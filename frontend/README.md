@@ -5,6 +5,7 @@ cp .env.example .env.local
 npm install
 npm run dev        # http://localhost:3000
 npm run lint
+npm run typecheck   # tạo route types rồi kiểm tra TypeScript
 npm run build
 ```
 

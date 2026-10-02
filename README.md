@@ -370,7 +370,7 @@ Chạy trước khi tạo PR (đây cũng là các bước CI chạy):
 # Frontend
 cd frontend
 npm run lint
-npx tsc --noEmit
+npm run typecheck
 npm run build
 
 # Backend
