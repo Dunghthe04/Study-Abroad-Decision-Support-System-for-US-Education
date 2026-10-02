@@ -1,0 +1,19 @@
+[project]
+name = "studyabroad-advisor"
+version = "0.1.0"
+description = "AI advisor service (RAG + LLM) for the Study Abroad Decision Support System"
+requires-python = ">=3.12"
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+# B008: FastAPI uses Depends() in argument defaults. E501: line length is left to the formatter.
+ignore = ["B008", "E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"

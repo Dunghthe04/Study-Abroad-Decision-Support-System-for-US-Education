@@ -1,0 +1,120 @@
+# Production stack for a single VPS (see docs/DEPLOYMENT.md).
+#   docker compose -f docker-compose.prod.yml --env-file .env up -d --build
+# Only Nginx publishes ports (80/443). Database, Ollama, API and advisor stay on the internal network.
+name: usas-prod
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "3" }
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    restart: always
+    logging: *logging
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-studyabroad}
+      POSTGRES_USER: ${POSTGRES_USER:-studyabroad}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  ollama:
+    image: ollama/ollama:latest
+    restart: always
+    logging: *logging
+    environment:
+      OLLAMA_KEEP_ALIVE: 24h   # keep the model in RAM between requests
+    volumes:
+      - ollama:/root/.ollama
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices: [{ driver: nvidia, count: all, capabilities: [gpu] }]
+
+  ollama-init:
+    image: ollama/ollama:latest
+    depends_on: [ollama]
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["/bin/sh", "-c", "ollama pull ${LLM_MODEL:-qwen3:14b} && ollama pull ${EMBEDDING_MODEL:-bge-m3}"]
+    restart: "no"
+
+  advisor:
+    build: ./advisor
+    restart: always
+    logging: *logging
+    depends_on:
+      db: { condition: service_healthy }
+    environment:
+      APP_ENV: production
+      API_KEY: ${ADVISOR_API_KEY:?ADVISOR_API_KEY is required}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-studyabroad}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-studyabroad}
+      OLLAMA_BASE_URL: http://ollama:11434
+      LLM_MODEL: ${LLM_MODEL:-qwen3:14b}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-bge-m3}
+
+  api:
+    build: ./backend
+    restart: always
+    logging: *logging
+    depends_on:
+      db: { condition: service_healthy }
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__Default: Host=db;Port=5432;Database=${POSTGRES_DB:-studyabroad};Username=${POSTGRES_USER:-studyabroad};Password=${POSTGRES_PASSWORD}
+      Advisor__BaseUrl: http://advisor:8000
+      Advisor__ApiKey: ${ADVISOR_API_KEY}
+      Cors__AllowedOrigins__0: https://${DOMAIN:?DOMAIN is required}
+      Swagger__Enabled: ${SWAGGER_ENABLED:-false}
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080 && printf \"GET /health/live HTTP/1.0\r\n\r\n\" >&3 && grep -q 200 <&3'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  web:
+    build: ./frontend
+    restart: always
+    logging: *logging
+    depends_on: [api]
+    environment:
+      API_INTERNAL_URL: http://api:8080
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: always
+    logging: *logging
+    depends_on: [web, api]
+    environment:
+      DOMAIN: ${DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/nginx/templates:/etc/nginx/templates:ro
+      - ./deploy/nginx/snippets:/etc/nginx/snippets:ro
+      - ./deploy/certbot/conf:/etc/letsencrypt:ro
+      - ./deploy/certbot/www:/var/www/certbot:ro
+    # Reload every 12h so renewed certificates are picked up.
+    command: ["/bin/sh", "-c", "while :; do sleep 12h; nginx -s reload; done & exec /docker-entrypoint.sh nginx -g 'daemon off;'"]
+
+  certbot:
+    image: certbot/certbot:latest
+    restart: always
+    logging: *logging
+    volumes:
+      - ./deploy/certbot/conf:/etc/letsencrypt
+      - ./deploy/certbot/www:/var/www/certbot
+    entrypoint: ["/bin/sh", "-c", "trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done"]
+
+volumes:
+  pgdata:
+  ollama:

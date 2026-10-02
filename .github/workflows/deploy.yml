@@ -1,0 +1,17 @@
+name: Deploy
+
+# Manual deploy to the VPS. Required repo secrets: VPS_HOST, VPS_USER, VPS_SSH_KEY, VPS_APP_DIR.
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: cd "${{ secrets.VPS_APP_DIR }}" && ./scripts/deploy.sh

@@ -1,0 +1,14 @@
+# Secrets
+.env
+!.env.example
+
+# Certificates & backups (production)
+deploy/certbot/
+backups/
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json

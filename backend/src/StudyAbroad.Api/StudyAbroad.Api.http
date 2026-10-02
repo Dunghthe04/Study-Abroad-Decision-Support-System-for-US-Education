@@ -1,0 +1,15 @@
+@host = http://localhost:5080
+
+GET {{host}}/health/ready
+
+###
+GET {{host}}/api/v1/study-centers?page=1&pageSize=10
+
+###
+POST {{host}}/api/v1/advisor/chat
+Content-Type: application/json
+
+{
+  "messages": [{ "role": "user", "content": "Du học thạc sĩ Mỹ có cần GRE không?" }],
+  "studyLevel": "master"
+}
