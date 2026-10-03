@@ -6,7 +6,6 @@ using System.Threading.Tasks;
 
 namespace StudyAbroad.Application.Auth
 {
-    //Dùng record vì DTO chỉ chứa dữ liệu, không thay đổi sau khi tạo
     //Body FE
     public record RegisterRequest(string Email, string Password, string FullName, string Role, bool? ParentAcknowledged = null);
 
@@ -17,6 +16,8 @@ namespace StudyAbroad.Application.Auth
         None,
         Validation,
         EmailTaken,
+        InvalidCredentials,   // sai email hoặc mật khẩu → 401
+        Locked,               // tài khoản bị khóa → 423
     };
 
     //Hộp trả kết quả
@@ -26,4 +27,5 @@ namespace StudyAbroad.Application.Auth
         public static AuthResult Fail(AuthError error, string message) => new(null, error, message);
     }
 
+    public record LoginRequest(string Email, string Password);
 }

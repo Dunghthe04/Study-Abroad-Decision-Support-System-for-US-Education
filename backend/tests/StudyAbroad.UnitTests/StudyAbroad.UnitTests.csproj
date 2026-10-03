@@ -23,6 +23,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\StudyAbroad.Application\StudyAbroad.Application.csproj" />
     <ProjectReference Include="..\..\src\StudyAbroad.Domain\StudyAbroad.Domain.csproj" />
+    <ProjectReference Include="..\..\src\StudyAbroad.Infrastructure\StudyAbroad.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>

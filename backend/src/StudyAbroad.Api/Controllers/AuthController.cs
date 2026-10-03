@@ -18,5 +18,17 @@ namespace StudyAbroad.Api.Controllers
                 _ => ValidationProblem(result.Message),
             };
         }
+
+        [HttpPost("login")]
+        public async Task<ActionResult<UserDto>> Login(LoginRequest request, CancellationToken ct)
+        {
+            var result = await auth.LoginAsync(request, ct);
+            return result.Error switch
+            {
+                AuthError.None => Ok(result.User),
+                AuthError.Locked => Problem(result.Message, statusCode: StatusCodes.Status423Locked),
+                _ => Problem(result.Message, statusCode: StatusCodes.Status401Unauthorized),
+            };
+        }
     }
 }

@@ -9,7 +9,6 @@ using StudyAbroad.Infrastructure.Advisor;
 using StudyAbroad.Infrastructure.Auth;
 using StudyAbroad.Infrastructure.Persistence;
 using StudyAbroad.Infrastructure.Persistence.Repositories;
-using StudyAbroad.Infrastructure.Repositories;
 
 namespace StudyAbroad.Infrastructure;
 

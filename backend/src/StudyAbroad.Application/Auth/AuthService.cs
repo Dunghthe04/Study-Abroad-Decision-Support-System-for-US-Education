@@ -12,6 +12,8 @@ namespace StudyAbroad.Application.Auth
     public interface IAuthService
     {
         Task<AuthResult> RegisterAsync(RegisterRequest request, CancellationToken ct = default);
+        Task<AuthResult> LoginAsync(LoginRequest request, CancellationToken ct = default);
+
     }
     public class AuthService(IUserRepository users, IPasswordHasher hasher) : IAuthService
     {
@@ -49,7 +51,7 @@ namespace StudyAbroad.Application.Auth
                 Status = request.Role == UserRoles.Center ? UserStatuses.Pending : UserStatuses.Active,
                 ParentAcknowledged = request.ParentAcknowledged == true
             };
-            await users.AddAsync(user);
+            await users.AddAsync(user, ct);
             return AuthResult.Ok(ToDto(user));
 
         }
@@ -61,6 +63,23 @@ namespace StudyAbroad.Application.Auth
 
         internal static UserDto ToDto(User user) => new UserDto(user.Id, user.Email, user.FullName, user.Role, user.Status);
 
+        public async Task<AuthResult> LoginAsync(LoginRequest request, CancellationToken ct = default)
+        {
+            var user = await users.GetUserByEmail(NormalizeEmail(request.Email), ct);
+
+            //Nếu ko có user or sai mật khẩu
+            if (user == null || !hasher.VerifyPassword(user.PasswordHash, request.Password ?? string.Empty))
+            {
+                return AuthResult.Fail(AuthError.InvalidCredentials, "Sai email hoặc mật khẩu.");
+            }
+
+            if (user.Status == UserStatuses.Locked)
+            {
+                return AuthResult.Fail(AuthError.Locked, "Tài khoản đã bị khóa.");
+            }
+            return AuthResult.Ok(ToDto(user));
+
+        }
     } 
 
 }
