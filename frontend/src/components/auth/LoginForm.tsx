@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { ApiError } from "@/lib/api";
-import { USE_MOCK_AUTH } from "@/lib/mock-auth";
+import { USE_MOCK_AUTH, resetMockDatabase } from "@/lib/mock-auth";
 import type { AuthResponse, LoginRequest } from "@/types/api";
 
 export function LoginForm() {
@@ -232,25 +232,101 @@ export function LoginForm() {
         </Link>
       </p>
 
-      {/* Hộp gợi ý test mock */}
+      {/* Hộp danh sách tài khoản mẫu & kiểm thử khóa 5 lần */}
       {USE_MOCK_AUTH && (
-        <details className="mt-6 rounded-lg border border-dashed border-slate-200 bg-slate-50/70 p-3 text-xs text-slate-600">
-          <summary className="cursor-pointer font-medium text-slate-700 hover:text-slate-900">
-            🧪 Gợi ý kiểm thử Mock API (Task B1)
+        <details className="mt-6 rounded-lg border border-dashed border-slate-300 bg-slate-50/80 p-3.5 text-xs text-slate-600">
+          <summary className="cursor-pointer font-medium text-slate-800 hover:text-slate-900">
+            🧪 Tài khoản mẫu & Cơ chế khóa 5 lần (Nhấn để xem)
           </summary>
-          <ul className="mt-2 list-disc space-y-1 pl-4 text-slate-600">
-            <li>
-              <strong>Đăng nhập thành công (200):</strong> Nhập email bất kỳ, mật khẩu bất kỳ.
-            </li>
-            <li>
-              <strong>Sai mật khẩu (401):</strong> Nhập mật khẩu là <code>wrong</code>.
-            </li>
-            <li>
-              <strong>Tài khoản bị khóa (423):</strong> Nhập email có chứa chữ <code>locked</code> hoặc <code>khoa</code>.
-            </li>
-          </ul>
+          <div className="mt-2.5 space-y-2.5">
+            <p className="font-semibold text-slate-700">
+              Chọn nhanh tài khoản mẫu (Mật khẩu: <code className="rounded bg-slate-200 px-1 py-0.5 font-mono">Password123</code>):
+            </p>
+            <div className="grid gap-1.5 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setEmail("student@gmail.com");
+                  setPassword("Password123");
+                  setEmailError("");
+                  setPasswordError("");
+                }}
+                className="rounded-md border border-slate-200 bg-white p-2 text-left transition hover:border-slate-400"
+              >
+                <p className="font-semibold text-slate-800">🎓 Học sinh</p>
+                <p className="font-mono text-[11px] text-slate-500">student@gmail.com</p>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setEmail("parent@gmail.com");
+                  setPassword("Password123");
+                  setEmailError("");
+                  setPasswordError("");
+                }}
+                className="rounded-md border border-slate-200 bg-white p-2 text-left transition hover:border-slate-400"
+              >
+                <p className="font-semibold text-slate-800">👨‍👩‍👧 Phụ huynh</p>
+                <p className="font-mono text-[11px] text-slate-500">parent@gmail.com</p>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setEmail("center@gmail.com");
+                  setPassword("Password123");
+                  setEmailError("");
+                  setPasswordError("");
+                }}
+                className="rounded-md border border-slate-200 bg-white p-2 text-left transition hover:border-slate-400"
+              >
+                <p className="font-semibold text-slate-800">🏢 Trung tâm (Chờ duyệt)</p>
+                <p className="font-mono text-[11px] text-slate-500">center@gmail.com</p>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setEmail("approved_center@gmail.com");
+                  setPassword("Password123");
+                  setEmailError("");
+                  setPasswordError("");
+                }}
+                className="rounded-md border border-slate-200 bg-white p-2 text-left transition hover:border-slate-400"
+              >
+                <p className="font-semibold text-slate-800">🏢 Trung tâm (Đã duyệt)</p>
+                <p className="font-mono text-[11px] text-slate-500">approved_center@gmail.com</p>
+              </button>
+            </div>
+
+            <div className="border-t border-slate-200 pt-2 text-[11px] leading-relaxed text-slate-600">
+              <p>
+                🔒 <strong>Thử nghiệm khóa 5 lần:</strong> Chọn bất kỳ tài khoản nào và gõ sai mật khẩu 5 lần. Từ lần 1 đến 4 hệ thống sẽ đếm lùi, đến lần thứ 5 tài khoản sẽ bị <strong>khóa thật 15 phút (Mã 423)</strong>!
+              </p>
+              <p className="mt-1">
+                📝 <strong>Tài khoản tự đăng ký:</strong> Bạn có thể qua trang Đăng ký tạo tài khoản mới, sau đó quay lại đây đăng nhập bằng chính thông tin vừa tạo.
+              </p>
+            </div>
+
+            <div className="pt-1 text-right">
+              <button
+                type="button"
+                onClick={() => {
+                  resetMockDatabase();
+                  setEmail("");
+                  setPassword("");
+                  setEmailError("");
+                  setPasswordError("");
+                  setApiError(null);
+                  alert("Đã khôi phục CSDL mẫu và xóa tất cả trạng thái khóa!");
+                }}
+                className="text-[11px] font-medium text-slate-500 underline hover:text-slate-900"
+              >
+                Khôi phục CSDL mẫu & Mở khóa tất cả
+              </button>
+            </div>
+          </div>
         </details>
       )}
     </div>
   );
 }
+
