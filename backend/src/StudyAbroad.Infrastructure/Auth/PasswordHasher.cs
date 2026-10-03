@@ -12,5 +12,8 @@ namespace StudyAbroad.Infrastructure.Auth
         //Chạy 2^12 vòng để hash
         private const int WorkFactor = 12;
         public string Hash(string password) => BCrypt.Net.BCrypt.HashPassword(password, WorkFactor);
+
+        public bool VerifyPassword(string hash, string password) =>
+            BCrypt.Net.BCrypt.Verify(password, hash);
     }
 }

@@ -11,5 +11,7 @@ namespace StudyAbroad.Application.Auth
     {
         Task<bool> EmailExistAsync(string email, CancellationToken cancellationToken = default);
         Task AddAsync(User user, CancellationToken cancellationToken = default);
+
+        Task <User?> GetUserByEmail(string email, CancellationToken cancellationToken = default);
     }
 }
