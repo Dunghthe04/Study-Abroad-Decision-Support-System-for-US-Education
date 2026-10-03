@@ -32,13 +32,19 @@ export async function mockLogin(data: LoginRequest): Promise<AuthResponse> {
   if (emailLower.includes("parent")) role = "parent";
   if (emailLower.includes("center")) role = "center";
 
-  return {
+  const user: AuthResponse = {
     id: "usr_mock_123",
     email: data.email,
     fullName: emailLower.startsWith("admin") ? "Quản trị viên Demo" : data.email.split("@")[0].toUpperCase(),
     role,
     status: "Active",
   };
+
+  if (typeof window !== "undefined") {
+    localStorage.setItem("usas_mock_session", JSON.stringify(user));
+  }
+
+  return user;
 }
 
 /**
@@ -62,3 +68,38 @@ export async function mockRegister(data: RegisterRequest): Promise<AuthResponse>
     status: data.role === "center" ? "PendingApproval" : "Active",
   };
 }
+
+/**
+ * Giả lập API Lấy thông tin phiên GET /api/v1/auth/me:
+ * - 200: Đã đăng nhập -> trả về thông tin User
+ * - 401: Chưa đăng nhập -> ném lỗi ApiError(401)
+ */
+export async function mockGetMe(): Promise<AuthResponse | null> {
+  await delay(200);
+
+  if (typeof window === "undefined") return null;
+
+  const saved = localStorage.getItem("usas_mock_session");
+  if (!saved) {
+    throw new ApiError(401, "Chưa đăng nhập.");
+  }
+
+  try {
+    return JSON.parse(saved) as AuthResponse;
+  } catch {
+    localStorage.removeItem("usas_mock_session");
+    throw new ApiError(401, "Phiên đăng nhập không hợp lệ.");
+  }
+}
+
+/**
+ * Giả lập API Đăng xuất POST /api/v1/auth/logout:
+ * - 204: Thành công -> xóa session
+ */
+export async function mockLogout(): Promise<void> {
+  await delay(300);
+  if (typeof window !== "undefined") {
+    localStorage.removeItem("usas_mock_session");
+  }
+}
+

@@ -3,14 +3,16 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ApiError, apiFetch } from "@/lib/api";
-import { USE_MOCK_AUTH, mockLogin } from "@/lib/mock-auth";
+import { useAuth } from "@/contexts/AuthContext";
+import { ApiError } from "@/lib/api";
+import { USE_MOCK_AUTH } from "@/lib/mock-auth";
 import type { AuthResponse, LoginRequest } from "@/types/api";
 
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectUrl = searchParams.get("redirect") || "/";
+  const { login } = useAuth();
 
   // Form states
   const [email, setEmail] = useState("");
@@ -63,25 +65,12 @@ export function LoginForm() {
     };
 
     try {
-      let result: AuthResponse;
-
-      if (USE_MOCK_AUTH) {
-        result = await mockLogin(payload);
-      } else {
-        // Gọi API thật khi backend đã sẵn sàng (credentails: include để nhận cookie)
-        result = await apiFetch<AuthResponse>("/api/v1/auth/login", {
-          method: "POST",
-          body: JSON.stringify(payload),
-          credentials: "include",
-        });
-      }
-
+      const result = await login(payload);
       setLoginSuccess(result);
 
       // Chuyển hướng sau 1s
       setTimeout(() => {
         router.push(redirectUrl);
-        router.refresh();
       }, 1000);
     } catch (err: unknown) {
       if (err instanceof ApiError) {

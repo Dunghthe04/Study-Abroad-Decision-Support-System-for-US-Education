@@ -3,8 +3,9 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ApiError, apiFetch } from "@/lib/api";
-import { USE_MOCK_AUTH, mockRegister } from "@/lib/mock-auth";
+import { useAuth } from "@/contexts/AuthContext";
+import { ApiError } from "@/lib/api";
+import { USE_MOCK_AUTH } from "@/lib/mock-auth";
 import type { AuthResponse, RegisterRequest, UserRole } from "@/types/api";
 
 const ROLES: { id: UserRole; title: string; desc: string; icon: string }[] = [
@@ -30,6 +31,7 @@ const ROLES: { id: UserRole; title: string; desc: string; icon: string }[] = [
 
 export function RegisterForm() {
   const router = useRouter();
+  const { register } = useAuth();
 
   // Form states
   const [role, setRole] = useState<UserRole>("student");
@@ -111,18 +113,7 @@ export function RegisterForm() {
     };
 
     try {
-      let result: AuthResponse;
-
-      if (USE_MOCK_AUTH) {
-        result = await mockRegister(payload);
-      } else {
-        result = await apiFetch<AuthResponse>("/api/v1/auth/register", {
-          method: "POST",
-          body: JSON.stringify(payload),
-          credentials: "include",
-        });
-      }
-
+      const result = await register(payload);
       setRegisterSuccess(result);
 
       // Chuyển sang trang đăng nhập sau 1.5 giây
@@ -411,7 +402,7 @@ export function RegisterForm() {
               <strong>Đăng ký bình thường (201):</strong> Điền đầy đủ thông tin hợp lệ (mật khẩu $\ge 8$ ký tự).
             </li>
             <li>
-              <strong>Kiểm tra Học sinh:</strong> Bắt buộc tick checkbox <em>"Phụ huynh đã biết"</em> mới cho tạo.
+              <strong>Kiểm tra Học sinh:</strong> Bắt buộc tick checkbox <em>&quot;Phụ huynh đã biết&quot;</em> mới cho tạo.
             </li>
             <li>
               <strong>Kiểm tra Trung tâm:</strong> Hiện thông báo và trả về trạng thái <code>PendingApproval</code> (chờ duyệt).

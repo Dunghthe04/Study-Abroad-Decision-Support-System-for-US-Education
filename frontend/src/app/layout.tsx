@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import { AuthProvider } from "@/contexts/AuthContext";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import "./globals.css";
 
@@ -13,13 +14,16 @@ export const metadata: Metadata = {
   description: "Hệ thống hỗ trợ ra quyết định du học Mỹ: tư vấn AI, tra cứu thông tin và tìm trung tâm.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="vi" className={`${inter.variable} h-full antialiased`}>
       <body className="flex min-h-full flex-col bg-slate-50 text-slate-900">
-        <SiteHeader />
-        <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8">{children}</main>
+        <AuthProvider>
+          <SiteHeader />
+          <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8">{children}</main>
+        </AuthProvider>
       </body>
     </html>
   );
 }
+
