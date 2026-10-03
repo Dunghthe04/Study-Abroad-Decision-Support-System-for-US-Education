@@ -38,3 +38,39 @@ export interface AdvisorChatResponse {
   citations: Citation[];
   disclaimer: string | null;
 }
+
+// --- Authentication DTOs (API Contract) ---
+
+export type UserRole = "student" | "parent" | "center";
+
+export type UserStatus = "Active" | "PendingApproval" | "Locked" | string;
+
+export interface User {
+  id: string;
+  email: string;
+  fullName: string;
+  role: UserRole;
+  status?: UserStatus;
+}
+
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface RegisterRequest {
+  email: string;
+  password: string;
+  fullName: string;
+  role: UserRole;
+  parentAcknowledged?: boolean;
+}
+
+export interface AuthResponse {
+  id: string;
+  email: string;
+  fullName: string;
+  role: UserRole;
+  status?: UserStatus;
+}
+
