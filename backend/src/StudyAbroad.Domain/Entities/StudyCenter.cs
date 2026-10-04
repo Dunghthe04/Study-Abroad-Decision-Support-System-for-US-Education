@@ -20,6 +20,18 @@ public class StudyCenter : BaseEntity
     /// <summary>Service keys from the survey catalog, e.g. "CHON_TRUONG", "LUYEN_PHONG_VAN".</summary>
     public List<string> Services { get; set; } = [];
 
+    public string? Phone { get; set; }
+    public string? Email { get; set; }
+    public string? Description { get; set; }
+
+    /// <summary>unverified | verified | rejected | suspended. Admin xác minh ở backlog #25.</summary>
+    public string VerificationStatus { get; set; } = "unverified";
+    public DateTime? VerifiedAt { get; set; }
+    public Guid? VerifiedByUserId { get; set; }
+
+    /// <summary>Tài khoản vai trò center quản lý hồ sơ này (cổng trung tâm, backlog #41).</summary>
+    public Guid? OwnerUserId { get; set; }
+
     public DateOnly? SurveyedAt { get; set; }
     public bool IsActive { get; set; } = true;
 }
