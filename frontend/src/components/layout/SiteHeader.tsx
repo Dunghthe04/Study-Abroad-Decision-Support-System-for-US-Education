@@ -2,6 +2,7 @@ import Link from "next/link";
 
 const links = [
   { href: "/advisor", label: "Tư vấn AI" },
+  { href: "/profile/financial", label: "Tài chính & Ngoại khóa" },
   { href: "/centers", label: "Trung tâm" },
 ];
 
