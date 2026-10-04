@@ -27,6 +27,8 @@ public static class DependencyInjection
         services.AddScoped<IStudyCenterRepository, StudyCenterRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddSingleton<IPasswordHasher, PasswordHasher>();
+        // [USAS-365] Đăng ký repository phân tích điểm học thuật
+        services.AddScoped<StudyAbroad.Application.Profile.Academic.IAcademicAnalysisRepository, AcademicAnalysisRepository>();
 
         services.Configure<AdvisorOptions>(configuration.GetSection(AdvisorOptions.SectionName));
         services.AddHttpClient<IAdvisorClient, AdvisorClient>((sp, client) =>
