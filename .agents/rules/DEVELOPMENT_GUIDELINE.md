@@ -13,7 +13,15 @@ Tài liệu này là "kim chỉ nam" cho việc lập trình, giải thích ki�
      - `USAS-365`: Phân tích điểm học thuật.
    - Tuyệt đối **không tự ý sửa đổi** các file core, config dùng chung hoặc code của thành viên khác (ví dụ: phần Auth, Bảng điểm của Tuấn Việt, AI Chat của Tuấn Dũng) trừ khi có sự thảo luận và thống nhất interface.
 
-2. **Tuân thủ Clean Architecture (Backend .NET 8):**
+2. **Quy chuẩn đặt tên Commit (bắt buộc cho Nguyễn Xuân Đức):**
+   Mỗi lần commit phải tách riêng rẽ theo từng phần và đặt tên đúng cú pháp:
+   - `[DucNX]: BE- <nội dung>` : Cho các file Backend (.NET Domain, Application, Infrastructure, Controller).
+   - `[DucNX]: FE- <nội dung>` : Cho các file Frontend (Next.js, React components, Tailwind, Types, API client).
+   - `[DucNX]: Test- <nội dung>` : Cho các file kiểm thử Unit Test.
+   - `[DucNX]: Docs- <nội dung>` : Cho tài liệu kỹ thuật, báo cáo Report 3, guideline.
+   *Quy tắc:* Cùng là BE thì gom commit chung 1 lần và ghi rõ, tương tự với FE, Test và Docs. Tuyệt đối không gom chung BE + FE + Test vào 1 commit duy nhất.
+
+3. **Tuân thủ Clean Architecture (Backend .NET 8):**
    - **Domain:** Chỉ chứa Entity, Enums, Domain Exceptions. Không phụ thuộc thư viện ngoài.
    - **Application:** Chứa DTOs, Service Interfaces, Service Implementations, Validators.
    - **Infrastructure:** Chứa EF Core Configurations, Repositories, Database Context, Migration.
