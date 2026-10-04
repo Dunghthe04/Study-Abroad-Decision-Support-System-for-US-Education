@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using StudyAbroad.Application.Auth;
+using StudyAbroad.Application.Profile.Financial;
 using StudyAbroad.Application.StudyCenters;
 
 namespace StudyAbroad.Application;
@@ -10,6 +11,7 @@ public static class DependencyInjection
     {
         services.AddScoped<IStudyCenterService, StudyCenterService>();
         services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IFinancialProfileService, FinancialProfileService>();
         return services;
     }
 }

@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using StudyAbroad.Application.Advisor;
 using StudyAbroad.Application.Auth;
+using StudyAbroad.Application.Profile.Financial;
 using StudyAbroad.Application.StudyCenters;
 using StudyAbroad.Infrastructure.Advisor;
 using StudyAbroad.Infrastructure.Auth;
@@ -26,6 +27,7 @@ public static class DependencyInjection
 
         services.AddScoped<IStudyCenterRepository, StudyCenterRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<IFinancialProfileRepository, FinancialProfileRepository>();
         services.AddSingleton<IPasswordHasher, PasswordHasher>();
 
         services.Configure<AdvisorOptions>(configuration.GetSection(AdvisorOptions.SectionName));
