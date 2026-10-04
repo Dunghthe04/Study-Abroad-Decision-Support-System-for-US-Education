@@ -3,6 +3,8 @@ import Link from "next/link";
 const links = [
   { href: "/advisor", label: "Tư vấn AI" },
   { href: "/centers", label: "Trung tâm" },
+  // [USAS-365] Liên kết trang phân tích điểm học thuật
+  { href: "/profile/academic", label: "Điểm học thuật" },
 ];
 
 export function SiteHeader() {
