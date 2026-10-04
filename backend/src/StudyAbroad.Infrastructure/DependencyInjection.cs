@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using StudyAbroad.Application.Advisor;
 using StudyAbroad.Application.Auth;
+using StudyAbroad.Application.Recommendations;
 using StudyAbroad.Application.StudyCenters;
 using StudyAbroad.Infrastructure.Advisor;
 using StudyAbroad.Infrastructure.Auth;
@@ -25,6 +26,7 @@ public static class DependencyInjection
             .UseSnakeCaseNamingConvention());
 
         services.AddScoped<IStudyCenterRepository, StudyCenterRepository>();
+        services.AddScoped<IRecommendationRepository, RecommendationRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddSingleton<IPasswordHasher, PasswordHasher>();
 
