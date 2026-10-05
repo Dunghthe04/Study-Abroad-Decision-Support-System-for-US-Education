@@ -16,7 +16,8 @@ namespace StudyAbroad.Application.Recommendations
         IReadOnlyList<string> PreferredStates,
         decimal? ExtracurricularScore,
         decimal? Ielts = null,
-        decimal? Toefl = null); 
+        decimal? Toefl = null,
+        decimal? Duolingo = null); 
 
 
     public record SchoolCandidate(
@@ -34,7 +35,8 @@ namespace StudyAbroad.Application.Recommendations
         decimal? FeesUsd,
         decimal? AcceptanceRate = null, // 0–1, chỉ dùng nội bộ, không hiển thị
         decimal? MinIelts = null,
-        decimal? MinToefl = null)
+        decimal? MinToefl = null,
+        decimal? MinDuolingo = null)
     {
         public decimal? TotalCostUsd =>
             TuitionUsd is null ? null : TuitionUsd + (LivingUsd ?? 0) + (FeesUsd ?? 0);
@@ -49,6 +51,12 @@ namespace StudyAbroad.Application.Recommendations
         decimal? Score,
         decimal? TotalCostUsd,
         bool CostUnknown,
-        FitBreakdown Fit);
+        FitBreakdown Fit,
+        EnglishStatus English = EnglishStatus.NoScore,   //để giao diện/giải thích ghi "cần IELTS ≥ 6.5"
+        bool OpenAdmission = false);                      //để giải thích ghi "trường tuyển sinh mở");
+
+    //Trạng thái điều kiện tiếng Anh của học sinh với trường
+    public enum EnglishStatus { Met, BelowMin, NoScore, Unknown }
+    //Met = đạt | BelowMin = chưa đạt mức tối thiểu | NoScore = HS chưa có điểm | Unknown = trường không công bố mức
 
 }

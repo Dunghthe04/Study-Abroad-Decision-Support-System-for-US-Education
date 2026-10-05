@@ -52,7 +52,8 @@ namespace StudyAbroad.Infrastructure.Persistence.Repositories
                        o.FeesUsd,
                        u.AcceptanceRate,
                        o.MinIelts,
-                       o.MinToefl
+                       o.MinToefl,
+                       o.MinDuolingo
                    )).ToListAsync(ct);
         }
 

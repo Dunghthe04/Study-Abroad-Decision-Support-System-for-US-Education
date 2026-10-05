@@ -24,6 +24,10 @@ namespace StudyAbroad.Application.Recommendations
 
         public int MaxResults { get; set; } = 12;//Số lượng trường tối đa trong gợi ý trường
         public PerCategoryLimits PerCategory { get; set; } = new ();
+        //Bậc học tuyển sinh mở: trường không có số liệu học thuật thì xếp Safety thay vì "chưa đủ dữ liệu"
+        public List<string> OpenAdmissionLevels { get; set; } = ["community_college"];
+        public decimal MissingValue { get; set; } = 0.5m;   //Giá trị trung tính khi TRƯỜNG thiếu dữ liệu
+
 
         // Đọc Json từ AppSetting.ValueJson với Key = "recommend.weights"
         private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
@@ -42,6 +46,21 @@ namespace StudyAbroad.Application.Recommendations
                 return new RecommendSettings();
             }
         }
+
+        public Dictionary<string, List<string>> MajorGroups { get; set; } = new()
+        {
+            ["Computer Science"] = ["IT", "Information Technology", "CNTT", "Công nghệ thông tin", "Software Engineering",
+                            "Computer Engineering", "Data Science", "Artificial Intelligence", "Cybersecurity",
+                            "Information Systems", "Computer Information Systems"],
+            ["Business"] = ["Business Administration", "Quản trị kinh doanh", "Kinh doanh", "Marketing", "Finance",
+                    "Accounting", "Business Analytics", "Management"],
+            ["Engineering"] = ["Kỹ thuật", "Mechanical Engineering", "Civil Engineering", "Electrical Engineering",
+                       "Chemical Engineering", "Industrial Engineering", "Biomedical Engineering", "Aerospace Engineering"],
+            ["Health Professions"] = ["Nursing", "Điều dưỡng", "Public Health", "Pharmacy", "Y tế"],
+            ["Economics"] = ["Kinh tế"],
+            ["Psychology"] = ["Tâm lý học"],
+            ["Biology"] = ["Sinh học", "Biochemistry"],
+        };
 
     }
 }

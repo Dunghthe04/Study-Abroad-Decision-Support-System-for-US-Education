@@ -61,7 +61,7 @@ namespace StudyAbroad.Application.Recommendations
         private static Level? SatLevel(int? satStudent, int ? sat25, int? sat75)
         {
             if(satStudent == null || sat25 == null || sat75 == null) return null;
-            if(satStudent <=sat25) return Level.Low;
+            if(satStudent < sat25) return Level.Low;
             if(satStudent >= sat75) return Level.High;
             return Level.Even;
         }

@@ -11,9 +11,10 @@ namespace StudyAbroad.Application.Recommendations
         public static IReadOnlyList<ScoredSchool> Recommend(
             StudentSnapshot student, IReadOnlyList<SchoolCandidate> candidates, RecommendSettings settings)
         {
+            var majors = new MajorMatcher(settings.MajorGroups);
             // lấy danh sách trường phù hợp với ngành học, bang ưu tiên, chi phí
             var scored = candidates
-                .Where(c => MatchesMajor(c, student.Major))
+                .Where(c => majors.Matches(student.Major, c.Majors))
                 .Where(c => MatchState(c, student.PreferredStates))
                 .Where(c => WithinBudget(c, student.AnnualBudgetUsd, settings.BudgetTolerance))
                 .Select(c => Score(student,c, settings) ).ToList();
@@ -31,27 +32,38 @@ namespace StudyAbroad.Application.Recommendations
 
         public static ScoredSchool Score(StudentSnapshot student, SchoolCandidate candidate, RecommendSettings settings)
         {
+            var neutral = settings.MissingValue;
 
-            //Sắp xếp theo luật , không phụ thuộc SAW
+            //1. Nhóm học thuật theo luật
             var category = AdmissionCategorizer.Categorize(student.Gpa4, student.Sat, candidate.AvgGpa4, candidate.Sat25, candidate.Sat75, settings.GpaBand);
 
-            //Chi phí trường
+            var openAdmission = (category == AdmissionCategory.InsufficientData && settings.OpenAdmissionLevels.Contains(student.StudyLevel, StringComparer.OrdinalIgnoreCase));
+
+            if (openAdmission)
+                category = AdmissionCategory.Safety;
+
+            //2. chuẩn hóa tiêu chí về [0.1]
             var cost = candidate.TotalCostUsd;
+            var academic = AcademicFit(student, candidate, settings.GpaBand, neutral);
+            var finance = student.AnnualBudgetUsd is not { } budget || budget <= 0 ? (decimal?)null
+                 : cost is { } co ? Clamp01((budget - co) / budget) : neutral;
+            var (english, englishStatus) = English(student, candidate, neutral);
+            var extracurricular = student.ExtracurricularScore is { } ex ? Clamp01(ex / 10m) : (decimal?)null;
+            var fit = new FitBreakdown(academic, finance, english, extracurricular);
 
-            //Chuẩn hóa tiêu chí về [0 1]
-            var fit = new FitBreakdown(
-                Academic: new[] { GpaFit(student.Gpa4, candidate.AvgGpa4, settings.GpaBand), SatFit(student.Sat, candidate.Sat25, candidate.Sat75) }.Average(),
-                Finance: FinanceFit(cost, student.AnnualBudgetUsd),
-                English: EnglishFit(student, candidate),
-                Extracurricular: ExtracurricularFit(student.ExtracurricularScore, candidate.AcceptanceRate));
-
-            // SAW = trọng số x điểm tiêu chí
+            //3. SAW. Trọng số ngoại khóa tăng theo độ chọ lọc của trường ( thiếu tỉ lệ ==> nhận trung tính)
             var w = settings.Weights;
-            var score = WeightedSum((fit.Academic, w.Academic), (fit.Finance, w.Finance), (fit.English, w.English), (fit.Extracurricular, w.Extracurricular));
+            var selectivity = candidate.AcceptanceRate is { } ac ? Clamp01(1m - ac) : neutral;
+            var score = WeightedSum((academic, w.Academic), (finance, w.Finance), (english, w.English), (extracurricular, w.Extracurricular * selectivity));
 
-            return new ScoredSchool(candidate, category,score is { } s ? Math.Round(s, 4): null,cost, CostUnknown: cost is null,fit);
+            return new ScoredSchool(candidate, category, score is { } s ? Math.Round(s, 4) : null, cost, CostUnknown: cost is null, fit, englishStatus, openAdmission);
         }
-
+        //Học thuật = trung bình GPA fit và SAT fit có dữ liệu. HS không có GPA lẫn SAT → null; trường không có số liệu → trung tính
+        private static decimal? AcademicFit(StudentSnapshot s, SchoolCandidate c, decimal band, decimal neutral)
+        {
+            if (s.Gpa4 is null && s.Sat is null) return null;
+            return new[] { GpaFit(s.Gpa4, c.AvgGpa4, band), SatFit(s.Sat, c.Sat25, c.Sat75) }.Average() ?? neutral;
+        }
         //GPA = avg - band => 0 ,gpa = avg => 0,5 , gpa > avg =>1
         private static decimal? GpaFit(decimal? gpa, decimal? avg, decimal band)
         {
@@ -75,13 +87,25 @@ namespace StudyAbroad.Application.Recommendations
             return Clamp01((budget.Value-cost.Value)/budget.Value);
         }
 
-        //Đạt yêu cầu => 1, chưa đạt => điểm/ yêu cầu, nếu có cả 2 lấy tốt hơn
-        private static decimal? EnglishFit(StudentSnapshot s, SchoolCandidate c)
+        //Tiếng Anh là điều kiện đầu vào: đạt mức tối thiểu = 1, chưa đạt = điểm/mức. Có nhiều bài thi thì lấy bài tốt nhất.
+        private static (decimal? Fit, EnglishStatus status) English(StudentSnapshot s, SchoolCandidate c, decimal neutral)
         {
-            decimal? ielts = s.Ielts is { } i && c.MinIelts is { } mi && mi > 0 ? Math.Min(1m, i / mi) : null;
-            decimal? toefl = s.Toefl is { } t && c.MinToefl is { } mt && mt > 0 ? Math.Min(1m, t / mt) : null;
-            return new[] { ielts, toefl }.Max();
+            if(s.Ielts is null && s.Toefl is null && s.Duolingo is null) return (null, EnglishStatus.NoScore);
+
+            var ratios = new[] {Ratio(s.Ielts,c.MinIelts),
+                Ratio(s.Toefl, c.MinToefl),
+                Ratio(s.Duolingo, c.MinDuolingo)
+            }.Where(r => r is not null).ToList();
+
+            
+            if(ratios.Count == 0) return (neutral, EnglishStatus.Unknown);
+
+            var best = ratios.Max();
+            return (best,best >= 1m? EnglishStatus.Met : EnglishStatus.BelowMin);
         }
+
+        private static decimal? Ratio(decimal? score, decimal? min)=>
+            score is { } s && min is { } m && m>0 ? Math.Min(1m, s/m) : null;
 
         //Trường càng chọn lọc càng xét hồ sơ toàn diện → ngoại khóa có trọng lượng lớn hơn
         private static decimal? ExtracurricularFit(decimal? ecScore, decimal? acceptanceRate)
@@ -101,12 +125,6 @@ namespace StudyAbroad.Application.Recommendations
 
 
         private static decimal Clamp01(decimal x) => Math.Clamp(x, 0m, 1m);
-        //Lọc danh sách trường theo ngành học mong muốn
-        private static bool MatchesMajor(SchoolCandidate c, string? studentMajor)
-        {
-            //Không nhập trường or trường có trong danh sách ngành học của trường = true
-            return string.IsNullOrWhiteSpace(studentMajor) || c.Majors.Any(m => string.Equals(studentMajor.Trim(), m.Trim(), StringComparison.OrdinalIgnoreCase));
-        }
 
         //Lọc danh sách trường theo bang mong muốn
         private static bool MatchState(SchoolCandidate c, IReadOnlyList<string> preferredStates)

@@ -24,6 +24,9 @@ public class RecommendationScorerTests
         School("DEMO_UI", "PA", ["Nursing"], 3.40m, 1200, 1350, 28000, 13000, 1000),
     ];
 
+    private static readonly RecommendSettings Cfg = new();
+    private static SchoolCandidate B => Demo[1];   // DEMO_UB: Match, tổng chi phí 50k
+
     private static StudentSnapshot Student(decimal budget = 50000, decimal? ec = null, string[]? states = null) =>
         new("undergraduate", "Computer Science", 3.5m, 1300, budget, states ?? [], ec);
 
@@ -119,12 +122,30 @@ public class RecommendationScorerTests
     }
 
     [Fact]
-    public void Score_MissingCriterion_ReweightsRemaining()
+    public void Score_StudentMissingData_ReweightsRemaining()
     {
-        // Thiếu chi phí → bỏ tiêu chí tài chính, điểm = điểm học thuật (chỉ còn một tiêu chí có dữ liệu)
-        var g = RecommendationScorer.Score(Student(), Demo.Single(x => x.Code == "DEMO_UG"), new RecommendSettings());
+        // HỌC SINH chưa nhập ngân sách → bỏ tiêu chí tài chính, điểm = điểm học thuật (tiêu chí duy nhất còn lại)
+        var g = RecommendationScorer.Score(Student() with { AnnualBudgetUsd = null }, B, Cfg);
         Assert.Null(g.Fit.Finance);
         Assert.Equal(Math.Round(g.Fit.Academic!.Value, 4), g.Score);
+    }
+
+    [Fact]
+    public void Score_SchoolMissingCost_GetsNeutralFinance()
+    {
+        // TRƯỜNG thiếu học phí → giá trị trung tính, không được lợi hơn trường có số liệu thật
+        var g = RecommendationScorer.Score(Student(), Demo.Single(x => x.Code == "DEMO_UG"), Cfg);
+        Assert.True(g.CostUnknown);
+        Assert.Equal(Cfg.MissingValue, g.Fit.Finance);
+    }
+
+    [Fact]
+    public void Score_SchoolMissingAcademicData_GetsNeutralAcademic()
+    {
+        // Trường không có GPA TB lẫn SAT → học thuật trung tính (nhóm vẫn là "chưa đủ dữ liệu")
+        var g = RecommendationScorer.Score(Student(), Demo.Single(x => x.Code == "DEMO_UF"), Cfg);
+        Assert.Equal(AdmissionCategory.InsufficientData, g.AdmissionCategory);
+        Assert.Equal(Cfg.MissingValue, g.Fit.Academic);
     }
 
     [Fact]
@@ -140,7 +161,13 @@ public class RecommendationScorerTests
         Assert.Equal(AdmissionCategory.Match, r.AdmissionCategory);
         Assert.Equal(57168m, r.TotalCostUsd);
         Assert.Equal(1m, r.Fit.English);
-        Assert.InRange(r.Score!.Value, 0.30m, 0.31m);                 // 0.4×0.391 + 0.3×0.047 + 0.1×1 + 0.2×0.182 ≈ 0.307
+        Assert.Equal(EnglishStatus.Met, r.English);
+        Assert.Equal(0.8m, r.Fit.Extracurricular);
+        // Học thuật = (GPA (3.5−3.7+0.3)/0.6 = 0.167 + SAT (1300−1140)/260 = 0.615) / 2 = 0.391
+        // Tài chính = (60000 − 57168) / 60000 = 0.047;  Tiếng Anh = 1;  Ngoại khóa = 0.8
+        // Trọng số ngoại khóa = 0.2 × (1 − 0.773) = 0.0454  →  tổng trọng số = 0.4 + 0.3 + 0.1 + 0.0454 = 0.8454
+        // Điểm = (0.4×0.391 + 0.3×0.047 + 0.1×1 + 0.0454×0.8) / 0.8454 ≈ 0.3630
+        Assert.InRange(r.Score!.Value, 0.362m, 0.364m);
     }
 
     [Fact]
@@ -153,8 +180,101 @@ public class RecommendationScorerTests
         var strong = Student(ec: 10);
         Assert.True(RecommendationScorer.Score(strong, selective, cfg).Score > RecommendationScorer.Score(strong, open, cfg).Score);
 
-        var none = Student(ec: 0);                                    // không có ngoại khóa → hai trường bằng điểm
-        Assert.Equal(RecommendationScorer.Score(none, selective, cfg).Score, RecommendationScorer.Score(none, open, cfg).Score);
+        var weak = Student(ec: 0);                                    // ngoại khóa yếu → bất lợi hơn ở trường chọn lọc
+        Assert.True(RecommendationScorer.Score(weak, selective, cfg).Score < RecommendationScorer.Score(weak, open, cfg).Score);
+
+        var unknown = Student(ec: null);                              // chưa có điểm ngoại khóa → bỏ tiêu chí, hai trường bằng điểm
+        Assert.Equal(RecommendationScorer.Score(unknown, selective, cfg).Score, RecommendationScorer.Score(unknown, open, cfg).Score);
     }
 
+    [Fact]
+    public void Score_StrongExtracurricular_DoesNotHurtOpenSchools()
+    {
+        // Cách cũ nhân điểm ngoại khóa với (1 − tỉ lệ nhận) nên trường dễ vào bị kéo tụt điểm
+        var open = B with { AcceptanceRate = 0.95m };
+        var without = RecommendationScorer.Score(Student(), open, Cfg).Score;
+        var strong = RecommendationScorer.Score(Student(ec: 10), open, Cfg).Score;
+        Assert.True(strong >= without);
+    }
+
+    // ---------- Cao đẳng cộng đồng tuyển sinh mở ----------
+
+    [Fact]
+    public void Score_CommunityCollegeWithoutData_IsOpenAdmissionSafety()
+    {
+        var cc = School("CC_1", "CA", CsBiz, null, null, null, 12000, 10000, null);
+        var r = RecommendationScorer.Score(Student() with { StudyLevel = "community_college" }, cc, Cfg);
+        Assert.Equal(AdmissionCategory.Safety, r.AdmissionCategory);
+        Assert.True(r.OpenAdmission);
+    }
+
+    [Fact]
+    public void Score_UndergraduateWithoutData_StaysInsufficient()
+    {
+        var uni = School("U_1", "CA", CsBiz, null, null, null, 12000, 10000, null);
+        var r = RecommendationScorer.Score(Student(), uni, Cfg);   // bậc đại học không nằm trong OpenAdmissionLevels
+        Assert.Equal(AdmissionCategory.InsufficientData, r.AdmissionCategory);
+        Assert.False(r.OpenAdmission);
+    }
+
+    // ---------- Điều kiện tiếng Anh ----------
+
+    [Fact]
+    public void Score_EnglishBelowMinimum_IsFlagged()
+    {
+        var r = RecommendationScorer.Score(Student() with { Ielts = 6.0m }, B with { MinIelts = 6.5m }, Cfg);
+        Assert.Equal(EnglishStatus.BelowMin, r.English);
+        Assert.InRange(r.Fit.English!.Value, 0.92m, 0.93m);       // 6.0 / 6.5
+    }
+
+    [Fact]
+    public void Score_EnglishAboveMinimum_IsMetAndCappedAtOne()
+    {
+        var r = RecommendationScorer.Score(Student() with { Ielts = 8.0m }, B with { MinIelts = 6.5m }, Cfg);
+        Assert.Equal(EnglishStatus.Met, r.English);
+        Assert.Equal(1m, r.Fit.English);                           // cao hơn mức tối thiểu không được thêm điểm
+    }
+
+    [Fact]
+    public void Score_EnglishAnyTestPassing_IsEnough()
+    {
+        // IELTS chưa đạt nhưng TOEFL đạt → tính là đạt
+        var s = Student() with { Ielts = 6.0m, Toefl = 90m };
+        var r = RecommendationScorer.Score(s, B with { MinIelts = 6.5m, MinToefl = 80m }, Cfg);
+        Assert.Equal(EnglishStatus.Met, r.English);
+    }
+
+    [Fact]
+    public void Score_EnglishDuolingo_IsChecked()
+    {
+        var r = RecommendationScorer.Score(Student() with { Duolingo = 100m }, B with { MinDuolingo = 110m }, Cfg);
+        Assert.Equal(EnglishStatus.BelowMin, r.English);
+    }
+
+    [Fact]
+    public void Score_StudentWithoutEnglishTest_IsNoScoreAndDropped()
+    {
+        var r = RecommendationScorer.Score(Student(), B with { MinIelts = 6.5m }, Cfg);
+        Assert.Equal(EnglishStatus.NoScore, r.English);
+        Assert.Null(r.Fit.English);
+    }
+
+    [Fact]
+    public void Score_SchoolWithoutEnglishMinimum_IsUnknownAndNeutral()
+    {
+        var r = RecommendationScorer.Score(Student() with { Ielts = 6.5m }, B, Cfg);
+        Assert.Equal(EnglishStatus.Unknown, r.English);
+        Assert.Equal(Cfg.MissingValue, r.Fit.English);
+    }
+
+    // ---------- So ngành qua nhóm ngành ----------
+
+    [Fact]
+    public void Recommend_MajorSynonym_MatchesGroup()
+    {
+        var r = RecommendationScorer.Recommend(Student() with { Major = "IT" }, Demo, Cfg)
+            .Select(x => x.Candidate.Code).ToList();
+        Assert.Contains("DEMO_UB", r);                               // trường ghi "Computer Science"
+        Assert.DoesNotContain("DEMO_UI", r);                         // trường chỉ có Nursing
+    }
 }
