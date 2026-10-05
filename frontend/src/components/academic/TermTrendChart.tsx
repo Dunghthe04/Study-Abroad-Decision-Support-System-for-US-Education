@@ -40,7 +40,7 @@ export function TermTrendChart({ terms }: TermTrendChartProps) {
       </div>
 
       <div className="mt-6">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-6">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-8">
           {sorted.map((item, idx) => {
             // Chiều cao tương đối trên thang 4.0 (0 đến 4.0)
             const heightPercent = Math.max(15, Math.min(100, Math.round((item.gpa4 / 4.0) * 100)));

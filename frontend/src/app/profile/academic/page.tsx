@@ -98,11 +98,16 @@ export default function AcademicAnalysisPage() {
     <div className="mx-auto max-w-5xl px-4 py-8">
       {/* Header trang */}
       <div className="mb-6">
-        <h1 className="text-2xl font-black text-slate-900">
-          Phân Tích Năng Lực Học Thuật & GPA
-        </h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Quy đổi điểm hệ 10 sang thang 4.0 chuẩn WES, phân tích điểm mạnh theo nhóm ngành (STEM / Xã hội / Ngoại ngữ) và đánh giá xu hướng 3 năm.
+        <div className="flex flex-wrap items-center gap-2.5">
+          <h1 className="text-2xl font-black text-slate-900">
+            Phân Tích Năng Lực Học Thuật & GPA
+          </h1>
+          <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-800">
+            Hỗ trợ THPT & Đại học (Tín chỉ)
+          </span>
+        </div>
+        <p className="mt-1.5 text-sm text-slate-500">
+          Quy đổi điểm hệ 10 sang thang 4.0 chuẩn WES, phân tích điểm mạnh theo nhóm ngành (STEM / Xã hội / Ngoại ngữ) và đánh giá xu hướng tăng trưởng (Growth Mindset).
         </p>
       </div>
 
