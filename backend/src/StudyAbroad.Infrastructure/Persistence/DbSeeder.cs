@@ -42,15 +42,14 @@ public static class DbSeeder
         if (await db.AppSettings.AnyAsync(s => s.Key == "recommend.weights")) return;
 
         db.AppSettings.Add(new AppSetting
-        {
-            Key = "recommend.weights",
-            Description = "Ngưỡng và trọng số cho gợi ý trường (#6)",
-            ValueJson = """
+            {
+                Key = "recommend.weights",
+                Description = "Ngưỡng và trọng số cho gợi ý trường (#6)",
+                ValueJson = """
             {
               "gpaBand": 0.3,
               "budgetTolerance": 0.10,
-              "extracurricularWeight": 0.5,
-              "financeWeight": 1.0,
+              "weights": { "academic": 0.4, "finance": 0.3, "english": 0.1, "extracurricular": 0.2 },
               "maxResults": 12,
               "perCategory": { "reach": 3, "match": 5, "safety": 4 }
             }

@@ -32,11 +32,11 @@ namespace StudyAbroad.Infrastructure.Persistence.Repositories
                 .FirstOrDefaultAsync(p => p.UserId == studentId, ct);
         }
 
-        public async Task<IReadOnlyList<SchoolCandidate>> GetSchoolCandidatesAsync(string stuidyLevel, CancellationToken ct = default)
+        public async Task<IReadOnlyList<SchoolCandidate>> GetSchoolCandidatesAsync(string studyLevel, CancellationToken ct = default)
         {
            return await (from o in db.UniversityOfferings.AsNoTracking()
                    join u in db.Universities.AsNoTracking() on o.UniversityId equals u.Id
-                   where u.IsActive && o.StudyLevel == stuidyLevel
+                   where u.IsActive && o.StudyLevel == studyLevel
                    select new SchoolCandidate(
                        u.Id,
                        o.Id,
@@ -49,7 +49,10 @@ namespace StudyAbroad.Infrastructure.Persistence.Repositories
                        o.Sat75,
                        o.TuitionUsd,
                        o.LivingUsd,
-                       o.FeesUsd
+                       o.FeesUsd,
+                       u.AcceptanceRate,
+                       o.MinIelts,
+                       o.MinToefl
                    )).ToListAsync(ct);
         }
 

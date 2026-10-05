@@ -86,20 +86,75 @@ public class RecommendationScorerTests
     }
 
     [Fact]
-    public void Recommend_ExtracurricularBoostsReachAndMatchOnly()
-    {
-        var s0 = RecommendationScorer.Recommend(Student(ec: 0), Demo, new RecommendSettings()).ToDictionary(x => x.Candidate.Code);
-        var s10 = RecommendationScorer.Recommend(Student(ec: 10), Demo, new RecommendSettings()).ToDictionary(x => x.Candidate.Code);
-
-        Assert.True(s10["DEMO_UB"].Score > s0["DEMO_UB"].Score);       // Match được cộng
-        Assert.Equal(s0["DEMO_UC"].Score, s10["DEMO_UC"].Score);      // Safety không đổi
-    }
-
-    [Fact]
     public void Recommend_SameInput_SameOrder()                       // tiêu chí 5
     {
         var a = RecommendationScorer.Recommend(Student(), Demo, new RecommendSettings()).Select(x => x.Candidate.Code);
         var b = RecommendationScorer.Recommend(Student(), Demo.Reverse().ToList(), new RecommendSettings()).Select(x => x.Candidate.Code);
         Assert.Equal(a, b);                                           // đảo thứ tự đầu vào vẫn ra cùng kết quả
     }
+
+    [Fact]
+    public void Recommend_SortedByCategory_ReachMatchSafetyThenInsufficient()
+    {
+        var order = RecommendationScorer.Recommend(Student(budget: 100000), Demo, new RecommendSettings())
+            .Select(x => x.AdmissionCategory).ToList();
+        Assert.Equal(order.Order().ToList(), order);                  // Reach(0) → Match(1) → Safety(2) → InsufficientData(3)
+    }
+
+    [Fact]
+    public void Recommend_ChangeWeights_ChangesOrderWithinGroup()    // tiêu chí 4
+    {
+        // Cả hai đều Match; X rẻ hơn, Y học thuật hợp hơn
+        SchoolCandidate[] two =
+        [
+            School("X", "CA", CsBiz, 3.50m, 1250, 1400, 30000, 10000, 0), // 40k
+        School("Y", "CA", CsBiz, 3.40m, 1200, 1400, 45000, 13000, 0), // 58k
+    ];
+        var student = Student(budget: 60000);
+        string[] Run2(SawWeights w) => RecommendationScorer.Recommend(student, two, new RecommendSettings { Weights = w })
+            .Select(x => x.Candidate.Code).ToArray();
+
+        Assert.Equal(["Y", "X"], Run2(new SawWeights(Academic: 1, Finance: 0, English: 0, Extracurricular: 0)));
+        Assert.Equal(["X", "Y"], Run2(new SawWeights(Academic: 0, Finance: 1, English: 0, Extracurricular: 0)));
+    }
+
+    [Fact]
+    public void Score_MissingCriterion_ReweightsRemaining()
+    {
+        // Thiếu chi phí → bỏ tiêu chí tài chính, điểm = điểm học thuật (chỉ còn một tiêu chí có dữ liệu)
+        var g = RecommendationScorer.Score(Student(), Demo.Single(x => x.Code == "DEMO_UG"), new RecommendSettings());
+        Assert.Null(g.Fit.Finance);
+        Assert.Equal(Math.Round(g.Fit.Academic!.Value, 4), g.Score);
+    }
+
+    [Fact]
+    public void Score_OregonStateExample_MatchesHandCalculation()
+    {
+        // Số liệu thật từ file của Dương; học sinh GPA 3.5, SAT 1300, IELTS 6.5, ngoại khóa 8/10, ngân sách 60k
+        var osu = new SchoolCandidate(Guid.NewGuid(), Guid.NewGuid(), "209542", "Oregon State University", "OR",
+            ["Computer Science"], 3.70m, 1140, 1400, 38190, 16386, 2592, AcceptanceRate: 0.773m, MinIelts: 6m, MinToefl: 70m);
+        var student = new StudentSnapshot("undergraduate", "Computer Science", 3.5m, 1300, 60000, [], 8m, Ielts: 6.5m);
+
+        var r = RecommendationScorer.Score(student, osu, new RecommendSettings());
+
+        Assert.Equal(AdmissionCategory.Match, r.AdmissionCategory);
+        Assert.Equal(57168m, r.TotalCostUsd);
+        Assert.Equal(1m, r.Fit.English);
+        Assert.InRange(r.Score!.Value, 0.30m, 0.31m);                 // 0.4×0.391 + 0.3×0.047 + 0.1×1 + 0.2×0.182 ≈ 0.307
+    }
+
+    [Fact]
+    public void Score_StrongExtracurricular_FavoursSelectiveSchools()
+    {
+        var selective = School("SEL", "CA", CsBiz, 3.5m, 1250, 1400, 30000, 10000, 0) with { AcceptanceRate = 0.10m };
+        var open = School("OPEN", "CA", CsBiz, 3.5m, 1250, 1400, 30000, 10000, 0) with { AcceptanceRate = 0.80m };
+        var cfg = new RecommendSettings();
+
+        var strong = Student(ec: 10);
+        Assert.True(RecommendationScorer.Score(strong, selective, cfg).Score > RecommendationScorer.Score(strong, open, cfg).Score);
+
+        var none = Student(ec: 0);                                    // không có ngoại khóa → hai trường bằng điểm
+        Assert.Equal(RecommendationScorer.Score(none, selective, cfg).Score, RecommendationScorer.Score(none, open, cfg).Score);
+    }
+
 }

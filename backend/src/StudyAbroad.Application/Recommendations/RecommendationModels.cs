@@ -14,7 +14,10 @@ namespace StudyAbroad.Application.Recommendations
         int? Sat,
         decimal? AnnualBudgetUsd,
         IReadOnlyList<string> PreferredStates,
-        decimal? ExtracurricularScore); // 0–10, từ chức năng AI phân tích hồ sơ; null nếu chưa có
+        decimal? ExtracurricularScore,
+        decimal? Ielts = null,
+        decimal? Toefl = null); 
+
 
     public record SchoolCandidate(
         Guid UniversityId,
@@ -28,17 +31,24 @@ namespace StudyAbroad.Application.Recommendations
         int? Sat75,
         decimal? TuitionUsd,
         decimal? LivingUsd,
-        decimal? FeesUsd)
+        decimal? FeesUsd,
+        decimal? AcceptanceRate = null, // 0–1, chỉ dùng nội bộ, không hiển thị
+        decimal? MinIelts = null,
+        decimal? MinToefl = null)
     {
         public decimal? TotalCostUsd =>
             TuitionUsd is null ? null : TuitionUsd + (LivingUsd ?? 0) + (FeesUsd ?? 0);
     }
+
+    //Điểm từng tiêu chí, 0-1,nếu ko có= null
+    public record FitBreakdown(decimal? Academic, decimal? Finance, decimal? English,decimal? Extracurricular);
 
     public record ScoredSchool(
         SchoolCandidate Candidate,
         AdmissionCategory AdmissionCategory,
         decimal? Score,
         decimal? TotalCostUsd,
-        bool CostUnknown);
+        bool CostUnknown,
+        FitBreakdown Fit);
 
 }

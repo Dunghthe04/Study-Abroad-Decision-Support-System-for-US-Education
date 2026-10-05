@@ -10,16 +10,18 @@ namespace StudyAbroad.Application.Recommendations
     //Số lượng trường tối đa theo từng loại (reach, match, safety) trong gợi ý trường (#6)
     public record PerCategoryLimits(int Reach =3, int Match=5 , int Safety = 4);
 
+    //trọng số SAW 4 tiêu chí,tổng lại thành 1
+    public record SawWeights(decimal Academic = 0.4m , decimal Finance =0.3m, decimal English=0.1m, decimal Extracurricular =0.2m);
+
     //Cấu hình gợi ý trường, đọc từ AppSetting.ValueJson với Key = "recommend.weights"
-    //Đổi trong db là có hiệu lực ngay, không cần sửa code
     public class RecommendSettings
     {
 
         public const string SettingKey = "recommend.weights";
         public decimal GpaBand { get; set; } = 0.3m; // Ngưỡng GPA để phân loại Reach, Match, Safety
         public decimal BudgetTolerance { get; set; } = 0.10m;// Cho vượt 10% chi phí
-        public decimal ExtracurricularWeight { get; set; } = 0.5m; //Trọng số hoạt động ngoại khóa
-        public decimal FinanceWeight { get; set; } = 1.0m;//Trọng số tài chính
+        public SawWeights Weights { get; set; } = new();//Trọng số SAW: học thuật, tài chính, tiếng Anh, ngoại khóa
+
         public int MaxResults { get; set; } = 12;//Số lượng trường tối đa trong gợi ý trường
         public PerCategoryLimits PerCategory { get; set; } = new ();
 
