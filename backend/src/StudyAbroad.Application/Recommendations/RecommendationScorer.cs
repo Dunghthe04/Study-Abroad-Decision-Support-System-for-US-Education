@@ -22,7 +22,7 @@ namespace StudyAbroad.Application.Recommendations
             return scored.GroupBy(s => s.AdmissionCategory)
                 .SelectMany(g => Ranked(g).Take(LimitFor(g.Key, settings)))
                 .OrderBy(s => s.AdmissionCategory)
-                .OrderByDescending(s => s.Score)
+                .ThenByDescending(s => s.Score)
                 .ThenBy(s => s.Candidate.Code, StringComparer.Ordinal)
                 .Take(settings.MaxResults)
                 .ToList();
@@ -71,15 +71,15 @@ namespace StudyAbroad.Application.Recommendations
         //Ngân sách còn dư trừ chi phí, vượt ngân sách => 0
         private static decimal? FinanceFit(decimal? cost, decimal? budget)
         {
-            if (cost == null || budget == null) return null;
-            return Clamp01((budget.Value-cost.Value)/cost.Value);
+            if (cost == null || budget == null || budget <= 0) return null;
+            return Clamp01((budget.Value-cost.Value)/budget.Value);
         }
 
         //Đạt yêu cầu => 1, chưa đạt => điểm/ yêu cầu, nếu có cả 2 lấy tốt hơn
         private static decimal? EnglishFit(StudentSnapshot s, SchoolCandidate c)
         {
-            decimal? ielts = s.Ielts is { } i && c.MinIelts is { } mi && mi > 0 ? Math.Min(1m, i / mi) : 0m;
-            decimal? toefl = s.Toefl is { } t && c.MinToefl is { } mt && mt > 0 ? Math.Min(1m, t / mt) : 0m;
+            decimal? ielts = s.Ielts is { } i && c.MinIelts is { } mi && mi > 0 ? Math.Min(1m, i / mi) : null;
+            decimal? toefl = s.Toefl is { } t && c.MinToefl is { } mt && mt > 0 ? Math.Min(1m, t / mt) : null;
             return new[] { ielts, toefl }.Max();
         }
 
