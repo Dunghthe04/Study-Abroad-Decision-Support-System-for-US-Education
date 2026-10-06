@@ -20,7 +20,6 @@ namespace StudyAbroad.Application.Auth
         Task<AuthResult> LoginAsync(LoginRequest request, string? ipAddress = null, string? userAgent = null, CancellationToken ct = default);
         Task<AuthResult> ForgotPasswordAsync(ForgotPasswordRequest request, CancellationToken ct = default);
         Task<AuthResult> ResetPasswordAsync(ResetPasswordRequest request, CancellationToken ct = default);
-        Task<AuthResult> UnlockAccountAsync(UnlockAccountRequest request, CancellationToken ct = default);
         Task<bool> LogoutAsync(string rawToken, CancellationToken ct = default);
         Task<UserDto?> GetMeAsync(Guid userId, CancellationToken ct = default);
         Task<List<UserDto>> GetAllUsersAsync(CancellationToken ct = default);
@@ -369,39 +368,6 @@ namespace StudyAbroad.Application.Auth
             await users.CreateSessionAsync(session, ct);
 
             return AuthResult.Ok(new AuthResponse(token, expiresAt, ToDto(user)));
-        }
-
-        public async Task<AuthResult> UnlockAccountAsync(UnlockAccountRequest request, CancellationToken ct = default)
-        {
-            var email = NormalizeEmail(request.Email);
-            var user = await users.GetUserByEmail(email, ct);
-            if (user == null)
-                return AuthResult.Fail(AuthError.Validation, "Không tìm thấy thông tin tài khoản.");
-
-            if (user.Status == UserStatuses.Locked)
-            {
-                return AuthResult.Fail(AuthError.Locked, "Tài khoản này đã bị khóa bởi Quản trị viên và không thể tự mở khóa.");
-            }
-
-            if (user.Status != UserStatuses.TempLocked)
-            {
-                return AuthResult.Ok("Tài khoản đang hoạt động bình thường, không bị tạm khóa.");
-            }
-
-            if (user.LockoutEnd.HasValue && user.LockoutEnd.Value <= DateTime.UtcNow)
-            {
-                user.Status = user.Role == UserRoles.Center ? UserStatuses.Pending : UserStatuses.Active;
-                user.FailedLoginAttempts = 0;
-                user.LockoutEnd = null;
-                await users.UpdateUserAsync(user, ct);
-                return AuthResult.Ok("Thời gian tạm khóa đã kết thúc. Tài khoản đã được tự động mở khóa!");
-            }
-
-            var remaining = user.LockoutEnd.HasValue
-                ? Math.Max(1, (int)Math.Ceiling((user.LockoutEnd.Value - DateTime.UtcNow).TotalMinutes))
-                : TempLockoutMinutes;
-
-            return AuthResult.Fail(AuthError.TempLocked, $"Tài khoản đang bị tạm khóa. Hệ thống sẽ tự động mở khóa sau {remaining} phút nữa.");
         }
 
         public async Task<AuthResult> ForgotPasswordAsync(ForgotPasswordRequest request, CancellationToken ct = default)

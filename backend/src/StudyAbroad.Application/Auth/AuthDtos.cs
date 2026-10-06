@@ -17,12 +17,11 @@ namespace StudyAbroad.Application.Auth
 
     public record LoginRequest(string Email, string Password);
 
-    // [USAS-12] Requests cho quy trình OTP & Quên mật khẩu & Mở khóa
+    // [USAS-12] Requests cho quy trình OTP & Quên mật khẩu
     public record VerifyEmailRequest(string Email, string OtpCode);
     public record ResendOtpRequest(string Email, string Purpose);
     public record ForgotPasswordRequest(string Email);
     public record ResetPasswordRequest(string Email, string OtpCode, string NewPassword);
-    public record UnlockAccountRequest(string Email, string OtpCode);
 
     public enum AuthError {
         None,
@@ -33,8 +32,8 @@ namespace StudyAbroad.Application.Auth
         Locked,               // tài khoản bị khóa bởi Admin (vĩnh viễn) → 423
         TempLocked,           // tài khoản bị tạm khóa sau 5 lần sai mật khẩu → 423
         Unverified,           // tài khoản chưa kích hoạt email OTP → 403
-        OtpInvalid,           // mã OTP không đúng → 400
-        OtpExpired,           // mã OTP đã hết hạn (> 10 phút) → 400
+        OtpInvalid,           // mã OTP không đúng hoặc đã bị vô hiệu hóa sau 5 lần nhập sai → 400
+        OtpExpired,           // mã OTP đã hết hạn (> 5 phút) → 400
     };
 
     // [USAS-362] Hộp trả kết quả từ AuthService

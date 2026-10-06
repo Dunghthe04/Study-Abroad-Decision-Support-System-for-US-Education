@@ -8,7 +8,6 @@ import type {
   ResendOtpRequest,
   ResetPasswordRequest,
   StudyCenter,
-  UnlockAccountRequest,
   UserDto,
   VerifyEmailRequest,
 } from "@/types/api";
@@ -90,13 +89,6 @@ export const authApi = {
   // [USAS-12] Đặt lại mật khẩu mới với mã OTP
   resetPassword: (data: ResetPasswordRequest) =>
     apiFetch<{ message: string }>("/api/v1/auth/reset-password", {
-      method: "POST",
-      body: JSON.stringify(data),
-    }),
-
-  // [USAS-12 / USAS-17] Mở khóa tài khoản tạm thời (sau khi bị tạm khóa vì nhập sai 5 lần)
-  unlockAccount: (data: UnlockAccountRequest) =>
-    apiFetch<{ message: string }>("/api/v1/auth/unlock-account", {
       method: "POST",
       body: JSON.stringify(data),
     }),

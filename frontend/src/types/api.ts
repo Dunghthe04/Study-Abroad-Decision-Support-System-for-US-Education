@@ -91,8 +91,3 @@ export interface ResetPasswordRequest {
   otpCode: string;
   newPassword: string;
 }
-
-export interface UnlockAccountRequest {
-  email: string;
-  otpCode: string;
-}

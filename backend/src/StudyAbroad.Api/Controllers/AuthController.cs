@@ -93,21 +93,6 @@ namespace StudyAbroad.Api.Controllers
             };
         }
 
-        // [USAS-12 / USAS-17] Mở khóa tài khoản tạm thời (sau khi bị tạm khóa vì nhập sai 5 lần)
-        [HttpPost("unlock-account")]
-        public async Task<IActionResult> UnlockAccount(UnlockAccountRequest request, CancellationToken ct)
-        {
-            var result = await auth.UnlockAccountAsync(request, ct);
-            return result.Error switch
-            {
-                AuthError.None => Ok(new { message = result.Message }),
-                AuthError.Locked => Problem(result.Message, statusCode: StatusCodes.Status423Locked, title: "Không thể tự mở khóa"),
-                AuthError.OtpExpired => Problem(result.Message, statusCode: StatusCodes.Status400BadRequest, title: "Mã OTP đã hết hạn"),
-                AuthError.OtpInvalid => Problem(result.Message, statusCode: StatusCodes.Status400BadRequest, title: "Mã OTP không đúng"),
-                _ => Problem(result.Message, statusCode: StatusCodes.Status400BadRequest)
-            };
-        }
-
         // [USAS-12] Yêu cầu đặt lại mật khẩu (Gửi mã OTP qua Email)
         [HttpPost("forgot-password")]
         public async Task<IActionResult> ForgotPassword(ForgotPasswordRequest request, CancellationToken ct)
