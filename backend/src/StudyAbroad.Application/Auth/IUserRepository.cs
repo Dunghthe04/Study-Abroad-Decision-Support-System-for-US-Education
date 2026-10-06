@@ -10,6 +10,7 @@ namespace StudyAbroad.Application.Auth
     public interface IUserRepository
     {
         Task<bool> EmailExistAsync(string email, CancellationToken cancellationToken = default);
+        Task<bool> PhoneExistAsync(string phone, CancellationToken cancellationToken = default);
         Task AddAsync(User user, CancellationToken cancellationToken = default);
         Task<User?> GetUserByEmail(string email, CancellationToken cancellationToken = default);
         Task<User?> GetUserById(Guid id, CancellationToken cancellationToken = default);
@@ -18,5 +19,7 @@ namespace StudyAbroad.Application.Auth
         Task CreateSessionAsync(UserSession session, CancellationToken cancellationToken = default);
         Task<UserSession?> GetSessionByTokenHashAsync(string tokenHash, CancellationToken cancellationToken = default);
         Task RevokeSessionAsync(string tokenHash, CancellationToken cancellationToken = default);
+        // [USAS-362] Quản lý danh sách người dùng (dành cho Admin)
+        Task<List<User>> GetAllUsersAsync(CancellationToken cancellationToken = default);
     }
 }

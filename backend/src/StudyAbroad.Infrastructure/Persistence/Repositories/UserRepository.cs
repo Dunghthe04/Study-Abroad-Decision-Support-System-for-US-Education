@@ -9,6 +9,9 @@ public class UserRepository(AppDbContext db) : IUserRepository
     public Task<bool> EmailExistAsync(string email, CancellationToken cancellationToken = default) =>
         db.Users.AnyAsync(u => u.Email == email, cancellationToken);
 
+    public Task<bool> PhoneExistAsync(string phone, CancellationToken cancellationToken = default) =>
+        db.Users.AnyAsync(u => u.Phone == phone, cancellationToken);
+
     public Task<User?> GetUserByEmail(string email, CancellationToken cancellationToken = default) =>
         db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Email == email, cancellationToken);
 
@@ -39,4 +42,8 @@ public class UserRepository(AppDbContext db) : IUserRepository
             await db.SaveChangesAsync(cancellationToken);
         }
     }
+
+    public Task<List<User>> GetAllUsersAsync(CancellationToken cancellationToken = default) =>
+        db.Users.AsNoTracking().OrderByDescending(u => u.CreatedAt).ToListAsync(cancellationToken);
 }
+

@@ -19,6 +19,7 @@ namespace StudyAbroad.Application.Auth
         None,
         Validation,
         EmailTaken,
+        PhoneTaken,           // trùng SĐT khi đăng ký → 409
         InvalidCredentials,   // sai tài khoản hoặc mật khẩu → 401
         Locked,               // tài khoản bị khóa → 423
     };

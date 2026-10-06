@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using StudyAbroad.Api.Extensions;
 using StudyAbroad.Application.Auth;
-using System.Security.Claims;
 
 namespace StudyAbroad.Api.Controllers
 {
@@ -17,12 +17,12 @@ namespace StudyAbroad.Api.Controllers
             return result.Error switch
             {
                 AuthError.None => StatusCode(StatusCodes.Status201Created, result.User),
-                AuthError.EmailTaken => Problem(result.Message, statusCode: StatusCodes.Status409Conflict),
+                AuthError.EmailTaken or AuthError.PhoneTaken => Problem(result.Message, statusCode: StatusCodes.Status409Conflict),
                 _ => ValidationProblem(result.Message),
             };
         }
 
-        // [AC-2] Đăng nhập: Email + Password, trả về JWT Token và UserDto
+        // [AC-2] Đăng nhập: Email + Password, trả về JWT Token và UserDto (thiết lập HttpOnly Cookie)
         [HttpPost("login")]
         public async Task<ActionResult<AuthResponse>> Login(LoginRequest request, CancellationToken ct)
         {
@@ -30,6 +30,19 @@ namespace StudyAbroad.Api.Controllers
             var userAgent = Request.Headers.UserAgent.ToString();
 
             var result = await auth.LoginAsync(request, ip, userAgent, ct);
+            if (result.Error == AuthError.None && result.Response != null)
+            {
+                // [Chống XSS]: Lưu access token vào HttpOnly Cookie
+                Response.Cookies.Append("usas_access_token", result.Response.AccessToken, new CookieOptions
+                {
+                    HttpOnly = true,
+                    Secure = Request.IsHttps,
+                    SameSite = SameSiteMode.Lax,
+                    Expires = result.Response.ExpiresAt,
+                    Path = "/"
+                });
+            }
+
             return result.Error switch
             {
                 AuthError.None => Ok(result.Response),
@@ -38,32 +51,50 @@ namespace StudyAbroad.Api.Controllers
             };
         }
 
-        // [AC-3] Đăng xuất: thu hồi phiên trên server (đánh dấu IsRevoked = true)
+        // [AC-3] Đăng xuất: thu hồi phiên trên server (đánh dấu IsRevoked = true) và xóa HttpOnly Cookie
         [Authorize]
         [HttpPost("logout")]
         public async Task<IActionResult> Logout(CancellationToken ct)
         {
-            var authHeader = Request.Headers.Authorization.ToString();
-            var rawToken = authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
-                ? authHeader["Bearer ".Length..].Trim()
-                : authHeader.Trim();
+            var rawToken = Request.Cookies["usas_access_token"];
+            if (string.IsNullOrEmpty(rawToken))
+            {
+                var authHeader = Request.Headers.Authorization.ToString();
+                rawToken = authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
+                    ? authHeader["Bearer ".Length..].Trim()
+                    : authHeader.Trim();
+            }
 
-            await auth.LogoutAsync(rawToken, ct);
+            if (!string.IsNullOrEmpty(rawToken))
+            {
+                await auth.LogoutAsync(rawToken, ct);
+            }
+
+            // Xóa HttpOnly Cookie trên trình duyệt
+            Response.Cookies.Delete("usas_access_token", new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = Request.IsHttps,
+                SameSite = SameSiteMode.Lax,
+                Path = "/"
+            });
+
             return Ok(new { message = "Đăng xuất thành công." });
         }
 
-        // Lấy thông tin cá nhân của người dùng hiện tại từ Token Claims
+        // [AC-4] Lấy thông tin cá nhân của người dùng hiện tại từ Token Claims
+        // Chống IDOR: trích xuất UserId từ Token đã ký số (User.GetUserId()), không nhận ID từ client param.
         [Authorize]
         [HttpGet("me")]
         public async Task<ActionResult<UserDto>> GetMe(CancellationToken ct)
         {
-            var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (!Guid.TryParse(userIdStr, out var userId))
+            var userId = User.GetUserId();
+            if (userId is null)
             {
                 return Unauthorized();
             }
 
-            var user = await auth.GetMeAsync(userId, ct);
+            var user = await auth.GetMeAsync(userId.Value, ct);
             return user != null ? Ok(user) : NotFound();
         }
     }

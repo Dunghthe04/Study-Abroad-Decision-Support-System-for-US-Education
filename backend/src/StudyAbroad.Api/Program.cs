@@ -61,18 +61,33 @@ builder.Services.AddAuthentication(options =>
         ClockSkew = TimeSpan.Zero
     };
 
-    // [AC-3] Kiểm tra phiên trong DB: nếu đã bị thu hồi (IsRevoked == true) thì từ chối request
+    // [Bảo mật HttpOnly Cookie & AC-3 Thu hồi phiên]
     options.Events = new JwtBearerEvents
     {
+        OnMessageReceived = context =>
+        {
+            // [Chống XSS]: Ưu tiên đọc Token từ HttpOnly Cookie "usas_access_token"
+            if (context.Request.Cookies.TryGetValue("usas_access_token", out var cookieToken) &&
+                !string.IsNullOrWhiteSpace(cookieToken))
+            {
+                context.Token = cookieToken;
+            }
+            return Task.CompletedTask;
+        },
         OnTokenValidated = async context =>
         {
             var tokenService = context.HttpContext.RequestServices.GetRequiredService<ITokenService>();
             var userRepo = context.HttpContext.RequestServices.GetRequiredService<IUserRepository>();
 
-            var authHeader = context.Request.Headers.Authorization.ToString();
-            var rawToken = authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
-                ? authHeader["Bearer ".Length..].Trim()
-                : authHeader.Trim();
+            // Lấy token từ HttpOnly Cookie hoặc Authorization Header
+            var rawToken = context.Request.Cookies["usas_access_token"];
+            if (string.IsNullOrEmpty(rawToken))
+            {
+                var authHeader = context.Request.Headers.Authorization.ToString();
+                rawToken = authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
+                    ? authHeader["Bearer ".Length..].Trim()
+                    : authHeader.Trim();
+            }
 
             if (!string.IsNullOrEmpty(rawToken))
             {

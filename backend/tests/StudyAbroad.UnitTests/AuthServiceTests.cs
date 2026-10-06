@@ -14,6 +14,9 @@ public class AuthServiceTests
         public Task<bool> EmailExistAsync(string email, CancellationToken cancellationToken = default) =>
             Task.FromResult(Users.Any(u => u.Email == email));
 
+        public Task<bool> PhoneExistAsync(string phone, CancellationToken cancellationToken = default) =>
+            Task.FromResult(Users.Any(u => u.Phone == phone));
+
         public Task AddAsync(User user, CancellationToken cancellationToken = default)
         {
             Users.Add(user);
@@ -41,6 +44,9 @@ public class AuthServiceTests
             if (s != null) s.IsRevoked = true;
             return Task.CompletedTask;
         }
+
+        public Task<List<User>> GetAllUsersAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(Users.ToList());
     }
 
     /// <summary>Not a real hash; lets tests check what was stored without running bcrypt.</summary>
@@ -90,6 +96,7 @@ public class AuthServiceTests
         var result = await CreateService().RegisterAsync(Request(role: UserRoles.Center));
 
         Assert.Equal(UserStatuses.Pending, result.User!.Status);
+        Assert.Single(_repo.Users);
     }
 
     [Theory]
@@ -305,6 +312,59 @@ public class AuthServiceTests
         Assert.Contains("Số điện thoại", result.Message!);
     }
 
+    [Theory]
+    [InlineData("6666")]
+    [InlineData("+15551234567")]
+    [InlineData("0123456789")]
+    [InlineData("0243123456")]
+    [InlineData("abcdefghij")]
+    public async Task Register_InvalidVietnamesePhone_ReturnsValidationError(string invalidPhone)
+    {
+        var service = CreateService();
+        var result = await service.RegisterAsync(Request(phone: invalidPhone));
+
+        Assert.Equal(AuthError.Validation, result.Error);
+        Assert.Contains("Số điện thoại không đúng định dạng Việt Nam", result.Message!);
+        Assert.Empty(_repo.Users);
+    }
+
+    [Theory]
+    [InlineData("+84912345678", "0912345678")]
+    [InlineData("84912345678", "0912345678")]
+    [InlineData("+84 988 123 456", "0988123456")]
+    [InlineData("0381234567", "0381234567")]
+    [InlineData("079-123-4567", "0791234567")]
+    public async Task Register_ValidVietnamesePhoneFormats_NormalizesAndSucceeds(string inputPhone, string expectedPhone)
+    {
+        var service = CreateService();
+        var result = await service.RegisterAsync(Request(phone: inputPhone));
+
+        Assert.Equal(AuthError.None, result.Error);
+        Assert.Equal(expectedPhone, result.User!.Phone);
+        Assert.Equal(expectedPhone, _repo.Users[0].Phone);
+    }
+
+    [Fact]
+    public async Task Register_PasswordExceedsMaxLength_ReturnsValidationError()
+    {
+        var service = CreateService();
+        var longPassword = new string('a', 101);
+        var result = await service.RegisterAsync(Request(password: longPassword));
+
+        Assert.Equal(AuthError.Validation, result.Error);
+        Assert.Contains("Mật khẩu không được vượt quá", result.Message!);
+    }
+
+    [Fact]
+    public async Task Login_PayloadExceedsMaxLength_ReturnsInvalidCredentials()
+    {
+        var service = CreateService();
+        var longEmail = new string('a', 101) + "@test.com";
+        var result = await service.LoginAsync(new LoginRequest(longEmail, "password123"));
+
+        Assert.Equal(AuthError.InvalidCredentials, result.Error);
+    }
+
     [Fact]
     public async Task Login_Success_ReturnsJwtTokenAndCreatesSession()
     {
@@ -354,4 +414,31 @@ public class AuthServiceTests
         Assert.Equal(userId, me.Id);
         Assert.Equal("0987654321", me.Phone);
     }
+
+    [Fact]
+    public async Task GetAllUsers_ReturnsAllMappedUserDtos()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request(email: "user1@test.com", phone: "0911111111"));
+        await service.RegisterAsync(Request(email: "user2@test.com", phone: "0922222222"));
+
+        var allUsers = await service.GetAllUsersAsync();
+
+        Assert.Equal(2, allUsers.Count);
+        Assert.Contains(allUsers, u => u.Email == "user1@test.com" && u.Phone == "0911111111");
+        Assert.Contains(allUsers, u => u.Email == "user2@test.com" && u.Phone == "0922222222");
+    }
+
+    [Fact]
+    public async Task Register_WithDuplicatePhone_ReturnsPhoneTakenError()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request(email: "user1@test.com", phone: "0912345678"));
+
+        var result = await service.RegisterAsync(Request(email: "user2@test.com", phone: "0912345678"));
+
+        Assert.Equal(AuthError.PhoneTaken, result.Error);
+        Assert.Contains("Số điện thoại đã được sử dụng", result.Message!);
+    }
 }
+
