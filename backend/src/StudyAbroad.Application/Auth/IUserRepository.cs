@@ -11,7 +11,12 @@ namespace StudyAbroad.Application.Auth
     {
         Task<bool> EmailExistAsync(string email, CancellationToken cancellationToken = default);
         Task AddAsync(User user, CancellationToken cancellationToken = default);
+        Task<User?> GetUserByEmail(string email, CancellationToken cancellationToken = default);
+        Task<User?> GetUserById(Guid id, CancellationToken cancellationToken = default);
 
-        Task <User?> GetUserByEmail(string email, CancellationToken cancellationToken = default);
+        // [USAS-362] Quản lý phiên làm việc của người dùng
+        Task CreateSessionAsync(UserSession session, CancellationToken cancellationToken = default);
+        Task<UserSession?> GetSessionByTokenHashAsync(string tokenHash, CancellationToken cancellationToken = default);
+        Task RevokeSessionAsync(string tokenHash, CancellationToken cancellationToken = default);
     }
 }

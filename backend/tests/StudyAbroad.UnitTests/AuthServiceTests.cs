@@ -9,6 +9,7 @@ public class AuthServiceTests
     private sealed class FakeUserRepository : IUserRepository
     {
         public List<User> Users { get; } = [];
+        public List<UserSession> Sessions { get; } = [];
 
         public Task<bool> EmailExistAsync(string email, CancellationToken cancellationToken = default) =>
             Task.FromResult(Users.Any(u => u.Email == email));
@@ -21,6 +22,25 @@ public class AuthServiceTests
 
         public Task<User?> GetUserByEmail(string email, CancellationToken cancellationToken = default) =>
             Task.FromResult(Users.FirstOrDefault(u => u.Email == email));
+
+        public Task<User?> GetUserById(Guid id, CancellationToken cancellationToken = default) =>
+            Task.FromResult(Users.FirstOrDefault(u => u.Id == id));
+
+        public Task CreateSessionAsync(UserSession session, CancellationToken cancellationToken = default)
+        {
+            Sessions.Add(session);
+            return Task.CompletedTask;
+        }
+
+        public Task<UserSession?> GetSessionByTokenHashAsync(string tokenHash, CancellationToken cancellationToken = default) =>
+            Task.FromResult(Sessions.FirstOrDefault(s => s.TokenHash == tokenHash));
+
+        public Task RevokeSessionAsync(string tokenHash, CancellationToken cancellationToken = default)
+        {
+            var s = Sessions.FirstOrDefault(x => x.TokenHash == tokenHash);
+            if (s != null) s.IsRevoked = true;
+            return Task.CompletedTask;
+        }
     }
 
     /// <summary>Not a real hash; lets tests check what was stored without running bcrypt.</summary>
@@ -30,17 +50,27 @@ public class AuthServiceTests
         public bool VerifyPassword(string hash, string password) => hash == "hashed:" + password;
     }
 
-    private readonly FakeUserRepository _repo = new();
+    private sealed class FakeTokenService : ITokenService
+    {
+        public (string Token, DateTime ExpiresAt) GenerateToken(User user) =>
+            ("token:" + user.Email, DateTime.UtcNow.AddDays(7));
 
-    private AuthService CreateService() => new(_repo, new FakeHasher());
+        public string HashToken(string token) => "hash:" + token;
+    }
+
+    private readonly FakeUserRepository _repo = new();
+    private readonly FakeTokenService _tokens = new();
+
+    private AuthService CreateService() => new(_repo, new FakeHasher(), _tokens);
 
     private static RegisterRequest Request(
         string email = "a@test.com",
         string password = "password123",
         string fullName = "Nguyen Van A",
         string role = UserRoles.Parent,
-        bool? parentAcknowledged = null) =>
-        new(email, password, fullName, role, parentAcknowledged);
+        bool? parentAcknowledged = null,
+        string? phone = null) =>
+        new(email, password, fullName, role, parentAcknowledged, phone);
 
     [Theory]
     [InlineData(UserRoles.Parent, null)]
@@ -251,5 +281,77 @@ public class AuthServiceTests
 
         Assert.Equal(AuthError.None, result.Error);
         Assert.Equal(UserStatuses.Pending, result.User!.Status);
+    }
+
+    [Fact]
+    public async Task Register_WithPhone_StoresPhone()
+    {
+        var service = CreateService();
+        var result = await service.RegisterAsync(Request(phone: "0912345678"));
+
+        Assert.Equal(AuthError.None, result.Error);
+        Assert.Equal("0912345678", result.User!.Phone);
+        Assert.Equal("0912345678", _repo.Users[0].Phone);
+    }
+
+    [Fact]
+    public async Task Register_WithPhoneTooLong_ReturnsValidationError()
+    {
+        var service = CreateService();
+        var longPhone = new string('1', 33);
+        var result = await service.RegisterAsync(Request(phone: longPhone));
+
+        Assert.Equal(AuthError.Validation, result.Error);
+        Assert.Contains("Số điện thoại", result.Message!);
+    }
+
+    [Fact]
+    public async Task Login_Success_ReturnsJwtTokenAndCreatesSession()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+
+        var result = await service.LoginAsync(
+            new LoginRequest("a@test.com", "password123"),
+            ipAddress: "127.0.0.1",
+            userAgent: "Mozilla/5.0");
+
+        Assert.Equal(AuthError.None, result.Error);
+        Assert.NotNull(result.Response);
+        Assert.NotEmpty(result.Response.AccessToken);
+        Assert.Single(_repo.Sessions);
+        Assert.False(_repo.Sessions[0].IsRevoked);
+        Assert.Equal("127.0.0.1", _repo.Sessions[0].IpAddress);
+        Assert.Equal("Mozilla/5.0", _repo.Sessions[0].UserAgent);
+    }
+
+    [Fact]
+    public async Task Logout_ValidToken_RevokesSession()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+
+        var loginResult = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
+        var rawToken = loginResult.Response!.AccessToken;
+
+        var logoutSuccess = await service.LogoutAsync(rawToken);
+
+        Assert.True(logoutSuccess);
+        Assert.Single(_repo.Sessions);
+        Assert.True(_repo.Sessions[0].IsRevoked);
+    }
+
+    [Fact]
+    public async Task GetMe_ExistingUser_ReturnsUserDto()
+    {
+        var service = CreateService();
+        var reg = await service.RegisterAsync(Request(phone: "0987654321"));
+        var userId = reg.User!.Id;
+
+        var me = await service.GetMeAsync(userId);
+
+        Assert.NotNull(me);
+        Assert.Equal(userId, me.Id);
+        Assert.Equal("0987654321", me.Phone);
     }
 }
