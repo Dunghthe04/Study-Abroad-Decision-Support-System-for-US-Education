@@ -16,5 +16,7 @@ namespace StudyAbroad.Domain.Entities
         public string Status { get; set; } = string.Empty;
         public bool ParentAcknowledged { get; set; }
 
+        /// <summary>[USAS-362] Số điện thoại liên hệ cá nhân (chỉ dùng lưu hồ sơ/tư vấn liên lạc, không dùng đăng nhập hay OTP để tránh tốn phí SMS).</summary>
+        public string? Phone { get; set; }
     }
 }
