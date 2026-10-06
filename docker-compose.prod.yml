@@ -73,6 +73,7 @@ services:
       Advisor__ApiKey: ${ADVISOR_API_KEY}
       Cors__AllowedOrigins__0: https://${DOMAIN:?DOMAIN is required}
       Swagger__Enabled: ${SWAGGER_ENABLED:-false}
+      Jwt__SecretKey: ${JWT_SECRET_KEY:?JWT_SECRET_KEY is required}
     healthcheck:
       test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080 && printf \"GET /health/live HTTP/1.0\r\n\r\n\" >&3 && grep -q 200 <&3'"]
       interval: 30s

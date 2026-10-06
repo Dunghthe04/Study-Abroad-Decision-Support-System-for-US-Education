@@ -4,7 +4,7 @@ namespace StudyAbroad.Infrastructure.Auth;
 public class JwtOptions
 {
     public const string SectionName = "Jwt";
-    public string SecretKey { get; set; } = "USAS_StudyAbroad_SecretKey_Minimum_32_Characters_Long_For_Security_2026!";
+    public string SecretKey { get; set; } = string.Empty;
     public string Issuer { get; set; } = "USAS";
     public string Audience { get; set; } = "USAS-Clients";
     public int ExpiryDays { get; set; } = 7;

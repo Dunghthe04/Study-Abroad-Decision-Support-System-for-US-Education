@@ -22,6 +22,26 @@ builder.Services.AddInfrastructure(builder.Configuration);
 
 // [USAS-362] Cấu hình JWT Bearer Authentication & Quản lý thu hồi phiên (AC-3)
 var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>() ?? new JwtOptions();
+
+// [USAS-362 Bảo mật] Nạp SecretKey từ biến môi trường JWT_SECRET_KEY hoặc cấu hình
+if (string.IsNullOrWhiteSpace(jwtOptions.SecretKey))
+{
+    jwtOptions.SecretKey = builder.Configuration["JWT_SECRET_KEY"] ?? string.Empty;
+}
+
+// [Bảo mật nghiêm ngặt] Kiểm tra độ an toàn của khóa ký số:
+if (string.IsNullOrWhiteSpace(jwtOptions.SecretKey) || jwtOptions.SecretKey.Length < 32)
+{
+    if (builder.Environment.IsDevelopment())
+    {
+        jwtOptions.SecretKey = "usas_dev_jwt_secret_key_minimum_32_characters_for_local_development_2026!";
+    }
+    else
+    {
+        throw new InvalidOperationException(
+            "CRITICAL SECURITY: JWT SecretKey must be configured via environment variable (JWT_SECRET_KEY) with minimum 32 characters in Production.");
+    }
+}
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;

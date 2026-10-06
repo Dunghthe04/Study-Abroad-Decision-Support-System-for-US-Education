@@ -71,6 +71,7 @@ services:
       Advisor__ApiKey: ${ADVISOR_API_KEY:-}
       Cors__AllowedOrigins__0: http://localhost:3000
       Swagger__Enabled: "true"
+      Jwt__SecretKey: ${JWT_SECRET_KEY:-usas_dev_jwt_secret_key_minimum_32_characters_for_local_development_2026!}
     ports:
       - "5080:8080"
 

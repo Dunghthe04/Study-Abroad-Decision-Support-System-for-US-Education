@@ -28,8 +28,16 @@ public static class DependencyInjection
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddSingleton<IPasswordHasher, PasswordHasher>();
 
-        // [USAS-362] Đăng ký JWT Token Service
-        services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SectionName));
+        // [USAS-362] Đăng ký JWT Token Service (Ưu tiên nạp key từ biến môi trường JWT_SECRET_KEY)
+        services.Configure<JwtOptions>(options =>
+        {
+            configuration.GetSection(JwtOptions.SectionName).Bind(options);
+            if (string.IsNullOrWhiteSpace(options.SecretKey))
+            {
+                options.SecretKey = configuration["JWT_SECRET_KEY"]
+                    ?? "usas_dev_jwt_secret_key_minimum_32_characters_for_local_development_2026!";
+            }
+        });
         services.AddSingleton<ITokenService, TokenService>();
 
         services.Configure<AdvisorOptions>(configuration.GetSection(AdvisorOptions.SectionName));
