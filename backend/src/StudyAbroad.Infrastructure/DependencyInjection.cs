@@ -48,8 +48,8 @@ public static class DependencyInjection
             if (int.TryParse(configuration["SMTP_PORT"], out var port)) options.Port = port;
             options.User = configuration["SMTP_USER"] ?? options.User;
             options.Password = configuration["SMTP_PASSWORD"] ?? options.Password;
-            options.FromEmail = configuration["SMTP_FROM_EMAIL"] ?? options.FromEmail;
-            options.FromName = configuration["SMTP_FROM_NAME"] ?? options.FromName;
+            options.FromEmail = configuration["SMTP_FROM_EMAIL"] ?? configuration["SMTP_SENDER_EMAIL"] ?? options.FromEmail;
+            options.FromName = configuration["SMTP_FROM_NAME"] ?? configuration["SMTP_SENDER_NAME"] ?? options.FromName;
         });
         services.AddScoped<IEmailSender, SmtpEmailSender>();
 
