@@ -28,7 +28,7 @@ namespace StudyAbroad.Application.Recommendations
         public List<string> OpenAdmissionLevels { get; set; } = ["community_college"];
         public decimal MissingValue { get; set; } = 0.5m;   //Giá trị trung tính khi TRƯỜNG thiếu dữ liệu
         public bool AiEnabled { get; set; } = true;          //Tắt thì chỉ trả kết quả CRM + giải thích soạn sẵn
-        public int AiTimeoutSeconds { get; set; } = 60;      //LLM quá thời gian này thì trả kết quả CRM
+        public int AiTimeoutSeconds { get; set; } = 120;      //LLM quá thời gian này thì trả kết quả CRM
 
         // Đọc Json từ AppSetting.ValueJson với Key = "recommend.weights"
         private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
