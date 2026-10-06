@@ -74,6 +74,12 @@ services:
       Cors__AllowedOrigins__0: https://${DOMAIN:?DOMAIN is required}
       Swagger__Enabled: ${SWAGGER_ENABLED:-false}
       Jwt__SecretKey: ${JWT_SECRET_KEY:?JWT_SECRET_KEY is required}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-USAS - Study Abroad Support}
     healthcheck:
       test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080 && printf \"GET /health/live HTTP/1.0\r\n\r\n\" >&3 && grep -q 200 <&3'"]
       interval: 30s

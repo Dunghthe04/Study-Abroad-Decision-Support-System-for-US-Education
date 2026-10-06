@@ -15,22 +15,34 @@ namespace StudyAbroad.Application.Auth
     // [USAS-362] Response trả về khi đăng nhập thành công: bao gồm JWT token và thông tin người dùng
     public record AuthResponse(string AccessToken, DateTime ExpiresAt, UserDto User);
 
+    public record LoginRequest(string Email, string Password);
+
+    // [USAS-12] Requests cho quy trình OTP & Quên mật khẩu & Mở khóa
+    public record VerifyEmailRequest(string Email, string OtpCode);
+    public record ResendOtpRequest(string Email, string Purpose);
+    public record ForgotPasswordRequest(string Email);
+    public record ResetPasswordRequest(string Email, string OtpCode, string NewPassword);
+    public record UnlockAccountRequest(string Email, string OtpCode);
+
     public enum AuthError {
         None,
         Validation,
         EmailTaken,
         PhoneTaken,           // trùng SĐT khi đăng ký → 409
         InvalidCredentials,   // sai tài khoản hoặc mật khẩu → 401
-        Locked,               // tài khoản bị khóa → 423
+        Locked,               // tài khoản bị khóa bởi Admin (vĩnh viễn) → 423
+        TempLocked,           // tài khoản bị tạm khóa sau 5 lần sai mật khẩu → 423
+        Unverified,           // tài khoản chưa kích hoạt email OTP → 403
+        OtpInvalid,           // mã OTP không đúng → 400
+        OtpExpired,           // mã OTP đã hết hạn (> 10 phút) → 400
     };
 
     // [USAS-362] Hộp trả kết quả từ AuthService
     public record AuthResult(UserDto? User, AuthResponse? Response = null, AuthError Error = AuthError.None, string? Message = null)
     {
-        public static AuthResult Ok(UserDto user) => new(user);
+        public static AuthResult Ok(UserDto user, string? message = null) => new(user, null, AuthError.None, message);
         public static AuthResult Ok(AuthResponse response) => new(response.User, response);
+        public static AuthResult Ok(string message) => new(null, null, AuthError.None, message);
         public static AuthResult Fail(AuthError error, string message) => new(null, null, error, message);
     }
-
-    public record LoginRequest(string Email, string Password);
 }

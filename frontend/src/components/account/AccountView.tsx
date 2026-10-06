@@ -56,7 +56,15 @@ export function AccountView() {
             </span>
           ) : user.status === "locked" ? (
             <span className="inline-flex items-center rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-800">
-              🔒 Đã bị khóa
+              🔒 Khóa bởi Quản trị viên
+            </span>
+          ) : user.status === "temp_locked" ? (
+            <span className="inline-flex items-center rounded-full bg-orange-100 px-3 py-1 text-xs font-semibold text-orange-800">
+              ⚠️ Tạm khóa (Sai 5 lần)
+            </span>
+          ) : user.status === "unverified" ? (
+            <span className="inline-flex items-center rounded-full bg-yellow-100 px-3 py-1 text-xs font-semibold text-yellow-800">
+              ✉️ Chưa xác thực Email
             </span>
           ) : (
             <span className="inline-flex items-center rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">

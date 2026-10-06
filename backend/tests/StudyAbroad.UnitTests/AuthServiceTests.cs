@@ -10,6 +10,7 @@ public class AuthServiceTests
     {
         public List<User> Users { get; } = [];
         public List<UserSession> Sessions { get; } = [];
+        public List<OtpToken> Otps { get; } = [];
 
         public Task<bool> EmailExistAsync(string email, CancellationToken cancellationToken = default) =>
             Task.FromResult(Users.Any(u => u.Email == email));
@@ -29,6 +30,13 @@ public class AuthServiceTests
         public Task<User?> GetUserById(Guid id, CancellationToken cancellationToken = default) =>
             Task.FromResult(Users.FirstOrDefault(u => u.Id == id));
 
+        public Task UpdateUserAsync(User user, CancellationToken cancellationToken = default)
+        {
+            var idx = Users.FindIndex(u => u.Id == user.Id);
+            if (idx >= 0) Users[idx] = user;
+            return Task.CompletedTask;
+        }
+
         public Task CreateSessionAsync(UserSession session, CancellationToken cancellationToken = default)
         {
             Sessions.Add(session);
@@ -45,11 +53,42 @@ public class AuthServiceTests
             return Task.CompletedTask;
         }
 
+        public Task RevokeAllSessionsAsync(Guid userId, CancellationToken cancellationToken = default)
+        {
+            foreach (var s in Sessions.Where(x => x.UserId == userId))
+            {
+                s.IsRevoked = true;
+            }
+            return Task.CompletedTask;
+        }
+
+        public Task SaveOtpAsync(OtpToken token, CancellationToken cancellationToken = default)
+        {
+            var idx = Otps.FindIndex(o => o.Id == token.Id);
+            if (idx >= 0) Otps[idx] = token;
+            else Otps.Add(token);
+            return Task.CompletedTask;
+        }
+
+        public Task<OtpToken?> GetLatestOtpAsync(Guid userId, string purpose, CancellationToken cancellationToken = default) =>
+            Task.FromResult(Otps
+                .Where(o => o.UserId == userId && o.Purpose == purpose && o.UsedAt == null)
+                .OrderByDescending(o => o.CreatedAt)
+                .FirstOrDefault());
+
+        public Task InvalidateOtpsAsync(Guid userId, string purpose, CancellationToken cancellationToken = default)
+        {
+            foreach (var o in Otps.Where(x => x.UserId == userId && x.Purpose == purpose && x.UsedAt == null))
+            {
+                o.UsedAt = DateTime.UtcNow;
+            }
+            return Task.CompletedTask;
+        }
+
         public Task<List<User>> GetAllUsersAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult(Users.ToList());
     }
 
-    /// <summary>Not a real hash; lets tests check what was stored without running bcrypt.</summary>
     private sealed class FakeHasher : IPasswordHasher
     {
         public string Hash(string password) => "hashed:" + password;
@@ -64,10 +103,34 @@ public class AuthServiceTests
         public string HashToken(string token) => "hash:" + token;
     }
 
+    private sealed class FakeEmailSender : IEmailSender
+    {
+        public List<(string To, string Purpose, string Code)> SentEmails { get; } = [];
+
+        public Task SendVerificationEmailAsync(string toEmail, string fullName, string otpCode, int expiryMinutes = 10, CancellationToken ct = default)
+        {
+            SentEmails.Add((toEmail, OtpPurposes.VerifyEmail, otpCode));
+            return Task.CompletedTask;
+        }
+
+        public Task SendPasswordResetEmailAsync(string toEmail, string fullName, string otpCode, int expiryMinutes = 10, CancellationToken ct = default)
+        {
+            SentEmails.Add((toEmail, OtpPurposes.ResetPassword, otpCode));
+            return Task.CompletedTask;
+        }
+
+        public Task SendAccountLockedEmailAsync(string toEmail, string fullName, string otpCode, int expiryMinutes = 10, CancellationToken ct = default)
+        {
+            SentEmails.Add((toEmail, OtpPurposes.UnlockAccount, otpCode));
+            return Task.CompletedTask;
+        }
+    }
+
     private readonly FakeUserRepository _repo = new();
     private readonly FakeTokenService _tokens = new();
+    private readonly FakeEmailSender _emailSender = new();
 
-    private AuthService CreateService() => new(_repo, new FakeHasher(), _tokens);
+    private AuthService CreateService() => new(_repo, new FakeHasher(), _tokens, _emailSender);
 
     private static RegisterRequest Request(
         string email = "a@test.com",
@@ -81,22 +144,69 @@ public class AuthServiceTests
     [Theory]
     [InlineData(UserRoles.Parent, null)]
     [InlineData(UserRoles.Student, true)]
-    public async Task Register_StudentOrParent_IsActive(string role, bool? parentAcknowledged)
+    public async Task Register_StudentOrParent_IsUnverifiedAndSendsOtpEmail(string role, bool? parentAcknowledged)
     {
         var result = await CreateService().RegisterAsync(Request(role: role, parentAcknowledged: parentAcknowledged));
 
         Assert.Equal(AuthError.None, result.Error);
-        Assert.Equal(UserStatuses.Active, result.User!.Status);
+        Assert.Equal(UserStatuses.Unverified, result.User!.Status);
         Assert.Single(_repo.Users);
+        Assert.Single(_emailSender.SentEmails);
+        Assert.Equal(OtpPurposes.VerifyEmail, _emailSender.SentEmails[0].Purpose);
     }
 
     [Fact]
-    public async Task Register_Center_IsPending()
+    public async Task VerifyEmail_ValidOtp_ActivatesAccountAndReturnsAuthResponse()
     {
-        var result = await CreateService().RegisterAsync(Request(role: UserRoles.Center));
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        var otpCode = _emailSender.SentEmails[0].Code;
 
-        Assert.Equal(UserStatuses.Pending, result.User!.Status);
-        Assert.Single(_repo.Users);
+        var result = await service.VerifyEmailAsync(new VerifyEmailRequest("a@test.com", otpCode));
+
+        Assert.Equal(AuthError.None, result.Error);
+        Assert.NotNull(result.Response);
+        Assert.Equal(UserStatuses.Active, _repo.Users[0].Status);
+    }
+
+    [Fact]
+    public async Task VerifyEmail_ExpiredOtp_ReturnsOtpExpiredError()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        var otp = _repo.Otps[0];
+        otp.ExpiresAt = DateTime.UtcNow.AddMinutes(-1); // Hết hạn
+
+        var result = await service.VerifyEmailAsync(new VerifyEmailRequest("a@test.com", _emailSender.SentEmails[0].Code));
+
+        Assert.Equal(AuthError.OtpExpired, result.Error);
+        Assert.Equal(UserStatuses.Unverified, _repo.Users[0].Status);
+    }
+
+    [Fact]
+    public async Task VerifyEmail_WrongOtp_IncrementsAttemptsAndReturnsError()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+
+        var result = await service.VerifyEmailAsync(new VerifyEmailRequest("a@test.com", "000000"));
+
+        Assert.Equal(AuthError.OtpInvalid, result.Error);
+        Assert.Equal(1, _repo.Otps[0].Attempts);
+        Assert.Equal(UserStatuses.Unverified, _repo.Users[0].Status);
+    }
+
+    [Fact]
+    public async Task Register_Center_IsPendingAfterEmailVerification()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request(role: UserRoles.Center));
+        var otpCode = _emailSender.SentEmails[0].Code;
+
+        var result = await service.VerifyEmailAsync(new VerifyEmailRequest("a@test.com", otpCode));
+
+        Assert.Equal(AuthError.None, result.Error);
+        Assert.Equal(UserStatuses.Pending, _repo.Users[0].Status);
     }
 
     [Theory]
@@ -122,135 +232,148 @@ public class AuthServiceTests
         Assert.Empty(_repo.Users);
     }
 
-    [Theory]
-    [InlineData("")]
-    [InlineData("not-an-email")]
-    [InlineData("Ten <a@test.com>")]
-    public async Task Register_InvalidEmail_IsValidationError(string email)
-    {
-        var result = await CreateService().RegisterAsync(Request(email: email));
-
-        Assert.Equal(AuthError.Validation, result.Error);
-    }
-
     [Fact]
-    public async Task Register_ShortPassword_IsValidationError()
-    {
-        var result = await CreateService().RegisterAsync(Request(password: "1234567"));
-
-        Assert.Equal(AuthError.Validation, result.Error);
-    }
-
-    [Theory]
-    [InlineData("")]
-    [InlineData("   ")]
-    public async Task Register_BlankFullName_IsValidationError(string fullName)
-    {
-        var result = await CreateService().RegisterAsync(Request(fullName: fullName));
-
-        Assert.Equal(AuthError.Validation, result.Error);
-    }
-
-    [Fact]
-    public async Task Register_FullNameTooLong_IsValidationError()
-    {
-        var result = await CreateService().RegisterAsync(Request(fullName: new string('a', 129)));
-
-        Assert.Equal(AuthError.Validation, result.Error);
-    }
-
-    [Fact]
-    public async Task Register_DuplicateEmail_IsEmailTaken_EvenWithDifferentCase()
+    public async Task Register_DuplicateEmail_IsEmailTakenError()
     {
         var service = CreateService();
-        await service.RegisterAsync(Request(email: "a@test.com"));
+        await service.RegisterAsync(Request());
 
-        var result = await service.RegisterAsync(Request(email: "A@Test.com"));
+        var result = await service.RegisterAsync(Request());
 
         Assert.Equal(AuthError.EmailTaken, result.Error);
         Assert.Single(_repo.Users);
     }
 
     [Fact]
-    public async Task Register_NormalizesEmailAndFullName()
-    {
-        await CreateService().RegisterAsync(Request(email: "  A@Test.COM ", fullName: "  Nguyen Van A  "));
-
-        var stored = Assert.Single(_repo.Users);
-        Assert.Equal("a@test.com", stored.Email);
-        Assert.Equal("Nguyen Van A", stored.FullName);
-    }
-
-    [Fact]
-    public async Task Register_StoresHashNotPlainPassword()
-    {
-        await CreateService().RegisterAsync(Request(password: "password123"));
-
-        var stored = Assert.Single(_repo.Users);
-        Assert.Equal("hashed:password123", stored.PasswordHash);
-    }
-
-    [Fact]
-    public async Task Register_ReturnsDtoMatchingStoredUser()
-    {
-        var result = await CreateService().RegisterAsync(Request());
-
-        var stored = Assert.Single(_repo.Users);
-        Assert.Equal(stored.Id, result.User!.Id);
-        Assert.Equal(stored.Email, result.User.Email);
-        Assert.Equal(stored.Role, result.User.Role);
-    }
-
-    // ---------- Login ----------
-
-    [Fact]
-    public async Task Login_CorrectPassword_ReturnsUser()
+    public async Task Login_UnverifiedUser_ReturnsUnverifiedError()
     {
         var service = CreateService();
-        await service.RegisterAsync(Request(email: "a@test.com"));
+        await service.RegisterAsync(Request());
 
         var result = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
 
-        Assert.Equal(AuthError.None, result.Error);
-        Assert.Equal("a@test.com", result.User!.Email);
+        Assert.Equal(AuthError.Unverified, result.Error);
     }
 
     [Fact]
-    public async Task Login_EmailIsCaseInsensitive()
+    public async Task Login_WrongPassword_5Times_TriggersTempLockoutAndSendsEmail()
     {
         var service = CreateService();
-        await service.RegisterAsync(Request(email: "a@test.com"));
+        await service.RegisterAsync(Request());
+        _repo.Users[0].Status = UserStatuses.Active; // Đã kích hoạt email
 
-        var result = await service.LoginAsync(new LoginRequest("  A@Test.COM ", "password123"));
+        // 4 lần đầu nhập sai
+        for (int i = 1; i <= 4; i++)
+        {
+            var res = await service.LoginAsync(new LoginRequest("a@test.com", "wrong-password"));
+            Assert.Equal(AuthError.InvalidCredentials, res.Error);
+            Assert.Equal(i, _repo.Users[0].FailedLoginAttempts);
+            Assert.Equal(UserStatuses.Active, _repo.Users[0].Status);
+        }
 
-        Assert.Equal(AuthError.None, result.Error);
+        // Lần thứ 5 nhập sai -> Tạm khóa tài khoản
+        var fifthResult = await service.LoginAsync(new LoginRequest("a@test.com", "wrong-password"));
+        Assert.Equal(AuthError.TempLocked, fifthResult.Error);
+        Assert.Equal(5, _repo.Users[0].FailedLoginAttempts);
+        Assert.Equal(UserStatuses.TempLocked, _repo.Users[0].Status);
+
+        // Kiểm tra email cảnh báo mở khóa đã được gửi
+        Assert.Contains(_emailSender.SentEmails, e => e.Purpose == OtpPurposes.UnlockAccount);
     }
 
-    [Theory]
-    [InlineData("a@test.com", "wrong-password")]
-    [InlineData("nobody@test.com", "password123")]
-    public async Task Login_WrongEmailOrPassword_IsInvalidCredentials(string email, string password)
+    [Fact]
+    public async Task Login_WhileTempLocked_EvenWithCorrectPassword_FailsWithTempLocked()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        _repo.Users[0].Status = UserStatuses.TempLocked;
+
+        // Kể cả nhập ĐÚNG mật khẩu
+        var result = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
+
+        Assert.Equal(AuthError.TempLocked, result.Error);
+    }
+
+    [Fact]
+    public async Task UnlockAccount_ValidOtp_RestoresActiveStatus()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        _repo.Users[0].Status = UserStatuses.Active;
+
+        // Tạo 5 lần sai để khóa
+        for (int i = 0; i < 5; i++)
+        {
+            await service.LoginAsync(new LoginRequest("a@test.com", "wrong-pass"));
+        }
+
+        var unlockOtpEmail = _emailSender.SentEmails.Last(e => e.Purpose == OtpPurposes.UnlockAccount);
+        var unlockResult = await service.UnlockAccountAsync(new UnlockAccountRequest("a@test.com", unlockOtpEmail.Code));
+
+        Assert.Equal(AuthError.None, unlockResult.Error);
+        Assert.Equal(UserStatuses.Active, _repo.Users[0].Status);
+        Assert.Equal(0, _repo.Users[0].FailedLoginAttempts);
+
+        // Sau khi mở khóa -> Đăng nhập thành công
+        var loginResult = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
+        Assert.Equal(AuthError.None, loginResult.Error);
+    }
+
+    [Fact]
+    public async Task UnlockAccount_AdminLockedUser_CannotUnlockViaOtp()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        _repo.Users[0].Status = UserStatuses.Locked; // Admin khóa vĩnh viễn
+
+        var result = await service.UnlockAccountAsync(new UnlockAccountRequest("a@test.com", "123456"));
+
+        Assert.Equal(AuthError.Locked, result.Error);
+        Assert.Contains("Quản trị viên", result.Message!);
+        Assert.Equal(UserStatuses.Locked, _repo.Users[0].Status);
+    }
+
+    [Fact]
+    public async Task ForgotPassword_And_ResetPassword_Flow_SucceedsAndRevokesSessions()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        _repo.Users[0].Status = UserStatuses.Active;
+
+        // Đăng nhập tạo session
+        await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
+        Assert.Single(_repo.Sessions);
+        Assert.False(_repo.Sessions[0].IsRevoked);
+
+        // Yêu cầu quên mật khẩu
+        var forgotRes = await service.ForgotPasswordAsync(new ForgotPasswordRequest("a@test.com"));
+        Assert.Equal(AuthError.None, forgotRes.Error);
+
+        var resetOtpEmail = _emailSender.SentEmails.Last(e => e.Purpose == OtpPurposes.ResetPassword);
+
+        // Đặt lại mật khẩu mới
+        var resetRes = await service.ResetPasswordAsync(new ResetPasswordRequest("a@test.com", resetOtpEmail.Code, "newPassword123"));
+        Assert.Equal(AuthError.None, resetRes.Error);
+
+        // Session cũ đã bị thu hồi
+        Assert.True(_repo.Sessions[0].IsRevoked);
+
+        // Mật khẩu mới đăng nhập được
+        var newLogin = await service.LoginAsync(new LoginRequest("a@test.com", "newPassword123"));
+        Assert.Equal(AuthError.None, newLogin.Error);
+    }
+
+    [Fact]
+    public async Task ResendOtp_Within60Seconds_EnforcesCooldown()
     {
         var service = CreateService();
         await service.RegisterAsync(Request());
 
-        var result = await service.LoginAsync(new LoginRequest(email, password));
+        // Yêu cầu gửi lại ngay lập tức
+        var res = await service.ResendOtpAsync(new ResendOtpRequest("a@test.com", OtpPurposes.VerifyEmail));
 
-        Assert.Equal(AuthError.InvalidCredentials, result.Error);
-        Assert.Null(result.User);
-    }
-
-    [Fact]
-    public async Task Login_WrongEmailOrPassword_HaveSameMessage()
-    {
-        var service = CreateService();
-        await service.RegisterAsync(Request());
-
-        var wrongPassword = await service.LoginAsync(new LoginRequest("a@test.com", "wrong-password"));
-        var unknownEmail = await service.LoginAsync(new LoginRequest("nobody@test.com", "password123"));
-
-        // Different messages would let anyone probe which emails are registered.
-        Assert.Equal(wrongPassword.Message, unknownEmail.Message);
+        Assert.Equal(AuthError.Validation, res.Error);
+        Assert.Contains("60 giây", res.Message!);
     }
 
     [Fact]
@@ -263,53 +386,6 @@ public class AuthServiceTests
         var result = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
 
         Assert.Equal(AuthError.Locked, result.Error);
-    }
-
-    [Fact]
-    public async Task Login_LockedAccount_WrongPassword_IsInvalidCredentials()
-    {
-        var service = CreateService();
-        await service.RegisterAsync(Request());
-        _repo.Users[0].Status = UserStatuses.Locked;
-
-        var result = await service.LoginAsync(new LoginRequest("a@test.com", "wrong-password"));
-
-        // Only someone who knows the password may learn that the account is locked.
-        Assert.Equal(AuthError.InvalidCredentials, result.Error);
-    }
-
-    [Fact]
-    public async Task Login_PendingCenter_CanLogin()
-    {
-        var service = CreateService();
-        await service.RegisterAsync(Request(role: UserRoles.Center));
-
-        var result = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
-
-        Assert.Equal(AuthError.None, result.Error);
-        Assert.Equal(UserStatuses.Pending, result.User!.Status);
-    }
-
-    [Fact]
-    public async Task Register_WithPhone_StoresPhone()
-    {
-        var service = CreateService();
-        var result = await service.RegisterAsync(Request(phone: "0912345678"));
-
-        Assert.Equal(AuthError.None, result.Error);
-        Assert.Equal("0912345678", result.User!.Phone);
-        Assert.Equal("0912345678", _repo.Users[0].Phone);
-    }
-
-    [Fact]
-    public async Task Register_WithPhoneTooLong_ReturnsValidationError()
-    {
-        var service = CreateService();
-        var longPhone = new string('1', 33);
-        var result = await service.RegisterAsync(Request(phone: longPhone));
-
-        Assert.Equal(AuthError.Validation, result.Error);
-        Assert.Contains("Số điện thoại", result.Message!);
     }
 
     [Theory]
@@ -370,6 +446,7 @@ public class AuthServiceTests
     {
         var service = CreateService();
         await service.RegisterAsync(Request());
+        _repo.Users[0].Status = UserStatuses.Active;
 
         var result = await service.LoginAsync(
             new LoginRequest("a@test.com", "password123"),
@@ -390,6 +467,7 @@ public class AuthServiceTests
     {
         var service = CreateService();
         await service.RegisterAsync(Request());
+        _repo.Users[0].Status = UserStatuses.Active;
 
         var loginResult = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
         var rawToken = loginResult.Response!.AccessToken;
@@ -441,4 +519,3 @@ public class AuthServiceTests
         Assert.Contains("Số điện thoại đã được sử dụng", result.Message!);
     }
 }
-

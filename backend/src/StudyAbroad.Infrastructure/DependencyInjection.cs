@@ -40,6 +40,19 @@ public static class DependencyInjection
         });
         services.AddSingleton<ITokenService, TokenService>();
 
+        // [USAS-12 / USAS-362] Đăng ký Smtp Email Service (Nạp từ configuration hoặc biến môi trường SMTP_*)
+        services.Configure<SmtpOptions>(options =>
+        {
+            configuration.GetSection(SmtpOptions.SectionName).Bind(options);
+            options.Host = configuration["SMTP_HOST"] ?? options.Host;
+            if (int.TryParse(configuration["SMTP_PORT"], out var port)) options.Port = port;
+            options.User = configuration["SMTP_USER"] ?? options.User;
+            options.Password = configuration["SMTP_PASSWORD"] ?? options.Password;
+            options.FromEmail = configuration["SMTP_FROM_EMAIL"] ?? options.FromEmail;
+            options.FromName = configuration["SMTP_FROM_NAME"] ?? options.FromName;
+        });
+        services.AddScoped<IEmailSender, SmtpEmailSender>();
+
         services.Configure<AdvisorOptions>(configuration.GetSection(AdvisorOptions.SectionName));
         services.AddHttpClient<IAdvisorClient, AdvisorClient>((sp, client) =>
         {

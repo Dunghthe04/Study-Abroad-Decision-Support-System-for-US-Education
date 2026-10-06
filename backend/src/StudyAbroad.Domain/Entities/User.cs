@@ -18,5 +18,8 @@ namespace StudyAbroad.Domain.Entities
 
         /// <summary>[USAS-362] Số điện thoại liên hệ cá nhân (chỉ dùng lưu hồ sơ/tư vấn liên lạc, không dùng đăng nhập hay OTP để tránh tốn phí SMS).</summary>
         public string? Phone { get; set; }
+
+        /// <summary>Số lần đăng nhập sai mật khẩu liên tiếp. Đạt 5 lần sẽ tự động chuyển sang trạng thái temp_locked.</summary>
+        public int FailedLoginAttempts { get; set; } = 0;
     }
 }

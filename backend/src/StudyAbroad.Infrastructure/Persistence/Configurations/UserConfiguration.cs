@@ -23,6 +23,8 @@ namespace StudyAbroad.Infrastructure.Persistence.Configurations
             builder.Property(x => x.Status).HasMaxLength(16).IsRequired();
             // [USAS-362] SĐT liên hệ tối đa 32 ký tự, không bắt buộc (nullable)
             builder.Property(x => x.Phone).HasMaxLength(32);
+            // [USAS-362] Số lần đăng nhập sai mật khẩu liên tiếp, mặc định 0
+            builder.Property(x => x.FailedLoginAttempts).HasDefaultValue(0).IsRequired();
         }
     }
 }

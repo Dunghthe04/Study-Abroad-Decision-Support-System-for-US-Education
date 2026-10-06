@@ -103,13 +103,8 @@ export function RegisterForm() {
         password,
       });
 
-      // 4. Đăng ký thành công -> Tự động đăng nhập
-      await login({
-        email: email.trim(),
-        password,
-      });
-
-      router.push("/account");
+      // 4. Đăng ký thành công -> Chuyển sang màn hình xác thực mã OTP gửi về email
+      router.push(`/verify-email?email=${encodeURIComponent(email.trim())}`);
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message || "Đăng ký không thành công. Vui lòng thử lại.");

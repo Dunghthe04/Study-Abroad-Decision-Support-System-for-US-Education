@@ -70,3 +70,29 @@ export interface LoginRequest {
   email: string;
   password: string;
 }
+
+// [USAS-12] Kiểu dữ liệu xác thực OTP & Quên mật khẩu & Mở khóa tài khoản
+export interface VerifyEmailRequest {
+  email: string;
+  otpCode: string;
+}
+
+export interface ResendOtpRequest {
+  email: string;
+  purpose: "verify_email" | "reset_password" | "unlock_account";
+}
+
+export interface ForgotPasswordRequest {
+  email: string;
+}
+
+export interface ResetPasswordRequest {
+  email: string;
+  otpCode: string;
+  newPassword: string;
+}
+
+export interface UnlockAccountRequest {
+  email: string;
+  otpCode: string;
+}

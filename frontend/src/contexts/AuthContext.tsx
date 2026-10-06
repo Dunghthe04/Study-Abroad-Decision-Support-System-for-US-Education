@@ -9,7 +9,9 @@ interface AuthContextType {
   isLoading: boolean;
   login: (data: LoginRequest) => Promise<UserDto>;
   register: (data: RegisterRequest) => Promise<UserDto>;
+  verifyEmail: (data: { email: string; otpCode: string }) => Promise<UserDto>;
   logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -48,6 +50,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return await authApi.register(data);
   };
 
+  // [USAS-12] Xác thực email OTP: Nhận AuthResponse và cập nhật user state
+  const verifyEmail = async (data: { email: string; otpCode: string }): Promise<UserDto> => {
+    const res = await authApi.verifyEmail(data);
+    setUser(res.user);
+    return res.user;
+  };
+
+  const refreshUser = async () => {
+    try {
+      const profile = await authApi.getMe();
+      setUser(profile);
+    } catch {
+      setUser(null);
+    }
+  };
+
   // [AC-3] Đăng xuất: Thu hồi phiên trên máy chủ và xóa HttpOnly Cookie
   const logout = async () => {
     try {
@@ -60,7 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, login, register, verifyEmail, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

@@ -1,11 +1,16 @@
 import type {
   AdvisorChatResponse,
   AuthResponse,
+  ForgotPasswordRequest,
   LoginRequest,
   PagedResult,
   RegisterRequest,
+  ResendOtpRequest,
+  ResetPasswordRequest,
   StudyCenter,
+  UnlockAccountRequest,
   UserDto,
+  VerifyEmailRequest,
 } from "@/types/api";
 
 // Browser code calls same-origin /api (Nginx in prod, Next rewrite in dev).
@@ -57,6 +62,41 @@ export const authApi = {
   // [AC-2] Đăng nhập: Backend thiết lập HttpOnly Cookie "usas_access_token"
   login: (data: LoginRequest) =>
     apiFetch<AuthResponse>("/api/v1/auth/login", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  // [USAS-12] Xác thực mã OTP kích hoạt email đăng ký
+  verifyEmail: (data: VerifyEmailRequest) =>
+    apiFetch<AuthResponse>("/api/v1/auth/verify-email", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  // [USAS-12] Gửi lại mã OTP (verify_email, reset_password, unlock_account)
+  resendOtp: (data: ResendOtpRequest) =>
+    apiFetch<{ message: string }>("/api/v1/auth/resend-otp", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  // [USAS-12] Quên mật khẩu - gửi mã OTP qua email
+  forgotPassword: (data: ForgotPasswordRequest) =>
+    apiFetch<{ message: string }>("/api/v1/auth/forgot-password", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  // [USAS-12] Đặt lại mật khẩu mới với mã OTP
+  resetPassword: (data: ResetPasswordRequest) =>
+    apiFetch<{ message: string }>("/api/v1/auth/reset-password", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  // [USAS-12 / USAS-17] Mở khóa tài khoản tạm thời (sau khi bị tạm khóa vì nhập sai 5 lần)
+  unlockAccount: (data: UnlockAccountRequest) =>
+    apiFetch<{ message: string }>("/api/v1/auth/unlock-account", {
       method: "POST",
       body: JSON.stringify(data),
     }),

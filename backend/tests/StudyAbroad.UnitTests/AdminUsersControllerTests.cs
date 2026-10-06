@@ -20,6 +20,21 @@ public class AdminUsersControllerTests
         public Task<AuthResult> LoginAsync(LoginRequest request, string? ipAddress = null, string? userAgent = null, CancellationToken ct = default) =>
             throw new NotImplementedException();
 
+        public Task<AuthResult> VerifyEmailAsync(VerifyEmailRequest request, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+
+        public Task<AuthResult> ResendOtpAsync(ResendOtpRequest request, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+
+        public Task<AuthResult> ForgotPasswordAsync(ForgotPasswordRequest request, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+
+        public Task<AuthResult> ResetPasswordAsync(ResetPasswordRequest request, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+
+        public Task<AuthResult> UnlockAccountAsync(UnlockAccountRequest request, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+
         public Task<bool> LogoutAsync(string rawToken, CancellationToken ct = default) =>
             throw new NotImplementedException();
 
