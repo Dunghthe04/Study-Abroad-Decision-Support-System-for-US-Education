@@ -70,7 +70,13 @@ services:
       Advisor__BaseUrl: http://advisor:8000
       Advisor__ApiKey: ${ADVISOR_API_KEY:-}
       Cors__AllowedOrigins__0: http://localhost:3000
-      Swagger__Enabled: "true"
+      Jwt__SecretKey: ${JWT_SECRET_KEY:-usas_dev_jwt_secret_key_minimum_32_characters_for_local_development_2026!}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-USAS - Study Abroad Support}
     ports:
       - "5080:8080"
 

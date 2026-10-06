@@ -99,8 +99,9 @@ export function ChatBox() {
       <form onSubmit={send} className="flex gap-2">
         <input
           value={input}
+          maxLength={1000}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Nhập câu hỏi..."
+          placeholder="Nhập câu hỏi (tối đa 1000 ký tự)..."
           className="flex-1 rounded border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
         />
         <button
