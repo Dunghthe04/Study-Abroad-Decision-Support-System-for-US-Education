@@ -31,15 +31,19 @@ public static class DependencyInjection
         services.AddSingleton<IPasswordHasher, PasswordHasher>();
 
         services.Configure<AdvisorOptions>(configuration.GetSection(AdvisorOptions.SectionName));
-        services.AddHttpClient<IAdvisorClient, AdvisorClient>((sp, client) =>
-        {
-            var options = sp.GetRequiredService<IOptions<AdvisorOptions>>().Value;
-            client.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/");
-            client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
-            if (!string.IsNullOrEmpty(options.ApiKey))
-                client.DefaultRequestHeaders.Add("X-Api-Key", options.ApiKey);
-        });
+        services.AddHttpClient<IAdvisorClient, AdvisorClient>(ConfigureAdvisorClient);
+        services.AddHttpClient<IRecommendationAi, RecommendationAiClient>(ConfigureAdvisorClient);
 
         return services;
+    }
+
+    //Cả chat và gợi ý trường đều gọi sang advisor: cùng địa chỉ, timeout, API key
+    private static void ConfigureAdvisorClient(IServiceProvider sp, HttpClient client)
+    {
+        var options = sp.GetRequiredService<IOptions<AdvisorOptions>>().Value;
+        client.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/");
+        client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+        if (!string.IsNullOrEmpty(options.ApiKey))
+            client.DefaultRequestHeaders.Add("X-Api-Key", options.ApiKey);
     }
 }

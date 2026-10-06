@@ -17,7 +17,7 @@ namespace StudyAbroad.Application.Recommendations
         //Lấy ra recommendation gần đây nhất
         Task<RecommendationResultDto?> GetLatestAsync(Guid userId, CancellationToken ct = default);
     }
-    public class RecommendationService(IRecommendationRepository repository) : IRecommendationService
+    public class RecommendationService(IRecommendationRepository repository, IRecommendationAi ai) : IRecommendationService
     {
         public const string AlgorithmVersion = "crm-saw-v1";
         private static readonly JsonSerializerOptions Json = new JsonSerializerOptions(JsonSerializerDefaults.Web);
@@ -66,23 +66,30 @@ namespace StudyAbroad.Application.Recommendations
             {
                 warnings.Add("Không có trường nào phù hợp với ngành, bang và ngân sách hiện tại. Hãy thử nới điều kiện.");
             }
-            //5. Đổi sang DTO + giải thích
-            var items = scored.Select((s, i) => new RecommendationItemDto(
+            //5. LLM xếp lại trong tệp ứng viên + viết giải thích ; lỗi or tắt = null ==> dùng kết quả CRM
+            var picks = await TryRankWithAiAsync(student, scored, settings, ct);
+            if (picks is null && settings.AiEnabled && scored.Count > 0)
+                warnings.Add("AI tạm thời chưa phản hồi, danh sách và giải thích theo kết quả chấm điểm.");
+
+            //6. Kiểm tra đầu ra LLM(mã trường, con số) rồi đổi sang Dto
+            var guarded = AiOutputGuard.Apply(picks ?? [], scored, student);
+            var items = guarded.Select((g, i) => new RecommendationItemDto(
                 Rank: i + 1,
-                s.Candidate.UniversityId,
-                s.Candidate.OfferingId,
-                s.Candidate.Code,
-                s.Candidate.Name,
-                s.Candidate.State,
-                ReasonTemplate.CategoryCode(s.AdmissionCategory),
-                s.Score,
-                s.TotalCostUsd,
-                s.CostUnknown,
-                ReasonTemplate.EnglishCode(s.English),
-                s.OpenAdmission,
-                ReasonTemplate.Build(student, s),
-                AiExplained: false)).ToList();
-            //6. Lưu
+                g.School.Candidate.UniversityId,
+                g.School.Candidate.OfferingId,
+                g.School.Candidate.Code,
+                g.School.Candidate.Name,
+                g.School.Candidate.State,
+                ReasonTemplate.CategoryCode(g.School.AdmissionCategory),
+                g.School.Score,
+                g.School.TotalCostUsd,
+                g.School.CostUnknown,
+                ReasonTemplate.EnglishCode(g.School.English),
+                g.School.OpenAdmission,
+                g.Reason,
+                g.AiExplained)).ToList();
+
+            //7. Lưu
             var entity = new Recommendation
             {
                 UserId = userId,
@@ -96,6 +103,38 @@ namespace StudyAbroad.Application.Recommendations
             return new RecommendationResultDto(entity.Id, entity.CreatedAt, entity.StudyLevel, items, warnings);
         }
 
+        //Gọi LLM có giới hạn thời gian. Trả null khi AI tắt, không có trường, LLM lỗi hoặc quá thời gian
+        private async Task<IReadOnlyList<AiPick>?> TryRankWithAiAsync(StudentSnapshot student, IReadOnlyList<ScoredSchool> scored, RecommendSettings settings, CancellationToken ct)
+        {
+            if (!settings.AiEnabled || scored.Count == 0) return null;
+
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeout.CancelAfter(TimeSpan.FromSeconds(settings.AiTimeoutSeconds));
+            try
+            {
+                var response = await ai.RankAsync(ToAiRequest(student, scored), timeout.Token);
+                return response.Items;
+            }
+            catch (Exception) when (!ct.IsCancellationRequested)   // người dùng tự hủy request thì không nuốt lỗi
+            {
+                return null;
+            }
+        }
+
+        //Chỉ gửi số liệu cần thiết cho LLM, không gửi thông tin cá nhân
+        private static AiRankRequest ToAiRequest(StudentSnapshot s, IReadOnlyList<ScoredSchool> scored) => new(
+            new AiStudentInput(s.StudyLevel, s.Major, s.Gpa4, s.Sat, s.AnnualBudgetUsd, s.Ielts, s.Toefl, s.Duolingo, s.ExtracurricularScore),
+            scored.Select(r => new AiSchoolInput(
+                r.Candidate.Code,
+                r.Candidate.Name,
+                r.Candidate.State,
+                ReasonTemplate.CategoryCode(r.AdmissionCategory),
+                r.Candidate.AvgGpa4,
+                r.Candidate.Sat25,
+                r.Candidate.Sat75,
+                r.Candidate.TuitionUsd,
+                r.TotalCostUsd,
+                ReasonTemplate.EnglishCode(r.English))).ToList());
 
         public async Task<RecommendationResultDto?> GetLatestAsync(Guid userId, CancellationToken ct = default)
         {
