@@ -89,7 +89,7 @@ namespace StudyAbroad.Infrastructure.Auth
                 using var client = new SmtpClient(_options.Host, _options.Port)
                 {
                     EnableSsl = _options.EnableSsl,
-                    Credentials = new NetworkCredential(_options.User.Trim(), _options.Password.Replace(" ", "").Trim()),
+                    Credentials = new NetworkCredential(_options.User, _options.Password),
                     Timeout = 10000 // 10 giây
                 };
 
