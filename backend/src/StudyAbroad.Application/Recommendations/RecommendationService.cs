@@ -2,8 +2,8 @@ using StudyAbroad.Domain.Entities;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using StudyAbroad.Domain.Constants;
 using System.Text.Json;
 using System.Threading.Tasks;
 
@@ -27,6 +27,10 @@ namespace StudyAbroad.Application.Recommendations
             var profile = await repository.GetProfileAsync(userId,ct);
             if (profile == null) return null;
             var warnings = new List<string>();
+            if (!StudyLevels.IsValid(profile.TargetLevel))
+                return new RecommendationResultDto(Guid.Empty, DateTime.UtcNow, profile.TargetLevel, [],
+                    ["Hồ sơ chưa chọn bậc học muốn đi. Hãy cập nhật hồ sơ trước khi gợi ý trường."]);
+
 
             //2. Cấu hình
             var settings = RecommendSettings.Parse(await repository.GetSettingJsonAsync(RecommendSettings.SettingKey, ct));

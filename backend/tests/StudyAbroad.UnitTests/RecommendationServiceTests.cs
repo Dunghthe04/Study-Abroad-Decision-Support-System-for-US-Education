@@ -124,6 +124,20 @@ public class RecommendationServiceTests
     }
 
     [Fact]
+    public async Task Create_NoStudyLevel_WarnsAndSavesNothing()
+    {
+        var profile = NewProfile();
+        profile.TargetLevel = "";
+        var repo = NewRepo(profile);
+
+        var result = await NewService(repo).CreateAsync(UserId);
+
+        Assert.Empty(result!.Items);
+        Assert.Contains(result.Warnings, w => w.Contains("bậc học"));
+        Assert.Empty(repo.Saved);
+    }
+
+    [Fact]
     public async Task Create_NoMatchingSchool_WarnsWithEmptyList()
     {
         var profile = NewProfile();
