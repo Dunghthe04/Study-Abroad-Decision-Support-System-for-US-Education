@@ -53,7 +53,7 @@ const UNIVERSITY_SUBJECTS = [
   "Đại số tuyến tính",
   "Xác suất thống kê ứng dụng",
   "Toán rời rạc",
-  "Lập trình C/C++ căn bản",
+  "Lập trình C/C++",
   "Lập trình hướng đối tượng (OOP)",
   "Cấu trúc dữ liệu & Giải thuật",
   "Kiến trúc máy tính",
@@ -70,40 +70,35 @@ const UNIVERSITY_SUBJECTS = [
   "Kinh tế vĩ mô",
   "Triết học Mác - Lênin",
   "Tiếng Anh học thuật (Academic English)",
-  "Khóa luận tốt nghiệp (Graduation Thesis)",
+  "Khóa luận tốt nghiệp",
 ];
 
-// Dữ liệu mẫu THPT 3 năm (25 môn học, xu hướng Upward Trend)
+// Dữ liệu mẫu THPT 3 năm (25 môn học, xu hướng tiến bộ Upward Trend)
 const SAMPLE_HIGHSCHOOL_SCORES: UpsertTranscriptScoreItem[] = [
-  // Lớp 10 HK1
   { termOrder: 1, termName: "Lớp 10 HK1", subject: "Toán", score: 8.5, credits: 2 },
   { termOrder: 1, termName: "Lớp 10 HK1", subject: "Ngữ văn", score: 8.0, credits: 2 },
   { termOrder: 1, termName: "Lớp 10 HK1", subject: "Tiếng Anh", score: 8.8, credits: 3 },
   { termOrder: 1, termName: "Lớp 10 HK1", subject: "Vật lý", score: 8.2, credits: 2 },
   { termOrder: 1, termName: "Lớp 10 HK1", subject: "Hóa học", score: 8.0, credits: 2 },
 
-  // Lớp 10 HK2
   { termOrder: 2, termName: "Lớp 10 HK2", subject: "Toán", score: 8.8, credits: 2 },
   { termOrder: 2, termName: "Lớp 10 HK2", subject: "Ngữ văn", score: 8.2, credits: 2 },
   { termOrder: 2, termName: "Lớp 10 HK2", subject: "Tiếng Anh", score: 9.0, credits: 3 },
   { termOrder: 2, termName: "Lớp 10 HK2", subject: "Vật lý", score: 8.5, credits: 2 },
   { termOrder: 2, termName: "Lớp 10 HK2", subject: "Hóa học", score: 8.3, credits: 2 },
 
-  // Lớp 11 HK1
   { termOrder: 3, termName: "Lớp 11 HK1", subject: "Toán Nâng cao", score: 9.0, credits: 2 },
   { termOrder: 3, termName: "Lớp 11 HK1", subject: "Ngữ văn", score: 8.5, credits: 2 },
   { termOrder: 3, termName: "Lớp 11 HK1", subject: "Tiếng Anh", score: 9.2, credits: 3 },
   { termOrder: 3, termName: "Lớp 11 HK1", subject: "Vật lý", score: 8.8, credits: 2 },
   { termOrder: 3, termName: "Lớp 11 HK1", subject: "Tin học", score: 9.5, credits: 2 },
 
-  // Lớp 11 HK2
   { termOrder: 4, termName: "Lớp 11 HK2", subject: "Toán Nâng cao", score: 9.2, credits: 2 },
   { termOrder: 4, termName: "Lớp 11 HK2", subject: "Ngữ văn", score: 8.6, credits: 2 },
   { termOrder: 4, termName: "Lớp 11 HK2", subject: "Tiếng Anh", score: 9.4, credits: 3 },
   { termOrder: 4, termName: "Lớp 11 HK2", subject: "Vật lý", score: 9.0, credits: 2 },
   { termOrder: 4, termName: "Lớp 11 HK2", subject: "Tin học", score: 9.6, credits: 2 },
 
-  // Lớp 12 HK1
   { termOrder: 5, termName: "Lớp 12 HK1", subject: "Toán Nâng cao", score: 9.5, credits: 2 },
   { termOrder: 5, termName: "Lớp 12 HK1", subject: "Ngữ văn", score: 8.8, credits: 2 },
   { termOrder: 5, termName: "Lớp 12 HK1", subject: "Tiếng Anh", score: 9.6, credits: 3 },
@@ -111,57 +106,45 @@ const SAMPLE_HIGHSCHOOL_SCORES: UpsertTranscriptScoreItem[] = [
   { termOrder: 5, termName: "Lớp 12 HK1", subject: "Tin học", score: 9.8, credits: 2 },
 ];
 
-// Dữ liệu mẫu Đại học 4 năm (28 môn, tính theo tín chỉ, nộp Thạc sĩ/Tiến sĩ)
+// Dữ liệu mẫu Đại học 4 năm (28 môn, tính theo tín chỉ tích lũy)
 const SAMPLE_UNIVERSITY_SCORES: UpsertTranscriptScoreItem[] = [
-  // Năm 1 HK1
   { termOrder: 1, termName: "Năm 1 HK1", subject: "Giải tích 1 (Calculus I)", score: 8.2, credits: 3 },
   { termOrder: 1, termName: "Năm 1 HK1", subject: "Đại số tuyến tính", score: 8.0, credits: 3 },
   { termOrder: 1, termName: "Năm 1 HK1", subject: "Triết học Mác - Lênin", score: 7.5, credits: 3 },
   { termOrder: 1, termName: "Năm 1 HK1", subject: "Tiếng Anh học thuật 1", score: 8.5, credits: 3 },
 
-  // Năm 1 HK2
   { termOrder: 2, termName: "Năm 1 HK2", subject: "Giải tích 2 (Calculus II)", score: 8.5, credits: 3 },
   { termOrder: 2, termName: "Năm 1 HK2", subject: "Vật lý đại cương", score: 8.2, credits: 3 },
-  { termOrder: 2, termName: "Năm 1 HK2", subject: "Lập trình C/C++ căn bản", score: 9.0, credits: 4 },
+  { termOrder: 2, termName: "Năm 1 HK2", subject: "Lập trình C/C++", score: 9.0, credits: 4 },
   { termOrder: 2, termName: "Năm 1 HK2", subject: "Tiếng Anh học thuật 2", score: 8.8, credits: 3 },
 
-  // Năm 2 HK1
   { termOrder: 3, termName: "Năm 2 HK1", subject: "Cấu trúc dữ liệu & Giải thuật", score: 9.0, credits: 4 },
   { termOrder: 3, termName: "Năm 2 HK1", subject: "Toán rời rạc", score: 8.6, credits: 3 },
   { termOrder: 3, termName: "Năm 2 HK1", subject: "Kiến trúc máy tính", score: 8.8, credits: 3 },
   { termOrder: 3, termName: "Năm 2 HK1", subject: "Kinh tế chính trị", score: 8.0, credits: 2 },
 
-  // Năm 2 HK2
   { termOrder: 4, termName: "Năm 2 HK2", subject: "Cơ sở dữ liệu (Database Systems)", score: 9.2, credits: 4 },
   { termOrder: 4, termName: "Năm 2 HK2", subject: "Hệ điều hành (Operating Systems)", score: 8.8, credits: 3 },
   { termOrder: 4, termName: "Năm 2 HK2", subject: "Xác suất thống kê ứng dụng", score: 8.5, credits: 3 },
   { termOrder: 4, termName: "Năm 2 HK2", subject: "Mạng máy tính", score: 8.7, credits: 3 },
 
-  // Năm 3 HK1
   { termOrder: 5, termName: "Năm 3 HK1", subject: "Trí tuệ nhân tạo (AI)", score: 9.4, credits: 3 },
   { termOrder: 5, termName: "Năm 3 HK1", subject: "Phát triển ứng dụng Web", score: 9.2, credits: 3 },
   { termOrder: 5, termName: "Năm 3 HK1", subject: "Thiết kế & Phân tích giải thuật", score: 9.0, credits: 3 },
   { termOrder: 5, termName: "Năm 3 HK1", subject: "Học máy cơ bản (Machine Learning)", score: 9.5, credits: 3 },
 
-  // Năm 3 HK2
   { termOrder: 6, termName: "Năm 3 HK2", subject: "Xử lý ngôn ngữ tự nhiên (NLP)", score: 9.5, credits: 3 },
   { termOrder: 6, termName: "Năm 3 HK2", subject: "Thị giác máy tính (Computer Vision)", score: 9.6, credits: 3 },
   { termOrder: 6, termName: "Năm 3 HK2", subject: "An toàn & Bảo mật hệ thống", score: 9.0, credits: 3 },
   { termOrder: 6, termName: "Năm 3 HK2", subject: "Dự án kỹ thuật phần mềm", score: 9.5, credits: 4 },
 
-  // Năm 4 HK1
-  { termOrder: 7, termName: "Năm 4 HK1", subject: "Điện toán đám mây (Cloud Computing)", score: 9.6, credits: 3 },
-  { termOrder: 7, termName: "Năm 4 HK1", subject: "Khai phá dữ liệu lớn (Big Data)", score: 9.7, credits: 3 },
+  { termOrder: 7, termName: "Năm 4 HK1", subject: "Điện toán đám mây", score: 9.6, credits: 3 },
+  { termOrder: 7, termName: "Năm 4 HK1", subject: "Khai phá dữ liệu lớn", score: 9.7, credits: 3 },
   { termOrder: 7, termName: "Năm 4 HK1", subject: "Quản trị dự án CNTT", score: 9.2, credits: 3 },
 
-  // Năm 4 HK2
-  { termOrder: 8, termName: "Năm 4 HK2", subject: "Khóa luận tốt nghiệp (Graduation Thesis)", score: 9.8, credits: 6 },
+  { termOrder: 8, termName: "Năm 4 HK2", subject: "Khóa luận tốt nghiệp", score: 9.8, credits: 6 },
 ];
 
-/**
- * [USAS-365] Bảng quản lý điểm chi tiết từng môn:
- * Hỗ trợ linh hoạt cho cả Học sinh THPT (nộp Đại học) và Sinh viên Đại học (nộp Master/PhD).
- */
 export function TranscriptScoreTable({
   scores,
   onSaveScores,
@@ -169,14 +152,11 @@ export function TranscriptScoreTable({
   onAnalyze,
   isAnalyzing,
 }: TranscriptScoreTableProps) {
-  // Chọn bậc học hiện tại
   const [level, setLevel] = useState<EducationLevel>("highschool");
 
-  // Danh sách kỳ theo bậc học
   const currentTerms = level === "highschool" ? HIGHSCHOOL_TERMS : UNIVERSITY_TERMS;
   const currentSubjects = level === "highschool" ? HIGHSCHOOL_SUBJECTS : UNIVERSITY_SUBJECTS;
 
-  // State form thêm môn học
   const [selectedTermOrder, setSelectedTermOrder] = useState<number>(1);
   const [isCustomTerm, setIsCustomTerm] = useState(false);
   const [customTermName, setCustomTermName] = useState("");
@@ -186,12 +166,10 @@ export function TranscriptScoreTable({
   const [score, setScore] = useState<string>("8.5");
   const [credits, setCredits] = useState<string>(level === "university" ? "3" : "2");
 
-  // State bộ lọc và tìm kiếm
   const [filterTerm, setFilterTerm] = useState<number | "all">("all");
   const [searchSubject, setSearchSubject] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
-  // Cập nhật số tín chỉ mặc định khi đổi bậc học
   const handleLevelChange = (newLevel: EducationLevel) => {
     setLevel(newLevel);
     setSelectedTermOrder(1);
@@ -199,12 +177,14 @@ export function TranscriptScoreTable({
     setCredits(newLevel === "university" ? "3" : "2");
   };
 
-  const handleAddSubject = async () => {
+  const handleAddSubject = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (!subject.trim()) {
-      alert("Vui lòng nhập hoặc chọn tên môn học.");
+      alert("Vui lòng nhập tên môn học.");
       return;
     }
 
+    // Fix C365-02: Cho phép độ chính xác thập phân tùy ý trong [0.0, 10.0] (ví dụ: 8.25)
     const numScore = parseFloat(score);
     if (isNaN(numScore) || numScore < 0 || numScore > 10) {
       alert("Điểm số phải từ 0.0 đến 10.0.");
@@ -216,20 +196,20 @@ export function TranscriptScoreTable({
 
     if (isCustomTerm) {
       if (!customTermName.trim()) {
-        alert("Vui lòng nhập tên kỳ học tùy chỉnh (VD: Kỳ Hè 2025).");
+        alert("Vui lòng nhập tên kỳ học tùy chỉnh.");
         return;
       }
       finalTermName = customTermName.trim();
       finalTermOrder = customTermOrder;
     } else {
       const found = currentTerms.find((t) => t.order === selectedTermOrder);
-      finalTermName = found ? found.name : `Học kỳ ${selectedTermOrder}`;
+      finalTermName = found ? found.name : `Kỳ ${selectedTermOrder}`;
       finalTermOrder = selectedTermOrder;
     }
 
     const numCredits = credits ? parseFloat(credits) : null;
     if (numCredits !== null && (isNaN(numCredits) || numCredits <= 0 || numCredits > 30)) {
-      alert("Số tín chỉ/hệ số phải lớn hơn 0 và không vượt quá 30.");
+      alert("Số tín chỉ/hệ số phải lớn hơn 0 và không quá 30.");
       return;
     }
 
@@ -243,8 +223,11 @@ export function TranscriptScoreTable({
 
     setIsSaving(true);
     try {
+      // Fix C365-03: CHỈ xóa trường tên môn khi lưu thành công vào API
       await onSaveScores([newItem]);
       setSubject("");
+    } catch {
+      // Khi API trả lỗi (500/400), giữ nguyên dữ liệu trong form để người dùng thử lại
     } finally {
       setIsSaving(false);
     }
@@ -255,22 +238,27 @@ export function TranscriptScoreTable({
     const label = isHs ? "THPT (3 năm - 25 môn)" : "Đại học (4 năm - 28 môn có tín chỉ)";
     const dataset = isHs ? SAMPLE_HIGHSCHOOL_SCORES : SAMPLE_UNIVERSITY_SCORES;
 
-    if (
-      confirm(
-        `Thao tác này sẽ nạp dữ liệu bảng điểm mẫu ${label} với xu hướng học tập tiến bộ (Upward Trend). Tiếp tục?`
-      )
-    ) {
+    if (confirm(`Nạp dữ liệu học tập mẫu ${label} để kiểm thử thuật toán?`)) {
       setIsSaving(true);
       try {
         await onSaveScores(dataset);
         setLevel(sampleType);
+      } catch {
+        // Lưu thất bại
       } finally {
         setIsSaving(false);
       }
     }
   };
 
-  // Thống kê nhanh từ danh sách điểm hiện tại
+  const handleDeleteScore = async (scoreId: string) => {
+    try {
+      await onDeleteScore(scoreId);
+    } catch {
+      // Bắt lỗi nếu caller rethrow, đảm bảo không gây unhandled rejection
+    }
+  };
+
   const stats = useMemo(() => {
     const total = scores.length;
     if (total === 0) return { total: 0, avg: 0, totalCredits: 0 };
@@ -283,7 +271,6 @@ export function TranscriptScoreTable({
     };
   }, [scores]);
 
-  // Danh sách các kỳ thực tế có trong bảng điểm để làm bộ lọc
   const uniqueTermsInScores = useMemo(() => {
     const map = new Map<number, string>();
     scores.forEach((s) => {
@@ -296,7 +283,6 @@ export function TranscriptScoreTable({
       .sort((a, b) => a.order - b.order);
   }, [scores]);
 
-  // Lọc dữ liệu hiển thị
   const filteredScores = useMemo(() => {
     return scores.filter((s) => {
       const matchTerm = filterTerm === "all" || s.termOrder === filterTerm;
@@ -312,258 +298,251 @@ export function TranscriptScoreTable({
     switch (groupKey) {
       case "natural_sciences":
         return (
-          <span className="inline-flex items-center gap-1 rounded bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700 border border-blue-200">
-            <span>🔬</span> {groupName}
+          <span className="inline-flex items-center rounded-sm bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
+            {groupName}
           </span>
         );
       case "languages":
         return (
-          <span className="inline-flex items-center gap-1 rounded bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 border border-emerald-200">
-            <span>🌐</span> {groupName}
+          <span className="inline-flex items-center rounded-sm bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+            {groupName}
           </span>
         );
       case "social_sciences":
         return (
-          <span className="inline-flex items-center gap-1 rounded bg-purple-50 px-2 py-0.5 text-[11px] font-semibold text-purple-700 border border-purple-200">
-            <span>📚</span> {groupName}
+          <span className="inline-flex items-center rounded-sm bg-purple-50 px-2 py-0.5 text-xs font-medium text-purple-700">
+            {groupName}
           </span>
         );
       default:
         return (
-          <span className="inline-flex items-center gap-1 rounded bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700 border border-slate-200">
-            <span>📌</span> {groupName}
+          <span className="inline-flex items-center rounded-sm bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+            {groupName}
           </span>
         );
     }
   };
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-xs">
-      {/* Header bảng điểm */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-100 pb-5">
+    <div className="rounded-xl border border-slate-200/90 bg-white p-5 sm:p-6 shadow-xs space-y-6">
+      {/* Top Action Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-5">
         <div>
           <div className="flex items-center gap-2">
-            <h3 className="text-lg font-bold text-slate-900">
-              Bảng Điểm Chi Tiết & Nhập Điểm Môn Học
+            <h3 className="text-base font-bold text-slate-900">
+              Bảng Điểm & Quản Lý Môn Học
             </h3>
-            <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700 border border-slate-200">
-              {scores.length} môn đã lưu
+            <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600">
+              {scores.length} đầu điểm
             </span>
           </div>
-          <p className="text-xs text-slate-500 mt-1">
-            Hỗ trợ nhập học bạ THPT (nộp Đại học Mỹ) hoặc bảng điểm Đại học theo tín chỉ (nộp Thạc sĩ / Tiến sĩ).
+          <p className="text-xs text-slate-500 mt-0.5">
+            Dữ liệu đầu vào để tính toán điểm trung bình và phân loại hồ sơ học thuật
           </p>
         </div>
 
-        {/* Nút hành động */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* Dropdown nạp mẫu */}
-          <div className="flex items-center rounded-lg border border-slate-200 bg-slate-50 p-0.5 text-xs">
+          {/* Secondary sample buttons */}
+          <div className="flex items-center gap-1.5 text-xs">
             <button
               type="button"
               onClick={() => handleLoadSample("highschool")}
               disabled={isSaving}
-              className="rounded-md px-2.5 py-1.5 font-medium text-slate-700 hover:bg-white hover:shadow-xs disabled:opacity-50 transition"
-              title="Nạp dữ liệu mẫu 3 năm THPT (25 môn)"
+              className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-50 disabled:opacity-50 transition"
             >
-              🎓 Mẫu THPT (3 năm)
+              Nạp mẫu THPT (3 năm)
             </button>
-            <span className="text-slate-300">|</span>
             <button
               type="button"
               onClick={() => handleLoadSample("university")}
               disabled={isSaving}
-              className="rounded-md px-2.5 py-1.5 font-medium text-slate-700 hover:bg-white hover:shadow-xs disabled:opacity-50 transition"
-              title="Nạp dữ liệu mẫu 4 năm Đại học có tín chỉ (28 môn)"
+              className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-50 disabled:opacity-50 transition"
             >
-              🏛️ Mẫu Đại học (4 năm)
+              Nạp mẫu Đại học (4 năm)
             </button>
           </div>
 
+          {/* Primary Action Button */}
           <button
             type="button"
             onClick={onAnalyze}
             disabled={isAnalyzing || scores.length === 0}
-            className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-50 shadow-xs transition"
+            className="inline-flex items-center justify-center rounded-lg bg-slate-900 px-4 py-1.5 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50 transition shadow-2xs"
           >
-            {isAnalyzing ? (
-              <>
-                <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-white border-r-transparent" />
-                Đang phân tích...
-              </>
-            ) : (
-              <>⚡ Phân tích điểm học thuật</>
-            )}
+            {isAnalyzing ? "Đang tính toán..." : "Phân tích điểm GPA"}
           </button>
         </div>
       </div>
 
-      {/* Form nhập môn học có Tab chuyển bậc học */}
-      <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50/70 p-4.5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200/80 pb-3">
+      {/* Input Section */}
+      <div className="rounded-lg border border-slate-200/70 bg-slate-50/60 p-4 space-y-3.5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200/60 pb-3">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
-              Thêm môn học mới:
-            </span>
-            <div className="inline-flex rounded-lg bg-white p-0.5 border border-slate-200 shadow-2xs">
+            <span className="text-xs font-semibold text-slate-700">Bậc học:</span>
+            <div className="inline-flex rounded-md bg-slate-200/70 p-0.5 text-xs">
               <button
                 type="button"
                 onClick={() => handleLevelChange("highschool")}
-                className={`rounded-md px-2.5 py-1 text-xs font-semibold transition ${
+                className={`rounded px-2.5 py-1 font-semibold transition ${
                   level === "highschool"
-                    ? "bg-blue-600 text-white shadow-xs"
+                    ? "bg-white text-slate-900 shadow-2xs"
                     : "text-slate-600 hover:text-slate-900"
                 }`}
               >
-                🎓 Bậc THPT (Cấp 3)
+                Học sinh THPT
               </button>
               <button
                 type="button"
                 onClick={() => handleLevelChange("university")}
-                className={`rounded-md px-2.5 py-1 text-xs font-semibold transition ${
+                className={`rounded px-2.5 py-1 font-semibold transition ${
                   level === "university"
-                    ? "bg-blue-600 text-white shadow-xs"
+                    ? "bg-white text-slate-900 shadow-2xs"
                     : "text-slate-600 hover:text-slate-900"
                 }`}
               >
-                🏛️ Bậc Đại học / Cao đẳng
+                Sinh viên Đại học
               </button>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 text-xs text-slate-500">
-            <label className="flex items-center gap-1.5 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={isCustomTerm}
-                onChange={(e) => setIsCustomTerm(e.target.checked)}
-                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-              />
-              <span>Nhập kỳ học tùy chỉnh</span>
+          {/* Fix C365-07: Liên kết label và input toggle kỳ tùy chỉnh */}
+          <div className="flex items-center gap-1.5 text-xs text-slate-500">
+            <input
+              id="transcript-custom-term-toggle"
+              type="checkbox"
+              checked={isCustomTerm}
+              onChange={(e) => setIsCustomTerm(e.target.checked)}
+              className="rounded border-slate-300 text-slate-900 focus:ring-slate-900 cursor-pointer"
+            />
+            <label htmlFor="transcript-custom-term-toggle" className="cursor-pointer">
+              Tùy chỉnh tên học kỳ
             </label>
           </div>
         </div>
 
-        {/* Input fields */}
-        <div className="mt-3.5 grid gap-3 sm:grid-cols-12 items-end">
-          {/* Học kỳ */}
+        {/* Form fields - Fix C365-07: Explicit id & htmlFor on all inputs */}
+        <form onSubmit={handleAddSubject} className="grid gap-3 sm:grid-cols-12 items-end">
           <div className="sm:col-span-3">
-            <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+            <label
+              htmlFor={isCustomTerm ? "transcript-custom-term-name" : "transcript-term-select"}
+              className="block text-xs font-medium text-slate-600 mb-1"
+            >
               {isCustomTerm ? "Tên kỳ tùy chỉnh" : "Học kỳ"}
             </label>
             {isCustomTerm ? (
               <div className="flex gap-1.5">
                 <input
+                  id="transcript-custom-term-name"
                   type="text"
                   value={customTermName}
                   onChange={(e) => setCustomTermName(e.target.value)}
                   placeholder="VD: Kỳ Hè 2025"
-                  className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:border-blue-500 focus:outline-hidden"
+                  className="w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900 focus:border-slate-500 focus:outline-hidden"
                 />
                 <input
+                  id="transcript-custom-term-order"
                   type="number"
                   min="1"
                   max="20"
+                  aria-label="Thứ tự học kỳ (1-20)"
                   value={customTermOrder}
                   onChange={(e) => setCustomTermOrder(parseInt(e.target.value) || 1)}
-                  title="Thứ tự thời gian của kỳ (1-20)"
-                  className="w-16 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs text-center text-slate-800 focus:border-blue-500 focus:outline-hidden"
+                  className="w-14 rounded border border-slate-300 bg-white px-1.5 py-1.5 text-xs text-center text-slate-900 focus:border-slate-500 focus:outline-hidden"
+                  title="Thứ tự thời gian (1-20)"
                 />
               </div>
             ) : (
               <select
+                id="transcript-term-select"
                 value={selectedTermOrder}
                 onChange={(e) => setSelectedTermOrder(parseInt(e.target.value))}
-                className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:border-blue-500 focus:outline-hidden"
+                className="w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900 focus:border-slate-500 focus:outline-hidden"
               >
                 {currentTerms.map((t) => (
                   <option key={t.order} value={t.order}>
-                    {t.name} (Kỳ {t.order})
+                    {t.name}
                   </option>
                 ))}
               </select>
             )}
           </div>
 
-          {/* Tên môn học */}
           <div className="sm:col-span-4">
-            <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+            <label htmlFor="transcript-subject-name" className="block text-xs font-medium text-slate-600 mb-1">
               Tên môn học
             </label>
             <input
+              id="transcript-subject-name"
               type="text"
-              list="subjects-datalist"
+              list="sub-datalist"
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
-              placeholder={level === "highschool" ? "VD: Toán, Vật lý, Tiếng Anh..." : "VD: Giải tích, Cấu trúc dữ liệu..."}
-              className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:border-blue-500 focus:outline-hidden"
+              placeholder={level === "highschool" ? "VD: Toán, Ngữ văn, Tiếng Anh..." : "VD: Giải tích, Lập trình..."}
+              className="w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900 focus:border-slate-500 focus:outline-hidden"
             />
-            <datalist id="subjects-datalist">
+            <datalist id="sub-datalist">
               {currentSubjects.map((s) => (
                 <option key={s} value={s} />
               ))}
             </datalist>
           </div>
 
-          {/* Điểm hệ 10 */}
+          {/* Fix C365-02: step="any" cho phép nhập điểm số lẻ như 8.25 */}
           <div className="sm:col-span-2">
-            <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-              Điểm hệ 10 (0 - 10)
+            <label htmlFor="transcript-score" className="block text-xs font-medium text-slate-600 mb-1">
+              Điểm hệ 10
             </label>
             <input
+              id="transcript-score"
               type="number"
-              step="0.1"
+              step="any"
               min="0"
               max="10"
               value={score}
               onChange={(e) => setScore(e.target.value)}
-              className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:border-blue-500 focus:outline-hidden"
+              className="w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900 focus:border-slate-500 focus:outline-hidden"
             />
           </div>
 
-          {/* Số tín chỉ / Hệ số */}
           <div className="sm:col-span-2">
-            <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-              {level === "university" ? "Số tín chỉ (Credits)" : "Hệ số / Tín chỉ"}
+            <label htmlFor="transcript-credits" className="block text-xs font-medium text-slate-600 mb-1">
+              {level === "university" ? "Số tín chỉ" : "Hệ số / Tín chỉ"}
             </label>
             <input
+              id="transcript-credits"
               type="number"
-              step="0.5"
+              step="any"
               min="0.5"
               max="30"
               value={credits}
               onChange={(e) => setCredits(e.target.value)}
-              placeholder={level === "university" ? "3" : "2"}
-              className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:border-blue-500 focus:outline-hidden"
+              className="w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900 focus:border-slate-500 focus:outline-hidden"
             />
           </div>
 
-          {/* Nút thêm môn */}
           <div className="sm:col-span-1">
             <button
-              type="button"
-              onClick={handleAddSubject}
+              type="submit"
               disabled={isSaving}
-              className="w-full rounded-md bg-slate-900 py-1.5 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50 transition"
+              className="w-full rounded bg-slate-900 py-1.5 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50 transition"
             >
-              + Thêm
+              Thêm
             </button>
           </div>
-        </div>
+        </form>
       </div>
 
-      {/* Toolbar: Tìm kiếm & Lọc theo kỳ */}
-      <div className="mt-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        {/* Bộ lọc học kỳ */}
-        <div className="flex flex-wrap items-center gap-1.5 text-xs">
-          <span className="text-slate-400 font-medium text-[11px] mr-1">Lọc kỳ:</span>
+      {/* Filter and Search Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-1 text-xs">
+          <span className="text-xs text-slate-500 mr-1 font-medium">Lọc kỳ:</span>
           <button
             type="button"
             onClick={() => setFilterTerm("all")}
-            className={`rounded-md px-2.5 py-1 font-semibold transition ${
+            className={`rounded px-2.5 py-1 font-medium transition ${
               filterTerm === "all"
-                ? "bg-blue-600 text-white shadow-2xs"
-                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                ? "bg-slate-900 text-white"
+                : "text-slate-600 hover:bg-slate-100"
             }`}
           >
             Tất cả ({scores.length})
@@ -575,10 +554,10 @@ export function TranscriptScoreTable({
                 key={t.order}
                 type="button"
                 onClick={() => setFilterTerm(t.order)}
-                className={`rounded-md px-2.5 py-1 font-semibold transition ${
+                className={`rounded px-2.5 py-1 font-medium transition ${
                   filterTerm === t.order
-                    ? "bg-blue-600 text-white shadow-2xs"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    ? "bg-slate-900 text-white"
+                    : "text-slate-600 hover:bg-slate-100"
                 }`}
               >
                 {t.name} ({count})
@@ -587,94 +566,69 @@ export function TranscriptScoreTable({
           })}
         </div>
 
-        {/* Ô tìm kiếm môn học */}
-        <div className="w-full sm:w-60">
+        {/* Fix C365-07: aria-label cho input tìm kiếm */}
+        <div className="w-full sm:w-56">
           <input
+            id="transcript-search-subject"
             type="text"
+            aria-label="Lọc theo tên môn học"
             value={searchSubject}
             onChange={(e) => setSearchSubject(e.target.value)}
-            placeholder="🔍 Tìm theo tên môn học..."
-            className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-800 placeholder:text-slate-400 focus:border-blue-500 focus:outline-hidden"
+            placeholder="Lọc theo tên môn..."
+            className="w-full rounded border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-900 placeholder:text-slate-400 focus:border-slate-500 focus:outline-hidden"
           />
         </div>
       </div>
 
-      {/* Tóm tắt nhanh số liệu */}
-      {scores.length > 0 && (
-        <div className="mt-3 flex flex-wrap items-center gap-4 rounded-lg bg-blue-50/50 border border-blue-100 px-3.5 py-2 text-xs text-blue-900">
-          <div className="flex items-center gap-1">
-            <span className="font-semibold">Tổng môn:</span>
-            <span className="font-bold text-blue-700">{stats.total} môn</span>
-          </div>
-          {stats.totalCredits > 0 && (
-            <div className="flex items-center gap-1">
-              <span className="font-semibold">Tổng tín chỉ tích lũy:</span>
-              <span className="font-bold text-blue-700">{stats.totalCredits} TC</span>
-            </div>
-          )}
-          <div className="flex items-center gap-1">
-            <span className="font-semibold">Điểm TB hệ 10 tạm tính:</span>
-            <span className="font-bold text-blue-700">{stats.avg} / 10.0</span>
-          </div>
-        </div>
-      )}
-
-      {/* Bảng dữ liệu điểm môn học */}
-      <div className="mt-3 overflow-x-auto rounded-lg border border-slate-200">
+      {/* Compact Data Table */}
+      <div className="overflow-x-auto rounded-lg border border-slate-200">
         <table className="w-full text-left text-xs">
-          <thead className="bg-slate-50 text-slate-600 uppercase tracking-wider text-[11px] border-b border-slate-200">
+          <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider text-[10px] border-b border-slate-200 font-semibold">
             <tr>
-              <th className="px-4 py-3">Học kỳ</th>
-              <th className="px-4 py-3">Môn học</th>
-              <th className="px-4 py-3">Phân nhóm môn</th>
-              <th className="px-4 py-3 text-center">Điểm hệ 10</th>
-              <th className="px-4 py-3 text-center">Tín chỉ / Hệ số</th>
-              <th className="px-4 py-3 text-center">GPA 4.0 (Quy đổi)</th>
-              <th className="px-4 py-3 text-right">Thao tác</th>
+              <th className="px-4 py-2.5">Học kỳ</th>
+              <th className="px-4 py-2.5">Môn học</th>
+              <th className="px-4 py-2.5">Phân nhóm</th>
+              <th className="px-4 py-2.5 text-center">Điểm 10</th>
+              <th className="px-4 py-2.5 text-center">Tín chỉ</th>
+              <th className="px-4 py-2.5 text-center font-bold text-slate-900">GPA 4.0 (WES)</th>
+              <th className="px-4 py-2.5 text-right">Thao tác</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {filteredScores.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-slate-400">
-                  {scores.length === 0 ? (
-                    <div>
-                      <p className="font-medium text-slate-600">Chưa có môn học nào trong bảng điểm.</p>
-                      <p className="mt-1 text-xs text-slate-400">
-                        Bấm nút <strong>"🎓 Mẫu THPT"</strong> hoặc <strong>"🏛️ Mẫu Đại học"</strong> ở trên để nạp dữ liệu trải nghiệm ngay.
-                      </p>
-                    </div>
-                  ) : (
-                    "Không tìm thấy môn học nào khớp với bộ lọc."
-                  )}
+                <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
+                  {scores.length === 0
+                    ? "Chưa có môn học nào. Sử dụng nút nạp mẫu ở trên hoặc thêm môn học thủ công."
+                    : "Không có môn học nào phù hợp với bộ lọc."}
                 </td>
               </tr>
             ) : (
               filteredScores.map((item) => (
                 <tr key={item.id} className="hover:bg-slate-50/70 transition-colors">
-                  <td className="px-4 py-2.5 font-medium text-slate-800 whitespace-nowrap">
+                  <td className="px-4 py-2 text-slate-700 font-medium whitespace-nowrap">
                     {item.termName}
                   </td>
-                  <td className="px-4 py-2.5 font-bold text-slate-900">
+                  <td className="px-4 py-2 font-semibold text-slate-900">
                     {item.subject}
                   </td>
-                  <td className="px-4 py-2.5 whitespace-nowrap">
+                  <td className="px-4 py-2 whitespace-nowrap">
                     {getGroupBadge(item.subjectGroup, item.subjectGroupName)}
                   </td>
-                  <td className="px-4 py-2.5 text-center font-bold text-slate-800">
-                    {item.score.toFixed(1)}
+                  <td className="px-4 py-2 text-center text-slate-700 font-medium">
+                    {item.score.toFixed(item.score % 1 === 0 ? 1 : 2)}
                   </td>
-                  <td className="px-4 py-2.5 text-center text-slate-600 font-medium">
-                    {item.credits ? `${item.credits} TC` : "-"}
+                  <td className="px-4 py-2 text-center text-slate-500 font-medium">
+                    {item.credits ? `${item.credits}` : "-"}
                   </td>
-                  <td className="px-4 py-2.5 text-center font-black text-blue-600 text-sm">
+                  <td className="px-4 py-2 text-center font-bold text-slate-900">
                     {item.gpa4.toFixed(2)}
                   </td>
-                  <td className="px-4 py-2.5 text-right whitespace-nowrap">
+                  <td className="px-4 py-2 text-right whitespace-nowrap">
                     <button
                       type="button"
-                      onClick={() => onDeleteScore(item.id)}
-                      className="text-red-500 hover:text-red-700 text-[11px] font-semibold hover:underline"
+                      onClick={() => handleDeleteScore(item.id)}
+                      className="text-slate-400 hover:text-red-600 text-xs font-medium transition-colors"
                     >
                       Xóa
                     </button>
@@ -683,6 +637,24 @@ export function TranscriptScoreTable({
               ))
             )}
           </tbody>
+          {scores.length > 0 && (
+            <tfoot className="bg-slate-50/80 border-t border-slate-200 text-slate-700 text-xs font-semibold">
+              <tr>
+                <td colSpan={3} className="px-4 py-2">
+                  Tổng kết ({stats.total} môn học):
+                </td>
+                <td className="px-4 py-2 text-center">
+                  TB {stats.avg}
+                </td>
+                <td className="px-4 py-2 text-center">
+                  {stats.totalCredits > 0 ? `${stats.totalCredits} TC` : "-"}
+                </td>
+                <td colSpan={2} className="px-4 py-2 text-right text-slate-500 font-normal text-xs">
+                  * Bấm &quot;Phân tích điểm GPA&quot; để tính toán toàn diện
+                </td>
+              </tr>
+            </tfoot>
+          )}
         </table>
       </div>
     </div>

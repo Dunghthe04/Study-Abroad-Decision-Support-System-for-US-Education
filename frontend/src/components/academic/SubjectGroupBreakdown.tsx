@@ -5,130 +5,79 @@ interface SubjectGroupBreakdownProps {
 }
 
 /**
- * [USAS-365] Phân tích điểm theo từng nhóm môn học:
- * - Khoa học Tự nhiên (STEM)
- * - Khoa học Xã hội & Nhân văn
- * - Ngoại ngữ
+ * [USAS-365] Phân tích điểm trung bình theo từng nhóm môn học:
+ * - Điều chỉnh tên chính xác theo dữ liệu: "Điểm Trung Bình Theo Nhóm Môn".
+ * - Tối ưu kích cỡ chữ và độ tương phản dễ đọc cho học sinh và phụ huynh.
  */
 export function SubjectGroupBreakdown({ groups }: SubjectGroupBreakdownProps) {
   if (groups.length === 0) {
     return null;
   }
 
-  const getGroupBadgeColor = (groupKey: string) => {
-    switch (groupKey) {
-      case "natural_sciences":
-        return {
-          bar: "bg-blue-600",
-          badge: "bg-blue-100 text-blue-800",
-          icon: "🔬",
-        };
-      case "languages":
-        return {
-          bar: "bg-emerald-600",
-          badge: "bg-emerald-100 text-emerald-800",
-          icon: "🌐",
-        };
-      case "social_sciences":
-        return {
-          bar: "bg-purple-600",
-          badge: "bg-purple-100 text-purple-800",
-          icon: "📚",
-        };
-      default:
-        return {
-          bar: "bg-slate-600",
-          badge: "bg-slate-100 text-slate-800",
-          icon: "📌",
-        };
-    }
-  };
-
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-      <div className="border-b border-slate-100 pb-4">
-        <h3 className="text-lg font-bold text-slate-900">
-          Phân Tích Năng Lực Theo Nhóm Môn Học
-        </h3>
-        <p className="text-xs text-slate-500 mt-1">
-          Hội đồng tuyển sinh Mỹ đặc biệt quan tâm tới nhóm môn phù hợp với ngành học dự định (Major Fit).
-        </p>
-      </div>
+    <div className="rounded-xl border border-slate-200/90 bg-white p-5 sm:p-6 shadow-xs h-full flex flex-col justify-between min-w-0 w-full">
+      <div>
+        <div className="border-b border-slate-100 pb-3">
+          <h3 className="text-base font-bold text-slate-900">
+            Điểm Trung Bình Theo Nhóm Môn
+          </h3>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Thống kê điểm số và số lượng môn học theo từng nhóm lĩnh vực
+          </p>
+        </div>
 
-      <div className="mt-5 grid gap-4 md:grid-cols-3">
-        {groups.map((group) => {
-          const style = getGroupBadgeColor(group.groupKey);
-          const percent = Math.min(100, Math.round((group.gpa4 / 4.0) * 100));
+        <div className="mt-4 space-y-3.5">
+          {groups.map((group) => {
+            const percent = Math.min(100, Math.round((group.gpa4 / 4.0) * 100));
 
-          return (
-            <div
-              key={group.groupKey}
-              className="flex flex-col justify-between rounded-lg border border-slate-200 bg-slate-50/50 p-4 transition-all hover:border-slate-300 hover:shadow-xs"
-            >
-              <div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
-                    <span>{style.icon}</span>
-                    <span>{group.groupName}</span>
-                  </span>
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${style.badge}`}
-                  >
-                    {group.subjectsCount} môn
-                  </span>
-                </div>
-
-                <div className="mt-4 flex items-baseline justify-between">
-                  <div>
-                    <span className="text-xs text-slate-500">GPA Quy Đổi:</span>
-                    <div className="text-2xl font-black text-slate-900">
+            return (
+              <div
+                key={group.groupKey}
+                className="rounded-lg border border-slate-100 bg-slate-50/70 p-3.5 space-y-2.5"
+              >
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-2">
+                  <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                    <span className="text-xs sm:text-sm font-bold text-slate-900 break-words">
+                      {group.groupName}
+                    </span>
+                    <span className="text-xs font-medium text-slate-500 shrink-0">
+                      ({group.subjectsCount} môn)
+                    </span>
+                  </div>
+                  <div className="text-left sm:text-right flex items-baseline gap-1 shrink-0">
+                    <span className="text-sm sm:text-base font-extrabold text-slate-900">
                       {group.gpa4.toFixed(2)}
-                      <span className="text-xs text-slate-400 font-normal"> / 4.0</span>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-xs text-slate-500">Điểm TB Hệ 10:</span>
-                    <div className="text-base font-bold text-slate-700">
-                      {group.rawAverage.toFixed(2)}
-                    </div>
+                    </span>
+                    <span className="text-xs text-slate-500 font-medium">/ 4.00</span>
+                    <span className="text-xs text-slate-500 ml-1">
+                      ({group.rawAverage.toFixed(1)}/10)
+                    </span>
                   </div>
                 </div>
 
-                {/* Progress bar */}
-                <div className="mt-3">
-                  <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200">
-                    <div
-                      className={`h-full rounded-full transition-all duration-500 ${style.bar}`}
-                      style={{ width: `${percent}%` }}
-                    />
-                  </div>
-                  <div className="mt-1 flex justify-between text-[11px] text-slate-400">
-                    <span>0.0</span>
-                    <span>{percent}% chuẩn tối đa</span>
-                    <span>4.0</span>
-                  </div>
+                {/* Thanh đo tỷ lệ điểm */}
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
+                  <div
+                    className="h-full rounded-full bg-slate-800 transition-all duration-500"
+                    style={{ width: `${percent}%` }}
+                  />
                 </div>
-              </div>
 
-              {/* Danh sách môn */}
-              <div className="mt-4 border-t border-slate-200/60 pt-3">
-                <span className="text-[11px] font-medium text-slate-500">
-                  Môn học đã ghi nhận:
-                </span>
-                <div className="mt-1 flex flex-wrap gap-1">
+                {/* Danh sách tên môn */}
+                <div className="flex flex-wrap gap-1.5 pt-0.5">
                   {group.subjects.map((sub) => (
                     <span
                       key={sub}
-                      className="rounded bg-white px-1.5 py-0.5 text-[10px] text-slate-600 border border-slate-200"
+                      className="rounded bg-white px-2 py-0.5 text-xs font-medium text-slate-700 border border-slate-200"
                     >
                       {sub}
                     </span>
                   ))}
                 </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
     </div>
   );
