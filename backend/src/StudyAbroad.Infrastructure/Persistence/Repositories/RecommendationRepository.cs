@@ -26,6 +26,14 @@ namespace StudyAbroad.Infrastructure.Persistence.Repositories
                 .FirstOrDefaultAsync(ct);
         }
 
+        public Task<Recommendation?> GetLatestRecommendationAsync(Guid userId, CancellationToken ct = default)
+        {
+            return db.Recommendations.AsNoTracking()
+            .Where(r => r.UserId == userId)
+            .OrderByDescending(r => r.CreatedAt)   // mới nhất lên đầu
+            .FirstOrDefaultAsync(ct);              // lấy 1 dòng, không có thì null
+        }
+
         public Task<StudentProfile?> GetProfileAsync(Guid studentId, CancellationToken ct = default)
         {
             return db.StudentProfiles.AsNoTracking()

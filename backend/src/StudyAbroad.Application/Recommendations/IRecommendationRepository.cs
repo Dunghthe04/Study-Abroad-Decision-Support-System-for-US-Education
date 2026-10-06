@@ -23,5 +23,8 @@ namespace StudyAbroad.Application.Recommendations
         /// Lưu hồ sơ gợi ý trường cho học sinh
         Task AddAsync(Recommendation recommendation, CancellationToken ct = default);
 
+        //Lần gợi ý gần nhất của user, null nếu chưa có
+        Task<Recommendation?> GetLatestRecommendationAsync(Guid userId, CancellationToken ct=default);
+
     }
 }
