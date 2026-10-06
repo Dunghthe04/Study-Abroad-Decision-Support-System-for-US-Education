@@ -11,10 +11,9 @@ namespace StudyAbroad.Application.Recommendations
         public static IReadOnlyList<ScoredSchool> Recommend(
             StudentSnapshot student, IReadOnlyList<SchoolCandidate> candidates, RecommendSettings settings)
         {
-            var majors = new MajorMatcher(settings.MajorGroups);
             // lấy danh sách trường phù hợp với ngành học, bang ưu tiên, chi phí
             var scored = candidates
-                .Where(c => majors.Matches(student.Major, c.Majors))
+                .Where(c => MatchesMajor(c, student.Major))
                 .Where(c => MatchState(c, student.PreferredStates))
                 .Where(c => WithinBudget(c, student.AnnualBudgetUsd, settings.BudgetTolerance))
                 .Select(c => Score(student,c, settings) ).ToList();
@@ -42,18 +41,17 @@ namespace StudyAbroad.Application.Recommendations
             if (openAdmission)
                 category = AdmissionCategory.Safety;
 
-            //2. chuẩn hóa tiêu chí về [0.1]
+            //2. Chuẩn hóa từng tiêu chí về [0, 1]
             var cost = candidate.TotalCostUsd;
             var academic = AcademicFit(student, candidate, settings.GpaBand, neutral);
-            var finance = student.AnnualBudgetUsd is not { } budget || budget <= 0 ? (decimal?)null
-                 : cost is { } co ? Clamp01((budget - co) / budget) : neutral;
+            var finance = FinanceFit(cost, student.AnnualBudgetUsd, neutral);
             var (english, englishStatus) = English(student, candidate, neutral);
-            var extracurricular = student.ExtracurricularScore is { } ex ? Clamp01(ex / 10m) : (decimal?)null;
+            var extracurricular = ExtracurricularFit(student.ExtracurricularScore);
             var fit = new FitBreakdown(academic, finance, english, extracurricular);
 
-            //3. SAW. Trọng số ngoại khóa tăng theo độ chọ lọc của trường ( thiếu tỉ lệ ==> nhận trung tính)
+            //3. SAW. Trọng số ngoại khóa tăng theo độ chọn lọc của trường
             var w = settings.Weights;
-            var selectivity = candidate.AcceptanceRate is { } ac ? Clamp01(1m - ac) : neutral;
+            var selectivity = Selectivity(candidate.AcceptanceRate, neutral);
             var score = WeightedSum((academic, w.Academic), (finance, w.Finance), (english, w.English), (extracurricular, w.Extracurricular * selectivity));
 
             return new ScoredSchool(candidate, category, score is { } s ? Math.Round(s, 4) : null, cost, CostUnknown: cost is null, fit, englishStatus, openAdmission);
@@ -80,12 +78,22 @@ namespace StudyAbroad.Application.Recommendations
             return Clamp01((decimal)(sat.Value - sat25.Value) / (sat75.Value - sat25.Value));
         }
 
-        //Ngân sách còn dư trừ chi phí, vượt ngân sách => 0
-        private static decimal? FinanceFit(decimal? cost, decimal? budget)
+        //Phần ngân sách còn dư sau khi trừ chi phí; vượt ngân sách → 0.
+        //HS chưa nhập ngân sách → null (bỏ tiêu chí); trường thiếu chi phí → trung tính
+        private static decimal? FinanceFit(decimal? cost, decimal? budget, decimal neutral)
         {
-            if (cost == null || budget == null || budget <= 0) return null;
-            return Clamp01((budget.Value-cost.Value)/budget.Value);
+            if (budget is null || budget <= 0) return null;
+            if (cost is null) return neutral;
+            return Clamp01((budget.Value - cost.Value) / budget.Value);
         }
+
+        //Điểm ngoại khóa thang 10 → [0, 1]; chưa chấm → null (bỏ tiêu chí)
+        private static decimal? ExtracurricularFit(decimal? score) =>
+            score is { } s ? Clamp01(s / 10m) : null;
+
+        //Độ chọn lọc = 1 - tỷ lệ nhận (nhận 10% → 0.9); trường không công bố → trung tính
+        private static decimal Selectivity(decimal? acceptanceRate, decimal neutral) =>
+            acceptanceRate is { } a ? Clamp01(1m - a) : neutral;
 
         //Tiếng Anh là điều kiện đầu vào: đạt mức tối thiểu = 1, chưa đạt = điểm/mức. Có nhiều bài thi thì lấy bài tốt nhất.
         private static (decimal? Fit, EnglishStatus status) English(StudentSnapshot s, SchoolCandidate c, decimal neutral)
@@ -107,12 +115,6 @@ namespace StudyAbroad.Application.Recommendations
         private static decimal? Ratio(decimal? score, decimal? min)=>
             score is { } s && min is { } m && m>0 ? Math.Min(1m, s/m) : null;
 
-        //Trường càng chọn lọc càng xét hồ sơ toàn diện → ngoại khóa có trọng lượng lớn hơn
-        private static decimal? ExtracurricularFit(decimal? ecScore, decimal? acceptanceRate)
-        {
-            if (ecScore is null || acceptanceRate is null) return null;
-            return Clamp01(ecScore.Value / 10m) * Clamp01(1m - acceptanceRate.Value);
-        }
         //Tiêu chí thiếu dữ liệu thì bỏ, chia lại theo tổng trọng số của các tiêu chí còn lại
         private static decimal? WeightedSum(params (decimal? Value, decimal Weight)[] criteria)
         {
@@ -125,6 +127,12 @@ namespace StudyAbroad.Application.Recommendations
 
 
         private static decimal Clamp01(decimal x) => Math.Clamp(x, 0m, 1m);
+
+        //Lọc theo ngành: tên ngành đã chuẩn hóa từ trước (dropdown ở form, LLM ở chat) nên chỉ cần so trùng tên
+        private static bool MatchesMajor(SchoolCandidate c, string? studentMajor)
+        {
+            return string.IsNullOrWhiteSpace(studentMajor) || c.Majors.Any(m => string.Equals(studentMajor.Trim(), m.Trim(), StringComparison.OrdinalIgnoreCase));
+        }
 
         //Lọc danh sách trường theo bang mong muốn
         private static bool MatchState(SchoolCandidate c, IReadOnlyList<string> preferredStates)

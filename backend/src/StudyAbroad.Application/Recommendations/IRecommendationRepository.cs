@@ -18,8 +18,6 @@ namespace StudyAbroad.Application.Recommendations
         //Lấy danh sách trường ứng viên để gợi ý
         Task<IReadOnlyList<SchoolCandidate>> GetSchoolCandidatesAsync(string studyLevel, CancellationToken ct=default);
 
-        /// <summary>ResultJson mới nhất của AI phân tích hồ sơ (kind = strengths_weaknesses), null nếu chưa có.</summary>
-        Task<string?> GetLatestAnalysisJsonAsync(Guid studentProfileId, CancellationToken ct=default);
         /// Lưu hồ sơ gợi ý trường cho học sinh
         Task AddAsync(Recommendation recommendation, CancellationToken ct = default);
 

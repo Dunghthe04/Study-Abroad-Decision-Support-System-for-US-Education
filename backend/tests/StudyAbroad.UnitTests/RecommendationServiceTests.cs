@@ -1,4 +1,3 @@
-using StudyAbroad.Application.Grading;
 using StudyAbroad.Application.Recommendations;
 using StudyAbroad.Domain.Entities;
 
@@ -11,7 +10,6 @@ public class RecommendationServiceTests
     {
         public StudentProfile? Profile { get; set; }
         public string? SettingsJson { get; set; }
-        public string? AnalysisJson { get; set; }
         public List<SchoolCandidate> Candidates { get; } = [];
         public List<Recommendation> Saved { get; } = [];
 
@@ -23,10 +21,6 @@ public class RecommendationServiceTests
 
         public Task<IReadOnlyList<SchoolCandidate>> GetSchoolCandidatesAsync(string studyLevel, CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<SchoolCandidate>>(Candidates);
-
-        // Trả kết quả phân tích chỉ khi gọi đúng ID HỒ SƠ (bắt lỗi truyền nhầm userId)
-        public Task<string?> GetLatestAnalysisJsonAsync(Guid studentProfileId, CancellationToken ct = default) =>
-            Task.FromResult(Profile?.Id == studentProfileId ? AnalysisJson : null);
 
         public Task AddAsync(Recommendation recommendation, CancellationToken ct = default)
         {
@@ -40,12 +34,11 @@ public class RecommendationServiceTests
 
     private static readonly Guid UserId = Guid.NewGuid();
 
-    private static StudentProfile NewProfile(string scale = "4", decimal gpa = 3.5m) => new()
+    private static StudentProfile NewProfile(decimal? gpa4 = 3.5m) => new()
     {
         UserId = UserId,
         TargetLevel = "undergraduate",
-        GradeScale = scale,
-        OverallGpa = gpa,
+        OverallGpa = gpa4,                     // thang 4; GradeScale để mặc định "10" (thang của bảng điểm gốc)
         IntendedMajor = "Computer Science",
         Sat = 1300,
         AnnualBudgetUsd = 50000,
@@ -61,7 +54,7 @@ public class RecommendationServiceTests
         return repo;
     }
 
-    private static RecommendationService NewService(FakeRepository repo) => new(repo, new Gpa4OnlyConverter());
+    private static RecommendationService NewService(FakeRepository repo) => new(repo);
 
     [Fact]
     public async Task Create_NoProfile_ReturnsNullAndSavesNothing()
@@ -102,9 +95,9 @@ public class RecommendationServiceTests
     }
 
     [Fact]
-    public async Task Create_Gpa10Scale_WarnsButStillRecommends()
+    public async Task Create_NoGpa_WarnsButStillRecommends()
     {
-        var result = await NewService(NewRepo(NewProfile(scale: "10", gpa: 8.5m))).CreateAsync(UserId);
+        var result = await NewService(NewRepo(NewProfile(gpa4: null))).CreateAsync(UserId);
 
         Assert.Contains(result!.Warnings, w => w.Contains("GPA"));
         Assert.NotEmpty(result.Items);                                   // vẫn xếp được nhờ SAT
@@ -113,17 +106,17 @@ public class RecommendationServiceTests
     [Fact]
     public async Task Create_MissingData_AddsWarnings()
     {
-        var result = await NewService(NewRepo()).CreateAsync(UserId);    // không có phân tích, không có điểm tiếng Anh
+        var result = await NewService(NewRepo()).CreateAsync(UserId);    // chưa có điểm ngoại khóa, chưa có điểm tiếng Anh
 
         Assert.Contains(result!.Warnings, w => w.Contains("ngoại khóa"));
         Assert.Contains(result.Warnings, w => w.Contains("tiếng Anh"));
     }
 
     [Fact]
-    public async Task Create_ReadsExtracurricularFromAnalysis()
+    public async Task Create_ReadsExtracurricularFromProfile()
     {
         var repo = NewRepo();
-        repo.AnalysisJson = """{"extracurricularScore": 8}""";
+        repo.Profile!.ExtracurricularScore = 8;
         var result = await NewService(repo).CreateAsync(UserId);
 
         Assert.DoesNotContain(result!.Warnings, w => w.Contains("ngoại khóa"));
@@ -179,18 +172,4 @@ public class RecommendationServiceTests
     [Fact]
     public async Task GetLatest_NoRecommendation_ReturnsNull() =>
         Assert.Null(await NewService(NewRepo()).GetLatestAsync(UserId));
-
-    [Fact]
-    public void ParseExtracurricular_ReadsScore() =>
-        Assert.Equal(7.5m, RecommendationService.ParseExtracurricular("""{"extracurricularScore": 7.5, "summary": "..."}"""));
-
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("{}")]                                    // thiếu key
-    [InlineData("""{"extracurricularScore": "tám"}""")]   // không phải số
-    [InlineData("[1, 2]")]                                // không phải object
-    [InlineData("không phải json")]                       // JSON hỏng
-    public void ParseExtracurricular_InvalidInput_ReturnsNull(string? json) =>
-        Assert.Null(RecommendationService.ParseExtracurricular(json));
 }

@@ -1,6 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
 using StudyAbroad.Application.Auth;
-using StudyAbroad.Application.Grading;
 using StudyAbroad.Application.Recommendations;
 using StudyAbroad.Application.StudyCenters;
 
@@ -12,7 +11,6 @@ public static class DependencyInjection
     {
         services.AddScoped<IStudyCenterService, StudyCenterService>();
         services.AddScoped<IAuthService, AuthService>();
-        services.AddScoped<IGpaConverter, Gpa4OnlyConverter>();  
         services.AddScoped<IRecommendationService,RecommendationService>();
         return services;
     }

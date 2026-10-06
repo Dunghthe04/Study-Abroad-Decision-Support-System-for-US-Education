@@ -11,8 +11,9 @@ public class StudentProfile : BaseEntity
     public string? CurrentSchool { get; set; }
     /// <summary>ví dụ Lớp 11, Năm 3, Đã tốt nghiệp</summary>
     public string? CurrentGrade { get; set; }
-    /// <summary>thang điểm: 10 | 4 | 100</summary>
+    /// <summary>thang điểm của bảng điểm gốc (transcript_scores): 10 | 4 | 100. Không phải thang của OverallGpa</summary>
     public string GradeScale { get; set; } = "10";
+    /// <summary>GPA luôn ở thang 4, do phân tích học thuật quy đổi từ bảng điểm; form không cho nhập tay; null nếu chưa phân tích</summary>
     public decimal? OverallGpa { get; set; }
     public string? IntendedMajor { get; set; }
     public decimal? Ielts { get; set; }
@@ -24,6 +25,8 @@ public class StudentProfile : BaseEntity
     public decimal? Gmat { get; set; }
     /// <summary>điểm thành phần, kỳ thi khác, ngày thi</summary>
     public string? OtherTestsJson { get; set; }
+    /// <summary>điểm ngoại khóa 0–10 do AI phân tích hồ sơ chấm (backlog #6); null nếu chưa chấm</summary>
+    public decimal? ExtracurricularScore { get; set; }
     public decimal? AnnualBudgetUsd { get; set; }
     /// <summary>family | loan | scholarship | other</summary>
     public string? FundingSource { get; set; }

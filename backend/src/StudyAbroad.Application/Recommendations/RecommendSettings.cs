@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace StudyAbroad.Application.Recommendations
 {
-    //Số lượng trường tối đa theo từng loại (reach, match, safety) trong gợi ý trường (#6)
+    //Số lượng trường tối đa theo từng loại (reach, match, safety) trong gợi ý trường
     public record PerCategoryLimits(int Reach =3, int Match=5 , int Safety = 4);
 
     //trọng số SAW 4 tiêu chí,tổng lại thành 1
@@ -47,20 +47,6 @@ namespace StudyAbroad.Application.Recommendations
             }
         }
 
-        public Dictionary<string, List<string>> MajorGroups { get; set; } = new()
-        {
-            ["Computer Science"] = ["IT", "Information Technology", "CNTT", "Công nghệ thông tin", "Software Engineering",
-                            "Computer Engineering", "Data Science", "Artificial Intelligence", "Cybersecurity",
-                            "Information Systems", "Computer Information Systems"],
-            ["Business"] = ["Business Administration", "Quản trị kinh doanh", "Kinh doanh", "Marketing", "Finance",
-                    "Accounting", "Business Analytics", "Management"],
-            ["Engineering"] = ["Kỹ thuật", "Mechanical Engineering", "Civil Engineering", "Electrical Engineering",
-                       "Chemical Engineering", "Industrial Engineering", "Biomedical Engineering", "Aerospace Engineering"],
-            ["Health Professions"] = ["Nursing", "Điều dưỡng", "Public Health", "Pharmacy", "Y tế"],
-            ["Economics"] = ["Kinh tế"],
-            ["Psychology"] = ["Tâm lý học"],
-            ["Biology"] = ["Sinh học", "Biochemistry"],
-        };
 
     }
 }

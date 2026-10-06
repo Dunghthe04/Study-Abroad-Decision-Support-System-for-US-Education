@@ -118,8 +118,8 @@ Toàn bộ thông tin học sinh tự nhập, gom vào một bảng: học thu�
 |---|---|---|
 | Mục tiêu | `target_level`, `intended_major` | Muốn đi bậc nào, ngành gì |
 | Học thuật | `current_school`, `current_grade` | Đang học ở đâu, lớp mấy hoặc năm mấy |
-| | `grade_scale` | Thang điểm đang dùng: `10`, `4` hoặc `100` |
-| | `overall_gpa` | Điểm trung bình theo thang ở trên |
+| | `grade_scale` | Thang điểm của bảng điểm gốc (`transcript_scores`): `10`, `4` hoặc `100` |
+| | `overall_gpa` | GPA **luôn ở thang 4**, do phân tích học thuật quy đổi từ bảng điểm. Form không cho nhập tay; để trống nếu chưa phân tích |
 | Điểm thi | `ielts`, `toefl`, `duolingo`, `sat`, `act`, `gre`, `gmat` | Điểm tổng từng kỳ thi. `null` nếu chưa thi |
 | | `other_tests_json` | Điểm thành phần, ngày thi, kỳ thi khác (SSAT, AP...) |
 | Tài chính | `annual_budget_usd` | Ngân sách mỗi năm |

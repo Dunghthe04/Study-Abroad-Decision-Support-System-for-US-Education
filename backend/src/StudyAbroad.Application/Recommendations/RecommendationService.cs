@@ -1,4 +1,3 @@
-using StudyAbroad.Application.Grading;
 using StudyAbroad.Domain.Entities;
 using System;
 using System.Collections.Generic;
@@ -18,7 +17,7 @@ namespace StudyAbroad.Application.Recommendations
         //Lấy ra recommendation gần đây nhất
         Task<RecommendationResultDto?> GetLatestAsync(Guid userId, CancellationToken ct = default);
     }
-    public class RecommendationService(IRecommendationRepository repository, IGpaConverter gpaConverter) : IRecommendationService
+    public class RecommendationService(IRecommendationRepository repository) : IRecommendationService
     {
         public const string AlgorithmVersion = "crm-saw-v1";
         private static readonly JsonSerializerOptions Json = new JsonSerializerOptions(JsonSerializerDefaults.Web);
@@ -33,15 +32,12 @@ namespace StudyAbroad.Application.Recommendations
             var settings = RecommendSettings.Parse(await repository.GetSettingJsonAsync(RecommendSettings.SettingKey, ct));
 
             //3. Chuẩn hóa hồ sơ
-            var gpa4 = await gpaConverter.ToGpa4Async(profile.OverallGpa, profile.GradeScale, ct);
-            if (profile.OverallGpa is not null && gpa4 is null)
-                warnings.Add($"Chưa quy đổi được GPA thang {profile.GradeScale} sang thang 4, tạm chỉ xét SAT.");
+            //overall_gpa luôn là thang 4 (phân tích học thuật của Đức quy đổi từ bảng điểm)
+            var gpa4 = profile.OverallGpa;
+            if (gpa4 is null)
+                warnings.Add("Chưa có GPA thang 4 (chưa phân tích bảng điểm), tạm chỉ xét SAT.");
 
-            //⚠ bảng phân tích lọc theo ID HỒ SƠ (profile.Id), không phải userId
-            var extracurricular = ParseExtracurricular(
-                await repository.GetLatestAnalysisJsonAsync(profile.Id, ct));
-
-            if (extracurricular is null)
+            if (profile.ExtracurricularScore is null)
                 warnings.Add("Chưa có điểm ngoại khóa từ phân tích hồ sơ, chưa xét tiêu chí ngoại khóa.");
 
             if (profile.Ielts is null && profile.Toefl is null && profile.Duolingo is null)
@@ -54,7 +50,7 @@ namespace StudyAbroad.Application.Recommendations
                         profile.Sat is { } sat ? (int)Math.Round(sat) : null,
                         profile.AnnualBudgetUsd,
                         profile.PreferredStates,
-                        extracurricular,
+                        profile.ExtracurricularScore,
                         profile.Ielts,
                         profile.Toefl,
                         profile.Duolingo);
@@ -103,26 +99,6 @@ namespace StudyAbroad.Application.Recommendations
             if (latest is null) return null;
             var items = JsonSerializer.Deserialize<List<RecommendationItemDto>>(latest.ItemsJson, Json) ?? [];
             return new RecommendationResultDto(latest.Id, latest.CreatedAt, latest.StudyLevel, items, []);
-        }
-
-        //Đọc "extracurricularScore" (0–10) từ ResultJson của AI phân tích hồ sơ (#7)
-        public static decimal? ParseExtracurricular(string? json)
-        {
-            if (string.IsNullOrWhiteSpace(json)) return null;
-            try
-            {
-                using var doc = JsonDocument.Parse(json);
-                return doc.RootElement.ValueKind == JsonValueKind.Object
-                       && doc.RootElement.TryGetProperty("extracurricularScore", out var v)
-                       && v.ValueKind == JsonValueKind.Number   // giá trị dạng chữ thì TryGetDecimal ném lỗi, nên kiểm tra trước
-                       && v.TryGetDecimal(out var score)
-                    ? score
-                    : null;
-            }
-            catch (JsonException)
-            {
-                return null;   // JSON hỏng → coi như chưa có điểm, không làm sập chức năng
-            }
         }
     }
 }

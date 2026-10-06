@@ -267,14 +267,20 @@ public class RecommendationScorerTests
         Assert.Equal(Cfg.MissingValue, r.Fit.English);
     }
 
-    // ---------- So ngành qua nhóm ngành ----------
+    // ---------- So ngành: trùng tên, không phân biệt hoa thường ----------
 
     [Fact]
-    public void Recommend_MajorSynonym_MatchesGroup()
+    public void Recommend_Major_ExactNameIgnoringCaseAndSpaces()
     {
-        var r = RecommendationScorer.Recommend(Student() with { Major = "IT" }, Demo, Cfg)
+        var r = RecommendationScorer.Recommend(Student() with { Major = "  computer science " }, Demo, Cfg)
             .Select(x => x.Candidate.Code).ToList();
         Assert.Contains("DEMO_UB", r);                               // trường ghi "Computer Science"
         Assert.DoesNotContain("DEMO_UI", r);                         // trường chỉ có Nursing
+    }
+
+    [Fact]
+    public void Recommend_Major_NonStandardName_NoMatch()            // tên chưa chuẩn hóa → không đoán
+    {
+        Assert.Empty(RecommendationScorer.Recommend(Student() with { Major = "IT" }, Demo, Cfg));
     }
 }

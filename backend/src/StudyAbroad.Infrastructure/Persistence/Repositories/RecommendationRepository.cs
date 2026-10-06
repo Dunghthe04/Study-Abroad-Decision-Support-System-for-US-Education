@@ -17,15 +17,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Repositories
             await db.SaveChangesAsync(ct);
         }
 
-        public Task<string?> GetLatestAnalysisJsonAsync(Guid studentProfileId, CancellationToken ct = default)
-        {
-            return db.AnalysisResults.AsNoTracking()
-                .Where(a => a.StudentProfileId == studentProfileId && a.Kind == "strengths_weaknesses")
-                .OrderByDescending(a => a.CreatedAt)
-                .Select(a => a.ResultJson)
-                .FirstOrDefaultAsync(ct);
-        }
-
         public Task<Recommendation?> GetLatestRecommendationAsync(Guid userId, CancellationToken ct = default)
         {
             return db.Recommendations.AsNoTracking()
