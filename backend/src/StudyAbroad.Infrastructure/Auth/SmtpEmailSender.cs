@@ -55,20 +55,19 @@ namespace StudyAbroad.Infrastructure.Auth
             await SendEmailAsync(toEmail, subject, body, ct);
         }
 
-        public async Task SendAccountLockedEmailAsync(string toEmail, string fullName, string otpCode, int expiryMinutes = 10, CancellationToken ct = default)
+        public async Task SendAccountTempLockedNotificationAsync(string toEmail, string fullName, int lockoutMinutes = 15, CancellationToken ct = default)
         {
-            var subject = "[USAS] Cảnh báo bảo mật: Tài khoản của bạn đã bị tạm khóa";
+            var subject = "[USAS] Cảnh báo bảo mật: Tài khoản tạm thời bị khóa 15 phút";
             var body = $"""
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #fecaca; border-radius: 12px; background-color: #ffffff;">
                     <h2 style="color: #b91c1c; margin-bottom: 16px;">⚠️ Cảnh báo: Tài khoản tạm thời bị khóa</h2>
                     <p style="font-size: 15px; color: #334155;">Xin chào <strong>{WebUtility.HtmlEncode(fullName)}</strong>,</p>
-                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">Hệ thống phát hiện tài khoản của bạn đã bị <strong>nhập sai mật khẩu liên tiếp 5 lần</strong>. Để bảo vệ an toàn cho dữ liệu của bạn, hệ thống đã tạm thời khóa tài khoản này.</p>
-                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">Nếu đây là bạn, bạn có thể tự mở khóa tài khoản bằng mã xác minh bên dưới:</p>
-                    <div style="background-color: #fff7ed; border: 2px dashed #f97316; border-radius: 8px; text-align: center; padding: 18px; margin: 24px 0;">
-                        <span style="font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #c2410c;">{otpCode}</span>
-                        <p style="margin: 8px 0 0; font-size: 13px; color: #64748b;">Mã mở khóa chỉ có hiệu lực trong <strong>{expiryMinutes} phút</strong>.</p>
+                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">Hệ thống phát hiện tài khoản của bạn đã bị <strong>nhập sai mật khẩu liên tiếp 5 lần</strong>. Để bảo vệ dữ liệu, tài khoản đã được tạm thời khóa trong <strong>{lockoutMinutes} phút</strong>.</p>
+                    <div style="background-color: #fff7ed; border-left: 4px solid #f97316; padding: 14px; margin: 20px 0; border-radius: 4px;">
+                        <p style="margin: 0; font-size: 14px; color: #9a3412; font-weight: 600;">Hệ thống sẽ TỰ ĐỘNG MỞ KHÓA tài khoản sau {lockoutMinutes} phút.</p>
+                        <p style="margin: 6px 0 0; font-size: 13px; color: #7c2d12;">Bạn không cần thực hiện thêm thao tác mở khóa nào. Sau khi hết thời gian trên, bạn có thể đăng nhập lại bình thường.</p>
                     </div>
-                    <p style="font-size: 13px; color: #64748b; line-height: 1.5;">Nếu đây không phải thao tác của bạn, có thể ai đó đang cố dò mật khẩu của bạn. Sau khi mở khóa, vui lòng đổi mật khẩu ngay lập tức.</p>
+                    <p style="font-size: 13px; color: #64748b; line-height: 1.5;">Nếu đây không phải thao tác của bạn, có thể ai đó đang cố dò mật khẩu tài khoản của bạn. Vui lòng sử dụng tính năng <em>"Quên mật khẩu"</em> để đổi mật khẩu ngay sau khi tài khoản được tự động mở khóa.</p>
                     <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
                     <p style="font-size: 12px; color: #94a3b8; text-align: center;">USAS - Hệ thống hỗ trợ ra quyết định du học Mỹ</p>
                 </div>

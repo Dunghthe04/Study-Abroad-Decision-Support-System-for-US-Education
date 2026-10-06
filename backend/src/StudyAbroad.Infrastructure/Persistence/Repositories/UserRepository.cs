@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using StudyAbroad.Application.Auth;
+using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
 
 namespace StudyAbroad.Infrastructure.Persistence.Repositories;
@@ -63,6 +64,13 @@ public class UserRepository(AppDbContext db) : IUserRepository
         await db.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task UpdateOtpAsync(OtpToken token, CancellationToken cancellationToken = default)
+    {
+        token.UpdatedAt = DateTime.UtcNow;
+        db.OtpTokens.Update(token);
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
     public Task<OtpToken?> GetLatestOtpAsync(Guid userId, string purpose, CancellationToken cancellationToken = default) =>
         db.OtpTokens
             .Where(o => o.UserId == userId && o.Purpose == purpose && o.UsedAt == null)
@@ -74,6 +82,43 @@ public class UserRepository(AppDbContext db) : IUserRepository
         await db.OtpTokens
             .Where(o => o.UserId == userId && o.Purpose == purpose && o.UsedAt == null)
             .ExecuteUpdateAsync(o => o.SetProperty(x => x.UsedAt, DateTime.UtcNow), cancellationToken);
+    }
+
+    public Task<int> CountOtpRequestsInLastHourAsync(Guid userId, string purpose, CancellationToken cancellationToken = default)
+    {
+        var oneHourAgo = DateTime.UtcNow.AddHours(-1);
+        return db.OtpTokens
+            .Where(o => o.UserId == userId && o.Purpose == purpose && o.CreatedAt >= oneHourAgo)
+            .CountAsync(cancellationToken);
+    }
+
+    public async Task<int> UnlockExpiredAccountsAsync(CancellationToken cancellationToken = default)
+    {
+        var now = DateTime.UtcNow;
+        var expiredLockedUsers = await db.Users
+            .Where(u => u.Status == UserStatuses.TempLocked && u.LockoutEnd != null && u.LockoutEnd <= now)
+            .ToListAsync(cancellationToken);
+
+        if (expiredLockedUsers.Count == 0) return 0;
+
+        foreach (var user in expiredLockedUsers)
+        {
+            user.Status = user.Role == UserRoles.Center ? UserStatuses.Pending : UserStatuses.Active;
+            user.FailedLoginAttempts = 0;
+            user.LockoutEnd = null;
+            user.UpdatedAt = now;
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        return expiredLockedUsers.Count;
+    }
+
+    public async Task<int> CleanupExpiredOtpsAsync(CancellationToken cancellationToken = default)
+    {
+        var now = DateTime.UtcNow;
+        return await db.OtpTokens
+            .Where(o => o.ExpiresAt < now)
+            .ExecuteDeleteAsync(cancellationToken);
     }
 
     public Task<List<User>> GetAllUsersAsync(CancellationToken cancellationToken = default) =>

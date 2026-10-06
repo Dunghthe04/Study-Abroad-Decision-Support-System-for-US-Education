@@ -63,6 +63,10 @@ public static class DependencyInjection
                 client.DefaultRequestHeaders.Add("X-Api-Key", options.ApiKey);
         });
 
+        // [Scheduled Background Jobs: Unlock expired accounts & Cleanup OTPs]
+        services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.AccountUnlockBackgroundService>();
+        services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.OtpCleanupBackgroundService>();
+
         return services;
     }
 }

@@ -67,13 +67,8 @@ export function LoginForm() {
           <p>{error}</p>
 
           {lockType === "temp_locked" && (
-            <div className="mt-3">
-              <Link
-                href={`/unlock-account?email=${encodeURIComponent(email.trim())}`}
-                className="inline-flex items-center justify-center rounded-lg bg-red-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500"
-              >
-                Mở khóa bằng mã OTP gửi về Email →
-              </Link>
+            <div className="mt-3 rounded-lg border border-red-300 bg-red-100/60 p-3 text-xs text-red-900">
+              <span className="font-semibold">⏳ Tự động mở khóa:</span> Tài khoản của bạn sẽ được hệ thống tự động mở khóa sau 15 phút. Bạn không cần thực hiện thêm thao tác nào, vui lòng quay lại sau thời gian trên.
             </div>
           )}
 

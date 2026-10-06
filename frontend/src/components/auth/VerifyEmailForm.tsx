@@ -153,7 +153,7 @@ export function VerifyEmailForm() {
             <label htmlFor="otp-input" className="block text-sm font-medium text-slate-700">
               Mã xác thực OTP (6 chữ số)
             </label>
-            <span className="text-xs text-slate-500">Hiệu lực trong 10 phút</span>
+            <span className="text-xs font-medium text-amber-600">Hiệu lực trong 5 phút</span>
           </div>
           <input
             id="otp-input"
@@ -168,6 +168,9 @@ export function VerifyEmailForm() {
             placeholder="123456"
             className="mt-1 block w-full text-center tracking-[0.5em] font-mono text-xl font-bold rounded-lg border border-slate-300 px-3 py-2.5 text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
           />
+          <p className="mt-1.5 text-xs text-slate-500">
+            Mã sẽ tự hủy sau 5 lần nhập sai. Tối đa 5 lần gửi mã mỗi giờ.
+          </p>
         </div>
 
         <button

@@ -24,8 +24,14 @@ namespace StudyAbroad.Application.Auth
 
         // [USAS-12 / USAS-17] Quản lý mã OTP
         Task SaveOtpAsync(OtpToken token, CancellationToken cancellationToken = default);
+        Task UpdateOtpAsync(OtpToken token, CancellationToken cancellationToken = default);
         Task<OtpToken?> GetLatestOtpAsync(Guid userId, string purpose, CancellationToken cancellationToken = default);
         Task InvalidateOtpsAsync(Guid userId, string purpose, CancellationToken cancellationToken = default);
+        Task<int> CountOtpRequestsInLastHourAsync(Guid userId, string purpose, CancellationToken cancellationToken = default);
+
+        // [USAS-362] Quản lý tác vụ chạy nền (Background Scheduled Jobs)
+        Task<int> UnlockExpiredAccountsAsync(CancellationToken cancellationToken = default);
+        Task<int> CleanupExpiredOtpsAsync(CancellationToken cancellationToken = default);
 
         // [USAS-362] Quản lý danh sách người dùng (dành cho Admin)
         Task<List<User>> GetAllUsersAsync(CancellationToken cancellationToken = default);

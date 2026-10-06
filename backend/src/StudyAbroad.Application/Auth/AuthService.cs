@@ -33,9 +33,24 @@ namespace StudyAbroad.Application.Auth
         public const int MaxFullNameLength = 100;
         public const int MaxEmailLength = 100;
         public const int MaxRawPhoneLength = 20;
-        public const int OtpExpiryMinutes = 10;
+
+        /// <summary>Thời hạn hiệu lực của mã OTP: 5 phút.</summary>
+        public const int OtpExpiryMinutes = 5;
+
+        /// <summary>Số lần nhập sai OTP tối đa trước khi mã OTP bị vô hiệu hóa: 5 lần.</summary>
         public const int MaxOtpAttempts = 5;
+
+        /// <summary>Số lần gõ sai mật khẩu tối đa trước khi tài khoản bị tạm khóa: 5 lần.</summary>
         public const int MaxFailedLoginAttempts = 5;
+
+        /// <summary>Thời gian tạm khóa tài khoản sau 5 lần nhập sai: 15 phút (tự động mở khóa sau 15 phút).</summary>
+        public const int TempLockoutMinutes = 15;
+
+        /// <summary>Khoảng thời gian tối thiểu giữa 2 lần yêu cầu mã OTP liên tiếp: 60 giây.</summary>
+        public const int MinSecondsBetweenOtpRequests = 60;
+
+        /// <summary>Giới hạn số lần yêu cầu mã OTP tối đa trong 1 giờ: 5 lần.</summary>
+        public const int MaxOtpRequestsPerHour = 5;
 
         public static string GenerateOtpCode() =>
             RandomNumberGenerator.GetInt32(100000, 1000000).ToString("D6");
@@ -120,11 +135,12 @@ namespace StudyAbroad.Application.Auth
                 Status = UserStatuses.Unverified,
                 ParentAcknowledged = request.ParentAcknowledged == true,
                 Phone = normalizedPhone,
-                FailedLoginAttempts = 0
+                FailedLoginAttempts = 0,
+                LockoutEnd = null
             };
             await users.AddAsync(user, ct);
 
-            // Sinh mã OTP 6 số và gửi qua Email thật (hiệu lực 10 phút)
+            // Sinh mã OTP 6 số và gửi qua Email thật (hiệu lực 5 phút)
             var otpCode = GenerateOtpCode();
             var otp = new OtpToken
             {
@@ -155,23 +171,37 @@ namespace StudyAbroad.Application.Auth
             if (otp == null)
                 return AuthResult.Fail(AuthError.OtpInvalid, "Không tìm thấy mã OTP hợp lệ. Vui lòng yêu cầu gửi lại mã mới.");
 
+            if (otp.UsedAt != null)
+                return AuthResult.Fail(AuthError.OtpInvalid, "Mã OTP này đã được sử dụng. Vui lòng yêu cầu gửi lại mã mới.");
+
             if (DateTime.UtcNow > otp.ExpiresAt)
-                return AuthResult.Fail(AuthError.OtpExpired, $"Mã OTP đã hết hạn (chỉ có hiệu lực trong {OtpExpiryMinutes} phút). Vui lòng nhấn gửi lại mã.");
+                return AuthResult.Fail(AuthError.OtpExpired, $"Mã OTP đã hết hạn sau {OtpExpiryMinutes} phút. Vui lòng nhấn gửi lại mã mới.");
 
             if (otp.Attempts >= MaxOtpAttempts)
-                return AuthResult.Fail(AuthError.OtpInvalid, $"Bạn đã nhập sai mã OTP quá {MaxOtpAttempts} lần. Vui lòng yêu cầu gửi lại mã mới.");
+                return AuthResult.Fail(AuthError.OtpInvalid, $"Mã OTP đã bị vô hiệu hóa do nhập sai quá {MaxOtpAttempts} lần. Vui lòng yêu cầu gửi lại mã mới.");
 
             if (otp.CodeHash != HashOtp(request.OtpCode))
             {
                 otp.Attempts++;
-                await users.SaveOtpAsync(otp, ct);
+                if (otp.Attempts >= MaxOtpAttempts)
+                {
+                    otp.UsedAt = DateTime.UtcNow; // Vô hiệu hóa mã sau 5 lần sai
+                    await users.UpdateOtpAsync(otp, ct);
+                    return AuthResult.Fail(AuthError.OtpInvalid, $"Mã OTP đã bị vô hiệu hóa do nhập sai quá {MaxOtpAttempts} lần. Vui lòng yêu cầu gửi lại mã mới.");
+                }
+
+                await users.UpdateOtpAsync(otp, ct);
                 var remaining = MaxOtpAttempts - otp.Attempts;
-                return AuthResult.Fail(AuthError.OtpInvalid, $"Mã OTP không chính xác. Bạn còn {remaining} lần thử.");
+                return AuthResult.Fail(AuthError.OtpInvalid, $"Mã OTP không chính xác. Bạn còn {remaining} lần thử trước khi mã bị vô hiệu hóa.");
             }
 
-            // OTP đúng -> đánh dấu đã dùng và kích hoạt tài khoản
+            // OTP đúng -> Đánh dấu đã dùng sau 1 lần sử dụng thành công và kích hoạt tài khoản
             otp.UsedAt = DateTime.UtcNow;
+            await users.UpdateOtpAsync(otp, ct);
+
             user.Status = user.Role == UserRoles.Center ? UserStatuses.Pending : UserStatuses.Active;
+            user.FailedLoginAttempts = 0;
+            user.LockoutEnd = null;
             await users.UpdateUserAsync(user, ct);
 
             // Tự động đăng nhập
@@ -199,23 +229,30 @@ namespace StudyAbroad.Application.Auth
             }
 
             if (request.Purpose != OtpPurposes.VerifyEmail &&
-                request.Purpose != OtpPurposes.ResetPassword &&
-                request.Purpose != OtpPurposes.UnlockAccount)
+                request.Purpose != OtpPurposes.ResetPassword)
             {
                 return AuthResult.Fail(AuthError.Validation, "Mục đích gửi OTP không hợp lệ.");
             }
 
-            // Nếu user bị khóa bởi Admin thì không cho gửi OTP mở khóa/đổi mật khẩu
-            if (user.Status == UserStatuses.Locked && request.Purpose != OtpPurposes.VerifyEmail)
+            // Nếu user bị khóa bởi Admin thì không cho gửi OTP đổi mật khẩu
+            if (user.Status == UserStatuses.Locked)
             {
                 return AuthResult.Fail(AuthError.Locked, "Tài khoản của bạn đã bị khóa bởi Quản trị viên và không thể tự thao tác.");
             }
 
+            // 1. Kiểm tra khoảng thời gian tối thiểu 60 giây giữa 2 lần yêu cầu
             var latest = await users.GetLatestOtpAsync(user.Id, request.Purpose, ct);
-            if (latest != null && (DateTime.UtcNow - latest.CreatedAt).TotalSeconds < 60)
+            if (latest != null && (DateTime.UtcNow - latest.CreatedAt).TotalSeconds < MinSecondsBetweenOtpRequests)
             {
-                var waitSeconds = 60 - (int)(DateTime.UtcNow - latest.CreatedAt).TotalSeconds;
+                var waitSeconds = MinSecondsBetweenOtpRequests - (int)(DateTime.UtcNow - latest.CreatedAt).TotalSeconds;
                 return AuthResult.Fail(AuthError.Validation, $"Vui lòng đợi thêm {waitSeconds} giây trước khi yêu cầu gửi lại mã mới.");
+            }
+
+            // 2. Kiểm tra giới hạn tối đa 5 lần yêu cầu trong vòng 1 giờ
+            var countLastHour = await users.CountOtpRequestsInLastHourAsync(user.Id, request.Purpose, ct);
+            if (countLastHour >= MaxOtpRequestsPerHour)
+            {
+                return AuthResult.Fail(AuthError.Validation, $"Bạn đã vượt quá giới hạn {MaxOtpRequestsPerHour} lần yêu cầu mã trong vòng 1 giờ. Vui lòng thử lại sau.");
             }
 
             await users.InvalidateOtpsAsync(user.Id, request.Purpose, ct);
@@ -235,8 +272,6 @@ namespace StudyAbroad.Application.Auth
                 await emailSender.SendVerificationEmailAsync(user.Email, user.FullName, otpCode, OtpExpiryMinutes, ct);
             else if (request.Purpose == OtpPurposes.ResetPassword)
                 await emailSender.SendPasswordResetEmailAsync(user.Email, user.FullName, otpCode, OtpExpiryMinutes, ct);
-            else if (request.Purpose == OtpPurposes.UnlockAccount)
-                await emailSender.SendAccountLockedEmailAsync(user.Email, user.FullName, otpCode, OtpExpiryMinutes, ct);
 
             return AuthResult.Ok($"Đã gửi mã xác thực mới tới email của bạn (hiệu lực {OtpExpiryMinutes} phút).");
         }
@@ -255,16 +290,31 @@ namespace StudyAbroad.Application.Auth
                 return AuthResult.Fail(AuthError.InvalidCredentials, "Sai tài khoản hoặc mật khẩu.");
             }
 
-            // 1. Kiểm tra khóa bởi Admin (vĩnh viễn) -> Chặn tuyệt đối, không thể tự mở bằng OTP
+            // 1. Kiểm tra khóa bởi Admin (vĩnh viễn) -> Chặn tuyệt đối
             if (user.Status == UserStatuses.Locked)
             {
                 return AuthResult.Fail(AuthError.Locked, "Tài khoản của bạn đã bị khóa bởi Quản trị viên. Vui lòng liên hệ ban quản trị để được hỗ trợ.");
             }
 
-            // 2. Kiểm tra tạm khóa do sai 5 lần -> Kể cả gõ đúng mật khẩu vẫn bị chặn
+            // 2. Kiểm tra tạm khóa do sai 5 lần: Tự động mở khóa sau 15 phút
             if (user.Status == UserStatuses.TempLocked)
             {
-                return AuthResult.Fail(AuthError.TempLocked, "Tài khoản của bạn tạm thời bị khóa do nhập sai mật khẩu 5 lần liên tiếp. Vui lòng kiểm tra email để lấy mã OTP mở khóa.");
+                if (user.LockoutEnd.HasValue && user.LockoutEnd.Value <= DateTime.UtcNow)
+                {
+                    // Đã qua 15 phút -> Tự động mở khóa ngay tại runtime
+                    user.Status = user.Role == UserRoles.Center ? UserStatuses.Pending : UserStatuses.Active;
+                    user.FailedLoginAttempts = 0;
+                    user.LockoutEnd = null;
+                    await users.UpdateUserAsync(user, ct);
+                }
+                else
+                {
+                    var remainingMinutes = user.LockoutEnd.HasValue
+                        ? Math.Max(1, (int)Math.Ceiling((user.LockoutEnd.Value - DateTime.UtcNow).TotalMinutes))
+                        : TempLockoutMinutes;
+
+                    return AuthResult.Fail(AuthError.TempLocked, $"Tài khoản tạm thời bị khóa do nhập sai mật khẩu 5 lần liên tiếp. Hệ thống sẽ tự động mở khóa sau {remainingMinutes} phút.");
+                }
             }
 
             // 3. Kiểm tra chưa xác minh email
@@ -280,35 +330,26 @@ namespace StudyAbroad.Application.Auth
 
                 if (user.FailedLoginAttempts >= MaxFailedLoginAttempts)
                 {
-                    // Đạt 5 lần sai -> Tạm khóa tài khoản và bắn email OTP mở khóa
+                    // Đạt 5 lần sai -> Tạm khóa 15 phút và gửi email thông báo (email chỉ để thông báo)
                     user.Status = UserStatuses.TempLocked;
-
-                    var otpCode = GenerateOtpCode();
-                    await users.InvalidateOtpsAsync(user.Id, OtpPurposes.UnlockAccount, ct);
-                    await users.SaveOtpAsync(new OtpToken
-                    {
-                        UserId = user.Id,
-                        Purpose = OtpPurposes.UnlockAccount,
-                        CodeHash = HashOtp(otpCode),
-                        ExpiresAt = DateTime.UtcNow.AddMinutes(OtpExpiryMinutes),
-                        Attempts = 0
-                    }, ct);
+                    user.LockoutEnd = DateTime.UtcNow.AddMinutes(TempLockoutMinutes);
 
                     await users.UpdateUserAsync(user, ct);
-                    await emailSender.SendAccountLockedEmailAsync(user.Email, user.FullName, otpCode, OtpExpiryMinutes, ct);
+                    await emailSender.SendAccountTempLockedNotificationAsync(user.Email, user.FullName, TempLockoutMinutes, ct);
 
-                    return AuthResult.Fail(AuthError.TempLocked, $"Tài khoản đã bị tạm khóa do nhập sai mật khẩu {MaxFailedLoginAttempts} lần liên tiếp. Mã OTP mở khóa đã được gửi tới email của bạn (hiệu lực {OtpExpiryMinutes} phút).");
+                    return AuthResult.Fail(AuthError.TempLocked, $"Tài khoản đã bị tạm khóa do nhập sai mật khẩu {MaxFailedLoginAttempts} lần liên tiếp. Hệ thống sẽ tự động mở khóa sau {TempLockoutMinutes} phút.");
                 }
 
                 await users.UpdateUserAsync(user, ct);
                 var remaining = MaxFailedLoginAttempts - user.FailedLoginAttempts;
-                return AuthResult.Fail(AuthError.InvalidCredentials, $"Sai tài khoản hoặc mật khẩu. Bạn còn {remaining} lần thử trước khi tài khoản bị tạm khóa.");
+                return AuthResult.Fail(AuthError.InvalidCredentials, $"Sai tài khoản hoặc mật khẩu. Bạn còn {remaining} lần thử trước khi tài khoản bị tạm khóa {TempLockoutMinutes} phút.");
             }
 
-            // Đăng nhập thành công -> Reset bộ đếm số lần sai
-            if (user.FailedLoginAttempts > 0)
+            // Đăng nhập thành công -> Reset bộ đếm số lần sai và thời gian khóa
+            if (user.FailedLoginAttempts > 0 || user.LockoutEnd != null)
             {
                 user.FailedLoginAttempts = 0;
+                user.LockoutEnd = null;
                 await users.UpdateUserAsync(user, ct);
             }
 
@@ -337,10 +378,9 @@ namespace StudyAbroad.Application.Auth
             if (user == null)
                 return AuthResult.Fail(AuthError.Validation, "Không tìm thấy thông tin tài khoản.");
 
-            // Bị Admin khóa -> Tuyệt đối không cho phép tự mở khóa bằng OTP!
             if (user.Status == UserStatuses.Locked)
             {
-                return AuthResult.Fail(AuthError.Locked, "Tài khoản này đã bị khóa bởi Quản trị viên và không thể tự mở khóa. Vui lòng liên hệ ban quản trị để được hỗ trợ.");
+                return AuthResult.Fail(AuthError.Locked, "Tài khoản này đã bị khóa bởi Quản trị viên và không thể tự mở khóa.");
             }
 
             if (user.Status != UserStatuses.TempLocked)
@@ -348,31 +388,20 @@ namespace StudyAbroad.Application.Auth
                 return AuthResult.Ok("Tài khoản đang hoạt động bình thường, không bị tạm khóa.");
             }
 
-            var otp = await users.GetLatestOtpAsync(user.Id, OtpPurposes.UnlockAccount, ct);
-            if (otp == null)
-                return AuthResult.Fail(AuthError.OtpInvalid, "Không tìm thấy mã OTP mở khóa hợp lệ. Vui lòng yêu cầu gửi lại mã mới.");
-
-            if (DateTime.UtcNow > otp.ExpiresAt)
-                return AuthResult.Fail(AuthError.OtpExpired, $"Mã OTP mở khóa đã hết hạn (chỉ có hiệu lực trong {OtpExpiryMinutes} phút). Vui lòng yêu cầu gửi lại mã mới.");
-
-            if (otp.Attempts >= MaxOtpAttempts)
-                return AuthResult.Fail(AuthError.OtpInvalid, $"Bạn đã nhập sai mã OTP quá {MaxOtpAttempts} lần. Vui lòng yêu cầu gửi lại mã mới.");
-
-            if (otp.CodeHash != HashOtp(request.OtpCode))
+            if (user.LockoutEnd.HasValue && user.LockoutEnd.Value <= DateTime.UtcNow)
             {
-                otp.Attempts++;
-                await users.SaveOtpAsync(otp, ct);
-                var remaining = MaxOtpAttempts - otp.Attempts;
-                return AuthResult.Fail(AuthError.OtpInvalid, $"Mã OTP không chính xác. Bạn còn {remaining} lần thử.");
+                user.Status = user.Role == UserRoles.Center ? UserStatuses.Pending : UserStatuses.Active;
+                user.FailedLoginAttempts = 0;
+                user.LockoutEnd = null;
+                await users.UpdateUserAsync(user, ct);
+                return AuthResult.Ok("Thời gian tạm khóa đã kết thúc. Tài khoản đã được tự động mở khóa!");
             }
 
-            // OTP đúng -> Mở khóa thành công
-            otp.UsedAt = DateTime.UtcNow;
-            user.FailedLoginAttempts = 0;
-            user.Status = UserStatuses.Active;
-            await users.UpdateUserAsync(user, ct);
+            var remaining = user.LockoutEnd.HasValue
+                ? Math.Max(1, (int)Math.Ceiling((user.LockoutEnd.Value - DateTime.UtcNow).TotalMinutes))
+                : TempLockoutMinutes;
 
-            return AuthResult.Ok("Mở khóa tài khoản thành công! Bạn có thể đăng nhập lại ngay bây giờ.");
+            return AuthResult.Fail(AuthError.TempLocked, $"Tài khoản đang bị tạm khóa. Hệ thống sẽ tự động mở khóa sau {remaining} phút nữa.");
         }
 
         public async Task<AuthResult> ForgotPasswordAsync(ForgotPasswordRequest request, CancellationToken ct = default)
@@ -383,18 +412,30 @@ namespace StudyAbroad.Application.Auth
             // Anti-enumeration: Luôn trả về thông báo thành công dù email có tồn tại hay không
             if (user != null && user.Status != UserStatuses.Locked)
             {
-                var otpCode = GenerateOtpCode();
-                await users.InvalidateOtpsAsync(user.Id, OtpPurposes.ResetPassword, ct);
-                await users.SaveOtpAsync(new OtpToken
+                // Kiểm tra cooldown 60s
+                var latest = await users.GetLatestOtpAsync(user.Id, OtpPurposes.ResetPassword, ct);
+                if (latest != null && (DateTime.UtcNow - latest.CreatedAt).TotalSeconds < MinSecondsBetweenOtpRequests)
                 {
-                    UserId = user.Id,
-                    Purpose = OtpPurposes.ResetPassword,
-                    CodeHash = HashOtp(otpCode),
-                    ExpiresAt = DateTime.UtcNow.AddMinutes(OtpExpiryMinutes),
-                    Attempts = 0
-                }, ct);
+                    return AuthResult.Ok($"Nếu email tồn tại trong hệ thống, mã xác thực đặt lại mật khẩu đã được gửi đến hộp thư (hiệu lực {OtpExpiryMinutes} phút).");
+                }
 
-                await emailSender.SendPasswordResetEmailAsync(user.Email, user.FullName, otpCode, OtpExpiryMinutes, ct);
+                // Kiểm tra giới hạn 5 lần/giờ
+                var countLastHour = await users.CountOtpRequestsInLastHourAsync(user.Id, OtpPurposes.ResetPassword, ct);
+                if (countLastHour < MaxOtpRequestsPerHour)
+                {
+                    var otpCode = GenerateOtpCode();
+                    await users.InvalidateOtpsAsync(user.Id, OtpPurposes.ResetPassword, ct);
+                    await users.SaveOtpAsync(new OtpToken
+                    {
+                        UserId = user.Id,
+                        Purpose = OtpPurposes.ResetPassword,
+                        CodeHash = HashOtp(otpCode),
+                        ExpiresAt = DateTime.UtcNow.AddMinutes(OtpExpiryMinutes),
+                        Attempts = 0
+                    }, ct);
+
+                    await emailSender.SendPasswordResetEmailAsync(user.Email, user.FullName, otpCode, OtpExpiryMinutes, ct);
+                }
             }
 
             return AuthResult.Ok($"Nếu email tồn tại trong hệ thống, mã xác thực đặt lại mật khẩu đã được gửi đến hộp thư (hiệu lực {OtpExpiryMinutes} phút).");
@@ -420,27 +461,40 @@ namespace StudyAbroad.Application.Auth
             if (otp == null)
                 return AuthResult.Fail(AuthError.OtpInvalid, "Không tìm thấy mã OTP đặt lại mật khẩu hợp lệ. Vui lòng yêu cầu gửi lại mã mới.");
 
+            if (otp.UsedAt != null)
+                return AuthResult.Fail(AuthError.OtpInvalid, "Mã OTP này đã được sử dụng. Vui lòng yêu cầu gửi lại mã mới.");
+
             if (DateTime.UtcNow > otp.ExpiresAt)
-                return AuthResult.Fail(AuthError.OtpExpired, $"Mã OTP đã hết hạn (chỉ có hiệu lực trong {OtpExpiryMinutes} phút). Vui lòng yêu cầu gửi lại mã mới.");
+                return AuthResult.Fail(AuthError.OtpExpired, $"Mã OTP đã hết hạn sau {OtpExpiryMinutes} phút. Vui lòng yêu cầu gửi lại mã mới.");
 
             if (otp.Attempts >= MaxOtpAttempts)
-                return AuthResult.Fail(AuthError.OtpInvalid, $"Bạn đã nhập sai mã OTP quá {MaxOtpAttempts} lần. Vui lòng yêu cầu gửi lại mã mới.");
+                return AuthResult.Fail(AuthError.OtpInvalid, $"Mã OTP đã bị vô hiệu hóa do nhập sai quá {MaxOtpAttempts} lần. Vui lòng yêu cầu gửi lại mã mới.");
 
             if (otp.CodeHash != HashOtp(request.OtpCode))
             {
                 otp.Attempts++;
-                await users.SaveOtpAsync(otp, ct);
+                if (otp.Attempts >= MaxOtpAttempts)
+                {
+                    otp.UsedAt = DateTime.UtcNow; // Vô hiệu hóa sau 5 lần sai
+                    await users.UpdateOtpAsync(otp, ct);
+                    return AuthResult.Fail(AuthError.OtpInvalid, $"Mã OTP đã bị vô hiệu hóa do nhập sai quá {MaxOtpAttempts} lần. Vui lòng yêu cầu gửi lại mã mới.");
+                }
+
+                await users.UpdateOtpAsync(otp, ct);
                 var remaining = MaxOtpAttempts - otp.Attempts;
-                return AuthResult.Fail(AuthError.OtpInvalid, $"Mã OTP không chính xác. Bạn còn {remaining} lần thử.");
+                return AuthResult.Fail(AuthError.OtpInvalid, $"Mã OTP không chính xác. Bạn còn {remaining} lần thử trước khi mã bị vô hiệu hóa.");
             }
 
-            // OTP đúng -> Cập nhật mật khẩu mới
+            // OTP đúng -> Đánh dấu đã dùng sau 1 lần thành công và cập nhật mật khẩu mới
             otp.UsedAt = DateTime.UtcNow;
+            await users.UpdateOtpAsync(otp, ct);
+
             user.PasswordHash = hasher.Hash(request.NewPassword);
             user.FailedLoginAttempts = 0;
             if (user.Status == UserStatuses.TempLocked)
             {
-                user.Status = UserStatuses.Active;
+                user.Status = user.Role == UserRoles.Center ? UserStatuses.Pending : UserStatuses.Active;
+                user.LockoutEnd = null;
             }
 
             await users.UpdateUserAsync(user, ct);

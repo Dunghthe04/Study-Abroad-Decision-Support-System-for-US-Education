@@ -85,6 +85,39 @@ public class AuthServiceTests
             return Task.CompletedTask;
         }
 
+        public Task UpdateOtpAsync(OtpToken token, CancellationToken cancellationToken = default)
+        {
+            var idx = Otps.FindIndex(o => o.Id == token.Id);
+            if (idx >= 0) Otps[idx] = token;
+            return Task.CompletedTask;
+        }
+
+        public Task<int> CountOtpRequestsInLastHourAsync(Guid userId, string purpose, CancellationToken cancellationToken = default)
+        {
+            var oneHourAgo = DateTime.UtcNow.AddHours(-1);
+            return Task.FromResult(Otps.Count(o => o.UserId == userId && o.Purpose == purpose && o.CreatedAt >= oneHourAgo));
+        }
+
+        public Task<int> UnlockExpiredAccountsAsync(CancellationToken cancellationToken = default)
+        {
+            var now = DateTime.UtcNow;
+            var expired = Users.Where(u => u.Status == UserStatuses.TempLocked && u.LockoutEnd != null && u.LockoutEnd <= now).ToList();
+            foreach (var u in expired)
+            {
+                u.Status = u.Role == UserRoles.Center ? UserStatuses.Pending : UserStatuses.Active;
+                u.FailedLoginAttempts = 0;
+                u.LockoutEnd = null;
+            }
+            return Task.FromResult(expired.Count);
+        }
+
+        public Task<int> CleanupExpiredOtpsAsync(CancellationToken cancellationToken = default)
+        {
+            var now = DateTime.UtcNow;
+            var count = Otps.RemoveAll(o => o.ExpiresAt < now);
+            return Task.FromResult(count);
+        }
+
         public Task<List<User>> GetAllUsersAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult(Users.ToList());
     }
@@ -107,21 +140,21 @@ public class AuthServiceTests
     {
         public List<(string To, string Purpose, string Code)> SentEmails { get; } = [];
 
-        public Task SendVerificationEmailAsync(string toEmail, string fullName, string otpCode, int expiryMinutes = 10, CancellationToken ct = default)
+        public Task SendVerificationEmailAsync(string toEmail, string fullName, string otpCode, int expiryMinutes = 5, CancellationToken ct = default)
         {
             SentEmails.Add((toEmail, OtpPurposes.VerifyEmail, otpCode));
             return Task.CompletedTask;
         }
 
-        public Task SendPasswordResetEmailAsync(string toEmail, string fullName, string otpCode, int expiryMinutes = 10, CancellationToken ct = default)
+        public Task SendPasswordResetEmailAsync(string toEmail, string fullName, string otpCode, int expiryMinutes = 5, CancellationToken ct = default)
         {
             SentEmails.Add((toEmail, OtpPurposes.ResetPassword, otpCode));
             return Task.CompletedTask;
         }
 
-        public Task SendAccountLockedEmailAsync(string toEmail, string fullName, string otpCode, int expiryMinutes = 10, CancellationToken ct = default)
+        public Task SendAccountTempLockedNotificationAsync(string toEmail, string fullName, int lockoutMinutes = 15, CancellationToken ct = default)
         {
-            SentEmails.Add((toEmail, OtpPurposes.UnlockAccount, otpCode));
+            SentEmails.Add((toEmail, "temp_locked_notice", $"lockout:{lockoutMinutes}m"));
             return Task.CompletedTask;
         }
     }
@@ -277,8 +310,8 @@ public class AuthServiceTests
         Assert.Equal(5, _repo.Users[0].FailedLoginAttempts);
         Assert.Equal(UserStatuses.TempLocked, _repo.Users[0].Status);
 
-        // Kiểm tra email cảnh báo mở khóa đã được gửi
-        Assert.Contains(_emailSender.SentEmails, e => e.Purpose == OtpPurposes.UnlockAccount);
+        // Kiểm tra email cảnh báo đã được gửi (không chứa mã OTP mở khóa)
+        Assert.Contains(_emailSender.SentEmails, e => e.Purpose == "temp_locked_notice");
     }
 
     [Fact]
@@ -287,6 +320,7 @@ public class AuthServiceTests
         var service = CreateService();
         await service.RegisterAsync(Request());
         _repo.Users[0].Status = UserStatuses.TempLocked;
+        _repo.Users[0].LockoutEnd = DateTime.UtcNow.AddMinutes(10);
 
         // Kể cả nhập ĐÚNG mật khẩu
         var result = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
@@ -295,24 +329,20 @@ public class AuthServiceTests
     }
 
     [Fact]
-    public async Task UnlockAccount_ValidOtp_RestoresActiveStatus()
+    public async Task UnlockAccount_After15Minutes_RestoresActiveStatus()
     {
         var service = CreateService();
         await service.RegisterAsync(Request());
-        _repo.Users[0].Status = UserStatuses.Active;
+        var user = _repo.Users[0];
+        user.Status = UserStatuses.TempLocked;
+        user.FailedLoginAttempts = 5;
+        user.LockoutEnd = DateTime.UtcNow.AddMinutes(-1); // Đã hết 15 phút
 
-        // Tạo 5 lần sai để khóa
-        for (int i = 0; i < 5; i++)
-        {
-            await service.LoginAsync(new LoginRequest("a@test.com", "wrong-pass"));
-        }
-
-        var unlockOtpEmail = _emailSender.SentEmails.Last(e => e.Purpose == OtpPurposes.UnlockAccount);
-        var unlockResult = await service.UnlockAccountAsync(new UnlockAccountRequest("a@test.com", unlockOtpEmail.Code));
+        var unlockResult = await service.UnlockAccountAsync(new UnlockAccountRequest("a@test.com", ""));
 
         Assert.Equal(AuthError.None, unlockResult.Error);
-        Assert.Equal(UserStatuses.Active, _repo.Users[0].Status);
-        Assert.Equal(0, _repo.Users[0].FailedLoginAttempts);
+        Assert.Equal(UserStatuses.Active, user.Status);
+        Assert.Equal(0, user.FailedLoginAttempts);
 
         // Sau khi mở khóa -> Đăng nhập thành công
         var loginResult = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
@@ -517,5 +547,224 @@ public class AuthServiceTests
 
         Assert.Equal(AuthError.PhoneTaken, result.Error);
         Assert.Contains("Số điện thoại đã được sử dụng", result.Message!);
+    }
+
+    [Fact]
+    public async Task Register_Generates5MinuteOtp_AndSendsVerificationEmail()
+    {
+        var service = CreateService();
+        var result = await service.RegisterAsync(Request());
+
+        Assert.Equal(AuthError.None, result.Error);
+        Assert.Equal(UserStatuses.Unverified, result.User!.Status);
+        Assert.Single(_repo.Otps);
+        var otp = _repo.Otps[0];
+        Assert.Equal(OtpPurposes.VerifyEmail, otp.Purpose);
+        // Kiểm tra thời hạn 5 phút
+        Assert.True(otp.ExpiresAt > DateTime.UtcNow.AddMinutes(4) && otp.ExpiresAt <= DateTime.UtcNow.AddMinutes(5));
+        Assert.Single(_emailSender.SentEmails);
+        Assert.Equal("a@test.com", _emailSender.SentEmails[0].To);
+    }
+
+    [Fact]
+    public async Task VerifyEmail_OtpExpiredAfter5Minutes_ReturnsOtpExpiredError()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        // Giả lập OTP đã hết hạn sau 5 phút
+        _repo.Otps[0].ExpiresAt = DateTime.UtcNow.AddMinutes(-1);
+
+        var result = await service.VerifyEmailAsync(new VerifyEmailRequest("a@test.com", "123456"));
+
+        Assert.Equal(AuthError.OtpExpired, result.Error);
+        Assert.Contains("hết hạn", result.Message!);
+    }
+
+    [Fact]
+    public async Task VerifyEmail_WrongOtp5Times_InvalidatesOtp_NeverLocksUserAccount()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        var user = _repo.Users[0];
+
+        // Nhập sai 4 lần
+        for (int i = 1; i <= 4; i++)
+        {
+            var res = await service.VerifyEmailAsync(new VerifyEmailRequest("a@test.com", "000000"));
+            Assert.Equal(AuthError.OtpInvalid, res.Error);
+            Assert.Contains($"còn {5 - i} lần thử", res.Message!);
+            Assert.Equal(i, _repo.Otps[0].Attempts);
+            Assert.Null(_repo.Otps[0].UsedAt);
+            Assert.Equal(UserStatuses.Unverified, user.Status);
+            Assert.Equal(0, user.FailedLoginAttempts); // Không bao giờ tăng FailedLoginAttempts
+        }
+
+        // Nhập sai lần thứ 5 -> Mã OTP bị vô hiệu hóa
+        var finalRes = await service.VerifyEmailAsync(new VerifyEmailRequest("a@test.com", "000000"));
+        Assert.Equal(AuthError.OtpInvalid, finalRes.Error);
+        Assert.Contains("vô hiệu hóa", finalRes.Message!);
+        Assert.NotNull(_repo.Otps[0].UsedAt); // Đã bị hủy
+        Assert.Equal(UserStatuses.Unverified, user.Status); // Tài khoản vẫn unverified, không bị khóa
+    }
+
+    [Fact]
+    public async Task VerifyEmail_CorrectOtp_MarksUsedAndActivatesUser()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        var code = _emailSender.SentEmails[0].Code;
+
+        var result = await service.VerifyEmailAsync(new VerifyEmailRequest("a@test.com", code));
+
+        Assert.Equal(AuthError.None, result.Error);
+        Assert.NotNull(result.Response);
+        Assert.Equal(UserStatuses.Active, _repo.Users[0].Status);
+        Assert.NotNull(_repo.Otps[0].UsedAt); // Mã đã dùng thành công và bị hủy
+    }
+
+    [Fact]
+    public async Task ResendOtp_Within60Seconds_ReturnsValidationError()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+
+        var result = await service.ResendOtpAsync(new ResendOtpRequest("a@test.com", OtpPurposes.VerifyEmail));
+
+        Assert.Equal(AuthError.Validation, result.Error);
+        Assert.Contains("Vui lòng đợi thêm", result.Message!);
+    }
+
+    [Fact]
+    public async Task ResendOtp_MoreThan5TimesPerHour_ReturnsQuotaExceededError()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        var user = _repo.Users[0];
+
+        // Giả lập đã có 5 OTP tokens được tạo trong 1 giờ qua
+        for (int i = 0; i < 4; i++)
+        {
+            _repo.Otps.Add(new OtpToken
+            {
+                UserId = user.Id,
+                Purpose = OtpPurposes.VerifyEmail,
+                CodeHash = "hash",
+                CreatedAt = DateTime.UtcNow.AddMinutes(-10),
+                ExpiresAt = DateTime.UtcNow.AddMinutes(5)
+            });
+        }
+        // Cho lần gần nhất quá 60s
+        _repo.Otps[0].CreatedAt = DateTime.UtcNow.AddMinutes(-5);
+
+        var result = await service.ResendOtpAsync(new ResendOtpRequest("a@test.com", OtpPurposes.VerifyEmail));
+
+        Assert.Equal(AuthError.Validation, result.Error);
+        Assert.Contains("vượt quá giới hạn 5 lần", result.Message!);
+    }
+
+    [Fact]
+    public async Task Login_WrongPassword5Times_TempLocksUserFor15Minutes_AndSendsNoticeEmail()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        var user = _repo.Users[0];
+        user.Status = UserStatuses.Active;
+
+        // Nhập sai 4 lần
+        for (int i = 1; i <= 4; i++)
+        {
+            var res = await service.LoginAsync(new LoginRequest("a@test.com", "wrongpass"));
+            Assert.Equal(AuthError.InvalidCredentials, res.Error);
+            Assert.Equal(i, user.FailedLoginAttempts);
+            Assert.Equal(UserStatuses.Active, user.Status);
+        }
+
+        // Nhập sai lần thứ 5 -> Tạm khóa 15 phút
+        var lockRes = await service.LoginAsync(new LoginRequest("a@test.com", "wrongpass"));
+        Assert.Equal(AuthError.TempLocked, lockRes.Error);
+        Assert.Equal(UserStatuses.TempLocked, user.Status);
+        Assert.NotNull(user.LockoutEnd);
+        Assert.True(user.LockoutEnd > DateTime.UtcNow.AddMinutes(14) && user.LockoutEnd <= DateTime.UtcNow.AddMinutes(15));
+
+        // Kiểm tra email thông báo đã được gửi (không chứa mã OTP mở khóa)
+        Assert.Contains(_emailSender.SentEmails, e => e.Purpose == "temp_locked_notice");
+    }
+
+    [Fact]
+    public async Task Login_TempLockedUser_Within15Minutes_IsBlocked()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        var user = _repo.Users[0];
+        user.Status = UserStatuses.TempLocked;
+        user.LockoutEnd = DateTime.UtcNow.AddMinutes(10); // Còn 10 phút nữa
+
+        // Kể cả gõ đúng mật khẩu vẫn bị chặn
+        var result = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
+
+        Assert.Equal(AuthError.TempLocked, result.Error);
+        Assert.Contains("tự động mở khóa sau", result.Message!);
+    }
+
+    [Fact]
+    public async Task Login_TempLockedUser_After15Minutes_AutoUnlocksAndSucceeds()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        var user = _repo.Users[0];
+        user.Status = UserStatuses.TempLocked;
+        user.FailedLoginAttempts = 5;
+        user.LockoutEnd = DateTime.UtcNow.AddMinutes(-1); // Đã quá 15 phút
+
+        var result = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
+
+        Assert.Equal(AuthError.None, result.Error);
+        Assert.NotNull(result.Response);
+        Assert.Equal(UserStatuses.Active, user.Status);
+        Assert.Equal(0, user.FailedLoginAttempts);
+        Assert.Null(user.LockoutEnd);
+    }
+
+    [Fact]
+    public async Task BackgroundJob_UnlockExpiredAccounts_AutoUnlocksExpiredTempLockedUsers()
+    {
+        var user = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "locked@test.com",
+            Role = UserRoles.Student,
+            Status = UserStatuses.TempLocked,
+            FailedLoginAttempts = 5,
+            LockoutEnd = DateTime.UtcNow.AddMinutes(-5) // Đã quá 15 phút
+        };
+        _repo.Users.Add(user);
+
+        var count = await _repo.UnlockExpiredAccountsAsync();
+
+        Assert.Equal(1, count);
+        Assert.Equal(UserStatuses.Active, user.Status);
+        Assert.Equal(0, user.FailedLoginAttempts);
+        Assert.Null(user.LockoutEnd);
+    }
+
+    [Fact]
+    public async Task BackgroundJob_CleanupExpiredOtps_RemovesExpiredTokens()
+    {
+        _repo.Otps.Add(new OtpToken
+        {
+            Id = Guid.NewGuid(),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(-10) // Đã hết hạn
+        });
+        _repo.Otps.Add(new OtpToken
+        {
+            Id = Guid.NewGuid(),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(4) // Còn hạn
+        });
+
+        var deleted = await _repo.CleanupExpiredOtpsAsync();
+
+        Assert.Equal(1, deleted);
+        Assert.Single(_repo.Otps);
+        Assert.True(_repo.Otps[0].ExpiresAt > DateTime.UtcNow);
     }
 }

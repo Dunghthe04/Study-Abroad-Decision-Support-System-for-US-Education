@@ -21,5 +21,8 @@ namespace StudyAbroad.Domain.Entities
 
         /// <summary>Số lần đăng nhập sai mật khẩu liên tiếp. Đạt 5 lần sẽ tự động chuyển sang trạng thái temp_locked.</summary>
         public int FailedLoginAttempts { get; set; } = 0;
+
+        /// <summary>Thời điểm hết hạn khóa tạm thời (15 phút sau khi gõ sai 5 lần). Sau thời điểm này tài khoản tự động được mở khóa.</summary>
+        public DateTime? LockoutEnd { get; set; }
     }
 }

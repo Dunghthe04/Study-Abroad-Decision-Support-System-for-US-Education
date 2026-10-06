@@ -25,6 +25,7 @@ namespace StudyAbroad.Infrastructure.Persistence.Configurations
             builder.Property(x => x.Phone).HasMaxLength(32);
             // [USAS-362] Số lần đăng nhập sai mật khẩu liên tiếp, mặc định 0
             builder.Property(x => x.FailedLoginAttempts).HasDefaultValue(0).IsRequired();
+            builder.Property(x => x.LockoutEnd);
         }
     }
 }
