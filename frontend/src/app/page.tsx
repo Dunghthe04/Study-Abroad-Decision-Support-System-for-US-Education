@@ -16,6 +16,11 @@ const features = [
     title: "Hồ sơ cá nhân",
     description: "Đăng ký hoặc đăng nhập để quản lý lộ trình tư vấn và bảo mật thông tin hồ sơ du học.",
   },
+  {
+    href: "/profile/academic",
+    title: "Hồ sơ học thuật & Bảng điểm",
+    description: "Nhập điểm từng môn theo kỳ (3 năm gần nhất), chọn thang điểm và chứng chỉ IELTS/SAT để AI phân tích năng lực.",
+  },
 ];
 
 export default function HomePage() {
@@ -30,7 +35,7 @@ export default function HomePage() {
           tiến sĩ.
         </p>
       </div>
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {features.map((f) => (
           <Link
             key={f.href}

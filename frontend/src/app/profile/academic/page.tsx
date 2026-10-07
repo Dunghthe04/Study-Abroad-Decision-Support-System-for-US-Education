@@ -1,228 +1,176 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import {
-  deleteTranscriptScore,
-  getLatestAcademicAnalysis,
-  getTranscriptScores,
-  saveTranscriptScores,
-  triggerAcademicAnalysis,
-} from "@/lib/academic-api";
-import type {
-  AcademicAnalysisResponse,
-  TranscriptScore,
-  UpsertTranscriptScoreItem,
-} from "@/types/academic";
-import { GpaSummaryCard } from "@/components/academic/GpaSummaryCard";
-import { SubjectGroupBreakdown } from "@/components/academic/SubjectGroupBreakdown";
-import { TermTrendChart } from "@/components/academic/TermTrendChart";
-import { TranscriptScoreTable } from "@/components/academic/TranscriptScoreTable";
+import React, { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import Link from "next/link";
+import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
+import { AcademicProfileForm } from "@/components/profile/AcademicProfileForm";
+import { AcademicAnalysisView } from "@/components/academic/AcademicAnalysisView";
+import { profileApi, ApiError } from "@/lib/api";
+import type { AcademicProfileResponse } from "@/types/api";
 
-export default function AcademicAnalysisPage() {
-  const [scores, setScores] = useState<TranscriptScore[]>([]);
-  const [analysis, setAnalysis] = useState<AcademicAnalysisResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+function AcademicProfileContent() {
+  const searchParams = useSearchParams();
+  const autoAnalyze = searchParams.get("autoAnalyze") === "true";
+  const requestedTab = searchParams.get("tab");
+
+  const [selectedTab, setSelectedTab] = useState<"profile" | "analysis" | null>(null);
+  const activeTab = selectedTab ?? (autoAnalyze || requestedTab === "analysis" ? "analysis" : "profile");
+
+  const [profile, setProfile] = useState<AcademicProfileResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   useEffect(() => {
-    let ignore = false;
+    let isMounted = true;
 
-    async function fetchInitialData() {
+    async function loadProfile() {
+      setIsLoading(true);
+      setFetchError(null);
       try {
-        const [scoresData, analysisData] = await Promise.all([
-          getTranscriptScores(),
-          getLatestAcademicAnalysis().catch((err: unknown) => {
-            const msg = err instanceof Error ? err.message : String(err);
-            if (msg.includes("404") || msg.toLowerCase().includes("not found")) {
-              return null;
-            }
-            throw err;
-          }),
-        ]);
-        if (!ignore) {
-          setScores(scoresData);
-          setAnalysis(analysisData);
+        const data = await profileApi.getAcademicProfile();
+        if (isMounted) {
+          setProfile(data);
         }
-      } catch (err) {
-        if (!ignore) {
-          console.error("Lỗi kết nối dữ liệu học thuật:", err);
-          const msg =
-            err instanceof Error
-              ? err.message
-              : "Không thể tải dữ liệu bảng điểm. Vui lòng kiểm tra kết nối mạng hoặc thử lại.";
-          setFetchError(msg);
+      } catch (err: unknown) {
+        if (isMounted) {
+          if (
+            (err instanceof ApiError && err.status === 404) ||
+            (err instanceof Error &&
+              (err.message.includes("404") ||
+                err.message.toLowerCase().includes("not found") ||
+                err.message.includes("Chưa tìm thấy")))
+          ) {
+            setProfile(null);
+          } else if (err instanceof Error) {
+            setFetchError(err.message);
+          } else {
+            setFetchError("Không thể tải thông tin hồ sơ học thuật.");
+          }
         }
       } finally {
-        if (!ignore) {
-          setLoading(false);
+        if (isMounted) {
+          setIsLoading(false);
         }
       }
     }
 
-    fetchInitialData();
+    loadProfile();
 
     return () => {
-      ignore = true;
+      isMounted = false;
     };
   }, []);
 
-  const handleRetry = async () => {
-    setLoading(true);
-    setFetchError(null);
-    try {
-      const [scoresData, analysisData] = await Promise.all([
-        getTranscriptScores(),
-        getLatestAcademicAnalysis().catch((err: unknown) => {
-          const msg = err instanceof Error ? err.message : String(err);
-          if (msg.includes("404") || msg.toLowerCase().includes("not found")) {
-            return null;
-          }
-          throw err;
-        }),
-      ]);
-      setScores(scoresData);
-      setAnalysis(analysisData);
-    } catch (err) {
-      const msg =
-        err instanceof Error
-          ? err.message
-          : "Không thể tải dữ liệu bảng điểm. Vui lòng kiểm tra kết nối mạng hoặc thử lại.";
-      setFetchError(msg);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSaveScores = async (items: UpsertTranscriptScoreItem[]) => {
-    try {
-      const updated = await saveTranscriptScores(items);
-      setScores(updated);
-      setMessage({ type: "success", text: "Đã cập nhật bảng điểm học tập thành công." });
-      setTimeout(() => setMessage(null), 3000);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Lỗi lưu bảng điểm.";
-      setMessage({ type: "error", text: msg });
-      // Fix C365-03: Ném lại lỗi để TranscriptScoreTable giữ nguyên dữ liệu trong form và không xóa input
-      throw err;
-    }
-  };
-
-  const handleDeleteScore = async (scoreId: string) => {
-    try {
-      await deleteTranscriptScore(scoreId);
-      setScores((prev) => prev.filter((s) => s.id !== scoreId));
-      setMessage({ type: "success", text: "Đã xóa môn học khỏi bảng điểm." });
-      setTimeout(() => setMessage(null), 3000);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Lỗi xóa môn học.";
-      setMessage({ type: "error", text: msg });
-      // Fix C365-08: Không rethrow để tránh unhandled rejection / pageerror tại caller
-    }
-  };
-
-  const handleAnalyze = async () => {
-    setIsAnalyzing(true);
-    setMessage(null);
-    try {
-      const result = await triggerAcademicAnalysis();
-      setAnalysis(result);
-      setMessage({
-        type: "success",
-        text: "Phân tích điểm học thuật hoàn tất. Chỉ số GPA và xu hướng đã được cập nhật.",
-      });
-      setTimeout(() => setMessage(null), 4000);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Lỗi phân tích điểm học thuật.";
-      setMessage({ type: "error", text: msg });
-    } finally {
-      setIsAnalyzing(false);
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="py-24 text-center">
-        <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-slate-900 border-r-transparent" />
-        <p className="mt-3 text-xs text-slate-500 font-medium">Đang tải hồ sơ học thuật...</p>
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-8 min-w-0 w-full">
-      {/* Header bar */}
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-slate-200/80 pb-5">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-              Đánh Giá Năng Lực Học Thuật & GPA
+    <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
+      {/* Breadcrumb Navigation */}
+      <nav className="mb-6 flex items-center gap-2 text-xs font-medium text-slate-500">
+        <Link href="/" className="hover:text-blue-600 transition">
+          Trang chủ
+        </Link>
+        <span>/</span>
+        <Link href="/account" className="hover:text-blue-600 transition">
+          Tài khoản
+        </Link>
+        <span>/</span>
+        <span className="text-slate-900 font-semibold">
+          {activeTab === "profile" ? "Hồ sơ học thuật" : "Đánh giá Năng lực & GPA"}
+        </span>
+      </nav>
+
+      {/* Header Banner */}
+      <div className="mb-6 rounded-2xl border border-slate-200 bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 p-6 sm:p-8 text-white shadow-sm">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">
+              Hồ sơ Học thuật & Đánh giá Năng lực
             </h1>
-            <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700">
-              Quy đổi WES 4.0
-            </span>
+            <p className="mt-2 max-w-2xl text-sm text-slate-300">
+              Khai báo kết quả học tập, chứng chỉ chuẩn hóa (IELTS/SAT) và quy đổi điểm chuẩn WES 4.0 phục vụ tư vấn tuyển sinh đại học Mỹ.
+            </p>
           </div>
-          <p className="mt-1 text-xs sm:text-sm text-slate-600 max-w-2xl">
-            Quy đổi bảng điểm theo tiêu chuẩn giáo dục Hoa Kỳ (WES 4.0 tham khảo), phân tích điểm theo nhóm môn và nhận diện đà tăng trưởng học thuật (Growth Mindset).
-          </p>
+
+          <div className="flex items-center gap-3">
+            <Link
+              href="/advisor"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-white/10 px-4 py-2 text-xs font-semibold text-white backdrop-blur transition hover:bg-white/20 border border-white/20"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+              </svg>
+              Chat Advisor
+            </Link>
+          </div>
         </div>
       </div>
 
-      {/* Thông báo lỗi tải dữ liệu (Fix C365-06: Tách biệt hoàn toàn khỏi empty table/form) */}
-      {fetchError ? (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-center space-y-3">
-          <p className="text-sm font-semibold text-red-800">{fetchError}</p>
-          <p className="text-xs text-red-600 max-w-md mx-auto">
-            Không thể tải dữ liệu bảng điểm từ máy chủ. Vui lòng kiểm tra lại kết nối mạng và thử lại.
-          </p>
-          <div className="pt-1">
+      {/* Tab Navigation */}
+      <div className="mb-8 flex border-b border-slate-200 bg-white rounded-t-xl px-2">
+        <button
+          type="button"
+          onClick={() => setSelectedTab("profile")}
+          className={`flex items-center gap-2 border-b-2 px-5 py-3 text-sm font-semibold transition cursor-pointer ${
+            activeTab === "profile"
+              ? "border-blue-600 text-blue-600"
+              : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700"
+          }`}
+        >
+          <span>📑</span> Hồ sơ học thuật & Chứng chỉ
+        </button>
+        <button
+          type="button"
+          onClick={() => setSelectedTab("analysis")}
+          className={`flex items-center gap-2 border-b-2 px-5 py-3 text-sm font-semibold transition cursor-pointer ${
+            activeTab === "analysis"
+              ? "border-blue-600 text-blue-600"
+              : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700"
+          }`}
+        >
+          <span>📊</span> Phân tích GPA WES 4.0 & Bảng điểm
+        </button>
+      </div>
+
+      {activeTab === "profile" ? (
+        isLoading ? (
+          <div className="flex min-h-[300px] items-center justify-center rounded-2xl border border-slate-200 bg-white p-12">
+            <div className="text-center">
+              <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-blue-600 border-r-transparent"></div>
+              <p className="mt-3 text-sm font-medium text-slate-600">Đang tải dữ liệu hồ sơ học thuật...</p>
+            </div>
+          </div>
+        ) : fetchError ? (
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-center">
+            <p className="text-sm font-semibold text-red-700">Lỗi khi tải hồ sơ: {fetchError}</p>
             <button
-              type="button"
-              onClick={handleRetry}
-              className="rounded-lg bg-red-600 px-4 py-2 text-xs font-semibold text-white hover:bg-red-700 transition cursor-pointer"
+              onClick={() => window.location.reload()}
+              className="mt-3 inline-flex items-center rounded-lg bg-red-600 px-4 py-2 text-xs font-semibold text-white hover:bg-red-700"
             >
-              Thử tải lại dữ liệu
+              Tải lại trang
             </button>
           </div>
-        </div>
+        ) : (
+          <AcademicProfileForm initialProfile={profile} autoAnalyze={autoAnalyze} />
+        )
       ) : (
-        <>
-          {/* Toast Feedback */}
-          {message && (
-            <div
-              className={`rounded-lg p-3 text-xs font-semibold ${
-                message.type === "success"
-                  ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
-                  : "bg-red-50 text-red-800 border border-red-200"
-              }`}
-            >
-              {message.text}
-            </div>
-          )}
-
-          {/* Analytics Dashboard (Executive Summary + 2-col analytics) */}
-          {analysis && (
-            <div className="space-y-6 min-w-0 w-full">
-              <GpaSummaryCard analysis={analysis} />
-              {/* Fix C365-01: Thêm min-w-0 vào grid 2 cột để ngăn tràn layout */}
-              <div className="grid gap-6 md:grid-cols-2 min-w-0 w-full">
-                <SubjectGroupBreakdown groups={analysis.subjectGroups} />
-                <TermTrendChart terms={analysis.termAverages} />
-              </div>
-            </div>
-          )}
-
-          {/* Detailed Transcript Manager */}
-          <TranscriptScoreTable
-            scores={scores}
-            onSaveScores={handleSaveScores}
-            onDeleteScore={handleDeleteScore}
-            onAnalyze={handleAnalyze}
-            isAnalyzing={isAnalyzing}
-          />
-        </>
+        <AcademicAnalysisView autoAnalyze={autoAnalyze} />
       )}
     </div>
+  );
+}
+
+export default function AcademicProfilePage() {
+  return (
+    <ProtectedRoute allowedRoles={["student", "parent"]}>
+      <Suspense
+        fallback={
+          <div className="flex min-h-[50vh] items-center justify-center">
+            <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-blue-600 border-r-transparent"></div>
+          </div>
+        }
+      >
+        <AcademicProfileContent />
+      </Suspense>
+    </ProtectedRoute>
   );
 }

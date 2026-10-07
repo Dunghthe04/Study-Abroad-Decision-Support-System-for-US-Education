@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using StudyAbroad.Application.AcademicProfiles;
 using StudyAbroad.Application.Auth;
 using StudyAbroad.Application.StudyCenters;
 
@@ -12,6 +13,7 @@ public static class DependencyInjection
         services.AddScoped<IAuthService, AuthService>();
         // [USAS-365] Đăng ký service phân tích điểm học thuật
         services.AddScoped<StudyAbroad.Application.Profile.Academic.IAcademicAnalysisService, StudyAbroad.Application.Profile.Academic.AcademicAnalysisService>();
+        services.AddScoped<IAcademicProfileService, AcademicProfileService>();
         return services;
     }
 }

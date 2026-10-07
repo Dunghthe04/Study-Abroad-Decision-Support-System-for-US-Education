@@ -12,6 +12,8 @@ public class StudentProfileConfiguration : IEntityTypeConfiguration<StudentProfi
         b.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
         b.Property(x => x.TargetLevel).HasMaxLength(32).IsRequired();
         b.Property(x => x.CurrentSchool).HasMaxLength(256);
+        b.Property(x => x.EducationSystem).HasMaxLength(64);
+        b.Property(x => x.GraduationYear);
         b.Property(x => x.CurrentGrade).HasMaxLength(64);
         b.Property(x => x.GradeScale).HasMaxLength(8).IsRequired();
         b.Property(x => x.OverallGpa).HasPrecision(5, 2);
