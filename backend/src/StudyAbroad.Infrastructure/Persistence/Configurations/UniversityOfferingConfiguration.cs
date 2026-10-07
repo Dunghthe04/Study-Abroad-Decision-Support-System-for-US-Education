@@ -21,6 +21,14 @@ public class UniversityOfferingConfiguration : IEntityTypeConfiguration<Universi
         b.Property(x => x.MinIelts).HasPrecision(3, 1);
         b.Property(x => x.MinToefl).HasPrecision(5, 1);
         b.Property(x => x.MinDuolingo).HasPrecision(5, 1);
+        b.Property(x => x.AvgGpa4).HasPrecision(3, 2);
+        b.ToTable(t =>
+        {
+            t.HasCheckConstraint("ck_university_offerings_avg_gpa4", "avg_gpa4 IS NULL OR avg_gpa4 BETWEEN 0 AND 4");
+            t.HasCheckConstraint("ck_university_offerings_sat_range",
+                "(sat25 IS NULL OR sat25 BETWEEN 400 AND 1600) AND (sat75 IS NULL OR sat75 BETWEEN 400 AND 1600) "
+                + "AND (sat25 IS NULL OR sat75 IS NULL OR sat25 <= sat75)");
+        });
         b.Property(x => x.SatPolicy).HasMaxLength(16);
         b.Property(x => x.DeadlinesJson).HasColumnType("jsonb");
         b.Property(x => x.Notes).HasMaxLength(2000);

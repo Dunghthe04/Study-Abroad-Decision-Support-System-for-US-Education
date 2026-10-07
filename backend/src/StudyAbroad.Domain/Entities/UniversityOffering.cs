@@ -18,6 +18,12 @@ public class UniversityOffering : BaseEntity
     public decimal? MinIelts { get; set; }
     public decimal? MinToefl { get; set; }
     public decimal? MinDuolingo { get; set; }
+    /// <summary>GPA trung bình của sinh viên trúng tuyển, thang 4 (Common Data Set mục C12). Null nếu trường không công bố.</summary>
+    public decimal? AvgGpa4 { get; set; }
+    /// <summary>Tổng SAT mốc 25% của sinh viên trúng tuyển (400–1600). Dưới mốc này → Reach.</summary>
+    public int? Sat25 { get; set; }
+    /// <summary>Tổng SAT mốc 75% của sinh viên trúng tuyển (400–1600). Từ mốc này trở lên → Safety.</summary>
+    public int? Sat75 { get; set; }
     /// <summary>required | optional | not_accepted</summary>
     public string? SatPolicy { get; set; }
     /// <summary>danh sách vòng nộp và ngày: ED, EA, RD, Spring...</summary>

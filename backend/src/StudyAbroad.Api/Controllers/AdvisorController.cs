@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using StudyAbroad.Application.Advisor;
 using StudyAbroad.Domain.Constants;
@@ -6,6 +7,7 @@ namespace StudyAbroad.Api.Controllers;
 
 /// <summary>Proxies chat requests to the Python advisor service so the browser only talks to this API.</summary>
 [ApiController]
+[Authorize]
 [Route("api/v1/advisor")]
 public class AdvisorController(IAdvisorClient advisor, ILogger<AdvisorController> logger) : ControllerBase
 {

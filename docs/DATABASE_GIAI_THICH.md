@@ -196,6 +196,8 @@ Một trường có thể có nhiều bậc học, mỗi bậc có ngành, học
 | | `tuition_usd`, `living_usd`, `fees_usd` | Học phí, sinh hoạt, phí khác mỗi năm |
 | Điều kiện | `min_gpa4`, `min_ielts`, `min_toefl`, `min_duolingo` | Điểm tối thiểu, `null` nếu trường không công bố |
 | | `sat_policy` | `required`, `optional`, `not_accepted` |
+| Mặt bằng trúng tuyển | `avg_gpa4` | GPA trung bình của sinh viên trúng tuyển, thang 4 (Common Data Set mục C12). `null` nếu trường không công bố |
+| | `sat25`, `sat75` | Mốc SAT 25% và 75% của sinh viên trúng tuyển (400–1600). Dùng để xếp Reach/Match/Safety ở chức năng gợi ý trường (#6): dưới `sat25` là Reach, từ `sat75` trở lên là Safety |
 | Hạn nộp | `deadlines_json` | Danh sách vòng nộp, ví dụ `[{"round":"EA","date":"2026-11-01"}]` |
 | Nguồn | `source_url`, `retrieved_at` | Lấy số liệu ở đâu, ngày nào. Bắt buộc ghi để kiểm chứng |
 
