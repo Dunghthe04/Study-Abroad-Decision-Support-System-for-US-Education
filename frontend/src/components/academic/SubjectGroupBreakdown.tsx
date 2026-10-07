@@ -41,7 +41,9 @@ export function SubjectGroupBreakdown({ groups }: SubjectGroupBreakdownProps) {
                       {group.groupName}
                     </span>
                     <span className="text-xs font-medium text-slate-500 shrink-0">
-                      ({group.subjectsCount} môn)
+                      {group.subjectsCount > group.subjects.length
+                        ? `(${group.subjects.length} môn · ${group.subjectsCount} đầu điểm)`
+                        : `(${group.subjects.length} môn)`}
                     </span>
                   </div>
                   <div className="text-left sm:text-right flex items-baseline gap-1 shrink-0">

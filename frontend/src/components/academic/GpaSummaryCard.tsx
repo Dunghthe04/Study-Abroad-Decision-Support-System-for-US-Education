@@ -107,7 +107,7 @@ export function GpaSummaryCard({ analysis }: GpaSummaryCardProps) {
               Nhận xét xu hướng học tập:
             </span>
             <span className="text-xs font-medium text-slate-500">
-              {analysis.totalSubjects} môn ({analysis.totalTerms} học kỳ)
+              {analysis.totalSubjects} đầu điểm ({analysis.totalTerms} học kỳ)
             </span>
           </div>
 
