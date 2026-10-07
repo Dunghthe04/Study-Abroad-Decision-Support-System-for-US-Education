@@ -484,4 +484,65 @@ public class AcademicProfileServiceTests
         Assert.Equal(GradeScales.Scale10, result.Data.GradeScale);
         Assert.Empty(result.Data.Terms);
     }
+
+    [Fact]
+    public async Task SaveAcademicProfileAsync_GraduateWithGreAndGmat_SavesSuccessfully()
+    {
+        var repo = new FakeAcademicProfileRepository();
+        var service = new AcademicProfileService(repo);
+        var userId = Guid.NewGuid();
+
+        var request = new SaveAcademicProfileRequest(
+            TargetLevel: StudyLevels.Master,
+            CurrentSchool: "Đại học Bách Khoa",
+            EducationSystem: EducationSystems.Standard,
+            GraduationYear: 2024,
+            CurrentGrade: "Đã tốt nghiệp",
+            GradeScale: GradeScales.Scale4,
+            IntendedMajor: "Khoa học Dữ liệu",
+            Ielts: 7.5m,
+            Gre: 325m,
+            Gmat: null,
+            OtherTestsJson: "{\"AP_Calculus\": 5}",
+            Terms:
+            [
+                new TranscriptTermDto("Năm 4 - HK1", 1, [new TranscriptScoreItemDto("Xác suất thống kê", null, 3.8m, 3)])
+            ]
+        );
+
+        var result = await service.SaveAcademicProfileAsync(userId, request);
+
+        Assert.True(result.Succeeded);
+        Assert.NotNull(result.Data);
+        Assert.Equal(325m, result.Data.Gre);
+        Assert.Equal("{\"AP_Calculus\": 5}", result.Data.OtherTestsJson);
+    }
+
+    [Theory]
+    [InlineData(250)]
+    [InlineData(345)]
+    public async Task SaveAcademicProfileAsync_InvalidGre_Rejects(decimal invalidGre)
+    {
+        var repo = new FakeAcademicProfileRepository();
+        var service = new AcademicProfileService(repo);
+        var userId = Guid.NewGuid();
+
+        var request = new SaveAcademicProfileRequest(
+            TargetLevel: StudyLevels.Master,
+            CurrentSchool: "Đại học A",
+            EducationSystem: EducationSystems.Standard,
+            GraduationYear: 2024,
+            CurrentGrade: "Năm 4",
+            GradeScale: GradeScales.Scale4,
+            IntendedMajor: "CS",
+            Gre: invalidGre,
+            Terms: []
+        );
+
+        var result = await service.SaveAcademicProfileAsync(userId, request);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(AcademicProfileError.Validation, result.Error);
+        Assert.Contains("GRE", result.Message);
+    }
 }

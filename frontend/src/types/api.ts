@@ -122,6 +122,9 @@ export interface SaveAcademicProfileRequest {
   duolingo?: number | null;
   sat?: number | null;
   act?: number | null;
+  gre?: number | null;
+  gmat?: number | null;
+  otherTestsJson?: string | null;
   terms: TranscriptTerm[];
 }
 
@@ -141,6 +144,9 @@ export interface AcademicProfileResponse {
   duolingo?: number | null;
   sat?: number | null;
   act?: number | null;
+  gre?: number | null;
+  gmat?: number | null;
+  otherTestsJson?: string | null;
   terms: TranscriptTerm[];
   createdAt: string;
   updatedAt?: string | null;

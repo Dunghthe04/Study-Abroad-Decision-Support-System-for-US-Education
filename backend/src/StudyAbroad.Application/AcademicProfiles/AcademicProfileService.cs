@@ -49,6 +49,9 @@ public class AcademicProfileService(
                 Duolingo: null,
                 Sat: null,
                 Act: null,
+                Gre: null,
+                Gmat: null,
+                OtherTestsJson: null,
                 Terms: [],
                 CreatedAt: DateTime.UtcNow,
                 UpdatedAt: null
@@ -138,6 +141,18 @@ public class AcademicProfileService(
         {
             if (request.Act.Value < 1m || request.Act.Value > 36m)
                 return AcademicProfileResult.Fail(AcademicProfileError.Validation, "Điểm ACT không hợp lệ (từ 1 đến 36).");
+        }
+
+        if (request.Gre.HasValue)
+        {
+            if (request.Gre.Value < 260m || request.Gre.Value > 340m)
+                return AcademicProfileResult.Fail(AcademicProfileError.Validation, "Điểm GRE không hợp lệ (từ 260 đến 340).");
+        }
+
+        if (request.Gmat.HasValue)
+        {
+            if (request.Gmat.Value < 200m || request.Gmat.Value > 800m)
+                return AcademicProfileResult.Fail(AcademicProfileError.Validation, "Điểm GMAT không hợp lệ (từ 200 đến 800).");
         }
 
         // 3. Validate Bảng điểm: Điểm theo thang, môn trùng lặp trong từng kỳ
@@ -301,7 +316,10 @@ public class AcademicProfileService(
                 Toefl = request.Toefl,
                 Duolingo = request.Duolingo,
                 Sat = request.Sat,
-                Act = request.Act
+                Act = request.Act,
+                Gre = request.Gre,
+                Gmat = request.Gmat,
+                OtherTestsJson = request.OtherTestsJson
             };
             await repository.AddProfileAsync(profile, ct);
         }
@@ -320,6 +338,9 @@ public class AcademicProfileService(
             profile.Duolingo = request.Duolingo;
             profile.Sat = request.Sat;
             profile.Act = request.Act;
+            profile.Gre = request.Gre;
+            profile.Gmat = request.Gmat;
+            profile.OtherTestsJson = request.OtherTestsJson;
             await repository.UpdateProfileAsync(profile, ct);
         }
 
@@ -365,6 +386,9 @@ public class AcademicProfileService(
             p.Duolingo,
             p.Sat,
             p.Act,
+            p.Gre,
+            p.Gmat,
+            p.OtherTestsJson,
             terms,
             p.CreatedAt,
             p.UpdatedAt

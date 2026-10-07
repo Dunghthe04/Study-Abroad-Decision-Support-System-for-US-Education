@@ -24,12 +24,15 @@ public record SaveAcademicProfileRequest(
     string? CurrentGrade,
     string GradeScale,
     string? IntendedMajor,
-    decimal? Ielts,
-    decimal? Toefl,
-    decimal? Duolingo,
-    decimal? Sat,
-    decimal? Act,
-    List<TranscriptTermDto>? Terms
+    decimal? Ielts = null,
+    decimal? Toefl = null,
+    decimal? Duolingo = null,
+    decimal? Sat = null,
+    decimal? Act = null,
+    decimal? Gre = null,
+    decimal? Gmat = null,
+    string? OtherTestsJson = null,
+    List<TranscriptTermDto>? Terms = null
 );
 
 public record AcademicProfileResponse(
@@ -48,6 +51,9 @@ public record AcademicProfileResponse(
     decimal? Duolingo,
     decimal? Sat,
     decimal? Act,
+    decimal? Gre,
+    decimal? Gmat,
+    string? OtherTestsJson,
     List<TranscriptTermDto> Terms,
     DateTime CreatedAt,
     DateTime? UpdatedAt
