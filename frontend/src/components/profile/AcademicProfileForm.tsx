@@ -1215,50 +1215,42 @@ export function AcademicProfileForm({ initialProfile }: Props) {
               >
                 + Duolingo
               </button>
-              {!isGraduate && targetLevel !== "middle_school" && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => handleToggleTest("sat")}
-                    className={`rounded-lg px-2.5 py-1 text-xs font-semibold border transition ${
-                      enabledTests.sat ? "bg-purple-50 text-purple-700 border-purple-200" : "bg-white text-slate-600 border-slate-200"
-                    }`}
-                  >
-                    + SAT
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleToggleTest("act")}
-                    className={`rounded-lg px-2.5 py-1 text-xs font-semibold border transition ${
-                      enabledTests.act ? "bg-indigo-50 text-indigo-700 border-indigo-200" : "bg-white text-slate-600 border-slate-200"
-                    }`}
-                  >
-                    + ACT
-                  </button>
-                </>
-              )}
-              {isGraduate && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => handleToggleTest("gre")}
-                    className={`rounded-lg px-2.5 py-1 text-xs font-semibold border transition ${
-                      enabledTests.gre ? "bg-teal-50 text-teal-700 border-teal-200" : "bg-white text-slate-600 border-slate-200"
-                    }`}
-                  >
-                    + GRE
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleToggleTest("gmat")}
-                    className={`rounded-lg px-2.5 py-1 text-xs font-semibold border transition ${
-                      enabledTests.gmat ? "bg-cyan-50 text-cyan-700 border-cyan-200" : "bg-white text-slate-600 border-slate-200"
-                    }`}
-                  >
-                    + GMAT
-                  </button>
-                </>
-              )}
+              <button
+                type="button"
+                onClick={() => handleToggleTest("sat")}
+                className={`rounded-lg px-2.5 py-1 text-xs font-semibold border transition ${
+                  enabledTests.sat ? "bg-purple-50 text-purple-700 border-purple-200" : "bg-white text-slate-600 border-slate-200"
+                }`}
+              >
+                + SAT
+              </button>
+              <button
+                type="button"
+                onClick={() => handleToggleTest("act")}
+                className={`rounded-lg px-2.5 py-1 text-xs font-semibold border transition ${
+                  enabledTests.act ? "bg-indigo-50 text-indigo-700 border-indigo-200" : "bg-white text-slate-600 border-slate-200"
+                }`}
+              >
+                + ACT
+              </button>
+              <button
+                type="button"
+                onClick={() => handleToggleTest("gre")}
+                className={`rounded-lg px-2.5 py-1 text-xs font-semibold border transition ${
+                  enabledTests.gre ? "bg-teal-50 text-teal-700 border-teal-200" : "bg-white text-slate-600 border-slate-200"
+                }`}
+              >
+                + GRE
+              </button>
+              <button
+                type="button"
+                onClick={() => handleToggleTest("gmat")}
+                className={`rounded-lg px-2.5 py-1 text-xs font-semibold border transition ${
+                  enabledTests.gmat ? "bg-cyan-50 text-cyan-700 border-cyan-200" : "bg-white text-slate-600 border-slate-200"
+                }`}
+              >
+                + GMAT
+              </button>
               <button
                 type="button"
                 onClick={handleAddOtherTest}
