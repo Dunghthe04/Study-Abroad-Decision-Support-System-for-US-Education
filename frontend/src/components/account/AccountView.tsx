@@ -27,7 +27,6 @@ export function AccountView() {
         .getAcademicProfile()
         .then((res) => {
           setProfile(res);
-          // Nếu chưa có trường học hoặc chưa có học kỳ nào -> Hiển thị Modal cảnh báo
           const isComplete = Boolean(
             res &&
               res.currentSchool &&
@@ -40,7 +39,6 @@ export function AccountView() {
           }
         })
         .catch(() => {
-          // Lỗi mạng hoặc chưa có -> Cảnh báo
           setShowWarningModal(true);
         })
         .finally(() => {
@@ -76,22 +74,13 @@ export function AccountView() {
 
   // Nhãn bậc học
   const targetLevelLabels: Record<string, string> = {
-    secondary: "Trung học phổ thông (Secondary)",
+    middle_school: "Trung học cơ sở / Cấp 2 (Middle School)",
+    secondary: "Trung học phổ thông / Cấp 3 (High School)",
     community_college: "Cao đẳng cộng đồng 2+2 (Community College)",
     undergraduate: "Đại học 4 năm (Undergraduate)",
     master: "Thạc sĩ (Master)",
     phd: "Tiến sĩ (PhD)",
   };
-
-  // Ước tính GPA Thang 4.0
-  const estimatedGpa4 = (() => {
-    if (!profile || profile.overallGpa == null) return null;
-    const gpa = profile.overallGpa;
-    if (profile.gradeScale === "4" || profile.gradeScale === "letter") return gpa.toFixed(2);
-    if (profile.gradeScale === "10") return ((gpa / 10) * 4).toFixed(2);
-    if (profile.gradeScale === "100") return ((gpa / 100) * 4).toFixed(2);
-    return gpa.toFixed(2);
-  })();
 
   // Danh sách chứng chỉ có điểm
   const activeCertificates = (() => {
@@ -137,14 +126,8 @@ export function AccountView() {
             </div>
 
             <p className="mt-4 text-sm text-slate-600 leading-relaxed">
-              Tài khoản của bạn hiện <strong>chưa có thông tin bảng điểm</strong> và các chứng chỉ học thuật. Để hệ thống có thể:
+              Tài khoản của bạn hiện <strong>chưa có thông tin bảng điểm</strong> và các chứng chỉ học thuật. Vui lòng cập nhật bảng điểm để hệ thống hỗ trợ bạn tốt nhất.
             </p>
-
-            <ul className="mt-2 space-y-1.5 text-xs text-slate-600 list-disc list-inside">
-              <li>Quy đổi GPA sang chuẩn Mỹ (Thang 4.0)</li>
-              <li>Kích hoạt mô hình phân tích năng lực (Reach / Match / Safety)</li>
-              <li>Cung cấp gợi ý danh sách trường đại học Mỹ phù hợp nhất</li>
-            </ul>
 
             <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
               <button
@@ -239,7 +222,7 @@ export function AccountView() {
             </p>
           </div>
 
-          {/* [USAS-363] THÔNG TIN BẢNG ĐIỂM & HỌC THUẬT CHO HỌC SINH / PHỤ HUYNH */}
+          {/* THÔNG TIN BẢNG ĐIỂM & HỌC THUẬT CHO HỌC SINH / PHỤ HUYNH */}
           {(user.role === "student" || user.role === "parent") && (
             <div className="space-y-4">
               {isLoadingProfile ? (
@@ -264,7 +247,7 @@ export function AccountView() {
                           </span>
                         </div>
                         <p className="mt-1 text-xs text-amber-800 leading-relaxed">
-                          Bạn chưa nhập bảng điểm môn học theo từng học kỳ. Vui lòng hoàn thành để hệ thống phân tích năng lực và gợi ý trường đại học Mỹ phù hợp.
+                          Bạn chưa nhập bảng điểm môn học theo từng học kỳ. Vui lòng hoàn thành để hệ thống lưu trữ và hỗ trợ tư vấn học thuật.
                         </p>
                       </div>
                     </div>
@@ -292,7 +275,7 @@ export function AccountView() {
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
-                          <h3 className="text-base font-bold text-slate-900">Bảng điểm & Năng lực học thuật</h3>
+                          <h3 className="text-base font-bold text-slate-900">Bảng điểm & Hồ sơ học thuật</h3>
                           <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-800 border border-emerald-200">
                             ✓ Đã cập nhật
                           </span>
@@ -314,7 +297,7 @@ export function AccountView() {
                         Sửa bảng điểm
                       </Link>
                       <Link
-                        href="/profile/academic?autoAnalyze=true"
+                        href="/advisor"
                         className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-bold text-white shadow-sm hover:bg-indigo-700 transition"
                       >
                         <span>🚀 Phân tích năng lực</span>
@@ -322,7 +305,7 @@ export function AccountView() {
                     </div>
                   </div>
 
-                  {/* Chi tiết học vấn & GPA */}
+                  {/* Chi tiết học vấn & GPA theo thang trường */}
                   <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
                     <div className="rounded-xl bg-slate-50 p-3.5 border border-slate-100">
                       <span className="block text-[11px] font-medium text-slate-500 uppercase">Trường học</span>
@@ -332,19 +315,21 @@ export function AccountView() {
                       <span className="text-[11px] text-slate-500">TN: {profile?.graduationYear || "Chưa rõ"}</span>
                     </div>
 
-                    <div className="rounded-xl bg-blue-50/60 p-3.5 border border-blue-100">
-                      <span className="block text-[11px] font-medium text-blue-700 uppercase">GPA Thang trường</span>
-                      <span className="mt-0.5 block text-lg font-extrabold text-blue-900">
-                        {profile?.overallGpa?.toFixed(2) || "0.00"}{" "}
-                        <span className="text-xs font-normal text-blue-600">(Thang {profile?.gradeScale})</span>
+                    <div className="rounded-xl bg-slate-50 p-3.5 border border-slate-100">
+                      <span className="block text-[11px] font-medium text-slate-500 uppercase">Khối lớp / Bậc học</span>
+                      <span className="mt-0.5 block text-sm font-bold text-slate-900 truncate">
+                        {profile?.currentGrade || "Chưa nhập"}
+                      </span>
+                      <span className="text-[11px] text-slate-500 truncate">
+                        {profile?.targetLevel ? targetLevelLabels[profile.targetLevel] || profile.targetLevel : ""}
                       </span>
                     </div>
 
-                    <div className="rounded-xl bg-emerald-50/60 p-3.5 border border-emerald-100">
-                      <span className="block text-[11px] font-medium text-emerald-700 uppercase">GPA Chuẩn Mỹ 4.0</span>
-                      <span className="mt-0.5 block text-lg font-extrabold text-emerald-900">
-                        {estimatedGpa4 || "0.00"}{" "}
-                        <span className="text-xs font-normal text-emerald-600">/ 4.0</span>
+                    <div className="rounded-xl bg-blue-50/60 p-3.5 border border-blue-100">
+                      <span className="block text-[11px] font-medium text-blue-700 uppercase">Điểm trung bình (GPA)</span>
+                      <span className="mt-0.5 block text-lg font-extrabold text-blue-900">
+                        {profile?.overallGpa?.toFixed(2) || "0.00"}{" "}
+                        <span className="text-xs font-normal text-blue-600">(Thang {profile?.gradeScale})</span>
                       </span>
                     </div>
                   </div>

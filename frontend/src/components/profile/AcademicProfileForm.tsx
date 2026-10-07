@@ -2,7 +2,6 @@
 
 import React, { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { profileApi } from "@/lib/api";
 import type {
   AcademicProfileResponse,
@@ -13,9 +12,9 @@ import type {
 } from "@/types/api";
 
 const GRADE_SCALES: { id: GradeScaleType; name: string; desc: string; placeholder: string }[] = [
-  { id: "10", name: "Thang 10", desc: "0.0 - 10.0 (Phổ biến THPT Việt Nam)", placeholder: "Ví dụ: 8.5" },
+  { id: "10", name: "Thang 10", desc: "0.0 - 10.0 (Phổ biến tại Việt Nam)", placeholder: "Ví dụ: 8.5" },
   { id: "100", name: "Thang 100", desc: "0 - 100 (Hệ phần trăm)", placeholder: "Ví dụ: 85" },
-  { id: "4", name: "Thang 4", desc: "0.0 - 4.0 (Chuẩn Mỹ / Đại học)", placeholder: "Ví dụ: 3.6" },
+  { id: "4", name: "Thang 4", desc: "0.0 - 4.0 (Hệ tín chỉ Đại học)", placeholder: "Ví dụ: 3.6" },
   { id: "letter", name: "Thang chữ", desc: "A+, A, A-, B+, B, B-, C, D, F", placeholder: "Chọn điểm chữ" },
 ];
 
@@ -46,15 +45,16 @@ const EDUCATION_SYSTEMS = [
 ];
 
 const TARGET_LEVELS = [
-  { value: "secondary", label: "Trung học phổ thông (Secondary)" },
+  { value: "middle_school", label: "Trung học cơ sở / Cấp 2 (Middle School)" },
+  { value: "secondary", label: "Trung học phổ thông / Cấp 3 (High School)" },
   { value: "community_college", label: "Cao đẳng cộng đồng 2+2 (Community College)" },
   { value: "undergraduate", label: "Đại học 4 năm (Undergraduate)" },
-  { value: "master", label: "Thạc sĩ (Master - Sau đại học)" },
-  { value: "phd", label: "Tiến sĩ (PhD - Sau đại học)" },
+  { value: "master", label: "Thạc sĩ (Master)" },
+  { value: "phd", label: "Tiến sĩ (PhD)" },
 ];
 
 /**
- * Quy đổi thông minh giữa các thang điểm (Thang 10, Thang 100, Thang 4, Thang chữ)
+ * Quy đổi điểm số giữa các thang điểm khi người dùng chủ động chuyển thang
  */
 function convertScore(
   oldScore: number,
@@ -66,7 +66,6 @@ function convertScore(
     return { score: oldScore, rawScore: oldRaw ?? undefined };
   }
 
-  // 1. Chuyển đổi về mốc chuẩn Thang 4.0 (standard4)
   let standard4 = 3.0;
 
   if (fromScale === "letter") {
@@ -80,7 +79,6 @@ function convertScore(
     standard4 = Math.min(4.0, Math.max(0.0, oldScore));
   }
 
-  // 2. Chuyển từ standard4 sang thang đích
   if (toScale === "10") {
     const s10 = Math.round((standard4 / 4) * 10 * 10) / 10;
     return { score: s10, rawScore: s10.toFixed(1) };
@@ -126,10 +124,10 @@ interface Props {
   autoAnalyze?: boolean;
 }
 
-export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Props) {
+export function AcademicProfileForm({ initialProfile }: Props) {
   const router = useRouter();
 
-  // Xác định xem hồ sơ đã được lưu trước đó hay chưa
+  // Kiểm tra xem đã có hồ sơ lưu trước đó hay chưa
   const hasSavedProfile = Boolean(
     initialProfile &&
       initialProfile.id &&
@@ -140,11 +138,7 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
   // Chế độ: false = Xem (không sửa được, có nút Sửa), true = Chỉnh sửa
   const [isEditing, setIsEditing] = useState<boolean>(!hasSavedProfile);
 
-  // Hiển thị khung phân tích năng lực học thuật
-  const [showAnalysis, setShowAnalysis] = useState<boolean>(autoAnalyze);
-  const isAnalysisVisible = showAnalysis || autoAnalyze;
-
-  // Basic Info State
+  // Thông tin học vấn
   const [targetLevel, setTargetLevel] = useState<string>(initialProfile?.targetLevel ?? "undergraduate");
   const isGraduate = targetLevel === "master" || targetLevel === "phd";
 
@@ -156,19 +150,19 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
     initialProfile?.graduationYear ? String(initialProfile.graduationYear) : ""
   );
   const [currentGrade, setCurrentGrade] = useState<string>(
-    initialProfile?.currentGrade ?? (isGraduate ? "Đại học năm 3" : "Lớp 11")
+    initialProfile?.currentGrade ?? (isGraduate ? "Đại học năm 3" : targetLevel === "middle_school" ? "Lớp 8" : "Lớp 11")
   );
   const [intendedMajor, setIntendedMajor] = useState<string>(initialProfile?.intendedMajor ?? "");
 
-  // Scale State
+  // Thang điểm áp dụng
   const [gradeScale, setGradeScale] = useState<GradeScaleType>(
     (initialProfile?.gradeScale as GradeScaleType) || (isGraduate ? "4" : "10")
   );
 
-  // Học kỳ mặc định tùy theo bậc học
+  // Danh sách học kỳ mặc định
   const defaultHighSchoolTerms: TranscriptTerm[] = [
     {
-      termName: "Lớp 10 - Học kỳ 1",
+      termName: targetLevel === "middle_school" ? "Lớp 8 - Học kỳ 1" : "Lớp 10 - Học kỳ 1",
       termOrder: 1,
       scores: [
         { subject: "Toán học", score: 8.5, rawScore: "8.5", credits: null },
@@ -177,7 +171,7 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
       ],
     },
     {
-      termName: "Lớp 10 - Học kỳ 2",
+      termName: targetLevel === "middle_school" ? "Lớp 8 - Học kỳ 2" : "Lớp 10 - Học kỳ 2",
       termOrder: 2,
       scores: [
         { subject: "Toán học", score: 8.8, rawScore: "8.8", credits: null },
@@ -189,7 +183,7 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
 
   const defaultGraduateTerms: TranscriptTerm[] = [
     {
-      termName: "Đại học - Năm 1",
+      termName: "Đại học - Kỳ 1",
       termOrder: 1,
       scores: [
         { subject: "Giải tích đại học", score: 3.5, rawScore: "3.5", credits: 3 },
@@ -198,7 +192,7 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
       ],
     },
     {
-      termName: "Đại học - Năm 2",
+      termName: "Đại học - Kỳ 2",
       termOrder: 2,
       scores: [
         { subject: "Cấu trúc dữ liệu & Thuật toán", score: 3.6, rawScore: "3.6", credits: 4 },
@@ -216,7 +210,7 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
         : defaultHighSchoolTerms
   );
 
-  // Certificates State (Cho phép để trống khi chưa thi)
+  // Chứng chỉ Ngoại ngữ & Chuẩn hóa
   const [ielts, setIelts] = useState<string>(initialProfile?.ielts != null ? String(initialProfile.ielts) : "");
   const [toefl, setToefl] = useState<string>(initialProfile?.toefl != null ? String(initialProfile.toefl) : "");
   const [duolingo, setDuolingo] = useState<string>(
@@ -227,7 +221,7 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
   const [gre, setGre] = useState<string>(initialProfile?.gre != null ? String(initialProfile.gre) : "");
   const [gmat, setGmat] = useState<string>(initialProfile?.gmat != null ? String(initialProfile.gmat) : "");
 
-  // Chứng chỉ khác (AP, IB, PTE...) từ otherTestsJson
+  // Chứng chỉ khác (AP, IB, PTE...)
   const parseOtherTests = (jsonStr?: string | null): OtherTestItem[] => {
     if (!jsonStr) return [];
     try {
@@ -240,7 +234,7 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
         }));
       }
     } catch {
-      // Ignored
+      // Bỏ qua nếu json lỗi
     }
     return [];
   };
@@ -249,12 +243,12 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
     parseOtherTests(initialProfile?.otherTestsJson)
   );
 
-  // Trạng thái các loại chứng chỉ đang hiển thị trong giao diện
+  // Trạng thái các loại chứng chỉ đang hiển thị
   const [enabledTests, setEnabledTests] = useState<{ [key: string]: boolean }>(() => ({
     ielts: Boolean(initialProfile?.ielts != null || !hasSavedProfile),
     toefl: Boolean(initialProfile?.toefl != null),
     duolingo: Boolean(initialProfile?.duolingo != null),
-    sat: Boolean(initialProfile?.sat != null || (!isGraduate && !hasSavedProfile)),
+    sat: Boolean(initialProfile?.sat != null || (!isGraduate && !hasSavedProfile && targetLevel !== "middle_school")),
     act: Boolean(initialProfile?.act != null),
     gre: Boolean(initialProfile?.gre != null || (isGraduate && !hasSavedProfile)),
     gmat: Boolean(initialProfile?.gmat != null),
@@ -265,13 +259,12 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // Xử lý đổi thang điểm và TỰ ĐỘNG QUY ĐỔI TOÀN BỘ ĐIỂM SANG THANG MỚI
+  // Đổi thang điểm và tự động quy đổi điểm các môn
   const handleGradeScaleChange = (newScale: GradeScaleType) => {
     if (newScale === gradeScale) return;
     const oldScale = gradeScale;
     setGradeScale(newScale);
 
-    // Tự động map điểm toàn bộ các môn trong tất cả học kỳ
     const convertedTerms = terms.map((term) => ({
       ...term,
       scores: term.scores.map((s) => {
@@ -287,121 +280,31 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
     setTerms(convertedTerms);
   };
 
-  // Xác định xem bảng điểm đang có lớp / năm nào
-  const currentGradeProgress = useMemo(() => {
-    const termNames = terms.map((t) => t.termName.toLowerCase());
-    const hasGrade10 = termNames.some((n) => n.includes("lớp 10") || n.includes("10"));
-    const hasGrade11 = termNames.some((n) => n.includes("lớp 11") || n.includes("11"));
-    const hasGrade12 = termNames.some((n) => n.includes("lớp 12") || n.includes("12"));
-
-    const hasUniYear1 = termNames.some((n) => n.includes("năm 1") || n.includes("year 1"));
-    const hasUniYear2 = termNames.some((n) => n.includes("năm 2") || n.includes("year 2"));
-    const hasUniYear3 = termNames.some((n) => n.includes("năm 3") || n.includes("year 3"));
-    const hasUniYear4 = termNames.some((n) => n.includes("năm 4") || n.includes("year 4"));
-
-    return {
-      hasGrade10,
-      hasGrade11,
-      hasGrade12,
-      hasUniYear1,
-      hasUniYear2,
-      hasUniYear3,
-      hasUniYear4,
-    };
-  }, [terms]);
-
-  // TÍNH NĂNG "LÊN LỚP" CHO CẤP 3 (Grade Promotion Helper)
-  const handlePromoteGrade = (nextGrade: "11" | "12") => {
-    if (terms.length >= 6) {
-      alert("Hệ thống hỗ trợ tối đa 6 học kỳ gần nhất (tương đương 3 năm học).");
-      return;
-    }
-
-    // Lấy danh sách tên môn học của kỳ gần nhất để tái sử dụng
-    const lastTerm = terms[terms.length - 1];
-    const templateScores: TranscriptScoreItem[] =
-      lastTerm && lastTerm.scores.length > 0
-        ? lastTerm.scores.map((s) => {
-            const initScore =
-              gradeScale === "100" ? 80 : gradeScale === "letter" ? 4.0 : gradeScale === "4" ? 3.5 : 8.0;
-            const initRaw = gradeScale === "letter" ? "A" : String(initScore);
-            return {
-              subject: s.subject,
-              score: initScore,
-              rawScore: initRaw,
-              credits: s.credits,
-            };
-          })
-        : [
-            { subject: "Toán học", score: 8.5, rawScore: "8.5", credits: null },
-            { subject: "Ngữ văn", score: 8.0, rawScore: "8.0", credits: null },
-            { subject: "Tiếng Anh", score: 8.5, rawScore: "8.5", credits: null },
-          ];
-
-    const currentMaxOrder = terms.length;
-    const term1Order = currentMaxOrder + 1;
-    const term2Order = currentMaxOrder + 2;
-
-    const newTerms: TranscriptTerm[] = [
-      ...terms,
-      {
-        termName: `Lớp ${nextGrade} - Học kỳ 1`,
-        termOrder: term1Order,
-        scores: templateScores.map((s) => ({ ...s })),
-      },
-      {
-        termName: `Lớp ${nextGrade} - Học kỳ 2`,
-        termOrder: term2Order,
-        scores: templateScores.map((s) => ({ ...s })),
-      },
-    ];
-
-    setTerms(newTerms);
-    setCurrentGrade(`Lớp ${nextGrade}`);
-  };
-
-  // TÍNH NĂNG "THÊM NĂM ĐẠI HỌC" CHO THẠC SĨ / TIẾN SĨ
-  const handlePromoteUniversityYear = (yearNum: number) => {
-    if (terms.length >= 6) {
-      alert("Hệ thống hỗ trợ tối đa 6 học kỳ gần nhất.");
-      return;
-    }
-
-    const currentMaxOrder = terms.length;
-    const nextOrder = currentMaxOrder + 1;
-    const initScore = gradeScale === "4" ? 3.5 : gradeScale === "10" ? 8.0 : 80;
-
-    const newTerm: TranscriptTerm = {
-      termName: `Đại học - Năm ${yearNum}`,
-      termOrder: nextOrder,
-      scores: [
-        { subject: `Môn chuyên ngành năm ${yearNum} (1)`, score: initScore, rawScore: String(initScore), credits: 3 },
-        { subject: `Môn chuyên ngành năm ${yearNum} (2)`, score: initScore, rawScore: String(initScore), credits: 3 },
-      ],
-    };
-
-    setTerms([...terms, newTerm]);
-    setCurrentGrade(`Đại học năm ${yearNum}`);
-  };
-
-  // Term management helpers
+  // Quản lý học kỳ (không giới hạn tối đa 6 học kỳ, hỗ trợ đại học 8-12 kỳ)
   const handleAddTerm = () => {
-    if (terms.length >= 6) {
-      alert("Hệ thống hỗ trợ tối đa 6 học kỳ gần nhất (tương đương 3 năm học).");
+    if (terms.length >= 24) {
+      alert("Hệ thống hỗ trợ tối đa 24 học kỳ.");
       return;
     }
     const nextOrder = terms.length + 1;
     const initScore = gradeScale === "100" ? 80 : gradeScale === "letter" ? 4.0 : gradeScale === "4" ? 3.5 : 8.0;
     const initRaw = gradeScale === "letter" ? "A" : String(initScore);
 
+    // Tự động gợi ý tên kỳ tiếp theo
+    const defaultTermName = isGraduate
+      ? `Đại học - Kỳ ${nextOrder}`
+      : targetLevel === "middle_school"
+        ? `Lớp THCS - Học kỳ ${nextOrder}`
+        : `Học kỳ ${nextOrder}`;
+
     setTerms([
       ...terms,
       {
-        termName: isGraduate ? `Đại học - Học kỳ ${nextOrder}` : `Học kỳ ${nextOrder}`,
+        termName: defaultTermName,
         termOrder: nextOrder,
         scores: [
           {
-            subject: isGraduate ? "Môn học đại học" : "Toán học",
+            subject: isGraduate ? "Môn học chuyên ngành" : "Toán học",
             score: initScore,
             rawScore: initRaw,
             credits: isGraduate ? 3 : null,
@@ -426,7 +329,7 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
     setTerms(next);
   };
 
-  // Subject management helpers
+  // Quản lý môn học trong từng học kỳ
   const handleAddSubject = (termIndex: number) => {
     const next = [...terms];
     const initScore = gradeScale === "100" ? 80 : gradeScale === "letter" ? 4.0 : gradeScale === "4" ? 3.5 : 8.0;
@@ -481,7 +384,7 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
     setTerms(next);
   };
 
-  // Realtime validation
+  // Realtime validation môn học và điểm số
   const validationErrors = useMemo(() => {
     const errors: { [key: string]: string } = {};
 
@@ -503,7 +406,7 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
           errors[subKey] = "Tên môn học không được để trống";
         }
 
-        // Validate score based on scale
+        // Kiểm tra điểm theo thang điểm đã chọn
         if (gradeScale === "10") {
           if (s.score < 0 || s.score > 10) {
             errors[`${subKey}-score`] = "Điểm phải từ 0.0 đến 10.0";
@@ -527,7 +430,7 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
     return errors;
   }, [terms, gradeScale]);
 
-  // Realtime GPA Preview
+  // Tính GPA theo đúng thang điểm hiện tại của người dùng (không ép quy đổi thang 4)
   const { overallGpaPreview, termGpaList } = useMemo(() => {
     let totalWeightedScore = 0;
     let totalCredits = 0;
@@ -585,61 +488,6 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
     return { overallGpaPreview: overall, termGpaList: termList };
   }, [terms]);
 
-  // Quy đổi GPA chuẩn Mỹ 4.0
-  const usGpaEstimate = useMemo(() => {
-    if (gradeScale === "4" || gradeScale === "letter") {
-      return overallGpaPreview;
-    }
-    if (gradeScale === "10") {
-      return Math.round((overallGpaPreview / 10) * 4 * 100) / 100;
-    }
-    if (gradeScale === "100") {
-      return Math.round((overallGpaPreview / 100) * 4 * 100) / 100;
-    }
-    return overallGpaPreview;
-  }, [overallGpaPreview, gradeScale]);
-
-  // Phân loại hồ sơ Reach / Match / Safety
-  const profileClassification = useMemo(() => {
-    const satScore = sat ? parseInt(sat, 10) : 0;
-    const ieltsScore = ielts ? parseFloat(ielts) : 0;
-    const greScore = gre ? parseInt(gre, 10) : 0;
-
-    let tier = "Cần cải thiện (Needs Improvement)";
-    let badgeColor = "bg-amber-100 text-amber-800 border-amber-200";
-    let reachDescription = isGraduate ? "Top 50-80 US Graduate Schools" : "Top 100-150 US Universities";
-    let matchDescription = isGraduate ? "Top 80-120 US Graduate Schools" : "Top 150-200 hoặc Đại học vùng";
-    let safetyDescription = isGraduate ? "State Universities / Regional Masters" : "Community College 2+2";
-
-    if (
-      usGpaEstimate >= 3.65 ||
-      (!isGraduate && satScore >= 1450) ||
-      (isGraduate && greScore >= 325) ||
-      ieltsScore >= 7.5
-    ) {
-      tier = "Ứng viên rất mạnh (Strong Candidate)";
-      badgeColor = "bg-emerald-100 text-emerald-800 border-emerald-200";
-      reachDescription = isGraduate
-        ? "Top 10-25 US Graduate Programs (Stanford, MIT, Carnegie Mellon, Ivy League)"
-        : "Top 20-40 National Universities (Ivy League / Top Tier)";
-      matchDescription = isGraduate ? "Top 25-60 National Graduate Programs" : "Top 40-75 National Universities";
-      safetyDescription = isGraduate ? "Top 60-100 National Graduate Programs" : "Top 75-120 National Universities";
-    } else if (
-      usGpaEstimate >= 3.2 ||
-      (!isGraduate && satScore >= 1250) ||
-      (isGraduate && greScore >= 310) ||
-      ieltsScore >= 6.5
-    ) {
-      tier = "Ứng viên tiềm năng (Competitive Candidate)";
-      badgeColor = "bg-blue-100 text-blue-800 border-blue-200";
-      reachDescription = isGraduate ? "Top 30-60 US Graduate Programs" : "Top 50-80 National Universities";
-      matchDescription = isGraduate ? "Top 60-100 US Graduate Programs" : "Top 80-130 National Universities";
-      safetyDescription = isGraduate ? "Top 100-150 State Universities" : "Top 130-180 hoặc Public State Colleges";
-    }
-
-    return { tier, badgeColor, reachDescription, matchDescription, safetyDescription };
-  }, [usGpaEstimate, sat, ielts, gre, isGraduate]);
-
   // Thêm chứng chỉ khác
   const handleAddOtherTest = () => {
     const newId = String(Date.now());
@@ -654,7 +502,6 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
     setOtherTests(otherTests.map((t) => (t.id === id ? { ...t, [field]: value } : t)));
   };
 
-  // Bật/tắt loại chứng chỉ
   const handleToggleTest = (key: string) => {
     setEnabledTests((prev) => ({ ...prev, [key]: !prev[key] }));
   };
@@ -684,7 +531,7 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
   };
 
   // Lưu hồ sơ
-  const handleSave = async (andAnalyze = false) => {
+  const handleSave = async (andGoToAdvisor = false) => {
     setErrorMessage(null);
     setSuccessMessage(null);
 
@@ -776,7 +623,6 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
       return;
     }
 
-    // Lọc các chứng chỉ khác hợp lệ
     const validOtherTests = otherTests.filter((t) => t.name.trim() !== "");
     const otherTestsJsonStr = validOtherTests.length > 0 ? JSON.stringify(validOtherTests) : null;
 
@@ -803,14 +649,14 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
     try {
       await profileApi.saveAcademicProfile(payload);
       setSuccessMessage("Đã lưu hồ sơ học thuật thành công! Dữ liệu đã được ghi an toàn vào hệ thống.");
-      setIsEditing(false); // Chuyển về chế độ Xem, khóa form để tránh sửa nhầm
+      setIsEditing(false);
       setTimeout(() => {
         document.getElementById("form-feedback-section")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
       }, 50);
 
-      if (andAnalyze) {
-        setShowAnalysis(true);
-        router.push("/profile/academic?autoAnalyze=true");
+      // Nếu bấm nút phân tích: chuyển sang URL /advisor (không render UI phân tích tại đây)
+      if (andGoToAdvisor) {
+        router.push("/advisor");
       }
     } catch (err: unknown) {
       if (err instanceof Error) {
@@ -825,7 +671,7 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
 
   return (
     <div className="space-y-8">
-      {/* THANH TRẠNG THÁI: VIEW MODE VS EDIT MODE */}
+      {/* THANH TRẠNG THÁI: VIEW MODE VS EDIT MODE (KHÔNG CÓ NÚT HỦY/LƯU Ở TRÊN NÀY) */}
       <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <div
@@ -852,14 +698,14 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
             </div>
             <p className="text-xs text-slate-500">
               {!isEditing
-                ? "Dữ liệu được bảo vệ an toàn. Bấm nút 'Chỉnh sửa' bên cạnh nếu bạn muốn cập nhật lại điểm."
-                : "Điền các trường bắt buộc (*) và nhấn 'Lưu hồ sơ' khi hoàn tất."}
+                ? "Dữ liệu được bảo vệ an toàn. Bấm nút 'Chỉnh sửa hồ sơ' nếu bạn muốn cập nhật lại điểm."
+                : "Điền các thông tin bắt buộc (*). Các nút Lưu và Hủy nằm ở cuối trang sau khi bạn điền xong."}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          {!isEditing ? (
+        <div>
+          {!isEditing && (
             <button
               type="button"
               onClick={() => setIsEditing(true)}
@@ -870,32 +716,11 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
               </svg>
               Chỉnh sửa hồ sơ
             </button>
-          ) : (
-            <div className="flex items-center gap-2">
-              {hasSavedProfile && (
-                <button
-                  type="button"
-                  onClick={handleCancelEdit}
-                  disabled={isSaving}
-                  className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
-                >
-                  Hủy
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => handleSave(false)}
-                disabled={isSaving}
-                className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
-              >
-                {isSaving ? "Đang lưu..." : "💾 Lưu thay đổi"}
-              </button>
-            </div>
           )}
         </div>
       </div>
 
-      {/* KHỐI 1: THÔNG TIN HỌC VẤN CƠ BẢN (PHÂN HÓA BẬC HỌC) */}
+      {/* KHỐI 1: THÔNG TIN HỌC VẤN CƠ BẢN */}
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
@@ -909,7 +734,9 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
             <p className="text-xs text-slate-500">
               {isGraduate
                 ? "Bậc Thạc sĩ / Tiến sĩ: Áp dụng bảng điểm bậc Đại học và chứng chỉ sau đại học (GRE, GMAT)"
-                : "Bậc Cử nhân / THPT: Áp dụng bảng điểm THPT (Lớp 10, 11, 12) và chứng chỉ SAT / ACT"}
+                : targetLevel === "middle_school"
+                  ? "Bậc THCS / Cấp 2: Áp dụng bảng điểm các lớp THCS (Lớp 6, 7, 8, 9)"
+                  : "Bậc Cử nhân / THPT: Áp dụng bảng điểm các lớp THPT (Lớp 10, 11, 12)"}
             </p>
           </div>
         </div>
@@ -930,6 +757,10 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
                   if (educationSystem === "standard") setEducationSystem("university");
                   if (currentGrade.includes("Lớp")) setCurrentGrade("Đại học năm 3");
                   setGradeScale("4");
+                } else if (newLevel === "middle_school") {
+                  if (educationSystem === "university") setEducationSystem("standard");
+                  setCurrentGrade("Lớp 8");
+                  setGradeScale("10");
                 } else {
                   if (educationSystem === "university") setEducationSystem("standard");
                   if (currentGrade.includes("Đại học")) setCurrentGrade("Lớp 11");
@@ -969,7 +800,7 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
             />
           </div>
 
-          {/* Trường hiện tại (Đại học nếu học Thạc sĩ/Tiến sĩ, THPT nếu học Đại học) */}
+          {/* Trường hiện tại */}
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700">
               {isGraduate ? "Trường Đại học tốt nghiệp / đang học" : "Trường học hiện tại"}{" "}
@@ -980,7 +811,13 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
               disabled={!isEditing}
               value={currentSchool}
               onChange={(e) => setCurrentSchool(e.target.value)}
-              placeholder={isGraduate ? "Ví dụ: Đại học Bách Khoa Hà Nội, ĐH Kinh tế Quốc dân..." : "Ví dụ: THPT Chuyên Hà Nội - Amsterdam..."}
+              placeholder={
+                isGraduate
+                  ? "Ví dụ: Đại học Bách Khoa Hà Nội, ĐH Kinh tế Quốc dân..."
+                  : targetLevel === "middle_school"
+                    ? "Ví dụ: THCS Giảng Võ, THCS Cầu Giấy..."
+                    : "Ví dụ: THPT Chuyên Hà Nội - Amsterdam..."
+              }
               className={`mt-1 block w-full rounded-xl border px-3.5 py-2.5 text-sm shadow-sm transition ${
                 !isEditing
                   ? "bg-slate-50 border-slate-200 text-slate-700 cursor-not-allowed"
@@ -1023,7 +860,13 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
               disabled={!isEditing}
               value={currentGrade}
               onChange={(e) => setCurrentGrade(e.target.value)}
-              placeholder={isGraduate ? "Ví dụ: Đại học năm 3, Đại học năm 4, Đã tốt nghiệp Cử nhân" : "Ví dụ: Lớp 10, Lớp 11, Lớp 12..."}
+              placeholder={
+                isGraduate
+                  ? "Ví dụ: Đại học năm 3, Đại học năm 4, Đã tốt nghiệp Cử nhân"
+                  : targetLevel === "middle_school"
+                    ? "Ví dụ: Lớp 6, Lớp 7, Lớp 8, Lớp 9"
+                    : "Ví dụ: Lớp 10, Lớp 11, Lớp 12..."
+              }
               className={`mt-1 block w-full rounded-xl border px-3.5 py-2.5 text-sm shadow-sm transition ${
                 !isEditing
                   ? "bg-slate-50 border-slate-200 text-slate-700 cursor-not-allowed"
@@ -1035,7 +878,7 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
           {/* Năm tốt nghiệp dự kiến */}
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700">
-              {isGraduate ? "Năm tốt nghiệp Đại học (hoặc dự kiến)" : "Năm tốt nghiệp THPT dự kiến"}{" "}
+              {isGraduate ? "Năm tốt nghiệp Đại học (hoặc dự kiến)" : "Năm tốt nghiệp dự kiến"}{" "}
               <span className="text-red-500 font-bold">*</span>
             </label>
             <input
@@ -1056,7 +899,7 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
         </div>
       </section>
 
-      {/* KHỐI 2: THANG ĐIỂM & BẢNG ĐIỂM HỌC KỲ (CÓ NÚT LÊN LỚP) */}
+      {/* KHỐI 2: THANG ĐIỂM & BẢNG ĐIỂM HỌC KỲ (KHÔNG ÉP THANG 4, KHÔNG GIỚI HẠN 6 KỲ) */}
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex flex-col gap-4 border-b border-slate-100 pb-4 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-3">
@@ -1066,34 +909,27 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
               </svg>
             </div>
             <div>
-              <h2 className="text-lg font-bold text-slate-900">
-                {isGraduate ? "2. Bảng điểm bậc Đại học (Cử nhân)" : "2. Bảng điểm học kỳ (3 năm gần nhất)"}
-              </h2>
+              <h2 className="text-lg font-bold text-slate-900">2. Bảng điểm học kỳ</h2>
               <p className="text-xs text-slate-500">
-                {isGraduate
-                  ? "Nhập điểm các năm/kỳ Đại học. Điểm số được tính trung bình có trọng số theo số tín chỉ."
-                  : "Khi chuyển đổi thang điểm, hệ thống tự động quy đổi toàn bộ điểm các môn sang thang mới."}
+                Nhập danh sách học kỳ và môn học. Thang điểm sẽ tính theo đúng thang điểm trường bạn áp dụng.
               </p>
             </div>
           </div>
 
-          {/* Widget Xem Trước GPA */}
+          {/* Widget Xem Trước GPA theo đúng thang điểm của trường */}
           <div className="flex items-center gap-3 rounded-xl bg-slate-50 px-4 py-2 border border-slate-200">
-            <span className="text-xs font-medium text-slate-500">
-              {isGraduate ? "GPA Cử nhân tích lũy:" : "GPA Ước tính:"}
-            </span>
+            <span className="text-xs font-medium text-slate-500">GPA Trung bình:</span>
             <span className="text-base font-extrabold text-blue-600">{overallGpaPreview.toFixed(2)}</span>
             <span className="text-xs text-slate-400">({GRADE_SCALES.find((s) => s.id === gradeScale)?.name})</span>
-            <span className="text-xs font-bold text-emerald-600">≈ {usGpaEstimate.toFixed(2)}/4.0</span>
           </div>
         </div>
 
-        {/* BỘ CHỌN THANG ĐIỂM VÀ TỰ ĐỘNG QUY ĐỔI */}
+        {/* BỘ CHỌN THANG ĐIỂM */}
         <div className="mt-5">
           <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700">
             Chọn thang điểm áp dụng <span className="text-red-500 font-bold">*</span>
             <span className="ml-2 font-normal text-slate-400">
-              (Bấm chuyển thang điểm để tự động quy đổi toàn bộ điểm đã nhập)
+              (Bấm chuyển thang điểm để tự động quy đổi toàn bộ điểm các môn sang thang mới)
             </span>
           </label>
           <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -1124,102 +960,7 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
           </div>
         </div>
 
-        {/* NÚT "LÊN LỚP" / TIẾN ĐỘ BẢNG ĐIỂM */}
-        {isEditing && (
-          <div className="mt-5 rounded-xl border border-blue-100 bg-blue-50/40 p-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold uppercase tracking-wider text-blue-900">
-                    Tiến độ bảng điểm:
-                  </span>
-                  <div className="flex items-center gap-1.5">
-                    {!isGraduate ? (
-                      <>
-                        <span
-                          className={`rounded px-2 py-0.5 text-[11px] font-semibold border ${
-                            currentGradeProgress.hasGrade10
-                              ? "bg-emerald-100 text-emerald-800 border-emerald-200"
-                              : "bg-slate-100 text-slate-500 border-slate-200"
-                          }`}
-                        >
-                          Lớp 10 {currentGradeProgress.hasGrade10 ? "✓" : "○"}
-                        </span>
-                        <span
-                          className={`rounded px-2 py-0.5 text-[11px] font-semibold border ${
-                            currentGradeProgress.hasGrade11
-                              ? "bg-emerald-100 text-emerald-800 border-emerald-200"
-                              : "bg-slate-100 text-slate-500 border-slate-200"
-                          }`}
-                        >
-                          Lớp 11 {currentGradeProgress.hasGrade11 ? "✓" : "○"}
-                        </span>
-                        <span
-                          className={`rounded px-2 py-0.5 text-[11px] font-semibold border ${
-                            currentGradeProgress.hasGrade12
-                              ? "bg-emerald-100 text-emerald-800 border-emerald-200"
-                              : "bg-slate-100 text-slate-500 border-slate-200"
-                          }`}
-                        >
-                          Lớp 12 {currentGradeProgress.hasGrade12 ? "✓" : "○"}
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        <span className="rounded bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-800 border border-emerald-200">
-                          Đại học ({terms.length} kỳ đã nhập)
-                        </span>
-                      </>
-                    )}
-                  </div>
-                </div>
-                <p className="mt-1 text-[11px] text-blue-800">
-                  {!isGraduate
-                    ? "Bấm nút 'Lên lớp' để hệ thống tự động sinh 2 học kỳ cho khối lớp tiếp theo với danh sách môn học sẵn có."
-                    : "Bấm 'Thêm năm học tiếp theo' để nhập bảng điểm các năm đại học tiếp theo."}
-                </p>
-              </div>
-
-              {/* CÁC NÚT LÊN LỚP */}
-              <div className="flex items-center gap-2">
-                {!isGraduate ? (
-                  <>
-                    {!currentGradeProgress.hasGrade11 && (
-                      <button
-                        type="button"
-                        onClick={() => handlePromoteGrade("11")}
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-blue-700"
-                      >
-                        <span>🎓 Lên Lớp 11</span>
-                      </button>
-                    )}
-                    {currentGradeProgress.hasGrade11 && !currentGradeProgress.hasGrade12 && (
-                      <button
-                        type="button"
-                        onClick={() => handlePromoteGrade("12")}
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-blue-700"
-                      >
-                        <span>🎓 Lên Lớp 12</span>
-                      </button>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => handlePromoteUniversityYear(terms.length + 1)}
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-blue-700"
-                    >
-                      <span>🎓 Thêm Năm học tiếp theo</span>
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* DANH SÁCH CÁC HỌC KỲ */}
+        {/* DANH SÁCH CÁC HỌC KỲ (LINH HOẠT TẬN 9, 10, 12 KỲ) */}
         <div className="mt-6 space-y-6">
           {terms.map((term, tIdx) => {
             const currentTermGpa = termGpaList[tIdx]?.gpa ?? 0;
@@ -1239,6 +980,7 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
                       disabled={!isEditing}
                       value={term.termName}
                       onChange={(e) => handleTermNameChange(tIdx, e.target.value)}
+                      placeholder="Ví dụ: Lớp 10 - Học kỳ 1, Đại học - Kỳ 5..."
                       className={`text-sm font-bold text-slate-800 rounded px-2 py-1 transition ${
                         !isEditing
                           ? "bg-transparent border-transparent"
@@ -1408,7 +1150,7 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
           })}
         </div>
 
-        {/* Nút Thêm Học Kỳ */}
+        {/* Nút Thêm Học Kỳ (Không giới hạn tối đa 6 học kỳ) */}
         {isEditing && (
           <div className="mt-4">
             <button
@@ -1419,7 +1161,7 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
-              Thêm học kỳ mới (Tối đa 6 học kỳ)
+              + Thêm học kỳ mới
             </button>
           </div>
         )}
@@ -1431,7 +1173,7 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138z" />
               </svg>
             </div>
             <div>
@@ -1473,7 +1215,7 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
               >
                 + Duolingo
               </button>
-              {!isGraduate ? (
+              {!isGraduate && targetLevel !== "middle_school" && (
                 <>
                   <button
                     type="button"
@@ -1494,7 +1236,8 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
                     + ACT
                   </button>
                 </>
-              ) : (
+              )}
+              {isGraduate && (
                 <>
                   <button
                     type="button"
@@ -1769,7 +1512,7 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
                     disabled={!isEditing}
                     value={t.name}
                     onChange={(e) => handleUpdateOtherTest(t.id, "name", e.target.value)}
-                    placeholder="Tên chứng chỉ (vd: AP Calculus BC, IB Math)"
+                    placeholder="Tên chứng chỉ (vd: AP Calculus, IB Math)"
                     className="w-1/2 rounded border border-slate-300 bg-white px-2 py-1 text-xs"
                   />
                   <input
@@ -1795,92 +1538,6 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
           </div>
         )}
       </section>
-
-      {/* KHỐI 4: PHÂN TÍCH NĂNG LỰC HỌC THUẬT */}
-      {isAnalysisVisible && (
-        <section className="rounded-2xl border-2 border-indigo-200 bg-gradient-to-br from-indigo-50/60 via-purple-50/40 to-white p-6 shadow-md animate-in fade-in">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-indigo-100 pb-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-sm">
-                <span className="text-xl">🚀</span>
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-lg font-extrabold text-indigo-950">
-                    Phân tích năng lực học thuật
-                  </h2>
-                  <span className="rounded-full bg-indigo-100 px-2.5 py-0.5 text-[11px] font-bold text-indigo-800 border border-indigo-200">
-                    AI Recommendation Engine
-                  </span>
-                </div>
-                <p className="text-xs text-indigo-700">
-                  Phân tích dựa trên điểm chuẩn hóa CSDL và phân nhóm trường Reach / Match / Safety
-                </p>
-              </div>
-            </div>
-
-            <span className={`rounded-xl px-3 py-1.5 text-xs font-bold border ${profileClassification.badgeColor}`}>
-              {profileClassification.tier}
-            </span>
-          </div>
-
-          <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
-            {/* REACH */}
-            <div className="rounded-xl border border-purple-200 bg-white p-4 shadow-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-purple-700 uppercase tracking-wider">🎯 Nhóm Vươn tới (Reach)</span>
-                <span className="rounded bg-purple-100 px-2 py-0.5 text-[10px] font-bold text-purple-800">Cạnh tranh</span>
-              </div>
-              <p className="mt-2 text-xs font-semibold text-slate-800">{profileClassification.reachDescription}</p>
-              <p className="mt-1 text-[11px] text-slate-500">
-                Các trường top đòi hỏi bài luận ấn tượng và hoạt động ngoại khóa xuất sắc để tạo đột phá.
-              </p>
-            </div>
-
-            {/* MATCH */}
-            <div className="rounded-xl border border-blue-200 bg-white p-4 shadow-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-blue-700 uppercase tracking-wider">⚖️ Nhóm Mục tiêu (Match)</span>
-                <span className="rounded bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-800">Vừa sức</span>
-              </div>
-              <p className="mt-2 text-xs font-semibold text-slate-800">{profileClassification.matchDescription}</p>
-              <p className="mt-1 text-[11px] text-slate-500">
-                Hồ sơ học thuật hiện tại nằm trong khoảng 50% ứng viên được nhận của nhóm trường này.
-              </p>
-            </div>
-
-            {/* SAFETY */}
-            <div className="rounded-xl border border-emerald-200 bg-white p-4 shadow-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">🛡️ Nhóm An toàn (Safety)</span>
-                <span className="rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">Đảm bảo</span>
-              </div>
-              <p className="mt-2 text-xs font-semibold text-slate-800">{profileClassification.safetyDescription}</p>
-              <p className="mt-1 text-[11px] text-slate-500">
-                Tỷ lệ trúng tuyển trên 80% với cơ hội nhận học bổng tự động (Merit-based scholarships) cao.
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-xl bg-indigo-950 p-4 text-white">
-            <div className="flex items-center gap-3">
-              <span className="text-2xl">💡</span>
-              <div>
-                <div className="text-xs font-bold text-indigo-200">Gợi ý lộ trình tiếp theo:</div>
-                <div className="text-xs text-slate-200">
-                  {ielts || toefl ? "Đã có chứng chỉ ngoại ngữ. Hãy tra cứu danh sách trường có hỗ trợ tài chính tốt." : "Nên thi bổ sung chứng chỉ IELTS hoặc Duolingo để mở rộng số lượng trường nộp hồ sơ."}
-                </div>
-              </div>
-            </div>
-            <Link
-              href="/schools"
-              className="inline-flex items-center justify-center rounded-lg bg-white px-4 py-2 text-xs font-bold text-indigo-950 hover:bg-indigo-50 transition whitespace-nowrap"
-            >
-              Khám phá danh sách trường phù hợp →
-            </Link>
-          </div>
-        </section>
-      )}
 
       {/* THÔNG BÁO LỖI HOẶC THÀNH CÔNG (HIỂN THỊ Ở CUỐI GẦN NÚT BẤM ĐỂ DỄ ĐỌC) */}
       {(errorMessage || successMessage) && (
@@ -1982,10 +1639,7 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
 
             <button
               type="button"
-              onClick={() => {
-                setShowAnalysis(true);
-                router.push("/profile/academic?autoAnalyze=true");
-              }}
+              onClick={() => router.push("/advisor")}
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-3 text-sm font-bold text-white shadow-md transition hover:opacity-95 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
               <span>🚀</span> Phân tích năng lực học thuật
