@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -94,6 +95,31 @@ export function AccountView() {
             Số điện thoại được sử dụng để chuyên viên tư vấn liên hệ hỗ trợ hồ sơ du học.
           </p>
         </div>
+
+        {/* [USAS-363] Thẻ liên kết Hồ sơ học thuật & Bảng điểm (Học sinh / Phụ huynh) */}
+        {(user.role === "student" || user.role === "parent") && (
+          <div className="rounded-xl border border-blue-200 bg-gradient-to-r from-blue-50/80 to-indigo-50/80 p-5 shadow-sm">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-base font-bold text-slate-900">📑 Hồ sơ học thuật & Bảng điểm</span>
+                  <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700">
+                    B1-01 & B1-02
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-slate-600">
+                  Nhập bảng điểm 3 năm gần nhất theo thang điểm của trường, cùng chứng chỉ IELTS/SAT để AI phân tích năng lực học thuật.
+                </p>
+              </div>
+              <Link
+                href="/profile/academic"
+                className="inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-blue-700 whitespace-nowrap"
+              >
+                Cập nhật bảng điểm & chứng chỉ →
+              </Link>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
