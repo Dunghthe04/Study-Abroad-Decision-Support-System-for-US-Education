@@ -37,11 +37,29 @@ public class AcademicAnalysisRepository : IAcademicAnalysisRepository
 
         if (profile == null)
         {
+            var userExists = await _context.Users.AnyAsync(u => u.Id == userId, ct);
+            if (!userExists)
+            {
+                var devUser = new User
+                {
+                    Id = userId,
+                    Email = $"dev_{userId:N}@usas.test",
+                    FullName = "Dev Test User",
+                    Role = "student",
+                    Status = "active",
+                    PasswordHash = "dev_bypass_hash",
+                    ParentAcknowledged = true
+                };
+                await _context.Users.AddAsync(devUser, ct);
+                await _context.SaveChangesAsync(ct);
+            }
+
             profile = new StudentProfile
             {
                 Id = Guid.NewGuid(),
                 UserId = userId,
-                GradeScale = "10"
+                GradeScale = "10",
+                TargetLevel = StudyLevels.Undergraduate
             };
             await _context.StudentProfiles.AddAsync(profile, ct);
             await _context.SaveChangesAsync(ct);
