@@ -654,9 +654,9 @@ export function AcademicProfileForm({ initialProfile }: Props) {
         document.getElementById("form-feedback-section")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
       }, 50);
 
-      // Nếu bấm nút phân tích: chuyển sang URL /advisor (không render UI phân tích tại đây)
+      // Nếu bấm nút phân tích: chuyển sang route /profile/academic?autoAnalyze=true
       if (andGoToAdvisor) {
-        router.push("/advisor");
+        router.push("/profile/academic?autoAnalyze=true");
       }
     } catch (err: unknown) {
       if (err instanceof Error) {
@@ -1639,7 +1639,7 @@ export function AcademicProfileForm({ initialProfile }: Props) {
 
             <button
               type="button"
-              onClick={() => router.push("/advisor")}
+              onClick={() => router.push("/profile/academic?autoAnalyze=true")}
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-3 text-sm font-bold text-white shadow-md transition hover:opacity-95 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
               <span>🚀</span> Phân tích năng lực học thuật
