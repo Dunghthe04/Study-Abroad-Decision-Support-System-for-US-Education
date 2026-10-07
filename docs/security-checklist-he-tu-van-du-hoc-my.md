@@ -66,6 +66,21 @@ Chạy qua checklist này mỗi khi thêm 1 API/trang/chức năng mới — k�
 | [ ] | Kiểm duyệt + ẩn danh hóa dữ liệu trước khi đưa vào training/fine-tune | Chỉ khi cập nhật dữ liệu training cho AI | |
 | [ ] | Thêm log cho hành động nhạy cảm (đăng nhập, thanh toán, xóa dữ liệu, đổi quyền...) | Mọi hành động nhạy cảm mới | |
 
+### B2. Bảng kiểm tra an toàn theo từng User Story đã hoàn thành
+
+#### User Story #2: Hồ sơ học thuật & Bảng điểm (USAS-363 / B1-01, B1-02, B1-08, B1-09)
+*Người thực hiện: Việt · Ngày hoàn thành: 2026-10-07*
+
+| ✓ | Hạng mục an toàn thông tin | Giải pháp kỹ thuật đã triển khai | Trạng thái |
+|---|---|---|---|
+| [x] | **RBAC (Role-Based Access Control)** | Backend: `[Authorize(Roles = $"{UserRoles.Student},{UserRoles.Parent}")]`<br>Frontend: `<ProtectedRoute allowedRoles={["student", "parent"]}>` (chặn trung tâm / khách) | Đã kiểm thử |
+| [x] | **Chống IDOR (Insecure Direct Object References)** | Tuyệt đối không nhận `userId` hay `profileId` từ client (route/query/body). Luôn trích xuất an toàn từ `User.GetUserId()` qua HttpOnly Cookie claim. | Đã kiểm thử |
+| [x] | **Chặn điểm ngoài thang & Whitelist** | Kiểm tra nghiêm ngặt thang 10 (`0.0 - 10.0`), thang 100 (`0 - 100`), thang 4 (`0.0 - 4.0`), thang chữ (whitelist 13 ký tự chuẩn `A+` đến `F`). Chặn vượt quá giới hạn. | Đã kiểm thử |
+| [x] | **Chặn trùng lặp môn học** | Bắt lỗi nếu cùng một học kỳ có 2 môn cùng tên (case-insensitive & trimmed). Cho phép trùng môn ở các học kỳ khác nhau. | Đã kiểm thử |
+| [x] | **Ràng buộc điểm chứng chỉ** | Kiểm tra chuẩn: IELTS (0.0-9.0, bước 0.5), TOEFL (0-120), Duolingo (10-160), SAT (400-1600), ACT (1-36). Cho phép để trống khi chưa thi. | Đã kiểm thử |
+| [x] | **Chống SQL Injection** | Sử dụng 100% Entity Framework Core LINQ Parameterized Queries, không dùng Raw SQL ghép chuỗi. | Đã kiểm thử |
+| [x] | **Unit Test Suite** | 100% passed test cases (101/101 tests) kiểm thử các giá trị biên (boundary test, negative test, duplicate checks). | Đã kiểm thử |
+
 ---
 
 ## PHẦN C — ĐỊNH KỲ (không gắn tính năng cụ thể)
