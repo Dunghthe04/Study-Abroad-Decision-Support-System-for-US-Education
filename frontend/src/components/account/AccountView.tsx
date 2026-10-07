@@ -103,9 +103,9 @@ export function AccountView() {
               <div>
                 <div className="flex items-center gap-2">
                   <span className="text-base font-bold text-slate-900">📑 Hồ sơ học thuật & Bảng điểm</span>
-                  <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700">
+                  {/* <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700">
                     B1-01 & B1-02
-                  </span>
+                  </span> */}
                 </div>
                 <p className="mt-1 text-xs text-slate-600">
                   Nhập bảng điểm 3 năm gần nhất theo thang điểm của trường, cùng chứng chỉ IELTS/SAT để AI phân tích năng lực học thuật.

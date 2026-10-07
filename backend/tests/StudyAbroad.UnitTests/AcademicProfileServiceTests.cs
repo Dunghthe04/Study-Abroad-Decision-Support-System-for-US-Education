@@ -467,4 +467,21 @@ public class AcademicProfileServiceTests
         Assert.Single(result.Data.Terms);
         Assert.Equal(2, result.Data.Terms[0].Scores.Count);
     }
+
+    [Fact]
+    public async Task GetAcademicProfileAsync_ProfileDoesNotExist_ReturnsDefaultEmptyProfile()
+    {
+        var repo = new FakeAcademicProfileRepository();
+        var service = new AcademicProfileService(repo);
+        var userId = Guid.NewGuid();
+
+        var result = await service.GetAcademicProfileAsync(userId);
+
+        Assert.True(result.Succeeded);
+        Assert.NotNull(result.Data);
+        Assert.Equal(userId, result.Data.UserId);
+        Assert.Equal(StudyLevels.Undergraduate, result.Data.TargetLevel);
+        Assert.Equal(GradeScales.Scale10, result.Data.GradeScale);
+        Assert.Empty(result.Data.Terms);
+    }
 }

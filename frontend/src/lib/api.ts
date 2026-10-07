@@ -1,10 +1,13 @@
 import type {
+  AdvisorChatResponse,
   AuthResponse,
   ForgotPasswordRequest,
   LoginRequest,
+  PagedResult,
   RegisterRequest,
   ResendOtpRequest,
   ResetPasswordRequest,
+  StudyCenter,
   UserDto,
   VerifyEmailRequest,
   AcademicProfileResponse,

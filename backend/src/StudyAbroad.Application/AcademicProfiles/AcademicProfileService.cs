@@ -33,7 +33,27 @@ public class AcademicProfileService(
         var profile = await repository.GetByUserIdAsync(userId, ct);
         if (profile == null)
         {
-            return AcademicProfileResult.Fail(AcademicProfileError.NotFound, "Chưa tìm thấy hồ sơ học thuật của người dùng.");
+            var initialEmptyProfile = new AcademicProfileResponse(
+                Id: Guid.Empty,
+                UserId: userId,
+                TargetLevel: StudyLevels.Undergraduate,
+                CurrentSchool: null,
+                EducationSystem: EducationSystems.Standard,
+                GraduationYear: null,
+                CurrentGrade: "Lớp 11",
+                GradeScale: GradeScales.Scale10,
+                OverallGpa: null,
+                IntendedMajor: null,
+                Ielts: null,
+                Toefl: null,
+                Duolingo: null,
+                Sat: null,
+                Act: null,
+                Terms: [],
+                CreatedAt: DateTime.UtcNow,
+                UpdatedAt: null
+            );
+            return AcademicProfileResult.Ok(initialEmptyProfile, "Khởi tạo biểu mẫu hồ sơ học thuật mới.");
         }
 
         var scores = await repository.GetTranscriptScoresAsync(profile.Id, ct);

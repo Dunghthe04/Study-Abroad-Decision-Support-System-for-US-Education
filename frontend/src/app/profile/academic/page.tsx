@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { AcademicProfileForm } from "@/components/profile/AcademicProfileForm";
-import { profileApi } from "@/lib/api";
+import { profileApi, ApiError } from "@/lib/api";
 import type { AcademicProfileResponse } from "@/types/api";
 
 function AcademicProfileContent() {
@@ -28,10 +28,17 @@ function AcademicProfileContent() {
           setProfile(data);
         }
       } catch (err: unknown) {
-        // Nếu hồ sơ chưa được tạo lần nào (404), coi như tạo mới
+        // Nếu chưa có hồ sơ (404 hoặc Not Found): hiển thị form mẫu để người dùng bắt đầu điền
         if (isMounted) {
-          if (err instanceof Error && !err.message.includes("404")) {
+          if (
+            (err instanceof ApiError && err.status === 404) ||
+            (err instanceof Error && (err.message.includes("404") || err.message.toLowerCase().includes("not found") || err.message.includes("Chưa tìm thấy")))
+          ) {
+            setProfile(null);
+          } else if (err instanceof Error) {
             setFetchError(err.message);
+          } else {
+            setFetchError("Không thể tải thông tin hồ sơ học thuật.");
           }
         }
       } finally {
@@ -67,9 +74,9 @@ function AcademicProfileContent() {
       <div className="mb-8 rounded-2xl border border-slate-200 bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 p-8 text-white shadow-sm">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <span className="inline-flex items-center rounded-full bg-blue-500/20 px-3 py-1 text-xs font-semibold text-blue-200 border border-blue-400/30">
+            {/* <span className="inline-flex items-center rounded-full bg-blue-500/20 px-3 py-1 text-xs font-semibold text-blue-200 border border-blue-400/30">
               User Story #2: B1-01 & B1-02
-            </span>
+            </span> */}
             <h1 className="mt-2 text-2xl font-extrabold tracking-tight sm:text-3xl">
               Hồ sơ Học thuật & Bảng điểm
             </h1>
