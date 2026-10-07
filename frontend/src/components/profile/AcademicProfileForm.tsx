@@ -140,7 +140,7 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
   // Chế độ: false = Xem (không sửa được, có nút Sửa), true = Chỉnh sửa
   const [isEditing, setIsEditing] = useState<boolean>(!hasSavedProfile);
 
-  // Hiển thị khung phân tích năng lực (kết nối Story #4 - Xuân Đức)
+  // Hiển thị khung phân tích năng lực học thuật
   const [showAnalysis, setShowAnalysis] = useState<boolean>(autoAnalyze);
   const isAnalysisVisible = showAnalysis || autoAnalyze;
 
@@ -585,7 +585,7 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
     return { overallGpaPreview: overall, termGpaList: termList };
   }, [terms]);
 
-  // Quy đổi GPA chuẩn Mỹ 4.0 để phục vụ Story #4 (Xuân Đức)
+  // Quy đổi GPA chuẩn Mỹ 4.0
   const usGpaEstimate = useMemo(() => {
     if (gradeScale === "4" || gradeScale === "letter") {
       return overallGpaPreview;
@@ -599,7 +599,7 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
     return overallGpaPreview;
   }, [overallGpaPreview, gradeScale]);
 
-  // Phân loại hồ sơ Reach / Match / Safety (Story #4 Integration)
+  // Phân loại hồ sơ Reach / Match / Safety
   const profileClassification = useMemo(() => {
     const satScore = sat ? parseInt(sat, 10) : 0;
     const ieltsScore = ielts ? parseFloat(ielts) : 0;
@@ -688,9 +688,16 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
     setErrorMessage(null);
     setSuccessMessage(null);
 
+    const notifyError = (msg: string) => {
+      setErrorMessage(msg);
+      setTimeout(() => {
+        document.getElementById("form-feedback-section")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }, 50);
+    };
+
     // 1. Kiểm tra các trường BẮT BUỘC (*)
     if (!currentSchool.trim()) {
-      setErrorMessage(
+      notifyError(
         isGraduate
           ? "Vui lòng nhập 'Trường Đại học tốt nghiệp / đang học' (Trường bắt buộc có dấu *)."
           : "Vui lòng nhập 'Trường học hiện tại' (Trường bắt buộc có dấu *)."
@@ -699,73 +706,73 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
     }
 
     if (!graduationYear.trim()) {
-      setErrorMessage("Vui lòng nhập 'Năm tốt nghiệp dự kiến' (Trường bắt buộc có dấu *).");
+      notifyError("Vui lòng nhập 'Năm tốt nghiệp dự kiến' (Trường bắt buộc có dấu *).");
       return;
     }
 
     const gradYearNum = parseInt(graduationYear, 10);
     if (isNaN(gradYearNum) || gradYearNum < 2015 || gradYearNum > 2040) {
-      setErrorMessage("Năm tốt nghiệp phải nằm trong khoảng từ 2015 đến 2040.");
+      notifyError("Năm tốt nghiệp phải nằm trong khoảng từ 2015 đến 2040.");
       return;
     }
 
     if (!currentGrade.trim()) {
-      setErrorMessage("Vui lòng nhập 'Khối / Lớp / Năm học hiện tại' (Trường bắt buộc có dấu *).");
+      notifyError("Vui lòng nhập 'Khối / Lớp / Năm học hiện tại' (Trường bắt buộc có dấu *).");
       return;
     }
 
     if (terms.length === 0) {
-      setErrorMessage("Vui lòng nhập ít nhất 1 học kỳ trong bảng điểm.");
+      notifyError("Vui lòng nhập ít nhất 1 học kỳ trong bảng điểm.");
       return;
     }
 
     // 2. Kiểm tra lỗi môn học và điểm số
     const hasFieldErrors = Object.keys(validationErrors).length > 0;
     if (hasFieldErrors) {
-      setErrorMessage("Vui lòng sửa các điểm ngoài thang hoặc tên môn học bị trùng lặp/để trống trước khi lưu.");
+      notifyError("Vui lòng sửa các điểm ngoài thang hoặc tên môn học bị trùng lặp/để trống trước khi lưu.");
       return;
     }
 
     // 3. Validate chứng chỉ (nếu có nhập)
     const ieltsVal = enabledTests.ielts && ielts ? parseFloat(ielts) : null;
     if (ieltsVal != null && (ieltsVal < 0 || ieltsVal > 9.0 || (ieltsVal * 10) % 5 !== 0)) {
-      setErrorMessage("Điểm IELTS không hợp lệ. Phải từ 0.0 đến 9.0 với bước nhảy 0.5 (ví dụ: 6.5, 7.0, 7.5).");
+      notifyError("Điểm IELTS không hợp lệ. Phải từ 0.0 đến 9.0 với bước nhảy 0.5 (ví dụ: 6.5, 7.0, 7.5).");
       return;
     }
 
     const toeflVal = enabledTests.toefl && toefl ? parseInt(toefl, 10) : null;
     if (toeflVal != null && (toeflVal < 0 || toeflVal > 120)) {
-      setErrorMessage("Điểm TOEFL iBT không hợp lệ. Phải từ 0 đến 120.");
+      notifyError("Điểm TOEFL iBT không hợp lệ. Phải từ 0 đến 120.");
       return;
     }
 
     const duolingoVal = enabledTests.duolingo && duolingo ? parseInt(duolingo, 10) : null;
     if (duolingoVal != null && (duolingoVal < 10 || duolingoVal > 160)) {
-      setErrorMessage("Điểm Duolingo English Test không hợp lệ. Phải từ 10 đến 160.");
+      notifyError("Điểm Duolingo English Test không hợp lệ. Phải từ 10 đến 160.");
       return;
     }
 
     const satVal = enabledTests.sat && sat ? parseInt(sat, 10) : null;
     if (satVal != null && (satVal < 400 || satVal > 1600)) {
-      setErrorMessage("Điểm SAT không hợp lệ. Phải nằm trong khoảng từ 400 đến 1600.");
+      notifyError("Điểm SAT không hợp lệ. Phải nằm trong khoảng từ 400 đến 1600.");
       return;
     }
 
     const actVal = enabledTests.act && act ? parseInt(act, 10) : null;
     if (actVal != null && (actVal < 1 || actVal > 36)) {
-      setErrorMessage("Điểm ACT không hợp lệ. Phải từ 1 đến 36.");
+      notifyError("Điểm ACT không hợp lệ. Phải từ 1 đến 36.");
       return;
     }
 
     const greVal = enabledTests.gre && gre ? parseInt(gre, 10) : null;
     if (greVal != null && (greVal < 260 || greVal > 340)) {
-      setErrorMessage("Điểm GRE General Test không hợp lệ. Phải nằm trong khoảng từ 260 đến 340.");
+      notifyError("Điểm GRE General Test không hợp lệ. Phải nằm trong khoảng từ 260 đến 340.");
       return;
     }
 
     const gmatVal = enabledTests.gmat && gmat ? parseInt(gmat, 10) : null;
     if (gmatVal != null && (gmatVal < 200 || gmatVal > 800)) {
-      setErrorMessage("Điểm GMAT không hợp lệ. Phải nằm trong khoảng từ 200 đến 800.");
+      notifyError("Điểm GMAT không hợp lệ. Phải nằm trong khoảng từ 200 đến 800.");
       return;
     }
 
@@ -797,6 +804,9 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
       await profileApi.saveAcademicProfile(payload);
       setSuccessMessage("Đã lưu hồ sơ học thuật thành công! Dữ liệu đã được ghi an toàn vào hệ thống.");
       setIsEditing(false); // Chuyển về chế độ Xem, khóa form để tránh sửa nhầm
+      setTimeout(() => {
+        document.getElementById("form-feedback-section")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }, 50);
 
       if (andAnalyze) {
         setShowAnalysis(true);
@@ -804,9 +814,9 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
       }
     } catch (err: unknown) {
       if (err instanceof Error) {
-        setErrorMessage(err.message);
+        notifyError(err.message);
       } else {
-        setErrorMessage("Đã xảy ra lỗi khi lưu hồ sơ. Vui lòng thử lại.");
+        notifyError("Đã xảy ra lỗi khi lưu hồ sơ. Vui lòng thử lại.");
       }
     } finally {
       setIsSaving(false);
@@ -850,28 +860,16 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
 
         <div className="flex items-center gap-2">
           {!isEditing ? (
-            <>
-              <button
-                type="button"
-                onClick={() => setIsEditing(true)}
-                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                </svg>
-                Chỉnh sửa hồ sơ
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowAnalysis(true);
-                  router.push("/profile/academic?autoAnalyze=true");
-                }}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:opacity-95"
-              >
-                <span>🚀 Phân tích năng lực (Đức)</span>
-              </button>
-            </>
+            <button
+              type="button"
+              onClick={() => setIsEditing(true)}
+              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+              </svg>
+              Chỉnh sửa hồ sơ
+            </button>
           ) : (
             <div className="flex items-center gap-2">
               {hasSavedProfile && (
@@ -896,25 +894,6 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
           )}
         </div>
       </div>
-
-      {/* THÔNG BÁO LỖI HOẶC THÀNH CÔNG */}
-      {errorMessage && (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-xs font-semibold text-red-800 flex items-start gap-2">
-          <svg className="h-4 w-4 shrink-0 text-red-600 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <span>{errorMessage}</span>
-        </div>
-      )}
-
-      {successMessage && (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-xs font-semibold text-emerald-800 flex items-start gap-2">
-          <svg className="h-4 w-4 shrink-0 text-emerald-600 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-          </svg>
-          <span>{successMessage}</span>
-        </div>
-      )}
 
       {/* KHỐI 1: THÔNG TIN HỌC VẤN CƠ BẢN (PHÂN HÓA BẬC HỌC) */}
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -1817,7 +1796,7 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
         )}
       </section>
 
-      {/* KHỐI 4: KẾT NỐI STORY #4 (PHÂN TÍCH NĂNG LỰC HỌC THUẬT - XUÂN ĐỨC) */}
+      {/* KHỐI 4: PHÂN TÍCH NĂNG LỰC HỌC THUẬT */}
       {isAnalysisVisible && (
         <section className="rounded-2xl border-2 border-indigo-200 bg-gradient-to-br from-indigo-50/60 via-purple-50/40 to-white p-6 shadow-md animate-in fade-in">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-indigo-100 pb-4">
@@ -1903,7 +1882,56 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
         </section>
       )}
 
-      {/* HÀNH ĐỘNG SUBMIT VÀ NÚT LƯU */}
+      {/* THÔNG BÁO LỖI HOẶC THÀNH CÔNG (HIỂN THỊ Ở CUỐI GẦN NÚT BẤM ĐỂ DỄ ĐỌC) */}
+      {(errorMessage || successMessage) && (
+        <div id="form-feedback-section" className="space-y-3">
+          {errorMessage && (
+            <div className="rounded-2xl border-2 border-red-200 bg-red-50 p-4 text-xs font-semibold text-red-900 shadow-sm flex items-start justify-between gap-3 animate-in fade-in">
+              <div className="flex items-start gap-2.5">
+                <svg className="h-5 w-5 shrink-0 text-red-600 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div>
+                  <div className="font-bold text-sm text-red-900">Vui lòng kiểm tra lại thông tin:</div>
+                  <p className="mt-1 font-normal text-red-800 leading-relaxed">{errorMessage}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setErrorMessage(null)}
+                className="text-red-400 hover:text-red-700 p-1 rounded-lg"
+                title="Đóng thông báo"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          {successMessage && (
+            <div className="rounded-2xl border-2 border-emerald-200 bg-emerald-50 p-4 text-xs font-semibold text-emerald-900 shadow-sm flex items-start justify-between gap-3 animate-in fade-in">
+              <div className="flex items-start gap-2.5">
+                <svg className="h-5 w-5 shrink-0 text-emerald-600 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                <div>
+                  <div className="font-bold text-sm text-emerald-900">Lưu thành công!</div>
+                  <p className="mt-1 font-normal text-emerald-800 leading-relaxed">{successMessage}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSuccessMessage(null)}
+                className="text-emerald-400 hover:text-emerald-700 p-1 rounded-lg"
+                title="Đóng thông báo"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* HÀNH ĐỘNG SUBMIT VÀ NÚT PHÂN TÍCH Ở CUỐI TRANG */}
       <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:items-center sm:justify-end">
         {isEditing ? (
           <>
@@ -1936,7 +1964,7 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
-              {isSaving ? "Đang xử lý..." : "Lưu & Phân tích năng lực học thuật 🚀"}
+              {isSaving ? "Đang xử lý..." : "Lưu & Phân tích năng lực 🚀"}
             </button>
           </>
         ) : (
@@ -1960,7 +1988,7 @@ export function AcademicProfileForm({ initialProfile, autoAnalyze = false }: Pro
               }}
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-3 text-sm font-bold text-white shadow-md transition hover:opacity-95 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
-              <span>🚀</span> Phân tích năng lực học thuật (Story #4)
+              <span>🚀</span> Phân tích năng lực học thuật
             </button>
           </div>
         )}
