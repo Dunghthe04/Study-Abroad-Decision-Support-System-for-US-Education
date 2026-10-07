@@ -1,28 +1,22 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import {
-  deleteTranscriptScore,
   getLatestAcademicAnalysis,
   getTranscriptScores,
-  saveTranscriptScores,
   triggerAcademicAnalysis,
 } from "@/lib/academic-api";
 import type {
   AcademicAnalysisResponse,
   TranscriptScore,
-  UpsertTranscriptScoreItem,
 } from "@/types/academic";
 import { GpaSummaryCard } from "@/components/academic/GpaSummaryCard";
 import { SubjectGroupBreakdown } from "@/components/academic/SubjectGroupBreakdown";
 import { TermTrendChart } from "@/components/academic/TermTrendChart";
-import { TranscriptScoreTable } from "@/components/academic/TranscriptScoreTable";
+import { ReadOnlyTranscriptTable } from "@/components/academic/ReadOnlyTranscriptTable";
 
-interface AcademicAnalysisViewProps {
-  autoAnalyze?: boolean;
-}
-
-export function AcademicAnalysisView({ autoAnalyze }: AcademicAnalysisViewProps) {
+export function AcademicAnalysisView() {
   const [scores, setScores] = useState<TranscriptScore[]>([]);
   const [analysis, setAnalysis] = useState<AcademicAnalysisResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -45,16 +39,24 @@ export function AcademicAnalysisView({ autoAnalyze }: AcademicAnalysisViewProps)
             throw err;
           }),
         ]);
+
         if (!ignore) {
           setScores(scoresData);
-          if (analysisData) {
+
+          // Kiểm tra nếu chưa từng phân tích HOẶC bảng điểm đã có sự thay đổi số lượng môn so với lần phân tích trước
+          const isStale =
+            scoresData.length > 0 &&
+            (!analysisData || analysisData.totalSubjects !== scoresData.length);
+
+          if (isStale) {
+            try {
+              const computed = await triggerAcademicAnalysis();
+              if (!ignore) setAnalysis(computed);
+            } catch {
+              if (!ignore && analysisData) setAnalysis(analysisData);
+            }
+          } else if (analysisData) {
             setAnalysis(analysisData);
-          } else if (autoAnalyze && scoresData.length > 0) {
-            triggerAcademicAnalysis()
-              .then((res) => {
-                if (!ignore) setAnalysis(res);
-              })
-              .catch(() => {});
           }
         }
       } catch (err) {
@@ -63,7 +65,7 @@ export function AcademicAnalysisView({ autoAnalyze }: AcademicAnalysisViewProps)
           const msg =
             err instanceof Error
               ? err.message
-              : "Không thể tải dữ liệu bảng điểm. Vui lòng kiểm tra kết nối mạng hoặc thử lại.";
+              : "Không thể tải dữ liệu phân tích học thuật. Vui lòng kiểm tra kết nối mạng.";
           setFetchError(msg);
         }
       } finally {
@@ -78,7 +80,7 @@ export function AcademicAnalysisView({ autoAnalyze }: AcademicAnalysisViewProps)
     return () => {
       ignore = true;
     };
-  }, [autoAnalyze]);
+  }, []);
 
   const handleRetry = async () => {
     setLoading(true);
@@ -95,58 +97,48 @@ export function AcademicAnalysisView({ autoAnalyze }: AcademicAnalysisViewProps)
         }),
       ]);
       setScores(scoresData);
-      setAnalysis(analysisData);
+      const isStale =
+        scoresData.length > 0 &&
+        (!analysisData || analysisData.totalSubjects !== scoresData.length);
+
+      if (isStale) {
+        try {
+          const computed = await triggerAcademicAnalysis();
+          setAnalysis(computed);
+        } catch {
+          setAnalysis(analysisData);
+        }
+      } else {
+        setAnalysis(analysisData);
+      }
     } catch (err) {
       const msg =
         err instanceof Error
           ? err.message
-          : "Không thể tải dữ liệu bảng điểm. Vui lòng kiểm tra kết nối mạng hoặc thử lại.";
+          : "Không thể tải dữ liệu bảng điểm. Vui lòng kiểm tra kết nối mạng.";
       setFetchError(msg);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSaveScores = async (items: UpsertTranscriptScoreItem[]) => {
-    try {
-      const updated = await saveTranscriptScores(items);
-      setScores(updated);
-      setMessage({ type: "success", text: "Đã cập nhật bảng điểm học tập thành công." });
-      setTimeout(() => setMessage(null), 3000);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Lỗi lưu bảng điểm.";
-      setMessage({ type: "error", text: msg });
-      // Fix C365-03: Ném lại lỗi để TranscriptScoreTable giữ nguyên dữ liệu trong form và không xóa input
-      throw err;
-    }
-  };
-
-  const handleDeleteScore = async (scoreId: string) => {
-    try {
-      await deleteTranscriptScore(scoreId);
-      setScores((prev) => prev.filter((s) => s.id !== scoreId));
-      setMessage({ type: "success", text: "Đã xóa môn học khỏi bảng điểm." });
-      setTimeout(() => setMessage(null), 3000);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Lỗi xóa môn học.";
-      setMessage({ type: "error", text: msg });
-      // Fix C365-08: Không rethrow để tránh unhandled rejection / pageerror tại caller
-    }
-  };
-
-  const handleAnalyze = async () => {
+  const handleTriggerAnalysis = async () => {
     setIsAnalyzing(true);
     setMessage(null);
     try {
-      const result = await triggerAcademicAnalysis();
+      const [result, refreshedScores] = await Promise.all([
+        triggerAcademicAnalysis(),
+        getTranscriptScores(),
+      ]);
       setAnalysis(result);
+      setScores(refreshedScores);
       setMessage({
         type: "success",
-        text: "Phân tích điểm học thuật hoàn tất. Chỉ số GPA và xu hướng đã được cập nhật.",
+        text: "Phân tích điểm học thuật hoàn tất. Chỉ số GPA WES 4.0 và xu hướng đã được cập nhật thành công.",
       });
       setTimeout(() => setMessage(null), 4000);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Lỗi phân tích điểm học thuật.";
+      const msg = err instanceof Error ? err.message : "Lỗi khi kích hoạt phân tích điểm.";
       setMessage({ type: "error", text: msg });
     } finally {
       setIsAnalyzing(false);
@@ -156,8 +148,8 @@ export function AcademicAnalysisView({ autoAnalyze }: AcademicAnalysisViewProps)
   if (loading) {
     return (
       <div className="py-24 text-center">
-        <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-slate-900 border-r-transparent" />
-        <p className="mt-3 text-xs text-slate-500 font-medium">Đang tải hồ sơ học thuật...</p>
+        <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-slate-900 border-r-transparent" />
+        <p className="mt-3 text-xs text-slate-500 font-medium">Đang tải báo cáo phân tích năng lực học thuật...</p>
       </div>
     );
   }
@@ -171,7 +163,7 @@ export function AcademicAnalysisView({ autoAnalyze }: AcademicAnalysisViewProps)
             <h1 className="text-2xl font-bold tracking-tight text-slate-900">
               Đánh Giá Năng Lực Học Thuật & GPA
             </h1>
-            <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700">
+            <span className="rounded-full bg-blue-50 border border-blue-200 px-2.5 py-0.5 text-xs font-semibold text-blue-700">
               Quy đổi WES 4.0
             </span>
           </div>
@@ -179,14 +171,29 @@ export function AcademicAnalysisView({ autoAnalyze }: AcademicAnalysisViewProps)
             Quy đổi bảng điểm theo tiêu chuẩn giáo dục Hoa Kỳ (WES 4.0 tham khảo), phân tích điểm theo nhóm môn và nhận diện đà tăng trưởng học thuật (Growth Mindset).
           </p>
         </div>
+
+        <div className="flex items-center gap-2">
+          <Link
+            href="/profile/academic"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
+          >
+            <span>✏️</span> Chỉnh sửa bảng điểm
+          </Link>
+          <Link
+            href="/advisor"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 transition"
+          >
+            <span>🤖</span> Tư vấn AI &rarr;
+          </Link>
+        </div>
       </div>
 
-      {/* Thông báo lỗi tải dữ liệu (Fix C365-06: Tách biệt hoàn toàn khỏi empty table/form) */}
+      {/* Thông báo lỗi tải dữ liệu */}
       {fetchError ? (
         <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-center space-y-3">
           <p className="text-sm font-semibold text-red-800">{fetchError}</p>
           <p className="text-xs text-red-600 max-w-md mx-auto">
-            Không thể tải dữ liệu bảng điểm từ máy chủ. Vui lòng kiểm tra lại kết nối mạng và thử lại.
+            Không thể tải dữ liệu phân tích từ máy chủ. Vui lòng kiểm tra lại kết nối và thử lại.
           </p>
           <div className="pt-1">
             <button
@@ -213,26 +220,50 @@ export function AcademicAnalysisView({ autoAnalyze }: AcademicAnalysisViewProps)
             </div>
           )}
 
-          {/* Analytics Dashboard (Executive Summary + 2-col analytics) */}
-          {analysis && (
-            <div className="space-y-6 min-w-0 w-full">
-              <GpaSummaryCard analysis={analysis} />
-              {/* Fix C365-01: Thêm min-w-0 vào grid 2 cột để ngăn tràn layout */}
-              <div className="grid gap-6 md:grid-cols-2 min-w-0 w-full">
-                <SubjectGroupBreakdown groups={analysis.subjectGroups} />
-                <TermTrendChart terms={analysis.termAverages} />
+          {/* Empty State: Nếu chưa có môn học nào được nhập */}
+          {scores.length === 0 ? (
+            <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center space-y-4 shadow-xs">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-blue-50 text-blue-600 text-2xl">
+                📑
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">
+                  Chưa có dữ liệu bảng điểm học tập
+                </h3>
+                <p className="mt-1 text-xs sm:text-sm text-slate-500 max-w-md mx-auto">
+                  Bạn cần nhập bảng điểm các kỳ học (hoặc tải mẫu học bạ) tại mục <strong>Hồ sơ học thuật</strong> trước khi hệ thống có thể tính toán GPA 4.0 và phân tích đà tăng trưởng.
+                </p>
+              </div>
+              <div className="pt-2">
+                <Link
+                  href="/profile/academic"
+                  className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-blue-700 transition"
+                >
+                  <span>📝</span> Nhập bảng điểm tại Hồ sơ học thuật &rarr;
+                </Link>
               </div>
             </div>
-          )}
+          ) : (
+            <>
+              {/* Analytics Dashboard (Executive Summary + 2-col analytics) */}
+              {analysis && (
+                <div className="space-y-6 min-w-0 w-full">
+                  <GpaSummaryCard analysis={analysis} />
+                  <div className="grid gap-6 md:grid-cols-2 min-w-0 w-full">
+                    <SubjectGroupBreakdown groups={analysis.subjectGroups} />
+                    <TermTrendChart terms={analysis.termAverages} />
+                  </div>
+                </div>
+              )}
 
-          {/* Detailed Transcript Manager */}
-          <TranscriptScoreTable
-            scores={scores}
-            onSaveScores={handleSaveScores}
-            onDeleteScore={handleDeleteScore}
-            onAnalyze={handleAnalyze}
-            isAnalyzing={isAnalyzing}
-          />
+              {/* Bảng danh sách môn học đã trích xuất từ DB (Read-Only View) */}
+              <ReadOnlyTranscriptTable
+                scores={scores}
+                onRefreshAnalysis={handleTriggerAnalysis}
+                isAnalyzing={isAnalyzing}
+              />
+            </>
+          )}
         </>
       )}
     </div>
