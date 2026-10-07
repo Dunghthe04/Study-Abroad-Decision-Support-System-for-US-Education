@@ -91,3 +91,63 @@ export interface ResetPasswordRequest {
   otpCode: string;
   newPassword: string;
 }
+
+// [USAS-363] Hồ sơ học thuật (Academic Profile & Transcripts)
+export type GradeScaleType = "10" | "100" | "4" | "letter";
+export type EducationSystemType = "standard" | "specialized" | "dual_degree" | "international" | "private" | "other";
+
+export interface TranscriptScoreItem {
+  subject: string;
+  rawScore?: string | null;
+  score: number;
+  credits?: number | null;
+}
+
+export interface TranscriptTerm {
+  termName: string;
+  termOrder: number;
+  scores: TranscriptScoreItem[];
+}
+
+export interface SaveAcademicProfileRequest {
+  targetLevel: string;
+  currentSchool?: string | null;
+  educationSystem?: string | null;
+  graduationYear?: number | null;
+  currentGrade?: string | null;
+  gradeScale: GradeScaleType | string;
+  intendedMajor?: string | null;
+  ielts?: number | null;
+  toefl?: number | null;
+  duolingo?: number | null;
+  sat?: number | null;
+  act?: number | null;
+  gre?: number | null;
+  gmat?: number | null;
+  otherTestsJson?: string | null;
+  terms: TranscriptTerm[];
+}
+
+export interface AcademicProfileResponse {
+  id: string;
+  userId: string;
+  targetLevel: string;
+  currentSchool?: string | null;
+  educationSystem?: string | null;
+  graduationYear?: number | null;
+  currentGrade?: string | null;
+  gradeScale: string;
+  overallGpa?: number | null;
+  intendedMajor?: string | null;
+  ielts?: number | null;
+  toefl?: number | null;
+  duolingo?: number | null;
+  sat?: number | null;
+  act?: number | null;
+  gre?: number | null;
+  gmat?: number | null;
+  otherTestsJson?: string | null;
+  terms: TranscriptTerm[];
+  createdAt: string;
+  updatedAt?: string | null;
+}
