@@ -8,6 +8,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 {
     public DbSet<StudyCenter> StudyCenters => Set<StudyCenter>();
     public DbSet<User> Users => Set<User>();
+    public DbSet<UserSession> UserSessions => Set<UserSession>();
 
     public DbSet<OtpToken> OtpTokens => Set<OtpToken>();
     public DbSet<Consent> Consents => Set<Consent>();
