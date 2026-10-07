@@ -28,6 +28,7 @@ public static class DependencyInjection
         services.AddScoped<IStudyCenterRepository, StudyCenterRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IFinancialProfileRepository, FinancialProfileRepository>();
+        services.AddScoped<StudyAbroad.Application.AcademicProfiles.IAcademicProfileRepository, AcademicProfileRepository>();
         services.AddSingleton<IPasswordHasher, PasswordHasher>();
 
         // [USAS-362] Đăng ký JWT Token Service (Ưu tiên nạp key từ biến môi trường JWT_SECRET_KEY)

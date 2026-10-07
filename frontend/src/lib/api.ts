@@ -10,6 +10,8 @@ import type {
   StudyCenter,
   UserDto,
   VerifyEmailRequest,
+  AcademicProfileResponse,
+  SaveAcademicProfileRequest,
 } from "@/types/api";
 
 // Browser code calls same-origin /api (Nginx in prod, Next rewrite in dev).
@@ -105,3 +107,20 @@ export const authApi = {
       method: "GET",
     }),
 };
+
+// [USAS-363] API Quản lý hồ sơ học thuật & Bảng điểm (Học sinh / Phụ huynh)
+export const profileApi = {
+  // Lấy hồ sơ học thuật của người dùng hiện tại (chống IDOR qua HttpOnly Cookie)
+  getAcademicProfile: () =>
+    apiFetch<AcademicProfileResponse>("/api/v1/profile/academic", {
+      method: "GET",
+    }),
+
+  // Lưu hoặc cập nhật hồ sơ học thuật, bảng điểm từng học kỳ và chứng chỉ
+  saveAcademicProfile: (data: SaveAcademicProfileRequest) =>
+    apiFetch<AcademicProfileResponse>("/api/v1/profile/academic", {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+};
+

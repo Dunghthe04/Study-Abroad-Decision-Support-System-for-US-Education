@@ -9,9 +9,13 @@ public class StudentProfile : BaseEntity
     /// <summary>bậc muốn đi, giá trị từ StudyLevels</summary>
     public string TargetLevel { get; set; } = string.Empty;
     public string? CurrentSchool { get; set; }
+    /// <summary>hệ chương trình: standard | specialized | dual_degree | international | private | other</summary>
+    public string? EducationSystem { get; set; }
+    /// <summary>năm tốt nghiệp THPT hoặc Đại học</summary>
+    public int? GraduationYear { get; set; }
     /// <summary>ví dụ Lớp 11, Năm 3, Đã tốt nghiệp</summary>
     public string? CurrentGrade { get; set; }
-    /// <summary>thang điểm: 10 | 4 | 100</summary>
+    /// <summary>thang điểm: 10 | 100 | 4 | letter</summary>
     public string GradeScale { get; set; } = "10";
     public decimal? OverallGpa { get; set; }
     public string? IntendedMajor { get; set; }

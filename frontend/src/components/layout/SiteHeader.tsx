@@ -34,6 +34,16 @@ export function SiteHeader() {
                 </Link>
               </li>
             ))}
+            {user && (user.role === "student" || user.role === "parent") && (
+              <li>
+                <Link
+                  href="/profile/academic"
+                  className="font-medium text-blue-600 transition hover:text-blue-700 flex items-center gap-1"
+                >
+                  <span>📑</span> Hồ sơ học thuật
+                </Link>
+              </li>
+            )}
           </ul>
         </div>
 
