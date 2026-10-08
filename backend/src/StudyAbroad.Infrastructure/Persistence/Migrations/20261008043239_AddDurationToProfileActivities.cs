@@ -10,20 +10,9 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<int>(
-                name: "duration_months",
-                schema: "app",
-                table: "profile_activities",
-                type: "integer",
-                nullable: true);
-
-            migrationBuilder.AddColumn<bool>(
-                name: "is_ongoing",
-                schema: "app",
-                table: "profile_activities",
-                type: "boolean",
-                nullable: false,
-                defaultValue: false);
+            // IF NOT EXISTS: DB đã chạy bản cũ của 20261008052916 (cũng thêm 2 cột này) thì bỏ qua, không lỗi "column already exists"
+            migrationBuilder.Sql("ALTER TABLE app.profile_activities ADD COLUMN IF NOT EXISTS duration_months integer;");
+            migrationBuilder.Sql("ALTER TABLE app.profile_activities ADD COLUMN IF NOT EXISTS is_ongoing boolean NOT NULL DEFAULT false;");
         }
 
         /// <inheritdoc />
