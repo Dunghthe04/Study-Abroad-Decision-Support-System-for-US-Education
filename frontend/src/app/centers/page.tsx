@@ -2,6 +2,9 @@ import { connection } from "next/server";
 import { apiFetch } from "@/lib/api";
 import { studyLevelLabel } from "@/lib/study-levels";
 import type { PagedResult, StudyCenter } from "@/types/api";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 export const metadata = { title: "Trung tâm tư vấn – USAS" };
 
@@ -17,27 +20,35 @@ export default async function CentersPage() {
 
   return (
     <section className="space-y-4">
-      <h1 className="text-2xl font-bold">Trung tâm tư vấn du học</h1>
+      <h1 className="text-h1">Trung tâm tư vấn du học</h1>
       {!data ? (
-        <p className="text-red-600">Không tải được dữ liệu. Kiểm tra API đã chạy chưa.</p>
+        <Alert variant="destructive">
+          <AlertDescription>Không tải được dữ liệu. Kiểm tra API đã chạy chưa.</AlertDescription>
+        </Alert>
       ) : data.items.length === 0 ? (
-        <p className="text-slate-600">Chưa có trung tâm nào.</p>
+        <p className="text-muted-foreground">Chưa có trung tâm nào.</p>
       ) : (
         <ul className="grid gap-3 sm:grid-cols-2">
           {data.items.map((c) => (
-            <li key={c.id} className="rounded-lg border border-slate-200 bg-white p-4">
-              <p className="font-semibold">{c.name}</p>
-              {c.city && <p className="text-sm text-slate-600">{c.city}</p>}
-              {c.studyLevels.length > 0 && (
-                <p className="text-sm text-slate-600">Bậc: {c.studyLevels.map(studyLevelLabel).join(", ")}</p>
-              )}
-              <div className="mt-2 flex flex-wrap gap-1">
-                {c.services.map((s) => (
-                  <span key={s} className="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-700">
-                    {s}
-                  </span>
-                ))}
-              </div>
+            <li key={c.id}>
+              <Card className="h-full">
+                <CardHeader>
+                  <CardTitle>{c.name}</CardTitle>
+                  {c.city && <CardDescription>{c.city}</CardDescription>}
+                  {c.studyLevels.length > 0 && (
+                    <CardDescription>Bậc: {c.studyLevels.map(studyLevelLabel).join(", ")}</CardDescription>
+                  )}
+                </CardHeader>
+                {c.services.length > 0 && (
+                  <CardContent className="flex flex-wrap gap-1">
+                    {c.services.map((s) => (
+                      <Badge key={s} variant="secondary">
+                        {s}
+                      </Badge>
+                    ))}
+                  </CardContent>
+                )}
+              </Card>
             </li>
           ))}
         </ul>

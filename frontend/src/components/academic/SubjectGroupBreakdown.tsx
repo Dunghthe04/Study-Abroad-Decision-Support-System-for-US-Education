@@ -1,4 +1,7 @@
 import type { SubjectGroupScore } from "@/types/academic";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 
 interface SubjectGroupBreakdownProps {
   groups: SubjectGroupScore[];
@@ -15,72 +18,70 @@ export function SubjectGroupBreakdown({ groups }: SubjectGroupBreakdownProps) {
   }
 
   return (
-    <div className="rounded-xl border border-slate-200/90 bg-white p-5 sm:p-6 shadow-xs h-full flex flex-col justify-between min-w-0 w-full">
-      <div>
-        <div className="border-b border-slate-100 pb-3">
-          <h3 className="text-base font-bold text-slate-900">
-            Điểm Trung Bình Theo Nhóm Môn
-          </h3>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Thống kê điểm số và số lượng môn học theo từng nhóm lĩnh vực
-          </p>
-        </div>
+    <Card className="h-full w-full min-w-0">
+      <CardHeader>
+        <CardTitle>
+          <h3>Điểm Trung Bình Theo Nhóm Môn</h3>
+        </CardTitle>
+        <CardDescription>
+          Thống kê điểm số và số lượng môn học theo từng nhóm lĩnh vực
+        </CardDescription>
+      </CardHeader>
 
-        <div className="mt-4 space-y-3.5">
+      <CardContent className="flex-1">
+        <div className="space-y-5">
           {groups.map((group) => {
             const percent = Math.min(100, Math.round((group.gpa4 / 4.0) * 100));
 
             return (
               <div
                 key={group.groupKey}
-                className="rounded-lg border border-slate-100 bg-slate-50/70 p-3.5 space-y-2.5"
+                className="space-y-2"
               >
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-2">
-                  <div className="flex flex-wrap items-center gap-1.5 min-w-0">
-                    <span className="text-xs sm:text-sm font-bold text-slate-900 break-words">
+                <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
+                  <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                    <span className="font-medium break-words">
                       {group.groupName}
                     </span>
-                    <span className="text-xs font-medium text-slate-500 shrink-0">
+                    <span className="shrink-0 text-xs text-muted-foreground">
                       {group.subjectsCount > group.subjects.length
                         ? `(${group.subjects.length} môn · ${group.subjectsCount} đầu điểm)`
                         : `(${group.subjects.length} môn)`}
                     </span>
                   </div>
-                  <div className="text-left sm:text-right flex items-baseline gap-1 shrink-0">
-                    <span className="text-sm sm:text-base font-extrabold text-slate-900">
+                  <div className="flex shrink-0 items-baseline gap-1">
+                    <span className="text-numeric">
                       {group.gpa4.toFixed(2)}
                     </span>
-                    <span className="text-xs text-slate-500 font-medium">/ 4.00</span>
-                    <span className="text-xs text-slate-500 ml-1">
+                    <span className="text-xs text-muted-foreground">/ 4.00</span>
+                    <span className="text-xs text-muted-foreground">
                       ({group.rawAverage.toFixed(1)}/10)
                     </span>
                   </div>
                 </div>
 
                 {/* Thanh đo tỷ lệ điểm */}
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
-                  <div
-                    className="h-full rounded-full bg-slate-800 transition-all duration-500"
-                    style={{ width: `${percent}%` }}
-                  />
-                </div>
+                <Progress
+                  value={percent}
+                  aria-label={group.groupName}
+                />
 
                 {/* Danh sách tên môn */}
-                <div className="flex flex-wrap gap-1.5 pt-0.5">
+                <div className="flex flex-wrap gap-1.5">
                   {group.subjects.map((sub) => (
-                    <span
+                    <Badge
                       key={sub}
-                      className="rounded bg-white px-2 py-0.5 text-xs font-medium text-slate-700 border border-slate-200"
+                      variant="brand"
                     >
                       {sub}
-                    </span>
+                    </Badge>
                   ))}
                 </div>
               </div>
             );
           })}
         </div>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }

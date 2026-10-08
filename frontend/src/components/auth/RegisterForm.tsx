@@ -3,8 +3,17 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Building2Icon, GraduationCapIcon, InfoIcon, UsersIcon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { ApiError } from "@/lib/api";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/ui/spinner";
 
 export function RegisterForm() {
   const router = useRouter();
@@ -117,190 +126,175 @@ export function RegisterForm() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-      <div className="mb-6 text-center">
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Đăng ký tài khoản</h1>
-        <p className="mt-2 text-sm text-slate-600">
+    <Card className="mx-auto w-full max-w-md">
+      <CardHeader className="text-center">
+        <CardTitle>
+          <h1>Đăng ký tài khoản</h1>
+        </CardTitle>
+        <CardDescription>
           Tạo tài khoản để nhận tư vấn du học Mỹ và quản lý hồ sơ cá nhân
+        </CardDescription>
+      </CardHeader>
+
+      <CardContent className="space-y-6">
+        {error && (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        <form onSubmit={handleSubmit}>
+          <FieldGroup>
+            {/* Lựa chọn vai trò: Học sinh, Phụ huynh, Trung tâm */}
+            <Field>
+              <Label>Bạn là:</Label>
+              <div className="grid grid-cols-3 gap-2">
+              <Button
+                type="button"
+                variant={role === "student" ? "default" : "outline"}
+                onClick={() => setRole("student")}
+              >
+                <GraduationCapIcon aria-hidden="true" />
+                Học sinh
+              </Button>
+              <Button
+                type="button"
+                variant={role === "parent" ? "default" : "outline"}
+                onClick={() => setRole("parent")}
+              >
+                <UsersIcon aria-hidden="true" />
+                Phụ huynh
+              </Button>
+              <Button
+                type="button"
+                variant={role === "center" ? "default" : "outline"}
+                onClick={() => setRole("center")}
+              >
+                <Building2Icon aria-hidden="true" />
+                Trung tâm
+              </Button>
+              </div>
+            </Field>
+
+            {/* Thông báo riêng cho tài khoản trung tâm */}
+            {role === "center" && (
+              <Alert variant="warning" role="status">
+                <InfoIcon aria-hidden="true" />
+                <AlertDescription>
+                  Tài khoản Trung tâm du học sẽ ở trạng thái chờ duyệt (Pending) bởi Ban quản trị trước khi có thể công khai hồ sơ.
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {/* Họ và tên */}
+            <Field>
+              <FieldLabel htmlFor="fullName">
+                {role === "center" ? "Tên trung tâm / Đại diện" : "Họ và tên"} <span className="text-destructive">*</span>
+              </FieldLabel>
+              <Input
+                id="fullName"
+                type="text"
+                required
+                maxLength={100}
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                placeholder={role === "center" ? "Trung tâm Du học Á Âu" : "Nguyễn Văn A"}
+              />
+            </Field>
+
+            {/* Email đăng nhập */}
+            <Field>
+              <FieldLabel htmlFor="email">
+                Email <span className="text-destructive">*</span>
+              </FieldLabel>
+              <Input
+                id="email"
+                type="email"
+                required
+                maxLength={100}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="example@gmail.com"
+              />
+            </Field>
+
+            {/* Số điện thoại Việt Nam */}
+            <Field>
+              <FieldLabel htmlFor="phone">Số điện thoại liên hệ (Việt Nam)</FieldLabel>
+              <Input
+                id="phone"
+                type="tel"
+                maxLength={20}
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="0912 345 678 hoặc +84912345678"
+              />
+              <FieldDescription>
+                Chỉ chấp nhận số điện thoại di động Việt Nam (10 chữ số, đầu số 03, 05, 07, 08, 09).
+              </FieldDescription>
+            </Field>
+
+            {/* Mật khẩu */}
+            <Field>
+              <FieldLabel htmlFor="password">
+                Mật khẩu <span className="text-destructive">*</span>
+              </FieldLabel>
+              <Input
+                id="password"
+                type="password"
+                required
+                minLength={8}
+                maxLength={100}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Tối thiểu 8 ký tự, tối đa 100"
+              />
+            </Field>
+
+            {/* Xác nhận mật khẩu */}
+            <Field>
+              <FieldLabel htmlFor="confirmPassword">
+                Xác nhận mật khẩu <span className="text-destructive">*</span>
+              </FieldLabel>
+              <Input
+                id="confirmPassword"
+                type="password"
+                required
+                maxLength={100}
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Nhập lại mật khẩu"
+              />
+            </Field>
+
+            {/* Checkbox dành riêng cho vai học sinh */}
+            {role === "student" && (
+              <Field orientation="horizontal">
+                <Checkbox
+                  id="parentAcknowledged"
+                  checked={parentAcknowledged}
+                  onCheckedChange={(checked) => setParentAcknowledged(checked)}
+                />
+                <FieldLabel htmlFor="parentAcknowledged">
+                  Tôi xác nhận phụ huynh đã biết về việc tôi đăng ký tài khoản tư vấn du học trên hệ thống.
+                </FieldLabel>
+              </Field>
+            )}
+
+            <Button type="submit" size="lg" disabled={isSubmitting} className="w-full">
+              {isSubmitting && <Spinner data-icon="inline-start" />}
+              {isSubmitting ? "Đang xử lý..." : "Tạo tài khoản"}
+            </Button>
+          </FieldGroup>
+        </form>
+
+        <p className="text-center text-muted-foreground">
+          Đã có tài khoản?{" "}
+          <Link href="/login" className="text-primary hover:underline">
+            Đăng nhập ngay
+          </Link>
         </p>
-      </div>
-
-      {error && (
-        <div
-          role="alert"
-          className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-800"
-        >
-          {error}
-        </div>
-      )}
-
-      <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Lựa chọn vai trò: Học sinh, Phụ huynh, Trung tâm */}
-        <div>
-          <label className="block text-sm font-semibold text-slate-700">Bạn là:</label>
-          <div className="mt-2 grid grid-cols-3 gap-2">
-            <button
-              type="button"
-              onClick={() => setRole("student")}
-              className={`flex items-center justify-center rounded-lg border py-2.5 text-xs sm:text-sm font-medium transition-colors ${
-                role === "student"
-                  ? "border-blue-600 bg-blue-50 text-blue-700 font-semibold shadow-sm"
-                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-              }`}
-            >
-              🎓 Học sinh
-            </button>
-            <button
-              type="button"
-              onClick={() => setRole("parent")}
-              className={`flex items-center justify-center rounded-lg border py-2.5 text-xs sm:text-sm font-medium transition-colors ${
-                role === "parent"
-                  ? "border-blue-600 bg-blue-50 text-blue-700 font-semibold shadow-sm"
-                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-              }`}
-            >
-              👨‍👩‍👧 Phụ huynh
-            </button>
-            <button
-              type="button"
-              onClick={() => setRole("center")}
-              className={`flex items-center justify-center rounded-lg border py-2.5 text-xs sm:text-sm font-medium transition-colors ${
-                role === "center"
-                  ? "border-blue-600 bg-blue-50 text-blue-700 font-semibold shadow-sm"
-                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-              }`}
-            >
-              🏢 Trung tâm
-            </button>
-          </div>
-        </div>
-
-        {/* Thông báo riêng cho tài khoản trung tâm */}
-        {role === "center" && (
-          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-            ℹ️ Tài khoản Trung tâm du học sẽ ở trạng thái chờ duyệt (Pending) bởi Ban quản trị trước khi có thể công khai hồ sơ.
-          </div>
-        )}
-
-        {/* Họ và tên */}
-        <div>
-          <label htmlFor="fullName" className="block text-sm font-medium text-slate-700">
-            {role === "center" ? "Tên trung tâm / Đại diện" : "Họ và tên"} <span className="text-red-500">*</span>
-          </label>
-          <input
-            id="fullName"
-            type="text"
-            required
-            maxLength={100}
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-            placeholder={role === "center" ? "Trung tâm Du học Á Âu" : "Nguyễn Văn A"}
-            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          />
-        </div>
-
-        {/* Email đăng nhập */}
-        <div>
-          <label htmlFor="email" className="block text-sm font-medium text-slate-700">
-            Email <span className="text-red-500">*</span>
-          </label>
-          <input
-            id="email"
-            type="email"
-            required
-            maxLength={100}
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="example@gmail.com"
-            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          />
-        </div>
-
-        {/* Số điện thoại Việt Nam */}
-        <div>
-          <label htmlFor="phone" className="block text-sm font-medium text-slate-700">
-            Số điện thoại liên hệ (Việt Nam)
-          </label>
-          <input
-            id="phone"
-            type="tel"
-            maxLength={20}
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            placeholder="0912 345 678 hoặc +84912345678"
-            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          />
-          <p className="mt-1 text-xs text-slate-500">
-            Chỉ chấp nhận số điện thoại di động Việt Nam (10 chữ số, đầu số 03, 05, 07, 08, 09).
-          </p>
-        </div>
-
-        {/* Mật khẩu */}
-        <div>
-          <label htmlFor="password" className="block text-sm font-medium text-slate-700">
-            Mật khẩu <span className="text-red-500">*</span>
-          </label>
-          <input
-            id="password"
-            type="password"
-            required
-            minLength={8}
-            maxLength={100}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Tối thiểu 8 ký tự, tối đa 100"
-            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          />
-        </div>
-
-        {/* Xác nhận mật khẩu */}
-        <div>
-          <label htmlFor="confirmPassword" className="block text-sm font-medium text-slate-700">
-            Xác nhận mật khẩu <span className="text-red-500">*</span>
-          </label>
-          <input
-            id="confirmPassword"
-            type="password"
-            required
-            maxLength={100}
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            placeholder="Nhập lại mật khẩu"
-            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          />
-        </div>
-
-        {/* Checkbox dành riêng cho vai học sinh */}
-        {role === "student" && (
-          <div className="flex items-start gap-2 pt-1">
-            <input
-              id="parentAcknowledged"
-              type="checkbox"
-              checked={parentAcknowledged}
-              onChange={(e) => setParentAcknowledged(e.target.checked)}
-              className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-            />
-            <label htmlFor="parentAcknowledged" className="text-xs text-slate-600">
-              Tôi xác nhận phụ huynh đã biết về việc tôi đăng ký tài khoản tư vấn du học trên hệ thống.
-            </label>
-          </div>
-        )}
-
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="mt-2 w-full rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white shadow hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:bg-blue-300"
-        >
-          {isSubmitting ? "Đang xử lý..." : "Tạo tài khoản"}
-        </button>
-      </form>
-
-      <div className="mt-6 text-center text-sm text-slate-600">
-        Đã có tài khoản?{" "}
-        <Link href="/login" className="font-semibold text-blue-600 hover:text-blue-500">
-          Đăng nhập ngay
-        </Link>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }

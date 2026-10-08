@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import { Spinner } from "@/components/ui/spinner";
 import { ForgotPasswordForm } from "@/components/auth/ForgotPasswordForm";
 
 export const metadata: Metadata = {
@@ -10,7 +11,14 @@ export const metadata: Metadata = {
 export default function ForgotPasswordPage() {
   return (
     <div className="flex min-h-[calc(100vh-12rem)] items-center justify-center py-6">
-      <Suspense fallback={<div className="text-center text-sm text-slate-500">Đang tải...</div>}>
+      <Suspense
+        fallback={
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Spinner />
+            Đang tải...
+          </div>
+        }
+      >
         <ForgotPasswordForm />
       </Suspense>
     </div>

@@ -5,6 +5,15 @@
 import { useState, useEffect } from "react";
 import { getFinancialProfile, saveFinancialProfile } from "@/lib/profile-api";
 import type { FinancialProfileDto } from "@/types/profile";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from "@/components/ui/input-group";
+import { Label } from "@/components/ui/label";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
 
 const FUNDING_OPTIONS = [
   { value: "family_support", label: "Gia đình hỗ trợ toàn bộ/một phần" },
@@ -101,134 +110,135 @@ export function FinancialCard() {
 
   if (loading) {
     return (
-      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-xs">
-        <div className="animate-pulse space-y-4">
-          <div className="h-6 w-1/3 rounded bg-slate-200"></div>
-          <div className="h-10 w-full rounded bg-slate-100"></div>
-          <div className="h-10 w-full rounded bg-slate-100"></div>
-        </div>
-      </div>
+      <Card>
+        <CardContent className="space-y-4">
+          <Skeleton className="h-6 w-1/3" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+        </CardContent>
+      </Card>
     );
   }
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-xs">
-      <div className="mb-4 border-b border-slate-100 pb-3">
-        <h2 className="text-lg font-semibold text-slate-900">1. Khả năng Tài chính Du học</h2>
-        <p className="text-xs text-slate-500">
+    <Card>
+      <CardHeader>
+        <CardTitle>1. Khả năng Tài chính Du học</CardTitle>
+        <CardDescription>
           Thông tin giúp hệ thống AI so sánh chi phí trường và gợi ý gói học bổng phù hợp (USAS-364).
-        </p>
-      </div>
+        </CardDescription>
+      </CardHeader>
 
-      {error && (
-        <div className="mb-4 rounded-lg bg-rose-50 p-3 text-sm text-rose-700 border border-rose-200">
-          {error}
-        </div>
-      )}
+      <CardContent className="space-y-4">
+        {error && (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
 
-      {success && (
-        <div className="mb-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-700 border border-emerald-200">
-          {success}
-        </div>
-      )}
+        {success && (
+          <Alert variant="success">
+            <AlertDescription>{success}</AlertDescription>
+          </Alert>
+        )}
 
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-slate-700">
-            Ngân sách gia đình có thể chi trả mỗi năm (USD/năm) *
-          </label>
-          <div className="relative mt-1">
-            <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400 font-semibold">$</span>
-            <input
-              type="number"
-              min="0"
-              max="10000000"
-              step="500"
-              required
-              value={budget}
-              onChange={(e) => setBudget(e.target.value)}
-              placeholder="30000"
-              className="w-full rounded-lg border border-slate-300 py-2 pl-8 pr-4 text-slate-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="financial-budget">
+              Ngân sách gia đình có thể chi trả mỗi năm (USD/năm) *
+            </Label>
+            <InputGroup>
+              <InputGroupAddon>
+                <InputGroupText>$</InputGroupText>
+              </InputGroupAddon>
+              <InputGroupInput
+                id="financial-budget"
+                type="number"
+                min="0"
+                max="10000000"
+                step="500"
+                required
+                value={budget}
+                onChange={(e) => setBudget(e.target.value)}
+                placeholder="30000"
+              />
+            </InputGroup>
+            <p className="text-body-s">
+              Ví dụ: $20,000 – $40,000 (Trung bình các trường ĐH công lập Mỹ khoảng $25,000–$45,000/năm gồm học phí và ăn ở).
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="financial-funding-source">
+              Nguồn tài chính chính *
+            </Label>
+            <NativeSelect
+              id="financial-funding-source"
+              className="w-full"
+              value={fundingSource}
+              onChange={(e) => setFundingSource(e.target.value)}
+            >
+              {FUNDING_OPTIONS.map((opt) => (
+                <NativeSelectOption key={opt.value} value={opt.value}>
+                  {opt.label}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <Checkbox
+              id="needScholarship"
+              checked={needScholarship}
+              onCheckedChange={(checked) => setNeedScholarship(checked)}
+            />
+            <Label htmlFor="needScholarship">
+              Cần học bổng hoặc hỗ trợ tài chính để đủ điều kiện du học
+            </Label>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="financial-max-tuition">
+              Học phí mong muốn tối đa (USD/năm - tùy chọn)
+            </Label>
+            <InputGroup>
+              <InputGroupAddon>
+                <InputGroupText>$</InputGroupText>
+              </InputGroupAddon>
+              <InputGroupInput
+                id="financial-max-tuition"
+                type="number"
+                min="0"
+                max="10000000"
+                step="500"
+                value={maxTuition}
+                onChange={(e) => setMaxTuition(e.target.value)}
+                placeholder="20000"
+              />
+            </InputGroup>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="financial-notes">
+              Ghi chú thêm về hoàn cảnh tài chính
+            </Label>
+            <Textarea
+              id="financial-notes"
+              rows={2}
+              value={notes}
+              maxLength={1000}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Ví dụ: Có thể chứng minh sổ tiết kiệm 1 tỷ đồng, có người thân bảo lãnh tại bang California..."
             />
           </div>
-          <span className="text-xs text-slate-500 mt-1 block">
-            Ví dụ: $20,000 – $40,000 (Trung bình các trường ĐH công lập Mỹ khoảng $25,000–$45,000/năm gồm học phí và ăn ở).
-          </span>
-        </div>
 
-        <div>
-          <label className="block text-sm font-medium text-slate-700">
-            Nguồn tài chính chính *
-          </label>
-          <select
-            value={fundingSource}
-            onChange={(e) => setFundingSource(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-          >
-            {FUNDING_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="flex items-center gap-3 pt-1">
-          <input
-            type="checkbox"
-            id="needScholarship"
-            checked={needScholarship}
-            onChange={(e) => setNeedScholarship(e.target.checked)}
-            className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-          />
-          <label htmlFor="needScholarship" className="text-sm font-medium text-slate-800">
-            Cần học bổng hoặc hỗ trợ tài chính để đủ điều kiện du học
-          </label>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-slate-700">
-            Học phí mong muốn tối đa (USD/năm - tùy chọn)
-          </label>
-          <div className="relative mt-1">
-            <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400 font-semibold">$</span>
-            <input
-              type="number"
-              min="0"
-              max="10000000"
-              step="500"
-              value={maxTuition}
-              onChange={(e) => setMaxTuition(e.target.value)}
-              placeholder="20000"
-              className="w-full rounded-lg border border-slate-300 py-2 pl-8 pr-4 text-slate-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-            />
+          <div className="flex justify-end pt-2">
+            <Button type="submit" size="lg" disabled={saving}>
+              {saving ? "Đang lưu..." : profile ? "Cập nhật hồ sơ tài chính" : "Lưu hồ sơ tài chính"}
+            </Button>
           </div>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-slate-700">
-            Ghi chú thêm về hoàn cảnh tài chính
-          </label>
-          <textarea
-            rows={2}
-            value={notes}
-            maxLength={1000}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="Ví dụ: Có thể chứng minh sổ tiết kiệm 1 tỷ đồng, có người thân bảo lãnh tại bang California..."
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-sm"
-          />
-        </div>
-
-        <div className="pt-2 flex justify-end">
-          <button
-            type="submit"
-            disabled={saving}
-            className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white shadow-xs hover:bg-blue-700 disabled:opacity-50 transition-colors"
-          >
-            {saving ? "Đang lưu..." : profile ? "Cập nhật hồ sơ tài chính" : "Lưu hồ sơ tài chính"}
-          </button>
-        </div>
-      </form>
-    </div>
+        </form>
+      </CardContent>
+    </Card>
   );
 }

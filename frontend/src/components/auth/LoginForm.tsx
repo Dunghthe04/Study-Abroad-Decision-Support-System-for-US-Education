@@ -3,8 +3,15 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { ArrowRightIcon, HourglassIcon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { ApiError } from "@/lib/api";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 
 export function LoginForm() {
   const router = useRouter();
@@ -51,100 +58,98 @@ export function LoginForm() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-      <div className="mb-6 text-center">
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Đăng nhập</h1>
-        <p className="mt-2 text-sm text-slate-600">
+    <Card className="mx-auto w-full max-w-md">
+      <CardHeader className="text-center">
+        <CardTitle>
+          <h1>Đăng nhập</h1>
+        </CardTitle>
+        <CardDescription>
           Truy cập tài khoản học sinh / phụ huynh để quản lý thông tin
+        </CardDescription>
+      </CardHeader>
+
+      <CardContent className="space-y-6">
+        {error && (
+          <Alert variant="destructive">
+            <AlertDescription>
+              <p>{error}</p>
+
+              {lockType === "temp_locked" && (
+                <p>
+                  <span className="inline-flex items-center gap-1 font-medium">
+                    <HourglassIcon className="size-3.5" aria-hidden="true" />
+                    Tự động mở khóa:
+                  </span> Tài khoản của bạn sẽ được hệ thống tự động mở khóa sau 15 phút. Bạn không cần thực hiện thêm thao tác nào, vui lòng quay lại sau thời gian trên.
+                </p>
+              )}
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {error && lockType === "unverified" && (
+          <Link
+            href={`/verify-email?email=${encodeURIComponent(email.trim())}`}
+            className={buttonVariants({ size: "sm" })}
+          >
+            Kích hoạt tài khoản bằng mã OTP
+            <ArrowRightIcon aria-hidden="true" />
+          </Link>
+        )}
+
+        <form onSubmit={handleSubmit}>
+          <FieldGroup>
+            {/* Email */}
+            <Field>
+              <FieldLabel htmlFor="email">Email</FieldLabel>
+              <Input
+                id="email"
+                type="email"
+                required
+                maxLength={100}
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="example@gmail.com"
+              />
+            </Field>
+
+            {/* Mật khẩu */}
+            <Field>
+              <div className="flex items-center justify-between">
+                <FieldLabel htmlFor="password">Mật khẩu</FieldLabel>
+                <Link
+                  href="/forgot-password"
+                  className="text-primary hover:underline"
+                >
+                  Quên mật khẩu?
+                </Link>
+              </div>
+              <Input
+                id="password"
+                type="password"
+                required
+                maxLength={100}
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+              />
+            </Field>
+
+            <Button type="submit" size="lg" disabled={isSubmitting} className="w-full">
+              {isSubmitting && <Spinner data-icon="inline-start" />}
+              {isSubmitting ? "Đang đăng nhập..." : "Đăng nhập"}
+            </Button>
+          </FieldGroup>
+        </form>
+
+        <p className="text-center text-muted-foreground">
+          Chưa có tài khoản?{" "}
+          <Link href="/register" className="text-primary hover:underline">
+            Đăng ký ngay
+          </Link>
         </p>
-      </div>
-
-      {error && (
-        <div
-          role="alert"
-          className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-800"
-        >
-          <p>{error}</p>
-
-          {lockType === "temp_locked" && (
-            <div className="mt-3 rounded-lg border border-red-300 bg-red-100/60 p-3 text-xs text-red-900">
-              <span className="font-semibold">⏳ Tự động mở khóa:</span> Tài khoản của bạn sẽ được hệ thống tự động mở khóa sau 15 phút. Bạn không cần thực hiện thêm thao tác nào, vui lòng quay lại sau thời gian trên.
-            </div>
-          )}
-
-          {lockType === "unverified" && (
-            <div className="mt-3">
-              <Link
-                href={`/verify-email?email=${encodeURIComponent(email.trim())}`}
-                className="inline-flex items-center justify-center rounded-lg bg-blue-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                Kích hoạt tài khoản bằng mã OTP →
-              </Link>
-            </div>
-          )}
-        </div>
-      )}
-
-      <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Email */}
-        <div>
-          <label htmlFor="email" className="block text-sm font-medium text-slate-700">
-            Email
-          </label>
-          <input
-            id="email"
-            type="email"
-            required
-            maxLength={100}
-            autoComplete="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="example@gmail.com"
-            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          />
-        </div>
-
-        {/* Mật khẩu */}
-        <div>
-          <div className="flex items-center justify-between">
-            <label htmlFor="password" className="block text-sm font-medium text-slate-700">
-              Mật khẩu
-            </label>
-            <Link
-              href="/forgot-password"
-              className="text-xs font-medium text-blue-600 hover:text-blue-500"
-            >
-              Quên mật khẩu?
-            </Link>
-          </div>
-          <input
-            id="password"
-            type="password"
-            required
-            maxLength={100}
-            autoComplete="current-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="••••••••"
-            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          />
-        </div>
-
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="mt-2 w-full rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white shadow hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:bg-blue-300"
-        >
-          {isSubmitting ? "Đang đăng nhập..." : "Đăng nhập"}
-        </button>
-      </form>
-
-      <div className="mt-6 text-center text-sm text-slate-600">
-        Chưa có tài khoản?{" "}
-        <Link href="/register" className="font-semibold text-blue-600 hover:text-blue-500">
-          Đăng ký ngay
-        </Link>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }
