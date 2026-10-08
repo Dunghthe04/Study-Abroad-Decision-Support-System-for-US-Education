@@ -141,3 +141,28 @@ def test_cost_ranks_mark_cheapest_and_priciest_per_group():
 )
 def test_contradictions_check_cost_rank_in_group(reason, cost_rank, is_wrong):
     assert bool(contradictions(reason, {"cost_rank": cost_rank})) == is_wrong
+
+
+# ---------- lý do xếp nhóm phải nhắc đúng tiêu chí quyết định nhóm ----------
+
+UF_BY_GPA = {**UF_TRUTH, "category_basis": "gpa"}
+
+
+def test_reason_blaming_sat_when_gpa_decides_is_rejected():
+    # Lỗi thật: UF là thử sức vì GPA, nhưng LLM chỉ nói SAT
+    reason = "Điểm SAT 1380 của bạn nằm trong khoảng 25%-75% (1320-1480), nên đây là lựa chọn để thử sức."
+
+    assert any(e.startswith("category_basis") for e in contradictions(reason, UF_BY_GPA))
+
+
+def test_reason_naming_deciding_criterion_is_accepted():
+    reason = "GPA 3.6 của bạn thấp hơn mức trung bình 3.9 của trường, nên đây là lựa chọn để thử sức dù SAT đã nằm trong khoảng 25%-75%."
+
+    assert contradictions(reason, UF_BY_GPA) == []
+
+
+def test_relations_include_basis_except_insufficient_data():
+    assert relations(STUDENT, school(category_basis="sat"))["category_basis"] == "sat"
+    assert "category_basis" not in relations(
+        STUDENT, school(category="insufficient_data", category_basis="sat")
+    )

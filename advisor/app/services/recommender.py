@@ -32,18 +32,20 @@ insufficient_data = "chưa đủ dữ liệu" (TRƯỜNG chưa công bố đủ 
 Mỗi trường có các so sánh hệ thống đã tính sẵn (khóa "so_sanh"), luôn đúng: chỉ diễn đạt lại, tuyệt đối không nói ngược.
 
 Nhiệm vụ: mỗi trường viết 3 câu tiếng Việt tự nhiên, xưng "bạn", lần lượt theo 3 tiêu chí:
-   - Học thuật: SAT/GPA của bạn so với sinh viên trúng tuyển, và vì sao trường thuộc nhóm này.
+   - Học thuật: vì sao trường thuộc nhóm này. Khóa "ly_do_nhom" cho biết tiêu chí quyết định nhóm (GPA, SAT hoặc cả hai):
+     BẮT BUỘC nêu tiêu chí đó trước, kèm phép so sánh của nó. Tiêu chí còn lại nếu có thì chỉ nói thêm, không dùng làm lý do.
      Chỉ nhắc GPA khi trường có khóa "gpa"; chỉ nhắc SAT khi trường có khóa "sat".
    - Tài chính: chi phí so với ngân sách, trường rẻ nhất/đắt nhất nhóm nếu có, hoặc chi phí chưa có dữ liệu.
-   - Ngoại khóa: dựa vào mức ngoại khóa trong hồ sơ (mạnh = lợi thế, còn mỏng = cần bổ sung), kèm một lời khuyên cụ thể;
-     hồ sơ chưa có ngoại khóa thì khuyên bổ sung.
+   - Ngoại khóa: dựa vào mức ngoại khóa trong hồ sơ (mạnh = lợi thế, còn mỏng = cần bổ sung) và một lời khuyên cụ thể.
+     Mỗi trường một lời khuyên KHÁC NHAU, chọn từ: bài luận cá nhân, thư giới thiệu, dự án dài hạn, giải thưởng hoặc cuộc thi,
+     vai trò lãnh đạo, hoạt động cộng đồng, nghiên cứu hoặc thực tập liên quan ngành. Hồ sơ chưa có ngoại khóa thì khuyên bổ sung.
      Chỉ nhắc tiếng Anh khi khóa "tieng_anh" cho biết bạn CHƯA đạt yêu cầu.
    Không lặp lại cùng một mẫu câu giữa các trường, không chép nguyên câu của ví dụ.
    Mỗi lý do viết trên một dòng, dưới 340 ký tự.
 
-Ví dụ cách viết (trường giả; KHÔNG dùng lại con số của ví dụ):
-- "Điểm SAT 1250 của bạn còn dưới mốc 25% (1300) của sinh viên trúng tuyển, nên đây là lựa chọn để thử sức. Chi phí 45,000 USD/năm vẫn nằm gọn trong ngân sách. Điểm ngoại khóa 3.5/4 là lợi thế, hãy dùng nó làm chủ đề bài luận."
-- "Với SAT 1300 nằm trong khoảng 25%-75% (1200-1400), đây là lựa chọn vừa sức với bạn. Đây cũng là trường có chi phí thấp nhất nhóm. Hồ sơ ngoại khóa còn mỏng, bạn nên bổ sung một dự án dài hạn."
+Ví dụ đủ 3 câu (trường giả; con số phải lấy từ dữ liệu của chính trường đang viết, KHÔNG dùng con số của ví dụ):
+- ly_do_nhom = GPA: "GPA của bạn thấp hơn mức trung bình của trường, nên đây là lựa chọn để thử sức dù SAT đã nằm trong khoảng 25%-75%. Chi phí vẫn nằm trong ngân sách. Ngoại khóa ở mức khá, thư giới thiệu từ người hướng dẫn CLB sẽ giúp hồ sơ thuyết phục hơn."
+- ly_do_nhom = SAT: "SAT của bạn nằm trong khoảng 25%-75% của sinh viên trúng tuyển, nên đây là lựa chọn vừa sức. Đây cũng là trường có chi phí thấp nhất nhóm. Hồ sơ ngoại khóa còn mỏng, bạn nên bổ sung một dự án dài hạn."
 
 Quy tắc bắt buộc:
 - Trả về đủ mọi trường, mỗi trường đúng 1 lần, giữ nguyên mã trường (code).
@@ -57,6 +59,7 @@ MAX_REASON_CHARS = 380
 
 _SAT_TEXT = {"above": "cao hơn mốc 75%", "below": "thấp hơn mốc 25%", "within": "nằm trong khoảng 25%-75%"}
 _GPA_TEXT = {"above": "cao hơn", "below": "thấp hơn", "equal": "bằng"}
+_BASIS_TEXT = {"gpa": "GPA", "sat": "SAT", "gpa_sat": "GPA và SAT"}
 _ENGLISH_TEXT = {
     "met": "bạn đạt yêu cầu tiếng Anh của trường",
     "below_min": "bạn chưa đạt yêu cầu tiếng Anh tối thiểu",
@@ -174,6 +177,8 @@ def school_data(st: AiStudentInput, sc: AiSchoolInput, notes: list[str]) -> dict
     """Dữ liệu một trường gửi cho LLM: số liệu kèm phép so sánh đã tính ("so_sanh" đặt đầu để LLM đọc trước)."""
     rel = relations(st, sc)
     data: dict[str, Any] = {"code": sc.code, "name": sc.name, "state": sc.state, "category": sc.category}
+    if "category_basis" in rel:
+        data["ly_do_nhom"] = _BASIS_TEXT[rel["category_basis"]]
     if "sat" in rel:
         data["sat"] = {
             "so_sanh": _SAT_TEXT[rel["sat"]],

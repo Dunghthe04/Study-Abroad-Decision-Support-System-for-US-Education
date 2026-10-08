@@ -23,6 +23,8 @@ def extracurricular_level(score: float | None) -> str | None:
 def relations(st: AiStudentInput, sc: AiSchoolInput) -> dict[str, str]:
     """Quan hệ đúng giữa hồ sơ và trường Thiếu dữ liệu thì không có khóa đó."""
     rel = {"category": sc.category, "english": sc.english}
+    if sc.category_basis and sc.category != "insufficient_data":
+        rel["category_basis"] = sc.category_basis
     if st.sat is not None and sc.sat25 is not None and sc.sat75 is not None:
         rel["sat"] = "above" if st.sat > sc.sat75 else "below" if st.sat < sc.sat25 else "within"
     if st.gpa4 is not None and sc.avg_gpa4 is not None:
@@ -208,5 +210,13 @@ def contradictions(reason: str, truth: dict[str, str]) -> list[str]:
         if truth[key] not in said:
             errors.append(f"{key}: lý do nói {sorted(said)}, đúng là {truth[key]}")
 
-    # 4. Trả về danh sách lỗi
+    # 4. Lý do xếp nhóm phải nhắc đúng tiêu chí quyết định nhóm (vd. thử sức vì GPA thì không được chỉ nói SAT)
+    basis = truth.get("category_basis")
+    if basis:
+        needed = {"gpa": ["gpa"], "sat": ["sat"], "gpa_sat": ["gpa", "sat"]}[basis]
+        mentioned = [w for w in needed if re.search(rf"\b{w}\b", reason, flags=re.IGNORECASE)]
+        if not mentioned:
+            errors.append(f"category_basis: lý do không nhắc {basis.upper()}, tiêu chí quyết định nhóm")
+
+    # 5. Trả về danh sách lỗi
     return errors

@@ -40,6 +40,8 @@ SYSTEM_PROMPT = """Bạn đọc các hoạt động ngoại khóa do một học
   cho thấy phạm vi hẹp hơn. Ví dụ: CLB của lớp hoặc của trường, hoạt động chỉ diễn ra trong trường → 1, dù học sinh khai 5;
   giải hoặc hoạt động cấp quận → 2; cấp tỉnh/thành → 3. Mô tả không đủ để đánh giá thì giữ mức học sinh khai.
   "muc_khai" là null (học sinh không khai) thì tự đánh giá từ mô tả; mô tả không đủ thì chọn 1.
+- Mục có "loai" = "giải thưởng": impact_level là CẤP của giải theo tên giải, đơn vị trao và mô tả
+  (giải cấp trường → 1, quận → 2, tỉnh/thành → 3, quốc gia → 4, quốc tế → 5); role chọn member.
 
 Trả về đủ mọi hoạt động, giữ nguyên id. Chỉ dựa vào chữ học sinh viết, không đoán thêm."""
 
@@ -72,23 +74,32 @@ class ActivityReader:
                 # Không chặn việc lọc trường: đọc vai trò bằng từ khóa, giữ mức học sinh khai
                 logger.warning("LLM không đọc được hoạt động, dùng từ khóa: %s", ex)
 
-        attributes = [to_activity(a, read.get(a.id)) for a in activities]
-        result = extracurricular_score(attributes)
+        # Hoạt động tính bằng công thức q; giải thưởng chỉ lấy cấp giải để cộng điểm thưởng
+        acts = [a for a in activities if a.kind == "activity"]
+        awards = [a for a in activities if a.kind == "award"]
+        act_attrs = [to_activity(a, read.get(a.id)) for a in acts]
+        award_attrs = [to_activity(a, read.get(a.id)) for a in awards]
+        result = extracurricular_score(act_attrs, [w.impact_level for w in award_attrs])
+
+        scored = {
+            a.id: ScoredActivity(
+                id=a.id,
+                role=attr.role,
+                reputable_org=attr.reputable_org,
+                impact_level=attr.impact_level,
+                quality=s.quality,
+                points=s.points,
+                counted=s.counted,
+                kind=a.kind,
+            )
+            for group, attrs, scores in (
+                (acts, act_attrs, result.activities),
+                (awards, award_attrs, result.awards),
+            )
+            for a, attr, s in zip(group, attrs, scores, strict=True)
+        }
         return ExtracurricularResponse(
-            score=result.score,
-            ai_used=ai_used,
-            activities=[
-                ScoredActivity(
-                    id=a.id,
-                    role=attr.role,
-                    reputable_org=attr.reputable_org,
-                    impact_level=attr.impact_level,
-                    quality=s.quality,
-                    points=s.points,
-                    counted=s.counted,
-                )
-                for a, attr, s in zip(activities, attributes, result.activities, strict=True)
-            ],
+            score=result.score, ai_used=ai_used, activities=[scored[a.id] for a in activities]
         )
 
 
@@ -113,6 +124,7 @@ def _messages(activities: list[ActivityInput]) -> list[dict[str, str]]:
             "to_chuc": a.organization,
             "mo_ta": a.description,
             "muc_khai": a.impact_level,
+            "loai": "giải thưởng" if a.kind == "award" else "hoạt động",
         }
         for a in activities
     ]

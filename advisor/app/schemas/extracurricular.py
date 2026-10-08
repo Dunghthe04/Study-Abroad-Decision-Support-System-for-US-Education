@@ -1,9 +1,14 @@
 """Hợp đồng dữ liệu .NET <-> advisor cho bước tính điểm ngoại khóa (thang 0–4)."""
 
+from typing import Literal
+
 from pydantic import Field
 
 from app.schemas.recommendation import CamelModel
 from app.services.extracurricular import Role
+
+# activity = hoạt động, kinh nghiệm (tính bằng công thức q); award = giải thưởng (điểm thưởng theo cấp giải)
+Kind = Literal["activity", "award"]
 
 
 class ActivityInput(CamelModel):
@@ -17,6 +22,7 @@ class ActivityInput(CamelModel):
     # học sinh tự khai: 1 trường … 5 quốc tế; None = không khai, LLM đọc từ mô tả
     impact_level: int | None = Field(default=None, ge=1, le=5)
     months: int | None = Field(default=None, ge=0)
+    kind: Kind = "activity"
 
 
 class ExtracurricularRequest(CamelModel):
@@ -31,6 +37,7 @@ class ScoredActivity(CamelModel):
     quality: float
     points: float
     counted: bool
+    kind: Kind = "activity"
 
 
 class ExtracurricularResponse(CamelModel):

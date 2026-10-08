@@ -13,8 +13,8 @@ using StudyAbroad.Infrastructure.Persistence;
 namespace StudyAbroad.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20261008052916_AddFinancialDetailsAndActivityDuration")]
-    partial class AddFinancialDetailsAndActivityDuration
+    [Migration("20261008043239_AddDurationToProfileActivities")]
+    partial class AddDurationToProfileActivities
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -1272,11 +1272,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("numeric(4,2)")
                         .HasColumnName("extracurricular_score");
 
-                    b.Property<string>("FinancialNotes")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)")
-                        .HasColumnName("financial_notes");
-
                     b.Property<string>("FundingSource")
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)")
@@ -1311,11 +1306,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)")
                         .HasColumnName("intended_major");
-
-                    b.Property<decimal?>("MaxExpectedTuitionUsd")
-                        .HasPrecision(12, 2)
-                        .HasColumnType("numeric(12,2)")
-                        .HasColumnName("max_expected_tuition_usd");
 
                     b.Property<bool>("NeedsScholarship")
                         .HasColumnType("boolean")

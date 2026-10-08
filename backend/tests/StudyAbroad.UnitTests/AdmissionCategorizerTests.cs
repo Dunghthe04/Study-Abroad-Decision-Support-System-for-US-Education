@@ -47,6 +47,15 @@ public class AdmissionCategorizerTests
         Assert.Equal(AdmissionCategory.Safety, AdmissionCategorizer.Categorize(3.6m, null, 3.4m, null, null, 0.1m));
     }
 
+    [Theory]
+    [InlineData(3.6, 1380, 3.9, 1320, 1480, "gpa")]       // University of Florida: GPA thấp (thử sức), SAT ngang → do GPA
+    [InlineData(3.9, 1250, 3.9, 1300, 1450, "sat")]       // GPA ngang, SAT thấp → do SAT
+    [InlineData(3.9, 1350, 3.9, 1300, 1450, "gpa_sat")]   // cả hai cùng mức ngang
+    [InlineData(null, 1350, 3.9, 1300, 1450, "sat")]      // chỉ có SAT
+    [InlineData(null, null, 3.9, 1300, 1450, null)]       // chưa đủ dữ liệu
+    public void Basis_IsCriterionThatDecidesCategory(double? gpa, int? sat, double? avg, int? s25, int? s75, string? expected) =>
+        Assert.Equal(expected, AdmissionCategorizer.Basis((decimal?)gpa, sat, (decimal?)avg, s25, s75, 0.3m));
+
     [Fact]
     public void Categorize_SameInput_SameResult()          // tiêu chí: chạy lại cho cùng kết quả
     {

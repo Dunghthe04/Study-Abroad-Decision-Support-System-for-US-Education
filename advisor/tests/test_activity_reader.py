@@ -111,3 +111,26 @@ async def test_undeclared_level_without_llm_falls_back_to_lowest_level():
     result = await ActivityReader(llm).score(request(UNDECLARED))
 
     assert result.activities[0].impact_level == 1
+
+
+# ---------- giải thưởng: LLM đọc cấp giải, công thức cộng điểm thưởng ----------
+
+AWARD = ActivityInput(id="w1", name="Giải Nhì tin học", organization="Sở GD&ĐT Hà Nội", kind="award")
+
+
+async def test_award_gets_bonus_from_level_read_by_llm():
+    llm = FakeLLM(
+        {
+            "activities": [
+                {"id": "a1", "role": "founder", "reputable_org": False, "impact_level": 3},
+                {"id": "w1", "role": "member", "reputable_org": True, "impact_level": 3},
+            ]
+        }
+    )
+
+    result = await ActivityReader(llm).score(request(ROBOTICS, AWARD))
+
+    assert [a.kind for a in result.activities] == ["activity", "award"]
+    assert result.activities[1].points == 0.15  # giải cấp tỉnh: 0.05 × 3
+    assert result.score == 1.07  # 0.92 + 0.15
+    assert '"loai": "giải thưởng"' in llm.calls[0]["messages"][1]["content"]

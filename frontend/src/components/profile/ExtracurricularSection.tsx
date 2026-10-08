@@ -188,6 +188,7 @@ export function ExtracurricularSection() {
                 type="number"
                 min="1"
                 max="120"
+                step="1"
                 value={duration}
                 onChange={(e) => setDuration(e.target.value)}
                 placeholder="12"

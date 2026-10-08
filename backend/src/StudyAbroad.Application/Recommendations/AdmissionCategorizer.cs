@@ -49,6 +49,26 @@ namespace StudyAbroad.Application.Recommendations
             };
         }
 
+        /// <summary>
+        /// Tiêu chí quyết định nhóm (tiêu chí đang ở mức thấp hơn): "gpa", "sat", "gpa_sat" (bằng mức nhau),
+        /// null khi chưa đủ dữ liệu. LLM phải nêu đúng tiêu chí này khi giải thích vì sao trường thuộc nhóm.
+        /// </summary>
+        public static string? Basis(
+            decimal? studentGpa4, int? studentSat, decimal? avgGpa4, int? sat25, int? sat75, decimal band)
+        {
+            var gpaLevel = GpaLevel(studentGpa4, avgGpa4, band);
+            var satLevel = SatLevel(studentSat, sat25, sat75);
+
+            return (gpaLevel, satLevel) switch
+            {
+                ({ } g, { } s) when g == s => "gpa_sat",
+                ({ } g, { } s) => g < s ? "gpa" : "sat",
+                ({ }, null) => "gpa",
+                (null, { }) => "sat",
+                _ => null,
+            };
+        }
+
         private static Level? GpaLevel(decimal? GpaStudent, decimal? schoolAvg, decimal band)
         {
             if(GpaStudent == null || schoolAvg == null) return null;

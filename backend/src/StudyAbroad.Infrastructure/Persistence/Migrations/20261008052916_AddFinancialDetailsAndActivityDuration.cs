@@ -5,6 +5,7 @@
 namespace StudyAbroad.Infrastructure.Persistence.Migrations
 {
     /// <inheritdoc />
+    // duration_months, is_ongoing đã thêm ở 20261008043239_AddDurationToProfileActivities: migration này chỉ thêm 2 cột tài chính
     public partial class AddFinancialDetailsAndActivityDuration : Migration
     {
         /// <inheritdoc />
@@ -26,21 +27,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                 precision: 12,
                 scale: 2,
                 nullable: true);
-
-            migrationBuilder.AddColumn<int>(
-                name: "duration_months",
-                schema: "app",
-                table: "profile_activities",
-                type: "integer",
-                nullable: true);
-
-            migrationBuilder.AddColumn<bool>(
-                name: "is_ongoing",
-                schema: "app",
-                table: "profile_activities",
-                type: "boolean",
-                nullable: false,
-                defaultValue: false);
         }
 
         /// <inheritdoc />
@@ -55,16 +41,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                 name: "max_expected_tuition_usd",
                 schema: "app",
                 table: "student_profiles");
-
-            migrationBuilder.DropColumn(
-                name: "duration_months",
-                schema: "app",
-                table: "profile_activities");
-
-            migrationBuilder.DropColumn(
-                name: "is_ongoing",
-                schema: "app",
-                table: "profile_activities");
         }
     }
 }
