@@ -297,7 +297,7 @@ export function AccountView() {
                         Sửa bảng điểm
                       </Link>
                       <Link
-                        href="/profile/academic?autoAnalyze=true"
+                        href="/profile/academic/analysis"
                         className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-bold text-white shadow-sm hover:bg-indigo-700 transition"
                       >
                         <span>🚀 Phân tích năng lực</span>
