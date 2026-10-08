@@ -154,10 +154,34 @@ interface SchoolInfo {
 - `costUnknown = true`: hiện "Chưa có dữ liệu chi phí".
 - Ngược lại hiện `totalCostUsd`. Có `school` thì có thể tách học phí / sinh hoạt / phí khác.
 
-### Giải thích
+### Lý do (xếp nhóm, ưu điểm, nhược điểm)
 
-- Hiện `reason` nguyên văn.
-- `aiExplained = false` nghĩa là AI không phản hồi hoặc giải thích AI bị bỏ vì sai số liệu; câu đang hiện là câu soạn sẵn. Có thể thêm chú thích nhỏ, không bắt buộc.
+Code dựng từ số liệu nên luôn đúng và có ngay, không phụ thuộc AI. Kết quả lưu trước ngày 08/10 không có 3 trường này (`?`): khi đó hiện `reason`.
+
+```ts
+interface RecommendationItem {
+  // ...các trường ở trên
+  categoryReason?: string | null; // "Thử sức — vì GPA 2.75 thấp hơn GPA trung bình 3.54 từ 0.30 điểm trở lên. Hệ thống xét cả GPA và SAT, lấy mức thấp hơn…"
+  strengths?: string[] | null;    // ["SAT 1300 nằm trong khoảng 25–75% (1098–1330)", "Chi phí $45,086/năm nằm trong ngân sách $60,000"]
+  weaknesses?: string[] | null;   // ["GPA 2.75 thấp hơn GPA trung bình 3.54 của trường 0.79 điểm", "Ngoại khóa còn mỏng (1.69/4)"]
+}
+interface SchoolInfo {
+  // ...các trường ở trên
+  avgGpa4?: number | null;        // GPA trung bình trúng tuyển, thang 4
+  sat25?: number | null;
+  sat75?: number | null;
+}
+interface RecommendationResult {
+  // ...các trường ở trên
+  student?: {                     // hồ sơ dùng cho lần lọc này, để hiện "Học thuật (GPA, SAT, IELTS) · Ngân sách · Ngoại khóa"
+    major: string | null; gpa4: number | null; sat: number | null;
+    ielts: number | null; toefl: number | null; duolingo: number | null;
+    annualBudgetUsd: number | null; extracurricularScore: number | null;
+  } | null;
+}
+```
+
+- `reason` vẫn còn: là nhận xét AI viết (`aiExplained = true`) hoặc câu soạn sẵn. Giao diện hiện trong phần chi tiết trường khi `aiExplained = true`.
 - **Không hiện `score`** và không biến nó thành phần trăm: đây là điểm xếp hạng, không phải khả năng đậu.
 
 ### Cảnh báo
