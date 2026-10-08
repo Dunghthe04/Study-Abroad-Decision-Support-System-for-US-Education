@@ -32,10 +32,16 @@ public class StudentProfile : BaseEntity
     /// <summary>điểm ngoại khóa 0–4 (thang của thầy): LLM đọc hoạt động thành thuộc tính, công thức của nhóm tính điểm; null nếu chưa phân tích</summary>
     public decimal? ExtracurricularScore { get; set; }
     public decimal? AnnualBudgetUsd { get; set; }
+    /// <summary>[USAS-364] Mức học phí mong muốn tối đa hàng năm</summary>
+    public decimal? MaxExpectedTuitionUsd { get; set; }
     /// <summary>family | loan | scholarship | other</summary>
     public string? FundingSource { get; set; }
     public bool NeedsScholarship { get; set; }
+    /// <summary>[USAS-364] Ghi chú nguyện vọng tài chính của học sinh</summary>
+    public string? FinancialNotes { get; set; }
     public List<string> PreferredStates { get; set; } = [];
     /// <summary>tiến độ lộ trình theo StepKey, ví dụ B1: done</summary>
     public string? RoadmapProgressJson { get; set; }
+    /// <summary>Đường dẫn tệp bảng điểm đã tải lên (USAS-363)</summary>
+    public string? TranscriptFileUrl { get; set; }
 }
