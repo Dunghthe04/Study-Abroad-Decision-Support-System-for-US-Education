@@ -3,8 +3,9 @@ from contextlib import asynccontextmanager
 import httpx
 from fastapi import FastAPI
 
-from app.api.routes import health, recommendation
+from app.api.routes import health, profile, recommendation
 from app.core.config import get_settings
+from app.services.activity_reader import ActivityReader
 from app.services.ollama import OllamaClient
 from app.services.recommender import Recommender
 
@@ -17,7 +18,9 @@ async def lifespan(app: FastAPI):
     async with httpx.AsyncClient(
         base_url=settings.ollama_base_url, timeout=settings.llm_timeout_seconds
     ) as http:
-        app.state.recommender = Recommender(OllamaClient(http, settings.llm_model))
+        llm = OllamaClient(http, settings.llm_model)
+        app.state.recommender = Recommender(llm)
+        app.state.activity_reader = ActivityReader(llm)
         yield
 
 
@@ -26,6 +29,7 @@ def create_app() -> FastAPI:
     app = FastAPI(title="Study Abroad Advisor Service", version="0.1.0", lifespan=lifespan)
     app.include_router(health.router)
     app.include_router(recommendation.router)
+    app.include_router(profile.router)
     return app
 
 
