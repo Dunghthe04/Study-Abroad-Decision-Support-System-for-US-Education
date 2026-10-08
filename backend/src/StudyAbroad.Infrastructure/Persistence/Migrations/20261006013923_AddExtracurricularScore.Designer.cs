@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using StudyAbroad.Infrastructure.Persistence;
@@ -12,9 +13,11 @@ using StudyAbroad.Infrastructure.Persistence;
 namespace StudyAbroad.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261006013923_AddExtracurricularScore")]
+    partial class AddExtracurricularScore
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1247,11 +1250,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("numeric(5,1)")
                         .HasColumnName("duolingo");
 
-                    b.Property<string>("EducationSystem")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("education_system");
-
                     b.Property<decimal?>("ExtracurricularScore")
                         .HasPrecision(4, 2)
                         .HasColumnType("numeric(4,2)")
@@ -1272,10 +1270,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasMaxLength(8)
                         .HasColumnType("character varying(8)")
                         .HasColumnName("grade_scale");
-
-                    b.Property<int?>("GraduationYear")
-                        .HasColumnType("integer")
-                        .HasColumnName("graduation_year");
 
                     b.Property<decimal?>("Gre")
                         .HasPrecision(5, 1)
@@ -1330,11 +1324,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("numeric(5,1)")
                         .HasColumnName("toefl");
 
-                    b.Property<string>("TranscriptFileUrl")
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)")
-                        .HasColumnName("transcript_file_url");
-
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
@@ -1352,7 +1341,7 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
 
                     b.ToTable("student_profiles", "app", t =>
                         {
-                            t.HasCheckConstraint("ck_student_profiles_extracurricular_score", "extracurricular_score IS NULL OR extracurricular_score BETWEEN 0 AND 4");
+                            t.HasCheckConstraint("ck_student_profiles_extracurricular_score", "extracurricular_score IS NULL OR extracurricular_score BETWEEN 0 AND 10");
                         });
                 });
 
@@ -1538,11 +1527,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasPrecision(4, 1)
                         .HasColumnType("numeric(4,1)")
                         .HasColumnName("credits");
-
-                    b.Property<string>("RawScore")
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)")
-                        .HasColumnName("raw_score");
 
                     b.Property<decimal>("Score")
                         .HasPrecision(6, 2)
@@ -1798,21 +1782,11 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(256)")
                         .HasColumnName("email");
 
-                    b.Property<int>("FailedLoginAttempts")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0)
-                        .HasColumnName("failed_login_attempts");
-
                     b.Property<string>("FullName")
                         .IsRequired()
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)")
                         .HasColumnName("full_name");
-
-                    b.Property<DateTime?>("LockoutEnd")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("lockout_end");
 
                     b.Property<bool>("ParentAcknowledged")
                         .HasColumnType("boolean")
@@ -1823,11 +1797,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasMaxLength(60)
                         .HasColumnType("character varying(60)")
                         .HasColumnName("password_hash");
-
-                    b.Property<string>("Phone")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("phone");
 
                     b.Property<string>("Role")
                         .IsRequired()
@@ -1853,61 +1822,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_users_email");
 
                     b.ToTable("users", "app");
-                });
-
-            modelBuilder.Entity("StudyAbroad.Domain.Entities.UserSession", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<DateTime>("ExpiresAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("expires_at");
-
-                    b.Property<string>("IpAddress")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("ip_address");
-
-                    b.Property<bool>("IsRevoked")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_revoked");
-
-                    b.Property<string>("TokenHash")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("token_hash");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.Property<string>("UserAgent")
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)")
-                        .HasColumnName("user_agent");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("user_id");
-
-                    b.HasKey("Id")
-                        .HasName("pk_user_sessions");
-
-                    b.HasIndex("TokenHash")
-                        .HasDatabaseName("ix_user_sessions_token_hash");
-
-                    b.HasIndex("UserId", "IsRevoked")
-                        .HasDatabaseName("ix_user_sessions_user_id_is_revoked");
-
-                    b.ToTable("user_sessions", "app");
                 });
 
             modelBuilder.Entity("StudyAbroad.Domain.Entities.AnalysisResult", b =>
@@ -2141,16 +2055,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_university_offerings_universities_university_id");
-                });
-
-            modelBuilder.Entity("StudyAbroad.Domain.Entities.UserSession", b =>
-                {
-                    b.HasOne("StudyAbroad.Domain.Entities.User", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_user_sessions_users_user_id");
                 });
 #pragma warning restore 612, 618
         }

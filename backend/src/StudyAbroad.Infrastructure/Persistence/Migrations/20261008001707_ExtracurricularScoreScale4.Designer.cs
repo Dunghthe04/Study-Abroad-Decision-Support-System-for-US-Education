@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using StudyAbroad.Infrastructure.Persistence;
@@ -12,9 +13,11 @@ using StudyAbroad.Infrastructure.Persistence;
 namespace StudyAbroad.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261008001707_ExtracurricularScoreScale4")]
+    partial class ExtracurricularScoreScale4
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1247,11 +1250,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("numeric(5,1)")
                         .HasColumnName("duolingo");
 
-                    b.Property<string>("EducationSystem")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("education_system");
-
                     b.Property<decimal?>("ExtracurricularScore")
                         .HasPrecision(4, 2)
                         .HasColumnType("numeric(4,2)")
@@ -1272,10 +1270,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasMaxLength(8)
                         .HasColumnType("character varying(8)")
                         .HasColumnName("grade_scale");
-
-                    b.Property<int?>("GraduationYear")
-                        .HasColumnType("integer")
-                        .HasColumnName("graduation_year");
 
                     b.Property<decimal?>("Gre")
                         .HasPrecision(5, 1)
@@ -1329,11 +1323,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasPrecision(5, 1)
                         .HasColumnType("numeric(5,1)")
                         .HasColumnName("toefl");
-
-                    b.Property<string>("TranscriptFileUrl")
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)")
-                        .HasColumnName("transcript_file_url");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -1538,11 +1527,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasPrecision(4, 1)
                         .HasColumnType("numeric(4,1)")
                         .HasColumnName("credits");
-
-                    b.Property<string>("RawScore")
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)")
-                        .HasColumnName("raw_score");
 
                     b.Property<decimal>("Score")
                         .HasPrecision(6, 2)
