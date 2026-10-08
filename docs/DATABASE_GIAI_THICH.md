@@ -118,8 +118,10 @@ Toàn bộ thông tin học sinh tự nhập, gom vào một bảng: học thu�
 |---|---|---|
 | Mục tiêu | `target_level`, `intended_major` | Muốn đi bậc nào, ngành gì |
 | Học thuật | `current_school`, `current_grade` | Đang học ở đâu, lớp mấy hoặc năm mấy |
-| | `grade_scale` | Thang điểm của bảng điểm gốc (`transcript_scores`): `10`, `4` hoặc `100` |
-| | `overall_gpa` | GPA **luôn ở thang 4**, do phân tích học thuật quy đổi từ bảng điểm. Form không cho nhập tay; để trống nếu chưa phân tích |
+| | `education_system` | Hệ chương trình đào tạo: `standard` (công lập), `specialized` (chuyên), `dual_degree` (song bằng), `international` (quốc tế IB/AP), `private` (tư thục), `other` |
+| | `graduation_year` | Năm tốt nghiệp dự kiến (ví dụ: `2026`, `2027`) |
+| | `grade_scale` | Thang điểm của bảng điểm gốc (`transcript_scores`): `10`, `100`, `4` hoặc `letter` (thang chữ Mỹ) |
+| | `overall_gpa` | GPA **luôn ở thang 4**, quy đổi từ bảng điểm (có trọng số tín chỉ nếu có). Form không cho nhập tay; để trống nếu chưa phân tích |
 | Điểm thi | `ielts`, `toefl`, `duolingo`, `sat`, `act`, `gre`, `gmat` | Điểm tổng từng kỳ thi. `null` nếu chưa thi |
 | | `other_tests_json` | Điểm thành phần, ngày thi, kỳ thi khác (SSAT, AP...) |
 | Tài chính | `annual_budget_usd` | Ngân sách mỗi năm |
@@ -133,22 +135,23 @@ Quan hệ:
 - Là bảng cha của `transcript_scores`, `profile_activities` và `analysis_results`, cả ba đều xóa theo.
 - `recommendations` trỏ tới đây theo kiểu không bắt buộc.
 
-Người làm chính: Việt (#2 hồ sơ học thuật, #21 lộ trình), Đức (#3 tài chính).
+Người làm chính: Việt (#2 hồ sơ học thuật, #21 lộ trình), Đức (#3 tài chính, #4 phân tích năng lực).
 
 ### `transcript_scores` – Bảng điểm chi tiết
-Điểm từng môn theo từng học kỳ. Một học sinh có nhiều dòng.
+Điểm từng môn theo từng học kỳ. Một học sinh có nhiều dòng (tối đa 6 học kỳ = 3 năm gần nhất).
 
 | Cột | Ý nghĩa |
 |---|---|
-| `term_name` | Tên kỳ, ví dụ `Lớp 10 HK1` |
+| `term_name` | Tên kỳ, ví dụ `Lớp 10 HK1`, `Fall 2025` |
 | `term_order` | Số thứ tự để sắp xếp kỳ (1, 2, 3...) |
-| `subject` | Môn học |
-| `score` | Điểm |
-| `credits` | Số tín chỉ (bậc đại học), có thể để trống |
+| `subject` | Môn học (không được trùng tên trong cùng một học kỳ) |
+| `score` | Điểm chuẩn hóa số (thang 10: `0.0 - 10.0`, thang 100: `0 - 100`, thang 4: `0.0 - 4.0`, thang chữ: quy đổi sang thang 4 từ 0.0 đến 4.0) |
+| `raw_score` | Điểm gốc nhập vào (ví dụ: `"A+"`, `"B-"`, `"9.5"`). Lưu nguyên bản điểm chữ khi dùng thang `letter` |
+| `credits` | Số tín chỉ hoặc hệ số môn học (dùng tính GPA có trọng số), có thể để trống |
 
-Ví dụ: học sinh lớp 12 nhập 6 kỳ × 8 môn thì có 48 dòng.
+Ví dụ: học sinh lớp 12 nhập 6 kỳ × 8 môn thì có 48 dòng. Khi học sinh dùng thang chữ `letter`, người dùng chọn điểm `"A"` thì `raw_score = "A"` và `score = 4.00`.
 Quan hệ: `student_profiles` 1–n `transcript_scores`, xóa theo.
-Người làm chính: Việt (#2 nhập điểm), Đức (#4 tính GPA từ bảng này).
+Người làm chính: Việt (#2 nhập điểm), Đức (#4 tính GPA và phân tích năng lực học thuật từ bảng này).
 
 ### `profile_activities` – Hoạt động trong hồ sơ
 Ngoại khóa, kinh nghiệm làm việc và giải thưởng, gom chung một bảng, phân biệt bằng `kind`.

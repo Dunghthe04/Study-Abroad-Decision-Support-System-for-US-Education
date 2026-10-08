@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using StudyAbroad.Application.AcademicProfiles;
 using StudyAbroad.Application.Auth;
 using StudyAbroad.Application.Recommendations;
 using StudyAbroad.Application.StudyCenters;
@@ -12,6 +13,7 @@ public static class DependencyInjection
         services.AddScoped<IStudyCenterService, StudyCenterService>();
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IRecommendationService,RecommendationService>();
+        services.AddScoped<IAcademicProfileService, AcademicProfileService>();
         return services;
     }
 }

@@ -9,11 +9,15 @@ public class StudentProfile : BaseEntity
     /// <summary>bậc muốn đi, giá trị từ StudyLevels</summary>
     public string TargetLevel { get; set; } = string.Empty;
     public string? CurrentSchool { get; set; }
+    /// <summary>hệ chương trình: standard | specialized | dual_degree | international | private | other</summary>
+    public string? EducationSystem { get; set; }
+    /// <summary>năm tốt nghiệp THPT hoặc Đại học</summary>
+    public int? GraduationYear { get; set; }
     /// <summary>ví dụ Lớp 11, Năm 3, Đã tốt nghiệp</summary>
     public string? CurrentGrade { get; set; }
-    /// <summary>thang điểm của bảng điểm gốc (transcript_scores): 10 | 4 | 100. Không phải thang của OverallGpa</summary>
+    /// <summary>thang điểm của bảng điểm gốc (transcript_scores): 10 | 100 | 4 | letter</summary>
     public string GradeScale { get; set; } = "10";
-    /// <summary>GPA luôn ở thang 4, do phân tích học thuật quy đổi từ bảng điểm; form không cho nhập tay; null nếu chưa phân tích</summary>
+    /// <summary>GPA luôn ở thang 4 (nhóm đã chốt), quy đổi từ bảng điểm; form không cho nhập tay; null nếu chưa phân tích</summary>
     public decimal? OverallGpa { get; set; }
     public string? IntendedMajor { get; set; }
     public decimal? Ielts { get; set; }

@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using StudyAbroad.Infrastructure.Persistence;
@@ -12,9 +13,11 @@ using StudyAbroad.Infrastructure.Persistence;
 namespace StudyAbroad.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261007082833_AddAcademicProfileFields")]
+    partial class AddAcademicProfileFields
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1252,11 +1255,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(64)")
                         .HasColumnName("education_system");
 
-                    b.Property<decimal?>("ExtracurricularScore")
-                        .HasPrecision(4, 2)
-                        .HasColumnType("numeric(4,2)")
-                        .HasColumnName("extracurricular_score");
-
                     b.Property<string>("FundingSource")
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)")
@@ -1330,11 +1328,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("numeric(5,1)")
                         .HasColumnName("toefl");
 
-                    b.Property<string>("TranscriptFileUrl")
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)")
-                        .HasColumnName("transcript_file_url");
-
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
@@ -1350,10 +1343,7 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_student_profiles_user_id");
 
-                    b.ToTable("student_profiles", "app", t =>
-                        {
-                            t.HasCheckConstraint("ck_student_profiles_extracurricular_score", "extracurricular_score IS NULL OR extracurricular_score BETWEEN 0 AND 4");
-                        });
+                    b.ToTable("student_profiles", "app");
                 });
 
             modelBuilder.Entity("StudyAbroad.Domain.Entities.StudyCenter", b =>
