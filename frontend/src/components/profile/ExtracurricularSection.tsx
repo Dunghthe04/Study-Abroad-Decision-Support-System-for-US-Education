@@ -35,20 +35,18 @@ export function ExtracurricularSection() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function loadActivities() {
-    try {
-      setLoading(true);
-      const data = await getExtracurricularActivities();
-      setActivities(data);
-    } catch {
-      // ignore
-    } finally {
-      setLoading(false);
-    }
-  }
-
   useEffect(() => {
-    loadActivities();
+    async function load() {
+      try {
+        const data = await getExtracurricularActivities();
+        setActivities(data);
+      } catch {
+        // ignore
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
   }, []);
 
   async function handleAdd(e: React.FormEvent) {

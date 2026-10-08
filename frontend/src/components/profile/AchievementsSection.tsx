@@ -28,20 +28,18 @@ export function AchievementsSection() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function loadAchievements() {
-    try {
-      setLoading(true);
-      const data = await getAchievements();
-      setAchievements(data);
-    } catch {
-      // ignore
-    } finally {
-      setLoading(false);
-    }
-  }
-
   useEffect(() => {
-    loadAchievements();
+    async function load() {
+      try {
+        const data = await getAchievements();
+        setAchievements(data);
+      } catch {
+        // ignore
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
   }, []);
 
   async function handleAdd(e: React.FormEvent) {
