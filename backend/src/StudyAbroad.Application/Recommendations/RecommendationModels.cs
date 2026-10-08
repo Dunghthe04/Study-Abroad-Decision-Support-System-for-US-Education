@@ -33,7 +33,7 @@ namespace StudyAbroad.Application.Recommendations
         decimal? TuitionUsd,
         decimal? LivingUsd,
         decimal? FeesUsd,
-        decimal? AcceptanceRate = null, // 0–1, chỉ dùng nội bộ, không hiển thị
+        decimal? AcceptanceRate = null, // 0–1, chỉ để hiển thị thông tin trường, không dùng để chấm điểm
         decimal? MinIelts = null,
         decimal? MinToefl = null,
         decimal? MinDuolingo = null,

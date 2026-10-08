@@ -49,10 +49,9 @@ namespace StudyAbroad.Application.Recommendations
             var extracurricular = ExtracurricularFit(student.ExtracurricularScore);
             var fit = new FitBreakdown(academic, finance, english, extracurricular);
 
-            //3. SAW. Trọng số ngoại khóa tăng theo độ chọn lọc của trường
+            //3. SAW: một bộ trọng số chung cho mọi trường (trọng số chứng minh bằng AHP)
             var w = settings.Weights;
-            var selectivity = Selectivity(candidate.AcceptanceRate, neutral);
-            var score = WeightedSum((academic, w.Academic), (finance, w.Finance), (english, w.English), (extracurricular, w.Extracurricular * selectivity));
+            var score = WeightedSum((academic, w.Academic), (finance, w.Finance), (english, w.English), (extracurricular, w.Extracurricular));
 
             return new ScoredSchool(candidate, category, score is { } s ? Math.Round(s, 4) : null, cost, CostUnknown: cost is null, fit, englishStatus, openAdmission);
         }
@@ -90,10 +89,6 @@ namespace StudyAbroad.Application.Recommendations
         //Điểm ngoại khóa thang 0–4 → [0, 1]; chưa chấm → null (bỏ tiêu chí)
         private static decimal? ExtracurricularFit(decimal? score) =>
             score is { } s ? Clamp01(s / 4m) : null;
-
-        //Độ chọn lọc = 1 - tỷ lệ nhận (nhận 10% → 0.9); trường không công bố → trung tính
-        private static decimal Selectivity(decimal? acceptanceRate, decimal neutral) =>
-            acceptanceRate is { } a ? Clamp01(1m - a) : neutral;
 
         //Tiếng Anh là điều kiện đầu vào: đạt mức tối thiểu = 1, chưa đạt = điểm/mức. Có nhiều bài thi thì lấy bài tốt nhất.
         private static (decimal? Fit, EnglishStatus status) English(StudentSnapshot s, SchoolCandidate c, decimal neutral)

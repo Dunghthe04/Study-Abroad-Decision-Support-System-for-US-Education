@@ -470,7 +470,7 @@ Các tham số admin chỉnh được mà không cần sửa code, lưu dạng k
 
 | `key` | `value_json` ví dụ | Dùng ở |
 |---|---|---|
-| `recommend.weights` | `{"major":0.4,"state":0.2,"budget":0.4}` | Trọng số 3 tiêu chí gợi ý trường (#6) |
+| `recommend.weights` | `{"weights":{"academic":0.4,"finance":0.3,"english":0.1,"extracurricular":0.2},"aiTimeoutSeconds":120}` | Cấu hình gợi ý trường (#6): trọng số SAW 4 tiêu chí (chứng minh bằng AHP), giới hạn thời gian AI. Không có dòng này thì dùng giá trị mặc định trong code |
 | `grade_scale.10` | `[{"min":9,"max":10,"gpa4":4.0},{"min":8,"max":8.99,"gpa4":3.5}]` | Quy đổi điểm thang 10 sang GPA 4 (#4, #13) |
 | `major_weights` | `{"Computer Science":{"Toán":0.4,"Tin":0.3}}` | Môn quan trọng theo ngành (#15) |
 | `moderation.rules` | `[{"pattern":"zalo","action":"flag"}]` | Luật kiểm duyệt diễn đàn (#28) |
