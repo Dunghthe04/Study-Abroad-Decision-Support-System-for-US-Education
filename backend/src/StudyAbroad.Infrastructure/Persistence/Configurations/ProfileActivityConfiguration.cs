@@ -15,6 +15,7 @@ public class ProfileActivityConfiguration : IEntityTypeConfiguration<ProfileActi
         b.Property(x => x.Organization).HasMaxLength(256);
         b.Property(x => x.Role).HasMaxLength(128);
         b.Property(x => x.Description).HasMaxLength(2000);
+        b.Property(x => x.ImpactLevel);
         b.HasIndex(x => new { x.StudentProfileId, x.Kind });
     }
 }

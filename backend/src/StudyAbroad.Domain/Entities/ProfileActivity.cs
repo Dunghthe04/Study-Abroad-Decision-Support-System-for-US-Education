@@ -15,4 +15,6 @@ public class ProfileActivity : BaseEntity
     public string? Description { get; set; }
     public DateOnly? StartDate { get; set; }
     public DateOnly? EndDate { get; set; }
+    /// <summary>[USAS-364] Mức độ ảnh hưởng: 1 (Trường/CLB) đến 5 (Quốc tế)</summary>
+    public int? ImpactLevel { get; set; }
 }

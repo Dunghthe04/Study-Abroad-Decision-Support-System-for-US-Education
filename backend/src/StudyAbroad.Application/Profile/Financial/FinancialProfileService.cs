@@ -82,7 +82,8 @@ public class FinancialProfileService(IFinancialProfileRepository repository) : I
             Organization = request.Organization?.Trim(),
             Description = request.Description?.Trim(),
             StartDate = startDate,
-            EndDate = endDate
+            EndDate = endDate,
+            ImpactLevel = request.ImpactLevel
         };
 
         await repository.AddActivityAsync(activity, ct);
@@ -111,6 +112,7 @@ public class FinancialProfileService(IFinancialProfileRepository repository) : I
         activity.Role = request.Role.Trim();
         activity.Organization = request.Organization?.Trim();
         activity.Description = request.Description?.Trim();
+        activity.ImpactLevel = request.ImpactLevel;
 
         if (DateOnly.TryParse(request.StartDate, out var sDate)) activity.StartDate = sDate;
         if (DateOnly.TryParse(request.EndDate, out var eDate)) activity.EndDate = eDate;
@@ -219,8 +221,8 @@ public class FinancialProfileService(IFinancialProfileRepository repository) : I
     private static FinancialProfileDto MapToFinancialDto(StudentProfile p, string? notes = null) =>
         new(p.Id, p.UserId, p.AnnualBudgetUsd ?? 0, p.FundingSource ?? "family", p.NeedsScholarship, null, "USD", notes, p.CreatedAt, p.UpdatedAt);
 
-    private static ExtracurricularActivityDto MapToActivityDto(ProfileActivity a, Guid userId, int? durationMonths = null, int impactLevel = 1, bool isOngoing = false) =>
-        new(a.Id, userId, a.Title, a.Role ?? string.Empty, a.Organization ?? string.Empty, durationMonths, a.StartDate?.ToString("yyyy-MM"), a.EndDate?.ToString("yyyy-MM"), isOngoing, impactLevel, a.Description ?? string.Empty, a.CreatedAt, a.UpdatedAt);
+    private static ExtracurricularActivityDto MapToActivityDto(ProfileActivity a, Guid userId, int? durationMonths = null, int? impactLevel = null, bool isOngoing = false) =>
+        new(a.Id, userId, a.Title, a.Role ?? string.Empty, a.Organization ?? string.Empty, durationMonths, a.StartDate?.ToString("yyyy-MM"), a.EndDate?.ToString("yyyy-MM"), isOngoing, impactLevel ?? a.ImpactLevel ?? ProfileConstants.ImpactLevels.School, a.Description ?? string.Empty, a.CreatedAt, a.UpdatedAt);
 
     private static StudentAchievementDto MapToAchievementDto(ProfileActivity a) =>
         new(a.Id, a.StudentProfileId, a.Role ?? "award", a.Title, a.Organization, a.StartDate?.ToString("yyyy-MM"), a.Description ?? string.Empty, a.CreatedAt);
