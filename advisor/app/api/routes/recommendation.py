@@ -17,7 +17,7 @@ async def explain(
     # gọi đến service
     recommender: Annotated[Recommender, Depends(get_recommender)],
 ) -> AiRankResponse:
-    """Nhận danh sách trường CRM đã lọc, trả lại thứ tự mới và lý do do LLM viết."""
+    """Nhận danh sách trường CRM đã lọc và xếp hạng, trả lại lý do do LLM viết cho từng trường."""
     try:
         return await recommender.rank(request)
     except (OllamaError, RecommenderError) as ex:

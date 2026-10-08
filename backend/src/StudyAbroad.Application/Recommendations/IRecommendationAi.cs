@@ -33,10 +33,10 @@ namespace StudyAbroad.Application.Recommendations
 
     public record AiRankRequest(AiStudentInput Student, IReadOnlyList<AiSchoolInput> Schools);
 
-    //LLM trả về : danh sách mã trường + giải thích theo thứ tự LLM xếp
+    //LLM trả về : mã trường + giải thích; thứ tự cuối cùng vẫn là thứ tự SAW
     public record AiRankResponse(IReadOnlyList<AiPick> Items);
 
-    /// <summary>Gọi LLM xếp lại tập ứng viên và viết giải thích. Cài đặt thật ở Infrastructure (gọi sang advisor).</summary>
+    /// <summary>Gọi LLM viết giải thích cho tập ứng viên CRM đã xếp hạng. Cài đặt thật ở Infrastructure (gọi sang advisor).</summary>
     public interface IRecommendationAi
     {
         Task<AiRankResponse> RankAsync(AiRankRequest request,CancellationToken ct= default);

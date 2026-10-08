@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace StudyAbroad.Application.Recommendations
 {
-    //Câu trả lời của AI LLM: nã trường + giải thíc theo thứ tự LLM xếp
+    //Câu trả lời của AI LLM: mã trường + giải thích (thứ tự AI trả về không được dùng)
     public record AiPick(string? Code, string? Reason);
 
     //Một trường Sau khi kiểm tra  : AiExplained = false ==> thay lời giải thích AI = đoạn sẵn
@@ -27,35 +27,21 @@ namespace StudyAbroad.Application.Recommendations
         //Tìm %
         private static readonly Regex PercentPattern = new(@"(\d+(?:[.,]\d+)?)\s*%", RegexOptions.Compiled);
 
-        //Nhận kết quả AI + danh dách trường CRM + thông tin học sinh ==> kiểm tra AI ==> tạo danh sách cuối
+        //Nhận kết quả AI + danh sách trường CRM + thông tin học sinh ==> kiểm tra AI ==> tạo danh sách cuối
+        //Thứ tự luôn là thứ tự SAW của CRM; AI chỉ đóng góp lời giải thích
         public static IReadOnlyList<GuardedPick> Apply(IReadOnlyList<AiPick> picks, IReadOnlyList<ScoredSchool> scored, StudentSnapshot student)
         {
-            //Tạo dicrionary các trường, key(mã trường) => value( thông tin)
-            var byCode = scored.ToDictionary(s => s.Candidate.Code, StringComparer.OrdinalIgnoreCase);
-            //Chống trường trùng
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            //Danh sách kết quả
-            var result = new List<GuardedPick>();
-
-            //1. Các trường LLM chọn, theo thứ tự LLM xếp
+            //1. Lời giải thích AI theo mã trường; mã trùng thì lấy lần đầu, mã lạ thì không bao giờ được dùng
+            var reasons = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
             foreach (var pick in picks)
-            {
-                if (pick.Code is null || !byCode.TryGetValue(pick.Code.Trim(), out var school)) continue; // nếu mã trường AI ko có trong tập ứng viên ==> bỏ
-                if(!seen.Add(school.Candidate.Code)) continue; //lặp bỏ
+                if (pick.Code is { } code)
+                    reasons.TryAdd(code.Trim(), pick.Reason);
 
-                //chống AI hallucination về số liệu
-                var grounded = IsGrounded(pick.Reason, student, school);
-                //nếu giải thích AI ok => lấy , ngươc lại lấy template
-                result.Add(new GuardedPick(school, grounded ? pick.Reason!.Trim() : ReasonTemplate.Build(student, school), grounded));
-
-            }
-
-            //2. Các trường LLM bỏ sót ==> thêm vào cuối theo thứ tự CRM, giải thích soạn sẵn
-            foreach (var school in scored.Where(s => !seen.Contains(s.Candidate.Code)))
-                result.Add(new GuardedPick(school, ReasonTemplate.Build(student, school), AiExplained : false));
-
-            //3. Giữ nhóm CRM: Reach => Match => Safety: trong nhóm giữ thứ tự LLM
-            return result.OrderBy(p => p.School.AdmissionCategory).ToList();
+            //2. Đi theo thứ tự CRM: giải thích AI đúng số liệu thì lấy, thiếu hoặc sai thì dùng câu soạn sẵn
+            return scored.Select(school =>
+                reasons.TryGetValue(school.Candidate.Code, out var reason) && IsGrounded(reason, student, school)
+                    ? new GuardedPick(school, reason!.Trim(), AiExplained: true)
+                    : new GuardedPick(school, ReasonTemplate.Build(student, school), AiExplained: false)).ToList();
         }
 
         /// <summary>Lời giải thích hợp lệ khi không rỗng, không quá dài, không nêu phần trăm đậu và mọi con số đều có trong dữ liệu.</summary>

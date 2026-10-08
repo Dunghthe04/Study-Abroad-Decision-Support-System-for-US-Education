@@ -73,13 +73,14 @@ public class AiOutputGuardTests
     }
 
     [Fact]
-    public void Apply_AiOrder_KeptWithinCategory()
+    public void Apply_AiOrder_IgnoredWithinCategory()
     {
         var match2 = Scored(Osu with { Code = "M2", Name = "Match Two" });
-        ScoredSchool[] crm = [Match, match2];                        // CRM: 209542 trước M2
+        ScoredSchool[] crm = [Match, match2];                        // SAW: 209542 trước M2
 
         var r = AiOutputGuard.Apply([new("M2", "Phù hợp."), new("209542", GoodReason)], crm, Student);
-        Assert.Equal(["M2", "209542"], Codes(r));                    // LLM xếp lại: M2 lên trước
+        Assert.Equal(["209542", "M2"], Codes(r));                    // LLM đưa M2 lên trước nhưng vẫn giữ thứ tự SAW
+        Assert.All(r, p => Assert.True(p.AiExplained));               // lời giải thích AI vẫn được dùng
     }
 
     // ---------- Con số trong lời giải thích ----------

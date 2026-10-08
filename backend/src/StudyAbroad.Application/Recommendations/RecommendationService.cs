@@ -66,7 +66,7 @@ namespace StudyAbroad.Application.Recommendations
             {
                 warnings.Add("Không có trường nào phù hợp với ngành, bang và ngân sách hiện tại. Hãy thử nới điều kiện.");
             }
-            //5. LLM xếp lại trong tệp ứng viên + viết giải thích ; lỗi or tắt = null ==> dùng kết quả CRM
+            //5. LLM viết giải thích cho từng trường (không đổi thứ tự SAW); lỗi or tắt = null ==> giải thích soạn sẵn
             var picks = await TryRankWithAiAsync(student, scored, settings, ct);
             if (picks is null && settings.AiEnabled && scored.Count > 0)
                 warnings.Add("AI tạm thời chưa phản hồi, danh sách và giải thích theo kết quả chấm điểm.");

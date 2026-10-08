@@ -1,4 +1,6 @@
-"""Hybrid: CRM bên .NET đã lọc và chia nhóm trường, LLM chỉ xếp lại trong danh sách đó và viết lý do.
+"""Hybrid: CRM bên .NET đã lọc, chia nhóm và xếp hạng trường (SAW); LLM chỉ viết lý do cho từng trường.
+
+.NET giữ nguyên thứ tự SAW, thứ tự LLM trả về không được dùng.
 
 Số liệu phải đúng, lời văn được tự do:
 - Phép so sánh (SAT, GPA, ngân sách) do code tính (fact_check.relations), LLM chỉ diễn đạt lại.
@@ -29,9 +31,7 @@ Hệ thống đã lọc sẵn và chia nhóm, gọi đúng tên nhóm khi viết
 insufficient_data = "chưa đủ dữ liệu" (TRƯỜNG chưa công bố đủ SAT/GPA để xếp nhóm, không phải do học sinh).
 Mỗi trường có các so sánh hệ thống đã tính sẵn (khóa "so_sanh"), luôn đúng: chỉ diễn đạt lại, tuyệt đối không nói ngược.
 
-Nhiệm vụ:
-1. Xếp lại thứ tự các trường TRONG TỪNG NHÓM: trường hợp với hồ sơ hơn đứng trước. Không đổi nhóm.
-2. Mỗi trường viết 3 câu tiếng Việt tự nhiên, xưng "bạn", lần lượt theo 3 tiêu chí:
+Nhiệm vụ: mỗi trường viết 3 câu tiếng Việt tự nhiên, xưng "bạn", lần lượt theo 3 tiêu chí:
    - Học thuật: SAT/GPA của bạn so với sinh viên trúng tuyển, và vì sao trường thuộc nhóm này.
      Chỉ nhắc GPA khi trường có khóa "gpa"; chỉ nhắc SAT khi trường có khóa "sat".
    - Tài chính: chi phí so với ngân sách, trường rẻ nhất/đắt nhất nhóm nếu có, hoặc chi phí chưa có dữ liệu.

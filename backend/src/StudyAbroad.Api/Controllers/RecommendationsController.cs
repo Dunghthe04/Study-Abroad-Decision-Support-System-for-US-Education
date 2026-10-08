@@ -6,14 +6,15 @@ using StudyAbroad.Application.Recommendations;
 namespace StudyAbroad.Api.Controllers
 {
     [ApiController]
-    //[Authorize]
+    [Authorize]
     [Route("api/v1/recommendations")]
     public class RecommendationsController(IRecommendationService service) : ControllerBase
     {
+        //Người dùng lấy từ cookie đăng nhập, không nhận userId từ request: không chạy được gợi ý cho hồ sơ người khác
         [HttpPost]
-        public async Task<ActionResult<RecommendationResultDto>> Create([FromQuery] Guid userId, CancellationToken ct)
+        public async Task<ActionResult<RecommendationResultDto>> Create(CancellationToken ct)
         {
-            //if (User.GetUserId() is not { } userId) return Unauthorized();
+            if (User.GetUserId() is not { } userId) return Unauthorized();
             var result = await service.CreateAsync(userId, ct);
             return result is null
                 ? Problem("Người dùng chưa có hồ sơ học sinh, hãy tạo hồ sơ trước.", statusCode: StatusCodes.Status404NotFound)

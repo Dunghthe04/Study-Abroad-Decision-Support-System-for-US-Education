@@ -3,7 +3,7 @@ using StudyAbroad.Application.Recommendations;
 
 namespace StudyAbroad.Infrastructure.Advisor;
 
-/// <summary>Gọi advisor (Python) để LLM xếp lại tập ứng viên và viết giải thích.</summary>
+/// <summary>Gọi advisor (Python) để LLM viết giải thích cho tập ứng viên CRM đã xếp hạng.</summary>
 public class RecommendationAiClient(HttpClient http) : IRecommendationAi
 {
     public async Task<AiRankResponse> RankAsync(AiRankRequest request, CancellationToken ct = default)

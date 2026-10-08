@@ -201,10 +201,10 @@ public class RecommendationServiceTests
     public async Task GetLatest_NoRecommendation_ReturnsNull() =>
         Assert.Null(await NewService(NewRepo()).GetLatestAsync(UserId));
 
-    // ---------- LLM xếp lại + giải thích ----------
+    // ---------- LLM giải thích, không đổi thứ tự ----------
 
     [Fact]
-    public async Task Create_AiReordersWithinCategory_AndKeepsGroundedReason()
+    public async Task Create_KeepsSawOrder_AndKeepsGroundedReason()
     {
         var repo = NewRepo();
         repo.Candidates.Add(new(Guid.NewGuid(), Guid.NewGuid(), "DEMO_UD", "Demo D", "WA",
@@ -219,7 +219,8 @@ public class RecommendationServiceTests
 
         var result = await NewService(repo, ai).CreateAsync(UserId);
 
-        Assert.Equal(["DEMO_UD", "DEMO_UB", "DEMO_UC"], result!.Items.Select(i => i.Code));   // LLM xếp DEMO_UD lên trước trong nhóm Match
+        // LLM đưa DEMO_UD lên trước nhưng vẫn giữ thứ tự SAW (bằng điểm thì theo mã trường)
+        Assert.Equal(["DEMO_UB", "DEMO_UD", "DEMO_UC"], result!.Items.Select(i => i.Code));
         Assert.True(result.Items.Single(i => i.Code == "DEMO_UD").AiExplained);
         Assert.False(result.Items.Single(i => i.Code == "DEMO_UB").AiExplained);
         Assert.DoesNotContain(result.Warnings, w => w.Contains("AI"));
