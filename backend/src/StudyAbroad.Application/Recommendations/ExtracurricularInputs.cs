@@ -38,8 +38,8 @@ namespace StudyAbroad.Application.Recommendations
                         Cut(a.Description, 1000), ImpactLevel: null, Months: null, Kind: "award")
                     : new ExtracurricularActivityInput(a.Id.ToString(), Name(a), Role(a), Cut(a.Organization, 200),
                         Cut(a.Description, 1000),
-                        ImpactLevel: null,   // TODO: đổi thành a.ImpactLevel khi bảng profile_activities có cột impact_level
-                        Months(a.StartDate, a.EndDate, today)))
+                        a.ImpactLevel,   // học sinh khai ở form; null (dữ liệu cũ) thì LLM đọc từ mô tả
+                        a.DurationMonths ?? Months(a.StartDate, a.EndDate, today)))   // số tháng khai ở form; không có thì tính từ ngày
                 .ToList();
 
         //Thành tích loại "internship" (thực tập) là kinh nghiệm, tính như hoạt động; các loại còn lại là giải thưởng

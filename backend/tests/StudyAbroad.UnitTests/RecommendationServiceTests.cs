@@ -199,7 +199,7 @@ public class RecommendationServiceTests
         var club = sent.Single(a => a.Kind == "activity");
         Assert.Equal("CLB Robotics", club.Name);
         Assert.Equal(12, club.Months);                                   // 09/2024 → 09/2025
-        Assert.Null(club.ImpactLevel);                                   // chưa có cột impact_level
+        Assert.Null(club.ImpactLevel);                                   // hoạt động mẫu không khai mức ảnh hưởng
         Assert.Equal("Giải Nhì tin học", sent.Single(a => a.Kind == "award").Name);
         Assert.Equal(3.0m, result!.Extracurricular!.Score);
         Assert.Equal(["CLB Robotics", "Giải Nhì tin học"], result.Extracurricular.Activities.Select(a => a.Name).OrderBy(n => n));

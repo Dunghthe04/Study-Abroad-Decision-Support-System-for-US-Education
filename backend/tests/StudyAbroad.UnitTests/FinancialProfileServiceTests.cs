@@ -149,6 +149,30 @@ public class FinancialProfileServiceTests
     }
 
     [Fact]
+    public async Task AddAndUpdateActivity_KeepsDurationImpactAndOngoingAfterReload()
+    {
+        var repo = new FakeFinancialProfileRepository();
+        var service = new FinancialProfileService(repo);
+        var userId = Guid.NewGuid();
+
+        var created = await service.AddActivityAsync(userId, new CreateExtracurricularRequest(
+            ActivityName: "CLB Robotics", Role: "Chủ nhiệm", DurationMonths: 12, IsOngoing: true, ImpactLevel: 4));
+
+        var loaded = Assert.Single(await service.GetActivitiesAsync(userId));   // tải lại trang: đọc từ DB, không từ request
+        Assert.Equal(12, loaded.DurationMonths);
+        Assert.True(loaded.IsOngoing);
+        Assert.Equal(4, loaded.ImpactLevel);
+
+        await service.UpdateActivityAsync(userId, created.Id, new UpdateExtracurricularRequest(
+            ActivityName: "CLB Robotics", Role: "Chủ nhiệm", DurationMonths: 18, IsOngoing: false, ImpactLevel: 2));
+
+        loaded = Assert.Single(await service.GetActivitiesAsync(userId));
+        Assert.Equal(18, loaded.DurationMonths);
+        Assert.False(loaded.IsOngoing);
+        Assert.Equal(2, loaded.ImpactLevel);
+    }
+
+    [Fact]
     public async Task UpdateActivityAsync_RejectsWhenUserDoesNotOwnProfile_AntiIDOR()
     {
         var repo = new FakeFinancialProfileRepository();
