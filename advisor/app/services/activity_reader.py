@@ -30,7 +30,8 @@ SYSTEM_PROMPT = """Bạn đọc các hoạt động ngoại khóa do một học
 
 - role (vai trò của học sinh trong hoạt động):
   founder = sáng lập, người lập ra · head = chủ nhiệm, chủ tịch, đội trưởng, trưởng nhóm chính, president, captain ·
-  deputy = phó chủ nhiệm, phó, trưởng ban, vice · member = thành viên, tình nguyện viên, người tham gia.
+  deputy = phó chủ nhiệm, phó, trưởng ban, vice · member = thành viên, tình nguyện viên, người tham gia,
+  thực tập sinh, nhân viên, cộng tác viên.
 - reputable_org: true khi tổ chức có uy tín rộng rãi bên ngoài trường: tổ chức quốc tế (UNICEF, UNESCO, WWF…),
   cơ quan hoặc tổ chức cấp quốc gia, cuộc thi chính thức cấp quốc gia/quốc tế, trường đại học hoặc viện nghiên cứu.
   CLB trong trường, nhóm tự lập, công ty nhỏ: false.
