@@ -36,7 +36,7 @@ public class ExtracurricularScoringTests
 
         Assert.Equal(0m, result.Score);
         Assert.True(result.Fresh);
-        Assert.Null(result.Warning);
+        Assert.Equal(ExtracurricularScoring.NoActivitiesWarning, result.Warning);
         Assert.Empty(ai.Requests);
     }
 
@@ -131,6 +131,55 @@ public class ExtracurricularScoringTests
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             new ExtracurricularScoring(ai).ScoreAsync([Robotics], storedScore: 2.0m, timeoutSeconds: 30, cts.Token));
+    }
+
+    // ---------- đổi hoạt động trong hồ sơ thành dữ liệu gửi advisor ----------
+
+    private static readonly DateOnly Today = new(2026, 10, 8);
+
+    [Theory]
+    [InlineData("2024-09-01", "2025-09-01", 12)]
+    [InlineData("2025-10-15", null, 12)]          // chưa kết thúc = đang tham gia, tính đến hôm nay
+    [InlineData("2026-10-01", "2026-09-01", 0)]   // ngày nhập ngược → 0, không âm
+    [InlineData(null, "2025-01-01", null)]        // không có ngày bắt đầu → không biết
+    public void Months_FromStartAndEndDates(string? start, string? end, int? expected) =>
+        Assert.Equal(expected, ExtracurricularInputs.Months(
+            start is null ? null : DateOnly.Parse(start), end is null ? null : DateOnly.Parse(end), Today));
+
+    [Fact]
+    public void From_MapsKindsAndCutsLongText()
+    {
+        var profileId = Guid.NewGuid();
+        var activities = new[]
+        {
+            new Domain.Entities.ProfileActivity { StudentProfileId = profileId, Kind = "extracurricular", Title = "CLB", Role = "Chủ nhiệm", Description = new string('a', 1500), ImpactLevel = 3, DurationMonths = 18, StartDate = new(2025, 1, 1) },
+            new Domain.Entities.ProfileActivity { StudentProfileId = profileId, Kind = "experience", Title = "Làm thêm" },
+            new Domain.Entities.ProfileActivity { StudentProfileId = profileId, Kind = "award", Title = "Giải Nhì", Role = "award", StartDate = new(2025, 5, 1) },
+            new Domain.Entities.ProfileActivity { StudentProfileId = profileId, Kind = "award", Title = "Thực tập FPT", Role = "internship" },
+            new Domain.Entities.ProfileActivity { StudentProfileId = profileId, Kind = "other", Title = "Bỏ qua" },
+        };
+
+        var inputs = ExtracurricularInputs.From(activities, Today).ToDictionary(i => i.Name);
+
+        Assert.Equal(["CLB", "Giải Nhì", "Làm thêm", "Thực tập FPT"], inputs.Keys.OrderBy(n => n));
+        Assert.Equal(1000, inputs["CLB"].Description!.Length);         // advisor nhận tối đa 1000 ký tự
+        Assert.Equal(3, inputs["CLB"].ImpactLevel);                     // mức ảnh hưởng học sinh khai
+        Assert.Equal(18, inputs["CLB"].Months);                          // số tháng khai ở form được ưu tiên hơn ngày
+        Assert.Null(inputs["Làm thêm"].ImpactLevel);                     // dữ liệu cũ chưa khai: LLM đọc từ mô tả
+        Assert.Equal("award", inputs["Giải Nhì"].Kind);
+        Assert.Null(inputs["Giải Nhì"].Role);                            // cột role của giải thưởng là loại thành tích, không gửi
+        Assert.Null(inputs["Giải Nhì"].Months);
+        Assert.Equal("activity", inputs["Thực tập FPT"].Kind);           // thực tập tính như hoạt động
+        Assert.Equal("Thực tập sinh", inputs["Thực tập FPT"].Role);
+    }
+
+    [Fact]
+    public void Hash_ChangesOnlyWhenActivitiesChange()
+    {
+        var a = ExtracurricularInputs.Hash([Robotics]);
+
+        Assert.Equal(a, ExtracurricularInputs.Hash([Robotics with { }]));
+        Assert.NotEqual(a, ExtracurricularInputs.Hash([Robotics with { Months = 25 }]));
     }
 
     // ---------- hợp đồng JSON với advisor (Python dùng camelCase) ----------

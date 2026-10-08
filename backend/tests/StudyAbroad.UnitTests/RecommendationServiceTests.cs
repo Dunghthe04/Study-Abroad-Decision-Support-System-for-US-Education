@@ -30,6 +30,37 @@ public class RecommendationServiceTests
 
         public Task<Recommendation?> GetLatestRecommendationAsync(Guid userId, CancellationToken ct = default) =>
             Task.FromResult(Saved.LastOrDefault(r => r.UserId == userId));
+
+        public List<ProfileActivity> Activities { get; } = [];
+        public List<AnalysisResult> Analyses { get; } = [];
+
+        public Task<IReadOnlyList<ProfileActivity>> GetActivitiesAsync(Guid studentProfileId, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<ProfileActivity>>(Activities.Where(a => a.StudentProfileId == studentProfileId).ToList());
+
+        public Task<AnalysisResult?> GetLatestAnalysisAsync(Guid studentProfileId, string kind, CancellationToken ct = default) =>
+            Task.FromResult(Analyses.LastOrDefault(a => a.StudentProfileId == studentProfileId && a.Kind == kind));
+
+        public Task SaveExtracurricularAsync(AnalysisResult analysis, decimal score, CancellationToken ct = default)
+        {
+            Analyses.Add(analysis);
+            if (Profile?.Id == analysis.StudentProfileId) Profile.ExtracurricularScore = score;
+            return Task.CompletedTask;
+        }
+    }
+
+    // Advisor chấm ngoại khóa giả: mặc định trả 3.0 điểm, AI đọc được; đổi Handler để giả lập lỗi
+    private sealed class FakeExtracurricularAi : IExtracurricularAi
+    {
+        public Func<ExtracurricularScoreRequest, Task<ExtracurricularScoreResponse>> Handler { get; set; } =
+            r => Task.FromResult(new ExtracurricularScoreResponse(3.0m, true,
+                r.Activities.Select(a => new ScoredActivity(a.Id, "head", false, 3, 0.8m, 0.9m, true)).ToList()));
+        public List<ExtracurricularScoreRequest> Requests { get; } = [];
+
+        public Task<ExtracurricularScoreResponse> ScoreAsync(ExtracurricularScoreRequest request, CancellationToken ct = default)
+        {
+            Requests.Add(request);
+            return Handler(request);
+        }
     }
 
     // LLM giả: mặc định trả danh sách rỗng; đổi Handler để giả lập LLM trả kết quả, ném lỗi hoặc trả lời chậm
@@ -68,7 +99,18 @@ public class RecommendationServiceTests
         return repo;
     }
 
-    private static RecommendationService NewService(FakeRepository repo, FakeAi? ai = null) => new(repo, ai ?? new FakeAi());
+    private static RecommendationService NewService(FakeRepository repo, FakeAi? ai = null, FakeExtracurricularAi? ecAi = null) =>
+        new(repo, ai ?? new FakeAi(), new ExtracurricularScoring(ecAi ?? new FakeExtracurricularAi()));
+
+    private static ProfileActivity Activity(FakeRepository repo, string title, string kind = "extracurricular") => new()
+    {
+        StudentProfileId = repo.Profile!.Id,
+        Kind = kind,
+        Title = title,
+        Role = "Chủ nhiệm",
+        StartDate = new DateOnly(2024, 9, 1),
+        EndDate = new DateOnly(2025, 9, 1),
+    };
 
     [Fact]
     public async Task Create_NoProfile_ReturnsNullAndSavesNothing()
@@ -126,15 +168,107 @@ public class RecommendationServiceTests
         Assert.Contains(result.Warnings, w => w.Contains("tiếng Anh"));
     }
 
+    // ---------- Điểm ngoại khóa (bước đầu của nút "Lọc trường") ----------
+
     [Fact]
-    public async Task Create_ReadsExtracurricularFromProfile()
+    public async Task Create_NoActivities_ScoresZeroWithoutCallingAdvisor()
     {
         var repo = NewRepo();
-        repo.Profile!.ExtracurricularScore = 3;
-        var result = await NewService(repo).CreateAsync(UserId);
+        repo.Profile!.ExtracurricularScore = 3;                         // điểm cũ không còn đúng khi hồ sơ không có hoạt động
+        var ecAi = new FakeExtracurricularAi();
 
-        Assert.DoesNotContain(result!.Warnings, w => w.Contains("ngoại khóa"));
-        Assert.Contains("\"extracurricularScore\":3", repo.Saved.Single().CriteriaJson);
+        var result = await NewService(repo, ecAi: ecAi).CreateAsync(UserId);
+
+        Assert.Empty(ecAi.Requests);
+        Assert.Equal(0m, result!.Extracurricular!.Score);
+        Assert.Contains(ExtracurricularScoring.NoActivitiesWarning, result.Warnings);
+        Assert.Equal(0m, repo.Profile.ExtracurricularScore);
+    }
+
+    [Fact]
+    public async Task Create_ScoresActivitiesAndUsesScoreInSaw()
+    {
+        var repo = NewRepo();
+        repo.Activities.Add(Activity(repo, "CLB Robotics"));
+        repo.Activities.Add(Activity(repo, "Giải Nhì tin học", kind: "award"));   // giải thưởng: cộng điểm thưởng
+        var ecAi = new FakeExtracurricularAi();
+
+        var result = await NewService(repo, ecAi: ecAi).CreateAsync(UserId);
+
+        var sent = Assert.Single(ecAi.Requests).Activities;
+        var club = sent.Single(a => a.Kind == "activity");
+        Assert.Equal("CLB Robotics", club.Name);
+        Assert.Equal(12, club.Months);                                   // 09/2024 → 09/2025
+        Assert.Null(club.ImpactLevel);                                   // hoạt động mẫu không khai mức ảnh hưởng
+        Assert.Equal("Giải Nhì tin học", sent.Single(a => a.Kind == "award").Name);
+        Assert.Equal(3.0m, result!.Extracurricular!.Score);
+        Assert.Equal(["CLB Robotics", "Giải Nhì tin học"], result.Extracurricular.Activities.Select(a => a.Name).OrderBy(n => n));
+        Assert.Equal(3.0m, repo.Profile!.ExtracurricularScore);         // lưu lại điểm mới
+        Assert.Single(repo.Analyses);
+        Assert.Contains("\"extracurricularScore\":3", repo.Saved.Single().CriteriaJson);   // SAW dùng điểm vừa tính
+        Assert.DoesNotContain(result.Warnings, w => w.Contains("ngoại khóa"));
+    }
+
+    [Fact]
+    public async Task Create_SameActivities_ReusesScoreWithoutCallingAdvisor()
+    {
+        var repo = NewRepo();
+        repo.Activities.Add(Activity(repo, "CLB Robotics"));
+        var ecAi = new FakeExtracurricularAi();
+
+        await NewService(repo, ecAi: ecAi).CreateAsync(UserId);
+        var second = await NewService(repo, ecAi: ecAi).CreateAsync(UserId);
+
+        Assert.Single(ecAi.Requests);                                    // lần 2 không gọi LLM
+        Assert.Single(repo.Analyses);                                    // không lưu trùng
+        Assert.Equal(3.0m, second!.Extracurricular!.Score);
+        Assert.Equal("CLB Robotics", Assert.Single(second.Extracurricular.Activities).Name);
+    }
+
+    [Fact]
+    public async Task Create_ChangedActivities_ScoresAgain()
+    {
+        var repo = NewRepo();
+        repo.Activities.Add(Activity(repo, "CLB Robotics"));
+        var ecAi = new FakeExtracurricularAi();
+        await NewService(repo, ecAi: ecAi).CreateAsync(UserId);
+
+        repo.Activities.Add(Activity(repo, "Tình nguyện"));
+        await NewService(repo, ecAi: ecAi).CreateAsync(UserId);
+
+        Assert.Equal(2, ecAi.Requests.Count);
+        Assert.Equal(2, ecAi.Requests[1].Activities.Count);
+    }
+
+    [Fact]
+    public async Task Create_AdvisorDown_UsesStoredScoreAndStillRecommends()
+    {
+        var repo = NewRepo();
+        repo.Profile!.ExtracurricularScore = 2.5m;
+        repo.Activities.Add(Activity(repo, "CLB Robotics"));
+        var ecAi = new FakeExtracurricularAi { Handler = _ => throw new HttpRequestException("connection refused") };
+
+        var result = await NewService(repo, ecAi: ecAi).CreateAsync(UserId);
+
+        Assert.Equal(2.5m, result!.Extracurricular!.Score);
+        Assert.False(result.Extracurricular.Fresh);
+        Assert.Contains(ExtracurricularScoring.StaleWarning, result.Warnings);
+        Assert.Empty(repo.Analyses);                                     // không có điểm mới thì không lưu
+        Assert.NotEmpty(result.Items);
+    }
+
+    [Fact]
+    public async Task GetLatest_ReturnsExtracurricularSummary()
+    {
+        var repo = NewRepo();
+        repo.Activities.Add(Activity(repo, "CLB Robotics"));
+        var service = NewService(repo);
+        await service.CreateAsync(UserId);
+
+        var latest = await service.GetLatestAsync(UserId);
+
+        Assert.Equal(3.0m, latest!.Extracurricular!.Score);
+        Assert.Equal("CLB Robotics", Assert.Single(latest.Extracurricular.Activities).Name);
     }
 
     [Fact]

@@ -14,6 +14,8 @@ from app.core.study_levels import StudyLevel
 
 Category = Literal["reach", "match", "safety", "insufficient_data"]
 EnglishStatus = Literal["met", "below_min", "no_score", "unknown"]
+# Tiêu chí quyết định nhóm (CRM lấy mức thấp hơn của GPA và SAT): gpa, sat, hoặc cả hai cùng mức
+CategoryBasis = Literal["gpa", "sat", "gpa_sat"]
 
 
 class CamelModel(BaseModel):
@@ -49,6 +51,7 @@ class AiSchoolInput(CamelModel):
     tuition_usd: float | None = None
     total_cost_usd: float | None = None
     english: EnglishStatus
+    category_basis: CategoryBasis | None = None  # None = chưa đủ dữ liệu
 
 
 class AiRankRequest(CamelModel):

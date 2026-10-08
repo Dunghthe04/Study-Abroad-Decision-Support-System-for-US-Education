@@ -21,10 +21,12 @@ public class RecommendSettingsTests
     {
         // Đúng dạng dòng recommend.weights trong bảng app_settings
         var s = RecommendSettings.Parse("""
-            {"weights": {"academic": 0.5, "finance": 0.2, "english": 0.1, "extracurricular": 0.2},
+            {"weights": {"academic": 0.6, "finance": 0.2, "extracurricular": 0.2},
+             "academicParts": {"gpa": 0.5, "sat": 0.3, "english": 0.2},
              "aiTimeoutSeconds": 90, "extracurricularTimeoutSeconds": 20}
             """);
-        Assert.Equal(new SawWeights(0.5m, 0.2m, 0.1m, 0.2m), s.Weights);
+        Assert.Equal(new SawWeights(0.6m, 0.2m, 0.2m), s.Weights);
+        Assert.Equal(new AcademicParts(0.5m, 0.3m, 0.2m), s.AcademicParts);
         Assert.Equal(90, s.AiTimeoutSeconds);
         Assert.Equal(20, s.ExtracurricularTimeoutSeconds);
     }
@@ -32,9 +34,10 @@ public class RecommendSettingsTests
     [Fact]
     public void Parse_OldKeys_AreIgnored()
     {
-        // Dạng cũ (financeWeight, extracurricularWeight) không còn dùng → trọng số mặc định 0.4/0.3/0.1/0.2
-        var s = RecommendSettings.Parse("""{"financeWeight": 1.0, "extracurricularWeight": 0.5}""");
+        // Dạng cũ (financeWeight, extracurricularWeight, weights.english) không còn dùng → mặc định 0.5/0.3/0.2
+        var s = RecommendSettings.Parse("""{"financeWeight": 1.0, "weights": {"english": 0.1}}""");
         Assert.Equal(new SawWeights(), s.Weights);
+        Assert.Equal(new AcademicParts(), s.AcademicParts);
     }
 
     [Theory]

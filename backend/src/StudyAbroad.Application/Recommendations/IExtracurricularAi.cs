@@ -8,7 +8,8 @@ namespace StudyAbroad.Application.Recommendations
         string? Organization,
         string? Description,
         int? ImpactLevel,      // học sinh tự khai: 1 trường … 5 quốc tế; null = không khai, LLM đọc từ mô tả
-        int? Months);
+        int? Months,
+        string Kind = "activity");   // activity = hoạt động, kinh nghiệm | award = giải thưởng (cộng điểm thưởng theo cấp giải)
 
     public record ExtracurricularScoreRequest(IReadOnlyList<ExtracurricularActivityInput> Activities);
 
@@ -20,7 +21,8 @@ namespace StudyAbroad.Application.Recommendations
         int ImpactLevel,       // sau khi LLM đối chiếu mô tả (không cao hơn mức học sinh khai)
         decimal Quality,
         decimal Points,
-        bool Counted);         // false = ngoài 4 hoạt động tốt nhất
+        bool Counted,          // false = ngoài 4 hoạt động (3 giải) tốt nhất
+        string Kind = "activity");
 
     //AiUsed = false: LLM lỗi, advisor đọc vai trò bằng từ khóa
     public record ExtracurricularScoreResponse(decimal Score, bool AiUsed, IReadOnlyList<ScoredActivity> Activities);

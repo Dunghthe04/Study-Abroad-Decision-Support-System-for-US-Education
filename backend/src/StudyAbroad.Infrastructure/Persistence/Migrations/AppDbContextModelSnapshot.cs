@@ -915,9 +915,7 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnName("impact_level");
 
                     b.Property<bool>("IsOngoing")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
-                        .HasDefaultValue(false)
                         .HasColumnName("is_ongoing");
 
                     b.Property<string>("Kind")

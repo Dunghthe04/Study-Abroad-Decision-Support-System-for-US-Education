@@ -197,18 +197,19 @@ export function ExtracurricularSection() {
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-medium text-slate-700">Thời gian tham gia (Số tháng)</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="120"
-                    value={duration}
-                    onChange={(e) => setDuration(e.target.value)}
-                    placeholder="12"
-                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white text-slate-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                  />
-                </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-700">Thời gian tham gia (Số tháng)</label>
+              <input
+                type="number"
+                min="1"
+                max="120"
+                step="1"
+                value={duration}
+                onChange={(e) => setDuration(e.target.value)}
+                placeholder="12"
+                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm bg-white text-slate-900"
+              />
+            </div>
 
                 <div className="flex items-center gap-2 pt-6">
                   <input

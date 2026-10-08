@@ -86,3 +86,27 @@ def test_invalid_impact_level_is_rejected():
 )
 def test_role_from_text(text, expected):
     assert role_from_text(text) == expected
+
+
+# ---------- điểm thưởng giải thưởng ----------
+
+
+def test_award_bonus_is_005_per_level():
+    # 1 hoạt động 0.92 + giải cấp tỉnh (3) 0.15 + giải quốc gia (4) 0.20
+    result = extracurricular_score([act(level=3, role="founder", months=24)], award_levels=[3, 4])
+
+    assert [a.points for a in result.awards] == [0.15, 0.2]
+    assert result.score == 1.27
+
+
+def test_award_bonus_counts_best_three_and_caps_at_half_point():
+    result = extracurricular_score([], award_levels=[1, 5, 5, 5])
+
+    assert result.awards[0].counted is False  # giải cấp trường bị bỏ vì ngoài 3 giải cao nhất
+    assert result.score == 0.5  # 3 × 0.25 = 0.75, chặn ở 0.5
+
+
+def test_awards_cannot_push_score_above_four():
+    full = [act(level=5, role="founder", months=24, reputable=True)] * 4
+
+    assert extracurricular_score(full, award_levels=[5]).score == 4.0
