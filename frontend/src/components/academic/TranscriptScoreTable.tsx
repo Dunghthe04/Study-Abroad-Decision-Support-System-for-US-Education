@@ -2,6 +2,22 @@
 
 import { useMemo, useState } from "react";
 import type { TranscriptScore, UpsertTranscriptScoreItem } from "@/types/academic";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableFooter,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 interface TranscriptScoreTableProps {
   scores: TranscriptScore[];
@@ -298,365 +314,353 @@ export function TranscriptScoreTable({
     switch (groupKey) {
       case "natural_sciences":
         return (
-          <span className="inline-flex items-center rounded-sm bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
+          <Badge variant="brand">
             {groupName}
-          </span>
+          </Badge>
         );
       case "languages":
         return (
-          <span className="inline-flex items-center rounded-sm bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+          <Badge variant="brand">
             {groupName}
-          </span>
+          </Badge>
         );
       case "social_sciences":
         return (
-          <span className="inline-flex items-center rounded-sm bg-purple-50 px-2 py-0.5 text-xs font-medium text-purple-700">
+          <Badge variant="brand">
             {groupName}
-          </span>
+          </Badge>
         );
       default:
         return (
-          <span className="inline-flex items-center rounded-sm bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+          <Badge variant="neutral">
             {groupName}
-          </span>
+          </Badge>
         );
     }
   };
 
   return (
-    <div className="rounded-xl border border-slate-200/90 bg-white p-5 sm:p-6 shadow-xs space-y-6">
+    <Card>
       {/* Top Action Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-5">
-        <div>
-          <div className="flex items-center gap-2">
-            <h3 className="text-base font-bold text-slate-900">
-              Bảng Điểm & Quản Lý Môn Học
-            </h3>
-            <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600">
-              {scores.length} đầu điểm
-            </span>
-          </div>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Dữ liệu đầu vào để tính toán điểm trung bình và phân loại hồ sơ học thuật
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Secondary sample buttons */}
-          <div className="flex items-center gap-1.5 text-xs">
-            <button
-              type="button"
-              onClick={() => handleLoadSample("highschool")}
-              disabled={isSaving}
-              className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-50 disabled:opacity-50 transition"
-            >
-              Nạp mẫu THPT (3 năm)
-            </button>
-            <button
-              type="button"
-              onClick={() => handleLoadSample("university")}
-              disabled={isSaving}
-              className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-50 disabled:opacity-50 transition"
-            >
-              Nạp mẫu Đại học (4 năm)
-            </button>
+      <CardHeader>
+        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+          <div>
+            <div className="flex items-center gap-2">
+              <CardTitle>
+                Bảng Điểm & Quản Lý Môn Học
+              </CardTitle>
+              <Badge variant="brand">
+                {scores.length} đầu điểm
+              </Badge>
+            </div>
+            <CardDescription>
+              Dữ liệu đầu vào để tính toán điểm trung bình và phân loại hồ sơ học thuật
+            </CardDescription>
           </div>
 
-          {/* Primary Action Button */}
-          <button
-            type="button"
-            onClick={onAnalyze}
-            disabled={isAnalyzing || scores.length === 0}
-            className="inline-flex items-center justify-center rounded-lg bg-slate-900 px-4 py-1.5 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50 transition shadow-2xs"
-          >
-            {isAnalyzing ? "Đang tính toán..." : "Phân tích điểm GPA"}
-          </button>
-        </div>
-      </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Secondary sample buttons */}
+            <div className="flex items-center gap-1.5">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => handleLoadSample("highschool")}
+                disabled={isSaving}
+              >
+                Nạp mẫu THPT (3 năm)
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => handleLoadSample("university")}
+                disabled={isSaving}
+              >
+                Nạp mẫu Đại học (4 năm)
+              </Button>
+            </div>
 
-      {/* Input Section */}
-      <div className="rounded-lg border border-slate-200/70 bg-slate-50/60 p-4 space-y-3.5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200/60 pb-3">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-slate-700">Bậc học:</span>
-            <div className="inline-flex rounded-md bg-slate-200/70 p-0.5 text-xs">
-              <button
-                type="button"
-                onClick={() => handleLevelChange("highschool")}
-                className={`rounded px-2.5 py-1 font-semibold transition ${
-                  level === "highschool"
-                    ? "bg-white text-slate-900 shadow-2xs"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                Học sinh THPT
-              </button>
-              <button
-                type="button"
-                onClick={() => handleLevelChange("university")}
-                className={`rounded px-2.5 py-1 font-semibold transition ${
-                  level === "university"
-                    ? "bg-white text-slate-900 shadow-2xs"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                Sinh viên Đại học
-              </button>
+            {/* Primary Action Button */}
+            <Button
+              type="button"
+              size="sm"
+              onClick={onAnalyze}
+              disabled={isAnalyzing || scores.length === 0}
+            >
+              {isAnalyzing ? "Đang tính toán..." : "Phân tích điểm GPA"}
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+
+      <CardContent className="space-y-6">
+        {/* Input Section */}
+        <div className="space-y-4">
+          <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+            <div className="flex items-center gap-2">
+              <span className="font-medium">Bậc học:</span>
+              <div className="flex gap-1">
+                <Button
+                  type="button"
+                  size="xs"
+                  variant={level === "highschool" ? "outline" : "ghost"}
+                  aria-pressed={level === "highschool"}
+                  onClick={() => handleLevelChange("highschool")}
+                >
+                  Học sinh THPT
+                </Button>
+                <Button
+                  type="button"
+                  size="xs"
+                  variant={level === "university" ? "outline" : "ghost"}
+                  aria-pressed={level === "university"}
+                  onClick={() => handleLevelChange("university")}
+                >
+                  Sinh viên Đại học
+                </Button>
+              </div>
+            </div>
+
+            {/* Fix C365-07: Liên kết label và input toggle kỳ tùy chỉnh */}
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="transcript-custom-term-toggle"
+                checked={isCustomTerm}
+                onCheckedChange={(checked) => setIsCustomTerm(checked)}
+              />
+              <Label htmlFor="transcript-custom-term-toggle">
+                Tùy chỉnh tên học kỳ
+              </Label>
             </div>
           </div>
 
-          {/* Fix C365-07: Liên kết label và input toggle kỳ tùy chỉnh */}
-          <div className="flex items-center gap-1.5 text-xs text-slate-500">
-            <input
-              id="transcript-custom-term-toggle"
-              type="checkbox"
-              checked={isCustomTerm}
-              onChange={(e) => setIsCustomTerm(e.target.checked)}
-              className="rounded border-slate-300 text-slate-900 focus:ring-slate-900 cursor-pointer"
-            />
-            <label htmlFor="transcript-custom-term-toggle" className="cursor-pointer">
-              Tùy chỉnh tên học kỳ
-            </label>
-          </div>
-        </div>
+          {/* Form fields - Fix C365-07: Explicit id & htmlFor on all inputs */}
+          <form onSubmit={handleAddSubject} className="grid items-end gap-3 sm:grid-cols-12">
+            <div className="flex flex-col gap-2 sm:col-span-3">
+              <Label htmlFor={isCustomTerm ? "transcript-custom-term-name" : "transcript-term-select"}>
+                {isCustomTerm ? "Tên kỳ tùy chỉnh" : "Học kỳ"}
+              </Label>
+              {isCustomTerm ? (
+                <div className="flex gap-1.5">
+                  <Input
+                    id="transcript-custom-term-name"
+                    type="text"
+                    value={customTermName}
+                    onChange={(e) => setCustomTermName(e.target.value)}
+                    placeholder="VD: Kỳ Hè 2025"
+                  />
+                  <Input
+                    id="transcript-custom-term-order"
+                    type="number"
+                    min="1"
+                    max="20"
+                    aria-label="Thứ tự học kỳ (1-20)"
+                    value={customTermOrder}
+                    onChange={(e) => setCustomTermOrder(parseInt(e.target.value) || 1)}
+                    className="w-14"
+                    title="Thứ tự thời gian (1-20)"
+                  />
+                </div>
+              ) : (
+                <NativeSelect
+                  id="transcript-term-select"
+                  value={selectedTermOrder}
+                  onChange={(e) => setSelectedTermOrder(parseInt(e.target.value))}
+                  className="w-full"
+                >
+                  {currentTerms.map((t) => (
+                    <NativeSelectOption key={t.order} value={t.order}>
+                      {t.name}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+              )}
+            </div>
 
-        {/* Form fields - Fix C365-07: Explicit id & htmlFor on all inputs */}
-        <form onSubmit={handleAddSubject} className="grid gap-3 sm:grid-cols-12 items-end">
-          <div className="sm:col-span-3">
-            <label
-              htmlFor={isCustomTerm ? "transcript-custom-term-name" : "transcript-term-select"}
-              className="block text-xs font-medium text-slate-600 mb-1"
-            >
-              {isCustomTerm ? "Tên kỳ tùy chỉnh" : "Học kỳ"}
-            </label>
-            {isCustomTerm ? (
-              <div className="flex gap-1.5">
-                <input
-                  id="transcript-custom-term-name"
-                  type="text"
-                  value={customTermName}
-                  onChange={(e) => setCustomTermName(e.target.value)}
-                  placeholder="VD: Kỳ Hè 2025"
-                  className="w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900 focus:border-slate-500 focus:outline-hidden"
-                />
-                <input
-                  id="transcript-custom-term-order"
-                  type="number"
-                  min="1"
-                  max="20"
-                  aria-label="Thứ tự học kỳ (1-20)"
-                  value={customTermOrder}
-                  onChange={(e) => setCustomTermOrder(parseInt(e.target.value) || 1)}
-                  className="w-14 rounded border border-slate-300 bg-white px-1.5 py-1.5 text-xs text-center text-slate-900 focus:border-slate-500 focus:outline-hidden"
-                  title="Thứ tự thời gian (1-20)"
-                />
-              </div>
-            ) : (
-              <select
-                id="transcript-term-select"
-                value={selectedTermOrder}
-                onChange={(e) => setSelectedTermOrder(parseInt(e.target.value))}
-                className="w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900 focus:border-slate-500 focus:outline-hidden"
-              >
-                {currentTerms.map((t) => (
-                  <option key={t.order} value={t.order}>
-                    {t.name}
-                  </option>
+            <div className="flex flex-col gap-2 sm:col-span-4">
+              <Label htmlFor="transcript-subject-name">
+                Tên môn học
+              </Label>
+              <Input
+                id="transcript-subject-name"
+                type="text"
+                list="sub-datalist"
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                placeholder={level === "highschool" ? "VD: Toán, Ngữ văn, Tiếng Anh..." : "VD: Giải tích, Lập trình..."}
+              />
+              <datalist id="sub-datalist">
+                {currentSubjects.map((s) => (
+                  <option key={s} value={s} />
                 ))}
-              </select>
-            )}
-          </div>
+              </datalist>
+            </div>
 
-          <div className="sm:col-span-4">
-            <label htmlFor="transcript-subject-name" className="block text-xs font-medium text-slate-600 mb-1">
-              Tên môn học
-            </label>
-            <input
-              id="transcript-subject-name"
-              type="text"
-              list="sub-datalist"
-              value={subject}
-              onChange={(e) => setSubject(e.target.value)}
-              placeholder={level === "highschool" ? "VD: Toán, Ngữ văn, Tiếng Anh..." : "VD: Giải tích, Lập trình..."}
-              className="w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900 focus:border-slate-500 focus:outline-hidden"
-            />
-            <datalist id="sub-datalist">
-              {currentSubjects.map((s) => (
-                <option key={s} value={s} />
-              ))}
-            </datalist>
-          </div>
+            {/* Fix C365-02: step="any" cho phép nhập điểm số lẻ như 8.25 */}
+            <div className="flex flex-col gap-2 sm:col-span-2">
+              <Label htmlFor="transcript-score">
+                Điểm hệ 10
+              </Label>
+              <Input
+                id="transcript-score"
+                type="number"
+                step="any"
+                min="0"
+                max="10"
+                value={score}
+                onChange={(e) => setScore(e.target.value)}
+              />
+            </div>
 
-          {/* Fix C365-02: step="any" cho phép nhập điểm số lẻ như 8.25 */}
-          <div className="sm:col-span-2">
-            <label htmlFor="transcript-score" className="block text-xs font-medium text-slate-600 mb-1">
-              Điểm hệ 10
-            </label>
-            <input
-              id="transcript-score"
-              type="number"
-              step="any"
-              min="0"
-              max="10"
-              value={score}
-              onChange={(e) => setScore(e.target.value)}
-              className="w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900 focus:border-slate-500 focus:outline-hidden"
-            />
-          </div>
+            <div className="flex flex-col gap-2 sm:col-span-2">
+              <Label htmlFor="transcript-credits">
+                {level === "university" ? "Số tín chỉ" : "Hệ số / Tín chỉ"}
+              </Label>
+              <Input
+                id="transcript-credits"
+                type="number"
+                step="any"
+                min="0.5"
+                max="30"
+                value={credits}
+                onChange={(e) => setCredits(e.target.value)}
+              />
+            </div>
 
-          <div className="sm:col-span-2">
-            <label htmlFor="transcript-credits" className="block text-xs font-medium text-slate-600 mb-1">
-              {level === "university" ? "Số tín chỉ" : "Hệ số / Tín chỉ"}
-            </label>
-            <input
-              id="transcript-credits"
-              type="number"
-              step="any"
-              min="0.5"
-              max="30"
-              value={credits}
-              onChange={(e) => setCredits(e.target.value)}
-              className="w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900 focus:border-slate-500 focus:outline-hidden"
-            />
-          </div>
-
-          <div className="sm:col-span-1">
-            <button
-              type="submit"
-              disabled={isSaving}
-              className="w-full rounded bg-slate-900 py-1.5 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50 transition"
-            >
-              Thêm
-            </button>
-          </div>
-        </form>
-      </div>
-
-      {/* Filter and Search Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-1 text-xs">
-          <span className="text-xs text-slate-500 mr-1 font-medium">Lọc kỳ:</span>
-          <button
-            type="button"
-            onClick={() => setFilterTerm("all")}
-            className={`rounded px-2.5 py-1 font-medium transition ${
-              filterTerm === "all"
-                ? "bg-slate-900 text-white"
-                : "text-slate-600 hover:bg-slate-100"
-            }`}
-          >
-            Tất cả ({scores.length})
-          </button>
-          {uniqueTermsInScores.map((t) => {
-            const count = scores.filter((s) => s.termOrder === t.order).length;
-            return (
-              <button
-                key={t.order}
-                type="button"
-                onClick={() => setFilterTerm(t.order)}
-                className={`rounded px-2.5 py-1 font-medium transition ${
-                  filterTerm === t.order
-                    ? "bg-slate-900 text-white"
-                    : "text-slate-600 hover:bg-slate-100"
-                }`}
+            <div className="sm:col-span-1">
+              <Button
+                type="submit"
+                disabled={isSaving}
+                className="w-full"
               >
-                {t.name} ({count})
-              </button>
-            );
-          })}
+                Thêm
+              </Button>
+            </div>
+          </form>
         </div>
 
-        {/* Fix C365-07: aria-label cho input tìm kiếm */}
-        <div className="w-full sm:w-56">
-          <input
-            id="transcript-search-subject"
-            type="text"
-            aria-label="Lọc theo tên môn học"
-            value={searchSubject}
-            onChange={(e) => setSearchSubject(e.target.value)}
-            placeholder="Lọc theo tên môn..."
-            className="w-full rounded border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-900 placeholder:text-slate-400 focus:border-slate-500 focus:outline-hidden"
-          />
-        </div>
-      </div>
+        {/* Filter and Search Bar */}
+        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+          <div className="flex flex-wrap items-center gap-1">
+            <span className="mr-1 text-muted-foreground">Lọc kỳ:</span>
+            <Button
+              type="button"
+              size="xs"
+              variant={filterTerm === "all" ? "default" : "ghost"}
+              aria-pressed={filterTerm === "all"}
+              onClick={() => setFilterTerm("all")}
+            >
+              Tất cả ({scores.length})
+            </Button>
+            {uniqueTermsInScores.map((t) => {
+              const count = scores.filter((s) => s.termOrder === t.order).length;
+              const isActive = filterTerm === t.order;
+              return (
+                <Button
+                  key={t.order}
+                  type="button"
+                  size="xs"
+                  variant={isActive ? "default" : "ghost"}
+                  aria-pressed={isActive}
+                  onClick={() => setFilterTerm(t.order)}
+                >
+                  {t.name} ({count})
+                </Button>
+              );
+            })}
+          </div>
 
-      {/* Compact Data Table */}
-      <div className="overflow-x-auto rounded-lg border border-slate-200">
-        <table className="w-full text-left text-xs">
-          <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider text-[10px] border-b border-slate-200 font-semibold">
-            <tr>
-              <th className="px-4 py-2.5">Học kỳ</th>
-              <th className="px-4 py-2.5">Môn học</th>
-              <th className="px-4 py-2.5">Phân nhóm</th>
-              <th className="px-4 py-2.5 text-center">Điểm 10</th>
-              <th className="px-4 py-2.5 text-center">Tín chỉ</th>
-              <th className="px-4 py-2.5 text-center font-bold text-slate-900">GPA 4.0 (WES)</th>
-              <th className="px-4 py-2.5 text-right">Thao tác</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
+          {/* Fix C365-07: aria-label cho input tìm kiếm */}
+          <div className="w-full sm:w-56">
+            <Input
+              id="transcript-search-subject"
+              type="text"
+              aria-label="Lọc theo tên môn học"
+              value={searchSubject}
+              onChange={(e) => setSearchSubject(e.target.value)}
+              placeholder="Lọc theo tên môn..."
+            />
+          </div>
+        </div>
+
+        {/* Compact Data Table */}
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Học kỳ</TableHead>
+              <TableHead>Môn học</TableHead>
+              <TableHead>Phân nhóm</TableHead>
+              <TableHead className="text-center">Điểm 10</TableHead>
+              <TableHead className="text-center">Tín chỉ</TableHead>
+              <TableHead className="text-center">GPA 4.0 (WES)</TableHead>
+              <TableHead className="text-right">Thao tác</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {filteredScores.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
+              <TableRow>
+                <TableCell colSpan={7} className="text-center whitespace-normal text-muted-foreground">
                   {scores.length === 0
                     ? "Chưa có môn học nào. Sử dụng nút nạp mẫu ở trên hoặc thêm môn học thủ công."
                     : "Không có môn học nào phù hợp với bộ lọc."}
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ) : (
               filteredScores.map((item) => (
-                <tr key={item.id} className="hover:bg-slate-50/70 transition-colors">
-                  <td className="px-4 py-2 text-slate-700 font-medium whitespace-nowrap">
+                <TableRow key={item.id}>
+                  <TableCell>
                     {item.termName}
-                  </td>
-                  <td className="px-4 py-2 font-semibold text-slate-900">
+                  </TableCell>
+                  <TableCell className="whitespace-normal">
                     {item.subject}
-                  </td>
-                  <td className="px-4 py-2 whitespace-nowrap">
+                  </TableCell>
+                  <TableCell>
                     {getGroupBadge(item.subjectGroup, item.subjectGroupName)}
-                  </td>
-                  <td className="px-4 py-2 text-center text-slate-700 font-medium">
+                  </TableCell>
+                  <TableCell className="text-center text-numeric">
                     {item.score.toFixed(item.score % 1 === 0 ? 1 : 2)}
-                  </td>
-                  <td className="px-4 py-2 text-center text-slate-500 font-medium">
+                  </TableCell>
+                  <TableCell className="text-center">
                     {item.credits ? `${item.credits}` : "-"}
-                  </td>
-                  <td className="px-4 py-2 text-center font-bold text-slate-900">
+                  </TableCell>
+                  <TableCell className="text-center text-numeric">
                     {item.gpa4.toFixed(2)}
-                  </td>
-                  <td className="px-4 py-2 text-right whitespace-nowrap">
-                    <button
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button
                       type="button"
+                      variant="destructive"
+                      size="xs"
                       onClick={() => handleDeleteScore(item.id)}
-                      className="text-slate-400 hover:text-red-600 text-xs font-medium transition-colors"
                     >
                       Xóa
-                    </button>
-                  </td>
-                </tr>
+                    </Button>
+                  </TableCell>
+                </TableRow>
               ))
             )}
-          </tbody>
+          </TableBody>
           {scores.length > 0 && (
-            <tfoot className="bg-slate-50/80 border-t border-slate-200 text-slate-700 text-xs font-semibold">
-              <tr>
-                <td colSpan={3} className="px-4 py-2">
+            <TableFooter>
+              <TableRow>
+                <TableCell colSpan={3}>
                   Tổng kết ({stats.total} môn học):
-                </td>
-                <td className="px-4 py-2 text-center">
+                </TableCell>
+                <TableCell className="text-center">
                   TB {stats.avg}
-                </td>
-                <td className="px-4 py-2 text-center">
+                </TableCell>
+                <TableCell className="text-center">
                   {stats.totalCredits > 0 ? `${stats.totalCredits} TC` : "-"}
-                </td>
-                <td colSpan={2} className="px-4 py-2 text-right text-slate-500 font-normal text-xs">
+                </TableCell>
+                <TableCell colSpan={2} className="text-right text-muted-foreground">
                   * Bấm &quot;Phân tích điểm GPA&quot; để tính toán toàn diện
-                </td>
-              </tr>
-            </tfoot>
+                </TableCell>
+              </TableRow>
+            </TableFooter>
           )}
-        </table>
-      </div>
-    </div>
+        </Table>
+      </CardContent>
+    </Card>
   );
 }

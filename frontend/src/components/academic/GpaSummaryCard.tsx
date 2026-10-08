@@ -1,4 +1,6 @@
 import type { AcademicAnalysisResponse } from "@/types/academic";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface GpaSummaryCardProps {
   analysis: AcademicAnalysisResponse;
@@ -18,108 +20,105 @@ export function GpaSummaryCard({ analysis }: GpaSummaryCardProps) {
   const trendStatus = isInsufficientTerms
     ? {
         label: "Chưa đủ dữ liệu xu hướng",
-        color: "text-slate-700 bg-slate-100 border-slate-200",
+        variant: "neutral" as const,
       }
     : isUpward
     ? {
         label: "Xu hướng tiến bộ (Upward Trend)",
-        color: "text-emerald-700 bg-emerald-50 border-emerald-200",
+        variant: "ok" as const,
       }
     : isDownward
     ? {
         label: "Xu hướng giảm (Downward Trend)",
-        color: "text-amber-800 bg-amber-50 border-amber-200",
+        variant: "risk" as const,
       }
     : {
         label: "Phong độ ổn định (Consistent)",
-        color: "text-slate-800 bg-slate-100 border-slate-200",
+        variant: "neutral" as const,
       };
 
   return (
-    <div className="rounded-xl border border-slate-200/90 bg-white p-5 sm:p-7 shadow-xs">
+    <Card>
       {/* Header bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-5">
-        <div>
-          <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-            Kết quả quy đổi học thuật
-          </span>
-          <h2 className="text-xl font-bold tracking-tight text-slate-900 mt-0.5">
-            Chỉ số GPA & Năng lực học tập
-          </h2>
-          <p className="text-xs text-slate-600 mt-1">
-            Quy đổi tham khảo theo {analysis.scaleSource}
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <div
-            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold ${trendStatus.color}`}
-          >
-            <span className="h-1.5 w-1.5 rounded-full bg-current" />
-            <span>{trendStatus.label}</span>
+      <CardHeader>
+        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+          <div>
+            <span className="text-label">
+              Kết quả quy đổi học thuật
+            </span>
+            <CardTitle>
+              <h2>Chỉ số GPA & Năng lực học tập</h2>
+            </CardTitle>
+            <CardDescription>
+              Quy đổi tham khảo theo {analysis.scaleSource}
+            </CardDescription>
           </div>
+
+          <Badge variant={trendStatus.variant}>
+            {trendStatus.label}
+          </Badge>
         </div>
-      </div>
+      </CardHeader>
 
       {/* Main KPI Row */}
-      <div className="mt-6 grid gap-6 md:grid-cols-12 items-center">
+      <CardContent className="grid items-center gap-6 md:grid-cols-12">
         {/* Left: Primary Score Block (5 cols) */}
-        <div className="md:col-span-5 flex items-baseline gap-4 border-b md:border-b-0 md:border-r border-slate-100 pb-5 md:pb-0 md:pr-6">
+        <div className="flex items-baseline gap-4 md:col-span-5">
           <div>
-            <span className="block text-xs font-semibold text-slate-600">
+            <span className="block text-label">
               GPA Thang 4.0 (WES Standard)
             </span>
             <div className="mt-1 flex items-baseline gap-1.5">
-              <span className="text-4xl font-extrabold tracking-tight text-slate-900">
+              <span className="text-numeric text-4xl">
                 {analysis.unweightedGpa.toFixed(2)}
               </span>
-              <span className="text-sm font-medium text-slate-500">/ 4.00</span>
+              <span className="text-muted-foreground">/ 4.00</span>
             </div>
-            <span className="mt-1 block text-xs text-slate-500">
+            <span className="mt-1 block text-xs text-muted-foreground">
               Unweighted (Không trọng số)
             </span>
           </div>
 
-          <div className="space-y-2 border-l border-slate-200/80 pl-4">
+          <div className="space-y-2">
             <div>
-              <span className="text-xs text-slate-500 block">Weighted GPA</span>
-              <span className="text-base font-bold text-slate-900">
+              <span className="block text-xs text-muted-foreground">Weighted GPA</span>
+              <span className="text-numeric text-base">
                 {analysis.weightedGpa.toFixed(2)}
               </span>
-              <span className="text-[11px] text-slate-500 block">
+              <span className="block text-xs text-muted-foreground">
                 (Tín chỉ / môn nâng cao)
               </span>
             </div>
             <div>
-              <span className="text-xs text-slate-500 block">Điểm TB hệ 10</span>
-              <span className="text-sm font-semibold text-slate-800">
+              <span className="block text-xs text-muted-foreground">Điểm TB hệ 10</span>
+              <span className="text-numeric">
                 {analysis.rawAverage.toFixed(2)}
-                <span className="text-xs text-slate-500 font-normal"> / 10.0</span>
+                <span className="text-xs font-normal text-muted-foreground"> / 10.0</span>
               </span>
             </div>
           </div>
         </div>
 
         {/* Right: Strategic Insight (7 cols) */}
-        <div className="md:col-span-7 space-y-2.5">
+        <div className="space-y-2.5 md:col-span-7">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-800">
+            <span className="font-medium">
               Nhận xét xu hướng học tập:
             </span>
-            <span className="text-xs font-medium text-slate-500">
+            <span className="text-xs text-muted-foreground">
               {analysis.totalSubjects} đầu điểm ({analysis.totalTerms} học kỳ)
             </span>
           </div>
 
-          <p className="text-xs sm:text-sm text-slate-700 leading-relaxed bg-slate-50 rounded-lg p-3.5 border border-slate-100">
+          <p>
             {analysis.trendDescription}
           </p>
 
-          <p className="text-xs text-slate-500 leading-normal">
+          <p className="text-body-s">
             * {analysis.disclaimer}
           </p>
         </div>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }

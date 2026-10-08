@@ -1,4 +1,5 @@
 import type { TermTrend } from "@/types/academic";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface TermTrendChartProps {
   terms: TermTrend[];
@@ -15,13 +16,13 @@ function formatTermLabel(termName: string) {
     const last = parts[parts.length - 1];
     const prefix = parts.slice(0, parts.length - 1).join(" ");
     return (
-      <div className="flex flex-col items-center leading-tight">
-        <span className="text-slate-500 whitespace-nowrap">{prefix}</span>
-        <span className="font-semibold text-slate-700 whitespace-nowrap">{last}</span>
+      <div className="flex flex-col items-center">
+        <span className="whitespace-nowrap text-muted-foreground">{prefix}</span>
+        <span className="whitespace-nowrap font-medium">{last}</span>
       </div>
     );
   }
-  return <span className="leading-tight break-words">{trimmed}</span>;
+  return <span className="break-words">{trimmed}</span>;
 }
 
 /**
@@ -38,26 +39,29 @@ export function TermTrendChart({ terms }: TermTrendChartProps) {
   const sorted = [...terms].sort((a, b) => a.termOrder - b.termOrder);
 
   return (
-    <div className="rounded-xl border border-slate-200/90 bg-white p-5 sm:p-6 shadow-xs h-full flex flex-col justify-between min-w-0 w-full overflow-hidden">
-      <div className="min-w-0 w-full">
-        {/* Heading bar: cho phép xuống dòng trên mobile để không bị cắt */}
-        <div className="border-b border-slate-100 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-2">
+    <Card className="h-full w-full min-w-0">
+      {/* Heading bar: cho phép xuống dòng trên mobile để không bị cắt */}
+      <CardHeader>
+        <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
           <div className="min-w-0">
-            <h3 className="text-base font-bold text-slate-900">
-              Biến Động Điểm Số Theo Học Kỳ
-            </h3>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <CardTitle>
+              <h3>Biến Động Điểm Số Theo Học Kỳ</h3>
+            </CardTitle>
+            <CardDescription>
               Đánh giá tính kiên trì và đà tăng trưởng qua các kỳ học
-            </p>
+            </CardDescription>
           </div>
-          <span className="text-[11px] font-medium text-slate-500 whitespace-nowrap shrink-0 self-start sm:self-auto">
+          <span className="shrink-0 text-label">
             Thang 4.0 WES
           </span>
         </div>
+      </CardHeader>
+
+      <CardContent className="min-w-0">
 
         {/* Chart scroll container (ngăn tràn document trên màn hình nhỏ) */}
-        <div className="mt-6 w-full overflow-x-auto pb-1">
-          <div className="flex items-end gap-2 sm:gap-3 h-48 min-w-full pb-2 border-b-2 border-slate-300">
+        <div className="overflow-x-auto">
+          <div className="flex h-48 items-end gap-3">
             {sorted.map((item) => {
               // Fix C365-10: Chiều cao theo tỷ lệ thật (0 -> 0%, 4.0 -> 100%), không ép sàn nhân tạo (2% hay 6%)
               const heightPercent = Math.min(100, Math.max(0, (item.gpa4 / 4.0) * 100));
@@ -65,18 +69,18 @@ export function TermTrendChart({ terms }: TermTrendChartProps) {
               return (
                 <div
                   key={item.termOrder}
-                  className="flex-1 min-w-[56px] sm:min-w-[64px] flex flex-col items-center justify-end h-full group"
+                  className="flex h-full min-w-14 flex-1 flex-col items-center justify-end gap-1"
                 >
                   {/* Điểm GPA hiển thị rõ ràng trên cột/baseline (kể cả 0.00) */}
-                  <span className="text-[11px] font-bold text-slate-800 mb-1 group-hover:text-blue-600 transition-colors">
+                  <span className="text-numeric text-xs">
                     {item.gpa4.toFixed(2)}
                   </span>
 
                   {/* Khung cột biểu đồ với đường baseline đáy */}
-                  <div className="w-full max-w-[36px] bg-slate-100 rounded-t flex items-end justify-center overflow-hidden h-32 relative">
+                  <div className="flex h-32 w-full max-w-9 items-end">
                     {heightPercent > 0 && (
                       <div
-                        className="w-full bg-slate-800 group-hover:bg-blue-600 transition-all duration-300 rounded-t"
+                        className="w-full bg-primary"
                         style={{ height: `${heightPercent}%` }}
                         title={`${item.termName}: GPA ${item.gpa4.toFixed(2)} (Hệ 10: ${item.rawAverage.toFixed(1)})`}
                       />
@@ -85,7 +89,7 @@ export function TermTrendChart({ terms }: TermTrendChartProps) {
 
                   {/* Nhãn kỳ học: 2 dòng rõ ràng, phân biệt được mọi kỳ trên mobile (Fix C365-09) */}
                   <div
-                    className="mt-2 text-center text-[10px] w-full px-0.5"
+                    className="text-center text-xs"
                     title={item.termName}
                   >
                     {formatTermLabel(item.termName)}
@@ -97,11 +101,11 @@ export function TermTrendChart({ terms }: TermTrendChartProps) {
         </div>
 
         {/* Chú thích điểm khởi đầu và hiện tại */}
-        <div className="mt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[11px] text-slate-500">
+        <div className="mt-3 flex flex-col justify-between gap-1 text-body-s sm:flex-row sm:items-center">
           <span>Khởi đầu: {sorted[0]?.termName} ({sorted[0]?.gpa4.toFixed(2)})</span>
           <span>Hiện tại: {sorted[sorted.length - 1]?.termName} ({sorted[sorted.length - 1]?.gpa4.toFixed(2)})</span>
         </div>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }

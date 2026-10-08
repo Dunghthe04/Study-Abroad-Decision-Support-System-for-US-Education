@@ -3,8 +3,16 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { ArrowLeftIcon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { authApi, ApiError } from "@/lib/api";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 
 export function VerifyEmailForm() {
   const router = useRouter();
@@ -98,109 +106,97 @@ export function VerifyEmailForm() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-      <div className="mb-6 text-center">
-        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-blue-100 text-blue-600">
-          <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-          </svg>
-        </div>
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Xác thực Email</h1>
-        <p className="mt-2 text-sm text-slate-600">
+    <Card className="mx-auto w-full max-w-md">
+      <CardHeader className="text-center">
+        <CardTitle>
+          <h1>Xác thực Email</h1>
+        </CardTitle>
+        <CardDescription>
           Vui lòng nhập mã OTP gồm 6 chữ số vừa được gửi đến hòm thư của bạn để kích hoạt tài khoản.
-        </p>
-      </div>
+        </CardDescription>
+      </CardHeader>
 
-      {error && (
-        <div
-          role="alert"
-          className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-800"
-        >
-          {error}
-        </div>
-      )}
+      <CardContent className="space-y-6">
+        {error && (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
 
-      {successMessage && (
-        <div
-          role="status"
-          className="mb-6 rounded-lg border border-green-200 bg-green-50 p-4 text-sm font-medium text-green-800"
-        >
-          {successMessage}
-        </div>
-      )}
+        {successMessage && (
+          <Alert variant="success" role="status">
+            <AlertDescription>{successMessage}</AlertDescription>
+          </Alert>
+        )}
 
-      <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Email */}
-        <div>
-          <label htmlFor="verify-email-input" className="block text-sm font-medium text-slate-700">
-            Địa chỉ Email
-          </label>
-          <input
-            id="verify-email-input"
-            type="email"
-            required
-            maxLength={100}
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="example@gmail.com"
-            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          />
-        </div>
+        <form onSubmit={handleSubmit}>
+          <FieldGroup>
+            {/* Email */}
+            <Field>
+              <FieldLabel htmlFor="verify-email-input">Địa chỉ Email</FieldLabel>
+              <Input
+                id="verify-email-input"
+                type="email"
+                required
+                maxLength={100}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="example@gmail.com"
+              />
+            </Field>
 
-        {/* Mã OTP */}
-        <div>
-          <div className="flex items-center justify-between">
-            <label htmlFor="otp-input" className="block text-sm font-medium text-slate-700">
-              Mã xác thực OTP (6 chữ số)
-            </label>
-            <span className="text-xs font-medium text-amber-600">Hiệu lực trong 5 phút</span>
+            {/* Mã OTP */}
+            <Field>
+              <div className="flex items-center justify-between">
+                <FieldLabel htmlFor="otp-input">Mã xác thực OTP (6 chữ số)</FieldLabel>
+                <Badge variant="warn">Hiệu lực trong 5 phút</Badge>
+              </div>
+              <Input
+                id="otp-input"
+                type="text"
+                required
+                maxLength={6}
+                pattern="[0-9]*"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                value={otpCode}
+                onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                placeholder="123456"
+                className="text-center font-mono tracking-widest"
+              />
+              <FieldDescription>
+                Mã sẽ tự hủy sau 5 lần nhập sai. Tối đa 5 lần gửi mã mỗi giờ.
+              </FieldDescription>
+            </Field>
+
+            <Button type="submit" size="lg" disabled={isSubmitting || otpCode.length !== 6} className="w-full">
+              {isSubmitting && <Spinner data-icon="inline-start" />}
+              {isSubmitting ? "Đang xác thực..." : "Kích hoạt tài khoản"}
+            </Button>
+          </FieldGroup>
+        </form>
+
+        {/* Gửi lại OTP */}
+        <div className="flex flex-col items-center gap-2 text-muted-foreground">
+          <div>
+            Chưa nhận được mã?{" "}
+            <Button
+              type="button"
+              variant="link"
+              onClick={handleResendOtp}
+              disabled={cooldown > 0 || isResending}
+            >
+              {cooldown > 0 ? `Gửi lại sau (${cooldown}s)` : isResending ? "Đang gửi..." : "Gửi lại mã OTP"}
+            </Button>
           </div>
-          <input
-            id="otp-input"
-            type="text"
-            required
-            maxLength={6}
-            pattern="[0-9]*"
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            value={otpCode}
-            onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-            placeholder="123456"
-            className="mt-1 block w-full text-center tracking-[0.5em] font-mono text-xl font-bold rounded-lg border border-slate-300 px-3 py-2.5 text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          />
-          <p className="mt-1.5 text-xs text-slate-500">
-            Mã sẽ tự hủy sau 5 lần nhập sai. Tối đa 5 lần gửi mã mỗi giờ.
-          </p>
+          <div>
+            <Link href="/login" className={buttonVariants({ variant: "ghost", size: "sm" })}>
+              <ArrowLeftIcon aria-hidden="true" />
+              Quay lại đăng nhập
+            </Link>
+          </div>
         </div>
-
-        <button
-          type="submit"
-          disabled={isSubmitting || otpCode.length !== 6}
-          className="mt-2 w-full rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white shadow hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:bg-blue-300"
-        >
-          {isSubmitting ? "Đang xác thực..." : "Kích hoạt tài khoản"}
-        </button>
-      </form>
-
-      {/* Gửi lại OTP */}
-      <div className="mt-6 flex flex-col items-center justify-center space-y-2 text-sm text-slate-600">
-        <div>
-          Chưa nhận được mã?{" "}
-          <button
-            type="button"
-            onClick={handleResendOtp}
-            disabled={cooldown > 0 || isResending}
-            className="font-semibold text-blue-600 hover:text-blue-500 disabled:text-slate-400 disabled:cursor-not-allowed"
-          >
-            {cooldown > 0 ? `Gửi lại sau (${cooldown}s)` : isResending ? "Đang gửi..." : "Gửi lại mã OTP"}
-          </button>
-        </div>
-        <div>
-          <Link href="/login" className="text-xs text-slate-500 hover:text-slate-700">
-            ← Quay lại đăng nhập
-          </Link>
-        </div>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }

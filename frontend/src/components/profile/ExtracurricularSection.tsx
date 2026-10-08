@@ -9,13 +9,23 @@ import {
   deleteExtracurricularActivity,
 } from "@/lib/profile-api";
 import type { ExtracurricularActivityDto, CreateExtracurricularRequest } from "@/types/profile";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
+import { FieldError } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { Textarea } from "@/components/ui/textarea";
 
-const IMPACT_LEVEL_LABELS: Record<number, { label: string; color: string }> = {
-  1: { label: "Cấp Trường / CLB", color: "bg-slate-100 text-slate-700" },
-  2: { label: "Cấp Quận / Huyện", color: "bg-blue-50 text-blue-700 border-blue-200" },
-  3: { label: "Cấp Tỉnh / Thành phố", color: "bg-indigo-50 text-indigo-700 border-indigo-200" },
-  4: { label: "Cấp Quốc gia", color: "bg-purple-50 text-purple-700 border-purple-200" },
-  5: { label: "Cấp Quốc tế", color: "bg-amber-50 text-amber-800 border-amber-200" },
+const IMPACT_LEVEL_LABELS: Record<number, { label: string; variant: "neutral" | "brand" }> = {
+  1: { label: "Cấp Trường / CLB", variant: "neutral" },
+  2: { label: "Cấp Quận / Huyện", variant: "neutral" },
+  3: { label: "Cấp Tỉnh / Thành phố", variant: "brand" },
+  4: { label: "Cấp Quốc gia", variant: "brand" },
+  5: { label: "Cấp Quốc tế", variant: "brand" },
 };
 
 export function ExtracurricularSection() {
@@ -107,190 +117,193 @@ export function ExtracurricularSection() {
   }
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-xs">
-      <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-900">2. Hoạt động Ngoại khóa & Lãnh đạo</h2>
-          <p className="text-xs text-slate-500">
-            Tiêu chí thứ 3 để AI cộng điểm và đánh giá hồ sơ toàn diện (Holistic Review kiểu Mỹ).
-          </p>
-        </div>
-        <button
-          onClick={() => setShowAddForm(!showAddForm)}
-          className="rounded-lg bg-slate-900 px-3.5 py-1.5 text-xs font-medium text-white hover:bg-slate-800 transition-colors"
-        >
-          {showAddForm ? "Đóng Form" : "+ Thêm hoạt động"}
-        </button>
-      </div>
+    <Card>
+      <CardHeader>
+        <CardTitle>2. Hoạt động Ngoại khóa & Lãnh đạo</CardTitle>
+        <CardDescription>
+          Tiêu chí thứ 3 để AI cộng điểm và đánh giá hồ sơ toàn diện (Holistic Review kiểu Mỹ).
+        </CardDescription>
+        <CardAction>
+          <Button size="sm" onClick={() => setShowAddForm(!showAddForm)}>
+            {showAddForm ? "Đóng Form" : "+ Thêm hoạt động"}
+          </Button>
+        </CardAction>
+      </CardHeader>
 
-      {showAddForm && (
-        <form onSubmit={handleAdd} className="mb-6 rounded-lg border border-blue-100 bg-blue-50/40 p-4 space-y-3">
-          <h3 className="text-sm font-semibold text-blue-900">Khai báo hoạt động mới</h3>
-          {error && <div className="text-xs text-rose-600">{error}</div>}
+      <CardContent>
+        {showAddForm && (
+          <Card size="sm" className="mb-6">
+            <CardContent>
+              <form onSubmit={handleAdd} className="space-y-3">
+                <h3 className="text-h3">Khai báo hoạt động mới</h3>
+                {error && <FieldError>{error}</FieldError>}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-slate-700">Tên hoạt động / CLB / Dự án *</label>
-              <input
-                type="text"
-                required
-                maxLength={150}
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="VD: CLB Tranh biện FPT Debate Club"
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm bg-white text-slate-900"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-700">Vai trò của bạn *</label>
-              <input
-                type="text"
-                required
-                maxLength={100}
-                value={role}
-                onChange={(e) => setRole(e.target.value)}
-                placeholder="VD: Chủ tịch CLB / Trưởng ban tổ chức"
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm bg-white text-slate-900"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-700">Đơn vị / Tổ chức / Trường</label>
-              <input
-                type="text"
-                maxLength={150}
-                value={org}
-                onChange={(e) => setOrg(e.target.value)}
-                placeholder="VD: Trường THPT Chuyên Hà Nội - Amsterdam"
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm bg-white text-slate-900"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-700">Mức độ ảnh hưởng (Quy mô) *</label>
-              <select
-                value={impact}
-                onChange={(e) => setImpact(parseInt(e.target.value, 10))}
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm bg-white text-slate-900"
-              >
-                <option value={1}>1 - Cấp Trường / Câu lạc bộ</option>
-                <option value={2}>2 - Cấp Quận / Huyện / Liên trường</option>
-                <option value={3}>3 - Cấp Tỉnh / Thành phố</option>
-                <option value={4}>4 - Cấp Quốc gia</option>
-                <option value={5}>5 - Cấp Quốc tế</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-700">Thời gian tham gia (Số tháng)</label>
-              <input
-                type="number"
-                min="1"
-                max="120"
-                step="1"
-                value={duration}
-                onChange={(e) => setDuration(e.target.value)}
-                placeholder="12"
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm bg-white text-slate-900"
-              />
-            </div>
-
-            <div className="flex items-center gap-2 pt-5">
-              <input
-                type="checkbox"
-                id="isOngoing"
-                checked={isOngoing}
-                onChange={(e) => setIsOngoing(e.target.checked)}
-                className="h-4 w-4 rounded border-slate-300 text-blue-600"
-              />
-              <label htmlFor="isOngoing" className="text-xs font-medium text-slate-700">
-                Đang tiếp tục tham gia
-              </label>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-slate-700">Mô tả đóng góp & Kết quả cụ thể</label>
-            <textarea
-              rows={2}
-              maxLength={1000}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="VD: Dẫn dắt 30 thành viên tổ chức giải tranh biện thu hút 200 thí sinh; gây quỹ 15 triệu đồng..."
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm bg-white text-slate-900"
-            />
-          </div>
-
-          <div className="flex justify-end gap-2 pt-1">
-            <button
-              type="button"
-              onClick={() => setShowAddForm(false)}
-              className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50"
-            >
-              Hủy
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="rounded-md bg-blue-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-            >
-              {saving ? "Đang lưu..." : "Thêm hoạt động"}
-            </button>
-          </div>
-        </form>
-      )}
-
-      {loading ? (
-        <div className="text-center py-6 text-xs text-slate-400">Đang tải danh sách hoạt động...</div>
-      ) : activities.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-slate-200 py-8 text-center">
-          <p className="text-sm text-slate-500">Chưa có hoạt động ngoại khóa nào được khai báo.</p>
-          <p className="text-xs text-slate-400 mt-1">Bấm &quot;+ Thêm hoạt động&quot; để tăng cơ hội nhận học bổng.</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {activities.map((act) => {
-            const badge = IMPACT_LEVEL_LABELS[act.impactLevel] || IMPACT_LEVEL_LABELS[1];
-            return (
-              <div
-                key={act.id}
-                className="flex items-start justify-between rounded-lg border border-slate-200 bg-slate-50/50 p-3.5 hover:bg-slate-50 transition-colors"
-              >
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-sm text-slate-900">{act.activityName}</span>
-                    <span className={`rounded px-2 py-0.5 text-[11px] font-medium border ${badge.color}`}>
-                      {badge.label}
-                    </span>
-                    {act.isOngoing && (
-                      <span className="rounded bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 text-[10px]">
-                        Đang tham gia
-                      </span>
-                    )}
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="activity-name">Tên hoạt động / CLB / Dự án *</Label>
+                    <Input
+                      id="activity-name"
+                      type="text"
+                      required
+                      maxLength={150}
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="VD: CLB Tranh biện FPT Debate Club"
+                    />
                   </div>
 
-                  <p className="text-xs text-slate-600">
-                    <span className="font-medium text-slate-700">{act.role}</span>
-                    {act.organization ? ` • ${act.organization}` : ""}
-                    {act.durationMonths ? ` • ${act.durationMonths} tháng` : ""}
-                  </p>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="activity-role">Vai trò của bạn *</Label>
+                    <Input
+                      id="activity-role"
+                      type="text"
+                      required
+                      maxLength={100}
+                      value={role}
+                      onChange={(e) => setRole(e.target.value)}
+                      placeholder="VD: Chủ tịch CLB / Trưởng ban tổ chức"
+                    />
+                  </div>
 
-                  {act.description && <p className="text-xs text-slate-500 pt-1 italic">{act.description}</p>}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="activity-organization">Đơn vị / Tổ chức / Trường</Label>
+                    <Input
+                      id="activity-organization"
+                      type="text"
+                      maxLength={150}
+                      value={org}
+                      onChange={(e) => setOrg(e.target.value)}
+                      placeholder="VD: Trường THPT Chuyên Hà Nội - Amsterdam"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="activity-impact">Mức độ ảnh hưởng (Quy mô) *</Label>
+                    <NativeSelect
+                      id="activity-impact"
+                      className="w-full"
+                      value={impact}
+                      onChange={(e) => setImpact(parseInt(e.target.value, 10))}
+                    >
+                      <NativeSelectOption value={1}>1 - Cấp Trường / Câu lạc bộ</NativeSelectOption>
+                      <NativeSelectOption value={2}>2 - Cấp Quận / Huyện / Liên trường</NativeSelectOption>
+                      <NativeSelectOption value={3}>3 - Cấp Tỉnh / Thành phố</NativeSelectOption>
+                      <NativeSelectOption value={4}>4 - Cấp Quốc gia</NativeSelectOption>
+                      <NativeSelectOption value={5}>5 - Cấp Quốc tế</NativeSelectOption>
+                    </NativeSelect>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="activity-duration">Thời gian tham gia (Số tháng)</Label>
+                    <Input
+                      id="activity-duration"
+                      type="number"
+                      min="1"
+                      max="120"
+                      step="1"
+                      value={duration}
+                      onChange={(e) => setDuration(e.target.value)}
+                      placeholder="12"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-5">
+                    <Checkbox
+                      id="isOngoing"
+                      checked={isOngoing}
+                      onCheckedChange={(checked) => setIsOngoing(checked)}
+                    />
+                    <Label htmlFor="isOngoing">
+                      Đang tiếp tục tham gia
+                    </Label>
+                  </div>
                 </div>
 
-                <button
-                  onClick={() => handleDelete(act.id)}
-                  title="Xóa hoạt động"
-                  className="text-xs text-rose-500 hover:text-rose-700 p-1"
-                >
-                  Xóa
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="activity-description">Mô tả đóng góp & Kết quả cụ thể</Label>
+                  <Textarea
+                    id="activity-description"
+                    rows={2}
+                    maxLength={1000}
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="VD: Dẫn dắt 30 thành viên tổ chức giải tranh biện thu hút 200 thí sinh; gây quỹ 15 triệu đồng..."
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-1">
+                  <Button type="button" variant="outline" size="sm" onClick={() => setShowAddForm(false)}>
+                    Hủy
+                  </Button>
+                  <Button type="submit" size="sm" disabled={saving}>
+                    {saving ? "Đang lưu..." : "Thêm hoạt động"}
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        )}
+
+        {loading ? (
+          <Empty>
+            <EmptyDescription>Đang tải danh sách hoạt động...</EmptyDescription>
+          </Empty>
+        ) : activities.length === 0 ? (
+          <Empty>
+            <EmptyHeader>
+              <EmptyTitle>
+                Chưa có hoạt động ngoại khóa nào được khai báo.
+              </EmptyTitle>
+              <EmptyDescription>
+                Bấm &quot;+ Thêm hoạt động&quot; để tăng cơ hội nhận học bổng.
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        ) : (
+          <div className="space-y-3">
+            {activities.map((act) => {
+              const badge = IMPACT_LEVEL_LABELS[act.impactLevel] || IMPACT_LEVEL_LABELS[1];
+              return (
+                <Card key={act.id} size="sm">
+                  <CardHeader>
+                    <CardTitle>{act.activityName}</CardTitle>
+                    <CardDescription>
+                      {act.role}
+                      {act.organization ? ` • ${act.organization}` : ""}
+                      {act.durationMonths ? ` • ${act.durationMonths} tháng` : ""}
+                    </CardDescription>
+                    <CardAction>
+                      <Button
+                        variant="destructive"
+                        size="xs"
+                        onClick={() => handleDelete(act.id)}
+                        title="Xóa hoạt động"
+                      >
+                        Xóa
+                      </Button>
+                    </CardAction>
+                  </CardHeader>
+
+                  <CardContent className="space-y-2">
+                    <div className="flex flex-wrap gap-2">
+                      <Badge variant={badge.variant}>
+                        {badge.label}
+                      </Badge>
+                      {act.isOngoing && (
+                        <Badge variant="ok">
+                          Đang tham gia
+                        </Badge>
+                      )}
+                    </div>
+
+                    {act.description && <p className="text-body-s">{act.description}</p>}
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
