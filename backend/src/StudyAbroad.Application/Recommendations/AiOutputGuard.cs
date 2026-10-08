@@ -19,7 +19,7 @@ namespace StudyAbroad.Application.Recommendations
         //Giới hạn giải thích
         private const int MaxReasonLength = 600;
 
-        //Số được phép dù ko có trong dữ liệu: mốc 24/75%, thang 4 (Gpa), thang 10 (ngoại khóa)
+        //Số được phép dù ko có trong dữ liệu: mốc 24/75%, thang 4 (GPA, ngoại khóa), thang 10 (giữ cho kết quả cũ)
         private static readonly decimal[] Constants = [25m, 75m, 4m, 10m];
 
         //Tìm số trong câu

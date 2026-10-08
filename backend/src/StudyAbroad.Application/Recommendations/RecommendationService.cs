@@ -86,8 +86,9 @@ namespace StudyAbroad.Application.Recommendations
                 g.School.CostUnknown,
                 ReasonTemplate.EnglishCode(g.School.English),
                 g.School.OpenAdmission,
-                g.Reason,
-                g.AiExplained)).ToList();
+                 g.Reason,
+                g.AiExplained,
+                ToSchoolInfo(g.School.Candidate))).ToList();
 
             //7. Lưu
             var entity = new Recommendation
@@ -102,6 +103,9 @@ namespace StudyAbroad.Application.Recommendations
             await repository.AddAsync(entity, ct);
             return new RecommendationResultDto(entity.Id, entity.CreatedAt, entity.StudyLevel, items, warnings);
         }
+        private static SchoolInfoDto ToSchoolInfo(SchoolCandidate c) => new(
+    c.City, c.State, c.Control, c.Website, c.AcceptanceRate, c.InternationalStudents, c.SatPolicy,
+    c.TuitionUsd, c.LivingUsd, c.FeesUsd, c.MinIelts, c.MinToefl, c.MinDuolingo);
 
         //Gọi LLM có giới hạn thời gian. Trả null khi AI tắt, không có trường, LLM lỗi hoặc quá thời gian
         private async Task<IReadOnlyList<AiPick>?> TryRankWithAiAsync(StudentSnapshot student, IReadOnlyList<ScoredSchool> scored, RecommendSettings settings, CancellationToken ct)

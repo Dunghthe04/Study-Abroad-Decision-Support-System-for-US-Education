@@ -26,7 +26,7 @@ public class StudentProfileConfiguration : IEntityTypeConfiguration<StudentProfi
         b.Property(x => x.OtherTestsJson).HasColumnType("jsonb");
         b.Property(x => x.ExtracurricularScore).HasPrecision(4, 2);
         b.ToTable(t => t.HasCheckConstraint("ck_student_profiles_extracurricular_score",
-            "extracurricular_score IS NULL OR extracurricular_score BETWEEN 0 AND 10"));
+            "extracurricular_score IS NULL OR extracurricular_score BETWEEN 0 AND 4"));
         b.Property(x => x.AnnualBudgetUsd).HasPrecision(12, 2);
         b.Property(x => x.FundingSource).HasMaxLength(32);
         b.Property(x => x.PreferredStates).HasColumnType("text[]");

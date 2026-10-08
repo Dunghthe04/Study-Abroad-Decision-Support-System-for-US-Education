@@ -130,11 +130,11 @@ public class RecommendationServiceTests
     public async Task Create_ReadsExtracurricularFromProfile()
     {
         var repo = NewRepo();
-        repo.Profile!.ExtracurricularScore = 8;
+        repo.Profile!.ExtracurricularScore = 3;
         var result = await NewService(repo).CreateAsync(UserId);
 
         Assert.DoesNotContain(result!.Warnings, w => w.Contains("ngoại khóa"));
-        Assert.Contains("\"extracurricularScore\":8", repo.Saved.Single().CriteriaJson);
+        Assert.Contains("\"extracurricularScore\":3", repo.Saved.Single().CriteriaJson);
     }
 
     [Fact]
@@ -304,4 +304,33 @@ public class RecommendationServiceTests
         Assert.Equal(["DEMO_UB", "DEMO_UC"], result!.Items.Select(i => i.Code));            // Match vẫn đứng trước Safety
         Assert.Equal(["match", "safety"], result.Items.Select(i => i.Category));
     }
+
+    [Fact]
+    public async Task Create_ItemsCarrySchoolInfo()
+    {
+        var repo = NewRepo();
+        repo.Candidates[0] = repo.Candidates[0] with
+        {
+            City = "New York",
+            Control = "private",
+            Website = "https://demo-b.edu",
+            AcceptanceRate = 0.45m,
+            InternationalStudents = 900,
+            SatPolicy = "optional",
+            MinIelts = 6.5m,
+        };
+
+        var result = await NewService(repo).CreateAsync(UserId);
+
+        var school = result!.Items.Single(i => i.Code == "DEMO_UB").School;
+        Assert.NotNull(school);
+        Assert.Equal("New York", school.City);
+        Assert.Equal("NY", school.State);
+        Assert.Equal("private", school.Control);
+        Assert.Equal(0.45m, school.AcceptanceRate);
+        Assert.Equal("optional", school.SatPolicy);
+        Assert.Equal(35000m, school.TuitionUsd);
+        Assert.Equal(6.5m, school.MinIelts);
+    }
+
 }

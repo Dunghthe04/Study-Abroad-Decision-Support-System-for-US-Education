@@ -151,10 +151,10 @@ public class RecommendationScorerTests
     [Fact]
     public void Score_OregonStateExample_MatchesHandCalculation()
     {
-        // Số liệu thật từ file của Dương; học sinh GPA 3.5, SAT 1300, IELTS 6.5, ngoại khóa 8/10, ngân sách 60k
+        // Số liệu thật từ file của Dương; học sinh GPA 3.5, SAT 1300, IELTS 6.5, ngoại khóa 3.2/4, ngân sách 60k
         var osu = new SchoolCandidate(Guid.NewGuid(), Guid.NewGuid(), "209542", "Oregon State University", "OR",
             ["Computer Science"], 3.70m, 1140, 1400, 38190, 16386, 2592, AcceptanceRate: 0.773m, MinIelts: 6m, MinToefl: 70m);
-        var student = new StudentSnapshot("undergraduate", "Computer Science", 3.5m, 1300, 60000, [], 8m, Ielts: 6.5m);
+        var student = new StudentSnapshot("undergraduate", "Computer Science", 3.5m, 1300, 60000, [], 3.2m, Ielts: 6.5m);
 
         var r = RecommendationScorer.Score(student, osu, new RecommendSettings());
 
@@ -177,7 +177,7 @@ public class RecommendationScorerTests
         var open = School("OPEN", "CA", CsBiz, 3.5m, 1250, 1400, 30000, 10000, 0) with { AcceptanceRate = 0.80m };
         var cfg = new RecommendSettings();
 
-        var strong = Student(ec: 10);
+        var strong = Student(ec: 4);
         Assert.True(RecommendationScorer.Score(strong, selective, cfg).Score > RecommendationScorer.Score(strong, open, cfg).Score);
 
         var weak = Student(ec: 0);                                    // ngoại khóa yếu → bất lợi hơn ở trường chọn lọc
@@ -193,7 +193,7 @@ public class RecommendationScorerTests
         // Cách cũ nhân điểm ngoại khóa với (1 − tỉ lệ nhận) nên trường dễ vào bị kéo tụt điểm
         var open = B with { AcceptanceRate = 0.95m };
         var without = RecommendationScorer.Score(Student(), open, Cfg).Score;
-        var strong = RecommendationScorer.Score(Student(ec: 10), open, Cfg).Score;
+        var strong = RecommendationScorer.Score(Student(ec: 4), open, Cfg).Score;
         Assert.True(strong >= without);
     }
 

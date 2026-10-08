@@ -1,8 +1,9 @@
 """Hybrid: CRM bên .NET đã lọc và chia nhóm trường, LLM chỉ xếp lại trong danh sách đó và viết lý do.
 
-Phép so sánh số (SAT, GPA, chi phí) do code tính sẵn thành "facts", LLM chỉ diễn đạt lại:
-model 8B tự so sánh số hay sai (đã gặp: "SAT 1380 vượt mốc 75% (1450)").
-Kết quả còn được .NET kiểm tra lần nữa (AiOutputGuard): mã trường, con số, độ dài lý do.
+Số liệu phải đúng, lời văn được tự do:
+- Phép so sánh (SAT, GPA, ngân sách) do code tính (fact_check.relations), LLM chỉ diễn đạt lại.
+- Lý do nào nói ngược phép so sánh thì bị bỏ (fact_check.contradictions), .NET thay bằng câu soạn sẵn.
+- .NET kiểm tra thêm lần nữa (AiOutputGuard): mã trường, con số, độ dài lý do.
 """
 
 import json
@@ -13,28 +14,52 @@ from typing import Any, Protocol
 from pydantic import ValidationError
 
 from app.schemas.recommendation import AiPick, AiRankRequest, AiRankResponse, AiSchoolInput, AiStudentInput
+from app.services.fact_check import (
+    EXTRACURRICULAR_LEVEL_TEXT,
+    contradictions,
+    cost_ranks,
+    extracurricular_level,
+    relations,
+)
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """Bạn là tư vấn viên du học Mỹ, nói chuyện trực tiếp với học sinh.
-Hệ thống đã lọc sẵn danh sách trường và chia nhóm: reach (khó vào), match (vừa sức), safety (an toàn),
-insufficient_data (chưa đủ dữ liệu). Mỗi trường có "facts": các so sánh hệ thống đã tính sẵn, luôn đúng.
+SYSTEM_PROMPT = """Bạn là tư vấn viên du học Mỹ giàu kinh nghiệm, đang giải thích danh sách trường gợi ý cho một học sinh Việt Nam.
+Hệ thống đã lọc sẵn và chia nhóm, gọi đúng tên nhóm khi viết: reach = "thử sức", match = "vừa sức", safety = "an toàn",
+insufficient_data = "chưa đủ dữ liệu" (TRƯỜNG chưa công bố đủ SAT/GPA để xếp nhóm, không phải do học sinh).
+Mỗi trường có các so sánh hệ thống đã tính sẵn (khóa "so_sanh"), luôn đúng: chỉ diễn đạt lại, tuyệt đối không nói ngược.
 
 Nhiệm vụ:
 1. Xếp lại thứ tự các trường TRONG TỪNG NHÓM: trường hợp với hồ sơ hơn đứng trước. Không đổi nhóm.
-2. Mỗi trường viết đúng 1 câu tiếng Việt tự nhiên (khoảng 25 từ), xưng "bạn", nêu 1-2 ý quan trọng nhất
-   trong facts của trường đó. Nếu có điểm bất lợi (vượt ngân sách, chưa đạt tiếng Anh) thì phải nhắc.
+2. Mỗi trường viết 3 câu tiếng Việt tự nhiên, xưng "bạn", lần lượt theo 3 tiêu chí:
+   - Học thuật: SAT/GPA của bạn so với sinh viên trúng tuyển, và vì sao trường thuộc nhóm này.
+     Chỉ nhắc GPA khi trường có khóa "gpa"; chỉ nhắc SAT khi trường có khóa "sat".
+   - Tài chính: chi phí so với ngân sách, trường rẻ nhất/đắt nhất nhóm nếu có, hoặc chi phí chưa có dữ liệu.
+   - Ngoại khóa: dựa vào mức ngoại khóa trong hồ sơ (mạnh = lợi thế, còn mỏng = cần bổ sung), kèm một lời khuyên cụ thể;
+     hồ sơ chưa có ngoại khóa thì khuyên bổ sung.
+     Chỉ nhắc tiếng Anh khi khóa "tieng_anh" cho biết bạn CHƯA đạt yêu cầu.
+   Không lặp lại cùng một mẫu câu giữa các trường, không chép nguyên câu của ví dụ.
+   Mỗi lý do viết trên một dòng, dưới 340 ký tự.
+
+Ví dụ cách viết (trường giả; KHÔNG dùng lại con số của ví dụ):
+- "Điểm SAT 1250 của bạn còn dưới mốc 25% (1300) của sinh viên trúng tuyển, nên đây là lựa chọn để thử sức. Chi phí 45,000 USD/năm vẫn nằm gọn trong ngân sách. Điểm ngoại khóa 3.5/4 là lợi thế, hãy dùng nó làm chủ đề bài luận."
+- "Với SAT 1300 nằm trong khoảng 25%-75% (1200-1400), đây là lựa chọn vừa sức với bạn. Đây cũng là trường có chi phí thấp nhất nhóm. Hồ sơ ngoại khóa còn mỏng, bạn nên bổ sung một dự án dài hạn."
 
 Quy tắc bắt buộc:
 - Trả về đủ mọi trường, mỗi trường đúng 1 lần, giữ nguyên mã trường (code).
-- Chỉ dùng con số có trong facts và hồ sơ, viết đúng như dữ liệu (vd. 57,168 USD).
-  Không tự tính ra số mới, không nêu năm, thứ hạng hay số thứ tự. Không nói ngược ý facts.
+- Chỉ dùng con số có trong dữ liệu được cho, viết đúng như dữ liệu (vd. 57,168 USD).
+  Không tự tính ra số mới (chênh lệch, phần trăm), không nêu năm, thứ hạng hay số thứ tự.
 - Không nói chắc chắn đậu hay trượt, không đoán tỉ lệ đậu.
 - Không dùng thông tin ngoài dữ liệu được cho (danh tiếng, xếp hạng, thành phố...)."""
+TEMPERATURE = 0.3  # hơi ngẫu nhiên để lời văn đa dạng; số liệu đã có fact_check và AiOutputGuard giữ đúng
+# Ollama cắt cứng lý do ở độ dài này: chặn LLM viết lan man làm chậm (12 trường, khoảng 15 token/giây)
+MAX_REASON_CHARS = 380
 
+_SAT_TEXT = {"above": "cao hơn mốc 75%", "below": "thấp hơn mốc 25%", "within": "nằm trong khoảng 25%-75%"}
+_GPA_TEXT = {"above": "cao hơn", "below": "thấp hơn", "equal": "bằng"}
 _ENGLISH_TEXT = {
-    "met": "đạt yêu cầu tiếng Anh",
-    "below_min": "chưa đạt yêu cầu tiếng Anh tối thiểu",
+    "met": "bạn đạt yêu cầu tiếng Anh của trường",
+    "below_min": "bạn chưa đạt yêu cầu tiếng Anh tối thiểu",
     "no_score": "bạn chưa có điểm tiếng Anh",
     "unknown": "trường không công bố yêu cầu tiếng Anh",
 }
@@ -65,21 +90,33 @@ class Recommender:
             {"role": "user", "content": build_user_prompt(request)},
         ]
         # OllamaError (Ollama tắt, quá thời gian) không bắt ở đây: để lỗi đi thẳng lên route
-        raw = await self._llm.chat_json(messages, build_output_schema(codes))
+        raw = await self._llm.chat_json(messages, build_output_schema(codes), TEMPERATURE)
+
         try:
-            # Kiểm tra xem raw có đúng cấu trúc k
             items = AiRankResponse.model_validate(raw).items
         except ValidationError as ex:
             raise RecommenderError(f"LLM trả sai định dạng: {ex}") from ex
 
-        picks = keep_valid_picks(items, codes)
+        ranks = cost_ranks(request.schools)
+        truths = {
+            s.code: {**relations(request.student, s), "cost_rank": ranks[s.code]} for s in request.schools
+        }
+        picks = []
+        for pick in keep_valid_picks(items, codes):
+            pick = pick.model_copy(update={"reason": clean_reason(pick.reason)})
+            wrong = contradictions(pick.reason, truths[pick.code])
+            if wrong:
+                # Bỏ lý do sai: .NET (AiOutputGuard) tự thêm lại trường này với lý do soạn sẵn
+                logger.warning("Bỏ lý do nói ngược số liệu %s %s: %s", pick.code, wrong, pick.reason)
+                continue
+            picks.append(pick)
 
-        # Nếu rỗng
         if not picks:
-            raise RecommenderError("LLM không trả về trường nào hợp lệ")
+            raise RecommenderError("LLM không trả về lý do nào dùng được")
         if len(picks) < len(codes):
-            # Không bỏ cả kết quả: .NET (AiOutputGuard) tự thêm trường bị thiếu với lý do soạn sẵn
-            logger.warning("LLM bỏ sót %d/%d trường", len(codes) - len(picks), len(codes))
+            logger.warning(
+                "Thiếu %d/%d trường, .NET sẽ bổ sung lý do soạn sẵn", len(codes) - len(picks), len(codes)
+            )
         return AiRankResponse(items=picks)
 
 
@@ -95,22 +132,19 @@ def keep_valid_picks(items: list[AiPick], codes: list[str]) -> list[AiPick]:
     return picks
 
 
-# Tạo prompt rõ ràng để gửi QWen
+def clean_reason(text: str) -> str:
+    """Giữ dòng đầu (LLM đôi khi viết thêm một bản nữa ở dòng sau) và bỏ câu cuối bị cắt dở vì giới hạn độ dài."""
+    line = text.strip().split("\n")[0].strip()
+    if line and line[-1] not in ".!?":
+        end = line.rfind(". ")
+        if end > 0:
+            line = line[: end + 1]
+    return line
+
+
 def build_user_prompt(request: AiRankRequest) -> str:
-    schools = []
-
-    for s in request.schools:
-        school = {
-            "code": s.code,
-            "name": s.name,
-            "state": s.state,
-            "category": s.category,
-            # Sự thật khi so hs với trường
-            "facts": school_facts(request.student, s),
-        }
-
-        schools.append(school)
-
+    notes = group_notes(request)
+    schools = [school_data(request.student, s, notes[s.code]) for s in request.schools]
     return (
         f"Hồ sơ học sinh: {describe_student(request.student)}\n\n"
         f"Danh sách trường (JSON):\n{json.dumps(schools, ensure_ascii=False)}"
@@ -129,37 +163,50 @@ def describe_student(st: AiStudentInput) -> str:
         if value is not None:
             parts.append(f"{label} {_num(value)}")
     if st.extracurricular_score is not None:
-        parts.append(f"ngoại khóa {_num(st.extracurricular_score)}/10")
+        level = EXTRACURRICULAR_LEVEL_TEXT[extracurricular_level(st.extracurricular_score)]
+        parts.append(f"ngoại khóa {_num(st.extracurricular_score)}/4 (mức {level})")
     if st.annual_budget_usd is not None:
         parts.append(f"ngân sách {_money(st.annual_budget_usd)}/năm")
     return ", ".join(parts)
 
 
-def school_facts(st: AiStudentInput, sc: AiSchoolInput) -> list[str]:
-    """So sánh hồ sơ với một trường bằng code (luôn đúng). Thiếu dữ liệu thì bỏ qua ý đó."""
-    facts = []
-    if st.sat is not None and sc.sat25 is not None and sc.sat75 is not None:
-        if st.sat > sc.sat75:
-            where = f"cao hơn mốc 75% ({sc.sat75})"
-        elif st.sat < sc.sat25:
-            where = f"thấp hơn mốc 25% ({sc.sat25})"
-        else:
-            where = f"trong khoảng mốc 25%-75% ({sc.sat25}-{sc.sat75})"
-        facts.append(f"SAT {st.sat} {where}")
+def school_data(st: AiStudentInput, sc: AiSchoolInput, notes: list[str]) -> dict[str, Any]:
+    """Dữ liệu một trường gửi cho LLM: số liệu kèm phép so sánh đã tính ("so_sanh" đặt đầu để LLM đọc trước)."""
+    rel = relations(st, sc)
+    data: dict[str, Any] = {"code": sc.code, "name": sc.name, "state": sc.state, "category": sc.category}
+    if "sat" in rel:
+        data["sat"] = {
+            "so_sanh": _SAT_TEXT[rel["sat"]],
+            "cua_ban": st.sat,
+            "moc_25": sc.sat25,
+            "moc_75": sc.sat75,
+        }
+    if "gpa" in rel:
+        data["gpa"] = {
+            "so_sanh": _GPA_TEXT[rel["gpa"]],
+            "cua_ban": _num(st.gpa4),
+            "trung_binh": _num(sc.avg_gpa4),
+        }
+    if sc.total_cost_usd is None:
+        data["chi_phi"] = "chưa có dữ liệu, cần hỏi trường"
+    else:
+        data["chi_phi"] = {"moi_nam": _money(sc.total_cost_usd)}
+        if "budget" in rel:
+            data["chi_phi"]["so_sanh"] = "trong ngân sách" if rel["budget"] == "within" else "vượt ngân sách"
+    data["tieng_anh"] = _ENGLISH_TEXT[sc.english]
+    if notes:
+        data["noi_bat"] = notes
+    return data
 
-    if st.gpa4 is not None and sc.avg_gpa4 is not None:
-        compare = "cao hơn" if st.gpa4 > sc.avg_gpa4 else "thấp hơn" if st.gpa4 < sc.avg_gpa4 else "bằng"
-        facts.append(f"GPA {_num(st.gpa4)} {compare} GPA trung bình {_num(sc.avg_gpa4)}")
 
-    if sc.total_cost_usd is not None:
-        cost = f"chi phí {_money(sc.total_cost_usd)}/năm"
-        if st.annual_budget_usd is not None:
-            within = sc.total_cost_usd <= st.annual_budget_usd
-            cost += f", {'trong' if within else 'vượt'} ngân sách {_money(st.annual_budget_usd)}"
-        facts.append(cost)
-
-    facts.append(_ENGLISH_TEXT[sc.english])
-    return facts
+def group_notes(request: AiRankRequest) -> dict[str, list[str]]:
+    """Điểm nổi bật trong nhóm (chi phí thấp nhất / cao nhất): luôn đúng, không sinh số mới, giúp mỗi trường một ý riêng."""
+    texts = {"cheapest": "chi phí thấp nhất trong nhóm", "priciest": "chi phí cao nhất trong nhóm"}
+    ranks = cost_ranks(request.schools)
+    return {
+        s.code: [f"{texts[ranks[s.code]]} {s.category}"] if ranks[s.code] in texts else []
+        for s in request.schools
+    }
 
 
 def build_output_schema(codes: list[str]) -> dict[str, Any]:
@@ -175,7 +222,7 @@ def build_output_schema(codes: list[str]) -> dict[str, Any]:
                     "type": "object",
                     "properties": {
                         "code": {"type": "string", "enum": codes},
-                        "reason": {"type": "string"},
+                        "reason": {"type": "string", "maxLength": MAX_REASON_CHARS},
                     },
                     "required": ["code", "reason"],
                 },

@@ -52,7 +52,12 @@ namespace StudyAbroad.Infrastructure.Persistence.Repositories
                        u.AcceptanceRate,
                        o.MinIelts,
                        o.MinToefl,
-                       o.MinDuolingo
+                       o.MinDuolingo,
+                       u.City,
+                       u.Control,
+                       u.Website,
+                       u.InternationalStudentCount,
+                       o.SatPolicy
                    )).ToListAsync(ct);
         }
 

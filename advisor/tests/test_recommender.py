@@ -2,12 +2,15 @@ import pytest
 
 from app.schemas.recommendation import AiPick, AiRankRequest, AiSchoolInput, AiStudentInput
 from app.services.recommender import (
+    TEMPERATURE,
     Recommender,
     RecommenderError,
     build_output_schema,
     build_user_prompt,
+    clean_reason,
+    group_notes,
     keep_valid_picks,
-    school_facts,
+    school_data,
 )
 from tests.fakes import FakeLLM
 
@@ -31,53 +34,44 @@ def school(**changes) -> AiSchoolInput:
     return AiSchoolInput(**data)
 
 
-# ---------- school_facts: phép so sánh do code làm, phải luôn đúng ----------
+# ---------- dữ liệu từng trường gửi cho LLM ----------
 
 
-@pytest.mark.parametrize(
-    ("sat", "expected"),
-    [
-        (1500, "SAT 1500 cao hơn mốc 75% (1480)"),
-        (1200, "SAT 1200 thấp hơn mốc 25% (1250)"),
-        (1380, "SAT 1380 trong khoảng mốc 25%-75% (1250-1480)"),
-        (1480, "SAT 1480 trong khoảng mốc 25%-75% (1250-1480)"),  # bằng đúng mốc vẫn là "trong khoảng"
-    ],
-)
-def test_facts_compare_sat_with_school_range(sat, expected):
-    student = STUDENT.model_copy(update={"sat": sat})
+def test_school_data_puts_computed_comparison_next_to_numbers():
+    data = school_data(STUDENT, school(), notes=[])
 
-    assert expected in school_facts(student, school())
+    assert data["sat"] == {
+        "so_sanh": "nằm trong khoảng 25%-75%",
+        "cua_ban": 1380,
+        "moc_25": 1250,
+        "moc_75": 1480,
+    }
+    assert data["gpa"]["so_sanh"] == "thấp hơn"
+    assert data["chi_phi"] == {"moi_nam": "57,168 USD", "so_sanh": "trong ngân sách"}
 
 
-@pytest.mark.parametrize(
-    ("gpa", "expected"),
-    [
-        (3.8, "GPA 3.8 cao hơn GPA trung bình 3.7"),
-        (3.5, "GPA 3.5 thấp hơn GPA trung bình 3.7"),
-        (3.7, "GPA 3.7 bằng GPA trung bình 3.7"),
-    ],
-)
-def test_facts_compare_gpa_with_school_average(gpa, expected):
-    student = STUDENT.model_copy(update={"gpa4": gpa})
+def test_school_data_says_cost_is_missing_instead_of_skipping_it():
+    data = school_data(STUDENT, school(total_cost_usd=None), notes=[])
 
-    assert expected in school_facts(student, school())
+    assert data["chi_phi"] == "chưa có dữ liệu, cần hỏi trường"
 
 
-@pytest.mark.parametrize(
-    ("total_cost", "expected"),
-    [
-        (57168, "chi phí 57,168 USD/năm, trong ngân sách 60,000 USD"),
-        (65000, "chi phí 65,000 USD/năm, vượt ngân sách 60,000 USD"),
-    ],
-)
-def test_facts_compare_cost_with_budget(total_cost, expected):
-    assert expected in school_facts(STUDENT, school(total_cost_usd=total_cost))
+def test_group_notes_mark_cheapest_and_priciest_in_each_group():
+    schools = [
+        school(code="A", total_cost_usd=30000),
+        school(code="B", total_cost_usd=50000),
+        school(code="C", total_cost_usd=40000),
+        school(code="S", category="safety", total_cost_usd=20000),  # nhóm chỉ có 1 trường: không so
+    ]
 
+    notes = group_notes(AiRankRequest(student=STUDENT, schools=schools))
 
-def test_facts_skip_missing_school_data():
-    bare = school(avg_gpa4=None, sat25=None, sat75=None, total_cost_usd=None, english="unknown")
-
-    assert school_facts(STUDENT, bare) == ["trường không công bố yêu cầu tiếng Anh"]
+    assert notes == {
+        "A": ["chi phí thấp nhất trong nhóm match"],
+        "B": ["chi phí cao nhất trong nhóm match"],
+        "C": [],
+        "S": [],
+    }
 
 
 # ---------- prompt và schema gửi cho LLM ----------
@@ -132,3 +126,28 @@ async def test_rank_raises_when_no_code_is_valid():
 
     with pytest.raises(RecommenderError):
         await Recommender(llm).rank(AiRankRequest(student=STUDENT, schools=[school()]))
+
+
+async def test_rank_drops_reason_that_contradicts_the_numbers():
+    asu = school(code="ASU", name="Arizona State University", sat25=1120, sat75=1360)
+    wrong = "SAT 1380 thấp hơn mốc 25% (1250), nên đây là trường thử sức."  # sai: 1380 nằm trong khoảng
+    right = "Với SAT 1380, bạn đã vượt mốc 75% (1360) của trường."
+    llm = FakeLLM({"items": [{"code": "UW", "reason": wrong}, {"code": "ASU", "reason": right}]})
+
+    response = await Recommender(llm).rank(AiRankRequest(student=STUDENT, schools=[school(), asu]))
+
+    assert [p.code for p in response.items] == ["ASU"]  # UW bị bỏ, .NET sẽ dùng lý do soạn sẵn
+    assert llm.calls[0]["temperature"] == TEMPERATURE
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("Câu một. Câu hai.", "Câu một. Câu hai."),
+        ("Câu một. Câu hai.\nCâu một viết lại. Câu hai viết lại.", "Câu một. Câu hai."),  # LLM viết lặp
+        ("Câu một. Câu hai bị cắt d", "Câu một."),  # chạm giới hạn độ dài
+        ("GPA 3.6 thấp hơn 3.9", "GPA 3.6 thấp hơn 3.9"),  # chỉ 1 câu bị cắt thì giữ nguyên
+    ],
+)
+def test_clean_reason(raw, expected):
+    assert clean_reason(raw) == expected

@@ -36,7 +36,12 @@ namespace StudyAbroad.Application.Recommendations
         decimal? AcceptanceRate = null, // 0–1, chỉ dùng nội bộ, không hiển thị
         decimal? MinIelts = null,
         decimal? MinToefl = null,
-        decimal? MinDuolingo = null)
+        decimal? MinDuolingo = null,
+        string? City = null,
+        string? Control = null,             // public | private
+        string? Website = null,
+        int? InternationalStudents = null,
+        string? SatPolicy = null)            // required | optional | not_accepted)
     {
         public decimal? TotalCostUsd =>
             TuitionUsd is null ? null : TuitionUsd + (LivingUsd ?? 0) + (FeesUsd ?? 0);

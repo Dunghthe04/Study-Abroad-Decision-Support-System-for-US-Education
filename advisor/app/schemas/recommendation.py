@@ -33,7 +33,7 @@ class AiStudentInput(CamelModel):
     ielts: float | None = None
     toefl: float | None = None
     duolingo: float | None = None
-    extracurricular_score: float | None = None  # thang 10
+    extracurricular_score: float | None = None  # thang 0–4
 
 
 class AiSchoolInput(CamelModel):

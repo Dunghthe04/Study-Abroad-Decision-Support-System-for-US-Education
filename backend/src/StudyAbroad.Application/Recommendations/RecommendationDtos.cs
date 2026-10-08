@@ -14,8 +14,25 @@ namespace StudyAbroad.Application.Recommendations
         bool CostUnknown,
         string English,         // met | below_min | no_score | unknown
         bool OpenAdmission,
-        string Reason,
-        bool AiExplained);      // false = giải thích theo mẫu, true = AI viết (giai đoạn 4)
+         string Reason,
+        bool AiExplained,       // false = giải thích theo mẫu, true = AI viết (giai đoạn 4)
+        SchoolInfoDto? School = null);   // thông tin trường để giao diện hiện thẻ trường; null ở kết quả cũ đã lưu
+
+    //Thông tin trường lấy thẳng từ database (không phụ thuộc học sinh)
+    public record SchoolInfoDto(
+        string? City,
+        string? State,
+        string? Control,            // public | private
+        string? Website,
+        decimal? AcceptanceRate,    // 0–1
+        int? InternationalStudents,
+        string? SatPolicy,          // required | optional | not_accepted
+        decimal? TuitionUsd,
+        decimal? LivingUsd,
+        decimal? FeesUsd,
+        decimal? MinIelts,
+        decimal? MinToefl,
+        decimal? MinDuolingo);
 
     public record RecommendationResultDto(
         Guid Id,

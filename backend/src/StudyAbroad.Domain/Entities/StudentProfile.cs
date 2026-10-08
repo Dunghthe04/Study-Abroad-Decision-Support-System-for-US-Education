@@ -25,7 +25,7 @@ public class StudentProfile : BaseEntity
     public decimal? Gmat { get; set; }
     /// <summary>điểm thành phần, kỳ thi khác, ngày thi</summary>
     public string? OtherTestsJson { get; set; }
-    /// <summary>điểm ngoại khóa 0–10 do AI phân tích hồ sơ chấm (backlog #6); null nếu chưa chấm</summary>
+    /// <summary>điểm ngoại khóa 0–4 (thang của thầy): LLM đọc hoạt động thành thuộc tính, công thức của nhóm tính điểm; null nếu chưa phân tích</summary>
     public decimal? ExtracurricularScore { get; set; }
     public decimal? AnnualBudgetUsd { get; set; }
     /// <summary>family | loan | scholarship | other</summary>

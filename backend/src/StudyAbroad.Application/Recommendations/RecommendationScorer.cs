@@ -87,9 +87,9 @@ namespace StudyAbroad.Application.Recommendations
             return Clamp01((budget.Value - cost.Value) / budget.Value);
         }
 
-        //Điểm ngoại khóa thang 10 → [0, 1]; chưa chấm → null (bỏ tiêu chí)
+        //Điểm ngoại khóa thang 0–4 → [0, 1]; chưa chấm → null (bỏ tiêu chí)
         private static decimal? ExtracurricularFit(decimal? score) =>
-            score is { } s ? Clamp01(s / 10m) : null;
+            score is { } s ? Clamp01(s / 4m) : null;
 
         //Độ chọn lọc = 1 - tỷ lệ nhận (nhận 10% → 0.9); trường không công bố → trung tính
         private static decimal Selectivity(decimal? acceptanceRate, decimal neutral) =>
