@@ -8,7 +8,7 @@ import { ApiError } from "@/lib/api";
 
 export function RegisterForm() {
   const router = useRouter();
-  const { register, login } = useAuth();
+  const { register } = useAuth();
 
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
