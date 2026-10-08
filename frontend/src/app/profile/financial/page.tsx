@@ -1,6 +1,4 @@
-import { FinancialCard } from "@/components/profile/FinancialCard";
-import { ExtracurricularSection } from "@/components/profile/ExtracurricularSection";
-import { AchievementsSection } from "@/components/profile/AchievementsSection";
+import { FinancialProfileTabs } from "@/components/profile/FinancialProfileTabs";
 import Link from "next/link";
 
 export const metadata = {
@@ -40,17 +38,8 @@ export default function FinancialProfilePage() {
         </div>
       </div>
 
-      {/* 3 Khối nghiệp vụ chính */}
-      <div className="space-y-6">
-        {/* Khối 1: Tài chính */}
-        <FinancialCard />
-
-        {/* Khối 2: Ngoại khóa & Lãnh đạo */}
-        <ExtracurricularSection />
-
-        {/* Khối 3: Nghiên cứu, Thực tập & Giải thưởng */}
-        <AchievementsSection />
-      </div>
+      {/* Tab-based layout thay vì stack dọc 3 khối */}
+      <FinancialProfileTabs />
     </div>
   );
 }

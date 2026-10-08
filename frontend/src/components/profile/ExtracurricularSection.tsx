@@ -110,9 +110,9 @@ export function ExtracurricularSection() {
     <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-xs">
       <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
         <div>
-          <h2 className="text-lg font-semibold text-slate-900">2. Hoạt động Ngoại khóa & Lãnh đạo</h2>
+          <h2 className="text-lg font-semibold text-slate-900">Hoạt động ngoại khóa</h2>
           <p className="text-xs text-slate-500">
-            Tiêu chí thứ 3 để AI cộng điểm và đánh giá hồ sơ toàn diện (Holistic Review kiểu Mỹ).
+            Tiêu chí quan trọng để AI đánh giá hồ sơ toàn diện (Holistic Review).
           </p>
         </div>
         <button
@@ -124,120 +124,137 @@ export function ExtracurricularSection() {
       </div>
 
       {showAddForm && (
-        <form onSubmit={handleAdd} className="mb-6 rounded-lg border border-blue-100 bg-blue-50/40 p-4 space-y-3">
-          <h3 className="text-sm font-semibold text-blue-900">Khai báo hoạt động mới</h3>
-          {error && <div className="text-xs text-rose-600">{error}</div>}
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4"
+          onClick={(e) => { if (e.target === e.currentTarget) setShowAddForm(false); }}
+        >
+          <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <form onSubmit={handleAdd} className="space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 className="text-base font-semibold text-slate-900">Khai báo hoạt động mới</h3>
+                <button
+                  type="button"
+                  onClick={() => setShowAddForm(false)}
+                  className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+                >
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-slate-700">Tên hoạt động / CLB / Dự án *</label>
-              <input
-                type="text"
-                required
-                maxLength={150}
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="VD: CLB Tranh biện FPT Debate Club"
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm bg-white text-slate-900"
-              />
-            </div>
+              {error && <div className="rounded-lg bg-rose-50 border border-rose-200 p-2.5 text-xs text-rose-600">{error}</div>}
 
-            <div>
-              <label className="block text-xs font-medium text-slate-700">Vai trò của bạn *</label>
-              <input
-                type="text"
-                required
-                maxLength={100}
-                value={role}
-                onChange={(e) => setRole(e.target.value)}
-                placeholder="VD: Chủ tịch CLB / Trưởng ban tổ chức"
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm bg-white text-slate-900"
-              />
-            </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-700">Tên hoạt động / CLB / Dự án *</label>
+                  <input
+                    type="text"
+                    required
+                    maxLength={150}
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="VD: CLB Tranh biện FPT Debate Club"
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white text-slate-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
 
-            <div>
-              <label className="block text-xs font-medium text-slate-700">Đơn vị / Tổ chức / Trường</label>
-              <input
-                type="text"
-                maxLength={150}
-                value={org}
-                onChange={(e) => setOrg(e.target.value)}
-                placeholder="VD: Trường THPT Chuyên Hà Nội - Amsterdam"
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm bg-white text-slate-900"
-              />
-            </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700">Vai trò của bạn *</label>
+                  <input
+                    type="text"
+                    required
+                    maxLength={100}
+                    value={role}
+                    onChange={(e) => setRole(e.target.value)}
+                    placeholder="VD: Chủ tịch CLB / Trưởng ban tổ chức"
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white text-slate-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
 
-            <div>
-              <label className="block text-xs font-medium text-slate-700">Mức độ ảnh hưởng (Quy mô) *</label>
-              <select
-                value={impact}
-                onChange={(e) => setImpact(parseInt(e.target.value, 10))}
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm bg-white text-slate-900"
-              >
-                <option value={1}>1 - Cấp Trường / Câu lạc bộ</option>
-                <option value={2}>2 - Cấp Quận / Huyện / Liên trường</option>
-                <option value={3}>3 - Cấp Tỉnh / Thành phố</option>
-                <option value={4}>4 - Cấp Quốc gia</option>
-                <option value={5}>5 - Cấp Quốc tế</option>
-              </select>
-            </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700">Đơn vị / Tổ chức / Trường</label>
+                  <input
+                    type="text"
+                    maxLength={150}
+                    value={org}
+                    onChange={(e) => setOrg(e.target.value)}
+                    placeholder="VD: Trường THPT Chuyên HN-Amsterdam"
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white text-slate-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
 
-            <div>
-              <label className="block text-xs font-medium text-slate-700">Thời gian tham gia (Số tháng)</label>
-              <input
-                type="number"
-                min="1"
-                max="120"
-                value={duration}
-                onChange={(e) => setDuration(e.target.value)}
-                placeholder="12"
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm bg-white text-slate-900"
-              />
-            </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700">Mức độ ảnh hưởng (Quy mô) *</label>
+                  <select
+                    value={impact}
+                    onChange={(e) => setImpact(parseInt(e.target.value, 10))}
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white text-slate-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  >
+                    <option value={1}>1 - Cấp Trường / Câu lạc bộ</option>
+                    <option value={2}>2 - Cấp Quận / Huyện / Liên trường</option>
+                    <option value={3}>3 - Cấp Tỉnh / Thành phố</option>
+                    <option value={4}>4 - Cấp Quốc gia</option>
+                    <option value={5}>5 - Cấp Quốc tế</option>
+                  </select>
+                </div>
 
-            <div className="flex items-center gap-2 pt-5">
-              <input
-                type="checkbox"
-                id="isOngoing"
-                checked={isOngoing}
-                onChange={(e) => setIsOngoing(e.target.checked)}
-                className="h-4 w-4 rounded border-slate-300 text-blue-600"
-              />
-              <label htmlFor="isOngoing" className="text-xs font-medium text-slate-700">
-                Đang tiếp tục tham gia
-              </label>
-            </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700">Thời gian tham gia (Số tháng)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="120"
+                    value={duration}
+                    onChange={(e) => setDuration(e.target.value)}
+                    placeholder="12"
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white text-slate-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2 pt-6">
+                  <input
+                    type="checkbox"
+                    id="isOngoing"
+                    checked={isOngoing}
+                    onChange={(e) => setIsOngoing(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-blue-600"
+                  />
+                  <label htmlFor="isOngoing" className="text-xs font-medium text-slate-700">
+                    Đang tiếp tục tham gia
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-700">Mô tả đóng góp & Kết quả cụ thể</label>
+                <textarea
+                  rows={2}
+                  maxLength={1000}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="VD: Dẫn dắt 30 thành viên tổ chức giải tranh biện thu hút 200 thí sinh..."
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white text-slate-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setShowAddForm(false)}
+                  className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                >
+                  {saving ? "Đang lưu..." : "Thêm hoạt động"}
+                </button>
+              </div>
+            </form>
           </div>
-
-          <div>
-            <label className="block text-xs font-medium text-slate-700">Mô tả đóng góp & Kết quả cụ thể</label>
-            <textarea
-              rows={2}
-              maxLength={1000}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="VD: Dẫn dắt 30 thành viên tổ chức giải tranh biện thu hút 200 thí sinh; gây quỹ 15 triệu đồng..."
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm bg-white text-slate-900"
-            />
-          </div>
-
-          <div className="flex justify-end gap-2 pt-1">
-            <button
-              type="button"
-              onClick={() => setShowAddForm(false)}
-              className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50"
-            >
-              Hủy
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="rounded-md bg-blue-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-            >
-              {saving ? "Đang lưu..." : "Thêm hoạt động"}
-            </button>
-          </div>
-        </form>
+        </div>
       )}
 
       {loading ? (

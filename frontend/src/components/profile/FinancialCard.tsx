@@ -114,7 +114,7 @@ export function FinancialCard() {
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-xs">
       <div className="mb-4 border-b border-slate-100 pb-3">
-        <h2 className="text-lg font-semibold text-slate-900">1. Khả năng Tài chính Du học</h2>
+        <h2 className="text-lg font-semibold text-slate-900">Khả năng Tài chính Du học</h2>
         <p className="text-xs text-slate-500">
           Thông tin giúp hệ thống AI so sánh chi phí trường và gợi ý gói học bổng phù hợp.
         </p>
