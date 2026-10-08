@@ -8,6 +8,8 @@ const links = [
   { href: "/advisor", label: "Tư vấn AI" },
   { href: "/profile/financial", label: "Tài chính & Ngoại khóa" },
   { href: "/centers", label: "Trung tâm" },
+  // [USAS-365] Liên kết trang phân tích điểm học thuật
+  { href: "/profile/academic/analysis", label: "Điểm học thuật" },
 ];
 
 export function SiteHeader() {

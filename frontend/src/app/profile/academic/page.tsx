@@ -1,7 +1,6 @@
 "use client";
 
 import React, { Suspense, useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { AcademicProfileForm } from "@/components/profile/AcademicProfileForm";
@@ -9,9 +8,6 @@ import { profileApi, ApiError } from "@/lib/api";
 import type { AcademicProfileResponse } from "@/types/api";
 
 function AcademicProfileContent() {
-  const searchParams = useSearchParams();
-  const autoAnalyze = searchParams.get("autoAnalyze") === "true";
-
   const [profile, setProfile] = useState<AcademicProfileResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -28,11 +24,13 @@ function AcademicProfileContent() {
           setProfile(data);
         }
       } catch (err: unknown) {
-        // Nếu chưa có hồ sơ (404 hoặc Not Found): hiển thị form mẫu để người dùng bắt đầu điền
         if (isMounted) {
           if (
             (err instanceof ApiError && err.status === 404) ||
-            (err instanceof Error && (err.message.includes("404") || err.message.toLowerCase().includes("not found") || err.message.includes("Chưa tìm thấy")))
+            (err instanceof Error &&
+              (err.message.includes("404") ||
+                err.message.toLowerCase().includes("not found") ||
+                err.message.includes("Chưa tìm thấy")))
           ) {
             setProfile(null);
           } else if (err instanceof Error) {
@@ -58,34 +56,46 @@ function AcademicProfileContent() {
   return (
     <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
       {/* Breadcrumb Navigation */}
-      <nav className="mb-6 flex items-center gap-2 text-xs font-medium text-slate-500">
-        <Link href="/" className="hover:text-blue-600 transition">
-          Trang chủ
+      <nav className="mb-6 flex items-center justify-between text-xs font-medium text-slate-500">
+        <div className="flex items-center gap-2">
+          <Link href="/" className="hover:text-blue-600 transition">
+            Trang chủ
+          </Link>
+          <span>/</span>
+          <Link href="/account" className="hover:text-blue-600 transition">
+            Tài khoản
+          </Link>
+          <span>/</span>
+          <span className="text-slate-900 font-semibold">Hồ sơ học thuật</span>
+        </div>
+
+        <Link
+          href="/profile/academic/analysis"
+          className="inline-flex items-center gap-1.5 font-semibold text-indigo-600 hover:text-indigo-800 transition"
+        >
+          <span>📊</span> Xem phân tích GPA WES 4.0 &rarr;
         </Link>
-        <span>/</span>
-        <Link href="/account" className="hover:text-blue-600 transition">
-          Tài khoản
-        </Link>
-        <span>/</span>
-        <span className="text-slate-900 font-semibold">Hồ sơ học thuật</span>
       </nav>
 
       {/* Header Banner */}
       <div className="mb-8 rounded-2xl border border-slate-200 bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 p-8 text-white shadow-sm">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            {/* <span className="inline-flex items-center rounded-full bg-blue-500/20 px-3 py-1 text-xs font-semibold text-blue-200 border border-blue-400/30">
-              User Story #2: B1-01 & B1-02
-            </span> */}
             <h1 className="mt-2 text-2xl font-extrabold tracking-tight sm:text-3xl">
               Hồ sơ Học thuật & Bảng điểm
             </h1>
             <p className="mt-2 max-w-2xl text-sm text-slate-300">
-              Nhập chi tiết bảng điểm 3 năm gần nhất theo thang điểm của trường, cùng chứng chỉ IELTS/SAT để AI phân tích năng lực học thuật và tư vấn lộ trình du học Mỹ chính xác nhất.
+              Nhập chi tiết bảng điểm các năm học theo thang điểm của trường, cùng chứng chỉ IELTS/SAT để hệ thống phân tích năng lực học thuật và tư vấn lộ trình du học Mỹ.
             </p>
           </div>
 
           <div className="flex items-center gap-3">
+            <Link
+              href="/profile/academic/analysis"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-indigo-700"
+            >
+              <span>🚀</span> Phân tích GPA
+            </Link>
             <Link
               href="/advisor"
               className="inline-flex items-center gap-1.5 rounded-xl bg-white/10 px-4 py-2 text-xs font-semibold text-white backdrop-blur transition hover:bg-white/20 border border-white/20"
@@ -111,13 +121,13 @@ function AcademicProfileContent() {
           <p className="text-sm font-semibold text-red-700">Lỗi khi tải hồ sơ: {fetchError}</p>
           <button
             onClick={() => window.location.reload()}
-            className="mt-3 inline-flex items-center rounded-lg bg-red-600 px-4 py-2 text-xs font-semibold text-white hover:bg-red-700"
+            className="mt-3 inline-flex items-center rounded-lg bg-red-600 px-4 py-2 text-xs font-semibold text-white hover:bg-red-700 cursor-pointer"
           >
             Tải lại trang
           </button>
         </div>
       ) : (
-        <AcademicProfileForm initialProfile={profile} autoAnalyze={autoAnalyze} />
+        <AcademicProfileForm initialProfile={profile} />
       )}
     </div>
   );
