@@ -59,6 +59,7 @@ public static class DependencyInjection
         services.Configure<AdvisorOptions>(configuration.GetSection(AdvisorOptions.SectionName));
         services.AddHttpClient<IAdvisorClient, AdvisorClient>(ConfigureAdvisorClient);
         services.AddHttpClient<IRecommendationAi, RecommendationAiClient>(ConfigureAdvisorClient);
+        services.AddHttpClient<IExtracurricularAi, ExtracurricularAiClient>(ConfigureAdvisorClient);
 
         // [Scheduled Background Jobs: Unlock expired accounts & Cleanup OTPs]
         services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.AccountUnlockBackgroundService>();

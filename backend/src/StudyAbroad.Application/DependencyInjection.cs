@@ -13,6 +13,7 @@ public static class DependencyInjection
         services.AddScoped<IStudyCenterService, StudyCenterService>();
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IRecommendationService,RecommendationService>();
+        services.AddScoped<ExtracurricularScoring>();
         services.AddScoped<IAcademicProfileService, AcademicProfileService>();
         return services;
     }

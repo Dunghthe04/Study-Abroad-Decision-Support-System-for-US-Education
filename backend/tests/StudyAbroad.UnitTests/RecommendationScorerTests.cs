@@ -165,26 +165,21 @@ public class RecommendationScorerTests
         Assert.Equal(0.8m, r.Fit.Extracurricular);
         // Học thuật = (GPA (3.5−3.7+0.3)/0.6 = 0.167 + SAT (1300−1140)/260 = 0.615) / 2 = 0.391
         // Tài chính = (60000 − 57168) / 60000 = 0.047;  Tiếng Anh = 1;  Ngoại khóa = 0.8
-        // Trọng số ngoại khóa = 0.2 × (1 − 0.773) = 0.0454  →  tổng trọng số = 0.4 + 0.3 + 0.1 + 0.0454 = 0.8454
-        // Điểm = (0.4×0.391 + 0.3×0.047 + 0.1×1 + 0.0454×0.8) / 0.8454 ≈ 0.3630
-        Assert.InRange(r.Score!.Value, 0.362m, 0.364m);
+        // SAW, tổng trọng số = 1:  Điểm = 0.4×0.391 + 0.3×0.047 + 0.1×1 + 0.2×0.8 ≈ 0.4306
+        Assert.InRange(r.Score!.Value, 0.430m, 0.431m);
     }
 
     [Fact]
-    public void Score_StrongExtracurricular_FavoursSelectiveSchools()
+    public void Score_AcceptanceRateDoesNotChangeScore()
     {
+        // Mọi trường dùng chung một bộ trọng số: tỷ lệ nhận không ảnh hưởng điểm SAW
         var selective = School("SEL", "CA", CsBiz, 3.5m, 1250, 1400, 30000, 10000, 0) with { AcceptanceRate = 0.10m };
         var open = School("OPEN", "CA", CsBiz, 3.5m, 1250, 1400, 30000, 10000, 0) with { AcceptanceRate = 0.80m };
         var cfg = new RecommendSettings();
 
-        var strong = Student(ec: 4);
-        Assert.True(RecommendationScorer.Score(strong, selective, cfg).Score > RecommendationScorer.Score(strong, open, cfg).Score);
-
-        var weak = Student(ec: 0);                                    // ngoại khóa yếu → bất lợi hơn ở trường chọn lọc
-        Assert.True(RecommendationScorer.Score(weak, selective, cfg).Score < RecommendationScorer.Score(weak, open, cfg).Score);
-
-        var unknown = Student(ec: null);                              // chưa có điểm ngoại khóa → bỏ tiêu chí, hai trường bằng điểm
-        Assert.Equal(RecommendationScorer.Score(unknown, selective, cfg).Score, RecommendationScorer.Score(unknown, open, cfg).Score);
+        foreach (var ec in new decimal?[] { 4, 0, null })
+            Assert.Equal(RecommendationScorer.Score(Student(ec: ec), selective, cfg).Score,
+                         RecommendationScorer.Score(Student(ec: ec), open, cfg).Score);
     }
 
     [Fact]
