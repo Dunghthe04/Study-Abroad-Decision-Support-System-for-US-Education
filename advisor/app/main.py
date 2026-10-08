@@ -1,44 +1,35 @@
-import logging
 from contextlib import asynccontextmanager
 
+import httpx
 from fastapi import FastAPI
 
-from app.api.routes import chat, health
-from app.core import db
+from app.api.routes import health, profile, recommendation
 from app.core.config import get_settings
-from app.rag.retriever import Retriever
-from app.services.advisor import AdvisorService
+from app.services.activity_reader import ActivityReader
 from app.services.ollama import OllamaClient
+from app.services.recommender import Recommender
 
 
+# Khai báo vòng đơi fastapi
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Trước yield: chạy 1 lần lúc khởi động. Sau yield: chạy lúc tắt (đóng kết nối tới Ollama)."""
     settings = get_settings()
-    logging.basicConfig(level=settings.log_level)
-
-    await db.run_schema_sql()
-    pool = await db.open_pool()
-    llm = OllamaClient(settings)
-
-    app.state.pool = pool
-    app.state.llm = llm
-    app.state.advisor = AdvisorService(llm, Retriever(pool, settings.rag_candidate_k, settings.rag_top_k))
-    yield
-    await llm.aclose()
-    await db.close_pool()
+    async with httpx.AsyncClient(
+        base_url=settings.ollama_base_url, timeout=settings.llm_timeout_seconds
+    ) as http:
+        llm = OllamaClient(http, settings.llm_model)
+        app.state.recommender = Recommender(llm)
+        app.state.activity_reader = ActivityReader(llm)
+        yield
 
 
 def create_app() -> FastAPI:
-    settings = get_settings()
-    app = FastAPI(
-        title="Study Abroad Advisor Service",
-        version="0.1.0",
-        lifespan=lifespan,
-        docs_url="/docs" if settings.app_env != "production" else None,
-        redoc_url=None,
-    )
+    """Tạo ứng dụng. Viết thành hàm để test có thể tạo app mới, độc lập cho mỗi lần chạy."""
+    app = FastAPI(title="Study Abroad Advisor Service", version="0.1.0", lifespan=lifespan)
     app.include_router(health.router)
-    app.include_router(chat.router)
+    app.include_router(recommendation.router)
+    app.include_router(profile.router)
     return app
 
 

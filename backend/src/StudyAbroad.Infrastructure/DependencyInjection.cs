@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using StudyAbroad.Application.Advisor;
 using StudyAbroad.Application.Auth;
 using StudyAbroad.Application.Profile.Financial;
+using StudyAbroad.Application.Recommendations;
 using StudyAbroad.Application.StudyCenters;
 using StudyAbroad.Infrastructure.Advisor;
 using StudyAbroad.Infrastructure.Auth;
@@ -26,6 +27,7 @@ public static class DependencyInjection
             .UseSnakeCaseNamingConvention());
 
         services.AddScoped<IStudyCenterRepository, StudyCenterRepository>();
+        services.AddScoped<IRecommendationRepository, RecommendationRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IFinancialProfileRepository, FinancialProfileRepository>();
         services.AddScoped<StudyAbroad.Application.AcademicProfiles.IAcademicProfileRepository, AcademicProfileRepository>();
@@ -59,19 +61,24 @@ public static class DependencyInjection
         services.AddScoped<IEmailSender, SmtpEmailSender>();
 
         services.Configure<AdvisorOptions>(configuration.GetSection(AdvisorOptions.SectionName));
-        services.AddHttpClient<IAdvisorClient, AdvisorClient>((sp, client) =>
-        {
-            var options = sp.GetRequiredService<IOptions<AdvisorOptions>>().Value;
-            client.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/");
-            client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
-            if (!string.IsNullOrEmpty(options.ApiKey))
-                client.DefaultRequestHeaders.Add("X-Api-Key", options.ApiKey);
-        });
+        services.AddHttpClient<IAdvisorClient, AdvisorClient>(ConfigureAdvisorClient);
+        services.AddHttpClient<IRecommendationAi, RecommendationAiClient>(ConfigureAdvisorClient);
+        services.AddHttpClient<IExtracurricularAi, ExtracurricularAiClient>(ConfigureAdvisorClient);
 
         // [Scheduled Background Jobs: Unlock expired accounts & Cleanup OTPs]
         services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.AccountUnlockBackgroundService>();
         services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.OtpCleanupBackgroundService>();
 
         return services;
+    }
+
+    //Cả chat và gợi ý trường đều gọi sang advisor: cùng địa chỉ, timeout, API key
+    private static void ConfigureAdvisorClient(IServiceProvider sp, HttpClient client)
+    {
+        var options = sp.GetRequiredService<IOptions<AdvisorOptions>>().Value;
+        client.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/");
+        client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+        if (!string.IsNullOrEmpty(options.ApiKey))
+            client.DefaultRequestHeaders.Add("X-Api-Key", options.ApiKey);
     }
 }
