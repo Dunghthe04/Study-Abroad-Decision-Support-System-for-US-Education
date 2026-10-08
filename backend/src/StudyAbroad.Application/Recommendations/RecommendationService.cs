@@ -17,7 +17,7 @@ namespace StudyAbroad.Application.Recommendations
         //Lấy ra recommendation gần đây nhất
         Task<RecommendationResultDto?> GetLatestAsync(Guid userId, CancellationToken ct = default);
     }
-    public class RecommendationService(IRecommendationRepository repository, IRecommendationAi ai) : IRecommendationService
+    public class RecommendationService(IRecommendationRepository repository, IRecommendationAi ai, ExtracurricularScoring scoring) : IRecommendationService
     {
         public const string AlgorithmVersion = "crm-saw-v1";
         private static readonly JsonSerializerOptions Json = new JsonSerializerOptions(JsonSerializerDefaults.Web);
@@ -41,8 +41,8 @@ namespace StudyAbroad.Application.Recommendations
             if (gpa4 is null)
                 warnings.Add("Chưa có GPA thang 4 (chưa phân tích bảng điểm), tạm chỉ xét SAT.");
 
-            if (profile.ExtracurricularScore is null)
-                warnings.Add("Chưa có điểm ngoại khóa từ phân tích hồ sơ, chưa xét tiêu chí ngoại khóa.");
+            //Điểm ngoại khóa: LLM đọc hoạt động thành thuộc tính, công thức của nhóm tính điểm 0–4
+            var extracurricular = await ScoreExtracurricularAsync(profile, settings, warnings, ct);
 
             if (profile.Ielts is null && profile.Toefl is null && profile.Duolingo is null)
                 warnings.Add("Chưa có điểm tiếng Anh (IELTS/TOEFL/Duolingo), chưa kiểm tra điều kiện tiếng Anh.");
@@ -54,7 +54,7 @@ namespace StudyAbroad.Application.Recommendations
                         profile.Sat is { } sat ? (int)Math.Round(sat) : null,
                         profile.AnnualBudgetUsd,
                         profile.PreferredStates,
-                        profile.ExtracurricularScore,
+                        extracurricular.Score,
                         profile.Ielts,
                         profile.Toefl,
                         profile.Duolingo);
@@ -96,12 +96,59 @@ namespace StudyAbroad.Application.Recommendations
                 UserId = userId,
                 StudentProfileId = profile.Id,
                 StudyLevel = student.StudyLevel,
-                CriteriaJson = JsonSerializer.Serialize(new { student, settings }, Json),
+                CriteriaJson = JsonSerializer.Serialize(new { student, settings, extracurricular }, Json),
                 ItemsJson = JsonSerializer.Serialize(items, Json),
                 AlgorithmVersion = AlgorithmVersion
             };
             await repository.AddAsync(entity, ct);
-            return new RecommendationResultDto(entity.Id, entity.CreatedAt, entity.StudyLevel, items, warnings);
+            return new RecommendationResultDto(entity.Id, entity.CreatedAt, entity.StudyLevel, items, warnings, extracurricular);
+        }
+
+        //Hoạt động không đổi và lần trước AI đã đọc được → dùng lại kết quả cũ, không gọi LLM.
+        //Đổi thì gọi advisor (có dự phòng: điểm cũ hoặc bỏ tiêu chí), có gì khác lần trước thì lưu lại.
+        private async Task<ExtracurricularSummaryDto> ScoreExtracurricularAsync(
+            StudentProfile profile, RecommendSettings settings, List<string> warnings, CancellationToken ct)
+        {
+            var activities = await repository.GetActivitiesAsync(profile.Id, ct);
+            var inputs = ExtracurricularInputs.From(activities, DateOnly.FromDateTime(DateTime.UtcNow));
+            var hash = ExtracurricularInputs.Hash(inputs);
+
+            var previous = ReadAnalysis(await repository.GetLatestAnalysisAsync(profile.Id, ExtracurricularInputs.AnalysisKind, ct));
+            if (previous is { AiUsed: true } && previous.InputHash == hash)
+                return Summary(previous.Score, fresh: true, aiUsed: true, previous.Activities, inputs);
+
+            var outcome = await scoring.ScoreAsync(inputs, profile.ExtracurricularScore, settings.ExtracurricularTimeoutSeconds, ct);
+            if (outcome.Warning is not null) warnings.Add(outcome.Warning);
+
+            if (outcome.Fresh && outcome.Score is { } score &&
+                (previous is null || previous.InputHash != hash || previous.Score != score || previous.AiUsed != outcome.AiUsed))
+            {
+                var analysis = new ExtracurricularAnalysis(hash, score, outcome.AiUsed, outcome.Activities);
+                await repository.SaveExtracurricularAsync(new AnalysisResult
+                {
+                    StudentProfileId = profile.Id,
+                    Kind = ExtracurricularInputs.AnalysisKind,
+                    ModelVersion = ExtracurricularInputs.ModelVersion,
+                    ResultJson = JsonSerializer.Serialize(analysis, Json),
+                }, score, ct);
+            }
+            return Summary(outcome.Score, outcome.Fresh, outcome.AiUsed, outcome.Activities, inputs);
+        }
+
+        private static ExtracurricularAnalysis? ReadAnalysis(AnalysisResult? result)
+        {
+            if (result is null) return null;
+            try { return JsonSerializer.Deserialize<ExtracurricularAnalysis>(result.ResultJson, Json); }
+            catch (JsonException) { return null; }   // dữ liệu cũ hỏng thì coi như chưa có, tính lại
+        }
+
+        //Ghép điểm từng hoạt động với tên hoạt động để giao diện hiển thị
+        private static ExtracurricularSummaryDto Summary(decimal? score, bool fresh, bool aiUsed,
+            IReadOnlyList<ScoredActivity> scored, IReadOnlyList<ExtracurricularActivityInput> inputs)
+        {
+            var names = inputs.ToDictionary(i => i.Id, i => i.Name);
+            return new ExtracurricularSummaryDto(score, fresh, aiUsed, scored.Select(a => new ExtracurricularActivityDto(
+                a.Id, names.GetValueOrDefault(a.Id, ""), a.Role, a.ReputableOrg, a.ImpactLevel, a.Quality, a.Points, a.Counted)).ToList());
         }
         private static SchoolInfoDto ToSchoolInfo(SchoolCandidate c) => new(
     c.City, c.State, c.Control, c.Website, c.AcceptanceRate, c.InternationalStudents, c.SatPolicy,
@@ -145,7 +192,20 @@ namespace StudyAbroad.Application.Recommendations
             var latest = await repository.GetLatestRecommendationAsync(userId, ct);
             if (latest is null) return null;
             var items = JsonSerializer.Deserialize<List<RecommendationItemDto>>(latest.ItemsJson, Json) ?? [];
-            return new RecommendationResultDto(latest.Id, latest.CreatedAt, latest.StudyLevel, items, []);
+            return new RecommendationResultDto(latest.Id, latest.CreatedAt, latest.StudyLevel, items, [], ReadSummary(latest.CriteriaJson));
+        }
+
+        //Bảng ngoại khóa lưu trong criteria_json; kết quả cũ chưa có thì null
+        private static ExtracurricularSummaryDto? ReadSummary(string criteriaJson)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(criteriaJson);
+                return doc.RootElement.TryGetProperty("extracurricular", out var ec)
+                    ? ec.Deserialize<ExtracurricularSummaryDto>(Json)
+                    : null;
+            }
+            catch (JsonException) { return null; }
         }
     }
 }

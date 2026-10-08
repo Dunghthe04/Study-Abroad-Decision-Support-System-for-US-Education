@@ -169,9 +169,9 @@ interface SchoolInfo {
 - "AI tạm thời chưa phản hồi, danh sách và giải thích theo kết quả chấm điểm."
 - "Không có trường nào phù hợp với ngành, bang và ngân sách hiện tại. Hãy thử nới điều kiện." (khi `items` rỗng)
 
-## Sắp có: bảng điểm ngoại khóa
+## Bảng điểm ngoại khóa
 
-Khi nối điểm ngoại khóa vào nút, kết quả có thêm trường `extracurricular`. Tên trường có thể đổi nhẹ khi làm xong; giao diện nên coi nó là tùy chọn (`?`).
+Mỗi lần bấm nút, hệ thống chấm lại điểm ngoại khóa từ các hoạt động loại `extracurricular` và `experience` trong hồ sơ (giải thưởng `award` chưa tính), rồi trả kèm trường `extracurricular`. Kết quả lưu trước ngày 08/10 không có trường này, nên giao diện coi nó là tùy chọn (`?`). `GET /latest` cũng trả trường này.
 
 ```ts
 interface RecommendationResult {
@@ -181,7 +181,8 @@ interface RecommendationResult {
     fresh: boolean;             // false = đang dùng điểm lần trước
     aiUsed: boolean;
     activities: {
-      id: string;               // id của hoạt động trong hồ sơ
+      id: string;               // id của hoạt động trong hồ sơ (profile_activities)
+      name: string;             // tên hoạt động học sinh nhập
       role: "member" | "deputy" | "head" | "founder";
       reputableOrg: boolean;
       impactLevel: number;      // 1 trường … 5 quốc tế, sau khi AI đối chiếu mô tả

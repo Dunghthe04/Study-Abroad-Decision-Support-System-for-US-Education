@@ -17,6 +17,7 @@ namespace StudyAbroad.Application.Recommendations
         public const string StaleWarning = "Chưa cập nhật được điểm ngoại khóa, tạm dùng điểm lần trước.";
         public const string MissingWarning = "Chưa tính được điểm ngoại khóa, chưa xét tiêu chí ngoại khóa.";
         public const string KeywordWarning = "AI chưa đọc được mô tả hoạt động, điểm ngoại khóa tạm tính theo vai trò học sinh khai.";
+        public const string NoActivitiesWarning = "Hồ sơ chưa có hoạt động ngoại khóa hoặc kinh nghiệm nào, điểm ngoại khóa tính là 0.";
 
         public async Task<ExtracurricularOutcome> ScoreAsync(
             IReadOnlyList<ExtracurricularActivityInput> activities,
@@ -26,7 +27,7 @@ namespace StudyAbroad.Application.Recommendations
         {
             //Không có hoạt động nào: điểm 0, không cần gọi advisor
             if (activities.Count == 0)
-                return new ExtracurricularOutcome(0m, [], AiUsed: false, Fresh: true, Warning: null);
+                return new ExtracurricularOutcome(0m, [], AiUsed: false, Fresh: true, NoActivitiesWarning);
 
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
             timeout.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));

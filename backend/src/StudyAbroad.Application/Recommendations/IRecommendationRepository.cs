@@ -24,5 +24,14 @@ namespace StudyAbroad.Application.Recommendations
         //Lần gợi ý gần nhất của user, null nếu chưa có
         Task<Recommendation?> GetLatestRecommendationAsync(Guid userId, CancellationToken ct=default);
 
+        //Hoạt động ngoại khóa, kinh nghiệm, giải thưởng trong hồ sơ
+        Task<IReadOnlyList<ProfileActivity>> GetActivitiesAsync(Guid studentProfileId, CancellationToken ct = default);
+
+        //Kết quả phân tích mới nhất theo loại (vd. "extracurricular"), null nếu chưa có
+        Task<AnalysisResult?> GetLatestAnalysisAsync(Guid studentProfileId, string kind, CancellationToken ct = default);
+
+        //Lưu kết quả chấm ngoại khóa và cập nhật student_profiles.extracurricular_score
+        Task SaveExtracurricularAsync(AnalysisResult analysis, decimal score, CancellationToken ct = default);
+
     }
 }

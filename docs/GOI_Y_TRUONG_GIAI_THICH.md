@@ -219,5 +219,5 @@ Thuật toán chọn trường (bước 2–5) không phụ thuộc LLM, nên **
 | Phần | Trạng thái |
 |---|---|
 | Lọc, phân nhóm, SAW, giải thích 3 câu, kiểm tra giải thích | Đã chạy trong nút "Lọc trường" |
-| Endpoint tính điểm ngoại khóa (advisor) và lớp gọi từ .NET có dự phòng | Đã có, có test; **chưa nối vào nút** |
-| Nối điểm ngoại khóa vào nút (đọc hoạt động, chỉ tính lại khi hoạt động đổi, trả bảng chi tiết) | Đang làm. Chờ cột `impact_level` trong bảng `profile_activities` |
+| Điểm ngoại khóa trong nút: đọc hoạt động `extracurricular` và `experience`, chỉ tính lại khi hoạt động đổi, trả bảng chi tiết | Đã chạy |
+| Phạm vi học sinh tự khai (lan can "chỉ được giữ hoặc hạ") | Chờ cột `impact_level` trong bảng `profile_activities`; hiện LLM tự đánh giá phạm vi từ mô tả |

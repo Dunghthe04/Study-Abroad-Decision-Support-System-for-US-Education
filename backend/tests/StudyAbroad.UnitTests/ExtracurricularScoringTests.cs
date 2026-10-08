@@ -36,7 +36,7 @@ public class ExtracurricularScoringTests
 
         Assert.Equal(0m, result.Score);
         Assert.True(result.Fresh);
-        Assert.Null(result.Warning);
+        Assert.Equal(ExtracurricularScoring.NoActivitiesWarning, result.Warning);
         Assert.Empty(ai.Requests);
     }
 
@@ -131,6 +131,45 @@ public class ExtracurricularScoringTests
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             new ExtracurricularScoring(ai).ScoreAsync([Robotics], storedScore: 2.0m, timeoutSeconds: 30, cts.Token));
+    }
+
+    // ---------- đổi hoạt động trong hồ sơ thành dữ liệu gửi advisor ----------
+
+    private static readonly DateOnly Today = new(2026, 10, 8);
+
+    [Theory]
+    [InlineData("2024-09-01", "2025-09-01", 12)]
+    [InlineData("2025-10-15", null, 12)]          // chưa kết thúc = đang tham gia, tính đến hôm nay
+    [InlineData("2026-10-01", "2026-09-01", 0)]   // ngày nhập ngược → 0, không âm
+    [InlineData(null, "2025-01-01", null)]        // không có ngày bắt đầu → không biết
+    public void Months_FromStartAndEndDates(string? start, string? end, int? expected) =>
+        Assert.Equal(expected, ExtracurricularInputs.Months(
+            start is null ? null : DateOnly.Parse(start), end is null ? null : DateOnly.Parse(end), Today));
+
+    [Fact]
+    public void From_KeepsOnlyCountedKindsAndCutsLongText()
+    {
+        var profileId = Guid.NewGuid();
+        var activities = new[]
+        {
+            new Domain.Entities.ProfileActivity { StudentProfileId = profileId, Kind = "extracurricular", Title = "CLB", Description = new string('a', 1500) },
+            new Domain.Entities.ProfileActivity { StudentProfileId = profileId, Kind = "experience", Title = "Thực tập" },
+            new Domain.Entities.ProfileActivity { StudentProfileId = profileId, Kind = "award", Title = "Giải Nhì" },
+        };
+
+        var inputs = ExtracurricularInputs.From(activities, Today);
+
+        Assert.Equal(["CLB", "Thực tập"], inputs.Select(i => i.Name).OrderBy(n => n));
+        Assert.Equal(1000, inputs.Single(i => i.Name == "CLB").Description!.Length);   // advisor nhận tối đa 1000 ký tự
+    }
+
+    [Fact]
+    public void Hash_ChangesOnlyWhenActivitiesChange()
+    {
+        var a = ExtracurricularInputs.Hash([Robotics]);
+
+        Assert.Equal(a, ExtracurricularInputs.Hash([Robotics with { }]));
+        Assert.NotEqual(a, ExtracurricularInputs.Hash([Robotics with { Months = 25 }]));
     }
 
     // ---------- hợp đồng JSON với advisor (Python dùng camelCase) ----------
