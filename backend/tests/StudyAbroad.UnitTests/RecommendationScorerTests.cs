@@ -117,8 +117,8 @@ public class RecommendationScorerTests
         string[] Run2(SawWeights w) => RecommendationScorer.Recommend(student, two, new RecommendSettings { Weights = w })
             .Select(x => x.Candidate.Code).ToArray();
 
-        Assert.Equal(["Y", "X"], Run2(new SawWeights(Academic: 1, Finance: 0, English: 0, Extracurricular: 0)));
-        Assert.Equal(["X", "Y"], Run2(new SawWeights(Academic: 0, Finance: 1, English: 0, Extracurricular: 0)));
+        Assert.Equal(["Y", "X"], Run2(new SawWeights(Academic: 1, Finance: 0, Extracurricular: 0)));
+        Assert.Equal(["X", "Y"], Run2(new SawWeights(Academic: 0, Finance: 1, Extracurricular: 0)));
     }
 
     [Fact]
@@ -163,9 +163,10 @@ public class RecommendationScorerTests
         Assert.Equal(1m, r.Fit.English);
         Assert.Equal(EnglishStatus.Met, r.English);
         Assert.Equal(0.8m, r.Fit.Extracurricular);
-        // Học thuật = (GPA (3.5−3.7+0.3)/0.6 = 0.167 + SAT (1300−1140)/260 = 0.615) / 2 = 0.391
-        // Tài chính = (60000 − 57168) / 60000 = 0.047;  Tiếng Anh = 1;  Ngoại khóa = 0.8
-        // SAW, tổng trọng số = 1:  Điểm = 0.4×0.391 + 0.3×0.047 + 0.1×1 + 0.2×0.8 ≈ 0.4306
+        // Học thuật = 0.4×GPA (3.5−3.7+0.3)/0.6 = 0.167 + 0.4×SAT (1300−1140)/260 = 0.615 + 0.2×Tiếng Anh 1 = 0.513
+        // Tài chính = (60000 − 57168) / 60000 = 0.047;  Ngoại khóa = 0.8
+        // SAW 3 tiêu chí:  Điểm = 0.5×0.513 + 0.3×0.047 + 0.2×0.8 ≈ 0.4306
+        Assert.InRange(r.Fit.Academic!.Value, 0.512m, 0.513m);
         Assert.InRange(r.Score!.Value, 0.430m, 0.431m);
     }
 
@@ -255,11 +256,43 @@ public class RecommendationScorerTests
     }
 
     [Fact]
-    public void Score_SchoolWithoutEnglishMinimum_IsUnknownAndNeutral()
+    public void Score_SchoolWithoutEnglishMinimum_IsUnknownAndLeftOutOfAcademic()
     {
+        // Trường không công bố mức tiếng Anh: học thuật chỉ tính GPA và SAT, như học sinh chưa thi
         var r = RecommendationScorer.Score(Student() with { Ielts = 6.5m }, B, Cfg);
         Assert.Equal(EnglishStatus.Unknown, r.English);
-        Assert.Equal(Cfg.MissingValue, r.Fit.English);
+        Assert.Null(r.Fit.English);
+        Assert.Equal(RecommendationScorer.Score(Student(), B, Cfg).Fit.Academic, r.Fit.Academic);
+    }
+
+    [Fact]
+    public void Score_EnglishIsPartOfAcademic()
+    {
+        // Đạt tiếng Anh kéo học thuật lên, chưa đạt kéo xuống; tổng điểm chỉ còn 3 tiêu chí
+        var met = RecommendationScorer.Score(Student() with { Ielts = 7.0m }, B with { MinIelts = 6.5m }, Cfg);
+        var below = RecommendationScorer.Score(Student() with { Ielts = 5.0m }, B with { MinIelts = 6.5m }, Cfg);
+        var none = RecommendationScorer.Score(Student(), B with { MinIelts = 6.5m }, Cfg);
+
+        Assert.True(met.Fit.Academic > none.Fit.Academic);
+        Assert.True(below.Fit.Academic < met.Fit.Academic);
+        Assert.Equal(Math.Round((0.5m * met.Fit.Academic!.Value + 0.3m * met.Fit.Finance!.Value) / 0.8m, 4), met.Score);   // chưa có ngoại khóa: chia lại cho 0.8
+    }
+
+    [Fact]
+    public void Score_OnlyEnglishScore_AcademicIsEnglishFit()
+    {
+        var s = Student() with { Gpa4 = null, Sat = null, Ielts = 6.0m };
+        var r = RecommendationScorer.Score(s, B with { MinIelts = 6.0m }, Cfg);
+        Assert.Equal(1m, r.Fit.Academic);
+    }
+
+    [Fact]
+    public void Score_AcademicParts_ComeFromSettings()
+    {
+        // Admin đổi trọng số trong học thuật: chỉ xét SAT
+        var cfg = new RecommendSettings { AcademicParts = new AcademicParts(Gpa: 0, Sat: 1, English: 0) };
+        var r = RecommendationScorer.Score(Student() with { Ielts = 7.0m }, B with { MinIelts = 6.5m }, cfg);
+        Assert.InRange(r.Fit.Academic!.Value, 0.333m, 0.334m);   // SAT (1300 − 1250) / 150
     }
 
     // ---------- So ngành: trùng tên, không phân biệt hoa thường ----------

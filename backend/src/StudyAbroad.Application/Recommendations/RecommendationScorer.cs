@@ -41,26 +41,33 @@ namespace StudyAbroad.Application.Recommendations
             if (openAdmission)
                 category = AdmissionCategory.Safety;
 
-            //2. Chuẩn hóa từng tiêu chí về [0, 1]
+            //2. Chuẩn hóa từng tiêu chí về [0, 1]; tiếng Anh là một phần của học thuật
             var cost = candidate.TotalCostUsd;
-            var academic = AcademicFit(student, candidate, settings.GpaBand, neutral);
+            var (english, englishStatus) = English(student, candidate);
+            var academic = AcademicFit(student, candidate, english, settings);
             var finance = FinanceFit(cost, student.AnnualBudgetUsd, neutral);
-            var (english, englishStatus) = English(student, candidate, neutral);
             var extracurricular = ExtracurricularFit(student.ExtracurricularScore);
             var fit = new FitBreakdown(academic, finance, english, extracurricular);
 
-            //3. SAW: một bộ trọng số chung cho mọi trường (trọng số chứng minh bằng AHP)
+            //3. SAW 3 tiêu chí: một bộ trọng số chung cho mọi trường (trọng số chứng minh bằng AHP)
             var w = settings.Weights;
-            var score = WeightedSum((academic, w.Academic), (finance, w.Finance), (english, w.English), (extracurricular, w.Extracurricular));
+            var score = WeightedSum((academic, w.Academic), (finance, w.Finance), (extracurricular, w.Extracurricular));
 
             return new ScoredSchool(candidate, category, score is { } s ? Math.Round(s, 4) : null, cost, CostUnknown: cost is null, fit, englishStatus, openAdmission);
         }
-        //Học thuật = trung bình GPA fit và SAT fit có dữ liệu. HS không có GPA lẫn SAT → null; trường không có số liệu → trung tính
-        private static decimal? AcademicFit(StudentSnapshot s, SchoolCandidate c, decimal band, decimal neutral)
+        //Học thuật = trung bình có trọng số của GPA fit, SAT fit, tiếng Anh fit; chỉ tính phần cả HS lẫn trường có số liệu.
+        //HS không có GPA, SAT lẫn điểm tiếng Anh → null (bỏ tiêu chí); HS có điểm nhưng trường không có số liệu nào → trung tính
+        private static decimal? AcademicFit(StudentSnapshot s, SchoolCandidate c, decimal? english, RecommendSettings settings)
         {
-            if (s.Gpa4 is null && s.Sat is null) return null;
-            return new[] { GpaFit(s.Gpa4, c.AvgGpa4, band), SatFit(s.Sat, c.Sat25, c.Sat75) }.Average() ?? neutral;
+            if (s.Gpa4 is null && s.Sat is null && !HasEnglishScore(s)) return null;
+            var p = settings.AcademicParts;
+            return WeightedSum(
+                (GpaFit(s.Gpa4, c.AvgGpa4, settings.GpaBand), p.Gpa),
+                (SatFit(s.Sat, c.Sat25, c.Sat75), p.Sat),
+                (english, p.English)) ?? settings.MissingValue;
         }
+
+        private static bool HasEnglishScore(StudentSnapshot s) => s.Ielts is not null || s.Toefl is not null || s.Duolingo is not null;
         //GPA = avg - band => 0 ,gpa = avg => 0,5 , gpa > avg =>1
         private static decimal? GpaFit(decimal? gpa, decimal? avg, decimal band)
         {
@@ -91,9 +98,10 @@ namespace StudyAbroad.Application.Recommendations
             score is { } s ? Clamp01(s / 4m) : null;
 
         //Tiếng Anh là điều kiện đầu vào: đạt mức tối thiểu = 1, chưa đạt = điểm/mức. Có nhiều bài thi thì lấy bài tốt nhất.
-        private static (decimal? Fit, EnglishStatus status) English(StudentSnapshot s, SchoolCandidate c, decimal neutral)
+        //Trường không công bố mức → null: không tính vào học thuật, chỉ báo trạng thái Unknown
+        private static (decimal? Fit, EnglishStatus status) English(StudentSnapshot s, SchoolCandidate c)
         {
-            if(s.Ielts is null && s.Toefl is null && s.Duolingo is null) return (null, EnglishStatus.NoScore);
+            if (!HasEnglishScore(s)) return (null, EnglishStatus.NoScore);
 
             var ratios = new[] {Ratio(s.Ielts,c.MinIelts),
                 Ratio(s.Toefl, c.MinToefl),
@@ -101,7 +109,7 @@ namespace StudyAbroad.Application.Recommendations
             }.Where(r => r is not null).ToList();
 
             
-            if(ratios.Count == 0) return (neutral, EnglishStatus.Unknown);
+            if(ratios.Count == 0) return (null, EnglishStatus.Unknown);
 
             var best = ratios.Max();
             return (best,best >= 1m? EnglishStatus.Met : EnglishStatus.BelowMin);

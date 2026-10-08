@@ -47,7 +47,7 @@ namespace StudyAbroad.Application.Recommendations
             TuitionUsd is null ? null : TuitionUsd + (LivingUsd ?? 0) + (FeesUsd ?? 0);
     }
 
-    //Điểm từng tiêu chí, 0-1,nếu ko có= null
+    //Điểm từng tiêu chí, 0-1,nếu ko có= null. English là phần tiếng Anh đã tính trong Academic, giữ riêng để giải thích
     public record FitBreakdown(decimal? Academic, decimal? Finance, decimal? English,decimal? Extracurricular);
 
     public record ScoredSchool(
