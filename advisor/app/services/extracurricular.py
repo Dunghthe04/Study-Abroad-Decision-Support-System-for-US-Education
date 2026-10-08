@@ -3,7 +3,8 @@
 Mỗi hoạt động i:
   q_i = 0.40·(mức ảnh hưởng/5) + 0.35·vai trò + 0.25·min(số tháng, 24)/24   (+0.10 nếu tổ chức uy tín, tối đa 1)
   vai trò: 0.3 thành viên · 0.6 phó / trưởng ban · 0.8 chủ nhiệm / đội trưởng · 1.0 sáng lập
-EC = min(4, Σ (0.5 + 0.5·q_i)) trên tối đa 4 hoạt động có q cao nhất.
+EC = min(4, Σ (0.5 + 0.5·q_i) + thưởng giải) trên tối đa 4 hoạt động có q cao nhất.
+Thưởng giải (chờ thầy duyệt) = min(0.5, Σ 0.05·cấp giải) trên tối đa 3 giải cấp cao nhất.
 
 Thuộc tính lấy từ form (mức ảnh hưởng, số tháng) và từ chữ (vai trò, tổ chức uy tín):
 bước này đọc vai trò bằng từ khóa; bước sau LLM đọc chữ thay cho từ khóa, công thức giữ nguyên.
@@ -24,6 +25,10 @@ FULL_MONTHS = 24  # tham gia từ 2 năm trở lên được tối đa phần th
 UNKNOWN_TIME = 0.5  # học sinh không khai số tháng: lấy mức trung tính
 MAX_ACTIVITIES = 4
 MAX_SCORE = 4.0
+# Giải thưởng cộng thêm (chờ thầy duyệt): không có vai trò, thời gian nên không dùng công thức q
+AWARD_POINT_PER_LEVEL = 0.05
+MAX_AWARDS = 3
+MAX_AWARD_BONUS = 0.5
 
 # Từ khóa vai trò, xét theo thứ tự: "phó chủ nhiệm" phải ra phó chứ không ra chủ nhiệm
 _ROLE_KEYWORDS: list[tuple[Role, tuple[str, ...]]] = [
@@ -51,6 +56,7 @@ class ActivityScore(BaseModel):
 class ExtracurricularResult(BaseModel):
     score: float  # 0–4
     activities: list[ActivityScore]  # cùng thứ tự với đầu vào, để giải thích từng hoạt động
+    awards: list[ActivityScore] = []  # điểm thưởng từng giải, cùng thứ tự với đầu vào
 
 
 def role_from_text(text: str | None) -> Role:
@@ -70,7 +76,9 @@ def activity_quality(a: Activity) -> float:
     return min(q, 1.0)
 
 
-def extracurricular_score(activities: list[Activity]) -> ExtracurricularResult:
+def extracurricular_score(
+    activities: list[Activity], award_levels: list[int] | None = None
+) -> ExtracurricularResult:
     qualities = [activity_quality(a) for a in activities]
     best = set(sorted(range(len(qualities)), key=lambda i: qualities[i], reverse=True)[:MAX_ACTIVITIES])
 
@@ -82,5 +90,19 @@ def extracurricular_score(activities: list[Activity]) -> ExtracurricularResult:
         )
         for i, q in enumerate(qualities)
     ]
-    total = sum(d.points for d in details)
-    return ExtracurricularResult(score=round(min(MAX_SCORE, total), 2), activities=details)
+    awards = award_scores(award_levels or [])
+    total = sum(d.points for d in details) + min(MAX_AWARD_BONUS, sum(a.points for a in awards))
+    return ExtracurricularResult(score=round(min(MAX_SCORE, total), 2), activities=details, awards=awards)
+
+
+def award_scores(levels: list[int]) -> list[ActivityScore]:
+    """Điểm thưởng giải thưởng: 0.05 × cấp giải (trường 0.05 … quốc tế 0.25), 3 giải cao nhất, tổng tối đa 0.5."""
+    best = set(sorted(range(len(levels)), key=lambda i: levels[i], reverse=True)[:MAX_AWARDS])
+    return [
+        ActivityScore(
+            quality=round(level / 5, 3),
+            points=round(AWARD_POINT_PER_LEVEL * level, 3) if i in best else 0.0,
+            counted=i in best,
+        )
+        for i, level in enumerate(levels)
+    ]

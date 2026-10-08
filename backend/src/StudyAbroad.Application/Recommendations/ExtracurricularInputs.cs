@@ -13,13 +13,14 @@ namespace StudyAbroad.Application.Recommendations
     {
         public const string AnalysisKind = "extracurricular";
         //Đổi công thức hoặc cách đọc thì tăng version: hash đổi theo, lần bấm sau tính lại hết
-        public const string ModelVersion = "ec-v1";
+        public const string ModelVersion = "ec-v2";   // v2: cộng điểm thưởng giải thưởng
 
-        //Loại hoạt động tính vào điểm ngoại khóa; award (giải thưởng) chưa tính vì không có vai trò, thời gian
+        //Loại hoạt động tính vào điểm ngoại khóa: hoạt động, kinh nghiệm tính bằng công thức q; giải thưởng cộng điểm thưởng
         public static readonly IReadOnlySet<string> CountedKinds = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "extracurricular",
             "experience",
+            "award",
         };
 
         public const int MaxActivities = 20;   // advisor nhận tối đa 20 hoạt động
@@ -31,15 +32,24 @@ namespace StudyAbroad.Application.Recommendations
                 .Where(a => CountedKinds.Contains(a.Kind))
                 .OrderBy(a => a.StartDate ?? DateOnly.MaxValue).ThenBy(a => a.Id)   // thứ tự cố định để hash ổn định
                 .Take(MaxActivities)
-                .Select(a => new ExtracurricularActivityInput(
-                    a.Id.ToString(),
-                    Cut(a.Title, 200) is { Length: > 0 } title ? title : "(không tên)",
-                    Cut(a.Role, 100),
-                    Cut(a.Organization, 200),
-                    Cut(a.Description, 1000),
-                    ImpactLevel: null,   // TODO: đổi thành a.ImpactLevel khi bảng profile_activities có cột impact_level
-                    Months(a.StartDate, a.EndDate, today)))
+                .Select(a => IsAward(a)
+                    // Giải thưởng: cột role đang chứa loại thành tích (award, research...), không phải vai trò
+                    ? new ExtracurricularActivityInput(a.Id.ToString(), Name(a), null, Cut(a.Organization, 200),
+                        Cut(a.Description, 1000), ImpactLevel: null, Months: null, Kind: "award")
+                    : new ExtracurricularActivityInput(a.Id.ToString(), Name(a), Role(a), Cut(a.Organization, 200),
+                        Cut(a.Description, 1000),
+                        ImpactLevel: null,   // TODO: đổi thành a.ImpactLevel khi bảng profile_activities có cột impact_level
+                        Months(a.StartDate, a.EndDate, today)))
                 .ToList();
+
+        //Thành tích loại "internship" (thực tập) là kinh nghiệm, tính như hoạt động; các loại còn lại là giải thưởng
+        private static bool IsAward(ProfileActivity a) =>
+            a.Kind.Equals("award", StringComparison.OrdinalIgnoreCase) && !string.Equals(a.Role, "internship", StringComparison.OrdinalIgnoreCase);
+
+        private static string? Role(ProfileActivity a) =>
+            string.Equals(a.Role, "internship", StringComparison.OrdinalIgnoreCase) ? "Thực tập sinh" : Cut(a.Role, 100);
+
+        private static string Name(ProfileActivity a) => Cut(a.Title, 200) ?? "(không tên)";
 
         //Số tháng tham gia; chưa có ngày kết thúc = vẫn đang tham gia, tính đến hôm nay; không có ngày bắt đầu → null
         public static int? Months(DateOnly? start, DateOnly? end, DateOnly today)

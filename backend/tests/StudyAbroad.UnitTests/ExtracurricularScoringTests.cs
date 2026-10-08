@@ -147,20 +147,27 @@ public class ExtracurricularScoringTests
             start is null ? null : DateOnly.Parse(start), end is null ? null : DateOnly.Parse(end), Today));
 
     [Fact]
-    public void From_KeepsOnlyCountedKindsAndCutsLongText()
+    public void From_MapsKindsAndCutsLongText()
     {
         var profileId = Guid.NewGuid();
         var activities = new[]
         {
-            new Domain.Entities.ProfileActivity { StudentProfileId = profileId, Kind = "extracurricular", Title = "CLB", Description = new string('a', 1500) },
-            new Domain.Entities.ProfileActivity { StudentProfileId = profileId, Kind = "experience", Title = "Thực tập" },
-            new Domain.Entities.ProfileActivity { StudentProfileId = profileId, Kind = "award", Title = "Giải Nhì" },
+            new Domain.Entities.ProfileActivity { StudentProfileId = profileId, Kind = "extracurricular", Title = "CLB", Role = "Chủ nhiệm", Description = new string('a', 1500) },
+            new Domain.Entities.ProfileActivity { StudentProfileId = profileId, Kind = "experience", Title = "Làm thêm" },
+            new Domain.Entities.ProfileActivity { StudentProfileId = profileId, Kind = "award", Title = "Giải Nhì", Role = "award", StartDate = new(2025, 5, 1) },
+            new Domain.Entities.ProfileActivity { StudentProfileId = profileId, Kind = "award", Title = "Thực tập FPT", Role = "internship" },
+            new Domain.Entities.ProfileActivity { StudentProfileId = profileId, Kind = "other", Title = "Bỏ qua" },
         };
 
-        var inputs = ExtracurricularInputs.From(activities, Today);
+        var inputs = ExtracurricularInputs.From(activities, Today).ToDictionary(i => i.Name);
 
-        Assert.Equal(["CLB", "Thực tập"], inputs.Select(i => i.Name).OrderBy(n => n));
-        Assert.Equal(1000, inputs.Single(i => i.Name == "CLB").Description!.Length);   // advisor nhận tối đa 1000 ký tự
+        Assert.Equal(["CLB", "Giải Nhì", "Làm thêm", "Thực tập FPT"], inputs.Keys.OrderBy(n => n));
+        Assert.Equal(1000, inputs["CLB"].Description!.Length);         // advisor nhận tối đa 1000 ký tự
+        Assert.Equal("award", inputs["Giải Nhì"].Kind);
+        Assert.Null(inputs["Giải Nhì"].Role);                            // cột role của giải thưởng là loại thành tích, không gửi
+        Assert.Null(inputs["Giải Nhì"].Months);
+        Assert.Equal("activity", inputs["Thực tập FPT"].Kind);           // thực tập tính như hoạt động
+        Assert.Equal("Thực tập sinh", inputs["Thực tập FPT"].Role);
     }
 
     [Fact]

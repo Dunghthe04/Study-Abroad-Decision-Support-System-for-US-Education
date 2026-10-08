@@ -164,6 +164,19 @@ q_i = 0.40 × (phạm vi / 5) + 0.35 × vai trò + 0.25 × min(số tháng, 24) 
 
 Mỗi hoạt động được tính đóng góp **từ 0.5 đến 1.0** điểm, nên 4 hoạt động tốt nhất cho tối đa 4 điểm. Có hoạt động thì ít nhất được 0.5, tránh trường hợp hoạt động yếu bị tính bằng 0.
 
+Hoạt động gồm loại `extracurricular` (CLB, tình nguyện, thể thao) và `experience` (việc làm, thực tập), giống mục Activities của Common App. Thành tích loại "thực tập" cũng tính như hoạt động.
+
+### Điểm thưởng giải thưởng (đề xuất, chờ thầy duyệt)
+
+Giải thưởng không có vai trò hay thời gian tham gia nên không dùng công thức q. LLM chỉ đọc **cấp giải** (1 trường … 5 quốc tế) từ tên giải, đơn vị trao và mô tả:
+
+```
+Thưởng giải = min(0.5, Σ 0.05 × cấp giải)   trên tối đa 3 giải cấp cao nhất
+Điểm ngoại khóa = min(4, Σ điểm hoạt động + thưởng giải)
+```
+
+Ví dụ: sáng lập CLB cấp tỉnh 24 tháng (0.92) + giải cấp tỉnh (0.15) + giải quốc gia (0.20) = **1.27**. Thưởng giải tối đa 0.5 để giải thưởng chỉ bổ sung, không thay được hoạt động dài hạn. Bỏ phần này chỉ cần đặt hệ số 0.05 về 0.
+
 Code quy điểm thành mức rồi đưa mức cho LLM; `fact_check` bỏ giải thích nào nói sai mức:
 
 | Mức | Điểm |
@@ -200,7 +213,7 @@ Qwen3 8B hay so sánh số sai (ví dụ nói "SAT 1380 dưới mốc 25%" khi k
 
 | Lớp | Kiểm tra | Sai thì |
 |---|---|---|
-| `fact_check.py` (advisor) | Câu nói về SAT, GPA, ngân sách, tiếng Anh, nhóm, mức ngoại khóa, độ rẻ trong nhóm có khớp số liệu không; có hứa hẹn "chắc chắn", "đảm bảo" không | Bỏ giải thích của LLM |
+| `fact_check.py` (advisor) | Câu nói về SAT, GPA, ngân sách, tiếng Anh, nhóm, mức ngoại khóa, độ rẻ trong nhóm có khớp số liệu không; có nêu đúng **tiêu chí quyết định nhóm** không (vd. thử sức vì GPA thì phải nhắc GPA); có hứa hẹn "chắc chắn", "đảm bảo" không | Bỏ giải thích của LLM |
 | `AiOutputGuard.cs` (.NET) | Mã trường có trong danh sách không; mọi con số có trong dữ liệu không; có nêu tỷ lệ đậu không | Thay bằng câu soạn sẵn từ số liệu |
 
 ## 8. Khi AI lỗi
@@ -208,7 +221,7 @@ Qwen3 8B hay so sánh số sai (ví dụ nói "SAT 1380 dưới mốc 25%" khi k
 | Tình huống | Hệ thống làm gì |
 |---|---|
 | LLM không đọc được hoạt động | Đọc vai trò bằng từ khóa, vẫn tính điểm |
-| Advisor tắt hoặc quá 30 giây khi tính ngoại khóa | Dùng điểm ngoại khóa lần trước; chưa có thì bỏ tiêu chí ngoại khóa, kèm cảnh báo |
+| Advisor tắt hoặc quá 60 giây khi tính ngoại khóa | Dùng điểm ngoại khóa lần trước; chưa có thì bỏ tiêu chí ngoại khóa, kèm cảnh báo |
 | LLM không viết được giải thích hoặc quá 120 giây | Danh sách vẫn theo SAW, giải thích soạn sẵn, kèm cảnh báo |
 | Giải thích sai số liệu | Thay bằng giải thích soạn sẵn cho đúng trường đó |
 
@@ -219,5 +232,5 @@ Thuật toán chọn trường (bước 2–5) không phụ thuộc LLM, nên **
 | Phần | Trạng thái |
 |---|---|
 | Lọc, phân nhóm, SAW, giải thích 3 câu, kiểm tra giải thích | Đã chạy trong nút "Lọc trường" |
-| Điểm ngoại khóa trong nút: đọc hoạt động `extracurricular` và `experience`, chỉ tính lại khi hoạt động đổi, trả bảng chi tiết | Đã chạy |
-| Phạm vi học sinh tự khai (lan can "chỉ được giữ hoặc hạ") | Chờ cột `impact_level` trong bảng `profile_activities`; hiện LLM tự đánh giá phạm vi từ mô tả |
+| Điểm ngoại khóa trong nút: hoạt động `extracurricular`, `experience` và giải thưởng `award`, chỉ tính lại khi hoạt động đổi, trả bảng chi tiết | Đã chạy (điểm thưởng giải chờ thầy duyệt) |
+| Phạm vi và số tháng học sinh tự khai (lan can "chỉ được giữ hoặc hạ") | Chờ cột `impact_level`, `duration_months` trong bảng `profile_activities`; hiện LLM tự đánh giá phạm vi từ mô tả, số tháng lấy mức trung tính |

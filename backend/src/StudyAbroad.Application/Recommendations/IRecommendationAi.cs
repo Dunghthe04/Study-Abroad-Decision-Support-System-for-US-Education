@@ -29,7 +29,8 @@ namespace StudyAbroad.Application.Recommendations
         int? Sat75,
         decimal? TuitionUsd,
         decimal? TotalCostUsd,
-        string English);// met | below_min | no_score | unknown
+        string English,// met | below_min | no_score | unknown
+        string? CategoryBasis = null);// gpa | sat | gpa_sat: tiêu chí quyết định nhóm; null = chưa đủ dữ liệu
 
     public record AiRankRequest(AiStudentInput Student, IReadOnlyList<AiSchoolInput> Schools);
 

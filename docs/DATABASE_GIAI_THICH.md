@@ -470,7 +470,7 @@ Các tham số admin chỉnh được mà không cần sửa code, lưu dạng k
 
 | `key` | `value_json` ví dụ | Dùng ở |
 |---|---|---|
-| `recommend.weights` | `{"weights":{"academic":0.4,"finance":0.3,"english":0.1,"extracurricular":0.2},"gpaBand":0.3,"budgetTolerance":0.10,"maxResults":12,"perCategory":{"reach":3,"match":5,"safety":4},"aiTimeoutSeconds":120,"extracurricularTimeoutSeconds":30}` | Cấu hình gợi ý trường (#6), đọc bằng `RecommendSettings`: trọng số SAW 4 tiêu chí (chứng minh bằng AHP), ngưỡng GPA, số trường mỗi nhóm, giới hạn thời gian AI. Khóa nào thiếu hoặc sai tên thì dùng giá trị mặc định trong code (cũng là các giá trị ở ví dụ này) |
+| `recommend.weights` | `{"weights":{"academic":0.4,"finance":0.3,"english":0.1,"extracurricular":0.2},"gpaBand":0.3,"budgetTolerance":0.10,"maxResults":12,"perCategory":{"reach":3,"match":5,"safety":4},"aiTimeoutSeconds":120,"extracurricularTimeoutSeconds":60}` | Cấu hình gợi ý trường (#6), đọc bằng `RecommendSettings`: trọng số SAW 4 tiêu chí (chứng minh bằng AHP), ngưỡng GPA, số trường mỗi nhóm, giới hạn thời gian AI. Khóa nào thiếu hoặc sai tên thì dùng giá trị mặc định trong code (cũng là các giá trị ở ví dụ này) |
 | `grade_scale.10` | `[{"min":9,"max":10,"gpa4":4.0},{"min":8,"max":8.99,"gpa4":3.5}]` | Quy đổi điểm thang 10 sang GPA 4 (#4, #13) |
 | `major_weights` | `{"Computer Science":{"Toán":0.4,"Tin":0.3}}` | Môn quan trọng theo ngành (#15) |
 | `moderation.rules` | `[{"pattern":"zalo","action":"flag"}]` | Luật kiểm duyệt diễn đàn (#28) |

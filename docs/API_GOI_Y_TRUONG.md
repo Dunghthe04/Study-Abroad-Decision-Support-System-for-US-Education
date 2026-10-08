@@ -171,7 +171,7 @@ interface SchoolInfo {
 
 ## Bảng điểm ngoại khóa
 
-Mỗi lần bấm nút, hệ thống chấm lại điểm ngoại khóa từ các hoạt động loại `extracurricular` và `experience` trong hồ sơ (giải thưởng `award` chưa tính), rồi trả kèm trường `extracurricular`. Kết quả lưu trước ngày 08/10 không có trường này, nên giao diện coi nó là tùy chọn (`?`). `GET /latest` cũng trả trường này.
+Mỗi lần bấm nút, hệ thống chấm lại điểm ngoại khóa từ hoạt động (`extracurricular`, `experience`) và giải thưởng (`award`) trong hồ sơ, rồi trả kèm trường `extracurricular`. Hoạt động không đổi thì dùng lại kết quả lần trước. Kết quả lưu trước ngày 08/10 không có trường này, nên giao diện coi nó là tùy chọn (`?`). `GET /latest` cũng trả trường này.
 
 ```ts
 interface RecommendationResult {
@@ -188,10 +188,11 @@ interface RecommendationResult {
       impactLevel: number;      // 1 trường … 5 quốc tế, sau khi AI đối chiếu mô tả
       quality: number;          // 0–1
       points: number;           // đóng góp vào điểm tổng
-      counted: boolean;         // false = ngoài 4 hoạt động tốt nhất
+      counted: boolean;         // false = ngoài 4 hoạt động (hoặc 3 giải) tốt nhất
+      kind: "activity" | "award"; // award: impactLevel là cấp giải, points là điểm thưởng (0.05 × cấp)
     }[];
   };
 }
 ```
 
-Gợi ý hiển thị: điểm tổng "3.0 / 4" và bảng từng hoạt động (vai trò, phạm vi, điểm). Hoạt động có `counted = false` thì làm mờ. Nếu `impactLevel` thấp hơn mức học sinh đã khai, ghi chú "AI đánh giá phạm vi thực tế là cấp trường".
+Gợi ý hiển thị: điểm tổng "3.0 / 4", bảng hoạt động (vai trò, phạm vi, điểm) và danh sách giải thưởng (cấp giải, điểm thưởng) tách riêng theo `kind`. Hoạt động có `counted = false` thì làm mờ. Nếu `impactLevel` thấp hơn mức học sinh đã khai, ghi chú "AI đánh giá phạm vi thực tế là cấp trường".

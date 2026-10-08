@@ -58,5 +58,6 @@ namespace StudyAbroad.Application.Recommendations
         int ImpactLevel,                 // 1 trường … 5 quốc tế
         decimal Quality,                 // 0–1
         decimal Points,                  // đóng góp vào điểm tổng
-        bool Counted);                   // false = ngoài 4 hoạt động tốt nhất
+        bool Counted,                    // false = ngoài 4 hoạt động (3 giải) tốt nhất
+        string Kind = "activity");       // activity | award
 }

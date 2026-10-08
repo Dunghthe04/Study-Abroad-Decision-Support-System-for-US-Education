@@ -148,7 +148,7 @@ namespace StudyAbroad.Application.Recommendations
         {
             var names = inputs.ToDictionary(i => i.Id, i => i.Name);
             return new ExtracurricularSummaryDto(score, fresh, aiUsed, scored.Select(a => new ExtracurricularActivityDto(
-                a.Id, names.GetValueOrDefault(a.Id, ""), a.Role, a.ReputableOrg, a.ImpactLevel, a.Quality, a.Points, a.Counted)).ToList());
+                a.Id, names.GetValueOrDefault(a.Id, ""), a.Role, a.ReputableOrg, a.ImpactLevel, a.Quality, a.Points, a.Counted, a.Kind)).ToList());
         }
         private static SchoolInfoDto ToSchoolInfo(SchoolCandidate c) => new(
     c.City, c.State, c.Control, c.Website, c.AcceptanceRate, c.InternationalStudents, c.SatPolicy,
@@ -163,7 +163,7 @@ namespace StudyAbroad.Application.Recommendations
             timeout.CancelAfter(TimeSpan.FromSeconds(settings.AiTimeoutSeconds));
             try
             {
-                var response = await ai.RankAsync(ToAiRequest(student, scored), timeout.Token);
+                var response = await ai.RankAsync(ToAiRequest(student, scored, settings.GpaBand), timeout.Token);
                 return response.Items;
             }
             catch (Exception) when (!ct.IsCancellationRequested)   // người dùng tự hủy request thì không nuốt lỗi
@@ -173,7 +173,7 @@ namespace StudyAbroad.Application.Recommendations
         }
 
         //Chỉ gửi số liệu cần thiết cho LLM, không gửi thông tin cá nhân
-        private static AiRankRequest ToAiRequest(StudentSnapshot s, IReadOnlyList<ScoredSchool> scored) => new(
+        private static AiRankRequest ToAiRequest(StudentSnapshot s, IReadOnlyList<ScoredSchool> scored, decimal gpaBand) => new(
             new AiStudentInput(s.StudyLevel, s.Major, s.Gpa4, s.Sat, s.AnnualBudgetUsd, s.Ielts, s.Toefl, s.Duolingo, s.ExtracurricularScore),
             scored.Select(r => new AiSchoolInput(
                 r.Candidate.Code,
@@ -185,7 +185,8 @@ namespace StudyAbroad.Application.Recommendations
                 r.Candidate.Sat75,
                 r.Candidate.TuitionUsd,
                 r.TotalCostUsd,
-                ReasonTemplate.EnglishCode(r.English))).ToList());
+                ReasonTemplate.EnglishCode(r.English),
+                AdmissionCategorizer.Basis(s.Gpa4, s.Sat, r.Candidate.AvgGpa4, r.Candidate.Sat25, r.Candidate.Sat75, gpaBand))).ToList());
 
         public async Task<RecommendationResultDto?> GetLatestAsync(Guid userId, CancellationToken ct = default)
         {

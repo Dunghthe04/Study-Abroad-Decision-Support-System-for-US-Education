@@ -190,17 +190,19 @@ public class RecommendationServiceTests
     {
         var repo = NewRepo();
         repo.Activities.Add(Activity(repo, "CLB Robotics"));
-        repo.Activities.Add(Activity(repo, "Giải Nhì tin học", kind: "award"));   // giải thưởng chưa tính
+        repo.Activities.Add(Activity(repo, "Giải Nhì tin học", kind: "award"));   // giải thưởng: cộng điểm thưởng
         var ecAi = new FakeExtracurricularAi();
 
         var result = await NewService(repo, ecAi: ecAi).CreateAsync(UserId);
 
-        var sent = Assert.Single(Assert.Single(ecAi.Requests).Activities);
-        Assert.Equal("CLB Robotics", sent.Name);
-        Assert.Equal(12, sent.Months);                                   // 09/2024 → 09/2025
-        Assert.Null(sent.ImpactLevel);                                   // chưa có cột impact_level
+        var sent = Assert.Single(ecAi.Requests).Activities;
+        var club = sent.Single(a => a.Kind == "activity");
+        Assert.Equal("CLB Robotics", club.Name);
+        Assert.Equal(12, club.Months);                                   // 09/2024 → 09/2025
+        Assert.Null(club.ImpactLevel);                                   // chưa có cột impact_level
+        Assert.Equal("Giải Nhì tin học", sent.Single(a => a.Kind == "award").Name);
         Assert.Equal(3.0m, result!.Extracurricular!.Score);
-        Assert.Equal("CLB Robotics", Assert.Single(result.Extracurricular.Activities).Name);
+        Assert.Equal(["CLB Robotics", "Giải Nhì tin học"], result.Extracurricular.Activities.Select(a => a.Name).OrderBy(n => n));
         Assert.Equal(3.0m, repo.Profile!.ExtracurricularScore);         // lưu lại điểm mới
         Assert.Single(repo.Analyses);
         Assert.Contains("\"extracurricularScore\":3", repo.Saved.Single().CriteriaJson);   // SAW dùng điểm vừa tính
