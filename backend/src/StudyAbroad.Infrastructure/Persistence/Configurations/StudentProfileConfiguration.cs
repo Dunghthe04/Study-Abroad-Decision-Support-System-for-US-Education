@@ -30,9 +30,12 @@ public class StudentProfileConfiguration : IEntityTypeConfiguration<StudentProfi
         b.ToTable(t => t.HasCheckConstraint("ck_student_profiles_extracurricular_score",
             "extracurricular_score IS NULL OR extracurricular_score BETWEEN 0 AND 4"));
         b.Property(x => x.AnnualBudgetUsd).HasPrecision(12, 2);
+        b.Property(x => x.MaxExpectedTuitionUsd).HasPrecision(12, 2);
         b.Property(x => x.FundingSource).HasMaxLength(32);
+        b.Property(x => x.FinancialNotes).HasMaxLength(1000);
         b.Property(x => x.PreferredStates).HasColumnType("text[]");
         b.Property(x => x.RoadmapProgressJson).HasColumnType("jsonb");
+        b.Property(x => x.TranscriptFileUrl).HasMaxLength(512);
         b.HasIndex(x => x.UserId).IsUnique();
     }
 }

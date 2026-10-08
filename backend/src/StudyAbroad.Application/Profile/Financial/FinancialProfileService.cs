@@ -37,11 +37,13 @@ public class FinancialProfileService(IFinancialProfileRepository repository) : I
         var profile = await repository.EnsureProfileExistsAsync(userId, ct);
 
         profile.AnnualBudgetUsd = request.AnnualBudget;
+        profile.MaxExpectedTuitionUsd = request.MaxExpectedTuition;
         profile.FundingSource = request.FundingSource.Trim();
         profile.NeedsScholarship = request.NeedScholarship;
+        profile.FinancialNotes = request.Notes?.Trim();
 
         await repository.UpdateProfileAsync(profile, ct);
-        return MapToFinancialDto(profile, request.Notes);
+        return MapToFinancialDto(profile);
     }
 
     // ==========================================
@@ -222,8 +224,8 @@ public class FinancialProfileService(IFinancialProfileRepository repository) : I
     // MAPPERS
     // ==========================================
 
-    private static FinancialProfileDto MapToFinancialDto(StudentProfile p, string? notes = null) =>
-        new(p.Id, p.UserId, p.AnnualBudgetUsd ?? 0, p.FundingSource ?? "family", p.NeedsScholarship, null, "USD", notes, p.CreatedAt, p.UpdatedAt);
+    private static FinancialProfileDto MapToFinancialDto(StudentProfile p) =>
+        new(p.Id, p.UserId, p.AnnualBudgetUsd ?? 0, p.FundingSource ?? "family", p.NeedsScholarship, p.MaxExpectedTuitionUsd, "USD", p.FinancialNotes, p.CreatedAt, p.UpdatedAt);
 
     private static ExtracurricularActivityDto MapToActivityDto(ProfileActivity a, Guid userId) =>
         new(a.Id, userId, a.Title, a.Role ?? string.Empty, a.Organization ?? string.Empty, a.DurationMonths, a.StartDate?.ToString("yyyy-MM"), a.EndDate?.ToString("yyyy-MM"), a.IsOngoing, a.ImpactLevel ?? ProfileConstants.ImpactLevels.School, a.Description ?? string.Empty, a.CreatedAt, a.UpdatedAt);
