@@ -152,7 +152,11 @@ public class ExtracurricularScoringTests
         var profileId = Guid.NewGuid();
         var activities = new[]
         {
+<<<<<<< HEAD
             new Domain.Entities.ProfileActivity { StudentProfileId = profileId, Kind = "extracurricular", Title = "CLB", Role = "Chủ nhiệm", Description = new string('a', 1500), ImpactLevel = 3, DurationMonths = 18, StartDate = new(2025, 1, 1) },
+=======
+            new Domain.Entities.ProfileActivity { StudentProfileId = profileId, Kind = "extracurricular", Title = "CLB", Role = "Chủ nhiệm", Description = new string('a', 1500), ImpactLevel = 3 },
+>>>>>>> 7315c1c2687ccd9ba245705ca67955e387094895
             new Domain.Entities.ProfileActivity { StudentProfileId = profileId, Kind = "experience", Title = "Làm thêm" },
             new Domain.Entities.ProfileActivity { StudentProfileId = profileId, Kind = "award", Title = "Giải Nhì", Role = "award", StartDate = new(2025, 5, 1) },
             new Domain.Entities.ProfileActivity { StudentProfileId = profileId, Kind = "award", Title = "Thực tập FPT", Role = "internship" },
@@ -164,7 +168,10 @@ public class ExtracurricularScoringTests
         Assert.Equal(["CLB", "Giải Nhì", "Làm thêm", "Thực tập FPT"], inputs.Keys.OrderBy(n => n));
         Assert.Equal(1000, inputs["CLB"].Description!.Length);         // advisor nhận tối đa 1000 ký tự
         Assert.Equal(3, inputs["CLB"].ImpactLevel);                     // mức ảnh hưởng học sinh khai
+<<<<<<< HEAD
         Assert.Equal(18, inputs["CLB"].Months);                          // số tháng khai ở form được ưu tiên hơn ngày
+=======
+>>>>>>> 7315c1c2687ccd9ba245705ca67955e387094895
         Assert.Null(inputs["Làm thêm"].ImpactLevel);                     // dữ liệu cũ chưa khai: LLM đọc từ mô tả
         Assert.Equal("award", inputs["Giải Nhì"].Kind);
         Assert.Null(inputs["Giải Nhì"].Role);                            // cột role của giải thưởng là loại thành tích, không gửi
