@@ -87,3 +87,27 @@ async def test_no_activities_scores_zero_without_calling_llm():
 
     assert result.score == 0
     assert llm.calls == []
+
+
+# ---------- học sinh không khai phạm vi (form chưa có ô này hoặc để trống) ----------
+
+UNDECLARED = ActivityInput(
+    id="a3", name="Dạy học tình nguyện", role="Thành viên", description="Dạy tiếng Anh ở 5 tỉnh"
+)
+
+
+async def test_undeclared_level_uses_level_read_by_llm():
+    llm = FakeLLM({"activities": [{"id": "a3", "role": "member", "reputable_org": False, "impact_level": 4}]})
+
+    result = await ActivityReader(llm).score(request(UNDECLARED))
+
+    assert result.activities[0].impact_level == 4  # không có mức khai để chặn → dùng mức LLM đọc
+    assert '"muc_khai": null' in llm.calls[0]["messages"][1]["content"]
+
+
+async def test_undeclared_level_without_llm_falls_back_to_lowest_level():
+    llm = FakeLLM(OllamaError("connection refused"))
+
+    result = await ActivityReader(llm).score(request(UNDECLARED))
+
+    assert result.activities[0].impact_level == 1

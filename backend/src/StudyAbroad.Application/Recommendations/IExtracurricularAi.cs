@@ -7,7 +7,7 @@ namespace StudyAbroad.Application.Recommendations
         string? Role,          // chữ học sinh nhập, ví dụ "Chủ nhiệm CLB"
         string? Organization,
         string? Description,
-        int ImpactLevel,       // học sinh tự khai: 1 trường … 5 quốc tế
+        int? ImpactLevel,      // học sinh tự khai: 1 trường … 5 quốc tế; null = không khai, LLM đọc từ mô tả
         int? Months);
 
     public record ExtracurricularScoreRequest(IReadOnlyList<ExtracurricularActivityInput> Activities);

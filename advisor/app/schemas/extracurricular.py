@@ -14,7 +14,8 @@ class ActivityInput(CamelModel):
     role: str | None = Field(default=None, max_length=100)  # chữ học sinh nhập, vd "Chủ nhiệm CLB"
     organization: str | None = Field(default=None, max_length=200)
     description: str | None = Field(default=None, max_length=1000)
-    impact_level: int = Field(ge=1, le=5)  # học sinh tự khai: 1 trường … 5 quốc tế
+    # học sinh tự khai: 1 trường … 5 quốc tế; None = không khai, LLM đọc từ mô tả
+    impact_level: int | None = Field(default=None, ge=1, le=5)
     months: int | None = Field(default=None, ge=0)
 
 

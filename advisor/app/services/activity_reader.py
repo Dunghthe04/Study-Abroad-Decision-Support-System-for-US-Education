@@ -2,6 +2,7 @@
 
 LLM chỉ phân loại (vai trò, tổ chức uy tín, phạm vi thực tế), không chấm điểm.
 Code giữ 2 lan can: phạm vi không được cao hơn mức học sinh khai; LLM lỗi thì đọc vai trò bằng từ khóa.
+Học sinh không khai phạm vi thì lấy phạm vi LLM đọc; LLM cũng lỗi thì lấy mức thấp nhất (cấp trường).
 """
 
 import json
@@ -22,6 +23,9 @@ from app.services.recommender import JsonLLM
 
 logger = logging.getLogger(__name__)
 
+UNKNOWN_LEVEL = 1  # học sinh không khai phạm vi và LLM không đọc được: coi là cấp trường
+MAX_LEVEL = 5
+
 SYSTEM_PROMPT = """Bạn đọc các hoạt động ngoại khóa do một học sinh Việt Nam khai và PHÂN LOẠI từng hoạt động. Không chấm điểm.
 
 - role (vai trò của học sinh trong hoạt động):
@@ -34,6 +38,7 @@ SYSTEM_PROMPT = """Bạn đọc các hoạt động ngoại khóa do một học
   Không được cao hơn mức học sinh tự khai (khóa "muc_khai"). Học sinh hay khai cao hơn thực tế, hãy hạ xuống khi mô tả
   cho thấy phạm vi hẹp hơn. Ví dụ: CLB của lớp hoặc của trường, hoạt động chỉ diễn ra trong trường → 1, dù học sinh khai 5;
   giải hoặc hoạt động cấp quận → 2; cấp tỉnh/thành → 3. Mô tả không đủ để đánh giá thì giữ mức học sinh khai.
+  "muc_khai" là null (học sinh không khai) thì tự đánh giá từ mô tả; mô tả không đủ thì chọn 1.
 
 Trả về đủ mọi hoạt động, giữ nguyên id. Chỉ dựa vào chữ học sinh viết, không đoán thêm."""
 
@@ -89,9 +94,12 @@ class ActivityReader:
 def to_activity(a: ActivityInput, read: _ReadActivity | None) -> Activity:
     """Ghép thuộc tính LLM đọc với số liệu học sinh khai; LLM bỏ sót hoạt động này thì dùng từ khóa."""
     if read is None:
-        return Activity(impact_level=a.impact_level, role=role_from_text(a.role), months=a.months)
+        # Không khai, LLM cũng không đọc được: lấy mức thấp nhất, không đoán cao hơn
+        level = a.impact_level or UNKNOWN_LEVEL
+        return Activity(impact_level=level, role=role_from_text(a.role), months=a.months)
     # Lan can: LLM chỉ được giữ hoặc hạ phạm vi, không được nâng cao hơn mức học sinh khai
-    level = max(1, min(read.impact_level, a.impact_level))
+    ceiling = a.impact_level or MAX_LEVEL
+    level = max(1, min(read.impact_level, ceiling))
     return Activity(impact_level=level, role=read.role, months=a.months, reputable_org=read.reputable_org)
 
 
