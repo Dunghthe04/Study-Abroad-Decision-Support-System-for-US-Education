@@ -40,7 +40,7 @@ export function FinancialCard() {
           setMaxTuition(data.maxExpectedTuition ? data.maxExpectedTuition.toString() : "");
           setNotes(data.notes || "");
         }
-      } catch (err: any) {
+      } catch {
         // Có thể chưa đăng nhập hoặc chưa có profile
       } finally {
         setLoading(false);
@@ -92,8 +92,8 @@ export function FinancialCard() {
       setProfile(updated);
       setSuccess("Đã lưu thông tin tài chính thành công!");
       setTimeout(() => setSuccess(null), 4000);
-    } catch (err: any) {
-      setError(err?.message || "Có lỗi xảy ra khi lưu thông tin tài chính.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Có lỗi xảy ra khi lưu thông tin tài chính.");
     } finally {
       setSaving(false);
     }

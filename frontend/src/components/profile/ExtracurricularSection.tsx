@@ -35,10 +35,6 @@ export function ExtracurricularSection() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadActivities();
-  }, []);
-
   async function loadActivities() {
     try {
       setLoading(true);
@@ -50,6 +46,10 @@ export function ExtracurricularSection() {
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    loadActivities();
+  }, []);
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
@@ -91,8 +91,8 @@ export function ExtracurricularSection() {
       setDescription("");
       setIsOngoing(false);
       setShowAddForm(false);
-    } catch (err: any) {
-      setError(err?.message || "Lỗi khi thêm hoạt động ngoại khóa.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Lỗi khi thêm hoạt động ngoại khóa.");
     } finally {
       setSaving(false);
     }
@@ -103,8 +103,8 @@ export function ExtracurricularSection() {
     try {
       await deleteExtracurricularActivity(id);
       setActivities(activities.filter((a) => a.id !== id));
-    } catch (err: any) {
-      alert(err?.message || "Không thể xóa hoạt động.");
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Không thể xóa hoạt động.");
     }
   }
 
@@ -247,7 +247,7 @@ export function ExtracurricularSection() {
       ) : activities.length === 0 ? (
         <div className="rounded-lg border border-dashed border-slate-200 py-8 text-center">
           <p className="text-sm text-slate-500">Chưa có hoạt động ngoại khóa nào được khai báo.</p>
-          <p className="text-xs text-slate-400 mt-1">Bấm "+ Thêm hoạt động" để tăng cơ hội nhận học bổng.</p>
+          <p className="text-xs text-slate-400 mt-1">Bấm &quot;+ Thêm hoạt động&quot; để tăng cơ hội nhận học bổng.</p>
         </div>
       ) : (
         <div className="space-y-3">

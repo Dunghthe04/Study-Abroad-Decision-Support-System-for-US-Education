@@ -28,10 +28,6 @@ export function AchievementsSection() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadAchievements();
-  }, []);
-
   async function loadAchievements() {
     try {
       setLoading(true);
@@ -43,6 +39,10 @@ export function AchievementsSection() {
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    loadAchievements();
+  }, []);
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
@@ -71,8 +71,8 @@ export function AchievementsSection() {
       setIssueDate("");
       setDescription("");
       setShowAddForm(false);
-    } catch (err: any) {
-      setError(err?.message || "Có lỗi xảy ra khi thêm thành tích.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Có lỗi xảy ra khi thêm thành tích.");
     } finally {
       setSaving(false);
     }
@@ -83,8 +83,8 @@ export function AchievementsSection() {
     try {
       await deleteAchievement(id);
       setAchievements(achievements.filter((a) => a.id !== id));
-    } catch (err: any) {
-      alert(err?.message || "Không thể xóa thành tích.");
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Không thể xóa thành tích.");
     }
   }
 
@@ -200,7 +200,7 @@ export function AchievementsSection() {
       ) : achievements.length === 0 ? (
         <div className="rounded-lg border border-dashed border-slate-200 py-8 text-center">
           <p className="text-sm text-slate-500">Chưa có giải thưởng hoặc nghiên cứu nào được khai báo.</p>
-          <p className="text-xs text-slate-400 mt-1">Bấm "+ Thêm thành tích" để làm dày hồ sơ của bạn.</p>
+          <p className="text-xs text-slate-400 mt-1">Bấm &quot;+ Thêm thành tích&quot; để làm dày hồ sơ của bạn.</p>
         </div>
       ) : (
         <div className="space-y-3">

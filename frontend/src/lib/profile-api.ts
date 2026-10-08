@@ -1,6 +1,6 @@
 // [USAS-364] Client API gọi các endpoint Quản lý Hồ sơ tài chính và Hoạt động ngoại khóa
 
-import { apiFetch } from "@/lib/api";
+import { apiFetch, ApiError } from "@/lib/api";
 import type {
   FinancialProfileDto,
   SaveFinancialProfileRequest,
@@ -35,8 +35,8 @@ export async function getFinancialProfile(): Promise<FinancialProfileDto | null>
     return await apiFetch<FinancialProfileDto>("/api/v1/profile/financial", {
       headers: getAuthHeaders(),
     });
-  } catch (err: any) {
-    if (err?.status === 404 || err?.status === 401) return null;
+  } catch (err: unknown) {
+    if (err instanceof ApiError && (err.status === 404 || err.status === 401)) return null;
     throw err;
   }
 }
@@ -57,8 +57,8 @@ export async function getExtracurricularActivities(): Promise<ExtracurricularAct
     return await apiFetch<ExtracurricularActivityDto[]>("/api/v1/profile/extracurricular", {
       headers: getAuthHeaders(),
     });
-  } catch (err: any) {
-    if (err?.status === 404 || err?.status === 401) return [];
+  } catch (err: unknown) {
+    if (err instanceof ApiError && (err.status === 404 || err.status === 401)) return [];
     throw err;
   }
 }
@@ -97,8 +97,8 @@ export async function getAchievements(): Promise<StudentAchievementDto[]> {
     return await apiFetch<StudentAchievementDto[]>("/api/v1/profile/achievements", {
       headers: getAuthHeaders(),
     });
-  } catch (err: any) {
-    if (err?.status === 404 || err?.status === 401) return [];
+  } catch (err: unknown) {
+    if (err instanceof ApiError && (err.status === 404 || err.status === 401)) return [];
     throw err;
   }
 }
@@ -126,8 +126,8 @@ export async function getProfileSummary(): Promise<StudentProfileSummaryDto | nu
     return await apiFetch<StudentProfileSummaryDto>("/api/v1/profile/summary", {
       headers: getAuthHeaders(),
     });
-  } catch (err: any) {
-    if (err?.status === 404 || err?.status === 401) return null;
+  } catch (err: unknown) {
+    if (err instanceof ApiError && (err.status === 404 || err.status === 401)) return null;
     throw err;
   }
 }
