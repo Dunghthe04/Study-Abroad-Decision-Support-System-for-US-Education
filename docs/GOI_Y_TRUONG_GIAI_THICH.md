@@ -28,7 +28,7 @@ Hồ sơ học sinh (học thuật, tài chính, tiếng Anh, hoạt động ngo
    │
    ├─ 2. Lọc cứng: ngành, bang mong muốn, ngân sách
    ├─ 3. Phân nhóm: reach / match / safety theo GPA và SAT
-   ├─ 4. Chuẩn hóa 4 tiêu chí về [0, 1]
+   ├─ 4. Chuẩn hóa 3 tiêu chí về [0, 1] (tiếng Anh nằm trong học thuật)
    ├─ 5. SAW với trọng số AHP → xếp hạng trong từng nhóm, lấy tối đa 12 trường
    │
    ├─ 6. LLM viết giải thích 3 câu cho từng trường: học thuật, tài chính, ngoại khóa
@@ -58,14 +58,24 @@ So hồ sơ học sinh với số liệu tuyển sinh của trường:
 - Không có cả hai thì nhóm là **"chưa đủ dữ liệu"**. Riêng bậc cao đẳng cộng đồng (tuyển sinh mở) thì xếp **safety**.
 - Mỗi nhóm lấy tối đa: reach 3, match 5, safety 4; tổng tối đa 12 trường.
 
-## 3. Chuẩn hóa 4 tiêu chí về [0, 1]
+## 3. Chuẩn hóa 3 tiêu chí về [0, 1]
 
 | Tiêu chí | Công thức | Thiếu dữ liệu |
 |---|---|---|
-| **Học thuật** | Trung bình của GPA fit = (GPA − GPA TB + 0.3) / 0.6 và SAT fit = (SAT − SAT25) / (SAT75 − SAT25), mỗi phần kẹp trong [0, 1] | Học sinh không có GPA lẫn SAT: bỏ tiêu chí. Trường không có số liệu: 0.5 |
+| **Học thuật** | Trung bình có trọng số: 0.4 × GPA fit + 0.4 × SAT fit + 0.2 × Tiếng Anh fit (xem bảng dưới) | Học sinh không có GPA, SAT lẫn điểm tiếng Anh: bỏ tiêu chí. Có điểm nhưng trường không có số liệu nào: 0.5 |
 | **Tài chính** | (Ngân sách − Chi phí) / Ngân sách, kẹp trong [0, 1] | Học sinh chưa nhập ngân sách: bỏ tiêu chí. Trường không công bố chi phí: 0.5 |
-| **Tiếng Anh** | min(1, điểm / mức tối thiểu của trường), lấy bài thi tốt nhất (IELTS, TOEFL, Duolingo) | Học sinh chưa thi: bỏ tiêu chí. Trường không công bố mức: 0.5 |
 | **Ngoại khóa** | Điểm ngoại khóa / 4 (xem mục 6) | Chưa có điểm: bỏ tiêu chí |
+
+Ba phần của học thuật, mỗi phần kẹp trong [0, 1]:
+
+| Phần | Trọng số | Công thức |
+|---|---|---|
+| GPA fit | 0.4 | (GPA − GPA TB của trường + 0.3) / 0.6 |
+| SAT fit | 0.4 | (SAT − SAT25) / (SAT75 − SAT25) |
+| Tiếng Anh fit | 0.2 | min(1, điểm / mức tối thiểu của trường), lấy bài thi tốt nhất (IELTS, TOEFL, Duolingo) |
+
+- Chỉ tính phần mà **cả học sinh lẫn trường** đều có số liệu, rồi chia lại theo tổng trọng số của các phần còn lại. Ví dụ trường không công bố mức IELTS: học thuật = (0.4 × GPA fit + 0.4 × SAT fit) / 0.8.
+- Tiếng Anh nhẹ hơn GPA, SAT vì bản chất là điều kiện đạt/không đạt (đạt = 1, cao hơn mức tối thiểu không được thêm điểm). Học sinh chưa đạt vẫn có cảnh báo riêng trên kết quả. Tỷ lệ 0.2 lấy từ AHP 4 tiêu chí trước đây: tiếng Anh 0.098 / (học thuật 0.437 + tiếng Anh 0.098) ≈ 0.18.
 
 **Bỏ tiêu chí** nghĩa là SAW chia lại cho tổng trọng số của các tiêu chí còn lại, để học sinh thiếu một loại điểm không bị kéo điểm xuống 0.
 
@@ -77,47 +87,55 @@ AHP (Analytic Hierarchy Process, Saaty) biến các câu so sánh "tiêu chí A 
 
 Ô (hàng, cột) = hàng quan trọng hơn cột bao nhiêu lần, theo thang Saaty 1–9. Ô đối xứng là nghịch đảo.
 
-| | Học thuật | Tài chính | Tiếng Anh | Ngoại khóa |
-|---|---|---|---|---|
-| **Học thuật** | 1 | 2 | 4 | 2 |
-| **Tài chính** | 1/2 | 1 | 3 | 3/2 |
-| **Tiếng Anh** | 1/4 | 1/3 | 1 | 1/2 |
-| **Ngoại khóa** | 1/2 | 2/3 | 2 | 1 |
+| | Học thuật | Tài chính | Ngoại khóa |
+|---|---|---|---|
+| **Học thuật** | 1 | 2 | 2 |
+| **Tài chính** | 1/2 | 1 | 3/2 |
+| **Ngoại khóa** | 1/2 | 2/3 | 1 |
 
-| Tiêu chí | Lý do mức quan trọng |
-|---|---|
-| Học thuật cao nhất | Quyết định nhóm reach/match/safety và khả năng được nhận |
-| Tài chính thứ hai | Ngân sách đã lọc cứng ở bước 1; trong xếp hạng chỉ còn để ưu tiên trường rẻ hơn |
-| Ngoại khóa thứ ba | Trường Mỹ xét hồ sơ toàn diện, nhưng không nặng bằng học thuật |
-| Tiếng Anh thấp nhất | Bản chất là điều kiện đạt/không đạt; trường hợp chưa đạt đã có cảnh báo riêng |
+| So sánh | Mức | Lý do |
+|---|---|---|
+| Học thuật / Tài chính | 2 | Học thuật quyết định nhóm reach/match/safety và khả năng được nhận; ngân sách đã lọc cứng ở bước 1, trong xếp hạng chỉ còn để ưu tiên trường rẻ hơn |
+| Học thuật / Ngoại khóa | 2 | Trường Mỹ xét hồ sơ toàn diện, nhưng không nặng bằng học thuật |
+| Tài chính / Ngoại khóa | 3/2 | Chi phí quyết định gia đình có theo học được không |
 
 ### Tính trọng số (trung bình nhân theo hàng)
 
 ```
-Học thuật : (1 × 2 × 4 × 2)^(1/4)         = 16^(1/4)    = 2.000
-Tài chính : (1/2 × 1 × 3 × 3/2)^(1/4)     = 2.25^(1/4)  = 1.225
-Tiếng Anh : (1/4 × 1/3 × 1 × 1/2)^(1/4)   = 0.0417^(1/4)= 0.452
-Ngoại khóa: (1/2 × 2/3 × 2 × 1)^(1/4)     = 0.667^(1/4) = 0.904
-Tổng = 4.580
+Học thuật : (1 × 2 × 2)^(1/3)       = 1.587
+Tài chính : (1/2 × 1 × 3/2)^(1/3)   = 0.909
+Ngoại khóa: (1/2 × 2/3 × 1)^(1/3)   = 0.693
+Tổng = 3.189
 
-→ Học thuật 0.437 · Tài chính 0.267 · Tiếng Anh 0.099 · Ngoại khóa 0.197
+→ Học thuật 0.498 · Tài chính 0.285 · Ngoại khóa 0.217
 ```
 
-Tính bằng vector riêng (cách chuẩn của AHP) cho kết quả gần như trùng: 0.4375 · 0.2676 · 0.0983 · 0.1966.
+Tính bằng vector riêng cho cùng kết quả: 0.4977 · 0.2849 · 0.2174.
 
 ### Kiểm tra nhất quán
 
 ```
-λmax = 4.021
-CI   = (λmax − n) / (n − 1) = (4.021 − 4) / 3 = 0.0069
-CR   = CI / RI = 0.0069 / 0.90 = 0.008        (RI = 0.90 với n = 4)
+λmax = 3.018
+CI   = (λmax − n) / (n − 1) = (3.018 − 3) / 2 = 0.0091
+CR   = CI / RI = 0.0091 / 0.58 = 0.016        (RI = 0.58 với n = 3)
 ```
 
-**CR = 0.008 < 0.1**: các phép so sánh nhất quán, trọng số dùng được.
+**CR = 0.016 < 0.1**: các phép so sánh nhất quán, trọng số dùng được. Kết quả cũng khớp AHP 4 tiêu chí trước đây khi gộp tiếng Anh vào học thuật: 0.437 + 0.098 = 0.536 · 0.268 · 0.197.
 
 ### Trọng số dùng trong hệ thống
 
-Làm tròn kết quả AHP: **Học thuật 0.4 · Tài chính 0.3 · Tiếng Anh 0.1 · Ngoại khóa 0.2** (tổng = 1). Đây là giá trị mặc định trong `RecommendSettings.cs`. Admin có thể đổi trong bảng `app_settings` (key `recommend.weights`) mà không phải sửa code.
+Làm tròn kết quả AHP: **Học thuật 0.5 · Tài chính 0.3 · Ngoại khóa 0.2** (tổng = 1). Đây là giá trị mặc định trong `RecommendSettings.cs`, đồng thời được ghi vào bảng `app_settings` (key `recommend.weights`). Admin sửa dòng này là đổi được mọi hệ số mà không phải sửa code hay khởi động lại API:
+
+```json
+{"weights": {"academic": 0.5, "finance": 0.3, "extracurricular": 0.2},
+ "academicParts": {"gpa": 0.4, "sat": 0.4, "english": 0.2},
+ "gpaBand": 0.3, "budgetTolerance": 0.10, "missingValue": 0.5,
+ "maxResults": 12, "perCategory": {"reach": 3, "match": 5, "safety": 4},
+ "openAdmissionLevels": ["community_college"],
+ "aiEnabled": true, "aiTimeoutSeconds": 120, "extracurricularTimeoutSeconds": 60}
+```
+
+Key nào thiếu thì dùng giá trị mặc định trong code.
 
 ## 5. SAW: xếp hạng
 
@@ -134,13 +152,12 @@ Trường: GPA TB 3.70, SAT 1140–1400, tổng chi phí 57.168 USD, IELTS tối
 
 | Tiêu chí | Giá trị [0, 1] | Trọng số | Tích |
 |---|---|---|---|
-| Học thuật | GPA (3.5 − 3.7 + 0.3) / 0.6 = 0.167; SAT (1300 − 1140) / 260 = 0.615; TB = 0.391 | 0.4 | 0.156 |
+| Học thuật | GPA (3.5 − 3.7 + 0.3) / 0.6 = 0.167; SAT (1300 − 1140) / 260 = 0.615; tiếng Anh min(1, 6.5 / 6.0) = 1; 0.4 × 0.167 + 0.4 × 0.615 + 0.2 × 1 = 0.513 | 0.5 | 0.256 |
 | Tài chính | (60000 − 57168) / 60000 = 0.047 | 0.3 | 0.014 |
-| Tiếng Anh | min(1, 6.5 / 6.0) = 1 | 0.1 | 0.100 |
 | Ngoại khóa | 3.2 / 4 = 0.8 | 0.2 | 0.160 |
 | **Tổng** | | | **0.431** |
 
-Nhóm: GPA thấp hơn TB 0.2 (< 0.3) → ngang; SAT nằm giữa 25%–75% → ngang. Kết quả: **match**. Ví dụ này có test tự động `Score_OregonStateExample_MatchesHandCalculation`.
+Nhóm: GPA thấp hơn TB 0.2 (< 0.3) → ngang; SAT nằm giữa 25%–75% → ngang. Kết quả: **match**. Tiếng Anh không dùng để phân nhóm. Ví dụ này có test tự động `Score_OregonStateExample_MatchesHandCalculation`.
 
 ## 6. Điểm ngoại khóa 0–4
 
