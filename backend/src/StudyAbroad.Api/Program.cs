@@ -19,6 +19,7 @@ builder.Host.UseSerilog((context, config) => config
 
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddMemoryCache();
 
 // [USAS-362] Cấu hình JWT Bearer Authentication & Quản lý thu hồi phiên (AC-3)
 var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>() ?? new JwtOptions();

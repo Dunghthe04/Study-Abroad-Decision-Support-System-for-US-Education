@@ -1254,6 +1254,10 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(256)")
                         .HasColumnName("current_school");
 
+                    b.Property<string>("DraftFlowStateJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("draft_flow_state_json");
+
                     b.Property<decimal?>("Duolingo")
                         .HasPrecision(5, 1)
                         .HasColumnType("numeric(5,1)")

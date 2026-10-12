@@ -44,4 +44,6 @@ public class StudentProfile : BaseEntity
     public string? RoadmapProgressJson { get; set; }
     /// <summary>Đường dẫn tệp bảng điểm đã tải lên (USAS-363)</summary>
     public string? TranscriptFileUrl { get; set; }
+    /// <summary>[USAS-640] Trạng thái bản nháp của luồng nhập hồ sơ đa bước (step hiện tại và dữ liệu nháp)</summary>
+    public string? DraftFlowStateJson { get; set; }
 }

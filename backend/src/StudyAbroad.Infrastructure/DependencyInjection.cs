@@ -34,6 +34,8 @@ public static class DependencyInjection
         services.AddSingleton<IPasswordHasher, PasswordHasher>();
         // [USAS-365] Đăng ký repository phân tích điểm học thuật
         services.AddScoped<StudyAbroad.Application.Profile.Academic.IAcademicAnalysisRepository, AcademicAnalysisRepository>();
+        // [USAS-640] Đăng ký repository luồng hồ sơ và metadata
+        services.AddScoped<StudyAbroad.Application.Profile.Flow.IProfileFlowRepository, ProfileFlowRepository>();
 
         // [USAS-362] Đăng ký JWT Token Service (Ưu tiên nạp key từ biến môi trường JWT_SECRET_KEY)
         services.Configure<JwtOptions>(options =>

@@ -5,6 +5,9 @@ namespace StudyAbroad.Domain.Constants;
 /// </summary>
 public static class ProfileConstants
 {
+    /// <summary>[USAS-640] Khóa cấu hình toàn bộ metadata cho luồng nhập hồ sơ (không hardcode)</summary>
+    public const string ProfileMetadataAppSettingKey = "profile.metadata";
+
     public static class FundingSources
     {
         public const string FamilySupport = "family_support";     // Gia đình tài trợ

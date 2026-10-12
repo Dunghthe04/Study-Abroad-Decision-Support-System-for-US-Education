@@ -36,6 +36,7 @@ public class StudentProfileConfiguration : IEntityTypeConfiguration<StudentProfi
         b.Property(x => x.PreferredStates).HasColumnType("text[]");
         b.Property(x => x.RoadmapProgressJson).HasColumnType("jsonb");
         b.Property(x => x.TranscriptFileUrl).HasMaxLength(512);
+        b.Property(x => x.DraftFlowStateJson).HasColumnType("jsonb");
         b.HasIndex(x => x.UserId).IsUnique();
     }
 }
