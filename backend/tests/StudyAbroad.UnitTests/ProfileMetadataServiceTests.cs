@@ -41,6 +41,18 @@ public class ProfileMetadataServiceTests
 
         public Task<IReadOnlyList<string>> GetOfferingMajorsAsync(CancellationToken ct = default) =>
             Task.FromResult(MockOfferingMajors);
+
+        public Task ReplaceTranscriptScoresAsync(Guid profileId, IEnumerable<TranscriptScore> scores, CancellationToken ct = default) =>
+            Task.CompletedTask;
+
+        public Task ReplaceProfileActivitiesAsync(Guid profileId, IEnumerable<ProfileActivity> activities, CancellationToken ct = default) =>
+            Task.CompletedTask;
+
+        public Task<IReadOnlyList<TranscriptScore>> GetTranscriptScoresAsync(Guid profileId, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<TranscriptScore>>([]);
+
+        public Task<IReadOnlyList<ProfileActivity>> GetProfileActivitiesAsync(Guid profileId, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<ProfileActivity>>([]);
     }
 
     private const string ValidMetadataJson = """

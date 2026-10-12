@@ -36,6 +36,8 @@ public static class DependencyInjection
         services.AddScoped<StudyAbroad.Application.Profile.Academic.IAcademicAnalysisRepository, AcademicAnalysisRepository>();
         // [USAS-640] Đăng ký repository luồng hồ sơ và metadata
         services.AddScoped<StudyAbroad.Application.Profile.Flow.IProfileFlowRepository, ProfileFlowRepository>();
+        // [USAS-640] Đăng ký service lưu trữ tệp bảng điểm nháp
+        services.AddScoped<StudyAbroad.Application.Profile.Flow.IProfileFileStorageService, StudyAbroad.Infrastructure.Services.ProfileFileStorageService>();
 
         // [USAS-362] Đăng ký JWT Token Service (Ưu tiên nạp key từ biến môi trường JWT_SECRET_KEY)
         services.Configure<JwtOptions>(options =>

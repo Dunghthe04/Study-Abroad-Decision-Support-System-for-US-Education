@@ -15,4 +15,8 @@ public interface IProfileFlowRepository
     Task UpdateProfileAsync(StudentProfile profile, CancellationToken ct = default);
     Task<StudentProfile> EnsureProfileExistsAsync(Guid userId, CancellationToken ct = default);
     Task<IReadOnlyList<string>> GetOfferingMajorsAsync(CancellationToken ct = default);
+    Task ReplaceTranscriptScoresAsync(Guid profileId, IEnumerable<TranscriptScore> scores, CancellationToken ct = default);
+    Task ReplaceProfileActivitiesAsync(Guid profileId, IEnumerable<ProfileActivity> activities, CancellationToken ct = default);
+    Task<IReadOnlyList<TranscriptScore>> GetTranscriptScoresAsync(Guid profileId, CancellationToken ct = default);
+    Task<IReadOnlyList<ProfileActivity>> GetProfileActivitiesAsync(Guid profileId, CancellationToken ct = default);
 }
