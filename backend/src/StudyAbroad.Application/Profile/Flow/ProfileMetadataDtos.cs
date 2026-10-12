@@ -8,6 +8,7 @@ namespace StudyAbroad.Application.Profile.Flow;
 /// </summary>
 public record ProfileMetadataResponse(
     [property: JsonPropertyName("studyLevels")] IReadOnlyList<StudyLevelMetadataItem> StudyLevels,
+    [property: JsonPropertyName("currentEducationLevels")] IReadOnlyList<CurrentEducationLevelItem> CurrentEducationLevels,
     [property: JsonPropertyName("budgetTiers")] IReadOnlyList<BudgetTierMetadataItem> BudgetTiers,
     [property: JsonPropertyName("scholarshipNeeds")] IReadOnlyList<ScholarshipNeedMetadataItem> ScholarshipNeeds,
     [property: JsonPropertyName("fundingSources")] IReadOnlyList<IdLabelItem> FundingSources,
@@ -18,8 +19,14 @@ public record ProfileMetadataResponse(
     [property: JsonPropertyName("activityCategories")] IReadOnlyList<IdLabelItem> ActivityCategories,
     [property: JsonPropertyName("impactLevels")] IReadOnlyList<ImpactLevelMetadataItem> ImpactLevels,
     [property: JsonPropertyName("usStates")] IReadOnlyList<UsStateMetadataItem> UsStates,
+    [property: JsonPropertyName("popularStateCodes")] IReadOnlyList<string> PopularStateCodes,
     [property: JsonPropertyName("usMajors")] IReadOnlyList<UsMajorMetadataItem> UsMajors,
     [property: JsonPropertyName("institutionTypes")] IReadOnlyList<IdLabelItem> InstitutionTypes
+);
+
+public record CurrentEducationLevelItem(
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonPropertyName("label")] string Label
 );
 
 public record StudyLevelMetadataItem(
@@ -98,11 +105,13 @@ public record ImpactLevelMetadataItem(
 
 public record UsStateMetadataItem(
     [property: JsonPropertyName("code")] string Code,
-    [property: JsonPropertyName("name")] string Name
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("isPopular")] bool IsPopular = false
 );
 
 public record UsMajorMetadataItem(
     [property: JsonPropertyName("id")] string Id,
     [property: JsonPropertyName("name")] string Name,
-    [property: JsonPropertyName("englishName")] string EnglishName
+    [property: JsonPropertyName("englishName")] string EnglishName,
+    [property: JsonPropertyName("category")] string? Category = null
 );

@@ -21,6 +21,7 @@ public class ProfileMetadataServiceTests
     private sealed class FakeProfileFlowRepository : IProfileFlowRepository
     {
         public string? MockSettingValue { get; set; }
+        public IReadOnlyList<string> MockOfferingMajors { get; set; } = [];
         public int CallCount { get; private set; }
 
         public Task<string?> GetAppSettingValueAsync(string key, CancellationToken ct = default)
@@ -37,12 +38,18 @@ public class ProfileMetadataServiceTests
 
         public Task<StudentProfile> EnsureProfileExistsAsync(Guid userId, CancellationToken ct = default) =>
             Task.FromResult(new StudentProfile { UserId = userId });
+
+        public Task<IReadOnlyList<string>> GetOfferingMajorsAsync(CancellationToken ct = default) =>
+            Task.FromResult(MockOfferingMajors);
     }
 
     private const string ValidMetadataJson = """
     {
       "studyLevels": [
         { "id": "undergraduate", "name": "Đại học", "subName": "Bachelor", "duration": "4 năm", "description": "Cử nhân", "defaultGradeScale": "10", "defaultEducationSystem": "standard" }
+      ],
+      "currentEducationLevels": [
+        { "id": "high_school", "label": "Trung học phổ thông" }
       ],
       "budgetTiers": [
         { "id": "tier_1", "label": "Dưới 20.000 USD", "minUsd": 0, "maxUsd": 20000, "approxUsd": 15000, "description": "Học bổng" }
@@ -78,8 +85,9 @@ public class ProfileMetadataServiceTests
         { "level": 1, "label": "Cấp Trường", "desc": "Trường" }
       ],
       "usStates": [
-        { "code": "CA", "name": "California" }
+        { "code": "CA", "name": "California", "isPopular": true }
       ],
+      "popularStateCodes": [ "CA" ],
       "usMajors": [
         { "id": "cs", "name": "Khoa học máy tính", "englishName": "Computer Science" }
       ],
@@ -101,13 +109,37 @@ public class ProfileMetadataServiceTests
         Assert.NotNull(result);
         Assert.Single(result.StudyLevels);
         Assert.Equal("undergraduate", result.StudyLevels[0].Id);
+        Assert.Single(result.CurrentEducationLevels);
+        Assert.Equal("high_school", result.CurrentEducationLevels[0].Id);
         Assert.Single(result.BudgetTiers);
         Assert.Equal("tier_1", result.BudgetTiers[0].Id);
         Assert.Single(result.GradeScales);
         Assert.Equal("10", result.GradeScales[0].Id);
         Assert.Single(result.UsStates);
         Assert.Equal("CA", result.UsStates[0].Code);
+        Assert.True(result.UsStates[0].IsPopular);
+        Assert.Single(result.PopularStateCodes);
         Assert.Equal(1, repo.CallCount);
+    }
+
+    [Fact]
+    public async Task GetMetadataAsync_MergesOfferingMajors_FromRepository()
+    {
+        var repo = new FakeProfileFlowRepository
+        {
+            MockSettingValue = ValidMetadataJson,
+            MockOfferingMajors = ["Computer Science", "Artificial Intelligence", "Mechanical Engineering"]
+        };
+        var cache = new MemoryCache(new MemoryCacheOptions());
+        var service = new ProfileMetadataService(repo, cache);
+
+        var result = await service.GetMetadataAsync();
+
+        Assert.NotNull(result);
+        // Computer Science existed, so AI and Mechanical Engineering were newly merged -> 3 total majors
+        Assert.Equal(3, result.UsMajors.Count);
+        Assert.Contains(result.UsMajors, m => m.EnglishName == "Artificial Intelligence");
+        Assert.Contains(result.UsMajors, m => m.EnglishName == "Mechanical Engineering");
     }
 
     [Fact]

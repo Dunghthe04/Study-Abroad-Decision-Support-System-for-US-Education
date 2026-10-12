@@ -54,4 +54,20 @@ public class ProfileFlowRepository(AppDbContext context) : IProfileFlowRepositor
         await context.SaveChangesAsync(ct);
         return profile;
     }
+
+    public async Task<IReadOnlyList<string>> GetOfferingMajorsAsync(CancellationToken ct = default)
+    {
+        var offerings = await context.UniversityOfferings
+            .AsNoTracking()
+            .Select(o => o.Majors)
+            .ToListAsync(ct);
+
+        return offerings
+            .SelectMany(m => m)
+            .Where(m => !string.IsNullOrWhiteSpace(m))
+            .Select(m => m.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(m => m)
+            .ToList();
+    }
 }

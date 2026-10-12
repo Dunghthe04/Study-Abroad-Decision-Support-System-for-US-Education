@@ -14,4 +14,5 @@ public interface IProfileFlowRepository
     Task<StudentProfile?> GetProfileByUserIdAsync(Guid userId, CancellationToken ct = default);
     Task UpdateProfileAsync(StudentProfile profile, CancellationToken ct = default);
     Task<StudentProfile> EnsureProfileExistsAsync(Guid userId, CancellationToken ct = default);
+    Task<IReadOnlyList<string>> GetOfferingMajorsAsync(CancellationToken ct = default);
 }
