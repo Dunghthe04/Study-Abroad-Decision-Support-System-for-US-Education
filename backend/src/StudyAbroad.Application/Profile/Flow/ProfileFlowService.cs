@@ -3,9 +3,12 @@ using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -13,11 +16,10 @@ namespace StudyAbroad.Application.Profile.Flow;
 
 /// <summary>
 /// [USAS-640] Service xử lý luồng nhập hồ sơ một cửa (Unified Profile Flow 6 bước):
-/// - Tự động lưu nháp từng bước vào DraftFlowStateJson
-/// - Khôi phục đúng bước đang làm dở khi quay lại
-/// - Quản lý tệp bảng điểm nháp (xem trước / chỉ lưu nháp)
-/// - OCR đọc và bóc tách bảng điểm học bạ thành các môn học
-/// - Xác nhận lưu chính thức (Commit) bóc tách toàn bộ 5 bước vào CSDL chính
+/// - Nháp lưu đúng 1 định dạng (draft của FE) vào DraftFlowStateJson, khôi phục đúng bước đang làm dở
+/// - Quản lý tệp bảng điểm nháp + OCR (kết quả OCR trả về cho FE tự ghép vào draft)
+/// - Commit: validate rồi ánh xạ draft vào student_profiles / transcript_scores / profile_activities trong 1 transaction
+/// - Mở lại hồ sơ đã gửi: dựng draft từ DB bằng BuildDraftFromProfile
 /// </summary>
 public class ProfileFlowService(
     IProfileFlowRepository repository,
@@ -28,146 +30,67 @@ public class ProfileFlowService(
     {
         PropertyNameCaseInsensitive = true,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        NumberHandling = JsonNumberHandling.AllowReadingFromString,
         Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
     };
+
+    private static readonly Regex TermNameRegex = new(@"^(?<grade>.*?)\s*-?\s*HK\s*(?<sem>[12])\s*$",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    /// <summary>Nhãn cấp học cũ (luồng trước lưu nhãn tiếng Việt) → mã</summary>
+    private static readonly Dictionary<string, string> EducationLevelLabels = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Trung học cơ sở"] = "middle_school",
+        ["Trung học phổ thông"] = "high_school",
+        ["Cao đẳng / Đại học"] = "college_university",
+        ["Thạc sĩ"] = "master",
+    };
+
+    private static readonly HashSet<string> EducationLevelCodes =
+        ["middle_school", "high_school", "college_university", "master"];
+
+    private static readonly HashSet<string> SchoolTypes = ["all", "public", "private"];
+
+    /// <summary>Định dạng lưu trong draft_flow_state_json</summary>
+    private sealed record StoredFlowState(
+        int CurrentStep,
+        List<int>? CompletedSteps,
+        ProfileFlowDraftDto? Draft,
+        DraftTranscriptInfoDto? DraftTranscript,
+        DateTime? LastUpdatedAt);
+
+    private sealed record BudgetTier(string Id, decimal? MinUsd, decimal? MaxUsd);
 
     public async Task<ProfileFlowStateDto> GetFlowStateAsync(Guid userId, CancellationToken ct = default)
     {
         var profile = await repository.GetProfileByUserIdAsync(userId, ct);
+        if (profile is null)
+            return EmptyState(hasCommittedProfile: false);
 
-        // 1. Nếu có bản nháp đang làm dở, ưu tiên khôi phục trạng thái nháp
-        if (profile?.DraftFlowStateJson is not null && !string.IsNullOrWhiteSpace(profile.DraftFlowStateJson))
-        {
-            try
-            {
-                var draftState = JsonSerializer.Deserialize<ProfileFlowStateDto>(profile.DraftFlowStateJson, JsonOptions);
-                if (draftState is not null)
-                {
-                    return draftState with { HasCommittedProfile = profile.OverallGpa.HasValue || profile.AnnualBudgetUsd.HasValue };
-                }
-            }
-            catch
-            {
-                // Nếu JSON bị lỗi cấu trúc, tiếp tục kiểm tra hồ sơ chính thức
-            }
-        }
+        var committed = HasCommittedProfile(profile);
 
-        // 2. Nếu đã có hồ sơ chính thức trong DB nhưng chưa có nháp mới, khởi tạo từ hồ sơ chính thức
-        if (profile is not null && (profile.OverallGpa.HasValue || profile.AnnualBudgetUsd.HasValue || !string.IsNullOrWhiteSpace(profile.IntendedMajor)))
+        // 1. Có nháp đang làm dở → trả nguyên nháp
+        var stored = ReadStoredState(profile.DraftFlowStateJson);
+        if (stored?.Draft is not null)
+            return ToStateDto(stored, committed);
+
+        // 2. Đã gửi hồ sơ (hoặc có dữ liệu cũ) → dựng draft từ DB
+        if (committed)
         {
-            var transcriptScores = await repository.GetTranscriptScoresAsync(profile.Id, ct);
+            var scores = await repository.GetTranscriptScoresAsync(profile.Id, ct);
             var activities = await repository.GetProfileActivitiesAsync(profile.Id, ct);
-
-            var terms = transcriptScores
-                .GroupBy(s => new { s.TermOrder, s.TermName })
-                .OrderBy(g => g.Key.TermOrder)
-                .Select(g => new FlowTranscriptTermDto(
-                    TermOrder: g.Key.TermOrder,
-                    TermName: g.Key.TermName,
-                    Scores: g.Select(s => new FlowTranscriptSubjectScoreDto(s.Subject, s.Score, s.RawScore, s.Credits)).ToList()
-                ))
-                .ToList();
-
-            var flowActivities = activities
-                .Select(a => new FlowActivityItemDto(
-                    Id: a.Id,
-                    Type: string.Equals(a.Kind, "award", StringComparison.OrdinalIgnoreCase) ? "award" : "activity",
-                    Title: a.Title,
-                    Role: a.Role,
-                    Organization: a.Organization,
-                    ImpactLevel: a.ImpactLevel ?? 1,
-                    DurationMonths: a.DurationMonths,
-                    Year: a.StartDate?.Year.ToString(),
-                    Description: a.Description
-                ))
-                .ToList();
-
-            DraftTranscriptInfoDto? draftTranscript = null;
-            if (!string.IsNullOrWhiteSpace(profile.TranscriptFileUrl))
-            {
-                draftTranscript = new DraftTranscriptInfoDto(
-                    OriginalFileName: Path.GetFileName(profile.TranscriptFileUrl),
-                    StoredFileName: Path.GetFileName(profile.TranscriptFileUrl),
-                    RelativePath: profile.TranscriptFileUrl,
-                    FileSizeBytes: 0,
-                    ContentType: profile.TranscriptFileUrl.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase) ? "application/pdf" : "image/jpeg",
-                    UploadedAt: profile.UpdatedAt ?? profile.CreatedAt
-                );
-            }
-
-            var stepData = new ProfileFlowStepDataDto(
-                Step1: new Step1GeneralDto(
-                    TargetLevel: profile.TargetLevel,
-                    CurrentEducationLevel: profile.EducationSystem,
-                    CurrentSchool: profile.CurrentSchool,
-                    CurrentGrade: profile.CurrentGrade,
-                    GraduationYear: profile.GraduationYear,
-                    IntendedMajor: profile.IntendedMajor,
-                    PreferredStates: profile.PreferredStates ?? [],
-                    InstitutionType: "any"
-                ),
-                Step2: new Step2TranscriptDto(
-                    EducationSystem: profile.EducationSystem,
-                    GradeScale: profile.GradeScale,
-                    CalculatedGpa4: profile.OverallGpa,
-                    Terms: terms
-                ),
-                Step3: new Step3CertificationsDto(
-                    EnglishTestType: profile.Ielts.HasValue ? "ielts" : (profile.Toefl.HasValue ? "toefl" : (profile.Duolingo.HasValue ? "duolingo" : "none")),
-                    Ielts: profile.Ielts,
-                    Toefl: profile.Toefl,
-                    Duolingo: profile.Duolingo,
-                    EnglishExamDate: null,
-                    SelectedStandardizedTests: GetStandardizedTestsList(profile),
-                    Sat: profile.Sat,
-                    Act: profile.Act,
-                    Ap: null,
-                    Gre: profile.Gre,
-                    Gmat: profile.Gmat,
-                    OtherTestsJson: profile.OtherTestsJson
-                ),
-                Step4: new Step4FinancialDto(
-                    BudgetTierId: ResolveBudgetTierId(profile.AnnualBudgetUsd),
-                    AnnualBudgetUsd: profile.AnnualBudgetUsd,
-                    ScholarshipNeedId: profile.NeedsScholarship ? "preferred" : "optional",
-                    FundingSourceId: profile.FundingSource,
-                    FinancialNotes: profile.FinancialNotes
-                ),
-                Step5: new Step5ActivitiesDto(flowActivities)
-            );
-
             return new ProfileFlowStateDto(
-                CurrentStep: 1,
+                CurrentStep: 6,
                 CompletedSteps: [1, 2, 3, 4, 5],
-                StepData: stepData,
-                DraftTranscript: draftTranscript,
+                Draft: BuildDraftFromProfile(profile, scores, activities),
+                DraftTranscript: stored?.DraftTranscript,
                 LastUpdatedAt: profile.UpdatedAt ?? profile.CreatedAt,
                 HasCommittedProfile: true,
-                Draft: ConvertStepDataToRawDraft(stepData),
-                LastCompletedStep: 5
-            );
+                LastCompletedStep: 5);
         }
 
-        // 3. Người dùng hoàn toàn mới: khởi tạo trạng thái mặc định bước 1
-        return new ProfileFlowStateDto(
-            CurrentStep: 1,
-            CompletedSteps: [],
-            StepData: new ProfileFlowStepDataDto(
-                Step1: new Step1GeneralDto(
-                    TargetLevel: StudyLevels.Undergraduate,
-                    CurrentEducationLevel: "high_school",
-                    CurrentSchool: null,
-                    CurrentGrade: "Lớp 11",
-                    GraduationYear: null,
-                    IntendedMajor: null,
-                    PreferredStates: [],
-                    InstitutionType: "any"
-                )
-            ),
-            DraftTranscript: null,
-            LastUpdatedAt: null,
-            HasCommittedProfile: false
-        );
+        // 3. Người dùng mới: draft rỗng, không chọn sẵn ngân sách / nhu cầu học bổng
+        return EmptyState(hasCommittedProfile: false) with { DraftTranscript = stored?.DraftTranscript };
     }
 
     public async Task<ProfileFlowStateDto> SaveDraftAsync(Guid userId, SaveProfileDraftRequest request, CancellationToken ct = default)
@@ -177,46 +100,20 @@ public class ProfileFlowService(
             throw new ArgumentOutOfRangeException(nameof(request.CurrentStep), "Bước hiện tại phải nằm trong khoảng từ 1 đến 6.");
         }
 
-        var profile = await repository.EnsureProfileExistsAsync(userId, ct);
+        var profile = await repository.EnsureProfileExistsAsync(userId, CancellationToken.None);
+        var previous = ReadStoredState(profile.DraftFlowStateJson);
 
-        // Khôi phục thông tin file nháp cũ nếu request không gửi kèm
-        DraftTranscriptInfoDto? draftTranscript = null;
-        if (!string.IsNullOrWhiteSpace(profile.DraftFlowStateJson))
-        {
-            try
-            {
-                var oldState = JsonSerializer.Deserialize<ProfileFlowStateDto>(profile.DraftFlowStateJson, JsonOptions);
-                draftTranscript = oldState?.DraftTranscript;
-            }
-            catch
-            {
-                // Bỏ qua lỗi deserialize nháp cũ
-            }
-        }
-
-        var rawDraft = request.Draft ?? request.FlowState;
-        var stepData = request.StepData;
-        if (stepData is null && rawDraft is not null)
-        {
-            stepData = ConvertRawDraftToStepData(rawDraft);
-        }
-        stepData ??= new ProfileFlowStepDataDto();
-
-        var updatedState = new ProfileFlowStateDto(
+        var stored = new StoredFlowState(
             CurrentStep: request.CurrentStep,
-            CompletedSteps: request.CompletedSteps ?? [],
-            StepData: stepData,
-            DraftTranscript: draftTranscript,
-            LastUpdatedAt: DateTime.UtcNow,
-            HasCommittedProfile: profile.OverallGpa.HasValue || profile.AnnualBudgetUsd.HasValue,
-            Draft: rawDraft,
-            LastCompletedStep: request.CompletedSteps?.Count > 0 ? request.CompletedSteps.Max() : (request.CurrentStep > 1 ? request.CurrentStep - 1 : 0)
-        );
+            CompletedSteps: NormalizeCompletedSteps(request.CompletedSteps),
+            Draft: NormalizeDraft(request.Draft ?? previous?.Draft ?? new ProfileFlowDraftDto()),
+            DraftTranscript: previous?.DraftTranscript,
+            LastUpdatedAt: DateTime.UtcNow);
 
-        profile.DraftFlowStateJson = JsonSerializer.Serialize(updatedState, JsonOptions);
-        await repository.UpdateProfileAsync(profile, ct);
+        profile.DraftFlowStateJson = JsonSerializer.Serialize(stored, JsonOptions);
+        await repository.UpdateProfileAsync(profile, CancellationToken.None);
 
-        return updatedState;
+        return ToStateDto(stored, HasCommittedProfile(profile));
     }
 
     public async Task<UploadDraftTranscriptResultDto> UploadDraftTranscriptAsync(
@@ -254,45 +151,12 @@ public class ProfileFlowService(
             }
         }
 
-        // 3. Cập nhật vào DraftFlowStateJson
-        ProfileFlowStateDto currentState;
-        if (!string.IsNullOrWhiteSpace(profile.DraftFlowStateJson))
-        {
-            try
-            {
-                currentState = JsonSerializer.Deserialize<ProfileFlowStateDto>(profile.DraftFlowStateJson, JsonOptions)
-                    ?? CreateDefaultDraftState();
-            }
-            catch
-            {
-                currentState = CreateDefaultDraftState();
-            }
-        }
-        else
-        {
-            currentState = CreateDefaultDraftState();
-        }
+        // 3. Chỉ ghi thông tin file vào nháp; điểm OCR do FE ghép vào draft.step2 rồi tự lưu nháp
+        var stored = ReadStoredState(profile.DraftFlowStateJson)
+            ?? new StoredFlowState(2, [], null, null, null);
+        stored = stored with { DraftTranscript = draftInfo, LastUpdatedAt = DateTime.UtcNow };
 
-        var updatedStepData = currentState.StepData;
-        if (ocrResponse != null && ocrResponse.Terms.Count > 0)
-        {
-            var currentStep2 = currentState.StepData.Step2 ?? new Step2TranscriptDto("standard", "10", null, []);
-            var updatedStep2 = currentStep2 with
-            {
-                Terms = ocrResponse.Terms.ToList(),
-                CalculatedGpa4 = ocrResponse.CalculatedGpa4 ?? currentStep2.CalculatedGpa4
-            };
-            updatedStepData = currentState.StepData with { Step2 = updatedStep2 };
-        }
-
-        var newState = currentState with
-        {
-            DraftTranscript = draftInfo,
-            StepData = updatedStepData,
-            LastUpdatedAt = DateTime.UtcNow
-        };
-
-        profile.DraftFlowStateJson = JsonSerializer.Serialize(newState, JsonOptions);
+        profile.DraftFlowStateJson = JsonSerializer.Serialize(stored, JsonOptions);
         await repository.UpdateProfileAsync(profile, ct);
 
         return new UploadDraftTranscriptResultDto(
@@ -300,159 +164,28 @@ public class ProfileFlowService(
             ExtractedTerms: ocrResponse?.Terms ?? [],
             CalculatedGpa4: ocrResponse?.CalculatedGpa4,
             OcrMessage: ocrResponse?.Message,
-            Warnings: ocrResponse?.Warnings
+            Warnings: ocrResponse?.Warnings,
+            DraftFile: draftInfo
         );
     }
-
 
     public async Task<CommitProfileFlowResponse> CommitFlowAsync(
         Guid userId, CommitProfileFlowRequest? request, CancellationToken ct = default)
     {
         var profile = await repository.EnsureProfileExistsAsync(userId, ct);
+        var stored = ReadStoredState(profile.DraftFlowStateJson);
 
-        // 1. Lấy dữ liệu cần commit từ request hoặc từ nháp đang lưu
-        ProfileFlowStepDataDto? stepData = request?.StepData;
-        DraftTranscriptInfoDto? draftTranscript = null;
+        var draft = request?.Draft ?? stored?.Draft
+            ?? throw new InvalidOperationException("Không tìm thấy dữ liệu hồ sơ để xác nhận lưu chính thức.");
+        draft = NormalizeDraft(draft);
 
-        if (!string.IsNullOrWhiteSpace(profile.DraftFlowStateJson))
-        {
-            try
-            {
-                var existingDraft = JsonSerializer.Deserialize<ProfileFlowStateDto>(profile.DraftFlowStateJson, JsonOptions);
-                draftTranscript = existingDraft?.DraftTranscript;
-                stepData ??= existingDraft?.StepData;
-            }
-            catch
-            {
-                // Bỏ qua lỗi đọc nháp
-            }
-        }
+        var budgetTiers = await LoadBudgetTiersAsync(ct);
+        ValidateForCommit(draft, budgetTiers);
 
-        if (stepData is null || (stepData.Step1 is null && stepData.Step2 is null))
-        {
-            var rawDraft = request?.FinalDraft;
-            if (rawDraft is null && !string.IsNullOrWhiteSpace(profile.DraftFlowStateJson))
-            {
-                try
-                {
-                    using var doc = JsonDocument.Parse(profile.DraftFlowStateJson);
-                    if (doc.RootElement.TryGetProperty("draft", out var dProp))
-                    {
-                        rawDraft = dProp.Clone();
-                    }
-                }
-                catch
-                {
-                    // Bỏ qua lỗi đọc nháp
-                }
-            }
+        var (scores, activities) = ApplyDraftToProfile(profile, draft, budgetTiers, DateTime.UtcNow);
 
-            if (rawDraft is not null)
-            {
-                stepData = ConvertRawDraftToStepData(rawDraft);
-            }
-        }
-
-        if (stepData is null)
-        {
-            throw new InvalidOperationException("Không tìm thấy dữ liệu hồ sơ để xác nhận lưu chính thức.");
-        }
-
-        // 2. Bóc tách Bước 1: Mục tiêu & Học vấn chung
-        var step1 = stepData.Step1;
-        profile.TargetLevel = !string.IsNullOrWhiteSpace(step1?.TargetLevel)
-            ? step1.TargetLevel.Trim()
-            : StudyLevels.Undergraduate;
-
-        profile.CurrentSchool = step1?.CurrentSchool?.Trim();
-        profile.CurrentGrade = step1?.CurrentGrade?.Trim();
-        profile.GraduationYear = step1?.GraduationYear;
-        profile.IntendedMajor = step1?.IntendedMajor?.Trim();
-        profile.PreferredStates = step1?.PreferredStates ?? [];
-
-        // 3. Bóc tách Bước 2: Bảng điểm & Tính GPA 4.0
-        var step2 = stepData.Step2;
-        profile.EducationSystem = step2?.EducationSystem?.Trim() ?? step1?.CurrentEducationLevel?.Trim();
-        profile.GradeScale = !string.IsNullOrWhiteSpace(step2?.GradeScale) ? step2.GradeScale.Trim() : "10";
-
-        var transcriptScores = new List<TranscriptScore>();
-        if (step2?.Terms is not null)
-        {
-            foreach (var term in step2.Terms)
-            {
-                if (term.Scores is null) continue;
-                foreach (var s in term.Scores)
-                {
-                    if (string.IsNullOrWhiteSpace(s.Subject)) continue;
-                    transcriptScores.Add(new TranscriptScore
-                    {
-                        TermOrder = term.TermOrder,
-                        TermName = term.TermName.Trim(),
-                        Subject = s.Subject.Trim(),
-                        Score = s.Score,
-                        RawScore = s.RawScore ?? s.Score.ToString(),
-                        Credits = s.Credits ?? 1m
-                    });
-                }
-            }
-        }
-
-        profile.OverallGpa = CalculateGpa4(step2?.CalculatedGpa4, profile.GradeScale, transcriptScores);
-
-        // 4. Bóc tách Bước 3: Chứng chỉ & Bài thi chuẩn hóa
-        var step3 = stepData.Step3;
-        profile.Ielts = step3?.Ielts;
-        profile.Toefl = step3?.Toefl;
-        profile.Duolingo = step3?.Duolingo;
-        profile.Sat = step3?.Sat;
-        profile.Act = step3?.Act;
-        profile.Gre = step3?.Gre;
-        profile.Gmat = step3?.Gmat;
-
-        if (step3 is not null)
-        {
-            var otherInfo = new Dictionary<string, object?>
-            {
-                ["englishTestType"] = step3.EnglishTestType,
-                ["englishExamDate"] = step3.EnglishExamDate,
-                ["ap"] = step3.Ap,
-                ["selectedStandardizedTests"] = step3.SelectedStandardizedTests
-            };
-            profile.OtherTestsJson = JsonSerializer.Serialize(otherInfo);
-        }
-
-        // 5. Bóc tách Bước 4: Tài chính
-        var step4 = stepData.Step4;
-        profile.AnnualBudgetUsd = ResolveAnnualBudgetUsd(step4?.AnnualBudgetUsd, step4?.BudgetTierId);
-        profile.FundingSource = step4?.FundingSourceId?.Trim();
-        profile.NeedsScholarship = !string.Equals(step4?.ScholarshipNeedId, "optional", StringComparison.OrdinalIgnoreCase);
-        profile.FinancialNotes = step4?.FinancialNotes?.Trim();
-
-        // 6. Bóc tách Bước 5: Hoạt động & Giải thưởng ngoại khóa
-        var step5 = stepData.Step5;
-        var profileActivities = new List<ProfileActivity>();
-        if (step5?.Items is not null)
-        {
-            foreach (var item in step5.Items)
-            {
-                if (string.IsNullOrWhiteSpace(item.Title)) continue;
-                profileActivities.Add(new ProfileActivity
-                {
-                    Kind = string.Equals(item.Type, "award", StringComparison.OrdinalIgnoreCase) ? "award" : "extracurricular",
-                    Title = item.Title.Trim(),
-                    Role = item.Role?.Trim(),
-                    Organization = item.Organization?.Trim(),
-                    ImpactLevel = item.ImpactLevel,
-                    DurationMonths = item.DurationMonths,
-                    Description = item.Description?.Trim(),
-                    IsOngoing = false
-                });
-            }
-        }
-
-        profile.ExtracurricularScore = CalculateExtracurricularScore(profileActivities);
-
-        // 7. Bóc tách Bước 5 (File bảng điểm): Chuyển file nháp sang chính thức
+        // Chuyển file bảng điểm nháp (theo trạng thái trên server) sang thư mục chính thức
+        var draftTranscript = stored?.DraftTranscript;
         if (draftTranscript is not null && !string.IsNullOrWhiteSpace(draftTranscript.RelativePath))
         {
             var officialUrl = await fileStorageService.CommitDraftTranscriptAsync(userId, draftTranscript.RelativePath, ct);
@@ -462,13 +195,10 @@ public class ProfileFlowService(
             }
         }
 
-        // 8. Hoàn tất lưu chính thức: Xóa bản nháp sau khi commit thành công
+        profile.FlowSubmittedAt = DateTimeOffset.UtcNow;
         profile.DraftFlowStateJson = null;
-        profile.UpdatedAt = DateTime.UtcNow;
 
-        await repository.UpdateProfileAsync(profile, ct);
-        await repository.ReplaceTranscriptScoresAsync(profile.Id, transcriptScores, ct);
-        await repository.ReplaceProfileActivitiesAsync(profile.Id, profileActivities, ct);
+        await repository.CommitProfileFlowAsync(profile, scores, activities, ct);
 
         return new CommitProfileFlowResponse(
             Succeeded: true,
@@ -477,9 +207,12 @@ public class ProfileFlowService(
             IntendedMajor: profile.IntendedMajor,
             OverallGpa: profile.OverallGpa,
             ExtracurricularScore: profile.ExtracurricularScore,
-            AnnualBudgetUsd: profile.AnnualBudgetUsd,
+            BudgetMinUsd: profile.BudgetMinUsd,
+            BudgetMaxUsd: profile.BudgetMaxUsd,
+            TargetSchoolType: profile.TargetSchoolType,
             TranscriptFileUrl: profile.TranscriptFileUrl,
-            Message: "Hồ sơ du học đã được lưu chính thức thành công vào hệ thống."
+            Message: "Hồ sơ du học đã được lưu chính thức thành công vào hệ thống.",
+            Success: true
         );
     }
 
@@ -495,387 +228,461 @@ public class ProfileFlowService(
         await fileStorageService.DeleteDraftFilesAsync(userId, ct);
     }
 
-    // Helper: Quy đổi GPA 4.0 chuẩn xác
-    private static decimal? CalculateGpa4(decimal? explicitGpa, string gradeScale, List<TranscriptScore> scores)
+    // ───────────────────────────── Trạng thái nháp ─────────────────────────────
+
+    /// <summary>Đã gửi qua luồng 6 bước, hoặc có dữ liệu nhập từ màn hình cũ</summary>
+    private static bool HasCommittedProfile(StudentProfile profile) =>
+        profile.FlowSubmittedAt.HasValue
+        || profile.OverallGpa.HasValue
+        || profile.BudgetTier is not null
+        || !string.IsNullOrWhiteSpace(profile.IntendedMajor);
+
+    private static ProfileFlowStateDto EmptyState(bool hasCommittedProfile) => new(
+        CurrentStep: 1,
+        CompletedSteps: [],
+        Draft: EmptyDraft(),
+        DraftTranscript: null,
+        LastUpdatedAt: null,
+        HasCommittedProfile: hasCommittedProfile,
+        LastCompletedStep: 0);
+
+    private static ProfileFlowDraftDto EmptyDraft() => new(
+        Step1: new FlowGoalDraftDto(TargetStates: [], TargetSchoolType: "all"),
+        Step2: new FlowTranscriptDraftDto(AcademicYears: []),
+        Step3: new FlowCertificationDraftDto(EnglishTestType: "none", OtherTests: []),
+        Step4: new FlowFinancialDraftDto(),
+        Step5: new FlowActivitiesDraftDto([]));
+
+    private static ProfileFlowStateDto ToStateDto(StoredFlowState stored, bool hasCommittedProfile)
     {
-        if (explicitGpa.HasValue && explicitGpa.Value > 0)
-        {
-            return Math.Round(explicitGpa.Value, 2);
-        }
-
-        if (scores.Count == 0) return null;
-
-        var totalScore = 0m;
-        var totalCredits = 0m;
-
-        foreach (var s in scores)
-        {
-            var cred = s.Credits.HasValue && s.Credits.Value > 0 ? s.Credits.Value : 1m;
-            decimal normScore;
-
-            if (gradeScale == "10")
-            {
-                // Quy đổi trực tiếp theo công thức chuẩn: (Điểm thang 10 / 10) * 4
-                normScore = (s.Score / 10m) * 4m;
-            }
-            else if (gradeScale == "100")
-            {
-                normScore = s.Score / 100m * 4m;
-            }
-            else
-            {
-                normScore = Math.Clamp(s.Score, 0m, 4m);
-            }
-
-            totalScore += normScore * cred;
-            totalCredits += cred;
-        }
-
-        return totalCredits > 0 ? Math.Round(totalScore / totalCredits, 2) : null;
+        var completed = stored.CompletedSteps ?? [];
+        return new ProfileFlowStateDto(
+            CurrentStep: stored.CurrentStep is >= 1 and <= 6 ? stored.CurrentStep : 1,
+            CompletedSteps: completed,
+            Draft: stored.Draft ?? EmptyDraft(),
+            DraftTranscript: stored.DraftTranscript,
+            LastUpdatedAt: stored.LastUpdatedAt,
+            HasCommittedProfile: hasCommittedProfile,
+            LastCompletedStep: completed.Count > 0 ? completed.Max() : 0);
     }
 
-    // Helper: Tính điểm ngoại khóa theo thang 0–4 dựa trên cấp độ và số lượng
-    private static decimal? CalculateExtracurricularScore(List<ProfileActivity> activities)
+    /// <summary>Đọc nháp; JSON hỏng thì coi như không có nháp</summary>
+    private static StoredFlowState? ReadStoredState(string? json)
     {
-        if (activities.Count == 0) return 0m;
-
-        var maxLevel = activities.Max(a => a.ImpactLevel ?? 1);
-        var baseScore = maxLevel switch
-        {
-            >= 4 => 3.5m, // Quốc tế
-            3 => 3.0m,    // Quốc gia
-            2 => 2.2m,    // Tỉnh / Thành
-            _ => 1.5m     // Trường
-        };
-
-        var bonus = Math.Min(activities.Count, 4) * 0.15m;
-        return Math.Clamp(Math.Round(baseScore + bonus, 2), 0m, 4.0m);
-    }
-
-    private static decimal? ResolveAnnualBudgetUsd(decimal? explicitUsd, string? budgetTierId)
-    {
-        if (explicitUsd.HasValue && explicitUsd.Value > 0) return explicitUsd.Value;
-
-        return budgetTierId switch
-        {
-            "tier_under_20k" => 15000m,
-            "tier_20k_35k" => 28000m,
-            "tier_35k_50k" => 42000m,
-            "tier_50k_70k" => 60000m,
-            "tier_above_70k" => 85000m,
-            _ => null
-        };
-    }
-
-    private static string? ResolveBudgetTierId(decimal? annualBudgetUsd)
-    {
-        if (!annualBudgetUsd.HasValue) return null;
-        var usd = annualBudgetUsd.Value;
-        if (usd < 20000) return "tier_under_20k";
-        if (usd <= 35000) return "tier_20k_35k";
-        if (usd <= 50000) return "tier_35k_50k";
-        if (usd <= 70000) return "tier_50k_70k";
-        return "tier_above_70k";
-    }
-
-    private static List<string> GetStandardizedTestsList(StudentProfile profile)
-    {
-        var tests = new List<string>();
-        if (profile.Sat.HasValue) tests.Add("sat");
-        if (profile.Act.HasValue) tests.Add("act");
-        if (profile.Gre.HasValue) tests.Add("gre");
-        if (profile.Gmat.HasValue) tests.Add("gmat");
-        return tests;
-    }
-
-    private static ProfileFlowStepDataDto ConvertRawDraftToStepData(object rawDraft)
-    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
         try
         {
-            JsonElement root;
-            if (rawDraft is JsonElement je)
-            {
-                root = je;
-            }
-            else
-            {
-                var json = JsonSerializer.Serialize(rawDraft, JsonOptions);
-                using var doc = JsonDocument.Parse(json);
-                root = doc.RootElement.Clone();
-            }
-
-            // 1. Parse Step 1
-            Step1GeneralDto? step1 = null;
-            if (root.TryGetProperty("step1", out var s1) && s1.ValueKind == JsonValueKind.Object)
-            {
-                string? targetLevel = s1.TryGetProperty("targetDegreeLevel", out var tl) && tl.ValueKind == JsonValueKind.String ? tl.GetString() : (s1.TryGetProperty("targetLevel", out var tl2) && tl2.ValueKind == JsonValueKind.String ? tl2.GetString() : "undergraduate");
-                string? curLevel = s1.TryGetProperty("currentEducationLevel", out var cel) && cel.ValueKind == JsonValueKind.String ? cel.GetString() : null;
-                string? curSchool = s1.TryGetProperty("currentSchool", out var cs) && cs.ValueKind == JsonValueKind.String ? cs.GetString() : null;
-                string? curGrade = s1.TryGetProperty("currentGrade", out var cg) && cg.ValueKind == JsonValueKind.String ? cg.GetString() : null;
-                int? gradYear = s1.TryGetProperty("expectedGraduationYear", out var gy) && gy.TryGetInt32(out var gyVal) ? gyVal : (s1.TryGetProperty("graduationYear", out var gy2) && gy2.TryGetInt32(out var gy2Val) ? gy2Val : null);
-                string? major = s1.TryGetProperty("targetMajor", out var tm) && tm.ValueKind == JsonValueKind.String ? tm.GetString() : (s1.TryGetProperty("intendedMajor", out var im) && im.ValueKind == JsonValueKind.String ? im.GetString() : null);
-                var prefStates = s1.TryGetProperty("targetStates", out var ts) && ts.ValueKind == JsonValueKind.Array
-                    ? ts.EnumerateArray().Select(x => x.GetString() ?? "").Where(x => !string.IsNullOrEmpty(x)).ToList()
-                    : (s1.TryGetProperty("preferredStates", out var ps) && ps.ValueKind == JsonValueKind.Array ? ps.EnumerateArray().Select(x => x.GetString() ?? "").Where(x => !string.IsNullOrEmpty(x)).ToList() : new List<string>());
-                string? instType = s1.TryGetProperty("targetSchoolType", out var st) && st.ValueKind == JsonValueKind.String ? st.GetString() : null;
-
-                step1 = new Step1GeneralDto(targetLevel, curLevel, curSchool, curGrade, gradYear, major, prefStates, instType);
-            }
-
-            // 2. Parse Step 2
-            Step2TranscriptDto? step2 = null;
-            if (root.TryGetProperty("step2", out var s2) && s2.ValueKind == JsonValueKind.Object)
-            {
-                decimal? gpa4 = null;
-                if (s2.TryGetProperty("calculatedGpa4Scale", out var g4) && g4.TryGetDecimal(out var g4Val)) gpa4 = g4Val;
-                else if (s2.TryGetProperty("calculatedGpa4", out var g4b) && g4b.TryGetDecimal(out var g4bVal)) gpa4 = g4bVal;
-
-                var terms = new List<FlowTranscriptTermDto>();
-                if (s2.TryGetProperty("academicYears", out var ay) && ay.ValueKind == JsonValueKind.Array)
-                {
-                    int order = 1;
-                    foreach (var yearElem in ay.EnumerateArray())
-                    {
-                        var gradeName = yearElem.TryGetProperty("gradeName", out var gn) ? gn.GetString() ?? "Lớp" : "Lớp";
-                        if (yearElem.TryGetProperty("subjects", out var subs) && subs.ValueKind == JsonValueKind.Array)
-                        {
-                            var s1Scores = new List<FlowTranscriptSubjectScoreDto>();
-                            var s2Scores = new List<FlowTranscriptSubjectScoreDto>();
-
-                            foreach (var sub in subs.EnumerateArray())
-                            {
-                                var subName = sub.TryGetProperty("subjectName", out var sn) ? sn.GetString() ?? "" : "";
-                                if (string.IsNullOrWhiteSpace(subName)) continue;
-
-                                if (sub.TryGetProperty("semester1Score", out var sc1) && sc1.ValueKind == JsonValueKind.Number && sc1.TryGetDecimal(out var sc1Val))
-                                {
-                                    s1Scores.Add(new FlowTranscriptSubjectScoreDto(subName, sc1Val, sc1Val.ToString(), 1m));
-                                }
-                                if (sub.TryGetProperty("semester2Score", out var sc2) && sc2.ValueKind == JsonValueKind.Number && sc2.TryGetDecimal(out var sc2Val))
-                                {
-                                    s2Scores.Add(new FlowTranscriptSubjectScoreDto(subName, sc2Val, sc2Val.ToString(), 1m));
-                                }
-                            }
-
-                            if (s1Scores.Count > 0)
-                            {
-                                terms.Add(new FlowTranscriptTermDto(order++, $"{gradeName} - HK1", s1Scores));
-                            }
-                            if (s2Scores.Count > 0)
-                            {
-                                terms.Add(new FlowTranscriptTermDto(order++, $"{gradeName} - HK2", s2Scores));
-                            }
-                        }
-                    }
-                }
-
-                step2 = new Step2TranscriptDto(
-                    EducationSystem: step1?.CurrentEducationLevel ?? "Việt Nam",
-                    GradeScale: "10",
-                    CalculatedGpa4: gpa4,
-                    Terms: terms
-                );
-            }
-
-            // 3. Parse Step 3
-            Step3CertificationsDto? step3 = null;
-            if (root.TryGetProperty("step3", out var s3) && s3.ValueKind == JsonValueKind.Object)
-            {
-                var engType = s3.TryGetProperty("englishTestType", out var et) && et.ValueKind == JsonValueKind.String ? et.GetString() : null;
-                decimal? engScore = s3.TryGetProperty("englishOverallScore", out var eos) && eos.TryGetDecimal(out var eosVal) ? eosVal : null;
-                var engDate = s3.TryGetProperty("englishTestDate", out var ed) && ed.ValueKind == JsonValueKind.String ? ed.GetString() : null;
-
-                decimal? sat = null;
-                decimal? act = null;
-                decimal? ap = null;
-                decimal? gre = null;
-                decimal? gmat = null;
-                var selectedTests = new List<string>();
-
-                if (s3.TryGetProperty("otherTests", out var ot) && ot.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (var t in ot.EnumerateArray())
-                    {
-                        var tType = t.TryGetProperty("testType", out var tt) && tt.ValueKind == JsonValueKind.String ? tt.GetString() : null;
-                        var tScore = t.TryGetProperty("score", out var ts) && ts.TryGetDecimal(out var tsVal) ? tsVal : (decimal?)null;
-                        if (!string.IsNullOrEmpty(tType))
-                        {
-                            selectedTests.Add(tType.ToLowerInvariant());
-                            if (tType.Equals("SAT", StringComparison.OrdinalIgnoreCase)) sat = tScore;
-                            else if (tType.Equals("ACT", StringComparison.OrdinalIgnoreCase)) act = tScore;
-                            else if (tType.Equals("AP", StringComparison.OrdinalIgnoreCase)) ap = tScore;
-                            else if (tType.Equals("GRE", StringComparison.OrdinalIgnoreCase)) gre = tScore;
-                            else if (tType.Equals("GMAT", StringComparison.OrdinalIgnoreCase)) gmat = tScore;
-                        }
-                    }
-                }
-
-                step3 = new Step3CertificationsDto(
-                    EnglishTestType: engType,
-                    Ielts: engType == "IELTS" ? engScore : null,
-                    Toefl: engType == "TOEFL" ? engScore : null,
-                    Duolingo: engType == "Duolingo" ? engScore : null,
-                    EnglishExamDate: engDate,
-                    SelectedStandardizedTests: selectedTests,
-                    Sat: sat,
-                    Act: act,
-                    Ap: ap,
-                    Gre: gre,
-                    Gmat: gmat
-                );
-            }
-
-            // 4. Parse Step 4
-            Step4FinancialDto? step4 = null;
-            if (root.TryGetProperty("step4", out var s4) && s4.ValueKind == JsonValueKind.Object)
-            {
-                var tier = s4.TryGetProperty("annualBudgetTier", out var bt) && bt.ValueKind == JsonValueKind.String ? bt.GetString() : null;
-                if (!string.IsNullOrEmpty(tier) && !tier.StartsWith("tier_")) tier = $"tier_{tier}";
-                decimal? usd = s4.TryGetProperty("annualBudgetUsd", out var bu) && bu.TryGetDecimal(out var buVal) ? buVal : null;
-                var need = s4.TryGetProperty("needFinancialAid", out var nf) && nf.ValueKind == JsonValueKind.String ? nf.GetString() : null;
-                var notes = s4.TryGetProperty("financialNotes", out var fn) && fn.ValueKind == JsonValueKind.String ? fn.GetString() : null;
-
-                step4 = new Step4FinancialDto(
-                    BudgetTierId: tier,
-                    AnnualBudgetUsd: usd,
-                    ScholarshipNeedId: need,
-                    FundingSourceId: null,
-                    FinancialNotes: notes
-                );
-            }
-
-            // 5. Parse Step 5
-            Step5ActivitiesDto? step5 = null;
-            if (root.TryGetProperty("step5", out var s5) && s5.ValueKind == JsonValueKind.Object)
-            {
-                var items = new List<FlowActivityItemDto>();
-                if (s5.TryGetProperty("activities", out var acts) && acts.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (var a in acts.EnumerateArray())
-                    {
-                        var aName = a.TryGetProperty("name", out var an) && an.ValueKind == JsonValueKind.String ? an.GetString() ?? "" : "";
-                        if (string.IsNullOrWhiteSpace(aName)) continue;
-
-                        var aCat = a.TryGetProperty("category", out var ac) && ac.ValueKind == JsonValueKind.String ? ac.GetString() : "activity";
-                        var aRole = a.TryGetProperty("role", out var ar) && ar.ValueKind == JsonValueKind.String ? ar.GetString() : null;
-                        var aImpStr = a.TryGetProperty("impactLevel", out var ai) && ai.ValueKind == JsonValueKind.String ? ai.GetString() : "school";
-                        int impLevel = aImpStr switch
-                        {
-                            "international" => 4,
-                            "national" => 3,
-                            "province" => 2,
-                            _ => 1
-                        };
-                        int? durMonths = a.TryGetProperty("durationYears", out var dy) && dy.TryGetInt32(out var dyVal) ? dyVal * 12 : 12;
-                        var aYear = a.TryGetProperty("year", out var ayElem) ? ayElem.ToString() : null;
-
-                        items.Add(new FlowActivityItemDto(
-                            Id: Guid.NewGuid(),
-                            Type: aCat == "achievement" ? "award" : "extracurricular",
-                            Title: aName,
-                            Role: aRole,
-                            Organization: null,
-                            ImpactLevel: impLevel,
-                            DurationMonths: durMonths,
-                            Year: aYear,
-                            Description: aRole != null ? $"Vai trò: {aRole}" : null
-                        ));
-                    }
-                }
-                step5 = new Step5ActivitiesDto(items);
-            }
-
-            return new ProfileFlowStepDataDto(step1, step2, step3, step4, step5);
+            return JsonSerializer.Deserialize<StoredFlowState>(json, JsonOptions);
         }
-        catch
+        catch (JsonException)
         {
-            return new ProfileFlowStepDataDto();
+            return null;
         }
     }
 
-    private static object ConvertStepDataToRawDraft(ProfileFlowStepDataDto stepData)
+    private static List<int> NormalizeCompletedSteps(IEnumerable<int>? steps) =>
+        (steps ?? []).Where(s => s is >= 1 and <= 6).Distinct().Order().ToList();
+
+    /// <summary>Chuẩn hóa giá trị cũ còn sót trong nháp (nhãn cấp học, mã tier thiếu tiền tố, not_needed...)</summary>
+    private static ProfileFlowDraftDto NormalizeDraft(ProfileFlowDraftDto draft)
     {
-        var s1 = stepData.Step1;
-        var s2 = stepData.Step2;
-        var s3 = stepData.Step3;
-        var s4 = stepData.Step4;
-        var s5 = stepData.Step5;
-
-        var otherTests = new List<object>();
-        if (s3?.Sat.HasValue == true) otherTests.Add(new { testType = "SAT", score = s3.Sat.Value });
-        if (s3?.Act.HasValue == true) otherTests.Add(new { testType = "ACT", score = s3.Act.Value });
-        if (s3?.Ap.HasValue == true) otherTests.Add(new { testType = "AP", score = s3.Ap.Value });
-        if (s3?.Gre.HasValue == true) otherTests.Add(new { testType = "GRE", score = s3.Gre.Value });
-        if (s3?.Gmat.HasValue == true) otherTests.Add(new { testType = "GMAT", score = s3.Gmat.Value });
-
-        string? engType = s3?.Ielts.HasValue == true ? "IELTS" : (s3?.Toefl.HasValue == true ? "TOEFL" : (s3?.Duolingo.HasValue == true ? "Duolingo" : (s3?.EnglishTestType ?? "none")));
-        decimal? engScore = s3?.Ielts ?? s3?.Toefl ?? s3?.Duolingo;
-
-        var activities = new List<object>();
-        if (s5?.Items != null)
+        var step1 = draft.Step1 is null ? null : draft.Step1 with
         {
-            foreach (var item in s5.Items)
+            CurrentEducationLevel = NormalizeEducationLevel(draft.Step1.CurrentEducationLevel),
+        };
+
+        var step4 = draft.Step4 is null ? null : draft.Step4 with
+        {
+            AnnualBudgetTier = string.IsNullOrWhiteSpace(draft.Step4.AnnualBudgetTier)
+                ? null
+                : draft.Step4.AnnualBudgetTier.StartsWith("tier_", StringComparison.Ordinal)
+                    ? draft.Step4.AnnualBudgetTier
+                    : "tier_" + draft.Step4.AnnualBudgetTier,
+            NeedFinancialAid = draft.Step4.NeedFinancialAid == "not_needed" ? ProfileConstants.ScholarshipNeeds.Optional
+                : string.IsNullOrWhiteSpace(draft.Step4.NeedFinancialAid) ? null : draft.Step4.NeedFinancialAid,
+        };
+
+        return draft with { Step1 = step1, Step4 = step4 };
+    }
+
+    private static string? NormalizeEducationLevel(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var trimmed = value.Trim();
+        return EducationLevelLabels.TryGetValue(trimmed, out var code) ? code : trimmed;
+    }
+
+    // ───────────────────────────── Commit: validate + ánh xạ ─────────────────────────────
+
+    private async Task<Dictionary<string, BudgetTier>> LoadBudgetTiersAsync(CancellationToken ct)
+    {
+        var tiers = new Dictionary<string, BudgetTier>(StringComparer.Ordinal);
+        var json = await repository.GetAppSettingValueAsync(ProfileConstants.ProfileMetadataAppSettingKey, ct);
+        if (string.IsNullOrWhiteSpace(json)) return tiers;
+
+        using var doc = JsonDocument.Parse(json);
+        if (!doc.RootElement.TryGetProperty("budgetTiers", out var arr) || arr.ValueKind != JsonValueKind.Array)
+            return tiers;
+
+        foreach (var item in arr.EnumerateArray())
+        {
+            if (!item.TryGetProperty("id", out var idProp) || idProp.GetString() is not { Length: > 0 } id) continue;
+            tiers[id] = new BudgetTier(id, ReadDecimal(item, "minUsd"), ReadDecimal(item, "maxUsd"));
+        }
+        return tiers;
+
+        static decimal? ReadDecimal(JsonElement el, string name) =>
+            el.TryGetProperty(name, out var p) && p.ValueKind == JsonValueKind.Number ? p.GetDecimal() : null;
+    }
+
+    private static void ValidateForCommit(ProfileFlowDraftDto draft, IReadOnlyDictionary<string, BudgetTier> budgetTiers)
+    {
+        var errors = new List<string>();
+
+        // Bước 1
+        var step1 = draft.Step1;
+        if (!StudyLevels.IsValid(step1?.TargetDegreeLevel))
+            errors.Add("Bước 1: chưa chọn bậc học muốn theo học.");
+        if (step1?.CurrentEducationLevel is null || !EducationLevelCodes.Contains(step1.CurrentEducationLevel))
+            errors.Add("Bước 1: chưa chọn cấp học hiện tại.");
+
+        // Bước 2
+        foreach (var year in draft.Step2?.AcademicYears ?? [])
+        foreach (var subject in year.Subjects ?? [])
+        {
+            if (subject.Semester1Score is < 0 or > 10 || subject.Semester2Score is < 0 or > 10)
             {
-                activities.Add(new
-                {
-                    id = item.Id?.ToString() ?? Guid.NewGuid().ToString(),
-                    name = item.Title ?? "",
-                    category = item.Type == "award" ? "achievement" : "activity",
-                    role = item.Role,
-                    impactLevel = item.ImpactLevel switch { 4 => "international", 3 => "national", 2 => "province", _ => "school" },
-                    durationYears = item.DurationMonths.HasValue ? Math.Max(1, item.DurationMonths.Value / 12) : 1,
-                    year = int.TryParse(item.Year, out var yr) ? yr : (int?)null
-                });
+                errors.Add($"Bước 2: điểm môn {subject.SubjectName} ({year.GradeName}) phải từ 0 đến 10.");
             }
         }
 
-        return new
+        // Bước 3
+        var englishType = draft.Step3?.EnglishTestType?.Trim().ToLowerInvariant();
+        if (englishType is not null && !ProfileConstants.EnglishTestTypes.All.Contains(englishType))
+            errors.Add("Bước 3: loại chứng chỉ tiếng Anh không hợp lệ.");
+        if (englishType is not null && englishType != ProfileConstants.EnglishTestTypes.None
+            && !string.IsNullOrWhiteSpace(draft.Step3?.EnglishTestDate) && ParseDateOnly(draft.Step3.EnglishTestDate) is null)
+            errors.Add("Bước 3: ngày thi tiếng Anh không hợp lệ.");
+
+        // Bước 4
+        var tierId = draft.Step4?.AnnualBudgetTier;
+        if (string.IsNullOrWhiteSpace(tierId))
+            errors.Add("Bước 4: chưa chọn mức ngân sách.");
+        else if (!budgetTiers.ContainsKey(tierId))
+            errors.Add($"Bước 4: mức ngân sách '{tierId}' không tồn tại.");
+        if (draft.Step4?.NeedFinancialAid is null || !ProfileConstants.ScholarshipNeeds.All.Contains(draft.Step4.NeedFinancialAid))
+            errors.Add("Bước 4: chưa chọn nhu cầu học bổng.");
+
+        // Bước 5
+        var currentYear = DateTime.UtcNow.Year;
+        foreach (var item in draft.Step5?.Activities ?? [])
         {
-            step1 = new
+            var name = item.Name?.Trim();
+            if (string.IsNullOrWhiteSpace(name))
             {
-                targetDegreeLevel = s1?.TargetLevel ?? "undergraduate",
-                currentEducationLevel = s1?.CurrentEducationLevel,
-                currentSchool = s1?.CurrentSchool,
-                currentGrade = s1?.CurrentGrade,
-                expectedGraduationYear = s1?.GraduationYear,
-                targetMajor = s1?.IntendedMajor,
-                targetStates = s1?.PreferredStates ?? new List<string>(),
-                targetSchoolType = s1?.InstitutionType ?? "all"
-            },
-            step2 = new
-            {
-                calculatedGpa4Scale = s2?.CalculatedGpa4,
-                manualGpa10Scale = s2?.CalculatedGpa4.HasValue == true ? Math.Round((s2.CalculatedGpa4.Value / 4.0m) * 10m, 2) : (decimal?)null,
-                academicYears = new object[] { }
-            },
-            step3 = new
-            {
-                englishTestType = engType,
-                englishOverallScore = engScore,
-                englishTestDate = s3?.EnglishExamDate,
-                otherTests = otherTests
-            },
-            step4 = new
-            {
-                annualBudgetTier = s4?.BudgetTierId?.Replace("tier_", ""),
-                annualBudgetUsd = s4?.AnnualBudgetUsd,
-                needFinancialAid = s4?.ScholarshipNeedId ?? "preferred",
-                financialNotes = s4?.FinancialNotes
-            },
-            step5 = new
-            {
-                activities = activities
+                errors.Add("Bước 5: có mục chưa nhập tên.");
+                continue;
             }
-        };
+            if (item.ImpactLevel is null || !ProfileConstants.ImpactLevelCodes.ToLevel.ContainsKey(item.ImpactLevel))
+                errors.Add($"Bước 5: '{name}' chưa chọn phạm vi.");
+
+            if (IsAward(item))
+            {
+                if (item.Year is null || item.Year < 1900 || item.Year > currentYear)
+                    errors.Add($"Bước 5: giải thưởng '{name}' chưa có năm đạt giải hợp lệ.");
+                continue;
+            }
+
+            if (item.Role is null || !ProfileConstants.ActivityRoles.All.Contains(item.Role))
+                errors.Add($"Bước 5: hoạt động '{name}' chưa chọn vai trò.");
+            var start = ParseDateOnly(item.StartDate);
+            if (start is null)
+                errors.Add($"Bước 5: hoạt động '{name}' chưa có tháng bắt đầu hợp lệ (MM/yyyy).");
+            var end = item.IsOngoing ? null : ParseDateOnly(item.EndDate);
+            if (!item.IsOngoing && end is null)
+                errors.Add($"Bước 5: hoạt động '{name}' chưa có tháng kết thúc hợp lệ (MM/yyyy).");
+            if (start is not null && end is not null && end < start)
+                errors.Add($"Bước 5: hoạt động '{name}' có tháng kết thúc trước tháng bắt đầu.");
+        }
+
+        if (errors.Count > 0)
+            throw new InvalidOperationException(string.Join(" ", errors));
     }
 
-    private static ProfileFlowStateDto CreateDefaultDraftState() =>
-        new(
-            CurrentStep: 1,
-            CompletedSteps: [],
-            StepData: new ProfileFlowStepDataDto(),
-            DraftTranscript: null,
-            LastUpdatedAt: DateTime.UtcNow,
-            HasCommittedProfile: false
-        );
+    private static bool IsAward(FlowActivityDraftDto item) =>
+        string.Equals(item.Category, "achievement", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(item.Category, "award", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Ánh xạ draft (đã validate) vào entity. Không ghi các cột luồng 6 bước không thu thập (funding_source, financial_notes, max_expected_tuition_usd, gre, gmat).</summary>
+    private static (List<TranscriptScore> Scores, List<ProfileActivity> Activities) ApplyDraftToProfile(
+        StudentProfile profile, ProfileFlowDraftDto draft, IReadOnlyDictionary<string, BudgetTier> budgetTiers, DateTime now)
+    {
+        // Bước 1
+        var step1 = draft.Step1!;
+        profile.TargetLevel = step1.TargetDegreeLevel!.Trim();
+        profile.CurrentEducationLevel = step1.CurrentEducationLevel;
+        profile.CurrentGrade = NullIfBlank(step1.CurrentGrade);
+        profile.CurrentSchool = NullIfBlank(step1.CurrentSchool);
+        profile.GraduationYear = step1.ExpectedGraduationYear;
+        profile.IntendedMajor = NullIfBlank(step1.TargetMajor);
+        profile.PreferredStates = (step1.TargetStates ?? [])
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Select(s => s.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var schoolType = step1.TargetSchoolType?.Trim().ToLowerInvariant();
+        profile.TargetSchoolType = schoolType is not null && SchoolTypes.Contains(schoolType) ? schoolType : "all";
+
+        // Bước 2: mỗi (khối, học kỳ) là 1 kỳ; TermOrder tăng dần theo thứ tự khối trên UI
+        profile.GradeScale = GradeScales.Scale10;
+        var scores = new List<TranscriptScore>();
+        var termOrder = 0;
+        foreach (var year in draft.Step2?.AcademicYears ?? [])
+        {
+            var gradeName = NullIfBlank(year.GradeName) ?? "Không rõ";
+            for (var semester = 1; semester <= 2; semester++)
+            {
+                termOrder++;
+                foreach (var subject in year.Subjects ?? [])
+                {
+                    var score = semester == 1 ? subject.Semester1Score : subject.Semester2Score;
+                    if (score is null || string.IsNullOrWhiteSpace(subject.SubjectName)) continue;
+                    scores.Add(new TranscriptScore
+                    {
+                        TermName = $"{gradeName} HK{semester}",
+                        TermOrder = termOrder,
+                        GradeName = gradeName,
+                        Semester = semester,
+                        Subject = subject.SubjectName.Trim(),
+                        Score = score.Value,
+                        RawScore = score.Value.ToString(CultureInfo.InvariantCulture),
+                        Credits = 1m,
+                    });
+                }
+            }
+        }
+        profile.OverallGpa = ComputeGpa4(draft.Step2) ?? draft.Step2?.CalculatedGpa4Scale;
+
+        // Bước 3
+        var step3 = draft.Step3;
+        var englishType = step3?.EnglishTestType?.Trim().ToLowerInvariant() ?? ProfileConstants.EnglishTestTypes.None;
+        var hasEnglish = englishType != ProfileConstants.EnglishTestTypes.None;
+        profile.EnglishTestType = englishType;
+        profile.Ielts = englishType == ProfileConstants.EnglishTestTypes.Ielts ? step3?.EnglishOverallScore : null;
+        profile.Toefl = englishType == ProfileConstants.EnglishTestTypes.Toefl ? step3?.EnglishOverallScore : null;
+        profile.Duolingo = englishType == ProfileConstants.EnglishTestTypes.Duolingo ? step3?.EnglishOverallScore : null;
+        profile.EnglishTestDate = hasEnglish ? ParseDateOnly(step3?.EnglishTestDate) : null;
+
+        var otherTests = step3?.OtherTests ?? [];
+        decimal? OtherTest(string type) => otherTests
+            .FirstOrDefault(t => string.Equals(t.TestType, type, StringComparison.OrdinalIgnoreCase))?.Score;
+        profile.Sat = OtherTest("SAT");
+        profile.Act = OtherTest("ACT");
+        var ap = OtherTest("AP");
+        profile.OtherTestsJson = ap is null ? null : JsonSerializer.Serialize(new Dictionary<string, decimal> { ["ap"] = ap.Value });
+
+        // Bước 4
+        var tier = budgetTiers[draft.Step4!.AnnualBudgetTier!];
+        profile.BudgetTier = tier.Id;
+        profile.BudgetMinUsd = tier.MinUsd;
+        profile.BudgetMaxUsd = tier.MaxUsd; // null với mức trên 70k = không giới hạn trần
+        profile.ScholarshipNeed = draft.Step4.NeedFinancialAid;
+        profile.NeedsScholarship = ProfileConstants.ScholarshipNeeds.NeedsScholarship(profile.ScholarshipNeed);
+
+        // Điểm ngoại khóa cũ không còn đúng với dữ liệu mới; để bộ tính điểm tính lại
+        profile.ExtracurricularScore = null;
+
+        // Bước 5
+        var today = DateOnly.FromDateTime(now);
+        var activities = new List<ProfileActivity>();
+        foreach (var item in draft.Step5?.Activities ?? [])
+        {
+            var impact = ProfileConstants.ImpactLevelCodes.ToLevel[item.ImpactLevel!];
+            if (IsAward(item))
+            {
+                activities.Add(new ProfileActivity
+                {
+                    Kind = "award",
+                    Title = item.Name!.Trim(),
+                    ImpactLevel = impact,
+                    AwardYear = item.Year,
+                });
+                continue;
+            }
+
+            var start = ParseDateOnly(item.StartDate)!.Value;
+            var end = item.IsOngoing ? (DateOnly?)null : ParseDateOnly(item.EndDate);
+            activities.Add(new ProfileActivity
+            {
+                Kind = "extracurricular",
+                Title = item.Name!.Trim(),
+                Role = item.Role,
+                ImpactLevel = impact,
+                StartDate = start,
+                EndDate = end,
+                IsOngoing = item.IsOngoing,
+                DurationMonths = CountMonths(start, end ?? today),
+            });
+        }
+
+        return (scores, activities);
+    }
+
+    /// <summary>Giống FE: trung bình các môn (mỗi môn = TB HK1, HK2 nếu có), quy đổi tuyến tính sang thang 4</summary>
+    private static decimal? ComputeGpa4(FlowTranscriptDraftDto? step2)
+    {
+        var subjectAverages = new List<decimal>();
+        foreach (var year in step2?.AcademicYears ?? [])
+        foreach (var subject in year.Subjects ?? [])
+        {
+            var values = new[] { subject.Semester1Score, subject.Semester2Score }.Where(v => v.HasValue).Select(v => v!.Value).ToList();
+            if (values.Count > 0) subjectAverages.Add(values.Average());
+        }
+
+        if (subjectAverages.Count == 0) return null;
+        var gpa10 = Math.Round(subjectAverages.Average(), 2);
+        return Math.Round(gpa10 / 10m * 4m, 2);
+    }
+
+    /// <summary>Số tháng tính cả tháng đầu và tháng cuối (09/2024 → 05/2025 = 9 tháng)</summary>
+    private static int CountMonths(DateOnly start, DateOnly end) =>
+        Math.Max(1, (end.Year - start.Year) * 12 + end.Month - start.Month + 1);
+
+    // ───────────────────────────── Dựng lại draft từ DB ─────────────────────────────
+
+    private static ProfileFlowDraftDto BuildDraftFromProfile(
+        StudentProfile profile, IReadOnlyList<TranscriptScore> scores, IReadOnlyList<ProfileActivity> activities)
+    {
+        var step1 = new FlowGoalDraftDto(
+            CurrentEducationLevel: profile.CurrentEducationLevel ?? NormalizeEducationLevel(profile.EducationSystem) switch
+            {
+                { } code when EducationLevelCodes.Contains(code) => code,
+                _ => null
+            },
+            CurrentGrade: profile.CurrentGrade,
+            CurrentSchool: profile.CurrentSchool,
+            ExpectedGraduationYear: profile.GraduationYear,
+            TargetDegreeLevel: profile.TargetLevel,
+            TargetMajor: profile.IntendedMajor,
+            TargetStates: profile.PreferredStates?.ToList() ?? [],
+            TargetSchoolType: profile.TargetSchoolType ?? "all");
+
+        // Bảng điểm: gom theo khối, giữ thứ tự TermOrder; dữ liệu cũ không có grade_name/semester thì tách từ term_name
+        var years = new List<FlowAcademicYearDraftDto>();
+        foreach (var s in scores.OrderBy(s => s.TermOrder))
+        {
+            var (gradeName, semester) = ResolveGradeAndSemester(s);
+            var year = years.FirstOrDefault(y => y.GradeName == gradeName);
+            if (year is null)
+            {
+                year = new FlowAcademicYearDraftDto(gradeName, []);
+                years.Add(year);
+            }
+
+            var index = year.Subjects!.FindIndex(x => x.SubjectName == s.Subject);
+            var subject = index >= 0 ? year.Subjects[index] : new FlowSubjectDraftDto(s.Subject);
+            subject = semester == 2 ? subject with { Semester2Score = s.Score } : subject with { Semester1Score = s.Score };
+            if (index >= 0) year.Subjects[index] = subject;
+            else year.Subjects.Add(subject);
+        }
+        var step2 = new FlowTranscriptDraftDto(years, profile.OverallGpa, profile.OverallGpa is { } g ? Math.Round(g / 4m * 10m, 2) : null);
+
+        var englishType = profile.EnglishTestType
+            ?? (profile.Ielts.HasValue ? ProfileConstants.EnglishTestTypes.Ielts
+                : profile.Toefl.HasValue ? ProfileConstants.EnglishTestTypes.Toefl
+                : profile.Duolingo.HasValue ? ProfileConstants.EnglishTestTypes.Duolingo
+                : ProfileConstants.EnglishTestTypes.None);
+        var otherTests = new List<FlowOtherTestDraftDto>();
+        if (profile.Sat.HasValue) otherTests.Add(new FlowOtherTestDraftDto("SAT", profile.Sat));
+        if (profile.Act.HasValue) otherTests.Add(new FlowOtherTestDraftDto("ACT", profile.Act));
+        if (ReadApScore(profile.OtherTestsJson) is { } ap) otherTests.Add(new FlowOtherTestDraftDto("AP", ap));
+        var step3 = new FlowCertificationDraftDto(
+            EnglishTestType: englishType switch
+            {
+                ProfileConstants.EnglishTestTypes.Ielts => "IELTS",
+                ProfileConstants.EnglishTestTypes.Toefl => "TOEFL",
+                ProfileConstants.EnglishTestTypes.Duolingo => "Duolingo",
+                _ => "none"
+            },
+            EnglishOverallScore: englishType switch
+            {
+                ProfileConstants.EnglishTestTypes.Ielts => profile.Ielts,
+                ProfileConstants.EnglishTestTypes.Toefl => profile.Toefl,
+                ProfileConstants.EnglishTestTypes.Duolingo => profile.Duolingo,
+                _ => null
+            },
+            EnglishTestDate: profile.EnglishTestDate?.ToString("yyyy-MM", CultureInfo.InvariantCulture),
+            OtherTests: otherTests);
+
+        var step4 = new FlowFinancialDraftDto(profile.BudgetTier, profile.ScholarshipNeed);
+
+        var step5 = new FlowActivitiesDraftDto(activities.Select(a => string.Equals(a.Kind, "award", StringComparison.OrdinalIgnoreCase)
+            ? new FlowActivityDraftDto(
+                Id: a.Id.ToString(),
+                Name: a.Title,
+                Category: "achievement",
+                ImpactLevel: ProfileConstants.ImpactLevelCodes.FromLevel(a.ImpactLevel),
+                Year: a.AwardYear ?? a.StartDate?.Year)
+            : new FlowActivityDraftDto(
+                Id: a.Id.ToString(),
+                Name: a.Title,
+                Category: "activity",
+                Role: a.Role is not null && ProfileConstants.ActivityRoles.All.Contains(a.Role) ? a.Role : null,
+                ImpactLevel: ProfileConstants.ImpactLevelCodes.FromLevel(a.ImpactLevel),
+                StartDate: a.StartDate?.ToString("MM/yyyy", CultureInfo.InvariantCulture),
+                EndDate: a.EndDate?.ToString("MM/yyyy", CultureInfo.InvariantCulture),
+                IsOngoing: a.IsOngoing,
+                DurationMonths: a.DurationMonths)).ToList());
+
+        return new ProfileFlowDraftDto(step1, step2, step3, step4, step5);
+    }
+
+    private static (string GradeName, int Semester) ResolveGradeAndSemester(TranscriptScore s)
+    {
+        if (!string.IsNullOrWhiteSpace(s.GradeName) && s.Semester is 1 or 2)
+            return (s.GradeName, s.Semester.Value);
+
+        var match = TermNameRegex.Match(s.TermName ?? string.Empty);
+        if (match.Success)
+        {
+            var grade = match.Groups["grade"].Value.Trim().TrimEnd('-').Trim();
+            return (grade.Length > 0 ? grade : s.TermName!, int.Parse(match.Groups["sem"].Value));
+        }
+        return (string.IsNullOrWhiteSpace(s.TermName) ? "Không rõ" : s.TermName, 1);
+    }
+
+    private static decimal? ReadApScore(string? otherTestsJson)
+    {
+        if (string.IsNullOrWhiteSpace(otherTestsJson)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(otherTestsJson);
+            return doc.RootElement.ValueKind == JsonValueKind.Object
+                && doc.RootElement.TryGetProperty("ap", out var ap)
+                && ap.ValueKind == JsonValueKind.Number
+                    ? ap.GetDecimal()
+                    : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    // ───────────────────────────── Helpers ─────────────────────────────
+
+    private static string? NullIfBlank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    /// <summary>Nhận MM/yyyy (tháng hoạt động), yyyy-MM (input type=month), ngày đầy đủ hoặc chỉ năm</summary>
+    private static DateOnly? ParseDateOnly(string? str)
+    {
+        if (string.IsNullOrWhiteSpace(str)) return null;
+        var trimmed = str.Trim();
+        if (DateOnly.TryParseExact(trimmed, ["MM/yyyy", "M/yyyy", "yyyy-MM"], CultureInfo.InvariantCulture, DateTimeStyles.None, out var monthYear))
+            return monthYear;
+        if (DateOnly.TryParse(trimmed, CultureInfo.InvariantCulture, out var d)) return d;
+        if (int.TryParse(trimmed, out var onlyYear) && onlyYear >= 1900 && onlyYear <= 2100)
+            return new DateOnly(onlyYear, 1, 1);
+        return null;
+    }
 }

@@ -57,8 +57,11 @@ namespace StudyAbroad.Application.Recommendations
         decimal? Ielts,
         decimal? Toefl,
         decimal? Duolingo,
-        decimal? AnnualBudgetUsd,
-        decimal? ExtracurricularScore);  // 0–4
+        decimal? BudgetMinUsd,
+        decimal? BudgetMaxUsd,
+        decimal? ExtracurricularScore = null,
+        decimal? AnnualBudgetUsd = null,
+        int ActivitiesCount = 0);
 
     //Điểm ngoại khóa dùng cho lần lọc này. Score = null: chưa tính được, SAW bỏ tiêu chí ngoại khóa
     public record ExtracurricularSummaryDto(

@@ -17,10 +17,11 @@ namespace StudyAbroad.Application.Recommendations
             if (r.English == EnglishStatus.BelowMin)
                 parts.Add($"Chưa đạt điều kiện tiếng Anh tối thiểu của trường ({EnglishMinimums(r.Candidate)}).");
 
-            parts.Add((r.TotalCostUsd, s.AnnualBudgetUsd) switch
+            parts.Add((r.TotalCostUsd, s.BudgetMaxUsd, s.BudgetMinUsd) switch
             {
-                ({ } t, { } b) => $"Chi phí ước tính khoảng ${Money(t)}/năm, ngân sách của bạn ${Money(b)}/năm.",
-                ({ } t, null) => $"Chi phí ước tính khoảng ${Money(t)}/năm.",
+                ({ } t, { } max, { } min) when min > 0 => $"Chi phí ước tính khoảng ${Money(t)}/năm, ngân sách của bạn từ ${Money(min)} đến ${Money(max)}/năm.",
+                ({ } t, { } max, _) => $"Chi phí ước tính khoảng ${Money(t)}/năm, ngân sách của bạn dưới ${Money(max)}/năm.",
+                ({ } t, null, _) => $"Chi phí ước tính khoảng ${Money(t)}/năm.",
                 _ => "Chưa có dữ liệu chi phí, hãy kiểm tra trên website của trường.",
             });
 

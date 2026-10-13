@@ -71,58 +71,41 @@ public class ProfileFlowRepository(AppDbContext context) : IProfileFlowRepositor
             .ToList();
     }
 
-    public async Task ReplaceTranscriptScoresAsync(Guid profileId, IEnumerable<TranscriptScore> scores, CancellationToken ct = default)
+    public async Task CommitProfileFlowAsync(
+        StudentProfile profile,
+        IEnumerable<TranscriptScore> scores,
+        IEnumerable<ProfileActivity> activities,
+        CancellationToken ct = default)
     {
-        var existing = await context.TranscriptScores
-            .Where(s => s.StudentProfileId == profileId)
-            .ToListAsync(ct);
+        var now = DateTime.UtcNow;
+        await using var tx = await context.Database.BeginTransactionAsync(ct);
 
-        if (existing.Count > 0)
+        profile.UpdatedAt = now;
+        context.StudentProfiles.Update(profile);
+
+        var oldScores = await context.TranscriptScores.Where(s => s.StudentProfileId == profile.Id).ToListAsync(ct);
+        context.TranscriptScores.RemoveRange(oldScores);
+        var oldActivities = await context.ProfileActivities.Where(a => a.StudentProfileId == profile.Id).ToListAsync(ct);
+        context.ProfileActivities.RemoveRange(oldActivities);
+
+        foreach (var s in scores)
         {
-            context.TranscriptScores.RemoveRange(existing);
+            s.StudentProfileId = profile.Id;
+            s.CreatedAt = now;
+            s.UpdatedAt = now;
+            context.TranscriptScores.Add(s);
         }
 
-        var toAdd = scores.ToList();
-        foreach (var s in toAdd)
+        foreach (var a in activities)
         {
-            s.StudentProfileId = profileId;
-            s.CreatedAt = DateTime.UtcNow;
-            s.UpdatedAt = DateTime.UtcNow;
-        }
-
-        if (toAdd.Count > 0)
-        {
-            await context.TranscriptScores.AddRangeAsync(toAdd, ct);
+            a.StudentProfileId = profile.Id;
+            a.CreatedAt = now;
+            a.UpdatedAt = now;
+            context.ProfileActivities.Add(a);
         }
 
         await context.SaveChangesAsync(ct);
-    }
-
-    public async Task ReplaceProfileActivitiesAsync(Guid profileId, IEnumerable<ProfileActivity> activities, CancellationToken ct = default)
-    {
-        var existing = await context.ProfileActivities
-            .Where(a => a.StudentProfileId == profileId)
-            .ToListAsync(ct);
-
-        if (existing.Count > 0)
-        {
-            context.ProfileActivities.RemoveRange(existing);
-        }
-
-        var toAdd = activities.ToList();
-        foreach (var a in toAdd)
-        {
-            a.StudentProfileId = profileId;
-            a.CreatedAt = DateTime.UtcNow;
-            a.UpdatedAt = DateTime.UtcNow;
-        }
-
-        if (toAdd.Count > 0)
-        {
-            await context.ProfileActivities.AddRangeAsync(toAdd, ct);
-        }
-
-        await context.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
     }
 
     public async Task<IReadOnlyList<TranscriptScore>> GetTranscriptScoresAsync(Guid profileId, CancellationToken ct = default)

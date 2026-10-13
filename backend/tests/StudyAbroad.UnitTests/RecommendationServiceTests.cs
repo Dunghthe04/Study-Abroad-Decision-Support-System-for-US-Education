@@ -86,7 +86,7 @@ public class RecommendationServiceTests
         OverallGpa = gpa4,                     // thang 4; GradeScale để mặc định "10" (thang của bảng điểm gốc)
         IntendedMajor = "Computer Science",
         Sat = 1300,
-        AnnualBudgetUsd = 50000,
+        BudgetMaxUsd = 50000,
     };
 
     private static FakeRepository NewRepo(StudentProfile? profile = null)

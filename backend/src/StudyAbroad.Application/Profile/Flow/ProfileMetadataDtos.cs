@@ -18,6 +18,7 @@ public record ProfileMetadataResponse(
     [property: JsonPropertyName("certifications")] IReadOnlyList<CertificationMetadataItem> Certifications,
     [property: JsonPropertyName("activityCategories")] IReadOnlyList<IdLabelItem> ActivityCategories,
     [property: JsonPropertyName("impactLevels")] IReadOnlyList<ImpactLevelMetadataItem> ImpactLevels,
+    [property: JsonPropertyName("activityRoles")] IReadOnlyList<IdLabelItem> ActivityRoles,
     [property: JsonPropertyName("usStates")] IReadOnlyList<UsStateMetadataItem> UsStates,
     [property: JsonPropertyName("popularStateCodes")] IReadOnlyList<string> PopularStateCodes,
     [property: JsonPropertyName("usMajors")] IReadOnlyList<UsMajorMetadataItem> UsMajors,
@@ -43,7 +44,8 @@ public record BudgetTierMetadataItem(
     [property: JsonPropertyName("id")] string Id,
     [property: JsonPropertyName("label")] string Label,
     [property: JsonPropertyName("minUsd")] decimal MinUsd,
-    [property: JsonPropertyName("maxUsd")] decimal MaxUsd,
+    /// <summary>null = không giới hạn trên (mức trên 70k)</summary>
+    [property: JsonPropertyName("maxUsd")] decimal? MaxUsd,
     [property: JsonPropertyName("approxUsd")] decimal ApproxUsd,
     [property: JsonPropertyName("description")] string Description
 );
@@ -98,6 +100,7 @@ public record CertificationMetadataItem(
 );
 
 public record ImpactLevelMetadataItem(
+    [property: JsonPropertyName("id")] string Id,
     [property: JsonPropertyName("level")] int Level,
     [property: JsonPropertyName("label")] string Label,
     [property: JsonPropertyName("desc")] string Desc

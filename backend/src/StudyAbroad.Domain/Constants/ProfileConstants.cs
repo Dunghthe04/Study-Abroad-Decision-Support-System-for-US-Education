@@ -33,6 +33,56 @@ public static class ProfileConstants
         public static bool IsValid(int level) => level >= 1 && level <= 5;
     }
 
+    /// <summary>[USAS-640] Mã phạm vi hoạt động/giải thưởng ở luồng 6 bước, ánh xạ sang ImpactLevels 1..5</summary>
+    public static class ImpactLevelCodes
+    {
+        public static readonly IReadOnlyDictionary<string, int> ToLevel = new Dictionary<string, int>
+        {
+            ["school"] = ImpactLevels.School,
+            ["district"] = ImpactLevels.District,
+            ["province"] = ImpactLevels.City,
+            ["national"] = ImpactLevels.National,
+            ["international"] = ImpactLevels.International,
+        };
+
+        public static string? FromLevel(int? level) =>
+            ToLevel.FirstOrDefault(kv => kv.Value == level).Key;
+    }
+
+    /// <summary>[USAS-640] Vai trò trong hoạt động (R theo tài liệu tính điểm)</summary>
+    public static class ActivityRoles
+    {
+        public const string Founder = "founder";
+        public const string Leader = "leader";
+        public const string ViceLeader = "vice_leader";
+        public const string Member = "member";
+
+        public static readonly IReadOnlySet<string> All = new HashSet<string> { Founder, Leader, ViceLeader, Member };
+    }
+
+    /// <summary>[USAS-640] Nhu cầu học bổng</summary>
+    public static class ScholarshipNeeds
+    {
+        public const string Mandatory = "mandatory";
+        public const string Preferred = "preferred";
+        public const string Optional = "optional";
+
+        public static readonly IReadOnlySet<string> All = new HashSet<string> { Mandatory, Preferred, Optional };
+
+        public static bool NeedsScholarship(string? need) => need is Mandatory or Preferred;
+    }
+
+    /// <summary>[USAS-640] Chứng chỉ tiếng Anh chọn ở bước 3</summary>
+    public static class EnglishTestTypes
+    {
+        public const string Ielts = "ielts";
+        public const string Toefl = "toefl";
+        public const string Duolingo = "duolingo";
+        public const string None = "none";
+
+        public static readonly IReadOnlySet<string> All = new HashSet<string> { Ielts, Toefl, Duolingo, None };
+    }
+
     public static class AchievementCategories
     {
         public const string Award = "award";                 // Giải thưởng học thuật / năng khiếu

@@ -42,10 +42,7 @@ public class ProfileMetadataServiceTests
         public Task<IReadOnlyList<string>> GetOfferingMajorsAsync(CancellationToken ct = default) =>
             Task.FromResult(MockOfferingMajors);
 
-        public Task ReplaceTranscriptScoresAsync(Guid profileId, IEnumerable<TranscriptScore> scores, CancellationToken ct = default) =>
-            Task.CompletedTask;
-
-        public Task ReplaceProfileActivitiesAsync(Guid profileId, IEnumerable<ProfileActivity> activities, CancellationToken ct = default) =>
+        public Task CommitProfileFlowAsync(StudentProfile profile, IEnumerable<TranscriptScore> scores, IEnumerable<ProfileActivity> activities, CancellationToken ct = default) =>
             Task.CompletedTask;
 
         public Task<IReadOnlyList<TranscriptScore>> GetTranscriptScoresAsync(Guid profileId, CancellationToken ct = default) =>

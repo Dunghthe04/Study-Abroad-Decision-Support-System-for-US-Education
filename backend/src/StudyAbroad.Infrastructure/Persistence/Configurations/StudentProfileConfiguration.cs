@@ -13,6 +13,7 @@ public class StudentProfileConfiguration : IEntityTypeConfiguration<StudentProfi
         b.Property(x => x.TargetLevel).HasMaxLength(32).IsRequired();
         b.Property(x => x.CurrentSchool).HasMaxLength(256);
         b.Property(x => x.EducationSystem).HasMaxLength(64);
+        b.Property(x => x.CurrentEducationLevel).HasMaxLength(32);
         b.Property(x => x.GraduationYear);
         b.Property(x => x.CurrentGrade).HasMaxLength(64);
         b.Property(x => x.GradeScale).HasMaxLength(8).IsRequired();
@@ -25,18 +26,25 @@ public class StudentProfileConfiguration : IEntityTypeConfiguration<StudentProfi
         b.Property(x => x.Act).HasPrecision(4, 1);
         b.Property(x => x.Gre).HasPrecision(5, 1);
         b.Property(x => x.Gmat).HasPrecision(5, 1);
+        b.Property(x => x.EnglishTestType).HasMaxLength(16);
+        b.Property(x => x.EnglishTestDate);
         b.Property(x => x.OtherTestsJson).HasColumnType("jsonb");
         b.Property(x => x.ExtracurricularScore).HasPrecision(4, 2);
         b.ToTable(t => t.HasCheckConstraint("ck_student_profiles_extracurricular_score",
             "extracurricular_score IS NULL OR extracurricular_score BETWEEN 0 AND 4"));
-        b.Property(x => x.AnnualBudgetUsd).HasPrecision(12, 2);
+        b.Property(x => x.BudgetTier).HasMaxLength(32);
+        b.Property(x => x.BudgetMinUsd).HasPrecision(12, 2);
+        b.Property(x => x.BudgetMaxUsd).HasPrecision(12, 2);
         b.Property(x => x.MaxExpectedTuitionUsd).HasPrecision(12, 2);
         b.Property(x => x.FundingSource).HasMaxLength(32);
+        b.Property(x => x.ScholarshipNeed).HasMaxLength(16);
         b.Property(x => x.FinancialNotes).HasMaxLength(1000);
         b.Property(x => x.PreferredStates).HasColumnType("text[]");
+        b.Property(x => x.TargetSchoolType).HasMaxLength(32).HasDefaultValue("all");
         b.Property(x => x.RoadmapProgressJson).HasColumnType("jsonb");
         b.Property(x => x.TranscriptFileUrl).HasMaxLength(512);
         b.Property(x => x.DraftFlowStateJson).HasColumnType("jsonb");
+        b.Property(x => x.FlowSubmittedAt);
         b.HasIndex(x => x.UserId).IsUnique();
     }
 }

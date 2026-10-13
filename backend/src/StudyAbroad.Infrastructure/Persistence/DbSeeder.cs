@@ -162,7 +162,7 @@ public static class DbSeeder
       "id": "tier_above_70k",
       "label": "Trên 70.000 USD",
       "minUsd": 70000,
-      "maxUsd": 120000,
+      "maxUsd": null,
       "approxUsd": 85000,
       "description": "Tự tin chi trả cho mọi trường đại học hàng đầu không cần học bổng."
     }
@@ -495,24 +495,52 @@ public static class DbSeeder
   ],
   "impactLevels": [
     {
+      "id": "school",
       "level": 1,
       "label": "Trường",
       "desc": "Cấp trường / CLB học sinh"
     },
     {
+      "id": "district",
       "level": 2,
-      "label": "Tỉnh / Thành",
-      "desc": "Cấp tỉnh / thành phố / quận huyện"
+      "label": "Quận / Huyện",
+      "desc": "Cấp quận / huyện"
     },
     {
+      "id": "province",
       "level": 3,
+      "label": "Tỉnh / Thành",
+      "desc": "Cấp tỉnh / thành phố"
+    },
+    {
+      "id": "national",
+      "level": 4,
       "label": "Quốc gia",
       "desc": "Học sinh giỏi / kỳ thi / dự án cấp toàn quốc"
     },
     {
-      "level": 4,
+      "id": "international",
+      "level": 5,
       "label": "Quốc tế",
       "desc": "Olympic / kỳ thi / tổ chức quốc tế"
+    }
+  ],
+  "activityRoles": [
+    {
+      "id": "founder",
+      "label": "Sáng lập"
+    },
+    {
+      "id": "leader",
+      "label": "Trưởng / Chủ nhiệm"
+    },
+    {
+      "id": "vice_leader",
+      "label": "Phó"
+    },
+    {
+      "id": "member",
+      "label": "Thành viên"
     }
   ],
   "usStates": [
