@@ -12,7 +12,97 @@ import type {
 export const profileFlowApi = {
   // Lấy siêu dữ liệu động (bậc học, mức tiền, 51 bang, 366 ngành)
   getMetadata: async (): Promise<ProfileMetadataResponse> => {
-    return await apiFetch<ProfileMetadataResponse>("/api/v1/profile/metadata");
+    interface RawMajorItem {
+      id?: string;
+      name?: string;
+      englishName?: string;
+      category?: string;
+    }
+
+    interface RawStateItem {
+      code: string;
+      name: string;
+      region?: string;
+      isPopular?: boolean;
+    }
+
+    interface RawStudyLevelItem {
+      key?: string;
+      id?: string;
+      label?: string;
+      name?: string;
+      description?: string;
+      subName?: string;
+      durationYears?: number;
+      defaultGradeScale?: string;
+      allowedGradingScales?: string[];
+    }
+
+    interface RawBudgetTierItem {
+      key?: string;
+      id?: string;
+      label: string;
+      minUsd?: number | null;
+      maxUsd?: number | null;
+      description?: string;
+    }
+
+    interface RawMetadataPayload {
+      popularStateCodes?: string[];
+      usStates?: RawStateItem[];
+      states?: RawStateItem[];
+      usMajors?: (RawMajorItem | string)[];
+      offeringMajors?: (RawMajorItem | string)[];
+      studyLevels?: RawStudyLevelItem[];
+      budgetTiers?: RawBudgetTierItem[];
+      financialNeedLevels?: ProfileMetadataResponse["financialNeedLevels"];
+      scholarshipNeeds?: ProfileMetadataResponse["financialNeedLevels"];
+      impactLevels?: ProfileMetadataResponse["impactLevels"];
+      certificationTypes?: ProfileMetadataResponse["certificationTypes"];
+      certifications?: ProfileMetadataResponse["certificationTypes"];
+    }
+
+    const raw = await apiFetch<RawMetadataPayload>("/api/v1/profile/metadata");
+    const popularCodes = new Set(raw.popularStateCodes ?? []);
+
+    const states = (raw.usStates ?? raw.states ?? []).map((s) => ({
+      code: s.code,
+      name: s.name,
+      region: s.region ?? "",
+      isPopular: Boolean(s.isPopular || popularCodes.has(s.code)),
+    }));
+
+    const offeringMajors: string[] = (raw.usMajors ?? raw.offeringMajors ?? []).map((m) =>
+      typeof m === "string" ? m : `${m.name}${m.englishName ? ` (${m.englishName})` : ""}`
+    );
+
+    const studyLevels = (raw.studyLevels ?? []).map((l) => ({
+      key: l.key ?? l.id ?? "undergraduate",
+      label: l.label ?? l.name ?? "Đại học",
+      description: l.description ?? l.subName ?? "",
+      durationYears: l.durationYears ?? 4,
+      defaultGradingScale: l.defaultGradeScale ?? "scale_10",
+      allowedGradingScales: l.allowedGradingScales ?? [],
+    }));
+
+    const budgetTiers = (raw.budgetTiers ?? []).map((b) => ({
+      key: b.key ?? b.id ?? "35k_50k",
+      label: b.label,
+      minUsd: b.minUsd ?? null,
+      maxUsd: b.maxUsd ?? null,
+      currency: "USD",
+      description: b.description ?? "",
+    }));
+
+    return {
+      studyLevels,
+      budgetTiers,
+      financialNeedLevels: raw.financialNeedLevels ?? raw.scholarshipNeeds ?? [],
+      impactLevels: raw.impactLevels ?? [],
+      certificationTypes: raw.certificationTypes ?? raw.certifications ?? [],
+      states,
+      offeringMajors,
+    };
   },
 
   // Lấy trạng thái nháp hiện tại của người dùng
