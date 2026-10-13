@@ -137,5 +137,6 @@ public record CommitProfileFlowResponse(
     [property: JsonPropertyName("extracurricularScore")] decimal? ExtracurricularScore,
     [property: JsonPropertyName("annualBudgetUsd")] decimal? AnnualBudgetUsd,
     [property: JsonPropertyName("transcriptFileUrl")] string? TranscriptFileUrl,
-    [property: JsonPropertyName("message")] string Message
+    [property: JsonPropertyName("message")] string Message,
+    [property: JsonPropertyName("success")] bool Success = true
 );

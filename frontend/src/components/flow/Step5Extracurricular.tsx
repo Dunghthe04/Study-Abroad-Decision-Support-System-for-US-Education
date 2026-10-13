@@ -38,6 +38,7 @@ export function Step5Extracurricular({
   const [isOngoing, setIsOngoing] = useState(false);
   const [impactLevel, setImpactLevel] = useState("school");
   const [year, setYear] = useState(new Date().getFullYear().toString());
+  const [yearError, setYearError] = useState<string | null>(null);
 
   // Helper tính số năm từ khoảng thời gian
   const estimateDurationYears = (start: string, end: string, ongoing: boolean): number => {
@@ -58,7 +59,21 @@ export function Step5Extracurricular({
   const handleSaveItem = () => {
     if (!name.trim()) return;
 
-    const currentYearStr = `${new Date().getMonth() + 1}/${new Date().getFullYear()}`;
+    const currentYear = new Date().getFullYear();
+    if (category === "achievement") {
+      const parsedYear = Number(year);
+      if (isNaN(parsedYear) || parsedYear > currentYear) {
+        setYearError(`Năm đạt giải không được lớn hơn năm hiện tại (${currentYear}).`);
+        return;
+      }
+      if (parsedYear < 2000) {
+        setYearError("Năm đạt giải không hợp lệ (từ năm 2000 trở lại đây).");
+        return;
+      }
+    }
+    setYearError(null);
+
+    const currentYearStr = `${new Date().getMonth() + 1}/${currentYear}`;
     const calculatedDuration = estimateDurationYears(startDate, endDate, isOngoing);
 
     const newItem: ActivityDraft = {
@@ -71,7 +86,7 @@ export function Step5Extracurricular({
       isOngoing: category === "activity" ? isOngoing : undefined,
       durationYears: category === "activity" ? calculatedDuration : undefined,
       impactLevel,
-      year: category === "achievement" ? Number(year) || new Date().getFullYear() : undefined,
+      year: category === "achievement" ? Number(year) || currentYear : undefined,
     };
 
     onUpdate([...activities, newItem]);
@@ -300,16 +315,25 @@ export function Step5Extracurricular({
             ) : (
               <div className="space-y-1.5 max-w-xs">
                 <Label htmlFor="itemYear" className="text-xs font-medium text-foreground">
-                  Năm đạt giải
+                  Năm đạt giải (tối đa {new Date().getFullYear()})
                 </Label>
                 <Input
                   id="itemYear"
                   type="number"
-                  min={2018}
-                  max={2030}
+                  min={2000}
+                  max={new Date().getFullYear()}
                   value={year}
-                  onChange={(e) => setYear(e.target.value)}
+                  onChange={(e) => {
+                    setYear(e.target.value);
+                    setYearError(null);
+                  }}
+                  className={cn(yearError && "border-destructive ring-1 ring-destructive")}
                 />
+                {yearError && (
+                  <div className="text-xs text-destructive font-medium mt-1">
+                    {yearError}
+                  </div>
+                )}
               </div>
             )}
 
@@ -355,7 +379,10 @@ export function Step5Extracurricular({
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => setShowAddForm(false)}
+              onClick={() => {
+                setShowAddForm(false);
+                setYearError(null);
+              }}
               className="cursor-pointer"
             >
               Hủy

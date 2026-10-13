@@ -1,6 +1,8 @@
 "use client";
 
-import { ArrowLeftIcon, ArrowRightIcon, DollarSignIcon, HelpCircleIcon } from "lucide-react";
+import { useState } from "react";
+import { ArrowLeftIcon, ArrowRightIcon, DollarSignIcon, HelpCircleIcon, AlertTriangleIcon } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
@@ -41,9 +43,24 @@ const needScholarshipOptions = [
 ];
 
 export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Step4FinancialProps) {
+  const [financialError, setFinancialError] = useState<string | null>(null);
+
   const budgetTiers = metadata?.budgetTiers && metadata.budgetTiers.length > 0
     ? metadata.budgetTiers
     : DEFAULT_BUDGET_TIERS;
+
+  const handleNextClick = () => {
+    if (!data.annualBudgetTier) {
+      setFinancialError("Vui lòng chọn mức ngân sách mỗi năm trước khi tiếp tục.");
+      return;
+    }
+    if (!data.needFinancialAid) {
+      setFinancialError("Vui lòng chọn nhu cầu học bổng của bạn trước khi tiếp tục.");
+      return;
+    }
+    setFinancialError(null);
+    onNext();
+  };
 
   return (
     <div className="space-y-8 animate-in fade-in-50 duration-200">
@@ -79,12 +96,13 @@ export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Ste
               <button
                 key={tier.key}
                 type="button"
-                onClick={() =>
+                onClick={() => {
+                  setFinancialError(null);
                   onUpdate({
                     annualBudgetTier: tier.key,
                     annualBudgetUsd: tier.maxUsd ?? tier.minUsd ?? null,
-                  })
-                }
+                  });
+                }}
                 className={cn(
                   "flex flex-col items-start justify-between rounded-xl border p-4 text-left transition-all cursor-pointer h-full shadow-2xs",
                   isSelected
@@ -130,7 +148,10 @@ export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Ste
               <button
                 key={opt.key}
                 type="button"
-                onClick={() => onUpdate({ needFinancialAid: opt.key })}
+                onClick={() => {
+                  setFinancialError(null);
+                  onUpdate({ needFinancialAid: opt.key });
+                }}
                 className={cn(
                   "flex flex-col items-start justify-between rounded-xl border p-4 text-left transition-all cursor-pointer h-full shadow-2xs",
                   isSelected
@@ -158,13 +179,24 @@ export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Ste
         </div>
       </section>
 
+      {/* Financial Validation Error Notice */}
+      {financialError && (
+        <Alert className="border-destructive/60 bg-destructive/10 animate-in fade-in-50">
+          <AlertTriangleIcon className="size-4 text-destructive" />
+          <AlertTitle className="text-sm font-semibold text-destructive">Thông tin tài chính chưa hoàn tất</AlertTitle>
+          <AlertDescription className="text-xs text-destructive font-medium leading-relaxed">
+            {financialError}
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Bottom Actions */}
       <div className="flex justify-between pt-4 border-t border-line">
         <Button variant="outline" onClick={onPrev} size="lg" className="gap-1.5 cursor-pointer">
           <ArrowLeftIcon className="size-4" />
           Quay lại
         </Button>
-        <Button onClick={onNext} size="lg" className="gap-1.5 cursor-pointer">
+        <Button onClick={handleNextClick} size="lg" className="gap-1.5 cursor-pointer">
           Tiếp tục
           <ArrowRightIcon className="size-4" />
         </Button>

@@ -161,6 +161,7 @@ export function Step2Transcript({
     )
   );
   const [dragOver, setDragOver] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
   const fileInputId = useId();
 
   const { gpa10, gpa4 } = calculateLinearGpa(years);
@@ -290,9 +291,24 @@ export function Step2Transcript({
 
         setActiveYearIndex(targetIdx);
         setShowManualTable(true);
-        setOcrSuccessNotice(
-          `Đã nhận diện thành công ${res.ocrExtraction.subjects.length} môn học từ bảng điểm. Vui lòng kiểm tra lại điểm trong bảng bên dưới.`
-        );
+
+        const filledYearsCount = updatedYears.filter((y) =>
+          y.subjects.some((s) => s.semester1Score !== null || s.semester2Score !== null)
+        ).length;
+
+        if (filledYearsCount < updatedYears.length) {
+          const missingYears = updatedYears
+            .filter((y) => y.subjects.every((s) => s.semester1Score === null && s.semester2Score === null))
+            .map((y) => y.gradeName);
+
+          setOcrSuccessNotice(
+            `Đã nhận diện ${res.ocrExtraction.subjects.length} môn của ${detectedGrade}. Lưu ý: Hồ sơ du học cần đủ điểm các năm (${updatedYears.map((y) => y.gradeName).join(", ")}). Bạn đang thiếu ${missingYears.join(", ")}. Vui lòng tiếp tục tải thêm ảnh bảng điểm hoặc tự điền điểm vào bảng bên dưới.`
+          );
+        } else {
+          setOcrSuccessNotice(
+            `Đã nhận diện thành công ${res.ocrExtraction.subjects.length} môn học từ bảng điểm. Vui lòng kiểm tra lại điểm trong bảng bên dưới.`
+          );
+        }
       } else {
         // Tải file lên được nhưng AI không đọc được điểm (ảnh mờ, scan lệch...)
         onUpdate({ draftTranscriptFile: res.draftFile });
@@ -309,6 +325,57 @@ export function Step2Transcript({
     } finally {
       setIsUploading(false);
     }
+  };
+
+  const handleNextClick = () => {
+    if (gpa10 === null || gpa4 === null) {
+      setValidationError(
+        "Vui lòng tải lên ảnh bảng điểm hoặc tự điền điểm các môn học để hệ thống tính toán GPA trước khi tiếp tục."
+      );
+      setShowManualTable(true);
+      return;
+    }
+
+    // Kiểm tra từng năm học yêu cầu trong danh sách năm
+    const emptyYears = years.filter((y) =>
+      y.subjects.every(
+        (s) =>
+          (s.semester1Score === null || s.semester1Score === undefined) &&
+          (s.semester2Score === null || s.semester2Score === undefined)
+      )
+    );
+
+    if (emptyYears.length > 0) {
+      setValidationError(
+        `Hồ sơ cần đầy đủ thông tin điểm của 3 năm học (${years.map((y) => y.gradeName).join(", ")}) để tính toán cơ hội trúng tuyển chuẩn xác nhất. Hiện bạn đang thiếu điểm của ${emptyYears.map((y) => y.gradeName).join(", ")}. Vui lòng tải thêm ảnh bảng điểm hoặc điền tay các năm còn thiếu.`
+      );
+      setShowManualTable(true);
+      const firstMissingIdx = years.findIndex((y) => y.gradeName === emptyYears[0].gradeName);
+      if (firstMissingIdx !== -1) setActiveYearIndex(firstMissingIdx);
+      return;
+    }
+
+    // Kiểm tra nếu tổng số học kỳ có điểm quá ít (chỉ có 1 học kỳ trên tổng số các năm)
+    let totalTermsWithScores = 0;
+    for (const y of years) {
+      if (y.subjects.some((s) => s.semester1Score !== null && s.semester1Score !== undefined)) {
+        totalTermsWithScores++;
+      }
+      if (y.subjects.some((s) => s.semester2Score !== null && s.semester2Score !== undefined)) {
+        totalTermsWithScores++;
+      }
+    }
+
+    if (years.length >= 2 && totalTermsWithScores < 2) {
+      setValidationError(
+        "Dữ liệu hiện tại mới chỉ ghi nhận 1 học kỳ. Vui lòng tải thêm ảnh hoặc điền thêm điểm các học kỳ khác để hồ sơ có đủ điểm đánh giá."
+      );
+      setShowManualTable(true);
+      return;
+    }
+
+    setValidationError(null);
+    onNext();
   };
 
   return (
@@ -674,13 +741,24 @@ export function Step2Transcript({
         </div>
       )}
 
+      {/* Validation Error Notice */}
+      {validationError && (
+        <Alert className="border-destructive/60 bg-destructive/10 animate-in fade-in-50">
+          <AlertTriangleIcon className="size-4 text-destructive" />
+          <AlertTitle className="text-sm font-semibold text-destructive">Chưa đủ dữ liệu bảng điểm</AlertTitle>
+          <AlertDescription className="text-xs text-destructive font-medium leading-relaxed">
+            {validationError}
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Bottom Actions */}
       <div className="flex justify-between pt-4 border-t border-line">
         <Button variant="outline" onClick={onPrev} size="lg" className="gap-1.5 cursor-pointer">
           <ArrowLeftIcon className="size-4" />
           Quay lại
         </Button>
-        <Button onClick={onNext} size="lg" className="gap-1.5 cursor-pointer">
+        <Button onClick={handleNextClick} size="lg" className="gap-1.5 cursor-pointer">
           Tiếp tục
           <ArrowRightIcon className="size-4" />
         </Button>

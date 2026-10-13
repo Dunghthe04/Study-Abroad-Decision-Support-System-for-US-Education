@@ -141,7 +141,10 @@ export interface ProfileFlowState {
   currentStep: number;
   lastCompletedStep: number;
   updatedAtUtc?: string | null;
-  draft: ProfileFlowDraft;
+  draft?: ProfileFlowDraft | null;
+  stepData?: Record<string, unknown>;
+  completedSteps?: number[];
+  hasCommittedProfile?: boolean;
 }
 
 export interface OcrExtractedSubject {
@@ -168,8 +171,9 @@ export interface UploadDraftTranscriptResponse {
 }
 
 export interface CommitProfileFlowResponse {
-  success: boolean;
+  success?: boolean;
+  succeeded?: boolean;
   message: string;
   profileId: string;
-  committedAtUtc: string;
+  committedAtUtc?: string;
 }

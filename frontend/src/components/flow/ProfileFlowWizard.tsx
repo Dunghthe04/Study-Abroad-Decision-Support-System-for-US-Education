@@ -86,15 +86,16 @@ export function ProfileFlowWizard() {
         if (stateData) {
           setCurrentStep(stateData.currentStep || 1);
           setLastCompletedStep(stateData.lastCompletedStep || 0);
-          if (stateData.draft) {
+          const incomingDraft = stateData.draft;
+          if (incomingDraft) {
             setDraft((prev) => ({
               ...prev,
-              ...stateData.draft,
-              step1: { ...prev.step1, ...stateData.draft.step1 },
-              step2: { ...prev.step2, ...stateData.draft.step2 },
-              step3: { ...prev.step3, ...stateData.draft.step3 },
-              step4: { ...prev.step4, ...stateData.draft.step4 },
-              step5: { ...prev.step5, ...stateData.draft.step5 },
+              ...incomingDraft,
+              step1: { ...prev.step1, ...incomingDraft.step1 },
+              step2: { ...prev.step2, ...incomingDraft.step2 },
+              step3: { ...prev.step3, ...incomingDraft.step3 },
+              step4: { ...prev.step4, ...incomingDraft.step4 },
+              step5: { ...prev.step5, ...incomingDraft.step5 },
             }));
           }
         } else if (typeof window !== "undefined") {
@@ -264,7 +265,8 @@ export function ProfileFlowWizard() {
       }
 
       const res = await profileFlowApi.commitFlow(draft);
-      if (res.success) {
+      const isSuccessful = Boolean(res.success || res.succeeded);
+      if (isSuccessful) {
         if (typeof window !== "undefined") {
           localStorage.removeItem("usas_flow_draft");
         }

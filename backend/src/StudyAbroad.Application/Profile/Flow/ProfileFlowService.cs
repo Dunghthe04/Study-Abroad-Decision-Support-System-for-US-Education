@@ -142,7 +142,9 @@ public class ProfileFlowService(
                 StepData: stepData,
                 DraftTranscript: draftTranscript,
                 LastUpdatedAt: profile.UpdatedAt ?? profile.CreatedAt,
-                HasCommittedProfile: true
+                HasCommittedProfile: true,
+                Draft: ConvertStepDataToRawDraft(stepData),
+                LastCompletedStep: 5
             );
         }
 
@@ -193,7 +195,12 @@ public class ProfileFlowService(
         }
 
         var rawDraft = request.Draft ?? request.FlowState;
-        var stepData = request.StepData ?? new ProfileFlowStepDataDto();
+        var stepData = request.StepData;
+        if (stepData is null && rawDraft is not null)
+        {
+            stepData = ConvertRawDraftToStepData(rawDraft);
+        }
+        stepData ??= new ProfileFlowStepDataDto();
 
         var updatedState = new ProfileFlowStateDto(
             CurrentStep: request.CurrentStep,
@@ -318,6 +325,31 @@ public class ProfileFlowService(
             catch
             {
                 // Bỏ qua lỗi đọc nháp
+            }
+        }
+
+        if (stepData is null || (stepData.Step1 is null && stepData.Step2 is null))
+        {
+            var rawDraft = request?.FinalDraft;
+            if (rawDraft is null && !string.IsNullOrWhiteSpace(profile.DraftFlowStateJson))
+            {
+                try
+                {
+                    using var doc = JsonDocument.Parse(profile.DraftFlowStateJson);
+                    if (doc.RootElement.TryGetProperty("draft", out var dProp))
+                    {
+                        rawDraft = dProp.Clone();
+                    }
+                }
+                catch
+                {
+                    // Bỏ qua lỗi đọc nháp
+                }
+            }
+
+            if (rawDraft is not null)
+            {
+                stepData = ConvertRawDraftToStepData(rawDraft);
             }
         }
 
@@ -554,6 +586,287 @@ public class ProfileFlowService(
         if (profile.Gre.HasValue) tests.Add("gre");
         if (profile.Gmat.HasValue) tests.Add("gmat");
         return tests;
+    }
+
+    private static ProfileFlowStepDataDto ConvertRawDraftToStepData(object rawDraft)
+    {
+        try
+        {
+            JsonElement root;
+            if (rawDraft is JsonElement je)
+            {
+                root = je;
+            }
+            else
+            {
+                var json = JsonSerializer.Serialize(rawDraft, JsonOptions);
+                using var doc = JsonDocument.Parse(json);
+                root = doc.RootElement.Clone();
+            }
+
+            // 1. Parse Step 1
+            Step1GeneralDto? step1 = null;
+            if (root.TryGetProperty("step1", out var s1) && s1.ValueKind == JsonValueKind.Object)
+            {
+                string? targetLevel = s1.TryGetProperty("targetDegreeLevel", out var tl) && tl.ValueKind == JsonValueKind.String ? tl.GetString() : (s1.TryGetProperty("targetLevel", out var tl2) && tl2.ValueKind == JsonValueKind.String ? tl2.GetString() : "undergraduate");
+                string? curLevel = s1.TryGetProperty("currentEducationLevel", out var cel) && cel.ValueKind == JsonValueKind.String ? cel.GetString() : null;
+                string? curSchool = s1.TryGetProperty("currentSchool", out var cs) && cs.ValueKind == JsonValueKind.String ? cs.GetString() : null;
+                string? curGrade = s1.TryGetProperty("currentGrade", out var cg) && cg.ValueKind == JsonValueKind.String ? cg.GetString() : null;
+                int? gradYear = s1.TryGetProperty("expectedGraduationYear", out var gy) && gy.TryGetInt32(out var gyVal) ? gyVal : (s1.TryGetProperty("graduationYear", out var gy2) && gy2.TryGetInt32(out var gy2Val) ? gy2Val : null);
+                string? major = s1.TryGetProperty("targetMajor", out var tm) && tm.ValueKind == JsonValueKind.String ? tm.GetString() : (s1.TryGetProperty("intendedMajor", out var im) && im.ValueKind == JsonValueKind.String ? im.GetString() : null);
+                var prefStates = s1.TryGetProperty("targetStates", out var ts) && ts.ValueKind == JsonValueKind.Array
+                    ? ts.EnumerateArray().Select(x => x.GetString() ?? "").Where(x => !string.IsNullOrEmpty(x)).ToList()
+                    : (s1.TryGetProperty("preferredStates", out var ps) && ps.ValueKind == JsonValueKind.Array ? ps.EnumerateArray().Select(x => x.GetString() ?? "").Where(x => !string.IsNullOrEmpty(x)).ToList() : new List<string>());
+                string? instType = s1.TryGetProperty("targetSchoolType", out var st) && st.ValueKind == JsonValueKind.String ? st.GetString() : null;
+
+                step1 = new Step1GeneralDto(targetLevel, curLevel, curSchool, curGrade, gradYear, major, prefStates, instType);
+            }
+
+            // 2. Parse Step 2
+            Step2TranscriptDto? step2 = null;
+            if (root.TryGetProperty("step2", out var s2) && s2.ValueKind == JsonValueKind.Object)
+            {
+                decimal? gpa4 = null;
+                if (s2.TryGetProperty("calculatedGpa4Scale", out var g4) && g4.TryGetDecimal(out var g4Val)) gpa4 = g4Val;
+                else if (s2.TryGetProperty("calculatedGpa4", out var g4b) && g4b.TryGetDecimal(out var g4bVal)) gpa4 = g4bVal;
+
+                var terms = new List<FlowTranscriptTermDto>();
+                if (s2.TryGetProperty("academicYears", out var ay) && ay.ValueKind == JsonValueKind.Array)
+                {
+                    int order = 1;
+                    foreach (var yearElem in ay.EnumerateArray())
+                    {
+                        var gradeName = yearElem.TryGetProperty("gradeName", out var gn) ? gn.GetString() ?? "Lớp" : "Lớp";
+                        if (yearElem.TryGetProperty("subjects", out var subs) && subs.ValueKind == JsonValueKind.Array)
+                        {
+                            var s1Scores = new List<FlowTranscriptSubjectScoreDto>();
+                            var s2Scores = new List<FlowTranscriptSubjectScoreDto>();
+
+                            foreach (var sub in subs.EnumerateArray())
+                            {
+                                var subName = sub.TryGetProperty("subjectName", out var sn) ? sn.GetString() ?? "" : "";
+                                if (string.IsNullOrWhiteSpace(subName)) continue;
+
+                                if (sub.TryGetProperty("semester1Score", out var sc1) && sc1.ValueKind == JsonValueKind.Number && sc1.TryGetDecimal(out var sc1Val))
+                                {
+                                    s1Scores.Add(new FlowTranscriptSubjectScoreDto(subName, sc1Val, sc1Val.ToString(), 1m));
+                                }
+                                if (sub.TryGetProperty("semester2Score", out var sc2) && sc2.ValueKind == JsonValueKind.Number && sc2.TryGetDecimal(out var sc2Val))
+                                {
+                                    s2Scores.Add(new FlowTranscriptSubjectScoreDto(subName, sc2Val, sc2Val.ToString(), 1m));
+                                }
+                            }
+
+                            if (s1Scores.Count > 0)
+                            {
+                                terms.Add(new FlowTranscriptTermDto(order++, $"{gradeName} - HK1", s1Scores));
+                            }
+                            if (s2Scores.Count > 0)
+                            {
+                                terms.Add(new FlowTranscriptTermDto(order++, $"{gradeName} - HK2", s2Scores));
+                            }
+                        }
+                    }
+                }
+
+                step2 = new Step2TranscriptDto(
+                    EducationSystem: step1?.CurrentEducationLevel ?? "Việt Nam",
+                    GradeScale: "10",
+                    CalculatedGpa4: gpa4,
+                    Terms: terms
+                );
+            }
+
+            // 3. Parse Step 3
+            Step3CertificationsDto? step3 = null;
+            if (root.TryGetProperty("step3", out var s3) && s3.ValueKind == JsonValueKind.Object)
+            {
+                var engType = s3.TryGetProperty("englishTestType", out var et) && et.ValueKind == JsonValueKind.String ? et.GetString() : null;
+                decimal? engScore = s3.TryGetProperty("englishOverallScore", out var eos) && eos.TryGetDecimal(out var eosVal) ? eosVal : null;
+                var engDate = s3.TryGetProperty("englishTestDate", out var ed) && ed.ValueKind == JsonValueKind.String ? ed.GetString() : null;
+
+                decimal? sat = null;
+                decimal? act = null;
+                decimal? ap = null;
+                decimal? gre = null;
+                decimal? gmat = null;
+                var selectedTests = new List<string>();
+
+                if (s3.TryGetProperty("otherTests", out var ot) && ot.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var t in ot.EnumerateArray())
+                    {
+                        var tType = t.TryGetProperty("testType", out var tt) && tt.ValueKind == JsonValueKind.String ? tt.GetString() : null;
+                        var tScore = t.TryGetProperty("score", out var ts) && ts.TryGetDecimal(out var tsVal) ? tsVal : (decimal?)null;
+                        if (!string.IsNullOrEmpty(tType))
+                        {
+                            selectedTests.Add(tType.ToLowerInvariant());
+                            if (tType.Equals("SAT", StringComparison.OrdinalIgnoreCase)) sat = tScore;
+                            else if (tType.Equals("ACT", StringComparison.OrdinalIgnoreCase)) act = tScore;
+                            else if (tType.Equals("AP", StringComparison.OrdinalIgnoreCase)) ap = tScore;
+                            else if (tType.Equals("GRE", StringComparison.OrdinalIgnoreCase)) gre = tScore;
+                            else if (tType.Equals("GMAT", StringComparison.OrdinalIgnoreCase)) gmat = tScore;
+                        }
+                    }
+                }
+
+                step3 = new Step3CertificationsDto(
+                    EnglishTestType: engType,
+                    Ielts: engType == "IELTS" ? engScore : null,
+                    Toefl: engType == "TOEFL" ? engScore : null,
+                    Duolingo: engType == "Duolingo" ? engScore : null,
+                    EnglishExamDate: engDate,
+                    SelectedStandardizedTests: selectedTests,
+                    Sat: sat,
+                    Act: act,
+                    Ap: ap,
+                    Gre: gre,
+                    Gmat: gmat
+                );
+            }
+
+            // 4. Parse Step 4
+            Step4FinancialDto? step4 = null;
+            if (root.TryGetProperty("step4", out var s4) && s4.ValueKind == JsonValueKind.Object)
+            {
+                var tier = s4.TryGetProperty("annualBudgetTier", out var bt) && bt.ValueKind == JsonValueKind.String ? bt.GetString() : null;
+                if (!string.IsNullOrEmpty(tier) && !tier.StartsWith("tier_")) tier = $"tier_{tier}";
+                decimal? usd = s4.TryGetProperty("annualBudgetUsd", out var bu) && bu.TryGetDecimal(out var buVal) ? buVal : null;
+                var need = s4.TryGetProperty("needFinancialAid", out var nf) && nf.ValueKind == JsonValueKind.String ? nf.GetString() : null;
+                var notes = s4.TryGetProperty("financialNotes", out var fn) && fn.ValueKind == JsonValueKind.String ? fn.GetString() : null;
+
+                step4 = new Step4FinancialDto(
+                    BudgetTierId: tier,
+                    AnnualBudgetUsd: usd,
+                    ScholarshipNeedId: need,
+                    FundingSourceId: null,
+                    FinancialNotes: notes
+                );
+            }
+
+            // 5. Parse Step 5
+            Step5ActivitiesDto? step5 = null;
+            if (root.TryGetProperty("step5", out var s5) && s5.ValueKind == JsonValueKind.Object)
+            {
+                var items = new List<FlowActivityItemDto>();
+                if (s5.TryGetProperty("activities", out var acts) && acts.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var a in acts.EnumerateArray())
+                    {
+                        var aName = a.TryGetProperty("name", out var an) && an.ValueKind == JsonValueKind.String ? an.GetString() ?? "" : "";
+                        if (string.IsNullOrWhiteSpace(aName)) continue;
+
+                        var aCat = a.TryGetProperty("category", out var ac) && ac.ValueKind == JsonValueKind.String ? ac.GetString() : "activity";
+                        var aRole = a.TryGetProperty("role", out var ar) && ar.ValueKind == JsonValueKind.String ? ar.GetString() : null;
+                        var aImpStr = a.TryGetProperty("impactLevel", out var ai) && ai.ValueKind == JsonValueKind.String ? ai.GetString() : "school";
+                        int impLevel = aImpStr switch
+                        {
+                            "international" => 4,
+                            "national" => 3,
+                            "province" => 2,
+                            _ => 1
+                        };
+                        int? durMonths = a.TryGetProperty("durationYears", out var dy) && dy.TryGetInt32(out var dyVal) ? dyVal * 12 : 12;
+                        var aYear = a.TryGetProperty("year", out var ayElem) ? ayElem.ToString() : null;
+
+                        items.Add(new FlowActivityItemDto(
+                            Id: Guid.NewGuid(),
+                            Type: aCat == "achievement" ? "award" : "extracurricular",
+                            Title: aName,
+                            Role: aRole,
+                            Organization: null,
+                            ImpactLevel: impLevel,
+                            DurationMonths: durMonths,
+                            Year: aYear,
+                            Description: aRole != null ? $"Vai trò: {aRole}" : null
+                        ));
+                    }
+                }
+                step5 = new Step5ActivitiesDto(items);
+            }
+
+            return new ProfileFlowStepDataDto(step1, step2, step3, step4, step5);
+        }
+        catch
+        {
+            return new ProfileFlowStepDataDto();
+        }
+    }
+
+    private static object ConvertStepDataToRawDraft(ProfileFlowStepDataDto stepData)
+    {
+        var s1 = stepData.Step1;
+        var s2 = stepData.Step2;
+        var s3 = stepData.Step3;
+        var s4 = stepData.Step4;
+        var s5 = stepData.Step5;
+
+        var otherTests = new List<object>();
+        if (s3?.Sat.HasValue == true) otherTests.Add(new { testType = "SAT", score = s3.Sat.Value });
+        if (s3?.Act.HasValue == true) otherTests.Add(new { testType = "ACT", score = s3.Act.Value });
+        if (s3?.Ap.HasValue == true) otherTests.Add(new { testType = "AP", score = s3.Ap.Value });
+        if (s3?.Gre.HasValue == true) otherTests.Add(new { testType = "GRE", score = s3.Gre.Value });
+        if (s3?.Gmat.HasValue == true) otherTests.Add(new { testType = "GMAT", score = s3.Gmat.Value });
+
+        string? engType = s3?.Ielts.HasValue == true ? "IELTS" : (s3?.Toefl.HasValue == true ? "TOEFL" : (s3?.Duolingo.HasValue == true ? "Duolingo" : (s3?.EnglishTestType ?? "none")));
+        decimal? engScore = s3?.Ielts ?? s3?.Toefl ?? s3?.Duolingo;
+
+        var activities = new List<object>();
+        if (s5?.Items != null)
+        {
+            foreach (var item in s5.Items)
+            {
+                activities.Add(new
+                {
+                    id = item.Id?.ToString() ?? Guid.NewGuid().ToString(),
+                    name = item.Title ?? "",
+                    category = item.Type == "award" ? "achievement" : "activity",
+                    role = item.Role,
+                    impactLevel = item.ImpactLevel switch { 4 => "international", 3 => "national", 2 => "province", _ => "school" },
+                    durationYears = item.DurationMonths.HasValue ? Math.Max(1, item.DurationMonths.Value / 12) : 1,
+                    year = int.TryParse(item.Year, out var yr) ? yr : (int?)null
+                });
+            }
+        }
+
+        return new
+        {
+            step1 = new
+            {
+                targetDegreeLevel = s1?.TargetLevel ?? "undergraduate",
+                currentEducationLevel = s1?.CurrentEducationLevel,
+                currentSchool = s1?.CurrentSchool,
+                currentGrade = s1?.CurrentGrade,
+                expectedGraduationYear = s1?.GraduationYear,
+                targetMajor = s1?.IntendedMajor,
+                targetStates = s1?.PreferredStates ?? new List<string>(),
+                targetSchoolType = s1?.InstitutionType ?? "all"
+            },
+            step2 = new
+            {
+                calculatedGpa4Scale = s2?.CalculatedGpa4,
+                manualGpa10Scale = s2?.CalculatedGpa4.HasValue == true ? Math.Round((s2.CalculatedGpa4.Value / 4.0m) * 10m, 2) : (decimal?)null,
+                academicYears = new object[] { }
+            },
+            step3 = new
+            {
+                englishTestType = engType,
+                englishOverallScore = engScore,
+                englishTestDate = s3?.EnglishExamDate,
+                otherTests = otherTests
+            },
+            step4 = new
+            {
+                annualBudgetTier = s4?.BudgetTierId?.Replace("tier_", ""),
+                annualBudgetUsd = s4?.AnnualBudgetUsd,
+                needFinancialAid = s4?.ScholarshipNeedId ?? "preferred",
+                financialNotes = s4?.FinancialNotes
+            },
+            step5 = new
+            {
+                activities = activities
+            }
+        };
     }
 
     private static ProfileFlowStateDto CreateDefaultDraftState() =>
