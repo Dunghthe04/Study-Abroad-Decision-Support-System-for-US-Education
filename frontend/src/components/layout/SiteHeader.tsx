@@ -2,7 +2,21 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { FileTextIcon, LogOutIcon, UserIcon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Button, buttonVariants } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const links = [
   { href: "/advisor", label: "Tư vấn AI" },
@@ -23,16 +37,16 @@ export function SiteHeader() {
   };
 
   return (
-    <header className="border-b border-slate-200 bg-white">
+    <header className="border-b">
       <nav className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
         <div className="flex items-center gap-8">
-          <Link href="/" className="text-lg font-bold tracking-tight text-blue-600">
+          <Link href="/" className="font-heading text-xl font-semibold tracking-tight text-brand-ink">
             USAS
           </Link>
-          <ul className="flex gap-6 text-sm font-medium text-slate-600">
+          <ul className="flex gap-6 text-sm font-medium text-muted-foreground">
             {links.map((l) => (
               <li key={l.href}>
-                <Link href={l.href} className="transition hover:text-slate-900">
+                <Link href={l.href} className="hover:text-foreground">
                   {l.label}
                 </Link>
               </li>
@@ -41,9 +55,10 @@ export function SiteHeader() {
               <li>
                 <Link
                   href="/profile/academic"
-                  className="font-medium text-blue-600 transition hover:text-blue-700 flex items-center gap-1"
+                  className="flex items-center gap-1 text-primary hover:text-primary/80"
                 >
-                  <span>📑</span> Hồ sơ học thuật
+                  <FileTextIcon className="size-4" aria-hidden="true" />
+                  Hồ sơ học thuật
                 </Link>
               </li>
             )}
@@ -53,37 +68,39 @@ export function SiteHeader() {
         {/* Trạng thái xác thực của người dùng (Khách vs Đã đăng nhập) */}
         <div className="flex items-center gap-3">
           {isLoading ? (
-            <div className="h-8 w-20 animate-pulse rounded bg-slate-100" />
+            <Skeleton className="h-8 w-20" />
           ) : user ? (
-            <div className="flex items-center gap-4">
-              <Link
-                href="/account"
-                className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
-              >
-                <span>👤 {user.fullName}</span>
-                <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">
+            <DropdownMenu>
+              <DropdownMenuTrigger render={<Button variant="outline" />}>
+                <Avatar size="sm">
+                  <AvatarFallback>{user.fullName.charAt(0).toUpperCase()}</AvatarFallback>
+                </Avatar>
+                <span>{user.fullName}</span>
+                <Badge variant="brand">
                   {user.role === "student" ? "Học sinh" : user.role === "parent" ? "Phụ huynh" : user.role}
-                </span>
-              </Link>
-              <button
-                onClick={handleLogout}
-                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-100 hover:text-red-600"
-              >
-                Đăng xuất
-              </button>
-            </div>
+                </Badge>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel>{user.fullName}</DropdownMenuLabel>
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem render={<Link href="/account" />}>
+                  <UserIcon />
+                  Hồ sơ cá nhân
+                </DropdownMenuItem>
+                <DropdownMenuItem variant="destructive" onClick={handleLogout}>
+                  <LogOutIcon />
+                  Đăng xuất
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           ) : (
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <Link
-                href="/login"
-                className="rounded-lg px-3 py-1.5 text-slate-700 transition hover:bg-slate-100 hover:text-slate-900"
-              >
+            <div className="flex items-center gap-2">
+              <Link href="/login" className={buttonVariants({ variant: "ghost" })}>
                 Đăng nhập
               </Link>
-              <Link
-                href="/register"
-                className="rounded-lg bg-blue-600 px-3.5 py-1.5 text-white shadow-sm transition hover:bg-blue-700"
-              >
+              <Link href="/register" className={buttonVariants({ variant: "default" })}>
                 Đăng ký
               </Link>
             </div>

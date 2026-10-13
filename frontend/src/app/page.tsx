@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 const features = [
   {
@@ -27,23 +28,25 @@ export default function HomePage() {
   return (
     <section className="space-y-8">
       <div className="space-y-2">
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">
+        <h1 className="text-display">
           Study Abroad Decision Support System
         </h1>
-        <p className="text-slate-600">
+        <p className="text-body text-muted-foreground">
           Nền tảng hỗ trợ học sinh, sinh viên và phụ huynh ra quyết định du học Mỹ, từ THPT, đại học đến thạc sĩ,
           tiến sĩ.
         </p>
       </div>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {features.map((f) => (
-          <Link
-            key={f.href}
-            href={f.href}
-            className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-blue-400 hover:shadow-md"
-          >
-            <h2 className="font-semibold text-slate-900">{f.title}</h2>
-            <p className="mt-2 text-sm text-slate-600">{f.description}</p>
+          <Link key={f.href} href={f.href} className="block">
+            <Card className="h-full">
+              <CardHeader>
+                <CardTitle>
+                  <h2>{f.title}</h2>
+                </CardTitle>
+                <CardDescription>{f.description}</CardDescription>
+              </CardHeader>
+            </Card>
           </Link>
         ))}
       </div>

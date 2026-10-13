@@ -4,6 +4,15 @@ import React, { Suspense } from "react";
 import Link from "next/link";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { AcademicAnalysisView } from "@/components/academic/AcademicAnalysisView";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
+import { Spinner } from "@/components/ui/spinner";
 
 export default function AcademicAnalysisRoutePage() {
   return (
@@ -11,27 +20,37 @@ export default function AcademicAnalysisRoutePage() {
       <Suspense
         fallback={
           <div className="flex min-h-[50vh] items-center justify-center">
-            <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-blue-600 border-r-transparent"></div>
+            <Spinner />
           </div>
         }
       >
-        <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8 space-y-6">
+        <div className="mx-auto max-w-5xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
           {/* Breadcrumb Navigation */}
-          <nav className="flex items-center gap-2 text-xs font-medium text-slate-500">
-            <Link href="/" className="hover:text-blue-600 transition">
-              Trang chủ
-            </Link>
-            <span>/</span>
-            <Link href="/account" className="hover:text-blue-600 transition">
-              Tài khoản
-            </Link>
-            <span>/</span>
-            <Link href="/profile/academic" className="hover:text-blue-600 transition">
-              Hồ sơ học thuật
-            </Link>
-            <span>/</span>
-            <span className="text-slate-900 font-semibold">Phân tích GPA (WES 4.0)</span>
-          </nav>
+          <Breadcrumb>
+            <BreadcrumbList>
+              <BreadcrumbItem>
+                <BreadcrumbLink render={<Link href="/" />}>
+                  Trang chủ
+                </BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator>/</BreadcrumbSeparator>
+              <BreadcrumbItem>
+                <BreadcrumbLink render={<Link href="/account" />}>
+                  Tài khoản
+                </BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator>/</BreadcrumbSeparator>
+              <BreadcrumbItem>
+                <BreadcrumbLink render={<Link href="/profile/academic" />}>
+                  Hồ sơ học thuật
+                </BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator>/</BreadcrumbSeparator>
+              <BreadcrumbItem>
+                <BreadcrumbPage>Phân tích GPA (WES 4.0)</BreadcrumbPage>
+              </BreadcrumbItem>
+            </BreadcrumbList>
+          </Breadcrumb>
 
           {/* Academic Analysis Dashboard */}
           <AcademicAnalysisView />

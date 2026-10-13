@@ -2,7 +2,30 @@
 
 import React, { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import {
+  CheckIcon,
+  CircleAlertIcon,
+  LockIcon,
+  PencilIcon,
+  PlusIcon,
+  RocketIcon,
+  SaveIcon,
+  Trash2Icon,
+  XIcon,
+  ZapIcon,
+} from "lucide-react";
 import { profileApi } from "@/lib/api";
+import { cn } from "@/lib/utils";
+import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { Separator } from "@/components/ui/separator";
+import { Spinner } from "@/components/ui/spinner";
+import { Toggle } from "@/components/ui/toggle";
 import type {
   AcademicProfileResponse,
   GradeScaleType,
@@ -10,6 +33,9 @@ import type {
   TranscriptTerm,
   TranscriptScoreItem,
 } from "@/types/api";
+
+const VIEW_MODE_INPUT_CLASS = "disabled:opacity-100";
+const SELECT_WRAPPER_CLASS = "w-full has-[select:disabled]:opacity-100";
 
 const GRADE_SCALES: { id: GradeScaleType; name: string; desc: string; placeholder: string }[] = [
   { id: "10", name: "Thang 10", desc: "0.0 - 10.0 (Phổ biến tại Việt Nam)", placeholder: "Ví dụ: 8.5" },
@@ -672,82 +698,57 @@ export function AcademicProfileForm({ initialProfile }: Props) {
   return (
     <div className="space-y-8">
       {/* THANH TRẠNG THÁI: VIEW MODE VS EDIT MODE (KHÔNG CÓ NÚT HỦY/LƯU Ở TRÊN NÀY) */}
-      <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <div
-            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl font-bold ${
-              !isEditing ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700"
-            }`}
-          >
-            {!isEditing ? "🔒" : "✏️"}
-          </div>
+      <Card>
+        <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-sm font-bold text-slate-900">
+              <h2 className="text-h3">
                 {!isEditing ? "Chế độ xem hồ sơ (Đã lưu trữ)" : "Chế độ chỉnh sửa hồ sơ"}
               </h2>
-              <span
-                className={`rounded-full px-2 py-0.5 text-[11px] font-semibold border ${
-                  !isEditing
-                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                    : "bg-amber-50 text-amber-700 border-amber-200"
-                }`}
-              >
+              <Badge variant={!isEditing ? "ok" : "warn"}>
+                {!isEditing ? <LockIcon aria-hidden /> : <PencilIcon aria-hidden />}
                 {!isEditing ? "Đã khóa chỉnh sửa" : "Đang chỉnh sửa"}
-              </span>
+              </Badge>
             </div>
-            <p className="text-xs text-slate-500">
+            <p className="text-body-s">
               {!isEditing
                 ? "Dữ liệu được bảo vệ an toàn. Bấm nút 'Chỉnh sửa hồ sơ' nếu bạn muốn cập nhật lại điểm."
                 : "Điền các thông tin bắt buộc (*). Các nút Lưu và Hủy nằm ở cuối trang sau khi bạn điền xong."}
             </p>
           </div>
-        </div>
 
-        <div>
-          {!isEditing && (
-            <button
-              type="button"
-              onClick={() => setIsEditing(true)}
-              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-              </svg>
-              Chỉnh sửa hồ sơ
-            </button>
-          )}
-        </div>
-      </div>
+          <div>
+            {!isEditing && (
+              <Button type="button" size="lg" onClick={() => setIsEditing(true)}>
+                <PencilIcon />
+                Chỉnh sửa hồ sơ
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* KHỐI 1: THÔNG TIN HỌC VẤN CƠ BẢN */}
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l9-5-9-5-9 5 9 5z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" />
-            </svg>
-          </div>
-          <div>
-            <h2 className="text-lg font-bold text-slate-900">1. Thông tin học vấn cơ bản</h2>
-            <p className="text-xs text-slate-500">
-              {isGraduate
-                ? "Bậc Thạc sĩ / Tiến sĩ: Áp dụng bảng điểm bậc Đại học và chứng chỉ sau đại học (GRE, GMAT)"
-                : targetLevel === "middle_school"
-                  ? "Bậc THCS / Cấp 2: Áp dụng bảng điểm các lớp THCS (Lớp 6, 7, 8, 9)"
-                  : "Bậc Cử nhân / THPT: Áp dụng bảng điểm các lớp THPT (Lớp 10, 11, 12)"}
-            </p>
-          </div>
-        </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>1. Thông tin học vấn cơ bản</CardTitle>
+          <CardDescription>
+            {isGraduate
+              ? "Bậc Thạc sĩ / Tiến sĩ: Áp dụng bảng điểm bậc Đại học và chứng chỉ sau đại học (GRE, GMAT)"
+              : targetLevel === "middle_school"
+                ? "Bậc THCS / Cấp 2: Áp dụng bảng điểm các lớp THCS (Lớp 6, 7, 8, 9)"
+                : "Bậc Cử nhân / THPT: Áp dụng bảng điểm các lớp THPT (Lớp 10, 11, 12)"}
+          </CardDescription>
+        </CardHeader>
 
-        <div className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-2">
+        <CardContent className="grid grid-cols-1 gap-5 md:grid-cols-2">
           {/* Bậc muốn học tại Mỹ */}
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700">
-              Bậc muốn học tại Mỹ <span className="text-red-500 font-bold">*</span>
-            </label>
-            <select
+          <div className="space-y-1.5">
+            <Label htmlFor="academic-target-level">
+              Bậc muốn học tại Mỹ <span className="text-destructive">*</span>
+            </Label>
+            <NativeSelect
+              id="academic-target-level"
               disabled={!isEditing}
               value={targetLevel}
               onChange={(e) => {
@@ -767,46 +768,40 @@ export function AcademicProfileForm({ initialProfile }: Props) {
                   setGradeScale("10");
                 }
               }}
-              className={`mt-1 block w-full rounded-xl border px-3.5 py-2.5 text-sm shadow-sm transition ${
-                !isEditing
-                  ? "bg-slate-50 border-slate-200 text-slate-700 cursor-not-allowed"
-                  : "bg-white border-slate-300 text-slate-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              }`}
+              className={SELECT_WRAPPER_CLASS}
             >
               {TARGET_LEVELS.map((lvl) => (
-                <option key={lvl.value} value={lvl.value}>
+                <NativeSelectOption key={lvl.value} value={lvl.value}>
                   {lvl.label}
-                </option>
+                </NativeSelectOption>
               ))}
-            </select>
+            </NativeSelect>
           </div>
 
           {/* Ngành muốn học */}
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700">
+          <div className="space-y-1.5">
+            <Label htmlFor="academic-intended-major">
               Ngành muốn học (Intended Major)
-            </label>
-            <input
+            </Label>
+            <Input
+              id="academic-intended-major"
               type="text"
               disabled={!isEditing}
               value={intendedMajor}
               onChange={(e) => setIntendedMajor(e.target.value)}
               placeholder={isGraduate ? "Ví dụ: Khoa học Dữ liệu, MBA, Tài chính..." : "Ví dụ: Khoa học Máy tính, Kinh doanh, Tâm lý học..."}
-              className={`mt-1 block w-full rounded-xl border px-3.5 py-2.5 text-sm shadow-sm transition ${
-                !isEditing
-                  ? "bg-slate-50 border-slate-200 text-slate-700 cursor-not-allowed"
-                  : "bg-white border-slate-300 text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              }`}
+              className={VIEW_MODE_INPUT_CLASS}
             />
           </div>
 
           {/* Trường hiện tại */}
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700">
+          <div className="space-y-1.5">
+            <Label htmlFor="academic-current-school">
               {isGraduate ? "Trường Đại học tốt nghiệp / đang học" : "Trường học hiện tại"}{" "}
-              <span className="text-red-500 font-bold">*</span>
-            </label>
-            <input
+              <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              id="academic-current-school"
               type="text"
               disabled={!isEditing}
               value={currentSchool}
@@ -818,44 +813,38 @@ export function AcademicProfileForm({ initialProfile }: Props) {
                     ? "Ví dụ: THCS Giảng Võ, THCS Cầu Giấy..."
                     : "Ví dụ: THPT Chuyên Hà Nội - Amsterdam..."
               }
-              className={`mt-1 block w-full rounded-xl border px-3.5 py-2.5 text-sm shadow-sm transition ${
-                !isEditing
-                  ? "bg-slate-50 border-slate-200 text-slate-700 cursor-not-allowed"
-                  : "bg-white border-slate-300 text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              }`}
+              className={VIEW_MODE_INPUT_CLASS}
             />
           </div>
 
           {/* Hệ chương trình */}
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700">
+          <div className="space-y-1.5">
+            <Label htmlFor="academic-education-system">
               Hệ chương trình đào tạo
-            </label>
-            <select
+            </Label>
+            <NativeSelect
+              id="academic-education-system"
               disabled={!isEditing}
               value={educationSystem}
               onChange={(e) => setEducationSystem(e.target.value)}
-              className={`mt-1 block w-full rounded-xl border px-3.5 py-2.5 text-sm shadow-sm transition ${
-                !isEditing
-                  ? "bg-slate-50 border-slate-200 text-slate-700 cursor-not-allowed"
-                  : "bg-white border-slate-300 text-slate-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              }`}
+              className={SELECT_WRAPPER_CLASS}
             >
               {EDUCATION_SYSTEMS.map((sys) => (
-                <option key={sys.value} value={sys.value}>
+                <NativeSelectOption key={sys.value} value={sys.value}>
                   {sys.label}
-                </option>
+                </NativeSelectOption>
               ))}
-            </select>
+            </NativeSelect>
           </div>
 
           {/* Khối / Lớp / Năm học hiện tại */}
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700">
+          <div className="space-y-1.5">
+            <Label htmlFor="academic-current-grade">
               {isGraduate ? "Năm học đại học hiện tại" : "Khối / Lớp hiện tại"}{" "}
-              <span className="text-red-500 font-bold">*</span>
-            </label>
-            <input
+              <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              id="academic-current-grade"
               type="text"
               disabled={!isEditing}
               value={currentGrade}
@@ -867,21 +856,18 @@ export function AcademicProfileForm({ initialProfile }: Props) {
                     ? "Ví dụ: Lớp 6, Lớp 7, Lớp 8, Lớp 9"
                     : "Ví dụ: Lớp 10, Lớp 11, Lớp 12..."
               }
-              className={`mt-1 block w-full rounded-xl border px-3.5 py-2.5 text-sm shadow-sm transition ${
-                !isEditing
-                  ? "bg-slate-50 border-slate-200 text-slate-700 cursor-not-allowed"
-                  : "bg-white border-slate-300 text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              }`}
+              className={VIEW_MODE_INPUT_CLASS}
             />
           </div>
 
           {/* Năm tốt nghiệp dự kiến */}
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700">
+          <div className="space-y-1.5">
+            <Label htmlFor="academic-graduation-year">
               {isGraduate ? "Năm tốt nghiệp Đại học (hoặc dự kiến)" : "Năm tốt nghiệp dự kiến"}{" "}
-              <span className="text-red-500 font-bold">*</span>
-            </label>
-            <input
+              <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              id="academic-graduation-year"
               type="number"
               disabled={!isEditing}
               value={graduationYear}
@@ -889,693 +875,662 @@ export function AcademicProfileForm({ initialProfile }: Props) {
               placeholder="Ví dụ: 2026, 2027..."
               min={2015}
               max={2040}
-              className={`mt-1 block w-full rounded-xl border px-3.5 py-2.5 text-sm shadow-sm transition ${
-                !isEditing
-                  ? "bg-slate-50 border-slate-200 text-slate-700 cursor-not-allowed"
-                  : "bg-white border-slate-300 text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              }`}
+              className={VIEW_MODE_INPUT_CLASS}
             />
           </div>
-        </div>
-      </section>
+        </CardContent>
+      </Card>
 
       {/* KHỐI 2: THANG ĐIỂM & BẢNG ĐIỂM HỌC KỲ (KHÔNG ÉP THANG 4, KHÔNG GIỚI HẠN 6 KỲ) */}
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-4 border-b border-slate-100 pb-4 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-50 text-purple-600">
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
-            </div>
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <h2 className="text-lg font-bold text-slate-900">2. Bảng điểm học kỳ</h2>
-              <p className="text-xs text-slate-500">
+              <CardTitle>2. Bảng điểm học kỳ</CardTitle>
+              <CardDescription>
                 Nhập danh sách học kỳ và môn học. Thang điểm sẽ tính theo đúng thang điểm trường bạn áp dụng.
-              </p>
+              </CardDescription>
+            </div>
+
+            {/* Widget Xem Trước GPA theo đúng thang điểm của trường */}
+            <div className="flex items-center gap-3">
+              <span className="text-label">GPA Trung bình:</span>
+              <span className="text-numeric">{overallGpaPreview.toFixed(2)}</span>
+              <span className="text-body-s">({GRADE_SCALES.find((s) => s.id === gradeScale)?.name})</span>
+            </div>
+          </div>
+        </CardHeader>
+
+        <CardContent>
+          {/* BỘ CHỌN THANG ĐIỂM */}
+          <div>
+            <Label>
+              Chọn thang điểm áp dụng <span className="text-destructive">*</span>
+              <span className="text-muted-foreground">
+                (Bấm chuyển thang điểm để tự động quy đổi toàn bộ điểm các môn sang thang mới)
+              </span>
+            </Label>
+            <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {GRADE_SCALES.map((scale) => {
+                const selected = gradeScale === scale.id;
+                return (
+                  <Button
+                    key={scale.id}
+                    type="button"
+                    variant={selected ? "default" : "outline"}
+                    disabled={!isEditing}
+                    aria-pressed={selected}
+                    onClick={() => handleGradeScaleChange(scale.id)}
+                    className={cn(
+                      "h-auto flex-col items-stretch py-2 text-left whitespace-normal",
+                      selected && !isEditing && "disabled:opacity-100"
+                    )}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span>{scale.name}</span>
+                      {selected && (
+                        <span className="flex items-center gap-1">
+                          <CheckIcon aria-hidden />
+                          Đang chọn
+                        </span>
+                      )}
+                    </div>
+                    <div className="font-normal">{scale.desc}</div>
+                  </Button>
+                );
+              })}
             </div>
           </div>
 
-          {/* Widget Xem Trước GPA theo đúng thang điểm của trường */}
-          <div className="flex items-center gap-3 rounded-xl bg-slate-50 px-4 py-2 border border-slate-200">
-            <span className="text-xs font-medium text-slate-500">GPA Trung bình:</span>
-            <span className="text-base font-extrabold text-blue-600">{overallGpaPreview.toFixed(2)}</span>
-            <span className="text-xs text-slate-400">({GRADE_SCALES.find((s) => s.id === gradeScale)?.name})</span>
-          </div>
-        </div>
-
-        {/* BỘ CHỌN THANG ĐIỂM */}
-        <div className="mt-5">
-          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700">
-            Chọn thang điểm áp dụng <span className="text-red-500 font-bold">*</span>
-            <span className="ml-2 font-normal text-slate-400">
-              (Bấm chuyển thang điểm để tự động quy đổi toàn bộ điểm các môn sang thang mới)
-            </span>
-          </label>
-          <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {GRADE_SCALES.map((scale) => {
-              const selected = gradeScale === scale.id;
+          {/* DANH SÁCH CÁC HỌC KỲ (LINH HOẠT TẬN 9, 10, 12 KỲ) */}
+          <div className="mt-6 space-y-6">
+            {terms.map((term, tIdx) => {
+              const currentTermGpa = termGpaList[tIdx]?.gpa ?? 0;
               return (
-                <button
-                  key={scale.id}
-                  type="button"
-                  disabled={!isEditing}
-                  onClick={() => handleGradeScaleChange(scale.id)}
-                  className={`rounded-xl border p-3.5 text-left transition ${
-                    selected
-                      ? "border-blue-600 bg-blue-50/60 text-blue-900 shadow-sm ring-1 ring-blue-500 font-bold"
-                      : !isEditing
-                        ? "border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed"
-                        : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
-                  }`}
-                >
-                  <div className="flex items-center justify-between text-sm">
-                    <span>{scale.name}</span>
-                    {selected && <span className="text-blue-600 text-xs">✓ Đang chọn</span>}
-                  </div>
-                  <div className="mt-1 text-[11px] text-slate-500 font-normal">{scale.desc}</div>
-                </button>
+                <Card key={tIdx} size="sm">
+                  {/* Header Học Kỳ */}
+                  <CardHeader>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex items-center gap-2">
+                        <Badge>{term.termOrder}</Badge>
+                        <Input
+                          type="text"
+                          disabled={!isEditing}
+                          value={term.termName}
+                          onChange={(e) => handleTermNameChange(tIdx, e.target.value)}
+                          placeholder="Ví dụ: Lớp 10 - Học kỳ 1, Đại học - Kỳ 5..."
+                          className={cn("w-auto", VIEW_MODE_INPUT_CLASS)}
+                        />
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <span className="text-body-s">
+                          GPA kỳ: <strong className="text-numeric">{currentTermGpa.toFixed(2)}</strong>
+                        </span>
+
+                        {isEditing && terms.length > 1 && (
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            size="xs"
+                            onClick={() => handleRemoveTerm(tIdx)}
+                          >
+                            Xóa kỳ này
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </CardHeader>
+
+                  <CardContent>
+                    {/* Bảng điểm các môn */}
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-12 gap-2 text-label">
+                        <div className="col-span-6 sm:col-span-5">Tên môn học *</div>
+                        <div className="col-span-4 sm:col-span-3">Điểm số *</div>
+                        <div className="hidden sm:col-span-3 sm:block">Số tín chỉ / Trọng số</div>
+                        <div className="col-span-2 text-center sm:col-span-1">Thao tác</div>
+                      </div>
+
+                      {term.scores.map((scoreItem, sIdx) => {
+                        const subKey = `${tIdx}-${sIdx}`;
+                        const hasSubError = validationErrors[subKey];
+                        const hasScoreError = validationErrors[`${subKey}-score`];
+
+                        return (
+                          <div key={sIdx} className="space-y-1">
+                            <div className="grid grid-cols-12 items-center gap-2">
+                              {/* Tên môn học */}
+                              <div className="col-span-6 sm:col-span-5">
+                                <Input
+                                  type="text"
+                                  disabled={!isEditing}
+                                  value={scoreItem.subject}
+                                  onChange={(e) => handleSubjectChange(tIdx, sIdx, "subject", e.target.value)}
+                                  placeholder="Nhập tên môn học..."
+                                  aria-invalid={isEditing && Boolean(hasSubError)}
+                                  className={VIEW_MODE_INPUT_CLASS}
+                                />
+                              </div>
+
+                              {/* Điểm số */}
+                              <div className="col-span-4 sm:col-span-3">
+                                {gradeScale === "letter" ? (
+                                  <NativeSelect
+                                    disabled={!isEditing}
+                                    value={scoreItem.rawScore || "A"}
+                                    onChange={(e) => handleSubjectChange(tIdx, sIdx, "rawScore", e.target.value)}
+                                    aria-invalid={isEditing && Boolean(hasScoreError)}
+                                    className={SELECT_WRAPPER_CLASS}
+                                  >
+                                    {LETTER_OPTIONS.map((opt) => (
+                                      <NativeSelectOption key={opt.value} value={opt.value}>
+                                        {opt.label}
+                                      </NativeSelectOption>
+                                    ))}
+                                  </NativeSelect>
+                                ) : (
+                                  <Input
+                                    type="number"
+                                    step={gradeScale === "100" ? "1" : "0.1"}
+                                    disabled={!isEditing}
+                                    value={scoreItem.rawScore ?? scoreItem.score}
+                                    onChange={(e) => handleSubjectChange(tIdx, sIdx, "score", e.target.value)}
+                                    placeholder="Điểm..."
+                                    aria-invalid={isEditing && Boolean(hasScoreError)}
+                                    className={VIEW_MODE_INPUT_CLASS}
+                                  />
+                                )}
+                              </div>
+
+                              {/* Số tín chỉ / Trọng số */}
+                              <div className="hidden sm:col-span-3 sm:block">
+                                <Input
+                                  type="number"
+                                  disabled={!isEditing}
+                                  step="0.5"
+                                  min="0"
+                                  value={scoreItem.credits ?? ""}
+                                  onChange={(e) => handleSubjectChange(tIdx, sIdx, "credits", e.target.value)}
+                                  placeholder={isGraduate ? "Ví dụ: 3 (tín chỉ)" : "Không bắt buộc"}
+                                  className={VIEW_MODE_INPUT_CLASS}
+                                />
+                              </div>
+
+                              {/* Xóa dòng */}
+                              <div className="col-span-2 text-center sm:col-span-1">
+                                {isEditing && term.scores.length > 1 ? (
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    onClick={() => handleRemoveSubject(tIdx, sIdx)}
+                                    title="Xóa môn học này"
+                                    aria-label="Xóa môn học này"
+                                  >
+                                    <Trash2Icon />
+                                  </Button>
+                                ) : (
+                                  <span className="text-muted-foreground">-</span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Báo lỗi validation dòng */}
+                            {(hasSubError || hasScoreError) && (
+                              <div className="text-destructive">
+                                {hasSubError && <div>• {hasSubError}</div>}
+                                {hasScoreError && <div>• {hasScoreError}</div>}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Thêm môn học */}
+                    {isEditing && (
+                      <div className="mt-3">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleAddSubject(tIdx)}
+                        >
+                          <PlusIcon />
+                          Thêm môn học vào {term.termName}
+                        </Button>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
               );
             })}
           </div>
-        </div>
 
-        {/* DANH SÁCH CÁC HỌC KỲ (LINH HOẠT TẬN 9, 10, 12 KỲ) */}
-        <div className="mt-6 space-y-6">
-          {terms.map((term, tIdx) => {
-            const currentTermGpa = termGpaList[tIdx]?.gpa ?? 0;
-            return (
-              <div
-                key={tIdx}
-                className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 transition hover:border-slate-300"
+          {/* Nút Thêm Học Kỳ (Không giới hạn tối đa 6 học kỳ) */}
+          {isEditing && (
+            <div className="mt-4">
+              <Button
+                type="button"
+                variant="secondary"
+                size="lg"
+                onClick={handleAddTerm}
               >
-                {/* Header Học Kỳ */}
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-slate-200/80 pb-3">
-                  <div className="flex items-center gap-2">
-                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white">
-                      {term.termOrder}
-                    </span>
-                    <input
-                      type="text"
-                      disabled={!isEditing}
-                      value={term.termName}
-                      onChange={(e) => handleTermNameChange(tIdx, e.target.value)}
-                      placeholder="Ví dụ: Lớp 10 - Học kỳ 1, Đại học - Kỳ 5..."
-                      className={`text-sm font-bold text-slate-800 rounded px-2 py-1 transition ${
-                        !isEditing
-                          ? "bg-transparent border-transparent"
-                          : "border border-slate-300 bg-white hover:border-blue-400 focus:border-blue-500"
-                      }`}
-                    />
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs font-medium text-slate-600">
-                      GPA kỳ: <strong className="text-blue-600">{currentTermGpa.toFixed(2)}</strong>
-                    </span>
-
-                    {isEditing && terms.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveTerm(tIdx)}
-                        className="text-xs font-semibold text-red-600 hover:text-red-700 hover:underline"
-                      >
-                        Xóa kỳ này
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Bảng điểm các môn */}
-                <div className="mt-3 space-y-2">
-                  <div className="grid grid-cols-12 gap-2 text-[11px] font-bold uppercase tracking-wider text-slate-500 px-2">
-                    <div className="col-span-6 sm:col-span-5">Tên môn học *</div>
-                    <div className="col-span-4 sm:col-span-3">Điểm số *</div>
-                    <div className="hidden sm:block sm:col-span-3">Số tín chỉ / Trọng số</div>
-                    <div className="col-span-2 sm:col-span-1 text-center">Thao tác</div>
-                  </div>
-
-                  {term.scores.map((scoreItem, sIdx) => {
-                    const subKey = `${tIdx}-${sIdx}`;
-                    const hasSubError = validationErrors[subKey];
-                    const hasScoreError = validationErrors[`${subKey}-score`];
-
-                    return (
-                      <div key={sIdx} className="space-y-1">
-                        <div className="grid grid-cols-12 gap-2 items-center rounded-lg bg-white p-2 border border-slate-200">
-                          {/* Tên môn học */}
-                          <div className="col-span-6 sm:col-span-5">
-                            <input
-                              type="text"
-                              disabled={!isEditing}
-                              value={scoreItem.subject}
-                              onChange={(e) => handleSubjectChange(tIdx, sIdx, "subject", e.target.value)}
-                              placeholder="Nhập tên môn học..."
-                              className={`w-full rounded-md border px-2.5 py-1.5 text-xs transition ${
-                                !isEditing
-                                  ? "bg-slate-50 border-slate-200 text-slate-700"
-                                  : hasSubError
-                                    ? "border-red-400 bg-red-50 text-red-900 focus:border-red-500"
-                                    : "border-slate-300 text-slate-900 focus:border-blue-500"
-                              }`}
-                            />
-                          </div>
-
-                          {/* Điểm số */}
-                          <div className="col-span-4 sm:col-span-3">
-                            {gradeScale === "letter" ? (
-                              <select
-                                disabled={!isEditing}
-                                value={scoreItem.rawScore || "A"}
-                                onChange={(e) => handleSubjectChange(tIdx, sIdx, "rawScore", e.target.value)}
-                                className={`w-full rounded-md border px-2 py-1.5 text-xs transition ${
-                                  !isEditing
-                                    ? "bg-slate-50 border-slate-200 text-slate-700"
-                                    : hasScoreError
-                                      ? "border-red-400 bg-red-50 text-red-900 focus:border-red-500"
-                                      : "border-slate-300 text-slate-900 focus:border-blue-500"
-                                }`}
-                              >
-                                {LETTER_OPTIONS.map((opt) => (
-                                  <option key={opt.value} value={opt.value}>
-                                    {opt.label}
-                                  </option>
-                                ))}
-                              </select>
-                            ) : (
-                              <input
-                                type="number"
-                                step={gradeScale === "100" ? "1" : "0.1"}
-                                disabled={!isEditing}
-                                value={scoreItem.rawScore ?? scoreItem.score}
-                                onChange={(e) => handleSubjectChange(tIdx, sIdx, "score", e.target.value)}
-                                placeholder="Điểm..."
-                                className={`w-full rounded-md border px-2.5 py-1.5 text-xs transition ${
-                                  !isEditing
-                                    ? "bg-slate-50 border-slate-200 text-slate-700"
-                                    : hasScoreError
-                                      ? "border-red-400 bg-red-50 text-red-900 focus:border-red-500"
-                                      : "border-slate-300 text-slate-900 focus:border-blue-500"
-                                }`}
-                              />
-                            )}
-                          </div>
-
-                          {/* Số tín chỉ / Trọng số */}
-                          <div className="hidden sm:block sm:col-span-3">
-                            <input
-                              type="number"
-                              disabled={!isEditing}
-                              step="0.5"
-                              min="0"
-                              value={scoreItem.credits ?? ""}
-                              onChange={(e) => handleSubjectChange(tIdx, sIdx, "credits", e.target.value)}
-                              placeholder={isGraduate ? "Ví dụ: 3 (tín chỉ)" : "Không bắt buộc"}
-                              className={`w-full rounded-md border px-2.5 py-1.5 text-xs transition ${
-                                !isEditing
-                                  ? "bg-slate-50 border-slate-200 text-slate-700"
-                                  : "border-slate-300 text-slate-900 focus:border-blue-500"
-                              }`}
-                            />
-                          </div>
-
-                          {/* Xóa dòng */}
-                          <div className="col-span-2 sm:col-span-1 text-center">
-                            {isEditing && term.scores.length > 1 ? (
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveSubject(tIdx, sIdx)}
-                                title="Xóa môn học này"
-                                className="text-slate-400 hover:text-red-600 transition"
-                              >
-                                <svg className="h-4 w-4 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                </svg>
-                              </button>
-                            ) : (
-                              <span className="text-slate-300 text-xs">-</span>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Báo lỗi validation dòng */}
-                        {(hasSubError || hasScoreError) && (
-                          <div className="px-2 text-[11px] font-semibold text-red-600">
-                            {hasSubError && <div>• {hasSubError}</div>}
-                            {hasScoreError && <div>• {hasScoreError}</div>}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Thêm môn học */}
-                {isEditing && (
-                  <div className="mt-3">
-                    <button
-                      type="button"
-                      onClick={() => handleAddSubject(tIdx)}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:border-blue-500 hover:text-blue-600"
-                    >
-                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                      </svg>
-                      Thêm môn học vào {term.termName}
-                    </button>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Nút Thêm Học Kỳ (Không giới hạn tối đa 6 học kỳ) */}
-        {isEditing && (
-          <div className="mt-4">
-            <button
-              type="button"
-              onClick={handleAddTerm}
-              className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-xs font-bold text-blue-700 shadow-sm transition hover:bg-blue-100"
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              + Thêm học kỳ mới
-            </button>
-          </div>
-        )}
-      </section>
+                <PlusIcon />
+                + Thêm học kỳ mới
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* KHỐI 3: CHỨNG CHỈ NGOẠI NGỮ & BÀI THI CHUẨN HÓA (ĐỘNG TỪ CSDL) */}
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138z" />
-              </svg>
-            </div>
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="text-lg font-bold text-slate-900">3. Chứng chỉ Ngoại ngữ & Bài thi chuẩn hóa</h2>
-              <p className="text-xs text-slate-500">
+              <CardTitle>3. Chứng chỉ Ngoại ngữ & Bài thi chuẩn hóa</CardTitle>
+              <CardDescription>
                 Lựa chọn các chứng chỉ bạn đang có trong CSDL (Có thể để trống nếu chưa thi)
-              </p>
+              </CardDescription>
             </div>
+
+            {/* BẬT / TẮT HOẶC THÊM CHỨNG CHỈ */}
+            {isEditing && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-label">Thêm chứng chỉ:</span>
+                <Toggle
+                  variant="outline"
+                  size="sm"
+                  pressed={enabledTests.ielts}
+                  onPressedChange={() => handleToggleTest("ielts")}
+                >
+                  + IELTS
+                </Toggle>
+                <Toggle
+                  variant="outline"
+                  size="sm"
+                  pressed={enabledTests.toefl}
+                  onPressedChange={() => handleToggleTest("toefl")}
+                >
+                  + TOEFL
+                </Toggle>
+                <Toggle
+                  variant="outline"
+                  size="sm"
+                  pressed={enabledTests.duolingo}
+                  onPressedChange={() => handleToggleTest("duolingo")}
+                >
+                  + Duolingo
+                </Toggle>
+                <Toggle
+                  variant="outline"
+                  size="sm"
+                  pressed={enabledTests.sat}
+                  onPressedChange={() => handleToggleTest("sat")}
+                >
+                  + SAT
+                </Toggle>
+                <Toggle
+                  variant="outline"
+                  size="sm"
+                  pressed={enabledTests.act}
+                  onPressedChange={() => handleToggleTest("act")}
+                >
+                  + ACT
+                </Toggle>
+                <Toggle
+                  variant="outline"
+                  size="sm"
+                  pressed={enabledTests.gre}
+                  onPressedChange={() => handleToggleTest("gre")}
+                >
+                  + GRE
+                </Toggle>
+                <Toggle
+                  variant="outline"
+                  size="sm"
+                  pressed={enabledTests.gmat}
+                  onPressedChange={() => handleToggleTest("gmat")}
+                >
+                  + GMAT
+                </Toggle>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleAddOtherTest}
+                >
+                  + Khác (AP/IB/PTE)
+                </Button>
+              </div>
+            )}
+          </div>
+        </CardHeader>
+
+        <CardContent>
+          {/* CÁC Ô NHẬP ĐIỂM CHỨNG CHỈ */}
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+            {/* IELTS */}
+            {enabledTests.ielts && (
+              <Card size="sm">
+                <CardContent className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="academic-test-ielts">IELTS (0.0 - 9.0)</Label>
+                    {isEditing && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="xs"
+                        onClick={() => handleToggleTest("ielts")}
+                      >
+                        <XIcon aria-hidden />
+                        Ẩn
+                      </Button>
+                    )}
+                  </div>
+                  <Input
+                    id="academic-test-ielts"
+                    type="number"
+                    disabled={!isEditing}
+                    step="0.5"
+                    min="0"
+                    max="9"
+                    value={ielts}
+                    onChange={(e) => setIelts(e.target.value)}
+                    placeholder="Ví dụ: 7.0 hoặc để trống"
+                    className={VIEW_MODE_INPUT_CLASS}
+                  />
+                </CardContent>
+              </Card>
+            )}
+
+            {/* TOEFL */}
+            {enabledTests.toefl && (
+              <Card size="sm">
+                <CardContent className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="academic-test-toefl">TOEFL iBT (0 - 120)</Label>
+                    {isEditing && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="xs"
+                        onClick={() => handleToggleTest("toefl")}
+                      >
+                        <XIcon aria-hidden />
+                        Ẩn
+                      </Button>
+                    )}
+                  </div>
+                  <Input
+                    id="academic-test-toefl"
+                    type="number"
+                    disabled={!isEditing}
+                    min="0"
+                    max="120"
+                    value={toefl}
+                    onChange={(e) => setToefl(e.target.value)}
+                    placeholder="Ví dụ: 95 hoặc để trống"
+                    className={VIEW_MODE_INPUT_CLASS}
+                  />
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Duolingo */}
+            {enabledTests.duolingo && (
+              <Card size="sm">
+                <CardContent className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="academic-test-duolingo">Duolingo Test (10 - 160)</Label>
+                    {isEditing && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="xs"
+                        onClick={() => handleToggleTest("duolingo")}
+                      >
+                        <XIcon aria-hidden />
+                        Ẩn
+                      </Button>
+                    )}
+                  </div>
+                  <Input
+                    id="academic-test-duolingo"
+                    type="number"
+                    disabled={!isEditing}
+                    min="10"
+                    max="160"
+                    value={duolingo}
+                    onChange={(e) => setDuolingo(e.target.value)}
+                    placeholder="Ví dụ: 125 hoặc để trống"
+                    className={VIEW_MODE_INPUT_CLASS}
+                  />
+                </CardContent>
+              </Card>
+            )}
+
+            {/* SAT */}
+            {enabledTests.sat && (
+              <Card size="sm">
+                <CardContent className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="academic-test-sat">SAT (400 - 1600)</Label>
+                    {isEditing && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="xs"
+                        onClick={() => handleToggleTest("sat")}
+                      >
+                        <XIcon aria-hidden />
+                        Ẩn
+                      </Button>
+                    )}
+                  </div>
+                  <Input
+                    id="academic-test-sat"
+                    type="number"
+                    disabled={!isEditing}
+                    min="400"
+                    max="1600"
+                    value={sat}
+                    onChange={(e) => setSat(e.target.value)}
+                    placeholder="Ví dụ: 1450 hoặc để trống"
+                    className={VIEW_MODE_INPUT_CLASS}
+                  />
+                </CardContent>
+              </Card>
+            )}
+
+            {/* ACT */}
+            {enabledTests.act && (
+              <Card size="sm">
+                <CardContent className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="academic-test-act">ACT (1 - 36)</Label>
+                    {isEditing && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="xs"
+                        onClick={() => handleToggleTest("act")}
+                      >
+                        <XIcon aria-hidden />
+                        Ẩn
+                      </Button>
+                    )}
+                  </div>
+                  <Input
+                    id="academic-test-act"
+                    type="number"
+                    disabled={!isEditing}
+                    min="1"
+                    max="36"
+                    value={act}
+                    onChange={(e) => setAct(e.target.value)}
+                    placeholder="Ví dụ: 32 hoặc để trống"
+                    className={VIEW_MODE_INPUT_CLASS}
+                  />
+                </CardContent>
+              </Card>
+            )}
+
+            {/* GRE (Sau đại học) */}
+            {enabledTests.gre && (
+              <Card size="sm">
+                <CardContent className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="academic-test-gre">GRE General (260 - 340)</Label>
+                    {isEditing && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="xs"
+                        onClick={() => handleToggleTest("gre")}
+                      >
+                        <XIcon aria-hidden />
+                        Ẩn
+                      </Button>
+                    )}
+                  </div>
+                  <Input
+                    id="academic-test-gre"
+                    type="number"
+                    disabled={!isEditing}
+                    min="260"
+                    max="340"
+                    value={gre}
+                    onChange={(e) => setGre(e.target.value)}
+                    placeholder="Ví dụ: 322 hoặc để trống"
+                    className={VIEW_MODE_INPUT_CLASS}
+                  />
+                </CardContent>
+              </Card>
+            )}
+
+            {/* GMAT (Sau đại học) */}
+            {enabledTests.gmat && (
+              <Card size="sm">
+                <CardContent className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="academic-test-gmat">GMAT (200 - 800)</Label>
+                    {isEditing && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="xs"
+                        onClick={() => handleToggleTest("gmat")}
+                      >
+                        <XIcon aria-hidden />
+                        Ẩn
+                      </Button>
+                    )}
+                  </div>
+                  <Input
+                    id="academic-test-gmat"
+                    type="number"
+                    disabled={!isEditing}
+                    min="200"
+                    max="800"
+                    value={gmat}
+                    onChange={(e) => setGmat(e.target.value)}
+                    placeholder="Ví dụ: 685 hoặc để trống"
+                    className={VIEW_MODE_INPUT_CLASS}
+                  />
+                </CardContent>
+              </Card>
+            )}
           </div>
 
-          {/* BẬT / TẮT HOẶC THÊM CHỨNG CHỈ */}
-          {isEditing && (
-            <div className="flex flex-wrap gap-1.5 items-center">
-              <span className="text-[11px] font-semibold text-slate-500 mr-1">Thêm chứng chỉ:</span>
-              <button
-                type="button"
-                onClick={() => handleToggleTest("ielts")}
-                className={`rounded-lg px-2.5 py-1 text-xs font-semibold border transition ${
-                  enabledTests.ielts ? "bg-red-50 text-red-700 border-red-200" : "bg-white text-slate-600 border-slate-200"
-                }`}
-              >
-                + IELTS
-              </button>
-              <button
-                type="button"
-                onClick={() => handleToggleTest("toefl")}
-                className={`rounded-lg px-2.5 py-1 text-xs font-semibold border transition ${
-                  enabledTests.toefl ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-white text-slate-600 border-slate-200"
-                }`}
-              >
-                + TOEFL
-              </button>
-              <button
-                type="button"
-                onClick={() => handleToggleTest("duolingo")}
-                className={`rounded-lg px-2.5 py-1 text-xs font-semibold border transition ${
-                  enabledTests.duolingo ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-white text-slate-600 border-slate-200"
-                }`}
-              >
-                + Duolingo
-              </button>
-              <button
-                type="button"
-                onClick={() => handleToggleTest("sat")}
-                className={`rounded-lg px-2.5 py-1 text-xs font-semibold border transition ${
-                  enabledTests.sat ? "bg-purple-50 text-purple-700 border-purple-200" : "bg-white text-slate-600 border-slate-200"
-                }`}
-              >
-                + SAT
-              </button>
-              <button
-                type="button"
-                onClick={() => handleToggleTest("act")}
-                className={`rounded-lg px-2.5 py-1 text-xs font-semibold border transition ${
-                  enabledTests.act ? "bg-indigo-50 text-indigo-700 border-indigo-200" : "bg-white text-slate-600 border-slate-200"
-                }`}
-              >
-                + ACT
-              </button>
-              <button
-                type="button"
-                onClick={() => handleToggleTest("gre")}
-                className={`rounded-lg px-2.5 py-1 text-xs font-semibold border transition ${
-                  enabledTests.gre ? "bg-teal-50 text-teal-700 border-teal-200" : "bg-white text-slate-600 border-slate-200"
-                }`}
-              >
-                + GRE
-              </button>
-              <button
-                type="button"
-                onClick={() => handleToggleTest("gmat")}
-                className={`rounded-lg px-2.5 py-1 text-xs font-semibold border transition ${
-                  enabledTests.gmat ? "bg-cyan-50 text-cyan-700 border-cyan-200" : "bg-white text-slate-600 border-slate-200"
-                }`}
-              >
-                + GMAT
-              </button>
-              <button
-                type="button"
-                onClick={handleAddOtherTest}
-                className="rounded-lg px-2.5 py-1 text-xs font-semibold border border-dashed border-slate-300 bg-white text-slate-700 hover:border-slate-400"
-              >
-                + Khác (AP/IB/PTE)
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* CÁC Ô NHẬP ĐIỂM CHỨNG CHỈ */}
-        <div className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-3">
-          {/* IELTS */}
-          {enabledTests.ielts && (
-            <div className="relative rounded-xl border border-red-100 bg-red-50/20 p-3.5">
-              <div className="flex items-center justify-between">
-                <label className="block text-xs font-bold text-red-900">IELTS (0.0 - 9.0)</label>
-                {isEditing && (
-                  <button
-                    type="button"
-                    onClick={() => handleToggleTest("ielts")}
-                    className="text-[11px] text-slate-400 hover:text-red-600"
-                  >
-                    ✕ Ẩn
-                  </button>
-                )}
+          {/* DANH SÁCH CHỨNG CHỈ TÙY CHỌN KHÁC (AP, IB, PTE...) */}
+          {otherTests.length > 0 && (
+            <div className="mt-5">
+              <Separator className="mb-4" />
+              <span className="mb-2 block text-label">
+                Chứng chỉ khác (AP, IB, PTE Academic...):
+              </span>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {otherTests.map((t) => (
+                  <div key={t.id} className="flex items-center gap-2">
+                    <Input
+                      type="text"
+                      disabled={!isEditing}
+                      value={t.name}
+                      onChange={(e) => handleUpdateOtherTest(t.id, "name", e.target.value)}
+                      placeholder="Tên chứng chỉ (vd: AP Calculus, IB Math)"
+                      className={cn("w-1/2", VIEW_MODE_INPUT_CLASS)}
+                    />
+                    <Input
+                      type="text"
+                      disabled={!isEditing}
+                      value={t.score}
+                      onChange={(e) => handleUpdateOtherTest(t.id, "score", e.target.value)}
+                      placeholder="Điểm (vd: 5, 42)"
+                      className={cn("w-1/3", VIEW_MODE_INPUT_CLASS)}
+                    />
+                    {isEditing && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-xs"
+                        onClick={() => handleRemoveOtherTest(t.id)}
+                        aria-label="Xóa chứng chỉ"
+                      >
+                        <XIcon />
+                      </Button>
+                    )}
+                  </div>
+                ))}
               </div>
-              <input
-                type="number"
-                disabled={!isEditing}
-                step="0.5"
-                min="0"
-                max="9"
-                value={ielts}
-                onChange={(e) => setIelts(e.target.value)}
-                placeholder="Ví dụ: 7.0 hoặc để trống"
-                className={`mt-1.5 block w-full rounded-lg border px-3 py-2 text-sm transition ${
-                  !isEditing
-                    ? "bg-slate-50 border-slate-200 text-slate-700"
-                    : "bg-white border-slate-300 text-slate-900 focus:border-red-500 focus:ring-1 focus:ring-red-500"
-                }`}
-              />
             </div>
           )}
-
-          {/* TOEFL */}
-          {enabledTests.toefl && (
-            <div className="relative rounded-xl border border-blue-100 bg-blue-50/20 p-3.5">
-              <div className="flex items-center justify-between">
-                <label className="block text-xs font-bold text-blue-900">TOEFL iBT (0 - 120)</label>
-                {isEditing && (
-                  <button
-                    type="button"
-                    onClick={() => handleToggleTest("toefl")}
-                    className="text-[11px] text-slate-400 hover:text-blue-600"
-                  >
-                    ✕ Ẩn
-                  </button>
-                )}
-              </div>
-              <input
-                type="number"
-                disabled={!isEditing}
-                min="0"
-                max="120"
-                value={toefl}
-                onChange={(e) => setToefl(e.target.value)}
-                placeholder="Ví dụ: 95 hoặc để trống"
-                className={`mt-1.5 block w-full rounded-lg border px-3 py-2 text-sm transition ${
-                  !isEditing
-                    ? "bg-slate-50 border-slate-200 text-slate-700"
-                    : "bg-white border-slate-300 text-slate-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                }`}
-              />
-            </div>
-          )}
-
-          {/* Duolingo */}
-          {enabledTests.duolingo && (
-            <div className="relative rounded-xl border border-emerald-100 bg-emerald-50/20 p-3.5">
-              <div className="flex items-center justify-between">
-                <label className="block text-xs font-bold text-emerald-900">Duolingo Test (10 - 160)</label>
-                {isEditing && (
-                  <button
-                    type="button"
-                    onClick={() => handleToggleTest("duolingo")}
-                    className="text-[11px] text-slate-400 hover:text-emerald-600"
-                  >
-                    ✕ Ẩn
-                  </button>
-                )}
-              </div>
-              <input
-                type="number"
-                disabled={!isEditing}
-                min="10"
-                max="160"
-                value={duolingo}
-                onChange={(e) => setDuolingo(e.target.value)}
-                placeholder="Ví dụ: 125 hoặc để trống"
-                className={`mt-1.5 block w-full rounded-lg border px-3 py-2 text-sm transition ${
-                  !isEditing
-                    ? "bg-slate-50 border-slate-200 text-slate-700"
-                    : "bg-white border-slate-300 text-slate-900 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                }`}
-              />
-            </div>
-          )}
-
-          {/* SAT */}
-          {enabledTests.sat && (
-            <div className="relative rounded-xl border border-purple-100 bg-purple-50/20 p-3.5">
-              <div className="flex items-center justify-between">
-                <label className="block text-xs font-bold text-purple-900">SAT (400 - 1600)</label>
-                {isEditing && (
-                  <button
-                    type="button"
-                    onClick={() => handleToggleTest("sat")}
-                    className="text-[11px] text-slate-400 hover:text-purple-600"
-                  >
-                    ✕ Ẩn
-                  </button>
-                )}
-              </div>
-              <input
-                type="number"
-                disabled={!isEditing}
-                min="400"
-                max="1600"
-                value={sat}
-                onChange={(e) => setSat(e.target.value)}
-                placeholder="Ví dụ: 1450 hoặc để trống"
-                className={`mt-1.5 block w-full rounded-lg border px-3 py-2 text-sm transition ${
-                  !isEditing
-                    ? "bg-slate-50 border-slate-200 text-slate-700"
-                    : "bg-white border-slate-300 text-slate-900 focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
-                }`}
-              />
-            </div>
-          )}
-
-          {/* ACT */}
-          {enabledTests.act && (
-            <div className="relative rounded-xl border border-indigo-100 bg-indigo-50/20 p-3.5">
-              <div className="flex items-center justify-between">
-                <label className="block text-xs font-bold text-indigo-900">ACT (1 - 36)</label>
-                {isEditing && (
-                  <button
-                    type="button"
-                    onClick={() => handleToggleTest("act")}
-                    className="text-[11px] text-slate-400 hover:text-indigo-600"
-                  >
-                    ✕ Ẩn
-                  </button>
-                )}
-              </div>
-              <input
-                type="number"
-                disabled={!isEditing}
-                min="1"
-                max="36"
-                value={act}
-                onChange={(e) => setAct(e.target.value)}
-                placeholder="Ví dụ: 32 hoặc để trống"
-                className={`mt-1.5 block w-full rounded-lg border px-3 py-2 text-sm transition ${
-                  !isEditing
-                    ? "bg-slate-50 border-slate-200 text-slate-700"
-                    : "bg-white border-slate-300 text-slate-900 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                }`}
-              />
-            </div>
-          )}
-
-          {/* GRE (Sau đại học) */}
-          {enabledTests.gre && (
-            <div className="relative rounded-xl border border-teal-100 bg-teal-50/20 p-3.5">
-              <div className="flex items-center justify-between">
-                <label className="block text-xs font-bold text-teal-900">GRE General (260 - 340)</label>
-                {isEditing && (
-                  <button
-                    type="button"
-                    onClick={() => handleToggleTest("gre")}
-                    className="text-[11px] text-slate-400 hover:text-teal-600"
-                  >
-                    ✕ Ẩn
-                  </button>
-                )}
-              </div>
-              <input
-                type="number"
-                disabled={!isEditing}
-                min="260"
-                max="340"
-                value={gre}
-                onChange={(e) => setGre(e.target.value)}
-                placeholder="Ví dụ: 322 hoặc để trống"
-                className={`mt-1.5 block w-full rounded-lg border px-3 py-2 text-sm transition ${
-                  !isEditing
-                    ? "bg-slate-50 border-slate-200 text-slate-700"
-                    : "bg-white border-slate-300 text-slate-900 focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
-                }`}
-              />
-            </div>
-          )}
-
-          {/* GMAT (Sau đại học) */}
-          {enabledTests.gmat && (
-            <div className="relative rounded-xl border border-cyan-100 bg-cyan-50/20 p-3.5">
-              <div className="flex items-center justify-between">
-                <label className="block text-xs font-bold text-cyan-900">GMAT (200 - 800)</label>
-                {isEditing && (
-                  <button
-                    type="button"
-                    onClick={() => handleToggleTest("gmat")}
-                    className="text-[11px] text-slate-400 hover:text-cyan-600"
-                  >
-                    ✕ Ẩn
-                  </button>
-                )}
-              </div>
-              <input
-                type="number"
-                disabled={!isEditing}
-                min="200"
-                max="800"
-                value={gmat}
-                onChange={(e) => setGmat(e.target.value)}
-                placeholder="Ví dụ: 685 hoặc để trống"
-                className={`mt-1.5 block w-full rounded-lg border px-3 py-2 text-sm transition ${
-                  !isEditing
-                    ? "bg-slate-50 border-slate-200 text-slate-700"
-                    : "bg-white border-slate-300 text-slate-900 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
-                }`}
-              />
-            </div>
-          )}
-        </div>
-
-        {/* DANH SÁCH CHỨNG CHỈ TÙY CHỌN KHÁC (AP, IB, PTE...) */}
-        {otherTests.length > 0 && (
-          <div className="mt-5 border-t border-slate-100 pt-4">
-            <span className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-              Chứng chỉ khác (AP, IB, PTE Academic...):
-            </span>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {otherTests.map((t) => (
-                <div key={t.id} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50/50 p-2">
-                  <input
-                    type="text"
-                    disabled={!isEditing}
-                    value={t.name}
-                    onChange={(e) => handleUpdateOtherTest(t.id, "name", e.target.value)}
-                    placeholder="Tên chứng chỉ (vd: AP Calculus, IB Math)"
-                    className="w-1/2 rounded border border-slate-300 bg-white px-2 py-1 text-xs"
-                  />
-                  <input
-                    type="text"
-                    disabled={!isEditing}
-                    value={t.score}
-                    onChange={(e) => handleUpdateOtherTest(t.id, "score", e.target.value)}
-                    placeholder="Điểm (vd: 5, 42)"
-                    className="w-1/3 rounded border border-slate-300 bg-white px-2 py-1 text-xs"
-                  />
-                  {isEditing && (
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveOtherTest(t.id)}
-                      className="text-slate-400 hover:text-red-600"
-                    >
-                      ✕
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </section>
+        </CardContent>
+      </Card>
 
       {/* THÔNG BÁO LỖI HOẶC THÀNH CÔNG (HIỂN THỊ Ở CUỐI GẦN NÚT BẤM ĐỂ DỄ ĐỌC) */}
       {(errorMessage || successMessage) && (
         <div id="form-feedback-section" className="space-y-3">
           {errorMessage && (
-            <div className="rounded-2xl border-2 border-red-200 bg-red-50 p-4 text-xs font-semibold text-red-900 shadow-sm flex items-start justify-between gap-3 animate-in fade-in">
-              <div className="flex items-start gap-2.5">
-                <svg className="h-5 w-5 shrink-0 text-red-600 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <div>
-                  <div className="font-bold text-sm text-red-900">Vui lòng kiểm tra lại thông tin:</div>
-                  <p className="mt-1 font-normal text-red-800 leading-relaxed">{errorMessage}</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setErrorMessage(null)}
-                className="text-red-400 hover:text-red-700 p-1 rounded-lg"
-                title="Đóng thông báo"
-              >
-                ✕
-              </button>
-            </div>
+            <Alert variant="destructive">
+              <CircleAlertIcon />
+              <AlertTitle>Vui lòng kiểm tra lại thông tin:</AlertTitle>
+              <AlertDescription>{errorMessage}</AlertDescription>
+              <AlertAction>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => setErrorMessage(null)}
+                  title="Đóng thông báo"
+                  aria-label="Đóng thông báo"
+                >
+                  <XIcon />
+                </Button>
+              </AlertAction>
+            </Alert>
           )}
 
           {successMessage && (
-            <div className="rounded-2xl border-2 border-emerald-200 bg-emerald-50 p-4 text-xs font-semibold text-emerald-900 shadow-sm flex items-start justify-between gap-3 animate-in fade-in">
-              <div className="flex items-start gap-2.5">
-                <svg className="h-5 w-5 shrink-0 text-emerald-600 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                <div>
-                  <div className="font-bold text-sm text-emerald-900">Lưu thành công!</div>
-                  <p className="mt-1 font-normal text-emerald-800 leading-relaxed">{successMessage}</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSuccessMessage(null)}
-                className="text-emerald-400 hover:text-emerald-700 p-1 rounded-lg"
-                title="Đóng thông báo"
-              >
-                ✕
-              </button>
-            </div>
+            <Alert variant="success">
+              <CheckIcon />
+              <AlertTitle>Lưu thành công!</AlertTitle>
+              <AlertDescription>{successMessage}</AlertDescription>
+              <AlertAction>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => setSuccessMessage(null)}
+                  title="Đóng thông báo"
+                  aria-label="Đóng thông báo"
+                >
+                  <XIcon />
+                </Button>
+              </AlertAction>
+            </Alert>
           )}
         </div>
       )}
@@ -1585,57 +1540,58 @@ export function AcademicProfileForm({ initialProfile }: Props) {
         {isEditing ? (
           <>
             {hasSavedProfile && (
-              <button
+              <Button
                 type="button"
+                variant="outline"
+                size="lg"
                 onClick={handleCancelEdit}
                 disabled={isSaving}
-                className="rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-400 disabled:opacity-50"
               >
                 Hủy thay đổi
-              </button>
+              </Button>
             )}
 
-            <button
+            <Button
               type="button"
+              variant="outline"
+              size="lg"
               onClick={() => handleSave(false)}
               disabled={isSaving}
-              className="rounded-xl border border-slate-300 bg-white px-6 py-3 text-sm font-bold text-slate-800 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
             >
-              {isSaving ? "Đang lưu..." : "💾 Lưu hồ sơ"}
-            </button>
+              {isSaving ? <Spinner /> : <SaveIcon aria-hidden />}
+              {isSaving ? "Đang lưu..." : "Lưu hồ sơ"}
+            </Button>
 
-            <button
+            <Button
               type="button"
+              size="lg"
               onClick={() => handleSave(true)}
               disabled={isSaving}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 px-6 py-3 text-sm font-bold text-white shadow-md transition hover:opacity-95 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
             >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-              {isSaving ? "Đang xử lý..." : "Lưu & Phân tích năng lực 🚀"}
-            </button>
+              {isSaving ? <Spinner /> : <ZapIcon />}
+              {isSaving ? "Đang xử lý..." : "Lưu & Phân tích năng lực"}
+            </Button>
           </>
         ) : (
           <div className="flex items-center gap-3">
-            <button
+            <Button
               type="button"
+              variant="outline"
+              size="lg"
               onClick={() => setIsEditing(true)}
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-bold text-slate-800 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-              </svg>
+              <PencilIcon />
               Chỉnh sửa lại hồ sơ
-            </button>
+            </Button>
 
-            <button
+            <Button
               type="button"
+              size="lg"
               onClick={() => router.push("/profile/academic/analysis")}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-3 text-sm font-bold text-white shadow-md transition hover:opacity-95 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
-              <span>🚀</span> Phân tích năng lực học thuật
-            </button>
+              <RocketIcon aria-hidden />
+              Phân tích năng lực học thuật
+            </Button>
           </div>
         )}
       </div>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { ArrowRightIcon, BotIcon, FileTextIcon, PencilIcon } from "lucide-react";
 import {
   getLatestAcademicAnalysis,
   getTranscriptScores,
@@ -15,6 +16,19 @@ import { GpaSummaryCard } from "@/components/academic/GpaSummaryCard";
 import { SubjectGroupBreakdown } from "@/components/academic/SubjectGroupBreakdown";
 import { TermTrendChart } from "@/components/academic/TermTrendChart";
 import { ReadOnlyTranscriptTable } from "@/components/academic/ReadOnlyTranscriptTable";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import { Spinner } from "@/components/ui/spinner";
 
 export function AcademicAnalysisView() {
   const [scores, setScores] = useState<TranscriptScore[]>([]);
@@ -147,27 +161,27 @@ export function AcademicAnalysisView() {
 
   if (loading) {
     return (
-      <div className="py-24 text-center">
-        <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-slate-900 border-r-transparent" />
-        <p className="mt-3 text-xs text-slate-500 font-medium">Đang tải báo cáo phân tích năng lực học thuật...</p>
+      <div className="flex flex-col items-center gap-3 py-24 text-sm text-muted-foreground">
+        <Spinner />
+        <p>Đang tải báo cáo phân tích năng lực học thuật...</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-8 min-w-0 w-full">
+    <div className="w-full min-w-0 space-y-8">
       {/* Header bar */}
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-slate-200/80 pb-5">
+      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+            <h1 className="text-h1">
               Đánh Giá Năng Lực Học Thuật & GPA
             </h1>
-            <span className="rounded-full bg-blue-50 border border-blue-200 px-2.5 py-0.5 text-xs font-semibold text-blue-700">
+            <Badge variant="brand">
               Quy đổi WES 4.0
-            </span>
+            </Badge>
           </div>
-          <p className="mt-1 text-xs sm:text-sm text-slate-600 max-w-2xl">
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
             Quy đổi bảng điểm theo tiêu chuẩn giáo dục Hoa Kỳ (WES 4.0 tham khảo), phân tích điểm theo nhóm môn và nhận diện đà tăng trưởng học thuật (Growth Mindset).
           </p>
         </div>
@@ -175,81 +189,80 @@ export function AcademicAnalysisView() {
         <div className="flex items-center gap-2">
           <Link
             href="/profile/academic"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
+            className={buttonVariants({ variant: "outline", size: "lg" })}
           >
-            <span>✏️</span> Chỉnh sửa bảng điểm
+            <PencilIcon aria-hidden="true" /> Chỉnh sửa bảng điểm
           </Link>
           <Link
             href="/advisor"
-            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 transition"
+            className={buttonVariants({ size: "lg" })}
           >
-            <span>🤖</span> Tư vấn AI &rarr;
+            <BotIcon aria-hidden="true" /> Tư vấn AI <ArrowRightIcon aria-hidden="true" />
           </Link>
         </div>
       </div>
 
       {/* Thông báo lỗi tải dữ liệu */}
       {fetchError ? (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-center space-y-3">
-          <p className="text-sm font-semibold text-red-800">{fetchError}</p>
-          <p className="text-xs text-red-600 max-w-md mx-auto">
+        <Alert variant="destructive">
+          <AlertTitle>{fetchError}</AlertTitle>
+          <AlertDescription>
             Không thể tải dữ liệu phân tích từ máy chủ. Vui lòng kiểm tra lại kết nối và thử lại.
-          </p>
-          <div className="pt-1">
-            <button
+          </AlertDescription>
+          <div className="mt-2">
+            <Button
               type="button"
+              variant="destructive"
+              size="lg"
               onClick={handleRetry}
-              className="rounded-lg bg-red-600 px-4 py-2 text-xs font-semibold text-white hover:bg-red-700 transition cursor-pointer"
             >
               Thử tải lại dữ liệu
-            </button>
+            </Button>
           </div>
-        </div>
+        </Alert>
       ) : (
         <>
           {/* Toast Feedback */}
           {message && (
-            <div
-              className={`rounded-lg p-3 text-xs font-semibold ${
-                message.type === "success"
-                  ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
-                  : "bg-red-50 text-red-800 border border-red-200"
-              }`}
-            >
-              {message.text}
-            </div>
+            <Alert variant={message.type === "success" ? "success" : "destructive"}>
+              <AlertDescription>
+                {message.text}
+              </AlertDescription>
+            </Alert>
           )}
 
           {/* Empty State: Nếu chưa có môn học nào được nhập */}
           {scores.length === 0 ? (
-            <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center space-y-4 shadow-xs">
-              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-blue-50 text-blue-600 text-2xl">
-                📑
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-slate-900">
-                  Chưa có dữ liệu bảng điểm học tập
-                </h3>
-                <p className="mt-1 text-xs sm:text-sm text-slate-500 max-w-md mx-auto">
-                  Bạn cần nhập bảng điểm các kỳ học (hoặc tải mẫu học bạ) tại mục <strong>Hồ sơ học thuật</strong> trước khi hệ thống có thể tính toán GPA 4.0 và phân tích đà tăng trưởng.
-                </p>
-              </div>
-              <div className="pt-2">
-                <Link
-                  href="/profile/academic"
-                  className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-blue-700 transition"
-                >
-                  <span>📝</span> Nhập bảng điểm tại Hồ sơ học thuật &rarr;
-                </Link>
-              </div>
-            </div>
+            <Card>
+              <Empty>
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <FileTextIcon aria-hidden="true" />
+                  </EmptyMedia>
+                  <EmptyTitle>
+                    Chưa có dữ liệu bảng điểm học tập
+                  </EmptyTitle>
+                  <EmptyDescription>
+                    Bạn cần nhập bảng điểm các kỳ học (hoặc tải mẫu học bạ) tại mục <strong>Hồ sơ học thuật</strong> trước khi hệ thống có thể tính toán GPA 4.0 và phân tích đà tăng trưởng.
+                  </EmptyDescription>
+                </EmptyHeader>
+                <EmptyContent>
+                  <Link
+                    href="/profile/academic"
+                    className={buttonVariants({ size: "lg" })}
+                  >
+                    <FileTextIcon aria-hidden="true" /> Nhập bảng điểm tại Hồ sơ học thuật <ArrowRightIcon aria-hidden="true" />
+                  </Link>
+                </EmptyContent>
+              </Empty>
+            </Card>
           ) : (
             <>
               {/* Analytics Dashboard (Executive Summary + 2-col analytics) */}
               {analysis && (
-                <div className="space-y-6 min-w-0 w-full">
+                <div className="w-full min-w-0 space-y-6">
                   <GpaSummaryCard analysis={analysis} />
-                  <div className="grid gap-6 md:grid-cols-2 min-w-0 w-full">
+                  <div className="grid w-full min-w-0 gap-6 md:grid-cols-2">
                     <SubjectGroupBreakdown groups={analysis.subjectGroups} />
                     <TermTrendChart terms={analysis.termAverages} />
                   </div>
