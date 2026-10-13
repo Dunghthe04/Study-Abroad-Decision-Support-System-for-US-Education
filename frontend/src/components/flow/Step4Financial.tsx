@@ -6,7 +6,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import type { BudgetTierOption, FinancialDraft, ProfileMetadataResponse } from "@/types/profile-flow";
+import { DEFAULT_BUDGET_TIERS, SCHOLARSHIP_NEED_OPTIONS } from "@/lib/profile-flow-options";
+import type { BudgetTierId, FinancialDraft, ProfileMetadataResponse, ScholarshipNeed } from "@/types/profile-flow";
 
 interface Step4FinancialProps {
   data: FinancialDraft;
@@ -16,38 +17,28 @@ interface Step4FinancialProps {
   onNext: () => void;
 }
 
-const DEFAULT_BUDGET_TIERS: BudgetTierOption[] = [
-  { key: "under_20k", label: "Dưới 20.000 USD", minUsd: 0, maxUsd: 20000, currency: "USD", description: "Học phí & sinh hoạt phí dưới $20.000/năm" },
-  { key: "20k_35k", label: "20.000 – 35.000 USD", minUsd: 20000, maxUsd: 35000, currency: "USD", description: "Học phí & sinh hoạt phí $20.000 – $35.000/năm" },
-  { key: "35k_50k", label: "35.000 – 50.000 USD", minUsd: 35000, maxUsd: 50000, currency: "USD", description: "Học phí & sinh hoạt phí $35.000 – $50.000/năm" },
-  { key: "50k_70k", label: "50.000 – 70.000 USD", minUsd: 50000, maxUsd: 70000, currency: "USD", description: "Học phí & sinh hoạt phí $50.000 – $70.000/năm" },
-  { key: "above_70k", label: "Trên 70.000 USD", minUsd: 70000, maxUsd: null, currency: "USD", description: "Học phí & sinh hoạt phí trên $70.000/năm" },
-];
-
-const needScholarshipOptions = [
-  {
-    key: "mandatory",
-    title: "Bắt buộc",
-    description: "Không có học bổng thì chưa thể đi",
-  },
-  {
-    key: "preferred",
-    title: "Nên có",
-    description: "Càng nhiều càng tốt",
-  },
-  {
-    key: "not_needed",
-    title: "Không cần",
-    description: "Gia đình tự chi trả được",
-  },
-];
-
 export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Step4FinancialProps) {
   const [financialError, setFinancialError] = useState<string | null>(null);
 
-  const budgetTiers = metadata?.budgetTiers && metadata.budgetTiers.length > 0
-    ? metadata.budgetTiers
-    : DEFAULT_BUDGET_TIERS;
+  // Chỉ lưu mã mức; min/max USD do BE lấy từ seed metadata khi commit
+  const budgetTiers: { key: BudgetTierId; label: string; description: string }[] =
+    metadata?.budgetTiers && metadata.budgetTiers.length > 0
+      ? metadata.budgetTiers.map((t) => ({
+          key: t.key as BudgetTierId,
+          label: t.label,
+          description: t.description,
+        }))
+      : DEFAULT_BUDGET_TIERS;
+
+  const needOptions: { key: ScholarshipNeed; title: string; description: string }[] =
+    SCHOLARSHIP_NEED_OPTIONS.map((o) => {
+      const fromMeta = metadata?.financialNeedLevels.find((m) => m.key === o.value);
+      return {
+        key: o.value,
+        title: fromMeta?.label || o.label,
+        description: fromMeta?.description || o.description,
+      };
+    });
 
   const handleNextClick = () => {
     if (!data.annualBudgetTier) {
@@ -98,10 +89,7 @@ export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Ste
                 type="button"
                 onClick={() => {
                   setFinancialError(null);
-                  onUpdate({
-                    annualBudgetTier: tier.key,
-                    annualBudgetUsd: tier.maxUsd ?? tier.minUsd ?? null,
-                  });
+                  onUpdate({ annualBudgetTier: tier.key });
                 }}
                 className={cn(
                   "flex flex-col items-start justify-between rounded-xl border p-4 text-left transition-all cursor-pointer h-full shadow-2xs",
@@ -142,7 +130,7 @@ export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Ste
         </div>
 
         <div className="grid gap-3 sm:grid-cols-3">
-          {needScholarshipOptions.map((opt) => {
+          {needOptions.map((opt) => {
             const isSelected = data.needFinancialAid === opt.key;
             return (
               <button

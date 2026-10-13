@@ -6,8 +6,16 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MonthPicker, type MonthValue } from "@/components/ui/month-picker";
 import { cn } from "@/lib/utils";
-import type { ActivityDraft } from "@/types/profile-flow";
+import {
+  ACTIVITY_ROLE_OPTIONS,
+  IMPACT_LEVEL_OPTIONS,
+  countMonths,
+  labelOf,
+  parseMonthYear,
+} from "@/lib/profile-flow-options";
+import type { ActivityDraft, ActivityRole, ImpactLevel } from "@/types/profile-flow";
 
 interface Step5ExtracurricularProps {
   activities: ActivityDraft[];
@@ -16,12 +24,18 @@ interface Step5ExtracurricularProps {
   onNext: () => void;
 }
 
-const levelOptions = [
-  { key: "school", label: "Cấp trường" },
-  { key: "province", label: "Tỉnh / Thành" },
-  { key: "national", label: "Quốc gia" },
-  { key: "international", label: "Quốc tế" },
-];
+/** Thiếu gì so với điều kiện commit phía BE (ProfileFlowService.ValidateForCommit). */
+function getItemProblem(item: ActivityDraft): string | null {
+  if (!item.impactLevel) return "chưa chọn phạm vi";
+  if (item.category === "achievement") return item.year ? null : "chưa có năm đạt giải";
+  if (!item.role) return "chưa chọn vai trò";
+  if (!parseMonthYear(item.startDate)) return "chưa có tháng bắt đầu";
+  if (!item.isOngoing && !parseMonthYear(item.endDate)) return "chưa có tháng kết thúc";
+  return null;
+}
+
+const formatMonthYear = (m: { year: number; month: number }) =>
+  `${String(m.month).padStart(2, "0")}/${m.year}`;
 
 export function Step5Extracurricular({
   activities,
@@ -32,78 +46,112 @@ export function Step5Extracurricular({
   const [showAddForm, setShowAddForm] = useState(false);
   const [category, setCategory] = useState<"activity" | "achievement">("activity");
   const [name, setName] = useState("");
-  const [role, setRole] = useState("");
-  const [startDate, setStartDate] = useState("09/2024");
-  const [endDate, setEndDate] = useState("05/2026");
+  const [role, setRole] = useState<ActivityRole | null>(null);
+  const [startDate, setStartDate] = useState<MonthValue | null>(null);
+  const [endDate, setEndDate] = useState<MonthValue | null>(null);
   const [isOngoing, setIsOngoing] = useState(false);
-  const [impactLevel, setImpactLevel] = useState("school");
+  const [impactLevel, setImpactLevel] = useState<ImpactLevel | null>(null);
   const [year, setYear] = useState(new Date().getFullYear().toString());
-  const [yearError, setYearError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [listError, setListError] = useState<string | null>(null);
 
-  // Helper tính số năm từ khoảng thời gian
-  const estimateDurationYears = (start: string, end: string, ongoing: boolean): number => {
-    try {
-      const startParts = start.split("/");
-      const startYr = Number(startParts[startParts.length - 1]);
-      const currentYear = new Date().getFullYear();
-      const endYr = ongoing
-        ? currentYear
-        : Number(end.split("/")[end.split("/").length - 1]) || currentYear;
-      const diff = endYr - startYr;
-      return diff > 0 ? diff : 1;
-    } catch {
-      return 1;
-    }
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonthIndex = currentYear * 12 + now.getMonth() + 1;
+  const thisMonth: MonthValue = { year: currentYear, month: now.getMonth() + 1 };
+
+  const resetForm = () => {
+    setName("");
+    setRole(null);
+    setStartDate(null);
+    setEndDate(null);
+    setIsOngoing(false);
+    setImpactLevel(null);
+    setYear(currentYear.toString());
+    setFormError(null);
   };
 
   const handleSaveItem = () => {
     if (!name.trim()) return;
+    if (!impactLevel) {
+      setFormError("Vui lòng chọn phạm vi ảnh hưởng.");
+      return;
+    }
 
-    const currentYear = new Date().getFullYear();
+    const id =
+      typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString();
+    let newItem: ActivityDraft;
+
     if (category === "achievement") {
       const parsedYear = Number(year);
-      if (isNaN(parsedYear) || parsedYear > currentYear) {
-        setYearError(`Năm đạt giải không được lớn hơn năm hiện tại (${currentYear}).`);
+      if (!Number.isInteger(parsedYear) || parsedYear > currentYear) {
+        setFormError(`Năm đạt giải không được lớn hơn năm hiện tại (${currentYear}).`);
         return;
       }
       if (parsedYear < 2000) {
-        setYearError("Năm đạt giải không hợp lệ (từ năm 2000 trở lại đây).");
+        setFormError("Năm đạt giải không hợp lệ (từ năm 2000 trở lại đây).");
         return;
       }
+      newItem = { id, name: name.trim(), category, impactLevel, year: parsedYear };
+    } else {
+      if (!role) {
+        setFormError("Vui lòng chọn vai trò của bạn.");
+        return;
+      }
+      const start = startDate;
+      if (!start) {
+        setFormError("Vui lòng chọn tháng bắt đầu.");
+        return;
+      }
+      if (start.year * 12 + start.month > currentMonthIndex) {
+        setFormError("Tháng bắt đầu không được sau tháng hiện tại.");
+        return;
+      }
+      const end = isOngoing ? null : endDate;
+      if (!isOngoing) {
+        if (!end) {
+          setFormError("Vui lòng chọn tháng kết thúc, hoặc tick “Đến nay”.");
+          return;
+        }
+        if (end.year * 12 + end.month < start.year * 12 + start.month) {
+          setFormError("Tháng kết thúc phải sau hoặc bằng tháng bắt đầu.");
+          return;
+        }
+      }
+      const startStr = formatMonthYear(start);
+      const endStr = end ? formatMonthYear(end) : null;
+      newItem = {
+        id,
+        name: name.trim(),
+        category,
+        impactLevel,
+        role,
+        startDate: startStr,
+        endDate: endStr,
+        isOngoing,
+        durationMonths: countMonths(startStr, endStr, isOngoing),
+      };
     }
-    setYearError(null);
-
-    const currentYearStr = `${new Date().getMonth() + 1}/${currentYear}`;
-    const calculatedDuration = estimateDurationYears(startDate, endDate, isOngoing);
-
-    const newItem: ActivityDraft = {
-      id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(),
-      name: name.trim(),
-      category,
-      role: category === "activity" ? (role.trim() || "Thành viên") : undefined,
-      startDate: category === "activity" ? startDate.trim() : undefined,
-      endDate: category === "activity" ? (isOngoing ? currentYearStr : endDate.trim()) : undefined,
-      isOngoing: category === "activity" ? isOngoing : undefined,
-      durationYears: category === "activity" ? calculatedDuration : undefined,
-      impactLevel,
-      year: category === "achievement" ? Number(year) || currentYear : undefined,
-    };
 
     onUpdate([...activities, newItem]);
-
-    // Reset form
-    setName("");
-    setRole("");
-    setIsOngoing(false);
+    setListError(null);
+    resetForm();
     setShowAddForm(false);
   };
 
   const handleDeleteItem = (index: number) => {
     onUpdate(activities.filter((_, i) => i !== index));
+    setListError(null);
   };
 
-  const getLevelLabel = (key: string) => {
-    return levelOptions.find((l) => l.key === key)?.label ?? key;
+  const handleNextClick = () => {
+    const bad = activities.find((a) => getItemProblem(a));
+    if (bad) {
+      setListError(`“${bad.name}” ${getItemProblem(bad)}. Hãy xoá mục này rồi thêm lại cho đủ thông tin.`);
+      return;
+    }
+    setListError(null);
+    onNext();
   };
 
   return (
@@ -127,72 +175,78 @@ export function Step5Extracurricular({
           </Label>
 
           <div className="space-y-2.5">
-            {activities.map((item, idx) => (
-              <div
-                key={item.id ?? idx}
-                className="flex items-center justify-between rounded-xl border border-line bg-surface p-4 shadow-2xs hover:border-brand/40 transition-colors"
-              >
-                <div className="flex items-start gap-3">
-                  <div
-                    className={cn(
-                      "mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold",
-                      item.category === "activity"
-                        ? "bg-brand-wash text-brand"
-                        : "bg-warn-wash text-warn"
-                    )}
-                  >
-                    {item.category === "activity" ? (
-                      <UsersIcon className="size-4" />
-                    ) : (
-                      <AwardIcon className="size-4" />
-                    )}
-                  </div>
-
-                  <div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-sm text-foreground">{item.name}</span>
-                      <Badge variant="secondary" className="text-[10px] font-medium">
-                        {item.category === "activity" ? "Hoạt động" : "Giải thưởng"}
-                      </Badge>
-                      <Badge variant="outline" className="text-[10px]">
-                        {getLevelLabel(item.impactLevel)}
-                      </Badge>
-                    </div>
-
-                    <div className="text-xs text-muted-foreground mt-1 flex items-center gap-2">
+            {activities.map((item, idx) => {
+              const problem = getItemProblem(item);
+              return (
+                <div
+                  key={item.id ?? idx}
+                  className={cn(
+                    "flex items-center justify-between rounded-xl border bg-surface p-4 shadow-2xs hover:border-brand/40 transition-colors",
+                    problem ? "border-destructive/50" : "border-line"
+                  )}
+                >
+                  <div className="flex items-start gap-3">
+                    <div
+                      className={cn(
+                        "mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold",
+                        item.category === "activity" ? "bg-brand-wash text-brand" : "bg-warn-wash text-warn"
+                      )}
+                    >
                       {item.category === "activity" ? (
-                        <>
-                          <span>{item.role || "Thành viên"}</span>
-                          <span>•</span>
-                          <span className="inline-flex items-center gap-1 font-medium text-foreground">
-                            <CalendarIcon className="size-3 text-brand" />
-                            {item.startDate ? (
-                              <>
-                                {item.startDate} – {item.isOngoing ? "Đến nay" : item.endDate || "Nay"}
-                              </>
-                            ) : (
-                              <>{item.durationYears || 1} năm</>
-                            )}
-                          </span>
-                        </>
+                        <UsersIcon className="size-4" />
                       ) : (
-                        <span>Năm {item.year}</span>
+                        <AwardIcon className="size-4" />
                       )}
                     </div>
-                  </div>
-                </div>
 
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleDeleteItem(idx)}
-                  className="text-muted-foreground hover:text-destructive h-8 px-2 cursor-pointer"
-                >
-                  <Trash2Icon className="size-4" />
-                  <span className="hidden sm:inline text-xs ml-1">Xóa</span>
-                </Button>
-              </div>
-            ))}
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-sm text-foreground">{item.name}</span>
+                        <Badge variant="secondary" className="text-[10px] font-medium">
+                          {item.category === "activity" ? "Hoạt động" : "Giải thưởng"}
+                        </Badge>
+                        {item.impactLevel && (
+                          <Badge variant="outline" className="text-[10px]">
+                            {labelOf(IMPACT_LEVEL_OPTIONS, item.impactLevel)}
+                          </Badge>
+                        )}
+                        {problem && (
+                          <Badge variant="destructive" className="text-[10px]">
+                            Thiếu: {problem}
+                          </Badge>
+                        )}
+                      </div>
+
+                      <div className="text-xs text-muted-foreground mt-1 flex items-center gap-2">
+                        {item.category === "activity" ? (
+                          <>
+                            <span>{labelOf(ACTIVITY_ROLE_OPTIONS, item.role) || "Chưa chọn vai trò"}</span>
+                            <span>•</span>
+                            <span className="inline-flex items-center gap-1 font-medium text-foreground">
+                              <CalendarIcon className="size-3 text-brand" />
+                              {item.startDate ?? "?"} – {item.isOngoing ? "Đến nay" : item.endDate || "?"}
+                              {item.durationMonths ? ` · ${item.durationMonths} tháng` : ""}
+                            </span>
+                          </>
+                        ) : (
+                          <span>Năm {item.year ?? "?"}</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleDeleteItem(idx)}
+                    className="text-muted-foreground hover:text-destructive h-8 px-2 cursor-pointer"
+                  >
+                    <Trash2Icon className="size-4" />
+                    <span className="hidden sm:inline text-xs ml-1">Xóa</span>
+                  </Button>
+                </div>
+              );
+            })}
           </div>
         </section>
       )}
@@ -213,30 +267,22 @@ export function Step5Extracurricular({
           <div className="flex items-center justify-between border-b border-line pb-3">
             <div className="font-semibold text-sm text-foreground">Bạn muốn thêm gì?</div>
             <div className="flex gap-1 rounded-lg bg-ground p-1 border border-line">
-              <button
-                type="button"
-                onClick={() => setCategory("activity")}
-                className={cn(
-                  "rounded-md px-3 py-1 text-xs font-semibold transition-all cursor-pointer",
-                  category === "activity"
-                    ? "bg-brand text-white shadow-xs"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                Hoạt động
-              </button>
-              <button
-                type="button"
-                onClick={() => setCategory("achievement")}
-                className={cn(
-                  "rounded-md px-3 py-1 text-xs font-semibold transition-all cursor-pointer",
-                  category === "achievement"
-                    ? "bg-brand text-white shadow-xs"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                Giải thưởng
-              </button>
+              {(["activity", "achievement"] as const).map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => {
+                    setCategory(c);
+                    setFormError(null);
+                  }}
+                  className={cn(
+                    "rounded-md px-3 py-1 text-xs font-semibold transition-all cursor-pointer",
+                    category === c ? "bg-brand text-white shadow-xs" : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {c === "activity" ? "Hoạt động" : "Giải thưởng"}
+                </button>
+              ))}
             </div>
           </div>
 
@@ -261,15 +307,27 @@ export function Step5Extracurricular({
             {category === "activity" ? (
               <div className="space-y-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="itemRole" className="text-xs font-medium text-foreground">
-                    Vai trò của bạn
-                  </Label>
-                  <Input
-                    id="itemRole"
-                    placeholder="VD: Đội trưởng, Trưởng ban Truyền thông, Thành viên"
-                    value={role}
-                    onChange={(e) => setRole(e.target.value)}
-                  />
+                  <Label className="text-xs font-medium text-foreground">Vai trò của bạn · Chọn 1</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {ACTIVITY_ROLE_OPTIONS.map((r) => (
+                      <button
+                        key={r.value}
+                        type="button"
+                        onClick={() => {
+                          setRole(r.value);
+                          setFormError(null);
+                        }}
+                        className={cn(
+                          "rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer",
+                          role === r.value
+                            ? "border-brand bg-brand-wash/60 text-brand ring-1 ring-brand font-semibold"
+                            : "border-line bg-surface text-muted-foreground hover:border-brand/40"
+                        )}
+                      >
+                        {r.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 {/* Khoảng thời gian: Từ lúc nào đến lúc nào + Đến nay */}
@@ -278,11 +336,17 @@ export function Step5Extracurricular({
                     <Label htmlFor="itemStartDate" className="text-xs font-medium text-foreground">
                       Từ (Tháng/Năm)
                     </Label>
-                    <Input
+                    <MonthPicker
                       id="itemStartDate"
-                      placeholder="VD: 09/2023"
+                      placeholder="Chọn tháng bắt đầu"
                       value={startDate}
-                      onChange={(e) => setStartDate(e.target.value)}
+                      max={thisMonth}
+                      onChange={(m) => {
+                        setStartDate(m);
+                        // Tháng kết thúc cũ trước tháng bắt đầu mới thì bỏ, để chọn lại
+                        if (endDate && endDate.year * 12 + endDate.month < m.year * 12 + m.month) setEndDate(null);
+                        setFormError(null);
+                      }}
                     />
                   </div>
 
@@ -301,13 +365,18 @@ export function Step5Extracurricular({
                         <span>Đến nay</span>
                       </label>
                     </div>
-                    <Input
+                    <MonthPicker
                       id="itemEndDate"
-                      placeholder="VD: 05/2025"
-                      value={isOngoing ? "Đến nay (Hiện tại)" : endDate}
+                      placeholder="Chọn tháng kết thúc"
+                      value={endDate}
+                      min={startDate}
+                      max={thisMonth}
                       disabled={isOngoing}
-                      onChange={(e) => setEndDate(e.target.value)}
-                      className={cn(isOngoing && "bg-muted text-muted-foreground")}
+                      disabledText="Đến nay (Hiện tại)"
+                      onChange={(m) => {
+                        setEndDate(m);
+                        setFormError(null);
+                      }}
                     />
                   </div>
                 </div>
@@ -315,39 +384,36 @@ export function Step5Extracurricular({
             ) : (
               <div className="space-y-1.5 max-w-xs">
                 <Label htmlFor="itemYear" className="text-xs font-medium text-foreground">
-                  Năm đạt giải (tối đa {new Date().getFullYear()})
+                  Năm đạt giải (tối đa {currentYear})
                 </Label>
                 <Input
                   id="itemYear"
                   type="number"
                   min={2000}
-                  max={new Date().getFullYear()}
+                  max={currentYear}
                   value={year}
                   onChange={(e) => {
                     setYear(e.target.value);
-                    setYearError(null);
+                    setFormError(null);
                   }}
-                  className={cn(yearError && "border-destructive ring-1 ring-destructive")}
                 />
-                {yearError && (
-                  <div className="text-xs text-destructive font-medium mt-1">
-                    {yearError}
-                  </div>
-                )}
               </div>
             )}
 
-            {/* Impact Level Chips with Radio Dots */}
+            {/* Phạm vi ảnh hưởng — 5 mức, DB lưu impact_level 1..5 */}
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-foreground">Cấp độ · Chọn 1 cấp độ</Label>
+              <Label className="text-xs font-medium text-foreground">Phạm vi ảnh hưởng · Chọn 1</Label>
               <div className="flex flex-wrap gap-2">
-                {levelOptions.map((lvl) => {
-                  const isSelected = impactLevel === lvl.key;
+                {IMPACT_LEVEL_OPTIONS.map((lvl) => {
+                  const isSelected = impactLevel === lvl.value;
                   return (
                     <button
-                      key={lvl.key}
+                      key={lvl.value}
                       type="button"
-                      onClick={() => setImpactLevel(lvl.key)}
+                      onClick={() => {
+                        setImpactLevel(lvl.value);
+                        setFormError(null);
+                      }}
                       className={cn(
                         "flex items-center rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer",
                         isSelected
@@ -358,9 +424,7 @@ export function Step5Extracurricular({
                       <span
                         className={cn(
                           "mr-1.5 flex size-3 items-center justify-center rounded-full border transition-all",
-                          isSelected
-                            ? "border-brand bg-brand"
-                            : "border-muted-foreground/50 bg-surface"
+                          isSelected ? "border-brand bg-brand" : "border-muted-foreground/50 bg-surface"
                         )}
                       >
                         {isSelected && <span className="size-1 rounded-full bg-white" />}
@@ -373,6 +437,8 @@ export function Step5Extracurricular({
             </div>
           </div>
 
+          {formError && <div className="text-xs text-destructive font-medium">{formError}</div>}
+
           {/* Form Actions */}
           <div className="flex justify-end gap-2 border-t border-line pt-3">
             <Button
@@ -381,7 +447,7 @@ export function Step5Extracurricular({
               size="sm"
               onClick={() => {
                 setShowAddForm(false);
-                setYearError(null);
+                resetForm();
               }}
               className="cursor-pointer"
             >
@@ -400,13 +466,19 @@ export function Step5Extracurricular({
         </section>
       )}
 
+      {listError && (
+        <div className="rounded-xl bg-destructive/10 p-3 text-xs text-destructive font-medium border border-destructive/20">
+          {listError}
+        </div>
+      )}
+
       {/* Bottom Actions */}
       <div className="flex justify-between pt-4 border-t border-line">
         <Button variant="outline" onClick={onPrev} size="lg" className="gap-1.5 cursor-pointer">
           <ArrowLeftIcon className="size-4" />
           Quay lại
         </Button>
-        <Button onClick={onNext} size="lg" className="gap-1.5 cursor-pointer">
+        <Button onClick={handleNextClick} size="lg" className="gap-1.5 cursor-pointer">
           Tiếp tục
           <ArrowRightIcon className="size-4" />
         </Button>

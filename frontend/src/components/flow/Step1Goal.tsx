@@ -14,7 +14,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import type { GoalDraft, ProfileMetadataResponse } from "@/types/profile-flow";
+import {
+  EDUCATION_LEVEL_OPTIONS,
+  SCHOOL_TYPE_OPTIONS,
+  getGradeOptionsForLevel,
+} from "@/lib/profile-flow-options";
+import type { CurrentEducationLevel, GoalDraft, ProfileMetadataResponse } from "@/types/profile-flow";
 
 interface Step1GoalProps {
   data: GoalDraft;
@@ -23,40 +28,15 @@ interface Step1GoalProps {
   onNext: () => void;
 }
 
-const currentLevelOptions = [
-  "Trung học cơ sở",
-  "Trung học phổ thông",
-  "Cao đẳng / Đại học",
-  "Thạc sĩ",
-];
-
-const schoolTypeOptions = [
-  { value: "all", label: "Không lọc" },
-  { value: "public", label: "Công lập" },
-  { value: "private", label: "Tư thục" },
-];
-
-const GRADUATION_YEAR_OPTIONS = [2026, 2027, 2028, 2029, 2030, 2031];
-
-function getGradeOptionsForLevel(level?: string): string[] {
-  switch (level) {
-    case "Trung học cơ sở":
-      return ["Lớp 6", "Lớp 7", "Lớp 8", "Lớp 9"];
-    case "Trung học phổ thông":
-      return ["Lớp 10", "Lớp 11", "Lớp 12"];
-    case "Cao đẳng / Đại học":
-      return ["Năm 1", "Năm 2", "Năm 3", "Năm 4", "Năm cuối", "Đã tốt nghiệp"];
-    case "Thạc sĩ":
-      return ["Năm 1", "Năm 2", "Đã tốt nghiệp"];
-    default:
-      return ["Lớp 10", "Lớp 11", "Lớp 12"];
-  }
-}
+// Năm tốt nghiệp dự kiến: năm nay → 6 năm tới
+const THIS_YEAR = new Date().getFullYear();
+const GRADUATION_YEAR_OPTIONS = Array.from({ length: 7 }, (_, i) => THIS_YEAR + i);
 
 export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) {
   const [majorQuery, setMajorQuery] = useState(data.targetMajor ?? "");
   const [showMajorDropdown, setShowMajorDropdown] = useState(false);
   const [majorError, setMajorError] = useState<string | null>(null);
+  const [levelError, setLevelError] = useState<string | null>(null);
 
   const [stateSearch, setStateSearch] = useState("");
   const [showStateDropdown, setShowStateDropdown] = useState(false);
@@ -95,22 +75,14 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
   // Grade options based on current level
   const gradeOptions = getGradeOptionsForLevel(data.currentEducationLevel);
 
-  const handleSelectEducationLevel = (opt: string) => {
-    const newGradeOptions = getGradeOptionsForLevel(opt);
-    const defaultGrade =
-      opt === "Trung học cơ sở"
-        ? "Lớp 9"
-        : opt === "Cao đẳng / Đại học"
-        ? "Năm 2"
-        : opt === "Thạc sĩ"
-        ? "Năm 1"
-        : "Lớp 11";
-    const currentGradeStillValid =
-      data.currentGrade && newGradeOptions.includes(data.currentGrade);
+  const handleSelectEducationLevel = (level: CurrentEducationLevel) => {
+    // Giữ lớp đã chọn nếu vẫn hợp lệ với cấp học mới, không thì để học sinh chọn lại
+    const stillValid = !!data.currentGrade && getGradeOptionsForLevel(level).includes(data.currentGrade);
     onUpdate({
-      currentEducationLevel: opt,
-      currentGrade: currentGradeStillValid ? data.currentGrade : defaultGrade,
+      currentEducationLevel: level,
+      currentGrade: stillValid ? data.currentGrade : null,
     });
+    setLevelError(null);
   };
 
   // 51 States from metadata
@@ -145,6 +117,16 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
   };
 
   const handleNextClick = () => {
+    if (!data.currentEducationLevel || !data.targetDegreeLevel) {
+      setLevelError(
+        !data.currentEducationLevel
+          ? "Vui lòng chọn cấp học hiện tại."
+          : "Vui lòng chọn bậc học muốn theo học ở Mỹ."
+      );
+      if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    setLevelError(null);
     if (!data.targetMajor || !data.targetMajor.trim()) {
       setMajorError("Vui lòng chọn hoặc nhập ngành học mong muốn trước khi tiếp tục.");
       setShowMajorDropdown(true);
@@ -219,13 +201,13 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
 
         {/* Level pills with explicit single-select radio dots */}
         <div className="flex flex-wrap gap-2.5">
-          {currentLevelOptions.map((opt) => {
-            const isSelected = data.currentEducationLevel === opt;
+          {EDUCATION_LEVEL_OPTIONS.map((opt) => {
+            const isSelected = data.currentEducationLevel === opt.value;
             return (
               <button
-                key={opt}
+                key={opt.value}
                 type="button"
-                onClick={() => handleSelectEducationLevel(opt)}
+                onClick={() => handleSelectEducationLevel(opt.value)}
                 className={cn(
                   "flex items-center rounded-full border px-4 py-2 text-sm font-medium transition-all cursor-pointer shadow-2xs",
                   isSelected
@@ -243,11 +225,12 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
                 >
                   {isSelected && <span className="size-1.5 rounded-full bg-white" />}
                 </span>
-                {opt}
+                {opt.label}
               </button>
             );
           })}
         </div>
+        {levelError && <p className="text-xs font-medium text-destructive">{levelError}</p>}
 
         {/* Dynamic Grade, School Name & Expected Graduation Year */}
         <div className="grid gap-4 sm:grid-cols-3 pt-2">
@@ -259,10 +242,14 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
             <div className="relative">
               <select
                 id="currentGrade"
-                value={data.currentGrade ?? gradeOptions[0]}
-                onChange={(e) => onUpdate({ currentGrade: e.target.value })}
+                value={data.currentGrade ?? ""}
+                disabled={gradeOptions.length === 0}
+                onChange={(e) => onUpdate({ currentGrade: e.target.value || null })}
                 className="w-full appearance-none rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground shadow-2xs focus:border-brand focus:outline-hidden focus:ring-1 focus:ring-brand cursor-pointer"
               >
+                <option value="">
+                  {gradeOptions.length ? "Chọn lớp / năm" : "Chọn cấp học trước"}
+                </option>
                 {gradeOptions.map((g) => (
                   <option key={g} value={g}>
                     {g}
@@ -299,7 +286,7 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
                   onUpdate({
                     expectedGraduationYear: e.target.value
                       ? Number(e.target.value)
-                      : undefined,
+                      : null,
                   })
                 }
                 className="w-full appearance-none rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground shadow-2xs focus:border-brand focus:outline-hidden focus:ring-1 focus:ring-brand cursor-pointer"
@@ -335,7 +322,10 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
               <button
                 key={lvl.key}
                 type="button"
-                onClick={() => onUpdate({ targetDegreeLevel: lvl.key })}
+                onClick={() => {
+                  onUpdate({ targetDegreeLevel: lvl.key });
+                  setLevelError(null);
+                }}
                 className={cn(
                   "flex flex-col items-start justify-between rounded-xl border p-4 text-left transition-all cursor-pointer h-full shadow-2xs",
                   isSelected
@@ -422,7 +412,7 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
                   type="button"
                   onClick={() => {
                     setMajorQuery("");
-                    onUpdate({ targetMajor: undefined });
+                    onUpdate({ targetMajor: null });
                     setShowMajorDropdown(true);
                   }}
                   className="p-0.5 text-muted-foreground hover:text-foreground cursor-pointer rounded"
@@ -633,7 +623,7 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
         <div className="space-y-1.5">
           <Label className="text-xs font-semibold text-foreground">Loại hình trường</Label>
           <div className="flex gap-2">
-            {schoolTypeOptions.map((opt) => {
+            {SCHOOL_TYPE_OPTIONS.map((opt) => {
               const current = data.targetSchoolType ?? "all";
               const isSelected = current === opt.value;
               return (

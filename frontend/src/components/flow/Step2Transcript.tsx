@@ -22,12 +22,23 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { profileFlowApi } from "@/lib/profile-flow-api";
-import type { AcademicYearDraft, SubjectDraft, TranscriptDraft } from "@/types/profile-flow";
+import { parseTermName } from "@/lib/profile-flow-options";
+import type {
+  AcademicYearDraft,
+  CurrentEducationLevel,
+  DraftTranscriptFile,
+  ExtractedTerm,
+  TranscriptDraft,
+} from "@/types/profile-flow";
 
 interface Step2TranscriptProps {
   data: TranscriptDraft;
-  currentEducationLevel?: string;
-  currentGrade?: string;
+  currentEducationLevel?: CurrentEducationLevel | null;
+  currentGrade?: string | null;
+  /** File bảng điểm nháp — BE lưu riêng ngoài draft */
+  draftTranscript?: DraftTranscriptFile | null;
+  onTranscriptUploaded?: (file: DraftTranscriptFile | null) => void;
+  onUploadingChange?: (uploading: boolean) => void;
   onUpdate: (updated: Partial<TranscriptDraft>) => void;
   onPrev: () => void;
   onNext: () => void;
@@ -46,10 +57,10 @@ const DEFAULT_SUBJECTS = [
 ];
 
 // Sinh danh sách 3 năm học gần nhất tính đến lớp/năm hiện tại
-function getInitialAcademicYears(level?: string, grade?: string): AcademicYearDraft[] {
+function getInitialAcademicYears(level?: CurrentEducationLevel | null, grade?: string | null): AcademicYearDraft[] {
   let gradeNames: string[] = ["Lớp 10", "Lớp 11", "Lớp 12"];
 
-  if (level === "Trung học cơ sở") {
+  if (level === "middle_school") {
     if (grade === "Lớp 9") {
       gradeNames = ["Lớp 7", "Lớp 8", "Lớp 9"];
     } else if (grade === "Lớp 8") {
@@ -61,7 +72,7 @@ function getInitialAcademicYears(level?: string, grade?: string): AcademicYearDr
     } else {
       gradeNames = ["Lớp 7", "Lớp 8", "Lớp 9"];
     }
-  } else if (level === "Trung học phổ thông") {
+  } else if (level === "high_school") {
     if (grade === "Lớp 12") {
       gradeNames = ["Lớp 10", "Lớp 11", "Lớp 12"];
     } else if (grade === "Lớp 11") {
@@ -71,7 +82,7 @@ function getInitialAcademicYears(level?: string, grade?: string): AcademicYearDr
     } else {
       gradeNames = ["Lớp 10", "Lớp 11", "Lớp 12"];
     }
-  } else if (level === "Cao đẳng / Đại học") {
+  } else if (level === "college_university") {
     if (grade === "Năm 4" || grade === "Năm cuối" || grade === "Đã tốt nghiệp") {
       gradeNames = ["Năm 2", "Năm 3", "Năm 4"];
     } else if (grade === "Năm 3") {
@@ -83,7 +94,7 @@ function getInitialAcademicYears(level?: string, grade?: string): AcademicYearDr
     } else {
       gradeNames = ["Năm 1", "Năm 2", "Năm 3"];
     }
-  } else if (level === "Thạc sĩ") {
+  } else if (level === "master") {
     if (grade === "Năm 2" || grade === "Đã tốt nghiệp") {
       gradeNames = ["Năm 1", "Năm 2"];
     } else {
@@ -99,6 +110,94 @@ function getInitialAcademicYears(level?: string, grade?: string): AcademicYearDr
       semester2Score: null,
     })),
   }));
+}
+
+const normalizeGrade = (g: string) =>
+  g.normalize("NFD").replace(/\p{M}/gu, "").replace(/đ/gi, "d").replace(/\s+/g, " ").trim().toLowerCase();
+
+// Tên gọi tắt / đầy đủ của cùng một môn → khóa chung, để "Văn" nhập tay và "Ngữ văn" từ OCR không thành 2 dòng
+const SUBJECT_ALIASES: Record<string, string> = {
+  van: "ngu van",
+  "toan hoc": "toan",
+  ly: "vat ly",
+  li: "vat ly",
+  "vat li": "vat ly",
+  hoa: "hoa hoc",
+  sinh: "sinh hoc",
+  su: "lich su",
+  dia: "dia ly",
+  "dia li": "dia ly",
+  anh: "tieng anh",
+  "anh van": "tieng anh",
+  "ngoai ngu": "tieng anh",
+  tin: "tin hoc",
+  "gd cd": "gdcd",
+  "giao duc cong dan": "gdcd",
+  "gd qp": "gdqp",
+  "gdqp-an": "gdqp",
+};
+const subjectKey = (name: string) => {
+  const n = normalizeGrade(name);
+  return SUBJECT_ALIASES[n] ?? n;
+};
+
+const gradeOrder = (gradeName: string) => {
+  const m = /^(lop|nam)\s*(\d+)$/.exec(normalizeGrade(gradeName));
+  return m ? (m[1] === "nam" ? 100 : 0) + Number(m[2]) : Number.MAX_SAFE_INTEGER;
+};
+
+type TermTarget = { gradeName: string | null; semester: 1 | 2 | "all" };
+
+// "Lớp 12 HK1" → { Lớp 12, 1 }; "Lớp 12 - Cả năm" → { Lớp 12, all }; tên lạ → { null, 1 } (gán vào năm đang mở)
+function resolveTerm(termName: string): TermTarget {
+  const parsed = parseTermName(termName);
+  if (parsed) return parsed;
+  const allYear = /^(.*?)\s*[-–]?\s*(cả năm|ca nam)\s*$/i.exec(termName.trim());
+  if (allYear) return { gradeName: allYear[1].trim() || null, semester: "all" };
+  return { gradeName: termName.trim() || null, semester: 1 };
+}
+
+// Gộp điểm OCR vào các năm học (không sửa trực tiếp object cũ)
+function mergeExtractedTerms(
+  years: AcademicYearDraft[],
+  terms: ExtractedTerm[],
+  fallbackIdx: number
+): AcademicYearDraft[] {
+  let result = years.map((y) => ({ ...y, subjects: y.subjects.map((s) => ({ ...s })) }));
+
+  for (const term of terms) {
+    const target = resolveTerm(term.termName || "");
+    let idx = target.gradeName
+      ? result.findIndex((y) => normalizeGrade(y.gradeName) === normalizeGrade(target.gradeName!))
+      : -1;
+
+    // Bảng điểm có khối chưa nằm trong danh sách (VD đang ở Lớp 11 nhưng tải cả Lớp 9) → thêm năm mới
+    if (idx === -1 && target.gradeName && /^(lop|nam)\s*\d+$/.test(normalizeGrade(target.gradeName))) {
+      result = [...result, { gradeName: target.gradeName, subjects: [] }];
+      idx = result.length - 1;
+    }
+    if (idx === -1) idx = Math.min(fallbackIdx, result.length - 1);
+    if (idx < 0) continue;
+
+    const subjects = result[idx].subjects;
+    for (const sc of term.scores) {
+      const name = sc.subject?.trim();
+      if (!name || typeof sc.score !== "number") continue;
+      let sub = subjects.find((x) => subjectKey(x.subjectName) === subjectKey(name));
+      if (!sub) {
+        sub = { subjectName: name, semester1Score: null, semester2Score: null };
+        subjects.push(sub);
+      }
+      if (target.semester === 2) sub.semester2Score = sc.score;
+      else if (target.semester === 1) sub.semester1Score = sc.score;
+      else {
+        sub.semester1Score ??= sc.score;
+        sub.semester2Score ??= sc.score;
+      }
+    }
+  }
+  // Năm mới thêm vào cuối → xếp lại Lớp 10, 11, 12 cho đúng thứ tự (sort ổn định, tên lạ giữ ở cuối)
+  return [...result].sort((a, b) => gradeOrder(a.gradeName) - gradeOrder(b.gradeName));
 }
 
 // Helper tính GPA thang 4 từ thang 10 theo công thức tuyến tính: GPA 4.0 = GPA 10 / 10 * 4.0
@@ -139,6 +238,9 @@ export function Step2Transcript({
   data,
   currentEducationLevel,
   currentGrade,
+  draftTranscript,
+  onTranscriptUploaded,
+  onUploadingChange,
   onUpdate,
   onPrev,
   onNext,
@@ -235,85 +337,56 @@ export function Step2Transcript({
     if (fileArray.length === 0) return;
 
     setIsUploading(true);
+    onUploadingChange?.(true);
     setUploadError(null);
     setOcrFailedNotice(null);
     setOcrSuccessNotice(null);
     setOcrWarnings([]);
 
     try {
-      const res = await profileFlowApi.uploadDraftTranscript(fileArray);
+      // BE chỉ nhận 1 file mỗi lần tải
+      const res = await profileFlowApi.uploadDraftTranscript(fileArray.slice(0, 1));
+      onTranscriptUploaded?.(res.draftTranscript ?? null);
 
-      if (res.ocrExtraction?.warnings && res.ocrExtraction.warnings.length > 0) {
-        setOcrWarnings(res.ocrExtraction.warnings);
+      if (res.warnings && res.warnings.length > 0) {
+        setOcrWarnings(res.warnings);
       }
 
-      // Kiểm tra nếu OCR bóc tách được môn học
-      if (res.ocrExtraction?.subjects && res.ocrExtraction.subjects.length > 0) {
-        const detectedGrade = res.ocrExtraction.detectedGrade ?? years[0]?.gradeName ?? "Lớp 10";
-        let targetIdx = years.findIndex((y) => y.gradeName.includes(detectedGrade));
-        if (targetIdx === -1) targetIdx = activeYearIndex;
+      const extractedTerms = (res.extractedTerms ?? []).filter((t) => t.scores?.length > 0);
 
-        const updatedYears = years.map((y, yIdx) => {
-          if (yIdx !== targetIdx) return y;
-
-          // Merge OCR subjects
-          const mergedSubjects: SubjectDraft[] = [...y.subjects];
-          for (const ocrSub of res.ocrExtraction!.subjects) {
-            const existing = mergedSubjects.find(
-              (s) => s.subjectName.toLowerCase() === ocrSub.subjectName.toLowerCase()
-            );
-            if (existing) {
-              if (ocrSub.semester1Score !== null && ocrSub.semester1Score !== undefined) {
-                existing.semester1Score = ocrSub.semester1Score;
-              }
-              if (ocrSub.semester2Score !== null && ocrSub.semester2Score !== undefined) {
-                existing.semester2Score = ocrSub.semester2Score;
-              }
-            } else {
-              mergedSubjects.push({
-                subjectName: ocrSub.subjectName,
-                semester1Score: ocrSub.semester1Score ?? null,
-                semester2Score: ocrSub.semester2Score ?? null,
-              });
-            }
-          }
-
-          return { ...y, subjects: mergedSubjects };
-        });
-
+      if (extractedTerms.length > 0) {
+        const updatedYears = mergeExtractedTerms(years, extractedTerms, activeYearIndex);
         const newGpas = calculateLinearGpa(updatedYears);
         onUpdate({
-          draftTranscriptFile: res.draftFile,
           academicYears: updatedYears,
           manualGpa10Scale: newGpas.gpa10,
           calculatedGpa4Scale: newGpas.gpa4,
         });
 
-        setActiveYearIndex(targetIdx);
         setShowManualTable(true);
 
-        const filledYearsCount = updatedYears.filter((y) =>
-          y.subjects.some((s) => s.semester1Score !== null || s.semester2Score !== null)
-        ).length;
+        const filledYears = updatedYears.filter((y) =>
+          y.subjects.some((s) => s.semester1Score != null || s.semester2Score != null)
+        );
 
-        if (filledYearsCount < updatedYears.length) {
+        if (filledYears.length < updatedYears.length) {
           const missingYears = updatedYears
-            .filter((y) => y.subjects.every((s) => s.semester1Score === null && s.semester2Score === null))
+            .filter((y) => y.subjects.every((s) => s.semester1Score == null && s.semester2Score == null))
             .map((y) => y.gradeName);
 
           setOcrSuccessNotice(
-            `Đã nhận diện ${res.ocrExtraction.subjects.length} môn của ${detectedGrade}. Lưu ý: Hồ sơ du học cần đủ điểm các năm (${updatedYears.map((y) => y.gradeName).join(", ")}). Bạn đang thiếu ${missingYears.join(", ")}. Vui lòng tiếp tục tải thêm ảnh bảng điểm hoặc tự điền điểm vào bảng bên dưới.`
+            `Đã nhận diện thành công điểm của ${filledYears.map((y) => y.gradeName).join(", ")}. Lưu ý: Hồ sơ du học cần đủ điểm các năm (${updatedYears.map((y) => y.gradeName).join(", ")}). Bạn đang còn thiếu ${missingYears.join(", ")}. Vui lòng tải thêm ảnh bảng điểm hoặc tự nhập các môn còn thiếu vào bảng bên dưới.`
           );
         } else {
           setOcrSuccessNotice(
-            `Đã nhận diện thành công ${res.ocrExtraction.subjects.length} môn học từ bảng điểm. Vui lòng kiểm tra lại điểm trong bảng bên dưới.`
+            `Đã nhận diện thành công đầy đủ điểm các năm (${filledYears.map((y) => y.gradeName).join(", ")}) từ bảng điểm. Vui lòng kiểm tra lại điểm trong bảng bên dưới.`
           );
         }
       } else {
         // Tải file lên được nhưng AI không đọc được điểm (ảnh mờ, scan lệch...)
-        onUpdate({ draftTranscriptFile: res.draftFile });
         setOcrFailedNotice(
-          "Hệ thống đã nhận tệp nhưng không thể trích xuất được bảng điểm (ảnh có thể bị mờ, chụp lệch, độ tương phản thấp hoặc không chứa bảng điểm học tập). Vui lòng gửi lại ảnh rõ nét hơn hoặc nhập điểm trực tiếp bằng tay."
+          res.ocrMessage ||
+            "Hệ thống đã nhận tệp nhưng không thể trích xuất được bảng điểm (ảnh có thể bị mờ, chụp lệch, độ tương phản thấp hoặc không chứa bảng điểm học tập). Vui lòng gửi lại ảnh rõ nét hơn hoặc nhập điểm trực tiếp bằng tay."
         );
       }
     } catch (err: unknown) {
@@ -324,6 +397,7 @@ export function Step2Transcript({
       );
     } finally {
       setIsUploading(false);
+      onUploadingChange?.(false);
     }
   };
 
@@ -386,12 +460,10 @@ export function Step2Transcript({
           Bước 2/6 · khoảng 1 phút
         </div>
         <h1 className="text-h1 text-foreground">
-          {showManualTable ? "Kiểm tra lại điểm của bạn" : "Tải bảng điểm của bạn lên"}
+          Bảng điểm học tập & Điểm số 3 năm
         </h1>
         <p className="text-body text-muted-foreground">
-          {showManualTable
-            ? "Hệ thống tự động tính điểm theo công thức chuẩn (GPA 4.0 = GPA 10 / 10 * 4.0). Bạn chỉ cần kiểm tra và chỉnh sửa điểm chưa đúng."
-            : "Chụp hoặc scan bảng điểm 3 năm gần nhất. Hệ thống AI sẽ tự động đọc điểm, bạn không phải gõ từng môn."}
+          Tải ảnh hoặc PDF bảng điểm để AI tự động trích xuất điểm các kỳ. Bạn có thể kiểm tra và chỉnh sửa điểm trực tiếp ngay ở bảng bên dưới.
         </p>
       </div>
 
@@ -399,7 +471,6 @@ export function Step2Transcript({
       <input
         id={fileInputId}
         type="file"
-        multiple
         accept="image/*,.pdf"
         className="hidden"
         onChange={(e) => e.target.files && handleFileUpload(e.target.files)}
@@ -471,103 +542,102 @@ export function Step2Transcript({
         </div>
       )}
 
-      {/* Upload Dropzone (Visible when not in manual table) */}
-      {!showManualTable ? (
-        <div className="space-y-4">
-          <div
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDragOver(true);
-            }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={(e) => {
-              e.preventDefault();
-              setDragOver(false);
-              if (e.dataTransfer.files) handleFileUpload(e.dataTransfer.files);
-            }}
-            className={cn(
-              "flex flex-col items-center justify-center rounded-2xl border-2 border-dashed p-8 sm:p-12 text-center transition-all",
-              dragOver
-                ? "border-brand bg-brand-wash/30 scale-[1.01]"
-                : "border-line bg-surface hover:border-brand/50 hover:bg-muted/20"
-            )}
-          >
-            {isUploading ? (
-              <div className="space-y-3">
-                <Loader2Icon className="mx-auto size-10 animate-spin text-brand" />
+      {/* 1. Vùng Upload bảng điểm (Luôn nằm ngay trên bảng điểm) */}
+      <div className="space-y-3">
+        <div
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragOver(true);
+          }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragOver(false);
+            if (e.dataTransfer.files) handleFileUpload(e.dataTransfer.files);
+          }}
+          className={cn(
+            "flex flex-col items-center justify-center rounded-2xl border-2 border-dashed p-6 sm:p-7 text-center transition-all",
+            dragOver
+              ? "border-brand bg-brand-wash/30 scale-[1.01]"
+              : "border-line bg-surface hover:border-brand/50 hover:bg-muted/10",
+            isUploading && "border-brand bg-brand-wash/20"
+          )}
+        >
+          {isUploading ? (
+            <div className="py-2 space-y-3 flex flex-col items-center">
+              <Loader2Icon className="size-9 animate-spin text-brand" />
+              <div className="space-y-1">
                 <div className="font-semibold text-sm text-foreground">
                   Đang phân tích bảng điểm bằng Ollama AI...
                 </div>
-                <div className="text-xs text-muted-foreground max-w-sm">
-                  Mô hình thị giác đang đọc các cột môn học và điểm số từ ảnh. Vui lòng đợi trong giây lát.
+                <div className="text-xs text-muted-foreground max-w-md">
+                  Mô hình thị giác đang đọc các cột môn học và bóc tách điểm số. Vui lòng đợi trong giây lát...
                 </div>
               </div>
-            ) : (
-              <div className="space-y-4 max-w-md">
-                <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-brand-wash text-brand">
-                  <UploadCloudIcon className="size-7" />
+            </div>
+          ) : (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 w-full">
+              <div className="flex items-center gap-3 text-left">
+                <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-brand-wash text-brand">
+                  <UploadCloudIcon className="size-6" />
                 </div>
                 <div>
-                  <div className="font-semibold text-base text-foreground">
-                    Kéo thả hoặc chọn tệp bảng điểm của bạn
+                  <div className="font-semibold text-sm text-foreground">
+                    Tải lên bảng điểm để AI tự động trích xuất
                   </div>
-                  <div className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                    Hỗ trợ file PDF hoặc ảnh chụp (PNG, JPG). Bạn có thể tải nhiều ảnh cùng lúc cho các kỳ.
-                    Hệ thống tự động tính GPA thang 4.0 và 10.
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    Hỗ trợ file PDF hoặc ảnh chụp (PNG, JPG). Mỗi lần tải 1 tệp; tải tiếp tệp khác để bổ sung các kỳ còn thiếu.
                   </div>
-                </div>
-
-                <div className="pt-2">
-                  <Button
-                    type="button"
-                    onClick={triggerFileInput}
-                    className="gap-2 cursor-pointer shadow-xs font-semibold text-sm"
-                  >
-                    <FileUpIcon className="size-4" />
-                    Chọn tệp từ máy
-                  </Button>
                 </div>
               </div>
-            )}
-          </div>
 
-          {uploadError && (
-            <div className="rounded-xl bg-destructive/10 p-3 text-xs text-destructive font-medium border border-destructive/20">
-              {uploadError}
+              <div className="flex items-center gap-2 shrink-0">
+                {draftTranscript && (
+                  <Badge variant="secondary" className="text-[11px] gap-1 px-2.5 py-1">
+                    <CheckCircle2Icon className="size-3 text-ok" />
+                    Đã tải file
+                  </Badge>
+                )}
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={triggerFileInput}
+                  className="gap-2 cursor-pointer shadow-xs font-semibold text-xs bg-brand hover:bg-brand-ink text-white"
+                >
+                  <FileUpIcon className="size-3.5" />
+                  {draftTranscript ? "Tải lại file khác" : "Chọn tệp từ máy"}
+                </Button>
+              </div>
             </div>
           )}
+        </div>
 
-          {/* Skip upload link */}
-          <div className="text-center pt-2">
+        {uploadError && (
+          <div className="rounded-xl bg-destructive/10 p-3 text-xs text-destructive font-medium border border-destructive/20">
+            {uploadError}
+          </div>
+        )}
+      </div>
+
+      {/* 2. Bảng điểm các năm học & thanh tóm tắt GPA (Nằm ngay phía dưới vùng upload) */}
+      <div className="space-y-6">
+        {/* File attached banner if any */}
+        {draftTranscript && (
+          <div className="flex items-center justify-between rounded-xl border border-line bg-surface p-3 text-xs">
+            <div className="flex items-center gap-2 text-foreground font-medium">
+              <FileTextIcon className="size-4 text-brand" />
+              <span>{draftTranscript.originalFileName}</span>
+              <Badge variant="secondary" className="text-[10px]">Đã quét AI</Badge>
+            </div>
             <button
               type="button"
-              onClick={() => setShowManualTable(true)}
+              onClick={triggerFileInput}
               className="text-xs font-semibold text-brand hover:underline cursor-pointer"
             >
-              Chưa có file bảng điểm? Nhập điểm bằng tay vào bảng 3 năm gần nhất →
+              Tải lại file khác
             </button>
           </div>
-        </div>
-      ) : (
-        /* Manual Table View with Years Tabs and Subjects */
-        <div className="space-y-6">
-          {/* File attached banner if any */}
-          {data.draftTranscriptFile && (
-            <div className="flex items-center justify-between rounded-xl border border-line bg-surface p-3 text-xs">
-              <div className="flex items-center gap-2 text-foreground font-medium">
-                <FileTextIcon className="size-4 text-brand" />
-                <span>{data.draftTranscriptFile.originalFileName}</span>
-                <Badge variant="secondary" className="text-[10px]">Đã quét</Badge>
-              </div>
-              <button
-                type="button"
-                onClick={triggerFileInput}
-                className="text-xs font-semibold text-brand hover:underline cursor-pointer"
-              >
-                Tải lại file khác
-              </button>
-            </div>
-          )}
+        )}
 
           {/* Academic Years Selector */}
           <div className="space-y-2">
@@ -577,7 +647,7 @@ export function Step2Transcript({
                   Bảng điểm các năm học (3 năm gần nhất)
                 </Label>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Đang hiển thị các năm học tính đến lớp {currentGrade || "hiện tại"}.
+                  Đang hiển thị các năm học tính đến {currentGrade || "lớp hiện tại"}.
                 </p>
               </div>
               <button
@@ -624,7 +694,7 @@ export function Step2Transcript({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-line/60">
-                    {years[activeYearIndex].subjects.map((sub, sIdx) => {
+                    {years[activeYearIndex].subjects.map((sub, sIdx, subjects) => {
                       const s1 = typeof sub.semester1Score === "number" ? sub.semester1Score : null;
                       const s2 = typeof sub.semester2Score === "number" ? sub.semester2Score : null;
                       const avg =
@@ -633,6 +703,13 @@ export function Step2Transcript({
                           : s1 !== null
                           ? s1
                           : s2;
+
+                      // Sau khi AI điền điểm, ô còn trống trong năm đã có điểm được tô vàng để nhắc kiểm tra
+                      const flagEmpty =
+                        ocrSuccessNotice !== null &&
+                        subjects.some((x) => x.semester1Score != null || x.semester2Score != null);
+                      const cellClass = (empty: boolean) =>
+                        cn("h-8 text-center text-xs w-20 mx-auto", flagEmpty && empty && "border-warn bg-warn-wash/40");
 
                       return (
                         <tr key={sIdx} className="hover:bg-muted/10 transition-colors">
@@ -650,7 +727,7 @@ export function Step2Transcript({
                               onChange={(e) =>
                                 handleScoreChange(activeYearIndex, sIdx, "semester1Score", e.target.value)
                               }
-                              className="h-8 text-center text-xs w-20 mx-auto"
+                              className={cellClass(s1 === null)}
                             />
                           </td>
                           <td className="py-1 px-2 text-center">
@@ -664,7 +741,7 @@ export function Step2Transcript({
                               onChange={(e) =>
                                 handleScoreChange(activeYearIndex, sIdx, "semester2Score", e.target.value)
                               }
-                              className="h-8 text-center text-xs w-20 mx-auto"
+                              className={cellClass(s2 === null)}
                             />
                           </td>
                           <td className="py-2 px-3 text-center font-bold text-foreground">
@@ -739,7 +816,6 @@ export function Step2Transcript({
             </div>
           </div>
         </div>
-      )}
 
       {/* Validation Error Notice */}
       {validationError && (

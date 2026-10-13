@@ -20,14 +20,16 @@ import type {
   CertificationDraft,
   FinancialDraft,
   ActivityDraft,
+  DraftTranscriptFile,
   ProfileFlowDraft,
   ProfileMetadataResponse,
 } from "@/types/profile-flow";
 
+// Không chọn sẵn cấp học / ngân sách / học bổng — học sinh phải tự chọn (BE validate khi commit)
 const INITIAL_DRAFT: ProfileFlowDraft = {
   step1: {
-    currentEducationLevel: "Trung học phổ thông",
-    currentGrade: "Lớp 11",
+    currentEducationLevel: null,
+    currentGrade: null,
     targetDegreeLevel: "undergraduate",
     targetStates: [],
     targetSchoolType: "all",
@@ -42,8 +44,8 @@ const INITIAL_DRAFT: ProfileFlowDraft = {
     otherTests: [],
   },
   step4: {
-    annualBudgetTier: "35k_50k",
-    needFinancialAid: "preferred",
+    annualBudgetTier: null,
+    needFinancialAid: null,
   },
   step5: {
     activities: [],
@@ -55,8 +57,9 @@ export function ProfileFlowWizard() {
   const { user } = useAuth();
 
   const [currentStep, setCurrentStep] = useState(1);
-  const [lastCompletedStep, setLastCompletedStep] = useState(0);
+  const [completedSteps, setCompletedSteps] = useState<number[]>([]);
   const [draft, setDraft] = useState<ProfileFlowDraft>(INITIAL_DRAFT);
+  const [draftTranscript, setDraftTranscript] = useState<DraftTranscriptFile | null>(null);
   const [metadata, setMetadata] = useState<ProfileMetadataResponse | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
@@ -66,6 +69,12 @@ export function ProfileFlowWizard() {
 
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isInitialMount = useRef(true);
+  const isUploadingRef = useRef(false);
+  const completedStepsRef = useRef<number[]>([]);
+  useEffect(() => {
+    completedStepsRef.current = completedSteps;
+  }, [completedSteps]);
+  const lastCompletedStep = completedSteps.length ? Math.max(...completedSteps) : 0;
 
   // 1. Tải siêu dữ liệu và trạng thái nháp khi vào trang
   useEffect(() => {
@@ -85,18 +94,11 @@ export function ProfileFlowWizard() {
 
         if (stateData) {
           setCurrentStep(stateData.currentStep || 1);
-          setLastCompletedStep(stateData.lastCompletedStep || 0);
+          setCompletedSteps(stateData.completedSteps ?? []);
+          setDraftTranscript(stateData.draftTranscript ?? null);
           const incomingDraft = stateData.draft;
           if (incomingDraft) {
-            setDraft((prev) => ({
-              ...prev,
-              ...incomingDraft,
-              step1: { ...prev.step1, ...incomingDraft.step1 },
-              step2: { ...prev.step2, ...incomingDraft.step2 },
-              step3: { ...prev.step3, ...incomingDraft.step3 },
-              step4: { ...prev.step4, ...incomingDraft.step4 },
-              step5: { ...prev.step5, ...incomingDraft.step5 },
-            }));
+            setDraft((prev) => mergeDraft(prev, incomingDraft));
           }
         } else if (typeof window !== "undefined") {
           // Fallback lưu nháp LocalStorage cho khách chưa đăng nhập
@@ -104,9 +106,9 @@ export function ProfileFlowWizard() {
           if (localDraftStr) {
             try {
               const parsed = JSON.parse(localDraftStr);
-              if (parsed?.draft) setDraft(parsed.draft);
+              if (parsed?.draft) setDraft(mergeDraft(INITIAL_DRAFT, parsed.draft));
               if (parsed?.currentStep) setCurrentStep(parsed.currentStep);
-              if (parsed?.lastCompletedStep) setLastCompletedStep(parsed.lastCompletedStep);
+              if (Array.isArray(parsed?.completedSteps)) setCompletedSteps(parsed.completedSteps);
             } catch {
               // ignore
             }
@@ -129,6 +131,21 @@ export function ProfileFlowWizard() {
     };
   }, [user]);
 
+  // Lưu nháp: đã đăng nhập → BE, khách → localStorage
+  const persistDraft = useCallback(
+    async (step: number, steps: number[], currentDraft: ProfileFlowDraft) => {
+      if (user) {
+        await profileFlowApi.saveDraft(step, steps, currentDraft);
+      } else if (typeof window !== "undefined") {
+        localStorage.setItem(
+          "usas_flow_draft",
+          JSON.stringify({ currentStep: step, completedSteps: steps, draft: currentDraft })
+        );
+      }
+    },
+    [user]
+  );
+
   // 2. Tự động lưu nháp (Debounce 1000ms)
   const triggerAutoSave = useCallback(
     (step: number, currentDraft: ProfileFlowDraft) => {
@@ -141,15 +158,9 @@ export function ProfileFlowWizard() {
       setSaveStatus("saving");
 
       saveTimerRef.current = setTimeout(async () => {
+        if (isUploadingRef.current) return;
         try {
-          if (user) {
-            await profileFlowApi.saveDraft(step, currentDraft);
-          } else if (typeof window !== "undefined") {
-            localStorage.setItem(
-              "usas_flow_draft",
-              JSON.stringify({ currentStep: step, lastCompletedStep, draft: currentDraft })
-            );
-          }
+          await persistDraft(step, completedStepsRef.current, currentDraft);
           setSaveStatus("saved");
         } catch (err: unknown) {
           console.error("Lưu nháp thất bại:", err);
@@ -157,7 +168,7 @@ export function ProfileFlowWizard() {
         }
       }, 1000);
     },
-    [user, lastCompletedStep]
+    [persistDraft]
   );
 
   // Helper cập nhật từng phần của bản nháp
@@ -209,15 +220,19 @@ export function ProfileFlowWizard() {
   // Điều hướng tới bước tiếp theo
   const handleNext = () => {
     const nextStep = Math.min(6, currentStep + 1);
-    const nextLastCompleted = Math.max(lastCompletedStep, currentStep);
+    const nextCompleted = completedSteps.includes(currentStep)
+      ? completedSteps
+      : [...completedSteps, currentStep].sort((a, b) => a - b);
 
-    setLastCompletedStep(nextLastCompleted);
+    setCompletedSteps(nextCompleted);
     setCurrentStep(nextStep);
 
-    // Lưu nháp ngay lập tức khi đổi bước
-    if (user) {
-      profileFlowApi.saveDraft(nextStep, draft).catch(() => null);
-    }
+    // Lưu nháp ngay khi đổi bước; huỷ lượt auto-save đang chờ để nó không ghi đè bước cũ
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    setSaveStatus("saving");
+    persistDraft(nextStep, nextCompleted, draft)
+      .then(() => setSaveStatus("saved"))
+      .catch(() => setSaveStatus("error"));
 
     if (typeof window !== "undefined") {
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -257,7 +272,7 @@ export function ProfileFlowWizard() {
         if (typeof window !== "undefined") {
           localStorage.setItem(
             "usas_flow_draft",
-            JSON.stringify({ currentStep: 6, lastCompletedStep: 6, draft })
+            JSON.stringify({ currentStep: 6, completedSteps: [1, 2, 3, 4, 5], draft })
           );
         }
         router.push("/login?redirect=/analysis");
@@ -324,6 +339,11 @@ export function ProfileFlowWizard() {
                 data={draft.step2}
                 currentEducationLevel={draft.step1.currentEducationLevel}
                 currentGrade={draft.step1.currentGrade}
+                draftTranscript={draftTranscript}
+                onTranscriptUploaded={setDraftTranscript}
+                onUploadingChange={(uploading) => {
+                  isUploadingRef.current = uploading;
+                }}
                 onUpdate={updateStep2}
                 onPrev={handlePrev}
                 onNext={handleNext}
@@ -361,6 +381,7 @@ export function ProfileFlowWizard() {
             {currentStep === 6 && (
               <Step6Review
                 draft={draft}
+                draftTranscript={draftTranscript}
                 metadata={metadata}
                 onEditStep={handleSelectStep}
                 onPrev={handlePrev}
@@ -382,4 +403,15 @@ export function ProfileFlowWizard() {
       </main>
     </div>
   );
+}
+
+// Gộp draft nhận về (BE hoặc localStorage) lên khung mặc định để không thiếu field nào
+function mergeDraft(base: ProfileFlowDraft, incoming: Partial<ProfileFlowDraft>): ProfileFlowDraft {
+  return {
+    step1: { ...base.step1, ...incoming.step1 },
+    step2: { ...base.step2, ...incoming.step2 },
+    step3: { ...base.step3, ...incoming.step3 },
+    step4: { ...base.step4, ...incoming.step4 },
+    step5: { activities: incoming.step5?.activities ?? base.step5.activities },
+  };
 }

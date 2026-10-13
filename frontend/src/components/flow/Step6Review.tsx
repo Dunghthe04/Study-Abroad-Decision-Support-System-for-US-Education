@@ -13,10 +13,20 @@ import {
   TrophyIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { ProfileFlowDraft, ProfileMetadataResponse } from "@/types/profile-flow";
+import {
+  ACTIVITY_ROLE_OPTIONS,
+  DEFAULT_BUDGET_TIERS,
+  EDUCATION_LEVEL_OPTIONS,
+  IMPACT_LEVEL_OPTIONS,
+  SCHOLARSHIP_NEED_OPTIONS,
+  SCHOOL_TYPE_OPTIONS,
+  labelOf,
+} from "@/lib/profile-flow-options";
+import type { DraftTranscriptFile, ProfileFlowDraft, ProfileMetadataResponse } from "@/types/profile-flow";
 
 interface Step6ReviewProps {
   draft: ProfileFlowDraft;
+  draftTranscript?: DraftTranscriptFile | null;
   metadata: ProfileMetadataResponse | null;
   onEditStep: (stepNumber: number) => void;
   onPrev: () => void;
@@ -26,6 +36,7 @@ interface Step6ReviewProps {
 
 export function Step6Review({
   draft,
+  draftTranscript,
   metadata,
   onEditStep,
   onPrev,
@@ -44,20 +55,17 @@ export function Step6Review({
   const studyLevelLabel =
     metadata?.studyLevels.find((l) => l.key === step1.targetDegreeLevel)?.label ??
     step1.targetDegreeLevel ??
-    "Đại học";
+    "Chưa chọn";
 
   // Budget Tier Label
   const budgetTierLabel =
     metadata?.budgetTiers.find((b) => b.key === step4.annualBudgetTier)?.label ??
-    step4.annualBudgetTier ??
+    DEFAULT_BUDGET_TIERS.find((b) => b.key === step4.annualBudgetTier)?.label ??
     "Chưa chọn";
 
   // Financial need label
-  const financialNeedMap: Record<string, string> = {
-    mandatory: "Bắt buộc có học bổng mới đi được",
-    preferred: "Nên có học bổng (càng nhiều càng tốt)",
-    not_needed: "Không cần học bổng (gia đình tự chi trả)",
-  };
+  const need = SCHOLARSHIP_NEED_OPTIONS.find((o) => o.value === step4.needFinancialAid);
+  const financialNeedLabel = need ? `${need.label} (${need.description.toLowerCase()})` : "Chưa chọn";
 
   // Transcript stats
   const totalSubjects = step2.academicYears?.reduce((sum, y) => sum + y.subjects.length, 0) ?? 0;
@@ -103,7 +111,7 @@ export function Step6Review({
           <div className="pt-3 text-xs space-y-1.5 text-muted-foreground leading-relaxed">
             <div>
               <strong className="text-foreground">Cấp học: </strong>
-              {step1.currentEducationLevel || "Chưa chọn"}
+              {labelOf(EDUCATION_LEVEL_OPTIONS, step1.currentEducationLevel) || "Chưa chọn"}
               {step1.currentGrade && ` · ${step1.currentGrade}`}
               {step1.currentSchool && ` · ${step1.currentSchool}`}
             </div>
@@ -115,8 +123,14 @@ export function Step6Review({
               <strong className="text-foreground">Ngành & Địa điểm: </strong>
               {step1.targetMajor || "Mọi ngành"}
               {stateNames && ` · Bang: ${stateNames}`}
-              {step1.targetSchoolType && ` · ${step1.targetSchoolType === "public" ? "Công lập" : step1.targetSchoolType === "private" ? "Tư thục" : "Không lọc loại trường"}`}
+              {step1.targetSchoolType && step1.targetSchoolType !== "all" && ` · ${labelOf(SCHOOL_TYPE_OPTIONS, step1.targetSchoolType)}`}
             </div>
+            {step1.expectedGraduationYear && (
+              <div>
+                <strong className="text-foreground">Năm tốt nghiệp dự kiến: </strong>
+                {step1.expectedGraduationYear}
+              </div>
+            )}
           </div>
         </div>
 
@@ -143,10 +157,10 @@ export function Step6Review({
                 <strong className="text-foreground">Dữ liệu điểm: </strong>
                 {totalYears > 0 ? `${totalYears} năm học · ${totalSubjects} môn học` : "Chưa nhập điểm"}
               </div>
-              {step2.draftTranscriptFile && (
+              {draftTranscript && (
                 <div className="text-[11px] text-ok mt-0.5 flex items-center gap-1">
                   <CheckCircle2Icon className="size-3" />
-                  Đã tải tệp: {step2.draftTranscriptFile.originalFileName}
+                  Đã tải tệp: {draftTranscript.originalFileName}
                 </div>
               )}
             </div>
@@ -178,7 +192,7 @@ export function Step6Review({
             <div>
               <strong className="text-foreground">Tiếng Anh: </strong>
               {step3.englishTestType && step3.englishTestType !== "none"
-                ? `${step3.englishTestType} ${step3.englishOverallScore ?? "–"}`
+                ? `${step3.englishTestType.toUpperCase()} ${step3.englishOverallScore ?? "–"}${step3.englishTestDate ? ` · thi ${step3.englishTestDate}` : ""}`
                 : "Chưa có"}
             </div>
             <div>
@@ -214,7 +228,7 @@ export function Step6Review({
             </div>
             <div>
               <strong className="text-foreground">Nhu cầu học bổng: </strong>
-              {financialNeedMap[step4.needFinancialAid ?? ""] || "Chưa xác định"}
+              {financialNeedLabel}
             </div>
           </div>
         </div>
@@ -238,13 +252,27 @@ export function Step6Review({
           </div>
           <div className="pt-3 text-xs text-muted-foreground">
             {step5.activities.length > 0 ? (
-              <div className="flex gap-4">
-                <span>
-                  <strong className="text-foreground">{activitiesCount}</strong> hoạt động ngoại khóa
-                </span>
-                <span>
-                  <strong className="text-foreground">{awardsCount}</strong> giải thưởng / thành tích
-                </span>
+              <div className="space-y-2">
+                <div className="flex gap-4">
+                  <span>
+                    <strong className="text-foreground">{activitiesCount}</strong> hoạt động ngoại khóa
+                  </span>
+                  <span>
+                    <strong className="text-foreground">{awardsCount}</strong> giải thưởng / thành tích
+                  </span>
+                </div>
+                <ul className="space-y-1">
+                  {step5.activities.map((a, i) => (
+                    <li key={a.id ?? i}>
+                      <strong className="text-foreground">{a.name}</strong>
+                      {" · "}
+                      {labelOf(IMPACT_LEVEL_OPTIONS, a.impactLevel) || "Chưa chọn phạm vi"}
+                      {a.category === "activity"
+                        ? ` · ${labelOf(ACTIVITY_ROLE_OPTIONS, a.role) || "Chưa chọn vai trò"}${a.durationMonths ? ` · ${a.durationMonths} tháng` : ""}`
+                        : ` · Năm ${a.year ?? "?"}`}
+                    </li>
+                  ))}
+                </ul>
               </div>
             ) : (
               <span>Chưa có hoạt động ngoại khóa</span>

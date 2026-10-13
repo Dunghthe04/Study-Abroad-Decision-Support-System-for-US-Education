@@ -25,9 +25,10 @@ export interface FinancialNeedLevelOption {
 }
 
 export interface ImpactLevelOption {
-  key: string;
+  id: ImpactLevel;
+  level: number;
   label: string;
-  weight: number;
+  desc?: string;
 }
 
 export interface CertificationTypeOption {
@@ -55,76 +56,87 @@ export interface ProfileMetadataResponse {
   offeringMajors: string[];
 }
 
+// ==========================================
+// Draft 6 bước — đúng 1 định dạng, BE lưu nguyên (ProfileFlowDraftDto)
+// ==========================================
+
+export type CurrentEducationLevel = "middle_school" | "high_school" | "college_university" | "master";
+export type TargetSchoolType = "all" | "public" | "private";
+export type EnglishTestType = "IELTS" | "TOEFL" | "Duolingo" | "none";
+export type BudgetTierId = "tier_under_20k" | "tier_20k_35k" | "tier_35k_50k" | "tier_50k_70k" | "tier_above_70k";
+export type ScholarshipNeed = "mandatory" | "preferred" | "optional";
+/** Phạm vi ảnh hưởng — DB lưu impact_level 1..5 theo thứ tự này. */
+export type ImpactLevel = "school" | "district" | "province" | "national" | "international";
+export type ActivityRole = "founder" | "leader" | "vice_leader" | "member";
+
 export interface GoalDraft {
-  currentEducationLevel?: string;
-  currentGrade?: string;
-  currentSchool?: string;
-  expectedGraduationYear?: number;
-  targetDegreeLevel?: string;
-  targetMajor?: string;
-  targetStates?: string[];
-  targetSchoolType?: string; // "all" | "public" | "private"
+  currentEducationLevel?: CurrentEducationLevel | null;
+  currentGrade?: string | null;
+  currentSchool?: string | null;
+  expectedGraduationYear?: number | null;
+  targetDegreeLevel?: string | null;
+  targetMajor?: string | null;
+  targetStates?: string[] | null;
+  targetSchoolType?: TargetSchoolType | null;
 }
 
 export interface SubjectDraft {
   subjectName: string;
   semester1Score?: number | null;
   semester2Score?: number | null;
-  finalScore?: number | null;
 }
 
 export interface AcademicYearDraft {
-  gradeName: string; // "Lớp 10", "Lớp 11", "Lớp 12", etc.
-  yearName?: string;
+  gradeName: string; // "Lớp 10", "Năm 1", ...
   subjects: SubjectDraft[];
 }
 
+/** File bảng điểm nháp — nằm ngoài draft (BE: DraftTranscriptInfoDto). */
 export interface DraftTranscriptFile {
-  fileId: string;
   originalFileName: string;
-  fileUrl: string;
-  fileSize: number;
-  uploadedAtUtc: string;
+  storedFileName: string;
+  relativePath: string;
+  fileSizeBytes: number;
+  contentType: string;
+  uploadedAt: string;
 }
 
 export interface TranscriptDraft {
-  draftTranscriptFile?: DraftTranscriptFile | null;
   academicYears: AcademicYearDraft[];
   calculatedGpa4Scale?: number | null;
   manualGpa10Scale?: number | null;
 }
 
 export interface OtherTestDraft {
-  testType: string; // "SAT" | "ACT" | "AP"
+  testType: "SAT" | "ACT" | "AP";
   score?: number | null;
-  details?: string;
 }
 
 export interface CertificationDraft {
-  englishTestType?: string; // "IELTS" | "TOEFL" | "Duolingo" | "none"
+  englishTestType?: EnglishTestType | null;
   englishOverallScore?: number | null;
-  englishTestDate?: string;
+  englishTestDate?: string | null; // "yyyy-MM"
   otherTests: OtherTestDraft[];
 }
 
 export interface FinancialDraft {
-  annualBudgetTier?: string;
-  annualBudgetUsd?: number | null;
-  needFinancialAid?: string; // "mandatory" | "preferred" | "not_needed"
-  financialNotes?: string;
+  annualBudgetTier?: BudgetTierId | null;
+  needFinancialAid?: ScholarshipNeed | null;
 }
 
 export interface ActivityDraft {
-  id?: string;
+  id?: string | null;
   name: string;
   category: "activity" | "achievement";
-  role?: string;
-  durationYears?: number;
-  startDate?: string;
-  endDate?: string;
-  isOngoing?: boolean;
-  impactLevel: string; // "school" | "province" | "national" | "international"
-  year?: number;
+  impactLevel?: ImpactLevel | null;
+  // Hoạt động
+  role?: ActivityRole | null;
+  startDate?: string | null; // "MM/yyyy"
+  endDate?: string | null; // "MM/yyyy"
+  isOngoing?: boolean | null;
+  durationMonths?: number | null;
+  // Giải thưởng
+  year?: number | null;
 }
 
 export interface ProfileFlowDraft {
@@ -139,35 +151,33 @@ export interface ProfileFlowDraft {
 
 export interface ProfileFlowState {
   currentStep: number;
+  completedSteps: number[];
   lastCompletedStep: number;
-  updatedAtUtc?: string | null;
-  draft?: ProfileFlowDraft | null;
-  stepData?: Record<string, unknown>;
-  completedSteps?: number[];
-  hasCommittedProfile?: boolean;
+  draft: ProfileFlowDraft;
+  draftTranscript?: DraftTranscriptFile | null;
+  lastUpdatedAt?: string | null;
+  hasCommittedProfile: boolean;
 }
 
-export interface OcrExtractedSubject {
-  subjectName: string;
-  semester1Score?: number | null;
-  semester2Score?: number | null;
-  finalScore?: number | null;
+export interface ExtractedSubjectScore {
+  subject: string;
+  score: number;
+  rawScore?: string;
+  credits?: number;
 }
 
-export interface OcrExtractionResult {
-  detectedGrade?: string | null;
-  detectedTerm?: string | null;
-  detectedGradingScale?: string | null;
-  subjects: OcrExtractedSubject[];
-  summaryGpa10?: number | null;
-  calculatedGpa4?: number | null;
-  confidenceScore: number;
-  warnings?: string[] | null;
+export interface ExtractedTerm {
+  termOrder?: number;
+  termName: string;
+  scores: ExtractedSubjectScore[];
 }
 
 export interface UploadDraftTranscriptResponse {
-  draftFile: DraftTranscriptFile;
-  ocrExtraction?: OcrExtractionResult | null;
+  draftTranscript: DraftTranscriptFile;
+  extractedTerms: ExtractedTerm[];
+  calculatedGpa4?: number | null;
+  ocrMessage?: string | null;
+  warnings?: string[] | null;
 }
 
 export interface CommitProfileFlowResponse {
@@ -175,5 +185,13 @@ export interface CommitProfileFlowResponse {
   succeeded?: boolean;
   message: string;
   profileId: string;
+  targetLevel?: string;
+  intendedMajor?: string | null;
+  overallGpa?: number | null;
+  extracurricularScore?: number | null;
+  budgetMinUsd?: number | null;
+  budgetMaxUsd?: number | null;
+  targetSchoolType?: string | null;
+  transcriptFileUrl?: string | null;
   committedAtUtc?: string;
 }
