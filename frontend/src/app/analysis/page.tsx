@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { ProfileFlowWizard } from "@/components/flow/ProfileFlowWizard";
 
 export const metadata: Metadata = {
@@ -8,5 +9,9 @@ export const metadata: Metadata = {
 };
 
 export default function AnalysisPage() {
-  return <ProfileFlowWizard />;
+  return (
+    <ProtectedRoute>
+      <ProfileFlowWizard />
+    </ProtectedRoute>
+  );
 }
