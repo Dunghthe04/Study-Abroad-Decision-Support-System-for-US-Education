@@ -41,27 +41,11 @@ namespace StudyAbroad.Application.Recommendations
         string? Control = null,             // public | private
         string? Website = null,
         int? InternationalStudents = null,
-        string? SatPolicy = null)            // required | optional | not_accepted)
+        string? SatPolicy = null,            // required | optional | not_accepted
+        bool? HasIntlAid = null)             // H6: có học bổng cho du học sinh không. null = chưa có dữ liệu
     {
         public decimal? TotalCostUsd =>
             TuitionUsd is null ? null : TuitionUsd + (LivingUsd ?? 0) + (FeesUsd ?? 0);
     }
-
-    //Điểm từng tiêu chí, 0-1,nếu ko có= null. English là phần tiếng Anh đã tính trong Academic, giữ riêng để giải thích
-    public record FitBreakdown(decimal? Academic, decimal? Finance, decimal? English,decimal? Extracurricular);
-
-    public record ScoredSchool(
-        SchoolCandidate Candidate,
-        AdmissionCategory AdmissionCategory,
-        decimal? Score,
-        decimal? TotalCostUsd,
-        bool CostUnknown,
-        FitBreakdown Fit,
-        EnglishStatus English = EnglishStatus.NoScore,   //để giao diện/giải thích ghi "cần IELTS ≥ 6.5"
-        bool OpenAdmission = false);                      //để giải thích ghi "trường tuyển sinh mở");
-
-    //Trạng thái điều kiện tiếng Anh của học sinh với trường
-    public enum EnglishStatus { Met, BelowMin, NoScore, Unknown }
-    //Met = đạt | BelowMin = chưa đạt mức tối thiểu | NoScore = HS chưa có điểm | Unknown = trường không công bố mức
 
 }
