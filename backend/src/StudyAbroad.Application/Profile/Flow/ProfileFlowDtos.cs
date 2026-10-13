@@ -14,7 +14,9 @@ public record ProfileFlowStateDto(
     [property: JsonPropertyName("stepData")] ProfileFlowStepDataDto StepData,
     [property: JsonPropertyName("draftTranscript")] DraftTranscriptInfoDto? DraftTranscript,
     [property: JsonPropertyName("lastUpdatedAt")] DateTime? LastUpdatedAt,
-    [property: JsonPropertyName("hasCommittedProfile")] bool HasCommittedProfile
+    [property: JsonPropertyName("hasCommittedProfile")] bool HasCommittedProfile,
+    [property: JsonPropertyName("draft")] object? Draft = null,
+    [property: JsonPropertyName("lastCompletedStep")] int? LastCompletedStep = 0
 );
 
 public record ProfileFlowStepDataDto(
@@ -26,73 +28,73 @@ public record ProfileFlowStepDataDto(
 );
 
 public record Step1GeneralDto(
-    [property: JsonPropertyName("targetLevel")] string? TargetLevel,
-    [property: JsonPropertyName("currentEducationLevel")] string? CurrentEducationLevel,
-    [property: JsonPropertyName("currentSchool")] string? CurrentSchool,
-    [property: JsonPropertyName("currentGrade")] string? CurrentGrade,
-    [property: JsonPropertyName("graduationYear")] int? GraduationYear,
-    [property: JsonPropertyName("intendedMajor")] string? IntendedMajor,
-    [property: JsonPropertyName("preferredStates")] List<string> PreferredStates,
-    [property: JsonPropertyName("institutionType")] string? InstitutionType
+    [property: JsonPropertyName("targetLevel")] string? TargetLevel = null,
+    [property: JsonPropertyName("currentEducationLevel")] string? CurrentEducationLevel = null,
+    [property: JsonPropertyName("currentSchool")] string? CurrentSchool = null,
+    [property: JsonPropertyName("currentGrade")] string? CurrentGrade = null,
+    [property: JsonPropertyName("graduationYear")] int? GraduationYear = null,
+    [property: JsonPropertyName("intendedMajor")] string? IntendedMajor = null,
+    [property: JsonPropertyName("preferredStates")] List<string>? PreferredStates = null,
+    [property: JsonPropertyName("institutionType")] string? InstitutionType = null
 );
 
 public record Step2TranscriptDto(
-    [property: JsonPropertyName("educationSystem")] string? EducationSystem,
-    [property: JsonPropertyName("gradeScale")] string? GradeScale,
-    [property: JsonPropertyName("calculatedGpa4")] decimal? CalculatedGpa4,
-    [property: JsonPropertyName("terms")] List<FlowTranscriptTermDto> Terms
+    [property: JsonPropertyName("educationSystem")] string? EducationSystem = null,
+    [property: JsonPropertyName("gradeScale")] string? GradeScale = null,
+    [property: JsonPropertyName("calculatedGpa4")] decimal? CalculatedGpa4 = null,
+    [property: JsonPropertyName("terms")] List<FlowTranscriptTermDto>? Terms = null
 );
 
 public record FlowTranscriptTermDto(
-    [property: JsonPropertyName("termOrder")] int TermOrder,
-    [property: JsonPropertyName("termName")] string TermName,
-    [property: JsonPropertyName("scores")] List<FlowTranscriptSubjectScoreDto> Scores
+    [property: JsonPropertyName("termOrder")] int TermOrder = 1,
+    [property: JsonPropertyName("termName")] string? TermName = null,
+    [property: JsonPropertyName("scores")] List<FlowTranscriptSubjectScoreDto>? Scores = null
 );
 
 public record FlowTranscriptSubjectScoreDto(
-    [property: JsonPropertyName("subject")] string Subject,
-    [property: JsonPropertyName("score")] decimal Score,
+    [property: JsonPropertyName("subject")] string? Subject = null,
+    [property: JsonPropertyName("score")] decimal Score = 0m,
     [property: JsonPropertyName("rawScore")] string? RawScore = null,
     [property: JsonPropertyName("credits")] decimal? Credits = 1m
 );
 
 public record Step3CertificationsDto(
-    [property: JsonPropertyName("englishTestType")] string? EnglishTestType,
-    [property: JsonPropertyName("ielts")] decimal? Ielts,
-    [property: JsonPropertyName("toefl")] decimal? Toefl,
-    [property: JsonPropertyName("duolingo")] decimal? Duolingo,
-    [property: JsonPropertyName("englishExamDate")] string? EnglishExamDate,
-    [property: JsonPropertyName("selectedStandardizedTests")] List<string> SelectedStandardizedTests,
-    [property: JsonPropertyName("sat")] decimal? Sat,
-    [property: JsonPropertyName("act")] decimal? Act,
-    [property: JsonPropertyName("ap")] decimal? Ap,
-    [property: JsonPropertyName("gre")] decimal? Gre,
-    [property: JsonPropertyName("gmat")] decimal? Gmat,
+    [property: JsonPropertyName("englishTestType")] string? EnglishTestType = null,
+    [property: JsonPropertyName("ielts")] decimal? Ielts = null,
+    [property: JsonPropertyName("toefl")] decimal? Toefl = null,
+    [property: JsonPropertyName("duolingo")] decimal? Duolingo = null,
+    [property: JsonPropertyName("englishExamDate")] string? EnglishExamDate = null,
+    [property: JsonPropertyName("selectedStandardizedTests")] List<string>? SelectedStandardizedTests = null,
+    [property: JsonPropertyName("sat")] decimal? Sat = null,
+    [property: JsonPropertyName("act")] decimal? Act = null,
+    [property: JsonPropertyName("ap")] decimal? Ap = null,
+    [property: JsonPropertyName("gre")] decimal? Gre = null,
+    [property: JsonPropertyName("gmat")] decimal? Gmat = null,
     [property: JsonPropertyName("otherTestsJson")] string? OtherTestsJson = null
 );
 
 public record Step4FinancialDto(
-    [property: JsonPropertyName("budgetTierId")] string? BudgetTierId,
-    [property: JsonPropertyName("annualBudgetUsd")] decimal? AnnualBudgetUsd,
-    [property: JsonPropertyName("scholarshipNeedId")] string? ScholarshipNeedId,
-    [property: JsonPropertyName("fundingSourceId")] string? FundingSourceId,
-    [property: JsonPropertyName("financialNotes")] string? FinancialNotes
+    [property: JsonPropertyName("budgetTierId")] string? BudgetTierId = null,
+    [property: JsonPropertyName("annualBudgetUsd")] decimal? AnnualBudgetUsd = null,
+    [property: JsonPropertyName("scholarshipNeedId")] string? ScholarshipNeedId = null,
+    [property: JsonPropertyName("fundingSourceId")] string? FundingSourceId = null,
+    [property: JsonPropertyName("financialNotes")] string? FinancialNotes = null
 );
 
 public record Step5ActivitiesDto(
-    [property: JsonPropertyName("items")] List<FlowActivityItemDto> Items
+    [property: JsonPropertyName("items")] List<FlowActivityItemDto>? Items = null
 );
 
 public record FlowActivityItemDto(
-    [property: JsonPropertyName("id")] Guid? Id,
-    [property: JsonPropertyName("type")] string Type,
-    [property: JsonPropertyName("title")] string Title,
-    [property: JsonPropertyName("role")] string? Role,
-    [property: JsonPropertyName("organization")] string? Organization,
-    [property: JsonPropertyName("impactLevel")] int ImpactLevel,
-    [property: JsonPropertyName("durationMonths")] int? DurationMonths,
-    [property: JsonPropertyName("year")] string? Year,
-    [property: JsonPropertyName("description")] string? Description
+    [property: JsonPropertyName("id")] Guid? Id = null,
+    [property: JsonPropertyName("type")] string? Type = null,
+    [property: JsonPropertyName("title")] string? Title = null,
+    [property: JsonPropertyName("role")] string? Role = null,
+    [property: JsonPropertyName("organization")] string? Organization = null,
+    [property: JsonPropertyName("impactLevel")] int? ImpactLevel = 1,
+    [property: JsonPropertyName("durationMonths")] int? DurationMonths = null,
+    [property: JsonPropertyName("year")] string? Year = null,
+    [property: JsonPropertyName("description")] string? Description = null
 );
 
 public record DraftTranscriptInfoDto(
@@ -115,12 +117,15 @@ public record UploadDraftTranscriptResultDto(
 
 public record SaveProfileDraftRequest(
     [property: JsonPropertyName("currentStep")] int CurrentStep,
-    [property: JsonPropertyName("completedSteps")] List<int>? CompletedSteps,
-    [property: JsonPropertyName("stepData")] ProfileFlowStepDataDto StepData
+    [property: JsonPropertyName("completedSteps")] List<int>? CompletedSteps = null,
+    [property: JsonPropertyName("stepData")] ProfileFlowStepDataDto? StepData = null,
+    [property: JsonPropertyName("flowState")] object? FlowState = null,
+    [property: JsonPropertyName("draft")] object? Draft = null
 );
 
 public record CommitProfileFlowRequest(
-    [property: JsonPropertyName("stepData")] ProfileFlowStepDataDto? StepData = null
+    [property: JsonPropertyName("stepData")] ProfileFlowStepDataDto? StepData = null,
+    [property: JsonPropertyName("finalDraft")] object? FinalDraft = null
 );
 
 public record CommitProfileFlowResponse(

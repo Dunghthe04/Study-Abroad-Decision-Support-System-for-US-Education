@@ -120,6 +120,9 @@ export interface ActivityDraft {
   category: "activity" | "achievement";
   role?: string;
   durationYears?: number;
+  startDate?: string;
+  endDate?: string;
+  isOngoing?: boolean;
   impactLevel: string; // "school" | "province" | "national" | "international"
   year?: number;
 }

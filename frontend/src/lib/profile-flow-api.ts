@@ -31,7 +31,11 @@ export const profileFlowApi = {
   saveDraft: async (currentStep: number, draft: ProfileFlowDraft): Promise<ProfileFlowState> => {
     return await apiFetch<ProfileFlowState>("/api/v1/profile/flow/draft", {
       method: "PUT",
-      body: JSON.stringify({ currentStep, flowState: draft }),
+      body: JSON.stringify({
+        currentStep,
+        draft,
+        flowState: draft,
+      }),
     });
   },
 

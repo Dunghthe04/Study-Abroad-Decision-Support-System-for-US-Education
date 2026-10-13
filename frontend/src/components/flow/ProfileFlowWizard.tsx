@@ -320,6 +320,8 @@ export function ProfileFlowWizard() {
             {currentStep === 2 && (
               <Step2Transcript
                 data={draft.step2}
+                currentEducationLevel={draft.step1.currentEducationLevel}
+                currentGrade={draft.step1.currentGrade}
                 onUpdate={updateStep2}
                 onPrev={handlePrev}
                 onNext={handleNext}

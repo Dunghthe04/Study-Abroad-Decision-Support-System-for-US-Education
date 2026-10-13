@@ -192,13 +192,18 @@ public class ProfileFlowService(
             }
         }
 
+        var rawDraft = request.Draft ?? request.FlowState;
+        var stepData = request.StepData ?? new ProfileFlowStepDataDto();
+
         var updatedState = new ProfileFlowStateDto(
             CurrentStep: request.CurrentStep,
             CompletedSteps: request.CompletedSteps ?? [],
-            StepData: request.StepData,
+            StepData: stepData,
             DraftTranscript: draftTranscript,
             LastUpdatedAt: DateTime.UtcNow,
-            HasCommittedProfile: profile.OverallGpa.HasValue || profile.AnnualBudgetUsd.HasValue
+            HasCommittedProfile: profile.OverallGpa.HasValue || profile.AnnualBudgetUsd.HasValue,
+            Draft: rawDraft,
+            LastCompletedStep: request.CompletedSteps?.Count > 0 ? request.CompletedSteps.Max() : (request.CurrentStep > 1 ? request.CurrentStep - 1 : 0)
         );
 
         profile.DraftFlowStateJson = JsonSerializer.Serialize(updatedState, JsonOptions);

@@ -49,7 +49,7 @@ public class ProfileFlowController(IProfileFlowService flowService) : Controller
     [ProducesResponseType(typeof(ProfileFlowStateDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> SaveDraft([FromBody] SaveProfileDraftRequest request, CancellationToken ct)
+    public async Task<IActionResult> SaveDraft([FromBody] SaveProfileDraftRequest? request, CancellationToken ct)
     {
         var userId = User.GetUserId();
         if (userId is null)
@@ -57,12 +57,13 @@ public class ProfileFlowController(IProfileFlowService flowService) : Controller
             return Unauthorized(new { error = "Không tìm thấy thông tin xác thực của người dùng." });
         }
 
-        if (request.CurrentStep < 1 || request.CurrentStep > 6)
+        var req = request ?? new SaveProfileDraftRequest(CurrentStep: 1);
+        if (req.CurrentStep < 1 || req.CurrentStep > 6)
         {
             return BadRequest(new { error = "Bước hiện tại phải từ 1 đến 6." });
         }
 
-        var updatedState = await flowService.SaveDraftAsync(userId.Value, request, ct);
+        var updatedState = await flowService.SaveDraftAsync(userId.Value, req, ct);
         return Ok(updatedState);
     }
 

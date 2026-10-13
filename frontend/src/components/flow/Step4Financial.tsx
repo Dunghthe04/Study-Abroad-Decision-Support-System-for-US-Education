@@ -56,7 +56,7 @@ export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Ste
           Gia đình bạn dự định chi bao nhiêu cho một năm học?
         </h1>
         <p className="text-body text-muted-foreground">
-          Chọn mức gần đúng nhất, không cần chính xác. Chúng tôi dùng nó để loại các trường quá tầm tài chính.
+          Chọn một mức gần đúng nhất (chọn 1 mức duy nhất). Chúng tôi dùng nó để loại các trường vượt ngân sách của bạn.
         </p>
       </div>
 
@@ -65,10 +65,10 @@ export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Ste
         <div>
           <Label className="text-sm font-semibold text-foreground flex items-center gap-1.5">
             <DollarSignIcon className="size-4 text-brand" />
-            Mức ngân sách mỗi năm
+            Mức ngân sách mỗi năm · Chọn 1 mức phù hợp nhất
           </Label>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Gồm học phí và chi phí ăn ở. Chưa gồm vé máy bay.
+            Gồm học phí và chi phí ăn ở mỗi năm (chưa gồm vé máy bay).
           </p>
         </div>
 
@@ -86,14 +86,26 @@ export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Ste
                   })
                 }
                 className={cn(
-                  "flex flex-col items-start justify-between rounded-xl border p-4 text-left transition-all cursor-pointer h-full",
+                  "flex flex-col items-start justify-between rounded-xl border p-4 text-left transition-all cursor-pointer h-full shadow-2xs",
                   isSelected
                     ? "border-brand bg-brand-wash/40 ring-2 ring-brand text-brand-ink"
                     : "border-line bg-surface hover:border-brand/40 hover:bg-muted/30"
                 )}
               >
-                <div className="font-semibold text-sm text-foreground">{tier.label}</div>
-                <div className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                <div className="flex items-center justify-between w-full">
+                  <div className="font-semibold text-sm text-foreground">{tier.label}</div>
+                  <div
+                    className={cn(
+                      "size-4 rounded-full border flex items-center justify-center shrink-0 transition-all ml-2",
+                      isSelected
+                        ? "border-brand bg-brand"
+                        : "border-muted-foreground/40 bg-surface"
+                    )}
+                  >
+                    {isSelected && <div className="size-1.5 rounded-full bg-white" />}
+                  </div>
+                </div>
+                <div className="text-xs text-muted-foreground mt-2 line-clamp-2">
                   {tier.description}
                 </div>
               </button>
@@ -107,7 +119,7 @@ export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Ste
         <div>
           <Label className="text-sm font-semibold text-foreground flex items-center gap-1.5">
             <HelpCircleIcon className="size-4 text-brand" />
-            Bạn có cần học bổng để theo học được không?
+            Bạn có cần học bổng để theo học được không? · Chọn 1 lựa chọn
           </Label>
         </div>
 
@@ -120,14 +132,26 @@ export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Ste
                 type="button"
                 onClick={() => onUpdate({ needFinancialAid: opt.key })}
                 className={cn(
-                  "flex flex-col items-start justify-between rounded-xl border p-4 text-left transition-all cursor-pointer h-full",
+                  "flex flex-col items-start justify-between rounded-xl border p-4 text-left transition-all cursor-pointer h-full shadow-2xs",
                   isSelected
                     ? "border-brand bg-brand-wash/40 ring-2 ring-brand text-brand-ink"
                     : "border-line bg-surface hover:border-brand/40 hover:bg-muted/30"
                 )}
               >
-                <div className="font-semibold text-sm text-foreground">{opt.title}</div>
-                <div className="text-xs text-muted-foreground mt-1">{opt.description}</div>
+                <div className="flex items-center justify-between w-full">
+                  <div className="font-semibold text-sm text-foreground">{opt.title}</div>
+                  <div
+                    className={cn(
+                      "size-4 rounded-full border flex items-center justify-center shrink-0 transition-all ml-2",
+                      isSelected
+                        ? "border-brand bg-brand"
+                        : "border-muted-foreground/40 bg-surface"
+                    )}
+                  >
+                    {isSelected && <div className="size-1.5 rounded-full bg-white" />}
+                  </div>
+                </div>
+                <div className="text-xs text-muted-foreground mt-2">{opt.description}</div>
               </button>
             );
           })}
@@ -136,11 +160,11 @@ export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Ste
 
       {/* Bottom Actions */}
       <div className="flex justify-between pt-4 border-t border-line">
-        <Button variant="outline" onClick={onPrev} size="lg" className="gap-1.5">
+        <Button variant="outline" onClick={onPrev} size="lg" className="gap-1.5 cursor-pointer">
           <ArrowLeftIcon className="size-4" />
           Quay lại
         </Button>
-        <Button onClick={onNext} size="lg" className="gap-1.5">
+        <Button onClick={onNext} size="lg" className="gap-1.5 cursor-pointer">
           Tiếp tục
           <ArrowRightIcon className="size-4" />
         </Button>

@@ -5,12 +5,15 @@ import {
   AlertTriangleIcon,
   ArrowLeftIcon,
   ArrowRightIcon,
+  CheckCircle2Icon,
   FileTextIcon,
   FileUpIcon,
   Loader2Icon,
   PlusIcon,
+  RefreshCwIcon,
   Trash2Icon,
   UploadCloudIcon,
+  Edit3Icon,
 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +26,8 @@ import type { AcademicYearDraft, SubjectDraft, TranscriptDraft } from "@/types/p
 
 interface Step2TranscriptProps {
   data: TranscriptDraft;
+  currentEducationLevel?: string;
+  currentGrade?: string;
   onUpdate: (updated: Partial<TranscriptDraft>) => void;
   onPrev: () => void;
   onNext: () => void;
@@ -40,22 +45,63 @@ const DEFAULT_SUBJECTS = [
   "Địa lý",
 ];
 
-const DEFAULT_YEARS: AcademicYearDraft[] = [
-  {
-    gradeName: "Lớp 10",
-    subjects: DEFAULT_SUBJECTS.map((s) => ({ subjectName: s, semester1Score: null, semester2Score: null })),
-  },
-  {
-    gradeName: "Lớp 11",
-    subjects: DEFAULT_SUBJECTS.map((s) => ({ subjectName: s, semester1Score: null, semester2Score: null })),
-  },
-  {
-    gradeName: "Lớp 12",
-    subjects: DEFAULT_SUBJECTS.map((s) => ({ subjectName: s, semester1Score: null, semester2Score: null })),
-  },
-];
+// Sinh danh sách 3 năm học gần nhất tính đến lớp/năm hiện tại
+function getInitialAcademicYears(level?: string, grade?: string): AcademicYearDraft[] {
+  let gradeNames: string[] = ["Lớp 10", "Lớp 11", "Lớp 12"];
 
-// Helper tính GPA thang 4 từ thang 10 theo công thức tuyến tính người dùng yêu cầu: GPA 4.0 = GPA 10 / 10 * 4.0
+  if (level === "Trung học cơ sở") {
+    if (grade === "Lớp 9") {
+      gradeNames = ["Lớp 7", "Lớp 8", "Lớp 9"];
+    } else if (grade === "Lớp 8") {
+      gradeNames = ["Lớp 6", "Lớp 7", "Lớp 8"];
+    } else if (grade === "Lớp 7") {
+      gradeNames = ["Lớp 6", "Lớp 7"];
+    } else if (grade === "Lớp 6") {
+      gradeNames = ["Lớp 6"];
+    } else {
+      gradeNames = ["Lớp 7", "Lớp 8", "Lớp 9"];
+    }
+  } else if (level === "Trung học phổ thông") {
+    if (grade === "Lớp 12") {
+      gradeNames = ["Lớp 10", "Lớp 11", "Lớp 12"];
+    } else if (grade === "Lớp 11") {
+      gradeNames = ["Lớp 9", "Lớp 10", "Lớp 11"];
+    } else if (grade === "Lớp 10") {
+      gradeNames = ["Lớp 8", "Lớp 9", "Lớp 10"];
+    } else {
+      gradeNames = ["Lớp 10", "Lớp 11", "Lớp 12"];
+    }
+  } else if (level === "Cao đẳng / Đại học") {
+    if (grade === "Năm 4" || grade === "Năm cuối" || grade === "Đã tốt nghiệp") {
+      gradeNames = ["Năm 2", "Năm 3", "Năm 4"];
+    } else if (grade === "Năm 3") {
+      gradeNames = ["Năm 1", "Năm 2", "Năm 3"];
+    } else if (grade === "Năm 2") {
+      gradeNames = ["Năm 1", "Năm 2"];
+    } else if (grade === "Năm 1") {
+      gradeNames = ["Năm 1"];
+    } else {
+      gradeNames = ["Năm 1", "Năm 2", "Năm 3"];
+    }
+  } else if (level === "Thạc sĩ") {
+    if (grade === "Năm 2" || grade === "Đã tốt nghiệp") {
+      gradeNames = ["Năm 1", "Năm 2"];
+    } else {
+      gradeNames = ["Năm 1"];
+    }
+  }
+
+  return gradeNames.map((g) => ({
+    gradeName: g,
+    subjects: DEFAULT_SUBJECTS.map((s) => ({
+      subjectName: s,
+      semester1Score: null,
+      semester2Score: null,
+    })),
+  }));
+}
+
+// Helper tính GPA thang 4 từ thang 10 theo công thức tuyến tính: GPA 4.0 = GPA 10 / 10 * 4.0
 function calculateLinearGpa(years: AcademicYearDraft[]): { gpa10: number | null; gpa4: number | null } {
   let totalScore10 = 0;
   let count = 0;
@@ -89,14 +135,30 @@ function calculateLinearGpa(years: AcademicYearDraft[]): { gpa10: number | null;
   return { gpa10, gpa4 };
 }
 
-export function Step2Transcript({ data, onUpdate, onPrev, onNext }: Step2TranscriptProps) {
-  const years = data.academicYears && data.academicYears.length > 0 ? data.academicYears : DEFAULT_YEARS;
+export function Step2Transcript({
+  data,
+  currentEducationLevel,
+  currentGrade,
+  onUpdate,
+  onPrev,
+  onNext,
+}: Step2TranscriptProps) {
+  // Khởi tạo các năm học dựa theo bậc học & lớp hiện tại của người dùng
+  const defaultYears = getInitialAcademicYears(currentEducationLevel, currentGrade);
+  const years = data.academicYears && data.academicYears.length > 0 ? data.academicYears : defaultYears;
+
   const [activeYearIndex, setActiveYearIndex] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [ocrFailedNotice, setOcrFailedNotice] = useState<string | null>(null);
+  const [ocrSuccessNotice, setOcrSuccessNotice] = useState<string | null>(null);
   const [ocrWarnings, setOcrWarnings] = useState<string[]>([]);
   const [showManualTable, setShowManualTable] = useState(
-    Boolean(data.academicYears && data.academicYears.length > 0 && data.academicYears.some((y) => y.subjects.some((s) => s.semester1Score !== null)))
+    Boolean(
+      data.academicYears &&
+        data.academicYears.length > 0 &&
+        data.academicYears.some((y) => y.subjects.some((s) => s.semester1Score !== null || s.semester2Score !== null))
+    )
   );
   const [dragOver, setDragOver] = useState(false);
   const fileInputId = useId();
@@ -159,12 +221,22 @@ export function Step2Transcript({ data, onUpdate, onPrev, onNext }: Step2Transcr
     });
   };
 
+  const triggerFileInput = () => {
+    const el = document.getElementById(fileInputId) as HTMLInputElement | null;
+    if (el) {
+      el.value = "";
+      el.click();
+    }
+  };
+
   const handleFileUpload = async (files: FileList | File[]) => {
     const fileArray = Array.from(files);
     if (fileArray.length === 0) return;
 
     setIsUploading(true);
     setUploadError(null);
+    setOcrFailedNotice(null);
+    setOcrSuccessNotice(null);
     setOcrWarnings([]);
 
     try {
@@ -174,9 +246,9 @@ export function Step2Transcript({ data, onUpdate, onPrev, onNext }: Step2Transcr
         setOcrWarnings(res.ocrExtraction.warnings);
       }
 
-      // If OCR extracted subjects, map them into the current active grade or detected grade
+      // Kiểm tra nếu OCR bóc tách được môn học
       if (res.ocrExtraction?.subjects && res.ocrExtraction.subjects.length > 0) {
-        const detectedGrade = res.ocrExtraction.detectedGrade ?? "Lớp 10";
+        const detectedGrade = res.ocrExtraction.detectedGrade ?? years[0]?.gradeName ?? "Lớp 10";
         let targetIdx = years.findIndex((y) => y.gradeName.includes(detectedGrade));
         if (targetIdx === -1) targetIdx = activeYearIndex;
 
@@ -217,13 +289,23 @@ export function Step2Transcript({ data, onUpdate, onPrev, onNext }: Step2Transcr
         });
 
         setActiveYearIndex(targetIdx);
+        setShowManualTable(true);
+        setOcrSuccessNotice(
+          `Đã nhận diện thành công ${res.ocrExtraction.subjects.length} môn học từ bảng điểm. Vui lòng kiểm tra lại điểm trong bảng bên dưới.`
+        );
       } else {
+        // Tải file lên được nhưng AI không đọc được điểm (ảnh mờ, scan lệch...)
         onUpdate({ draftTranscriptFile: res.draftFile });
+        setOcrFailedNotice(
+          "Hệ thống đã nhận tệp nhưng không thể trích xuất được bảng điểm (ảnh có thể bị mờ, chụp lệch, độ tương phản thấp hoặc không chứa bảng điểm học tập). Vui lòng gửi lại ảnh rõ nét hơn hoặc nhập điểm trực tiếp bằng tay."
+        );
       }
-
-      setShowManualTable(true);
     } catch (err: unknown) {
-      setUploadError(err instanceof Error ? err.message : "Đã có lỗi khi tải tệp bảng điểm");
+      const msg = err instanceof Error ? err.message : "Đã có lỗi khi xử lý tệp bảng điểm";
+      setUploadError(msg);
+      setOcrFailedNotice(
+        "Không thể đọc bảng điểm từ tệp này. Bạn có thể thử chụp lại ảnh rõ nét hơn hoặc chuyển sang tự nhập điểm bằng tay."
+      );
     } finally {
       setIsUploading(false);
     }
@@ -241,10 +323,20 @@ export function Step2Transcript({ data, onUpdate, onPrev, onNext }: Step2Transcr
         </h1>
         <p className="text-body text-muted-foreground">
           {showManualTable
-            ? "Hệ thống đã tự động tính điểm theo công thức chuẩn. Bạn chỉ cần sửa ô nào chưa đúng."
-            : "Đây là cách nhanh nhất. Bạn không phải gõ từng môn."}
+            ? "Hệ thống tự động tính điểm theo công thức chuẩn (GPA 4.0 = GPA 10 / 10 * 4.0). Bạn chỉ cần kiểm tra và chỉnh sửa điểm chưa đúng."
+            : "Chụp hoặc scan bảng điểm 3 năm gần nhất. Hệ thống AI sẽ tự động đọc điểm, bạn không phải gõ từng môn."}
         </p>
       </div>
+
+      {/* Hidden file input */}
+      <input
+        id={fileInputId}
+        type="file"
+        multiple
+        accept="image/*,.pdf"
+        className="hidden"
+        onChange={(e) => e.target.files && handleFileUpload(e.target.files)}
+      />
 
       {/* OCR Warnings if any */}
       {ocrWarnings.length > 0 && (
@@ -259,7 +351,60 @@ export function Step2Transcript({ data, onUpdate, onPrev, onNext }: Step2Transcr
         </Alert>
       )}
 
-      {/* Upload Dropzone (Visible when not in manual table, or toggleable) */}
+      {/* OCR Success notice */}
+      {ocrSuccessNotice && (
+        <Alert className="border-brand/40 bg-brand-wash/40">
+          <CheckCircle2Icon className="size-4 text-brand" />
+          <AlertTitle className="text-sm font-semibold text-brand">Đã trích xuất điểm thành công</AlertTitle>
+          <AlertDescription className="text-xs text-brand-ink">{ocrSuccessNotice}</AlertDescription>
+        </Alert>
+      )}
+
+      {/* OCR Failure & Re-upload or Manual Entry Card */}
+      {ocrFailedNotice && (
+        <div className="rounded-2xl border-2 border-warn/60 bg-warn-wash/30 p-5 space-y-3 animate-in fade-in-50">
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-xl bg-warn-wash text-warn shrink-0">
+              <AlertTriangleIcon className="size-5" />
+            </div>
+            <div className="space-y-1">
+              <div className="font-semibold text-sm text-foreground">
+                Chưa nhận diện được dữ liệu từ bảng điểm
+              </div>
+              <div className="text-xs text-muted-foreground leading-relaxed">
+                {ocrFailedNotice}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2 pt-2 border-t border-warn/20">
+            <Button
+              type="button"
+              size="sm"
+              onClick={triggerFileInput}
+              className="gap-1.5 cursor-pointer bg-brand hover:bg-brand-ink text-xs font-semibold text-white"
+            >
+              <RefreshCwIcon className="size-3.5" />
+              Chọn ảnh / tệp khác rõ nét hơn
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setShowManualTable(true);
+                setOcrFailedNotice(null);
+              }}
+              className="gap-1.5 cursor-pointer text-xs font-semibold"
+            >
+              <Edit3Icon className="size-3.5" />
+              Chuyển sang điền điểm bằng tay
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Upload Dropzone (Visible when not in manual table) */}
       {!showManualTable ? (
         <div className="space-y-4">
           <div
@@ -287,7 +432,7 @@ export function Step2Transcript({ data, onUpdate, onPrev, onNext }: Step2Transcr
                   Đang phân tích bảng điểm bằng Ollama AI...
                 </div>
                 <div className="text-xs text-muted-foreground max-w-sm">
-                  Mô hình thị giác đang đọc các cột môn học và học kỳ trong ảnh/PDF. Vui lòng đợi trong giây lát.
+                  Mô hình thị giác đang đọc các cột môn học và điểm số từ ảnh. Vui lòng đợi trong giây lát.
                 </div>
               </div>
             ) : (
@@ -297,36 +442,30 @@ export function Step2Transcript({ data, onUpdate, onPrev, onNext }: Step2Transcr
                 </div>
                 <div>
                   <div className="font-semibold text-base text-foreground">
-                    Kéo thả hoặc chọn bảng điểm của bạn
+                    Kéo thả hoặc chọn tệp bảng điểm của bạn
                   </div>
                   <div className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                    Hỗ trợ tệp PDF hoặc ảnh chụp (PNG, JPG). Bạn có thể chọn nhiều ảnh cùng lúc cho từng kỳ.
-                    Hệ thống sẽ tự đọc điểm, bạn chỉ cần kiểm tra lại.
+                    Hỗ trợ file PDF hoặc ảnh chụp (PNG, JPG). Bạn có thể tải nhiều ảnh cùng lúc cho các kỳ.
+                    Hệ thống tự động tính GPA thang 4.0 và 10.
                   </div>
                 </div>
 
                 <div className="pt-2">
-                  <input
-                    id={fileInputId}
-                    type="file"
-                    multiple
-                    accept="image/*,.pdf"
-                    className="hidden"
-                    onChange={(e) => e.target.files && handleFileUpload(e.target.files)}
-                  />
-                  <label htmlFor={fileInputId}>
-                    <span className="inline-flex items-center gap-2 rounded-xl bg-brand px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-brand-ink cursor-pointer transition-colors">
-                      <FileUpIcon className="size-4" />
-                      Chọn tệp từ máy
-                    </span>
-                  </label>
+                  <Button
+                    type="button"
+                    onClick={triggerFileInput}
+                    className="gap-2 cursor-pointer shadow-xs font-semibold text-sm"
+                  >
+                    <FileUpIcon className="size-4" />
+                    Chọn tệp từ máy
+                  </Button>
                 </div>
               </div>
             )}
           </div>
 
           {uploadError && (
-            <div className="rounded-lg bg-risk-wash p-3 text-xs text-risk font-medium">
+            <div className="rounded-xl bg-destructive/10 p-3 text-xs text-destructive font-medium border border-destructive/20">
               {uploadError}
             </div>
           )}
@@ -338,7 +477,7 @@ export function Step2Transcript({ data, onUpdate, onPrev, onNext }: Step2Transcr
               onClick={() => setShowManualTable(true)}
               className="text-xs font-semibold text-brand hover:underline cursor-pointer"
             >
-              Chưa có bảng điểm? Nhập tay
+              Chưa có file bảng điểm? Nhập điểm bằng tay vào bảng 3 năm gần nhất →
             </button>
           </div>
         </div>
@@ -355,10 +494,10 @@ export function Step2Transcript({ data, onUpdate, onPrev, onNext }: Step2Transcr
               </div>
               <button
                 type="button"
-                onClick={() => setShowManualTable(false)}
+                onClick={triggerFileInput}
                 className="text-xs font-semibold text-brand hover:underline cursor-pointer"
               >
-                Tải tệp khác
+                Tải lại file khác
               </button>
             </div>
           )}
@@ -366,29 +505,35 @@ export function Step2Transcript({ data, onUpdate, onPrev, onNext }: Step2Transcr
           {/* Academic Years Selector */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label className="text-sm font-semibold text-foreground">
-                Điểm học bạ 3 năm gần nhất đến hiện tại
-              </Label>
+              <div>
+                <Label className="text-sm font-semibold text-foreground">
+                  Bảng điểm các năm học (3 năm gần nhất)
+                </Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Đang hiển thị các năm học tính đến lớp {currentGrade || "hiện tại"}.
+                </p>
+              </div>
               <button
                 type="button"
-                onClick={() => setShowManualTable(false)}
-                className="text-xs text-muted-foreground hover:text-foreground cursor-pointer"
+                onClick={triggerFileInput}
+                className="text-xs text-brand font-medium hover:underline cursor-pointer flex items-center gap-1"
               >
-                Tải lại file bảng điểm
+                <FileUpIcon className="size-3.5" />
+                Tải ảnh khác
               </button>
             </div>
 
-            <div className="flex gap-2 border-b border-line pb-2">
+            <div className="flex flex-wrap gap-2 border-b border-line pb-2">
               {years.map((y, idx) => (
                 <button
                   key={y.gradeName}
                   type="button"
                   onClick={() => setActiveYearIndex(idx)}
                   className={cn(
-                    "rounded-lg px-4 py-2 text-xs font-semibold transition-all cursor-pointer",
+                    "rounded-lg px-4 py-2 text-xs font-semibold transition-all cursor-pointer shadow-2xs",
                     activeYearIndex === idx
                       ? "bg-brand text-white shadow-xs"
-                      : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+                      : "bg-surface border border-line text-muted-foreground hover:border-brand/40 hover:text-foreground"
                   )}
                 >
                   {y.gradeName}
@@ -398,125 +543,129 @@ export function Step2Transcript({ data, onUpdate, onPrev, onNext }: Step2Transcr
           </div>
 
           {/* Subjects Table */}
-          <div className="overflow-hidden rounded-xl border border-line bg-surface shadow-xs">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-ground/70 text-muted-foreground border-b border-line">
-                <tr>
-                  <th className="py-2.5 px-4 font-semibold">Môn học</th>
-                  <th className="py-2.5 px-3 font-semibold text-center w-28">Học kỳ 1</th>
-                  <th className="py-2.5 px-3 font-semibold text-center w-28">Học kỳ 2</th>
-                  <th className="py-2.5 px-3 font-semibold text-center w-20">Trung bình</th>
-                  <th className="py-2.5 px-2 text-center w-10"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-line">
-                {years[activeYearIndex]?.subjects.map((sub, sIdx) => {
-                  const s1 = typeof sub.semester1Score === "number" ? sub.semester1Score : null;
-                  const s2 = typeof sub.semester2Score === "number" ? sub.semester2Score : null;
-                  let avg: string = "–";
-                  if (s1 !== null && s2 !== null) {
-                    avg = ((s1 + s2) / 2).toFixed(1);
-                  } else if (s1 !== null) {
-                    avg = s1.toFixed(1);
-                  } else if (s2 !== null) {
-                    avg = s2.toFixed(1);
-                  }
-
-                  return (
-                    <tr key={`${sub.subjectName}-${sIdx}`} className="hover:bg-muted/30 transition-colors">
-                      <td className="py-2 px-4 font-medium text-foreground">
-                        {sub.subjectName}
-                      </td>
-                      <td className="py-2 px-3 text-center">
-                        <Input
-                          type="number"
-                          step="0.1"
-                          min="0"
-                          max="10"
-                          placeholder="–"
-                          value={sub.semester1Score ?? ""}
-                          onChange={(e) =>
-                            handleScoreChange(activeYearIndex, sIdx, "semester1Score", e.target.value)
-                          }
-                          className="h-8 text-center text-xs font-semibold"
-                        />
-                      </td>
-                      <td className="py-2 px-3 text-center">
-                        <Input
-                          type="number"
-                          step="0.1"
-                          min="0"
-                          max="10"
-                          placeholder="–"
-                          value={sub.semester2Score ?? ""}
-                          onChange={(e) =>
-                            handleScoreChange(activeYearIndex, sIdx, "semester2Score", e.target.value)
-                          }
-                          className="h-8 text-center text-xs font-semibold"
-                        />
-                      </td>
-                      <td className="py-2 px-3 text-center font-bold text-foreground">
-                        {avg}
-                      </td>
-                      <td className="py-2 px-2 text-center">
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveSubject(activeYearIndex, sIdx)}
-                          className="text-muted-foreground hover:text-destructive cursor-pointer p-1"
-                          title="Xóa môn này"
-                        >
-                          <Trash2Icon className="size-3.5" />
-                        </button>
-                      </td>
+          {years[activeYearIndex] && (
+            <div className="space-y-4">
+              <div className="overflow-hidden rounded-xl border border-line bg-surface shadow-2xs">
+                <table className="w-full text-left text-xs">
+                  <thead className="border-b border-line bg-muted/30 text-muted-foreground uppercase font-semibold text-[10px]">
+                    <tr>
+                      <th className="py-2.5 px-3">Môn học</th>
+                      <th className="py-2.5 px-3 w-28 text-center">Học kỳ 1</th>
+                      <th className="py-2.5 px-3 w-28 text-center">Học kỳ 2</th>
+                      <th className="py-2.5 px-3 w-24 text-center">Trung bình</th>
+                      <th className="py-2.5 px-2 w-12 text-center">Xóa</th>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                  </thead>
+                  <tbody className="divide-y divide-line/60">
+                    {years[activeYearIndex].subjects.map((sub, sIdx) => {
+                      const s1 = typeof sub.semester1Score === "number" ? sub.semester1Score : null;
+                      const s2 = typeof sub.semester2Score === "number" ? sub.semester2Score : null;
+                      const avg =
+                        s1 !== null && s2 !== null
+                          ? Math.round(((s1 + s2) / 2) * 10) / 10
+                          : s1 !== null
+                          ? s1
+                          : s2;
 
-            {/* Add Subject Row */}
-            <div className="border-t border-line p-2.5 bg-ground/40 flex justify-between items-center">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => handleAddSubject(activeYearIndex)}
-                className="text-xs text-brand font-medium gap-1 h-8"
-              >
-                <PlusIcon className="size-3.5" />
-                Thêm môn học
-              </Button>
-              <span className="text-[11px] text-muted-foreground pr-2">
-                Thang điểm 10 (0.0 – 10.0)
-              </span>
+                      return (
+                        <tr key={sIdx} className="hover:bg-muted/10 transition-colors">
+                          <td className="py-2 px-3 font-medium text-foreground">
+                            {sub.subjectName}
+                          </td>
+                          <td className="py-1 px-2 text-center">
+                            <Input
+                              type="number"
+                              min={0}
+                              max={10}
+                              step={0.1}
+                              placeholder="-"
+                              value={sub.semester1Score ?? ""}
+                              onChange={(e) =>
+                                handleScoreChange(activeYearIndex, sIdx, "semester1Score", e.target.value)
+                              }
+                              className="h-8 text-center text-xs w-20 mx-auto"
+                            />
+                          </td>
+                          <td className="py-1 px-2 text-center">
+                            <Input
+                              type="number"
+                              min={0}
+                              max={10}
+                              step={0.1}
+                              placeholder="-"
+                              value={sub.semester2Score ?? ""}
+                              onChange={(e) =>
+                                handleScoreChange(activeYearIndex, sIdx, "semester2Score", e.target.value)
+                              }
+                              className="h-8 text-center text-xs w-20 mx-auto"
+                            />
+                          </td>
+                          <td className="py-2 px-3 text-center font-bold text-foreground">
+                            {avg !== null ? avg.toFixed(1) : "-"}
+                          </td>
+                          <td className="py-2 px-2 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveSubject(activeYearIndex, sIdx)}
+                              className="text-muted-foreground hover:text-destructive cursor-pointer p-1 rounded"
+                              title="Xóa môn"
+                            >
+                              <Trash2Icon className="size-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Add Subject Button */}
+              <div className="flex justify-between items-center">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleAddSubject(activeYearIndex)}
+                  className="gap-1.5 text-xs cursor-pointer"
+                >
+                  <PlusIcon className="size-3.5" />
+                  Thêm môn học
+                </Button>
+                <span className="text-[11px] text-muted-foreground">
+                  Điểm số tính theo thang điểm 10 của Việt Nam
+                </span>
+              </div>
             </div>
-          </div>
+          )}
 
-          {/* Live GPA Calculation Box */}
-          <div className="rounded-2xl border border-brand/20 bg-gradient-to-r from-brand-wash/50 to-surface p-5">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="space-y-0.5">
-                <div className="text-xs font-semibold text-brand uppercase tracking-wider">
-                  GPA tự tính (thang 4.0 chuẩn hóa)
+          {/* Dynamic GPA Calculation Card */}
+          <div className="rounded-xl border border-brand/30 bg-brand-wash/30 p-4 shadow-2xs">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <div className="font-semibold text-sm text-foreground flex items-center gap-1.5">
+                  <span>Điểm trung bình tích lũy (GPA)</span>
+                  <Badge variant="outline" className="text-[10px] border-brand/40 text-brand">
+                    Tuyến tính: GPA 10 / 10 * 4.0
+                  </Badge>
                 </div>
-                <div className="text-xs text-muted-foreground">
-                  Tự động cập nhật theo công thức tuyến tính chuẩn: GPA 4.0 = (GPA 10 / 10) × 4.0
+                <div className="text-xs text-muted-foreground mt-0.5">
+                  Được tính tự động từ toàn bộ các môn và năm học đã nhập ở trên.
                 </div>
               </div>
 
               <div className="flex items-center gap-4">
-                {gpa10 !== null && (
-                  <div className="text-right">
-                    <div className="text-[10px] text-muted-foreground uppercase">TB Thang 10</div>
-                    <div className="text-numeric text-base font-semibold text-foreground">
-                      {gpa10.toFixed(2)}
-                    </div>
+                <div className="text-right">
+                  <div className="text-[11px] text-muted-foreground">Thang điểm 10</div>
+                  <div className="text-lg font-bold text-foreground">
+                    {gpa10 !== null ? gpa10.toFixed(2) : "—"}
                   </div>
-                )}
-                <div className="rounded-xl bg-brand px-4 py-2 text-center text-white shadow-xs">
-                  <div className="text-[10px] uppercase font-semibold text-white/80">Thang 4.0</div>
-                  <div className="text-numeric text-xl font-black">
-                    {gpa4 !== null ? gpa4.toFixed(2) : "–"}
+                </div>
+                <div className="h-8 w-px bg-line" />
+                <div className="text-right">
+                  <div className="text-[11px] text-brand font-semibold">Quy đổi thang 4.0</div>
+                  <div className="text-2xl font-extrabold text-brand">
+                    {gpa4 !== null ? gpa4.toFixed(2) : "—"}
                   </div>
                 </div>
               </div>
@@ -527,11 +676,11 @@ export function Step2Transcript({ data, onUpdate, onPrev, onNext }: Step2Transcr
 
       {/* Bottom Actions */}
       <div className="flex justify-between pt-4 border-t border-line">
-        <Button variant="outline" onClick={onPrev} size="lg" className="gap-1.5">
+        <Button variant="outline" onClick={onPrev} size="lg" className="gap-1.5 cursor-pointer">
           <ArrowLeftIcon className="size-4" />
           Quay lại
         </Button>
-        <Button onClick={onNext} size="lg" className="gap-1.5">
+        <Button onClick={onNext} size="lg" className="gap-1.5 cursor-pointer">
           Tiếp tục
           <ArrowRightIcon className="size-4" />
         </Button>
