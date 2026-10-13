@@ -104,6 +104,14 @@ public record DraftTranscriptInfoDto(
     [property: JsonPropertyName("uploadedAt")] DateTime UploadedAt
 );
 
+public record UploadDraftTranscriptResultDto(
+    [property: JsonPropertyName("draftTranscript")] DraftTranscriptInfoDto DraftTranscript,
+    [property: JsonPropertyName("extractedTerms")] IReadOnlyList<FlowTranscriptTermDto> ExtractedTerms,
+    [property: JsonPropertyName("calculatedGpa4")] decimal? CalculatedGpa4,
+    [property: JsonPropertyName("ocrMessage")] string? OcrMessage
+);
+
+
 public record SaveProfileDraftRequest(
     [property: JsonPropertyName("currentStep")] int CurrentStep,
     [property: JsonPropertyName("completedSteps")] List<int>? CompletedSteps,

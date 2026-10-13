@@ -240,6 +240,31 @@ public class ProfileFlowServiceTests
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => service.SaveDraftAsync(userId, invalidRequest));
     }
 
+    private sealed class FakeTranscriptOcrClient : StudyAbroad.Application.Advisor.ITranscriptOcrClient
+    {
+        public bool Called { get; private set; }
+        public StudyAbroad.Application.Advisor.TranscriptOcrResponse ResponseToReturn { get; set; } = new(
+            Success: true,
+            ModelUsed: "minicpm-v",
+            Terms: [
+                new FlowTranscriptTermDto(
+                    1,
+                    "Lớp 10 HK1",
+                    [new FlowTranscriptSubjectScoreDto("Toán", 9.0m, "9.0", 1m)]
+                )
+            ],
+            CalculatedGpa4: 4.0m,
+            Message: "Đã OCR thành công"
+        );
+
+        public Task<StudyAbroad.Application.Advisor.TranscriptOcrResponse> OcrTranscriptAsync(
+            StudyAbroad.Application.Advisor.TranscriptOcrRequest request, CancellationToken ct = default)
+        {
+            Called = true;
+            return Task.FromResult(ResponseToReturn);
+        }
+    }
+
     [Fact]
     public async Task UploadDraftTranscriptAsync_StoresDraftFileInfoInState()
     {
@@ -249,15 +274,37 @@ public class ProfileFlowServiceTests
         var userId = Guid.NewGuid();
 
         using var memoryStream = new MemoryStream(new byte[] { 1, 2, 3, 4 });
-        var draftInfo = await service.UploadDraftTranscriptAsync(
+        var uploadResult = await service.UploadDraftTranscriptAsync(
             userId, memoryStream, "bang_diem.pdf", "application/pdf", 4);
 
-        Assert.Equal("bang_diem.pdf", draftInfo.OriginalFileName);
-        Assert.Contains("/uploads/drafts/", draftInfo.RelativePath);
+        Assert.Equal("bang_diem.pdf", uploadResult.DraftTranscript.OriginalFileName);
+        Assert.Contains("/uploads/drafts/", uploadResult.DraftTranscript.RelativePath);
 
         var profile = await repo.GetProfileByUserIdAsync(userId);
         Assert.NotNull(profile);
         Assert.Contains("bang_diem.pdf", profile!.DraftFlowStateJson);
+    }
+
+    [Fact]
+    public async Task UploadDraftTranscriptAsync_WhenOcrClientProvided_PopulatesStep2TermsAndGpa()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var storage = new FakeFileStorageService();
+        var ocrClient = new FakeTranscriptOcrClient();
+        var service = new ProfileFlowService(repo, storage, ocrClient);
+        var userId = Guid.NewGuid();
+
+        using var memoryStream = new MemoryStream(new byte[] { 1, 2, 3, 4 });
+        var uploadResult = await service.UploadDraftTranscriptAsync(
+            userId, memoryStream, "hoc_ba.png", "image/png", 4);
+
+        Assert.True(ocrClient.Called);
+        Assert.Single(uploadResult.ExtractedTerms);
+        Assert.Equal(4.0m, uploadResult.CalculatedGpa4);
+
+        var profile = await repo.GetProfileByUserIdAsync(userId);
+        Assert.NotNull(profile);
+        Assert.Contains("Lớp 10 HK1", profile!.DraftFlowStateJson);
     }
 
     [Fact]

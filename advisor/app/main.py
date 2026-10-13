@@ -8,6 +8,7 @@ from app.core.config import get_settings
 from app.services.activity_reader import ActivityReader
 from app.services.ollama import OllamaClient
 from app.services.recommender import Recommender
+from app.services.transcript_reader import TranscriptReader
 
 
 # Khai báo vòng đơi fastapi
@@ -21,7 +22,9 @@ async def lifespan(app: FastAPI):
         llm = OllamaClient(http, settings.llm_model)
         app.state.recommender = Recommender(llm)
         app.state.activity_reader = ActivityReader(llm)
+        app.state.transcript_reader = TranscriptReader(http, settings)
         yield
+
 
 
 def create_app() -> FastAPI:

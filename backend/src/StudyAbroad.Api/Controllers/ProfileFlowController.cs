@@ -67,12 +67,12 @@ public class ProfileFlowController(IProfileFlowService flowService) : Controller
     }
 
     /// <summary>
-    /// Tải tệp bảng điểm (PDF hoặc ảnh) lên dạng nháp để xem trước.
+    /// Tải tệp bảng điểm (PDF hoặc ảnh) lên dạng nháp để xem trước và tự động OCR đọc điểm các môn học.
     /// Không ghi đè hồ sơ chính thức cho đến khi bấm xác nhận ở bước cuối.
     /// </summary>
     [HttpPost("draft/upload-transcript")]
     [Consumes("multipart/form-data")]
-    [ProducesResponseType(typeof(DraftTranscriptInfoDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(UploadDraftTranscriptResultDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> UploadDraftTranscript(IFormFile? file, CancellationToken ct)

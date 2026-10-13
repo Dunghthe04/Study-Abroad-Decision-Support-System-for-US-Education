@@ -1,3 +1,4 @@
+using StudyAbroad.Application.Advisor;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
 using System;
@@ -15,11 +16,13 @@ namespace StudyAbroad.Application.Profile.Flow;
 /// - Tự động lưu nháp từng bước vào DraftFlowStateJson
 /// - Khôi phục đúng bước đang làm dở khi quay lại
 /// - Quản lý tệp bảng điểm nháp (xem trước / chỉ lưu nháp)
+/// - OCR đọc và bóc tách bảng điểm học bạ thành các môn học
 /// - Xác nhận lưu chính thức (Commit) bóc tách toàn bộ 5 bước vào CSDL chính
 /// </summary>
 public class ProfileFlowService(
     IProfileFlowRepository repository,
-    IProfileFileStorageService fileStorageService) : IProfileFlowService
+    IProfileFileStorageService fileStorageService,
+    ITranscriptOcrClient? ocrClient = null) : IProfileFlowService
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -204,15 +207,36 @@ public class ProfileFlowService(
         return updatedState;
     }
 
-    public async Task<DraftTranscriptInfoDto> UploadDraftTranscriptAsync(
+    public async Task<UploadDraftTranscriptResultDto> UploadDraftTranscriptAsync(
         Guid userId, Stream fileStream, string fileName, string contentType, long length, CancellationToken ct = default)
     {
         var profile = await repository.EnsureProfileExistsAsync(userId, ct);
 
-        // 1. Lưu file vào thư mục nháp
-        var draftInfo = await fileStorageService.SaveDraftTranscriptAsync(userId, fileStream, fileName, contentType, length, ct);
+        // Đọc toàn bộ nội dung file ra bộ nhớ để vừa lưu nháp vừa gửi sang OCR
+        using var ms = new MemoryStream();
+        await fileStream.CopyToAsync(ms, ct);
+        var fileBytes = ms.ToArray();
 
-        // 2. Cập nhật vào DraftFlowStateJson
+        // 1. Lưu file vào thư mục nháp
+        using var saveStream = new MemoryStream(fileBytes);
+        var draftInfo = await fileStorageService.SaveDraftTranscriptAsync(userId, saveStream, fileName, contentType, length, ct);
+
+        // 2. Thử OCR bóc tách điểm bảng điểm qua AI Advisor
+        TranscriptOcrResponse? ocrResponse = null;
+        if (ocrClient != null)
+        {
+            try
+            {
+                var base64 = Convert.ToBase64String(fileBytes);
+                ocrResponse = await ocrClient.OcrTranscriptAsync(new TranscriptOcrRequest(base64, fileName, contentType), ct);
+            }
+            catch
+            {
+                // OCR lỗi thì không chặn luồng upload
+            }
+        }
+
+        // 3. Cập nhật vào DraftFlowStateJson
         ProfileFlowStateDto currentState;
         if (!string.IsNullOrWhiteSpace(profile.DraftFlowStateJson))
         {
@@ -231,17 +255,36 @@ public class ProfileFlowService(
             currentState = CreateDefaultDraftState();
         }
 
+        var updatedStepData = currentState.StepData;
+        if (ocrResponse != null && ocrResponse.Terms.Count > 0)
+        {
+            var currentStep2 = currentState.StepData.Step2 ?? new Step2TranscriptDto("standard", "10", null, []);
+            var updatedStep2 = currentStep2 with
+            {
+                Terms = ocrResponse.Terms.ToList(),
+                CalculatedGpa4 = ocrResponse.CalculatedGpa4 ?? currentStep2.CalculatedGpa4
+            };
+            updatedStepData = currentState.StepData with { Step2 = updatedStep2 };
+        }
+
         var newState = currentState with
         {
             DraftTranscript = draftInfo,
+            StepData = updatedStepData,
             LastUpdatedAt = DateTime.UtcNow
         };
 
         profile.DraftFlowStateJson = JsonSerializer.Serialize(newState, JsonOptions);
         await repository.UpdateProfileAsync(profile, ct);
 
-        return draftInfo;
+        return new UploadDraftTranscriptResultDto(
+            DraftTranscript: draftInfo,
+            ExtractedTerms: ocrResponse?.Terms ?? [],
+            CalculatedGpa4: ocrResponse?.CalculatedGpa4,
+            OcrMessage: ocrResponse?.Message
+        );
     }
+
 
     public async Task<CommitProfileFlowResponse> CommitFlowAsync(
         Guid userId, CommitProfileFlowRequest? request, CancellationToken ct = default)

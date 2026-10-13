@@ -17,7 +17,7 @@ public interface IProfileFlowService
 {
     Task<ProfileFlowStateDto> GetFlowStateAsync(Guid userId, CancellationToken ct = default);
     Task<ProfileFlowStateDto> SaveDraftAsync(Guid userId, SaveProfileDraftRequest request, CancellationToken ct = default);
-    Task<DraftTranscriptInfoDto> UploadDraftTranscriptAsync(Guid userId, Stream fileStream, string fileName, string contentType, long length, CancellationToken ct = default);
+    Task<UploadDraftTranscriptResultDto> UploadDraftTranscriptAsync(Guid userId, Stream fileStream, string fileName, string contentType, long length, CancellationToken ct = default);
     Task<CommitProfileFlowResponse> CommitFlowAsync(Guid userId, CommitProfileFlowRequest? request, CancellationToken ct = default);
     Task ClearDraftAsync(Guid userId, CancellationToken ct = default);
 }

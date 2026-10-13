@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://localhost:11434"
     llm_model: str = "qwen3:8b"
     llm_timeout_seconds: float = 120
+    vision_model: str = "minicpm-v"
+    vision_timeout_seconds: float = 180
 
 
 @lru_cache

@@ -14,3 +14,9 @@ def get_recommender(request: Request) -> Recommender:
 def get_activity_reader(request: Request) -> ActivityReader:
     """Lấy ActivityReader đã tạo lúc khởi động."""
     return request.app.state.activity_reader
+
+
+def get_transcript_reader(request: Request):
+    """Lấy TranscriptReader đã tạo lúc khởi động."""
+    return request.app.state.transcript_reader
+
