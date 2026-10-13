@@ -6,10 +6,20 @@ using System.Threading.Tasks;
 namespace StudyAbroad.Application.Advisor;
 
 /// <summary>
-/// [USAS-640] DTO yêu cầu gửi ảnh học bạ sang advisor để nhận diện OCR
+/// [USAS-640] Dữ liệu của 1 tệp ảnh hoặc PDF học bạ
+/// </summary>
+public record TranscriptFilePayload(
+    string ImageBase64,
+    string? FileName = null,
+    string? ContentType = null
+);
+
+/// <summary>
+/// [USAS-640] DTO yêu cầu gửi ảnh học bạ (hỗ trợ nhiều ảnh/nhiều trang) sang advisor để OCR
 /// </summary>
 public record TranscriptOcrRequest(
-    string ImageBase64,
+    IReadOnlyList<TranscriptFilePayload>? Files = null,
+    string? ImageBase64 = null,
     string? FileName = null,
     string? ContentType = null
 );
@@ -21,8 +31,10 @@ public record TranscriptOcrResponse(
     bool Success,
     string? ModelUsed,
     IReadOnlyList<FlowTranscriptTermDto> Terms,
+    decimal? AverageScoreScale10,
     decimal? CalculatedGpa4,
-    string? Message
+    string? Message,
+    IReadOnlyList<string>? Warnings = null
 );
 
 /// <summary>

@@ -253,7 +253,8 @@ public class ProfileFlowServiceTests
                     [new FlowTranscriptSubjectScoreDto("Toán", 9.0m, "9.0", 1m)]
                 )
             ],
-            CalculatedGpa4: 4.0m,
+            AverageScoreScale10: 9.0m,
+            CalculatedGpa4: 3.6m,
             Message: "Đã OCR thành công"
         );
 
@@ -300,7 +301,7 @@ public class ProfileFlowServiceTests
 
         Assert.True(ocrClient.Called);
         Assert.Single(uploadResult.ExtractedTerms);
-        Assert.Equal(4.0m, uploadResult.CalculatedGpa4);
+        Assert.Equal(3.6m, uploadResult.CalculatedGpa4);
 
         var profile = await repo.GetProfileByUserIdAsync(userId);
         Assert.NotNull(profile);

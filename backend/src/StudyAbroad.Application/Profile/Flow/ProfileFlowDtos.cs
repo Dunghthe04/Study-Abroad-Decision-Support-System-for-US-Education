@@ -108,7 +108,8 @@ public record UploadDraftTranscriptResultDto(
     [property: JsonPropertyName("draftTranscript")] DraftTranscriptInfoDto DraftTranscript,
     [property: JsonPropertyName("extractedTerms")] IReadOnlyList<FlowTranscriptTermDto> ExtractedTerms,
     [property: JsonPropertyName("calculatedGpa4")] decimal? CalculatedGpa4,
-    [property: JsonPropertyName("ocrMessage")] string? OcrMessage
+    [property: JsonPropertyName("ocrMessage")] string? OcrMessage,
+    [property: JsonPropertyName("warnings")] IReadOnlyList<string>? Warnings = null
 );
 
 

@@ -39,8 +39,10 @@ public class TranscriptOcrClient(HttpClient http, ILogger<TranscriptOcrClient> l
             Success: false,
             ModelUsed: "fallback_highschool_template",
             Terms: [],
+            AverageScoreScale10: null,
             CalculatedGpa4: null,
-            Message: "Không thể kết nối dịch vụ OCR, bạn có thể nhập điểm thủ công."
+            Message: "Không thể kết nối dịch vụ OCR, bạn có thể nhập điểm thủ công.",
+            Warnings: ["Dịch vụ OCR tạm thời không khả dụng, vui lòng tự nhập điểm vào bảng."]
         );
     }
 }

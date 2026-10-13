@@ -228,7 +228,13 @@ public class ProfileFlowService(
             try
             {
                 var base64 = Convert.ToBase64String(fileBytes);
-                ocrResponse = await ocrClient.OcrTranscriptAsync(new TranscriptOcrRequest(base64, fileName, contentType), ct);
+                ocrResponse = await ocrClient.OcrTranscriptAsync(
+                    new TranscriptOcrRequest(
+                        Files: [new TranscriptFilePayload(base64, fileName, contentType)],
+                        ImageBase64: base64,
+                        FileName: fileName,
+                        ContentType: contentType
+                    ), ct);
             }
             catch
             {
@@ -281,7 +287,8 @@ public class ProfileFlowService(
             DraftTranscript: draftInfo,
             ExtractedTerms: ocrResponse?.Terms ?? [],
             CalculatedGpa4: ocrResponse?.CalculatedGpa4,
-            OcrMessage: ocrResponse?.Message
+            OcrMessage: ocrResponse?.Message,
+            Warnings: ocrResponse?.Warnings
         );
     }
 
@@ -471,8 +478,8 @@ public class ProfileFlowService(
 
             if (gradeScale == "10")
             {
-                // Thang 10 quy đổi sang 4.0 theo công thức tỷ lệ chuẩn
-                normScore = s.Score >= 8.5m ? 4.0m : (s.Score >= 8.0m ? 3.5m : (s.Score >= 7.0m ? 3.0m : (s.Score >= 6.0m ? 2.5m : (s.Score >= 5.0m ? 2.0m : 1.0m))));
+                // Quy đổi trực tiếp theo công thức chuẩn: (Điểm thang 10 / 10) * 4
+                normScore = (s.Score / 10m) * 4m;
             }
             else if (gradeScale == "100")
             {

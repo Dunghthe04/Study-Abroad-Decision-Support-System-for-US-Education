@@ -75,7 +75,10 @@ public class ProfileFlowController(IProfileFlowService flowService) : Controller
     [ProducesResponseType(typeof(UploadDraftTranscriptResultDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> UploadDraftTranscript(IFormFile? file, CancellationToken ct)
+    public async Task<IActionResult> UploadDraftTranscript(
+        List<IFormFile>? files,
+        IFormFile? file,
+        CancellationToken ct)
     {
         var userId = User.GetUserId();
         if (userId is null)
@@ -83,16 +86,20 @@ public class ProfileFlowController(IProfileFlowService flowService) : Controller
             return Unauthorized(new { error = "Không tìm thấy thông tin xác thực của người dùng." });
         }
 
-        if (file is null || file.Length == 0)
+        var fileList = (files != null && files.Count > 0) ? files : (file != null ? [file] : new List<IFormFile>());
+        fileList = fileList.Where(f => f.Length > 0).ToList();
+
+        if (fileList.Count == 0)
         {
-            return BadRequest(new { error = "Vui lòng chọn tệp bảng điểm hợp lệ để tải lên." });
+            return BadRequest(new { error = "Vui lòng chọn ít nhất một tệp bảng điểm hợp lệ để tải lên." });
         }
 
         try
         {
-            await using var stream = file.OpenReadStream();
+            var primaryFile = fileList[0];
+            await using var stream = primaryFile.OpenReadStream();
             var draftInfo = await flowService.UploadDraftTranscriptAsync(
-                userId.Value, stream, file.FileName, file.ContentType, file.Length, ct);
+                userId.Value, stream, primaryFile.FileName, primaryFile.ContentType, primaryFile.Length, ct);
 
             return Ok(draftInfo);
         }
