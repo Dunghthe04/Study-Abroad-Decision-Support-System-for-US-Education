@@ -1,11 +1,11 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ApiError } from "@/lib/api";
 import { createRecommendation, getLatestRecommendation } from "@/lib/recommendation-api";
-import type { RecommendationItem, RecommendationResult } from "@/types/recommendation";
+import type { RecommendationItem, RecommendationResult, StudentSummary } from "@/types/recommendation";
 import {
   AlertCircleIcon,
   CheckIcon,
@@ -108,6 +108,16 @@ const money = new Intl.NumberFormat("en-US", {
 });
 const usd = (v: number | null | undefined) => (v == null ? null : money.format(v));
 
+// Mức ngân sách: khoảng min–max, "Dưới max", "Trên min" (mức cao nhất không có trần) hoặc số cũ annualBudgetUsd
+function budgetLabel(s: StudentSummary): string | null {
+  const min = s.budgetMinUsd && s.budgetMinUsd > 0 ? s.budgetMinUsd : null;
+  const max = s.budgetMaxUsd ?? null;
+  if (min && max) return `${usd(min)} – ${usd(max)}`;
+  if (max) return `Dưới ${usd(max)}`;
+  if (min) return `Trên ${usd(min)}`;
+  return s.annualBudgetUsd ? usd(s.annualBudgetUsd) : null;
+}
+
 export function RecommendationPanel() {
   const router = useRouter();
   const [result, setResult] = useState<RecommendationResult | null>(null);
@@ -119,27 +129,22 @@ export function RecommendationPanel() {
   // AHP Priority Presets State
   const [activePreset, setActivePreset] = useState<PriorityPreset>("balanced");
   const [showCustomSliders, setShowCustomSliders] = useState(false);
-  const [customCost, setCustomCost] = useState<InterestLevel>(3);
-  const [customScholarship, setCustomScholarship] = useState<InterestLevel>(3);
-  const [customQuality, setCustomQuality] = useState<InterestLevel>(2);
+  const [sliderCost, setSliderCost] = useState(30);
+  const [sliderScholarship, setSliderScholarship] = useState(20);
+  const [sliderQuality, setSliderQuality] = useState(50);
+
+  const applyPreset = (preset: Exclude<PriorityPreset, "custom">) => {
+    setActivePreset(preset);
+    const w = PRESET_WEIGHTS[preset];
+    setSliderCost(Math.round(w.cost * 100));
+    setSliderScholarship(Math.round(w.scholarship * 100));
+    setSliderQuality(Math.round(w.quality * 100));
+  };
 
   // Expanded items
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function load() {
-      try {
-        setResult(await getLatestRecommendation());
-      } catch (err) {
-        if (err instanceof ApiError && err.status === 401) router.push("/login");
-      } finally {
-        setLoadingLatest(false);
-      }
-    }
-    load();
-  }, [router]);
-
-  async function handleRun() {
+  const handleRun = useCallback(async () => {
     setError(null);
     setNoProfile(false);
     setRunning(true);
@@ -152,26 +157,51 @@ export function RecommendationPanel() {
     } finally {
       setRunning(false);
     }
-  }
+  }, [router]);
+
+  // Chưa lọc lần nào (VD vừa gửi hồ sơ 6 bước xong) thì tự lọc luôn, khỏi bắt người dùng tìm nút
+  const autoRan = useRef(false);
+  useEffect(() => {
+    async function load() {
+      let latest: RecommendationResult | null = null;
+      try {
+        latest = await getLatestRecommendation();
+        setResult(latest);
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 401) {
+          router.push("/login");
+          return;
+        }
+      } finally {
+        setLoadingLatest(false);
+      }
+      if (!latest && !autoRan.current) {
+        autoRan.current = true;
+        void handleRun();
+      }
+    }
+    load();
+  }, [router, handleRun]);
 
   // Calculate current active weights
   const currentWeights: PriorityWeights = useMemo(() => {
     if (activePreset !== "custom") {
       return PRESET_WEIGHTS[activePreset];
     }
-    const total = customCost + customScholarship + customQuality;
+    const total = sliderCost + sliderScholarship + sliderQuality;
+    if (total <= 0) return PRESET_WEIGHTS.balanced;
     return {
-      cost: customCost / total,
-      scholarship: customScholarship / total,
-      quality: customQuality / total,
+      cost: sliderCost / total,
+      scholarship: sliderScholarship / total,
+      quality: sliderQuality / total,
     };
-  }, [activePreset, customCost, customScholarship, customQuality]);
+  }, [activePreset, sliderCost, sliderScholarship, sliderQuality]);
 
   // Dynamic Re-ranking & 4-tier categorisation
   const tieredItems = useMemo(() => {
     if (!result?.items) return { reach: [], match: [], safety: [], financial_reach: [], insufficient_data: [] };
 
-    const studentBudget = result.student?.annualBudgetUsd ?? null;
+    const studentBudget = result.student?.budgetMaxUsd ?? result.student?.annualBudgetUsd ?? null;
 
     // Helper to score individual school based on current weights
     const getSchoolFit = (item: RecommendationItem) => {
@@ -259,6 +289,8 @@ export function RecommendationPanel() {
 
   const student = result?.student;
   const ecScore = result?.student?.extracurricularScore ?? result?.extracurricular?.score ?? null;
+  // BE chưa điền activitiesCount (luôn 0) → lấy số hoạt động đã chấm trong phần ngoại khóa
+  const activitiesCount = student?.activitiesCount || result?.extracurricular?.activities?.length || 0;
 
   return (
     <div className="space-y-6">
@@ -272,7 +304,7 @@ export function RecommendationPanel() {
             <span className="font-medium text-brand">{student.major || "Mọi ngành"}</span>
             <span>•</span>
             <span>
-              {student.annualBudgetUsd ? `${usd(student.annualBudgetUsd)}/năm` : "Chưa đặt ngân sách"}
+              {budgetLabel(student) ? `${budgetLabel(student)}/năm` : "Chưa đặt ngân sách"}
             </span>
             {student.gpa4 && (
               <>
@@ -286,12 +318,17 @@ export function RecommendationPanel() {
                 <span>IELTS {student.ielts}</span>
               </>
             )}
-            {ecScore && (
+            {activitiesCount > 0 ? (
               <>
                 <span>•</span>
-                <span>Ngoại khóa {ecScore}/4</span>
+                <span>{activitiesCount} hoạt động ngoại khóa</span>
               </>
-            )}
+            ) : ecScore ? (
+              <>
+                <span>•</span>
+                <span>Có hoạt động ngoại khóa</span>
+              </>
+            ) : null}
           </div>
         </div>
       )}
@@ -314,10 +351,7 @@ export function RecommendationPanel() {
             <div className="flex flex-wrap items-center gap-1.5">
               <button
                 type="button"
-                onClick={() => {
-                  setActivePreset("balanced");
-                  setShowCustomSliders(false);
-                }}
+                onClick={() => applyPreset("balanced")}
                 className={cn(
                   "rounded-lg px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer",
                   activePreset === "balanced"
@@ -329,10 +363,7 @@ export function RecommendationPanel() {
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setActivePreset("low_cost");
-                  setShowCustomSliders(false);
-                }}
+                onClick={() => applyPreset("low_cost")}
                 className={cn(
                   "rounded-lg px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer",
                   activePreset === "low_cost"
@@ -344,10 +375,7 @@ export function RecommendationPanel() {
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setActivePreset("high_scholarship");
-                  setShowCustomSliders(false);
-                }}
+                onClick={() => applyPreset("high_scholarship")}
                 className={cn(
                   "rounded-lg px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer",
                   activePreset === "high_scholarship"
@@ -359,10 +387,7 @@ export function RecommendationPanel() {
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setActivePreset("reputation");
-                  setShowCustomSliders(false);
-                }}
+                onClick={() => applyPreset("reputation")}
                 className={cn(
                   "rounded-lg px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer",
                   activePreset === "reputation"
@@ -374,102 +399,114 @@ export function RecommendationPanel() {
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setShowCustomSliders(!showCustomSliders);
-                  setActivePreset("custom");
-                }}
+                onClick={() => setShowCustomSliders(!showCustomSliders)}
                 className={cn(
-                  "rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer flex items-center gap-1",
-                  activePreset === "custom"
+                  "rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5",
+                  showCustomSliders || activePreset === "custom"
                     ? "border-brand bg-brand-wash text-brand font-bold"
                     : "border-line text-muted-foreground hover:border-brand/40 hover:text-foreground"
                 )}
               >
-                <SlidersHorizontalIcon className="size-3" />
-                {showCustomSliders ? "Ẩn chỉnh mức" : "Chỉnh mức"}
+                <SlidersHorizontalIcon className="size-3.5" />
+                {showCustomSliders ? "Ẩn thanh trượt" : "Hiện thanh trượt"}
               </button>
             </div>
           </div>
 
           {/* Expanded Custom Weights Sliders */}
           {showCustomSliders && (
-            <div className="rounded-xl border border-line bg-ground/50 p-4 space-y-3 animate-in fade-in-50 duration-150">
-              <div className="text-xs font-semibold text-foreground">
-                Bạn đang ở chế độ Tùy chỉnh mức ưu tiên:
+            <div className="rounded-xl border border-line bg-ground/50 p-4 space-y-4 animate-in fade-in-50 duration-150">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-line/60 pb-2">
+                <div className="text-xs font-semibold text-foreground flex items-center gap-2">
+                  <span>Mức ưu tiên theo tỷ lệ phần trăm:</span>
+                  {activePreset === "custom" ? (
+                    <Badge variant="outline" className="text-[10px] border-brand/40 text-brand bg-brand-wash">
+                      Đang kéo tùy chỉnh
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary" className="text-[10px]">
+                      Theo chế độ: {activePreset === "balanced" ? "Cân bằng" : activePreset === "low_cost" ? "Chi phí thấp" : activePreset === "high_scholarship" ? "Học bổng nhiều" : "Danh tiếng"}
+                    </Badge>
+                  )}
+                </div>
+                <div className="text-[11px] text-muted-foreground">
+                  Kéo thanh trượt để tinh chỉnh hoặc bấm các nút ở trên để thanh tự động trượt vào mức
+                </div>
               </div>
-              <div className="grid gap-3 sm:grid-cols-3 text-xs">
-                {/* Chi phí */}
-                <div className="rounded-lg bg-surface p-3 border border-line space-y-2">
-                  <div className="font-semibold text-foreground">Chi phí</div>
-                  <div className="flex gap-1">
-                    {([1, 2, 3] as InterestLevel[]).map((lvl) => (
-                      <button
-                        key={lvl}
-                        type="button"
-                        onClick={() => {
-                          setCustomCost(lvl);
-                          setActivePreset("custom");
-                        }}
-                        className={cn(
-                          "flex-1 rounded py-1 text-[11px] font-medium transition-colors cursor-pointer",
-                          customCost === lvl
-                            ? "bg-brand text-white font-semibold"
-                            : "bg-muted text-muted-foreground hover:bg-muted/80"
-                        )}
-                      >
-                        {lvl === 1 ? "Ít" : lvl === 2 ? "Vừa" : "Rất cao"}
-                      </button>
-                    ))}
+
+              <div className="grid gap-4 sm:grid-cols-3">
+                {/* 1. Chi phí */}
+                <div className="rounded-xl bg-surface p-3.5 border border-line space-y-2.5 shadow-2xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-xs text-foreground">Chi phí</span>
+                    <span className="font-bold text-xs text-brand bg-brand-wash px-2 py-0.5 rounded-md">
+                      {sliderCost}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={5}
+                    value={sliderCost}
+                    onChange={(e) => {
+                      setActivePreset("custom");
+                      setSliderCost(Number(e.target.value));
+                    }}
+                    className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-brand transition-all"
+                  />
+                  <div className="text-[11px] text-muted-foreground leading-tight">
+                    Ưu tiên trường có tổng học phí & chi phí sinh hoạt vừa túi tiền.
                   </div>
                 </div>
 
-                {/* Học bổng */}
-                <div className="rounded-lg bg-surface p-3 border border-line space-y-2">
-                  <div className="font-semibold text-foreground">Học bổng</div>
-                  <div className="flex gap-1">
-                    {([1, 2, 3] as InterestLevel[]).map((lvl) => (
-                      <button
-                        key={lvl}
-                        type="button"
-                        onClick={() => {
-                          setCustomScholarship(lvl);
-                          setActivePreset("custom");
-                        }}
-                        className={cn(
-                          "flex-1 rounded py-1 text-[11px] font-medium transition-colors cursor-pointer",
-                          customScholarship === lvl
-                            ? "bg-brand text-white font-semibold"
-                            : "bg-muted text-muted-foreground hover:bg-muted/80"
-                        )}
-                      >
-                        {lvl === 1 ? "Ít" : lvl === 2 ? "Vừa" : "Rất cao"}
-                      </button>
-                    ))}
+                {/* 2. Học bổng */}
+                <div className="rounded-xl bg-surface p-3.5 border border-line space-y-2.5 shadow-2xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-xs text-foreground">Học bổng</span>
+                    <span className="font-bold text-xs text-brand bg-brand-wash px-2 py-0.5 rounded-md">
+                      {sliderScholarship}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={5}
+                    value={sliderScholarship}
+                    onChange={(e) => {
+                      setActivePreset("custom");
+                      setSliderScholarship(Number(e.target.value));
+                    }}
+                    className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-brand transition-all"
+                  />
+                  <div className="text-[11px] text-muted-foreground leading-tight">
+                    Ưu tiên trường có quỹ học bổng và hỗ trợ tài chính hào phóng cho sinh viên.
                   </div>
                 </div>
 
-                {/* Chất lượng / Danh tiếng */}
-                <div className="rounded-lg bg-surface p-3 border border-line space-y-2">
-                  <div className="font-semibold text-foreground">Chất lượng đào tạo</div>
-                  <div className="flex gap-1">
-                    {([1, 2, 3] as InterestLevel[]).map((lvl) => (
-                      <button
-                        key={lvl}
-                        type="button"
-                        onClick={() => {
-                          setCustomQuality(lvl);
-                          setActivePreset("custom");
-                        }}
-                        className={cn(
-                          "flex-1 rounded py-1 text-[11px] font-medium transition-colors cursor-pointer",
-                          customQuality === lvl
-                            ? "bg-brand text-white font-semibold"
-                            : "bg-muted text-muted-foreground hover:bg-muted/80"
-                        )}
-                      >
-                        {lvl === 1 ? "Ít" : lvl === 2 ? "Vừa" : "Rất cao"}
-                      </button>
-                    ))}
+                {/* 3. Chất lượng & Danh tiếng */}
+                <div className="rounded-xl bg-surface p-3.5 border border-line space-y-2.5 shadow-2xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-xs text-foreground">Chất lượng & Danh tiếng</span>
+                    <span className="font-bold text-xs text-brand bg-brand-wash px-2 py-0.5 rounded-md">
+                      {sliderQuality}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={5}
+                    value={sliderQuality}
+                    onChange={(e) => {
+                      setActivePreset("custom");
+                      setSliderQuality(Number(e.target.value));
+                    }}
+                    className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-brand transition-all"
+                  />
+                  <div className="text-[11px] text-muted-foreground leading-tight">
+                    Ưu tiên trường top đầu, chất lượng đào tạo và tỷ lệ tuyển chọn khắt khe.
                   </div>
                 </div>
               </div>
@@ -515,6 +552,35 @@ export function RecommendationPanel() {
             </Alert>
           )}
 
+          {!result && !running && !noProfile && (
+            <Card className="items-center gap-3 border-dashed border-line px-6 py-10 text-center shadow-none">
+              <SparklesIcon className="size-6 text-brand" />
+              <CardTitle className="text-base">Chưa có kết quả gợi ý</CardTitle>
+              <CardDescription className="max-w-md text-xs">
+                Bấm nút dưới đây để lọc trường theo hồ sơ hiện tại. Mất khoảng 1 phút vì AI viết nhận xét cho từng
+                trường.
+              </CardDescription>
+              <Button type="button" onClick={handleRun} className="mt-1 gap-2">
+                <RefreshCwIcon className="size-4" />
+                Lọc trường theo hồ sơ
+              </Button>
+            </Card>
+          )}
+
+          {result && result.warnings.length > 0 && (
+            <Alert className="border-warn/40 bg-warn-wash/40">
+              <TriangleAlertIcon className="size-4 text-warn" />
+              <AlertTitle className="text-warn font-semibold text-sm">Lưu ý về kết quả</AlertTitle>
+              <AlertDescription className="text-xs text-muted-foreground">
+                <ul className="space-y-1">
+                  {result.warnings.map((w) => (
+                    <li key={w}>• {w}</li>
+                  ))}
+                </ul>
+              </AlertDescription>
+            </Alert>
+          )}
+
           {/* Render 4 Groups (Khó vào, Vừa sức, An toàn, Cần học bổng lớn) */}
           {result &&
             TIERS.map((tier) => {
@@ -548,7 +614,12 @@ export function RecommendationPanel() {
                         <TableHead className="w-10 text-center">#</TableHead>
                         <TableHead>Trường</TableHead>
                         <TableHead className="text-right">Chi phí/năm</TableHead>
-                        <TableHead className="text-center">Độ phù hợp</TableHead>
+                        <TableHead
+                          className="text-center"
+                          title="Điểm sắp xếp theo mức ưu tiên bạn chọn ở trên (chi phí, học bổng, chất lượng). Không phải khả năng trúng tuyển."
+                        >
+                          Độ phù hợp
+                        </TableHead>
                         <TableHead className="w-24 text-right">Chi tiết</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -576,11 +647,16 @@ export function RecommendationPanel() {
                                       : "Đại học"}
                                   </span>
                                 </div>
-                                {item.categoryReason && (
-                                  <div className="text-xs text-muted-foreground/90 mt-1 line-clamp-1 italic">
+                                {item.categoryReason ? (
+                                  <div className="text-xs text-foreground/80 mt-1.5 font-medium">
                                     {item.categoryReason}
                                   </div>
+                                ) : (
+                                  item.reason && (
+                                    <div className="text-xs text-foreground/80 mt-1.5">{item.reason}</div>
+                                  )
                                 )}
+                                <ReasonBullets item={item} limit={2} />
                               </TableCell>
                               <TableCell className="text-right font-medium text-foreground align-top">
                                 {item.costUnknown || item.totalCostUsd == null ? (
@@ -702,12 +778,16 @@ export function RecommendationPanel() {
                 </div>
                 <div className="flex justify-between">
                   <span>Ngoại khóa:</span>
-                  <strong className="text-foreground">{ecScore ? `${ecScore} / 4.0` : "–"}</strong>
+                  <strong className="text-foreground">
+                    {activitiesCount > 0
+                      ? `${activitiesCount} hoạt động`
+                      : ecScore ? `${ecScore} / 4.0` : "–"}
+                  </strong>
                 </div>
                 <div className="flex justify-between">
                   <span>Ngân sách / năm:</span>
                   <strong className="text-foreground">
-                    {student.annualBudgetUsd ? usd(student.annualBudgetUsd) : "–"}
+                    {budgetLabel(student) ?? "–"}
                   </strong>
                 </div>
               </div>
@@ -716,6 +796,29 @@ export function RecommendationPanel() {
         </aside>
       </div>
     </div>
+  );
+}
+
+// Ưu / nhược điểm rút gọn ngay dưới tên trường (đầy đủ ở phần Chi tiết)
+function ReasonBullets({ item, limit }: { item: RecommendationItem; limit: number }) {
+  const strengths = item.strengths?.slice(0, limit) ?? [];
+  const weaknesses = item.weaknesses?.slice(0, limit) ?? [];
+  if (strengths.length === 0 && weaknesses.length === 0) return null;
+  return (
+    <ul className="mt-1.5 space-y-0.5 text-xs">
+      {strengths.map((st) => (
+        <li key={`s-${st}`} className="flex items-start gap-1.5 text-foreground/80">
+          <CheckIcon className="size-3.5 text-ok shrink-0 mt-0.5" aria-hidden="true" />
+          <span>{st}</span>
+        </li>
+      ))}
+      {weaknesses.map((w) => (
+        <li key={`w-${w}`} className="flex items-start gap-1.5 text-foreground/80">
+          <XIcon className="size-3.5 text-risk shrink-0 mt-0.5" aria-hidden="true" />
+          <span>{w}</span>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -747,11 +850,13 @@ function SchoolDetailsExtended({ item }: { item: RecommendationItem }) {
 
   return (
     <div className="space-y-4 text-xs">
-      {/* AI Explanation / Nhận xét 3 câu */}
+      {/* Nhận xét: AI viết (aiExplained) hoặc câu so sánh soạn sẵn từ số liệu */}
       {item.reason && (
         <Alert className="border-brand/20 bg-brand-wash/30">
           <SparklesIcon className="size-4 text-brand" />
-          <AlertTitle className="text-brand font-semibold text-xs">Đánh giá độ phù hợp</AlertTitle>
+          <AlertTitle className="text-brand font-semibold text-xs">
+            {item.aiExplained ? "Nhận xét của AI" : "Tóm tắt so sánh"}
+          </AlertTitle>
           <AlertDescription className="text-xs text-foreground/90 mt-1 leading-relaxed">
             {item.reason}
           </AlertDescription>
@@ -759,7 +864,7 @@ function SchoolDetailsExtended({ item }: { item: RecommendationItem }) {
       )}
 
       {/* Strengths & Weaknesses */}
-      {(item.strengths?.length || item.weaknesses?.length) && (
+      {!!(item.strengths?.length || item.weaknesses?.length) && (
         <div className="grid gap-3 sm:grid-cols-2 pt-1">
           {!!item.strengths?.length && (
             <div className="rounded-lg bg-ok-wash/30 border border-ok/20 p-3 space-y-1">
