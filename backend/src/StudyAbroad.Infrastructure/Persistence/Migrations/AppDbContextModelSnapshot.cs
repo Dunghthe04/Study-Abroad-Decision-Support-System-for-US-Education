@@ -902,9 +902,21 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(2000)")
                         .HasColumnName("description");
 
+                    b.Property<int?>("DurationMonths")
+                        .HasColumnType("integer")
+                        .HasColumnName("duration_months");
+
                     b.Property<DateOnly?>("EndDate")
                         .HasColumnType("date")
                         .HasColumnName("end_date");
+
+                    b.Property<int?>("ImpactLevel")
+                        .HasColumnType("integer")
+                        .HasColumnName("impact_level");
+
+                    b.Property<bool>("IsOngoing")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_ongoing");
 
                     b.Property<string>("Kind")
                         .IsRequired()
@@ -1252,6 +1264,16 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(64)")
                         .HasColumnName("education_system");
 
+                    b.Property<decimal?>("ExtracurricularScore")
+                        .HasPrecision(4, 2)
+                        .HasColumnType("numeric(4,2)")
+                        .HasColumnName("extracurricular_score");
+
+                    b.Property<string>("FinancialNotes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("financial_notes");
+
                     b.Property<string>("FundingSource")
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)")
@@ -1286,6 +1308,11 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)")
                         .HasColumnName("intended_major");
+
+                    b.Property<decimal?>("MaxExpectedTuitionUsd")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("max_expected_tuition_usd");
 
                     b.Property<bool>("NeedsScholarship")
                         .HasColumnType("boolean")
@@ -1345,7 +1372,10 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_student_profiles_user_id");
 
-                    b.ToTable("student_profiles", "app");
+                    b.ToTable("student_profiles", "app", t =>
+                        {
+                            t.HasCheckConstraint("ck_student_profiles_extracurricular_score", "extracurricular_score IS NULL OR extracurricular_score BETWEEN 0 AND 4");
+                        });
                 });
 
             modelBuilder.Entity("StudyAbroad.Domain.Entities.StudyCenter", b =>

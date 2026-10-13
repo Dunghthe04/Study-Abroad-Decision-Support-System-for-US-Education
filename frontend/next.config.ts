@@ -10,6 +10,8 @@ const nextConfig: NextConfig = {
   async rewrites() {
     return devApiTarget ? [{ source: "/api/:path*", destination: `${devApiTarget}/api/:path*` }] : [];
   },
+  // Dev proxy mặc định cắt request sau 30 giây; gợi ý trường chờ AI viết giải thích, máy chỉ có CPU mất tới khoảng 9 phút
+  experimental: { proxyTimeout: 600_000 },
 };
 
 export default nextConfig;
