@@ -26,7 +26,6 @@ async def lifespan(app: FastAPI):
         yield
 
 
-
 def create_app() -> FastAPI:
     """Tạo ứng dụng. Viết thành hàm để test có thể tạo app mới, độc lập cho mỗi lần chạy."""
     app = FastAPI(title="Study Abroad Advisor Service", version="0.1.0", lifespan=lifespan)

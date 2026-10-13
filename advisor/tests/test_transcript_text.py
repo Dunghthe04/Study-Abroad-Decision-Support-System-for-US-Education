@@ -46,5 +46,7 @@ def test_cut_repetition_drops_repeated_page_and_fences():
 
 def test_cut_repetition_keeps_header_repeated_per_grade_block():
     header = "Môn Toán Lý Hóa Sinh Ngữ văn"
-    text = f"{header}\nHK1 7.2 4.2 7.8 5.1 6.7\n{header}\nHK1 7.7 7.3 9 7.8 6.5\n{header}\nHK1 8.1 7.4 8.5 7.7 7"
+    text = (
+        f"{header}\nHK1 7.2 4.2 7.8 5.1 6.7\n{header}\nHK1 7.7 7.3 9 7.8 6.5\n{header}\nHK1 8.1 7.4 8.5 7.7 7"
+    )
     assert cut_repetition(text) == text

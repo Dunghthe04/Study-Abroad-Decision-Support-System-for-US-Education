@@ -24,13 +24,25 @@ Lớp 10
 HIGH_SCHOOL_PARSED = {
     "scale": "10",
     "terms": [
-        {"grade": "Lớp 10", "term": "HK1", "subjects": [
-            {"name": "Toán", "score": "7,2"}, {"name": "Lý", "score": "4,2"}, {"name": "Văn", "score": "6,7"},
-            {"name": "Thể dục", "score": "Đ"},
-        ]},
-        {"grade": "Lớp 10", "term": "HK2", "subjects": [
-            {"name": "Toán", "score": "7,5"}, {"name": "Lý", "score": "7,8"}, {"name": "Văn", "score": "7,1"},
-        ]},
+        {
+            "grade": "Lớp 10",
+            "term": "HK1",
+            "subjects": [
+                {"name": "Toán", "score": "7,2"},
+                {"name": "Lý", "score": "4,2"},
+                {"name": "Văn", "score": "6,7"},
+                {"name": "Thể dục", "score": "Đ"},
+            ],
+        },
+        {
+            "grade": "Lớp 10",
+            "term": "HK2",
+            "subjects": [
+                {"name": "Toán", "score": "7,5"},
+                {"name": "Lý", "score": "7,8"},
+                {"name": "Văn", "score": "7,1"},
+            ],
+        },
         {"grade": "Lớp 10", "term": "Cả năm", "subjects": [{"name": "Toán", "score": "7,4"}]},
     ],
 }
@@ -173,9 +185,19 @@ def test_university_portal_maps_seasons_to_years_and_summer_joins_spring():
 
 
 def test_score_not_in_transcribed_text_is_dropped_with_warning():
-    parsed = {"scale": "10", "terms": [{"grade": "Lớp 10", "term": "HK1", "subjects": [
-        {"name": "Toán", "score": "7,2"}, {"name": "Hóa", "score": "9,9"},
-    ]}]}
+    parsed = {
+        "scale": "10",
+        "terms": [
+            {
+                "grade": "Lớp 10",
+                "term": "HK1",
+                "subjects": [
+                    {"name": "Toán", "score": "7,2"},
+                    {"name": "Hóa", "score": "9,9"},
+                ],
+            }
+        ],
+    }
     body = post_image(make_client(FakeOllama(HIGH_SCHOOL_MARKDOWN, parsed)))
 
     assert scores_by_term(body) == {"Lớp 10 HK1": {"Toán": 7.2}}
@@ -196,7 +218,9 @@ def test_vision_500_retries_once_on_cpu():
 
 def test_vision_repeat_limit_is_not_retried_on_cpu():
     fake = FakeOllama(
-        HIGH_SCHOOL_MARKDOWN, HIGH_SCHOOL_PARSED, vision_errors=1,
+        HIGH_SCHOOL_MARKDOWN,
+        HIGH_SCHOOL_PARSED,
+        vision_errors=1,
         vision_error_text='{"error":"prediction aborted, token repeat limit reached"}',
     )
     body = post_image(make_client(fake))
@@ -207,7 +231,8 @@ def test_vision_repeat_limit_is_not_retried_on_cpu():
 
 def test_repeat_limit_after_table_keeps_text_already_transcribed():
     fake = FakeOllama(
-        HIGH_SCHOOL_MARKDOWN, HIGH_SCHOOL_PARSED,
+        HIGH_SCHOOL_MARKDOWN,
+        HIGH_SCHOOL_PARSED,
         stream_error="prediction aborted, token repeat limit reached",
     )
     body = post_image(make_client(fake))
@@ -241,7 +266,10 @@ def test_no_vision_model_installed_asks_for_manual_entry():
 
 
 def test_non_ten_point_scale_is_not_filled_in():
-    parsed = {"scale": "4", "terms": [{"grade": "Năm 1", "term": "HK1", "subjects": [{"name": "Math", "score": "3,5"}]}]}
+    parsed = {
+        "scale": "4",
+        "terms": [{"grade": "Năm 1", "term": "HK1", "subjects": [{"name": "Math", "score": "3,5"}]}],
+    }
     body = post_image(make_client(FakeOllama("Math 3,5", parsed)))
 
     assert body["success"] is False
@@ -294,10 +322,14 @@ def test_resolve_term_variants():
 
 def test_high_school_year_only_maps_to_grade_10_with_warning():
     markdown = "KẾT QUẢ HỌC TẬP Năm học 2019 - 2020\n| Môn | Kỳ 1 | Kỳ 2 |\n| Toán | 9,9 | 9,8 |"
-    parsed = {"scale": "10", "level": "thpt", "terms": [
-        {"grade": "2019 - 2020", "term": "Kỳ 1", "subjects": [{"name": "Toán học", "score": "9,9"}]},
-        {"grade": "2019 - 2020", "term": "Kỳ 2", "subjects": [{"name": "Toán học", "score": "9,8"}]},
-    ]}
+    parsed = {
+        "scale": "10",
+        "level": "thpt",
+        "terms": [
+            {"grade": "2019 - 2020", "term": "Kỳ 1", "subjects": [{"name": "Toán học", "score": "9,9"}]},
+            {"grade": "2019 - 2020", "term": "Kỳ 2", "subjects": [{"name": "Toán học", "score": "9,8"}]},
+        ],
+    }
     body = post_image(make_client(FakeOllama(markdown, parsed)))
 
     assert scores_by_term(body) == {"Lớp 10 HK1": {"Toán": 9.9}, "Lớp 10 HK2": {"Toán": 9.8}}
@@ -310,9 +342,13 @@ def test_class_code_like_11a1_is_read_as_grade_11():
 
 def test_grade_not_written_in_source_is_not_trusted():
     markdown = "KẾT QUẢ HỌC TẬP Năm học 2021 - 2022\n| Môn | Kỳ 1 |\n| Toán | 8,5 |"
-    parsed = {"scale": "10", "level": "thpt", "terms": [
-        {"grade": "Lớp 12", "term": "Kỳ 1", "subjects": [{"name": "Toán", "score": "8,5"}]},
-    ]}
+    parsed = {
+        "scale": "10",
+        "level": "thpt",
+        "terms": [
+            {"grade": "Lớp 12", "term": "Kỳ 1", "subjects": [{"name": "Toán", "score": "8,5"}]},
+        ],
+    }
     body = post_image(make_client(FakeOllama(markdown, parsed)))
 
     assert scores_by_term(body) == {"Lớp 10 HK1": {"Toán": 8.5}}
@@ -331,7 +367,13 @@ def test_spaced_high_school_table_is_read_by_code_without_llm():
     body = post_image(make_client(fake))
 
     assert scores_by_term(body)["Lớp 10 HK1"] == {
-        "Toán": 7.2, "Vật lý": 4.2, "Ngữ văn": 6.7, "Lịch sử": 7.6, "Địa lý": 6.6, "Tiếng Anh": 5.7, "GDCD": 6.0,
+        "Toán": 7.2,
+        "Vật lý": 4.2,
+        "Ngữ văn": 6.7,
+        "Lịch sử": 7.6,
+        "Địa lý": 6.6,
+        "Tiếng Anh": 5.7,
+        "GDCD": 6.0,
     }
     assert set(scores_by_term(body)) == {"Lớp 10 HK1", "Lớp 10 HK2"}
     assert not [c for c in fake.calls if "format" in c]  # không gọi LLM bước B

@@ -19,4 +19,3 @@ def get_activity_reader(request: Request) -> ActivityReader:
 def get_transcript_reader(request: Request):
     """Lấy TranscriptReader đã tạo lúc khởi động."""
     return request.app.state.transcript_reader
-

@@ -27,4 +27,3 @@ async def ocr_transcript(
 ) -> TranscriptOcrResponse:
     """[USAS-640] OCR đọc và bóc tách bảng điểm học bạ THPT thành các môn và học kỳ bằng Ollama Vision / LLM."""
     return await reader.read_transcript(request)
-

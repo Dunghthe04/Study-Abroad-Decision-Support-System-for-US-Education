@@ -16,10 +16,37 @@ from difflib import SequenceMatcher
 
 # Tiêu đề cột nhiều chữ hay gặp trong học bạ / bảng điểm (viết không dấu)
 MULTI_WORD_HEADERS = (
-    "ngu van", "ngoai ngu", "cong nghe", "the duc", "gd cd", "gd qp", "gdqp an", "tb mon", "tb cm",
-    "lich su", "dia ly", "dia li", "vat ly", "vat li", "hoa hoc", "sinh hoc", "tin hoc", "toan hoc",
-    "tieng anh", "anh van", "am nhac", "my thuat", "hoc luc", "hanh kiem", "xep loai", "diem tb",
-    "giao duc", "quoc phong", "the chat", "ca nam", "hoc ky",
+    "ngu van",
+    "ngoai ngu",
+    "cong nghe",
+    "the duc",
+    "gd cd",
+    "gd qp",
+    "gdqp an",
+    "tb mon",
+    "tb cm",
+    "lich su",
+    "dia ly",
+    "dia li",
+    "vat ly",
+    "vat li",
+    "hoa hoc",
+    "sinh hoc",
+    "tin hoc",
+    "toan hoc",
+    "tieng anh",
+    "anh van",
+    "am nhac",
+    "my thuat",
+    "hoc luc",
+    "hanh kiem",
+    "xep loai",
+    "diem tb",
+    "giao duc",
+    "quoc phong",
+    "the chat",
+    "ca nam",
+    "hoc ky",
 )
 MIN_PAIR_SIMILARITY = 0.8  # chịu được OCR sai dấu: "Thể dµc" ~ "the duc", "Ngữ vân" ~ "ngu van"
 HEADER_LEADS = ("mon hoc", "mon", "subject", "course")
@@ -86,7 +113,7 @@ def _try_table(lines: list[str], start: int) -> tuple[list[str], int] | None:
         return None
 
     rows: list[tuple[str, list[str]]] = []
-    for line in lines[start + 1:]:
+    for line in lines[start + 1 :]:
         row = _split_row(line)
         if row is None or (rows and len(row[1]) != len(rows[0][1])):
             break
@@ -133,11 +160,15 @@ def read_term_tables(text: str) -> list[dict]:
             continue
         if len(cells) != len(header) or not _TERM_LABEL_RE.match(plain(cells[0])):
             continue
-        terms.append({
-            "grade": grade,
-            "term": cells[0],
-            "subjects": [{"name": name, "score": score} for name, score in zip(header[1:], cells[1:], strict=True)],
-        })
+        terms.append(
+            {
+                "grade": grade,
+                "term": cells[0],
+                "subjects": [
+                    {"name": name, "score": score} for name, score in zip(header[1:], cells[1:], strict=True)
+                ],
+            }
+        )
     return terms
 
 

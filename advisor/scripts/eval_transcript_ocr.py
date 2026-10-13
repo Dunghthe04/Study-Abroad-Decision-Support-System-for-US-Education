@@ -58,15 +58,22 @@ async def run(files: list[Path], models: list[str], out_dir: Path) -> None:
                 elapsed = time.perf_counter() - started
 
                 scores = sum(len(t.scores) for t in result.terms)
-                dropped = sum(int(m.group(1)) for w in result.warnings if (m := re.search(r"bỏ (\d+) điểm", w)))
-                rows.append((model, path.name, len(result.terms), scores, dropped, elapsed, result.model_used or ""))
+                dropped = sum(
+                    int(m.group(1)) for w in result.warnings if (m := re.search(r"bỏ (\d+) điểm", w))
+                )
+                rows.append(
+                    (model, path.name, len(result.terms), scores, dropped, elapsed, result.model_used or "")
+                )
 
                 stem = f"{re.sub(r'[^a-z0-9]+', '_', model)}__{path.stem}"
                 (out_dir / f"{stem}.md").write_text("\n\n".join(reader.transcripts), encoding="utf-8")
                 (out_dir / f"{stem}.json").write_text(
-                    json.dumps(result.model_dump(by_alias=True), ensure_ascii=False, indent=1), encoding="utf-8"
+                    json.dumps(result.model_dump(by_alias=True), ensure_ascii=False, indent=1),
+                    encoding="utf-8",
                 )
-                print(f"{model:14} {path.name:42} kỳ={len(result.terms):2} điểm={scores:3} loại={dropped:2} {elapsed:6.1f}s")
+                print(
+                    f"{model:14} {path.name:42} kỳ={len(result.terms):2} điểm={scores:3} loại={dropped:2} {elapsed:6.1f}s"
+                )
                 for w in result.warnings:
                     print(f"{'':16}! {w}")
 

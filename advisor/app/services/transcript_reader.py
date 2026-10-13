@@ -102,7 +102,9 @@ MAX_SOURCE_CHARS = 12000
 MAX_PDF_PAGES = 10
 MIN_IMAGE_SIDE = 1200
 
-FRIENDLY_AI_BUSY = "AI chưa đọc được (máy chủ AI đang bận hoặc thiếu bộ nhớ). Bạn thử lại sau ít phút hoặc nhập điểm tay."
+FRIENDLY_AI_BUSY = (
+    "AI chưa đọc được (máy chủ AI đang bận hoặc thiếu bộ nhớ). Bạn thử lại sau ít phút hoặc nhập điểm tay."
+)
 
 SUBJECT_MAP: dict[str, str] = {
     "toán": "Toán",
@@ -389,7 +391,11 @@ class TranscriptReader:
             page_images = self._render_pdf_pages(pdf_bytes)
         except Exception as ex:
             logger.warning("Không render được PDF %s: %s", file_name, ex)
-            return _FileResult(warnings=[f"Tệp '{file_name}': không mở được tệp PDF. Bạn thử xuất lại PDF hoặc chụp ảnh bảng điểm."])
+            return _FileResult(
+                warnings=[
+                    f"Tệp '{file_name}': không mở được tệp PDF. Bạn thử xuất lại PDF hoặc chụp ảnh bảng điểm."
+                ]
+            )
         if not page_images:
             return _FileResult(warnings=[f"Tệp '{file_name}': tệp PDF không có trang nào."])
         return await self._read_images(page_images, file_name)
@@ -418,7 +424,9 @@ class TranscriptReader:
         vision_model = await self._pick_vision_model()
         if not vision_model:
             return _FileResult(
-                warnings=[f"Tệp '{file_name}': máy chủ AI chưa cài model đọc ảnh. Bạn nhập điểm tay vào bảng giúp nhé."]
+                warnings=[
+                    f"Tệp '{file_name}': máy chủ AI chưa cài model đọc ảnh. Bạn nhập điểm tay vào bảng giúp nhé."
+                ]
             )
 
         pages: list[str] = []
@@ -435,7 +443,9 @@ class TranscriptReader:
         if not pages:
             return _FileResult(
                 model=vision_model,
-                warnings=[f"Tệp '{file_name}': AI không đọc được chữ nào trong ảnh. Bạn chụp rõ và thẳng hơn giúp nhé."],
+                warnings=[
+                    f"Tệp '{file_name}': AI không đọc được chữ nào trong ảnh. Bạn chụp rõ và thẳng hơn giúp nhé."
+                ],
             )
         return await self._parse_source("\n\n".join(pages), file_name, model_used=vision_model)
 
@@ -447,10 +457,14 @@ class TranscriptReader:
             img = img.convert("L")
             longest = max(img.size)
             max_side = self._settings.image_max_side
-            target = max_side if longest > max_side else MIN_IMAGE_SIDE if longest < MIN_IMAGE_SIDE else longest
+            target = (
+                max_side if longest > max_side else MIN_IMAGE_SIDE if longest < MIN_IMAGE_SIDE else longest
+            )
             if target != longest:
                 ratio = target / longest
-                img = img.resize((round(img.width * ratio), round(img.height * ratio)), Image.Resampling.LANCZOS)
+                img = img.resize(
+                    (round(img.width * ratio), round(img.height * ratio)), Image.Resampling.LANCZOS
+                )
             img = ImageOps.autocontrast(img, cutoff=1)
             buf = io.BytesIO()
             img.save(buf, format="PNG", optimize=True)
@@ -497,7 +511,9 @@ class TranscriptReader:
         # Bảng học bạ đã dựng thẳng cột thì code đọc luôn: nhanh và không lệch cột như LLM nhỏ
         if table_terms := read_term_tables(source):
             level = "thpt" if any(t["grade"] for t in table_terms) else "unknown"
-            direct = self._check_parsed({"scale": "10", "level": level, "terms": table_terms}, source, file_name)
+            direct = self._check_parsed(
+                {"scale": "10", "level": level, "terms": table_terms}, source, file_name
+            )
             if direct.terms:
                 direct.model = model_used
                 return direct
@@ -519,7 +535,10 @@ class TranscriptReader:
             return _FileResult(model=used, warnings=[f"Tệp '{file_name}': {FRIENDLY_AI_BUSY}"])
         except ValueError as ex:
             logger.warning("Bước B trả JSON hỏng (%s): %s", file_name, ex)
-            return _FileResult(model=used, warnings=[f"Tệp '{file_name}': AI trả kết quả không hợp lệ, bạn thử lại giúp nhé."])
+            return _FileResult(
+                model=used,
+                warnings=[f"Tệp '{file_name}': AI trả kết quả không hợp lệ, bạn thử lại giúp nhé."],
+            )
 
         result = self._check_parsed(data, source, file_name)
         result.model = used
@@ -537,7 +556,12 @@ class TranscriptReader:
                 or "repeat limit" in ex.response.text
             ):
                 raise OllamaUnavailableError(f"{ex.response.status_code}: {ex.response.text[:300]}") from ex
-            logger.warning("Ollama %s lỗi %s, thử lại trên CPU: %s", payload["model"], ex.response.status_code, ex.response.text[:300])
+            logger.warning(
+                "Ollama %s lỗi %s, thử lại trên CPU: %s",
+                payload["model"],
+                ex.response.status_code,
+                ex.response.text[:300],
+            )
         except httpx.HTTPError as ex:
             raise OllamaUnavailableError(repr(ex)) from ex
 
@@ -726,7 +750,9 @@ class TranscriptReader:
         first_year: dict[bool, int] = {}
         for t in raw_terms:
             if t.academic_year is not None:
-                first_year[t.high_school] = min(first_year.get(t.high_school, t.academic_year), t.academic_year)
+                first_year[t.high_school] = min(
+                    first_year.get(t.high_school, t.academic_year), t.academic_year
+                )
         merged: dict[str, dict[str, float]] = {}
         for t in raw_terms:
             grade = t.grade_name
