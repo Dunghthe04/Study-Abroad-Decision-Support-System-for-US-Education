@@ -1,6 +1,5 @@
 """Hợp đồng dữ liệu .NET <-> advisor cho bước OCR đọc bảng điểm (học bạ THPT/ĐH đa tệp)."""
 
-from typing import Any
 from pydantic import Field
 
 from app.schemas.recommendation import CamelModel
