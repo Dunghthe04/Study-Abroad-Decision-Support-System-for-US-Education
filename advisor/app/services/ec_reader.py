@@ -1,14 +1,12 @@
-"""Gọi AI theo skill ec, sai gọi lại 1 lần"""
-import json
+"""Lượt ① (bậc ngoại khóa): gọi AI 1 lần theo skill_ec.md, kiểm tra JSON, sai thì gọi lại 1 lần."""
+
 from pathlib import Path
 from typing import Any
 
 from app.schemas.ec import EcRequest, EcResponse, EcResult, ec_schema
-from app.services.ollama import OllamaError
-from app.services.scorer import MAX_ATTEMPTS, load_skill
+from app.services.skill_call import SKILLS_DIR, SkillCall
 
-SKILL_PATH = Path(__file__).resolve().parent.parent / "skills" / "skill_ec.md"
-
+SKILL_PATH = SKILLS_DIR / "skill_ec.md"
 #Mốc chia bậc m :  m < 0.10 → 1, < 0.25 → 2, < 0.45 → 3, < 0.65 → 4, còn lại 5
 TIER_CUTS = [0.10, 0.25, 0.45, 0.65]
 
@@ -46,29 +44,19 @@ def check_ec(raw: dict[str, Any], req: EcRequest) -> EcResult:
     return result 
 
 class EcReader:
-    def __init__(self, llm: Any, model:str, skill_path: Path= SKILL_PATH)-> None:
-        self._llm=llm
-        self._model = model
-        self._skill, self.skill_version = load_skill(skill_path)
+    def __init__(self, llm: Any, model: str, skill_path: Path = SKILL_PATH) -> None:
+        self._call = SkillCall(llm, model, skill_path)
+        self.skill_version = self._call.skill_version
 
     async def read(self, req: EcRequest) -> EcResponse:
-        #không có hoạt động và giải nào thì m = 0, bậc 1. Không cần gọi AI.
+        # Bước N7: không có hoạt động và giải nào thì m = 0, bậc 1. Không cần gọi AI.
         if not req.act and not req.awards:
-            return self._response(EcResult(act=[], tong_hd =0,bonus=0,m=0,tier=1))
+            return self._response(EcResult(act=[], tong_hd=0, bonus=0, m=0, tier=1))
 
-        #Nếu có gửi lên act or awads
-        messages=[
-            {"role": "system","content": self._skill},
-            {"role": "user","content":json.dumps(req.model_dump(),ensure_ascii=False,separators=(",",":"))},
-        ]
-        for _ in range(MAX_ATTEMPTS):
-            try:
-                raw = await self._llm.chat_json(messages, ec_schema(len(req.act)), temperature=0.0)
-                return self._response(check_ec(raw, req)) 
-            except (OllamaError, ValueError):
-                continue
-        
-        raise EcError("AI không trả được bậc ngoại khóa hợp lệ sau 2 lần gọi")
+        result = await self._call.run(req.model_dump(), ec_schema(len(req.act)), lambda raw: check_ec(raw, req))
+        if result is None:
+            raise EcError("AI không trả được bậc ngoại khóa hợp lệ sau 2 lần gọi")
+        return self._response(result)
 
     def _response(self, result: EcResult) -> EcResponse:
-        return EcResponse(**result.model_dump(), skill_version=self.skill_version, model=self._model)
+        return EcResponse(**result.model_dump(), skill_version=self.skill_version, model=self._call.model)

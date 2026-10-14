@@ -8,7 +8,8 @@ from app.api.deps import get_scorer
 from app.main import create_app
 from app.schemas.score import ScoreRequest, score_schema
 from app.services.ollama import OllamaError
-from app.services.scorer import Scorer, load_skill
+from app.services.scorer import SKILL_PATH, Scorer
+from app.services.skill_call import load_skill
 from tests.fakes import FakeLLM
 
 STUDENT = {"gpa": 3.6, "sat": 1350, "budget": 50000, "tier": 3}
@@ -101,7 +102,7 @@ def test_schema_fixes_codes_count_and_key_order():
 
 
 def test_skill_file_has_version():
-    text, version = load_skill()
+    text, version = load_skill(SKILL_PATH)
     assert version == "1.1"
     assert "Bước 6" in text
 

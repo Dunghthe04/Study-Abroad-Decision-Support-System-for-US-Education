@@ -1,13 +1,12 @@
 """Lượt ③ (xếp hạng và chọn danh sách): gọi AI 1 lần theo skill_pick.md, kiểm tra JSON, sai thì gọi lại 1 lần."""
-import json
+
 from pathlib import Path
 from typing import Any
 
 from app.schemas.pick import LIMITS, PickItem, PickRequest, PickResponse, PickResult, pick_schema
-from app.services.ollama import OllamaError
-from app.services.scorer import MAX_ATTEMPTS, load_skill
+from app.services.skill_call import SKILLS_DIR, SkillCall
 
-SKILL_PATH = Path(__file__).resolve().parent.parent / "skills" / "skill_pick.md"
+SKILL_PATH = SKILLS_DIR / "skill_pick.md"
 
 class PickError(Exception):
     """AI trả sai 2 lần liền: chưa có danh sách để hiển thị."""
@@ -71,25 +70,15 @@ def check_pick(raw: dict[str,Any], req: PickRequest)-> PickResult:
     return result
 class Picker:
     def __init__(self, llm: Any, model: str, skill_path: Path = SKILL_PATH) -> None:
-        self._llm = llm
-        self._model = model
-        self._skill, self.skill_version = load_skill(skill_path)
+        self._call = SkillCall(llm, model, skill_path)
+        self.skill_version = self._call.skill_version
 
     async def pick(self, req: PickRequest) -> PickResponse:
         user = req.model_dump(exclude_none=True)   # thiếu số thì bỏ key, như lượt ②
-        messages = [
-            {"role": "system", "content": self._skill},
-            {"role": "user", "content": json.dumps(user, ensure_ascii=False, separators=(",", ":"))},
-        ]
         codes = [i.c for i in req.items]
-        for _ in range(MAX_ATTEMPTS):
-            try:
-                raw = await self._llm.chat_json(messages, pick_schema(codes), temperature=0.0)
-                result = check_pick(raw, req)
-                return PickResponse(**result.model_dump(), skill_version=self.skill_version, model=self._model)
-            except (OllamaError, ValueError):
-                continue
-        raise PickError("AI không trả được danh sách hợp lệ sau 2 lần gọi")
-
+        result = await self._call.run(user, pick_schema(codes), lambda raw: check_pick(raw, req))
+        if result is None:
+            raise PickError("AI không trả được danh sách hợp lệ sau 2 lần gọi")
+        return PickResponse(**result.model_dump(), skill_version=self.skill_version, model=self._call.model)
 
     

@@ -1,22 +1,13 @@
 """Lượt ② (chấm trường): chia lô, gọi AI theo skill_score.md, kiểm tra JSON, sai thì gọi lại 1 lần."""
-import json
-import re
+
 from pathlib import Path
 from typing import Any
 
 from app.schemas.score import ScoreItem, ScoreRequest, ScoreResponse, ScoreSchool, score_schema
-from app.services.ollama import OllamaError
+from app.services.skill_call import SKILLS_DIR, SkillCall
 
-SKILL_PATH = Path(__file__).resolve().parent.parent / "skills" / "skill_score.md"
-BATCH_SIZE =8 # 8 trường/lô: vừa num_ctx 6144, model 8B còn tính chính xác
-MAX_ATTEMPTS=2 # lô sai định dạng thì gọi lại đúng 1 lần
-
-# Đọc skill
-def load_skill(path: Path =SKILL_PATH) -> tuple[str, str]:
-    """Đọc file skill, lấy số phiên bản ở dòng đầu ("skill_version 1.1")."""
-    text = path.read_text(encoding="utf-8")
-    match = re.search(r"skill_version\s+([\w.]+)", text)
-    return text, match.group(1) if match else "unknown"
+SKILL_PATH = SKILLS_DIR / "skill_score.md"
+BATCH_SIZE = 8   # 8 trường/lô: vừa num_ctx 6144
 
 #kiểm tra kết quả JSON do AI trả về có đúng cấu trúc, đúng mã trường, đúng thứ tự và nằm trong các giới hạn hợp lệ hay không.
 #raw dữ liệu AI trả về, codes là mã trường ban đầu 
@@ -53,112 +44,25 @@ def check_batch(raw: dict[str, Any], codes: list[str]) -> list[ScoreItem]:
     return items
 
 class Scorer:
-    def __init__(self, llm: Any, model: str, skill_path: Path=SKILL_PATH, batch_size: int=BATCH_SIZE)-> None:
-         # Lưu đối tượng giao tiếp với AI
-        self._llm = llm
-
-        # Lưu tên mô hình AI, ví dụ qwen3:8b
-        self._model = model
-
-        # Đọc hướng dẫn chấm điểm và phiên bản hướng dẫn
-        self._skill, self.skill_version = load_skill(skill_path)
-
-        # Số trường được chấm trong mỗi lần gọi AI
+    def __init__(self, llm: Any, model: str, skill_path: Path = SKILL_PATH, batch_size: int = BATCH_SIZE) -> None:
+        self._call = SkillCall(llm, model, skill_path)
+        self.skill_version = self._call.skill_version
         self._batch_size = batch_size
 
     async def score(self, req: ScoreRequest) -> ScoreResponse:
-        #Chuyển hồ sơ học sinh thành dictionary
         student = req.student.model_dump(exclude_none=True)
-
-        #Chuẩn bị danh sách kq
-        items =[]
-        failed = []
-
-        #Chia danh sách trường thành nhiều lô
+        items: list[ScoreItem] = []
+        failed: list[str] = []
         for start in range(0, len(req.schools), self._batch_size):
-            batch = req.schools[
-                start: start+self._batch_size
-            ]
-
-            #Gửi lô trường cho AI chấm
+            batch = req.schools[start:start + self._batch_size]
             result = await self._score_batch(student, batch)
-
-            #Xử lý kết quả của lô
             if result is None:
-                #Ghi nhận mã trường thuộc lô thất bại
-                for school in batch:
-                    failed.append(school.c)
+                failed += [s.c for s in batch]   # không bịa kết quả cho lô lỗi
             else:
-                #Thêm kết quả hợp lệ vào danh sách chung
-                for item in result:
-                    items.append(item)
-        return ScoreResponse(
-            skill_version = self.skill_version,
-            model = self._model,
-            items= items,
-            failed= failed
+                items += result
+        return ScoreResponse(skill_version=self.skill_version, model=self._call.model, items=items, failed=failed)
 
-        )
-
-
-    async def _score_batch(
-        self,
-        student: dict[str, Any],
-        batch: list[ScoreSchool]
-    ) -> list[ScoreItem] | None:
-
-        # Bước 1: Lấy mã các trường trong lô
-        codes = []
-        for school in batch:
-            codes.append(school.c)
-
-        # Bước 2: Chuẩn bị dữ liệu gửi AI
-        user = {
-            "student": student,
-            # duyệt từng trường trong lô, bỏ các tt = none
-            "schools": [
-                school.model_dump(exclude_none=True)
-                for school in batch
-            ]
-        }
-
-        # Bước 3: Tạo nội dung hội thoại gửi AI
-        messages = [
-            # Hướng dẫn + quy tắc cần tuân theo
-            {
-                "role": "system",
-                "content": self._skill
-            },
-            # Dữ liệu cần đánh giá
-            {
-                "role": "user",
-                "content": json.dumps( # Chuyển thành chuỗi json
-                    user,
-                    ensure_ascii=False,
-                    separators=(",", ":")
-                )
-            }
-        ]
-
-        # Bước 4: Thử gọi AI tối đa MAX_ATTEMPTS lần
-        for _ in range(MAX_ATTEMPTS):
-            try:
-                # Gửi yêu cầu và nhận JSON từ AI
-                raw = await self._llm.chat_json(
-                    messages,
-                    score_schema(codes),
-                    temperature=0.0
-                )
-
-                # Kiểm tra kết quả AI trả về
-                checked_items = check_batch(raw, codes)
-
-                # Hợp lệ thì trả kết quả ngay
-                return checked_items
-
-            except (OllamaError, ValueError):
-                # Gặp lỗi thuộc nhóm trên thì thử lại
-                continue
-
-        # Tất cả các lần thử đều thất bại
-        return None
+    async def _score_batch(self, student: dict[str, Any], batch: list[ScoreSchool]) -> list[ScoreItem] | None:
+        codes = [s.c for s in batch]
+        user = {"student": student, "schools": [s.model_dump(exclude_none=True) for s in batch]}
+        return await self._call.run(user, score_schema(codes), lambda raw: check_batch(raw, codes))
