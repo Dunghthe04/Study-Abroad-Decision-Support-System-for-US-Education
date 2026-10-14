@@ -1,9 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.api.deps import get_ec_reader, get_scorer
+from app.api.deps import get_ec_reader, get_picker, get_scorer
 from app.schemas.ec import EcRequest, EcResponse
+from app.schemas.pick import PickRequest, PickResponse
 from app.schemas.score import ScoreRequest, ScoreResponse
 from app.services.ec_reader import EcError, EcReader
+from app.services.picker import Picker, PickError
 from app.services.scorer import Scorer
 
 router = APIRouter(prefix="/recommend", tags=["recommend"])
@@ -22,3 +24,11 @@ async def ec(req: EcRequest, reader: EcReader= Depends(get_ec_reader))-> EcRespo
 async def score(req: ScoreRequest, scorer: Scorer= Depends(get_scorer)) -> ScoreResponse:
     """Lượt ②: chấm các trường còn lại sau lọc cứng, chia lô 8 trường."""
     return await scorer.score(req)
+
+@router.post("/pick", response_model=PickResponse)
+async def pick(req: PickRequest, picker: Picker= Depends(get_picker)) -> PickResponse:
+    """Lượt ③: xếp hạng theo mức quan tâm, chia 4 khối, gắn mã lý do. Đổi nút ưu tiên thì chỉ gọi lại lượt này."""
+    try:
+        return await picker.pick(req)
+    except PickError as ex:
+        raise HTTPException(status_code=502, detail=str(ex)) from ex

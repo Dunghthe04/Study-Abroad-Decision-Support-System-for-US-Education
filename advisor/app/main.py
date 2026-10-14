@@ -7,6 +7,7 @@ from app.api.routes import health, recommend
 from app.core.config import get_settings
 from app.services.ec_reader import EcReader
 from app.services.ollama import OllamaClient
+from app.services.picker import Picker
 from app.services.scorer import Scorer
 
 
@@ -32,6 +33,7 @@ async def lifespan(app: FastAPI):
         # Lượt ② chấm trường: đọc skill_score.md 1 lần lúc khởi động
         app.state.scorer = Scorer(app.state.llm, settings.llm_model)
         app.state.ec_reader = EcReader(app.state.llm, settings.llm_model)
+        app.state.picker = Picker(app.state.llm, settings.llm_model)
         yield
 
 

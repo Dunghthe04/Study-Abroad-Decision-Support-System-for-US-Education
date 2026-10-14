@@ -6,6 +6,7 @@ from fastapi import Request
 
 from app.services.ec_reader import EcReader
 from app.services.ollama import OllamaClient
+from app.services.picker import Picker
 from app.services.scorer import Scorer
 
 
@@ -19,3 +20,7 @@ def get_scorer(request: Request) -> Scorer:
 
 def get_ec_reader(request: Request) -> EcReader:
     return request.app.state.ec_reader
+
+def get_picker(request: Request) -> Picker:
+    """Lấy Picker (lượt ③ chọn danh sách) đã tạo lúc khởi động."""
+    return request.app.state.picker
