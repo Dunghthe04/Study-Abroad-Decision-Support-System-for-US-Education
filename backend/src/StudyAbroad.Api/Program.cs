@@ -4,6 +4,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Serilog;
 using StudyAbroad.Api.Extensions;
+using StudyAbroad.Api.RateLimiting;
 using StudyAbroad.Application;
 using StudyAbroad.Application.Auth;
 using StudyAbroad.Infrastructure;
@@ -104,6 +105,7 @@ builder.Services.AddAuthentication(options =>
 });
 
 builder.Services.AddAuthorization();
+builder.Services.AddTranscriptUploadRateLimiter();
 
 builder.Services.AddControllers();
 builder.Services.AddProblemDetails();
@@ -159,16 +161,8 @@ app.UseExceptionHandler();
 app.UseStatusCodePages();
 app.UseSerilogRequestLogging();
 
-var uploadsDir = Path.Combine(app.Environment.ContentRootPath, "uploads");
-if (!Directory.Exists(uploadsDir))
-{
-    Directory.CreateDirectory(uploadsDir);
-}
-app.UseStaticFiles(new StaticFileOptions
-{
-    FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(uploadsDir),
-    RequestPath = "/uploads"
-});
+// [USAS-640 Bảo mật] Thư mục uploads chứa bảng điểm (dữ liệu cá nhân) nên KHÔNG phục vụ qua static files:
+// chỉ code phía server đọc tệp, theo userId lấy từ JWT.
 
 if (app.Environment.IsDevelopment() || app.Configuration.GetValue<bool>("Swagger:Enabled"))
 {
@@ -179,6 +173,7 @@ if (app.Environment.IsDevelopment() || app.Configuration.GetValue<bool>("Swagger
 app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 app.MapControllers();
 app.MapAppHealthChecks();

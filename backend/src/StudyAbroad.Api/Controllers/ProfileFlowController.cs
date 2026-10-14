@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using StudyAbroad.Api.Extensions;
+using StudyAbroad.Api.RateLimiting;
 using StudyAbroad.Application.Profile.Flow;
 using StudyAbroad.Domain.Constants;
 using System;
@@ -23,6 +25,9 @@ namespace StudyAbroad.Api.Controllers;
 [Route("api/v1/profile/flow")]
 public class ProfileFlowController(IProfileFlowService flowService) : ControllerBase
 {
+    /// <summary>Tệp tối đa 10MB cộng phần đầu multipart: request lớn hơn bị Kestrel chặn trước khi đọc vào bộ nhớ</summary>
+    private const long MaxUploadRequestBytes = ProfileFileStorageLimits.MaxFileSizeBytes + 1024 * 1024;
+
     /// <summary>
     /// Lấy trạng thái hiện tại của luồng hồ sơ (bước đang làm, dữ liệu nháp các bước).
     /// Bỏ dở giữa chừng thì quay lại đúng bước đang làm.
@@ -73,9 +78,13 @@ public class ProfileFlowController(IProfileFlowService flowService) : Controller
     /// </summary>
     [HttpPost("draft/upload-transcript")]
     [Consumes("multipart/form-data")]
+    [RequestSizeLimit(MaxUploadRequestBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = MaxUploadRequestBytes)]
+    [EnableRateLimiting(TranscriptUploadRateLimit.PolicyName)]
     [ProducesResponseType(typeof(UploadDraftTranscriptResultDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> UploadDraftTranscript(
         List<IFormFile>? files,
         IFormFile? file,
@@ -87,17 +96,26 @@ public class ProfileFlowController(IProfileFlowService flowService) : Controller
             return Unauthorized(new { error = "Không tìm thấy thông tin xác thực của người dùng." });
         }
 
-        var fileList = (files != null && files.Count > 0) ? files : (file != null ? [file] : new List<IFormFile>());
-        fileList = fileList.Where(f => f.Length > 0).ToList();
+        var fileList = (files ?? []).Concat(file != null ? [file] : []).Where(f => f.Length > 0).ToList();
 
         if (fileList.Count == 0)
         {
             return BadRequest(new { error = "Vui lòng chọn ít nhất một tệp bảng điểm hợp lệ để tải lên." });
         }
 
+        if (fileList.Count > 1)
+        {
+            return BadRequest(new { error = "Mỗi lần chỉ tải lên 1 tệp bảng điểm." });
+        }
+
+        var primaryFile = fileList[0];
+        if (primaryFile.Length > ProfileFileStorageLimits.MaxFileSizeBytes)
+        {
+            return BadRequest(new { error = "Kích thước tệp phải lớn hơn 0 và không vượt quá 10MB." });
+        }
+
         try
         {
-            var primaryFile = fileList[0];
             await using var stream = primaryFile.OpenReadStream();
             var draftInfo = await flowService.UploadDraftTranscriptAsync(
                 userId.Value, stream, primaryFile.FileName, primaryFile.ContentType, primaryFile.Length, ct);
