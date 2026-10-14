@@ -43,7 +43,7 @@ services:
     depends_on: [ollama]
     environment:
       OLLAMA_HOST: http://ollama:11434
-    entrypoint: ["/bin/sh", "-c", "ollama pull ${LLM_MODEL:-qwen3:14b} && ollama pull ${EMBEDDING_MODEL:-bge-m3}"]
+    entrypoint: ["/bin/sh", "-c", "ollama pull ${LLM_MODEL:-qwen3:14b} && ollama pull ${EMBEDDING_MODEL:-bge-m3} && ollama pull ${VISION_MODEL:-glm-ocr} && ( [ -z \"${TRANSCRIPT_PARSE_MODEL:-}\" ] || ollama pull ${TRANSCRIPT_PARSE_MODEL:-} )"]
     restart: "no"
 
   advisor:
@@ -59,6 +59,8 @@ services:
       OLLAMA_BASE_URL: http://ollama:11434
       LLM_MODEL: ${LLM_MODEL:-qwen3:14b}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-bge-m3}
+      VISION_MODEL: ${VISION_MODEL:-glm-ocr}
+      TRANSCRIPT_PARSE_MODEL: ${TRANSCRIPT_PARSE_MODEL:-}  # empty = reuse LLM_MODEL
 
   api:
     build: ./backend

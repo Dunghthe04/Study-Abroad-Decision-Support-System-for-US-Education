@@ -441,7 +441,7 @@ public class AcademicProfileServiceTests
             TargetLevel = StudyLevels.Master,
             CurrentSchool = "Đại học Bách Khoa",
             EducationSystem = EducationSystems.Standard,
-            GraduationYear = 2025,
+            GraduationYear = 2026,
             CurrentGrade = "Năm 4",
             GradeScale = GradeScales.Scale4,
             OverallGpa = 3.65m,
@@ -496,7 +496,7 @@ public class AcademicProfileServiceTests
             TargetLevel: StudyLevels.Master,
             CurrentSchool: "Đại học Bách Khoa",
             EducationSystem: EducationSystems.Standard,
-            GraduationYear: 2024,
+            GraduationYear: 2026,
             CurrentGrade: "Đã tốt nghiệp",
             GradeScale: GradeScales.Scale4,
             IntendedMajor: "Khoa học Dữ liệu",
@@ -531,7 +531,7 @@ public class AcademicProfileServiceTests
             TargetLevel: StudyLevels.Master,
             CurrentSchool: "Đại học A",
             EducationSystem: EducationSystems.Standard,
-            GraduationYear: 2024,
+            GraduationYear: 2026,
             CurrentGrade: "Năm 4",
             GradeScale: GradeScales.Scale4,
             IntendedMajor: "CS",
@@ -544,5 +544,30 @@ public class AcademicProfileServiceTests
         Assert.False(result.Succeeded);
         Assert.Equal(AcademicProfileError.Validation, result.Error);
         Assert.Contains("GRE", result.Message);
+    }
+
+    [Fact]
+    public async Task SaveAcademicProfileAsync_GraduationYearInPast_Rejects()
+    {
+        var repo = new FakeAcademicProfileRepository();
+        var service = new AcademicProfileService(repo);
+        var userId = Guid.NewGuid();
+
+        var request = new SaveAcademicProfileRequest(
+            TargetLevel: StudyLevels.Undergraduate,
+            CurrentSchool: "THPT Chuyên Hà Nội",
+            EducationSystem: EducationSystems.Standard,
+            GraduationYear: 2023,
+            CurrentGrade: "Lớp 12",
+            GradeScale: GradeScales.Scale10,
+            IntendedMajor: "Computer Science",
+            Terms: []
+        );
+
+        var result = await service.SaveAcademicProfileAsync(userId, request);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(AcademicProfileError.Validation, result.Error);
+        Assert.Contains("quá khứ", result.Message);
     }
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { FileTextIcon, LogOutIcon, UserIcon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -17,18 +17,26 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 
 const links = [
-  { href: "/advisor", label: "Tư vấn AI" },
-  { href: "/profile/financial", label: "Tài chính & Ngoại khóa" },
-  { href: "/centers", label: "Trung tâm" },
-  // [USAS-365] Liên kết trang phân tích điểm học thuật
-  { href: "/profile/academic/analysis", label: "Điểm học thuật" },
+  { href: "/", label: "Trang chủ" },
+  { href: "/methodology", label: "Giới thiệu phương pháp" },
+  { href: "/analysis", label: "Phân tích tư vấn" },
+  { href: "/advisor", label: "Chat AI" },
 ];
 
 export function SiteHeader() {
   const { user, isLoading, logout } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
+
+  const isLinkActive = (href: string) => {
+    if (href === "/") {
+      return pathname === "/";
+    }
+    return pathname.startsWith(href);
+  };
 
   const handleLogout = async () => {
     await logout();
@@ -36,31 +44,40 @@ export function SiteHeader() {
   };
 
   return (
-    <header className="border-b">
+    <header className="border-b bg-surface/95 backdrop-blur-sm sticky top-0 z-40">
       <nav className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
         <div className="flex items-center gap-8">
-          <Link href="/" className="font-heading text-xl font-semibold tracking-tight text-brand-ink">
-            USAS
+          <Link
+            href="/"
+            className="flex items-center gap-2 font-heading text-xl font-bold tracking-tight text-brand-ink transition-opacity hover:opacity-90"
+          >
+            <span className="flex size-7 items-center justify-center rounded-lg bg-brand text-white font-sans text-xs font-black shadow-xs">
+              US
+            </span>
+            <span>USAS</span>
           </Link>
-          <ul className="flex gap-6 text-sm font-medium text-muted-foreground">
-            {links.map((l) => (
-              <li key={l.href}>
-                <Link href={l.href} className="hover:text-foreground">
-                  {l.label}
-                </Link>
-              </li>
-            ))}
-            {user && (user.role === "student" || user.role === "parent") && (
-              <li>
-                <Link
-                  href="/profile/academic"
-                  className="flex items-center gap-1 text-primary hover:text-primary/80"
-                >
-                  <FileTextIcon className="size-4" aria-hidden="true" />
-                  Hồ sơ học thuật
-                </Link>
-              </li>
-            )}
+          <ul className="flex items-center gap-1 sm:gap-2 text-sm font-medium">
+            {links.map((l) => {
+              const active = isLinkActive(l.href);
+              return (
+                <li key={l.href}>
+                  <Link
+                    href={l.href}
+                    className={cn(
+                      "relative rounded-md px-3 py-1.5 transition-all text-sm font-medium inline-flex items-center gap-1.5",
+                      active
+                        ? "bg-brand/10 text-brand font-semibold shadow-2xs"
+                        : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                    )}
+                  >
+                    {l.label}
+                    {active && (
+                      <span className="absolute -bottom-3 left-3 right-3 h-0.5 rounded-full bg-brand" />
+                    )}
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
         </div>
 
@@ -84,6 +101,10 @@ export function SiteHeader() {
                   <DropdownMenuLabel>{user.fullName}</DropdownMenuLabel>
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />
+                <DropdownMenuItem render={<Link href="/analysis" />}>
+                  <FileTextIcon />
+                  Phân tích tư vấn
+                </DropdownMenuItem>
                 <DropdownMenuItem render={<Link href="/account" />}>
                   <UserIcon />
                   Hồ sơ cá nhân
@@ -109,3 +130,4 @@ export function SiteHeader() {
     </header>
   );
 }
+

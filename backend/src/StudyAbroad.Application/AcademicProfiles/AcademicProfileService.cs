@@ -92,9 +92,10 @@ public class AcademicProfileService(
             return AcademicProfileResult.Fail(AcademicProfileError.Validation, "Hệ chương trình học tập không hợp lệ.");
         }
 
-        if (request.GraduationYear.HasValue && (request.GraduationYear.Value < 1990 || request.GraduationYear.Value > 2040))
+        var currentYear = DateTime.UtcNow.Year;
+        if (request.GraduationYear.HasValue && (request.GraduationYear.Value < currentYear || request.GraduationYear.Value > currentYear + 15))
         {
-            return AcademicProfileResult.Fail(AcademicProfileError.Validation, "Năm tốt nghiệp không hợp lệ (phải từ năm 1990 đến 2040).");
+            return AcademicProfileResult.Fail(AcademicProfileError.Validation, $"Năm tốt nghiệp không hợp lệ (không được ở quá khứ, phải từ năm {currentYear} đến {currentYear + 15}).");
         }
 
         if (request.CurrentSchool?.Length > 256)

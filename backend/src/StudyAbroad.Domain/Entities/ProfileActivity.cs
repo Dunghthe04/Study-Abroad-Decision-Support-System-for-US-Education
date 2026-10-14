@@ -10,12 +10,14 @@ public class ProfileActivity : BaseEntity
     public string Kind { get; set; } = string.Empty;
     public string Title { get; set; } = string.Empty;
     public string? Organization { get; set; }
-    /// <summary>vai trò, hoặc cấp giải</summary>
+    /// <summary>vai trò; luồng 6 bước lưu mã founder | leader | vice_leader | member (null với giải thưởng). Dữ liệu cũ có thể là chữ tự do</summary>
     public string? Role { get; set; }
     public string? Description { get; set; }
     public DateOnly? StartDate { get; set; }
     public DateOnly? EndDate { get; set; }
-    /// <summary>[USAS-364] Mức độ ảnh hưởng: 1 (Trường/CLB) đến 5 (Quốc tế)</summary>
+    /// <summary>[USAS-640] năm đạt giải (chỉ với Kind = award)</summary>
+    public int? AwardYear { get; set; }
+    /// <summary>Phạm vi / cấp độ: 1 Trường, 2 Quận/huyện, 3 Tỉnh/TP, 4 Quốc gia, 5 Quốc tế</summary>
     public int? ImpactLevel { get; set; }
     /// <summary>[USAS-364] Số tháng tham gia học sinh tự khai ở form; null thì tính từ StartDate/EndDate</summary>
     public int? DurationMonths { get; set; }

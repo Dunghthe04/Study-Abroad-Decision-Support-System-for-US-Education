@@ -12,3 +12,7 @@ Thumbs.db
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# Uploads
+uploads/
+**/uploads/

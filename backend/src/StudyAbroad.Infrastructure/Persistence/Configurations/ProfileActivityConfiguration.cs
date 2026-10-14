@@ -15,7 +15,10 @@ public class ProfileActivityConfiguration : IEntityTypeConfiguration<ProfileActi
         b.Property(x => x.Organization).HasMaxLength(256);
         b.Property(x => x.Role).HasMaxLength(128);
         b.Property(x => x.Description).HasMaxLength(2000);
+        b.Property(x => x.AwardYear);
         b.Property(x => x.ImpactLevel);
+        b.ToTable(t => t.HasCheckConstraint("ck_profile_activities_impact_level",
+            "impact_level IS NULL OR impact_level BETWEEN 1 AND 5"));
         b.Property(x => x.DurationMonths);
         b.Property(x => x.IsOngoing);
         b.HasIndex(x => new { x.StudentProfileId, x.Kind });

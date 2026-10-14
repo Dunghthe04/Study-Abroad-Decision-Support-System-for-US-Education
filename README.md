@@ -80,6 +80,7 @@ Danh sách này được khai báo ở 3 nơi và **phải giữ giống nhau**:
 | AI | **Python FastAPI** | 0.142 | Service AI (advisor) | Hệ sinh thái AI chủ yếu dùng Python; FastAPI nhẹ, async, có docs tự động |
 | | **Qwen3-8B** (dev) / **Qwen3-14B** (prod) qua **Ollama** | – | LLM sinh câu trả lời | Open-source, tiếng Việt tốt, chạy local được, bản quantized nhẹ |
 | | **BGE-M3** | – | Embedding (vector 1024 chiều) | Đa ngôn ngữ, hỗ trợ tiếng Việt tốt |
+| | **GLM-OCR** | – | Đọc bảng điểm từ ảnh/PDF | Model OCR nhỏ (~2.2 GB) chép ảnh thành chữ, vừa GPU 4 GB; LLM chữ bóc điểm thành JSON |
 | | **Hybrid search** (vector + full-text, RRF) | – | Tìm tài liệu cho RAG | Vector hiểu ngữ nghĩa; full-text bắt đúng thuật ngữ như F-1, I-20, SEVIS |
 | Database | **PostgreSQL** + **pgvector** | 16 | Dữ liệu nghiệp vụ + kho vector | Một DB cho cả hai, đỡ phải vận hành thêm vector DB riêng |
 | Hạ tầng | **Docker**, **Docker Compose** | – | Đóng gói và chạy toàn hệ thống | Máy ai cũng chạy giống nhau, deploy chỉ cần một lệnh |
@@ -281,6 +282,14 @@ python -m scripts.ingest --reset
 
 > Không làm AI cũng **không cần chạy advisor**. Trang chat sẽ báo lỗi 503, các trang khác vẫn chạy bình thường.
 > Máy yếu (RAM < 16 GB): đặt `LLM_MODEL=qwen3:4b` trong `.env` (cả `.env` ở thư mục gốc lẫn `advisor/.env`) để dùng model nhỏ hơn.
+
+> **Đọc bảng điểm từ ảnh/PDF** (bước 2 của `/analysis`) cần thêm model `glm-ocr` (~2.2 GB, chép ảnh thành chữ); bước bóc điểm từng môn dùng chung `LLM_MODEL`. `ollama-init` đã tự tải. Nếu bạn cài Ollama trực tiếp trên máy (không qua Docker) thì tự tải:
+> ```powershell
+> ollama pull glm-ocr
+> ```
+> Đã có volume `ollama` từ trước thì chạy lại `docker compose up -d ollama-init` để tải thêm. Thiếu model thì trang vẫn chạy, chỉ báo nhập điểm tay.
+>
+> **GPU dưới 8 GB VRAM hoặc server chỉ có CPU:** đặt `TRANSCRIPT_PARSE_MODEL=qwen3:4b` trong `.env` (Docker tự tải) hoặc `advisor/.env` (rồi `ollama pull qwen3:4b`). Trên GPU 4 GB, `qwen3:4b` bóc điểm mất ~20 s, `qwen3:8b` ~40 s, kết quả như nhau.
 
 ### Cổng sử dụng
 
