@@ -7,13 +7,14 @@ from app.schemas.score import ScoreItem, ScoreRequest, ScoreResponse, ScoreSchoo
 from app.services.skill_call import SKILLS_DIR, SkillCall
 
 SKILL_PATH = SKILLS_DIR / "skill_score.md"
-BATCH_SIZE = 8   # 8 trường/lô: vừa num_ctx 6144
+BATCH_SIZE = 8  # 8 trường/lô: vừa num_ctx 6144
 
-#kiểm tra kết quả JSON do AI trả về có đúng cấu trúc, đúng mã trường, đúng thứ tự và nằm trong các giới hạn hợp lệ hay không.
-#raw dữ liệu AI trả về, codes là mã trường ban đầu 
+
+# kiểm tra kết quả JSON do AI trả về có đúng cấu trúc, đúng mã trường, đúng thứ tự và nằm trong các giới hạn hợp lệ hay không.
+# raw dữ liệu AI trả về, codes là mã trường ban đầu
 def check_batch(raw: dict[str, Any], codes: list[str]) -> list[ScoreItem]:
     """Kiểm tra JSON AI trả về cho 1 lô (mục 7). Sai thì ném ValueError."""
-    
+
     items = []
     try:
         # Duyệt qua kết quả từng trường
@@ -23,10 +24,10 @@ def check_batch(raw: dict[str, Any], codes: list[str]) -> list[ScoreItem]:
     except (KeyError, TypeError) as ex:
         raise ValueError("JSON thiếu danh sách items") from ex
 
-    actual_codes =[]
+    actual_codes = []
     for item in items:
         actual_codes.append(item.c)
-    #Nếu danh sách mã trường khác danh sách ban đầu
+    # Nếu danh sách mã trường khác danh sách ban đầu
     if actual_codes != codes:
         raise ValueError("Mã trường hoặc thứ tự trường không khớp")
 
@@ -43,8 +44,11 @@ def check_batch(raw: dict[str, Any], codes: list[str]) -> list[ScoreItem]:
                 raise ValueError(f"{i.c}: {name} = {v} ngoài 0–1")
     return items
 
+
 class Scorer:
-    def __init__(self, llm: Any, model: str, skill_path: Path = SKILL_PATH, batch_size: int = BATCH_SIZE) -> None:
+    def __init__(
+        self, llm: Any, model: str, skill_path: Path = SKILL_PATH, batch_size: int = BATCH_SIZE
+    ) -> None:
         self._call = SkillCall(llm, model, skill_path)
         self.skill_version = self._call.skill_version
         self._batch_size = batch_size
@@ -54,13 +58,15 @@ class Scorer:
         items: list[ScoreItem] = []
         failed: list[str] = []
         for start in range(0, len(req.schools), self._batch_size):
-            batch = req.schools[start:start + self._batch_size]
+            batch = req.schools[start : start + self._batch_size]
             result = await self._score_batch(student, batch)
             if result is None:
-                failed += [s.c for s in batch]   # không bịa kết quả cho lô lỗi
+                failed += [s.c for s in batch]  # không bịa kết quả cho lô lỗi
             else:
                 items += result
-        return ScoreResponse(skill_version=self.skill_version, model=self._call.model, items=items, failed=failed)
+        return ScoreResponse(
+            skill_version=self.skill_version, model=self._call.model, items=items, failed=failed
+        )
 
     async def _score_batch(self, student: dict[str, Any], batch: list[ScoreSchool]) -> list[ScoreItem] | None:
         codes = [s.c for s in batch]

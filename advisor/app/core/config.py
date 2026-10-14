@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     transcript_parse_model: str = ""
     transcript_parse_timeout_seconds: float = 180
 
+
 # Lần gọi hàm sau nó lấy đối tượng đã lưu trong lru_cache
 @lru_cache
 def get_settings() -> Settings:

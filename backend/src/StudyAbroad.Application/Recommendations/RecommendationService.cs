@@ -95,14 +95,17 @@ namespace StudyAbroad.Application.Recommendations
             if (pickItems.Count == 0)
                 return Empty(profile.TargetLevel, [.. warnings, "AI chưa chấm được trường nào. Hãy thử lại sau ít phút."]);
 
+            var pickRequest = new AiPickRequest(BalancedPref, RecommendationInputs.NeedAidCode(criteria.AidNeed), pickItems);
             AiPickResult pick;
             try
             {
-                pick = await ai.PickAsync(new AiPickRequest(BalancedPref, RecommendationInputs.NeedAidCode(criteria.AidNeed), pickItems), ct);
+                pick = await ai.PickAsync(pickRequest, ct);
             }
             catch (RecommendationAiException)
             {
-                return Empty(profile.TargetLevel, [.. warnings, "AI chọn danh sách tạm thời không phản hồi. Hãy thử lại sau ít phút."]);
+                // Dự phòng: chia khối, xếp hạng, mã lý do bằng code theo đúng luật của skill_pick
+                pick = PickFallback.Pick(pickRequest, settings.PerCategory);
+                warnings.Add("AI chưa sắp được danh sách, hệ thống đã tự sắp theo công thức.");
             }
 
             //6. Ghép kết quả AI với thông tin trường trong DB

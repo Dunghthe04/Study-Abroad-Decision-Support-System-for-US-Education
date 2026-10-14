@@ -21,7 +21,7 @@ async def test_sends_skill_and_compact_json_then_returns_checked_result():
     assert result == "đã kiểm tra"
     system, user = llm.calls[0]["messages"]
     assert system == {"role": "system", "content": call.skill}
-    assert user["content"] == '{"a":1,"b":"Hà Nội"}'               # liền, giữ tiếng Việt
+    assert user["content"] == '{"a":1,"b":"Hà Nội"}'  # liền, giữ tiếng Việt
     assert llm.calls[0]["schema"] == {"type": "object"}
     assert llm.calls[0]["temperature"] == 0
 
@@ -40,7 +40,7 @@ async def test_retries_once_after_ollama_error():
 async def test_returns_none_after_two_failures_and_stops():
     llm = FakeLLM({"ok": False}, OllamaError("x"), {"ok": True})
     assert await SkillCall(llm, "m", SKILL).run({}, {}, check_ok) is None
-    assert len(llm.calls) == 2                                       # không gọi lần thứ 3
+    assert len(llm.calls) == 2  # không gọi lần thứ 3
 
 
 def test_load_skill_reads_version_of_all_three_skills():
@@ -63,7 +63,9 @@ def test_schema_required_keys_match_properties():
 
     ec = ec_schema(1)
     assert set(ec["required"]) == set(ec["properties"])
-    assert set(ec["properties"]["act"]["items"]["required"]) == set(ec["properties"]["act"]["items"]["properties"])
+    assert set(ec["properties"]["act"]["items"]["required"]) == set(
+        ec["properties"]["act"]["items"]["properties"]
+    )
     item = score_schema(["A"])["properties"]["items"]["items"]
     assert set(item["required"]) == set(item["properties"])
     pick = pick_schema(["A"])

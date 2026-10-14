@@ -21,8 +21,13 @@ AN = {
     "awards": [{"text": "Giải Nhì Olympic Tin học", "level": 3}],
 }
 # Đầu ra đúng trong tài liệu
-AN_RESULT = {"act": [{"role": 0.8, "scope": 1, "q": 0.61}, {"role": 0.3, "scope": 3, "q": 0.47}],
-             "tong_hd": 1.08, "bonus": 0.15, "m": 0.31, "tier": 3}
+AN_RESULT = {
+    "act": [{"role": 0.8, "scope": 1, "q": 0.61}, {"role": 0.3, "scope": 3, "q": 0.47}],
+    "tong_hd": 1.08,
+    "bonus": 0.15,
+    "m": 0.31,
+    "tier": 3,
+}
 
 
 def request(data=AN):
@@ -50,7 +55,7 @@ async def test_no_activity_and_no_award_is_tier_1_without_calling_ai():
 
 
 async def test_ai_raising_scope_is_rejected_and_retried():
-    raised = {**AN_RESULT, "act": [{"role": 0.8, "scope": 4, "q": 0.61}, AN_RESULT["act"][1]]}   # 1 → 4
+    raised = {**AN_RESULT, "act": [{"role": 0.8, "scope": 4, "q": 0.61}, AN_RESULT["act"][1]]}  # 1 → 4
     llm = FakeLLM(raised, AN_RESULT)
     res = await EcReader(llm, "m").read(request())
     assert len(llm.calls) == 2
@@ -64,7 +69,7 @@ async def test_ai_lowering_scope_is_allowed():
 
 
 async def test_tier_not_matching_m_is_rejected():
-    llm = FakeLLM({**AN_RESULT, "tier": 4}, AN_RESULT)     # m 0.31 phải là bậc 3
+    llm = FakeLLM({**AN_RESULT, "tier": 4}, AN_RESULT)  # m 0.31 phải là bậc 3
     res = await EcReader(llm, "m").read(request())
     assert len(llm.calls) == 2 and res.tier == 3
 
@@ -87,7 +92,9 @@ async def test_failing_twice_raises():
         await EcReader(llm, "m").read(request())
 
 
-@pytest.mark.parametrize(("m", "tier"), [(0, 1), (0.09, 1), (0.10, 2), (0.31, 3), (0.45, 4), (0.64, 4), (0.65, 5), (1, 5)])
+@pytest.mark.parametrize(
+    ("m", "tier"), [(0, 1), (0.09, 1), (0.10, 2), (0.31, 3), (0.45, 4), (0.64, 4), (0.65, 5), (1, 5)]
+)
 def test_tier_cutoffs(m, tier):
     assert tier_of(m) == tier
 
@@ -110,7 +117,9 @@ def test_endpoint_returns_tier():
 
 def test_endpoint_returns_502_when_ai_fails():
     app = create_app()
-    app.dependency_overrides[get_ec_reader] = lambda: EcReader(FakeLLM(OllamaError("x"), OllamaError("x")), "m")
+    app.dependency_overrides[get_ec_reader] = lambda: EcReader(
+        FakeLLM(OllamaError("x"), OllamaError("x")), "m"
+    )
     assert TestClient(app).post("/recommend/ec", json=AN).status_code == 502
 
 

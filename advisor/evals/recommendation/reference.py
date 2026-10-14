@@ -98,7 +98,19 @@ def score_school(student, s):
         return None if x is None else round(x, n)
 
     return {
-        "c": s["c"], "w": [round(w[0], 2), round(w[1], 2)], "pg": rnd(pg), "conf": conf, "ps": rnd(ps),
-        "A": rnd(a), "adj": adj, "S": rnd(total), "g": g, "r": rnd(r), "g2": g2,
-        "F": rnd(f, 3), "H": rnd(h, 3), "Q": s.get("q"), "gap": rnd(gap, 0),
+        "c": s["c"],
+        "w": [round(w[0], 2), round(w[1], 2)],
+        "pg": rnd(pg),
+        "conf": conf,
+        "ps": rnd(ps),
+        "A": rnd(a),
+        "adj": adj,
+        "S": rnd(total),
+        "g": g,
+        "r": rnd(r),
+        "g2": g2,
+        "F": rnd(f, 3),
+        "H": rnd(h, 3),
+        "Q": s.get("q"),
+        "gap": rnd(gap, 0),
     }
