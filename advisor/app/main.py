@@ -1,10 +1,12 @@
 from contextlib import asynccontextmanager
 
-import httpx # gửi request đến ollama
+import httpx  # gửi request đến ollama
 from fastapi import FastAPI
-from app.api.routes import health
+
+from app.api.routes import health, recommend
 from app.core.config import get_settings
 from app.services.ollama import OllamaClient
+from app.services.scorer import Scorer
 
 
 # Khai báo vòng đơi fastapi
@@ -26,6 +28,8 @@ async def lifespan(app: FastAPI):
             seed=settings.llm_seed,
             keep_alive=settings.llm_keep_alive,
         )
+        # Lượt ② chấm trường: đọc skill_score.md 1 lần lúc khởi động
+        app.state.scorer = Scorer(app.state.llm, settings.llm_model)
         yield
 
 
@@ -33,6 +37,7 @@ def create_app() -> FastAPI:
     """Tạo ứng dụng. Viết thành hàm để test có thể tạo app mới, độc lập cho mỗi lần chạy."""
     app = FastAPI(title="Study Abroad Advisor Service", version="0.1.0", lifespan=lifespan)
     app.include_router(health.router)
+    app.include_router(recommend.router)
     return app
 
 
