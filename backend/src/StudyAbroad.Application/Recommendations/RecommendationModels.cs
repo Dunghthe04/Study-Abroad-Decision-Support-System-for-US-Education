@@ -14,10 +14,12 @@ namespace StudyAbroad.Application.Recommendations
         int? Sat,
         decimal? AnnualBudgetUsd,
         IReadOnlyList<string> PreferredStates,
-        decimal? ExtracurricularScore,
+        decimal? ExtracurricularScore = null,
         decimal? Ielts = null,
         decimal? Toefl = null,
-        decimal? Duolingo = null); 
+        decimal? Duolingo = null,
+        decimal? BudgetMinUsd = null,
+        decimal? BudgetMaxUsd = null); 
 
 
     public record SchoolCandidate(

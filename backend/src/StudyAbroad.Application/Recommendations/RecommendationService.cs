@@ -48,16 +48,18 @@ namespace StudyAbroad.Application.Recommendations
                 warnings.Add("Chưa có điểm tiếng Anh (IELTS/TOEFL/Duolingo), chưa kiểm tra điều kiện tiếng Anh.");
 
             var student = new StudentSnapshot(
-                        profile.TargetLevel,
-                        profile.IntendedMajor,
-                        gpa4,
-                        profile.Sat is { } sat ? (int)Math.Round(sat) : null,
-                        profile.AnnualBudgetUsd,
-                        profile.PreferredStates,
-                        extracurricular.Score,
-                        profile.Ielts,
-                        profile.Toefl,
-                        profile.Duolingo);
+                profile.TargetLevel,
+                profile.IntendedMajor,
+                gpa4,
+                profile.Sat is { } sat ? (int)Math.Round(sat) : null,
+                profile.BudgetMaxUsd,
+                profile.PreferredStates,
+                extracurricular.Score,
+                profile.Ielts,
+                profile.Toefl,
+                profile.Duolingo,
+                profile.BudgetMinUsd,
+                profile.BudgetMaxUsd);
 
             //4. lấy trường ứng viên + chấm điểm
             var candidates = await repository.GetSchoolCandidatesAsync(student.StudyLevel, ct);
@@ -159,7 +161,7 @@ namespace StudyAbroad.Application.Recommendations
     c.TuitionUsd, c.LivingUsd, c.FeesUsd, c.MinIelts, c.MinToefl, c.MinDuolingo, c.AvgGpa4, c.Sat25, c.Sat75);
 
         private static StudentSummaryDto ToSummary(StudentSnapshot s) =>
-            new(s.Major, s.Gpa4, s.Sat, s.Ielts, s.Toefl, s.Duolingo, s.AnnualBudgetUsd, s.ExtracurricularScore);
+            new(s.Major, s.Gpa4, s.Sat, s.Ielts, s.Toefl, s.Duolingo, s.BudgetMinUsd, s.BudgetMaxUsd, s.ExtracurricularScore, s.BudgetMaxUsd);
 
         //Gọi LLM có giới hạn thời gian. Trả null khi AI tắt, không có trường, LLM lỗi hoặc quá thời gian
         private async Task<IReadOnlyList<AiPick>?> TryRankWithAiAsync(StudentSnapshot student, IReadOnlyList<ScoredSchool> scored, RecommendSettings settings, CancellationToken ct)
@@ -181,7 +183,7 @@ namespace StudyAbroad.Application.Recommendations
 
         //Chỉ gửi số liệu cần thiết cho LLM, không gửi thông tin cá nhân
         private static AiRankRequest ToAiRequest(StudentSnapshot s, IReadOnlyList<ScoredSchool> scored, decimal gpaBand) => new(
-            new AiStudentInput(s.StudyLevel, s.Major, s.Gpa4, s.Sat, s.AnnualBudgetUsd, s.Ielts, s.Toefl, s.Duolingo, s.ExtracurricularScore),
+            new AiStudentInput(s.StudyLevel, s.Major, s.Gpa4, s.Sat, s.BudgetMaxUsd, s.Ielts, s.Toefl, s.Duolingo, s.ExtracurricularScore),
             scored.Select(r => new AiSchoolInput(
                 r.Candidate.Code,
                 r.Candidate.Name,

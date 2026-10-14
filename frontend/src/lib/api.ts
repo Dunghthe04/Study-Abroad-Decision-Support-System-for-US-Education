@@ -36,7 +36,15 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
 
   if (!res.ok) {
     const body = await res.json().catch(() => null);
-    const message = body?.detail ?? body?.title ?? body?.message ?? res.statusText;
+    let message = body?.detail ?? body?.title ?? body?.error ?? body?.message ?? res.statusText;
+    if (body?.errors && typeof body.errors === "object") {
+      const errorList = Object.entries(body.errors)
+        .map(([field, msgs]) => `${field}: ${Array.isArray(msgs) ? msgs.join("; ") : msgs}`)
+        .join(" | ");
+      if (errorList) {
+        message = `${message} (${errorList})`;
+      }
+    }
     throw new ApiError(res.status, message);
   }
 

@@ -50,14 +50,18 @@ export interface StudentSummary {
   ielts: number | null;
   toefl: number | null;
   duolingo: number | null;
-  annualBudgetUsd: number | null;
-  extracurricularScore: number | null; // 0–4
+  annualBudgetUsd?: number | null;
+  budgetMinUsd?: number | null;
+  budgetMaxUsd?: number | null;
+  extracurricularScore?: number | null; // 0–4
+  activitiesCount?: number;
 }
 
 export interface ExtracurricularSummary {
   score: number | null; // 0–4
   fresh: boolean;
   aiUsed: boolean;
+  activities?: { id: string; name: string }[]; // các hoạt động đã chấm (BE trả thêm vai trò, điểm…)
 }
 
 export interface RecommendationResult {

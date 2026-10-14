@@ -16,7 +16,10 @@ import { Spinner } from "@/components/ui/spinner";
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirect = searchParams.get("redirect") || "/account";
+  // Mặc định về trang chủ; chỉ nhận redirect là đường dẫn nội bộ (chặn "//evil.com")
+  const redirectParam = searchParams.get("redirect");
+  const redirect =
+    redirectParam && redirectParam.startsWith("/") && !redirectParam.startsWith("//") ? redirectParam : "/";
 
   const { login } = useAuth();
   const [email, setEmail] = useState("");
