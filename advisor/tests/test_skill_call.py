@@ -53,3 +53,18 @@ def test_load_skill_without_version_is_unknown(tmp_path):
     f = tmp_path / "x.md"
     f.write_text("không có phiên bản", encoding="utf-8")
     assert load_skill(f) == ("không có phiên bản", "unknown")
+
+
+def test_schema_required_keys_match_properties():
+    # Ollama ép theo "required": gõ nhầm 1 dấu cách ("tong_hd ") thì AI bỏ key thật và lượt đó luôn lỗi
+    from app.schemas.ec import ec_schema
+    from app.schemas.pick import pick_schema
+    from app.schemas.score import score_schema
+
+    ec = ec_schema(1)
+    assert set(ec["required"]) == set(ec["properties"])
+    assert set(ec["properties"]["act"]["items"]["required"]) == set(ec["properties"]["act"]["items"]["properties"])
+    item = score_schema(["A"])["properties"]["items"]["items"]
+    assert set(item["required"]) == set(item["properties"])
+    pick = pick_schema(["A"])
+    assert set(pick["required"]) == set(pick["properties"])

@@ -44,7 +44,7 @@ def ec_schema(n_act: int) -> dict[str, Any]:
     """Json schema cho format của Ollama trả về"""
     return {
         "type": "object",
-        "required": ["act", "tong_hd ","bonus","m","tier"],
+        "required": ["act", "tong_hd","bonus","m","tier"],
         "properties": {
             "act": {
                 "type": "array",
