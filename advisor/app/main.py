@@ -1,8 +1,9 @@
 from contextlib import asynccontextmanager
 
 import httpx
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 
+from app.api.deps import require_api_key
 from app.api.routes import health, profile, recommendation
 from app.core.config import get_settings
 from app.services.activity_reader import ActivityReader
@@ -30,8 +31,9 @@ def create_app() -> FastAPI:
     """Tạo ứng dụng. Viết thành hàm để test có thể tạo app mới, độc lập cho mỗi lần chạy."""
     app = FastAPI(title="Study Abroad Advisor Service", version="0.1.0", lifespan=lifespan)
     app.include_router(health.router)
-    app.include_router(recommendation.router)
-    app.include_router(profile.router)
+    # Các route gọi Ollama đều cần khoá; health để mở cho docker healthcheck
+    app.include_router(recommendation.router, dependencies=[Depends(require_api_key)])
+    app.include_router(profile.router, dependencies=[Depends(require_api_key)])
     return app
 
 

@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     # đọc thêm cấu hình ở .env, nếu .env có những biết mà Settings ko có thì bỏ qua
     # Luôn là advisor/.env dù chạy uvicorn từ thư mục nào (chạy từ gốc repo thì ".env" sẽ là file của docker-compose)
     model_config = SettingsConfigDict(env_file=ADVISOR_ENV_FILE, extra="ignore")
+    # Khoá chung với .NET (header X-Api-Key). Để trống = không kiểm tra (chạy local); prod bắt buộc đặt
+    api_key: str = ""
     ollama_base_url: str = "http://localhost:11434"
     llm_model: str = "qwen3:8b"
     llm_timeout_seconds: float = 120

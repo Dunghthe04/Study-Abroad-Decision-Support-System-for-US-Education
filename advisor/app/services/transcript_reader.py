@@ -101,6 +101,13 @@ PARSE_SCHEMA: dict[str, Any] = {
 MAX_SOURCE_CHARS = 12000
 MAX_PDF_PAGES = 10
 MIN_IMAGE_SIDE = 1200
+# Chống "bom ảnh": ảnh nhỏ về dung lượng nhưng giải nén ra hàng trăm triệu pixel làm hết RAM.
+# Ảnh chụp điện thoại 48MP vẫn dưới mức này
+MAX_IMAGE_PIXELS = 60_000_000
+# Trang PDF nhỏ được phóng to tối đa 4 lần (trang lớn thì luôn thu nhỏ về image_max_side)
+MAX_PDF_RENDER_SCALE = 4.0
+# Pillow không mở được (HEIC...) thì gửi nguyên tệp cho model, nhưng chỉ khi tệp không quá lớn
+MAX_RAW_IMAGE_BYTES = 10 * 1024 * 1024
 
 FRIENDLY_AI_BUSY = (
     "AI chưa đọc được (máy chủ AI đang bận hoặc thiếu bộ nhớ). Bạn thử lại sau ít phút hoặc nhập điểm tay."
@@ -409,9 +416,10 @@ class TranscriptReader:
             for i in range(min(len(pdf), MAX_PDF_PAGES)):
                 page = pdf[i]
                 width, height = page.get_size()
-                # Trang A4 ~ 842pt; render sao cho cạnh dài ~ image_max_side
+                # Trang A4 ~ 842pt; render sao cho cạnh dài ~ image_max_side.
+                # Không ép scale >= 1: trang khổ cực lớn (14400pt) phải được thu nhỏ, nếu không sẽ ra ảnh ~200 triệu pixel
                 scale = self._settings.image_max_side / max(width, height, 1)
-                pil = page.render(scale=max(scale, 1.0)).to_pil()
+                pil = page.render(scale=min(scale, MAX_PDF_RENDER_SCALE)).to_pil()
                 buf = io.BytesIO()
                 pil.save(buf, format="PNG")
                 images.append(buf.getvalue())
@@ -430,9 +438,16 @@ class TranscriptReader:
             )
 
         pages: list[str] = []
+        skipped: list[str] = []
         for page_no, image in enumerate(images, 1):
+            prepared = self._prepare_image(image)
+            if prepared is None:
+                where = f"Tệp '{file_name}'" if len(images) == 1 else f"Tệp '{file_name}' trang {page_no}"
+                skipped.append(
+                    f"{where}: ảnh quá lớn hoặc không đọc được. Bạn chụp lại hoặc xuất ảnh nhỏ hơn giúp nhé."
+                )
+                continue
             try:
-                prepared = self._prepare_image(image)
                 markdown = tidy_transcription(await self._transcribe(vision_model, prepared))
             except OllamaUnavailableError as ex:
                 logger.warning("Bước A lỗi (%s, %s trang %d): %s", vision_model, file_name, page_no, ex)
@@ -441,18 +456,29 @@ class TranscriptReader:
                 pages.append(markdown if len(images) == 1 else f"--- Trang {page_no} ---\n{markdown}")
 
         if not pages:
+            if skipped:
+                return _FileResult(model=vision_model, warnings=skipped)
             return _FileResult(
                 model=vision_model,
                 warnings=[
                     f"Tệp '{file_name}': AI không đọc được chữ nào trong ảnh. Bạn chụp rõ và thẳng hơn giúp nhé."
                 ],
             )
-        return await self._parse_source("\n\n".join(pages), file_name, model_used=vision_model)
+        result = await self._parse_source("\n\n".join(pages), file_name, model_used=vision_model)
+        result.warnings[:0] = skipped
+        return result
 
-    def _prepare_image(self, image: bytes) -> str:
-        """Xoay theo EXIF, đưa về cỡ vừa đủ cho model, chuyển xám và tăng tương phản. Trả về base64."""
+    def _prepare_image(self, image: bytes) -> str | None:
+        """Xoay theo EXIF, đưa về cỡ vừa đủ cho model, chuyển xám và tăng tương phản. Trả về base64.
+
+        Trả None khi ảnh quá lớn (bom ảnh) hoặc không đọc được mà tệp lại quá nặng: không gửi sang Ollama.
+        """
         try:
             img = Image.open(io.BytesIO(image))
+            # Image.open chỉ đọc phần đầu tệp, chưa giải nén: kiểm tra số pixel trước khi đụng vào dữ liệu ảnh
+            if img.width * img.height > MAX_IMAGE_PIXELS:
+                logger.warning("Từ chối ảnh quá lớn: %dx%d", img.width, img.height)
+                return None
             img = ImageOps.exif_transpose(img)
             img = img.convert("L")
             longest = max(img.size)
@@ -469,8 +495,14 @@ class TranscriptReader:
             buf = io.BytesIO()
             img.save(buf, format="PNG", optimize=True)
             return base64.b64encode(buf.getvalue()).decode("ascii")
+        except Image.DecompressionBombError as ex:
+            logger.warning("Từ chối bom ảnh: %s", ex)
+            return None
         except Exception as ex:
             # Định dạng Pillow không mở được (HEIC...): gửi nguyên ảnh, để model tự thử
+            if len(image) > MAX_RAW_IMAGE_BYTES:
+                logger.warning("Ảnh không đọc được và quá nặng (%d byte), bỏ qua", len(image))
+                return None
             logger.info("Bỏ qua tiền xử lý ảnh: %s", ex)
             return base64.b64encode(image).decode("ascii")
 
