@@ -1873,6 +1873,11 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(2000)")
                         .HasColumnName("notes");
 
+                    b.Property<decimal?>("OtherExpensesUsd")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("other_expenses_usd");
+
                     b.Property<decimal?>("RetentionRate1Yr")
                         .HasPrecision(5, 4)
                         .HasColumnType("numeric(5,4)")

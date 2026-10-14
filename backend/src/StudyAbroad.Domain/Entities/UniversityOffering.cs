@@ -14,6 +14,7 @@ public class UniversityOffering : BaseEntity
     public decimal? TuitionUsd { get; set; }
     public decimal? LivingUsd { get; set; }
     public decimal? FeesUsd { get; set; }
+    public decimal? OtherExpensesUsd { get; set; }
     public decimal? MinGpa4 { get; set; }
     public decimal? MinIelts { get; set; }
     public decimal? MinToefl { get; set; }

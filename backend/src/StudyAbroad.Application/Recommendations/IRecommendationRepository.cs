@@ -23,6 +23,8 @@ namespace StudyAbroad.Application.Recommendations
 
         //Lần gợi ý gần nhất của user, null nếu chưa có
         Task<Recommendation?> GetLatestRecommendationAsync(Guid userId, CancellationToken ct=default);
-
+        
+        //Hoạt động ngoại khóa, kinh nghiệm và giải thưởng của hồ sơ (đầu vào lượt ①)
+        Task<IReadOnlyList<ProfileActivity>> GetActivitiesAsync(Guid studentProfileId, CancellationToken ct = default);
     }
 }

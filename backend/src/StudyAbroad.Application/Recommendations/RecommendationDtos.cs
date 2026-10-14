@@ -16,7 +16,13 @@ namespace StudyAbroad.Application.Recommendations
         bool OpenAdmission,
          string Reason,
         bool AiExplained,       // false = giải thích theo mẫu, true = AI viết (giai đoạn 4)
-        SchoolInfoDto? School = null);   // thông tin trường để giao diện hiện thẻ trường; null ở kết quả cũ đã lưu
+        SchoolInfoDto? School = null,    // thông tin trường để giao diện hiện thẻ trường; null ở kết quả cũ đã lưu
+        string? Block = null,            // khối trên màn 9: reach | match | safety | aid | other
+        bool FarReach = false,           // Khó vào xa: đã Khó vào mà trường còn nhận ít du học sinh
+        decimal? RankScore = null,       // X: điểm xếp hạng theo mức quan tâm (0–1)
+        IReadOnlyList<string>? Why = null,     // mã lý do: GPA_LOW, SAT_IN_RANGE, BUDGET_OK, INTL_LOW...
+        IReadOnlyList<string>? Flags = null,   // cờ dữ liệu: COST_UNKNOWN, C7_DEFAULT, ENGLISH_MIN_UNKNOWN...
+        decimal? OverBudgetUsd = null);  // số tiền vượt ngân sách mỗi năm (khối aid));   // thông tin trường để giao diện hiện thẻ trường; null ở kết quả cũ đã lưu
 
     //Thông tin trường lấy thẳng từ database (không phụ thuộc học sinh)
     public record SchoolInfoDto(

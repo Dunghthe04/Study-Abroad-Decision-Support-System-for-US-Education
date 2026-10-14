@@ -12,6 +12,8 @@ namespace StudyAbroad.Application.Recommendations
         public const string SettingKey = "recommend.weights";
         public decimal BudgetTolerance { get; set; } = 0.10m;   // Trần ngân sách = ngân sách × (1 + 10%)
         public int MaxResults { get; set; } = 12;               // Số lượng trường tối đa trong gợi ý trường
+        public int MaxCandidates { get; set; } = 40;            // Số trường tối đa gửi AI chấm sau lọc cứng (40 trường ≈ 5 lô ≈ 2,5 phút)
+
         public PerCategoryLimits PerCategory { get; set; } = new();
         public bool AiEnabled { get; set; } = true;
         public int AiTimeoutSeconds { get; set; } = 120;

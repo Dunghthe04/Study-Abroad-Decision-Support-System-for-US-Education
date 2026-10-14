@@ -71,6 +71,11 @@ public static class DependencyInjection
             ConfigureAdvisorClient(sp, client);
             client.Timeout = TimeSpan.FromSeconds(sp.GetRequiredService<IOptions<AdvisorOptions>>().Value.OcrTimeoutSeconds);
         });
+        services.AddHttpClient<IRecommendationAi, RecommendationAiClient>((sp, client) =>
+        {
+            ConfigureAdvisorClient(sp, client);
+            client.Timeout = TimeSpan.FromSeconds(sp.GetRequiredService<IOptions<AdvisorOptions>>().Value.RecommendTimeoutSeconds);
+        });
 
         // [Scheduled Background Jobs: Unlock expired accounts & Cleanup OTPs]
         services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.AccountUnlockBackgroundService>();

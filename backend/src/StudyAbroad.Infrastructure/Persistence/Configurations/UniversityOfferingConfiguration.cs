@@ -17,6 +17,7 @@ public class UniversityOfferingConfiguration : IEntityTypeConfiguration<Universi
         b.Property(x => x.TuitionUsd).HasPrecision(12, 2);
         b.Property(x => x.LivingUsd).HasPrecision(12, 2);
         b.Property(x => x.FeesUsd).HasPrecision(12, 2);
+        b.Property(x => x.OtherExpensesUsd).HasPrecision(12, 2);
         b.Property(x => x.MinGpa4).HasPrecision(3, 2);
         b.Property(x => x.MinIelts).HasPrecision(3, 1);
         b.Property(x => x.MinToefl).HasPrecision(5, 1);
