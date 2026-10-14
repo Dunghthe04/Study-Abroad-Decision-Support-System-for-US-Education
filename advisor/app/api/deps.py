@@ -4,6 +4,7 @@
 
 from fastapi import Request
 
+from app.services.ec_reader import EcReader
 from app.services.ollama import OllamaClient
 from app.services.scorer import Scorer
 
@@ -15,3 +16,6 @@ def get_llm(request: Request) -> OllamaClient:
 def get_scorer(request: Request) -> Scorer:
     """Lấy Scorer (lượt ② chấm trường) đã tạo lúc khởi động."""
     return request.app.state.scorer
+
+def get_ec_reader(request: Request) -> EcReader:
+    return request.app.state.ec_reader
