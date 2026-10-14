@@ -44,6 +44,11 @@ interface Step2TranscriptProps {
   onNext: () => void;
 }
 
+// Khớp với BE (ProfileFileStorageService): chỉ PDF/PNG/JPG, tối đa 10MB
+const TRANSCRIPT_EXTENSIONS = [".pdf", ".png", ".jpg", ".jpeg"];
+const TRANSCRIPT_ACCEPT = TRANSCRIPT_EXTENSIONS.join(",");
+const TRANSCRIPT_MAX_BYTES = 10 * 1024 * 1024;
+
 const DEFAULT_SUBJECTS = [
   "Toán",
   "Ngữ văn",
@@ -336,6 +341,18 @@ export function Step2Transcript({
     const fileArray = Array.from(files);
     if (fileArray.length === 0) return;
 
+    // Báo lỗi ngay ở trình duyệt, khỏi chờ gửi lên BE (BE vẫn kiểm tra lại cả nội dung tệp)
+    const file = fileArray[0];
+    const ext = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
+    if (!TRANSCRIPT_EXTENSIONS.includes(ext)) {
+      setUploadError("Chỉ nhận tệp PDF, PNG, JPG hoặc JPEG.");
+      return;
+    }
+    if (file.size > TRANSCRIPT_MAX_BYTES) {
+      setUploadError("Tệp quá lớn. Bảng điểm tối đa 10MB.");
+      return;
+    }
+
     setIsUploading(true);
     onUploadingChange?.(true);
     setUploadError(null);
@@ -471,7 +488,7 @@ export function Step2Transcript({
       <input
         id={fileInputId}
         type="file"
-        accept="image/*,.pdf"
+        accept={TRANSCRIPT_ACCEPT}
         className="hidden"
         onChange={(e) => e.target.files && handleFileUpload(e.target.files)}
       />

@@ -149,7 +149,14 @@ export const profileFlowApi = {
 
     if (!res.ok) {
       const err = await res.json().catch(() => null);
-      throw new Error(err?.error ?? err?.message ?? "Không thể tải lên bảng điểm.");
+      // 413/429 có thể do Kestrel hoặc nginx trả, không kèm JSON
+      const fallback =
+        res.status === 429
+          ? "Bạn tải bảng điểm quá nhiều lần hoặc đang có một tệp được xử lý. Vui lòng đợi vài phút rồi thử lại."
+          : res.status === 413
+            ? "Tệp quá lớn. Bảng điểm tối đa 10MB."
+            : "Không thể tải lên bảng điểm.";
+      throw new Error(err?.error ?? err?.message ?? fallback);
     }
 
     return (await res.json()) as UploadDraftTranscriptResponse;
