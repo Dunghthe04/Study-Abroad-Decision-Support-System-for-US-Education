@@ -17,7 +17,7 @@ public class FinancialProfileService(IFinancialProfileRepository repository) : I
     public async Task<FinancialProfileDto?> GetFinancialProfileAsync(Guid userId, CancellationToken ct = default)
     {
         var profile = await repository.GetProfileByUserIdAsync(userId, ct);
-        if (profile is null || profile.AnnualBudgetUsd is null)
+        if (profile is null || profile.BudgetMaxUsd is null)
             return null;
 
         return MapToFinancialDto(profile);
@@ -36,7 +36,8 @@ public class FinancialProfileService(IFinancialProfileRepository repository) : I
 
         var profile = await repository.EnsureProfileExistsAsync(userId, ct);
 
-        profile.AnnualBudgetUsd = request.AnnualBudget;
+        profile.BudgetMaxUsd = request.AnnualBudget;
+        profile.BudgetMinUsd = 0;
         profile.MaxExpectedTuitionUsd = request.MaxExpectedTuition;
         profile.FundingSource = request.FundingSource.Trim();
         profile.NeedsScholarship = request.NeedScholarship;
@@ -225,7 +226,7 @@ public class FinancialProfileService(IFinancialProfileRepository repository) : I
     // ==========================================
 
     private static FinancialProfileDto MapToFinancialDto(StudentProfile p) =>
-        new(p.Id, p.UserId, p.AnnualBudgetUsd ?? 0, p.FundingSource ?? "family", p.NeedsScholarship, p.MaxExpectedTuitionUsd, "USD", p.FinancialNotes, p.CreatedAt, p.UpdatedAt);
+        new(p.Id, p.UserId, p.BudgetMaxUsd ?? 0, p.FundingSource ?? "family", p.NeedsScholarship, p.MaxExpectedTuitionUsd, "USD", p.FinancialNotes, p.CreatedAt, p.UpdatedAt);
 
     private static ExtracurricularActivityDto MapToActivityDto(ProfileActivity a, Guid userId) =>
         new(a.Id, userId, a.Title, a.Role ?? string.Empty, a.Organization ?? string.Empty, a.DurationMonths, a.StartDate?.ToString("yyyy-MM"), a.EndDate?.ToString("yyyy-MM"), a.IsOngoing, a.ImpactLevel ?? ProfileConstants.ImpactLevels.School, a.Description ?? string.Empty, a.CreatedAt, a.UpdatedAt);

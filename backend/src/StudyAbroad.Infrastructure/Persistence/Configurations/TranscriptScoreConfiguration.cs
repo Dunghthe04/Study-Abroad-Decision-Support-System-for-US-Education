@@ -11,6 +11,8 @@ public class TranscriptScoreConfiguration : IEntityTypeConfiguration<TranscriptS
         b.HasKey(x => x.Id);
         b.HasOne<StudentProfile>().WithMany().HasForeignKey(x => x.StudentProfileId).OnDelete(DeleteBehavior.Cascade);
         b.Property(x => x.TermName).HasMaxLength(64).IsRequired();
+        b.Property(x => x.GradeName).HasMaxLength(32);
+        b.Property(x => x.Semester);
         b.Property(x => x.Subject).HasMaxLength(128).IsRequired();
         b.Property(x => x.Score).HasPrecision(6, 2);
         b.Property(x => x.RawScore).HasMaxLength(16);

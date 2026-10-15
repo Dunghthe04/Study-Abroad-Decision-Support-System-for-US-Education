@@ -33,6 +33,11 @@ async def test_chat_json_sends_schema_and_parses_content():
     assert body["stream"] is False
     assert body["think"] is False
     assert body["options"]["temperature"] == 0.0
+    # Chạy hết trên GPU, ngữ cảnh vừa VRAM, kết quả lặp lại được
+    assert body["options"]["num_gpu"] == 99
+    assert body["options"]["num_ctx"] == 6144
+    assert body["options"]["seed"] == 42
+    assert body["keep_alive"] == "30m"
 
 
 async def test_chat_json_raises_when_content_is_not_json():

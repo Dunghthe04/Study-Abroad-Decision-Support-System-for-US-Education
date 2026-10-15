@@ -57,7 +57,26 @@ namespace StudyAbroad.Infrastructure.Persistence.Repositories
                        u.Control,
                        u.Website,
                        u.InternationalStudentCount,
-                       o.SatPolicy
+                       o.SatPolicy,
+                       // HasIntlAid: null = chưa có dữ liệu H6, "none" = không có học bổng du học sinh
+                       o.IntlAidPolicy == null ? (bool?)null : o.IntlAidPolicy != "none",
+                       o.C7GpaImportance,
+                       o.C7TestImportance,
+                       o.C7EcImportance,
+                       o.SatSubmitPct,
+                       new GpaDistribution(
+                           o.GpaPct40,
+                           o.GpaPct375To399,
+                           o.GpaPct350To374,
+                           o.GpaPct325To349,
+                           o.GpaPct300To324,
+                           o.GpaPct250To299,
+                           o.GpaPctBelow250),
+                       o.IntlAcceptanceRate,
+                       o.IntlAidAvgUsd,
+                       o.RetentionRate1Yr,
+                       o.GradRate6Yr,
+                       o.OtherExpensesUsd
                    )).ToListAsync(ct);
         }
 
@@ -65,24 +84,8 @@ namespace StudyAbroad.Infrastructure.Persistence.Repositories
         {
             return await db.ProfileActivities.AsNoTracking()
                 .Where(a => a.StudentProfileId == studentProfileId)
+                .OrderBy(a => a.CreatedAt)
                 .ToListAsync(ct);
-        }
-
-        public Task<AnalysisResult?> GetLatestAnalysisAsync(Guid studentProfileId, string kind, CancellationToken ct = default)
-        {
-            return db.AnalysisResults.AsNoTracking()
-                .Where(a => a.StudentProfileId == studentProfileId && a.Kind == kind)
-                .OrderByDescending(a => a.CreatedAt)
-                .FirstOrDefaultAsync(ct);
-        }
-
-        public async Task SaveExtracurricularAsync(AnalysisResult analysis, decimal score, CancellationToken ct = default)
-        {
-            db.AnalysisResults.Add(analysis);
-            var profile = await db.StudentProfiles.FindAsync([analysis.StudentProfileId], ct);
-            if (profile is not null)
-                profile.ExtracurricularScore = score;   // updated_at do SaveChangesAsync tự cập nhật
-            await db.SaveChangesAsync(ct);
         }
 
         public Task<string?> GetSettingJsonAsync(string key, CancellationToken ct = default)

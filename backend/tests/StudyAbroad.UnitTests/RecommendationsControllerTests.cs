@@ -23,6 +23,9 @@ public class RecommendationsControllerTests
 
         public Task<RecommendationResultDto?> GetLatestAsync(Guid userId, CancellationToken ct = default) =>
             Task.FromResult<RecommendationResultDto?>(null);
+
+        public Task<SchoolAdviceDto?> ExplainSchoolAsync(Guid userId, Guid offeringId, CancellationToken ct = default) =>
+            Task.FromResult<SchoolAdviceDto?>(null);
     }
 
     private static RecommendationsController NewController(FakeService service, Guid? userId)

@@ -41,7 +41,30 @@ export interface RecommendationItem {
   categoryReason?: string | null; // vì sao trường thuộc nhóm này (code dựng từ số liệu); kết quả cũ không có
   strengths?: string[] | null;
   weaknesses?: string[] | null;
+  // Công thức mới (backend chia khối): kết quả cũ đã lưu có thể không có các trường này
+  block?: RecommendationBlock | null; // khối trên màn 9, backend quyết định
+  farReach?: boolean; // Khó vào xa: đã Khó vào mà trường còn nhận ít du học sinh
+  rankScore?: number | null; // X 0–1 theo nút Cân bằng
+  why?: string[] | null; // mã lý do: GPA_LOW, SAT_IN_RANGE, NEED_AID...
+  flags?: string[] | null; // cờ dữ liệu: COST_UNKNOWN, C7_DEFAULT...
+  overBudgetUsd?: number | null; // số tiền vượt ngân sách mỗi năm (khối aid)
+  costFit?: number | null; // F 0–1
+  aidFit?: number | null; // H 0–1
+  quality?: number | null; // Q 0–1
+  gpaPosition?: number | null; // GPA cao hơn bao nhiêu % sinh viên trường (0–100)
+  satPosition?: number | null; // vị trí SAT trong trường (25 = mốc 25%, 75 = mốc 75%)
+  ecAdjustment?: number | null; // cộng/trừ do ngoại khóa ở trường này (−6..+6)
 }
+
+/** Lời tư vấn AI viết cho 1 trường (gọi khi mở "Chi tiết"). */
+export interface SchoolAdvice {
+  summary: string;
+  strengths: string[];
+  improvements: string[];
+  model: string;
+}
+
+export type RecommendationBlock = "reach" | "match" | "safety" | "aid" | "other";
 
 export interface StudentSummary {
   major: string | null;
@@ -50,14 +73,18 @@ export interface StudentSummary {
   ielts: number | null;
   toefl: number | null;
   duolingo: number | null;
-  annualBudgetUsd: number | null;
-  extracurricularScore: number | null; // 0–4
+  annualBudgetUsd?: number | null;
+  budgetMinUsd?: number | null;
+  budgetMaxUsd?: number | null;
+  extracurricularScore?: number | null; // 0–4
+  activitiesCount?: number;
 }
 
 export interface ExtracurricularSummary {
   score: number | null; // 0–4
   fresh: boolean;
   aiUsed: boolean;
+  activities?: { id: string; name: string }[]; // các hoạt động đã chấm (BE trả thêm vai trò, điểm…)
 }
 
 export interface RecommendationResult {

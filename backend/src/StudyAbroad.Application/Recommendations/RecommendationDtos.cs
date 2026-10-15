@@ -17,9 +17,25 @@ namespace StudyAbroad.Application.Recommendations
          string Reason,
         bool AiExplained,       // false = giải thích theo mẫu, true = AI viết (giai đoạn 4)
         SchoolInfoDto? School = null,    // thông tin trường để giao diện hiện thẻ trường; null ở kết quả cũ đã lưu
-        string? CategoryReason = null,   // vì sao trường thuộc nhóm này (code dựng từ số liệu); null ở kết quả cũ
-        IReadOnlyList<string>? Strengths = null,    // ưu điểm của hồ sơ với trường này
-        IReadOnlyList<string>? Weaknesses = null);  // nhược điểm của hồ sơ với trường này
+        string? Block = null,            // khối trên màn 9: reach | match | safety | aid | other
+        bool FarReach = false,           // Khó vào xa: đã Khó vào mà trường còn nhận ít du học sinh
+        decimal? RankScore = null,       // X: điểm xếp hạng theo mức quan tâm (0–1)
+        IReadOnlyList<string>? Why = null,     // mã lý do: GPA_LOW, SAT_IN_RANGE, BUDGET_OK, INTL_LOW...
+        IReadOnlyList<string>? Flags = null,   // cờ dữ liệu: COST_UNKNOWN, C7_DEFAULT, ENGLISH_MIN_UNKNOWN...
+        decimal? OverBudgetUsd = null,   // số tiền vượt ngân sách mỗi năm (khối aid)
+        decimal? CostFit = null,         // F: (ngân sách − chi phí)/ngân sách, 0–1; dùng khi đổi nút ưu tiên
+        decimal? AidFit = null,          // H: học bổng TB du học sinh / chi phí, 0–1
+        decimal? Quality = null,         // Q: TB tỉ lệ giữ chân và tốt nghiệp, 0–1
+        decimal? GpaPosition = null,     // GPA cao hơn khoảng bao nhiêu % sinh viên trường (0–100)
+        decimal? SatPosition = null,     // vị trí SAT trong trường (25 = mốc 25%, 75 = mốc 75%)
+        decimal? EcAdjustment = null);   // điểm cộng/trừ do ngoại khóa ở trường này (−6..+6)
+
+    //Lời tư vấn AI viết cho 1 trường (gọi khi học sinh mở chi tiết trường)
+    public record SchoolAdviceDto(
+        string Summary,
+        IReadOnlyList<string> Strengths,
+        IReadOnlyList<string> Improvements,
+        string Model);
 
     //Thông tin trường lấy thẳng từ database (không phụ thuộc học sinh)
     public record SchoolInfoDto(
@@ -45,37 +61,5 @@ namespace StudyAbroad.Application.Recommendations
         DateTime CreatedAt,
         string StudyLevel,
         IReadOnlyList<RecommendationItemDto> Items,
-        IReadOnlyList<string> Warnings,   // ví dụ: "chưa quy đổi được GPA"
-        ExtracurricularSummaryDto? Extracurricular = null,   // null ở kết quả cũ lưu trước khi có bước chấm ngoại khóa
-        StudentSummaryDto? Student = null);                  // hồ sơ dùng cho lần lọc này; null ở kết quả cũ
-
-    //Hồ sơ học sinh dùng để lọc, để giao diện hiện "Học thuật (GPA, SAT, IELTS) · Ngân sách · Ngoại khóa"
-    public record StudentSummaryDto(
-        string? Major,
-        decimal? Gpa4,                   // thang 4
-        int? Sat,
-        decimal? Ielts,
-        decimal? Toefl,
-        decimal? Duolingo,
-        decimal? AnnualBudgetUsd,
-        decimal? ExtracurricularScore);  // 0–4
-
-    //Điểm ngoại khóa dùng cho lần lọc này. Score = null: chưa tính được, SAW bỏ tiêu chí ngoại khóa
-    public record ExtracurricularSummaryDto(
-        decimal? Score,                  // 0–4
-        bool Fresh,                      // false = advisor lỗi, đang dùng điểm lần trước
-        bool AiUsed,                     // false = vai trò đọc bằng từ khóa
-        IReadOnlyList<ExtracurricularScoreItemDto> Activities);
-
-    //Một hoạt động sau khi chấm: thuộc tính AI đọc ra + điểm theo công thức
-    public record ExtracurricularScoreItemDto(
-        string Id,                       // id của profile_activities
-        string Name,
-        string Role,                     // member | deputy | head | founder
-        bool ReputableOrg,
-        int ImpactLevel,                 // 1 trường … 5 quốc tế
-        decimal Quality,                 // 0–1
-        decimal Points,                  // đóng góp vào điểm tổng
-        bool Counted,                    // false = ngoài 4 hoạt động (3 giải) tốt nhất
-        string Kind = "activity");       // activity | award
+        IReadOnlyList<string> Warnings);  // ví dụ: "chưa quy đổi được GPA"
 }

@@ -62,7 +62,7 @@ export function VerifyEmailForm() {
       } else {
         setSuccessMessage("Kích hoạt tài khoản thành công! Đang chuyển hướng...");
         setTimeout(() => {
-          router.push("/account");
+          router.push("/");
         }, 1500);
       }
     } catch (err) {

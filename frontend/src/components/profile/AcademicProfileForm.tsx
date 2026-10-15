@@ -71,12 +71,78 @@ const EDUCATION_SYSTEMS = [
 ];
 
 const TARGET_LEVELS = [
-  { value: "middle_school", label: "Trung học cơ sở / Cấp 2 (Middle School)" },
-  { value: "secondary", label: "Trung học phổ thông / Cấp 3 (High School)" },
   { value: "community_college", label: "Cao đẳng cộng đồng 2+2 (Community College)" },
-  { value: "undergraduate", label: "Đại học 4 năm (Undergraduate)" },
+  { value: "undergraduate", label: "Đại học 4 năm (Undergraduate / Bachelor)" },
   { value: "master", label: "Thạc sĩ (Master)" },
   { value: "phd", label: "Tiến sĩ (PhD)" },
+];
+
+/**
+ * Danh mục chuẩn các ngành học tiếng Anh của các trường Đại học Mỹ
+ */
+const US_MAJORS = [
+  // Computer Science & Information Technology
+  { value: "Computer Science", label: "Computer Science (Khoa học máy tính)" },
+  { value: "Data Science", label: "Data Science (Khoa học dữ liệu)" },
+  { value: "Artificial Intelligence", label: "Artificial Intelligence (Trí tuệ nhân tạo)" },
+  { value: "Software Engineering", label: "Software Engineering (Kỹ thuật phần mềm)" },
+  { value: "Information Technology", label: "Information Technology (Công nghệ thông tin)" },
+  { value: "Cybersecurity", label: "Cybersecurity (An ninh mạng)" },
+  { value: "Computer Engineering", label: "Computer Engineering (Kỹ thuật máy tính)" },
+
+  // Business, Management & Economics
+  { value: "Business Administration", label: "Business Administration (Quản trị kinh doanh / BBA / MBA)" },
+  { value: "Finance", label: "Finance (Tài chính)" },
+  { value: "Accounting", label: "Accounting (Kế toán)" },
+  { value: "Marketing", label: "Marketing (Tiếp thị số / Marketing)" },
+  { value: "Economics", label: "Economics (Kinh tế học)" },
+  { value: "Business Analytics", label: "Business Analytics (Phân tích dữ liệu kinh doanh)" },
+  { value: "Supply Chain Management", label: "Supply Chain Management (Quản lý chuỗi cung ứng & Logistics)" },
+  { value: "International Business", label: "International Business (Kinh doanh quốc tế)" },
+
+  // Engineering
+  { value: "Mechanical Engineering", label: "Mechanical Engineering (Kỹ thuật cơ khí)" },
+  { value: "Electrical Engineering", label: "Electrical Engineering (Kỹ thuật điện - điện tử)" },
+  { value: "Biomedical Engineering", label: "Biomedical Engineering (Kỹ thuật y sinh)" },
+  { value: "Chemical Engineering", label: "Chemical Engineering (Kỹ thuật hóa học)" },
+  { value: "Civil Engineering", label: "Civil Engineering (Kỹ thuật xây dựng & công trình)" },
+  { value: "Aerospace Engineering", label: "Aerospace Engineering (Kỹ thuật hàng không vũ trụ)" },
+  { value: "Industrial Engineering", label: "Industrial Engineering (Kỹ thuật công nghiệp / Tối ưu hóa)" },
+
+  // Natural Sciences & Mathematics
+  { value: "Mathematics", label: "Mathematics / Applied Math (Toán học & Toán ứng dụng)" },
+  { value: "Statistics", label: "Statistics (Thống kê học)" },
+  { value: "Physics", label: "Physics (Vật lý học)" },
+  { value: "Chemistry", label: "Chemistry / Biochemistry (Hóa học / Hóa sinh)" },
+  { value: "Biological Sciences", label: "Biological Sciences / Biology (Khoa học sinh học)" },
+  { value: "Environmental Science", label: "Environmental Science (Khoa học môi trường)" },
+
+  // Health, Medicine & Pre-Professional
+  { value: "Pre-Medicine", label: "Pre-Medicine / Health Sciences (Y khoa / Khoa học sức khỏe)" },
+  { value: "Nursing", label: "Nursing (Điều dưỡng)" },
+  { value: "Public Health", label: "Public Health (Y tế công cộng)" },
+  { value: "Pharmacy", label: "Pharmacy / Pharmaceutical Sciences (Dược học)" },
+
+  // Social Sciences & Humanities
+  { value: "Psychology", label: "Psychology (Tâm lý học)" },
+  { value: "Political Science", label: "Political Science & International Relations (Khoa học chính trị & QHTT)" },
+  { value: "Communications", label: "Communications & Media Studies (Truyền thông đại chúng)" },
+  { value: "Sociology", label: "Sociology (Xã hội học)" },
+  { value: "English Literature", label: "English Literature (Văn học Anh ngữ)" },
+  { value: "Journalism", label: "Journalism (Báo chí)" },
+
+  // Arts, Design & Architecture
+  { value: "Architecture", label: "Architecture (Kiến trúc)" },
+  { value: "Graphic Design", label: "Graphic Design (Thiết kế đồ họa)" },
+  { value: "Digital Arts & Animation", label: "Digital Arts & Animation (Nghệ thuật số & Hoạt hình)" },
+  { value: "Fine Arts", label: "Fine Arts (Mỹ thuật)" },
+
+  // Law & Education
+  { value: "Pre-Law Studies", label: "Pre-Law Studies (Tiền luật học)" },
+  { value: "Education", label: "Education (Khoa học giáo dục)" },
+
+  // Exploratory
+  { value: "Undecided / General Studies", label: "Undecided / Exploratory (Chưa quyết định / Tổng quát)" },
 ];
 
 /**
@@ -274,7 +340,7 @@ export function AcademicProfileForm({ initialProfile }: Props) {
     ielts: Boolean(initialProfile?.ielts != null || !hasSavedProfile),
     toefl: Boolean(initialProfile?.toefl != null),
     duolingo: Boolean(initialProfile?.duolingo != null),
-    sat: Boolean(initialProfile?.sat != null || (!isGraduate && !hasSavedProfile && targetLevel !== "middle_school")),
+    sat: Boolean(initialProfile?.sat != null || (!isGraduate && !hasSavedProfile)),
     act: Boolean(initialProfile?.act != null),
     gre: Boolean(initialProfile?.gre != null || (isGraduate && !hasSavedProfile)),
     gmat: Boolean(initialProfile?.gmat != null),
@@ -319,9 +385,7 @@ export function AcademicProfileForm({ initialProfile }: Props) {
     // Tự động gợi ý tên kỳ tiếp theo
     const defaultTermName = isGraduate
       ? `Đại học - Kỳ ${nextOrder}`
-      : targetLevel === "middle_school"
-        ? `Lớp THCS - Học kỳ ${nextOrder}`
-        : `Học kỳ ${nextOrder}`;
+      : `Học kỳ ${nextOrder}`;
 
     setTerms([
       ...terms,
@@ -584,8 +648,9 @@ export function AcademicProfileForm({ initialProfile }: Props) {
     }
 
     const gradYearNum = parseInt(graduationYear, 10);
-    if (isNaN(gradYearNum) || gradYearNum < 2015 || gradYearNum > 2040) {
-      notifyError("Năm tốt nghiệp phải nằm trong khoảng từ 2015 đến 2040.");
+    const currentYear = new Date().getFullYear();
+    if (isNaN(gradYearNum) || gradYearNum < currentYear || gradYearNum > currentYear + 15) {
+      notifyError(`Năm tốt nghiệp dự kiến không được ở quá khứ (phải từ năm ${currentYear} đến ${currentYear + 15}).`);
       return;
     }
 
@@ -758,10 +823,6 @@ export function AcademicProfileForm({ initialProfile }: Props) {
                   if (educationSystem === "standard") setEducationSystem("university");
                   if (currentGrade.includes("Lớp")) setCurrentGrade("Đại học năm 3");
                   setGradeScale("4");
-                } else if (newLevel === "middle_school") {
-                  if (educationSystem === "university") setEducationSystem("standard");
-                  setCurrentGrade("Lớp 8");
-                  setGradeScale("10");
                 } else {
                   if (educationSystem === "university") setEducationSystem("standard");
                   if (currentGrade.includes("Đại học")) setCurrentGrade("Lớp 11");
@@ -778,20 +839,31 @@ export function AcademicProfileForm({ initialProfile }: Props) {
             </NativeSelect>
           </div>
 
-          {/* Ngành muốn học */}
+          {/* Ngành muốn học (Tiếng Anh chuẩn ĐH Mỹ) */}
           <div className="space-y-1.5">
-            <Label htmlFor="academic-intended-major">
-              Ngành muốn học (Intended Major)
-            </Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="academic-intended-major">
+                Ngành muốn học (Intended Major)
+              </Label>
+              <span className="text-[11px] text-muted-foreground">Tiếng Anh chuẩn ĐH Mỹ</span>
+            </div>
             <Input
               id="academic-intended-major"
+              list="us-majors-list"
               type="text"
               disabled={!isEditing}
               value={intendedMajor}
               onChange={(e) => setIntendedMajor(e.target.value)}
-              placeholder={isGraduate ? "Ví dụ: Khoa học Dữ liệu, MBA, Tài chính..." : "Ví dụ: Khoa học Máy tính, Kinh doanh, Tâm lý học..."}
+              placeholder="Ví dụ: Computer Science, Finance, Mechanical Engineering..."
               className={VIEW_MODE_INPUT_CLASS}
             />
+            <datalist id="us-majors-list">
+              {US_MAJORS.map((m) => (
+                <option key={m.value} value={m.value}>
+                  {m.label}
+                </option>
+              ))}
+            </datalist>
           </div>
 
           {/* Trường hiện tại */}
@@ -808,10 +880,8 @@ export function AcademicProfileForm({ initialProfile }: Props) {
               onChange={(e) => setCurrentSchool(e.target.value)}
               placeholder={
                 isGraduate
-                  ? "Ví dụ: Đại học Bách Khoa Hà Nội, ĐH Kinh tế Quốc dân..."
-                  : targetLevel === "middle_school"
-                    ? "Ví dụ: THCS Giảng Võ, THCS Cầu Giấy..."
-                    : "Ví dụ: THPT Chuyên Hà Nội - Amsterdam..."
+                  ? "Ví dụ: Đại học Bách Khoa Hà Nội, ĐH Kinh tế Quốc dân, RMIT..."
+                  : "Ví dụ: THPT Chuyên Hà Nội - Amsterdam, THPT Lê Hồng Phong..."
               }
               className={VIEW_MODE_INPUT_CLASS}
             />
@@ -851,16 +921,14 @@ export function AcademicProfileForm({ initialProfile }: Props) {
               onChange={(e) => setCurrentGrade(e.target.value)}
               placeholder={
                 isGraduate
-                  ? "Ví dụ: Đại học năm 3, Đại học năm 4, Đã tốt nghiệp Cử nhân"
-                  : targetLevel === "middle_school"
-                    ? "Ví dụ: Lớp 6, Lớp 7, Lớp 8, Lớp 9"
-                    : "Ví dụ: Lớp 10, Lớp 11, Lớp 12..."
+                  ? "Ví dụ: Đại học năm 3, Đại học năm 4, Đã tốt nghiệp Cử nhân..."
+                  : "Ví dụ: Lớp 11, Lớp 12, Đã tốt nghiệp THPT, Gap year..."
               }
               className={VIEW_MODE_INPUT_CLASS}
             />
           </div>
 
-          {/* Năm tốt nghiệp dự kiến */}
+          {/* Năm tốt nghiệp dự kiến (Không để về quá khứ) */}
           <div className="space-y-1.5">
             <Label htmlFor="academic-graduation-year">
               {isGraduate ? "Năm tốt nghiệp Đại học (hoặc dự kiến)" : "Năm tốt nghiệp dự kiến"}{" "}
@@ -872,9 +940,9 @@ export function AcademicProfileForm({ initialProfile }: Props) {
               disabled={!isEditing}
               value={graduationYear}
               onChange={(e) => setGraduationYear(e.target.value)}
-              placeholder="Ví dụ: 2026, 2027..."
-              min={2015}
-              max={2040}
+              placeholder={`Ví dụ: ${new Date().getFullYear()}, ${new Date().getFullYear() + 1}...`}
+              min={new Date().getFullYear()}
+              max={new Date().getFullYear() + 15}
               className={VIEW_MODE_INPUT_CLASS}
             />
           </div>

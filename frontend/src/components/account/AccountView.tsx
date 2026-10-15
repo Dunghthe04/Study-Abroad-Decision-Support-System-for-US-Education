@@ -106,8 +106,6 @@ export function AccountView() {
 
   // Nhãn bậc học
   const targetLevelLabels: Record<string, string> = {
-    middle_school: "Trung học cơ sở / Cấp 2 (Middle School)",
-    secondary: "Trung học phổ thông / Cấp 3 (High School)",
     community_college: "Cao đẳng cộng đồng 2+2 (Community College)",
     undergraduate: "Đại học 4 năm (Undergraduate)",
     master: "Thạc sĩ (Master)",
