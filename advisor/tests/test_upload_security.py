@@ -56,7 +56,7 @@ def test_empty_api_key_setting_skips_check_for_local_dev():
 def test_recommendation_routes_also_require_api_key():
     client, _ = make_client(api_key="khoa-test")
 
-    for url in ("/recommend/ec", "/recommend/score", "/recommend/pick"):
+    for url in ("/recommend/ec", "/recommend/explain"):
         assert client.post(url, json={}).status_code == 401
 
 

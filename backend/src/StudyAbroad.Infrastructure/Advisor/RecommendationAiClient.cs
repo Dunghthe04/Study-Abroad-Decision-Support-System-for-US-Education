@@ -8,16 +8,14 @@ using System.Threading.Tasks;
 
 namespace StudyAbroad.Infrastructure.Advisor
 {
+    //Gọi advisor: đọc hoạt động ngoại khóa và viết tư vấn từng trường. HttpClient đã có địa chỉ, timeout và X-Api-Key (cấu hình trong DependencyInjection).
     public class RecommendationAiClient(HttpClient http) : IRecommendationAi
     {
         public Task<AiEcResult> ReadExtracurricularAsync(AiEcRequest request, CancellationToken ct = default) =>
             PostAsync<AiEcRequest, AiEcResult>("recommend/ec", request, ct);
 
-        public Task<AiScoreResult> ScoreAsync(AiScoreRequest request, CancellationToken ct = default) =>
-            PostAsync<AiScoreRequest, AiScoreResult>("recommend/score", request, ct);
-
-        public Task<AiPickResult> PickAsync(AiPickRequest request, CancellationToken ct = default) =>
-            PostAsync<AiPickRequest, AiPickResult>("recommend/pick", request, ct);
+        public Task<AiExplainResult> ExplainAsync(AiExplainRequest request, CancellationToken ct = default) =>
+            PostAsync<AiExplainRequest, AiExplainResult>("recommend/explain", request, ct);
 
         //Mọi lỗi (mạng, quá thời gian, HTTP lỗi, JSON hỏng) đổi thành RecommendationAiException để service xử lý một chỗ
         private async Task<TResponse> PostAsync<TRequest, TResponse>(string path, TRequest request, CancellationToken ct)

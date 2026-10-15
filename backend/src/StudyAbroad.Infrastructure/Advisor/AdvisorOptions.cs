@@ -10,6 +10,6 @@ public class AdvisorOptions
     // Đọc bảng điểm: model ảnh chép bảng rồi LLM bóc điểm, nhiều tệp nên lâu hơn các lời gọi khác
     public int OcrTimeoutSeconds { get; set; } = 600;
 
-    // Gợi ý trường: lượt ② chấm tối đa 40 trường theo lô 8 (khoảng 30 giây/lô, lô lỗi được gọi lại 1 lần)
-    public int RecommendTimeoutSeconds { get; set; } = 600;
+    // Gợi ý trường: AI đọc hoạt động ngoại khóa (khoảng 5–10 giây, sai định dạng thì advisor gọi lại 1 lần)
+    public int RecommendTimeoutSeconds { get; set; } = 120;
 }

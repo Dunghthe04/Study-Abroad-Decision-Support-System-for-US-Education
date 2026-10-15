@@ -2,8 +2,8 @@ using System.Text.Json;
 
 namespace StudyAbroad.Application.Recommendations
 {
-    //Số lượng trường tối đa theo từng loại (reach, match, safety) trong gợi ý trường
-    public record PerCategoryLimits(int Reach = 3, int Match = 5, int Safety = 4);
+    //Số lượng trường tối đa mỗi khối trên màn 9: Khó vào, Vừa sức, An toàn hơn, Cần học bổng lớn
+    public record PerCategoryLimits(int Reach = 3, int Match = 5, int Safety = 4, int Aid = 5);
 
     //Cấu hình gợi ý trường, đọc từ AppSetting.ValueJson với Key = "recommend.weights".
     //Các tham số của công thức mới (file GOI_Y_TRUONG_TONG_QUAN) sẽ thêm vào đây khi viết lại.
@@ -12,7 +12,6 @@ namespace StudyAbroad.Application.Recommendations
         public const string SettingKey = "recommend.weights";
         public decimal BudgetTolerance { get; set; } = 0.10m;   // Trần ngân sách = ngân sách × (1 + 10%)
         public int MaxResults { get; set; } = 12;               // Số lượng trường tối đa trong gợi ý trường
-        public int MaxCandidates { get; set; } = 40;            // Số trường tối đa gửi AI chấm sau lọc cứng (40 trường ≈ 5 lô ≈ 2,5 phút)
 
         public PerCategoryLimits PerCategory { get; set; } = new();
         public bool AiEnabled { get; set; } = true;

@@ -11,14 +11,19 @@ namespace StudyAbroad.Application.Recommendations
 
         //Lấy ra recommendation gần đây nhất
         Task<RecommendationResultDto?> GetLatestAsync(Guid userId, CancellationToken ct = default);
+
+        //AI tư vấn 1 trường trong lần gợi ý gần nhất. null = chưa có gợi ý hoặc trường không có trong kết quả
+        Task<SchoolAdviceDto?> ExplainSchoolAsync(Guid userId, Guid offeringId, CancellationToken ct = default);
     }
 
-    //Luồng gợi ý trường (GOI_Y_TRUONG_AI_CACH_THUC_HIEN): lọc cứng → lượt ① ngoại khóa → lượt ② chấm trường → lượt ③ chọn danh sách
+    //Luồng gợi ý trường: lọc cứng (C#) → bậc ngoại khóa (advisor: AI đọc mô tả, Python tính bậc) → chấm trường (C#) → chia khối, xếp hạng (C#).
+    //Phần công thức chạy bằng code vì AI tự tính chỉ đúng 33–48% trên bộ đánh giá 216 cặp (docs/GOI_Y_TRUONG_TODO.md, mục 4.3).
     public class RecommendationService(IRecommendationRepository repository, IRecommendationAi ai) : IRecommendationService
     {
         private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
         private static readonly int[] BalancedPref = [2, 2, 2];   // nút "Cân bằng": mặc định khi mở màn 9
-        private const int AverageTier = 3;                        // dùng tạm khi lượt ① lỗi: điều chỉnh ngoại khóa = 0
+        private const int AverageTier = 3;                        // dùng tạm khi chưa chấm được ngoại khóa: điều chỉnh = 0
+        public const string AlgorithmVersion = "rule1";           // công thức GOI_Y_TRUONG_TONG_QUAN bản 2 chạy bằng C#
 
         public async Task<RecommendationResultDto?> CreateAsync(Guid userId, CancellationToken ct = default)
         {
@@ -44,13 +49,15 @@ namespace StudyAbroad.Application.Recommendations
             var passed = HardFilter.Apply(criteria, candidates, settings.BudgetTolerance)
                 .Where(r => r.Outcome != FilterOutcome.Excluded)
                 .OrderBy(r => r.Outcome)                                   // trường trong ngân sách trước khối học bổng
-                .ThenBy(r => r.School.Code, StringComparer.Ordinal)        // cố định thứ tự để chạy lại ra cùng kết quả
-                .Take(settings.MaxCandidates)
+                .ThenBy(r => r.School.Code, StringComparer.Ordinal)        // cố định thứ tự để chạy lại ra cùng kết quả; chấm mọi trường qua lọc, không giới hạn số lượng
                 .ToList();
             if (passed.Count == 0)
                 return Empty(profile.TargetLevel, [.. warnings, "Không có trường nào phù hợp với ngành, bang, ngân sách và tiếng Anh hiện tại. Hãy thử nới điều kiện."]);
+            if (passed.All(r => r.Outcome == FilterOutcome.AidBlock))
+                warnings.Add($"Ngân sách {profile.BudgetMaxUsd:N0} USD/năm thấp hơn chi phí của mọi trường phù hợp. " +
+                             "Các trường dưới đây chỉ đi được nếu có học bổng lớn; bạn có thể cân nhắc nới ngân sách.");
 
-            //3. Lượt ①: bậc ngoại khóa (1 lần cho cả hồ sơ)
+            //3. Bậc ngoại khóa (gọi advisor 1 lần: AI đọc vai trò, phạm vi; Python tính bậc)
             var activities = await repository.GetActivitiesAsync(profile.Id, ct);
             AiEcResult? ec = null;
             try
@@ -63,53 +70,28 @@ namespace StudyAbroad.Application.Recommendations
             }
             var tier = ec?.Tier ?? AverageTier;
 
-            //4. Lượt ②: chấm từng trường (advisor tự chia lô 8 trường)
+            //4. Chấm từng trường (tầng 2 + F/H/Q), cùng công thức với advisor/evals/recommendation/reference.py
             var flags = new Dictionary<string, IReadOnlyList<string>>();
-            var schools = passed.Select(r =>
+            var sat = profile.Sat is decimal s ? (int?)Math.Round(s) : null;
+            var student = new AiStudent(profile.OverallGpa, sat, profile.BudgetMaxUsd, tier);
+            var scoreItems = passed.Select(r =>
             {
                 var school = AiSchoolMapper.ToAi(r.School, out var dataFlags);
                 flags[r.School.Code] = [.. r.Flags, .. dataFlags];
-                return school;
+                return SchoolScorer.Score(student, school);
             }).ToList();
-            var sat = profile.Sat is decimal s ? (int?)Math.Round(s) : null;
-            AiScoreResult score;
-            try
-            {
-                score = await ai.ScoreAsync(new AiScoreRequest(new AiStudent(profile.OverallGpa, sat, profile.BudgetMaxUsd, tier), schools), ct);
-            }
-            catch (RecommendationAiException)
-            {
-                return Empty(profile.TargetLevel, [.. warnings, "AI chấm trường tạm thời không phản hồi. Hãy thử lại sau ít phút."]);
-            }
-            if (score.Failed.Count > 0)
-                warnings.Add($"Có {score.Failed.Count} trường AI chưa chấm được, tạm chưa đưa vào danh sách.");
 
-            //5. Lượt ③: xếp theo mức quan tâm (mặc định Cân bằng), chia khối, mã lý do
+            //5. Xếp theo mức quan tâm (mặc định Cân bằng), chia khối 3/5/4 + khối học bổng, mã lý do
             var byCode = passed.ToDictionary(r => r.School.Code);
-            var pickItems = score.Items
-                .Where(i => byCode.ContainsKey(i.Code))
+            var pickItems = scoreItems
                 .Select(i => new AiPickItem(i.Code, i.G2,
                     byCode[i.Code].Outcome == FilterOutcome.AidBlock ? "AID" : "MAIN",   // khối học bổng lấy từ lọc cứng
                     i.F, i.H, i.Q, i.Gap, i.Pg, i.Ps, i.Adj, i.R))
                 .ToList();
-            if (pickItems.Count == 0)
-                return Empty(profile.TargetLevel, [.. warnings, "AI chưa chấm được trường nào. Hãy thử lại sau ít phút."]);
+            var pick = SchoolPicker.Pick(new AiPickRequest(BalancedPref, RecommendationInputs.NeedAidCode(criteria.AidNeed), pickItems), settings.PerCategory);
 
-            var pickRequest = new AiPickRequest(BalancedPref, RecommendationInputs.NeedAidCode(criteria.AidNeed), pickItems);
-            AiPickResult pick;
-            try
-            {
-                pick = await ai.PickAsync(pickRequest, ct);
-            }
-            catch (RecommendationAiException)
-            {
-                // Dự phòng: chia khối, xếp hạng, mã lý do bằng code theo đúng luật của skill_pick
-                pick = PickFallback.Pick(pickRequest, settings.PerCategory);
-                warnings.Add("AI chưa sắp được danh sách, hệ thống đã tự sắp theo công thức.");
-            }
-
-            //6. Ghép kết quả AI với thông tin trường trong DB
-            var scored = score.Items.ToDictionary(i => i.Code);
+            //6. Ghép kết quả với thông tin trường trong DB
+            var scored = scoreItems.ToDictionary(i => i.Code);
             (string Block, IReadOnlyList<AiPickEntry> Entries)[] blocks =
                 [("reach", pick.Reach), ("match", pick.Match), ("safety", pick.Safety), ("aid", pick.Aid), ("other", pick.Other)];
             var items = blocks
@@ -130,11 +112,11 @@ namespace StudyAbroad.Application.Recommendations
                     tier,
                     extracurricular = ec,
                     pref = BalancedPref,
-                    skills = new { ec = ec?.SkillVersion, score = score.SkillVersion, pick = pick.SkillVersion },
-                    model = score.Model
+                    skillEc = ec?.SkillVersion,
+                    model = ec?.Model
                 }, Json),
                 ItemsJson = JsonSerializer.Serialize(items, Json),
-                AlgorithmVersion = $"ai3-ec{ec?.SkillVersion ?? "none"}-score{score.SkillVersion}-pick{pick.SkillVersion}"
+                AlgorithmVersion = $"{AlgorithmVersion}-ec{ec?.SkillVersion ?? "none"}"
             };
             await repository.AddAsync(entity, ct);
 
@@ -147,6 +129,38 @@ namespace StudyAbroad.Application.Recommendations
             if (latest is null) return null;
             var items = JsonSerializer.Deserialize<List<RecommendationItemDto>>(latest.ItemsJson, Json) ?? [];
             return new RecommendationResultDto(latest.Id, latest.CreatedAt, latest.StudyLevel, items, []);
+        }
+
+        public async Task<SchoolAdviceDto?> ExplainSchoolAsync(Guid userId, Guid offeringId, CancellationToken ct = default)
+        {
+            var latest = await repository.GetLatestRecommendationAsync(userId, ct);
+            var profile = await repository.GetProfileAsync(userId, ct);
+            if (latest is null || profile is null) return null;
+            var items = JsonSerializer.Deserialize<List<RecommendationItemDto>>(latest.ItemsJson, Json) ?? [];
+            if (items.FirstOrDefault(i => i.OfferingId == offeringId) is not { } item) return null;
+
+            // Bậc ngoại khóa dùng đúng bậc của lần gợi ý đó (lưu trong criteria_json)
+            int? tier = null;
+            using (var criteria = JsonDocument.Parse(latest.CriteriaJson))
+                if (criteria.RootElement.TryGetProperty("tier", out var t) && t.TryGetInt32(out var v)) tier = v;
+
+            var sat = profile.Sat is decimal s ? (int?)Math.Round(s) : null;
+            var group = item.FarReach ? "Khó vào xa" : item.Category switch
+            {
+                "reach" => "Khó vào",
+                "match" => "Vừa sức",
+                "safety" => "An toàn hơn",
+                _ => "Chưa đủ dữ liệu"
+            };
+            var request = new AiExplainRequest(
+                new AiExplainStudent(profile.OverallGpa, sat, profile.Ielts, profile.Toefl, profile.Duolingo,
+                    profile.BudgetMaxUsd, tier, profile.IntendedMajor),
+                new AiExplainSchool(item.Name, item.State, item.School?.Control, group, item.Block == "aid",
+                    item.School?.AcceptanceRate * 100, item.School?.AvgGpa4, item.School?.Sat25, item.School?.Sat75,
+                    item.GpaPosition, item.SatPosition, item.TotalCostUsd, item.OverBudgetUsd, item.EcAdjustment));
+
+            var advice = await ai.ExplainAsync(request, ct);   // lỗi → RecommendationAiException, controller trả 503
+            return new SchoolAdviceDto(advice.Summary, advice.Strengths, advice.Improvements, advice.Model);
         }
 
         private static RecommendationResultDto Empty(string level, IReadOnlyList<string> warnings) =>
@@ -169,7 +183,7 @@ namespace StudyAbroad.Application.Recommendations
                 English: EnglishCode(filter.Flags),
                 OpenAdmission: score.G2 == "O",
                 Reason: ReasonTexts.Join(pick.Why),
-                AiExplained: true,
+                AiExplained: false,     // câu lý do ghép từ mã; AI viết tư vấn sẽ làm sau
                 School: new SchoolInfoDto(s.City, s.State, s.Control, s.Website, s.AcceptanceRate, s.InternationalStudents,
                     s.SatPolicy, s.TuitionUsd, s.LivingUsd, s.FeesUsd, s.MinIelts, s.MinToefl, s.MinDuolingo, s.AvgGpa4, s.Sat25, s.Sat75),
                 Block: block,
@@ -177,7 +191,13 @@ namespace StudyAbroad.Application.Recommendations
                 RankScore: pick.X,
                 Why: pick.Why,
                 Flags: flags,
-                OverBudgetUsd: score.Gap);
+                OverBudgetUsd: score.Gap,
+                CostFit: score.F,
+                AidFit: score.H,
+                Quality: score.Q,
+                GpaPosition: score.Pg,
+                SatPosition: score.Ps,
+                EcAdjustment: score.Adj);
         }
 
         //Tiếng Anh: lọc cứng đã loại trường thiếu điểm, còn lại là đạt hoặc chưa so được

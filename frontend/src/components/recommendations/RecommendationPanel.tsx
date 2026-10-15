@@ -4,8 +4,14 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ApiError } from "@/lib/api";
-import { createRecommendation, getLatestRecommendation } from "@/lib/recommendation-api";
-import type { RecommendationItem, RecommendationResult, StudentSummary } from "@/types/recommendation";
+import { createRecommendation, getLatestRecommendation, getSchoolAdvice } from "@/lib/recommendation-api";
+import type {
+  RecommendationBlock,
+  RecommendationItem,
+  RecommendationResult,
+  SchoolAdvice,
+  StudentSummary,
+} from "@/types/recommendation";
 import {
   AlertCircleIcon,
   CheckIcon,
@@ -86,11 +92,13 @@ interface PriorityWeights {
   quality: number;
 }
 
+// 4 nút = 4 bộ mức quan tâm trong GOI_Y_TRUONG_TONG_QUAN: Cân bằng [2,2,2], Chi phí thấp [3,1,1],
+// Học bổng nhiều [1,3,1], Danh tiếng [1,1,3]; trọng số = mức / tổng mức (cùng công thức SchoolPicker ở backend)
 const PRESET_WEIGHTS: Record<Exclude<PriorityPreset, "custom">, PriorityWeights> = {
-  balanced: { cost: 0.3, scholarship: 0.2, quality: 0.5 },
-  low_cost: { cost: 0.6, scholarship: 0.15, quality: 0.25 },
-  high_scholarship: { cost: 0.25, scholarship: 0.45, quality: 0.3 },
-  reputation: { cost: 0.15, scholarship: 0.2, quality: 0.65 },
+  balanced: { cost: 1 / 3, scholarship: 1 / 3, quality: 1 / 3 },
+  low_cost: { cost: 0.6, scholarship: 0.2, quality: 0.2 },
+  high_scholarship: { cost: 0.2, scholarship: 0.6, quality: 0.2 },
+  reputation: { cost: 0.2, scholarship: 0.2, quality: 0.6 },
 };
 
 type InterestLevel = 1 | 2 | 3; // 1: Ít quan tâm, 2: Vừa, 3: Rất quan tâm
@@ -100,6 +108,21 @@ const SAT_POLICY: Record<string, string> = {
   optional: "không bắt buộc",
   not_accepted: "không xét",
 };
+
+// Nhãn khả năng trúng tuyển, hiện trong khối "Chỉ đi được nếu có học bổng lớn"
+function academicLabel(item: RecommendationItem): string {
+  if (item.farReach) return "Khó vào xa";
+  switch (item.category) {
+    case "reach":
+      return "Khó vào";
+    case "match":
+      return "Vừa sức";
+    case "safety":
+      return "An toàn hơn";
+    default:
+      return "Chưa đủ dữ liệu";
+  }
+}
 
 const money = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -159,10 +182,20 @@ export function RecommendationPanel() {
     }
   }, [router]);
 
-  // Chưa lọc lần nào (VD vừa gửi hồ sơ 6 bước xong) thì tự lọc luôn, khỏi bắt người dùng tìm nút
+  // Chưa lọc lần nào thì tự lọc luôn, khỏi bắt người dùng tìm nút.
+  // Vừa gửi hồ sơ 6 bước (?run=1) thì luôn lọc lại theo hồ sơ mới, không hiện kết quả cũ đã lưu.
   const autoRan = useRef(false);
   useEffect(() => {
     async function load() {
+      if (new URLSearchParams(window.location.search).get("run") === "1") {
+        router.replace("/recommendations"); // bỏ ?run=1 để tải lại trang không lọc lại lần nữa
+        setLoadingLatest(false);
+        if (!autoRan.current) {
+          autoRan.current = true;
+          void handleRun();
+        }
+        return;
+      }
       let latest: RecommendationResult | null = null;
       try {
         latest = await getLatestRecommendation();
@@ -197,76 +230,49 @@ export function RecommendationPanel() {
     };
   }, [activePreset, sliderCost, sliderScholarship, sliderQuality]);
 
-  // Dynamic Re-ranking & 4-tier categorisation
+  // Chia khối theo "block" backend trả về (backend đã chấm và cắt hạn mức 3/5/4, khối học bổng 5).
+  // Đổi nút ưu tiên chỉ sắp lại thứ tự trong khối bằng X = w·[F, H, Q], cùng công thức SchoolPicker; không đổi khối.
   const tieredItems = useMemo(() => {
-    if (!result?.items) return { reach: [], match: [], safety: [], financial_reach: [], insufficient_data: [] };
-
-    const studentBudget = result.student?.budgetMaxUsd ?? result.student?.annualBudgetUsd ?? null;
-
-    // Helper to score individual school based on current weights
-    const getSchoolFit = (item: RecommendationItem) => {
-      // 1. Quality / Academic fit (0..1)
-      const academicBase = item.score ?? 0.6;
-      const rankBonus = item.school?.acceptanceRate ? Math.max(0, 1 - item.school.acceptanceRate) : 0.5;
-      const qualityScore = Math.min(1, Math.max(0, academicBase * 0.7 + rankBonus * 0.3));
-
-      // 2. Cost fit (0..1) - cheaper is better
-      const cost = item.totalCostUsd ?? 50000;
-      const costScore = Math.max(0, Math.min(1, (85000 - cost) / 60000));
-
-      // 3. Scholarship fit (0..1)
-      const intlRatio = (item.school?.internationalStudents ?? 500) > 1000 ? 0.8 : 0.5;
-      const scholarshipScore = intlRatio;
-
-      const composite =
-        currentWeights.quality * qualityScore +
-        currentWeights.cost * costScore +
-        currentWeights.scholarship * scholarshipScore;
-
-      // Fit percentage clamped between 45% and 98%
-      return Math.round(composite * 100);
-    };
-
-    const categorized: Record<FlowCategory, Array<RecommendationItem & { fitScore: number }>> = {
+    const categorized: Record<FlowCategory, Array<RecommendationItem & { fitScore: number | null }>> = {
       reach: [],
       match: [],
       safety: [],
       financial_reach: [],
       insufficient_data: [],
     };
+    if (!result?.items) return categorized;
+
+    const rankScore = (item: RecommendationItem): number | null => {
+      const parts = (
+        [
+          [currentWeights.cost, item.costFit],
+          [currentWeights.scholarship, item.aidFit],
+          [currentWeights.quality, item.quality],
+        ] as const
+      ).filter((part): part is readonly [number, number] => part[1] != null);
+      const weightSum = parts.reduce((s, [w]) => s + w, 0);
+      if (parts.length === 0 || weightSum === 0) return item.rankScore ?? null;
+      return parts.reduce((s, [w, v]) => s + w * v, 0) / weightSum; // tiêu chí thiếu thì chia lại trọng số
+    };
+
+    const blockToTier: Record<RecommendationBlock, FlowCategory> = {
+      reach: "reach",
+      match: "match",
+      safety: "safety",
+      aid: "financial_reach",
+      other: "insufficient_data",
+    };
 
     for (const item of result.items) {
-      const fitScore = getSchoolFit(item);
-      const enhancedItem = { ...item, fitScore };
-
-      if (item.category === "insufficient_data") {
-        categorized.insufficient_data.push(enhancedItem);
-        continue;
-      }
-
-      // Check if cost exceeds student budget by > 5%
-      const exceedsBudget =
-        studentBudget !== null &&
-        item.totalCostUsd !== null &&
-        !item.costUnknown &&
-        item.totalCostUsd > studentBudget * 1.05;
-
-      if (exceedsBudget && (item.category === "match" || item.category === "safety")) {
-        categorized.financial_reach.push(enhancedItem);
-      } else if (item.category === "reach") {
-        categorized.reach.push(enhancedItem);
-      } else if (item.category === "match") {
-        categorized.match.push(enhancedItem);
-      } else if (item.category === "safety") {
-        categorized.safety.push(enhancedItem);
-      } else {
-        categorized.match.push(enhancedItem);
-      }
+      // Kết quả cũ (trước công thức mới) không có block: tạm xếp theo nhóm học thuật
+      const tier: FlowCategory = item.block ? blockToTier[item.block] : item.category;
+      const x = rankScore(item);
+      categorized[tier].push({ ...item, fitScore: x == null ? null : Math.round(x * 100) });
     }
 
-    // Sort items within each category by fitScore descending (Re-ranking in-place without moving groups!)
-    for (const key of Object.keys(categorized) as FlowCategory[]) {
-      categorized[key].sort((a, b) => b.fitScore - a.fitScore);
+    // 3 khối chính: X giảm dần theo nút đang chọn. Khối học bổng giữ thứ tự backend (vượt ít tiền nhất trước).
+    for (const key of ["reach", "match", "safety"] as const) {
+      categorized[key].sort((p, q) => (q.fitScore ?? -1) - (p.fitScore ?? -1) || p.rank - q.rank);
     }
 
     return categorized;
@@ -616,9 +622,13 @@ export function RecommendationPanel() {
                         <TableHead className="text-right">Chi phí/năm</TableHead>
                         <TableHead
                           className="text-center"
-                          title="Điểm sắp xếp theo mức ưu tiên bạn chọn ở trên (chi phí, học bổng, chất lượng). Không phải khả năng trúng tuyển."
+                          title={
+                            tier.key === "financial_reach"
+                              ? "Khả năng trúng tuyển theo hồ sơ học thuật, chưa tính tiền."
+                              : "Điểm sắp xếp theo mức ưu tiên bạn chọn ở trên (chi phí, học bổng, chất lượng). Không phải khả năng trúng tuyển."
+                          }
                         >
-                          Độ phù hợp
+                          {tier.key === "financial_reach" ? "Khả năng đỗ" : "Độ phù hợp"}
                         </TableHead>
                         <TableHead className="w-24 text-right">Chi tiết</TableHead>
                       </TableRow>
@@ -664,11 +674,22 @@ export function RecommendationPanel() {
                                 ) : (
                                   usd(item.totalCostUsd)
                                 )}
+                                {item.overBudgetUsd != null && (
+                                  <div className="text-[11px] font-normal text-destructive">vượt {usd(item.overBudgetUsd)}</div>
+                                )}
                               </TableCell>
                               <TableCell className="text-center align-top">
-                                <span className="inline-flex items-center justify-center rounded-full bg-brand-wash px-2.5 py-0.5 text-xs font-bold text-brand">
-                                  {item.fitScore}%
-                                </span>
+                                {tier.key === "financial_reach" ? (
+                                  <span className="inline-flex items-center justify-center rounded-full bg-muted px-2.5 py-0.5 text-[11px] font-semibold text-foreground">
+                                    {academicLabel(item)}
+                                  </span>
+                                ) : item.fitScore == null ? (
+                                  <span className="text-muted-foreground">—</span>
+                                ) : (
+                                  <span className="inline-flex items-center justify-center rounded-full bg-brand-wash px-2.5 py-0.5 text-xs font-bold text-brand">
+                                    {item.fitScore}%
+                                  </span>
+                                )}
                               </TableCell>
                               <TableCell className="text-right align-top">
                                 <Button
@@ -693,7 +714,7 @@ export function RecommendationPanel() {
                               <TableRow className="bg-ground/30">
                                 <TableCell />
                                 <TableCell colSpan={4} className="whitespace-normal p-4">
-                                  <SchoolDetailsExtended item={item} />
+                                  <SchoolDetailsExtended item={item} resultId={result.id} />
                                 </TableCell>
                               </TableRow>
                             )}
@@ -822,8 +843,103 @@ function ReasonBullets({ item, limit }: { item: RecommendationItem; limit: numbe
   );
 }
 
+// Lời tư vấn AI đã tải, theo lần gợi ý + trường: đóng/mở lại "Chi tiết" không gọi AI lần nữa
+const adviceCache = new Map<string, SchoolAdvice>();
+
+// AI tư vấn 1 trường: tải khi mở "Chi tiết" (vài giây), lỗi thì cho thử lại
+function SchoolAdviceBox({ offeringId, resultId }: { offeringId: string; resultId: string }) {
+  const key = `${resultId}:${offeringId}`;
+  const [advice, setAdvice] = useState<SchoolAdvice | null>(() => adviceCache.get(key) ?? null);
+  const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    if (adviceCache.has(key)) return;
+    let cancelled = false;
+    getSchoolAdvice(offeringId)
+      .then((a) => {
+        adviceCache.set(key, a);
+        if (!cancelled) setAdvice(a);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setError(
+          err instanceof ApiError && err.status === 404
+            ? "Kết quả gợi ý đã thay đổi, hãy tải lại trang."
+            : "AI tư vấn tạm thời chưa phản hồi.",
+        );
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [key, offeringId, attempt]);
+
+  if (error) {
+    return (
+      <div className="flex items-center gap-2 rounded-lg border border-line bg-surface p-3 text-muted-foreground">
+        <AlertCircleIcon className="size-4 shrink-0" aria-hidden="true" />
+        <span>{error}</span>
+        <Button variant="ghost" size="sm" className="ml-auto h-7 text-xs" onClick={() => {
+            setError(null);
+            setAttempt((n) => n + 1);
+          }}>
+          Thử lại
+        </Button>
+      </div>
+    );
+  }
+
+  if (!advice) {
+    return (
+      <div className="flex items-center gap-2 rounded-lg border border-brand/20 bg-brand-wash/30 p-3 text-brand">
+        <Spinner className="size-4" />
+        <span>AI đang phân tích hồ sơ của bạn với trường này…</span>
+      </div>
+    );
+  }
+
+  return (
+    <Alert className="border-brand/20 bg-brand-wash/30">
+      <SparklesIcon className="size-4 text-brand" />
+      <AlertTitle className="text-brand font-semibold text-xs">Tư vấn của AI</AlertTitle>
+      <AlertDescription className="text-xs text-foreground/90 mt-1 space-y-2 leading-relaxed">
+        <p>{advice.summary}</p>
+        {advice.strengths.length > 0 && (
+          <div>
+            <div className="font-semibold text-ok">Điểm mạnh</div>
+            <ul className="mt-0.5 space-y-0.5">
+              {advice.strengths.map((st, i) => (
+                <li key={i} className="flex items-start gap-1.5">
+                  <CheckIcon className="size-3.5 text-ok shrink-0 mt-0.5" aria-hidden="true" />
+                  <span>{st}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {advice.improvements.length > 0 && (
+          <div>
+            <div className="font-semibold text-brand">Nên làm gì</div>
+            <ul className="mt-0.5 space-y-0.5">
+              {advice.improvements.map((im, i) => (
+                <li key={i} className="flex items-start gap-1.5">
+                  <ChevronUpIcon className="size-3.5 text-brand shrink-0 mt-0.5" aria-hidden="true" />
+                  <span>{im}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        <p className="text-[10px] text-muted-foreground">
+          AI ({advice.model}) viết từ số liệu hệ thống đã chấm, chỉ mang tính tham khảo.
+        </p>
+      </AlertDescription>
+    </Alert>
+  );
+}
+
 // Chi tiết trường mở rộng
-function SchoolDetailsExtended({ item }: { item: RecommendationItem }) {
+function SchoolDetailsExtended({ item, resultId }: { item: RecommendationItem; resultId: string }) {
   const s = item.school;
   const na = "Chưa công bố";
   const english = [
@@ -850,7 +966,9 @@ function SchoolDetailsExtended({ item }: { item: RecommendationItem }) {
 
   return (
     <div className="space-y-4 text-xs">
-      {/* Nhận xét: AI viết (aiExplained) hoặc câu so sánh soạn sẵn từ số liệu */}
+      <SchoolAdviceBox offeringId={item.offeringId} resultId={resultId} />
+
+      {/* Câu so sánh soạn sẵn từ số liệu (luôn có, kể cả khi AI chưa phản hồi) */}
       {item.reason && (
         <Alert className="border-brand/20 bg-brand-wash/30">
           <SparklesIcon className="size-4 text-brand" />

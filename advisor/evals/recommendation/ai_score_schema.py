@@ -1,4 +1,4 @@
-"""Dữ liệu vào/ra của lượt ② (chấm trường). Key ngắn, đúng như mục 4 và 6 trong GOI_Y_TRUONG_AI_CACH_THUC_HIEN."""
+"""THỰC NGHIỆM: khuôn dữ liệu vào/ra khi cho AI tự chấm trường (dùng với ai_scorer.py)."""
 
 from typing import Any, Literal
 

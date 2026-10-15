@@ -7,9 +7,8 @@ from app.api.deps import require_api_key
 from app.api.routes import health, profile, recommend
 from app.core.config import get_settings
 from app.services.ec_reader import EcReader
+from app.services.explainer import Explainer
 from app.services.ollama import OllamaClient
-from app.services.picker import Picker
-from app.services.scorer import Scorer
 from app.services.transcript_reader import TranscriptReader
 
 
@@ -32,10 +31,10 @@ async def lifespan(app: FastAPI):
             seed=settings.llm_seed,
             keep_alive=settings.llm_keep_alive,
         )
-        # Lượt ② chấm trường: đọc skill_score.md 1 lần lúc khởi động
-        app.state.scorer = Scorer(app.state.llm, settings.llm_model)
+        # Bậc ngoại khóa: AI đọc vai trò, phạm vi; Python tính bậc (đọc skill_ec.md 1 lần lúc khởi động)
         app.state.ec_reader = EcReader(app.state.llm, settings.llm_model)
-        app.state.picker = Picker(app.state.llm, settings.llm_model)
+        # AI tư vấn từng trường: đọc skill_explain.md 1 lần lúc khởi động
+        app.state.explainer = Explainer(app.state.llm, settings.llm_model)
         # Đọc bảng điểm (OCR) của USAS-640
         app.state.transcript_reader = TranscriptReader(http, settings)
         yield

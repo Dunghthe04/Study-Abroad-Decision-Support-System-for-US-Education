@@ -17,9 +17,9 @@ from pathlib import Path
 import httpx
 
 from app.core.config import get_settings
-from app.schemas.score import ScoreRequest
 from app.services.ollama import OllamaClient
-from app.services.scorer import Scorer
+from evals.recommendation.ai_score_schema import ScoreRequest
+from evals.recommendation.ai_scorer import Scorer
 
 HERE = Path(__file__).parent
 CASES = HERE / "cases.json"
@@ -130,7 +130,9 @@ if __name__ == "__main__":
     parser.add_argument("--limit", type=int, default=0, help="chỉ chạy N hồ sơ đầu (0 = tất cả)")
     parser.add_argument("--cases", default="", help="chỉ chạy các hồ sơ này, ví dụ P02,P14")
     parser.add_argument(
-        "--skill", default="", help="file skill khác để thử (mặc định app/skills/skill_score.md)"
+        "--skill",
+        default="",
+        help="file skill khác để thử (mặc định evals/recommendation/skills/skill_score.md)",
     )
     parser.add_argument("--batch-size", type=int, default=8)
     a = parser.parse_args()

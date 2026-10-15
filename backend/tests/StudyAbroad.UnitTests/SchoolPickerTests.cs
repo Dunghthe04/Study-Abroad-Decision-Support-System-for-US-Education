@@ -2,7 +2,7 @@ using StudyAbroad.Application.Recommendations;
 
 namespace StudyAbroad.UnitTests;
 
-public class PickFallbackTests
+public class SchoolPickerTests
 {
     // Ví dụ mục 8 file AI_CACH_THUC_HIEN: An với Colgate (khối học bổng), Trường B (An toàn hơn), Trường C (Vừa sức)
     private static readonly AiPickItem Colgate = new("190099", "RF", "AID", null, null, null, 45610m, 17.2m, 0m, 0m, 0.25m);
@@ -10,7 +10,7 @@ public class PickFallbackTests
     private static readonly AiPickItem C = new("C", "M", "MAIN", 0.08m, 0.261m, 0.9m, null, 50m, 58.33m, 0m, null);
 
     private static AiPickResult Run(int[] pref, string needAid, params AiPickItem[] items) =>
-        PickFallback.Pick(new AiPickRequest(pref, needAid, items), new PerCategoryLimits());
+        SchoolPicker.Pick(new AiPickRequest(pref, needAid, items), new PerCategoryLimits());
 
     [Fact]
     public void DocumentExample_Balanced_MatchesExpectedOutput()
@@ -88,12 +88,20 @@ public class PickFallbackTests
     public void Why_FourthReasonRules(double adj, double? r, string expected)
     {
         var item = C with { Adj = (decimal)adj, R = (decimal?)r };
-        Assert.Equal(expected, PickFallback.Why(item)[^1]);
+        Assert.Equal(expected, SchoolPicker.Why(item)[^1]);
     }
 
     [Fact]
     public void Why_SkipsMissingScores()
     {
-        Assert.Equal(["BUDGET_OK"], PickFallback.Why(C with { Pg = null, Ps = null, Adj = 0m }));
+        Assert.Equal(["BUDGET_OK"], SchoolPicker.Why(C with { Pg = null, Ps = null, Adj = 0m }));
+    }
+
+    [Fact]
+    public void AidBlock_IsCutAtFiveSchools()
+    {
+        var items = Enumerable.Range(0, 8).Select(k => Colgate with { Code = $"A{k}", Gap = 1000m * (8 - k) }).ToArray();
+        var aid = Run([2, 2, 2], "preferred", items).Aid;
+        Assert.Equal(["A7", "A6", "A5", "A4", "A3"], aid.Select(e => e.Code));   // vượt ít tiền nhất trước, tối đa 5
     }
 }

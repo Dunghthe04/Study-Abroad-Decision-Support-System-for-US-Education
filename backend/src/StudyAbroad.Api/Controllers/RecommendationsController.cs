@@ -28,5 +28,21 @@ namespace StudyAbroad.Api.Controllers
             var result = await service.GetLatestAsync(userId, ct);
             return result is null ? NotFound() : Ok(result);
         }
+
+        //AI tư vấn 1 trường trong lần gợi ý gần nhất của chính người dùng (gọi khi mở "Chi tiết")
+        [HttpPost("latest/schools/{offeringId:guid}/advice")]
+        public async Task<ActionResult<SchoolAdviceDto>> Advice(Guid offeringId, CancellationToken ct)
+        {
+            if (User.GetUserId() is not { } userId) return Unauthorized();
+            try
+            {
+                var advice = await service.ExplainSchoolAsync(userId, offeringId, ct);
+                return advice is null ? NotFound() : Ok(advice);
+            }
+            catch (RecommendationAiException)
+            {
+                return Problem("AI tư vấn tạm thời chưa phản hồi, hãy thử lại sau.", statusCode: StatusCodes.Status503ServiceUnavailable);
+            }
+        }
     }
 }

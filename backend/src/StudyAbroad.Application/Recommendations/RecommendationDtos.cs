@@ -22,7 +22,20 @@ namespace StudyAbroad.Application.Recommendations
         decimal? RankScore = null,       // X: điểm xếp hạng theo mức quan tâm (0–1)
         IReadOnlyList<string>? Why = null,     // mã lý do: GPA_LOW, SAT_IN_RANGE, BUDGET_OK, INTL_LOW...
         IReadOnlyList<string>? Flags = null,   // cờ dữ liệu: COST_UNKNOWN, C7_DEFAULT, ENGLISH_MIN_UNKNOWN...
-        decimal? OverBudgetUsd = null);  // số tiền vượt ngân sách mỗi năm (khối aid));   // thông tin trường để giao diện hiện thẻ trường; null ở kết quả cũ đã lưu
+        decimal? OverBudgetUsd = null,   // số tiền vượt ngân sách mỗi năm (khối aid)
+        decimal? CostFit = null,         // F: (ngân sách − chi phí)/ngân sách, 0–1; dùng khi đổi nút ưu tiên
+        decimal? AidFit = null,          // H: học bổng TB du học sinh / chi phí, 0–1
+        decimal? Quality = null,         // Q: TB tỉ lệ giữ chân và tốt nghiệp, 0–1
+        decimal? GpaPosition = null,     // GPA cao hơn khoảng bao nhiêu % sinh viên trường (0–100)
+        decimal? SatPosition = null,     // vị trí SAT trong trường (25 = mốc 25%, 75 = mốc 75%)
+        decimal? EcAdjustment = null);   // điểm cộng/trừ do ngoại khóa ở trường này (−6..+6)
+
+    //Lời tư vấn AI viết cho 1 trường (gọi khi học sinh mở chi tiết trường)
+    public record SchoolAdviceDto(
+        string Summary,
+        IReadOnlyList<string> Strengths,
+        IReadOnlyList<string> Improvements,
+        string Model);
 
     //Thông tin trường lấy thẳng từ database (không phụ thuộc học sinh)
     public record SchoolInfoDto(

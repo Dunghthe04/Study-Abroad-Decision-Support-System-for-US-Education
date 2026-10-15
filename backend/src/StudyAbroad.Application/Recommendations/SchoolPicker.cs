@@ -1,8 +1,8 @@
 namespace StudyAbroad.Application.Recommendations
 {
-    //Dự phòng lượt ③ (mục 10 file AI_CACH_THUC_HIEN): AI chọn danh sách lỗi thì code làm đúng các bước P1–P5 của skill_pick.
-    //Đây là luật cố định (tra nhóm, tính X, sắp xếp, cắt hạn mức, chọn mã lý do), không cần AI.
-    public static class PickFallback
+    //Tầng 3: chia khối, xếp hạng theo mức quan tâm, chọn mã lý do (các bước P1–P5 trong GOI_Y_TRUONG_AI_CACH_THUC_HIEN mục 8).
+    //Luật cố định (tra nhóm, tính X, sắp xếp, cắt hạn mức), chạy bằng code; AI làm bước này đã chia khối sai khi chạy thử.
+    public static class SchoolPicker
     {
         public const string Version = "code";
 
@@ -20,6 +20,7 @@ namespace StudyAbroad.Application.Recommendations
             var aid = request.NeedAid == "no" ? [] : request.Items
                 .Where(i => i.Block == "AID")
                 .OrderBy(i => i.Gap ?? decimal.MaxValue).ThenBy(i => i.Code, StringComparer.Ordinal)
+                .Take(limits.Aid)
                 .Select(i => new AiPickEntry(i.Code, null, Why(i)))
                 .ToList();
 

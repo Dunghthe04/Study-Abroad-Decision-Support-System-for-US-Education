@@ -85,7 +85,7 @@ namespace StudyAbroad.Application.Recommendations
             var activities = list
                 .Where(a => a.Kind != AwardKind)
                 .Take(MaxActivities)
-                .Select(a => new AiEcActivity(Describe(a, MaxActivityText), Level(a.ImpactLevel), Months(a, today)))
+                .Select(a => new AiEcActivity(Describe(a, MaxActivityText), Level(a.ImpactLevel), Months(a, today), RoleCode(a.Role)))
                 .ToList();
             var awards = list
                 .Where(a => a.Kind == AwardKind)
@@ -103,6 +103,10 @@ namespace StudyAbroad.Application.Recommendations
             if (text.Length == 0) text = "Hoạt động không có mô tả";
             return text.Length <= maxLength ? text : text[..maxLength];
         }
+
+        //Vai trò học sinh chọn ở form (founder | leader | vice_leader | member); advisor dùng khi AI lỗi. Chữ tự do của dữ liệu cũ thì bỏ.
+        private static string? RoleCode(string? role) =>
+            role is not null && ProfileConstants.ActivityRoles.All.Contains(role) ? role : null;
 
         //Phạm vi / cấp giải 1–5; thiếu thì coi là cấp trường (thấp nhất, không nâng hồ sơ)
         private static int Level(int? impact) => Math.Clamp(impact ?? 1, 1, 5);

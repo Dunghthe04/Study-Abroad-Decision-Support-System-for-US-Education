@@ -1,15 +1,11 @@
-"""Lượt ② chấm trường: chia lô, kiểm tra JSON, gọi lại khi sai, endpoint /recommend/score."""
+"""Thực nghiệm AI tự chấm trường (evals): chia lô, kiểm tra JSON, gọi lại khi sai."""
 
 import json
 
-from fastapi.testclient import TestClient
-
-from app.api.deps import get_scorer
-from app.main import create_app
-from app.schemas.score import ScoreRequest, score_schema
 from app.services.ollama import OllamaError
-from app.services.scorer import SKILL_PATH, Scorer
 from app.services.skill_call import load_skill
+from evals.recommendation.ai_score_schema import ScoreRequest, score_schema
+from evals.recommendation.ai_scorer import SKILL_PATH, Scorer
 from tests.fakes import FakeLLM
 
 STUDENT = {"gpa": 3.6, "sat": 1350, "budget": 50000, "tier": 3}
@@ -143,19 +139,3 @@ def test_skill_file_has_version():
     text, version = load_skill(SKILL_PATH)
     assert version == "1.1"
     assert "Bước 6" in text
-
-
-def test_endpoint_returns_items():
-    app = create_app()
-    app.dependency_overrides[get_scorer] = lambda: Scorer(FakeLLM({"items": [item("190099")]}), "m")
-    resp = TestClient(app).post("/recommend/score", json={"student": STUDENT, "schools": [COLGATE]})
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["items"][0]["g2"] == "RF" and body["failed"] == []
-
-
-def test_endpoint_rejects_invalid_input():
-    app = create_app()
-    app.dependency_overrides[get_scorer] = lambda: Scorer(FakeLLM(), "m")
-    bad = {"student": {**STUDENT, "tier": 7}, "schools": [COLGATE]}  # bậc chỉ 1–5
-    assert TestClient(app).post("/recommend/score", json=bad).status_code == 422

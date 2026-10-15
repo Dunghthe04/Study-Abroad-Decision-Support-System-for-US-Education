@@ -32,64 +32,44 @@ public class RecommendationAiClientTests
         return (new RecommendationAiClient(http), handler);
     }
 
-    private const string ScoreResponse = """
-        {"skill_version":"1.1","model":"qwen3:8b","failed":["X"],
-         "items":[{"c":"190099","w":[0.75,0.25],"pg":17.2,"conf":"H","ps":0,"A":12.9,"adj":0,"S":12.9,
-                   "g":"R","r":0.25,"g2":"RF","F":0,"H":0.906,"Q":0.905,"gap":45610}]}
-        """;
-
-    [Fact]
-    public async Task Score_PostsCompactJsonAndReadsUppercaseKeys()
-    {
-        var (client, handler) = Make(HttpStatusCode.OK, ScoreResponse);
-        var school = new AiSchool("190099", 0.175m, null, [1450, 1510], 0.23m, "opt", null, 3.85m, [3, 2, 2], 95610m, null, 0.905m);
-        var result = await client.ScoreAsync(new AiScoreRequest(new AiStudent(3.6m, null, 50000m, 3), [school]));
-
-        Assert.Equal("/recommend/score", handler.LastPath);
-        // Key ngắn đúng khuôn advisor; null bị bỏ (không có "iacc", "sat" của học sinh, "aid")
-        Assert.Equal(
-            """{"student":{"gpa":3.6,"budget":50000,"tier":3},"schools":[{"c":"190099","acc":0.175,"sat":[1450,1510],"subm":0.23,"satp":"opt","avg":3.85,"L":[3,2,2],"coa":95610,"q":0.905}]}""",
-            handler.LastBody);
-
-        var item = Assert.Single(result.Items);
-        Assert.Equal((12.9m, 12.9m, "RF"), (item.A, item.S, item.G2));   // "A", "S" viết hoa vẫn đọc đúng
-        Assert.Equal(["X"], result.Failed);
-        Assert.Equal("1.1", result.SkillVersion);
-    }
-
     [Fact]
     public async Task ReadExtracurricular_ReadsTierAndSnakeCaseKeys()
     {
         var (client, handler) = Make(HttpStatusCode.OK, """
             {"act":[{"role":0.8,"scope":1,"q":0.61}],"tong_hd":0.61,"bonus":0.15,"m":0.19,"tier":2,
-             "skill_version":"1.1","model":"qwen3:8b"}
+             "skill_version":"2.0","model":"qwen3:8b","ai_used":false}
             """);
         var result = await client.ReadExtracurricularAsync(new AiEcRequest(
-            [new AiEcActivity("Đội trưởng CLB Robotics", 1, 24)], [new AiEcAward("Giải Nhì Tin học", 3)]));
+            [new AiEcActivity("Đội trưởng CLB Robotics", 1, 24, "leader"), new AiEcActivity("Tình nguyện", 3, 12)],
+            [new AiEcAward("Giải Nhì Tin học", 3)]));
 
         Assert.Equal("/recommend/ec", handler.LastPath);
         var sent = JsonDocument.Parse(handler.LastBody!).RootElement;
         Assert.Equal("Đội trưởng CLB Robotics", sent.GetProperty("act")[0].GetProperty("text").GetString());
         Assert.Equal(3, sent.GetProperty("awards")[0].GetProperty("level").GetInt32());
-        Assert.Equal((2, 0.61m, 0.8m), (result.Tier, result.ActivityTotal, result.Activities[0].Role));
+        Assert.Equal("leader", sent.GetProperty("act")[0].GetProperty("role").GetString());
+        Assert.False(sent.GetProperty("act")[1].TryGetProperty("role", out _));     // không chọn vai trò ở form: bỏ key
+        Assert.Equal((2, 0.61m, 0.8m, false), (result.Tier, result.ActivityTotal, result.Activities[0].Role, result.AiUsed));
     }
 
     [Fact]
-    public async Task Pick_SendsNeedAidAndUppercaseCriteria()
+    public async Task Explain_PostsSnakeCaseKeysAndDropsNulls()
     {
         var (client, handler) = Make(HttpStatusCode.OK, """
-            {"status":"OK","reach":[],"match":[{"c":"C","X":0.414,"why":["GPA_MID"]}],"safety":[],
-             "aid":[{"c":"190099","X":null,"why":["NEED_AID"]}],"other":[],"skill_version":"1.1","model":"qwen3:8b"}
+            {"summary":"Colgate là trường rất khó vào.","strengths":[],"improvements":["Nâng SAT"],
+             "skill_version":"1.1","model":"qwen3:8b"}
             """);
-        var result = await client.PickAsync(new AiPickRequest([2, 2, 2], "preferred",
-            [new AiPickItem("C", "M", "MAIN", 0.08m, 0.261m, 0.9m, null, 50m, 58.33m, 0m, null)]));
+        var result = await client.ExplainAsync(new AiExplainRequest(
+            new AiExplainStudent(3.6m, 1350, null, null, null, 50000m, 3, null),
+            new AiExplainSchool("Colgate", "NY", "private", "Khó vào xa", true, 17.5m, null, 1450, 1510, 17.2m, 0m,
+                95610m, 45610m, 0m)));
 
-        Assert.Equal("/recommend/pick", handler.LastPath);
-        Assert.Equal(
-            """{"pref":[2,2,2],"needAid":"preferred","items":[{"c":"C","g2":"M","blk":"MAIN","F":0.08,"H":0.261,"Q":0.9,"pg":50,"ps":58.33,"adj":0}]}""",
-            handler.LastBody);
-        Assert.Equal("C", Assert.Single(result.Match).Code);
-        Assert.Null(result.Aid[0].X);
+        Assert.Equal("/recommend/explain", handler.LastPath);
+        var sent = JsonDocument.Parse(handler.LastBody!).RootElement;
+        Assert.Equal(3, sent.GetProperty("student").GetProperty("ec_tier").GetInt32());
+        Assert.False(sent.GetProperty("student").TryGetProperty("ielts", out _));      // null bị bỏ
+        Assert.True(sent.GetProperty("school").GetProperty("need_aid").GetBoolean());
+        Assert.Equal(["Nâng SAT"], result.Improvements);
     }
 
     [Fact]
@@ -106,7 +86,7 @@ public class RecommendationAiClientTests
     public async Task InvalidJson_Throws()
     {
         var (client, _) = Make(HttpStatusCode.OK, "không phải json");
-        await Assert.ThrowsAsync<RecommendationAiException>(() => client.PickAsync(new AiPickRequest([2, 2, 2], "no", [])));
+        await Assert.ThrowsAsync<RecommendationAiException>(() => client.ReadExtracurricularAsync(new AiEcRequest([], [])));
     }
 
     [Fact]
@@ -114,7 +94,7 @@ public class RecommendationAiClientTests
     {
         var handler = new StubHandler((_, _) => throw new HttpRequestException("Connection refused"));
         var client = new RecommendationAiClient(new HttpClient(handler) { BaseAddress = new Uri("http://advisor:8000/") });
-        var ex = await Assert.ThrowsAsync<RecommendationAiException>(() => client.PickAsync(new AiPickRequest([2, 2, 2], "no", [])));
+        var ex = await Assert.ThrowsAsync<RecommendationAiException>(() => client.ReadExtracurricularAsync(new AiEcRequest([], [])));
         Assert.IsType<HttpRequestException>(ex.InnerException);
     }
 
@@ -130,7 +110,7 @@ public class RecommendationAiClientTests
         {
             BaseAddress = new Uri("http://advisor:8000/"), Timeout = TimeSpan.FromMilliseconds(100)
         });
-        var ex = await Assert.ThrowsAsync<RecommendationAiException>(() => client.PickAsync(new AiPickRequest([2, 2, 2], "no", [])));
+        var ex = await Assert.ThrowsAsync<RecommendationAiException>(() => client.ReadExtracurricularAsync(new AiEcRequest([], [])));
         Assert.Contains("quá thời gian", ex.Message);
     }
 }
