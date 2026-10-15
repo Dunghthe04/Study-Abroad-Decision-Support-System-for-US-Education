@@ -4,6 +4,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Serilog;
 using StudyAbroad.Api.Extensions;
+using StudyAbroad.Api.RateLimiting;
 using StudyAbroad.Application;
 using StudyAbroad.Application.Auth;
 using StudyAbroad.Infrastructure;
@@ -19,6 +20,7 @@ builder.Host.UseSerilog((context, config) => config
 
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddMemoryCache();
 
 // [USAS-362] Cấu hình JWT Bearer Authentication & Quản lý thu hồi phiên (AC-3)
 var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>() ?? new JwtOptions();
@@ -103,6 +105,7 @@ builder.Services.AddAuthentication(options =>
 });
 
 builder.Services.AddAuthorization();
+builder.Services.AddTranscriptUploadRateLimiter();
 
 builder.Services.AddControllers();
 builder.Services.AddProblemDetails();
@@ -158,6 +161,9 @@ app.UseExceptionHandler();
 app.UseStatusCodePages();
 app.UseSerilogRequestLogging();
 
+// [USAS-640 Bảo mật] Thư mục uploads chứa bảng điểm (dữ liệu cá nhân) nên KHÔNG phục vụ qua static files:
+// chỉ code phía server đọc tệp, theo userId lấy từ JWT.
+
 if (app.Environment.IsDevelopment() || app.Configuration.GetValue<bool>("Swagger:Enabled"))
 {
     app.UseSwagger();
@@ -167,6 +173,7 @@ if (app.Environment.IsDevelopment() || app.Configuration.GetValue<bool>("Swagger
 app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 app.MapControllers();
 app.MapAppHealthChecks();

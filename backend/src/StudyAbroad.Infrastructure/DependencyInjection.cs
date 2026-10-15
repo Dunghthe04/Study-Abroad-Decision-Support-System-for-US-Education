@@ -34,6 +34,10 @@ public static class DependencyInjection
         services.AddSingleton<IPasswordHasher, PasswordHasher>();
         // [USAS-365] Đăng ký repository phân tích điểm học thuật
         services.AddScoped<StudyAbroad.Application.Profile.Academic.IAcademicAnalysisRepository, AcademicAnalysisRepository>();
+        // [USAS-640] Đăng ký repository luồng hồ sơ và metadata
+        services.AddScoped<StudyAbroad.Application.Profile.Flow.IProfileFlowRepository, ProfileFlowRepository>();
+        // [USAS-640] Đăng ký service lưu trữ tệp bảng điểm nháp
+        services.AddScoped<StudyAbroad.Application.Profile.Flow.IProfileFileStorageService, StudyAbroad.Infrastructure.Services.ProfileFileStorageService>();
 
         // [USAS-362] Đăng ký JWT Token Service (Ưu tiên nạp key từ biến môi trường JWT_SECRET_KEY)
         services.Configure<JwtOptions>(options =>
@@ -62,8 +66,16 @@ public static class DependencyInjection
 
         services.Configure<AdvisorOptions>(configuration.GetSection(AdvisorOptions.SectionName));
         services.AddHttpClient<IAdvisorClient, AdvisorClient>(ConfigureAdvisorClient);
-        services.AddHttpClient<IRecommendationAi, RecommendationAiClient>(ConfigureAdvisorClient);
-        services.AddHttpClient<IExtracurricularAi, ExtracurricularAiClient>(ConfigureAdvisorClient);
+        services.AddHttpClient<ITranscriptOcrClient, TranscriptOcrClient>((sp, client) =>
+        {
+            ConfigureAdvisorClient(sp, client);
+            client.Timeout = TimeSpan.FromSeconds(sp.GetRequiredService<IOptions<AdvisorOptions>>().Value.OcrTimeoutSeconds);
+        });
+        services.AddHttpClient<IRecommendationAi, RecommendationAiClient>((sp, client) =>
+        {
+            ConfigureAdvisorClient(sp, client);
+            client.Timeout = TimeSpan.FromSeconds(sp.GetRequiredService<IOptions<AdvisorOptions>>().Value.RecommendTimeoutSeconds);
+        });
 
         // [Scheduled Background Jobs: Unlock expired accounts & Cleanup OTPs]
         services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.AccountUnlockBackgroundService>();
