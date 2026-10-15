@@ -55,6 +55,8 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-studyabroad}:${POSTGRES_PASSWORD:-studyabroad}@db:5432/${POSTGRES_DB:-studyabroad}
       OLLAMA_BASE_URL: http://ollama:11434
       LLM_MODEL: ${LLM_MODEL:-qwen3:8b}
+      LLM_NUM_CTX: ${LLM_NUM_CTX:-6144}
+      LLM_NUM_GPU: ${LLM_NUM_GPU:-99}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-bge-m3}
       VISION_MODEL: ${VISION_MODEL:-glm-ocr}
       TRANSCRIPT_PARSE_MODEL: ${TRANSCRIPT_PARSE_MODEL:-}  # empty = reuse LLM_MODEL

@@ -285,7 +285,7 @@ export function ProfileFlowWizard() {
         if (typeof window !== "undefined") {
           localStorage.removeItem("usas_flow_draft");
         }
-        router.push("/recommendations");
+        router.push("/recommendations?run=1"); // hồ sơ vừa đổi: lọc lại, không hiện kết quả cũ
       } else {
         setErrorMessage(res.message || "Không thể hoàn tất lưu hồ sơ.");
       }

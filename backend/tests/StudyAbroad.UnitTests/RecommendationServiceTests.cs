@@ -5,467 +5,237 @@ namespace StudyAbroad.UnitTests;
 
 public class RecommendationServiceTests
 {
-    // Repository giả chạy trong bộ nhớ: test service mà không cần database
-    private sealed class FakeRepository : IRecommendationRepository
-    {
-        public StudentProfile? Profile { get; set; }
-        public string? SettingsJson { get; set; }
-        public List<SchoolCandidate> Candidates { get; } = [];
-        public List<Recommendation> Saved { get; } = [];
-
-        public Task<StudentProfile?> GetProfileAsync(Guid userId, CancellationToken ct = default) =>
-            Task.FromResult(Profile?.UserId == userId ? Profile : null);
-
-        public Task<string?> GetSettingJsonAsync(string key, CancellationToken ct = default) =>
-            Task.FromResult(SettingsJson);
-
-        public Task<IReadOnlyList<SchoolCandidate>> GetSchoolCandidatesAsync(string studyLevel, CancellationToken ct = default) =>
-            Task.FromResult<IReadOnlyList<SchoolCandidate>>(Candidates);
-
-        public Task AddAsync(Recommendation recommendation, CancellationToken ct = default)
-        {
-            Saved.Add(recommendation);
-            return Task.CompletedTask;
-        }
-
-        public Task<Recommendation?> GetLatestRecommendationAsync(Guid userId, CancellationToken ct = default) =>
-            Task.FromResult(Saved.LastOrDefault(r => r.UserId == userId));
-
-        public List<ProfileActivity> Activities { get; } = [];
-        public List<AnalysisResult> Analyses { get; } = [];
-
-        public Task<IReadOnlyList<ProfileActivity>> GetActivitiesAsync(Guid studentProfileId, CancellationToken ct = default) =>
-            Task.FromResult<IReadOnlyList<ProfileActivity>>(Activities.Where(a => a.StudentProfileId == studentProfileId).ToList());
-
-        public Task<AnalysisResult?> GetLatestAnalysisAsync(Guid studentProfileId, string kind, CancellationToken ct = default) =>
-            Task.FromResult(Analyses.LastOrDefault(a => a.StudentProfileId == studentProfileId && a.Kind == kind));
-
-        public Task SaveExtracurricularAsync(AnalysisResult analysis, decimal score, CancellationToken ct = default)
-        {
-            Analyses.Add(analysis);
-            if (Profile?.Id == analysis.StudentProfileId) Profile.ExtracurricularScore = score;
-            return Task.CompletedTask;
-        }
-    }
-
-    // Advisor chấm ngoại khóa giả: mặc định trả 3.0 điểm, AI đọc được; đổi Handler để giả lập lỗi
-    private sealed class FakeExtracurricularAi : IExtracurricularAi
-    {
-        public Func<ExtracurricularScoreRequest, Task<ExtracurricularScoreResponse>> Handler { get; set; } =
-            r => Task.FromResult(new ExtracurricularScoreResponse(3.0m, true,
-                r.Activities.Select(a => new ScoredActivity(a.Id, "head", false, 3, 0.8m, 0.9m, true)).ToList()));
-        public List<ExtracurricularScoreRequest> Requests { get; } = [];
-
-        public Task<ExtracurricularScoreResponse> ScoreAsync(ExtracurricularScoreRequest request, CancellationToken ct = default)
-        {
-            Requests.Add(request);
-            return Handler(request);
-        }
-    }
-
-    // LLM giả: mặc định trả danh sách rỗng; đổi Handler để giả lập LLM trả kết quả, ném lỗi hoặc trả lời chậm
-    private sealed class FakeAi : IRecommendationAi
-    {
-        public Func<AiRankRequest, CancellationToken, Task<AiRankResponse>> Handler { get; set; } =
-            (_, _) => Task.FromResult(new AiRankResponse([]));
-        public List<AiRankRequest> Requests { get; } = [];
-
-        public Task<AiRankResponse> RankAsync(AiRankRequest request, CancellationToken ct = default)
-        {
-            Requests.Add(request);
-            return Handler(request, ct);
-        }
-    }
-
     private static readonly Guid UserId = Guid.NewGuid();
 
-    private static StudentProfile NewProfile(decimal? gpa4 = 3.5m) => new()
+    private sealed class FakeRepository : IRecommendationRepository
     {
-        UserId = UserId,
-        TargetLevel = "undergraduate",
-        OverallGpa = gpa4,                     // thang 4; GradeScale để mặc định "10" (thang của bảng điểm gốc)
-        IntendedMajor = "Computer Science",
-        Sat = 1300,
-        BudgetMaxUsd = 50000,
-    };
+        public StudentProfile? Profile;
+        public List<SchoolCandidate> Schools = [];
+        public List<ProfileActivity> Activities = [];
+        public Recommendation? Saved;
 
-    private static FakeRepository NewRepo(StudentProfile? profile = null)
-    {
-        var repo = new FakeRepository { Profile = profile ?? NewProfile() };
-        repo.Candidates.Add(new(Guid.NewGuid(), Guid.NewGuid(), "DEMO_UB", "Demo B", "NY",
-            ["Computer Science"], 3.50m, 1250, 1400, 35000, 14000, 1000));   // Match
-        repo.Candidates.Add(new(Guid.NewGuid(), Guid.NewGuid(), "DEMO_UC", "Demo C", "TX",
-            ["Computer Science"], 3.10m, 1050, 1200, 22000, 12000, 1000));   // Safety
-        return repo;
+        public Task<StudentProfile?> GetProfileAsync(Guid studentId, CancellationToken ct = default) => Task.FromResult(Profile);
+        public Task<IReadOnlyList<ProfileActivity>> GetActivitiesAsync(Guid id, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<ProfileActivity>>(Activities);
+        public Task<string?> GetSettingJsonAsync(string key, CancellationToken ct = default) => Task.FromResult<string?>(null);
+        public Task<IReadOnlyList<SchoolCandidate>> GetSchoolCandidatesAsync(string level, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<SchoolCandidate>>(Schools);
+        public Task AddAsync(Recommendation r, CancellationToken ct = default) { Saved = r; return Task.CompletedTask; }
+        public Task<Recommendation?> GetLatestRecommendationAsync(Guid userId, CancellationToken ct = default) =>
+            Task.FromResult(Saved);
     }
 
-    private static RecommendationService NewService(FakeRepository repo, FakeAi? ai = null, FakeExtracurricularAi? ecAi = null) =>
-        new(repo, ai ?? new FakeAi(), new ExtracurricularScoring(ecAi ?? new FakeExtracurricularAi()));
-
-    private static ProfileActivity Activity(FakeRepository repo, string title, string kind = "extracurricular") => new()
+    //Advisor giả: đọc hoạt động ngoại khóa → bậc, và viết tư vấn từng trường
+    private sealed class FakeAi : IRecommendationAi
     {
-        StudentProfileId = repo.Profile!.Id,
-        Kind = kind,
-        Title = title,
-        Role = "Chủ nhiệm",
-        StartDate = new DateOnly(2024, 9, 1),
-        EndDate = new DateOnly(2025, 9, 1),
+        public AiEcRequest? EcRequest;
+        public AiExplainRequest? ExplainRequest;
+
+        public Task<AiExplainResult> ExplainAsync(AiExplainRequest request, CancellationToken ct = default)
+        {
+            ExplainRequest = request;
+            return Task.FromResult(new AiExplainResult("Tóm tắt tư vấn đủ dài.", ["Điểm mạnh"], ["Nên làm"], "1.1", "qwen3:8b"));
+        }
+
+        public bool EcFails;
+        public int Tier = 4;
+
+        public Task<AiEcResult> ReadExtracurricularAsync(AiEcRequest request, CancellationToken ct = default)
+        {
+            EcRequest = request;
+            if (EcFails) throw new RecommendationAiException("advisor tắt");
+            return Task.FromResult(new AiEcResult([], 1.2m, 0.15m, 0.34m, Tier, "2.0", "qwen3:8b"));
+        }
+    }
+
+    private static StudentProfile Profile() => new()
+    {
+        UserId = UserId, TargetLevel = "undergraduate", OverallGpa = 3.6m, Sat = 1349.6m, Ielts = 7.0m,
+        IntendedMajor = "Computer Science", TargetSchoolType = "all", BudgetMaxUsd = 50000m, ScholarshipNeed = "preferred",
     };
 
-    [Fact]
-    public async Task Create_NoProfile_ReturnsNullAndSavesNothing()
-    {
-        var repo = NewRepo();
-        repo.Profile = null;
+    private static SchoolCandidate School(string code, decimal tuition, decimal avgGpa, int sat25, int sat75,
+        decimal? intlRate = null, string major = "Computer and information sciences") => new(
+        Guid.NewGuid(), Guid.NewGuid(), code, $"School {code}", "NY", [major], avgGpa, sat25, sat75, tuition, 15000m, 0m,
+        AcceptanceRate: 0.4m, MinIelts: 6.5m, Control: "private", HasIntlAid: true,
+        C7GpaImportance: "very_important", C7TestImportance: "important", C7EcImportance: "important",
+        IntlAcceptanceRate: intlRate, IntlAidAvgUsd: 20000m);
 
-        Assert.Null(await NewService(repo).CreateAsync(UserId));
-        Assert.Empty(repo.Saved);
+    private static (RecommendationService Service, FakeRepository Repo, FakeAi Ai) Make()
+    {
+        var repo = new FakeRepository
+        {
+            Profile = Profile(),
+            Schools =
+            [
+                School("A", 30000m, 3.5m, 1300, 1450),                      // ngang sức → Vừa sức
+                School("B", 20000m, 3.0m, 1000, 1150),                      // dễ → An toàn hơn
+                School("C", 70000m, 3.9m, 1500, 1560, intlRate: 0.05m),     // khó, nhận ít du học sinh, vượt ngân sách → khối học bổng
+                School("D", 20000m, 3.5m, 1300, 1450, major: "History"),    // khác ngành → bị lọc
+            ],
+            Activities = [new ProfileActivity { Kind = "extracurricular", Title = "CLB Robotics", Role = "leader", ImpactLevel = 1, DurationMonths = 24 },
+                          new ProfileActivity { Kind = "award", Title = "Giải Nhì Tin học", ImpactLevel = 3 }],
+        };
+        var ai = new FakeAi();
+        return (new RecommendationService(repo, ai), repo, ai);
     }
 
     [Fact]
-    public async Task Create_ReturnsItemsAndSaves()
+    public async Task FullFlow_FiltersCallsAdvisorOnceAndScoresInCode()
     {
-        var repo = NewRepo();
-        var result = await NewService(repo).CreateAsync(UserId);
+        var (service, repo, ai) = Make();
+        var result = await service.CreateAsync(UserId);
 
+        // Advisor chỉ nhận hoạt động + giải; vai trò ở form gửi kèm để advisor dùng khi AI lỗi
+        var act = Assert.Single(ai.EcRequest!.Activities);
+        Assert.Equal(("CLB Robotics. vai trò: leader", "leader"), (act.Text, act.Role));
+        Assert.Equal(3, Assert.Single(ai.EcRequest.Awards).Level);
+
+        // D khác ngành bị loại; A Vừa sức, B An toàn hơn, C khối học bổng
         Assert.NotNull(result);
-        Assert.Equal(2, result.Items.Count);
-        Assert.Equal([1, 2], result.Items.Select(i => i.Rank));
-        Assert.All(result.Items, i => Assert.False(string.IsNullOrWhiteSpace(i.Reason)));   // trường nào cũng có giải thích
-        Assert.All(result.Items, i => Assert.False(i.AiExplained));
-
-        var saved = Assert.Single(repo.Saved);
-        Assert.Equal(UserId, saved.UserId);
-        Assert.Equal(repo.Profile!.Id, saved.StudentProfileId);
-        Assert.Equal(RecommendationService.AlgorithmVersion, saved.AlgorithmVersion);
-        Assert.Contains("DEMO_UB", saved.ItemsJson);
-        Assert.Equal(result.Id, saved.Id);
+        Assert.Equal(["A", "B", "C"], result!.Items.Select(i => i.Code));
+        Assert.Equal(["match", "safety", "aid"], result.Items.Select(i => i.Block));
+        Assert.Equal([1, 2, 3], result.Items.Select(i => i.Rank));
+        Assert.Empty(result.Warnings);
+        Assert.NotNull(repo.Saved);
     }
 
     [Fact]
-    public async Task Create_CategoriesAsExpected()
+    public async Task Scores_ComeFromFormulaWithTierFromAdvisor()
     {
-        var result = await NewService(NewRepo()).CreateAsync(UserId);
-        Assert.Equal("match", result!.Items.Single(i => i.Code == "DEMO_UB").Category);
-        Assert.Equal("safety", result.Items.Single(i => i.Code == "DEMO_UC").Category);
+        var (service, _, _) = Make();
+        var result = await service.CreateAsync(UserId);
+
+        // A: pg từ GPA trung bình (z = 0,33 → 62,67), ps = 41,67, w = [0,6; 0,4], tier 4 × L 2 → +2
+        var a = result!.Items.Single(i => i.Code == "A");
+        Assert.Equal(56.27m, a.Score);
+        Assert.Equal("match", a.Category);
+        Assert.Contains("BUDGET_OK", a.Why!);
     }
 
     [Fact]
-    public async Task Create_NoGpa_WarnsButStillRecommends()
+    public async Task ResultItem_CarriesGroupReasonsAndSchoolInfo()
     {
-        var result = await NewService(NewRepo(NewProfile(gpa4: null))).CreateAsync(UserId);
+        var (service, _, _) = Make();
+        var result = await service.CreateAsync(UserId);
 
-        Assert.Contains(result!.Warnings, w => w.Contains("GPA"));
-        Assert.NotEmpty(result.Items);                                   // vẫn xếp được nhờ SAT
+        var c = result!.Items.Single(i => i.Code == "C");
+        Assert.Equal(("reach", true), (c.Category, c.FarReach));      // r = 0,05/0,4 < 0,5 → Khó vào xa
+        Assert.Equal(35000m, c.OverBudgetUsd);                          // 85.000 − 50.000
+        Assert.Equal(["GPA_LOW", "SAT_BELOW", "NEED_AID", "INTL_LOW"], c.Why);
+        Assert.Equal("GPA thấp hơn phần lớn sinh viên của trường. SAT thấp hơn khoảng 25–75 của trường. Cần học bổng lớn. Trường nhận ít du học sinh so với tỉ lệ chung.", c.Reason);
+        Assert.Contains(FilterFlags.NeedBigAid, c.Flags!);
+        Assert.Equal("met", c.English);
+        Assert.Equal("NY", c.School!.State);
     }
 
     [Fact]
-    public async Task Create_MissingData_AddsWarnings()
+    public async Task SavedRecordKeepsVersionsForReplay()
     {
-        var result = await NewService(NewRepo()).CreateAsync(UserId);    // chưa có điểm ngoại khóa, chưa có điểm tiếng Anh
-
-        Assert.Contains(result!.Warnings, w => w.Contains("ngoại khóa"));
-        Assert.Contains(result.Warnings, w => w.Contains("tiếng Anh"));
-    }
-
-    // ---------- Điểm ngoại khóa (bước đầu của nút "Lọc trường") ----------
-
-    [Fact]
-    public async Task Create_NoActivities_ScoresZeroWithoutCallingAdvisor()
-    {
-        var repo = NewRepo();
-        repo.Profile!.ExtracurricularScore = 3;                         // điểm cũ không còn đúng khi hồ sơ không có hoạt động
-        var ecAi = new FakeExtracurricularAi();
-
-        var result = await NewService(repo, ecAi: ecAi).CreateAsync(UserId);
-
-        Assert.Empty(ecAi.Requests);
-        Assert.Equal(0m, result!.Extracurricular!.Score);
-        Assert.Contains(ExtracurricularScoring.NoActivitiesWarning, result.Warnings);
-        Assert.Equal(0m, repo.Profile.ExtracurricularScore);
-    }
-
-    [Fact]
-    public async Task Create_ScoresActivitiesAndUsesScoreInSaw()
-    {
-        var repo = NewRepo();
-        repo.Activities.Add(Activity(repo, "CLB Robotics"));
-        repo.Activities.Add(Activity(repo, "Giải Nhì tin học", kind: "award"));   // giải thưởng: cộng điểm thưởng
-        var ecAi = new FakeExtracurricularAi();
-
-        var result = await NewService(repo, ecAi: ecAi).CreateAsync(UserId);
-
-        var sent = Assert.Single(ecAi.Requests).Activities;
-        var club = sent.Single(a => a.Kind == "activity");
-        Assert.Equal("CLB Robotics", club.Name);
-        Assert.Equal(12, club.Months);                                   // 09/2024 → 09/2025
-        Assert.Null(club.ImpactLevel);                                   // hoạt động mẫu không khai mức ảnh hưởng
-        Assert.Equal("Giải Nhì tin học", sent.Single(a => a.Kind == "award").Name);
-        Assert.Equal(3.0m, result!.Extracurricular!.Score);
-        Assert.Equal(["CLB Robotics", "Giải Nhì tin học"], result.Extracurricular.Activities.Select(a => a.Name).OrderBy(n => n));
-        Assert.Equal(3.0m, repo.Profile!.ExtracurricularScore);         // lưu lại điểm mới
-        Assert.Single(repo.Analyses);
-        Assert.Contains("\"extracurricularScore\":3", repo.Saved.Single().CriteriaJson);   // SAW dùng điểm vừa tính
-        Assert.DoesNotContain(result.Warnings, w => w.Contains("ngoại khóa"));
-    }
-
-    [Fact]
-    public async Task Create_SameActivities_ReusesScoreWithoutCallingAdvisor()
-    {
-        var repo = NewRepo();
-        repo.Activities.Add(Activity(repo, "CLB Robotics"));
-        var ecAi = new FakeExtracurricularAi();
-
-        await NewService(repo, ecAi: ecAi).CreateAsync(UserId);
-        var second = await NewService(repo, ecAi: ecAi).CreateAsync(UserId);
-
-        Assert.Single(ecAi.Requests);                                    // lần 2 không gọi LLM
-        Assert.Single(repo.Analyses);                                    // không lưu trùng
-        Assert.Equal(3.0m, second!.Extracurricular!.Score);
-        Assert.Equal("CLB Robotics", Assert.Single(second.Extracurricular.Activities).Name);
-    }
-
-    [Fact]
-    public async Task Create_ChangedActivities_ScoresAgain()
-    {
-        var repo = NewRepo();
-        repo.Activities.Add(Activity(repo, "CLB Robotics"));
-        var ecAi = new FakeExtracurricularAi();
-        await NewService(repo, ecAi: ecAi).CreateAsync(UserId);
-
-        repo.Activities.Add(Activity(repo, "Tình nguyện"));
-        await NewService(repo, ecAi: ecAi).CreateAsync(UserId);
-
-        Assert.Equal(2, ecAi.Requests.Count);
-        Assert.Equal(2, ecAi.Requests[1].Activities.Count);
-    }
-
-    [Fact]
-    public async Task Create_AdvisorDown_UsesStoredScoreAndStillRecommends()
-    {
-        var repo = NewRepo();
-        repo.Profile!.ExtracurricularScore = 2.5m;
-        repo.Activities.Add(Activity(repo, "CLB Robotics"));
-        var ecAi = new FakeExtracurricularAi { Handler = _ => throw new HttpRequestException("connection refused") };
-
-        var result = await NewService(repo, ecAi: ecAi).CreateAsync(UserId);
-
-        Assert.Equal(2.5m, result!.Extracurricular!.Score);
-        Assert.False(result.Extracurricular.Fresh);
-        Assert.Contains(ExtracurricularScoring.StaleWarning, result.Warnings);
-        Assert.Empty(repo.Analyses);                                     // không có điểm mới thì không lưu
-        Assert.NotEmpty(result.Items);
-    }
-
-    [Fact]
-    public async Task GetLatest_ReturnsExtracurricularSummary()
-    {
-        var repo = NewRepo();
-        repo.Activities.Add(Activity(repo, "CLB Robotics"));
-        var service = NewService(repo);
+        var (service, repo, _) = Make();
         await service.CreateAsync(UserId);
 
+        Assert.Equal("rule1-ec2.0", repo.Saved!.AlgorithmVersion);
+        Assert.Contains("\"tier\":4", repo.Saved.CriteriaJson);
         var latest = await service.GetLatestAsync(UserId);
-
-        Assert.Equal(3.0m, latest!.Extracurricular!.Score);
-        Assert.Equal("CLB Robotics", Assert.Single(latest.Extracurricular.Activities).Name);
+        Assert.Equal(3, latest!.Items.Count);
     }
 
     [Fact]
-    public async Task Create_NoStudyLevel_WarnsAndSavesNothing()
+    public async Task AdvisorDown_UsesAverageTierAndStillShowsList()
     {
-        var profile = NewProfile();
-        profile.TargetLevel = "";
-        var repo = NewRepo(profile);
+        var (service, repo, ai) = Make();
+        ai.EcFails = true;
+        var result = await service.CreateAsync(UserId);
 
-        var result = await NewService(repo).CreateAsync(UserId);
+        Assert.Contains(result!.Warnings, w => w.Contains("bậc 3"));
+        Assert.Equal(3, result.Items.Count);                          // vẫn có danh sách
+        Assert.Equal("rule1-ecnone", repo.Saved!.AlgorithmVersion);
+    }
+
+    [Fact]
+    public async Task NoSchoolPassesFilter_ReturnsWarningWithoutCallingAdvisor()
+    {
+        var (service, repo, ai) = Make();
+        repo.Profile!.IntendedMajor = "Psychology";
+        var result = await service.CreateAsync(UserId);
 
         Assert.Empty(result!.Items);
-        Assert.Contains(result.Warnings, w => w.Contains("bậc học"));
-        Assert.Empty(repo.Saved);
+        Assert.Null(ai.EcRequest);
+        Assert.Contains(result.Warnings, w => w.Contains("nới điều kiện"));
     }
 
     [Fact]
-    public async Task Create_NoMatchingSchool_WarnsWithEmptyList()
+    public async Task UnknownMajorName_IsNotFilteredAndWarns()
     {
-        var profile = NewProfile();
-        profile.IntendedMajor = "Nursing";
-        var result = await NewService(NewRepo(profile)).CreateAsync(UserId);
+        var (service, repo, _) = Make();
+        repo.Profile!.IntendedMajor = "Underwater Basket Weaving";
+        var result = await service.CreateAsync(UserId);
 
+        Assert.Contains(result!.Items, i => i.Code == "D");           // không lọc ngành: cả D cũng vào
+        Assert.Contains(result.Warnings, w => w.Contains("Underwater Basket Weaving"));
+    }
+
+    [Fact]
+    public async Task AllSchoolsOverBudget_WarnsAndShowsAidBlock()
+    {
+        var (service, repo, _) = Make();
+        repo.Profile!.BudgetMaxUsd = 20000m;                                  // thấp hơn chi phí mọi trường
+        var result = await service.CreateAsync(UserId);
+
+        Assert.All(result!.Items, i => Assert.Equal("aid", i.Block));
+        Assert.Contains(result.Warnings, w => w.Contains("thấp hơn chi phí của mọi trường"));
+    }
+
+    [Fact]
+    public async Task Item_CarriesRankingCriteriaForPreferenceButtons()
+    {
+        var (service, _, _) = Make();
+        var a = (await service.CreateAsync(UserId))!.Items.Single(i => i.Code == "A");
+        Assert.Equal((0.1m, 0.444m), (a.CostFit!.Value, a.AidFit!.Value));   // F = (50.000 − 45.000)/50.000; H = 20.000/45.000
+    }
+
+    [Fact]
+    public async Task NonUndergraduate_IsNotScoredYet()
+    {
+        var (service, repo, ai) = Make();
+        repo.Profile!.TargetLevel = "master";
+        var result = await service.CreateAsync(UserId);
         Assert.Empty(result!.Items);
-        Assert.Contains(result.Warnings, w => w.Contains("Không có trường nào"));
+        Assert.Null(ai.EcRequest);
     }
 
     [Fact]
-    public async Task Create_SettingsFromDatabase_AreUsed()            // tiêu chí: đổi ngưỡng → kết quả đổi
+    public async Task ExplainSchool_SendsScoredNumbersOfLatestResult()
     {
-        var repo = NewRepo();
-        var before = await NewService(repo).CreateAsync(UserId);
-        repo.SettingsJson = """{"gpaBand": 0.5}""";                       // nới ngưỡng GPA
-        var after = await NewService(repo).CreateAsync(UserId);
+        var (service, _, ai) = Make();
+        var result = await service.CreateAsync(UserId);
+        var c = result!.Items.Single(i => i.Code == "C");
 
-        Assert.Equal("safety", before!.Items.Single(i => i.Code == "DEMO_UC").Category);   // GPA hơn 0.4 ≥ 0.3
-        Assert.Equal("match", after!.Items.Single(i => i.Code == "DEMO_UC").Category);     // 0.4 < 0.5
+        var advice = await service.ExplainSchoolAsync(UserId, c.OfferingId);
+
+        Assert.Equal(("Tóm tắt tư vấn đủ dài.", "qwen3:8b"), (advice!.Summary, advice.Model));
+        var sent = ai.ExplainRequest!;
+        Assert.Equal((3.6m, 1350, 4), (sent.Student.Gpa!.Value, sent.Student.Sat!.Value, sent.Student.EcTier!.Value));
+        Assert.Equal(("Khó vào xa", true, 35000m), (sent.School.Group, sent.School.NeedAid, sent.School.OverBudget!.Value));
+        Assert.Equal(c.GpaPosition, sent.School.GpaPosition);
+        Assert.Equal(40m, sent.School.AcceptancePercent);               // 0,4 → 40%
     }
 
     [Fact]
-    public async Task Create_SameProfile_SameResult()                  // tiêu chí: chạy lại cho cùng kết quả
+    public async Task ExplainSchool_UnknownSchoolOrNoResult_ReturnsNull()
     {
-        var repo = NewRepo();
-        var first = await NewService(repo).CreateAsync(UserId);
-        var second = await NewService(repo).CreateAsync(UserId);
-
-        Assert.Equal(first!.Items.Select(i => (i.Code, i.Category)), second!.Items.Select(i => (i.Code, i.Category)));
+        var (service, _, _) = Make();
+        Assert.Null(await service.ExplainSchoolAsync(UserId, Guid.NewGuid()));   // chưa gợi ý lần nào
+        await service.CreateAsync(UserId);
+        Assert.Null(await service.ExplainSchoolAsync(UserId, Guid.NewGuid()));   // trường không có trong kết quả
     }
 
     [Fact]
-    public async Task GetLatest_ReturnsSavedItemsInSameOrder()
+    public async Task NoProfile_ReturnsNull()
     {
-        var repo = NewRepo();
-        var service = NewService(repo);
-        var created = await service.CreateAsync(UserId);
-        var latest = await service.GetLatestAsync(UserId);
-
-        Assert.Equal(created!.Items.Select(i => i.Code), latest!.Items.Select(i => i.Code));
-        Assert.Equal(created.Items.Select(i => i.Reason), latest.Items.Select(i => i.Reason));
-        Assert.Equal(created.Id, latest.Id);
+        var (service, repo, _) = Make();
+        repo.Profile = null;
+        Assert.Null(await service.CreateAsync(UserId));
     }
-
-    [Fact]
-    public async Task GetLatest_NoRecommendation_ReturnsNull() =>
-        Assert.Null(await NewService(NewRepo()).GetLatestAsync(UserId));
-
-    // ---------- LLM giải thích, không đổi thứ tự ----------
-
-    [Fact]
-    public async Task Create_KeepsSawOrder_AndKeepsGroundedReason()
-    {
-        var repo = NewRepo();
-        repo.Candidates.Add(new(Guid.NewGuid(), Guid.NewGuid(), "DEMO_UD", "Demo D", "WA",
-            ["Computer Science"], 3.50m, 1250, 1400, 35000, 14000, 1000));   // Match, giống hệt DEMO_UB
-        var ai = new FakeAi
-        {
-            Handler = (_, _) => Task.FromResult(new AiRankResponse([
-                new("DEMO_UD", "Chi phí 50,000 USD/năm, vừa bằng ngân sách 50,000 USD."),
-                new("DEMO_UB", "Chi phí chỉ 20,000 USD."),                  // số bịa → thay bằng giải thích soạn sẵn
-            ])),
-        };
-
-        var result = await NewService(repo, ai).CreateAsync(UserId);
-
-        // LLM đưa DEMO_UD lên trước nhưng vẫn giữ thứ tự SAW (bằng điểm thì theo mã trường)
-        Assert.Equal(["DEMO_UB", "DEMO_UD", "DEMO_UC"], result!.Items.Select(i => i.Code));
-        Assert.True(result.Items.Single(i => i.Code == "DEMO_UD").AiExplained);
-        Assert.False(result.Items.Single(i => i.Code == "DEMO_UB").AiExplained);
-        Assert.DoesNotContain(result.Warnings, w => w.Contains("AI"));
-    }
-
-    [Fact]
-    public async Task Create_AiThrows_FallsBackToCrmWithWarning()
-    {
-        var ai = new FakeAi { Handler = (_, _) => throw new HttpRequestException("advisor down") };
-
-        var result = await NewService(NewRepo(), ai).CreateAsync(UserId);
-
-        Assert.Equal(["DEMO_UB", "DEMO_UC"], result!.Items.Select(i => i.Code));            // đúng thứ tự CRM
-        Assert.All(result.Items, i => Assert.False(i.AiExplained));
-        Assert.Contains(result.Warnings, w => w.Contains("AI"));
-    }
-
-    [Fact]
-    public async Task Create_AiTooSlow_FallsBackAfterTimeout()
-    {
-        var repo = NewRepo();
-        repo.SettingsJson = """{"aiTimeoutSeconds": 1}""";
-        var ai = new FakeAi
-        {
-            Handler = async (_, ct) => { await Task.Delay(TimeSpan.FromSeconds(30), ct); return new AiRankResponse([]); },
-        };
-
-        var result = await NewService(repo, ai).CreateAsync(UserId);   // dừng sau khoảng 1 giây, không chờ đủ 30 giây
-
-        Assert.Equal(2, result!.Items.Count);
-        Assert.Contains(result.Warnings, w => w.Contains("AI"));
-    }
-
-    [Fact]
-    public async Task Create_AiDisabled_DoesNotCallAi()
-    {
-        var repo = NewRepo();
-        repo.SettingsJson = """{"aiEnabled": false}""";
-        var ai = new FakeAi();
-
-        var result = await NewService(repo, ai).CreateAsync(UserId);
-
-        Assert.Empty(ai.Requests);
-        Assert.Equal(2, result!.Items.Count);
-        Assert.DoesNotContain(result.Warnings, w => w.Contains("AI"));             // tắt chủ động thì không cảnh báo
-    }
-
-    [Fact]
-    public async Task Create_NoMatchingSchool_DoesNotCallAi()
-    {
-        var profile = NewProfile();
-        profile.IntendedMajor = "Nursing";
-        var ai = new FakeAi();
-
-        await NewService(NewRepo(profile), ai).CreateAsync(UserId);
-
-        Assert.Empty(ai.Requests);
-    }
-
-    [Fact]
-    public async Task Create_AiRequest_OnlyCrmSchoolsWithCrmCategories()
-    {
-        var ai = new FakeAi();
-        await NewService(NewRepo(), ai).CreateAsync(UserId);
-
-        var request = Assert.Single(ai.Requests);
-        Assert.Equal(["DEMO_UB", "DEMO_UC"], request.Schools.Select(s => s.Code));
-        Assert.Equal(["match", "safety"], request.Schools.Select(s => s.Category));
-        Assert.DoesNotContain(UserId.ToString(), System.Text.Json.JsonSerializer.Serialize(request));   // không gửi định danh người dùng
-    }
-
-    [Fact]
-    public async Task Create_AiCannotChangeCategories()
-    {
-        var ai = new FakeAi
-        {
-            Handler = (_, _) => Task.FromResult(new AiRankResponse([new("DEMO_UC", "An toàn."), new("KHONG_CO", "Bịa.")])),
-        };
-
-        var result = await NewService(NewRepo(), ai).CreateAsync(UserId);
-
-        Assert.Equal(["DEMO_UB", "DEMO_UC"], result!.Items.Select(i => i.Code));            // Match vẫn đứng trước Safety
-        Assert.Equal(["match", "safety"], result.Items.Select(i => i.Category));
-    }
-
-    [Fact]
-    public async Task Create_ItemsCarrySchoolInfo()
-    {
-        var repo = NewRepo();
-        repo.Candidates[0] = repo.Candidates[0] with
-        {
-            City = "New York",
-            Control = "private",
-            Website = "https://demo-b.edu",
-            AcceptanceRate = 0.45m,
-            InternationalStudents = 900,
-            SatPolicy = "optional",
-            MinIelts = 6.5m,
-        };
-
-        var result = await NewService(repo).CreateAsync(UserId);
-
-        var school = result!.Items.Single(i => i.Code == "DEMO_UB").School;
-        Assert.NotNull(school);
-        Assert.Equal("New York", school.City);
-        Assert.Equal("NY", school.State);
-        Assert.Equal("private", school.Control);
-        Assert.Equal(0.45m, school.AcceptanceRate);
-        Assert.Equal("optional", school.SatPolicy);
-        Assert.Equal(35000m, school.TuitionUsd);
-        Assert.Equal(6.5m, school.MinIelts);
-    }
-
 }

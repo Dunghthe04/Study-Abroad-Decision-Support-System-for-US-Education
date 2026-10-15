@@ -1,12 +1,15 @@
 # Cung cấp các dependency/service mà API cần dùng,
+# 1. Khởi đông -> tạo 1 OllamaClient
+# 2. Lưu đối tượng vào app.state.llm
 
 import secrets
 
 from fastapi import Depends, Header, HTTPException, Request, status
 
 from app.core.config import Settings, get_settings
-from app.services.activity_reader import ActivityReader
-from app.services.recommender import Recommender
+from app.services.ec_reader import EcReader
+from app.services.explainer import Explainer
+from app.services.ollama import OllamaClient
 
 
 def require_api_key(
@@ -25,16 +28,21 @@ def require_api_key(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Sai hoặc thiếu API key.")
 
 
-def get_recommender(request: Request) -> Recommender:
-    """Lấy Recommender đã tạo lúc khởi động (giống lấy service đã đăng ký trong DI container)."""
-    return request.app.state.recommender
+def get_llm(request: Request) -> OllamaClient:
+    """Lấy OllamaClient đã tạo lúc khởi động (giống lấy service đã đăng ký trong DI container)."""
+    return request.app.state.llm
 
 
-def get_activity_reader(request: Request) -> ActivityReader:
-    """Lấy ActivityReader đã tạo lúc khởi động."""
-    return request.app.state.activity_reader
+def get_ec_reader(request: Request) -> EcReader:
+    """Lấy EcReader (lượt ① bậc ngoại khóa) đã tạo lúc khởi động."""
+    return request.app.state.ec_reader
 
 
 def get_transcript_reader(request: Request):
     """Lấy TranscriptReader đã tạo lúc khởi động."""
     return request.app.state.transcript_reader
+
+
+def get_explainer(request: Request) -> Explainer:
+    """Lấy Explainer (AI tư vấn từng trường) đã tạo lúc khởi động."""
+    return request.app.state.explainer

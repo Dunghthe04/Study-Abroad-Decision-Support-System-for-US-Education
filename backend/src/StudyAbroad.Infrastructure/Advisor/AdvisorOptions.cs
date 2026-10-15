@@ -9,4 +9,7 @@ public class AdvisorOptions
     public int TimeoutSeconds { get; set; } = 120;
     // Đọc bảng điểm: model ảnh chép bảng rồi LLM bóc điểm, nhiều tệp nên lâu hơn các lời gọi khác
     public int OcrTimeoutSeconds { get; set; } = 600;
+
+    // Gợi ý trường: AI đọc hoạt động ngoại khóa (khoảng 5–10 giây, sai định dạng thì advisor gọi lại 1 lần)
+    public int RecommendTimeoutSeconds { get; set; } = 120;
 }

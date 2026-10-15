@@ -2,7 +2,7 @@
 
 from pydantic import Field
 
-from app.schemas.recommendation import CamelModel
+from app.schemas.common import CamelModel
 
 
 class TranscriptSubjectScore(CamelModel):

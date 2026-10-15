@@ -15,7 +15,6 @@ public static class DependencyInjection
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IFinancialProfileService, FinancialProfileService>();
         services.AddScoped<IRecommendationService, RecommendationService>();
-        services.AddScoped<ExtracurricularScoring>();
         // [USAS-365] Đăng ký service phân tích điểm học thuật
         services.AddScoped<StudyAbroad.Application.Profile.Academic.IAcademicAnalysisService, StudyAbroad.Application.Profile.Academic.AcademicAnalysisService>();
         services.AddScoped<IAcademicProfileService, AcademicProfileService>();
