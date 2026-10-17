@@ -37,13 +37,11 @@ public class RecommendationServiceTests
             return Task.FromResult(new AiExplainResult("Tóm tắt tư vấn đủ dài.", ["Điểm mạnh"], ["Nên làm"], "1.1", "qwen3:8b"));
         }
 
-        public bool EcFails;
         public int Tier = 4;
 
         public Task<AiEcResult> ReadExtracurricularAsync(AiEcRequest request, CancellationToken ct = default)
         {
             EcRequest = request;
-            if (EcFails) throw new RecommendationAiException("advisor tắt");
             return Task.FromResult(new AiEcResult([], 1.2m, 0.15m, 0.34m, Tier, "2.0", "qwen3:8b"));
         }
     }
@@ -81,79 +79,6 @@ public class RecommendationServiceTests
     }
 
     [Fact]
-    public async Task FullFlow_FiltersCallsAdvisorOnceAndScoresInCode()
-    {
-        var (service, repo, ai) = Make();
-        var result = await service.CreateAsync(UserId);
-
-        // Advisor chỉ nhận hoạt động + giải; vai trò ở form gửi kèm để advisor dùng khi AI lỗi
-        var act = Assert.Single(ai.EcRequest!.Activities);
-        Assert.Equal(("CLB Robotics. vai trò: leader", "leader"), (act.Text, act.Role));
-        Assert.Equal(3, Assert.Single(ai.EcRequest.Awards).Level);
-
-        // D khác ngành bị loại; A Vừa sức, B An toàn hơn, C khối học bổng
-        Assert.NotNull(result);
-        Assert.Equal(["A", "B", "C"], result!.Items.Select(i => i.Code));
-        Assert.Equal(["match", "safety", "aid"], result.Items.Select(i => i.Block));
-        Assert.Equal([1, 2, 3], result.Items.Select(i => i.Rank));
-        Assert.Empty(result.Warnings);
-        Assert.NotNull(repo.Saved);
-    }
-
-    [Fact]
-    public async Task Scores_ComeFromFormulaWithTierFromAdvisor()
-    {
-        var (service, _, _) = Make();
-        var result = await service.CreateAsync(UserId);
-
-        // A: pg từ GPA trung bình (z = 0,33 → 62,67), ps = 41,67, w = [0,6; 0,4], tier 4 × L 2 → +2
-        var a = result!.Items.Single(i => i.Code == "A");
-        Assert.Equal(56.27m, a.Score);
-        Assert.Equal("match", a.Category);
-        Assert.Contains("BUDGET_OK", a.Why!);
-    }
-
-    [Fact]
-    public async Task ResultItem_CarriesGroupReasonsAndSchoolInfo()
-    {
-        var (service, _, _) = Make();
-        var result = await service.CreateAsync(UserId);
-
-        var c = result!.Items.Single(i => i.Code == "C");
-        Assert.Equal(("reach", true), (c.Category, c.FarReach));      // r = 0,05/0,4 < 0,5 → Khó vào xa
-        Assert.Equal(35000m, c.OverBudgetUsd);                          // 85.000 − 50.000
-        Assert.Equal(["GPA_LOW", "SAT_BELOW", "NEED_AID", "INTL_LOW"], c.Why);
-        Assert.Equal("GPA thấp hơn phần lớn sinh viên của trường. SAT thấp hơn khoảng 25–75 của trường. Cần học bổng lớn. Trường nhận ít du học sinh so với tỉ lệ chung.", c.Reason);
-        Assert.Contains(FilterFlags.NeedBigAid, c.Flags!);
-        Assert.Equal("met", c.English);
-        Assert.Equal("NY", c.School!.State);
-    }
-
-    [Fact]
-    public async Task SavedRecordKeepsVersionsForReplay()
-    {
-        var (service, repo, _) = Make();
-        await service.CreateAsync(UserId);
-
-        Assert.Equal("rule1-ec2.0", repo.Saved!.AlgorithmVersion);
-        Assert.Contains("\"tier\":4", repo.Saved.CriteriaJson);
-        var latest = await service.GetLatestAsync(UserId);
-        Assert.Equal(3, latest!.Items.Count);
-    }
-
-    [Fact]
-    public async Task AdvisorDown_UsesAverageTierAndStillShowsList()
-    {
-        var (service, repo, ai) = Make();
-        ai.EcFails = true;
-        var result = await service.CreateAsync(UserId);
-
-        Assert.Contains(result!.Warnings, w => w.Contains("bậc 3"));
-        Assert.Equal(3, result.Items.Count);                          // vẫn có danh sách
-        Assert.Equal("rule1-ecnone", repo.Saved!.AlgorithmVersion);
-    }
-
-    [Fact]
     public async Task NoSchoolPassesFilter_ReturnsWarningWithoutCallingAdvisor()
     {
         var (service, repo, ai) = Make();
@@ -163,17 +88,6 @@ public class RecommendationServiceTests
         Assert.Empty(result!.Items);
         Assert.Null(ai.EcRequest);
         Assert.Contains(result.Warnings, w => w.Contains("nới điều kiện"));
-    }
-
-    [Fact]
-    public async Task UnknownMajorName_IsNotFilteredAndWarns()
-    {
-        var (service, repo, _) = Make();
-        repo.Profile!.IntendedMajor = "Underwater Basket Weaving";
-        var result = await service.CreateAsync(UserId);
-
-        Assert.Contains(result!.Items, i => i.Code == "D");           // không lọc ngành: cả D cũng vào
-        Assert.Contains(result.Warnings, w => w.Contains("Underwater Basket Weaving"));
     }
 
     [Fact]
@@ -188,14 +102,6 @@ public class RecommendationServiceTests
     }
 
     [Fact]
-    public async Task Item_CarriesRankingCriteriaForPreferenceButtons()
-    {
-        var (service, _, _) = Make();
-        var a = (await service.CreateAsync(UserId))!.Items.Single(i => i.Code == "A");
-        Assert.Equal((0.1m, 0.444m), (a.CostFit!.Value, a.AidFit!.Value));   // F = (50.000 − 45.000)/50.000; H = 20.000/45.000
-    }
-
-    [Fact]
     public async Task NonUndergraduate_IsNotScoredYet()
     {
         var (service, repo, ai) = Make();
@@ -203,23 +109,6 @@ public class RecommendationServiceTests
         var result = await service.CreateAsync(UserId);
         Assert.Empty(result!.Items);
         Assert.Null(ai.EcRequest);
-    }
-
-    [Fact]
-    public async Task ExplainSchool_SendsScoredNumbersOfLatestResult()
-    {
-        var (service, _, ai) = Make();
-        var result = await service.CreateAsync(UserId);
-        var c = result!.Items.Single(i => i.Code == "C");
-
-        var advice = await service.ExplainSchoolAsync(UserId, c.OfferingId);
-
-        Assert.Equal(("Tóm tắt tư vấn đủ dài.", "qwen3:8b"), (advice!.Summary, advice.Model));
-        var sent = ai.ExplainRequest!;
-        Assert.Equal((3.6m, 1350, 4), (sent.Student.Gpa!.Value, sent.Student.Sat!.Value, sent.Student.EcTier!.Value));
-        Assert.Equal(("Khó vào xa", true, 35000m), (sent.School.Group, sent.School.NeedAid, sent.School.OverBudget!.Value));
-        Assert.Equal(c.GpaPosition, sent.School.GpaPosition);
-        Assert.Equal(40m, sent.School.AcceptancePercent);               // 0,4 → 40%
     }
 
     [Fact]

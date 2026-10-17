@@ -1,7 +1,6 @@
-"""THỰC NGHIỆM (không chạy trong hệ thống): AI tự chấm trường theo skill_score.md, chia lô, kiểm tra JSON.
+"""AI chấm trường theo skill_score.md, chia lô, kiểm tra JSON (đang làm lại theo hướng gửi lên AI cloud).
 
-Từng là lượt ② của advisor. Bộ đánh giá đo được AI chỉ đúng 33–48%, nên hệ thống chuyển sang
-C# (SchoolScorer). Giữ lại để chạy lại thí nghiệm bằng run_eval.py cho báo cáo.
+Từng thử với Qwen3 8B, bộ đánh giá cũ đo được chỉ đúng 33–48% (bản cũ ở commit c610ea9).
 """
 
 from pathlib import Path

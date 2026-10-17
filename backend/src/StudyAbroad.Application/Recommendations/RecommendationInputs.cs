@@ -70,14 +70,6 @@ namespace StudyAbroad.Application.Recommendations
             Toefl: p.Toefl,
             Duolingo: p.Duolingo);
 
-        //Mã gửi lượt ③
-        public static string NeedAidCode(AidNeed need) => need switch
-        {
-            AidNeed.Required => "required",
-            AidNeed.Preferred => "preferred",
-            _ => "no"
-        };
-
         //Hoạt động + giải thưởng → đầu vào lượt ①. Không gửi tên, email, số điện thoại của học sinh.
         public static AiEcRequest ToEcRequest(IEnumerable<ProfileActivity> items, DateOnly today)
         {
