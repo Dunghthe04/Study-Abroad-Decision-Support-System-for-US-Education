@@ -16,8 +16,7 @@ namespace StudyAbroad.Application.Recommendations
         Task<SchoolAdviceDto?> ExplainSchoolAsync(Guid userId, Guid offeringId, CancellationToken ct = default);
     }
 
-    //Luồng gợi ý trường: lọc cứng (C#) → bậc ngoại khóa (advisor: AI đọc mô tả, Python tính bậc) → chấm trường (C#) → chia khối, xếp hạng (C#).
-    //Phần công thức chạy bằng code vì AI tự tính chỉ đúng 33–48% trên bộ đánh giá 216 cặp (docs/GOI_Y_TRUONG_TODO.md, mục 4.3).
+    //Luồng gợi ý trường: lọc cứng (C#) → bậc ngoại khóa (advisor: AI đọc mô tả, Python tính bậc) → chấm và chọn trường (đang làm lại: gửi lên AI cloud).
     public class RecommendationService(IRecommendationRepository repository, IRecommendationAi ai) : IRecommendationService
     {
         private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
@@ -70,57 +69,11 @@ namespace StudyAbroad.Application.Recommendations
             }
             var tier = ec?.Tier ?? AverageTier;
 
-            //4. Chấm từng trường (tầng 2 + F/H/Q), cùng công thức với advisor/evals/recommendation/reference.py
-            var flags = new Dictionary<string, IReadOnlyList<string>>();
-            var sat = profile.Sat is decimal s ? (int?)Math.Round(s) : null;
-            var student = new AiStudent(profile.OverallGpa, sat, profile.BudgetMaxUsd, tier);
-            var scoreItems = passed.Select(r =>
-            {
-                var school = AiSchoolMapper.ToAi(r.School, out var dataFlags);
-                flags[r.School.Code] = [.. r.Flags, .. dataFlags];
-                return SchoolScorer.Score(student, school);
-            }).ToList();
-
-            //5. Xếp theo mức quan tâm (mặc định Cân bằng), chia khối 3/5/4 + khối học bổng, mã lý do
-            var byCode = passed.ToDictionary(r => r.School.Code);
-            var pickItems = scoreItems
-                .Select(i => new AiPickItem(i.Code, i.G2,
-                    byCode[i.Code].Outcome == FilterOutcome.AidBlock ? "AID" : "MAIN",   // khối học bổng lấy từ lọc cứng
-                    i.F, i.H, i.Q, i.Gap, i.Pg, i.Ps, i.Adj, i.R))
-                .ToList();
-            var pick = SchoolPicker.Pick(new AiPickRequest(BalancedPref, RecommendationInputs.NeedAidCode(criteria.AidNeed), pickItems), settings.PerCategory);
-
-            //6. Ghép kết quả với thông tin trường trong DB
-            var scored = scoreItems.ToDictionary(i => i.Code);
-            (string Block, IReadOnlyList<AiPickEntry> Entries)[] blocks =
-                [("reach", pick.Reach), ("match", pick.Match), ("safety", pick.Safety), ("aid", pick.Aid), ("other", pick.Other)];
-            var items = blocks
-                .SelectMany(b => b.Entries.Select(e => (b.Block, Entry: e)))
-                .Where(x => byCode.ContainsKey(x.Entry.Code) && scored.ContainsKey(x.Entry.Code))
-                .Select((x, i) => ToItem(i + 1, x.Block, x.Entry, byCode[x.Entry.Code], scored[x.Entry.Code], flags[x.Entry.Code]))
-                .ToList();
-
-            //7. Lưu kèm phiên bản skill và model để tái lập
-            var entity = new Recommendation
-            {
-                UserId = userId,
-                StudentProfileId = profile.Id,
-                StudyLevel = profile.TargetLevel,
-                CriteriaJson = JsonSerializer.Serialize(new
-                {
-                    criteria,
-                    tier,
-                    extracurricular = ec,
-                    pref = BalancedPref,
-                    skillEc = ec?.SkillVersion,
-                    model = ec?.Model
-                }, Json),
-                ItemsJson = JsonSerializer.Serialize(items, Json),
-                AlgorithmVersion = $"{AlgorithmVersion}-ec{ec?.SkillVersion ?? "none"}"
-            };
-            await repository.AddAsync(entity, ct);
-
-            return new RecommendationResultDto(entity.Id, entity.CreatedAt, entity.StudyLevel, items, warnings);
+            //4. TODO (làm lại): gửi các trường đã lọc (passed) và bậc ngoại khóa (tier) lên AI cloud để chấm và chọn danh sách,
+            //   rồi kiểm tra kết quả bằng công thức chuẩn. Phần chấm bằng code C# (SchoolScorer, SchoolPicker) đã bỏ,
+            //   bản cũ nằm ở commit c610ea9. Tạm thời trả danh sách rỗng kèm cảnh báo để API không lỗi.
+            warnings.Add("Phần chấm điểm và chọn trường đang được làm lại, chưa có danh sách gợi ý.");
+            return Empty(profile.TargetLevel, warnings);
         }
 
         public async Task<RecommendationResultDto?> GetLatestAsync(Guid userId, CancellationToken ct = default)
