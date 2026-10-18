@@ -8,6 +8,9 @@ from fastapi import Depends, Header, HTTPException, Request, status
 
 from app.core.config import Settings, get_settings
 from app.services.ollama import OllamaClient
+from app.services.ec_reader import EcReader
+from app.services.scorer import Scorer
+from app.services.picker import Picker
 
 
 def require_api_key(
@@ -34,3 +37,13 @@ def get_llm(request: Request) -> OllamaClient:
 def get_transcript_reader(request: Request):
     """Lấy TranscriptReader đã tạo lúc khởi động."""
     return request.app.state.transcript_reader
+
+#Lấy EcReader đã tạo lúc khởi động
+def get_ec_reader(request: Request) -> EcReader:
+    return request.app.state.ec_reader
+
+def get_scorer(request: Request) -> Scorer:
+    return request.app.state.scorer
+
+def get_picker(request: Request) -> Picker:
+    return request.app.state.picker

@@ -2,6 +2,7 @@
 Thứ tự ưu tiên: biến môi trường (docker-compose) > file .env > giá trị mặc định dưới đây.
 """
 
+
 # Dùng để lưu kết quả trả về của hàm nhằm tái sử dụng.
 from functools import lru_cache
 from pathlib import Path
@@ -38,6 +39,10 @@ class Settings(BaseSettings):
     # Để trống = dùng chung llm_model. Máy GPU yếu / server chỉ có CPU nên đặt qwen3:4b cho nhanh
     transcript_parse_model: str = ""
     transcript_parse_timeout_seconds: float = 180
+    gemini_api_key: str = ""
+    gemini_base_url: str = "https://generativelanguage.googleapis.com"
+    gemini_model: str = "gemini-3.8-flash"
+    gemini_thinking_level: str = "low"
 
 
 # Lần gọi hàm sau nó lấy đối tượng đã lưu trong lru_cache
