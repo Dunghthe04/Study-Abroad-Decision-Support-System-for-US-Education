@@ -1,13 +1,16 @@
-"""Phần dùng chung của 3 lượt: đọc skill, ghép message, gọi lại 1 lần khi sai."""
-
-from pathlib import Path
+"""Phần dùng chung khi gọi AI: đọc skill, ghép message, gọi lại 1 lần khi sai."""
 
 from app.services.ollama import OllamaError
-from app.services.skill_call import SKILLS_DIR, SkillCall, load_skill
+from app.services.skill_call import SkillCall, load_skill
 from tests.fakes import FakeLLM
 
-SKILL = SKILLS_DIR / "skill_ec.md"
-EVAL_SKILLS = Path(__file__).resolve().parent.parent / "evals" / "recommendation" / "skills"
+SKILL_TEXT = "skill_version 1.0\nNội dung skill thử."
+
+
+def skill_file(tmp_path):
+    path = tmp_path / "skill.md"
+    path.write_text(SKILL_TEXT, encoding="utf-8")
+    return path
 
 
 def check_ok(raw):
@@ -16,9 +19,9 @@ def check_ok(raw):
     return "đã kiểm tra"
 
 
-async def test_sends_skill_and_compact_json_then_returns_checked_result():
+async def test_sends_skill_and_compact_json_then_returns_checked_result(tmp_path):
     llm = FakeLLM({"ok": True})
-    call = SkillCall(llm, "qwen3:8b", SKILL)
+    call = SkillCall(llm, "qwen3:8b", skill_file(tmp_path))
     result = await call.run({"a": 1, "b": "Hà Nội"}, {"type": "object"}, check_ok)
 
     assert result == "đã kiểm tra"
@@ -29,52 +32,29 @@ async def test_sends_skill_and_compact_json_then_returns_checked_result():
     assert llm.calls[0]["temperature"] == 0
 
 
-async def test_retries_once_after_check_fails():
+async def test_retries_once_after_check_fails(tmp_path):
     llm = FakeLLM({"ok": False}, {"ok": True})
-    assert await SkillCall(llm, "m", SKILL).run({}, {}, check_ok) == "đã kiểm tra"
+    assert await SkillCall(llm, "m", skill_file(tmp_path)).run({}, {}, check_ok) == "đã kiểm tra"
     assert len(llm.calls) == 2
 
 
-async def test_retries_once_after_ollama_error():
+async def test_retries_once_after_ollama_error(tmp_path):
     llm = FakeLLM(OllamaError("timeout"), {"ok": True})
-    assert await SkillCall(llm, "m", SKILL).run({}, {}, check_ok) == "đã kiểm tra"
+    assert await SkillCall(llm, "m", skill_file(tmp_path)).run({}, {}, check_ok) == "đã kiểm tra"
 
 
-async def test_returns_none_after_two_failures_and_stops():
+async def test_returns_none_after_two_failures_and_stops(tmp_path):
     llm = FakeLLM({"ok": False}, OllamaError("x"), {"ok": True})
-    assert await SkillCall(llm, "m", SKILL).run({}, {}, check_ok) is None
+    assert await SkillCall(llm, "m", skill_file(tmp_path)).run({}, {}, check_ok) is None
     assert len(llm.calls) == 2  # không gọi lần thứ 3
 
 
-def test_load_skill_reads_versions():
-    text, version = load_skill(SKILLS_DIR / "skill_ec.md")
-    assert version == "2.0" and "role" in text
-    text, version = load_skill(SKILLS_DIR / "skill_explain.md")
-    assert version == "1.1" and "facts" in text
-    # skill_score, skill_pick chỉ còn dùng cho thực nghiệm (evals)
-    for name in ("skill_score.md", "skill_pick.md"):
-        text, version = load_skill(EVAL_SKILLS / name)
-        assert version == "1.1" and len(text) > 1000
+def test_load_skill_reads_version(tmp_path):
+    text, version = load_skill(skill_file(tmp_path))
+    assert version == "1.0" and "Nội dung skill thử" in text
 
 
 def test_load_skill_without_version_is_unknown(tmp_path):
     f = tmp_path / "x.md"
     f.write_text("không có phiên bản", encoding="utf-8")
     assert load_skill(f) == ("không có phiên bản", "unknown")
-
-
-def test_schema_required_keys_match_properties():
-    # Ollama ép theo "required": gõ nhầm 1 dấu cách ("tong_hd ") thì AI bỏ key thật và lượt đó luôn lỗi
-    from app.schemas.ec import ec_schema
-    from app.schemas.explain import explain_schema
-    from evals.recommendation.ai_score_schema import score_schema
-
-    ec = ec_schema(1)
-    assert set(ec["required"]) == set(ec["properties"])
-    assert set(ec["properties"]["act"]["items"]["required"]) == set(
-        ec["properties"]["act"]["items"]["properties"]
-    )
-    ex = explain_schema()
-    assert set(ex["required"]) == set(ex["properties"])
-    item = score_schema(["A"])["properties"]["items"]["items"]
-    assert set(item["required"]) == set(item["properties"])

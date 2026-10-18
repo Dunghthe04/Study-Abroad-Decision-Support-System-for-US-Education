@@ -4,10 +4,8 @@ import httpx  # gửi request đến ollama
 from fastapi import Depends, FastAPI
 
 from app.api.deps import require_api_key
-from app.api.routes import health, profile, recommend
+from app.api.routes import health, profile
 from app.core.config import get_settings
-from app.services.ec_reader import EcReader
-from app.services.explainer import Explainer
 from app.services.ollama import OllamaClient
 from app.services.transcript_reader import TranscriptReader
 
@@ -31,10 +29,6 @@ async def lifespan(app: FastAPI):
             seed=settings.llm_seed,
             keep_alive=settings.llm_keep_alive,
         )
-        # Bậc ngoại khóa: AI đọc vai trò, phạm vi; Python tính bậc (đọc skill_ec.md 1 lần lúc khởi động)
-        app.state.ec_reader = EcReader(app.state.llm, settings.llm_model)
-        # AI tư vấn từng trường: đọc skill_explain.md 1 lần lúc khởi động
-        app.state.explainer = Explainer(app.state.llm, settings.llm_model)
         # Đọc bảng điểm (OCR) của USAS-640
         app.state.transcript_reader = TranscriptReader(http, settings)
         yield
@@ -45,7 +39,6 @@ def create_app() -> FastAPI:
     app = FastAPI(title="Study Abroad Advisor Service", version="0.1.0", lifespan=lifespan)
     app.include_router(health.router)
     # Các route gọi Ollama đều cần khoá; health để mở cho docker healthcheck
-    app.include_router(recommend.router, dependencies=[Depends(require_api_key)])
     app.include_router(profile.router, dependencies=[Depends(require_api_key)])
     return app
 

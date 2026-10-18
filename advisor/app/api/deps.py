@@ -7,8 +7,6 @@ import secrets
 from fastapi import Depends, Header, HTTPException, Request, status
 
 from app.core.config import Settings, get_settings
-from app.services.ec_reader import EcReader
-from app.services.explainer import Explainer
 from app.services.ollama import OllamaClient
 
 
@@ -33,16 +31,6 @@ def get_llm(request: Request) -> OllamaClient:
     return request.app.state.llm
 
 
-def get_ec_reader(request: Request) -> EcReader:
-    """Lấy EcReader (lượt ① bậc ngoại khóa) đã tạo lúc khởi động."""
-    return request.app.state.ec_reader
-
-
 def get_transcript_reader(request: Request):
     """Lấy TranscriptReader đã tạo lúc khởi động."""
     return request.app.state.transcript_reader
-
-
-def get_explainer(request: Request) -> Explainer:
-    """Lấy Explainer (AI tư vấn từng trường) đã tạo lúc khởi động."""
-    return request.app.state.explainer

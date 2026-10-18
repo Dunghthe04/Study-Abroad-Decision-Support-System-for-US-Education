@@ -5,7 +5,6 @@ using Microsoft.Extensions.Options;
 using StudyAbroad.Application.Advisor;
 using StudyAbroad.Application.Auth;
 using StudyAbroad.Application.Profile.Financial;
-using StudyAbroad.Application.Recommendations;
 using StudyAbroad.Application.StudyCenters;
 using StudyAbroad.Infrastructure.Advisor;
 using StudyAbroad.Infrastructure.Auth;
@@ -27,7 +26,6 @@ public static class DependencyInjection
             .UseSnakeCaseNamingConvention());
 
         services.AddScoped<IStudyCenterRepository, StudyCenterRepository>();
-        services.AddScoped<IRecommendationRepository, RecommendationRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IFinancialProfileRepository, FinancialProfileRepository>();
         services.AddScoped<StudyAbroad.Application.AcademicProfiles.IAcademicProfileRepository, AcademicProfileRepository>();
@@ -70,11 +68,6 @@ public static class DependencyInjection
         {
             ConfigureAdvisorClient(sp, client);
             client.Timeout = TimeSpan.FromSeconds(sp.GetRequiredService<IOptions<AdvisorOptions>>().Value.OcrTimeoutSeconds);
-        });
-        services.AddHttpClient<IRecommendationAi, RecommendationAiClient>((sp, client) =>
-        {
-            ConfigureAdvisorClient(sp, client);
-            client.Timeout = TimeSpan.FromSeconds(sp.GetRequiredService<IOptions<AdvisorOptions>>().Value.RecommendTimeoutSeconds);
         });
 
         // [Scheduled Background Jobs: Unlock expired accounts & Cleanup OTPs]
