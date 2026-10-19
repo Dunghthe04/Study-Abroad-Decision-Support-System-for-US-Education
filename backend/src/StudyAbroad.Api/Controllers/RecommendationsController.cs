@@ -1,48 +1,144 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using StudyAbroad.Api.Extensions;
 using StudyAbroad.Application.Recommendations;
+using StudyAbroad.Domain.Constants;
+using StudyAbroad.Domain.Entities;
 
-namespace StudyAbroad.Api.Controllers
+namespace StudyAbroad.Api.Controllers;
+
+[ApiController]
+[Authorize(Roles = $"{UserRoles.Student},{UserRoles.Parent}")]
+[Route("api/v1/recommendations")]
+public class RecommendationsController(RecommendationService recommendations) : ControllerBase
 {
-    [ApiController]
-    [Authorize]
-    [Route("api/v1/recommendations")]
-    public class RecommendationsController(IRecommendationService service) : ControllerBase
+    // pref bỏ trống thì service dùng [2, 2, 2].
+    public record CreateRecommendationRequest(IReadOnlyList<int>? Pref);
+
+    public record RecommendationResponse(
+        Guid Id,
+        DateTime CreatedAt,
+        string StudyLevel,
+        string? AlgorithmVersion,
+        JsonElement Criteria,
+        JsonElement Items);
+
+    public record RepickRequest(IReadOnlyList<int> Pref);
+
+
+    [HttpPost]
+    public async Task<IActionResult> Create([FromBody] CreateRecommendationRequest? request, CancellationToken ct)
     {
-        //Người dùng lấy từ cookie đăng nhập, không nhận userId từ request: không chạy được gợi ý cho hồ sơ người khác
-        [HttpPost]
-        public async Task<ActionResult<RecommendationResultDto>> Create(CancellationToken ct)
-        {
-            if (User.GetUserId() is not { } userId) return Unauthorized();
-            var result = await service.CreateAsync(userId, ct);
-            return result is null
-                ? Problem("Người dùng chưa có hồ sơ học sinh, hãy tạo hồ sơ trước.", statusCode: StatusCodes.Status404NotFound)
-                : Ok(result);
-        }
+        var userId = User.GetUserId();
+        if (userId is null)
+            return Unauthorized(new { message = "Vui lòng đăng nhập." });
 
-        [HttpGet("latest")]
-        public async Task<ActionResult<RecommendationResultDto>> GetLatest(CancellationToken ct)
-        {
-            if (User.GetUserId() is not { } userId) return Unauthorized();
-            var result = await service.GetLatestAsync(userId, ct);
-            return result is null ? NotFound() : Ok(result);
-        }
+        if (request?.Pref is { } pref && (pref.Count != 3 || pref.Any(n => n is < 0 or > 4)))
+            return BadRequest(new { message = "Ưu tiên phải là 3 số từ 0 đến 4: chi phí, học bổng, chất lượng." });
 
-        //AI tư vấn 1 trường trong lần gợi ý gần nhất của chính người dùng (gọi khi mở "Chi tiết")
-        [HttpPost("latest/schools/{offeringId:guid}/advice")]
-        public async Task<ActionResult<SchoolAdviceDto>> Advice(Guid offeringId, CancellationToken ct)
+        try
         {
-            if (User.GetUserId() is not { } userId) return Unauthorized();
-            try
-            {
-                var advice = await service.ExplainSchoolAsync(userId, offeringId, ct);
-                return advice is null ? NotFound() : Ok(advice);
-            }
-            catch (RecommendationAiException)
-            {
-                return Problem("AI tư vấn tạm thời chưa phản hồi, hãy thử lại sau.", statusCode: StatusCodes.Status503ServiceUnavailable);
-            }
+            var saved = await recommendations.CreateAsync(userId.Value, request?.Pref, ct);
+            return Ok(ToResponse(saved));
+        }
+        catch (InvalidOperationException ex) when (ex.Message.StartsWith("Chưa") || ex.Message.StartsWith("Hồ sơ"))
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Problem(detail: ex.Message, statusCode: StatusCodes.Status502BadGateway, title: "Kết quả gợi ý không hợp lệ");
+        }
+        catch (HttpRequestException)
+        {
+            return Problem(detail: "Dịch vụ gợi ý đang bận.", statusCode: StatusCodes.Status503ServiceUnavailable);
         }
     }
+
+    [HttpGet("latest")]
+    public async Task<IActionResult> Latest(CancellationToken ct)
+    {
+        var userId = User.GetUserId();
+        if (userId is null)
+            return Unauthorized(new { message = "Vui lòng đăng nhập." });
+
+        var saved = await recommendations.GetLatestAsync(userId.Value, ct);
+        return saved is null
+            ? NotFound(new { message = "Chưa có lần gợi ý nào." })
+            : Ok(ToResponse(saved));
+    }
+
+    private static RecommendationResponse ToResponse(Recommendation row)
+    {
+        using var criteria = JsonDocument.Parse(row.CriteriaJson);
+        using var items = JsonDocument.Parse(row.ItemsJson);
+        return new RecommendationResponse(
+            row.Id,
+            row.CreatedAt,
+            row.StudyLevel,
+            row.AlgorithmVersion,
+            criteria.RootElement.Clone(),
+            items.RootElement.Clone());
+    }
+
+        // Đổi nút ưu tiên: chỉ chạy lại lượt chọn trên số đã lưu.
+    [HttpPost("repick")]
+    public async Task<IActionResult> Repick([FromBody] RepickRequest? request, CancellationToken ct)
+    {
+        var userId = User.GetUserId();
+        if (userId is null)
+            return Unauthorized(new { message = "Vui lòng đăng nhập." });
+
+        if (request?.Pref is not { Count: 3 } pref || pref.Any(n => n is < 0 or > 4))
+            return BadRequest(new { message = "Ưu tiên phải là 3 số từ 0 đến 4: chi phí, học bổng, chất lượng." });
+
+        try
+        {
+            var saved = await recommendations.RepickAsync(userId.Value, pref, ct);
+            return Ok(ToResponse(saved));
+        }
+        catch (InvalidOperationException ex) when (ex.Message.StartsWith("Chưa"))
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Problem(detail: ex.Message, statusCode: StatusCodes.Status502BadGateway, title: "Kết quả gợi ý không hợp lệ");
+        }
+        catch (HttpRequestException)
+        {
+            return Problem(detail: "Dịch vụ gợi ý đang bận.", statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+    }
+
+    // Mở chi tiết một trường: Qwen viết lời tư vấn từ số đã lưu.
+    [HttpPost("schools/{code}/explain")]
+    public async Task<IActionResult> Explain(string code, CancellationToken ct)
+    {
+        var userId = User.GetUserId();
+        if (userId is null)
+            return Unauthorized(new { message = "Vui lòng đăng nhập." });
+
+        try
+        {
+            var explanation = await recommendations.ExplainAsync(userId.Value, code, ct);
+            return explanation.Status == "OK"
+                ? Ok(explanation)
+                : Problem(detail: "Chưa viết được lời tư vấn, vui lòng thử lại.", statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+        catch (InvalidOperationException ex) when (ex.Message.StartsWith("Chưa"))
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Problem(detail: ex.Message, statusCode: StatusCodes.Status502BadGateway, title: "Kết quả tư vấn không hợp lệ");
+        }
+        catch (HttpRequestException)
+        {
+            return Problem(detail: "Dịch vụ gợi ý đang bận.", statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+    }
+
 }

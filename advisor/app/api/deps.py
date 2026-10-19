@@ -10,6 +10,8 @@ from app.core.config import Settings, get_settings
 from app.services.ec_reader import EcReader
 from app.services.explainer import Explainer
 from app.services.ollama import OllamaClient
+from app.services.picker import Picker
+from app.services.scorer import Scorer
 
 
 def require_api_key(
@@ -33,16 +35,24 @@ def get_llm(request: Request) -> OllamaClient:
     return request.app.state.llm
 
 
-def get_ec_reader(request: Request) -> EcReader:
-    """Lấy EcReader (lượt ① bậc ngoại khóa) đã tạo lúc khởi động."""
-    return request.app.state.ec_reader
-
-
 def get_transcript_reader(request: Request):
     """Lấy TranscriptReader đã tạo lúc khởi động."""
     return request.app.state.transcript_reader
 
 
+# Lấy EcReader đã tạo lúc khởi động
+def get_ec_reader(request: Request) -> EcReader:
+    return request.app.state.ec_reader
+
+
+def get_scorer(request: Request) -> Scorer:
+    return request.app.state.scorer
+
+
+def get_picker(request: Request) -> Picker:
+    return request.app.state.picker
+
+
+# hàm độc đối tượng trong state
 def get_explainer(request: Request) -> Explainer:
-    """Lấy Explainer (AI tư vấn từng trường) đã tạo lúc khởi động."""
     return request.app.state.explainer

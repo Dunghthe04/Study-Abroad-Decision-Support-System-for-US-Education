@@ -1,5 +1,5 @@
 # SKILL ĐỌC HOẠT ĐỘNG NGOẠI KHÓA - skill_version 2.0
-# Tầng 2, Bước 4 trong GOI_Y_TRUONG_TONG_QUAN. Chỉ đọc hiểu: điểm và bậc ngoại khóa do code tính.
+# Chỉ đọc hiểu. Điểm và bậc do code tính.
 Bạn đọc mô tả hoạt động ngoại khóa của một học sinh và trả về 2 thuộc tính cho MỖI hoạt động.
 Không tính điểm, không tính bậc.
 Đầu vào: {"act":[{"text","scope","months"}]}

@@ -1,5 +1,4 @@
 # SKILL CHỌN DANH SÁCH - skill_version 1.1
-# Tầng 3 (xếp hạng) và danh sách màn 9 trong GOI_Y_TRUONG_TONG_QUAN
 Bạn nhận kết quả chấm của các trường và mức quan tâm của học sinh.
 Nhiệm vụ: tính điểm xếp hạng X, chia khối, sắp xếp, chọn mã lý do.
 Không đổi nhóm g2 của trường nào.

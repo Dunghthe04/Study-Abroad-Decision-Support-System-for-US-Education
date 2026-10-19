@@ -1,4 +1,4 @@
-using StudyAbroad.Application.Recommendations;
+using StudyAbroad.Application.Profile.Academic;
 
 namespace StudyAbroad.UnitTests;
 
@@ -8,7 +8,7 @@ public class DtoNamingTests
     public void DtoNames_AreUniqueAcrossNamespaces()
     {
         // Swagger đặt tên schema theo tên class: hai DTO trùng tên ở hai namespace làm swagger.json lỗi 500
-        var duplicates = typeof(RecommendationResultDto).Assembly.GetTypes()
+        var duplicates = typeof(AcademicAnalysisResponseDto).Assembly.GetTypes()
             .Where(t => t.IsPublic && t.Name.EndsWith("Dto", StringComparison.Ordinal))
             .GroupBy(t => t.Name)
             .Where(g => g.Count() > 1)
