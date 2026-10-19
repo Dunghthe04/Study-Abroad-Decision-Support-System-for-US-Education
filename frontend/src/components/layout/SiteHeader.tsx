@@ -43,6 +43,9 @@ export function SiteHeader() {
     router.push("/login");
   };
 
+  // Luồng hồ sơ 6 bước có header riêng (ProfileFlowHeader) — chỉ giữ 1 header
+  if (pathname.startsWith("/analysis")) return null;
+
   return (
     <header className="border-b bg-surface/95 backdrop-blur-sm sticky top-0 z-40">
       <nav className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">

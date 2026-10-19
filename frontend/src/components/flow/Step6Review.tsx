@@ -22,6 +22,7 @@ import {
   SCHOOL_TYPE_OPTIONS,
   labelOf,
 } from "@/lib/profile-flow-options";
+import { findCertType, formatCertSummary, formatYearMonth } from "@/lib/certification-utils";
 import type { DraftTranscriptFile, ProfileFlowDraft, ProfileMetadataResponse } from "@/types/profile-flow";
 
 interface Step6ReviewProps {
@@ -47,6 +48,7 @@ export function Step6Review({
 
   // Resolve state names
   const allStates = metadata?.states ?? [];
+  const certificationTypes = metadata?.certificationTypes ?? [];
   const stateNames = (step1.targetStates ?? [])
     .map((code) => allStates.find((s) => s.code === code)?.name ?? code)
     .join(", ");
@@ -189,18 +191,21 @@ export function Step6Review({
             </Button>
           </div>
           <div className="pt-3 text-xs space-y-1.5 text-muted-foreground">
-            <div>
-              <strong className="text-foreground">Tiếng Anh: </strong>
-              {step3.englishTestType && step3.englishTestType !== "none"
-                ? `${step3.englishTestType.toUpperCase()} ${step3.englishOverallScore ?? "–"}${step3.englishTestDate ? ` · thi ${step3.englishTestDate}` : ""}`
-                : "Chưa có"}
-            </div>
-            <div>
-              <strong className="text-foreground">Bài thi chuẩn hóa: </strong>
-              {step3.otherTests.length > 0
-                ? step3.otherTests.map((t) => `${t.testType} ${t.score ?? ""}`).join(", ")
-                : "Chưa có SAT/ACT/AP"}
-            </div>
+            {step3.certifications.length > 0 ? (
+              step3.certifications.map((cert) => (
+                <div key={cert.id}>
+                  {formatCertSummary(cert, findCertType(certificationTypes, cert.type))}
+                </div>
+              ))
+            ) : (
+              <div>Chưa có chứng chỉ</div>
+            )}
+            {step3.englishPlanned && (
+              <div>
+                <strong className="text-foreground">Dự kiến thi tiếng Anh: </strong>
+                {formatYearMonth(step3.englishPlannedDate) ?? "chưa chọn thời gian"}
+              </div>
+            )}
           </div>
         </div>
 

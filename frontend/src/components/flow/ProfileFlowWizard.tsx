@@ -14,6 +14,7 @@ import { Step4Financial } from "./Step4Financial";
 import { Step5Extracurricular } from "./Step5Extracurricular";
 import { Step6Review } from "./Step6Review";
 import { profileFlowApi } from "@/lib/profile-flow-api";
+import { migrateLegacyStep3 } from "@/lib/certification-utils";
 import type {
   GoalDraft,
   TranscriptDraft,
@@ -23,6 +24,7 @@ import type {
   DraftTranscriptFile,
   ProfileFlowDraft,
   ProfileMetadataResponse,
+  LegacyCertificationDraft,
 } from "@/types/profile-flow";
 
 // Không chọn sẵn cấp học / ngân sách / học bổng — học sinh phải tự chọn (BE validate khi commit)
@@ -40,8 +42,9 @@ const INITIAL_DRAFT: ProfileFlowDraft = {
     manualGpa10Scale: null,
   },
   step3: {
-    englishTestType: "none",
-    otherTests: [],
+    certifications: [],
+    englishPlanned: false,
+    englishPlannedDate: null,
   },
   step4: {
     annualBudgetTier: null,
@@ -353,6 +356,7 @@ export function ProfileFlowWizard() {
             {currentStep === 3 && (
               <Step3Certifications
                 data={draft.step3}
+                certificationTypes={metadata?.certificationTypes ?? []}
                 onUpdate={updateStep3}
                 onPrev={handlePrev}
                 onNext={handleNext}
@@ -410,7 +414,10 @@ function mergeDraft(base: ProfileFlowDraft, incoming: Partial<ProfileFlowDraft>)
   return {
     step1: { ...base.step1, ...incoming.step1 },
     step2: { ...base.step2, ...incoming.step2 },
-    step3: { ...base.step3, ...incoming.step3 },
+    // Nháp cũ (englishTestType / otherTests) → danh sách chứng chỉ
+    step3: incoming.step3
+      ? migrateLegacyStep3(incoming.step3 as Partial<CertificationDraft> & LegacyCertificationDraft)
+      : base.step3,
     step4: { ...base.step4, ...incoming.step4 },
     step5: { activities: incoming.step5?.activities ?? base.step5.activities },
   };
