@@ -11,6 +11,7 @@ from app.services.ollama import OllamaClient
 from app.services.ec_reader import EcReader
 from app.services.scorer import Scorer
 from app.services.picker import Picker
+from app.services.explainer import Explainer
 
 
 def require_api_key(
@@ -47,3 +48,7 @@ def get_scorer(request: Request) -> Scorer:
 
 def get_picker(request: Request) -> Picker:
     return request.app.state.picker
+
+#hàm độc đối tượng trong state
+def get_explainer(request: Request) -> Explainer:
+    return request.app.state.explainer

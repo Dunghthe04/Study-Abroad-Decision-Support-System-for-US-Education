@@ -118,6 +118,7 @@ public class ProfileFlowRepository(AppDbContext context) : IProfileFlowRepositor
             .ToListAsync(ct);
     }
 
+    //Lấy danh sách hoạt động ngoại khóa của sinh viên
     public async Task<IReadOnlyList<ProfileActivity>> GetProfileActivitiesAsync(Guid profileId, CancellationToken ct = default)
     {
         return await context.ProfileActivities

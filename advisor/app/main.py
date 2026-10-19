@@ -14,6 +14,8 @@ from app.api.routes import health, profile, recommend
 from app.services.gemini import GeminiClient
 from app.services.scorer import Scorer
 from app.services.picker import Picker
+from app.services.explainer import Explainer
+
 # Khai báo vòng đơi fastapi
 @asynccontextmanager
 # Đọc Settings → tạo HTTP client → tạo OllamaClient
@@ -45,6 +47,8 @@ async def lifespan(app: FastAPI):
         )
         app.state.scorer = Scorer(gemini, settings.gemini_model)
         app.state.picker = Picker(gemini, settings.gemini_model)
+        app.state.explainer = Explainer(app.state.llm, settings.llm_model)
+
         yield
 
 

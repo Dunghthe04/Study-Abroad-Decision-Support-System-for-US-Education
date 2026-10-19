@@ -9,6 +9,9 @@ from app.services.scorer import Scorer
 from app.api.deps import get_ec_reader, get_scorer, get_picker
 from app.schemas.pick import PickRequest, PickResponse
 from app.services.picker import Picker
+from app.api.deps import get_explainer
+from app.schemas.explain import ExplainRequest, ExplainResponse
+from app.services.explainer import Explainer
 
 router = APIRouter(prefix="/api/v1/recommend", tags=["recommend"])
 
@@ -23,3 +26,7 @@ async def score(req: ScoreRequest, scorer: Annotated[Scorer, Depends(get_scorer)
 @router.post("/pick", response_model=PickResponse)
 async def pick(req: PickRequest, picker: Annotated[Picker, Depends(get_picker)]) -> PickResponse:
     return await picker.pick(req)
+
+@router.post("/explain", response_model=ExplainResponse)
+async def explain(req: ExplainRequest, explainer: Annotated[Explainer, Depends(get_explainer)]) -> ExplainResponse:
+    return await explainer.explain(req)
