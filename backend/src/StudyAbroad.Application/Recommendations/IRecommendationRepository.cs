@@ -14,6 +14,8 @@ namespace StudyAbroad.Application.Recommendations
         Task<Recommendation?> GetLatestAsync(Guid userId, CancellationToken ct = default);
 
         Task<IReadOnlyList<RecommendSchoolInput>> ListSchoolsAsync(string studyLevel, CancellationToken ct = default);
+        //Tìm trường theo code, cấp độ
+        Task<RecommendSchoolInput?> FindSchoolAsync(string code, string studyLevel, CancellationToken ct = default);
 
     }
 }

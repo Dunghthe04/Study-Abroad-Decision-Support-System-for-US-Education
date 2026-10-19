@@ -31,6 +31,9 @@ public class AdvisorClient(HttpClient http) : IAdvisorClient
     public Task<PickResponseDto> PickAsync(PickRequestDto request, CancellationToken ct = default) =>
         PostAsync<PickRequestDto, PickResponseDto>("api/v1/recommend/pick", request, ct);
 
+    public Task<ExplainResponseDto> ExplainAsync(ExplainRequestDto request, CancellationToken ct = default) =>
+        PostAsync<ExplainRequestDto, ExplainResponseDto>("api/v1/recommend/explain", request, ct);
+
     private async Task<TResponse> PostAsync<TRequest, TResponse>(string url, TRequest request, CancellationToken ct)
     {
         using var response = await http.PostAsJsonAsync(url, request, AdvisorJson, ct);

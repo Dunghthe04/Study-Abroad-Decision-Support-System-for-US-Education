@@ -140,4 +140,46 @@ public class RecommendationServiceTests
         public Task<IReadOnlyList<TranscriptScore>> GetTranscriptScoresAsync(Guid profileId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<IReadOnlyList<ProfileActivity>> GetProfileActivitiesAsync(Guid profileId, CancellationToken ct = default) => throw new NotSupportedException();
     }
+
+        [Fact]
+    public async Task Repick_ReusesSavedScores_AndOnlyCallsPick()
+    {
+        var advisor = new FakeAdvisor();
+        var store = new FakeRecommendationRepository();
+        var service = new RecommendationService(advisor, store, new UnusedProfileFlow());
+
+        var profile = new StudentProfile
+        {
+            UserId = Guid.NewGuid(),
+            TargetLevel = "undergraduate",
+            IntendedMajor = "Computer and information sciences",
+            BudgetMaxUsd = 50_000m,
+            ScholarshipNeed = ProfileConstants.ScholarshipNeeds.Preferred,
+            OverallGpa = 3.6m,
+            Sat = 1350m,
+            Ielts = 6.5m,
+            TargetSchoolType = "all"
+        };
+        var schools = new List<RecommendSchoolInput>
+        {
+            School("Colgate", 95_610m, "need_and_merit", "Computer and information sciences"),
+            School("B", 38_000m, "none", "Computer and information sciences")
+        };
+
+        await service.RecommendAsync(profile, [], schools);
+        var again = await service.RepickAsync(profile.UserId, [3, 1, 1], default);
+
+        // Lần chọn lại chỉ thêm đúng một lượt pick, không thêm ec hay score.
+        Assert.Equal(["ec", "score", "pick", "pick"], advisor.Calls);
+        Assert.Equal([3, 1, 1], advisor.PickRequest!.Pref);
+        Assert.Equal("AID", advisor.PickRequest.Items.Single(i => i.C == "Colgate").Blk);
+        Assert.Equal(2, store.Rows.Count);
+
+        using var criteria = JsonDocument.Parse(again.CriteriaJson);
+        using var items = JsonDocument.Parse(again.ItemsJson);
+        Assert.Equal(3, criteria.RootElement.GetProperty("pref")[0].GetInt32());
+        Assert.Equal(12.9, items.RootElement.GetProperty("scored")[0].GetProperty("s").GetDouble());
+        Assert.Equal(0.414, items.RootElement.GetProperty("match")[0].GetProperty("x").GetDouble());
+    }
+
 }

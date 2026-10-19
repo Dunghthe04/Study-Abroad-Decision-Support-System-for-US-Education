@@ -24,6 +24,9 @@ public class RecommendationsController(RecommendationService recommendations) : 
         JsonElement Criteria,
         JsonElement Items);
 
+    public record RepickRequest(IReadOnlyList<int> Pref);
+
+
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateRecommendationRequest? request, CancellationToken ct)
     {
@@ -78,4 +81,64 @@ public class RecommendationsController(RecommendationService recommendations) : 
             criteria.RootElement.Clone(),
             items.RootElement.Clone());
     }
+
+        // Đổi nút ưu tiên: chỉ chạy lại lượt chọn trên số đã lưu.
+    [HttpPost("repick")]
+    public async Task<IActionResult> Repick([FromBody] RepickRequest? request, CancellationToken ct)
+    {
+        var userId = User.GetUserId();
+        if (userId is null)
+            return Unauthorized(new { message = "Vui lòng đăng nhập." });
+
+        if (request?.Pref is not { Count: 3 } pref || pref.Any(n => n is < 0 or > 4))
+            return BadRequest(new { message = "Ưu tiên phải là 3 số từ 0 đến 4: chi phí, học bổng, chất lượng." });
+
+        try
+        {
+            var saved = await recommendations.RepickAsync(userId.Value, pref, ct);
+            return Ok(ToResponse(saved));
+        }
+        catch (InvalidOperationException ex) when (ex.Message.StartsWith("Chưa"))
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Problem(detail: ex.Message, statusCode: StatusCodes.Status502BadGateway, title: "Kết quả gợi ý không hợp lệ");
+        }
+        catch (HttpRequestException)
+        {
+            return Problem(detail: "Dịch vụ gợi ý đang bận.", statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+    }
+
+    // Mở chi tiết một trường: Qwen viết lời tư vấn từ số đã lưu.
+    [HttpPost("schools/{code}/explain")]
+    public async Task<IActionResult> Explain(string code, CancellationToken ct)
+    {
+        var userId = User.GetUserId();
+        if (userId is null)
+            return Unauthorized(new { message = "Vui lòng đăng nhập." });
+
+        try
+        {
+            var explanation = await recommendations.ExplainAsync(userId.Value, code, ct);
+            return explanation.Status == "OK"
+                ? Ok(explanation)
+                : Problem(detail: "Chưa viết được lời tư vấn, vui lòng thử lại.", statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+        catch (InvalidOperationException ex) when (ex.Message.StartsWith("Chưa"))
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Problem(detail: ex.Message, statusCode: StatusCodes.Status502BadGateway, title: "Kết quả tư vấn không hợp lệ");
+        }
+        catch (HttpRequestException)
+        {
+            return Problem(detail: "Dịch vụ gợi ý đang bận.", statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+    }
+
 }

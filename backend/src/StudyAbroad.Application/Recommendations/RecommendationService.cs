@@ -3,6 +3,7 @@ using StudyAbroad.Application.Profile.Flow;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace StudyAbroad.Application.Recommendations;
 
@@ -16,6 +17,15 @@ public record RecommendationRun(
     IReadOnlyList<FilterResult> Filters,
     ScoreResponseDto? Score,
     PickResponseDto? Pick
+);
+
+public record SchoolExplaination(
+    string Code,
+    string Name,
+    string Status,
+    string Summary,
+    IReadOnlyList<string> Strengths,
+    IReadOnlyList<string> Improvements
 );
 
 public class RecommendationService(IAdvisorClient advisor, IRecommendationRepository recommendations, IProfileFlowRepository profiles)
@@ -32,6 +42,7 @@ public class RecommendationService(IAdvisorClient advisor, IRecommendationReposi
         CancellationToken ct = default
     )
     {
+        //Danh sách các điều kiện 
         var criteria = new FilterCriteria(
          profile.IntendedMajor,
          profile.PreferredStates,
@@ -42,18 +53,21 @@ public class RecommendationService(IAdvisorClient advisor, IRecommendationReposi
          profile.Toefl,
          profile.Duolingo);
 
-        
+        //Các trường đã lọc cừng 3 kết quả: Keep, AidBlock hoặc Excluded
         var filtered = HardFilter.Apply(criteria, schools.Select(ToFilterSchool), BudgetTolerance);
-        // Những trường được giữ
+        // Những trường được giữ, bỏ các trường exclude ,
         var kept = filtered.Where(r=> r.Outcome != FilterOutcome.Excluded).ToList();
-        //
+        // QWEN
+        // ToEcRequest trả về 2 danh sách activities và award
+        // ReadEcAsync = Qweb đọc ngoại khóa
         var ec = await advisor.ReadEcAsync(ToEcRequest(activities), ct);
         CloudResultCheck.EnsureTier(ec.Tier);
 
         if (kept.Count == 0)
             return await SaveAsync(profile, pref, schools, new RecommendationRun(ec.Tier, ec.AiUsed, filtered, null, null), ct);
 
-        //Chuyển thành dict key : code -> value trường
+        //GEMINI
+        //Chuyển thành dict key : code -> value 
         var byCode = kept.ToDictionary(r => r.School.Code, StringComparer.OrdinalIgnoreCase);
 
         var scoreSchools = schools
@@ -71,6 +85,7 @@ public class RecommendationService(IAdvisorClient advisor, IRecommendationReposi
         var score = await advisor.ScoreAsync(new ScoreRequestDto(student, scoreSchools), ct);
         CloudResultCheck.EnsureScore(byCode.Keys, score);
 
+        //ToPickSchool  chép điểm Gemini vừa chấm và gán nhãn khối 
         var pickItems = score.Items
             .Select(item => ToPickSchool(item, byCode[item.C].Outcome))
             .ToList();
@@ -78,6 +93,7 @@ public class RecommendationService(IAdvisorClient advisor, IRecommendationReposi
             return await SaveAsync(profile, pref, schools, new RecommendationRun(ec.Tier, ec.AiUsed, filtered, score, null), ct);
 
         //Chọn các trường
+        //Xem có cần học bổng k
         var needAid = ToNeedAid(profile.ScholarshipNeed);
         var pick = await advisor.PickAsync(
            new PickRequestDto(NormalizePref(pref), needAid, pickItems),
@@ -86,9 +102,9 @@ public class RecommendationService(IAdvisorClient advisor, IRecommendationReposi
         return await SaveAsync(profile, pref, schools, new RecommendationRun(ec.Tier, ec.AiUsed, filtered, score, pick), ct);
     }
 
-    // Hồ sơ đã gửi thì lọc, chấm, chọn và lưu. Trả về đúng dòng vừa ghi.
     public async Task<Recommendation> CreateAsync(Guid userId, IReadOnlyList<int>? pref, CancellationToken ct)
     {
+        //Lấy hồ sơ sinh viên
         var profile = await profiles.GetProfileByUserIdAsync(userId, ct)
             ?? throw new InvalidOperationException("Chưa có hồ sơ.");
         if (profile.FlowSubmittedAt is null)
@@ -96,13 +112,128 @@ public class RecommendationService(IAdvisorClient advisor, IRecommendationReposi
         if (string.IsNullOrWhiteSpace(profile.TargetLevel))
             throw new InvalidOperationException("Hồ sơ chưa có bậc học muốn theo.");
 
+        //Lấy ra các activity, giải thưởng
         var activities = await profiles.GetProfileActivitiesAsync(profile.Id, ct);
+        //Lấy ra danh sách trường active và đúng bậc học
         var schools = await recommendations.ListSchoolsAsync(profile.TargetLevel, ct);
+        //Gợi ý trường
         await RecommendAsync(profile, activities, schools, pref, ct);
 
         return await recommendations.GetLatestAsync(userId, ct)
             ?? throw new InvalidOperationException("Không lưu được kết quả gợi ý.");
     }
+
+    // Đổi nút ưu tiên: đọc số đã chấm từ lần gợi ý gần nhất, chỉ gọi lại lượt chọn.
+    // Không lọc lại, không gọi Qwen, không gọi lại Gemini chấm.
+    public async Task<Recommendation> RepickAsync(Guid userId, IReadOnlyList<int> pref, CancellationToken ct){
+        // Lấy lượt gợi ý gần nhất
+        var lastest = await recommendations.GetLatestAsync(userId, ct) 
+            ?? throw new InvalidOperationException("Chưa có lượt gợi ý nào.");
+        
+        //Lấy hồ sơ và trường từ lượt gợi ý gần nhất
+        var criteria = JsonNode.Parse(lastest.CriteriaJson)!.AsObject();
+        var items = JsonNode.Parse(lastest.ItemsJson)!.AsObject();
+
+        //Chuyển thành dict key : code -> value trường
+        var pickItems = items["scored"]!.AsArray()
+            .Select(row => ToStoredPickSchool(row!))
+            .ToList();
+        
+        if (pickItems.Count == 0)
+            throw new InvalidOperationException("Chưa có trường nào trong lần gợi ý gần nhất để chọn lại.");
+        
+        var needAid = ToNeedAid(criteria["scholarshipNeed"]?.GetValue<string>());
+        var normalized = NormalizePref(pref);
+        var pick = await advisor.PickAsync(new PickRequestDto(normalized, needAid, pickItems), ct);
+        CloudResultCheck.EnsurePick(pickItems, needAid, pick);
+
+        // Giữ nguyên scored, failed và criteria cũ. Chỉ thay phần của lượt chọn.
+        criteria["pref"] = JsonSerializer.SerializeToNode(normalized, StoredJson);
+        criteria["pickSkill"] = pick.SkillVersion;
+        criteria["pickModel"] = pick.Model;
+        criteria["status"] = pick.Status;
+        items["reach"] = JsonSerializer.SerializeToNode(Block(pick.Reach), StoredJson);
+        items["match"] = JsonSerializer.SerializeToNode(Block(pick.Match), StoredJson);
+        items["safety"] = JsonSerializer.SerializeToNode(Block(pick.Safety), StoredJson);
+        items["aid"] = JsonSerializer.SerializeToNode(Block(pick.Aid), StoredJson);
+        items["other"] = JsonSerializer.SerializeToNode(Block(pick.Other), StoredJson);
+
+        var version = pick.SkillVersion.Length > 32 ? pick.SkillVersion[..32] : pick.SkillVersion;
+        var row = new Recommendation
+        {
+            UserId = lastest.UserId,
+            StudentProfileId = lastest.StudentProfileId,
+            StudyLevel = lastest.StudyLevel,
+            CriteriaJson = criteria.ToJsonString(),
+            ItemsJson = items.ToJsonString(),
+            AlgorithmVersion = version
+        };
+        await recommendations.AddAsync(row, ct);
+        return row;
+    
+    }
+
+    private static readonly string[] BlockNames = ["reach", "match", "safety", "aid", "other"];
+    // Mở chi tiết một trường: Qwen viết lời tư vấn từ số đã lưu. Không lọc, không chấm lại.
+    public async Task<SchoolExplanation> ExplainAsync(Guid userId, string code, CancellationToken ct)
+    {
+        var last = await recommendations.GetLatestAsync(userId, ct)
+            ?? throw new InvalidOperationException("Chưa có lần gợi ý nào.");
+        var profile = await profiles.GetProfileByUserIdAsync(userId, ct)
+            ?? throw new InvalidOperationException("Chưa có hồ sơ.");
+
+        var criteria = JsonNode.Parse(last.CriteriaJson)!.AsObject();
+        var items = JsonNode.Parse(last.ItemsJson)!.AsObject();
+
+        var scored = items["scored"]!.AsArray()
+            .FirstOrDefault(row => string.Equals(row!["code"]?.GetValue<string>(), code, StringComparison.OrdinalIgnoreCase))
+            ?? throw new InvalidOperationException($"Chưa có trường {code} trong lần gợi ý gần nhất.");
+        var school = await recommendations.FindSchoolAsync(scored["code"]!.GetValue<string>(), last.StudyLevel, ct)
+            ?? throw new InvalidOperationException($"Chưa tìm thấy thông tin trường {code}.");
+
+        var university = school.University;
+        var offering = school.Offering;
+        var student = new ExplainStudentDto(
+            ToDouble(profile.OverallGpa),
+            SatScore(profile.Sat),
+            ToDouble(profile.BudgetMaxUsd),
+            criteria["tier"]?.GetValue<int>(),
+            profile.IntendedMajor);
+        var target = new ExplainSchoolDto(
+            university.Name,
+            university.State,
+            university.Control,
+            scored["g2"]!.GetValue<string>(),
+            scored["outcome"]!.GetValue<string>() == nameof(FilterOutcome.AidBlock) ? "AID" : "MAIN",
+            StoredWhy(items, university.Code),
+            ToDouble(university.AcceptanceRate),
+            offering.Sat25,
+            offering.Sat75,
+            Num(scored, "pg"),
+            Num(scored, "ps"),
+            ToDouble(TotalCost(offering)),
+            Num(scored, "gap"));
+
+        var result = await advisor.ExplainAsync(new ExplainRequestDto(student, target), ct);
+        return new SchoolExplanation(university.Code, university.Name, result.Status,
+            result.Summary, result.Strengths, result.Improvements);
+    }
+
+    // Mã lý do của một trường: nằm ở khối nào thì lấy `why` ở khối đó.
+    private static List<string> StoredWhy(JsonObject items, string code)
+    {
+        foreach (var name in BlockNames)
+        {
+            if (items[name] is not JsonArray block) continue;
+            foreach (var entry in block)
+            {
+                if (!string.Equals(entry?["code"]?.GetValue<string>(), code, StringComparison.OrdinalIgnoreCase)) continue;
+                return entry!["why"]?.AsArray().Select(w => w!.GetValue<string>()).ToList() ?? [];
+            }
+        }
+        return [];
+    }
+
 
     public Task<Recommendation?> GetLatestAsync(Guid userId, CancellationToken ct) =>
         recommendations.GetLatestAsync(userId, ct);
@@ -112,7 +243,7 @@ public class RecommendationService(IAdvisorClient advisor, IRecommendationReposi
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
     };
 
-    // Ghi đúng số cloud đã trả. Không tính lại.
+    // Chuyển kết quả thành JSON và lưu bảng
     private async Task<RecommendationRun> SaveAsync(
         StudentProfile profile,
         IReadOnlyList<int>? pref,
@@ -237,6 +368,19 @@ public class RecommendationService(IAdvisorClient advisor, IRecommendationReposi
             item.Ps,
             item.Adj,
             item.R);
+    // Dựng lại một trường cho lượt chọn từ số đã lưu. Không tính lại gì.
+    private static PickSchoolDto ToStoredPickSchool(JsonNode row) =>
+        new(
+            row["code"]!.GetValue<string>(),
+            row["g2"]!.GetValue<string>(),
+            row["outcome"]!.GetValue<string>() == nameof(FilterOutcome.AidBlock) ? "AID" : "MAIN",
+            Num(row, "f"), Num(row, "h"), Num(row, "q"), Num(row, "gap"),
+            Num(row, "pg"), Num(row, "ps"), Num(row, "adj"), Num(row, "r"));
+
+    private static double? Num(JsonNode row, string key) =>
+        row[key] is JsonValue value && value.TryGetValue<double>(out var number) ? number : null;
+
+    //Từ danh sách activitiess chia ra 2 danh sách award và ngoại khóa
     private static EcRequestDto ToEcRequest(IReadOnlyList<ProfileActivity> activities)
     {
         var act = activities

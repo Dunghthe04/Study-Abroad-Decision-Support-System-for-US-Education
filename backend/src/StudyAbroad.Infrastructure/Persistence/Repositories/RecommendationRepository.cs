@@ -35,5 +35,18 @@ namespace StudyAbroad.Infrastructure.Persistence.Repositories
             return rows.Select(row => new RecommendSchoolInput(row.university, row.offering)).ToList();
         }
 
+        public async Task<RecommendSchoolInput?> FindSchoolAsync(string code, string studyLevel, CancellationToken ct = default)
+        {
+            var row = await db.UniversityOfferings
+                .Where(o => o.StudyLevel == studyLevel)
+                .Join(
+                    db.Universities.Where(u => u.IsActive && u.Code == code),
+                    offering => offering.UniversityId,
+                    university => university.Id,
+                    (offering, university) => new { university, offering })
+                .FirstOrDefaultAsync(ct);
+            return row is null ? null : new RecommendSchoolInput(row.university, row.offering);
+        }
+
     }
 }
