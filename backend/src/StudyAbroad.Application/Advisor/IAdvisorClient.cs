@@ -4,4 +4,7 @@ namespace StudyAbroad.Application.Advisor;
 public interface IAdvisorClient
 {
     Task<AdvisorChatResponse> ChatAsync(AdvisorChatRequest request, CancellationToken ct = default);
+    Task<EcResponseDto> ReadEcAsync(EcRequestDto request, CancellationToken ct = default);
+    Task<ScoreResponseDto> ScoreAsync(ScoreRequestDto request, CancellationToken ct = default);
+    Task<PickResponseDto> PickAsync(PickRequestDto request, CancellationToken ct = default);
 }
