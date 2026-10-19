@@ -1,17 +1,22 @@
 """Khuôn dữ liệu vào/ra của lượt tư vấn từng trường: Qwen viết lời từ số đã lưu."""
+
 from typing import Any, Literal
+
 from pydantic import BaseModel, Field
+
 from app.schemas.pick import WhyCode
 
-MAX_POINTS =3 # tối đa 3 ý
+MAX_POINTS = 3  # tối đa 3 ý
 
-#Dữ liệu đầu vào sinh viên 
+
+# Dữ liệu đầu vào sinh viên
 class ExplainStudent(BaseModel):
     gpa: float | None = Field(default=None, ge=0, le=4)
     sat: int | None = Field(default=None, ge=400, le=1600)
     budget: float | None = None
     tier: int | None = Field(default=None, ge=1, le=5)  # bậc ngoại khóa
     major: str | None = Field(default=None, max_length=200)
+
 
 # Dữ liệu 1 trường
 class ExplainSchool(BaseModel):
@@ -29,16 +34,19 @@ class ExplainSchool(BaseModel):
     cost: float | None = None
     gap: float | None = None  # USD còn thiếu khi vượt ngân sách
 
+
 # Dữ liệu đầu vào để tư vấn
 class ExplainRequest(BaseModel):
     student: ExplainStudent
     school: ExplainSchool
 
-#Kết quả trả về từ Qwen: tóm tắt, điểm mạnh, điểm cần cải thiện
+
+# Kết quả trả về từ Qwen: tóm tắt, điểm mạnh, điểm cần cải thiện
 class ExplainResult(BaseModel):
     summary: str = Field(min_length=10)
     strengths: list[str] = Field(default=[], max_length=MAX_POINTS)
     improvements: list[str] = Field(default=[], max_length=MAX_POINTS)
+
 
 # Kết quả trả về từ API: phiên bản, trạng thái, kết quả
 class ExplainResponse(BaseModel):
@@ -48,6 +56,7 @@ class ExplainResponse(BaseModel):
     summary: str = ""
     strengths: list[str] = []
     improvements: list[str] = []
+
 
 def explain_schema() -> dict[str, Any]:
     """Khuôn JSON ép Qwen trả: đoạn tóm tắt + 2 danh sách ngắn."""

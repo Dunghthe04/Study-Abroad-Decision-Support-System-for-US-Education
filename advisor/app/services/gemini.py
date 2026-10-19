@@ -1,13 +1,17 @@
 """Gọi Gemini Interactions API và ép trả JSON đúng schema. Cùng giao diện chat_json với OllamaClient."""
+
 import asyncio
 import json
 from typing import Any
-import httpx #Gửi HTTP request đến Gemini API.
-from app.services.ollama import OllamaError #Gọi gemini API thay cho Ollama.
+
+import httpx  # Gửi HTTP request đến Gemini API.
+
+from app.services.ollama import OllamaError  # Gọi gemini API thay cho Ollama.
 
 
 class GeminiError(OllamaError):
     """Kế thừa OllamaError để SkillCall vẫn gọi lại khi lỗi mạng hoặc JSON sai."""
+
 
 # Khởi tạo GeminiClient
 class GeminiClient:
@@ -28,6 +32,7 @@ class GeminiClient:
         self._max_retries = max_retries
         self._min_interval = min_interval
         self.usage_log: list[dict[str, Any]] = []
+
     async def chat_json(
         self, messages: list[dict[str, str]], schema: dict[str, Any], temperature: float = 0.0
     ) -> dict[str, Any]:
@@ -50,6 +55,7 @@ class GeminiClient:
             return json.loads(self._extract_text(data))
         except ValueError as ex:
             raise GeminiError("Gemini trả về nội dung không đọc được thành JSON") from ex
+
     async def _post_with_retry(self, body: dict[str, Any]) -> dict[str, Any]:
         last = "chưa gọi"
         for attempt in range(self._max_retries):
@@ -78,6 +84,7 @@ class GeminiClient:
                     return data
             await asyncio.sleep(2**attempt * 2)
         raise GeminiError(f"Gọi Gemini thất bại sau {self._max_retries} lần: {last}")
+
     @staticmethod
     def _extract_text(data: dict[str, Any]) -> str:
         # JSON nằm trong bước type = model_output, không nằm ở khóa ngoài cùng

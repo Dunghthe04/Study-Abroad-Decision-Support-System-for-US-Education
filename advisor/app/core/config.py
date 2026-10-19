@@ -2,7 +2,6 @@
 Thứ tự ưu tiên: biến môi trường (docker-compose) > file .env > giá trị mặc định dưới đây.
 """
 
-
 # Dùng để lưu kết quả trả về của hàm nhằm tái sử dụng.
 from functools import lru_cache
 from pathlib import Path

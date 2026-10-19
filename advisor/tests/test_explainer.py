@@ -4,12 +4,27 @@ from tests.fakes import FakeLLM
 
 # Hồ sơ mẫu: An và Colgate. why là các mã lý do mà cloud đã chọn.
 COLGATE = {
-    "student": {"gpa": 3.6, "sat": 1350, "budget": 50000, "tier": 3, "major": "Computer and information sciences"},
+    "student": {
+        "gpa": 3.6,
+        "sat": 1350,
+        "budget": 50000,
+        "tier": 3,
+        "major": "Computer and information sciences",
+    },
     "school": {
-        "name": "Colgate University", "state": "NY", "control": "private",
-        "g2": "RF", "blk": "AID",
+        "name": "Colgate University",
+        "state": "NY",
+        "control": "private",
+        "g2": "RF",
+        "blk": "AID",
         "why": ["GPA_LOW", "SAT_BELOW", "NEED_AID", "INTL_LOW"],
-        "acc": 0.175, "sat25": 1450, "sat75": 1510, "pg": 17, "ps": 0, "cost": 95610, "gap": 45610,
+        "acc": 0.175,
+        "sat25": 1450,
+        "sat75": 1510,
+        "pg": 17,
+        "ps": 0,
+        "cost": 95610,
+        "gap": 45610,
     },
 }
 

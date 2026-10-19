@@ -4,17 +4,16 @@ import httpx  # gửi request đến ollama
 from fastapi import Depends, FastAPI
 
 from app.api.deps import require_api_key
-from app.api.routes import health, profile
-from app.core.config import get_settings
-from app.services.ollama import OllamaClient
-from app.services.transcript_reader import TranscriptReader
-from app.services.ec_reader import EcReader
 from app.api.routes import health, profile, recommend
-
-from app.services.gemini import GeminiClient
-from app.services.scorer import Scorer
-from app.services.picker import Picker
+from app.core.config import get_settings
+from app.services.ec_reader import EcReader
 from app.services.explainer import Explainer
+from app.services.gemini import GeminiClient
+from app.services.ollama import OllamaClient
+from app.services.picker import Picker
+from app.services.scorer import Scorer
+from app.services.transcript_reader import TranscriptReader
+
 
 # Khai báo vòng đơi fastapi
 @asynccontextmanager
@@ -24,10 +23,8 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     # Tạo kết nối Http đến ollama
     async with (
-    httpx.AsyncClient(
-        base_url=settings.ollama_base_url, timeout=settings.llm_timeout_seconds
-    ) as http,
-    httpx.AsyncClient(base_url=settings.gemini_base_url, timeout=180) as gemini_http,
+        httpx.AsyncClient(base_url=settings.ollama_base_url, timeout=settings.llm_timeout_seconds) as http,
+        httpx.AsyncClient(base_url=settings.gemini_base_url, timeout=180) as gemini_http,
     ):
         app.state.llm = OllamaClient(
             http,

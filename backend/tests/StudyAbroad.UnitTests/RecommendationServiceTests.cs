@@ -108,6 +108,9 @@ public class RecommendationServiceTests
             return Task.FromResult(new PickResponseDto("1.1", "gemini-test", "OK", [], match, [], aid, []));
         }
 
+        public Task<ExplainResponseDto> ExplainAsync(ExplainRequestDto request, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
         private static ScoreItemDto Item(string code, string g, string g2, double s, double? f, double? gap) =>
             new(code, [0.5, 0.5], 50, "H", 50, 50, 0, s, g, 1, g2, f, 0.1, 0.8, gap);
     }
@@ -127,6 +130,9 @@ public class RecommendationServiceTests
 
         public Task<IReadOnlyList<RecommendSchoolInput>> ListSchoolsAsync(string studyLevel, CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<RecommendSchoolInput>>([]);
+
+        public Task<RecommendSchoolInput?> FindSchoolAsync(string code, string studyLevel, CancellationToken ct = default) =>
+            Task.FromResult<RecommendSchoolInput?>(null);
     }
 
     private sealed class UnusedProfileFlow : IProfileFlowRepository

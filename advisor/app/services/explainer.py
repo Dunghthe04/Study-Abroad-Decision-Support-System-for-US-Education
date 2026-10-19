@@ -1,7 +1,8 @@
 """Tư vấn từng trường: Qwen viết lời từ số đã lưu. Không chấm lại, không đổi nhóm."""
+
 from pathlib import Path
 from typing import Any
-from unittest import result
+
 from app.schemas.explain import (
     ExplainRequest,
     ExplainResponse,
@@ -11,6 +12,7 @@ from app.schemas.explain import (
     explain_schema,
 )
 from app.services.skill_call import SKILLS_DIR, SkillCall
+
 SKILL_PATH = Path(SKILLS_DIR) / "skill_explain.md"
 
 GROUP_LABEL = {
@@ -22,11 +24,13 @@ GROUP_LABEL = {
     "O": "Nhận gần như tất cả",
 }
 
-#Chuyển đổi tiền USD sang định dạng có dấu chấm phân cách hàng nghìn
+
+# Chuyển đổi tiền USD sang định dạng có dấu chấm phân cách hàng nghìn
 def money(value: float | None) -> str:
     return f"{value:,.0f}".replace(",", ".") if value is not None else "?"
 
-#Qwen dựa vào câu mẫu này để viết lời giải thích cho từng trường, dựa vào số đã lưu trong cơ sở dữ liệu.
+
+# Qwen dựa vào câu mẫu này để viết lời giải thích cho từng trường, dựa vào số đã lưu trong cơ sở dữ liệu.
 def fact_of(code: str, st: ExplainStudent, sc: ExplainSchool) -> str:
     """Đổi một mã lý do thành câu đúng. Qwen chỉ diễn đạt lại, không so sánh."""
     gpa = f"GPA {st.gpa}" if st.gpa is not None else "GPA"
@@ -61,6 +65,7 @@ def fact_of(code: str, st: ExplainStudent, sc: ExplainSchool) -> str:
         return "Ngoại khóa của bạn cần bổ sung cho trường này"
     return ""
 
+
 # Xây dựng danh sách lý do cho từng trường
 def build_facts(req: ExplainRequest) -> list[str]:
     facts = []
@@ -73,15 +78,16 @@ def build_facts(req: ExplainRequest) -> list[str]:
 
     return facts
 
-# Gom dữ liệu thành đúng 1 JSON để gửi QWEN 
+
+# Gom dữ liệu thành đúng 1 JSON để gửi QWEN
 def build_user(req: ExplainRequest) -> dict[str, Any]:
     st, sc = req.student, req.school
     school: dict[str, Any] = {
         "name": sc.name,
         "state": sc.state,
         "control": sc.control,
-        "group": GROUP_LABEL[sc.g2],            # mã g2 → nhãn tiếng Việt
-        "needAid": sc.blk == "AID",             # True nếu trường nằm ở khối học bổng
+        "group": GROUP_LABEL[sc.g2],  # mã g2 → nhãn tiếng Việt
+        "needAid": sc.blk == "AID",  # True nếu trường nằm ở khối học bổng
         "acceptance": round(sc.acc * 100, 1) if sc.acc is not None else None,  # 0–1 → %
         "sat25": sc.sat25,
         "sat75": sc.sat75,
@@ -93,20 +99,23 @@ def build_user(req: ExplainRequest) -> dict[str, Any]:
         "school": {k: v for k, v in school.items() if v is not None},
         "facts": build_facts(req),
     }
+
+
 # Một lượt AI: gửi JSON cho Qwen, kiểm tra kết quả, đóng gói trả về
 class Explainer:
-    def __init__(self, llm: Any, model: str, skill_path: Path = SKILL_PATH)-> None:
-        self._call =SkillCall(llm, model, skill_path)
+    def __init__(self, llm: Any, model: str, skill_path: Path = SKILL_PATH) -> None:
+        self._call = SkillCall(llm, model, skill_path)
         self.skill_version = self._call.skill_version
+
     async def explain(self, req: ExplainRequest) -> ExplainResponse:
         result = await self._call.run(
             build_user(req), explain_schema(), lambda raw: ExplainResult.model_validate(raw)
         )
         return ExplainResponse(
-                skill_version=self.skill_version,
-                model=self._call.model,
-                status="OK" if result is not None else "FAILED",
-                summary=result.summary if result else "",
-                strengths=result.strengths if result else [],
-                improvements=result.improvements if result else [],
-            )
+            skill_version=self.skill_version,
+            model=self._call.model,
+            status="OK" if result is not None else "FAILED",
+            summary=result.summary if result else "",
+            strengths=result.strengths if result else [],
+            improvements=result.improvements if result else [],
+        )
