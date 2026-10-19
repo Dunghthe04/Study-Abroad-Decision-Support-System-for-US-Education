@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using StudyAbroad.Application.Advisor;
 using StudyAbroad.Application.Auth;
 using StudyAbroad.Application.Profile.Financial;
+using StudyAbroad.Application.Recommendations;
 using StudyAbroad.Application.StudyCenters;
 using StudyAbroad.Infrastructure.Advisor;
 using StudyAbroad.Infrastructure.Auth;
@@ -36,6 +37,7 @@ public static class DependencyInjection
         services.AddScoped<StudyAbroad.Application.Profile.Flow.IProfileFlowRepository, ProfileFlowRepository>();
         // [USAS-640] Đăng ký service lưu trữ tệp bảng điểm nháp
         services.AddScoped<StudyAbroad.Application.Profile.Flow.IProfileFileStorageService, StudyAbroad.Infrastructure.Services.ProfileFileStorageService>();
+        services.AddScoped<IRecommendationRepository, RecommendationRepository>();
 
         // [USAS-362] Đăng ký JWT Token Service (Ưu tiên nạp key từ biến môi trường JWT_SECRET_KEY)
         services.Configure<JwtOptions>(options =>
