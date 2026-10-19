@@ -28,6 +28,15 @@ public record SchoolExplaination(
     IReadOnlyList<string> Improvements
 );
 
+// Lời tư vấn một trường, trả cho frontend.
+public record SchoolExplanation(
+    string Code,
+    string Name,
+    string Status,
+    string Summary,
+    IReadOnlyList<string> Strengths,
+    IReadOnlyList<string> Improvements);
+
 public class RecommendationService(IAdvisorClient advisor, IRecommendationRepository recommendations, IProfileFlowRepository profiles)
 
 {
@@ -101,6 +110,7 @@ public class RecommendationService(IAdvisorClient advisor, IRecommendationReposi
         CloudResultCheck.EnsurePick(pickItems, needAid, pick);
         return await SaveAsync(profile, pref, schools, new RecommendationRun(ec.Tier, ec.AiUsed, filtered, score, pick), ct);
     }
+
 
     public async Task<Recommendation> CreateAsync(Guid userId, IReadOnlyList<int>? pref, CancellationToken ct)
     {
@@ -254,9 +264,9 @@ public class RecommendationService(IAdvisorClient advisor, IRecommendationReposi
         var version = run.Pick?.SkillVersion ?? run.Score?.SkillVersion ?? "ec";
         if (version.Length > 32) version = version[..32];
 
-        var universityIds = schools
+        var byCode = schools
             .GroupBy(s => s.University.Code, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(g => g.Key, g => g.First().University.Id, StringComparer.OrdinalIgnoreCase);
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
         var filters = run.Filters.ToDictionary(f => f.School.Code, StringComparer.OrdinalIgnoreCase);
 
         var criteria = new
@@ -277,22 +287,30 @@ public class RecommendationService(IAdvisorClient advisor, IRecommendationReposi
 
         var items = new
         {
-            scored = (run.Score?.Items ?? []).Select(item => new
+            scored = (run.Score?.Items ?? []).Select(item =>
             {
-                universityId = universityIds.GetValueOrDefault(item.C),
-                code = item.C,
-                outcome = filters[item.C].Outcome.ToString(),
-                flags = filters[item.C].Flags,
-                g2 = item.G2,
-                s = item.S,
-                f = item.F,
-                h = item.H,
-                q = item.Q,
-                gap = item.Gap,
-                pg = item.Pg,
-                ps = item.Ps,
-                adj = item.Adj,
-                r = item.R
+                var school = byCode[item.C];
+                return new
+                {
+                    universityId = school.University.Id,
+                    code = item.C,
+                    name = school.University.Name,
+                    state = school.University.State,
+                    control = school.University.Control,
+                    cost = TotalCost(school.Offering),
+                    outcome = filters[item.C].Outcome.ToString(),
+                    flags = filters[item.C].Flags,
+                    g2 = item.G2,
+                    s = item.S,
+                    f = item.F,
+                    h = item.H,
+                    q = item.Q,
+                    gap = item.Gap,
+                    pg = item.Pg,
+                    ps = item.Ps,
+                    adj = item.Adj,
+                    r = item.R
+                };
             }).ToList(),
             failed = run.Score?.Failed ?? [],
             reach = Block(run.Pick?.Reach),
