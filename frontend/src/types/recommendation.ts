@@ -39,6 +39,7 @@ export interface ScoredSchool {
   name: string;
   state: string | null;
   control: string | null; // public | private
+  website?: string | null; // trang chủ của trường; lần gợi ý cũ chưa có
   cost: number | null; // tổng chi phí USD/năm
   outcome: "Keep" | "AidBlock";
   flags: FilterFlag[];

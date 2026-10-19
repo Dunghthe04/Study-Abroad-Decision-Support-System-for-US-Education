@@ -276,6 +276,7 @@ export function ProfileFlowWizard() {
           );
         }
         router.push("/login?redirect=/analysis");
+        router.push("/recommendations?run=1");
         return;
       }
 
@@ -285,7 +286,7 @@ export function ProfileFlowWizard() {
         if (typeof window !== "undefined") {
           localStorage.removeItem("usas_flow_draft");
         }
-        router.push("/analysis");
+        router.push("/recommendations?run=1");
       } else {
         setErrorMessage(res.message || "Không thể hoàn tất lưu hồ sơ.");
       }

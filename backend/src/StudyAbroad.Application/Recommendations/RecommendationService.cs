@@ -297,6 +297,7 @@ public class RecommendationService(IAdvisorClient advisor, IRecommendationReposi
                     name = school.University.Name,
                     state = school.University.State,
                     control = school.University.Control,
+                    website = school.University.Website,
                     cost = TotalCost(school.Offering),
                     outcome = filters[item.C].Outcome.ToString(),
                     flags = filters[item.C].Flags,
