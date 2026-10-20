@@ -196,14 +196,18 @@ const CENTERS = [
 /* =========================================================
    TRẠNG THÁI
    ========================================================= */
-const FIELDS = ['grade','major','budget','gpa','sat','eng','ec','aid'];
-const LABEL = { grade: 'Bậc / lớp', major: 'Ngành', budget: 'Ngân sách / năm', gpa: 'GPA (thang 4)', sat: 'SAT', eng: 'Tiếng Anh', ec: 'Ngoại khóa', aid: 'Cần hỗ trợ tài chính' };
-const REQUIRED = ['grade','major','budget','gpa'];
+const FIELDS = ['grade','target','major','intake','edu','gpa','sat','eng','ec','budget','aid'];
+const LABEL = { grade: 'Bậc hiện tại', target: 'Bậc muốn học', major: 'Ngành', intake: 'Dự định nhập học', edu: 'Chương trình học', gpa: 'GPA (thang 4)', sat: 'SAT', eng: 'Tiếng Anh', ec: 'Ngoại khóa', budget: 'Ngân sách / năm', aid: 'Nhu cầu học bổng' };
+const TARGETS = { HS: 'THPT', COL: 'Cao đẳng', BA: 'Đại học', MA: 'Thạc sĩ', PHD: 'Tiến sĩ', UNK: 'Chưa biết' };
+const EDUS = { VN: 'THPT Việt Nam', IB: 'IB', AL: 'A-level', AP: 'AP' };
+const AIDS = { none: 'Không cần', nice: 'Nên có', must: 'Bắt buộc phải có' };
+const OPTIONAL_OK = ['eng', 'ec', 'sat', 'intake'];
+const REQUIRED = ['grade','target','major','edu','gpa','eng','ec','budget','aid'];
 function freshState() {
   return {
     step: 1, mode: null,
-    p: { grade: '', major: '', budget: null, gpa: null, sat: null, eng: null, ec: [], aid: null },
-    st: {}, pref: 'Cân bằng', sim: '0', sel: null, targets: [],
+    p: { grade: '', target: '', major: '', intake: '', edu: '', budget: null, gpa: null, sat: null, eng: null, ec: [], aid: null },
+    st: {}, skipped: {}, need: null, unclear: 0, lastQ: '', awaitConfirm: null, branchAsked: false, had: [], pref: 'Cân bằng', sim: '0', sel: null, targets: [],
     chat: [], aiAsked: null, dirty: true, ranOnce: false,
     use: { gem: 0, qwen: 0, rule: 0 }, log: [], road: {}, confirmed: false
   };
@@ -220,16 +224,24 @@ const dS = x => clamp(x, 0, 100).toFixed(1);
 const usd = n => Math.round(n).toLocaleString('vi-VN') + ' USD';
 function toast(t) { const e = $('#toast'); e.textContent = t; e.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => e.hidden = true, 2600); }
 function filled(f) { const v = S.p[f]; return f === 'ec' ? v.length > 0 : v !== null && v !== ''; }
-function setField(f, v, status) { S.p[f] = v; S.st[f] = filled(f) ? status : undefined; S.dirty = true; S.confirmed = false; }
-function missingRequired() { return REQUIRED.filter(f => !filled(f)); }
+let touched = [];
+function setField(f, v, status) { touched.push(f); S.p[f] = v; S.st[f] = filled(f) ? status : undefined; S.dirty = true; S.confirmed = false; }
+function answered(f) { return filled(f) || (OPTIONAL_OK.includes(f) && !!S.skipped[f]); }
+function missingRequired() { return REQUIRED.filter(f => !answered(f)); }
+function branchGate() {
+  if (['COL', 'BA'].includes(S.p.target)) return '';
+  return '<div class="panel"><h3>Demo chỉ mô phỏng nhánh Cao đẳng / Đại học</h3><p class="muted">Bậc bạn chọn (' + (TARGETS[S.p.target] || '—') + ') dùng bộ câu hỏi, cách đánh giá và lộ trình riêng (xem framework, phần 3.3). Trong hệ thống thật, code chọn nhánh ở B1. Ở bản demo, hãy chọn Cao đẳng hoặc Đại học để xem tiếp.</p><button class="btn primary" onclick="go(2)">Quay lại nhập hồ sơ</button></div>';
+}
 function fieldText(f) {
   const v = S.p[f];
-  if (!filled(f)) return '—';
+  if (!filled(f)) return S.skipped[f] ? (f === 'ec' ? 'Không có' : 'Chưa có') : '—';
   if (f === 'major') return MAJORS[v];
   if (f === 'budget') return usd(v);
   if (f === 'ec') return v.length + ' hoạt động';
   if (f === 'eng') return v.type + ' ' + v.score;
-  if (f === 'aid') return v ? 'Có' : 'Không';
+  if (f === 'aid') return AIDS[v];
+  if (f === 'target') return TARGETS[v];
+  if (f === 'edu') return EDUS[v];
   if (f === 'grade') return 'Lớp ' + v;
   return v;
 }
@@ -262,7 +274,8 @@ function scoreAt(sch, gpa, sat) {
   return { pg, ps, A, adj, S: A + adj };
 }
 const groupOf = s => s < 25 ? 0 : s <= 75 ? 1 : 2;
-function netCost(sch) { return sch.cost - (S.p.aid ? sch.aid : 0); }
+const wantsAid = () => S.p.aid === 'nice' || S.p.aid === 'must';
+function netCost(sch) { return sch.cost - (wantsAid() ? sch.aid : 0); }
 function need(sch, target) { // suy diễn lùi
   const sc = scoreAt(sch, S.p.gpa, S.p.sat);
   const out = {};
@@ -293,6 +306,7 @@ function compute() {
   const [w1, w2, w3] = PREFS[S.pref], items = [], excluded = [];
   SCHOOLS.forEach(sch => {
     if (!sch.majors.includes(S.p.major)) { excluded.push({ sch, why: 'không có ngành ' + MAJORS[S.p.major] }); return; }
+    if (S.p.aid === 'must' && sch.H < 40) { excluded.push({ sch, why: 'bạn cần học bổng bắt buộc nhưng trường ít hỗ trợ (mức ' + sch.H + '/100)' }); return; }
     const net = netCost(sch);
     if (net > S.p.budget * 1.5) { excluded.push({ sch, why: 'chi phí sau hỗ trợ ' + usd(net) + ' vượt 150% ngân sách' }); return; }
     const sc = scoreAt(sch, S.p.gpa, S.p.sat), ruleG = groupOf(sc.S);
@@ -320,88 +334,183 @@ function runRecommend(reason) {
 }
 
 /* =========================================================
-   CHAT: phân tích hồ sơ + ý định
+   CHAT: router (nhãn) -> code quyết định bước (theo framework B0..B6)
    ========================================================= */
+const NEXTQ = {
+  grade: 'Hiện bạn đang học lớp mấy, hoặc đang làm gì? (B1.1)',
+  target: 'Bạn muốn sang Mỹ học bậc nào? (THPT, cao đẳng, đại học, thạc sĩ, tiến sĩ, hoặc chưa biết) (B1.2)',
+  major: 'Bạn định học ngành gì? Chưa chắc cũng không sao, bạn cứ kể vài môn bạn thích. (B1.3)',
+  intake: 'Bạn dự định nhập học khoảng khi nào? Ví dụ "mùa thu 2027", hoặc nói "chưa rõ". (B1.4)',
+  edu: 'Bạn học chương trình nào: THPT Việt Nam, IB, A-level hay AP? (D1)',
+  gpa: 'Điểm trung bình các học kỳ của bạn là bao nhiêu? Thang 4 hay thang 10 đều được. (D2)',
+  sat: 'Bạn đã thi SAT hoặc ACT chưa? Nếu rồi thì được bao nhiêu điểm? (D3)',
+  eng: 'Bạn đã có chứng chỉ tiếng Anh nào chưa (IELTS, TOEFL)? Điểm bao nhiêu? (E1)',
+  ec: 'Bạn kể giúp mình các hoạt động ngoại khóa: tên hoạt động, vai trò, làm trong bao lâu. Không có cũng được. (D4)',
+  budget: 'Gia đình bạn có thể chi khoảng bao nhiêu mỗi năm cho cả học phí và sinh hoạt? (F1)',
+  aid: 'Bạn cần học bổng ở mức nào: không cần, nên có, hay bắt buộc phải có mới đi được? (F2)'
+};
+const ASK_ORDER = ['grade','target','major','intake','edu','budget','aid','gpa','sat','eng','ec'];
+function nextQuestion() {
+  for (const f of ASK_ORDER) if (!answered(f)) { S.aiAsked = f; S.lastQ = NEXTQ[f]; return NEXTQ[f]; }
+  S.aiAsked = null; return null;
+}
+function tool(name, cls, note) { return '<div class="chipline"><span class="tag ' + cls + '">Công cụ: ' + name + '</span><span class="src"> ' + note + '</span></div>'; }
+function say(cls, html) { S.chat.push({ cls, html }); }
+function cbtn(label) { return '<button class="btn small" style="margin:4px 4px 0 0" onclick="send(this.textContent)">' + label + '</button>'; }
+
+/* --- đọc thông tin học sinh tự nói (info_given) --- */
 function parseProfile(text) {
   const t = text.toLowerCase(), ch = [];
   if (/(nếu|giả sử|thì sao|what if)/.test(t) && !/(em|tôi|mình) (đã|vừa)/.test(t)) return ch;
   let m;
   if ((m = t.match(/lớp\s*(10|11|12)/))) { setField('grade', m[1], 'said'); ch.push('lớp ' + m[1]); }
-  if ((m = t.match(/sat\s*[:=]?\s*(\d{3,4})/)) && +m[1] >= 400 && +m[1] <= 1600) { setField('sat', +m[1], 'said'); ch.push('SAT ' + m[1]); }
-  if ((m = t.match(/gpa\s*[:=]?\s*(\d+(?:[.,]\d+)?)/))) { let g = parseFloat(m[1].replace(',', '.')); if (g > 4 && g <= 10) g = Math.round(g / 10 * 4 * 100) / 100; if (g > 0 && g <= 4) { setField('gpa', g, 'said'); ch.push('GPA ' + g); } }
-  if ((m = t.match(/ielts\s*[:=]?\s*(\d(?:[.,]\d)?)/))) { setField('eng', { type: 'IELTS', score: m[1].replace(',', '.') }, 'said'); ch.push('IELTS ' + m[1]); }
+  if (/(thpt|high school|trung học)/.test(t) && /(muốn|học)/.test(t) && !/lớp\s*\d/.test(t) && !/việt nam/.test(t)) { setField('target', 'HS', 'said'); ch.push('bậc THPT'); }
+  else if (/(cao đẳng)/.test(t)) { setField('target', 'COL', 'said'); ch.push('bậc cao đẳng'); }
+  else if (/(thạc sĩ|master)/.test(t)) { setField('target', 'MA', 'said'); ch.push('bậc thạc sĩ'); }
+  else if (/(tiến sĩ|phd)/.test(t)) { setField('target', 'PHD', 'said'); ch.push('bậc tiến sĩ'); }
+  else if (/(học đại học|vào đại học|lên đại học|bậc đại học|undergrad|bachelor|muốn.{0,10}đại học)/.test(t)) { setField('target', 'BA', 'said'); ch.push('bậc đại học'); }
+  else if (S.aiAsked === 'target' && /(chưa biết|chưa rõ|không biết)/.test(t)) {
+    const g = +S.p.grade; setField('target', g >= 11 ? 'BA' : 'HS', 'said'); ch.push('bậc ' + (g >= 11 ? 'đại học' : 'THPT') + ' (code gợi ý theo lớp ' + (g || '?') + ', bạn xác nhận nhé)');
+  }
+  if ((m = t.match(/(mùa )?(thu|xuân|fall|spring)\s*(20\d\d)/))) { setField('intake', (/(thu|fall)/.test(m[2]) ? 'Fall ' : 'Spring ') + m[3], 'said'); ch.push('nhập học ' + S.p.intake); }
+  if (/\b(ib|a-level|alevel)\b/.test(t) || /thpt việt nam/.test(t) || /\bap\b/.test(t)) {
+    const k = /\bib\b/.test(t) ? 'IB' : /a-?level/.test(t) ? 'AL' : /thpt việt nam/.test(t) ? 'VN' : 'AP';
+    const key = { IB: 'IB', AL: 'AL', VN: 'VN', AP: 'AP' }[k]; setField('edu', key, 'said'); ch.push('chương trình ' + EDUS[key]);
+  }
+  if ((m = t.match(/sat(?:\s+em)?\s*(?:được|là|[:=])?\s*(\d{3,4})/)) && +m[1] >= 400 && +m[1] <= 1600) { setField('sat', +m[1], 'said'); ch.push('SAT ' + m[1]); }
+  if ((m = t.match(/gpa(?:\s+em)?\s*(?:được|là|[:=])?\s*(\d+(?:[.,]\d+)?)/))) { let g = parseFloat(m[1].replace(',', '.')); if (g > 4 && g <= 10) g = Math.round(g / 10 * 4 * 100) / 100; if (g > 0 && g <= 4) { setField('gpa', g, 'said'); ch.push('GPA ' + g); } }
+  if ((m = t.match(/ielts(?:\s+em)?\s*(?:được|là|[:=])?\s*(\d(?:[.,]\d)?)/))) { setField('eng', { type: 'IELTS', score: m[1].replace(',', '.') }, 'said'); ch.push('IELTS ' + m[1]); }
   else if ((m = t.match(/toefl\s*[:=]?\s*(\d{2,3})/))) { setField('eng', { type: 'TOEFL', score: m[1] }, 'said'); ch.push('TOEFL ' + m[1]); }
-  if ((m = t.match(/(\d[\d.,]*)\s*(nghìn|ngàn|k)\b/)) ) { setField('budget', parseFloat(m[1].replace(',', '.')) * 1000, 'said'); ch.push('ngân sách ' + m[1] + ' nghìn USD'); }
+  if ((m = t.match(/(\d[\d.,]*)\s*(nghìn|ngàn|k)\b/))) { setField('budget', parseFloat(m[1].replace(',', '.')) * 1000, 'said'); ch.push('ngân sách ' + m[1] + ' nghìn USD'); }
   else if ((m = t.match(/ngân sách\s*[:=]?\s*(\d[\d.,]{3,})/))) { setField('budget', +m[1].replace(/[.,]/g, ''), 'said'); ch.push('ngân sách ' + m[1]); }
-  const mj = [['CS', /(\bcs\b|khoa học máy tính|công nghệ thông tin|\bit\b)/], ['BUS', /(kinh doanh|business)/], ['ENG', /(kỹ thuật|engineering)/], ['BIO', /(sinh học|biology)/], ['ART', /(nghệ thuật|\bart\b)/]];
-  for (const [k, re] of mj) if (re.test(t) && /(ngành|học|muốn|chọn|theo)/.test(t)) { setField('major', k, 'said'); ch.push('ngành ' + MAJORS[k]); break; }
-  if (/(cần|xin).{0,12}(học bổng|hỗ trợ tài chính)/.test(t) && !/nhiều/.test(t)) { setField('aid', true, 'said'); ch.push('cần hỗ trợ tài chính'); }
-  if (/(không cần).{0,12}(học bổng|hỗ trợ)/.test(t)) { setField('aid', false, 'said'); ch.push('không cần hỗ trợ'); }
+  const mj = [['CS', /(\bcs\b|khoa học máy tính|công nghệ thông tin)/], ['BUS', /(kinh doanh|business)/], ['ENG', /(kỹ thuật|engineering)/], ['BIO', /(sinh học|biology)/], ['ART', /(nghệ thuật|\bart\b)/]];
+  for (const [k, re] of mj) if (re.test(t) && /(ngành|học|muốn|chọn|theo|thích)/.test(t)) { setField('major', k, 'said'); ch.push('ngành ' + MAJORS[k]); break; }
+  if (/(bắt buộc|phải có).{0,14}(học bổng|hỗ trợ)/.test(t)) { setField('aid', 'must', 'said'); ch.push('học bổng: bắt buộc phải có'); }
+  else if (/(không cần).{0,12}(học bổng|hỗ trợ)/.test(t)) { setField('aid', 'none', 'said'); ch.push('học bổng: không cần'); }
+  else if (/(cần|xin|nên có).{0,12}(học bổng|hỗ trợ tài chính)/.test(t) && !/nhiều/.test(t)) { setField('aid', 'nice', 'said'); ch.push('học bổng: nên có'); }
   if (/(đội trưởng|chủ tịch|câu lạc bộ|clb|tình nguyện|thành lập|giải (nhất|nhì|ba)|olympiad)/.test(t) && !/\?/.test(t)) {
     const y = (t.match(/(\d)\s*năm/) || [])[1] || 1, r = readEC(text, +y);
-    S.p.ec.push({ text: text.trim(), years: +y, tier: r.tier, why: r.why }); S.st.ec = 'said'; S.dirty = true; S.confirmed = false; ch.push('1 hoạt động ngoại khóa (tier ' + r.tier + ')');
+    S.p.ec.push({ text: text.trim(), years: +y, tier: r.tier, why: r.why }); S.st.ec = 'said'; S.dirty = true; S.confirmed = false; touched.push('ec'); delete S.skipped.ec; ch.push('1 hoạt động ngoại khóa (tier ' + r.tier + ')');
   }
   return ch;
 }
-const NEXTQ = {
-  grade: 'Bạn đang học lớp mấy (10, 11 hay 12)?',
-  major: 'Bạn muốn học ngành nào? (khoa học máy tính, kinh doanh, kỹ thuật, sinh học, nghệ thuật)',
-  budget: 'Ngân sách mỗi năm của gia đình khoảng bao nhiêu? (ví dụ: 50 nghìn)',
-  gpa: 'GPA của bạn là bao nhiêu? (thang 4 hoặc thang 10 đều được)',
-  sat: 'Bạn đã thi SAT chưa? Nếu rồi, cho mình điểm nhé. (Chưa có cũng được, nhưng độ tin cậy sẽ giảm.)',
-  eng: 'Điểm tiếng Anh (IELTS hoặc TOEFL) của bạn?',
-  ec: 'Bạn có hoạt động ngoại khóa nổi bật nào không? Kể cả vai trò và số năm tham gia.'
-};
-function nextQuestion() {
-  const order = ['grade','major','budget','gpa','sat','eng','ec'];
-  for (const f of order) if (!filled(f) && S.aiAsked !== f) { S.aiAsked = f; return NEXTQ[f]; }
-  return null;
-}
-function tool(name, cls, note) { return '<div class="chipline"><span class="tag ' + cls + '">Công cụ: ' + name + '</span><span class="src"> ' + note + '</span></div>'; }
-function say(cls, html) { S.chat.push({ cls, html }); }
 
+/* --- skill router: chỉ gắn nhãn, không trả lời --- */
+const RE_KNOW = /(là gì|nghĩa là|cần mang gì|khác nhau|visa|i-?20|chi phí du học|giấy tờ|việc làm|need-?based|merit|\bed\b|\bea\b|early|common app|css profile|thông tin du học|f-?1)/;
+const RE_SERV = /(sửa (bài )?luận|nộp hồ sơ (hộ|giúp)|luyện phỏng vấn|làm hồ sơ visa|hỗ trợ làm hồ sơ|dịch vụ|có.{0,8}trung tâm)/;
+function route(t, changed) {
+  const L = [];
+  if (changed.length) L.push(/(nhầm|thật ra|sửa lại|đổi lại|chứ không phải)/.test(t) && touched.some(f => S.had.includes(f)) ? 'change_info' : 'answer');
+  if (RE_KNOW.test(t) && !/(nếu|thì sao)/.test(t) && !/học bổng nhiều/.test(t)) L.push('knowledge_q');
+  if (RE_SERV.test(t)) L.push('service_req');
+  if (/(vậy là đủ|tạm biệt|\bbye\b|thôi nhé|kết thúc|cảm ơn.{0,20}(đủ|thôi))/.test(t)) L.push('end');
+  if (!L.length) {
+    if (S.aiAsked && /^(đúng|ok|ừ|vâng|chuẩn|rồi)/.test(t)) L.push('answer');
+    else if (S.aiAsked && OPTIONAL_OK.includes(S.aiAsked) && /(chưa|không có|không)/.test(t)) L.push('answer');
+    else L.push('other');
+  }
+  const ord = ['answer', 'change_info', 'knowledge_q', 'service_req', 'end', 'other'];
+  return ord.filter(x => L.includes(x));
+}
+function knowledge(t) {
+  if (/need-?based/.test(t)) return 'Học bổng dựa trên khả năng tài chính của gia đình. Nhiều trường tư cấp cho du học sinh, mức khác nhau tuỳ trường.';
+  if (/merit/.test(t)) return 'Học bổng dựa trên thành tích học tập hoặc hoạt động, không phụ thuộc thu nhập gia đình.';
+  if (/(\bed\b|early)/.test(t)) return 'Early Decision: nộp sớm, nếu đậu thì bắt buộc nhập học. Chỉ chọn 1 trường và chỉ khi chắc về tài chính.';
+  if (/(i-?20)/.test(t)) return 'I-20 là giấy do trường cấp sau khi bạn nhập học, dùng để xin visa F-1 và chứng minh bạn được nhận.';
+  if (/(visa|f-?1)/.test(t)) return 'F-1 là visa du học. Cần giấy I-20 của trường, chứng minh tài chính, và phỏng vấn tại lãnh sự quán.';
+  if (/(chi phí)/.test(t)) return 'Chi phí gồm học phí, sinh hoạt, bảo hiểm và vé máy bay. Mức cụ thể khác nhau tuỳ trường và bang, bạn xem ở bước gợi ý trường.';
+  if (/(giấy tờ)/.test(t)) return 'Thường cần học bạ, chứng chỉ tiếng Anh, bài luận, thư giới thiệu, và giấy tờ tài chính. Mỗi trường có danh sách riêng.';
+  if (/(việc làm)/.test(t)) return 'Sinh viên F-1 thường được làm thêm trong khuôn viên trường, giới hạn số giờ. Làm ngoài trường cần điều kiện riêng.';
+  return 'Đây là kiến thức chung về du học Mỹ. Mình trả lời từ tài liệu đã duyệt, hiện demo có sẵn: visa F-1, I-20, need-based, merit, ED, chi phí, giấy tờ, việc làm.';
+}
+function kb(t) { S.use.qwen++; return knowledge(t) + '<div class="src" style="margin-top:4px">Nguồn: tài liệu đã duyệt (minh hoạ)</div>' + tool('B5 knowledge (RAG)', 't-qwen', 'chỉ trả lời từ tài liệu đã duyệt, kèm nguồn'); }
+
+/* --- tin nhắn đầu tiên: B0 nhu cầu --- */
+function classifyNeed(t, changed) {
+  if (RE_SERV.test(t)) return 'service';
+  if (RE_KNOW.test(t) && !/(trường|lộ trình|hồ sơ của em)/.test(t)) return 'knowledge';
+  if (changed.length || /(trường|lộ trình|đánh giá hồ sơ|đi được|nên học|xem hồ sơ|gợi ý|du học)/.test(t)) return 'profile_advice';
+  return 'unclear';
+}
+function b0Buttons() { return cbtn('Tìm trường, lộ trình hợp với mình') + cbtn('Hỏi thông tin du học') + cbtn('Cần hỗ trợ làm hồ sơ'); }
+function B0(text, t, changed) {
+  const need = classifyNeed(t, changed);
+  const chip = tool('B0_nhu_cau', 't-qwen', 'need = ' + need + (changed.length ? ', info_given đã ghi (học sinh tự nói, chưa xác nhận)' : ''));
+  if (need === 'profile_advice') {
+    S.need = need; S.unclear = 0;
+    let h = (changed.length ? 'Mình đã ghi vào hồ sơ: ' + changed.join(', ') + '. Mình sẽ chỉ hỏi xác nhận phần bạn đã nói, không hỏi lại.' : 'Được, mình sẽ hỏi vài câu để hiểu hồ sơ của bạn nhé.');
+    const q = nextQuestion(); h += '<div style="margin-top:6px">' + q + '</div>';
+    say('a', h + chip); return;
+  }
+  if (need === 'knowledge') { say('a', kb(t) + '<div style="margin-top:6px">Bạn có muốn mình xem hồ sơ và gợi ý trường không?</div>' + cbtn('Có, tìm trường cho em') + chip); return; }
+  if (need === 'service') { say('a', 'Mình hiểu bạn cần hỗ trợ làm hồ sơ. Mình chuyển bạn sang danh sách trung tâm phù hợp ở bước 6, xếp theo độ phù hợp chứ không theo phí.' + tool('B6 chuyển trung tâm', 't-ui', 'không chào bán') + '<button class="btn small" onclick="go(6)">Mở bước 6</button>' + chip); return; }
+  S.unclear++;
+  if (S.unclear === 1) say('a', 'Bạn muốn mình tìm trường theo hồ sơ của bạn, hay bạn đang có câu hỏi cụ thể? (B0.2)' + chip);
+  else say('a', 'Bạn bấm chọn một hướng nhé:<div>' + b0Buttons() + '</div>' + chip);
+}
+
+/* --- từ bước 2 trở đi: xử lý theo nhãn, thứ tự cố định --- */
 function reply(text) {
   say('u', esc(text));
-  const t = text.toLowerCase();
+  const t = text.toLowerCase(), n0 = S.chat.length;
+  S.had = FIELDS.filter(filled); touched = [];
   const changed = parseProfile(text);
-  if (changed.length) {
-    let h = 'Mình đã ghi vào hồ sơ: ' + changed.join(', ') + '.' + tool('router + điền hồ sơ', 't-qwen', 'Qwen gắn nhãn, code quyết định bước tiếp theo');
-    if (S.step >= 4 && S.ranOnce) { runRecommend(); h += '<div style="margin-top:6px">Hồ sơ thay đổi nên mình đã chấm lại, danh sách bên cạnh đã cập nhật.</div>' + tool('recommend', 't-ai', 'cùng bộ máy với form'); }
-    else if (S.step === 2) {
+  const labels = route(t, changed);
+  const rc = tool('router', 't-qwen', 'nhãn: ' + labels.join(' + ') + ' (Qwen gắn nhãn, code quyết định bước)');
+  if (!S.need && S.step <= 2) { B0(text, t, changed); finish(n0, ''); return; }
+  const parts = [];
+  if (labels.includes('answer')) {
+    if (!changed.length && S.aiAsked && OPTIONAL_OK.includes(S.aiAsked) && /(chưa|không có|không)/.test(t)) { S.skipped[S.aiAsked] = true; S.dirty = true; parts.push('Mình ghi là ' + (S.aiAsked === 'ec' ? 'không có hoạt động' : 'chưa có') + ' (độ tin cậy kết quả sẽ giảm nhẹ).'); }
+    if (S.awaitConfirm === 'branch' && /^(đúng|ok|ừ|vâng|chuẩn|rồi)/.test(t)) { S.awaitConfirm = null; ['grade', 'target'].forEach(f => { if (filled(f)) S.st[f] = 'ok'; }); parts.push('Đã xác nhận bậc học và nhánh.'); }
+    if (changed.length) parts.push('Mình đã ghi vào hồ sơ: ' + changed.join(', ') + '.' + tool('điền hồ sơ', 't-qwen', 'đúng trường, trạng thái "học sinh tự nói"'));
+  }
+  if (labels.includes('change_info')) parts.push('Mình đã sửa lại: ' + changed.join(', ') + '.' + (S.ranOnce && S.step < 4 ? ' Vì đã có kết quả trước đó, mình sẽ chạy lại B3 và B4.' : ''));
+  if (labels.includes('knowledge_q')) parts.push(kb(t));
+  if (labels.includes('service_req')) parts.push('Về dịch vụ hỗ trợ, mình có danh sách trung tâm phù hợp ở bước 6, không chào bán.' + tool('B6 chuyển trung tâm', 't-ui', 'chỉ gợi ý') + '<button class="btn small" onclick="go(6)">Mở bước 6</button>');
+  if (labels.includes('end')) { parts.push('Cảm ơn bạn! Hồ sơ của bạn đã được lưu, bạn quay lại lúc nào cũng được.'); say('a', parts.join('<div style="height:6px"></div>')); finish(n0, rc); return; }
+  if (changed.length && S.step >= 4 && S.ranOnce) { runRecommend(); parts.push('Hồ sơ thay đổi nên mình đã chấm lại, danh sách bên cạnh đã cập nhật.' + tool('recommend', 't-ai', 'cùng bộ máy với form')); }
+  if (labels.includes('other')) {
+    const greet = /(^|\s)(hi|hello|chào|xin chào|alo|hey)(\s|$|[!,.])/.test(t) || /(bạn là ai|ai vậy)/.test(t);
+    if (greet) parts.push(/(bạn là ai|ai vậy)/.test(t) ? 'Mình là trợ lý tư vấn du học Mỹ của hệ thống. Mình giúp bạn tìm trường, lập lộ trình và giải đáp thắc mắc. Mình không thay quyết định của bạn và không hứa chắc đỗ.' : 'Chào bạn!');
+    else if (S.step >= 3) { if (!handleTools(text, t, parts)) parts.push('Câu này nằm ngoài phần mình hỗ trợ trong phiên này. Bạn có thể hỏi: vì sao trường X xếp vậy, cần bổ sung gì, nếu SAT lên 1450 thì sao, đổi ưu tiên chi phí/học bổng/danh tiếng, hoặc hỏi kiến thức như need-based, visa, I-20.'); }
+    else if (!(S.awaitConfirm === 'branch' && /^(chưa|không|sai)/.test(t))) parts.push('Mình chưa hiểu ý này lắm.');
+  }
+  if (S.step === 2) {
+    if (S.awaitConfirm === 'branch' && /^(chưa|không|sai)/.test(t)) {
+      S.awaitConfirm = null; S.branchAsked = false; S.p.grade = ''; S.p.target = ''; delete S.st.grade; delete S.st.target; S.aiAsked = null;
+      parts.push('Mình hỏi lại nhé. ' + nextQuestion());
+    } else if (filled('grade') && filled('target') && S.awaitConfirm === null && !S.branchAsked) {
+      S.branchAsked = true; S.awaitConfirm = 'branch';
+      const nm = { HS: 'THPT', COL: 'CĐ/ĐH', BA: 'CĐ/ĐH', MA: 'Thạc sĩ', PHD: 'Tiến sĩ' }[S.p.target];
+      parts.push('Mình hiểu bạn đang học lớp ' + S.p.grade + ' và muốn học ' + TARGETS[S.p.target].toLowerCase() + ', đúng không?' + tool('chọn nhánh', 't-rule', 'code chọn: nhánh ' + nm + ' (AI không chọn)') + cbtn('Đúng rồi') + cbtn('Chưa đúng'));
+    } else if (S.awaitConfirm !== 'branch') {
       const q = nextQuestion();
-      h += q ? '<div style="margin-top:6px">' + q + '</div>' : '<div style="margin-top:6px">Đủ thông tin cần thiết rồi. Bạn xác nhận lại ở khung bên trái, rồi bấm "Xem đánh giá hồ sơ".</div>';
+      if (q) parts.push((labels.includes('other') || labels.includes('knowledge_q') ? 'Quay lại câu đang hỏi: ' : '') + q);
+      else parts.push('Đủ thông tin cần thiết rồi. Bạn xác nhận lại ở khung bên trái, rồi bấm "Xem đánh giá hồ sơ".' + tool('kiểm tra đủ thông tin', 't-rule', 'code kiểm, không phải AI'));
     }
-    say('a', h); return;
   }
-  if (S.step === 2 && /(bắt đầu|xin chào|chào)/.test(t)) { const q = nextQuestion(); say('a', 'Chào bạn! ' + (q || '')); return; }
-  const need_ = S.p.gpa !== null && S.p.major && S.p.budget !== null;
-  if (!need_ && S.step >= 3) { say('a', 'Hồ sơ chưa đủ để chấm. Bạn bổ sung giúp mình: ' + missingRequired().map(f => LABEL[f]).join(', ') + '.'); return; }
-  const items = need_ ? compute().items : [];
-  const cur = items.find(i => i.sch.id === S.sel);
-  if (/(là gì|nghĩa là|khác nhau|need-?based|merit|\bed\b|\bea\b|early|common app|css profile|f-?1|visa)/.test(t)) {
-    S.use.qwen++;
-    const ans = /need-?based/.test(t) ? 'Học bổng dựa trên khả năng tài chính của gia đình. Nhiều trường tư cấp cho du học sinh, mức khác nhau tuỳ trường.'
-      : /merit/.test(t) ? 'Học bổng dựa trên thành tích học tập hoặc hoạt động, không phụ thuộc thu nhập gia đình.'
-      : /(\bed\b|early)/.test(t) ? 'Early Decision: nộp sớm, nếu đậu thì bắt buộc nhập học. Chỉ chọn 1 trường và chỉ khi chắc về tài chính.'
-      : /(visa|f-?1)/.test(t) ? 'F-1 là visa du học. Cần giấy I-20 của trường sau khi nhập học và chứng minh tài chính.'
-      : 'Đây là khái niệm trong quy trình xin học Mỹ. Mình trả lời từ tài liệu đã duyệt của hệ thống.';
-    say('a', ans + '<div class="src" style="margin-top:4px">Nguồn: tài liệu đã duyệt (minh hoạ)</div>' + tool('knowledge (RAG)', 't-qwen', 'chỉ trả lời từ tài liệu đã duyệt, kèm nguồn')); return;
-  }
-  if (/(trung tâm|nộp hồ sơ giúp|sửa luận)/.test(t)) { say('a', 'Mình mở danh sách trung tâm phù hợp ở bước 6. Xếp theo độ phù hợp, không theo phí.' + tool('centers', 't-ui', 'không chào bán, không xếp theo thanh toán') + '<button class="btn small" onclick="go(6)">Mở bước 6</button>'); return; }
-  if (/(lộ trình|kế hoạch|deadline|hạn nộp|timeline)/.test(t)) { say('a', 'Mình có lộ trình theo mục tiêu của bạn ở bước 5.' + tool('roadmap', 't-rule', 'tính từ hạn nộp và khoảng cách điểm') + '<button class="btn small" onclick="go(5)">Mở bước 5</button>'); return; }
+  if (!parts.length) parts.push(S.awaitConfirm === 'branch' ? 'Bạn xác nhận giúp mình: đúng hay chưa đúng?' + cbtn('Đúng rồi') + cbtn('Chưa đúng') : 'Mình chưa hiểu ý này lắm.');
+  say('a', parts.join('<div style="height:6px"></div>'));
+  finish(n0, rc);
+}
+function finish(n0, rc) { const first = S.chat.slice(n0).find(m => m.cls === 'a'); if (first) first.html += rc; }
+
+/* --- công cụ từ bước 3 trở đi --- */
+function handleTools(text, t, parts) {
+  const ok = S.p.gpa !== null && S.p.major && S.p.budget !== null;
+  if (!ok) { parts.push('Hồ sơ chưa đủ để chấm. Bạn bổ sung giúp mình: ' + missingRequired().map(f => LABEL[f]).join(', ') + '.'); return true; }
+  const items = compute().items, cur = items.find(i => i.sch.id === S.sel);
+  if (/(lộ trình|kế hoạch|deadline|hạn nộp|timeline)/.test(t)) { parts.push('Mình có lộ trình theo mục tiêu của bạn ở bước 5.' + tool('roadmap', 't-rule', 'tính từ hạn nộp và khoảng cách điểm') + '<button class="btn small" onclick="go(5)">Mở bước 5</button>'); return true; }
   const sw = t.match(/sat\s*(?:lên|là|=|:)?\s*(\d{3,4})/);
   if (cur && /(nếu|giả sử|thì sao)/.test(t) && sw) {
-    const v = +sw[1]; S.use.rule++;
-    const a = cur.sc.S, b = scoreAt(cur.sch, S.p.gpa, v).S;
-    say('a', 'Với ' + esc(cur.sch.name) + ': độ mạnh hồ sơ ' + dS(a) + ' → ' + dS(b) + ' (' + GROUPS[groupOf(a)] + ' → ' + GROUPS[groupOf(b)] + '). Mô phỏng theo mô hình luật, không ghi đè hồ sơ thật.' + tool('what-if', 't-rule', 'chạy trên bản sao tạm, không tốn lượt AI')); return;
+    const v = +sw[1]; S.use.rule++; const a = cur.sc.S, b = scoreAt(cur.sch, S.p.gpa, v).S;
+    parts.push('Với ' + esc(cur.sch.name) + ': độ mạnh hồ sơ ' + dS(a) + ' → ' + dS(b) + ' (' + GROUPS[groupOf(a)] + ' → ' + GROUPS[groupOf(b)] + '). Mô phỏng theo mô hình luật, không ghi đè hồ sơ thật.' + tool('what-if', 't-rule', 'chạy trên bản sao tạm, không tốn lượt AI')); return true;
   }
-  if (/(rẻ|chi phí thấp|tiết kiệm)/.test(t)) return doPref('Chi phí thấp', 'chat');
-  if (/(học bổng nhiều|nhiều học bổng|ưu tiên học bổng)/.test(t)) return doPref('Học bổng nhiều', 'chat');
-  if (/(danh tiếng|top|uy tín)/.test(t)) return doPref('Danh tiếng', 'chat');
-  if (/(cân bằng)/.test(t)) return doPref('Cân bằng', 'chat');
-  if (cur && /(vì sao|tại sao|giải thích)/.test(t)) { S.use.qwen++; say('a', 'Theo kết quả đã lưu của ' + esc(cur.sch.name) + ': ' + cur.facts.join('; ') + '.' + tool('explain', 't-qwen', 'Qwen viết lời từ các câu đã kiểm tra, không tự so sánh số')); return; }
-  if (cur && /(cần|bổ sung|thiếu|làm sao|cải thiện)/.test(t)) { S.use.rule++; say('a', backText(cur).join(' ') + tool('gap (suy diễn lùi)', 't-rule', 'mô hình luật, không tốn lượt AI')); return; }
-  say('a', 'Câu này nằm ngoài những gì mình hỗ trợ được trong phiên này. Bạn có thể hỏi: vì sao trường X xếp vậy, cần bổ sung gì, nếu SAT lên 1450 thì sao, đổi ưu tiên chi phí/học bổng/danh tiếng, hoặc giải thích khái niệm như need-based.');
+  const pf = /(rẻ|chi phí thấp|tiết kiệm)/.test(t) ? 'Chi phí thấp' : /(học bổng nhiều|nhiều học bổng|ưu tiên học bổng)/.test(t) ? 'Học bổng nhiều' : /(danh tiếng|uy tín|\btop\b)/.test(t) ? 'Danh tiếng' : /cân bằng/.test(t) ? 'Cân bằng' : null;
+  if (pf) { S.pref = pf; S.use.gem++; S.use.rule++; parts.push('Đã đổi thứ tự trong từng khối theo "' + pf + '". Không lọc lại, không chấm lại, nhóm của từng trường không đổi.' + tool('repick', 't-ai', 'chỉ gọi lại lượt chọn (1 lượt AI)')); return true; }
+  if (cur && /(vì sao|tại sao|giải thích)/.test(t)) { S.use.qwen++; parts.push('Theo kết quả đã lưu của ' + esc(cur.sch.name) + ': ' + cur.facts.join('; ') + '.' + tool('explain', 't-qwen', 'Qwen viết lời từ các câu đã kiểm tra, không tự so sánh số')); return true; }
+  if (cur && /(cần|bổ sung|thiếu|làm sao|cải thiện)/.test(t)) { S.use.rule++; parts.push(backText(cur).join(' ') + tool('gap (suy diễn lùi)', 't-rule', 'mô hình luật, không tốn lượt AI')); return true; }
+  return false;
 }
 function doPref(p, from) {
   S.pref = p; S.use.gem++; S.use.rule++;
@@ -426,8 +535,8 @@ function renderStepper() {
   $('#stepper').innerHTML = STEPS.map((s, i) => '<button class="step ' + (S.step === i + 1 ? 'on' : S.step > i + 1 ? 'done' : '') + '" onclick="go(' + (i + 1) + ')"><span class="n">' + (i + 1) + '</span>' + s + '</button>').join('');
 }
 function completeness() {
-  const w = { grade: 1, major: 2, budget: 2, gpa: 3, sat: 2, eng: 1, ec: 2, aid: 1 }; let a = 0, b = 0;
-  FIELDS.forEach(f => { b += w[f]; if (filled(f)) a += w[f]; });
+  const w = { grade: 1, target: 2, major: 2, intake: 1, edu: 1, gpa: 3, sat: 2, eng: 1, ec: 2, budget: 2, aid: 1 }; let a = 0, b = 0;
+  FIELDS.forEach(f => { b += w[f]; if (answered(f)) a += w[f]; });
   return Math.round(a / b * 100);
 }
 function renderCase() {
@@ -436,7 +545,7 @@ function renderCase() {
     '<div class="small muted">Chat và form cùng đọc, cùng ghi một nơi này.</div>' +
     '<div class="bar"><i style="width:' + pc + '%"></i></div><div class="small muted" style="margin-bottom:6px">Đủ ' + pc + '%</div>' +
     FIELDS.map(f => '<div class="field"><span class="k">' + LABEL[f] + (REQUIRED.includes(f) ? ' *' : '') + '</span><span class="v">' + esc(fieldText(f)) +
-      (filled(f) ? (S.confirmed || S.st[f] === 'ok' ? '<span class="st ok">đã xác nhận</span>' : '<span class="st said">học sinh nói</span>') : '<span class="st miss">thiếu</span>') + '</span></div>').join('') +
+      (filled(f) ? (S.confirmed || S.st[f] === 'ok' ? '<span class="st ok">đã xác nhận</span>' : '<span class="st said">học sinh nói</span>') : S.skipped[f] ? '<span class="st said">chưa có</span>' : '<span class="st miss">thiếu</span>') + '</span></div>').join('') +
     '<div class="small muted" style="margin-top:8px">* bắt buộc để chấm. Thông tin "học sinh nói" cần được xác nhận, độ tin cậy kết quả phụ thuộc vào đây.</div>';
 }
 
@@ -452,7 +561,8 @@ function viewStart() {
 }
 function start(mode) {
   S.mode = mode; S.step = 2;
-  if (mode === 'chat' && !S.chat.length) { say('a', 'Chào bạn, mình là trợ lý tư vấn du học Mỹ. Mình sẽ hỏi vài câu để hiểu hồ sơ của bạn. Bạn có thể trả lời nhiều ý trong một câu.' + '<div style="margin-top:6px">' + (nextQuestion()) + '</div>'); }
+  if (mode === 'form') S.need = S.need || 'profile_advice';
+  if (mode === 'chat' && !S.chat.length) { S.lastQ = 'B0.1'; say('a', 'Chào bạn, mình là trợ lý tư vấn du học Mỹ. Bạn đang cần mình giúp điều gì?<div>' + b0Buttons() + '</div>' + tool('B0.1', 't-ui', 'lời chào cố định, kèm 3 nút gợi ý')); }
   render();
 }
 
@@ -468,41 +578,52 @@ function viewProfile() {
   if (S.mode === 'chat') return '<div class="panel">' + sw + '<div id="chatMainHost"></div>' + foot + '</div>';
   return '<div class="panel">' + sw + formHtml() + foot + '</div>';
 }
-function setMode(m) { S.mode = m; if (m === 'chat' && !S.chat.length) start('chat'); else render(); }
+function setMode(m) {
+  S.mode = m;
+  if (m === 'chat' && !S.chat.length) {
+    if (completeness() > 0) { S.need = 'profile_advice'; say('a', 'Mình thấy bạn đã nhập một phần hồ sơ ở form, nên bỏ qua phần hỏi nhu cầu (B0). Mình chỉ hỏi tiếp phần còn thiếu.<div style="margin-top:6px">' + (nextQuestion() || 'Hồ sơ đã đủ, bạn bấm "Xem đánh giá hồ sơ" nhé.') + '</div>'); render(); }
+    else start('chat');
+  } else render();
+}
 function confirmProfile() { FIELDS.forEach(f => { if (filled(f)) S.st[f] = 'ok'; }); S.confirmed = true; toast('Đã xác nhận hồ sơ'); render(); }
 function formHtml() {
   const p = S.p, e = p.eng || {};
   return '<div class="sect"><h3>1. Thông tin cơ bản</h3><div class="grid2">' +
     '<label class="f">Bạn đang học lớp<select onchange="fset(\'grade\',this.value)"><option value="">Chọn</option>' + [10, 11, 12].map(g => '<option ' + (p.grade == g ? 'selected' : '') + ' value="' + g + '">Lớp ' + g + '</option>').join('') + '</select></label>' +
+    '<label class="f">Bậc muốn học<select onchange="fset(\'target\',this.value)"><option value="">Chọn</option>' + Object.keys(TARGETS).map(k => '<option ' + (p.target === k ? 'selected' : '') + ' value="' + k + '">' + TARGETS[k] + '</option>').join('') + '</select></label>' +
     '<label class="f">Ngành muốn học<select onchange="fset(\'major\',this.value)"><option value="">Chọn</option>' + Object.keys(MAJORS).map(k => '<option ' + (p.major === k ? 'selected' : '') + ' value="' + k + '">' + MAJORS[k] + '</option>').join('') + '</select></label></div></div>' +
     '<div class="sect"><h3>2. Học lực <button class="btn small" style="margin-left:8px" onclick="fakeOCR()">Tải bảng điểm (giả lập OCR)</button></h3><div class="grid2">' +
     '<label class="f">GPA<input type="number" step="0.01" min="0" max="10" id="gpaIn" value="' + (p.gpa ?? '') + '" placeholder="vd 3.6 hoặc 8.5" onchange="fset(\'gpa\',this.value)"><span class="small muted">Nhập thang 4 hoặc thang 10 đều được, hệ thống tự quy đổi.</span></label>' +
     '<label class="f">SAT (không bắt buộc)<input type="number" min="400" max="1600" value="' + (p.sat ?? '') + '" onchange="fset(\'sat\',this.value)"></label>' +
+    '<label class="f">Chương trình đang học<select onchange="fset(\'edu\',this.value)"><option value="">Chọn</option>' + Object.keys(EDUS).map(k => '<option ' + (p.edu === k ? 'selected' : '') + ' value="' + k + '">' + EDUS[k] + '</option>').join('') + '</select></label>' +
+    '<label class="f">Dự định nhập học (không bắt buộc)<input type="text" value="' + esc(p.intake || '') + '" placeholder="vd Fall 2027" onchange="fset(\'intake\',this.value)"></label>' +
     '<label class="f">Chứng chỉ tiếng Anh<select onchange="fset(\'engType\',this.value)"><option ' + (e.type === 'IELTS' ? 'selected' : '') + '>IELTS</option><option ' + (e.type === 'TOEFL' ? 'selected' : '') + '>TOEFL</option></select></label>' +
-    '<label class="f">Điểm<input type="number" step="0.5" value="' + (e.score ?? '') + '" onchange="fset(\'engScore\',this.value)"></label></div></div>' +
+    '<label class="f">Điểm<input type="number" step="0.5" value="' + (e.score ?? '') + '" onchange="fset(\'engScore\',this.value)"><button class="btn small" style="margin-top:8px" onclick="skipF(\'eng\')">Chưa thi</button> ' + (S.skipped.eng ? '<span class="tag t-gray">đã ghi: chưa thi</span>' : '') + '</label></div></div>' +
     '<div class="sect"><h3>3. Hoạt động ngoại khóa</h3>' +
     p.ec.map((x, i) => '<div class="ec"><b>' + esc(x.text) + '</b> · ' + x.years + ' năm <span class="tag t-qwen">Qwen đọc: tier ' + x.tier + '/5</span> <button class="btn small" onclick="delEC(' + i + ')">Xoá</button><div class="why">Vì sao: ' + esc(x.why) + '</div></div>').join('') +
     '<div class="grid2"><label class="f">Mô tả (vai trò, thành tích)<textarea id="ecText" placeholder="vd: Đội trưởng CLB Robotics của trường"></textarea></label>' +
-    '<label class="f">Số năm tham gia<input type="number" id="ecYears" min="0" max="6" value="1"><button class="btn small" style="margin-top:8px" onclick="addEC()">+ Thêm hoạt động</button></label></div></div>' +
+    '<label class="f">Số năm tham gia<input type="number" id="ecYears" min="0" max="6" value="1"><button class="btn small" style="margin-top:8px" onclick="addEC()">+ Thêm hoạt động</button> <button class="btn small" style="margin-top:8px" onclick="skipF(\'ec\')">Không có hoạt động nào</button></label></div></div>' +
     '<div class="sect"><h3>4. Tài chính</h3><div class="grid2">' +
     '<label class="f">Ngân sách mỗi năm (USD)<input type="number" step="1000" value="' + (p.budget ?? '') + '" onchange="fset(\'budget\',this.value)"></label>' +
-    '<label class="f">Cần hỗ trợ tài chính / học bổng?<select onchange="fset(\'aid\',this.value)"><option value="">Chọn</option><option value="1" ' + (p.aid === true ? 'selected' : '') + '>Có</option><option value="0" ' + (p.aid === false ? 'selected' : '') + '>Không</option></select></label></div></div>';
+    '<label class="f">Bạn cần học bổng ở mức nào?<select onchange="fset(\'aid\',this.value)"><option value="">Chọn</option>' + Object.keys(AIDS).map(k => '<option ' + (p.aid === k ? 'selected' : '') + ' value="' + k + '">' + AIDS[k] + '</option>').join('') + '</select></label></div></div>';
 }
 function fset(f, v) {
   if (f === 'engType' || f === 'engScore') { const e = S.p.eng || { type: 'IELTS', score: '' }; if (f === 'engType') e.type = v; else e.score = v; setField('eng', e.score === '' ? null : e, 'said'); }
   else if (f === 'gpa') { let g = parseFloat(v); if (g > 4 && g <= 10) g = Math.round(g / 10 * 4 * 100) / 100; if (!(g > 0 && g <= 4)) { toast('GPA không hợp lệ'); g = null; } setField('gpa', g, 'said'); }
   else if (f === 'sat') { const s = v === '' ? null : +v; if (s !== null && (s < 400 || s > 1600)) { toast('SAT phải từ 400 đến 1600'); setField('sat', null, 'said'); } else setField('sat', s, 'said'); }
   else if (f === 'budget') setField('budget', v === '' ? null : +v, 'said');
-  else if (f === 'aid') setField('aid', v === '' ? null : v === '1', 'said');
+  else if (f === 'aid') setField('aid', v === '' ? null : v, 'said');
+  else if (f === 'target' && v === 'UNK') { const g = +S.p.grade; setField('target', g >= 11 ? 'BA' : 'HS', 'said'); toast('Hệ thống gợi ý bậc ' + (g >= 11 ? 'Đại học' : 'THPT') + ' theo lớp bạn đang học, hãy xác nhận.'); }
   else if (f === 'grade') setField('grade', v, 'said');
   else setField(f, v, 'said');
   renderCase(); renderStepper(); refreshFoot();
 }
 function refreshFoot() { const keep = document.activeElement; const y = window.scrollY; $('#main').innerHTML = view(); mountChat(); window.scrollTo(0, y); }
 function fakeOCR() { setField('gpa', 3.6, 'said'); S.st.gpa = 'said'; toast('OCR đọc được GPA 3,6 từ bảng điểm. Hãy kiểm tra và xác nhận.'); render(); }
+function skipF(f) { S.skipped[f] = true; S.dirty = true; toast('Đã ghi: ' + (f === 'ec' ? 'không có hoạt động' : 'chưa thi')); render(); }
 function addEC() {
   const t = $('#ecText').value.trim(), y = +$('#ecYears').value || 0; if (!t) { toast('Hãy mô tả hoạt động'); return; }
-  const r = readEC(t, y); S.p.ec.push({ text: t, years: y, tier: r.tier, why: r.why }); S.st.ec = 'said'; S.dirty = true; S.confirmed = false; S.use.qwen++; render();
+  const r = readEC(t, y); S.p.ec.push({ text: t, years: y, tier: r.tier, why: r.why }); S.st.ec = 'said'; S.dirty = true; S.confirmed = false; S.use.qwen++; delete S.skipped.ec; render();
 }
 function delEC(i) { S.p.ec.splice(i, 1); if (!S.p.ec.length) S.st.ec = undefined; S.dirty = true; render(); }
 
@@ -521,6 +642,7 @@ function dims() {
 function viewReview() {
   const miss = missingRequired();
   if (miss.length) return gate(miss);
+  if (branchGate()) return branchGate();
   const d = dims(), have = d.filter(x => x.v !== null), avg = Math.round(have.reduce((a, b) => a + b.v, 0) / have.length);
   const sorted = [...have].sort((a, b) => b.v - a.v), top = sorted.slice(0, 2), low = sorted.slice(-2).reverse();
   const pc = completeness(), unconf = FIELDS.filter(f => filled(f) && !(S.confirmed || S.st[f] === 'ok')).length;
@@ -549,6 +671,7 @@ function gate(miss) {
    ========================================================= */
 function viewWorkspace() {
   const miss = missingRequired(); if (miss.length) return gate(miss);
+  if (branchGate()) return branchGate();
   if (S.dirty || !S.ranOnce) runRecommend();
   const { items, excluded } = compute(), cur = items.find(i => i.sch.id === S.sel) || items[0];
   let list = '';
@@ -594,6 +717,7 @@ function pickTargets(items) {
 }
 function viewRoad() {
   const miss = missingRequired(); if (miss.length) return gate(miss);
+  if (branchGate()) return branchGate();
   if (S.dirty || !S.ranOnce) runRecommend();
   const items = compute().items, tg = pickTargets(items), y = S.p.grade == 12 ? 2026 : S.p.grade == 11 ? 2027 : 2028;
   const match = tg.find(i => i.shown === 1) || tg[0];
@@ -605,7 +729,7 @@ function viewRoad() {
     ['15/11–1/1', 'Early (ED/EA) nếu muốn: chỉ chọn khi chắc về tài chính.'],
     ['Đầu 1/' + (y + 1), 'Hạn nộp Regular của phần lớn trường. Hoàn tất bài luận và thư giới thiệu.']
   ];
-  if (S.p.aid) steps.push(['2/' + (y + 1), 'Nộp giấy tờ tài chính xin học bổng need-based (CSS Profile hoặc mẫu của trường).']);
+  if (wantsAid()) steps.push(['2/' + (y + 1), 'Nộp giấy tờ tài chính xin học bổng need-based (CSS Profile hoặc mẫu của trường).']);
   steps.push(['3–4/' + (y + 1), 'Nhận kết quả, so sánh gói hỗ trợ tài chính.'], ['1/5/' + (y + 1), 'Chốt trường và đặt cọc.'], ['6–8/' + (y + 1), 'Nhận I-20, xin visa F-1, chuẩn bị chứng minh tài chính.']);
   const done = S.road;
   return '<div class="panel"><h3>Lộ trình theo mục tiêu của bạn <span class="tag t-rule">Luật</span></h3><div class="small muted" style="margin-bottom:10px">Tạo từ hạn nộp và khoảng cách điểm trong bước 4. Trường mục tiêu: ' + (S.targets.length ? 'bạn đã chọn' : 'tự chọn 4 trường đại diện, bạn có thể ★ ở bước 4') + '.</div><div class="tl">' +
@@ -619,7 +743,7 @@ function viewRoad() {
 function viewCenters() {
   const need_ = [];
   if (S.p.sat && S.p.sat < 1400) need_.push('Luyện SAT');
-  need_.push('Sửa luận'); if (S.p.aid) need_.push('Nộp hồ sơ');
+  need_.push('Sửa luận'); if (wantsAid()) need_.push('Nộp hồ sơ');
   return '<div class="panel"><h3>Trung tâm tư vấn phù hợp</h3><div class="callout" style="margin-bottom:10px">Chỉ gợi ý để tham khảo, <b>không chào bán</b>. Xếp theo độ phù hợp với nhu cầu của bạn, <b>không xếp theo phí</b> trung tâm trả. Nhu cầu suy ra từ hồ sơ: ' + need_.join(', ') + '.</div>' +
     CENTERS.map((c, i) => '<div class="cen"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><b>' + c.name + '</b><span class="tag t-ui">' + c.city + '</span></div>' + (c.verified ? '<span class="tag t-rule">Đã xác minh</span>' : '') + c.svc.map(s => '<span class="tag ' + (need_.includes(s) ? 't-ai' : 't-gray') + '">' + s + '</span>').join('') +
       '<div class="small muted" style="margin:6px 0">Phù hợp vì: ' + c.fit + '</div><button class="btn small" onclick="contact(' + i + ')">Gửi yêu cầu liên hệ</button></div>').join('') +
@@ -634,9 +758,14 @@ function contact(i) {
    CHAT PANEL (một khung duy nhất, gắn vào nơi cần)
    ========================================================= */
 function chatQuick() {
-  if (S.step === 2) return ['Em lớp 12, muốn học khoa học máy tính, ngân sách 50 nghìn', 'GPA 3.6, SAT 1350, IELTS 7.0', 'Em là đội trưởng CLB Robotics 3 năm', 'Em cần học bổng'];
-  if (S.step === 4) return ['Vì sao trường này xếp như vậy?', 'Cần bổ sung gì để vào trường này?', 'Nếu SAT lên 1450 thì sao?', 'Em muốn trường rẻ hơn', 'Học bổng need-based là gì?', 'Em vừa thi lại SAT 1450'];
-  return ['Học bổng need-based là gì?', 'Early Decision là gì?', 'Cho em xem lộ trình', 'Có trung tâm nào phù hợp không?'];
+  if (S.step === 2) {
+    if (!S.need) return ['Tìm trường, lộ trình hợp với mình', 'Hỏi thông tin du học', 'Cần hỗ trợ làm hồ sơ', 'Em lớp 12, muốn học CS ở Mỹ, IELTS 7.0, có đi được trường tốt không ạ?', 'Chào'];
+    const m = { grade: ['Em lớp 12'], target: ['Em muốn học đại học', 'Em chưa biết nữa'], major: ['Em muốn học khoa học máy tính'], intake: ['Mùa thu 2027', 'Em chưa rõ'], edu: ['THPT Việt Nam', 'IB'], budget: ['Ngân sách 50 nghìn'], aid: ['Em cần học bổng', 'Em không cần học bổng', 'Bắt buộc phải có học bổng'], gpa: ['GPA 3.6', 'GPA 8.5 thang 10'], sat: ['SAT 1350', 'Em chưa thi SAT'], eng: ['IELTS 7.0', 'Em chưa thi'], ec: ['Em là đội trưởng CLB Robotics 3 năm', 'Em không có hoạt động nào'] };
+    const base = S.awaitConfirm === 'branch' ? ['Đúng rồi', 'Chưa đúng'] : (m[S.aiAsked] || []);
+    return base.concat(['I-20 là gì?', 'Chào']);
+  }
+  if (S.step === 4) return ['Vì sao trường này xếp như vậy?', 'Cần bổ sung gì để vào trường này?', 'Nếu SAT lên 1450 thì sao?', 'Em muốn trường rẻ hơn', 'Học bổng need-based là gì?', 'Em vừa thi lại SAT 1450', 'À em nhầm, GPA em là 3.4'];
+  return ['Học bổng need-based là gì?', 'Early Decision là gì?', 'Cho em xem lộ trình', 'Bên mình có sửa bài luận không?', 'Chào', 'Em cảm ơn, vậy là đủ rồi'];
 }
 function mountChat() {
   const host = S.step === 2 && S.mode === 'chat' ? $('#chatMainHost') : S.step >= 3 ? $('#dockHost') : null;
@@ -682,7 +811,7 @@ function render() {
 function sample() {
   S = freshState(); S.mode = 'form';
   setField('grade', '12', 'ok'); setField('major', 'CS', 'ok'); setField('budget', 50000, 'ok'); setField('gpa', 3.6, 'ok'); setField('sat', 1350, 'ok');
-  setField('eng', { type: 'IELTS', score: '7.0' }, 'ok'); setField('aid', true, 'ok');
+  setField('eng', { type: 'IELTS', score: '7.0' }, 'ok'); setField('aid', 'nice', 'ok'); setField('target', 'BA', 'ok'); setField('edu', 'VN', 'ok'); setField('intake', 'Fall 2027', 'ok'); S.need = 'profile_advice';
   [['Đội trưởng CLB Robotics của trường', 3], ['Tình nguyện dạy tin học cho trẻ em vùng khó khăn', 2], ['Giải Ba cuộc thi Tin học cấp thành phố', 1]].forEach(([t, y]) => { const r = readEC(t, y); S.p.ec.push({ text: t, years: y, tier: r.tier, why: r.why }); });
   S.st.ec = 'ok'; S.confirmed = true; S.step = 3; say('a', 'Mình đã có hồ sơ của An. Bạn muốn hỏi gì về hồ sơ hoặc kết quả?');
   render();
@@ -690,7 +819,7 @@ function sample() {
 $('#btnSample').addEventListener('click', sample);
 $('#btnReset').addEventListener('click', () => { S = freshState(); render(); });
 render();
-(function () { const m = typeof location !== 'undefined' && location.hash.match(/^#s([1-6])$/); if (m) { sample(); go(+m[1]); } })();
+(function () { const m = typeof location !== 'undefined' && location.hash.match(/^#s([1-6])$/); if (m) { sample(); go(+m[1]); } else if (typeof location !== 'undefined' && location.hash === '#chat') { start('chat'); ['Em lớp 12, muốn học CS ở Mỹ, IELTS 7.0, có đi được trường tốt không ạ?', 'I-20 là gì ạ?'].forEach(reply); render(); } })();
 </script>
 </body>
 </html>
