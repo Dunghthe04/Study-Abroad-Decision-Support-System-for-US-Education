@@ -21,6 +21,7 @@ namespace StudyAbroad.Application.Recommendations
         Excluded   // loại
     }
 
+    //Tiêu chí lọc của sinh viên
     public record FilterCriteria(
         string? Major,
         IReadOnlyList<string> States,
@@ -31,7 +32,7 @@ namespace StudyAbroad.Application.Recommendations
         decimal? Toefl = null,
         decimal? Duolingo = null);
 
-    // Trường đưa vào lọc. TotalCostUsd = học phí + ăn ở + phí + chi khác. Học phí null thì tổng cũng null.
+    // Trường đưa vào lọc. TotalCostUsd = học phí + ăn ở + phí + chi khác.
     // HasIntlAid: có chính sách học bổng du học sinh thì true, chính sách "none" thì false, chưa có số thì null.
     public record FilterSchool(
         string Code,
@@ -44,7 +45,7 @@ namespace StudyAbroad.Application.Recommendations
         decimal? MinToefl = null,
         decimal? MinDuolingo = null);
 
-
+    //Kết quả sau lọc
     public record FilterResult(
         FilterSchool School,
         FilterOutcome Outcome,
@@ -66,6 +67,7 @@ namespace StudyAbroad.Application.Recommendations
     public static class HardFilter
     {
         public static IReadOnlyList<FilterResult> Apply(
+            //Các tiêu chí lọc, danh sách các trường đưa vào lọc, dung sai ngân sách
             FilterCriteria criteria, IEnumerable<FilterSchool> schools, decimal budgetTolerance) =>
             schools.Select(s => Check(criteria, s, budgetTolerance)).ToList();
 
@@ -75,7 +77,9 @@ namespace StudyAbroad.Application.Recommendations
             // Ngành: học sinh chưa chọn thì bỏ qua. Trường không khai ngành thì giữ, gắn cờ.
             if (!string.IsNullOrWhiteSpace(c.Major))
             {
+                //Sinh viên chọn ngành - mà trường ko có ngành nào
                 if (school.Majors.Count == 0) flags.Add(FilterFlags.MajorUnknown);
+                //Nếu trường ko có ngành trùng -> loại
                 else if (!school.Majors.Contains(c.Major, StringComparer.OrdinalIgnoreCase))
                     return Exclude(school, "MAJOR");
             }
@@ -95,13 +99,14 @@ namespace StudyAbroad.Application.Recommendations
             if (englishFail) return Exclude(school, "ENGLISH");
             if (englishFlag is not null) flags.Add(englishFlag);
 
+            // Trường k có chi phí -> gán cờ + giữ
             if (school.TotalCostUsd is not decimal cost)
             {
                 flags.Add(FilterFlags.CostUnknown);
                 return new FilterResult(school, FilterOutcome.Keep, flags);
             }
 
-            // Nếu k có ngân sách
+            // Nếu k có ngân sách -> gán cờ + giữ
             if(c.AnnualBudgetUsd is not decimal budget)
                 return new FilterResult(school,FilterOutcome.Keep, flags);
 
@@ -110,15 +115,14 @@ namespace StudyAbroad.Application.Recommendations
             if (cost <= ceiling)
                 return new FilterResult(school, FilterOutcome.Keep, flags);
 
-            //Nếu ngân sách *1,1 < cost và  ko chọn cần học bổng
+            //Nếu ngân sách *1,1 < cost -> loại
             if (c.AidNeed == AidNeed.None) return Exclude(school, "BUDGET");
 
-            //Nếu cần học bổng mà trường k có
+            //Nếu ngân sách *1,1 < cost  && trường k có học bổng -> loại
             if (school.HasIntlAid == false) return Exclude(school, "BUDGET_NO_AID");
 
-            //nếu k có dữ liệu học bổng
+            //Nếu ngân sách *1,1 < cost && trường k có dữ liệu học bổng -> cờ (k rõ học bổng + cần số tiền lớn)
             if (school.HasIntlAid is null) flags.Add(FilterFlags.AidUnknown);
-
             flags.Add(FilterFlags.NeedBigAid);
             return new FilterResult(school, FilterOutcome.AidBlock, flags, OverBudgetUsd: cost - budget);
         }
@@ -141,6 +145,7 @@ namespace StudyAbroad.Application.Recommendations
             return comparable.Any(p => p.Student >= p.Min) ? (false, null) : (true, null);
 
         }
+        //Hàm loại trường
         private static FilterResult Exclude(FilterSchool school, string reason) =>
             new(school, FilterOutcome.Excluded, [], reason);
     }

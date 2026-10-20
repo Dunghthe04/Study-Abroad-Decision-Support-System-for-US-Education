@@ -15,7 +15,7 @@ from app.services.scorer import Scorer
 router = APIRouter(prefix="/api/v1/recommend", tags=["recommend"])
 
 
-@router.post("/ec", response_model=EcResponse)
+@router.post("/ec", response_model=EcResponse) #EcResponse là định dạng FastApi trả về
 async def ec(req: EcRequest, reader: Annotated[EcReader, Depends(get_ec_reader)]) -> EcResponse:
     return await reader.read(req)
 
