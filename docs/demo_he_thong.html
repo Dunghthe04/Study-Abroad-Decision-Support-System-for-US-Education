@@ -1,0 +1,696 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>US-DSS · Demo hệ thống</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --ink: #1c2330; --muted: #5d6778; --line: #d9dee7;
+    --brand: #2f5bea; --brand-soft: #e6ecff;
+    --ai: #7a3ff0; --ai-soft: #efe8ff;
+    --rule: #0f8a5f; --rule-soft: #dff5ec;
+    --qwen: #c46a00; --qwen-soft: #fff0da;
+    --warn: #b45309; --warn-soft: #fff1d6;
+    --bad: #b42318; --bad-soft: #fde7e4;
+    --radius: 12px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151b; --card: #1a1f28; --ink: #e8ecf3; --muted: #9aa5b8; --line: #2b3342;
+      --brand: #7d9bff; --brand-soft: #1f2a4d;
+      --ai: #b595ff; --ai-soft: #2a2145;
+      --rule: #4fd1a1; --rule-soft: #12332a;
+      --qwen: #ffb257; --qwen-soft: #3a2a12;
+      --warn: #ffc266; --warn-soft: #3a2c10;
+      --bad: #ff8a80; --bad-soft: #3b1714;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  button { font: inherit; color: inherit; }
+  .wrap { max-width: 1320px; margin: 0 auto; padding: 14px 16px 48px; }
+  .top { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+  .top h1 { font-size: 20px; margin: 0; }
+  .top .note { font-size: 12px; color: var(--muted); }
+  .btn { border: 1px solid var(--line); background: var(--card); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  .btn:hover { border-color: var(--brand); }
+  .btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+  .btn.small { padding: 3px 9px; font-size: 12px; }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+
+  .stepper { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .step { border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 6px 12px; cursor: pointer; font-size: 13px; }
+  .step .n { display: inline-block; width: 20px; height: 20px; line-height: 20px; text-align: center; border-radius: 50%; background: var(--line); font-size: 12px; margin-right: 6px; }
+  .step.on { background: var(--brand); border-color: var(--brand); color: #fff; }
+  .step.on .n { background: #fff; color: var(--brand); }
+  .step.done .n { background: var(--rule); color: #fff; }
+
+  .layout { display: grid; grid-template-columns: 250px minmax(0,1fr) 340px; gap: 12px; align-items: start; }
+  .layout.nodock { grid-template-columns: 250px minmax(0,1fr); }
+  @media (max-width: 1100px) { .layout, .layout.nodock { grid-template-columns: 1fr; } }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; }
+  .panel h2 { font-size: 13px; margin: 0 0 8px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  .panel h3 { font-size: 15px; margin: 0 0 6px; }
+  .muted { color: var(--muted); } .small { font-size: 12px; }
+  .tag { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 999px; margin: 2px 4px 0 0; }
+  .t-ai { background: var(--ai-soft); color: var(--ai); } .t-rule { background: var(--rule-soft); color: var(--rule); }
+  .t-qwen { background: var(--qwen-soft); color: var(--qwen); } .t-ui { background: var(--brand-soft); color: var(--brand); }
+  .t-gray { background: var(--line); color: var(--muted); }
+  .badge { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 999px; }
+  .b-ok { background: var(--rule-soft); color: var(--rule); } .b-warn { background: var(--warn-soft); color: var(--warn); } .b-bad { background: var(--bad-soft); color: var(--bad); }
+
+  /* CaseState */
+  .case { position: sticky; top: 10px; }
+  .field { display: flex; justify-content: space-between; gap: 6px; align-items: center; padding: 5px 0; border-bottom: 1px dashed var(--line); font-size: 13px; }
+  .field:last-child { border-bottom: 0; }
+  .field .k { color: var(--muted); } .field .v { font-weight: 600; text-align: right; }
+  .st { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 999px; margin-left: 4px; }
+  .st.said { background: var(--warn-soft); color: var(--warn); } .st.ok { background: var(--rule-soft); color: var(--rule); } .st.miss { background: var(--line); color: var(--muted); }
+  .bar { height: 8px; background: var(--line); border-radius: 999px; overflow: hidden; margin: 6px 0 2px; }
+  .bar > i { display: block; height: 100%; background: var(--brand); }
+
+  /* landing */
+  .cards2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 700px) { .cards2 { grid-template-columns: 1fr; } }
+  .big { text-align: left; border: 1.5px solid var(--line); background: var(--card); border-radius: var(--radius); padding: 16px; cursor: pointer; }
+  .big:hover { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+  .big h3 { font-size: 17px; margin: 0 0 4px; } .big p { margin: 0; color: var(--muted); font-size: 14px; }
+
+  /* form */
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; background: var(--card); padding: 5px 12px; cursor: pointer; }
+  .seg button.on { background: var(--brand); color: #fff; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 700px) { .grid2 { grid-template-columns: 1fr; } }
+  label.f { display: block; font-size: 13px; color: var(--muted); }
+  input[type=text], input[type=number], select, textarea { width: 100%; margin-top: 3px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--ink); padding: 7px 9px; font: inherit; }
+  textarea { resize: vertical; min-height: 56px; }
+  .sect { margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+  .sect:last-child { border-bottom: 0; }
+  .sect > h3 { font-size: 15px; margin: 0 0 8px; }
+  .ec { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; margin: 6px 0; background: var(--bg); font-size: 14px; }
+  .ec .why { font-size: 12px; color: var(--muted); }
+  .err { color: var(--bad); font-size: 12px; }
+
+  /* review */
+  .dim { margin: 8px 0; } .dim .row { display: flex; justify-content: space-between; font-size: 13px; }
+  .big-num { font-size: 40px; font-weight: 700; line-height: 1; }
+  ul.clean { margin: 4px 0 0; padding-left: 18px; font-size: 14px; } ul.clean li { margin: 3px 0; }
+  .callout { background: var(--brand-soft); border-radius: 10px; padding: 10px 12px; font-size: 14px; }
+  .callout.warn { background: var(--warn-soft); }
+
+  /* workspace */
+  .ws { display: grid; grid-template-columns: 280px minmax(0,1fr); gap: 12px; align-items: start; }
+  @media (max-width: 900px) { .ws { grid-template-columns: 1fr; } }
+  .prefs { display: flex; flex-wrap: wrap; gap: 6px; }
+  .prefs button { border: 1px solid var(--line); background: var(--bg); border-radius: 999px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
+  .prefs button.on { background: var(--brand); border-color: var(--brand); color: #fff; }
+  .block-title { font-size: 12px; font-weight: 700; color: var(--muted); margin: 10px 0 4px; }
+  .school { display: block; width: 100%; text-align: left; border: 1.5px solid var(--line); border-radius: 10px; background: var(--bg); padding: 8px 10px; margin-bottom: 6px; cursor: pointer; }
+  .school.on { border-color: var(--brand); background: var(--brand-soft); }
+  .school b { display: block; font-size: 14px; } .school span { font-size: 12px; color: var(--muted); }
+  .kv { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; margin: 10px 0; }
+  .kv div { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+  .kv small { display: block; color: var(--muted); font-size: 12px; } .kv strong { font-size: 17px; }
+  .sec { margin-top: 12px; } .sec h4 { font-size: 13px; margin: 0 0 4px; }
+  input[type=range] { width: 100%; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; } th, td { text-align: left; padding: 5px 6px; border-bottom: 1px solid var(--line); } th { color: var(--muted); font-weight: 600; }
+  details { margin-top: 10px; } summary { cursor: pointer; font-size: 13px; color: var(--brand); }
+  .meter { display: flex; gap: 8px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+
+  /* chat */
+  .chatbox { display: flex; flex-direction: column; height: 560px; }
+  .chatbox.main { height: 520px; }
+  .msgs { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 2px; }
+  .m { max-width: 92%; padding: 8px 11px; border-radius: 12px; font-size: 14px; }
+  .m.u { align-self: flex-end; background: var(--brand); color: #fff; }
+  .m.a { align-self: flex-start; background: var(--bg); border: 1px solid var(--line); }
+  .m .chipline { margin-top: 6px; } .m .src { font-size: 12px; color: var(--muted); }
+  .quick { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+  .quick button { border: 1px solid var(--line); background: var(--bg); border-radius: 999px; padding: 4px 10px; font-size: 12px; cursor: pointer; text-align: left; }
+  .quick button:hover { border-color: var(--brand); }
+  .sendrow { display: flex; gap: 6px; } .sendrow input { margin: 0; }
+
+  /* roadmap, centers */
+  .tl { border-left: 3px solid var(--line); margin-left: 8px; padding-left: 14px; }
+  .tl .it { position: relative; margin: 0 0 14px; }
+  .tl .it::before { content: ""; position: absolute; left: -22px; top: 5px; width: 11px; height: 11px; border-radius: 50%; background: var(--brand); }
+  .tl .when { font-size: 12px; font-weight: 700; color: var(--brand); }
+  .cen { border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin-bottom: 10px; background: var(--bg); }
+  .toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-size: 14px; max-width: 90vw; z-index: 9; }
+  .toast[hidden] { display: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div><h1>US-DSS · Demo hệ thống tư vấn du học Mỹ</h1>
+      <div class="note">Bản mô phỏng để xem luồng và kiến trúc. Trường học là trường giả định, công thức đơn giản hoá, không phải kết quả thật. Ngày trong demo: 20/10/2026.</div></div>
+    <div><button class="btn" id="btnSample">Điền hồ sơ mẫu (An)</button> <button class="btn" id="btnReset">Làm lại từ đầu</button></div>
+  </div>
+  <div class="stepper" id="stepper"></div>
+
+  <div class="layout" id="layout">
+    <aside class="panel case" id="case"></aside>
+    <main id="main"></main>
+    <aside class="panel" id="dock"><div id="dockHost"></div></aside>
+  </div>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<template id="chatTpl">
+  <div class="chatbox" id="chatbox">
+    <h2 id="chatTitle">Trợ lý (cùng một phiên)</h2>
+    <div class="msgs" id="msgs"></div>
+    <div class="quick" id="quick"></div>
+    <div class="sendrow"><input type="text" id="chatIn" placeholder="Nhập câu hỏi hoặc thông tin hồ sơ..."><button class="btn primary" id="chatSend">Gửi</button></div>
+    <div class="small muted" style="margin-top:6px">Chat không tự tính điểm: mỗi câu trả lời gọi một công cụ và hiện rõ công cụ nào.</div>
+  </div>
+</template>
+
+<script>
+/* =========================================================
+   DỮ LIỆU GIẢ ĐỊNH
+   ========================================================= */
+const MAJORS = { CS: 'Khoa học máy tính', BUS: 'Kinh doanh', ENG: 'Kỹ thuật', BIO: 'Sinh học', ART: 'Nghệ thuật' };
+const SCHOOLS = [
+  { id: 's1', name: 'Đại học Ridgeview', st: 'MA', majors: ['CS','BUS','ENG','BIO'], gpa: 3.9, sat25: 1450, sat75: 1550, tier: 2, cost: 88000, aid: 50000, H: 90, Q: 95 },
+  { id: 's2', name: 'Cao đẳng Maple Hill', st: 'ME', majors: ['CS','BIO','BUS','ART'], gpa: 3.8, sat25: 1380, sat75: 1490, tier: 3, cost: 85000, aid: 40000, H: 80, Q: 85 },
+  { id: 's3', name: 'Đại học Lakeshore', st: 'IL', majors: ['CS','ENG','BUS'], gpa: 3.7, sat25: 1300, sat75: 1450, tier: 4, cost: 78000, aid: 20000, H: 55, Q: 80 },
+  { id: 's4', name: 'Đại học Bắc Cascade', st: 'WA', majors: ['CS','ENG','BIO'], gpa: 3.6, sat25: 1200, sat75: 1400, tier: 4, cost: 52000, aid: 12000, H: 40, Q: 70 },
+  { id: 's5', name: 'Đại học Prairie State', st: 'IN', majors: ['CS','BUS','ENG'], gpa: 3.4, sat25: 1100, sat75: 1320, tier: 5, cost: 41000, aid: 8000, H: 35, Q: 60 },
+  { id: 's6', name: 'Đại học Sunbelt Texas', st: 'TX', majors: ['CS','BUS','ART'], gpa: 3.3, sat25: 1050, sat75: 1250, tier: 5, cost: 38000, aid: 10000, H: 45, Q: 55 },
+  { id: 's7', name: 'Cao đẳng Cedar Valley', st: 'PA', majors: ['BUS','ART','BIO'], gpa: 3.5, sat25: 1150, sat75: 1330, tier: 3, cost: 62000, aid: 25000, H: 70, Q: 65 },
+  { id: 's8', name: 'Đại học Harborview', st: 'NY', majors: ['CS','ART','BUS'], gpa: 3.5, sat25: 1220, sat75: 1400, tier: 3, cost: 80000, aid: 3000, H: 25, Q: 75 },
+  { id: 's9', name: 'Đại học Evergreen Tech', st: 'CA', majors: ['CS','ENG'], gpa: 3.85, sat25: 1420, sat75: 1540, tier: 3, cost: 70000, aid: 8000, H: 30, Q: 90 }
+];
+const PREFS = { 'Cân bằng': [2,2,2], 'Chi phí thấp': [3,1,1], 'Học bổng nhiều': [1,3,1], 'Danh tiếng': [1,1,3] };
+const GROUPS = ['Khó vào', 'Vừa sức', 'An toàn hơn'];
+const CENTERS = [
+  { name: 'Trung tâm Hướng Dương', city: 'TP.HCM', svc: ['Sửa luận', 'Nộp hồ sơ'], fit: 'Hồ sơ cần tài chính, kinh nghiệm xin học bổng need-based', verified: true },
+  { name: 'Học viện Đường Chân Trời', city: 'Hà Nội', svc: ['Luyện SAT', 'Sửa luận'], fit: 'Cần nâng SAT trước kỳ nộp Regular', verified: true },
+  { name: 'Tư vấn Cánh Buồm Online', city: 'Online', svc: ['Nộp hồ sơ', 'Visa F-1'], fit: 'Cần hỗ trợ từ xa, nộp nhiều trường', verified: true }
+];
+
+/* =========================================================
+   TRẠNG THÁI
+   ========================================================= */
+const FIELDS = ['grade','major','budget','gpa','sat','eng','ec','aid'];
+const LABEL = { grade: 'Bậc / lớp', major: 'Ngành', budget: 'Ngân sách / năm', gpa: 'GPA (thang 4)', sat: 'SAT', eng: 'Tiếng Anh', ec: 'Ngoại khóa', aid: 'Cần hỗ trợ tài chính' };
+const REQUIRED = ['grade','major','budget','gpa'];
+function freshState() {
+  return {
+    step: 1, mode: null,
+    p: { grade: '', major: '', budget: null, gpa: null, sat: null, eng: null, ec: [], aid: null },
+    st: {}, pref: 'Cân bằng', sim: '0', sel: null, targets: [],
+    chat: [], aiAsked: null, dirty: true, ranOnce: false,
+    use: { gem: 0, qwen: 0, rule: 0 }, log: [], road: {}, confirmed: false
+  };
+}
+let S = freshState();
+
+/* =========================================================
+   TIỆN ÍCH
+   ========================================================= */
+const $ = s => document.querySelector(s);
+const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+const dS = x => clamp(x, 0, 100).toFixed(1);
+const usd = n => Math.round(n).toLocaleString('vi-VN') + ' USD';
+function toast(t) { const e = $('#toast'); e.textContent = t; e.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => e.hidden = true, 2600); }
+function filled(f) { const v = S.p[f]; return f === 'ec' ? v.length > 0 : v !== null && v !== ''; }
+function setField(f, v, status) { S.p[f] = v; S.st[f] = filled(f) ? status : undefined; S.dirty = true; S.confirmed = false; }
+function missingRequired() { return REQUIRED.filter(f => !filled(f)); }
+function fieldText(f) {
+  const v = S.p[f];
+  if (!filled(f)) return '—';
+  if (f === 'major') return MAJORS[v];
+  if (f === 'budget') return usd(v);
+  if (f === 'ec') return v.length + ' hoạt động';
+  if (f === 'eng') return v.type + ' ' + v.score;
+  if (f === 'aid') return v ? 'Có' : 'Không';
+  if (f === 'grade') return 'Lớp ' + v;
+  return v;
+}
+
+/* ---- Qwen đọc ngoại khóa (mô phỏng): trả về tier 1–5 và bằng chứng ---- */
+function readEC(text, years) {
+  const t = text.toLowerCase(); let tier = 2; const why = [];
+  if (/(thành lập|sáng lập|founder|quốc gia|national|isef|olympiad)/.test(t)) { tier = 5; why.push('thành lập / cấp quốc gia'); }
+  else if (/(đội trưởng|chủ tịch|captain|president|giải (nhất|nhì|ba)|cấp (tỉnh|thành)|thành phố)/.test(t)) { tier = 4; why.push('vai trò lãnh đạo hoặc giải cấp tỉnh/thành'); }
+  else if (/(thành viên|tình nguyện|volunteer|clb|câu lạc bộ|club|dạy)/.test(t)) { tier = 3; why.push('tham gia đều đặn có đóng góp'); }
+  else why.push('chưa thấy vai trò hoặc thành tích rõ');
+  if (years >= 3 && tier < 5) { tier += (tier >= 3 ? 0 : 1); why.push(years + ' năm duy trì'); }
+  if (years <= 1 && tier > 2) { tier -= 1; why.push('mới tham gia ≤ 1 năm'); }
+  return { tier: clamp(tier, 1, 5), why: why.join('; ') };
+}
+function ecScore() {
+  if (!S.p.ec.length) return null;
+  const top = S.p.ec.map(e => e.tier).sort((a, b) => b - a).slice(0, 3);
+  return Math.round(top.reduce((a, b) => a + b, 0) / top.length / 5 * 100);
+}
+
+/* =========================================================
+   MÔ HÌNH LUẬT (đơn giản hoá, minh hoạ)
+   ========================================================= */
+function scoreAt(sch, gpa, sat) {
+  const pg = 50 + (gpa - sch.gpa) / 0.3 * 25;
+  const ps = sat ? 25 + 50 * (sat - sch.sat25) / (sch.sat75 - sch.sat25) : null;
+  const A = ps === null ? pg : 0.4 * pg + 0.6 * ps;
+  const adj = (sch.tier - 3) * 3;
+  return { pg, ps, A, adj, S: A + adj };
+}
+const groupOf = s => s < 25 ? 0 : s <= 75 ? 1 : 2;
+function netCost(sch) { return sch.cost - (S.p.aid ? sch.aid : 0); }
+function need(sch, target) { // suy diễn lùi
+  const sc = scoreAt(sch, S.p.gpa, S.p.sat);
+  const out = {};
+  if (S.p.sat) {
+    const ps = (target - sc.adj - 0.4 * sc.pg) / 0.6;
+    const sat = sch.sat25 + (ps - 25) / 50 * (sch.sat75 - sch.sat25);
+    out.sat = sat > 1600 ? null : Math.max(Math.ceil(sat / 10) * 10, S.p.sat);
+  } else out.sat = undefined;
+  const psv = sc.ps === null ? null : sc.ps;
+  const pg = psv === null ? target - sc.adj : (target - sc.adj - 0.6 * psv) / 0.4;
+  const gpa = sch.gpa + (pg - 50) * 0.3 / 25;
+  out.gpa = gpa > 4 ? null : Math.max(Math.round(gpa * 100) / 100, S.p.gpa);
+  return out;
+}
+function factsOf(sch, sc) {
+  const f = [], g = S.p.gpa, d = g - sch.gpa;
+  f.push(d >= 0.15 ? 'GPA cao hơn mức điển hình của trường' : d <= -0.15 ? 'GPA thấp hơn mức điển hình của trường (' + sch.gpa.toFixed(1) + ')' : 'GPA gần mức điển hình của trường');
+  if (S.p.sat) f.push(S.p.sat < sch.sat25 ? 'SAT thấp hơn mốc 25% của trường (' + sch.sat25 + '), thiếu ' + (sch.sat25 - S.p.sat) + ' điểm' : S.p.sat > sch.sat75 ? 'SAT cao hơn mốc 75% của trường (' + sch.sat75 + ')' : 'SAT nằm trong khoảng 25–75% của trường');
+  else f.push('Chưa có SAT: chỉ so sánh bằng GPA, độ tin cậy giảm');
+  if (sch.tier <= 2) f.push('Trường nhận rất ít du học sinh, bị trừ điểm điều chỉnh');
+  if (sch.tier >= 5) f.push('Trường nhận nhiều du học sinh, được cộng điểm điều chỉnh');
+  const net = netCost(sch);
+  f.push(net <= S.p.budget ? 'Chi phí sau hỗ trợ (' + usd(net) + ') nằm trong ngân sách' : 'Chi phí sau hỗ trợ (' + usd(net) + ') vượt ngân sách ' + usd(net - S.p.budget) + '/năm');
+  return f;
+}
+
+function compute() {
+  const [w1, w2, w3] = PREFS[S.pref], items = [], excluded = [];
+  SCHOOLS.forEach(sch => {
+    if (!sch.majors.includes(S.p.major)) { excluded.push({ sch, why: 'không có ngành ' + MAJORS[S.p.major] }); return; }
+    const net = netCost(sch);
+    if (net > S.p.budget * 1.5) { excluded.push({ sch, why: 'chi phí sau hỗ trợ ' + usd(net) + ' vượt 150% ngân sách' }); return; }
+    const sc = scoreAt(sch, S.p.gpa, S.p.sat), ruleG = groupOf(sc.S);
+    let aiG = ruleG, mode = 'ok';
+    if (S.sim === '1') aiG = ruleG === 2 ? 1 : ruleG + 1;
+    if (S.sim === '2') aiG = ruleG === 1 ? 2 : 2 - ruleG;
+    const diff = Math.abs(aiG - ruleG);
+    let shown, src, cls, msg;
+    if (S.sim === 'fail') { shown = ruleG; src = 'Luật (AI lỗi)'; cls = 'b-warn'; msg = 'AI không phản hồi hoặc hết hạn mức: hiện kết quả mô hình luật.'; mode = 'fail'; }
+    else if (diff === 0) { shown = aiG; src = 'AI + luật khớp'; cls = 'b-ok'; msg = 'Hai mô hình xếp cùng nhóm.'; }
+    else if (diff === 1) { shown = aiG; src = 'AI (có cảnh báo)'; cls = 'b-warn'; msg = 'Lệch 1 bậc: hiện AI, ghi cảnh báo "luật xếp ' + GROUPS[ruleG] + '".'; mode = 'warn'; }
+    else { shown = ruleG; src = 'Luật (lệch 2 bậc)'; cls = 'b-bad'; msg = 'Lệch 2 bậc: hiện kết quả của luật, ghi nhật ký (AI xếp ' + GROUPS[aiG] + ').'; mode = 'bad'; }
+    const F = clamp(100 * (1 - net / (S.p.budget * 1.5)), 0, 100);
+    items.push({ sch, sc, ruleG, aiG, shown, src, cls, msg, mode, net, gap: Math.max(0, net - S.p.budget), X: w1 * F + w2 * sch.H + w3 * sch.Q, facts: factsOf(sch, sc) });
+  });
+  items.sort((a, b) => a.shown - b.shown || b.X - a.X);
+  return { items, excluded };
+}
+function runRecommend(reason) {
+  S.use.gem++; S.use.rule++; S.ranOnce = true; S.dirty = false;
+  const r = compute(); const time = new Date().toLocaleTimeString('vi-VN');
+  r.items.forEach(it => { if (it.mode !== 'ok') S.log.push({ time, school: it.sch.name, ai: GROUPS[it.aiG], rule: GROUPS[it.ruleG], shown: it.src }); });
+  if (!S.sel || !r.items.find(i => i.sch.id === S.sel)) S.sel = r.items[0] ? r.items[0].sch.id : null;
+  return reason;
+}
+
+/* =========================================================
+   CHAT: phân tích hồ sơ + ý định
+   ========================================================= */
+function parseProfile(text) {
+  const t = text.toLowerCase(), ch = [];
+  if (/(nếu|giả sử|thì sao|what if)/.test(t) && !/(em|tôi|mình) (đã|vừa)/.test(t)) return ch;
+  let m;
+  if ((m = t.match(/lớp\s*(10|11|12)/))) { setField('grade', m[1], 'said'); ch.push('lớp ' + m[1]); }
+  if ((m = t.match(/sat\s*[:=]?\s*(\d{3,4})/)) && +m[1] >= 400 && +m[1] <= 1600) { setField('sat', +m[1], 'said'); ch.push('SAT ' + m[1]); }
+  if ((m = t.match(/gpa\s*[:=]?\s*(\d+(?:[.,]\d+)?)/))) { let g = parseFloat(m[1].replace(',', '.')); if (g > 4 && g <= 10) g = Math.round(g / 10 * 4 * 100) / 100; if (g > 0 && g <= 4) { setField('gpa', g, 'said'); ch.push('GPA ' + g); } }
+  if ((m = t.match(/ielts\s*[:=]?\s*(\d(?:[.,]\d)?)/))) { setField('eng', { type: 'IELTS', score: m[1].replace(',', '.') }, 'said'); ch.push('IELTS ' + m[1]); }
+  else if ((m = t.match(/toefl\s*[:=]?\s*(\d{2,3})/))) { setField('eng', { type: 'TOEFL', score: m[1] }, 'said'); ch.push('TOEFL ' + m[1]); }
+  if ((m = t.match(/(\d[\d.,]*)\s*(nghìn|ngàn|k)\b/)) ) { setField('budget', parseFloat(m[1].replace(',', '.')) * 1000, 'said'); ch.push('ngân sách ' + m[1] + ' nghìn USD'); }
+  else if ((m = t.match(/ngân sách\s*[:=]?\s*(\d[\d.,]{3,})/))) { setField('budget', +m[1].replace(/[.,]/g, ''), 'said'); ch.push('ngân sách ' + m[1]); }
+  const mj = [['CS', /(\bcs\b|khoa học máy tính|công nghệ thông tin|\bit\b)/], ['BUS', /(kinh doanh|business)/], ['ENG', /(kỹ thuật|engineering)/], ['BIO', /(sinh học|biology)/], ['ART', /(nghệ thuật|\bart\b)/]];
+  for (const [k, re] of mj) if (re.test(t) && /(ngành|học|muốn|chọn|theo)/.test(t)) { setField('major', k, 'said'); ch.push('ngành ' + MAJORS[k]); break; }
+  if (/(cần|xin).{0,12}(học bổng|hỗ trợ tài chính)/.test(t) && !/nhiều/.test(t)) { setField('aid', true, 'said'); ch.push('cần hỗ trợ tài chính'); }
+  if (/(không cần).{0,12}(học bổng|hỗ trợ)/.test(t)) { setField('aid', false, 'said'); ch.push('không cần hỗ trợ'); }
+  if (/(đội trưởng|chủ tịch|câu lạc bộ|clb|tình nguyện|thành lập|giải (nhất|nhì|ba)|olympiad)/.test(t) && !/\?/.test(t)) {
+    const y = (t.match(/(\d)\s*năm/) || [])[1] || 1, r = readEC(text, +y);
+    S.p.ec.push({ text: text.trim(), years: +y, tier: r.tier, why: r.why }); S.st.ec = 'said'; S.dirty = true; S.confirmed = false; ch.push('1 hoạt động ngoại khóa (tier ' + r.tier + ')');
+  }
+  return ch;
+}
+const NEXTQ = {
+  grade: 'Bạn đang học lớp mấy (10, 11 hay 12)?',
+  major: 'Bạn muốn học ngành nào? (khoa học máy tính, kinh doanh, kỹ thuật, sinh học, nghệ thuật)',
+  budget: 'Ngân sách mỗi năm của gia đình khoảng bao nhiêu? (ví dụ: 50 nghìn)',
+  gpa: 'GPA của bạn là bao nhiêu? (thang 4 hoặc thang 10 đều được)',
+  sat: 'Bạn đã thi SAT chưa? Nếu rồi, cho mình điểm nhé. (Chưa có cũng được, nhưng độ tin cậy sẽ giảm.)',
+  eng: 'Điểm tiếng Anh (IELTS hoặc TOEFL) của bạn?',
+  ec: 'Bạn có hoạt động ngoại khóa nổi bật nào không? Kể cả vai trò và số năm tham gia.'
+};
+function nextQuestion() {
+  const order = ['grade','major','budget','gpa','sat','eng','ec'];
+  for (const f of order) if (!filled(f) && S.aiAsked !== f) { S.aiAsked = f; return NEXTQ[f]; }
+  return null;
+}
+function tool(name, cls, note) { return '<div class="chipline"><span class="tag ' + cls + '">Công cụ: ' + name + '</span><span class="src"> ' + note + '</span></div>'; }
+function say(cls, html) { S.chat.push({ cls, html }); }
+
+function reply(text) {
+  say('u', esc(text));
+  const t = text.toLowerCase();
+  const changed = parseProfile(text);
+  if (changed.length) {
+    let h = 'Mình đã ghi vào hồ sơ: ' + changed.join(', ') + '.' + tool('router + điền hồ sơ', 't-qwen', 'Qwen gắn nhãn, code quyết định bước tiếp theo');
+    if (S.step >= 4 && S.ranOnce) { runRecommend(); h += '<div style="margin-top:6px">Hồ sơ thay đổi nên mình đã chấm lại, danh sách bên cạnh đã cập nhật.</div>' + tool('recommend', 't-ai', 'cùng bộ máy với form'); }
+    else if (S.step === 2) {
+      const q = nextQuestion();
+      h += q ? '<div style="margin-top:6px">' + q + '</div>' : '<div style="margin-top:6px">Đủ thông tin cần thiết rồi. Bạn xác nhận lại ở khung bên trái, rồi bấm "Xem đánh giá hồ sơ".</div>';
+    }
+    say('a', h); return;
+  }
+  if (S.step === 2 && /(bắt đầu|xin chào|chào)/.test(t)) { const q = nextQuestion(); say('a', 'Chào bạn! ' + (q || '')); return; }
+  const need_ = S.p.gpa !== null && S.p.major && S.p.budget !== null;
+  if (!need_ && S.step >= 3) { say('a', 'Hồ sơ chưa đủ để chấm. Bạn bổ sung giúp mình: ' + missingRequired().map(f => LABEL[f]).join(', ') + '.'); return; }
+  const items = need_ ? compute().items : [];
+  const cur = items.find(i => i.sch.id === S.sel);
+  if (/(là gì|nghĩa là|khác nhau|need-?based|merit|\bed\b|\bea\b|early|common app|css profile|f-?1|visa)/.test(t)) {
+    S.use.qwen++;
+    const ans = /need-?based/.test(t) ? 'Học bổng dựa trên khả năng tài chính của gia đình. Nhiều trường tư cấp cho du học sinh, mức khác nhau tuỳ trường.'
+      : /merit/.test(t) ? 'Học bổng dựa trên thành tích học tập hoặc hoạt động, không phụ thuộc thu nhập gia đình.'
+      : /(\bed\b|early)/.test(t) ? 'Early Decision: nộp sớm, nếu đậu thì bắt buộc nhập học. Chỉ chọn 1 trường và chỉ khi chắc về tài chính.'
+      : /(visa|f-?1)/.test(t) ? 'F-1 là visa du học. Cần giấy I-20 của trường sau khi nhập học và chứng minh tài chính.'
+      : 'Đây là khái niệm trong quy trình xin học Mỹ. Mình trả lời từ tài liệu đã duyệt của hệ thống.';
+    say('a', ans + '<div class="src" style="margin-top:4px">Nguồn: tài liệu đã duyệt (minh hoạ)</div>' + tool('knowledge (RAG)', 't-qwen', 'chỉ trả lời từ tài liệu đã duyệt, kèm nguồn')); return;
+  }
+  if (/(trung tâm|nộp hồ sơ giúp|sửa luận)/.test(t)) { say('a', 'Mình mở danh sách trung tâm phù hợp ở bước 6. Xếp theo độ phù hợp, không theo phí.' + tool('centers', 't-ui', 'không chào bán, không xếp theo thanh toán') + '<button class="btn small" onclick="go(6)">Mở bước 6</button>'); return; }
+  if (/(lộ trình|kế hoạch|deadline|hạn nộp|timeline)/.test(t)) { say('a', 'Mình có lộ trình theo mục tiêu của bạn ở bước 5.' + tool('roadmap', 't-rule', 'tính từ hạn nộp và khoảng cách điểm') + '<button class="btn small" onclick="go(5)">Mở bước 5</button>'); return; }
+  const sw = t.match(/sat\s*(?:lên|là|=|:)?\s*(\d{3,4})/);
+  if (cur && /(nếu|giả sử|thì sao)/.test(t) && sw) {
+    const v = +sw[1]; S.use.rule++;
+    const a = cur.sc.S, b = scoreAt(cur.sch, S.p.gpa, v).S;
+    say('a', 'Với ' + esc(cur.sch.name) + ': độ mạnh hồ sơ ' + dS(a) + ' → ' + dS(b) + ' (' + GROUPS[groupOf(a)] + ' → ' + GROUPS[groupOf(b)] + '). Mô phỏng theo mô hình luật, không ghi đè hồ sơ thật.' + tool('what-if', 't-rule', 'chạy trên bản sao tạm, không tốn lượt AI')); return;
+  }
+  if (/(rẻ|chi phí thấp|tiết kiệm)/.test(t)) return doPref('Chi phí thấp', 'chat');
+  if (/(học bổng nhiều|nhiều học bổng|ưu tiên học bổng)/.test(t)) return doPref('Học bổng nhiều', 'chat');
+  if (/(danh tiếng|top|uy tín)/.test(t)) return doPref('Danh tiếng', 'chat');
+  if (/(cân bằng)/.test(t)) return doPref('Cân bằng', 'chat');
+  if (cur && /(vì sao|tại sao|giải thích)/.test(t)) { S.use.qwen++; say('a', 'Theo kết quả đã lưu của ' + esc(cur.sch.name) + ': ' + cur.facts.join('; ') + '.' + tool('explain', 't-qwen', 'Qwen viết lời từ các câu đã kiểm tra, không tự so sánh số')); return; }
+  if (cur && /(cần|bổ sung|thiếu|làm sao|cải thiện)/.test(t)) { S.use.rule++; say('a', backText(cur).join(' ') + tool('gap (suy diễn lùi)', 't-rule', 'mô hình luật, không tốn lượt AI')); return; }
+  say('a', 'Câu này nằm ngoài những gì mình hỗ trợ được trong phiên này. Bạn có thể hỏi: vì sao trường X xếp vậy, cần bổ sung gì, nếu SAT lên 1450 thì sao, đổi ưu tiên chi phí/học bổng/danh tiếng, hoặc giải thích khái niệm như need-based.');
+}
+function doPref(p, from) {
+  S.pref = p; S.use.gem++; S.use.rule++;
+  say('a', 'Đã đổi thứ tự trong từng khối theo "' + p + '". Không lọc lại, không chấm lại, nhóm của từng trường không đổi.' + tool('repick', 't-ai', 'chỉ gọi lại lượt chọn (1 lượt AI)'));
+}
+function backText(it) {
+  if (it.shown === 2) return ['Đã ở nhóm An toàn hơn, không cần bổ sung thêm.'];
+  const lvl = it.shown === 0 ? 25 : 75, nm = it.shown === 0 ? 'Vừa sức' : 'An toàn hơn';
+  const n = need(it.sch, lvl), out = ['Để lên nhóm ' + nm + ' (độ mạnh hồ sơ ≥ ' + lvl + '):'];
+  if (n.sat === undefined) out.push('Chưa có SAT: nếu thi SAT thì cần đạt điểm cao hơn mốc 25% của trường (' + it.sch.sat25 + ').');
+  else out.push(n.sat === null ? 'Chỉ tăng SAT thì không đủ (cần vượt 1600).' : n.sat <= S.p.sat ? 'SAT hiện tại đã đủ.' : 'Chỉ tăng SAT: cần khoảng ' + n.sat + '.');
+  out.push(n.gpa === null ? 'Chỉ tăng GPA thì không đủ (cần vượt 4,0).' : n.gpa <= S.p.gpa ? 'GPA hiện tại đã đủ.' : 'Chỉ tăng GPA: cần khoảng ' + n.gpa.toFixed(2).replace('.', ',') + '.');
+  if (it.gap > 0) out.push('Về chi phí: vượt ngân sách ' + usd(it.gap) + '/năm, cần thêm học bổng hoặc chọn trường rẻ hơn.');
+  return out;
+}
+
+/* =========================================================
+   RENDER: thanh bước + CaseState
+   ========================================================= */
+const STEPS = ['Bắt đầu', 'Nhập hồ sơ', 'Đánh giá hồ sơ', 'Gợi ý trường', 'Lộ trình', 'Trung tâm'];
+function renderStepper() {
+  $('#stepper').innerHTML = STEPS.map((s, i) => '<button class="step ' + (S.step === i + 1 ? 'on' : S.step > i + 1 ? 'done' : '') + '" onclick="go(' + (i + 1) + ')"><span class="n">' + (i + 1) + '</span>' + s + '</button>').join('');
+}
+function completeness() {
+  const w = { grade: 1, major: 2, budget: 2, gpa: 3, sat: 2, eng: 1, ec: 2, aid: 1 }; let a = 0, b = 0;
+  FIELDS.forEach(f => { b += w[f]; if (filled(f)) a += w[f]; });
+  return Math.round(a / b * 100);
+}
+function renderCase() {
+  const pc = completeness();
+  $('#case').innerHTML = '<h2>Hồ sơ chung (CaseState)</h2>' +
+    '<div class="small muted">Chat và form cùng đọc, cùng ghi một nơi này.</div>' +
+    '<div class="bar"><i style="width:' + pc + '%"></i></div><div class="small muted" style="margin-bottom:6px">Đủ ' + pc + '%</div>' +
+    FIELDS.map(f => '<div class="field"><span class="k">' + LABEL[f] + (REQUIRED.includes(f) ? ' *' : '') + '</span><span class="v">' + esc(fieldText(f)) +
+      (filled(f) ? (S.confirmed || S.st[f] === 'ok' ? '<span class="st ok">đã xác nhận</span>' : '<span class="st said">học sinh nói</span>') : '<span class="st miss">thiếu</span>') + '</span></div>').join('') +
+    '<div class="small muted" style="margin-top:8px">* bắt buộc để chấm. Thông tin "học sinh nói" cần được xác nhận, độ tin cậy kết quả phụ thuộc vào đây.</div>';
+}
+
+/* =========================================================
+   BƯỚC 1: BẮT ĐẦU
+   ========================================================= */
+function viewStart() {
+  return '<div class="panel"><h3 style="font-size:20px">Bạn muốn bắt đầu thế nào?</h3>' +
+    '<p class="muted">Hai cách vào cùng ghi vào một hồ sơ chung và dùng một bộ máy tính toán. Bạn có thể đổi qua lại bất cứ lúc nào.</p>' +
+    '<div class="cards2"><button class="big" onclick="start(\'chat\')"><h3>Trò chuyện với trợ lý</h3><p>Trợ lý hỏi từng câu, bạn trả lời tự nhiên, thông tin tự điền vào hồ sơ.</p><span class="tag t-qwen">Qwen router + skill</span></button>' +
+    '<button class="big" onclick="start(\'form\')"><h3>Điền form</h3><p>Nhập có cấu trúc, tải bảng điểm để đọc tự động, nhanh nếu bạn đã biết mình muốn gì.</p><span class="tag t-ui">Form + OCR</span></button></div>' +
+    '<p class="small muted" style="margin-top:12px">Muốn xem nhanh: bấm "Điền hồ sơ mẫu (An)" ở góc phải trên.</p></div>';
+}
+function start(mode) {
+  S.mode = mode; S.step = 2;
+  if (mode === 'chat' && !S.chat.length) { say('a', 'Chào bạn, mình là trợ lý tư vấn du học Mỹ. Mình sẽ hỏi vài câu để hiểu hồ sơ của bạn. Bạn có thể trả lời nhiều ý trong một câu.' + '<div style="margin-top:6px">' + (nextQuestion()) + '</div>'); }
+  render();
+}
+
+/* =========================================================
+   BƯỚC 2: NHẬP HỒ SƠ
+   ========================================================= */
+function viewProfile() {
+  const sw = '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px"><div><b>Nhập hồ sơ</b> <span class="muted small">bằng chat hoặc form, cùng một hồ sơ</span></div>' +
+    '<span class="seg"><button class="' + (S.mode === 'chat' ? 'on' : '') + '" onclick="setMode(\'chat\')">Chat</button><button class="' + (S.mode === 'form' ? 'on' : '') + '" onclick="setMode(\'form\')">Form</button></span></div>';
+  const miss = missingRequired();
+  const foot = '<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn" onclick="confirmProfile()">Xác nhận hồ sơ</button><button class="btn primary" onclick="go(3)" ' + (miss.length ? 'disabled' : '') + '>Xem đánh giá hồ sơ →</button>' +
+    (miss.length ? '<span class="small muted">Còn thiếu: ' + miss.map(f => LABEL[f]).join(', ') + '</span>' : '<span class="small" style="color:var(--rule)">Đã đủ thông tin cần thiết</span>') + '</div>';
+  if (S.mode === 'chat') return '<div class="panel">' + sw + '<div id="chatMainHost"></div>' + foot + '</div>';
+  return '<div class="panel">' + sw + formHtml() + foot + '</div>';
+}
+function setMode(m) { S.mode = m; if (m === 'chat' && !S.chat.length) start('chat'); else render(); }
+function confirmProfile() { FIELDS.forEach(f => { if (filled(f)) S.st[f] = 'ok'; }); S.confirmed = true; toast('Đã xác nhận hồ sơ'); render(); }
+function formHtml() {
+  const p = S.p, e = p.eng || {};
+  return '<div class="sect"><h3>1. Thông tin cơ bản</h3><div class="grid2">' +
+    '<label class="f">Bạn đang học lớp<select onchange="fset(\'grade\',this.value)"><option value="">Chọn</option>' + [10, 11, 12].map(g => '<option ' + (p.grade == g ? 'selected' : '') + ' value="' + g + '">Lớp ' + g + '</option>').join('') + '</select></label>' +
+    '<label class="f">Ngành muốn học<select onchange="fset(\'major\',this.value)"><option value="">Chọn</option>' + Object.keys(MAJORS).map(k => '<option ' + (p.major === k ? 'selected' : '') + ' value="' + k + '">' + MAJORS[k] + '</option>').join('') + '</select></label></div></div>' +
+    '<div class="sect"><h3>2. Học lực <button class="btn small" style="margin-left:8px" onclick="fakeOCR()">Tải bảng điểm (giả lập OCR)</button></h3><div class="grid2">' +
+    '<label class="f">GPA<input type="number" step="0.01" min="0" max="10" id="gpaIn" value="' + (p.gpa ?? '') + '" placeholder="vd 3.6 hoặc 8.5" onchange="fset(\'gpa\',this.value)"><span class="small muted">Nhập thang 4 hoặc thang 10 đều được, hệ thống tự quy đổi.</span></label>' +
+    '<label class="f">SAT (không bắt buộc)<input type="number" min="400" max="1600" value="' + (p.sat ?? '') + '" onchange="fset(\'sat\',this.value)"></label>' +
+    '<label class="f">Chứng chỉ tiếng Anh<select onchange="fset(\'engType\',this.value)"><option ' + (e.type === 'IELTS' ? 'selected' : '') + '>IELTS</option><option ' + (e.type === 'TOEFL' ? 'selected' : '') + '>TOEFL</option></select></label>' +
+    '<label class="f">Điểm<input type="number" step="0.5" value="' + (e.score ?? '') + '" onchange="fset(\'engScore\',this.value)"></label></div></div>' +
+    '<div class="sect"><h3>3. Hoạt động ngoại khóa</h3>' +
+    p.ec.map((x, i) => '<div class="ec"><b>' + esc(x.text) + '</b> · ' + x.years + ' năm <span class="tag t-qwen">Qwen đọc: tier ' + x.tier + '/5</span> <button class="btn small" onclick="delEC(' + i + ')">Xoá</button><div class="why">Vì sao: ' + esc(x.why) + '</div></div>').join('') +
+    '<div class="grid2"><label class="f">Mô tả (vai trò, thành tích)<textarea id="ecText" placeholder="vd: Đội trưởng CLB Robotics của trường"></textarea></label>' +
+    '<label class="f">Số năm tham gia<input type="number" id="ecYears" min="0" max="6" value="1"><button class="btn small" style="margin-top:8px" onclick="addEC()">+ Thêm hoạt động</button></label></div></div>' +
+    '<div class="sect"><h3>4. Tài chính</h3><div class="grid2">' +
+    '<label class="f">Ngân sách mỗi năm (USD)<input type="number" step="1000" value="' + (p.budget ?? '') + '" onchange="fset(\'budget\',this.value)"></label>' +
+    '<label class="f">Cần hỗ trợ tài chính / học bổng?<select onchange="fset(\'aid\',this.value)"><option value="">Chọn</option><option value="1" ' + (p.aid === true ? 'selected' : '') + '>Có</option><option value="0" ' + (p.aid === false ? 'selected' : '') + '>Không</option></select></label></div></div>';
+}
+function fset(f, v) {
+  if (f === 'engType' || f === 'engScore') { const e = S.p.eng || { type: 'IELTS', score: '' }; if (f === 'engType') e.type = v; else e.score = v; setField('eng', e.score === '' ? null : e, 'said'); }
+  else if (f === 'gpa') { let g = parseFloat(v); if (g > 4 && g <= 10) g = Math.round(g / 10 * 4 * 100) / 100; if (!(g > 0 && g <= 4)) { toast('GPA không hợp lệ'); g = null; } setField('gpa', g, 'said'); }
+  else if (f === 'sat') { const s = v === '' ? null : +v; if (s !== null && (s < 400 || s > 1600)) { toast('SAT phải từ 400 đến 1600'); setField('sat', null, 'said'); } else setField('sat', s, 'said'); }
+  else if (f === 'budget') setField('budget', v === '' ? null : +v, 'said');
+  else if (f === 'aid') setField('aid', v === '' ? null : v === '1', 'said');
+  else if (f === 'grade') setField('grade', v, 'said');
+  else setField(f, v, 'said');
+  renderCase(); renderStepper(); refreshFoot();
+}
+function refreshFoot() { const keep = document.activeElement; const y = window.scrollY; $('#main').innerHTML = view(); mountChat(); window.scrollTo(0, y); }
+function fakeOCR() { setField('gpa', 3.6, 'said'); S.st.gpa = 'said'; toast('OCR đọc được GPA 3,6 từ bảng điểm. Hãy kiểm tra và xác nhận.'); render(); }
+function addEC() {
+  const t = $('#ecText').value.trim(), y = +$('#ecYears').value || 0; if (!t) { toast('Hãy mô tả hoạt động'); return; }
+  const r = readEC(t, y); S.p.ec.push({ text: t, years: y, tier: r.tier, why: r.why }); S.st.ec = 'said'; S.dirty = true; S.confirmed = false; S.use.qwen++; render();
+}
+function delEC(i) { S.p.ec.splice(i, 1); if (!S.p.ec.length) S.st.ec = undefined; S.dirty = true; render(); }
+
+/* =========================================================
+   BƯỚC 3: ĐÁNH GIÁ HỒ SƠ (B3)
+   ========================================================= */
+function dims() {
+  const p = S.p, d = [];
+  d.push({ k: 'Học lực', v: Math.round(clamp((p.gpa - 2.5) / 1.5 * 100, 0, 100)), src: 'Luật' });
+  d.push({ k: 'Thi chuẩn hoá', v: p.sat ? Math.round(clamp((p.sat - 1000) / 600 * 100, 0, 100)) : null, src: 'Luật' });
+  d.push({ k: 'Tiếng Anh', v: p.eng ? Math.round(clamp(p.eng.type === 'IELTS' ? (p.eng.score - 5) / 3 * 100 : (p.eng.score - 60) / 60 * 100, 0, 100)) : null, src: 'Luật' });
+  d.push({ k: 'Ngoại khóa', v: ecScore(), src: 'Qwen đọc + luật' });
+  d.push({ k: 'Tài chính', v: Math.round(clamp(p.budget / 80000 * 100, 0, 100)), src: 'Luật' });
+  return d;
+}
+function viewReview() {
+  const miss = missingRequired();
+  if (miss.length) return gate(miss);
+  const d = dims(), have = d.filter(x => x.v !== null), avg = Math.round(have.reduce((a, b) => a + b.v, 0) / have.length);
+  const sorted = [...have].sort((a, b) => b.v - a.v), top = sorted.slice(0, 2), low = sorted.slice(-2).reverse();
+  const pc = completeness(), unconf = FIELDS.filter(f => filled(f) && !(S.confirmed || S.st[f] === 'ok')).length;
+  let conf = 'Cao', why = [];
+  if (!S.p.sat) { conf = 'Trung bình'; why.push('chưa có SAT'); }
+  if (!S.p.ec.length) { conf = 'Trung bình'; why.push('chưa có ngoại khóa'); }
+  if (unconf > 0) { conf = conf === 'Cao' ? 'Trung bình' : 'Thấp'; why.push(unconf + ' thông tin chưa xác nhận'); }
+  if (pc < 60) { conf = 'Thấp'; why.push('hồ sơ mới đủ ' + pc + '%'); }
+  const cc = conf === 'Cao' ? 'b-ok' : conf === 'Thấp' ? 'b-bad' : 'b-warn';
+  return '<div class="panel"><h3>Đánh giá hồ sơ <span class="tag t-ai">Nhận xét: AI</span><span class="tag t-rule">Con số: luật</span></h3>' +
+    '<div class="grid2"><div><div class="muted small">Độ mạnh hồ sơ tổng quát (0–100)</div><div class="big-num">' + avg + '</div>' +
+    '<div style="margin-top:8px">Độ tin cậy kết quả: <span class="badge ' + cc + '">' + conf + '</span></div>' +
+    '<div class="small muted">Tính từ độ đủ dữ liệu và việc đã xác nhận, không phải AI tự báo.' + (why.length ? ' Giảm vì: ' + why.join(', ') + '.' : '') + '</div></div>' +
+    '<div>' + d.map(x => '<div class="dim"><div class="row"><span>' + x.k + ' <span class="muted small">(' + x.src + ')</span></span><b>' + (x.v === null ? 'chưa có' : x.v) + '</b></div><div class="bar"><i style="width:' + (x.v || 0) + '%"></i></div></div>').join('') + '</div></div>' +
+    '<div class="grid2" style="margin-top:12px"><div class="callout"><b>Điểm mạnh</b><ul class="clean">' + top.map(x => '<li>' + x.k + ' (' + x.v + ')</li>').join('') + '</ul></div>' +
+    '<div class="callout warn"><b>Điểm cần cải thiện</b><ul class="clean">' + low.map(x => '<li>' + x.k + ' (' + x.v + ')</li>').join('') + (S.p.sat ? '' : '<li>Thi SAT để so sánh chính xác hơn</li>') + '</ul></div></div>' +
+    (S.p.ec.length ? '<div class="sec"><h4>Ngoại khóa đã đọc <span class="tag t-qwen">Qwen</span></h4><ul class="clean">' + S.p.ec.map(x => '<li>' + esc(x.text) + ': tier ' + x.tier + '/5 · ' + esc(x.why) + '</li>').join('') + '</ul></div>' : '') +
+    '<div style="margin-top:14px"><button class="btn primary" onclick="go(4)">Xem gợi ý trường →</button></div></div>';
+}
+function gate(miss) {
+  return '<div class="panel"><h3>Hồ sơ chưa đủ để tiếp tục</h3><p class="muted">Hệ thống chỉ chấm khi đủ thông tin cần thiết. Còn thiếu: <b>' + miss.map(f => LABEL[f]).join(', ') + '</b>.</p><button class="btn primary" onclick="go(2)">Quay lại nhập hồ sơ</button></div>';
+}
+
+/* =========================================================
+   BƯỚC 4: GỢI Ý TRƯỜNG (bàn làm việc)
+   ========================================================= */
+function viewWorkspace() {
+  const miss = missingRequired(); if (miss.length) return gate(miss);
+  if (S.dirty || !S.ranOnce) runRecommend();
+  const { items, excluded } = compute(), cur = items.find(i => i.sch.id === S.sel) || items[0];
+  let list = '';
+  GROUPS.forEach((g, gi) => {
+    const arr = items.filter(i => i.shown === gi);
+    list += '<div class="block-title">' + g.toUpperCase() + ' (' + arr.length + ')</div>' + (arr.map(i => '<button class="school ' + (cur && i.sch.id === cur.sch.id ? 'on' : '') + '" onclick="pick(\'' + i.sch.id + '\')"><b>' + (S.targets.includes(i.sch.id) ? '★ ' : '') + i.sch.name + '</b><span>' + i.sch.st + ' · độ mạnh ' + clamp(i.sc.S, 0, 100).toFixed(0) + ' · ' + usd(i.net) + '/năm</span></button>').join('') || '<div class="small muted">Không có trường</div>');
+  });
+  const top = '<div class="panel" style="margin-bottom:12px"><div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;justify-content:space-between"><div><div class="small muted" style="margin-bottom:4px">Nút ưu tiên (gọi lại lượt chọn, không chấm lại)</div><div class="prefs">' + Object.keys(PREFS).map(p => '<button class="' + (p === S.pref ? 'on' : '') + '" onclick="prefBtn(\'' + p + '\')">' + p + '</button>').join('') + '</div></div>' +
+    '<div><div class="small muted" style="margin-bottom:4px">Mô phỏng khi AI và luật so sánh</div><select onchange="setSim(this.value)" style="margin:0"><option value="0" ' + (S.sim === '0' ? 'selected' : '') + '>Khớp nhóm</option><option value="1" ' + (S.sim === '1' ? 'selected' : '') + '>Lệch 1 bậc</option><option value="2" ' + (S.sim === '2' ? 'selected' : '') + '>Lệch 2 bậc</option><option value="fail" ' + (S.sim === 'fail' ? 'selected' : '') + '>AI lỗi / hết hạn mức</option></select></div>' +
+    '<div class="meter"><span>Gemini: <b>' + S.use.gem + '</b> lượt</span><span>Qwen: <b>' + S.use.qwen + '</b></span><span>Luật: <b>' + S.use.rule + '</b> (miễn phí)</span></div></div></div>';
+  const exc = '<details><summary>Đã lọc cứng loại ' + excluded.length + ' trường</summary><ul class="clean">' + excluded.map(e => '<li>' + e.sch.name + ': ' + e.why + '</li>').join('') + '</ul></details>';
+  const log = '<details><summary>Nhật ký phân xử AI và luật (' + S.log.length + ')</summary>' + (S.log.length ? '<table><tr><th>Giờ</th><th>Trường</th><th>AI</th><th>Luật</th><th>Hiển thị</th></tr>' + S.log.slice(-8).map(l => '<tr><td>' + l.time + '</td><td>' + l.school + '</td><td>' + l.ai + '</td><td>' + l.rule + '</td><td>' + l.shown + '</td></tr>').join('') + '</table>' : '<div class="small muted">Chưa có lần lệch nào. Thử đổi ô mô phỏng ở trên.</div>') + '</details>';
+  return top + '<div class="ws"><div class="panel"><h2>Danh sách gợi ý</h2>' + list + exc + log + '</div>' + (cur ? detailHtml(cur) : '<div class="panel">Không có trường phù hợp. Thử tăng ngân sách hoặc đổi ngành.</div>') + '</div>';
+}
+function detailHtml(it) {
+  const sch = it.sch, back = backText(it), star = S.targets.includes(sch.id);
+  return '<div class="panel"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><h3 style="font-size:19px;margin:0">' + sch.name + ' <span class="muted small">(' + sch.st + ')</span></h3><button class="btn small" onclick="toggleTarget(\'' + sch.id + '\')">' + (star ? '★ Đã đưa vào mục tiêu' : '☆ Đưa vào mục tiêu') + '</button></div>' +
+    '<div style="margin:6px 0"><span class="badge ' + it.cls + '">' + GROUPS[it.shown] + ' · nguồn: ' + it.src + '</span></div><div class="small muted">' + it.msg + '</div>' +
+    '<div class="kv"><div><small>Độ mạnh hồ sơ so với trường</small><strong>' + dS(it.sc.S) + '</strong></div><div><small>Chi phí sau hỗ trợ</small><strong style="font-size:14px">' + usd(it.net) + '</strong></div><div><small>Vượt ngân sách</small><strong style="font-size:14px">' + (it.gap ? usd(it.gap) : 'Không') + '</strong></div></div>' +
+    '<div class="sec"><h4>Vì sao (mã lý do đã chuyển thành câu)</h4><ul class="clean">' + it.facts.map(x => '<li>' + x + '</li>').join('') + '</ul></div>' +
+    '<div class="sec"><h4>Cần bổ sung gì (suy diễn lùi) <span class="tag t-rule">Luật</span></h4><ul class="clean">' + back.map(x => '<li>' + x + '</li>').join('') + '</ul></div>' +
+    '<div class="sec"><h4>What-if: nếu SAT là <b id="wiVal">' + (S.p.sat || 1200) + '</b> <span class="tag t-rule">Luật, mô phỏng</span></h4><input type="range" min="1000" max="1600" step="10" value="' + (S.p.sat || 1200) + '" oninput="whatIf(this.value)"><div id="wiOut" class="small"></div></div>' +
+    '<div style="margin-top:12px"><button class="btn small" onclick="ask(\'Vì sao ' + sch.name + ' xếp như vậy?\')">Hỏi trợ lý: vì sao xếp vậy</button> <button class="btn small" onclick="ask(\'Muốn vào ' + sch.name + ' cần bổ sung gì?\')">Hỏi: cần bổ sung gì</button></div></div>';
+}
+function pick(id) { S.sel = id; render(); }
+function toggleTarget(id) { const i = S.targets.indexOf(id); if (i >= 0) S.targets.splice(i, 1); else S.targets.push(id); render(); }
+function prefBtn(p) { say('u', 'Chọn nút: ' + p); doPref(p, 'button'); render(); }
+function setSim(v) { S.sim = v; S.dirty = true; render(); }
+function whatIf(v) {
+  const it = compute().items.find(i => i.sch.id === S.sel); if (!it) return;
+  $('#wiVal').textContent = v; const b = scoreAt(it.sch, S.p.gpa, +v).S;
+  $('#wiOut').innerHTML = 'Độ mạnh hồ sơ ' + dS(it.sc.S) + ' → <b>' + dS(b) + '</b> (' + GROUPS[groupOf(it.sc.S)] + ' → <b>' + GROUPS[groupOf(b)] + '</b>). Không ghi đè hồ sơ thật, không tốn lượt AI.';
+}
+function ask(q) { reply(q); render(); }
+
+/* =========================================================
+   BƯỚC 5: LỘ TRÌNH (B4)
+   ========================================================= */
+function pickTargets(items) {
+  const chosen = items.filter(i => S.targets.includes(i.sch.id));
+  if (chosen.length) return chosen;
+  const out = []; [0, 1, 1, 2].forEach(g => { const c = items.filter(i => i.shown === g && !out.includes(i))[0]; if (c) out.push(c); }); return out;
+}
+function viewRoad() {
+  const miss = missingRequired(); if (miss.length) return gate(miss);
+  if (S.dirty || !S.ranOnce) runRecommend();
+  const items = compute().items, tg = pickTargets(items), y = S.p.grade == 12 ? 2026 : S.p.grade == 11 ? 2027 : 2028;
+  const match = tg.find(i => i.shown === 1) || tg[0];
+  let satTask = 'Ôn và thi SAT lần đầu (mùa xuân)';
+  if (match) { const n = need(match.sch, 25); if (n.sat && S.p.sat && n.sat > S.p.sat) satTask = 'Thi lại SAT, mục tiêu khoảng ' + n.sat + ' (để vào nhóm Vừa sức của ' + match.sch.name + ')'; else if (S.p.sat) satTask = 'SAT hiện tại đã đủ cho mục tiêu, có thể không cần thi lại'; }
+  const steps = [
+    ['Tháng 10–11/' + y, 'Chốt danh sách trường mục tiêu (' + tg.map(i => i.sch.name).join(', ') + ') và tạo tài khoản nộp hồ sơ.'],
+    ['Tháng 12/' + y, satTask + '.'],
+    ['15/11–1/1', 'Early (ED/EA) nếu muốn: chỉ chọn khi chắc về tài chính.'],
+    ['Đầu 1/' + (y + 1), 'Hạn nộp Regular của phần lớn trường. Hoàn tất bài luận và thư giới thiệu.']
+  ];
+  if (S.p.aid) steps.push(['2/' + (y + 1), 'Nộp giấy tờ tài chính xin học bổng need-based (CSS Profile hoặc mẫu của trường).']);
+  steps.push(['3–4/' + (y + 1), 'Nhận kết quả, so sánh gói hỗ trợ tài chính.'], ['1/5/' + (y + 1), 'Chốt trường và đặt cọc.'], ['6–8/' + (y + 1), 'Nhận I-20, xin visa F-1, chuẩn bị chứng minh tài chính.']);
+  const done = S.road;
+  return '<div class="panel"><h3>Lộ trình theo mục tiêu của bạn <span class="tag t-rule">Luật</span></h3><div class="small muted" style="margin-bottom:10px">Tạo từ hạn nộp và khoảng cách điểm trong bước 4. Trường mục tiêu: ' + (S.targets.length ? 'bạn đã chọn' : 'tự chọn 4 trường đại diện, bạn có thể ★ ở bước 4') + '.</div><div class="tl">' +
+    steps.map((s, i) => '<div class="it"><div class="when">' + s[0] + '</div><label><input type="checkbox" ' + (done[i] ? 'checked' : '') + ' onchange="S.road[' + i + ']=this.checked"> ' + s[1] + '</label></div>').join('') + '</div>' +
+    '<button class="btn primary" onclick="go(6)">Cần hỗ trợ dịch vụ? Xem trung tâm →</button></div>';
+}
+
+/* =========================================================
+   BƯỚC 6: TRUNG TÂM (B6)
+   ========================================================= */
+function viewCenters() {
+  const need_ = [];
+  if (S.p.sat && S.p.sat < 1400) need_.push('Luyện SAT');
+  need_.push('Sửa luận'); if (S.p.aid) need_.push('Nộp hồ sơ');
+  return '<div class="panel"><h3>Trung tâm tư vấn phù hợp</h3><div class="callout" style="margin-bottom:10px">Chỉ gợi ý để tham khảo, <b>không chào bán</b>. Xếp theo độ phù hợp với nhu cầu của bạn, <b>không xếp theo phí</b> trung tâm trả. Nhu cầu suy ra từ hồ sơ: ' + need_.join(', ') + '.</div>' +
+    CENTERS.map((c, i) => '<div class="cen"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><b>' + c.name + '</b><span class="tag t-ui">' + c.city + '</span></div>' + (c.verified ? '<span class="tag t-rule">Đã xác minh</span>' : '') + c.svc.map(s => '<span class="tag ' + (need_.includes(s) ? 't-ai' : 't-gray') + '">' + s + '</span>').join('') +
+      '<div class="small muted" style="margin:6px 0">Phù hợp vì: ' + c.fit + '</div><button class="btn small" onclick="contact(' + i + ')">Gửi yêu cầu liên hệ</button></div>').join('') +
+    '<div class="small muted">Khi bạn bấm "Gửi yêu cầu liên hệ", hệ thống hiển thị rõ dữ liệu nào sẽ được chia sẻ và chỉ gửi khi bạn đồng ý.</div></div>';
+}
+function contact(i) {
+  const shared = FIELDS.filter(filled).map(f => LABEL[f]).join(', ');
+  if (confirm('Chia sẻ với "' + CENTERS[i].name + '": ' + shared + '.\nBạn đồng ý gửi yêu cầu liên hệ?')) toast('Đã gửi yêu cầu liên hệ tới ' + CENTERS[i].name + ' (mô phỏng).');
+}
+
+/* =========================================================
+   CHAT PANEL (một khung duy nhất, gắn vào nơi cần)
+   ========================================================= */
+function chatQuick() {
+  if (S.step === 2) return ['Em lớp 12, muốn học khoa học máy tính, ngân sách 50 nghìn', 'GPA 3.6, SAT 1350, IELTS 7.0', 'Em là đội trưởng CLB Robotics 3 năm', 'Em cần học bổng'];
+  if (S.step === 4) return ['Vì sao trường này xếp như vậy?', 'Cần bổ sung gì để vào trường này?', 'Nếu SAT lên 1450 thì sao?', 'Em muốn trường rẻ hơn', 'Học bổng need-based là gì?', 'Em vừa thi lại SAT 1450'];
+  return ['Học bổng need-based là gì?', 'Early Decision là gì?', 'Cho em xem lộ trình', 'Có trung tâm nào phù hợp không?'];
+}
+function mountChat() {
+  const host = S.step === 2 && S.mode === 'chat' ? $('#chatMainHost') : S.step >= 3 ? $('#dockHost') : null;
+  if (!host) return;
+  host.innerHTML = ''; host.appendChild($('#chatTpl').content.cloneNode(true));
+  const box = $('#chatbox'); if (host.id === 'chatMainHost') box.classList.add('main');
+  $('#chatTitle').textContent = host.id === 'chatMainHost' ? 'Cửa vào 1: trò chuyện dẫn dắt' : 'Trợ lý (cùng một phiên, biết trường đang xem)';
+  $('#msgs').innerHTML = S.chat.map(m => '<div class="m ' + m.cls + '">' + m.html + '</div>').join('');
+  $('#msgs').scrollTop = $('#msgs').scrollHeight;
+  $('#quick').innerHTML = chatQuick().map((q, i) => '<button data-q="' + i + '">' + esc(q) + '</button>').join('');
+  $('#quick').querySelectorAll('button').forEach(b => b.addEventListener('click', () => send(chatQuick()[+b.dataset.q])));
+  const inp = $('#chatIn'); const go_ = () => { const v = inp.value.trim(); if (v) send(v); };
+  $('#chatSend').addEventListener('click', go_); inp.addEventListener('keydown', e => { if (e.key === 'Enter') go_(); });
+}
+function send(text) { reply(text); render(); const i = $('#chatIn'); if (i) i.focus(); }
+
+/* =========================================================
+   ĐIỀU HƯỚNG + RENDER TỔNG
+   ========================================================= */
+function view() {
+  switch (S.step) {
+    case 1: return viewStart(); case 2: return viewProfile(); case 3: return viewReview();
+    case 4: return viewWorkspace(); case 5: return viewRoad(); default: return viewCenters();
+  }
+}
+function go(n) {
+  if (n === 1) { S.step = 1; render(); return; }
+  if (!S.mode) S.mode = 'form';
+  if (n >= 3 && missingRequired().length) { S.step = n; render(); return; }
+  S.step = n; render(); window.scrollTo(0, 0);
+}
+function render() {
+  const dockOn = S.step >= 3;
+  $('#layout').classList.toggle('nodock', !dockOn);
+  $('#dock').style.display = dockOn ? '' : 'none';
+  $('#case').style.display = S.step === 1 ? 'none' : '';
+  $('#layout').style.gridTemplateColumns = S.step === 1 ? '1fr' : '';
+  renderStepper(); renderCase();
+  $('#main').innerHTML = view();
+  mountChat();
+  if (S.step === 4) { const w = $('#wiVal'); if (w) whatIf(w.textContent); }
+}
+function sample() {
+  S = freshState(); S.mode = 'form';
+  setField('grade', '12', 'ok'); setField('major', 'CS', 'ok'); setField('budget', 50000, 'ok'); setField('gpa', 3.6, 'ok'); setField('sat', 1350, 'ok');
+  setField('eng', { type: 'IELTS', score: '7.0' }, 'ok'); setField('aid', true, 'ok');
+  [['Đội trưởng CLB Robotics của trường', 3], ['Tình nguyện dạy tin học cho trẻ em vùng khó khăn', 2], ['Giải Ba cuộc thi Tin học cấp thành phố', 1]].forEach(([t, y]) => { const r = readEC(t, y); S.p.ec.push({ text: t, years: y, tier: r.tier, why: r.why }); });
+  S.st.ec = 'ok'; S.confirmed = true; S.step = 3; say('a', 'Mình đã có hồ sơ của An. Bạn muốn hỏi gì về hồ sơ hoặc kết quả?');
+  render();
+}
+$('#btnSample').addEventListener('click', sample);
+$('#btnReset').addEventListener('click', () => { S = freshState(); render(); });
+render();
+(function () { const m = typeof location !== 'undefined' && location.hash.match(/^#s([1-6])$/); if (m) { sample(); go(+m[1]); } })();
+</script>
+</body>
+</html>
