@@ -1,0 +1,142 @@
+{
+ "when": "2026-10-22T20:54:17",
+ "provider": "gemini",
+ "model": "gemini-3.8-flash",
+ "thinking": "low",
+ "batch_size": 8,
+ "skill_version": "1.1",
+ "seconds": 21.9,
+ "summary": {
+  "pairs": 8,
+  "g2_correct_pct": 100.0,
+  "all_steps_correct_pct": 37.5,
+  "first_wrong_step": {
+   "w": 3,
+   "ps": 2
+  },
+  "mean_s_error": 2.18
+ },
+ "rows": [
+  {
+   "case": "P01",
+   "c": "S001",
+   "ok_g2": true,
+   "first_wrong": "w",
+   "s_err": 13.090000000000003,
+   "got": [
+    0.5,
+    0.5
+   ],
+   "want": [
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "case": "P01",
+   "c": "S002",
+   "ok_g2": true,
+   "first_wrong": null,
+   "s_err": 0.010000000000005116,
+   "got": null,
+   "want": null
+  },
+  {
+   "case": "P01",
+   "c": "S003",
+   "ok_g2": true,
+   "first_wrong": "w",
+   "s_err": null,
+   "got": [
+    1.0,
+    0.0
+   ],
+   "want": [
+    0.5,
+    0.5
+   ]
+  },
+  {
+   "case": "P01",
+   "c": "S004",
+   "ok_g2": true,
+   "first_wrong": "ps",
+   "s_err": 0.0,
+   "got": 100.0,
+   "want": null
+  },
+  {
+   "case": "P01",
+   "c": "S005",
+   "ok_g2": true,
+   "first_wrong": null,
+   "s_err": 0.0,
+   "got": null,
+   "want": null
+  },
+  {
+   "case": "P01",
+   "c": "S006",
+   "ok_g2": true,
+   "first_wrong": "ps",
+   "s_err": 0.0,
+   "got": 100.0,
+   "want": null
+  },
+  {
+   "case": "P01",
+   "c": "S007",
+   "ok_g2": true,
+   "first_wrong": null,
+   "s_err": null,
+   "got": null,
+   "want": null
+  },
+  {
+   "case": "P01",
+   "c": "S008",
+   "ok_g2": true,
+   "first_wrong": "w",
+   "s_err": 0.0,
+   "got": [
+    0.67,
+    0.33
+   ],
+   "want": [
+    0.0,
+    1.0
+   ]
+  }
+ ],
+ "latency_seconds": {
+  "calls": 1,
+  "min": 12.8,
+  "median": 12.8,
+  "max": 12.8
+ },
+ "tokens": {
+  "input": 3105,
+  "output": 1210,
+  "thought": 0,
+  "calls": 1
+ },
+ "usage_log": [
+  {
+   "usage": {
+    "total_tokens": 4315,
+    "total_input_tokens": 3105,
+    "input_tokens_by_modality": [
+     {
+      "modality": "text",
+      "tokens": 3105
+     }
+    ],
+    "total_cached_tokens": 0,
+    "total_output_tokens": 1210,
+    "total_tool_use_tokens": 0,
+    "total_thought_tokens": 0
+   },
+   "seconds": 12.81
+  }
+ ]
+}

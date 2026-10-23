@@ -46,12 +46,12 @@ public class RecommendationService(IAdvisorClient advisor, IRecommendationReposi
     public async Task<RecommendationRun> RecommendAsync(
         StudentProfile profile,
         IReadOnlyList<ProfileActivity> activities,
-        IReadOnlyList<RecommendSchoolInput> schools,
+        IReadOnlyList<RecommendSchoolInput> schools, // dánh sách các trường active và đúng bậc học
         IReadOnlyList<int>? pref = null,
         CancellationToken ct = default
     )
     {
-        //Danh sách các điều kiện 
+        //Danh sách các tiêu chí của học sinh
         var criteria = new FilterCriteria(
          profile.IntendedMajor,
          profile.PreferredStates,
@@ -62,28 +62,32 @@ public class RecommendationService(IAdvisorClient advisor, IRecommendationReposi
          profile.Toefl,
          profile.Duolingo);
 
-        //Các trường đã lọc cừng 3 kết quả: Keep, AidBlock hoặc Excluded
+        // filtered = danh sách các trường đã lọc cứng (tiêu chí, danh sách trường, dung sai)
         var filtered = HardFilter.Apply(criteria, schools.Select(ToFilterSchool), BudgetTolerance);
-        // Những trường được giữ, bỏ các trường exclude ,
+        // Chỉ giữ các trường kept, aid
         var kept = filtered.Where(r=> r.Outcome != FilterOutcome.Excluded).ToList();
-        // QWEN
+
+        // *******************QWEN*******************************************
         // ToEcRequest trả về 2 danh sách activities và award
         // ReadEcAsync = Qweb đọc ngoại khóa
         var ec = await advisor.ReadEcAsync(ToEcRequest(activities), ct);
+        //Check kết quả trả về
         CloudResultCheck.EnsureTier(ec.Tier);
 
         if (kept.Count == 0)
             return await SaveAsync(profile, pref, schools, new RecommendationRun(ec.Tier, ec.AiUsed, filtered, null, null), ct);
 
         //GEMINI
-        //Chuyển thành dict key : code -> value 
+        //Dựng dữ liệu Gemini chấm
+        //Chuyển thành dict key : code -> value :kept(kết quả lọc cứng trường keep and aid)
         var byCode = kept.ToDictionary(r => r.School.Code, StringComparer.OrdinalIgnoreCase);
 
+        //Chỉ lấy các trường nằm trong byCode( đã lọc cứng) -> chuyển danh sách thành dạng ToScoreSChool để gửi gemini
         var scoreSchools = schools
             .Where(s => byCode.ContainsKey(s.University.Code))
             .Select(ToScoreSchool)
             .ToList();
-
+        //Đóng gói hồ sơ sinh viên
         var student = new ScoreStudentDto(
             profile.OverallGpa is decimal gpa ? (double)gpa : null,
             SatScore(profile.Sat),
@@ -117,6 +121,7 @@ public class RecommendationService(IAdvisorClient advisor, IRecommendationReposi
         //Lấy hồ sơ sinh viên
         var profile = await profiles.GetProfileByUserIdAsync(userId, ct)
             ?? throw new InvalidOperationException("Chưa có hồ sơ.");
+        // Đã submit hồ sơ bước 6 chưa?
         if (profile.FlowSubmittedAt is null)
             throw new InvalidOperationException("Hồ sơ chưa được gửi ở bước 6.");
         if (string.IsNullOrWhiteSpace(profile.TargetLevel))
@@ -351,6 +356,7 @@ public class RecommendationService(IAdvisorClient advisor, IRecommendationReposi
             offering.MinToefl,
             offering.MinDuolingo);
     }
+    //Hàm chuyển dữ liệu về dạng gửi lên gemini
     private static ScoreSchoolDto ToScoreSchool(RecommendSchoolInput input)
     {
         var university = input.University;

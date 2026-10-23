@@ -47,7 +47,7 @@ public record ScoreStudentDto(
     double? Budget, // ngân sách USD/năm
     int Tier);      // bậc ngoại khóa đã tính ở lượt trước
 
-// Một trường đã qua lọc cứng. Thiếu số thì để null, không gửi 0.
+// Một trường đã qua lọc cứng. Thiếu số thì để null, không gửi 0., dữ liệu gửi lên gemini
 public record ScoreSchoolDto(
     string C,                    // mã trường, chép nguyên
     double? Acc,                 // tỷ lệ nhận chung, 0–1

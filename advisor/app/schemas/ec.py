@@ -47,7 +47,7 @@ class EcActivityResult(EcActivityRead):
 
 
 class EcResponse(BaseModel):
-    # mảng activity đã đọc
+    # mảng activity AI đã đọc (role,scope,q)
     act: list[EcActivityResult]
     # tổng điểm hoạt động
     tong_hd: float
