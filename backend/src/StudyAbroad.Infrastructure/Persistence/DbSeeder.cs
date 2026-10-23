@@ -412,75 +412,414 @@ public static class DbSeeder
   "certifications": [
     {
       "id": "ielts",
-      "name": "IELTS",
+      "name": "IELTS Academic",
       "category": "english",
+      "group": "popular",
+      "order": 1,
+      "aliases": [
+        "ielts",
+        "ielts academic"
+      ],
       "min": 0,
       "max": 9,
       "step": 0.5,
-      "placeholder": "Ví dụ: 7.0"
+      "placeholder": "Ví dụ: 6.5",
+      "scaleLabel": "Thang 0–9",
+      "validityYears": 2,
+      "sections": [
+        {
+          "id": "listening",
+          "label": "Nghe",
+          "min": 0,
+          "max": 9,
+          "step": 0.5
+        },
+        {
+          "id": "reading",
+          "label": "Đọc",
+          "min": 0,
+          "max": 9,
+          "step": 0.5
+        },
+        {
+          "id": "writing",
+          "label": "Viết",
+          "min": 0,
+          "max": 9,
+          "step": 0.5
+        },
+        {
+          "id": "speaking",
+          "label": "Nói",
+          "min": 0,
+          "max": 9,
+          "step": 0.5
+        }
+      ],
+      "sectionsHint": "Nên điền, nhiều trường yêu cầu điểm tối thiểu mỗi kỹ năng",
+      "requiresSubject": false,
+      "subjectLabel": null,
+      "profileField": "ielts"
     },
     {
       "id": "toefl",
       "name": "TOEFL iBT",
       "category": "english",
+      "group": "popular",
+      "order": 2,
+      "aliases": [
+        "toefl",
+        "toefl ibt",
+        "ibt"
+      ],
       "min": 0,
       "max": 120,
       "step": 1,
-      "placeholder": "Ví dụ: 95"
+      "placeholder": "Ví dụ: 95",
+      "scaleLabel": "Thang 0–120",
+      "validityYears": 2,
+      "sections": [
+        {
+          "id": "listening",
+          "label": "Nghe",
+          "min": 0,
+          "max": 30,
+          "step": 1
+        },
+        {
+          "id": "reading",
+          "label": "Đọc",
+          "min": 0,
+          "max": 30,
+          "step": 1
+        },
+        {
+          "id": "writing",
+          "label": "Viết",
+          "min": 0,
+          "max": 30,
+          "step": 1
+        },
+        {
+          "id": "speaking",
+          "label": "Nói",
+          "min": 0,
+          "max": 30,
+          "step": 1
+        }
+      ],
+      "sectionsHint": "Nên điền, nhiều trường yêu cầu điểm tối thiểu mỗi kỹ năng",
+      "requiresSubject": false,
+      "subjectLabel": null,
+      "profileField": "toefl"
     },
     {
       "id": "duolingo",
       "name": "Duolingo English Test",
       "category": "english",
+      "group": "popular",
+      "order": 3,
+      "aliases": [
+        "duolingo",
+        "det"
+      ],
       "min": 10,
       "max": 160,
       "step": 5,
-      "placeholder": "Ví dụ: 125"
+      "placeholder": "Ví dụ: 125",
+      "scaleLabel": "Thang 10–160",
+      "validityYears": 2,
+      "sections": null,
+      "sectionsHint": null,
+      "requiresSubject": false,
+      "subjectLabel": null,
+      "profileField": "duolingo"
+    },
+    {
+      "id": "pte",
+      "name": "PTE Academic",
+      "category": "english",
+      "group": "popular",
+      "order": 4,
+      "aliases": [
+        "pte",
+        "pearson"
+      ],
+      "min": 10,
+      "max": 90,
+      "step": 1,
+      "placeholder": "Ví dụ: 65",
+      "scaleLabel": "Thang 10–90",
+      "validityYears": 2,
+      "sections": [
+        {
+          "id": "listening",
+          "label": "Nghe",
+          "min": 10,
+          "max": 90,
+          "step": 1
+        },
+        {
+          "id": "reading",
+          "label": "Đọc",
+          "min": 10,
+          "max": 90,
+          "step": 1
+        },
+        {
+          "id": "writing",
+          "label": "Viết",
+          "min": 10,
+          "max": 90,
+          "step": 1
+        },
+        {
+          "id": "speaking",
+          "label": "Nói",
+          "min": 10,
+          "max": 90,
+          "step": 1
+        }
+      ],
+      "sectionsHint": "Nên điền, nhiều trường yêu cầu điểm tối thiểu mỗi kỹ năng",
+      "requiresSubject": false,
+      "subjectLabel": null,
+      "profileField": null
+    },
+    {
+      "id": "cambridge",
+      "name": "Cambridge English (C1 Advanced, C2 Proficiency)",
+      "category": "english",
+      "group": "other",
+      "order": 5,
+      "aliases": [
+        "cambridge",
+        "cae",
+        "cpe",
+        "c1 advanced",
+        "c2 proficiency"
+      ],
+      "min": 80,
+      "max": 230,
+      "step": 1,
+      "placeholder": "Ví dụ: 185",
+      "scaleLabel": "Thang 80–230",
+      "validityYears": null,
+      "sections": null,
+      "sectionsHint": null,
+      "requiresSubject": false,
+      "subjectLabel": null,
+      "profileField": null
+    },
+    {
+      "id": "itep",
+      "name": "iTEP Academic",
+      "category": "english",
+      "group": "other",
+      "order": 6,
+      "aliases": [
+        "itep"
+      ],
+      "min": 0,
+      "max": 6,
+      "step": 0.5,
+      "placeholder": "Ví dụ: 4.5",
+      "scaleLabel": "Thang 0–6",
+      "validityYears": 2,
+      "sections": null,
+      "sectionsHint": null,
+      "requiresSubject": false,
+      "subjectLabel": null,
+      "profileField": null
+    },
+    {
+      "id": "languagecert",
+      "name": "LanguageCert Academic",
+      "category": "english",
+      "group": "other",
+      "order": 7,
+      "aliases": [
+        "languagecert",
+        "language cert"
+      ],
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "placeholder": "Ví dụ: 75",
+      "scaleLabel": "Thang 0–100",
+      "validityYears": 2,
+      "sections": null,
+      "sectionsHint": null,
+      "requiresSubject": false,
+      "subjectLabel": null,
+      "profileField": null
     },
     {
       "id": "sat",
       "name": "SAT",
       "category": "standardized",
+      "group": "popular",
+      "order": 1,
+      "aliases": [
+        "sat"
+      ],
       "min": 400,
       "max": 1600,
       "step": 10,
-      "placeholder": "Ví dụ: 1420"
+      "placeholder": "Ví dụ: 1420",
+      "scaleLabel": "Thang 400–1600",
+      "validityYears": null,
+      "sections": [
+        {
+          "id": "math",
+          "label": "Toán",
+          "min": 200,
+          "max": 800,
+          "step": 10
+        },
+        {
+          "id": "reading_writing",
+          "label": "Đọc và Viết",
+          "min": 200,
+          "max": 800,
+          "step": 10
+        }
+      ],
+      "sectionsHint": "Không bắt buộc",
+      "requiresSubject": false,
+      "subjectLabel": null,
+      "profileField": "sat"
     },
     {
       "id": "act",
       "name": "ACT",
       "category": "standardized",
+      "group": "popular",
+      "order": 2,
+      "aliases": [
+        "act"
+      ],
       "min": 1,
       "max": 36,
       "step": 1,
-      "placeholder": "Ví dụ: 31"
+      "placeholder": "Ví dụ: 31",
+      "scaleLabel": "Thang 1–36",
+      "validityYears": null,
+      "sections": null,
+      "sectionsHint": null,
+      "requiresSubject": false,
+      "subjectLabel": null,
+      "profileField": "act"
     },
     {
       "id": "ap",
-      "name": "Advanced Placement (AP)",
+      "name": "AP (Advanced Placement)",
       "category": "standardized",
+      "group": "popular",
+      "order": 3,
+      "aliases": [
+        "ap",
+        "advanced placement"
+      ],
       "min": 1,
       "max": 5,
       "step": 1,
-      "placeholder": "Ví dụ: 5"
+      "placeholder": "Ví dụ: 5",
+      "scaleLabel": "Thang 1–5",
+      "validityYears": null,
+      "sections": null,
+      "sectionsHint": null,
+      "requiresSubject": true,
+      "subjectLabel": "Tên môn AP",
+      "profileField": "ap"
+    },
+    {
+      "id": "ib",
+      "name": "IB Diploma",
+      "category": "standardized",
+      "group": "other",
+      "order": 4,
+      "aliases": [
+        "ib",
+        "international baccalaureate"
+      ],
+      "min": 1,
+      "max": 45,
+      "step": 1,
+      "placeholder": "Ví dụ: 38",
+      "scaleLabel": "Thang 1–45",
+      "validityYears": null,
+      "sections": null,
+      "sectionsHint": null,
+      "requiresSubject": false,
+      "subjectLabel": null,
+      "profileField": null
+    },
+    {
+      "id": "alevel",
+      "name": "A-Level",
+      "category": "standardized",
+      "group": "other",
+      "order": 5,
+      "aliases": [
+        "a level",
+        "a-level",
+        "alevel",
+        "gce"
+      ],
+      "min": null,
+      "max": null,
+      "step": null,
+      "placeholder": "Ví dụ: A*",
+      "scaleLabel": "Điểm chữ A*–E",
+      "validityYears": null,
+      "sections": null,
+      "sectionsHint": null,
+      "requiresSubject": true,
+      "subjectLabel": "Tên môn A-Level",
+      "profileField": null
     },
     {
       "id": "gre",
       "name": "GRE General",
       "category": "graduate",
+      "group": "other",
+      "order": 6,
+      "aliases": [
+        "gre"
+      ],
       "min": 260,
       "max": 340,
       "step": 1,
-      "placeholder": "Ví dụ: 320"
+      "placeholder": "Ví dụ: 320",
+      "scaleLabel": "Thang 260–340",
+      "validityYears": 5,
+      "sections": null,
+      "sectionsHint": null,
+      "requiresSubject": false,
+      "subjectLabel": null,
+      "profileField": "gre"
     },
     {
       "id": "gmat",
       "name": "GMAT",
       "category": "graduate",
+      "group": "other",
+      "order": 7,
+      "aliases": [
+        "gmat"
+      ],
       "min": 200,
       "max": 800,
       "step": 10,
-      "placeholder": "Ví dụ: 680"
+      "placeholder": "Ví dụ: 680",
+      "scaleLabel": "Thang 200–800",
+      "validityYears": 5,
+      "sections": null,
+      "sectionsHint": null,
+      "requiresSubject": false,
+      "subjectLabel": null,
+      "profileField": "gmat"
     }
   ],
   "activityCategories": [

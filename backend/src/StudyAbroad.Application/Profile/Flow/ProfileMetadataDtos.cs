@@ -89,14 +89,37 @@ public record TemplateSubjectItem(
     [property: JsonPropertyName("credits")] decimal Credits
 );
 
+/// <summary>
+/// [USAS-640] Một loại chứng chỉ trong danh mục (app_settings profile.metadata). min/max/step null khi điểm dạng chữ
+/// (A-Level); validityYears null là không hết hạn; profileField là cột cũ trên student_profiles được điền điểm cao nhất
+/// </summary>
 public record CertificationMetadataItem(
     [property: JsonPropertyName("id")] string Id,
     [property: JsonPropertyName("name")] string Name,
     [property: JsonPropertyName("category")] string Category,
+    [property: JsonPropertyName("min")] decimal? Min,
+    [property: JsonPropertyName("max")] decimal? Max,
+    [property: JsonPropertyName("step")] decimal? Step,
+    [property: JsonPropertyName("placeholder")] string? Placeholder,
+    [property: JsonPropertyName("group")] string Group = "other",
+    [property: JsonPropertyName("order")] int Order = 0,
+    [property: JsonPropertyName("aliases")] IReadOnlyList<string>? Aliases = null,
+    [property: JsonPropertyName("scaleLabel")] string? ScaleLabel = null,
+    [property: JsonPropertyName("validityYears")] int? ValidityYears = null,
+    [property: JsonPropertyName("sections")] IReadOnlyList<CertificationSectionItem>? Sections = null,
+    [property: JsonPropertyName("sectionsHint")] string? SectionsHint = null,
+    [property: JsonPropertyName("requiresSubject")] bool RequiresSubject = false,
+    [property: JsonPropertyName("subjectLabel")] string? SubjectLabel = null,
+    [property: JsonPropertyName("profileField")] string? ProfileField = null
+);
+
+/// <summary>Điểm thành phần của một loại chứng chỉ (kỹ năng IELTS, phần thi SAT)</summary>
+public record CertificationSectionItem(
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonPropertyName("label")] string Label,
     [property: JsonPropertyName("min")] decimal Min,
     [property: JsonPropertyName("max")] decimal Max,
-    [property: JsonPropertyName("step")] decimal Step,
-    [property: JsonPropertyName("placeholder")] string Placeholder
+    [property: JsonPropertyName("step")] decimal Step
 );
 
 public record ImpactLevelMetadataItem(

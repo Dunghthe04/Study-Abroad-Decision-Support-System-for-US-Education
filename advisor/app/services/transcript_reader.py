@@ -30,6 +30,7 @@ from app.schemas.transcript_ocr import (
     TranscriptSubjectScore,
     TranscriptTerm,
 )
+from app.services.pii_mask import mask_personal_info
 from app.services.transcript_text import read_term_tables, tidy_transcription
 
 logger = logging.getLogger(__name__)
@@ -539,7 +540,8 @@ class TranscriptReader:
 
     async def _parse_source(self, source: str, file_name: str, model_used: str | None) -> _FileResult:
         """Bước B: LLM chữ đọc văn bản, trả JSON theo schema; sau đó hậu kiểm bằng code."""
-        source = source[:MAX_SOURCE_CHARS]
+        # Che họ tên, ngày sinh, mã số trước khi đưa cho LLM; điểm, lớp, năm học giữ nguyên
+        source = mask_personal_info(source)[:MAX_SOURCE_CHARS]
         # Bảng học bạ đã dựng thẳng cột thì code đọc luôn: nhanh và không lệch cột như LLM nhỏ
         if table_terms := read_term_tables(source):
             level = "thpt" if any(t["grade"] for t in table_terms) else "unknown"

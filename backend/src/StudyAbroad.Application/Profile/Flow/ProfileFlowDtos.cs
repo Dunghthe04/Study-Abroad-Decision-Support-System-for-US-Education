@@ -56,15 +56,37 @@ public record FlowSubjectDraftDto(
     [property: JsonPropertyName("semester2Score")] decimal? Semester2Score = null
 );
 
-/// <summary>Bước 3 – englishTestType: IELTS | TOEFL | Duolingo | none; englishTestDate: yyyy-MM</summary>
+/// <summary>
+/// Bước 3 – danh sách chứng chỉ (certifications), kế hoạch thi tiếng Anh (englishPlanned, englishPlannedDate: yyyy-MM).
+/// englishTestType / englishOverallScore / englishTestDate / otherTests là dạng nháp cũ, chỉ đọc để chuyển sang danh sách
+/// </summary>
 public record FlowCertificationDraftDto(
+    [property: JsonPropertyName("certifications")] List<FlowCertificationItemDto>? Certifications = null,
+    [property: JsonPropertyName("englishPlanned")] bool EnglishPlanned = false,
+    [property: JsonPropertyName("englishPlannedDate")] string? EnglishPlannedDate = null,
     [property: JsonPropertyName("englishTestType")] string? EnglishTestType = null,
     [property: JsonPropertyName("englishOverallScore")] decimal? EnglishOverallScore = null,
     [property: JsonPropertyName("englishTestDate")] string? EnglishTestDate = null,
     [property: JsonPropertyName("otherTests")] List<FlowOtherTestDraftDto>? OtherTests = null
 );
 
-/// <summary>testType: SAT | ACT | AP</summary>
+/// <summary>
+/// Một chứng chỉ. type: id trong metadata certifications hoặc "other"; sections: điểm thành phần theo id section;
+/// testDate: yyyy-MM
+/// </summary>
+public record FlowCertificationItemDto(
+    [property: JsonPropertyName("id")] string? Id = null,
+    [property: JsonPropertyName("category")] string? Category = null,
+    [property: JsonPropertyName("type")] string? Type = null,
+    [property: JsonPropertyName("customName")] string? CustomName = null,
+    [property: JsonPropertyName("subject")] string? Subject = null,
+    [property: JsonPropertyName("overall")] decimal? Overall = null,
+    [property: JsonPropertyName("scaleText")] string? ScaleText = null,
+    [property: JsonPropertyName("sections")] Dictionary<string, decimal?>? Sections = null,
+    [property: JsonPropertyName("testDate")] string? TestDate = null
+);
+
+/// <summary>Nháp cũ – testType: SAT | ACT | AP</summary>
 public record FlowOtherTestDraftDto(
     [property: JsonPropertyName("testType")] string? TestType = null,
     [property: JsonPropertyName("score")] decimal? Score = null

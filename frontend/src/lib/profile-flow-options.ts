@@ -2,6 +2,7 @@
 // Giá trị (`value`) là mã lưu vào DB — khớp seed `profile.metadata` và ProfileConstants phía BE.
 
 import type {
+  AcademicYearDraft,
   ActivityRole,
   BudgetTierId,
   CurrentEducationLevel,
@@ -96,4 +97,38 @@ export function parseTermName(termName: string): { gradeName: string; semester: 
   const m = /^(.*?)\s*-?\s*(?:HK|Học kỳ|Kỳ)\s*([12])\s*$/i.exec(termName.trim());
   if (!m) return null;
   return { gradeName: m[1].trim(), semester: m[2] === "2" ? 2 : 1 };
+}
+
+// Helper tính GPA thang 4 từ thang 10 theo công thức tuyến tính: GPA 4.0 = GPA 10 / 10 * 4.0
+export function calculateLinearGpa(years: AcademicYearDraft[]): { gpa10: number | null; gpa4: number | null } {
+  let totalScore10 = 0;
+  let count = 0;
+
+  for (const yr of years) {
+    for (const sub of yr.subjects) {
+      const s1 = typeof sub.semester1Score === "number" ? sub.semester1Score : null;
+      const s2 = typeof sub.semester2Score === "number" ? sub.semester2Score : null;
+
+      let subAvg: number | null = null;
+      if (s1 !== null && s2 !== null) {
+        subAvg = (s1 + s2) / 2;
+      } else if (s1 !== null) {
+        subAvg = s1;
+      } else if (s2 !== null) {
+        subAvg = s2;
+      }
+
+      if (subAvg !== null && subAvg >= 0 && subAvg <= 10) {
+        totalScore10 += subAvg;
+        count++;
+      }
+    }
+  }
+
+  if (count === 0) return { gpa10: null, gpa4: null };
+
+  const gpa10 = Math.round((totalScore10 / count) * 100) / 100;
+  const gpa4 = Math.round(((gpa10 / 10) * 4.0) * 100) / 100;
+
+  return { gpa10, gpa4 };
 }

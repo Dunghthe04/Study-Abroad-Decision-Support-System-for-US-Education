@@ -27,7 +27,6 @@ public static class DependencyInjection
             .UseSnakeCaseNamingConvention());
 
         services.AddScoped<IStudyCenterRepository, StudyCenterRepository>();
-        services.AddScoped<IRecommendationRepository, RecommendationRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IFinancialProfileRepository, FinancialProfileRepository>();
         services.AddScoped<StudyAbroad.Application.AcademicProfiles.IAcademicProfileRepository, AcademicProfileRepository>();
@@ -38,6 +37,7 @@ public static class DependencyInjection
         services.AddScoped<StudyAbroad.Application.Profile.Flow.IProfileFlowRepository, ProfileFlowRepository>();
         // [USAS-640] Đăng ký service lưu trữ tệp bảng điểm nháp
         services.AddScoped<StudyAbroad.Application.Profile.Flow.IProfileFileStorageService, StudyAbroad.Infrastructure.Services.ProfileFileStorageService>();
+        services.AddScoped<IRecommendationRepository, RecommendationRepository>();
 
         // [USAS-362] Đăng ký JWT Token Service (Ưu tiên nạp key từ biến môi trường JWT_SECRET_KEY)
         services.Configure<JwtOptions>(options =>
@@ -70,11 +70,6 @@ public static class DependencyInjection
         {
             ConfigureAdvisorClient(sp, client);
             client.Timeout = TimeSpan.FromSeconds(sp.GetRequiredService<IOptions<AdvisorOptions>>().Value.OcrTimeoutSeconds);
-        });
-        services.AddHttpClient<IRecommendationAi, RecommendationAiClient>((sp, client) =>
-        {
-            ConfigureAdvisorClient(sp, client);
-            client.Timeout = TimeSpan.FromSeconds(sp.GetRequiredService<IOptions<AdvisorOptions>>().Value.RecommendTimeoutSeconds);
         });
 
         // [Scheduled Background Jobs: Unlock expired accounts & Cleanup OTPs]

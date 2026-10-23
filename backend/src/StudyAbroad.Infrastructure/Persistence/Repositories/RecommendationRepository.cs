@@ -16,82 +16,37 @@ namespace StudyAbroad.Infrastructure.Persistence.Repositories
             db.Recommendations.Add(recommendation);
             await db.SaveChangesAsync(ct);
         }
+        public Task<Recommendation?> GetLatestAsync(Guid userId, CancellationToken ct = default) =>
+            db.Recommendations
+                .Where(r => r.UserId == userId)
+                .OrderByDescending(r => r.CreatedAt)
+                .FirstOrDefaultAsync(ct);
 
-        public Task<Recommendation?> GetLatestRecommendationAsync(Guid userId, CancellationToken ct = default)
+        public async Task<IReadOnlyList<RecommendSchoolInput>> ListSchoolsAsync(string studyLevel, CancellationToken ct = default)
         {
-            return db.Recommendations.AsNoTracking()
-            .Where(r => r.UserId == userId)
-            .OrderByDescending(r => r.CreatedAt)   // mới nhất lên đầu
-            .FirstOrDefaultAsync(ct);              // lấy 1 dòng, không có thì null
-        }
-
-        public Task<StudentProfile?> GetProfileAsync(Guid studentId, CancellationToken ct = default)
-        {
-            return db.StudentProfiles.AsNoTracking()
-                .FirstOrDefaultAsync(p => p.UserId == studentId, ct);
-        }
-
-        public async Task<IReadOnlyList<SchoolCandidate>> GetSchoolCandidatesAsync(string studyLevel, CancellationToken ct = default)
-        {
-           return await (from o in db.UniversityOfferings.AsNoTracking()
-                   join u in db.Universities.AsNoTracking() on o.UniversityId equals u.Id
-                   where u.IsActive && o.StudyLevel == studyLevel
-                   select new SchoolCandidate(
-                       u.Id,
-                       o.Id,
-                       u.Code,
-                       u.Name,
-                       u.State,
-                       o.Majors,
-                       o.AvgGpa4,
-                       o.Sat25,
-                       o.Sat75,
-                       o.TuitionUsd,
-                       o.LivingUsd,
-                       o.FeesUsd,
-                       u.AcceptanceRate,
-                       o.MinIelts,
-                       o.MinToefl,
-                       o.MinDuolingo,
-                       u.City,
-                       u.Control,
-                       u.Website,
-                       u.InternationalStudentCount,
-                       o.SatPolicy,
-                       // HasIntlAid: null = chưa có dữ liệu H6, "none" = không có học bổng du học sinh
-                       o.IntlAidPolicy == null ? (bool?)null : o.IntlAidPolicy != "none",
-                       o.C7GpaImportance,
-                       o.C7TestImportance,
-                       o.C7EcImportance,
-                       o.SatSubmitPct,
-                       new GpaDistribution(
-                           o.GpaPct40,
-                           o.GpaPct375To399,
-                           o.GpaPct350To374,
-                           o.GpaPct325To349,
-                           o.GpaPct300To324,
-                           o.GpaPct250To299,
-                           o.GpaPctBelow250),
-                       o.IntlAcceptanceRate,
-                       o.IntlAidAvgUsd,
-                       o.RetentionRate1Yr,
-                       o.GradRate6Yr,
-                       o.OtherExpensesUsd
-                   )).ToListAsync(ct);
-        }
-
-        public async Task<IReadOnlyList<ProfileActivity>> GetActivitiesAsync(Guid studentProfileId, CancellationToken ct = default)
-        {
-            return await db.ProfileActivities.AsNoTracking()
-                .Where(a => a.StudentProfileId == studentProfileId)
-                .OrderBy(a => a.CreatedAt)
+            var rows = await db.UniversityOfferings
+                .Where(o => o.StudyLevel == studyLevel)
+                .Join(
+                    db.Universities.Where(u => u.IsActive),
+                    offering => offering.UniversityId,
+                    university => university.Id,
+                    (offering, university) => new { university, offering })
                 .ToListAsync(ct);
+            return rows.Select(row => new RecommendSchoolInput(row.university, row.offering)).ToList();
         }
 
-        public Task<string?> GetSettingJsonAsync(string key, CancellationToken ct = default)
+        public async Task<RecommendSchoolInput?> FindSchoolAsync(string code, string studyLevel, CancellationToken ct = default)
         {
-            return db.AppSettings.AsNoTracking()
-                .Where(s => s.Key == key).Select(s => s.ValueJson).FirstOrDefaultAsync(ct);
+            var row = await db.UniversityOfferings
+                .Where(o => o.StudyLevel == studyLevel)
+                .Join(
+                    db.Universities.Where(u => u.IsActive && u.Code == code),
+                    offering => offering.UniversityId,
+                    university => university.Id,
+                    (offering, university) => new { university, offering })
+                .FirstOrDefaultAsync(ct);
+            return row is null ? null : new RecommendSchoolInput(row.university, row.offering);
         }
+
     }
 }

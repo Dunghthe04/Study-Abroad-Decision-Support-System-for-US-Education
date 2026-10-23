@@ -75,6 +75,7 @@ public class ProfileFlowRepository(AppDbContext context) : IProfileFlowRepositor
         StudentProfile profile,
         IEnumerable<TranscriptScore> scores,
         IEnumerable<ProfileActivity> activities,
+        IEnumerable<ProfileCertification> certifications,
         CancellationToken ct = default)
     {
         var now = DateTime.UtcNow;
@@ -87,6 +88,8 @@ public class ProfileFlowRepository(AppDbContext context) : IProfileFlowRepositor
         context.TranscriptScores.RemoveRange(oldScores);
         var oldActivities = await context.ProfileActivities.Where(a => a.StudentProfileId == profile.Id).ToListAsync(ct);
         context.ProfileActivities.RemoveRange(oldActivities);
+        var oldCertifications = await context.ProfileCertifications.Where(c => c.StudentProfileId == profile.Id).ToListAsync(ct);
+        context.ProfileCertifications.RemoveRange(oldCertifications);
 
         foreach (var s in scores)
         {
@@ -104,6 +107,14 @@ public class ProfileFlowRepository(AppDbContext context) : IProfileFlowRepositor
             context.ProfileActivities.Add(a);
         }
 
+        foreach (var c in certifications)
+        {
+            c.StudentProfileId = profile.Id;
+            c.CreatedAt = now;
+            c.UpdatedAt = now;
+            context.ProfileCertifications.Add(c);
+        }
+
         await context.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
     }
@@ -118,6 +129,7 @@ public class ProfileFlowRepository(AppDbContext context) : IProfileFlowRepositor
             .ToListAsync(ct);
     }
 
+    //Lấy danh sách hoạt động ngoại khóa của sinh viên
     public async Task<IReadOnlyList<ProfileActivity>> GetProfileActivitiesAsync(Guid profileId, CancellationToken ct = default)
     {
         return await context.ProfileActivities
@@ -125,6 +137,15 @@ public class ProfileFlowRepository(AppDbContext context) : IProfileFlowRepositor
             .Where(a => a.StudentProfileId == profileId)
             .OrderByDescending(a => a.ImpactLevel)
             .ThenBy(a => a.Title)
+            .ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<ProfileCertification>> GetProfileCertificationsAsync(Guid profileId, CancellationToken ct = default)
+    {
+        return await context.ProfileCertifications
+            .AsNoTracking()
+            .Where(c => c.StudentProfileId == profileId)
+            .OrderBy(c => c.SortOrder)
             .ToListAsync(ct);
     }
 }
