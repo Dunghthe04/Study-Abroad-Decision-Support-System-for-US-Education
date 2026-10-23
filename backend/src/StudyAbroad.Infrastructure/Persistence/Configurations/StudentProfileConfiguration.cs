@@ -28,6 +28,8 @@ public class StudentProfileConfiguration : IEntityTypeConfiguration<StudentProfi
         b.Property(x => x.Gmat).HasPrecision(5, 1);
         b.Property(x => x.EnglishTestType).HasMaxLength(16);
         b.Property(x => x.EnglishTestDate);
+        b.Property(x => x.EnglishTestPlanned).HasDefaultValue(false);
+        b.Property(x => x.EnglishPlannedDate);
         b.Property(x => x.OtherTestsJson).HasColumnType("jsonb");
         b.Property(x => x.ExtracurricularScore).HasPrecision(4, 2);
         b.ToTable(t => t.HasCheckConstraint("ck_student_profiles_extracurricular_score",

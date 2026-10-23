@@ -31,12 +31,36 @@ export interface ImpactLevelOption {
   desc?: string;
 }
 
-export interface CertificationTypeOption {
-  key: string;
+/** Điểm thành phần của một loại chứng chỉ (kỹ năng IELTS, phần thi SAT) — từ metadata */
+export interface CertificationSectionOption {
+  id: string;
   label: string;
-  maxScore: number;
-  minScore: number;
-  scoreType: string;
+  min: number;
+  max: number;
+  step: number;
+}
+
+export type CertificationCategory = "english" | "standardized" | "graduate";
+
+/** Một loại chứng chỉ trong danh mục `certifications` của app_settings profile.metadata */
+export interface CertificationTypeOption {
+  id: string;
+  name: string;
+  category: CertificationCategory;
+  group: "popular" | "other" | string;
+  order: number;
+  aliases: string[];
+  min: number | null;
+  max: number | null;
+  step: number | null;
+  placeholder: string | null;
+  scaleLabel: string | null;
+  validityYears: number | null;
+  sections: CertificationSectionOption[];
+  sectionsHint: string | null;
+  requiresSubject: boolean;
+  subjectLabel: string | null;
+  profileField: string | null;
 }
 
 export interface UsStateOption {
@@ -107,16 +131,43 @@ export interface TranscriptDraft {
   manualGpa10Scale?: number | null;
 }
 
-export interface OtherTestDraft {
+/** Loại "Khác" — học sinh tự nhập tên chứng chỉ */
+export const OTHER_CERT_TYPE = "other";
+
+/** Một chứng chỉ học sinh khai (BE: FlowCertificationItemDto). Mỗi môn AP là một mục. */
+export interface CertificationItem {
+  id: string;
+  category: CertificationCategory;
+  /** id trong metadata certifications, hoặc "other" */
+  type: string;
+  customName?: string | null;
+  subject?: string | null;
+  overall?: number | null;
+  /** thang điểm tự nhập (loại "Khác") hoặc điểm dạng chữ (A-Level) */
+  scaleText?: string | null;
+  /** điểm thành phần theo id section trong metadata */
+  sections?: Record<string, number | null> | null;
+  testDate?: string | null; // "yyyy-MM"
+}
+
+/** Nháp kiểu cũ (trước khi có danh sách thẻ) — chỉ dùng để chuyển đổi */
+export interface LegacyOtherTestDraft {
   testType: "SAT" | "ACT" | "AP";
   score?: number | null;
 }
 
 export interface CertificationDraft {
+  certifications: CertificationItem[];
+  englishPlanned: boolean;
+  englishPlannedDate?: string | null; // "yyyy-MM"
+}
+
+/** Bước 3 kiểu cũ còn nằm trong nháp đã lưu (server hoặc localStorage) */
+export interface LegacyCertificationDraft {
   englishTestType?: EnglishTestType | null;
   englishOverallScore?: number | null;
-  englishTestDate?: string | null; // "yyyy-MM"
-  otherTests: OtherTestDraft[];
+  englishTestDate?: string | null;
+  otherTests?: LegacyOtherTestDraft[] | null;
 }
 
 export interface FinancialDraft {

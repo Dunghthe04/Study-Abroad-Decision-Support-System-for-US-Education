@@ -2,11 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircleIcon, Loader2Icon } from "lucide-react";
+import { AlertCircleIcon, CheckIcon, Loader2Icon, XIcon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { ProfileFlowHeader } from "./ProfileFlowHeader";
-import { ProfileFlowStepper } from "./ProfileFlowStepper";
+import { useAssistant, useAssistantPageContext } from "@/components/assistant/AssistantProvider";
+import { FLOW_STEPS, ProfileFlowStepper } from "./ProfileFlowStepper";
 import { Step1Goal } from "./Step1Goal";
 import { Step2Transcript } from "./Step2Transcript";
 import { Step3Certifications } from "./Step3Certifications";
@@ -14,6 +14,8 @@ import { Step4Financial } from "./Step4Financial";
 import { Step5Extracurricular } from "./Step5Extracurricular";
 import { Step6Review } from "./Step6Review";
 import { profileFlowApi } from "@/lib/profile-flow-api";
+import { migrateLegacyStep3 } from "@/lib/certification-utils";
+import { recommendationApi } from "@/lib/recommendation-api";
 import type {
   GoalDraft,
   TranscriptDraft,
@@ -23,6 +25,7 @@ import type {
   DraftTranscriptFile,
   ProfileFlowDraft,
   ProfileMetadataResponse,
+  LegacyCertificationDraft,
 } from "@/types/profile-flow";
 
 // Không chọn sẵn cấp học / ngân sách / học bổng — học sinh phải tự chọn (BE validate khi commit)
@@ -40,8 +43,9 @@ const INITIAL_DRAFT: ProfileFlowDraft = {
     manualGpa10Scale: null,
   },
   step3: {
-    englishTestType: "none",
-    otherTests: [],
+    certifications: [],
+    englishPlanned: false,
+    englishPlannedDate: null,
   },
   step4: {
     annualBudgetTier: null,
@@ -52,9 +56,23 @@ const INITIAL_DRAFT: ProfileFlowDraft = {
   },
 };
 
+// Nháp của lần nộp gần nhất, để nộp lại y hệt thì không lọc trường và gửi AI lần nữa
+const LAST_COMMITTED_KEY = "usas_last_committed_draft";
+
+// Câu gợi ý riêng cho từng bước trong khung trợ lý
+const STEP_SUGGESTIONS: Record<number, string> = {
+  1: "Chưa biết chọn ngành nào thì sao?",
+  2: "Học kỳ chưa có điểm thì để thế nào?",
+  3: "Chứng chỉ của em không có trong danh sách?",
+  4: "Ngân sách có gồm vé máy bay không?",
+  5: "Phạm vi ảnh hưởng chọn thế nào?",
+  6: "Hồ sơ của em đủ chưa?",
+};
+
 export function ProfileFlowWizard() {
   const router = useRouter();
   const { user } = useAuth();
+  const { open: assistantOpen } = useAssistant();
 
   const [currentStep, setCurrentStep] = useState(1);
   const [completedSteps, setCompletedSteps] = useState<number[]>([]);
@@ -70,11 +88,19 @@ export function ProfileFlowWizard() {
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isInitialMount = useRef(true);
   const isUploadingRef = useRef(false);
+  const redirecting = useRef(false);
   const completedStepsRef = useRef<number[]>([]);
   useEffect(() => {
     completedStepsRef.current = completedSteps;
   }, [completedSteps]);
   const lastCompletedStep = completedSteps.length ? Math.max(...completedSteps) : 0;
+
+  const stepTitle = FLOW_STEPS.find((s) => s.step === currentStep)?.title ?? "";
+  useAssistantPageContext({
+    label: `Bước ${currentStep}/6 · ${stepTitle}`,
+    suggestions: ["Bước này điền thế nào?", "Kiểm tra bước này giúp mình", STEP_SUGGESTIONS[currentStep]].filter(Boolean),
+    studyLevel: draft.step1.targetDegreeLevel ?? null,
+  });
 
   // 1. Tải siêu dữ liệu và trạng thái nháp khi vào trang
   useEffect(() => {
@@ -82,13 +108,21 @@ export function ProfileFlowWizard() {
 
     async function loadInitialData() {
       try {
+        // Đã có kết quả gợi ý thì vào thẳng trang kết quả (khỏi gửi AI lại); "Sửa hồ sơ" mở ?edit=1 để vào form
+        const editing = new URLSearchParams(window.location.search).get("edit") === "1";
         // Tải metadata động song song với trạng thái nháp
-        const [metaData, stateData] = await Promise.all([
+        const [metaData, stateData, latest] = await Promise.all([
           profileFlowApi.getMetadata().catch(() => null),
           user ? profileFlowApi.getFlowState().catch(() => null) : null,
+          user && !editing ? recommendationApi.getLatest().catch(() => null) : null,
         ]);
 
         if (!isMounted) return;
+        if (latest) {
+          redirecting.current = true;
+          router.replace("/recommendations");
+          return;
+        }
 
         if (metaData) setMetadata(metaData);
 
@@ -117,7 +151,7 @@ export function ProfileFlowWizard() {
       } catch (err: unknown) {
         console.error("Lỗi khi tải dữ liệu ban đầu cho luồng hồ sơ:", err);
       } finally {
-        if (isMounted) {
+        if (isMounted && !redirecting.current) {
           setIsLoading(false);
           isInitialMount.current = false;
         }
@@ -129,7 +163,7 @@ export function ProfileFlowWizard() {
     return () => {
       isMounted = false;
     };
-  }, [user]);
+  }, [user, router]);
 
   // Lưu nháp: đã đăng nhập → BE, khách → localStorage
   const persistDraft = useCallback(
@@ -276,15 +310,30 @@ export function ProfileFlowWizard() {
           );
         }
         router.push("/login?redirect=/analysis");
-        router.push("/recommendations?run=1");
+        return;
+      }
+
+      // Hồ sơ y hệt lần nộp trước (đã có kết quả) thì xem lại kết quả cũ, không lọc và gửi AI lần nữa
+      const draftJson = JSON.stringify({ user: user.id, draft });
+      let lastCommitted: string | null = null;
+      try {
+        lastCommitted = localStorage.getItem(LAST_COMMITTED_KEY);
+      } catch {
+        // trình duyệt chặn storage → coi như hồ sơ mới
+      }
+      if (lastCommitted === draftJson && (await recommendationApi.getLatest().catch(() => null))) {
+        router.push("/recommendations");
         return;
       }
 
       const res = await profileFlowApi.commitFlow(draft);
       const isSuccessful = Boolean(res.success || res.succeeded);
       if (isSuccessful) {
-        if (typeof window !== "undefined") {
+        try {
           localStorage.removeItem("usas_flow_draft");
+          localStorage.setItem(LAST_COMMITTED_KEY, draftJson);
+        } catch {
+          // bỏ qua
         }
         router.push("/recommendations?run=1");
       } else {
@@ -308,24 +357,48 @@ export function ProfileFlowWizard() {
     );
   }
 
+  const stepper = (variant: "sidebar" | "strip") => (
+    <ProfileFlowStepper
+      variant={variant}
+      draft={draft}
+      metadata={metadata}
+      currentStep={currentStep}
+      lastCompletedStep={lastCompletedStep}
+      onSelectStep={handleSelectStep}
+    />
+  );
+
   return (
-    <div className="-mx-4 -mt-8 min-h-screen bg-ground/40 pb-16">
-      {/* Top Wizard Header */}
-      <ProfileFlowHeader saveStatus={saveStatus} onExit={handleExit} />
+    <div className="pb-16">
+      {/* Trạng thái lưu nháp + Thoát */}
+      <div className="mb-4 flex items-center justify-between gap-4">
+        <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Hồ sơ chọn trường</span>
+        <div className="flex items-center gap-3 text-xs">
+          <SaveStatus status={saveStatus} />
+          <button
+            type="button"
+            onClick={handleExit}
+            className="inline-flex cursor-pointer items-center gap-1 rounded-md px-2 py-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <XIcon className="size-3.5" />
+            Thoát
+          </button>
+        </div>
+      </div>
 
-      {/* Main Split-View Layout */}
-      <main className="mx-auto max-w-5xl px-4 pt-6 sm:pt-8">
-        {errorMessage && (
-          <Alert variant="destructive" className="mb-6">
-            <AlertCircleIcon className="size-4" />
-            <AlertTitle>Không thể lưu hồ sơ</AlertTitle>
-            <AlertDescription className="text-xs">{errorMessage}</AlertDescription>
-          </Alert>
-        )}
+      {errorMessage && (
+        <Alert variant="destructive" className="mb-6">
+          <AlertCircleIcon className="size-4" />
+          <AlertTitle>Không thể lưu hồ sơ</AlertTitle>
+          <AlertDescription className="text-xs">{errorMessage}</AlertDescription>
+        </Alert>
+      )}
 
-        <div className="grid gap-8 lg:grid-cols-12 items-start">
-          {/* Left Column: Active Step Form (65% width on desktop) */}
-          <div className="lg:col-span-8 rounded-2xl border border-line bg-surface p-6 sm:p-8 shadow-xs">
+      {/* Khung trợ lý đóng: cột form + thanh bước bên phải; mở: dải bước ngang trên form */}
+      <div className="flex flex-wrap items-start gap-6">
+        <div className="min-w-0 flex-[999_1_560px] space-y-5">
+          {assistantOpen && stepper("strip")}
+          <div className="rounded-xl border border-line bg-surface p-[18px] shadow-xs sm:p-7">
             {currentStep === 1 && (
               <Step1Goal
                 data={draft.step1}
@@ -354,6 +427,7 @@ export function ProfileFlowWizard() {
             {currentStep === 3 && (
               <Step3Certifications
                 data={draft.step3}
+                certificationTypes={metadata?.certificationTypes ?? []}
                 onUpdate={updateStep3}
                 onPrev={handlePrev}
                 onNext={handleNext}
@@ -391,19 +465,42 @@ export function ProfileFlowWizard() {
               />
             )}
           </div>
-
-          {/* Right Column: Stepper Sidebar (35% width on desktop) */}
-          <div className="lg:col-span-4">
-            <ProfileFlowStepper
-              currentStep={currentStep}
-              lastCompletedStep={lastCompletedStep}
-              onSelectStep={handleSelectStep}
-            />
-          </div>
         </div>
-      </main>
+
+        {!assistantOpen && (
+          <div className="min-w-0 flex-[1_1_300px] lg:sticky lg:top-[76px] lg:max-w-[400px]">{stepper("sidebar")}</div>
+        )}
+      </div>
     </div>
   );
+}
+
+function SaveStatus({ status }: { status: "saved" | "saving" | "error" | "idle" }) {
+  if (status === "saving") {
+    return (
+      <span className="inline-flex items-center gap-1 text-muted-foreground">
+        <Loader2Icon className="size-3.5 animate-spin text-brand" />
+        Đang lưu nháp...
+      </span>
+    );
+  }
+  if (status === "saved") {
+    return (
+      <span className="inline-flex items-center gap-1 font-medium text-ok">
+        <CheckIcon className="size-3.5" />
+        Đã lưu nháp
+      </span>
+    );
+  }
+  if (status === "error") {
+    return (
+      <span className="inline-flex items-center gap-1 font-medium text-warn">
+        <AlertCircleIcon className="size-3.5" />
+        Chưa lưu được nháp
+      </span>
+    );
+  }
+  return <span className="text-muted-foreground">Tự động lưu nháp</span>;
 }
 
 // Gộp draft nhận về (BE hoặc localStorage) lên khung mặc định để không thiếu field nào
@@ -411,7 +508,10 @@ function mergeDraft(base: ProfileFlowDraft, incoming: Partial<ProfileFlowDraft>)
   return {
     step1: { ...base.step1, ...incoming.step1 },
     step2: { ...base.step2, ...incoming.step2 },
-    step3: { ...base.step3, ...incoming.step3 },
+    // Nháp cũ (englishTestType / otherTests) → danh sách chứng chỉ
+    step3: incoming.step3
+      ? migrateLegacyStep3(incoming.step3 as Partial<CertificationDraft> & LegacyCertificationDraft)
+      : base.step3,
     step4: { ...base.step4, ...incoming.step4 },
     step5: { activities: incoming.step5?.activities ?? base.step5.activities },
   };

@@ -22,7 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { profileFlowApi } from "@/lib/profile-flow-api";
-import { parseTermName } from "@/lib/profile-flow-options";
+import { calculateLinearGpa, parseTermName } from "@/lib/profile-flow-options";
 import type {
   AcademicYearDraft,
   CurrentEducationLevel,
@@ -203,40 +203,6 @@ function mergeExtractedTerms(
   }
   // Năm mới thêm vào cuối → xếp lại Lớp 10, 11, 12 cho đúng thứ tự (sort ổn định, tên lạ giữ ở cuối)
   return [...result].sort((a, b) => gradeOrder(a.gradeName) - gradeOrder(b.gradeName));
-}
-
-// Helper tính GPA thang 4 từ thang 10 theo công thức tuyến tính: GPA 4.0 = GPA 10 / 10 * 4.0
-function calculateLinearGpa(years: AcademicYearDraft[]): { gpa10: number | null; gpa4: number | null } {
-  let totalScore10 = 0;
-  let count = 0;
-
-  for (const yr of years) {
-    for (const sub of yr.subjects) {
-      const s1 = typeof sub.semester1Score === "number" ? sub.semester1Score : null;
-      const s2 = typeof sub.semester2Score === "number" ? sub.semester2Score : null;
-
-      let subAvg: number | null = null;
-      if (s1 !== null && s2 !== null) {
-        subAvg = (s1 + s2) / 2;
-      } else if (s1 !== null) {
-        subAvg = s1;
-      } else if (s2 !== null) {
-        subAvg = s2;
-      }
-
-      if (subAvg !== null && subAvg >= 0 && subAvg <= 10) {
-        totalScore10 += subAvg;
-        count++;
-      }
-    }
-  }
-
-  if (count === 0) return { gpa10: null, gpa4: null };
-
-  const gpa10 = Math.round((totalScore10 / count) * 100) / 100;
-  const gpa4 = Math.round(((gpa10 / 10) * 4.0) * 100) / 100;
-
-  return { gpa10, gpa4 };
 }
 
 export function Step2Transcript({
@@ -477,10 +443,10 @@ export function Step2Transcript({
           Bước 2/6 · khoảng 1 phút
         </div>
         <h1 className="text-h1 text-foreground">
-          Bảng điểm học tập & Điểm số 3 năm
+          Bảng điểm của bạn
         </h1>
         <p className="text-body text-muted-foreground">
-          Tải ảnh hoặc PDF bảng điểm để AI tự động trích xuất điểm các kỳ. Bạn có thể kiểm tra và chỉnh sửa điểm trực tiếp ngay ở bảng bên dưới.
+          Tải bảng điểm lên là cách nhanh nhất. Bạn không phải gõ từng môn.
         </p>
       </div>
 
@@ -600,10 +566,12 @@ export function Step2Transcript({
                 </div>
                 <div>
                   <div className="font-semibold text-sm text-foreground">
-                    Tải lên bảng điểm để AI tự động trích xuất
+                    {draftTranscript ? "Đã đọc xong bảng điểm của bạn" : "Tải học bạ lên để tự điền bảng dưới"}
                   </div>
                   <div className="text-xs text-muted-foreground mt-0.5">
-                    Hỗ trợ file PDF hoặc ảnh chụp (PNG, JPG). Mỗi lần tải 1 tệp; tải tiếp tệp khác để bổ sung các kỳ còn thiếu.
+                    {draftTranscript
+                      ? "Kiểm tra lại điểm ở bảng dưới, sửa trực tiếp nếu cần."
+                      : "Tệp PDF hoặc ảnh chụp (PNG, JPG). Tải tiếp tệp khác để bổ sung các kỳ còn thiếu."}
                   </div>
                 </div>
               </div>
@@ -622,7 +590,7 @@ export function Step2Transcript({
                   className="gap-2 cursor-pointer shadow-xs font-semibold text-xs bg-brand hover:bg-brand-ink text-white"
                 >
                   <FileUpIcon className="size-3.5" />
-                  {draftTranscript ? "Tải lại file khác" : "Chọn tệp từ máy"}
+                  {draftTranscript ? "Tải tệp khác" : "Chọn tệp từ máy"}
                 </Button>
               </div>
             </div>
@@ -651,7 +619,7 @@ export function Step2Transcript({
               onClick={triggerFileInput}
               className="text-xs font-semibold text-brand hover:underline cursor-pointer"
             >
-              Tải lại file khác
+              Tải tệp khác
             </button>
           </div>
         )}
@@ -661,7 +629,7 @@ export function Step2Transcript({
             <div className="flex items-center justify-between">
               <div>
                 <Label className="text-sm font-semibold text-foreground">
-                  Bảng điểm các năm học (3 năm gần nhất)
+                  Điểm học bạ 3 năm gần nhất đến hiện tại
                 </Label>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   Đang hiển thị các năm học tính đến {currentGrade || "lớp hiện tại"}.
@@ -691,6 +659,7 @@ export function Step2Transcript({
                   )}
                 >
                   {y.gradeName}
+                  {idx === years.length - 1 && " (hiện tại)"}
                 </button>
               ))}
             </div>
@@ -725,8 +694,13 @@ export function Step2Transcript({
                       const flagEmpty =
                         ocrSuccessNotice !== null &&
                         subjects.some((x) => x.semester1Score != null || x.semester2Score != null);
-                      const cellClass = (empty: boolean) =>
-                        cn("h-8 text-center text-xs w-20 mx-auto", flagEmpty && empty && "border-warn bg-warn-wash/40");
+                      const outOfRange = (v: number | null | undefined) => typeof v === "number" && (v < 0 || v > 10);
+                      const cellClass = (empty: boolean, invalid: boolean) =>
+                        cn(
+                          "h-8 text-center text-xs w-20 mx-auto",
+                          flagEmpty && empty && "border-warn bg-warn-wash/40",
+                          invalid && "border-destructive ring-1 ring-destructive"
+                        );
 
                       return (
                         <tr key={sIdx} className="hover:bg-muted/10 transition-colors">
@@ -739,12 +713,12 @@ export function Step2Transcript({
                               min={0}
                               max={10}
                               step={0.1}
-                              placeholder="-"
+                              placeholder="0–10"
                               value={sub.semester1Score ?? ""}
                               onChange={(e) =>
                                 handleScoreChange(activeYearIndex, sIdx, "semester1Score", e.target.value)
                               }
-                              className={cellClass(s1 === null)}
+                              className={cellClass(s1 === null, outOfRange(sub.semester1Score))}
                             />
                           </td>
                           <td className="py-1 px-2 text-center">
@@ -753,12 +727,12 @@ export function Step2Transcript({
                               min={0}
                               max={10}
                               step={0.1}
-                              placeholder="-"
+                              placeholder="0–10"
                               value={sub.semester2Score ?? ""}
                               onChange={(e) =>
                                 handleScoreChange(activeYearIndex, sIdx, "semester2Score", e.target.value)
                               }
-                              className={cellClass(s2 === null)}
+                              className={cellClass(s2 === null, outOfRange(sub.semester2Score))}
                             />
                           </td>
                           <td className="py-2 px-3 text-center font-bold text-foreground">
@@ -805,7 +779,7 @@ export function Step2Transcript({
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div>
                 <div className="font-semibold text-sm text-foreground flex items-center gap-1.5">
-                  <span>Điểm trung bình tích lũy (GPA)</span>
+                  <span>Điểm TB tự tính</span>
                   <Badge variant="outline" className="text-[10px] border-brand/40 text-brand">
                     Tuyến tính: GPA 10 / 10 * 4.0
                   </Badge>
@@ -824,7 +798,7 @@ export function Step2Transcript({
                 </div>
                 <div className="h-8 w-px bg-line" />
                 <div className="text-right">
-                  <div className="text-[11px] text-brand font-semibold">Quy đổi thang 4.0</div>
+                  <div className="text-[11px] text-brand font-semibold">Quy đổi thang 4</div>
                   <div className="text-2xl font-extrabold text-brand">
                     {gpa4 !== null ? gpa4.toFixed(2) : "—"}
                   </div>

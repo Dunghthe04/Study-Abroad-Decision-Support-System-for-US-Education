@@ -16,9 +16,15 @@ public interface IProfileFlowRepository
     Task<StudentProfile> EnsureProfileExistsAsync(Guid userId, CancellationToken ct = default);
     Task<IReadOnlyList<string>> GetOfferingMajorsAsync(CancellationToken ct = default);
     /// <summary>
-    /// Lưu chính thức hồ sơ: cập nhật profile, thay toàn bộ điểm bảng điểm và hoạt động — trong 1 transaction.
+    /// Lưu chính thức hồ sơ: cập nhật profile, thay toàn bộ điểm bảng điểm, hoạt động và chứng chỉ — trong 1 transaction.
     /// </summary>
-    Task CommitProfileFlowAsync(StudentProfile profile, IEnumerable<TranscriptScore> scores, IEnumerable<ProfileActivity> activities, CancellationToken ct = default);
+    Task CommitProfileFlowAsync(
+        StudentProfile profile,
+        IEnumerable<TranscriptScore> scores,
+        IEnumerable<ProfileActivity> activities,
+        IEnumerable<ProfileCertification> certifications,
+        CancellationToken ct = default);
     Task<IReadOnlyList<TranscriptScore>> GetTranscriptScoresAsync(Guid profileId, CancellationToken ct = default);
     Task<IReadOnlyList<ProfileActivity>> GetProfileActivitiesAsync(Guid profileId, CancellationToken ct = default);
+    Task<IReadOnlyList<ProfileCertification>> GetProfileCertificationsAsync(Guid profileId, CancellationToken ct = default);
 }
