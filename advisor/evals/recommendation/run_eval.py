@@ -52,7 +52,14 @@ def same(key, got, want):
 def compare(got, want):
     """So 1 trường: bước sai đầu tiên, sai số điểm S, nhóm cuối đúng hay không."""
     if got is None:
-        return {"c": want["c"], "ok_g2": False, "first_wrong": "FAILED", "s_err": None, "got": None, "want": None}
+        return {
+            "c": want["c"],
+            "ok_g2": False,
+            "first_wrong": "FAILED",
+            "s_err": None,
+            "got": None,
+            "want": None,
+        }
     first = next((k for k in STEPS if not same(k, got[k], want[k])), None)
     s_err = abs(got["S"] - want["S"]) if got["S"] is not None and want["S"] is not None else None
     return {
@@ -60,7 +67,7 @@ def compare(got, want):
         "ok_g2": got["g2"] == want["g2"],
         "first_wrong": first,
         "s_err": s_err,
-        "got": got[first] if first else None,    # giá trị AI trả ở bước sai
+        "got": got[first] if first else None,  # giá trị AI trả ở bước sai
         "want": want[first] if first else None,  # đáp án công thức ở bước đó
     }
 
@@ -93,7 +100,12 @@ def latency(usage_log):
     secs = sorted(x["seconds"] for x in usage_log if "seconds" in x)
     if not secs:
         return None
-    return {"calls": len(secs), "min": round(secs[0], 1), "median": round(secs[len(secs) // 2], 1), "max": round(secs[-1], 1)}
+    return {
+        "calls": len(secs),
+        "min": round(secs[0], 1),
+        "median": round(secs[len(secs) // 2], 1),
+        "max": round(secs[-1], 1),
+    }
 
 
 def summarize(rows):
@@ -123,7 +135,10 @@ class LoggingLLM:
         try:
             raw = await self._inner.chat_json(messages, schema, temperature)
         except Exception as ex:  # noqa: BLE001
-            print(f"  LỖI GỌI AI sau {time.perf_counter() - started:.0f}s: {type(ex).__name__}: {str(ex)[:300]}", flush=True)
+            print(
+                f"  LỖI GỌI AI sau {time.perf_counter() - started:.0f}s: {type(ex).__name__}: {str(ex)[:300]}",
+                flush=True,
+            )
             raise
         self.walls.append(time.perf_counter() - started)
         n = len(raw.get("items", [])) if isinstance(raw, dict) else "?"
@@ -148,13 +163,15 @@ def make_llm(args, http):
 
         load_dotenv()
 
-        return LoggingLLM(GeminiClient(
-            http,
-            args.model,
-            os.environ["GEMINI_API_KEY"],
-            thinking_level=args.thinking,
-            min_interval=args.interval,
-        ))
+        return LoggingLLM(
+            GeminiClient(
+                http,
+                args.model,
+                os.environ["GEMINI_API_KEY"],
+                thinking_level=args.thinking,
+                min_interval=args.interval,
+            )
+        )
     from app.services.ollama import OllamaClient
 
     return LoggingLLM(OllamaClient(http, args.model))
@@ -167,7 +184,9 @@ async def main():
     p.add_argument("--thinking", default=None, help="low | medium | high (nếu model hỗ trợ)")
     p.add_argument("--batch-size", type=int, default=8)
     p.add_argument("--limit", type=int, default=None, help="chỉ chạy N học sinh đầu (chạy thử cho rẻ)")
-    p.add_argument("--schools", type=int, default=None, help="chỉ lấy N trường đầu mỗi hồ sơ (8 = 1 lần gọi mỗi hồ sơ)")
+    p.add_argument(
+        "--schools", type=int, default=None, help="chỉ lấy N trường đầu mỗi hồ sơ (8 = 1 lần gọi mỗi hồ sơ)"
+    )
     p.add_argument("--interval", type=float, default=0.0, help="giây nghỉ giữa 2 lần gọi")
     args = p.parse_args()
 
@@ -177,7 +196,9 @@ async def main():
     cases = json.loads(CASES.read_text(encoding="utf-8"))
     async with httpx.AsyncClient(base_url=base, timeout=180) as http:
         llm = make_llm(args, http)
-        rows, seconds, skill_version = await run(llm, args.model, args.batch_size, cases, args.limit, args.schools)
+        rows, seconds, skill_version = await run(
+            llm, args.model, args.batch_size, cases, args.limit, args.schools
+        )
 
     out = {
         "when": datetime.now().isoformat(timespec="seconds"),

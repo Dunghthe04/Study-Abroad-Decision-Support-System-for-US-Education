@@ -34,7 +34,20 @@ def main():
                 lat.get("median", ""),
             ]
         )
-    head = ["lần chạy", "model", "skill", "cặp", "gọi", "đúng nhóm", "đúng mọi bước", "sai số S", "token vào", "token ra", "tổng giây", "giây/lần gọi"]
+    head = [
+        "lần chạy",
+        "model",
+        "skill",
+        "cặp",
+        "gọi",
+        "đúng nhóm",
+        "đúng mọi bước",
+        "sai số S",
+        "token vào",
+        "token ra",
+        "tổng giây",
+        "giây/lần gọi",
+    ]
     widths = [max(len(str(r[i])) for r in [head] + rows) for i in range(len(head))]
     for r in [head] + rows:
         print(" | ".join(str(v).ljust(w) for v, w in zip(r, widths, strict=True)))
