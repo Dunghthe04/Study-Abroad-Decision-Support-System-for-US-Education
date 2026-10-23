@@ -17,13 +17,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
+import { isWideRoute } from "@/lib/layout-routes";
 import { cn } from "@/lib/utils";
 
 const links = [
   { href: "/", label: "Trang chủ" },
   { href: "/methodology", label: "Giới thiệu phương pháp" },
   { href: "/analysis", label: "Phân tích tư vấn" },
-  { href: "/advisor", label: "Chat AI" },
 ];
 
 export function SiteHeader() {
@@ -43,23 +43,25 @@ export function SiteHeader() {
     router.push("/login");
   };
 
-  // Luồng hồ sơ 6 bước có header riêng (ProfileFlowHeader) — chỉ giữ 1 header
-  if (pathname.startsWith("/analysis")) return null;
-
   return (
-    <header className="border-b bg-surface/95 backdrop-blur-sm sticky top-0 z-40">
-      <nav className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
-        <div className="flex items-center gap-8">
+    <header className="sticky top-0 z-40 border-b border-line bg-surface print:hidden">
+      <nav
+        className={cn(
+          "mx-auto flex items-center justify-between gap-6 px-4 py-2.5",
+          isWideRoute(pathname) ? "max-w-[1320px] sm:px-6" : "max-w-5xl"
+        )}
+      >
+        <div className="flex min-w-0 items-center gap-6">
           <Link
             href="/"
             className="flex items-center gap-2 font-heading text-xl font-bold tracking-tight text-brand-ink transition-opacity hover:opacity-90"
           >
-            <span className="flex size-7 items-center justify-center rounded-lg bg-brand text-white font-sans text-xs font-black shadow-xs">
+            <span className="flex size-[30px] items-center justify-center rounded-lg bg-brand-ink text-white font-sans text-xs font-black">
               US
             </span>
             <span>USAS</span>
           </Link>
-          <ul className="flex items-center gap-1 sm:gap-2 text-sm font-medium">
+          <ul className="flex items-center gap-1 overflow-x-auto text-sm font-medium [scrollbar-width:none]">
             {links.map((l) => {
               const active = isLinkActive(l.href);
               return (
@@ -67,16 +69,13 @@ export function SiteHeader() {
                   <Link
                     href={l.href}
                     className={cn(
-                      "relative rounded-md px-3 py-1.5 transition-all text-sm font-medium inline-flex items-center gap-1.5",
+                      "inline-flex items-center whitespace-nowrap rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors",
                       active
-                        ? "bg-brand/10 text-brand font-semibold shadow-2xs"
+                        ? "bg-brand-wash text-brand font-semibold"
                         : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
                     )}
                   >
                     {l.label}
-                    {active && (
-                      <span className="absolute -bottom-3 left-3 right-3 h-0.5 rounded-full bg-brand" />
-                    )}
                   </Link>
                 </li>
               );
@@ -85,17 +84,26 @@ export function SiteHeader() {
         </div>
 
         {/* Trạng thái xác thực của người dùng (Khách vs Đã đăng nhập) */}
-        <div className="flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-3">
           {isLoading ? (
             <Skeleton className="h-8 w-20" />
           ) : user ? (
             <DropdownMenu>
-              <DropdownMenuTrigger render={<Button variant="outline" />}>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    variant="outline"
+                    className="h-9 gap-2 rounded-full border-line pr-2 pl-1"
+                  />
+                }
+              >
                 <Avatar size="sm">
-                  <AvatarFallback>{user.fullName.charAt(0).toUpperCase()}</AvatarFallback>
+                  <AvatarFallback className="bg-brand-wash text-brand-ink font-semibold">
+                    {user.fullName.charAt(0).toUpperCase()}
+                  </AvatarFallback>
                 </Avatar>
-                <span>{user.fullName}</span>
-                <Badge variant="brand">
+                <span className="hidden max-w-40 truncate sm:inline">{user.fullName}</span>
+                <Badge variant="brand" className="hidden md:inline-flex">
                   {user.role === "student" ? "Học sinh" : user.role === "parent" ? "Phụ huynh" : user.role}
                 </Badge>
               </DropdownMenuTrigger>

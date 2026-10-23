@@ -45,6 +45,11 @@ export function CertificationCard({ cert, type, onEdit, onRemove, disabled }: Ce
               {expiry.label}
             </span>
           )}
+          {cert.type === "other" && (
+            <span className="rounded-full bg-warn-wash px-2 py-0.5 text-xs font-medium text-warn">
+              Có thể không được các trường xét
+            </span>
+          )}
         </div>
         {parts.length > 0 && (
           <p className="text-sm text-muted-foreground">

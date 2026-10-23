@@ -59,6 +59,7 @@ type EditingState = { mode: "add"; section: SectionConfig["key"]; draft: Certifi
 export function Step3Certifications({ data, certificationTypes, onUpdate, onPrev, onNext }: Step3CertificationsProps) {
   const certifications = data.certifications ?? [];
   const [editing, setEditing] = useState<EditingState | null>(null);
+  const hasEnglish = certifications.some((c) => c.category === "english");
 
   const now = new Date();
   const thisMonth = { year: now.getFullYear(), month: now.getMonth() + 1 };
@@ -73,10 +74,13 @@ export function Step3Certifications({ data, certificationTypes, onUpdate, onPrev
 
   const handleSave = (cert: CertificationItem) => {
     const exists = certifications.some((c) => c.id === cert.id);
+    // Đã có chứng chỉ tiếng Anh thì bỏ cờ "sẽ thi sau"
+    const englishAdded = cert.category === "english";
     onUpdate({
       certifications: exists
         ? certifications.map((c) => (c.id === cert.id ? cert : c))
         : [...certifications, cert],
+      ...(englishAdded && data.englishPlanned ? { englishPlanned: false, englishPlannedDate: null } : {}),
     });
     setEditing(null);
   };
@@ -132,7 +136,7 @@ export function Step3Certifications({ data, certificationTypes, onUpdate, onPrev
             onSave={handleSave}
             onCancel={() => setEditing(null)}
           />
-        ) : (
+        ) : section.key === "english" && data.englishPlanned ? null : (
           <button
             type="button"
             onClick={() => startAdd(section)}
@@ -161,7 +165,8 @@ export function Step3Certifications({ data, certificationTypes, onUpdate, onPrev
       <div className="space-y-4">
         {renderSection(SECTIONS[0])}
 
-        {/* Kế hoạch thi tiếng Anh */}
+        {/* Kế hoạch thi tiếng Anh — chỉ hỏi khi chưa có chứng chỉ tiếng Anh nào */}
+        {!hasEnglish && (
         <div className="space-y-3 rounded-xl bg-ground/50 px-4 py-3">
           <Label className="flex cursor-pointer items-center gap-2.5 text-sm font-normal text-foreground">
             <Checkbox
@@ -187,6 +192,7 @@ export function Step3Certifications({ data, certificationTypes, onUpdate, onPrev
             </div>
           )}
         </div>
+        )}
       </div>
 
       <div className="border-t border-line pt-6">{renderSection(SECTIONS[1])}</div>

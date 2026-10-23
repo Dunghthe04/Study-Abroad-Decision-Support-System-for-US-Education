@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ArrowLeftIcon, ArrowRightIcon, DollarSignIcon, HelpCircleIcon, AlertTriangleIcon } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { DEFAULT_BUDGET_TIERS, SCHOLARSHIP_NEED_OPTIONS } from "@/lib/profile-flow-options";
@@ -17,8 +18,22 @@ interface Step4FinancialProps {
   onNext: () => void;
 }
 
+// Tỉ giá chỉ dùng để quy đổi trên form; số tiền không được lưu, chỉ lưu mã mức
+const RATE = 25000;
+// Ngưỡng trên (USD) của từng mức khi metadata không có minUsd/maxUsd
+const FALLBACK_MAX_USD: Partial<Record<BudgetTierId, number>> = {
+  tier_under_20k: 20000,
+  tier_20k_35k: 35000,
+  tier_35k_50k: 50000,
+  tier_50k_70k: 70000,
+};
+
+type Currency = "vnd" | "usd";
+
 export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Step4FinancialProps) {
   const [financialError, setFinancialError] = useState<string | null>(null);
+  const [currency, setCurrency] = useState<Currency>("vnd");
+  const [amountText, setAmountText] = useState("");
 
   // Chỉ lưu mã mức; min/max USD do BE lấy từ seed metadata khi commit
   const budgetTiers: { key: BudgetTierId; label: string; description: string }[] =
@@ -29,6 +44,34 @@ export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Ste
           description: t.description,
         }))
       : DEFAULT_BUDGET_TIERS;
+
+  const amount = Number(amountText.replace(/\D/g, "")) || 0;
+  const amountUsd = currency === "vnd" ? Math.round(amount / RATE) : amount;
+
+  // Tìm mức chứa số USD: ưu tiên min/max trong metadata, không có thì dùng ngưỡng mặc định
+  const tierForUsd = (usd: number): BudgetTierId | null => {
+    const metaTiers = metadata?.budgetTiers ?? [];
+    if (metaTiers.some((t) => t.minUsd != null || t.maxUsd != null)) {
+      const hit = metaTiers.find((t) => (t.minUsd ?? 0) <= usd && (t.maxUsd == null || usd < t.maxUsd));
+      if (hit) return hit.key as BudgetTierId;
+    }
+    const keys = budgetTiers.map((t) => t.key);
+    return keys.find((k) => FALLBACK_MAX_USD[k] != null && usd < FALLBACK_MAX_USD[k]!) ?? keys[keys.length - 1] ?? null;
+  };
+
+  const applyAmount = (text: string, cur: Currency) => {
+    setAmountText(text);
+    const value = Number(text.replace(/\D/g, "")) || 0;
+    if (value <= 0) return;
+    const usd = cur === "vnd" ? Math.round(value / RATE) : value;
+    const tier = tierForUsd(usd);
+    if (tier) {
+      setFinancialError(null);
+      onUpdate({ annualBudgetTier: tier });
+    }
+  };
+
+  const selectedTierLabel = budgetTiers.find((t) => t.key === data.annualBudgetTier)?.label;
 
   const needOptions: { key: ScholarshipNeed; title: string; description: string }[] =
     SCHOLARSHIP_NEED_OPTIONS.map((o) => {
@@ -64,7 +107,7 @@ export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Ste
           Gia đình bạn dự định chi bao nhiêu cho một năm học?
         </h1>
         <p className="text-body text-muted-foreground">
-          Chọn một mức gần đúng nhất (chọn 1 mức duy nhất). Chúng tôi dùng nó để loại các trường vượt ngân sách của bạn.
+          Chọn mức gần đúng nhất hoặc nhập số tiền cụ thể. Chúng tôi dùng nó để loại các trường vượt ngân sách của bạn.
         </p>
       </div>
 
@@ -89,6 +132,7 @@ export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Ste
                 type="button"
                 onClick={() => {
                   setFinancialError(null);
+                  setAmountText("");
                   onUpdate({ annualBudgetTier: tier.key });
                 }}
                 className={cn(
@@ -117,6 +161,59 @@ export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Ste
               </button>
             );
           })}
+        </div>
+
+        {/* Nhập số tiền cụ thể → tự chọn mức tương ứng */}
+        <div className="space-y-2.5 rounded-xl bg-ground/50 px-4 py-3.5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <Label htmlFor="budgetAmount" className="text-sm font-semibold text-foreground">
+              Hoặc nhập số tiền cụ thể
+            </Label>
+            <div className="inline-flex rounded-lg border border-line bg-surface p-0.5 text-xs font-medium">
+              {(["vnd", "usd"] as const).map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  aria-pressed={currency === c}
+                  onClick={() => {
+                    setCurrency(c);
+                    applyAmount(amountText, c);
+                  }}
+                  className={cn(
+                    "cursor-pointer rounded-md px-3 py-1 transition-colors",
+                    currency === c ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {c === "vnd" ? "VNĐ" : "USD"}
+                </button>
+              ))}
+            </div>
+          </div>
+          <Input
+            id="budgetAmount"
+            inputMode="numeric"
+            placeholder={currency === "vnd" ? "VD: 900.000.000" : "VD: 36.000"}
+            value={amount > 0 ? amount.toLocaleString("vi-VN") : amountText.replace(/\D/g, "")}
+            onChange={(e) => applyAmount(e.target.value, currency)}
+            className="max-w-xs bg-surface"
+          />
+          <p className="text-xs text-muted-foreground">
+            {amount > 0 ? (
+              <>
+                {currency === "vnd" ? (
+                  <>
+                    ≈ <strong className="font-semibold text-foreground">{amountUsd.toLocaleString("vi-VN")} USD</strong>{" "}
+                    mỗi năm (tỉ giá 1 USD = {RATE.toLocaleString("vi-VN")} VNĐ)
+                  </>
+                ) : (
+                  <>{amountUsd.toLocaleString("vi-VN")} USD mỗi năm</>
+                )}
+                {selectedTierLabel && <> · đã tự chọn mức {selectedTierLabel}</>}
+              </>
+            ) : (
+              "Nhập tổng số tiền gia đình có thể chi mỗi năm, hệ thống tự chọn mức gần nhất."
+            )}
+          </p>
         </div>
       </section>
 

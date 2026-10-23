@@ -105,7 +105,12 @@ export function CertificationForm({
 
   const scoreHint =
     type && hasNumericScale
-      ? [type.scaleLabel, type.step && type.step !== 1 ? `bước ${type.step}` : null].filter(Boolean).join(", ")
+      ? [
+          type.min != null && type.max != null ? `Thang ${type.min}–${type.max}` : type.scaleLabel,
+          type.step && type.step !== 1 ? `bước ${type.step}` : null,
+        ]
+          .filter(Boolean)
+          .join(", ")
       : null;
 
   const datePicker = (
@@ -202,8 +207,9 @@ export function CertificationForm({
           <div className="flex gap-2 rounded-lg border border-warn/30 bg-warn-wash px-3 py-2.5 text-sm text-warn">
             <AlertTriangleIcon className="mt-0.5 size-4 shrink-0" />
             <p>
-              Không phải trường nào cũng công nhận chứng chỉ này. Ở trang kết quả, trường nào chưa rõ có nhận hay
-              không sẽ được đánh dấu để bạn kiểm tra lại.
+              <strong className="font-semibold">Lưu ý:</strong> Chứng chỉ này chưa có trong dữ liệu của hệ thống nên
+              không được dùng để xếp hạng gợi ý. Không phải trường nào cũng công nhận, bạn nên kiểm tra với từng
+              trường.
             </p>
           </div>
         </>

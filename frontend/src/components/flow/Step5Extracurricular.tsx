@@ -71,8 +71,14 @@ export function Step5Extracurricular({
     setFormError(null);
   };
 
+  // Đủ các trường bắt buộc mới cho bấm "Thêm vào hồ sơ"; lỗi khoảng thời gian vẫn báo khi bấm
+  const canSave =
+    Boolean(name.trim()) &&
+    Boolean(impactLevel) &&
+    (category === "achievement" ? Boolean(year) : Boolean(role) && Boolean(startDate) && (isOngoing || Boolean(endDate)));
+
   const handleSaveItem = () => {
-    if (!name.trim()) return;
+    if (!canSave) return;
     if (!impactLevel) {
       setFormError("Vui lòng chọn phạm vi ảnh hưởng.");
       return;
@@ -205,11 +211,6 @@ export function Step5Extracurricular({
                         <Badge variant="secondary" className="text-[10px] font-medium">
                           {item.category === "activity" ? "Hoạt động" : "Giải thưởng"}
                         </Badge>
-                        {item.impactLevel && (
-                          <Badge variant="outline" className="text-[10px]">
-                            {labelOf(IMPACT_LEVEL_OPTIONS, item.impactLevel)}
-                          </Badge>
-                        )}
                         {problem && (
                           <Badge variant="destructive" className="text-[10px]">
                             Thiếu: {problem}
@@ -221,15 +222,21 @@ export function Step5Extracurricular({
                         {item.category === "activity" ? (
                           <>
                             <span>{labelOf(ACTIVITY_ROLE_OPTIONS, item.role) || "Chưa chọn vai trò"}</span>
-                            <span>•</span>
+                            <span>·</span>
                             <span className="inline-flex items-center gap-1 font-medium text-foreground">
                               <CalendarIcon className="size-3 text-brand" />
-                              {item.startDate ?? "?"} – {item.isOngoing ? "Đến nay" : item.endDate || "?"}
-                              {item.durationMonths ? ` · ${item.durationMonths} tháng` : ""}
+                              {item.startDate ?? "?"} – {item.isOngoing ? "nay" : item.endDate || "?"}
+                              {item.durationMonths ? ` (${item.durationMonths} tháng)` : ""}
                             </span>
                           </>
                         ) : (
                           <span>Năm {item.year ?? "?"}</span>
+                        )}
+                        {item.impactLevel && (
+                          <>
+                            <span>·</span>
+                            <span>Cấp {labelOf(IMPACT_LEVEL_OPTIONS, item.impactLevel)?.toLowerCase()}</span>
+                          </>
                         )}
                       </div>
                     </div>
@@ -457,7 +464,7 @@ export function Step5Extracurricular({
               type="button"
               size="sm"
               onClick={handleSaveItem}
-              disabled={!name.trim()}
+              disabled={!canSave}
               className="cursor-pointer font-semibold"
             >
               Thêm vào hồ sơ
@@ -470,6 +477,12 @@ export function Step5Extracurricular({
         <div className="rounded-xl bg-destructive/10 p-3 text-xs text-destructive font-medium border border-destructive/20">
           {listError}
         </div>
+      )}
+
+      {activities.length === 0 && !showAddForm && (
+        <p className="text-center text-xs text-muted-foreground">
+          Chưa có gì để điền? Bạn có thể bấm Tiếp tục và bổ sung sau.
+        </p>
       )}
 
       {/* Bottom Actions */}
