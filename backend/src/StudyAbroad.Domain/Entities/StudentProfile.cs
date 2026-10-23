@@ -33,6 +33,10 @@ public class StudentProfile : BaseEntity
     public string? EnglishTestType { get; set; }
     /// <summary>[USAS-640] ngày thi chứng chỉ tiếng Anh</summary>
     public DateOnly? EnglishTestDate { get; set; }
+    /// <summary>[USAS-640] học sinh chưa có chứng chỉ tiếng Anh, sẽ thi sau (bước 3)</summary>
+    public bool EnglishTestPlanned { get; set; }
+    /// <summary>[USAS-640] tháng dự kiến thi tiếng Anh (ngày 1 của tháng)</summary>
+    public DateOnly? EnglishPlannedDate { get; set; }
     /// <summary>kỳ thi khác ngoài cột riêng, dạng {"ap": 4}</summary>
     public string? OtherTestsJson { get; set; }
     /// <summary>điểm ngoại khóa 0–4 (thang của thầy): LLM đọc hoạt động thành thuộc tính, công thức của nhóm tính điểm; null nếu chưa phân tích</summary>

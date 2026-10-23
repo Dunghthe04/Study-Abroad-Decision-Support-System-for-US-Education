@@ -7,6 +7,9 @@ import type {
   ProfileFlowDraft,
   UploadDraftTranscriptResponse,
   CommitProfileFlowResponse,
+  CertificationCategory,
+  CertificationSectionOption,
+  CertificationTypeOption,
 } from "@/types/profile-flow";
 
 export const profileFlowApi = {
@@ -57,8 +60,27 @@ export const profileFlowApi = {
       budgetTiers?: RawBudgetTierItem[];
       scholarshipNeeds?: { id: string; label: string; subLabel?: string }[];
       impactLevels?: ProfileMetadataResponse["impactLevels"];
-      certificationTypes?: ProfileMetadataResponse["certificationTypes"];
-      certifications?: ProfileMetadataResponse["certificationTypes"];
+      certifications?: RawCertificationItem[];
+    }
+
+    interface RawCertificationItem {
+      id: string;
+      name: string;
+      category: string;
+      group?: string;
+      order?: number;
+      aliases?: string[] | null;
+      min?: number | null;
+      max?: number | null;
+      step?: number | null;
+      placeholder?: string | null;
+      scaleLabel?: string | null;
+      validityYears?: number | null;
+      sections?: CertificationSectionOption[] | null;
+      sectionsHint?: string | null;
+      requiresSubject?: boolean;
+      subjectLabel?: string | null;
+      profileField?: string | null;
     }
 
     const raw = await apiFetch<RawMetadataPayload>("/api/v1/profile/metadata");
@@ -105,7 +127,30 @@ export const profileFlowApi = {
         description: n.subLabel ?? "",
       })),
       impactLevels: raw.impactLevels ?? [],
-      certificationTypes: raw.certificationTypes ?? raw.certifications ?? [],
+      // Danh mục chứng chỉ lấy nguyên từ app_settings profile.metadata, chỉ điền mặc định cho trường thiếu
+      certificationTypes: (raw.certifications ?? [])
+        .filter((c) => c.id && c.name)
+        .map(
+          (c): CertificationTypeOption => ({
+            id: c.id,
+            name: c.name,
+            category: c.category as CertificationCategory,
+            group: c.group ?? "other",
+            order: c.order ?? 0,
+            aliases: c.aliases ?? [],
+            min: c.min ?? null,
+            max: c.max ?? null,
+            step: c.step ?? null,
+            placeholder: c.placeholder ?? null,
+            scaleLabel: c.scaleLabel ?? null,
+            validityYears: c.validityYears ?? null,
+            sections: c.sections ?? [],
+            sectionsHint: c.sectionsHint ?? null,
+            requiresSubject: Boolean(c.requiresSubject),
+            subjectLabel: c.subjectLabel ?? null,
+            profileField: c.profileField ?? null,
+          })
+        ),
       states,
       offeringMajors,
     };

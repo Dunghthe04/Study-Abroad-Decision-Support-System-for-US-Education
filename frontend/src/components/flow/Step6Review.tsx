@@ -6,6 +6,7 @@ import {
   CheckCircle2Icon,
   DollarSignIcon,
   Edit3Icon,
+  type LucideIcon,
   FileTextIcon,
   GraduationCapIcon,
   Loader2Icon,
@@ -13,6 +14,7 @@ import {
   TrophyIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   ACTIVITY_ROLE_OPTIONS,
   DEFAULT_BUDGET_TIERS,
@@ -20,9 +22,52 @@ import {
   IMPACT_LEVEL_OPTIONS,
   SCHOLARSHIP_NEED_OPTIONS,
   SCHOOL_TYPE_OPTIONS,
+  calculateLinearGpa,
   labelOf,
 } from "@/lib/profile-flow-options";
+import { findCertType, formatCertSummary, formatYearMonth } from "@/lib/certification-utils";
 import type { DraftTranscriptFile, ProfileFlowDraft, ProfileMetadataResponse } from "@/types/profile-flow";
+
+/** Một thẻ trong lưới xem lại: eyebrow + nút Sửa, nội dung bên dưới */
+function ReviewCard({
+  icon: Icon,
+  eyebrow,
+  onEdit,
+  className,
+  children,
+}: {
+  icon: LucideIcon;
+  eyebrow: string;
+  onEdit: () => void;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-2xl border border-line bg-surface p-5 shadow-2xs transition-colors hover:border-brand/40",
+        className
+      )}
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          <Icon className="size-3.5 text-brand" />
+          {eyebrow}
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onEdit}
+          className="h-7 gap-1 px-2 text-xs font-semibold text-brand hover:bg-brand-wash"
+        >
+          <Edit3Icon className="size-3.5" />
+          Sửa
+        </Button>
+      </div>
+      <div className="mt-2 space-y-1.5 text-xs leading-relaxed text-muted-foreground">{children}</div>
+    </div>
+  );
+}
 
 interface Step6ReviewProps {
   draft: ProfileFlowDraft;
@@ -47,6 +92,7 @@ export function Step6Review({
 
   // Resolve state names
   const allStates = metadata?.states ?? [];
+  const certificationTypes = metadata?.certificationTypes ?? [];
   const stateNames = (step1.targetStates ?? [])
     .map((code) => allStates.find((s) => s.code === code)?.name ?? code)
     .join(", ");
@@ -72,6 +118,11 @@ export function Step6Review({
   const totalYears = step2.academicYears?.length ?? 0;
   const gpa = step2.calculatedGpa4Scale ?? (step2.manualGpa10Scale ? ((step2.manualGpa10Scale / 10) * 4).toFixed(2) : "–");
 
+  const { gpa10 } = calculateLinearGpa(step2.academicYears ?? []);
+  const gpa10Value = gpa10 ?? step2.manualGpa10Scale ?? null;
+  const gpa10Text = gpa10Value != null ? gpa10Value.toFixed(1) : "–";
+  const gradeNames = (step2.academicYears ?? []).map((y) => y.gradeName).join(", ");
+
   // Activities & Awards count
   const activitiesCount = step5.activities.filter((a) => a.category === "activity").length;
   const awardsCount = step5.activities.filter((a) => a.category === "achievement").length;
@@ -90,195 +141,107 @@ export function Step6Review({
       </div>
 
       {/* Review Cards Grid */}
-      <div className="space-y-4">
-        {/* 1. Bạn & Mục tiêu */}
-        <div className="rounded-2xl border border-line bg-surface p-5 shadow-2xs hover:border-brand/40 transition-colors">
-          <div className="flex items-center justify-between border-b border-line/60 pb-3">
-            <div className="flex items-center gap-2 text-sm font-bold text-foreground">
-              <GraduationCapIcon className="size-4 text-brand" />
-              <span>BẠN & MỤC TIÊU</span>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onEditStep(1)}
-              className="text-xs text-brand font-semibold hover:bg-brand-wash h-8 gap-1"
-            >
-              <Edit3Icon className="size-3.5" />
-              Sửa
-            </Button>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <ReviewCard icon={GraduationCapIcon} eyebrow="Bạn & mục tiêu" onEdit={() => onEditStep(1)}>
+          <div className="text-sm font-semibold text-foreground">
+            {labelOf(EDUCATION_LEVEL_OPTIONS, step1.currentEducationLevel) || "Chưa chọn"}
+            {step1.currentGrade && ` · ${step1.currentGrade}`}
+            {" → "}
+            <span className="text-brand">{studyLevelLabel}</span>
           </div>
-          <div className="pt-3 text-xs space-y-1.5 text-muted-foreground leading-relaxed">
-            <div>
-              <strong className="text-foreground">Cấp học: </strong>
-              {labelOf(EDUCATION_LEVEL_OPTIONS, step1.currentEducationLevel) || "Chưa chọn"}
-              {step1.currentGrade && ` · ${step1.currentGrade}`}
-              {step1.currentSchool && ` · ${step1.currentSchool}`}
-            </div>
-            <div>
-              <strong className="text-foreground">Muốn học ở Mỹ: </strong>
-              <span className="text-brand font-semibold">{studyLevelLabel}</span>
-            </div>
-            <div>
-              <strong className="text-foreground">Ngành & Địa điểm: </strong>
-              {step1.targetMajor || "Mọi ngành"}
-              {stateNames && ` · Bang: ${stateNames}`}
-              {step1.targetSchoolType && step1.targetSchoolType !== "all" && ` · ${labelOf(SCHOOL_TYPE_OPTIONS, step1.targetSchoolType)}`}
-            </div>
-            {step1.expectedGraduationYear && (
-              <div>
-                <strong className="text-foreground">Năm tốt nghiệp dự kiến: </strong>
-                {step1.expectedGraduationYear}
-              </div>
-            )}
+          {step1.currentSchool && <div>{step1.currentSchool}</div>}
+          <div>
+            <strong className="text-foreground">Ngành: </strong>
+            {step1.targetMajor || "Chưa chọn"}
           </div>
-        </div>
+          <div>
+            <strong className="text-foreground">Bang: </strong>
+            {stateNames || "Không lọc"}
+            {step1.targetSchoolType && step1.targetSchoolType !== "all" && ` · ${labelOf(SCHOOL_TYPE_OPTIONS, step1.targetSchoolType)}`}
+          </div>
+          {step1.expectedGraduationYear && (
+            <div>
+              <strong className="text-foreground">Tốt nghiệp dự kiến: </strong>
+              {step1.expectedGraduationYear}
+            </div>
+          )}
+        </ReviewCard>
 
-        {/* 2. Bảng điểm */}
-        <div className="rounded-2xl border border-line bg-surface p-5 shadow-2xs hover:border-brand/40 transition-colors">
-          <div className="flex items-center justify-between border-b border-line/60 pb-3">
-            <div className="flex items-center gap-2 text-sm font-bold text-foreground">
-              <FileTextIcon className="size-4 text-brand" />
-              <span>BẢNG ĐIỂM</span>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onEditStep(2)}
-              className="text-xs text-brand font-semibold hover:bg-brand-wash h-8 gap-1"
-            >
-              <Edit3Icon className="size-3.5" />
-              Sửa
-            </Button>
-          </div>
-          <div className="pt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-muted-foreground">
-            <div>
-              <div>
-                <strong className="text-foreground">Dữ liệu điểm: </strong>
-                {totalYears > 0 ? `${totalYears} năm học · ${totalSubjects} môn học` : "Chưa nhập điểm"}
+        <ReviewCard icon={FileTextIcon} eyebrow="Bảng điểm" onEdit={() => onEditStep(2)}>
+          <div className="flex items-start justify-between gap-3">
+            <div className="space-y-1">
+              <div className="text-sm font-semibold text-foreground">
+                {totalYears > 0 ? `${totalSubjects} môn · ${gradeNames}` : "Chưa nhập điểm"}
               </div>
               {draftTranscript && (
-                <div className="text-[11px] text-ok mt-0.5 flex items-center gap-1">
+                <div className="flex items-center gap-1 text-[11px] text-ok">
                   <CheckCircle2Icon className="size-3" />
                   Đã tải tệp: {draftTranscript.originalFileName}
                 </div>
               )}
             </div>
-            <div className="rounded-xl bg-brand-wash px-3 py-1.5 text-center">
-              <div className="text-[10px] text-brand-ink uppercase font-semibold">GPA Thang 4.0</div>
-              <div className="text-numeric text-base font-bold text-brand">{gpa}</div>
+            <div className="shrink-0 rounded-xl bg-brand-wash px-3 py-1.5 text-center">
+              <div className="text-[10px] font-semibold text-brand-ink">Điểm TB tự tính</div>
+              <div className="text-numeric text-base font-bold text-brand">{gpa10Text}</div>
+              <div className="text-[10px] text-brand-ink">thang 4: {gpa}</div>
             </div>
           </div>
-        </div>
+        </ReviewCard>
 
-        {/* 3. Chứng chỉ */}
-        <div className="rounded-2xl border border-line bg-surface p-5 shadow-2xs hover:border-brand/40 transition-colors">
-          <div className="flex items-center justify-between border-b border-line/60 pb-3">
-            <div className="flex items-center gap-2 text-sm font-bold text-foreground">
-              <BookOpenIcon className="size-4 text-brand" />
-              <span>CHỨNG CHỈ</span>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onEditStep(3)}
-              className="text-xs text-brand font-semibold hover:bg-brand-wash h-8 gap-1"
-            >
-              <Edit3Icon className="size-3.5" />
-              Sửa
-            </Button>
-          </div>
-          <div className="pt-3 text-xs space-y-1.5 text-muted-foreground">
-            <div>
-              <strong className="text-foreground">Tiếng Anh: </strong>
-              {step3.englishTestType && step3.englishTestType !== "none"
-                ? `${step3.englishTestType.toUpperCase()} ${step3.englishOverallScore ?? "–"}${step3.englishTestDate ? ` · thi ${step3.englishTestDate}` : ""}`
-                : "Chưa có"}
-            </div>
-            <div>
-              <strong className="text-foreground">Bài thi chuẩn hóa: </strong>
-              {step3.otherTests.length > 0
-                ? step3.otherTests.map((t) => `${t.testType} ${t.score ?? ""}`).join(", ")
-                : "Chưa có SAT/ACT/AP"}
-            </div>
-          </div>
-        </div>
-
-        {/* 4. Tài chính */}
-        <div className="rounded-2xl border border-line bg-surface p-5 shadow-2xs hover:border-brand/40 transition-colors">
-          <div className="flex items-center justify-between border-b border-line/60 pb-3">
-            <div className="flex items-center gap-2 text-sm font-bold text-foreground">
-              <DollarSignIcon className="size-4 text-brand" />
-              <span>TÀI CHÍNH</span>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onEditStep(4)}
-              className="text-xs text-brand font-semibold hover:bg-brand-wash h-8 gap-1"
-            >
-              <Edit3Icon className="size-3.5" />
-              Sửa
-            </Button>
-          </div>
-          <div className="pt-3 text-xs space-y-1.5 text-muted-foreground">
-            <div>
-              <strong className="text-foreground">Ngân sách dự kiến: </strong>
-              {budgetTierLabel}
-            </div>
-            <div>
-              <strong className="text-foreground">Nhu cầu học bổng: </strong>
-              {financialNeedLabel}
-            </div>
-          </div>
-        </div>
-
-        {/* 5. Ngoại khóa & Giải thưởng */}
-        <div className="rounded-2xl border border-line bg-surface p-5 shadow-2xs hover:border-brand/40 transition-colors">
-          <div className="flex items-center justify-between border-b border-line/60 pb-3">
-            <div className="flex items-center gap-2 text-sm font-bold text-foreground">
-              <TrophyIcon className="size-4 text-brand" />
-              <span>HOẠT ĐỘNG & GIẢI THƯỞNG</span>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onEditStep(5)}
-              className="text-xs text-brand font-semibold hover:bg-brand-wash h-8 gap-1"
-            >
-              <Edit3Icon className="size-3.5" />
-              Sửa
-            </Button>
-          </div>
-          <div className="pt-3 text-xs text-muted-foreground">
-            {step5.activities.length > 0 ? (
-              <div className="space-y-2">
-                <div className="flex gap-4">
-                  <span>
-                    <strong className="text-foreground">{activitiesCount}</strong> hoạt động ngoại khóa
-                  </span>
-                  <span>
-                    <strong className="text-foreground">{awardsCount}</strong> giải thưởng / thành tích
-                  </span>
-                </div>
-                <ul className="space-y-1">
-                  {step5.activities.map((a, i) => (
-                    <li key={a.id ?? i}>
-                      <strong className="text-foreground">{a.name}</strong>
-                      {" · "}
-                      {labelOf(IMPACT_LEVEL_OPTIONS, a.impactLevel) || "Chưa chọn phạm vi"}
-                      {a.category === "activity"
-                        ? ` · ${labelOf(ACTIVITY_ROLE_OPTIONS, a.role) || "Chưa chọn vai trò"}${a.durationMonths ? ` · ${a.durationMonths} tháng` : ""}`
-                        : ` · Năm ${a.year ?? "?"}`}
-                    </li>
-                  ))}
-                </ul>
+        <ReviewCard icon={BookOpenIcon} eyebrow="Chứng chỉ" onEdit={() => onEditStep(3)}>
+          {step3.certifications.length > 0 ? (
+            step3.certifications.map((cert) => (
+              <div key={cert.id} className="text-foreground">
+                {formatCertSummary(cert, findCertType(certificationTypes, cert.type))}
               </div>
-            ) : (
-              <span>Chưa có hoạt động ngoại khóa</span>
-            )}
+            ))
+          ) : (
+            <div>Chưa có chứng chỉ</div>
+          )}
+          {step3.englishPlanned && (
+            <div>
+              <strong className="text-foreground">Dự kiến thi tiếng Anh: </strong>
+              {formatYearMonth(step3.englishPlannedDate) ?? "chưa chọn thời gian"}
+            </div>
+          )}
+        </ReviewCard>
+
+        <ReviewCard icon={DollarSignIcon} eyebrow="Tài chính" onEdit={() => onEditStep(4)}>
+          <div className="text-sm font-semibold text-foreground">{budgetTierLabel} / năm</div>
+          <div>
+            <strong className="text-foreground">Học bổng: </strong>
+            {financialNeedLabel}
           </div>
-        </div>
+        </ReviewCard>
+
+        <ReviewCard
+          icon={TrophyIcon}
+          eyebrow="Hoạt động & giải thưởng"
+          onEdit={() => onEditStep(5)}
+          className="sm:col-span-2"
+        >
+          {step5.activities.length > 0 ? (
+            <>
+              <div className="text-sm font-semibold text-foreground">
+                {activitiesCount} hoạt động · {awardsCount} giải
+              </div>
+              <ul className="space-y-1">
+                {step5.activities.map((a, i) => (
+                  <li key={a.id ?? i}>
+                    <strong className="text-foreground">{a.name}</strong>
+                    {" · "}
+                    {labelOf(IMPACT_LEVEL_OPTIONS, a.impactLevel) || "Chưa chọn phạm vi"}
+                    {a.category === "activity"
+                      ? ` · ${labelOf(ACTIVITY_ROLE_OPTIONS, a.role) || "Chưa chọn vai trò"}${a.durationMonths ? ` · ${a.durationMonths} tháng` : ""}`
+                      : ` · Năm ${a.year ?? "?"}`}
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <div>Chưa có hoạt động ngoại khóa</div>
+          )}
+        </ReviewCard>
       </div>
 
       {/* Helpful Hint */}

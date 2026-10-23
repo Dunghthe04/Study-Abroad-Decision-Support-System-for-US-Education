@@ -16,6 +16,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<StudentProfile> StudentProfiles => Set<StudentProfile>();
     public DbSet<TranscriptScore> TranscriptScores => Set<TranscriptScore>();
     public DbSet<ProfileActivity> ProfileActivities => Set<ProfileActivity>();
+    public DbSet<ProfileCertification> ProfileCertifications => Set<ProfileCertification>();
     public DbSet<University> Universities => Set<University>();
     public DbSet<UniversityOffering> UniversityOfferings => Set<UniversityOffering>();
     public DbSet<Scholarship> Scholarships => Set<Scholarship>();

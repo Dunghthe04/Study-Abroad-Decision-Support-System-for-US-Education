@@ -1,16 +1,10 @@
-"""Đáp án lượt ② (chấm trường) theo GOI_Y_TRUONG_TONG_QUAN bản 2 và quy ước trong skill_score.md.
+"""Công thức chuẩn (đáp án) để so với AI. Nhận đúng JSON mà AI nhận, trả đúng các key AI phải trả."""
 
-Nhận đúng JSON gọn mà AI nhận (key c, acc, iacc, sat, gpa, L...), trả đúng các key AI phải trả,
-để so từng bước. Chỉ dùng cho bộ đánh giá (bước 4.1, 4.3). Không chạy trong hệ thống.
-"""
-
-# Cận các khoảng GPA (k1..k7) theo skill: k1 [0, 2.50) ... k6 [3.75, 4.00), k7 = 4.0
-GPA_EDGES = [0.0, 2.5, 3.0, 3.25, 3.5, 3.75, 4.0]
-# Bảng đổi z ra điểm vị trí (skill bước 2c), nội suy tuyến tính giữa 2 mốc
+GPA_EDGES = [0.0, 2.5, 3.0, 3.25, 3.5, 3.75, 4.0]  # cận các khoảng k1..k6; k7 = đúng 4.0
 Z_TABLE = [(-2, 2), (-1.5, 7), (-1, 16), (-0.5, 31), (0, 50), (0.5, 69), (1, 84), (1.5, 93), (2, 98)]
-GPA_SD = 0.3
-LOW_SUBMIT = 0.5
-INTL_RATIO = 0.5
+GPA_SD = 0.3  # độ lệch chuẩn khi chỉ có GPA trung bình (giả định của nhóm)
+LOW_SUBMIT = 0.5  # dưới 50% sinh viên nộp SAT thì L_SAT × 0,5
+INTL_RATIO = 0.5  # r < 0,5 thì hạ một nhóm
 
 
 def clamp(x, lo, hi):
@@ -18,6 +12,7 @@ def clamp(x, lo, hi):
 
 
 def z_to_position(z):
+    """Đổi z ra điểm vị trí theo bảng, nội suy tuyến tính giữa 2 mốc gần nhất."""
     if z <= Z_TABLE[0][0]:
         return Z_TABLE[0][1]
     if z >= Z_TABLE[-1][0]:
@@ -25,22 +20,22 @@ def z_to_position(z):
     for (z1, p1), (z2, p2) in zip(Z_TABLE, Z_TABLE[1:], strict=False):
         if z1 <= z <= z2:
             return p1 + (p2 - p1) * (z - z1) / (z2 - z1)
-    raise AssertionError("không tới được")
 
 
 def gpa_position(gpa, dist):
-    """Bước 2b: dist = 7 tỉ lệ k1..k7 (0–1)."""
+    """Điểm GPA = 100 × (a + t × b). dist = tỉ lệ 7 khoảng k1..k7 (0–1)."""
     if gpa >= 4.0:
         return 100 * sum(dist[:6]) + 50 * dist[6]
     for k in range(6):
         lo, hi = GPA_EDGES[k], GPA_EDGES[k + 1]
         if gpa < hi:
-            return 100 * sum(dist[:k]) + 100 * max(0.0, (gpa - lo) / (hi - lo)) * dist[k]
-    raise AssertionError("không tới được")
+            a = sum(dist[:k])  # tỉ lệ sinh viên ở các khoảng thấp hơn
+            t = max(0.0, (gpa - lo) / (hi - lo))  # đi được bao nhiêu phần trong khoảng
+            b = dist[k]  # tỉ lệ sinh viên trong khoảng của học sinh
+            return 100 * (a + t * b)
 
 
 def score_school(student, s):
-    """Tầng 2 + tầng 3 cho 1 trường, trả dict cùng key với ScoreItem."""
     gpa, sat, tier, budget = student.get("gpa"), student.get("sat"), student["tier"], student.get("budget")
     lg, ls, le = s["L"]
 
@@ -61,10 +56,10 @@ def score_school(student, s):
     elif gpa is not None and s.get("avg") is not None:
         pg = z_to_position((gpa - s["avg"]) / GPA_SD)
 
+    # Bước 3, 5, 6a. Điểm học thuật, điều chỉnh ngoại khóa, nhóm theo S
+    adj = (tier - 3) * le
     if pg is None and ps is None:
-        a = total = None
-        g = "NA"
-        w = [0.5, 0.5]
+        w, a, total, g = [0.5, 0.5], None, None, "NA"
     else:
         if pg is None:
             w = [0.0, 1.0]
@@ -72,14 +67,11 @@ def score_school(student, s):
             w = [1.0, 0.0]
         else:
             w = [lg / (lg + ls), ls / (lg + ls)] if lg + ls else [0.5, 0.5]
-        # Bước 3, 5, 6a
         a = w[0] * (pg or 0) + w[1] * (ps or 0)
-    adj = (tier - 3) * le
-    if pg is not None or ps is not None:
         total = a + adj
         g = "R" if total < 25 else "S" if total > 75 else "M"
     if (s.get("acc") or 0) >= 0.99:
-        g = "O"
+        g = "O"  # trường nhận gần như tất cả: không chia nhóm
 
     # Bước 6b. Du học sinh
     r, g2 = None, g
@@ -88,7 +80,7 @@ def score_school(student, s):
         if r < INTL_RATIO and g in ("R", "M", "S"):
             g2 = {"S": "M", "M": "R", "R": "RF"}[g]
 
-    # Tầng 3
+    # Tầng 3: F, H, Q và số tiền vượt ngân sách
     coa, aid = s.get("coa"), s.get("aid")
     f = clamp((budget - coa) / budget, 0, 1) if budget and coa else None
     h = min(1.0, aid / coa) if aid is not None and coa else None

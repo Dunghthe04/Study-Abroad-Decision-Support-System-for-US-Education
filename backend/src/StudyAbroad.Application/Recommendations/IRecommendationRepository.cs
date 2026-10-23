@@ -9,22 +9,13 @@ namespace StudyAbroad.Application.Recommendations
 {
     public interface IRecommendationRepository
     {
-        //Lấy hồ sơ học sinh để gợi ý trường
-        Task<StudentProfile?> GetProfileAsync(Guid studentId, CancellationToken ct=default);
-
-        //lấy cấu hình gợi ý trường (key = "recommend_settings")
-        Task<string?> GetSettingJsonAsync(string key,CancellationToken ct=default);
-
-        //Lấy danh sách trường ứng viên để gợi ý
-        Task<IReadOnlyList<SchoolCandidate>> GetSchoolCandidatesAsync(string studyLevel, CancellationToken ct=default);
-
-        /// Lưu hồ sơ gợi ý trường cho học sinh
         Task AddAsync(Recommendation recommendation, CancellationToken ct = default);
+        // Dùng ở mốc 4.5, chưa cần viết API.
+        Task<Recommendation?> GetLatestAsync(Guid userId, CancellationToken ct = default);
 
-        //Lần gợi ý gần nhất của user, null nếu chưa có
-        Task<Recommendation?> GetLatestRecommendationAsync(Guid userId, CancellationToken ct=default);
-        
-        //Hoạt động ngoại khóa, kinh nghiệm và giải thưởng của hồ sơ (đầu vào lượt ①)
-        Task<IReadOnlyList<ProfileActivity>> GetActivitiesAsync(Guid studentProfileId, CancellationToken ct = default);
+        Task<IReadOnlyList<RecommendSchoolInput>> ListSchoolsAsync(string studyLevel, CancellationToken ct = default);
+        //Tìm trường theo code, cấp độ
+        Task<RecommendSchoolInput?> FindSchoolAsync(string code, string studyLevel, CancellationToken ct = default);
+
     }
 }

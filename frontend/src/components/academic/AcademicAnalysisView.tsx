@@ -29,8 +29,10 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Spinner } from "@/components/ui/spinner";
+import { useAssistant } from "@/components/assistant/AssistantProvider";
 
 export function AcademicAnalysisView() {
+  const { openPanel } = useAssistant();
   const [scores, setScores] = useState<TranscriptScore[]>([]);
   const [analysis, setAnalysis] = useState<AcademicAnalysisResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -193,12 +195,13 @@ export function AcademicAnalysisView() {
           >
             <PencilIcon aria-hidden="true" /> Chỉnh sửa bảng điểm
           </Link>
-          <Link
-            href="/advisor"
-            className={buttonVariants({ size: "lg" })}
+          <Button
+            type="button"
+            size="lg"
+            onClick={() => openPanel("Bảng điểm của em đang ở mức nào so với các trường Mỹ?")}
           >
-            <BotIcon aria-hidden="true" /> Tư vấn AI <ArrowRightIcon aria-hidden="true" />
-          </Link>
+            <BotIcon aria-hidden="true" /> Hỏi trợ lý <ArrowRightIcon aria-hidden="true" />
+          </Button>
         </div>
       </div>
 
