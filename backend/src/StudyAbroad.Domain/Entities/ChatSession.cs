@@ -11,4 +11,7 @@ public class ChatSession : BaseEntity
     /// <summary>bước trong flow: B0..B6</summary>
     public string? CurrentStep { get; set; }
     public Guid? SkillId { get; set; }
+
+    /// <summary>trạng thái hội thoại advisor trả về (framework mục 4.3), gửi lại ở lượt sau</summary>
+    public string? StateJson { get; set; }
 }
