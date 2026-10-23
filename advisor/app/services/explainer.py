@@ -1,75 +1,121 @@
-"""AI tư vấn từng trường: đọc số liệu hệ thống đã chấm, viết lời giải thích và lời khuyên theo skill_explain.md.
-
-Model nhỏ hay so sánh số sai (ví dụ nói SAT 1400 "cao hơn mốc 75% là 1410"), nên Python so sánh trước và gửi kèm
-các nhận định đã đúng ("facts"); AI chỉ diễn đạt lại, không phải tự so sánh.
-"""
+"""Tư vấn từng trường: Qwen viết lời từ số đã lưu. Không chấm lại, không đổi nhóm."""
 
 from pathlib import Path
 from typing import Any
 
-from app.schemas.explain import ExplainRequest, ExplainResponse, ExplainResult, explain_schema
+from app.schemas.explain import (
+    ExplainRequest,
+    ExplainResponse,
+    ExplainResult,
+    ExplainSchool,
+    ExplainStudent,
+    explain_schema,
+)
 from app.services.skill_call import SKILLS_DIR, SkillCall
 
-SKILL_PATH = SKILLS_DIR / "skill_explain.md"
+SKILL_PATH = Path(SKILLS_DIR) / "skill_explain.md"
+
+GROUP_LABEL = {
+    "R": "Khó vào",
+    "RF": "Khó vào xa",
+    "M": "Vừa sức",
+    "S": "An toàn hơn",
+    "NA": "Chưa đủ dữ liệu",
+    "O": "Nhận gần như tất cả",
+}
 
 
-class ExplainError(Exception):
-    """AI trả sai định dạng 2 lần liền."""
+# Chuyển đổi tiền USD sang định dạng có dấu chấm phân cách hàng nghìn
+def money(value: float | None) -> str:
+    return f"{value:,.0f}".replace(",", ".") if value is not None else "?"
 
 
-def _usd(v: float) -> str:
-    return f"{v:,.0f}".replace(",", ".") + " USD"
+# Qwen dựa vào câu mẫu này để viết lời giải thích cho từng trường, dựa vào số đã lưu trong cơ sở dữ liệu.
+def fact_of(code: str, st: ExplainStudent, sc: ExplainSchool) -> str:
+    """Đổi một mã lý do thành câu đúng. Qwen chỉ diễn đạt lại, không so sánh."""
+    gpa = f"GPA {st.gpa}" if st.gpa is not None else "GPA"
+    sat = f"SAT {st.sat}" if st.sat is not None else "SAT"
+    pos = f": cao hơn khoảng {sc.pg:.0f}% sinh viên của trường" if sc.pg is not None else ""
+    if code == "GPA_HIGH":
+        return f"{gpa} cao hơn mặt bằng sinh viên trúng tuyển{pos}"
+    if code == "GPA_MID":
+        return f"{gpa} nằm trong mặt bằng sinh viên trúng tuyển{pos}"
+    if code == "GPA_LOW":
+        return f"{gpa} thấp hơn phần lớn sinh viên trúng tuyển{pos}"
+    if code == "SAT_ABOVE":
+        mark = f" ({sc.sat75})" if sc.sat75 is not None else ""
+        return f"{sat} cao hơn mốc 75% của trường{mark}"
+    if code == "SAT_IN_RANGE":
+        if sc.sat25 is not None and sc.sat75 is not None:
+            return f"{sat} nằm trong khoảng {sc.sat25}–{sc.sat75} của trường"
+        return f"{sat} nằm trong khoảng SAT của trường"
+    if code == "SAT_BELOW":
+        if sc.sat25 is not None and st.sat is not None and sc.sat25 > st.sat:
+            return f"{sat} thấp hơn mốc 25% của trường ({sc.sat25}), thiếu khoảng {sc.sat25 - st.sat} điểm"
+        return f"{sat} thấp hơn mốc 25% của trường"
+    if code == "BUDGET_OK":
+        return f"Chi phí {money(sc.cost)} USD/năm, nằm trong ngân sách"
+    if code == "NEED_AID":
+        return f"Chi phí {money(sc.cost)} USD/năm, vượt ngân sách {money(sc.gap)} USD/năm: cần học bổng lớn"
+    if code == "INTL_LOW":
+        return "Trường nhận rất ít du học sinh so với tỉ lệ nhận chung"
+    if code == "EC_PLUS":
+        return "Ngoại khóa của bạn là lợi thế ở trường này"
+    if code == "EC_MINUS":
+        return "Ngoại khóa của bạn cần bổ sung cho trường này"
+    return ""
 
 
+# Xây dựng danh sách lý do cho từng trường
 def build_facts(req: ExplainRequest) -> list[str]:
-    """Các nhận định so sánh đã tính sẵn bằng code, đúng tuyệt đối."""
-    st, sc = req.student, req.school
-    facts: list[str] = []
+    facts = []
 
-    if st.gpa is not None and sc.gpa_position is not None:
-        p = round(sc.gpa_position)
-        level = "cao hơn phần lớn" if p > 75 else "ở khoảng giữa" if p >= 25 else "thấp hơn phần lớn"
-        facts.append(f"GPA {st.gpa} {level} sinh viên trúng tuyển: cao hơn khoảng {p}% sinh viên của trường")
-    if st.sat is not None and sc.sat25 is not None and sc.sat75 is not None:
-        if st.sat < sc.sat25:
-            facts.append(
-                f"SAT {st.sat} thấp hơn mốc 25% của trường ({sc.sat25}), thiếu khoảng {sc.sat25 - st.sat} điểm"
-            )
-        elif st.sat > sc.sat75:
-            facts.append(f"SAT {st.sat} cao hơn mốc 75% của trường ({sc.sat75})")
-        else:
-            facts.append(f"SAT {st.sat} nằm trong khoảng 25–75 của trường ({sc.sat25}–{sc.sat75})")
-    elif st.sat is None:
-        facts.append("Học sinh chưa có SAT; kết quả chỉ dựa vào GPA")
-    if st.ec_tier is not None:
-        tier = {1: "rất mỏng", 2: "dưới trung bình", 3: "trung bình", 4: "khá", 5: "nổi bật"}[st.ec_tier]
-        adj = sc.ec_adjustment or 0
-        effect = "là lợi thế" if adj > 0 else "làm hồ sơ yếu đi" if adj < 0 else "không ảnh hưởng"
-        facts.append(f"Ngoại khóa ở mức {tier} (bậc {st.ec_tier}/5), ở trường này {effect}")
-    if sc.cost is not None:
-        if sc.need_aid and sc.over_budget:
-            facts.append(
-                f"Chi phí {_usd(sc.cost)}/năm, vượt ngân sách {_usd(sc.over_budget)}/năm: cần học bổng lớn"
-            )
-        else:
-            facts.append(f"Chi phí {_usd(sc.cost)}/năm, nằm trong ngân sách")
-    if sc.group == "Khó vào xa":
-        facts.append("Trường nhận rất ít du học sinh so với tỉ lệ nhận chung")
+    for code in req.school.why:
+        fact = fact_of(code, req.student, req.school)
+
+        if fact:
+            facts.append(fact)
+
     return facts
 
 
+# Gom dữ liệu thành đúng 1 JSON để gửi QWEN
+def build_user(req: ExplainRequest) -> dict[str, Any]:
+    st, sc = req.student, req.school
+    school: dict[str, Any] = {
+        "name": sc.name,
+        "state": sc.state,
+        "control": sc.control,
+        "group": GROUP_LABEL[sc.g2],  # mã g2 → nhãn tiếng Việt
+        "needAid": sc.blk == "AID",  # True nếu trường nằm ở khối học bổng
+        "acceptance": round(sc.acc * 100, 1) if sc.acc is not None else None,  # 0–1 → %
+        "sat25": sc.sat25,
+        "sat75": sc.sat75,
+        "cost": sc.cost,
+        "gap": sc.gap,
+    }
+    return {
+        "student": st.model_dump(exclude_none=True),
+        "school": {k: v for k, v in school.items() if v is not None},
+        "facts": build_facts(req),
+    }
+
+
+# Một lượt AI: gửi JSON cho Qwen, kiểm tra kết quả, đóng gói trả về
 class Explainer:
     def __init__(self, llm: Any, model: str, skill_path: Path = SKILL_PATH) -> None:
         self._call = SkillCall(llm, model, skill_path)
         self.skill_version = self._call.skill_version
 
     async def explain(self, req: ExplainRequest) -> ExplainResponse:
-        # Thiếu số thì bỏ key, AI không nhắc tới (skill: key không có = chưa có dữ liệu)
-        user = req.model_dump(exclude_none=True)
-        user["facts"] = build_facts(req)
-        result = await self._call.run(user, explain_schema(), ExplainResult.model_validate)
-        if result is None:
-            raise ExplainError("AI chưa viết được lời tư vấn, hãy thử lại.")
+        result = await self._call.run(
+            build_user(req), explain_schema(), lambda raw: ExplainResult.model_validate(raw)
+        )
         return ExplainResponse(
-            **result.model_dump(), skill_version=self.skill_version, model=self._call.model
+            skill_version=self.skill_version,
+            model=self._call.model,
+            status="OK" if result is not None else "FAILED",
+            summary=result.summary if result else "",
+            strengths=result.strengths if result else [],
+            improvements=result.improvements if result else [],
         )

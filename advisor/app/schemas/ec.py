@@ -1,68 +1,66 @@
-"""Dữ liệu vào/ra của bậc ngoại khóa: AI đọc vai trò, phạm vi; Python tính q, m, bậc."""
+"""Dữ liệu vào/ra của bậc ngoại khóa: Qwen đọc vai trò, phạm vi; Python tính q, m, bậc."""
 
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-MAX_ACTIVITIES = 10  # tối đa 10 hoạt động
+MAX_ACTIVITIES = 10
 MAX_AWARD = 10
-ROLES = [1.0, 0.8, 0.6, 0.3]  # sáng lập, trưởng nhóm, phó nhóm, thành viên
-# Vai trò học sinh chọn ở form (luồng 6 bước) → giá trị; dùng khi AI lỗi
+ROLES = [1.0, 0.8, 0.6, 0.3]
 FORM_ROLES = {"founder": 1.0, "leader": 0.8, "vice_leader": 0.6, "member": 0.3}
 
 
+# Dữ liệu vào: hoạt động ngoại khóa
 class EcActivity(BaseModel):
-    # mô tả
     text: str = Field(min_length=1, max_length=500)
-    # phạm vi học sinh chọn: 1 trường ... 5 quốc tế
-    scope: int = Field(ge=1, le=5)
-    # Tháng
+    scope: int = Field(ge=1, le=5)  # phạm vi học sinh chọn: 1 trường ... 5 quốc tế
     months: int = Field(ge=0, le=120)
-    # vai trò chọn ở form; không gửi cho AI, chỉ dùng khi AI lỗi
     role: Literal["founder", "leader", "vice_leader", "member"] | None = None
 
 
+# Dữ liệu vào giải thưởng
 class EcAward(BaseModel):
     text: str = Field(min_length=1, max_length=300)
-    # cấp giải, cùng thang với scope
-    level: int = Field(ge=1, le=5)
+    level: int = Field(ge=1, le=5)  # cấp giải, cùng thang với scope
 
 
+# Dữ liệu vào:  mảng hoạt động và giải thưởng, mỗi mảng có độ dài tối đa 10
 class EcRequest(BaseModel):
     act: list[EcActivity] = Field(default=[], max_length=MAX_ACTIVITIES)
     awards: list[EcAward] = Field(default=[], max_length=MAX_AWARD)
 
 
+# kết quả AI đọc một hoạt động
 class EcActivityRead(BaseModel):
-    """Phần AI đọc được cho 1 hoạt động."""
-
-    role: Literal[1.0, 0.8, 0.6, 0.3]  # vai trò đọc từ text
-    scope: int = Field(ge=1, le=5)  # phạm vi sau khi xét (chỉ giữ hoặc hạ)
+    role: Literal[1.0, 0.8, 0.6, 0.3]
+    scope: int = Field(ge=1, le=5)
 
 
+# mẢNG  kết quả AI đọc hoạt động
 class EcRead(BaseModel):
-    """JSON AI trả về: chỉ có đọc hiểu, không có phép tính."""
-
     act: list[EcActivityRead]
 
 
+# Kết quả tính mỗi activity
 class EcActivityResult(EcActivityRead):
-    q: float  # điểm hoạt động, Python tính
+    q: float
 
 
 class EcResponse(BaseModel):
+    # mảng activity đã đọc
     act: list[EcActivityResult]
-    tong_hd: float  # tổng q của tối đa 4 hoạt động cao nhất
-    bonus: float  # điểm thưởng giải, tối đa 0,5
-    m: float  # mức ngoại khóa = (tong_hd + bonus) / 4
-    tier: int = Field(ge=1, le=5)  # bậc ngoại khóa
+    # tổng điểm hoạt động
+    tong_hd: float
+    # tổng điểm giải thưởng
+    bonus: float
+    tier: int = Field(ge=1, le=5)
     skill_version: str
     model: str
-    ai_used: bool  # false = không gọi AI hoặc AI lỗi, vai trò lấy từ form
+    ai_used: bool
 
 
 def ec_schema(n_act: int) -> dict[str, Any]:
-    """JSON Schema cho format của Ollama: đúng n hoạt động, mỗi hoạt động chỉ có role và scope."""
+    """Ollama phải trả đúng n hoạt động, mỗi hoạt động chỉ có role và scope."""
     return {
         "type": "object",
         "required": ["act"],
@@ -79,6 +77,6 @@ def ec_schema(n_act: int) -> dict[str, Any]:
                         "scope": {"type": "integer", "minimum": 1, "maximum": 5},
                     },
                 },
-            },
+            }
         },
     }

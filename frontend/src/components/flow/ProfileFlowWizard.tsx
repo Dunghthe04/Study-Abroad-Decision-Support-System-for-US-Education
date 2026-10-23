@@ -15,7 +15,7 @@ import { Step5Extracurricular } from "./Step5Extracurricular";
 import { Step6Review } from "./Step6Review";
 import { profileFlowApi } from "@/lib/profile-flow-api";
 import { migrateLegacyStep3 } from "@/lib/certification-utils";
-import { getLatestRecommendation } from "@/lib/recommendation-api";
+import { recommendationApi } from "@/lib/recommendation-api";
 import type {
   GoalDraft,
   TranscriptDraft,
@@ -114,7 +114,7 @@ export function ProfileFlowWizard() {
         const [metaData, stateData, latest] = await Promise.all([
           profileFlowApi.getMetadata().catch(() => null),
           user ? profileFlowApi.getFlowState().catch(() => null) : null,
-          user && !editing ? getLatestRecommendation().catch(() => null) : null,
+          user && !editing ? recommendationApi.getLatest().catch(() => null) : null,
         ]);
 
         if (!isMounted) return;
@@ -321,7 +321,7 @@ export function ProfileFlowWizard() {
       } catch {
         // trình duyệt chặn storage → coi như hồ sơ mới
       }
-      if (lastCommitted === draftJson && (await getLatestRecommendation().catch(() => null))) {
+      if (lastCommitted === draftJson && (await recommendationApi.getLatest().catch(() => null))) {
         router.push("/recommendations");
         return;
       }
@@ -335,7 +335,7 @@ export function ProfileFlowWizard() {
         } catch {
           // bỏ qua
         }
-        router.push("/recommendations?run=1"); // hồ sơ vừa đổi: lọc lại, không hiện kết quả cũ
+        router.push("/recommendations?run=1");
       } else {
         setErrorMessage(res.message || "Không thể hoàn tất lưu hồ sơ.");
       }

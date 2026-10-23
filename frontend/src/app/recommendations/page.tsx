@@ -1,15 +1,23 @@
+import type { Metadata } from "next";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
-import { RecommendationPanel } from "@/components/recommendations/RecommendationPanel";
+import { RecommendationView } from "@/components/recommendation/RecommendationView";
 
-export const metadata = {
-  title: "Gợi ý trường – USAS",
-  description: "Lọc trường đại học Mỹ phù hợp theo mô hình phân tầng 4 nhóm trường, thuật toán AHP & SAW.",
+export const metadata: Metadata = {
+  title: "Trường gợi ý – USAS",
+  description: "Danh sách trường Khó vào, Vừa sức, An toàn hơn và khối cần học bổng lớn theo hồ sơ của bạn.",
 };
 
-export default function RecommendationsPage() {
+// ?run=1: vừa gửi hồ sơ xong, chạy gợi ý mới. Không có thì đọc lần đã lưu.
+export default async function RecommendationsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const { run } = await searchParams;
+
   return (
     <ProtectedRoute>
-      <RecommendationPanel />
+      <RecommendationView autoRun={run === "1"} />
     </ProtectedRoute>
   );
 }
