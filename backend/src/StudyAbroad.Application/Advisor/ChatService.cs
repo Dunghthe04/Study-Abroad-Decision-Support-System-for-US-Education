@@ -36,6 +36,7 @@ namespace StudyAbroad.Application.Advisor
             //Gửi request sang Advisor
             var response = await advisor.ChatAsync(request with { State = state }, ct);
             //Sau khi advisor phản hồi ==> lưu trạng thái mới
+            session.StateJson = response.State?.GetRawText();
             if (response.State is { ValueKind: JsonValueKind.Object } s && s.TryGetProperty("currentStep", out var step))
                 //Lưu bước hiện tại
                 session.CurrentStep = step.GetString();

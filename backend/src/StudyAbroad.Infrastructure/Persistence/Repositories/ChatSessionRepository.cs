@@ -14,17 +14,17 @@ namespace StudyAbroad.Infrastructure.Persistence.Repositories
         public async Task AddAsync(ChatSession chatSession, CancellationToken ct = default)
         {
             db.ChatSessions.Add(chatSession);
-            await db.SaveChangesAsync();
+            await db.SaveChangesAsync(ct);
         }
 
-        public Task<ChatSession> FindAsync(Guid id, Guid userId, CancellationToken ct = default)
+        public Task<ChatSession?> FindAsync(Guid id, Guid userId, CancellationToken ct = default)
         {
             return db.ChatSessions.FirstOrDefaultAsync(s => s.Id == id && s.UserId == userId, ct);
         }
 
         public Task SaveAsync(CancellationToken ct = default)
         {
-            return db.SaveChangesAsync();
+            return db.SaveChangesAsync(ct);
         }
     }
 }
