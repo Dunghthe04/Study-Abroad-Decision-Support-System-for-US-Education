@@ -7,3 +7,5 @@ __pycache__/
 # Raw survey data contains personal info -> keep it in Google Drive, never in git.
 data/raw/*
 !data/raw/.gitkeep
+# Vector tính từ BGE-M3 (sinh lại được bằng embed.py), không đưa vào git
+ml/skill_picker/artifacts/vectors*
