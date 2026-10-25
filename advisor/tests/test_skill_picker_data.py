@@ -48,6 +48,3 @@ def test_dataset_is_clean():
     for row in rows:
         assert 1 <= sum(labels_to_vector(row["labels"])) <= 2  # mỗi dòng 1 hoặc 2 nhãn hợp lệ
         assert row["message"].strip()
-
-
-
