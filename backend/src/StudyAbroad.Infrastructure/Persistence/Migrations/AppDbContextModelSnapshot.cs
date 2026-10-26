@@ -968,6 +968,81 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.ProfileCertification", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("category");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CustomName")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("custom_name");
+
+                    b.Property<decimal?>("OverallScore")
+                        .HasPrecision(7, 2)
+                        .HasColumnType("numeric(7,2)")
+                        .HasColumnName("overall_score");
+
+                    b.Property<string>("ScaleText")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("scale_text");
+
+                    b.Property<string>("SectionScoresJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("section_scores_json");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("sort_order");
+
+                    b.Property<Guid>("StudentProfileId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("student_profile_id");
+
+                    b.Property<string>("Subject")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("subject");
+
+                    b.Property<DateOnly?>("TestDate")
+                        .HasColumnType("date")
+                        .HasColumnName("test_date");
+
+                    b.Property<string>("TestType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("test_type");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_profile_certifications");
+
+                    b.HasIndex("StudentProfileId", "TestType")
+                        .HasDatabaseName("ix_profile_certifications_student_profile_id_test_type");
+
+                    b.ToTable("profile_certifications", "app", t =>
+                        {
+                            t.HasCheckConstraint("ck_profile_certifications_other_name", "test_type <> 'other' OR custom_name IS NOT NULL");
+                        });
+                });
+
             modelBuilder.Entity("StudyAbroad.Domain.Entities.Recommendation", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1290,9 +1365,19 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(64)")
                         .HasColumnName("education_system");
 
+                    b.Property<DateOnly?>("EnglishPlannedDate")
+                        .HasColumnType("date")
+                        .HasColumnName("english_planned_date");
+
                     b.Property<DateOnly?>("EnglishTestDate")
                         .HasColumnType("date")
                         .HasColumnName("english_test_date");
+
+                    b.Property<bool>("EnglishTestPlanned")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("english_test_planned");
 
                     b.Property<string>("EnglishTestType")
                         .HasMaxLength(16)
@@ -2222,6 +2307,16 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_profile_activities_student_profiles_student_profile_id");
+                });
+
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.ProfileCertification", b =>
+                {
+                    b.HasOne("StudyAbroad.Domain.Entities.StudentProfile", null)
+                        .WithMany()
+                        .HasForeignKey("StudentProfileId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_profile_certifications_student_profiles_student_profile_id");
                 });
 
             modelBuilder.Entity("StudyAbroad.Domain.Entities.Recommendation", b =>

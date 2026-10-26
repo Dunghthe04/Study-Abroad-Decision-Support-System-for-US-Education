@@ -32,6 +32,18 @@ public class ProfileFlowServiceTests
         { "id": "tier_35k_50k", "minUsd": 35000, "maxUsd": 50000 },
         { "id": "tier_50k_70k", "minUsd": 50000, "maxUsd": 70000 },
         { "id": "tier_above_70k", "minUsd": 70000, "maxUsd": null }
+      ],
+      "certifications": [
+        { "id": "ielts", "name": "IELTS Academic", "category": "english", "group": "popular", "min": 0, "max": 9, "step": 0.5,
+          "validityYears": 2, "profileField": "ielts",
+          "sections": [ { "id": "listening", "label": "Nghe", "min": 0, "max": 9, "step": 0.5 } ] },
+        { "id": "toefl", "name": "TOEFL iBT", "category": "english", "group": "popular", "min": 0, "max": 120, "step": 1, "profileField": "toefl" },
+        { "id": "pte", "name": "PTE Academic", "category": "english", "group": "popular", "min": 10, "max": 90, "step": 1 },
+        { "id": "sat", "name": "SAT", "category": "standardized", "group": "popular", "min": 400, "max": 1600, "step": 10, "profileField": "sat" },
+        { "id": "ap", "name": "AP", "category": "standardized", "group": "popular", "min": 1, "max": 5, "step": 1,
+          "requiresSubject": true, "subjectLabel": "Tên môn AP", "profileField": "ap" },
+        { "id": "alevel", "name": "A-Level", "category": "standardized", "group": "other", "min": null, "max": null, "step": null,
+          "requiresSubject": true, "subjectLabel": "Tên môn A-Level" }
       ]
     }
     """;
@@ -41,6 +53,7 @@ public class ProfileFlowServiceTests
         public readonly Dictionary<Guid, StudentProfile> Profiles = new();
         public readonly Dictionary<Guid, List<TranscriptScore>> Scores = new();
         public readonly Dictionary<Guid, List<ProfileActivity>> Activities = new();
+        public readonly Dictionary<Guid, List<ProfileCertification>> Certifications = new();
 
         public Task<string?> GetAppSettingValueAsync(string key, CancellationToken ct = default) =>
             Task.FromResult<string?>(key == ProfileConstants.ProfileMetadataAppSettingKey ? MetadataJson : null);
@@ -78,13 +91,23 @@ public class ProfileFlowServiceTests
 
         public int CommitCount { get; private set; }
 
-        public Task CommitProfileFlowAsync(StudentProfile profile, IEnumerable<TranscriptScore> scores, IEnumerable<ProfileActivity> activities, CancellationToken ct = default)
+        public Task CommitProfileFlowAsync(StudentProfile profile, IEnumerable<TranscriptScore> scores, IEnumerable<ProfileActivity> activities, IEnumerable<ProfileCertification> certifications, CancellationToken ct = default)
         {
             CommitCount++;
             Profiles[profile.Id] = profile;
             Scores[profile.Id] = scores.Select(s => { s.StudentProfileId = profile.Id; return s; }).ToList();
             Activities[profile.Id] = activities.Select(a => { a.StudentProfileId = profile.Id; return a; }).ToList();
+            Certifications[profile.Id] = certifications.Select(c => { c.StudentProfileId = profile.Id; return c; }).ToList();
             return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<ProfileCertification>> GetProfileCertificationsAsync(Guid profileId, CancellationToken ct = default)
+        {
+            if (Certifications.TryGetValue(profileId, out var list))
+            {
+                return Task.FromResult<IReadOnlyList<ProfileCertification>>(list);
+            }
+            return Task.FromResult<IReadOnlyList<ProfileCertification>>([]);
         }
 
         public Task<IReadOnlyList<TranscriptScore>> GetTranscriptScoresAsync(Guid profileId, CancellationToken ct = default)
@@ -179,10 +202,19 @@ public class ProfileFlowServiceTests
         }
     }
 
+    private static List<FlowCertificationItemDto> DefaultCertifications() =>
+    [
+        new(Id: "c1", Category: "english", Type: "ielts", Overall: 7.5m,
+            Sections: new Dictionary<string, decimal?> { ["listening"] = 8m }, TestDate: "2026-03"),
+        new(Id: "c2", Category: "standardized", Type: "sat", Overall: 1450m),
+        new(Id: "c3", Category: "standardized", Type: "ap", Subject: "Calculus BC", Overall: 4m),
+    ];
+
     private static ProfileFlowDraftDto FullDraft(
         string? tier = "tier_above_70k",
         string? need = "optional",
-        List<FlowActivityDraftDto>? activities = null) => new(
+        List<FlowActivityDraftDto>? activities = null,
+        List<FlowCertificationItemDto>? certifications = null) => new(
         Step1: new FlowGoalDraftDto(
             CurrentEducationLevel: "high_school",
             CurrentGrade: "Lớp 12",
@@ -199,11 +231,7 @@ public class ProfileFlowServiceTests
                 new FlowAcademicYearDraftDto("Lớp 12", [new FlowSubjectDraftDto("Toán", 9m, null)]),
             ],
             CalculatedGpa4Scale: 3.3m),
-        Step3: new FlowCertificationDraftDto(
-            EnglishTestType: "IELTS",
-            EnglishOverallScore: 7.5m,
-            EnglishTestDate: "2026-03",
-            OtherTests: [new FlowOtherTestDraftDto("SAT", 1450m), new FlowOtherTestDraftDto("AP", 4m)]),
+        Step3: new FlowCertificationDraftDto(Certifications: certifications ?? DefaultCertifications()),
         Step4: new FlowFinancialDraftDto(tier, need),
         Step5: new FlowActivitiesDraftDto(activities ??
         [
@@ -387,6 +415,12 @@ public class ProfileFlowServiceTests
         Assert.Equal(1450m, p.Sat);
         Assert.Null(p.Act);
         Assert.Equal("{\"ap\":4}", p.OtherTestsJson);
+        var certs = repo.Certifications[p.Id];
+        Assert.Equal(["ielts", "sat", "ap"], certs.OrderBy(c => c.SortOrder).Select(c => c.TestType));
+        var ielts = certs.Single(c => c.TestType == "ielts");
+        Assert.Equal(("english", new DateOnly(2026, 3, 1)), (ielts.Category, ielts.TestDate!.Value));
+        Assert.Equal("{\"listening\":8}", ielts.SectionScoresJson);
+        Assert.Equal("Calculus BC", certs.Single(c => c.TestType == "ap").Subject);
 
         // Bước 4: trên 70k → không có trần; không cần học bổng
         Assert.Equal("tier_above_70k", p.BudgetTier);
@@ -426,10 +460,10 @@ public class ProfileFlowServiceTests
         Assert.Equal(["Lớp 11", "Lớp 12"], d.Step2!.AcademicYears!.Select(y => y.GradeName));
         Assert.Equal(new FlowSubjectDraftDto("Toán", 8m, 9m), d.Step2.AcademicYears![0].Subjects!.Single(x => x.SubjectName == "Toán"));
         Assert.Equal(new FlowSubjectDraftDto("Toán", 9m, null), d.Step2.AcademicYears![1].Subjects!.Single());
-        Assert.Equal("IELTS", d.Step3!.EnglishTestType);
-        Assert.Equal(7.5m, d.Step3.EnglishOverallScore);
-        Assert.Equal("2026-03", d.Step3.EnglishTestDate);
-        Assert.Contains(d.Step3.OtherTests!, t => t.TestType == "AP" && t.Score == 4m);
+        var rebuilt = d.Step3!.Certifications!;
+        Assert.Equal(["ielts", "sat", "ap"], rebuilt.Select(c => c.Type));
+        Assert.Equal((7.5m, "2026-03", 8m), (rebuilt[0].Overall!.Value, rebuilt[0].TestDate, rebuilt[0].Sections!["listening"]!.Value));
+        Assert.Equal(("Calculus BC", 4m), (rebuilt[2].Subject, rebuilt[2].Overall!.Value));
         Assert.Equal(new FlowFinancialDraftDto("tier_20k_35k", "mandatory"), d.Step4);
         var club = d.Step5!.Activities!.Single(a => a.Category == "activity");
         Assert.Equal(("founder", "district", "09/2024", "05/2026", (int?)21), (club.Role, club.ImpactLevel, club.StartDate, club.EndDate, club.DurationMonths));
@@ -490,6 +524,167 @@ public class ProfileFlowServiceTests
 
         Assert.Contains("'Tình nguyện' chưa chọn vai trò", ex.Message);
         Assert.Contains("'Giải Toán' chưa có năm đạt giải", ex.Message);
+    }
+
+    [Fact]
+    public async Task CommitFlowAsync_TwoIelts_LegacyColumnKeepsHighestScore_AndPlannedEnglishIsStored()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var service = new ProfileFlowService(repo, new FakeFileStorageService());
+        var userId = Guid.NewGuid();
+        var draft = FullDraft() with
+        {
+            Step3 = new FlowCertificationDraftDto(
+                Certifications:
+                [
+                    new(Category: "english", Type: "ielts", Overall: 6.5m, TestDate: "2026-05"),
+                    new(Category: "english", Type: "ielts", Overall: 7m, TestDate: "2025-01"),
+                    new(Category: "english", Type: "pte", Overall: 70m, TestDate: "2026-06"),
+                ],
+                EnglishPlanned: true,
+                EnglishPlannedDate: "2099-12"),
+        };
+
+        await service.CommitFlowAsync(userId, new CommitProfileFlowRequest(draft));
+
+        var p = (await repo.GetProfileByUserIdAsync(userId))!;
+        Assert.Equal(7m, p.Ielts);
+        Assert.Null(p.Sat);
+        Assert.Null(p.OtherTestsJson);
+        // PTE không có cột riêng → tiếng Anh chính là IELTS có ngày thi gần nhất
+        Assert.Equal("ielts", p.EnglishTestType);
+        Assert.Equal(new DateOnly(2026, 5, 1), p.EnglishTestDate);
+        Assert.True(p.EnglishTestPlanned);
+        Assert.Equal(new DateOnly(2099, 12, 1), p.EnglishPlannedDate);
+        Assert.Equal(3, repo.Certifications[p.Id].Count);
+    }
+
+    [Fact]
+    public async Task CommitFlowAsync_NoCertifications_IsAllowed_AndClearsLegacyColumns()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var service = new ProfileFlowService(repo, new FakeFileStorageService());
+        var userId = Guid.NewGuid();
+        await service.CommitFlowAsync(userId, new CommitProfileFlowRequest(FullDraft()));
+
+        await service.CommitFlowAsync(userId, new CommitProfileFlowRequest(FullDraft(certifications: [])));
+
+        var p = (await repo.GetProfileByUserIdAsync(userId))!;
+        Assert.Empty(repo.Certifications[p.Id]);
+        Assert.Null(p.Ielts);
+        Assert.Null(p.Sat);
+        Assert.Null(p.OtherTestsJson);
+        Assert.Equal("none", p.EnglishTestType);
+    }
+
+    [Theory]
+    [InlineData("gmat", 700.0, null, null, null, "không có trong danh mục")]
+    [InlineData("ielts", 9.5, null, null, null, "điểm IELTS Academic phải từ 0 đến 9")]
+    [InlineData("ielts", 6.3, null, null, null, "bước 0.5")]
+    [InlineData("ielts", 7.0, "listening", 10.0, null, "điểm Nghe của IELTS Academic")]
+    [InlineData("ielts", 7.0, "speaking", 7.0, null, "không có phần thi 'speaking'")]
+    [InlineData("ap", 4.0, null, null, null, "AP chưa nhập tên môn ap")]
+    [InlineData("other", 80.0, null, null, null, "chưa nhập tên")]
+    [InlineData("sat", null, null, null, null, "SAT chưa nhập điểm")]
+    [InlineData("alevel", null, null, null, "Toán", "A-Level chưa nhập điểm")]
+    public async Task CommitFlowAsync_WhenCertificationInvalid_Throws(
+        string type, double? overall, string? sectionId, double? sectionScore, string? subject, string expected)
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var service = new ProfileFlowService(repo, new FakeFileStorageService());
+        var sections = sectionId is null ? null : new Dictionary<string, decimal?> { [sectionId] = (decimal?)sectionScore };
+        var draft = FullDraft(certifications:
+        [
+            new(Category: "english", Type: type, Overall: (decimal?)overall, Sections: sections, Subject: subject),
+        ]);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.CommitFlowAsync(Guid.NewGuid(), new CommitProfileFlowRequest(draft)));
+
+        Assert.Contains(expected, ex.Message);
+        Assert.Equal(0, repo.CommitCount);
+    }
+
+    [Fact]
+    public async Task CommitFlowAsync_WhenTestDateInFuture_Throws()
+    {
+        var service = new ProfileFlowService(new InMemoryProfileFlowRepository(), new FakeFileStorageService());
+        var draft = FullDraft(certifications: [new(Category: "english", Type: "ielts", Overall: 7m, TestDate: "2099-01")]);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.CommitFlowAsync(Guid.NewGuid(), new CommitProfileFlowRequest(draft)));
+
+        Assert.Contains("không được ở tương lai", ex.Message);
+    }
+
+    [Fact]
+    public async Task CommitFlowAsync_OtherCertificationAndLetterGrade_AreStored()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var service = new ProfileFlowService(repo, new FakeFileStorageService());
+        var userId = Guid.NewGuid();
+        var draft = FullDraft(certifications:
+        [
+            new(Category: "english", Type: "other", CustomName: "Aptis", Overall: 160m, ScaleText: "0–200", TestDate: "2026-01"),
+            new(Category: "standardized", Type: "alevel", Subject: "Mathematics", ScaleText: "A*", Overall: 99m),
+        ]);
+
+        await service.CommitFlowAsync(userId, new CommitProfileFlowRequest(draft));
+
+        var p = (await repo.GetProfileByUserIdAsync(userId))!;
+        var certs = repo.Certifications[p.Id];
+        var other = certs.Single(c => c.TestType == "other");
+        Assert.Equal(("english", "Aptis", 160m, "0–200"), (other.Category, other.CustomName, other.OverallScore!.Value, other.ScaleText));
+        var alevel = certs.Single(c => c.TestType == "alevel");
+        // A-Level không có thang số → bỏ điểm số, giữ điểm chữ
+        Assert.Equal(("Mathematics", "A*", (decimal?)null), (alevel.Subject, alevel.ScaleText, alevel.OverallScore));
+        Assert.Equal("none", p.EnglishTestType);
+    }
+
+    [Fact]
+    public async Task SaveDraftAsync_LegacyStep3_IsConvertedToCertificationList()
+    {
+        var service = new ProfileFlowService(new InMemoryProfileFlowRepository(), new FakeFileStorageService());
+        var draft = FullDraft() with
+        {
+            Step3 = new FlowCertificationDraftDto(
+                EnglishTestType: "IELTS",
+                EnglishOverallScore: 7.5m,
+                EnglishTestDate: "2026-03",
+                OtherTests: [new FlowOtherTestDraftDto("SAT", 1450m), new FlowOtherTestDraftDto("AP", null)]),
+        };
+
+        var state = await service.SaveDraftAsync(Guid.NewGuid(), new SaveProfileDraftRequest(3, [1, 2], draft));
+
+        var items = state.Draft.Step3!.Certifications!;
+        Assert.Equal(2, items.Count);
+        Assert.Equal(("english", "ielts", 7.5m, "2026-03"), (items[0].Category, items[0].Type, items[0].Overall!.Value, items[0].TestDate));
+        Assert.Equal(("standardized", "sat", 1450m), (items[1].Category, items[1].Type, items[1].Overall!.Value));
+        Assert.Null(state.Draft.Step3.EnglishTestType);
+        Assert.Null(state.Draft.Step3.OtherTests);
+    }
+
+    [Fact]
+    public async Task GetFlowState_ForProfileWithOnlyLegacyColumns_RebuildsCertificationsFromMetadata()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var service = new ProfileFlowService(repo, new FakeFileStorageService());
+        var userId = Guid.NewGuid();
+        var profile = await repo.EnsureProfileExistsAsync(userId);
+        profile.FlowSubmittedAt = DateTime.UtcNow;
+        profile.Ielts = 6.5m;
+        profile.EnglishTestType = "ielts";
+        profile.EnglishTestDate = new DateOnly(2025, 11, 1);
+        profile.Sat = 1380m;
+        profile.OtherTestsJson = "{\"ap\":5}";
+
+        var state = await service.GetFlowStateAsync(userId);
+
+        var items = state.Draft.Step3!.Certifications!;
+        var ielts = Assert.Single(items, c => c.Type == "ielts");
+        Assert.Equal((6.5m, "2025-11"), (ielts.Overall!.Value, ielts.TestDate));
+        Assert.Equal(1380m, Assert.Single(items, c => c.Type == "sat").Overall);
+        Assert.Equal(5m, Assert.Single(items, c => c.Type == "ap").Overall);
     }
 
     [Fact]

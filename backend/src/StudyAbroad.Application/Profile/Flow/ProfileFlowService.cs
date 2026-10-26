@@ -18,7 +18,8 @@ namespace StudyAbroad.Application.Profile.Flow;
 /// [USAS-640] Service xử lý luồng nhập hồ sơ một cửa (Unified Profile Flow 6 bước):
 /// - Nháp lưu đúng 1 định dạng (draft của FE) vào DraftFlowStateJson, khôi phục đúng bước đang làm dở
 /// - Quản lý tệp bảng điểm nháp + OCR (kết quả OCR trả về cho FE tự ghép vào draft)
-/// - Commit: validate rồi ánh xạ draft vào student_profiles / transcript_scores / profile_activities trong 1 transaction
+/// - Commit: validate rồi ánh xạ draft vào student_profiles / transcript_scores / profile_activities / profile_certifications
+///   trong 1 transaction. Danh mục loại chứng chỉ lấy từ app_settings profile.metadata, không viết cứng trong code
 /// - Mở lại hồ sơ đã gửi: dựng draft từ DB bằng BuildDraftFromProfile
 /// </summary>
 public class ProfileFlowService(
@@ -61,6 +62,12 @@ public class ProfileFlowService(
 
     private sealed record BudgetTier(string Id, decimal? MinUsd, decimal? MaxUsd);
 
+    /// <summary>type của chứng chỉ học sinh tự nhập tên (không có trong danh mục)</summary>
+    private const string OtherCertificationType = "other";
+
+    /// <summary>Nhóm chứng chỉ trên UI bước 3; chứng chỉ "other" phải thuộc một trong các nhóm này</summary>
+    private static readonly HashSet<string> CertificationCategories = ["english", "standardized", "graduate"];
+
     public async Task<ProfileFlowStateDto> GetFlowStateAsync(Guid userId, CancellationToken ct = default)
     {
         var profile = await repository.GetProfileByUserIdAsync(userId, ct);
@@ -79,10 +86,12 @@ public class ProfileFlowService(
         {
             var scores = await repository.GetTranscriptScoresAsync(profile.Id, ct);
             var activities = await repository.GetProfileActivitiesAsync(profile.Id, ct);
+            var certifications = await repository.GetProfileCertificationsAsync(profile.Id, ct);
+            var certificationTypes = await LoadCertificationTypesAsync(ct);
             return new ProfileFlowStateDto(
                 CurrentStep: 6,
                 CompletedSteps: [1, 2, 3, 4, 5],
-                Draft: BuildDraftFromProfile(profile, scores, activities),
+                Draft: BuildDraftFromProfile(profile, scores, activities, certifications, certificationTypes),
                 DraftTranscript: stored?.DraftTranscript,
                 LastUpdatedAt: profile.UpdatedAt ?? profile.CreatedAt,
                 HasCommittedProfile: true,
@@ -187,9 +196,11 @@ public class ProfileFlowService(
         draft = NormalizeDraft(draft);
 
         var budgetTiers = await LoadBudgetTiersAsync(ct);
-        ValidateForCommit(draft, budgetTiers);
+        var certificationTypes = await LoadCertificationTypesAsync(ct);
+        var now = DateTime.UtcNow;
+        ValidateForCommit(draft, budgetTiers, certificationTypes, now);
 
-        var (scores, activities) = ApplyDraftToProfile(profile, draft, budgetTiers, DateTime.UtcNow);
+        var (scores, activities, certifications) = ApplyDraftToProfile(profile, draft, budgetTiers, certificationTypes, now);
 
         // Chuyển file bảng điểm nháp (theo trạng thái trên server) sang thư mục chính thức
         var previousOfficialUrl = profile.TranscriptFileUrl;
@@ -206,7 +217,7 @@ public class ProfileFlowService(
         profile.FlowSubmittedAt = DateTimeOffset.UtcNow;
         profile.DraftFlowStateJson = null;
 
-        await repository.CommitProfileFlowAsync(profile, scores, activities, ct);
+        await repository.CommitProfileFlowAsync(profile, scores, activities, certifications, ct);
 
         // Đã lưu xong hồ sơ mới thì xoá file bảng điểm chính thức cũ, không giữ dữ liệu cá nhân thừa
         if (!string.IsNullOrWhiteSpace(previousOfficialUrl) && previousOfficialUrl != profile.TranscriptFileUrl)
@@ -263,7 +274,7 @@ public class ProfileFlowService(
     private static ProfileFlowDraftDto EmptyDraft() => new(
         Step1: new FlowGoalDraftDto(TargetStates: [], TargetSchoolType: "all"),
         Step2: new FlowTranscriptDraftDto(AcademicYears: []),
-        Step3: new FlowCertificationDraftDto(EnglishTestType: "none", OtherTests: []),
+        Step3: new FlowCertificationDraftDto(Certifications: []),
         Step4: new FlowFinancialDraftDto(),
         Step5: new FlowActivitiesDraftDto([]));
 
@@ -316,7 +327,44 @@ public class ProfileFlowService(
                 : string.IsNullOrWhiteSpace(draft.Step4.NeedFinancialAid) ? null : draft.Step4.NeedFinancialAid,
         };
 
-        return draft with { Step1 = step1, Step4 = step4 };
+        return draft with { Step1 = step1, Step3 = NormalizeCertificationStep(draft.Step3), Step4 = step4 };
+    }
+
+    /// <summary>
+    /// Nháp cũ lưu 1 chứng chỉ tiếng Anh (englishTestType + englishOverallScore) và otherTests (SAT/ACT/AP)
+    /// → chuyển sang danh sách certifications; id loại cũ trùng id trong metadata nên chỉ cần viết thường
+    /// </summary>
+    private static FlowCertificationDraftDto? NormalizeCertificationStep(FlowCertificationDraftDto? step3)
+    {
+        if (step3 is null) return null;
+
+        var items = step3.Certifications;
+        if (items is null)
+        {
+            items = [];
+            var englishType = step3.EnglishTestType?.Trim().ToLowerInvariant();
+            if (!string.IsNullOrEmpty(englishType) && englishType != ProfileConstants.EnglishTestTypes.None
+                && step3.EnglishOverallScore is not null)
+            {
+                items.Add(new FlowCertificationItemDto(
+                    Id: $"legacy_{englishType}",
+                    Category: "english",
+                    Type: englishType,
+                    Overall: step3.EnglishOverallScore,
+                    TestDate: ParseDateOnly(step3.EnglishTestDate)?.ToString("yyyy-MM", CultureInfo.InvariantCulture)));
+            }
+            foreach (var test in step3.OtherTests ?? [])
+            {
+                var type = test.TestType?.Trim().ToLowerInvariant();
+                if (string.IsNullOrEmpty(type) || test.Score is null) continue;
+                items.Add(new FlowCertificationItemDto(Id: $"legacy_{type}", Category: "standardized", Type: type, Overall: test.Score));
+            }
+        }
+
+        return new FlowCertificationDraftDto(
+            Certifications: items,
+            EnglishPlanned: step3.EnglishPlanned,
+            EnglishPlannedDate: step3.EnglishPlanned ? NullIfBlank(step3.EnglishPlannedDate) : null);
     }
 
     private static string? NormalizeEducationLevel(string? value)
@@ -349,7 +397,31 @@ public class ProfileFlowService(
             el.TryGetProperty(name, out var p) && p.ValueKind == JsonValueKind.Number ? p.GetDecimal() : null;
     }
 
-    private static void ValidateForCommit(ProfileFlowDraftDto draft, IReadOnlyDictionary<string, BudgetTier> budgetTiers)
+    /// <summary>Danh mục loại chứng chỉ (mảng certifications trong profile.metadata), khóa theo id</summary>
+    private async Task<Dictionary<string, CertificationMetadataItem>> LoadCertificationTypesAsync(CancellationToken ct)
+    {
+        var types = new Dictionary<string, CertificationMetadataItem>(StringComparer.OrdinalIgnoreCase);
+        var json = await repository.GetAppSettingValueAsync(ProfileConstants.ProfileMetadataAppSettingKey, ct);
+        if (string.IsNullOrWhiteSpace(json)) return types;
+
+        using var doc = JsonDocument.Parse(json);
+        if (!doc.RootElement.TryGetProperty("certifications", out var arr) || arr.ValueKind != JsonValueKind.Array)
+            return types;
+
+        foreach (var item in arr.EnumerateArray())
+        {
+            var type = item.Deserialize<CertificationMetadataItem>(JsonOptions);
+            if (type is null || string.IsNullOrWhiteSpace(type.Id)) continue;
+            types[type.Id] = type;
+        }
+        return types;
+    }
+
+    private static void ValidateForCommit(
+        ProfileFlowDraftDto draft,
+        IReadOnlyDictionary<string, BudgetTier> budgetTiers,
+        IReadOnlyDictionary<string, CertificationMetadataItem> certificationTypes,
+        DateTime now)
     {
         var errors = new List<string>();
 
@@ -371,12 +443,7 @@ public class ProfileFlowService(
         }
 
         // Bước 3
-        var englishType = draft.Step3?.EnglishTestType?.Trim().ToLowerInvariant();
-        if (englishType is not null && !ProfileConstants.EnglishTestTypes.All.Contains(englishType))
-            errors.Add("Bước 3: loại chứng chỉ tiếng Anh không hợp lệ.");
-        if (englishType is not null && englishType != ProfileConstants.EnglishTestTypes.None
-            && !string.IsNullOrWhiteSpace(draft.Step3?.EnglishTestDate) && ParseDateOnly(draft.Step3.EnglishTestDate) is null)
-            errors.Add("Bước 3: ngày thi tiếng Anh không hợp lệ.");
+        ValidateCertifications(draft.Step3, certificationTypes, now, errors);
 
         // Bước 4
         var tierId = draft.Step4?.AnnualBudgetTier;
@@ -423,13 +490,118 @@ public class ProfileFlowService(
             throw new InvalidOperationException(string.Join(" ", errors));
     }
 
+    /// <summary>Thang điểm, điểm thành phần, môn bắt buộc đều theo danh mục trong DB</summary>
+    private static void ValidateCertifications(
+        FlowCertificationDraftDto? step3,
+        IReadOnlyDictionary<string, CertificationMetadataItem> certificationTypes,
+        DateTime now,
+        List<string> errors)
+    {
+        if (step3 is null) return;
+        var thisMonth = new DateOnly(now.Year, now.Month, 1);
+
+        foreach (var item in step3.Certifications ?? [])
+        {
+            var typeId = item.Type?.Trim();
+            if (string.IsNullOrEmpty(typeId))
+            {
+                errors.Add("Bước 3: có chứng chỉ chưa chọn loại.");
+                continue;
+            }
+
+            string label;
+            if (string.Equals(typeId, OtherCertificationType, StringComparison.OrdinalIgnoreCase))
+            {
+                label = NullIfBlank(item.CustomName) ?? "Khác";
+                if (string.IsNullOrWhiteSpace(item.CustomName))
+                    errors.Add("Bước 3: chứng chỉ \"Khác\" chưa nhập tên.");
+                else if (item.CustomName.Trim().Length > 128)
+                    errors.Add("Bước 3: tên chứng chỉ tối đa 128 ký tự.");
+                if (item.Category is null || !CertificationCategories.Contains(item.Category))
+                    errors.Add($"Bước 3: chứng chỉ '{label}' không thuộc nhóm hợp lệ.");
+                if (item.Overall is < 0)
+                    errors.Add($"Bước 3: điểm của '{label}' không được âm.");
+                if (item.ScaleText?.Trim().Length > 32)
+                    errors.Add($"Bước 3: thang điểm của '{label}' tối đa 32 ký tự.");
+            }
+            else if (!certificationTypes.TryGetValue(typeId, out var type))
+            {
+                errors.Add($"Bước 3: loại chứng chỉ '{typeId}' không có trong danh mục.");
+                continue;
+            }
+            else
+            {
+                label = type.Name;
+                if (type.Min is { } min && type.Max is { } max)
+                {
+                    if (item.Overall is not { } overall)
+                        errors.Add($"Bước 3: {label} chưa nhập điểm.");
+                    else if (!IsOnScale(overall, min, max, type.Step))
+                        errors.Add($"Bước 3: điểm {label} phải từ {Fmt(min)} đến {Fmt(max)}{StepText(type.Step)}.");
+                }
+                else if (string.IsNullOrWhiteSpace(item.ScaleText))
+                {
+                    errors.Add($"Bước 3: {label} chưa nhập điểm.");
+                }
+                else if (item.ScaleText.Trim().Length > 32)
+                {
+                    errors.Add($"Bước 3: điểm {label} tối đa 32 ký tự.");
+                }
+
+                foreach (var (sectionId, value) in item.Sections ?? [])
+                {
+                    if (value is null) continue;
+                    var section = type.Sections?.FirstOrDefault(x => x.Id == sectionId);
+                    if (section is null)
+                        errors.Add($"Bước 3: {label} không có phần thi '{sectionId}'.");
+                    else if (!IsOnScale(value.Value, section.Min, section.Max, section.Step))
+                        errors.Add($"Bước 3: điểm {section.Label} của {label} phải từ {Fmt(section.Min)} đến {Fmt(section.Max)}{StepText(section.Step)}.");
+                }
+
+                if (type.RequiresSubject && string.IsNullOrWhiteSpace(item.Subject))
+                    errors.Add($"Bước 3: {label} chưa nhập {(type.SubjectLabel ?? "tên môn").ToLowerInvariant()}.");
+                else if (item.Subject?.Trim().Length > 128)
+                    errors.Add($"Bước 3: tên môn {label} tối đa 128 ký tự.");
+            }
+
+            if (!string.IsNullOrWhiteSpace(item.TestDate))
+            {
+                var date = ParseDateOnly(item.TestDate);
+                if (date is null)
+                    errors.Add($"Bước 3: ngày thi {label} không hợp lệ.");
+                else if (date > thisMonth)
+                    errors.Add($"Bước 3: ngày thi {label} không được ở tương lai.");
+            }
+        }
+
+        if (step3.EnglishPlanned && !string.IsNullOrWhiteSpace(step3.EnglishPlannedDate))
+        {
+            var planned = ParseDateOnly(step3.EnglishPlannedDate);
+            if (planned is null)
+                errors.Add("Bước 3: tháng dự kiến thi tiếng Anh không hợp lệ.");
+            else if (planned < thisMonth)
+                errors.Add("Bước 3: tháng dự kiến thi tiếng Anh không được ở quá khứ.");
+        }
+
+        static bool IsOnScale(decimal value, decimal min, decimal max, decimal? step) =>
+            value >= min && value <= max && (step is not > 0 || (value - min) % step.Value == 0);
+
+        static string StepText(decimal? step) => step is > 0 and not 1 ? $", bước {Fmt(step.Value)}" : "";
+
+        static string Fmt(decimal value) => value.ToString("0.##", CultureInfo.InvariantCulture);
+    }
+
     private static bool IsAward(FlowActivityDraftDto item) =>
         string.Equals(item.Category, "achievement", StringComparison.OrdinalIgnoreCase)
         || string.Equals(item.Category, "award", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>Ánh xạ draft (đã validate) vào entity. Không ghi các cột luồng 6 bước không thu thập (funding_source, financial_notes, max_expected_tuition_usd, gre, gmat).</summary>
-    private static (List<TranscriptScore> Scores, List<ProfileActivity> Activities) ApplyDraftToProfile(
-        StudentProfile profile, ProfileFlowDraftDto draft, IReadOnlyDictionary<string, BudgetTier> budgetTiers, DateTime now)
+    /// <summary>Ánh xạ draft (đã validate) vào entity. Không ghi các cột luồng 6 bước không thu thập (funding_source, financial_notes, max_expected_tuition_usd).</summary>
+    private static (List<TranscriptScore> Scores, List<ProfileActivity> Activities, List<ProfileCertification> Certifications) ApplyDraftToProfile(
+        StudentProfile profile,
+        ProfileFlowDraftDto draft,
+        IReadOnlyDictionary<string, BudgetTier> budgetTiers,
+        IReadOnlyDictionary<string, CertificationMetadataItem> certificationTypes,
+        DateTime now)
     {
         // Bước 1
         var step1 = draft.Step1!;
@@ -478,22 +650,10 @@ public class ProfileFlowService(
         profile.OverallGpa = ComputeGpa4(draft.Step2) ?? draft.Step2?.CalculatedGpa4Scale;
 
         // Bước 3
-        var step3 = draft.Step3;
-        var englishType = step3?.EnglishTestType?.Trim().ToLowerInvariant() ?? ProfileConstants.EnglishTestTypes.None;
-        var hasEnglish = englishType != ProfileConstants.EnglishTestTypes.None;
-        profile.EnglishTestType = englishType;
-        profile.Ielts = englishType == ProfileConstants.EnglishTestTypes.Ielts ? step3?.EnglishOverallScore : null;
-        profile.Toefl = englishType == ProfileConstants.EnglishTestTypes.Toefl ? step3?.EnglishOverallScore : null;
-        profile.Duolingo = englishType == ProfileConstants.EnglishTestTypes.Duolingo ? step3?.EnglishOverallScore : null;
-        profile.EnglishTestDate = hasEnglish ? ParseDateOnly(step3?.EnglishTestDate) : null;
-
-        var otherTests = step3?.OtherTests ?? [];
-        decimal? OtherTest(string type) => otherTests
-            .FirstOrDefault(t => string.Equals(t.TestType, type, StringComparison.OrdinalIgnoreCase))?.Score;
-        profile.Sat = OtherTest("SAT");
-        profile.Act = OtherTest("ACT");
-        var ap = OtherTest("AP");
-        profile.OtherTestsJson = ap is null ? null : JsonSerializer.Serialize(new Dictionary<string, decimal> { ["ap"] = ap.Value });
+        var certifications = BuildCertifications(draft.Step3, certificationTypes);
+        ApplyLegacyCertificationColumns(profile, certifications, certificationTypes);
+        profile.EnglishTestPlanned = draft.Step3?.EnglishPlanned ?? false;
+        profile.EnglishPlannedDate = profile.EnglishTestPlanned ? ParseDateOnly(draft.Step3?.EnglishPlannedDate) : null;
 
         // Bước 4
         var tier = budgetTiers[draft.Step4!.AnnualBudgetTier!];
@@ -539,8 +699,104 @@ public class ProfileFlowService(
             });
         }
 
-        return (scores, activities);
+        return (scores, activities, certifications);
     }
+
+    private static List<ProfileCertification> BuildCertifications(
+        FlowCertificationDraftDto? step3, IReadOnlyDictionary<string, CertificationMetadataItem> certificationTypes)
+    {
+        var result = new List<ProfileCertification>();
+        foreach (var item in step3?.Certifications ?? [])
+        {
+            var typeId = item.Type!.Trim();
+            var isOther = string.Equals(typeId, OtherCertificationType, StringComparison.OrdinalIgnoreCase);
+            var type = isOther ? null : certificationTypes[typeId];
+            var hasNumericScale = type?.Min is not null && type.Max is not null;
+
+            var sections = (item.Sections ?? [])
+                .Where(kv => kv.Value is not null && type?.Sections?.Any(x => x.Id == kv.Key) == true)
+                .ToDictionary(kv => kv.Key, kv => kv.Value!.Value);
+
+            result.Add(new ProfileCertification
+            {
+                Category = type?.Category ?? item.Category!,
+                TestType = isOther ? OtherCertificationType : type!.Id,
+                CustomName = isOther ? NullIfBlank(item.CustomName) : null,
+                Subject = type?.RequiresSubject == true ? NullIfBlank(item.Subject) : null,
+                OverallScore = isOther || hasNumericScale ? item.Overall : null,
+                ScaleText = isOther || !hasNumericScale ? NullIfBlank(item.ScaleText) : null,
+                SectionScoresJson = sections.Count > 0 ? JsonSerializer.Serialize(sections, JsonOptions) : null,
+                TestDate = ParseDateOnly(item.TestDate),
+                SortOrder = result.Count,
+            });
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Gợi ý trường vẫn đọc các cột cũ (ielts, toefl, sat...). Mỗi loại có profileField trong metadata → ghi điểm cao nhất
+    /// của loại đó; tiếng Anh chính là chứng chỉ có cột riêng và ngày thi gần nhất; AP ghi vào other_tests_json {"ap": điểm cao nhất}
+    /// </summary>
+    private static void ApplyLegacyCertificationColumns(
+        StudentProfile profile,
+        IReadOnlyList<ProfileCertification> certifications,
+        IReadOnlyDictionary<string, CertificationMetadataItem> certificationTypes)
+    {
+        var withField = certifications
+            .Where(c => c.OverallScore is not null && certificationTypes.TryGetValue(c.TestType, out var t) && t.ProfileField is not null)
+            .Select(c => (Cert: c, Field: certificationTypes[c.TestType].ProfileField!))
+            .ToList();
+
+        foreach (var field in certificationTypes.Values.Select(t => t.ProfileField).OfType<string>().Distinct())
+        {
+            var best = withField.Where(x => x.Field == field).Max(x => x.Cert.OverallScore);
+            SetProfileField(profile, field, best);
+        }
+
+        var mainEnglish = withField
+            .Where(x => x.Cert.Category == "english")
+            .OrderByDescending(x => x.Cert.TestDate ?? DateOnly.MinValue)
+            .ThenByDescending(x => x.Cert.OverallScore)
+            .Select(x => x.Cert)
+            .FirstOrDefault();
+        profile.EnglishTestType = mainEnglish is null
+            ? ProfileConstants.EnglishTestTypes.None
+            : certificationTypes[mainEnglish.TestType].ProfileField;
+        profile.EnglishTestDate = mainEnglish?.TestDate;
+    }
+
+    /// <summary>Tên profileField trong metadata ↔ cột trên student_profiles</summary>
+    private static void SetProfileField(StudentProfile profile, string field, decimal? value)
+    {
+        switch (field)
+        {
+            case "ielts": profile.Ielts = value; break;
+            case "toefl": profile.Toefl = value; break;
+            case "duolingo": profile.Duolingo = value; break;
+            case "sat": profile.Sat = value; break;
+            case "act": profile.Act = value; break;
+            case "gre": profile.Gre = value; break;
+            case "gmat": profile.Gmat = value; break;
+            case "ap":
+                profile.OtherTestsJson = value is null
+                    ? null
+                    : JsonSerializer.Serialize(new Dictionary<string, decimal> { ["ap"] = value.Value });
+                break;
+        }
+    }
+
+    private static decimal? GetProfileField(StudentProfile profile, string field) => field switch
+    {
+        "ielts" => profile.Ielts,
+        "toefl" => profile.Toefl,
+        "duolingo" => profile.Duolingo,
+        "sat" => profile.Sat,
+        "act" => profile.Act,
+        "gre" => profile.Gre,
+        "gmat" => profile.Gmat,
+        "ap" => ReadApScore(profile.OtherTestsJson),
+        _ => null
+    };
 
     /// <summary>Giống FE: trung bình các môn (mỗi môn = TB HK1, HK2 nếu có), quy đổi tuyến tính sang thang 4</summary>
     private static decimal? ComputeGpa4(FlowTranscriptDraftDto? step2)
@@ -565,7 +821,11 @@ public class ProfileFlowService(
     // ───────────────────────────── Dựng lại draft từ DB ─────────────────────────────
 
     private static ProfileFlowDraftDto BuildDraftFromProfile(
-        StudentProfile profile, IReadOnlyList<TranscriptScore> scores, IReadOnlyList<ProfileActivity> activities)
+        StudentProfile profile,
+        IReadOnlyList<TranscriptScore> scores,
+        IReadOnlyList<ProfileActivity> activities,
+        IReadOnlyList<ProfileCertification> certifications,
+        IReadOnlyDictionary<string, CertificationMetadataItem> certificationTypes)
     {
         var step1 = new FlowGoalDraftDto(
             CurrentEducationLevel: profile.CurrentEducationLevel ?? NormalizeEducationLevel(profile.EducationSystem) switch
@@ -601,32 +861,12 @@ public class ProfileFlowService(
         }
         var step2 = new FlowTranscriptDraftDto(years, profile.OverallGpa, profile.OverallGpa is { } g ? Math.Round(g / 4m * 10m, 2) : null);
 
-        var englishType = profile.EnglishTestType
-            ?? (profile.Ielts.HasValue ? ProfileConstants.EnglishTestTypes.Ielts
-                : profile.Toefl.HasValue ? ProfileConstants.EnglishTestTypes.Toefl
-                : profile.Duolingo.HasValue ? ProfileConstants.EnglishTestTypes.Duolingo
-                : ProfileConstants.EnglishTestTypes.None);
-        var otherTests = new List<FlowOtherTestDraftDto>();
-        if (profile.Sat.HasValue) otherTests.Add(new FlowOtherTestDraftDto("SAT", profile.Sat));
-        if (profile.Act.HasValue) otherTests.Add(new FlowOtherTestDraftDto("ACT", profile.Act));
-        if (ReadApScore(profile.OtherTestsJson) is { } ap) otherTests.Add(new FlowOtherTestDraftDto("AP", ap));
         var step3 = new FlowCertificationDraftDto(
-            EnglishTestType: englishType switch
-            {
-                ProfileConstants.EnglishTestTypes.Ielts => "IELTS",
-                ProfileConstants.EnglishTestTypes.Toefl => "TOEFL",
-                ProfileConstants.EnglishTestTypes.Duolingo => "Duolingo",
-                _ => "none"
-            },
-            EnglishOverallScore: englishType switch
-            {
-                ProfileConstants.EnglishTestTypes.Ielts => profile.Ielts,
-                ProfileConstants.EnglishTestTypes.Toefl => profile.Toefl,
-                ProfileConstants.EnglishTestTypes.Duolingo => profile.Duolingo,
-                _ => null
-            },
-            EnglishTestDate: profile.EnglishTestDate?.ToString("yyyy-MM", CultureInfo.InvariantCulture),
-            OtherTests: otherTests);
+            Certifications: certifications.Count > 0
+                ? certifications.OrderBy(c => c.SortOrder).Select(ToCertificationDraft).ToList()
+                : BuildCertificationsFromLegacyColumns(profile, certificationTypes),
+            EnglishPlanned: profile.EnglishTestPlanned,
+            EnglishPlannedDate: profile.EnglishPlannedDate?.ToString("yyyy-MM", CultureInfo.InvariantCulture));
 
         var step4 = new FlowFinancialDraftDto(profile.BudgetTier, profile.ScholarshipNeed);
 
@@ -649,6 +889,51 @@ public class ProfileFlowService(
                 DurationMonths: a.DurationMonths)).ToList());
 
         return new ProfileFlowDraftDto(step1, step2, step3, step4, step5);
+    }
+
+    private static FlowCertificationItemDto ToCertificationDraft(ProfileCertification c) => new(
+        Id: c.Id.ToString(),
+        Category: c.Category,
+        Type: c.TestType,
+        CustomName: c.CustomName,
+        Subject: c.Subject,
+        Overall: c.OverallScore,
+        ScaleText: c.ScaleText,
+        Sections: ReadSectionScores(c.SectionScoresJson),
+        TestDate: c.TestDate?.ToString("yyyy-MM", CultureInfo.InvariantCulture));
+
+    /// <summary>Hồ sơ cũ chưa có dòng profile_certifications: dựng từ các cột cũ theo profileField trong metadata</summary>
+    private static List<FlowCertificationItemDto> BuildCertificationsFromLegacyColumns(
+        StudentProfile profile, IReadOnlyDictionary<string, CertificationMetadataItem> certificationTypes)
+    {
+        var items = new List<FlowCertificationItemDto>();
+        foreach (var type in certificationTypes.Values.Where(t => t.ProfileField is not null).OrderBy(t => t.Category).ThenBy(t => t.Order))
+        {
+            if (GetProfileField(profile, type.ProfileField!) is not { } score) continue;
+            var testDate = string.Equals(profile.EnglishTestType, type.ProfileField, StringComparison.OrdinalIgnoreCase)
+                ? profile.EnglishTestDate
+                : null;
+            items.Add(new FlowCertificationItemDto(
+                Id: $"legacy_{type.Id}",
+                Category: type.Category,
+                Type: type.Id,
+                Overall: score,
+                TestDate: testDate?.ToString("yyyy-MM", CultureInfo.InvariantCulture)));
+        }
+        return items;
+    }
+
+    private static Dictionary<string, decimal?>? ReadSectionScores(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try
+        {
+            return JsonSerializer.Deserialize<Dictionary<string, decimal?>>(json, JsonOptions);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     private static (string GradeName, int Semester) ResolveGradeAndSemester(TranscriptScore s)

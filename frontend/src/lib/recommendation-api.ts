@@ -30,7 +30,9 @@ export const recommendationApi = {
   // Đọc lần gợi ý gần nhất, không gọi AI. Chưa có lần nào thì trả null thay vì ném lỗi.
   getLatest: async (): Promise<Recommendation | null> => {
     try {
-      return await apiFetch<Recommendation>(`${BASE}/latest`, { method: "GET" });
+      const rec = await apiFetch<Recommendation>(`${BASE}/latest`, { method: "GET" });
+      // Lần lưu trước PR #19 có items là mảng, không có scored/reach: coi như chưa có, để người dùng chạy lại
+      return Array.isArray(rec?.items?.scored) ? rec : null;
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) return null;
       throw err;

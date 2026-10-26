@@ -208,23 +208,15 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
                 key={opt.value}
                 type="button"
                 onClick={() => handleSelectEducationLevel(opt.value)}
+                aria-pressed={isSelected}
                 className={cn(
-                  "flex items-center rounded-full border px-4 py-2 text-sm font-medium transition-all cursor-pointer shadow-2xs",
+                  "flex items-center gap-1.5 rounded-full border px-4 py-2 text-sm font-medium transition-all cursor-pointer",
                   isSelected
-                    ? "border-brand bg-brand-wash/60 text-brand ring-1 ring-brand"
-                    : "border-line bg-surface text-muted-foreground hover:border-brand/40 hover:text-foreground"
+                    ? "border-foreground bg-foreground text-background"
+                    : "border-line bg-surface text-foreground hover:border-foreground/40"
                 )}
               >
-                <span
-                  className={cn(
-                    "mr-2 flex size-3.5 items-center justify-center rounded-full border transition-all",
-                    isSelected
-                      ? "border-brand bg-brand"
-                      : "border-muted-foreground/50 bg-surface"
-                  )}
-                >
-                  {isSelected && <span className="size-1.5 rounded-full bg-white" />}
-                </span>
+                {isSelected && <CheckIcon className="size-3.5" />}
                 {opt.label}
               </button>
             );
@@ -310,12 +302,9 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
           <Label className="text-sm font-semibold text-foreground">
             Bạn muốn học bậc nào ở Mỹ?
           </Label>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Chưa chắc? Chọn bậc gần nhất, bạn có thể đổi lại sau.
-          </p>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2">
           {studyLevels.map((lvl) => {
             const isSelected = data.targetDegreeLevel === lvl.key;
             return (
@@ -355,21 +344,18 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
             );
           })}
         </div>
+        {data.targetDegreeLevel === "master" || data.targetDegreeLevel === "phd" ? (
+          <p className="flex items-center gap-1.5 text-xs font-medium text-warn">
+            <AlertCircleIcon className="size-3.5 shrink-0" />
+            Bậc này đang làm sau. Bản hiện tại gợi ý trường cho Cao đẳng và Đại học.
+          </p>
+        ) : (
+          <p className="text-xs text-muted-foreground">Chưa chắc? Chọn bậc gần nhất, bạn có thể đổi lại sau.</p>
+        )}
       </section>
 
-      {/* Question 3: Narrowing Down Filters (Ngành bắt buộc & Bang mong muốn) */}
-      <section className="space-y-5 rounded-2xl border border-line bg-ground/50 p-5">
-        <div>
-          <div className="flex items-center gap-2">
-            <Label className="text-sm font-semibold text-foreground">
-              Ngành học & Tiêu chí trường
-            </Label>
-          </div>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Ngành học là yêu cầu bắt buộc để AI tìm kiếm và xếp hạng trường tương thích.
-          </p>
-        </div>
-
+      {/* Question 3: Ngành học mong muốn (bắt buộc) */}
+      <section className="space-y-4 pt-2">
         {/* Ngành học mong muốn (BẮT BUỘC & Searchable Dropdown) */}
         <div ref={majorDropdownRef} className="space-y-1.5 relative">
           <div className="flex items-center justify-between">
@@ -491,6 +477,16 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
             </div>
           )}
         </div>
+      </section>
+
+      {/* Question 4: Thu hẹp gợi ý — không bắt buộc */}
+      <section className="space-y-5 rounded-2xl border border-line bg-ground/50 p-5">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold text-foreground">Thu hẹp gợi ý</span>
+          <span className="rounded-full bg-surface px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+            Không bắt buộc
+          </span>
+        </div>
 
         {/* Bang mong muốn (Searchable Dropdown + Popular Chips) */}
         <div ref={stateDropdownRef} className="space-y-2 relative">
@@ -499,11 +495,6 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
               <MapPinIcon className="size-3.5 text-brand" />
               Bang mong muốn (Mỹ) · Chọn được nhiều bang
             </Label>
-            {selectedStates.length > 0 && (
-              <span className="text-xs font-medium text-brand">
-                Đã chọn {selectedStates.length} bang
-              </span>
-            )}
           </div>
 
           {/* Selected chips display */}
@@ -571,6 +562,12 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
               />
             </button>
           </div>
+
+          <p className="text-xs text-muted-foreground">
+            {selectedStates.length > 0
+              ? `Đã chọn ${selectedStates.length} bang.`
+              : "Chưa chọn bang nào, không lọc theo bang."}
+          </p>
 
           {/* Searchable State Dropdown List */}
           {showStateDropdown && (

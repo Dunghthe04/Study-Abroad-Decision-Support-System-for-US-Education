@@ -7,10 +7,12 @@ import { AlertCircleIcon, RefreshCwIcon } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { useAssistant, useAssistantPageContext } from "@/components/assistant/AssistantProvider";
 import { recommendationApi } from "@/lib/recommendation-api";
 import type { PickBlockName, Pref, Recommendation, ScoredSchool } from "@/types/recommendation";
 import { ExplainSheet } from "./ExplainSheet";
 import { PrefButtons } from "./PrefButtons";
+import { ProfileSummary } from "./ProfileSummary";
 import { SchoolCard } from "./SchoolCard";
 
 // Bốn khối chính theo đúng thứ tự trên màn. "other" để riêng ở cuối.
@@ -19,6 +21,12 @@ const BLOCKS: { key: PickBlockName; title: string; note: string }[] = [
   { key: "match", title: "Vừa sức", note: "Tối đa 5 trường" },
   { key: "safety", title: "An toàn hơn", note: "Tối đa 4 trường" },
   { key: "aid", title: "Chỉ đi được nếu có học bổng lớn", note: "Xếp theo số tiền còn thiếu" },
+];
+
+const RESULT_SUGGESTIONS = [
+  "Hồ sơ của em mạnh ở đâu?",
+  "Nên nộp bao nhiêu trường mỗi nhóm?",
+  "Làm sao để lên nhóm Vừa sức?",
 ];
 
 interface RecommendationViewProps {
@@ -34,6 +42,24 @@ export function RecommendationView({ autoRun }: RecommendationViewProps) {
   const [error, setError] = useState<string | null>(null);
   const [explainCode, setExplainCode] = useState<string | null>(null);
   const started = useRef(false); // dev mode chạy useEffect 2 lần; không được tạo 2 lần gợi ý
+  const { openPanel } = useAssistant();
+
+  // Ngữ cảnh trợ lý bên phải: lời chào theo số trường, chip hỏi về trường Khó vào đầu tiên
+  const firstReach = rec ? rec.items.scored.find((s) => s.code === rec.items.reach[0]?.code) : undefined;
+  const shownCount = rec ? BLOCKS.reduce((n, b) => n + rec.items[b.key].length, 0) : 0;
+  useAssistantPageContext({
+    label: "Trang đề xuất",
+    suggestions: firstReach ? [`Vì sao ${firstReach.name} Khó vào?`, ...RESULT_SUGGESTIONS] : RESULT_SUGGESTIONS,
+    greeting: rec ? `Đây là ${shownCount} trường hợp với hồ sơ của bạn. Bạn có thể hỏi mình, ví dụ:` : undefined,
+  });
+
+  // Có kết quả thì mở trợ lý bên phải một lần như bản demo (màn hẹp thì khung phủ kín nên không tự mở)
+  const autoOpened = useRef(false);
+  useEffect(() => {
+    if (!rec || autoOpened.current) return;
+    autoOpened.current = true;
+    if (window.matchMedia("(min-width: 900px)").matches) openPanel();
+  }, [rec, openPanel]);
 
   // Chạy cả quy trình (lọc → Qwen → Gemini). Mất khoảng nửa phút.
   const runNew = async () => {
@@ -107,6 +133,8 @@ export function RecommendationView({ autoRun }: RecommendationViewProps) {
         </Button>
       </div>
 
+      <ProfileSummary rec={rec} />
+
       {error && (
         <Alert variant="destructive">
           <AlertCircleIcon className="size-4" />
@@ -118,7 +146,7 @@ export function RecommendationView({ autoRun }: RecommendationViewProps) {
       {!rec && !error && (
         <div className="rounded-2xl border border-line bg-surface p-8 text-center text-sm text-muted-foreground">
           Bạn chưa có danh sách trường. Bấm &quot;Nhận gợi ý&quot; hoặc{" "}
-          <Link href="/analysis" className="font-semibold text-brand underline-offset-4 hover:underline">
+          <Link href="/analysis?edit=1" className="font-semibold text-brand underline-offset-4 hover:underline">
             hoàn thành hồ sơ
           </Link>{" "}
           trước.
@@ -152,7 +180,7 @@ function ResultBody({ rec, repicking, onRepick, onExplain }: ResultBodyProps) {
     return (
       <div className="rounded-2xl border border-line bg-surface p-8 text-center text-sm text-muted-foreground">
         Không có trường nào qua bộ lọc. Hãy thử bỏ bớt bang, đổi loại trường hoặc mức ngân sách trong{" "}
-        <Link href="/analysis" className="font-semibold text-brand underline-offset-4 hover:underline">
+        <Link href="/analysis?edit=1" className="font-semibold text-brand underline-offset-4 hover:underline">
           hồ sơ
         </Link>
         .
