@@ -8,7 +8,6 @@ import type {
   UserDto,
   VerifyEmailRequest,
   AcademicProfileResponse,
-  SaveAcademicProfileRequest,
 } from "@/types/api";
 
 // Browser code calls same-origin /api (Nginx in prod, Next rewrite in dev).
@@ -119,13 +118,6 @@ export const profileApi = {
   getAcademicProfile: () =>
     apiFetch<AcademicProfileResponse>("/api/v1/profile/academic", {
       method: "GET",
-    }),
-
-  // Lưu hoặc cập nhật hồ sơ học thuật, bảng điểm từng học kỳ và chứng chỉ
-  saveAcademicProfile: (data: SaveAcademicProfileRequest) =>
-    apiFetch<AcademicProfileResponse>("/api/v1/profile/academic", {
-      method: "PUT",
-      body: JSON.stringify(data),
     }),
 };
 
