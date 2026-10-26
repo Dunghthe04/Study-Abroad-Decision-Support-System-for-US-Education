@@ -70,6 +70,7 @@ Bảng này liệt kê chi tiết từng biện pháp kỹ thuật, hiểm họa
 - [x] **Khóa tài khoản chống Brute-Force**: Tự động tạm khóa 15 phút sau 5 lần đăng nhập thất bại; OTP vô hiệu sau 5 lần sai, tối đa 5 lần gửi/giờ; rate limit theo IP.
 - [x] **Chống dò tài khoản**: Thông báo chung cho đăng ký trùng, đăng nhập sai, OTP sai, quên mật khẩu.
 - [x] **Thu hồi phiên tập trung (Session Revocation)**: Bảng `user_sessions` lưu vết phiên, hỗ trợ đăng xuất vô hiệu hóa tức thì (AC-3).
+- [x] **Đổi mật khẩu khi đã đăng nhập (UC-06)**: `POST /api/v1/auth/change-password` bắt buộc mật khẩu hiện tại, mật khẩu mới 8–100 ký tự và khác mật khẩu cũ; giữ phiên hiện tại, thu hồi các phiên khác, gửi mail thông báo. Nhập sai mật khẩu hiện tại cũng tính vào bộ đếm 5 lần → tạm khóa và thu hồi mọi phiên. Test: `ChangePassword_*` trong `AuthServiceTests.cs`.
 - [x] **Unit Test Suite**: 100% passed test cases trong `AuthServiceTests.cs`, `PasswordHasherTests.cs`.
 
 ### 2. User Story #2: Hồ sơ học thuật & Bảng điểm (USAS-363 / B1-01, B1-02, B1-08, B1-09)
@@ -81,7 +82,11 @@ Bảng này liệt kê chi tiết từng biện pháp kỹ thuật, hiểm họa
 - [x] **Chặn trùng lặp môn học**: Bắt lỗi nếu cùng một học kỳ có 2 môn cùng tên (case-insensitive & trimmed).
 - [x] **Ràng buộc điểm chứng chỉ quốc tế**: IELTS (0.0-9.0, bước 0.5), TOEFL (0-120), Duolingo (10-160), SAT (400-1600), ACT (1-36).
 - [x] **Chống SQL Injection**: 100% Entity Framework Core LINQ Parameterized Queries.
-- [x] **Unit Test Suite**: 100% passed test cases trong `AcademicProfileServiceTests.cs` (chỉ còn API đọc `GET /api/v1/profile/academic`; lưu hồ sơ đi qua `/api/v1/profile-flow/*`).
+- [x] **GPA chỉ tính phía server**: Khi commit hồ sơ, GPA tính tuyến tính (/10 × 4) từ điểm các môn, bỏ qua giá trị client gửi lên.
+- [x] **Giới hạn nháp & độ dài trường**: Nháp tối đa 256K ký tự, 8 năm học, 40 môn/năm, 30 chứng chỉ, 50 hoạt động; độ dài tên trường/môn/khối/hoạt động theo cột DB, năm tốt nghiệp hợp lệ → trả 400 thay vì lỗi DB 500.
+- [x] **Không lộ đường dẫn lưu file**: Thông tin file bảng điểm nháp trả về chỉ có tên gốc, kích thước, loại, thời điểm tải.
+- [x] **Xác nhận bảng điểm trích xuất (UC-12)**: Ô điểm đọc từ ảnh, điểm bất thường, ô bị ghi đè / trùng môn được tô cam; còn ô chưa xác nhận thì frontend không cho sang bước 3 và backend từ chối commit. Test: `CommitFlowAsync_WhenTranscriptCellsStillFlagged_Throws_ThenSucceedsAfterConfirm`, `advisor/tests/test_transcript_ocr_api.py`.
+- [x] **Unit Test Suite**: 100% passed test cases trong `ProfileFlowServiceTests.cs`, `AcademicProfileServiceTests.cs` (chỉ còn API đọc `GET /api/v1/profile/academic`; lưu hồ sơ đi qua `/api/v1/profile-flow/*`).
 
 ### 3. User Story #16: Quản trị tài khoản & Phân quyền Admin (AC-4)
 *Người thực hiện: Tuấn Việt · Trạng thái: Đã nghiệm thu 100%*
