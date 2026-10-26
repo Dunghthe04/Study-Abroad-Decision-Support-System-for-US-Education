@@ -3,18 +3,38 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Building2Icon, GraduationCapIcon, InfoIcon, UsersIcon } from "lucide-react";
+import { GraduationCapIcon, InfoIcon, UsersIcon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { ApiError } from "@/lib/api";
 import { setPendingEmail } from "@/lib/pending-email";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
+
+// [Q11] Ngưỡng tuổi theo luật VN (khớp AgeGroups ở backend; backend tính lại và là nơi quyết định)
+const CHILD_MAX_AGE_EXCLUSIVE = 16;
+const ADULT_AGE = 18;
+const MAX_AGE = 100;
+
+// Ngày hôm nay theo giờ Việt Nam, dạng yyyy-MM-dd
+function todayInVietnam(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }).format(new Date());
+}
+
+// Tuổi tròn từ ngày sinh yyyy-MM-dd; null nếu chưa nhập hoặc sai định dạng
+function ageFrom(dob: string): number | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dob);
+  if (!m) return null;
+  const [ty, tm, td] = todayInVietnam().split("-").map(Number);
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  let age = ty - y;
+  if (tm < mo || (tm === mo && td < d)) age--;
+  return age;
+}
 
 export function RegisterForm() {
   const router = useRouter();
@@ -23,13 +43,18 @@ export function RegisterForm() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [role, setRole] = useState<"student" | "parent" | "center">("student");
-  const [parentAcknowledged, setParentAcknowledged] = useState(false);
+  const [role, setRole] = useState<"student" | "parent">("student");
+  const [dateOfBirth, setDateOfBirth] = useState("");
+  const [parentEmail, setParentEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const age = ageFrom(dateOfBirth);
+  const isMinorStudent = role === "student" && age !== null && age >= 0 && age < ADULT_AGE;
+  const parentEmailRequired = isMinorStudent && age !== null && age < CHILD_MAX_AGE_EXCLUSIVE;
 
   // Hàm kiểm tra và chuẩn hóa số điện thoại Việt Nam
   const validateVietnamesePhone = (raw: string): { valid: boolean; normalized?: string } => {
@@ -54,7 +79,7 @@ export function RegisterForm() {
 
     // 1. Kiểm tra tính hợp lệ cơ bản ở phía client
     if (!fullName.trim()) {
-      setError(role === "center" ? "Vui lòng nhập tên trung tâm hoặc người đại diện." : "Vui lòng nhập họ và tên.");
+      setError("Vui lòng nhập họ và tên.");
       return;
     }
     if (fullName.trim().length > 100) {
@@ -81,8 +106,28 @@ export function RegisterForm() {
       setError("Mật khẩu xác nhận không khớp.");
       return;
     }
-    if (role === "student" && !parentAcknowledged) {
-      setError("Học sinh cần xác nhận phụ huynh đã biết về việc tạo tài khoản này.");
+    if (age === null) {
+      setError("Vui lòng nhập ngày sinh.");
+      return;
+    }
+    if (dateOfBirth > todayInVietnam()) {
+      setError("Ngày sinh không được ở tương lai.");
+      return;
+    }
+    if (age > MAX_AGE) {
+      setError("Ngày sinh không hợp lệ.");
+      return;
+    }
+    if (role === "parent" && age < ADULT_AGE) {
+      setError(`Tài khoản phụ huynh phải từ ${ADULT_AGE} tuổi.`);
+      return;
+    }
+    if (parentEmailRequired && !parentEmail.trim()) {
+      setError(`Học sinh dưới ${CHILD_MAX_AGE_EXCLUSIVE} tuổi cần nhập email phụ huynh để phụ huynh đồng ý.`);
+      return;
+    }
+    if (isMinorStudent && parentEmail.trim().toLowerCase() === email.trim().toLowerCase()) {
+      setError("Email phụ huynh phải khác email của học sinh.");
       return;
     }
 
@@ -109,7 +154,8 @@ export function RegisterForm() {
         email: email.trim(),
         phone: normalizedPhone,
         role,
-        parentAcknowledged: role === "student" ? true : undefined,
+        dateOfBirth,
+        parentEmail: isMinorStudent && parentEmail.trim() ? parentEmail.trim() : null,
         password,
       });
 
@@ -147,10 +193,10 @@ export function RegisterForm() {
 
         <form onSubmit={handleSubmit}>
           <FieldGroup>
-            {/* Lựa chọn vai trò: Học sinh, Phụ huynh, Trung tâm */}
+            {/* Lựa chọn vai trò: Học sinh, Phụ huynh (trung tâm do admin tạo tài khoản) */}
             <Field>
               <Label>Bạn là:</Label>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-2">
               <Button
                 type="button"
                 variant={role === "student" ? "default" : "outline"}
@@ -167,31 +213,13 @@ export function RegisterForm() {
                 <UsersIcon aria-hidden="true" />
                 Phụ huynh
               </Button>
-              <Button
-                type="button"
-                variant={role === "center" ? "default" : "outline"}
-                onClick={() => setRole("center")}
-              >
-                <Building2Icon aria-hidden="true" />
-                Trung tâm
-              </Button>
               </div>
             </Field>
-
-            {/* Thông báo riêng cho tài khoản trung tâm */}
-            {role === "center" && (
-              <Alert variant="warning" role="status">
-                <InfoIcon aria-hidden="true" />
-                <AlertDescription>
-                  Tài khoản Trung tâm du học sẽ ở trạng thái chờ duyệt (Pending) bởi Ban quản trị trước khi có thể công khai hồ sơ.
-                </AlertDescription>
-              </Alert>
-            )}
 
             {/* Họ và tên */}
             <Field>
               <FieldLabel htmlFor="fullName">
-                {role === "center" ? "Tên trung tâm / Đại diện" : "Họ và tên"} <span className="text-destructive">*</span>
+                Họ và tên <span className="text-destructive">*</span>
               </FieldLabel>
               <Input
                 id="fullName"
@@ -200,8 +228,26 @@ export function RegisterForm() {
                 maxLength={100}
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
-                placeholder={role === "center" ? "Trung tâm Du học Á Âu" : "Nguyễn Văn A"}
+                placeholder="Nguyễn Văn A"
               />
+            </Field>
+
+            {/* Ngày sinh: dùng để tính nhóm tuổi */}
+            <Field>
+              <FieldLabel htmlFor="dateOfBirth">
+                Ngày sinh <span className="text-destructive">*</span>
+              </FieldLabel>
+              <Input
+                id="dateOfBirth"
+                type="date"
+                required
+                max={todayInVietnam()}
+                value={dateOfBirth}
+                onChange={(e) => setDateOfBirth(e.target.value)}
+              />
+              {role === "parent" && (
+                <FieldDescription>Tài khoản phụ huynh dành cho người từ {ADULT_AGE} tuổi.</FieldDescription>
+              )}
             </Field>
 
             {/* Email đăng nhập */}
@@ -269,18 +315,35 @@ export function RegisterForm() {
               />
             </Field>
 
-            {/* Checkbox dành riêng cho vai học sinh */}
-            {role === "student" && (
-              <Field orientation="horizontal">
-                <Checkbox
-                  id="parentAcknowledged"
-                  checked={parentAcknowledged}
-                  onCheckedChange={(checked) => setParentAcknowledged(checked)}
-                />
-                <FieldLabel htmlFor="parentAcknowledged">
-                  Tôi xác nhận phụ huynh đã biết về việc tôi đăng ký tài khoản tư vấn du học trên hệ thống.
-                </FieldLabel>
-              </Field>
+            {/* Email phụ huynh: học sinh dưới 18 (bắt buộc khi dưới 16) */}
+            {isMinorStudent && (
+              <>
+                <Alert role="status">
+                  <InfoIcon aria-hidden="true" />
+                  <AlertDescription>
+                    {parentEmailRequired
+                      ? `Theo Luật Bảo vệ dữ liệu cá nhân, với học sinh dưới ${CHILD_MAX_AGE_EXCLUSIVE} tuổi hệ thống cần cha mẹ hoặc người giám hộ đồng ý trước khi lưu và phân tích hồ sơ. Bạn vẫn dùng được tài khoản; các chức năng hồ sơ, gợi ý trường và tư vấn AI sẽ mở khi phụ huynh bấm đồng ý trong email mời.`
+                      : `Bạn chưa đủ ${ADULT_AGE} tuổi: có thể nhập email phụ huynh để mời liên kết tài khoản (không bắt buộc). Một số chức năng như chia sẻ hồ sơ cho trung tâm chỉ dành cho người từ ${ADULT_AGE} tuổi.`}
+                  </AlertDescription>
+                </Alert>
+                <Field>
+                  <FieldLabel htmlFor="parentEmail">
+                    Email phụ huynh {parentEmailRequired && <span className="text-destructive">*</span>}
+                  </FieldLabel>
+                  <Input
+                    id="parentEmail"
+                    type="email"
+                    required={parentEmailRequired}
+                    maxLength={100}
+                    value={parentEmail}
+                    onChange={(e) => setParentEmail(e.target.value)}
+                    placeholder="phuhuynh@gmail.com"
+                  />
+                  <FieldDescription>
+                    Lời mời được gửi tới email này sau khi bạn xác thực email của mình.
+                  </FieldDescription>
+                </Field>
+              </>
             )}
 
             <Button type="submit" size="lg" disabled={isSubmitting} className="w-full">

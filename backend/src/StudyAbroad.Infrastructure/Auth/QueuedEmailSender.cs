@@ -50,6 +50,9 @@ namespace StudyAbroad.Infrastructure.Auth
         public Task SendPasswordChangedNotificationAsync(string toEmail, string fullName, CancellationToken ct = default) =>
             Enqueue(toEmail, (s, t) => s.SendPasswordChangedNotificationAsync(toEmail, fullName, t));
 
+        public Task SendParentInviteEmailAsync(string toEmail, string studentName, string inviteToken, int expiryDays, CancellationToken ct = default) =>
+            Enqueue(toEmail, (s, t) => s.SendParentInviteEmailAsync(toEmail, studentName, inviteToken, expiryDays, t));
+
         private Task Enqueue(string toEmail, Func<IEmailSender, CancellationToken, Task> send)
         {
             if (!queue.TryEnqueue(send))

@@ -28,6 +28,7 @@ public static class DependencyInjection
 
         services.AddScoped<IStudyCenterRepository, StudyCenterRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<StudyAbroad.Application.ParentLinks.IParentLinkRepository, ParentLinkRepository>();
         services.AddScoped<IFinancialProfileRepository, FinancialProfileRepository>();
         services.AddScoped<StudyAbroad.Application.AcademicProfiles.IAcademicProfileRepository, AcademicProfileRepository>();
         services.AddSingleton<IPasswordHasher, PasswordHasher>();
@@ -60,6 +61,7 @@ public static class DependencyInjection
             options.Password = NonEmpty(configuration["SMTP_PASSWORD"]) ?? options.Password;
             options.FromEmail = NonEmpty(configuration["SMTP_FROM_EMAIL"]) ?? NonEmpty(configuration["SMTP_SENDER_EMAIL"]) ?? options.FromEmail;
             options.FromName = NonEmpty(configuration["SMTP_FROM_NAME"]) ?? NonEmpty(configuration["SMTP_SENDER_NAME"]) ?? options.FromName;
+            options.AppBaseUrl = NonEmpty(configuration["APP_PUBLIC_URL"]) ?? options.AppBaseUrl;
         });
         // Mail gửi ở nền qua hàng đợi: request không chờ SMTP
         services.AddSingleton<SmtpEmailSender>();

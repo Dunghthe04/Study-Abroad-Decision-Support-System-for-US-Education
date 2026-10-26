@@ -61,8 +61,12 @@ export interface RegisterRequest {
   email: string;
   password: string;
   fullName: string;
-  role: "student" | "parent" | "center";
-  parentAcknowledged?: boolean;
+  // Trung tâm không tự đăng ký (tài khoản do admin tạo)
+  role: "student" | "parent";
+  /** yyyy-MM-dd; bắt buộc */
+  dateOfBirth: string;
+  /** Bắt buộc với học sinh dưới 16, không bắt buộc với 16–17 */
+  parentEmail?: string | null;
   phone?: string | null;
 }
 

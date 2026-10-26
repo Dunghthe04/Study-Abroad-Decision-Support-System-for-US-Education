@@ -1,5 +1,6 @@
 using StudyAbroad.Application.Auth;
 using StudyAbroad.Application.Common;
+using StudyAbroad.Application.ParentLinks;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
 
@@ -199,29 +200,65 @@ public class AuthServiceTests
             SentEmails.Add((toEmail, "password_changed_notice", ""));
             return Task.CompletedTask;
         }
+
+        public Task SendParentInviteEmailAsync(string toEmail, string studentName, string inviteToken, int expiryDays, CancellationToken ct = default)
+        {
+            SentEmails.Add((toEmail, "parent_invite", inviteToken));
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class FakeParentLinkRepository : IParentLinkRepository
+    {
+        public List<ParentStudentLink> Links { get; } = [];
+
+        public Task AddAsync(ParentStudentLink link, CancellationToken ct = default)
+        {
+            Links.Add(link);
+            return Task.CompletedTask;
+        }
+
+        public Task UpdateAsync(ParentStudentLink link, CancellationToken ct = default)
+        {
+            var idx = Links.FindIndex(l => l.Id == link.Id);
+            if (idx >= 0) Links[idx] = link;
+            return Task.CompletedTask;
+        }
+
+        public Task<List<ParentStudentLink>> GetByStudentAsync(Guid studentUserId, CancellationToken ct = default) =>
+            Task.FromResult(Links.Where(l => l.StudentUserId == studentUserId).OrderByDescending(l => l.CreatedAt).ToList());
     }
 
     private readonly FakeUserRepository _repo = new();
     private readonly FakeTokenService _tokens = new();
     private readonly FakeEmailSender _emailSender = new();
+    private readonly FakeParentLinkRepository _links = new();
 
-    private AuthService CreateService() => new(_repo, new FakeHasher(), _tokens, _emailSender);
+    private AuthService CreateService() => new(_repo, new FakeHasher(), _tokens, _emailSender, _links);
+
+    // Ngày sinh ứng với tuổi tròn (sinh nhật cách hôm nay ở VN 10 ngày về trước)
+    private static DateOnly BornYearsAgo(int years) =>
+        AgePolicy.TodayInVietnam(DateTime.UtcNow).AddDays(-10).AddYears(-years);
 
     private static RegisterRequest Request(
         string email = "a@test.com",
         string password = "password123",
         string fullName = "Nguyen Van A",
         string role = UserRoles.Parent,
-        bool? parentAcknowledged = null,
-        string? phone = null) =>
-        new(email, password, fullName, role, parentAcknowledged, phone);
+        DateOnly? dateOfBirth = null,
+        string? parentEmail = null,
+        string? phone = null,
+        bool noDateOfBirth = false) =>
+        new(email, password, fullName, role, noDateOfBirth ? null : dateOfBirth ?? BornYearsAgo(30), parentEmail, phone);
 
     [Theory]
-    [InlineData(UserRoles.Parent, null)]
-    [InlineData(UserRoles.Student, true)]
-    public async Task Register_StudentOrParent_IsUnverifiedAndSendsOtpEmail(string role, bool? parentAcknowledged)
+    [InlineData(UserRoles.Parent, 30, null)]
+    [InlineData(UserRoles.Student, 18, null)]
+    [InlineData(UserRoles.Student, 17, null)]
+    [InlineData(UserRoles.Student, 15, "parent@test.com")]
+    public async Task Register_StudentOrParent_IsUnverifiedAndSendsOtpEmail(string role, int age, string? parentEmail)
     {
-        var result = await CreateService().RegisterAsync(Request(role: role, parentAcknowledged: parentAcknowledged));
+        var result = await CreateService().RegisterAsync(Request(role: role, dateOfBirth: BornYearsAgo(age), parentEmail: parentEmail));
 
         Assert.Equal(AuthError.None, result.Error);
         Assert.Null(result.User);
@@ -274,31 +311,146 @@ public class AuthServiceTests
     }
 
     [Fact]
-    public async Task Register_Center_IsPendingAfterEmailVerification()
+    public async Task Register_SavesDateOfBirth()
     {
-        var service = CreateService();
-        await service.RegisterAsync(Request(role: UserRoles.Center));
-        var otpCode = _emailSender.SentEmails[0].Code;
+        var dob = BornYearsAgo(30);
+        await CreateService().RegisterAsync(Request(dateOfBirth: dob));
 
-        var result = await service.VerifyEmailAsync(new VerifyEmailRequest("a@test.com", otpCode));
-
-        Assert.Equal(AuthError.None, result.Error);
-        Assert.Equal(UserStatuses.Pending, _repo.Users[0].Status);
+        Assert.Equal(dob, _repo.Users[0].DateOfBirth);
     }
 
-    [Theory]
-    [InlineData(null)]
-    [InlineData(false)]
-    public async Task Register_StudentWithoutParentAcknowledged_IsValidationError(bool? parentAcknowledged)
+    [Fact]
+    public async Task Register_WithoutDateOfBirth_IsValidationError()
     {
-        var result = await CreateService().RegisterAsync(Request(role: UserRoles.Student, parentAcknowledged: parentAcknowledged));
+        var result = await CreateService().RegisterAsync(Request(noDateOfBirth: true));
+
+        Assert.Equal(AuthError.Validation, result.Error);
+        Assert.Empty(_repo.Users);
+        Assert.Empty(_emailSender.SentEmails);
+    }
+
+    [Fact]
+    public async Task Register_DateOfBirthInFuture_IsValidationError()
+    {
+        var tomorrow = AgePolicy.TodayInVietnam(DateTime.UtcNow).AddDays(1);
+
+        var result = await CreateService().RegisterAsync(Request(dateOfBirth: tomorrow));
+
+        Assert.Equal(AuthError.Validation, result.Error);
+        Assert.Empty(_repo.Users);
+    }
+
+    [Fact]
+    public async Task Register_AgeOverMax_IsValidationError()
+    {
+        var result = await CreateService().RegisterAsync(Request(dateOfBirth: BornYearsAgo(AuthService.MaxAge + 1)));
 
         Assert.Equal(AuthError.Validation, result.Error);
         Assert.Empty(_repo.Users);
     }
 
     [Theory]
+    [InlineData(17)]
+    [InlineData(10)]
+    public async Task Register_ParentUnder18_IsValidationError(int age)
+    {
+        var result = await CreateService().RegisterAsync(Request(role: UserRoles.Parent, dateOfBirth: BornYearsAgo(age)));
+
+        Assert.Equal(AuthError.Validation, result.Error);
+        Assert.Empty(_repo.Users);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task Register_StudentUnder16WithoutParentEmail_IsValidationError(string? parentEmail)
+    {
+        var result = await CreateService().RegisterAsync(
+            Request(role: UserRoles.Student, dateOfBirth: BornYearsAgo(15), parentEmail: parentEmail));
+
+        Assert.Equal(AuthError.Validation, result.Error);
+        Assert.Empty(_repo.Users);
+        Assert.Empty(_links.Links);
+    }
+
+    [Theory]
+    [InlineData("a@test.com")]
+    [InlineData(" A@Test.com ")]
+    [InlineData("not-an-email")]
+    public async Task Register_StudentInvalidOrSameParentEmail_IsValidationError(string parentEmail)
+    {
+        var result = await CreateService().RegisterAsync(
+            Request(role: UserRoles.Student, dateOfBirth: BornYearsAgo(15), parentEmail: parentEmail));
+
+        Assert.Equal(AuthError.Validation, result.Error);
+        Assert.Empty(_repo.Users);
+    }
+
+    [Fact]
+    public async Task Register_Student16To17WithoutParentEmail_SucceedsWithoutLink()
+    {
+        var result = await CreateService().RegisterAsync(Request(role: UserRoles.Student, dateOfBirth: BornYearsAgo(16)));
+
+        Assert.Equal(AuthError.None, result.Error);
+        Assert.Single(_repo.Users);
+        Assert.Empty(_links.Links);
+    }
+
+    [Fact]
+    public async Task Register_Student16To17WithParentEmail_CreatesLink()
+    {
+        await CreateService().RegisterAsync(
+            Request(role: UserRoles.Student, dateOfBirth: BornYearsAgo(17), parentEmail: "Parent@Test.com"));
+
+        var link = Assert.Single(_links.Links);
+        Assert.Equal("parent@test.com", link.ParentEmail);
+    }
+
+    [Fact]
+    public async Task Register_AdultStudentParentEmail_IsIgnored()
+    {
+        var result = await CreateService().RegisterAsync(
+            Request(role: UserRoles.Student, dateOfBirth: BornYearsAgo(19), parentEmail: "parent@test.com"));
+
+        Assert.Equal(AuthError.None, result.Error);
+        Assert.Empty(_links.Links);
+    }
+
+    [Fact]
+    public async Task Register_StudentUnder16_InviteSentOnlyAfterEmailVerified()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(
+            Request(role: UserRoles.Student, dateOfBirth: BornYearsAgo(14), parentEmail: "parent@test.com"));
+
+        // Trước khi xác thực: đã lưu link, chưa có token, chưa gửi mail mời
+        var link = Assert.Single(_links.Links);
+        Assert.Equal(_repo.Users[0].Id, link.StudentUserId);
+        Assert.Equal(ParentLinkStatuses.Pending, link.Status);
+        Assert.Null(link.TokenHash);
+        Assert.Equal(0, link.InviteSentCount);
+        Assert.DoesNotContain(_emailSender.SentEmails, e => e.Purpose == "parent_invite");
+
+        var otpCode = _emailSender.SentEmails[0].Code;
+        var result = await service.VerifyEmailAsync(new VerifyEmailRequest("a@test.com", otpCode));
+
+        Assert.Equal(AuthError.None, result.Error);
+        var invite = Assert.Single(_emailSender.SentEmails, e => e.Purpose == "parent_invite");
+        Assert.Equal("parent@test.com", invite.To);
+        link = _links.Links[0];
+        Assert.Equal(ParentInvite.HashToken(invite.Code), link.TokenHash);
+        Assert.NotEqual(invite.Code, link.TokenHash);
+        Assert.Equal(1, link.InviteSentCount);
+        Assert.NotNull(link.LastInviteSentAt);
+        Assert.InRange(link.TokenExpiresAt!.Value,
+            DateTime.UtcNow.AddDays(ParentInvite.ExpiryDays).AddMinutes(-1),
+            DateTime.UtcNow.AddDays(ParentInvite.ExpiryDays).AddMinutes(1));
+    }
+
+    [Theory]
     [InlineData(UserRoles.Admin)]
+    [InlineData(UserRoles.Center)]
     [InlineData("teacher")]
     [InlineData("")]
     public async Task Register_RoleNotAllowed_IsValidationError(string role)

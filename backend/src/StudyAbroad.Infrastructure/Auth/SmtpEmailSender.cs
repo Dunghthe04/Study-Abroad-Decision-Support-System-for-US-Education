@@ -128,6 +128,28 @@ namespace StudyAbroad.Infrastructure.Auth
             await SendEmailAsync(toEmail, subject, body, ct);
         }
 
+        public async Task SendParentInviteEmailAsync(string toEmail, string studentName, string inviteToken, int expiryDays, CancellationToken ct = default)
+        {
+            var link = $"{_options.AppBaseUrl.TrimEnd('/')}/parent-consent?token={Uri.EscapeDataString(inviteToken)}";
+            var subject = "[USAS] Mời phụ huynh liên kết tài khoản học sinh";
+            var body = $"""
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
+                    <h2 style="color: #2563eb; margin-bottom: 16px;">Lời mời liên kết tài khoản học sinh</h2>
+                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">Học sinh <strong>{WebUtility.HtmlEncode(studentName)}</strong> vừa tạo tài khoản trên Hệ thống Hỗ trợ Ra quyết định Du học Mỹ (USAS) và khai địa chỉ email này là email của phụ huynh.</p>
+                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">Theo Luật Bảo vệ dữ liệu cá nhân, hệ thống cần cha mẹ hoặc người giám hộ đồng ý trước khi lưu và phân tích hồ sơ học tập của học sinh dưới 16 tuổi. Phụ huynh có thể xem nội dung đồng ý, chấp nhận liên kết và rút lại sự đồng ý bất cứ lúc nào.</p>
+                    <div style="text-align: center; margin: 24px 0;">
+                        <a href="{WebUtility.HtmlEncode(link)}" style="display: inline-block; background-color: #2563eb; color: #ffffff; text-decoration: none; font-weight: 600; padding: 12px 24px; border-radius: 8px;">Xem và xác nhận</a>
+                        <p style="margin: 8px 0 0; font-size: 13px; color: #64748b;">Link có hiệu lực trong <strong>{expiryDays} ngày</strong> và chỉ dùng được một lần.</p>
+                    </div>
+                    <p style="font-size: 13px; color: #94a3b8; line-height: 1.5;">Nếu bạn không phải phụ huynh của học sinh này, vui lòng bỏ qua email; hệ thống không liên kết khi bạn chưa xác nhận.</p>
+                    <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+                    <p style="font-size: 12px; color: #94a3b8; text-align: center;">USAS - Hệ thống hỗ trợ ra quyết định du học Mỹ</p>
+                </div>
+                """;
+
+            await SendEmailAsync(toEmail, subject, body, ct);
+        }
+
         private async Task SendEmailAsync(string toEmail, string subject, string htmlBody, CancellationToken ct)
         {
             if (string.IsNullOrWhiteSpace(_options.User) || string.IsNullOrWhiteSpace(_options.Password))

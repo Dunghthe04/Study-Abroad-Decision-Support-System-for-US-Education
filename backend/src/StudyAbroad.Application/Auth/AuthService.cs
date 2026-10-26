@@ -1,4 +1,5 @@
 using StudyAbroad.Application.Common;
+using StudyAbroad.Application.ParentLinks;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
 using System;
@@ -27,13 +28,14 @@ namespace StudyAbroad.Application.Auth
         Task<List<UserDto>> GetAllUsersAsync(CancellationToken ct = default);
     }
 
-    public class AuthService(IUserRepository users, IPasswordHasher hasher, ITokenService tokens, IEmailSender emailSender) : IAuthService
+    public class AuthService(IUserRepository users, IPasswordHasher hasher, ITokenService tokens, IEmailSender emailSender, IParentLinkRepository parentLinks) : IAuthService
     {
         public const int MinPasswordLength = 8;
         public const int MaxPasswordLength = 100;
         public const int MaxFullNameLength = 100;
         public const int MaxEmailLength = 100;
         public const int MaxRawPhoneLength = 20;
+        public const int MaxAge = 100;
 
         /// <summary>Thời hạn hiệu lực của mã OTP: 5 phút.</summary>
         public const int OtpExpiryMinutes = 5;
@@ -124,8 +126,11 @@ namespace StudyAbroad.Application.Auth
             if (!UserRoles.SelfRegister.Contains(request.Role))
                 return AuthResult.Fail(AuthError.Validation, $"Vai trò '{request.Role}' không hợp lệ.");
 
-            if (request.Role == UserRoles.Student && request.ParentAcknowledged != true)
-                return AuthResult.Fail(AuthError.Validation, "Học sinh cần xác nhận phụ huynh đã biết.");
+            // [Q11] Nhóm tuổi theo luật VN: dưới 16 cần phụ huynh đồng ý trước khi xử lý dữ liệu (Luật BVDLCN Điều 24),
+            // 16–17 tự dùng nhưng có thể mời phụ huynh liên kết, phụ huynh phải đủ 18 tuổi
+            var (ageError, parentEmail) = ValidateAge(request, email);
+            if (ageError != null)
+                return AuthResult.Fail(AuthError.Validation, ageError);
 
             // Luôn hash mật khẩu trước khi kiểm trùng: thời gian xử lý như nhau dù email đã có tài khoản hay chưa
             var passwordHash = hasher.Hash(request.Password);
@@ -154,12 +159,16 @@ namespace StudyAbroad.Application.Auth
                 FullName = fullName,
                 Role = request.Role,
                 Status = UserStatuses.Unverified,
-                ParentAcknowledged = request.ParentAcknowledged == true,
+                DateOfBirth = request.DateOfBirth,
                 Phone = normalizedPhone,
                 FailedLoginAttempts = 0,
                 LockoutEnd = null
             };
             await users.AddAsync(user, ct);
+
+            // Ghi lại email phụ huynh; mail mời chỉ gửi sau khi học sinh xác thực email (tránh tài khoản rác gửi mail cho người lạ)
+            if (parentEmail != null)
+                await parentLinks.AddAsync(new ParentStudentLink { StudentUserId = user.Id, ParentEmail = parentEmail }, ct);
 
             // Sinh mã OTP 6 số và gửi qua Email thật (hiệu lực 5 phút)
             var otpCode = GenerateOtpCode();
@@ -192,6 +201,9 @@ namespace StudyAbroad.Application.Auth
             user.FailedLoginAttempts = 0;
             user.LockoutEnd = null;
             await users.UpdateUserAsync(user, ct);
+
+            if (user.Role == UserRoles.Student)
+                await SendFirstParentInvitesAsync(user, ct);
 
             // Tự động đăng nhập
             var (token, expiresAt) = tokens.GenerateToken(user);
@@ -442,6 +454,70 @@ namespace StudyAbroad.Application.Auth
             await emailSender.SendPasswordChangedNotificationAsync(user.Email, user.FullName, ct);
 
             return AuthResult.Ok("Đổi mật khẩu thành công. Các thiết bị khác đã được đăng xuất.");
+        }
+
+        /// <summary>
+        /// Ngày sinh bắt buộc, không ở tương lai, tối đa 100 tuổi. Phụ huynh phải từ 18 tuổi. Học sinh dưới 16 phải có email
+        /// phụ huynh; 16–17 nhập thì mời liên kết; từ 18 bỏ qua. Trả email phụ huynh đã chuẩn hóa (null nếu không mời).
+        /// </summary>
+        private static (string? Error, string? ParentEmail) ValidateAge(RegisterRequest request, string studentEmail)
+        {
+            if (request.DateOfBirth is not { } dob)
+                return ("Vui lòng nhập ngày sinh.", null);
+
+            var today = AgePolicy.TodayInVietnam(DateTime.UtcNow);
+            if (dob > today)
+                return ("Ngày sinh không được ở tương lai.", null);
+
+            var age = AgePolicy.GetAge(dob, today);
+            if (age > MaxAge)
+                return ("Ngày sinh không hợp lệ.", null);
+
+            if (request.Role == UserRoles.Parent)
+                return age < AgeGroups.AdultAge
+                    ? ($"Tài khoản phụ huynh phải từ {AgeGroups.AdultAge} tuổi.", null)
+                    : (null, null);
+
+            if (request.Role != UserRoles.Student || age >= AgeGroups.AdultAge)
+                return (null, null);
+
+            var parentEmail = NormalizeEmail(request.ParentEmail ?? string.Empty);
+            if (parentEmail.Length == 0)
+                return age < AgeGroups.ChildMaxAgeExclusive
+                    ? ($"Học sinh dưới {AgeGroups.ChildMaxAgeExclusive} tuổi cần nhập email phụ huynh để phụ huynh đồng ý.", null)
+                    : (null, null);
+
+            if (!IsValidEmail(parentEmail))
+                return ($"Email phụ huynh không hợp lệ hoặc vượt quá {MaxEmailLength} ký tự.", null);
+
+            if (parentEmail == studentEmail)
+                return ("Email phụ huynh phải khác email của học sinh.", null);
+
+            return (null, parentEmail);
+        }
+
+        /// <summary>Gửi mail mời cho các email phụ huynh khai lúc đăng ký (link chưa gửi lần nào).</summary>
+        private async Task SendFirstParentInvitesAsync(User student, CancellationToken ct)
+        {
+            var links = await parentLinks.GetByStudentAsync(student.Id, ct);
+            foreach (var link in links.Where(l => l.Status == ParentLinkStatuses.Pending && l.InviteSentCount == 0))
+            {
+                var token = ParentInvite.GenerateToken();
+                var now = DateTime.UtcNow;
+                link.TokenHash = ParentInvite.HashToken(token);
+                link.TokenExpiresAt = now.AddDays(ParentInvite.ExpiryDays);
+                link.InviteSentCount = 1;
+                link.LastInviteSentAt = now;
+                try
+                {
+                    await parentLinks.UpdateAsync(link, ct);
+                }
+                catch (ConcurrencyConflictException)
+                {
+                    continue;
+                }
+                await emailSender.SendParentInviteEmailAsync(link.ParentEmail, student.FullName, token, ParentInvite.ExpiryDays, ct);
+            }
         }
 
         /// <summary>Kiểm tra chính sách mật khẩu (8–100 ký tự), dùng chung cho đăng ký, đặt lại và đổi mật khẩu.</summary>

@@ -6,8 +6,9 @@ using System.Threading.Tasks;
 
 namespace StudyAbroad.Application.Auth
 {
-    // [USAS-362] Request đăng ký từ client: Phone là thông tin liên hệ không bắt buộc
-    public record RegisterRequest(string Email, string Password, string FullName, string Role, bool? ParentAcknowledged = null, string? Phone = null);
+    // [USAS-362] Request đăng ký từ client: Phone là thông tin liên hệ không bắt buộc.
+    // DateOfBirth bắt buộc (tính nhóm tuổi); ParentEmail bắt buộc với học sinh dưới 16, không bắt buộc với 16–17.
+    public record RegisterRequest(string Email, string Password, string FullName, string Role, DateOnly? DateOfBirth = null, string? ParentEmail = null, string? Phone = null);
 
     // [USAS-362] Thông tin người dùng trả về cho client (không chứa password_hash)
     public record UserDto(Guid Id, string Email, string FullName, string Role, string Status, string? Phone = null);

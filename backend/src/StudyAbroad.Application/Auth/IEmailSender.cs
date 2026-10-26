@@ -22,5 +22,8 @@ namespace StudyAbroad.Application.Auth
 
         /// <summary>Mật khẩu vừa được đổi (quên mật khẩu hoặc đổi khi đã đăng nhập): báo để chủ tài khoản phát hiện nếu không phải mình làm.</summary>
         Task SendPasswordChangedNotificationAsync(string toEmail, string fullName, CancellationToken ct = default);
+
+        /// <summary>Mời phụ huynh liên kết và đồng ý cho hệ thống xử lý dữ liệu của học sinh; link chứa token dùng một lần.</summary>
+        Task SendParentInviteEmailAsync(string toEmail, string studentName, string inviteToken, int expiryDays, CancellationToken ct = default);
     }
 }
