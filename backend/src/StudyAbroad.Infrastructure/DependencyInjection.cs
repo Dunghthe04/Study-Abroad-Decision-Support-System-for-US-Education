@@ -55,12 +55,13 @@ public static class DependencyInjection
         services.Configure<SmtpOptions>(options =>
         {
             configuration.GetSection(SmtpOptions.SectionName).Bind(options);
-            options.Host = configuration["SMTP_HOST"] ?? options.Host;
+            // docker-compose truyền "" khi .env không đặt biến, nên chuỗi rỗng coi như chưa cấu hình
+            options.Host = NonEmpty(configuration["SMTP_HOST"]) ?? options.Host;
             if (int.TryParse(configuration["SMTP_PORT"], out var port)) options.Port = port;
-            options.User = configuration["SMTP_USER"] ?? options.User;
-            options.Password = configuration["SMTP_PASSWORD"] ?? options.Password;
-            options.FromEmail = configuration["SMTP_FROM_EMAIL"] ?? configuration["SMTP_SENDER_EMAIL"] ?? options.FromEmail;
-            options.FromName = configuration["SMTP_FROM_NAME"] ?? configuration["SMTP_SENDER_NAME"] ?? options.FromName;
+            options.User = NonEmpty(configuration["SMTP_USER"]) ?? options.User;
+            options.Password = NonEmpty(configuration["SMTP_PASSWORD"]) ?? options.Password;
+            options.FromEmail = NonEmpty(configuration["SMTP_FROM_EMAIL"]) ?? NonEmpty(configuration["SMTP_SENDER_EMAIL"]) ?? options.FromEmail;
+            options.FromName = NonEmpty(configuration["SMTP_FROM_NAME"]) ?? NonEmpty(configuration["SMTP_SENDER_NAME"]) ?? options.FromName;
         });
         services.AddScoped<IEmailSender, SmtpEmailSender>();
 
@@ -78,6 +79,8 @@ public static class DependencyInjection
 
         return services;
     }
+
+    private static string? NonEmpty(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 
     //Cả chat và gợi ý trường đều gọi sang advisor: cùng địa chỉ, timeout, API key
     private static void ConfigureAdvisorClient(IServiceProvider sp, HttpClient client)

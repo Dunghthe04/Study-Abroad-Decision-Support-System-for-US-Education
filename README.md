@@ -235,15 +235,13 @@ docker compose up -d db ollama ollama-init
 <details open>
 <summary><b>Backend (.NET)</b> → http://localhost:5080/swagger</summary>
 
-- Visual Studio 2022: mở `backend/StudyAbroad.sln`, chọn profile **http**, nhấn F5.
-- Hoặc dùng terminal:
+- Terminal (khuyên dùng): script nạp biến từ file `.env` ở gốc repo (SMTP_*, JWT_SECRET_KEY, SEED_ADMIN_PASSWORD) rồi chạy `dotnet watch`:
   ```powershell
-  cd backend
-  dotnet tool restore
-  dotnet watch --project src/StudyAbroad.Api
+  ./scripts/run-backend.ps1        # Git Bash/macOS/Linux: ./scripts/run-backend.sh
   ```
+- Visual Studio 2022: mở `backend/StudyAbroad.sln`, chọn profile **http**, nhấn F5. Cách này **không đọc `.env`** nên mail OTP không được gửi (chỉ ghi cảnh báo trong log) và không tạo tài khoản admin.
 
-Lần chạy đầu, API tự tạo bảng (migration) và seed 2 trung tâm demo.
+Lần chạy đầu, API tự tạo bảng (migration) và seed 2 trung tâm demo. Tài khoản `admin@usas.edu.vn` chỉ được tạo khi `.env` có `SEED_ADMIN_PASSWORD`. Không ghi mật khẩu SMTP vào `appsettings*.json`: chỉ để trong `.env` (file này không commit).
 </details>
 
 <details open>
