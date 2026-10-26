@@ -516,6 +516,22 @@ public class AuthServiceTests
     }
 
     [Fact]
+    public async Task GetMe_ChildStudent_ReturnsAgeRestrictions()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request(role: UserRoles.Student, dateOfBirth: BornYearsAgo(14), parentEmail: "me@test.com"));
+        var userId = _repo.Users[0].Id;
+
+        var me = await service.GetMeAsync(userId);
+
+        Assert.NotNull(me);
+        Assert.Equal(AgeGroups.Child, me.AgeGroup);
+        Assert.Equal(ParentConsentStatuses.Pending, me.ParentConsentStatus);
+        Assert.Contains(AgeFeatures.ProcessStudentData, me.BlockedFeatures!);
+        Assert.Contains(AgeFeatures.ShareWithCenter, me.BlockedFeatures!);
+    }
+
+    [Fact]
     public async Task GetAllUsers_ReturnsAllMappedUserDtos()
     {
         var service = CreateService();

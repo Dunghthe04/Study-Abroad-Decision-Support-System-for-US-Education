@@ -234,6 +234,10 @@ internal sealed class FakeParentLinkRepository : IParentLinkRepository
     public Task<List<ParentStudentLink>> GetActiveByParentAsync(Guid parentUserId, CancellationToken ct = default) =>
         Task.FromResult(Links.Where(l => l.ParentUserId == parentUserId && l.Status == ParentLinkStatuses.Active).Select(Clone).ToList());
 
+    public Task<bool> HasGrantedConsentAsync(Guid studentUserId, CancellationToken ct = default) =>
+        Task.FromResult(Links.Any(l => l.StudentUserId == studentUserId && l.Status == ParentLinkStatuses.Active
+            && Consents.Any(c => c.Id == l.ConsentId && c.Granted)));
+
     public Task<Consent?> GetConsentAsync(Guid consentId, CancellationToken ct = default) =>
         Task.FromResult(Consents.Where(c => c.Id == consentId).Select(c => new Consent
         {

@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Serilog;
+using Microsoft.AspNetCore.Authorization;
+using StudyAbroad.Api.Authorization;
 using StudyAbroad.Api.Extensions;
 using StudyAbroad.Api.RateLimiting;
 using StudyAbroad.Application;
@@ -117,7 +119,14 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
-builder.Services.AddAuthorization();
+// [Q11] Mỗi dòng trong AgeFeatures.Rules thành một policy cùng tên: [Authorize(Policy = AgeFeatures.X)]
+builder.Services.AddAuthorization(options =>
+{
+    foreach (var feature in AgeFeatures.Rules.Keys)
+        options.AddPolicy(feature, policy => policy.RequireAuthenticatedUser().AddRequirements(new AgeFeatureRequirement(feature)));
+});
+builder.Services.AddScoped<IAuthorizationHandler, AgeFeatureHandler>();
+builder.Services.AddSingleton<IAuthorizationMiddlewareResultHandler, AgeRestrictionResultHandler>();
 builder.Services.AddTranscriptUploadRateLimiter();
 builder.Services.AddAuthRateLimiter();
 

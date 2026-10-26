@@ -216,7 +216,7 @@ namespace StudyAbroad.Application.Auth
                 IsRevoked = false
             }, ct);
 
-            return AuthResult.Ok(new AuthResponse(token, expiresAt, ToDto(user)));
+            return AuthResult.Ok(new AuthResponse(token, expiresAt, await ToDtoAsync(user, ct)));
         }
 
         public async Task<AuthResult> ResendOtpAsync(ResendOtpRequest request, CancellationToken ct = default)
@@ -345,7 +345,7 @@ namespace StudyAbroad.Application.Auth
             };
             await users.CreateSessionAsync(session, ct);
 
-            return AuthResult.Ok(new AuthResponse(token, expiresAt, ToDto(user)));
+            return AuthResult.Ok(new AuthResponse(token, expiresAt, await ToDtoAsync(user, ct)));
         }
 
         public async Task<AuthResult> ForgotPasswordAsync(ForgotPasswordRequest request, CancellationToken ct = default)
@@ -618,6 +618,18 @@ namespace StudyAbroad.Application.Auth
         internal static UserDto ToDto(User user) =>
             new(user.Id, user.Email, user.FullName, user.Role, user.Status, user.Phone);
 
+        // [Q11] Kèm thông tin chặn theo tuổi cho người dùng đang đăng nhập
+        private async Task<UserDto> ToDtoAsync(User user, CancellationToken ct)
+        {
+            var access = await AgeAccess.EvaluateAsync(user, parentLinks, DateTime.UtcNow, ct);
+            return ToDto(user) with
+            {
+                AgeGroup = access.AgeGroup,
+                ParentConsentStatus = access.ParentConsentStatus,
+                BlockedFeatures = access.BlockedFeatures,
+            };
+        }
+
         public async Task<bool> LogoutAsync(string rawToken, CancellationToken ct = default)
         {
             if (string.IsNullOrWhiteSpace(rawToken)) return false;
@@ -629,7 +641,7 @@ namespace StudyAbroad.Application.Auth
         public async Task<UserDto?> GetMeAsync(Guid userId, CancellationToken ct = default)
         {
             var user = await users.GetUserById(userId, ct);
-            return user != null ? ToDto(user) : null;
+            return user != null ? await ToDtoAsync(user, ct) : null;
         }
 
         public async Task<List<UserDto>> GetAllUsersAsync(CancellationToken ct = default)

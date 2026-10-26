@@ -41,6 +41,12 @@ public class ParentLinkRepository(AppDbContext db) : IParentLinkRepository
     public Task<Consent?> GetConsentAsync(Guid consentId, CancellationToken ct = default) =>
         db.Consents.AsNoTracking().FirstOrDefaultAsync(c => c.Id == consentId, ct);
 
+    public Task<bool> HasGrantedConsentAsync(Guid studentUserId, CancellationToken ct = default) =>
+        db.ParentStudentLinks.AsNoTracking()
+            .Where(l => l.StudentUserId == studentUserId && l.Status == ParentLinkStatuses.Active && l.ConsentId != null)
+            .Join(db.Consents, l => l.ConsentId, c => (Guid?)c.Id, (l, c) => c)
+            .AnyAsync(c => c.Granted, ct);
+
     public async Task SaveAcceptAsync(ParentStudentLink link, Consent consent, CancellationToken ct = default)
     {
         // Một SaveChanges = một transaction: consent và link cùng thành công hoặc cùng rollback

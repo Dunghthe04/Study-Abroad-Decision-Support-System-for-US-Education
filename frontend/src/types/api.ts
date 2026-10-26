@@ -49,6 +49,10 @@ export interface UserDto {
   role: UserRole;
   status: string;
   phone?: string | null;
+  // [Q11] Server tính theo ngày sinh + đồng ý của phụ huynh; null/không có = không áp giới hạn
+  ageGroup?: "child" | "minor" | "adult" | null;
+  parentConsentStatus?: "granted" | "pending" | "none" | "not_required" | null;
+  blockedFeatures?: string[] | null;
 }
 
 // Token chỉ nằm trong HttpOnly cookie, body không chứa token

@@ -22,6 +22,9 @@ public interface IParentLinkRepository
 
     Task<Consent?> GetConsentAsync(Guid consentId, CancellationToken ct = default);
 
+    /// <summary>Học sinh có ít nhất một link active mà consent đi kèm còn granted (dùng cho chặn theo tuổi).</summary>
+    Task<bool> HasGrantedConsentAsync(Guid studentUserId, CancellationToken ct = default);
+
     /// <summary>Phụ huynh chấp nhận: thêm consent và cập nhật link trong cùng một lần lưu (một transaction).
     /// Ném <see cref="Common.ConcurrencyConflictException"/> khi link vừa bị sửa.</summary>
     Task SaveAcceptAsync(ParentStudentLink link, Consent consent, CancellationToken ct = default);

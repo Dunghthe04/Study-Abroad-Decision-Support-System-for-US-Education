@@ -11,6 +11,7 @@ namespace StudyAbroad.Api.Controllers;
 [Route("api/v1/advisor")]
 public class AdvisorController(IAdvisorClient advisor, ILogger<AdvisorController> logger) : ControllerBase
 {
+    [Authorize(Policy = AgeFeatures.ProcessStudentData)] // [Q11] dưới 16 cần phụ huynh đồng ý
     [HttpPost("chat")]
     public async Task<ActionResult<AdvisorChatResponse>> Chat(AdvisorChatRequest request, CancellationToken ct)
     {
