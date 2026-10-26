@@ -59,6 +59,14 @@ public class UserRepository(AppDbContext db) : IUserRepository
             .ExecuteUpdateAsync(s => s.SetProperty(x => x.IsRevoked, true).SetProperty(x => x.UpdatedAt, DateTime.UtcNow), cancellationToken);
     }
 
+    // [UC-06] Đổi mật khẩu: giữ phiên đang dùng, thu hồi phiên trên các thiết bị khác
+    public async Task RevokeOtherSessionsAsync(Guid userId, string keepTokenHash, CancellationToken cancellationToken = default)
+    {
+        await db.UserSessions
+            .Where(s => s.UserId == userId && !s.IsRevoked && s.TokenHash != keepTokenHash)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.IsRevoked, true).SetProperty(x => x.UpdatedAt, DateTime.UtcNow), cancellationToken);
+    }
+
     public async Task SaveOtpAsync(OtpToken token, CancellationToken cancellationToken = default)
     {
         db.OtpTokens.Add(token);

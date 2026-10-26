@@ -92,6 +92,12 @@ export interface ResetPasswordRequest {
   newPassword: string;
 }
 
+// [UC-06] Đổi mật khẩu khi đã đăng nhập
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+}
+
 // [USAS-363] Hồ sơ học thuật (Academic Profile & Transcripts)
 export interface TranscriptScoreItem {
   subject: string;

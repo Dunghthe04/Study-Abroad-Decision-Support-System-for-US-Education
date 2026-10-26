@@ -1,5 +1,6 @@
 import type {
   AuthResponse,
+  ChangePasswordRequest,
   ForgotPasswordRequest,
   LoginRequest,
   RegisterRequest,
@@ -95,6 +96,13 @@ export const authApi = {
   // [USAS-12] Đặt lại mật khẩu mới với mã OTP
   resetPassword: (data: ResetPasswordRequest) =>
     apiFetch<{ message: string }>("/api/v1/auth/reset-password", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  // [UC-06] Đổi mật khẩu khi đã đăng nhập: giữ phiên hiện tại, đăng xuất các thiết bị khác
+  changePassword: (data: ChangePasswordRequest) =>
+    apiFetch<{ message: string }>("/api/v1/auth/change-password", {
       method: "POST",
       body: JSON.stringify(data),
     }),

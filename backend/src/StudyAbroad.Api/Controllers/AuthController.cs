@@ -105,20 +105,40 @@ namespace StudyAbroad.Api.Controllers
             };
         }
 
+        // [UC-06] Đổi mật khẩu khi đã đăng nhập: giữ phiên hiện tại, đăng xuất các thiết bị khác, gửi mail thông báo
+        [Authorize]
+        [HttpPost("change-password")]
+        [EnableRateLimiting(AuthRateLimit.PolicyName)]
+        public async Task<IActionResult> ChangePassword(ChangePasswordRequest request, CancellationToken ct)
+        {
+            var userId = User.GetUserId();
+            if (userId is null)
+            {
+                return Unauthorized();
+            }
+
+            var result = await auth.ChangePasswordAsync(userId.Value, GetRawToken(), request, ct);
+            if (result.Error == AuthError.TempLocked)
+            {
+                // Mọi phiên đã bị thu hồi: xóa luôn cookie trên trình duyệt này
+                Response.Cookies.Delete(AccessTokenCookie, CreateCookieOptions(expires: null));
+            }
+
+            return result.Error switch
+            {
+                AuthError.None => Ok(new { message = result.Message }),
+                AuthError.TempLocked => Problem(result.Message, statusCode: StatusCodes.Status423Locked, title: "Tài khoản bị tạm khóa"),
+                // 400 thay vì 401: sai mật khẩu hiện tại không có nghĩa phiên hết hạn
+                _ => Problem(result.Message, statusCode: StatusCodes.Status400BadRequest),
+            };
+        }
+
         // [AC-3] Đăng xuất: thu hồi phiên trên server (đánh dấu IsRevoked = true) và xóa HttpOnly Cookie
         [Authorize]
         [HttpPost("logout")]
         public async Task<IActionResult> Logout(CancellationToken ct)
         {
-            var rawToken = Request.Cookies[AccessTokenCookie];
-            if (string.IsNullOrEmpty(rawToken))
-            {
-                var authHeader = Request.Headers.Authorization.ToString();
-                rawToken = authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
-                    ? authHeader["Bearer ".Length..].Trim()
-                    : authHeader.Trim();
-            }
-
+            var rawToken = GetRawToken();
             if (!string.IsNullOrEmpty(rawToken))
             {
                 await auth.LogoutAsync(rawToken, ct);
@@ -143,6 +163,21 @@ namespace StudyAbroad.Api.Controllers
 
             var user = await auth.GetMeAsync(userId.Value, ct);
             return user != null ? Ok(user) : NotFound();
+        }
+
+        // Token của phiên hiện tại: lấy từ HttpOnly Cookie, không có thì từ header Authorization
+        private string GetRawToken()
+        {
+            var rawToken = Request.Cookies[AccessTokenCookie];
+            if (!string.IsNullOrEmpty(rawToken))
+            {
+                return rawToken;
+            }
+
+            var authHeader = Request.Headers.Authorization.ToString();
+            return authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
+                ? authHeader["Bearer ".Length..].Trim()
+                : authHeader.Trim();
         }
 
         // [Chống XSS]: token chỉ nằm trong HttpOnly Cookie, body không chứa token

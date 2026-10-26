@@ -32,6 +32,9 @@ public class AdminUsersControllerTests
         public Task<AuthResult> ResetPasswordAsync(ResetPasswordRequest request, CancellationToken ct = default) =>
             throw new NotImplementedException();
 
+        public Task<AuthResult> ChangePasswordAsync(Guid userId, string currentRawToken, ChangePasswordRequest request, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+
         public Task<bool> LogoutAsync(string rawToken, CancellationToken ct = default) =>
             throw new NotImplementedException();
 

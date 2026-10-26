@@ -13,6 +13,7 @@ import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle }
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
+import { ChangePasswordCard } from "@/components/account/ChangePasswordCard";
 import {
   ArrowRightIcon,
   BookOpenIcon,
@@ -374,6 +375,8 @@ export function AccountView() {
           )}
         </CardContent>
       </Card>
+
+      <ChangePasswordCard />
     </>
   );
 }

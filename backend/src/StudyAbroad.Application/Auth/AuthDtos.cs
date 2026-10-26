@@ -23,6 +23,9 @@ namespace StudyAbroad.Application.Auth
     public record ForgotPasswordRequest(string Email);
     public record ResetPasswordRequest(string Email, string OtpCode, string NewPassword);
 
+    // [UC-06] Đổi mật khẩu khi đã đăng nhập: bắt buộc nhập mật khẩu hiện tại
+    public record ChangePasswordRequest(string CurrentPassword, string NewPassword);
+
     public enum AuthError {
         None,
         Validation,

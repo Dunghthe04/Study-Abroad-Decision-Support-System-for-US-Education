@@ -21,6 +21,7 @@ namespace StudyAbroad.Application.Auth
         Task<AuthResult> LoginAsync(LoginRequest request, string? ipAddress = null, string? userAgent = null, CancellationToken ct = default);
         Task<AuthResult> ForgotPasswordAsync(ForgotPasswordRequest request, CancellationToken ct = default);
         Task<AuthResult> ResetPasswordAsync(ResetPasswordRequest request, CancellationToken ct = default);
+        Task<AuthResult> ChangePasswordAsync(Guid userId, string currentRawToken, ChangePasswordRequest request, CancellationToken ct = default);
         Task<bool> LogoutAsync(string rawToken, CancellationToken ct = default);
         Task<UserDto?> GetMeAsync(Guid userId, CancellationToken ct = default);
         Task<List<UserDto>> GetAllUsersAsync(CancellationToken ct = default);
@@ -381,6 +382,66 @@ namespace StudyAbroad.Application.Auth
             await emailSender.SendPasswordChangedNotificationAsync(user.Email, user.FullName, ct);
 
             return AuthResult.Ok("Đặt lại mật khẩu thành công! Vui lòng đăng nhập bằng mật khẩu mới.");
+        }
+
+        public const string WrongCurrentPasswordMessage = "Mật khẩu hiện tại không đúng.";
+
+        /// <summary>
+        /// [UC-06] Đổi mật khẩu khi đã đăng nhập. Sai mật khẩu hiện tại dùng chung bộ đếm với đăng nhập
+        /// (phiên bị đánh cắp không thành nơi dò mật khẩu): đủ 5 lần thì tạm khóa 15 phút và thu hồi mọi phiên.
+        /// Thành công thì giữ phiên hiện tại, đăng xuất các thiết bị khác và gửi mail báo cho chủ tài khoản.
+        /// </summary>
+        public async Task<AuthResult> ChangePasswordAsync(Guid userId, string currentRawToken, ChangePasswordRequest request, CancellationToken ct = default)
+        {
+            if (string.IsNullOrEmpty(request.CurrentPassword) || request.CurrentPassword.Length > MaxPasswordLength)
+                return AuthResult.Fail(AuthError.InvalidCredentials, WrongCurrentPasswordMessage);
+
+            var passwordError = ValidatePassword(request.NewPassword, "Mật khẩu mới");
+            if (passwordError != null)
+                return AuthResult.Fail(AuthError.Validation, passwordError);
+
+            var user = await users.GetUserById(userId, ct);
+            if (user == null || user.Status == UserStatuses.Locked || user.Status == UserStatuses.TempLocked)
+                return AuthResult.Fail(AuthError.InvalidCredentials, WrongCurrentPasswordMessage);
+
+            // Ghi nhận lần thử TRƯỚC khi so mật khẩu, như đăng nhập
+            user.FailedLoginAttempts++;
+            if (!await TryUpdateUserAsync(user, ct))
+                return AuthResult.Fail(AuthError.InvalidCredentials, WrongCurrentPasswordMessage);
+
+            if (!hasher.VerifyPassword(user.PasswordHash, request.CurrentPassword))
+            {
+                if (user.FailedLoginAttempts >= MaxFailedLoginAttempts)
+                {
+                    user.Status = UserStatuses.TempLocked;
+                    user.LockoutEnd = DateTime.UtcNow.AddMinutes(TempLockoutMinutes);
+                    if (await TryUpdateUserAsync(user, ct))
+                    {
+                        await users.RevokeAllSessionsAsync(user.Id, ct);
+                        await emailSender.SendAccountTempLockedNotificationAsync(user.Email, user.FullName, TempLockoutMinutes, ct);
+                    }
+
+                    return AuthResult.Fail(AuthError.TempLocked, $"Tài khoản đã bị tạm khóa do nhập sai mật khẩu {MaxFailedLoginAttempts} lần liên tiếp. Hệ thống sẽ tự động mở khóa sau {TempLockoutMinutes} phút.");
+                }
+
+                return AuthResult.Fail(AuthError.InvalidCredentials, WrongCurrentPasswordMessage);
+            }
+
+            user.FailedLoginAttempts = 0;
+            if (request.NewPassword == request.CurrentPassword)
+            {
+                await TryUpdateUserAsync(user, ct);
+                return AuthResult.Fail(AuthError.Validation, "Mật khẩu mới phải khác mật khẩu hiện tại.");
+            }
+
+            user.PasswordHash = hasher.Hash(request.NewPassword);
+            if (!await TryUpdateUserAsync(user, ct))
+                return AuthResult.Fail(AuthError.InvalidCredentials, WrongCurrentPasswordMessage);
+
+            await users.RevokeOtherSessionsAsync(user.Id, tokens.HashToken(currentRawToken), ct);
+            await emailSender.SendPasswordChangedNotificationAsync(user.Email, user.FullName, ct);
+
+            return AuthResult.Ok("Đổi mật khẩu thành công. Các thiết bị khác đã được đăng xuất.");
         }
 
         /// <summary>Kiểm tra chính sách mật khẩu (8–100 ký tự), dùng chung cho đăng ký, đặt lại và đổi mật khẩu.</summary>

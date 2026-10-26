@@ -72,6 +72,15 @@ public class AuthServiceTests
             return Task.CompletedTask;
         }
 
+        public Task RevokeOtherSessionsAsync(Guid userId, string keepTokenHash, CancellationToken cancellationToken = default)
+        {
+            foreach (var s in Sessions.Where(x => x.UserId == userId && x.TokenHash != keepTokenHash))
+            {
+                s.IsRevoked = true;
+            }
+            return Task.CompletedTask;
+        }
+
         public Task SaveOtpAsync(OtpToken token, CancellationToken cancellationToken = default)
         {
             var idx = Otps.FindIndex(o => o.Id == token.Id);
@@ -1135,5 +1144,106 @@ public class AuthServiceTests
         Assert.Equal(AuthError.OtpInvalid, result.Error);
         Assert.Equal(AuthService.OtpFailedMessage, result.Message);
         Assert.Equal(oldHash, _repo.Users[0].PasswordHash);
+    }
+
+    // [UC-06] Đổi mật khẩu: tạo tài khoản active và 2 phiên (thiết bị hiện tại + thiết bị khác)
+    private async Task<(AuthService Service, User User, string CurrentToken)> ActiveUserWithTwoSessionsAsync()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        var user = _repo.Users[0];
+        user.Status = UserStatuses.Active;
+
+        var login = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
+        var currentToken = login.Response!.AccessToken;
+        await _repo.CreateSessionAsync(new UserSession { UserId = user.Id, TokenHash = "hash:other-device", ExpiresAt = DateTime.UtcNow.AddDays(7) });
+        return (service, user, currentToken);
+    }
+
+    [Fact]
+    public async Task ChangePassword_Success_KeepsCurrentSession_RevokesOthers_AndMailsOwner()
+    {
+        var (service, user, currentToken) = await ActiveUserWithTwoSessionsAsync();
+
+        var result = await service.ChangePasswordAsync(user.Id, currentToken, new ChangePasswordRequest("password123", "newPassword123"));
+
+        Assert.Equal(AuthError.None, result.Error);
+        Assert.Equal("hashed:newPassword123", user.PasswordHash);
+        Assert.False(_repo.Sessions.Single(s => s.TokenHash == "hash:" + currentToken).IsRevoked);
+        Assert.True(_repo.Sessions.Single(s => s.TokenHash == "hash:other-device").IsRevoked);
+        Assert.Contains(_emailSender.SentEmails, e => e.Purpose == "password_changed_notice" && e.To == "a@test.com");
+    }
+
+    [Fact]
+    public async Task ChangePassword_WrongCurrentPassword_RejectedAndCounted_NoChange()
+    {
+        var (service, user, currentToken) = await ActiveUserWithTwoSessionsAsync();
+
+        var result = await service.ChangePasswordAsync(user.Id, currentToken, new ChangePasswordRequest("wrongpass", "newPassword123"));
+
+        Assert.Equal(AuthError.InvalidCredentials, result.Error);
+        Assert.Equal(AuthService.WrongCurrentPasswordMessage, result.Message);
+        Assert.Equal("hashed:password123", user.PasswordHash);
+        Assert.Equal(1, user.FailedLoginAttempts);
+        Assert.All(_repo.Sessions, s => Assert.False(s.IsRevoked));
+        Assert.DoesNotContain(_emailSender.SentEmails, e => e.Purpose == "password_changed_notice");
+    }
+
+    [Fact]
+    public async Task ChangePassword_WrongCurrentPassword5Times_TempLocksAndRevokesAllSessions()
+    {
+        var (service, user, currentToken) = await ActiveUserWithTwoSessionsAsync();
+
+        for (int i = 1; i <= 4; i++)
+        {
+            var res = await service.ChangePasswordAsync(user.Id, currentToken, new ChangePasswordRequest("wrongpass", "newPassword123"));
+            Assert.Equal(AuthError.InvalidCredentials, res.Error);
+        }
+
+        var lockRes = await service.ChangePasswordAsync(user.Id, currentToken, new ChangePasswordRequest("wrongpass", "newPassword123"));
+
+        Assert.Equal(AuthError.TempLocked, lockRes.Error);
+        Assert.Equal(UserStatuses.TempLocked, user.Status);
+        Assert.All(_repo.Sessions, s => Assert.True(s.IsRevoked));
+        Assert.Contains(_emailSender.SentEmails, e => e.Purpose == "temp_locked_notice");
+    }
+
+    [Theory]
+    [InlineData("short")]
+    [InlineData("")]
+    public async Task ChangePassword_InvalidNewPassword_IsValidationError_NotCounted(string newPassword)
+    {
+        var (service, user, currentToken) = await ActiveUserWithTwoSessionsAsync();
+
+        var result = await service.ChangePasswordAsync(user.Id, currentToken, new ChangePasswordRequest("password123", newPassword));
+
+        Assert.Equal(AuthError.Validation, result.Error);
+        Assert.Equal("hashed:password123", user.PasswordHash);
+        Assert.Equal(0, user.FailedLoginAttempts);
+    }
+
+    [Fact]
+    public async Task ChangePassword_NewSameAsCurrent_IsValidationError_SessionsUntouched()
+    {
+        var (service, user, currentToken) = await ActiveUserWithTwoSessionsAsync();
+
+        var result = await service.ChangePasswordAsync(user.Id, currentToken, new ChangePasswordRequest("password123", "password123"));
+
+        Assert.Equal(AuthError.Validation, result.Error);
+        Assert.Equal(0, user.FailedLoginAttempts);
+        Assert.All(_repo.Sessions, s => Assert.False(s.IsRevoked));
+    }
+
+    [Fact]
+    public async Task ChangePassword_ConcurrentAttemptConflict_RejectedBeforeCheckingPassword()
+    {
+        var (service, user, currentToken) = await ActiveUserWithTwoSessionsAsync();
+        _repo.UserConflictsToThrow = 1;
+
+        var result = await service.ChangePasswordAsync(user.Id, currentToken, new ChangePasswordRequest("password123", "newPassword123"));
+
+        Assert.Equal(AuthError.InvalidCredentials, result.Error);
+        Assert.Equal("hashed:password123", user.PasswordHash);
+        Assert.All(_repo.Sessions, s => Assert.False(s.IsRevoked));
     }
 }
