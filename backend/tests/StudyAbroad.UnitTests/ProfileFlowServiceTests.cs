@@ -759,6 +759,38 @@ public class ProfileFlowServiceTests
     }
 
     [Fact]
+    public async Task CommitFlowAsync_WhenTranscriptCellsStillFlagged_Throws_ThenSucceedsAfterConfirm()
+    {
+        var service = new ProfileFlowService(new InMemoryProfileFlowRepository(), new FakeFileStorageService());
+        var userId = Guid.NewGuid();
+        var flagged = FullDraft() with
+        {
+            Step2 = new FlowTranscriptDraftDto(AcademicYears:
+            [
+                new FlowAcademicYearDraftDto("Lớp 12", [new FlowSubjectDraftDto("Toán", 8m, 9m, Semester2Review: "source_image")]),
+            ]),
+        };
+
+        // Cờ được giữ khi lưu nháp để người dùng quay lại vẫn thấy ô cam
+        await service.SaveDraftAsync(userId, new SaveProfileDraftRequest(2, [1], flagged));
+        var state = await service.GetFlowStateAsync(userId);
+        Assert.Equal("source_image", state.Draft!.Step2!.AcademicYears![0].Subjects![0].Semester2Review);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.CommitFlowAsync(userId, new CommitProfileFlowRequest(flagged)));
+        Assert.Contains("chưa xác nhận đã kiểm tra bảng điểm", ex.Message);
+
+        var confirmed = flagged with
+        {
+            Step2 = new FlowTranscriptDraftDto(AcademicYears:
+            [
+                new FlowAcademicYearDraftDto("Lớp 12", [new FlowSubjectDraftDto("Toán", 8m, 9m)]),
+            ]),
+        };
+        await service.CommitFlowAsync(userId, new CommitProfileFlowRequest(confirmed));
+    }
+
+    [Fact]
     public async Task SaveDraftAsync_WhenTooManyItems_ThrowsArgumentException_AndKeepsOldDraft()
     {
         var repo = new InMemoryProfileFlowRepository();

@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import io
 import json
@@ -10,7 +11,8 @@ from PIL import Image
 from app.api.deps import get_transcript_reader
 from app.core.config import Settings
 from app.main import create_app
-from app.services.transcript_reader import TranscriptReader
+from app.schemas.transcript_ocr import TranscriptFilePayload, TranscriptOcrRequest
+from app.services.transcript_reader import TranscriptReader, _FileResult, _RawTerm
 
 HIGH_SCHOOL_MARKDOWN = """BẢN TRÍCH SAO KẾT QUẢ HỌC TẬP
 Lớp 10
@@ -377,3 +379,30 @@ def test_spaced_high_school_table_is_read_by_code_without_llm():
     }
     assert set(scores_by_term(body)) == {"Lớp 10 HK1", "Lớp 10 HK2"}
     assert not [c for c in fake.calls if "format" in c]  # không gọi LLM bước B
+
+
+def test_scores_read_from_image_are_flagged_for_review():
+    body = post_image(make_client(FakeOllama(HIGH_SCHOOL_MARKDOWN, HIGH_SCHOOL_PARSED)))
+
+    cells = [s for t in body["terms"] for s in t["scores"]]
+    assert cells and all(s["needsReview"] is True for s in cells)
+    assert {s["reviewReason"] for s in cells} == {"source_image"}
+
+
+def test_outlier_score_is_flagged_and_text_pdf_scores_are_not():
+    reader = TranscriptReader(FakeOllama(), Settings(_env_file=None))  # type: ignore[arg-type,call-arg]
+    terms = [
+        _RawTerm(label="Lớp 10 HK1", grade_name="Lớp 10", semester=1,
+                 scores={"Toán": 8.0, "Vật lý": 7.5, "Ngữ văn": 7.8, "Tiếng Anh": 8.2, "Tin học": 2.0}),
+    ]
+
+    async def fake_read_file(_file_item, _file_name):
+        return _FileResult(terms=terms)
+
+    reader._read_file = fake_read_file  # type: ignore[method-assign]
+    request = TranscriptOcrRequest(files=[TranscriptFilePayload(image_base64="eA==", file_name="a.pdf")])
+    body = asyncio.run(reader.read_transcript(request))
+
+    flags = {s.subject: (s.needs_review, s.review_reason) for s in body.terms[0].scores}
+    assert flags["Tin học"] == (True, "outlier")
+    assert flags["Toán"] == (False, None)

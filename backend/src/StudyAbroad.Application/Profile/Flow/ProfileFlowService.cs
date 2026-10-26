@@ -465,6 +465,9 @@ public class ProfileFlowService(
             errors.Add("Bước 1: tên bang tối đa 64 ký tự.");
 
         // Bước 2
+        if (draft.Step2?.AcademicYears?.Any(y => y.Subjects?.Any(s => s.Semester1Review is not null || s.Semester2Review is not null) == true) == true)
+            errors.Add("Bước 2: bạn chưa xác nhận đã kiểm tra bảng điểm.");
+
         foreach (var year in draft.Step2?.AcademicYears ?? [])
         {
             if (year.GradeName?.Trim().Length > 32)
@@ -550,6 +553,8 @@ public class ProfileFlowService(
             errors.Add($"Bước 2: tối đa {MaxAcademicYears} năm học.");
         if (years.Any(y => y.Subjects?.Count > MaxSubjectsPerYear))
             errors.Add($"Bước 2: mỗi năm học tối đa {MaxSubjectsPerYear} môn.");
+        if (years.Any(y => y.Subjects?.Any(s => s.Semester1Review?.Length > 32 || s.Semester2Review?.Length > 32) == true))
+            errors.Add("Bước 2: lý do kiểm tra ô điểm không hợp lệ.");
 
         if (draft.Step3?.Certifications?.Count > MaxCertifications)
             errors.Add($"Bước 3: tối đa {MaxCertifications} chứng chỉ.");

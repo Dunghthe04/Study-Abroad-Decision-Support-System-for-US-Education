@@ -53,7 +53,10 @@ public record FlowAcademicYearDraftDto(
 public record FlowSubjectDraftDto(
     [property: JsonPropertyName("subjectName")] string? SubjectName = null,
     [property: JsonPropertyName("semester1Score")] decimal? Semester1Score = null,
-    [property: JsonPropertyName("semester2Score")] decimal? Semester2Score = null
+    [property: JsonPropertyName("semester2Score")] decimal? Semester2Score = null,
+    // [UC-12] Lý do ô điểm cần kiểm tra (null = đã kiểm tra / nhập tay); còn cờ thì không cho commit
+    [property: JsonPropertyName("semester1Review")] string? Semester1Review = null,
+    [property: JsonPropertyName("semester2Review")] string? Semester2Review = null
 );
 
 /// <summary>
@@ -130,7 +133,10 @@ public record FlowTranscriptSubjectScoreDto(
     [property: JsonPropertyName("subject")] string? Subject = null,
     [property: JsonPropertyName("score")] decimal Score = 0m,
     [property: JsonPropertyName("rawScore")] string? RawScore = null,
-    [property: JsonPropertyName("credits")] decimal? Credits = 1m
+    [property: JsonPropertyName("credits")] decimal? Credits = 1m,
+    // [UC-12] Advisor đánh dấu ô cần kiểm tra: "source_image" hoặc "outlier"
+    [property: JsonPropertyName("needsReview")] bool NeedsReview = false,
+    [property: JsonPropertyName("reviewReason")] string? ReviewReason = null
 );
 
 public record DraftTranscriptInfoDto(
