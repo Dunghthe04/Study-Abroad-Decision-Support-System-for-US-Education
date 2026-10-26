@@ -28,7 +28,7 @@ Dùng để dự đoán nhãn         Dùng để học tái tạo vector
 """
 
 # Thư viện Pytorch để xử lý tensor và tính tonas
-import torch 
+import torch
 from torch import nn  # Cung cấp các lớp để xây dựng mạng nơ-ron.
 
 from ml.skill_picker.data import LABELS
@@ -57,7 +57,7 @@ class SkillCAE(nn.Module):
     def __init__(
         self,
         n_labels: int = len(LABELS),
-        dropout: float = 0.3, #tỷ lệ Dropout được sử dụng trong Head.
+        dropout: float = 0.3,  # tỷ lệ Dropout được sử dụng trong Head.
     ) -> None:
         super().__init__()
 
@@ -73,7 +73,7 @@ class SkillCAE(nn.Module):
         #
         # Mỗi lớp Conv1D vừa trích xuất đặc trưng,
         # vừa giảm số vị trí xuống còn một nửa.
-        #ReLU(): thêm tính phi tuyến để mô hình học các quan hệ phức tạp hơn.
+        # ReLU(): thêm tính phi tuyến để mô hình học các quan hệ phức tạp hơn.
         self.encoder_conv = nn.Sequential(
             # 1 kênh -> 16 kênh; 1024 -> 512 vị trí.
             nn.Conv1d(1, 16, kernel_size=7, stride=2, padding=3),

@@ -1,4 +1,3 @@
-
 """
 Huấn luyện mô hình SkillCAE bằng PyTorch và so sánh với Logistic Regression.
 
@@ -31,7 +30,6 @@ from ml.skill_picker.dataset import load_splits
 from ml.skill_picker.embed import ARTIFACTS_DIR
 from ml.skill_picker.metrics import THRESHOLD, compute_metrics, print_metrics
 from ml.skill_picker.model import INPUT_SCALE, SkillCAE
-
 
 # ============================================================
 # 1. ĐƯỜNG DẪN LƯU KẾT QUẢ
@@ -73,6 +71,7 @@ RECON_WEIGHT = 0.5
 # 3. HÀM DỰ ĐOÁN XÁC SUẤT
 # ============================================================
 
+
 def predict_prob(model: SkillCAE, x: torch.Tensor) -> np.ndarray:
     """Chuyển đầu ra của mô hình thành xác suất dự đoán cho 11 nhãn kỹ năng."""
 
@@ -88,6 +87,7 @@ def predict_prob(model: SkillCAE, x: torch.Tensor) -> np.ndarray:
 # ============================================================
 # 4. HÀM HUẤN LUYỆN CHÍNH
 # ============================================================
+
 
 def main() -> None:
     # Giúp PowerShell hiển thị tiếng Việt đúng mã hóa.
@@ -221,10 +221,7 @@ def main() -> None:
             best_epoch = epoch
 
             # Sao chép trọng số để giữ nguyên trạng thái tốt nhất.
-            best_state = {
-                k: v.clone()
-                for k, v in model.state_dict().items()
-            }
+            best_state = {k: v.clone() for k, v in model.state_dict().items()}
 
         # In thông tin ở epoch đầu tiên và sau mỗi 5 epoch.
         if epoch % 5 == 0 or epoch == 1:
@@ -238,10 +235,7 @@ def main() -> None:
         # Nếu đã qua PATIENCE epoch mà Macro-F1 không cải thiện,
         # dừng huấn luyện sớm để tránh tiếp tục học không cần thiết.
         if epoch - best_epoch >= PATIENCE:
-            print(
-                f"Dừng sớm ở epoch {epoch} "
-                f"(epoch tốt nhất: {best_epoch})"
-            )
+            print(f"Dừng sớm ở epoch {epoch} (epoch tốt nhất: {best_epoch})")
             break
 
     # --------------------------------------------------------
@@ -251,8 +245,7 @@ def main() -> None:
     # Bảo đảm đã có trọng số tốt nhất trước khi khôi phục.
     if best_state is None:
         raise RuntimeError(
-            "Không có trọng số mô hình tốt nhất. "
-            "Hãy kiểm tra dữ liệu validation và quá trình huấn luyện."
+            "Không có trọng số mô hình tốt nhất. Hãy kiểm tra dữ liệu validation và quá trình huấn luyện."
         )
 
     # Đưa mô hình về trạng thái có Macro-F1 validation cao nhất.
@@ -310,18 +303,11 @@ def main() -> None:
 
     if logreg_path.exists():
         # Đọc kết quả Logistic Regression đã được lưu trước đó.
-        base = json.loads(
-            logreg_path.read_text(encoding="utf-8")
-        )
+        base = json.loads(logreg_path.read_text(encoding="utf-8"))
 
         # So sánh hai mô hình trên cùng tập validation.
         print("\nSo sánh trên tập validation:")
-        print(
-            f"{'':20s}"
-            f"{'Exact Match':>12s}"
-            f"{'Macro-F1':>10s}"
-            f"{'Micro-F1':>10s}"
-        )
+        print(f"{'':20s}{'Exact Match':>12s}{'Macro-F1':>10s}{'Micro-F1':>10s}")
 
         print(
             f"{'Logistic Regression':20s}"
@@ -331,10 +317,7 @@ def main() -> None:
         )
 
         print(
-            f"{'CAE':20s}"
-            f"{metrics['exact_match']:12.3f}"
-            f"{metrics['macro_f1']:10.3f}"
-            f"{metrics['micro_f1']:10.3f}"
+            f"{'CAE':20s}{metrics['exact_match']:12.3f}{metrics['macro_f1']:10.3f}{metrics['micro_f1']:10.3f}"
         )
 
     print(f"\nĐã lưu trọng số mô hình: {MODEL_PATH}")
