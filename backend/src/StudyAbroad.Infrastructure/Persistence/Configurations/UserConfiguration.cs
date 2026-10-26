@@ -26,6 +26,8 @@ namespace StudyAbroad.Infrastructure.Persistence.Configurations
             // [USAS-362] Số lần đăng nhập sai mật khẩu liên tiếp, mặc định 0
             builder.Property(x => x.FailedLoginAttempts).HasDefaultValue(0).IsRequired();
             builder.Property(x => x.LockoutEnd);
+            // Npgsql ánh xạ uint IsRowVersion vào cột hệ thống xmin (không tạo cột mới)
+            builder.Property(x => x.Version).IsRowVersion();
         }
     }
 }

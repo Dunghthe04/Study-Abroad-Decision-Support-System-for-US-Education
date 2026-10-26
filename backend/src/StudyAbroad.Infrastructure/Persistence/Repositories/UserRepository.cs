@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using StudyAbroad.Application.Auth;
+using StudyAbroad.Application.Common;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
 
@@ -48,7 +49,7 @@ public class UserRepository(AppDbContext db) : IUserRepository
     {
         user.UpdatedAt = DateTime.UtcNow;
         db.Users.Update(user);
-        await db.SaveChangesAsync(cancellationToken);
+        await SaveWithConcurrencyCheckAsync(cancellationToken);
     }
 
     public async Task RevokeAllSessionsAsync(Guid userId, CancellationToken cancellationToken = default)
@@ -68,7 +69,22 @@ public class UserRepository(AppDbContext db) : IUserRepository
     {
         token.UpdatedAt = DateTime.UtcNow;
         db.OtpTokens.Update(token);
-        await db.SaveChangesAsync(cancellationToken);
+        await SaveWithConcurrencyCheckAsync(cancellationToken);
+    }
+
+    // Version (xmin) đã đổi nghĩa là request khác vừa ghi bản ghi này: bỏ thay đổi của request hiện tại
+    private async Task SaveWithConcurrencyCheckAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            foreach (var entry in ex.Entries)
+                entry.State = EntityState.Detached;
+            throw new ConcurrencyConflictException("Bản ghi đã được cập nhật bởi một request khác.", ex);
+        }
     }
 
     public Task<OtpToken?> GetLatestOtpAsync(Guid userId, string purpose, CancellationToken cancellationToken = default) =>

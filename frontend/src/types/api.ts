@@ -51,8 +51,8 @@ export interface UserDto {
   phone?: string | null;
 }
 
+// Token chỉ nằm trong HttpOnly cookie, body không chứa token
 export interface AuthResponse {
-  accessToken: string;
   expiresAt: string;
   user: UserDto;
 }

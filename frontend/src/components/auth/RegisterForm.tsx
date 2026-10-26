@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Building2Icon, GraduationCapIcon, InfoIcon, UsersIcon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { ApiError } from "@/lib/api";
+import { setPendingEmail } from "@/lib/pending-email";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -113,7 +114,8 @@ export function RegisterForm() {
       });
 
       // 4. Đăng ký thành công -> Chuyển sang màn hình xác thực mã OTP gửi về email
-      router.push(`/verify-email?email=${encodeURIComponent(email.trim())}`);
+      setPendingEmail(email.trim());
+      router.push("/verify-email");
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message || "Đăng ký không thành công. Vui lòng thử lại.");

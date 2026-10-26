@@ -59,7 +59,7 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
 export const authApi = {
   // [AC-1] Đăng ký tài khoản (học sinh hoặc phụ huynh, email/SĐT, mật khẩu)
   register: (data: RegisterRequest) =>
-    apiFetch<UserDto>("/api/v1/auth/register", {
+    apiFetch<{ message: string }>("/api/v1/auth/register", {
       method: "POST",
       body: JSON.stringify(data),
     }),

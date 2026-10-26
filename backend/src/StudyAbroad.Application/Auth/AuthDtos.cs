@@ -12,7 +12,7 @@ namespace StudyAbroad.Application.Auth
     // [USAS-362] Thông tin người dùng trả về cho client (không chứa password_hash)
     public record UserDto(Guid Id, string Email, string FullName, string Role, string Status, string? Phone = null);
 
-    // [USAS-362] Response trả về khi đăng nhập thành công: bao gồm JWT token và thông tin người dùng
+    // [USAS-362] Kết quả đăng nhập thành công. AccessToken chỉ dùng để đặt HttpOnly cookie, controller không trả nó trong body
     public record AuthResponse(string AccessToken, DateTime ExpiresAt, UserDto User);
 
     public record LoginRequest(string Email, string Password);
@@ -26,14 +26,11 @@ namespace StudyAbroad.Application.Auth
     public enum AuthError {
         None,
         Validation,
-        EmailTaken,
-        PhoneTaken,           // trùng SĐT khi đăng ký → 409
         InvalidCredentials,   // sai tài khoản hoặc mật khẩu → 401
         Locked,               // tài khoản bị khóa bởi Admin (vĩnh viễn) → 423
         TempLocked,           // tài khoản bị tạm khóa sau 5 lần sai mật khẩu → 423
         Unverified,           // tài khoản chưa kích hoạt email OTP → 403
-        OtpInvalid,           // mã OTP không đúng hoặc đã bị vô hiệu hóa sau 5 lần nhập sai → 400
-        OtpExpired,           // mã OTP đã hết hạn (> 5 phút) → 400
+        OtpInvalid,           // mã OTP sai / hết hạn / đã dùng / đã vô hiệu hóa (gộp một thông báo, chống dò) → 400
     };
 
     // [USAS-362] Hộp trả kết quả từ AuthService

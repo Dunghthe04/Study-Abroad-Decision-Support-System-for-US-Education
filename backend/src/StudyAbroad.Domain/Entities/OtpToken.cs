@@ -12,4 +12,6 @@ public class OtpToken : BaseEntity
     public DateTime ExpiresAt { get; set; }
     public DateTime? UsedAt { get; set; }
     public int Attempts { get; set; }
+    /// <summary>Concurrency token (cột hệ thống xmin của Postgres): chặn dò OTP bằng nhiều request song song.</summary>
+    public uint Version { get; set; }
 }

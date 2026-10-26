@@ -24,5 +24,8 @@ namespace StudyAbroad.Domain.Entities
 
         /// <summary>Thời điểm hết hạn khóa tạm thời (15 phút sau khi gõ sai 5 lần). Sau thời điểm này tài khoản tự động được mở khóa.</summary>
         public DateTime? LockoutEnd { get; set; }
+
+        /// <summary>Concurrency token (cột hệ thống xmin của Postgres): chặn 2 request song song cùng ghi đè bộ đếm đăng nhập sai.</summary>
+        public uint Version { get; set; }
     }
 }
