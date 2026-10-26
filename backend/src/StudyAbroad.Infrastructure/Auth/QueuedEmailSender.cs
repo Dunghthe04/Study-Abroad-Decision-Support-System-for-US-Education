@@ -53,6 +53,9 @@ namespace StudyAbroad.Infrastructure.Auth
         public Task SendParentInviteEmailAsync(string toEmail, string studentName, string inviteToken, int expiryDays, CancellationToken ct = default) =>
             Enqueue(toEmail, (s, t) => s.SendParentInviteEmailAsync(toEmail, studentName, inviteToken, expiryDays, t));
 
+        public Task SendParentLinkChangedEmailAsync(string toEmail, string studentName, string parentLabel, bool linked, CancellationToken ct = default) =>
+            Enqueue(toEmail, (s, t) => s.SendParentLinkChangedEmailAsync(toEmail, studentName, parentLabel, linked, t));
+
         private Task Enqueue(string toEmail, Func<IEmailSender, CancellationToken, Task> send)
         {
             if (!queue.TryEnqueue(send))

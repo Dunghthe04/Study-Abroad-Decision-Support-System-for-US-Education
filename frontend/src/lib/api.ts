@@ -9,6 +9,9 @@ import type {
   UserDto,
   VerifyEmailRequest,
   AcademicProfileResponse,
+  ParentInviteInfo,
+  ParentLinkDto,
+  ParentLinkResponse,
 } from "@/types/api";
 
 // Browser code calls same-origin /api (Nginx in prod, Next rewrite in dev).
@@ -129,3 +132,38 @@ export const profileApi = {
     }),
 };
 
+// [Q11] Liên kết phụ huynh – học sinh. Token lời mời đi trong body để không nằm trong log URL của API.
+export const parentLinksApi = {
+  lookupInvite: (token: string) =>
+    apiFetch<ParentLinkResponse<ParentInviteInfo>>("/api/v1/parent-links/invite/lookup", {
+      method: "POST",
+      body: JSON.stringify({ token }),
+    }),
+
+  acceptInvite: (token: string) =>
+    apiFetch<ParentLinkResponse<ParentLinkDto>>("/api/v1/parent-links/invite/accept", {
+      method: "POST",
+      body: JSON.stringify({ token }),
+    }),
+
+  resend: () =>
+    apiFetch<ParentLinkResponse<ParentLinkDto>>("/api/v1/parent-links/resend", {
+      method: "POST",
+    }),
+
+  changeParentEmail: (parentEmail: string) =>
+    apiFetch<ParentLinkResponse<ParentLinkDto>>("/api/v1/parent-links/parent-email", {
+      method: "PUT",
+      body: JSON.stringify({ parentEmail }),
+    }),
+
+  revoke: (id: string) =>
+    apiFetch<ParentLinkResponse<ParentLinkDto>>(`/api/v1/parent-links/${encodeURIComponent(id)}/revoke`, {
+      method: "POST",
+    }),
+
+  getMine: () =>
+    apiFetch<ParentLinkResponse<ParentLinkDto[]>>("/api/v1/parent-links/me", {
+      method: "GET",
+    }),
+};

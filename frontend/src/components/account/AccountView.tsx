@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
 import { ChangePasswordCard } from "@/components/account/ChangePasswordCard";
+import { ParentLinksCard } from "@/components/account/ParentLinksCard";
 import {
   ArrowRightIcon,
   BookOpenIcon,
@@ -375,6 +376,8 @@ export function AccountView() {
           )}
         </CardContent>
       </Card>
+
+      <ParentLinksCard />
 
       <ChangePasswordCard />
     </>

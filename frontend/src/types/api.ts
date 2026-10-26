@@ -139,3 +139,33 @@ export interface AcademicProfileResponse {
   createdAt: string;
   updatedAt?: string | null;
 }
+
+// [Q11] Liên kết phụ huynh – học sinh (đồng ý xử lý dữ liệu trẻ em)
+export type ParentLinkStatus = "pending" | "active" | "revoked" | "expired";
+
+export interface ParentInviteInfo {
+  studentName: string;
+  studentAge: number | null;
+  parentEmail: string;
+  expiresAt: string;
+  policyVersion: string;
+}
+
+export interface ParentLinkDto {
+  id: string;
+  status: ParentLinkStatus;
+  parentEmail: string;
+  parentName: string | null;
+  studentName: string;
+  studentAge: number | null;
+  acceptedAt: string | null;
+  lastInviteSentAt: string | null;
+  tokenExpiresAt: string | null;
+  /** Server tính theo luật rút đồng ý (học sinh dưới 16 không tự rút liên kết đã đồng ý) */
+  canRevoke: boolean;
+}
+
+export interface ParentLinkResponse<T> {
+  message: string | null;
+  data: T;
+}

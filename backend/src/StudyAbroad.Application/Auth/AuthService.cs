@@ -502,12 +502,7 @@ namespace StudyAbroad.Application.Auth
             var links = await parentLinks.GetByStudentAsync(student.Id, ct);
             foreach (var link in links.Where(l => l.Status == ParentLinkStatuses.Pending && l.InviteSentCount == 0))
             {
-                var token = ParentInvite.GenerateToken();
-                var now = DateTime.UtcNow;
-                link.TokenHash = ParentInvite.HashToken(token);
-                link.TokenExpiresAt = now.AddDays(ParentInvite.ExpiryDays);
-                link.InviteSentCount = 1;
-                link.LastInviteSentAt = now;
+                var token = ParentInvite.Issue(link, DateTime.UtcNow);
                 try
                 {
                     await parentLinks.UpdateAsync(link, ct);
@@ -617,7 +612,7 @@ namespace StudyAbroad.Application.Auth
 
         internal static string NormalizeEmail(string email) => (email ?? string.Empty).Trim().ToLowerInvariant();
 
-        private static bool IsValidEmail(string email) =>
+        internal static bool IsValidEmail(string email) =>
             email.Length <= MaxEmailLength && MailAddress.TryCreate(email, out var parsed) && parsed.Address == email;
 
         internal static UserDto ToDto(User user) =>

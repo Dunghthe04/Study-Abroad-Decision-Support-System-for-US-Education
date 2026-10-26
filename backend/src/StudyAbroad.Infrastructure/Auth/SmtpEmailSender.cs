@@ -150,6 +150,30 @@ namespace StudyAbroad.Infrastructure.Auth
             await SendEmailAsync(toEmail, subject, body, ct);
         }
 
+        public async Task SendParentLinkChangedEmailAsync(string toEmail, string studentName, string parentLabel, bool linked, CancellationToken ct = default)
+        {
+            var student = WebUtility.HtmlEncode(studentName);
+            var parent = WebUtility.HtmlEncode(parentLabel);
+            var subject = linked
+                ? "[USAS] Phụ huynh đã xác nhận liên kết tài khoản"
+                : "[USAS] Liên kết phụ huynh đã bị hủy";
+            var title = linked ? "Liên kết phụ huynh đã được xác nhận" : "Liên kết phụ huynh đã bị hủy";
+            var content = linked
+                ? $"Phụ huynh <strong>{parent}</strong> đã đồng ý cho hệ thống xử lý dữ liệu và liên kết với tài khoản học sinh <strong>{student}</strong>."
+                : $"Liên kết giữa phụ huynh <strong>{parent}</strong> và học sinh <strong>{student}</strong> đã bị hủy; sự đồng ý xử lý dữ liệu (nếu có) đã được rút lại.";
+            var body = $"""
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
+                    <h2 style="color: #2563eb; margin-bottom: 16px;">{title}</h2>
+                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">{content}</p>
+                    <p style="font-size: 13px; color: #94a3b8; line-height: 1.5;">Bạn có thể xem trạng thái liên kết trong trang Tài khoản. Nếu không phải bạn hoặc người thân thực hiện, vui lòng đăng nhập và kiểm tra lại.</p>
+                    <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+                    <p style="font-size: 12px; color: #94a3b8; text-align: center;">USAS - Hệ thống hỗ trợ ra quyết định du học Mỹ</p>
+                </div>
+                """;
+
+            await SendEmailAsync(toEmail, subject, body, ct);
+        }
+
         private async Task SendEmailAsync(string toEmail, string subject, string htmlBody, CancellationToken ct)
         {
             if (string.IsNullOrWhiteSpace(_options.User) || string.IsNullOrWhiteSpace(_options.Password))
