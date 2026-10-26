@@ -88,7 +88,18 @@ Bảng này liệt kê chi tiết từng biện pháp kỹ thuật, hiểm họa
 - [x] **Xác nhận bảng điểm trích xuất (UC-12)**: Ô điểm đọc từ ảnh, điểm bất thường, ô bị ghi đè / trùng môn được tô cam; còn ô chưa xác nhận thì frontend không cho sang bước 3 và backend từ chối commit. Test: `CommitFlowAsync_WhenTranscriptCellsStillFlagged_Throws_ThenSucceedsAfterConfirm`, `advisor/tests/test_transcript_ocr_api.py`.
 - [x] **Unit Test Suite**: 100% passed test cases trong `ProfileFlowServiceTests.cs`, `AcademicProfileServiceTests.cs` (chỉ còn API đọc `GET /api/v1/profile/academic`; lưu hồ sơ đi qua `/api/v1/profile-flow/*`).
 
-### 3. User Story #16: Quản trị tài khoản & Phân quyền Admin (AC-4)
+### 3. Bảo vệ dữ liệu cá nhân của trẻ em (Q11, Luật BVDLCN 91/2025 Điều 24, NĐ 356/2025 Điều 6)
+*Người thực hiện: Tuấn Việt*
+
+- [x] **Xác định nhóm tuổi phía server**: Ngày sinh bắt buộc khi đăng ký học sinh/phụ huynh; tuổi tính lại mỗi request theo giờ Việt Nam, không tin tuổi từ client hay token.
+- [x] **Đồng ý của phụ huynh kiểm chứng được**: Bảng `consents` lưu chủ thể (học sinh), người đồng ý (`granted_by_user_id`), thời điểm, phiên bản nội dung (`policy_version`) và IP. Checkbox đồng ý không tick sẵn.
+- [x] **Chỉ đúng phụ huynh được mời mới đồng ý được**: Token mời ngẫu nhiên, lưu SHA-256, dùng một lần, hết hạn 7 ngày, gửi trong body POST; tài khoản chấp nhận phải có vai trò phụ huynh và email khớp email được mời; giới hạn gửi lại 5 lần/ngày.
+- [x] **Rút đồng ý → ngừng xử lý**: Phụ huynh rút thì `consents.granted = false`, link `revoked`; các API xử lý dữ liệu của học sinh dưới 16 trả 403 ngay ở request kế tiếp. Lịch sử không bị xóa.
+- [x] **Chặn tập trung theo bảng quy tắc**: `AgeFeatures.Rules` → policy ASP.NET Core (`AgeFeatureHandler`), 403 `age_restricted`. Áp cho lưu/upload/commit hồ sơ, gợi ý trường, chat trợ lý AI. Frontend chỉ ẩn nút, không phải lớp bảo vệ.
+- [x] **Chống tranh chấp ghi đồng thời**: Link mời dùng `xmin` làm concurrency token; chấp nhận/rút cùng lúc trả 409.
+- [x] **Unit Test Suite**: `AgeFeaturesTests.cs` (ma trận mọi quy tắc × nhóm tuổi × có/không đồng ý, handler khớp `blockedFeatures`, body 403), `ParentLinkServiceTests.cs`, `AgePolicyTests` và các test đăng ký theo tuổi trong `AuthServiceTests.cs`.
+
+### 4. User Story #16: Quản trị tài khoản & Phân quyền Admin (AC-4)
 *Người thực hiện: Tuấn Việt · Trạng thái: Đã nghiệm thu 100%*
 
 - [x] **Bảo vệ Endpoint Admin**: `[Authorize(Roles = UserRoles.Admin)]` trên `AdminUsersController`.

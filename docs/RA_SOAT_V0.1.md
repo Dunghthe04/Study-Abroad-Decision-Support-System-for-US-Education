@@ -48,6 +48,29 @@ Tài liệu này so 24 work item của sprint v0.1 (Jira USAS-1975 → 1996, 206
 | Q8 | Ngưỡng gợi ý | Theo dữ liệu từng trường (UC-69) |
 | Q9 | UC-12 | Tô cam ô đọc từ ảnh/scan, điểm bất thường, ô ghi đè/trùng môn; một nút xác nhận chung |
 | Q10 | UC-07 | Bước 6 Review là đủ |
+| Q11 | UC-01 đăng ký theo độ tuổi | Dưới 16 vẫn dùng được nhưng chưa lưu/phân tích hồ sơ cho tới khi phụ huynh đồng ý qua email; 16–17 dùng đủ trừ chia sẻ hồ sơ cho trung tâm; từ 18 như phụ huynh; tài khoản cũ chưa có ngày sinh không hạn chế; bỏ tự đăng ký trung tâm |
+
+### Q11 chi tiết: độ tuổi và đồng ý của phụ huynh
+
+**Căn cứ pháp lý:**
+
+- Luật Bảo vệ dữ liệu cá nhân 91/2025/QH15 (hiệu lực 01/01/2026), Điều 24: xử lý dữ liệu của trẻ em cần người đại diện theo pháp luật đồng ý; rút đồng ý thì phải ngừng xử lý.
+- Luật Trẻ em 2016: trẻ em là người dưới 16 tuổi. Bộ luật Dân sự: dưới 18 là người chưa thành niên.
+- Nghị định 356/2025/NĐ-CP, Điều 6: đồng ý phải kiểm chứng được (ai, lúc nào, nội dung gì) và không được tick sẵn.
+
+**Bảng nhóm tuổi** (tuổi tính theo ngày sinh, giờ Việt Nam, ở mỗi request nên tự hết hạn chế khi đủ tuổi):
+
+| Nhóm | Đăng ký | Bị chặn |
+|---|---|---|
+| Dưới 16, chưa có phụ huynh đồng ý | Bắt buộc ngày sinh + email phụ huynh | Lưu hồ sơ (wizard), upload bảng điểm, gợi ý trường, chat trợ lý AI, chia sẻ cho trung tâm |
+| Dưới 16, phụ huynh đã đồng ý | | Chia sẻ cho trung tâm |
+| 16–17 | Bắt buộc ngày sinh, email phụ huynh tùy chọn | Chia sẻ cho trung tâm |
+| Từ 18 | Bắt buộc ngày sinh | Không |
+| Phụ huynh | Bắt buộc ngày sinh, phải từ 18 tuổi | Không |
+
+**Luồng liên kết:** học sinh xác thực OTP xong thì hệ thống gửi mail mời tới phụ huynh (token một lần, lưu dạng SHA-256, hết hạn 7 ngày). Phụ huynh đăng nhập/đăng ký tài khoản phụ huynh đúng email được mời, đọc nội dung đồng ý và bấm "Đồng ý". Hệ thống ghi `consents` (`granted_by_user_id`, `policy_version`, `granted_ip`) và chuyển link sang `active`. Phụ huynh rút đồng ý → `consents.granted = false`, link `revoked`, học sinh dưới 16 quay về chế độ hạn chế; dữ liệu cũ giữ nguyên. Lịch sử link và consent không bao giờ bị xóa.
+
+**Code:** bảng quy tắc duy nhất ở `backend/src/StudyAbroad.Domain/Constants/AgeFeatures.cs`. Mỗi dòng tự thành một policy cùng tên (`Program.cs`); bị chặn trả 403 `{ code: "age_restricted", feature, needParentConsent }`. `GET /api/v1/auth/me` trả `ageGroup`, `parentConsentStatus`, `blockedFeatures` để frontend ẩn nút (`<AgeGate>`, `useAgeBlock`).
 
 ## 3. Đã sửa trên branch `fix/security-v0.1` (phần của Việt)
 
@@ -59,6 +82,10 @@ Tài liệu này so 24 work item của sprint v0.1 (Jira USAS-1975 → 1996, 206
 | `a4203a3` | UC-06 đổi mật khẩu khi đã đăng nhập |
 | `6447717` | GPA chỉ tính phía server; giới hạn kích thước nháp; validate độ dài; ẩn đường dẫn file |
 | `2203e2d` | UC-12 tô cam ô cần kiểm tra + nút "Tôi đã kiểm tra bảng điểm"; backend chặn commit khi còn ô chưa xác nhận |
+| `f71900a` | Q11: cột `users.date_of_birth`, bảng `parent_student_links`, `consents` thêm `granted_by_user_id` / `granted_ip` |
+| `b630f66` | Q11: đăng ký theo độ tuổi, mời phụ huynh qua email sau khi xác thực OTP, bỏ tự đăng ký trung tâm |
+| `f2a7b43` | Q11: trang `/parent-consent`, gửi lại / đổi email mời, rút đồng ý, mục liên kết ở trang tài khoản |
+| `c6e6c69` | Q11: chặn chức năng theo tuổi qua `AgeFeatures.Rules` (backend policy + frontend `AgeGate`) |
 
 ### ⚠️ Việc cần làm ngay (không sửa được bằng code)
 
@@ -117,6 +144,20 @@ Hệ quả: ai cũng đọc/sửa được hồ sơ tài chính và học thuậ
 - **CSP:** thiếu header Content-Security-Policy ở nginx.
 - **AuditLog:** bảng `AuditLog` có nhưng chưa ghi gì; nên ghi các sự kiện đăng nhập, khóa tài khoản, đổi mật khẩu, thao tác admin.
 - **PII trên máy người dùng:** nháp hồ sơ còn lưu trong `localStorage` của trình duyệt (có PII); nên xóa khi đăng xuất.
+
+### 4.6. Độ tuổi và phụ huynh (Q11): việc cho người làm tiếp
+
+- **Thêm chặn theo tuổi cho chức năng mới**, chỉ 3 chỗ, không sửa handler hay DB:
+  1. thêm một dòng vào `AgeFeatures.Rules`, ví dụ `[X] = new(MinAge: 18, ParentConsentUnlocks: false)`, và thêm tên vào `AGE_FEATURES` + `PARENT_CONSENT_UNLOCKS` trong `frontend/src/lib/age-features.ts`;
+  2. gắn `[Authorize(Policy = AgeFeatures.X)]` lên endpoint;
+  3. bọc trang hoặc nút bằng `<AgeGate feature="x">` (hoặc dùng `useAgeBlock`).
+  Test `AgeFeaturesTests` tự chạy qua mọi dòng trong `Rules`.
+- **Chia sẻ hồ sơ cho trung tâm (bảng `leads`):** chưa có API. Khi làm phải gắn `[Authorize(Policy = AgeFeatures.ShareWithCenter)]` và ghi `consent_id` (đồng ý riêng của người dùng cho mục đích `share_with_center`).
+- **Tài khoản trung tâm:** không còn tự đăng ký. `AdminUsersController` mới có GET, cần thêm API admin tạo tài khoản trung tâm.
+- **`APP_PUBLIC_URL`:** dùng để dựng link trong mail mời phụ huynh; production lấy `https://${DOMAIN}` (`docker-compose.prod.yml`), dev mặc định `http://localhost:3000`.
+- **Token mời** đi trong body POST (`invite/lookup`, `invite/accept`), không nằm trong URL API để không lọt vào log máy chủ; link trong mail vẫn có `?token=` cho trang frontend.
+- **Controller của Đức** (`FinancialProfileController`, `AcademicAnalysisController`) không có xác thực nên cũng không có chặn theo tuổi; xử lý theo mục 4.1 thì chặn sẽ chỉ còn qua wizard.
+- **Tài khoản cũ** chưa có ngày sinh không bị hạn chế. Nếu sau này muốn áp dụng, cần màn hình bắt bổ sung ngày sinh khi đăng nhập.
 
 ## 5. Kiểm thử
 
