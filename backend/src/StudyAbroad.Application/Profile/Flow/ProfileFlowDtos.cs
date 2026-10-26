@@ -11,7 +11,7 @@ public record ProfileFlowStateDto(
     [property: JsonPropertyName("currentStep")] int CurrentStep,
     [property: JsonPropertyName("completedSteps")] IReadOnlyList<int> CompletedSteps,
     [property: JsonPropertyName("draft")] ProfileFlowDraftDto Draft,
-    [property: JsonPropertyName("draftTranscript")] DraftTranscriptInfoDto? DraftTranscript,
+    [property: JsonPropertyName("draftTranscript")] DraftTranscriptFileDto? DraftTranscript,
     [property: JsonPropertyName("lastUpdatedAt")] DateTime? LastUpdatedAt,
     [property: JsonPropertyName("hasCommittedProfile")] bool HasCommittedProfile = false,
     [property: JsonPropertyName("lastCompletedStep")] int LastCompletedStep = 0
@@ -142,13 +142,28 @@ public record DraftTranscriptInfoDto(
     [property: JsonPropertyName("uploadedAt")] DateTime UploadedAt
 );
 
+/// <summary>Thông tin file nháp trả cho client: không có tên lưu trữ / đường dẫn trên server</summary>
+public record DraftTranscriptFileDto(
+    [property: JsonPropertyName("originalFileName")] string OriginalFileName,
+    [property: JsonPropertyName("fileSizeBytes")] long FileSizeBytes,
+    [property: JsonPropertyName("contentType")] string ContentType,
+    [property: JsonPropertyName("uploadedAt")] DateTime UploadedAt
+)
+{
+    public static DraftTranscriptFileDto From(DraftTranscriptInfoDto info) =>
+        new(info.OriginalFileName, info.FileSizeBytes, info.ContentType, info.UploadedAt);
+
+    public static DraftTranscriptFileDto? FromOrNull(DraftTranscriptInfoDto? info) =>
+        info is null ? null : From(info);
+}
+
 public record UploadDraftTranscriptResultDto(
-    [property: JsonPropertyName("draftTranscript")] DraftTranscriptInfoDto DraftTranscript,
+    [property: JsonPropertyName("draftTranscript")] DraftTranscriptFileDto DraftTranscript,
     [property: JsonPropertyName("extractedTerms")] IReadOnlyList<FlowTranscriptTermDto> ExtractedTerms,
     [property: JsonPropertyName("calculatedGpa4")] decimal? CalculatedGpa4,
     [property: JsonPropertyName("ocrMessage")] string? OcrMessage,
     [property: JsonPropertyName("warnings")] IReadOnlyList<string>? Warnings = null,
-    [property: JsonPropertyName("draftFile")] DraftTranscriptInfoDto? DraftFile = null
+    [property: JsonPropertyName("draftFile")] DraftTranscriptFileDto? DraftFile = null
 );
 
 public record SaveProfileDraftRequest(

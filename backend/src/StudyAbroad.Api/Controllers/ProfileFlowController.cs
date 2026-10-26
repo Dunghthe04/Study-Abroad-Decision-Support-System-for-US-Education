@@ -68,8 +68,15 @@ public class ProfileFlowController(IProfileFlowService flowService) : Controller
             return BadRequest(new { error = "Bước hiện tại phải từ 1 đến 6." });
         }
 
-        var updatedState = await flowService.SaveDraftAsync(userId.Value, req, ct);
-        return Ok(updatedState);
+        try
+        {
+            var updatedState = await flowService.SaveDraftAsync(userId.Value, req, ct);
+            return Ok(updatedState);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
     }
 
     /// <summary>

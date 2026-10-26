@@ -115,11 +115,9 @@ export interface AcademicYearDraft {
   subjects: SubjectDraft[];
 }
 
-/** File bảng điểm nháp — nằm ngoài draft (BE: DraftTranscriptInfoDto). */
+/** File bảng điểm nháp — nằm ngoài draft (BE: DraftTranscriptFileDto, không có đường dẫn lưu trữ). */
 export interface DraftTranscriptFile {
   originalFileName: string;
-  storedFileName: string;
-  relativePath: string;
   fileSizeBytes: number;
   contentType: string;
   uploadedAt: string;
