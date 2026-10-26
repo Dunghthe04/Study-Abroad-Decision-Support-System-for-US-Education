@@ -27,7 +27,8 @@ BỘ PHÂN LOẠI (Head)          BỘ GIẢI MÃ (Decoder)
 Dùng để dự đoán nhãn         Dùng để học tái tạo vector
 """
 
-import torch  # Xử lý dữ liệu dạng tensor trên CPU hoặc GPU.
+# Thư viện Pytorch để xử lý tensor và tính tonas
+import torch 
 from torch import nn  # Cung cấp các lớp để xây dựng mạng nơ-ron.
 
 from ml.skill_picker.data import LABELS
@@ -36,7 +37,6 @@ from ml.skill_picker.data import LABELS
 INPUT_DIM = 1024
 
 # Sau khi nén, vector chỉ còn 128 giá trị.
-# Có thể hiểu đây là bản tóm tắt thông tin mà mô hình học được.
 LATENT_DIM = 128
 
 # Nhân vector với 32 để các giá trị nhỏ trở nên lớn hơn,
@@ -45,6 +45,7 @@ LATENT_DIM = 128
 INPUT_SCALE = 32.0
 
 
+# Xây dựng mô hình, sử dụng cơ chế của pytorch để xây dựng và quản lý mạng nơ-ron
 class SkillCAE(nn.Module):
     """
     Định nghĩa mô hình gồm:
@@ -56,7 +57,7 @@ class SkillCAE(nn.Module):
     def __init__(
         self,
         n_labels: int = len(LABELS),
-        dropout: float = 0.3,
+        dropout: float = 0.3, #tỷ lệ Dropout được sử dụng trong Head.
     ) -> None:
         super().__init__()
 
@@ -72,6 +73,7 @@ class SkillCAE(nn.Module):
         #
         # Mỗi lớp Conv1D vừa trích xuất đặc trưng,
         # vừa giảm số vị trí xuống còn một nửa.
+        #ReLU(): thêm tính phi tuyến để mô hình học các quan hệ phức tạp hơn.
         self.encoder_conv = nn.Sequential(
             # 1 kênh -> 16 kênh; 1024 -> 512 vị trí.
             nn.Conv1d(1, 16, kernel_size=7, stride=2, padding=3),
@@ -85,7 +87,7 @@ class SkillCAE(nn.Module):
         )
 
         # Sau 3 lớp Conv1D, dữ liệu có 64 x 128 = 8192 giá trị.
-        # Linear nén 8192 giá trị xuống còn 128 giá trị.
+        # Linear nén 8192 giá trị xuống còn 128 giá trị.cố gắng giữ thông tin quan trọng
         self.encoder_fc = nn.Linear(
             64 * (INPUT_DIM // 8),
             LATENT_DIM,
@@ -107,6 +109,7 @@ class SkillCAE(nn.Module):
         # Tăng dần số vị trí:
         # 128 -> 256 -> 512 -> 1024.
         # ConvTranspose1D học cách tạo lại các giá trị ở mỗi bước.
+        # lớp kết nối đầy đủ (Fully Connected Layer) dùng để mở rộng vector latent từ 128 số thành 8192 số
         self.decoder_conv = nn.Sequential(
             nn.ConvTranspose1d(
                 64,
@@ -158,11 +161,13 @@ class SkillCAE(nn.Module):
         """
 
         # Nhân 32 để điều chỉnh thang giá trị.
+        # Conv1D yêu cầu 3 chiều (B, số_kênh, chiều_dài)
         # unsqueeze(1) thêm chiều kênh:
         # (B, 1024) -> (B, 1, 1024).
         h = self.encoder_conv((x * INPUT_SCALE).unsqueeze(1))
 
         # Sau Conv1D: (B, 64, 128).
+        # flatten(1) giữ nguyên chiều đầu tiên là B = 3, rồi gộp hai chiều còn lại thành một chiều.
         # Gộp 64 kênh và 128 vị trí thành 8192 giá trị:
         # (B, 64, 128) -> (B, 8192).
         h = h.flatten(1)
