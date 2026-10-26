@@ -12,6 +12,9 @@ public class ConsentConfiguration : IEntityTypeConfiguration<Consent>
         b.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
         b.Property(x => x.Purpose).HasMaxLength(32).IsRequired();
         b.Property(x => x.PolicyVersion).HasMaxLength(16);
+        b.HasOne<User>().WithMany().HasForeignKey(x => x.GrantedByUserId).OnDelete(DeleteBehavior.SetNull);
+        // 45 ký tự đủ cho IPv6 dạng dài nhất
+        b.Property(x => x.GrantedIp).HasMaxLength(45);
         b.HasIndex(x => new { x.UserId, x.Purpose });
     }
 }

@@ -14,7 +14,11 @@ namespace StudyAbroad.Domain.Entities
         public string FullName { get; set; } = string.Empty;
         public string Role { get; set; } = string.Empty;
         public string Status { get; set; } = string.Empty;
+        /// <summary>Cột cũ (ô tick "phụ huynh đã biết"), giữ vì còn dữ liệu, không dùng nữa: thay bằng ParentStudentLink.</summary>
         public bool ParentAcknowledged { get; set; }
+
+        /// <summary>Ngày sinh khai khi đăng ký, dùng tính nhóm tuổi theo luật VN. Null = tài khoản cũ / center / admin, không bị giới hạn theo tuổi.</summary>
+        public DateOnly? DateOfBirth { get; set; }
 
         /// <summary>[USAS-362] Số điện thoại liên hệ cá nhân (chỉ dùng lưu hồ sơ/tư vấn liên lạc, không dùng đăng nhập hay OTP để tránh tốn phí SMS).</summary>
         public string? Phone { get; set; }
