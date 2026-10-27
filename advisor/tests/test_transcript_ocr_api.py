@@ -392,8 +392,12 @@ def test_scores_read_from_image_are_flagged_for_review():
 def test_outlier_score_is_flagged_and_text_pdf_scores_are_not():
     reader = TranscriptReader(FakeOllama(), Settings(_env_file=None))  # type: ignore[arg-type,call-arg]
     terms = [
-        _RawTerm(label="Lớp 10 HK1", grade_name="Lớp 10", semester=1,
-                 scores={"Toán": 8.0, "Vật lý": 7.5, "Ngữ văn": 7.8, "Tiếng Anh": 8.2, "Tin học": 2.0}),
+        _RawTerm(
+            label="Lớp 10 HK1",
+            grade_name="Lớp 10",
+            semester=1,
+            scores={"Toán": 8.0, "Vật lý": 7.5, "Ngữ văn": 7.8, "Tiếng Anh": 8.2, "Tin học": 2.0},
+        ),
     ]
 
     async def fake_read_file(_file_item, _file_name):
