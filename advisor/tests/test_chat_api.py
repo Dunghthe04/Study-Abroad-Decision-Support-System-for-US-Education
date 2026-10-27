@@ -10,7 +10,7 @@ from app.services.chat_flow import QUESTIONS, ChatFlow
 def make_client() -> TestClient:
     # Không dùng "with" nên không chạy lifespan, không cần Ollama, Gemini
     app = create_app()
-    app.dependency_overrides[get_chat_flow] = ChatFlow
+    app.dependency_overrides[get_chat_flow] = lambda: ChatFlow()
     return TestClient(app)
 
 

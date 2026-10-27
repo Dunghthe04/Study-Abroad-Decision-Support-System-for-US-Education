@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 import httpx  # gửi request đến ollama
@@ -13,6 +14,7 @@ from app.services.gemini import GeminiClient
 from app.services.ollama import OllamaClient
 from app.services.picker import Picker
 from app.services.scorer import Scorer
+from app.services.skill_picker_loader import load_skill_picker
 from app.services.transcript_reader import TranscriptReader
 
 
@@ -46,12 +48,23 @@ async def lifespan(app: FastAPI):
         app.state.scorer = Scorer(gemini, settings.gemini_model)
         app.state.picker = Picker(gemini, settings.gemini_model)
         app.state.explainer = Explainer(app.state.llm, settings.llm_model)
-        app.state.chat_flow = ChatFlow()
+        app.state.chat_flow = ChatFlow(picker=load_skill_picker(http))
         yield
+
+
+# Log của advisor (tên bắt đầu bằng "advisor") mặc định bị uvicorn bỏ qua nên phải tự bật mức INFO
+def setup_logging() -> None:
+    log = logging.getLogger("advisor")
+    log.setLevel(logging.INFO)
+    if not log.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
+        log.addHandler(handler)
 
 
 def create_app() -> FastAPI:
     """Tạo ứng dụng. Viết thành hàm để test có thể tạo app mới, độc lập cho mỗi lần chạy."""
+    setup_logging()
     app = FastAPI(title="Study Abroad Advisor Service", version="0.1.0", lifespan=lifespan)
     app.include_router(health.router)
     # Các route gọi Ollama đều cần khoá; health để mở cho docker healthcheck
