@@ -60,7 +60,21 @@ public class ChatServiceTests
         Assert.Equal("{\"currentStep\":\"B4\"}", other.StateJson);
     }
 
-    private sealed class FakeAdvisor(string nextStep) : IAdvisorClient
+    [Fact]
+    public async Task QuickRepliesAndWidget_FromAdvisor_ReachTheBrowser()
+    {
+        var replies = new List<QuickReply> { new("Điền bằng form", "Điền bằng form") };
+        var widget = new Widget("major");
+        var advisor = new FakeAdvisor("B1", replies, widget);
+
+        var res = await new ChatService(advisor, new FakeSessions()).ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Equal(replies, res.QuickReplies);
+        Assert.Equal(widget, res.Widget);
+        Assert.Null(res.State); // trạng thái nội bộ vẫn không lộ ra ngoài
+    }
+
+    private sealed class FakeAdvisor(string nextStep, IReadOnlyList<QuickReply>? replies = null, Widget? widget = null) : IAdvisorClient
     {
         public AdvisorChatRequest? LastRequest { get; private set; }
 
@@ -68,7 +82,7 @@ public class ChatServiceTests
         {
             LastRequest = request;
             var state = JsonDocument.Parse($"{{\"currentStep\":\"{nextStep}\"}}").RootElement;
-            return Task.FromResult(new AdvisorChatResponse("ok", [], null, state));
+            return Task.FromResult(new AdvisorChatResponse("ok", [], null, state, QuickReplies: replies, Widget: widget));
         }
 
         public Task<EcResponseDto> ReadEcAsync(EcRequestDto request, CancellationToken ct = default) => throw new NotSupportedException();

@@ -4,7 +4,7 @@ import json
 import logging
 from dataclasses import dataclass
 
-from app.schemas.chat import ChatMessage, ChatRequest, ChatState, ProfileField
+from app.schemas.chat import ChatMessage, ChatRequest, ChatState, ProfileField, QuickReply, Widget
 from app.services.chat_flow import (
     NEED_MAJOR,
     NEED_PROFILE,
@@ -37,6 +37,18 @@ class FakePicker:
         if self._error:
             raise self._error
         return FakePrediction(self._skills, {s: 0.9 for s in self._skills})
+
+
+class RichHandler:
+    """Skill giả: trả lời kèm nút gợi ý và/hoặc công cụ nhập."""
+
+    def __init__(
+        self, answer: str, quick_replies: list[QuickReply] | None = None, widget: Widget | None = None
+    ):
+        self._output = SkillOutput(answer, quick_replies or [], widget)
+
+    async def run(self, state: ChatState, message: str) -> SkillOutput:
+        return self._output
 
 
 class RecordingHandler:
@@ -73,6 +85,41 @@ async def test_two_skills_run_in_fixed_order_and_answers_are_joined():
     assert ran == ["skill_ho_so", "skill_tra_loi"]  # nhưng chạy skill của bước trước
     assert res.answer == "trả lời của skill_ho_so\n\ntrả lời của skill_tra_loi"
     assert res.skills == ["skill_ho_so", "skill_tra_loi"]
+
+
+async def test_response_carries_quick_replies_and_widget_from_the_skill():
+    buttons = [QuickReply(label="Trả lời trong chat", value="Trả lời trong chat")]
+    widget = Widget(type="major", data={"options": ["Computer Science"]})
+    handlers = {"skill_ho_so": RichHandler("hỏi ngành", buttons, widget)}
+
+    res = await ChatFlow(FakePicker("skill_ho_so"), handlers).reply(request("em chưa rõ"))
+
+    assert res.quick_replies == buttons
+    assert res.widget == widget
+
+
+async def test_response_has_no_buttons_or_widget_by_default():
+    handlers = {"skill_ho_so": RichHandler("trả lời thường")}
+
+    res = await ChatFlow(FakePicker("skill_ho_so"), handlers).reply(request("em được 1420"))
+
+    assert res.quick_replies == []
+    assert res.widget is None
+    assert res.profile == {} and res.profile_changed == []  # điền ở việc 1.5
+
+
+async def test_when_two_skills_give_buttons_the_later_one_wins_but_earlier_is_kept_if_later_has_none():
+    first = [QuickReply(label="A", value="a")]
+    second = [QuickReply(label="B", value="b")]
+    both = {"skill_ho_so": RichHandler("1", first), "skill_tra_loi": RichHandler("2", second)}
+    only_first = {"skill_ho_so": RichHandler("1", first), "skill_tra_loi": RichHandler("2")}
+    picker = ("skill_tra_loi", "skill_ho_so")
+
+    later_wins = await ChatFlow(FakePicker(*picker), both).reply(request("SAT 1420, I-20 là gì ạ?"))
+    kept = await ChatFlow(FakePicker(*picker), only_first).reply(request("SAT 1420, I-20 là gì ạ?"))
+
+    assert later_wins.quick_replies == second  # skill_ho_so chạy trước, skill_tra_loi chạy sau và thắng
+    assert kept.quick_replies == first  # skill chạy sau không đưa nút thì giữ nút của skill trước
 
 
 async def test_picker_receives_step_question_message_and_missing_fields():

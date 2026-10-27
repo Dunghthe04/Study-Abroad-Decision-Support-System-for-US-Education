@@ -32,12 +32,26 @@ export interface Citation {
   url: string | null;
   snippet: string | null;
 }
+// Nút gợi ý: bấm thì gửi `value` như tin nhắn của học sinh
+export interface QuickReply {
+  label: string;
+  value: string;
+}
+
+// Công cụ nhập ngay trong chat; frontend vẽ theo `type`
+export interface ChatWidget {
+  type: "major" | "review" | "budget" | "scholarship";
+  data?: Record<string, unknown> | null;
+}
 
 export interface AdvisorChatResponse {
   answer: string;
   citations: Citation[];
   disclaimer: string | null;
   sessionId: string | null;
+  quickReplies?: QuickReply[] | null;
+  widget?: ChatWidget | null;
+  profileChanged?: string[] | null; // khóa hồ sơ chat vừa đổi; form cần nạp lại khi có giá trị
 }
 
 // [USAS-362] Kiểu dữ liệu xác thực và người dùng

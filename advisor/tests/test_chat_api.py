@@ -28,6 +28,10 @@ def test_new_chat_starts_with_b0_question():
     assert body["state"]["currentStep"] == "B0"  # trả camelCase
     assert body["state"]["lastQuestion"] == QUESTIONS["B0.1"]
     assert body["state"]["asked"] == {"B0.1": 1}
+    # trường mới của hợp đồng: có mặt, rỗng, camelCase để .NET đọc được
+    assert body["quickReplies"] == []
+    assert body["widget"] is None
+    assert body["profileChanged"] == []
 
 
 def test_existing_state_is_kept():
