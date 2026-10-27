@@ -31,6 +31,8 @@ class ChatState(CamelModel):
     branch: str | None = None
     profile: dict[str, ProfileField] = {}
     last_question: str = ""  # câu hệ thống vừa hỏi, là đầu vào của bước chọn skill
+    # mã câu đang chờ học sinh trả lời, ví dụ "B2.D2"; None = không có câu nào chờ
+    question_id: str | None = None
     asked: dict[str, int] = {}  # mã câu hỏi → số lần đã hỏi (tối đa 2) ví dụ câu hỏi B0 hỏi tối đa 2
     return_to: Step | None = None  # bước dở cần quay lại sau B5, B6
 

@@ -10,7 +10,7 @@ import time
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from app.schemas.chat import ChatRequest, ChatResponse, ChatState
+from app.schemas.chat import ChatRequest, ChatResponse, ChatState, Step
 from app.services.skill_rules import Plan, missing_fields, plan_skills
 
 # Tạo 1 logger
@@ -26,16 +26,27 @@ NEED_PROFILE = (
 NEED_RESULTS = "Bạn cần xem danh sách trường gợi ý trước, rồi mình mới phân tích tiếp được nhé."
 
 
-# Ghi lại câu vừa hỏi vào Chatsate, lưu last_question và tăng số lần hỏi
+# Ghi lại câu vừa hỏi vào Chatsate, lưu last_question, question_id và tăng số lần hỏi
 def ask(state: ChatState, question_id: str) -> str:
-    # Lưu câu vừa hỏi
+    # Lưu câu vừa hỏi, cùng mã câu để lượt sau biết học sinh đang trả lời câu nào
     state.last_question = QUESTIONS[question_id]
+    state.question_id = question_id
     # Tăng số lần hỏi
     state.asked[question_id] = state.asked.get(question_id, 0) + 1
     return state.last_question
 
 
+# Chuyển sang bước khác: mọi skill đổi bước đều gọi hàm này, không gán current_step trực tiếp
+# Xóa câu đang chờ của bước cũ; nếu bước mới có câu hỏi thì gọi ask() SAU go_to
+def go_to(state: ChatState, step: Step) -> None:
+    state.current_step = step
+    state.last_question = ""
+    state.question_id = None
+
+
 # Model chọn skill: chỉ cần có hàm predict trả về .skills (đã xếp xác suất cao trước) và .probs
+# Class này dùng để mô tả kiểu của model chọn skill, không cần khởi tạo
+# Giống interface
 class SkillChooser(Protocol):
     async def predict(self, step: str, last_question: str, message: str, missing: list[str]) -> Any: ...
 
@@ -62,7 +73,7 @@ class OffTopicHandler:
 # Skill tạm: học sinh muốn dừng thì chào và đánh dấu kết thúc
 class EndHandler:
     async def run(self, state: ChatState, message: str) -> SkillOutput:
-        state.current_step = "END"
+        go_to(state, "END")
         return SkillOutput("Chúc bạn thành công. Khi cần bạn cứ quay lại nhé.")
 
 
@@ -71,7 +82,9 @@ class ChatFlow:
         self, picker: SkillChooser | None = None, handlers: dict[str, SkillHandler] | None = None
     ) -> None:
         self._picker = picker  # None = chưa có model: luôn dùng skill của bước hiện tại
+        # Nạp các kills và đối tượng skill mặc định
         self._handlers: dict[str, SkillHandler] = {"ngoai_le": OffTopicHandler(), "ket_thuc": EndHandler()}
+        # Thêm các skill khác nếu có
         self._handlers.update(handlers or {})
 
     async def reply(self, req: ChatRequest) -> ChatResponse:
@@ -95,8 +108,11 @@ class ChatFlow:
         # 3. Chạy từng skill, ghép các câu trả lời
         answers: list[str] = []
         for skill in plan.skills:
+            # Lấy ra handler của skill, nếu không có thì trả NOT_READY
             handler = self._handlers.get(skill)
+            # Nếu có handler chạy đối tượng skill và lấy câu trả lời, nếu không có handler thì trả NOT_READY
             answers.append((await handler.run(state, message)).answer if handler else NOT_READY)
+        # Nếu bị chặn thì thêm câu trả lời
         answers += blocked_answers(plan)
 
         # 4. Ghi log (dữ liệu để train lại model và kiểm tra random check)

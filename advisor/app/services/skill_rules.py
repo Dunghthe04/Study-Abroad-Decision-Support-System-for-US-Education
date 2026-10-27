@@ -78,7 +78,7 @@ def is_answered(name: str, field_value: ProfileField | None) -> bool:
     if field_value is None:
         return False
 
-    # Nếu có giá trị + name là gpa or ngân sách thì đã xác nhận chưa
+    # Nếu có giá trị bắt buộc thì phải có giá trị đã xác nhận, không được bỏ qua
     if name in MUST_HAVE_VALUE:
         return field_value.status == "confirmed"
     return field_value.status in ("confirmed", "none", "unknown")
