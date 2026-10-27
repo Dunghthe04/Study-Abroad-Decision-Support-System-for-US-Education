@@ -4,6 +4,7 @@ Chạy (cần Ollama đang bật và đã `ollama pull bge-m3`):  python -m ml.s
 Ra: ml/skill_picker/artifacts/vectors.npy (mỗi dòng dữ liệu một vector) và vectors_meta.json
 """
 
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -36,6 +37,14 @@ def embed_texts(texts: list[str], client: httpx.Client) -> np.ndarray:
     return vectors
 
 
+# khi chạy embed-> tạo ra mã băm r lưu vào vectors_meta.json. Khi train kiểm tra mã băm thay đổi k , khác nhau báo lỗi, giống train tiếp
+# Dấu vân tay của toàn bộ đoạn chữ đưa cho BGE-M3: đổi bất kỳ chữ nào (câu hỏi, tin nhắn, khóa thiếu) thì đổi.
+# Lưu cùng vector để biết vector còn khớp với file dữ liệu không
+def texts_hash(rows: list[dict[str, str]]) -> str:
+    joined = "\n".join(build_text(r) for r in rows)
+    return hashlib.sha256(joined.encode("utf-8")).hexdigest()
+
+
 def main() -> None:
     sys.stdout.reconfigure(encoding="utf-8")  # PowerShell cũ in tiếng Việt bị lỗi mã hóa nếu thiếu dòng này
     rows = load_rows()
@@ -56,7 +65,10 @@ def main() -> None:
     np.save(VECTORS_PATH, vectors)
     # ids cùng thứ tự với vectors: dòng i của vectors là của rows[i]
     META_PATH.write_text(
-        json.dumps({"model": MODEL, "dim": DIM, "ids": [r["id"] for r in rows]}, ensure_ascii=False),
+        json.dumps(
+            {"model": MODEL, "dim": DIM, "ids": [r["id"] for r in rows], "texts_hash": texts_hash(rows)},
+            ensure_ascii=False,
+        ),
         encoding="utf-8",
     )
     print(f"Đã lưu {vectors.shape[0]} vector, mỗi vector {vectors.shape[1]} số -> {VECTORS_PATH}")

@@ -6,16 +6,21 @@ import json
 import numpy as np
 
 from ml.skill_picker.data import labels_to_vector, load_rows
-from ml.skill_picker.embed import META_PATH, VECTORS_PATH
+from ml.skill_picker.embed import META_PATH, VECTORS_PATH, texts_hash
 
 
 # Đọc bảng vector và danh sách id đi kèm
 def load_vectors() -> tuple[np.ndarray, list[str]]:  # np.ndarray : 1 mảng chứa các vector
     # Đọc file vector (n hàng, 1024 cột)
     vectors = np.load(VECTORS_PATH)
-    # Đọc file -> chuyển dạng python -> lấy id
-    ids = json.loads(META_PATH.read_text(encoding="utf-8"))["ids"]
-    return vectors, ids
+    # Đọc file thông tin đi kèm vector
+    meta = json.loads(META_PATH.read_text(encoding="utf-8"))
+    # Chữ trong file csv đã đổi so với lúc tính vector thì vector không còn đúng, phải tính lại
+    if meta.get("texts_hash") != texts_hash(load_rows()):
+        raise ValueError(
+            "Chữ trong file dữ liệu đã đổi so với lúc tính vector. Chạy lại: python -m ml.skill_picker.embed"
+        )
+    return vectors, meta["ids"]
 
 
 # Trả về {"train": (X, Y, rows), "val": (...), "test": (...)}
