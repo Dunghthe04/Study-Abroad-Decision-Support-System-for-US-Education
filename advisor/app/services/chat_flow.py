@@ -31,7 +31,7 @@ def ask(state: ChatState, question_id: str) -> str:
     # Lưu câu vừa hỏi
     state.last_question = QUESTIONS[question_id]
     # Tăng số lần hỏi
-    state.asked[question_id] = state.asked.get(question_id,0) + 1
+    state.asked[question_id] = state.asked.get(question_id, 0) + 1
     return state.last_question
 
 
