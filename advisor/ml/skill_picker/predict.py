@@ -23,17 +23,17 @@ from ml.skill_picker.embed import DIM, MODEL, OLLAMA_URL
 from ml.skill_picker.model import SkillCAE
 from ml.skill_picker.train_cae import CONFIG_PATH, MODEL_PATH
 
-# Hàm đổi 1 đoạn chữ thành vector 1024 số (async vì chat chạy bất đồng bộ)
+# Callable là kiểu của hàm, dùng mô tả kiểu của hàm
 Embedder = Callable[[str], Awaitable[np.ndarray]]
 
 
-# Class lưu trữ kết quả dự đoán
+# Class lưu trữ kết quả dự đoán, ko cần khởi tạo 
 @dataclass
 class Prediction:
     skills: list[str]  # Các nhãn đạt ngưỡng, cao xếp trước
     probs: dict[str, float]  # xác xuất của cả 11 nhãn ( ghi log)
 
-    @property
+    @property # Thao tác hàm như thuộc tính, không cần gọi () khi truy cập
     def unsure(self) -> bool:
         """Không nhãn nào đạt ngưỡng: hệ thống dùng skill bước hiện tại"""
         return not self.skills
@@ -52,7 +52,7 @@ class OllamaEmbedder:
             raise ValueError(f"Vector sai kích thước: {vector.shape}, cần {(DIM,)}")
         return vector
 
-
+# Chọn skill cho 1 tin nhắn: nạp model, embedder, dự đoán skill
 class SkillPicker:
     def __init__(self, model: Any, labels: list[str], threshold: float, embedder: Embedder) -> None:
         self._model = model

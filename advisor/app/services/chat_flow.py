@@ -36,6 +36,8 @@ def ask(state: ChatState, question_id: str) -> str:
 
 
 # Model chọn skill: chỉ cần có hàm predict trả về .skills (đã xếp xác suất cao trước) và .probs
+# Class này dùng để mô tả kiểu của model chọn skill, không cần khởi tạo
+# Giống interface
 class SkillChooser(Protocol):
     async def predict(self, step: str, last_question: str, message: str, missing: list[str]) -> Any: ...
 
@@ -71,7 +73,9 @@ class ChatFlow:
         self, picker: SkillChooser | None = None, handlers: dict[str, SkillHandler] | None = None
     ) -> None:
         self._picker = picker  # None = chưa có model: luôn dùng skill của bước hiện tại
+        # Nạp các kills và đối tượng skill mặc định
         self._handlers: dict[str, SkillHandler] = {"ngoai_le": OffTopicHandler(), "ket_thuc": EndHandler()}
+        # Thêm các skill khác nếu có
         self._handlers.update(handlers or {})
 
     async def reply(self, req: ChatRequest) -> ChatResponse:
@@ -95,8 +99,11 @@ class ChatFlow:
         # 3. Chạy từng skill, ghép các câu trả lời
         answers: list[str] = []
         for skill in plan.skills:
+            # Lấy ra handler của skill, nếu không có thì trả NOT_READY
             handler = self._handlers.get(skill)
+            # Nếu có handler chạy đối tượng skill và lấy câu trả lời, nếu không có handler thì trả NOT_READY
             answers.append((await handler.run(state, message)).answer if handler else NOT_READY)
+        # Nếu bị chặn thì thêm câu trả lời
         answers += blocked_answers(plan)
 
         # 4. Ghi log (dữ liệu để train lại model và kiểm tra random check)
