@@ -1,7 +1,7 @@
 """Bước 2.9: luật code chọn skill chạy thật. Hàm thuần nên không cần AI, DB hay Ollama."""
 
 from app.schemas.chat import ChatState, ProfileField
-from app.services.skill_rules import Blocked, missing_fields, plan_skills
+from app.services.skill_rules import REQUIRED_B3, Blocked, missing_fields, plan_skills
 
 
 def state(step: str = "B2", **fields: str) -> ChatState:
@@ -11,14 +11,8 @@ def state(step: str = "B2", **fields: str) -> ChatState:
     )
 
 
-FULL_PROFILE = dict(
-    education_system="confirmed",
-    gpa="confirmed",
-    english="confirmed",
-    budget="confirmed",
-    scholarship_need="confirmed",
-    activities="confirmed",
-)
+B3_PROFILE = dict(target_level="confirmed", gpa="confirmed", english="confirmed", budget="confirmed")
+FULL_PROFILE = dict(B3_PROFILE, major="confirmed", scholarship="confirmed")  # đủ cho cả B4
 
 
 def test_unsure_model_falls_back_to_current_step_skill():
@@ -73,23 +67,54 @@ def test_unknown_labels_are_ignored():
 
 
 def test_assessment_is_blocked_until_profile_is_complete():
-    plan = plan_skills(state("B3", education_system="confirmed", gpa="confirmed"), ["skill_danh_gia"])
+    plan = plan_skills(state("B3", gpa="confirmed"), ["skill_danh_gia"])
 
     assert plan.skills == []
     assert plan.blocked == [Blocked("skill_danh_gia", "thieu_ho_so")]
-    assert plan.missing == ["english", "budget", "scholarship_need", "activities"]  # đúng thứ tự hỏi
+    assert plan.missing == ["target_level", "english", "budget"]  # đúng thứ tự hỏi, chưa đòi ngành
 
 
-def test_assessment_runs_when_profile_is_complete():
-    plan = plan_skills(state("B3", **FULL_PROFILE), ["skill_danh_gia"])
+def test_assessment_runs_without_major_or_scholarship():
+    plan = plan_skills(state("B3", **B3_PROFILE), ["skill_danh_gia"])
 
     assert plan.skills == ["skill_danh_gia"]
     assert not plan.blocked
     assert plan.missing == []
 
 
-def test_none_and_unknown_count_as_answered_but_not_for_gpa_and_budget():
-    profile = dict(FULL_PROFILE, english="none", activities="unknown")
+def test_assessment_still_runs_when_major_is_unknown():
+    profile = dict(B3_PROFILE, major="unknown")  # chưa rõ ngành vẫn đánh giá được hồ sơ
+    plan = plan_skills(state("B3", **profile), ["skill_danh_gia"])
+
+    assert plan.skills == ["skill_danh_gia"]
+
+
+def test_roadmap_is_blocked_for_major_when_major_is_the_first_missing():
+    profile = dict(FULL_PROFILE, major="unknown")  # chỉ ngành chưa rõ
+    plan = plan_skills(state("B4", **profile), ["skill_lo_trinh"])
+
+    assert plan.skills == []
+    assert plan.blocked == [Blocked("skill_lo_trinh", "thieu_nganh")]
+    assert plan.missing == ["major"]  # học bổng đã có, chỉ còn ngành
+
+
+def test_roadmap_asks_profile_first_when_other_fields_are_missing_too():
+    profile = dict(FULL_PROFILE, gpa="unknown", major="unknown")  # GPA đứng trước ngành trong thứ tự hỏi
+    plan = plan_skills(state("B4", **profile), ["skill_lo_trinh"])
+
+    assert plan.blocked == [Blocked("skill_lo_trinh", "thieu_ho_so")]
+    assert plan.missing == ["gpa", "major"]
+
+
+def test_roadmap_runs_when_profile_is_complete():
+    plan = plan_skills(state("B4", **FULL_PROFILE), ["skill_lo_trinh"])
+
+    assert plan.skills == ["skill_lo_trinh"]
+    assert not plan.blocked
+
+
+def test_none_and_unknown_count_as_answered_but_not_for_must_have_fields():
+    profile = dict(FULL_PROFILE, english="none", scholarship="unknown")
     assert missing_fields(state(**profile).profile) == []
 
     profile = dict(FULL_PROFILE, gpa="unknown")  # GPA không được bỏ qua
@@ -97,6 +122,19 @@ def test_none_and_unknown_count_as_answered_but_not_for_gpa_and_budget():
 
     profile = dict(FULL_PROFILE, budget="said_in_B0")  # tự nói chưa xác nhận
     assert missing_fields(state(**profile).profile) == ["budget"]
+
+    profile = dict(FULL_PROFILE, target_level="unknown")  # bậc học không được bỏ qua
+    assert missing_fields(state(**profile).profile) == ["target_level"]
+
+    profile = dict(FULL_PROFILE, major="unknown")  # "chưa rõ" ngành: B4 vẫn thiếu
+    assert missing_fields(state(**profile).profile) == ["major"]
+
+
+def test_missing_fields_can_be_counted_for_the_b3_milestone_only():
+    profile = dict(B3_PROFILE, major="unknown")
+
+    assert missing_fields(state(**profile).profile, REQUIRED_B3) == []
+    assert missing_fields(state(**profile).profile) == ["major", "scholarship"]  # mặc định tính theo B4
 
 
 def test_explain_and_what_if_need_a_school_list():

@@ -17,13 +17,43 @@ from app.services.skill_rules import Plan, missing_fields, plan_skills
 logger = logging.getLogger("advisor.chat")
 
 # Câu hỏi lấy nguyên văn từ framework, AI không tự đặt câu hỏi
-QUESTIONS = {"B0.1": "Chào bạn, mình là trợ lý tư vấn du học Mỹ. Bạn đang cần mình giúp gì?"}
+# Câu hỏi lấy nguyên văn từ framework, AI không tự đặt câu hỏi.
+# Chữ phải giống hệt cột last_question trong ml/skill_picker/data/skill_picker.csv (có test kiểm tra),
+# vì model chọn skill nhìn câu này làm đầu vào.
+# X1 đến X3: câu chuyển bước, framework chưa đặt mã nên đặt tạm.
+QUESTIONS = {
+    "B0.1": "Chào bạn, mình là trợ lý tư vấn du học Mỹ. Bạn đang cần mình giúp điều gì?",
+    "B0.2": "Bạn muốn mình tìm trường theo hồ sơ của bạn, hay bạn đang có câu hỏi cụ thể?",
+    "B1.1": "Hiện bạn đang học lớp mấy, hoặc đang làm gì?",
+    "B1.2": "Bạn muốn sang Mỹ học bậc nào?",
+    "B1.3": "Bạn định học ngành gì? Chưa chắc cũng không sao, bạn cứ kể vài môn bạn thích.",
+    "B1.4": "Bạn dự định nhập học khoảng khi nào?",
+    "D1": "Bạn học chương trình nào: THPT Việt Nam, IB, A-level hay AP?",
+    "D2": "Điểm trung bình từng học kỳ của bạn là bao nhiêu? Bạn có thể tải ảnh học bạ cho nhanh.",
+    "D3": "Bạn đã thi SAT hoặc ACT chưa? Nếu rồi thì được bao nhiêu điểm?",
+    "E1": "Bạn đã có chứng chỉ tiếng Anh nào chưa (IELTS, TOEFL, Duolingo)? Điểm bao nhiêu, thi khi nào?",
+    "E2": "Bạn dự định thi khi nào, mục tiêu khoảng bao nhiêu điểm?",
+    "F1": "Gia đình bạn có thể chi khoảng bao nhiêu mỗi năm cho cả học phí và sinh hoạt?",
+    "F2": "Bạn cần học bổng ở mức nào: không cần, nên có, hay bắt buộc phải có mới đi được?",
+    "F3": "Chi phí du học chủ yếu do ai chi trả?",
+    "D4": "Bạn kể giúp mình các hoạt động ngoại khóa: tên, vai trò, phạm vi (trường, quận, thành phố, quốc gia, quốc tế), làm trong bao lâu.",
+    "D5": "Bạn có giải thưởng nào không? Tên giải và cấp giải?",
+    "N1": "Bạn có người thân ở Mỹ không?",
+    "N2": "Bạn đã tìm hiểu bang nào ở Mỹ chưa?",
+    "N3": "Bạn thích trường công hay trường tư?",
+    "N4": "Bạn từng bị từ chối visa chưa?",
+    "X1": "Bạn kiểm tra giúp mình hồ sơ ở trên, đúng không?",
+    "X2": "Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?",
+    "X3": "Bạn có muốn mình xem hồ sơ và gợi ý trường không?",
+}
+
 
 NOT_READY = "Phần này mình đang hoàn thiện, bạn quay lại sau nhé."
 NEED_PROFILE = (
     "Mình cần biết thêm về hồ sơ của bạn trước khi làm bước này. Bạn cho mình xin thêm thông tin nhé."
 )
 NEED_RESULTS = "Bạn cần xem danh sách trường gợi ý trước, rồi mình mới phân tích tiếp được nhé."
+NEED_MAJOR = "Để gợi ý trường mình cần biết ngành bạn muốn học. Bạn chọn ngành giúp mình nhé."
 
 
 # Ghi lại câu vừa hỏi vào Chatsate, lưu last_question, question_id và tăng số lần hỏi
@@ -146,11 +176,17 @@ def last_user_message(req: ChatRequest) -> str:
 
 
 # Skill bị chặn thì nói cho học sinh biết vì sao
+# Câu nói cho học sinh biết vì sao skill bị chặn, theo lý do
+BLOCKED_ANSWER = {
+    "thieu_ho_so": NEED_PROFILE,
+    "thieu_nganh": NEED_MAJOR,
+    "chua_co_danh_sach": NEED_RESULTS,
+}
+
+
+# Skill bị chặn thì nói cho học sinh biết vì sao
 def blocked_answers(plan: Plan) -> list[str]:
-    out = []
-    for item in plan.blocked:
-        out.append(NEED_PROFILE if item.reason == "thieu_ho_so" else NEED_RESULTS)
-    return out
+    return [BLOCKED_ANSWER[item.reason] for item in plan.blocked]
 
 
 # Mỗi lượt ghi một dòng JSON: tin nhắn, model chọn gì, code chạy gì

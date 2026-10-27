@@ -45,13 +45,17 @@ ORDER = [
 ]
 
 MAX_SKILLS = 2
-# Thông tin bắt buộc trước khi chạy B3, B4, theo thứ tự hỏi (framework mục 4.1): D1, D2, E1, F1, F2, D4
-REQUIRED_FIELDS = ["education_system", "gpa", "english", "budget", "scholarship_need", "activities"]
-# GPA và ngân sách không được bỏ qua: phải có giá trị đã xác nhận
-MUST_HAVE_VALUE = {"gpa", "budget"}
+# Thông tin bắt buộc theo mốc, theo thứ tự hỏi (framework mục 4.1)
+# B3 (đánh giá hồ sơ): bậc học muốn theo, GPA, tiếng Anh, ngân sách. Chưa cần ngành.
+REQUIRED_B3 = ["target_level", "gpa", "english", "budget"]
+# B4 (lộ trình, gợi ý trường): thêm ngành (để lọc trường) và học bổng
+REQUIRED_B4 = [*REQUIRED_B3, "major", "scholarship"]
+# Phải có giá trị đã xác nhận, không được bỏ qua hay "chưa rõ".
+# major: B3 không đòi ngành nên "chưa rõ" vẫn qua B3, nhưng B4 đòi ngành thật.
+MUST_HAVE_VALUE = {"target_level", "gpa", "budget", "major"}
 
-# các skill cần hồ sơ đầy đủ
-NEEDS_PROFILE = {"skill_danh_gia", "skill_lo_trinh"}  # cần đủ hồ sơ
+# Skill cần hồ sơ -> danh sách thông tin skill đó đòi
+REQUIRED_BY_SKILL = {"skill_danh_gia": REQUIRED_B3, "skill_lo_trinh": REQUIRED_B4}
 # các skill cần danh sách trường đã đề xuất
 NEEDS_RESULTS = {"skill_explain", "skill_kich_ban"}  # cần đã có danh sách trường
 
@@ -60,7 +64,7 @@ NEEDS_RESULTS = {"skill_explain", "skill_kich_ban"}  # cần đã có danh sách
 @dataclass
 class Blocked:
     skill: str
-    reason: Literal["thieu_ho_so", "chua_co_danh_sach"]
+    reason: Literal["thieu_ho_so", "thieu_nganh", "chua_co_danh_sach"]
 
 
 # Gói kết quả sau khi kiểm tra
@@ -84,9 +88,9 @@ def is_answered(name: str, field_value: ProfileField | None) -> bool:
     return field_value.status in ("confirmed", "none", "unknown")
 
 
-# Danh sách thông tin bắt buộc còn thiếu, theo thứ tự hỏi
-def missing_fields(profile: dict[str, ProfileField]) -> list[str]:
-    return [name for name in REQUIRED_FIELDS if not is_answered(name, profile.get(name))]
+# Danh sách thông tin bắt buộc còn thiếu, theo thứ tự hỏi (mặc định tính theo mốc B4, mốc đầy đủ nhất)
+def missing_fields(profile: dict[str, ProfileField], required: list[str] = REQUIRED_B4) -> list[str]:
+    return [name for name in required if not is_answered(name, profile.get(name))]
 
 
 # Predicted: nhãn model chọn,Đã xếp xác suất cao trước
@@ -106,18 +110,23 @@ def plan_skills(state: ChatState, predicted: list[str], has_results: bool = Fals
     skills = skills[:MAX_SKILLS]  # lấy 2 nhãn xác suất cao nhất
     skills.sort(key=ORDER.index)  # sắp theo thứ tự chạy
 
-    missing = missing_fields(state.profile)
     # 2 danh sách được chạy và chặn
     runnable: list[str] = []
     blocked: list[Blocked] = []
+    missing_for_user: list[str] = []
     for skill in skills:
-        # Nếu skill cần hồ sơ đầy đủ nhưng hồ sơ thiếu
-        if skill in NEEDS_PROFILE and missing:
-            blocked.append(Blocked(skill, "thieu_ho_so"))
+        # Mỗi skill đòi 1 danh sách riêng: đánh giá (B3) ít hơn lộ trình B4
+        # Nếu skill là skill_danh_gia và skill_lo_trinh --> lấy ra các kiểu ầu của skill để check
+        missing = (
+            missing_fields(state.profile, REQUIRED_BY_SKILL[skill]) if skill in REQUIRED_BY_SKILL else []
+        )
+        if missing:
+            # Thiếu ngành đứng đầu thì sau này hiện ô chọn ngành; thiếu thứ khác thì hỏi tiếp hồ sơ
+            reason = "thieu_nganh" if missing[0] == "major" else "thieu_ho_so"
+            blocked.append(Blocked(skill, reason))
+            missing_for_user = missing_for_user or missing  # lấy danh sách thiếu của skill bị chặn đầu tiên
         elif skill in NEEDS_RESULTS and not has_results:
             blocked.append(Blocked(skill, "chua_co_danh_sach"))
         else:
             runnable.append(skill)
-
-    missing_for_user = missing if any(b.reason == "thieu_ho_so" for b in blocked) else []
     return Plan(skills=runnable, source=source, blocked=blocked, missing=missing_for_user)
