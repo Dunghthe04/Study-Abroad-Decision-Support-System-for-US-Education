@@ -1,5 +1,7 @@
 import logging
 from contextlib import asynccontextmanager
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
 import httpx  # gửi request đến ollama
 from fastapi import Depends, FastAPI
@@ -16,8 +18,6 @@ from app.services.picker import Picker
 from app.services.scorer import Scorer
 from app.services.skill_picker_loader import load_skill_picker
 from app.services.transcript_reader import TranscriptReader
-from logging.handlers import RotatingFileHandler
-from pathlib import Path
 
 
 # Khai báo vòng đơi fastapi

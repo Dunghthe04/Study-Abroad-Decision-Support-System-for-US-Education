@@ -27,13 +27,13 @@ from ml.skill_picker.train_cae import CONFIG_PATH, MODEL_PATH
 Embedder = Callable[[str], Awaitable[np.ndarray]]
 
 
-# Class lưu trữ kết quả dự đoán, ko cần khởi tạo 
+# Class lưu trữ kết quả dự đoán, ko cần khởi tạo
 @dataclass
 class Prediction:
     skills: list[str]  # Các nhãn đạt ngưỡng, cao xếp trước
     probs: dict[str, float]  # xác xuất của cả 11 nhãn ( ghi log)
 
-    @property # Thao tác hàm như thuộc tính, không cần gọi () khi truy cập
+    @property  # Thao tác hàm như thuộc tính, không cần gọi () khi truy cập
     def unsure(self) -> bool:
         """Không nhãn nào đạt ngưỡng: hệ thống dùng skill bước hiện tại"""
         return not self.skills
@@ -51,6 +51,7 @@ class OllamaEmbedder:
         if vector.shape != (DIM,):
             raise ValueError(f"Vector sai kích thước: {vector.shape}, cần {(DIM,)}")
         return vector
+
 
 # Chọn skill cho 1 tin nhắn: nạp model, embedder, dự đoán skill
 class SkillPicker:
