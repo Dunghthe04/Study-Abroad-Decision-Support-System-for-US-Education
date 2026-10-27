@@ -5,7 +5,16 @@ import logging
 from dataclasses import dataclass
 
 from app.schemas.chat import ChatMessage, ChatRequest, ChatState, ProfileField
-from app.services.chat_flow import NEED_PROFILE, NOT_READY, ChatFlow, SkillOutput, last_user_message
+from app.services.chat_flow import (
+    NEED_PROFILE,
+    NOT_READY,
+    QUESTIONS,
+    ChatFlow,
+    SkillOutput,
+    ask,
+    go_to,
+    last_user_message,
+)
 
 
 @dataclass
@@ -98,6 +107,35 @@ async def test_goodbye_ends_the_conversation():
     res = await ChatFlow(FakePicker("ket_thuc")).reply(request("em cảm ơn ạ"))
 
     assert res.state.current_step == "END"
+
+
+def test_ask_stores_question_text_id_and_counts():
+    state = ChatState()
+
+    assert ask(state, "B0.1") == QUESTIONS["B0.1"]
+    ask(state, "B0.1")
+
+    assert state.last_question == QUESTIONS["B0.1"]
+    assert state.question_id == "B0.1"  # lượt sau biết học sinh đang trả lời câu nào
+    assert state.asked == {"B0.1": 2}
+
+
+def test_go_to_changes_step_and_clears_pending_question():
+    state = ChatState(current_step="B1")
+    ask(state, "B0.1")
+
+    go_to(state, "B2")
+
+    assert state.current_step == "B2"
+    assert state.last_question == ""  # câu của bước cũ không còn chờ trả lời
+    assert state.question_id is None
+    assert state.asked == {"B0.1": 1}  # lịch sử đã hỏi vẫn giữ
+
+
+def test_old_state_without_question_id_still_loads():
+    state = ChatState.model_validate({"currentStep": "B2", "lastQuestion": "Bạn đã thi SAT chưa?"})
+
+    assert state.question_id is None
 
 
 def test_last_user_message_ignores_assistant_messages():

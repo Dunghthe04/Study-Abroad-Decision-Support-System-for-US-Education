@@ -10,7 +10,7 @@ import time
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from app.schemas.chat import ChatRequest, ChatResponse, ChatState
+from app.schemas.chat import ChatRequest, ChatResponse, ChatState, Step
 from app.services.skill_rules import Plan, missing_fields, plan_skills
 
 # Tạo 1 logger
@@ -26,13 +26,22 @@ NEED_PROFILE = (
 NEED_RESULTS = "Bạn cần xem danh sách trường gợi ý trước, rồi mình mới phân tích tiếp được nhé."
 
 
-# Ghi lại câu vừa hỏi vào Chatsate, lưu last_question và tăng số lần hỏi
+# Ghi lại câu vừa hỏi vào Chatsate, lưu last_question, question_id và tăng số lần hỏi
 def ask(state: ChatState, question_id: str) -> str:
-    # Lưu câu vừa hỏi
+    # Lưu câu vừa hỏi, cùng mã câu để lượt sau biết học sinh đang trả lời câu nào
     state.last_question = QUESTIONS[question_id]
+    state.question_id = question_id
     # Tăng số lần hỏi
     state.asked[question_id] = state.asked.get(question_id, 0) + 1
     return state.last_question
+
+
+# Chuyển sang bước khác: mọi skill đổi bước đều gọi hàm này, không gán current_step trực tiếp
+# Xóa câu đang chờ của bước cũ; nếu bước mới có câu hỏi thì gọi ask() SAU go_to
+def go_to(state: ChatState, step: Step) -> None:
+    state.current_step = step
+    state.last_question = ""
+    state.question_id = None
 
 
 # Model chọn skill: chỉ cần có hàm predict trả về .skills (đã xếp xác suất cao trước) và .probs
@@ -64,7 +73,7 @@ class OffTopicHandler:
 # Skill tạm: học sinh muốn dừng thì chào và đánh dấu kết thúc
 class EndHandler:
     async def run(self, state: ChatState, message: str) -> SkillOutput:
-        state.current_step = "END"
+        go_to(state, "END")
         return SkillOutput("Chúc bạn thành công. Khi cần bạn cứ quay lại nhé.")
 
 
