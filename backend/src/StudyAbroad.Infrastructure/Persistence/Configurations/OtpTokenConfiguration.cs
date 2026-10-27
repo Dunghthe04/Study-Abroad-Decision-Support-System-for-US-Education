@@ -13,5 +13,7 @@ public class OtpTokenConfiguration : IEntityTypeConfiguration<OtpToken>
         b.Property(x => x.Purpose).HasMaxLength(32).IsRequired();
         b.Property(x => x.CodeHash).HasMaxLength(100).IsRequired();
         b.HasIndex(x => new { x.UserId, x.Purpose });
+        // Npgsql ánh xạ uint IsRowVersion vào cột hệ thống xmin (không tạo cột mới)
+        b.Property(x => x.Version).IsRowVersion();
     }
 }

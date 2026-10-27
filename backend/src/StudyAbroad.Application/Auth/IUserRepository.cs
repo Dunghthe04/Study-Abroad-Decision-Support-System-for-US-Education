@@ -21,6 +21,7 @@ namespace StudyAbroad.Application.Auth
         Task<UserSession?> GetSessionByTokenHashAsync(string tokenHash, CancellationToken cancellationToken = default);
         Task RevokeSessionAsync(string tokenHash, CancellationToken cancellationToken = default);
         Task RevokeAllSessionsAsync(Guid userId, CancellationToken cancellationToken = default);
+        Task RevokeOtherSessionsAsync(Guid userId, string keepTokenHash, CancellationToken cancellationToken = default);
 
         // [USAS-12 / USAS-17] Quản lý mã OTP
         Task SaveOtpAsync(OtpToken token, CancellationToken cancellationToken = default);

@@ -13,6 +13,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { AGE_FEATURES, useAgeBlock } from "@/lib/age-features";
 import { useAssistant, type AssistantTurn } from "./AssistantProvider";
 
 // Trang đăng nhập / đăng ký không hiện trợ lý
@@ -29,6 +30,7 @@ export function AssistantPanel() {
   const visible = useAssistantVisible();
   const pathname = usePathname();
   const [input, setInput] = useState("");
+  const ageBlock = useAgeBlock(AGE_FEATURES.processStudentData);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -135,53 +137,65 @@ export function AssistantPanel() {
 
       {/* Chip gợi ý + ô nhập */}
       <div className="border-t border-line px-4 pt-3 pb-4">
-        {page.suggestions.length > 0 && (
-          <div className="-mx-4 mb-3 flex gap-2 overflow-x-auto px-4 pb-0.5 [scrollbar-width:none]">
-            {page.suggestions.map((s) => (
-              <button
-                key={s}
-                type="button"
-                disabled={loading}
-                onClick={() => send(s)}
-                className="h-8 shrink-0 cursor-pointer rounded-full border border-line bg-surface px-3 text-[13px] whitespace-nowrap text-foreground transition-colors hover:border-brand/50 hover:bg-brand-wash/50 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {s}
-              </button>
-            ))}
-          </div>
-        )}
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            submit();
-          }}
-          className="flex items-end gap-2"
-        >
-          <textarea
-            ref={inputRef}
-            rows={1}
-            value={input}
-            maxLength={1000}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-                e.preventDefault();
-                submit();
-              }
+        {ageBlock ? (
+          // [Q11] Chat gửi dữ liệu cá nhân cho AI: học sinh dưới 16 cần phụ huynh đồng ý
+          <p className="text-sm text-muted-foreground">
+            {ageBlock.message}{" "}
+            <Link href="/account" className="font-medium text-brand underline">
+              Mời phụ huynh xác nhận
+            </Link>
+          </p>
+        ) : (
+          <>
+          {page.suggestions.length > 0 && (
+            <div className="-mx-4 mb-3 flex gap-2 overflow-x-auto px-4 pb-0.5 [scrollbar-width:none]">
+              {page.suggestions.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  disabled={loading}
+                  onClick={() => send(s)}
+                  className="h-8 shrink-0 cursor-pointer rounded-full border border-line bg-surface px-3 text-[13px] whitespace-nowrap text-foreground transition-colors hover:border-brand/50 hover:bg-brand-wash/50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          )}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              submit();
             }}
-            placeholder="Hỏi về trang này, hoặc bất cứ điều gì…"
-            aria-label="Câu hỏi cho trợ lý"
-            className="min-h-[42px] flex-1 resize-none rounded-xl border border-line bg-surface px-3.5 py-2.5 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-brand focus:ring-2 focus:ring-brand/20"
-          />
-          <button
-            type="submit"
-            aria-label="Gửi"
-            disabled={loading || !input.trim()}
-            className="flex size-[42px] shrink-0 cursor-pointer items-center justify-center rounded-xl bg-brand text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex items-end gap-2"
           >
-            <ArrowUpIcon className="size-4.5" />
-          </button>
-        </form>
+            <textarea
+              ref={inputRef}
+              rows={1}
+              value={input}
+              maxLength={1000}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  submit();
+                }
+              }}
+              placeholder="Hỏi về trang này, hoặc bất cứ điều gì…"
+              aria-label="Câu hỏi cho trợ lý"
+              className="min-h-[42px] flex-1 resize-none rounded-xl border border-line bg-surface px-3.5 py-2.5 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-brand focus:ring-2 focus:ring-brand/20"
+            />
+            <button
+              type="submit"
+              aria-label="Gửi"
+              disabled={loading || !input.trim()}
+              className="flex size-[42px] shrink-0 cursor-pointer items-center justify-center rounded-xl bg-brand text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <ArrowUpIcon className="size-4.5" />
+            </button>
+          </form>
+          </>
+        )}
       </div>
     </aside>
   );

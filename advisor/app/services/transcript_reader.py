@@ -239,6 +239,12 @@ _SCHOOL_GRADE_RE = re.compile(r"\b(?:lop|grade|class|khoi)[\s:.]*(6|7|8|9|10|11|
 _UNI_YEAR_RE = re.compile(r"\b(?:nam|year)\s*(?:thu\s*)?([1-6])\b")
 _ROMAN = {"i": 1, "ii": 2, "iii": 3}
 
+# [UC-12] Điểm lệch khỏi trung vị mọi môn từ ngưỡng này trở lên thì đánh dấu cần kiểm tra (cần đủ số điểm để so)
+OUTLIER_DISTANCE = 3.5
+OUTLIER_MIN_SCORES = 4
+REVIEW_SOURCE_IMAGE = "source_image"
+REVIEW_OUTLIER = "outlier"
+
 
 class OllamaUnavailableError(Exception):
     """Gọi Ollama thất bại. Chi tiết kỹ thuật chỉ ghi log, người dùng nhận câu tiếng Việt dễ hiểu."""
@@ -254,6 +260,7 @@ class _RawTerm:
     semester: int | None = None
     academic_year: int | None = None
     high_school: bool = False
+    from_image: bool = False
 
 
 @dataclass
@@ -310,7 +317,8 @@ class TranscriptReader:
             warnings.append(
                 "Học bạ không ghi rõ lớp nên hệ thống tạm xếp năm học sớm nhất là Lớp 10. Bạn kiểm tra lại tên kỳ trong bảng giúp nhé."
             )
-        collected = self._merge_terms(raw_terms)
+        image_cells: set[tuple[str, str]] = set()
+        collected = self._merge_terms(raw_terms, image_cells)
         model_used = " + ".join(models_used) or None
 
         if not collected:
@@ -321,14 +329,28 @@ class TranscriptReader:
                 warnings=warnings,
             )
 
+        all_scores = [sc for term_scores in collected.values() for sc in term_scores.values()]
+        median = self._median(all_scores) if len(all_scores) >= OUTLIER_MIN_SCORES else None
+
         final_terms: list[TranscriptTerm] = []
-        all_scores: list[float] = []
         for order, term_name in enumerate(sorted(collected, key=self._term_sort_key), 1):
-            score_items = [
-                TranscriptSubjectScore(subject=subj, score=round(sc, 2), raw_score=str(sc), credits=1.0)
-                for subj, sc in collected[term_name].items()
-            ]
-            all_scores.extend(collected[term_name].values())
+            score_items = []
+            for subj, sc in collected[term_name].items():
+                reason = None
+                if median is not None and abs(sc - median) >= OUTLIER_DISTANCE:
+                    reason = REVIEW_OUTLIER
+                elif (term_name, subj) in image_cells:
+                    reason = REVIEW_SOURCE_IMAGE
+                score_items.append(
+                    TranscriptSubjectScore(
+                        subject=subj,
+                        score=round(sc, 2),
+                        raw_score=str(sc),
+                        credits=1.0,
+                        needs_review=reason is not None,
+                        review_reason=reason,
+                    )
+                )
             final_terms.append(TranscriptTerm(term_order=order, term_name=term_name, scores=score_items))
 
         # Quy đổi GPA: trung bình tất cả các điểm môn / 10 * 4
@@ -467,6 +489,9 @@ class TranscriptReader:
             )
         result = await self._parse_source("\n\n".join(pages), file_name, model_used=vision_model)
         result.warnings[:0] = skipped
+        # Chữ do model thị giác chép lại có thể sai số: mọi ô từ nguồn này đều cần người dùng kiểm tra
+        for term in result.terms:
+            term.from_image = True
         return result
 
     def _prepare_image(self, image: bytes) -> str | None:
@@ -779,8 +804,11 @@ class TranscriptReader:
             raw.semester = 1 if raw.semester % 2 == 1 else 2
         return raw
 
-    def _merge_terms(self, raw_terms: list[_RawTerm]) -> dict[str, dict[str, float]]:
-        """Kỳ chỉ ghi năm học: ĐH gán "Năm n", THPT gán "Lớp 10 + n" tính từ năm học sớm nhất. Rồi gộp điểm theo tên kỳ chuẩn."""
+    def _merge_terms(
+        self, raw_terms: list[_RawTerm], image_cells: set[tuple[str, str]] | None = None
+    ) -> dict[str, dict[str, float]]:
+        """Kỳ chỉ ghi năm học: ĐH gán "Năm n", THPT gán "Lớp 10 + n" tính từ năm học sớm nhất. Rồi gộp điểm theo tên kỳ chuẩn.
+        image_cells nhận (tên kỳ, môn) của các điểm đọc từ ảnh."""
         first_year: dict[bool, int] = {}
         for t in raw_terms:
             if t.academic_year is not None:
@@ -798,7 +826,19 @@ class TranscriptReader:
             else:
                 name = self._normalize_term_name(t.label)
             merged.setdefault(name, {}).update(t.scores)
+            if image_cells is not None:
+                for subj in t.scores:
+                    if t.from_image:
+                        image_cells.add((name, subj))
+                    else:
+                        image_cells.discard((name, subj))
         return merged
+
+    @staticmethod
+    def _median(values: list[float]) -> float:
+        ordered = sorted(values)
+        mid = len(ordered) // 2
+        return ordered[mid] if len(ordered) % 2 else (ordered[mid - 1] + ordered[mid]) / 2
 
     # ---------- Chuẩn hoá tên ----------
 

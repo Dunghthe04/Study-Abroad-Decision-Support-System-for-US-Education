@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRightIcon, HourglassIcon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { ApiError } from "@/lib/api";
+import { setPendingEmail } from "@/lib/pending-email";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,10 +17,11 @@ import { Spinner } from "@/components/ui/spinner";
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  // Mặc định về trang chủ; chỉ nhận redirect là đường dẫn nội bộ (chặn "//evil.com")
+  // Mặc định về trang chủ; chỉ nhận redirect là đường dẫn nội bộ (chặn "//evil.com" và "/\evil.com",
+  // trình duyệt coi "\" như "/" nên "/\evil.com" cũng là URL sang domain khác)
   const redirectParam = searchParams.get("redirect");
   const redirect =
-    redirectParam && redirectParam.startsWith("/") && !redirectParam.startsWith("//") ? redirectParam : "/";
+    redirectParam && /^\/(?![\/\\])/.test(redirectParam) ? redirectParam : "/";
 
   const { login } = useAuth();
   const [email, setEmail] = useState("");
@@ -91,7 +93,8 @@ export function LoginForm() {
 
         {error && lockType === "unverified" && (
           <Link
-            href={`/verify-email?email=${encodeURIComponent(email.trim())}`}
+            href="/verify-email"
+            onClick={() => setPendingEmail(email.trim())}
             className={buttonVariants({ size: "sm" })}
           >
             Kích hoạt tài khoản bằng mã OTP

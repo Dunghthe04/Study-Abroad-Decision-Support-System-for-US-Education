@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { AgeGate } from "@/components/auth/AgeGate";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { ProfileFlowWizard } from "@/components/flow/ProfileFlowWizard";
 
@@ -11,7 +12,9 @@ export const metadata: Metadata = {
 export default function AnalysisPage() {
   return (
     <ProtectedRoute>
-      <ProfileFlowWizard />
+      <AgeGate feature="process_student_data">
+        <ProfileFlowWizard />
+      </AgeGate>
     </ProtectedRoute>
   );
 }

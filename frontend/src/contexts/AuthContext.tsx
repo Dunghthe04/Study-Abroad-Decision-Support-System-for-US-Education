@@ -8,7 +8,7 @@ interface AuthContextType {
   user: UserDto | null;
   isLoading: boolean;
   login: (data: LoginRequest) => Promise<UserDto>;
-  register: (data: RegisterRequest) => Promise<UserDto>;
+  register: (data: RegisterRequest) => Promise<{ message: string }>;
   verifyEmail: (data: { email: string; otpCode: string }) => Promise<UserDto>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -46,7 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   // [AC-1] Đăng ký: Gọi API tạo tài khoản học sinh / phụ huynh
-  const register = async (data: RegisterRequest): Promise<UserDto> => {
+  const register = async (data: RegisterRequest): Promise<{ message: string }> => {
     return await authApi.register(data);
   };
 

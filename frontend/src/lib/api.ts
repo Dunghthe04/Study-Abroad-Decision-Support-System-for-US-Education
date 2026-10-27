@@ -1,14 +1,18 @@
 import type {
   AuthResponse,
+  ChangePasswordRequest,
   ForgotPasswordRequest,
   LoginRequest,
   RegisterRequest,
   ResendOtpRequest,
   ResetPasswordRequest,
+  UpdateProfileRequest,
   UserDto,
   VerifyEmailRequest,
   AcademicProfileResponse,
-  SaveAcademicProfileRequest,
+  ParentInviteInfo,
+  ParentLinkDto,
+  ParentLinkResponse,
 } from "@/types/api";
 
 // Browser code calls same-origin /api (Nginx in prod, Next rewrite in dev).
@@ -60,7 +64,7 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
 export const authApi = {
   // [AC-1] Đăng ký tài khoản (học sinh hoặc phụ huynh, email/SĐT, mật khẩu)
   register: (data: RegisterRequest) =>
-    apiFetch<UserDto>("/api/v1/auth/register", {
+    apiFetch<{ message: string }>("/api/v1/auth/register", {
       method: "POST",
       body: JSON.stringify(data),
     }),
@@ -100,6 +104,20 @@ export const authApi = {
       body: JSON.stringify(data),
     }),
 
+  // [UC-06] Đổi mật khẩu khi đã đăng nhập: giữ phiên hiện tại, đăng xuất các thiết bị khác
+  changePassword: (data: ChangePasswordRequest) =>
+    apiFetch<{ message: string }>("/api/v1/auth/change-password", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  // Sửa họ tên và số điện thoại của chính mình (email đăng nhập không đổi được)
+  updateMe: (data: UpdateProfileRequest) =>
+    apiFetch<{ message: string; user: UserDto }>("/api/v1/auth/me", {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+
   // [AC-3] Đăng xuất: Thu hồi phiên trên server và xóa HttpOnly Cookie (không cần truyền token thủ công)
   logout: () =>
     apiFetch<{ message: string }>("/api/v1/auth/logout", {
@@ -120,12 +138,40 @@ export const profileApi = {
     apiFetch<AcademicProfileResponse>("/api/v1/profile/academic", {
       method: "GET",
     }),
-
-  // Lưu hoặc cập nhật hồ sơ học thuật, bảng điểm từng học kỳ và chứng chỉ
-  saveAcademicProfile: (data: SaveAcademicProfileRequest) =>
-    apiFetch<AcademicProfileResponse>("/api/v1/profile/academic", {
-      method: "PUT",
-      body: JSON.stringify(data),
-    }),
 };
 
+// [Q11] Liên kết phụ huynh – học sinh. Token lời mời đi trong body để không nằm trong log URL của API.
+export const parentLinksApi = {
+  lookupInvite: (token: string) =>
+    apiFetch<ParentLinkResponse<ParentInviteInfo>>("/api/v1/parent-links/invite/lookup", {
+      method: "POST",
+      body: JSON.stringify({ token }),
+    }),
+
+  acceptInvite: (token: string) =>
+    apiFetch<ParentLinkResponse<ParentLinkDto>>("/api/v1/parent-links/invite/accept", {
+      method: "POST",
+      body: JSON.stringify({ token }),
+    }),
+
+  resend: () =>
+    apiFetch<ParentLinkResponse<ParentLinkDto>>("/api/v1/parent-links/resend", {
+      method: "POST",
+    }),
+
+  changeParentEmail: (parentEmail: string) =>
+    apiFetch<ParentLinkResponse<ParentLinkDto>>("/api/v1/parent-links/parent-email", {
+      method: "PUT",
+      body: JSON.stringify({ parentEmail }),
+    }),
+
+  revoke: (id: string) =>
+    apiFetch<ParentLinkResponse<ParentLinkDto>>(`/api/v1/parent-links/${encodeURIComponent(id)}/revoke`, {
+      method: "POST",
+    }),
+
+  getMine: () =>
+    apiFetch<ParentLinkResponse<ParentLinkDto[]>>("/api/v1/parent-links/me", {
+      method: "GET",
+    }),
+};

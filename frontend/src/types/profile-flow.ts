@@ -108,6 +108,9 @@ export interface SubjectDraft {
   subjectName: string;
   semester1Score?: number | null;
   semester2Score?: number | null;
+  /** [UC-12] Lý do ô cần kiểm tra (source_image | outlier | overwrote | duplicate); null = đã kiểm tra / nhập tay */
+  semester1Review?: string | null;
+  semester2Review?: string | null;
 }
 
 export interface AcademicYearDraft {
@@ -115,11 +118,9 @@ export interface AcademicYearDraft {
   subjects: SubjectDraft[];
 }
 
-/** File bảng điểm nháp — nằm ngoài draft (BE: DraftTranscriptInfoDto). */
+/** File bảng điểm nháp — nằm ngoài draft (BE: DraftTranscriptFileDto, không có đường dẫn lưu trữ). */
 export interface DraftTranscriptFile {
   originalFileName: string;
-  storedFileName: string;
-  relativePath: string;
   fileSizeBytes: number;
   contentType: string;
   uploadedAt: string;
@@ -215,6 +216,8 @@ export interface ExtractedSubjectScore {
   score: number;
   rawScore?: string;
   credits?: number;
+  needsReview?: boolean;
+  reviewReason?: string | null;
 }
 
 export interface ExtractedTerm {

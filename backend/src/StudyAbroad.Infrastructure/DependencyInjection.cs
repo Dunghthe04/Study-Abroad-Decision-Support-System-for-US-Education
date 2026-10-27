@@ -28,6 +28,7 @@ public static class DependencyInjection
 
         services.AddScoped<IStudyCenterRepository, StudyCenterRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<StudyAbroad.Application.ParentLinks.IParentLinkRepository, ParentLinkRepository>();
         services.AddScoped<IFinancialProfileRepository, FinancialProfileRepository>();
         services.AddScoped<StudyAbroad.Application.AcademicProfiles.IAcademicProfileRepository, AcademicProfileRepository>();
         services.AddSingleton<IPasswordHasher, PasswordHasher>();
@@ -41,15 +42,13 @@ public static class DependencyInjection
         services.AddScoped<IChatSessionRepository, ChatSessionRepository>();
 
 
-        // [USAS-362] Đăng ký JWT Token Service (Ưu tiên nạp key từ biến môi trường JWT_SECRET_KEY)
+        // [USAS-362] Đăng ký JWT Token Service (Ưu tiên nạp key từ biến môi trường JWT_SECRET_KEY).
+        // Không có khóa mặc định ở đây: Program.cs kiểm tra độ dài khóa, chỉ dùng khóa dev khi môi trường Development.
         services.Configure<JwtOptions>(options =>
         {
             configuration.GetSection(JwtOptions.SectionName).Bind(options);
             if (string.IsNullOrWhiteSpace(options.SecretKey))
-            {
-                options.SecretKey = configuration["JWT_SECRET_KEY"]
-                    ?? "usas_dev_jwt_secret_key_minimum_32_characters_for_local_development_2026!";
-            }
+                options.SecretKey = configuration["JWT_SECRET_KEY"] ?? string.Empty;
         });
         services.AddSingleton<ITokenService, TokenService>();
 
@@ -57,14 +56,20 @@ public static class DependencyInjection
         services.Configure<SmtpOptions>(options =>
         {
             configuration.GetSection(SmtpOptions.SectionName).Bind(options);
-            options.Host = configuration["SMTP_HOST"] ?? options.Host;
+            // docker-compose truyền "" khi .env không đặt biến, nên chuỗi rỗng coi như chưa cấu hình
+            options.Host = NonEmpty(configuration["SMTP_HOST"]) ?? options.Host;
             if (int.TryParse(configuration["SMTP_PORT"], out var port)) options.Port = port;
-            options.User = configuration["SMTP_USER"] ?? options.User;
-            options.Password = configuration["SMTP_PASSWORD"] ?? options.Password;
-            options.FromEmail = configuration["SMTP_FROM_EMAIL"] ?? configuration["SMTP_SENDER_EMAIL"] ?? options.FromEmail;
-            options.FromName = configuration["SMTP_FROM_NAME"] ?? configuration["SMTP_SENDER_NAME"] ?? options.FromName;
+            options.User = NonEmpty(configuration["SMTP_USER"]) ?? options.User;
+            options.Password = NonEmpty(configuration["SMTP_PASSWORD"]) ?? options.Password;
+            options.FromEmail = NonEmpty(configuration["SMTP_FROM_EMAIL"]) ?? NonEmpty(configuration["SMTP_SENDER_EMAIL"]) ?? options.FromEmail;
+            options.FromName = NonEmpty(configuration["SMTP_FROM_NAME"]) ?? NonEmpty(configuration["SMTP_SENDER_NAME"]) ?? options.FromName;
+            options.AppBaseUrl = NonEmpty(configuration["APP_PUBLIC_URL"]) ?? options.AppBaseUrl;
         });
-        services.AddScoped<IEmailSender, SmtpEmailSender>();
+        // Mail gửi ở nền qua hàng đợi: request không chờ SMTP
+        services.AddSingleton<SmtpEmailSender>();
+        services.AddSingleton<EmailQueue>();
+        services.AddSingleton<IEmailSender, QueuedEmailSender>();
+        services.AddHostedService<EmailDispatchBackgroundService>();
 
         services.Configure<AdvisorOptions>(configuration.GetSection(AdvisorOptions.SectionName));
         services.AddHttpClient<IAdvisorClient, AdvisorClient>(ConfigureAdvisorClient);
@@ -80,6 +85,8 @@ public static class DependencyInjection
 
         return services;
     }
+
+    private static string? NonEmpty(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 
     //Cả chat và gợi ý trường đều gọi sang advisor: cùng địa chỉ, timeout, API key
     private static void ConfigureAdvisorClient(IServiceProvider sp, HttpClient client)
