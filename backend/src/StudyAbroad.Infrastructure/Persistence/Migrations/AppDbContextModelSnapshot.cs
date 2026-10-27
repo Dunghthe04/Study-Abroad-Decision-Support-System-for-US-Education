@@ -310,6 +310,10 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("skill_id");
 
+                    b.Property<string>("StateJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("state_json");
+
                     b.Property<string>("StudyLevel")
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)")

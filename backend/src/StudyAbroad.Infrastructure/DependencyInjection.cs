@@ -38,6 +38,8 @@ public static class DependencyInjection
         // [USAS-640] Đăng ký service lưu trữ tệp bảng điểm nháp
         services.AddScoped<StudyAbroad.Application.Profile.Flow.IProfileFileStorageService, StudyAbroad.Infrastructure.Services.ProfileFileStorageService>();
         services.AddScoped<IRecommendationRepository, RecommendationRepository>();
+        services.AddScoped<IChatSessionRepository, ChatSessionRepository>();
+
 
         // [USAS-362] Đăng ký JWT Token Service (Ưu tiên nạp key từ biến môi trường JWT_SECRET_KEY)
         services.Configure<JwtOptions>(options =>

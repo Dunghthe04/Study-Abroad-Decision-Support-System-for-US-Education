@@ -7,6 +7,7 @@ import secrets
 from fastapi import Depends, Header, HTTPException, Request, status
 
 from app.core.config import Settings, get_settings
+from app.services.chat_flow import ChatFlow
 from app.services.ec_reader import EcReader
 from app.services.explainer import Explainer
 from app.services.ollama import OllamaClient
@@ -56,3 +57,7 @@ def get_picker(request: Request) -> Picker:
 # hàm độc đối tượng trong state
 def get_explainer(request: Request) -> Explainer:
     return request.app.state.explainer
+
+
+def get_chat_flow(request: Request) -> ChatFlow:
+    return request.app.state.chat_flow

@@ -37,6 +37,7 @@ export interface AdvisorChatResponse {
   answer: string;
   citations: Citation[];
   disclaimer: string | null;
+  sessionId: string | null;
 }
 
 // [USAS-362] Kiểu dữ liệu xác thực và người dùng

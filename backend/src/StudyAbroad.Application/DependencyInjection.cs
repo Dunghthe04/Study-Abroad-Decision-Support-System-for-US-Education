@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using StudyAbroad.Application.AcademicProfiles;
+using StudyAbroad.Application.Advisor;
 using StudyAbroad.Application.Auth;
 using StudyAbroad.Application.Profile.Financial;
 using StudyAbroad.Application.Recommendations;
@@ -22,6 +23,7 @@ public static class DependencyInjection
         // [USAS-640] Đăng ký service luồng hồ sơ một cửa
         services.AddScoped<StudyAbroad.Application.Profile.Flow.IProfileFlowService, StudyAbroad.Application.Profile.Flow.ProfileFlowService>();
         services.AddScoped<RecommendationService>();
+        services.AddScoped<StudyAbroad.Application.Advisor.ChatService>();
         return services;
     }
 }
