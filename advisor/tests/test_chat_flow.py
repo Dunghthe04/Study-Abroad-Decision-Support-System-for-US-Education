@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from app.schemas.chat import ChatMessage, ChatRequest, ChatState, ProfileField
 from app.services.chat_flow import (
+    NEED_MAJOR,
     NEED_PROFILE,
     NOT_READY,
     QUESTIONS,
@@ -89,6 +90,21 @@ async def test_assessment_is_blocked_when_profile_is_incomplete():
 
     assert res.skills == []
     assert res.answer == NEED_PROFILE
+
+
+async def test_roadmap_asks_for_major_when_only_major_is_missing():
+    profile = {
+        k: ProfileField(status="confirmed")
+        for k in ("target_level", "gpa", "english", "budget", "scholarship")
+    }
+    profile["major"] = ProfileField(status="unknown")  # "chưa rõ" ngành
+
+    res = await ChatFlow(FakePicker("skill_lo_trinh")).reply(
+        request("gợi ý trường cho em", current_step="B4", profile=profile)
+    )
+
+    assert res.skills == []
+    assert res.answer == NEED_MAJOR
 
 
 async def test_model_error_falls_back_instead_of_crashing():

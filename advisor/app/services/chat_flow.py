@@ -53,6 +53,7 @@ NEED_PROFILE = (
     "Mình cần biết thêm về hồ sơ của bạn trước khi làm bước này. Bạn cho mình xin thêm thông tin nhé."
 )
 NEED_RESULTS = "Bạn cần xem danh sách trường gợi ý trước, rồi mình mới phân tích tiếp được nhé."
+NEED_MAJOR = "Để gợi ý trường mình cần biết ngành bạn muốn học. Bạn chọn ngành giúp mình nhé."
 
 
 # Ghi lại câu vừa hỏi vào Chatsate, lưu last_question, question_id và tăng số lần hỏi
@@ -175,11 +176,17 @@ def last_user_message(req: ChatRequest) -> str:
 
 
 # Skill bị chặn thì nói cho học sinh biết vì sao
+# Câu nói cho học sinh biết vì sao skill bị chặn, theo lý do
+BLOCKED_ANSWER = {
+    "thieu_ho_so": NEED_PROFILE,
+    "thieu_nganh": NEED_MAJOR,
+    "chua_co_danh_sach": NEED_RESULTS,
+}
+
+
+# Skill bị chặn thì nói cho học sinh biết vì sao
 def blocked_answers(plan: Plan) -> list[str]:
-    out = []
-    for item in plan.blocked:
-        out.append(NEED_PROFILE if item.reason == "thieu_ho_so" else NEED_RESULTS)
-    return out
+    return [BLOCKED_ANSWER[item.reason] for item in plan.blocked]
 
 
 # Mỗi lượt ghi một dòng JSON: tin nhắn, model chọn gì, code chạy gì
