@@ -7,10 +7,10 @@ Vòng xử lý tin nhắn
 import json
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-from app.schemas.chat import ChatRequest, ChatResponse, ChatState, Step
+from app.schemas.chat import ChatRequest, ChatResponse, ChatState, QuickReply, Step, Widget
 from app.services.skill_rules import Plan, missing_fields, plan_skills
 
 # Tạo 1 logger
@@ -81,10 +81,13 @@ class SkillChooser(Protocol):
     async def predict(self, step: str, last_question: str, message: str, missing: list[str]) -> Any: ...
 
 
-# Kết quả của 1 skill: câu trả lời gửi học sinh (trạng thái sửa trực tiếp trên state được truyền vào)
+# Kết quả của 1 skill: câu trả lời gửi học sinh, kèm nút gợi ý và công cụ nhập nếu có
+# (trạng thái sửa trực tiếp trên state được truyền vào)
 @dataclass
 class SkillOutput:
     answer: str
+    quick_replies: list[QuickReply] = field(default_factory=list)
+    widget: Widget | None = None
 
 
 # Hợp đồng chung mọi skill: nhân trạng thái và tin nhắn, trả câu trả lời
@@ -137,11 +140,19 @@ class ChatFlow:
 
         # 3. Chạy từng skill, ghép các câu trả lời
         answers: list[str] = []
+        quick_replies: list[QuickReply] = []
+        widget: Widget | None = None
         for skill in plan.skills:
             # Lấy ra handler của skill, nếu không có thì trả NOT_READY
             handler = self._handlers.get(skill)
-            # Nếu có handler chạy đối tượng skill và lấy câu trả lời, nếu không có handler thì trả NOT_READY
-            answers.append((await handler.run(state, message)).answer if handler else NOT_READY)
+            if handler is None:
+                answers.append(NOT_READY)
+                continue
+            output = await handler.run(state, message)
+            answers.append(output.answer)
+            # Mỗi lượt chỉ hiện một bộ nút và một công cụ nhập: lấy của skill chạy sau cùng có đưa ra
+            quick_replies = output.quick_replies or quick_replies
+            widget = output.widget or widget
         # Nếu bị chặn thì thêm câu trả lời
         answers += blocked_answers(plan)
 
@@ -149,7 +160,11 @@ class ChatFlow:
         log_turn(state, message, predicted, probs, plan, (time.perf_counter() - started) * 1000)
 
         return ChatResponse(
-            answer="\n\n".join(dict.fromkeys(answers)) or NOT_READY, state=state, skills=plan.skills
+            answer="\n\n".join(dict.fromkeys(answers)) or NOT_READY,
+            state=state,
+            skills=plan.skills,
+            quick_replies=quick_replies,
+            widget=widget,
         )
 
     # Gọi model; lỗi (chưa nạp model, Ollama tắt...) thì trả về "không chắc"
