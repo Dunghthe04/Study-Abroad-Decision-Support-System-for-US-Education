@@ -23,6 +23,7 @@ namespace StudyAbroad.Application.Auth
         Task<AuthResult> ForgotPasswordAsync(ForgotPasswordRequest request, CancellationToken ct = default);
         Task<AuthResult> ResetPasswordAsync(ResetPasswordRequest request, CancellationToken ct = default);
         Task<AuthResult> ChangePasswordAsync(Guid userId, string currentRawToken, ChangePasswordRequest request, CancellationToken ct = default);
+        Task<AuthResult> UpdateProfileAsync(Guid userId, UpdateProfileRequest request, CancellationToken ct = default);
         Task<bool> LogoutAsync(string rawToken, CancellationToken ct = default);
         Task<UserDto?> GetMeAsync(Guid userId, CancellationToken ct = default);
         Task<List<UserDto>> GetAllUsersAsync(CancellationToken ct = default);
@@ -454,6 +455,44 @@ namespace StudyAbroad.Application.Auth
             await emailSender.SendPasswordChangedNotificationAsync(user.Email, user.FullName, ct);
 
             return AuthResult.Ok("Đổi mật khẩu thành công. Các thiết bị khác đã được đăng xuất.");
+        }
+
+        /// <summary>
+        /// Sửa họ tên và số điện thoại của chính mình. Email đăng nhập không nằm trong request nên không đổi được.
+        /// Số điện thoại kiểm tra như lúc đăng ký và không được trùng tài khoản khác.
+        /// </summary>
+        public async Task<AuthResult> UpdateProfileAsync(Guid userId, UpdateProfileRequest request, CancellationToken ct = default)
+        {
+            var fullName = request.FullName?.Trim() ?? string.Empty;
+            if (fullName.Length == 0 || fullName.Length > MaxFullNameLength)
+                return AuthResult.Fail(AuthError.Validation, $"Họ tên không được để trống và tối đa {MaxFullNameLength} ký tự.");
+
+            var rawPhone = request.Phone?.Trim();
+            string? normalizedPhone = null;
+            if (!string.IsNullOrEmpty(rawPhone))
+            {
+                if (rawPhone.Length > MaxRawPhoneLength)
+                    return AuthResult.Fail(AuthError.Validation, $"Số điện thoại không được vượt quá {MaxRawPhoneLength} ký tự.");
+
+                if (!TryValidateAndNormalizeVietnamesePhone(rawPhone, out var cleanPhone))
+                    return AuthResult.Fail(AuthError.Validation, "Số điện thoại không đúng định dạng Việt Nam (ví dụ: 0912345678 hoặc +84912345678).");
+
+                normalizedPhone = cleanPhone;
+            }
+
+            var user = await users.GetUserById(userId, ct);
+            if (user == null)
+                return AuthResult.Fail(AuthError.Validation, "Không tìm thấy tài khoản.");
+
+            if (normalizedPhone != null && normalizedPhone != user.Phone && await users.PhoneExistAsync(normalizedPhone, ct))
+                return AuthResult.Fail(AuthError.Validation, "Số điện thoại này đã được dùng cho tài khoản khác.");
+
+            user.FullName = fullName;
+            user.Phone = normalizedPhone;
+            if (!await TryUpdateUserAsync(user, ct))
+                return AuthResult.Fail(AuthError.Validation, "Thông tin vừa được thay đổi ở nơi khác. Vui lòng tải lại trang và thử lại.");
+
+            return AuthResult.Ok(await ToDtoAsync(user, ct), "Đã lưu thông tin cá nhân.");
         }
 
         /// <summary>

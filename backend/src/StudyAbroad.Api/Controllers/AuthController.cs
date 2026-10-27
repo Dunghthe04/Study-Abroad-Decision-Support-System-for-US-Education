@@ -165,6 +165,24 @@ namespace StudyAbroad.Api.Controllers
             return user != null ? Ok(user) : NotFound();
         }
 
+        // Sửa họ tên và số điện thoại của chính mình (email đăng nhập không đổi được)
+        [Authorize]
+        [HttpPut("me")]
+        [EnableRateLimiting(AuthRateLimit.PolicyName)]
+        public async Task<IActionResult> UpdateMe(UpdateProfileRequest request, CancellationToken ct)
+        {
+            var userId = User.GetUserId();
+            if (userId is null)
+            {
+                return Unauthorized();
+            }
+
+            var result = await auth.UpdateProfileAsync(userId.Value, request, ct);
+            return result.Error == AuthError.None
+                ? Ok(new { message = result.Message, user = result.User })
+                : Problem(result.Message, statusCode: StatusCodes.Status400BadRequest);
+        }
+
         // Token của phiên hiện tại: lấy từ HttpOnly Cookie, không có thì từ header Authorization
         private string GetRawToken()
         {

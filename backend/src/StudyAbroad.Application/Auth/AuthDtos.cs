@@ -30,6 +30,9 @@ namespace StudyAbroad.Application.Auth
     // [UC-06] Đổi mật khẩu khi đã đăng nhập: bắt buộc nhập mật khẩu hiện tại
     public record ChangePasswordRequest(string CurrentPassword, string NewPassword);
 
+    // Sửa thông tin cá nhân: chỉ họ tên và số điện thoại, email đăng nhập không đổi được. Phone rỗng = xóa số
+    public record UpdateProfileRequest(string FullName, string? Phone);
+
     public enum AuthError {
         None,
         Validation,

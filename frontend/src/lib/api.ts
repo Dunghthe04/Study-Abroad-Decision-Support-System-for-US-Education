@@ -6,6 +6,7 @@ import type {
   RegisterRequest,
   ResendOtpRequest,
   ResetPasswordRequest,
+  UpdateProfileRequest,
   UserDto,
   VerifyEmailRequest,
   AcademicProfileResponse,
@@ -107,6 +108,13 @@ export const authApi = {
   changePassword: (data: ChangePasswordRequest) =>
     apiFetch<{ message: string }>("/api/v1/auth/change-password", {
       method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  // Sửa họ tên và số điện thoại của chính mình (email đăng nhập không đổi được)
+  updateMe: (data: UpdateProfileRequest) =>
+    apiFetch<{ message: string; user: UserDto }>("/api/v1/auth/me", {
+      method: "PUT",
       body: JSON.stringify(data),
     }),
 

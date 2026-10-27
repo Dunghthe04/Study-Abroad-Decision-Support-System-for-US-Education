@@ -1207,4 +1207,68 @@ public class AuthServiceTests
         Assert.Equal("hashed:password123", user.PasswordHash);
         Assert.All(_repo.Sessions, s => Assert.False(s.IsRevoked));
     }
+
+    // Sửa thông tin cá nhân: tên + số điện thoại, email giữ nguyên
+    private async Task<(AuthService Service, User User)> ActiveUserAsync(string email = "a@test.com", string? phone = null)
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request(email: email, phone: phone));
+        var user = _repo.Users.Single(u => u.Email == email);
+        user.Status = UserStatuses.Active;
+        return (service, user);
+    }
+
+    [Fact]
+    public async Task UpdateProfile_ChangesNameAndNormalizesPhone_EmailUnchanged()
+    {
+        var (service, user) = await ActiveUserAsync();
+
+        var result = await service.UpdateProfileAsync(user.Id, new UpdateProfileRequest("  Tran Thi B  ", "+84 912 345 678"));
+
+        Assert.Equal(AuthError.None, result.Error);
+        Assert.Equal("Tran Thi B", user.FullName);
+        Assert.Equal("0912345678", user.Phone);
+        Assert.Equal("a@test.com", user.Email);
+        Assert.Equal("Tran Thi B", result.User!.FullName);
+    }
+
+    [Fact]
+    public async Task UpdateProfile_EmptyPhone_ClearsPhone()
+    {
+        var (service, user) = await ActiveUserAsync(phone: "0912345678");
+
+        var result = await service.UpdateProfileAsync(user.Id, new UpdateProfileRequest("Nguyen Van A", "  "));
+
+        Assert.Equal(AuthError.None, result.Error);
+        Assert.Null(user.Phone);
+    }
+
+    [Theory]
+    [InlineData("", "0912345678")]
+    [InlineData("Nguyen Van A", "12345")]
+    public async Task UpdateProfile_InvalidInput_Rejected_NoChange(string fullName, string phone)
+    {
+        var (service, user) = await ActiveUserAsync();
+
+        var result = await service.UpdateProfileAsync(user.Id, new UpdateProfileRequest(fullName, phone));
+
+        Assert.Equal(AuthError.Validation, result.Error);
+        Assert.Equal("Nguyen Van A", user.FullName);
+        Assert.Null(user.Phone);
+    }
+
+    [Fact]
+    public async Task UpdateProfile_PhoneOfAnotherAccount_Rejected_OwnPhoneAllowed()
+    {
+        await ActiveUserAsync(email: "other@test.com", phone: "0987654321");
+        var (service, user) = await ActiveUserAsync(phone: "0912345678");
+
+        var taken = await service.UpdateProfileAsync(user.Id, new UpdateProfileRequest("Nguyen Van A", "0987654321"));
+        var own = await service.UpdateProfileAsync(user.Id, new UpdateProfileRequest("Nguyen Van C", "0912345678"));
+
+        Assert.Equal(AuthError.Validation, taken.Error);
+        Assert.Equal(AuthError.None, own.Error);
+        Assert.Equal("0912345678", user.Phone);
+        Assert.Equal("Nguyen Van C", user.FullName);
+    }
 }

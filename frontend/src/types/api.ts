@@ -106,6 +106,12 @@ export interface ChangePasswordRequest {
   newPassword: string;
 }
 
+// Sửa thông tin cá nhân: email đăng nhập không đổi được. phone rỗng = xóa số
+export interface UpdateProfileRequest {
+  fullName: string;
+  phone: string | null;
+}
+
 // [USAS-363] Hồ sơ học thuật (Academic Profile & Transcripts)
 export interface TranscriptScoreItem {
   subject: string;
