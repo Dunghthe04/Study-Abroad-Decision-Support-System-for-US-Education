@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=ADVISOR_ENV_FILE, extra="ignore")
     # Khoá chung với .NET (header X-Api-Key). Để trống = không kiểm tra (chạy local); prod bắt buộc đặt
     api_key: str = ""
+    # Đường dẫn file lưu log từng lượt chat (dữ liệu để gắn nhãn). Để trống = không ghi file.
+    # Đường dẫn tương đối tính từ thư mục advisor/
+    chat_log_file: str = ""
     ollama_base_url: str = "http://localhost:11434"
     llm_model: str = "qwen3:8b"
     llm_timeout_seconds: float = 120

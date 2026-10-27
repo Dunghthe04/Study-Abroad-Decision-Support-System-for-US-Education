@@ -16,6 +16,8 @@ from app.services.picker import Picker
 from app.services.scorer import Scorer
 from app.services.skill_picker_loader import load_skill_picker
 from app.services.transcript_reader import TranscriptReader
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
 
 # Khai báo vòng đơi fastapi
@@ -52,14 +54,44 @@ async def lifespan(app: FastAPI):
         yield
 
 
+ADVISOR_DIR = Path(__file__).resolve().parents[1]  # app/main.py -> advisor/
+
+
+# Chỉ cho các dòng chat_turn đi qua, để file log không lẫn log khác
+class OnlyChatTurns(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        return record.getMessage().startswith("chat_turn ")
+
+
+# Ghi các dòng chat_turn ra file (nếu cấu hình CHAT_LOG_FILE). Lỗi ghi file không được làm sập dịch vụ
+def add_chat_file_handler(log: logging.Logger) -> None:
+    path = get_settings().chat_log_file
+    if not path:
+        return
+    file = Path(path)
+    if not file.is_absolute():
+        file = ADVISOR_DIR / file
+    try:
+        file.parent.mkdir(parents=True, exist_ok=True)
+        # utf-8 bắt buộc: Windows mặc định không phải utf-8 nên tiếng Việt sẽ hỏng hoặc báo lỗi
+        handler = RotatingFileHandler(file, maxBytes=5_000_000, backupCount=5, encoding="utf-8")
+    except OSError:
+        log.exception("Không mở được file log chat: %s", file)
+        return
+    handler.addFilter(OnlyChatTurns())
+    handler.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
+    log.addHandler(handler)
+
+
 # Log của advisor (tên bắt đầu bằng "advisor") mặc định bị uvicorn bỏ qua nên phải tự bật mức INFO
 def setup_logging() -> None:
     log = logging.getLogger("advisor")
     log.setLevel(logging.INFO)
-    if not log.handlers:
+    if not log.handlers:  # chỉ chạy lần đầu
         handler = logging.StreamHandler()
         handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
         log.addHandler(handler)
+        add_chat_file_handler(log)  # thêm dòng này
 
 
 def create_app() -> FastAPI:
