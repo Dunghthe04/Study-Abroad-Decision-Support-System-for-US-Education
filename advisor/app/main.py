@@ -17,6 +17,7 @@ from app.services.ollama import OllamaClient
 from app.services.picker import Picker
 from app.services.scorer import Scorer
 from app.services.skill_picker_loader import load_skill_picker
+from app.services.skills import build_handlers
 from app.services.transcript_reader import TranscriptReader
 
 
@@ -50,7 +51,10 @@ async def lifespan(app: FastAPI):
         app.state.scorer = Scorer(gemini, settings.gemini_model)
         app.state.picker = Picker(gemini, settings.gemini_model)
         app.state.explainer = Explainer(app.state.llm, settings.llm_model)
-        app.state.chat_flow = ChatFlow(picker=load_skill_picker(http))
+        app.state.chat_flow = ChatFlow(
+            picker=load_skill_picker(http),
+            handlers=build_handlers(app.state.llm, settings.llm_model),
+        )
         yield
 
 

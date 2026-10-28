@@ -87,6 +87,112 @@ async def test_two_skills_run_in_fixed_order_and_answers_are_joined():
     assert res.skills == ["skill_ho_so", "skill_tra_loi"]
 
 
+class WritingHandler:
+    """Skill giả: ghi một thông tin vào hồ sơ trong state, như skill_ho_so làm."""
+
+    def __init__(self, key: str, value, status: str = "confirmed") -> None:
+        self._key, self._field = key, ProfileField(value=value, status=status)
+
+    async def run(self, state: ChatState, message: str) -> SkillOutput:
+        state.profile[self._key] = self._field
+        return SkillOutput("đã ghi")
+
+
+def request_with_draft(message: str, draft: dict | None, **state_fields) -> ChatRequest:
+    """Như request(), nhưng kèm hồ sơ từ bản nháp (.NET gửi ở ChatRequest.profile)."""
+    base = request(message, **state_fields)
+    return base.model_copy(update={"profile": draft})
+
+
+def confirmed(*keys: str) -> dict[str, ProfileField]:
+    return {k: ProfileField(value="x", status="confirmed") for k in keys}
+
+
+async def test_draft_profile_is_used_to_find_missing_fields():
+    picker = FakePicker("skill_ho_so")
+
+    await ChatFlow(picker).reply(request_with_draft("em được 1420", confirmed("gpa", "english")))
+
+    *_, missing = picker.calls[0]
+    assert "gpa" not in missing and "english" not in missing  # đã có trong nháp, không hỏi lại
+    assert "budget" in missing
+
+
+async def test_without_draft_the_profile_in_state_is_kept():
+    picker = FakePicker("skill_ho_so")
+    profile = {"gpa": ProfileField(value="x", status="confirmed")}
+
+    res = await ChatFlow(picker).reply(request_with_draft("em được 1420", None, profile=profile))
+
+    assert "gpa" in res.state.profile
+    assert res.profile_changed == []
+
+
+async def test_empty_draft_clears_what_the_form_removed():
+    picker = FakePicker("skill_ho_so")
+    profile = {"gpa": ProfileField(value="x", status="confirmed")}
+
+    res = await ChatFlow(picker).reply(request_with_draft("em được 1420", {}, profile=profile))
+
+    assert "gpa" not in res.state.profile  # học sinh xóa GPA ở form
+    assert "gpa" in picker.calls[0][3]  # nên GPA lại thuộc nhóm còn thiếu
+
+
+async def test_said_in_b0_is_not_promoted_when_the_draft_has_the_same_value():
+    picker = FakePicker("skill_ho_so")
+    state_profile = {"gpa": ProfileField(value="x", status="said_in_B0")}
+
+    res = await ChatFlow(picker).reply(request_with_draft("ok", confirmed("gpa"), profile=state_profile))
+
+    assert res.state.profile["gpa"].status == "said_in_B0"  # vẫn chờ học sinh xác nhận
+    assert "gpa" in picker.calls[0][3]
+
+
+async def test_new_chat_preloads_the_profile_from_the_form():
+    req = ChatRequest(
+        messages=[ChatMessage(role="user", content="chào")], profile=confirmed("gpa", "english")
+    )
+
+    res = await ChatFlow().reply(req)
+
+    assert res.answer == QUESTIONS["B0.1"]
+    assert set(res.state.profile) == {"gpa", "english"}
+    assert set(res.profile) == {"gpa", "english"}
+    assert res.profile_changed == []  # nạp sẵn không phải do chat sửa
+
+
+async def test_a_field_written_by_a_skill_is_reported_as_changed():
+    handlers = {"skill_ho_so": WritingHandler("english", {"type": "ielts", "total": 7.0})}
+
+    res = await ChatFlow(FakePicker("skill_ho_so"), handlers).reply(
+        request_with_draft("IELTS em 7.0", confirmed("gpa"))
+    )
+
+    assert res.profile_changed == ["english"]  # gpa lấy từ nháp nên không tính là chat đổi
+    assert res.profile["english"].value["total"] == 7.0
+
+
+async def test_changes_to_chat_only_keys_are_not_reported():
+    handlers = {"skill_ho_so": WritingHandler("funding_source", "bố mẹ")}
+
+    res = await ChatFlow(FakePicker("skill_ho_so"), handlers).reply(
+        request_with_draft("bố mẹ chi trả", confirmed("gpa"))
+    )
+
+    assert res.profile_changed == []  # form không có chỗ cho khóa này nên không cần nạp lại
+    assert "funding_source" in res.profile  # nhưng chat vẫn nhớ
+
+
+async def test_nothing_changed_when_no_skill_wrote_anything():
+    handlers = {"skill_tra_loi": RichHandler("I-20 là giấy ...")}
+
+    res = await ChatFlow(FakePicker("skill_tra_loi"), handlers).reply(
+        request_with_draft("I-20 là gì ạ?", confirmed("gpa"))
+    )
+
+    assert res.profile_changed == []
+
+
 async def test_response_carries_quick_replies_and_widget_from_the_skill():
     buttons = [QuickReply(label="Trả lời trong chat", value="Trả lời trong chat")]
     widget = Widget(type="major", data={"options": ["Computer Science"]})
