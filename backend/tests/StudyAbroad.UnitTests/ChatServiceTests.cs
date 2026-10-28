@@ -1,5 +1,7 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using StudyAbroad.Application.Advisor;
+using StudyAbroad.Application.Profile.Flow;
 using StudyAbroad.Domain.Entities;
 
 namespace StudyAbroad.UnitTests;
@@ -15,7 +17,7 @@ public class ChatServiceTests
         var store = new FakeSessions();
         var userId = Guid.NewGuid();
 
-        var res = await new ChatService(advisor, store).ChatAsync(userId, new AdvisorChatRequest(Hello));
+        var res = await new ChatService(advisor, store, new FakeProfileFlow()).ChatAsync(userId, new AdvisorChatRequest(Hello));
 
         Assert.Null(advisor.LastRequest!.State);        // chưa có phiên thì chưa có trạng thái
         var saved = Assert.Single(store.Rows);
@@ -35,7 +37,7 @@ public class ChatServiceTests
         store.Rows.Add(session);
         var advisor = new FakeAdvisor("B2");
 
-        await new ChatService(advisor, store).ChatAsync(userId, new AdvisorChatRequest(Hello, session.Id.ToString()));
+        await new ChatService(advisor, store, new FakeProfileFlow()).ChatAsync(userId, new AdvisorChatRequest(Hello, session.Id.ToString()));
 
         Assert.Equal("B1", advisor.LastRequest!.State!.Value.GetProperty("currentStep").GetString());
         Assert.Single(store.Rows);                       // cập nhật phiên cũ, không tạo phiên mới
@@ -51,7 +53,7 @@ public class ChatServiceTests
         var advisor = new FakeAdvisor("B0");
         var fake = JsonDocument.Parse("{\"currentStep\":\"B6\"}").RootElement;
 
-        var res = await new ChatService(advisor, store)
+        var res = await new ChatService(advisor, store, new FakeProfileFlow())
             .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello, other.Id.ToString(), State: fake));
 
         Assert.Null(advisor.LastRequest!.State);         // không đọc phiên người khác, không tin state từ trình duyệt
@@ -67,22 +69,105 @@ public class ChatServiceTests
         var widget = new Widget("major");
         var advisor = new FakeAdvisor("B1", replies, widget);
 
-        var res = await new ChatService(advisor, new FakeSessions()).ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+        var res = await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow()).ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
 
         Assert.Equal(replies, res.QuickReplies);
         Assert.Equal(widget, res.Widget);
         Assert.Null(res.State); // trạng thái nội bộ vẫn không lộ ra ngoài
     }
 
+    // C4: hồ sơ gửi sang advisor lấy từ nháp, chat đổi gì thì ghi vào nháp
+    private static JsonElement Json(string json) => JsonDocument.Parse(json).RootElement.Clone();
+
+    private const string BudgetChanged = """{ "budget": { "value": "tier_20k_35k", "status": "confirmed" } }""";
+
+    [Fact]
+    public async Task SendsProfileFromDraft_NotFromBrowser()
+    {
+        var flow = new FakeProfileFlow { Draft = new ProfileFlowDraftDto(Step4: new FlowFinancialDraftDto("tier_35k_50k")) };
+        var advisor = new FakeAdvisor("B2");
+        var fromBrowser = Json("""{ "budget": { "value": "tier_above_70k", "status": "confirmed" } }""");
+
+        await new ChatService(advisor, new FakeSessions(), flow)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello, Profile: fromBrowser));
+
+        var budget = advisor.LastRequest!.Profile!.Value.GetProperty("budget");
+        Assert.Equal("tier_35k_50k", budget.GetProperty("value").GetString());
+        Assert.Equal("confirmed", budget.GetProperty("status").GetString());
+    }
+
+    [Fact]
+    public async Task KeepsNoneStatusFromPreviousTurn_WhenDraftHasNoValue()
+    {
+        var userId = Guid.NewGuid();
+        var store = new FakeSessions();
+        var session = new ChatSession
+        {
+            UserId = userId,
+            StateJson = """{"currentStep":"B2","profile":{"sat":{"value":null,"status":"none"}}}""",
+        };
+        store.Rows.Add(session);
+        var advisor = new FakeAdvisor("B2");
+
+        await new ChatService(advisor, store, new FakeProfileFlow())
+            .ChatAsync(userId, new AdvisorChatRequest(Hello, session.Id.ToString()));
+
+        // nháp không lưu được "chưa thi SAT", lấy lại từ lượt trước để chat không hỏi lại
+        Assert.Equal("none", advisor.LastRequest!.Profile!.Value.GetProperty("sat").GetProperty("status").GetString());
+    }
+
+    [Fact]
+    public async Task ChangedKeys_ArePatchedIntoDraft_AndProfileStaysInternal()
+    {
+        var flow = new FakeProfileFlow();
+        var advisor = new FakeAdvisor("B2") { Profile = Json(BudgetChanged), Changed = ["budget"] };
+
+        var res = await new ChatService(advisor, new FakeSessions(), flow).ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Equal(["budget"], flow.PatchedKeys);
+        Assert.Equal("tier_20k_35k", flow.PatchedProfile!["budget"]!["value"]!.GetValue<string>());
+        Assert.Equal(["budget"], res.ProfileChanged);
+        Assert.Null(res.Profile);
+    }
+
+    [Fact]
+    public async Task NothingChanged_DoesNotTouchDraft()
+    {
+        var flow = new FakeProfileFlow();
+        var advisor = new FakeAdvisor("B2") { Profile = Json(BudgetChanged), Changed = [] };
+
+        var res = await new ChatService(advisor, new FakeSessions(), flow).ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Null(flow.PatchedKeys);
+        Assert.Empty(res.ProfileChanged!);
+    }
+
+    [Fact]
+    public async Task DraftOverLimit_ChatStillAnswers_AndReportsNoChange()
+    {
+        var store = new FakeSessions();
+        var flow = new FakeProfileFlow { PatchError = new ArgumentException("Dữ liệu nháp quá lớn") };
+        var advisor = new FakeAdvisor("B2") { Profile = Json(BudgetChanged), Changed = ["budget"] };
+
+        var res = await new ChatService(advisor, store, flow).ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Equal("ok", res.Answer);
+        Assert.Empty(res.ProfileChanged!);
+        Assert.Single(store.Rows); // phiên chat vẫn được lưu
+    }
+
     private sealed class FakeAdvisor(string nextStep, IReadOnlyList<QuickReply>? replies = null, Widget? widget = null) : IAdvisorClient
     {
         public AdvisorChatRequest? LastRequest { get; private set; }
+        public JsonElement? Profile { get; init; }
+        public IReadOnlyList<string>? Changed { get; init; }
 
         public Task<AdvisorChatResponse> ChatAsync(AdvisorChatRequest request, CancellationToken ct = default)
         {
             LastRequest = request;
             var state = JsonDocument.Parse($"{{\"currentStep\":\"{nextStep}\"}}").RootElement;
-            return Task.FromResult(new AdvisorChatResponse("ok", [], null, state, QuickReplies: replies, Widget: widget));
+            return Task.FromResult(new AdvisorChatResponse(
+                "ok", [], null, state, QuickReplies: replies, Widget: widget, Profile: Profile, ProfileChanged: Changed));
         }
 
         public Task<EcResponseDto> ReadEcAsync(EcRequestDto request, CancellationToken ct = default) => throw new NotSupportedException();
@@ -105,5 +190,30 @@ public class ChatServiceTests
         }
 
         public Task SaveAsync(CancellationToken ct = default) => Task.CompletedTask;
+    }
+
+    private sealed class FakeProfileFlow : IProfileFlowService
+    {
+        public ProfileFlowDraftDto Draft { get; init; } = new();
+        public Exception? PatchError { get; init; }
+        public JsonObject? PatchedProfile { get; private set; }
+        public IReadOnlyCollection<string>? PatchedKeys { get; private set; }
+
+        public Task<ProfileFlowStateDto> GetFlowStateAsync(Guid userId, CancellationToken ct = default) =>
+            Task.FromResult(new ProfileFlowStateDto(1, [], Draft, null, null));
+
+        public Task<ProfileFlowStateDto> PatchDraftAsync(
+            Guid userId, JsonObject chatProfile, IReadOnlyCollection<string> changedKeys, CancellationToken ct = default)
+        {
+            if (PatchError is not null) throw PatchError;
+            PatchedProfile = chatProfile;
+            PatchedKeys = changedKeys;
+            return Task.FromResult(new ProfileFlowStateDto(1, [], Draft, null, null));
+        }
+
+        public Task<ProfileFlowStateDto> SaveDraftAsync(Guid userId, SaveProfileDraftRequest request, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<UploadDraftTranscriptResultDto> UploadDraftTranscriptAsync(Guid userId, Stream fileStream, string fileName, string contentType, long length, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<CommitProfileFlowResponse> CommitFlowAsync(Guid userId, CommitProfileFlowRequest? request, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task ClearDraftAsync(Guid userId, CancellationToken ct = default) => throw new NotSupportedException();
     }
 }
