@@ -16,3 +16,9 @@ Thumbs.db
 # Uploads
 uploads/
 **/uploads/
+.claude/
+
+# Temp & build caches
+scratch/
+**/__pycache__/
+*.pyc

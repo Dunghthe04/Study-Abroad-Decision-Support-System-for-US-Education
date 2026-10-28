@@ -5,7 +5,7 @@ namespace StudyAbroad.Api.Extensions;
 
 public static class MigrationExtensions
 {
-    /// <summary>Applies EF Core migrations at startup when Database:MigrateOnStartup is true; seeds demo data in Development.</summary>
+    /// <summary>Áp EF Core migrations khi khởi động nếu Database:MigrateOnStartup = true; seed demo ở Development.</summary>
     public static async Task ApplyDatabaseMigrationsAsync(this WebApplication app)
     {
         if (!app.Configuration.GetValue<bool>("Database:MigrateOnStartup")) return;
@@ -15,6 +15,6 @@ public static class MigrationExtensions
         await db.Database.MigrateAsync();
 
         if (app.Environment.IsDevelopment())
-            await DbSeeder.SeedAsync(db);
+            await DbSeeder.SeedAsync(db, app.Configuration["SEED_ADMIN_PASSWORD"]);
     }
 }

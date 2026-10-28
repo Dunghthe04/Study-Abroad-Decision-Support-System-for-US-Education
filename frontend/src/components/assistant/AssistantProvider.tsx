@@ -36,6 +36,8 @@ interface AssistantContextValue {
 }
 
 const STORAGE_KEY = "usas_assistant_chat";
+const SESSION_KEY = "usas_assistant_session";
+
 
 const GENERAL_SUGGESTIONS = [
   "I-20 là gì?",
@@ -83,6 +85,8 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
   const turnsRef = useRef<AssistantTurn[]>([]);
   const loadingRef = useRef(false);
   const restoredRef = useRef(false);
+  const sessionIdRef = useRef<string | null>(null);
+
 
   const page = registered ?? defaultContext(pathname);
   const pageRef = useRef(page);
@@ -95,6 +99,7 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
     setTurns(next);
     try {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      sessionIdRef.current = sessionStorage.getItem(SESSION_KEY);
     } catch {
       // trình duyệt chặn storage → chỉ giữ trong bộ nhớ
     }
@@ -125,10 +130,19 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
         const res = await apiFetch<AdvisorChatResponse>("/api/v1/advisor/chat", {
           method: "POST",
           body: JSON.stringify({
+            sessionId: sessionIdRef.current,
             messages: history.map(({ role, content }) => ({ role, content })),
             studyLevel: pageRef.current.studyLevel || null,
           }),
         });
+        if (res.sessionId) {
+          sessionIdRef.current = res.sessionId;
+          try {
+            sessionStorage.setItem(SESSION_KEY, res.sessionId);
+          } catch {
+            // trình duyệt chặn storage → chỉ giữ trong bộ nhớ
+          }
+        }
         commitTurns([
           ...history,
           { role: "assistant", content: res.answer, citations: res.citations, disclaimer: res.disclaimer },
@@ -170,6 +184,13 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
   );
 
   const newChat = useCallback(() => {
+    // Cuộc trò chuyện mới: quên phiên cũ để backend tạo phiên mới (bắt đầu lại từ B0)
+    sessionIdRef.current = null;
+    try {
+      sessionStorage.removeItem(SESSION_KEY);
+    } catch {
+      // trình duyệt chặn storage → bỏ qua
+    }
     commitTurns([]);
     setError(null);
   }, [commitTurns]);

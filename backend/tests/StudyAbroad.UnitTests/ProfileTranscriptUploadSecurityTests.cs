@@ -164,7 +164,7 @@ public class ProfileTranscriptUploadSecurityTests : IDisposable
             Guid userId, Stream fileStream, string fileName, string contentType, long length, CancellationToken ct = default)
         {
             UploadCalls++;
-            var info = new DraftTranscriptInfoDto(fileName, "x.pdf", "/uploads/drafts/x.pdf", length, "application/pdf", DateTime.UtcNow);
+            var info = new DraftTranscriptFileDto(fileName, length, "application/pdf", DateTime.UtcNow);
             return Task.FromResult(new UploadDraftTranscriptResultDto(info, [], null, null, null, info));
         }
 

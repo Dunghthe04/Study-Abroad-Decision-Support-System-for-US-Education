@@ -16,25 +16,6 @@ public record TranscriptTermDto(
     List<TranscriptScoreItemDto> Scores
 );
 
-public record SaveAcademicProfileRequest(
-    string TargetLevel,
-    string? CurrentSchool,
-    string? EducationSystem,
-    int? GraduationYear,
-    string? CurrentGrade,
-    string GradeScale,
-    string? IntendedMajor,
-    decimal? Ielts = null,
-    decimal? Toefl = null,
-    decimal? Duolingo = null,
-    decimal? Sat = null,
-    decimal? Act = null,
-    decimal? Gre = null,
-    decimal? Gmat = null,
-    string? OtherTestsJson = null,
-    List<TranscriptTermDto>? Terms = null
-);
-
 public record AcademicProfileResponse(
     Guid Id,
     Guid UserId,

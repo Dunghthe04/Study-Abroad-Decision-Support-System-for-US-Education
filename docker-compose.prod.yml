@@ -82,6 +82,7 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-}
       SMTP_FROM_NAME: ${SMTP_FROM_NAME:-USAS - Study Abroad Support}
+      APP_PUBLIC_URL: https://${DOMAIN:?DOMAIN is required}
     healthcheck:
       test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080 && printf \"GET /health/live HTTP/1.0\r\n\r\n\" >&3 && grep -q 200 <&3'"]
       interval: 30s

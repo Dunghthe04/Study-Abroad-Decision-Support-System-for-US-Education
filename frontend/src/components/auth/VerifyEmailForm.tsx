@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { ArrowLeftIcon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { authApi, ApiError } from "@/lib/api";
@@ -13,15 +13,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
+import { clearPendingEmail, usePendingEmail } from "@/lib/pending-email";
 
 export function VerifyEmailForm() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const initialEmail = searchParams.get("email") || "";
 
   const { verifyEmail } = useAuth();
 
-  const [email, setEmail] = useState(initialEmail);
+  // Email do bước trước (đăng ký / quên mật khẩu / đăng nhập) để lại trong sessionStorage;
+  // người dùng sửa ô email thì dùng giá trị đã nhập
+  const pendingEmail = usePendingEmail();
+  const [typedEmail, setEmail] = useState<string | null>(null);
+  const email = typedEmail ?? pendingEmail;
   const [otpCode, setOtpCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -56,6 +59,7 @@ export function VerifyEmailForm() {
     setIsSubmitting(true);
     try {
       const user = await verifyEmail({ email: email.trim(), otpCode: cleanOtp });
+      clearPendingEmail();
 
       if (user.role === "center" && user.status === "pending") {
         setSuccessMessage("Xác thực email thành công! Tài khoản đại diện trung tâm của bạn đang chờ Quản trị viên duyệt hồ sơ.");

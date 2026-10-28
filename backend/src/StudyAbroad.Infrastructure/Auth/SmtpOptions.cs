@@ -11,5 +11,7 @@ namespace StudyAbroad.Infrastructure.Auth
         public string FromEmail { get; set; } = "no-reply@usas.edu.vn";
         public string FromName { get; set; } = "USAS Education Support";
         public bool EnableSsl { get; set; } = true;
+        /// <summary>Địa chỉ frontend để dựng link trong mail (link mời phụ huynh). Lấy từ APP_PUBLIC_URL.</summary>
+        public string AppBaseUrl { get; set; } = "http://localhost:3000";
     }
 }

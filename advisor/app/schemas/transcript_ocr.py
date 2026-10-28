@@ -10,6 +10,9 @@ class TranscriptSubjectScore(CamelModel):
     score: float = Field(..., description="Điểm số thang 10")
     raw_score: str | None = None
     credits: float | None = 1.0
+    # [UC-12] Ô cần người dùng kiểm tra lại: "source_image" (đọc từ ảnh/PDF scan) hoặc "outlier" (lệch xa các môn khác)
+    needs_review: bool = False
+    review_reason: str | None = None
 
 
 class TranscriptTerm(CamelModel):

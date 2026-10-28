@@ -1,4 +1,6 @@
 using StudyAbroad.Application.Auth;
+using StudyAbroad.Application.Common;
+using StudyAbroad.Application.ParentLinks;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
 
@@ -6,122 +8,6 @@ namespace StudyAbroad.UnitTests;
 
 public class AuthServiceTests
 {
-    private sealed class FakeUserRepository : IUserRepository
-    {
-        public List<User> Users { get; } = [];
-        public List<UserSession> Sessions { get; } = [];
-        public List<OtpToken> Otps { get; } = [];
-
-        public Task<bool> EmailExistAsync(string email, CancellationToken cancellationToken = default) =>
-            Task.FromResult(Users.Any(u => u.Email == email));
-
-        public Task<bool> PhoneExistAsync(string phone, CancellationToken cancellationToken = default) =>
-            Task.FromResult(Users.Any(u => u.Phone == phone));
-
-        public Task AddAsync(User user, CancellationToken cancellationToken = default)
-        {
-            Users.Add(user);
-            return Task.CompletedTask;
-        }
-
-        public Task<User?> GetUserByEmail(string email, CancellationToken cancellationToken = default) =>
-            Task.FromResult(Users.FirstOrDefault(u => u.Email == email));
-
-        public Task<User?> GetUserById(Guid id, CancellationToken cancellationToken = default) =>
-            Task.FromResult(Users.FirstOrDefault(u => u.Id == id));
-
-        public Task UpdateUserAsync(User user, CancellationToken cancellationToken = default)
-        {
-            var idx = Users.FindIndex(u => u.Id == user.Id);
-            if (idx >= 0) Users[idx] = user;
-            return Task.CompletedTask;
-        }
-
-        public Task CreateSessionAsync(UserSession session, CancellationToken cancellationToken = default)
-        {
-            Sessions.Add(session);
-            return Task.CompletedTask;
-        }
-
-        public Task<UserSession?> GetSessionByTokenHashAsync(string tokenHash, CancellationToken cancellationToken = default) =>
-            Task.FromResult(Sessions.FirstOrDefault(s => s.TokenHash == tokenHash));
-
-        public Task RevokeSessionAsync(string tokenHash, CancellationToken cancellationToken = default)
-        {
-            var s = Sessions.FirstOrDefault(x => x.TokenHash == tokenHash);
-            if (s != null) s.IsRevoked = true;
-            return Task.CompletedTask;
-        }
-
-        public Task RevokeAllSessionsAsync(Guid userId, CancellationToken cancellationToken = default)
-        {
-            foreach (var s in Sessions.Where(x => x.UserId == userId))
-            {
-                s.IsRevoked = true;
-            }
-            return Task.CompletedTask;
-        }
-
-        public Task SaveOtpAsync(OtpToken token, CancellationToken cancellationToken = default)
-        {
-            var idx = Otps.FindIndex(o => o.Id == token.Id);
-            if (idx >= 0) Otps[idx] = token;
-            else Otps.Add(token);
-            return Task.CompletedTask;
-        }
-
-        public Task<OtpToken?> GetLatestOtpAsync(Guid userId, string purpose, CancellationToken cancellationToken = default) =>
-            Task.FromResult(Otps
-                .Where(o => o.UserId == userId && o.Purpose == purpose && o.UsedAt == null)
-                .OrderByDescending(o => o.CreatedAt)
-                .FirstOrDefault());
-
-        public Task InvalidateOtpsAsync(Guid userId, string purpose, CancellationToken cancellationToken = default)
-        {
-            foreach (var o in Otps.Where(x => x.UserId == userId && x.Purpose == purpose && x.UsedAt == null))
-            {
-                o.UsedAt = DateTime.UtcNow;
-            }
-            return Task.CompletedTask;
-        }
-
-        public Task UpdateOtpAsync(OtpToken token, CancellationToken cancellationToken = default)
-        {
-            var idx = Otps.FindIndex(o => o.Id == token.Id);
-            if (idx >= 0) Otps[idx] = token;
-            return Task.CompletedTask;
-        }
-
-        public Task<int> CountOtpRequestsInLastHourAsync(Guid userId, string purpose, CancellationToken cancellationToken = default)
-        {
-            var oneHourAgo = DateTime.UtcNow.AddHours(-1);
-            return Task.FromResult(Otps.Count(o => o.UserId == userId && o.Purpose == purpose && o.CreatedAt >= oneHourAgo));
-        }
-
-        public Task<int> UnlockExpiredAccountsAsync(CancellationToken cancellationToken = default)
-        {
-            var now = DateTime.UtcNow;
-            var expired = Users.Where(u => u.Status == UserStatuses.TempLocked && u.LockoutEnd != null && u.LockoutEnd <= now).ToList();
-            foreach (var u in expired)
-            {
-                u.Status = u.Role == UserRoles.Center ? UserStatuses.Pending : UserStatuses.Active;
-                u.FailedLoginAttempts = 0;
-                u.LockoutEnd = null;
-            }
-            return Task.FromResult(expired.Count);
-        }
-
-        public Task<int> CleanupExpiredOtpsAsync(CancellationToken cancellationToken = default)
-        {
-            var now = DateTime.UtcNow;
-            var count = Otps.RemoveAll(o => o.ExpiresAt < now);
-            return Task.FromResult(count);
-        }
-
-        public Task<List<User>> GetAllUsersAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(Users.ToList());
-    }
-
     private sealed class FakeHasher : IPasswordHasher
     {
         public string Hash(string password) => "hashed:" + password;
@@ -136,53 +22,40 @@ public class AuthServiceTests
         public string HashToken(string token) => "hash:" + token;
     }
 
-    private sealed class FakeEmailSender : IEmailSender
-    {
-        public List<(string To, string Purpose, string Code)> SentEmails { get; } = [];
-
-        public Task SendVerificationEmailAsync(string toEmail, string fullName, string otpCode, int expiryMinutes = 5, CancellationToken ct = default)
-        {
-            SentEmails.Add((toEmail, OtpPurposes.VerifyEmail, otpCode));
-            return Task.CompletedTask;
-        }
-
-        public Task SendPasswordResetEmailAsync(string toEmail, string fullName, string otpCode, int expiryMinutes = 5, CancellationToken ct = default)
-        {
-            SentEmails.Add((toEmail, OtpPurposes.ResetPassword, otpCode));
-            return Task.CompletedTask;
-        }
-
-        public Task SendAccountTempLockedNotificationAsync(string toEmail, string fullName, int lockoutMinutes = 15, CancellationToken ct = default)
-        {
-            SentEmails.Add((toEmail, "temp_locked_notice", $"lockout:{lockoutMinutes}m"));
-            return Task.CompletedTask;
-        }
-    }
-
     private readonly FakeUserRepository _repo = new();
     private readonly FakeTokenService _tokens = new();
     private readonly FakeEmailSender _emailSender = new();
+    private readonly FakeParentLinkRepository _links = new();
 
-    private AuthService CreateService() => new(_repo, new FakeHasher(), _tokens, _emailSender);
+    private AuthService CreateService() => new(_repo, new FakeHasher(), _tokens, _emailSender, _links);
+
+    // Ngày sinh ứng với tuổi tròn (sinh nhật cách hôm nay ở VN 10 ngày về trước)
+    private static DateOnly BornYearsAgo(int years) =>
+        AgePolicy.TodayInVietnam(DateTime.UtcNow).AddDays(-10).AddYears(-years);
 
     private static RegisterRequest Request(
         string email = "a@test.com",
         string password = "password123",
         string fullName = "Nguyen Van A",
         string role = UserRoles.Parent,
-        bool? parentAcknowledged = null,
-        string? phone = null) =>
-        new(email, password, fullName, role, parentAcknowledged, phone);
+        DateOnly? dateOfBirth = null,
+        string? parentEmail = null,
+        string? phone = null,
+        bool noDateOfBirth = false) =>
+        new(email, password, fullName, role, noDateOfBirth ? null : dateOfBirth ?? BornYearsAgo(30), parentEmail, phone);
 
     [Theory]
-    [InlineData(UserRoles.Parent, null)]
-    [InlineData(UserRoles.Student, true)]
-    public async Task Register_StudentOrParent_IsUnverifiedAndSendsOtpEmail(string role, bool? parentAcknowledged)
+    [InlineData(UserRoles.Parent, 30, null)]
+    [InlineData(UserRoles.Student, 18, null)]
+    [InlineData(UserRoles.Student, 17, null)]
+    [InlineData(UserRoles.Student, 15, "parent@test.com")]
+    public async Task Register_StudentOrParent_IsUnverifiedAndSendsOtpEmail(string role, int age, string? parentEmail)
     {
-        var result = await CreateService().RegisterAsync(Request(role: role, parentAcknowledged: parentAcknowledged));
+        var result = await CreateService().RegisterAsync(Request(role: role, dateOfBirth: BornYearsAgo(age), parentEmail: parentEmail));
 
         Assert.Equal(AuthError.None, result.Error);
-        Assert.Equal(UserStatuses.Unverified, result.User!.Status);
+        Assert.Null(result.User);
+        Assert.Equal(UserStatuses.Unverified, _repo.Users[0].Status);
         Assert.Single(_repo.Users);
         Assert.Single(_emailSender.SentEmails);
         Assert.Equal(OtpPurposes.VerifyEmail, _emailSender.SentEmails[0].Purpose);
@@ -203,7 +76,7 @@ public class AuthServiceTests
     }
 
     [Fact]
-    public async Task VerifyEmail_ExpiredOtp_ReturnsOtpExpiredError()
+    public async Task VerifyEmail_ExpiredOtp_ReturnsGenericOtpInvalid()
     {
         var service = CreateService();
         await service.RegisterAsync(Request());
@@ -212,7 +85,8 @@ public class AuthServiceTests
 
         var result = await service.VerifyEmailAsync(new VerifyEmailRequest("a@test.com", _emailSender.SentEmails[0].Code));
 
-        Assert.Equal(AuthError.OtpExpired, result.Error);
+        Assert.Equal(AuthError.OtpInvalid, result.Error);
+        Assert.Equal(AuthService.OtpFailedMessage, result.Message);
         Assert.Equal(UserStatuses.Unverified, _repo.Users[0].Status);
     }
 
@@ -230,31 +104,146 @@ public class AuthServiceTests
     }
 
     [Fact]
-    public async Task Register_Center_IsPendingAfterEmailVerification()
+    public async Task Register_SavesDateOfBirth()
     {
-        var service = CreateService();
-        await service.RegisterAsync(Request(role: UserRoles.Center));
-        var otpCode = _emailSender.SentEmails[0].Code;
+        var dob = BornYearsAgo(30);
+        await CreateService().RegisterAsync(Request(dateOfBirth: dob));
 
-        var result = await service.VerifyEmailAsync(new VerifyEmailRequest("a@test.com", otpCode));
-
-        Assert.Equal(AuthError.None, result.Error);
-        Assert.Equal(UserStatuses.Pending, _repo.Users[0].Status);
+        Assert.Equal(dob, _repo.Users[0].DateOfBirth);
     }
 
-    [Theory]
-    [InlineData(null)]
-    [InlineData(false)]
-    public async Task Register_StudentWithoutParentAcknowledged_IsValidationError(bool? parentAcknowledged)
+    [Fact]
+    public async Task Register_WithoutDateOfBirth_IsValidationError()
     {
-        var result = await CreateService().RegisterAsync(Request(role: UserRoles.Student, parentAcknowledged: parentAcknowledged));
+        var result = await CreateService().RegisterAsync(Request(noDateOfBirth: true));
+
+        Assert.Equal(AuthError.Validation, result.Error);
+        Assert.Empty(_repo.Users);
+        Assert.Empty(_emailSender.SentEmails);
+    }
+
+    [Fact]
+    public async Task Register_DateOfBirthInFuture_IsValidationError()
+    {
+        var tomorrow = AgePolicy.TodayInVietnam(DateTime.UtcNow).AddDays(1);
+
+        var result = await CreateService().RegisterAsync(Request(dateOfBirth: tomorrow));
+
+        Assert.Equal(AuthError.Validation, result.Error);
+        Assert.Empty(_repo.Users);
+    }
+
+    [Fact]
+    public async Task Register_AgeOverMax_IsValidationError()
+    {
+        var result = await CreateService().RegisterAsync(Request(dateOfBirth: BornYearsAgo(AuthService.MaxAge + 1)));
 
         Assert.Equal(AuthError.Validation, result.Error);
         Assert.Empty(_repo.Users);
     }
 
     [Theory]
+    [InlineData(17)]
+    [InlineData(10)]
+    public async Task Register_ParentUnder18_IsValidationError(int age)
+    {
+        var result = await CreateService().RegisterAsync(Request(role: UserRoles.Parent, dateOfBirth: BornYearsAgo(age)));
+
+        Assert.Equal(AuthError.Validation, result.Error);
+        Assert.Empty(_repo.Users);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task Register_StudentUnder16WithoutParentEmail_IsValidationError(string? parentEmail)
+    {
+        var result = await CreateService().RegisterAsync(
+            Request(role: UserRoles.Student, dateOfBirth: BornYearsAgo(15), parentEmail: parentEmail));
+
+        Assert.Equal(AuthError.Validation, result.Error);
+        Assert.Empty(_repo.Users);
+        Assert.Empty(_links.Links);
+    }
+
+    [Theory]
+    [InlineData("a@test.com")]
+    [InlineData(" A@Test.com ")]
+    [InlineData("not-an-email")]
+    public async Task Register_StudentInvalidOrSameParentEmail_IsValidationError(string parentEmail)
+    {
+        var result = await CreateService().RegisterAsync(
+            Request(role: UserRoles.Student, dateOfBirth: BornYearsAgo(15), parentEmail: parentEmail));
+
+        Assert.Equal(AuthError.Validation, result.Error);
+        Assert.Empty(_repo.Users);
+    }
+
+    [Fact]
+    public async Task Register_Student16To17WithoutParentEmail_SucceedsWithoutLink()
+    {
+        var result = await CreateService().RegisterAsync(Request(role: UserRoles.Student, dateOfBirth: BornYearsAgo(16)));
+
+        Assert.Equal(AuthError.None, result.Error);
+        Assert.Single(_repo.Users);
+        Assert.Empty(_links.Links);
+    }
+
+    [Fact]
+    public async Task Register_Student16To17WithParentEmail_CreatesLink()
+    {
+        await CreateService().RegisterAsync(
+            Request(role: UserRoles.Student, dateOfBirth: BornYearsAgo(17), parentEmail: "Parent@Test.com"));
+
+        var link = Assert.Single(_links.Links);
+        Assert.Equal("parent@test.com", link.ParentEmail);
+    }
+
+    [Fact]
+    public async Task Register_AdultStudentParentEmail_IsIgnored()
+    {
+        var result = await CreateService().RegisterAsync(
+            Request(role: UserRoles.Student, dateOfBirth: BornYearsAgo(19), parentEmail: "parent@test.com"));
+
+        Assert.Equal(AuthError.None, result.Error);
+        Assert.Empty(_links.Links);
+    }
+
+    [Fact]
+    public async Task Register_StudentUnder16_InviteSentOnlyAfterEmailVerified()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(
+            Request(role: UserRoles.Student, dateOfBirth: BornYearsAgo(14), parentEmail: "parent@test.com"));
+
+        // Trước khi xác thực: đã lưu link, chưa có token, chưa gửi mail mời
+        var link = Assert.Single(_links.Links);
+        Assert.Equal(_repo.Users[0].Id, link.StudentUserId);
+        Assert.Equal(ParentLinkStatuses.Pending, link.Status);
+        Assert.Null(link.TokenHash);
+        Assert.Equal(0, link.InviteSentCount);
+        Assert.DoesNotContain(_emailSender.SentEmails, e => e.Purpose == "parent_invite");
+
+        var otpCode = _emailSender.SentEmails[0].Code;
+        var result = await service.VerifyEmailAsync(new VerifyEmailRequest("a@test.com", otpCode));
+
+        Assert.Equal(AuthError.None, result.Error);
+        var invite = Assert.Single(_emailSender.SentEmails, e => e.Purpose == "parent_invite");
+        Assert.Equal("parent@test.com", invite.To);
+        link = _links.Links[0];
+        Assert.Equal(ParentInvite.HashToken(invite.Code), link.TokenHash);
+        Assert.NotEqual(invite.Code, link.TokenHash);
+        Assert.Equal(1, link.InviteSentCount);
+        Assert.NotNull(link.LastInviteSentAt);
+        Assert.InRange(link.TokenExpiresAt!.Value,
+            DateTime.UtcNow.AddDays(ParentInvite.ExpiryDays).AddMinutes(-1),
+            DateTime.UtcNow.AddDays(ParentInvite.ExpiryDays).AddMinutes(1));
+    }
+
+    [Theory]
     [InlineData(UserRoles.Admin)]
+    [InlineData(UserRoles.Center)]
     [InlineData("teacher")]
     [InlineData("")]
     public async Task Register_RoleNotAllowed_IsValidationError(string role)
@@ -266,15 +255,18 @@ public class AuthServiceTests
     }
 
     [Fact]
-    public async Task Register_DuplicateEmail_IsEmailTakenError()
+    public async Task Register_DuplicateEmail_ReturnsSameMessageAndMailsOwner()
     {
         var service = CreateService();
-        await service.RegisterAsync(Request());
+        var first = await service.RegisterAsync(Request());
 
-        var result = await service.RegisterAsync(Request());
+        var result = await service.RegisterAsync(Request(email: " A@Test.com "));
 
-        Assert.Equal(AuthError.EmailTaken, result.Error);
+        Assert.Equal(AuthError.None, result.Error);
+        Assert.Equal(first.Message, result.Message);
         Assert.Single(_repo.Users);
+        Assert.Single(_repo.Otps); // không sinh OTP mới
+        Assert.Equal(("a@test.com", "account_exists_notice"), (_emailSender.SentEmails[^1].To, _emailSender.SentEmails[^1].Purpose));
     }
 
     [Fact]
@@ -383,8 +375,9 @@ public class AuthServiceTests
         var resetRes = await service.ResetPasswordAsync(new ResetPasswordRequest("a@test.com", resetOtpEmail.Code, "newPassword123"));
         Assert.Equal(AuthError.None, resetRes.Error);
 
-        // Session cũ đã bị thu hồi
+        // Session cũ đã bị thu hồi và chủ tài khoản nhận mail báo đổi mật khẩu
         Assert.True(_repo.Sessions[0].IsRevoked);
+        Assert.Contains(_emailSender.SentEmails, e => e.Purpose == "password_changed_notice" && e.To == "a@test.com");
 
         // Mật khẩu mới đăng nhập được
         var newLogin = await service.LoginAsync(new LoginRequest("a@test.com", "newPassword123"));
@@ -392,7 +385,7 @@ public class AuthServiceTests
     }
 
     [Fact]
-    public async Task ResendOtp_Within60Seconds_EnforcesCooldown()
+    public async Task ResendOtp_Within60Seconds_SilentlyDoesNotSend()
     {
         var service = CreateService();
         await service.RegisterAsync(Request());
@@ -400,8 +393,10 @@ public class AuthServiceTests
         // Yêu cầu gửi lại ngay lập tức
         var res = await service.ResendOtpAsync(new ResendOtpRequest("a@test.com", OtpPurposes.VerifyEmail));
 
-        Assert.Equal(AuthError.Validation, res.Error);
+        Assert.Equal(AuthError.None, res.Error);
         Assert.Contains("60 giây", res.Message!);
+        Assert.Single(_repo.Otps);
+        Assert.Single(_emailSender.SentEmails);
     }
 
     [Fact]
@@ -444,7 +439,6 @@ public class AuthServiceTests
         var result = await service.RegisterAsync(Request(phone: inputPhone));
 
         Assert.Equal(AuthError.None, result.Error);
-        Assert.Equal(expectedPhone, result.User!.Phone);
         Assert.Equal(expectedPhone, _repo.Users[0].Phone);
     }
 
@@ -511,14 +505,30 @@ public class AuthServiceTests
     public async Task GetMe_ExistingUser_ReturnsUserDto()
     {
         var service = CreateService();
-        var reg = await service.RegisterAsync(Request(phone: "0987654321"));
-        var userId = reg.User!.Id;
+        await service.RegisterAsync(Request(phone: "0987654321"));
+        var userId = _repo.Users[0].Id;
 
         var me = await service.GetMeAsync(userId);
 
         Assert.NotNull(me);
         Assert.Equal(userId, me.Id);
         Assert.Equal("0987654321", me.Phone);
+    }
+
+    [Fact]
+    public async Task GetMe_ChildStudent_ReturnsAgeRestrictions()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request(role: UserRoles.Student, dateOfBirth: BornYearsAgo(14), parentEmail: "me@test.com"));
+        var userId = _repo.Users[0].Id;
+
+        var me = await service.GetMeAsync(userId);
+
+        Assert.NotNull(me);
+        Assert.Equal(AgeGroups.Child, me.AgeGroup);
+        Assert.Equal(ParentConsentStatuses.Pending, me.ParentConsentStatus);
+        Assert.Contains(AgeFeatures.ProcessStudentData, me.BlockedFeatures!);
+        Assert.Contains(AgeFeatures.ShareWithCenter, me.BlockedFeatures!);
     }
 
     [Fact]
@@ -536,15 +546,17 @@ public class AuthServiceTests
     }
 
     [Fact]
-    public async Task Register_WithDuplicatePhone_ReturnsPhoneTakenError()
+    public async Task Register_WithDuplicatePhone_ReturnsGenericSuccessAndMailsNewEmail()
     {
         var service = CreateService();
         await service.RegisterAsync(Request(email: "user1@test.com", phone: "0912345678"));
 
-        var result = await service.RegisterAsync(Request(email: "user2@test.com", phone: "0912345678"));
+        var result = await service.RegisterAsync(Request(email: "user2@test.com", phone: "+84 912 345 678"));
 
-        Assert.Equal(AuthError.PhoneTaken, result.Error);
-        Assert.Contains("Số điện thoại đã được sử dụng", result.Message!);
+        Assert.Equal(AuthError.None, result.Error);
+        Assert.Contains("user2@test.com", result.Message!);
+        Assert.Single(_repo.Users);
+        Assert.Equal(("user2@test.com", "phone_in_use_notice"), (_emailSender.SentEmails[^1].To, _emailSender.SentEmails[^1].Purpose));
     }
 
     [Fact]
@@ -554,7 +566,7 @@ public class AuthServiceTests
         var result = await service.RegisterAsync(Request());
 
         Assert.Equal(AuthError.None, result.Error);
-        Assert.Equal(UserStatuses.Unverified, result.User!.Status);
+        Assert.Equal(UserStatuses.Unverified, _repo.Users[0].Status);
         Assert.Single(_repo.Otps);
         var otp = _repo.Otps[0];
         Assert.Equal(OtpPurposes.VerifyEmail, otp.Purpose);
@@ -565,7 +577,7 @@ public class AuthServiceTests
     }
 
     [Fact]
-    public async Task VerifyEmail_OtpExpiredAfter5Minutes_ReturnsOtpExpiredError()
+    public async Task VerifyEmail_OtpExpiredAfter5Minutes_ReturnsGenericOtpInvalid()
     {
         var service = CreateService();
         await service.RegisterAsync(Request());
@@ -574,8 +586,8 @@ public class AuthServiceTests
 
         var result = await service.VerifyEmailAsync(new VerifyEmailRequest("a@test.com", "123456"));
 
-        Assert.Equal(AuthError.OtpExpired, result.Error);
-        Assert.Contains("hết hạn", result.Message!);
+        Assert.Equal(AuthError.OtpInvalid, result.Error);
+        Assert.Equal(AuthService.OtpFailedMessage, result.Message);
     }
 
     [Fact]
@@ -590,7 +602,7 @@ public class AuthServiceTests
         {
             var res = await service.VerifyEmailAsync(new VerifyEmailRequest("a@test.com", "000000"));
             Assert.Equal(AuthError.OtpInvalid, res.Error);
-            Assert.Contains($"còn {5 - i} lần thử", res.Message!);
+            Assert.Equal(AuthService.OtpFailedMessage, res.Message);
             Assert.Equal(i, _repo.Otps[0].Attempts);
             Assert.Null(_repo.Otps[0].UsedAt);
             Assert.Equal(UserStatuses.Unverified, user.Status);
@@ -600,7 +612,7 @@ public class AuthServiceTests
         // Nhập sai lần thứ 5 -> Mã OTP bị vô hiệu hóa
         var finalRes = await service.VerifyEmailAsync(new VerifyEmailRequest("a@test.com", "000000"));
         Assert.Equal(AuthError.OtpInvalid, finalRes.Error);
-        Assert.Contains("vô hiệu hóa", finalRes.Message!);
+        Assert.Equal(AuthService.OtpFailedMessage, finalRes.Message);
         Assert.NotNull(_repo.Otps[0].UsedAt); // Đã bị hủy
         Assert.Equal(UserStatuses.Unverified, user.Status); // Tài khoản vẫn unverified, không bị khóa
     }
@@ -621,19 +633,22 @@ public class AuthServiceTests
     }
 
     [Fact]
-    public async Task ResendOtp_Within60Seconds_ReturnsValidationError()
+    public async Task ResendOtp_UnknownEmail_ReturnsSameMessageAsExistingEmail()
     {
         var service = CreateService();
         await service.RegisterAsync(Request());
+        _repo.Otps[0].CreatedAt = DateTime.UtcNow.AddSeconds(-61);
 
-        var result = await service.ResendOtpAsync(new ResendOtpRequest("a@test.com", OtpPurposes.VerifyEmail));
+        var known = await service.ResendOtpAsync(new ResendOtpRequest("a@test.com", OtpPurposes.VerifyEmail));
+        var unknown = await service.ResendOtpAsync(new ResendOtpRequest("nobody@test.com", OtpPurposes.VerifyEmail));
 
-        Assert.Equal(AuthError.Validation, result.Error);
-        Assert.Contains("Vui lòng đợi thêm", result.Message!);
+        Assert.Equal(AuthError.None, unknown.Error);
+        Assert.Equal(known.Message, unknown.Message);
+        Assert.DoesNotContain(_emailSender.SentEmails, e => e.To == "nobody@test.com");
     }
 
     [Fact]
-    public async Task ResendOtp_MoreThan5TimesPerHour_ReturnsQuotaExceededError()
+    public async Task ResendOtp_MoreThan5TimesPerHour_SilentlyDoesNotSend()
     {
         var service = CreateService();
         await service.RegisterAsync(Request());
@@ -656,8 +671,9 @@ public class AuthServiceTests
 
         var result = await service.ResendOtpAsync(new ResendOtpRequest("a@test.com", OtpPurposes.VerifyEmail));
 
-        Assert.Equal(AuthError.Validation, result.Error);
-        Assert.Contains("vượt quá giới hạn 5 lần", result.Message!);
+        Assert.Equal(AuthError.None, result.Error);
+        Assert.Equal(5, _repo.Otps.Count); // không sinh thêm mã
+        Assert.Single(_emailSender.SentEmails);
     }
 
     [Fact]
@@ -836,13 +852,12 @@ public class AuthServiceTests
         // Lần thứ 5 sai -> Bị vô hiệu hóa ngay
         var attempt5 = await service.VerifyEmailAsync(new VerifyEmailRequest("a@test.com", "000000"));
         Assert.Equal(AuthError.OtpInvalid, attempt5.Error);
-        Assert.Contains("vô hiệu hóa", attempt5.Message!);
         Assert.NotNull(_repo.Otps[0].UsedAt); // Đã bị hủy
 
         // Lần thứ 6 gõ ĐÚNG mã cũ -> Vẫn bị từ chối vì mã OTP đó đã không còn hợp lệ
         var attempt6 = await service.VerifyEmailAsync(new VerifyEmailRequest("a@test.com", correctCode));
         Assert.Equal(AuthError.OtpInvalid, attempt6.Error);
-        Assert.Contains("Không tìm thấy mã OTP hợp lệ", attempt6.Message!);
+        Assert.Equal(AuthService.OtpFailedMessage, attempt6.Message);
         Assert.Equal(UserStatuses.Unverified, _repo.Users[0].Status);
     }
 
@@ -862,7 +877,7 @@ public class AuthServiceTests
     }
 
     [Fact]
-    public async Task ResendOtp_AdminLockedUser_ReturnsLockedError()
+    public async Task ResendOtp_AdminLockedUser_SilentlyDoesNotSend()
     {
         var service = CreateService();
         await service.RegisterAsync(Request());
@@ -870,8 +885,8 @@ public class AuthServiceTests
 
         var result = await service.ResendOtpAsync(new ResendOtpRequest("a@test.com", OtpPurposes.ResetPassword));
 
-        Assert.Equal(AuthError.Locked, result.Error);
-        Assert.Contains("Quản trị viên", result.Message!);
+        Assert.Equal(AuthError.None, result.Error);
+        Assert.DoesNotContain(_emailSender.SentEmails, e => e.Purpose == OtpPurposes.ResetPassword);
     }
 
     [Fact]
@@ -944,5 +959,316 @@ public class AuthServiceTests
         Assert.Equal(UserStatuses.TempLocked, activeLockoutUser.Status);
         Assert.Equal(5, activeLockoutUser.FailedLoginAttempts);
         Assert.NotNull(activeLockoutUser.LockoutEnd);
+    }
+
+    // =========================================================================
+    // CHỐNG DÒ TÀI KHOẢN & REQUEST SONG SONG
+    // =========================================================================
+
+    [Fact]
+    public async Task Login_UnknownEmail_SameResultAsWrongPassword()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        _repo.Users[0].Status = UserStatuses.Active;
+
+        var unknown = await service.LoginAsync(new LoginRequest("nobody@test.com", "password123"));
+        var wrong = await service.LoginAsync(new LoginRequest("a@test.com", "wrong-password"));
+
+        Assert.Equal(AuthError.InvalidCredentials, unknown.Error);
+        Assert.Equal(wrong.Error, unknown.Error);
+        Assert.Equal(wrong.Message, unknown.Message);
+    }
+
+    [Theory]
+    [InlineData(UserStatuses.Unverified)]
+    [InlineData(UserStatuses.Locked)]
+    public async Task Login_UnverifiedOrLocked_WrongPassword_DoesNotRevealStatusOrCountAttempts(string status)
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        _repo.Users[0].Status = status;
+
+        var result = await service.LoginAsync(new LoginRequest("a@test.com", "wrong-password"));
+
+        Assert.Equal(AuthError.InvalidCredentials, result.Error);
+        Assert.Equal(AuthService.InvalidCredentialsMessage, result.Message);
+        Assert.Equal(0, _repo.Users[0].FailedLoginAttempts);
+        Assert.Equal(status, _repo.Users[0].Status);
+    }
+
+    [Fact]
+    public async Task Login_ConcurrentAttemptConflict_RejectedBeforeCheckingPassword()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        _repo.Users[0].Status = UserStatuses.Active;
+        _repo.UserConflictsToThrow = 1; // request khác vừa ghi bộ đếm
+
+        // Kể cả mật khẩu đúng: không ghi được lần thử thì không được so mật khẩu
+        var result = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
+
+        Assert.Equal(AuthError.InvalidCredentials, result.Error);
+        Assert.Empty(_repo.Sessions);
+    }
+
+    [Fact]
+    public async Task VerifyEmail_ConcurrentAttemptConflict_RejectedWithoutConsumingOtp()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        var code = _emailSender.SentEmails[0].Code;
+        _repo.OtpConflictsToThrow = 1;
+
+        var result = await service.VerifyEmailAsync(new VerifyEmailRequest("a@test.com", code));
+
+        Assert.Equal(AuthError.OtpInvalid, result.Error);
+        Assert.Null(_repo.Otps[0].UsedAt);
+        Assert.Equal(UserStatuses.Unverified, _repo.Users[0].Status);
+        Assert.Empty(_repo.Sessions);
+    }
+
+    [Fact]
+    public async Task VerifyEmail_SameCodeUsedTwice_SecondIsRejected()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        var code = _emailSender.SentEmails[0].Code;
+
+        var first = await service.VerifyEmailAsync(new VerifyEmailRequest("a@test.com", code));
+        var second = await service.VerifyEmailAsync(new VerifyEmailRequest("a@test.com", code));
+
+        Assert.Equal(AuthError.None, first.Error);
+        Assert.Equal(AuthError.OtpInvalid, second.Error);
+        Assert.Single(_repo.Sessions);
+    }
+
+    [Fact]
+    public async Task VerifyEmail_UnknownEmail_SameMessageAsWrongCode()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+
+        var unknown = await service.VerifyEmailAsync(new VerifyEmailRequest("nobody@test.com", "000000"));
+        var wrong = await service.VerifyEmailAsync(new VerifyEmailRequest("a@test.com", "000000"));
+
+        Assert.Equal(AuthError.OtpInvalid, unknown.Error);
+        Assert.Equal(wrong.Message, unknown.Message);
+    }
+
+    [Fact]
+    public async Task ForgotPassword_UnknownEmail_SameMessageAndNoMail()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        _repo.Users[0].Status = UserStatuses.Active;
+
+        var known = await service.ForgotPasswordAsync(new ForgotPasswordRequest("a@test.com"));
+        var unknown = await service.ForgotPasswordAsync(new ForgotPasswordRequest("nobody@test.com"));
+
+        Assert.Equal(known.Message, unknown.Message);
+        Assert.DoesNotContain(_emailSender.SentEmails, e => e.To == "nobody@test.com");
+    }
+
+    [Theory]
+    [InlineData("short")]
+    [InlineData(null)]
+    public async Task ResetPassword_InvalidNewPassword_IsValidationErrorAndOtpUntouched(string? newPassword)
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        _repo.Users[0].Status = UserStatuses.Active;
+        await service.ForgotPasswordAsync(new ForgotPasswordRequest("a@test.com"));
+        var resetOtp = _repo.Otps.Last(o => o.Purpose == OtpPurposes.ResetPassword);
+        var code = _emailSender.SentEmails.Last(e => e.Purpose == OtpPurposes.ResetPassword).Code;
+
+        var result = await service.ResetPasswordAsync(new ResetPasswordRequest("a@test.com", code, newPassword!));
+
+        Assert.Equal(AuthError.Validation, result.Error);
+        Assert.Equal(0, resetOtp.Attempts);
+        Assert.Null(resetOtp.UsedAt);
+    }
+
+    [Fact]
+    public async Task ResetPassword_AdminLockedUser_RejectedWithGenericOtpMessage()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        _repo.Users[0].Status = UserStatuses.Active;
+        await service.ForgotPasswordAsync(new ForgotPasswordRequest("a@test.com"));
+        var code = _emailSender.SentEmails.Last(e => e.Purpose == OtpPurposes.ResetPassword).Code;
+        var oldHash = _repo.Users[0].PasswordHash;
+        _repo.Users[0].Status = UserStatuses.Locked;
+
+        var result = await service.ResetPasswordAsync(new ResetPasswordRequest("a@test.com", code, "newPassword123"));
+
+        Assert.Equal(AuthError.OtpInvalid, result.Error);
+        Assert.Equal(AuthService.OtpFailedMessage, result.Message);
+        Assert.Equal(oldHash, _repo.Users[0].PasswordHash);
+    }
+
+    // [UC-06] Đổi mật khẩu: tạo tài khoản active và 2 phiên (thiết bị hiện tại + thiết bị khác)
+    private async Task<(AuthService Service, User User, string CurrentToken)> ActiveUserWithTwoSessionsAsync()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        var user = _repo.Users[0];
+        user.Status = UserStatuses.Active;
+
+        var login = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
+        var currentToken = login.Response!.AccessToken;
+        await _repo.CreateSessionAsync(new UserSession { UserId = user.Id, TokenHash = "hash:other-device", ExpiresAt = DateTime.UtcNow.AddDays(7) });
+        return (service, user, currentToken);
+    }
+
+    [Fact]
+    public async Task ChangePassword_Success_KeepsCurrentSession_RevokesOthers_AndMailsOwner()
+    {
+        var (service, user, currentToken) = await ActiveUserWithTwoSessionsAsync();
+
+        var result = await service.ChangePasswordAsync(user.Id, currentToken, new ChangePasswordRequest("password123", "newPassword123"));
+
+        Assert.Equal(AuthError.None, result.Error);
+        Assert.Equal("hashed:newPassword123", user.PasswordHash);
+        Assert.False(_repo.Sessions.Single(s => s.TokenHash == "hash:" + currentToken).IsRevoked);
+        Assert.True(_repo.Sessions.Single(s => s.TokenHash == "hash:other-device").IsRevoked);
+        Assert.Contains(_emailSender.SentEmails, e => e.Purpose == "password_changed_notice" && e.To == "a@test.com");
+    }
+
+    [Fact]
+    public async Task ChangePassword_WrongCurrentPassword_RejectedAndCounted_NoChange()
+    {
+        var (service, user, currentToken) = await ActiveUserWithTwoSessionsAsync();
+
+        var result = await service.ChangePasswordAsync(user.Id, currentToken, new ChangePasswordRequest("wrongpass", "newPassword123"));
+
+        Assert.Equal(AuthError.InvalidCredentials, result.Error);
+        Assert.Equal(AuthService.WrongCurrentPasswordMessage, result.Message);
+        Assert.Equal("hashed:password123", user.PasswordHash);
+        Assert.Equal(1, user.FailedLoginAttempts);
+        Assert.All(_repo.Sessions, s => Assert.False(s.IsRevoked));
+        Assert.DoesNotContain(_emailSender.SentEmails, e => e.Purpose == "password_changed_notice");
+    }
+
+    [Fact]
+    public async Task ChangePassword_WrongCurrentPassword5Times_TempLocksAndRevokesAllSessions()
+    {
+        var (service, user, currentToken) = await ActiveUserWithTwoSessionsAsync();
+
+        for (int i = 1; i <= 4; i++)
+        {
+            var res = await service.ChangePasswordAsync(user.Id, currentToken, new ChangePasswordRequest("wrongpass", "newPassword123"));
+            Assert.Equal(AuthError.InvalidCredentials, res.Error);
+        }
+
+        var lockRes = await service.ChangePasswordAsync(user.Id, currentToken, new ChangePasswordRequest("wrongpass", "newPassword123"));
+
+        Assert.Equal(AuthError.TempLocked, lockRes.Error);
+        Assert.Equal(UserStatuses.TempLocked, user.Status);
+        Assert.All(_repo.Sessions, s => Assert.True(s.IsRevoked));
+        Assert.Contains(_emailSender.SentEmails, e => e.Purpose == "temp_locked_notice");
+    }
+
+    [Theory]
+    [InlineData("short")]
+    [InlineData("")]
+    public async Task ChangePassword_InvalidNewPassword_IsValidationError_NotCounted(string newPassword)
+    {
+        var (service, user, currentToken) = await ActiveUserWithTwoSessionsAsync();
+
+        var result = await service.ChangePasswordAsync(user.Id, currentToken, new ChangePasswordRequest("password123", newPassword));
+
+        Assert.Equal(AuthError.Validation, result.Error);
+        Assert.Equal("hashed:password123", user.PasswordHash);
+        Assert.Equal(0, user.FailedLoginAttempts);
+    }
+
+    [Fact]
+    public async Task ChangePassword_NewSameAsCurrent_IsValidationError_SessionsUntouched()
+    {
+        var (service, user, currentToken) = await ActiveUserWithTwoSessionsAsync();
+
+        var result = await service.ChangePasswordAsync(user.Id, currentToken, new ChangePasswordRequest("password123", "password123"));
+
+        Assert.Equal(AuthError.Validation, result.Error);
+        Assert.Equal(0, user.FailedLoginAttempts);
+        Assert.All(_repo.Sessions, s => Assert.False(s.IsRevoked));
+    }
+
+    [Fact]
+    public async Task ChangePassword_ConcurrentAttemptConflict_RejectedBeforeCheckingPassword()
+    {
+        var (service, user, currentToken) = await ActiveUserWithTwoSessionsAsync();
+        _repo.UserConflictsToThrow = 1;
+
+        var result = await service.ChangePasswordAsync(user.Id, currentToken, new ChangePasswordRequest("password123", "newPassword123"));
+
+        Assert.Equal(AuthError.InvalidCredentials, result.Error);
+        Assert.Equal("hashed:password123", user.PasswordHash);
+        Assert.All(_repo.Sessions, s => Assert.False(s.IsRevoked));
+    }
+
+    // Sửa thông tin cá nhân: tên + số điện thoại, email giữ nguyên
+    private async Task<(AuthService Service, User User)> ActiveUserAsync(string email = "a@test.com", string? phone = null)
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request(email: email, phone: phone));
+        var user = _repo.Users.Single(u => u.Email == email);
+        user.Status = UserStatuses.Active;
+        return (service, user);
+    }
+
+    [Fact]
+    public async Task UpdateProfile_ChangesNameAndNormalizesPhone_EmailUnchanged()
+    {
+        var (service, user) = await ActiveUserAsync();
+
+        var result = await service.UpdateProfileAsync(user.Id, new UpdateProfileRequest("  Tran Thi B  ", "+84 912 345 678"));
+
+        Assert.Equal(AuthError.None, result.Error);
+        Assert.Equal("Tran Thi B", user.FullName);
+        Assert.Equal("0912345678", user.Phone);
+        Assert.Equal("a@test.com", user.Email);
+        Assert.Equal("Tran Thi B", result.User!.FullName);
+    }
+
+    [Fact]
+    public async Task UpdateProfile_EmptyPhone_ClearsPhone()
+    {
+        var (service, user) = await ActiveUserAsync(phone: "0912345678");
+
+        var result = await service.UpdateProfileAsync(user.Id, new UpdateProfileRequest("Nguyen Van A", "  "));
+
+        Assert.Equal(AuthError.None, result.Error);
+        Assert.Null(user.Phone);
+    }
+
+    [Theory]
+    [InlineData("", "0912345678")]
+    [InlineData("Nguyen Van A", "12345")]
+    public async Task UpdateProfile_InvalidInput_Rejected_NoChange(string fullName, string phone)
+    {
+        var (service, user) = await ActiveUserAsync();
+
+        var result = await service.UpdateProfileAsync(user.Id, new UpdateProfileRequest(fullName, phone));
+
+        Assert.Equal(AuthError.Validation, result.Error);
+        Assert.Equal("Nguyen Van A", user.FullName);
+        Assert.Null(user.Phone);
+    }
+
+    [Fact]
+    public async Task UpdateProfile_PhoneOfAnotherAccount_Rejected_OwnPhoneAllowed()
+    {
+        await ActiveUserAsync(email: "other@test.com", phone: "0987654321");
+        var (service, user) = await ActiveUserAsync(phone: "0912345678");
+
+        var taken = await service.UpdateProfileAsync(user.Id, new UpdateProfileRequest("Nguyen Van A", "0987654321"));
+        var own = await service.UpdateProfileAsync(user.Id, new UpdateProfileRequest("Nguyen Van C", "0912345678"));
+
+        Assert.Equal(AuthError.Validation, taken.Error);
+        Assert.Equal(AuthError.None, own.Error);
+        Assert.Equal("0912345678", user.Phone);
+        Assert.Equal("Nguyen Van C", user.FullName);
     }
 }

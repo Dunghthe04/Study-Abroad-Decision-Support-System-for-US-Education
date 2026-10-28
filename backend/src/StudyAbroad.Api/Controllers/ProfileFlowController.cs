@@ -50,6 +50,7 @@ public class ProfileFlowController(IProfileFlowService flowService) : Controller
     /// <summary>
     /// Lưu nháp tự động dữ liệu từng bước trong luồng khi người dùng nhập liệu hoặc đổi bước.
     /// </summary>
+    [Authorize(Policy = AgeFeatures.ProcessStudentData)] // [Q11] dưới 16 cần phụ huynh đồng ý
     [HttpPut("draft")]
     [ProducesResponseType(typeof(ProfileFlowStateDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -68,14 +69,22 @@ public class ProfileFlowController(IProfileFlowService flowService) : Controller
             return BadRequest(new { error = "Bước hiện tại phải từ 1 đến 6." });
         }
 
-        var updatedState = await flowService.SaveDraftAsync(userId.Value, req, ct);
-        return Ok(updatedState);
+        try
+        {
+            var updatedState = await flowService.SaveDraftAsync(userId.Value, req, ct);
+            return Ok(updatedState);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
     }
 
     /// <summary>
     /// Tải tệp bảng điểm (PDF hoặc ảnh) lên dạng nháp để xem trước và tự động OCR đọc điểm các môn học.
     /// Không ghi đè hồ sơ chính thức cho đến khi bấm xác nhận ở bước cuối.
     /// </summary>
+    [Authorize(Policy = AgeFeatures.ProcessStudentData)] // [Q11] dưới 16 cần phụ huynh đồng ý
     [HttpPost("draft/upload-transcript")]
     [Consumes("multipart/form-data")]
     [RequestSizeLimit(MaxUploadRequestBytes)]
@@ -132,6 +141,7 @@ public class ProfileFlowController(IProfileFlowService flowService) : Controller
     /// Xác nhận lưu chính thức toàn bộ 5 phần hồ sơ vào CSDL sau khi kiểm tra ở Bước 6.
     /// Bóc tách đổ vào các cột thực, chuyển file nháp thành chính thức, xóa bản nháp.
     /// </summary>
+    [Authorize(Policy = AgeFeatures.ProcessStudentData)] // [Q11] dưới 16 cần phụ huynh đồng ý
     [HttpPost("commit")]
     [ProducesResponseType(typeof(CommitProfileFlowResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

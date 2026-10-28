@@ -6,13 +6,17 @@ using System.Threading.Tasks;
 
 namespace StudyAbroad.Application.Auth
 {
-    // [USAS-362] Request đăng ký từ client: Phone là thông tin liên hệ không bắt buộc
-    public record RegisterRequest(string Email, string Password, string FullName, string Role, bool? ParentAcknowledged = null, string? Phone = null);
+    // [USAS-362] Request đăng ký từ client: Phone là thông tin liên hệ không bắt buộc.
+    // DateOfBirth bắt buộc (tính nhóm tuổi); ParentEmail bắt buộc với học sinh dưới 16, không bắt buộc với 16–17.
+    public record RegisterRequest(string Email, string Password, string FullName, string Role, DateOnly? DateOfBirth = null, string? ParentEmail = null, string? Phone = null);
 
     // [USAS-362] Thông tin người dùng trả về cho client (không chứa password_hash)
-    public record UserDto(Guid Id, string Email, string FullName, string Role, string Status, string? Phone = null);
+    // [Q11] AgeGroup (child/minor/adult, null nếu không áp), ParentConsentStatus (granted/pending/none/not_required),
+    // BlockedFeatures: các chức năng trong AgeFeatures.Rules đang bị chặn (server tính, frontend chỉ dùng để ẩn nút).
+    public record UserDto(Guid Id, string Email, string FullName, string Role, string Status, string? Phone = null,
+        string? AgeGroup = null, string? ParentConsentStatus = null, List<string>? BlockedFeatures = null);
 
-    // [USAS-362] Response trả về khi đăng nhập thành công: bao gồm JWT token và thông tin người dùng
+    // [USAS-362] Kết quả đăng nhập thành công. AccessToken chỉ dùng để đặt HttpOnly cookie, controller không trả nó trong body
     public record AuthResponse(string AccessToken, DateTime ExpiresAt, UserDto User);
 
     public record LoginRequest(string Email, string Password);
@@ -23,17 +27,20 @@ namespace StudyAbroad.Application.Auth
     public record ForgotPasswordRequest(string Email);
     public record ResetPasswordRequest(string Email, string OtpCode, string NewPassword);
 
+    // [UC-06] Đổi mật khẩu khi đã đăng nhập: bắt buộc nhập mật khẩu hiện tại
+    public record ChangePasswordRequest(string CurrentPassword, string NewPassword);
+
+    // Sửa thông tin cá nhân: chỉ họ tên và số điện thoại, email đăng nhập không đổi được. Phone rỗng = xóa số
+    public record UpdateProfileRequest(string FullName, string? Phone);
+
     public enum AuthError {
         None,
         Validation,
-        EmailTaken,
-        PhoneTaken,           // trùng SĐT khi đăng ký → 409
         InvalidCredentials,   // sai tài khoản hoặc mật khẩu → 401
         Locked,               // tài khoản bị khóa bởi Admin (vĩnh viễn) → 423
         TempLocked,           // tài khoản bị tạm khóa sau 5 lần sai mật khẩu → 423
         Unverified,           // tài khoản chưa kích hoạt email OTP → 403
-        OtpInvalid,           // mã OTP không đúng hoặc đã bị vô hiệu hóa sau 5 lần nhập sai → 400
-        OtpExpired,           // mã OTP đã hết hạn (> 5 phút) → 400
+        OtpInvalid,           // mã OTP sai / hết hạn / đã dùng / đã vô hiệu hóa (gộp một thông báo, chống dò) → 400
     };
 
     // [USAS-362] Hộp trả kết quả từ AuthService

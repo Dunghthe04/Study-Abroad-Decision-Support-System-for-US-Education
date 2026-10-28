@@ -8,7 +8,8 @@ namespace StudyAbroad.Infrastructure.Persistence;
 /// <summary>Seeds a few demo rows so the UI has data in development. Real data is imported from the survey.</summary>
 public static class DbSeeder
 {
-    public static async Task SeedAsync(AppDbContext db, CancellationToken ct = default)
+    /// <param name="adminPassword">Mật khẩu admin mặc định (env SEED_ADMIN_PASSWORD). Để trống thì không tạo admin.</param>
+    public static async Task SeedAsync(AppDbContext db, string? adminPassword, CancellationToken ct = default)
     {
         // 1. Seed trung tâm du học mẫu
         if (!await db.StudyCenters.AnyAsync(ct))
@@ -29,14 +30,14 @@ public static class DbSeeder
             await db.SaveChangesAsync(ct);
         }
 
-        // 2. [USAS-362] Seed tài khoản Quản trị viên (Admin) mặc định
-        if (!await db.Users.AnyAsync(u => u.Role == UserRoles.Admin, ct))
+        // 2. [USAS-362] Seed tài khoản Quản trị viên (Admin) mặc định, chỉ khi có mật khẩu từ env (không fix cứng trong code)
+        if (!string.IsNullOrWhiteSpace(adminPassword) && !await db.Users.AnyAsync(u => u.Role == UserRoles.Admin, ct))
         {
             var hasher = new PasswordHasher();
             db.Users.Add(new User
             {
                 Email = "admin@usas.edu.vn",
-                PasswordHash = hasher.Hash("123456789"),
+                PasswordHash = hasher.Hash(adminPassword),
                 FullName = "Quản trị viên Hệ thống",
                 Role = UserRoles.Admin,
                 Status = UserStatuses.Active,

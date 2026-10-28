@@ -29,5 +29,4 @@ public record AcademicProfileResult(
 public interface IAcademicProfileService
 {
     Task<AcademicProfileResult> GetAcademicProfileAsync(Guid userId, CancellationToken ct = default);
-    Task<AcademicProfileResult> SaveAcademicProfileAsync(Guid userId, SaveAcademicProfileRequest request, CancellationToken ct = default);
 }

@@ -11,7 +11,7 @@ public record ProfileFlowStateDto(
     [property: JsonPropertyName("currentStep")] int CurrentStep,
     [property: JsonPropertyName("completedSteps")] IReadOnlyList<int> CompletedSteps,
     [property: JsonPropertyName("draft")] ProfileFlowDraftDto Draft,
-    [property: JsonPropertyName("draftTranscript")] DraftTranscriptInfoDto? DraftTranscript,
+    [property: JsonPropertyName("draftTranscript")] DraftTranscriptFileDto? DraftTranscript,
     [property: JsonPropertyName("lastUpdatedAt")] DateTime? LastUpdatedAt,
     [property: JsonPropertyName("hasCommittedProfile")] bool HasCommittedProfile = false,
     [property: JsonPropertyName("lastCompletedStep")] int LastCompletedStep = 0
@@ -53,7 +53,10 @@ public record FlowAcademicYearDraftDto(
 public record FlowSubjectDraftDto(
     [property: JsonPropertyName("subjectName")] string? SubjectName = null,
     [property: JsonPropertyName("semester1Score")] decimal? Semester1Score = null,
-    [property: JsonPropertyName("semester2Score")] decimal? Semester2Score = null
+    [property: JsonPropertyName("semester2Score")] decimal? Semester2Score = null,
+    // [UC-12] Lý do ô điểm cần kiểm tra (null = đã kiểm tra / nhập tay); còn cờ thì không cho commit
+    [property: JsonPropertyName("semester1Review")] string? Semester1Review = null,
+    [property: JsonPropertyName("semester2Review")] string? Semester2Review = null
 );
 
 /// <summary>
@@ -130,7 +133,10 @@ public record FlowTranscriptSubjectScoreDto(
     [property: JsonPropertyName("subject")] string? Subject = null,
     [property: JsonPropertyName("score")] decimal Score = 0m,
     [property: JsonPropertyName("rawScore")] string? RawScore = null,
-    [property: JsonPropertyName("credits")] decimal? Credits = 1m
+    [property: JsonPropertyName("credits")] decimal? Credits = 1m,
+    // [UC-12] Advisor đánh dấu ô cần kiểm tra: "source_image" hoặc "outlier"
+    [property: JsonPropertyName("needsReview")] bool NeedsReview = false,
+    [property: JsonPropertyName("reviewReason")] string? ReviewReason = null
 );
 
 public record DraftTranscriptInfoDto(
@@ -142,13 +148,28 @@ public record DraftTranscriptInfoDto(
     [property: JsonPropertyName("uploadedAt")] DateTime UploadedAt
 );
 
+/// <summary>Thông tin file nháp trả cho client: không có tên lưu trữ / đường dẫn trên server</summary>
+public record DraftTranscriptFileDto(
+    [property: JsonPropertyName("originalFileName")] string OriginalFileName,
+    [property: JsonPropertyName("fileSizeBytes")] long FileSizeBytes,
+    [property: JsonPropertyName("contentType")] string ContentType,
+    [property: JsonPropertyName("uploadedAt")] DateTime UploadedAt
+)
+{
+    public static DraftTranscriptFileDto From(DraftTranscriptInfoDto info) =>
+        new(info.OriginalFileName, info.FileSizeBytes, info.ContentType, info.UploadedAt);
+
+    public static DraftTranscriptFileDto? FromOrNull(DraftTranscriptInfoDto? info) =>
+        info is null ? null : From(info);
+}
+
 public record UploadDraftTranscriptResultDto(
-    [property: JsonPropertyName("draftTranscript")] DraftTranscriptInfoDto DraftTranscript,
+    [property: JsonPropertyName("draftTranscript")] DraftTranscriptFileDto DraftTranscript,
     [property: JsonPropertyName("extractedTerms")] IReadOnlyList<FlowTranscriptTermDto> ExtractedTerms,
     [property: JsonPropertyName("calculatedGpa4")] decimal? CalculatedGpa4,
     [property: JsonPropertyName("ocrMessage")] string? OcrMessage,
     [property: JsonPropertyName("warnings")] IReadOnlyList<string>? Warnings = null,
-    [property: JsonPropertyName("draftFile")] DraftTranscriptInfoDto? DraftFile = null
+    [property: JsonPropertyName("draftFile")] DraftTranscriptFileDto? DraftFile = null
 );
 
 public record SaveProfileDraftRequest(

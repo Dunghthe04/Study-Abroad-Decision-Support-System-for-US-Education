@@ -714,4 +714,131 @@ public class ProfileFlowServiceTests
         Assert.Null(updatedProfile!.DraftFlowStateJson);
         Assert.True(storage.DeleteCalled);
     }
+
+    [Fact]
+    public async Task CommitFlowAsync_IgnoresClientGpa_ComputesOnServerOnly()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var service = new ProfileFlowService(repo, new FakeFileStorageService());
+        var userId = Guid.NewGuid();
+        // Không có điểm môn nào nhưng client gửi GPA 4.0
+        var draft = FullDraft() with { Step2 = new FlowTranscriptDraftDto(AcademicYears: [], CalculatedGpa4Scale: 4.0m) };
+
+        await service.CommitFlowAsync(userId, new CommitProfileFlowRequest(draft));
+
+        Assert.Null(repo.Profiles.Values.Single(p => p.UserId == userId).OverallGpa);
+    }
+
+    [Fact]
+    public async Task CommitFlowAsync_WhenFieldsTooLongOrDuplicateSubject_Throws()
+    {
+        var service = new ProfileFlowService(new InMemoryProfileFlowRepository(), new FakeFileStorageService());
+        var baseDraft = FullDraft();
+        var draft = baseDraft with
+        {
+            Step1 = baseDraft.Step1! with { CurrentSchool = new string('a', 257), ExpectedGraduationYear = 1800 },
+            Step2 = new FlowTranscriptDraftDto(AcademicYears:
+            [
+                new FlowAcademicYearDraftDto("Lớp 12", [new FlowSubjectDraftDto("Toán", 8m, 9m), new FlowSubjectDraftDto(" toán ", 7m, null)]),
+                new FlowAcademicYearDraftDto("Lớp 11", [new FlowSubjectDraftDto(new string('b', 129), 8m, null)]),
+            ]),
+            Step5 = new FlowActivitiesDraftDto(
+            [
+                new FlowActivityDraftDto(Name: new string('c', 257), Category: "achievement", ImpactLevel: "national", Year: 2025),
+            ]),
+        };
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.CommitFlowAsync(Guid.NewGuid(), new CommitProfileFlowRequest(draft)));
+
+        Assert.Contains("tên trường tối đa 256", ex.Message);
+        Assert.Contains("năm tốt nghiệp phải từ", ex.Message);
+        Assert.Contains("môn toán bị trùng trong Lớp 12", ex.Message);
+        Assert.Contains("tên môn trong Lớp 11 tối đa 128", ex.Message);
+        Assert.Contains("tên hoạt động / giải thưởng tối đa 256", ex.Message);
+    }
+
+    [Fact]
+    public async Task CommitFlowAsync_WhenTranscriptCellsStillFlagged_Throws_ThenSucceedsAfterConfirm()
+    {
+        var service = new ProfileFlowService(new InMemoryProfileFlowRepository(), new FakeFileStorageService());
+        var userId = Guid.NewGuid();
+        var flagged = FullDraft() with
+        {
+            Step2 = new FlowTranscriptDraftDto(AcademicYears:
+            [
+                new FlowAcademicYearDraftDto("Lớp 12", [new FlowSubjectDraftDto("Toán", 8m, 9m, Semester2Review: "source_image")]),
+            ]),
+        };
+
+        // Cờ được giữ khi lưu nháp để người dùng quay lại vẫn thấy ô cam
+        await service.SaveDraftAsync(userId, new SaveProfileDraftRequest(2, [1], flagged));
+        var state = await service.GetFlowStateAsync(userId);
+        Assert.Equal("source_image", state.Draft!.Step2!.AcademicYears![0].Subjects![0].Semester2Review);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.CommitFlowAsync(userId, new CommitProfileFlowRequest(flagged)));
+        Assert.Contains("chưa xác nhận đã kiểm tra bảng điểm", ex.Message);
+
+        var confirmed = flagged with
+        {
+            Step2 = new FlowTranscriptDraftDto(AcademicYears:
+            [
+                new FlowAcademicYearDraftDto("Lớp 12", [new FlowSubjectDraftDto("Toán", 8m, 9m)]),
+            ]),
+        };
+        await service.CommitFlowAsync(userId, new CommitProfileFlowRequest(confirmed));
+    }
+
+    [Fact]
+    public async Task SaveDraftAsync_WhenTooManyItems_ThrowsArgumentException_AndKeepsOldDraft()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var service = new ProfileFlowService(repo, new FakeFileStorageService());
+        var userId = Guid.NewGuid();
+        await service.SaveDraftAsync(userId, new SaveProfileDraftRequest(1, [], FullDraft()));
+        var before = repo.Profiles.Values.Single(p => p.UserId == userId).DraftFlowStateJson;
+
+        var subjects = Enumerable.Range(1, 41).Select(i => new FlowSubjectDraftDto($"Môn {i}", 8m, null)).ToList();
+        var draft = FullDraft() with { Step2 = new FlowTranscriptDraftDto(AcademicYears: [new FlowAcademicYearDraftDto("Lớp 12", subjects)]) };
+
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() =>
+            service.SaveDraftAsync(userId, new SaveProfileDraftRequest(2, [1], draft)));
+
+        Assert.Contains("tối đa 40 môn", ex.Message);
+        Assert.Equal(before, repo.Profiles.Values.Single(p => p.UserId == userId).DraftFlowStateJson);
+    }
+
+    [Fact]
+    public async Task SaveDraftAsync_WhenDraftTooLarge_ThrowsArgumentException()
+    {
+        var service = new ProfileFlowService(new InMemoryProfileFlowRepository(), new FakeFileStorageService());
+        var activities = Enumerable.Range(1, 50)
+            .Select(i => new FlowActivityDraftDto(Name: $"Hoạt động {i} " + new string('x', 6000), Category: "activity"))
+            .ToList();
+
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() =>
+            service.SaveDraftAsync(Guid.NewGuid(), new SaveProfileDraftRequest(5, [1, 2, 3, 4], FullDraft(activities: activities))));
+
+        Assert.Contains("quá lớn", ex.Message);
+    }
+
+    [Fact]
+    public async Task UploadAndGetState_DoNotExposeStoragePath()
+    {
+        var service = new ProfileFlowService(new InMemoryProfileFlowRepository(), new FakeFileStorageService());
+        var userId = Guid.NewGuid();
+
+        using var stream = new MemoryStream([1, 2, 3, 4]);
+        var upload = await service.UploadDraftTranscriptAsync(userId, stream, "hoc_ba.png", "image/png", 4);
+        var state = await service.GetFlowStateAsync(userId);
+
+        foreach (var json in new[] { JsonSerializer.Serialize(upload), JsonSerializer.Serialize(state) })
+        {
+            Assert.Contains("hoc_ba.png", json);
+            Assert.DoesNotContain("relativePath", json);
+            Assert.DoesNotContain("storedFileName", json);
+            Assert.DoesNotContain("/uploads/", json);
+        }
+    }
 }

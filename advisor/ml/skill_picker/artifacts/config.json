@@ -1,0 +1,19 @@
+{
+  "labels": [
+    "skill_nhu_cau",
+    "skill_bac_hoc",
+    "skill_ho_so",
+    "skill_danh_gia",
+    "skill_lo_trinh",
+    "skill_explain",
+    "skill_kich_ban",
+    "skill_tra_loi",
+    "skill_chuyen_trung_tam",
+    "ngoai_le",
+    "ket_thuc"
+  ],
+  "threshold": 0.5,
+  "best_epoch": 24,
+  "seed": 42,
+  "embedding_model": "bge-m3"
+}
