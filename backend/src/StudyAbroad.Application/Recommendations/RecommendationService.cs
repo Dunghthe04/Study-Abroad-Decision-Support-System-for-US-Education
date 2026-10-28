@@ -42,6 +42,8 @@ public class RecommendationService(IAdvisorClient advisor, IRecommendationReposi
 {
     public const decimal BudgetTolerance = 0.10m;
     private static readonly int[] BalancedPref = [2, 2, 2];
+    // Bắt đầu bằng "Hồ sơ" để controller trả 400 kèm câu này
+    public const string MissingScholarshipMessage = "Hồ sơ chưa chọn mức cần học bổng, cần chọn trước khi gợi ý trường.";
 
     public async Task<RecommendationRun> RecommendAsync(
         StudentProfile profile,
@@ -51,6 +53,11 @@ public class RecommendationService(IAdvisorClient advisor, IRecommendationReposi
         CancellationToken ct = default
     )
     {
+        // C7: học bổng trống không có nghĩa là "không cần học bổng" (ToAidNeed sẽ coi là None, loại sai trường).
+        // Chặn trước khi gọi Qwen/Gemini; chat sẽ hỏi F2 rồi gợi ý lại
+        if (string.IsNullOrWhiteSpace(profile.ScholarshipNeed))
+            throw new InvalidOperationException(MissingScholarshipMessage);
+
         //Danh sách các tiêu chí của học sinh
         var criteria = new FilterCriteria(
          profile.IntendedMajor,
