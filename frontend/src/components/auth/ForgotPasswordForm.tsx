@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { authApi, ApiError } from "@/lib/api";
+import { setPendingEmail } from "@/lib/pending-email";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,9 +32,10 @@ export function ForgotPasswordForm() {
     setIsSubmitting(true);
     try {
       const res = await authApi.forgotPassword({ email: email.trim() });
+      setPendingEmail(email.trim());
       setSuccessMessage(res.message || "Mã xác thực đặt lại mật khẩu đã được gửi đến email của bạn.");
       setTimeout(() => {
-        router.push(`/reset-password?email=${encodeURIComponent(email.trim())}`);
+        router.push("/reset-password");
       }, 1500);
     } catch (err) {
       if (err instanceof ApiError) {

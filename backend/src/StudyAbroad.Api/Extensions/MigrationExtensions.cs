@@ -15,6 +15,6 @@ public static class MigrationExtensions
         await db.Database.MigrateAsync();
 
         if (app.Environment.IsDevelopment())
-            await DbSeeder.SeedAsync(db);
+            await DbSeeder.SeedAsync(db, app.Configuration["SEED_ADMIN_PASSWORD"]);
     }
 }

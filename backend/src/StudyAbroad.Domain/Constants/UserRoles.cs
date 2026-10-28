@@ -13,8 +13,9 @@ namespace StudyAbroad.Domain.Constants
         public const string Center = "center";
         public const string Admin = "admin";
 
-        /// <summary>Roles a visitor may pick on the register form. Admin accounts are created by seeding only.</summary>
-        public static readonly IReadOnlySet<string> SelfRegister = new HashSet<string> { Student, Center, Parent };
+        /// <summary>Roles a visitor may pick on the register form. Admin accounts are created by seeding only,
+        /// center accounts by an admin (trung tâm không tự đăng ký).</summary>
+        public static readonly IReadOnlySet<string> SelfRegister = new HashSet<string> { Student, Parent };
 
     }
 }

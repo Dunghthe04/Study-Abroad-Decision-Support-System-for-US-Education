@@ -15,5 +15,6 @@ public class ChatSessionConfiguration : IEntityTypeConfiguration<ChatSession>
         b.Property(x => x.StudyLevel).HasMaxLength(32);
         b.Property(x => x.CurrentStep).HasMaxLength(8);
         b.HasIndex(x => new { x.UserId, x.CreatedAt });
+        b.Property(x => x.StateJson).HasColumnType("jsonb");
     }
 }

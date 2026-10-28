@@ -27,6 +27,7 @@ public class RecommendationsController(RecommendationService recommendations) : 
     public record RepickRequest(IReadOnlyList<int> Pref);
 
 
+    [Authorize(Policy = AgeFeatures.ProcessStudentData)] // [Q11] dưới 16 cần phụ huynh đồng ý
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateRecommendationRequest? request, CancellationToken ct)
     {
@@ -83,6 +84,7 @@ public class RecommendationsController(RecommendationService recommendations) : 
     }
 
         // Đổi nút ưu tiên: chỉ chạy lại lượt chọn trên số đã lưu.
+    [Authorize(Policy = AgeFeatures.ProcessStudentData)] // [Q11] dưới 16 cần phụ huynh đồng ý
     [HttpPost("repick")]
     public async Task<IActionResult> Repick([FromBody] RepickRequest? request, CancellationToken ct)
     {
@@ -113,6 +115,7 @@ public class RecommendationsController(RecommendationService recommendations) : 
     }
 
     // Mở chi tiết một trường: Qwen viết lời tư vấn từ số đã lưu.
+    [Authorize(Policy = AgeFeatures.ProcessStudentData)] // [Q11] dưới 16 cần phụ huynh đồng ý
     [HttpPost("schools/{code}/explain")]
     public async Task<IActionResult> Explain(string code, CancellationToken ct)
     {

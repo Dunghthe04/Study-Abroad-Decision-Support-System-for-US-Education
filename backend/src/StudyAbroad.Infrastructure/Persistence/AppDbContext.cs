@@ -12,6 +12,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
     public DbSet<OtpToken> OtpTokens => Set<OtpToken>();
     public DbSet<Consent> Consents => Set<Consent>();
+    public DbSet<ParentStudentLink> ParentStudentLinks => Set<ParentStudentLink>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<StudentProfile> StudentProfiles => Set<StudentProfile>();
     public DbSet<TranscriptScore> TranscriptScores => Set<TranscriptScore>();

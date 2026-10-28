@@ -162,7 +162,25 @@ function resolveTerm(termName: string): TermTarget {
   return { gradeName: termName.trim() || null, semester: 1 };
 }
 
+// [UC-12] Lý do một ô điểm được tô cam, hiện ở tooltip
+const REVIEW_LABELS: Record<string, string> = {
+  source_image: "Điểm đọc từ ảnh / bản scan, hãy đối chiếu với bảng điểm gốc.",
+  outlier: "Điểm chênh lệch nhiều so với các môn khác, hãy kiểm tra lại.",
+  overwrote: "Điểm cũ đã bị thay bằng điểm từ tệp vừa tải.",
+  duplicate: "Môn này xuất hiện nhiều lần trong cùng kỳ, đã lấy giá trị sau cùng.",
+};
+
+const REVIEW_FIELD = { semester1Score: "semester1Review", semester2Score: "semester2Review" } as const;
+
+function countReviewCells(years: AcademicYearDraft[]): number {
+  return years.reduce(
+    (n, y) => n + y.subjects.reduce((m, s) => m + (s.semester1Review ? 1 : 0) + (s.semester2Review ? 1 : 0), 0),
+    0
+  );
+}
+
 // Gộp điểm OCR vào các năm học (không sửa trực tiếp object cũ)
+// Ô bị trùng môn trong cùng kỳ, ghi đè điểm khác đã có, hoặc advisor đánh dấu → gắn lý do cần kiểm tra
 function mergeExtractedTerms(
   years: AcademicYearDraft[],
   terms: ExtractedTerm[],
@@ -185,19 +203,36 @@ function mergeExtractedTerms(
     if (idx < 0) continue;
 
     const subjects = result[idx].subjects;
+    const seenInTerm = new Set<string>();
     for (const sc of term.scores) {
       const name = sc.subject?.trim();
       if (!name || typeof sc.score !== "number") continue;
-      let sub = subjects.find((x) => subjectKey(x.subjectName) === subjectKey(name));
+      const key = subjectKey(name);
+      const duplicate = seenInTerm.has(key);
+      seenInTerm.add(key);
+      let sub = subjects.find((x) => subjectKey(x.subjectName) === key);
       if (!sub) {
         sub = { subjectName: name, semester1Score: null, semester2Score: null };
         subjects.push(sub);
       }
-      if (target.semester === 2) sub.semester2Score = sc.score;
-      else if (target.semester === 1) sub.semester1Score = sc.score;
+      const cell = sub;
+      const setCell = (field: "semester1Score" | "semester2Score") => {
+        const prev = cell[field];
+        const overwrote = typeof prev === "number" && prev !== sc.score;
+        cell[field] = sc.score;
+        cell[REVIEW_FIELD[field]] = duplicate
+          ? "duplicate"
+          : overwrote
+          ? "overwrote"
+          : sc.needsReview
+          ? sc.reviewReason || "source_image"
+          : null;
+      };
+      if (target.semester === 2) setCell("semester2Score");
+      else if (target.semester === 1) setCell("semester1Score");
       else {
-        sub.semester1Score ??= sc.score;
-        sub.semester2Score ??= sc.score;
+        if (cell.semester1Score == null) setCell("semester1Score");
+        if (cell.semester2Score == null) setCell("semester2Score");
       }
     }
   }
@@ -238,6 +273,18 @@ export function Step2Transcript({
   const fileInputId = useId();
 
   const { gpa10, gpa4 } = calculateLinearGpa(years);
+  const reviewCount = countReviewCells(years);
+
+  // [UC-12] Người dùng xác nhận đã rà toàn bộ bảng điểm → bỏ mọi cờ (cờ lưu trong nháp, BE không cho commit khi còn cờ)
+  const handleConfirmReviewed = () => {
+    onUpdate({
+      academicYears: years.map((y) => ({
+        ...y,
+        subjects: y.subjects.map((s) => ({ ...s, semester1Review: null, semester2Review: null })),
+      })),
+    });
+    setValidationError(null);
+  };
 
   const handleScoreChange = (
     yearIdx: number,
@@ -250,7 +297,8 @@ export function Step2Transcript({
       if (yIdx !== yearIdx) return y;
       const newSubjects = y.subjects.map((s, sIdx) => {
         if (sIdx !== subIdx) return s;
-        return { ...s, [field]: val };
+        // Người dùng tự sửa ô → coi như đã kiểm tra ô đó
+        return { ...s, [field]: val, [REVIEW_FIELD[field]]: null };
       });
       return { ...y, subjects: newSubjects };
     });
@@ -385,6 +433,16 @@ export function Step2Transcript({
   };
 
   const handleNextClick = () => {
+    if (reviewCount > 0) {
+      setValidationError(
+        `Bảng điểm còn ${reviewCount} ô tô cam cần kiểm tra. Hãy đối chiếu với bảng điểm gốc rồi bấm "Tôi đã kiểm tra bảng điểm".`
+      );
+      setShowManualTable(true);
+      const firstFlaggedIdx = years.findIndex((y) => y.subjects.some((s) => s.semester1Review || s.semester2Review));
+      if (firstFlaggedIdx !== -1) setActiveYearIndex(firstFlaggedIdx);
+      return;
+    }
+
     if (gpa10 === null || gpa4 === null) {
       setValidationError(
         "Vui lòng tải lên ảnh bảng điểm hoặc tự điền điểm các môn học để hệ thống tính toán GPA trước khi tiếp tục."
@@ -665,6 +723,30 @@ export function Step2Transcript({
             </div>
           </div>
 
+          {/* [UC-12] Nhắc kiểm tra các ô tô cam */}
+          {reviewCount > 0 && (
+            <Alert className="border-warn/40 bg-warn-wash/40">
+              <AlertTriangleIcon className="size-4 text-warn" />
+              <AlertTitle className="text-sm font-semibold text-warn">
+                Bảng điểm có {reviewCount} ô cần kiểm tra
+              </AlertTitle>
+              <AlertDescription className="text-xs leading-relaxed space-y-2">
+                <p>
+                  Các ô tô cam là điểm đọc từ ảnh, điểm chênh lệch bất thường hoặc bị ghi đè / trùng môn (
+                  {years
+                    .filter((y) => y.subjects.some((s) => s.semester1Review || s.semester2Review))
+                    .map((y) => y.gradeName)
+                    .join(", ")}
+                  ). Rê chuột vào ô để xem lý do. Sửa ô nào thì ô đó hết tô cam.
+                </p>
+                <Button type="button" size="sm" variant="outline" onClick={handleConfirmReviewed} className="gap-1.5 cursor-pointer">
+                  <CheckCircle2Icon className="size-3.5" />
+                  Tôi đã kiểm tra bảng điểm
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
+
           {/* Subjects Table */}
           {years[activeYearIndex] && (
             <div className="space-y-4">
@@ -695,12 +777,15 @@ export function Step2Transcript({
                         ocrSuccessNotice !== null &&
                         subjects.some((x) => x.semester1Score != null || x.semester2Score != null);
                       const outOfRange = (v: number | null | undefined) => typeof v === "number" && (v < 0 || v > 10);
-                      const cellClass = (empty: boolean, invalid: boolean) =>
+                      const cellClass = (empty: boolean, invalid: boolean, review?: string | null) =>
                         cn(
                           "h-8 text-center text-xs w-20 mx-auto",
                           flagEmpty && empty && "border-warn bg-warn-wash/40",
+                          review && "border-warn bg-warn-wash ring-1 ring-warn/60",
                           invalid && "border-destructive ring-1 ring-destructive"
                         );
+                      const reviewTitle = (review?: string | null) =>
+                        review ? REVIEW_LABELS[review] ?? "Ô này cần kiểm tra lại." : undefined;
 
                       return (
                         <tr key={sIdx} className="hover:bg-muted/10 transition-colors">
@@ -718,7 +803,8 @@ export function Step2Transcript({
                               onChange={(e) =>
                                 handleScoreChange(activeYearIndex, sIdx, "semester1Score", e.target.value)
                               }
-                              className={cellClass(s1 === null, outOfRange(sub.semester1Score))}
+                              className={cellClass(s1 === null, outOfRange(sub.semester1Score), sub.semester1Review)}
+                              title={reviewTitle(sub.semester1Review)}
                             />
                           </td>
                           <td className="py-1 px-2 text-center">
@@ -732,7 +818,8 @@ export function Step2Transcript({
                               onChange={(e) =>
                                 handleScoreChange(activeYearIndex, sIdx, "semester2Score", e.target.value)
                               }
-                              className={cellClass(s2 === null, outOfRange(sub.semester2Score))}
+                              className={cellClass(s2 === null, outOfRange(sub.semester2Score), sub.semester2Review)}
+                              title={reviewTitle(sub.semester2Review)}
                             />
                           </td>
                           <td className="py-2 px-3 text-center font-bold text-foreground">

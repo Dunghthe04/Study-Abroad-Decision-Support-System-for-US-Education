@@ -65,6 +65,16 @@ public class ProfileFlowService(
     /// <summary>type của chứng chỉ học sinh tự nhập tên (không có trong danh mục)</summary>
     private const string OtherCertificationType = "other";
 
+    // Giới hạn kích thước nháp và độ dài theo cột DB: dữ liệu vượt bị từ chối thay vì lỗi 500 khi ghi
+    private const int MaxDraftJsonChars = 256 * 1024;
+    private const int MaxAcademicYears = 8;
+    private const int MaxSubjectsPerYear = 40;
+    private const int MaxCertifications = 30;
+    private const int MaxActivities = 50;
+    private const int MaxTargetStates = 60;
+    private const int MinGraduationYear = 1950;
+    private const int MaxGraduationYearsAhead = 15;
+
     /// <summary>Nhóm chứng chỉ trên UI bước 3; chứng chỉ "other" phải thuộc một trong các nhóm này</summary>
     private static readonly HashSet<string> CertificationCategories = ["english", "standardized", "graduate"];
 
@@ -92,14 +102,14 @@ public class ProfileFlowService(
                 CurrentStep: 6,
                 CompletedSteps: [1, 2, 3, 4, 5],
                 Draft: BuildDraftFromProfile(profile, scores, activities, certifications, certificationTypes),
-                DraftTranscript: stored?.DraftTranscript,
+                DraftTranscript: DraftTranscriptFileDto.FromOrNull(stored?.DraftTranscript),
                 LastUpdatedAt: profile.UpdatedAt ?? profile.CreatedAt,
                 HasCommittedProfile: true,
                 LastCompletedStep: 5);
         }
 
         // 3. Người dùng mới: draft rỗng, không chọn sẵn ngân sách / nhu cầu học bổng
-        return EmptyState(hasCommittedProfile: false) with { DraftTranscript = stored?.DraftTranscript };
+        return EmptyState(hasCommittedProfile: false) with { DraftTranscript = DraftTranscriptFileDto.FromOrNull(stored?.DraftTranscript) };
     }
 
     public async Task<ProfileFlowStateDto> SaveDraftAsync(Guid userId, SaveProfileDraftRequest request, CancellationToken ct = default)
@@ -119,7 +129,16 @@ public class ProfileFlowService(
             DraftTranscript: previous?.DraftTranscript,
             LastUpdatedAt: DateTime.UtcNow);
 
-        profile.DraftFlowStateJson = JsonSerializer.Serialize(stored, JsonOptions);
+        var limitErrors = new List<string>();
+        ValidateDraftLimits(stored.Draft!, limitErrors);
+        if (limitErrors.Count > 0)
+            throw new ArgumentException(string.Join(" ", limitErrors));
+
+        var json = JsonSerializer.Serialize(stored, JsonOptions);
+        if (json.Length > MaxDraftJsonChars)
+            throw new ArgumentException("Dữ liệu nháp quá lớn, vui lòng rút gọn nội dung.");
+
+        profile.DraftFlowStateJson = json;
         await repository.UpdateProfileAsync(profile, CancellationToken.None);
 
         return ToStateDto(stored, HasCommittedProfile(profile));
@@ -154,9 +173,9 @@ public class ProfileFlowService(
                         ContentType: draftInfo.ContentType
                     ), ct);
             }
-            catch
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                // OCR lỗi thì không chặn luồng upload
+                // OCR lỗi (client OCR đã ghi log) thì không chặn luồng upload; FE báo người dùng tự nhập điểm
             }
         }
 
@@ -175,13 +194,14 @@ public class ProfileFlowService(
             await fileStorageService.DeleteDraftFileAsync(userId, previousDraftPath, ct);
         }
 
+        var publicInfo = DraftTranscriptFileDto.From(draftInfo);
         return new UploadDraftTranscriptResultDto(
-            DraftTranscript: draftInfo,
+            DraftTranscript: publicInfo,
             ExtractedTerms: ocrResponse?.Terms ?? [],
             CalculatedGpa4: ocrResponse?.CalculatedGpa4,
             OcrMessage: ocrResponse?.Message,
             Warnings: ocrResponse?.Warnings,
-            DraftFile: draftInfo
+            DraftFile: publicInfo
         );
     }
 
@@ -285,7 +305,7 @@ public class ProfileFlowService(
             CurrentStep: stored.CurrentStep is >= 1 and <= 6 ? stored.CurrentStep : 1,
             CompletedSteps: completed,
             Draft: stored.Draft ?? EmptyDraft(),
-            DraftTranscript: stored.DraftTranscript,
+            DraftTranscript: DraftTranscriptFileDto.FromOrNull(stored.DraftTranscript),
             LastUpdatedAt: stored.LastUpdatedAt,
             HasCommittedProfile: hasCommittedProfile,
             LastCompletedStep: completed.Count > 0 ? completed.Max() : 0);
@@ -424,6 +444,7 @@ public class ProfileFlowService(
         DateTime now)
     {
         var errors = new List<string>();
+        ValidateDraftLimits(draft, errors);
 
         // Bước 1
         var step1 = draft.Step1;
@@ -431,14 +452,40 @@ public class ProfileFlowService(
             errors.Add("Bước 1: chưa chọn bậc học muốn theo học.");
         if (step1?.CurrentEducationLevel is null || !EducationLevelCodes.Contains(step1.CurrentEducationLevel))
             errors.Add("Bước 1: chưa chọn cấp học hiện tại.");
+        if (step1?.CurrentSchool?.Trim().Length > 256)
+            errors.Add("Bước 1: tên trường tối đa 256 ký tự.");
+        if (step1?.CurrentGrade?.Trim().Length > 64)
+            errors.Add("Bước 1: lớp / năm học hiện tại tối đa 64 ký tự.");
+        if (step1?.TargetMajor?.Trim().Length > 128)
+            errors.Add("Bước 1: ngành dự định tối đa 128 ký tự.");
+        if (step1?.ExpectedGraduationYear is { } gradYear
+            && (gradYear < MinGraduationYear || gradYear > now.Year + MaxGraduationYearsAhead))
+            errors.Add($"Bước 1: năm tốt nghiệp phải từ {MinGraduationYear} đến {now.Year + MaxGraduationYearsAhead}.");
+        if (step1?.TargetStates?.Any(s => s?.Trim().Length > 64) == true)
+            errors.Add("Bước 1: tên bang tối đa 64 ký tự.");
 
         // Bước 2
+        if (draft.Step2?.AcademicYears?.Any(y => y.Subjects?.Any(s => s.Semester1Review is not null || s.Semester2Review is not null) == true) == true)
+            errors.Add("Bước 2: bạn chưa xác nhận đã kiểm tra bảng điểm.");
+
         foreach (var year in draft.Step2?.AcademicYears ?? [])
-        foreach (var subject in year.Subjects ?? [])
         {
-            if (subject.Semester1Score is < 0 or > 10 || subject.Semester2Score is < 0 or > 10)
+            if (year.GradeName?.Trim().Length > 32)
+                errors.Add("Bước 2: tên khối / năm học tối đa 32 ký tự.");
+
+            var seenSubjects = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var subject in year.Subjects ?? [])
             {
-                errors.Add($"Bước 2: điểm môn {subject.SubjectName} ({year.GradeName}) phải từ 0 đến 10.");
+                var subjectName = subject.SubjectName?.Trim();
+                if (subjectName?.Length > 128)
+                    errors.Add($"Bước 2: tên môn trong {year.GradeName} tối đa 128 ký tự.");
+                else if (!string.IsNullOrEmpty(subjectName) && !seenSubjects.Add(subjectName))
+                    errors.Add($"Bước 2: môn {subjectName} bị trùng trong {year.GradeName}.");
+
+                if (subject.Semester1Score is < 0 or > 10 || subject.Semester2Score is < 0 or > 10)
+                {
+                    errors.Add($"Bước 2: điểm môn {subject.SubjectName} ({year.GradeName}) phải từ 0 đến 10.");
+                }
             }
         }
 
@@ -462,6 +509,11 @@ public class ProfileFlowService(
             if (string.IsNullOrWhiteSpace(name))
             {
                 errors.Add("Bước 5: có mục chưa nhập tên.");
+                continue;
+            }
+            if (name.Length > 256)
+            {
+                errors.Add("Bước 5: tên hoạt động / giải thưởng tối đa 256 ký tự.");
                 continue;
             }
             if (item.ImpactLevel is null || !ProfileConstants.ImpactLevelCodes.ToLevel.ContainsKey(item.ImpactLevel))
@@ -488,6 +540,27 @@ public class ProfileFlowService(
 
         if (errors.Count > 0)
             throw new InvalidOperationException(string.Join(" ", errors));
+    }
+
+    /// <summary>Số phần tử tối đa của từng danh sách trong nháp (dùng cho cả lưu nháp và commit)</summary>
+    private static void ValidateDraftLimits(ProfileFlowDraftDto draft, List<string> errors)
+    {
+        if (draft.Step1?.TargetStates?.Count > MaxTargetStates)
+            errors.Add($"Bước 1: chọn tối đa {MaxTargetStates} bang.");
+
+        var years = draft.Step2?.AcademicYears ?? [];
+        if (years.Count > MaxAcademicYears)
+            errors.Add($"Bước 2: tối đa {MaxAcademicYears} năm học.");
+        if (years.Any(y => y.Subjects?.Count > MaxSubjectsPerYear))
+            errors.Add($"Bước 2: mỗi năm học tối đa {MaxSubjectsPerYear} môn.");
+        if (years.Any(y => y.Subjects?.Any(s => s.Semester1Review?.Length > 32 || s.Semester2Review?.Length > 32) == true))
+            errors.Add("Bước 2: lý do kiểm tra ô điểm không hợp lệ.");
+
+        if (draft.Step3?.Certifications?.Count > MaxCertifications)
+            errors.Add($"Bước 3: tối đa {MaxCertifications} chứng chỉ.");
+
+        if (draft.Step5?.Activities?.Count > MaxActivities)
+            errors.Add($"Bước 5: tối đa {MaxActivities} hoạt động / giải thưởng.");
     }
 
     /// <summary>Thang điểm, điểm thành phần, môn bắt buộc đều theo danh mục trong DB</summary>
@@ -647,7 +720,8 @@ public class ProfileFlowService(
                 }
             }
         }
-        profile.OverallGpa = ComputeGpa4(draft.Step2) ?? draft.Step2?.CalculatedGpa4Scale;
+        // GPA chỉ tính trên server từ điểm các môn, không nhận số GPA client gửi lên
+        profile.OverallGpa = ComputeGpa4(draft.Step2);
 
         // Bước 3
         var certifications = BuildCertifications(draft.Step3, certificationTypes);

@@ -27,40 +27,4 @@ public class AcademicProfileRepository(AppDbContext db) : IAcademicProfileReposi
             .ThenBy(s => s.CreatedAt)
             .ToListAsync(ct);
     }
-
-    public async Task AddProfileAsync(StudentProfile profile, CancellationToken ct = default)
-    {
-        await db.StudentProfiles.AddAsync(profile, ct);
-    }
-
-    public Task UpdateProfileAsync(StudentProfile profile, CancellationToken ct = default)
-    {
-        db.StudentProfiles.Update(profile);
-        return Task.CompletedTask;
-    }
-
-    public async Task ReplaceTranscriptScoresAsync(Guid studentProfileId, IEnumerable<TranscriptScore> scores, CancellationToken ct = default)
-    {
-        // Xóa bảng điểm cũ của profile
-        var existing = await db.TranscriptScores
-            .Where(s => s.StudentProfileId == studentProfileId)
-            .ToListAsync(ct);
-
-        if (existing.Count > 0)
-        {
-            db.TranscriptScores.RemoveRange(existing);
-        }
-
-        // Thêm bảng điểm mới
-        var scoreList = scores.ToList();
-        if (scoreList.Count > 0)
-        {
-            await db.TranscriptScores.AddRangeAsync(scoreList, ct);
-        }
-    }
-
-    public async Task SaveChangesAsync(CancellationToken ct = default)
-    {
-        await db.SaveChangesAsync(ct);
-    }
 }

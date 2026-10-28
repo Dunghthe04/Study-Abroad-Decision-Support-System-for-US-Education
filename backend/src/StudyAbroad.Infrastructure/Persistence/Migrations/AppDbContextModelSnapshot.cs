@@ -310,6 +310,10 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("skill_id");
 
+                    b.Property<string>("StateJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("state_json");
+
                     b.Property<string>("StudyLevel")
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)")
@@ -355,6 +359,15 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("granted");
 
+                    b.Property<Guid?>("GrantedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("granted_by_user_id");
+
+                    b.Property<string>("GrantedIp")
+                        .HasMaxLength(45)
+                        .HasColumnType("character varying(45)")
+                        .HasColumnName("granted_ip");
+
                     b.Property<string>("PolicyVersion")
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")
@@ -376,6 +389,9 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_consents");
+
+                    b.HasIndex("GrantedByUserId")
+                        .HasDatabaseName("ix_consents_granted_by_user_id");
 
                     b.HasIndex("UserId", "Purpose")
                         .HasDatabaseName("ix_consents_user_id_purpose");
@@ -877,6 +893,12 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("user_id");
 
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.HasKey("Id")
                         .HasName("pk_otp_tokens");
 
@@ -884,6 +906,109 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_otp_tokens_user_id_purpose");
 
                     b.ToTable("otp_tokens", "app");
+                });
+
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.ParentStudentLink", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime?>("AcceptedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("accepted_at");
+
+                    b.Property<Guid?>("ConsentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("consent_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<int>("InviteSentCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("invite_sent_count");
+
+                    b.Property<DateTime?>("LastInviteSentAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_invite_sent_at");
+
+                    b.Property<string>("ParentEmail")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("parent_email");
+
+                    b.Property<Guid?>("ParentUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("parent_user_id");
+
+                    b.Property<DateTime?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("revoked_at");
+
+                    b.Property<Guid?>("RevokedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("revoked_by_user_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasDefaultValue("pending")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("StudentUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("student_user_id");
+
+                    b.Property<DateTime?>("TokenExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("token_expires_at");
+
+                    b.Property<string>("TokenHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("token_hash");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_parent_student_links");
+
+                    b.HasIndex("ConsentId")
+                        .HasDatabaseName("ix_parent_student_links_consent_id");
+
+                    b.HasIndex("RevokedByUserId")
+                        .HasDatabaseName("ix_parent_student_links_revoked_by_user_id");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique()
+                        .HasDatabaseName("ix_parent_student_links_token_hash")
+                        .HasFilter("token_hash IS NOT NULL");
+
+                    b.HasIndex("ParentUserId", "Status")
+                        .HasDatabaseName("ix_parent_student_links_parent_user_id_status");
+
+                    b.HasIndex("StudentUserId", "ParentEmail")
+                        .IsUnique()
+                        .HasDatabaseName("ix_parent_student_links_student_user_id_parent_email")
+                        .HasFilter("status IN ('pending', 'active')");
+
+                    b.ToTable("parent_student_links", "app");
                 });
 
             modelBuilder.Entity("StudyAbroad.Domain.Entities.ProfileActivity", b =>
@@ -2045,6 +2170,10 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<DateOnly?>("DateOfBirth")
+                        .HasColumnType("date")
+                        .HasColumnName("date_of_birth");
+
                     b.Property<string>("Email")
                         .IsRequired()
                         .HasMaxLength(256)
@@ -2097,6 +2226,12 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.HasKey("Id")
                         .HasName("pk_users");
@@ -2203,6 +2338,12 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                 {
                     b.HasOne("StudyAbroad.Domain.Entities.User", null)
                         .WithMany()
+                        .HasForeignKey("GrantedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_consents_users_granted_by_user_id");
+
+                    b.HasOne("StudyAbroad.Domain.Entities.User", null)
+                        .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
@@ -2297,6 +2438,34 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_otp_tokens_users_user_id");
+                });
+
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.ParentStudentLink", b =>
+                {
+                    b.HasOne("StudyAbroad.Domain.Entities.Consent", null)
+                        .WithMany()
+                        .HasForeignKey("ConsentId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_parent_student_links_consents_consent_id");
+
+                    b.HasOne("StudyAbroad.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("ParentUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_parent_student_links_users_parent_user_id");
+
+                    b.HasOne("StudyAbroad.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("RevokedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_parent_student_links_users_revoked_by_user_id");
+
+                    b.HasOne("StudyAbroad.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("StudentUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_parent_student_links_users_student_user_id");
                 });
 
             modelBuilder.Entity("StudyAbroad.Domain.Entities.ProfileActivity", b =>

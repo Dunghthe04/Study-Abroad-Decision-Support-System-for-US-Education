@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { ArrowLeftIcon } from "lucide-react";
 import { authApi, ApiError } from "@/lib/api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -12,13 +12,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
+import { clearPendingEmail, usePendingEmail } from "@/lib/pending-email";
 
 export function ResetPasswordForm() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const initialEmail = searchParams.get("email") || "";
 
-  const [email, setEmail] = useState(initialEmail);
+  // Email do bước trước (đăng ký / quên mật khẩu / đăng nhập) để lại trong sessionStorage;
+  // người dùng sửa ô email thì dùng giá trị đã nhập
+  const pendingEmail = usePendingEmail();
+  const [typedEmail, setEmail] = useState<string | null>(null);
+  const email = typedEmail ?? pendingEmail;
   const [otpCode, setOtpCode] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -71,6 +74,7 @@ export function ResetPasswordForm() {
         otpCode: cleanOtp,
         newPassword,
       });
+      clearPendingEmail();
 
       setSuccessMessage(res.message || "Đặt lại mật khẩu thành công! Bạn có thể đăng nhập bằng mật khẩu mới.");
       setTimeout(() => {

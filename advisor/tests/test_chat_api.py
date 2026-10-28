@@ -10,7 +10,7 @@ from app.services.chat_flow import QUESTIONS, ChatFlow
 def make_client() -> TestClient:
     # Không dùng "with" nên không chạy lifespan, không cần Ollama, Gemini
     app = create_app()
-    app.dependency_overrides[get_chat_flow] = ChatFlow
+    app.dependency_overrides[get_chat_flow] = lambda: ChatFlow()
     return TestClient(app)
 
 
@@ -28,6 +28,10 @@ def test_new_chat_starts_with_b0_question():
     assert body["state"]["currentStep"] == "B0"  # trả camelCase
     assert body["state"]["lastQuestion"] == QUESTIONS["B0.1"]
     assert body["state"]["asked"] == {"B0.1": 1}
+    # trường mới của hợp đồng: có mặt, rỗng, camelCase để .NET đọc được
+    assert body["quickReplies"] == []
+    assert body["widget"] is None
+    assert body["profileChanged"] == []
 
 
 def test_existing_state_is_kept():

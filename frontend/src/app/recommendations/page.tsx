@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { AgeGate } from "@/components/auth/AgeGate";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { RecommendationView } from "@/components/recommendation/RecommendationView";
 
@@ -17,7 +18,9 @@ export default async function RecommendationsPage({
 
   return (
     <ProtectedRoute>
-      <RecommendationView autoRun={run === "1"} />
+      <AgeGate feature="process_student_data">
+        <RecommendationView autoRun={run === "1"} />
+      </AgeGate>
     </ProtectedRoute>
   );
 }

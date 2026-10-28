@@ -3,10 +3,13 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Serilog;
+using Microsoft.AspNetCore.Authorization;
+using StudyAbroad.Api.Authorization;
 using StudyAbroad.Api.Extensions;
 using StudyAbroad.Api.RateLimiting;
 using StudyAbroad.Application;
 using StudyAbroad.Application.Auth;
+using StudyAbroad.Domain.Constants;
 using StudyAbroad.Infrastructure;
 using StudyAbroad.Infrastructure.Auth;
 using System.Text;
@@ -44,6 +47,9 @@ if (string.IsNullOrWhiteSpace(jwtOptions.SecretKey) || jwtOptions.SecretKey.Leng
             "CRITICAL SECURITY: JWT SecretKey must be configured via environment variable (JWT_SECRET_KEY) with minimum 32 characters in Production.");
     }
 }
+// TokenService (ký token) đọc IOptions<JwtOptions>: dùng đúng khóa đã kiểm tra ở trên
+builder.Services.PostConfigure<JwtOptions>(o => o.SecretKey = jwtOptions.SecretKey);
+
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -98,14 +104,31 @@ builder.Services.AddAuthentication(options =>
                 if (session == null || session.IsRevoked)
                 {
                     context.Fail("Phiên đăng nhập đã hết hiệu lực.");
+                    return;
+                }
+
+                // [Q6] Tài khoản bị Admin khóa (hoặc đã bị xóa) thì mất quyền ngay, không đợi token hết hạn.
+                // Tạm khóa do người khác nhập sai mật khẩu (temp_locked) KHÔNG đăng xuất người đang dùng.
+                var user = await userRepo.GetUserById(session.UserId);
+                if (user == null || user.Status == UserStatuses.Locked)
+                {
+                    context.Fail("Tài khoản không còn quyền truy cập.");
                 }
             }
         }
     };
 });
 
-builder.Services.AddAuthorization();
+// [Q11] Mỗi dòng trong AgeFeatures.Rules thành một policy cùng tên: [Authorize(Policy = AgeFeatures.X)]
+builder.Services.AddAuthorization(options =>
+{
+    foreach (var feature in AgeFeatures.Rules.Keys)
+        options.AddPolicy(feature, policy => policy.RequireAuthenticatedUser().AddRequirements(new AgeFeatureRequirement(feature)));
+});
+builder.Services.AddScoped<IAuthorizationHandler, AgeFeatureHandler>();
+builder.Services.AddSingleton<IAuthorizationMiddlewareResultHandler, AgeRestrictionResultHandler>();
 builder.Services.AddTranscriptUploadRateLimiter();
+builder.Services.AddAuthRateLimiter();
 
 builder.Services.AddControllers();
 builder.Services.AddProblemDetails();
