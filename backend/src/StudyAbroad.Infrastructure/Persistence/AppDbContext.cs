@@ -38,6 +38,21 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<AppSetting> AppSettings => Set<AppSetting>();
 
+    // 13 thực thể bổ sung chuẩn hóa toàn diện 42 bảng DB First
+    public DbSet<StateLivingCost> StateLivingCosts => Set<StateLivingCost>();
+    public DbSet<RecommendationItem> RecommendationItems => Set<RecommendationItem>();
+    public DbSet<ExpertRule> ExpertRules => Set<ExpertRule>();
+    public DbSet<WhatIfSimulation> WhatIfSimulations => Set<WhatIfSimulation>();
+    public DbSet<LeadMessage> LeadMessages => Set<LeadMessage>();
+    public DbSet<CenterReview> CenterReviews => Set<CenterReview>();
+    public DbSet<SubscriptionPlan> SubscriptionPlans => Set<SubscriptionPlan>();
+    public DbSet<UserSubscription> UserSubscriptions => Set<UserSubscription>();
+    public DbSet<UserDailyUsage> UserDailyUsages => Set<UserDailyUsage>();
+    public DbSet<PaymentTransaction> PaymentTransactions => Set<PaymentTransaction>();
+    public DbSet<PolicyAlert> PolicyAlerts => Set<PolicyAlert>();
+    public DbSet<DataImportBatch> DataImportBatches => Set<DataImportBatch>();
+    public DbSet<FieldEvidence> FieldEvidences => Set<FieldEvidence>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         // Business tables live in the "app" schema; the advisor service owns the "advisor" schema (pgvector).

@@ -13,4 +13,13 @@ public class TargetSchool : BaseEntity
     public string Status { get; set; } = "considering";
     public int Priority { get; set; }
     public string? Notes { get; set; }
+
+    /// <summary>Vòng nộp: Early Action, Early Decision, Regular (UC-32).</summary>
+    public string? ApplicationRound { get; set; }
+
+    /// <summary>Hạn nộp hồ sơ.</summary>
+    public DateTime? Deadline { get; set; }
+
+    /// <summary>Cache kết quả phân tích khoảng cách thiếu hụt đến trường mục tiêu (UC-81 - Q2).</summary>
+    public string? GapAnalysisJson { get; set; }
 }

@@ -37,6 +37,7 @@ class ChatState(CamelModel):
     return_to: Step | None = None  # bước dở cần quay lại sau B5, B6
     intake_mode: Literal["chat", "form"] | None = None  # học sinh chọn điền hồ sơ bằng chat hay form
     has_results: bool = False  # đã có danh sách trường gợi ý chưa (skill_explain, skill_kich_ban cần)
+    study_level: StudyLevel | None = None  # bậc học học sinh quan tâm (từ .NET), dùng để lọc kiến thức
 
 
 # Nguồn trích dẫn, khớp record Citation bên .NET
@@ -54,7 +55,7 @@ class QuickReply(CamelModel):
 
 # Công cụ nhập ngay trong chat (ô chọn ngành, bảng rà soát...); frontend vẽ theo type
 class Widget(CamelModel):
-    type: Literal["major", "review", "budget", "scholarship"]
+    type: Literal["major", "review", "budget", "scholarship", "form", "select"]
     data: dict[str, Any] = {}
 
 

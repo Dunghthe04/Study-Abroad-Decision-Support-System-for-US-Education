@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     # Đường dẫn file lưu log từng lượt chat (dữ liệu để gắn nhãn). Để trống = không ghi file.
     # Đường dẫn tương đối tính từ thư mục advisor/
     chat_log_file: str = ""
+    # Số ngày giữ file log chat, quá hạn thì tự xóa
+    chat_log_keep_days: int = 90
     ollama_base_url: str = "http://localhost:11434"
     llm_model: str = "qwen3:8b"
     llm_timeout_seconds: float = 120
@@ -31,6 +33,14 @@ class Settings(BaseSettings):
     llm_num_gpu: int = 99
     # cùng đầu vào cho cùng kết quả
     llm_seed: int = 42
+    embedding_model: str = "bge-m3"
+    database_url: str = ""
+    # khi thử có thể đặt "verified,draft"
+    knowledge_statuses: str = "verified"
+    # Độ tương đồng tối thiểu (cosine, 0 đến 1) giữa câu hỏi và câu hỏi mẫu trong kho; thấp hơn thì từ chối
+    knowledge_min_score: float = 0.72
+    # Số đoạn kiến thức đưa cho AI mỗi lần trả lời
+    knowledge_top_k: int = 4
     llm_keep_alive: str = "30m"  # giữ model trong VRAM giữa các lượt, không nạp lại
     # Đọc bảng điểm: model ảnh chép ảnh thành chữ (bước A), LLM chữ bóc điểm thành JSON (bước B)
     vision_model: str = "glm-ocr"
