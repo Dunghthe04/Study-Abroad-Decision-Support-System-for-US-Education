@@ -34,10 +34,14 @@ interface AssistantContextValue {
   retry: () => void;
   setPageContext: (ctx: AssistantPageContext | null) => void;
   setBeforeSend: (fn: BeforeSend | null) => void;
+  setOnProfileChanged: (fn: ProfileChanged | null) => void;
 }
 
 /** Việc trang cần làm xong trước khi gửi tin nhắn chat (vd lưu nháp form đang chờ) */
 export type BeforeSend = () => Promise<void>
+
+/** Chat vừa ghi các ô này vào nháp hồ sơ (vd để form nạp lại) */
+export type ProfileChanged = (keys: string[]) => void
 
 const STORAGE_KEY = "usas_assistant_chat";
 const SESSION_KEY = "usas_assistant_session";
@@ -93,6 +97,10 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
   const beforeSendRef = useRef<BeforeSend | null>(null);
   const setBeforeSend = useCallback((fn: BeforeSend | null) => {
     beforeSendRef.current = fn;
+  }, []);
+  const onProfileChangedRef = useRef<ProfileChanged | null>(null);
+  const setOnProfileChanged = useCallback((fn: ProfileChanged | null) => {
+    onProfileChangedRef.current = fn;
   }, []);
 
   const page = registered ?? defaultContext(pathname);
@@ -157,6 +165,8 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
           ...history,
           { role: "assistant", content: res.answer, citations: res.citations, disclaimer: res.disclaimer },
         ]);
+        // D2: báo trang biết chat vừa đổi hồ sơ nháp
+        if (res.profileChanged?.length) onProfileChangedRef.current?.(res.profileChanged);
       } catch (err) {
         setError(toAssistantError(err));
       } finally {
@@ -221,8 +231,9 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
       retry,
       setPageContext: setRegistered,
       setBeforeSend,
+      setOnProfileChanged,
     }),
-    [open, wide, turns, loading, error, page, openPanel, newChat, send, retry, setBeforeSend]
+    [open, wide, turns, loading, error, page, openPanel, newChat, send, retry, setBeforeSend, setOnProfileChanged]
   );
 
   return <AssistantContext.Provider value={value}>{children}</AssistantContext.Provider>;
@@ -251,4 +262,13 @@ export function useAssistantBeforeSend(fn: BeforeSend) {
     setBeforeSend(fn);
     return () => setBeforeSend(null);
   }, [fn, setBeforeSend]);
+}
+
+/** Trang đăng ký việc cần làm khi chat vừa đổi hồ sơ nháp; rời trang thì gỡ */
+export function useAssistantProfileChanged(fn: ProfileChanged) {
+  const { setOnProfileChanged } = useAssistant();
+  useEffect(() => {
+    setOnProfileChanged(fn);
+    return () => setOnProfileChanged(null);
+  }, [fn, setOnProfileChanged]);
 }

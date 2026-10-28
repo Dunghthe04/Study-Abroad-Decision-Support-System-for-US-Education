@@ -9,6 +9,7 @@ import {
   useAssistant,
   useAssistantBeforeSend,
   useAssistantPageContext,
+  useAssistantProfileChanged,
 } from "@/components/assistant/AssistantProvider";
 import { FLOW_STEPS, ProfileFlowStepper } from "./ProfileFlowStepper";
 import { Step1Goal } from "./Step1Goal";
@@ -187,6 +188,48 @@ export function ProfileFlowWizard() {
   // Lượt tự lưu đang chờ hết 1 giây (null = không có gì chờ lưu)
   const pendingSaveRef = useRef<{ step: number; draft: ProfileFlowDraft } | null>(null);
 
+  // D2: chat vừa ghi vào nháp thì nạp lại form. Đang gõ dở một ô hoặc còn lượt lưu chờ
+  // thì đợi (đánh dấu reloadWantedRef), để không xoá chữ đang gõ. Chỉ setDraft, không tự lưu lại
+  const reloadWantedRef = useRef(false);
+  const formRef = useRef<HTMLDivElement>(null);
+  const reloadFromChat = useCallback(async () => {
+    if (!user) return;
+    // Chỉ xét ô của form; ô gõ chat của trợ lý luôn đang được chọn sau khi gửi
+    const active = document.activeElement;
+    const typing =
+      Boolean(formRef.current?.contains(active)) &&
+      (active instanceof HTMLInputElement ||
+        active instanceof HTMLTextAreaElement ||
+        active instanceof HTMLSelectElement);
+    if (typing || pendingSaveRef.current) {
+      reloadWantedRef.current = true;
+      return;
+    }
+    reloadWantedRef.current = false;
+    const state = await profileFlowApi.getFlowState().catch(() => null);
+    const incomingDraft = state?.draft;
+    if (!incomingDraft) return;
+    // Trong lúc chờ mạng học sinh lại gõ thì để lần sau nạp
+    if (pendingSaveRef.current) {
+      reloadWantedRef.current = true;
+      return;
+    }
+    setDraft((prev) => mergeDraft(prev, incomingDraft));
+    setDraftTranscript(state.draftTranscript ?? null);
+  }, [user]);
+  useAssistantProfileChanged(reloadFromChat);
+
+  // Rời khỏi ô đang gõ thì nạp phần chat đã đổi (đợi focus chuyển xong mới xét)
+  useEffect(() => {
+    const onFocusOut = () => {
+      setTimeout(() => {
+        if (reloadWantedRef.current) void reloadFromChat();
+      }, 0);
+    };
+    document.addEventListener("focusout", onFocusOut);
+    return () => document.removeEventListener("focusout", onFocusOut);
+  }, [reloadFromChat]);
+
   const savePending = useCallback(async () => {
     const pending = pendingSaveRef.current;
     if (!pending || isUploadingRef.current) return;
@@ -194,11 +237,12 @@ export function ProfileFlowWizard() {
     try {
       await persistDraft(pending.step, completedStepsRef.current, pending.draft);
       setSaveStatus("saved");
+      if (reloadWantedRef.current) void reloadFromChat();
     } catch (err: unknown) {
       console.error("Lưu nháp thất bại:", err);
       setSaveStatus("error");
     }
-  }, [persistDraft]);
+  }, [persistDraft, reloadFromChat]);
 
   // 2. Tự động lưu nháp (Debounce 1000ms)
   const triggerAutoSave = useCallback(
@@ -417,7 +461,7 @@ export function ProfileFlowWizard() {
       <div className="flex flex-wrap items-start gap-6">
         <div className="min-w-0 flex-[999_1_560px] space-y-5">
           {assistantOpen && stepper("strip")}
-          <div className="rounded-xl border border-line bg-surface p-[18px] shadow-xs sm:p-7">
+          <div ref={formRef} className="rounded-xl border border-line bg-surface p-[18px] shadow-xs sm:p-7">
             {currentStep === 1 && (
               <Step1Goal
                 data={draft.step1}
