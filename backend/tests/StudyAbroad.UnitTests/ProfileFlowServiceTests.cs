@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
@@ -713,6 +714,95 @@ public class ProfileFlowServiceTests
         Assert.NotNull(updatedProfile);
         Assert.Null(updatedProfile!.DraftFlowStateJson);
         Assert.True(storage.DeleteCalled);
+    }
+
+    // C3: chat ghi các khóa vừa đổi vào nháp
+    private static JsonObject ChatProfile(string json) => JsonNode.Parse(json)!.AsObject();
+
+    [Fact]
+    public async Task PatchDraftAsync_ChangesOnlyRequestedKeys_KeepsStepsAndTranscriptFile()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var service = new ProfileFlowService(repo, new FakeFileStorageService());
+        var userId = Guid.NewGuid();
+        var draft = FullDraft();
+        await service.SaveDraftAsync(userId, new SaveProfileDraftRequest(3, [1, 2], draft));
+        using (var stream = new MemoryStream([1, 2, 3]))
+            await service.UploadDraftTranscriptAsync(userId, stream, "hoc_ba.pdf", "application/pdf", 3);
+
+        // profile có cả major nhưng chỉ budget nằm trong danh sách đổi
+        var chat = ChatProfile("""
+        {
+          "budget": { "value": "tier_20k_35k", "status": "confirmed" },
+          "major": { "value": "Biology", "status": "confirmed" }
+        }
+        """);
+        await service.PatchDraftAsync(userId, chat, ["budget"]);
+        var state = await service.GetFlowStateAsync(userId);
+
+        Assert.Equal(3, state.CurrentStep);
+        Assert.Equal([1, 2], state.CompletedSteps);
+        Assert.Equal("hoc_ba.pdf", state.DraftTranscript!.OriginalFileName);
+        var expected = draft with { Step4 = draft.Step4! with { AnnualBudgetTier = "tier_20k_35k" } };
+        Assert.Equal(JsonSerializer.Serialize(expected), JsonSerializer.Serialize(state.Draft));
+    }
+
+    [Fact]
+    public async Task PatchDraftAsync_WhenNoDraftButCommittedProfile_PatchesDraftBuiltFromProfile()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var service = new ProfileFlowService(repo, new FakeFileStorageService());
+        var userId = Guid.NewGuid();
+        var profile = await repo.EnsureProfileExistsAsync(userId);
+        profile.FlowSubmittedAt = DateTime.UtcNow;
+        profile.IntendedMajor = "Computer Science";
+        profile.Ielts = 6.5m;
+        profile.EnglishTestType = "ielts";
+
+        var state = await service.PatchDraftAsync(
+            userId, ChatProfile("""{ "budget": { "value": "tier_35k_50k", "status": "confirmed" } }"""), ["budget"]);
+
+        Assert.Equal(6, state.CurrentStep);
+        Assert.Equal([1, 2, 3, 4, 5], state.CompletedSteps);
+        Assert.Equal("tier_35k_50k", state.Draft.Step4!.AnnualBudgetTier);
+        Assert.Equal("Computer Science", state.Draft.Step1!.TargetMajor);
+        Assert.Equal(6.5m, Assert.Single(state.Draft.Step3!.Certifications!, c => c.Type == "ielts").Overall);
+        Assert.NotNull(profile.DraftFlowStateJson);
+    }
+
+    [Fact]
+    public async Task PatchDraftAsync_ForNewUser_StartsFromEmptyDraftAtStep1()
+    {
+        var service = new ProfileFlowService(new InMemoryProfileFlowRepository(), new FakeFileStorageService());
+        var userId = Guid.NewGuid();
+
+        await service.PatchDraftAsync(userId, ChatProfile("""
+        {
+          "gpa": { "value": { "value": 8.5, "scale": 10, "source": "overall" }, "status": "said_in_B0" },
+          "target_level": { "value": "undergraduate", "status": "confirmed" }
+        }
+        """), ["gpa", "target_level"]);
+        var state = await service.GetFlowStateAsync(userId);
+
+        Assert.Equal(1, state.CurrentStep);
+        Assert.Empty(state.CompletedSteps);
+        Assert.Equal(StudyLevels.Undergraduate, state.Draft.Step1!.TargetDegreeLevel);
+        Assert.Equal("all", state.Draft.Step1.TargetSchoolType);
+        Assert.Equal(8.5m, state.Draft.Step2!.ManualGpa10Scale);
+        Assert.Null(state.Draft.Step4!.AnnualBudgetTier);
+    }
+
+    [Fact]
+    public async Task PatchDraftAsync_WhenNothingChanged_DoesNotWriteDraft()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var service = new ProfileFlowService(repo, new FakeFileStorageService());
+        var userId = Guid.NewGuid();
+        var profile = await repo.EnsureProfileExistsAsync(userId);
+
+        await service.PatchDraftAsync(userId, ChatProfile("""{ "budget": { "value": "tier_35k_50k", "status": "confirmed" } }"""), []);
+
+        Assert.Null(profile.DraftFlowStateJson);
     }
 
     // C6: chat xác nhận hồ sơ khi chưa hỏi học bổng; chọn trường mới bắt buộc (C7)

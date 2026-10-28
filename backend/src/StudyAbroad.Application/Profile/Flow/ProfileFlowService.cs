@@ -7,6 +7,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -129,18 +130,30 @@ public class ProfileFlowService(
             DraftTranscript: previous?.DraftTranscript,
             LastUpdatedAt: DateTime.UtcNow);
 
-        var limitErrors = new List<string>();
-        ValidateDraftLimits(stored.Draft!, limitErrors);
-        if (limitErrors.Count > 0)
-            throw new ArgumentException(string.Join(" ", limitErrors));
+        await WriteStoredStateAsync(profile, stored);
+        return ToStateDto(stored, HasCommittedProfile(profile));
+    }
 
-        var json = JsonSerializer.Serialize(stored, JsonOptions);
-        if (json.Length > MaxDraftJsonChars)
-            throw new ArgumentException("Dữ liệu nháp quá lớn, vui lòng rút gọn nội dung.");
+    /// <summary>
+    /// C3: chat ghi các khóa vừa đổi (profile_changed) vào nháp, các ô khác giữ nguyên.
+    /// Chưa có nháp thì sửa trên nháp form đang thấy: dựng từ hồ sơ đã gửi, hoặc nháp rỗng.
+    /// Không đổi bước đang làm, các bước đã xong và file học bạ nháp
+    /// </summary>
+    public async Task<ProfileFlowStateDto> PatchDraftAsync(
+        Guid userId, JsonObject chatProfile, IReadOnlyCollection<string> changedKeys, CancellationToken ct = default)
+    {
+        var current = await GetFlowStateAsync(userId, ct);
+        if (changedKeys.Count == 0) return current;
 
-        profile.DraftFlowStateJson = json;
-        await repository.UpdateProfileAsync(profile, CancellationToken.None);
+        var profile = await repository.EnsureProfileExistsAsync(userId, CancellationToken.None);
+        var stored = new StoredFlowState(
+            CurrentStep: current.CurrentStep,
+            CompletedSteps: current.CompletedSteps.ToList(),
+            Draft: NormalizeDraft(ChatProfileMapper.ApplyChatProfile(current.Draft, chatProfile, changedKeys)),
+            DraftTranscript: ReadStoredState(profile.DraftFlowStateJson)?.DraftTranscript,
+            LastUpdatedAt: DateTime.UtcNow);
 
+        await WriteStoredStateAsync(profile, stored);
         return ToStateDto(stored, HasCommittedProfile(profile));
     }
 
@@ -309,6 +322,22 @@ public class ProfileFlowService(
             LastUpdatedAt: stored.LastUpdatedAt,
             HasCommittedProfile: hasCommittedProfile,
             LastCompletedStep: completed.Count > 0 ? completed.Max() : 0);
+    }
+
+    /// <summary>Kiểm tra giới hạn rồi ghi nháp; dùng chung cho form (SaveDraftAsync) và chat (PatchDraftAsync)</summary>
+    private async Task WriteStoredStateAsync(StudentProfile profile, StoredFlowState stored)
+    {
+        var limitErrors = new List<string>();
+        ValidateDraftLimits(stored.Draft!, limitErrors);
+        if (limitErrors.Count > 0)
+            throw new ArgumentException(string.Join(" ", limitErrors));
+
+        var json = JsonSerializer.Serialize(stored, JsonOptions);
+        if (json.Length > MaxDraftJsonChars)
+            throw new ArgumentException("Dữ liệu nháp quá lớn, vui lòng rút gọn nội dung.");
+
+        profile.DraftFlowStateJson = json;
+        await repository.UpdateProfileAsync(profile, CancellationToken.None);
     }
 
     /// <summary>Đọc nháp; JSON hỏng thì coi như không có nháp</summary>
