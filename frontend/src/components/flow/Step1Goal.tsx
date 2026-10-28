@@ -36,6 +36,8 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
   const [majorQuery, setMajorQuery] = useState(data.targetMajor ?? "");
   const [showMajorDropdown, setShowMajorDropdown] = useState(false);
   const [majorError, setMajorError] = useState<string | null>(null);
+  // Học sinh chọn "Chưa rõ": ngành lưu null (giống chat lưu unknown), vẫn cho qua bước này
+  const [majorUnknown, setMajorUnknown] = useState(false);
   const [levelError, setLevelError] = useState<string | null>(null);
 
   const [stateSearch, setStateSearch] = useState("");
@@ -112,6 +114,15 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
   const handleSelectMajor = (major: string) => {
     setMajorQuery(major);
     onUpdate({ targetMajor: major });
+    setMajorUnknown(false);
+    setMajorError(null);
+    setShowMajorDropdown(false);
+  };
+
+  const handleMajorUnknown = () => {
+    setMajorQuery("");
+    onUpdate({ targetMajor: null });
+    setMajorUnknown(true);
     setMajorError(null);
     setShowMajorDropdown(false);
   };
@@ -127,8 +138,8 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
       return;
     }
     setLevelError(null);
-    if (!data.targetMajor || !data.targetMajor.trim()) {
-      setMajorError("Vui lòng chọn hoặc nhập ngành học mong muốn trước khi tiếp tục.");
+    if (!majorUnknown && (!data.targetMajor || !data.targetMajor.trim())) {
+      setMajorError("Vui lòng chọn hoặc nhập ngành học mong muốn, hoặc bấm \"Chưa rõ\" nếu bạn chưa quyết định.");
       setShowMajorDropdown(true);
       const el = document.getElementById(majorInputId);
       if (el) el.focus();
@@ -368,10 +379,24 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
                 ({allMajors.length > 0 ? `${allMajors.length} ngành` : "Đang tải danh sách..."})
               </span>
             </Label>
-            {data.targetMajor && (
+            {data.targetMajor ? (
               <span className="text-xs text-brand font-medium">
                 Đã chọn: <strong className="text-foreground">{data.targetMajor}</strong>
               </span>
+            ) : majorUnknown ? (
+              <span className="text-xs text-brand font-medium">
+                Đã chọn: <strong className="text-foreground">Chưa rõ ngành</strong>
+              </span>
+            ) : (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={handleMajorUnknown}
+                className="text-xs h-7 cursor-pointer"
+              >
+                Chưa rõ
+              </Button>
             )}
           </div>
 
@@ -384,6 +409,7 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
               onFocus={() => setShowMajorDropdown(true)}
               onChange={(e) => {
                 setMajorQuery(e.target.value);
+                setMajorUnknown(false);
                 setShowMajorDropdown(true);
                 if (majorError) setMajorError(null);
               }}

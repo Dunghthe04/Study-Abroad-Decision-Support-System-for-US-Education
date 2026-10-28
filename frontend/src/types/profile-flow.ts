@@ -126,10 +126,14 @@ export interface DraftTranscriptFile {
   uploadedAt: string;
 }
 
+/** Cách nhập GPA bước 2: GPA tổng hoặc tính từ điểm môn (học bạ). BE: ProfileConstants.GpaModes */
+export type GpaMode = "overall" | "transcript";
+
 export interface TranscriptDraft {
   academicYears: AcademicYearDraft[];
   calculatedGpa4Scale?: number | null;
   manualGpa10Scale?: number | null;
+  gpaMode?: GpaMode | null;
 }
 
 /** Loại "Khác" — học sinh tự nhập tên chứng chỉ */

@@ -6,9 +6,11 @@ import type {
   ActivityRole,
   BudgetTierId,
   CurrentEducationLevel,
+  GpaMode,
   ImpactLevel,
   ScholarshipNeed,
   TargetSchoolType,
+  TranscriptDraft,
 } from "@/types/profile-flow";
 
 export const EDUCATION_LEVEL_OPTIONS: { value: CurrentEducationLevel; label: string }[] = [
@@ -128,7 +130,25 @@ export function calculateLinearGpa(years: AcademicYearDraft[]): { gpa10: number 
   if (count === 0) return { gpa10: null, gpa4: null };
 
   const gpa10 = Math.round((totalScore10 / count) * 100) / 100;
-  const gpa4 = Math.round(((gpa10 / 10) * 4.0) * 100) / 100;
+  const gpa4 = toGpa4(gpa10);
 
   return { gpa10, gpa4 };
+}
+
+export function toGpa4(gpa10: number): number {
+  return Math.round(((gpa10 / 10) * 4.0) * 100) / 100;
+}
+
+/** Cách nhập GPA của nháp; nháp cũ chưa có gpaMode thì có điểm môn là học bạ (giống TranscriptGpa.Mode phía BE) */
+export function gpaModeOf(step2: TranscriptDraft | undefined): GpaMode {
+  if (step2?.gpaMode === "overall" || step2?.gpaMode === "transcript") return step2.gpaMode;
+  return calculateLinearGpa(step2?.academicYears ?? []).gpa10 === null ? "overall" : "transcript";
+}
+
+/** GPA của nháp theo cách nhập (giống TranscriptGpa.Gpa4 phía BE); GPA tổng nhập thang 4 thì gpa10 là null */
+export function draftGpa(step2: TranscriptDraft | undefined): { gpa10: number | null; gpa4: number | null } {
+  if (gpaModeOf(step2) === "transcript") return calculateLinearGpa(step2?.academicYears ?? []);
+  const manual10 = step2?.manualGpa10Scale ?? null;
+  if (manual10 !== null) return { gpa10: manual10, gpa4: toGpa4(manual10) };
+  return { gpa10: null, gpa4: step2?.calculatedGpa4Scale ?? null };
 }

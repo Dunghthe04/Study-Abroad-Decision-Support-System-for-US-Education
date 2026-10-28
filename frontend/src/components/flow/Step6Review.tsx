@@ -22,7 +22,7 @@ import {
   IMPACT_LEVEL_OPTIONS,
   SCHOLARSHIP_NEED_OPTIONS,
   SCHOOL_TYPE_OPTIONS,
-  calculateLinearGpa,
+  draftGpa,
   labelOf,
 } from "@/lib/profile-flow-options";
 import { findCertType, formatCertSummary, formatYearMonth } from "@/lib/certification-utils";
@@ -116,11 +116,10 @@ export function Step6Review({
   // Transcript stats
   const totalSubjects = step2.academicYears?.reduce((sum, y) => sum + y.subjects.length, 0) ?? 0;
   const totalYears = step2.academicYears?.length ?? 0;
-  const gpa = step2.calculatedGpa4Scale ?? (step2.manualGpa10Scale ? ((step2.manualGpa10Scale / 10) * 4).toFixed(2) : "–");
-
-  const { gpa10 } = calculateLinearGpa(step2.academicYears ?? []);
-  const gpa10Value = gpa10 ?? step2.manualGpa10Scale ?? null;
-  const gpa10Text = gpa10Value != null ? gpa10Value.toFixed(1) : "–";
+  // Cùng cách tính với BE (TranscriptGpa): GPA tổng hoặc tính từ điểm môn
+  const { gpa10, gpa4 } = draftGpa(step2);
+  const gpa = gpa4 != null ? gpa4.toFixed(2) : "–";
+  const gpa10Text = gpa10 != null ? gpa10.toFixed(1) : "–";
   const gradeNames = (step2.academicYears ?? []).map((y) => y.gradeName).join(", ");
 
   // Activities & Awards count

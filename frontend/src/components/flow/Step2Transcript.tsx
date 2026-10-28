@@ -22,12 +22,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { profileFlowApi } from "@/lib/profile-flow-api";
-import { calculateLinearGpa, parseTermName } from "@/lib/profile-flow-options";
+import { calculateLinearGpa, parseTermName, toGpa4 } from "@/lib/profile-flow-options";
 import type {
   AcademicYearDraft,
   CurrentEducationLevel,
   DraftTranscriptFile,
   ExtractedTerm,
+  GpaMode,
   TranscriptDraft,
 } from "@/types/profile-flow";
 
@@ -48,6 +49,17 @@ interface Step2TranscriptProps {
 const TRANSCRIPT_EXTENSIONS = [".pdf", ".png", ".jpg", ".jpeg"];
 const TRANSCRIPT_ACCEPT = TRANSCRIPT_EXTENSIONS.join(",");
 const TRANSCRIPT_MAX_BYTES = 10 * 1024 * 1024;
+
+const GPA_MODE_OPTIONS: { value: GpaMode; label: string; description: string }[] = [
+  { value: "overall", label: "Nhập GPA tổng", description: "Đã biết điểm trung bình chung, chỉ cần gõ một số." },
+  {
+    value: "transcript",
+    label: "Tải học bạ hoặc nhập từng môn",
+    description: "Hệ thống tự tính GPA từ điểm các môn.",
+  },
+];
+
+type GpaScale = "10" | "4";
 
 const DEFAULT_SUBJECTS = [
   "Toán",
@@ -270,10 +282,54 @@ export function Step2Transcript({
   );
   const [dragOver, setDragOver] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [scalePick, setScalePick] = useState<GpaScale>("10");
   const fileInputId = useId();
+  const overallInputId = useId();
 
   const { gpa10, gpa4 } = calculateLinearGpa(years);
   const reviewCount = countReviewCells(years);
+
+  // Nháp cũ chưa có gpaMode: chỉ có GPA tổng (không có điểm môn) thì là nhập GPA tổng
+  const hasOverallGpa = data.manualGpa10Scale != null || data.calculatedGpa4Scale != null;
+  const mode: GpaMode = data.gpaMode ?? (gpa10 === null && hasOverallGpa ? "overall" : "transcript");
+  // Thang của GPA tổng suy từ số đã lưu; chưa có số thì theo lựa chọn của người dùng
+  const overallScale: GpaScale =
+    data.manualGpa10Scale != null ? "10" : data.calculatedGpa4Scale != null ? "4" : scalePick;
+  const overallValue = overallScale === "10" ? data.manualGpa10Scale : data.calculatedGpa4Scale;
+
+  const handleModeChange = (next: GpaMode) => {
+    if (next === mode) return;
+    setValidationError(null);
+    if (next === "transcript") {
+      onUpdate({ gpaMode: "transcript" });
+      return;
+    }
+    // Chuyển sang GPA tổng thì bỏ điểm môn, để BE và chat không tính nhầm từ điểm cũ
+    if (gpa10 !== null) {
+      if (!window.confirm("Chuyển sang nhập GPA tổng sẽ xóa điểm các môn đã nhập. Bạn có chắc không?")) return;
+      onUpdate({ gpaMode: "overall", academicYears: [], manualGpa10Scale: null, calculatedGpa4Scale: null });
+      setShowManualTable(false);
+      return;
+    }
+    onUpdate({ gpaMode: "overall" });
+  };
+
+  const handleOverallScaleChange = (scale: GpaScale) => {
+    if (scale === overallScale) return;
+    setScalePick(scale);
+    onUpdate({ gpaMode: "overall", manualGpa10Scale: null, calculatedGpa4Scale: null });
+  };
+
+  const handleOverallChange = (valStr: string) => {
+    const parsed = valStr.trim() === "" ? null : Number(valStr);
+    const val = parsed === null || Number.isNaN(parsed) ? null : parsed;
+    setValidationError(null);
+    if (overallScale === "10") {
+      onUpdate({ gpaMode: "overall", manualGpa10Scale: val, calculatedGpa4Scale: val === null ? null : toGpa4(val) });
+    } else {
+      onUpdate({ gpaMode: "overall", manualGpa10Scale: null, calculatedGpa4Scale: val });
+    }
+  };
 
   // [UC-12] Người dùng xác nhận đã rà toàn bộ bảng điểm → bỏ mọi cờ (cờ lưu trong nháp, BE không cho commit khi còn cờ)
   const handleConfirmReviewed = () => {
@@ -305,6 +361,7 @@ export function Step2Transcript({
 
     const newGpas = calculateLinearGpa(updatedYears);
     onUpdate({
+      gpaMode: "transcript",
       academicYears: updatedYears,
       manualGpa10Scale: newGpas.gpa10,
       calculatedGpa4Scale: newGpas.gpa4,
@@ -337,6 +394,7 @@ export function Step2Transcript({
 
     const newGpas = calculateLinearGpa(updatedYears);
     onUpdate({
+      gpaMode: "transcript",
       academicYears: updatedYears,
       manualGpa10Scale: newGpas.gpa10,
       calculatedGpa4Scale: newGpas.gpa4,
@@ -389,6 +447,7 @@ export function Step2Transcript({
         const updatedYears = mergeExtractedTerms(years, extractedTerms, activeYearIndex);
         const newGpas = calculateLinearGpa(updatedYears);
         onUpdate({
+          gpaMode: "transcript",
           academicYears: updatedYears,
           manualGpa10Scale: newGpas.gpa10,
           calculatedGpa4Scale: newGpas.gpa4,
@@ -433,6 +492,20 @@ export function Step2Transcript({
   };
 
   const handleNextClick = () => {
+    if (mode === "overall") {
+      if (overallValue == null) {
+        setValidationError("Vui lòng nhập GPA tổng trước khi tiếp tục.");
+        return;
+      }
+      if (overallValue < 0 || overallValue > Number(overallScale)) {
+        setValidationError(`GPA thang ${overallScale} phải từ 0 đến ${overallScale}.`);
+        return;
+      }
+      setValidationError(null);
+      onNext();
+      return;
+    }
+
     if (reviewCount > 0) {
       setValidationError(
         `Bảng điểm còn ${reviewCount} ô tô cam cần kiểm tra. Hãy đối chiếu với bảng điểm gốc rồi bấm "Tôi đã kiểm tra bảng điểm".`
@@ -504,8 +577,30 @@ export function Step2Transcript({
           Bảng điểm của bạn
         </h1>
         <p className="text-body text-muted-foreground">
-          Tải bảng điểm lên là cách nhanh nhất. Bạn không phải gõ từng môn.
+          Đã biết GPA thì gõ thẳng. Chưa biết thì tải bảng điểm lên để hệ thống tự tính.
         </p>
+      </div>
+
+      {/* Hai cách nhập GPA: GPA tổng hoặc học bạ */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" role="radiogroup" aria-label="Cách nhập GPA">
+        {GPA_MODE_OPTIONS.map((opt) => (
+          <button
+            key={opt.value}
+            type="button"
+            role="radio"
+            aria-checked={mode === opt.value}
+            onClick={() => handleModeChange(opt.value)}
+            className={cn(
+              "rounded-xl border p-4 text-left transition-colors cursor-pointer",
+              mode === opt.value
+                ? "border-brand bg-brand-wash/40 ring-1 ring-brand"
+                : "border-line bg-surface hover:border-brand/50"
+            )}
+          >
+            <div className="font-semibold text-sm text-foreground">{opt.label}</div>
+            <div className="text-xs text-muted-foreground mt-0.5">{opt.description}</div>
+          </button>
+        ))}
       </div>
 
       {/* Hidden file input */}
@@ -517,6 +612,61 @@ export function Step2Transcript({
         onChange={(e) => e.target.files && handleFileUpload(e.target.files)}
       />
 
+      {mode === "overall" ? (
+        <div className="rounded-xl border border-line bg-surface p-5 space-y-4">
+          <div>
+            <div className="font-semibold text-sm text-foreground">GPA tổng của bạn</div>
+            <div className="text-xs text-muted-foreground mt-0.5">
+              Điểm trung bình chung trên học bạ hoặc bảng điểm. Nhớ chọn đúng thang điểm.
+            </div>
+          </div>
+          <div className="flex flex-col sm:flex-row sm:items-end gap-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-foreground">Thang điểm</Label>
+              <div className="flex gap-2">
+                {(["10", "4"] as const).map((scale) => (
+                  <Button
+                    key={scale}
+                    type="button"
+                    size="sm"
+                    variant={overallScale === scale ? "default" : "outline"}
+                    onClick={() => handleOverallScaleChange(scale)}
+                    className="cursor-pointer"
+                  >
+                    Thang {scale}
+                  </Button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor={overallInputId} className="text-xs font-semibold text-foreground">
+                GPA tổng (0–{overallScale})
+              </Label>
+              <Input
+                id={overallInputId}
+                type="number"
+                inputMode="decimal"
+                min={0}
+                max={Number(overallScale)}
+                step={0.01}
+                placeholder={overallScale === "10" ? "VD: 8.5" : "VD: 3.4"}
+                value={overallValue ?? ""}
+                onChange={(e) => handleOverallChange(e.target.value)}
+                className="w-40 bg-surface"
+              />
+            </div>
+            {overallScale === "10" && (
+              <div className="text-xs text-muted-foreground sm:pb-2.5">
+                Quy đổi thang 4:{" "}
+                <strong className="text-brand">
+                  {data.manualGpa10Scale != null ? toGpa4(data.manualGpa10Scale).toFixed(2) : "—"}
+                </strong>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        <>
       {/* OCR Warnings if any */}
       {ocrWarnings.length > 0 && (
         <Alert className="border-warn/40 bg-warn-wash/40">
@@ -894,6 +1044,8 @@ export function Step2Transcript({
             </div>
           </div>
         </div>
+        </>
+      )}
 
       {/* Validation Error Notice */}
       {validationError && (
