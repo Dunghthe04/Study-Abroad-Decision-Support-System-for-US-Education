@@ -10,6 +10,8 @@ def field(value="x", status="confirmed") -> ProfileField:
 
 def test_draft_keys_are_the_ones_that_have_a_place_in_the_form():
     assert {"gpa", "english", "budget", "major", "target_level", "scholarship"} <= DRAFT_KEYS
+    # lớp đang học (Bước 1) và kế hoạch thi tiếng Anh (Bước 3) cũng có ô trong form
+    assert {"current_grade", "english_plan"} <= DRAFT_KEYS
     # form chưa có chỗ lưu những khóa này, chỉ chat giữ
     assert (
         not {"education_system", "intake", "funding_source", "relatives_state", "visa_refused"} & DRAFT_KEYS

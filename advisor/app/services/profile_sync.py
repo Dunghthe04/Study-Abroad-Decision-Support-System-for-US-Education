@@ -7,12 +7,14 @@ from app.schemas.chat import ProfileField
 # trạng thái chat, nháp không đụng tới.
 DRAFT_KEYS = {
     "current_level",
+    "current_grade",
     "target_level",
     "major",
     "gpa",
     "sat",
     "act",
     "english",
+    "english_plan",
     "budget",
     "scholarship",
     "activities",
