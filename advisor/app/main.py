@@ -1,6 +1,6 @@
 import logging
 from contextlib import asynccontextmanager
-from logging.handlers import RotatingFileHandler
+from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 
 import httpx  # gửi request đến ollama
@@ -69,7 +69,8 @@ class OnlyChatTurns(logging.Filter):
 
 # Ghi các dòng chat_turn ra file (nếu cấu hình CHAT_LOG_FILE). Lỗi ghi file không được làm sập dịch vụ
 def add_chat_file_handler(log: logging.Logger) -> None:
-    path = get_settings().chat_log_file
+    settings = get_settings()
+    path = settings.chat_log_file
     if not path:
         return
     file = Path(path)
@@ -78,7 +79,10 @@ def add_chat_file_handler(log: logging.Logger) -> None:
     try:
         file.parent.mkdir(parents=True, exist_ok=True)
         # utf-8 bắt buộc: Windows mặc định không phải utf-8 nên tiếng Việt sẽ hỏng hoặc báo lỗi
-        handler = RotatingFileHandler(file, maxBytes=5_000_000, backupCount=5, encoding="utf-8")
+        # Mỗi ngày một file mới, giữ chat_log_keep_days ngày rồi xóa file cũ
+        handler = TimedRotatingFileHandler(
+            file, when="midnight", backupCount=settings.chat_log_keep_days, encoding="utf-8"
+        )
     except OSError:
         log.exception("Không mở được file log chat: %s", file)
         return

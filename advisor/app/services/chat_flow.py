@@ -22,6 +22,7 @@ from app.services.intake import (
     intake_choice,
     next_question,
 )
+from app.services.pii_mask import mask_personal_info
 from app.services.profile_sync import changed_keys, merge_profile
 from app.services.skill_rules import Plan, missing_fields, plan_skills
 
@@ -164,6 +165,7 @@ class ChatFlow:
                     {},
                     Plan(skills=[], source="fallback_step"),
                     (time.perf_counter() - started) * 1000,
+                    req.session_id,
                 )
                 return ChatResponse(
                     answer=output.answer,
@@ -211,7 +213,9 @@ class ChatFlow:
         answers += blocked_answers(plan, skip={"thieu_ho_so", "thieu_nganh"})
 
         # 4. Ghi log (dữ liệu để train lại model và kiểm tra random check)
-        log_turn(state, message, predicted, probs, plan, (time.perf_counter() - started) * 1000)
+        log_turn(
+            state, message, predicted, probs, plan, (time.perf_counter() - started) * 1000, req.session_id
+        )
 
         return ChatResponse(
             answer="\n\n".join(dict.fromkeys(answers)) or NOT_READY,
@@ -304,15 +308,22 @@ def ask_next_missing(state: ChatState, prefix: str = "") -> SkillOutput:
 
 # Mỗi lượt ghi một dòng JSON: tin nhắn, model chọn gì, code chạy gì
 def log_turn(
-    state: ChatState, message: str, predicted: list[str], probs: dict[str, float], plan: Plan, ms: float
+    state: ChatState,
+    message: str,
+    predicted: list[str],
+    probs: dict[str, float],
+    plan: Plan,
+    ms: float,
+    session_id: str | None = None,
 ) -> None:
     logger.info(
         "chat_turn %s",
         json.dumps(
             {
+                "session_id": session_id,
                 "step": state.current_step,
                 "last_question": state.last_question,
-                "message": message,
+                "message": mask_personal_info(message),
                 "model_skills": predicted,
                 "probs": {k: round(v, 3) for k, v in probs.items()},
                 "source": plan.source,

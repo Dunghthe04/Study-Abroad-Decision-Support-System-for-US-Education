@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     # Đường dẫn file lưu log từng lượt chat (dữ liệu để gắn nhãn). Để trống = không ghi file.
     # Đường dẫn tương đối tính từ thư mục advisor/
     chat_log_file: str = ""
+    # Số ngày giữ file log chat, quá hạn thì tự xóa
+    chat_log_keep_days: int = 90
     ollama_base_url: str = "http://localhost:11434"
     llm_model: str = "qwen3:8b"
     llm_timeout_seconds: float = 120

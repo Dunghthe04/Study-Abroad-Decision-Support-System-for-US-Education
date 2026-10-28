@@ -457,6 +457,60 @@ def test_last_user_message_ignores_assistant_messages():
     assert last_user_message(req) == "tìm trường"
 
 
+def last_log_record(caplog) -> dict:
+    line = next(r.getMessage() for r in reversed(caplog.records) if r.getMessage().startswith("chat_turn "))
+    return json.loads(line.removeprefix("chat_turn "))
+
+
+async def test_log_line_carries_the_session_id(caplog):
+    req = request("em được 1420").model_copy(update={"session_id": "3f2a-session"})
+
+    with caplog.at_level(logging.INFO, logger="advisor.chat"):
+        await ChatFlow(FakePicker("skill_ho_so")).reply(req)
+
+    assert last_log_record(caplog)["session_id"] == "3f2a-session"
+
+
+async def test_log_session_id_is_empty_when_not_given(caplog):
+    with caplog.at_level(logging.INFO, logger="advisor.chat"):
+        await ChatFlow(FakePicker("skill_ho_so")).reply(request("em được 1420"))
+
+    assert last_log_record(caplog)["session_id"] is None
+
+
+async def test_log_masks_personal_info_but_keeps_the_rest_of_the_message(caplog):
+    message = "email em là hoa@gmail.com, số 0912 345 678, em được SAT 1420"
+
+    with caplog.at_level(logging.INFO, logger="advisor.chat"):
+        await ChatFlow(FakePicker("skill_ho_so")).reply(request(message))
+
+    logged = last_log_record(caplog)["message"]
+    assert "hoa@gmail.com" not in logged and "0912" not in logged
+    assert "[EMAIL]" in logged
+    assert "SAT 1420" in logged  # điểm không bị che vì còn cần để gắn nhãn dữ liệu
+
+
+async def test_the_reply_to_the_student_is_not_masked_only_the_log(caplog):
+    handlers = {"skill_ho_so": RichHandler("ok")}
+
+    with caplog.at_level(logging.INFO, logger="advisor.chat"):
+        res = await ChatFlow(FakePicker("skill_ho_so"), handlers).reply(request("sđt em 0912 345 678"))
+
+    assert res.answer == "ok"
+    assert "0912" not in last_log_record(caplog)["message"]
+
+
+async def test_choice_turn_is_logged_with_the_session_id_too(caplog):
+    req = request(CHAT_BUTTON.value, current_step="B3", last_question="", question_id=INTAKE_ID).model_copy(
+        update={"session_id": "abc"}
+    )
+
+    with caplog.at_level(logging.INFO, logger="advisor.chat"):
+        await ChatFlow(FakePicker("skill_ho_so")).reply(req)
+
+    assert last_log_record(caplog)["session_id"] == "abc"
+
+
 async def test_each_turn_writes_one_json_log_line(caplog):
     with caplog.at_level(logging.INFO, logger="advisor.chat"):
         await ChatFlow(FakePicker("skill_ho_so")).reply(request("em được 1420"))
