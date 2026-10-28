@@ -15,6 +15,7 @@ import {
 import { cn } from "@/lib/utils";
 import { AGE_FEATURES, useAgeBlock } from "@/lib/age-features";
 import { useAssistant, type AssistantTurn } from "./AssistantProvider";
+import { MajorWidget } from "./MajorWidget";
 import { ReviewWidget } from "./ReviewWidget";
 
 // Trang đăng nhập / đăng ký không hiện trợ lý
@@ -235,6 +236,8 @@ function Turn({ turn, onReply }: { turn: AssistantTurn; onReply?: (value: string
       )}
       {turn.disclaimer && <p className="mt-2 text-xs text-muted-foreground italic">{turn.disclaimer}</p>}
       {turn.widget?.type === "review" && <ReviewWidget data={turn.widget.data} />}
+      {/* E: chỉ chọn được ở lượt cuối, giống nút trả lời nhanh */}
+      {turn.widget?.type === "major" && <MajorWidget onPick={onReply} />}
       {onReply && turn.quickReplies && turn.quickReplies.length > 0 && (
         <div className="mt-2.5 flex flex-wrap gap-2">
           {turn.quickReplies.map((r) => (

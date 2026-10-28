@@ -44,6 +44,7 @@ public class RecommendationService(IAdvisorClient advisor, IRecommendationReposi
     private static readonly int[] BalancedPref = [2, 2, 2];
     // Bắt đầu bằng "Hồ sơ" để controller trả 400 kèm câu này
     public const string MissingScholarshipMessage = "Hồ sơ chưa chọn mức cần học bổng, cần chọn trước khi gợi ý trường.";
+    public const string MissingMajorMessage = "Hồ sơ chưa chọn ngành, cần chọn ngành trước khi gợi ý trường.";
 
     public async Task<RecommendationRun> RecommendAsync(
         StudentProfile profile,
@@ -57,6 +58,9 @@ public class RecommendationService(IAdvisorClient advisor, IRecommendationReposi
         // Chặn trước khi gọi Qwen/Gemini; chat sẽ hỏi F2 rồi gợi ý lại
         if (string.IsNullOrWhiteSpace(profile.ScholarshipNeed))
             throw new InvalidOperationException(MissingScholarshipMessage);
+        // E: ngành "chưa rõ" (null) qua được bước đánh giá, nhưng không có ngành thì không lọc được trường
+        if (string.IsNullOrWhiteSpace(profile.IntendedMajor))
+            throw new InvalidOperationException(MissingMajorMessage);
 
         //Danh sách các tiêu chí của học sinh
         var criteria = new FilterCriteria(

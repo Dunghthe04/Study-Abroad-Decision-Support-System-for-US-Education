@@ -81,6 +81,32 @@ public class RecommendationServiceTests
         Assert.Empty(store.Rows);
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData(" ")]
+    public async Task Recommend_WithoutMajor_IsBlockedBeforeAnyCloudCall(string? major)
+    {
+        var advisor = new FakeAdvisor();
+        var store = new FakeRecommendationRepository();
+        var service = new RecommendationService(advisor, store, new UnusedProfileFlow());
+        var profile = new StudentProfile
+        {
+            UserId = Guid.NewGuid(),
+            TargetLevel = "undergraduate",
+            IntendedMajor = major,
+            BudgetMaxUsd = 50_000m,
+            ScholarshipNeed = ProfileConstants.ScholarshipNeeds.Preferred,
+        };
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.RecommendAsync(profile, [], [School("B", 38_000m, "none", "Computer and information sciences")]));
+
+        Assert.Equal(RecommendationService.MissingMajorMessage, ex.Message);
+        Assert.StartsWith("Hồ sơ", ex.Message); // controller trả 400, không phải 502
+        Assert.Empty(advisor.Calls);
+        Assert.Empty(store.Rows);
+    }
+
     [Fact]
     public async Task Recommend_WithOptionalScholarship_StillRuns()
     {
