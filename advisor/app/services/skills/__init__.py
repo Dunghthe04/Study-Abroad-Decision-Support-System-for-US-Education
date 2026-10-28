@@ -13,7 +13,9 @@ from typing import Any
 
 from app.services.chat_flow import SkillHandler
 from app.services.skills.skill_bac_hoc import BacHocHandler
+from app.services.skills.skill_danh_gia import DanhGiaHandler
 from app.services.skills.skill_ho_so import HoSoHandler
+from app.services.skills.skill_lo_trinh import LoTrinhHandler
 from app.services.skills.skill_nhu_cau import NhuCauHandler
 
 
@@ -25,4 +27,6 @@ def build_handlers(llm: Any, model: str) -> dict[str, SkillHandler]:
     handlers["skill_nhu_cau"] = NhuCauHandler(llm, model)
     handlers["skill_bac_hoc"] = BacHocHandler(llm, model)
     handlers["skill_ho_so"] = HoSoHandler(llm, model)
+    handlers["skill_danh_gia"] = DanhGiaHandler(llm, model)
+    handlers["skill_lo_trinh"] = LoTrinhHandler(llm, model)
     return handlers
