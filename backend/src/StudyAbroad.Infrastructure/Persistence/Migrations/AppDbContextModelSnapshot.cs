@@ -659,6 +659,12 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("code");
+
                     b.Property<string>("Content")
                         .IsRequired()
                         .HasColumnType("text")
@@ -670,33 +676,82 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("DocType")
                         .IsRequired()
+                        .ValueGeneratedOnAdd()
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)")
+                        .HasDefaultValue("faq")
                         .HasColumnName("doc_type");
+
+                    b.Property<string>("EmbeddingHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("embedding_hash");
 
                     b.Property<DateTime?>("IngestedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("ingested_at");
 
+                    b.Property<string>("Question")
+                        .HasColumnType("text")
+                        .HasColumnName("question");
+
+                    b.Property<string>("Quote")
+                        .HasColumnType("text")
+                        .HasColumnName("quote");
+
                     b.Property<DateOnly?>("RetrievedAt")
                         .HasColumnType("date")
                         .HasColumnName("retrieved_at");
+
+                    b.Property<DateTime?>("ReviewDueAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("review_due_at");
+
+                    b.Property<string>("Scope")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasDefaultValue("system_advisory")
+                        .HasColumnName("scope");
+
+                    b.Property<string>("SourceNote")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("source_note");
+
+                    b.Property<string>("SourceType")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasDefaultValue("official")
+                        .HasColumnName("source_type");
 
                     b.Property<string>("SourceUrl")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)")
                         .HasColumnName("source_url");
 
+                    b.Property<string>("Stage")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("stage");
+
                     b.Property<string>("Status")
                         .IsRequired()
+                        .ValueGeneratedOnAdd()
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")
+                        .HasDefaultValue("draft")
                         .HasColumnName("status");
 
                     b.Property<string>("StudyLevel")
                         .IsRequired()
+                        .ValueGeneratedOnAdd()
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)")
+                        .HasDefaultValue("general")
                         .HasColumnName("study_level");
 
                     b.Property<string>("Title")
@@ -704,6 +759,11 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasMaxLength(300)
                         .HasColumnType("character varying(300)")
                         .HasColumnName("title");
+
+                    b.Property<string>("Topic")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("topic");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -717,8 +777,24 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("verified_by_user_id");
 
+                    b.Property<int>("Version")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("version");
+
                     b.HasKey("Id")
                         .HasName("pk_knowledge_documents");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("ix_knowledge_documents_code");
+
+                    b.HasIndex("Scope")
+                        .HasDatabaseName("ix_knowledge_documents_scope");
+
+                    b.HasIndex("Topic")
+                        .HasDatabaseName("ix_knowledge_documents_topic");
 
                     b.HasIndex("VerifiedByUserId")
                         .HasDatabaseName("ix_knowledge_documents_verified_by_user_id");
