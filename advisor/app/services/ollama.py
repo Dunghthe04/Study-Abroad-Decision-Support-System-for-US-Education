@@ -24,11 +24,30 @@ class OllamaClient:
         num_gpu: int = 99,
         seed: int = 42,
         keep_alive: str = "30m",
+        embedding_model: str = "bge-m3",
     ) -> None:
         self._http = http
         self._model = model
+        self._embedding_model = embedding_model
         self._options = {"num_ctx": num_ctx, "num_gpu": num_gpu, "seed": seed}
         self._keep_alive = keep_alive
+
+    # Biến mỗi đoạn chữ thành một vector (bge-m3: 1024 số) để so sánh nghĩa với kho kiến thức
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        payload = {"model": self._embedding_model, "input": texts, "keep_alive": self._keep_alive}
+        try:
+            resp = await self._http.post("/api/embed", json=payload)
+            resp.raise_for_status()
+        except httpx.HTTPError as ex:
+            raise OllamaError(f"Gọi Ollama embed thất bại: {ex!r}") from ex
+
+        try:
+            vectors = resp.json()["embeddings"]
+        except (KeyError, ValueError) as ex:
+            raise OllamaError("Ollama embed trả về nội dung không đọc được") from ex
+        if len(vectors) != len(texts):  # mỗi đoạn chữ phải có đúng một vector
+            raise OllamaError(f"Gửi {len(texts)} đoạn chữ nhưng nhận {len(vectors)} vector")
+        return vectors
 
     # Gửi conversation + JSON schema cho Ollama và nhận JSON kết quả
     async def chat_json(
