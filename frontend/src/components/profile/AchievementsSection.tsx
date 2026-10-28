@@ -96,21 +96,6 @@ export function AchievementsSection() {
   }
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-xs">
-      <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-900">Nghiên cứu, thực tập & giải thưởng</h2>
-          <p className="text-xs text-slate-500">
-            Minh chứng năng lực học thuật xuất sắc và hồ sơ nổi bật (Honors & Awards).
-          </p>
-        </div>
-        <button
-          onClick={() => setShowAddForm(!showAddForm)}
-          className="rounded-lg bg-slate-900 px-3.5 py-1.5 text-xs font-medium text-white hover:bg-slate-800 transition-colors"
-        >
-          {showAddForm ? "Đóng Form" : "+ Thêm thành tích"}
-        </button>
-      </div>
     <Card>
       <CardHeader>
         <CardTitle>3. Nghiên cứu, Thực tập & Giải thưởng</CardTitle>
