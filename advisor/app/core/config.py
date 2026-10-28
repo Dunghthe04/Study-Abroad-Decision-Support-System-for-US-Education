@@ -35,6 +35,12 @@ class Settings(BaseSettings):
     llm_seed: int = 42
     embedding_model: str = "bge-m3"
     database_url: str = ""
+    # khi thử có thể đặt "verified,draft"
+    knowledge_statuses: str = "verified"
+    # Độ tương đồng tối thiểu (cosine, 0 đến 1) giữa câu hỏi và câu hỏi mẫu trong kho; thấp hơn thì từ chối
+    knowledge_min_score: float = 0.72
+    # Số đoạn kiến thức đưa cho AI mỗi lần trả lời
+    knowledge_top_k: int = 4
     llm_keep_alive: str = "30m"  # giữ model trong VRAM giữa các lượt, không nạp lại
     # Đọc bảng điểm: model ảnh chép ảnh thành chữ (bước A), LLM chữ bóc điểm thành JSON (bước B)
     vision_model: str = "glm-ocr"

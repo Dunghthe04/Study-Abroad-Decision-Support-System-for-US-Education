@@ -10,7 +10,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-from app.schemas.chat import ChatRequest, ChatResponse, ChatState, QuickReply, Step, Widget
+from app.schemas.chat import ChatRequest, ChatResponse, ChatState, Citation, QuickReply, Step, Widget
 from app.services.intake import (
     CHAT_BUTTON,
     FORM_BUTTON,
@@ -101,6 +101,8 @@ class SkillOutput:
     answer: str
     quick_replies: list[QuickReply] = field(default_factory=list)
     widget: Widget | None = None
+    citations: list[Citation] = field(default_factory=list)  # nguồn của thông tin trong câu trả lời
+    disclaimer: str | None = None  # lời lưu ý kèm theo
 
 
 # Hợp đồng chung mọi skill: nhân trạng thái và tin nhắn, trả câu trả lời
@@ -140,10 +142,13 @@ class ChatFlow:
             # Đã có hồ sơ (vào chat từ form) thì nạp sẵn để không hỏi lại
             if req.profile is not None:
                 state.profile = merge_profile(state.profile, req.profile)
+            state.study_level = req.study_level
             return ChatResponse(answer=ask(state, "B0.1"), state=state, profile=state.profile)
 
         # Sao chép đối tượng
         state = req.state.model_copy(deep=True)
+        if req.study_level:  # .NET gửi bậc học mỗi lượt; không gửi thì giữ bậc đã nhớ
+            state.study_level = req.study_level
         # Hồ sơ trong nháp (do .NET gửi) là nguồn thật; không gửi thì giữ hồ sơ trong state như cũ
         if req.profile is not None:
             state.profile = merge_profile(state.profile, req.profile)
@@ -186,6 +191,8 @@ class ChatFlow:
         answers: list[str] = []
         quick_replies: list[QuickReply] = []
         widget: Widget | None = None
+        citations: list[Citation] = []
+        disclaimer: str | None = None
         for skill in plan.skills:
             # Lấy ra handler của skill, nếu không có thì trả NOT_READY
             handler = self._handlers.get(skill)
@@ -197,6 +204,8 @@ class ChatFlow:
             # Mỗi lượt chỉ hiện một bộ nút và một công cụ nhập: lấy của skill chạy sau cùng có đưa ra
             quick_replies = output.quick_replies or quick_replies
             widget = output.widget or widget
+            citations += [c for c in output.citations if c not in citations]
+            disclaimer = output.disclaimer or disclaimer
         # Nếu bị chặn thì thêm câu trả lời
         # Bị chặn vì thiếu hồ sơ thì bắt đầu hỏi hồ sơ thay vì chỉ báo thiếu
         if any(b.reason == "thieu_ho_so" for b in plan.blocked):
@@ -223,6 +232,8 @@ class ChatFlow:
             skills=plan.skills,
             quick_replies=quick_replies,
             widget=widget,
+            citations=citations,
+            disclaimer=disclaimer,
             profile=state.profile,
             profile_changed=changed_keys(profile_before, state.profile),
         )
