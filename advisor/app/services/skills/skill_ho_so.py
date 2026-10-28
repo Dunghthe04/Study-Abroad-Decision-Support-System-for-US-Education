@@ -12,15 +12,19 @@ from pydantic import BaseModel, Field
 
 from app.services.skill_call import SKILLS_DIR, SkillCall
 from app.services.skills.validators import (
+    SCHOOL_TYPES,
     AskAgain,
     check_act,
     check_activities,
     check_awards,
     check_budget,
+    check_budget_tier,
     check_english,
+    check_english_plan,
     check_gpa,
     check_sat,
     check_scholarship,
+    check_states,
 )
 
 SKILL_PATH = SKILLS_DIR / "skill_ho_so.md"
@@ -47,7 +51,6 @@ CAN_BE_NONE = ("sat", "act", "english", "activities", "awards", "relatives_state
 
 EDUCATION_SYSTEMS = ("vn_thpt", "ib", "a_level", "ap", "other")
 FUNDING_SOURCES = ("parents", "relatives", "self", "loan")
-SCHOOL_TYPES = ("public", "private", "any")
 
 
 # Khuôn từng thông tin Qwen đọc ra. Chỉ kiểm tra dạng; khoảng điểm do validators kiểm tra
@@ -59,25 +62,36 @@ class GpaRead(BaseModel):
 class EnglishRead(BaseModel):
     type: str
     score: float
-    ielts_kind: str | None = None
     date: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}$")
 
 
+# Kế hoạch thi tiếng Anh: planned False là "chưa có kế hoạch"; có kế hoạch thì tháng có thể chưa biết
+class EnglishPlanRead(BaseModel):
+    planned: bool
+    date: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}$")
+
+
+# Học sinh nói số tiền (amount, currency) hoặc bấm nút mức (tier). Chỉ mức tier được lưu
 class BudgetRead(BaseModel):
-    amount: float
-    currency: str
+    amount: float | None = None
+    currency: str | None = None
+    tier: str | None = None
 
 
+# Một hoạt động như Bước 5 của form. Thiếu ý nào thì để null, validators sẽ hỏi lại đúng ý đó
 class ActivityRead(BaseModel):
-    name: str
-    role: str
-    scope: int
-    months: int
+    name: str | None = None
+    role: str | None = None
+    impact_level: str | None = None
+    start_date: str | None = None
+    end_date: str | None = None
+    is_ongoing: bool = False
 
 
 class AwardRead(BaseModel):
-    title: str
-    level: int
+    name: str | None = None
+    impact_level: str | None = None
+    year: int | None = None
 
 
 class HoSoValues(BaseModel):
@@ -86,7 +100,7 @@ class HoSoValues(BaseModel):
     sat: float | None = None
     act: float | None = None
     english: EnglishRead | None = None
-    english_plan: str | None = None
+    english_plan: EnglishPlanRead | None = None
     budget: BudgetRead | None = None
     scholarship: str | None = None
     funding_source: Literal[FUNDING_SOURCES] | None = None
@@ -126,17 +140,24 @@ def check_value(name: str, value: Any) -> Any:
     if name == "act":
         return check_act(value)
     if name == "english":
-        cert, score, kind = check_english(value.type, value.score, value.ielts_kind)
-        return {"type": cert, "value": score, "kind": kind, "date": value.date}
+        cert, score, test_date = check_english(value.type, value.score, value.date)
+        return {"type": cert, "value": score, "date": test_date}
+    if name == "english_plan":
+        return check_english_plan(value.planned, value.date)
     if name == "budget":
-        amount, currency, tier = check_budget(value.amount, value.currency)
-        return {"amount": amount, "currency": currency, "tier": tier}
+        if value.tier is not None:
+            return check_budget_tier(value.tier)
+        if value.amount is None:
+            raise AskAgain("Gia đình bạn có thể chi khoảng bao nhiêu mỗi năm? Bạn cho mình một con số nhé.")
+        return check_budget(value.amount, value.currency or "USD")
     if name == "scholarship":
         return check_scholarship(value)
     if name == "activities":
         return check_activities([a.model_dump() for a in value])
     if name == "awards":
         return check_awards([a.model_dump() for a in value])
+    if name == "preferred_states":
+        return check_states(value)
     if isinstance(value, str):
         return value.strip()
     return value

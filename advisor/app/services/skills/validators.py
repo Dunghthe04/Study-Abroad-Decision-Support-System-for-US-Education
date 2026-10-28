@@ -1,8 +1,14 @@
 """Luật kiểm tra giá trị học sinh nói trong chat, trước khi ghi vào hồ sơ (HUONG_DAN mục 7.1).
 
 Giá trị sai thì ném AskAgain kèm câu hỏi lại bằng tiếng Việt, không ghi bừa vào hồ sơ.
-Giới hạn điểm lấy đúng theo metadata chứng chỉ của .NET (DbSeeder.cs, mảng certifications).
+Mã và luật lấy đúng theo form và .NET (KE_HOACH_DONG_BO_CHAT_FORM.md), để chat nhận thì commit cũng nhận:
+- giới hạn điểm theo metadata chứng chỉ (DbSeeder.cs, mảng certifications);
+- mã vai trò, phạm vi, học bổng, loại trường theo profile-flow-options.ts;
+- luật hoạt động / giải thưởng theo Step5Extracurricular.tsx và ValidateForCommit.
 """
+
+import re
+from datetime import date
 
 # Thang GPA được nhận
 GPA_SCALES = (4, 10)
@@ -25,7 +31,6 @@ CERT_NAMES = {
     "duolingo": "Duolingo",
     "pte": "PTE",
 }
-IELTS_KINDS = ("academic", "general")
 
 # Tỷ giá cố định để đổi VNĐ sang USD, chỉ sửa ở đây
 VND_PER_USD = 25_000
@@ -40,15 +45,28 @@ BUDGET_TIERS = [
     (70_000, "tier_50k_70k"),
 ]
 TOP_TIER = "tier_above_70k"
+ALL_TIERS = (*(tier for _, tier in BUDGET_TIERS), TOP_TIER)
 
-SCHOLARSHIP_LEVELS = ("required", "preferred", "no")
+# Mã của form (Bước 4, Bước 1, Bước 5)
+SCHOLARSHIP_LEVELS = ("mandatory", "preferred", "optional")
+SCHOOL_TYPES = ("all", "public", "private")
+ACTIVITY_ROLES = ("founder", "leader", "vice_leader", "member")
+# Phạm vi theo thứ tự impact_level 1..5 trong DB
+IMPACT_LEVELS = ("school", "district", "province", "national", "international")
 
+# Chat chặt hơn .NET (cho 50 mục): chỉ nhận vài mục tiêu biểu nhất
 MAX_ACTIVITIES = 4
-ACTIVITY_ROLES = ("founder", "lead", "vice", "member")
-# Phạm vi 1 đến 5: trường, quận, tỉnh/thành phố, quốc gia, quốc tế
-MIN_SCOPE, MAX_SCOPE = 1, 5
-# Giải thưởng: tối đa 3, cấp giải cùng thang 1-5 với phạm vi
 MAX_AWARDS = 3
+# Năm đạt giải nhỏ nhất (FE bắt từ 2000, .NET từ 1900; lấy luật chặt hơn)
+MIN_AWARD_YEAR = 2000
+
+# Độ dài tối đa giống ValidateForCommit
+MAX_NAME_LEN = 256
+MAX_STATE_LEN = 64
+MAX_STATES = 60
+
+MONTH_YEAR = re.compile(r"^(\d{1,2})/(\d{4})$")  # "09/2024", dạng của hoạt động
+YEAR_MONTH = re.compile(r"^(\d{4})-(\d{2})$")  # "2024-09", dạng ngày thi chứng chỉ
 
 
 # Lỗi "cần hỏi lại": skill bắt lỗi này rồi gửi .question cho học sinh
@@ -62,6 +80,29 @@ class AskAgain(Exception):
 def on_step(value: float, step: float) -> bool:
     ratio = value / step
     return abs(ratio - round(ratio)) < 1e-9
+
+
+# Đổi tháng thành một số để so sánh trước/sau (giống year * 12 + month ở FE)
+def month_index(year: int, month: int) -> int:
+    return year * 12 + month
+
+
+# "09/2024" → số tháng để so sánh; sai dạng thì None
+def parse_month_year(text: str | None) -> int | None:
+    match = MONTH_YEAR.match((text or "").strip())
+    if not match:
+        return None
+    month, year = int(match[1]), int(match[2])
+    return month_index(year, month) if 1 <= month <= 12 and year >= 1900 else None
+
+
+# "2024-09" → số tháng để so sánh; sai dạng thì None
+def parse_year_month(text: str | None) -> int | None:
+    match = YEAR_MONTH.match((text or "").strip())
+    if not match:
+        return None
+    year, month = int(match[1]), int(match[2])
+    return month_index(year, month) if 1 <= month <= 12 and year >= 1900 else None
 
 
 # A1. GPA: không nói thang thì đoán (<= 4 là thang 4, còn lại thang 10). Trả về (gpa, thang)
@@ -100,20 +141,38 @@ def check_act(score: int) -> int:
     return int(check_score("act", score))
 
 
-# A3. Chứng chỉ tiếng Anh. IELTS phải biết Academic hay General, chưa nói thì hỏi lại
-# Trả về (mã chứng chỉ, điểm, loại IELTS hoặc None)
-def check_english(cert: str, score: float, ielts_kind: str | None = None) -> tuple[str, float, str | None]:
+# A3. Chứng chỉ tiếng Anh. IELTS là IELTS Academic như form, không hỏi loại.
+# Ngày thi "yyyy-MM" không được ở tương lai (giống ValidateCertifications). Trả về (mã, điểm, ngày thi)
+def check_english(
+    cert: str, score: float, test_date: str | None = None, today: date | None = None
+) -> tuple[str, float, str | None]:
     cert = cert.strip().lower()
     if cert not in ENGLISH_CERTS:
         raise AskAgain("Bạn có chứng chỉ tiếng Anh nào: IELTS, TOEFL, Duolingo hay PTE?")
     check_score(cert, score)
-    if cert != "ielts":
+    if test_date is None:
         return cert, score, None
-    if ielts_kind is None:
-        raise AskAgain("Chứng chỉ IELTS của bạn là Academic hay General Training?")
-    if ielts_kind not in IELTS_KINDS:
-        raise AskAgain("Mình chưa rõ loại IELTS. Bạn thi Academic hay General Training?")
-    return cert, score, ielts_kind
+    today = today or date.today()
+    taken = parse_year_month(test_date)
+    if taken is None:
+        raise AskAgain(f"Bạn thi {CERT_NAMES[cert]} vào tháng mấy, năm nào?")
+    if taken > month_index(today.year, today.month):
+        raise AskAgain("Ngày thi không được ở tương lai. Bạn thi vào tháng mấy, năm nào?")
+    return cert, score, test_date.strip()
+
+
+# A3. Kế hoạch thi tiếng Anh, đúng 2 ô englishPlanned / englishPlannedDate của form.
+# Chưa có kế hoạch → planned False; có kế hoạch thì tháng không bắt buộc, có thì không được ở quá khứ
+def check_english_plan(planned: bool, plan_date: str | None = None, today: date | None = None) -> dict:
+    if not planned or plan_date is None:
+        return {"planned": planned, "date": None}
+    today = today or date.today()
+    month = parse_year_month(plan_date)
+    if month is None:
+        raise AskAgain("Bạn dự định thi tiếng Anh vào tháng mấy, năm nào?")
+    if month < month_index(today.year, today.month):
+        raise AskAgain("Tháng dự kiến thi không được ở quá khứ. Bạn định thi vào tháng nào?")
+    return {"planned": True, "date": plan_date.strip()}
 
 
 # A4. Đổi số tiền sang USD (VNĐ chia tỷ giá)
@@ -129,9 +188,9 @@ def budget_tier(usd: float) -> str:
     return TOP_TIER
 
 
-# A4. Ngân sách mỗi năm. Học sinh nói khoảng thì skill truyền số lớn hơn.
-# Trả về (số tiền gốc, loại tiền, mã tier) để giữ được số học sinh nói
-def check_budget(amount: float, currency: str = "USD") -> tuple[float, str, str]:
+# A4. Ngân sách mỗi năm: chỉ lưu mức tier (giống annualBudgetTier của form), số tiền chỉ dùng để quy đổi.
+# Học sinh nói khoảng thì skill truyền số lớn hơn
+def check_budget(amount: float, currency: str = "USD") -> str:
     currency = currency.strip().upper()
     if currency not in CURRENCIES:
         raise AskAgain("Bạn cho mình biết số tiền theo USD hoặc VNĐ nhé?")
@@ -142,7 +201,15 @@ def check_budget(amount: float, currency: str = "USD") -> tuple[float, str, str]
         raise AskAgain(
             "Số tiền này lớn bất thường. Bạn kiểm tra lại số tiền và đơn vị (USD hay VNĐ) giúp mình nhé?"
         )
-    return amount, currency, budget_tier(usd)
+    return budget_tier(usd)
+
+
+# A4. Học sinh bấm nút chọn mức ngân sách: mã phải là một trong 5 mức của form
+def check_budget_tier(tier: str) -> str:
+    tier = tier.strip().lower()
+    if tier not in ALL_TIERS:
+        raise AskAgain("Gia đình bạn có thể chi khoảng bao nhiêu mỗi năm? Bạn chọn một mức giúp mình nhé.")
+    return tier
 
 
 # A4. Mức cần học bổng: bắt buộc trả lời, không được bỏ qua
@@ -152,40 +219,107 @@ def check_scholarship(level: str | None) -> str:
     return level.strip().lower()
 
 
-# A5. Một hoạt động ngoại khóa: tên, vai trò, phạm vi 1-5, số tháng
-def check_activity(name: str, role: str, scope: int, months: int) -> dict:
-    name = name.strip()
+# Loại trường muốn học: all (không lọc) | public | private, giống Bước 1 của form
+def check_school_type(kind: str) -> str:
+    kind = kind.strip().lower()
+    if kind not in SCHOOL_TYPES:
+        raise AskAgain("Bạn muốn học trường công lập, tư thục, hay trường nào cũng được?")
+    return kind
+
+
+# Bang muốn học: tối đa 60 bang, mỗi tên tối đa 64 ký tự (giống ValidateForCommit)
+def check_states(states: list[str]) -> list[str]:
+    names = [s.strip() for s in states if s.strip()]
+    if len(names) > MAX_STATES:
+        raise AskAgain(f"Bạn chọn giúp mình tối đa {MAX_STATES} bang nhé?")
+    if any(len(s) > MAX_STATE_LEN for s in names):
+        raise AskAgain("Mình chưa nhận ra tên bang này. Bạn viết lại tên bang giúp mình nhé?")
+    return names
+
+
+# Tên hoạt động / giải thưởng: không rỗng, tối đa 256 ký tự
+def check_item_name(name: str | None, ask: str) -> str:
+    name = (name or "").strip()
     if not name:
-        raise AskAgain("Hoạt động này tên là gì vậy bạn?")
-    role = role.strip().lower()
+        raise AskAgain(ask)
+    if len(name) > MAX_NAME_LEN:
+        raise AskAgain(f"Tên này dài quá, bạn viết ngắn lại giúp mình (tối đa {MAX_NAME_LEN} ký tự) nhé?")
+    return name
+
+
+# Phạm vi của hoạt động / giải thưởng, mã giống IMPACT_LEVEL_OPTIONS của form
+def check_impact(name: str, impact_level: str | None) -> str:
+    impact = (impact_level or "").strip().lower()
+    if impact not in IMPACT_LEVELS:
+        raise AskAgain(f"{name} ở phạm vi nào: trường, quận/huyện, tỉnh/thành phố, quốc gia hay quốc tế?")
+    return impact
+
+
+# A5. Một hoạt động ngoại khóa, đúng dạng một mục Bước 5 của form (FlowActivityDraftDto).
+# Luật giống Step5Extracurricular: có vai trò, phạm vi, tháng bắt đầu không sau tháng này,
+# có tháng kết thúc (không trước tháng bắt đầu) hoặc "đến nay". Thiếu ý nào thì hỏi đúng ý đó
+def check_activity(
+    name: str | None,
+    role: str | None = None,
+    impact_level: str | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    is_ongoing: bool = False,
+    today: date | None = None,
+) -> dict:
+    name = check_item_name(name, "Hoạt động này tên là gì vậy bạn?")
+    role = (role or "").strip().lower()
     if role not in ACTIVITY_ROLES:
-        raise AskAgain(f"Trong {name}, bạn là người sáng lập, trưởng nhóm, phó nhóm hay thành viên?")
-    if not MIN_SCOPE <= scope <= MAX_SCOPE:
-        raise AskAgain(f"{name} diễn ra ở phạm vi nào: trường, quận, thành phố, quốc gia hay quốc tế?")
-    if months <= 0:
-        raise AskAgain(f"Bạn tham gia {name} được bao nhiêu tháng rồi?")
-    return {"name": name, "role": role, "scope": scope, "months": months}
+        raise AskAgain(f"Trong {name}, bạn là người sáng lập, trưởng/chủ nhiệm, phó hay thành viên?")
+    impact = check_impact(name, impact_level)
+
+    today = today or date.today()
+    start = parse_month_year(start_date)
+    if start is None:
+        raise AskAgain(f"Bạn bắt đầu tham gia {name} từ tháng nào, năm nào?")
+    if start > month_index(today.year, today.month):
+        raise AskAgain("Tháng bắt đầu không được sau tháng hiện tại. Bạn bắt đầu từ tháng nào?")
+    if not is_ongoing:
+        end = parse_month_year(end_date)
+        if end is None:
+            raise AskAgain(f"Bạn tham gia {name} đến tháng nào, hay vẫn đang tham gia đến nay?")
+        if end < start:
+            raise AskAgain("Tháng kết thúc phải sau hoặc bằng tháng bắt đầu. Bạn xem lại giúp mình nhé?")
+
+    return {
+        "name": name,
+        "category": "activity",
+        "role": role,
+        "impactLevel": impact,
+        "startDate": start_date.strip(),
+        "endDate": None if is_ongoing else end_date.strip(),
+        "isOngoing": is_ongoing,
+    }
 
 
 # A5. Danh sách hoạt động: tối đa 4, kiểm tra từng cái
-def check_activities(items: list[dict]) -> list[dict]:
+def check_activities(items: list[dict], today: date | None = None) -> list[dict]:
     if len(items) > MAX_ACTIVITIES:
         raise AskAgain(f"Bạn chọn giúp mình tối đa {MAX_ACTIVITIES} hoạt động tiêu biểu nhất nhé?")
-    return [check_activity(**item) for item in items]
+    return [check_activity(**item, today=today) for item in items]
 
 
-# A9. Một giải thưởng: tên và cấp giải 1-5
-def check_award(title: str, level: int) -> dict:
-    title = title.strip()
-    if not title:
-        raise AskAgain("Giải thưởng này tên là gì vậy bạn?")
-    if not MIN_SCOPE <= level <= MAX_SCOPE:
-        raise AskAgain(f"{title} là giải cấp nào: trường, quận, thành phố, quốc gia hay quốc tế?")
-    return {"title": title, "level": level}
+# A9. Một giải thưởng, đúng dạng mục "achievement" của form: tên, phạm vi, năm đạt giải 2000..năm nay
+def check_award(
+    name: str | None, impact_level: str | None = None, year: int | None = None, today: date | None = None
+) -> dict:
+    name = check_item_name(name, "Giải thưởng này tên là gì vậy bạn?")
+    impact = check_impact(name, impact_level)
+    this_year = (today or date.today()).year
+    if year is None:
+        raise AskAgain(f"Bạn đạt {name} vào năm nào?")
+    if not MIN_AWARD_YEAR <= year <= this_year:
+        raise AskAgain(f"Năm đạt giải phải từ {MIN_AWARD_YEAR} đến {this_year}. Bạn đạt {name} năm nào?")
+    return {"name": name, "category": "achievement", "impactLevel": impact, "year": year}
 
 
 # A9. Danh sách giải thưởng: tối đa 3, kiểm tra từng cái
-def check_awards(items: list[dict]) -> list[dict]:
+def check_awards(items: list[dict], today: date | None = None) -> list[dict]:
     if len(items) > MAX_AWARDS:
         raise AskAgain(f"Bạn chọn giúp mình tối đa {MAX_AWARDS} giải thưởng cao nhất nhé?")
-    return [check_award(**item) for item in items]
+    return [check_award(**item, today=today) for item in items]

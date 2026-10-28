@@ -1,3 +1,5 @@
+from datetime import date
+
 import pytest
 
 from app.services.skills.validators import (
@@ -9,11 +11,18 @@ from app.services.skills.validators import (
     check_award,
     check_awards,
     check_budget,
+    check_budget_tier,
     check_english,
+    check_english_plan,
     check_gpa,
     check_sat,
     check_scholarship,
+    check_school_type,
+    check_states,
 )
+
+# Ngày cố định để test không phụ thuộc hôm nay
+TODAY = date(2026, 10, 28)
 
 # A1. GPA
 
@@ -90,24 +99,14 @@ def test_act_wrong_ask_again(score):
 # A3. Tiếng Anh
 
 
-def test_ielts_academic():
-    assert check_english("IELTS", 6.5, "academic") == ("ielts", 6.5, "academic")
+def test_ielts_no_kind_needed():
+    assert check_english("IELTS", 6.5) == ("ielts", 6.5, None)
 
 
 def test_ielts_off_step_ask_again():
     with pytest.raises(AskAgain) as err:
-        check_english("ielts", 6.3, "academic")
+        check_english("ielts", 6.3)
     assert "6.3" in err.value.question
-
-
-def test_ielts_without_kind_ask_again():
-    with pytest.raises(AskAgain) as err:
-        check_english("ielts", 7)
-    assert "Academic hay General" in err.value.question
-
-
-def test_toefl_no_kind_needed():
-    assert check_english("toefl", 95) == ("toefl", 95, None)
 
 
 def test_duolingo_step_5():
@@ -125,6 +124,47 @@ def test_unknown_cert_ask_again():
     with pytest.raises(AskAgain) as err:
         check_english("toeic", 800)
     assert "IELTS, TOEFL" in err.value.question
+
+
+def test_english_date_this_month_ok():
+    assert check_english("toefl", 95, "2026-10", today=TODAY) == ("toefl", 95, "2026-10")
+
+
+def test_english_date_in_future_ask_again():
+    with pytest.raises(AskAgain) as err:
+        check_english("toefl", 95, "2026-11", today=TODAY)
+    assert "tương lai" in err.value.question
+
+
+@pytest.mark.parametrize("wrong", ["2026-13", "10/2026", "sắp tới"])
+def test_english_date_wrong_shape_ask_again(wrong):
+    with pytest.raises(AskAgain):
+        check_english("ielts", 7, wrong, today=TODAY)
+
+
+# A3. Kế hoạch thi tiếng Anh: 3 lựa chọn giống form
+
+
+def test_plan_none():
+    assert check_english_plan(False) == {"planned": False, "date": None}
+
+
+def test_plan_not_planned_drops_date():
+    assert check_english_plan(False, "2027-03", today=TODAY) == {"planned": False, "date": None}
+
+
+def test_plan_without_month():
+    assert check_english_plan(True) == {"planned": True, "date": None}
+
+
+def test_plan_with_month():
+    assert check_english_plan(True, "2026-10", today=TODAY) == {"planned": True, "date": "2026-10"}
+
+
+def test_plan_month_in_past_ask_again():
+    with pytest.raises(AskAgain) as err:
+        check_english_plan(True, "2026-09", today=TODAY)
+    assert "quá khứ" in err.value.question
 
 
 # A4. Ngân sách, học bổng
@@ -147,12 +187,12 @@ def test_budget_tier_edges(usd, tier):
 
 
 def test_budget_usd():
-    assert check_budget(40_000) == (40_000, "USD", "tier_35k_50k")
+    assert check_budget(40_000) == "tier_35k_50k"
 
 
-def test_budget_vnd_keeps_original_amount():
+def test_budget_vnd():
     # 800 triệu / 25.000 = 32.000 USD
-    assert check_budget(800_000_000, "vnd") == (800_000_000, "VND", "tier_20k_35k")
+    assert check_budget(800_000_000, "vnd") == "tier_20k_35k"
 
 
 @pytest.mark.parametrize("amount", [0, -5_000])
@@ -173,57 +213,107 @@ def test_budget_unknown_currency_ask_again():
         check_budget(30_000, "EUR")
 
 
-@pytest.mark.parametrize("level", ["required", "preferred", "no", " Required "])
+def test_budget_tier_button():
+    assert check_budget_tier(" tier_50k_70k ") == "tier_50k_70k"
+    with pytest.raises(AskAgain):
+        check_budget_tier("tier_1m")
+
+
+@pytest.mark.parametrize("level", ["mandatory", "preferred", "optional", " Mandatory "])
 def test_scholarship_valid(level):
     assert check_scholarship(level) == level.strip().lower()
 
 
-@pytest.mark.parametrize("level", [None, "", "skip", "unknown"])
+@pytest.mark.parametrize("level", [None, "", "required", "no"])
 def test_scholarship_cannot_skip(level):
     with pytest.raises(AskAgain) as err:
         check_scholarship(level)
     assert "học bổng" in err.value.question
 
 
-# A5. Hoạt động
+# Loại trường, bang
+
+
+def test_school_type_form_codes():
+    assert check_school_type(" Public ") == "public"
+    with pytest.raises(AskAgain):
+        check_school_type("any")
+
+
+def test_states_max_60():
+    assert check_states([" California ", ""]) == ["California"]
+    with pytest.raises(AskAgain):
+        check_states(["Texas"] * 61)
+
+
+# A5. Hoạt động: đúng dạng một mục Bước 5 của form
+
+
+def activity(**changes):
+    item = {
+        "name": "CLB Robotics",
+        "role": "leader",
+        "impact_level": "school",
+        "start_date": "09/2024",
+        "end_date": "05/2026",
+        "is_ongoing": False,
+    }
+    return {**item, **changes}
 
 
 def test_activity_valid():
-    assert check_activity(" CLB Robotics ", "Lead", 3, 18) == {
+    assert check_activity(**activity(name=" CLB Robotics ", role="Leader"), today=TODAY) == {
         "name": "CLB Robotics",
-        "role": "lead",
-        "scope": 3,
-        "months": 18,
+        "category": "activity",
+        "role": "leader",
+        "impactLevel": "school",
+        "startDate": "09/2024",
+        "endDate": "05/2026",
+        "isOngoing": False,
     }
 
 
-def test_activity_wrong_role_ask_again():
+def test_activity_ongoing_drops_end_date():
+    res = check_activity(**activity(end_date=None, is_ongoing=True), today=TODAY)
+    assert (res["endDate"], res["isOngoing"]) == (None, True)
+
+
+@pytest.mark.parametrize(
+    ("changes", "asked"),
+    [
+        ({"name": "  "}, "tên"),
+        ({"role": "lead"}, "sáng lập"),
+        ({"impact_level": None}, "phạm vi"),
+        ({"start_date": None}, "bắt đầu"),
+        ({"end_date": None}, "đến nay"),
+    ],
+)
+def test_activity_missing_part_asks_that_part(changes, asked):
     with pytest.raises(AskAgain) as err:
-        check_activity("CLB Robotics", "boss", 3, 18)
-    assert "CLB Robotics" in err.value.question
+        check_activity(**activity(**changes), today=TODAY)
+    assert asked in err.value.question
 
 
-@pytest.mark.parametrize("scope", [0, 6])
-def test_activity_wrong_scope_ask_again(scope):
-    with pytest.raises(AskAgain):
-        check_activity("CLB Robotics", "member", scope, 18)
+def test_activity_start_after_this_month_ask_again():
+    with pytest.raises(AskAgain) as err:
+        check_activity(**activity(start_date="11/2026", is_ongoing=True), today=TODAY)
+    assert "hiện tại" in err.value.question
 
 
-def test_activity_zero_months_ask_again():
-    with pytest.raises(AskAgain):
-        check_activity("CLB Robotics", "member", 1, 0)
+def test_activity_end_before_start_ask_again():
+    with pytest.raises(AskAgain) as err:
+        check_activity(**activity(start_date="09/2024", end_date="08/2024"), today=TODAY)
+    assert "sau hoặc bằng" in err.value.question
 
 
-def test_activity_empty_name_ask_again():
-    with pytest.raises(AskAgain):
-        check_activity("  ", "member", 1, 6)
+def test_activity_same_start_and_end_ok():
+    assert check_activity(**activity(start_date="09/2024", end_date="09/2024"), today=TODAY)
 
 
 def test_activities_max_4():
-    item = {"name": "CLB", "role": "member", "scope": 1, "months": 6}
-    assert len(check_activities([item] * 4)) == 4
+    assert len(check_activities([activity()] * 4, today=TODAY)) == 4
     with pytest.raises(AskAgain) as err:
-        check_activities([item] * 5)
+        check_activities([activity()] * 5, today=TODAY)
     assert "4" in err.value.question
 
 
@@ -231,18 +321,29 @@ def test_activities_max_4():
 
 
 def test_award_valid():
-    assert check_award(" HSG Tin thành phố ", 3) == {"title": "HSG Tin thành phố", "level": 3}
+    assert check_award(" HSG Tin thành phố ", "province", 2025, today=TODAY) == {
+        "name": "HSG Tin thành phố",
+        "category": "achievement",
+        "impactLevel": "province",
+        "year": 2025,
+    }
 
 
-@pytest.mark.parametrize("level", [0, 6])
-def test_award_wrong_level_ask_again(level):
+def test_award_wrong_impact_ask_again():
     with pytest.raises(AskAgain) as err:
-        check_award("HSG Tin", level)
+        check_award("HSG Tin", "city", 2025, today=TODAY)
     assert "HSG Tin" in err.value.question
 
 
+@pytest.mark.parametrize("year", [None, 1999, 2027])
+def test_award_wrong_year_ask_again(year):
+    with pytest.raises(AskAgain) as err:
+        check_award("HSG Tin", "province", year, today=TODAY)
+    assert "năm" in err.value.question
+
+
 def test_awards_max_3():
-    item = {"title": "HSG", "level": 2}
-    assert len(check_awards([item] * 3)) == 3
+    item = {"name": "HSG", "impact_level": "district", "year": 2024}
+    assert len(check_awards([item] * 3, today=TODAY)) == 3
     with pytest.raises(AskAgain):
-        check_awards([item] * 4)
+        check_awards([item] * 4, today=TODAY)
