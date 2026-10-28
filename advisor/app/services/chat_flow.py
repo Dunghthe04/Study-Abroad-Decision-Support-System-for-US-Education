@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from app.schemas.chat import ChatRequest, ChatResponse, ChatState, QuickReply, Step, Widget
+from app.services.profile_sync import changed_keys, merge_profile
 from app.services.skill_rules import Plan, missing_fields, plan_skills
 
 # Tạo 1 logger
@@ -124,10 +125,18 @@ class ChatFlow:
         # Cuộc trò chuyện mới chưa có trạng thái -> mở đầu bằng B0.1
         if req.state is None:
             state = ChatState()
-            return ChatResponse(answer=ask(state, "B0.1"), state=state)
+            # Đã có hồ sơ (vào chat từ form) thì nạp sẵn để không hỏi lại
+            if req.profile is not None:
+                state.profile = merge_profile(state.profile, req.profile)
+            return ChatResponse(answer=ask(state, "B0.1"), state=state, profile=state.profile)
 
         # Sao chép đối tượng
         state = req.state.model_copy(deep=True)
+        # Hồ sơ trong nháp (do .NET gửi) là nguồn thật; không gửi thì giữ hồ sơ trong state như cũ
+        if req.profile is not None:
+            state.profile = merge_profile(state.profile, req.profile)
+        # Chụp hồ sơ đầu lượt để cuối lượt biết khóa nào đổi (sao chép sâu vì skill sửa trực tiếp trên state)
+        profile_before = {key: field.model_copy(deep=True) for key, field in state.profile.items()}
         message = last_user_message(req)
         # chương trình lấy thời điểm kết thúc trừ thời điểm bắt đầu để tính thời gian xử lý.
         started = time.perf_counter()
@@ -165,6 +174,8 @@ class ChatFlow:
             skills=plan.skills,
             quick_replies=quick_replies,
             widget=widget,
+            profile=state.profile,
+            profile_changed=changed_keys(profile_before, state.profile),
         )
 
     # Gọi model; lỗi (chưa nạp model, Ollama tắt...) thì trả về "không chắc"
