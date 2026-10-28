@@ -161,7 +161,7 @@ public class ChatProfileMapperTests
     {
         var step2 = ToDraft(Confirmed("gpa", """{"value":8.5,"scale":10,"source":"overall"}""")).Step2!;
 
-        Assert.Equal((8.5m, 3.4m), (step2.ManualGpa10Scale!.Value, step2.CalculatedGpa4Scale!.Value));
+        Assert.Equal((8.5m, 3.4m, "overall"), (step2.ManualGpa10Scale!.Value, step2.CalculatedGpa4Scale!.Value, step2.GpaMode));
     }
 
     // GPA tính từ học bạ: chat đọc ra source = transcript và không được ghi đè
@@ -178,6 +178,30 @@ public class ChatProfileMapperTests
 
         var draft = ToDraft(Confirmed("gpa", """{"value":9,"scale":10,"source":"overall"}"""), old);
         Assert.Same(old.Step2, draft.Step2);
+    }
+
+    // gpaMode = transcript nhưng chưa có điểm môn: chat ghi GPA tổng và chuyển sang overall
+    [Fact]
+    public void TranscriptModeWithoutScores_ChatWritesOverall()
+    {
+        var old = new ProfileFlowDraftDto(Step2: new FlowTranscriptDraftDto([], GpaMode: "transcript"));
+
+        var step2 = ToDraft(Confirmed("gpa", """{"value":3.6,"scale":4,"source":"overall"}"""), old).Step2!;
+
+        Assert.Equal(("overall", 3.6m), (step2.GpaMode, step2.CalculatedGpa4Scale!.Value));
+    }
+
+    // gpaMode = overall thì điểm môn còn sót lại không được tính
+    [Fact]
+    public void OverallMode_IgnoresLeftoverSubjects()
+    {
+        var draft = new ProfileFlowDraftDto(Step2: new FlowTranscriptDraftDto(
+            [new FlowAcademicYearDraftDto("Lớp 10", [new FlowSubjectDraftDto("Toán", 5m)])],
+            CalculatedGpa4Scale: 3.4m, ManualGpa10Scale: 8.5m, GpaMode: "overall"));
+
+        var gpa = ChatProfileMapper.ToChatProfile(draft)["gpa"]!["value"]!;
+
+        Assert.Equal("""{"value":8.5,"scale":10,"source":"overall"}""", gpa.ToJsonString());
     }
 
     // C2 chỉ ghi khóa chat báo là đã đổi

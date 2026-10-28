@@ -42,7 +42,8 @@ public record FlowGoalDraftDto(
 public record FlowTranscriptDraftDto(
     [property: JsonPropertyName("academicYears")] List<FlowAcademicYearDraftDto>? AcademicYears = null,
     [property: JsonPropertyName("calculatedGpa4Scale")] decimal? CalculatedGpa4Scale = null,
-    [property: JsonPropertyName("manualGpa10Scale")] decimal? ManualGpa10Scale = null
+    [property: JsonPropertyName("manualGpa10Scale")] decimal? ManualGpa10Scale = null,
+    [property: JsonPropertyName("gpaMode")] string? GpaMode = null
 );
 
 public record FlowAcademicYearDraftDto(

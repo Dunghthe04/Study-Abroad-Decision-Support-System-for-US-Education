@@ -495,7 +495,7 @@ public class ProfileFlowServiceTests
     [Theory]
     [InlineData(null, "optional", "Bước 4: chưa chọn mức ngân sách")]
     [InlineData("tier_unknown", "optional", "không tồn tại")]
-    [InlineData("tier_under_20k", null, "Bước 4: chưa chọn nhu cầu học bổng")]
+    [InlineData("tier_under_20k", "required", "Bước 4: nhu cầu học bổng 'required' không hợp lệ")]
     public async Task CommitFlowAsync_WhenFinancialStepInvalid_Throws(string? tier, string? need, string expected)
     {
         var repo = new InMemoryProfileFlowRepository();
@@ -715,18 +715,85 @@ public class ProfileFlowServiceTests
         Assert.True(storage.DeleteCalled);
     }
 
+    // C6: chat xác nhận hồ sơ khi chưa hỏi học bổng; chọn trường mới bắt buộc (C7)
     [Fact]
-    public async Task CommitFlowAsync_IgnoresClientGpa_ComputesOnServerOnly()
+    public async Task CommitFlowAsync_WithoutScholarshipNeed_Commits()
     {
         var repo = new InMemoryProfileFlowRepository();
         var service = new ProfileFlowService(repo, new FakeFileStorageService());
         var userId = Guid.NewGuid();
-        // Không có điểm môn nào nhưng client gửi GPA 4.0
-        var draft = FullDraft() with { Step2 = new FlowTranscriptDraftDto(AcademicYears: [], CalculatedGpa4Scale: 4.0m) };
+
+        await service.CommitFlowAsync(userId, new CommitProfileFlowRequest(FullDraft(need: null)));
+
+        var profile = repo.Profiles.Values.Single(p => p.UserId == userId);
+        Assert.Null(profile.ScholarshipNeed);
+        Assert.False(profile.NeedsScholarship);
+    }
+
+    // gpaMode = transcript: tính từ điểm môn, bỏ qua GPA client gửi lên
+    [Fact]
+    public async Task CommitFlowAsync_TranscriptMode_IgnoresClientGpa()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var service = new ProfileFlowService(repo, new FakeFileStorageService());
+        var userId = Guid.NewGuid();
+        var draft = FullDraft();
+        draft = draft with { Step2 = draft.Step2! with { CalculatedGpa4Scale = 4.0m, ManualGpa10Scale = 10m, GpaMode = "transcript" } };
 
         await service.CommitFlowAsync(userId, new CommitProfileFlowRequest(draft));
 
-        Assert.Null(repo.Profiles.Values.Single(p => p.UserId == userId).OverallGpa);
+        Assert.Equal(3.27m, repo.Profiles.Values.Single(p => p.UserId == userId).OverallGpa);
+    }
+
+    // gpaMode = overall: thang 10 quy đổi lại sang thang 4, không tin số thang 4 client gửi
+    [Theory]
+    [InlineData(8.5, 1.0, 3.4)]
+    [InlineData(null, 3.6, 3.6)]
+    public async Task CommitFlowAsync_OverallMode_UsesEnteredGpa(double? gpa10, double gpa4, double expected)
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var service = new ProfileFlowService(repo, new FakeFileStorageService());
+        var userId = Guid.NewGuid();
+        var draft = FullDraft() with
+        {
+            Step2 = new FlowTranscriptDraftDto([], (decimal)gpa4, (decimal?)gpa10, GpaMode: "overall"),
+        };
+
+        await service.CommitFlowAsync(userId, new CommitProfileFlowRequest(draft));
+
+        Assert.Equal((decimal)expected, repo.Profiles.Values.Single(p => p.UserId == userId).OverallGpa);
+    }
+
+    // Nháp cũ không có gpaMode: không có điểm môn thì coi là GPA tổng
+    [Fact]
+    public async Task CommitFlowAsync_OldDraftWithoutSubjects_UsesOverallGpa()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var service = new ProfileFlowService(repo, new FakeFileStorageService());
+        var userId = Guid.NewGuid();
+        var draft = FullDraft() with { Step2 = new FlowTranscriptDraftDto(AcademicYears: [], CalculatedGpa4Scale: 3.5m) };
+
+        await service.CommitFlowAsync(userId, new CommitProfileFlowRequest(draft));
+
+        Assert.Equal(3.5m, repo.Profiles.Values.Single(p => p.UserId == userId).OverallGpa);
+    }
+
+    [Theory]
+    [InlineData(null, null, null, "Bước 2: chưa nhập GPA")]
+    [InlineData("overall", 10.5, null, "Bước 2: GPA thang 10 phải từ 0 đến 10")]
+    [InlineData("overall", null, 4.5, "Bước 2: GPA thang 4 phải từ 0 đến 4")]
+    [InlineData("transcript", 8.0, 3.2, "Bước 2: chưa nhập điểm môn nào")]
+    public async Task CommitFlowAsync_WhenGpaMissingOrOutOfRange_Throws(string? mode, double? gpa10, double? gpa4, string expected)
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var service = new ProfileFlowService(repo, new FakeFileStorageService());
+        var draft = FullDraft() with { Step2 = new FlowTranscriptDraftDto([], (decimal?)gpa4, (decimal?)gpa10, mode) };
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.CommitFlowAsync(Guid.NewGuid(), new CommitProfileFlowRequest(draft)));
+
+        Assert.Contains(expected, ex.Message);
+        Assert.Equal(0, repo.CommitCount);
     }
 
     [Fact]

@@ -347,7 +347,12 @@ public class ProfileFlowService(
                 : string.IsNullOrWhiteSpace(draft.Step4.NeedFinancialAid) ? null : draft.Step4.NeedFinancialAid,
         };
 
-        return draft with { Step1 = step1, Step3 = NormalizeCertificationStep(draft.Step3), Step4 = step4 };
+        // Mã lạ thì bỏ; không lưu chế độ đoán được, vì form chưa có nút chọn (D5) sẽ giữ nguyên chế độ cũ khi thêm điểm môn
+        var step2 = draft.Step2?.GpaMode is { } mode && !ProfileConstants.GpaModes.All.Contains(mode)
+            ? draft.Step2 with { GpaMode = null }
+            : draft.Step2;
+
+        return draft with { Step1 = step1, Step2 = step2, Step3 = NormalizeCertificationStep(draft.Step3), Step4 = step4 };
     }
 
     /// <summary>
@@ -489,6 +494,21 @@ public class ProfileFlowService(
             }
         }
 
+        if (TranscriptGpa.Mode(draft.Step2) == ProfileConstants.GpaModes.Transcript)
+        {
+            if (TranscriptGpa.SubjectAverage10(draft.Step2) is null)
+                errors.Add("Bước 2: chưa nhập điểm môn nào.");
+        }
+        else if (draft.Step2?.ManualGpa10Scale is { } gpa10)
+        {
+            if (gpa10 is < 0 or > 10) errors.Add("Bước 2: GPA thang 10 phải từ 0 đến 10.");
+        }
+        else if (draft.Step2?.CalculatedGpa4Scale is { } gpa4)
+        {
+            if (gpa4 is < 0 or > 4) errors.Add("Bước 2: GPA thang 4 phải từ 0 đến 4.");
+        }
+        else errors.Add("Bước 2: chưa nhập GPA.");
+
         // Bước 3
         ValidateCertifications(draft.Step3, certificationTypes, now, errors);
 
@@ -498,8 +518,9 @@ public class ProfileFlowService(
             errors.Add("Bước 4: chưa chọn mức ngân sách.");
         else if (!budgetTiers.ContainsKey(tierId))
             errors.Add($"Bước 4: mức ngân sách '{tierId}' không tồn tại.");
-        if (draft.Step4?.NeedFinancialAid is null || !ProfileConstants.ScholarshipNeeds.All.Contains(draft.Step4.NeedFinancialAid))
-            errors.Add("Bước 4: chưa chọn nhu cầu học bổng.");
+        // C6: chat cho xác nhận hồ sơ khi chưa hỏi học bổng (chỉ bắt buộc lúc chọn trường); form vẫn bắt chọn ở giao diện
+        if (draft.Step4?.NeedFinancialAid is { } need && !ProfileConstants.ScholarshipNeeds.All.Contains(need))
+            errors.Add($"Bước 4: nhu cầu học bổng '{need}' không hợp lệ.");
 
         // Bước 5
         var currentYear = DateTime.UtcNow.Year;
@@ -721,7 +742,7 @@ public class ProfileFlowService(
             }
         }
         // GPA chỉ tính trên server từ điểm các môn, không nhận số GPA client gửi lên
-        profile.OverallGpa = ComputeGpa4(draft.Step2);
+        profile.OverallGpa = TranscriptGpa.Gpa4(draft.Step2);
 
         // Bước 3
         var certifications = BuildCertifications(draft.Step3, certificationTypes);
@@ -872,22 +893,6 @@ public class ProfileFlowService(
         _ => null
     };
 
-    /// <summary>Giống FE: trung bình các môn (mỗi môn = TB HK1, HK2 nếu có), quy đổi tuyến tính sang thang 4</summary>
-    private static decimal? ComputeGpa4(FlowTranscriptDraftDto? step2)
-    {
-        var subjectAverages = new List<decimal>();
-        foreach (var year in step2?.AcademicYears ?? [])
-        foreach (var subject in year.Subjects ?? [])
-        {
-            var values = new[] { subject.Semester1Score, subject.Semester2Score }.Where(v => v.HasValue).Select(v => v!.Value).ToList();
-            if (values.Count > 0) subjectAverages.Add(values.Average());
-        }
-
-        if (subjectAverages.Count == 0) return null;
-        var gpa10 = Math.Round(subjectAverages.Average(), 2);
-        return Math.Round(gpa10 / 10m * 4m, 2);
-    }
-
     /// <summary>Số tháng tính cả tháng đầu và tháng cuối (09/2024 → 05/2025 = 9 tháng)</summary>
     private static int CountMonths(DateOnly start, DateOnly end) =>
         Math.Max(1, (end.Year - start.Year) * 12 + end.Month - start.Month + 1);
@@ -934,7 +939,6 @@ public class ProfileFlowService(
             else year.Subjects.Add(subject);
         }
         var step2 = new FlowTranscriptDraftDto(years, profile.OverallGpa, profile.OverallGpa is { } g ? Math.Round(g / 4m * 10m, 2) : null);
-
         var step3 = new FlowCertificationDraftDto(
             Certifications: certifications.Count > 0
                 ? certifications.OrderBy(c => c.SortOrder).Select(ToCertificationDraft).ToList()

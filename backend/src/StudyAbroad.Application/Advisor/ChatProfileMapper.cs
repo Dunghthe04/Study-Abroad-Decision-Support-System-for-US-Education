@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using StudyAbroad.Application.Profile.Flow;
+using GpaModes = StudyAbroad.Domain.Constants.ProfileConstants.GpaModes;
 
 namespace StudyAbroad.Application.Advisor;
 
@@ -111,36 +112,30 @@ public static class ChatProfileMapper
         return draft;
     }
 
-    // Kế hoạch 3.1. Nháp chưa có gpaMode (S6): có điểm môn thì là học bạ, không thì là GPA tổng
+    // Kế hoạch 3.1: chế độ lấy theo gpaMode (TranscriptGpa.Mode đoán cho nháp cũ)
     private static JsonObject? Gpa(FlowTranscriptDraftDto? step2)
     {
-        var averages = (step2?.AcademicYears ?? [])
-            .SelectMany(y => y.Subjects ?? [])
-            .Select(s => new[] { s.Semester1Score, s.Semester2Score }.OfType<decimal>().ToList())
-            .Where(scores => scores.Count > 0)
-            .Select(scores => scores.Average())
-            .ToList();
-
-        // Cùng cách tính với ComputeGpa4 trước khi đổi sang thang 4
-        if (averages.Count > 0) return GpaNode(Math.Round(averages.Average(), 2), 10, "transcript");
-        if (step2?.ManualGpa10Scale is { } gpa10) return GpaNode(gpa10, 10, "overall");
-        if (step2?.CalculatedGpa4Scale is { } gpa4) return GpaNode(gpa4, 4, "overall");
+        if (TranscriptGpa.Mode(step2) == GpaModes.Transcript)
+            return TranscriptGpa.SubjectAverage10(step2) is { } average ? GpaNode(average, 10, GpaModes.Transcript) : null;
+        if (step2?.ManualGpa10Scale is { } gpa10) return GpaNode(gpa10, 10, GpaModes.Overall);
+        if (step2?.CalculatedGpa4Scale is { } gpa4) return GpaNode(gpa4, 4, GpaModes.Overall);
         return null;
     }
 
     private static JsonObject GpaNode(decimal value, int scale, string source) =>
         new() { ["value"] = value, ["scale"] = scale, ["source"] = source };
 
-    // GPA đang tính từ học bạ thì chat không ghi đè (kế hoạch 3.1), chỉ GPA tổng mới ghi
+    // GPA đang tính từ học bạ thì chat không ghi đè (kế hoạch 3.1). Chọn học bạ mà chưa có điểm môn
+    // thì không mất gì, cho chat ghi GPA tổng để khỏi hỏi đi hỏi lại
     private static FlowTranscriptDraftDto? ApplyGpa(FlowTranscriptDraftDto? step2, JsonNode? value)
     {
-        if (Gpa(step2)?["source"]?.GetValue<string>() == "transcript") return step2;
-        step2 ??= new FlowTranscriptDraftDto();
+        if (Gpa(step2)?["source"]?.GetValue<string>() == GpaModes.Transcript) return step2;
+        step2 = (step2 ?? new FlowTranscriptDraftDto()) with { GpaMode = GpaModes.Overall };
         if (value is null) return step2 with { ManualGpa10Scale = null, CalculatedGpa4Scale = null };
 
         var gpa = value["value"]!.GetValue<decimal>();
         return value["scale"]!.GetValue<int>() == 10
-            ? step2 with { ManualGpa10Scale = gpa, CalculatedGpa4Scale = Math.Round(gpa / 10m * 4m, 2) }
+            ? step2 with { ManualGpa10Scale = gpa, CalculatedGpa4Scale = TranscriptGpa.To4(gpa) }
             : step2 with { ManualGpa10Scale = null, CalculatedGpa4Scale = gpa };
     }
 

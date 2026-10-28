@@ -69,9 +69,9 @@ def ok_budget(value: Any, profile: dict, today: date) -> bool:
     return value in ALL_TIERS
 
 
-# Bỏ luật này khi C6 xong (.NET cho để trống học bổng)
+# Học bổng không bắt buộc khi lưu (C6, B4 mới đòi), có thì phải đúng mã của form
 def ok_scholarship(value: Any, profile: dict, today: date) -> bool:
-    return value in SCHOLARSHIP_LEVELS
+    return value is None or value in SCHOLARSHIP_LEVELS
 
 
 # Mỗi hoạt động đủ vai trò, phạm vi, tháng bắt đầu, tháng kết thúc hoặc "đến nay"

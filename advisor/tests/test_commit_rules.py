@@ -30,7 +30,6 @@ def minimal(**changes):
         "target_level": confirmed("undergraduate"),
         "gpa": confirmed({"value": 8.5, "scale": 10}),
         "budget": confirmed("tier_20k_35k"),
-        "scholarship": confirmed("preferred"),
     }
     return {**profile, **changes}
 
@@ -43,6 +42,7 @@ def test_full_profile_can_commit():
     profile = minimal(
         current_grade=confirmed("Lớp 12"),
         major=confirmed("Computer Science"),
+        scholarship=confirmed("preferred"),
         english=confirmed({"type": "ielts", "value": 6.5, "date": "2026-10"}),
         activities=confirmed([ACTIVITY] * 6),  # form cho nhiều hơn 4, .NET vẫn nhận
         awards=confirmed([AWARD]),
@@ -57,7 +57,6 @@ def test_empty_profile_lists_required_in_ask_order():
         "target_level",
         "gpa",
         "budget",
-        "scholarship",
     ]
 
 
@@ -71,6 +70,7 @@ def test_none_and_unknown_are_ok_for_optional():
         english=ProfileField(status="none"),
         major=ProfileField(value="unknown", status="unknown"),
         activities=ProfileField(status="none"),
+        scholarship=ProfileField(status="declined"),
     )
     assert commit_blockers(profile, today=TODAY) == []
 
@@ -86,7 +86,7 @@ def test_none_and_unknown_are_ok_for_optional():
         ({"english": confirmed({"type": "ielts", "value": 6.3, "date": None})}, "english"),
         ({"english": confirmed({"type": "toefl", "value": 95, "date": "2026-11"})}, "english"),
         ({"budget": confirmed("tier_1m")}, "budget"),
-        ({"scholarship": ProfileField(status="declined")}, "scholarship"),
+        ({"scholarship": confirmed("required")}, "scholarship"),  # mã cũ, form dùng mandatory
         ({"activities": confirmed([{**ACTIVITY, "role": None}])}, "activities"),
         ({"activities": confirmed([{**ACTIVITY, "isOngoing": False}])}, "activities"),
         ({"awards": confirmed([{**AWARD, "year": None}])}, "awards"),
