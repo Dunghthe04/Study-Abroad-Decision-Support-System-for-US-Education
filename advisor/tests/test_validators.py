@@ -6,6 +6,8 @@ from app.services.skills.validators import (
     check_act,
     check_activities,
     check_activity,
+    check_award,
+    check_awards,
     check_budget,
     check_english,
     check_gpa,
@@ -223,3 +225,24 @@ def test_activities_max_4():
     with pytest.raises(AskAgain) as err:
         check_activities([item] * 5)
     assert "4" in err.value.question
+
+
+# Giải thưởng (dùng ở A9)
+
+
+def test_award_valid():
+    assert check_award(" HSG Tin thành phố ", 3) == {"title": "HSG Tin thành phố", "level": 3}
+
+
+@pytest.mark.parametrize("level", [0, 6])
+def test_award_wrong_level_ask_again(level):
+    with pytest.raises(AskAgain) as err:
+        check_award("HSG Tin", level)
+    assert "HSG Tin" in err.value.question
+
+
+def test_awards_max_3():
+    item = {"title": "HSG", "level": 2}
+    assert len(check_awards([item] * 3)) == 3
+    with pytest.raises(AskAgain):
+        check_awards([item] * 4)

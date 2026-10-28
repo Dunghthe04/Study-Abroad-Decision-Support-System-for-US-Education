@@ -47,6 +47,8 @@ MAX_ACTIVITIES = 4
 ACTIVITY_ROLES = ("founder", "lead", "vice", "member")
 # Phạm vi 1 đến 5: trường, quận, tỉnh/thành phố, quốc gia, quốc tế
 MIN_SCOPE, MAX_SCOPE = 1, 5
+# Giải thưởng: tối đa 3, cấp giải cùng thang 1-5 với phạm vi
+MAX_AWARDS = 3
 
 
 # Lỗi "cần hỏi lại": skill bắt lỗi này rồi gửi .question cho học sinh
@@ -170,3 +172,20 @@ def check_activities(items: list[dict]) -> list[dict]:
     if len(items) > MAX_ACTIVITIES:
         raise AskAgain(f"Bạn chọn giúp mình tối đa {MAX_ACTIVITIES} hoạt động tiêu biểu nhất nhé?")
     return [check_activity(**item) for item in items]
+
+
+# A9. Một giải thưởng: tên và cấp giải 1-5
+def check_award(title: str, level: int) -> dict:
+    title = title.strip()
+    if not title:
+        raise AskAgain("Giải thưởng này tên là gì vậy bạn?")
+    if not MIN_SCOPE <= level <= MAX_SCOPE:
+        raise AskAgain(f"{title} là giải cấp nào: trường, quận, thành phố, quốc gia hay quốc tế?")
+    return {"title": title, "level": level}
+
+
+# A9. Danh sách giải thưởng: tối đa 3, kiểm tra từng cái
+def check_awards(items: list[dict]) -> list[dict]:
+    if len(items) > MAX_AWARDS:
+        raise AskAgain(f"Bạn chọn giúp mình tối đa {MAX_AWARDS} giải thưởng cao nhất nhé?")
+    return [check_award(**item) for item in items]
