@@ -8,10 +8,31 @@ TRONG = {"current_level": None, "current_grade": None, "target_level": None, "ma
 
 
 async def test_reads_current_level_and_grade():
-    llm = FakeLLM({**TRONG, "current_level": "high_school", "current_grade": 12})
+    llm = FakeLLM({**TRONG, "current_level": "high_school", "current_grade": "Lớp 12"})
     res = await BacHocReader(llm, "qwen3:8b").read("B1.1", "Em đang học lớp 12 ạ")
 
-    assert res == BacHocRead(current_level="high_school", current_grade=12, ai_used=True)
+    assert res == BacHocRead(current_level="high_school", current_grade="Lớp 12", ai_used=True)
+
+
+@pytest.mark.parametrize(
+    ("grade", "level"),
+    [("Lớp 12", "high_school"), ("Lớp 7", "middle_school"), ("Năm cuối", "college_university")],
+)
+def test_grade_only_in_one_level_gives_the_level(grade, level):
+    res = check_read({**TRONG, "current_grade": grade})
+    assert (res.current_level, res.current_grade) == (level, grade)
+
+
+def test_level_button_without_grade():
+    res = check_read({**TRONG, "current_level": "master"})
+    assert (res.current_level, res.current_grade) == ("master", None)
+
+
+def test_grade_in_two_levels_needs_level():
+    # "Năm 1" có ở cả đại học lẫn thạc sĩ
+    with pytest.raises(ValueError):
+        check_read({**TRONG, "current_grade": "Năm 1"})
+    assert check_read({**TRONG, "current_level": "master", "current_grade": "Năm 1"}).current_grade == "Năm 1"
 
 
 @pytest.mark.parametrize(
@@ -41,7 +62,11 @@ def test_major_kept_and_blank_is_none():
     "wrong",
     [
         {"current_level": "grade_12"},
-        {"current_grade": 13},
+        {"current_level": "phd"},
+        {"current_grade": 12},
+        {"current_grade": "Lớp 13"},
+        {"current_level": "high_school", "current_grade": "Năm 2"},
+        {"major": "x" * 129},
         {"target_level": "đại học"},
         {"intake": "tháng 9/2027"},
     ],

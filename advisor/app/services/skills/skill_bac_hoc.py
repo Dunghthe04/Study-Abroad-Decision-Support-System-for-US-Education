@@ -14,9 +14,18 @@ from app.services.skill_call import SKILLS_DIR, SkillCall
 SKILL_PATH = SKILLS_DIR / "skill_bac_hoc.md"
 UNKNOWN = "unknown"
 
-# Cấp học hiện tại, giữ đồng bộ với currentEducationLevels trong DbSeeder.cs
-CURRENT_LEVELS = ("middle_school", "high_school", "college_university", "master")
-MIN_GRADE, MAX_GRADE = 6, 12
+# Cấp học hiện tại → các lớp form cho chọn, chép từ getGradeOptionsForLevel (profile-flow-options.ts).
+# Mã cấp học giữ đồng bộ với currentEducationLevels trong DbSeeder.cs. Không có tiến sĩ
+GRADE_OPTIONS = {
+    "middle_school": ("Lớp 6", "Lớp 7", "Lớp 8", "Lớp 9"),
+    "high_school": ("Lớp 10", "Lớp 11", "Lớp 12"),
+    "college_university": ("Năm 1", "Năm 2", "Năm 3", "Năm 4", "Năm cuối", "Đã tốt nghiệp"),
+    "master": ("Năm 1", "Năm 2", "Đã tốt nghiệp"),
+}
+CURRENT_LEVELS = tuple(GRADE_OPTIONS)
+ALL_GRADES = tuple(dict.fromkeys(g for grades in GRADE_OPTIONS.values() for g in grades))
+# Độ dài tối đa của ngành (giống ValidateForCommit)
+MAX_MAJOR_LEN = 128
 # Qwen trả tên dễ đọc, code đổi sang mã StudyLevels của .NET
 TARGET_LEVELS = {
     "college": "community_college",
@@ -35,7 +44,7 @@ SCHEMA = {
     "required": ["current_level", "current_grade", "target_level", "major", "intake"],
     "properties": {
         "current_level": {"enum": [*CURRENT_LEVELS, None]},
-        "current_grade": {"type": ["integer", "null"]},
+        "current_grade": {"enum": [*ALL_GRADES, None]},
         "target_level": {"enum": [*TARGET_LEVELS, None]},
         "major": {"type": ["string", "null"]},
         "intake": {"type": ["string", "null"]},
@@ -47,7 +56,7 @@ SCHEMA = {
 @dataclass
 class BacHocRead:
     current_level: str | None = None
-    current_grade: int | None = None
+    current_grade: str | None = None
     target_level: str | None = None
     major: str | None = None
     intake: str | None = None
@@ -59,7 +68,24 @@ def clean_major(major: str | None) -> str | None:
     if major is None or not major.strip():
         return None
     major = major.strip()
+    if len(major) > MAX_MAJOR_LEN:
+        raise ValueError(f"major dài quá {MAX_MAJOR_LEN} ký tự")
     return UNKNOWN if major.lower() in UNKNOWN_MAJORS else major
+
+
+# Lớp quyết định cấp học: "Lớp 12" chỉ thuộc high_school nên tự suy ra được.
+# "Năm 1" có ở cả đại học lẫn thạc sĩ nên phải có current_level đi kèm
+def check_grade(level: str | None, grade: str | None) -> tuple[str | None, str | None]:
+    if grade is None:
+        return level, None
+    if level is None:
+        levels = [lv for lv, grades in GRADE_OPTIONS.items() if grade in grades]
+        if len(levels) != 1:
+            raise ValueError(f"current_grade {grade} cần current_level đi kèm")
+        level = levels[0]
+    if grade not in GRADE_OPTIONS[level]:
+        raise ValueError(f"current_grade {grade} không thuộc {level}")
+    return level, grade
 
 
 # Kiểm tra JSON Qwen trả, sai thì ném ValueError để SkillCall gọi lại
@@ -67,10 +93,7 @@ def check_read(raw: dict[str, Any]) -> BacHocRead:
     current_level = raw.get("current_level")
     if current_level is not None and current_level not in CURRENT_LEVELS:
         raise ValueError(f"current_level lạ: {current_level}")
-
-    grade = raw.get("current_grade")
-    if grade is not None and not (isinstance(grade, int) and MIN_GRADE <= grade <= MAX_GRADE):
-        raise ValueError(f"current_grade lạ: {grade}")
+    current_level, grade = check_grade(current_level, raw.get("current_grade"))
 
     target = raw.get("target_level")
     if target is not None and target not in TARGET_LEVELS:
