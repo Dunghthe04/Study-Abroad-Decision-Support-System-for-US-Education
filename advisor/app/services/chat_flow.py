@@ -73,7 +73,6 @@ BACK_TO_QUESTION = "Quay lại câu mình đang hỏi nhé: "
 OPENING_QUESTIONS = {"B0.1", "B0.2"}
 
 
-
 # Ghi lại câu vừa hỏi vào Chatsate, lưu last_question, question_id và tăng số lần hỏi
 def ask(state: ChatState, question_id: str) -> str:
     # Lưu câu vừa hỏi, cùng mã câu để lượt sau biết học sinh đang trả lời câu nào
