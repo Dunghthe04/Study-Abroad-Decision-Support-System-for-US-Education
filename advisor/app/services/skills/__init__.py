@@ -12,6 +12,9 @@ Không đăng ký ngoai_le và ket_thuc: hai skill tạm đó đã có sẵn tro
 from typing import Any
 
 from app.services.chat_flow import SkillHandler
+from app.services.skills.skill_bac_hoc import BacHocHandler
+from app.services.skills.skill_ho_so import HoSoHandler
+from app.services.skills.skill_nhu_cau import NhuCauHandler
 
 
 # llm: OllamaClient (Qwen) dùng chung cho các skill; model: tên model, truyền vào SkillCall hoặc để ghi log
@@ -19,4 +22,7 @@ def build_handlers(llm: Any, model: str) -> dict[str, SkillHandler]:
     handlers: dict[str, SkillHandler] = {}
     # Mỗi skill một dòng, ví dụ:
     # handlers["skill_nhu_cau"] = NhuCauHandler(llm, model)
+    handlers["skill_nhu_cau"] = NhuCauHandler(llm, model)
+    handlers["skill_bac_hoc"] = BacHocHandler(llm, model)
+    handlers["skill_ho_so"] = HoSoHandler(llm, model)
     return handlers

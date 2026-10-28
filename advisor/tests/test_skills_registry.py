@@ -34,9 +34,10 @@ def test_every_registered_handler_has_an_async_run():
 
 def test_each_call_builds_a_fresh_registry():
     first = build_handlers(llm=object(), model="m")
-    first["skill_ho_so"] = object()  # sửa bản này không được ảnh hưởng lần gọi sau
+    replaced = object()
+    first["skill_ho_so"] = replaced  # sửa bản này không được ảnh hưởng lần gọi sau
 
-    assert "skill_ho_so" not in build_handlers(llm=object(), model="m")
+    assert build_handlers(llm=object(), model="m").get("skill_ho_so") is not replaced
 
 
 async def test_registry_keeps_the_built_in_skills_working_in_chat_flow():

@@ -1,7 +1,8 @@
-"""skill_ho_so (B2), phần đọc: biết đang chờ câu nào, Qwen đọc giá trị, code kiểm tra bằng validators.
+"""skill_ho_so (B2): biết đang chờ câu nào, Qwen đọc giá trị, code kiểm tra bằng validators, ghi state.profile.
 
-Phần run(state, message) (chọn câu tiếp theo, ghi state.profile) làm ở B3. Ở đây chỉ có hàm đọc.
-Giá trị sai (GPA 85, IELTS 6.3...) không được ghi; kết quả mang theo câu hỏi lại để B3 gửi cho học sinh.
+Giá trị sai (GPA 85, IELTS 6.3...) không được ghi; học sinh nhận câu hỏi lại.
+Thứ tự hỏi: D2 → E1 → F1 (đủ REQUIRED_B3), rồi các câu tùy chọn, rồi X1 (rà soát). Học sinh bấm "Đúng" ở X1
+thì mọi thông tin said_in_B0 thành confirmed và chuyển sang B3.
 """
 
 from dataclasses import dataclass, field
@@ -10,7 +11,10 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from app.schemas.chat import ChatState, ProfileField, QuickReply, Widget
+from app.services.chat_flow import NEED_PROFILE, QUESTIONS, SkillOutput, ask, go_to
 from app.services.skill_call import SKILLS_DIR, SkillCall
+from app.services.skill_rules import REQUIRED_B3, missing_fields
 from app.services.skills.validators import (
     SCHOOL_TYPES,
     AskAgain,
@@ -48,6 +52,31 @@ QUESTION_FIELDS = {
 }
 # Thông tin học sinh được nói "không có" (ghi status="none")
 CAN_BE_NONE = ("sat", "act", "english", "activities", "awards", "relatives_state")
+
+# Mỗi câu hỏi tối đa 2 lần (framework); câu tùy chọn chỉ hỏi 1 lần
+MAX_ASK = 2
+# Câu bắt buộc cho B3, theo thứ tự hỏi
+REQUIRED_QUESTIONS = ("D2", "E1", "F1")
+# Câu tùy chọn: F2 (học bổng) hỏi sớm vì B4 cần; E2 chỉ hỏi khi học sinh chưa có chứng chỉ tiếng Anh
+OPTIONAL_QUESTIONS = ("F2", "E2", "D1", "D3", "D4", "D5", "F3", "N1", "N2", "N3", "N4")
+# Thông tin bắt buộc → câu hỏi để hỏi lại khi học sinh xác nhận mà vẫn còn thiếu
+FIELD_QUESTION = {"gpa": "D2", "english": "E1", "budget": "F1"}
+# Những câu học sinh gõ (hoặc nút bấm gửi) để xác nhận hồ sơ ở X1
+CONFIRM_WORDS = {
+    "đúng",
+    "đúng rồi",
+    "dạ đúng",
+    "dạ đúng rồi",
+    "vâng",
+    "ok",
+    "oke",
+    "xác nhận",
+    "chuẩn",
+    "yes",
+}
+CONFIRM_REPLY = QuickReply(label="Đúng rồi", value="Đúng rồi")
+FIX_REPLY = QuickReply(label="Cần sửa", value="Em cần sửa thông tin")
+SAVED = "Mình đã ghi nhận hồ sơ của bạn."
 
 EDUCATION_SYSTEMS = ("vn_thpt", "ib", "a_level", "ap", "other")
 FUNDING_SOURCES = ("parents", "relatives", "self", "loan")
@@ -204,3 +233,97 @@ class HoSoReader:
         }
         raw = await self._call.run(user, SCHEMA, check_read)
         return check_values(raw, question_id) if raw is not None else HoSoRead()
+
+
+# Ghi kết quả đọc vào hồ sơ. keep_existing=True (thông tin nói ở B0) thì không đè thông tin đã có;
+# còn ở B2 học sinh sửa thì ghi đè
+def save_read(
+    state: ChatState, read: HoSoRead, status: str = "confirmed", keep_existing: bool = False
+) -> None:
+    fields = [(name, value, status) for name, value in read.values.items()]
+    fields += [(name, None, "none") for name in read.none_fields]
+    for name, value, field_status in fields:
+        if keep_existing and name in state.profile:
+            continue
+        state.profile[name] = ProfileField(value=value, status=field_status)
+
+
+# Câu đã có câu trả lời chưa: thông tin của câu có trong hồ sơ, trạng thái nào cũng được (kể cả said_in_B0)
+def answered(state: ChatState, question_id: str) -> bool:
+    return any(name in state.profile for name in QUESTION_FIELDS[question_id])
+
+
+# Chọn câu tiếp theo: câu bắt buộc còn thiếu (hỏi tối đa 2 lần), rồi câu tùy chọn chưa hỏi. Hết thì None
+def next_question(state: ChatState) -> str | None:
+    for question_id in REQUIRED_QUESTIONS:
+        if not answered(state, question_id) and state.asked.get(question_id, 0) < MAX_ASK:
+            return question_id
+    english = state.profile.get("english")
+    for question_id in OPTIONAL_QUESTIONS:
+        if question_id == "E2" and (english is None or english.status != "none"):
+            continue
+        if not answered(state, question_id) and state.asked.get(question_id, 0) == 0:
+            return question_id
+    return None
+
+
+# Bảng rà soát X1: widget review hiện toàn bộ hồ sơ, kèm hai nút Đúng / Cần sửa
+def review(state: ChatState) -> SkillOutput:
+    data = {
+        "profile": {name: {"value": f.value, "status": f.status} for name, f in state.profile.items()},
+        "missing": missing_fields(state.profile, REQUIRED_B3),
+    }
+    return SkillOutput(
+        ask(state, "X1"), quick_replies=[CONFIRM_REPLY, FIX_REPLY], widget=Widget(type="review", data=data)
+    )
+
+
+# Hỏi câu tiếp theo của B2, hết câu thì sang rà soát. skill_bac_hoc gọi hàm này khi chuyển sang B2
+def ask_next(state: ChatState) -> SkillOutput:
+    question_id = next_question(state)
+    return SkillOutput(ask(state, question_id)) if question_id else review(state)
+
+
+def is_confirm(message: str) -> bool:
+    return message.strip().strip(".!").lower() in CONFIRM_WORDS
+
+
+# Học sinh xác nhận ở X1: said_in_B0 thành confirmed. Còn thiếu thông tin bắt buộc thì hỏi lại, chưa sang B3
+def confirm(state: ChatState) -> SkillOutput:
+    for profile_field in state.profile.values():
+        if profile_field.status == "said_in_B0":
+            profile_field.status = "confirmed"
+    missing = missing_fields(state.profile, REQUIRED_B3)
+    if not missing:
+        go_to(state, "B3")
+        return SkillOutput(f"{SAVED} {ask(state, 'X3')}")
+    if missing[0] == "target_level":
+        go_to(state, "B1")
+        return SkillOutput(f"{NEED_PROFILE} {ask(state, 'B1.2')}")
+    return SkillOutput(f"{NEED_PROFILE} {ask(state, FIELD_QUESTION[missing[0]])}")
+
+
+class HoSoHandler:
+    def __init__(self, llm: Any, model: str) -> None:
+        self._reader = HoSoReader(llm, model)
+
+    async def run(self, state: ChatState, message: str) -> SkillOutput:
+        question_id = state.question_id
+        if question_id == "X1" and is_confirm(message):
+            return confirm(state)
+
+        known = {name: f.value for name, f in state.profile.items() if f.value is not None}
+        asked_id = question_id if question_id in QUESTION_FIELDS else None
+        read = await self._reader.read(asked_id, message, known, state.branch)
+        save_read(state, read)
+
+        if question_id == "X1":
+            # Học sinh sửa thông tin ở bảng rà soát: sai thì hỏi lại, đúng thì hiện lại bảng
+            return SkillOutput(read.ask_again) if read.ask_again else review(state)
+        # Câu bắt buộc chưa có câu trả lời (giá trị sai, hoặc học sinh không nói) thì hỏi lại, tối đa 2 lần.
+        # Câu tùy chọn chỉ hỏi lại khi giá trị sai
+        limit = MAX_ASK if asked_id in REQUIRED_QUESTIONS or read.ask_again else 1
+        if asked_id and not answered(state, asked_id) and state.asked.get(asked_id, 0) < limit:
+            ask(state, asked_id)
+            return SkillOutput(read.ask_again or QUESTIONS[asked_id])
+        return ask_next(state)

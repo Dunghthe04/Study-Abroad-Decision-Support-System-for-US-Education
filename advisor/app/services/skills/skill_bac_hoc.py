@@ -1,7 +1,7 @@
-"""skill_bac_hoc (B1), phần đọc: Qwen đọc cấp học, bậc muốn học, ngành, kỳ nhập học (câu B1.1 đến B1.4).
+"""skill_bac_hoc (B1): Qwen đọc cấp học, bậc muốn học, ngành, kỳ nhập học (câu B1.1 đến B1.4), code ghi state.
 
-Phần run(state, message) (hỏi lần lượt, ghi state) làm ở B2. Ở đây chỉ có hàm đọc.
-Quy ước giá trị trả về: None = học sinh không nói; UNKNOWN = học sinh nói "chưa rõ" (B2 ghi status="unknown").
+Hỏi lần lượt B1.1 → B1.4, bỏ qua câu đã có câu trả lời, mỗi câu tối đa 2 lần; xong thì sang B2 (skill_ho_so).
+Quy ước giá trị đọc ra: None = học sinh không nói; UNKNOWN = học sinh nói "chưa rõ" (ghi status="unknown").
 """
 
 import re
@@ -9,7 +9,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from app.schemas.chat import ChatState, ProfileField
+from app.services.chat_flow import SkillOutput, ask, go_to
 from app.services.skill_call import SKILLS_DIR, SkillCall
+from app.services.skills import skill_ho_so
+from app.services.skills.skill_ho_so import MAX_ASK
 
 SKILL_PATH = SKILLS_DIR / "skill_bac_hoc.md"
 UNKNOWN = "unknown"
@@ -38,6 +42,15 @@ TARGET_LEVELS = {
 INTAKE_PATTERN = re.compile(r"(Fall|Spring|Summer) 20\d\d")
 # Những cách Qwen có thể viết "chưa rõ ngành"
 UNKNOWN_MAJORS = {UNKNOWN, "undecided", "chưa rõ", "chưa biết"}
+
+# Câu hỏi B1 → thông tin câu đó cần, theo thứ tự hỏi
+QUESTION_FIELDS = {
+    "B1.1": ["current_level"],
+    "B1.2": ["target_level"],
+    "B1.3": ["major"],
+    "B1.4": ["intake"],
+}
+READ_FIELDS = ("current_level", "current_grade", "target_level", "major", "intake")
 
 SCHEMA = {
     "type": "object",
@@ -123,3 +136,52 @@ class BacHocReader:
         user = {"question_id": question_id, "message": message}
         result = await self._call.run(user, SCHEMA, check_read)
         return result if result is not None else BacHocRead()
+
+
+# Ghi kết quả đọc vào hồ sơ. UNKNOWN ghi status="unknown", không có giá trị.
+# keep_existing=True (thông tin nói ở B0) thì không đè thông tin đã có
+def save_read(
+    state: ChatState, read: BacHocRead, status: str = "confirmed", keep_existing: bool = False
+) -> None:
+    for name in READ_FIELDS:
+        value = getattr(read, name)
+        if value is None or (keep_existing and name in state.profile):
+            continue
+        if value == UNKNOWN:
+            state.profile[name] = ProfileField(value=None, status="unknown")
+        else:
+            state.profile[name] = ProfileField(value=value, status=status)
+
+
+def answered(state: ChatState, question_id: str) -> bool:
+    return any(name in state.profile for name in QUESTION_FIELDS[question_id])
+
+
+# Câu B1 tiếp theo chưa có câu trả lời và chưa hỏi đủ 2 lần. Hết thì None
+def next_question(state: ChatState) -> str | None:
+    for question_id in QUESTION_FIELDS:
+        if not answered(state, question_id) and state.asked.get(question_id, 0) < MAX_ASK:
+            return question_id
+    return None
+
+
+# Hỏi câu B1 tiếp theo; hết câu thì sang B2 và hỏi câu đầu của skill_ho_so. skill_nhu_cau gọi hàm này
+def ask_next(state: ChatState) -> SkillOutput:
+    question_id = next_question(state)
+    if question_id:
+        return SkillOutput(ask(state, question_id))
+    go_to(state, "B2")
+    return skill_ho_so.ask_next(state)
+
+
+class BacHocHandler:
+    def __init__(self, llm: Any, model: str) -> None:
+        self._reader = BacHocReader(llm, model)
+
+    async def run(self, state: ChatState, message: str) -> SkillOutput:
+        question_id = state.question_id if state.question_id in QUESTION_FIELDS else "B1.1"
+        save_read(state, await self._reader.read(question_id, message))
+        # Học sinh chưa trả lời câu đang hỏi thì hỏi lại (tối đa 2 lần)
+        if not answered(state, question_id) and state.asked.get(question_id, 0) < MAX_ASK:
+            return SkillOutput(ask(state, question_id))
+        return ask_next(state)
