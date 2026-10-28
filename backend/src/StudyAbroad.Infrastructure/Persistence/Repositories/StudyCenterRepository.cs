@@ -29,6 +29,11 @@ public class StudyCenterRepository(AppDbContext db) : IStudyCenterRepository
         return new PagedResult<StudyCenter>(items, query.Page, query.PageSize, total);
     }
 
+    public async Task<IReadOnlyList<StudyCenter>> ListReferableAsync(CancellationToken ct = default) =>
+    await db.StudyCenters.AsNoTracking()
+        .Where(x => x.IsActive && x.VerificationStatus == CenterReferral.Verified)
+        .ToListAsync(ct);
+
     public Task<StudyCenter?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
         db.StudyCenters.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
 }

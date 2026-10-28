@@ -7,4 +7,6 @@ public interface IStudyCenterRepository
 {
     Task<PagedResult<StudyCenter>> SearchAsync(StudyCenterQuery query, CancellationToken ct = default);
     Task<StudyCenter?> GetByIdAsync(Guid id, CancellationToken ct = default);
+    Task<IReadOnlyList<StudyCenter>> ListReferableAsync(CancellationToken ct = default);
+
 }
