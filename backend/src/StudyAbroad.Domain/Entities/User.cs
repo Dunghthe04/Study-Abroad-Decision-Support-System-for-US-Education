@@ -31,5 +31,14 @@ namespace StudyAbroad.Domain.Entities
 
         /// <summary>Concurrency token (cột hệ thống xmin của Postgres): chặn 2 request song song cùng ghi đè bộ đếm đăng nhập sai.</summary>
         public uint Version { get; set; }
+
+        /// <summary>Khóa ngày sinh sau đăng ký, chỉ admin sửa (UC-01).</summary>
+        public bool IsBirthdateLocked { get; set; } = true;
+
+        /// <summary>Khóa quyền đăng bài diễn đàn (UC-56).</summary>
+        public DateTime? ForumRestrictedUntil { get; set; }
+
+        /// <summary>Lý do hạn chế quyền diễn đàn.</summary>
+        public string? ForumRestrictionReason { get; set; }
     }
 }
