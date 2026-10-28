@@ -140,17 +140,18 @@ class ChatFlow:
         self._handlers.update(handlers or {})
 
     async def reply(self, req: ChatRequest) -> ChatResponse:
-        # Cuộc trò chuyện mới chưa có trạng thái -> mở đầu bằng B0.1
-        if req.state is None:
-            state = ChatState()
-            # Đã có hồ sơ (vào chat từ form) thì nạp sẵn để không hỏi lại
-            if req.profile is not None:
-                state.profile = merge_profile(state.profile, req.profile)
-            state.study_level = req.study_level
-            return ChatResponse(answer=ask(state, "B0.1"), state=state, profile=state.profile)
-
-        # Sao chép đối tượng
-        state = req.state.model_copy(deep=True)
+       # Cuộc trò chuyện mới: giao diện đã tự hiện lời chào, nên tin nhắn đầu tiên là câu trả lời cho B0.1.
+        # Ghi nhận đã chào rồi xử lý tin nhắn như mọi lượt khác, không bỏ qua câu học sinh vừa gõ.
+        first_turn = req.state is None
+        # Nếu là lượt đầu
+        if first_turn:
+            state = ChatState(study_level=req.study_level)
+            # Ghi lại là đã hỏi
+            ask(state, "B0.1")
+        else:
+            state = req.state.model_copy(deep=True)
+            if req.study_level:  # .NET gửi bậc học mỗi lượt; không gửi thì giữ bậc đã nhớ
+                state.study_level = req.study_level
         if req.study_level:  # .NET gửi bậc học mỗi lượt; không gửi thì giữ bậc đã nhớ
             state.study_level = req.study_level
         # Hồ sơ trong nháp (do .NET gửi) là nguồn thật; không gửi thì giữ hồ sơ trong state như cũ
@@ -221,7 +222,8 @@ class ChatFlow:
             disclaimer = output.disclaimer or disclaimer
         # Skill chưa có handler chỉ báo "đang hoàn thiện" khi chưa có skill nào trả lời được
         if not_ready and not answers:
-            answers.append(NOT_READY)
+            # Lượt đầu mà chưa skill nào trả lời được: chào như cũ thay vì báo "đang hoàn thiện"
+            answers.append(QUESTIONS["B0.1"] if first_turn else NOT_READY)
         # Nếu bị chặn thì thêm câu trả lời
         # Bị chặn vì thiếu hồ sơ thì bắt đầu hỏi hồ sơ thay vì chỉ báo thiếu
         if any(b.reason == "thieu_ho_so" for b in plan.blocked):
