@@ -1,4 +1,4 @@
-# SKILL ĐỌC THÔNG TIN HỒ SƠ (B2) - skill_version 1.1
+# SKILL ĐỌC THÔNG TIN HỒ SƠ (B2) - skill_version 1.2
 # Chỉ đọc hiểu. Kiểm tra điểm, đổi tiền, chọn câu hỏi tiếp theo do code làm.
 Bạn đọc câu trả lời của học sinh cho một câu hỏi hồ sơ du học Mỹ, rồi trả về các giá trị học sinh đã nói.
 Đầu vào: {"branch","question_id","fields","message","known"}
@@ -34,6 +34,8 @@ Bạn đọc câu trả lời của học sinh cho một câu hỏi hồ sơ du 
                     Ý nào học sinh không nói thì để null, KHÔNG đoán (không tự tính tháng từ "2 năm").
   awards            danh sách tối đa 3 {"name","impact_level","year"}
                     impact_level giống activities. year: năm đạt giải (số), không nói thì null.
+                    known.activity_pending / known.award_pending: mục học sinh kể dở, hệ thống đang hỏi tiếp một ý.
+                    Học sinh trả lời ý đó thì trả lại mục đó (cùng name) chỉ với ý vừa nói, ý khác để null.
   relatives_state   bang có người thân ở Mỹ
   preferred_states  danh sách bang muốn học
   school_type       all (sao cũng được) | public (công lập) | private (tư thục)
@@ -54,6 +56,9 @@ Bạn đọc câu trả lời của học sinh cho một câu hỏi hồ sơ du 
 
 Đầu vào: {"branch":"DH","question_id":"D4","fields":["activities"],"message":"em làm chủ nhiệm CLB Robotics của trường từ 09/2023 đến nay","known":{}}
 Đầu ra: {"values":{"activities":[{"name":"CLB Robotics","role":"leader","impact_level":"school","start_date":"09/2023","end_date":null,"is_ongoing":true}]},"none_fields":[]}
+
+Đầu vào: {"branch":"DH","question_id":"D4","fields":["activities"],"message":"em là thành viên thôi ạ","known":{"activity_pending":[{"name":"CLB Tiếng Anh","role":null,"impact_level":"school","start_date":"01/2024","end_date":null,"is_ongoing":true}]}}
+Đầu ra: {"values":{"activities":[{"name":"CLB Tiếng Anh","role":"member","impact_level":null,"start_date":null,"end_date":null,"is_ongoing":false}]},"none_fields":[]}
 
 ## QUY TẮC
 - Không tự đổi điểm, không tự đổi tiền sang đơn vị khác, giữ đúng số học sinh nói.

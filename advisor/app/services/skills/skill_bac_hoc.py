@@ -10,9 +10,9 @@ from pathlib import Path
 from typing import Any
 
 from app.schemas.chat import ChatState, ProfileField
-from app.services.chat_flow import SkillOutput, ask, go_to
+from app.services.chat_flow import SkillOutput, go_to
 from app.services.skill_call import SKILLS_DIR, SkillCall
-from app.services.skills import skill_ho_so
+from app.services.skills import buttons, skill_ho_so
 from app.services.skills.skill_ho_so import MAX_ASK
 
 SKILL_PATH = SKILLS_DIR / "skill_bac_hoc.md"
@@ -169,7 +169,7 @@ def next_question(state: ChatState) -> str | None:
 def ask_next(state: ChatState) -> SkillOutput:
     question_id = next_question(state)
     if question_id:
-        return SkillOutput(ask(state, question_id))
+        return buttons.ask_with_buttons(state, question_id)
     go_to(state, "B2")
     return skill_ho_so.ask_next(state)
 
@@ -180,8 +180,13 @@ class BacHocHandler:
 
     async def run(self, state: ChatState, message: str) -> SkillOutput:
         question_id = state.question_id if state.question_id in QUESTION_FIELDS else "B1.1"
+        # B5. Bấm nút (bậc học, "Em chưa rõ ngành") thì ghi thẳng, không gọi Qwen
+        button = buttons.pressed(question_id, message)
+        if button is not None:
+            buttons.press(state, button)
+            return ask_next(state)
         save_read(state, await self._reader.read(question_id, message))
         # Học sinh chưa trả lời câu đang hỏi thì hỏi lại (tối đa 2 lần)
         if not answered(state, question_id) and state.asked.get(question_id, 0) < MAX_ASK:
-            return SkillOutput(ask(state, question_id))
+            return buttons.ask_with_buttons(state, question_id)
         return ask_next(state)

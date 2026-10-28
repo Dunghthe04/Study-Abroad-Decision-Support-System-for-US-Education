@@ -3,23 +3,32 @@
 Giá trị sai (GPA 85, IELTS 6.3...) không được ghi; học sinh nhận câu hỏi lại.
 Thứ tự hỏi: D2 → E1 → F1 (đủ REQUIRED_B3), rồi các câu tùy chọn, rồi X1 (rà soát). Học sinh bấm "Đúng" ở X1
 thì mọi thông tin said_in_B0 thành confirmed và chuyển sang B3.
+B4: hoạt động / giải thưởng thiếu ý (vai trò, phạm vi, tháng...) thì giữ phần đã nói và hỏi tiếp từng ý.
+B5: câu hỏi có nút gợi ý (buttons.py); bấm nút thì ghi thẳng, không gọi Qwen.
 """
 
+from collections.abc import Callable
+from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, NamedTuple
 
 from pydantic import BaseModel, Field
 
 from app.schemas.chat import ChatState, ProfileField, QuickReply, Widget
-from app.services.chat_flow import NEED_PROFILE, QUESTIONS, SkillOutput, ask, go_to
+from app.services.chat_flow import NEED_PROFILE, SkillOutput, ask, go_to
 from app.services.skill_call import SKILLS_DIR, SkillCall
 from app.services.skill_rules import REQUIRED_B3, missing_fields
+from app.services.skills import buttons
 from app.services.skills.validators import (
+    MAX_ACTIVITIES,
+    MAX_AWARDS,
     SCHOOL_TYPES,
     AskAgain,
     check_act,
     check_activities,
+    check_activity,
+    check_award,
     check_awards,
     check_budget,
     check_budget_tier,
@@ -77,6 +86,26 @@ CONFIRM_WORDS = {
 CONFIRM_REPLY = QuickReply(label="Đúng rồi", value="Đúng rồi")
 FIX_REPLY = QuickReply(label="Cần sửa", value="Em cần sửa thông tin")
 SAVED = "Mình đã ghi nhận hồ sơ của bạn."
+
+
+# B4. Danh sách hoạt động / giải thưởng: câu hỏi, khóa giữ các mục đang thiếu ý, hàm kiểm tra một mục,
+# hàm kiểm tra cả danh sách (số mục), số mục tối đa
+class ListField(NamedTuple):
+    question: str
+    pending_key: str
+    check_item: Callable[..., dict]
+    check_list: Callable[[list[dict]], list[dict]]
+    limit: int
+
+
+# Khóa *_pending không có trong nháp form (profile_sync.DRAFT_KEYS) nên chỉ nằm trong trạng thái chat
+LIST_FIELDS = {
+    "activities": ListField("D4", "activity_pending", check_activity, check_activities, MAX_ACTIVITIES),
+    "awards": ListField("D5", "award_pending", check_award, check_awards, MAX_AWARDS),
+}
+PENDING_KEYS = tuple(spec.pending_key for spec in LIST_FIELDS.values())
+# Một câu D4/D5 được hỏi tiếp tối đa ngần này lần (mỗi lần thường một ý: vai trò, phạm vi, tháng...)
+MAX_FOLLOW_UPS = 4
 
 EDUCATION_SYSTEMS = ("vn_thpt", "ib", "a_level", "ap", "other")
 FUNDING_SOURCES = ("parents", "relatives", "self", "loan")
@@ -150,13 +179,15 @@ class HoSoRaw(BaseModel):
 SCHEMA = HoSoRaw.model_json_schema()
 
 
-# Kết quả đọc: values đã qua validators, ask_again là câu hỏi lại nếu có giá trị sai
+# Kết quả đọc: values đã qua validators, ask_again là câu hỏi lại nếu có giá trị sai.
+# pending: hoạt động / giải thưởng còn thiếu ý, giữ nguyên dạng Qwen đọc để hỏi tiếp (B4)
 @dataclass
 class HoSoRead:
     values: dict[str, Any] = field(default_factory=dict)
     none_fields: list[str] = field(default_factory=list)
     ask_again: str | None = None
     ai_used: bool = False
+    pending: dict[str, list[dict]] = field(default_factory=dict)
 
 
 # Kiểm tra một thông tin bằng validators, trả về giá trị chuẩn để ghi vào hồ sơ. Sai thì ném AskAgain
@@ -181,15 +212,37 @@ def check_value(name: str, value: Any) -> Any:
         return check_budget(value.amount, value.currency or "USD")
     if name == "scholarship":
         return check_scholarship(value)
-    if name == "activities":
-        return check_activities([a.model_dump() for a in value])
-    if name == "awards":
-        return check_awards([a.model_dump() for a in value])
     if name == "preferred_states":
         return check_states(value)
     if isinstance(value, str):
         return value.strip()
     return value
+
+
+# B4. Kiểm tra từng mục: mục đủ ý thì chuẩn hóa theo dạng form, mục thiếu ý giữ nguyên để hỏi tiếp.
+# question là câu hỏi ý còn thiếu của mục thiếu đầu tiên
+def split_items(name: str, items: list[dict]) -> tuple[list[dict], list[dict], str | None]:
+    done, waiting, question = [], [], None
+    for item in items:
+        try:
+            done.append(LIST_FIELDS[name].check_item(**item))
+        except AskAgain as err:
+            waiting.append(item)
+            question = question or err.question
+    return done, waiting, question
+
+
+# Hoạt động / giải thưởng: quá số mục thì hỏi lại; mục đủ ý vào values, mục thiếu ý vào pending
+def check_items(result: HoSoRead, name: str, items: list[dict]) -> None:
+    spec = LIST_FIELDS[name]
+    if len(items) > spec.limit:
+        spec.check_list(items)  # ném AskAgain "tối đa ... mục"
+    done, waiting, question = split_items(name, items)
+    if done:
+        result.values[name] = done
+    if waiting:
+        result.pending[name] = waiting
+        raise AskAgain(question)
 
 
 # Chạy validators cho mọi thông tin đọc được. Thông tin của câu đang hỏi kiểm tra trước,
@@ -202,7 +255,10 @@ def check_values(read: HoSoRaw, question_id: str | None) -> HoSoRead:
     result = HoSoRead(ai_used=True)
     for name in order:
         try:
-            result.values[name] = check_value(name, getattr(read.values, name))
+            if name in LIST_FIELDS:
+                check_items(result, name, [item.model_dump() for item in getattr(read.values, name)])
+            else:
+                result.values[name] = check_value(name, getattr(read.values, name))
         except AskAgain as err:
             result.ask_again = result.ask_again or err.question
     # Một thông tin vừa có giá trị vừa "không có" thì tin giá trị
@@ -236,16 +292,72 @@ class HoSoReader:
 
 
 # Ghi kết quả đọc vào hồ sơ. keep_existing=True (thông tin nói ở B0) thì không đè thông tin đã có;
-# còn ở B2 học sinh sửa thì ghi đè
+# còn ở B2 học sinh sửa thì ghi đè. Hoạt động / giải thưởng thì thêm vào danh sách đang có (save_items)
 def save_read(
     state: ChatState, read: HoSoRead, status: str = "confirmed", keep_existing: bool = False
 ) -> None:
-    fields = [(name, value, status) for name, value in read.values.items()]
+    fields = [(name, value, status) for name, value in read.values.items() if name not in LIST_FIELDS]
     fields += [(name, None, "none") for name in read.none_fields]
     for name, value, field_status in fields:
         if keep_existing and name in state.profile:
             continue
         state.profile[name] = ProfileField(value=value, status=field_status)
+    for name in LIST_FIELDS:
+        if not (keep_existing and name in state.profile):
+            save_items(state, name, read.values.get(name, []), read.pending.get(name, []), status)
+
+
+def item_name(item: dict) -> str:
+    return (item.get("name") or "").strip().lower()
+
+
+# B4. Ghép ý học sinh vừa nói vào mục đang thiếu ý: mục cùng tên; mục chưa có tên; hoặc (học sinh
+# không nhắc tên) mục thiếu đầu tiên. Mục có tên mới thì thêm vào cuối
+def fill(pending: list[dict], items: list[dict]) -> list[dict]:
+    merged = [dict(item) for item in pending]
+    for item in items:
+        name = item_name(item)
+        if name:
+            target = next((p for p in merged if item_name(p) == name), None)
+            target = target or next((p for p in merged if not item_name(p)), None)
+        else:
+            target = merged[0] if merged else None
+        if target is None:
+            merged.append(dict(item))
+        else:
+            target.update(
+                {key: value for key, value in item.items() if value is not None and value is not False}
+            )
+    return merged
+
+
+# B4. Thêm mục đủ ý vào danh sách; mục chưa đủ ý (cả mục dở từ lượt trước) giữ ở khóa *_pending.
+# Trùng tên thì mục mới thay mục cũ; quá số mục tối đa thì bỏ mục cũ nhất
+def save_items(state: ChatState, name: str, done: list[dict], new_pending: list[dict], status: str) -> None:
+    if not done and not new_pending:
+        return
+    spec = LIST_FIELDS[name]
+    old_pending = state.profile.pop(spec.pending_key, None)
+    more_done, waiting, _ = split_items(name, fill(old_pending.value if old_pending else [], new_pending))
+    done = done + more_done
+    done_names = {item_name(item) for item in done}
+    waiting = [item for item in waiting if item_name(item) not in done_names]
+    if done:
+        old = state.profile.get(name)
+        old_items = old.value if old is not None and isinstance(old.value, list) else []
+        kept = [item for item in old_items if item_name(item) not in done_names]
+        state.profile[name] = ProfileField(value=(kept + done)[-spec.limit :], status=status)
+    if waiting:
+        state.profile[spec.pending_key] = ProfileField(value=waiting, status="unknown")
+
+
+# B4. Câu hỏi ý còn thiếu của mục dở đầu tiên của câu D4 hoặc D5. Không có mục dở thì None
+def pending_question(state: ChatState, question_id: str) -> str | None:
+    for name, spec in LIST_FIELDS.items():
+        pending = state.profile.get(spec.pending_key)
+        if spec.question == question_id and pending is not None:
+            return split_items(name, pending.value[:1])[2]
+    return None
 
 
 # Câu đã có câu trả lời chưa: thông tin của câu có trong hồ sơ, trạng thái nào cũng được (kể cả said_in_B0)
@@ -267,10 +379,11 @@ def next_question(state: ChatState) -> str | None:
     return None
 
 
-# Bảng rà soát X1: widget review hiện toàn bộ hồ sơ, kèm hai nút Đúng / Cần sửa
+# Bảng rà soát X1: widget review hiện toàn bộ hồ sơ (trừ mục dở *_pending), kèm hai nút Đúng / Cần sửa
 def review(state: ChatState) -> SkillOutput:
+    profile = {name: f for name, f in state.profile.items() if name not in PENDING_KEYS}
     data = {
-        "profile": {name: {"value": f.value, "status": f.status} for name, f in state.profile.items()},
+        "profile": {name: {"value": f.value, "status": f.status} for name, f in profile.items()},
         "missing": missing_fields(state.profile, REQUIRED_B3),
     }
     return SkillOutput(
@@ -278,10 +391,35 @@ def review(state: ChatState) -> SkillOutput:
     )
 
 
-# Hỏi câu tiếp theo của B2, hết câu thì sang rà soát. skill_bac_hoc gọi hàm này khi chuyển sang B2
+# Hỏi một câu B2 kèm nút; câu tùy chọn có thêm nút "Bỏ qua". text: câu khác câu chuẩn (câu hỏi lại)
+def ask_question(state: ChatState, question_id: str, text: str | None = None) -> SkillOutput:
+    return buttons.ask_with_buttons(state, question_id, text, can_skip=question_id in OPTIONAL_QUESTIONS)
+
+
+# Hỏi câu tiếp theo của B2, hết câu thì sang rà soát. skill_bac_hoc gọi hàm này khi chuyển sang B2.
+# D4/D5 mà đang có mục dở (nói ở B0) thì hỏi luôn ý còn thiếu thay cho câu chung
 def ask_next(state: ChatState) -> SkillOutput:
     question_id = next_question(state)
-    return SkillOutput(ask(state, question_id)) if question_id else review(state)
+    if question_id is None:
+        return review(state)
+    return ask_question(state, question_id, pending_question(state, question_id))
+
+
+# B4. Lượt này có mục dở mới hoặc vừa được bổ sung thì hỏi tiếp ý còn thiếu.
+# Học sinh trả lời câu hỏi tiếp mà không nói thêm gì cho mục đó, hoặc đã hỏi đủ lần, thì bỏ mục đó
+def follow_up(state: ChatState, before: dict[str, Any]) -> SkillOutput | None:
+    for spec in LIST_FIELDS.values():
+        pending = state.profile.get(spec.pending_key)
+        if pending is None:
+            continue
+        stuck = pending.value == before.get(spec.pending_key)
+        if stuck and state.question_id != spec.question:
+            continue  # mục dở từ trước (vd nói ở B0), chờ tới lúc hỏi câu của nó
+        if stuck or state.asked.get(spec.question, 0) > MAX_FOLLOW_UPS:
+            del state.profile[spec.pending_key]
+            continue
+        return ask_question(state, spec.question, pending_question(state, spec.question))
+    return None
 
 
 def is_confirm(message: str) -> bool:
@@ -299,8 +437,20 @@ def confirm(state: ChatState) -> SkillOutput:
         return SkillOutput(f"{SAVED} {ask(state, 'X3')}")
     if missing[0] == "target_level":
         go_to(state, "B1")
-        return SkillOutput(f"{NEED_PROFILE} {ask(state, 'B1.2')}")
-    return SkillOutput(f"{NEED_PROFILE} {ask(state, FIELD_QUESTION[missing[0]])}")
+        output = buttons.ask_with_buttons(state, "B1.2")
+    else:
+        output = ask_question(state, FIELD_QUESTION[missing[0]])
+    output.answer = f"{NEED_PROFILE} {output.answer}"
+    return output
+
+
+# B5. Học sinh bấm nút của câu đang hỏi: ghi thẳng giá trị của nút, bỏ mục dở của câu đó, hỏi câu tiếp
+def press_button(state: ChatState, button: buttons.Button) -> SkillOutput:
+    buttons.press(state, button)
+    for spec in LIST_FIELDS.values():
+        if spec.question == state.question_id:
+            state.profile.pop(spec.pending_key, None)
+    return ask_next(state)
 
 
 class HoSoHandler:
@@ -311,12 +461,19 @@ class HoSoHandler:
         question_id = state.question_id
         if question_id == "X1" and is_confirm(message):
             return confirm(state)
+        button = buttons.pressed(question_id, message, can_skip=question_id in OPTIONAL_QUESTIONS)
+        if button is not None:
+            return press_button(state, button)
 
         known = {name: f.value for name, f in state.profile.items() if f.value is not None}
         asked_id = question_id if question_id in QUESTION_FIELDS else None
+        before = {key: deepcopy(state.profile[key].value) for key in PENDING_KEYS if key in state.profile}
         read = await self._reader.read(asked_id, message, known, state.branch)
         save_read(state, read)
 
+        follow = follow_up(state, before)
+        if follow is not None:
+            return follow
         if question_id == "X1":
             # Học sinh sửa thông tin ở bảng rà soát: sai thì hỏi lại, đúng thì hiện lại bảng
             return SkillOutput(read.ask_again) if read.ask_again else review(state)
@@ -324,6 +481,5 @@ class HoSoHandler:
         # Câu tùy chọn chỉ hỏi lại khi giá trị sai
         limit = MAX_ASK if asked_id in REQUIRED_QUESTIONS or read.ask_again else 1
         if asked_id and not answered(state, asked_id) and state.asked.get(asked_id, 0) < limit:
-            ask(state, asked_id)
-            return SkillOutput(read.ask_again or QUESTIONS[asked_id])
+            return ask_question(state, asked_id, read.ask_again)
         return ask_next(state)

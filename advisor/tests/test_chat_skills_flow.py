@@ -255,3 +255,133 @@ async def test_fix_at_review_overwrites_and_shows_review_again():
     assert res.state.profile["gpa"] == field({"value": 8.7, "scale": 10})
     assert res.state.question_id == "X1"
     assert res.widget.type == "review"
+
+
+# B5: nút gợi ý và widget
+
+
+async def test_budget_question_comes_with_budget_widget():
+    llm = FakeLLM(ho_so({"english": {"type": "ielts", "score": 6.5, "date": None}}))
+    res = await turn(
+        llm,
+        "IELTS 6.5",
+        current_step="B2",
+        question_id="E1",
+        profile={"gpa": field({"value": 8.5, "scale": 10})},
+    )
+
+    assert res.state.question_id == "F1"
+    assert res.widget.type == "budget"
+    assert res.widget.data["options"][0] == {"value": "tier_under_20k", "label": "Dưới 20.000 USD"}
+    assert "Bỏ qua" not in [r.label for r in res.quick_replies]  # F1 bắt buộc nên không có nút bỏ qua
+
+
+async def test_pressing_budget_button_saves_tier_without_qwen():
+    llm = FakeLLM()
+    res = await turn(llm, "Dưới 20.000 USD", current_step="B2", question_id="F1", profile=full_profile())
+
+    assert llm.calls == []
+    assert res.state.profile["budget"] == field("tier_under_20k")
+    assert res.state.question_id == "F2"
+    assert res.widget.type == "scholarship"
+    assert [r.label for r in res.quick_replies][-1] == "Bỏ qua"
+
+
+async def test_skip_button_moves_on_without_saving():
+    llm = FakeLLM()
+    profile = {**full_profile(), "budget": field("tier_35k_50k")}
+    res = await turn(llm, "Bỏ qua", current_step="B2", question_id="F2", asked={"F2": 1}, profile=profile)
+
+    assert llm.calls == []
+    assert "scholarship" not in res.state.profile
+    assert res.state.question_id == "D1"
+
+
+async def test_target_level_button_in_b1():
+    llm = FakeLLM()
+    res = await turn(
+        llm,
+        "Thạc sĩ",
+        current_step="B1",
+        question_id="B1.2",
+        profile={"current_level": field("college_university")},
+    )
+
+    assert llm.calls == []
+    assert res.state.profile["target_level"] == field("master")
+    assert res.state.question_id == "B1.3"
+    assert [r.label for r in res.quick_replies] == ["Em chưa rõ ngành"]
+
+
+# B4: hoạt động thiếu ý thì hỏi tiếp
+
+
+def at_d4() -> dict:
+    asked = {"F2": 1, "D1": 1, "D3": 1, "D4": 1}
+    profile = {**full_profile(), "budget": field("tier_35k_50k")}
+    return {"current_step": "B2", "question_id": "D4", "asked": asked, "profile": profile}
+
+
+ENGLISH_CLUB = {
+    "name": "CLB Tiếng Anh",
+    "impact_level": "school",
+    "start_date": "01/2024",
+    "is_ongoing": True,
+}
+
+
+async def test_activity_without_role_is_kept_and_role_asked_then_saved():
+    res = await turn(
+        FakeLLM(ho_so({"activities": [ENGLISH_CLUB]})), "em ở CLB Tiếng Anh từ 01/2024", **at_d4()
+    )
+
+    assert "activities" not in res.state.profile
+    assert res.state.profile["activity_pending"].value[0]["name"] == "CLB Tiếng Anh"
+    assert res.state.question_id == "D4"
+    assert "sáng lập" in res.answer
+
+    llm = FakeLLM(ho_so({"activities": [{"name": "CLB Tiếng Anh", "role": "member"}]}))
+    res = await turn(llm, "em là thành viên", **res.state.model_dump())
+
+    assert "activity_pending" not in res.state.profile
+    assert res.state.profile["activities"].value == [
+        {
+            "name": "CLB Tiếng Anh",
+            "category": "activity",
+            "role": "member",
+            "impactLevel": "school",
+            "startDate": "01/2024",
+            "endDate": None,
+            "isOngoing": True,
+        }
+    ]
+    assert res.state.question_id == "D5"
+
+
+async def test_answer_without_new_info_drops_the_unfinished_activity():
+    state = at_d4()
+    state["profile"]["activity_pending"] = field([ENGLISH_CLUB], "unknown")
+    res = await turn(FakeLLM(ho_so()), "dạ em không nhớ", **state)
+
+    assert "activity_pending" not in res.state.profile
+    assert "activities" not in res.state.profile
+    assert res.state.question_id == "D5"
+
+
+async def test_unfinished_activity_from_b0_is_asked_at_d4_and_hidden_in_review():
+    state = at_d4()
+    state["asked"].pop("D4")
+    state["question_id"] = "D3"
+    state["profile"]["activity_pending"] = field([ENGLISH_CLUB], "unknown")
+    res = await turn(FakeLLM(ho_so(none_fields=["sat", "act"])), "em chưa thi", **state)
+
+    assert res.state.question_id == "D4"
+    assert "CLB Tiếng Anh" in res.answer and "sáng lập" in res.answer
+
+    # Bấm "Em chưa có hoạt động" thì bỏ mục dở; tới bảng rà soát không còn khóa *_pending
+    asked = {q: 1 for q in OPTIONAL_QUESTIONS}
+    res = await turn(FakeLLM(), "Em chưa có hoạt động", **{**res.state.model_dump(), "asked": asked})
+
+    assert res.state.profile["activities"] == field(None, "none")
+    assert res.widget.type == "review"
+    assert "activity_pending" not in res.widget.data["profile"]
