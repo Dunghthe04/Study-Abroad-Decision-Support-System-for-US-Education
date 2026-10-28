@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from app.schemas.chat import ChatMessage, ChatRequest, ChatState, ProfileField, QuickReply, Widget
 from app.services.chat_flow import (
     NEED_MAJOR,
-    NEED_PROFILE,
     NEED_RESULTS,
     NOT_READY,
     QUESTIONS,
@@ -17,6 +16,7 @@ from app.services.chat_flow import (
     go_to,
     last_user_message,
 )
+from app.services.intake import CHAT_BUTTON, FORM_BUTTON, INTAKE_ASK, INTAKE_FORM, INTAKE_ID, INTAKE_MORE
 
 
 @dataclass
@@ -256,11 +256,85 @@ async def test_explain_is_blocked_until_the_state_has_results():
     assert allowed.state.has_results is True  # cờ được giữ trong state để lượt sau còn dùng
 
 
-async def test_assessment_is_blocked_when_profile_is_incomplete():
-    res = await ChatFlow(FakePicker("skill_danh_gia")).reply(request("đánh giá hồ sơ em", current_step="B3"))
+async def test_assessment_blocked_with_no_profile_offers_chat_or_form():
+    picker = FakePicker("skill_danh_gia")
 
-    assert res.skills == []
-    assert res.answer == NEED_PROFILE
+    res = await ChatFlow(picker).reply(request("đánh giá hồ sơ em", current_step="B3", last_question=""))
+
+    assert res.skills == []  # chưa đủ hồ sơ nên chưa đánh giá
+    assert res.answer == INTAKE_ASK
+    assert res.quick_replies == [CHAT_BUTTON, FORM_BUTTON]
+    assert res.state.question_id == INTAKE_ID  # lượt sau biết học sinh đang chọn cách điền
+    assert res.state.last_question == ""  # câu mời nằm ngoài các câu model đã học
+
+
+async def test_choosing_chat_asks_the_first_missing_question():
+    picker = FakePicker("skill_ho_so")
+
+    res = await ChatFlow(picker).reply(
+        request(CHAT_BUTTON.value, current_step="B3", last_question="", question_id=INTAKE_ID)
+    )
+
+    assert res.answer == QUESTIONS["B1.2"]  # bậc học là thông tin đầu tiên còn thiếu
+    assert res.state.intake_mode == "chat"
+    assert res.state.current_step == "B1"
+    assert res.state.question_id == "B1.2" and res.state.last_question == QUESTIONS["B1.2"]
+    assert picker.calls == []  # lựa chọn nhận bằng chữ trên nút, không nhờ model
+
+
+async def test_choosing_form_opens_the_form_widget():
+    res = await ChatFlow(FakePicker("skill_ho_so")).reply(
+        request(FORM_BUTTON.value, current_step="B3", last_question="", question_id=INTAKE_ID)
+    )
+
+    assert res.answer == INTAKE_FORM
+    assert res.widget == Widget(type="form")
+    assert res.state.intake_mode == "form"
+    assert res.state.question_id is None
+
+
+async def test_other_message_while_choosing_goes_through_the_normal_flow():
+    ran: list[str] = []
+    handlers = {"skill_tra_loi": RecordingHandler("skill_tra_loi", ran)}
+
+    res = await ChatFlow(FakePicker("skill_tra_loi"), handlers).reply(
+        request("I-20 là gì ạ?", current_step="B3", last_question="", question_id=INTAKE_ID)
+    )
+
+    assert ran == ["skill_tra_loi"]
+    assert res.state.question_id is None  # không còn chờ lựa chọn
+
+
+async def test_partial_profile_gets_the_next_missing_question_in_chat():
+    profile = {"target_level": ProfileField(value="x", status="confirmed")}
+
+    res = await ChatFlow(FakePicker("skill_danh_gia")).reply(
+        request("đánh giá hồ sơ em", current_step="B3", last_question="", profile=profile)
+    )
+
+    assert res.answer == INTAKE_MORE + QUESTIONS["D2"]  # đã có bậc học, hỏi tiếp GPA
+    assert res.state.intake_mode == "chat"
+    assert res.state.current_step == "B2" and res.state.question_id == "D2"
+    assert res.quick_replies == []  # đã có hồ sơ nên không mời chọn lại
+
+
+async def test_form_chosen_but_nothing_filled_reminds_the_form():
+    res = await ChatFlow(FakePicker("skill_danh_gia")).reply(
+        request("đánh giá hồ sơ em", current_step="B3", last_question="", intake_mode="form")
+    )
+
+    assert res.answer == INTAKE_FORM
+    assert res.widget == Widget(type="form")
+
+
+async def test_no_intake_when_nothing_is_blocked():
+    ran: list[str] = []
+    handlers = {"skill_tra_loi": RecordingHandler("skill_tra_loi", ran)}
+
+    res = await ChatFlow(FakePicker("skill_tra_loi"), handlers).reply(request("I-20 là gì ạ?"))
+
+    assert res.answer == "trả lời của skill_tra_loi"  # hỏi kiến thức thì không kéo sang hỏi hồ sơ
+    assert res.quick_replies == [] and res.state.intake_mode is None
 
 
 async def test_roadmap_asks_for_major_when_only_major_is_missing():

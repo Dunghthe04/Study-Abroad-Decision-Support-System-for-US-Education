@@ -11,6 +11,17 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from app.schemas.chat import ChatRequest, ChatResponse, ChatState, QuickReply, Step, Widget
+from app.services.intake import (
+    CHAT_BUTTON,
+    FORM_BUTTON,
+    INTAKE_ASK,
+    INTAKE_FORM,
+    INTAKE_ID,
+    INTAKE_MORE,
+    has_profile,
+    intake_choice,
+    next_question,
+)
 from app.services.profile_sync import changed_keys, merge_profile
 from app.services.skill_rules import Plan, missing_fields, plan_skills
 
@@ -140,6 +151,28 @@ class ChatFlow:
         message = last_user_message(req)
         # chương trình lấy thời điểm kết thúc trừ thời điểm bắt đầu để tính thời gian xử lý.
         started = time.perf_counter()
+        # Đang chờ học sinh chọn cách điền hồ sơ: nhận lựa chọn bằng chữ trên nút, không nhờ model
+        if state.question_id == INTAKE_ID:
+            state.question_id = None
+            choice = intake_choice(message)
+            if choice:
+                output = begin_intake(state, choice)
+                log_turn(
+                    state,
+                    message,
+                    [],
+                    {},
+                    Plan(skills=[], source="fallback_step"),
+                    (time.perf_counter() - started) * 1000,
+                )
+                return ChatResponse(
+                    answer=output.answer,
+                    state=state,
+                    quick_replies=output.quick_replies,
+                    widget=output.widget,
+                    profile=state.profile,
+                    profile_changed=changed_keys(profile_before, state.profile),
+                )
 
         # 1. Model chọn skill(lỗi thì coi như không chắc, dùng skill của bước hiện tại)
         predicted, probs = await self._choose(state, message)
@@ -163,7 +196,14 @@ class ChatFlow:
             quick_replies = output.quick_replies or quick_replies
             widget = output.widget or widget
         # Nếu bị chặn thì thêm câu trả lời
-        answers += blocked_answers(plan)
+        # Bị chặn vì thiếu hồ sơ thì bắt đầu hỏi hồ sơ thay vì chỉ báo thiếu
+        if any(b.reason == "thieu_ho_so" for b in plan.blocked):
+            intake = start_intake(state)
+            answers.append(intake.answer)
+            quick_replies = intake.quick_replies or quick_replies
+            widget = intake.widget or widget
+        # Các lý do chặn khác thì báo cho học sinh biết
+        answers += blocked_answers(plan, skip={"thieu_ho_so"})
 
         # 4. Ghi log (dữ liệu để train lại model và kiểm tra random check)
         log_turn(state, message, predicted, probs, plan, (time.perf_counter() - started) * 1000)
@@ -210,9 +250,43 @@ BLOCKED_ANSWER = {
 }
 
 
-# Skill bị chặn thì nói cho học sinh biết vì sao
-def blocked_answers(plan: Plan) -> list[str]:
-    return [BLOCKED_ANSWER[item.reason] for item in plan.blocked]
+# Skill bị chặn thì nói cho học sinh biết vì sao (bỏ qua các lý do trong skip)
+def blocked_answers(plan: Plan, skip: set[str] | None = None) -> list[str]:
+    return [BLOCKED_ANSWER[item.reason] for item in plan.blocked if item.reason not in (skip or set())]
+
+
+# Bắt đầu hỏi hồ sơ khi một skill bị chặn vì thiếu hồ sơ
+def start_intake(state: ChatState) -> SkillOutput:
+    # Chưa có thông tin nào và chưa chọn cách điền: mời chọn chat hay form
+    if state.intake_mode is None and not has_profile(state.profile):
+        state.question_id = INTAKE_ID
+        # Câu mời này nằm ngoài 23 câu model đã học nên để rỗng, model sẽ nhìn như "không có câu nào đang chờ"
+        state.last_question = ""
+        return SkillOutput(INTAKE_ASK, [CHAT_BUTTON, FORM_BUTTON])
+    # Đã chọn form mà chưa điền gì: nhắc lại form
+    if state.intake_mode == "form" and not has_profile(state.profile):
+        return SkillOutput(INTAKE_FORM, widget=Widget(type="form"))
+    # Đã có một phần hồ sơ: hỏi tiếp phần còn thiếu ngay trong chat
+    return ask_next_missing(state, INTAKE_MORE)
+
+
+# Học sinh đã chọn: form thì mở form, chat thì hỏi câu đầu tiên còn thiếu
+def begin_intake(state: ChatState, choice: str) -> SkillOutput:
+    if choice == "form":
+        state.intake_mode = "form"
+        return SkillOutput(INTAKE_FORM, widget=Widget(type="form"))
+    return ask_next_missing(state)
+
+
+# Hỏi câu đầu tiên còn thiếu; lượt sau skill của bước đó đọc câu trả lời
+def ask_next_missing(state: ChatState, prefix: str = "") -> SkillOutput:
+    target = next_question(state.profile)
+    if target is None:
+        return SkillOutput(NEED_PROFILE)
+    step, question_id = target
+    state.intake_mode = "chat"
+    go_to(state, step)  # đổi bước trước, rồi mới hỏi (ask lưu mã câu sau go_to)
+    return SkillOutput(prefix + ask(state, question_id))
 
 
 # Mỗi lượt ghi một dòng JSON: tin nhắn, model chọn gì, code chạy gì

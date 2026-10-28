@@ -35,6 +35,7 @@ def test_intake_mode_only_accepts_chat_or_form():
 
 def test_widget_type_must_be_a_known_kind():
     assert Widget(type="major").data == {}
+    assert Widget(type="form").data == {}  # widget báo frontend mở form hồ sơ
     with pytest.raises(ValidationError):
         Widget(type="slider")
 
