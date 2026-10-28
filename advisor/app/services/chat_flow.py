@@ -10,7 +10,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-from app.schemas.chat import ChatRequest, ChatResponse, ChatState, QuickReply, Step, Widget
+from app.schemas.chat import ChatRequest, ChatResponse, ChatState, Citation, QuickReply, Step, Widget
 from app.services.intake import (
     CHAT_BUTTON,
     FORM_BUTTON,
@@ -67,6 +67,10 @@ NEED_PROFILE = (
 )
 NEED_RESULTS = "Bạn cần xem danh sách trường gợi ý trước, rồi mình mới phân tích tiếp được nhé."
 NEED_MAJOR = "Để gợi ý trường mình cần biết ngành bạn muốn học. Bạn chọn ngành giúp mình nhé."
+# Skill trả lời xen ngang (không đổi bước, không hỏi sang câu khác): trả lời xong thì nhắc lại câu đang chờ
+INTERRUPT_SKILLS = {"skill_tra_loi"}
+BACK_TO_QUESTION = "Quay lại câu mình đang hỏi nhé: "
+OPENING_QUESTIONS = {"B0.1", "B0.2"}
 
 
 # Ghi lại câu vừa hỏi vào Chatsate, lưu last_question, question_id và tăng số lần hỏi
@@ -101,6 +105,8 @@ class SkillOutput:
     answer: str
     quick_replies: list[QuickReply] = field(default_factory=list)
     widget: Widget | None = None
+    citations: list[Citation] = field(default_factory=list)  # nguồn của thông tin trong câu trả lời
+    disclaimer: str | None = None  # lời lưu ý kèm theo
 
 
 # Hợp đồng chung mọi skill: nhân trạng thái và tin nhắn, trả câu trả lời
@@ -140,10 +146,13 @@ class ChatFlow:
             # Đã có hồ sơ (vào chat từ form) thì nạp sẵn để không hỏi lại
             if req.profile is not None:
                 state.profile = merge_profile(state.profile, req.profile)
+            state.study_level = req.study_level
             return ChatResponse(answer=ask(state, "B0.1"), state=state, profile=state.profile)
 
         # Sao chép đối tượng
         state = req.state.model_copy(deep=True)
+        if req.study_level:  # .NET gửi bậc học mỗi lượt; không gửi thì giữ bậc đã nhớ
+            state.study_level = req.study_level
         # Hồ sơ trong nháp (do .NET gửi) là nguồn thật; không gửi thì giữ hồ sơ trong state như cũ
         if req.profile is not None:
             state.profile = merge_profile(state.profile, req.profile)
@@ -183,20 +192,31 @@ class ChatFlow:
         plan = plan_skills(state, predicted, has_results=state.has_results)
 
         # 3. Chạy từng skill, ghép các câu trả lời
+        # Câu đang chờ học sinh trả lời, chụp trước khi chạy skill để biết skill có hỏi sang câu khác không
+        pending = (state.question_id, state.last_question)
+        not_ready = False
         answers: list[str] = []
         quick_replies: list[QuickReply] = []
         widget: Widget | None = None
+        citations: list[Citation] = []
+        disclaimer: str | None = None
         for skill in plan.skills:
             # Lấy ra handler của skill, nếu không có thì trả NOT_READY
             handler = self._handlers.get(skill)
             if handler is None:
-                answers.append(NOT_READY)
-                continue
+                if handler is None:
+                    not_ready = True
+                    continue
             output = await handler.run(state, message)
             answers.append(output.answer)
             # Mỗi lượt chỉ hiện một bộ nút và một công cụ nhập: lấy của skill chạy sau cùng có đưa ra
             quick_replies = output.quick_replies or quick_replies
             widget = output.widget or widget
+            citations += [c for c in output.citations if c not in citations]
+            disclaimer = output.disclaimer or disclaimer
+        # Skill chưa có handler chỉ báo "đang hoàn thiện" khi chưa có skill nào trả lời được
+        if not_ready and not answers:
+            answers.append(NOT_READY)
         # Nếu bị chặn thì thêm câu trả lời
         # Bị chặn vì thiếu hồ sơ thì bắt đầu hỏi hồ sơ thay vì chỉ báo thiếu
         if any(b.reason == "thieu_ho_so" for b in plan.blocked):
@@ -212,6 +232,14 @@ class ChatFlow:
         # Các lý do chặn khác thì báo cho học sinh biết (thiếu hồ sơ và thiếu ngành đã xử lý ở trên)
         answers += blocked_answers(plan, skip={"thieu_ho_so", "thieu_nganh"})
 
+        # Trả lời xen ngang lúc đang hỏi hồ sơ: nhắc lại câu đang chờ (không gọi ask nên không tăng số lần hỏi)
+        if (
+            INTERRUPT_SKILLS & set(plan.skills)
+            and all(pending)
+            and pending[0] not in OPENING_QUESTIONS
+            and (state.question_id, state.last_question) == pending
+        ):
+            answers.append(BACK_TO_QUESTION + pending[1])
         # 4. Ghi log (dữ liệu để train lại model và kiểm tra random check)
         log_turn(
             state, message, predicted, probs, plan, (time.perf_counter() - started) * 1000, req.session_id
@@ -223,6 +251,8 @@ class ChatFlow:
             skills=plan.skills,
             quick_replies=quick_replies,
             widget=widget,
+            citations=citations,
+            disclaimer=disclaimer,
             profile=state.profile,
             profile_changed=changed_keys(profile_before, state.profile),
         )

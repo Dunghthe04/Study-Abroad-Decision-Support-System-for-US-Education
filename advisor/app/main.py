@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from logging.handlers import TimedRotatingFileHandler
@@ -9,10 +10,12 @@ from fastapi import Depends, FastAPI
 from app.api.deps import require_api_key
 from app.api.routes import chat, health, profile, recommend
 from app.core.config import get_settings
+from app.core.db import open_pool
 from app.services.chat_flow import ChatFlow
 from app.services.ec_reader import EcReader
 from app.services.explainer import Explainer
 from app.services.gemini import GeminiClient
+from app.services.knowledge import KnowledgeRetriever
 from app.services.ollama import OllamaClient
 from app.services.picker import Picker
 from app.services.scorer import Scorer
@@ -39,6 +42,7 @@ async def lifespan(app: FastAPI):
             num_gpu=settings.llm_num_gpu,
             seed=settings.llm_seed,
             keep_alive=settings.llm_keep_alive,
+            embedding_model=settings.embedding_model,
         )
         app.state.transcript_reader = TranscriptReader(http, settings)
         app.state.ec_reader = EcReader(app.state.llm, settings.llm_model)
@@ -51,11 +55,21 @@ async def lifespan(app: FastAPI):
         app.state.scorer = Scorer(gemini, settings.gemini_model)
         app.state.picker = Picker(gemini, settings.gemini_model)
         app.state.explainer = Explainer(app.state.llm, settings.llm_model)
+        # Kho kiến thức: không có DB thì None, chat vẫn chạy nhưng chưa trả lời được câu hỏi kiến thức
+        app.state.db_pool = await asyncio.to_thread(open_pool, settings.database_url)
+        knowledge = None
+        if app.state.db_pool is not None:
+            statuses = [s.strip() for s in settings.knowledge_statuses.split(",") if s.strip()]
+            knowledge = KnowledgeRetriever(app.state.db_pool, statuses, settings.knowledge_top_k)
         app.state.chat_flow = ChatFlow(
             picker=load_skill_picker(http),
-            handlers=build_handlers(app.state.llm, settings.llm_model),
+            handlers=build_handlers(
+                app.state.llm, settings.llm_model, knowledge, settings.knowledge_min_score
+            ),
         )
         yield
+        if app.state.db_pool is not None:
+            await asyncio.to_thread(app.state.db_pool.close)
 
 
 ADVISOR_DIR = Path(__file__).resolve().parents[1]  # app/main.py -> advisor/

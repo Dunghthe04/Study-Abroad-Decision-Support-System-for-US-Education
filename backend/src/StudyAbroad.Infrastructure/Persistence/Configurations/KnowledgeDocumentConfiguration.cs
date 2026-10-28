@@ -30,9 +30,12 @@ public class KnowledgeDocumentConfiguration : IEntityTypeConfiguration<Knowledge
         // EF Core 8 không map float[] sang pgvector, nên không đưa thuộc tính này vào model.
         b.Ignore(x => x.Embedding);
         b.Property(x => x.IngestedAt);
+        b.Property(x => x.Code).HasMaxLength(64).IsRequired();
+        b.Property(x => x.EmbeddingHash).HasMaxLength(64);
 
         b.HasIndex(x => new { x.Status, x.StudyLevel, x.DocType });
         b.HasIndex(x => x.Scope);
         b.HasIndex(x => x.Topic);
+        b.HasIndex(x => x.Code).IsUnique();
     }
 }

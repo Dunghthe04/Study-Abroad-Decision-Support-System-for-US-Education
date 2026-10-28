@@ -983,6 +983,12 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("code");
+
                     b.Property<string>("Content")
                         .IsRequired()
                         .HasColumnType("text")
@@ -999,6 +1005,11 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(32)")
                         .HasDefaultValue("faq")
                         .HasColumnName("doc_type");
+
+                    b.Property<string>("EmbeddingHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("embedding_hash");
 
                     b.Property<DateTime?>("IngestedAt")
                         .HasColumnType("timestamp with time zone")
@@ -1098,6 +1109,10 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_knowledge_documents");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("ix_knowledge_documents_code");
 
                     b.HasIndex("Scope")
                         .HasDatabaseName("ix_knowledge_documents_scope");
