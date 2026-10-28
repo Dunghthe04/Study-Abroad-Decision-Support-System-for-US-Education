@@ -101,7 +101,12 @@ export function AssistantPanel() {
         )}
 
         {turns.map((t, i) => (
-          <Turn key={i} turn={t} />
+          <Turn
+            key={i}
+            turn={t}
+            // D3: nút trả lời nhanh chỉ bấm được ở lượt cuối, khi không chờ trả lời và không bị chặn tuổi
+            onReply={i === turns.length - 1 && !loading && !ageBlock ? send : undefined}
+          />
         ))}
 
         {loading && (
@@ -201,7 +206,7 @@ export function AssistantPanel() {
   );
 }
 
-function Turn({ turn }: { turn: AssistantTurn }) {
+function Turn({ turn, onReply }: { turn: AssistantTurn; onReply?: (value: string) => void }) {
   if (turn.role === "user") {
     return (
       <div className="max-w-[90%] self-end rounded-[16px_4px_16px_16px] bg-[#E7EDF1] px-[15px] py-2.5 whitespace-pre-wrap text-foreground">
@@ -228,6 +233,20 @@ function Turn({ turn }: { turn: AssistantTurn }) {
         </ol>
       )}
       {turn.disclaimer && <p className="mt-2 text-xs text-muted-foreground italic">{turn.disclaimer}</p>}
+      {onReply && turn.quickReplies && turn.quickReplies.length > 0 && (
+        <div className="mt-2.5 flex flex-wrap gap-2">
+          {turn.quickReplies.map((r) => (
+            <button
+              key={r.value}
+              type="button"
+              onClick={() => onReply(r.value)}
+              className="min-h-8 cursor-pointer rounded-full border border-brand/40 bg-brand-wash/40 px-3 py-1 text-[13px] text-foreground transition-colors hover:border-brand hover:bg-brand-wash"
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -3,9 +3,14 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { ApiError, apiFetch } from "@/lib/api";
-import type { AdvisorChatResponse, ChatMessage, Citation } from "@/types/api";
+import type { AdvisorChatResponse, ChatMessage, Citation, QuickReply } from "@/types/api";
 
-export type AssistantTurn = ChatMessage & { citations?: Citation[]; disclaimer?: string | null };
+export type AssistantTurn = ChatMessage & {
+  citations?: Citation[];
+  disclaimer?: string | null;
+  /** Nút trả lời nhanh của lượt trợ lý; chỉ hiện ở lượt cuối */
+  quickReplies?: QuickReply[] | null;
+};
 
 export type AssistantError = { kind: "unavailable" | "auth" | "other"; message: string };
 
@@ -163,7 +168,13 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
         }
         commitTurns([
           ...history,
-          { role: "assistant", content: res.answer, citations: res.citations, disclaimer: res.disclaimer },
+          {
+            role: "assistant",
+            content: res.answer,
+            citations: res.citations,
+            disclaimer: res.disclaimer,
+            quickReplies: res.quickReplies,
+          },
         ]);
         // D2: báo trang biết chat vừa đổi hồ sơ nháp
         if (res.profileChanged?.length) onProfileChangedRef.current?.(res.profileChanged);
