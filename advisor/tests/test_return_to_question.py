@@ -128,3 +128,24 @@ async def test_not_ready_is_still_shown_when_no_skill_could_answer():
     res = await flow.reply(request("em muốn học bậc nào", ChatState(current_step="B1")))
 
     assert res.answer == NOT_READY
+
+
+async def test_no_reminder_for_the_opening_question_because_a_knowledge_question_already_answers_it():
+    # B0.1 "bạn cần mình giúp điều gì?": học sinh hỏi một câu kiến thức chính là đang trả lời câu này
+    state = ChatState(current_step="B0")
+    ask(state, "B0.1")
+    flow = ChatFlow(PickerOf("skill_tra_loi"), {"skill_tra_loi": KnowledgeSkill()})
+
+    res = await flow.reply(request("Phí SEVIS bao nhiêu?", state))
+
+    assert res.answer == KNOWLEDGE_ANSWER
+
+
+async def test_no_reminder_for_the_second_opening_question_either():
+    state = ChatState(current_step="B0")
+    ask(state, "B0.2")
+    flow = ChatFlow(PickerOf("skill_tra_loi"), {"skill_tra_loi": KnowledgeSkill()})
+
+    res = await flow.reply(request("Phí SEVIS bao nhiêu?", state))
+
+    assert res.answer == KNOWLEDGE_ANSWER

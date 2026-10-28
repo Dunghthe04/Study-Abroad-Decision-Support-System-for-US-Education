@@ -1,8 +1,9 @@
 """skill_tra_loi (B5): trả lời câu hỏi kiến thức từ kho kiến thức, có trích nguồn.
 
-Luồng: embedding câu hỏi -> tìm các dòng gần nghĩa trong kho -> dưới ngưỡng thì từ chối (không gọi Qwen)
--> Qwen viết câu trả lời chỉ từ các đoạn tìm được -> code kiểm tra số và nguồn.
-Qwen sai hai lần thì trả thẳng câu trả lời chuẩn của đoạn gần nhất, không để học sinh nhận câu trả lời chưa kiểm tra.
+Luồng: embedding câu hỏi -> lấy dòng gần nghĩa nhất trong kho -> dưới ngưỡng thì từ chối (không gọi Qwen)
+-> Qwen viết lại câu trả lời chuẩn của dòng đó cho tự nhiên, giữ đủ mọi ý -> code kiểm tra không bịa số, không bỏ ý.
+Chỉ dùng MỘT dòng tốt nhất: đưa nhiều dòng thì Qwen trộn cả chuyện khác vào câu trả lời.
+Qwen sai hai lần thì trả thẳng câu trả lời chuẩn của dòng đó, không để học sinh nhận câu trả lời chưa kiểm tra.
 """
 
 import logging
@@ -24,9 +25,8 @@ SCHEMA = {
     "properties": {
         "enough": {"type": "boolean"},
         "answer": {"type": "string"},
-        "used": {"type": "array", "items": {"type": "integer"}},
     },
-    "required": ["enough", "answer", "used"],
+    "required": ["enough", "answer"],
 }
 
 NO_BASIS = (
@@ -41,12 +41,16 @@ DISCLAIMER = (
 
 # Giới hạn trích nội dung
 SNIPPET_CHARS = 200
+# Câu viết lại phải dài ít nhất chừng này so với câu chuẩn; ngắn hơn nhiều là đã bỏ ý
+MIN_KEEP_RATIO = 0.6
 # Câu trả lời không được hứa kết quả
 FORBIDDEN = ("chắc chắn", "đảm bảo", "100%", "tuyệt đối")
 
-# Tìm trong nội dung trong chuỗi
-_MARKER_RE = re.compile(r"\[(\d+)\]")
+# Dấu [1], [2] Qwen có thể vẫn viết thói quen: bỏ đi, nguồn đã hiện riêng bên dưới câu trả lời
+_MARKER_RE = re.compile(r"\s*\[\d+\]")
 _NUMBER_RE = re.compile(r"\d+(?:[.,]\d+)*")
+# Số thứ tự liệt kê "(1)", "(2)": viết lại thành "thứ nhất" cũng được, không tính là bỏ ý
+_ENUM_RE = re.compile(r"\(\d+\)")
 
 
 # Đóng gói kq sau khi kiểm tra trả lời qwen
@@ -54,7 +58,6 @@ _NUMBER_RE = re.compile(r"\d+(?:[.,]\d+)*")
 class Composed:
     enough: bool
     answer: str
-    used: list[int]
 
 
 # "4.000" và "4000" là cùng một số; "6,5" và "6.5" cũng vậy
@@ -65,33 +68,32 @@ def _normalize(number: str) -> str:
     return n
 
 
-# Các con số trong một đoạn chữ (đã bỏ dấu [1], [2] chỉ số đoạn)
+# Các con số trong một đoạn chữ
 def numbers_in(text: str) -> set[str]:
-    return {_normalize(n) for n in _NUMBER_RE.findall(_MARKER_RE.sub("", text))}
+    return {_normalize(n) for n in _NUMBER_RE.findall(text)}
 
 
 # Kiểm tra câu trả lời của Qwen; sai thì ném ValueError để SkillCall gọi lại
-def check_answer(raw: dict[str, Any], question: str, hits: list[KnowledgeHit]) -> Composed:
-    enough, answer, used = bool(raw["enough"]), str(raw["answer"]).strip(), list(raw["used"])
-    if not enough:
-        return Composed(False, "", [])
+def check_answer(raw: dict[str, Any], question: str, hit: KnowledgeHit) -> Composed:
+    if not bool(raw["enough"]):
+        return Composed(False, "")
+    answer = _MARKER_RE.sub("", str(raw["answer"])).strip()
     if not answer:
         raise ValueError("enough = true nhưng không có câu trả lời")
-    valid_ids = set(range(1, len(hits) + 1))
-    markers = {int(m) for m in _MARKER_RE.findall(answer)}
-    if not markers:
-        raise ValueError("câu trả lời không ghi nguồn [n]")
-    if not used or not set(used) <= valid_ids or not markers <= valid_ids:
-        raise ValueError("số đoạn trích dẫn không hợp lệ")
     lowered = answer.lower()
     for word in FORBIDDEN:
         if word in lowered:
             raise ValueError(f"dùng từ hứa kết quả: {word}")
-    allowed = numbers_in(question).union(*(numbers_in(h.content) for h in hits))
-    extra = numbers_in(answer) - allowed
+    extra = numbers_in(answer) - numbers_in(question) - numbers_in(hit.content)
     if extra:
-        raise ValueError(f"số không có trong đoạn tham khảo: {sorted(extra)}")
-    return Composed(True, answer, sorted(set(used) | markers))
+        raise ValueError(f"số không có trong nội dung tham khảo: {sorted(extra)}")
+    # Giữ đủ ý: mọi con số của câu chuẩn phải còn, và câu viết lại không được ngắn đi quá nhiều
+    dropped = numbers_in(_ENUM_RE.sub("", hit.content)) - numbers_in(answer)
+    if dropped:
+        raise ValueError(f"bỏ mất số của câu chuẩn: {sorted(dropped)}")
+    if len(answer) < MIN_KEEP_RATIO * len(hit.content):
+        raise ValueError("câu viết lại ngắn hơn nhiều so với câu chuẩn, có thể đã bỏ ý")
+    return Composed(True, answer)
 
 
 # lấy thông tin của một đoạn kiến thức và chuyển nó thành một đối tượng trích dẫn (Citation) để đính kèm vào câu trả lời cho người dùng.
@@ -111,32 +113,27 @@ class TraLoiHandler:
         try:
             # Biến câu hỏi thành vector
             [vector] = await self._llm.embed([message])
-            # Lấy ra danh sách các kiến thức trong kho
+            # Lấy ra các dòng kiến thức gần nhất (đã xếp điểm cao trước)
             hits = await self._retriever.search(vector, state.study_level)
         except Exception:  # Ollama tắt hoặc DB lỗi: nói thật là đang gián đoạn, không bịa
             logger.exception("Tìm kiến thức thất bại")
             return SkillOutput(UNAVAILABLE)
-        # Lấy ra các kiesn thức có điểm >= 0.72
-        grounded = [h for h in hits if h.score >= self._min_score]
-        # Nếu k có
-        if not grounded:
+        # Chỉ lấy dòng tốt nhất, và phải đạt ngưỡng
+        if not hits or hits[0].score < self._min_score:
             return SkillOutput(NO_BASIS)
+        best = hits[0]
 
-        # Nếu có tạo mảng các kiến thức
-        passages = [{"id": i, "text": h.content} for i, h in enumerate(grounded, start=1)]
         # Gọi ollama chạy skill
         composed = await self._call.run(
-            {"question": message, "passages": passages},
+            {"question": message, "passage": best.content},
             SCHEMA,
-            lambda raw: check_answer(raw, message, grounded),
+            lambda raw: check_answer(raw, message, best),
         )
         if composed is not None and not composed.enough:
             return SkillOutput(NO_BASIS)
-        if composed is None:  # Qwen sai hai lần: dùng câu trả lời chuẩn của đoạn gần nhất
-            answer, used = f"{grounded[0].content} [1]", [1]
+        if composed is None:  # Qwen sai hai lần: dùng câu trả lời chuẩn của dòng đó
+            logger.warning("Qwen không trả được câu hợp lệ sau 2 lần, dùng câu chuẩn của %s", best.code)
+            answer = best.content
         else:
-            # Lấy ra câu trả lời + nguồn
-            answer, used = composed.answer, composed.used
-        return SkillOutput(
-            answer, citations=[citation_of(grounded[i - 1]) for i in used], disclaimer=DISCLAIMER
-        )
+            answer = composed.answer
+        return SkillOutput(answer, citations=[citation_of(best)], disclaimer=DISCLAIMER)

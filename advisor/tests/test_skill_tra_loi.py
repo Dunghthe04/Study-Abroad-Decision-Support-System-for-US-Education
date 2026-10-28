@@ -61,8 +61,12 @@ def handler_with(llm, retriever, min_score=0.72):
     return TraLoiHandler(llm, "qwen3:8b", retriever, min_score)
 
 
-def good(answer="Phí SEVIS là 350 USD [1].", used=(1,)):
-    return {"enough": True, "answer": answer, "used": list(used)}
+# Câu Qwen viết lại đủ ý của SEVIS
+REWRITTEN = "Phí SEVIS I-901 cho diện F-1 là 350 USD, bạn nộp một lần trước khi phỏng vấn visa."
+
+
+def good(answer=REWRITTEN):
+    return {"enough": True, "answer": answer}
 
 
 # ---------- đọc số trong câu ----------
@@ -73,21 +77,17 @@ def test_numbers_in_treats_thousand_separators_and_decimal_commas_the_same():
     assert numbers_in("IELTS 6,5") == numbers_in("IELTS 6.5") == {"6.5"}
 
 
-def test_numbers_in_ignores_the_source_markers():
-    assert numbers_in("Phí là 350 USD [1] và [2].") == {"350"}
-
-
 # ---------- kiểm tra câu trả lời của Qwen ----------
 
 
 def test_check_answer_accepts_a_grounded_answer():
-    result = check_answer(good(), "Phí SEVIS bao nhiêu?", [hit()])
+    result = check_answer(good(), "Phí SEVIS bao nhiêu?", hit())
 
-    assert result.enough and result.used == [1]
+    assert result.enough and result.answer == REWRITTEN
 
 
 def test_check_answer_not_enough_needs_no_checking():
-    result = check_answer({"enough": False, "answer": "", "used": []}, "q", [hit()])
+    result = check_answer({"enough": False, "answer": ""}, "q", hit())
 
     assert not result.enough
 
@@ -96,35 +96,61 @@ def test_check_answer_not_enough_needs_no_checking():
     "raw",
     [
         good(answer=""),  # nói đủ nhưng không có câu trả lời
-        good(answer="Phí SEVIS là 350 USD."),  # không ghi nguồn
-        good(answer="Phí SEVIS là 350 USD [3].", used=(3,)),  # đoạn 3 không tồn tại
-        good(used=()),  # không nói đã dùng đoạn nào
-        good(answer="Chắc chắn phí SEVIS là 350 USD [1]."),  # hứa kết quả
-        good(answer="Phí SEVIS là 380 USD [1]."),  # số không có trong đoạn
+        good(answer="Chắc chắn " + REWRITTEN),  # hứa kết quả
+        good(answer=REWRITTEN.replace("350", "380")),  # số không có trong nội dung, và mất số 350
+        good(
+            answer="Phí SEVIS I-901 cho diện F-1, bạn nộp một lần trước khi phỏng vấn visa nhé."
+        ),  # bỏ mất con số 350
+        good(
+            answer="Phí SEVIS I-901 là 350 USD."
+        ),  # ngắn hơn nhiều: bỏ ý "diện F-1, nộp một lần trước phỏng vấn"
     ],
 )
 def test_check_answer_rejects_bad_answers(raw):
     with pytest.raises(ValueError):
-        check_answer(raw, "Phí SEVIS bao nhiêu?", [hit()])
+        check_answer(raw, "Phí SEVIS bao nhiêu?", hit())
+
+
+def test_check_answer_removes_source_markers_the_model_still_writes():
+    raw = good(
+        answer="Phí SEVIS I-901 cho diện F-1 là 350 USD [1]. Bạn nộp một lần trước khi phỏng vấn visa [2]."
+    )
+
+    result = check_answer(raw, "q", hit())
+
+    assert (
+        result.answer == "Phí SEVIS I-901 cho diện F-1 là 350 USD. Bạn nộp một lần trước khi phỏng vấn visa."
+    )  # người dùng không phải nhìn [1] [2]
+
+
+def test_check_answer_does_not_count_a_marker_number_as_a_made_up_figure():
+    # [7] không có trong nội dung, nhưng chỉ là dấu nguồn nên bị bỏ chứ không bị coi là số bịa
+    assert check_answer(good(answer=REWRITTEN.replace("USD,", "USD [7],")), "q", hit()).enough
 
 
 def test_check_answer_allows_numbers_from_the_question():
-    raw = good(answer="Với 3 năm học thì phí SEVIS vẫn là 350 USD [1].")
+    raw = good(
+        answer="Dù học 3 năm, phí SEVIS I-901 cho diện F-1 vẫn là 350 USD, nộp một lần trước khi phỏng vấn visa."
+    )
 
-    assert check_answer(raw, "Nếu học 3 năm thì phí SEVIS bao nhiêu?", [hit()]).enough
+    assert check_answer(raw, "Nếu học 3 năm thì phí SEVIS bao nhiêu?", hit()).enough
 
 
 def test_check_answer_allows_thousand_separator_written_either_way():
-    raw = good(answer="Khoảng 4000 USD mỗi tháng [1].")
+    raw = good(
+        answer="Bạn cần giấy xác nhận số dư tài khoản tối thiểu bằng chi phí năm đầu, khoảng 4000 USD mỗi tháng."
+    )
 
-    assert check_answer(raw, "Cần chứng minh bao nhiêu?", [hit(content=FINANCE)]).enough
+    assert check_answer(raw, "Cần chứng minh bao nhiêu?", hit(content=FINANCE)).enough
 
 
-def test_check_answer_adds_cited_markers_to_used():
-    two = [hit(), hit("KB-002", FINANCE)]
-    raw = good(answer="Phí là 350 USD [1], cần khoảng 4.000 USD [2].", used=(1,))
+def test_check_answer_does_not_require_list_numbering_to_be_kept():
+    content = "Hai yếu tố: (1) năng lực học thuật; (2) năng lực tài chính cho năm học đầu tiên."
+    raw = good(
+        answer="Có hai yếu tố: thứ nhất là năng lực học thuật, thứ hai là năng lực tài chính cho năm học đầu tiên."
+    )
 
-    assert check_answer(raw, "q", two).used == [1, 2]
+    assert check_answer(raw, "q", hit(content=content)).enough  # "(1)", "(2)" viết thành "thứ nhất" vẫn đủ ý
 
 
 # ---------- nguồn trích dẫn ----------
@@ -143,30 +169,32 @@ def test_citation_snippet_is_cut_short():
 # ---------- handler ----------
 
 
-async def test_answers_with_citation_and_disclaimer():
+async def test_answers_with_one_citation_and_disclaimer():
     llm = FakeLLMWithEmbed(good())
     retriever = FakeRetriever([hit(url="https://example.org/sevis")])
 
     out = await handler_with(llm, retriever).run(ChatState(), "Phí SEVIS bao nhiêu?")
 
-    assert out.answer == "Phí SEVIS là 350 USD [1]."
+    assert out.answer == REWRITTEN  # không còn dấu [1]
     assert [c.title for c in out.citations] == ["8 CFR 214.13"]
     assert out.citations[0].url == "https://example.org/sevis"
     assert out.disclaimer == DISCLAIMER
     assert llm.embedded == [["Phí SEVIS bao nhiêu?"]]
 
 
-async def test_sends_qwen_only_the_passages_above_the_threshold():
+async def test_sends_qwen_only_the_best_passage_even_when_others_pass_the_threshold():
+    # dòng 2 (0.83) cũng đạt ngưỡng nhưng là chuyện khác: đưa cho Qwen thì Qwen trộn vào câu trả lời
     llm = FakeLLMWithEmbed(good())
-    retriever = FakeRetriever([hit(score=0.9), hit("KB-002", FINANCE, score=0.5)])
+    retriever = FakeRetriever([hit(score=1.0), hit("KB-069", FINANCE, score=0.83)])
 
-    await handler_with(llm, retriever).run(ChatState(), "Phí SEVIS bao nhiêu?")
+    out = await handler_with(llm, retriever).run(ChatState(), "Phí SEVIS bao nhiêu?")
 
     user = llm.calls[0]["messages"][1]["content"]
-    assert "350 USD" in user and "4.000" not in user  # đoạn điểm thấp không được đưa cho Qwen
+    assert "350 USD" in user and "4.000" not in user
+    assert [c.title for c in out.citations] == ["8 CFR 214.13"]  # và chỉ một nguồn
 
 
-async def test_refuses_without_calling_qwen_when_nothing_reaches_the_threshold():
+async def test_refuses_without_calling_qwen_when_the_best_passage_is_below_the_threshold():
     llm = FakeLLMWithEmbed()
     retriever = FakeRetriever([hit(score=0.5)])
 
@@ -182,8 +210,8 @@ async def test_refuses_when_the_store_returns_nothing():
     assert out.answer == NO_BASIS
 
 
-async def test_refuses_when_qwen_says_the_passages_are_not_enough():
-    llm = FakeLLMWithEmbed({"enough": False, "answer": "", "used": []})
+async def test_refuses_when_qwen_says_the_passage_is_not_enough():
+    llm = FakeLLMWithEmbed({"enough": False, "answer": ""})
 
     out = await handler_with(llm, FakeRetriever([hit()])).run(ChatState(), "q")
 
@@ -191,21 +219,30 @@ async def test_refuses_when_qwen_says_the_passages_are_not_enough():
 
 
 async def test_retries_once_then_uses_the_checked_second_answer():
-    llm = FakeLLMWithEmbed(good(answer="Phí SEVIS là 999 USD [1]."), good())
+    llm = FakeLLMWithEmbed(good(answer=REWRITTEN.replace("350", "999")), good())
 
     out = await handler_with(llm, FakeRetriever([hit()])).run(ChatState(), "Phí SEVIS bao nhiêu?")
 
-    assert out.answer == "Phí SEVIS là 350 USD [1]."
+    assert out.answer == REWRITTEN
     assert len(llm.calls) == 2
 
 
 async def test_falls_back_to_the_standard_answer_when_qwen_is_wrong_twice():
-    llm = FakeLLMWithEmbed(good(answer="Phí là 999 USD [1]."), good(answer="Phí là 888 USD [1]."))
+    llm = FakeLLMWithEmbed(good(answer="Phí là 999 USD."), good(answer="Phí là 888 USD."))
 
     out = await handler_with(llm, FakeRetriever([hit()])).run(ChatState(), "Phí SEVIS bao nhiêu?")
 
-    assert out.answer == f"{SEVIS} [1]"  # nguyên văn câu trả lời chuẩn, không phải lời Qwen
+    assert out.answer == SEVIS  # nguyên văn câu trả lời chuẩn, không phải lời Qwen, không có [1]
     assert [c.title for c in out.citations] == ["8 CFR 214.13"]
+
+
+async def test_logs_why_it_fell_back_to_the_standard_answer(caplog):
+    llm = FakeLLMWithEmbed(good(answer="Phí là 999 USD."), good(answer="Phí là 888 USD."))
+
+    with caplog.at_level("WARNING", logger="advisor.knowledge"):
+        await handler_with(llm, FakeRetriever([hit()])).run(ChatState(), "Phí SEVIS bao nhiêu?")
+
+    assert "KB-001" in caplog.text  # biết dòng nào được dùng làm câu chuẩn khi Qwen không dùng được
 
 
 async def test_falls_back_when_qwen_is_unreachable_twice():
@@ -213,16 +250,7 @@ async def test_falls_back_when_qwen_is_unreachable_twice():
 
     out = await handler_with(llm, FakeRetriever([hit()])).run(ChatState(), "q")
 
-    assert out.answer.startswith(SEVIS)
-
-
-async def test_only_the_cited_passage_becomes_a_citation():
-    llm = FakeLLMWithEmbed(good(answer="Cần khoảng 4.000 USD mỗi tháng [2].", used=(2,)))
-    retriever = FakeRetriever([hit(), hit("KB-002", FINANCE, quote="Hướng dẫn tài chính")])
-
-    out = await handler_with(llm, retriever).run(ChatState(), "Chứng minh tài chính?")
-
-    assert [c.title for c in out.citations] == ["Hướng dẫn tài chính"]
+    assert out.answer == SEVIS
 
 
 async def test_says_service_is_unavailable_when_embedding_fails():
@@ -286,7 +314,7 @@ async def test_chat_returns_the_citations_and_disclaimer_to_the_client():
 
     res = await flow.reply(req)
 
-    assert res.answer == "Phí SEVIS là 350 USD [1]."
+    assert res.answer == REWRITTEN
     assert [c.url for c in res.citations] == ["https://example.org/sevis"]
     assert res.disclaimer == DISCLAIMER
 

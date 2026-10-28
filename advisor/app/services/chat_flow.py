@@ -70,6 +70,8 @@ NEED_MAJOR = "Để gợi ý trường mình cần biết ngành bạn muốn h�
 # Skill trả lời xen ngang (không đổi bước, không hỏi sang câu khác): trả lời xong thì nhắc lại câu đang chờ
 INTERRUPT_SKILLS = {"skill_tra_loi"}
 BACK_TO_QUESTION = "Quay lại câu mình đang hỏi nhé: "
+OPENING_QUESTIONS = {"B0.1", "B0.2"}
+
 
 
 # Ghi lại câu vừa hỏi vào Chatsate, lưu last_question, question_id và tăng số lần hỏi
@@ -235,6 +237,7 @@ class ChatFlow:
         if (
             INTERRUPT_SKILLS & set(plan.skills)
             and all(pending)
+            and pending[0] not in OPENING_QUESTIONS
             and (state.question_id, state.last_question) == pending
         ):
             answers.append(BACK_TO_QUESTION + pending[1])
