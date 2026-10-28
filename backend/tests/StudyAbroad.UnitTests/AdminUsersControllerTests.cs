@@ -46,16 +46,6 @@ public class AdminUsersControllerTests
 
         public Task<List<UserDto>> GetAllUsersAsync(CancellationToken ct = default) =>
             Task.FromResult(Users);
-
-        public CreateModeratorAccountRequest? LastCreateModeratorRequest { get; private set; }
-
-        public Task<AuthResult> CreateModeratorAccountAsync(CreateModeratorAccountRequest request, CancellationToken ct = default)
-        {
-            LastCreateModeratorRequest = request;
-            var user = new UserDto(Guid.NewGuid(), request.Email, request.FullName, UserRoles.Moderator, UserStatuses.Active, request.Phone);
-            Users.Add(user);
-            return Task.FromResult(AuthResult.Ok(user, "Đã tạo tài khoản moderator."));
-        }
     }
 
     [Fact]
@@ -118,20 +108,5 @@ public class AdminUsersControllerTests
         var result = await controller.GetUserById(Guid.NewGuid(), CancellationToken.None);
 
         Assert.IsType<NotFoundResult>(result.Result);
-    }
-
-    [Fact]
-    public async Task CreateModerator_WhenValid_ReturnsCreatedAtRoute()
-    {
-        var fakeAuth = new FakeAuthService();
-        var controller = new AdminUsersController(fakeAuth);
-        var request = new CreateModeratorAccountRequest("mod@test.com", "Password1!", "Moderator User", "0912345678");
-
-        var result = await controller.CreateModerator(request, CancellationToken.None);
-
-        var created = Assert.IsType<CreatedAtActionResult>(result.Result);
-        var user = Assert.IsType<UserDto>(created.Value);
-        Assert.Equal(UserRoles.Moderator, user.Role);
-        Assert.Equal("mod@test.com", user.Email);
     }
 }

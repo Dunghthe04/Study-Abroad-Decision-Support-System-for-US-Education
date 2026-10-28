@@ -34,15 +34,4 @@ public class AdminUsersController(IAuthService auth) : ControllerBase
         var user = await auth.GetMeAsync(id, ct);
         return user is not null ? Ok(user) : NotFound();
     }
-
-    /// <summary>[UC-63] Tạo tài khoản moderator (khách không tự đăng ký được role này).</summary>
-    [HttpPost("moderators")]
-    public async Task<ActionResult<UserDto>> CreateModerator(CreateModeratorAccountRequest request, CancellationToken ct)
-    {
-        var result = await auth.CreateModeratorAccountAsync(request, ct);
-        if (result.Error != AuthError.None || result.User is null)
-            return ValidationProblem(result.Message);
-
-        return CreatedAtAction(nameof(GetUserById), new { id = result.User.Id }, result.User);
-    }
 }

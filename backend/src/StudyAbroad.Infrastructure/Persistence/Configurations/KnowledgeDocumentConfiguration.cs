@@ -26,9 +26,7 @@ public class KnowledgeDocumentConfiguration : IEntityTypeConfiguration<Knowledge
         b.Property(x => x.RetrievedAt);
         b.Property(x => x.ReviewDueAt);
         b.Property(x => x.Version).HasDefaultValue(1);
-        // Cột embedding vector(1024) do migration RAG tạo bằng SQL thô.
-        // EF Core 8 không map float[] sang pgvector, nên không đưa thuộc tính này vào model.
-        b.Ignore(x => x.Embedding);
+        b.Property(x => x.Embedding).HasColumnType("vector(1024)");
         b.Property(x => x.IngestedAt);
 
         b.HasIndex(x => new { x.Status, x.StudyLevel, x.DocType });

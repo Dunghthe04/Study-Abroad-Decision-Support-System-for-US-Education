@@ -103,7 +103,6 @@ public class AgeFeaturesTests
     [Theory]
     [InlineData(UserRoles.Parent)]
     [InlineData(UserRoles.Center)]
-    [InlineData(UserRoles.Moderator)]
     [InlineData(UserRoles.Admin)]
     public void Check_NonStudent_NeverBlocked(string role)
     {

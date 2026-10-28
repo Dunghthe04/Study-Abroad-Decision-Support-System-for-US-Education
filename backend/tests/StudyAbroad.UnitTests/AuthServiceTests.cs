@@ -244,7 +244,6 @@ public class AuthServiceTests
     [Theory]
     [InlineData(UserRoles.Admin)]
     [InlineData(UserRoles.Center)]
-    [InlineData(UserRoles.Moderator)]
     [InlineData("teacher")]
     [InlineData("")]
     public async Task Register_RoleNotAllowed_IsValidationError(string role)
@@ -268,50 +267,6 @@ public class AuthServiceTests
         Assert.Single(_repo.Users);
         Assert.Single(_repo.Otps); // không sinh OTP mới
         Assert.Equal(("a@test.com", "account_exists_notice"), (_emailSender.SentEmails[^1].To, _emailSender.SentEmails[^1].Purpose));
-    }
-
-    [Fact]
-    public async Task CreateModeratorAccount_CreatesActiveModeratorWithoutOtp()
-    {
-        var service = CreateService();
-        var result = await service.CreateModeratorAccountAsync(
-            new CreateModeratorAccountRequest("mod@test.com", "password123", "Người kiểm duyệt", "0912345678"));
-
-        Assert.Equal(AuthError.None, result.Error);
-        Assert.NotNull(result.User);
-        Assert.Equal(UserRoles.Moderator, result.User.Role);
-        Assert.Equal(UserStatuses.Active, result.User.Status);
-        var stored = Assert.Single(_repo.Users);
-        Assert.Equal("mod@test.com", stored.Email);
-        Assert.Empty(_repo.Otps);
-        Assert.Empty(_emailSender.SentEmails);
-    }
-
-    [Fact]
-    public async Task CreateModeratorAccount_DuplicateEmail_ReturnsValidationError()
-    {
-        var service = CreateService();
-        await service.CreateModeratorAccountAsync(
-            new CreateModeratorAccountRequest("mod@test.com", "password123", "Mod A"));
-        var result = await service.CreateModeratorAccountAsync(
-            new CreateModeratorAccountRequest("MOD@test.com", "password123", "Mod B"));
-
-        Assert.Equal(AuthError.Validation, result.Error);
-        Assert.Single(_repo.Users);
-    }
-
-    [Fact]
-    public async Task Login_ModeratorCreatedByAdmin_SucceedsWithoutEmailVerification()
-    {
-        var service = CreateService();
-        await service.CreateModeratorAccountAsync(
-            new CreateModeratorAccountRequest("mod@test.com", "password123", "Mod User"));
-
-        var login = await service.LoginAsync(new LoginRequest("mod@test.com", "password123"));
-
-        Assert.Equal(AuthError.None, login.Error);
-        Assert.NotNull(login.Response);
-        Assert.Equal(UserRoles.Moderator, login.Response.User.Role);
     }
 
     [Fact]

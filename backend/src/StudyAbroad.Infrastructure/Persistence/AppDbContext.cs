@@ -58,6 +58,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         // Business tables live in the "app" schema; the advisor service owns the "advisor" schema (pgvector).
         modelBuilder.HasDefaultSchema("app");
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
+
+        modelBuilder.Entity<StateLivingCost>(builder =>
+        {
+            builder.ToTable("state_living_costs");
+            builder.HasKey(x => x.StateCode);
+        });
     }
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
