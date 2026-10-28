@@ -337,7 +337,7 @@ async def test_no_intake_when_nothing_is_blocked():
     assert res.quick_replies == [] and res.state.intake_mode is None
 
 
-async def test_roadmap_asks_for_major_when_only_major_is_missing():
+async def test_roadmap_shows_the_major_widget_when_only_major_is_missing():
     profile = {
         k: ProfileField(status="confirmed")
         for k in ("target_level", "gpa", "english", "budget", "scholarship")
@@ -350,6 +350,51 @@ async def test_roadmap_asks_for_major_when_only_major_is_missing():
 
     assert res.skills == []
     assert res.answer == NEED_MAJOR
+    assert res.widget == Widget(type="major")  # frontend hiện ô chọn ngành
+    assert res.state.current_step == "B1" and res.state.return_to == "B4"  # chọn xong thì quay lại B4
+    assert res.state.question_id == "B1.3" and res.state.last_question == QUESTIONS["B1.3"]
+
+
+async def test_the_chosen_major_is_read_as_the_answer_to_the_major_question():
+    profile = {
+        k: ProfileField(status="confirmed")
+        for k in ("target_level", "gpa", "english", "budget", "scholarship")
+    }
+    first = await ChatFlow(FakePicker("skill_lo_trinh")).reply(
+        request("gợi ý trường cho em", current_step="B4", profile=profile)
+    )
+    picker = FakePicker("skill_bac_hoc")
+
+    # Học sinh chọn ngành trong ô, frontend gửi tên ngành như một tin nhắn
+    await ChatFlow(picker).reply(
+        ChatRequest(messages=[ChatMessage(role="user", content="Computer Science")], state=first.state)
+    )
+
+    step, question, message, _ = picker.calls[0]
+    assert (step, question, message) == (
+        "B1",
+        QUESTIONS["B1.3"],
+        "Computer Science",
+    )  # đúng ngữ cảnh model đã học
+
+
+async def test_no_major_widget_when_the_major_is_known_or_other_reason_blocks():
+    full = {
+        k: ProfileField(status="confirmed")
+        for k in ("target_level", "gpa", "english", "budget", "major", "scholarship")
+    }
+
+    known = await ChatFlow(FakePicker("skill_lo_trinh")).reply(
+        request("gợi ý trường cho em", current_step="B4", profile=full)
+    )
+    other = await ChatFlow(FakePicker("skill_explain")).reply(
+        request("vì sao trường A Vừa sức", current_step="B4", profile=full)
+    )
+
+    assert known.widget is None  # đủ ngành thì skill_lo_trinh chạy (chưa có handler nên trả câu mẫu)
+    assert (
+        other.widget is None and other.answer == NEED_RESULTS
+    )  # chặn vì chưa có danh sách, không phải thiếu ngành
 
 
 async def test_model_error_falls_back_instead_of_crashing():

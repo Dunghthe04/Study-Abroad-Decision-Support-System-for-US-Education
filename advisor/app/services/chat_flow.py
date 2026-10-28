@@ -202,8 +202,13 @@ class ChatFlow:
             answers.append(intake.answer)
             quick_replies = intake.quick_replies or quick_replies
             widget = intake.widget or widget
-        # Các lý do chặn khác thì báo cho học sinh biết
-        answers += blocked_answers(plan, skip={"thieu_ho_so"})
+        # Đến B4 mà chưa có ngành thì hiện ô chọn ngành
+        elif any(b.reason == "thieu_nganh" for b in plan.blocked):
+            major = ask_major(state)
+            answers.append(major.answer)
+            widget = major.widget or widget
+        # Các lý do chặn khác thì báo cho học sinh biết (thiếu hồ sơ và thiếu ngành đã xử lý ở trên)
+        answers += blocked_answers(plan, skip={"thieu_ho_so", "thieu_nganh"})
 
         # 4. Ghi log (dữ liệu để train lại model và kiểm tra random check)
         log_turn(state, message, predicted, probs, plan, (time.perf_counter() - started) * 1000)
@@ -268,6 +273,14 @@ def start_intake(state: ChatState) -> SkillOutput:
         return SkillOutput(INTAKE_FORM, widget=Widget(type="form"))
     # Đã có một phần hồ sơ: hỏi tiếp phần còn thiếu ngay trong chat
     return ask_next_missing(state, INTAKE_MORE)
+
+
+# Đến B4 mà chưa có ngành: hiện ô chọn ngành, câu trả lời sẽ được skill_bac_hoc đọc ở bước B1
+def ask_major(state: ChatState) -> SkillOutput:
+    state.return_to = "B4"  # chọn xong ngành thì quay lại B4
+    go_to(state, "B1")  # model chỉ được học câu hỏi ngành ở bước B1, nên trả về B1 để chọn đúng skill
+    ask(state, "B1.3")  # lưu mã câu và chữ câu hỏi ngành (học sinh vẫn thấy câu NEED_MAJOR bên dưới)
+    return SkillOutput(NEED_MAJOR, widget=Widget(type="major"))
 
 
 # Học sinh đã chọn: form thì mở form, chat thì hỏi câu đầu tiên còn thiếu
