@@ -26,6 +26,7 @@ public class KnowledgeDocumentConfiguration : IEntityTypeConfiguration<Knowledge
         b.Property(x => x.RetrievedAt);
         b.Property(x => x.ReviewDueAt);
         b.Property(x => x.Version).HasDefaultValue(1);
+        // Cột embedding vector(1024) nằm trong DB (migration/SQL + ingest Python); entity chỉ dùng EmbeddingHash.
         b.Property(x => x.IngestedAt);
         b.Property(x => x.Code).HasMaxLength(64).IsRequired();
         b.Property(x => x.EmbeddingHash).HasMaxLength(64);
