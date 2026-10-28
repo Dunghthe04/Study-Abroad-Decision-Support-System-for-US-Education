@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     llm_num_gpu: int = 99
     # cùng đầu vào cho cùng kết quả
     llm_seed: int = 42
+    embedding_model: str = "bge-m3"
+    database_url: str = ""
     llm_keep_alive: str = "30m"  # giữ model trong VRAM giữa các lượt, không nạp lại
     # Đọc bảng điểm: model ảnh chép ảnh thành chữ (bước A), LLM chữ bóc điểm thành JSON (bước B)
     vision_model: str = "glm-ocr"

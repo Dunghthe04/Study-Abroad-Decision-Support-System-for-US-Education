@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from logging.handlers import TimedRotatingFileHandler
@@ -9,6 +10,7 @@ from fastapi import Depends, FastAPI
 from app.api.deps import require_api_key
 from app.api.routes import chat, health, profile, recommend
 from app.core.config import get_settings
+from app.core.db import open_pool
 from app.services.chat_flow import ChatFlow
 from app.services.ec_reader import EcReader
 from app.services.explainer import Explainer
@@ -39,6 +41,7 @@ async def lifespan(app: FastAPI):
             num_gpu=settings.llm_num_gpu,
             seed=settings.llm_seed,
             keep_alive=settings.llm_keep_alive,
+            embedding_model=settings.embedding_model,
         )
         app.state.transcript_reader = TranscriptReader(http, settings)
         app.state.ec_reader = EcReader(app.state.llm, settings.llm_model)
@@ -55,7 +58,10 @@ async def lifespan(app: FastAPI):
             picker=load_skill_picker(http),
             handlers=build_handlers(app.state.llm, settings.llm_model),
         )
+        app.state.db_pool = await asyncio.to_thread(open_pool, settings.database_url)
         yield
+        if app.state.db_pool is not None:
+            await asyncio.to_thread(app.state.db_pool.close)
 
 
 ADVISOR_DIR = Path(__file__).resolve().parents[1]  # app/main.py -> advisor/
