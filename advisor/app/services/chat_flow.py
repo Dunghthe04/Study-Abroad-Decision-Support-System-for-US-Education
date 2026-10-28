@@ -140,7 +140,7 @@ class ChatFlow:
         self._handlers.update(handlers or {})
 
     async def reply(self, req: ChatRequest) -> ChatResponse:
-       # Cuộc trò chuyện mới: giao diện đã tự hiện lời chào, nên tin nhắn đầu tiên là câu trả lời cho B0.1.
+        # Cuộc trò chuyện mới: giao diện đã tự hiện lời chào, nên tin nhắn đầu tiên là câu trả lời cho B0.1.
         # Ghi nhận đã chào rồi xử lý tin nhắn như mọi lượt khác, không bỏ qua câu học sinh vừa gõ.
         first_turn = req.state is None
         # Nếu là lượt đầu
