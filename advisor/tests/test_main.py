@@ -8,3 +8,25 @@ def test_startup_creates_llm_client():
     # Có "with" thì TestClient mới chạy lifespan (không gọi Ollama, chỉ tạo client)
     with TestClient(create_app()) as client:
         assert isinstance(client.app.state.llm, OllamaClient)
+
+
+def test_startup_registers_skills_from_build_handlers(monkeypatch):
+    class FakeSkill:
+        async def run(self, state, message):
+            raise NotImplementedError
+
+    seen = {}
+
+    def fake_build_handlers(llm, model):
+        seen["llm"], seen["model"] = llm, model
+        return {"skill_ho_so": FakeSkill()}
+
+    monkeypatch.setattr("app.main.build_handlers", fake_build_handlers)
+
+    with TestClient(create_app()) as client:
+        handlers = (
+            client.app.state.chat_flow._handlers
+        )  # kiểm tra nội bộ để chắc main.py đã nối danh sách đăng ký
+        assert "skill_ho_so" in handlers  # skill đăng ký được gắn vào ChatFlow
+        assert {"ngoai_le", "ket_thuc"} <= set(handlers)  # skill tạm vẫn còn
+        assert seen["llm"] is client.app.state.llm  # skill nhận đúng llm dùng chung lúc khởi động
