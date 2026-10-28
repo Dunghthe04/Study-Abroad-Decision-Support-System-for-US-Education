@@ -5,7 +5,11 @@ import { useRouter } from "next/navigation";
 import { AlertCircleIcon, CheckIcon, Loader2Icon, XIcon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { useAssistant, useAssistantPageContext } from "@/components/assistant/AssistantProvider";
+import {
+  useAssistant,
+  useAssistantBeforeSend,
+  useAssistantPageContext,
+} from "@/components/assistant/AssistantProvider";
 import { FLOW_STEPS, ProfileFlowStepper } from "./ProfileFlowStepper";
 import { Step1Goal } from "./Step1Goal";
 import { Step2Transcript } from "./Step2Transcript";
@@ -180,6 +184,22 @@ export function ProfileFlowWizard() {
     [user]
   );
 
+  // Lượt tự lưu đang chờ hết 1 giây (null = không có gì chờ lưu)
+  const pendingSaveRef = useRef<{ step: number; draft: ProfileFlowDraft } | null>(null);
+
+  const savePending = useCallback(async () => {
+    const pending = pendingSaveRef.current;
+    if (!pending || isUploadingRef.current) return;
+    pendingSaveRef.current = null;
+    try {
+      await persistDraft(pending.step, completedStepsRef.current, pending.draft);
+      setSaveStatus("saved");
+    } catch (err: unknown) {
+      console.error("Lưu nháp thất bại:", err);
+      setSaveStatus("error");
+    }
+  }, [persistDraft]);
+
   // 2. Tự động lưu nháp (Debounce 1000ms)
   const triggerAutoSave = useCallback(
     (step: number, currentDraft: ProfileFlowDraft) => {
@@ -190,20 +210,18 @@ export function ProfileFlowWizard() {
       }
 
       setSaveStatus("saving");
-
-      saveTimerRef.current = setTimeout(async () => {
-        if (isUploadingRef.current) return;
-        try {
-          await persistDraft(step, completedStepsRef.current, currentDraft);
-          setSaveStatus("saved");
-        } catch (err: unknown) {
-          console.error("Lưu nháp thất bại:", err);
-          setSaveStatus("error");
-        }
-      }, 1000);
+      pendingSaveRef.current = { step, draft: currentDraft };
+      saveTimerRef.current = setTimeout(savePending, 1000);
     },
-    [persistDraft]
+    [savePending]
   );
+
+  // D1: gửi tin nhắn chat thì lưu ngay nháp đang chờ, không đợi hết 1 giây
+  const flushDraft = useCallback(async () => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    await savePending();
+  }, [savePending]);
+  useAssistantBeforeSend(flushDraft);
 
   // Helper cập nhật từng phần của bản nháp
   const updateStep1 = (val: Partial<GoalDraft>) => {
@@ -263,6 +281,7 @@ export function ProfileFlowWizard() {
 
     // Lưu nháp ngay khi đổi bước; huỷ lượt auto-save đang chờ để nó không ghi đè bước cũ
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    pendingSaveRef.current = null;
     setSaveStatus("saving");
     persistDraft(nextStep, nextCompleted, draft)
       .then(() => setSaveStatus("saved"))

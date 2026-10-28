@@ -33,7 +33,11 @@ interface AssistantContextValue {
   send: (text: string) => void;
   retry: () => void;
   setPageContext: (ctx: AssistantPageContext | null) => void;
+  setBeforeSend: (fn: BeforeSend | null) => void;
 }
+
+/** Việc trang cần làm xong trước khi gửi tin nhắn chat (vd lưu nháp form đang chờ) */
+export type BeforeSend = () => Promise<void>
 
 const STORAGE_KEY = "usas_assistant_chat";
 const SESSION_KEY = "usas_assistant_session";
@@ -86,7 +90,10 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
   const loadingRef = useRef(false);
   const restoredRef = useRef(false);
   const sessionIdRef = useRef<string | null>(null);
-
+  const beforeSendRef = useRef<BeforeSend | null>(null);
+  const setBeforeSend = useCallback((fn: BeforeSend | null) => {
+    beforeSendRef.current = fn;
+  }, []);
 
   const page = registered ?? defaultContext(pathname);
   const pageRef = useRef(page);
@@ -127,6 +134,9 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
       setLoading(true);
       setError(null);
       try {
+        // D1: lưu ngay nháp form đang chờ, để chat đọc đúng những gì học sinh vừa gõ.
+        // Lưu lỗi vẫn gửi chat (form tự báo lỗi lưu của nó)
+        await beforeSendRef.current?.().catch(() => undefined);
         const res = await apiFetch<AdvisorChatResponse>("/api/v1/advisor/chat", {
           method: "POST",
           body: JSON.stringify({
@@ -210,8 +220,9 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
       send,
       retry,
       setPageContext: setRegistered,
+      setBeforeSend,
     }),
-    [open, wide, turns, loading, error, page, openPanel, newChat, send, retry]
+    [open, wide, turns, loading, error, page, openPanel, newChat, send, retry, setBeforeSend]
   );
 
   return <AssistantContext.Provider value={value}>{children}</AssistantContext.Provider>;
@@ -231,4 +242,13 @@ export function useAssistantPageContext(ctx: AssistantPageContext) {
     setPageContext(JSON.parse(key) as AssistantPageContext);
     return () => setPageContext(null);
   }, [key, setPageContext]);
+}
+
+/** Trang đăng ký việc phải xong trước mỗi tin nhắn chat; rời trang thì gỡ */
+export function useAssistantBeforeSend(fn: BeforeSend) {
+  const { setBeforeSend } = useAssistant();
+  useEffect(() => {
+    setBeforeSend(fn);
+    return () => setBeforeSend(null);
+  }, [fn, setBeforeSend]);
 }
