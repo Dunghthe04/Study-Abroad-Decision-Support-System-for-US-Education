@@ -54,7 +54,7 @@ class QuickReply(CamelModel):
 
 # Công cụ nhập ngay trong chat (ô chọn ngành, bảng rà soát...); frontend vẽ theo type
 class Widget(CamelModel):
-    type: Literal["major", "review", "budget", "scholarship"]
+    type: Literal["major", "review", "budget", "scholarship", "form"]
     data: dict[str, Any] = {}
 
 
