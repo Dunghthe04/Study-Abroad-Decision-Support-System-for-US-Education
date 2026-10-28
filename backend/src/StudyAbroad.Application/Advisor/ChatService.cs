@@ -45,11 +45,30 @@ namespace StudyAbroad.Application.Advisor
             var response = await advisor.ChatAsync(
                 request with { State = state, Profile = JsonSerializer.SerializeToElement(profile) }, ct);
             var changed = await SaveProfileToDraftAsync(userId, response, ct);
+
+            // C5: chat chỉ sang B3 khi học sinh bấm "Đúng rồi" ở X1, lúc đó lưu hồ sơ chính thức.
+            // Lưu lỗi thì giữ nguyên trạng thái cũ (vẫn ở X1) và nháp, báo lỗi để học sinh sửa rồi xác nhận lại
+            var nextStep = CurrentStep(response.State);
+            if (nextStep == ConfirmedStep && session.CurrentStep != ConfirmedStep)
+            {
+                var commitError = await CommitProfileAsync(userId, ct);
+                if (commitError is not null)
+                {
+                    response = response with
+                    {
+                        Answer = $"Hồ sơ chưa lưu được: {commitError} Bạn sửa lại giúp mình rồi xác nhận lại nhé.",
+                        State = state,
+                        QuickReplies = null,
+                        Widget = null,
+                    };
+                    nextStep = session.CurrentStep;
+                }
+            }
+
             //Sau khi advisor phản hồi ==> lưu trạng thái mới
             session.StateJson = response.State?.GetRawText();
-            if (response.State is { ValueKind: JsonValueKind.Object } s && s.TryGetProperty("currentStep", out var step))
-                //Lưu bước hiện tại
-                session.CurrentStep = step.GetString();
+            //Lưu bước hiện tại
+            session.CurrentStep = nextStep ?? session.CurrentStep;
             session.UpdatedAt = DateTime.UtcNow;
 
             if (isNew)
@@ -67,6 +86,27 @@ namespace StudyAbroad.Application.Advisor
                 ProfileChanged = changed,
                 SessionId = session.Id.ToString(),
             };
+        }
+
+        private const string ConfirmedStep = "B3";
+
+        private static string? CurrentStep(JsonElement? state) =>
+            state is { ValueKind: JsonValueKind.Object } s && s.TryGetProperty("currentStep", out var step)
+                ? step.GetString()
+                : null;
+
+        // Lưu hồ sơ chính thức; trả câu lỗi tiếng Việt nếu hồ sơ chưa đủ điều kiện, null nếu lưu được
+        private async Task<string?> CommitProfileAsync(Guid userId, CancellationToken ct)
+        {
+            try
+            {
+                await profileFlow.CommitFlowAsync(userId, null, ct);
+                return null;
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
+            {
+                return ex.Message;
+            }
         }
 
         // Hồ sơ chat lượt trước nằm trong state.profile

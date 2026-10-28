@@ -156,6 +156,69 @@ public class ChatServiceTests
         Assert.Single(store.Rows); // phiên chat vẫn được lưu
     }
 
+    // C5: học sinh xác nhận ở X1 (chat sang B3) thì lưu hồ sơ chính thức
+    private static ChatSession AtReview(Guid userId, string step = "B2") =>
+        new() { UserId = userId, StateJson = $"{{\"currentStep\":\"{step}\",\"questionId\":\"X1\"}}", CurrentStep = step };
+
+    [Fact]
+    public async Task ConfirmAtReview_CommitsProfile()
+    {
+        var userId = Guid.NewGuid();
+        var store = new FakeSessions();
+        var session = AtReview(userId);
+        store.Rows.Add(session);
+        var flow = new FakeProfileFlow();
+
+        var res = await new ChatService(new FakeAdvisor("B3"), store, flow)
+            .ChatAsync(userId, new AdvisorChatRequest(Hello, session.Id.ToString()));
+
+        Assert.Equal(1, flow.Commits);
+        Assert.Equal("ok", res.Answer);
+        Assert.Equal("B3", session.CurrentStep);
+    }
+
+    [Fact]
+    public async Task CommitFails_KeepsReviewStateAndDraft_AndExplainsInVietnamese()
+    {
+        var userId = Guid.NewGuid();
+        var store = new FakeSessions();
+        var session = AtReview(userId);
+        var oldState = session.StateJson;
+        store.Rows.Add(session);
+        var flow = new FakeProfileFlow { CommitError = new InvalidOperationException("Vui lòng nhập GPA hợp lệ.") };
+        var advisor = new FakeAdvisor("B3", [new QuickReply("Đánh giá hồ sơ", "Đánh giá hồ sơ")])
+        {
+            Profile = Json(BudgetChanged),
+            Changed = ["budget"],
+        };
+
+        var res = await new ChatService(advisor, store, flow)
+            .ChatAsync(userId, new AdvisorChatRequest(Hello, session.Id.ToString()));
+
+        Assert.Contains("Hồ sơ chưa lưu được", res.Answer);
+        Assert.Contains("Vui lòng nhập GPA hợp lệ.", res.Answer);
+        Assert.Null(res.QuickReplies);           // không mời sang bước sau khi chưa lưu được
+        Assert.Equal(oldState, session.StateJson); // vẫn ở bảng rà soát, xác nhận lại được
+        Assert.Equal("B2", session.CurrentStep);
+        Assert.Equal(["budget"], flow.PatchedKeys); // nháp vẫn giữ những gì vừa nói
+        Assert.Equal(["budget"], res.ProfileChanged);
+    }
+
+    [Fact]
+    public async Task AlreadyPastReview_DoesNotCommitAgain()
+    {
+        var userId = Guid.NewGuid();
+        var store = new FakeSessions();
+        var session = AtReview(userId, "B3");
+        store.Rows.Add(session);
+        var flow = new FakeProfileFlow();
+
+        await new ChatService(new FakeAdvisor("B3"), store, flow)
+            .ChatAsync(userId, new AdvisorChatRequest(Hello, session.Id.ToString()));
+
+        Assert.Equal(0, flow.Commits);
+    }
+
     private sealed class FakeAdvisor(string nextStep, IReadOnlyList<QuickReply>? replies = null, Widget? widget = null) : IAdvisorClient
     {
         public AdvisorChatRequest? LastRequest { get; private set; }
@@ -196,6 +259,8 @@ public class ChatServiceTests
     {
         public ProfileFlowDraftDto Draft { get; init; } = new();
         public Exception? PatchError { get; init; }
+        public Exception? CommitError { get; init; }
+        public int Commits { get; private set; }
         public JsonObject? PatchedProfile { get; private set; }
         public IReadOnlyCollection<string>? PatchedKeys { get; private set; }
 
@@ -213,7 +278,12 @@ public class ChatServiceTests
 
         public Task<ProfileFlowStateDto> SaveDraftAsync(Guid userId, SaveProfileDraftRequest request, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<UploadDraftTranscriptResultDto> UploadDraftTranscriptAsync(Guid userId, Stream fileStream, string fileName, string contentType, long length, CancellationToken ct = default) => throw new NotSupportedException();
-        public Task<CommitProfileFlowResponse> CommitFlowAsync(Guid userId, CommitProfileFlowRequest? request, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<CommitProfileFlowResponse> CommitFlowAsync(Guid userId, CommitProfileFlowRequest? request, CancellationToken ct = default)
+        {
+            if (CommitError is not null) throw CommitError;
+            Commits++;
+            return Task.FromResult<CommitProfileFlowResponse>(null!);
+        }
         public Task ClearDraftAsync(Guid userId, CancellationToken ct = default) => throw new NotSupportedException();
     }
 }
