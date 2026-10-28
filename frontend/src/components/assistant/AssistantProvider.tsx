@@ -3,13 +3,15 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { ApiError, apiFetch } from "@/lib/api";
-import type { AdvisorChatResponse, ChatMessage, Citation, QuickReply } from "@/types/api";
+import type { AdvisorChatResponse, ChatMessage, ChatWidget, Citation, QuickReply } from "@/types/api";
 
 export type AssistantTurn = ChatMessage & {
   citations?: Citation[];
   disclaimer?: string | null;
   /** Nút trả lời nhanh của lượt trợ lý; chỉ hiện ở lượt cuối */
   quickReplies?: QuickReply[] | null;
+  /** Widget kèm lượt trợ lý (vd bảng rà soát hồ sơ) */
+  widget?: ChatWidget | null;
 };
 
 export type AssistantError = { kind: "unavailable" | "auth" | "other"; message: string };
@@ -174,6 +176,7 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
             citations: res.citations,
             disclaimer: res.disclaimer,
             quickReplies: res.quickReplies,
+            widget: res.widget,
           },
         ]);
         // D2: báo trang biết chat vừa đổi hồ sơ nháp
