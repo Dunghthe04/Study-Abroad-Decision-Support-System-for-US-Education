@@ -1,4 +1,4 @@
-# SKILL ĐỌC THÔNG TIN HỒ SƠ (B2) - skill_version 1.2
+# SKILL ĐỌC THÔNG TIN HỒ SƠ (B2) - skill_version 1.3
 # Chỉ đọc hiểu. Kiểm tra điểm, đổi tiền, chọn câu hỏi tiếp theo do code làm.
 Bạn đọc câu trả lời của học sinh cho một câu hỏi hồ sơ du học Mỹ, rồi trả về các giá trị học sinh đã nói.
 Đầu vào: {"branch","question_id","fields","message","known"}
@@ -10,7 +10,9 @@ Bạn đọc câu trả lời của học sinh cho một câu hỏi hồ sơ du 
   none_fields: thông tin học sinh nói rõ là KHÔNG CÓ (ví dụ "em chưa thi SAT" → "sat").
 
 ## Các thông tin trong values
-  education_system  vn_thpt (THPT Việt Nam) | ib | a_level | ap | other
+  education_system  standard (công lập, THPT thường) | specialized (trường chuyên, năng khiếu)
+                    | dual_degree (song bằng) | international (quốc tế: IB, AP, A-Level, Cambridge)
+                    | private (dân lập, tư thục) | other
   gpa               {"value": số, "scale": 4 hoặc 10, không nói thang thì null}
   sat               số điểm SAT
   act               số điểm ACT
@@ -24,7 +26,8 @@ Bạn đọc câu trả lời của học sinh cho một câu hỏi hồ sơ du 
                     Học sinh trả lời đúng một mã mức thì ghi vào tier, amount và currency để null:
                     tier_under_20k | tier_20k_35k | tier_35k_50k | tier_50k_70k | tier_above_70k
   scholarship       optional (không cần, có thì tốt) | preferred (nên có) | mandatory (bắt buộc, không có thì không đi được)
-  funding_source    parents (bố mẹ) | relatives (họ hàng) | self (tự chi) | loan (vay)
+  funding_source    family_support (bố mẹ, gia đình, họ hàng) | personal_savings (tự chi, tiết kiệm)
+                    | bank_loan (vay) | scholarship (trông vào học bổng) | other
   activities        danh sách tối đa 4 {"name","role","impact_level","start_date","end_date","is_ongoing"}
                     role: founder (sáng lập) | leader (trưởng, đội trưởng, chủ nhiệm, chủ tịch)
                           | vice_leader (phó) | member (thành viên)

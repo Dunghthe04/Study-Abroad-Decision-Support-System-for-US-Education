@@ -36,6 +36,8 @@ public class ProfileFlowService(
         Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
     };
 
+    // Kỳ nhập học: giống INTAKE_PATTERN bên chat (skill_bac_hoc)
+    private static readonly Regex IntakeRegex = new(@"^(Fall|Spring|Summer) 20\d\d$", RegexOptions.Compiled);
     private static readonly Regex TermNameRegex = new(@"^(?<grade>.*?)\s*-?\s*HK\s*(?<sem>[12])\s*$",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
@@ -486,12 +488,16 @@ public class ProfileFlowService(
             errors.Add("Bước 1: chưa chọn bậc học muốn theo học.");
         if (step1?.CurrentEducationLevel is null || !EducationLevelCodes.Contains(step1.CurrentEducationLevel))
             errors.Add("Bước 1: chưa chọn cấp học hiện tại.");
+        if (step1?.EducationSystem is { } system && !EducationSystems.IsValid(system))
+            errors.Add($"Bước 1: hệ chương trình '{system}' không hợp lệ.");
         if (step1?.CurrentSchool?.Trim().Length > 256)
             errors.Add("Bước 1: tên trường tối đa 256 ký tự.");
         if (step1?.CurrentGrade?.Trim().Length > 64)
             errors.Add("Bước 1: lớp / năm học hiện tại tối đa 64 ký tự.");
         if (step1?.TargetMajor?.Trim().Length > 128)
             errors.Add("Bước 1: ngành dự định tối đa 128 ký tự.");
+        if (NullIfBlank(step1?.TargetIntake) is { } intake && !IntakeRegex.IsMatch(intake))
+            errors.Add($"Bước 1: kỳ nhập học '{intake}' không hợp lệ (dạng Fall 2027).");
         if (step1?.ExpectedGraduationYear is { } gradYear
             && (gradYear < MinGraduationYear || gradYear > now.Year + MaxGraduationYearsAhead))
             errors.Add($"Bước 1: năm tốt nghiệp phải từ {MinGraduationYear} đến {now.Year + MaxGraduationYearsAhead}.");
@@ -550,6 +556,8 @@ public class ProfileFlowService(
         // C6: chat cho xác nhận hồ sơ khi chưa hỏi học bổng (chỉ bắt buộc lúc chọn trường); form vẫn bắt chọn ở giao diện
         if (draft.Step4?.NeedFinancialAid is { } need && !ProfileConstants.ScholarshipNeeds.All.Contains(need))
             errors.Add($"Bước 4: nhu cầu học bổng '{need}' không hợp lệ.");
+        if (draft.Step4?.FundingSource is { } funding && !ProfileConstants.FundingSources.All.Contains(funding))
+            errors.Add($"Bước 4: nguồn tài chính '{funding}' không hợp lệ.");
 
         // Bước 5
         var currentYear = DateTime.UtcNow.Year;
@@ -718,7 +726,7 @@ public class ProfileFlowService(
         string.Equals(item.Category, "achievement", StringComparison.OrdinalIgnoreCase)
         || string.Equals(item.Category, "award", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>Ánh xạ draft (đã validate) vào entity. Không ghi các cột luồng 6 bước không thu thập (funding_source, financial_notes, max_expected_tuition_usd).</summary>
+    /// <summary>Ánh xạ draft (đã validate) vào entity. Không ghi các cột luồng 6 bước không thu thập (financial_notes, max_expected_tuition_usd).</summary>
     private static (List<TranscriptScore> Scores, List<ProfileActivity> Activities, List<ProfileCertification> Certifications) ApplyDraftToProfile(
         StudentProfile profile,
         ProfileFlowDraftDto draft,
@@ -731,9 +739,12 @@ public class ProfileFlowService(
         profile.TargetLevel = step1.TargetDegreeLevel!.Trim();
         profile.CurrentEducationLevel = step1.CurrentEducationLevel;
         profile.CurrentGrade = NullIfBlank(step1.CurrentGrade);
+        // Hệ chương trình chỉ có nghĩa với học sinh cấp 3
+        profile.EducationSystem = step1.CurrentEducationLevel == "high_school" ? NullIfBlank(step1.EducationSystem) : null;
         profile.CurrentSchool = NullIfBlank(step1.CurrentSchool);
         profile.GraduationYear = step1.ExpectedGraduationYear;
         profile.IntendedMajor = NullIfBlank(step1.TargetMajor);
+        profile.TargetIntake = NullIfBlank(step1.TargetIntake);
         profile.PreferredStates = (step1.TargetStates ?? [])
             .Where(s => !string.IsNullOrWhiteSpace(s))
             .Select(s => s.Trim())
@@ -786,6 +797,7 @@ public class ProfileFlowService(
         profile.BudgetMaxUsd = tier.MaxUsd; // null với mức trên 70k = không giới hạn trần
         profile.ScholarshipNeed = draft.Step4.NeedFinancialAid;
         profile.NeedsScholarship = ProfileConstants.ScholarshipNeeds.NeedsScholarship(profile.ScholarshipNeed);
+        profile.FundingSource = NullIfBlank(draft.Step4.FundingSource);
 
         // Điểm ngoại khóa cũ không còn đúng với dữ liệu mới; để bộ tính điểm tính lại
         profile.ExtracurricularScore = null;
@@ -942,10 +954,12 @@ public class ProfileFlowService(
                 _ => null
             },
             CurrentGrade: profile.CurrentGrade,
+            EducationSystem: EducationSystems.IsValid(profile.EducationSystem) ? profile.EducationSystem : null,
             CurrentSchool: profile.CurrentSchool,
             ExpectedGraduationYear: profile.GraduationYear,
             TargetDegreeLevel: profile.TargetLevel,
             TargetMajor: profile.IntendedMajor,
+            TargetIntake: profile.TargetIntake,
             TargetStates: profile.PreferredStates?.ToList() ?? [],
             TargetSchoolType: profile.TargetSchoolType ?? "all");
 
@@ -975,7 +989,9 @@ public class ProfileFlowService(
             EnglishPlanned: profile.EnglishTestPlanned,
             EnglishPlannedDate: profile.EnglishPlannedDate?.ToString("yyyy-MM", CultureInfo.InvariantCulture));
 
-        var step4 = new FlowFinancialDraftDto(profile.BudgetTier, profile.ScholarshipNeed);
+        // Hồ sơ cũ có thể lưu mã nguồn tài chính khác (family, loan) thì để trống cho học sinh chọn lại
+        var funding = profile.FundingSource is { } f && ProfileConstants.FundingSources.All.Contains(f) ? f : null;
+        var step4 = new FlowFinancialDraftDto(profile.BudgetTier, profile.ScholarshipNeed, funding);
 
         var step5 = new FlowActivitiesDraftDto(activities.Select(a => string.Equals(a.Kind, "award", StringComparison.OrdinalIgnoreCase)
             ? new FlowActivityDraftDto(

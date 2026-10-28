@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   ArrowUpIcon,
+  FileTextIcon,
   Maximize2Icon,
   MessageCircleIcon,
   Minimize2Icon,
@@ -15,8 +16,11 @@ import {
 import { cn } from "@/lib/utils";
 import { AGE_FEATURES, useAgeBlock } from "@/lib/age-features";
 import { useAssistant, type AssistantTurn } from "./AssistantProvider";
+import { BudgetWidget } from "./BudgetWidget";
 import { MajorWidget } from "./MajorWidget";
 import { ReviewWidget } from "./ReviewWidget";
+import { ScholarshipWidget } from "./ScholarshipWidget";
+import { SelectWidget } from "./SelectWidget";
 
 // Trang đăng nhập / đăng ký không hiện trợ lý
 const HIDDEN_PREFIXES = ["/login", "/register", "/forgot-password", "/reset-password", "/verify-email"];
@@ -238,6 +242,19 @@ function Turn({ turn, onReply }: { turn: AssistantTurn; onReply?: (value: string
       {turn.widget?.type === "review" && <ReviewWidget data={turn.widget.data} />}
       {/* E: chỉ chọn được ở lượt cuối, giống nút trả lời nhanh */}
       {turn.widget?.type === "major" && <MajorWidget onPick={onReply} />}
+      {turn.widget?.type === "select" && <SelectWidget data={turn.widget.data} onPick={onReply} />}
+      {turn.widget?.type === "budget" && <BudgetWidget data={turn.widget.data} onPick={onReply} />}
+      {turn.widget?.type === "scholarship" && <ScholarshipWidget data={turn.widget.data} onPick={onReply} />}
+      {/* Mục 1: học sinh chọn điền bằng form */}
+      {turn.widget?.type === "form" && (
+        <Link
+          href="/analysis"
+          className="mt-2.5 inline-flex h-8 items-center gap-1.5 rounded-full bg-brand px-3.5 text-[13px] font-semibold text-white transition-colors hover:bg-brand-ink"
+        >
+          <FileTextIcon className="size-4" />
+          Mở form hồ sơ
+        </Link>
+      )}
       {onReply && turn.quickReplies && turn.quickReplies.length > 0 && (
         <div className="mt-2.5 flex flex-wrap gap-2">
           {turn.quickReplies.map((r) => (

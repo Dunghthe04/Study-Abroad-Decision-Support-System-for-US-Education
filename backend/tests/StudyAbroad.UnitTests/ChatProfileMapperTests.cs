@@ -44,6 +44,9 @@ public class ChatProfileMapperTests
     [InlineData("awards", "[" + Award + "]")]
     [InlineData("preferred_states", """["CA","TX"]""")]
     [InlineData("school_type", "\"public\"")]
+    [InlineData("education_system", "\"specialized\"")]
+    [InlineData("funding_source", "\"bank_loan\"")]
+    [InlineData("intake", "\"Fall 2027\"")]
     public void RoundTrip_EachKey(string key, string valueJson)
     {
         var profile = Confirmed(key, valueJson);

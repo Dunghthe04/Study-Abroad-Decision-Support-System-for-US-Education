@@ -47,8 +47,8 @@ interface AssistantContextValue {
 /** Việc trang cần làm xong trước khi gửi tin nhắn chat (vd lưu nháp form đang chờ) */
 export type BeforeSend = () => Promise<void>
 
-/** Chat vừa ghi các ô này vào nháp hồ sơ (vd để form nạp lại) */
-export type ProfileChanged = (keys: string[]) => void
+/** Chat vừa ghi các ô này vào nháp hồ sơ (vd để form nạp lại); formStep: trang form của câu chat đang hỏi */
+export type ProfileChanged = (keys: string[], formStep: number | null) => void
 
 const STORAGE_KEY = "usas_assistant_chat";
 const SESSION_KEY = "usas_assistant_session";
@@ -179,8 +179,9 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
             widget: res.widget,
           },
         ]);
-        // D2: báo trang biết chat vừa đổi hồ sơ nháp
-        if (res.profileChanged?.length) onProfileChangedRef.current?.(res.profileChanged);
+        // D2: báo trang biết chat vừa đổi hồ sơ nháp, hoặc đang hỏi sang trang form khác (mục 7)
+        if (res.profileChanged?.length || res.formStep != null)
+          onProfileChangedRef.current?.(res.profileChanged ?? [], res.formStep ?? null);
       } catch (err) {
         setError(toAssistantError(err));
       } finally {

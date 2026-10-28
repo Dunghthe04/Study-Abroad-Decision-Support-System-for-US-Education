@@ -7,9 +7,11 @@ B4: hoạt động / giải thưởng thiếu ý (vai trò, phạm vi, tháng...
 B5: câu hỏi có nút gợi ý (buttons.py); bấm nút thì ghi thẳng, không gọi Qwen.
 """
 
+import re
 from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
 from typing import Any, Literal, NamedTuple
 
@@ -66,8 +68,14 @@ CAN_BE_NONE = ("sat", "act", "english", "activities", "awards", "relatives_state
 MAX_ASK = 2
 # Câu bắt buộc cho B3, theo thứ tự hỏi
 REQUIRED_QUESTIONS = ("D2", "E1", "F1")
-# Câu tùy chọn: F2 (học bổng) hỏi sớm vì B4 cần; E2 chỉ hỏi khi học sinh chưa có chứng chỉ tiếng Anh
-OPTIONAL_QUESTIONS = ("F2", "E2", "D1", "D3", "D4", "D5", "F3", "N1", "N2", "N3", "N4")
+# Câu tùy chọn: F2 (học bổng) hỏi sớm vì B4 cần; E2 chỉ hỏi khi học sinh chưa có chứng chỉ tiếng Anh;
+# D1 chỉ hỏi học sinh cấp 3; N1 chỉ hỏi khi chưa có bang muốn học (gợi ý bang theo người thân).
+# N4 (visa) không hỏi ở B2: chỉ hỏi khi học sinh hỏi về visa / lộ trình. N1, N4 không lưu vào form
+OPTIONAL_QUESTIONS = ("F2", "E2", "D1", "D3", "D4", "D5", "F3", "N1", "N2", "N3")
+# Thứ tự hỏi theo trang form: hỏi xong các câu của một trang mới sang trang sau, không quay lại trang trước.
+# Trang 1 mục tiêu (D1, N2, N3), 2 học bạ (D2), 3 tiếng Anh, SAT (E1, E2, D3), 4 tài chính (F1-F3),
+# 5 hoạt động, giải thưởng (D4, D5). Hết form mới hỏi thông tin thêm không có trong form (N1 người thân)
+QUESTION_ORDER = ("D1", "N2", "N3", "D2", "E1", "E2", "D3", "F1", "F2", "F3", "D4", "D5", "N1")
 # Thông tin bắt buộc → câu hỏi để hỏi lại khi học sinh xác nhận mà vẫn còn thiếu
 FIELD_QUESTION = {"gpa": "D2", "english": "E1", "budget": "F1"}
 # Những câu học sinh gõ (hoặc nút bấm gửi) để xác nhận hồ sơ ở X1
@@ -86,6 +94,23 @@ CONFIRM_WORDS = {
 CONFIRM_REPLY = QuickReply(label="Đúng rồi", value="Đúng rồi")
 FIX_REPLY = QuickReply(label="Cần sửa", value="Em cần sửa thông tin")
 SAVED = "Mình đã ghi nhận hồ sơ của bạn."
+# Câu ô chọn E2 ghép: "Em dự kiến thi tháng 5/2027". Khớp thì ghi thẳng, không gọi Qwen
+PLAN_TEXT = re.compile(r"em dự kiến thi tháng (\d{1,2})/(\d{4})", re.IGNORECASE)
+# english_plan khi học sinh chưa thi tiếng Anh và chưa nói tháng dự kiến (ô "sẽ thi sau" của form đã tích)
+PLANNED_NO_DATE = {"planned": True, "date": None}
+# Câu nút xác nhận thang GPA gửi (và ô chọn D2 ghép): "GPA 8.5 thang 10". Khớp thì ghi thẳng, không gọi Qwen
+GPA_TEXT = re.compile(r"gpa\s+(\d+(?:[.,]\d+)?)\s+thang\s+(4|10)", re.IGNORECASE)
+# Câu ô nhập D4 / D5 ghép (buttons.select_fields): "Hoạt động CLB Tiếng Anh, vai trò Thành viên, phạm vi Trường,
+# từ 9/2024 đến 5/2025" (hoặc ", đang tham gia"), "Giải thưởng HSG Toán, phạm vi Tỉnh / Thành phố, năm 2025".
+# Khớp thì ghi thẳng, không gọi Qwen
+ACTIVITY_TEXT = re.compile(
+    r"hoạt động (?P<name>.+?), vai trò (?P<role>.+?), phạm vi (?P<impact>.+?), từ (?P<start>\d{1,2}/\d{4})"
+    r"(?:, (?P<ongoing>đang tham gia)| đến (?P<end>\d{1,2}/\d{4}))",
+    re.IGNORECASE,
+)
+AWARD_TEXT = re.compile(
+    r"giải thưởng (?P<name>.+?), phạm vi (?P<impact>.+?), năm (?P<year>\d{4})", re.IGNORECASE
+)
 
 
 # B4. Danh sách hoạt động / giải thưởng: câu hỏi, khóa giữ các mục đang thiếu ý, hàm kiểm tra một mục,
@@ -106,9 +131,16 @@ LIST_FIELDS = {
 PENDING_KEYS = tuple(spec.pending_key for spec in LIST_FIELDS.values())
 # Một câu D4/D5 được hỏi tiếp tối đa ngần này lần (mỗi lần thường một ý: vai trò, phạm vi, tháng...)
 MAX_FOLLOW_UPS = 4
+# Ghi xong một hoạt động / giải thưởng thì hỏi còn mục nào nữa không, kèm nút để sang câu sau
+MORE_TEXT = {
+    "D4": "Mình đã ghi {name}. Bạn còn hoạt động nào nữa không? Có thì nhập tiếp nhé.",
+    "D5": "Mình đã ghi {name}. Bạn còn giải thưởng nào nữa không? Có thì nhập tiếp nhé.",
+}
+NO_MORE = {"D4": "Không còn hoạt động", "D5": "Không còn giải"}
 
-EDUCATION_SYSTEMS = ("vn_thpt", "ib", "a_level", "ap", "other")
-FUNDING_SOURCES = ("parents", "relatives", "self", "loan")
+# Mã giống form và DB (EducationSystems, ProfileConstants.FundingSources) để lưu được vào hồ sơ
+EDUCATION_SYSTEMS = ("standard", "specialized", "dual_degree", "international", "private", "other")
+FUNDING_SOURCES = ("family_support", "personal_savings", "bank_loan", "scholarship", "other")
 
 
 # Khuôn từng thông tin Qwen đọc ra. Chỉ kiểm tra dạng; khoảng điểm do validators kiểm tra
@@ -188,6 +220,8 @@ class HoSoRead:
     ask_again: str | None = None
     ai_used: bool = False
     pending: dict[str, list[dict]] = field(default_factory=dict)
+    # Học sinh không nói thang GPA: thang trong values là đoán. Ở B2 thì hỏi lại thang thay vì ghi
+    gpa_guessed: bool = False
 
 
 # Kiểm tra một thông tin bằng validators, trả về giá trị chuẩn để ghi vào hồ sơ. Sai thì ném AskAgain
@@ -259,6 +293,7 @@ def check_values(read: HoSoRaw, question_id: str | None) -> HoSoRead:
                 check_items(result, name, [item.model_dump() for item in getattr(read.values, name)])
             else:
                 result.values[name] = check_value(name, getattr(read.values, name))
+                result.gpa_guessed = result.gpa_guessed or (name == "gpa" and read.values.gpa.scale is None)
         except AskAgain as err:
             result.ask_again = result.ask_again or err.question
     # Một thông tin vừa có giá trị vừa "không có" thì tin giá trị
@@ -351,6 +386,28 @@ def save_items(state: ChatState, name: str, done: list[dict], new_pending: list[
         state.profile[spec.pending_key] = ProfileField(value=waiting, status="unknown")
 
 
+# Ý còn thiếu lấy mức thấp nhất (TH-22): thành viên, cấp trường, 0 tháng (kết thúc ngay tháng bắt đầu),
+# năm đạt giải là năm nay
+def lowest(name: str, item: dict, today: date | None = None) -> dict:
+    now = (today or date.today()).strftime("%m/%Y")
+    if name == "awards":
+        defaults = {"impact_level": "school", "year": int(now[-4:])}
+    else:
+        start = item.get("start_date") or now
+        defaults = {"role": "member", "impact_level": "school", "start_date": start, "end_date": start}
+        if item.get("is_ongoing"):
+            defaults.pop("end_date")
+    return {**item, **{key: value for key, value in defaults.items() if not item.get(key)}}
+
+
+# Mục dở không hỏi tiếp được nữa: điền ý còn thiếu bằng mức thấp nhất rồi ghi; mục chưa có tên thì bỏ
+def save_lowest(state: ChatState, name: str) -> None:
+    spec = LIST_FIELDS[name]
+    pending = state.profile.pop(spec.pending_key)
+    done, _, _ = split_items(name, [lowest(name, item) for item in pending.value])
+    save_items(state, name, done, [], "confirmed")
+
+
 # B4. Câu hỏi ý còn thiếu của mục dở đầu tiên của câu D4 hoặc D5. Không có mục dở thì None
 def pending_question(state: ChatState, question_id: str) -> str | None:
     for name, spec in LIST_FIELDS.items():
@@ -362,19 +419,36 @@ def pending_question(state: ChatState, question_id: str) -> str | None:
 
 # Câu đã có câu trả lời chưa: thông tin của câu có trong hồ sơ, trạng thái nào cũng được (kể cả said_in_B0)
 def answered(state: ChatState, question_id: str) -> bool:
+    if question_id == "E2":
+        # Ô "sẽ thi sau" đã tích nhưng chưa có tháng dự kiến thì vẫn hỏi tháng
+        plan = state.profile.get("english_plan")
+        return plan is not None and plan.value != PLANNED_NO_DATE
     return any(name in state.profile for name in QUESTION_FIELDS[question_id])
 
 
-# Chọn câu tiếp theo: câu bắt buộc còn thiếu (hỏi tối đa 2 lần), rồi câu tùy chọn chưa hỏi. Hết thì None
+# Câu tùy chọn này có cần hỏi học sinh này không (E2, D1, N1 chỉ hỏi khi cần)
+def needed(state: ChatState, question_id: str) -> bool:
+    if question_id == "E2":
+        english = state.profile.get("english")
+        return english is not None and english.status == "none"
+    if question_id == "D1":
+        level = state.profile.get("current_level")
+        return level is not None and level.value == "high_school"
+    if question_id == "N1":
+        return "preferred_states" not in state.profile
+    return True
+
+
+# Chọn câu tiếp theo theo thứ tự trang form: câu bắt buộc còn thiếu (hỏi tối đa 2 lần),
+# câu tùy chọn cần hỏi mà chưa hỏi (1 lần). Hết thì None
 def next_question(state: ChatState) -> str | None:
-    for question_id in REQUIRED_QUESTIONS:
-        if not answered(state, question_id) and state.asked.get(question_id, 0) < MAX_ASK:
-            return question_id
-    english = state.profile.get("english")
-    for question_id in OPTIONAL_QUESTIONS:
-        if question_id == "E2" and (english is None or english.status != "none"):
+    for question_id in QUESTION_ORDER:
+        if answered(state, question_id):
             continue
-        if not answered(state, question_id) and state.asked.get(question_id, 0) == 0:
+        if question_id in REQUIRED_QUESTIONS:
+            if state.asked.get(question_id, 0) < MAX_ASK:
+                return question_id
+        elif needed(state, question_id) and state.asked.get(question_id, 0) == 0:
             return question_id
     return None
 
@@ -396,9 +470,17 @@ def ask_question(state: ChatState, question_id: str, text: str | None = None) ->
     return buttons.ask_with_buttons(state, question_id, text, can_skip=question_id in OPTIONAL_QUESTIONS)
 
 
+# Học sinh nói chưa thi tiếng Anh thì tích ô "sẽ thi sau" giống form (chưa có tháng dự kiến)
+def plan_english(state: ChatState) -> None:
+    english = state.profile.get("english")
+    if english is not None and english.status == "none" and "english_plan" not in state.profile:
+        state.profile["english_plan"] = ProfileField(value=PLANNED_NO_DATE, status="confirmed")
+
+
 # Hỏi câu tiếp theo của B2, hết câu thì sang rà soát. skill_bac_hoc gọi hàm này khi chuyển sang B2.
 # D4/D5 mà đang có mục dở (nói ở B0) thì hỏi luôn ý còn thiếu thay cho câu chung
 def ask_next(state: ChatState) -> SkillOutput:
+    plan_english(state)
     question_id = next_question(state)
     if question_id is None:
         return review(state)
@@ -406,9 +488,10 @@ def ask_next(state: ChatState) -> SkillOutput:
 
 
 # B4. Lượt này có mục dở mới hoặc vừa được bổ sung thì hỏi tiếp ý còn thiếu.
-# Học sinh trả lời câu hỏi tiếp mà không nói thêm gì cho mục đó, hoặc đã hỏi đủ lần, thì bỏ mục đó
+# Học sinh trả lời câu hỏi tiếp mà không nói thêm gì cho mục đó, hoặc đã hỏi đủ lần, thì ý còn thiếu
+# lấy mức thấp nhất (TH-22)
 def follow_up(state: ChatState, before: dict[str, Any]) -> SkillOutput | None:
-    for spec in LIST_FIELDS.values():
+    for name, spec in LIST_FIELDS.items():
         pending = state.profile.get(spec.pending_key)
         if pending is None:
             continue
@@ -416,7 +499,7 @@ def follow_up(state: ChatState, before: dict[str, Any]) -> SkillOutput | None:
         if stuck and state.question_id != spec.question:
             continue  # mục dở từ trước (vd nói ở B0), chờ tới lúc hỏi câu của nó
         if stuck or state.asked.get(spec.question, 0) > MAX_FOLLOW_UPS:
-            del state.profile[spec.pending_key]
+            save_lowest(state, name)
             continue
         return ask_question(state, spec.question, pending_question(state, spec.question))
     return None
@@ -433,8 +516,9 @@ def confirm(state: ChatState) -> SkillOutput:
             profile_field.status = "confirmed"
     missing = missing_fields(state.profile, REQUIRED_B3)
     if not missing:
+        # Sang B3, chat_flow chạy skill_danh_gia ngay trong lượt này
         go_to(state, "B3")
-        return SkillOutput(f"{SAVED} {ask(state, 'X3')}")
+        return SkillOutput(SAVED)
     if missing[0] == "target_level":
         go_to(state, "B1")
         output = buttons.ask_with_buttons(state, "B1.2")
@@ -445,6 +529,103 @@ def confirm(state: ChatState) -> SkillOutput:
 
 
 # B5. Học sinh bấm nút của câu đang hỏi: ghi thẳng giá trị của nút, bỏ mục dở của câu đó, hỏi câu tiếp
+# "GPA 8.5 thang 10" → (8.5, 10); câu khác thì None
+def read_gpa_text(message: str) -> tuple[float, int] | None:
+    match = GPA_TEXT.fullmatch(message.strip().rstrip("."))
+    return (float(match[1].replace(",", ".")), int(match[2])) if match else None
+
+
+# Học sinh nói GPA mà không nói thang: đoán thang rồi hỏi lại kèm nút. GPA <= 4 thì có cả thang 4 và thang 10
+def ask_gpa_scale(state: ChatState, gpa: float) -> SkillOutput:
+    ask(state, "D2")
+    number = f"{gpa:g}"
+    if gpa > 4:
+        replies = [QuickReply(label="Đúng, thang 10", value=f"GPA {number} thang 10")]
+        return SkillOutput(f"GPA {number} của bạn là trên thang 10 đúng không?", quick_replies=replies)
+    replies = [
+        QuickReply(label="Đúng, thang 4", value=f"GPA {number} thang 4"),
+        QuickReply(label="Không, thang 10", value=f"GPA {number} thang 10"),
+    ]
+    return SkillOutput(f"GPA {number} của bạn là trên thang 4 đúng không?", quick_replies=replies)
+
+
+# Ghi GPA học sinh đã nói rõ thang (bấm nút xác nhận hoặc chọn ở ô chọn), không gọi Qwen
+def save_gpa(state: ChatState, gpa: float, scale: int) -> SkillOutput:
+    try:
+        value, scale = check_gpa(gpa, scale)
+    except AskAgain as err:
+        return ask_question(state, "D2", err.question)
+    state.profile["gpa"] = ProfileField(value={"value": value, "scale": scale}, status="confirmed")
+    return review(state) if state.question_id == "X1" else ask_next(state)
+
+
+# Ghi tháng dự kiến thi tiếng Anh học sinh chọn ở ô chọn E2, không gọi Qwen
+def save_english_plan(state: ChatState, month: int, year: int) -> SkillOutput:
+    try:
+        plan = check_english_plan(True, f"{year}-{month:02d}")
+    except AskAgain as err:
+        return ask_question(state, "E2", err.question)
+    state.profile["english_plan"] = ProfileField(value=plan, status="confirmed")
+    return review(state) if state.question_id == "X1" else ask_next(state)
+
+
+# D4 / D5: ghi xong một mục mà chưa tới số mục tối đa thì hỏi còn mục nữa không (ô nhập vẫn hiện),
+# nút "Không còn ..." để sang câu sau. Không có mục mới thì None
+def ask_more(state: ChatState, question_id: str, count_before: int) -> SkillOutput | None:
+    name, spec = next((n, s) for n, s in LIST_FIELDS.items() if s.question == question_id)
+    saved = state.profile.get(name)
+    items = saved.value if saved is not None and isinstance(saved.value, list) else []
+    if len(items) <= count_before or len(items) >= spec.limit:
+        return None
+    output = ask_question(state, question_id, MORE_TEXT[question_id].format(name=items[-1]["name"]))
+    output.quick_replies = [QuickReply(label=NO_MORE[question_id], value=NO_MORE[question_id])]
+    return output
+
+
+def list_count(state: ChatState, question_id: str | None) -> int:
+    name = next((n for n, s in LIST_FIELDS.items() if s.question == question_id), None)
+    saved = state.profile.get(name) if name else None
+    return len(saved.value) if saved is not None and isinstance(saved.value, list) else 0
+
+
+# Đọc câu ô nhập D4 / D5 ghép; chữ vai trò, phạm vi đổi về mã như form. Câu khác thì None
+def read_item_text(question_id: str | None, message: str) -> tuple[str, dict] | None:
+    text = message.strip().rstrip(".")
+    roles = {label.lower(): code for code, label in buttons.ROLE_LABELS.items()}
+    impacts = {label.lower(): code for code, label in buttons.IMPACT_LABELS.items()}
+    activity = ACTIVITY_TEXT.fullmatch(text) if question_id == "D4" else None
+    if activity is not None:
+        month_year = lambda value: f"{int(value.split('/')[0]):02d}/{value.split('/')[1]}"  # noqa: E731
+        return "activities", {
+            "name": activity["name"],
+            "role": roles.get(activity["role"].strip().lower(), activity["role"]),
+            "impact_level": impacts.get(activity["impact"].strip().lower(), activity["impact"]),
+            "start_date": month_year(activity["start"]),
+            "end_date": month_year(activity["end"]) if activity["end"] else None,
+            "is_ongoing": activity["ongoing"] is not None,
+        }
+    award = AWARD_TEXT.fullmatch(text) if question_id == "D5" else None
+    if award is not None:
+        return "awards", {
+            "name": award["name"],
+            "impact_level": impacts.get(award["impact"].strip().lower(), award["impact"]),
+            "year": int(award["year"]),
+        }
+    return None
+
+
+# Ghi một hoạt động / giải thưởng học sinh nhập ở ô nhập, không gọi Qwen. Sai ý nào thì hỏi lại ý đó
+def save_item_text(state: ChatState, name: str, item: dict) -> SkillOutput:
+    spec = LIST_FIELDS[name]
+    count_before = list_count(state, spec.question)
+    try:
+        done = spec.check_item(**item)
+    except AskAgain as err:
+        return ask_question(state, spec.question, err.question)
+    save_items(state, name, [done], [], "confirmed")
+    return ask_more(state, spec.question, count_before) or ask_next(state)
+
+
 def press_button(state: ChatState, button: buttons.Button) -> SkillOutput:
     buttons.press(state, button)
     for spec in LIST_FIELDS.values():
@@ -461,19 +642,39 @@ class HoSoHandler:
         question_id = state.question_id
         if question_id == "X1" and is_confirm(message):
             return confirm(state)
+        if question_id in NO_MORE and buttons.same_text(message, NO_MORE[question_id]):
+            return ask_next(state)
+        item_text = read_item_text(question_id, message)
+        if item_text is not None:
+            return save_item_text(state, *item_text)
         button = buttons.pressed(question_id, message, can_skip=question_id in OPTIONAL_QUESTIONS)
         if button is not None:
             return press_button(state, button)
+        gpa_text = read_gpa_text(message)
+        if gpa_text is not None:
+            return save_gpa(state, *gpa_text)
+        plan_text = PLAN_TEXT.fullmatch(message.strip().rstrip("."))
+        if plan_text is not None:
+            return save_english_plan(state, int(plan_text[1]), int(plan_text[2]))
 
         known = {name: f.value for name, f in state.profile.items() if f.value is not None}
         asked_id = question_id if question_id in QUESTION_FIELDS else None
         before = {key: deepcopy(state.profile[key].value) for key in PENDING_KEYS if key in state.profile}
+        count_before = list_count(state, question_id)
         read = await self._reader.read(asked_id, message, known, state.branch)
+        # GPA không nói thang thì chưa ghi, hỏi lại thang sau khi ghi các thông tin khác
+        guessed_gpa = read.values.pop("gpa", None) if read.gpa_guessed else None
         save_read(state, read)
+        if guessed_gpa is not None:
+            return ask_gpa_scale(state, guessed_gpa["value"])
 
         follow = follow_up(state, before)
         if follow is not None:
             return follow
+        if question_id in NO_MORE:
+            more = ask_more(state, question_id, count_before)
+            if more is not None:
+                return more
         if question_id == "X1":
             # Học sinh sửa thông tin ở bảng rà soát: sai thì hỏi lại, đúng thì hiện lại bảng
             return SkillOutput(read.ask_again) if read.ask_again else review(state)

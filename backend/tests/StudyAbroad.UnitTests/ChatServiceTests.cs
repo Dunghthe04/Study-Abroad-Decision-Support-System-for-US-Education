@@ -156,6 +156,26 @@ public class ChatServiceTests
         Assert.Single(store.Rows); // phiên chat vẫn được lưu
     }
 
+    // Mục 7: trả trang form của câu chat đang hỏi
+    [Theory]
+    [InlineData("B1.3", 1)]
+    [InlineData("D2", 2)]
+    [InlineData("E2", 3)]
+    [InlineData("F1", 4)]
+    [InlineData("D5", 5)]
+    [InlineData("X1", 6)]
+    [InlineData("N4", null)]
+    [InlineData(null, null)]
+    public async Task Response_HasFormStepOfAskedQuestion(string? questionId, int? expected)
+    {
+        var advisor = new FakeAdvisor("B2") { QuestionId = questionId };
+
+        var res = await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow())
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Equal(expected, res.FormStep);
+    }
+
     // C5: học sinh xác nhận ở X1 (chat sang B3) thì lưu hồ sơ chính thức
     private static ChatSession AtReview(Guid userId, string step = "B2") =>
         new() { UserId = userId, StateJson = $"{{\"currentStep\":\"{step}\",\"questionId\":\"X1\"}}", CurrentStep = step };
@@ -224,11 +244,13 @@ public class ChatServiceTests
         public AdvisorChatRequest? LastRequest { get; private set; }
         public JsonElement? Profile { get; init; }
         public IReadOnlyList<string>? Changed { get; init; }
+        public string? QuestionId { get; init; }
 
         public Task<AdvisorChatResponse> ChatAsync(AdvisorChatRequest request, CancellationToken ct = default)
         {
             LastRequest = request;
-            var state = JsonDocument.Parse($"{{\"currentStep\":\"{nextStep}\"}}").RootElement;
+            var question = QuestionId is null ? "" : $",\"questionId\":\"{QuestionId}\"";
+            var state = JsonDocument.Parse($"{{\"currentStep\":\"{nextStep}\"{question}}}").RootElement;
             return Task.FromResult(new AdvisorChatResponse(
                 "ok", [], null, state, QuickReplies: replies, Widget: widget, Profile: Profile, ProfileChanged: Changed));
         }

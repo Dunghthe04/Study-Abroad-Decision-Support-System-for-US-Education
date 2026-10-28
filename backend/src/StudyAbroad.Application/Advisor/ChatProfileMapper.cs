@@ -20,6 +20,7 @@ public static class ChatProfileMapper
     [
         "current_level", "current_grade", "target_level", "major", "gpa", "sat", "act", "english",
         "english_plan", "budget", "scholarship", "activities", "awards", "preferred_states", "school_type",
+        "education_system", "funding_source", "intake",
     ];
 
     // Trạng thái có giá trị; none / unknown / declined thì nháp không có chỗ lưu
@@ -58,6 +59,9 @@ public static class ChatProfileMapper
             ["awards"] = ListOrNull(items.Where(IsAward).Select(AwardToChat)),
             ["preferred_states"] = ListOrNull((step1?.TargetStates ?? []).Select(s => (JsonNode)JsonValue.Create(s)!)),
             ["school_type"] = Text(step1?.TargetSchoolType),
+            ["education_system"] = Text(step1?.EducationSystem),
+            ["funding_source"] = Text(draft.Step4?.FundingSource),
+            ["intake"] = Text(step1?.TargetIntake),
         };
 
         var profile = new JsonObject();
@@ -91,6 +95,9 @@ public static class ChatProfileMapper
                 "major" => draft with { Step1 = step1 with { TargetMajor = Str(value) } },
                 "preferred_states" => draft with { Step1 = step1 with { TargetStates = value?.AsArray().Select(s => s!.GetValue<string>()).ToList() } },
                 "school_type" => draft with { Step1 = step1 with { TargetSchoolType = Str(value) } },
+                "education_system" => draft with { Step1 = step1 with { EducationSystem = Str(value) } },
+                "intake" => draft with { Step1 = step1 with { TargetIntake = Str(value) } },
+                "funding_source" => draft with { Step4 = step4 with { FundingSource = Str(value) } },
                 "gpa" => draft with { Step2 = ApplyGpa(draft.Step2, value) },
                 "sat" or "act" => draft with { Step3 = step3 with { Certifications = PutCert(step3.Certifications, Standardized, key, value is null ? null : (value.GetValue<decimal>(), null)) } },
                 "english" => draft with { Step3 = step3 with { Certifications = PutEnglish(step3.Certifications, value) } },

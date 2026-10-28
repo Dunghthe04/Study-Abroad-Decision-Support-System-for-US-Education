@@ -84,11 +84,33 @@ namespace StudyAbroad.Application.Advisor
                 State = null,
                 Profile = null,
                 ProfileChanged = changed,
+                FormStep = FormStepOf(response.State),
                 SessionId = session.Id.ToString(),
             };
         }
 
         private const string ConfirmedStep = "B3";
+
+        // Mục 7: câu chat đang hỏi nằm ở trang nào của form, để form chuyển theo
+        private static readonly Dictionary<string, int> FormSteps = new()
+        {
+            ["D1"] = 1, ["N2"] = 1, ["N3"] = 1,
+            ["D2"] = 2,
+            ["E1"] = 3, ["E2"] = 3, ["D3"] = 3,
+            ["F1"] = 4, ["F2"] = 4, ["F3"] = 4,
+            ["D4"] = 5, ["D5"] = 5,
+            ["X1"] = 6,
+        };
+
+        private static int? FormStepOf(JsonElement? state)
+        {
+            if (state is not { ValueKind: JsonValueKind.Object } s
+                || !s.TryGetProperty("questionId", out var q) || q.ValueKind != JsonValueKind.String)
+                return null;
+            var id = q.GetString()!;
+            if (id.StartsWith("B1.")) return 1;
+            return FormSteps.TryGetValue(id, out var step) ? step : null;
+        }
 
         private static string? CurrentStep(JsonElement? state) =>
             state is { ValueKind: JsonValueKind.Object } s && s.TryGetProperty("currentStep", out var step)

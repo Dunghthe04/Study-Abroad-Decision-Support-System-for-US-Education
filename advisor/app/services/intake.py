@@ -13,6 +13,8 @@ INTAKE_ID = "INTAKE"
 INTAKE_ASK = "Để làm bước này mình cần hồ sơ của bạn. Bạn muốn trả lời ngay trong chat hay điền bằng form?"
 INTAKE_FORM = "Bạn điền hồ sơ ở form nhé, điền xong quay lại đây để mình làm tiếp."
 INTAKE_MORE = "Hồ sơ của bạn còn thiếu một vài thông tin. "
+# Nút "Tiếp tục bằng chat" trên form gửi câu này: hỏi tiếp trong chat các mục còn thiếu
+CONTINUE_CHAT = "Tiếp tục bằng chat"
 
 CHAT_BUTTON = QuickReply(label="Trả lời trong chat", value="Trả lời trong chat")
 FORM_BUTTON = QuickReply(label="Điền bằng form", value="Điền bằng form")
@@ -31,6 +33,17 @@ FIELD_QUESTION = {
 # Hồ sơ đã có thông tin nào trong phần form quản lý chưa (chat đã nhớ hoặc form đã điền)
 def has_profile(profile: dict[str, ProfileField]) -> bool:
     return any(key in DRAFT_KEYS for key in profile)
+
+
+# Câu mời chọn cách điền; đã có một phần hồ sơ thì nói còn thiếu mấy mục bắt buộc
+def intake_ask(profile: dict[str, ProfileField], required: list[str]) -> str:
+    missing = len(missing_fields(profile, required))
+    if not has_profile(profile) or missing == 0:
+        return INTAKE_ASK
+    return (
+        f"Để làm bước này hồ sơ của bạn còn thiếu {missing} mục. "
+        "Bạn muốn trả lời ngay trong chat hay điền bằng form?"
+    )
 
 
 # Học sinh chọn gì: nhận bằng chữ trên nút (hoặc câu ngắn có chữ "form", "chat"), không nhờ model

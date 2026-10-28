@@ -46,9 +46,9 @@ interface Step2TranscriptProps {
 }
 
 // Khớp với BE (ProfileFileStorageService): chỉ PDF/PNG/JPG, tối đa 10MB
-const TRANSCRIPT_EXTENSIONS = [".pdf", ".png", ".jpg", ".jpeg"];
-const TRANSCRIPT_ACCEPT = TRANSCRIPT_EXTENSIONS.join(",");
-const TRANSCRIPT_MAX_BYTES = 10 * 1024 * 1024;
+export const TRANSCRIPT_EXTENSIONS = [".pdf", ".png", ".jpg", ".jpeg"];
+export const TRANSCRIPT_ACCEPT = TRANSCRIPT_EXTENSIONS.join(",");
+export const TRANSCRIPT_MAX_BYTES = 10 * 1024 * 1024;
 
 const GPA_MODE_OPTIONS: { value: GpaMode; label: string; description: string }[] = [
   { value: "overall", label: "Nhập GPA tổng", description: "Đã biết điểm trung bình chung, chỉ cần gõ một số." },
@@ -74,7 +74,7 @@ const DEFAULT_SUBJECTS = [
 ];
 
 // Sinh danh sách 3 năm học gần nhất tính đến lớp/năm hiện tại
-function getInitialAcademicYears(level?: CurrentEducationLevel | null, grade?: string | null): AcademicYearDraft[] {
+export function getInitialAcademicYears(level?: CurrentEducationLevel | null, grade?: string | null): AcademicYearDraft[] {
   let gradeNames: string[] = ["Lớp 10", "Lớp 11", "Lớp 12"];
 
   if (level === "middle_school") {
@@ -193,7 +193,7 @@ function countReviewCells(years: AcademicYearDraft[]): number {
 
 // Gộp điểm OCR vào các năm học (không sửa trực tiếp object cũ)
 // Ô bị trùng môn trong cùng kỳ, ghi đè điểm khác đã có, hoặc advisor đánh dấu → gắn lý do cần kiểm tra
-function mergeExtractedTerms(
+export function mergeExtractedTerms(
   years: AcademicYearDraft[],
   terms: ExtractedTerm[],
   fallbackIdx: number

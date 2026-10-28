@@ -2312,6 +2312,11 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(16)")
                         .HasColumnName("scholarship_need");
 
+                    b.Property<string>("TargetIntake")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("target_intake");
+
                     b.Property<string>("TargetLevel")
                         .IsRequired()
                         .HasMaxLength(32)

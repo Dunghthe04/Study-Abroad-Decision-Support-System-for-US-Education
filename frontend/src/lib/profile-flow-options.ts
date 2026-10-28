@@ -6,6 +6,8 @@ import type {
   ActivityRole,
   BudgetTierId,
   CurrentEducationLevel,
+  EducationSystem,
+  FundingSource,
   GpaMode,
   ImpactLevel,
   ScholarshipNeed,
@@ -18,6 +20,25 @@ export const EDUCATION_LEVEL_OPTIONS: { value: CurrentEducationLevel; label: str
   { value: "high_school", label: "Trung học phổ thông" },
   { value: "college_university", label: "Cao đẳng / Đại học" },
   { value: "master", label: "Thạc sĩ" },
+];
+
+/** Hệ chương trình cấp 3 — chữ giống seed `profile.metadata` (educationSystems), chat dùng cùng chữ trên nút */
+export const EDUCATION_SYSTEM_OPTIONS: { value: EducationSystem; label: string }[] = [
+  { value: "standard", label: "Hệ chuẩn công lập Việt Nam" },
+  { value: "specialized", label: "Hệ chuyên (Trường THPT Chuyên / Năng khiếu)" },
+  { value: "dual_degree", label: "Hệ song bằng (Việt - Anh / Cambridge)" },
+  { value: "international", label: "Hệ quốc tế hoàn toàn (IB, AP, Cambridge)" },
+  { value: "private", label: "Dân lập / Tư thục chất lượng cao" },
+  { value: "other", label: "Hệ khác" },
+];
+
+/** Ai chi trả chính — chữ giống seed `profile.metadata` (fundingSources), chat dùng cùng chữ trên nút */
+export const FUNDING_SOURCE_OPTIONS: { value: FundingSource; label: string }[] = [
+  { value: "family_support", label: "Gia đình hỗ trợ toàn bộ / một phần" },
+  { value: "personal_savings", label: "Tiết kiệm cá nhân" },
+  { value: "bank_loan", label: "Vay vốn du học ngân hàng" },
+  { value: "scholarship", label: "Trông đợi vào học bổng" },
+  { value: "other", label: "Nguồn tài chính khác" },
 ];
 
 export const SCHOOL_TYPE_OPTIONS: { value: TargetSchoolType; label: string }[] = [
@@ -49,6 +70,16 @@ export const DEFAULT_BUDGET_TIERS: { key: BudgetTierId; label: string; descripti
   { key: "tier_50k_70k", label: "50.000 – 70.000 USD", description: "Học phí & sinh hoạt phí $50.000 – $70.000/năm" },
   { key: "tier_above_70k", label: "Trên 70.000 USD", description: "Học phí & sinh hoạt phí trên $70.000/năm" },
 ];
+
+// Tỉ giá chỉ dùng để quy đổi trên form và ô nhập tiền của chat; số tiền không được lưu, chỉ lưu mã mức
+export const BUDGET_RATE = 25000;
+// Ngưỡng trên (USD) của từng mức khi metadata không có minUsd/maxUsd
+export const FALLBACK_MAX_USD: Partial<Record<BudgetTierId, number>> = {
+  tier_under_20k: 20000,
+  tier_20k_35k: 35000,
+  tier_35k_50k: 50000,
+  tier_50k_70k: 70000,
+};
 
 export const SCHOLARSHIP_NEED_OPTIONS: { value: ScholarshipNeed; label: string; description: string }[] = [
   { value: "mandatory", label: "Bắt buộc", description: "Không có học bổng thì chưa thể đi" },

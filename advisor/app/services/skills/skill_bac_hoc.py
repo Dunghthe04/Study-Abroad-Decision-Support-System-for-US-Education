@@ -19,13 +19,9 @@ SKILL_PATH = SKILLS_DIR / "skill_bac_hoc.md"
 UNKNOWN = "unknown"
 
 # Cấp học hiện tại → các lớp form cho chọn, chép từ getGradeOptionsForLevel (profile-flow-options.ts).
-# Mã cấp học giữ đồng bộ với currentEducationLevels trong DbSeeder.cs. Không có tiến sĩ
-GRADE_OPTIONS = {
-    "middle_school": ("Lớp 6", "Lớp 7", "Lớp 8", "Lớp 9"),
-    "high_school": ("Lớp 10", "Lớp 11", "Lớp 12"),
-    "college_university": ("Năm 1", "Năm 2", "Năm 3", "Năm 4", "Năm cuối", "Đã tốt nghiệp"),
-    "master": ("Năm 1", "Năm 2", "Đã tốt nghiệp"),
-}
+# Mã cấp học giữ đồng bộ với currentEducationLevels trong DbSeeder.cs. Không có tiến sĩ.
+# Để ở buttons.py vì ô chọn B1.1 trong chat cũng dùng
+GRADE_OPTIONS = buttons.GRADE_OPTIONS
 CURRENT_LEVELS = tuple(GRADE_OPTIONS)
 ALL_GRADES = tuple(dict.fromkeys(g for grades in GRADE_OPTIONS.values() for g in grades))
 # Độ dài tối đa của ngành (giống ValidateForCommit)
@@ -51,6 +47,10 @@ QUESTION_FIELDS = {
     "B1.4": ["intake"],
 }
 READ_FIELDS = ("current_level", "current_grade", "target_level", "major", "intake")
+# Ngành bắt buộc giống form: hỏi tới khi học sinh chọn ngành hoặc bấm "Em chưa rõ ngành" (nút "Chưa rõ" của form)
+REQUIRED_QUESTIONS = ("B1.3",)
+# Ô form không bắt buộc: có nút "Bỏ qua", bấm thì không hỏi lại
+SKIPPABLE_QUESTIONS = ("B1.4",)
 
 SCHEMA = {
     "type": "object",
@@ -157,19 +157,28 @@ def answered(state: ChatState, question_id: str) -> bool:
     return any(name in state.profile for name in QUESTION_FIELDS[question_id])
 
 
-# Câu B1 tiếp theo chưa có câu trả lời và chưa hỏi đủ 2 lần. Hết thì None
+# Câu này còn hỏi được không: câu bắt buộc thì luôn hỏi, câu khác tối đa 2 lần
+def can_ask(state: ChatState, question_id: str) -> bool:
+    return question_id in REQUIRED_QUESTIONS or state.asked.get(question_id, 0) < MAX_ASK
+
+
+# Câu B1 tiếp theo chưa có câu trả lời và còn hỏi được. Hết thì None
 def next_question(state: ChatState) -> str | None:
     for question_id in QUESTION_FIELDS:
-        if not answered(state, question_id) and state.asked.get(question_id, 0) < MAX_ASK:
+        if not answered(state, question_id) and can_ask(state, question_id):
             return question_id
     return None
+
+
+def ask_question(state: ChatState, question_id: str) -> SkillOutput:
+    return buttons.ask_with_buttons(state, question_id, can_skip=question_id in SKIPPABLE_QUESTIONS)
 
 
 # Hỏi câu B1 tiếp theo; hết câu thì sang B2 và hỏi câu đầu của skill_ho_so. skill_nhu_cau gọi hàm này
 def ask_next(state: ChatState) -> SkillOutput:
     question_id = next_question(state)
     if question_id:
-        return buttons.ask_with_buttons(state, question_id)
+        return ask_question(state, question_id)
     go_to(state, "B2")
     return skill_ho_so.ask_next(state)
 
@@ -181,12 +190,15 @@ class BacHocHandler:
     async def run(self, state: ChatState, message: str) -> SkillOutput:
         question_id = state.question_id if state.question_id in QUESTION_FIELDS else "B1.1"
         # B5. Bấm nút (bậc học, "Em chưa rõ ngành") thì ghi thẳng, không gọi Qwen
-        button = buttons.pressed(question_id, message)
+        can_skip = question_id in SKIPPABLE_QUESTIONS
+        button = buttons.pressed(question_id, message, can_skip=can_skip)
         if button is not None:
             buttons.press(state, button)
+            if button == buttons.SKIP:
+                state.asked[question_id] = MAX_ASK  # bỏ qua thì không hỏi lại
             return ask_next(state)
         save_read(state, await self._reader.read(question_id, message))
-        # Học sinh chưa trả lời câu đang hỏi thì hỏi lại (tối đa 2 lần)
-        if not answered(state, question_id) and state.asked.get(question_id, 0) < MAX_ASK:
-            return buttons.ask_with_buttons(state, question_id)
+        # Học sinh chưa trả lời câu đang hỏi thì hỏi lại (tối đa 2 lần, ngành thì hỏi tới khi có)
+        if not answered(state, question_id) and can_ask(state, question_id):
+            return ask_question(state, question_id)
         return ask_next(state)

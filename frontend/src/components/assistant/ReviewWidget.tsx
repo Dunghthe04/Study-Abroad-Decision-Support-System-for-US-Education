@@ -4,6 +4,8 @@ import { cn } from "@/lib/utils";
 import {
   DEFAULT_BUDGET_TIERS,
   EDUCATION_LEVEL_OPTIONS,
+  EDUCATION_SYSTEM_OPTIONS,
+  FUNDING_SOURCE_OPTIONS,
   SCHOLARSHIP_NEED_OPTIONS,
   SCHOOL_TYPE_OPTIONS,
   labelOf,
@@ -44,23 +46,8 @@ const STATUS_TEXT: Record<string, string> = {
   declined: "Không muốn nói",
 };
 
-const EDUCATION_SYSTEMS: Record<string, string> = {
-  vn_thpt: "THPT Việt Nam",
-  ib: "IB",
-  a_level: "A-Level",
-  ap: "AP",
-  other: "Khác",
-};
-
 // Học bổng: chat dùng required/preferred/no, form dùng mandatory/preferred/optional
 const SCHOLARSHIP_ALIASES: Record<string, string> = { required: "mandatory", no: "optional" };
-
-const FUNDING: Record<string, string> = {
-  parents: "Bố mẹ",
-  relatives: "Người thân",
-  self: "Tự túc",
-  loan: "Vay",
-};
 
 const CERT_NAMES: Record<string, string> = {
   ielts: "IELTS",
@@ -88,7 +75,7 @@ function formatValue(key: string, value: unknown): string {
     case "current_level":
       return labelOf(EDUCATION_LEVEL_OPTIONS, str(value) as never) || str(value);
     case "education_system":
-      return EDUCATION_SYSTEMS[str(value)] ?? str(value);
+      return labelOf(EDUCATION_SYSTEM_OPTIONS, str(value) as never) || str(value);
     case "target_level":
       return str(value) && studyLevelLabel(str(value));
     case "gpa": {
@@ -114,7 +101,7 @@ function formatValue(key: string, value: unknown): string {
       return labelOf(SCHOLARSHIP_NEED_OPTIONS, need as never) || str(value);
     }
     case "funding_source":
-      return FUNDING[str(value)] ?? str(value);
+      return labelOf(FUNDING_SOURCE_OPTIONS, str(value) as never) || str(value);
     case "activities":
     case "awards":
       return names(value);

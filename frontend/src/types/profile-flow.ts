@@ -92,14 +92,22 @@ export type ScholarshipNeed = "mandatory" | "preferred" | "optional";
 /** Phạm vi ảnh hưởng — DB lưu impact_level 1..5 theo thứ tự này. */
 export type ImpactLevel = "school" | "district" | "province" | "national" | "international";
 export type ActivityRole = "founder" | "leader" | "vice_leader" | "member";
+/** Hệ chương trình cấp 3 — khớp EducationSystems phía BE */
+export type EducationSystem = "standard" | "specialized" | "dual_degree" | "international" | "private" | "other";
+/** Ai chi trả chính — khớp ProfileConstants.FundingSources phía BE */
+export type FundingSource = "family_support" | "personal_savings" | "bank_loan" | "scholarship" | "other";
 
 export interface GoalDraft {
   currentEducationLevel?: CurrentEducationLevel | null;
   currentGrade?: string | null;
+  /** Chỉ hỏi khi currentEducationLevel là high_school */
+  educationSystem?: EducationSystem | null;
   currentSchool?: string | null;
   expectedGraduationYear?: number | null;
   targetDegreeLevel?: string | null;
   targetMajor?: string | null;
+  /** Kỳ nhập học dạng "Fall 2027" — khớp câu B1.4 bên chat */
+  targetIntake?: string | null;
   targetStates?: string[] | null;
   targetSchoolType?: TargetSchoolType | null;
 }
@@ -178,6 +186,7 @@ export interface LegacyCertificationDraft {
 export interface FinancialDraft {
   annualBudgetTier?: BudgetTierId | null;
   needFinancialAid?: ScholarshipNeed | null;
+  fundingSource?: FundingSource | null;
 }
 
 export interface ActivityDraft {

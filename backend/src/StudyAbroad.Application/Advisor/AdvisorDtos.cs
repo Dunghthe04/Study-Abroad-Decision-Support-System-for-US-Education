@@ -21,6 +21,7 @@ public record Widget(string Type, JsonElement? Data = null);
 
 /// <param name="Profile">Hồ sơ sau lượt này (nội bộ, .NET dùng để ghi vào bản nháp).</param>
 /// <param name="ProfileChanged">Khóa hồ sơ đổi trong lượt này.</param>
+/// <param name="FormStep">Trang form (1–6) của câu chat đang hỏi; null = câu không thuộc trang nào.</param>
 public record AdvisorChatResponse(
     string Answer,
     IReadOnlyList<Citation> Citations,
@@ -30,4 +31,5 @@ public record AdvisorChatResponse(
     IReadOnlyList<QuickReply>? QuickReplies = null,
     Widget? Widget = null,
     JsonElement? Profile = null,
-    IReadOnlyList<string>? ProfileChanged = null);
+    IReadOnlyList<string>? ProfileChanged = null,
+    int? FormStep = null);
