@@ -145,7 +145,7 @@ class ChatFlow:
         predicted, probs = await self._choose(state, message)
 
         # 2. Code kiểm luật: tối đa 2 skill, thứ tự chạy, điều kiện chạy
-        plan = plan_skills(state, predicted, has_results=False)
+        plan = plan_skills(state, predicted, has_results=state.has_results)
 
         # 3. Chạy từng skill, ghép các câu trả lời
         answers: list[str] = []

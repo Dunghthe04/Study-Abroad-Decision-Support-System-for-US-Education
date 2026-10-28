@@ -8,6 +8,7 @@ from app.schemas.chat import ChatMessage, ChatRequest, ChatState, ProfileField, 
 from app.services.chat_flow import (
     NEED_MAJOR,
     NEED_PROFILE,
+    NEED_RESULTS,
     NOT_READY,
     QUESTIONS,
     ChatFlow,
@@ -236,6 +237,23 @@ async def test_picker_receives_step_question_message_and_missing_fields():
     step, question, message, missing = picker.calls[0]
     assert (step, question, message) == ("B2", "Bạn đã thi SAT chưa?", "em được 1420")
     assert "gpa" not in missing and "english" in missing  # chỉ gửi những thông tin còn thiếu
+
+
+async def test_explain_is_blocked_until_the_state_has_results():
+    ran_blocked: list[str] = []
+    ran_allowed: list[str] = []
+
+    blocked = await ChatFlow(
+        FakePicker("skill_explain"), {"skill_explain": RecordingHandler("skill_explain", ran_blocked)}
+    ).reply(request("vì sao trường A Vừa sức", current_step="B4"))
+    allowed = await ChatFlow(
+        FakePicker("skill_explain"), {"skill_explain": RecordingHandler("skill_explain", ran_allowed)}
+    ).reply(request("vì sao trường A Vừa sức", current_step="B4", has_results=True))
+
+    assert blocked.skills == [] and ran_blocked == []  # chưa có danh sách trường thì chưa giải thích được
+    assert blocked.answer == NEED_RESULTS
+    assert allowed.skills == ["skill_explain"] and ran_allowed == ["skill_explain"]
+    assert allowed.state.has_results is True  # cờ được giữ trong state để lượt sau còn dùng
 
 
 async def test_assessment_is_blocked_when_profile_is_incomplete():
