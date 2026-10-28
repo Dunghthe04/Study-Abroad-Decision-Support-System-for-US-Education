@@ -5,6 +5,12 @@ namespace StudyAbroad.Domain.Entities;
 /// <summary>Kiến thức đã kiểm chứng cho AI: mỗi dòng Đã kiểm chứng ở sheet 05 / 88 cặp Q&A là một bản ghi, script nạp sẽ embed sang kho tri thức phục vụ B5 RAG (UC-51, 52, 77).</summary>
 public class KnowledgeDocument : BaseEntity
 {
+    /// <summary>Mã cố định KB-001..., khóa để cập nhật khi nạp lại dữ liệu.</summary>
+    public string Code { get; set; } = string.Empty;
+
+    /// <summary>Mã băm của Question lúc tạo vector, chỉ tạo lại vector khi câu hỏi đổi.</summary>
+    public string? EmbeddingHash { get; set; }
+
     /// <summary>Tiêu đề hoặc phần đầu của câu hỏi.</summary>
     public string Title { get; set; } = string.Empty;
 
@@ -52,9 +58,6 @@ public class KnowledgeDocument : BaseEntity
 
     /// <summary>Phiên bản tài liệu (mặc định 1).</summary>
     public int Version { get; set; } = 1;
-
-    /// <summary>Vector 1024 chiều (mô hình BGE-M3) của trường Question.</summary>
-    public float[]? Embedding { get; set; }
 
     /// <summary>ID người kiểm duyệt (Moderator / Admin).</summary>
     public Guid? VerifiedByUserId { get; set; }
