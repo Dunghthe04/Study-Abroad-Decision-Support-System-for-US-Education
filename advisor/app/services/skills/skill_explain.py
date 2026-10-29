@@ -5,6 +5,8 @@ Skill chỉ xác định trường nào, rồi báo .NET (action "explain" kèm 
 """
 
 import logging
+import re
+import unicodedata
 from typing import Any
 
 from app.schemas.chat import ChatState, QuickReply, ResultSchool
@@ -17,8 +19,8 @@ logger = logging.getLogger("advisor.explain")
 PICK_PATH = SKILLS_DIR / "skill_chon_truong.md"
 PICK_SCHEMA = {
     "type": "object",
-    "properties": {"code": {"type": ["string", "null"]}},
-    "required": ["code"],
+    "properties": {"code": {"type": ["string", "null"]}, "words": {"type": ["string", "null"]}},
+    "required": ["code", "words"],
 }
 
 EXPLAIN_ACTION = "explain"
@@ -29,15 +31,70 @@ NO_LIST = "Mình chưa có danh sách trường gợi ý nào để giải thíc
 MAX_BUTTONS = 6  # danh sách có thể 20 trường, nút chỉ hiện vài trường đầu
 
 
-# Mã AI chọn phải nằm trong danh sách (AI đoán bừa mã lạ thì ném ValueError để SkillCall gọi lại); None = không rõ trường nào
-def check_pick(raw: dict[str, Any], schools: list[ResultSchool]) -> str | None:
+# Chữ chung của tên trường, không đủ để chứng minh học sinh nhắc đúng trường đó
+COMMON_WORDS = {"university", "of", "the", "state", "college", "institute", "technology", "truong", "and"}
+# Vị trí học sinh hay nói: số thứ tự và "cuối"
+ORDINALS = {
+    "nhat": 1,
+    "hai": 2,
+    "ba": 3,
+    "tu": 4,
+    "bon": 4,
+    "nam": 5,
+    "sau": 6,
+    "bay": 7,
+    "tam": 8,
+    "chin": 9,
+    "muoi": 10,
+}
+_POSITION_RE = re.compile(r"\b(?:thu|so)\s*(\d+|[a-z]+)\b")
+_FIRST_RE = re.compile(r"\bdau tien\b|\bdau danh sach\b")
+_LAST_RE = re.compile(r"\bcuoi cung\b|\bcuoi danh sach\b")
+
+
+# Bỏ dấu, chữ thường: "Trường thứ ba" và "truong thu ba" như nhau
+def plain(text: str) -> str:
+    text = text.lower().replace("đ", "d")
+    return "".join(c for c in unicodedata.normalize("NFD", text) if unicodedata.category(c) != "Mn")
+
+
+def tokens(text: str) -> set[str]:
+    return set(re.findall(r"[a-z0-9]+", plain(text)))
+
+
+# AI phải chỉ ra chữ học sinh viết để gọi trường đó (words). Chữ đó phải có trong tin nhắn và khớp tên hoặc mã của
+# trường AI chọn: AI hay đoán một trường nổi tiếng khi học sinh hỏi trường không có trong danh sách (Harvard -> MIT)
+# Mã AI chọn phải nằm trong danh sách; sai thì ném ValueError để SkillCall gọi lại. None = không rõ trường nào
+def check_pick(raw: dict[str, Any], message: str, schools: list[ResultSchool]) -> str | None:
     code = raw.get("code") or None
     if code is None:
         return None
-    by_lower = {s.code.lower(): s.code for s in schools}
-    if str(code).lower() not in by_lower:
+    by_lower = {s.code.lower(): s for s in schools}
+    school = by_lower.get(str(code).lower())
+    if school is None:
         raise ValueError(f"mã trường lạ: {code}")
-    return by_lower[str(code).lower()]
+    words = str(raw.get("words") or "").strip()
+    if not words or plain(words) not in plain(message):
+        raise ValueError("chữ AI nêu không có trong tin nhắn")
+    proof = tokens(words) - COMMON_WORDS
+    if not proof & (tokens(school.name) | {school.code.lower()}):
+        raise ValueError(f"chữ AI nêu không khớp trường {school.code}")
+    return school.code
+
+
+# Gọi theo vị trí ("trường thứ ba", "trường đầu tiên", "trường cuối cùng"): code đếm, không để AI đếm (AI hay đếm sai)
+def match_by_position(message: str, schools: list[ResultSchool]) -> ResultSchool | None:
+    text = plain(message)
+    if _LAST_RE.search(text):
+        return schools[-1]
+    if _FIRST_RE.search(text):
+        return schools[0]
+    found = _POSITION_RE.search(text)
+    if found is None:
+        return None
+    word = found.group(1)
+    number = int(word) if word.isdigit() else ORDINALS.get(word)
+    return schools[number - 1] if number and number <= len(schools) else None
 
 
 # Học sinh gõ đúng tên một trường (kể cả khi bấm nút) thì khỏi hỏi AI. Trùng nhiều tên thì để AI quyết
@@ -62,7 +119,7 @@ class ExplainHandler:
         if not schools:
             return SkillOutput(NO_LIST)
 
-        chosen = match_by_name(message, schools)
+        chosen = match_by_name(message, schools) or match_by_position(message, schools)
         if chosen is None:
             payload = {
                 "message": message,
@@ -71,7 +128,7 @@ class ExplainHandler:
                     for s in schools
                 ],
             }
-            code = await self._pick.run(payload, PICK_SCHEMA, lambda raw: check_pick(raw, schools))
+            code = await self._pick.run(payload, PICK_SCHEMA, lambda raw: check_pick(raw, message, schools))
             chosen = next((s for s in schools if s.code == code), None)
 
         # Không rõ trường nào (hoặc AI sai hai lần): hỏi lại bằng nút, bấm là gửi lại một câu có đúng tên trường

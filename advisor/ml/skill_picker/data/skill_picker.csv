@@ -1801,3 +1801,227 @@ S1799,def-90,B3,Bạn có muốn mình đề xuất lộ trình và danh sách t
 S1800,def-90,B5,,cho em hỏi test-optional với test-blind khác gì nhau,,skill_tra_loi,synthetic,train
 S1801,def-90,B2,"Bạn cần học bổng ở mức nào: không cần, nên có, hay bắt buộc phải có mới đi được?",test-optional khác test-blind thế nào,"budget, scholarship",skill_tra_loi,synthetic,train
 S1802,def-90,B4,,test-optional va test-blind khac nhau cho nao,,skill_tra_loi,synthetic,train
+S1803,ex2-1,B4,,University of Iowa khó vào hay dễ vào vậy,,skill_explain,synthetic,train
+S1804,ex2-1,B4,,University of Iowa có hợp với em không,,skill_explain,synthetic,train
+S1805,ex2-1,B4,,vì sao em bị xếp nhóm Safety ở University of Iowa,,skill_explain,synthetic,train
+S1806,ex2-1,B4,,em có nên nộp University of Iowa không,,skill_explain,synthetic,train
+S1807,ex2-1,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,university of iowa kho vao hay de vao vay,,skill_explain,synthetic,train
+S1808,ex2-2,B4,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,vì sao Iowa là nhóm khó vào,,skill_explain,synthetic,train
+S1809,ex2-2,B4,,tại sao Iowa lại ở nhóm Match,,skill_explain,synthetic,train
+S1810,ex2-2,B4,"Bạn kiểm tra giúp mình hồ sơ ở trên, đúng không?",cho em biết lý do Iowa nằm trong danh sách,,skill_explain,synthetic,train
+S1811,ex2-2,B4,"Bạn kiểm tra giúp mình hồ sơ ở trên, đúng không?",giải thích giúp em trường Iowa,,skill_explain,synthetic,train
+S1812,ex2-2,B4,,vi sao iowa la nhom kho vao,,skill_explain,synthetic,train
+S1813,ex2-3,B4,,cho em biết lý do Arizona State University nằm trong danh sách,,skill_explain,synthetic,val
+S1814,ex2-3,B4,,vì sao em bị xếp nhóm Reach ở Arizona State University,,skill_explain,synthetic,val
+S1815,ex2-3,B4,,tại sao Arizona State University lại ở nhóm Reach,,skill_explain,synthetic,val
+S1816,ex2-3,B4,,Arizona State University khó vào hay dễ vào vậy,,skill_explain,synthetic,val
+S1817,ex2-3,B5,,cho em biet ly do arizona state university nam trong danh sach,,skill_explain,synthetic,val
+S1818,ex2-4,B4,,giải thích giúp em trường ASU,,skill_explain,synthetic,train
+S1819,ex2-4,B4,,vì sao ASU bị xếp vào nhóm vừa sức,,skill_explain,synthetic,train
+S1820,ex2-4,B4,,em muốn xem chi tiết về ASU,,skill_explain,synthetic,train
+S1821,ex2-4,B4,,vì sao em bị xếp nhóm vừa sức ở ASU,,skill_explain,synthetic,train
+S1822,ex2-4,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,giai thich giup em truong asu,,skill_explain,synthetic,train
+S1823,ex2-5,B4,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,em muốn xem chi tiết về Oregon State University,,skill_explain,synthetic,train
+S1824,ex2-5,B4,,Oregon State University khó vào hay dễ vào vậy,,skill_explain,synthetic,train
+S1825,ex2-5,B4,"Bạn kiểm tra giúp mình hồ sơ ở trên, đúng không?",tại sao Oregon State University lại ở nhóm an toàn hơn,,skill_explain,synthetic,train
+S1826,ex2-5,B4,,vì sao Oregon State University bị xếp vào nhóm an toàn hơn,,skill_explain,synthetic,train
+S1827,ex2-5,B5,,em muon xem chi tiet ve oregon state university,,skill_explain,synthetic,train
+S1828,ex2-6,B4,,vì sao UIUC là nhóm khó vào,,skill_explain,synthetic,train
+S1829,ex2-6,B4,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,vì sao em bị xếp nhóm Reach ở UIUC,,skill_explain,synthetic,train
+S1830,ex2-6,B4,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,UIUC khó vào hay dễ vào vậy,,skill_explain,synthetic,train
+S1831,ex2-6,B4,,vì sao UIUC bị xếp vào nhóm Reach,,skill_explain,synthetic,train
+S1832,ex2-6,B4,,vi sao uiuc la nhom kho vao,,skill_explain,synthetic,train
+S1833,ex2-7,B4,,tại sao University of Arizona lại ở nhóm Safety,,skill_explain,synthetic,val
+S1834,ex2-7,B4,,cho em biết lý do University of Arizona nằm trong danh sách,,skill_explain,synthetic,val
+S1835,ex2-7,B4,,vì sao em bị xếp nhóm Safety ở University of Arizona,,skill_explain,synthetic,val
+S1836,ex2-7,B4,,University of Arizona có hợp với em không,,skill_explain,synthetic,val
+S1837,ex2-7,B4,,tai sao university of arizona lai o nhom safety,,skill_explain,synthetic,val
+S1838,ex2-8,B4,,cho em biết lý do University of Oregon nằm trong danh sách,,skill_explain,synthetic,train
+S1839,ex2-8,B4,,vì sao University of Oregon bị xếp vào nhóm Match,,skill_explain,synthetic,train
+S1840,ex2-8,B4,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,em có nên nộp University of Oregon không,,skill_explain,synthetic,train
+S1841,ex2-8,B4,,tại sao University of Oregon lại ở nhóm Match,,skill_explain,synthetic,train
+S1842,ex2-8,B4,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,cho em biet ly do university of oregon nam trong danh sach,,skill_explain,synthetic,train
+S1843,ex2-9,B5,,vì sao Penn State bị xếp vào nhóm vừa sức,,skill_explain,synthetic,train
+S1844,ex2-9,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,em muốn xem chi tiết về Penn State,,skill_explain,synthetic,train
+S1845,ex2-9,B4,,Penn State có hợp với em không,,skill_explain,synthetic,train
+S1846,ex2-9,B4,,tại sao Penn State lại ở nhóm vừa sức,,skill_explain,synthetic,train
+S1847,ex2-9,B4,,vi sao penn state bi xep vao nhom vua suc,,skill_explain,synthetic,train
+S1848,ex2-10,B4,,vì sao Rutgers bị xếp vào nhóm Safety,,skill_explain,synthetic,train
+S1849,ex2-10,B4,,cho em biết lý do Rutgers nằm trong danh sách,,skill_explain,synthetic,train
+S1850,ex2-10,B4,,em muốn xem chi tiết về Rutgers,,skill_explain,synthetic,train
+S1851,ex2-10,B4,,giải thích giúp em trường Rutgers,,skill_explain,synthetic,train
+S1852,ex2-10,B4,,vi sao rutgers bi xep vao nhom safety,,skill_explain,synthetic,train
+S1853,ex2-11,B4,,vì sao em bị xếp nhóm Match ở UCLA,,skill_explain,synthetic,train
+S1854,ex2-11,B4,,em muốn xem chi tiết về UCLA,,skill_explain,synthetic,train
+S1855,ex2-11,B4,,giải thích giúp em trường UCLA,,skill_explain,synthetic,train
+S1856,ex2-11,B4,,vì sao UCLA bị xếp vào nhóm Match,,skill_explain,synthetic,train
+S1857,ex2-11,B4,,vi sao em bi xep nhom match o ucla,,skill_explain,synthetic,train
+S1858,ex2-12,B4,,tại sao UC San Diego lại ở nhóm Match,,skill_explain,synthetic,train
+S1859,ex2-12,B4,,UC San Diego khó vào hay dễ vào vậy,,skill_explain,synthetic,train
+S1860,ex2-12,B4,,em muốn xem chi tiết về UC San Diego,,skill_explain,synthetic,train
+S1861,ex2-12,B4,,em có nên nộp UC San Diego không,,skill_explain,synthetic,train
+S1862,ex2-12,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,tai sao uc san diego lai o nhom match,,skill_explain,synthetic,train
+S1863,ex2-13,B4,,giải thích giúp em trường Northeastern,,skill_explain,synthetic,val
+S1864,ex2-13,B4,,em có nên nộp Northeastern không,,skill_explain,synthetic,val
+S1865,ex2-13,B4,,Northeastern khó vào hay dễ vào vậy,,skill_explain,synthetic,val
+S1866,ex2-13,B5,,vì sao Northeastern là nhóm khó vào,,skill_explain,synthetic,val
+S1867,ex2-13,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,giai thich giup em truong northeastern,,skill_explain,synthetic,val
+S1868,ex2-14,B4,,em muốn xem chi tiết về Georgia Tech,,skill_explain,synthetic,train
+S1869,ex2-14,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,vì sao Georgia Tech là nhóm khó vào,,skill_explain,synthetic,train
+S1870,ex2-14,B4,,em có nên nộp Georgia Tech không,,skill_explain,synthetic,train
+S1871,ex2-14,B4,,giải thích giúp em trường Georgia Tech,,skill_explain,synthetic,train
+S1872,ex2-14,B4,,em muon xem chi tiet ve georgia tech,,skill_explain,synthetic,train
+S1873,ex2-15,B4,,vì sao University of Florida bị xếp vào nhóm Match,,skill_explain,synthetic,train
+S1874,ex2-15,B4,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,giải thích giúp em trường University of Florida,,skill_explain,synthetic,train
+S1875,ex2-15,B4,,em có nên nộp University of Florida không,,skill_explain,synthetic,train
+S1876,ex2-15,B4,,cho em biết lý do University of Florida nằm trong danh sách,,skill_explain,synthetic,train
+S1877,ex2-15,B4,,vi sao university of florida bi xep vao nhom match,,skill_explain,synthetic,train
+S1878,ex2-16,B4,,vì sao Texas A&M là nhóm khó vào,,skill_explain,synthetic,train
+S1879,ex2-16,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,em có nên nộp Texas A&M không,,skill_explain,synthetic,train
+S1880,ex2-16,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,Texas A&M khó vào hay dễ vào vậy,,skill_explain,synthetic,train
+S1881,ex2-16,B4,,giải thích giúp em trường Texas A&M,,skill_explain,synthetic,train
+S1882,ex2-16,B4,,vi sao texas a&m la nhom kho vao,,skill_explain,synthetic,train
+S1883,ex2-17,B4,,Virginia Tech khó vào hay dễ vào vậy,,skill_explain,synthetic,val
+S1884,ex2-17,B4,,vì sao Virginia Tech bị xếp vào nhóm Safety,,skill_explain,synthetic,val
+S1885,ex2-17,B4,,cho em biết lý do Virginia Tech nằm trong danh sách,,skill_explain,synthetic,val
+S1886,ex2-17,B4,,em muốn xem chi tiết về Virginia Tech,,skill_explain,synthetic,val
+S1887,ex2-17,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,virginia tech kho vao hay de vao vay,,skill_explain,synthetic,val
+S1888,ex2-18,B4,,em muốn xem chi tiết về Tulane,,skill_explain,synthetic,train
+S1889,ex2-18,B4,,tại sao Tulane lại ở nhóm an toàn hơn,,skill_explain,synthetic,train
+S1890,ex2-18,B4,,em có nên nộp Tulane không,,skill_explain,synthetic,train
+S1891,ex2-18,B4,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,Tulane có hợp với em không,,skill_explain,synthetic,train
+S1892,ex2-18,B4,,em muon xem chi tiet ve tulane,,skill_explain,synthetic,train
+S1893,ex2-19,B5,,em có nên nộp University of Washington không,,skill_explain,synthetic,train
+S1894,ex2-19,B4,,tại sao University of Washington lại ở nhóm an toàn hơn,,skill_explain,synthetic,train
+S1895,ex2-19,B4,,giải thích giúp em trường University of Washington,,skill_explain,synthetic,train
+S1896,ex2-19,B4,,vì sao em bị xếp nhóm an toàn hơn ở University of Washington,,skill_explain,synthetic,train
+S1897,ex2-19,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,em co nen nop university of washington khong,,skill_explain,synthetic,train
+S1898,ex2-20,B4,,vì sao em bị xếp nhóm Reach ở Carnegie Mellon,,skill_explain,synthetic,train
+S1899,ex2-20,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,vì sao Carnegie Mellon là nhóm khó vào,,skill_explain,synthetic,train
+S1900,ex2-20,B4,,em muốn xem chi tiết về Carnegie Mellon,,skill_explain,synthetic,train
+S1901,ex2-20,B4,,tại sao Carnegie Mellon lại ở nhóm Reach,,skill_explain,synthetic,train
+S1902,ex2-20,B4,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,vi sao em bi xep nhom reach o carnegie mellon,,skill_explain,synthetic,train
+S1903,ex2-21,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,vì sao em bị xếp nhóm an toàn hơn ở Brandeis,,skill_explain,synthetic,train
+S1904,ex2-21,B4,,Brandeis có hợp với em không,,skill_explain,synthetic,train
+S1905,ex2-21,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,giải thích giúp em trường Brandeis,,skill_explain,synthetic,train
+S1906,ex2-21,B4,,tại sao Brandeis lại ở nhóm an toàn hơn,,skill_explain,synthetic,train
+S1907,ex2-21,B4,,vi sao em bi xep nhom an toan hon o brandeis,,skill_explain,synthetic,train
+S1908,ex2-22,B4,,vì sao Drexel là nhóm khó vào,,skill_explain,synthetic,val
+S1909,ex2-22,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,Drexel có hợp với em không,,skill_explain,synthetic,val
+S1910,ex2-22,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,Drexel khó vào hay dễ vào vậy,,skill_explain,synthetic,val
+S1911,ex2-22,B4,,tại sao Drexel lại ở nhóm Reach,,skill_explain,synthetic,val
+S1912,ex2-22,B4,,vi sao drexel la nhom kho vao,,skill_explain,synthetic,val
+S1913,ex2-23,B5,,vì sao Clemson là nhóm khó vào,,skill_explain,synthetic,train
+S1914,ex2-23,B4,,em có nên nộp Clemson không,,skill_explain,synthetic,train
+S1915,ex2-23,B4,,vì sao em bị xếp nhóm Safety ở Clemson,,skill_explain,synthetic,train
+S1916,ex2-23,B4,,tại sao Clemson lại ở nhóm Safety,,skill_explain,synthetic,train
+S1917,ex2-23,B4,,vi sao clemson la nhom kho vao,,skill_explain,synthetic,train
+S1918,ex2-24,B4,,em có nên nộp University of Utah không,,skill_explain,synthetic,train
+S1919,ex2-24,B4,,cho em biết lý do University of Utah nằm trong danh sách,,skill_explain,synthetic,train
+S1920,ex2-24,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,vì sao University of Utah bị xếp vào nhóm vừa sức,,skill_explain,synthetic,train
+S1921,ex2-24,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,University of Utah khó vào hay dễ vào vậy,,skill_explain,synthetic,train
+S1922,ex2-24,B4,,em co nen nop university of utah khong,,skill_explain,synthetic,train
+S1923,ex2-25,B4,,cho em biết thêm về trường đầu tiên,,skill_explain,synthetic,train
+S1924,ex2-25,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,trường đầu tiên em có nên nộp không,,skill_explain,synthetic,train
+S1925,ex2-25,B4,,giải thích giúp em trường đầu tiên,,skill_explain,synthetic,train
+S1926,ex2-25,B4,,cho em biet them ve truong dau tien,,skill_explain,synthetic,train
+S1927,ex2-26,B4,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,trường thứ hai em có nên nộp không,,skill_explain,synthetic,train
+S1928,ex2-26,B4,,giải thích giúp em trường thứ hai,,skill_explain,synthetic,train
+S1929,ex2-26,B4,,vì sao trường thứ hai lại ở nhóm đó,,skill_explain,synthetic,train
+S1930,ex2-26,B4,,truong thu hai em co nen nop khong,,skill_explain,synthetic,train
+S1931,ex2-27,B5,,giải thích giúp em trường thứ ba,,skill_explain,synthetic,train
+S1932,ex2-27,B4,,trường thứ ba em có nên nộp không,,skill_explain,synthetic,train
+S1933,ex2-27,B4,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,trường thứ ba có hợp với em không,,skill_explain,synthetic,train
+S1934,ex2-27,B4,,giai thich giup em truong thu ba,,skill_explain,synthetic,train
+S1935,ex2-28,B4,,trường thứ tư em có nên nộp không,,skill_explain,synthetic,train
+S1936,ex2-28,B4,,vì sao trường thứ tư lại ở nhóm đó,,skill_explain,synthetic,train
+S1937,ex2-28,B4,,trường thứ tư có hợp với em không,,skill_explain,synthetic,train
+S1938,ex2-28,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,truong thu tu em co nen nop khong,,skill_explain,synthetic,train
+S1939,ex2-29,B4,,trường cuối cùng có hợp với em không,,skill_explain,synthetic,train
+S1940,ex2-29,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,trường cuối cùng em có nên nộp không,,skill_explain,synthetic,train
+S1941,ex2-29,B4,,vì sao trường cuối cùng lại ở nhóm đó,,skill_explain,synthetic,train
+S1942,ex2-29,B4,,truong cuoi cung co hop voi em khong,,skill_explain,synthetic,train
+S1943,ex2-30,B4,,giải thích giúp em trường đầu danh sách,,skill_explain,synthetic,train
+S1944,ex2-30,B4,,cho em biết thêm về trường đầu danh sách,,skill_explain,synthetic,train
+S1945,ex2-30,B4,"Bạn kiểm tra giúp mình hồ sơ ở trên, đúng không?",trường đầu danh sách có hợp với em không,,skill_explain,synthetic,train
+S1946,ex2-30,B4,,giai thich giup em truong dau danh sach,,skill_explain,synthetic,train
+S1947,ex2-31,B4,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,trường số 2 em có nên nộp không,,skill_explain,synthetic,train
+S1948,ex2-31,B4,,giải thích giúp em trường số 2,,skill_explain,synthetic,train
+S1949,ex2-31,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,trường số 2 có hợp với em không,,skill_explain,synthetic,train
+S1950,ex2-31,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,truong so 2 em co nen nop khong,,skill_explain,synthetic,train
+S1951,ex2-32,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,trường số 5 em có nên nộp không,,skill_explain,synthetic,train
+S1952,ex2-32,B4,,cho em biết thêm về trường số 5,,skill_explain,synthetic,train
+S1953,ex2-32,B4,,vì sao trường số 5 lại ở nhóm đó,,skill_explain,synthetic,train
+S1954,ex2-32,B4,,truong so 5 em co nen nop khong,,skill_explain,synthetic,train
+S1955,ex2-33,B4,"Bạn kiểm tra giúp mình hồ sơ ở trên, đúng không?",vì sao em bị xếp nhóm này,,skill_explain,synthetic,train
+S1956,ex2-33,B4,,vi sao em bi xep nhom nay,,skill_explain,synthetic,train
+S1957,ex2-34,B4,,sao lại là nhóm này vậy,,skill_explain,synthetic,train
+S1958,ex2-34,B4,,sao lai la nhom nay vay,,skill_explain,synthetic,train
+S1959,ex2-35,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,trường này có hợp với em không,,skill_explain,synthetic,train
+S1960,ex2-35,B4,,truong nay co hop voi em khong,,skill_explain,synthetic,train
+S1961,ex2-36,B4,,tại sao trường đó khó vào,,skill_explain,synthetic,train
+S1962,ex2-36,B4,,tai sao truong do kho vao,,skill_explain,synthetic,train
+S1963,ex2-37,B4,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,trường đó em có nên nộp không,,skill_explain,synthetic,val
+S1964,ex2-37,B4,,truong do em co nen nop khong,,skill_explain,synthetic,val
+S1965,ex2-38,B4,,giải thích kết quả giúp em,,skill_explain,synthetic,train
+S1966,ex2-38,B5,,giai thich ket qua giup em,,skill_explain,synthetic,train
+S1967,ex2-39,B4,,vì sao các trường lại xếp như vậy,,skill_explain,synthetic,train
+S1968,ex2-39,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,vi sao cac truong lai xep nhu vay,,skill_explain,synthetic,train
+S1969,ex2-40,B4,,em chưa hiểu sao trường này lại nằm trong danh sách,,skill_explain,synthetic,train
+S1970,ex2-40,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,em chua hieu sao truong nay lai nam trong danh sach,,skill_explain,synthetic,train
+S1971,ex2-41,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,trường này em có cơ hội không,,skill_explain,synthetic,train
+S1972,ex2-41,B4,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,truong nay em co co hoi khong,,skill_explain,synthetic,train
+S1973,ex2-42,B4,,cho em biết lý do trường này khó vào,,skill_explain,synthetic,train
+S1974,ex2-42,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,cho em biet ly do truong nay kho vao,,skill_explain,synthetic,train
+S1975,ex2-43,B4,,trường nào dễ vào nhất,,skill_explain,synthetic,train
+S1976,ex2-43,B4,,truong nao de vao nhat,,skill_explain,synthetic,train
+S1977,ex2-44,B4,,trường nào khó vào nhất trong danh sách,,skill_explain,synthetic,val
+S1978,ex2-44,B4,,truong nao kho vao nhat trong danh sach,,skill_explain,synthetic,val
+S1979,ex2-45,B4,,trường nào hợp với em nhất,,skill_explain,synthetic,train
+S1980,ex2-45,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,truong nao hop voi em nhat,,skill_explain,synthetic,train
+S1981,ex2-46,B4,,trong danh sách trường nào em có cơ hội cao nhất,,skill_explain,synthetic,train
+S1982,ex2-46,B4,,trong danh sach truong nao em co co hoi cao nhat,,skill_explain,synthetic,train
+S1983,ex2-47,B4,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,trường nào em nên nộp trước,,skill_explain,synthetic,train
+S1984,ex2-47,B4,,truong nao em nen nop truoc,,skill_explain,synthetic,train
+S1985,ex2-48,B4,,trường nào em cần học bổng lớn mới đi được,,skill_explain,synthetic,train
+S1986,ex2-48,B4,,truong nao em can hoc bong lon moi di duoc,,skill_explain,synthetic,train
+S1987,ex2-49,B4,,vì sao có trường em chỉ đi được nếu có học bổng,,skill_explain,synthetic,train
+S1988,ex2-49,B5,,vi sao co truong em chi di duoc neu co hoc bong,,skill_explain,synthetic,train
+S1989,ex2-50,B4,,vì sao trường nào cũng nhóm khó vào,,skill_explain,synthetic,train
+S1990,ex2-50,B5,,vi sao truong nao cung nhom kho vao,,skill_explain,synthetic,train
+S1991,ex2-51,B4,,có trường nào trong danh sách em chắc chắn đỗ không,,skill_explain,synthetic,train
+S1992,ex2-51,B4,,co truong nao trong danh sach em chac chan do khong,,skill_explain,synthetic,train
+S1993,ex2-52,B4,,"nhóm an toàn gồm trường nào, vì sao",,skill_explain,synthetic,train
+S1994,ex2-52,B4,,"nhom an toan gom truong nao, vi sao",,skill_explain,synthetic,train
+S1995,ex2-53,B4,,giải thích Harvard giúp em,,skill_explain,synthetic,train
+S1996,ex2-53,B4,,em có nên nộp Harvard không,,skill_explain,synthetic,train
+S1997,ex2-53,B5,,Harvard khó vào hay dễ vào vậy,,skill_explain,synthetic,train
+S1998,ex2-53,B4,,giai thich harvard giup em,,skill_explain,synthetic,train
+S1999,ex2-54,B4,,vì sao Yale không có trong danh sách của em,,skill_explain,synthetic,train
+S2000,ex2-54,B4,,Yale khó vào hay dễ vào vậy,,skill_explain,synthetic,train
+S2001,ex2-54,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,giải thích Yale giúp em,,skill_explain,synthetic,train
+S2002,ex2-54,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,vi sao yale khong co trong danh sach cua em,,skill_explain,synthetic,train
+S2003,ex2-55,B4,,Princeton khó vào hay dễ vào vậy,,skill_explain,synthetic,train
+S2004,ex2-55,B4,,giải thích Princeton giúp em,,skill_explain,synthetic,train
+S2005,ex2-55,B4,,vì sao Princeton không có trong danh sách của em,,skill_explain,synthetic,train
+S2006,ex2-55,B4,,princeton kho vao hay de vao vay,,skill_explain,synthetic,train
+S2007,ex2-56,B4,,giải thích Columbia giúp em,,skill_explain,synthetic,train
+S2008,ex2-56,B4,,em có nên nộp Columbia không,,skill_explain,synthetic,train
+S2009,ex2-56,B4,,vì sao Columbia không có trong danh sách của em,,skill_explain,synthetic,train
+S2010,ex2-56,B4,,giai thich columbia giup em,,skill_explain,synthetic,train
+S2011,ex2-57,B4,,em có nên nộp Duke không,,skill_explain,synthetic,train
+S2012,ex2-57,B4,,vì sao Duke không có trong danh sách của em,,skill_explain,synthetic,train
+S2013,ex2-57,B4,,giải thích Duke giúp em,,skill_explain,synthetic,train
+S2014,ex2-57,B4,,em co nen nop duke khong,,skill_explain,synthetic,train
+S2015,ex2-58,B5,,giải thích Johns Hopkins giúp em,,skill_explain,synthetic,val
+S2016,ex2-58,B4,,em có nên nộp Johns Hopkins không,,skill_explain,synthetic,val
+S2017,ex2-58,B4,,vì sao Johns Hopkins không có trong danh sách của em,,skill_explain,synthetic,val
+S2018,ex2-58,B5,,giai thich johns hopkins giup em,,skill_explain,synthetic,val
+S2019,ex2-59,B4,,giải thích Caltech giúp em,,skill_explain,synthetic,val
+S2020,ex2-59,B4,,em có nên nộp Caltech không,,skill_explain,synthetic,val
+S2021,ex2-59,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,Caltech khó vào hay dễ vào vậy,,skill_explain,synthetic,val
+S2022,ex2-59,B4,,giai thich caltech giup em,,skill_explain,synthetic,val
+S2023,ex2-60,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,em có nên nộp Brown không,,skill_explain,synthetic,train
+S2024,ex2-60,B4,,Brown khó vào hay dễ vào vậy,,skill_explain,synthetic,train
+S2025,ex2-60,B4,,vì sao Brown không có trong danh sách của em,,skill_explain,synthetic,train
+S2026,ex2-60,B4,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,em co nen nop brown khong,,skill_explain,synthetic,train
