@@ -13,9 +13,10 @@ import { Spinner } from "@/components/ui/spinner";
 interface ProtectedRouteProps {
   children: ReactNode;
   allowedRoles?: UserRole[];
+  deniedMessage?: ReactNode;
 }
 
-export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
+export function ProtectedRoute({ children, allowedRoles, deniedMessage }: ProtectedRouteProps) {
   const { user, isLoading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
@@ -54,7 +55,11 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
               <h2>Không có quyền truy cập</h2>
             </CardTitle>
             <CardDescription>
-              Khu vực này chỉ dành cho tài khoản <strong>{roleHint}</strong>.
+              {deniedMessage ?? (
+                <>
+                  Khu vực này chỉ dành cho tài khoản <strong>{roleHint}</strong>.
+                </>
+              )}
             </CardDescription>
           </CardHeader>
           <CardContent>
