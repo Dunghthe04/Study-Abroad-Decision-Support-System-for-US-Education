@@ -45,6 +45,42 @@ public class ChatRecommendationTests
     }
 
     [Fact]
+    public void Schools_ListsEveryShownSchoolOnce_InPageOrder_WithItsGroupCode()
+    {
+        var items = """
+            {
+              "scored": [
+                { "code": "MIT", "name": "Massachusetts Institute of Technology", "g2": "R" },
+                { "code": "ASU", "name": "Arizona State University", "g2": "M" },
+                { "code": "UO", "name": "University of Oregon" },
+                { "code": "XXX", "name": "Không nằm trong nhóm nào" }
+              ],
+              "reach": [ { "code": "MIT" } ],
+              "match": [ { "code": "ASU" }, { "code": "UO" } ],
+              "safety": [],
+              "aid": [ { "code": "ASU" } ],
+              "other": [ { "code": "XXX" } ]
+            }
+            """;
+
+        var schools = ChatRecommendation.Schools(Run(items));
+
+        Assert.Equal(
+            [
+                new ChatSchool("MIT", "Massachusetts Institute of Technology", "R"),
+                new ChatSchool("ASU", "Arizona State University", "M"),
+                new ChatSchool("UO", "University of Oregon", null),
+            ],
+            schools);
+    }
+
+    [Fact]
+    public void Schools_IsEmptyWhenNothingWasFound()
+    {
+        Assert.Empty(ChatRecommendation.Schools(Run("""{ "scored": [], "reach": [] }""")));
+    }
+
+    [Fact]
     public void Summarize_CutsTheAidGroupToThreeNames()
     {
         var items = """
