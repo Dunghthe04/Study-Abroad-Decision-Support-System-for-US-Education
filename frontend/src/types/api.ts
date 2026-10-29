@@ -40,7 +40,7 @@ export interface QuickReply {
 
 // Công cụ nhập ngay trong chat; frontend vẽ theo `type`
 export interface ChatWidget {
-  type: "major" | "review" | "budget" | "scholarship" | "form" | "select";
+  type: "major" | "review" | "budget" | "scholarship" | "form";
   data?: Record<string, unknown> | null;
 }
 
@@ -52,11 +52,27 @@ export interface AdvisorChatResponse {
   quickReplies?: QuickReply[] | null;
   widget?: ChatWidget | null;
   profileChanged?: string[] | null; // khóa hồ sơ chat vừa đổi; form cần nạp lại khi có giá trị
-  formStep?: number | null; // trang form (1–6) của câu chat đang hỏi; form chuyển theo
 }
 
 // [USAS-362] Kiểu dữ liệu xác thực và người dùng
-export type UserRole = "student" | "parent" | "center" | "admin";
+export type UserRole = "student" | "parent" | "center" | "moderator" | "admin";
+
+/** [UC-60] Tìm, lọc, phân trang danh sách tài khoản (admin). */
+export interface AdminUserAccountListQuery {
+  search?: string;
+  role?: UserRole | "";
+  status?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+/** [UC-63] Admin tạo tài khoản moderator (khách không tự đăng ký). */
+export interface CreateModeratorAccountRequest {
+  email: string;
+  password: string;
+  fullName: string;
+  phone?: string | null;
+}
 
 export interface UserDto {
   id: string;
