@@ -3,7 +3,7 @@
 import { CheckIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { findCertType, getCertDisplayName } from "@/lib/certification-utils";
-import { DEFAULT_BUDGET_TIERS, calculateLinearGpa } from "@/lib/profile-flow-options";
+import { DEFAULT_BUDGET_TIERS, draftGpa, gpaModeOf } from "@/lib/profile-flow-options";
 import type { CurrentEducationLevel, ProfileFlowDraft, ProfileMetadataResponse } from "@/types/profile-flow";
 
 export interface StepMeta {
@@ -70,9 +70,13 @@ function stepSummary(step: number, draft: ProfileFlowDraft, metadata: ProfileMet
       return [SHORT_LEVEL_LABELS[currentEducationLevel], currentGrade].filter(Boolean).join(" · ") + (target ? ` → ${target}` : "");
     }
     case 2: {
-      const years = draft.step2.academicYears ?? [];
-      const { gpa10 } = calculateLinearGpa(years);
+      const { gpa10, gpa4 } = draftGpa(draft.step2);
+      if (gpaModeOf(draft.step2) === "overall") {
+        if (gpa10 !== null) return `GPA ${gpa10.toFixed(1)} / thang 10`;
+        return gpa4 !== null ? `GPA ${gpa4.toFixed(2)} / thang 4` : null;
+      }
       if (gpa10 === null) return null;
+      const years = draft.step2.academicYears ?? [];
       const grades = years.map((y) => y.gradeName.replace(/^Lớp\s*/, "")).join(", ");
       return `Lớp ${grades} · TB ${gpa10.toFixed(1)} / thang 10`;
     }

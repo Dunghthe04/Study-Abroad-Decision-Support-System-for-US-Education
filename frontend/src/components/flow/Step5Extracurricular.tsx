@@ -25,7 +25,7 @@ interface Step5ExtracurricularProps {
 }
 
 /** Thiếu gì so với điều kiện commit phía BE (ProfileFlowService.ValidateForCommit). */
-function getItemProblem(item: ActivityDraft): string | null {
+export function getItemProblem(item: ActivityDraft): string | null {
   if (!item.impactLevel) return "chưa chọn phạm vi";
   if (item.category === "achievement") return item.year ? null : "chưa có năm đạt giải";
   if (!item.role) return "chưa chọn vai trò";

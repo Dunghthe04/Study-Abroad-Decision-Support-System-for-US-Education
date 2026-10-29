@@ -16,7 +16,15 @@ from app.services.chat_flow import (
     go_to,
     last_user_message,
 )
-from app.services.intake import CHAT_BUTTON, FORM_BUTTON, INTAKE_ASK, INTAKE_FORM, INTAKE_ID, INTAKE_MORE
+from app.services.intake import (
+    CHAT_BUTTON,
+    CONTINUE_CHAT,
+    FORM_BUTTON,
+    INTAKE_ASK,
+    INTAKE_FORM,
+    INTAKE_ID,
+    INTAKE_MORE,
+)
 
 
 @dataclass
@@ -86,6 +94,30 @@ async def test_two_skills_run_in_fixed_order_and_answers_are_joined():
     assert ran == ["skill_ho_so", "skill_tra_loi"]  # nhưng chạy skill của bước trước
     assert res.answer == "trả lời của skill_ho_so\n\ntrả lời của skill_tra_loi"
     assert res.skills == ["skill_ho_so", "skill_tra_loi"]
+
+
+async def test_pressing_a_button_of_the_current_question_does_not_ask_the_model():
+    ran: list[str] = []
+    picker = FakePicker("skill_ho_so", "ket_thuc")
+    flow = ChatFlow(picker, {"skill_ho_so": RecordingHandler("skill_ho_so", ran)})
+
+    res = await flow.reply(request("Bỏ qua", question_id="F2"))
+
+    assert picker.calls == []  # nút "Bỏ qua" của câu đang hỏi: dùng skill của bước
+    assert ran == ["skill_ho_so"]
+    assert res.state.current_step == "B2"
+
+
+async def test_end_is_dropped_when_the_model_also_picks_another_skill():
+    ran: list[str] = []
+    flow = ChatFlow(
+        FakePicker("skill_ho_so", "ket_thuc"), {"skill_ho_so": RecordingHandler("skill_ho_so", ran)}
+    )
+
+    res = await flow.reply(request("10", question_id="D2"))
+
+    assert res.skills == ["skill_ho_so"]
+    assert res.state.current_step == "B2"  # học sinh đang trả lời, không kết thúc cuộc trò chuyện
 
 
 class WritingHandler:
@@ -174,14 +206,14 @@ async def test_a_field_written_by_a_skill_is_reported_as_changed():
 
 
 async def test_changes_to_chat_only_keys_are_not_reported():
-    handlers = {"skill_ho_so": WritingHandler("funding_source", "bố mẹ")}
+    handlers = {"skill_ho_so": WritingHandler("relatives_state", "CA")}
 
     res = await ChatFlow(FakePicker("skill_ho_so"), handlers).reply(
-        request_with_draft("bố mẹ chi trả", confirmed("gpa"))
+        request_with_draft("chú em ở California", confirmed("gpa"))
     )
 
     assert res.profile_changed == []  # form không có chỗ cho khóa này nên không cần nạp lại
-    assert "funding_source" in res.profile  # nhưng chat vẫn nhớ
+    assert "relatives_state" in res.profile  # nhưng chat vẫn nhớ
 
 
 async def test_nothing_changed_when_no_skill_wrote_anything():
@@ -275,10 +307,11 @@ async def test_choosing_chat_asks_the_first_missing_question():
         request(CHAT_BUTTON.value, current_step="B3", last_question="", question_id=INTAKE_ID)
     )
 
-    assert res.answer == QUESTIONS["B1.2"]  # bậc học là thông tin đầu tiên còn thiếu
+    # Hỏi như form, từ câu đầu tiên của trang 1 (đang học lớp mấy)
+    assert res.answer == QUESTIONS["B1.1"]
     assert res.state.intake_mode == "chat"
     assert res.state.current_step == "B1"
-    assert res.state.question_id == "B1.2" and res.state.last_question == QUESTIONS["B1.2"]
+    assert res.state.question_id == "B1.1" and res.state.last_question == QUESTIONS["B1.1"]
     assert picker.calls == []  # lựa chọn nhận bằng chữ trên nút, không nhờ model
 
 
@@ -305,26 +338,47 @@ async def test_other_message_while_choosing_goes_through_the_normal_flow():
     assert res.state.question_id is None  # không còn chờ lựa chọn
 
 
-async def test_partial_profile_gets_the_next_missing_question_in_chat():
+async def test_partial_profile_still_offers_chat_or_form_and_says_how_many_are_missing():
     profile = {"target_level": ProfileField(value="x", status="confirmed")}
 
     res = await ChatFlow(FakePicker("skill_danh_gia")).reply(
         request("đánh giá hồ sơ em", current_step="B3", last_question="", profile=profile)
     )
 
-    assert res.answer == INTAKE_MORE + QUESTIONS["D2"]  # đã có bậc học, hỏi tiếp GPA
+    assert "còn thiếu 3 mục" in res.answer  # thiếu GPA, tiếng Anh, ngân sách
+    assert res.quick_replies == [CHAT_BUTTON, FORM_BUTTON]
+    assert res.state.question_id == INTAKE_ID
+
+
+async def test_answering_in_chat_keeps_asking_without_offering_again():
+    profile = {"target_level": ProfileField(value="x", status="confirmed")}
+
+    res = await ChatFlow(FakePicker("skill_danh_gia")).reply(
+        request("đánh giá hồ sơ em", current_step="B3", last_question="", profile=profile, intake_mode="chat")
+    )
+
+    assert res.answer.startswith(INTAKE_MORE)
+    assert res.state.current_step == "B1" and res.state.question_id == "B1.1"
+    assert CHAT_BUTTON not in res.quick_replies
+
+
+async def test_continue_in_chat_button_from_the_form_asks_the_missing_items():
+    picker = FakePicker("skill_tra_loi")
+
+    res = await ChatFlow(picker).reply(request(CONTINUE_CHAT, current_step="B3", last_question=""))
+
+    assert res.answer == QUESTIONS["B1.1"]
     assert res.state.intake_mode == "chat"
-    assert res.state.current_step == "B2" and res.state.question_id == "D2"
-    assert res.quick_replies == []  # đã có hồ sơ nên không mời chọn lại
+    assert picker.calls == []  # câu của nút, không nhờ model
 
 
-async def test_form_chosen_but_nothing_filled_reminds_the_form():
+async def test_form_chosen_but_still_missing_offers_the_choice_again():
     res = await ChatFlow(FakePicker("skill_danh_gia")).reply(
         request("đánh giá hồ sơ em", current_step="B3", last_question="", intake_mode="form")
     )
 
-    assert res.answer == INTAKE_FORM
-    assert res.widget == Widget(type="form")
+    assert res.answer == INTAKE_ASK
+    assert res.quick_replies == [CHAT_BUTTON, FORM_BUTTON]
 
 
 async def test_no_intake_when_nothing_is_blocked():

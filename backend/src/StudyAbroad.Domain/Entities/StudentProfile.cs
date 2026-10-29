@@ -22,6 +22,8 @@ public class StudentProfile : BaseEntity
     /// <summary>GPA luôn ở thang 4 (nhóm đã chốt), quy đổi từ bảng điểm; form không cho nhập tay; null nếu chưa phân tích</summary>
     public decimal? OverallGpa { get; set; }
     public string? IntendedMajor { get; set; }
+    /// <summary>kỳ muốn nhập học, dạng "Fall 2027" (Fall | Spring | Summer + năm); form bước 1 và câu B1.4 bên chat</summary>
+    public string? TargetIntake { get; set; }
     public decimal? Ielts { get; set; }
     public decimal? Toefl { get; set; }
     public decimal? Duolingo { get; set; }
