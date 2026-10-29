@@ -1,3 +1,4 @@
+using StudyAbroad.Application.Audit;
 using StudyAbroad.Application.Auth;
 using StudyAbroad.Application.Common;
 using StudyAbroad.Application.ParentLinks;
@@ -26,8 +27,9 @@ public class AuthServiceTests
     private readonly FakeTokenService _tokens = new();
     private readonly FakeEmailSender _emailSender = new();
     private readonly FakeParentLinkRepository _links = new();
+    private readonly FakeAuditLogRepository _auditLogs = new();
 
-    private AuthService CreateService() => new(_repo, new FakeHasher(), _tokens, _emailSender, _links);
+    private AuthService CreateService() => new(_repo, new FakeHasher(), _tokens, _emailSender, _links, _auditLogs);
 
     // Ngày sinh ứng với tuổi tròn (sinh nhật cách hôm nay ở VN 10 ngày về trước)
     private static DateOnly BornYearsAgo(int years) =>
@@ -312,6 +314,71 @@ public class AuthServiceTests
         Assert.Equal(AuthError.None, login.Error);
         Assert.NotNull(login.Response);
         Assert.Equal(UserRoles.Moderator, login.Response.User.Role);
+    }
+
+    [Fact]
+    public async Task LockUserAccount_LocksStudent_WritesAuditAndRevokesSessions()
+    {
+        var adminId = Guid.NewGuid();
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        _repo.Users[0].Status = UserStatuses.Active;
+        var studentId = _repo.Users[0].Id;
+        await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
+        Assert.Single(_repo.Sessions);
+        Assert.False(_repo.Sessions[0].IsRevoked);
+
+        var result = await service.LockUserAccountAsync(
+            studentId,
+            new LockUserAccountRequest("Vi phạm quy chế cộng đồng"),
+            adminId);
+
+        Assert.Equal(AuthError.None, result.Error);
+        Assert.Equal(UserStatuses.Locked, _repo.Users[0].Status);
+        Assert.True(_repo.Sessions[0].IsRevoked);
+        var log = Assert.Single(_auditLogs.Entries);
+        Assert.Equal("user.lock", log.Action);
+        Assert.Equal(adminId, log.ActorUserId);
+    }
+
+    [Fact]
+    public async Task LockUserAccount_AdminTarget_ReturnsValidationError()
+    {
+        var service = CreateService();
+        _repo.Users.Add(new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "admin@test.com",
+            Role = UserRoles.Admin,
+            Status = UserStatuses.Active,
+            PasswordHash = "x",
+            FullName = "Admin",
+        });
+        var adminTargetId = _repo.Users[0].Id;
+
+        var result = await service.LockUserAccountAsync(
+            adminTargetId,
+            new LockUserAccountRequest("test"),
+            Guid.NewGuid());
+
+        Assert.Equal(AuthError.Validation, result.Error);
+        Assert.Empty(_auditLogs.Entries);
+    }
+
+    [Fact]
+    public async Task LockUserAccount_AlreadyLocked_ReturnsValidationError()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        var studentId = _repo.Users[0].Id;
+        _repo.Users[0].Status = UserStatuses.Locked;
+
+        var result = await service.LockUserAccountAsync(
+            studentId,
+            new LockUserAccountRequest("lý do"),
+            Guid.NewGuid());
+
+        Assert.Equal(AuthError.Validation, result.Error);
     }
 
     [Fact]

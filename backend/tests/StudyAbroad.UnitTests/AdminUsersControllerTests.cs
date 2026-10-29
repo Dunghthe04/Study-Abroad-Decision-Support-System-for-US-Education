@@ -1,5 +1,7 @@
 using System.Reflection;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using StudyAbroad.Api.Controllers;
 using StudyAbroad.Application.Auth;
@@ -83,6 +85,28 @@ public class AdminUsersControllerTests
             Users.Add(user);
             return Task.FromResult(AuthResult.Ok(user, "Đã tạo tài khoản moderator."));
         }
+
+        public (Guid TargetId, LockUserAccountRequest Request, Guid ActorId)? LastLockCall { get; private set; }
+
+        public Task<AuthResult> LockUserAccountAsync(
+            Guid targetUserId,
+            LockUserAccountRequest request,
+            Guid actorAdminId,
+            CancellationToken ct = default)
+        {
+            LastLockCall = (targetUserId, request, actorAdminId);
+            var user = Users.FirstOrDefault(u => u.Id == targetUserId);
+            if (user is null)
+                return Task.FromResult(AuthResult.Fail(AuthError.Validation, "Không tìm thấy tài khoản."));
+
+            // Fake in-memory: giả lập khóa (UPDATE status), KHÔNG xóa tài khoản — production dùng UpdateUserAsync.
+            // UserDto là record bất biến: không sửa user.Status trực tiếp; `with` tạo object mới cùng Id.
+            // Remove + Add: thay phần tử cũ trong List bằng bản mới (đổi Status), không phải xóa user rồi tạo user khác.
+            var updated = user with { Status = UserStatuses.Locked };
+            Users.Remove(user);
+            Users.Add(updated);
+            return Task.FromResult(AuthResult.Ok(updated, "Đã khóa tài khoản."));
+        }
     }
 
     [Fact]
@@ -161,5 +185,40 @@ public class AdminUsersControllerTests
         var user = Assert.IsType<UserDto>(created.Value);
         Assert.Equal(UserRoles.Moderator, user.Role);
         Assert.Equal("mod@test.com", user.Email);
+    }
+
+    [Fact]
+    public async Task LockUser_WhenValid_ReturnsOk()
+    {
+        var adminId = Guid.NewGuid();
+        var studentId = Guid.NewGuid();
+        var fakeAuth = new FakeAuthService
+        {
+            Users =
+            [
+                new UserDto(studentId, "student@test.com", "Student", UserRoles.Student, UserStatuses.Active, null),
+            ],
+        };
+        var controller = new AdminUsersController(fakeAuth)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = new ClaimsPrincipal(new ClaimsIdentity(
+                    [
+                        new Claim(ClaimTypes.NameIdentifier, adminId.ToString()),
+                    ], authenticationType: "test")),
+                },
+            },
+        };
+
+        var result = await controller.LockUser(studentId, new LockUserAccountRequest("Lý do khóa"), CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var user = Assert.IsType<UserDto>(ok.Value);
+        Assert.Equal(UserStatuses.Locked, user.Status);
+        Assert.NotNull(fakeAuth.LastLockCall);
+        Assert.Equal(adminId, fakeAuth.LastLockCall.Value.ActorId);
     }
 }
