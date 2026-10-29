@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using StudyAbroad.Application.Auth;
+using StudyAbroad.Application.Common;
 using StudyAbroad.Domain.Constants;
 
 namespace StudyAbroad.Api.Controllers;
@@ -15,14 +16,14 @@ namespace StudyAbroad.Api.Controllers;
 [Route("api/v1/admin/users")]
 public class AdminUsersController(IAuthService auth) : ControllerBase
 {
-    /// <summary>
-    /// [AC-4] Lấy danh sách tất cả tài khoản trong hệ thống (chỉ dành cho Admin).
-    /// </summary>
+    /// <summary>[UC-60] Xem danh sách tài khoản — tìm, lọc, phân trang (chỉ Admin).</summary>
     [HttpGet]
-    public async Task<ActionResult<List<UserDto>>> GetAllUsers(CancellationToken ct)
+    public async Task<ActionResult<PagedResult<UserDto>>> GetAdminUserAccountList(
+        [FromQuery] AdminUserAccountListQuery query,
+        CancellationToken ct)
     {
-        var users = await auth.GetAllUsersAsync(ct);
-        return Ok(users);
+        var result = await auth.GetAdminUserAccountListAsync(query, ct);
+        return Ok(result);
     }
 
     /// <summary>
