@@ -109,6 +109,10 @@ public class RecommendationService(IAdvisorClient advisor, IRecommendationReposi
         //Tính điểm trường
         var score = await advisor.ScoreAsync(new ScoreRequestDto(student, scoreSchools), ct);
         CloudResultCheck.EnsureScore(byCode.Keys, score);
+        // Gemini không chấm được trường nào (hết hạn mức, quá tải...): đây là lỗi dịch vụ, không phải "không có trường phù hợp".
+        // Không lưu kết quả rỗng (sẽ che mất lượt gợi ý tốt trước đó); controller trả 503, chat báo đang bận
+        if (score.Items.Count == 0 && score.Failed.Count > 0)
+            throw new HttpRequestException("Dịch vụ chấm điểm không chấm được trường nào (có thể hết hạn mức hoặc quá tải).");
 
         //ToPickSchool  chép điểm Gemini vừa chấm và gán nhãn khối 
         var pickItems = score.Items

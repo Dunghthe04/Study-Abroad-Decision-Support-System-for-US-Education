@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   ArrowUpIcon,
   FileTextIcon,
@@ -242,6 +242,7 @@ function TypingIndicator({ recommending }: { recommending?: boolean }) {
 }
 
 function Turn({ turn, onReply }: { turn: AssistantTurn; onReply?: (value: string) => void }) {
+  const router = useRouter();
   if (turn.role === "user") {
     return (
       <div className="max-w-[90%] self-end rounded-[16px_4px_16px_16px] bg-[#E7EDF1] px-[15px] py-2.5 whitespace-pre-wrap text-foreground">
@@ -286,13 +287,15 @@ function Turn({ turn, onReply }: { turn: AssistantTurn; onReply?: (value: string
       )}
       {/* Chat vừa chạy gợi ý trường: mở trang Gợi ý trường xem đủ danh sách (đọc lượt vừa lưu, không chạy lại) */}
       {turn.widget?.type === "recommend" && (
-        <Link
-          href="/recommendations"
+        // Mỗi lần bấm thêm ts khác nhau để trang tải lại kết quả mới nhất, kể cả khi đang đứng sẵn ở trang này
+        <button
+          type="button"
+          onClick={() => router.push(`/recommendations?ts=${Date.now()}`)}
           className="mt-2.5 inline-flex h-8 items-center gap-1.5 rounded-full bg-brand px-3.5 text-[13px] font-semibold text-white transition-colors hover:bg-brand-ink"
         >
           <GraduationCapIcon className="size-4" />
           Xem đầy đủ danh sách trường
-        </Link>
+        </button>
       )}
       {onReply && turn.quickReplies && turn.quickReplies.length > 0 && (
         <div className="mt-2.5 flex flex-wrap gap-2">
