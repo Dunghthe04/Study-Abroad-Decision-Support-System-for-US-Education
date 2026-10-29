@@ -17,6 +17,7 @@ from app.services.knowledge import KnowledgeRetriever
 from app.services.skills.skill_bac_hoc import BacHocHandler
 from app.services.skills.skill_chuyen_trung_tam import ChuyenTrungTamHandler
 from app.services.skills.skill_danh_gia import DanhGiaHandler
+from app.services.skills.skill_explain import ExplainHandler
 from app.services.skills.skill_ho_so import HoSoHandler
 from app.services.skills.skill_lo_trinh import LoTrinhHandler
 from app.services.skills.skill_nhu_cau import NhuCauHandler
@@ -40,6 +41,7 @@ def build_handlers(
     handlers["skill_ho_so"] = HoSoHandler(llm, model)
     handlers["skill_danh_gia"] = DanhGiaHandler(llm, model)
     handlers["skill_lo_trinh"] = LoTrinhHandler(llm, model)
+    handlers["skill_explain"] = ExplainHandler(llm, model)
     if knowledge is not None:
         handlers["skill_tra_loi"] = TraLoiHandler(llm, model, knowledge, min_score)
     if centers is not None:
