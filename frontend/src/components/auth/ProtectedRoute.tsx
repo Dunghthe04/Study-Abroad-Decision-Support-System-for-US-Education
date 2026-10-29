@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import type { UserRole } from "@/types/api";
+import { formatUserRole } from "@/lib/user-role-labels";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
@@ -40,6 +41,11 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
   }
 
   if (allowedRoles && allowedRoles.length > 0 && !allowedRoles.includes(user.role)) {
+    const roleHint =
+      allowedRoles.length === 1
+        ? formatUserRole(allowedRoles[0])
+        : allowedRoles.map((r) => formatUserRole(r)).join(", ");
+
     return (
       <div className="flex min-h-[50vh] items-center justify-center p-4">
         <Card className="w-full max-w-md text-center">
@@ -48,7 +54,7 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
               <h2>Không có quyền truy cập</h2>
             </CardTitle>
             <CardDescription>
-              Khu vực này chỉ dành cho tài khoản <strong>Học sinh</strong> hoặc <strong>Phụ huynh</strong> để quản lý hồ sơ học thuật.
+              Khu vực này chỉ dành cho tài khoản <strong>{roleHint}</strong>.
             </CardDescription>
           </CardHeader>
           <CardContent>

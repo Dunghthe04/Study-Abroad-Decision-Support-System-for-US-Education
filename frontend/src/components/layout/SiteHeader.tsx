@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { FileTextIcon, LogOutIcon, UserIcon } from "lucide-react";
+import { FileTextIcon, LogOutIcon, ShieldIcon, UserIcon } from "lucide-react";
+import { formatUserRole } from "@/lib/user-role-labels";
 import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -104,7 +105,7 @@ export function SiteHeader() {
                 </Avatar>
                 <span className="hidden max-w-40 truncate sm:inline">{user.fullName}</span>
                 <Badge variant="brand" className="hidden md:inline-flex">
-                  {user.role === "student" ? "Học sinh" : user.role === "parent" ? "Phụ huynh" : user.role}
+                  {formatUserRole(user.role)}
                 </Badge>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
@@ -120,6 +121,12 @@ export function SiteHeader() {
                   <UserIcon />
                   Hồ sơ cá nhân
                 </DropdownMenuItem>
+                {user.role === "admin" && (
+                  <DropdownMenuItem render={<Link href="/admin/users" />}>
+                    <ShieldIcon />
+                    Quản trị người dùng
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem variant="destructive" onClick={handleLogout}>
                   <LogOutIcon />
                   Đăng xuất
