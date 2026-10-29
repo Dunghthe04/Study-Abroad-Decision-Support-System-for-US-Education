@@ -264,9 +264,11 @@ def render(route: Route, intake: Intake | None, major: Any) -> str:
         parts.append(NO_LIST + "\n" + "\n".join(CRITERIA).format(major=major_text))
     return "\n\n".join(parts)
 
+
 # Chỉ lộ trình đại học thẳng mới có danh sách trường; lộ trình khác hệ thống chưa có dữ liệu trường
 def action_for(route: Route) -> str | None:
     return RECOMMEND_ACTION if route.route == "direct" else None
+
 
 class LoTrinhHandler:
     def __init__(self, llm: Any, model: str) -> None:

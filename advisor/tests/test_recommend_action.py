@@ -33,7 +33,9 @@ class SkillWith:
 
 
 def request(message: str = "có") -> ChatRequest:
-    return ChatRequest(messages=[ChatMessage(role="user", content=message)], state=ChatState(current_step="B4"))
+    return ChatRequest(
+        messages=[ChatMessage(role="user", content=message)], state=ChatState(current_step="B4")
+    )
 
 
 def route(name: str) -> Route:

@@ -116,7 +116,14 @@ export function AssistantPanel() {
           />
         ))}
 
-        {loading && <TypingIndicator />}
+        {loading && (
+          <TypingIndicator
+            recommending={
+              turns.at(-2)?.role === "assistant" &&
+              turns.at(-2)?.content.includes("đề xuất lộ trình và danh sách trường")
+            }
+          />
+        )}
 
         {error && (
           <div className="rounded-lg border border-warn/30 bg-warn-wash px-3 py-2.5 text-[13px] text-warn">
@@ -207,7 +214,7 @@ export function AssistantPanel() {
 // Giao diện không biết trước lượt nào chạy gợi ý, nên dựa vào thời gian chờ; lượt thường xong trước mốc này
 const SLOW_REPLY_MS = 8000;
 
-function TypingIndicator() {
+function TypingIndicator({ recommending }: { recommending?: boolean }) {
   const [slow, setSlow] = useState(false);
   useEffect(() => {
     const timer = setTimeout(() => setSlow(true), SLOW_REPLY_MS);
@@ -225,7 +232,9 @@ function TypingIndicator() {
       ))}
       {slow && (
         <span className="ml-2 text-xs text-muted-foreground">
-          Mình đang tính toán các trường phù hợp với bạn, có thể mất khoảng một phút...
+          {recommending
+            ? "Mình đang tính toán các trường phù hợp với bạn, có thể mất khoảng một phút..."
+            : "Mình đang xử lý, bạn chờ thêm một chút nhé..."}
         </span>
       )}
     </div>
