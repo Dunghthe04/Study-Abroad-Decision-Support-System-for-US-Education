@@ -1,4 +1,5 @@
 using StudyAbroad.Application.Profile.Flow;
+using StudyAbroad.Application.Recommendations;
 using StudyAbroad.Domain.Entities;
 using System;
 using System.Collections.Generic;
@@ -15,9 +16,10 @@ namespace StudyAbroad.Application.Advisor
     // FE(Gửi câu hỏi + SessionId) -> ChatService(Tìm phiên trong DB, lấy StateJson)-> Advisor python (Nhận request, xử lý hội thoại, trả câu trả lời và State mới)-> ChatService(lưu trạng thái mới vào DB, cập nhập bước hiện tại)
     // C4: mỗi lượt gửi kèm hồ sơ đọc từ bản nháp form, chat đổi ô nào thì ghi ô đó vào nháp
     // analyses: lưu câu đánh giá / lộ trình vào analysis_results (null thì không lưu, dùng trong test cũ)
+    // recommender: chạy gợi ý trường khi advisor trả action "recommend" (null thì bỏ qua, dùng trong test cũ)
     public class ChatService(
         IAdvisorClient advisor, IChatSessionRepository sessions, IProfileFlowService profileFlow,
-        IChatAnalysisRepository? analyses = null)
+        IChatAnalysisRepository? analyses = null, IRecommendationRunner? recommender = null)
     {
         //Dữ liệu FE gửi lên
         public async Task<AdvisorChatResponse> ChatAsync(Guid userId, AdvisorChatRequest request, CancellationToken ct = default)
@@ -72,6 +74,11 @@ namespace StudyAbroad.Application.Advisor
 
             await SaveAnalysesAsync(userId, response, ct);
 
+            // Lộ trình đại học thẳng: chạy gợi ý trường có sẵn rồi đưa danh sách vào câu trả lời.
+            // Chạy sau khi lưu analysis để bản lưu lộ trình không lẫn danh sách trường
+            if (response.Action == ChatRecommendation.Action && recommender is not null)
+                response = await RecommendAsync(userId, response, ct);
+
             //Sau khi advisor phản hồi ==> lưu trạng thái mới
             session.StateJson = response.State?.GetRawText();
             //Lưu bước hiện tại
@@ -94,10 +101,39 @@ namespace StudyAbroad.Application.Advisor
                 FormStep = FormStepOf(response.State),
                 SessionId = session.Id.ToString(),
                 Skills = null,
+                Action = null,
             };
         }
 
         private const string ReviewQuestion = "X1";
+
+        // Chạy gợi ý trường (lọc, chấm, chọn, lưu) rồi nối bản tóm tắt vào câu lộ trình, bật hasResults, hiện nút xem đầy đủ.
+        // Lỗi thì vẫn trả câu lộ trình kèm lời báo, không làm hỏng cả lượt chat
+        private async Task<AdvisorChatResponse> RecommendAsync(Guid userId, AdvisorChatResponse response, CancellationToken ct)
+        {
+            try
+            {
+                var saved = await recommender!.CreateAsync(userId, null, ct);
+                return response with
+                {
+                    Answer = $"{response.Answer}\n\n{ChatRecommendation.Summarize(saved)}",
+                    State = ChatRecommendation.WithResults(response.State),
+                    Widget = new Widget(ChatRecommendation.WidgetType),
+                };
+            }
+            catch (InvalidOperationException ex)
+            {
+                // Lỗi do hồ sơ ("Chưa...", "Hồ sơ...") thì nói rõ; lỗi kết quả AI thì báo chung
+                var reason = ex.Message.StartsWith("Chưa") || ex.Message.StartsWith("Hồ sơ")
+                    ? $"Mình chưa tạo được danh sách trường: {ex.Message}"
+                    : ChatRecommendation.Invalid;
+                return response with { Answer = $"{response.Answer}\n\n{reason}" };
+            }
+            catch (HttpRequestException)
+            {
+                return response with { Answer = $"{response.Answer}\n\n{ChatRecommendation.Busy}" };
+            }
+        }
 
         // Skill nào chạy thì lưu câu trả lời vào analysis_results với loại tương ứng
         private static readonly Dictionary<string, string> AnalysisKinds = new()

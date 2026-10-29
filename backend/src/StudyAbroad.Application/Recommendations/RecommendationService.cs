@@ -38,6 +38,7 @@ public record SchoolExplanation(
     IReadOnlyList<string> Improvements);
 
 public class RecommendationService(IAdvisorClient advisor, IRecommendationRepository recommendations, IProfileFlowRepository profiles)
+    : IRecommendationRunner
 
 {
     public const decimal BudgetTolerance = 0.10m;

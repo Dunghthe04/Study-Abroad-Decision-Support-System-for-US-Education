@@ -38,10 +38,30 @@ public class ChatRecommendationTests
         Assert.Equal(
             "Mình đã tìm được các trường phù hợp với hồ sơ của bạn:\n" +
             "- Khó vào: Massachusetts Institute of Technology\n" +
-            "- Vừa sức: University of Illinois Urbana-Champaign, Arizona State University, University of Arizona và 1 trường khác\n" +
+            "- Vừa sức: University of Illinois Urbana-Champaign, Arizona State University, University of Arizona, University of Oregon\n" +
             "- An toàn hơn: Oregon State University\n" +
             ChatRecommendation.More,
             text);
+    }
+
+    [Fact]
+    public void Summarize_CutsTheAidGroupToThreeNames()
+    {
+        var items = """
+            { "scored": [], "aid": [ {"code":"A1"}, {"code":"A2"}, {"code":"A3"}, {"code":"A4"}, {"code":"A5"} ] }
+            """;
+
+        Assert.Contains("- Chỉ đi được nếu có học bổng lớn: A1, A2, A3 và 2 trường khác", ChatRecommendation.Summarize(Run(items)));
+    }
+
+    [Fact]
+    public void Summarize_CutsAGroupAtItsPageLimit()
+    {
+        var items = """
+            { "scored": [], "reach": [ {"code":"R1"}, {"code":"R2"}, {"code":"R3"}, {"code":"R4"} ] }
+            """;
+
+        Assert.Contains("- Khó vào: R1, R2, R3 và 1 trường khác", ChatRecommendation.Summarize(Run(items)));
     }
 
     [Fact]
@@ -50,7 +70,7 @@ public class ChatRecommendationTests
         var text = ChatRecommendation.Summarize(Run(Items));
 
         Assert.DoesNotContain("học bổng lớn", text); // nhóm aid rỗng
-        Assert.DoesNotContain("University of Oregon\n", text); // nhóm other không hiện trong chat
+        Assert.Equal(4, text.Split("\n- ").Length); // 3 dòng nhóm: nhóm other không hiện trong chat
     }
 
     [Fact]
