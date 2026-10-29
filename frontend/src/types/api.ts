@@ -40,7 +40,7 @@ export interface QuickReply {
 
 // Công cụ nhập ngay trong chat; frontend vẽ theo `type`
 export interface ChatWidget {
-  type: "major" | "review" | "budget" | "scholarship" | "form";
+  type: "major" | "review" | "budget" | "scholarship" | "form" | "select";
   data?: Record<string, unknown> | null;
 }
 
@@ -52,6 +52,7 @@ export interface AdvisorChatResponse {
   quickReplies?: QuickReply[] | null;
   widget?: ChatWidget | null;
   profileChanged?: string[] | null; // khóa hồ sơ chat vừa đổi; form cần nạp lại khi có giá trị
+  formStep?: number | null; // trang form (1–6) của câu chat đang hỏi; form chuyển theo
 }
 
 // [USAS-362] Kiểu dữ liệu xác thực và người dùng
