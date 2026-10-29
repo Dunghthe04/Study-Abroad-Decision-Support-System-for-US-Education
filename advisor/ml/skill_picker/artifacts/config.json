@@ -13,7 +13,7 @@
     "ket_thuc"
   ],
   "threshold": 0.5,
-  "best_epoch": 20,
+  "best_epoch": 16,
   "seed": 42,
   "embedding_model": "bge-m3"
 }

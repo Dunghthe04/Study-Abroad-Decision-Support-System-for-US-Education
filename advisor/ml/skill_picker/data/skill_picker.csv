@@ -2025,3 +2025,74 @@ S2023,ex2-60,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường khôn
 S2024,ex2-60,B4,,Brown khó vào hay dễ vào vậy,,skill_explain,synthetic,train
 S2025,ex2-60,B4,,vì sao Brown không có trong danh sách của em,,skill_explain,synthetic,train
 S2026,ex2-60,B4,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,em co nen nop brown khong,,skill_explain,synthetic,train
+S2027,ct2-1,B4,,cho em số điện thoại của trung tâm,,skill_chuyen_trung_tam,synthetic,train
+S2028,ct2-1,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,cho em xin số điện thoại trung tâm tư vấn,,skill_chuyen_trung_tam,synthetic,train
+S2029,ct2-1,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,số điện thoại trung tâm là gì,,skill_chuyen_trung_tam,synthetic,train
+S2030,ct2-1,B4,,cho em so dien thoai cua trung tam,,skill_chuyen_trung_tam,synthetic,train
+S2031,ct2-2,B4,,cho em xin hotline trung tâm tư vấn du học,,skill_chuyen_trung_tam,synthetic,train
+S2032,ct2-2,B4,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,trung tâm có hotline không,,skill_chuyen_trung_tam,synthetic,train
+S2033,ct2-2,B4,,cho em số hotline của trung tâm,,skill_chuyen_trung_tam,synthetic,train
+S2034,ct2-2,B4,,cho em xin hotline trung tam tu van du hoc,,skill_chuyen_trung_tam,synthetic,train
+S2035,ct2-3,B4,,trung tâm nào uy tín nhất,,skill_chuyen_trung_tam,synthetic,val
+S2036,ct2-3,B4,,trung tâm tư vấn du học nào uy tín nhất,,skill_chuyen_trung_tam,synthetic,val
+S2037,ct2-3,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,trung tâm nào đáng tin nhất vậy,,skill_chuyen_trung_tam,synthetic,val
+S2038,ct2-3,B3,,trung tam nao uy tin nhat,,skill_chuyen_trung_tam,synthetic,val
+S2039,ct2-4,B4,,trung tâm nào tốt nhất,,skill_chuyen_trung_tam,synthetic,train
+S2040,ct2-4,B4,,trung tâm tư vấn nào tốt nhất cho em,,skill_chuyen_trung_tam,synthetic,train
+S2041,ct2-4,B4,,nên chọn trung tâm nào tốt nhất,,skill_chuyen_trung_tam,synthetic,train
+S2042,ct2-4,B3,,trung tam nao tot nhat,,skill_chuyen_trung_tam,synthetic,train
+S2043,ct2-5,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,"trung tâm nào uy tín nhất, giá bao nhiêu",,skill_chuyen_trung_tam,synthetic,train
+S2044,ct2-5,B4,,trung tâm nào uy tín và giá bao nhiêu,,skill_chuyen_trung_tam,synthetic,train
+S2045,ct2-5,B2,Điểm trung bình từng học kỳ của bạn là bao nhiêu? Bạn có thể tải ảnh học bạ cho nhanh.,cho em hỏi trung tâm uy tín và giá thế nào,scholarship,skill_chuyen_trung_tam,synthetic,train
+S2046,ct2-5,B1,"Bạn định học ngành gì? Chưa chắc cũng không sao, bạn cứ kể vài môn bạn thích.","trung tam nao uy tin nhat, gia bao nhieu","gpa, english, budget, major, scholarship",skill_chuyen_trung_tam,synthetic,train
+S2047,ct2-6,B1,"Hiện bạn đang học lớp mấy, hoặc đang làm gì?",trung tâm nào xếp hạng cao nhất,"target_level, gpa, budget, major, scholarship",skill_chuyen_trung_tam,synthetic,train
+S2048,ct2-6,B4,,xếp hạng các trung tâm tư vấn giúp em,,skill_chuyen_trung_tam,synthetic,train
+S2049,ct2-6,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,trung tâm nào được đánh giá cao nhất,,skill_chuyen_trung_tam,synthetic,train
+S2050,ct2-6,B4,,trung tam nao xep hang cao nhat,,skill_chuyen_trung_tam,synthetic,train
+S2051,ct2-7,B3,,review trung tâm tư vấn giúp em,,skill_chuyen_trung_tam,synthetic,train
+S2052,ct2-7,B4,,có review nào về trung tâm không,,skill_chuyen_trung_tam,synthetic,train
+S2053,ct2-7,B4,,đánh giá của học sinh về trung tâm thế nào,,skill_chuyen_trung_tam,synthetic,train
+S2054,ct2-7,B4,,review trung tam tu van giup em,,skill_chuyen_trung_tam,synthetic,train
+S2055,ct2-8,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,học phí của trung tâm là bao nhiêu,,skill_chuyen_trung_tam,synthetic,train
+S2056,ct2-8,B0,"Chào bạn, mình là trợ lý tư vấn du học Mỹ. Bạn đang cần mình giúp điều gì?",phí dịch vụ của trung tâm bao nhiêu,"target_level, gpa, english, major, scholarship",skill_chuyen_trung_tam,synthetic,train
+S2057,ct2-8,B3,,trung tâm tính phí thế nào,,skill_chuyen_trung_tam,synthetic,train
+S2058,ct2-8,B5,,hoc phi cua trung tam la bao nhieu,,skill_chuyen_trung_tam,synthetic,train
+S2059,ct2-9,B2,Bạn có giải thưởng nào không? Tên giải và cấp giải?,trung tâm nào rẻ nhất,,skill_chuyen_trung_tam,synthetic,train
+S2060,ct2-9,B2,Gia đình bạn có thể chi khoảng bao nhiêu mỗi năm cho cả học phí và sinh hoạt?,có trung tâm nào giá rẻ không,,skill_chuyen_trung_tam,synthetic,train
+S2061,ct2-9,B4,,cho em báo giá trung tâm,,skill_chuyen_trung_tam,synthetic,train
+S2062,ct2-9,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,trung tam nao re nhat,,skill_chuyen_trung_tam,synthetic,train
+S2063,ct2-10,B0,"Chào bạn, mình là trợ lý tư vấn du học Mỹ. Bạn đang cần mình giúp điều gì?",cho em địa chỉ trung tâm tư vấn,"target_level, gpa, budget, major, scholarship",skill_chuyen_trung_tam,synthetic,train
+S2064,ct2-10,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,trung tâm tư vấn ở đâu,,skill_chuyen_trung_tam,synthetic,train
+S2065,ct2-10,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,địa chỉ văn phòng trung tâm ở đâu,,skill_chuyen_trung_tam,synthetic,train
+S2066,ct2-10,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,cho em dia chi trung tam tu van,,skill_chuyen_trung_tam,synthetic,train
+S2067,ct2-11,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,em muốn gặp tư vấn viên,,skill_chuyen_trung_tam,synthetic,train
+S2068,ct2-11,B3,,cho em gặp tư vấn viên,,skill_chuyen_trung_tam,synthetic,train
+S2069,ct2-11,B4,,em muốn nói chuyện với tư vấn viên thật,,skill_chuyen_trung_tam,synthetic,train
+S2070,ct2-11,B3,,em muon gap tu van vien,,skill_chuyen_trung_tam,synthetic,train
+S2071,ct2-12,B2,Gia đình bạn có thể chi khoảng bao nhiêu mỗi năm cho cả học phí và sinh hoạt?,em muốn liên hệ trung tâm tư vấn,"gpa, english, scholarship",skill_chuyen_trung_tam,synthetic,train
+S2072,ct2-12,B5,,làm sao để liên hệ trung tâm,,skill_chuyen_trung_tam,synthetic,train
+S2073,ct2-12,B3,,cho em liên hệ với trung tâm,,skill_chuyen_trung_tam,synthetic,train
+S2074,ct2-12,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,em muon lien he trung tam tu van,,skill_chuyen_trung_tam,synthetic,train
+S2075,ct2-13,B4,,cho em email của trung tâm,,skill_chuyen_trung_tam,synthetic,train
+S2076,ct2-13,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,trung tâm có zalo không,,skill_chuyen_trung_tam,synthetic,train
+S2077,ct2-13,B3,,cho em zalo trung tâm tư vấn,,skill_chuyen_trung_tam,synthetic,train
+S2078,ct2-13,B4,,cho em email cua trung tam,,skill_chuyen_trung_tam,synthetic,train
+S2079,ct2-14,B2,"Bạn đã có chứng chỉ tiếng Anh nào chưa (IELTS, TOEFL, Duolingo)? Điểm bao nhiêu, thi khi nào?",trung tâm có cam kết đỗ không,"gpa, english, budget, scholarship",skill_chuyen_trung_tam,synthetic,train
+S2080,ct2-14,B3,,trung tâm nào cam kết có visa,,skill_chuyen_trung_tam,synthetic,train
+S2081,ct2-14,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,trung tâm có đảm bảo đậu không,,skill_chuyen_trung_tam,synthetic,train
+S2082,ct2-14,B3,"Bạn kiểm tra giúp mình hồ sơ ở trên, đúng không?",trung tam co cam ket do khong,,skill_chuyen_trung_tam,synthetic,train
+S2083,ct2-15,B0,"Bạn muốn mình tìm trường theo hồ sơ của bạn, hay bạn đang có câu hỏi cụ thể?",cho em số điện thoại trung tâm sửa bài luận,"target_level, gpa, english, budget, major, scholarship",skill_chuyen_trung_tam,synthetic,train
+S2084,ct2-15,B4,,giá sửa bài luận bao nhiêu,,skill_chuyen_trung_tam,synthetic,train
+S2085,ct2-15,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,cho em so dien thoai trung tam sua bai luan,,skill_chuyen_trung_tam,synthetic,train
+S2086,ct2-16,B4,,cho em số điện thoại trung tâm luyện phỏng vấn visa,,skill_chuyen_trung_tam,synthetic,val
+S2087,ct2-16,B5,,luyện phỏng vấn visa ở trung tâm nào uy tín nhất,,skill_chuyen_trung_tam,synthetic,val
+S2088,ct2-16,B4,,cho em so dien thoai trung tam luyen phong van visa,,skill_chuyen_trung_tam,synthetic,val
+S2089,ct2-17,B4,,em cần trung tâm làm hồ sơ hộ,,skill_chuyen_trung_tam,synthetic,train
+S2090,ct2-17,B4,,trung tâm nào làm hồ sơ hộ tốt nhất,,skill_chuyen_trung_tam,synthetic,train
+S2091,ct2-17,B4,,em can trung tam lam ho so ho,,skill_chuyen_trung_tam,synthetic,train
+S2092,ct2-18,B4,,nộp hồ sơ ở trung tâm nào uy tín nhất,,skill_chuyen_trung_tam,synthetic,val
+S2093,ct2-18,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,cho em số điện thoại trung tâm nộp hồ sơ,,skill_chuyen_trung_tam,synthetic,val
+S2094,ct2-18,B4,,nop ho so o trung tam nao uy tin nhat,,skill_chuyen_trung_tam,synthetic,val
+S2095,ct2-19,B4,,em cần trung tâm chọn trường,,skill_chuyen_trung_tam,synthetic,train
+S2096,ct2-19,B3,"Bạn kiểm tra giúp mình hồ sơ ở trên, đúng không?",có trung tâm nào chọn trường rẻ không,,skill_chuyen_trung_tam,synthetic,train
+S2097,ct2-19,B5,,em can trung tam chon truong,,skill_chuyen_trung_tam,synthetic,train

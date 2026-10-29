@@ -11,7 +11,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from app.schemas.chat import ChatState, Citation
+from app.schemas.chat import ChatState, Citation, QuickReply
 from app.services.chat_flow import SkillOutput
 from app.services.knowledge import KnowledgeHit, KnowledgeRetriever
 from app.services.skill_call import SKILLS_DIR, SkillCall
@@ -31,8 +31,10 @@ SCHEMA = {
 
 NO_BASIS = (
     "Hiện hệ thống chưa có thông tin chắc chắn về vấn đề này. "
-    "Bạn có thể hỏi lại bằng cách khác, hoặc liên hệ một trung tâm tư vấn du học uy tín để được hỗ trợ trực tiếp."
+    "Bạn có thể hỏi lại bằng cách khác, hoặc mình gợi ý các trung tâm tư vấn đã xác minh nếu bạn cần người hỗ trợ trực tiếp."
 )
+# Nút dẫn sang B6 (skill_chuyen_trung_tam): bấm là gửi câu xin gặp tư vấn viên, hệ thống hỏi cần dịch vụ nào
+CENTER_BUTTON = QuickReply(label="Gợi ý trung tâm tư vấn", value="Em muốn gặp tư vấn viên")
 UNAVAILABLE = "Phần trả lời kiến thức đang tạm gián đoạn, bạn thử lại sau ít phút nhé."
 DISCLAIMER = (
     "Thông tin chỉ mang tính tham khảo. Quy định visa, học phí và học bổng có thể thay đổi; "
@@ -120,7 +122,7 @@ class TraLoiHandler:
             return SkillOutput(UNAVAILABLE)
         # Chỉ lấy dòng tốt nhất, và phải đạt ngưỡng
         if not hits or hits[0].score < self._min_score:
-            return SkillOutput(NO_BASIS)
+            return SkillOutput(NO_BASIS, quick_replies=[CENTER_BUTTON])
         best = hits[0]
 
         # Gọi ollama chạy skill
@@ -130,7 +132,7 @@ class TraLoiHandler:
             lambda raw: check_answer(raw, message, best),
         )
         if composed is not None and not composed.enough:
-            return SkillOutput(NO_BASIS)
+            return SkillOutput(NO_BASIS, quick_replies=[CENTER_BUTTON])
         if composed is None:  # Qwen sai hai lần: dùng câu trả lời chuẩn của dòng đó
             logger.warning("Qwen không trả được câu hợp lệ sau 2 lần, dùng câu chuẩn của %s", best.code)
             answer = best.content

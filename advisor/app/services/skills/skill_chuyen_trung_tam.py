@@ -15,6 +15,7 @@ from app.schemas.chat import ChatState, QuickReply
 from app.services.centers import SERVICES, CenterFinder, CenterHit
 from app.services.chat_flow import SkillOutput
 from app.services.skill_call import SKILLS_DIR, SkillCall
+from app.services.small_talk import plain
 
 logger = logging.getLogger("advisor.centers")
 
@@ -52,6 +53,17 @@ NO_CENTER = (
     "Bạn có thể xem danh sách trung tâm đầy đủ ở trang Trung tâm."
 )
 UNAVAILABLE = "Phần gợi ý trung tâm đang tạm gián đoạn, bạn thử lại sau ít phút nhé."
+# Học sinh xin điều hệ thống không cung cấp (số điện thoại, giá, xếp hạng, đánh giá trung tâm)
+NOT_PROVIDED = (
+    "Mình không cung cấp số điện thoại, mức giá hay xếp hạng, đánh giá của trung tâm. "
+    "Mình chỉ gợi ý các trung tâm đã xác minh, bạn xem thông tin trên website của họ và tự hỏi trực tiếp nhé."
+)
+_NOT_PROVIDED_RE = re.compile(
+    r"\bso dien thoai\b|\bsdt\b|\bhotline\b|\bzalo\b|\bemail\b|\bgmail\b|\bbao gia\b|\bmuc gia\b"
+    r"|\bgia\b.*\bbao nhieu\b|\bgia (?:ca|tien|re)\b|\bphi (?:dich vu|bao nhieu)\b|\bchi phi\b|\bhoc phi\b"
+    r"|\bbao nhieu tien\b|\bre nhat\b"
+    r"|\buy tin\b|\btot nhat\b|\bdang tin\b|\bxep hang\b|\bdanh gia\b|\breview\b"
+)
 DISCLAIMER = (
     "Danh sách chỉ gồm trung tâm đã được xác minh, xếp theo thành phố rồi theo tên, không phải xếp hạng chất lượng. "
     "Bạn nên tự tìm hiểu kỹ trước khi liên hệ."
@@ -187,7 +199,14 @@ class ChuyenTrungTamHandler:
         self._need = SkillCall(llm, model, NEED_PATH)
         self._explain = SkillCall(llm, model, EXPLAIN_PATH)
 
+    # Học sinh xin số điện thoại, giá, xếp hạng: nói rõ không cung cấp rồi gợi ý trung tâm như bình thường
     async def run(self, state: ChatState, message: str) -> SkillOutput:
+        output = await self._suggest(state, message)
+        if _NOT_PROVIDED_RE.search(plain(message)):
+            output.answer = f"{NOT_PROVIDED}\n\n{output.answer}"
+        return output
+
+    async def _suggest(self, state: ChatState, message: str) -> SkillOutput:
         try:
             cities = await self._finder.cities()
         except Exception:  # backend tắt hoặc lỗi: nói thật là đang gián đoạn, không bịa danh sách
