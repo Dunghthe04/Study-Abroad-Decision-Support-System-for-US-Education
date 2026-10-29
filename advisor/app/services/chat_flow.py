@@ -68,7 +68,7 @@ NEED_PROFILE = (
 NEED_RESULTS = "Bạn cần xem danh sách trường gợi ý trước, rồi mình mới phân tích tiếp được nhé."
 NEED_MAJOR = "Để gợi ý trường mình cần biết ngành bạn muốn học. Bạn chọn ngành giúp mình nhé."
 # Skill trả lời xen ngang (không đổi bước, không hỏi sang câu khác): trả lời xong thì nhắc lại câu đang chờ
-INTERRUPT_SKILLS = {"skill_tra_loi"}
+INTERRUPT_SKILLS = {"skill_tra_loi", "skill_chuyen_trung_tam"}
 BACK_TO_QUESTION = "Quay lại câu mình đang hỏi nhé: "
 OPENING_QUESTIONS = {"B0.1", "B0.2"}
 

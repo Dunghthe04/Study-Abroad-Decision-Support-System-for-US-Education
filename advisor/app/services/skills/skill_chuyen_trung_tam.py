@@ -91,6 +91,7 @@ BANNED = (
 MAX_REASON_WORDS = 40
 _DIGIT_RE = re.compile(r"\d")
 
+
 # Nhu cầu đã kiểm tra
 @dataclass(frozen=True)
 class Need:

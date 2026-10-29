@@ -11,6 +11,7 @@ from app.api.deps import require_api_key
 from app.api.routes import chat, health, profile, recommend
 from app.core.config import get_settings
 from app.core.db import open_pool
+from app.services.centers import CenterFinder
 from app.services.chat_flow import ChatFlow
 from app.services.ec_reader import EcReader
 from app.services.explainer import Explainer
@@ -34,6 +35,9 @@ async def lifespan(app: FastAPI):
     async with (
         httpx.AsyncClient(base_url=settings.ollama_base_url, timeout=settings.llm_timeout_seconds) as http,
         httpx.AsyncClient(base_url=settings.gemini_base_url, timeout=180) as gemini_http,
+        httpx.AsyncClient(
+            base_url=settings.backend_base_url, timeout=settings.backend_timeout_seconds
+        ) as backend_http,
     ):
         app.state.llm = OllamaClient(
             http,
@@ -61,10 +65,11 @@ async def lifespan(app: FastAPI):
         if app.state.db_pool is not None:
             statuses = [s.strip() for s in settings.knowledge_statuses.split(",") if s.strip()]
             knowledge = KnowledgeRetriever(app.state.db_pool, statuses, settings.knowledge_top_k)
+        centers = CenterFinder(backend_http) if settings.backend_base_url else None
         app.state.chat_flow = ChatFlow(
             picker=load_skill_picker(http),
             handlers=build_handlers(
-                app.state.llm, settings.llm_model, knowledge, settings.knowledge_min_score
+                app.state.llm, settings.llm_model, knowledge, settings.knowledge_min_score, centers
             ),
         )
         yield

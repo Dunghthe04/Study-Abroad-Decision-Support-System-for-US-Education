@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 
 from app.main import create_app
+from app.services.centers import CenterFinder
 from app.services.ollama import OllamaClient
 
 
@@ -17,8 +18,8 @@ def test_startup_registers_skills_from_build_handlers(monkeypatch):
 
     seen = {}
 
-    def fake_build_handlers(llm, model, knowledge=None, min_score=0.72):
-        seen["llm"], seen["model"], seen["knowledge"] = llm, model, knowledge
+    def fake_build_handlers(llm, model, knowledge=None, min_score=0.72, centers=None):
+        seen["llm"], seen["model"], seen["knowledge"], seen["centers"] = llm, model, knowledge, centers
         return {"skill_ho_so": FakeSkill()}
 
     monkeypatch.setattr("app.main.build_handlers", fake_build_handlers)
@@ -31,6 +32,9 @@ def test_startup_registers_skills_from_build_handlers(monkeypatch):
         assert {"ngoai_le", "ket_thuc"} <= set(handlers)  # skill tạm vẫn còn
         assert seen["llm"] is client.app.state.llm  # skill nhận đúng llm dùng chung lúc khởi động
         assert seen["knowledge"] is None  # không có DATABASE_URL thì không có bộ tìm kiến thức
+        assert isinstance(
+            seen["centers"], CenterFinder
+        )  # BACKEND_BASE_URL mặc định có nên bật gợi ý trung tâm (B6)
 
 
 def test_startup_has_no_db_pool_when_no_database_is_configured():
