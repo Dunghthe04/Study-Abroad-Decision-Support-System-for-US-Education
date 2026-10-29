@@ -75,6 +75,11 @@ export interface CreateModeratorAccountRequest {
   phone?: string | null;
 }
 
+/** [UC-61] Admin khóa tài khoản kèm lý do. */
+export interface LockUserAccountRequest {
+  reason: string;
+}
+
 export interface UserDto {
   id: string;
   email: string;

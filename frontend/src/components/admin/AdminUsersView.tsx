@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
-import { ShieldCheckIcon, UserPlusIcon } from "lucide-react";
+import { BanIcon, ShieldCheckIcon, UserPlusIcon } from "lucide-react";
 import { adminUsersApi, ApiError } from "@/lib/api";
 import { formatUserRole } from "@/lib/user-role-labels";
 import type { UserDto, UserRole } from "@/types/api";
@@ -14,6 +14,14 @@ import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Table,
   TableBody,
@@ -47,6 +55,11 @@ const ACCOUNT_STATUS_OPTIONS = [
 const filterSelectClass =
   "h-9 w-full min-w-[10rem] rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50";
 
+/** [UC-61] Chỉ khóa student/parent/moderator/center chưa locked. */
+function canAdminLock(user: UserDto): boolean {
+  return user.role !== "admin" && user.status !== "locked";
+}
+
 function statusBadgeVariant(status: string): "default" | "secondary" | "destructive" | "outline" {
   if (status === "active") return "default";
   if (status === "unverified" || status === "pending") return "secondary";
@@ -73,6 +86,11 @@ export function AdminUsersView() {
   const [phone, setPhone] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const [lockTarget, setLockTarget] = useState<UserDto | null>(null);
+  const [lockReason, setLockReason] = useState("");
+  const [lockSubmitting, setLockSubmitting] = useState(false);
+  const [lockDialogError, setLockDialogError] = useState<string | null>(null);
 
   const fetchUserPage = useCallback(async (activePage: number, signal?: { cancelled: boolean }) => {
     setListError(null);
@@ -121,6 +139,48 @@ export function AdminUsersView() {
     }, 300);
     return () => window.clearTimeout(timer);
   }, [searchInput]);
+
+  const openLockDialog = (user: UserDto) => {
+    setLockTarget(user);
+    setLockReason("");
+    setLockDialogError(null);
+  };
+
+  const closeLockDialog = () => {
+    if (lockSubmitting) return;
+    setLockTarget(null);
+    setLockReason("");
+    setLockDialogError(null);
+  };
+
+  const handleConfirmLock = async () => {
+    if (!lockTarget) return;
+    const reason = lockReason.trim();
+    if (!reason) {
+      setLockDialogError("Vui lòng nhập lý do khóa.");
+      return;
+    }
+    setLockDialogError(null);
+    setLockSubmitting(true);
+    try {
+      await adminUsersApi.lock(lockTarget.id, { reason });
+      toast.add({
+        type: "success",
+        priority: "high",
+        timeout: 6000,
+        title: "Đã khóa tài khoản",
+        description: lockTarget.email,
+      });
+      setLockTarget(null);
+      setLockReason("");
+      setLockDialogError(null);
+      await loadUsers();
+    } catch (err) {
+      setLockDialogError(err instanceof ApiError ? err.message : "Không khóa được tài khoản.");
+    } finally {
+      setLockSubmitting(false);
+    }
+  };
 
   const handleCreateModerator = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -349,12 +409,13 @@ export function AdminUsersView() {
                     <TableHead>Vai trò</TableHead>
                     <TableHead>Trạng thái</TableHead>
                     <TableHead>SĐT</TableHead>
+                    <TableHead className="w-[7rem]">{/* UC-61 */}Thao tác</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {users.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center text-muted-foreground">
+                      <TableCell colSpan={6} className="text-center text-muted-foreground">
                         Không có kết quả.
                       </TableCell>
                     </TableRow>
@@ -368,6 +429,22 @@ export function AdminUsersView() {
                           <Badge variant={statusBadgeVariant(u.status)}>{u.status}</Badge>
                         </TableCell>
                         <TableCell className="text-muted-foreground">{u.phone ?? "—"}</TableCell>
+                        <TableCell>
+                          {canAdminLock(u) ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="gap-1 text-destructive hover:text-destructive"
+                              onClick={() => openLockDialog(u)}
+                            >
+                              <BanIcon className="size-3.5" aria-hidden />
+                              Khóa
+                            </Button>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
                       </TableRow>
                     ))
                   )}
@@ -402,6 +479,44 @@ export function AdminUsersView() {
           )}
         </CardContent>
       </Card>
+
+      {/* [UC-61] Xác nhận khóa tài khoản */}
+      <Dialog open={lockTarget !== null} onOpenChange={(open) => !open && closeLockDialog()}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Khóa tài khoản</DialogTitle>
+            <DialogDescription>
+              {lockTarget
+                ? `Khóa ${lockTarget.fullName} (${lockTarget.email}). Người dùng không thể đăng nhập cho đến khi được mở khóa.`
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <Field>
+            <FieldLabel htmlFor="lock-reason">Lý do khóa</FieldLabel>
+            <Input
+              id="lock-reason"
+              value={lockReason}
+              onChange={(e) => setLockReason(e.target.value)}
+              placeholder="Ví dụ: Vi phạm quy chế..."
+              maxLength={500}
+              disabled={lockSubmitting}
+            />
+          </Field>
+          {lockDialogError ? (
+            <Alert variant="destructive">
+              <AlertDescription>{lockDialogError}</AlertDescription>
+            </Alert>
+          ) : null}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={closeLockDialog} disabled={lockSubmitting}>
+              Hủy
+            </Button>
+            <Button type="button" variant="destructive" onClick={() => void handleConfirmLock()} disabled={lockSubmitting}>
+              {lockSubmitting ? <Spinner className="size-4" /> : "Xác nhận khóa"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
