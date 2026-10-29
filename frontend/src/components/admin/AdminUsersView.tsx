@@ -74,8 +74,7 @@ export function AdminUsersView() {
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const loadUsers = useCallback(async (pageOverride?: number) => {
-    const activePage = pageOverride ?? page;
+  const fetchUserPage = useCallback(async (activePage: number, signal?: { cancelled: boolean }) => {
     setListError(null);
     setListLoading(true);
     try {
@@ -86,19 +85,33 @@ export function AdminUsersView() {
         page: activePage,
         pageSize: ACCOUNT_LIST_PAGE_SIZE,
       });
+      if (signal?.cancelled) return;
       setUsers(data.items);
       setTotalCount(data.totalCount);
       setTotalPages(data.totalPages ?? Math.max(1, Math.ceil(data.totalCount / data.pageSize)));
     } catch (err) {
+      if (signal?.cancelled) return;
       setListError(err instanceof ApiError ? err.message : "Không tải được danh sách người dùng.");
     } finally {
-      setListLoading(false);
+      if (!signal?.cancelled) setListLoading(false);
     }
-  }, [page, roleFilter, searchQuery, statusFilter]);
+  }, [roleFilter, searchQuery, statusFilter]);
 
+  const loadUsers = useCallback(
+    (pageOverride?: number) => fetchUserPage(pageOverride ?? page),
+    [fetchUserPage, page],
+  );
+
+  /** Tải danh sách khi đổi trang/lọc — setState sau await, tránh rule react-hooks/set-state-in-effect. */
   useEffect(() => {
-    void loadUsers();
-  }, [loadUsers]);
+    const signal = { cancelled: false };
+    void (async () => {
+      await fetchUserPage(page, signal);
+    })();
+    return () => {
+      signal.cancelled = true;
+    };
+  }, [fetchUserPage, page]);
 
   /** Debounce ô tìm — tránh gọi API mỗi ký tự. */
   useEffect(() => {
