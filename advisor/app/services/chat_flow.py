@@ -308,6 +308,15 @@ class ChatFlow:
             skip_blocked.add("chua_co_danh_sach")
         answers += blocked_answers(plan, skip=skip_blocked)
 
+        # Đã trả lời kiến thức / trung tâm ở B5, B6 (skill chạy thật, có handler): quay lại việc đang dở
+        answered = INTERRUPT_SKILLS & {s for s in skills if s in self._handlers}
+        if answered and state.current_step in CHAIN_STEPS:
+            resumed = resume_after_chain(state)
+            if resumed is not None:
+                answers.append(resumed.answer)
+                quick_replies = resumed.quick_replies or quick_replies
+                widget = resumed.widget or widget
+
         # Trả lời xen ngang lúc đang hỏi hồ sơ: nhắc lại câu đang chờ (không gọi ask nên không tăng số lần hỏi)
         if (
             INTERRUPT_SKILLS & set(plan.skills)
@@ -380,6 +389,28 @@ BLOCKED_ANSWER = {
 # Skill bị chặn thì nói cho học sinh biết vì sao (bỏ qua các lý do trong skip)
 def blocked_answers(plan: Plan, skip: set[str] | None = None) -> list[str]:
     return [BLOCKED_ANSWER[item.reason] for item in plan.blocked if item.reason not in (skip or set())]
+
+
+RESUME = "Mình quay lại phần tư vấn chọn trường nhé."
+
+
+# Trả lời kiến thức hoặc giới thiệu trung tâm xong (B5, B6) thì quay lại việc đang dở, không đứng yên ở B5/B6:
+# - đã có danh sách trường: về B4 (bước model chọn skill đã học cho việc hỏi về trường, giải thích, kịch bản);
+# - chưa có danh sách mà hồ sơ còn thiếu: hỏi tiếp hồ sơ như lúc bắt đầu thu hồ sơ;
+# - hồ sơ đủ rồi: để yên, học sinh nhắn tiếp thì skill của bước đó chạy
+def resume_after_chain(state: ChatState) -> SkillOutput | None:
+    target, state.return_to = state.return_to, None
+    if target is None:  # không có việc dở (không đi từ skill_nhu_cau sang): để nguyên như cũ
+        return None
+    if state.has_results:
+        go_to(state, "B4")
+        return None
+    if not missing_fields(state.profile, REQUIRED_B3):
+        return None
+    go_to(state, target)  # model chọn skill nhìn đúng bước đang thu hồ sơ, không còn đứng ở B5/B6
+    output = start_intake(state)
+    output.answer = f"{RESUME}\n\n{output.answer}"
+    return output
 
 
 # Bắt đầu hỏi hồ sơ khi một skill bị chặn vì thiếu hồ sơ
