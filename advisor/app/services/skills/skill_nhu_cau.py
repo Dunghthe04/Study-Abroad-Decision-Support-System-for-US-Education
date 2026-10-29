@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from app.schemas.chat import ChatState, QuickReply
-from app.services.chat_flow import NOT_READY, SkillOutput, ask, go_to, start_intake
+from app.services.chat_flow import SkillOutput, ask, go_to, start_intake
 from app.services.skill_call import SKILLS_DIR, SkillCall
 from app.services.skill_rules import REQUIRED_B3, missing_fields
 from app.services.skills import skill_bac_hoc, skill_ho_so
@@ -101,7 +101,7 @@ class NhuCauHandler:
         if read.need in NEED_STEP:
             go_to(state, NEED_STEP[read.need])
             state.return_to = "B1"
-            return SkillOutput(NOT_READY)
+            return SkillOutput("")
 
         await self._save_info(state, message, set(read.info))
         # Muốn tư vấn hồ sơ mà còn thiếu mục bắt buộc: mời chọn trả lời trong chat hay điền form (giống bước đánh giá)

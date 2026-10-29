@@ -78,3 +78,5 @@ class ChatResponse(CamelModel):
     widget: Widget | None = None  # công cụ nhập cần hiện trong chat
     profile: dict[str, ProfileField] = {}  # hồ sơ sau lượt này (điền ở việc 1.5)
     profile_changed: list[str] = []  # khóa hồ sơ đổi trong lượt này (điền ở việc 1.5)
+    # Việc .NET cần làm sau lượt này. "recommend" = chạy gợi ý trường (pipeline ở .NET), None = không có
+    action: Literal["recommend"] | None = None

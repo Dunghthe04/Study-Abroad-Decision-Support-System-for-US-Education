@@ -23,7 +23,14 @@ from app.services.intake import (
 )
 from app.services.pii_mask import mask_personal_info
 from app.services.profile_sync import changed_keys, merge_profile
-from app.services.skill_rules import REQUIRED_B3, REQUIRED_BY_SKILL, Plan, missing_fields, plan_skills
+from app.services.skill_rules import (
+    REQUIRED_B3,
+    REQUIRED_BY_SKILL,
+    STEP_SKILL,
+    Plan,
+    missing_fields,
+    plan_skills,
+)
 
 # Tạo 1 logger
 logger = logging.getLogger("advisor.chat")
@@ -72,6 +79,7 @@ BACK_TO_QUESTION = "Quay lại câu mình đang hỏi nhé: "
 OPENING_QUESTIONS = {"B0.1", "B0.2"}
 # Skill đánh giá hồ sơ (B3): chạy ngay khi rà soát hồ sơ xong
 ASSESS_SKILL = "skill_danh_gia"
+CHAIN_STEPS = {"B5", "B6"}
 END_SKILL = "ket_thuc"
 # Bước hỏi hồ sơ (bậc học, hồ sơ): câu hỏi có nút gợi ý
 INTAKE_STEPS = ("B1", "B2")
@@ -111,6 +119,7 @@ class SkillOutput:
     widget: Widget | None = None
     citations: list[Citation] = field(default_factory=list)  # nguồn của thông tin trong câu trả lời
     disclaimer: str | None = None  # lời lưu ý kèm theo
+    action: str | None = None  # việc .NET cần làm sau lượt này, xem ChatResponse.action
 
 
 # Hợp đồng chung mọi skill: nhân trạng thái và tin nhắn, trả câu trả lời
@@ -221,6 +230,7 @@ class ChatFlow:
         widget: Widget | None = None
         citations: list[Citation] = []
         disclaimer: str | None = None
+        action: str | None = None
         skills = list(plan.skills)
         for skill in skills:
             # Lấy ra handler của skill, nếu không có thì trả NOT_READY
@@ -229,17 +239,25 @@ class ChatFlow:
                 if handler is None:
                     not_ready = True
                     continue
+            step_before = state.current_step
             output = await handler.run(state, message)
-            answers.append(output.answer)
+            # Skill chỉ chuyển bước (câu trả lời rỗng) thì không thêm câu nào, skill của bước mới sẽ trả lời
+            if output.answer:
+                answers.append(output.answer)
             # Mỗi lượt chỉ hiện một bộ nút và một công cụ nhập: lấy của skill chạy sau cùng có đưa ra
             quick_replies = output.quick_replies or quick_replies
             widget = output.widget or widget
             citations += [c for c in output.citations if c not in citations]
             disclaimer = output.disclaimer or disclaimer
+            action = output.action or action
             # Rà soát hồ sơ xong (skill_ho_so vừa chuyển sang B3, không còn câu chờ): đánh giá luôn trong lượt này,
             # không bắt học sinh nhắn thêm một lần nữa mới thấy kết quả
             if state.current_step == "B3" and state.question_id is None and ASSESS_SKILL not in skills:
                 skills.append(ASSESS_SKILL)
+            if state.current_step != step_before and state.current_step in CHAIN_STEPS:
+                next_skill = STEP_SKILL[state.current_step]
+                if next_skill not in skills:
+                    skills.append(next_skill)
         # Skill chưa có handler chỉ báo "đang hoàn thiện" khi chưa có skill nào trả lời được
         if not_ready and not answers:
             # Lượt đầu mà chưa skill nào trả lời được: chào như cũ thay vì báo "đang hoàn thiện"
@@ -258,7 +276,11 @@ class ChatFlow:
             answers.append(major.answer)
             widget = major.widget or widget
         # Các lý do chặn khác thì báo cho học sinh biết (thiếu hồ sơ và thiếu ngành đã xử lý ở trên)
-        answers += blocked_answers(plan, skip={"thieu_ho_so", "thieu_nganh"})
+        # Đã có skill khác trả lời rồi thì không thêm câu "cần xem danh sách trường trước" (câu thừa, không liên quan)
+        skip_blocked = {"thieu_ho_so", "thieu_nganh"}
+        if any(answers):
+            skip_blocked.add("chua_co_danh_sach")
+        answers += blocked_answers(plan, skip=skip_blocked)
 
         # Trả lời xen ngang lúc đang hỏi hồ sơ: nhắc lại câu đang chờ (không gọi ask nên không tăng số lần hỏi)
         if (
@@ -283,6 +305,7 @@ class ChatFlow:
             disclaimer=disclaimer,
             profile=state.profile,
             profile_changed=changed_keys(profile_before, state.profile),
+            action=action,
         )
 
     # Gọi model; lỗi (chưa nạp model, Ollama tắt...) thì trả về "không chắc"

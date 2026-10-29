@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using StudyAbroad.Application.Advisor;
 using StudyAbroad.Application.Profile.Flow;
+using StudyAbroad.Application.Recommendations;
 using StudyAbroad.Domain.Entities;
 
 namespace StudyAbroad.UnitTests;
@@ -335,6 +336,120 @@ public class ChatServiceTests
         Assert.Empty(analyses.Saved);
     }
 
+    // Gợi ý trường trong chat: advisor trả action "recommend" (lộ trình đại học thẳng) thì chạy gợi ý có sẵn
+    private const string OneSchool = """{ "scored": [ { "code": "ASU", "name": "Arizona State University" } ], "match": [ { "code": "ASU" } ] }""";
+
+    [Fact]
+    public async Task RecommendAction_RunsTheRecommendation_AndAddsTheSummaryToTheAnswer()
+    {
+        var userId = Guid.NewGuid();
+        var runner = new FakeRunner { Result = new Recommendation { ItemsJson = OneSchool } };
+        var store = new FakeSessions();
+
+        var res = await new ChatService(new FakeAdvisor("B4") { Action = "recommend" }, store, new FakeProfileFlow(), null, runner)
+            .ChatAsync(userId, new AdvisorChatRequest(Hello));
+
+        Assert.Equal(userId, runner.CalledFor);
+        Assert.StartsWith("ok\n\nMình đã tìm được các trường phù hợp", res.Answer); // câu lộ trình giữ nguyên ở đầu
+        Assert.Contains("- Vừa sức: Arizona State University", res.Answer);
+        Assert.Equal(new Widget(ChatRecommendation.WidgetType), res.Widget); // nút xem đầy đủ
+        Assert.Null(res.Action); // action là việc nội bộ, không trả cho trình duyệt
+        Assert.Contains("\"hasResults\":true", Assert.Single(store.Rows).StateJson); // lượt sau skill_explain chạy được
+    }
+
+    [Fact]
+    public async Task NoAction_DoesNotRunTheRecommendation()
+    {
+        var runner = new FakeRunner();
+
+        var res = await new ChatService(new FakeAdvisor("B4"), new FakeSessions(), new FakeProfileFlow(), null, runner)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Null(runner.CalledFor);
+        Assert.Equal("ok", res.Answer);
+    }
+
+    [Fact]
+    public async Task RecommendationSummary_IsNotSavedAsPartOfTheRoadmapAnalysis()
+    {
+        var analyses = new FakeAnalyses();
+        var runner = new FakeRunner { Result = new Recommendation { ItemsJson = OneSchool } };
+        var advisor = new FakeAdvisor("B4") { Skills = ["skill_lo_trinh"], Action = "recommend" };
+
+        await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), analyses, runner)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.DoesNotContain("Arizona", Assert.Single(analyses.Saved).Json);
+    }
+
+    [Theory]
+    [InlineData("Hồ sơ chưa chọn ngành, cần chọn ngành trước khi gợi ý trường.", "Mình chưa tạo được danh sách trường: Hồ sơ chưa chọn ngành")]
+    [InlineData("Gemini trả code lạ", ChatRecommendation.Invalid)]
+    public async Task RecommendationFails_KeepsTheRoadmap_AndExplains(string error, string expected)
+    {
+        var runner = new FakeRunner { Error = new InvalidOperationException(error) };
+        var store = new FakeSessions();
+
+        var res = await new ChatService(new FakeAdvisor("B4") { Action = "recommend" }, store, new FakeProfileFlow(), null, runner)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.StartsWith("ok\n\n", res.Answer);
+        Assert.Contains(expected, res.Answer);
+        Assert.Null(res.Widget);
+        Assert.DoesNotContain("hasResults", Assert.Single(store.Rows).StateJson); // chưa có kết quả thì không bật
+    }
+
+    [Fact]
+    public async Task RecommendationServiceDown_SaysBusy()
+    {
+        var runner = new FakeRunner { Error = new HttpRequestException("advisor tắt") };
+
+        var res = await new ChatService(new FakeAdvisor("B4") { Action = "recommend" }, new FakeSessions(), new FakeProfileFlow(), null, runner)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Equal($"ok\n\n{ChatRecommendation.Busy}", res.Answer);
+    }
+
+    // Gemini treo: advisor thử lại nhiều lần, HttpClient của .NET hết giờ (TaskCanceledException). Không được làm lỗi 500 cả lượt chat
+    [Fact]
+    public async Task RecommendationTimesOut_SaysBusy_AndKeepsTheRoadmap()
+    {
+        var runner = new FakeRunner { Error = new TaskCanceledException("HttpClient.Timeout") };
+
+        var res = await new ChatService(new FakeAdvisor("B4") { Action = "recommend" }, new FakeSessions(), new FakeProfileFlow(), null, runner)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Equal($"ok\n\n{ChatRecommendation.Busy}", res.Answer);
+    }
+
+    // Học sinh đóng trang giữa chừng (request bị hủy) thì không nuốt lỗi: để ASP.NET dừng lượt chat như bình thường
+    [Fact]
+    public async Task RequestCancelledByTheUser_IsNotSwallowed()
+    {
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        var runner = new FakeRunner { Error = new TaskCanceledException() };
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            new ChatService(new FakeAdvisor("B4") { Action = "recommend" }, new FakeSessions(), new FakeProfileFlow(), null, runner)
+                .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello), cts.Token));
+    }
+
+    private sealed class FakeRunner : IRecommendationRunner
+    {
+        public Recommendation? Result { get; init; }
+        public Exception? Error { get; init; }
+        public Guid? CalledFor { get; private set; }
+
+        public Task<Recommendation> CreateAsync(Guid userId, IReadOnlyList<int>? pref, CancellationToken ct)
+        {
+            CalledFor = userId;
+            if (Error is not null)
+                throw Error;
+            return Task.FromResult(Result!);
+        }
+    }
+
     private sealed class FakeAnalyses : IChatAnalysisRepository
     {
         public List<(Guid UserId, string Kind, string Json, string Model)> Saved { get; } = [];
@@ -353,6 +468,7 @@ public class ChatServiceTests
         public IReadOnlyList<string>? Changed { get; init; }
         public string? QuestionId { get; init; }
         public IReadOnlyList<string>? Skills { get; init; }
+        public string? Action { get; init; }
 
         public Task<AdvisorChatResponse> ChatAsync(AdvisorChatRequest request, CancellationToken ct = default)
         {
@@ -360,7 +476,7 @@ public class ChatServiceTests
             var question = QuestionId is null ? "" : $",\"questionId\":\"{QuestionId}\"";
             var state = JsonDocument.Parse($"{{\"currentStep\":\"{nextStep}\"{question}}}").RootElement;
             return Task.FromResult(new AdvisorChatResponse(
-                "ok", [], null, state, QuickReplies: replies, Widget: widget, Profile: Profile, ProfileChanged: Changed, Skills: Skills));
+                "ok", [], null, state, QuickReplies: replies, Widget: widget, Profile: Profile, ProfileChanged: Changed, Skills: Skills, Action: Action));
         }
 
         public Task<EcResponseDto> ReadEcAsync(EcRequestDto request, CancellationToken ct = default) => throw new NotSupportedException();

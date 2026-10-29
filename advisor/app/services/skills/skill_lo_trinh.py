@@ -52,6 +52,8 @@ CRITERIA = (
     "- Tổng chi phí mỗi năm vừa ngân sách gia đình",
     "- Yêu cầu đầu vào (GPA, tiếng Anh) vừa sức với hồ sơ hiện tại",
 )
+# Lộ trình đại học thẳng: nhờ .NET chạy gợi ý trường (lọc, chấm, chọn) rồi đưa danh sách vào chat
+RECOMMEND_ACTION = "recommend"
 DIRECT_NEXT = "Bước tiếp theo: hệ thống sẽ gợi ý danh sách trường theo hồ sơ và ngành của bạn."
 
 
@@ -263,6 +265,11 @@ def render(route: Route, intake: Intake | None, major: Any) -> str:
     return "\n\n".join(parts)
 
 
+# Chỉ lộ trình đại học thẳng mới có danh sách trường; lộ trình khác hệ thống chưa có dữ liệu trường
+def action_for(route: Route) -> str | None:
+    return RECOMMEND_ACTION if route.route == "direct" else None
+
+
 class LoTrinhHandler:
     def __init__(self, llm: Any, model: str) -> None:
         self._planner = RoutePlanner(llm, model)
@@ -270,4 +277,4 @@ class LoTrinhHandler:
     async def run(self, state: ChatState, message: str) -> SkillOutput:
         route, intake = await self._planner.plan(state.profile)
         go_to(state, "B4")
-        return SkillOutput(render(route, intake, value_of(state.profile, "major")))
+        return SkillOutput(render(route, intake, value_of(state.profile, "major")), action=action_for(route))

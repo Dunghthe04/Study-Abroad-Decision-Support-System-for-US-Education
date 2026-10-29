@@ -58,6 +58,11 @@ class Settings(BaseSettings):
     gemini_base_url: str = "https://generativelanguage.googleapis.com"
     gemini_model: str = "gemini-3.8-flash"
     gemini_thinking_level: str = "low"
+    # Model dự phòng khi model chính quá tải (503) hoặc treo. Để trống = không có dự phòng
+    gemini_fallback_model: str = ""
+    # Thời gian chờ mỗi lần gọi và số lần thử mỗi model. 2 model x 2 lần x 60 giây vẫn dưới 300 giây .NET chờ
+    gemini_timeout_seconds: float = 60
+    gemini_max_retries: int = 2
 
 
 # Lần gọi hàm sau nó lấy đối tượng đã lưu trong lru_cache

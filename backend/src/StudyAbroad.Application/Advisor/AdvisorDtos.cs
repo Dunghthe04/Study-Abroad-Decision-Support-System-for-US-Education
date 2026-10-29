@@ -33,4 +33,6 @@ public record AdvisorChatResponse(
     JsonElement? Profile = null,
     IReadOnlyList<string>? ProfileChanged = null,
     int? FormStep = null,
-    IReadOnlyList<string>? Skills = null);
+    IReadOnlyList<string>? Skills = null,
+    // Việc .NET cần làm sau lượt này: "recommend" = chạy gợi ý trường (ChatRecommendation). Không trả cho trình duyệt
+    string? Action = null);
