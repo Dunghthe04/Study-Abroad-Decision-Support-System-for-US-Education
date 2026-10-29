@@ -31,6 +31,7 @@ from app.services.skill_rules import (
     missing_fields,
     plan_skills,
 )
+from app.services.small_talk import classify
 
 # Tạo 1 logger
 logger = logging.getLogger("advisor.chat")
@@ -120,6 +121,7 @@ class SkillOutput:
     citations: list[Citation] = field(default_factory=list)  # nguồn của thông tin trong câu trả lời
     disclaimer: str | None = None  # lời lưu ý kèm theo
     action: str | None = None  # việc .NET cần làm sau lượt này, xem ChatResponse.action
+    action_data: dict[str, Any] = field(default_factory=dict)  # dữ liệu kèm action
 
 
 # Hợp đồng chung mọi skill: nhân trạng thái và tin nhắn, trả câu trả lời
@@ -127,9 +129,28 @@ class SkillHandler(Protocol):
     async def run(self, state: ChatState, message: str) -> SkillOutput: ...
 
 
+GOODBYE = "Chúc bạn thành công. Khi cần bạn cứ quay lại nhé."
+GREETING = "Chào bạn! Mình là trợ lý tư vấn du học Mỹ."
+THANKS = "Rất vui được giúp bạn!"
+# Chào hoặc cảm ơn giữa chừng: mời học sinh làm tiếp, không bắt đầu lại
+ASK_MORE = "Bạn cần mình giúp gì về du học Mỹ?"
+ASK_MORE_WITH_RESULTS = (
+    "Bạn có thể hỏi mình về một trường trong danh sách gợi ý, về visa, học bổng hoặc tìm trung tâm tư vấn."
+)
+
+
 # Skill tạm: học sinh nói lạc đề thì trả lời ngắn và nhắc lại câu đang hỏi
+# Lời xã giao (chào, cảm ơn, tạm biệt) mà model xếp nhầm vào đây thì đáp đúng chỗ, không đáp "chỉ hỗ trợ du học"
 class OffTopicHandler:
     async def run(self, state: ChatState, message: str) -> SkillOutput:
+        kind = classify(message)
+        if kind == "goodbye":
+            go_to(state, "END")
+            return SkillOutput(GOODBYE)
+        if kind is not None:
+            opening = GREETING if kind == "greeting" else THANKS
+            follow_up = state.last_question or (ASK_MORE_WITH_RESULTS if state.has_results else ASK_MORE)
+            return SkillOutput(f"{opening} {follow_up}")
         if state.last_question:
             return SkillOutput(f"Mình chỉ hỗ trợ tư vấn du học Mỹ thôi nhé. {state.last_question}")
         return SkillOutput("Mình chỉ hỗ trợ tư vấn du học Mỹ thôi nhé. Bạn cần mình giúp gì về du học?")
@@ -139,7 +160,7 @@ class OffTopicHandler:
 class EndHandler:
     async def run(self, state: ChatState, message: str) -> SkillOutput:
         go_to(state, "END")
-        return SkillOutput("Chúc bạn thành công. Khi cần bạn cứ quay lại nhé.")
+        return SkillOutput(GOODBYE)
 
 
 class ChatFlow:
@@ -170,6 +191,9 @@ class ChatFlow:
         # Hồ sơ trong nháp (do .NET gửi) là nguồn thật; không gửi thì giữ hồ sơ trong state như cũ
         if req.profile is not None:
             state.profile = merge_profile(state.profile, req.profile)
+        # Danh sách trường gợi ý do .NET gửi mỗi lượt; không gửi thì giữ như cũ
+        if req.schools is not None:
+            state.schools = req.schools
         # Cuộc trò chuyện đã kết thúc mà học sinh nhắn tiếp: mở lại từ đầu (giữ hồ sơ), như vừa được chào ở B0.1.
         # Model chọn skill chưa từng học bước END nên nếu để nguyên sẽ đoán sai.
         if state.current_step == "END":
@@ -231,6 +255,7 @@ class ChatFlow:
         citations: list[Citation] = []
         disclaimer: str | None = None
         action: str | None = None
+        action_data: dict[str, Any] = {}
         skills = list(plan.skills)
         for skill in skills:
             # Lấy ra handler của skill, nếu không có thì trả NOT_READY
@@ -249,7 +274,8 @@ class ChatFlow:
             widget = output.widget or widget
             citations += [c for c in output.citations if c not in citations]
             disclaimer = output.disclaimer or disclaimer
-            action = output.action or action
+            if output.action:
+                action, action_data = output.action, output.action_data
             # Rà soát hồ sơ xong (skill_ho_so vừa chuyển sang B3, không còn câu chờ): đánh giá luôn trong lượt này,
             # không bắt học sinh nhắn thêm một lần nữa mới thấy kết quả
             if state.current_step == "B3" and state.question_id is None and ASSESS_SKILL not in skills:
@@ -282,6 +308,15 @@ class ChatFlow:
             skip_blocked.add("chua_co_danh_sach")
         answers += blocked_answers(plan, skip=skip_blocked)
 
+        # Đã trả lời kiến thức / trung tâm ở B5, B6 (skill chạy thật, có handler): quay lại việc đang dở
+        answered = INTERRUPT_SKILLS & {s for s in skills if s in self._handlers}
+        if answered and state.current_step in CHAIN_STEPS:
+            resumed = resume_after_chain(state)
+            if resumed is not None:
+                answers.append(resumed.answer)
+                quick_replies = resumed.quick_replies or quick_replies
+                widget = resumed.widget or widget
+
         # Trả lời xen ngang lúc đang hỏi hồ sơ: nhắc lại câu đang chờ (không gọi ask nên không tăng số lần hỏi)
         if (
             INTERRUPT_SKILLS & set(plan.skills)
@@ -306,6 +341,7 @@ class ChatFlow:
             profile=state.profile,
             profile_changed=changed_keys(profile_before, state.profile),
             action=action,
+            action_data=action_data,
         )
 
     # Gọi model; lỗi (chưa nạp model, Ollama tắt...) thì trả về "không chắc"
@@ -353,6 +389,28 @@ BLOCKED_ANSWER = {
 # Skill bị chặn thì nói cho học sinh biết vì sao (bỏ qua các lý do trong skip)
 def blocked_answers(plan: Plan, skip: set[str] | None = None) -> list[str]:
     return [BLOCKED_ANSWER[item.reason] for item in plan.blocked if item.reason not in (skip or set())]
+
+
+RESUME = "Mình quay lại phần tư vấn chọn trường nhé."
+
+
+# Trả lời kiến thức hoặc giới thiệu trung tâm xong (B5, B6) thì quay lại việc đang dở, không đứng yên ở B5/B6:
+# - đã có danh sách trường: về B4 (bước model chọn skill đã học cho việc hỏi về trường, giải thích, kịch bản);
+# - chưa có danh sách mà hồ sơ còn thiếu: hỏi tiếp hồ sơ như lúc bắt đầu thu hồ sơ;
+# - hồ sơ đủ rồi: để yên, học sinh nhắn tiếp thì skill của bước đó chạy
+def resume_after_chain(state: ChatState) -> SkillOutput | None:
+    target, state.return_to = state.return_to, None
+    if target is None:  # không có việc dở (không đi từ skill_nhu_cau sang): để nguyên như cũ
+        return None
+    if state.has_results:
+        go_to(state, "B4")
+        return None
+    if not missing_fields(state.profile, REQUIRED_B3):
+        return None
+    go_to(state, target)  # model chọn skill nhìn đúng bước đang thu hồ sơ, không còn đứng ở B5/B6
+    output = start_intake(state)
+    output.answer = f"{RESUME}\n\n{output.answer}"
+    return output
 
 
 # Bắt đầu hỏi hồ sơ khi một skill bị chặn vì thiếu hồ sơ

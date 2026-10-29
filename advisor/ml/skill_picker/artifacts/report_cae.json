@@ -1,13 +1,13 @@
 {
-  "exact_match": 0.8614232209737828,
-  "micro_f1": 0.9179755671902269,
-  "macro_f1": 0.8888542225573751,
-  "unsure_rate": 0.00749063670411985,
+  "exact_match": 0.8662420382165605,
+  "micro_f1": 0.9246676514032496,
+  "macro_f1": 0.8882412541644176,
+  "unsure_rate": 0.006369426751592357,
   "per_label": {
     "skill_nhu_cau": {
-      "precision": 0.8214285714285714,
+      "precision": 0.92,
       "recall": 1.0,
-      "f1": 0.9019607843137255,
+      "f1": 0.9583333333333334,
       "support": 23
     },
     "skill_bac_hoc": {
@@ -17,9 +17,9 @@
       "support": 32
     },
     "skill_ho_so": {
-      "precision": 0.8666666666666667,
-      "recall": 0.9285714285714286,
-      "f1": 0.896551724137931,
+      "precision": 0.8333333333333334,
+      "recall": 0.9523809523809523,
+      "f1": 0.8888888888888888,
       "support": 42
     },
     "skill_danh_gia": {
@@ -38,7 +38,7 @@
       "precision": 1.0,
       "recall": 1.0,
       "f1": 1.0,
-      "support": 17
+      "support": 54
     },
     "skill_kich_ban": {
       "precision": 1.0,
@@ -47,21 +47,21 @@
       "support": 17
     },
     "skill_tra_loi": {
-      "precision": 0.967391304347826,
-      "recall": 0.967391304347826,
-      "f1": 0.967391304347826,
+      "precision": 0.9278350515463918,
+      "recall": 0.9782608695652174,
+      "f1": 0.9523809523809523,
       "support": 92
     },
     "skill_chuyen_trung_tam": {
-      "precision": 1.0,
-      "recall": 0.9,
-      "f1": 0.9473684210526315,
-      "support": 10
+      "precision": 0.9090909090909091,
+      "recall": 1.0,
+      "f1": 0.9523809523809523,
+      "support": 20
     },
     "ngoai_le": {
-      "precision": 0.3333333333333333,
+      "precision": 0.29411764705882354,
       "recall": 1.0,
-      "f1": 0.5,
+      "f1": 0.45454545454545453,
       "support": 5
     },
     "ket_thuc": {

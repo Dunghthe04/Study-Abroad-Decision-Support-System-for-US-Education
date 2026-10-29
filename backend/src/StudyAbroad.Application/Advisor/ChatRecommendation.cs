@@ -63,6 +63,34 @@ public static class ChatRecommendation
         return "Mình đã tìm được các trường phù hợp với hồ sơ của bạn:\n" + string.Join("\n", lines) + "\n" + More;
     }
 
+    /// <summary>
+    /// Các trường học sinh đang thấy (4 nhóm hiển thị, đủ danh sách không cắt), theo thứ tự trang Gợi ý trường.
+    /// Gửi cho advisor mỗi lượt để skill_explain biết học sinh hỏi trường nào.
+    /// </summary>
+    public static IReadOnlyList<ChatSchool> Schools(Recommendation recommendation)
+    {
+        var items = JsonNode.Parse(recommendation.ItemsJson) as JsonObject;
+        var scored = (items?["scored"] as JsonArray ?? [])
+            .OfType<JsonObject>()
+            .Where(s => s["code"] is not null && s["name"] is not null)
+            .GroupBy(s => s["code"]!.GetValue<string>(), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+        var result = new List<ChatSchool>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (key, _, _) in Groups)
+        {
+            var codes = (items?[key] as JsonArray ?? [])
+                .OfType<JsonObject>()
+                .Select(e => e["code"]?.GetValue<string>())
+                .OfType<string>();
+            foreach (var code in codes)
+                if (scored.TryGetValue(code, out var row) && seen.Add(code))
+                    result.Add(new ChatSchool(code, row["name"]!.GetValue<string>(), row["g2"]?.GetValue<string>()));
+        }
+        return result;
+    }
+
     /// <summary>Bật hasResults trong trạng thái chat, để skill_explain, skill_kich_ban được chạy ở lượt sau.</summary>
     public static JsonElement? WithResults(JsonElement? state)
     {

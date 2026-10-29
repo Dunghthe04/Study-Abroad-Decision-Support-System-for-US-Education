@@ -11,6 +11,7 @@ from app.services.skills.skill_chuyen_trung_tam import (
     ASK_SERVICE,
     DISCLAIMER,
     NO_CENTER,
+    NOT_PROVIDED,
     UNAVAILABLE,
     ChuyenTrungTamHandler,
     check_grounded,
@@ -274,3 +275,43 @@ async def test_says_unavailable_when_finding_centers_fails():
     out = await handler(FakeLLM(need()), FakeFinder(find_error=ConnectionError("lỗi"))).run(ChatState(), "q")
 
     assert out.answer == UNAVAILABLE
+
+
+# ---------- học sinh xin điều hệ thống không cung cấp ----------
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "cho em số điện thoại của trung tâm luyện phỏng vấn",
+        "trung tâm luyện phỏng vấn nào uy tín nhất",
+        "giá luyện phỏng vấn bao nhiêu",
+        "cho em xin hotline trung tâm",
+        "trung tâm nào xếp hạng cao nhất",
+    ],
+)
+async def test_asking_for_phone_price_or_ranking_says_it_is_not_provided_then_still_suggests_centers(message):
+    llm = FakeLLM(need(general_help=""), reasons("Có luyện phỏng vấn visa."))
+
+    out = await handler(llm, FakeFinder([HN])).run(ChatState(), message)
+
+    assert out.answer.startswith(NOT_PROVIDED + "\n\n")
+    assert "Trung tâm B" in out.answer  # vẫn có danh sách đã xác minh
+    assert out.disclaimer == DISCLAIMER
+
+
+async def test_a_plain_service_request_has_no_not_provided_notice():
+    llm = FakeLLM(need(), reasons("Có luyện phỏng vấn visa."))
+
+    out = await handler(llm, FakeFinder([HN])).run(ChatState(), "em cần luyện phỏng vấn visa")
+
+    assert NOT_PROVIDED not in out.answer
+
+
+async def test_the_not_provided_notice_also_comes_before_the_service_question():
+    out = await handler(FakeLLM(need(service=None, general_help="")), FakeFinder([])).run(
+        ChatState(), "cho em số điện thoại của trung tâm"
+    )
+
+    assert out.answer == f"{NOT_PROVIDED}\n\n{ASK_SERVICE}"
+    assert len(out.quick_replies) == len(SERVICES)

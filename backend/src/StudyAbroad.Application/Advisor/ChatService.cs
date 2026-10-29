@@ -46,9 +46,12 @@ namespace StudyAbroad.Application.Advisor
             var flow = await profileFlow.GetFlowStateAsync(userId, ct);
             var profile = ChatProfileMapper.ToChatProfile(flow.Draft, PreviousProfile(state));
 
+            // Đã có danh sách trường thì gửi kèm (lấy lần gợi ý mới nhất, kể cả khi học sinh vừa gợi ý lại ở trang khác)
+            var schools = await LatestSchoolsAsync(userId, state, ct);
+
             //Gửi request sang Advisor
             var response = await advisor.ChatAsync(
-                request with { State = state, Profile = JsonSerializer.SerializeToElement(profile) }, ct);
+                request with { State = state, Profile = JsonSerializer.SerializeToElement(profile), Schools = schools }, ct);
             var changed = await SaveProfileToDraftAsync(userId, response, ct);
 
             // C5: học sinh bấm "Đúng rồi" ở X1 thì chat rời bảng rà soát sang B3, lúc đó lưu hồ sơ chính thức.
@@ -79,6 +82,10 @@ namespace StudyAbroad.Application.Advisor
             if (response.Action == ChatRecommendation.Action && recommender is not null)
                 response = await RecommendAsync(userId, response, ct);
 
+            // Học sinh hỏi về một trường: lời tư vấn lấy từ phần tư vấn từng trường có sẵn, thay câu tạm của advisor
+            if (response.Action == ChatExplanation.Action && recommender is not null)
+                response = await ExplainAsync(userId, response, ct);
+
             //Sau khi advisor phản hồi ==> lưu trạng thái mới
             session.StateJson = response.State?.GetRawText();
             //Lưu bước hiện tại
@@ -102,6 +109,7 @@ namespace StudyAbroad.Application.Advisor
                 SessionId = session.Id.ToString(),
                 Skills = null,
                 Action = null,
+                ActionData = null,
             };
         }
 
@@ -133,6 +141,41 @@ namespace StudyAbroad.Application.Advisor
                                        || (ex is TaskCanceledException && !ct.IsCancellationRequested))
             {
                 return response with { Answer = $"{response.Answer}\n\n{ChatRecommendation.Busy}" };
+            }
+        }
+
+        // Danh sách trường của lần gợi ý gần nhất; null khi chưa có kết quả (không cần gửi)
+        private async Task<IReadOnlyList<ChatSchool>?> LatestSchoolsAsync(Guid userId, JsonElement? state, CancellationToken ct)
+        {
+            if (recommender is null || state is not { ValueKind: JsonValueKind.Object } s
+                || !s.TryGetProperty("hasResults", out var has) || has.ValueKind != JsonValueKind.True)
+                return null;
+            var last = await recommender.GetLatestAsync(userId, ct);
+            return last is null ? null : ChatRecommendation.Schools(last);
+        }
+
+        // Viết lời tư vấn một trường (advisor đã chọn trường, mã ở ActionData.code). Lỗi thì báo, không làm hỏng cả lượt chat
+        private async Task<AdvisorChatResponse> ExplainAsync(Guid userId, AdvisorChatResponse response, CancellationToken ct)
+        {
+            var code = ChatExplanation.CodeOf(response.ActionData);
+            if (code is null)
+                return response with { Answer = ChatExplanation.Failed };
+            try
+            {
+                var result = await recommender!.ExplainAsync(userId, code, ct);
+                return response with { Answer = result.Status == "OK" ? ChatExplanation.Format(result) : ChatExplanation.Failed };
+            }
+            catch (InvalidOperationException ex)
+            {
+                var reason = ex.Message.StartsWith("Chưa")
+                    ? $"Mình chưa giải thích được trường này: {ex.Message}"
+                    : ChatRecommendation.Invalid;
+                return response with { Answer = reason };
+            }
+            catch (Exception ex) when (ex is HttpRequestException
+                                       || (ex is TaskCanceledException && !ct.IsCancellationRequested))
+            {
+                return response with { Answer = ChatExplanation.Busy };
             }
         }
 

@@ -6,7 +6,8 @@ Trước đây skill_nhu_cau trả "Phần này mình đang hoàn thiện" thay 
 from dataclasses import dataclass
 
 from app.schemas.chat import ChatMessage, ChatRequest, ChatState
-from app.services.chat_flow import NEED_RESULTS, NOT_READY, ChatFlow, SkillOutput, go_to
+from app.services.chat_flow import NEED_RESULTS, NOT_READY, RESUME, ChatFlow, SkillOutput, go_to
+from app.services.intake import INTAKE_ID
 
 
 @dataclass
@@ -56,9 +57,11 @@ async def test_a_knowledge_question_as_the_first_message_is_answered_in_the_same
 
     res = await flow.reply(first("IELTS là gì"))
 
-    assert res.answer == "IELTS là bài thi tiếng Anh 4 kỹ năng."  # không còn "đang hoàn thiện"
+    # không còn "đang hoàn thiện"; trả lời xong thì quay lại việc đang dở (hỏi hồ sơ), không đứng yên ở B5
+    assert res.answer.startswith("IELTS là bài thi tiếng Anh 4 kỹ năng.\n\n" + RESUME)
     assert res.skills == ["skill_nhu_cau", "skill_tra_loi"]
-    assert res.state.current_step == "B5" and res.state.return_to == "B1"
+    assert res.state.current_step != "B5" and res.state.return_to is None
+    assert res.state.question_id == INTAKE_ID
 
 
 async def test_a_service_request_as_the_first_message_goes_to_the_center_skill():
@@ -121,7 +124,7 @@ async def test_no_need_for_a_school_list_message_when_another_skill_already_answ
         )
     )
 
-    assert res.answer == "IELTS là bài thi tiếng Anh."
+    assert res.answer.startswith("IELTS là bài thi tiếng Anh.")
     assert NEED_RESULTS not in res.answer
 
 
@@ -136,3 +139,49 @@ async def test_still_asks_to_see_the_school_list_first_when_nothing_else_answere
     )
 
     assert res.answer == NEED_RESULTS
+
+
+# ---------- quay lại việc đang dở sau B5, B6 (return_to) ----------
+
+
+async def test_after_a_center_answer_with_results_the_chat_goes_back_to_b4():
+    # đã có danh sách trường: về B4 để học sinh hỏi tiếp về trường, không hỏi lại hồ sơ
+    centers = Answer("Dưới đây là một số trung tâm đã xác minh...")
+    flow = ChatFlow(
+        PickerOf("skill_nhu_cau"), {"skill_nhu_cau": NeedSkill("B6"), "skill_chuyen_trung_tam": centers}
+    )
+
+    res = await flow.reply(
+        ChatRequest(
+            messages=[ChatMessage(role="user", content="em muốn tìm trung tâm luyện phỏng vấn")],
+            state=ChatState(current_step="B4", has_results=True),
+        )
+    )
+
+    assert res.answer == "Dưới đây là một số trung tâm đã xác minh..."
+    assert (res.state.current_step, res.state.return_to, res.state.question_id) == ("B4", None, None)
+
+
+async def test_with_the_profile_complete_and_no_results_the_chat_does_not_ask_again():
+    from app.schemas.chat import ProfileField
+
+    full = {
+        k: ProfileField(value=v, status="confirmed")
+        for k, v in {"target_level": "undergraduate", "gpa": 3.6, "english": 7.0, "budget": 40000}.items()
+    }
+    flow = ChatFlow(PickerOf(), {"skill_nhu_cau": NeedSkill("B5"), "skill_tra_loi": Answer("Câu trả lời.")})
+
+    res = await flow.reply(
+        ChatRequest(messages=[ChatMessage(role="user", content="SAT là gì")], state=ChatState(profile=full))
+    )
+
+    assert res.answer == "Câu trả lời."
+    assert res.state.return_to is None
+
+
+async def test_the_intake_buttons_come_with_the_resume_question():
+    flow = ChatFlow(PickerOf(), {"skill_nhu_cau": NeedSkill("B5"), "skill_tra_loi": Answer("Câu trả lời.")})
+
+    res = await flow.reply(first("IELTS là gì"))
+
+    assert [b.label for b in res.quick_replies] == ["Trả lời trong chat", "Điền bằng form"]

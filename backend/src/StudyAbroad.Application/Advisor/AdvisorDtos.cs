@@ -5,12 +5,17 @@ public record ChatMessage(string Role, string Content);
 
 /// <param name="StudyLevel">Level the user asks about (see Domain.Constants.StudyLevels); null = all levels.</param>
 /// <param name="Profile">Hồ sơ hiện tại (khóa chat → {value, status}) do .NET gửi mỗi lượt; null = không gửi.</param>
+/// <param name="Schools">Trường của lần gợi ý gần nhất, chỉ gửi khi đã có kết quả; skill_explain dùng để biết học sinh nói trường nào.</param>
 public record AdvisorChatRequest(
     IReadOnlyList<ChatMessage> Messages,
     string? SessionId = null,
     string? StudyLevel = null,
     JsonElement? State = null,
-    JsonElement? Profile = null);
+    JsonElement? Profile = null,
+    IReadOnlyList<ChatSchool>? Schools = null);
+
+/// <summary>Một trường trong danh sách gợi ý. Group là mã nhóm đã chấm (R, RF, M, S, NA, O), advisor đổi sang chữ.</summary>
+public record ChatSchool(string Code, string Name, string? Group);
 public record Citation(string Title, string? Url, string? Snippet);
 
 /// <summary>Nút gợi ý: Label là chữ trên nút, Value là chữ gửi đi như tin nhắn của học sinh khi bấm.</summary>
@@ -34,5 +39,7 @@ public record AdvisorChatResponse(
     IReadOnlyList<string>? ProfileChanged = null,
     int? FormStep = null,
     IReadOnlyList<string>? Skills = null,
-    // Việc .NET cần làm sau lượt này: "recommend" = chạy gợi ý trường (ChatRecommendation). Không trả cho trình duyệt
-    string? Action = null);
+    // Việc .NET cần làm sau lượt này: "recommend" = chạy gợi ý trường (ChatRecommendation),
+    // "explain" = viết lời tư vấn một trường (ChatExplanation, mã trường nằm ở ActionData.code). Không trả cho trình duyệt
+    string? Action = null,
+    JsonElement? ActionData = null);
