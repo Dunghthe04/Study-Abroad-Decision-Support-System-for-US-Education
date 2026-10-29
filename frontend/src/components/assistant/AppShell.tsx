@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { isWideRoute } from "@/lib/layout-routes";
 import { cn } from "@/lib/utils";
 import { SiteHeader } from "@/components/layout/SiteHeader";
+import { Toaster } from "@/components/ui/toast";
 import { AssistantLauncher, AssistantPanel, useAssistantVisible } from "./AssistantPanel";
 import { useAssistant } from "./AssistantProvider";
 
@@ -36,6 +37,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </div>
       <AssistantPanel />
       <AssistantLauncher />
+      <Toaster />
     </div>
   );
 }
