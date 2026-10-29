@@ -3,9 +3,16 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { ApiError, apiFetch } from "@/lib/api";
-import type { AdvisorChatResponse, ChatMessage, Citation } from "@/types/api";
+import type { AdvisorChatResponse, ChatMessage, ChatWidget, Citation, QuickReply } from "@/types/api";
 
-export type AssistantTurn = ChatMessage & { citations?: Citation[]; disclaimer?: string | null };
+export type AssistantTurn = ChatMessage & {
+  citations?: Citation[];
+  disclaimer?: string | null;
+  /** Nút trả lời nhanh của lượt trợ lý; chỉ hiện ở lượt cuối */
+  quickReplies?: QuickReply[] | null;
+  /** Widget kèm lượt trợ lý (vd bảng rà soát hồ sơ) */
+  widget?: ChatWidget | null;
+};
 
 export type AssistantError = { kind: "unavailable" | "auth" | "other"; message: string };
 
@@ -33,7 +40,15 @@ interface AssistantContextValue {
   send: (text: string) => void;
   retry: () => void;
   setPageContext: (ctx: AssistantPageContext | null) => void;
+  setBeforeSend: (fn: BeforeSend | null) => void;
+  setOnProfileChanged: (fn: ProfileChanged | null) => void;
 }
+
+/** Việc trang cần làm xong trước khi gửi tin nhắn chat (vd lưu nháp form đang chờ) */
+export type BeforeSend = () => Promise<void>
+
+/** Chat vừa ghi các ô này vào nháp hồ sơ (vd để form nạp lại); formStep: trang form của câu chat đang hỏi */
+export type ProfileChanged = (keys: string[], formStep: number | null) => void
 
 const STORAGE_KEY = "usas_assistant_chat";
 const SESSION_KEY = "usas_assistant_session";
@@ -86,7 +101,14 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
   const loadingRef = useRef(false);
   const restoredRef = useRef(false);
   const sessionIdRef = useRef<string | null>(null);
-
+  const beforeSendRef = useRef<BeforeSend | null>(null);
+  const setBeforeSend = useCallback((fn: BeforeSend | null) => {
+    beforeSendRef.current = fn;
+  }, []);
+  const onProfileChangedRef = useRef<ProfileChanged | null>(null);
+  const setOnProfileChanged = useCallback((fn: ProfileChanged | null) => {
+    onProfileChangedRef.current = fn;
+  }, []);
 
   const page = registered ?? defaultContext(pathname);
   const pageRef = useRef(page);
@@ -127,6 +149,9 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
       setLoading(true);
       setError(null);
       try {
+        // D1: lưu ngay nháp form đang chờ, để chat đọc đúng những gì học sinh vừa gõ.
+        // Lưu lỗi vẫn gửi chat (form tự báo lỗi lưu của nó)
+        await beforeSendRef.current?.().catch(() => undefined);
         const res = await apiFetch<AdvisorChatResponse>("/api/v1/advisor/chat", {
           method: "POST",
           body: JSON.stringify({
@@ -145,8 +170,18 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
         }
         commitTurns([
           ...history,
-          { role: "assistant", content: res.answer, citations: res.citations, disclaimer: res.disclaimer },
+          {
+            role: "assistant",
+            content: res.answer,
+            citations: res.citations,
+            disclaimer: res.disclaimer,
+            quickReplies: res.quickReplies,
+            widget: res.widget,
+          },
         ]);
+        // D2: báo trang biết chat vừa đổi hồ sơ nháp, hoặc đang hỏi sang trang form khác (mục 7)
+        if (res.profileChanged?.length || res.formStep != null)
+          onProfileChangedRef.current?.(res.profileChanged ?? [], res.formStep ?? null);
       } catch (err) {
         setError(toAssistantError(err));
       } finally {
@@ -210,8 +245,10 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
       send,
       retry,
       setPageContext: setRegistered,
+      setBeforeSend,
+      setOnProfileChanged,
     }),
-    [open, wide, turns, loading, error, page, openPanel, newChat, send, retry]
+    [open, wide, turns, loading, error, page, openPanel, newChat, send, retry, setBeforeSend, setOnProfileChanged]
   );
 
   return <AssistantContext.Provider value={value}>{children}</AssistantContext.Provider>;
@@ -231,4 +268,22 @@ export function useAssistantPageContext(ctx: AssistantPageContext) {
     setPageContext(JSON.parse(key) as AssistantPageContext);
     return () => setPageContext(null);
   }, [key, setPageContext]);
+}
+
+/** Trang đăng ký việc phải xong trước mỗi tin nhắn chat; rời trang thì gỡ */
+export function useAssistantBeforeSend(fn: BeforeSend) {
+  const { setBeforeSend } = useAssistant();
+  useEffect(() => {
+    setBeforeSend(fn);
+    return () => setBeforeSend(null);
+  }, [fn, setBeforeSend]);
+}
+
+/** Trang đăng ký việc cần làm khi chat vừa đổi hồ sơ nháp; rời trang thì gỡ */
+export function useAssistantProfileChanged(fn: ProfileChanged) {
+  const { setOnProfileChanged } = useAssistant();
+  useEffect(() => {
+    setOnProfileChanged(fn);
+    return () => setOnProfileChanged(null);
+  }, [fn, setOnProfileChanged]);
 }

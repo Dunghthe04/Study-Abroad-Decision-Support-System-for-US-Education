@@ -55,6 +55,11 @@ public class ProfileMetadataServiceTests
             Task.FromResult<IReadOnlyList<ProfileActivity>>([]);
     }
 
+    private sealed class FakeRates(decimal rate = 26_000m) : IExchangeRateProvider
+    {
+        public Task<decimal> GetVndPerUsdAsync(CancellationToken ct = default) => Task.FromResult(rate);
+    }
+
     private const string ValidMetadataJson = """
     {
       "studyLevels": [
@@ -114,7 +119,7 @@ public class ProfileMetadataServiceTests
     {
         var repo = new FakeProfileFlowRepository { MockSettingValue = ValidMetadataJson };
         var cache = new MemoryCache(new MemoryCacheOptions());
-        var service = new ProfileMetadataService(repo, cache);
+        var service = new ProfileMetadataService(repo, cache, new FakeRates());
 
         var result = await service.GetMetadataAsync();
 
@@ -143,7 +148,7 @@ public class ProfileMetadataServiceTests
             MockOfferingMajors = ["Computer Science", "Artificial Intelligence", "Mechanical Engineering"]
         };
         var cache = new MemoryCache(new MemoryCacheOptions());
-        var service = new ProfileMetadataService(repo, cache);
+        var service = new ProfileMetadataService(repo, cache, new FakeRates());
 
         var result = await service.GetMetadataAsync();
 
@@ -159,7 +164,7 @@ public class ProfileMetadataServiceTests
     {
         var repo = new FakeProfileFlowRepository { MockSettingValue = ValidMetadataJson };
         var cache = new MemoryCache(new MemoryCacheOptions());
-        var service = new ProfileMetadataService(repo, cache);
+        var service = new ProfileMetadataService(repo, cache, new FakeRates());
 
         var result1 = await service.GetMetadataAsync();
         var result2 = await service.GetMetadataAsync();
@@ -174,8 +179,21 @@ public class ProfileMetadataServiceTests
     {
         var repo = new FakeProfileFlowRepository { MockSettingValue = null };
         var cache = new MemoryCache(new MemoryCacheOptions());
-        var service = new ProfileMetadataService(repo, cache);
+        var service = new ProfileMetadataService(repo, cache, new FakeRates());
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.GetMetadataAsync());
+    }
+
+    [Fact]
+    public async Task GetMetadataAsync_IncludesExchangeRate_OnFreshAndCachedCalls()
+    {
+        var repo = new FakeProfileFlowRepository { MockSettingValue = ValidMetadataJson };
+        var service = new ProfileMetadataService(repo, new MemoryCache(new MemoryCacheOptions()), new FakeRates(25_800m));
+
+        var fresh = await service.GetMetadataAsync();
+        var cached = await service.GetMetadataAsync();
+
+        Assert.Equal(25_800m, fresh.VndPerUsd);
+        Assert.Equal(25_800m, cached.VndPerUsd);
     }
 }

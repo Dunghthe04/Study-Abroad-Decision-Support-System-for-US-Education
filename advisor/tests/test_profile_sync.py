@@ -10,10 +10,12 @@ def field(value="x", status="confirmed") -> ProfileField:
 
 def test_draft_keys_are_the_ones_that_have_a_place_in_the_form():
     assert {"gpa", "english", "budget", "major", "target_level", "scholarship"} <= DRAFT_KEYS
-    # form chưa có chỗ lưu những khóa này, chỉ chat giữ
-    assert (
-        not {"education_system", "intake", "funding_source", "relatives_state", "visa_refused"} & DRAFT_KEYS
-    )
+    # lớp đang học (Bước 1) và kế hoạch thi tiếng Anh (Bước 3) cũng có ô trong form
+    assert {"current_grade", "english_plan"} <= DRAFT_KEYS
+    # hệ chương trình, kỳ nhập học (Bước 1) và nguồn chi trả (Bước 4) đã có ô trong form
+    assert {"education_system", "intake", "funding_source"} <= DRAFT_KEYS
+    # form không có chỗ lưu những khóa này, chỉ chat giữ
+    assert not {"relatives_state", "visa_refused"} & DRAFT_KEYS
 
 
 def test_values_from_the_draft_are_added():
@@ -39,20 +41,20 @@ def test_same_value_keeps_the_status_the_chat_already_has():
 
 
 def test_chat_only_keys_are_kept():
-    current = {"education_system": field("IB"), "funding_source": field("bố mẹ")}
+    current = {"relatives_state": field("CA"), "visa_refused": field(False)}
 
     merged = merge_profile(current, {"gpa": field(3.4)})
 
-    assert merged["education_system"].value == "IB"
-    assert merged["funding_source"].value == "bố mẹ"
+    assert merged["relatives_state"].value == "CA"
+    assert merged["visa_refused"].value is False
 
 
 def test_draft_cannot_overwrite_chat_only_keys():
-    current = {"education_system": field("IB")}
+    current = {"relatives_state": field("CA")}
 
-    merged = merge_profile(current, {"education_system": field("A-level")})
+    merged = merge_profile(current, {"relatives_state": field("TX")})
 
-    assert merged["education_system"].value == "IB"
+    assert merged["relatives_state"].value == "CA"
 
 
 def test_draft_key_missing_from_the_draft_is_dropped():
@@ -65,11 +67,11 @@ def test_draft_key_missing_from_the_draft_is_dropped():
 
 
 def test_empty_draft_clears_every_draft_key_but_not_chat_only_keys():
-    current = {"gpa": field(3.4), "intake": field("fall 2027")}
+    current = {"gpa": field(3.4), "relatives_state": field("CA")}
 
     merged = merge_profile(current, {})
 
-    assert set(merged) == {"intake"}
+    assert set(merged) == {"relatives_state"}
 
 
 def test_merge_does_not_modify_the_inputs():
@@ -96,5 +98,5 @@ def test_changed_keys_sees_a_status_change():
 def test_changed_keys_ignores_chat_only_keys_and_returns_empty_when_nothing_changed():
     before = {"gpa": field(3.4)}
 
-    assert changed_keys(before, {"gpa": field(3.4), "funding_source": field("bố mẹ")}) == []
+    assert changed_keys(before, {"gpa": field(3.4), "visa_refused": field(False)}) == []
     assert changed_keys(before, {"gpa": field(3.4)}) == []

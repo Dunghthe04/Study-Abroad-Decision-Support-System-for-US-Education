@@ -72,6 +72,15 @@ public static class ProfileConstants
         public static bool NeedsScholarship(string? need) => need is Mandatory or Preferred;
     }
 
+    /// <summary>Cách nhập GPA ở bước 2: GPA tổng hoặc tính từ điểm môn (học bạ)</summary>
+    public static class GpaModes
+    {
+        public const string Overall = "overall";
+        public const string Transcript = "transcript";
+
+        public static readonly IReadOnlySet<string> All = new HashSet<string> { Overall, Transcript };
+    }
+
     /// <summary>[USAS-640] Chứng chỉ tiếng Anh chọn ở bước 3</summary>
     public static class EnglishTestTypes
     {

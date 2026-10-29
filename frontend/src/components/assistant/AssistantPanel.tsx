@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   ArrowUpIcon,
+  FileTextIcon,
   Maximize2Icon,
   MessageCircleIcon,
   Minimize2Icon,
@@ -15,6 +16,11 @@ import {
 import { cn } from "@/lib/utils";
 import { AGE_FEATURES, useAgeBlock } from "@/lib/age-features";
 import { useAssistant, type AssistantTurn } from "./AssistantProvider";
+import { BudgetWidget } from "./BudgetWidget";
+import { MajorWidget } from "./MajorWidget";
+import { ReviewWidget } from "./ReviewWidget";
+import { ScholarshipWidget } from "./ScholarshipWidget";
+import { SelectWidget } from "./SelectWidget";
 
 // Trang đăng nhập / đăng ký không hiện trợ lý
 const HIDDEN_PREFIXES = ["/login", "/register", "/forgot-password", "/reset-password", "/verify-email"];
@@ -101,7 +107,12 @@ export function AssistantPanel() {
         )}
 
         {turns.map((t, i) => (
-          <Turn key={i} turn={t} />
+          <Turn
+            key={i}
+            turn={t}
+            // D3: nút trả lời nhanh chỉ bấm được ở lượt cuối, khi không chờ trả lời và không bị chặn tuổi
+            onReply={i === turns.length - 1 && !loading && !ageBlock ? send : undefined}
+          />
         ))}
 
         {loading && (
@@ -201,7 +212,7 @@ export function AssistantPanel() {
   );
 }
 
-function Turn({ turn }: { turn: AssistantTurn }) {
+function Turn({ turn, onReply }: { turn: AssistantTurn; onReply?: (value: string) => void }) {
   if (turn.role === "user") {
     return (
       <div className="max-w-[90%] self-end rounded-[16px_4px_16px_16px] bg-[#E7EDF1] px-[15px] py-2.5 whitespace-pre-wrap text-foreground">
@@ -228,6 +239,36 @@ function Turn({ turn }: { turn: AssistantTurn }) {
         </ol>
       )}
       {turn.disclaimer && <p className="mt-2 text-xs text-muted-foreground italic">{turn.disclaimer}</p>}
+      {turn.widget?.type === "review" && <ReviewWidget data={turn.widget.data} />}
+      {/* E: chỉ chọn được ở lượt cuối, giống nút trả lời nhanh */}
+      {turn.widget?.type === "major" && <MajorWidget onPick={onReply} />}
+      {turn.widget?.type === "select" && <SelectWidget data={turn.widget.data} onPick={onReply} />}
+      {turn.widget?.type === "budget" && <BudgetWidget data={turn.widget.data} onPick={onReply} />}
+      {turn.widget?.type === "scholarship" && <ScholarshipWidget data={turn.widget.data} onPick={onReply} />}
+      {/* Mục 1: học sinh chọn điền bằng form */}
+      {turn.widget?.type === "form" && (
+        <Link
+          href="/analysis"
+          className="mt-2.5 inline-flex h-8 items-center gap-1.5 rounded-full bg-brand px-3.5 text-[13px] font-semibold text-white transition-colors hover:bg-brand-ink"
+        >
+          <FileTextIcon className="size-4" />
+          Mở form hồ sơ
+        </Link>
+      )}
+      {onReply && turn.quickReplies && turn.quickReplies.length > 0 && (
+        <div className="mt-2.5 flex flex-wrap gap-2">
+          {turn.quickReplies.map((r) => (
+            <button
+              key={r.value}
+              type="button"
+              onClick={() => onReply(r.value)}
+              className="min-h-8 cursor-pointer rounded-full border border-brand/40 bg-brand-wash/40 px-3 py-1 text-[13px] text-foreground transition-colors hover:border-brand hover:bg-brand-wash"
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

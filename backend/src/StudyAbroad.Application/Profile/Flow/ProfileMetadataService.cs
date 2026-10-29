@@ -15,7 +15,8 @@ namespace StudyAbroad.Application.Profile.Flow;
 /// </summary>
 public class ProfileMetadataService(
     IProfileFlowRepository repository,
-    IMemoryCache cache) : IProfileMetadataService
+    IMemoryCache cache,
+    IExchangeRateProvider rates) : IProfileMetadataService
 {
     private const string CacheKey = "profile_flow_metadata_cache";
     private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(10);
@@ -24,7 +25,7 @@ public class ProfileMetadataService(
     {
         if (cache.TryGetValue(CacheKey, out ProfileMetadataResponse? cached) && cached is not null)
         {
-            return cached;
+            return cached with { VndPerUsd = await rates.GetVndPerUsdAsync(ct) };
         }
 
         var json = await repository.GetAppSettingValueAsync(ProfileConstants.ProfileMetadataAppSettingKey, ct);
@@ -66,7 +67,8 @@ public class ProfileMetadataService(
         }
 
         cache.Set(CacheKey, metadata, CacheDuration);
-        return metadata;
+        // Tỷ giá có bộ nhớ riêng (1 ngày) nên gắn sau khi lấy từ cache
+        return metadata with { VndPerUsd = await rates.GetVndPerUsdAsync(ct) };
     }
 
     public void InvalidateCache()

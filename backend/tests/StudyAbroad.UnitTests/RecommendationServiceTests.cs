@@ -54,6 +54,79 @@ public class RecommendationServiceTests
         Assert.Equal(0.414, items.RootElement.GetProperty("match")[0].GetProperty("x").GetDouble());
     }
 
+    // C7: học bổng trống thì không gợi ý trường, không gọi Qwen/Gemini, không lưu lượt nào
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public async Task Recommend_WithoutScholarshipNeed_IsBlockedBeforeAnyCloudCall(string? need)
+    {
+        var advisor = new FakeAdvisor();
+        var store = new FakeRecommendationRepository();
+        var service = new RecommendationService(advisor, store, new UnusedProfileFlow());
+        var profile = new StudentProfile
+        {
+            UserId = Guid.NewGuid(),
+            TargetLevel = "undergraduate",
+            IntendedMajor = "Computer and information sciences",
+            BudgetMaxUsd = 50_000m,
+            ScholarshipNeed = need,
+        };
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.RecommendAsync(profile, [], [School("B", 38_000m, "none", "Computer and information sciences")]));
+
+        Assert.Equal(RecommendationService.MissingScholarshipMessage, ex.Message);
+        Assert.StartsWith("Hồ sơ", ex.Message); // controller trả 400, không phải 502
+        Assert.Empty(advisor.Calls);
+        Assert.Empty(store.Rows);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(" ")]
+    public async Task Recommend_WithoutMajor_IsBlockedBeforeAnyCloudCall(string? major)
+    {
+        var advisor = new FakeAdvisor();
+        var store = new FakeRecommendationRepository();
+        var service = new RecommendationService(advisor, store, new UnusedProfileFlow());
+        var profile = new StudentProfile
+        {
+            UserId = Guid.NewGuid(),
+            TargetLevel = "undergraduate",
+            IntendedMajor = major,
+            BudgetMaxUsd = 50_000m,
+            ScholarshipNeed = ProfileConstants.ScholarshipNeeds.Preferred,
+        };
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.RecommendAsync(profile, [], [School("B", 38_000m, "none", "Computer and information sciences")]));
+
+        Assert.Equal(RecommendationService.MissingMajorMessage, ex.Message);
+        Assert.StartsWith("Hồ sơ", ex.Message); // controller trả 400, không phải 502
+        Assert.Empty(advisor.Calls);
+        Assert.Empty(store.Rows);
+    }
+
+    [Fact]
+    public async Task Recommend_WithOptionalScholarship_StillRuns()
+    {
+        var advisor = new FakeAdvisor();
+        var service = new RecommendationService(advisor, new FakeRecommendationRepository(), new UnusedProfileFlow());
+        var profile = new StudentProfile
+        {
+            UserId = Guid.NewGuid(),
+            TargetLevel = "undergraduate",
+            IntendedMajor = "Computer and information sciences",
+            BudgetMaxUsd = 50_000m,
+            ScholarshipNeed = ProfileConstants.ScholarshipNeeds.Optional,
+            TargetSchoolType = "all"
+        };
+
+        await service.RecommendAsync(profile, [], [School("B", 38_000m, "none", "Computer and information sciences")]);
+
+        Assert.Equal(["ec", "score", "pick"], advisor.Calls); // "không cần" là lựa chọn thật, vẫn chạy như cũ
+    }
+
     private static RecommendSchoolInput School(string code, decimal tuition, string aidPolicy, string major)
     {
         var university = new University { Code = code, Name = code, State = "NY", Control = "private", IsActive = true };
