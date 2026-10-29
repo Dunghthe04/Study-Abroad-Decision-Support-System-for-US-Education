@@ -111,6 +111,8 @@ class SkillOutput:
     widget: Widget | None = None
     citations: list[Citation] = field(default_factory=list)  # nguồn của thông tin trong câu trả lời
     disclaimer: str | None = None  # lời lưu ý kèm theo
+    action: str | None = None  # việc .NET cần làm sau lượt này, xem ChatResponse.action
+
 
 
 # Hợp đồng chung mọi skill: nhân trạng thái và tin nhắn, trả câu trả lời
@@ -221,6 +223,7 @@ class ChatFlow:
         widget: Widget | None = None
         citations: list[Citation] = []
         disclaimer: str | None = None
+        action: str | None = None
         skills = list(plan.skills)
         for skill in skills:
             # Lấy ra handler của skill, nếu không có thì trả NOT_READY
@@ -236,6 +239,7 @@ class ChatFlow:
             widget = output.widget or widget
             citations += [c for c in output.citations if c not in citations]
             disclaimer = output.disclaimer or disclaimer
+            action = output.action or action
             # Rà soát hồ sơ xong (skill_ho_so vừa chuyển sang B3, không còn câu chờ): đánh giá luôn trong lượt này,
             # không bắt học sinh nhắn thêm một lần nữa mới thấy kết quả
             if state.current_step == "B3" and state.question_id is None and ASSESS_SKILL not in skills:
@@ -283,6 +287,7 @@ class ChatFlow:
             disclaimer=disclaimer,
             profile=state.profile,
             profile_changed=changed_keys(profile_before, state.profile),
+            action=action,
         )
 
     # Gọi model; lỗi (chưa nạp model, Ollama tắt...) thì trả về "không chắc"
