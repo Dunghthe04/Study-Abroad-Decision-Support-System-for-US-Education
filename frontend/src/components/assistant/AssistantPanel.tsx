@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   ArrowUpIcon,
   FileTextIcon,
+  GraduationCapIcon,
   Maximize2Icon,
   MessageCircleIcon,
   Minimize2Icon,
@@ -115,17 +116,7 @@ export function AssistantPanel() {
           />
         ))}
 
-        {loading && (
-          <div className="flex items-center gap-1 py-1" role="status" aria-label="Đang trả lời">
-            {[0, 1, 2].map((d) => (
-              <span
-                key={d}
-                className="size-1.5 animate-pulse rounded-full bg-muted-foreground"
-                style={{ animationDelay: `${d * 200}ms` }}
-              />
-            ))}
-          </div>
-        )}
+        {loading && <TypingIndicator />}
 
         {error && (
           <div className="rounded-lg border border-warn/30 bg-warn-wash px-3 py-2.5 text-[13px] text-warn">
@@ -212,6 +203,35 @@ export function AssistantPanel() {
   );
 }
 
+// Lượt chat có chạy gợi ý trường mất khoảng một phút: chờ quá 8 giây thì báo thêm để học sinh không tưởng bị treo.
+// Giao diện không biết trước lượt nào chạy gợi ý, nên dựa vào thời gian chờ; lượt thường xong trước mốc này
+const SLOW_REPLY_MS = 8000;
+
+function TypingIndicator() {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setSlow(true), SLOW_REPLY_MS);
+    return () => clearTimeout(timer);
+  }, []);
+
+  return (
+    <div className="flex items-center gap-1 py-1" role="status" aria-label="Đang trả lời">
+      {[0, 1, 2].map((d) => (
+        <span
+          key={d}
+          className="size-1.5 animate-pulse rounded-full bg-muted-foreground"
+          style={{ animationDelay: `${d * 200}ms` }}
+        />
+      ))}
+      {slow && (
+        <span className="ml-2 text-xs text-muted-foreground">
+          Mình đang tính toán các trường phù hợp với bạn, có thể mất khoảng một phút...
+        </span>
+      )}
+    </div>
+  );
+}
+
 function Turn({ turn, onReply }: { turn: AssistantTurn; onReply?: (value: string) => void }) {
   if (turn.role === "user") {
     return (
@@ -253,6 +273,16 @@ function Turn({ turn, onReply }: { turn: AssistantTurn; onReply?: (value: string
         >
           <FileTextIcon className="size-4" />
           Mở form hồ sơ
+        </Link>
+      )}
+      {/* Chat vừa chạy gợi ý trường: mở trang Gợi ý trường xem đủ danh sách (đọc lượt vừa lưu, không chạy lại) */}
+      {turn.widget?.type === "recommend" && (
+        <Link
+          href="/recommendations"
+          className="mt-2.5 inline-flex h-8 items-center gap-1.5 rounded-full bg-brand px-3.5 text-[13px] font-semibold text-white transition-colors hover:bg-brand-ink"
+        >
+          <GraduationCapIcon className="size-4" />
+          Xem đầy đủ danh sách trường
         </Link>
       )}
       {onReply && turn.quickReplies && turn.quickReplies.length > 0 && (

@@ -410,6 +410,31 @@ public class ChatServiceTests
         Assert.Equal($"ok\n\n{ChatRecommendation.Busy}", res.Answer);
     }
 
+    // Gemini treo: advisor thử lại nhiều lần, HttpClient của .NET hết giờ (TaskCanceledException). Không được làm lỗi 500 cả lượt chat
+    [Fact]
+    public async Task RecommendationTimesOut_SaysBusy_AndKeepsTheRoadmap()
+    {
+        var runner = new FakeRunner { Error = new TaskCanceledException("HttpClient.Timeout") };
+
+        var res = await new ChatService(new FakeAdvisor("B4") { Action = "recommend" }, new FakeSessions(), new FakeProfileFlow(), null, runner)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Equal($"ok\n\n{ChatRecommendation.Busy}", res.Answer);
+    }
+
+    // Học sinh đóng trang giữa chừng (request bị hủy) thì không nuốt lỗi: để ASP.NET dừng lượt chat như bình thường
+    [Fact]
+    public async Task RequestCancelledByTheUser_IsNotSwallowed()
+    {
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        var runner = new FakeRunner { Error = new TaskCanceledException() };
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            new ChatService(new FakeAdvisor("B4") { Action = "recommend" }, new FakeSessions(), new FakeProfileFlow(), null, runner)
+                .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello), cts.Token));
+    }
+
     private sealed class FakeRunner : IRecommendationRunner
     {
         public Recommendation? Result { get; init; }

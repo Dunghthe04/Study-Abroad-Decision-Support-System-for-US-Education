@@ -129,7 +129,8 @@ namespace StudyAbroad.Application.Advisor
                     : ChatRecommendation.Invalid;
                 return response with { Answer = $"{response.Answer}\n\n{reason}" };
             }
-            catch (HttpRequestException)
+            catch (Exception ex) when (ex is HttpRequestException
+                                       || (ex is TaskCanceledException && !ct.IsCancellationRequested))
             {
                 return response with { Answer = $"{response.Answer}\n\n{ChatRecommendation.Busy}" };
             }
