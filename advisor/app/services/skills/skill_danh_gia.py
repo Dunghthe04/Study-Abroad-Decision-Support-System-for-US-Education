@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 from app.schemas.chat import ChatState, ProfileField, QuickReply
 from app.services.chat_flow import SkillOutput, ask, go_to
 from app.services.skill_call import SKILLS_DIR, SkillCall
+from app.services.skills.buttons import BUDGET_LABELS
 from app.services.skills.validators import IMPACT_LEVELS, month_index, parse_month_year
 
 logger = logging.getLogger("advisor.chat")
@@ -329,7 +330,7 @@ def readings(token: str) -> set[float]:
 # Các số được phép xuất hiện trong lời nhận xét: số trong hồ sơ, thang điểm
 def allowed_numbers(facts: Facts) -> set[float]:
     numbers = {facts.gpa, facts.gpa_scale, facts.gpa4, facts.sat, facts.english_score, facts.ielts}
-    numbers |= {facts.budget_usd, facts.ec_tier, facts.activities or None}
+    numbers |= {facts.budget_usd, facts.ec_tier, facts.activities}
     if facts.budget_tier:
         numbers |= {float(n) * 1000 for n in re.findall(r"\d+", facts.budget_tier)}
         numbers |= {float(n) for n in re.findall(r"\d+", facts.budget_tier)}
@@ -370,7 +371,8 @@ def ai_input(levels: dict[str, Any], facts: Facts) -> dict[str, Any]:
             "english": {"type": facts.english_type, "value": facts.english_score}
             if facts.english_type
             else None,
-            "budget_usd_per_year": facts.budget_usd,
+            # Gửi khoảng tiền như nút của form ("Trên 70.000 USD"), không gửi số trần để Qwen khỏi viết sai số
+            "budget_per_year": BUDGET_LABELS.get(facts.budget_tier) if facts.budget_tier else None,
             "activities": facts.activities,
         },
         "levels": levels,

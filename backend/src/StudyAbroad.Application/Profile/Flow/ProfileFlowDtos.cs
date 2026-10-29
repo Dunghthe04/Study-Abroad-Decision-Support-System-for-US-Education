@@ -28,7 +28,8 @@ public record ProfileFlowDraftDto(
 
 /// <summary>
 /// Bước 1 – Mục tiêu. currentEducationLevel: middle_school | high_school | college_university | master;
-/// educationSystem: mã EducationSystems, chỉ hỏi học sinh cấp 3; targetIntake: kỳ nhập học dạng "Fall 2027"
+/// educationSystem: mã EducationSystems, chỉ hỏi học sinh cấp 3; targetIntake: kỳ nhập học dạng "Fall 2027";
+/// majorUndecided: học sinh bấm "Chưa rõ" ngành (ở form hoặc chat), lúc đó targetMajor để trống
 /// </summary>
 public record FlowGoalDraftDto(
     [property: JsonPropertyName("currentEducationLevel")] string? CurrentEducationLevel = null,
@@ -40,7 +41,8 @@ public record FlowGoalDraftDto(
     [property: JsonPropertyName("targetMajor")] string? TargetMajor = null,
     [property: JsonPropertyName("targetIntake")] string? TargetIntake = null,
     [property: JsonPropertyName("targetStates")] List<string>? TargetStates = null,
-    [property: JsonPropertyName("targetSchoolType")] string? TargetSchoolType = null
+    [property: JsonPropertyName("targetSchoolType")] string? TargetSchoolType = null,
+    [property: JsonPropertyName("majorUndecided")] bool? MajorUndecided = null
 );
 
 /// <summary>Bước 2 – Bảng điểm theo khối/năm, mỗi môn có điểm HK1, HK2 (thang 10)</summary>

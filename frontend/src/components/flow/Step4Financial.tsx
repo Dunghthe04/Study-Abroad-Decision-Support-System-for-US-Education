@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import {
-  BUDGET_RATE as RATE,
+  BUDGET_RATE,
   DEFAULT_BUDGET_TIERS,
   FALLBACK_MAX_USD,
   FUNDING_SOURCE_OPTIONS,
@@ -30,6 +30,8 @@ export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Ste
   const [financialError, setFinancialError] = useState<string | null>(null);
   const [currency, setCurrency] = useState<Currency>("vnd");
   const [amountText, setAmountText] = useState("");
+  // Tỷ giá mới nhất từ BE, chưa có thì dùng tỷ giá mặc định
+  const RATE = Math.round(metadata?.vndPerUsd || BUDGET_RATE);
 
   // Chỉ lưu mã mức; min/max USD do BE lấy từ seed metadata khi commit
   const budgetTiers: { key: BudgetTierId; label: string; description: string }[] =

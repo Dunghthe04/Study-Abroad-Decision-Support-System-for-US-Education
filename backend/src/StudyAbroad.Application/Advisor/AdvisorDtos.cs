@@ -32,4 +32,5 @@ public record AdvisorChatResponse(
     Widget? Widget = null,
     JsonElement? Profile = null,
     IReadOnlyList<string>? ProfileChanged = null,
-    int? FormStep = null);
+    int? FormStep = null,
+    IReadOnlyList<string>? Skills = null);

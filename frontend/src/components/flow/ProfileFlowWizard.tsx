@@ -75,7 +75,7 @@ const STEP_SUGGESTIONS: Record<number, string> = {
 };
 
 // Mục 7: trang đã đủ ô bắt buộc chưa (giống nút "Tiếp tục" của từng trang) để chat được chuyển form qua.
-// Trang 1 không xét ngành: chat tự bắt buộc ngành, còn "Chưa rõ" chỉ form biết. Trang 2 chỉ cần đã có GPA
+// Trang 1 không xét ngành: chat tự bắt buộc ngành (hoặc "Chưa rõ"). Trang 2 chỉ cần đã có GPA
 function stepReady(step: number, draft: ProfileFlowDraft): boolean {
   switch (step) {
     case 1:

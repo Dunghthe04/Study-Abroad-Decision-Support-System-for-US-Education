@@ -26,9 +26,11 @@ export function BudgetWidget({ data, onPick }: { data?: Record<string, unknown> 
   const tiers = ((data?.options as Option[] | undefined) ?? DEFAULT_BUDGET_TIERS.map((t) => ({ value: t.key, label: t.label })));
   const [currency, setCurrency] = useState<Currency>("vnd");
   const [amountText, setAmountText] = useState("");
+  // Tỷ giá advisor gửi kèm (lấy mới mỗi ngày), không có thì dùng tỷ giá mặc định
+  const rate = Number(data?.rate) || BUDGET_RATE;
 
   const amount = Number(amountText.replace(/\D/g, "")) || 0;
-  const usd = currency === "vnd" ? Math.round(amount / BUDGET_RATE) : amount;
+  const usd = currency === "vnd" ? Math.round(amount / rate) : amount;
   const tier = amount > 0 ? tierForUsd(tiers, usd) : undefined;
 
   const submit = () => {
@@ -73,7 +75,7 @@ export function BudgetWidget({ data, onPick }: { data?: Record<string, unknown> 
               thuộc khoảng <strong className="font-semibold text-foreground">{tier.label}</strong>
             </>
           ) : (
-            `Nhập số tiền gia đình chi được mỗi năm (1 USD = ${BUDGET_RATE.toLocaleString("vi-VN")} VNĐ), hoặc bấm chọn khoảng.`
+            `Nhập số tiền gia đình chi được mỗi năm (1 USD = ${rate.toLocaleString("vi-VN")} VNĐ), hoặc bấm chọn khoảng.`
           )}
         </p>
         <button

@@ -19,6 +19,7 @@ from app.services.skills.validators import (
     check_scholarship,
     check_school_type,
     check_states,
+    read_money,
 )
 
 # Ngày cố định để test không phụ thuộc hôm nay
@@ -174,12 +175,12 @@ def test_plan_month_in_past_ask_again():
     ("usd", "tier"),
     [
         (15_000, "tier_under_20k"),
-        (20_000, "tier_under_20k"),
-        (20_001, "tier_20k_35k"),
-        (35_000, "tier_20k_35k"),
-        (50_000, "tier_35k_50k"),
-        (70_000, "tier_50k_70k"),
-        (70_001, "tier_above_70k"),
+        (19_999, "tier_under_20k"),
+        (20_000, "tier_20k_35k"),
+        (34_999, "tier_20k_35k"),
+        (35_000, "tier_35k_50k"),
+        (69_999, "tier_50k_70k"),
+        (70_000, "tier_above_70k"),
     ],
 )
 def test_budget_tier_edges(usd, tier):
@@ -206,6 +207,17 @@ def test_budget_huge_usd_ask_again():
     with pytest.raises(AskAgain) as err:
         check_budget(800_000_000, "USD")
     assert "USD hay VNĐ" in err.value.question
+
+
+@pytest.mark.parametrize("currency", ["VNĐ", "vnđ", "đồng", "VND"])
+def test_budget_vnd_spellings(currency):
+    assert check_budget(800_000_000, currency) == "tier_20k_35k"
+
+
+def test_budget_no_currency_big_number_is_vnd():
+    # "1 tỷ" không nói đơn vị: 1.000.000.000 / 25.000 = 40.000 USD
+    assert check_budget(1_000_000_000) == "tier_35k_50k"
+    assert check_budget(40_000) == "tier_35k_50k"
 
 
 def test_budget_unknown_currency_ask_again():
@@ -347,3 +359,37 @@ def test_awards_max_3():
     assert len(check_awards([item] * 3, today=TODAY)) == 3
     with pytest.raises(AskAgain):
         check_awards([item] * 4, today=TODAY)
+
+
+# Câu số tiền ở F1 đọc bằng code, không qua Qwen
+@pytest.mark.parametrize(
+    ("text", "money"),
+    [
+        ("800 triệu", (800_000_000, "VND")),
+        ("khoảng 1,2 tỷ", (1_200_000_000, "VND")),
+        ("900.000.000 đ", (900_000_000, "đ")),
+        ("36.000 USD", (36_000, "USD")),
+        ("40k/năm", (40_000, "USD")),
+        ("50000", (50_000, None)),
+    ],
+)
+def test_read_money(text, money):
+    assert read_money(text) == money
+
+
+@pytest.mark.parametrize("text", ["800", "em chưa biết", "8.5 thang 10"])
+def test_read_money_other_text_is_none(text):
+    assert read_money(text) is None
+
+
+@pytest.mark.parametrize(
+    ("text", "tier"),
+    [
+        ("800 triệu", "tier_20k_35k"),
+        ("1,2 tỷ", "tier_35k_50k"),
+        ("900.000.000 đ", "tier_35k_50k"),
+        ("36.000 USD", "tier_35k_50k"),
+    ],
+)
+def test_money_text_maps_to_form_tier(text, tier):
+    assert check_budget(*read_money(text)) == tier

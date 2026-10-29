@@ -18,8 +18,12 @@ public class ChatProfileMapperTests
     private static ProfileFlowDraftDto ToDraft(JsonObject profile, ProfileFlowDraftDto? draft = null) =>
         ChatProfileMapper.ApplyChatProfile(draft ?? new ProfileFlowDraftDto(), profile, profile.Select(p => p.Key).ToList());
 
-    private static void AssertSame(JsonObject expected, JsonObject actual) =>
+    // certifications là bản đầy đủ của english, sat, act: test không ghi nó thì không so
+    private static void AssertSame(JsonObject expected, JsonObject actual)
+    {
+        if (!expected.ContainsKey("certifications")) actual.Remove("certifications");
         Assert.Equal(expected.ToJsonString(), actual.ToJsonString());
+    }
 
     private static FlowCertificationItemDto Cert(string category, string type, decimal overall, string? date) =>
         new(Guid.NewGuid().ToString(), category, type, Overall: overall, TestDate: date);
@@ -148,6 +152,47 @@ public class ChatProfileMapperTests
         Assert.Null(ielts.Sections); // điểm thành phần cũ không khớp điểm mới
     }
 
+    private const string ChatCerts =
+        """[{"id":"c1","category":"english","type":"ielts","customName":null,"subject":null,"overall":6.5,"scaleText":null,"sections":null,"testDate":"2025-05"},"""
+        + """{"id":"c2","category":"standardized","type":"ap","customName":null,"subject":"Calculus BC","overall":5,"scaleText":null,"sections":null,"testDate":"2025-05"},"""
+        + """{"id":"c3","category":"standardized","type":"alevel","customName":null,"subject":"Math","overall":null,"scaleText":"A*","sections":null,"testDate":"2025-06"}]""";
+
+    [Fact]
+    public void ChatCertifications_RoundTrip()
+    {
+        var profile = Confirmed("certifications", ChatCerts);
+
+        var back = ChatProfileMapper.ToChatProfile(ToDraft(profile));
+
+        Assert.Equal(profile["certifications"]!.ToJsonString(), back["certifications"]!.ToJsonString());
+        Assert.Equal("ielts", back["english"]!["value"]!["type"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void ChatCertifications_AppliedLast_ReplaceAllCerts()
+    {
+        var old = new ProfileFlowDraftDto(Step3: new FlowCertificationDraftDto([Cert("english", "toefl", 80m, null)]));
+        // Thứ tự sắp xếp như changed_keys: certifications đứng trước english, nhưng vẫn ghi sau cùng
+        var profile = Profile($$$"""
+            {"certifications":{"value":{{{ChatCerts}}},"status":"confirmed"},
+             "english":{"value":{"type":"ielts","value":6.5,"date":"2025-05"},"status":"confirmed"}}
+            """);
+
+        var certs = ChatProfileMapper.ApplyChatProfile(old, profile, ["certifications", "english"]).Step3!.Certifications!;
+
+        Assert.Equal(["c1", "c2", "c3"], certs.Select(c => c.Id));
+    }
+
+    [Fact]
+    public void ChatCertWithoutId_GetsNewId()
+    {
+        var profile = Confirmed("certifications", """[{"category":"standardized","type":"sat","overall":1450}]""");
+
+        var cert = Assert.Single(ToDraft(profile).Step3!.Certifications!);
+
+        Assert.False(string.IsNullOrEmpty(cert.Id));
+    }
+
     [Fact]
     public void EnglishNone_RemovesEnglishCerts_KeepsSat()
     {
@@ -255,5 +300,36 @@ public class ChatProfileMapperTests
 
         Assert.Null(step1.TargetDegreeLevel);
         Assert.Null(step1.TargetMajor);
+        Assert.True(step1.MajorUndecided);
+    }
+
+    [Fact]
+    public void MajorChosenInChat_ClearsUndecided()
+    {
+        var old = new ProfileFlowDraftDto(Step1: new FlowGoalDraftDto(MajorUndecided: true));
+
+        var step1 = ToDraft(Confirmed("major", "\"Law\""), old).Step1!;
+
+        Assert.Equal("Law", step1.TargetMajor);
+        Assert.False(step1.MajorUndecided);
+    }
+
+    // Form bấm "Chưa rõ" thì chat thấy ngành unknown, không hỏi lại
+    [Fact]
+    public void UndecidedOnForm_SentAsUnknownMajor()
+    {
+        var draft = new ProfileFlowDraftDto(Step1: new FlowGoalDraftDto(MajorUndecided: true));
+
+        AssertSame(Profile("""{"major":{"value":"unknown","status":"unknown"}}"""), ChatProfileMapper.ToChatProfile(draft));
+    }
+
+    // Form bỏ "Chưa rõ" (bắt đầu gõ ngành) thì không giữ unknown của chat lượt trước
+    [Fact]
+    public void UndecidedClearedOnForm_NotKeptFromPrevious()
+    {
+        var draft = new ProfileFlowDraftDto(Step1: new FlowGoalDraftDto(MajorUndecided: false));
+        var previous = Profile("""{"major":{"value":"unknown","status":"unknown"}}""");
+
+        Assert.Empty(ChatProfileMapper.ToChatProfile(draft, previous));
     }
 }

@@ -9,6 +9,9 @@ Mã và luật lấy đúng theo form và .NET (KE_HOACH_DONG_BO_CHAT_FORM.md), 
 
 import re
 from datetime import date
+from typing import NamedTuple
+
+from app.services.skills import exchange_rate
 
 # Thang GPA được nhận
 GPA_SCALES = (4, 10)
@@ -21,6 +24,13 @@ CERT_LIMITS = {
     "toefl": (0, 120, 1),
     "duolingo": (10, 160, 5),
     "pte": (10, 90, 1),
+    "cambridge": (80, 230, 1),
+    "itep": (0, 6, 0.5),
+    "languagecert": (0, 100, 1),
+    "ap": (1, 5, 1),
+    "ib": (1, 45, 1),
+    "gre": (260, 340, 1),
+    "gmat": (200, 800, 10),
 }
 ENGLISH_CERTS = ("ielts", "toefl", "duolingo", "pte")
 CERT_NAMES = {
@@ -30,10 +40,44 @@ CERT_NAMES = {
     "toefl": "TOEFL",
     "duolingo": "Duolingo",
     "pte": "PTE",
+    "cambridge": "Cambridge English",
+    "itep": "iTEP",
+    "languagecert": "LanguageCert",
+    "ap": "AP",
+    "ib": "IB",
+    "alevel": "A-Level",
+    "gre": "GRE",
+    "gmat": "GMAT",
 }
 
-# Tỷ giá cố định để đổi VNĐ sang USD, chỉ sửa ở đây
-VND_PER_USD = 25_000
+
+# Loại chứng chỉ của form (metadata certifications trong DbSeeder.cs): tên như form, nhóm, có cần tên môn.
+# Loại có thang số thì giới hạn ở CERT_LIMITS; A-Level chấm điểm chữ (ALEVEL_GRADES)
+class CertType(NamedTuple):
+    name: str
+    category: str
+    requires_subject: bool = False
+
+
+CERT_TYPES = {
+    "ielts": CertType("IELTS Academic", "english"),
+    "toefl": CertType("TOEFL iBT", "english"),
+    "duolingo": CertType("Duolingo English Test", "english"),
+    "pte": CertType("PTE Academic", "english"),
+    "cambridge": CertType("Cambridge English", "english"),
+    "itep": CertType("iTEP Academic", "english"),
+    "languagecert": CertType("LanguageCert Academic", "english"),
+    "sat": CertType("SAT", "standardized"),
+    "act": CertType("ACT", "standardized"),
+    "ap": CertType("AP", "standardized", requires_subject=True),
+    "ib": CertType("IB Diploma", "standardized"),
+    "alevel": CertType("A-Level", "standardized", requires_subject=True),
+    "gre": CertType("GRE General", "graduate"),
+    "gmat": CertType("GMAT", "graduate"),
+}
+ALEVEL_GRADES = ("A*", "A", "B", "C", "D", "E")
+
+# Tỷ giá VNĐ/USD lấy mới mỗi ngày ở exchange_rate.py
 CURRENCIES = ("USD", "VND")
 # Ngân sách tối đa mỗi năm (giống MaxAnnualBudget của .NET)
 MAX_BUDGET_USD = 10_000_000
@@ -150,15 +194,58 @@ def check_english(
     if cert not in ENGLISH_CERTS:
         raise AskAgain("Bạn có chứng chỉ tiếng Anh nào: IELTS, TOEFL, Duolingo hay PTE?")
     check_score(cert, score)
+    return cert, score, check_test_date(cert, test_date, today)
+
+
+# Ngày thi "yyyy-MM" không được ở tương lai; không nói ngày thì None
+def check_test_date(cert: str, test_date: str | None, today: date | None = None) -> str | None:
     if test_date is None:
-        return cert, score, None
+        return None
     today = today or date.today()
     taken = parse_year_month(test_date)
     if taken is None:
         raise AskAgain(f"Bạn thi {CERT_NAMES[cert]} vào tháng mấy, năm nào?")
     if taken > month_index(today.year, today.month):
         raise AskAgain("Ngày thi không được ở tương lai. Bạn thi vào tháng mấy, năm nào?")
-    return cert, score, test_date.strip()
+    return test_date.strip()
+
+
+# A3. Một thẻ chứng chỉ như bước 3 của form (validateCertification): đúng loại, đúng thang điểm
+# (A-Level là điểm chữ, ghi ở scaleText), có tên môn khi loại cần. Trả về thẻ dạng form, chưa có id
+def check_certification(
+    cert: str,
+    score: str | float,
+    test_date: str | None = None,
+    subject: str | None = None,
+    today: date | None = None,
+) -> dict:
+    cert = cert.strip().lower()
+    spec = CERT_TYPES.get(cert)
+    if spec is None:
+        raise AskAgain("Mình chưa biết chứng chỉ này. Bạn chọn loại chứng chỉ trong danh sách giúp mình nhé?")
+    subject = (subject or "").strip() or None
+    if spec.requires_subject and subject is None:
+        raise AskAgain(f"Chứng chỉ {CERT_NAMES[cert]} của bạn là môn nào?")
+    overall, scale_text = None, None
+    if cert in CERT_LIMITS:
+        try:
+            value = float(str(score).replace(",", "."))
+        except ValueError:
+            raise AskAgain(f"Điểm {CERT_NAMES[cert]} của bạn là bao nhiêu?") from None
+        overall = check_score(cert, value)
+        overall = int(overall) if float(overall).is_integer() else overall
+    else:
+        scale_text = str(score).strip().upper()
+        if scale_text not in ALEVEL_GRADES:
+            raise AskAgain("Điểm A-Level là điểm chữ từ A* đến E. Bạn được điểm mấy?")
+    return {
+        "category": spec.category,
+        "type": cert,
+        "subject": subject,
+        "overall": overall,
+        "scaleText": scale_text,
+        "testDate": check_test_date(cert, test_date, today),
+    }
 
 
 # A3. Kế hoạch thi tiếng Anh, đúng 2 ô englishPlanned / englishPlannedDate của form.
@@ -175,23 +262,32 @@ def check_english_plan(planned: bool, plan_date: str | None = None, today: date 
     return {"planned": True, "date": plan_date.strip()}
 
 
-# A4. Đổi số tiền sang USD (VNĐ chia tỷ giá)
+# A4. Đổi số tiền sang USD (VNĐ chia tỷ giá hôm nay)
 def to_usd(amount: float, currency: str) -> float:
-    return amount / VND_PER_USD if currency == "VND" else amount
+    return amount / exchange_rate.vnd_per_usd() if currency == "VND" else amount
 
 
-# A4. Chọn mức ngân sách theo số USD mỗi năm
+# A4. Chọn mức ngân sách theo số USD mỗi năm. Giống form: đúng bằng trần thì sang mức trên (20.000 → 20k–35k)
 def budget_tier(usd: float) -> str:
     for ceiling, tier in BUDGET_TIERS:
-        if usd <= ceiling:
+        if usd < ceiling:
             return tier
     return TOP_TIER
 
 
 # A4. Ngân sách mỗi năm: chỉ lưu mức tier (giống annualBudgetTier của form), số tiền chỉ dùng để quy đổi.
 # Học sinh nói khoảng thì skill truyền số lớn hơn
-def check_budget(amount: float, currency: str = "USD") -> str:
+# Cách học sinh gọi đơn vị tiền → mã chuẩn
+CURRENCY_ALIASES = {"VNĐ": "VND", "ĐỒNG": "VND", "Đ": "VND", "$": "USD", "ĐÔ": "USD", "US$": "USD"}
+# Không nói đơn vị mà số từ 1 triệu trở lên thì là VNĐ (ngân sách 1 triệu USD/năm là không thật)
+VND_GUESS_FROM = 1_000_000
+
+
+def check_budget(amount: float, currency: str | None = None) -> str:
+    if currency is None or not currency.strip():
+        currency = "VND" if amount >= VND_GUESS_FROM else "USD"
     currency = currency.strip().upper()
+    currency = CURRENCY_ALIASES.get(currency, currency)
     if currency not in CURRENCIES:
         raise AskAgain("Bạn cho mình biết số tiền theo USD hoặc VNĐ nhé?")
     if amount <= 0:
@@ -202,6 +298,38 @@ def check_budget(amount: float, currency: str = "USD") -> str:
             "Số tiền này lớn bất thường. Bạn kiểm tra lại số tiền và đơn vị (USD hay VNĐ) giúp mình nhé?"
         )
     return budget_tier(usd)
+
+
+# Câu nói số tiền: "800 triệu", "1,2 tỷ", "900.000.000 đ", "36.000 USD", "40k usd/năm"
+MONEY_TEXT = re.compile(
+    r"(?:khoảng|tầm|chừng)?\s*(\d+(?:[.,]\d+)*)\s*(triệu|tr|tỷ|tỉ|k|nghìn|ngàn)?\s*"
+    r"(usd|us\$|\$|đô|vnđ|vnd|đồng|đ)?\s*(?:(?:/|mỗi|một)\s*năm)?",
+    re.IGNORECASE,
+)
+MONEY_UNITS = {"triệu": 1e6, "tr": 1e6, "tỷ": 1e9, "tỉ": 1e9, "k": 1e3, "nghìn": 1e3, "ngàn": 1e3}
+
+
+# Đọc câu số tiền thành (số tiền, đơn vị). Không nói đơn vị thì đơn vị None (check_budget tự đoán).
+# Câu khác thì None
+def read_money(text: str) -> tuple[float, str | None] | None:
+    match = MONEY_TEXT.fullmatch(text.strip().rstrip("."))
+    if match is None:
+        return None
+    number, unit, currency = match[1], match[2], match[3]
+    if re.fullmatch(r"\d{1,3}(?:[.,]\d{3})+", number):
+        amount = float(re.sub(r"[.,]", "", number))
+    elif number.count(".") + number.count(",") <= 1:
+        amount = float(number.replace(",", "."))
+    else:
+        return None
+    # Chỉ một số nhỏ, không đơn vị ("800") thì chưa rõ là 800 USD hay 800 triệu
+    if not unit and not currency and amount < 1000:
+        return None
+    if unit:
+        amount *= MONEY_UNITS[unit.lower()]
+        # "800 triệu" không nói đơn vị là VNĐ; "40k" không nói đơn vị là USD
+        currency = currency or ("USD" if unit.lower() == "k" else "VND")
+    return amount, currency
 
 
 # A4. Học sinh bấm nút chọn mức ngân sách: mã phải là một trong 5 mức của form

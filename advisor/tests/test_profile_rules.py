@@ -70,5 +70,6 @@ def test_cert_boundaries(cert):
 def test_budget_tier_boundaries():
     tiers = RULES["budgetTiers"]
     for tier, upper in zip(tiers, tiers[1:], strict=False):
-        assert v.budget_tier(tier["maxUsd"]) == tier["id"]
-        assert v.budget_tier(tier["maxUsd"] + 1) == upper["id"]
+        # Giống form: usd < maxUsd
+        assert v.budget_tier(tier["maxUsd"] - 1) == tier["id"]
+        assert v.budget_tier(tier["maxUsd"]) == upper["id"]

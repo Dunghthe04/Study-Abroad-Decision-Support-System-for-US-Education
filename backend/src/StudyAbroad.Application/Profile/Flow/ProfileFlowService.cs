@@ -961,7 +961,9 @@ public class ProfileFlowService(
             TargetMajor: profile.IntendedMajor,
             TargetIntake: profile.TargetIntake,
             TargetStates: profile.PreferredStates?.ToList() ?? [],
-            TargetSchoolType: profile.TargetSchoolType ?? "all");
+            TargetSchoolType: profile.TargetSchoolType ?? "all",
+            // Hồ sơ đã lưu mà không có ngành nghĩa là học sinh đã chọn "Chưa rõ" (form và chat đều bắt chọn)
+            MajorUndecided: profile.FlowSubmittedAt.HasValue && string.IsNullOrWhiteSpace(profile.IntendedMajor) ? true : null);
 
         // Bảng điểm: gom theo khối, giữ thứ tự TermOrder; dữ liệu cũ không có grade_name/semester thì tách từ term_name
         var years = new List<FlowAcademicYearDraftDto>();

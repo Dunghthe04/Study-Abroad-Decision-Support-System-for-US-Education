@@ -308,12 +308,14 @@ def last_user_message(req: ChatRequest) -> str:
     return req.messages[-1].content
 
 
-# Tin nhắn là chữ trên một nút (hoặc lựa chọn của ô chọn) của câu đang hỏi
+# Tin nhắn là chữ trên một nút (hoặc câu ghép của ô nhập chứng chỉ, hoạt động...) của câu đang hỏi
 def is_button(question_id: str | None, message: str) -> bool:
-    # Nhập muộn vì buttons nhập chat_flow
-    from app.services.skills import buttons
+    # Nhập muộn vì buttons, skill_ho_so nhập chat_flow
+    from app.services.skills import buttons, skill_ho_so
 
-    return buttons.pressed(question_id, message, can_skip=True) is not None
+    return buttons.pressed(question_id, message, can_skip=True) is not None or skill_ho_so.is_form_text(
+        question_id, message
+    )
 
 
 # Skill bị chặn thì nói cho học sinh biết vì sao

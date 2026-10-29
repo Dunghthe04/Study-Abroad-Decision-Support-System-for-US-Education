@@ -9,6 +9,8 @@ from datetime import date
 
 from app.schemas.chat import ChatState, ProfileField, QuickReply, Widget
 from app.services.chat_flow import SkillOutput, ask
+from app.services.skills import exchange_rate
+from app.services.skills.validators import ALEVEL_GRADES, CERT_LIMITS, CERT_TYPES
 
 
 def confirmed(value: object) -> ProfileField:
@@ -196,6 +198,57 @@ def month_year(prefix: str, label: str) -> list[dict]:
     ]
 
 
+# Ô nhập một chứng chỉ như thẻ chứng chỉ ở bước 3 form: loại (theo nhóm), môn (AP, A-Level), điểm (giới hạn
+# theo loại), điểm chữ (A-Level), tháng / năm thi. Gửi đi thành câu skill_ho_so.CERT_TEXT đọc được
+def cert_fields(categories: tuple[str, ...], placeholder: str) -> dict:
+    types = {code: spec for code, spec in CERT_TYPES.items() if spec.category in categories}
+    numeric = {spec.name: CERT_LIMITS[code] for code, spec in types.items() if code in CERT_LIMITS}
+    with_subject = [spec.name for spec in types.values() if spec.requires_subject]
+    letter = [spec.name for code, spec in types.items() if code not in CERT_LIMITS]
+    fields = [
+        {
+            "name": "type",
+            "label": "Loại chứng chỉ",
+            "placeholder": "Chọn chứng chỉ",
+            "options": same_options([spec.name for spec in types.values()]),
+        },
+        {
+            "name": "score",
+            "kind": "number",
+            "label": "Điểm",
+            "placeholder": placeholder,
+            "minBy": {"type": {name: low for name, (low, _, _) in numeric.items()}},
+            "maxBy": {"type": {name: high for name, (_, high, _) in numeric.items()}},
+            "stepBy": {"type": {name: step for name, (_, _, step) in numeric.items()}},
+            "shownWhen": {"field": "type", "values": list(numeric)},
+        },
+        *month_year("test", "Tháng thi"),
+    ]
+    if with_subject:
+        subject = {
+            "name": "subject",
+            "kind": "text",
+            "label": "Môn",
+            "placeholder": "VD: Calculus BC",
+            "prefix": ", môn ",
+            "shownWhen": {"field": "type", "values": with_subject},
+        }
+        fields.insert(1, subject)
+    if letter:
+        grade = {
+            "name": "grade",
+            "label": "Điểm",
+            "placeholder": "Chọn điểm",
+            "options": same_options(list(ALEVEL_GRADES)),
+            "shownWhen": {"field": "type", "values": letter},
+        }
+        fields.insert(len(fields) - 2, grade)
+    return {
+        "fields": fields,
+        "format": "Chứng chỉ {type}{subject}, điểm {score}{grade}, thi tháng {test_month}/{test_year}",
+    }
+
+
 # Ô chọn theo mẫu form cho từng câu. fields: các ô (select / number / states / text / check), label: nhãn
 # trên ô như form, format: ghép giá trị các ô thành tin nhắn gửi đi (altFormat: dùng khi ô check được tích;
 # ô hiddenBy ẩn khi ô check đó được tích). Học sinh vẫn gõ chat được, không bắt buộc dùng ô chọn
@@ -332,46 +385,8 @@ def select_fields(question_id: str) -> dict | None:
             ],
             "format": "GPA {gpa} thang {scale}",
         },
-        "D3": {
-            "fields": [
-                {
-                    "name": "test",
-                    "label": "Bài thi",
-                    "placeholder": "Chọn bài thi",
-                    "options": same_options(["SAT", "ACT"]),
-                },
-                {
-                    "name": "score",
-                    "kind": "number",
-                    "label": "Điểm",
-                    "placeholder": "VD: 1350",
-                    "min": 1,
-                    "max": 1600,
-                    "step": 1,
-                },
-            ],
-            "format": "{test} {score}",
-        },
-        "E1": {
-            "fields": [
-                {
-                    "name": "test",
-                    "label": "Chứng chỉ",
-                    "placeholder": "Chọn chứng chỉ",
-                    "options": same_options(["IELTS", "TOEFL", "Duolingo"]),
-                },
-                {
-                    "name": "score",
-                    "kind": "number",
-                    "label": "Điểm",
-                    "placeholder": "VD: 6.5",
-                    "min": 0,
-                    "max": 160,
-                    "step": 0.5,
-                },
-            ],
-            "format": "{test} {score}",
-        },
+        "D3": cert_fields(("standardized", "graduate"), "VD: 1350"),
+        "E1": cert_fields(("english",), "VD: 6.5"),
         "E2": {
             "fields": [
                 {
@@ -418,7 +433,11 @@ def quick_replies(question_id: str | None, can_skip: bool = False) -> list[Quick
 def widget(question_id: str | None) -> Widget | None:
     if question_id in WIDGETS:
         kind, labels = WIDGETS[question_id]
-        return Widget(type=kind, data={"options": options(labels)})
+        data: dict = {"options": options(labels)}
+        if kind == "budget":
+            # Ô nhập số tiền đổi VNĐ sang USD bằng cùng tỷ giá với chat
+            data["rate"] = round(exchange_rate.vnd_per_usd())
+        return Widget(type=kind, data=data)
     # B1.3: ô tìm ngành giống bước 1 của form
     if question_id == "B1.3":
         return Widget(type="major")

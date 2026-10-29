@@ -27,11 +27,17 @@ interface Field {
   multiple?: boolean;
   min?: number;
   max?: number;
-  /** max theo giá trị ô khác, vd GPA thang 4 thì tối đa 4 */
+  /** min / max / step theo giá trị ô khác, vd GPA thang 4 thì tối đa 4, IELTS bước 0.5 */
+  minBy?: Record<string, Record<string, number>>;
   maxBy?: Record<string, Record<string, number>>;
+  stepBy?: Record<string, Record<string, number>>;
   step?: number;
   /** Ẩn (và không cần điền) khi ô check này được tích, vd tháng kết thúc khi "vẫn đang tham gia" */
   hiddenBy?: string;
+  /** Chỉ hiện khi ô `field` chọn một trong `values`, vd ô môn chỉ hiện cho AP, A-Level */
+  shownWhen?: { field: string; values: string[] };
+  /** Chữ thêm trước giá trị khi ghép câu, vd ", môn " */
+  prefix?: string;
 }
 
 interface SelectData {
@@ -77,16 +83,22 @@ export function SelectWidget({ data, onPick }: { data?: Record<string, unknown> 
     return f.options ?? [];
   };
 
-  const maxOf = (f: Field): number | undefined => {
-    for (const [other, byValue] of Object.entries(f.maxBy ?? {})) {
-      const max = byValue[values[other] ?? ""];
-      if (max !== undefined) return max;
+  const numberBy = (by: Field["maxBy"], fallback?: number): number | undefined => {
+    for (const [other, byValue] of Object.entries(by ?? {})) {
+      const n = byValue[values[other] ?? ""];
+      if (n !== undefined) return n;
     }
-    return f.max;
+    return fallback;
   };
+  const minOf = (f: Field) => numberBy(f.minBy, f.min);
+  const maxOf = (f: Field) => numberBy(f.maxBy, f.max);
+  const stepOf = (f: Field) => numberBy(f.stepBy, f.step);
 
   const isChecked = (name: string) => values[name] === "1";
-  const shown = fields.filter((f) => !(f.hiddenBy && isChecked(f.hiddenBy)));
+  const isShown = (f: Field) =>
+    !(f.hiddenBy && isChecked(f.hiddenBy)) &&
+    (!f.shownWhen || f.shownWhen.values.includes(values[f.shownWhen.field] ?? ""));
+  const shown = fields.filter(isShown);
 
   const valueOf = (f: Field): string => (f.multiple ? (multi[f.name] ?? []).join(", ") : (values[f.name] ?? "").trim());
 
@@ -96,8 +108,9 @@ export function SelectWidget({ data, onPick }: { data?: Record<string, unknown> 
     if (!v) return false;
     if (f.kind !== "number") return true;
     const n = Number(v);
+    const min = minOf(f);
     const max = maxOf(f);
-    return Number.isFinite(n) && (f.min === undefined || n >= f.min) && (max === undefined || n <= max);
+    return Number.isFinite(n) && (min === undefined || n >= min) && (max === undefined || n <= max);
   };
 
   const ready = shown.every(isValid);
@@ -105,15 +118,20 @@ export function SelectWidget({ data, onPick }: { data?: Record<string, unknown> 
   const setValue = (name: string, value: string) =>
     setValues((prev) => {
       const next = { ...prev, [name]: value };
-      // Đổi ô cha thì xóa ô phụ thuộc (đổi cấp học thì chọn lại lớp)
-      for (const f of fields) if (f.dependsOn === name) next[f.name] = "";
+      // Đổi ô cha thì xóa ô phụ thuộc (đổi cấp học thì chọn lại lớp, đổi loại chứng chỉ thì nhập lại điểm)
+      for (const f of fields) {
+        const parents = [f.dependsOn, f.shownWhen?.field, ...Object.keys({ ...f.minBy, ...f.maxBy, ...f.stepBy })];
+        if (parents.includes(name)) next[f.name] = "";
+      }
       return next;
     });
 
   const submit = () => {
     if (!ready || !onPick) return;
     const template = altFormat && isChecked(altFormat.field) ? altFormat.format : format;
-    onPick(fields.reduce((text, f) => text.replace(`{${f.name}}`, valueOf(f)), template));
+    // Ô đang ẩn ghép thành chữ rỗng; chỗ trống của ô không có trong câu này cũng bỏ
+    const part = (f: Field) => (isShown(f) && valueOf(f) ? `${f.prefix ?? ""}${valueOf(f)}` : "");
+    onPick(fields.reduce((text, f) => text.replace(`{${f.name}}`, part(f)), template).replace(/\{\w+\}/g, ""));
   };
 
   const control = (f: Field) => {
@@ -124,9 +142,9 @@ export function SelectWidget({ data, onPick }: { data?: Record<string, unknown> 
           inputMode={f.kind === "number" ? "decimal" : undefined}
           id={`sw-${f.name}`}
           placeholder={f.placeholder}
-          min={f.min}
+          min={minOf(f)}
           max={maxOf(f)}
-          step={f.step}
+          step={stepOf(f)}
           disabled={!onPick}
           value={values[f.name] ?? ""}
           onChange={(e) => setValue(f.name, e.target.value)}

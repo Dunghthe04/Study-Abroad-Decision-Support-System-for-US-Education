@@ -19,7 +19,7 @@ public static class ChatProfileMapper
     public static readonly IReadOnlyList<string> DraftKeys =
     [
         "current_level", "current_grade", "target_level", "major", "gpa", "sat", "act", "english",
-        "english_plan", "budget", "scholarship", "activities", "awards", "preferred_states", "school_type",
+        "english_plan", "certifications", "budget", "scholarship", "activities", "awards", "preferred_states", "school_type",
         "education_system", "funding_source", "intake",
     ];
 
@@ -29,6 +29,7 @@ public static class ChatProfileMapper
     private const string English = "english";
     private const string Standardized = "standardized";
     private const string OtherType = "other";
+    private const string Unknown = "unknown";
 
     /// <summary>
     /// C1: nháp → profile chat, giá trị có trong nháp mang trạng thái confirmed.
@@ -53,6 +54,8 @@ public static class ChatProfileMapper
             ["english_plan"] = draft.Step3?.EnglishPlanned == true
                 ? new JsonObject { ["planned"] = true, ["date"] = Text(draft.Step3.EnglishPlannedDate) }
                 : null,
+            // Cả danh sách thẻ chứng chỉ như form, để chat thêm được nhiều chứng chỉ
+            ["certifications"] = ListOrNull(certs.Select(c => JsonSerializer.SerializeToNode(c)!)),
             ["budget"] = Text(draft.Step4?.AnnualBudgetTier),
             ["scholarship"] = Text(draft.Step4?.NeedFinancialAid),
             ["activities"] = ListOrNull(items.Where(i => !IsAward(i)).Select(ActivityToChat)),
@@ -69,6 +72,12 @@ public static class ChatProfileMapper
         {
             if (values[key] is { } value)
                 profile[key] = new JsonObject { ["value"] = value, ["status"] = "confirmed" };
+            // Ngành: cờ "Chưa rõ" của nháp quyết định, form bỏ "Chưa rõ" thì chat hỏi lại
+            else if (key == "major" && step1?.MajorUndecided is { } undecided)
+            {
+                if (undecided)
+                    profile[key] = new JsonObject { ["value"] = Unknown, ["status"] = Unknown };
+            }
             else if (KeepFromPrevious(key, previous?[key]))
                 profile[key] = previous![key]!.DeepClone();
         }
@@ -81,7 +90,8 @@ public static class ChatProfileMapper
     /// </summary>
     public static ProfileFlowDraftDto ApplyChatProfile(ProfileFlowDraftDto draft, JsonObject profile, IEnumerable<string> changedKeys)
     {
-        foreach (var key in changedKeys)
+        // certifications là cả danh sách nên ghi sau cùng, đè lên english / sat / act (chỉ là điểm rút ra từ danh sách)
+        foreach (var key in changedKeys.OrderBy(k => k == "certifications"))
         {
             var value = ValueOf(profile[key]);
             var step1 = draft.Step1 ?? new FlowGoalDraftDto();
@@ -92,7 +102,10 @@ public static class ChatProfileMapper
                 "current_level" => draft with { Step1 = step1 with { CurrentEducationLevel = Str(value) } },
                 "current_grade" => draft with { Step1 = step1 with { CurrentGrade = Str(value) } },
                 "target_level" => draft with { Step1 = step1 with { TargetDegreeLevel = Str(value) } },
-                "major" => draft with { Step1 = step1 with { TargetMajor = Str(value) } },
+                "major" => draft with
+                {
+                    Step1 = step1 with { TargetMajor = Str(value), MajorUndecided = StatusOf(profile[key]) == Unknown },
+                },
                 "preferred_states" => draft with { Step1 = step1 with { TargetStates = value?.AsArray().Select(s => s!.GetValue<string>()).ToList() } },
                 "school_type" => draft with { Step1 = step1 with { TargetSchoolType = Str(value) } },
                 "education_system" => draft with { Step1 = step1 with { EducationSystem = Str(value) } },
@@ -101,6 +114,7 @@ public static class ChatProfileMapper
                 "gpa" => draft with { Step2 = ApplyGpa(draft.Step2, value) },
                 "sat" or "act" => draft with { Step3 = step3 with { Certifications = PutCert(step3.Certifications, Standardized, key, value is null ? null : (value.GetValue<decimal>(), null)) } },
                 "english" => draft with { Step3 = step3 with { Certifications = PutEnglish(step3.Certifications, value) } },
+                "certifications" => draft with { Step3 = step3 with { Certifications = CertsFromChat(value) } },
                 "english_plan" => draft with
                 {
                     Step3 = step3 with
@@ -194,6 +208,13 @@ public static class ChatProfileMapper
         return list;
     }
 
+    // Thay toàn bộ chứng chỉ bằng danh sách của chat; thẻ thiếu id thì tạo id mới
+    private static List<FlowCertificationItemDto> CertsFromChat(JsonNode? value) =>
+        (value?.AsArray() ?? [])
+            .Select(node => node.Deserialize<FlowCertificationItemDto>()!)
+            .Select(c => string.IsNullOrEmpty(c.Id) ? c with { Id = Guid.NewGuid().ToString() } : c)
+            .ToList();
+
     private static JsonNode ActivityToChat(FlowActivityDraftDto item) => new JsonObject
     {
         ["name"] = item.Name,
@@ -235,6 +256,8 @@ public static class ChatProfileMapper
         // Nháp chỉ có englishPlanned = false, không phân biệt "chưa hỏi" với "chưa có kế hoạch"
         return key == "english_plan" && field["value"]?["planned"]?.GetValue<bool>() == false;
     }
+
+    private static string? StatusOf(JsonNode? field) => (field as JsonObject)?["status"]?.GetValue<string>();
 
     private static JsonNode? ValueOf(JsonNode? field) =>
         field is JsonObject f && ValueStatuses.Contains(f["status"]?.GetValue<string>()) ? f["value"] : null;

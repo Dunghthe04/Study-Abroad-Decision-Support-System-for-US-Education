@@ -15,12 +15,16 @@ DRAFT_KEYS = {
     "act",
     "english",
     "english_plan",
+    "certifications",
     "budget",
     "scholarship",
     "activities",
     "awards",
     "preferred_states",
     "school_type",
+    "education_system",
+    "funding_source",
+    "intake",
 }
 
 

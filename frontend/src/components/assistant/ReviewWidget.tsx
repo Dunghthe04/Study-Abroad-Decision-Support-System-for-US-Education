@@ -25,6 +25,7 @@ const ROWS: { key: string; label: string }[] = [
   { key: "major", label: "Ngành" },
   { key: "intake", label: "Nhập học" },
   { key: "gpa", label: "GPA" },
+  { key: "certifications", label: "Chứng chỉ" },
   { key: "sat", label: "SAT" },
   { key: "act", label: "ACT" },
   { key: "english", label: "Tiếng Anh" },
@@ -49,12 +50,35 @@ const STATUS_TEXT: Record<string, string> = {
 // Học bổng: chat dùng required/preferred/no, form dùng mandatory/preferred/optional
 const SCHOLARSHIP_ALIASES: Record<string, string> = { required: "mandatory", no: "optional" };
 
+// Tên ngắn giống validators.CERT_NAMES bên advisor
 const CERT_NAMES: Record<string, string> = {
   ielts: "IELTS",
   toefl: "TOEFL",
   duolingo: "Duolingo",
   pte: "PTE",
+  cambridge: "Cambridge English",
+  itep: "iTEP",
+  languagecert: "LanguageCert",
+  sat: "SAT",
+  act: "ACT",
+  ap: "AP",
+  ib: "IB",
+  alevel: "A-Level",
+  gre: "GRE",
+  gmat: "GMAT",
 };
+
+// Có danh sách chứng chỉ thì dòng "Chứng chỉ" đã gồm điểm của các dòng này
+const CERT_ROWS = new Set(["sat", "act", "english"]);
+
+// Một thẻ chứng chỉ như form: "AP Calculus BC 5 · thi 05/2025"
+function certText(item: unknown): string {
+  const c = obj(item);
+  const type = str(c.type).toLowerCase();
+  const date = formatYearMonth(str(c.testDate));
+  const name = [CERT_NAMES[type] ?? (str(c.customName) || str(c.type)), str(c.subject)].filter(Boolean).join(" ");
+  return [name, str(c.overall) || str(c.scaleText), date && `· thi ${date}`].filter(Boolean).join(" ");
+}
 
 function obj(v: unknown): Record<string, unknown> {
   return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
@@ -102,6 +126,8 @@ function formatValue(key: string, value: unknown): string {
     }
     case "funding_source":
       return labelOf(FUNDING_SOURCE_OPTIONS, str(value) as never) || str(value);
+    case "certifications":
+      return Array.isArray(value) ? value.map(certText).filter(Boolean).join("; ") : "";
     case "activities":
     case "awards":
       return names(value);
@@ -121,8 +147,11 @@ export function ReviewWidget({ data }: { data?: Record<string, unknown> | null }
   const profile = obj(data?.profile) as Record<string, Field>;
   const missing = new Set(Array.isArray(data?.missing) ? data.missing.map(str) : []);
 
+  const hasCerts = Array.isArray(obj(profile.certifications).value);
   const rows = ROWS.flatMap(({ key, label }) => {
     const field = obj(profile[key]) as Field;
+    // Điểm đã nằm trong dòng "Chứng chỉ"; "Không có" / còn thiếu thì vẫn hiện
+    if (hasCerts && CERT_ROWS.has(key) && field.value != null && !missing.has(key)) return [];
     const isMissing = missing.has(key);
     const text = STATUS_TEXT[field.status ?? ""] ?? formatValue(key, field.value);
     // Bỏ dòng chưa nói gì, trừ dòng bắt buộc còn thiếu

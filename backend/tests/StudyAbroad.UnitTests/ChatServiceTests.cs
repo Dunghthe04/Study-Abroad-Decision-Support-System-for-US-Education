@@ -197,6 +197,42 @@ public class ChatServiceTests
         Assert.Equal("B3", session.CurrentStep);
     }
 
+    // Đánh giá chạy ngay trong lượt xác nhận và chuyển chat sang B4: vẫn phải lưu hồ sơ chính thức
+    [Fact]
+    public async Task ConfirmAtReview_AssessedToB4_CommitsProfile()
+    {
+        var userId = Guid.NewGuid();
+        var store = new FakeSessions();
+        var session = AtReview(userId);
+        store.Rows.Add(session);
+        var flow = new FakeProfileFlow();
+
+        await new ChatService(new FakeAdvisor("B4"), store, flow)
+            .ChatAsync(userId, new AdvisorChatRequest(Hello, session.Id.ToString()));
+
+        Assert.Equal(1, flow.Commits);
+        Assert.Equal("B4", session.CurrentStep);
+    }
+
+    // Chỉ lưu khi rời bảng rà soát X1, sang B4 từ câu khác thì không lưu
+    [Fact]
+    public async Task ToB4WithoutReview_DoesNotCommit()
+    {
+        var userId = Guid.NewGuid();
+        var store = new FakeSessions();
+        var session = new ChatSession
+        {
+            UserId = userId, StateJson = "{\"currentStep\":\"B0\",\"questionId\":\"B0.2\"}", CurrentStep = "B0",
+        };
+        store.Rows.Add(session);
+        var flow = new FakeProfileFlow();
+
+        await new ChatService(new FakeAdvisor("B4"), store, flow)
+            .ChatAsync(userId, new AdvisorChatRequest(Hello, session.Id.ToString()));
+
+        Assert.Equal(0, flow.Commits);
+    }
+
     [Fact]
     public async Task CommitFails_KeepsReviewStateAndDraft_AndExplainsInVietnamese()
     {
@@ -239,12 +275,84 @@ public class ChatServiceTests
         Assert.Equal(0, flow.Commits);
     }
 
+    // Đánh giá chạy ngay khi xác nhận X1: lưu câu đánh giá vào analysis_results, không trả danh sách skill cho trình duyệt
+    [Fact]
+    public async Task ConfirmAtReview_SavesAssessment()
+    {
+        var userId = Guid.NewGuid();
+        var store = new FakeSessions();
+        var session = AtReview(userId);
+        store.Rows.Add(session);
+        var analyses = new FakeAnalyses();
+        var advisor = new FakeAdvisor("B4") { Skills = ["skill_ho_so", "skill_danh_gia"] };
+
+        var res = await new ChatService(advisor, store, new FakeProfileFlow(), analyses)
+            .ChatAsync(userId, new AdvisorChatRequest(Hello, session.Id.ToString()));
+
+        var saved = Assert.Single(analyses.Saved);
+        Assert.Equal((userId, "strengths_weaknesses", "{\"answer\":\"ok\"}", "chat:skill_danh_gia"), saved);
+        Assert.Null(res.Skills);
+    }
+
+    [Fact]
+    public async Task Roadmap_SavedAsStrategy()
+    {
+        var analyses = new FakeAnalyses();
+        var advisor = new FakeAdvisor("B4") { Skills = ["skill_lo_trinh"] };
+
+        await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), analyses)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Equal("strategy", Assert.Single(analyses.Saved).Kind);
+    }
+
+    // Hồ sơ chưa lưu được thì câu đánh giá bị thay bằng câu báo lỗi: không lưu đánh giá
+    [Fact]
+    public async Task CommitFails_DoesNotSaveAssessment()
+    {
+        var userId = Guid.NewGuid();
+        var store = new FakeSessions();
+        var session = AtReview(userId);
+        store.Rows.Add(session);
+        var analyses = new FakeAnalyses();
+        var flow = new FakeProfileFlow { CommitError = new InvalidOperationException("Thiếu GPA.") };
+
+        await new ChatService(new FakeAdvisor("B4") { Skills = ["skill_danh_gia"] }, store, flow, analyses)
+            .ChatAsync(userId, new AdvisorChatRequest(Hello, session.Id.ToString()));
+
+        Assert.Empty(analyses.Saved);
+    }
+
+    [Fact]
+    public async Task OtherSkills_SaveNothing()
+    {
+        var analyses = new FakeAnalyses();
+        var advisor = new FakeAdvisor("B2") { Skills = ["skill_ho_so", "skill_tra_loi"] };
+
+        await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), analyses)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Empty(analyses.Saved);
+    }
+
+    private sealed class FakeAnalyses : IChatAnalysisRepository
+    {
+        public List<(Guid UserId, string Kind, string Json, string Model)> Saved { get; } = [];
+
+        public Task SaveAsync(Guid userId, string kind, string resultJson, string modelVersion, CancellationToken ct = default)
+        {
+            Saved.Add((userId, kind, resultJson, modelVersion));
+            return Task.CompletedTask;
+        }
+    }
+
     private sealed class FakeAdvisor(string nextStep, IReadOnlyList<QuickReply>? replies = null, Widget? widget = null) : IAdvisorClient
     {
         public AdvisorChatRequest? LastRequest { get; private set; }
         public JsonElement? Profile { get; init; }
         public IReadOnlyList<string>? Changed { get; init; }
         public string? QuestionId { get; init; }
+        public IReadOnlyList<string>? Skills { get; init; }
 
         public Task<AdvisorChatResponse> ChatAsync(AdvisorChatRequest request, CancellationToken ct = default)
         {
@@ -252,7 +360,7 @@ public class ChatServiceTests
             var question = QuestionId is null ? "" : $",\"questionId\":\"{QuestionId}\"";
             var state = JsonDocument.Parse($"{{\"currentStep\":\"{nextStep}\"{question}}}").RootElement;
             return Task.FromResult(new AdvisorChatResponse(
-                "ok", [], null, state, QuickReplies: replies, Widget: widget, Profile: Profile, ProfileChanged: Changed));
+                "ok", [], null, state, QuickReplies: replies, Widget: widget, Profile: Profile, ProfileChanged: Changed, Skills: Skills));
         }
 
         public Task<EcResponseDto> ReadEcAsync(EcRequestDto request, CancellationToken ct = default) => throw new NotSupportedException();

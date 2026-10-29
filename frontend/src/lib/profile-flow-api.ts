@@ -61,6 +61,7 @@ export const profileFlowApi = {
       scholarshipNeeds?: { id: string; label: string; subLabel?: string }[];
       impactLevels?: ProfileMetadataResponse["impactLevels"];
       certifications?: RawCertificationItem[];
+      vndPerUsd?: number | null;
     }
 
     interface RawCertificationItem {
@@ -153,6 +154,7 @@ export const profileFlowApi = {
         ),
       states,
       offeringMajors,
+      vndPerUsd: raw.vndPerUsd ?? null,
     };
   },
 

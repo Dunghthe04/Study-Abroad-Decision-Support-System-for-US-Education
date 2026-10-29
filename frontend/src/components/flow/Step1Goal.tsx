@@ -49,8 +49,8 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
   const [majorQuery, setMajorQuery] = useState(data.targetMajor ?? "");
   const [showMajorDropdown, setShowMajorDropdown] = useState(false);
   const [majorError, setMajorError] = useState<string | null>(null);
-  // Học sinh chọn "Chưa rõ": ngành lưu null (giống chat lưu unknown), vẫn cho qua bước này
-  const [majorUnknown, setMajorUnknown] = useState(false);
+  // Học sinh chọn "Chưa rõ" (ở form hoặc chat): ngành lưu null kèm cờ majorUndecided, vẫn cho qua bước này
+  const majorUnknown = !data.targetMajor && data.majorUndecided === true;
   const [levelError, setLevelError] = useState<string | null>(null);
   // Mới chọn kỳ hoặc năm thì giữ tạm ở đây; đủ cả hai mới ghi vào nháp
   const [intakePending, setIntakePending] = useState({ term: "", year: "" });
@@ -137,16 +137,14 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
 
   const handleSelectMajor = (major: string) => {
     setMajorQuery(major);
-    onUpdate({ targetMajor: major });
-    setMajorUnknown(false);
+    onUpdate({ targetMajor: major, majorUndecided: false });
     setMajorError(null);
     setShowMajorDropdown(false);
   };
 
   const handleMajorUnknown = () => {
     setMajorQuery("");
-    onUpdate({ targetMajor: null });
-    setMajorUnknown(true);
+    onUpdate({ targetMajor: null, majorUndecided: true });
     setMajorError(null);
     setShowMajorDropdown(false);
   };
@@ -505,7 +503,7 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
               onFocus={() => setShowMajorDropdown(true)}
               onChange={(e) => {
                 setMajorQuery(e.target.value);
-                setMajorUnknown(false);
+                if (data.majorUndecided) onUpdate({ majorUndecided: false });
                 setShowMajorDropdown(true);
                 if (majorError) setMajorError(null);
               }}

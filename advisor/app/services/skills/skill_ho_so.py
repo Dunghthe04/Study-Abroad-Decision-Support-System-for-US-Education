@@ -8,6 +8,7 @@ B5: câu hỏi có nút gợi ý (buttons.py); bấm nút thì ghi thẳng, khô
 """
 
 import re
+import uuid
 from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass, field
@@ -21,8 +22,10 @@ from app.schemas.chat import ChatState, ProfileField, QuickReply, Widget
 from app.services.chat_flow import NEED_PROFILE, SkillOutput, ask, go_to
 from app.services.skill_call import SKILLS_DIR, SkillCall
 from app.services.skill_rules import REQUIRED_B3, missing_fields
-from app.services.skills import buttons
+from app.services.skills import buttons, exchange_rate
 from app.services.skills.validators import (
+    CERT_NAMES,
+    CERT_TYPES,
     MAX_ACTIVITIES,
     MAX_AWARDS,
     SCHOOL_TYPES,
@@ -34,12 +37,14 @@ from app.services.skills.validators import (
     check_awards,
     check_budget,
     check_budget_tier,
+    check_certification,
     check_english,
     check_english_plan,
     check_gpa,
     check_sat,
     check_scholarship,
     check_states,
+    read_money,
 )
 
 SKILL_PATH = SKILLS_DIR / "skill_ho_so.md"
@@ -137,6 +142,21 @@ MORE_TEXT = {
     "D5": "Mình đã ghi {name}. Bạn còn giải thưởng nào nữa không? Có thì nhập tiếp nhé.",
 }
 NO_MORE = {"D4": "Không còn hoạt động", "D5": "Không còn giải"}
+
+# Câu ô nhập E1 / D3 ghép (buttons.select_fields): "Chứng chỉ IELTS Academic, điểm 6.5, thi tháng 5/2025";
+# AP, A-Level có thêm ", môn Calculus BC" sau tên. Khớp thì ghi thẳng một thẻ chứng chỉ như form, không gọi Qwen
+CERT_TEXT = re.compile(
+    r"chứng chỉ (?P<name>.+?)(?:, môn (?P<subject>.+?))?, điểm (?P<score>[^,\s]+),"
+    r" thi tháng (?P<month>\d{1,2})/(?P<year>\d{4})",
+    re.IGNORECASE,
+)
+# Câu có ô nhập chứng chỉ → nhóm chứng chỉ của câu, giống hai mục của bước 3 form
+CERT_QUESTIONS = {"E1": ("english",), "D3": ("standardized", "graduate")}
+CERT_MORE = "Mình đã ghi {name}. Bạn còn chứng chỉ nào nữa không? Có thì nhập tiếp nhé."
+NO_MORE_CERT = "Không còn chứng chỉ"
+MAX_CERTS = 10
+# Thông tin rút ra từ danh sách chứng chỉ (skill_rules, đánh giá dùng). Qwen / nút đổi chúng thì sửa danh sách
+CERT_FIELDS = ("english", "sat", "act")
 
 # Mã giống form và DB (EducationSystems, ProfileConstants.FundingSources) để lưu được vào hồ sơ
 EDUCATION_SYSTEMS = ("standard", "specialized", "dual_degree", "international", "private", "other")
@@ -239,11 +259,12 @@ def check_value(name: str, value: Any) -> Any:
     if name == "english_plan":
         return check_english_plan(value.planned, value.date)
     if name == "budget":
+        # Có số tiền thì tự quy ra mức, không tin mức Qwen đoán
+        if value.amount is not None:
+            return check_budget(value.amount, value.currency)
         if value.tier is not None:
             return check_budget_tier(value.tier)
-        if value.amount is None:
-            raise AskAgain("Gia đình bạn có thể chi khoảng bao nhiêu mỗi năm? Bạn cho mình một con số nhé.")
-        return check_budget(value.amount, value.currency or "USD")
+        raise AskAgain("Gia đình bạn có thể chi khoảng bao nhiêu mỗi năm? Bạn cho mình một con số nhé.")
     if name == "scholarship":
         return check_scholarship(value)
     if name == "preferred_states":
@@ -333,10 +354,13 @@ def save_read(
 ) -> None:
     fields = [(name, value, status) for name, value in read.values.items() if name not in LIST_FIELDS]
     fields += [(name, None, "none") for name in read.none_fields]
+    written = []
     for name, value, field_status in fields:
         if keep_existing and name in state.profile:
             continue
         state.profile[name] = ProfileField(value=value, status=field_status)
+        written.append(name)
+    certs_from_fields(state, written, status)
     for name in LIST_FIELDS:
         if not (keep_existing and name in state.profile):
             save_items(state, name, read.values.get(name, []), read.pending.get(name, []), status)
@@ -419,6 +443,8 @@ def pending_question(state: ChatState, question_id: str) -> str | None:
 
 # Câu đã có câu trả lời chưa: thông tin của câu có trong hồ sơ, trạng thái nào cũng được (kể cả said_in_B0)
 def answered(state: ChatState, question_id: str) -> bool:
+    if question_id == "D3" and any(c.get("category") != "english" for c in saved_certs(state)):
+        return True  # đã có AP, IB, GRE... dù chưa có SAT / ACT
     if question_id == "E2":
         # Ô "sẽ thi sau" đã tích nhưng chưa có tháng dự kiến thì vẫn hỏi tháng
         plan = state.profile.get("english_plan")
@@ -559,6 +585,16 @@ def save_gpa(state: ChatState, gpa: float, scale: int) -> SkillOutput:
     return review(state) if state.question_id == "X1" else ask_next(state)
 
 
+# Ghi mức ngân sách từ câu số tiền ở F1 ("800 triệu", "36.000 USD"), không gọi Qwen
+def save_budget(state: ChatState, amount: float, currency: str | None) -> SkillOutput:
+    try:
+        tier = check_budget(amount, currency)
+    except AskAgain as err:
+        return ask_question(state, "F1", err.question)
+    state.profile["budget"] = ProfileField(value=tier, status="confirmed")
+    return ask_next(state)
+
+
 # Ghi tháng dự kiến thi tiếng Anh học sinh chọn ở ô chọn E2, không gọi Qwen
 def save_english_plan(state: ChatState, month: int, year: int) -> SkillOutput:
     try:
@@ -626,8 +662,133 @@ def save_item_text(state: ChatState, name: str, item: dict) -> SkillOutput:
     return ask_more(state, spec.question, count_before) or ask_next(state)
 
 
+# Danh sách thẻ chứng chỉ như form (khóa certifications), bản sao để sửa
+def saved_certs(state: ChatState) -> list[dict]:
+    saved = state.profile.get("certifications")
+    return [dict(c) for c in saved.value] if saved is not None and isinstance(saved.value, list) else []
+
+
+def same_cert(a: dict, b: dict) -> bool:
+    return (
+        a.get("type") == b.get("type")
+        and (a.get("subject") or "").lower() == (b.get("subject") or "").lower()
+    )
+
+
+# Thẻ cùng loại và cùng môn thì thay (giữ id), không thì thêm thẻ mới. Đủ khóa như FlowCertificationItemDto
+# để nháp gửi lại giống hệt (merge_profile không thấy khác)
+def put_cert(certs: list[dict], cert: dict) -> list[dict]:
+    old = next((c for c in certs if same_cert(c, cert)), None)
+    item = {"id": old["id"] if old else str(uuid.uuid4()), "customName": None, "sections": None, **cert}
+    return [item if c is old else c for c in certs] if old else [*certs, item]
+
+
+def write_certs(state: ChatState, certs: list[dict], status: str) -> None:
+    if certs:
+        state.profile["certifications"] = ProfileField(value=certs, status=status)
+    else:
+        state.profile.pop("certifications", None)
+
+
+# Qwen / nút vừa ghi english, sat, act: sửa thẻ chứng chỉ cùng loại; "không có" thì bỏ thẻ loại đó
+def certs_from_fields(state: ChatState, names: list[str], status: str) -> None:
+    names = [name for name in names if name in CERT_FIELDS and name in state.profile]
+    if not names:
+        return
+    certs = saved_certs(state)
+    for name in names:
+        value = state.profile[name].value
+        if value is None:
+            group = "english" if name == "english" else None
+            certs = [c for c in certs if (c.get("category") != group if group else c.get("type") != name)]
+            continue
+        english = name == "english"
+        cert = {
+            "category": "english" if english else "standardized",
+            "type": value["type"] if english else name,
+            "subject": None,
+            "overall": value["value"] if english else value,
+            "scaleText": None,
+            "testDate": value.get("date") if english else None,
+        }
+        certs = put_cert(certs, cert)
+    write_certs(state, certs, status)
+
+
+# Thêm thẻ ở ô nhập thì tính lại english, sat, act như ChatProfileMapper: tiếng Anh chính là thẻ thi mới
+# nhất rồi điểm cao nhất; SAT / ACT lấy điểm cao nhất
+def fields_from_certs(state: ChatState, status: str) -> None:
+    certs = saved_certs(state)
+    english = [c for c in certs if c.get("category") == "english" and c.get("overall") is not None]
+    if english:
+        main = max(english, key=lambda c: (c.get("testDate") or "", c["overall"]))
+        value = {"type": main["type"], "value": main["overall"], "date": main.get("testDate")}
+        state.profile["english"] = ProfileField(value=value, status=status)
+    for name in ("sat", "act"):
+        scores = [c["overall"] for c in certs if c.get("type") == name and c.get("overall") is not None]
+        if scores:
+            state.profile[name] = ProfileField(value=int(max(scores)), status=status)
+
+
+# Tên trên ô chọn ("IELTS Academic"), mã ("ielts") hoặc tên ngắn ("IELTS") → mã chứng chỉ
+def cert_type_of(name: str) -> str | None:
+    key = name.strip().lower()
+    return next(
+        (
+            code
+            for code, spec in CERT_TYPES.items()
+            if key in (code, spec.name.lower(), CERT_NAMES[code].lower())
+        ),
+        None,
+    )
+
+
+# Đọc câu ô nhập E1 / D3 ghép thành tham số của check_certification. Câu khác thì None
+def read_cert_text(question_id: str | None, message: str) -> dict | None:
+    match = CERT_TEXT.fullmatch(message.strip().rstrip(".")) if question_id in CERT_QUESTIONS else None
+    if match is None:
+        return None
+    return {
+        "cert": cert_type_of(match["name"]) or match["name"],
+        "score": match["score"],
+        "test_date": f"{match['year']}-{int(match['month']):02d}",
+        "subject": match["subject"],
+    }
+
+
+# Ghi một thẻ chứng chỉ học sinh nhập ở ô nhập, không gọi Qwen; sai thì hỏi lại. Ghi xong hỏi còn chứng chỉ
+# nào nữa không (ô nhập vẫn hiện), nút "Không còn chứng chỉ" để sang câu sau
+def save_cert_text(state: ChatState, item: dict) -> SkillOutput:
+    question_id = state.question_id or "E1"
+    try:
+        cert = check_certification(**item)
+    except AskAgain as err:
+        return ask_question(state, question_id, err.question)
+    certs = put_cert(saved_certs(state), cert)
+    write_certs(state, certs, "confirmed")
+    fields_from_certs(state, "confirmed")
+    if len(certs) >= MAX_CERTS:
+        return ask_next(state)
+    name = " ".join(filter(None, [CERT_NAMES[cert["type"]], cert["subject"]]))
+    output = ask_question(state, question_id, CERT_MORE.format(name=name))
+    output.quick_replies = [QuickReply(label=NO_MORE_CERT, value=NO_MORE_CERT)]
+    return output
+
+
+# Câu ghép từ ô nhập hoặc nút "Không còn ..." của câu đang hỏi là câu trả lời rõ: chat_flow không nhờ model
+# đoán skill (model có thể đoán nhầm "Không còn ..." là muốn dừng)
+def is_form_text(question_id: str | None, message: str) -> bool:
+    return (
+        (question_id in NO_MORE and buttons.same_text(message, NO_MORE[question_id]))
+        or (question_id in CERT_QUESTIONS and buttons.same_text(message, NO_MORE_CERT))
+        or read_item_text(question_id, message) is not None
+        or read_cert_text(question_id, message) is not None
+    )
+
+
 def press_button(state: ChatState, button: buttons.Button) -> SkillOutput:
     buttons.press(state, button)
+    certs_from_fields(state, list(button.values), "confirmed")
     for spec in LIST_FIELDS.values():
         if spec.question == state.question_id:
             state.profile.pop(spec.pending_key, None)
@@ -639,11 +800,18 @@ class HoSoHandler:
         self._reader = HoSoReader(llm, model)
 
     async def run(self, state: ChatState, message: str) -> SkillOutput:
+        # Tỷ giá cũ hơn 1 ngày thì lấy lại trước khi đổi tiền hoặc vẽ ô ngân sách
+        await exchange_rate.refresh()
         question_id = state.question_id
         if question_id == "X1" and is_confirm(message):
             return confirm(state)
         if question_id in NO_MORE and buttons.same_text(message, NO_MORE[question_id]):
             return ask_next(state)
+        if question_id in CERT_QUESTIONS and buttons.same_text(message, NO_MORE_CERT):
+            return ask_next(state)
+        cert_text = read_cert_text(question_id, message)
+        if cert_text is not None:
+            return save_cert_text(state, cert_text)
         item_text = read_item_text(question_id, message)
         if item_text is not None:
             return save_item_text(state, *item_text)
@@ -653,6 +821,9 @@ class HoSoHandler:
         gpa_text = read_gpa_text(message)
         if gpa_text is not None:
             return save_gpa(state, *gpa_text)
+        money = read_money(message) if question_id == "F1" else None
+        if money is not None:
+            return save_budget(state, *money)
         plan_text = PLAN_TEXT.fullmatch(message.strip().rstrip("."))
         if plan_text is not None:
             return save_english_plan(state, int(plan_text[1]), int(plan_text[2]))

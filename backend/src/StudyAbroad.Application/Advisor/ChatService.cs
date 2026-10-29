@@ -14,7 +14,10 @@ namespace StudyAbroad.Application.Advisor
     /// nhiệm vụ quản lý phiên chat giữa người dùng và AI Advisor Python.
     // FE(Gửi câu hỏi + SessionId) -> ChatService(Tìm phiên trong DB, lấy StateJson)-> Advisor python (Nhận request, xử lý hội thoại, trả câu trả lời và State mới)-> ChatService(lưu trạng thái mới vào DB, cập nhập bước hiện tại)
     // C4: mỗi lượt gửi kèm hồ sơ đọc từ bản nháp form, chat đổi ô nào thì ghi ô đó vào nháp
-    public class ChatService(IAdvisorClient advisor, IChatSessionRepository sessions, IProfileFlowService profileFlow)
+    // analyses: lưu câu đánh giá / lộ trình vào analysis_results (null thì không lưu, dùng trong test cũ)
+    public class ChatService(
+        IAdvisorClient advisor, IChatSessionRepository sessions, IProfileFlowService profileFlow,
+        IChatAnalysisRepository? analyses = null)
     {
         //Dữ liệu FE gửi lên
         public async Task<AdvisorChatResponse> ChatAsync(Guid userId, AdvisorChatRequest request, CancellationToken ct = default)
@@ -46,10 +49,11 @@ namespace StudyAbroad.Application.Advisor
                 request with { State = state, Profile = JsonSerializer.SerializeToElement(profile) }, ct);
             var changed = await SaveProfileToDraftAsync(userId, response, ct);
 
-            // C5: chat chỉ sang B3 khi học sinh bấm "Đúng rồi" ở X1, lúc đó lưu hồ sơ chính thức.
+            // C5: học sinh bấm "Đúng rồi" ở X1 thì chat rời bảng rà soát sang B3, lúc đó lưu hồ sơ chính thức.
+            // Đánh giá chạy luôn trong lượt này nên chat có thể đã sang B4.
             // Lưu lỗi thì giữ nguyên trạng thái cũ (vẫn ở X1) và nháp, báo lỗi để học sinh sửa rồi xác nhận lại
             var nextStep = CurrentStep(response.State);
-            if (nextStep == ConfirmedStep && session.CurrentStep != ConfirmedStep)
+            if (QuestionOf(state) == ReviewQuestion && IsPastReview(nextStep) && !IsPastReview(session.CurrentStep))
             {
                 var commitError = await CommitProfileAsync(userId, ct);
                 if (commitError is not null)
@@ -62,8 +66,11 @@ namespace StudyAbroad.Application.Advisor
                         Widget = null,
                     };
                     nextStep = session.CurrentStep;
+                    response = response with { Skills = null }; // câu đánh giá đã bị thay, không lưu
                 }
             }
+
+            await SaveAnalysesAsync(userId, response, ct);
 
             //Sau khi advisor phản hồi ==> lưu trạng thái mới
             session.StateJson = response.State?.GetRawText();
@@ -86,10 +93,31 @@ namespace StudyAbroad.Application.Advisor
                 ProfileChanged = changed,
                 FormStep = FormStepOf(response.State),
                 SessionId = session.Id.ToString(),
+                Skills = null,
             };
         }
 
-        private const string ConfirmedStep = "B3";
+        private const string ReviewQuestion = "X1";
+
+        // Skill nào chạy thì lưu câu trả lời vào analysis_results với loại tương ứng
+        private static readonly Dictionary<string, string> AnalysisKinds = new()
+        {
+            ["skill_danh_gia"] = "strengths_weaknesses",
+            ["skill_lo_trinh"] = "strategy",
+        };
+
+        private async Task SaveAnalysesAsync(Guid userId, AdvisorChatResponse response, CancellationToken ct)
+        {
+            if (analyses is null || response.Skills is not { Count: > 0 } skills)
+                return;
+            var resultJson = JsonSerializer.Serialize(new { answer = response.Answer });
+            foreach (var skill in skills.Distinct())
+                if (AnalysisKinds.TryGetValue(skill, out var kind))
+                    await analyses.SaveAsync(userId, kind, resultJson, $"chat:{skill}", ct);
+        }
+
+        // Bước sau bảng rà soát: B3 đánh giá, B4 lộ trình
+        private static bool IsPastReview(string? step) => step is "B3" or "B4";
 
         // Mục 7: câu chat đang hỏi nằm ở trang nào của form, để form chuyển theo
         private static readonly Dictionary<string, int> FormSteps = new()
@@ -104,13 +132,18 @@ namespace StudyAbroad.Application.Advisor
 
         private static int? FormStepOf(JsonElement? state)
         {
-            if (state is not { ValueKind: JsonValueKind.Object } s
-                || !s.TryGetProperty("questionId", out var q) || q.ValueKind != JsonValueKind.String)
+            if (QuestionOf(state) is not { } id)
                 return null;
-            var id = q.GetString()!;
             if (id.StartsWith("B1.")) return 1;
             return FormSteps.TryGetValue(id, out var step) ? step : null;
         }
+
+        // Câu chat đang hỏi (state.questionId), null nếu không có
+        private static string? QuestionOf(JsonElement? state) =>
+            state is { ValueKind: JsonValueKind.Object } s
+            && s.TryGetProperty("questionId", out var q) && q.ValueKind == JsonValueKind.String
+                ? q.GetString()
+                : null;
 
         private static string? CurrentStep(JsonElement? state) =>
             state is { ValueKind: JsonValueKind.Object } s && s.TryGetProperty("currentStep", out var step)

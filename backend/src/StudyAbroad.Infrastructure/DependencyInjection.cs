@@ -40,6 +40,7 @@ public static class DependencyInjection
         services.AddScoped<StudyAbroad.Application.Profile.Flow.IProfileFileStorageService, StudyAbroad.Infrastructure.Services.ProfileFileStorageService>();
         services.AddScoped<IRecommendationRepository, RecommendationRepository>();
         services.AddScoped<IChatSessionRepository, ChatSessionRepository>();
+        services.AddScoped<IChatAnalysisRepository, ChatAnalysisRepository>();
 
 
         // [USAS-362] Đăng ký JWT Token Service (Ưu tiên nạp key từ biến môi trường JWT_SECRET_KEY).
@@ -78,6 +79,10 @@ public static class DependencyInjection
             ConfigureAdvisorClient(sp, client);
             client.Timeout = TimeSpan.FromSeconds(sp.GetRequiredService<IOptions<AdvisorOptions>>().Value.OcrTimeoutSeconds);
         });
+
+        // Tỷ giá USD→VNĐ cho form ngân sách, chờ tối đa 5 giây
+        services.AddHttpClient<StudyAbroad.Application.Profile.Flow.IExchangeRateProvider, StudyAbroad.Infrastructure.Services.ExchangeRateProvider>(
+            client => client.Timeout = TimeSpan.FromSeconds(5));
 
         // [Scheduled Background Jobs: Unlock expired accounts & Cleanup OTPs]
         services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.AccountUnlockBackgroundService>();

@@ -78,6 +78,8 @@ export interface ProfileMetadataResponse {
   certificationTypes: CertificationTypeOption[];
   states: UsStateOption[];
   offeringMajors: string[];
+  /** 1 USD = ? VNĐ, BE lấy mới mỗi ngày; null thì dùng BUDGET_RATE */
+  vndPerUsd?: number | null;
 }
 
 // ==========================================
@@ -110,6 +112,8 @@ export interface GoalDraft {
   targetIntake?: string | null;
   targetStates?: string[] | null;
   targetSchoolType?: TargetSchoolType | null;
+  /** Học sinh bấm "Chưa rõ" ngành (ở form hoặc chat), lúc đó targetMajor để trống */
+  majorUndecided?: boolean | null;
 }
 
 export interface SubjectDraft {
