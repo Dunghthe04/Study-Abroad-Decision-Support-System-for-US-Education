@@ -13,6 +13,14 @@ namespace StudyAbroad.Application.Auth
     // [UC-63] Admin tạo tài khoản moderator (khách không tự đăng ký role này).
     public record CreateModeratorAccountRequest(string Email, string Password, string FullName, string? Phone = null);
 
+    /// <summary>[UC-60] Tìm, lọc và phân trang danh sách tài khoản (admin).</summary>
+    public record AdminUserAccountListQuery(
+        string? Search = null,
+        string? Role = null,
+        string? Status = null,
+        int Page = 1,
+        int PageSize = 20);
+
     // [USAS-362] Thông tin người dùng trả về cho client (không chứa password_hash)
     // [Q11] AgeGroup (child/minor/adult, null nếu không áp), ParentConsentStatus (granted/pending/none/not_required),
     // BlockedFeatures: các chức năng trong AgeFeatures.Rules đang bị chặn (server tính, frontend chỉ dùng để ẩn nút).
