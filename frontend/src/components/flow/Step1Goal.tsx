@@ -16,10 +16,11 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import {
   EDUCATION_LEVEL_OPTIONS,
+  EDUCATION_SYSTEM_OPTIONS,
   SCHOOL_TYPE_OPTIONS,
   getGradeOptionsForLevel,
 } from "@/lib/profile-flow-options";
-import type { CurrentEducationLevel, GoalDraft, ProfileMetadataResponse } from "@/types/profile-flow";
+import type { CurrentEducationLevel, EducationSystem, GoalDraft, ProfileMetadataResponse } from "@/types/profile-flow";
 
 interface Step1GoalProps {
   data: GoalDraft;
@@ -31,12 +32,35 @@ interface Step1GoalProps {
 // Năm tốt nghiệp dự kiến: năm nay → 6 năm tới
 const THIS_YEAR = new Date().getFullYear();
 const GRADUATION_YEAR_OPTIONS = Array.from({ length: 7 }, (_, i) => THIS_YEAR + i);
+// Kỳ nhập học: chọn kỳ rồi chọn năm, lưu ghép "Fall 2027" — khớp IntakeRegex phía BE và câu B1.4 bên chat
+const INTAKE_TERM_OPTIONS = [
+  { value: "Fall", label: "Kỳ mùa thu (Fall)" },
+  { value: "Spring", label: "Kỳ mùa xuân (Spring)" },
+  { value: "Summer", label: "Kỳ mùa hè (Summer)" },
+];
+const INTAKE_YEAR_OPTIONS = Array.from({ length: 6 }, (_, i) => String(THIS_YEAR + i));
+
+function parseIntake(intake?: string | null): { term: string; year: string } | null {
+  const m = /^(Fall|Spring|Summer) (20\d\d)$/.exec(intake ?? "");
+  return m ? { term: m[1], year: m[2] } : null;
+}
 
 export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) {
   const [majorQuery, setMajorQuery] = useState(data.targetMajor ?? "");
   const [showMajorDropdown, setShowMajorDropdown] = useState(false);
   const [majorError, setMajorError] = useState<string | null>(null);
+  // Học sinh chọn "Chưa rõ" (ở form hoặc chat): ngành lưu null kèm cờ majorUndecided, vẫn cho qua bước này
+  const majorUnknown = !data.targetMajor && data.majorUndecided === true;
   const [levelError, setLevelError] = useState<string | null>(null);
+  // Mới chọn kỳ hoặc năm thì giữ tạm ở đây; đủ cả hai mới ghi vào nháp
+  const [intakePending, setIntakePending] = useState({ term: "", year: "" });
+  const savedIntake = parseIntake(data.targetIntake);
+  const intakeTerm = savedIntake?.term ?? intakePending.term;
+  const intakeYear = savedIntake?.year ?? intakePending.year;
+  const updateIntake = (term: string, year: string) => {
+    setIntakePending({ term, year });
+    onUpdate({ targetIntake: term && year ? `${term} ${year}` : null });
+  };
 
   const [stateSearch, setStateSearch] = useState("");
   const [showStateDropdown, setShowStateDropdown] = useState(false);
@@ -81,6 +105,8 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
     onUpdate({
       currentEducationLevel: level,
       currentGrade: stillValid ? data.currentGrade : null,
+      // Hệ chương trình chỉ có nghĩa với cấp 3 (BE cũng bỏ khi lưu)
+      educationSystem: level === "high_school" ? data.educationSystem : null,
     });
     setLevelError(null);
   };
@@ -111,7 +137,14 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
 
   const handleSelectMajor = (major: string) => {
     setMajorQuery(major);
-    onUpdate({ targetMajor: major });
+    onUpdate({ targetMajor: major, majorUndecided: false });
+    setMajorError(null);
+    setShowMajorDropdown(false);
+  };
+
+  const handleMajorUnknown = () => {
+    setMajorQuery("");
+    onUpdate({ targetMajor: null, majorUndecided: true });
     setMajorError(null);
     setShowMajorDropdown(false);
   };
@@ -127,8 +160,8 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
       return;
     }
     setLevelError(null);
-    if (!data.targetMajor || !data.targetMajor.trim()) {
-      setMajorError("Vui lòng chọn hoặc nhập ngành học mong muốn trước khi tiếp tục.");
+    if (!majorUnknown && (!data.targetMajor || !data.targetMajor.trim())) {
+      setMajorError("Vui lòng chọn hoặc nhập ngành học mong muốn, hoặc bấm \"Chưa rõ\" nếu bạn chưa quyết định.");
       setShowMajorDropdown(true);
       const el = document.getElementById(majorInputId);
       if (el) el.focus();
@@ -294,6 +327,31 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
             </div>
           </div>
         </div>
+
+        {/* Hệ chương trình — chỉ học sinh cấp 3, giống câu D1 bên chat */}
+        {data.currentEducationLevel === "high_school" && (
+          <div className="space-y-1.5 sm:max-w-sm">
+            <Label htmlFor="educationSystem" className="text-xs font-medium text-foreground">
+              Hệ chương trình đang học
+            </Label>
+            <div className="relative">
+              <select
+                id="educationSystem"
+                value={data.educationSystem ?? ""}
+                onChange={(e) => onUpdate({ educationSystem: (e.target.value || null) as EducationSystem | null })}
+                className="w-full appearance-none rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground shadow-2xs focus:border-brand focus:outline-hidden focus:ring-1 focus:ring-brand cursor-pointer"
+              >
+                <option value="">Chưa chọn</option>
+                {EDUCATION_SYSTEM_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+              <ChevronDownIcon className="absolute right-3 top-2.5 size-4 text-muted-foreground pointer-events-none" />
+            </div>
+          </div>
+        )}
       </section>
 
       {/* Question 2: Target Degree Level */}
@@ -352,6 +410,53 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
         ) : (
           <p className="text-xs text-muted-foreground">Chưa chắc? Chọn bậc gần nhất, bạn có thể đổi lại sau.</p>
         )}
+
+        {/* Kỳ nhập học — chọn kỳ rồi chọn năm, giống câu B1.4 bên chat */}
+        <div className="space-y-1.5">
+          <Label htmlFor="targetIntakeTerm" className="text-xs font-medium text-foreground">
+            Kỳ muốn nhập học
+          </Label>
+          <div className="grid gap-3 sm:max-w-md sm:grid-cols-2">
+            <div className="relative">
+              <select
+                id="targetIntakeTerm"
+                aria-label="Kỳ nhập học"
+                value={intakeTerm}
+                onChange={(e) => updateIntake(e.target.value, intakeYear)}
+                className="w-full appearance-none rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground shadow-2xs focus:border-brand focus:outline-hidden focus:ring-1 focus:ring-brand cursor-pointer"
+              >
+                <option value="">Chọn kỳ</option>
+                {INTAKE_TERM_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+              <ChevronDownIcon className="absolute right-3 top-2.5 size-4 text-muted-foreground pointer-events-none" />
+            </div>
+            <div className="relative">
+              <select
+                id="targetIntakeYear"
+                aria-label="Năm nhập học"
+                value={intakeYear}
+                onChange={(e) => updateIntake(intakeTerm, e.target.value)}
+                className="w-full appearance-none rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground shadow-2xs focus:border-brand focus:outline-hidden focus:ring-1 focus:ring-brand cursor-pointer"
+              >
+                <option value="">Chọn năm</option>
+                {/* Năm đã lưu từ chat có thể nằm ngoài danh sách — vẫn hiện để không mất */}
+                {intakeYear && !INTAKE_YEAR_OPTIONS.includes(intakeYear) && (
+                  <option value={intakeYear}>{intakeYear}</option>
+                )}
+                {INTAKE_YEAR_OPTIONS.map((yr) => (
+                  <option key={yr} value={yr}>
+                    {yr}
+                  </option>
+                ))}
+              </select>
+              <ChevronDownIcon className="absolute right-3 top-2.5 size-4 text-muted-foreground pointer-events-none" />
+            </div>
+          </div>
+        </div>
       </section>
 
       {/* Question 3: Ngành học mong muốn (bắt buộc) */}
@@ -368,10 +473,24 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
                 ({allMajors.length > 0 ? `${allMajors.length} ngành` : "Đang tải danh sách..."})
               </span>
             </Label>
-            {data.targetMajor && (
+            {data.targetMajor ? (
               <span className="text-xs text-brand font-medium">
                 Đã chọn: <strong className="text-foreground">{data.targetMajor}</strong>
               </span>
+            ) : majorUnknown ? (
+              <span className="text-xs text-brand font-medium">
+                Đã chọn: <strong className="text-foreground">Chưa rõ ngành</strong>
+              </span>
+            ) : (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={handleMajorUnknown}
+                className="text-xs h-7 cursor-pointer"
+              >
+                Chưa rõ
+              </Button>
             )}
           </div>
 
@@ -384,6 +503,7 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
               onFocus={() => setShowMajorDropdown(true)}
               onChange={(e) => {
                 setMajorQuery(e.target.value);
+                if (data.majorUndecided) onUpdate({ majorUndecided: false });
                 setShowMajorDropdown(true);
                 if (majorError) setMajorError(null);
               }}

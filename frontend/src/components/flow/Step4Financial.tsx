@@ -1,14 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowLeftIcon, ArrowRightIcon, DollarSignIcon, HelpCircleIcon, AlertTriangleIcon } from "lucide-react";
+import { ArrowLeftIcon, ArrowRightIcon, ChevronDownIcon, DollarSignIcon, HelpCircleIcon, AlertTriangleIcon } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { DEFAULT_BUDGET_TIERS, SCHOLARSHIP_NEED_OPTIONS } from "@/lib/profile-flow-options";
-import type { BudgetTierId, FinancialDraft, ProfileMetadataResponse, ScholarshipNeed } from "@/types/profile-flow";
+import {
+  BUDGET_RATE,
+  DEFAULT_BUDGET_TIERS,
+  FALLBACK_MAX_USD,
+  FUNDING_SOURCE_OPTIONS,
+  SCHOLARSHIP_NEED_OPTIONS,
+} from "@/lib/profile-flow-options";
+import type { BudgetTierId, FinancialDraft, FundingSource, ProfileMetadataResponse, ScholarshipNeed } from "@/types/profile-flow";
 
 interface Step4FinancialProps {
   data: FinancialDraft;
@@ -18,22 +24,14 @@ interface Step4FinancialProps {
   onNext: () => void;
 }
 
-// Tỉ giá chỉ dùng để quy đổi trên form; số tiền không được lưu, chỉ lưu mã mức
-const RATE = 25000;
-// Ngưỡng trên (USD) của từng mức khi metadata không có minUsd/maxUsd
-const FALLBACK_MAX_USD: Partial<Record<BudgetTierId, number>> = {
-  tier_under_20k: 20000,
-  tier_20k_35k: 35000,
-  tier_35k_50k: 50000,
-  tier_50k_70k: 70000,
-};
-
 type Currency = "vnd" | "usd";
 
 export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Step4FinancialProps) {
   const [financialError, setFinancialError] = useState<string | null>(null);
   const [currency, setCurrency] = useState<Currency>("vnd");
   const [amountText, setAmountText] = useState("");
+  // Tỷ giá mới nhất từ BE, chưa có thì dùng tỷ giá mặc định
+  const RATE = Math.round(metadata?.vndPerUsd || BUDGET_RATE);
 
   // Chỉ lưu mã mức; min/max USD do BE lấy từ seed metadata khi commit
   const budgetTiers: { key: BudgetTierId; label: string; description: string }[] =
@@ -261,6 +259,29 @@ export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Ste
               </button>
             );
           })}
+        </div>
+      </section>
+
+      {/* Question 3: Funding Source — không bắt buộc, giống câu F3 bên chat */}
+      <section className="space-y-2 pt-2">
+        <Label htmlFor="fundingSource" className="text-sm font-semibold text-foreground">
+          Ai sẽ chi trả chính cho việc du học? · Không bắt buộc
+        </Label>
+        <div className="relative sm:max-w-sm">
+          <select
+            id="fundingSource"
+            value={data.fundingSource ?? ""}
+            onChange={(e) => onUpdate({ fundingSource: (e.target.value || null) as FundingSource | null })}
+            className="w-full appearance-none rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground shadow-2xs focus:border-brand focus:outline-hidden focus:ring-1 focus:ring-brand cursor-pointer"
+          >
+            <option value="">Chưa chọn</option>
+            {FUNDING_SOURCE_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+          <ChevronDownIcon className="absolute right-3 top-2.5 size-4 text-muted-foreground pointer-events-none" />
         </div>
       </section>
 

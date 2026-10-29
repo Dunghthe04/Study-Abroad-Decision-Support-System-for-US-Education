@@ -13,18 +13,17 @@ from typing import Any, Protocol
 from app.schemas.chat import ChatRequest, ChatResponse, ChatState, Citation, QuickReply, Step, Widget
 from app.services.intake import (
     CHAT_BUTTON,
+    CONTINUE_CHAT,
     FORM_BUTTON,
-    INTAKE_ASK,
     INTAKE_FORM,
     INTAKE_ID,
     INTAKE_MORE,
-    has_profile,
+    intake_ask,
     intake_choice,
-    next_question,
 )
 from app.services.pii_mask import mask_personal_info
 from app.services.profile_sync import changed_keys, merge_profile
-from app.services.skill_rules import Plan, missing_fields, plan_skills
+from app.services.skill_rules import REQUIRED_B3, REQUIRED_BY_SKILL, Plan, missing_fields, plan_skills
 
 # Tạo 1 logger
 logger = logging.getLogger("advisor.chat")
@@ -71,6 +70,11 @@ NEED_MAJOR = "Để gợi ý trường mình cần biết ngành bạn muốn h�
 INTERRUPT_SKILLS = {"skill_tra_loi"}
 BACK_TO_QUESTION = "Quay lại câu mình đang hỏi nhé: "
 OPENING_QUESTIONS = {"B0.1", "B0.2"}
+# Skill đánh giá hồ sơ (B3): chạy ngay khi rà soát hồ sơ xong
+ASSESS_SKILL = "skill_danh_gia"
+END_SKILL = "ket_thuc"
+# Bước hỏi hồ sơ (bậc học, hồ sơ): câu hỏi có nút gợi ý
+INTAKE_STEPS = ("B1", "B2")
 
 
 # Ghi lại câu vừa hỏi vào Chatsate, lưu last_question, question_id và tăng số lần hỏi
@@ -167,10 +171,13 @@ class ChatFlow:
         message = last_user_message(req)
         # chương trình lấy thời điểm kết thúc trừ thời điểm bắt đầu để tính thời gian xử lý.
         started = time.perf_counter()
-        # Đang chờ học sinh chọn cách điền hồ sơ: nhận lựa chọn bằng chữ trên nút, không nhờ model
-        if state.question_id == INTAKE_ID:
-            state.question_id = None
-            choice = intake_choice(message)
+        # Đang chờ học sinh chọn cách điền hồ sơ: nhận lựa chọn bằng chữ trên nút, không nhờ model.
+        # Nút "Tiếp tục bằng chat" trên form thì hỏi tiếp trong chat dù chat không đang chờ chọn
+        continue_chat = message.strip() == CONTINUE_CHAT
+        if state.question_id == INTAKE_ID or continue_chat:
+            if state.question_id == INTAKE_ID:
+                state.question_id = None
+            choice = "chat" if continue_chat else intake_choice(message)
             if choice:
                 output = begin_intake(state, choice)
                 log_turn(
@@ -191,8 +198,16 @@ class ChatFlow:
                     profile_changed=changed_keys(profile_before, state.profile),
                 )
 
-        # 1. Model chọn skill(lỗi thì coi như không chắc, dùng skill của bước hiện tại)
-        predicted, probs = await self._choose(state, message)
+        # 1. Model chọn skill(lỗi thì coi như không chắc, dùng skill của bước hiện tại).
+        # Bấm nút của câu đang hỏi ở B1, B2 là câu trả lời rõ: dùng skill của bước, không nhờ model
+        # (model từng đoán nút "Bỏ qua" là muốn dừng nên kết thúc cuộc trò chuyện giữa chừng)
+        if state.current_step in INTAKE_STEPS and is_button(state.question_id, message):
+            predicted, probs = [], {}
+        else:
+            predicted, probs = await self._choose(state, message)
+        # Kết thúc chỉ khi học sinh chỉ muốn dừng; đi kèm skill khác thì học sinh đang trả lời, không dừng
+        if len(predicted) > 1:
+            predicted = [skill for skill in predicted if skill != END_SKILL]
 
         # 2. Code kiểm luật: tối đa 2 skill, thứ tự chạy, điều kiện chạy
         plan = plan_skills(state, predicted, has_results=state.has_results)
@@ -206,7 +221,8 @@ class ChatFlow:
         widget: Widget | None = None
         citations: list[Citation] = []
         disclaimer: str | None = None
-        for skill in plan.skills:
+        skills = list(plan.skills)
+        for skill in skills:
             # Lấy ra handler của skill, nếu không có thì trả NOT_READY
             handler = self._handlers.get(skill)
             if handler is None:
@@ -220,14 +236,19 @@ class ChatFlow:
             widget = output.widget or widget
             citations += [c for c in output.citations if c not in citations]
             disclaimer = output.disclaimer or disclaimer
+            # Rà soát hồ sơ xong (skill_ho_so vừa chuyển sang B3, không còn câu chờ): đánh giá luôn trong lượt này,
+            # không bắt học sinh nhắn thêm một lần nữa mới thấy kết quả
+            if state.current_step == "B3" and state.question_id is None and ASSESS_SKILL not in skills:
+                skills.append(ASSESS_SKILL)
         # Skill chưa có handler chỉ báo "đang hoàn thiện" khi chưa có skill nào trả lời được
         if not_ready and not answers:
             # Lượt đầu mà chưa skill nào trả lời được: chào như cũ thay vì báo "đang hoàn thiện"
             answers.append(QUESTIONS["B0.1"] if first_turn else NOT_READY)
         # Nếu bị chặn thì thêm câu trả lời
         # Bị chặn vì thiếu hồ sơ thì bắt đầu hỏi hồ sơ thay vì chỉ báo thiếu
-        if any(b.reason == "thieu_ho_so" for b in plan.blocked):
-            intake = start_intake(state)
+        blocked_profile = next((b for b in plan.blocked if b.reason == "thieu_ho_so"), None)
+        if blocked_profile is not None:
+            intake = start_intake(state, REQUIRED_BY_SKILL.get(blocked_profile.skill, REQUIRED_B3))
             answers.append(intake.answer)
             quick_replies = intake.quick_replies or quick_replies
             widget = intake.widget or widget
@@ -255,7 +276,7 @@ class ChatFlow:
         return ChatResponse(
             answer="\n\n".join(dict.fromkeys(answers)) or NOT_READY,
             state=state,
-            skills=plan.skills,
+            skills=skills,
             quick_replies=quick_replies,
             widget=widget,
             citations=citations,
@@ -287,6 +308,16 @@ def last_user_message(req: ChatRequest) -> str:
     return req.messages[-1].content
 
 
+# Tin nhắn là chữ trên một nút (hoặc câu ghép của ô nhập chứng chỉ, hoạt động...) của câu đang hỏi
+def is_button(question_id: str | None, message: str) -> bool:
+    # Nhập muộn vì buttons, skill_ho_so nhập chat_flow
+    from app.services.skills import buttons, skill_ho_so
+
+    return buttons.pressed(question_id, message, can_skip=True) is not None or skill_ho_so.is_form_text(
+        question_id, message
+    )
+
+
 # Skill bị chặn thì nói cho học sinh biết vì sao
 # Câu nói cho học sinh biết vì sao skill bị chặn, theo lý do
 BLOCKED_ANSWER = {
@@ -302,18 +333,15 @@ def blocked_answers(plan: Plan, skip: set[str] | None = None) -> list[str]:
 
 
 # Bắt đầu hỏi hồ sơ khi một skill bị chặn vì thiếu hồ sơ
-def start_intake(state: ChatState) -> SkillOutput:
-    # Chưa có thông tin nào và chưa chọn cách điền: mời chọn chat hay form
-    if state.intake_mode is None and not has_profile(state.profile):
-        state.question_id = INTAKE_ID
-        # Câu mời này nằm ngoài 23 câu model đã học nên để rỗng, model sẽ nhìn như "không có câu nào đang chờ"
-        state.last_question = ""
-        return SkillOutput(INTAKE_ASK, [CHAT_BUTTON, FORM_BUTTON])
-    # Đã chọn form mà chưa điền gì: nhắc lại form
-    if state.intake_mode == "form" and not has_profile(state.profile):
-        return SkillOutput(INTAKE_FORM, widget=Widget(type="form"))
-    # Đã có một phần hồ sơ: hỏi tiếp phần còn thiếu ngay trong chat
-    return ask_next_missing(state, INTAKE_MORE)
+def start_intake(state: ChatState, required: list[str] = REQUIRED_B3) -> SkillOutput:
+    # Đang trả lời trong chat thì hỏi tiếp phần còn thiếu
+    if state.intake_mode == "chat":
+        return ask_next_missing(state, INTAKE_MORE)
+    # Chưa chọn, hoặc đã chọn form mà vẫn còn thiếu: mời chọn chat hay form (nói còn thiếu mấy mục)
+    state.question_id = INTAKE_ID
+    # Câu mời này nằm ngoài 23 câu model đã học nên để rỗng, model sẽ nhìn như "không có câu nào đang chờ"
+    state.last_question = ""
+    return SkillOutput(intake_ask(state.profile, required), [CHAT_BUTTON, FORM_BUTTON])
 
 
 # Đến B4 mà chưa có ngành: hiện ô chọn ngành, câu trả lời sẽ được skill_bac_hoc đọc ở bước B1
@@ -332,15 +360,17 @@ def begin_intake(state: ChatState, choice: str) -> SkillOutput:
     return ask_next_missing(state)
 
 
-# Hỏi câu đầu tiên còn thiếu; lượt sau skill của bước đó đọc câu trả lời
+# Hỏi lần lượt mọi mục của form còn thiếu (B1 rồi B2), kèm nút / ô chọn của từng câu;
+# lượt sau skill của bước đó đọc câu trả lời
 def ask_next_missing(state: ChatState, prefix: str = "") -> SkillOutput:
-    target = next_question(state.profile)
-    if target is None:
-        return SkillOutput(NEED_PROFILE)
-    step, question_id = target
+    # Nhập muộn vì các skill nhập chat_flow
+    from app.services.skills import skill_bac_hoc
+
     state.intake_mode = "chat"
-    go_to(state, step)  # đổi bước trước, rồi mới hỏi (ask lưu mã câu sau go_to)
-    return SkillOutput(prefix + ask(state, question_id))
+    go_to(state, "B1")  # skill_bac_hoc hết câu B1 thì tự sang B2
+    output = skill_bac_hoc.ask_next(state)
+    output.answer = prefix + output.answer
+    return output
 
 
 # Mỗi lượt ghi một dòng JSON: tin nhắn, model chọn gì, code chạy gì
