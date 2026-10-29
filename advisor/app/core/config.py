@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     llm_seed: int = 42
     embedding_model: str = "bge-m3"
     database_url: str = ""
+    # Địa chỉ backend .NET: B6 lấy trung tâm qua API của backend (luật chọn trung tâm nằm ở đó).
+    backend_base_url: str = "http://localhost:5080"
+    backend_timeout_seconds: float = 10
     # khi thử có thể đặt "verified,draft"
     knowledge_statuses: str = "verified"
     # Độ tương đồng tối thiểu (cosine, 0 đến 1) giữa câu hỏi và câu hỏi mẫu trong kho; thấp hơn thì từ chối

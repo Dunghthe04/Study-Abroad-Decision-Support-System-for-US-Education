@@ -1,4 +1,5 @@
 namespace StudyAbroad.Application.StudyCenters;
+public record CenterReferralQuery(string? Service = null, string? StudyLevel = null, string? City = null);
 
 public record StudyCenterDto(
     Guid Id,

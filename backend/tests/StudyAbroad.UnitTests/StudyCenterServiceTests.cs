@@ -18,6 +18,9 @@ public class StudyCenterServiceTests
 
         public Task<StudyCenter?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
             Task.FromResult(centers.FirstOrDefault(c => c.Id == id));
+
+        public Task<IReadOnlyList<StudyCenter>> ListReferableAsync(CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<StudyCenter>>(centers);
     }
 
     [Fact]
