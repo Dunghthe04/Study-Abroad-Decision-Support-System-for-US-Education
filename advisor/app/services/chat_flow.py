@@ -120,6 +120,7 @@ class SkillOutput:
     citations: list[Citation] = field(default_factory=list)  # nguồn của thông tin trong câu trả lời
     disclaimer: str | None = None  # lời lưu ý kèm theo
     action: str | None = None  # việc .NET cần làm sau lượt này, xem ChatResponse.action
+    action_data: dict[str, Any] = field(default_factory=dict)  # dữ liệu kèm action
 
 
 # Hợp đồng chung mọi skill: nhân trạng thái và tin nhắn, trả câu trả lời
@@ -170,6 +171,9 @@ class ChatFlow:
         # Hồ sơ trong nháp (do .NET gửi) là nguồn thật; không gửi thì giữ hồ sơ trong state như cũ
         if req.profile is not None:
             state.profile = merge_profile(state.profile, req.profile)
+        # Danh sách trường gợi ý do .NET gửi mỗi lượt; không gửi thì giữ như cũ
+        if req.schools is not None:
+            state.schools = req.schools
         # Cuộc trò chuyện đã kết thúc mà học sinh nhắn tiếp: mở lại từ đầu (giữ hồ sơ), như vừa được chào ở B0.1.
         # Model chọn skill chưa từng học bước END nên nếu để nguyên sẽ đoán sai.
         if state.current_step == "END":
@@ -231,6 +235,7 @@ class ChatFlow:
         citations: list[Citation] = []
         disclaimer: str | None = None
         action: str | None = None
+        action_data: dict[str, Any] = {}
         skills = list(plan.skills)
         for skill in skills:
             # Lấy ra handler của skill, nếu không có thì trả NOT_READY
@@ -249,7 +254,8 @@ class ChatFlow:
             widget = output.widget or widget
             citations += [c for c in output.citations if c not in citations]
             disclaimer = output.disclaimer or disclaimer
-            action = output.action or action
+            if output.action:
+                action, action_data = output.action, output.action_data
             # Rà soát hồ sơ xong (skill_ho_so vừa chuyển sang B3, không còn câu chờ): đánh giá luôn trong lượt này,
             # không bắt học sinh nhắn thêm một lần nữa mới thấy kết quả
             if state.current_step == "B3" and state.question_id is None and ASSESS_SKILL not in skills:
@@ -306,6 +312,7 @@ class ChatFlow:
             profile=state.profile,
             profile_changed=changed_keys(profile_before, state.profile),
             action=action,
+            action_data=action_data,
         )
 
     # Gọi model; lỗi (chưa nạp model, Ollama tắt...) thì trả về "không chắc"
