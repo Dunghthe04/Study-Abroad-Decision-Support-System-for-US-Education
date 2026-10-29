@@ -31,6 +31,7 @@ from app.services.skill_rules import (
     missing_fields,
     plan_skills,
 )
+from app.services.small_talk import classify
 
 # Tạo 1 logger
 logger = logging.getLogger("advisor.chat")
@@ -128,9 +129,28 @@ class SkillHandler(Protocol):
     async def run(self, state: ChatState, message: str) -> SkillOutput: ...
 
 
+GOODBYE = "Chúc bạn thành công. Khi cần bạn cứ quay lại nhé."
+GREETING = "Chào bạn! Mình là trợ lý tư vấn du học Mỹ."
+THANKS = "Rất vui được giúp bạn!"
+# Chào hoặc cảm ơn giữa chừng: mời học sinh làm tiếp, không bắt đầu lại
+ASK_MORE = "Bạn cần mình giúp gì về du học Mỹ?"
+ASK_MORE_WITH_RESULTS = (
+    "Bạn có thể hỏi mình về một trường trong danh sách gợi ý, về visa, học bổng hoặc tìm trung tâm tư vấn."
+)
+
+
 # Skill tạm: học sinh nói lạc đề thì trả lời ngắn và nhắc lại câu đang hỏi
+# Lời xã giao (chào, cảm ơn, tạm biệt) mà model xếp nhầm vào đây thì đáp đúng chỗ, không đáp "chỉ hỗ trợ du học"
 class OffTopicHandler:
     async def run(self, state: ChatState, message: str) -> SkillOutput:
+        kind = classify(message)
+        if kind == "goodbye":
+            go_to(state, "END")
+            return SkillOutput(GOODBYE)
+        if kind is not None:
+            opening = GREETING if kind == "greeting" else THANKS
+            follow_up = state.last_question or (ASK_MORE_WITH_RESULTS if state.has_results else ASK_MORE)
+            return SkillOutput(f"{opening} {follow_up}")
         if state.last_question:
             return SkillOutput(f"Mình chỉ hỗ trợ tư vấn du học Mỹ thôi nhé. {state.last_question}")
         return SkillOutput("Mình chỉ hỗ trợ tư vấn du học Mỹ thôi nhé. Bạn cần mình giúp gì về du học?")
@@ -140,7 +160,7 @@ class OffTopicHandler:
 class EndHandler:
     async def run(self, state: ChatState, message: str) -> SkillOutput:
         go_to(state, "END")
-        return SkillOutput("Chúc bạn thành công. Khi cần bạn cứ quay lại nhé.")
+        return SkillOutput(GOODBYE)
 
 
 class ChatFlow:
