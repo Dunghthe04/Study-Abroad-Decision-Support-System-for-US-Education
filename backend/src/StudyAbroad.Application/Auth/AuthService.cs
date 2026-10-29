@@ -27,6 +27,9 @@ namespace StudyAbroad.Application.Auth
         Task<bool> LogoutAsync(string rawToken, CancellationToken ct = default);
         Task<UserDto?> GetMeAsync(Guid userId, CancellationToken ct = default);
         Task<List<UserDto>> GetAllUsersAsync(CancellationToken ct = default);
+        Task<AuthResult> CreateModeratorAccountAsync(CreateModeratorAccountRequest request, CancellationToken ct = default);
+        /// <summary>[UC-60] Xem danh sách tài khoản — tìm, lọc, phân trang.</summary>
+        Task<PagedResult<UserDto>> GetAdminUserAccountListAsync(AdminUserAccountListQuery query, CancellationToken ct = default);
     }
 
     public class AuthService(IUserRepository users, IPasswordHasher hasher, ITokenService tokens, IEmailSender emailSender, IParentLinkRepository parentLinks) : IAuthService
@@ -687,6 +690,79 @@ namespace StudyAbroad.Application.Auth
         {
             var list = await users.GetAllUsersAsync(ct);
             return list.Select(ToDto).ToList();
+        }
+
+        private const int AdminUserListMaxPageSize = 100;
+
+        /// <summary>[UC-60] Danh sách tài khoản cho admin (một trang, có tìm/lọc).</summary>
+        public async Task<PagedResult<UserDto>> GetAdminUserAccountListAsync(AdminUserAccountListQuery query, CancellationToken ct = default)
+        {
+            var normalized = query with
+            {
+                Page = Math.Max(1, query.Page),
+                PageSize = Math.Clamp(query.PageSize, 1, AdminUserListMaxPageSize),
+                Search = string.IsNullOrWhiteSpace(query.Search) ? null : query.Search.Trim(),
+                Role = string.IsNullOrWhiteSpace(query.Role) ? null : query.Role.Trim(),
+                Status = string.IsNullOrWhiteSpace(query.Status) ? null : query.Status.Trim(),
+            };
+
+            var page = await users.GetAdminUserAccountListAsync(normalized, ct);
+            return new PagedResult<UserDto>(
+                page.Items.Select(ToDto).ToList(),
+                page.Page,
+                page.PageSize,
+                page.TotalCount);
+        }
+
+        /// <summary>[UC-63] Administrator tạo tài khoản moderator — trạng thái active, không qua OTP đăng ký công khai.</summary>
+        public async Task<AuthResult> CreateModeratorAccountAsync(CreateModeratorAccountRequest request, CancellationToken ct = default)
+        {
+            var email = NormalizeEmail(request.Email);
+            var fullName = request.FullName?.Trim() ?? string.Empty;
+            var rawPhone = request.Phone?.Trim();
+            string? normalizedPhone = null;
+
+            if (string.IsNullOrEmpty(email) || email.Length > MaxEmailLength || !IsValidEmail(email))
+                return AuthResult.Fail(AuthError.Validation, $"Email không hợp lệ hoặc vượt quá {MaxEmailLength} ký tự.");
+
+            var passwordError = ValidatePassword(request.Password, "Mật khẩu");
+            if (passwordError != null)
+                return AuthResult.Fail(AuthError.Validation, passwordError);
+
+            if (fullName.Length == 0 || fullName.Length > MaxFullNameLength)
+                return AuthResult.Fail(AuthError.Validation, $"Họ tên không được để trống và tối đa {MaxFullNameLength} ký tự.");
+
+            if (!string.IsNullOrEmpty(rawPhone))
+            {
+                if (rawPhone.Length > MaxRawPhoneLength)
+                    return AuthResult.Fail(AuthError.Validation, $"Số điện thoại không được vượt quá {MaxRawPhoneLength} ký tự.");
+
+                if (!TryValidateAndNormalizeVietnamesePhone(rawPhone, out var cleanPhone))
+                    return AuthResult.Fail(AuthError.Validation, "Số điện thoại không đúng định dạng Việt Nam (ví dụ: 0912345678 hoặc +84912345678).");
+
+                normalizedPhone = cleanPhone;
+            }
+
+            if (await users.EmailExistAsync(email, ct))
+                return AuthResult.Fail(AuthError.Validation, "Email đã được sử dụng.");
+
+            if (!string.IsNullOrEmpty(normalizedPhone) && await users.PhoneExistAsync(normalizedPhone, ct))
+                return AuthResult.Fail(AuthError.Validation, "Số điện thoại đã được sử dụng.");
+
+            var user = new User
+            {
+                Email = email,
+                PasswordHash = hasher.Hash(request.Password),
+                FullName = fullName,
+                Role = UserRoles.Moderator,
+                Status = UserStatuses.Active,
+                Phone = normalizedPhone,
+                FailedLoginAttempts = 0,
+                LockoutEnd = null,
+            };
+            await users.AddAsync(user, ct);
+
+            return AuthResult.Ok(ToDto(user), "Đã tạo tài khoản moderator.");
         }
     }
 }

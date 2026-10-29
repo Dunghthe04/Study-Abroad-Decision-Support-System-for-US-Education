@@ -1,3 +1,4 @@
+using StudyAbroad.Application.Common;
 using StudyAbroad.Domain.Entities;
 using System;
 using System.Collections.Generic;
@@ -36,5 +37,8 @@ namespace StudyAbroad.Application.Auth
 
         // [USAS-362] Quản lý danh sách người dùng (dành cho Admin)
         Task<List<User>> GetAllUsersAsync(CancellationToken cancellationToken = default);
+
+        /// <summary>[UC-60] Danh sách tài khoản có tìm, lọc, phân trang.</summary>
+        Task<PagedResult<User>> GetAdminUserAccountListAsync(AdminUserAccountListQuery query, CancellationToken cancellationToken = default);
     }
 }

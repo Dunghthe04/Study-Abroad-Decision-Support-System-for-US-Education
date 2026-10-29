@@ -56,7 +56,24 @@ export interface AdvisorChatResponse {
 }
 
 // [USAS-362] Kiểu dữ liệu xác thực và người dùng
-export type UserRole = "student" | "parent" | "center" | "admin";
+export type UserRole = "student" | "parent" | "center" | "moderator" | "admin";
+
+/** [UC-60] Tìm, lọc, phân trang danh sách tài khoản (admin). */
+export interface AdminUserAccountListQuery {
+  search?: string;
+  role?: UserRole | "";
+  status?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+/** [UC-63] Admin tạo tài khoản moderator (khách không tự đăng ký). */
+export interface CreateModeratorAccountRequest {
+  email: string;
+  password: string;
+  fullName: string;
+  phone?: string | null;
+}
 
 export interface UserDto {
   id: string;
