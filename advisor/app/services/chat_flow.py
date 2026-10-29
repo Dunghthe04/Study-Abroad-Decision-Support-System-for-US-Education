@@ -244,7 +244,6 @@ class ChatFlow:
             # Skill chỉ chuyển bước (câu trả lời rỗng) thì không thêm câu nào, skill của bước mới sẽ trả lời
             if output.answer:
                 answers.append(output.answer)
-            answers.append(output.answer)
             # Mỗi lượt chỉ hiện một bộ nút và một công cụ nhập: lấy của skill chạy sau cùng có đưa ra
             quick_replies = output.quick_replies or quick_replies
             widget = output.widget or widget
