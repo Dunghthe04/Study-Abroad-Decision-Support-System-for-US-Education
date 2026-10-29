@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Building2Icon, FileTextIcon, LogOutIcon, ShieldIcon, UserIcon } from "lucide-react";
+import { Building2Icon, FileTextIcon, LayoutDashboardIcon, LogOutIcon, ShieldIcon, UserIcon } from "lucide-react";
 import { formatUserRole } from "@/lib/user-role-labels";
 import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -18,6 +18,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
+import { isAdminRoute } from "@/lib/admin-nav";
 import { isWideRoute } from "@/lib/layout-routes";
 import { cn } from "@/lib/utils";
 
@@ -40,6 +41,8 @@ export function SiteHeader() {
     return pathname.startsWith(href);
   };
 
+  const canOpenAdmin = user?.role === "admin" || user?.role === "moderator";
+
   const handleLogout = async () => {
     await logout();
     router.push("/login");
@@ -50,7 +53,11 @@ export function SiteHeader() {
       <nav
         className={cn(
           "mx-auto flex items-center justify-between gap-6 px-4 py-2.5",
-          isWideRoute(pathname) ? "max-w-[1320px] sm:px-6" : "max-w-5xl"
+          isAdminRoute(pathname)
+            ? "max-w-none sm:px-6"
+            : isWideRoute(pathname)
+              ? "max-w-[1320px] sm:px-6"
+              : "max-w-5xl"
         )}
       >
         <div className="flex min-w-0 items-center gap-6">
@@ -114,6 +121,12 @@ export function SiteHeader() {
                   <DropdownMenuLabel>{user.fullName}</DropdownMenuLabel>
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />
+                {canOpenAdmin && (
+                  <DropdownMenuItem render={<Link href="/admin" />}>
+                    <LayoutDashboardIcon />
+                    Trang quản trị
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem render={<Link href="/analysis" />}>
                   <FileTextIcon />
                   Phân tích tư vấn
