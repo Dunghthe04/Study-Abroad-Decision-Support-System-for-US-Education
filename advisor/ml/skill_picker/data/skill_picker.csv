@@ -1363,3 +1363,441 @@ S1361,end-3,B4,,dạ tạm biệt nha bạn,,ket_thuc,synthetic,train
 S1362,end-8,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,à thôi em đi đây nhé,,ket_thuc,synthetic,train
 S1363,end-5,B4,,dạ bye,,ket_thuc,synthetic,train
 S1364,end-7,B4,,"cho em hỏi, vay duoc roi, em cam on",,ket_thuc,synthetic,train
+S1365,def-1,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,SAT là gì,,skill_tra_loi,synthetic,train
+S1366,def-1,B5,,SAT nghĩa là gì,,skill_tra_loi,synthetic,train
+S1367,def-1,B4,,em chưa hiểu SAT là gì,,skill_tra_loi,synthetic,train
+S1368,def-1,B1,"Hiện bạn đang học lớp mấy, hoặc đang làm gì?",SAT là gì vậy ạ,"target_level, gpa, english, budget, major, scholarship",skill_tra_loi,synthetic,train
+S1369,def-1,B5,,sat la gi,,skill_tra_loi,synthetic,train
+S1370,def-2,B4,,ACT là gì,,skill_tra_loi,synthetic,train
+S1371,def-2,B5,,ACT là gì vậy ạ,,skill_tra_loi,synthetic,train
+S1372,def-2,B1,Bạn muốn sang Mỹ học bậc nào?,ACT nghĩa là gì,"target_level, budget, major, scholarship",skill_tra_loi,synthetic,train
+S1373,def-2,B0,"Bạn muốn mình tìm trường theo hồ sơ của bạn, hay bạn đang có câu hỏi cụ thể?",mình muốn hiểu ACT là gì,"target_level, gpa, english, budget, major, scholarship",skill_tra_loi,synthetic,train
+S1374,def-2,B4,,act la gi,,skill_tra_loi,synthetic,train
+S1375,def-3,B0,"Chào bạn, mình là trợ lý tư vấn du học Mỹ. Bạn đang cần mình giúp điều gì?",IELTS nghĩa là gì,"target_level, english, budget, major, scholarship",skill_tra_loi,synthetic,val
+S1376,def-3,B2,"Bạn học chương trình nào: THPT Việt Nam, IB, A-level hay AP?",cho em hỏi IELTS là gì,,skill_tra_loi,synthetic,val
+S1377,def-3,B4,,mình muốn hiểu IELTS là gì,,skill_tra_loi,synthetic,val
+S1378,def-3,B4,,IELTS là sao ạ,,skill_tra_loi,synthetic,val
+S1379,def-3,B1,"Bạn định học ngành gì? Chưa chắc cũng không sao, bạn cứ kể vài môn bạn thích.",ielts nghia la gi,"gpa, major, scholarship",skill_tra_loi,synthetic,val
+S1380,def-4,B2,"Bạn đã có chứng chỉ tiếng Anh nào chưa (IELTS, TOEFL, Duolingo)? Điểm bao nhiêu, thi khi nào?",TOEFL là sao ạ,english,skill_tra_loi,synthetic,train
+S1381,def-4,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,TOEFL nghĩa là gì,,skill_tra_loi,synthetic,train
+S1382,def-4,B5,,em chưa hiểu TOEFL là gì,,skill_tra_loi,synthetic,train
+S1383,def-4,B0,"Chào bạn, mình là trợ lý tư vấn du học Mỹ. Bạn đang cần mình giúp điều gì?",TOEFL là gì,"target_level, gpa, english, major",skill_tra_loi,synthetic,train
+S1384,def-4,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,toefl la sao a,,skill_tra_loi,synthetic,train
+S1385,def-5,B3,,em chưa hiểu Duolingo English Test là gì,,skill_tra_loi,synthetic,train
+S1386,def-5,B5,,Duolingo English Test là sao ạ,,skill_tra_loi,synthetic,train
+S1387,def-5,B4,,mình muốn hiểu Duolingo English Test là gì,,skill_tra_loi,synthetic,train
+S1388,def-5,B0,"Chào bạn, mình là trợ lý tư vấn du học Mỹ. Bạn đang cần mình giúp điều gì?",cho em hỏi Duolingo English Test là gì,"target_level, gpa, major, scholarship",skill_tra_loi,synthetic,train
+S1389,def-5,B3,,em chua hieu duolingo english test la gi,,skill_tra_loi,synthetic,train
+S1390,def-6,B4,,PTE là gì thế bạn,,skill_tra_loi,synthetic,val
+S1391,def-6,B0,"Bạn muốn mình tìm trường theo hồ sơ của bạn, hay bạn đang có câu hỏi cụ thể?",PTE là sao ạ,"target_level, gpa, english, budget, major, scholarship",skill_tra_loi,synthetic,val
+S1392,def-6,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,PTE là gì vậy ạ,,skill_tra_loi,synthetic,val
+S1393,def-6,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,mình muốn hiểu PTE là gì,,skill_tra_loi,synthetic,val
+S1394,def-6,B3,,pte la gi the ban,,skill_tra_loi,synthetic,val
+S1395,def-7,B2,Bạn thích trường công hay trường tư?,GRE nghĩa là gì,"gpa, scholarship",skill_tra_loi,synthetic,val
+S1396,def-7,B4,,cho em hỏi GRE là gì,,skill_tra_loi,synthetic,val
+S1397,def-7,B5,,GRE là sao ạ,,skill_tra_loi,synthetic,val
+S1398,def-7,B1,"Hiện bạn đang học lớp mấy, hoặc đang làm gì?",mình muốn hiểu GRE là gì,"target_level, gpa, english, budget, major, scholarship",skill_tra_loi,synthetic,val
+S1399,def-7,B4,,gre nghia la gi,,skill_tra_loi,synthetic,val
+S1400,def-8,B2,"Bạn kể giúp mình các hoạt động ngoại khóa: tên, vai trò, phạm vi (trường, quận, thành phố, quốc gia, quốc tế), làm trong bao lâu.",GMAT là gì vậy ạ,,skill_tra_loi,synthetic,train
+S1401,def-8,B3,,GMAT là sao ạ,,skill_tra_loi,synthetic,train
+S1402,def-8,B4,,em chưa hiểu GMAT là gì,,skill_tra_loi,synthetic,train
+S1403,def-8,B1,"Bạn định học ngành gì? Chưa chắc cũng không sao, bạn cứ kể vài môn bạn thích.",GMAT là gì thế bạn,"gpa, major, scholarship",skill_tra_loi,synthetic,train
+S1404,def-8,B5,,gmat la gi vay a,,skill_tra_loi,synthetic,train
+S1405,def-9,B4,,AP là gì vậy ạ,,skill_tra_loi,synthetic,train
+S1406,def-9,B3,,em chưa hiểu AP là gì,,skill_tra_loi,synthetic,train
+S1407,def-9,B5,,mình muốn hiểu AP là gì,,skill_tra_loi,synthetic,train
+S1408,def-9,B1,"Hiện bạn đang học lớp mấy, hoặc đang làm gì?",AP là sao ạ,"target_level, gpa, english, major",skill_tra_loi,synthetic,train
+S1409,def-9,B4,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,ap la gi vay a,,skill_tra_loi,synthetic,train
+S1410,def-10,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,IB là gì,,skill_tra_loi,synthetic,train
+S1411,def-10,B1,Bạn muốn sang Mỹ học bậc nào?,IB là gì vậy ạ,"target_level, gpa, english, budget, major, scholarship",skill_tra_loi,synthetic,train
+S1412,def-10,B4,,mình muốn hiểu IB là gì,,skill_tra_loi,synthetic,train
+S1413,def-10,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,IB là gì thế bạn,,skill_tra_loi,synthetic,train
+S1414,def-10,B2,"Bạn cần học bổng ở mức nào: không cần, nên có, hay bắt buộc phải có mới đi được?",ib la gi,,skill_tra_loi,synthetic,train
+S1415,def-11,B2,"Bạn dự định thi khi nào, mục tiêu khoảng bao nhiêu điểm?",GPA là sao ạ,,skill_tra_loi,synthetic,train
+S1416,def-11,B2,Gia đình bạn có thể chi khoảng bao nhiêu mỗi năm cho cả học phí và sinh hoạt?,GPA là gì vậy ạ,"english, scholarship",skill_tra_loi,synthetic,train
+S1417,def-11,B5,,mình muốn hiểu GPA là gì,,skill_tra_loi,synthetic,train
+S1418,def-11,B5,,GPA là gì,,skill_tra_loi,synthetic,train
+S1419,def-11,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,gpa la sao a,,skill_tra_loi,synthetic,train
+S1420,def-12,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,test-optional là gì vậy ạ,,skill_tra_loi,synthetic,train
+S1421,def-12,B2,Gia đình bạn có thể chi khoảng bao nhiêu mỗi năm cho cả học phí và sinh hoạt?,test-optional là gì,"gpa, english, scholarship",skill_tra_loi,synthetic,train
+S1422,def-12,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,test-optional là gì thế bạn,,skill_tra_loi,synthetic,train
+S1423,def-12,B4,,test-optional nghĩa là gì,,skill_tra_loi,synthetic,train
+S1424,def-12,B4,,test-optional la gi vay a,,skill_tra_loi,synthetic,train
+S1425,def-13,B5,,em chưa hiểu superscore là gì,,skill_tra_loi,synthetic,train
+S1426,def-13,B0,"Bạn muốn mình tìm trường theo hồ sơ của bạn, hay bạn đang có câu hỏi cụ thể?",superscore nghĩa là gì,"target_level, gpa, english, budget, major",skill_tra_loi,synthetic,train
+S1427,def-13,B4,,superscore là gì,,skill_tra_loi,synthetic,train
+S1428,def-13,B5,,cho em hỏi superscore là gì,,skill_tra_loi,synthetic,train
+S1429,def-13,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,em chua hieu superscore la gi,,skill_tra_loi,synthetic,train
+S1430,def-14,B2,,I-20 là gì,scholarship,skill_tra_loi,synthetic,train
+S1431,def-14,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,mình muốn hiểu I-20 là gì,,skill_tra_loi,synthetic,train
+S1432,def-14,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,I-20 là sao ạ,,skill_tra_loi,synthetic,train
+S1433,def-14,B1,"Hiện bạn đang học lớp mấy, hoặc đang làm gì?",cho em hỏi I-20 là gì,"target_level, gpa, english, major, scholarship",skill_tra_loi,synthetic,train
+S1434,def-14,B1,"Hiện bạn đang học lớp mấy, hoặc đang làm gì?",i-20 la gi,"target_level, gpa, english, budget, major",skill_tra_loi,synthetic,train
+S1435,def-15,B1,Bạn muốn sang Mỹ học bậc nào?,DS-2019 là gì thế bạn,"target_level, gpa, english, budget, major, scholarship",skill_tra_loi,synthetic,train
+S1436,def-15,B3,,DS-2019 là gì vậy ạ,,skill_tra_loi,synthetic,train
+S1437,def-15,B4,,mình muốn hiểu DS-2019 là gì,,skill_tra_loi,synthetic,train
+S1438,def-15,B2,Điểm trung bình từng học kỳ của bạn là bao nhiêu? Bạn có thể tải ảnh học bạ cho nhanh.,DS-2019 là sao ạ,,skill_tra_loi,synthetic,train
+S1439,def-15,B1,"Hiện bạn đang học lớp mấy, hoặc đang làm gì?",ds-2019 la gi the ban,"target_level, english, budget, major, scholarship",skill_tra_loi,synthetic,train
+S1440,def-16,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,SEVIS nghĩa là gì,,skill_tra_loi,synthetic,train
+S1441,def-16,B4,,mình muốn hiểu SEVIS là gì,,skill_tra_loi,synthetic,train
+S1442,def-16,B4,,SEVIS là gì,,skill_tra_loi,synthetic,train
+S1443,def-16,B4,,SEVIS là gì vậy ạ,,skill_tra_loi,synthetic,train
+S1444,def-16,B1,"Hiện bạn đang học lớp mấy, hoặc đang làm gì?",sevis nghia la gi,"target_level, gpa, english, budget, major",skill_tra_loi,synthetic,train
+S1445,def-17,B4,,phí SEVIS là gì vậy ạ,,skill_tra_loi,synthetic,train
+S1446,def-17,B4,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,mình muốn hiểu phí SEVIS là gì,,skill_tra_loi,synthetic,train
+S1447,def-17,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,phí SEVIS là gì,,skill_tra_loi,synthetic,train
+S1448,def-17,B0,"Chào bạn, mình là trợ lý tư vấn du học Mỹ. Bạn đang cần mình giúp điều gì?",phí SEVIS là sao ạ,"target_level, gpa, english, budget, major, scholarship",skill_tra_loi,synthetic,train
+S1449,def-17,B5,,phi sevis la gi vay a,,skill_tra_loi,synthetic,train
+S1450,def-18,B4,,visa F-1 là gì vậy ạ,,skill_tra_loi,synthetic,train
+S1451,def-18,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,visa F-1 nghĩa là gì,,skill_tra_loi,synthetic,train
+S1452,def-18,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,em chưa hiểu visa F-1 là gì,,skill_tra_loi,synthetic,train
+S1453,def-18,B1,"Hiện bạn đang học lớp mấy, hoặc đang làm gì?",cho em hỏi visa F-1 là gì,"target_level, gpa, english, budget, major, scholarship",skill_tra_loi,synthetic,train
+S1454,def-18,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,visa f-1 la gi vay a,,skill_tra_loi,synthetic,train
+S1455,def-19,B4,,visa J-1 là sao ạ,,skill_tra_loi,synthetic,train
+S1456,def-19,B2,"Bạn đã có chứng chỉ tiếng Anh nào chưa (IELTS, TOEFL, Duolingo)? Điểm bao nhiêu, thi khi nào?",visa J-1 là gì,scholarship,skill_tra_loi,synthetic,train
+S1457,def-19,B0,"Bạn muốn mình tìm trường theo hồ sơ của bạn, hay bạn đang có câu hỏi cụ thể?",visa J-1 nghĩa là gì,"target_level, gpa, english, budget, major, scholarship",skill_tra_loi,synthetic,train
+S1458,def-19,B2,Bạn đã tìm hiểu bang nào ở Mỹ chưa?,mình muốn hiểu visa J-1 là gì,scholarship,skill_tra_loi,synthetic,train
+S1459,def-19,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,visa j-1 la sao a,,skill_tra_loi,synthetic,train
+S1460,def-20,B5,,visa M-1 là gì,,skill_tra_loi,synthetic,train
+S1461,def-20,B4,,em chưa hiểu visa M-1 là gì,,skill_tra_loi,synthetic,train
+S1462,def-20,B3,,visa M-1 là sao ạ,,skill_tra_loi,synthetic,train
+S1463,def-20,B4,,visa M-1 là gì vậy ạ,,skill_tra_loi,synthetic,train
+S1464,def-20,B2,Điểm trung bình từng học kỳ của bạn là bao nhiêu? Bạn có thể tải ảnh học bạ cho nhanh.,visa m-1 la gi,"gpa, english, budget",skill_tra_loi,synthetic,train
+S1465,def-21,B4,,DS-160 là gì,,skill_tra_loi,synthetic,train
+S1466,def-21,B4,,DS-160 là gì vậy ạ,,skill_tra_loi,synthetic,train
+S1467,def-21,B4,,DS-160 nghĩa là gì,,skill_tra_loi,synthetic,train
+S1468,def-21,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,em chưa hiểu DS-160 là gì,,skill_tra_loi,synthetic,train
+S1469,def-21,B4,,ds-160 la gi,,skill_tra_loi,synthetic,train
+S1470,def-22,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,phỏng vấn visa nghĩa là gì,,skill_tra_loi,synthetic,train
+S1471,def-22,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,em chưa hiểu phỏng vấn visa là gì,,skill_tra_loi,synthetic,train
+S1472,def-22,B3,,cho em hỏi phỏng vấn visa là gì,,skill_tra_loi,synthetic,train
+S1473,def-22,B4,,phỏng vấn visa là gì,,skill_tra_loi,synthetic,train
+S1474,def-22,B2,"Bạn kiểm tra giúp mình hồ sơ ở trên, đúng không?",phong van visa nghia la gi,gpa,skill_tra_loi,synthetic,train
+S1475,def-23,B5,,214(b) nghĩa là gì,,skill_tra_loi,synthetic,train
+S1476,def-23,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,214(b) là gì thế bạn,,skill_tra_loi,synthetic,train
+S1477,def-23,B3,,em chưa hiểu 214(b) là gì,,skill_tra_loi,synthetic,train
+S1478,def-23,B5,,cho em hỏi 214(b) là gì,,skill_tra_loi,synthetic,train
+S1479,def-23,B4,,214(b) nghia la gi,,skill_tra_loi,synthetic,train
+S1480,def-24,B2,"Bạn cần học bổng ở mức nào: không cần, nên có, hay bắt buộc phải có mới đi được?",I-94 là gì vậy ạ,english,skill_tra_loi,synthetic,train
+S1481,def-24,B4,,mình muốn hiểu I-94 là gì,,skill_tra_loi,synthetic,train
+S1482,def-24,B1,"Hiện bạn đang học lớp mấy, hoặc đang làm gì?",em chưa hiểu I-94 là gì,"target_level, gpa, english, major, scholarship",skill_tra_loi,synthetic,train
+S1483,def-24,B1,Bạn muốn sang Mỹ học bậc nào?,I-94 là gì thế bạn,"target_level, english, budget, major, scholarship",skill_tra_loi,synthetic,train
+S1484,def-24,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,i-94 la gi vay a,,skill_tra_loi,synthetic,train
+S1485,def-25,B0,"Chào bạn, mình là trợ lý tư vấn du học Mỹ. Bạn đang cần mình giúp điều gì?",DSO là gì,"target_level, gpa, english, major, scholarship",skill_tra_loi,synthetic,train
+S1486,def-25,B3,"Bạn kiểm tra giúp mình hồ sơ ở trên, đúng không?",DSO là sao ạ,,skill_tra_loi,synthetic,train
+S1487,def-25,B4,,DSO là gì thế bạn,,skill_tra_loi,synthetic,train
+S1488,def-25,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,DSO nghĩa là gì,,skill_tra_loi,synthetic,train
+S1489,def-25,B4,,dso la gi,,skill_tra_loi,synthetic,train
+S1490,def-26,B4,,OPT là gì vậy ạ,,skill_tra_loi,synthetic,train
+S1491,def-26,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,OPT là gì,,skill_tra_loi,synthetic,train
+S1492,def-26,B4,,OPT là gì thế bạn,,skill_tra_loi,synthetic,train
+S1493,def-26,B1,Bạn muốn sang Mỹ học bậc nào?,mình muốn hiểu OPT là gì,"target_level, gpa, english, budget, major, scholarship",skill_tra_loi,synthetic,train
+S1494,def-26,B2,"Bạn cần học bổng ở mức nào: không cần, nên có, hay bắt buộc phải có mới đi được?",opt la gi vay a,english,skill_tra_loi,synthetic,train
+S1495,def-27,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,STEM OPT nghĩa là gì,,skill_tra_loi,synthetic,train
+S1496,def-27,B1,"Hiện bạn đang học lớp mấy, hoặc đang làm gì?",STEM OPT là gì,"target_level, gpa, english, budget, major, scholarship",skill_tra_loi,synthetic,train
+S1497,def-27,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,STEM OPT là sao ạ,,skill_tra_loi,synthetic,train
+S1498,def-27,B2,Bạn đã thi SAT hoặc ACT chưa? Nếu rồi thì được bao nhiêu điểm?,mình muốn hiểu STEM OPT là gì,"gpa, budget",skill_tra_loi,synthetic,train
+S1499,def-27,B4,,stem opt nghia la gi,,skill_tra_loi,synthetic,train
+S1500,def-28,B4,,CPT là gì thế bạn,,skill_tra_loi,synthetic,val
+S1501,def-28,B0,"Chào bạn, mình là trợ lý tư vấn du học Mỹ. Bạn đang cần mình giúp điều gì?",cho em hỏi CPT là gì,"target_level, gpa, major, scholarship",skill_tra_loi,synthetic,val
+S1502,def-28,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,em chưa hiểu CPT là gì,,skill_tra_loi,synthetic,val
+S1503,def-28,B4,,CPT là gì vậy ạ,,skill_tra_loi,synthetic,val
+S1504,def-28,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,cpt la gi the ban,,skill_tra_loi,synthetic,val
+S1505,def-29,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,SSN là gì vậy ạ,,skill_tra_loi,synthetic,train
+S1506,def-29,B2,Chi phí du học chủ yếu do ai chi trả?,mình muốn hiểu SSN là gì,gpa,skill_tra_loi,synthetic,train
+S1507,def-29,B2,Điểm trung bình từng học kỳ của bạn là bao nhiêu? Bạn có thể tải ảnh học bạ cho nhanh.,em chưa hiểu SSN là gì,,skill_tra_loi,synthetic,train
+S1508,def-29,B0,"Chào bạn, mình là trợ lý tư vấn du học Mỹ. Bạn đang cần mình giúp điều gì?",SSN là gì thế bạn,"target_level, gpa, english, budget, major, scholarship",skill_tra_loi,synthetic,train
+S1509,def-29,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,ssn la gi vay a,,skill_tra_loi,synthetic,train
+S1510,def-30,B1,Bạn muốn sang Mỹ học bậc nào?,mình muốn hiểu Form 8843 là gì,"target_level, gpa, english, major",skill_tra_loi,synthetic,train
+S1511,def-30,B0,"Chào bạn, mình là trợ lý tư vấn du học Mỹ. Bạn đang cần mình giúp điều gì?",Form 8843 là gì thế bạn,"target_level, gpa, english, major",skill_tra_loi,synthetic,train
+S1512,def-30,B3,,Form 8843 là gì vậy ạ,,skill_tra_loi,synthetic,train
+S1513,def-30,B3,,em chưa hiểu Form 8843 là gì,,skill_tra_loi,synthetic,train
+S1514,def-30,B4,,minh muon hieu form 8843 la gi,,skill_tra_loi,synthetic,train
+S1515,def-31,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,Common App là sao ạ,,skill_tra_loi,synthetic,train
+S1516,def-31,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,Common App là gì vậy ạ,,skill_tra_loi,synthetic,train
+S1517,def-31,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,Common App nghĩa là gì,,skill_tra_loi,synthetic,train
+S1518,def-31,B4,"Bạn kiểm tra giúp mình hồ sơ ở trên, đúng không?",mình muốn hiểu Common App là gì,,skill_tra_loi,synthetic,train
+S1519,def-31,B4,,common app la sao a,,skill_tra_loi,synthetic,train
+S1520,def-32,B4,,Early Decision là gì vậy ạ,,skill_tra_loi,synthetic,train
+S1521,def-32,B3,,em chưa hiểu Early Decision là gì,,skill_tra_loi,synthetic,train
+S1522,def-32,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,Early Decision là gì,,skill_tra_loi,synthetic,train
+S1523,def-32,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,Early Decision là sao ạ,,skill_tra_loi,synthetic,train
+S1524,def-32,B1,"Hiện bạn đang học lớp mấy, hoặc đang làm gì?",early decision la gi vay a,"target_level, gpa, budget, major",skill_tra_loi,synthetic,train
+S1525,def-33,B0,"Chào bạn, mình là trợ lý tư vấn du học Mỹ. Bạn đang cần mình giúp điều gì?",Early Action nghĩa là gì,"target_level, budget, major, scholarship",skill_tra_loi,synthetic,train
+S1526,def-33,B5,,cho em hỏi Early Action là gì,,skill_tra_loi,synthetic,train
+S1527,def-33,B4,,Early Action là gì vậy ạ,,skill_tra_loi,synthetic,train
+S1528,def-33,B1,"Bạn định học ngành gì? Chưa chắc cũng không sao, bạn cứ kể vài môn bạn thích.",Early Action là gì,"gpa, english, budget, major, scholarship",skill_tra_loi,synthetic,train
+S1529,def-33,B2,Gia đình bạn có thể chi khoảng bao nhiêu mỗi năm cho cả học phí và sinh hoạt?,early action nghia la gi,,skill_tra_loi,synthetic,train
+S1530,def-34,B4,,mình muốn hiểu Regular Decision là gì,,skill_tra_loi,synthetic,train
+S1531,def-34,B3,,Regular Decision là gì vậy ạ,,skill_tra_loi,synthetic,train
+S1532,def-34,B5,,Regular Decision nghĩa là gì,,skill_tra_loi,synthetic,train
+S1533,def-34,B3,,Regular Decision là gì thế bạn,,skill_tra_loi,synthetic,train
+S1534,def-34,B4,,minh muon hieu regular decision la gi,,skill_tra_loi,synthetic,train
+S1535,def-35,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,rolling admission là gì thế bạn,,skill_tra_loi,synthetic,train
+S1536,def-35,B4,,rolling admission nghĩa là gì,,skill_tra_loi,synthetic,train
+S1537,def-35,B4,,mình muốn hiểu rolling admission là gì,,skill_tra_loi,synthetic,train
+S1538,def-35,B4,,rolling admission là gì vậy ạ,,skill_tra_loi,synthetic,train
+S1539,def-35,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,rolling admission la gi the ban,,skill_tra_loi,synthetic,train
+S1540,def-36,B2,"Bạn đã có chứng chỉ tiếng Anh nào chưa (IELTS, TOEFL, Duolingo)? Điểm bao nhiêu, thi khi nào?",waitlist là gì vậy ạ,"english, budget",skill_tra_loi,synthetic,val
+S1541,def-36,B3,,mình muốn hiểu waitlist là gì,,skill_tra_loi,synthetic,val
+S1542,def-36,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,waitlist là sao ạ,,skill_tra_loi,synthetic,val
+S1543,def-36,B5,,waitlist nghĩa là gì,,skill_tra_loi,synthetic,val
+S1544,def-36,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,waitlist la gi vay a,,skill_tra_loi,synthetic,val
+S1545,def-37,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,em chưa hiểu deferred là gì,,skill_tra_loi,synthetic,val
+S1546,def-37,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,mình muốn hiểu deferred là gì,,skill_tra_loi,synthetic,val
+S1547,def-37,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,cho em hỏi deferred là gì,,skill_tra_loi,synthetic,val
+S1548,def-37,B0,"Bạn muốn mình tìm trường theo hồ sơ của bạn, hay bạn đang có câu hỏi cụ thể?",deferred là gì,"target_level, gpa, english, budget, major, scholarship",skill_tra_loi,synthetic,val
+S1549,def-37,B4,,em chua hieu deferred la gi,,skill_tra_loi,synthetic,val
+S1550,def-38,B0,"Chào bạn, mình là trợ lý tư vấn du học Mỹ. Bạn đang cần mình giúp điều gì?",cho em hỏi personal statement là gì,"target_level, gpa, english, budget, major, scholarship",skill_tra_loi,synthetic,val
+S1551,def-38,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,personal statement là sao ạ,,skill_tra_loi,synthetic,val
+S1552,def-38,B4,,personal statement là gì,,skill_tra_loi,synthetic,val
+S1553,def-38,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,mình muốn hiểu personal statement là gì,,skill_tra_loi,synthetic,val
+S1554,def-38,B3,,cho em hoi personal statement la gi,,skill_tra_loi,synthetic,val
+S1555,def-39,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,em chưa hiểu supplemental essay là gì,,skill_tra_loi,synthetic,train
+S1556,def-39,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,supplemental essay là gì thế bạn,,skill_tra_loi,synthetic,train
+S1557,def-39,B4,,cho em hỏi supplemental essay là gì,,skill_tra_loi,synthetic,train
+S1558,def-39,B4,,supplemental essay là gì,,skill_tra_loi,synthetic,train
+S1559,def-39,B0,"Chào bạn, mình là trợ lý tư vấn du học Mỹ. Bạn đang cần mình giúp điều gì?",em chua hieu supplemental essay la gi,"target_level, gpa, english, major, scholarship",skill_tra_loi,synthetic,train
+S1560,def-40,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,SOP là sao ạ,,skill_tra_loi,synthetic,train
+S1561,def-40,B0,"Chào bạn, mình là trợ lý tư vấn du học Mỹ. Bạn đang cần mình giúp điều gì?",mình muốn hiểu SOP là gì,"target_level, english, major, scholarship",skill_tra_loi,synthetic,train
+S1562,def-40,B5,,SOP là gì,,skill_tra_loi,synthetic,train
+S1563,def-40,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,em chưa hiểu SOP là gì,,skill_tra_loi,synthetic,train
+S1564,def-40,B4,,sop la sao a,,skill_tra_loi,synthetic,train
+S1565,def-41,B2,Chi phí du học chủ yếu do ai chi trả?,cho em hỏi thư giới thiệu là gì,"budget, scholarship",skill_tra_loi,synthetic,val
+S1566,def-41,B2,"Bạn đã có chứng chỉ tiếng Anh nào chưa (IELTS, TOEFL, Duolingo)? Điểm bao nhiêu, thi khi nào?",mình muốn hiểu thư giới thiệu là gì,"gpa, english, scholarship",skill_tra_loi,synthetic,val
+S1567,def-41,B5,,thư giới thiệu là gì vậy ạ,,skill_tra_loi,synthetic,val
+S1568,def-41,B1,"Hiện bạn đang học lớp mấy, hoặc đang làm gì?",thư giới thiệu là gì,"target_level, gpa, english, budget, major, scholarship",skill_tra_loi,synthetic,val
+S1569,def-41,B0,"Bạn muốn mình tìm trường theo hồ sơ của bạn, hay bạn đang có câu hỏi cụ thể?",cho em hoi thu gioi thieu la gi,"target_level, gpa, english, major, scholarship",skill_tra_loi,synthetic,val
+S1570,def-42,B2,"Bạn kể giúp mình các hoạt động ngoại khóa: tên, vai trò, phạm vi (trường, quận, thành phố, quốc gia, quốc tế), làm trong bao lâu.",transcript là gì thế bạn,budget,skill_tra_loi,synthetic,val
+S1571,def-42,B0,"Bạn muốn mình tìm trường theo hồ sơ của bạn, hay bạn đang có câu hỏi cụ thể?",em chưa hiểu transcript là gì,"target_level, gpa, english, budget, major, scholarship",skill_tra_loi,synthetic,val
+S1572,def-42,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,transcript là gì,,skill_tra_loi,synthetic,val
+S1573,def-42,B1,"Bạn định học ngành gì? Chưa chắc cũng không sao, bạn cứ kể vài môn bạn thích.",transcript là sao ạ,"gpa, budget, major, scholarship",skill_tra_loi,synthetic,val
+S1574,def-42,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,transcript la gi the ban,,skill_tra_loi,synthetic,val
+S1575,def-43,B3,,hoạt động ngoại khóa là sao ạ,,skill_tra_loi,synthetic,train
+S1576,def-43,B5,,hoạt động ngoại khóa là gì vậy ạ,,skill_tra_loi,synthetic,train
+S1577,def-43,B3,,hoạt động ngoại khóa là gì,,skill_tra_loi,synthetic,train
+S1578,def-43,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,em chưa hiểu hoạt động ngoại khóa là gì,,skill_tra_loi,synthetic,train
+S1579,def-43,B4,,hoat dong ngoai khoa la sao a,,skill_tra_loi,synthetic,train
+S1580,def-44,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,COA là gì,,skill_tra_loi,synthetic,train
+S1581,def-44,B0,"Chào bạn, mình là trợ lý tư vấn du học Mỹ. Bạn đang cần mình giúp điều gì?",COA là gì vậy ạ,"target_level, english, major, scholarship",skill_tra_loi,synthetic,train
+S1582,def-44,B2,Điểm trung bình từng học kỳ của bạn là bao nhiêu? Bạn có thể tải ảnh học bạ cho nhanh.,mình muốn hiểu COA là gì,,skill_tra_loi,synthetic,train
+S1583,def-44,B0,"Chào bạn, mình là trợ lý tư vấn du học Mỹ. Bạn đang cần mình giúp điều gì?",COA nghĩa là gì,"target_level, gpa, english, major",skill_tra_loi,synthetic,train
+S1584,def-44,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,coa la gi,,skill_tra_loi,synthetic,train
+S1585,def-45,B1,"Bạn định học ngành gì? Chưa chắc cũng không sao, bạn cứ kể vài môn bạn thích.",mình muốn hiểu tuition là gì,"gpa, english, budget, major",skill_tra_loi,synthetic,train
+S1586,def-45,B3,"Bạn kiểm tra giúp mình hồ sơ ở trên, đúng không?",cho em hỏi tuition là gì,,skill_tra_loi,synthetic,train
+S1587,def-45,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,tuition là gì,,skill_tra_loi,synthetic,train
+S1588,def-45,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,tuition là gì thế bạn,,skill_tra_loi,synthetic,train
+S1589,def-45,B4,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,minh muon hieu tuition la gi,,skill_tra_loi,synthetic,train
+S1590,def-46,B4,,room and board nghĩa là gì,,skill_tra_loi,synthetic,train
+S1591,def-46,B1,"Hiện bạn đang học lớp mấy, hoặc đang làm gì?",room and board là gì vậy ạ,"target_level, gpa, english, major, scholarship",skill_tra_loi,synthetic,train
+S1592,def-46,B4,,em chưa hiểu room and board là gì,,skill_tra_loi,synthetic,train
+S1593,def-46,B5,,mình muốn hiểu room and board là gì,,skill_tra_loi,synthetic,train
+S1594,def-46,B0,"Bạn muốn mình tìm trường theo hồ sơ của bạn, hay bạn đang có câu hỏi cụ thể?",room and board nghia la gi,"target_level, gpa, english, major, scholarship",skill_tra_loi,synthetic,train
+S1595,def-47,B0,"Chào bạn, mình là trợ lý tư vấn du học Mỹ. Bạn đang cần mình giúp điều gì?",financial aid là gì vậy ạ,"target_level, english, budget, major",skill_tra_loi,synthetic,train
+S1596,def-47,B4,,financial aid là gì thế bạn,,skill_tra_loi,synthetic,train
+S1597,def-47,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,financial aid nghĩa là gì,,skill_tra_loi,synthetic,train
+S1598,def-47,B0,"Bạn muốn mình tìm trường theo hồ sơ của bạn, hay bạn đang có câu hỏi cụ thể?",financial aid là sao ạ,"target_level, gpa, english, major",skill_tra_loi,synthetic,train
+S1599,def-47,B1,"Bạn định học ngành gì? Chưa chắc cũng không sao, bạn cứ kể vài môn bạn thích.",financial aid la gi vay a,"english, major, scholarship",skill_tra_loi,synthetic,train
+S1600,def-48,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,học bổng merit là gì thế bạn,,skill_tra_loi,synthetic,train
+S1601,def-48,B1,"Bạn định học ngành gì? Chưa chắc cũng không sao, bạn cứ kể vài môn bạn thích.",cho em hỏi học bổng merit là gì,"gpa, english, budget, major, scholarship",skill_tra_loi,synthetic,train
+S1602,def-48,B4,,học bổng merit là gì vậy ạ,,skill_tra_loi,synthetic,train
+S1603,def-48,B3,,học bổng merit nghĩa là gì,,skill_tra_loi,synthetic,train
+S1604,def-48,B4,,hoc bong merit la gi the ban,,skill_tra_loi,synthetic,train
+S1605,def-49,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,học bổng need-based là sao ạ,,skill_tra_loi,synthetic,val
+S1606,def-49,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,học bổng need-based nghĩa là gì,,skill_tra_loi,synthetic,val
+S1607,def-49,B0,"Chào bạn, mình là trợ lý tư vấn du học Mỹ. Bạn đang cần mình giúp điều gì?",cho em hỏi học bổng need-based là gì,"target_level, english, budget, major",skill_tra_loi,synthetic,val
+S1608,def-49,B4,,học bổng need-based là gì vậy ạ,,skill_tra_loi,synthetic,val
+S1609,def-49,B3,,hoc bong need-based la sao a,,skill_tra_loi,synthetic,val
+S1610,def-50,B0,"Chào bạn, mình là trợ lý tư vấn du học Mỹ. Bạn đang cần mình giúp điều gì?",mình muốn hiểu need-blind là gì,"target_level, gpa, english, budget, major, scholarship",skill_tra_loi,synthetic,train
+S1611,def-50,B4,,cho em hỏi need-blind là gì,,skill_tra_loi,synthetic,train
+S1612,def-50,B1,Bạn muốn sang Mỹ học bậc nào?,em chưa hiểu need-blind là gì,"target_level, gpa, major, scholarship",skill_tra_loi,synthetic,train
+S1613,def-50,B4,,need-blind là gì,,skill_tra_loi,synthetic,train
+S1614,def-50,B1,Bạn muốn sang Mỹ học bậc nào?,minh muon hieu need-blind la gi,"target_level, gpa, english, budget, major, scholarship",skill_tra_loi,synthetic,train
+S1615,def-51,B4,,full ride là gì vậy ạ,,skill_tra_loi,synthetic,train
+S1616,def-51,B3,,full ride là gì,,skill_tra_loi,synthetic,train
+S1617,def-51,B3,,full ride nghĩa là gì,,skill_tra_loi,synthetic,train
+S1618,def-51,B0,"Bạn muốn mình tìm trường theo hồ sơ của bạn, hay bạn đang có câu hỏi cụ thể?",cho em hỏi full ride là gì,"target_level, gpa, english, major",skill_tra_loi,synthetic,train
+S1619,def-51,B4,,full ride la gi vay a,,skill_tra_loi,synthetic,train
+S1620,def-52,B4,,cho em hỏi chứng minh tài chính là gì,,skill_tra_loi,synthetic,train
+S1621,def-52,B2,Gia đình bạn có thể chi khoảng bao nhiêu mỗi năm cho cả học phí và sinh hoạt?,chứng minh tài chính là gì thế bạn,,skill_tra_loi,synthetic,train
+S1622,def-52,B3,,chứng minh tài chính nghĩa là gì,,skill_tra_loi,synthetic,train
+S1623,def-52,B2,Gia đình bạn có thể chi khoảng bao nhiêu mỗi năm cho cả học phí và sinh hoạt?,chứng minh tài chính là sao ạ,"gpa, scholarship",skill_tra_loi,synthetic,train
+S1624,def-52,B3,,cho em hoi chung minh tai chinh la gi,,skill_tra_loi,synthetic,train
+S1625,def-53,B4,,cho em hỏi assistantship là gì,,skill_tra_loi,synthetic,train
+S1626,def-53,B4,,em chưa hiểu assistantship là gì,,skill_tra_loi,synthetic,train
+S1627,def-53,B4,,mình muốn hiểu assistantship là gì,,skill_tra_loi,synthetic,train
+S1628,def-53,B3,,assistantship là gì,,skill_tra_loi,synthetic,train
+S1629,def-53,B4,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,cho em hoi assistantship la gi,,skill_tra_loi,synthetic,train
+S1630,def-54,B4,,community college nghĩa là gì,,skill_tra_loi,synthetic,train
+S1631,def-54,B5,,community college là gì,,skill_tra_loi,synthetic,train
+S1632,def-54,B3,,community college là gì thế bạn,,skill_tra_loi,synthetic,train
+S1633,def-54,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,mình muốn hiểu community college là gì,,skill_tra_loi,synthetic,train
+S1634,def-54,B4,,community college nghia la gi,,skill_tra_loi,synthetic,train
+S1635,def-55,B4,,associate degree là gì thế bạn,,skill_tra_loi,synthetic,train
+S1636,def-55,B4,,associate degree là gì,,skill_tra_loi,synthetic,train
+S1637,def-55,B3,,associate degree là sao ạ,,skill_tra_loi,synthetic,train
+S1638,def-55,B2,"Bạn đã có chứng chỉ tiếng Anh nào chưa (IELTS, TOEFL, Duolingo)? Điểm bao nhiêu, thi khi nào?",cho em hỏi associate degree là gì,"gpa, english",skill_tra_loi,synthetic,train
+S1639,def-55,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,associate degree la gi the ban,,skill_tra_loi,synthetic,train
+S1640,def-56,B2,Bạn đã thi SAT hoặc ACT chưa? Nếu rồi thì được bao nhiêu điểm?,mình muốn hiểu transfer là gì,gpa,skill_tra_loi,synthetic,train
+S1641,def-56,B4,,transfer là gì thế bạn,,skill_tra_loi,synthetic,train
+S1642,def-56,B4,,em chưa hiểu transfer là gì,,skill_tra_loi,synthetic,train
+S1643,def-56,B4,,transfer là gì vậy ạ,,skill_tra_loi,synthetic,train
+S1644,def-56,B1,"Hiện bạn đang học lớp mấy, hoặc đang làm gì?",minh muon hieu transfer la gi,"target_level, gpa, english, major, scholarship",skill_tra_loi,synthetic,train
+S1645,def-57,B5,,cho em hỏi liberal arts college là gì,,skill_tra_loi,synthetic,train
+S1646,def-57,B0,"Chào bạn, mình là trợ lý tư vấn du học Mỹ. Bạn đang cần mình giúp điều gì?",liberal arts college là gì,"target_level, gpa, english, budget, major, scholarship",skill_tra_loi,synthetic,train
+S1647,def-57,B2,Bạn đã thi SAT hoặc ACT chưa? Nếu rồi thì được bao nhiêu điểm?,liberal arts college nghĩa là gì,"gpa, english, budget",skill_tra_loi,synthetic,train
+S1648,def-57,B5,,liberal arts college là gì vậy ạ,,skill_tra_loi,synthetic,train
+S1649,def-57,B0,"Chào bạn, mình là trợ lý tư vấn du học Mỹ. Bạn đang cần mình giúp điều gì?",cho em hoi liberal arts college la gi,"target_level, gpa, english, budget, major, scholarship",skill_tra_loi,synthetic,train
+S1650,def-58,B2,Bạn từng bị từ chối visa chưa?,major là gì thế bạn,"english, budget, scholarship",skill_tra_loi,synthetic,train
+S1651,def-58,B3,,major là gì,,skill_tra_loi,synthetic,train
+S1652,def-58,B5,,cho em hỏi major là gì,,skill_tra_loi,synthetic,train
+S1653,def-58,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,major là sao ạ,,skill_tra_loi,synthetic,train
+S1654,def-58,B4,,major la gi the ban,,skill_tra_loi,synthetic,train
+S1655,def-59,B2,Gia đình bạn có thể chi khoảng bao nhiêu mỗi năm cho cả học phí và sinh hoạt?,cho em hỏi minor là gì,"english, budget",skill_tra_loi,synthetic,train
+S1656,def-59,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,minor nghĩa là gì,,skill_tra_loi,synthetic,train
+S1657,def-59,B2,"Bạn đã có chứng chỉ tiếng Anh nào chưa (IELTS, TOEFL, Duolingo)? Điểm bao nhiêu, thi khi nào?",minor là gì,,skill_tra_loi,synthetic,train
+S1658,def-59,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,minor là sao ạ,,skill_tra_loi,synthetic,train
+S1659,def-59,B4,,cho em hoi minor la gi,,skill_tra_loi,synthetic,train
+S1660,def-60,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,double major nghĩa là gì,,skill_tra_loi,synthetic,train
+S1661,def-60,B4,,double major là gì vậy ạ,,skill_tra_loi,synthetic,train
+S1662,def-60,B3,,double major là gì thế bạn,,skill_tra_loi,synthetic,train
+S1663,def-60,B0,"Chào bạn, mình là trợ lý tư vấn du học Mỹ. Bạn đang cần mình giúp điều gì?",double major là gì,"target_level, english, budget, major",skill_tra_loi,synthetic,train
+S1664,def-60,B3,,double major nghia la gi,,skill_tra_loi,synthetic,train
+S1665,def-61,B2,"Bạn cần học bổng ở mức nào: không cần, nên có, hay bắt buộc phải có mới đi được?",tín chỉ là gì thế bạn,"budget, scholarship",skill_tra_loi,synthetic,val
+S1666,def-61,B3,,tín chỉ nghĩa là gì,,skill_tra_loi,synthetic,val
+S1667,def-61,B5,,tín chỉ là gì,,skill_tra_loi,synthetic,val
+S1668,def-61,B1,"Hiện bạn đang học lớp mấy, hoặc đang làm gì?",tín chỉ là gì vậy ạ,"target_level, gpa, english, major, scholarship",skill_tra_loi,synthetic,val
+S1669,def-61,B0,"Chào bạn, mình là trợ lý tư vấn du học Mỹ. Bạn đang cần mình giúp điều gì?",tin chi la gi the ban,"target_level, gpa, english, budget, major, scholarship",skill_tra_loi,synthetic,val
+S1670,def-62,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,kỳ Fall là sao ạ,,skill_tra_loi,synthetic,train
+S1671,def-62,B1,"Bạn định học ngành gì? Chưa chắc cũng không sao, bạn cứ kể vài môn bạn thích.",cho em hỏi kỳ Fall là gì,"gpa, english, budget, major, scholarship",skill_tra_loi,synthetic,train
+S1672,def-62,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,kỳ Fall nghĩa là gì,,skill_tra_loi,synthetic,train
+S1673,def-62,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,kỳ Fall là gì,,skill_tra_loi,synthetic,train
+S1674,def-62,B0,"Chào bạn, mình là trợ lý tư vấn du học Mỹ. Bạn đang cần mình giúp điều gì?",ky fall la sao a,"target_level, gpa, english, major",skill_tra_loi,synthetic,train
+S1675,def-63,B4,,kiểm định là gì vậy ạ,,skill_tra_loi,synthetic,train
+S1676,def-63,B5,,kiểm định nghĩa là gì,,skill_tra_loi,synthetic,train
+S1677,def-63,B1,"Bạn định học ngành gì? Chưa chắc cũng không sao, bạn cứ kể vài môn bạn thích.",kiểm định là gì thế bạn,"english, major, scholarship",skill_tra_loi,synthetic,train
+S1678,def-63,B0,"Chào bạn, mình là trợ lý tư vấn du học Mỹ. Bạn đang cần mình giúp điều gì?",kiểm định là gì,"target_level, gpa, budget, major",skill_tra_loi,synthetic,train
+S1679,def-63,B2,"Bạn cần học bổng ở mức nào: không cần, nên có, hay bắt buộc phải có mới đi được?",kiem dinh la gi vay a,,skill_tra_loi,synthetic,train
+S1680,def-64,B4,,mình muốn hiểu SEVP là gì,,skill_tra_loi,synthetic,train
+S1681,def-64,B4,,SEVP là gì,,skill_tra_loi,synthetic,train
+S1682,def-64,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,SEVP là gì vậy ạ,,skill_tra_loi,synthetic,train
+S1683,def-64,B0,"Chào bạn, mình là trợ lý tư vấn du học Mỹ. Bạn đang cần mình giúp điều gì?",SEVP là gì thế bạn,"target_level, gpa, english, budget, major, scholarship",skill_tra_loi,synthetic,train
+S1684,def-64,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,minh muon hieu sevp la gi,,skill_tra_loi,synthetic,train
+S1685,def-65,B0,"Chào bạn, mình là trợ lý tư vấn du học Mỹ. Bạn đang cần mình giúp điều gì?",reach match safety là sao ạ,"target_level, budget, major, scholarship",skill_tra_loi,synthetic,train
+S1686,def-65,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,reach match safety là gì vậy ạ,,skill_tra_loi,synthetic,train
+S1687,def-65,B2,"Bạn học chương trình nào: THPT Việt Nam, IB, A-level hay AP?",reach match safety là gì thế bạn,english,skill_tra_loi,synthetic,train
+S1688,def-65,B4,,em chưa hiểu reach match safety là gì,,skill_tra_loi,synthetic,train
+S1689,def-65,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,reach match safety la sao a,,skill_tra_loi,synthetic,train
+S1690,def-66,B2,"Bạn đã có chứng chỉ tiếng Anh nào chưa (IELTS, TOEFL, Duolingo)? Điểm bao nhiêu, thi khi nào?",acceptance rate là gì vậy ạ,"gpa, english, budget",skill_tra_loi,synthetic,train
+S1691,def-66,B0,"Bạn muốn mình tìm trường theo hồ sơ của bạn, hay bạn đang có câu hỏi cụ thể?",acceptance rate là gì thế bạn,"target_level, gpa, english, major, scholarship",skill_tra_loi,synthetic,train
+S1692,def-66,B5,,em chưa hiểu acceptance rate là gì,,skill_tra_loi,synthetic,train
+S1693,def-66,B2,Bạn đã thi SAT hoặc ACT chưa? Nếu rồi thì được bao nhiêu điểm?,cho em hỏi acceptance rate là gì,budget,skill_tra_loi,synthetic,train
+S1694,def-66,B1,Bạn muốn sang Mỹ học bậc nào?,acceptance rate la gi vay a,"target_level, gpa, english, budget, major, scholarship",skill_tra_loi,synthetic,train
+S1695,def-67,B5,,orientation nghĩa là gì,,skill_tra_loi,synthetic,val
+S1696,def-67,B2,Bạn thích trường công hay trường tư?,orientation là sao ạ,scholarship,skill_tra_loi,synthetic,val
+S1697,def-67,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,orientation là gì vậy ạ,,skill_tra_loi,synthetic,val
+S1698,def-67,B3,"Bạn kiểm tra giúp mình hồ sơ ở trên, đúng không?",orientation là gì,,skill_tra_loi,synthetic,val
+S1699,def-67,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,orientation nghia la gi,,skill_tra_loi,synthetic,val
+S1700,def-68,B3,,ký túc xá là sao ạ,,skill_tra_loi,synthetic,val
+S1701,def-68,B4,"Bạn kiểm tra giúp mình hồ sơ ở trên, đúng không?",em chưa hiểu ký túc xá là gì,,skill_tra_loi,synthetic,val
+S1702,def-68,B4,,ký túc xá là gì,,skill_tra_loi,synthetic,val
+S1703,def-68,B1,"Hiện bạn đang học lớp mấy, hoặc đang làm gì?",ký túc xá nghĩa là gì,"target_level, gpa, english, major, scholarship",skill_tra_loi,synthetic,val
+S1704,def-68,B4,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,ky tuc xa la sao a,,skill_tra_loi,synthetic,val
+S1705,def-69,B5,,EducationUSA là gì,,skill_tra_loi,synthetic,train
+S1706,def-69,B4,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,mình muốn hiểu EducationUSA là gì,,skill_tra_loi,synthetic,train
+S1707,def-69,B5,,cho em hỏi EducationUSA là gì,,skill_tra_loi,synthetic,train
+S1708,def-69,B0,"Bạn muốn mình tìm trường theo hồ sơ của bạn, hay bạn đang có câu hỏi cụ thể?",EducationUSA là sao ạ,"target_level, gpa, english, budget, major, scholarship",skill_tra_loi,synthetic,train
+S1709,def-69,B4,,educationusa la gi,,skill_tra_loi,synthetic,train
+S1710,def-70,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,cho em hỏi Ivy League là gì,,skill_tra_loi,synthetic,train
+S1711,def-70,B3,,em chưa hiểu Ivy League là gì,,skill_tra_loi,synthetic,train
+S1712,def-70,B5,,Ivy League là gì vậy ạ,,skill_tra_loi,synthetic,train
+S1713,def-70,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,Ivy League là gì,,skill_tra_loi,synthetic,train
+S1714,def-70,B4,,cho em hoi ivy league la gi,,skill_tra_loi,synthetic,train
+S1715,def-71,B4,,homestay là sao ạ,,skill_tra_loi,synthetic,train
+S1716,def-71,B2,"Bạn cần học bổng ở mức nào: không cần, nên có, hay bắt buộc phải có mới đi được?",homestay là gì vậy ạ,"gpa, english, budget, scholarship",skill_tra_loi,synthetic,train
+S1717,def-71,B2,"Bạn cần học bổng ở mức nào: không cần, nên có, hay bắt buộc phải có mới đi được?",homestay là gì thế bạn,,skill_tra_loi,synthetic,train
+S1718,def-71,B2,"Bạn cần học bổng ở mức nào: không cần, nên có, hay bắt buộc phải có mới đi được?",homestay nghĩa là gì,scholarship,skill_tra_loi,synthetic,train
+S1719,def-71,B3,,homestay la sao a,,skill_tra_loi,synthetic,train
+S1720,def-72,B1,Bạn muốn sang Mỹ học bậc nào?,boarding school là gì vậy ạ,"target_level, budget, major",skill_tra_loi,synthetic,train
+S1721,def-72,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,boarding school nghĩa là gì,,skill_tra_loi,synthetic,train
+S1722,def-72,B2,"Bạn kể giúp mình các hoạt động ngoại khóa: tên, vai trò, phạm vi (trường, quận, thành phố, quốc gia, quốc tế), làm trong bao lâu.",em chưa hiểu boarding school là gì,budget,skill_tra_loi,synthetic,train
+S1723,def-72,B5,,mình muốn hiểu boarding school là gì,,skill_tra_loi,synthetic,train
+S1724,def-72,B2,"Bạn cần học bổng ở mức nào: không cần, nên có, hay bắt buộc phải có mới đi được?",boarding school la gi vay a,"budget, scholarship",skill_tra_loi,synthetic,train
+S1725,def-73,B0,"Bạn muốn mình tìm trường theo hồ sơ của bạn, hay bạn đang có câu hỏi cụ thể?",FAFSA là gì thế bạn,"target_level, gpa, english, budget, major",skill_tra_loi,synthetic,train
+S1726,def-73,B5,,mình muốn hiểu FAFSA là gì,,skill_tra_loi,synthetic,train
+S1727,def-73,B1,"Hiện bạn đang học lớp mấy, hoặc đang làm gì?",FAFSA nghĩa là gì,"target_level, gpa, english, budget, major, scholarship",skill_tra_loi,synthetic,train
+S1728,def-73,B4,,FAFSA là gì,,skill_tra_loi,synthetic,train
+S1729,def-73,B2,Bạn đã thi SAT hoặc ACT chưa? Nếu rồi thì được bao nhiêu điểm?,fafsa la gi the ban,"gpa, budget",skill_tra_loi,synthetic,train
+S1730,def-74,B2,Chi phí du học chủ yếu do ai chi trả?,CSS Profile nghĩa là gì,"gpa, budget, scholarship",skill_tra_loi,synthetic,train
+S1731,def-74,B4,,em chưa hiểu CSS Profile là gì,,skill_tra_loi,synthetic,train
+S1732,def-74,B4,,CSS Profile là gì,,skill_tra_loi,synthetic,train
+S1733,def-74,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,CSS Profile là sao ạ,,skill_tra_loi,synthetic,train
+S1734,def-74,B2,Bạn đã thi SAT hoặc ACT chưa? Nếu rồi thì được bao nhiêu điểm?,css profile nghia la gi,english,skill_tra_loi,synthetic,train
+S1735,def-75,B4,,Work-Study là gì vậy ạ,,skill_tra_loi,synthetic,train
+S1736,def-75,B1,"Hiện bạn đang học lớp mấy, hoặc đang làm gì?",Work-Study là sao ạ,"target_level, gpa, major, scholarship",skill_tra_loi,synthetic,train
+S1737,def-75,B4,,em chưa hiểu Work-Study là gì,,skill_tra_loi,synthetic,train
+S1738,def-75,B4,,Work-Study là gì,,skill_tra_loi,synthetic,train
+S1739,def-75,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,work-study la gi vay a,,skill_tra_loi,synthetic,train
+S1740,def-76,B4,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,I-901 là sao ạ,,skill_tra_loi,synthetic,train
+S1741,def-76,B0,"Bạn muốn mình tìm trường theo hồ sơ của bạn, hay bạn đang có câu hỏi cụ thể?",mình muốn hiểu I-901 là gì,"target_level, gpa, english, major, scholarship",skill_tra_loi,synthetic,train
+S1742,def-76,B4,,I-901 nghĩa là gì,,skill_tra_loi,synthetic,train
+S1743,def-76,B5,,em chưa hiểu I-901 là gì,,skill_tra_loi,synthetic,train
+S1744,def-76,B1,"Bạn định học ngành gì? Chưa chắc cũng không sao, bạn cứ kể vài môn bạn thích.",i-901 la sao a,"budget, major, scholarship",skill_tra_loi,synthetic,train
+S1745,def-77,B2,Điểm trung bình từng học kỳ của bạn là bao nhiêu? Bạn có thể tải ảnh học bạ cho nhanh.,xét tuyển toàn diện nghĩa là gì,"english, budget",skill_tra_loi,synthetic,train
+S1746,def-77,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,xét tuyển toàn diện là gì thế bạn,,skill_tra_loi,synthetic,train
+S1747,def-77,B0,"Chào bạn, mình là trợ lý tư vấn du học Mỹ. Bạn đang cần mình giúp điều gì?",xét tuyển toàn diện là sao ạ,"target_level, gpa, english, budget, major, scholarship",skill_tra_loi,synthetic,train
+S1748,def-77,B1,"Hiện bạn đang học lớp mấy, hoặc đang làm gì?",em chưa hiểu xét tuyển toàn diện là gì,"target_level, gpa, english, major, scholarship",skill_tra_loi,synthetic,train
+S1749,def-77,B4,,xet tuyen toan dien nghia la gi,,skill_tra_loi,synthetic,train
+S1750,def-78,B4,,GPA weighted nghĩa là gì,,skill_tra_loi,synthetic,train
+S1751,def-78,B5,,mình muốn hiểu GPA weighted là gì,,skill_tra_loi,synthetic,train
+S1752,def-78,B5,,cho em hỏi GPA weighted là gì,,skill_tra_loi,synthetic,train
+S1753,def-78,B2,Điểm trung bình từng học kỳ của bạn là bao nhiêu? Bạn có thể tải ảnh học bạ cho nhanh.,GPA weighted là sao ạ,"gpa, english, budget",skill_tra_loi,synthetic,train
+S1754,def-78,B2,"Bạn đã có chứng chỉ tiếng Anh nào chưa (IELTS, TOEFL, Duolingo)? Điểm bao nhiêu, thi khi nào?",gpa weighted nghia la gi,"gpa, budget",skill_tra_loi,synthetic,train
+S1755,def-79,B5,,cho em hỏi SAT với ACT khác gì nhau,,skill_tra_loi,synthetic,train
+S1756,def-79,B0,"Chào bạn, mình là trợ lý tư vấn du học Mỹ. Bạn đang cần mình giúp điều gì?",SAT và ACT khác nhau chỗ nào,"target_level, gpa, budget, major",skill_tra_loi,synthetic,train
+S1757,def-79,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,SAT khác ACT thế nào,,skill_tra_loi,synthetic,train
+S1758,def-79,B4,,cho em hoi sat voi act khac gi nhau,,skill_tra_loi,synthetic,train
+S1759,def-80,B0,"Bạn muốn mình tìm trường theo hồ sơ của bạn, hay bạn đang có câu hỏi cụ thể?",cho em hỏi TOEFL với IELTS khác gì nhau,"target_level, gpa, budget, major, scholarship",skill_tra_loi,synthetic,train
+S1760,def-80,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,TOEFL khác IELTS thế nào,,skill_tra_loi,synthetic,train
+S1761,def-80,B4,,TOEFL và IELTS khác nhau chỗ nào,,skill_tra_loi,synthetic,train
+S1762,def-80,B4,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,cho em hoi toefl voi ielts khac gi nhau,,skill_tra_loi,synthetic,train
+S1763,def-81,B4,,GRE và GMAT khác nhau chỗ nào,,skill_tra_loi,synthetic,train
+S1764,def-81,B1,"Bạn định học ngành gì? Chưa chắc cũng không sao, bạn cứ kể vài môn bạn thích.",GRE khác GMAT thế nào,"gpa, english, budget, major, scholarship",skill_tra_loi,synthetic,train
+S1765,def-81,B4,,cho em hỏi GRE với GMAT khác gì nhau,,skill_tra_loi,synthetic,train
+S1766,def-81,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,gre va gmat khac nhau cho nao,,skill_tra_loi,synthetic,train
+S1767,def-82,B4,,visa F-1 khác visa J-1 thế nào,,skill_tra_loi,synthetic,train
+S1768,def-82,B1,Bạn muốn sang Mỹ học bậc nào?,visa F-1 và visa J-1 khác nhau chỗ nào,"target_level, gpa, budget, major",skill_tra_loi,synthetic,train
+S1769,def-82,B3,,cho em hỏi visa F-1 với visa J-1 khác gì nhau,,skill_tra_loi,synthetic,train
+S1770,def-82,B0,"Chào bạn, mình là trợ lý tư vấn du học Mỹ. Bạn đang cần mình giúp điều gì?",visa f-1 khac visa j-1 the nao,"target_level, gpa, english, budget, major, scholarship",skill_tra_loi,synthetic,train
+S1771,def-83,B4,,cho em hỏi OPT với CPT khác gì nhau,,skill_tra_loi,synthetic,val
+S1772,def-83,B4,,OPT khác CPT thế nào,,skill_tra_loi,synthetic,val
+S1773,def-83,B4,,OPT và CPT khác nhau chỗ nào,,skill_tra_loi,synthetic,val
+S1774,def-83,B1,"Hiện bạn đang học lớp mấy, hoặc đang làm gì?",cho em hoi opt voi cpt khac gi nhau,"target_level, gpa, budget, major, scholarship",skill_tra_loi,synthetic,val
+S1775,def-84,B0,"Chào bạn, mình là trợ lý tư vấn du học Mỹ. Bạn đang cần mình giúp điều gì?",cho em hỏi Early Decision với Early Action khác gì nhau,"target_level, gpa, english, major, scholarship",skill_tra_loi,synthetic,train
+S1776,def-84,B1,"Bạn định học ngành gì? Chưa chắc cũng không sao, bạn cứ kể vài môn bạn thích.",Early Decision khác Early Action thế nào,"gpa, english, budget, major, scholarship",skill_tra_loi,synthetic,train
+S1777,def-84,B0,"Chào bạn, mình là trợ lý tư vấn du học Mỹ. Bạn đang cần mình giúp điều gì?",Early Decision và Early Action khác nhau chỗ nào,"target_level, english, major, scholarship",skill_tra_loi,synthetic,train
+S1778,def-84,B2,"Bạn kiểm tra giúp mình hồ sơ ở trên, đúng không?",cho em hoi early decision voi early action khac gi nhau,gpa,skill_tra_loi,synthetic,train
+S1779,def-85,B0,"Chào bạn, mình là trợ lý tư vấn du học Mỹ. Bạn đang cần mình giúp điều gì?",học bổng merit và học bổng need-based khác nhau chỗ nào,"target_level, gpa, english, major",skill_tra_loi,synthetic,train
+S1780,def-85,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,học bổng merit khác học bổng need-based thế nào,,skill_tra_loi,synthetic,train
+S1781,def-85,B0,"Chào bạn, mình là trợ lý tư vấn du học Mỹ. Bạn đang cần mình giúp điều gì?",cho em hỏi học bổng merit với học bổng need-based khác gì nhau,"target_level, gpa, english, budget, major, scholarship",skill_tra_loi,synthetic,train
+S1782,def-85,B5,,hoc bong merit va hoc bong need-based khac nhau cho nao,,skill_tra_loi,synthetic,train
+S1783,def-86,B5,,SOP khác personal statement thế nào,,skill_tra_loi,synthetic,train
+S1784,def-86,B2,Gia đình bạn có thể chi khoảng bao nhiêu mỗi năm cho cả học phí và sinh hoạt?,cho em hỏi SOP với personal statement khác gì nhau,scholarship,skill_tra_loi,synthetic,train
+S1785,def-86,B4,,SOP và personal statement khác nhau chỗ nào,,skill_tra_loi,synthetic,train
+S1786,def-86,B4,,sop khac personal statement the nao,,skill_tra_loi,synthetic,train
+S1787,def-87,B0,"Chào bạn, mình là trợ lý tư vấn du học Mỹ. Bạn đang cần mình giúp điều gì?",FAFSA khác CSS Profile thế nào,"target_level, gpa, english, budget, major, scholarship",skill_tra_loi,synthetic,train
+S1788,def-87,B2,"Bạn dự định thi khi nào, mục tiêu khoảng bao nhiêu điểm?",cho em hỏi FAFSA với CSS Profile khác gì nhau,"gpa, scholarship",skill_tra_loi,synthetic,train
+S1789,def-87,B4,,FAFSA và CSS Profile khác nhau chỗ nào,,skill_tra_loi,synthetic,train
+S1790,def-87,B5,Bạn có muốn mình xem hồ sơ và gợi ý trường không?,fafsa khac css profile the nao,,skill_tra_loi,synthetic,train
+S1791,def-88,B4,,trường công khác trường tư thế nào,,skill_tra_loi,synthetic,train
+S1792,def-88,B5,,trường công và trường tư khác nhau chỗ nào,,skill_tra_loi,synthetic,train
+S1793,def-88,B3,,cho em hỏi trường công với trường tư khác gì nhau,,skill_tra_loi,synthetic,train
+S1794,def-88,B4,,truong cong khac truong tu the nao,,skill_tra_loi,synthetic,train
+S1795,def-89,B4,,cho em hỏi semester với quarter khác gì nhau,,skill_tra_loi,synthetic,train
+S1796,def-89,B4,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,semester và quarter khác nhau chỗ nào,,skill_tra_loi,synthetic,train
+S1797,def-89,B1,"Hiện bạn đang học lớp mấy, hoặc đang làm gì?",semester khác quarter thế nào,"target_level, gpa, budget, major, scholarship",skill_tra_loi,synthetic,train
+S1798,def-89,B5,,cho em hoi semester voi quarter khac gi nhau,,skill_tra_loi,synthetic,train
+S1799,def-90,B3,Bạn có muốn mình đề xuất lộ trình và danh sách trường phù hợp không?,test-optional và test-blind khác nhau chỗ nào,,skill_tra_loi,synthetic,train
+S1800,def-90,B5,,cho em hỏi test-optional với test-blind khác gì nhau,,skill_tra_loi,synthetic,train
+S1801,def-90,B2,"Bạn cần học bổng ở mức nào: không cần, nên có, hay bắt buộc phải có mới đi được?",test-optional khác test-blind thế nào,"budget, scholarship",skill_tra_loi,synthetic,train
+S1802,def-90,B4,,test-optional va test-blind khac nhau cho nao,,skill_tra_loi,synthetic,train
