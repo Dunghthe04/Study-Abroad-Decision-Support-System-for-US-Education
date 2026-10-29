@@ -250,8 +250,8 @@ def test_clean_rows_give_no_errors():
 
 
 def test_there_are_88_records_with_unique_codes_and_questions(records):
-    assert len(records) == 88
-    assert len({r["question"] for r in records}) == 88
+    assert len(records) == 443
+    assert len({r["question"] for r in records}) == 443
     assert [r["code"] for r in records] == [f"KB-{n:03d}" for n in range(1, 89)]
     assert sorted(r["stt"] for r in records) == list(range(1, 89))
 
