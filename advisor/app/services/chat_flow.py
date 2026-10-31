@@ -38,8 +38,7 @@ logger = logging.getLogger("advisor.chat")
 
 # Câu hỏi lấy nguyên văn từ framework, AI không tự đặt câu hỏi
 # Câu hỏi lấy nguyên văn từ framework, AI không tự đặt câu hỏi.
-# Chữ phải giống hệt cột last_question trong ml/skill_picker/data/skill_picker.csv (có test kiểm tra),
-# vì model chọn skill nhìn câu này làm đầu vào.
+# Mỗi mã một câu riêng (có test kiểm tra), vì model chọn skill (SLM) nhìn chữ của câu này để biết đang chờ mã nào.
 # X1 đến X3: câu chuyển bước, framework chưa đặt mã nên đặt tạm.
 QUESTIONS = {
     "B0.1": "Chào bạn, mình là trợ lý tư vấn du học Mỹ. Bạn đang cần mình giúp điều gì?",
