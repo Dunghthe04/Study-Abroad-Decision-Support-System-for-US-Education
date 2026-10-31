@@ -13,11 +13,11 @@ INTENTS = ("tu_van", "kich_ban", "kien_thuc", "trung_tam", "ngoai_pham_vi", "ho_
 Intent = Literal["tu_van", "kich_ban", "kien_thuc", "trung_tam", "ngoai_pham_vi", "ho_so"]
 
 
-# Thông tin ngoài hồ sơ tách từ tin nhắn.  Không nhắc tới thì để None
+# Thông tin ngoài hồ sơ tách từ tin nhắn. Không nhắc tới thì để None
 class SlmEntities(BaseModel):
-    school: str | None = None
-    service: str | None = None
-    city: str | None = None
+    school: str | None = None  # tên trường học sinh hỏi tới (câu hỏi về một trường)
+    service: str | None = None  # dịch vụ cần ở trung tâm (mã trong centers.SERVICES)
+    city: str | None = None  # thành phố học sinh nói tới (tìm trung tâm)
 
 
 # Định nghĩa cấu trúc dữ liệu mà SLM cần trả về, ép theo SCHEMA
@@ -29,7 +29,7 @@ class SlmRead(BaseModel):
     entities: SlmEntities = Field(default_factory=SlmEntities)
 
 
-# có toàn bộ thuộc tính của SlmRead, đồng thời bổ sung thêm tin_cay.Độ tin cậy do code tính (từ xác suất của model), không để SLM tự khai
+# SlmRead cộng độ tin cậy (confidence). Độ tin cậy do code tính (từ xác suất của model), không để SLM tự khai
 class SlmResult(SlmRead):
     confidence: float = Field(default=1.0, ge=0, le=1)
 
@@ -41,17 +41,17 @@ class SlmResult(SlmRead):
 # Khuôn JSON bắt SLM trả đúng (truyền cho Ollama qua tham số format). Viết tay như các khuôn khác trong dự án
 SLM_SCHEMA = {
     "type": "object",
-    "required": ["loai", "co_ho_so", "thuc_the"],
+    "required": ["type", "has_profile", "entities"],
     "properties": {
-        "loai": {"enum": list(INTENTS)},
-        "co_ho_so": {"type": "boolean"},
-        "thuc_the": {
+        "type": {"enum": list(INTENTS)},
+        "has_profile": {"type": "boolean"},
+        "entities": {
             "type": "object",
-            "required": ["truong", "dich_vu", "thanh_pho"],
+            "required": ["school", "service", "city"],
             "properties": {
-                "truong": {"type": ["string", "null"]},
-                "dich_vu": {"type": ["string", "null"]},
-                "thanh_pho": {"type": ["string", "null"]},
+                "school": {"type": ["string", "null"]},
+                "service": {"type": ["string", "null"]},
+                "city": {"type": ["string", "null"]},
             },
         },
     },
