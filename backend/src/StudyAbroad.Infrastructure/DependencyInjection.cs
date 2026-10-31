@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using StudyAbroad.Application.Advisor;
+using StudyAbroad.Application.Audit;
 using StudyAbroad.Application.Auth;
 using StudyAbroad.Application.Profile.Financial;
 using StudyAbroad.Application.Recommendations;
@@ -28,6 +29,7 @@ public static class DependencyInjection
 
         services.AddScoped<IStudyCenterRepository, StudyCenterRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<IAuditLogRepository, AuditLogRepository>();
         services.AddScoped<StudyAbroad.Application.ParentLinks.IParentLinkRepository, ParentLinkRepository>();
         services.AddScoped<IFinancialProfileRepository, FinancialProfileRepository>();
         services.AddScoped<StudyAbroad.Application.AcademicProfiles.IAcademicProfileRepository, AcademicProfileRepository>();

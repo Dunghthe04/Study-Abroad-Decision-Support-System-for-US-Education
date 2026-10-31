@@ -1,5 +1,7 @@
+using StudyAbroad.Application.Audit;
 using StudyAbroad.Application.Common;
 using StudyAbroad.Application.ParentLinks;
+using System.Text.Json;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
 using System;
@@ -30,15 +32,32 @@ namespace StudyAbroad.Application.Auth
         Task<AuthResult> CreateModeratorAccountAsync(CreateModeratorAccountRequest request, CancellationToken ct = default);
         /// <summary>[UC-60] Xem danh sách tài khoản — tìm, lọc, phân trang.</summary>
         Task<PagedResult<UserDto>> GetAdminUserAccountListAsync(AdminUserAccountListQuery query, CancellationToken ct = default);
+        /// <summary>[UC-61] Admin khóa tài khoản (student/parent/moderator/center) kèm lý do và audit.</summary>
+        Task<AuthResult> LockUserAccountAsync(Guid targetUserId, LockUserAccountRequest request, Guid actorAdminId, CancellationToken ct = default);
     }
 
-    public class AuthService(IUserRepository users, IPasswordHasher hasher, ITokenService tokens, IEmailSender emailSender, IParentLinkRepository parentLinks) : IAuthService
+    public class AuthService(
+        IUserRepository users,
+        IPasswordHasher hasher,
+        ITokenService tokens,
+        IEmailSender emailSender,
+        IParentLinkRepository parentLinks,
+        IAuditLogRepository auditLogs) : IAuthService
     {
         public const int MinPasswordLength = 8;
         public const int MaxPasswordLength = 100;
         public const int MaxFullNameLength = 100;
         public const int MaxEmailLength = 100;
         public const int MaxRawPhoneLength = 20;
+        public const int MaxLockReasonLength = 500;
+
+        private static readonly HashSet<string> AdminLockableRoles = new(StringComparer.Ordinal)
+        {
+            UserRoles.Student,
+            UserRoles.Parent,
+            UserRoles.Moderator,
+            UserRoles.Center,
+        };
         public const int MaxAge = 100;
 
         /// <summary>Thời hạn hiệu lực của mã OTP: 5 phút.</summary>
@@ -763,6 +782,60 @@ namespace StudyAbroad.Application.Auth
             await users.AddAsync(user, ct);
 
             return AuthResult.Ok(ToDto(user), "Đã tạo tài khoản moderator.");
+        }
+
+        /// <summary>[UC-61] Khóa vĩnh viễn tài khoản (không áp dụng admin).</summary>
+        public async Task<AuthResult> LockUserAccountAsync(
+            Guid targetUserId,
+            LockUserAccountRequest request,
+            Guid actorAdminId,
+            CancellationToken ct = default)
+        {
+            var reason = request.Reason?.Trim() ?? string.Empty;
+            if (reason.Length == 0)
+                return AuthResult.Fail(AuthError.Validation, "Lý do khóa không được để trống.");
+            if (reason.Length > MaxLockReasonLength)
+                return AuthResult.Fail(AuthError.Validation, $"Lý do khóa tối đa {MaxLockReasonLength} ký tự.");
+
+            var user = await users.GetUserById(targetUserId, ct);
+            if (user is null)
+                return AuthResult.Fail(AuthError.Validation, "Không tìm thấy tài khoản.");
+
+            if (user.Id == actorAdminId)
+                return AuthResult.Fail(AuthError.Validation, "Không thể khóa chính tài khoản đang đăng nhập.");
+
+            if (user.Role == UserRoles.Admin)
+                return AuthResult.Fail(AuthError.Validation, "Không thể khóa tài khoản quản trị viên.");
+
+            if (!AdminLockableRoles.Contains(user.Role))
+                return AuthResult.Fail(AuthError.Validation, "Vai trò này không được khóa qua chức năng này.");
+
+            if (user.Status == UserStatuses.Locked)
+                return AuthResult.Fail(AuthError.Validation, "Tài khoản đã ở trạng thái khóa.");
+
+            var previousStatus = user.Status;
+            user.Status = UserStatuses.Locked;
+            user.LockoutEnd = null;
+            user.FailedLoginAttempts = 0;
+            await users.UpdateUserAsync(user, ct);
+            await users.RevokeAllSessionsAsync(user.Id, ct);
+
+            var detailJson = JsonSerializer.Serialize(new
+            {
+                reason,
+                previousStatus,
+                targetEmail = user.Email,
+            });
+            await auditLogs.AddAsync(new AuditLog
+            {
+                ActorUserId = actorAdminId,
+                Action = "user.lock",
+                EntityType = "user",
+                EntityId = user.Id.ToString(),
+                DetailJson = detailJson,
+            }, ct);
+
+            return AuthResult.Ok(ToDto(user), "Đã khóa tài khoản.");
         }
     }
 }

@@ -11,6 +11,7 @@ import type {
   AdminUserAccountListQuery,
   PagedResult,
   CreateModeratorAccountRequest,
+  LockUserAccountRequest,
   VerifyEmailRequest,
   AcademicProfileResponse,
   ParentInviteInfo,
@@ -202,6 +203,13 @@ export const adminUsersApi = {
 
   createModerator: (data: CreateModeratorAccountRequest) =>
     apiFetch<UserDto>("/api/v1/admin/users/moderators", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  /** [UC-61] Khóa tài khoản (admin). */
+  lock: (id: string, data: LockUserAccountRequest) =>
+    apiFetch<UserDto>(`/api/v1/admin/users/${encodeURIComponent(id)}/lock`, {
       method: "POST",
       body: JSON.stringify(data),
     }),
