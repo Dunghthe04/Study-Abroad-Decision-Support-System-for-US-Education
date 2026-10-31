@@ -20,7 +20,6 @@ from app.services.knowledge import KnowledgeRetriever
 from app.services.ollama import OllamaClient
 from app.services.picker import Picker
 from app.services.scorer import Scorer
-from app.services.skill_picker_loader import load_skill_picker
 from app.services.skills import build_handlers
 from app.services.transcript_reader import TranscriptReader
 
@@ -71,7 +70,6 @@ async def lifespan(app: FastAPI):
             knowledge = KnowledgeRetriever(app.state.db_pool, statuses, settings.knowledge_top_k)
         centers = CenterFinder(backend_http) if settings.backend_base_url else None
         app.state.chat_flow = ChatFlow(
-            picker=load_skill_picker(http),
             handlers=build_handlers(
                 app.state.llm, settings.llm_model, knowledge, settings.knowledge_min_score, centers
             ),
