@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using StudyAbroad.Api.Extensions;
 using StudyAbroad.Application.Auth;
 using StudyAbroad.Application.Common;
 using StudyAbroad.Domain.Constants;
@@ -45,5 +46,19 @@ public class AdminUsersController(IAuthService auth) : ControllerBase
             return ValidationProblem(result.Message);
 
         return CreatedAtAction(nameof(GetUserById), new { id = result.User.Id }, result.User);
+    }
+
+    /// <summary>[UC-61] Khóa tài khoản kèm lý do (ghi audit).</summary>
+    [HttpPost("{id:guid}/lock")]
+    public async Task<ActionResult<UserDto>> LockUser(Guid id, LockUserAccountRequest request, CancellationToken ct)
+    {
+        if (User.GetUserId() is not { } adminId)
+            return Unauthorized();
+
+        var result = await auth.LockUserAccountAsync(id, request, adminId, ct);
+        if (result.Error != AuthError.None || result.User is null)
+            return ValidationProblem(result.Message);
+
+        return Ok(result.User);
     }
 }

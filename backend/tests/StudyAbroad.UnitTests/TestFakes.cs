@@ -1,3 +1,4 @@
+using StudyAbroad.Application.Audit;
 using StudyAbroad.Application.Auth;
 using StudyAbroad.Application.Common;
 using StudyAbroad.Application.ParentLinks;
@@ -169,6 +170,17 @@ internal sealed class FakeUserRepository : IUserRepository
         var pageSize = Math.Clamp(query.PageSize, 1, 100);
         var items = list.Skip((page - 1) * pageSize).Take(pageSize).ToList();
         return Task.FromResult(new PagedResult<User>(items, page, pageSize, list.Count));
+    }
+}
+
+internal sealed class FakeAuditLogRepository : IAuditLogRepository
+{
+    public List<AuditLog> Entries { get; } = [];
+
+    public Task AddAsync(AuditLog entry, CancellationToken cancellationToken = default)
+    {
+        Entries.Add(entry);
+        return Task.CompletedTask;
     }
 }
 
