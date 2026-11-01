@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { FileTextIcon, LogOutIcon, ShieldIcon, UserIcon } from "lucide-react";
+import { Building2Icon, FileTextIcon, LogOutIcon, ShieldIcon, UserIcon } from "lucide-react";
 import { formatUserRole } from "@/lib/user-role-labels";
 import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -23,6 +23,7 @@ import { cn } from "@/lib/utils";
 
 const links = [
   { href: "/", label: "Trang chủ" },
+  { href: "/centers", label: "Trung tâm tư vấn" },
   { href: "/methodology", label: "Giới thiệu phương pháp" },
   { href: "/analysis", label: "Phân tích tư vấn" },
 ];
@@ -121,6 +122,12 @@ export function SiteHeader() {
                   <UserIcon />
                   Hồ sơ cá nhân
                 </DropdownMenuItem>
+                {(user.role === "admin" || user.role === "moderator") && (
+                  <DropdownMenuItem render={<Link href="/centers" />}>
+                    <Building2Icon />
+                    Danh bạ trung tâm
+                  </DropdownMenuItem>
+                )}
                 {user.role === "admin" && (
                   <DropdownMenuItem render={<Link href="/admin/users" />}>
                     <ShieldIcon />

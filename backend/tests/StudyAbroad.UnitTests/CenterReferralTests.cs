@@ -106,14 +106,22 @@ public class CenterReferralTests
 
         public Task<IReadOnlyList<StudyCenter>> ListReferableAsync(CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<StudyCenter>>(centers);
+
+        public Task<bool> ExistsByCodeAsync(string code, CancellationToken ct = default) =>
+            Task.FromResult(centers.Any(c => c.Code.Equals(code, StringComparison.OrdinalIgnoreCase)));
+
+        public Task AddAsync(StudyCenter center, CancellationToken ct = default) =>
+            throw new NotSupportedException();
     }
+
+    private readonly FakeAuditLogRepository _auditLogs = new();
 
     [Fact]
     public async Task ReferAsync_AppliesTheRuleAndMapsToDtos()
     {
         var service = new StudyCenterService(new ReferableRepository(
             Center("A", city: "Hà Nội", services: ["LUYEN_PHONG_VAN", "CHON_TRUONG"]),
-            Center("B", city: "TP.HCM")));
+            Center("B", city: "TP.HCM")), _auditLogs);
 
         var result = await service.ReferAsync(new CenterReferralQuery("LUYEN_PHONG_VAN", "undergraduate", "TP.HCM"));
 
@@ -124,7 +132,7 @@ public class CenterReferralTests
     [Fact]
     public async Task ReferAsync_RequiresAService()
     {
-        var service = new StudyCenterService(new ReferableRepository());
+        var service = new StudyCenterService(new ReferableRepository(), _auditLogs);
 
         await Assert.ThrowsAsync<ArgumentException>(() => service.ReferAsync(new CenterReferralQuery()));
     }
@@ -132,7 +140,7 @@ public class CenterReferralTests
     [Fact]
     public async Task GetReferralCitiesAsync_ReturnsTheCitiesOfReferableCenters()
     {
-        var service = new StudyCenterService(new ReferableRepository(Center("A", city: "TP.HCM"), Center("B")));
+        var service = new StudyCenterService(new ReferableRepository(Center("A", city: "TP.HCM"), Center("B")), _auditLogs);
 
         Assert.Equal(["Hà Nội", "TP.HCM"], await service.GetReferralCitiesAsync());
     }
