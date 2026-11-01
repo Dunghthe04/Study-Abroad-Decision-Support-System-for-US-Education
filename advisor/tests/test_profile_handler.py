@@ -5,9 +5,18 @@ from app.services.intake import INTAKE_ID
 from app.services.skill_rules import REQUIRED_B3
 from app.services.skills import skill_ho_so
 from app.services.skills.profile_handler import ChatProfileHandler
+from app.services.skills.skill_bac_hoc import BacHocHandler
+from app.services.skills.skill_ho_so import HoSoHandler
 from tests.fakes import FakeLLM
 
-handler = ChatProfileHandler(FakeLLM(), "test")
+
+def make_handler(llm) -> ChatProfileHandler:
+    return ChatProfileHandler(
+        {"skill_bac_hoc": BacHocHandler(llm, "test"), "skill_ho_so": HoSoHandler(llm, "test")}
+    )
+
+
+handler = make_handler(FakeLLM())
 MAC_DINH = SlmResult(type="mac_dinh")
 
 
@@ -92,7 +101,7 @@ async def test_collect_bac_hoc_question_saves_and_asks_next():
     )
     state = ChatState(current_step="B1")
     ask(state, "B1.1")
-    await ChatProfileHandler(llm, "test").collect(state, "Em lớp 12", MAC_DINH)
+    await make_handler(llm).collect(state, "Em lớp 12", MAC_DINH)
     assert state.profile["current_level"].value == "high_school"
     assert state.question_id == "B1.2"
 
@@ -101,7 +110,7 @@ async def test_collect_ho_so_question_saves_answer():
     llm = FakeLLM({"values": {"gpa": {"value": 8.5, "scale": 10}}, "none_fields": []})
     state = ChatState(current_step="B2")
     ask(state, "D2")
-    await ChatProfileHandler(llm, "test").collect(state, "GPA em 8.5 hệ 10", MAC_DINH)
+    await make_handler(llm).collect(state, "GPA em 8.5 hệ 10", MAC_DINH)
     assert state.profile["gpa"].status == "confirmed"
     assert state.question_id != "D2"
 
@@ -133,7 +142,7 @@ async def test_update_after_confirm_returns_to_review():
         asked=dict.fromkeys(skill_ho_so.QUESTION_ORDER, 1),
     )
     slm = SlmResult(type="mac_dinh", thuc_the={"gpa": "9.0"})
-    await ChatProfileHandler(llm, "test").collect(state, "GPA em giờ 9.0 hệ 10", slm)
+    await make_handler(llm).collect(state, "GPA em giờ 9.0 hệ 10", slm)
     assert state.profile["gpa"].value["value"] == 9.0
     assert state.profile["gpa"].status == "said_in_B0"
     assert state.profile["activities"].value == [{"name": "a"}]
@@ -149,7 +158,7 @@ async def test_said_value_of_other_group_saved_with_pending_question():
     state = ChatState(current_step="B2", intake_mode="chat")
     ask(state, "D2")
     slm = SlmResult(type="mac_dinh", thuc_the={"gpa": "8.5", "major": "CS"})
-    await ChatProfileHandler(llm, "test").collect(state, "GPA 8.5 hệ 10, ngành CS", slm)
+    await make_handler(llm).collect(state, "GPA 8.5 hệ 10, ngành CS", slm)
     assert state.profile["major"].status == "said_in_B0"
     assert state.profile["gpa"].status == "confirmed"
 
@@ -159,7 +168,7 @@ async def test_opening_message_saves_values_and_invites():
     state = ChatState()
     ask(state, "B0.1")
     slm = SlmResult(type="mac_dinh", thuc_the={"gpa": "8.5"})
-    await ChatProfileHandler(llm, "test").collect(state, "GPA 8.5", slm)
+    await make_handler(llm).collect(state, "GPA 8.5", slm)
     assert state.profile["gpa"].status == "said_in_B0"
     assert state.question_id == INTAKE_ID
 
@@ -168,7 +177,7 @@ async def test_opening_message_without_values_invites_without_calling_llm():
     llm = FakeLLM()
     state = ChatState()
     ask(state, "B0.1")
-    await ChatProfileHandler(llm, "test").collect(state, "Chào bạn", MAC_DINH)
+    await make_handler(llm).collect(state, "Chào bạn", MAC_DINH)
     assert state.question_id == INTAKE_ID
     assert llm.calls == []
 
@@ -176,7 +185,7 @@ async def test_opening_message_without_values_invites_without_calling_llm():
 async def test_nothing_new_keeps_ready_profile():
     llm = FakeLLM()
     state = ChatState(current_step="B3", profile=full_profile(), intake_mode="chat")
-    output = await ChatProfileHandler(llm, "test").collect(state, "ok", MAC_DINH)
+    output = await make_handler(llm).collect(state, "ok", MAC_DINH)
     assert output.answer
     assert (state.current_step, state.question_id) == ("B3", None)
     assert handler.ready(state, REQUIRED_B3)
@@ -187,6 +196,6 @@ async def test_unreadable_value_keeps_ready_profile():
     llm = FakeLLM({"values": {}, "none_fields": []})
     state = ChatState(current_step="B3", profile=full_profile(), intake_mode="chat")
     slm = SlmResult(type="mac_dinh", thuc_the={"gpa": "cao"})
-    await ChatProfileHandler(llm, "test").collect(state, "GPA em cao", slm)
+    await make_handler(llm).collect(state, "GPA em cao", slm)
     assert (state.current_step, state.question_id) == ("B3", None)
     assert handler.ready(state, REQUIRED_B3)

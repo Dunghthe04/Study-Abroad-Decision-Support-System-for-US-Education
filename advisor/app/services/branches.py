@@ -17,7 +17,8 @@ from app.services.chat_flow import (
     combine,
     start_intake,
 )
-from app.services.skill_rules import REQUIRED_BY_SKILL, STEP_SKILL, missing_fields
+from app.services.skill_rules import REQUIRED_B3, REQUIRED_BY_SKILL, STEP_SKILL, missing_fields
+from app.services.skills.profile_handler import ChatProfileHandler
 
 
 # Nhánh dùng nguyên một skill có sẵn (kiến thức, trung tâm)
@@ -92,11 +93,26 @@ class LegacyProfileBranch:
         return output
 
 
+# Trả lời câu hồ sơ đang chờ hoặc cập nhật hồ sơ. Hồ sơ vừa đủ trong lượt này thì tư vấn luôn,
+# không bắt học sinh nhắn thêm một lần nữa mới thấy kết quả
+class ProfileBranch:
+    def __init__(self, handler: ChatProfileHandler, advice: Branch) -> None:
+        self._handler = handler
+        self._advice = advice
+
+    async def run(self, state: ChatState, message: str, slm: SlmResult) -> SkillOutput:
+        was_ready = self._handler.ready(state, REQUIRED_B3)
+        output = await self._handler.collect(state, message, slm)
+        if not was_ready and self._handler.ready(state, REQUIRED_B3):
+            return combine(output, await self._advice.run(state, message, slm))
+        return output
+
+
 # Bảng nhánh theo loại câu hỏi SLM. skills: các skill cũ do skills.build_handlers tạo
 def build_branches(skills: dict[str, SkillHandler]) -> dict[str, Branch]:
     advice = LegacyAdviceBranch(skills)
     return {
-        "mac_dinh": LegacyProfileBranch(skills, advice),
+        "mac_dinh": ProfileBranch(ChatProfileHandler(skills), advice),
         "ho_so": advice,
         "kich_ban": NotReadyBranch(),
         "kien_thuc": SkillBranch(skills["skill_tra_loi"]) if "skill_tra_loi" in skills else NotReadyBranch(),

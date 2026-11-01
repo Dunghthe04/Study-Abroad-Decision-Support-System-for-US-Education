@@ -150,25 +150,23 @@ async def test_roadmap_with_only_the_major_missing_shows_the_major_widget():
     assert (state.current_step, state.question_id, state.return_to) == ("B1", "B1.3", "B4")
 
 
-# ---- hồ sơ (tạm dùng skill cũ, phần của Việt) ----
-@pytest.mark.parametrize(
-    ("step", "expected"),
-    [("B0", "skill_nhu_cau"), ("B1", "skill_bac_hoc"), ("B2", "skill_ho_so"), ("B4", "skill_ho_so")],
-)
-async def test_profile_answers_go_to_the_old_skill_of_the_step_being_asked(step, expected):
+# ---- hồ sơ ----
+@pytest.mark.parametrize(("question", "expected"), [("B1.1", "skill_bac_hoc"), ("D2", "skill_ho_so")])
+async def test_profile_answer_goes_to_the_skill_owning_the_pending_question(question, expected):
     ran: list[str] = []
+    state = ChatState(current_step="B2")
+    ask(state, question)
 
-    await build_branches(skills(ran))["mac_dinh"].run(
-        ChatState(current_step=step), "x", SlmResult(type="mac_dinh")
-    )
+    await build_branches(skills(ran))["mac_dinh"].run(state, "x", SlmResult(type="mac_dinh"))
 
-    assert ran == [expected]  # ngoài các bước hỏi hồ sơ (vd đã có danh sách) thì skill_ho_so ghi giá trị
+    assert ran == [expected]
 
 
 async def test_the_last_profile_answer_is_followed_by_the_advice_in_the_same_turn():
     ran: list[str] = []
     branches = build_branches(skills(ran, skill_ho_so=Recording("skill_ho_so", ran, moves_to="B3")))
     state = ChatState(current_step="B2", profile=filled(REQUIRED_B3))
+    ask(state, "X1")
 
     out = await branches["mac_dinh"].run(state, "8.5", SlmResult(type="mac_dinh"))
 
@@ -184,3 +182,12 @@ async def test_a_profile_answer_that_still_leaves_questions_does_not_run_the_adv
     await build_branches(skills(ran))["mac_dinh"].run(state, "8.5", SlmResult(type="mac_dinh"))
 
     assert ran == ["skill_ho_so"]
+
+
+async def test_nothing_new_on_a_ready_profile_does_not_run_the_advice_again():
+    ran: list[str] = []
+    state = ChatState(current_step="B3", profile=filled(REQUIRED_B3), intake_mode="chat")
+
+    await build_branches(skills(ran))["mac_dinh"].run(state, "ok", SlmResult(type="mac_dinh"))
+
+    assert ran == []

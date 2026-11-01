@@ -7,8 +7,6 @@ from app.schemas.slm import SlmResult
 from app.services.chat_flow import OPENING_QUESTIONS, SkillOutput, ask_next_missing, start_intake
 from app.services.skill_rules import REQUIRED_B3, missing_fields
 from app.services.skills import skill_bac_hoc, skill_ho_so
-from app.services.skills.skill_bac_hoc import BacHocHandler, BacHocReader
-from app.services.skills.skill_ho_so import HoSoHandler, HoSoReader
 
 # Giá trị hồ sơ nào do skill nào đọc
 BAC_HOC_FIELDS = set(skill_bac_hoc.READ_FIELDS)
@@ -22,11 +20,9 @@ class ChatProfileHandler:
     Lưu trữ và xử lý thông tin hồ sơ của học sinh trong quá trình chat.
     """
 
-    def __init__(self, llm: Any, model: str) -> None:
-        self._bac_hoc = BacHocHandler(llm, model)
-        self._ho_so = HoSoHandler(llm, model)
-        self._bac_hoc_reader = BacHocReader(llm, model)
-        self._ho_so_reader = HoSoReader(llm, model)
+    # skills: các skill do build_handlers tạo. Tra khi cần vì nhánh được tạo cả khi chưa đăng ký skill nào
+    def __init__(self, skills: dict[str, Any]) -> None:
+        self._skills = skills
 
     # Có câu đang chờ: ghi phần thuộc nhóm còn lại trước, để skill không hỏi lại điều vừa được nói.
     # Không có câu chờ: ghi giá trị tự khai rồi hỏi tiếp mục còn thiếu.
@@ -42,20 +38,16 @@ class ChatProfileHandler:
             return ask_next_missing(state)
         if state.question_id in skill_bac_hoc.QUESTION_FIELDS:
             await self._save_said(state, message, said - BAC_HOC_FIELDS)
-            return await self._bac_hoc.run(state, message)
+            return await self._skills["skill_bac_hoc"].run(state, message)
         await self._save_said(state, message, said - HO_SO_FIELDS)
-        return await self._ho_so.run(state, message)
+        return await self._skills["skill_ho_so"].run(state, message)
 
-    # Đọc lại tin bằng skill có khuôn giá trị chuẩn. Ghi said_in_B0 để học sinh xác nhận lại ở X1,
-    # được đè giá trị cũ vì học sinh có thể đang sửa hồ sơ
+    # Đọc lại tin bằng skill có khuôn giá trị chuẩn
     async def _save_said(self, state: ChatState, message: str, said: set[str]) -> None:
         if said & BAC_HOC_FIELDS:
-            read = await self._bac_hoc_reader.read("B1.1", message)
-            skill_bac_hoc.save_read(state, read, status="said_in_B0")
+            await self._skills["skill_bac_hoc"].save_said(state, message)
         if said & HO_SO_FIELDS:
-            known = {name: f.value for name, f in state.profile.items() if f.value is not None}
-            read = await self._ho_so_reader.read(None, message, known, state.branch)
-            skill_ho_so.save_read(state, read, status="said_in_B0")
+            await self._skills["skill_ho_so"].save_said(state, message)
 
     def pending_question(self, state: ChatState) -> str | None:
         """

@@ -799,6 +799,11 @@ class HoSoHandler:
     def __init__(self, llm: Any, model: str) -> None:
         self._reader = HoSoReader(llm, model)
 
+    # Ghi giá trị học sinh tự khai ngoài câu đang hỏi: said_in_B0 để xác nhận lại ở X1, được đè giá trị cũ
+    async def save_said(self, state: ChatState, message: str) -> None:
+        known = {name: f.value for name, f in state.profile.items() if f.value is not None}
+        save_read(state, await self._reader.read(None, message, known, state.branch), status="said_in_B0")
+
     async def run(self, state: ChatState, message: str) -> SkillOutput:
         # Tỷ giá cũ hơn 1 ngày thì lấy lại trước khi đổi tiền hoặc vẽ ô ngân sách
         await exchange_rate.refresh()
