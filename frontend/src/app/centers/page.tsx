@@ -5,6 +5,7 @@ import type { PagedResult, StudyCenter } from "@/types/api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { AddCenterButton } from "@/components/admin/AddCenterButton";
 
 export const metadata = { title: "Trung tâm tư vấn – USAS" };
 
@@ -20,7 +21,10 @@ export default async function CentersPage() {
 
   return (
     <section className="space-y-4">
-      <h1 className="text-h1">Trung tâm tư vấn du học</h1>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <h1 className="text-h1">Trung tâm tư vấn du học</h1>
+        <AddCenterButton />
+      </div>
       {!data ? (
         <Alert variant="destructive">
           <AlertDescription>Không tải được dữ liệu. Kiểm tra API đã chạy chưa.</AlertDescription>
