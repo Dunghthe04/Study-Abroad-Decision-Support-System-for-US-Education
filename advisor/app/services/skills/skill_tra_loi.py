@@ -14,6 +14,7 @@ from typing import Any
 from app.schemas.chat import ChatState, Citation, QuickReply
 from app.services.chat_flow import SkillOutput
 from app.services.knowledge import KnowledgeHit, KnowledgeRetriever
+from app.services.pii_mask import mask_personal_info
 from app.services.skill_call import SKILLS_DIR, SkillCall
 
 logger = logging.getLogger("advisor.knowledge")
@@ -105,8 +106,15 @@ def citation_of(hit: KnowledgeHit) -> Citation:
 
 
 class TraLoiHandler:
-    def __init__(self, llm: Any, model: str, retriever: KnowledgeRetriever, min_score: float = 0.72) -> None:
-        self._llm = llm
+    def __init__(
+        self,
+        llm: Any,
+        model: str,
+        retriever: KnowledgeRetriever,
+        min_score: float = 0.72,
+        embedder: Any = None,
+    ) -> None:
+        self._embedder = embedder or llm  # embedding chạy trên Ollama (bge-m3), khác với LLM viết câu trả lời
         self._retriever = retriever
         self._min_score = min_score
         self._call = SkillCall(llm, model, SKILL_PATH)
@@ -114,7 +122,7 @@ class TraLoiHandler:
     async def run(self, state: ChatState, message: str) -> SkillOutput:
         try:
             # Biến câu hỏi thành vector
-            [vector] = await self._llm.embed([message])
+            [vector] = await self._embedder.embed([message])
             # Lấy ra các dòng kiến thức gần nhất (đã xếp điểm cao trước)
             hits = await self._retriever.search(vector, state.study_level)
         except Exception:  # Ollama tắt hoặc DB lỗi: nói thật là đang gián đoạn, không bịa
@@ -122,6 +130,13 @@ class TraLoiHandler:
             return SkillOutput(UNAVAILABLE)
         # Chỉ lấy dòng tốt nhất, và phải đạt ngưỡng
         if not hits or hits[0].score < self._min_score:
+            # Ghi lại câu kho chưa trả lời được (đã che thông tin cá nhân) để biết cần bổ sung kiến thức gì
+            logger.info(
+                "knowledge_miss score=%s nearest=%s question=%r",
+                f"{hits[0].score:.3f}" if hits else "none",
+                hits[0].code if hits else "none",
+                mask_personal_info(message),
+            )
             return SkillOutput(NO_BASIS, quick_replies=[CENTER_BUTTON])
         best = hits[0]
 

@@ -2,7 +2,8 @@
 
 Quy trình 2 bước, vì model nhỏ vừa đọc ảnh vừa suy luận ra JSON thì rất dễ sai khi đổi bố cục:
 - Bước A "chép": model đọc ảnh (vision_model) chép nguyên văn ảnh thành Markdown. PDF có chữ thì bỏ qua bước này.
-- Bước B "hiểu": LLM chữ (transcript_parse_model, để trống thì dùng llm_model) đọc Markdown, trả JSON theo schema (structured output).
+- Bước B "hiểu": LLM chữ đọc Markdown, trả JSON theo schema (structured output). Có `parser` (Gemini) thì dùng Gemini,
+  không có thì dùng model Ollama (transcript_parse_model, để trống thì dùng llm_model).
 Sau đó code hậu kiểm: điểm phải có thật trong văn bản bước A và nằm trong 0–10, rồi chuẩn hoá tên môn / tên kỳ.
 """
 
@@ -30,6 +31,7 @@ from app.schemas.transcript_ocr import (
     TranscriptSubjectScore,
     TranscriptTerm,
 )
+from app.services.ollama import OllamaError
 from app.services.pii_mask import mask_personal_info
 from app.services.transcript_text import read_term_tables, tidy_transcription
 
@@ -271,9 +273,14 @@ class _FileResult:
 
 
 class TranscriptReader:
-    def __init__(self, http: httpx.AsyncClient, settings: Settings) -> None:
+    # parser: client LLM có chat_json (Gemini) cho bước B; None thì bước B chạy trên Ollama
+    def __init__(
+        self, http: httpx.AsyncClient, settings: Settings, parser: Any = None, parser_model: str = ""
+    ) -> None:
         self._http = http
         self._settings = settings
+        self._parser = parser
+        self._parser_model = parser_model
 
     async def read_transcript(self, request: TranscriptOcrRequest) -> TranscriptOcrResponse:
         """Đọc và bóc tách bảng điểm từ danh sách nhiều ảnh hoặc nhiều tệp PDF."""
@@ -576,6 +583,8 @@ class TranscriptReader:
             if direct.terms:
                 direct.model = model_used
                 return direct
+        if self._parser is not None:
+            return await self._parse_with_parser(source, file_name, model_used)
         parse_model = self._settings.transcript_parse_model or self._settings.llm_model
         payload: dict[str, Any] = {
             "model": parse_model,
@@ -599,6 +608,19 @@ class TranscriptReader:
                 warnings=[f"Tệp '{file_name}': AI trả kết quả không hợp lệ, bạn thử lại giúp nhé."],
             )
 
+        result = self._check_parsed(data, source, file_name)
+        result.model = used
+        return result
+
+    async def _parse_with_parser(self, source: str, file_name: str, model_used: str | None) -> _FileResult:
+        """Bước B trên Gemini: văn bản đã che họ tên, ngày sinh, mã số trước khi tới đây."""
+        used = " + ".join(m for m in (model_used, self._parser_model) if m)
+        messages = [{"role": "user", "content": PARSE_PROMPT + source}]
+        try:
+            data = await self._parser.chat_json(messages, PARSE_SCHEMA, temperature=0.0)
+        except OllamaError as ex:  # GeminiError kế thừa OllamaError: hết hạn mức, quá tải, JSON hỏng
+            logger.warning("Bước B lỗi (%s, %s): %s", self._parser_model, file_name, ex)
+            return _FileResult(model=used, warnings=[f"Tệp '{file_name}': {FRIENDLY_AI_BUSY}"])
         result = self._check_parsed(data, source, file_name)
         result.model = used
         return result

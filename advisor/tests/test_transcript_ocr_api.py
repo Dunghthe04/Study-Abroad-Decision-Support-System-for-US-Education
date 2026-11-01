@@ -410,3 +410,46 @@ def test_outlier_score_is_flagged_and_text_pdf_scores_are_not():
     flags = {s.subject: (s.needs_review, s.review_reason) for s in body.terms[0].scores}
     assert flags["Tin học"] == (True, "outlier")
     assert flags["Toán"] == (False, None)
+
+
+class FakeParser:
+    """Gemini giả cho bước B: ghi lại lời gọi, trả JSON soạn sẵn hoặc ném lỗi."""
+
+    def __init__(self, parsed: dict | None = None, error: Exception | None = None) -> None:
+        self.parsed, self.error, self.calls = parsed, error, []
+
+    async def chat_json(self, messages, schema, temperature=0.0):
+        self.calls.append(messages)
+        if self.error:
+            raise self.error
+        return self.parsed
+
+
+def test_step_b_runs_on_the_parser_when_there_is_one():
+    fake, parser = FakeOllama(markdown=HIGH_SCHOOL_MARKDOWN), FakeParser(HIGH_SCHOOL_PARSED)
+    reader = TranscriptReader(fake, Settings(_env_file=None), parser, "gemini-x")  # type: ignore[arg-type,call-arg]
+    app = create_app()
+    app.dependency_overrides[get_transcript_reader] = lambda: reader
+
+    res = TestClient(app).post("/api/v1/profile/transcript-ocr", json={"imageBase64": _png_base64()})
+
+    assert res.status_code == 200 and res.json()["success"]
+    assert len(parser.calls) == 1 and "Lớp 10" in parser.calls[0][0]["content"]
+    assert not any("format" in c for c in fake.calls)  # Ollama chỉ chạy bước A (đọc ảnh)
+    assert "gemini-x" in res.json()["modelUsed"]
+
+
+def test_step_b_parser_failure_gives_the_friendly_message():
+    from app.services.ollama import OllamaError
+
+    fake = FakeOllama(markdown=HIGH_SCHOOL_MARKDOWN)
+    reader = TranscriptReader(
+        fake, Settings(_env_file=None), FakeParser(error=OllamaError("hết hạn mức")), "gemini-x"
+    )  # type: ignore[arg-type,call-arg]
+    app = create_app()
+    app.dependency_overrides[get_transcript_reader] = lambda: reader
+
+    res = TestClient(app).post("/api/v1/profile/transcript-ocr", json={"imageBase64": _png_base64()})
+
+    assert res.status_code == 200 and not res.json()["success"]
+    assert any("AI chưa đọc được" in w for w in res.json()["warnings"])
