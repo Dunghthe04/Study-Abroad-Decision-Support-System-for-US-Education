@@ -171,3 +171,22 @@ async def test_opening_message_without_values_invites_without_calling_llm():
     await ChatProfileHandler(llm, "test").collect(state, "Chào bạn", MAC_DINH)
     assert state.question_id == INTAKE_ID
     assert llm.calls == []
+
+
+async def test_nothing_new_keeps_ready_profile():
+    llm = FakeLLM()
+    state = ChatState(current_step="B3", profile=full_profile(), intake_mode="chat")
+    output = await ChatProfileHandler(llm, "test").collect(state, "ok", MAC_DINH)
+    assert output.answer
+    assert (state.current_step, state.question_id) == ("B3", None)
+    assert handler.ready(state, REQUIRED_B3)
+    assert llm.calls == []
+
+
+async def test_unreadable_value_keeps_ready_profile():
+    llm = FakeLLM({"values": {}, "none_fields": []})
+    state = ChatState(current_step="B3", profile=full_profile(), intake_mode="chat")
+    slm = SlmResult(type="mac_dinh", thuc_the={"gpa": "cao"})
+    await ChatProfileHandler(llm, "test").collect(state, "GPA em cao", slm)
+    assert (state.current_step, state.question_id) == ("B3", None)
+    assert handler.ready(state, REQUIRED_B3)

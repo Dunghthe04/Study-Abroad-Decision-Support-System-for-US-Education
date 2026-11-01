@@ -14,6 +14,8 @@ from app.services.skills.skill_ho_so import HoSoHandler, HoSoReader
 BAC_HOC_FIELDS = set(skill_bac_hoc.READ_FIELDS)
 HO_SO_FIELDS = {name for names in skill_ho_so.QUESTION_FIELDS.values() for name in names}
 
+PROFILE_DONE = "Hồ sơ của bạn đã đầy đủ rồi. Bạn cần mình tư vấn thêm gì không?"
+
 
 class ChatProfileHandler:
     """
@@ -27,11 +29,14 @@ class ChatProfileHandler:
         self._ho_so_reader = HoSoReader(llm, model)
 
     # Có câu đang chờ: ghi phần thuộc nhóm còn lại trước, để skill không hỏi lại điều vừa được nói.
-    # Không có câu chờ: ghi giá trị tự khai rồi hỏi tiếp mục còn thiếu
+    # Không có câu chờ: ghi giá trị tự khai rồi hỏi tiếp mục còn thiếu.
+    # Hồ sơ vẫn đủ nghĩa là không có gì mới, nên không mở lại bước xác nhận
     async def collect(self, state: ChatState, message: str, slm: SlmResult) -> SkillOutput:
         said = set(slm.profile_values())
         if self.pending_question(state) is None:
             await self._save_said(state, message, said)
+            if self.ready(state, REQUIRED_B3):
+                return SkillOutput(PROFILE_DONE)
             if state.intake_mode != "chat" and missing_fields(state.profile, REQUIRED_B3):
                 return start_intake(state)
             return ask_next_missing(state)
