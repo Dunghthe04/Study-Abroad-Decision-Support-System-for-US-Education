@@ -1,7 +1,9 @@
 from app.schemas.chat import ChatState, ProfileField
 from app.schemas.slm import SlmResult
 from app.services.chat_flow import ask
+from app.services.intake import INTAKE_ID
 from app.services.skill_rules import REQUIRED_B3
+from app.services.skills import skill_ho_so
 from app.services.skills.profile_handler import ChatProfileHandler
 from tests.fakes import FakeLLM
 
@@ -113,3 +115,59 @@ async def test_collect_confirm_review_makes_profile_ready():
     assert state.current_step == "B3"
     assert state.question_id is None
     assert handler.ready(state, REQUIRED_B3)
+
+
+def full_profile() -> dict[str, ProfileField]:
+    names = ["current_level", "target_level", "major", "intake", "gpa", "english", "budget"]
+    profile = {name: ProfileField(value="x", status="confirmed") for name in names}
+    profile["activities"] = ProfileField(value=[{"name": "a"}], status="confirmed")
+    return profile
+
+
+async def test_update_after_confirm_returns_to_review():
+    llm = FakeLLM({"values": {"gpa": {"value": 9.0, "scale": 10}}, "none_fields": []})
+    state = ChatState(
+        current_step="B3",
+        profile=full_profile(),
+        intake_mode="chat",
+        asked=dict.fromkeys(skill_ho_so.QUESTION_ORDER, 1),
+    )
+    slm = SlmResult(type="mac_dinh", thuc_the={"gpa": "9.0"})
+    await ChatProfileHandler(llm, "test").collect(state, "GPA em giờ 9.0 hệ 10", slm)
+    assert state.profile["gpa"].value["value"] == 9.0
+    assert state.profile["gpa"].status == "said_in_B0"
+    assert state.profile["activities"].value == [{"name": "a"}]
+    assert (state.current_step, state.question_id) == ("B2", "X1")
+    assert not handler.ready(state, REQUIRED_B3)
+
+
+async def test_said_value_of_other_group_saved_with_pending_question():
+    llm = FakeLLM(
+        {"current_level": None, "current_grade": None, "target_level": None, "major": "CS", "intake": None},
+        {"values": {"gpa": {"value": 8.5, "scale": 10}}, "none_fields": []},
+    )
+    state = ChatState(current_step="B2", intake_mode="chat")
+    ask(state, "D2")
+    slm = SlmResult(type="mac_dinh", thuc_the={"gpa": "8.5", "major": "CS"})
+    await ChatProfileHandler(llm, "test").collect(state, "GPA 8.5 hệ 10, ngành CS", slm)
+    assert state.profile["major"].status == "said_in_B0"
+    assert state.profile["gpa"].status == "confirmed"
+
+
+async def test_opening_message_saves_values_and_invites():
+    llm = FakeLLM({"values": {"gpa": {"value": 8.5, "scale": 10}}, "none_fields": []})
+    state = ChatState()
+    ask(state, "B0.1")
+    slm = SlmResult(type="mac_dinh", thuc_the={"gpa": "8.5"})
+    await ChatProfileHandler(llm, "test").collect(state, "GPA 8.5", slm)
+    assert state.profile["gpa"].status == "said_in_B0"
+    assert state.question_id == INTAKE_ID
+
+
+async def test_opening_message_without_values_invites_without_calling_llm():
+    llm = FakeLLM()
+    state = ChatState()
+    ask(state, "B0.1")
+    await ChatProfileHandler(llm, "test").collect(state, "Chào bạn", MAC_DINH)
+    assert state.question_id == INTAKE_ID
+    assert llm.calls == []
