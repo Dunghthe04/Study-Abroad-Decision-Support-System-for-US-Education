@@ -33,6 +33,18 @@ def slm_input(message: str, profile: dict[str, str] | None, pending: str) -> dic
     return {"cau_hoi": message, "ho_so": profile or None, "cau_he_thong_dang_hoi": pending}
 
 
+# Hội thoại gửi cho SLM: system là prompt, user là JSON đầu vào viết liền.
+# Dùng chung cho lúc chạy (OllamaSlm.read) và lúc xuất dữ liệu fine-tune, để model học đúng thứ nó sẽ nhận
+def build_messages(
+    prompt: str, message: str, profile: dict[str, str] | None, pending: str
+) -> list[dict[str, str]]:
+    user = slm_input(message, profile, pending)
+    return [
+        {"role": "system", "content": prompt},
+        {"role": "user", "content": json.dumps(user, ensure_ascii=False, separators=(",", ":"))},
+    ]
+
+
 # Bỏ giá trị không có nguyên văn trong tin: model hay chép từ hồ sơ đầu vào, hoặc tự điền "null", "không có"
 def keep_verbatim(thuc_the: dict[str, Any], message: str) -> dict[str, Any]:
     text = message.lower()
@@ -82,12 +94,26 @@ def label_confidence(content: str, logprobs: list[dict[str, Any]]) -> float:
     return math.exp(total)
 
 
+# Định dạng đầu ra gửi cho Ollama theo settings.slm_format.
+# "json": model đã fine-tune tự viết đúng khuôn theo thứ tự đã học (type trước). Ép schema thì Ollama đổi thứ tự khóa
+# theo bảng chữ cái (nhan_phu, thuc_the, type), lệch với lúc train nên sai nhiều (đo val: 70,8% so với 90,8%).
+# "schema": ép theo SLM_SCHEMA, cho model chưa fine-tune vì nó không tự biết khuôn
+def output_format(name: str) -> dict[str, Any] | str:
+    if name == "json":
+        return "json"
+    if name == "schema":
+        return SLM_SCHEMA
+    raise ValueError(f"slm_format phải là 'json' hoặc 'schema', đang là '{name}'")
+
+
 class OllamaSlm:
     """Làm đúng hợp đồng SlmClassifier trong slm_contract.py."""
 
-    # slm: OllamaClient tạo với model SLM (settings.slm_model, qwen3:4b). Để Any để test truyền được client giả
-    def __init__(self, slm: Any) -> None:
+    # slm: OllamaClient tạo với model SLM (settings.slm_model). Để Any để test truyền được client giả.
+    # output: định dạng đầu ra, lấy bằng output_format(settings.slm_format). Mặc định ép SLM_SCHEMA
+    def __init__(self, slm: Any, output: dict[str, Any] | str = SLM_SCHEMA) -> None:
         self._slm = slm
+        self._output = output
         self.prompt, self.prompt_version = load_skill(PROMPT_PATH)
 
     # Lấy hồ sơ và câu hệ thống đang hỏi từ state (last_question rỗng khi không có câu nào chờ)
@@ -96,14 +122,10 @@ class OllamaSlm:
 
     # Phần chính, tách riêng để script đo chạy thẳng trên dữ liệu mà không cần dựng ChatState
     async def read(self, message: str, profile: dict[str, str] | None, pending: str) -> SlmResult:
-        user = slm_input(message, profile, pending)
-        messages = [
-            {"role": "system", "content": self.prompt},
-            {"role": "user", "content": json.dumps(user, ensure_ascii=False, separators=(",", ":"))},
-        ]
+        messages = build_messages(self.prompt, message, profile, pending)
         for _ in range(MAX_ATTEMPTS):
             try:
-                raw, content, logprobs = await self._slm.chat_json_scored(messages, SLM_SCHEMA)
+                raw, content, logprobs = await self._slm.chat_json_scored(messages, self._output)
                 raw["thuc_the"] = keep_verbatim(
                     raw.get("thuc_the") or {}, message
                 )  # bỏ giá trị không có trong tin
