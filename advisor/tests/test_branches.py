@@ -23,7 +23,7 @@ class Recording:
         return SkillOutput(f"trả lời của {self.name}")
 
 
-SKILL_NAMES = ("skill_nhu_cau", "skill_bac_hoc", "skill_ho_so", "skill_danh_gia", "skill_lo_trinh", "skill_explain",
+SKILL_NAMES = ("skill_bac_hoc", "skill_ho_so", "skill_danh_gia", "skill_lo_trinh", "skill_explain",
                "skill_tra_loi", "skill_chuyen_trung_tam")  # fmt: skip
 
 
@@ -109,6 +109,15 @@ async def test_advice_without_a_profile_offers_chat_or_form():
     )
 
     assert ran == [] and out.answer == INTAKE_ASK
+    assert out.quick_replies == [CHAT_BUTTON, FORM_BUTTON] and state.question_id == INTAKE_ID
+
+
+async def test_advice_on_the_opening_question_offers_chat_or_form():
+    state = ChatState()
+    ask(state, "B0.1")
+
+    out = await build_branches(skills([]))["ho_so"].run(state, "tôi muốn đi du học", SlmResult(type="ho_so"))
+
     assert out.quick_replies == [CHAT_BUTTON, FORM_BUTTON] and state.question_id == INTAKE_ID
 
 

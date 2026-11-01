@@ -10,6 +10,7 @@ from app.schemas.slm import SlmResult
 from app.services.chat_flow import (
     NEED_PROFILE,
     NOT_READY,
+    OPENING_QUESTIONS,
     Branch,
     SkillHandler,
     SkillOutput,
@@ -70,7 +71,7 @@ class LegacyAdviceBranch:
         # Đang hỏi hồ sơ dở (có câu đang chờ) thì chỉ báo cần thêm hồ sơ, ChatFlow nhắc lại câu đang chờ
         missing = missing_fields(state.profile, REQUIRED_BY_SKILL[name]) if name in REQUIRED_BY_SKILL else []
         if missing:
-            if state.question_id:
+            if state.question_id and state.question_id not in OPENING_QUESTIONS:
                 return SkillOutput(NEED_PROFILE)
             return ask_major(state) if missing[0] == "major" else start_intake(state, REQUIRED_BY_SKILL[name])
         return await self._skills[name].run(state, message)
