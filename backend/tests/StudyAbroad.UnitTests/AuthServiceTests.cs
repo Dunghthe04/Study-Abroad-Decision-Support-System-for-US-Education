@@ -382,6 +382,65 @@ public class AuthServiceTests
     }
 
     [Fact]
+    public async Task UnlockUserAccount_UnlocksLockedUser_WritesAuditAndResetsLockout()
+    {
+        var adminId = Guid.NewGuid();
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        var studentId = _repo.Users[0].Id;
+        _repo.Users[0].Status = UserStatuses.Locked;
+        _repo.Users[0].FailedLoginAttempts = 5;
+        _repo.Users[0].LockoutEnd = DateTime.UtcNow.AddMinutes(15);
+
+        var result = await service.UnlockUserAccountAsync(
+            studentId,
+            new UnlockUserAccountRequest("Đã xác minh thông tin giải trình"),
+            adminId);
+
+        Assert.Equal(AuthError.None, result.Error);
+        Assert.Equal(UserStatuses.Active, _repo.Users[0].Status);
+        Assert.Equal(0, _repo.Users[0].FailedLoginAttempts);
+        Assert.Null(_repo.Users[0].LockoutEnd);
+        var log = Assert.Single(_auditLogs.Entries);
+        Assert.Equal("user.unlock", log.Action);
+        Assert.Equal(adminId, log.ActorUserId);
+    }
+
+    [Fact]
+    public async Task UnlockUserAccount_WhenNotLocked_ReturnsValidationError()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        var studentId = _repo.Users[0].Id;
+        _repo.Users[0].Status = UserStatuses.Active;
+
+        var result = await service.UnlockUserAccountAsync(
+            studentId,
+            new UnlockUserAccountRequest("lý do"),
+            Guid.NewGuid());
+
+        Assert.Equal(AuthError.Validation, result.Error);
+        Assert.Empty(_auditLogs.Entries);
+    }
+
+    [Fact]
+    public async Task UnlockUserAccount_EmptyReason_ReturnsValidationError()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        var studentId = _repo.Users[0].Id;
+        _repo.Users[0].Status = UserStatuses.Locked;
+
+        var result = await service.UnlockUserAccountAsync(
+            studentId,
+            new UnlockUserAccountRequest("   "),
+            Guid.NewGuid());
+
+        Assert.Equal(AuthError.Validation, result.Error);
+        Assert.Empty(_auditLogs.Entries);
+    }
+
+    [Fact]
     public async Task Login_UnverifiedUser_ReturnsUnverifiedError()
     {
         var service = CreateService();
