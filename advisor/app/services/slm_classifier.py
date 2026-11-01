@@ -13,7 +13,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from app.schemas.chat import ChatState
-from app.schemas.slm import PROFILE_KEYS, SLM_SCHEMA, SlmRead, SlmResult
+from app.schemas.slm import PRIORITY, PROFILE_KEYS, SLM_SCHEMA, SlmRead, SlmResult
 from app.services.ollama import OllamaError
 from app.services.skill_call import SKILLS_DIR, load_skill
 
@@ -43,6 +43,22 @@ def build_messages(
         {"role": "system", "content": prompt},
         {"role": "user", "content": json.dumps(user, ensure_ascii=False, separators=(",", ":"))},
     ]
+
+
+# Sửa cặp nhãn model chọn đúng nhưng đặt sai chỗ, thay vì bỏ cả câu trả lời. Luật thứ tự cố định nên sửa chắc chắn được:
+#   nhãn phụ xếp trước nhãn chính → đảo (trung_tam + phụ kien_thuc → kien_thuc + phụ trung_tam)
+#   mac_dinh có nhãn phụ → câu hỏi là nhãn chính, giá trị hồ sơ vẫn nằm trong thuc_the (mac_dinh + kien_thuc → kien_thuc)
+#   nhãn phụ trùng nhãn chính → bỏ nhãn phụ
+# Đo trên val: lùi về mơ hồ 4 → 0, nhãn chính 90,8% → 94,2%
+def fix_labels(raw: dict[str, Any]) -> dict[str, Any]:
+    intent, sub = raw.get("type"), raw.get("nhan_phu")
+    if sub is None or sub == intent:
+        return {**raw, "nhan_phu": None}
+    if intent == "mac_dinh":
+        return {**raw, "type": sub, "nhan_phu": None}
+    if intent in PRIORITY and sub in PRIORITY and PRIORITY.index(sub) < PRIORITY.index(intent):
+        return {**raw, "type": sub, "nhan_phu": intent}
+    return raw
 
 
 # Bỏ giá trị không có nguyên văn trong tin: model hay chép từ hồ sơ đầu vào, hoặc tự điền "null", "không có"
@@ -126,6 +142,7 @@ class OllamaSlm:
         for _ in range(MAX_ATTEMPTS):
             try:
                 raw, content, logprobs = await self._slm.chat_json_scored(messages, self._output)
+                raw = fix_labels(raw)
                 raw["thuc_the"] = keep_verbatim(
                     raw.get("thuc_the") or {}, message
                 )  # bỏ giá trị không có trong tin

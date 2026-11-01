@@ -9,7 +9,7 @@ import pytest
 from app.schemas.chat import ChatState, ProfileField
 from app.schemas.slm import INTENTS, SLM_SCHEMA
 from app.services.ollama import OllamaClient, OllamaError
-from app.services.slm_classifier import OllamaSlm, label_confidence, output_format
+from app.services.slm_classifier import OllamaSlm, fix_labels, label_confidence, output_format
 
 GOOD = {"type": "trung_tam", "nhan_phu": None, "thuc_the": {"dich_vu": "SUA_BAI_LUAN", "thanh_pho": "HN"}}
 
@@ -76,12 +76,48 @@ async def test_classify_takes_the_profile_and_pending_question_from_the_state():
 
 
 async def test_an_answer_that_breaks_the_rules_is_retried_once():
-    wrong_order = {"type": "trung_tam", "nhan_phu": "kien_thuc", "thuc_the": {}}
-    slm = FakeSlm(wrong_order, GOOD)
+    no_mode = {
+        "type": "kich_ban",
+        "nhan_phu": None,
+        "thuc_the": {},
+    }  # kich_ban thiếu che_do: luật không tự sửa được
+    slm = FakeSlm(no_mode, GOOD)
 
     result = await OllamaSlm(slm).read("x", None, "")
 
     assert result.type == "trung_tam" and len(slm.calls) == 2
+
+
+@pytest.mark.parametrize(
+    ("labels", "expected"),
+    [
+        (("trung_tam", "kien_thuc"), ("kien_thuc", "trung_tam")),  # nhãn phụ xếp trước nhãn chính: đảo
+        (("kien_thuc", "ho_so"), ("ho_so", "kien_thuc")),
+        (("mac_dinh", "kien_thuc"), ("kien_thuc", None)),  # trả lời hồ sơ kèm câu hỏi: câu hỏi là nhãn chính
+        (("kien_thuc", "kien_thuc"), ("kien_thuc", None)),  # trùng: bỏ nhãn phụ
+        (("kien_thuc", "trung_tam"), ("kien_thuc", "trung_tam")),  # đã đúng luật: giữ nguyên
+        (
+            ("kien_thuc", "ngoai_pham_vi"),
+            ("kien_thuc", "ngoai_pham_vi"),
+        ),  # luật không sửa được: để SlmRead từ chối
+    ],
+)
+def test_fix_labels_puts_the_two_labels_in_the_order_of_the_priority_rule(labels, expected):
+    raw = {"type": labels[0], "nhan_phu": labels[1], "thuc_the": {"gpa": "8.0"}}
+
+    fixed = fix_labels(raw)
+
+    assert (fixed["type"], fixed["nhan_phu"]) == expected
+    assert fixed["thuc_the"] == {"gpa": "8.0"}  # thực thể giữ nguyên
+
+
+async def test_a_pair_in_the_wrong_order_is_fixed_without_asking_the_model_again():
+    wrong_order = {"type": "trung_tam", "nhan_phu": "kien_thuc", "thuc_the": {"dich_vu": "LUYEN_PHONG_VAN"}}
+    slm = FakeSlm(wrong_order)
+
+    result = await OllamaSlm(slm).read("phỏng vấn visa hỏi gì, có chỗ nào luyện không", None, "")
+
+    assert (result.type, result.nhan_phu) == ("kien_thuc", "trung_tam") and len(slm.calls) == 1
 
 
 async def test_two_failures_fall_back_to_an_ambiguous_message_with_zero_confidence():
