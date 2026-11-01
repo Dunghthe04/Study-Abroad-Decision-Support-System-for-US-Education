@@ -61,4 +61,18 @@ public class AdminUsersController(IAuthService auth) : ControllerBase
 
         return Ok(result.User);
     }
+
+    /// <summary>[UC-62] Mở khóa tài khoản kèm lý do (ghi audit).</summary>
+    [HttpPost("{id:guid}/unlock")]
+    public async Task<ActionResult<UserDto>> UnlockUser(Guid id, UnlockUserAccountRequest request, CancellationToken ct)
+    {
+        if (User.GetUserId() is not { } adminId)
+            return Unauthorized();
+
+        var result = await auth.UnlockUserAccountAsync(id, request, adminId, ct);
+        if (result.Error != AuthError.None || result.User is null)
+            return ValidationProblem(result.Message);
+
+        return Ok(result.User);
+    }
 }

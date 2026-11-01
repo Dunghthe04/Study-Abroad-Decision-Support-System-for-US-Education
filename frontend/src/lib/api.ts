@@ -12,6 +12,7 @@ import type {
   PagedResult,
   CreateModeratorAccountRequest,
   LockUserAccountRequest,
+  UnlockUserAccountRequest,
   VerifyEmailRequest,
   AcademicProfileResponse,
   ParentInviteInfo,
@@ -212,6 +213,13 @@ export const adminUsersApi = {
   /** [UC-61] Khóa tài khoản (admin). */
   lock: (id: string, data: LockUserAccountRequest) =>
     apiFetch<UserDto>(`/api/v1/admin/users/${encodeURIComponent(id)}/lock`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  /** [UC-62] Mở khóa tài khoản (admin). */
+  unlock: (id: string, data: UnlockUserAccountRequest) =>
+    apiFetch<UserDto>(`/api/v1/admin/users/${encodeURIComponent(id)}/unlock`, {
       method: "POST",
       body: JSON.stringify(data),
     }),

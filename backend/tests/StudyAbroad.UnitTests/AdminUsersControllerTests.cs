@@ -107,6 +107,25 @@ public class AdminUsersControllerTests
             Users.Add(updated);
             return Task.FromResult(AuthResult.Ok(updated, "Đã khóa tài khoản."));
         }
+
+        public (Guid TargetId, UnlockUserAccountRequest Request, Guid ActorId)? LastUnlockCall { get; private set; }
+
+        public Task<AuthResult> UnlockUserAccountAsync(
+            Guid targetUserId,
+            UnlockUserAccountRequest request,
+            Guid actorAdminId,
+            CancellationToken ct = default)
+        {
+            LastUnlockCall = (targetUserId, request, actorAdminId);
+            var user = Users.FirstOrDefault(u => u.Id == targetUserId);
+            if (user is null)
+                return Task.FromResult(AuthResult.Fail(AuthError.Validation, "Không tìm thấy tài khoản."));
+
+            var updated = user with { Status = UserStatuses.Active };
+            Users.Remove(user);
+            Users.Add(updated);
+            return Task.FromResult(AuthResult.Ok(updated, "Đã mở khóa tài khoản."));
+        }
     }
 
     [Fact]
@@ -220,5 +239,40 @@ public class AdminUsersControllerTests
         Assert.Equal(UserStatuses.Locked, user.Status);
         Assert.NotNull(fakeAuth.LastLockCall);
         Assert.Equal(adminId, fakeAuth.LastLockCall.Value.ActorId);
+    }
+
+    [Fact]
+    public async Task UnlockUser_WhenValid_ReturnsOk()
+    {
+        var adminId = Guid.NewGuid();
+        var studentId = Guid.NewGuid();
+        var fakeAuth = new FakeAuthService
+        {
+            Users =
+            [
+                new UserDto(studentId, "student@test.com", "Student", UserRoles.Student, UserStatuses.Locked, null),
+            ],
+        };
+        var controller = new AdminUsersController(fakeAuth)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = new ClaimsPrincipal(new ClaimsIdentity(
+                    [
+                        new Claim(ClaimTypes.NameIdentifier, adminId.ToString()),
+                    ], authenticationType: "test")),
+                },
+            },
+        };
+
+        var result = await controller.UnlockUser(studentId, new UnlockUserAccountRequest("Lý do mở khóa hợp lệ"), CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var user = Assert.IsType<UserDto>(ok.Value);
+        Assert.Equal(UserStatuses.Active, user.Status);
+        Assert.NotNull(fakeAuth.LastUnlockCall);
+        Assert.Equal(adminId, fakeAuth.LastUnlockCall.Value.ActorId);
     }
 }

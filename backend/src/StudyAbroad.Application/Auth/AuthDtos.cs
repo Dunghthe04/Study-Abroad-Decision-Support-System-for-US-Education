@@ -24,6 +24,9 @@ namespace StudyAbroad.Application.Auth
     /// <summary>[UC-61] Admin khóa tài khoản kèm lý do.</summary>
     public record LockUserAccountRequest(string Reason);
 
+    /// <summary>[UC-62] Admin mở khóa tài khoản kèm lý do.</summary>
+    public record UnlockUserAccountRequest(string Reason);
+
     // [USAS-362] Thông tin người dùng trả về cho client (không chứa password_hash)
     // [Q11] AgeGroup (child/minor/adult, null nếu không áp), ParentConsentStatus (granted/pending/none/not_required),
     // BlockedFeatures: các chức năng trong AgeFeatures.Rules đang bị chặn (server tính, frontend chỉ dùng để ẩn nút).
