@@ -1,3 +1,4 @@
+using StudyAbroad.Application.Audit;
 using StudyAbroad.Application.Common;
 using StudyAbroad.Application.StudyCenters;
 using StudyAbroad.Domain.Entities;
@@ -6,28 +7,46 @@ namespace StudyAbroad.UnitTests;
 
 public class StudyCenterServiceTests
 {
-    private sealed class FakeRepository(params StudyCenter[] centers) : IStudyCenterRepository
+    private sealed class FakeRepository : IStudyCenterRepository
     {
+        public List<StudyCenter> Centers { get; } = [];
+
+        public FakeRepository(params StudyCenter[] initial)
+        {
+            Centers.AddRange(initial);
+        }
+
         public StudyCenterQuery? LastQuery { get; private set; }
 
         public Task<PagedResult<StudyCenter>> SearchAsync(StudyCenterQuery query, CancellationToken ct = default)
         {
             LastQuery = query;
-            return Task.FromResult(new PagedResult<StudyCenter>(centers, query.Page, query.PageSize, centers.Length));
+            return Task.FromResult(new PagedResult<StudyCenter>(Centers, query.Page, query.PageSize, Centers.Count));
         }
 
         public Task<StudyCenter?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
-            Task.FromResult(centers.FirstOrDefault(c => c.Id == id));
+            Task.FromResult(Centers.FirstOrDefault(c => c.Id == id));
 
         public Task<IReadOnlyList<StudyCenter>> ListReferableAsync(CancellationToken ct = default) =>
-            Task.FromResult<IReadOnlyList<StudyCenter>>(centers);
+            Task.FromResult<IReadOnlyList<StudyCenter>>(Centers);
+
+        public Task<bool> ExistsByCodeAsync(string code, CancellationToken ct = default) =>
+            Task.FromResult(Centers.Any(c => c.Code.Equals(code, StringComparison.OrdinalIgnoreCase)));
+
+        public Task AddAsync(StudyCenter center, CancellationToken ct = default)
+        {
+            Centers.Add(center);
+            return Task.CompletedTask;
+        }
     }
+
+    private readonly FakeAuditLogRepository _auditLogs = new();
 
     [Fact]
     public async Task SearchAsync_ClampsPagingValues()
     {
         var repo = new FakeRepository();
-        var service = new StudyCenterService(repo);
+        var service = new StudyCenterService(repo, _auditLogs);
 
         await service.SearchAsync(new StudyCenterQuery(Page: 0, PageSize: 1000));
 
@@ -39,7 +58,7 @@ public class StudyCenterServiceTests
     public async Task GetByIdAsync_MapsEntityToDto()
     {
         var center = new StudyCenter { Code = "CTY_001", Name = "Test", Services = ["CHON_TRUONG"] };
-        var service = new StudyCenterService(new FakeRepository(center));
+        var service = new StudyCenterService(new FakeRepository(center), _auditLogs);
 
         var dto = await service.GetByIdAsync(center.Id);
 
@@ -51,7 +70,71 @@ public class StudyCenterServiceTests
     [Fact]
     public async Task GetByIdAsync_ReturnsNull_WhenMissing()
     {
-        var service = new StudyCenterService(new FakeRepository());
+        var service = new StudyCenterService(new FakeRepository(), _auditLogs);
         Assert.Null(await service.GetByIdAsync(Guid.NewGuid()));
+    }
+
+    [Fact]
+    public async Task CreateAsync_ValidRequest_CreatesCenterAndWritesAudit()
+    {
+        var repo = new FakeRepository();
+        var service = new StudyCenterService(repo, _auditLogs);
+        var actorId = Guid.NewGuid();
+
+        var request = new CreateStudyCenterRequest(
+            Code: "CTY_NEW",
+            Name: "Trung tâm Du học Mới",
+            City: "Hà Nội",
+            Address: "123 Cầu Giấy",
+            Website: "https://example.com",
+            Phone: "0912345678",
+            Services: ["CHON_TRUONG", "LUYEN_PHONG_VAN"],
+            StudyLevels: ["dai_hoc", "thac_si"]);
+
+        var result = await service.CreateAsync(request, actorId);
+
+        Assert.True(result.Success);
+        Assert.NotNull(result.Center);
+        Assert.Equal("CTY_NEW", result.Center.Code);
+        Assert.Equal("Trung tâm Du học Mới", result.Center.Name);
+        Assert.Equal("unverified", result.Center.VerificationStatus);
+        Assert.True(result.Center.IsActive);
+
+        var log = Assert.Single(_auditLogs.Entries);
+        Assert.Equal("study_center.create", log.Action);
+        Assert.Equal(actorId, log.ActorUserId);
+    }
+
+    [Fact]
+    public async Task CreateAsync_DuplicateCode_ReturnsFail()
+    {
+        var existing = new StudyCenter { Code = "DUPLICATE_CODE", Name = "Trung tâm cũ" };
+        var repo = new FakeRepository(existing);
+        var service = new StudyCenterService(repo, _auditLogs);
+
+        var request = new CreateStudyCenterRequest(
+            Code: "duplicate_code",
+            Name: "Trung tâm trùng mã");
+
+        var result = await service.CreateAsync(request, Guid.NewGuid());
+
+        Assert.False(result.Success);
+        Assert.Contains("đã tồn tại", result.ErrorMessage);
+        Assert.Empty(_auditLogs.Entries);
+    }
+
+    [Theory]
+    [InlineData("", "Tên hợp lệ", "Mã trung tâm")]
+    [InlineData("CODE", "", "Tên trung tâm")]
+    public async Task CreateAsync_EmptyRequiredFields_ReturnsFail(string code, string name, string expectedError)
+    {
+        var repo = new FakeRepository();
+        var service = new StudyCenterService(repo, _auditLogs);
+
+        var result = await service.CreateAsync(new CreateStudyCenterRequest(code, name), Guid.NewGuid());
+
+        Assert.False(result.Success);
+        Assert.Contains(expectedError, result.ErrorMessage);
+        Assert.Empty(_auditLogs.Entries);
     }
 }
