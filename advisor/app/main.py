@@ -34,7 +34,9 @@ async def lifespan(app: FastAPI):
     # Tạo kết nối Http đến ollama
     async with (
         httpx.AsyncClient(base_url=settings.ollama_base_url, timeout=settings.llm_timeout_seconds) as http,
-        httpx.AsyncClient(base_url=settings.gemini_base_url, timeout=180) as gemini_http,
+        httpx.AsyncClient(
+            base_url=settings.gemini_base_url, timeout=settings.gemini_timeout_seconds
+        ) as gemini_http,
         httpx.AsyncClient(
             base_url=settings.backend_base_url, timeout=settings.backend_timeout_seconds
         ) as backend_http,
@@ -55,6 +57,8 @@ async def lifespan(app: FastAPI):
             settings.gemini_model,
             settings.gemini_api_key,
             thinking_level=settings.gemini_thinking_level,
+            max_retries=settings.gemini_max_retries,
+            fallback_model=settings.gemini_fallback_model or None,
         )
         app.state.scorer = Scorer(gemini, settings.gemini_model)
         app.state.picker = Picker(gemini, settings.gemini_model)

@@ -124,7 +124,7 @@ def write_jsonl(path, records) -> None:
 def test_the_real_data_file_loads_cleanly():
     records = load_records(IN_PATH)
 
-    assert len(records) == 88
+    assert len(records) == 443
     assert records[0]["code"] == "KB-001"
 
 

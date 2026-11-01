@@ -50,7 +50,7 @@ export function RecommendationView({ autoRun }: RecommendationViewProps) {
   useAssistantPageContext({
     label: "Trang đề xuất",
     suggestions: firstReach ? [`Vì sao ${firstReach.name} Khó vào?`, ...RESULT_SUGGESTIONS] : RESULT_SUGGESTIONS,
-    greeting: rec ? `Đây là ${shownCount} trường hợp với hồ sơ của bạn. Bạn có thể hỏi mình, ví dụ:` : undefined,
+    greeting: rec ? `Mình là hệ thống tư vấn du học. Bạn cần mình hỗ trợ gì không?:` : undefined,
   });
 
   // Có kết quả thì mở trợ lý bên phải một lần như bản demo (màn hẹp thì khung phủ kín nên không tự mở)

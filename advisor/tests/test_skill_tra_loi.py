@@ -335,3 +335,18 @@ async def test_chat_remembers_the_study_level_sent_by_the_client():
     )
 
     assert [call[1] for call in retriever.calls] == ["undergraduate", "undergraduate"]
+
+
+async def test_a_refusal_does_not_vouch_for_any_center_and_offers_the_center_button():
+    out = await handler_with(FakeLLMWithEmbed(), FakeRetriever([hit(score=0.5)])).run(ChatState(), "q")
+
+    assert "uy tín" not in out.answer  # hệ thống không khen hay bảo chứng trung tâm nào
+    assert [(b.label, b.value) for b in out.quick_replies] == [
+        ("Gợi ý trung tâm tư vấn", "Em muốn gặp tư vấn viên")
+    ]
+
+
+async def test_a_real_answer_has_no_center_button():
+    out = await handler_with(FakeLLMWithEmbed(good()), FakeRetriever([hit()])).run(ChatState(), "q")
+
+    assert out.quick_replies == []

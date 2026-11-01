@@ -1,4 +1,5 @@
 using StudyAbroad.Application.Profile.Flow;
+using StudyAbroad.Application.Recommendations;
 using StudyAbroad.Domain.Entities;
 using System;
 using System.Collections.Generic;
@@ -15,9 +16,10 @@ namespace StudyAbroad.Application.Advisor
     // FE(Gửi câu hỏi + SessionId) -> ChatService(Tìm phiên trong DB, lấy StateJson)-> Advisor python (Nhận request, xử lý hội thoại, trả câu trả lời và State mới)-> ChatService(lưu trạng thái mới vào DB, cập nhập bước hiện tại)
     // C4: mỗi lượt gửi kèm hồ sơ đọc từ bản nháp form, chat đổi ô nào thì ghi ô đó vào nháp
     // analyses: lưu câu đánh giá / lộ trình vào analysis_results (null thì không lưu, dùng trong test cũ)
+    // recommender: chạy gợi ý trường khi advisor trả action "recommend" (null thì bỏ qua, dùng trong test cũ)
     public class ChatService(
         IAdvisorClient advisor, IChatSessionRepository sessions, IProfileFlowService profileFlow,
-        IChatAnalysisRepository? analyses = null)
+        IChatAnalysisRepository? analyses = null, IRecommendationRunner? recommender = null)
     {
         //Dữ liệu FE gửi lên
         public async Task<AdvisorChatResponse> ChatAsync(Guid userId, AdvisorChatRequest request, CancellationToken ct = default)
@@ -44,9 +46,12 @@ namespace StudyAbroad.Application.Advisor
             var flow = await profileFlow.GetFlowStateAsync(userId, ct);
             var profile = ChatProfileMapper.ToChatProfile(flow.Draft, PreviousProfile(state));
 
+            // Đã có danh sách trường thì gửi kèm (lấy lần gợi ý mới nhất, kể cả khi học sinh vừa gợi ý lại ở trang khác)
+            var schools = await LatestSchoolsAsync(userId, state, ct);
+
             //Gửi request sang Advisor
             var response = await advisor.ChatAsync(
-                request with { State = state, Profile = JsonSerializer.SerializeToElement(profile) }, ct);
+                request with { State = state, Profile = JsonSerializer.SerializeToElement(profile), Schools = schools }, ct);
             var changed = await SaveProfileToDraftAsync(userId, response, ct);
 
             // C5: học sinh bấm "Đúng rồi" ở X1 thì chat rời bảng rà soát sang B3, lúc đó lưu hồ sơ chính thức.
@@ -72,6 +77,15 @@ namespace StudyAbroad.Application.Advisor
 
             await SaveAnalysesAsync(userId, response, ct);
 
+            // Lộ trình đại học thẳng: chạy gợi ý trường có sẵn rồi đưa danh sách vào câu trả lời.
+            // Chạy sau khi lưu analysis để bản lưu lộ trình không lẫn danh sách trường
+            if (response.Action == ChatRecommendation.Action && recommender is not null)
+                response = await RecommendAsync(userId, response, ct);
+
+            // Học sinh hỏi về một trường: lời tư vấn lấy từ phần tư vấn từng trường có sẵn, thay câu tạm của advisor
+            if (response.Action == ChatExplanation.Action && recommender is not null)
+                response = await ExplainAsync(userId, response, ct);
+
             //Sau khi advisor phản hồi ==> lưu trạng thái mới
             session.StateJson = response.State?.GetRawText();
             //Lưu bước hiện tại
@@ -94,10 +108,76 @@ namespace StudyAbroad.Application.Advisor
                 FormStep = FormStepOf(response.State),
                 SessionId = session.Id.ToString(),
                 Skills = null,
+                Action = null,
+                ActionData = null,
             };
         }
 
         private const string ReviewQuestion = "X1";
+
+        // Chạy gợi ý trường (lọc, chấm, chọn, lưu) rồi nối bản tóm tắt vào câu lộ trình, bật hasResults, hiện nút xem đầy đủ.
+        // Lỗi thì vẫn trả câu lộ trình kèm lời báo, không làm hỏng cả lượt chat
+        private async Task<AdvisorChatResponse> RecommendAsync(Guid userId, AdvisorChatResponse response, CancellationToken ct)
+        {
+            try
+            {
+                var saved = await recommender!.CreateAsync(userId, null, ct);
+                return response with
+                {
+                    Answer = $"{response.Answer}\n\n{ChatRecommendation.Summarize(saved)}",
+                    State = ChatRecommendation.WithResults(response.State),
+                    Widget = new Widget(ChatRecommendation.WidgetType),
+                };
+            }
+            catch (InvalidOperationException ex)
+            {
+                // Lỗi do hồ sơ ("Chưa...", "Hồ sơ...") thì nói rõ; lỗi kết quả AI thì báo chung
+                var reason = ex.Message.StartsWith("Chưa") || ex.Message.StartsWith("Hồ sơ")
+                    ? $"Mình chưa tạo được danh sách trường: {ex.Message}"
+                    : ChatRecommendation.Invalid;
+                return response with { Answer = $"{response.Answer}\n\n{reason}" };
+            }
+            catch (Exception ex) when (ex is HttpRequestException
+                                       || (ex is TaskCanceledException && !ct.IsCancellationRequested))
+            {
+                return response with { Answer = $"{response.Answer}\n\n{ChatRecommendation.Busy}" };
+            }
+        }
+
+        // Danh sách trường của lần gợi ý gần nhất; null khi chưa có kết quả (không cần gửi)
+        private async Task<IReadOnlyList<ChatSchool>?> LatestSchoolsAsync(Guid userId, JsonElement? state, CancellationToken ct)
+        {
+            if (recommender is null || state is not { ValueKind: JsonValueKind.Object } s
+                || !s.TryGetProperty("hasResults", out var has) || has.ValueKind != JsonValueKind.True)
+                return null;
+            var last = await recommender.GetLatestAsync(userId, ct);
+            return last is null ? null : ChatRecommendation.Schools(last);
+        }
+
+        // Viết lời tư vấn một trường (advisor đã chọn trường, mã ở ActionData.code). Lỗi thì báo, không làm hỏng cả lượt chat
+        private async Task<AdvisorChatResponse> ExplainAsync(Guid userId, AdvisorChatResponse response, CancellationToken ct)
+        {
+            var code = ChatExplanation.CodeOf(response.ActionData);
+            if (code is null)
+                return response with { Answer = ChatExplanation.Failed };
+            try
+            {
+                var result = await recommender!.ExplainAsync(userId, code, ct);
+                return response with { Answer = result.Status == "OK" ? ChatExplanation.Format(result) : ChatExplanation.Failed };
+            }
+            catch (InvalidOperationException ex)
+            {
+                var reason = ex.Message.StartsWith("Chưa")
+                    ? $"Mình chưa giải thích được trường này: {ex.Message}"
+                    : ChatRecommendation.Invalid;
+                return response with { Answer = reason };
+            }
+            catch (Exception ex) when (ex is HttpRequestException
+                                       || (ex is TaskCanceledException && !ct.IsCancellationRequested))
+            {
+                return response with { Answer = ChatExplanation.Busy };
+            }
+        }
 
         // Skill nào chạy thì lưu câu trả lời vào analysis_results với loại tương ứng
         private static readonly Dictionary<string, string> AnalysisKinds = new()

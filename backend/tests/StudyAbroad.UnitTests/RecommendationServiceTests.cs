@@ -127,6 +127,30 @@ public class RecommendationServiceTests
         Assert.Equal(["ec", "score", "pick"], advisor.Calls); // "không cần" là lựa chọn thật, vẫn chạy như cũ
     }
 
+    // Gemini hỏng (hết hạn mức, quá tải): mọi trường chấm lỗi. Phải báo lỗi dịch vụ, không được lưu kết quả rỗng
+    [Fact]
+    public async Task Recommend_WhenGeminiScoresNothing_ThrowsServiceErrorAndSavesNothing()
+    {
+        var advisor = new FakeAdvisor { ScoreFailsAll = true };
+        var store = new FakeRecommendationRepository();
+        var service = new RecommendationService(advisor, store, new UnusedProfileFlow());
+        var profile = new StudentProfile
+        {
+            UserId = Guid.NewGuid(),
+            TargetLevel = "undergraduate",
+            IntendedMajor = "Computer and information sciences",
+            BudgetMaxUsd = 50_000m,
+            ScholarshipNeed = ProfileConstants.ScholarshipNeeds.Optional,
+            TargetSchoolType = "all"
+        };
+
+        await Assert.ThrowsAsync<HttpRequestException>(() =>
+            service.RecommendAsync(profile, [], [School("B", 38_000m, "none", "Computer and information sciences")]));
+
+        Assert.Equal(["ec", "score"], advisor.Calls); // không gọi bước chọn khi chưa có điểm
+        Assert.Empty(store.Rows); // không lưu lượt rỗng
+    }
+
     private static RecommendSchoolInput School(string code, decimal tuition, string aidPolicy, string major)
     {
         var university = new University { Code = code, Name = code, State = "NY", Control = "private", IsActive = true };
@@ -144,6 +168,7 @@ public class RecommendationServiceTests
     private sealed class FakeAdvisor : IAdvisorClient
     {
         public List<string> Calls { get; } = [];
+        public bool ScoreFailsAll { get; init; }
         public ScoreRequestDto? ScoreRequest { get; private set; }
         public PickRequestDto? PickRequest { get; private set; }
 
@@ -162,6 +187,8 @@ public class RecommendationServiceTests
                 throw new InvalidOperationException("Chưa có bậc ngoại khóa.");
             Calls.Add("score");
             ScoreRequest = request;
+            if (ScoreFailsAll)
+                return Task.FromResult(new ScoreResponseDto("1.1", "gemini-test", [], request.Schools.Select(s => s.C).ToList()));
             var items = request.Schools.Select(school => school.C == "Colgate"
                 ? Item("Colgate", "R", "RF", 12.9, 0, 45610)
                 : Item(school.C, "M", "M", 50, 0.24, null)).ToList();

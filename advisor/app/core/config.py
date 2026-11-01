@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     chat_log_keep_days: int = 90
     ollama_base_url: str = "http://localhost:11434"
     llm_model: str = "qwen3:8b"
+    slm_model: str = "qwen3:4b"
     llm_timeout_seconds: float = 120
     # Kích thước context window dự kiến
     llm_num_ctx: int = 6144
@@ -58,6 +59,11 @@ class Settings(BaseSettings):
     gemini_base_url: str = "https://generativelanguage.googleapis.com"
     gemini_model: str = "gemini-3.8-flash"
     gemini_thinking_level: str = "low"
+    # Model dự phòng khi model chính quá tải (503) hoặc treo. Để trống = không có dự phòng
+    gemini_fallback_model: str = ""
+    # Thời gian chờ mỗi lần gọi và số lần thử mỗi model. 2 model x 2 lần x 60 giây vẫn dưới 300 giây .NET chờ
+    gemini_timeout_seconds: float = 60
+    gemini_max_retries: int = 2
 
 
 # Lần gọi hàm sau nó lấy đối tượng đã lưu trong lru_cache
