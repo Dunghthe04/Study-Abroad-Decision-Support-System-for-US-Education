@@ -1,16 +1,16 @@
-"""B1 đến B3: skill_nhu_cau, skill_bac_hoc, skill_ho_so chạy trong ChatFlow (chưa có model: dùng skill của bước)."""
+"""Hỏi hồ sơ trong chat: skill_nhu_cau, skill_bac_hoc, skill_ho_so chạy qua nhánh hồ sơ (SLM đọc tin là mac_dinh)."""
 
 from app.schemas.chat import ChatMessage, ChatRequest, ChatState, ProfileField
-from app.services.chat_flow import NOT_READY, QUESTIONS, ChatFlow
+from app.services.chat_flow import QUESTIONS
 from app.services.intake import CHAT_BUTTON, FORM_BUTTON, INTAKE_ASK, INTAKE_ID
 from app.services.ollama import OllamaError
 from app.services.skills import build_handlers
 from app.services.skills.skill_ho_so import OPTIONAL_QUESTIONS, SAVED, next_question
-from tests.fakes import FakeLLM
+from tests.fakes import FakeLLM, flow_with
 
 
 async def turn(llm: FakeLLM, message: str, **state_fields):
-    flow = ChatFlow(handlers=build_handlers(llm, "qwen3:8b"))
+    flow = flow_with(build_handlers(llm, "qwen3:8b"))
     req = ChatRequest(messages=[ChatMessage(role="user", content=message)], state=ChatState(**state_fields))
     return await flow.reply(req)
 
@@ -112,13 +112,6 @@ async def test_unclear_asks_b0_2_with_buttons_then_goes_on_after_two_tries():
         intake_mode="chat",
     )
     assert (res.state.current_step, res.state.question_id) == ("B1", "B1.1")
-
-
-async def test_knowledge_question_moves_to_b5_and_remembers_to_come_back():
-    res = await turn(FakeLLM({"need": "knowledge", "branch": None, "info_given": {}}), "Visa cần gì ạ?")
-
-    assert (res.state.current_step, res.state.return_to) == ("B5", "B1")
-    assert res.answer == NOT_READY
 
 
 # B2: skill_bac_hoc
@@ -386,8 +379,8 @@ async def test_confirm_at_review_confirms_said_info_and_assesses_right_away():
     res = await turn(llm, "Đúng rồi", current_step="B2", question_id="X1", profile=profile)
 
     assert all(f.status == "confirmed" for f in res.state.profile.values())
-    # Xác nhận xong thì đánh giá hồ sơ luôn trong lượt này rồi hỏi X2, không hỏi lại "có muốn xem không"
-    assert res.skills == ["skill_ho_so", "skill_danh_gia"]
+    # Xác nhận xong thì nhánh hồ sơ đánh giá luôn trong lượt này rồi hỏi X2, không hỏi lại "có muốn xem không"
+    assert res.skills == ["mac_dinh"]
     assert (res.state.current_step, res.state.question_id) == ("B4", "X2")
     assert res.answer.startswith(SAVED)
     assert res.answer.endswith(QUESTIONS["X2"])

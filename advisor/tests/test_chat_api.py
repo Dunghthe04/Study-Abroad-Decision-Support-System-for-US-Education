@@ -4,13 +4,23 @@ from fastapi.testclient import TestClient
 
 from app.api.deps import get_chat_flow
 from app.main import create_app
-from app.services.chat_flow import QUESTIONS, ChatFlow
+from app.schemas.slm import SlmResult
+from app.services.chat_flow import QUESTIONS, ChatFlow, SkillOutput
+from app.services.slm_contract import FixedSlm
+
+
+class SilentBranch:
+    """Nhánh giả không trả lời gì: API chỉ kiểm khuôn vào/ra và câu chào B0.1."""
+
+    async def run(self, state, message, slm):
+        return SkillOutput("")
 
 
 def make_client() -> TestClient:
     # Không dùng "with" nên không chạy lifespan, không cần Ollama, Gemini
     app = create_app()
-    app.dependency_overrides[get_chat_flow] = lambda: ChatFlow()
+    flow = ChatFlow(FixedSlm(SlmResult(type="kien_thuc")), {"kien_thuc": SilentBranch()})
+    app.dependency_overrides[get_chat_flow] = lambda: flow
     return TestClient(app)
 
 
@@ -43,7 +53,7 @@ def test_existing_state_is_kept():
 
     assert res.status_code == 200
     body = res.json()
-    assert body["state"]["currentStep"] == "B2"  # bước 1.1 chưa có skill nên không đổi bước
+    assert body["state"]["currentStep"] == "B2"  # nhánh không đổi bước nên giữ nguyên
     assert body["state"]["asked"] == {"D3": 1}
 
 

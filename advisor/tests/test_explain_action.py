@@ -5,8 +5,12 @@
 """
 
 from app.schemas.chat import ChatMessage, ChatRequest, ChatResponse, ChatState, ResultSchool
-from app.services.chat_flow import ChatFlow, SkillOutput
-from tests.test_recommend_action import PickerOf
+from app.schemas.slm import SlmResult
+from app.services.chat_flow import SkillOutput
+from tests.fakes import flow_with
+
+# SLM đọc là tư vấn theo hồ sơ, có nêu tên trường: nhánh tư vấn gọi skill_explain
+EXPLAIN = SlmResult(type="ho_so", thuc_the={"truong": "Iowa"})
 
 SCHOOLS = [
     ResultSchool(code="iowa", name="University of Iowa", group="R"),
@@ -57,7 +61,7 @@ def test_request_reads_the_school_list_in_camel_case():
 
 async def test_chat_flow_gives_the_skill_the_school_list_and_returns_its_action():
     skill = SkillSeen()
-    flow = ChatFlow(PickerOf("skill_explain"), {"skill_explain": skill})
+    flow = flow_with({"skill_explain": skill}, EXPLAIN)
 
     res = await flow.reply(request(SCHOOLS))
 
@@ -68,7 +72,7 @@ async def test_chat_flow_gives_the_skill_the_school_list_and_returns_its_action(
 
 async def test_chat_flow_keeps_the_old_school_list_when_net_sends_none():
     skill = SkillSeen()
-    flow = ChatFlow(PickerOf("skill_explain"), {"skill_explain": skill})
+    flow = flow_with({"skill_explain": skill}, EXPLAIN)
 
     await flow.reply(request(None, ChatState(current_step="B4", has_results=True, schools=SCHOOLS)))
 
