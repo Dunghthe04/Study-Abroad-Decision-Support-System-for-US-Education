@@ -18,6 +18,25 @@ export interface StudyCenter {
   studyLevels: string[];
   services: string[];
   surveyedAt: string | null;
+  phone?: string | null;
+  email?: string | null;
+  description?: string | null;
+  verificationStatus?: string;
+  isActive?: boolean;
+}
+
+export interface CreateStudyCenterRequest {
+  code: string;
+  name: string;
+  website?: string | null;
+  address?: string | null;
+  city?: string | null;
+  studyLevels?: string[];
+  services?: string[];
+  phone?: string | null;
+  email?: string | null;
+  description?: string | null;
+  surveyedAt?: string | null;
 }
 
 export type ChatRole = "user" | "assistant";

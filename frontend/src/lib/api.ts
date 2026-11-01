@@ -17,6 +17,8 @@ import type {
   ParentInviteInfo,
   ParentLinkDto,
   ParentLinkResponse,
+  StudyCenter,
+  CreateStudyCenterRequest,
 } from "@/types/api";
 
 // Browser code calls same-origin /api (Nginx in prod, Next rewrite in dev).
@@ -210,6 +212,15 @@ export const adminUsersApi = {
   /** [UC-61] Khóa tài khoản (admin). */
   lock: (id: string, data: LockUserAccountRequest) =>
     apiFetch<UserDto>(`/api/v1/admin/users/${encodeURIComponent(id)}/lock`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+};
+
+// [UC-71] API Quản trị danh bạ trung tâm tư vấn (Moderator / Admin)
+export const studyCentersApi = {
+  create: (data: CreateStudyCenterRequest) =>
+    apiFetch<StudyCenter>("/api/v1/study-centers", {
       method: "POST",
       body: JSON.stringify(data),
     }),
