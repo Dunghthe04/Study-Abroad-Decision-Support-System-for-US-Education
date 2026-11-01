@@ -43,3 +43,26 @@ def test_version_changes_with_status():
     first = ChatState(profile={"gpa": ProfileField(value=8.5, status="said_in_B0")})
     second = ChatState(profile={"gpa": ProfileField(value=8.5, status="confirmed")})
     assert handler.version(first) != handler.version(second)
+    
+
+def test_ready_when_complete():
+    state = ChatState(profile={"gpa": ProfileField(value=8.5, status="confirmed")})
+    assert handler.ready(state, ["gpa"])
+
+
+def test_not_ready_when_field_missing():
+    assert not handler.ready(ChatState(), ["gpa"])
+
+
+def test_not_ready_while_question_pending():
+    state = ChatState(profile={"gpa": ProfileField(value=8.5, status="confirmed")})
+    ask(state, "B1.1")
+    assert not handler.ready(state, ["gpa"])
+
+
+def test_not_ready_with_unconfirmed_field():
+    state = ChatState(profile={
+        "gpa": ProfileField(value=8.5, status="confirmed"),
+        "major": ProfileField(value="CS", status="said_in_B0"),
+    })
+    assert not handler.ready(state, ["gpa"])

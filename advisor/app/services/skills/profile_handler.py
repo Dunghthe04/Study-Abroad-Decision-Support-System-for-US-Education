@@ -2,6 +2,7 @@ import hashlib
 import json
 
 from app.schemas.chat import ChatState
+from app.services.skill_rules import missing_fields
 from app.services.chat_flow import OPENING_QUESTIONS
 
 
@@ -25,3 +26,9 @@ class ChatProfileHandler:
         profile = {key: [field.value, field.status] for key, field in state.profile.items()}
         text = json.dumps(profile, ensure_ascii=False, sort_keys=True, default=str)
         return hashlib.sha256(text.encode()).hexdigest()[:16]
+    
+        # Đủ để tư vấn: không thiếu mục bắt buộc, không còn câu đang chờ, không còn thông tin chưa xác nhận
+    def ready(self, state: ChatState, required: list[str]) -> bool:
+        if missing_fields(state.profile, required) or self.pending_question(state) is not None:
+            return False
+        return all(field.status != "said_in_B0" for field in state.profile.values())
