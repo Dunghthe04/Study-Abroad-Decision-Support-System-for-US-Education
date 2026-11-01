@@ -47,7 +47,7 @@ export default async function CentersPage() {
                     <CardTitle className="text-lg">{c.name}</CardTitle>
                     {c.city && (
                       <Badge variant="outline" className="shrink-0 font-normal">
-                        📍 {c.city}
+                        {c.city}
                       </Badge>
                     )}
                   </div>

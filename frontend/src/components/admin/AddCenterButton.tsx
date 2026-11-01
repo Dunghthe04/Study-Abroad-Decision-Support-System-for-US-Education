@@ -141,7 +141,7 @@ export function AddCenterButton() {
       </Button>
 
       <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto p-6">
           <DialogHeader>
             <DialogTitle>Thêm trung tâm tư vấn vào danh bạ</DialogTitle>
             <DialogDescription>
