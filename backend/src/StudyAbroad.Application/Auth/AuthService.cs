@@ -34,6 +34,8 @@ namespace StudyAbroad.Application.Auth
         Task<PagedResult<UserDto>> GetAdminUserAccountListAsync(AdminUserAccountListQuery query, CancellationToken ct = default);
         /// <summary>[UC-61] Admin khóa tài khoản (student/parent/moderator/center) kèm lý do và audit.</summary>
         Task<AuthResult> LockUserAccountAsync(Guid targetUserId, LockUserAccountRequest request, Guid actorAdminId, CancellationToken ct = default);
+        /// <summary>[UC-62] Admin mở khóa tài khoản (status locked hoặc temp_locked) kèm lý do và audit.</summary>
+        Task<AuthResult> UnlockUserAccountAsync(Guid targetUserId, UnlockUserAccountRequest request, Guid actorAdminId, CancellationToken ct = default);
     }
 
     public class AuthService(
@@ -836,6 +838,50 @@ namespace StudyAbroad.Application.Auth
             }, ct);
 
             return AuthResult.Ok(ToDto(user), "Đã khóa tài khoản.");
+        }
+
+        /// <summary>[UC-62] Mở khóa tài khoản kèm lý do (chỉ tài khoản đang bị locked hoặc temp_locked).</summary>
+        public async Task<AuthResult> UnlockUserAccountAsync(
+            Guid targetUserId,
+            UnlockUserAccountRequest request,
+            Guid actorAdminId,
+            CancellationToken ct = default)
+        {
+            var reason = request.Reason?.Trim() ?? string.Empty;
+            if (reason.Length == 0)
+                return AuthResult.Fail(AuthError.Validation, "Lý do mở khóa không được để trống.");
+            if (reason.Length > MaxLockReasonLength)
+                return AuthResult.Fail(AuthError.Validation, $"Lý do mở khóa tối đa {MaxLockReasonLength} ký tự.");
+
+            var user = await users.GetUserById(targetUserId, ct);
+            if (user is null)
+                return AuthResult.Fail(AuthError.Validation, "Không tìm thấy tài khoản.");
+
+            if (user.Status != UserStatuses.Locked && user.Status != UserStatuses.TempLocked)
+                return AuthResult.Fail(AuthError.Validation, "Tài khoản không ở trạng thái bị khóa.");
+
+            var previousStatus = user.Status;
+            user.Status = UserStatuses.Active;
+            user.LockoutEnd = null;
+            user.FailedLoginAttempts = 0;
+            await users.UpdateUserAsync(user, ct);
+
+            var detailJson = JsonSerializer.Serialize(new
+            {
+                reason,
+                previousStatus,
+                targetEmail = user.Email,
+            });
+            await auditLogs.AddAsync(new AuditLog
+            {
+                ActorUserId = actorAdminId,
+                Action = "user.unlock",
+                EntityType = "user",
+                EntityId = user.Id.ToString(),
+                DetailJson = detailJson,
+            }, ct);
+
+            return AuthResult.Ok(ToDto(user), "Đã mở khóa tài khoản.");
         }
     }
 }
