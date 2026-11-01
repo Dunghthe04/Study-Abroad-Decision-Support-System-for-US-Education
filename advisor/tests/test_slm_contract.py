@@ -7,7 +7,16 @@ import pytest
 from pydantic import ValidationError
 
 from app.schemas.chat import ChatState
-from app.schemas.slm import ENTITY_KEYS, INTENTS, PROFILE_KEYS, SLM_SCHEMA, Intent, SlmRead, SlmResult
+from app.schemas.slm import (
+    ENTITY_KEYS,
+    INTENTS,
+    PROFILE_KEYS,
+    SLM_SCHEMA,
+    Intent,
+    SlmRead,
+    SlmResult,
+    check_labels,
+)
 from app.services.centers import SERVICES
 from app.services.skills import info_to_field
 from app.services.slm_contract import FixedSlm
@@ -71,16 +80,42 @@ def test_profile_values_are_only_the_profile_keys_in_the_entities():
     assert result.profile_values() == {"english": "IELTS 6.0"}
 
 
-def test_the_json_schema_lists_exactly_the_types_the_code_knows():
-    assert SLM_SCHEMA["properties"]["type"]["enum"] == list(INTENTS) == list(get_args(Intent))
-    assert SLM_SCHEMA["properties"]["thuc_the"]["properties"]["dich_vu"]["enum"] == list(SERVICES)
+def branches():
+    return {
+        (b["properties"]["type"]["const"], b["properties"]["nhan_phu"]["const"]): b
+        for b in SLM_SCHEMA["anyOf"]
+    }
+
+
+# Mỗi cặp (nhãn chính, nhãn phụ) hợp lệ là một nhánh của khuôn, không thừa không thiếu
+def test_the_json_schema_has_one_branch_per_allowed_label_pair():
+    pairs = set(branches())
+
+    assert {intent for intent, _ in pairs} == set(INTENTS) == set(get_args(Intent))
+    assert len(pairs) == 12  # 6 nhãn chính không phụ + ho_so 3 + kich_ban 2 + kien_thuc 1
+    assert ("kien_thuc", "trung_tam") in pairs
+    assert ("trung_tam", "trung_tam") not in pairs and ("trung_tam", "kien_thuc") not in pairs
+    for intent, sub in pairs:
+        check_labels(intent, sub)  # nhánh nào cũng đúng luật nhãn phụ
 
 
 # Khuôn ép SLM và class đọc kết quả phải cùng tên khóa, nếu lệch thì mọi câu trả lời của model đều bị từ chối
-def test_the_json_schema_has_the_same_keys_as_the_classes_that_read_it():
-    assert set(SLM_SCHEMA["required"]) == set(SLM_SCHEMA["properties"]) == set(SlmRead.model_fields)
-    entity_keys = set().union(*ENTITY_KEYS.values(), PROFILE_KEYS)
-    assert set(SLM_SCHEMA["properties"]["thuc_the"]["properties"]) == entity_keys
+def test_every_branch_has_the_same_keys_as_the_classes_that_read_it():
+    for branch in SLM_SCHEMA["anyOf"]:
+        assert set(branch["required"]) == set(branch["properties"]) == set(SlmRead.model_fields)
+    keys = set().union(*(b["properties"]["thuc_the"]["properties"] for b in SLM_SCHEMA["anyOf"]))
+    assert keys == set().union(*ENTITY_KEYS.values(), PROFILE_KEYS)
+    assert branches()[("trung_tam", None)]["properties"]["thuc_the"]["properties"]["dich_vu"]["enum"] == list(
+        SERVICES
+    )
+
+
+# Nhánh kich_ban chỉ có khóa của kich_ban và hồ sơ, nên model không sinh được dich_vu khi chọn kich_ban
+def test_a_branch_only_allows_the_keys_of_its_labels():
+    keys = set(branches()[("kich_ban", None)]["properties"]["thuc_the"]["properties"])
+
+    assert keys == ENTITY_KEYS["kich_ban"] | set(PROFILE_KEYS)
+    assert "dich_vu" in branches()[("kich_ban", "trung_tam")]["properties"]["thuc_the"]["properties"]
 
 
 def test_profile_keys_are_the_same_as_the_ones_the_chat_saves():
@@ -92,6 +127,15 @@ def test_every_labelled_output_in_the_dataset_is_a_valid_answer():
     for line in DEFAULT_OUT.read_text(encoding="utf-8").splitlines():
         record = json.loads(line)
         SlmRead.model_validate(record["output"])
+
+
+# Dòng dữ liệu nào cũng phải nằm gọn trong nhánh của cặp nhãn của nó, nếu không model bị khuôn chặn không học được
+def test_every_labelled_output_fits_the_branch_of_its_label_pair():
+    for line in DEFAULT_OUT.read_text(encoding="utf-8").splitlines():
+        output = json.loads(line)["output"]
+        thuc_the = branches()[(output["type"], output["nhan_phu"])]["properties"]["thuc_the"]
+        assert set(output["thuc_the"]) <= set(thuc_the["properties"]), output
+        assert set(thuc_the["required"]) <= set(output["thuc_the"]), output
 
 
 async def test_the_fixed_slm_returns_its_result_whatever_the_message_is():

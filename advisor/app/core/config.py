@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     chat_log_keep_days: int = 90
     ollama_base_url: str = "http://localhost:11434"
     llm_model: str = "qwen3:8b"
+    slm_model: str = "usas-slm"
+    slm_format: str = "json"
     llm_timeout_seconds: float = 120
     # Kích thước context window dự kiến
     llm_num_ctx: int = 6144
