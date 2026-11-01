@@ -80,6 +80,11 @@ export interface LockUserAccountRequest {
   reason: string;
 }
 
+/** [UC-62] Admin mở khóa tài khoản kèm lý do. */
+export interface UnlockUserAccountRequest {
+  reason: string;
+}
+
 export interface UserDto {
   id: string;
   email: string;
