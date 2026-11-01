@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
-import { BanIcon, ShieldCheckIcon, UserPlusIcon } from "lucide-react";
+import { BanIcon, KeyRoundIcon, ShieldCheckIcon, UserPlusIcon } from "lucide-react";
 import { adminUsersApi, ApiError } from "@/lib/api";
 import { formatUserRole } from "@/lib/user-role-labels";
 import type { UserDto, UserRole } from "@/types/api";
@@ -60,6 +60,11 @@ function canAdminLock(user: UserDto): boolean {
   return user.role !== "admin" && user.status !== "locked";
 }
 
+/** [UC-62] Chỉ mở khóa tài khoản đang bị locked hoặc temp_locked. */
+function canAdminUnlock(user: UserDto): boolean {
+  return user.role !== "admin" && (user.status === "locked" || user.status === "temp_locked");
+}
+
 function statusBadgeVariant(status: string): "default" | "secondary" | "destructive" | "outline" {
   if (status === "active") return "default";
   if (status === "unverified" || status === "pending") return "secondary";
@@ -91,6 +96,11 @@ export function AdminUsersView() {
   const [lockReason, setLockReason] = useState("");
   const [lockSubmitting, setLockSubmitting] = useState(false);
   const [lockDialogError, setLockDialogError] = useState<string | null>(null);
+
+  const [unlockTarget, setUnlockTarget] = useState<UserDto | null>(null);
+  const [unlockReason, setUnlockReason] = useState("");
+  const [unlockSubmitting, setUnlockSubmitting] = useState(false);
+  const [unlockDialogError, setUnlockDialogError] = useState<string | null>(null);
 
   const fetchUserPage = useCallback(async (activePage: number, signal?: { cancelled: boolean }) => {
     setListError(null);
@@ -179,6 +189,48 @@ export function AdminUsersView() {
       setLockDialogError(err instanceof ApiError ? err.message : "Không khóa được tài khoản.");
     } finally {
       setLockSubmitting(false);
+    }
+  };
+
+  const openUnlockDialog = (user: UserDto) => {
+    setUnlockTarget(user);
+    setUnlockReason("");
+    setUnlockDialogError(null);
+  };
+
+  const closeUnlockDialog = () => {
+    if (unlockSubmitting) return;
+    setUnlockTarget(null);
+    setUnlockReason("");
+    setUnlockDialogError(null);
+  };
+
+  const handleConfirmUnlock = async () => {
+    if (!unlockTarget) return;
+    const reason = unlockReason.trim();
+    if (!reason) {
+      setUnlockDialogError("Vui lòng nhập lý do mở khóa.");
+      return;
+    }
+    setUnlockDialogError(null);
+    setUnlockSubmitting(true);
+    try {
+      await adminUsersApi.unlock(unlockTarget.id, { reason });
+      toast.add({
+        type: "success",
+        priority: "high",
+        timeout: 6000,
+        title: "Đã mở khóa tài khoản",
+        description: unlockTarget.email,
+      });
+      setUnlockTarget(null);
+      setUnlockReason("");
+      setUnlockDialogError(null);
+      await loadUsers();
+    } catch (err) {
+      setUnlockDialogError(err instanceof ApiError ? err.message : "Không mở khóa được tài khoản.");
+    } finally {
+      setUnlockSubmitting(false);
     }
   };
 
@@ -409,7 +461,7 @@ export function AdminUsersView() {
                     <TableHead>Vai trò</TableHead>
                     <TableHead>Trạng thái</TableHead>
                     <TableHead>SĐT</TableHead>
-                    <TableHead className="w-[7rem]">{/* UC-61 */}Thao tác</TableHead>
+                    <TableHead className="w-[8rem]">{/* UC-61, UC-62 */}Thao tác</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -430,7 +482,18 @@ export function AdminUsersView() {
                         </TableCell>
                         <TableCell className="text-muted-foreground">{u.phone ?? "—"}</TableCell>
                         <TableCell>
-                          {canAdminLock(u) ? (
+                          {canAdminUnlock(u) ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="gap-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950"
+                              onClick={() => openUnlockDialog(u)}
+                            >
+                              <KeyRoundIcon className="size-3.5" aria-hidden />
+                              Mở khóa
+                            </Button>
+                          ) : canAdminLock(u) ? (
                             <Button
                               type="button"
                               variant="outline"
@@ -513,6 +576,49 @@ export function AdminUsersView() {
             </Button>
             <Button type="button" variant="destructive" onClick={() => void handleConfirmLock()} disabled={lockSubmitting}>
               {lockSubmitting ? <Spinner className="size-4" /> : "Xác nhận khóa"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* [UC-62] Xác nhận mở khóa tài khoản */}
+      <Dialog open={unlockTarget !== null} onOpenChange={(open) => !open && closeUnlockDialog()}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Mở khóa tài khoản</DialogTitle>
+            <DialogDescription>
+              {unlockTarget
+                ? `Mở khóa cho ${unlockTarget.fullName} (${unlockTarget.email}). Tài khoản sẽ có thể đăng nhập bình thường.`
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <Field>
+            <FieldLabel htmlFor="unlock-reason">Lý do mở khóa</FieldLabel>
+            <Input
+              id="unlock-reason"
+              value={unlockReason}
+              onChange={(e) => setUnlockReason(e.target.value)}
+              placeholder="Ví dụ: Đã xác minh thông tin giải trình..."
+              maxLength={500}
+              disabled={unlockSubmitting}
+            />
+          </Field>
+          {unlockDialogError ? (
+            <Alert variant="destructive">
+              <AlertDescription>{unlockDialogError}</AlertDescription>
+            </Alert>
+          ) : null}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={closeUnlockDialog} disabled={unlockSubmitting}>
+              Hủy
+            </Button>
+            <Button
+              type="button"
+              className="bg-emerald-600 text-white hover:bg-emerald-700"
+              onClick={() => void handleConfirmUnlock()}
+              disabled={unlockSubmitting}
+            >
+              {unlockSubmitting ? <Spinner className="size-4" /> : "Xác nhận mở khóa"}
             </Button>
           </DialogFooter>
         </DialogContent>
