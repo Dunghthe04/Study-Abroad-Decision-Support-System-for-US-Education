@@ -11,6 +11,7 @@ from app.api.deps import require_api_key
 from app.api.routes import chat, health, profile, recommend
 from app.core.config import get_settings
 from app.core.db import open_pool
+from app.services.branches import build_branches
 from app.services.centers import CenterFinder
 from app.services.chat_flow import ChatFlow
 from app.services.ec_reader import EcReader
@@ -20,8 +21,8 @@ from app.services.knowledge import KnowledgeRetriever
 from app.services.ollama import OllamaClient
 from app.services.picker import Picker
 from app.services.scorer import Scorer
-from app.services.skill_picker_loader import load_skill_picker
 from app.services.skills import build_handlers
+from app.services.slm_classifier import OllamaSlm, output_format
 from app.services.transcript_reader import TranscriptReader
 
 
@@ -70,12 +71,20 @@ async def lifespan(app: FastAPI):
             statuses = [s.strip() for s in settings.knowledge_statuses.split(",") if s.strip()]
             knowledge = KnowledgeRetriever(app.state.db_pool, statuses, settings.knowledge_top_k)
         centers = CenterFinder(backend_http) if settings.backend_base_url else None
-        app.state.chat_flow = ChatFlow(
-            picker=load_skill_picker(http),
-            handlers=build_handlers(
-                app.state.llm, settings.llm_model, knowledge, settings.knowledge_min_score, centers
-            ),
+        skills = build_handlers(
+            app.state.llm, settings.llm_model, knowledge, settings.knowledge_min_score, centers
         )
+        # SLM phân loại tin nhắn (usas-slm): client riêng vì khác model với llm_model, dùng chung kết nối http
+        slm_client = OllamaClient(
+            http,
+            settings.slm_model,
+            num_ctx=settings.llm_num_ctx,
+            num_gpu=settings.llm_num_gpu,
+            seed=settings.llm_seed,
+            keep_alive=settings.llm_keep_alive,
+        )
+        slm = OllamaSlm(slm_client, output_format(settings.slm_format))
+        app.state.chat_flow = ChatFlow(slm, build_branches(skills))
         yield
         if app.state.db_pool is not None:
             await asyncio.to_thread(app.state.db_pool.close)

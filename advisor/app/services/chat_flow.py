@@ -1,7 +1,9 @@
 """
-Điều phối luồng chat: đọc trạng thái, chọn skill bằng model, chạy skill, trả câu trả lời và trạng thái
-Vòng xử lý tin nhắn
-1. Model chọn skill(SkillPicker) -> 2. Code kiểm luật (plan_skill) -> 3. chạy từng skill-> 4. ghi log trả kết quả
+Điều phối luồng chat theo kiến trúc mới: SLM đọc tin nhắn, chạy nhánh theo loại câu hỏi, trả câu trả lời và trạng thái.
+Vòng xử lý một tin nhắn:
+1. SLM phân loại (nhãn chính, nhãn phụ, thực thể) -> 2. chọn nhánh -> 3. chạy từng nhánh, ghép câu trả lời
+-> 4. nhắc lại câu hồ sơ đang chờ nếu chưa được trả lời -> 5. ghi log, trả kết quả.
+Các nhánh nằm ở branches.py (main.py tạo rồi truyền vào ChatFlow).
 """
 
 import json
@@ -10,7 +12,17 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-from app.schemas.chat import ChatRequest, ChatResponse, ChatState, Citation, QuickReply, Step, Widget
+from app.schemas.chat import (
+    ChatRequest,
+    ChatResponse,
+    ChatState,
+    Citation,
+    ProfileField,
+    QuickReply,
+    Step,
+    Widget,
+)
+from app.schemas.slm import SlmResult
 from app.services.intake import (
     CHAT_BUTTON,
     CONTINUE_CHAT,
@@ -23,23 +35,15 @@ from app.services.intake import (
 )
 from app.services.pii_mask import mask_personal_info
 from app.services.profile_sync import changed_keys, merge_profile
-from app.services.skill_rules import (
-    REQUIRED_B3,
-    REQUIRED_BY_SKILL,
-    STEP_SKILL,
-    Plan,
-    missing_fields,
-    plan_skills,
-)
-from app.services.small_talk import classify
+from app.services.skill_rules import REQUIRED_B3
+from app.services.slm_contract import SlmClassifier
 
 # Tạo 1 logger
 logger = logging.getLogger("advisor.chat")
 
 # Câu hỏi lấy nguyên văn từ framework, AI không tự đặt câu hỏi
 # Câu hỏi lấy nguyên văn từ framework, AI không tự đặt câu hỏi.
-# Chữ phải giống hệt cột last_question trong ml/skill_picker/data/skill_picker.csv (có test kiểm tra),
-# vì model chọn skill nhìn câu này làm đầu vào.
+# Mỗi mã một câu riêng (có test kiểm tra), vì model chọn skill (SLM) nhìn chữ của câu này để biết đang chờ mã nào.
 # X1 đến X3: câu chuyển bước, framework chưa đặt mã nên đặt tạm.
 QUESTIONS = {
     "B0.1": "Chào bạn, mình là trợ lý tư vấn du học Mỹ. Bạn đang cần mình giúp điều gì?",
@@ -72,18 +76,9 @@ NOT_READY = "Phần này mình đang hoàn thiện, bạn quay lại sau nhé."
 NEED_PROFILE = (
     "Mình cần biết thêm về hồ sơ của bạn trước khi làm bước này. Bạn cho mình xin thêm thông tin nhé."
 )
-NEED_RESULTS = "Bạn cần xem danh sách trường gợi ý trước, rồi mình mới phân tích tiếp được nhé."
 NEED_MAJOR = "Để gợi ý trường mình cần biết ngành bạn muốn học. Bạn chọn ngành giúp mình nhé."
-# Skill trả lời xen ngang (không đổi bước, không hỏi sang câu khác): trả lời xong thì nhắc lại câu đang chờ
-INTERRUPT_SKILLS = {"skill_tra_loi", "skill_chuyen_trung_tam"}
 BACK_TO_QUESTION = "Quay lại câu mình đang hỏi nhé: "
 OPENING_QUESTIONS = {"B0.1", "B0.2"}
-# Skill đánh giá hồ sơ (B3): chạy ngay khi rà soát hồ sơ xong
-ASSESS_SKILL = "skill_danh_gia"
-CHAIN_STEPS = {"B5", "B6"}
-END_SKILL = "ket_thuc"
-# Bước hỏi hồ sơ (bậc học, hồ sơ): câu hỏi có nút gợi ý
-INTAKE_STEPS = ("B1", "B2")
 
 
 # Ghi lại câu vừa hỏi vào Chatsate, lưu last_question, question_id và tăng số lần hỏi
@@ -104,13 +99,6 @@ def go_to(state: ChatState, step: Step) -> None:
     state.question_id = None
 
 
-# Model chọn skill: chỉ cần có hàm predict trả về .skills (đã xếp xác suất cao trước) và .probs
-# Class này dùng để mô tả kiểu của model chọn skill, không cần khởi tạo
-# Giống interface
-class SkillChooser(Protocol):
-    async def predict(self, step: str, last_question: str, message: str, missing: list[str]) -> Any: ...
-
-
 # Kết quả của 1 skill: câu trả lời gửi học sinh, kèm nút gợi ý và công cụ nhập nếu có
 # (trạng thái sửa trực tiếp trên state được truyền vào)
 @dataclass
@@ -129,63 +117,48 @@ class SkillHandler(Protocol):
     async def run(self, state: ChatState, message: str) -> SkillOutput: ...
 
 
-GOODBYE = "Chúc bạn thành công. Khi cần bạn cứ quay lại nhé."
-GREETING = "Chào bạn! Mình là trợ lý tư vấn du học Mỹ."
-THANKS = "Rất vui được giúp bạn!"
-# Chào hoặc cảm ơn giữa chừng: mời học sinh làm tiếp, không bắt đầu lại
-ASK_MORE = "Bạn cần mình giúp gì về du học Mỹ?"
-ASK_MORE_WITH_RESULTS = (
-    "Bạn có thể hỏi mình về một trường trong danh sách gợi ý, về visa, học bổng hoặc tìm trung tâm tư vấn."
-)
+# Hợp đồng chung của mọi nhánh (branches.py): như SkillHandler nhưng nhận thêm kết quả SLM (thực thể, nhãn phụ...)
+class Branch(Protocol):
+    async def run(self, state: ChatState, message: str, slm: SlmResult) -> SkillOutput: ...
 
 
-# Skill tạm: học sinh nói lạc đề thì trả lời ngắn và nhắc lại câu đang hỏi
-# Lời xã giao (chào, cảm ơn, tạm biệt) mà model xếp nhầm vào đây thì đáp đúng chỗ, không đáp "chỉ hỗ trợ du học"
-class OffTopicHandler:
-    async def run(self, state: ChatState, message: str) -> SkillOutput:
-        kind = classify(message)
-        if kind == "goodbye":
-            go_to(state, "END")
-            return SkillOutput(GOODBYE)
-        if kind is not None:
-            opening = GREETING if kind == "greeting" else THANKS
-            follow_up = state.last_question or (ASK_MORE_WITH_RESULTS if state.has_results else ASK_MORE)
-            return SkillOutput(f"{opening} {follow_up}")
-        if state.last_question:
-            return SkillOutput(f"Mình chỉ hỗ trợ tư vấn du học Mỹ thôi nhé. {state.last_question}")
-        return SkillOutput("Mình chỉ hỗ trợ tư vấn du học Mỹ thôi nhé. Bạn cần mình giúp gì về du học?")
+# Ghép câu trả lời của 2 phần chạy liền nhau: nối chữ, lấy nút / công cụ / action của phần sau nếu có
+def combine(first: SkillOutput, second: SkillOutput) -> SkillOutput:
+    return SkillOutput(
+        answer="\n\n".join(a for a in (first.answer, second.answer) if a),
+        quick_replies=second.quick_replies or first.quick_replies,
+        widget=second.widget or first.widget,
+        citations=first.citations + [c for c in second.citations if c not in first.citations],
+        disclaimer=second.disclaimer or first.disclaimer,
+        action=second.action or first.action,
+        action_data=second.action_data if second.action else first.action_data,
+    )
 
 
-# Skill tạm: học sinh muốn dừng thì chào và đánh dấu kết thúc
-class EndHandler:
-    async def run(self, state: ChatState, message: str) -> SkillOutput:
-        go_to(state, "END")
-        return SkillOutput(GOODBYE)
+# Nhánh chạy cho một tin: nhãn chính, nhãn phụ, rồi nhánh hồ sơ cuối cùng nếu tin có kèm giá trị hồ sơ
+# (vd "8.5 ạ, mà I-20 là gì": trả lời kiến thức trước, ghi GPA và hỏi câu hồ sơ kế tiếp sau)
+def branches_to_run(slm: SlmResult) -> list[str]:
+    names = [slm.type, *([slm.nhan_phu] if slm.nhan_phu else [])]
+    if slm.touches_profile() and "mac_dinh" not in names:
+        names.append("mac_dinh")
+    return names
 
 
 class ChatFlow:
-    def __init__(
-        self, picker: SkillChooser | None = None, handlers: dict[str, SkillHandler] | None = None
-    ) -> None:
-        self._picker = picker  # None = chưa có model: luôn dùng skill của bước hiện tại
-        # Nạp các kills và đối tượng skill mặc định
-        self._handlers: dict[str, SkillHandler] = {"ngoai_le": OffTopicHandler(), "ket_thuc": EndHandler()}
-        # Thêm các skill khác nếu có
-        self._handlers.update(handlers or {})
+    # slm: bộ phân loại tin nhắn (OllamaSlm, test dùng FixedSlm). branches: loại câu hỏi -> nhánh (build_branches)
+    def __init__(self, slm: SlmClassifier, branches: dict[str, Branch]) -> None:
+        self._slm = slm
+        self._branches = branches
 
     async def reply(self, req: ChatRequest) -> ChatResponse:
         # Cuộc trò chuyện mới: giao diện đã tự hiện lời chào, nên tin nhắn đầu tiên là câu trả lời cho B0.1.
         # Ghi nhận đã chào rồi xử lý tin nhắn như mọi lượt khác, không bỏ qua câu học sinh vừa gõ.
         first_turn = req.state is None
-        # Nếu là lượt đầu
         if first_turn:
             state = ChatState(study_level=req.study_level)
-            # Ghi lại là đã hỏi
             ask(state, "B0.1")
         else:
             state = req.state.model_copy(deep=True)
-            if req.study_level:  # .NET gửi bậc học mỗi lượt; không gửi thì giữ bậc đã nhớ
-                state.study_level = req.study_level
         if req.study_level:  # .NET gửi bậc học mỗi lượt; không gửi thì giữ bậc đã nhớ
             state.study_level = req.study_level
         # Hồ sơ trong nháp (do .NET gửi) là nguồn thật; không gửi thì giữ hồ sơ trong state như cũ
@@ -194,17 +167,12 @@ class ChatFlow:
         # Danh sách trường gợi ý do .NET gửi mỗi lượt; không gửi thì giữ như cũ
         if req.schools is not None:
             state.schools = req.schools
-        # Cuộc trò chuyện đã kết thúc mà học sinh nhắn tiếp: mở lại từ đầu (giữ hồ sơ), như vừa được chào ở B0.1.
-        # Model chọn skill chưa từng học bước END nên nếu để nguyên sẽ đoán sai.
-        if state.current_step == "END":
-            go_to(state, "B0")
-            ask(state, "B0.1")
-        # Chụp hồ sơ đầu lượt để cuối lượt biết khóa nào đổi (sao chép sâu vì skill sửa trực tiếp trên state)
+        # Chụp hồ sơ đầu lượt để cuối lượt biết khóa nào đổi (sao chép sâu vì nhánh sửa trực tiếp trên state)
         profile_before = {key: field.model_copy(deep=True) for key, field in state.profile.items()}
         message = last_user_message(req)
-        # chương trình lấy thời điểm kết thúc trừ thời điểm bắt đầu để tính thời gian xử lý.
         started = time.perf_counter()
-        # Đang chờ học sinh chọn cách điền hồ sơ: nhận lựa chọn bằng chữ trên nút, không nhờ model.
+
+        # Đang chờ học sinh chọn cách điền hồ sơ: nhận lựa chọn bằng chữ trên nút, không cần SLM.
         # Nút "Tiếp tục bằng chat" trên form thì hỏi tiếp trong chat dù chat không đang chờ chọn
         continue_chat = message.strip() == CONTINUE_CHAT
         if state.question_id == INTAKE_ID or continue_chat:
@@ -213,153 +181,60 @@ class ChatFlow:
             choice = "chat" if continue_chat else intake_choice(message)
             if choice:
                 output = begin_intake(state, choice)
-                log_turn(
-                    state,
-                    message,
-                    [],
-                    {},
-                    Plan(skills=[], source="fallback_step"),
-                    (time.perf_counter() - started) * 1000,
-                    req.session_id,
-                )
-                return ChatResponse(
-                    answer=output.answer,
-                    state=state,
-                    quick_replies=output.quick_replies,
-                    widget=output.widget,
-                    profile=state.profile,
-                    profile_changed=changed_keys(profile_before, state.profile),
-                )
+                log_turn(state, message, None, [], (time.perf_counter() - started) * 1000, req.session_id)
+                return self._response(state, output, [], profile_before)
 
-        # 1. Model chọn skill(lỗi thì coi như không chắc, dùng skill của bước hiện tại).
-        # Bấm nút của câu đang hỏi ở B1, B2 là câu trả lời rõ: dùng skill của bước, không nhờ model
-        # (model từng đoán nút "Bỏ qua" là muốn dừng nên kết thúc cuộc trò chuyện giữa chừng)
-        if state.current_step in INTAKE_STEPS and is_button(state.question_id, message):
-            predicted, probs = [], {}
-        else:
-            predicted, probs = await self._choose(state, message)
-        # Kết thúc chỉ khi học sinh chỉ muốn dừng; đi kèm skill khác thì học sinh đang trả lời, không dừng
-        if len(predicted) > 1:
-            predicted = [skill for skill in predicted if skill != END_SKILL]
-
-        # 2. Code kiểm luật: tối đa 2 skill, thứ tự chạy, điều kiện chạy
-        plan = plan_skills(state, predicted, has_results=state.has_results)
-
-        # 3. Chạy từng skill, ghép các câu trả lời
-        # Câu đang chờ học sinh trả lời, chụp trước khi chạy skill để biết skill có hỏi sang câu khác không
+        # Câu hồ sơ đang chờ, chụp trước khi chạy nhánh để cuối lượt biết đã được trả lời chưa
         pending = (state.question_id, state.last_question)
-        not_ready = False
-        answers: list[str] = []
-        quick_replies: list[QuickReply] = []
-        widget: Widget | None = None
-        citations: list[Citation] = []
-        disclaimer: str | None = None
-        action: str | None = None
-        action_data: dict[str, Any] = {}
-        skills = list(plan.skills)
-        for skill in skills:
-            # Lấy ra handler của skill, nếu không có thì trả NOT_READY
-            handler = self._handlers.get(skill)
-            if handler is None:
-                if handler is None:
-                    not_ready = True
-                    continue
-            step_before = state.current_step
-            output = await handler.run(state, message)
-            # Skill chỉ chuyển bước (câu trả lời rỗng) thì không thêm câu nào, skill của bước mới sẽ trả lời
-            if output.answer:
-                answers.append(output.answer)
-            # Mỗi lượt chỉ hiện một bộ nút và một công cụ nhập: lấy của skill chạy sau cùng có đưa ra
-            quick_replies = output.quick_replies or quick_replies
-            widget = output.widget or widget
-            citations += [c for c in output.citations if c not in citations]
-            disclaimer = output.disclaimer or disclaimer
-            if output.action:
-                action, action_data = output.action, output.action_data
-            # Rà soát hồ sơ xong (skill_ho_so vừa chuyển sang B3, không còn câu chờ): đánh giá luôn trong lượt này,
-            # không bắt học sinh nhắn thêm một lần nữa mới thấy kết quả
-            if state.current_step == "B3" and state.question_id is None and ASSESS_SKILL not in skills:
-                skills.append(ASSESS_SKILL)
-            if state.current_step != step_before and state.current_step in CHAIN_STEPS:
-                next_skill = STEP_SKILL[state.current_step]
-                if next_skill not in skills:
-                    skills.append(next_skill)
-        # Skill chưa có handler chỉ báo "đang hoàn thiện" khi chưa có skill nào trả lời được
-        if not_ready and not answers:
-            # Lượt đầu mà chưa skill nào trả lời được: chào như cũ thay vì báo "đang hoàn thiện"
-            answers.append(QUESTIONS["B0.1"] if first_turn else NOT_READY)
-        # Nếu bị chặn thì thêm câu trả lời
-        # Bị chặn vì thiếu hồ sơ thì bắt đầu hỏi hồ sơ thay vì chỉ báo thiếu
-        blocked_profile = next((b for b in plan.blocked if b.reason == "thieu_ho_so"), None)
-        if blocked_profile is not None:
-            intake = start_intake(state, REQUIRED_BY_SKILL.get(blocked_profile.skill, REQUIRED_B3))
-            answers.append(intake.answer)
-            quick_replies = intake.quick_replies or quick_replies
-            widget = intake.widget or widget
-        # Đến B4 mà chưa có ngành thì hiện ô chọn ngành
-        elif any(b.reason == "thieu_nganh" for b in plan.blocked):
-            major = ask_major(state)
-            answers.append(major.answer)
-            widget = major.widget or widget
-        # Các lý do chặn khác thì báo cho học sinh biết (thiếu hồ sơ và thiếu ngành đã xử lý ở trên)
-        # Đã có skill khác trả lời rồi thì không thêm câu "cần xem danh sách trường trước" (câu thừa, không liên quan)
-        skip_blocked = {"thieu_ho_so", "thieu_nganh"}
-        if any(answers):
-            skip_blocked.add("chua_co_danh_sach")
-        answers += blocked_answers(plan, skip=skip_blocked)
+        # 1. SLM đọc tin nhắn. Bấm nút của câu đang hỏi là trả lời hồ sơ rõ ràng, không cần SLM đoán
+        if state.question_id and is_button(state.question_id, message):
+            slm = SlmResult(type="mac_dinh")
+        else:
+            slm = await self._slm.classify(state, message)
 
-        # Đã trả lời kiến thức / trung tâm ở B5, B6 (skill chạy thật, có handler): quay lại việc đang dở
-        answered = INTERRUPT_SKILLS & {s for s in skills if s in self._handlers}
-        if answered and state.current_step in CHAIN_STEPS:
-            resumed = resume_after_chain(state)
-            if resumed is not None:
-                answers.append(resumed.answer)
-                quick_replies = resumed.quick_replies or quick_replies
-                widget = resumed.widget or widget
+        # 2-3. Chạy từng nhánh theo thứ tự, ghép câu trả lời
+        names = branches_to_run(slm)
+        output = SkillOutput("")
+        for name in names:
+            output = combine(output, await self._branches[name].run(state, message, slm))
 
-        # Trả lời xen ngang lúc đang hỏi hồ sơ: nhắc lại câu đang chờ (không gọi ask nên không tăng số lần hỏi)
+        # 4. Học sinh hỏi xen ngang lúc đang hỏi hồ sơ (câu đang chờ chưa được trả lời): nhắc lại câu đang chờ.
+        # Không nhắc khi nhánh hồ sơ đã chạy (nó tự hỏi câu kế tiếp) hoặc khi câu đang chờ là câu chào mở đầu
         if (
-            INTERRUPT_SKILLS & set(plan.skills)
-            and all(pending)
+            pending[0]
             and pending[0] not in OPENING_QUESTIONS
+            and "mac_dinh" not in names
             and (state.question_id, state.last_question) == pending
         ):
-            answers.append(BACK_TO_QUESTION + pending[1])
-        # 4. Ghi log (dữ liệu để train lại model và kiểm tra random check)
-        log_turn(
-            state, message, predicted, probs, plan, (time.perf_counter() - started) * 1000, req.session_id
-        )
+            output = combine(output, SkillOutput(BACK_TO_QUESTION + pending[1]))
+        # Lượt đầu mà chưa nhánh nào trả lời được: chào như cũ thay vì "đang hoàn thiện"
+        if not output.answer:
+            output.answer = QUESTIONS["B0.1"] if first_turn else NOT_READY
 
+        # 5. Ghi log (dữ liệu để gán nhãn thêm và kiểm tra ngẫu nhiên)
+        log_turn(state, message, slm, names, (time.perf_counter() - started) * 1000, req.session_id)
+        return self._response(state, output, names, profile_before)
+
+    @staticmethod
+    def _response(
+        state: ChatState, output: SkillOutput, names: list[str], profile_before: dict[str, ProfileField]
+    ) -> ChatResponse:
         return ChatResponse(
-            answer="\n\n".join(dict.fromkeys(answers)) or NOT_READY,
+            answer=output.answer,
             state=state,
-            skills=skills,
-            quick_replies=quick_replies,
-            widget=widget,
-            citations=citations,
-            disclaimer=disclaimer,
+            skills=names,
+            quick_replies=output.quick_replies,
+            widget=output.widget,
+            citations=output.citations,
+            disclaimer=output.disclaimer,
             profile=state.profile,
             profile_changed=changed_keys(profile_before, state.profile),
-            action=action,
-            action_data=action_data,
+            action=output.action,
+            action_data=output.action_data,
         )
 
-    # Gọi model; lỗi (chưa nạp model, Ollama tắt...) thì trả về "không chắc"
-    async def _choose(self, state: ChatState, message: str) -> tuple[list[str], dict[str, float]]:
-        if self._picker is None:
-            return [], {}
-        try:
-            result = await self._picker.predict(
-                state.current_step, state.last_question, message, missing_fields(state.profile)
-            )
-        except Exception:
-            logger.exception("Model chọn skill lỗi, dùng skill của bước hiện tại")
-            return [], {}
-        return list(result.skills), dict(result.probs)
 
-    # Tin nhắn mới nhất của học sinh
-
-
+# Tin nhắn mới nhất của học sinh
 def last_user_message(req: ChatRequest) -> str:
     for message in reversed(req.messages):
         if message.role == "user":
@@ -375,42 +250,6 @@ def is_button(question_id: str | None, message: str) -> bool:
     return buttons.pressed(question_id, message, can_skip=True) is not None or skill_ho_so.is_form_text(
         question_id, message
     )
-
-
-# Skill bị chặn thì nói cho học sinh biết vì sao
-# Câu nói cho học sinh biết vì sao skill bị chặn, theo lý do
-BLOCKED_ANSWER = {
-    "thieu_ho_so": NEED_PROFILE,
-    "thieu_nganh": NEED_MAJOR,
-    "chua_co_danh_sach": NEED_RESULTS,
-}
-
-
-# Skill bị chặn thì nói cho học sinh biết vì sao (bỏ qua các lý do trong skip)
-def blocked_answers(plan: Plan, skip: set[str] | None = None) -> list[str]:
-    return [BLOCKED_ANSWER[item.reason] for item in plan.blocked if item.reason not in (skip or set())]
-
-
-RESUME = "Mình quay lại phần tư vấn chọn trường nhé."
-
-
-# Trả lời kiến thức hoặc giới thiệu trung tâm xong (B5, B6) thì quay lại việc đang dở, không đứng yên ở B5/B6:
-# - đã có danh sách trường: về B4 (bước model chọn skill đã học cho việc hỏi về trường, giải thích, kịch bản);
-# - chưa có danh sách mà hồ sơ còn thiếu: hỏi tiếp hồ sơ như lúc bắt đầu thu hồ sơ;
-# - hồ sơ đủ rồi: để yên, học sinh nhắn tiếp thì skill của bước đó chạy
-def resume_after_chain(state: ChatState) -> SkillOutput | None:
-    target, state.return_to = state.return_to, None
-    if target is None:  # không có việc dở (không đi từ skill_nhu_cau sang): để nguyên như cũ
-        return None
-    if state.has_results:
-        go_to(state, "B4")
-        return None
-    if not missing_fields(state.profile, REQUIRED_B3):
-        return None
-    go_to(state, target)  # model chọn skill nhìn đúng bước đang thu hồ sơ, không còn đứng ở B5/B6
-    output = start_intake(state)
-    output.answer = f"{RESUME}\n\n{output.answer}"
-    return output
 
 
 # Bắt đầu hỏi hồ sơ khi một skill bị chặn vì thiếu hồ sơ
@@ -454,13 +293,13 @@ def ask_next_missing(state: ChatState, prefix: str = "") -> SkillOutput:
     return output
 
 
-# Mỗi lượt ghi một dòng JSON: tin nhắn, model chọn gì, code chạy gì
+# Mỗi lượt ghi một dòng JSON: tin nhắn, SLM đọc ra gì, nhánh nào chạy.
+# Chỉ ghi tên khóa thực thể, không ghi giá trị (giá trị là chữ học sinh viết, có thể chứa thông tin cá nhân)
 def log_turn(
     state: ChatState,
     message: str,
-    predicted: list[str],
-    probs: dict[str, float],
-    plan: Plan,
+    slm: SlmResult | None,
+    ran: list[str],
     ms: float,
     session_id: str | None = None,
 ) -> None:
@@ -472,11 +311,11 @@ def log_turn(
                 "step": state.current_step,
                 "last_question": state.last_question,
                 "message": mask_personal_info(message),
-                "model_skills": predicted,
-                "probs": {k: round(v, 3) for k, v in probs.items()},
-                "source": plan.source,
-                "ran": plan.skills,
-                "blocked": [{"skill": b.skill, "reason": b.reason} for b in plan.blocked],
+                "slm_type": slm.type if slm else None,
+                "slm_nhan_phu": slm.nhan_phu if slm else None,
+                "slm_thuc_the": sorted(slm.thuc_the) if slm else [],
+                "slm_confidence": round(slm.confidence, 3) if slm else None,
+                "ran": ran,
                 "ms": round(ms),
             },
             ensure_ascii=False,

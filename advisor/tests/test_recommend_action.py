@@ -3,25 +3,11 @@
 Advisor không tự chạy gợi ý: pipeline (lọc, chấm, chọn, lưu) nằm ở .NET RecommendationService.
 """
 
-from dataclasses import dataclass
-
 from app.schemas.chat import ChatMessage, ChatRequest, ChatResponse, ChatState
-from app.services.chat_flow import ChatFlow, SkillOutput
+from app.schemas.slm import SlmResult
+from app.services.chat_flow import SkillOutput
 from app.services.skills.skill_lo_trinh import RECOMMEND_ACTION, Route, action_for
-
-
-@dataclass
-class FakePrediction:
-    skills: list[str]
-    probs: dict[str, float]
-
-
-class PickerOf:
-    def __init__(self, *skills: str) -> None:
-        self._skills = list(skills)
-
-    async def predict(self, step, last_question, message, missing):
-        return FakePrediction(self._skills, {s: 0.9 for s in self._skills})
+from tests.fakes import flow_with
 
 
 class SkillWith:
@@ -58,8 +44,8 @@ def test_response_has_no_action_by_default_and_sends_it_as_camel_case():
 
 
 async def test_chat_flow_passes_the_action_of_a_skill_to_the_response():
-    # skill_lo_trinh cần đủ hồ sơ mới chạy; ở đây chỉ kiểm tra ChatFlow chuyển action nên dùng skill không cần hồ sơ
-    flow = ChatFlow(PickerOf("skill_tra_loi"), {"skill_tra_loi": SkillWith("...", RECOMMEND_ACTION)})
+    # skill_lo_trinh cần đủ hồ sơ mới chạy; ở đây chỉ kiểm tra ChatFlow chuyển action nên dùng nhánh kiến thức
+    flow = flow_with({"skill_tra_loi": SkillWith("...", RECOMMEND_ACTION)}, SlmResult(type="kien_thuc"))
 
     res = await flow.reply(request())
 
@@ -67,7 +53,7 @@ async def test_chat_flow_passes_the_action_of_a_skill_to_the_response():
 
 
 async def test_chat_flow_has_no_action_when_no_skill_asks_for_one():
-    flow = ChatFlow(PickerOf("skill_tra_loi"), {"skill_tra_loi": SkillWith("Phí SEVIS là ...")})
+    flow = flow_with({"skill_tra_loi": SkillWith("Phí SEVIS là ...")}, SlmResult(type="kien_thuc"))
 
     res = await flow.reply(request("phí sevis bao nhiêu"))
 
