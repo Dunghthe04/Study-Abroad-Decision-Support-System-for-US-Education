@@ -13,7 +13,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from app.schemas.chat import ChatState
-from app.schemas.slm import SLM_SCHEMA, SlmRead, SlmResult
+from app.schemas.slm import PROFILE_KEYS, SLM_SCHEMA, SlmRead, SlmResult
 from app.services.ollama import OllamaError
 from app.services.skill_call import SKILLS_DIR, load_skill
 
@@ -24,11 +24,23 @@ MAX_ATTEMPTS = 2  # sai thì gọi lại đúng 1 lần
 # Hai lần đều sai (model trả sai luật, Ollama tắt): coi là tin mơ hồ, confidence 0 để chat hỏi lại học sinh
 FALLBACK = SlmResult(type="ngoai_pham_vi", thuc_the={"loai_con": "mo_ho"}, confidence=0.0)
 _TYPE_VALUE_RE = re.compile(r'"type"\s*:\s*"([^"]*)"')
+# Khóa mà giá trị phải là đoạn chữ nguyên văn trong tin nhắn
+SPAN_KEYS = {*PROFILE_KEYS, "truong", "thanh_pho"}
 
 
 # Đầu vào của SLM, cùng khóa với cột đầu vào trong file dữ liệu
 def slm_input(message: str, profile: dict[str, str] | None, pending: str) -> dict[str, Any]:
     return {"cau_hoi": message, "ho_so": profile or None, "cau_he_thong_dang_hoi": pending}
+
+
+# Bỏ giá trị không có nguyên văn trong tin: model hay chép từ hồ sơ đầu vào, hoặc tự điền "null", "không có"
+def keep_verbatim(thuc_the: dict[str, Any], message: str) -> dict[str, Any]:
+    text = message.lower()
+    return {
+        key: value
+        for key, value in thuc_the.items()
+        if key not in SPAN_KEYS or (isinstance(value, str) and value.lower() in text)
+    }
 
 
 # Hồ sơ trong state thành dict chữ như cột ho_so của dữ liệu. Trường chưa có giá trị thì bỏ
@@ -92,6 +104,9 @@ class OllamaSlm:
         for _ in range(MAX_ATTEMPTS):
             try:
                 raw, content, logprobs = await self._slm.chat_json_scored(messages, SLM_SCHEMA)
+                raw["thuc_the"] = keep_verbatim(
+                    raw.get("thuc_the") or {}, message
+                )  # bỏ giá trị không có trong tin
                 read = SlmRead.model_validate(raw)  # kiểm luật nhãn và thực thể
                 return SlmResult(**read.model_dump(), confidence=label_confidence(content, logprobs))
             except (OllamaError, ValidationError) as ex:

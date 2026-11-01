@@ -5,7 +5,7 @@ Khuôn này trùng với cột đầu ra trong data/slm/du_lieu_slm.xlsx (type =
 Sửa file này thì báo người kia trước, và sửa dữ liệu cho khớp.
 """
 
-from typing import Any, Literal, get_args
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -60,13 +60,14 @@ PRIORITY = ("ho_so", "kich_ban", "kien_thuc", "trung_tam")
 SecondaryIntent = Literal["kich_ban", "kien_thuc", "trung_tam"]
 
 
+# Các nhãn phụ hợp lệ của một loại: những loại xếp sau nó trong PRIORITY. Loại ngoài PRIORITY không có nhãn phụ
+def secondaries(intent: str) -> tuple[str, ...]:
+    return PRIORITY[PRIORITY.index(intent) + 1 :] if intent in PRIORITY else ()
+
+
 # Nhãn phụ phải xếp sau nhãn chính trong PRIORITY. Sai thì ném ValueError
 def check_labels(intent: str, sub: str | None) -> None:
-    # Không có nhãn phụ bỏ qua
-    if sub is None:
-        return
-    # Có nhãn phụ thì cả 2 nhãn phải nằm trong PRIORITY, và nhãn phụ phải đứng sau nhãn chính.
-    if intent not in PRIORITY or sub not in PRIORITY or PRIORITY.index(sub) <= PRIORITY.index(intent):
+    if sub is not None and sub not in secondaries(intent):
         raise ValueError(f"nhan_phu '{sub}' phải xếp sau '{intent}' theo thứ tự {' > '.join(PRIORITY)}")
 
 
@@ -122,36 +123,53 @@ class SlmResult(SlmRead):
         return self.type == "mac_dinh" or bool(self.profile_values())
 
 
-_TEXT = {"type": "string"}
-# Khuôn JSON bắt SLM trả đúng (truyền cho Ollama qua tham số format). Viết tay như các khuôn khác trong dự án.
-# Khuôn chỉ ép hình dạng; luật theo từng loại (vd kich_ban phải có che_do) do SlmRead kiểm sau
-SLM_SCHEMA = {
-    "type": "object",
-    "required": ["type", "nhan_phu", "thuc_the"],
-    "properties": {
-        "type": {"enum": list(INTENTS)},
-        "nhan_phu": {"enum": [*get_args(SecondaryIntent), None]},
-        "thuc_the": {
+# Chuỗi phải có ít nhất 1 ký tự: chặn model điền "" cho khóa không có thông tin
+_TEXT = {"type": "string", "minLength": 1}
+# Khuôn của từng khóa thực thể riêng. Khóa hồ sơ dùng chung _TEXT
+_ENTITY_SCHEMA = {
+    "truong": _TEXT,
+    "che_do": {"enum": list(SCENARIO_MODES)},
+    "thay_doi": {
+        "type": "array",
+        "items": {
             "type": "object",
             "additionalProperties": False,
-            "properties": {
-                **dict.fromkeys(PROFILE_KEYS, _TEXT),
-                "truong": _TEXT,
-                "che_do": {"enum": list(SCENARIO_MODES)},
-                "thay_doi": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "required": ["yeu_to"],
-                        "properties": {"yeu_to": _TEXT, "gia_tri": _TEXT, "hanh_dong": _TEXT},
-                    },
-                },
-                "muc_tieu": _TEXT,
-                "yeu_to": {"type": "array", "items": _TEXT},
-                "dich_vu": {"enum": list(SERVICES)},
-                "thanh_pho": _TEXT,
-                "loai_con": {"enum": list(SUBTYPES)},
-            },
+            "required": ["yeu_to"],
+            "properties": {"yeu_to": _TEXT, "gia_tri": _TEXT, "hanh_dong": _TEXT},
         },
     },
+    "muc_tieu": _TEXT,
+    "yeu_to": {"type": "array", "items": _TEXT},
+    "dich_vu": {"enum": list(SERVICES)},
+    "thanh_pho": _TEXT,
+    "loai_con": {"enum": list(SUBTYPES)},
 }
+# Khóa bắt buộc theo loại, khớp với check_entities
+_REQUIRED_KEYS = {"kich_ban": ["che_do"], "ngoai_pham_vi": ["loai_con"]}
+
+
+# Khuôn cho một cặp (nhãn chính, nhãn phụ): thuc_the chỉ có khóa của hai loại đó cộng khóa hồ sơ
+def _branch(intent: str, sub: str | None) -> dict[str, Any]:
+    keys = ENTITY_KEYS[intent] | ENTITY_KEYS.get(sub or "", set())
+    return {
+        "type": "object",
+        "required": ["type", "nhan_phu", "thuc_the"],
+        "properties": {
+            "type": {"const": intent},
+            "nhan_phu": {"const": sub},
+            "thuc_the": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": _REQUIRED_KEYS.get(intent, []),
+                "properties": {
+                    **dict.fromkeys(PROFILE_KEYS, _TEXT),
+                    **{key: _ENTITY_SCHEMA[key] for key in sorted(keys)},
+                },
+            },
+        },
+    }
+
+
+# Khuôn JSON ép SLM khi sinh (truyền cho Ollama qua tham số format). Mỗi cặp (nhãn chính, nhãn phụ) hợp lệ là một
+# nhánh của anyOf: model chọn type nào thì chỉ sinh được nhãn phụ và khóa của nhánh đó. SlmRead vẫn kiểm lại sau
+SLM_SCHEMA = {"anyOf": [_branch(intent, sub) for intent in INTENTS for sub in (None, *secondaries(intent))]}

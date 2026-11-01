@@ -27,35 +27,6 @@ from scripts.build_slm_jsonl import DEFAULT_OUT
 
 RESULT_DIR = DEFAULT_OUT.parent / "ket_qua"
 
-"""Đo SLM trên dữ liệu gán nhãn: nhãn chính, nhãn phụ, thực thể, tốc độ. Dùng để có baseline trước fine-tune và so sau.
-
-Cần Ollama đang chạy và đã pull model. Chạy trong thư mục advisor:
-  python -m scripts.eval_slm                       # qwen3:4b trên tập test
-  python -m scripts.eval_slm --split val --limit 20
-  python -m scripts.eval_slm --model usas-slm      # model đã fine-tune
-
-Ghi từng dự đoán vào data/slm/ket_qua/<model>_<split>.jsonl để xem lại câu sai.
-"""
-
-import argparse
-import asyncio
-import json
-import statistics
-import sys
-import time
-from collections import Counter, defaultdict
-from typing import Any
-
-import httpx
-
-from app.core.config import get_settings
-from app.schemas.slm import INTENTS
-from app.services.ollama import OllamaClient
-from app.services.slm_classifier import OllamaSlm
-from scripts.build_slm_jsonl import DEFAULT_OUT
-
-RESULT_DIR = DEFAULT_OUT.parent / "ket_qua"
-
 
 # So dự đoán với nhãn, trả các con số tổng hợp. preds[i] là output dự đoán (type, nhan_phu, thuc_the) của records[i]
 def score(records: list[dict[str, Any]], preds: list[dict[str, Any]]) -> dict[str, Any]:

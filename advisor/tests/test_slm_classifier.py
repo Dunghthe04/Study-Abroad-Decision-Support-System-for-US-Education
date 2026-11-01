@@ -92,6 +92,20 @@ async def test_two_failures_fall_back_to_an_ambiguous_message_with_zero_confiden
     assert (result.type, result.thuc_the, result.confidence) == ("ngoai_pham_vi", {"loai_con": "mo_ho"}, 0.0)
 
 
+async def test_values_not_written_in_the_message_are_dropped():
+    answer = {
+        "type": "ho_so",
+        "nhan_phu": None,
+        "thuc_the": {"gpa": "8.0", "truong": "null", "major": "computer science"},
+    }
+    slm = FakeSlm(answer)
+
+    result = await OllamaSlm(slm).read("em học Computer Science nên chọn trường nào", {"gpa": "8.0"}, "")
+
+    # gpa chép từ hồ sơ, truong là "null" tự điền: bỏ. major có trong tin (không phân biệt hoa thường): giữ
+    assert result.thuc_the == {"major": "computer science"}
+
+
 def test_confidence_is_the_probability_of_the_tokens_that_spell_the_type():
     content = '{"type":"kien_thuc","nhan_phu":null}'
     tokens = [
@@ -138,6 +152,7 @@ async def test_chat_json_scored_raises_when_content_is_not_json():
     http = httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="http://ollama.test")
     with pytest.raises(OllamaError):
         await OllamaClient(http, model="qwen3:4b").chat_json_scored([], {})
+
 
 # ---- script đo ----
 def test_the_eval_score_counts_labels_and_entities():
