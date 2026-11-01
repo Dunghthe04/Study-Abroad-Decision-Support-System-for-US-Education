@@ -51,8 +51,6 @@ async def lifespan(app: FastAPI):
             keep_alive=settings.llm_keep_alive,
             embedding_model=settings.embedding_model,
         )
-        app.state.transcript_reader = TranscriptReader(http, settings)
-        app.state.ec_reader = EcReader(app.state.llm, settings.llm_model)
         gemini = GeminiClient(
             gemini_http,
             settings.gemini_model,
@@ -61,9 +59,14 @@ async def lifespan(app: FastAPI):
             max_retries=settings.gemini_max_retries,
             fallback_model=settings.gemini_fallback_model or None,
         )
+        # Có khóa Gemini thì bước B đọc bảng điểm chạy trên Gemini, không thì dùng model Ollama (transcript_parse_model)
+        app.state.transcript_reader = TranscriptReader(
+            http, settings, gemini if settings.gemini_api_key else None, settings.gemini_model
+        )
         app.state.scorer = Scorer(gemini, settings.gemini_model)
         app.state.picker = Picker(gemini, settings.gemini_model)
-        app.state.explainer = Explainer(app.state.llm, settings.llm_model)
+        app.state.ec_reader = EcReader(gemini, settings.gemini_model)
+        app.state.explainer = Explainer(gemini, settings.gemini_model)
         # Kho kiến thức: không có DB thì None, chat vẫn chạy nhưng chưa trả lời được câu hỏi kiến thức
         app.state.db_pool = await asyncio.to_thread(open_pool, settings.database_url)
         knowledge = None
@@ -71,8 +74,9 @@ async def lifespan(app: FastAPI):
             statuses = [s.strip() for s in settings.knowledge_statuses.split(",") if s.strip()]
             knowledge = KnowledgeRetriever(app.state.db_pool, statuses, settings.knowledge_top_k)
         centers = CenterFinder(backend_http) if settings.backend_base_url else None
+        # Gemini viết câu trả lời cho mọi skill; Ollama (app.state.llm) chỉ còn embedding cho kho kiến thức
         skills = build_handlers(
-            app.state.llm, settings.llm_model, knowledge, settings.knowledge_min_score, centers
+            gemini, settings.gemini_model, knowledge, settings.knowledge_min_score, centers, app.state.llm
         )
         # SLM phân loại tin nhắn (usas-slm): client riêng vì khác model với llm_model, dùng chung kết nối http
         slm_client = OllamaClient(

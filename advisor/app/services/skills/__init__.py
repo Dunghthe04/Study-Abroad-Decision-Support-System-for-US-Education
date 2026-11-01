@@ -24,14 +24,16 @@ from app.services.skills.skill_nhu_cau import NhuCauHandler
 from app.services.skills.skill_tra_loi import TraLoiHandler
 
 
-# llm: OllamaClient (Qwen) dùng chung cho các skill; model: tên model, truyền vào SkillCall hoặc để ghi log
+# llm: client của LLM viết câu trả lời (Gemini) dùng chung cho các skill; model: tên model, truyền vào SkillCall hoặc để ghi log
 # knowledge: bộ tìm kiến thức; None (chưa có DB) thì không đăng ký skill_tra_loi
+# embedder: client Ollama (bge-m3) biến câu hỏi thành vector cho skill_tra_loi; bỏ trống thì dùng llm
 def build_handlers(
     llm: Any,
     model: str,
     knowledge: KnowledgeRetriever | None = None,
     min_score: float = 0.72,
     centers: CenterFinder | None = None,
+    embedder: Any = None,
 ) -> dict[str, SkillHandler]:
     handlers: dict[str, SkillHandler] = {}
     # Mỗi skill một dòng, ví dụ:
@@ -43,7 +45,7 @@ def build_handlers(
     handlers["skill_lo_trinh"] = LoTrinhHandler(llm, model)
     handlers["skill_explain"] = ExplainHandler(llm, model)
     if knowledge is not None:
-        handlers["skill_tra_loi"] = TraLoiHandler(llm, model, knowledge, min_score)
+        handlers["skill_tra_loi"] = TraLoiHandler(llm, model, knowledge, min_score, embedder)
     if centers is not None:
         handlers["skill_chuyen_trung_tam"] = ChuyenTrungTamHandler(llm, model, centers)
     return handlers

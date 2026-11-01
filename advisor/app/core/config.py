@@ -25,7 +25,8 @@ class Settings(BaseSettings):
     # Số ngày giữ file log chat, quá hạn thì tự xóa
     chat_log_keep_days: int = 90
     ollama_base_url: str = "http://localhost:11434"
-    llm_model: str = "qwen3:8b"
+    # Chỉ dùng khi không có GEMINI_API_KEY (bước B đọc bảng điểm chạy trên Ollama). Có khóa Gemini thì để trống
+    llm_model: str = ""
     slm_model: str = "usas-slm"
     slm_format: str = "json"
     llm_timeout_seconds: float = 120

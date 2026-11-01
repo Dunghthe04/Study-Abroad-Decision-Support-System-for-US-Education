@@ -57,3 +57,61 @@ async def test_out_of_scope_works_without_any_registered_skill():
     res = await flow.reply(req)
 
     assert res.skills == ["ngoai_pham_vi"] and res.answer
+
+
+async def test_knowledge_skill_embeds_with_the_embedder_and_writes_with_the_llm():
+    from app.services.knowledge import KnowledgeHit
+    from app.services.skills.skill_tra_loi import TraLoiHandler
+
+    class Embedder:
+        async def embed(self, texts):
+            return [[0.1, 0.2]]
+
+    class Llm:  # giống Gemini: chỉ có chat_json, không có embed
+        async def chat_json(self, messages, schema, temperature=0.0):
+            return {"enough": True, "answer": "I-20 là giấy xác nhận trường nhận bạn để xin visa du học."}
+
+    class Retriever:
+        async def search(self, vector, study_level):
+            assert vector == [0.1, 0.2]
+            return [
+                KnowledgeHit(
+                    "K1",
+                    "I-20 là gì",
+                    "I-20 là giấy xác nhận trường nhận bạn để xin visa.",
+                    None,
+                    None,
+                    None,
+                    None,
+                    0.9,
+                )
+            ]
+
+    handler = TraLoiHandler(Llm(), "gemini", Retriever(), 0.72, Embedder())
+
+    res = await handler.run(ChatState(), "I-20 là gì")
+
+    assert "I-20" in res.answer and res.citations
+
+
+async def test_a_question_below_the_threshold_is_logged_as_a_knowledge_miss(caplog):
+    import logging
+
+    from app.services.knowledge import KnowledgeHit
+    from app.services.skills.skill_tra_loi import NO_BASIS, TraLoiHandler
+
+    class Embedder:
+        async def embed(self, texts):
+            return [[0.1]]
+
+    class Retriever:
+        async def search(self, vector, study_level):
+            return [KnowledgeHit("K9", "câu khác", "nội dung khác", None, None, None, None, 0.40)]
+
+    handler = TraLoiHandler(object(), "gemini", Retriever(), 0.72, Embedder())
+
+    with caplog.at_level(logging.INFO, logger="advisor.knowledge"):
+        res = await handler.run(ChatState(), "học bổng ở Mars")
+
+    assert res.answer == NO_BASIS
+    assert "knowledge_miss" in caplog.text and "nearest=K9" in caplog.text and "0.400" in caplog.text
