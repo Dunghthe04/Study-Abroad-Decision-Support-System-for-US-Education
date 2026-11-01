@@ -22,3 +22,5 @@ uploads/
 scratch/
 **/__pycache__/
 *.pyc
+# Model fine-tune (vài GB): chia sẻ qua Drive, không đưa lên git
+advisor/models/**/*.gguf

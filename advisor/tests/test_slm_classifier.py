@@ -9,7 +9,7 @@ import pytest
 from app.schemas.chat import ChatState, ProfileField
 from app.schemas.slm import INTENTS, SLM_SCHEMA
 from app.services.ollama import OllamaClient, OllamaError
-from app.services.slm_classifier import OllamaSlm, label_confidence
+from app.services.slm_classifier import OllamaSlm, label_confidence, output_format
 
 GOOD = {"type": "trung_tam", "nhan_phu": None, "thuc_the": {"dich_vu": "SUA_BAI_LUAN", "thanh_pho": "HN"}}
 
@@ -173,3 +173,32 @@ def test_the_eval_score_counts_labels_and_entities():
     assert (result["dung_khoa_thuc_the"], result["dung_het_thuc_the"]) == (1.0, 0.5)
     assert result["theo_loai"] == {"mac_dinh": 0.0, "kien_thuc": 1.0}
     assert result["nham_nhieu_nhat"] == ["mac_dinh -> kien_thuc: 1"]
+
+
+# ---- định dạng đầu ra (settings.slm_format) ----
+def test_output_format_turns_the_config_into_what_ollama_gets():
+    assert output_format("json") == "json"
+    assert output_format("schema") is SLM_SCHEMA
+    with pytest.raises(ValueError, match="slm_format"):
+        output_format("jsn")
+
+
+async def test_the_chosen_output_format_is_sent_to_ollama():
+    slm = FakeSlm(GOOD)
+
+    await OllamaSlm(slm, "json").read("ai sửa bài luận ở HN", None, "")
+
+    assert slm.calls[0][1] == "json"
+
+
+async def test_chat_json_scored_sends_plain_json_mode_when_asked():
+    sent = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"message": {"content": '{"ok": true}'}})
+
+    http = httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="http://ollama.test")
+    await OllamaClient(http, model="usas-slm").chat_json_scored([{"role": "user", "content": "hi"}], "json")
+
+    assert sent["body"]["format"] == "json"

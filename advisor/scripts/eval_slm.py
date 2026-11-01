@@ -22,7 +22,7 @@ import httpx
 from app.core.config import get_settings
 from app.schemas.slm import INTENTS
 from app.services.ollama import OllamaClient
-from app.services.slm_classifier import OllamaSlm
+from app.services.slm_classifier import OllamaSlm, output_format
 from scripts.build_slm_jsonl import DEFAULT_OUT
 
 RESULT_DIR = DEFAULT_OUT.parent / "ket_qua"
@@ -56,7 +56,7 @@ def score(records: list[dict[str, Any]], preds: list[dict[str, Any]]) -> dict[st
     }
 
 
-async def run(model: str, split: str, limit: int | None) -> None:
+async def run(model: str, split: str, limit: int | None, fmt: str) -> None:
     settings = get_settings()
     records = [json.loads(line) for line in DEFAULT_OUT.read_text(encoding="utf-8").splitlines()]
     records = [r for r in records if r["split"] == split][:limit]
@@ -66,13 +66,15 @@ async def run(model: str, split: str, limit: int | None) -> None:
         client = OllamaClient(
             http, model, num_ctx=settings.llm_num_ctx, num_gpu=settings.llm_num_gpu, seed=settings.llm_seed
         )
-        slm = OllamaSlm(client)
+        slm = OllamaSlm(client, output_format(fmt))
         preds, rows, seconds = [], [], []
+        fallbacks = 0  # số câu lùi về mơ hồ (model trả sai luật 2 lần)
         for i, r in enumerate(records, start=1):
             start = time.perf_counter()
             result = await slm.read(
                 r["input"]["cau_hoi"], r["input"]["ho_so"], r["input"]["cau_he_thong_dang_hoi"]
             )
+            fallbacks += result.confidence == 0.0
             seconds.append(time.perf_counter() - start)
             pred = {"type": result.type, "nhan_phu": result.nhan_phu, "thuc_the": result.thuc_the}
             preds.append(pred)
@@ -99,10 +101,11 @@ async def run(model: str, split: str, limit: int | None) -> None:
     result |= {
         "giay_trung_binh": round(statistics.mean(seconds), 2),
         "giay_p90": round(sorted(seconds)[int(0.9 * (len(seconds) - 1))], 2),
-        "lui_ve_mo_ho": sum(row["confidence"] == 0.0 for row in rows),
+        "lui_ve_mo_ho": fallbacks,
         "confidence_khi_dung": round(statistics.mean(conf_right), 3) if conf_right else None,
         "confidence_khi_sai": round(statistics.mean(conf_wrong), 3) if conf_wrong else None,
         "prompt_version": slm.prompt_version,
+        "dinh_dang": fmt,
     }
     print(f"Model {model}, tập {split}")
     print(json.dumps(result, ensure_ascii=False, indent=2))
@@ -117,8 +120,10 @@ def main() -> None:
     parser.add_argument("--model", default=get_settings().slm_model)
     parser.add_argument("--split", default="test", choices=("train", "val", "test"))
     parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--format", default=get_settings().slm_format, choices=("json", "schema"))
+
     args = parser.parse_args()
-    asyncio.run(run(args.model, args.split, args.limit))
+    asyncio.run(run(args.model, args.split, args.limit, args.format))
 
 
 if __name__ == "__main__":

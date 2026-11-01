@@ -58,8 +58,9 @@ class OllamaClient:
         return self._read_json(await self._chat(messages, schema, temperature))
 
     # Như chat_json nhưng trả thêm nội dung thô và logprobs của từng token đầu ra, để tính độ tin cậy (SLM)
+    # schema: khuôn JSON (dict) để ép đúng cấu trúc, hoặc "json" để chỉ cần JSON hợp lệ
     async def chat_json_scored(
-        self, messages: list[dict[str, str]], schema: dict[str, Any]
+        self, messages: list[dict[str, str]], schema: dict[str, Any] | str
     ) -> tuple[dict[str, Any], str, list[dict[str, Any]]]:
         body = await self._chat(messages, schema, 0.0, logprobs=True)
         result = self._read_json(body)
@@ -69,7 +70,7 @@ class OllamaClient:
     async def _chat(
         self,
         messages: list[dict[str, str]],
-        schema: dict[str, Any],
+        schema: dict[str, Any] | str,
         temperature: float,
         logprobs: bool = False,
     ) -> dict[str, Any]:
