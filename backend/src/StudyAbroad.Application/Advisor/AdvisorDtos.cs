@@ -3,6 +3,12 @@ namespace StudyAbroad.Application.Advisor;
 
 public record ChatMessage(string Role, string Content);
 
+/// <summary>
+/// Một tin khi advisor trả lời theo từng ý (advisor: POST /api/v1/chat/stream).
+/// Type: "progress" (Answers = số câu sắp trả lời) hoặc "partial" (Text = câu trả lời của một ý, đúng thứ tự hỏi).
+/// </summary>
+public record AdvisorStreamEvent(string Type, int? Answers = null, string? Text = null);
+
 /// <param name="StudyLevel">Level the user asks about (see Domain.Constants.StudyLevels); null = all levels.</param>
 /// <param name="Profile">Hồ sơ hiện tại (khóa chat → {value, status}) do .NET gửi mỗi lượt; null = không gửi.</param>
 /// <param name="Schools">Trường của lần gợi ý gần nhất, chỉ gửi khi đã có kết quả; skill_explain dùng để biết học sinh nói trường nào.</param>
