@@ -11,12 +11,14 @@ import {
   getAdminUniversityOfferings,
 } from "@/lib/admin-university-api";
 import {
+  formatLastEdited,
   formatNumber,
   formatRetrievedAt,
   formatSatRange,
   formatUsd,
   parseDeadlines,
   satPolicyLabel,
+  sourceReliabilityLabel,
 } from "@/lib/admin-university-display";
 import { studyLevelLabel } from "@/lib/study-levels";
 import { EditOfferingDialog } from "./EditOfferingDialog";
@@ -40,13 +42,6 @@ interface LoadResult {
   detail: AdminUniversityDetail | null;
   offerings: AdminUniversityOffering[] | null;
   error: string | null;
-}
-
-function formatUpdatedAt(isoDateTime: string | null): string {
-  if (!isoDateTime) {
-    return "—";
-  }
-  return new Date(isoDateTime).toLocaleString("vi-VN");
 }
 
 const FRAME = "overflow-hidden rounded-md border border-border";
@@ -157,7 +152,8 @@ function OfferingCard({
 
   const sourceRows: DataRow[] = [
     { label: "Ngày lấy", value: formatRetrievedAt(offering.retrievedAt) },
-    { label: "Sửa lần cuối", value: formatUpdatedAt(offering.updatedAt) },
+    { label: "Mức tin cậy", value: sourceReliabilityLabel(offering.sourceReliability) },
+    { label: "Sửa lần cuối", value: formatLastEdited(offering.updatedAt, offering.lastEditedBy) },
     {
       label: "Nguồn",
       value: offering.sourceUrl ? (
@@ -332,6 +328,11 @@ export function OfferingsPanel({
             <p className="text-sm text-muted-foreground">
               Mã {university.code}. Danh sách bậc học (offering) của trường.
             </p>
+            {detail?.updatedAt && (
+              <p className="text-xs text-muted-foreground">
+                Sửa lần cuối: {formatLastEdited(detail.updatedAt, detail.lastEditedBy)}
+              </p>
+            )}
             {detail && (
               <div className="mt-2 flex flex-wrap gap-2">
                 <Button

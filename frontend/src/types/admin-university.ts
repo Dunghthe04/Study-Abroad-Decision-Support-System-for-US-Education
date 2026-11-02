@@ -36,7 +36,9 @@ export interface AdminUniversityOffering {
   notes: string | null;
   sourceUrl: string | null;
   retrievedAt: string | null;
+  sourceReliability: string | null;
   updatedAt: string | null;
+  lastEditedBy: string | null;
 }
 
 export interface AdminOfferingMajor {
@@ -66,6 +68,7 @@ export interface AdminUniversityDetail {
   isIvy: boolean;
   isActive: boolean;
   updatedAt: string | null;
+  lastEditedBy: string | null;
 }
 
 export interface UpdateUniversityRequest {
@@ -97,6 +100,7 @@ export interface UpdateOfferingRequest {
   satPolicy: string | null;
   sourceUrl: string | null;
   retrievedAt: string | null;
+  sourceReliability: string | null;
   notes: string | null;
   majors: { majorId: string; isStem: boolean }[];
 }

@@ -61,6 +61,7 @@ interface FormState {
   satPolicy: string;
   sourceUrl: string;
   retrievedAt: string;
+  sourceReliability: string;
   notes: string;
   /** majorId -> isStem; ngành không có trong map là trường không đào tạo. */
   majors: Record<string, boolean>;
@@ -81,6 +82,7 @@ function toFormState(offering: AdminUniversityOffering): FormState {
     satPolicy: toInputValue(offering.satPolicy),
     sourceUrl: toInputValue(offering.sourceUrl),
     retrievedAt: toInputValue(offering.retrievedAt),
+    sourceReliability: toInputValue(offering.sourceReliability),
     notes: toInputValue(offering.notes),
     majors,
   };
@@ -189,6 +191,7 @@ export function EditOfferingDialog({ universityId, offering, open, onOpenChange,
         satPolicy: textOrNull(form.satPolicy),
         sourceUrl: textOrNull(form.sourceUrl),
         retrievedAt: textOrNull(form.retrievedAt),
+        sourceReliability: textOrNull(form.sourceReliability),
         notes: textOrNull(form.notes),
         majors,
       });
@@ -362,6 +365,21 @@ export function EditOfferingDialog({ universityId, offering, open, onOpenChange,
                 {fieldError("retrievedAt")}
               </Field>
             </div>
+            <Field data-invalid={Boolean(fieldErrors.sourceReliability)}>
+              <FieldLabel htmlFor="offering-reliability">Mức tin cậy của nguồn</FieldLabel>
+              <NativeSelect
+                id="offering-reliability"
+                value={form.sourceReliability}
+                onChange={(e) => setForm({ ...form, sourceReliability: e.target.value })}
+                disabled={isSaving}
+              >
+                <NativeSelectOption value="">Chưa rõ</NativeSelectOption>
+                <NativeSelectOption value="official">Chính thức (CDS, website trường)</NativeSelectOption>
+                <NativeSelectOption value="aggregated">Tổng hợp (College Scorecard, trang tổng hợp)</NativeSelectOption>
+                <NativeSelectOption value="self_reported">Tự khai (người dùng, trung tâm cung cấp)</NativeSelectOption>
+              </NativeSelect>
+              {fieldError("sourceReliability")}
+            </Field>
             <Field data-invalid={Boolean(fieldErrors.notes)}>
               <FieldLabel htmlFor="offering-notes">Ghi chú</FieldLabel>
               <Textarea

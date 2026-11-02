@@ -43,6 +43,30 @@ export function satPolicyLabel(policy: string | null): string {
   return SAT_POLICY_LABELS[policy] ?? policy;
 }
 
+const SOURCE_RELIABILITY_LABELS: Record<string, string> = {
+  official: "Chính thức",
+  aggregated: "Tổng hợp",
+  self_reported: "Tự khai",
+};
+
+export function sourceReliabilityLabel(reliability: string | null): string {
+  if (!reliability) {
+    return "Chưa rõ";
+  }
+  return SOURCE_RELIABILITY_LABELS[reliability] ?? reliability;
+}
+
+export function formatLastEdited(isoDateTime: string | null, editorName: string | null): string {
+  if (!isoDateTime) {
+    return "—";
+  }
+  const editedAt = new Date(isoDateTime).toLocaleString("vi-VN");
+  if (!editorName) {
+    return editedAt;
+  }
+  return `${editorName} · ${editedAt}`;
+}
+
 export function formatUsd(amount: number | null): string {
   if (amount === null) {
     return "—";
