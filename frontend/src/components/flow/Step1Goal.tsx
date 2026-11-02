@@ -112,6 +112,7 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
 
   // Grade options based on current level
   const gradeOptions = getGradeOptionsForLevel(data.currentEducationLevel);
+  const isHighSchool = data.currentEducationLevel === "high_school";
 
   const handleSelectEducationLevel = (level: CurrentEducationLevel) => {
     // Giữ lớp đã chọn nếu vẫn hợp lệ với cấp học mới, không thì để học sinh chọn lại
@@ -295,99 +296,98 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
         </div>
         {levelError && <p className="text-xs font-medium text-destructive">{levelError}</p>}
 
-        {/* Dynamic Grade, School Name & Expected Graduation Year */}
-        <div className="grid gap-4 sm:grid-cols-3 pt-2">
-          {/* Lớp / Năm học (Dropdown động theo bậc học) */}
-          <div className="space-y-1.5">
-            <Label htmlFor="currentGrade" className="text-xs font-medium text-foreground">
-              Lớp / Năm học hiện tại
-            </Label>
-            <div className="relative">
-              <select
-                id="currentGrade"
-                value={data.currentGrade ?? ""}
-                disabled={gradeOptions.length === 0}
-                onChange={(e) => onUpdate({ currentGrade: e.target.value || null })}
-                className="w-full appearance-none rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground shadow-2xs focus:border-brand focus:outline-hidden focus:ring-1 focus:ring-brand cursor-pointer"
-              >
-                <option value="">
-                  {gradeOptions.length ? "Chọn lớp / năm" : "Chọn cấp học trước"}
-                </option>
-                {gradeOptions.map((g) => (
-                  <option key={g} value={g}>
-                    {g}
-                  </option>
-                ))}
-              </select>
-              <ChevronDownIcon className="absolute right-3 top-2.5 size-4 text-muted-foreground pointer-events-none" />
+        {/* Chọn cấp học xong mới hiện lớp, trường, năm tốt nghiệp; cấp 3 thêm hệ chương trình (giống câu D1 bên chat) */}
+        {data.currentEducationLevel && (
+          <div className={cn("grid gap-4 pt-2", isHighSchool ? "sm:grid-cols-2" : "sm:grid-cols-3")}>
+            {/* Lớp / Năm học (Dropdown động theo bậc học) */}
+            <div className="space-y-1.5">
+              <Label htmlFor="currentGrade" className="text-xs font-medium text-foreground">
+                Lớp / Năm học hiện tại
+              </Label>
+              <div className="relative">
+                <select
+                  id="currentGrade"
+                  value={data.currentGrade ?? ""}
+                  onChange={(e) => onUpdate({ currentGrade: e.target.value || null })}
+                  className="w-full appearance-none rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground shadow-2xs focus:border-brand focus:outline-hidden focus:ring-1 focus:ring-brand cursor-pointer"
+                >
+                  <option value="">Chọn lớp / năm</option>
+                  {gradeOptions.map((g) => (
+                    <option key={g} value={g}>
+                      {g}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDownIcon className="absolute right-3 top-2.5 size-4 text-muted-foreground pointer-events-none" />
+              </div>
             </div>
-          </div>
 
-          {/* Trường đang học */}
-          <div className="space-y-1.5">
-            <Label htmlFor="currentSchool" className="text-xs font-medium text-foreground">
-              Trường đang học
-            </Label>
-            <Input
-              id="currentSchool"
-              placeholder="VD: THPT Chuyên Hà Nội – Amsterdam"
-              value={data.currentSchool ?? ""}
-              onChange={(e) => onUpdate({ currentSchool: e.target.value })}
-            />
-          </div>
-
-          {/* Năm tốt nghiệp dự kiến (Dropdown 5 năm từ năm hiện tại) */}
-          <div className="space-y-1.5">
-            <Label htmlFor="expectedGraduationYear" className="text-xs font-medium text-foreground">
-              Năm tốt nghiệp dự kiến
-            </Label>
-            <div className="relative">
-              <select
-                id="expectedGraduationYear"
-                value={data.expectedGraduationYear ?? ""}
-                onChange={(e) =>
-                  onUpdate({
-                    expectedGraduationYear: e.target.value
-                      ? Number(e.target.value)
-                      : null,
-                  })
-                }
-                className="w-full appearance-none rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground shadow-2xs focus:border-brand focus:outline-hidden focus:ring-1 focus:ring-brand cursor-pointer"
-              >
-                <option value="">Chưa xác định</option>
-                {GRADUATION_YEAR_OPTIONS.map((yr) => (
-                  <option key={yr} value={yr}>
-                    {yr}
-                  </option>
-                ))}
-              </select>
-              <ChevronDownIcon className="absolute right-3 top-2.5 size-4 text-muted-foreground pointer-events-none" />
+            {/* Trường đang học */}
+            <div className="space-y-1.5">
+              <Label htmlFor="currentSchool" className="text-xs font-medium text-foreground">
+                Trường đang học
+              </Label>
+              <Input
+                id="currentSchool"
+                placeholder="VD: THPT Chuyên Hà Nội – Amsterdam"
+                value={data.currentSchool ?? ""}
+                onChange={(e) => onUpdate({ currentSchool: e.target.value })}
+              />
             </div>
-          </div>
-        </div>
 
-        {/* Hệ chương trình — chỉ học sinh cấp 3, giống câu D1 bên chat */}
-        {data.currentEducationLevel === "high_school" && (
-          <div className="space-y-1.5 sm:max-w-sm">
-            <Label htmlFor="educationSystem" className="text-xs font-medium text-foreground">
-              Hệ chương trình đang học
-            </Label>
-            <div className="relative">
-              <select
-                id="educationSystem"
-                value={data.educationSystem ?? ""}
-                onChange={(e) => onUpdate({ educationSystem: (e.target.value || null) as EducationSystem | null })}
-                className="w-full appearance-none rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground shadow-2xs focus:border-brand focus:outline-hidden focus:ring-1 focus:ring-brand cursor-pointer"
-              >
-                <option value="">Chưa chọn</option>
-                {EDUCATION_SYSTEM_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-              <ChevronDownIcon className="absolute right-3 top-2.5 size-4 text-muted-foreground pointer-events-none" />
+            {/* Năm tốt nghiệp dự kiến (Dropdown 5 năm từ năm hiện tại) */}
+            <div className="space-y-1.5">
+              <Label htmlFor="expectedGraduationYear" className="text-xs font-medium text-foreground">
+                Năm tốt nghiệp dự kiến
+              </Label>
+              <div className="relative">
+                <select
+                  id="expectedGraduationYear"
+                  value={data.expectedGraduationYear ?? ""}
+                  onChange={(e) =>
+                    onUpdate({
+                      expectedGraduationYear: e.target.value
+                        ? Number(e.target.value)
+                        : null,
+                    })
+                  }
+                  className="w-full appearance-none rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground shadow-2xs focus:border-brand focus:outline-hidden focus:ring-1 focus:ring-brand cursor-pointer"
+                >
+                  <option value="">Chưa xác định</option>
+                  {GRADUATION_YEAR_OPTIONS.map((yr) => (
+                    <option key={yr} value={yr}>
+                      {yr}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDownIcon className="absolute right-3 top-2.5 size-4 text-muted-foreground pointer-events-none" />
+              </div>
             </div>
+
+            {/* Hệ chương trình chỉ có ở cấp 3 */}
+            {isHighSchool && (
+              <div className="space-y-1.5">
+                <Label htmlFor="educationSystem" className="text-xs font-medium text-foreground">
+                  Hệ chương trình đang học
+                </Label>
+                <div className="relative">
+                  <select
+                    id="educationSystem"
+                    value={data.educationSystem ?? ""}
+                    onChange={(e) => onUpdate({ educationSystem: (e.target.value || null) as EducationSystem | null })}
+                    className="w-full appearance-none rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground shadow-2xs focus:border-brand focus:outline-hidden focus:ring-1 focus:ring-brand cursor-pointer"
+                  >
+                    <option value="">Chưa chọn</option>
+                    {EDUCATION_SYSTEM_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDownIcon className="absolute right-3 top-2.5 size-4 text-muted-foreground pointer-events-none" />
+                </div>
+              </div>
+            )}
           </div>
         )}
       </section>
