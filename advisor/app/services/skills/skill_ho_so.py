@@ -22,7 +22,7 @@ from app.schemas.chat import ChatState, ProfileField, QuickReply, Widget
 from app.services.chat_flow import NEED_PROFILE, SkillOutput, ask, go_to
 from app.services.skill_call import SKILLS_DIR, SkillCall
 from app.services.skill_rules import REQUIRED_B3, missing_fields
-from app.services.skills import buttons, exchange_rate
+from app.services.skills import buttons, exchange_rate, state_catalog
 from app.services.skills.validators import (
     CERT_NAMES,
     CERT_TYPES,
@@ -268,7 +268,8 @@ def check_value(name: str, value: Any) -> Any:
     if name == "scholarship":
         return check_scholarship(value)
     if name == "preferred_states":
-        return check_states(value)
+        # Đổi tên bang sang mã giống form (California → CA)
+        return state_catalog.to_codes(check_states(value), state_catalog.loaded())
     if isinstance(value, str):
         return value.strip()
     return value
@@ -344,6 +345,8 @@ class HoSoReader:
             "known": known,
         }
         raw = await self._call.run(user, SCHEMA, check_read)
+        # Đọc sẵn danh sách bang để check_value đổi tên bang sang mã
+        await state_catalog.states()
         return check_values(raw, question_id) if raw is not None else HoSoRead()
 
 
