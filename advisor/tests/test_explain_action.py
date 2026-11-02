@@ -5,12 +5,11 @@
 """
 
 from app.schemas.chat import ChatMessage, ChatRequest, ChatResponse, ChatState, ResultSchool
-from app.schemas.slm import SlmResult
 from app.services.chat_flow import SkillOutput
-from tests.fakes import flow_with
+from tests.fakes import flow_with, tin
 
 # SLM đọc là tư vấn theo hồ sơ, có nêu tên trường: nhánh tư vấn gọi skill_explain
-EXPLAIN = SlmResult(type="ho_so", thuc_the={"truong": "Iowa"})
+EXPLAIN = tin(("ho_so", {"truong": "Iowa"}))
 
 SCHOOLS = [
     ResultSchool(code="iowa", name="University of Iowa", group="R"),

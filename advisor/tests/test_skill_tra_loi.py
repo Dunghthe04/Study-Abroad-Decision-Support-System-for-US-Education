@@ -3,7 +3,6 @@
 import pytest
 
 from app.schemas.chat import ChatMessage, ChatRequest, ChatState
-from app.schemas.slm import SlmResult
 from app.services.knowledge import KnowledgeHit
 from app.services.ollama import OllamaError
 from app.services.skill_rules import ORDER
@@ -17,7 +16,7 @@ from app.services.skills.skill_tra_loi import (
     citation_of,
     numbers_in,
 )
-from tests.fakes import FakeLLM, flow_with
+from tests.fakes import FakeLLM, flow_with, tin
 
 SEVIS = "Phí SEVIS I-901 là 350 USD cho diện F-1, nộp một lần trước khi phỏng vấn visa."
 FINANCE = (
@@ -290,7 +289,7 @@ def test_skill_tra_loi_is_registered_only_when_the_knowledge_store_exists():
 
 
 # SLM đọc là câu hỏi kiến thức: nhánh kiến thức gọi skill_tra_loi
-KNOWLEDGE = SlmResult(type="kien_thuc")
+KNOWLEDGE = tin("kien_thuc")
 
 
 async def test_chat_returns_the_citations_and_disclaimer_to_the_client():

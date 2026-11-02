@@ -4,10 +4,9 @@ Advisor không tự chạy gợi ý: pipeline (lọc, chấm, chọn, lưu) nằ
 """
 
 from app.schemas.chat import ChatMessage, ChatRequest, ChatResponse, ChatState
-from app.schemas.slm import SlmResult
 from app.services.chat_flow import SkillOutput
 from app.services.skills.skill_lo_trinh import RECOMMEND_ACTION, Route, action_for
-from tests.fakes import flow_with
+from tests.fakes import flow_with, tin
 
 
 class SkillWith:
@@ -45,7 +44,7 @@ def test_response_has_no_action_by_default_and_sends_it_as_camel_case():
 
 async def test_chat_flow_passes_the_action_of_a_skill_to_the_response():
     # skill_lo_trinh cần đủ hồ sơ mới chạy; ở đây chỉ kiểm tra ChatFlow chuyển action nên dùng nhánh kiến thức
-    flow = flow_with({"skill_tra_loi": SkillWith("...", RECOMMEND_ACTION)}, SlmResult(type="kien_thuc"))
+    flow = flow_with({"skill_tra_loi": SkillWith("...", RECOMMEND_ACTION)}, tin("kien_thuc"))
 
     res = await flow.reply(request())
 
@@ -53,7 +52,7 @@ async def test_chat_flow_passes_the_action_of_a_skill_to_the_response():
 
 
 async def test_chat_flow_has_no_action_when_no_skill_asks_for_one():
-    flow = flow_with({"skill_tra_loi": SkillWith("Phí SEVIS là ...")}, SlmResult(type="kien_thuc"))
+    flow = flow_with({"skill_tra_loi": SkillWith("Phí SEVIS là ...")}, tin("kien_thuc"))
 
     res = await flow.reply(request("phí sevis bao nhiêu"))
 

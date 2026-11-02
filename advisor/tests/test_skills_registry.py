@@ -3,11 +3,10 @@
 import inspect
 
 from app.schemas.chat import ChatMessage, ChatRequest, ChatState
-from app.schemas.slm import SlmResult
 from app.services.chat_flow import SkillOutput, ask
 from app.services.skill_rules import ORDER
 from app.services.skills import build_handlers
-from tests.fakes import flow_with
+from tests.fakes import flow_with, tin
 
 
 def test_build_handlers_returns_a_dict_and_does_not_need_a_real_llm():
@@ -51,7 +50,7 @@ async def test_a_skill_in_the_registry_is_run_by_its_branch_in_chat_flow():
 
 
 async def test_out_of_scope_works_without_any_registered_skill():
-    flow = flow_with({}, SlmResult(type="ngoai_pham_vi", thuc_the={"loai_con": "tam_biet"}))
+    flow = flow_with({}, tin(("ngoai_pham_vi", {"loai_con": "tam_biet"})))
     req = ChatRequest(messages=[ChatMessage(role="user", content="em cảm ơn ạ")], state=ChatState())
 
     res = await flow.reply(req)
