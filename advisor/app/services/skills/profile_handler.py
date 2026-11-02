@@ -3,7 +3,7 @@ import json
 from typing import Any
 
 from app.schemas.chat import ChatState
-from app.schemas.slm import SlmTinResult
+from app.schemas.slm import SlmResult
 from app.services.chat_flow import OPENING_QUESTIONS, SkillOutput, ask_next_missing, start_intake
 from app.services.skill_rules import REQUIRED_B3, missing_fields
 from app.services.skills import skill_bac_hoc, skill_ho_so
@@ -27,7 +27,7 @@ class ChatProfileHandler:
     # Có câu đang chờ: ghi phần thuộc nhóm còn lại trước, để skill không hỏi lại điều vừa được nói.
     # Không có câu chờ: ghi giá trị tự khai rồi hỏi tiếp mục còn thiếu.
     # Hồ sơ vẫn đủ nghĩa là không có gì mới, nên không mở lại bước xác nhận
-    async def collect(self, state: ChatState, message: str, slm: SlmTinResult) -> SkillOutput:
+    async def collect(self, state: ChatState, message: str, slm: SlmResult) -> SkillOutput:
         said = set(slm.profile_values())
         if self.pending_question(state) is None:
             await self._save_said(state, message, said)
