@@ -40,8 +40,6 @@ public class ChatProfileMapperTests
     [InlineData("act", "32")]
     [InlineData("english", """{"type":"ielts","value":6.5,"date":"2026-05"}""")]
     [InlineData("english", """{"type":"toefl","value":95,"date":null}""")]
-    [InlineData("english_plan", """{"planned":true,"date":"2027-06"}""")]
-    [InlineData("english_plan", """{"planned":true,"date":null}""")]
     [InlineData("budget", "\"tier_20k_35k\"")]
     [InlineData("scholarship", "\"preferred\"")]
     [InlineData("activities", "[" + Activity + "," + Activity + "]")]
@@ -56,6 +54,26 @@ public class ChatProfileMapperTests
         var profile = Confirmed(key, valueJson);
 
         AssertSame(profile, ChatProfileMapper.ToChatProfile(ToDraft(profile)));
+    }
+
+    [Theory]
+    [InlineData("""{"planned":true,"date":"2027-06"}""")]
+    [InlineData("""{"planned":true,"date":null}""")]
+    public void RoundTrip_EnglishPlan(string planJson)
+    {
+        var profile = Profile("""{"english":{"value":null,"status":"none"},"english_plan":{"value":""" + planJson + ""","status":"confirmed"}}""");
+
+        AssertSame(profile, ChatProfileMapper.ToChatProfile(ToDraft(profile), profile));
+    }
+
+    [Fact]
+    public void EnglishPlannedInForm_CountsAsNoEnglishCertificate()
+    {
+        var draft = new ProfileFlowDraftDto { Step3 = new FlowCertificationDraftDto { EnglishPlanned = true } };
+
+        var english = ChatProfileMapper.ToChatProfile(draft)["english"]!;
+
+        Assert.Equal("none", english["status"]!.GetValue<string>());
     }
 
     [Fact]

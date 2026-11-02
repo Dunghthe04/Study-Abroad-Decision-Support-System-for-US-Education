@@ -78,6 +78,9 @@ public static class ChatProfileMapper
                 if (undecided)
                     profile[key] = new JsonObject { ["value"] = Unknown, ["status"] = Unknown };
             }
+            // Form tích "sẽ thi sau" là đã trả lời chưa có chứng chỉ tiếng Anh, chat không đòi hỏi lại
+            else if (key == "english" && draft.Step3?.EnglishPlanned == true)
+                profile[key] = new JsonObject { ["value"] = null, ["status"] = "none" };
             else if (KeepFromPrevious(key, previous?[key]))
                 profile[key] = previous![key]!.DeepClone();
         }
