@@ -44,7 +44,7 @@ class CaptureSlm:
 
     async def chat_json_scored(self, messages, schema):
         self.messages = messages
-        answer = {"type": "ngoai_pham_vi", "nhan_phu": None, "thuc_the": {"loai_con": "tam_biet"}}
+        answer = {"cac_y": [{"type": "ngoai_pham_vi", "doan": "x", "thuc_the": {"loai_con": "tam_biet"}}]}
         return answer, json.dumps(answer), []
 
 

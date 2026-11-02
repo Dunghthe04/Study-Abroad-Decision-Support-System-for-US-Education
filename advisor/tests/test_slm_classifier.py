@@ -1,4 +1,4 @@
-"""Bộ phân loại SLM qua Ollama: gửi đúng đầu vào, đọc đúng đầu ra, tính độ tin cậy, sai thì thử lại rồi lùi về mơ hồ."""
+"""Bộ phân loại SLM qua Ollama: gửi đúng đầu vào, đọc danh sách ý, tính độ tin cậy, sai thì thử lại rồi lùi về mơ hồ."""
 
 import json
 import math
@@ -7,11 +7,20 @@ import httpx
 import pytest
 
 from app.schemas.chat import ChatState, ProfileField
-from app.schemas.slm import INTENTS, SLM_SCHEMA
+from app.schemas.slm import INTENTS, SLM_TIN_SCHEMA
 from app.services.ollama import OllamaClient, OllamaError
-from app.services.slm_classifier import OllamaSlm, fix_labels, label_confidence, output_format
+from app.services.slm_classifier import OllamaSlm, keep_verbatim, label_confidence, output_format, words
 
-GOOD = {"type": "trung_tam", "nhan_phu": None, "thuc_the": {"dich_vu": "SUA_BAI_LUAN", "thanh_pho": "HN"}}
+CENTER = {
+    "type": "trung_tam",
+    "doan": "ai sửa bài luận ở HN",
+    "thuc_the": {"dich_vu": "SUA_BAI_LUAN", "thanh_pho": "HN"},
+}
+GOOD = {"cac_y": [CENTER]}
+
+
+def y(kind, doan, **thuc_the):
+    return {"type": kind, "doan": doan, "thuc_the": thuc_the}
 
 
 class FakeSlm:
@@ -33,14 +42,17 @@ def user_input(slm, call=0):
     return json.loads(slm.calls[call][0][1]["content"])
 
 
+# ---- đọc kết quả ----
 async def test_a_good_answer_is_read_into_the_contract():
     slm = FakeSlm(GOOD)
 
     result = await OllamaSlm(slm).read("ai sửa bài luận ở HN", None, "")
 
-    assert (result.type, result.nhan_phu, result.thuc_the) == ("trung_tam", None, GOOD["thuc_the"])
+    assert result.types() == ["trung_tam"]
+    assert (result.cac_y[0].doan, result.cac_y[0].thuc_the) == (CENTER["doan"], CENTER["thuc_the"])
     assert result.confidence == 1.0  # không có logprobs thì không đo được
-    assert slm.calls[0][1] is SLM_SCHEMA
+    assert result.con_lai == []
+    assert slm.calls[0][1] is SLM_TIN_SCHEMA
 
 
 async def test_the_model_gets_the_prompt_and_the_same_input_columns_as_the_dataset():
@@ -49,7 +61,7 @@ async def test_the_model_gets_the_prompt_and_the_same_input_columns_as_the_datas
     await OllamaSlm(slm).read("8.5 ạ", {"gpa": "8.0"}, "Điểm GPA của bạn?")
 
     system, _ = slm.calls[0][0]
-    assert system["role"] == "system" and "slm_phan_loai" in system["content"]
+    assert system["role"] == "system" and "slm_phan_loai_cac_y" in system["content"]
     assert user_input(slm) == {
         "cau_hoi": "8.5 ạ",
         "ho_so": {"gpa": "8.0"},
@@ -75,91 +87,167 @@ async def test_classify_takes_the_profile_and_pending_question_from_the_state():
     assert sent["cau_he_thong_dang_hoi"] == "Hiện bạn đang học lớp mấy, hoặc đang làm gì?"
 
 
+# ---- tin nhiều ý ----
+async def test_several_intents_come_back_in_the_order_the_code_wants_them():
+    answer = {
+        "cac_y": [
+            y("kien_thuc", "I-20 là gì"),
+            y("mac_dinh", "em GPA 3.5", gpa="em GPA 3.5"),
+            y("ho_so", "tư vấn trường"),
+            y("ho_so", "em nên nộp trường nào"),
+        ]
+    }
+
+    result = await OllamaSlm(FakeSlm(answer)).read(
+        "I-20 là gì, em GPA 3.5, tư vấn trường, em nên nộp trường nào", None, ""
+    )
+
+    assert result.types() == ["mac_dinh", "kien_thuc", "ho_so"]  # mac_dinh lên đầu, hai ho_so gộp một
+    assert result.cac_y[2].doan == "tư vấn trường, em nên nộp trường nào"
+    assert result.profile_values() == {"gpa": "em GPA 3.5"}
+
+
+async def test_intents_over_the_limit_are_postponed_not_lost():
+    answer = {"cac_y": [y("kien_thuc", f"câu {i}") for i in range(1, 6)]}
+
+    result = await OllamaSlm(FakeSlm(answer)).read("câu 1, câu 2, câu 3, câu 4, câu 5", None, "")
+
+    assert [i.doan for i in result.cac_y] == ["câu 1", "câu 2", "câu 3"]
+    assert [i.doan for i in result.con_lai] == ["câu 4", "câu 5"]
+
+
+async def test_a_greeting_next_to_a_real_question_is_dropped():
+    answer = {"cac_y": [y("ngoai_pham_vi", "chào", loai_con="tam_biet"), y("kien_thuc", "I-20 là gì")]}
+
+    result = await OllamaSlm(FakeSlm(answer)).read("chào, I-20 là gì", None, "")
+
+    assert result.types() == ["kien_thuc"]
+
+
+# ---- sai thì thử lại, rồi lùi về mơ hồ ----
 async def test_an_answer_that_breaks_the_rules_is_retried_once():
-    no_mode = {
-        "type": "kich_ban",
-        "nhan_phu": None,
-        "thuc_the": {},
-    }  # kich_ban thiếu che_do: luật không tự sửa được
+    no_mode = {"cac_y": [y("kich_ban", "nếu em lên SAT 1500 thì sao")]}  # kich_ban thiếu che_do
     slm = FakeSlm(no_mode, GOOD)
 
     result = await OllamaSlm(slm).read("x", None, "")
 
-    assert result.type == "trung_tam" and len(slm.calls) == 2
+    assert result.types() == ["trung_tam"] and len(slm.calls) == 2
 
 
 @pytest.mark.parametrize(
-    ("labels", "expected"),
+    "bad",
     [
-        (("trung_tam", "kien_thuc"), ("kien_thuc", "trung_tam")),  # nhãn phụ xếp trước nhãn chính: đảo
-        (("kien_thuc", "ho_so"), ("ho_so", "kien_thuc")),
-        (("mac_dinh", "kien_thuc"), ("kien_thuc", None)),  # trả lời hồ sơ kèm câu hỏi: câu hỏi là nhãn chính
-        (("kien_thuc", "kien_thuc"), ("kien_thuc", None)),  # trùng: bỏ nhãn phụ
-        (("kien_thuc", "trung_tam"), ("kien_thuc", "trung_tam")),  # đã đúng luật: giữ nguyên
-        (
-            ("kien_thuc", "ngoai_pham_vi"),
-            ("kien_thuc", "ngoai_pham_vi"),
-        ),  # luật không sửa được: để SlmRead từ chối
+        {"type": "kien_thuc", "nhan_phu": None, "thuc_the": {}},  # khuôn cũ, không có cac_y
+        {"cac_y": []},
+        {"cac_y": "không phải danh sách"},
+        {"cac_y": ["không phải object"]},
+        {"cac_y": [y("loai_la", "x")]},
     ],
 )
-def test_fix_labels_puts_the_two_labels_in_the_order_of_the_priority_rule(labels, expected):
-    raw = {"type": labels[0], "nhan_phu": labels[1], "thuc_the": {"gpa": "8.0"}}
+async def test_an_answer_in_the_wrong_shape_is_retried_not_crashed(bad):
+    slm = FakeSlm(bad, GOOD)
 
-    fixed = fix_labels(raw)
+    result = await OllamaSlm(slm).read("ai sửa bài luận ở HN", None, "")
 
-    assert (fixed["type"], fixed["nhan_phu"]) == expected
-    assert fixed["thuc_the"] == {"gpa": "8.0"}  # thực thể giữ nguyên
-
-
-async def test_a_pair_in_the_wrong_order_is_fixed_without_asking_the_model_again():
-    wrong_order = {"type": "trung_tam", "nhan_phu": "kien_thuc", "thuc_the": {"dich_vu": "LUYEN_PHONG_VAN"}}
-    slm = FakeSlm(wrong_order)
-
-    result = await OllamaSlm(slm).read("phỏng vấn visa hỏi gì, có chỗ nào luyện không", None, "")
-
-    assert (result.type, result.nhan_phu) == ("kien_thuc", "trung_tam") and len(slm.calls) == 1
+    assert result.types() == ["trung_tam"] and len(slm.calls) == 2
 
 
 async def test_two_failures_fall_back_to_an_ambiguous_message_with_zero_confidence():
-    slm = FakeSlm(OllamaError("down"), {"type": "nhu_cau"})
+    slm = FakeSlm(OllamaError("down"), {"cac_y": "hỏng"})
 
     result = await OllamaSlm(slm).read("x", None, "")
 
-    assert (result.type, result.thuc_the, result.confidence) == ("ngoai_pham_vi", {"loai_con": "mo_ho"}, 0.0)
+    assert result.types() == ["ngoai_pham_vi"]
+    assert result.cac_y[0].thuc_the == {"loai_con": "mo_ho"} and result.confidence == 0.0
 
 
-async def test_values_not_written_in_the_message_are_dropped():
+# ---- bỏ giá trị và đoạn không có trong tin ----
+async def test_values_not_written_in_the_message_are_dropped_per_intent():
     answer = {
-        "type": "ho_so",
-        "nhan_phu": None,
-        "thuc_the": {"gpa": "8.0", "truong": "null", "major": "computer science"},
+        "cac_y": [
+            y("mac_dinh", "em học Computer Science", gpa="8.0", major="computer science"),
+            y("ho_so", "chọn trường nào", truong="null"),
+        ]
     }
-    slm = FakeSlm(answer)
 
-    result = await OllamaSlm(slm).read("em học Computer Science nên chọn trường nào", {"gpa": "8.0"}, "")
+    result = await OllamaSlm(FakeSlm(answer)).read(
+        "em học Computer Science nên chọn trường nào", {"gpa": "8.0"}, ""
+    )
 
     # gpa chép từ hồ sơ, truong là "null" tự điền: bỏ. major có trong tin (không phân biệt hoa thường): giữ
-    assert result.thuc_the == {"major": "computer science"}
+    assert result.cac_y[0].thuc_the == {"major": "computer science"}
+    assert result.cac_y[1].thuc_the == {}
 
 
+def test_keep_verbatim_keeps_a_doan_made_of_words_of_the_message_even_when_rewritten():
+    raw = {"cac_y": [y("kien_thuc", "I-20 là gì"), y("kien_thuc", "SAT là gì")]}
+
+    cleaned = keep_verbatim(raw, "I-20 và SAT là gì?")
+
+    assert [i["doan"] for i in cleaned["cac_y"]] == ["I-20 là gì", "SAT là gì"]
+
+
+def test_keep_verbatim_replaces_a_doan_with_words_the_message_does_not_have():
+    cleaned = keep_verbatim({"cac_y": [y("kien_thuc", "visa F-1 là gì")]}, "I-20 là gì")
+    assert cleaned["cac_y"][0]["doan"] == "I-20 là gì"
+
+    empty = keep_verbatim({"cac_y": [{"type": "kien_thuc", "doan": "  ", "thuc_the": {}}]}, "I-20 là gì")
+    assert empty["cac_y"][0]["doan"] == "I-20 là gì"
+
+    missing = keep_verbatim({"cac_y": [{"type": "kien_thuc", "thuc_the": {}}]}, "I-20 là gì")
+    assert missing["cac_y"][0]["doan"] == "I-20 là gì"
+
+
+def test_keep_verbatim_leaves_a_broken_shape_for_the_contract_to_reject():
+    assert keep_verbatim({"cac_y": "x"}, "tin") == {"cac_y": "x"}
+    assert keep_verbatim({"cac_y": ["x"]}, "tin") == {"cac_y": ["x"]}
+    assert keep_verbatim({}, "tin") == {}
+
+
+def test_words_keeps_codes_and_numbers_whole_and_ignores_case():
+    assert words("I-20 là gì? TP.HCM 8.5") == {"i-20", "là", "gì", "tp.hcm", "8.5"}
+
+
+# ---- độ tin cậy ----
 def test_confidence_is_the_probability_of_the_tokens_that_spell_the_type():
-    content = '{"type":"kien_thuc","nhan_phu":null}'
+    content = '{"cac_y":[{"type":"kien_thuc","doan":"a"}]}'
     tokens = [
-        {"token": '{"type":"', "logprob": -5.0},  # ngoài giá trị type: không tính
+        {"token": '{"cac_y":[{"type":"', "logprob": -5.0},  # ngoài giá trị type: không tính
         {"token": "kien", "logprob": -0.1},
         {"token": "_thuc", "logprob": -0.2},
-        {"token": '","nhan_phu":null}', "logprob": -3.0},  # chữ " đầu nằm ngoài giá trị: không tính
+        {"token": '","doan":"a"}]}', "logprob": -3.0},  # chữ " đầu nằm ngoài giá trị: không tính
     ]
+    assert "".join(t["token"] for t in tokens) == content
 
     assert label_confidence(content, tokens) == pytest.approx(math.exp(-0.3))
     assert label_confidence(content, []) == 1.0
 
 
-def test_the_prompt_names_every_type_and_the_priority_rule():
+def test_confidence_of_a_message_is_the_weakest_intent():
+    content = '{"cac_y":[{"type":"kien_thuc","doan":"a"},{"type":"ho_so","doan":"b"}]}'
+    tokens = [
+        {"token": '{"cac_y":[{"type":"', "logprob": -9.0},
+        {"token": "kien", "logprob": -0.1},
+        {"token": "_thuc", "logprob": -0.2},
+        {"token": '","doan":"a"},{"type":"', "logprob": -9.0},
+        {"token": "ho", "logprob": -1.0},
+        {"token": "_so", "logprob": -0.5},
+        {"token": '","doan":"b"}]}', "logprob": -9.0},
+    ]
+    assert "".join(t["token"] for t in tokens) == content
+
+    assert label_confidence(content, tokens) == pytest.approx(math.exp(-1.5))  # ý ho_so thấp hơn ý kien_thuc
+
+
+def test_confidence_is_one_when_the_content_has_no_type():
+    assert label_confidence("không phải json", [{"token": "x", "logprob": -1.0}]) == 1.0
+
+
+def test_the_prompt_names_every_type_and_the_list_of_intents():
     prompt = OllamaSlm(FakeSlm()).prompt
 
     assert all(intent in prompt for intent in INTENTS)
-    assert "ho_so > kich_ban > kien_thuc > trung_tam" in prompt
+    assert '"cac_y"' in prompt and "luôn đứng đầu" in prompt and "nhan_phu" not in prompt
 
 
 # ---- OllamaClient.chat_json_scored ----
@@ -193,7 +281,7 @@ async def test_chat_json_scored_raises_when_content_is_not_json():
 # ---- định dạng đầu ra (settings.slm_format) ----
 def test_output_format_turns_the_config_into_what_ollama_gets():
     assert output_format("json") == "json"
-    assert output_format("schema") is SLM_SCHEMA
+    assert output_format("schema") is SLM_TIN_SCHEMA
     with pytest.raises(ValueError, match="slm_format"):
         output_format("jsn")
 

@@ -7,23 +7,23 @@ Cần đổi chữ ký thì báo người kia trước, rồi hai bên cùng s�
 from typing import TYPE_CHECKING, Protocol
 
 from app.schemas.chat import ChatState
-from app.schemas.slm import SlmResult
+from app.schemas.slm import SlmTinResult
 
 if TYPE_CHECKING:  # chỉ để gõ kiểu, tránh nhập vòng với chat_flow
     from app.services.chat_flow import SkillOutput
 
 
-# Đọc tin nhắn, trả loại câu hỏi, độ tin cậy, thông tin tách được
+# Đọc tin nhắn, trả danh sách ý (mỗi ý có loại, đoạn chữ, thông tin tách được) và độ tin cậy
 class SlmClassifier(Protocol):
-    async def classify(self, state: ChatState, message: str) -> SlmResult: ...
+    async def classify(self, state: ChatState, message: str) -> SlmTinResult: ...
 
 
 # Mọi thứ liên quan hồ sơ (chat và form)
 class ProfileHandler(Protocol):
     # Nhận tin nhắn khi slm.touches_profile() hoặc học sinh bấm nút, điền form: ghi giá trị, hỏi câu kế tiếp.
     # Giá trị hồ sơ lấy bằng slm.profile_values(): đoạn chữ nguyên văn trong tin (vd "GPA em khoảng 8.0"),
-    # phải tự chuẩn hóa và kiểm trước khi lưu. type == "mac_dinh" mà không có giá trị nào là tin mơ hồ, hỏi lại
-    async def collect(self, state: ChatState, message: str, slm: SlmResult) -> "SkillOutput": ...
+    # phải tự chuẩn hóa và kiểm trước khi lưu. Có ý mac_dinh mà không có giá trị nào là tin mơ hồ, hỏi lại
+    async def collect(self, state: ChatState, message: str, slm: SlmTinResult) -> "SkillOutput": ...
 
     # Câu hồ sơ đang chờ học sinh trả lời (để thêm "Quay lại câu mình đang hỏi..."), None nếu không có
     def pending_question(self, state: ChatState) -> str | None: ...
@@ -35,10 +35,9 @@ class ProfileHandler(Protocol):
     def version(self, state: ChatState) -> str: ...
 
 
-# SLM giả: luôn trả một kết quả cố định. Việt dùng để test phần hồ sơ khi chưa có Ollama hay bộ phân loại thật
 class FixedSlm:
-    def __init__(self, result: SlmResult) -> None:
+    def __init__(self, result: SlmTinResult) -> None:
         self._result = result
 
-    async def classify(self, state: ChatState, message: str) -> SlmResult:
+    async def classify(self, state: ChatState, message: str) -> SlmTinResult:
         return self._result
