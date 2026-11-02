@@ -52,7 +52,8 @@ export function Step5Extracurricular({
   const [isOngoing, setIsOngoing] = useState(false);
   const [impactLevel, setImpactLevel] = useState<ImpactLevel | null>(null);
   const [year, setYear] = useState(new Date().getFullYear().toString());
-  const [formError, setFormError] = useState<string | null>(null);
+  // Lỗi theo từng ô của form thêm mục, hiện ngay dưới ô đó
+  const [formErrors, setFormErrors] = useState<Partial<Record<"impact" | "year" | "role" | "start" | "end", string>>>({});
   const [listError, setListError] = useState<string | null>(null);
 
   const now = new Date();
@@ -68,7 +69,7 @@ export function Step5Extracurricular({
     setIsOngoing(false);
     setImpactLevel(null);
     setYear(currentYear.toString());
-    setFormError(null);
+    setFormErrors({});
   };
 
   // Đủ các trường bắt buộc mới cho bấm "Thêm vào hồ sơ"; lỗi khoảng thời gian vẫn báo khi bấm
@@ -80,7 +81,7 @@ export function Step5Extracurricular({
   const handleSaveItem = () => {
     if (!canSave) return;
     if (!impactLevel) {
-      setFormError("Vui lòng chọn phạm vi ảnh hưởng.");
+      setFormErrors({ impact: "Vui lòng chọn phạm vi ảnh hưởng." });
       return;
     }
 
@@ -91,36 +92,36 @@ export function Step5Extracurricular({
     if (category === "achievement") {
       const parsedYear = Number(year);
       if (!Number.isInteger(parsedYear) || parsedYear > currentYear) {
-        setFormError(`Năm đạt giải không được lớn hơn năm hiện tại (${currentYear}).`);
+        setFormErrors({ year: `Năm đạt giải không được lớn hơn năm hiện tại (${currentYear}).` });
         return;
       }
       if (parsedYear < 2000) {
-        setFormError("Năm đạt giải không hợp lệ (từ năm 2000 trở lại đây).");
+        setFormErrors({ year: "Năm đạt giải không hợp lệ (từ năm 2000 trở lại đây)." });
         return;
       }
       newItem = { id, name: name.trim(), category, impactLevel, year: parsedYear };
     } else {
       if (!role) {
-        setFormError("Vui lòng chọn vai trò của bạn.");
+        setFormErrors({ role: "Vui lòng chọn vai trò của bạn." });
         return;
       }
       const start = startDate;
       if (!start) {
-        setFormError("Vui lòng chọn tháng bắt đầu.");
+        setFormErrors({ start: "Vui lòng chọn tháng bắt đầu." });
         return;
       }
       if (start.year * 12 + start.month > currentMonthIndex) {
-        setFormError("Tháng bắt đầu không được sau tháng hiện tại.");
+        setFormErrors({ start: "Tháng bắt đầu không được sau tháng hiện tại." });
         return;
       }
       const end = isOngoing ? null : endDate;
       if (!isOngoing) {
         if (!end) {
-          setFormError("Vui lòng chọn tháng kết thúc, hoặc tick “Đến nay”.");
+          setFormErrors({ end: "Vui lòng chọn tháng kết thúc, hoặc tick “Đến nay”." });
           return;
         }
         if (end.year * 12 + end.month < start.year * 12 + start.month) {
-          setFormError("Tháng kết thúc phải sau hoặc bằng tháng bắt đầu.");
+          setFormErrors({ end: "Tháng kết thúc phải sau hoặc bằng tháng bắt đầu." });
           return;
         }
       }
@@ -280,7 +281,7 @@ export function Step5Extracurricular({
                   type="button"
                   onClick={() => {
                     setCategory(c);
-                    setFormError(null);
+                    setFormErrors({});
                   }}
                   className={cn(
                     "rounded-md px-3 py-1 text-xs font-semibold transition-all cursor-pointer",
@@ -322,7 +323,7 @@ export function Step5Extracurricular({
                         type="button"
                         onClick={() => {
                           setRole(r.value);
-                          setFormError(null);
+                          setFormErrors({});
                         }}
                         className={cn(
                           "rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer",
@@ -335,6 +336,7 @@ export function Step5Extracurricular({
                       </button>
                     ))}
                   </div>
+                  <FieldError message={formErrors.role} />
                 </div>
 
                 {/* Khoảng thời gian: Từ lúc nào đến lúc nào + Đến nay */}
@@ -352,9 +354,10 @@ export function Step5Extracurricular({
                         setStartDate(m);
                         // Tháng kết thúc cũ trước tháng bắt đầu mới thì bỏ, để chọn lại
                         if (endDate && endDate.year * 12 + endDate.month < m.year * 12 + m.month) setEndDate(null);
-                        setFormError(null);
+                        setFormErrors({});
                       }}
                     />
+                    <FieldError message={formErrors.start} />
                   </div>
 
                   <div className="space-y-1.5">
@@ -366,7 +369,10 @@ export function Step5Extracurricular({
                         <input
                           type="checkbox"
                           checked={isOngoing}
-                          onChange={(e) => setIsOngoing(e.target.checked)}
+                          onChange={(e) => {
+                            setIsOngoing(e.target.checked);
+                            setFormErrors({});
+                          }}
                           className="rounded border-line text-brand focus:ring-brand size-3.5 cursor-pointer"
                         />
                         <span>Đến nay</span>
@@ -382,9 +388,10 @@ export function Step5Extracurricular({
                       disabledText="Đến nay (Hiện tại)"
                       onChange={(m) => {
                         setEndDate(m);
-                        setFormError(null);
+                        setFormErrors({});
                       }}
                     />
+                    <FieldError message={formErrors.end} />
                   </div>
                 </div>
               </div>
@@ -401,9 +408,10 @@ export function Step5Extracurricular({
                   value={year}
                   onChange={(e) => {
                     setYear(e.target.value);
-                    setFormError(null);
+                    setFormErrors({});
                   }}
                 />
+                <FieldError message={formErrors.year} />
               </div>
             )}
 
@@ -419,7 +427,7 @@ export function Step5Extracurricular({
                       type="button"
                       onClick={() => {
                         setImpactLevel(lvl.value);
-                        setFormError(null);
+                        setFormErrors({});
                       }}
                       className={cn(
                         "flex items-center rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer",
@@ -441,10 +449,9 @@ export function Step5Extracurricular({
                   );
                 })}
               </div>
+              <FieldError message={formErrors.impact} />
             </div>
           </div>
-
-          {formError && <div className="text-xs text-destructive font-medium">{formError}</div>}
 
           {/* Form Actions */}
           <div className="flex justify-end gap-2 border-t border-line pt-3">
@@ -498,4 +505,9 @@ export function Step5Extracurricular({
       </div>
     </div>
   );
+}
+
+function FieldError({ message }: { message?: string }) {
+  if (!message) return null;
+  return <p className="text-xs font-medium text-destructive">{message}</p>;
 }
