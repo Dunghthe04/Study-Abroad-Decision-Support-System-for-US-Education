@@ -55,6 +55,14 @@ def as_json(value: Any, where: str, column: str) -> Any:
         raise ValueError(f"{where}: cột {column} không phải JSON hợp lệ") from ex
 
 
+# Hồ sơ thành khóa → chữ. Giá trị là danh sách (hoạt động, giải thưởng) thì nối bằng "; " cho đọc như học sinh nói
+def profile_text(profile: dict[str, Any]) -> dict[str, str]:
+    return {
+        key: "; ".join(map(str, value)) if isinstance(value, list) else str(value)
+        for key, value in profile.items()
+    }
+
+
 # Các từ của một đoạn chữ, viết thường ("I-20", "TP.HCM", "8.5" giữ nguyên một từ)
 def words(text: str) -> set[str]:
     return set(_WORD.findall(text.lower()))
@@ -125,7 +133,7 @@ def to_record(intent: str, raw: dict[str, Any], where: str, record_id: str) -> d
         request = SkillRequest(
             loai=intent,
             cau_hoi=text["cau_hoi"],
-            ho_so={key: str(value) for key, value in profile.items()},
+            ho_so=profile_text(profile),
             thay_doi=[{k: str(v) for k, v in change.items()} for change in main.get("thay_doi", [])],
             muc_tieu=main.get("muc_tieu") or (None if main.get("thay_doi") else text["cau_hoi"]),
         )
