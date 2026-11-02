@@ -11,6 +11,7 @@ Ghi từng dự đoán vào data/slm/ket_qua/<model>_<split>.jsonl để xem l�
 import argparse
 import asyncio
 import json
+import re
 import statistics
 import sys
 import time
@@ -26,6 +27,16 @@ from app.services.slm_classifier import OllamaSlm, output_format
 from scripts.build_slm_jsonl import DEFAULT_OUT
 
 RESULT_DIR = DEFAULT_OUT.parent / "ket_qua"
+
+
+# Độ giống nhau của hai đoạn chữ theo từ: F1 giữa hai tập từ (1 là giống hệt từ, 0 là không chung từ nào)
+def word_f1(gold: str, pred: str) -> float:
+    a, b = Counter(re.findall(r"[^\W_]+", gold.lower())), Counter(re.findall(r"[^\W_]+", pred.lower()))
+    common = sum((a & b).values())
+    if not common:
+        return 0.0
+    precision, recall = common / sum(b.values()), common / sum(a.values())
+    return 2 * precision * recall / (precision + recall)
 
 
 # Loại của các ý, theo thứ tự
@@ -50,6 +61,13 @@ def score(records: list[dict[str, Any]], preds: list[dict[str, Any]]) -> dict[st
         for g, p, ok in zip(gold, preds, same_order, strict=True)
         if ok
     ]
+    # doan chỉ so khi đã tách đúng loại và thứ tự. Viết lại được nên so theo chữ (F1 trên các từ), không bắt giống từng ký tự
+    doan_f1 = [
+        word_f1(a["doan"], b["doan"])
+        for g, p, ok in zip(gold, preds, same_order, strict=True)
+        if ok
+        for a, b in zip(g["cac_y"], p["cac_y"], strict=True)
+    ]
     recall: dict[str, Counter] = defaultdict(Counter)
     missing: Counter = Counter()
     extra: Counter = Counter()
@@ -70,6 +88,8 @@ def score(records: list[dict[str, Any]], preds: list[dict[str, Any]]) -> dict[st
         "theo_so_y": {k: round(sum(v) / len(v), 3) for k, v in sorted(by_count.items())},
         "dung_khoa_thuc_the": sum(keys) / len(keys) if keys else None,
         "dung_het_thuc_the": sum(values) / len(values) if values else None,
+        "doan_f1": round(sum(doan_f1) / len(doan_f1), 3) if doan_f1 else None,
+        "doan_giong_het": round(sum(f == 1 for f in doan_f1) / len(doan_f1), 3) if doan_f1 else None,
         "thu_hoi_theo_loai": {t: recall[t]["dung"] / recall[t]["n"] for t in INTENTS if recall[t]["n"]},
         "hay_thieu": [f"{t}: {c}" for t, c in missing.most_common(5)],
         "hay_thua": [f"{t}: {c}" for t, c in extra.most_common(5)],

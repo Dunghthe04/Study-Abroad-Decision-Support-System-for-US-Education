@@ -19,6 +19,8 @@ from scripts.build_slm_jsonl import (
 )
 
 MIN_ROWS_PER_TYPE = 30
+# Loại làm sau cùng, chưa có dữ liệu: gỡ khỏi danh sách này khi bắt đầu gán nhãn kịch bản
+POSTPONED = {"kich_ban"}
 
 
 @pytest.fixture(scope="module")
@@ -35,7 +37,7 @@ def test_every_type_has_enough_rows_and_all_three_splits(records):
     for r in records:
         by_type[r["type"]][r["split"]] += 1
 
-    assert set(by_type) == set(TYPES)
+    assert set(by_type) == set(TYPES) - POSTPONED
     for intent, splits in by_type.items():
         assert sum(splits.values()) >= MIN_ROWS_PER_TYPE, intent
         assert all(splits[s] > 0 for s in SPLITS), f"{intent} thiếu phần {splits}"
@@ -265,3 +267,22 @@ def test_the_form_is_checked_ids_come_from_the_sheet_and_blank_rows_are_skipped(
     wb.save(path)
     with pytest.raises(ValueError, match="mỗi loại một sheet"):
         read_records(path)
+
+
+def test_the_postponed_types_have_no_rows_yet_so_nobody_trains_on_half_finished_data(records):
+    for r in records:
+        for y in r["output"]["cac_y"]:
+            assert y["type"] not in POSTPONED, (
+                f"{r['id']}: {y['type']} chưa gán nhãn, bỏ dòng này hoặc gỡ khỏi POSTPONED"
+            )
+
+
+def test_the_hard_cases_exist_in_the_data(records):
+    questions = [r["input"]["cau_hoi"] for r in records]
+    types = {y["type"]: y for r in records for y in r["output"]["cac_y"]}
+
+    assert any("visa f1 can giay to gi" in q for q in questions), "thiếu câu không dấu"
+    assert {y["thuc_the"].get("loai_con") for r in records for y in r["output"]["cac_y"] if y["type"] == "ngoai_pham_vi"} == {
+        "ngoai_le", "nhay_cam", "tam_biet", "mo_ho",
+    }  # fmt: skip
+    assert types

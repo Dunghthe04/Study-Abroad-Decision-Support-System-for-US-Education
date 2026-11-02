@@ -1,6 +1,6 @@
 """Chấm điểm của scripts.eval_slm trên danh sách ý: không cần Ollama."""
 
-from scripts.eval_slm import score, types_of
+from scripts.eval_slm import score, types_of, word_f1
 
 
 def y(kind, doan="x", **thuc_the):
@@ -72,3 +72,26 @@ def test_the_score_is_split_by_how_many_intents_the_message_has():
 
 def test_types_of_keeps_the_order():
     assert types_of({"cac_y": [y("mac_dinh"), y("ho_so")]}) == ["mac_dinh", "ho_so"]
+
+
+def test_doan_is_scored_by_words_so_a_slightly_different_rewrite_still_earns_most_of_the_point():
+    gold = [y("kien_thuc", "I-20 là gì")]
+
+    same = score(*rows((gold, [y("kien_thuc", "I-20 là gì")])))
+    close = score(*rows((gold, [y("kien_thuc", "I-20 là gì vậy")])))
+    other = score(*rows((gold, [y("kien_thuc", "SAT bao nhiêu điểm")])))
+
+    assert same["doan_f1"] == 1 and same["doan_giong_het"] == 1
+    assert 0.8 < close["doan_f1"] < 1 and close["doan_giong_het"] == 0
+    assert other["doan_f1"] == 0
+
+
+def test_word_f1_ignores_case_and_punctuation_and_handles_nothing_in_common():
+    assert word_f1("I-20 là gì?", "i-20 LÀ GÌ") == 1
+    assert word_f1("abc", "xyz") == 0
+
+
+def test_doan_is_not_scored_when_the_intents_were_not_split_the_same_way():
+    result = score(*rows(([y("kien_thuc"), y("kien_thuc")], [y("kien_thuc")])))
+
+    assert result["doan_f1"] is None
