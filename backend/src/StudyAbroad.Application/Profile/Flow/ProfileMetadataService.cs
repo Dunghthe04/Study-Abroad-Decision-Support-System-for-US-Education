@@ -53,18 +53,15 @@ public class ProfileMetadataService(
                 .ToList()
         };
 
-        // Bang lấy từ bảng us_states (có vùng); bảng chưa có dữ liệu thì giữ usStates trong JSON
+        // Bang chỉ lấy từ bảng us_states (có vùng), JSON không còn usStates / popularStateCodes
         var stateOptions = await repository.GetUsStateOptionsAsync(ct);
-        if (stateOptions.Count > 0)
+        metadata = metadata with
         {
-            metadata = metadata with
-            {
-                UsStates = stateOptions
-                    .Select(s => new UsStateMetadataItem(s.Code, s.Name, s.IsPopular, s.Region))
-                    .ToList(),
-                PopularStateCodes = stateOptions.Where(s => s.IsPopular).Select(s => s.Code).ToList()
-            };
-        }
+            UsStates = stateOptions
+                .Select(s => new UsStateMetadataItem(s.Code, s.Name, s.IsPopular, s.Region))
+                .ToList(),
+            PopularStateCodes = stateOptions.Where(s => s.IsPopular).Select(s => s.Code).ToList()
+        };
 
         cache.Set(CacheKey, metadata, CacheDuration);
         // Tỷ giá có bộ nhớ riêng (1 ngày) nên gắn sau khi lấy từ cache

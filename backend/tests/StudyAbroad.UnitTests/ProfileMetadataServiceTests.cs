@@ -136,10 +136,9 @@ public class ProfileMetadataServiceTests
         Assert.Equal("tier_1", result.BudgetTiers[0].Id);
         Assert.Single(result.GradeScales);
         Assert.Equal("10", result.GradeScales[0].Id);
-        Assert.Single(result.UsStates);
-        Assert.Equal("CA", result.UsStates[0].Code);
-        Assert.True(result.UsStates[0].IsPopular);
-        Assert.Single(result.PopularStateCodes);
+        // Bang chỉ lấy từ bảng us_states (ở đây rỗng), không lấy usStates cũ trong JSON
+        Assert.Empty(result.UsStates);
+        Assert.Empty(result.PopularStateCodes);
         Assert.Equal(1, repo.CallCount);
     }
 
@@ -189,7 +188,7 @@ public class ProfileMetadataServiceTests
 
         var result = await service.GetMetadataAsync();
 
-        // Không gộp bang trong JSON ("CA"), chỉ 2 bang từ bảng us_states
+        // Không gộp bang cũ trong JSON ("CA"), chỉ 2 bang từ bảng us_states
         Assert.Equal(["MA", "OH"], result.UsStates.Select(s => s.Code));
         Assert.Equal("northeast", result.UsStates[0].Region);
         Assert.True(result.UsStates[0].IsPopular);
