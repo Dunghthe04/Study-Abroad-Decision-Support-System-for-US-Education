@@ -190,27 +190,6 @@ async def test_chat_json_scored_raises_when_content_is_not_json():
         await OllamaClient(http, model="qwen3:4b").chat_json_scored([], {})
 
 
-# ---- script đo ----
-def test_the_eval_score_counts_labels_and_entities():
-    from scripts.eval_slm import score
-
-    records = [
-        {"output": {"type": "kien_thuc", "nhan_phu": "trung_tam", "thuc_the": {"thanh_pho": "HN"}}},
-        {"output": {"type": "mac_dinh", "nhan_phu": None, "thuc_the": {"gpa": "8.5"}}},
-    ]
-    preds = [
-        {"type": "kien_thuc", "nhan_phu": None, "thuc_the": {"thanh_pho": "Hà Nội"}},
-        {"type": "kien_thuc", "nhan_phu": None, "thuc_the": {"gpa": "8.5"}},
-    ]
-
-    result = score(records, preds)
-
-    assert (result["nhan_chinh"], result["nhan_phu"], result["nhan_phu_tin_hai_y"]) == (0.5, 0.5, 0.0)
-    assert (result["dung_khoa_thuc_the"], result["dung_het_thuc_the"]) == (1.0, 0.5)
-    assert result["theo_loai"] == {"mac_dinh": 0.0, "kien_thuc": 1.0}
-    assert result["nham_nhieu_nhat"] == ["mac_dinh -> kien_thuc: 1"]
-
-
 # ---- định dạng đầu ra (settings.slm_format) ----
 def test_output_format_turns_the_config_into_what_ollama_gets():
     assert output_format("json") == "json"

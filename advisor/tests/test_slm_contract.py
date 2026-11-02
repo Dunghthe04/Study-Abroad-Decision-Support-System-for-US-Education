@@ -12,9 +12,11 @@ from app.schemas.slm import (
     INTENTS,
     PROFILE_KEYS,
     SLM_SCHEMA,
+    SLM_TIN_SCHEMA,
     Intent,
     SlmRead,
     SlmResult,
+    SlmTinResult,
     check_labels,
 )
 from app.services.centers import SERVICES
@@ -126,16 +128,20 @@ def test_profile_keys_are_the_same_as_the_ones_the_chat_saves():
 def test_every_labelled_output_in_the_dataset_is_a_valid_answer():
     for line in DEFAULT_OUT.read_text(encoding="utf-8").splitlines():
         record = json.loads(line)
-        SlmRead.model_validate(record["output"])
+        SlmTinResult.from_raw(record["output"])
 
 
-# Dòng dữ liệu nào cũng phải nằm gọn trong nhánh của cặp nhãn của nó, nếu không model bị khuôn chặn không học được
-def test_every_labelled_output_fits_the_branch_of_its_label_pair():
+# Mỗi ý trong dữ liệu phải nằm gọn trong nhánh của loại nó ở khuôn SLM_TIN_SCHEMA, nếu không model bị khuôn chặn không học được
+def test_every_labelled_intent_fits_the_branch_of_its_type():
+    by_type = {
+        b["properties"]["type"]["const"]: b["properties"]["thuc_the"]
+        for b in SLM_TIN_SCHEMA["properties"]["cac_y"]["items"]["anyOf"]
+    }
     for line in DEFAULT_OUT.read_text(encoding="utf-8").splitlines():
-        output = json.loads(line)["output"]
-        thuc_the = branches()[(output["type"], output["nhan_phu"])]["properties"]["thuc_the"]
-        assert set(output["thuc_the"]) <= set(thuc_the["properties"]), output
-        assert set(thuc_the["required"]) <= set(output["thuc_the"]), output
+        for y in json.loads(line)["output"]["cac_y"]:
+            thuc_the = by_type[y["type"]]
+            assert set(y["thuc_the"]) <= set(thuc_the["properties"]), y
+            assert set(thuc_the["required"]) <= set(y["thuc_the"]), y
 
 
 async def test_the_fixed_slm_returns_its_result_whatever_the_message_is():
