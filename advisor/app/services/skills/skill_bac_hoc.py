@@ -5,14 +5,15 @@ Quy ước giá trị đọc ra: None = học sinh không nói; UNKNOWN = học 
 """
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from app.schemas.chat import ChatState, ProfileField
+from app.schemas.chat import ChatState, ProfileField, QuickReply
 from app.services.chat_flow import SkillOutput, go_to
 from app.services.skill_call import SKILLS_DIR, SkillCall
-from app.services.skills import buttons, skill_ho_so
+from app.services.skills import buttons, major_catalog, skill_ho_so
+from app.services.skills.major_catalog import Major
 from app.services.skills.skill_ho_so import MAX_ASK
 
 SKILL_PATH = SKILLS_DIR / "skill_bac_hoc.md"
@@ -138,6 +139,55 @@ class BacHocReader:
         return result if result is not None else BacHocRead()
 
 
+# Ngành học sinh gõ không có trong bảng majors: chữ đã gõ và các ngành gần giống (có thể rỗng)
+@dataclass
+class MajorMiss:
+    text: str
+    near: list[Major] = field(default_factory=list)
+
+
+# Đổi ngành đọc được sang tên Anh trong bảng majors (giống form lưu). Không khớp đúng thì bỏ ngành
+# và trả MajorMiss để hỏi lại. Không có danh sách ngành (không có DB) thì giữ nguyên chữ như trước
+async def resolve_major(read: BacHocRead) -> MajorMiss | None:
+    if read.major is None or read.major == UNKNOWN:
+        return None
+    found = await major_catalog.find(read.major)
+    if found is None:
+        return None
+    if found.exact:
+        read.major = found.exact.name
+        return None
+    miss = MajorMiss(read.major, found.near)
+    read.major = None
+    return miss
+
+
+# Hỏi lại ngành: gần giống thì hiện các ngành đó thành nút để chọn, không giống ngành nào thì nhờ gõ lại
+def ask_major_again(state: ChatState, miss: MajorMiss) -> SkillOutput:
+    if len(miss.near) == 1:
+        text = (
+            f'Mình thấy câu trả lời của bạn gần với ngành "{miss.near[0].label}". '
+            "Nếu đúng thì bạn bấm nút bên dưới, không thì gõ lại tên ngành nhé."
+        )
+    elif miss.near:
+        names = ", ".join(f'"{m.label}"' for m in miss.near)
+        text = (
+            f"Mình thấy câu trả lời của bạn gần với các ngành {names}. "
+            "Bạn chọn ngành đúng ở nút bên dưới, hoặc gõ lại tên ngành nhé."
+        )
+    else:
+        text = (
+            f'Mình chưa tìm thấy ngành "{miss.text}" trong danh sách ngành. '
+            "Bạn gõ lại tên ngành khác hoặc tìm trong ô bên dưới nhé."
+        )
+    output = buttons.ask_with_buttons(state, "B1.3", text)
+    # Nút ngành gần giống gửi tên Việt, lượt sau khớp đúng nên ghi thẳng
+    output.quick_replies = [
+        QuickReply(label=m.label, value=m.label) for m in miss.near
+    ] + output.quick_replies
+    return output
+
+
 # Ghi kết quả đọc vào hồ sơ. UNKNOWN ghi status="unknown", không có giá trị.
 # keep_existing=True (thông tin nói ở B0) thì không đè thông tin đã có
 def save_read(
@@ -188,8 +238,11 @@ class BacHocHandler:
         self._reader = BacHocReader(llm, model)
 
     # Ghi giá trị học sinh tự khai ngoài câu đang hỏi: said_in_B0 để xác nhận lại ở X1, được đè giá trị cũ
+    # Ngành không khớp danh sách thì bỏ, tới B1.3 hỏi lại
     async def save_said(self, state: ChatState, message: str) -> None:
-        save_read(state, await self._reader.read("B1.1", message), status="said_in_B0")
+        read = await self._reader.read("B1.1", message)
+        await resolve_major(read)
+        save_read(state, read, status="said_in_B0")
 
     async def run(self, state: ChatState, message: str) -> SkillOutput:
         question_id = state.question_id if state.question_id in QUESTION_FIELDS else "B1.1"
@@ -201,7 +254,17 @@ class BacHocHandler:
             if button == buttons.SKIP:
                 state.asked[question_id] = MAX_ASK  # bỏ qua thì không hỏi lại
             return ask_next(state)
-        save_read(state, await self._reader.read(question_id, message))
+        # Chọn ngành ở ô tìm ngành / nút ngành gần giống, hoặc gõ đúng tên ngành: ghi thẳng, không gọi Qwen
+        if question_id == "B1.3":
+            found = await major_catalog.find(message)
+            if found is not None and found.exact:
+                state.profile["major"] = buttons.confirmed(found.exact.name)
+                return ask_next(state)
+        read = await self._reader.read(question_id, message)
+        miss = await resolve_major(read)
+        save_read(state, read)
+        if miss is not None and question_id == "B1.3" and not answered(state, "B1.3"):
+            return ask_major_again(state, miss)
         # Học sinh chưa trả lời câu đang hỏi thì hỏi lại (tối đa 2 lần, ngành thì hỏi tới khi có)
         if not answered(state, question_id) and can_ask(state, question_id):
             return ask_question(state, question_id)
