@@ -74,6 +74,13 @@ export interface AdvisorChatResponse {
   formStep?: number | null; // trang form (1–6) của câu chat đang hỏi; form chuyển theo
 }
 
+/** Một dòng của POST /api/v1/advisor/chat/stream (mỗi dòng một JSON): trả lời theo từng ý khi xong. */
+export type AdvisorStreamEvent =
+  | { type: "progress"; answers: number } // sắp trả lời N câu hỏi
+  | { type: "partial"; text: string } // câu trả lời của một ý, đúng thứ tự hỏi
+  | { type: "final"; response: AdvisorChatResponse } // câu cuối cùng (kèm sessionId, nút, widget): hiện câu này
+  | { type: "error"; message: string };
+
 // [USAS-362] Kiểu dữ liệu xác thực và người dùng
 export type UserRole = "student" | "parent" | "center" | "moderator" | "admin";
 
