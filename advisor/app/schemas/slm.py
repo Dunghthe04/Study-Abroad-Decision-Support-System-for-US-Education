@@ -4,6 +4,7 @@
 Khuôn này trùng với cột đầu ra trong data/slm/du_lieu_slm.xlsx (type = tên sheet, nhan_phu, thuc_the).
 Sửa file này thì báo người kia trước, và sửa dữ liệu cho khớp.
 """
+
 import hashlib
 import json
 import re
@@ -239,6 +240,7 @@ class SlmTinResult(SlmTin):
     def touches_profile(self) -> bool:
         return "mac_dinh" in self.types() or bool(self.profile_values())
 
+
 # ---- SLM lần 2: sinh skill cá nhân hóa ----
 # Chỉ hai loại cần hồ sơ mới có skill riêng của học sinh; các loại còn lại dùng skill chung
 SKILL_KINDS = ("ho_so", "kich_ban")
@@ -254,8 +256,16 @@ SKILL_SECTIONS = {
         "6. Lộ trình",
         "7. Yêu cầu câu trả lời",
     ),
-    "kich_ban": ("0. Câu hỏi kích hoạt", "1. Nhiệm vụ", "2. Hồ sơ gốc", "3. Cách làm", "4. Yêu cầu câu trả lời"),
+    "kich_ban": (
+        "0. Câu hỏi kích hoạt",
+        "1. Nhiệm vụ",
+        "2. Hồ sơ gốc",
+        "3. Cách làm",
+        "4. Yêu cầu câu trả lời",
+    ),
 }
+
+
 # Đầu vào của SLM lần 2: câu hỏi và hồ sơ đã đủ (giá trị đã được nhánh hồ sơ chuẩn hóa và kiểm)
 class SkillRequest(BaseModel):
     loai: Literal["ho_so", "kich_ban"]
@@ -275,7 +285,8 @@ class SkillRequest(BaseModel):
         if self.loai == "kich_ban" and not (self.thay_doi or self.muc_tieu):
             raise ValueError("kich_ban cần thay_doi hoặc muc_tieu")
         return self
-    
+
+
 # Khóa lưu skill: cùng loại, câu hỏi, hồ sơ (và thay đổi) thì dùng lại skill đã sinh; khác một giá trị là skill khác
 def skill_key(req: SkillRequest) -> str:
     raw = json.dumps(req.model_dump(), ensure_ascii=False, sort_keys=True)
@@ -300,7 +311,9 @@ def _so_trong(text: str) -> set[str]:
 # Chỉ kiểm cấu trúc và việc không bỏ số hồ sơ. Số suy ra (GPA thang 4, hạn nộp) và dòng Mốc sẽ kiểm bằng luật riêng
 def check_skill(text: str, req: SkillRequest) -> None:
     wanted = SKILL_SECTIONS[req.loai]
-    parts = re.split(r"^## (.+?)\s*$", text, flags=re.M)  # [chữ trước, tên mục, nội dung, tên mục, nội dung, ...]
+    parts = re.split(
+        r"^## (.+?)\s*$", text, flags=re.M
+    )  # [chữ trước, tên mục, nội dung, tên mục, nội dung, ...]
     muc = dict(zip(parts[1::2], parts[2::2], strict=True))
     if tuple(name for name in parts[1::2] if name in wanted) != wanted:
         raise ValueError(f"skill {req.loai} phải có đủ các mục theo thứ tự: {', '.join(wanted)}")
