@@ -7,8 +7,8 @@ Vòng xử lý một tin nhắn:
 Các nhánh nằm ở branches.py (main.py tạo rồi truyền vào ChatFlow).
 """
 
-import json
 import asyncio
+import json
 import logging
 import time
 from dataclasses import dataclass, field
