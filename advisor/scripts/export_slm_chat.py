@@ -1,7 +1,7 @@
 """Xuất dữ liệu SLM sang dạng hội thoại để fine-tune: system = prompt phân loại, user = JSON đầu vào, assistant = đáp án.
 
-Ghép bằng đúng build_messages mà OllamaSlm dùng lúc chạy, và viết đáp án theo một thứ tự khóa cố định (type đứng
-đầu), nên model học đúng thứ nó sẽ nhận và sẽ sinh. Chỉ xuất train và val, tập test không bao giờ đem đi train.
+Ghép bằng đúng build_messages mà OllamaSlm dùng lúc chạy, và viết đáp án theo một thứ tự khóa cố định (type, doan,
+thuc_the), nên model học đúng thứ nó sẽ nhận và sẽ sinh. Chỉ xuất train và val, tập test không bao giờ đem đi train.
 
 Chạy trong thư mục advisor, sau khi đã chạy scripts.build_slm_jsonl:
   python -m scripts.export_slm_chat
@@ -12,42 +12,35 @@ import json
 import sys
 from typing import Any
 
-from app.schemas.slm import SLM_SCHEMA
-from app.services.skill_call import load_skill
-from app.services.slm_classifier import PROMPT_PATH, build_messages
+from app.schemas.slm import SLM_TIN_SCHEMA
+from app.services.skill_call import SKILLS_DIR, load_skill
+from app.services.slm_classifier import build_messages
 from scripts.build_slm_jsonl import DEFAULT_OUT
 
+# Prompt của hợp đồng danh sách ý. OllamaSlm vẫn dùng slm_phan_loai.md cho đến khi bộ phân loại được đổi sang cac_y
+PROMPT_PATH = SKILLS_DIR / "slm_phan_loai_cac_y.md"
 OUT_DIR = DEFAULT_OUT.parent / "finetune"
 SPLITS = ("train", "val")
-# Đáp án train luôn viết theo một thứ tự cố định (type, nhan_phu, thuc_the; khóa trong thuc_the theo thứ tự khai báo
-# trong khuôn) để model học nhất quán. Lưu ý: khi nhận khuôn, Ollama ép khóa theo bảng chữ cái chứ không theo thứ tự
-# này, nên model đã fine-tune chạy với slm_format="json" (xem output_format trong slm_classifier.py)
+# Khóa trong thuc_the của mỗi loại ý luôn viết theo một thứ tự cố định (khóa hồ sơ rồi khóa riêng của loại, đúng thứ tự
+# khai báo trong khuôn) để model học nhất quán. Lưu ý: khi nhận khuôn, Ollama ép khóa theo bảng chữ cái chứ không theo
+# thứ tự này, nên model đã fine-tune chạy với slm_format="json" (xem output_format trong slm_classifier.py)
 _KEY_ORDER = {
-    (b["properties"]["type"]["const"], b["properties"]["nhan_phu"]["const"]): list(
-        b["properties"]["thuc_the"]["properties"]
-    )
-    for b in SLM_SCHEMA["anyOf"]
+    branch["properties"]["type"]["const"]: list(branch["properties"]["thuc_the"]["properties"])
+    for branch in SLM_TIN_SCHEMA["properties"]["cac_y"]["items"]["anyOf"]
 }
 
 
-# Đáp án viết liền như model sinh ra: type, nhan_phu, thuc_the, khóa trong thuc_the theo thứ tự của khuôn
+# Đáp án viết liền như model sinh ra: {"cac_y": [{type, doan, thuc_the}, ...]}, khóa trong thuc_the theo thứ tự của khuôn
 def answer_text(output: dict[str, Any]) -> str:
-    order = _KEY_ORDER[(output["type"], output["nhan_phu"])]
-    thuc_the = {key: output["thuc_the"][key] for key in order if key in output["thuc_the"]}
-    answer = {"type": output["type"], "nhan_phu": output["nhan_phu"], "thuc_the": thuc_the}
-    return json.dumps(answer, ensure_ascii=False, separators=(",", ":"))
-
-    # Một dòng dữ liệu thành một hội thoại: 2 tin như lúc chạy thật, cộng tin đáp án
-    # Mỗi hội thoại như vậy là một dòng trong data/slm/finetune/train.jsonl.
-    """
-    {"messages": [
-    {"role": "system",    "content": "# PHÂN LOẠI TIN NHẮN ... skill_version 1.1\n..."},
-    {"role": "user",      "content": '{"cau_hoi":"em đang học lớp 12","ho_so":null,"cau_he_thong_dang_hoi":"Hiện bạn đang học lớp mấy, hoặc đang làm gì?"}'},
-    {"role": "assistant", "content": '{"type":"mac_dinh","nhan_phu":null,"thuc_the":{"current_grade":"em đang học lớp 12"}}'}
-    ]}
-    """
+    cac_y = []
+    for y in output["cac_y"]:
+        thuc_the = {key: y["thuc_the"][key] for key in _KEY_ORDER[y["type"]] if key in y["thuc_the"]}
+        cac_y.append({"type": y["type"], "doan": y["doan"], "thuc_the": thuc_the})
+    return json.dumps({"cac_y": cac_y}, ensure_ascii=False, separators=(",", ":"))
 
 
+# Một dòng dữ liệu thành một hội thoại: 2 tin như lúc chạy thật, cộng tin đáp án. Mỗi hội thoại là một dòng trong
+# data/slm/finetune/train.jsonl, dạng {"messages": [{"role": "system", ...}, {"role": "user", ...}, {"role": "assistant", ...}]}
 def to_chat(record: dict[str, Any], prompt: str) -> dict[str, Any]:
     data = record["input"]
     messages = build_messages(prompt, data["cau_hoi"], data["ho_so"], data["cau_he_thong_dang_hoi"])

@@ -1,6 +1,6 @@
-"""Đo SLM trên dữ liệu gán nhãn: nhãn chính, nhãn phụ, thực thể, tốc độ. Dùng để có baseline trước fine-tune và so sau.
+"""Đo SLM trên dữ liệu gán nhãn: tách đủ ý, đúng loại, đúng thứ tự, thực thể, tốc độ. Dùng để có baseline trước fine-tune và so sau.
 
-Cần Ollama đang chạy và đã pull model. Chạy trong thư mục advisor:
+Bộ phân loại (OllamaSlm) phải đã trả danh sách ý cac_y. Cần Ollama đang chạy và đã pull model. Chạy trong thư mục advisor:
   python -m scripts.eval_slm                       # qwen3:4b trên tập test
   python -m scripts.eval_slm --split val --limit 20
   python -m scripts.eval_slm --model usas-slm      # model đã fine-tune
@@ -28,31 +28,51 @@ from scripts.build_slm_jsonl import DEFAULT_OUT
 RESULT_DIR = DEFAULT_OUT.parent / "ket_qua"
 
 
-# So dự đoán với nhãn, trả các con số tổng hợp. preds[i] là output dự đoán (type, nhan_phu, thuc_the) của records[i]
+# Loại của các ý, theo thứ tự
+def types_of(output: dict[str, Any]) -> list[str]:
+    return [y["type"] for y in output["cac_y"]]
+
+
+# So dự đoán với nhãn, trả các con số tổng hợp. preds[i] là output dự đoán ({"cac_y": [...]}) của records[i]
 def score(records: list[dict[str, Any]], preds: list[dict[str, Any]]) -> dict[str, Any]:
     n = len(records)
     gold = [r["output"] for r in records]
-    by_type: dict[str, Counter] = defaultdict(Counter)
-    confusion: Counter = Counter()
+    same_types = [sorted(types_of(g)) == sorted(types_of(p)) for g, p in zip(gold, preds, strict=True)]
+    same_order = [types_of(g) == types_of(p) for g, p in zip(gold, preds, strict=True)]
+    # Thực thể chỉ so khi đã tách đúng loại và thứ tự các ý, nếu không thì không biết ý nào ứng với ý nào
+    keys = [
+        all(set(a["thuc_the"]) == set(b["thuc_the"]) for a, b in zip(g["cac_y"], p["cac_y"], strict=True))
+        for g, p, ok in zip(gold, preds, same_order, strict=True)
+        if ok
+    ]
+    values = [
+        all(a["thuc_the"] == b["thuc_the"] for a, b in zip(g["cac_y"], p["cac_y"], strict=True))
+        for g, p, ok in zip(gold, preds, same_order, strict=True)
+        if ok
+    ]
+    recall: dict[str, Counter] = defaultdict(Counter)
+    missing: Counter = Counter()
+    extra: Counter = Counter()
     for g, p in zip(gold, preds, strict=True):
-        by_type[g["type"]]["n"] += 1
-        by_type[g["type"]]["dung"] += g["type"] == p["type"]
-        if g["type"] != p["type"]:
-            confusion[(g["type"], p["type"])] += 1
-    two = [(g, p) for g, p in zip(gold, preds, strict=True) if g["nhan_phu"]]
+        want, got = Counter(types_of(g)), Counter(types_of(p))
+        for kind, count in want.items():
+            recall[kind]["n"] += count
+            recall[kind]["dung"] += min(count, got[kind])
+        missing.update(want - got)
+        extra.update(got - want)
+    by_count: dict[str, list[bool]] = defaultdict(list)
+    for g, ok in zip(gold, same_types, strict=True):
+        by_count[str(min(len(g["cac_y"]), 3)) + ("+" if len(g["cac_y"]) >= 3 else "")].append(ok)
     return {
         "so_dong": n,
-        "nhan_chinh": sum(g["type"] == p["type"] for g, p in zip(gold, preds, strict=True)) / n,
-        "nhan_phu": sum(g["nhan_phu"] == p["nhan_phu"] for g, p in zip(gold, preds, strict=True)) / n,
-        "nhan_phu_tin_hai_y": sum(g["nhan_phu"] == p["nhan_phu"] for g, p in two) / len(two) if two else None,
-        "dung_khoa_thuc_the": sum(
-            set(g["thuc_the"]) == set(p["thuc_the"]) for g, p in zip(gold, preds, strict=True)
-        )
-        / n,
-        "dung_het_thuc_the": sum(g["thuc_the"] == p["thuc_the"] for g, p in zip(gold, preds, strict=True))
-        / n,
-        "theo_loai": {t: by_type[t]["dung"] / by_type[t]["n"] for t in INTENTS if by_type[t]["n"]},
-        "nham_nhieu_nhat": [f"{g} -> {p}: {c}" for (g, p), c in confusion.most_common(5)],
+        "dung_loai_cac_y": sum(same_types) / n,  # tách đủ ý, đúng loại (không xét thứ tự)
+        "dung_thu_tu": sum(same_order) / n,  # thêm điều kiện đúng thứ tự
+        "theo_so_y": {k: round(sum(v) / len(v), 3) for k, v in sorted(by_count.items())},
+        "dung_khoa_thuc_the": sum(keys) / len(keys) if keys else None,
+        "dung_het_thuc_the": sum(values) / len(values) if values else None,
+        "thu_hoi_theo_loai": {t: recall[t]["dung"] / recall[t]["n"] for t in INTENTS if recall[t]["n"]},
+        "hay_thieu": [f"{t}: {c}" for t, c in missing.most_common(5)],
+        "hay_thua": [f"{t}: {c}" for t, c in extra.most_common(5)],
     }
 
 
@@ -76,7 +96,7 @@ async def run(model: str, split: str, limit: int | None, fmt: str) -> None:
             )
             fallbacks += result.confidence == 0.0
             seconds.append(time.perf_counter() - start)
-            pred = {"type": result.type, "nhan_phu": result.nhan_phu, "thuc_the": result.thuc_the}
+            pred = {"cac_y": [y.model_dump() for y in (*result.cac_y, *result.con_lai)]}
             preds.append(pred)
             rows.append({"id": r["id"], "cau_hoi": r["input"]["cau_hoi"], "nhan": r["output"], "du_doan": pred,
                          "confidence": round(result.confidence, 4), "giay": round(seconds[-1], 2)})  # fmt: skip
@@ -91,12 +111,12 @@ async def run(model: str, split: str, limit: int | None, fmt: str) -> None:
     conf_right = [
         row["confidence"]
         for row, r in zip(rows, records, strict=True)
-        if row["du_doan"]["type"] == r["output"]["type"]
+        if sorted(types_of(row["du_doan"])) == sorted(types_of(r["output"]))
     ]
     conf_wrong = [
         row["confidence"]
         for row, r in zip(rows, records, strict=True)
-        if row["du_doan"]["type"] != r["output"]["type"]
+        if sorted(types_of(row["du_doan"])) != sorted(types_of(r["output"]))
     ]
     result |= {
         "giay_trung_binh": round(statistics.mean(seconds), 2),

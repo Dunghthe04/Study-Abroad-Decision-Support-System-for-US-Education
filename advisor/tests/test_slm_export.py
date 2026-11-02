@@ -2,9 +2,10 @@
 
 import json
 
+from app.schemas.slm import SlmTinResult
 from app.services.slm_classifier import OllamaSlm
 from scripts.build_slm_jsonl import DEFAULT_OUT
-from scripts.export_slm_chat import _KEY_ORDER, answer_text, chat_rows, to_chat
+from scripts.export_slm_chat import _KEY_ORDER, PROMPT_PATH, answer_text, chat_rows, to_chat
 
 RECORD = {
     "split": "train",
@@ -13,25 +14,30 @@ RECORD = {
         "ho_so": {"sat": "1400"},
         "cau_he_thong_dang_hoi": "Điểm GPA?",
     },
-    "output": {"type": "kien_thuc", "nhan_phu": None, "thuc_the": {"gpa": "8.5 ạ"}},
+    "output": {
+        "cac_y": [
+            {"type": "mac_dinh", "doan": "8.5 ạ", "thuc_the": {"gpa": "8.5 ạ"}},
+            {"type": "kien_thuc", "doan": "I-20 là gì", "thuc_the": {}},
+        ]
+    },
 }
 
 
 class CaptureSlm:
-    """SLM giả: ghi lại hội thoại OllamaSlm gửi đi rồi trả đúng đáp án."""
+    """SLM giả: ghi lại hội thoại OllamaSlm gửi đi rồi trả một đáp án hợp lệ."""
 
-    def __init__(self, answer):
-        self.answer = answer
+    def __init__(self):
         self.messages = None
 
     async def chat_json_scored(self, messages, schema):
         self.messages = messages
-        return self.answer, json.dumps(self.answer), []
+        answer = {"type": "ngoai_pham_vi", "nhan_phu": None, "thuc_the": {"loai_con": "tam_biet"}}
+        return answer, json.dumps(answer), []
 
 
-# Test quan trọng nhất: dữ liệu train phải trùng từng ký tự với thứ model nhận lúc chạy thật
+# Test quan trọng nhất: hai tin đầu của dữ liệu train phải trùng từng ký tự với thứ model nhận lúc chạy thật
 async def test_the_training_conversation_is_exactly_what_the_model_gets_at_run_time():
-    slm = CaptureSlm(RECORD["output"])
+    slm = CaptureSlm()
     classifier = OllamaSlm(slm)
 
     await classifier.read(
@@ -40,32 +46,54 @@ async def test_the_training_conversation_is_exactly_what_the_model_gets_at_run_t
     chat = to_chat(RECORD, classifier.prompt)["messages"]
 
     assert chat[:2] == slm.messages
-    assert chat[2] == {
-        "role": "assistant",
-        "content": '{"type":"kien_thuc","nhan_phu":null,"thuc_the":{"gpa":"8.5 ạ"}}',
-    }
+    assert chat[2]["role"] == "assistant"
+
+
+def test_the_answer_is_the_list_of_intents_written_the_way_the_model_must_produce_it():
+    assert answer_text(RECORD["output"]) == (
+        '{"cac_y":[{"type":"mac_dinh","doan":"8.5 ạ","thuc_the":{"gpa":"8.5 ạ"}},'
+        '{"type":"kien_thuc","doan":"I-20 là gì","thuc_the":{}}]}'
+    )
 
 
 def test_the_answer_lists_entity_keys_in_the_order_the_schema_forces():
     output = {
-        "type": "kich_ban",
-        "nhan_phu": None,
-        "thuc_the": {
-            "thay_doi": [{"yeu_to": "sat", "gia_tri": "1400"}],
-            "che_do": "what_if",
-            "sat": "SAT 1300",
-        },
+        "cac_y": [
+            {
+                "type": "kich_ban",
+                "doan": "nếu em lên SAT 1400 thì sao",
+                "thuc_the": {"thay_doi": [{"yeu_to": "sat", "gia_tri": "1400"}], "che_do": "what_if"},
+            }
+        ]
     }
 
-    keys = list(json.loads(answer_text(output))["thuc_the"])
+    keys = list(json.loads(answer_text(output))["cac_y"][0]["thuc_the"])
 
-    assert keys == ["sat", "che_do", "thay_doi"]  # khóa hồ sơ trước, rồi khóa riêng theo thứ tự của khuôn
-    assert keys == [key for key in _KEY_ORDER[("kich_ban", None)] if key in keys]
+    assert keys == ["che_do", "thay_doi"]  # theo thứ tự của khuôn, không theo thứ tự trong dữ liệu
+    assert keys == [key for key in _KEY_ORDER["kich_ban"] if key in keys]
+
+
+def test_each_intent_is_written_with_type_first_then_doan_then_thuc_the():
+    y = json.loads(answer_text(RECORD["output"]))["cac_y"][1]
+
+    assert list(y) == ["type", "doan", "thuc_the"]
+
+
+def test_the_answer_of_a_record_is_read_back_by_the_contract():
+    result = SlmTinResult.from_raw(json.loads(answer_text(RECORD["output"])))
+
+    assert [y.type for y in result.cac_y] == ["mac_dinh", "kien_thuc"]
+
+
+def test_the_prompt_describes_the_list_of_intents_and_the_answer_the_example_shows():
+    prompt = PROMPT_PATH.read_text(encoding="utf-8")
+
+    assert "skill_version 2." in prompt and '"cac_y"' in prompt and "nhan_phu" not in prompt
 
 
 def record(question, split):
     return {"split": split, "input": {"cau_hoi": question, "ho_so": None, "cau_he_thong_dang_hoi": ""},
-            "output": {"type": "ngoai_pham_vi", "nhan_phu": None, "thuc_the": {"loai_con": "tam_biet"}}}  # fmt: skip
+            "output": {"cac_y": [{"type": "ngoai_pham_vi", "doan": question, "thuc_the": {"loai_con": "tam_biet"}}]}}  # fmt: skip
 
 
 def test_only_the_requested_split_is_exported_and_questions_of_the_test_set_never_are():
@@ -86,3 +114,11 @@ def test_the_real_export_has_no_question_of_the_test_set():
         rows = chat_rows(records, "prompt", split)
         users = {json.loads(row["messages"][1]["content"])["cau_hoi"].lower() for row in rows}
         assert rows and not users & test_questions
+
+
+# Mọi đáp án trong dữ liệu thật phải đọc lại được bằng hợp đồng, nếu không model được dạy sinh thứ hệ thống từ chối
+def test_every_real_answer_is_read_back_by_the_contract():
+    records = [json.loads(line) for line in DEFAULT_OUT.read_text(encoding="utf-8").splitlines()]
+
+    for r in records:
+        SlmTinResult.from_raw(json.loads(answer_text(r["output"])))
