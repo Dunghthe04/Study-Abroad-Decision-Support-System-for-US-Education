@@ -1,4 +1,4 @@
-"""Hỏi hồ sơ trong chat: skill_nhu_cau, skill_bac_hoc, skill_ho_so chạy qua nhánh hồ sơ (SLM đọc tin là mac_dinh)."""
+"""Hỏi hồ sơ trong chat: skill_bac_hoc, skill_ho_so chạy qua nhánh hồ sơ (SLM đọc tin là mac_dinh)."""
 
 from app.schemas.chat import ChatMessage, ChatRequest, ChatState, ProfileField
 from app.services.chat_flow import QUESTIONS
@@ -10,6 +10,10 @@ from tests.fakes import FakeLLM, flow_with
 
 
 async def turn(llm: FakeLLM, message: str, **state_fields):
+    # Đang ở bước hỏi hồ sơ thì luôn có câu đang chờ, vì ask ghi cả mã câu lẫn chữ câu hỏi
+    if state_fields.get("current_step") in ("B1", "B2"):
+        state_fields.setdefault("last_question", "câu đang hỏi")
+        state_fields.setdefault("question_id", "B1.1" if state_fields["current_step"] == "B1" else "CHO")
     flow = flow_with(build_handlers(llm, "qwen3:8b"))
     req = ChatRequest(messages=[ChatMessage(role="user", content=message)], state=ChatState(**state_fields))
     return await flow.reply(req)
@@ -31,52 +35,7 @@ def ho_so(values: dict | None = None, none_fields: list | None = None) -> dict:
 PAGE1_ASKED = {"D1": 1, "N1": 1, "N2": 1, "N3": 1}
 
 
-# B1: skill_nhu_cau
-
-
-async def test_first_message_saves_said_info_and_skips_known_questions():
-    llm = FakeLLM(
-        {
-            "need": "profile_advice",
-            "branch": "DH",
-            "info_given": {
-                "current_level": "lớp 12",
-                "target_level": "đại học",
-                "gpa_text": "8.5",
-                "english_text": "IELTS 6.5",
-            },
-        },
-        {
-            **nothing_bac_hoc(),
-            "current_level": "high_school",
-            "current_grade": "Lớp 12",
-            "target_level": "bachelor",
-        },
-        ho_so(
-            {"gpa": {"value": 8.5, "scale": None}, "english": {"type": "ielts", "score": 6.5, "date": None}}
-        ),
-    )
-    res = await turn(llm, "Em lớp 12, muốn học đại học ở Mỹ, GPA 8.5, IELTS 6.5", intake_mode="chat")
-
-    assert (res.state.need, res.state.branch, res.state.current_step) == ("profile_advice", "DH", "B1")
-    # B1.1 và B1.2 đã nói nên hỏi thẳng B1.3
-    assert res.state.question_id == "B1.3"
-    assert res.answer == QUESTIONS["B1.3"]
-    profile = res.state.profile
-    assert profile["gpa"] == field({"value": 8.5, "scale": 10}, "said_in_B0")
-    assert profile["english"] == field({"type": "ielts", "value": 6.5, "date": None}, "said_in_B0")
-    assert profile["target_level"] == field("undergraduate", "said_in_B0")
-    assert profile["current_grade"] == field("Lớp 12", "said_in_B0")
-    assert {"gpa", "english", "target_level", "current_level"} <= set(res.profile_changed)
-
-
-async def test_first_message_without_info_only_calls_qwen_once():
-    llm = FakeLLM({"need": "profile_advice", "branch": "DH", "info_given": {}})
-    res = await turn(llm, "Em muốn tìm trường ở Mỹ", intake_mode="chat")
-
-    assert len(llm.calls) == 1
-    assert res.state.question_id == "B1.1"
-    assert res.state.profile == {}
+# Tin đầu tiên, chưa có câu đang chờ
 
 
 async def test_profile_advice_with_missing_items_offers_chat_or_form_first():
@@ -86,32 +45,6 @@ async def test_profile_advice_with_missing_items_offers_chat_or_form_first():
     assert res.state.question_id == INTAKE_ID
     assert res.answer == INTAKE_ASK
     assert [r.label for r in res.quick_replies] == [CHAT_BUTTON.label, FORM_BUTTON.label]
-
-
-async def test_said_info_does_not_overwrite_the_draft():
-    llm = FakeLLM(
-        {"need": "profile_advice", "branch": "DH", "info_given": {"gpa_text": "8.5"}},
-        ho_so({"gpa": {"value": 8.5, "scale": None}}),
-    )
-    res = await turn(llm, "GPA em 8.5", profile={"gpa": field({"value": 3.6, "scale": 4})})
-
-    assert res.state.profile["gpa"] == field({"value": 3.6, "scale": 4})
-
-
-async def test_unclear_asks_b0_2_with_buttons_then_goes_on_after_two_tries():
-    res = await turn(FakeLLM({"need": "unclear", "branch": None, "info_given": {}}), "chào bạn")
-
-    assert (res.state.current_step, res.state.question_id) == ("B0", "B0.2")
-    assert [r.label for r in res.quick_replies] == ["Tìm trường theo hồ sơ", "Em có câu hỏi"]
-
-    res = await turn(
-        FakeLLM({"need": "unclear", "branch": None, "info_given": {}}),
-        "ừm",
-        asked={"B0.1": 1, "B0.2": 2},
-        question_id="B0.2",
-        intake_mode="chat",
-    )
-    assert (res.state.current_step, res.state.question_id) == ("B1", "B1.1")
 
 
 # B2: skill_bac_hoc

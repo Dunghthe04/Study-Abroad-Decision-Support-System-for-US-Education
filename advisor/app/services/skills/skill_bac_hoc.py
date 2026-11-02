@@ -187,6 +187,10 @@ class BacHocHandler:
     def __init__(self, llm: Any, model: str) -> None:
         self._reader = BacHocReader(llm, model)
 
+    # Ghi giá trị học sinh tự khai ngoài câu đang hỏi: said_in_B0 để xác nhận lại ở X1, được đè giá trị cũ
+    async def save_said(self, state: ChatState, message: str) -> None:
+        save_read(state, await self._reader.read("B1.1", message), status="said_in_B0")
+
     async def run(self, state: ChatState, message: str) -> SkillOutput:
         question_id = state.question_id if state.question_id in QUESTION_FIELDS else "B1.1"
         # B5. Bấm nút (bậc học, "Em chưa rõ ngành") thì ghi thẳng, không gọi Qwen

@@ -10,6 +10,7 @@ from app.schemas.slm import SlmResult
 from app.services.chat_flow import (
     NEED_PROFILE,
     NOT_READY,
+    OPENING_QUESTIONS,
     Branch,
     SkillHandler,
     SkillOutput,
@@ -17,7 +18,8 @@ from app.services.chat_flow import (
     combine,
     start_intake,
 )
-from app.services.skill_rules import REQUIRED_BY_SKILL, STEP_SKILL, missing_fields
+from app.services.skill_rules import REQUIRED_B3, REQUIRED_BY_SKILL, missing_fields
+from app.services.skills.profile_handler import ChatProfileHandler
 
 
 # Nhánh dùng nguyên một skill có sẵn (kiến thức, trung tâm)
@@ -69,25 +71,23 @@ class LegacyAdviceBranch:
         # Đang hỏi hồ sơ dở (có câu đang chờ) thì chỉ báo cần thêm hồ sơ, ChatFlow nhắc lại câu đang chờ
         missing = missing_fields(state.profile, REQUIRED_BY_SKILL[name]) if name in REQUIRED_BY_SKILL else []
         if missing:
-            if state.question_id:
+            if state.question_id and state.question_id not in OPENING_QUESTIONS:
                 return SkillOutput(NEED_PROFILE)
             return ask_major(state) if missing[0] == "major" else start_intake(state, REQUIRED_BY_SKILL[name])
         return await self._skills[name].run(state, message)
 
 
-# TẠM, phần của Việt: trả lời / cập nhật hồ sơ bằng skill hỏi hồ sơ cũ (chọn theo bước đang hỏi).
-# Việt xong ProfileHandler thì thay lớp này bằng nhánh gọi ProfileHandler.collect(state, message, slm)
-class LegacyProfileBranch:
-    def __init__(self, skills: dict[str, SkillHandler], advice: Branch) -> None:
-        self._skills = skills
+# Trả lời câu hồ sơ đang chờ hoặc cập nhật hồ sơ. Hồ sơ vừa đủ trong lượt này thì tư vấn luôn,
+# không bắt học sinh nhắn thêm một lần nữa mới thấy kết quả
+class ProfileBranch:
+    def __init__(self, handler: ChatProfileHandler, advice: Branch) -> None:
+        self._handler = handler
         self._advice = advice
 
     async def run(self, state: ChatState, message: str, slm: SlmResult) -> SkillOutput:
-        step = state.current_step if state.current_step in ("B0", "B1", "B2") else "B2"
-        output = await self._skills[STEP_SKILL[step]].run(state, message)
-        # Hồ sơ vừa đủ (skill hỏi hồ sơ chuyển sang B3, không còn câu chờ): tư vấn luôn trong lượt này,
-        # không bắt học sinh nhắn thêm một lần nữa mới thấy kết quả
-        if state.current_step == "B3" and state.question_id is None:
+        was_ready = self._handler.ready(state, REQUIRED_B3)
+        output = await self._handler.collect(state, message, slm)
+        if not was_ready and self._handler.ready(state, REQUIRED_B3):
             return combine(output, await self._advice.run(state, message, slm))
         return output
 
@@ -96,7 +96,7 @@ class LegacyProfileBranch:
 def build_branches(skills: dict[str, SkillHandler]) -> dict[str, Branch]:
     advice = LegacyAdviceBranch(skills)
     return {
-        "mac_dinh": LegacyProfileBranch(skills, advice),
+        "mac_dinh": ProfileBranch(ChatProfileHandler(skills), advice),
         "ho_so": advice,
         "kich_ban": NotReadyBranch(),
         "kien_thuc": SkillBranch(skills["skill_tra_loi"]) if "skill_tra_loi" in skills else NotReadyBranch(),

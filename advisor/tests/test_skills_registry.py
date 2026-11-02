@@ -4,7 +4,7 @@ import inspect
 
 from app.schemas.chat import ChatMessage, ChatRequest, ChatState
 from app.schemas.slm import SlmResult
-from app.services.chat_flow import SkillOutput
+from app.services.chat_flow import SkillOutput, ask
 from app.services.skill_rules import ORDER
 from app.services.skills import build_handlers
 from tests.fakes import flow_with
@@ -40,13 +40,13 @@ async def test_a_skill_in_the_registry_is_run_by_its_branch_in_chat_flow():
             return SkillOutput("skill mới đã chạy")
 
     flow = flow_with({**build_handlers(llm=object(), model="m"), "skill_ho_so": FakeSkill()})
-    req = ChatRequest(
-        messages=[ChatMessage(role="user", content="em được 1420")], state=ChatState(current_step="B2")
-    )
+    state = ChatState(current_step="B2")
+    ask(state, "D2")
+    req = ChatRequest(messages=[ChatMessage(role="user", content="em được 1420")], state=state)
 
     res = await flow.reply(req)
 
-    # SLM đọc là trả lời hồ sơ, đang ở B2 nên nhánh hồ sơ gọi skill_ho_so
+    # SLM đọc là trả lời hồ sơ, câu đang chờ thuộc skill_ho_so nên nhánh hồ sơ gọi skill đó
     assert res.answer == "skill mới đã chạy"
 
 
