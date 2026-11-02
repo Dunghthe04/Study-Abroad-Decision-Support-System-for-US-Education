@@ -1,8 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { ArrowLeftIcon, ArrowRightIcon, ChevronDownIcon, DollarSignIcon, HelpCircleIcon, AlertTriangleIcon } from "lucide-react";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useId, useState } from "react";
+import { ArrowLeftIcon, ArrowRightIcon, ChevronDownIcon, DollarSignIcon, HelpCircleIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,7 +26,11 @@ interface Step4FinancialProps {
 type Currency = "vnd" | "usd";
 
 export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Step4FinancialProps) {
-  const [financialError, setFinancialError] = useState<string | null>(null);
+  // Lỗi của từng câu, hiện ngay dưới câu đó
+  const [budgetError, setBudgetError] = useState<string | null>(null);
+  const [aidError, setAidError] = useState<string | null>(null);
+  const budgetSectionId = useId();
+  const aidSectionId = useId();
   const [currency, setCurrency] = useState<Currency>("vnd");
   const [amountText, setAmountText] = useState("");
   // Tỷ giá mới nhất từ BE, chưa có thì dùng tỷ giá mặc định
@@ -64,7 +67,7 @@ export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Ste
     const usd = cur === "vnd" ? Math.round(value / RATE) : value;
     const tier = tierForUsd(usd);
     if (tier) {
-      setFinancialError(null);
+      setBudgetError(null);
       onUpdate({ annualBudgetTier: tier });
     }
   };
@@ -82,15 +85,17 @@ export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Ste
     });
 
   const handleNextClick = () => {
-    if (!data.annualBudgetTier) {
-      setFinancialError("Vui lòng chọn mức ngân sách mỗi năm trước khi tiếp tục.");
+    const missingBudget = !data.annualBudgetTier;
+    const missingAid = !data.needFinancialAid;
+    setBudgetError(missingBudget ? "Vui lòng chọn mức ngân sách mỗi năm." : null);
+    setAidError(missingAid ? "Vui lòng chọn nhu cầu học bổng của bạn." : null);
+    if (missingBudget || missingAid) {
+      // Cuộn tới câu sai đầu tiên
+      document
+        .getElementById(missingBudget ? budgetSectionId : aidSectionId)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
-    if (!data.needFinancialAid) {
-      setFinancialError("Vui lòng chọn nhu cầu học bổng của bạn trước khi tiếp tục.");
-      return;
-    }
-    setFinancialError(null);
     onNext();
   };
 
@@ -110,7 +115,7 @@ export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Ste
       </div>
 
       {/* Question 1: Annual Budget Tiers */}
-      <section className="space-y-4">
+      <section id={budgetSectionId} className="space-y-4">
         <div>
           <Label className="text-sm font-semibold text-foreground flex items-center gap-1.5">
             <DollarSignIcon className="size-4 text-brand" />
@@ -129,7 +134,7 @@ export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Ste
                 key={tier.key}
                 type="button"
                 onClick={() => {
-                  setFinancialError(null);
+                  setBudgetError(null);
                   setAmountText("");
                   onUpdate({ annualBudgetTier: tier.key });
                 }}
@@ -160,6 +165,7 @@ export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Ste
             );
           })}
         </div>
+        {budgetError && <p className="text-xs font-medium text-destructive">{budgetError}</p>}
 
         {/* Nhập số tiền cụ thể → tự chọn mức tương ứng */}
         <div className="space-y-2.5 rounded-xl bg-ground/50 px-4 py-3.5">
@@ -216,7 +222,7 @@ export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Ste
       </section>
 
       {/* Question 2: Scholarship Need */}
-      <section className="space-y-4 pt-2">
+      <section id={aidSectionId} className="space-y-4 pt-2">
         <div>
           <Label className="text-sm font-semibold text-foreground flex items-center gap-1.5">
             <HelpCircleIcon className="size-4 text-brand" />
@@ -232,7 +238,7 @@ export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Ste
                 key={opt.key}
                 type="button"
                 onClick={() => {
-                  setFinancialError(null);
+                  setAidError(null);
                   onUpdate({ needFinancialAid: opt.key });
                 }}
                 className={cn(
@@ -260,6 +266,7 @@ export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Ste
             );
           })}
         </div>
+        {aidError && <p className="text-xs font-medium text-destructive">{aidError}</p>}
       </section>
 
       {/* Question 3: Funding Source — không bắt buộc, giống câu F3 bên chat */}
@@ -284,17 +291,6 @@ export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Ste
           <ChevronDownIcon className="absolute right-3 top-2.5 size-4 text-muted-foreground pointer-events-none" />
         </div>
       </section>
-
-      {/* Financial Validation Error Notice */}
-      {financialError && (
-        <Alert className="border-destructive/60 bg-destructive/10 animate-in fade-in-50">
-          <AlertTriangleIcon className="size-4 text-destructive" />
-          <AlertTitle className="text-sm font-semibold text-destructive">Thông tin tài chính chưa hoàn tất</AlertTitle>
-          <AlertDescription className="text-xs text-destructive font-medium leading-relaxed">
-            {financialError}
-          </AlertDescription>
-        </Alert>
-      )}
 
       {/* Bottom Actions */}
       <div className="flex justify-between pt-4 border-t border-line">
