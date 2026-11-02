@@ -2,13 +2,13 @@
 
 import pytest
 
-from app.schemas.chat import ChatState, ProfileField, Widget
+from app.schemas.chat import ChatMessage, ChatRequest, ChatState, ProfileField, Widget
 from app.schemas.slm import INTENTS
 from app.services.branches import OUT_OF_SCOPE, NotReadyBranch, SkillBranch, build_branches
 from app.services.chat_flow import NEED_MAJOR, NEED_PROFILE, NOT_READY, QUESTIONS, SkillOutput, ask, go_to
 from app.services.intake import CHAT_BUTTON, FORM_BUTTON, INTAKE_ASK, INTAKE_ID, INTAKE_MORE
 from app.services.skill_rules import REQUIRED_B3, REQUIRED_B4
-from tests.fakes import tin
+from tests.fakes import flow_with, tin
 
 
 class Recording:
@@ -198,3 +198,29 @@ async def test_nothing_new_on_a_ready_profile_does_not_run_the_advice_again():
     await build_branches(skills(ran))["mac_dinh"].run(state, "ok", tin("mac_dinh"))
 
     assert ran == []
+
+
+async def test_the_profile_branch_leaves_the_advice_to_the_advice_intent_of_the_same_message():
+    ran: list[str] = []
+    branches = build_branches(skills(ran, skill_ho_so=Recording("skill_ho_so", ran, moves_to="B3")))
+    state = ChatState(current_step="B2", profile=filled(REQUIRED_B3))
+    ask(state, "X1")
+
+    await branches["mac_dinh"].run(state, "8.5, em nên nộp trường nào", tin("mac_dinh", "ho_so"))
+
+    assert ran == ["skill_ho_so"]  # nhánh tư vấn của ý ho_so sẽ chạy sau, không tư vấn trước ở đây
+
+
+async def test_a_profile_answer_with_an_advice_question_gives_the_advice_once():
+    ran: list[str] = []
+    handlers = skills(ran, skill_ho_so=Recording("skill_ho_so", ran, moves_to="B3"))
+    state = ChatState(current_step="B2", profile=filled(REQUIRED_B3))
+    ask(state, "X1")
+    message = ChatMessage(role="user", content="8.5, em nên nộp trường nào")
+
+    res = await flow_with(handlers, tin("mac_dinh", "ho_so")).reply(
+        ChatRequest(messages=[message], state=state)
+    )
+
+    assert ran == ["skill_ho_so", "skill_danh_gia"]
+    assert res.answer.count("trả lời của skill_danh_gia") == 1

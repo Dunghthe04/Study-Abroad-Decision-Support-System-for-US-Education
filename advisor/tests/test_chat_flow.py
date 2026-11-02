@@ -2,6 +2,7 @@
 Dùng SLM giả và nhánh giả nên không cần Ollama.
 """
 
+import asyncio
 import json
 import logging
 
@@ -500,3 +501,56 @@ async def test_nothing_is_added_when_no_intent_was_postponed():
     assert (
         MORE_QUESTIONS not in res.answer and MORE_QUESTIONS_TEXT not in res.answer and res.quick_replies == []
     )
+
+
+# ---- ý chỉ đọc state chạy song song ----
+class Rendezvous:
+    """Nhánh giả chỉ trả lời khi đủ `size` nhánh cùng đang chạy: chạy lần lượt thì bị chờ mãi và hỏng test."""
+
+    def __init__(self, size: int, delay: float = 0.0) -> None:
+        self.size, self.delay = size, delay
+        self.inside = 0
+        self.all_here = asyncio.Event()
+
+    async def run(self, state, message, slm):
+        self.inside += 1
+        if self.inside >= self.size:
+            self.all_here.set()
+        await asyncio.wait_for(self.all_here.wait(), timeout=1)
+        await asyncio.sleep(self.delay)
+        return SkillOutput(f"trả lời cho {message}")
+
+
+async def test_read_only_intents_run_at_the_same_time():
+    branch = Rendezvous(size=2)
+    slm = tin(("kien_thuc", {}, "I-20 là gì"), ("kien_thuc", {}, "SAT là gì"))
+    flow, _ = make_flow(slm, kien_thuc=branch)
+
+    res = await flow.reply(request("I-20 là gì, SAT là gì"))
+
+    assert res.answer == "trả lời cho I-20 là gì\n\ntrả lời cho SAT là gì"
+
+
+async def test_answers_keep_the_order_of_the_intents_even_when_a_later_one_finishes_first():
+    class Slow:
+        async def run(self, state, message, slm):
+            await asyncio.sleep(0.05 if message == "chậm" else 0)
+            return SkillOutput(message)
+
+    slm = tin(("kien_thuc", {}, "chậm"), ("kien_thuc", {}, "nhanh"), ("trung_tam", {}, "trung tâm"))
+    flow, _ = make_flow(slm, kien_thuc=Slow(), trung_tam=Slow())
+
+    res = await flow.reply(request("chậm, nhanh, trung tâm"))
+
+    assert res.answer == "chậm\n\nnhanh\n\ntrung tâm"
+    assert res.skills == ["kien_thuc", "kien_thuc", "trung_tam"]
+
+
+async def test_intents_that_write_state_still_run_one_after_another_and_before_the_read_only_ones():
+    ran: list[str] = []
+    slm = tin(("mac_dinh", {"gpa": "8.5"}), "kien_thuc", "ho_so")
+    flow, _ = make_flow(slm, ran, mac_dinh=FakeBranch("mac_dinh", ran, writes={"gpa": "8.5"}))
+
+    await flow.reply(request("8.5, I-20 là gì, em nên nộp trường nào", pending="D2"))
+
+    assert ran == ["mac_dinh", "ho_so", "kien_thuc"]  # kien_thuc đọc sau khi hồ sơ và tư vấn đã xong

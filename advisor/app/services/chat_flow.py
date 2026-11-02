@@ -8,6 +8,7 @@ Các nhánh nằm ở branches.py (main.py tạo rồi truyền vào ChatFlow).
 """
 
 import json
+import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
@@ -84,6 +85,9 @@ OPENING_QUESTIONS = {"B0.1", "B0.2"}
 MORE_QUESTIONS = "Bạn còn hỏi thêm vài việc nữa, bạn bấm ý nào mình trả lời ý đó nhé:"
 MORE_QUESTIONS_TEXT = "Bạn còn hỏi thêm vài việc nữa, hỏi lại giúp mình sau nhé:"
 BUTTON_LABEL_CHARS = 60
+# Loại ý chỉ ĐỌC state (kien_thuc, trung_tam chỉ đọc study_level), nên nhiều ý cùng loại này chạy song song được.
+# Loại khác (mac_dinh, ho_so...) ghi state nên vẫn chạy lần lượt. Thêm loại vào đây chỉ khi nhánh đó không ghi state
+PARALLEL_SAFE = {"kien_thuc", "trung_tam"}
 # Ý mac_dinh thay thế khi SLM không tách ý hồ sơ nhưng tin vẫn có giá trị hồ sơ (nằm trong ý khác)
 PROFILE_ONLY = SlmY(type="mac_dinh", doan="thông tin hồ sơ")
 
@@ -247,25 +251,40 @@ class ChatFlow:
 
     # Mỗi ý chạy nhánh của loại nó. Ý mac_dinh chạy TRƯỚC để các ý khác thấy hồ sơ mới, nhưng câu trả lời của nó
     # đặt CUỐI để tin nhắn kết thúc bằng câu hồ sơ kế tiếp (hoặc lời xác nhận). Ý quá trần đã nằm ngoài cac_y
+    # Mỗi ý chạy nhánh của loại nó. Ý mac_dinh chạy TRƯỚC để các ý khác thấy hồ sơ mới, nhưng câu trả lời của nó
+    # đặt CUỐI để tin nhắn kết thúc bằng câu hồ sơ kế tiếp (hoặc lời xác nhận). Ý quá trần đã nằm ngoài cac_y.
+    # Các ý chỉ đọc state (PARALLEL_SAFE) chạy song song cho nhanh; câu trả lời vẫn ghép đúng thứ tự các ý
     async def _run_intents(
         self, state: ChatState, message: str, slm: SlmTinResult
     ) -> tuple[list[str], SkillOutput]:
-        names: list[str] = []
+        intents = intents_to_run(slm)
+        results: dict[int, SkillOutput] = {}
+        # Ý ghi state chạy lần lượt theo thứ tự (mac_dinh đứng đầu)
+        for i, y in enumerate(intents):
+            if y.type not in PARALLEL_SAFE:
+                results[i] = await self._run_one(state, message, slm, y)
+        # Ý chỉ đọc state chạy cùng lúc, sau khi hồ sơ đã được ghi xong
+        parallel = [i for i, y in enumerate(intents) if y.type in PARALLEL_SAFE]
+        answers = await asyncio.gather(*(self._run_one(state, message, slm, intents[i]) for i in parallel))
+        results.update(zip(parallel, answers, strict=True))
+
         output = SkillOutput("")
         profile_output: SkillOutput | None = None
-        for y in intents_to_run(slm):
-            names.append(y.type)
-            # Ý khác nhận đoạn chữ của ý (nhánh kiến thức nhờ đó tìm kho bằng đúng câu hỏi), ý hồ sơ nhận cả tin
-            result = await self._branches[y.type].run(
-                state, message if y.type == "mac_dinh" else y.doan, view_of(slm, y)
-            )
+        for i, y in enumerate(intents):
             if y.type == "mac_dinh":
-                profile_output = result
+                profile_output = results[i]
             else:
-                output = combine(output, result)
+                output = combine(output, results[i])
         if profile_output is not None:
             output = combine(output, profile_output)
-        return names, output
+        return [y.type for y in intents], output
+
+    # Chạy nhánh của một ý. Ý khác nhận đoạn chữ của ý (nhánh kiến thức nhờ đó tìm kho bằng đúng câu hỏi),
+    # ý hồ sơ nhận cả tin
+    async def _run_one(self, state: ChatState, message: str, slm: SlmTinResult, y: SlmY) -> SkillOutput:
+        return await self._branches[y.type].run(
+            state, message if y.type == "mac_dinh" else y.doan, view_of(slm, y)
+        )
 
     @staticmethod
     def _response(
