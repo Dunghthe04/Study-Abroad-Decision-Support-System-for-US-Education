@@ -507,7 +507,8 @@ export function ProfileFlowWizard() {
         </div>
       </div>
 
-      {errorMessage && (
+      {/* Lỗi khi gửi hồ sơ hiện ở bước 6, cạnh thẻ của từng bước */}
+      {errorMessage && currentStep !== 6 && (
         <Alert variant="destructive" className="mb-6">
           <AlertCircleIcon className="size-4" />
           <AlertTitle>Không thể lưu hồ sơ</AlertTitle>
@@ -583,6 +584,7 @@ export function ProfileFlowWizard() {
                 onPrev={handlePrev}
                 onSubmit={handleSubmitCommit}
                 isSubmitting={isSubmitting}
+                submitError={errorMessage}
               />
             )}
           </div>
