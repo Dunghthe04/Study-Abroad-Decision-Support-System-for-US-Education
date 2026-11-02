@@ -17,11 +17,9 @@ from typing import Any
 
 from app.schemas.slm import SLM_TIN_SCHEMA
 from app.services.skill_call import SKILLS_DIR, load_skill
-from app.services.slm_classifier import build_messages
+from app.services.slm_classifier import PROMPT_PATH, build_messages
 from scripts.build_slm_jsonl import DEFAULT_OUT, profile_text
 
-# Prompt của hợp đồng danh sách ý. OllamaSlm vẫn dùng slm_phan_loai.md cho đến khi bộ phân loại được đổi sang cac_y
-PROMPT_PATH = SKILLS_DIR / "slm_phan_loai_cac_y.md"
 SKILL_PROMPT_PATH = SKILLS_DIR / "slm_sinh_skill_ho_so.md"
 SKILL_REPEAT = 3  # mỗi skill train xuất 3 lần, để model nhỏ học được khuôn dài từ ít mẫu
 SKILL_HOLDOUT_EVERY = 8  # cứ 8 skill train giữ lại 1 để kiểm skill, không đem đi train

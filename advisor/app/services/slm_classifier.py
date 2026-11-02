@@ -117,8 +117,8 @@ def label_confidence(content: str, logprobs: list[dict[str, Any]]) -> float:
 
 # Định dạng đầu ra gửi cho Ollama theo settings.slm_format.
 # "json": model đã fine-tune tự viết đúng khuôn theo thứ tự đã học (type trước). Ép schema thì Ollama đổi thứ tự khóa
-# theo bảng chữ cái (nhan_phu, thuc_the, type), lệch với lúc train nên sai nhiều (đo val: 70,8% so với 90,8%).
-# "schema": ép theo SLM_SCHEMA, cho model chưa fine-tune vì nó không tự biết khuôn
+# theo bảng chữ cái (doan, thuc_the, type), lệch với lúc train nên sai nhiều (đo ở bản cũ: 70,8% so với 90,8%).
+# "schema": ép theo SLM_TIN_SCHEMA, cho model chưa fine-tune vì nó không tự biết khuôn
 def output_format(name: str) -> dict[str, Any] | str:
     if name == "json":
         return "json"
