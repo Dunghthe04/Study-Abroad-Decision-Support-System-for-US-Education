@@ -1,12 +1,12 @@
 """Các nhánh xử lý tin nhắn theo loại câu hỏi SLM (kiến trúc mới: không còn chuỗi bước B0 đến B6).
 
-SLM phân loại mỗi tin vào một trong 6 loại, mỗi loại là một nhánh. ChatFlow chỉ gọi nhánh của nhãn chính,
-rồi nhánh của nhãn phụ nếu có. Nhánh nào chưa làm xong thì tạm dùng skill cũ bên trong (lớp tên Legacy...);
+SLM tách mỗi tin thành các ý, mỗi ý thuộc một trong 6 loại, mỗi loại là một nhánh. ChatFlow gọi nhánh của
+từng ý. Nhánh nào chưa làm xong thì tạm dùng skill cũ bên trong (lớp tên Legacy...);
 làm xong thì thay lớp đó trong build_branches, không phải sửa ChatFlow.
 """
 
 from app.schemas.chat import ChatState
-from app.schemas.slm import SlmResult
+from app.schemas.slm import SlmTinResult
 from app.services.chat_flow import (
     NEED_PROFILE,
     NOT_READY,
@@ -27,13 +27,13 @@ class SkillBranch:
     def __init__(self, skill: SkillHandler) -> None:
         self._skill = skill
 
-    async def run(self, state: ChatState, message: str, slm: SlmResult) -> SkillOutput:
+    async def run(self, state: ChatState, message: str, slm: SlmTinResult) -> SkillOutput:
         return await self._skill.run(state, message)
 
 
 # Nhánh chưa làm: báo đang hoàn thiện (kịch bản; kiến thức khi chưa có DB; trung tâm khi chưa có backend)
 class NotReadyBranch:
-    async def run(self, state: ChatState, message: str, slm: SlmResult) -> SkillOutput:
+    async def run(self, state: ChatState, message: str, slm: SlmTinResult) -> SkillOutput:
         return SkillOutput(NOT_READY)
 
 
@@ -49,8 +49,8 @@ OUT_OF_SCOPE = {
 
 # Ngoài phạm vi: trả câu cố định. Câu hồ sơ đang chờ (nếu có) do ChatFlow nhắc lại như mọi câu hỏi xen ngang
 class OutOfScopeBranch:
-    async def run(self, state: ChatState, message: str, slm: SlmResult) -> SkillOutput:
-        kind = slm.thuc_the.get("loai_con", "mo_ho")
+    async def run(self, state: ChatState, message: str, slm: SlmTinResult) -> SkillOutput:
+        kind = slm.cac_y[0].thuc_the.get("loai_con", "mo_ho")
         return SkillOutput(OUT_OF_SCOPE.get(kind, OUT_OF_SCOPE["mo_ho"]))
 
 
@@ -60,10 +60,10 @@ class LegacyAdviceBranch:
     def __init__(self, skills: dict[str, SkillHandler]) -> None:
         self._skills = skills
 
-    async def run(self, state: ChatState, message: str, slm: SlmResult) -> SkillOutput:
+    async def run(self, state: ChatState, message: str, slm: SlmTinResult) -> SkillOutput:
         if not state.has_results:
             name = "skill_danh_gia"
-        elif slm.thuc_the.get("truong"):
+        elif slm.cac_y[0].thuc_the.get("truong"):
             name = "skill_explain"
         else:
             name = "skill_lo_trinh"
@@ -78,16 +78,17 @@ class LegacyAdviceBranch:
 
 
 # Trả lời câu hồ sơ đang chờ hoặc cập nhật hồ sơ. Hồ sơ vừa đủ trong lượt này thì tư vấn luôn,
-# không bắt học sinh nhắn thêm một lần nữa mới thấy kết quả
+# không bắt học sinh nhắn thêm một lần nữa mới thấy kết quả.
+# Tin đã có ý ho_so thì thôi: ChatFlow sẽ chạy nhánh tư vấn cho ý đó ngay sau, tư vấn ở đây nữa là trả lời hai lần
 class ProfileBranch:
     def __init__(self, handler: ChatProfileHandler, advice: Branch) -> None:
         self._handler = handler
         self._advice = advice
 
-    async def run(self, state: ChatState, message: str, slm: SlmResult) -> SkillOutput:
+    async def run(self, state: ChatState, message: str, slm: SlmTinResult) -> SkillOutput:
         was_ready = self._handler.ready(state, REQUIRED_B3)
         output = await self._handler.collect(state, message, slm)
-        if not was_ready and self._handler.ready(state, REQUIRED_B3):
+        if not was_ready and self._handler.ready(state, REQUIRED_B3) and "ho_so" not in slm.types():
             return combine(output, await self._advice.run(state, message, slm))
         return output
 

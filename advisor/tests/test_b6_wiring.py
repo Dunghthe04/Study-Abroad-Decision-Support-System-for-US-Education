@@ -2,11 +2,10 @@
 
 from app.core.config import Settings
 from app.schemas.chat import ChatMessage, ChatRequest, ChatState
-from app.schemas.slm import SlmResult
 from app.services.chat_flow import BACK_TO_QUESTION, QUESTIONS, SkillOutput, ask
 from app.services.skills import build_handlers
 from app.services.skills.skill_chuyen_trung_tam import ChuyenTrungTamHandler
-from tests.fakes import flow_with
+from tests.fakes import flow_with, tin
 
 CENTER_ANSWER = "Dưới đây là một số trung tâm đã xác minh có hỗ trợ sửa bài luận: ..."
 
@@ -33,7 +32,7 @@ async def test_asking_for_a_center_while_answering_the_profile_repeats_the_pendi
     ask(state, "D2")  # đang chờ học sinh trả lời GPA
     flow = flow_with(
         {"skill_chuyen_trung_tam": CenterSkill()},
-        SlmResult(type="trung_tam", thuc_the={"dich_vu": "SUA_BAI_LUAN"}),
+        tin(("trung_tam", {"dich_vu": "SUA_BAI_LUAN"})),
     )
 
     res = await flow.reply(

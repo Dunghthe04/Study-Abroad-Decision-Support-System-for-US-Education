@@ -4,9 +4,9 @@ from fastapi.testclient import TestClient
 
 from app.api.deps import get_chat_flow
 from app.main import create_app
-from app.schemas.slm import SlmResult
 from app.services.chat_flow import QUESTIONS, ChatFlow, SkillOutput
 from app.services.slm_contract import FixedSlm
+from tests.fakes import tin
 
 
 class SilentBranch:
@@ -19,7 +19,7 @@ class SilentBranch:
 def make_client() -> TestClient:
     # Không dùng "with" nên không chạy lifespan, không cần Ollama, Gemini
     app = create_app()
-    flow = ChatFlow(FixedSlm(SlmResult(type="kien_thuc")), {"kien_thuc": SilentBranch()})
+    flow = ChatFlow(FixedSlm(tin("kien_thuc")), {"kien_thuc": SilentBranch()})
     app.dependency_overrides[get_chat_flow] = lambda: flow
     return TestClient(app)
 

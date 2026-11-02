@@ -1,11 +1,13 @@
 """
 Điều phối luồng chat theo kiến trúc mới: SLM đọc tin nhắn, chạy nhánh theo loại câu hỏi, trả câu trả lời và trạng thái.
 Vòng xử lý một tin nhắn:
-1. SLM phân loại (nhãn chính, nhãn phụ, thực thể) -> 2. chọn nhánh -> 3. chạy từng nhánh, ghép câu trả lời
--> 4. nhắc lại câu hồ sơ đang chờ nếu chưa được trả lời -> 5. ghi log, trả kết quả.
+1. SLM tách tin thành danh sách ý -> 2. mỗi ý chạy nhánh theo loại của nó (ý mac_dinh chạy trước), ghép câu trả lời
+-> 3. ý quá trần trả lời ngay thì hoãn thành nút bấm -> 4. nhắc lại câu hồ sơ đang chờ nếu chưa được trả lời
+-> 5. ghi log, trả kết quả.
 Các nhánh nằm ở branches.py (main.py tạo rồi truyền vào ChatFlow).
 """
 
+import asyncio
 import json
 import logging
 import time
@@ -22,7 +24,7 @@ from app.schemas.chat import (
     Step,
     Widget,
 )
-from app.schemas.slm import SlmResult
+from app.schemas.slm import SlmTinResult, SlmY
 from app.services.intake import (
     CHAT_BUTTON,
     CONTINUE_CHAT,
@@ -79,6 +81,15 @@ NEED_PROFILE = (
 NEED_MAJOR = "Để gợi ý trường mình cần biết ngành bạn muốn học. Bạn chọn ngành giúp mình nhé."
 BACK_TO_QUESTION = "Quay lại câu mình đang hỏi nhé: "
 OPENING_QUESTIONS = {"B0.1", "B0.2"}
+# Ý của tin vượt số trả lời ngay: hiện thành nút để học sinh bấm hỏi tiếp (hoặc chỉ liệt kê khi đang có nút hoặc ô khác)
+MORE_QUESTIONS = "Bạn còn hỏi thêm vài việc nữa, bạn bấm ý nào mình trả lời ý đó nhé:"
+MORE_QUESTIONS_TEXT = "Bạn còn hỏi thêm vài việc nữa, hỏi lại giúp mình sau nhé:"
+BUTTON_LABEL_CHARS = 60
+# Loại ý chỉ ĐỌC state (kien_thuc, trung_tam chỉ đọc study_level), nên nhiều ý cùng loại này chạy song song được.
+# Loại khác (mac_dinh, ho_so...) ghi state nên vẫn chạy lần lượt. Thêm loại vào đây chỉ khi nhánh đó không ghi state
+PARALLEL_SAFE = {"kien_thuc", "trung_tam"}
+# Ý mac_dinh thay thế khi SLM không tách ý hồ sơ nhưng tin vẫn có giá trị hồ sơ (nằm trong ý khác)
+PROFILE_ONLY = SlmY(type="mac_dinh", doan="thông tin hồ sơ")
 
 
 # Ghi lại câu vừa hỏi vào Chatsate, lưu last_question, question_id và tăng số lần hỏi
@@ -117,9 +128,11 @@ class SkillHandler(Protocol):
     async def run(self, state: ChatState, message: str) -> SkillOutput: ...
 
 
-# Hợp đồng chung của mọi nhánh (branches.py): như SkillHandler nhưng nhận thêm kết quả SLM (thực thể, nhãn phụ...)
+# Hợp đồng chung của mọi nhánh (branches.py): như SkillHandler nhưng nhận thêm kết quả SLM.
+# message và slm là phần dành cho nhánh này: nhánh hồ sơ nhận cả tin (gom giá trị hồ sơ của mọi ý),
+# nhánh khác nhận đoạn chữ và kết quả của đúng một ý (slm.cac_y chỉ có ý đó)
 class Branch(Protocol):
-    async def run(self, state: ChatState, message: str, slm: SlmResult) -> SkillOutput: ...
+    async def run(self, state: ChatState, message: str, slm: SlmTinResult) -> SkillOutput: ...
 
 
 # Ghép câu trả lời của 2 phần chạy liền nhau: nối chữ, lấy nút / công cụ / action của phần sau nếu có
@@ -135,13 +148,33 @@ def combine(first: SkillOutput, second: SkillOutput) -> SkillOutput:
     )
 
 
-# Nhánh chạy cho một tin: nhãn chính, nhãn phụ, rồi nhánh hồ sơ cuối cùng nếu tin có kèm giá trị hồ sơ
-# (vd "8.5 ạ, mà I-20 là gì": trả lời kiến thức trước, ghi GPA và hỏi câu hồ sơ kế tiếp sau)
-def branches_to_run(slm: SlmResult) -> list[str]:
-    names = [slm.type, *([slm.nhan_phu] if slm.nhan_phu else [])]
-    if slm.touches_profile() and "mac_dinh" not in names:
-        names.append("mac_dinh")
-    return names
+# Các ý chạy cho một tin, ý mac_dinh đứng đầu để hồ sơ được ghi trước khi các ý khác chạy.
+# SLM không tách ý hồ sơ mà tin vẫn có giá trị hồ sơ (nằm trong ý khác) thì thêm một ý mac_dinh
+def intents_to_run(slm: SlmTinResult) -> list[SlmY]:
+    if slm.touches_profile() and "mac_dinh" not in slm.types():
+        return [PROFILE_ONLY, *slm.cac_y]
+    return list(slm.cac_y)
+
+
+# Phần kết quả SLM giao cho nhánh của một ý: nhánh hồ sơ cần cả tin, nhánh khác chỉ cần ý của nó
+def view_of(slm: SlmTinResult, y: SlmY) -> SlmTinResult:
+    return slm if y.type == "mac_dinh" else slm.model_copy(update={"cac_y": [y], "con_lai": []})
+
+
+# Nhãn nút: cắt bớt câu quá dài, giá trị gửi đi vẫn là nguyên câu
+def short(text: str) -> str:
+    return text if len(text) <= BUTTON_LABEL_CHARS else text[: BUTTON_LABEL_CHARS - 1].rstrip() + "…"
+
+
+# Ý hoãn lại: nút bấm để hỏi tiếp. as_text: đang có nút hoặc ô khác (hoặc câu hồ sơ chờ trả lời) thì chỉ liệt kê
+def postponed(output: SkillOutput, left: list[SlmY], as_text: bool) -> SkillOutput:
+    if not left:
+        return output
+    if as_text:
+        listing = "\n".join(f"- {y.doan}" for y in left)
+        return combine(output, SkillOutput(f"{MORE_QUESTIONS_TEXT}\n{listing}"))
+    buttons = [QuickReply(label=short(y.doan), value=y.doan) for y in left]
+    return combine(output, SkillOutput(MORE_QUESTIONS, quick_replies=buttons))
 
 
 class ChatFlow:
@@ -188,25 +221,26 @@ class ChatFlow:
         pending = (state.question_id, state.last_question)
         # 1. SLM đọc tin nhắn. Bấm nút của câu đang hỏi là trả lời hồ sơ rõ ràng, không cần SLM đoán
         if state.question_id and is_button(state.question_id, message):
-            slm = SlmResult(type="mac_dinh")
+            slm = SlmTinResult(cac_y=[SlmY(type="mac_dinh", doan=message)])
         else:
             slm = await self._slm.classify(state, message)
 
-        # 2-3. Chạy từng nhánh theo thứ tự, ghép câu trả lời
-        names = branches_to_run(slm)
-        output = SkillOutput("")
-        for name in names:
-            output = combine(output, await self._branches[name].run(state, message, slm))
+        # 2. Chạy từng ý theo thứ tự, ghép câu trả lời
+        names, output = await self._run_intents(state, message, slm)
 
-        # 4. Học sinh hỏi xen ngang lúc đang hỏi hồ sơ (câu đang chờ chưa được trả lời): nhắc lại câu đang chờ.
+        # 3-4. Học sinh hỏi xen ngang lúc đang hỏi hồ sơ (câu đang chờ chưa được trả lời): nhắc lại câu đang chờ.
         # Không nhắc khi nhánh hồ sơ đã chạy (nó tự hỏi câu kế tiếp) hoặc khi câu đang chờ là câu chào mở đầu
-        if (
+        remind = bool(
             pending[0]
             and pending[0] not in OPENING_QUESTIONS
             and "mac_dinh" not in names
             and (state.question_id, state.last_question) == pending
-        ):
+        )
+        # Ý hoãn lại hiện trước câu nhắc, để câu cuối cùng học sinh thấy vẫn là câu đang chờ
+        output = postponed(output, slm.con_lai, as_text=bool(output.quick_replies or output.widget or remind))
+        if remind:
             output = combine(output, SkillOutput(BACK_TO_QUESTION + pending[1]))
+
         # Lượt đầu mà chưa nhánh nào trả lời được: chào như cũ thay vì "đang hoàn thiện"
         if not output.answer:
             output.answer = QUESTIONS["B0.1"] if first_turn else NOT_READY
@@ -214,6 +248,43 @@ class ChatFlow:
         # 5. Ghi log (dữ liệu để gán nhãn thêm và kiểm tra ngẫu nhiên)
         log_turn(state, message, slm, names, (time.perf_counter() - started) * 1000, req.session_id)
         return self._response(state, output, names, profile_before)
+
+    # Mỗi ý chạy nhánh của loại nó. Ý mac_dinh chạy TRƯỚC để các ý khác thấy hồ sơ mới, nhưng câu trả lời của nó
+    # đặt CUỐI để tin nhắn kết thúc bằng câu hồ sơ kế tiếp (hoặc lời xác nhận). Ý quá trần đã nằm ngoài cac_y
+    # Mỗi ý chạy nhánh của loại nó. Ý mac_dinh chạy TRƯỚC để các ý khác thấy hồ sơ mới, nhưng câu trả lời của nó
+    # đặt CUỐI để tin nhắn kết thúc bằng câu hồ sơ kế tiếp (hoặc lời xác nhận). Ý quá trần đã nằm ngoài cac_y.
+    # Các ý chỉ đọc state (PARALLEL_SAFE) chạy song song cho nhanh; câu trả lời vẫn ghép đúng thứ tự các ý
+    async def _run_intents(
+        self, state: ChatState, message: str, slm: SlmTinResult
+    ) -> tuple[list[str], SkillOutput]:
+        intents = intents_to_run(slm)
+        results: dict[int, SkillOutput] = {}
+        # Ý ghi state chạy lần lượt theo thứ tự (mac_dinh đứng đầu)
+        for i, y in enumerate(intents):
+            if y.type not in PARALLEL_SAFE:
+                results[i] = await self._run_one(state, message, slm, y)
+        # Ý chỉ đọc state chạy cùng lúc, sau khi hồ sơ đã được ghi xong
+        parallel = [i for i, y in enumerate(intents) if y.type in PARALLEL_SAFE]
+        answers = await asyncio.gather(*(self._run_one(state, message, slm, intents[i]) for i in parallel))
+        results.update(zip(parallel, answers, strict=True))
+
+        output = SkillOutput("")
+        profile_output: SkillOutput | None = None
+        for i, y in enumerate(intents):
+            if y.type == "mac_dinh":
+                profile_output = results[i]
+            else:
+                output = combine(output, results[i])
+        if profile_output is not None:
+            output = combine(output, profile_output)
+        return [y.type for y in intents], output
+
+    # Chạy nhánh của một ý. Ý khác nhận đoạn chữ của ý (nhánh kiến thức nhờ đó tìm kho bằng đúng câu hỏi),
+    # ý hồ sơ nhận cả tin
+    async def _run_one(self, state: ChatState, message: str, slm: SlmTinResult, y: SlmY) -> SkillOutput:
+        return await self._branches[y.type].run(
+            state, message if y.type == "mac_dinh" else y.doan, view_of(slm, y)
+        )
 
     @staticmethod
     def _response(
@@ -298,7 +369,7 @@ def ask_next_missing(state: ChatState, prefix: str = "") -> SkillOutput:
 def log_turn(
     state: ChatState,
     message: str,
-    slm: SlmResult | None,
+    slm: SlmTinResult | None,
     ran: list[str],
     ms: float,
     session_id: str | None = None,
@@ -311,9 +382,9 @@ def log_turn(
                 "step": state.current_step,
                 "last_question": state.last_question,
                 "message": mask_personal_info(message),
-                "slm_type": slm.type if slm else None,
-                "slm_nhan_phu": slm.nhan_phu if slm else None,
-                "slm_thuc_the": sorted(slm.thuc_the) if slm else [],
+                "slm_types": slm.types() if slm else [],
+                "slm_con_lai": len(slm.con_lai) if slm else 0,
+                "slm_thuc_the": sorted({key for y in slm.cac_y for key in y.thuc_the}) if slm else [],
                 "slm_confidence": round(slm.confidence, 3) if slm else None,
                 "ran": ran,
                 "ms": round(ms),

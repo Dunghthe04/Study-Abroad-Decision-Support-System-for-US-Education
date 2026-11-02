@@ -1,8 +1,12 @@
-"""Hợp đồng đầu ra của SLM (Qwen3 4B) ở lần gọi 1: phân loại câu hỏi và tách thông tin.
+"""Hợp đồng đầu ra của SLM (Qwen3 4B): lần gọi 1 tách tin thành danh sách ý, lần gọi 2 sinh skill cá nhân hóa.
 
-Đây là chỗ nối giữa hai phần: bộ phân loại (Dũng) tạo ra SlmResult; handler hồ sơ (Việt) và các nhánh còn lại đọc nó.
-Khuôn này trùng với cột đầu ra trong data/slm/du_lieu_slm.xlsx (type = tên sheet, nhan_phu, thuc_the).
+Đây là chỗ nối giữa hai phần: bộ phân loại (Dũng) tạo ra SlmTinResult; handler hồ sơ (Việt) và các nhánh còn lại đọc nó.
+Khuôn một ý trùng với phần tử của cột cac_y trong data/slm/du_lieu_slm.xlsx (type, doan, thuc_the).
 Sửa file này thì báo người kia trước, và sửa dữ liệu cho khớp.
+
+CÒN SÓT TỪ KIỂU CŨ (một nhãn chính, một nhãn phụ): PRIORITY, SecondaryIntent, secondaries, check_labels, SlmRead, SlmResult.
+Không còn bộ phân loại nào trả SlmResult. Chỉ còn profile_handler.py và test_profile_handler.py của Việt import SlmResult.
+Việt đổi hai file đó sang SlmTinResult rồi xóa các thứ trên (kèm tham số sub của check_entities).
 """
 
 import hashlib
@@ -102,7 +106,7 @@ def check_entities(intent: str, sub: str | None, entities: dict[str, Any]) -> No
                 raise ValueError("mỗi thay_doi cần yeu_to và gia_tri hoặc hanh_dong")
 
 
-# Định nghĩa cấu trúc dữ liệu mà SLM cần trả về, ép theo SLM_SCHEMA
+# CŨ (một nhãn chính, một nhãn phụ): kết quả SLM kiểu cũ. Không còn bộ phân loại nào trả lớp này, chờ Việt đổi sang SlmTinResult rồi xóa
 class SlmRead(BaseModel):
     type: Intent
     # Ý thứ hai khi tin có hai câu hỏi (vd đánh giá hồ sơ rồi hỏi visa), theo PRIORITY. Thường là None
@@ -349,32 +353,6 @@ _ENTITY_SCHEMA = {
 # Khóa bắt buộc theo loại, khớp với check_entities
 _REQUIRED_KEYS = {"kich_ban": ["che_do"], "ngoai_pham_vi": ["loai_con"]}
 
-
-# Khuôn cho một cặp (nhãn chính, nhãn phụ): thuc_the chỉ có khóa của hai loại đó cộng khóa hồ sơ
-def _branch(intent: str, sub: str | None) -> dict[str, Any]:
-    keys = ENTITY_KEYS[intent] | ENTITY_KEYS.get(sub or "", set())
-    return {
-        "type": "object",
-        "required": ["type", "nhan_phu", "thuc_the"],
-        "properties": {
-            "type": {"const": intent},
-            "nhan_phu": {"const": sub},
-            "thuc_the": {
-                "type": "object",
-                "additionalProperties": False,
-                "required": _REQUIRED_KEYS.get(intent, []),
-                "properties": {
-                    **dict.fromkeys(PROFILE_KEYS, _TEXT),
-                    **{key: _ENTITY_SCHEMA[key] for key in sorted(keys)},
-                },
-            },
-        },
-    }
-
-
-# Khuôn JSON ép SLM khi sinh (truyền cho Ollama qua tham số format). Mỗi cặp (nhãn chính, nhãn phụ) hợp lệ là một
-# nhánh của anyOf: model chọn type nào thì chỉ sinh được nhãn phụ và khóa của nhánh đó. SlmRead vẫn kiểm lại sau
-SLM_SCHEMA = {"anyOf": [_branch(intent, sub) for intent in INTENTS for sub in (None, *secondaries(intent))]}
 
 # Số ý tối đa SLM được sinh trong một tin: mac_dinh (1) + ý trả lời ngay + ý hoãn lại
 MAX_RAW_Y = 1 + MAX_Y + MAX_HOAN
