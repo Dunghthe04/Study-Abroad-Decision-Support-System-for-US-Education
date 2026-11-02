@@ -7,8 +7,6 @@ public class UniversityOffering : BaseEntity
 {
     public Guid UniversityId { get; set; }
     public string StudyLevel { get; set; } = string.Empty;
-    public List<string> Majors { get; set; } = [];
-    public List<string> StemMajors { get; set; } = [];
     /// <summary>năm học của số liệu chi phí, ví dụ 2026-27</summary>
     public string? AcademicYear { get; set; }
     public decimal? TuitionUsd { get; set; }
@@ -25,6 +23,16 @@ public class UniversityOffering : BaseEntity
     public int? Sat25 { get; set; }
     /// <summary>Tổng SAT mốc 75% của sinh viên trúng tuyển (400–1600). Từ mốc này trở lên → Safety.</summary>
     public int? Sat75 { get; set; }
+    /// <summary>ACT composite mốc 25% của sinh viên trúng tuyển (1–36, CDS C9).</summary>
+    public int? Act25 { get; set; }
+    /// <summary>ACT composite mốc 75% của sinh viên trúng tuyển (1–36, CDS C9).</summary>
+    public int? Act75 { get; set; }
+    /// <summary>Số hồ sơ nộp và số hồ sơ đỗ, tất cả thí sinh (CDS C1).</summary>
+    public int? ApplicantsTotal { get; set; }
+    public int? AdmittedTotal { get; set; }
+    /// <summary>Số hồ sơ nộp và số hồ sơ đỗ của du học sinh (CDS C1).</summary>
+    public int? IntlApplicants { get; set; }
+    public int? IntlAdmitted { get; set; }
     /// <summary>required | optional | not_accepted</summary>
     public string? SatPolicy { get; set; }
     /// <summary>danh sách vòng nộp và ngày: ED, EA, RD, Spring...</summary>
@@ -42,6 +50,8 @@ public class UniversityOffering : BaseEntity
     public string? C7EcImportance { get; set; }
     /// <summary>Tỉ lệ sinh viên trúng tuyển có nộp SAT (CDS C9). Dưới 0,5 thì L của SAT × 0,5.</summary>
     public decimal? SatSubmitPct { get; set; }
+    /// <summary>Tỉ lệ sinh viên trúng tuyển có nộp GPA (CDS C11).</summary>
+    public decimal? GpaSubmitPct { get; set; }
     /// <summary>Phân phối GPA sinh viên trúng tuyển (CDS C11): tỉ lệ trong từng khoảng.</summary>
     public decimal? GpaPct40 { get; set; }
     public decimal? GpaPct375To399 { get; set; }
@@ -54,6 +64,8 @@ public class UniversityOffering : BaseEntity
     public string? IntlAidPolicy { get; set; }
     /// <summary>Học bổng trung bình mỗi du học sinh nhận (USD/năm, CDS H6). Dùng tính H ở tầng 3.</summary>
     public decimal? IntlAidAvgUsd { get; set; }
+    /// <summary>Số du học sinh nhận học bổng (CDS H6).</summary>
+    public int? IntlAidRecipients { get; set; }
     /// <summary>Tỉ lệ giữ chân năm hai (CDS B22 / College Scorecard RET_FT4). Dùng tính Q ở tầng 3.</summary>
     public decimal? RetentionRate1Yr { get; set; }
     /// <summary>Tỉ lệ tốt nghiệp trong 6 năm (CDS B / College Scorecard C150_4). Dùng tính Q ở tầng 3.</summary>

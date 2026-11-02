@@ -1261,6 +1261,46 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.ToTable("lead_messages", "app");
                 });
 
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.Major", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("CipCode")
+                        .HasMaxLength(7)
+                        .HasColumnType("character varying(7)")
+                        .HasColumnName("cip_code");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("name");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_majors");
+
+                    b.HasIndex("CipCode")
+                        .IsUnique()
+                        .HasDatabaseName("ix_majors_cip_code");
+
+                    b.HasIndex("Name")
+                        .IsUnique()
+                        .HasDatabaseName("ix_majors_name");
+
+                    b.ToTable("majors", "app");
+                });
+
             modelBuilder.Entity("StudyAbroad.Domain.Entities.Notification", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1758,6 +1798,55 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("ck_profile_certifications_other_name", "test_type <> 'other' OR custom_name IS NOT NULL");
                         });
+                });
+
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.RankingList", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(48)
+                        .HasColumnType("character varying(48)")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Edition")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("edition");
+
+                    b.Property<int?>("EditionYear")
+                        .HasColumnType("integer")
+                        .HasColumnName("edition_year");
+
+                    b.Property<string>("ListGroup")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("list_group");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("Publisher")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("publisher");
+
+                    b.Property<string>("RankType")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("rank_type");
+
+                    b.Property<string>("Url")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("url");
+
+                    b.HasKey("Id")
+                        .HasName("pk_ranking_lists");
+
+                    b.ToTable("ranking_lists", "app");
                 });
 
             modelBuilder.Entity("StudyAbroad.Domain.Entities.Recommendation", b =>
@@ -2716,6 +2805,10 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_active");
 
+                    b.Property<bool>("IsIvy")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_ivy");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(256)
@@ -2760,6 +2853,22 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")
                         .HasColumnName("academic_year");
+
+                    b.Property<int?>("Act25")
+                        .HasColumnType("integer")
+                        .HasColumnName("act25");
+
+                    b.Property<int?>("Act75")
+                        .HasColumnType("integer")
+                        .HasColumnName("act75");
+
+                    b.Property<int?>("AdmittedTotal")
+                        .HasColumnType("integer")
+                        .HasColumnName("admitted_total");
+
+                    b.Property<int?>("ApplicantsTotal")
+                        .HasColumnType("integer")
+                        .HasColumnName("applicants_total");
 
                     b.Property<decimal?>("AvgGpa4")
                         .HasPrecision(3, 2)
@@ -2829,6 +2938,11 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("numeric(5,4)")
                         .HasColumnName("gpa_pct_below_250");
 
+                    b.Property<decimal?>("GpaSubmitPct")
+                        .HasPrecision(5, 4)
+                        .HasColumnType("numeric(5,4)")
+                        .HasColumnName("gpa_submit_pct");
+
                     b.Property<decimal?>("GradRate6Yr")
                         .HasPrecision(5, 4)
                         .HasColumnType("numeric(5,4)")
@@ -2838,6 +2952,10 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasPrecision(5, 4)
                         .HasColumnType("numeric(5,4)")
                         .HasColumnName("intl_acceptance_rate");
+
+                    b.Property<int?>("IntlAdmitted")
+                        .HasColumnType("integer")
+                        .HasColumnName("intl_admitted");
 
                     b.Property<decimal?>("IntlAidAvgUsd")
                         .HasPrecision(12, 2)
@@ -2849,15 +2967,18 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(16)")
                         .HasColumnName("intl_aid_policy");
 
+                    b.Property<int?>("IntlAidRecipients")
+                        .HasColumnType("integer")
+                        .HasColumnName("intl_aid_recipients");
+
+                    b.Property<int?>("IntlApplicants")
+                        .HasColumnType("integer")
+                        .HasColumnName("intl_applicants");
+
                     b.Property<decimal?>("LivingUsd")
                         .HasPrecision(12, 2)
                         .HasColumnType("numeric(12,2)")
                         .HasColumnName("living_usd");
-
-                    b.Property<List<string>>("Majors")
-                        .IsRequired()
-                        .HasColumnType("text[]")
-                        .HasColumnName("majors");
 
                     b.Property<decimal?>("MinDuolingo")
                         .HasPrecision(5, 1)
@@ -2921,11 +3042,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(512)")
                         .HasColumnName("source_url");
 
-                    b.Property<List<string>>("StemMajors")
-                        .IsRequired()
-                        .HasColumnType("text[]")
-                        .HasColumnName("stem_majors");
-
                     b.Property<string>("StudyLevel")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -2954,10 +3070,79 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
 
                     b.ToTable("university_offerings", "app", t =>
                         {
+                            t.HasCheckConstraint("ck_university_offerings_act_range", "(act25 IS NULL OR act25 BETWEEN 1 AND 36) AND (act75 IS NULL OR act75 BETWEEN 1 AND 36) AND (act25 IS NULL OR act75 IS NULL OR act25 <= act75)");
+
                             t.HasCheckConstraint("ck_university_offerings_avg_gpa4", "avg_gpa4 IS NULL OR avg_gpa4 BETWEEN 0 AND 4");
 
                             t.HasCheckConstraint("ck_university_offerings_sat_range", "(sat25 IS NULL OR sat25 BETWEEN 400 AND 1600) AND (sat75 IS NULL OR sat75 BETWEEN 400 AND 1600) AND (sat25 IS NULL OR sat75 IS NULL OR sat25 <= sat75)");
                         });
+                });
+
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.UniversityOfferingMajor", b =>
+                {
+                    b.Property<Guid>("UniversityOfferingId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("university_offering_id");
+
+                    b.Property<Guid>("MajorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("major_id");
+
+                    b.Property<bool>("IsStem")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_stem");
+
+                    b.Property<bool>("IsVerified")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_verified");
+
+                    b.HasKey("UniversityOfferingId", "MajorId")
+                        .HasName("pk_university_offering_majors");
+
+                    b.HasIndex("MajorId")
+                        .HasDatabaseName("ix_university_offering_majors_major_id");
+
+                    b.ToTable("university_offering_majors", "app");
+                });
+
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.UniversityRanking", b =>
+                {
+                    b.Property<Guid>("UniversityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("university_id");
+
+                    b.Property<string>("ListId")
+                        .HasMaxLength(48)
+                        .HasColumnType("character varying(48)")
+                        .HasColumnName("list_id");
+
+                    b.Property<bool>("IsTie")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_tie");
+
+                    b.Property<int>("Rank")
+                        .HasColumnType("integer")
+                        .HasColumnName("rank");
+
+                    b.Property<string>("RankDisplay")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("rank_display");
+
+                    b.HasKey("UniversityId", "ListId")
+                        .HasName("pk_university_rankings");
+
+                    b.HasIndex("ListId")
+                        .HasDatabaseName("ix_university_rankings_list_id");
+
+                    b.ToTable("university_rankings", "app");
                 });
 
             modelBuilder.Entity("StudyAbroad.Domain.Entities.User", b =>
@@ -3624,6 +3809,40 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_university_offerings_universities_university_id");
+                });
+
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.UniversityOfferingMajor", b =>
+                {
+                    b.HasOne("StudyAbroad.Domain.Entities.Major", null)
+                        .WithMany()
+                        .HasForeignKey("MajorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_university_offering_majors_majors_major_id");
+
+                    b.HasOne("StudyAbroad.Domain.Entities.UniversityOffering", null)
+                        .WithMany()
+                        .HasForeignKey("UniversityOfferingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_university_offering_majors_university_offerings_university_");
+                });
+
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.UniversityRanking", b =>
+                {
+                    b.HasOne("StudyAbroad.Domain.Entities.RankingList", null)
+                        .WithMany()
+                        .HasForeignKey("ListId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_university_rankings_ranking_lists_list_id");
+
+                    b.HasOne("StudyAbroad.Domain.Entities.University", null)
+                        .WithMany()
+                        .HasForeignKey("UniversityId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_university_rankings_universities_university_id");
                 });
 
             modelBuilder.Entity("StudyAbroad.Domain.Entities.UserDailyUsage", b =>

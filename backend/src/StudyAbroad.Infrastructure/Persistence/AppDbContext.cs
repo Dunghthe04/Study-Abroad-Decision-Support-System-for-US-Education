@@ -20,6 +20,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<ProfileCertification> ProfileCertifications => Set<ProfileCertification>();
     public DbSet<University> Universities => Set<University>();
     public DbSet<UniversityOffering> UniversityOfferings => Set<UniversityOffering>();
+    public DbSet<Major> Majors => Set<Major>();
+    public DbSet<UniversityOfferingMajor> UniversityOfferingMajors => Set<UniversityOfferingMajor>();
+    public DbSet<RankingList> RankingLists => Set<RankingList>();
+    public DbSet<UniversityRanking> UniversityRankings => Set<UniversityRanking>();
     public DbSet<Scholarship> Scholarships => Set<Scholarship>();
     public DbSet<TargetSchool> TargetSchools => Set<TargetSchool>();
     public DbSet<Recommendation> Recommendations => Set<Recommendation>();
