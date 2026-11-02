@@ -84,6 +84,7 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
   // Học sinh chọn "Chưa rõ" (ở form hoặc chat): ngành lưu null kèm cờ majorUndecided, vẫn cho qua bước này
   const majorUnknown = !data.targetMajor && data.majorUndecided === true;
   const [levelError, setLevelError] = useState<string | null>(null);
+  const [degreeError, setDegreeError] = useState<string | null>(null);
   // Mới chọn kỳ hoặc năm thì giữ tạm ở đây; đủ cả hai mới ghi vào nháp
   const [intakePending, setIntakePending] = useState({ term: "", year: "" });
   const savedIntake = parseIntake(data.targetIntake);
@@ -102,6 +103,7 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
   const [showStateDropdown, setShowStateDropdown] = useState(false);
 
   const majorInputId = useId();
+  const degreeSectionId = useId();
   const majorDropdownRef = useRef<HTMLDivElement>(null);
   const stateDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -212,16 +214,18 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
   };
 
   const handleNextClick = () => {
-    if (!data.currentEducationLevel || !data.targetDegreeLevel) {
-      setLevelError(
-        !data.currentEducationLevel
-          ? "Vui lòng chọn cấp học hiện tại."
-          : "Vui lòng chọn bậc học muốn theo học ở Mỹ."
-      );
+    if (!data.currentEducationLevel) {
+      setLevelError("Vui lòng chọn cấp học hiện tại.");
       if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
     setLevelError(null);
+    if (!data.targetDegreeLevel) {
+      setDegreeError("Vui lòng chọn bậc học muốn theo học ở Mỹ.");
+      document.getElementById(degreeSectionId)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+    setDegreeError(null);
     if (majorNotInList || (!majorUnknown && (!data.targetMajor || !data.targetMajor.trim()))) {
       setMajorError(
         majorNotInList
@@ -425,7 +429,7 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
       </section>
 
       {/* Question 2: Target Degree Level */}
-      <section className="space-y-4 pt-2">
+      <section id={degreeSectionId} className="space-y-4 pt-2">
         <div>
           <Label className="text-sm font-semibold text-foreground">
             Bạn muốn học bậc nào ở Mỹ?
@@ -441,7 +445,7 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
                 type="button"
                 onClick={() => {
                   onUpdate({ targetDegreeLevel: lvl.key });
-                  setLevelError(null);
+                  setDegreeError(null);
                 }}
                 className={cn(
                   "flex flex-col items-start justify-between rounded-xl border p-4 text-left transition-all cursor-pointer h-full shadow-2xs",
@@ -472,6 +476,7 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
             );
           })}
         </div>
+        {degreeError && <p className="text-xs font-medium text-destructive">{degreeError}</p>}
         {data.targetDegreeLevel === "master" || data.targetDegreeLevel === "phd" ? (
           <p className="flex items-center gap-1.5 text-xs font-medium text-warn">
             <AlertCircleIcon className="size-3.5 shrink-0" />
