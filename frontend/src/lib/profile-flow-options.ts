@@ -183,3 +183,84 @@ export function draftGpa(step2: TranscriptDraft | undefined): { gpa10: number | 
   if (manual10 !== null) return { gpa10: manual10, gpa4: toGpa4(manual10) };
   return { gpa10: null, gpa4: step2?.calculatedGpa4Scale ?? null };
 }
+
+export type GradeTrendType = "strong_upward" | "slight_upward" | "stable" | "downward";
+
+export interface GradeTrendInfo {
+  hasEnoughData: boolean;
+  trend: GradeTrendType | null;
+  changeGpa10: number;
+  yearlyAverages: { gradeName: string; gpa10: number; gpa4: number }[];
+  summaryMessage: string;
+}
+
+/** Đánh giá xu hướng tiến bộ học tập (Grade Trend / Upward Trend) theo chuẩn tuyển sinh Mỹ */
+export function calculateGradeTrend(years: AcademicYearDraft[]): GradeTrendInfo {
+  const yearlyAverages: { gradeName: string; gpa10: number; gpa4: number }[] = [];
+
+  for (const yr of years) {
+    let sum = 0;
+    let count = 0;
+    for (const sub of yr.subjects) {
+      const s1 = typeof sub.semester1Score === "number" ? sub.semester1Score : null;
+      const s2 = typeof sub.semester2Score === "number" ? sub.semester2Score : null;
+      let avg: number | null = null;
+      if (s1 !== null && s2 !== null) avg = (s1 + s2) / 2;
+      else if (s1 !== null) avg = s1;
+      else if (s2 !== null) avg = s2;
+
+      if (avg !== null && avg >= 0 && avg <= 10) {
+        sum += avg;
+        count++;
+      }
+    }
+    if (count > 0) {
+      const gpa10 = Math.round((sum / count) * 100) / 100;
+      yearlyAverages.push({
+        gradeName: yr.gradeName,
+        gpa10,
+        gpa4: toGpa4(gpa10),
+      });
+    }
+  }
+
+  if (yearlyAverages.length < 2) {
+    return {
+      hasEnoughData: false,
+      trend: null,
+      changeGpa10: 0,
+      yearlyAverages,
+      summaryMessage: "",
+    };
+  }
+
+  const firstGpa = yearlyAverages[0].gpa10;
+  const latestGpa = yearlyAverages[yearlyAverages.length - 1].gpa10;
+  const changeGpa10 = Math.round((latestGpa - firstGpa) * 100) / 100;
+
+  let trend: GradeTrendType = "stable";
+  let summaryMessage = "Thành tích học tập duy trì ổn định qua các năm học.";
+
+  if (changeGpa10 >= 0.3) {
+    trend = "strong_upward";
+    summaryMessage = `Điểm số tăng mạnh (+${changeGpa10}) qua các năm — Điểm cộng lớn trong mắt hội đồng tuyển sinh Mỹ!`;
+  } else if (changeGpa10 >= 0.1) {
+    trend = "slight_upward";
+    summaryMessage = `Điểm số có xu hướng tiến bộ (+${changeGpa10}) — Cho thấy đà phát triển và nỗ lực học tập tốt.`;
+  } else if (changeGpa10 <= -0.3) {
+    trend = "downward";
+    summaryMessage = `Điểm số có xu hướng giảm (${changeGpa10}) — Bạn nên chú ý cải thiện điểm số ở các kỳ tới.`;
+  } else if (changeGpa10 <= -0.1) {
+    trend = "downward";
+    summaryMessage = `Điểm số giảm nhẹ (${changeGpa10}) — Hãy duy trì sự tập trung để phục hồi phong độ.`;
+  }
+
+  return {
+    hasEnoughData: true,
+    trend,
+    changeGpa10,
+    yearlyAverages,
+    summaryMessage,
+  };
+}
+

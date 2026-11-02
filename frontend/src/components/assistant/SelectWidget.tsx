@@ -55,9 +55,25 @@ const controlClass =
   "w-full min-w-0 rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground shadow-2xs focus:border-brand focus:outline-hidden focus:ring-1 focus:ring-brand disabled:cursor-not-allowed disabled:opacity-60";
 const labelClass = "text-xs font-medium text-foreground";
 
+const GPA_PRESETS_10 = [
+  { label: "Xuất sắc (9.0 - 10)", value: "9.5" },
+  { label: "Giỏi (8.0 - 8.9)", value: "8.5" },
+  { label: "Khá (7.0 - 7.9)", value: "7.5" },
+  { label: "TB Khá (6.5 - 6.9)", value: "6.7" },
+  { label: "TB (5.0 - 6.4)", value: "5.7" },
+];
+
+const GPA_PRESETS_4 = [
+  { label: "Xuất sắc (3.6 - 4.0)", value: "3.8" },
+  { label: "Giỏi (3.2 - 3.59)", value: "3.4" },
+  { label: "Khá (2.5 - 3.19)", value: "2.8" },
+  { label: "TB (2.0 - 2.49)", value: "2.2" },
+];
+
 /** Ô chọn theo mẫu form cho câu đang hỏi; chọn xong gửi câu ghép như tin nhắn. Vẫn gõ chat được bình thường */
 export function SelectWidget({ data, onPick }: { data?: Record<string, unknown> | null; onPick?: (text: string) => void }) {
   const { fields = [], format = "", altFormat, upload } = (data ?? {}) as SelectData;
+  const [showGpaEstimator, setShowGpaEstimator] = useState(false);
   const [values, setValues] = useState<Record<string, string>>({});
   const [multi, setMulti] = useState<Record<string, string[]>>({});
   const [states, setStates] = useState<UsStateOption[]>([]);
@@ -135,6 +151,65 @@ export function SelectWidget({ data, onPick }: { data?: Record<string, unknown> 
   };
 
   const control = (f: Field) => {
+    if (f.name === "gpa") {
+      const currentScale = values["scale"] ?? "10";
+      const presets = currentScale === "4" ? GPA_PRESETS_4 : GPA_PRESETS_10;
+      return (
+        <div className="space-y-2">
+          <input
+            type="number"
+            inputMode="decimal"
+            id={`sw-${f.name}`}
+            placeholder={f.placeholder}
+            min={minOf(f)}
+            max={maxOf(f)}
+            step={stepOf(f)}
+            disabled={!onPick}
+            value={values[f.name] ?? ""}
+            onChange={(e) => setValue(f.name, e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && submit()}
+            className={controlClass}
+          />
+          <div className="pt-0.5">
+            <button
+              type="button"
+              disabled={!onPick}
+              onClick={() => setShowGpaEstimator((prev) => !prev)}
+              className="text-xs font-medium text-brand hover:underline inline-flex items-center gap-1 cursor-pointer"
+            >
+              {showGpaEstimator ? "Ẩn bảng ước lượng" : "💡 Chưa rõ GPA? Bấm chọn khoảng ước tính"}
+            </button>
+            {showGpaEstimator && (
+              <div className="mt-1.5 flex flex-wrap gap-1.5 p-2 rounded-lg bg-surface-raised border border-line">
+                {presets.map((preset) => {
+                  const isSelected = values["gpa"] === preset.value;
+                  return (
+                    <button
+                      key={preset.value}
+                      type="button"
+                      disabled={!onPick}
+                      onClick={() => {
+                        if (!values["scale"]) {
+                          setValue("scale", currentScale);
+                        }
+                        setValue("gpa", preset.value);
+                      }}
+                      className={`px-2 py-0.5 text-[11px] rounded-full border transition-all cursor-pointer ${
+                        isSelected
+                          ? "bg-brand text-white border-brand font-semibold shadow-xs"
+                          : "bg-surface text-foreground border-line hover:border-brand/50 hover:bg-brand-wash"
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
     if (f.kind === "number" || f.kind === "text")
       return (
         <input

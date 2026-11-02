@@ -584,8 +584,27 @@ def save_gpa(state: ChatState, gpa: float, scale: int) -> SkillOutput:
         value, scale = check_gpa(gpa, scale)
     except AskAgain as err:
         return ask_question(state, "D2", err.question)
+
+    # Kế hoạch đồng bộ 3.1: Nếu GPA đang tính từ học bạ chi tiết (source = transcript)
+    # thì không tự ý ghi đè GPA tổng, mà nhắc học sinh sửa ở bảng điểm Bước 2
+    old_gpa = state.profile.get("gpa")
+    if old_gpa and isinstance(old_gpa.value, dict) and old_gpa.value.get("source") == "transcript":
+        out = review(state) if state.question_id == "X1" else ask_next(state)
+        out.answer = (
+            f"Điểm GPA của em hiện đang được tính từ học bạ chi tiết ở Bước 2. "
+            f"Nếu muốn thay đổi, em hãy mở Bước 2 trên form để cập nhật điểm các môn nhé!\n\n{out.answer}"
+        )
+        return out
+
     state.profile["gpa"] = ProfileField(value={"value": value, "scale": scale}, status="confirmed")
-    return review(state) if state.question_id == "X1" else ask_next(state)
+    out = review(state) if state.question_id == "X1" else ask_next(state)
+    if buttons.is_middle_school_profile(state.profile):
+        out.answer = (
+            f"Mình đã ghi nhận mục tiêu GPA {value:g} (thang {scale}) của bạn. "
+            f"Nếu muốn lập lộ trình điểm chi tiết cho từng năm từ Lớp 9 đến Lớp 12 để theo dõi xu hướng tiến bộ (Grade Trend), "
+            f"bạn có thể mở Bước 2 trên form để chia điểm nhé!\n\n{out.answer}"
+        )
+    return out
 
 
 # Ghi mức ngân sách từ câu số tiền ở F1 ("800 triệu", "36.000 USD"), không gọi Qwen

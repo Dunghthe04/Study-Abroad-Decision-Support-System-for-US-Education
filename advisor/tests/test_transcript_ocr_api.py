@@ -316,6 +316,8 @@ def test_resolve_term_variants():
     assert resolve("", "Học kỳ II năm học 2023-2024").academic_year == 2023
     assert resolve("", "Học kỳ II năm học 2023-2024").semester == 2
     assert resolve("Lớp 11", "Học kỳ I").grade_name == "Lớp 11"
+    assert resolve("9", "Học kỳ 1").grade_name == "Lớp 9"
+    assert resolve("Lớp 9", "HK2").grade_name == "Lớp 9"
     third = resolve("", "Học kỳ 3")
     assert (third.grade_name, third.semester) == ("Năm 2", 1)
     assert resolve("Năm thứ 2", "HK2").grade_name == "Năm 2"

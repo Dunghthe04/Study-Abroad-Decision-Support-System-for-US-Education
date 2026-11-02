@@ -4,6 +4,7 @@ Bấm nút thì frontend gửi đúng chữ trên nút như một tin nhắn. Sk
 vào hồ sơ, không cần gọi Qwen.
 """
 
+import copy
 from dataclasses import dataclass, field
 from datetime import date
 
@@ -430,7 +431,15 @@ def quick_replies(question_id: str | None, can_skip: bool = False) -> list[Quick
     return [QuickReply(label=b.label, value=b.label) for b in buttons_of(question_id, can_skip)]
 
 
-def widget(question_id: str | None) -> Widget | None:
+def is_middle_school_profile(profile: dict | None) -> bool:
+    if not profile:
+        return False
+    lvl = getattr(profile.get("current_level"), "value", None)
+    grd = getattr(profile.get("current_grade"), "value", None)
+    return lvl == "middle_school" or grd in ("Lớp 6", "Lớp 7", "Lớp 8")
+
+
+def widget(question_id: str | None, profile: dict | None = None) -> Widget | None:
     if question_id in WIDGETS:
         kind, labels = WIDGETS[question_id]
         data: dict = {"options": options(labels)}
@@ -442,6 +451,13 @@ def widget(question_id: str | None) -> Widget | None:
     if question_id == "B1.3":
         return Widget(type="major")
     form = select_fields(question_id or "")
+    if form and question_id == "D2" and is_middle_school_profile(profile):
+        form = copy.deepcopy(form)
+        form.pop("upload", None)  # Học sinh cấp 2 không cần tải học bạ THPT
+        for f in form.get("fields", []):
+            if f.get("name") == "gpa":
+                f["label"] = "GPA mục tiêu"
+                f["placeholder"] = "VD: 8.5"
     return Widget(type="select", data=form) if form else None
 
 
@@ -466,6 +482,8 @@ def ask_with_buttons(
     state: ChatState, question_id: str, text: str | None = None, can_skip: bool = False
 ) -> SkillOutput:
     question = ask(state, question_id)
+    if question_id == "D2" and text is None and is_middle_school_profile(state.profile):
+        text = "Em đặt mục tiêu điểm trung bình (GPA) các năm cấp 3 khoảng bao nhiêu? Em có thể chọn ước lượng hoặc gõ điểm nhé."
     return SkillOutput(
-        text or question, quick_replies=quick_replies(question_id, can_skip), widget=widget(question_id)
+        text or question, quick_replies=quick_replies(question_id, can_skip), widget=widget(question_id, state.profile)
     )
