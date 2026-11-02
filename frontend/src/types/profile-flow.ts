@@ -70,6 +70,14 @@ export interface UsStateOption {
   isPopular: boolean;
 }
 
+/** Một ngành trong bảng majors: value (tiếng Anh) lưu vào hồ sơ, label (tiếng Việt) để hiện */
+export interface MajorOption {
+  value: string;
+  label: string;
+  aliases: string[];
+  isPopular: boolean;
+}
+
 export interface ProfileMetadataResponse {
   studyLevels: StudyLevelOption[];
   budgetTiers: BudgetTierOption[];
@@ -77,7 +85,9 @@ export interface ProfileMetadataResponse {
   impactLevels: ImpactLevelOption[];
   certificationTypes: CertificationTypeOption[];
   states: UsStateOption[];
+  /** Tên tiếng Anh của các ngành (ô chọn ngành ở chat dùng) */
   offeringMajors: string[];
+  majors: MajorOption[];
   /** 1 USD = ? VNĐ, BE lấy mới mỗi ngày; null thì dùng BUDGET_RATE */
   vndPerUsd?: number | null;
 }

@@ -160,6 +160,8 @@ interface FlowProfile {
   states: string[];
   ecTier: number;
   activitiesCount: number;
+  /** tên tiếng Việt của ngành trong bảng majors (hồ sơ lưu tên Anh) */
+  majorLabel: string | null;
 }
 
 // Lần gợi ý không trả điểm số hồ sơ → dựng lại từ nháp 6 bước (cùng nguồn backend dùng khi lưu hồ sơ)
@@ -199,6 +201,8 @@ function profileFromDraft(draft: ProfileFlowDraft, meta: ProfileMetadataResponse
     states: (draft.step1?.targetStates ?? []).map((c) => stateName.get(c) ?? c),
     ecTier: ecTierOf(activities),
     activitiesCount: activities.filter((a) => a.category === "activity").length,
+    majorLabel:
+      meta.majors.find((m) => m.value.toLowerCase() === draft.step1?.targetMajor?.toLowerCase())?.label ?? null,
   };
 }
 
@@ -277,7 +281,8 @@ export function ProfileSummary({ rec }: ProfileSummaryProps) {
   // Bậc ngoại khóa: ưu tiên bậc backend đã chấm trong lần gợi ý, không có thì tính từ nháp
   const ecTier = rec?.criteria.tier ?? flowProfile?.ecTier ?? null;
   const assessment = student ? assessProfile(student, ecTier, flowProfile?.activitiesCount ?? 0) : null;
-  const major = rec?.criteria.major || realStudent?.major || "Mọi ngành";
+  const majorValue = rec?.criteria.major || realStudent?.major || "";
+  const major = (majorValue && flowProfile?.majorLabel) || majorValue || "Mọi ngành";
   const states = flowProfile?.states.length ? flowProfile.states : (rec?.criteria.states ?? []);
   const budgetText = realStudent && budgetLabel(realStudent);
   const filterText = [
@@ -303,6 +308,11 @@ export function ProfileSummary({ rec }: ProfileSummaryProps) {
           <div className="min-w-0 space-y-1.5">
             <div className="text-[11.5px] font-bold tracking-[0.07em] text-brand uppercase">Hồ sơ đã gửi</div>
             <p className="text-[13.5px] text-muted-foreground">Bộ lọc từ hồ sơ: {filterText}</p>
+            {majorValue && (
+              <p className="text-[12.5px] text-muted-foreground">
+                Gợi ý theo nhóm ngành: trường có đào tạo nhóm ngành bạn chọn, chưa chắc có đúng chuyên ngành hẹp.
+              </p>
+            )}
           </div>
           <Link
             href="/analysis?edit=1"

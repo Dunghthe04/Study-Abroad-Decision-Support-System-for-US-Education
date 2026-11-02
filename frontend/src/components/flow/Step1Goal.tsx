@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { normalizeSearch } from "@/lib/certification-utils";
 import {
   EDUCATION_LEVEL_OPTIONS,
   EDUCATION_SYSTEM_OPTIONS,
@@ -46,7 +47,8 @@ function parseIntake(intake?: string | null): { term: string; year: string } | n
 }
 
 export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) {
-  const [majorQuery, setMajorQuery] = useState(data.targetMajor ?? "");
+  // Chữ đang gõ để tìm ngành; null = không gõ, ô hiện tên Việt của ngành đã chọn
+  const [majorQuery, setMajorQuery] = useState<string | null>(null);
   const [showMajorDropdown, setShowMajorDropdown] = useState(false);
   const [majorError, setMajorError] = useState<string | null>(null);
   // Học sinh chọn "Chưa rõ" (ở form hoặc chat): ngành lưu null kèm cờ majorUndecided, vẫn cho qua bước này
@@ -77,6 +79,7 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
         !majorDropdownRef.current.contains(event.target as Node)
       ) {
         setShowMajorDropdown(false);
+        setMajorQuery(null);
       }
       if (
         stateDropdownRef.current &&
@@ -93,7 +96,7 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
   const [prevTargetMajor, setPrevTargetMajor] = useState(data.targetMajor);
   if (data.targetMajor !== prevTargetMajor) {
     setPrevTargetMajor(data.targetMajor);
-    setMajorQuery(data.targetMajor ?? "");
+    setMajorQuery(null);
   }
 
   // Grade options based on current level
@@ -127,23 +130,30 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
     onUpdate({ targetStates: selectedStates.filter((c) => c !== code) });
   };
 
-  // 366 majors filtered
-  const allMajors = metadata?.offeringMajors ?? [];
-  const filteredMajors = majorQuery.trim()
-    ? allMajors.filter((m) =>
-        m.toLowerCase().includes(majorQuery.toLowerCase())
-      )
+  // Ngành trong bảng majors: hiện label (tiếng Việt), lưu value (tiếng Anh) để lọc trường khớp
+  const allMajors = metadata?.majors ?? [];
+  const popularMajors = allMajors.filter((m) => m.isPopular);
+  const selectedMajor = data.targetMajor
+    ? allMajors.find((m) => m.value.toLowerCase() === data.targetMajor!.toLowerCase())
+    : undefined;
+  const selectedMajorLabel = selectedMajor?.label ?? data.targetMajor ?? "";
+  // Hồ sơ cũ có thể lưu ngành không còn trong danh sách (vd "Computer Science")
+  const majorNotInList = !!data.targetMajor && allMajors.length > 0 && !selectedMajor;
+  // Tìm không dấu theo tên Việt, tên Anh và tên gọi khác ("may tinh", "cntt")
+  const majorSearch = normalizeSearch(majorQuery ?? "");
+  const filteredMajors = majorSearch
+    ? allMajors.filter((m) => [m.label, m.value, ...m.aliases].some((s) => normalizeSearch(s).includes(majorSearch)))
     : allMajors;
 
   const handleSelectMajor = (major: string) => {
-    setMajorQuery(major);
+    setMajorQuery(null);
     onUpdate({ targetMajor: major, majorUndecided: false });
     setMajorError(null);
     setShowMajorDropdown(false);
   };
 
   const handleMajorUnknown = () => {
-    setMajorQuery("");
+    setMajorQuery(null);
     onUpdate({ targetMajor: null, majorUndecided: true });
     setMajorError(null);
     setShowMajorDropdown(false);
@@ -160,8 +170,12 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
       return;
     }
     setLevelError(null);
-    if (!majorUnknown && (!data.targetMajor || !data.targetMajor.trim())) {
-      setMajorError("Vui lòng chọn hoặc nhập ngành học mong muốn, hoặc bấm \"Chưa rõ\" nếu bạn chưa quyết định.");
+    if (majorNotInList || (!majorUnknown && (!data.targetMajor || !data.targetMajor.trim()))) {
+      setMajorError(
+        majorNotInList
+          ? "Ngành đã lưu không còn trong danh sách, vui lòng chọn lại."
+          : "Vui lòng chọn một ngành trong danh sách, hoặc bấm \"Chưa chọn ngành\" nếu bạn chưa quyết định."
+      );
       setShowMajorDropdown(true);
       const el = document.getElementById(majorInputId);
       if (el) el.focus();
@@ -475,11 +489,11 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
             </Label>
             {data.targetMajor ? (
               <span className="text-xs text-brand font-medium">
-                Đã chọn: <strong className="text-foreground">{data.targetMajor}</strong>
+                Đã chọn: <strong className="text-foreground">{selectedMajorLabel}</strong>
               </span>
             ) : majorUnknown ? (
               <span className="text-xs text-brand font-medium">
-                Đã chọn: <strong className="text-foreground">Chưa rõ ngành</strong>
+                Đã chọn: <strong className="text-foreground">Chưa chọn ngành</strong>
               </span>
             ) : (
               <Button
@@ -489,7 +503,7 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
                 onClick={handleMajorUnknown}
                 className="text-xs h-7 cursor-pointer"
               >
-                Chưa rõ
+                Chưa chọn ngành
               </Button>
             )}
           </div>
@@ -498,8 +512,8 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
             <SearchIcon className="absolute left-3 top-2.5 size-4 text-muted-foreground pointer-events-none" />
             <Input
               id={majorInputId}
-              placeholder="Gõ để tìm kiếm hoặc nhấn mũi tên để chọn ngành..."
-              value={majorQuery}
+              placeholder="Gõ để tìm ngành, ví dụ: máy tính, kinh tế, y..."
+              value={majorQuery ?? selectedMajorLabel}
               onFocus={() => setShowMajorDropdown(true)}
               onChange={(e) => {
                 setMajorQuery(e.target.value);
@@ -513,11 +527,11 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
               )}
             />
             <div className="absolute right-2 top-2 flex items-center gap-1">
-              {majorQuery && (
+              {(majorQuery || data.targetMajor) && (
                 <button
                   type="button"
                   onClick={() => {
-                    setMajorQuery("");
+                    setMajorQuery(null);
                     onUpdate({ targetMajor: null });
                     setShowMajorDropdown(true);
                   }}
@@ -543,10 +557,34 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
             </div>
           </div>
 
-          {majorError && (
+          {(majorError || majorNotInList) && (
             <div className="flex items-center gap-1 text-xs text-destructive pt-0.5">
               <AlertCircleIcon className="size-3.5 shrink-0" />
-              <span>{majorError}</span>
+              <span>{majorError ?? "Ngành đã lưu không còn trong danh sách, vui lòng chọn lại."}</span>
+            </div>
+          )}
+
+          {/* Ngành phổ biến (cột is_popular trong bảng majors), không có thì ẩn */}
+          {popularMajors.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {popularMajors.map((m) => {
+                const isSelected = selectedMajor?.value === m.value;
+                return (
+                  <button
+                    key={m.value}
+                    type="button"
+                    onClick={() => handleSelectMajor(m.value)}
+                    className={cn(
+                      "rounded-md border px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer",
+                      isSelected
+                        ? "border-brand bg-brand text-white shadow-xs"
+                        : "border-line bg-surface text-muted-foreground hover:border-brand/40 hover:text-foreground"
+                    )}
+                  >
+                    {m.label}
+                  </button>
+                );
+              })}
             </div>
           )}
 
@@ -560,27 +598,17 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
               </div>
               {filteredMajors.length === 0 ? (
                 <div className="p-3 text-center text-xs text-muted-foreground">
-                  Không tìm thấy ngành nào khớp với &quot;{majorQuery}&quot;. Bạn có thể tiếp tục gõ để dùng tên ngành này.
-                  <div className="mt-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleSelectMajor(majorQuery.trim())}
-                      className="text-xs h-7"
-                    >
-                      Dùng &quot;{majorQuery.trim()}&quot; làm ngành học
-                    </Button>
-                  </div>
+                  Không tìm thấy ngành nào khớp với &quot;{majorQuery}&quot;. Thử gõ tên khác hoặc bấm
+                  &quot;Chưa chọn ngành&quot; nếu bạn chưa quyết định.
                 </div>
               ) : (
                 filteredMajors.map((m) => {
-                  const isSelected = data.targetMajor === m;
+                  const isSelected = selectedMajor?.value === m.value;
                   return (
                     <button
-                      key={m}
+                      key={m.value}
                       type="button"
-                      onClick={() => handleSelectMajor(m)}
+                      onClick={() => handleSelectMajor(m.value)}
                       className={cn(
                         "w-full text-left rounded-lg px-3 py-2 text-xs transition-colors flex items-center justify-between cursor-pointer",
                         isSelected
@@ -588,7 +616,7 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
                           : "text-foreground hover:bg-brand-wash hover:text-brand"
                       )}
                     >
-                      <span>{m}</span>
+                      <span>{m.label}</span>
                       {isSelected && <CheckIcon className="size-3.5 shrink-0" />}
                     </button>
                   );

@@ -105,6 +105,11 @@ export function Step6Review({
     step1.targetDegreeLevel ??
     "Chưa chọn";
 
+  // Ngành lưu tên Anh, hiện tên Việt nếu có trong bảng majors
+  const majorLabel =
+    metadata?.majors.find((m) => m.value.toLowerCase() === step1.targetMajor?.toLowerCase())?.label ??
+    step1.targetMajor;
+
   // Budget Tier Label
   const budgetTierLabel =
     metadata?.budgetTiers.find((b) => b.key === step4.annualBudgetTier)?.label ??
@@ -160,7 +165,7 @@ export function Step6Review({
           )}
           <div>
             <strong className="text-foreground">Ngành: </strong>
-            {step1.targetMajor || "Chưa chọn"}
+            {majorLabel || "Chưa chọn"}
           </div>
           <div>
             <strong className="text-foreground">Bang: </strong>
