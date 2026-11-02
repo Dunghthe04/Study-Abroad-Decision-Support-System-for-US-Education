@@ -22,7 +22,11 @@ namespace StudyAbroad.Application.Advisor
         IChatAnalysisRepository? analyses = null, IRecommendationRunner? recommender = null)
     {
         //Dữ liệu FE gửi lên
-        public async Task<AdvisorChatResponse> ChatAsync(Guid userId, AdvisorChatRequest request, CancellationToken ct = default)
+        // onEvent: chỉ truyền khi trả lời theo từng ý (stream); mỗi tin tiến độ / câu một ý của advisor gọi hàm này ngay.
+        // Mọi bước còn lại (lưu state, nháp, gợi ý trường...) chạy như cũ sau khi advisor trả xong, kết quả cuối giống hệt
+        public async Task<AdvisorChatResponse> ChatAsync(
+            Guid userId, AdvisorChatRequest request, CancellationToken ct = default,
+            Func<AdvisorStreamEvent, Task>? onEvent = null)
         {
             // SessionId do trình duyệt gửi chỉ dùng để tìm phiên; State của trình duyệt bị bỏ, luôn lấy từ DB
             var isNew = false;
@@ -50,8 +54,10 @@ namespace StudyAbroad.Application.Advisor
             var schools = await LatestSchoolsAsync(userId, state, ct);
 
             //Gửi request sang Advisor
-            var response = await advisor.ChatAsync(
-                request with { State = state, Profile = JsonSerializer.SerializeToElement(profile), Schools = schools }, ct);
+            var toAdvisor = request with { State = state, Profile = JsonSerializer.SerializeToElement(profile), Schools = schools };
+            var response = onEvent is null
+                ? await advisor.ChatAsync(toAdvisor, ct)
+                : await advisor.ChatStreamAsync(toAdvisor, onEvent, ct);
             var changed = await SaveProfileToDraftAsync(userId, response, ct);
 
             // C5: học sinh bấm "Đúng rồi" ở X1 thì chat rời bảng rà soát sang B3, lúc đó lưu hồ sơ chính thức.
