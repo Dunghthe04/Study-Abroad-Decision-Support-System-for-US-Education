@@ -65,6 +65,15 @@ public class ProfileFlowRepository(AppDbContext context) : IProfileFlowRepositor
             .ToListAsync(ct);
     }
 
+    public async Task<IReadOnlyList<UsStateOption>> GetUsStateOptionsAsync(CancellationToken ct = default)
+    {
+        return await context.UsStates
+            .AsNoTracking()
+            .OrderBy(s => s.Name)
+            .Select(s => new UsStateOption(s.Code, s.Name, s.Region, s.IsPopular))
+            .ToListAsync(ct);
+    }
+
     public async Task CommitProfileFlowAsync(
         StudentProfile profile,
         IEnumerable<TranscriptScore> scores,

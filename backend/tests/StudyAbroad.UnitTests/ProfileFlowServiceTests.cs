@@ -66,6 +66,10 @@ public class ProfileFlowServiceTests
                 new MajorOption("Business/marketing", "Kinh doanh và marketing", [], true)
             ]);
 
+        // Bảng us_states rỗng: metadata giữ bang trong JSON
+        public Task<IReadOnlyList<UsStateOption>> GetUsStateOptionsAsync(CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<UsStateOption>>([]);
+
         public Task<StudentProfile?> GetProfileByUserIdAsync(Guid userId, CancellationToken ct = default)
         {
             var profile = Profiles.Values.FirstOrDefault(p => p.UserId == userId);

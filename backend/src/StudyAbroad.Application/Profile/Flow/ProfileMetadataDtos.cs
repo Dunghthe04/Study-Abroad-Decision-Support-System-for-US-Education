@@ -134,7 +134,8 @@ public record ImpactLevelMetadataItem(
 public record UsStateMetadataItem(
     [property: JsonPropertyName("code")] string Code,
     [property: JsonPropertyName("name")] string Name,
-    [property: JsonPropertyName("isPopular")] bool IsPopular = false
+    [property: JsonPropertyName("isPopular")] bool IsPopular = false,
+    [property: JsonPropertyName("region")] string? Region = null
 );
 
 public record UsMajorMetadataItem(

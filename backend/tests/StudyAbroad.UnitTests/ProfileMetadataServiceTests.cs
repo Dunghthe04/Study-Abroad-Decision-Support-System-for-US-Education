@@ -22,6 +22,7 @@ public class ProfileMetadataServiceTests
     {
         public string? MockSettingValue { get; set; }
         public IReadOnlyList<MajorOption> MockMajorOptions { get; set; } = [];
+        public IReadOnlyList<UsStateOption> MockStateOptions { get; set; } = [];
         public int CallCount { get; private set; }
 
         public Task<string?> GetAppSettingValueAsync(string key, CancellationToken ct = default)
@@ -41,6 +42,9 @@ public class ProfileMetadataServiceTests
 
         public Task<IReadOnlyList<MajorOption>> GetMajorOptionsAsync(CancellationToken ct = default) =>
             Task.FromResult(MockMajorOptions);
+
+        public Task<IReadOnlyList<UsStateOption>> GetUsStateOptionsAsync(CancellationToken ct = default) =>
+            Task.FromResult(MockStateOptions);
 
         public Task CommitProfileFlowAsync(StudentProfile profile, IEnumerable<TranscriptScore> scores, IEnumerable<ProfileActivity> activities, IEnumerable<ProfileCertification> certifications, CancellationToken ct = default) =>
             Task.CompletedTask;
@@ -166,6 +170,30 @@ public class ProfileMetadataServiceTests
         Assert.True(cs.IsPopular);
         // Chưa có tên Việt thì hiện tên Anh
         Assert.Equal("Engineering", result.UsMajors[1].Name);
+    }
+
+    [Fact]
+    public async Task GetMetadataAsync_UsesStatesFromTable_WithRegion()
+    {
+        var repo = new FakeProfileFlowRepository
+        {
+            MockSettingValue = ValidMetadataJson,
+            MockStateOptions =
+            [
+                new UsStateOption("MA", "Massachusetts", "northeast", true),
+                new UsStateOption("OH", "Ohio", "midwest", false)
+            ]
+        };
+        var cache = new MemoryCache(new MemoryCacheOptions());
+        var service = new ProfileMetadataService(repo, cache, new FakeRates());
+
+        var result = await service.GetMetadataAsync();
+
+        // Không gộp bang trong JSON ("CA"), chỉ 2 bang từ bảng us_states
+        Assert.Equal(["MA", "OH"], result.UsStates.Select(s => s.Code));
+        Assert.Equal("northeast", result.UsStates[0].Region);
+        Assert.True(result.UsStates[0].IsPopular);
+        Assert.Equal(["MA"], result.PopularStateCodes);
     }
 
     [Fact]

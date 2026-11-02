@@ -16,6 +16,8 @@ public interface IProfileFlowRepository
     Task<StudentProfile> EnsureProfileExistsAsync(Guid userId, CancellationToken ct = default);
     /// <summary>Ngành trong bảng majors có trường đào tạo (để chọn trên form)</summary>
     Task<IReadOnlyList<MajorOption>> GetMajorOptionsAsync(CancellationToken ct = default);
+    /// <summary>51 bang trong bảng us_states (để chọn trên form, chia theo vùng)</summary>
+    Task<IReadOnlyList<UsStateOption>> GetUsStateOptionsAsync(CancellationToken ct = default);
     /// <summary>
     /// Lưu chính thức hồ sơ: cập nhật profile, thay toàn bộ điểm bảng điểm, hoạt động và chứng chỉ — trong 1 transaction.
     /// </summary>
@@ -32,3 +34,6 @@ public interface IProfileFlowRepository
 
 /// <summary>Một ngành để chọn: Name (tiếng Anh) là giá trị lưu vào hồ sơ, NameVi để hiện</summary>
 public record MajorOption(string Name, string? NameVi, IReadOnlyList<string> Aliases, bool IsPopular);
+
+/// <summary>Một bang để chọn: Code là giá trị lưu vào hồ sơ, Region là vùng (northeast, midwest, south, west)</summary>
+public record UsStateOption(string Code, string Name, string Region, bool IsPopular);
