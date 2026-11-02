@@ -51,7 +51,6 @@ async def test_a_good_answer_is_read_into_the_contract():
     assert result.types() == ["trung_tam"]
     assert (result.cac_y[0].doan, result.cac_y[0].thuc_the) == (CENTER["doan"], CENTER["thuc_the"])
     assert result.confidence == 1.0  # không có logprobs thì không đo được
-    assert result.con_lai == []
     assert slm.calls[0][1] is SLM_TIN_SCHEMA
 
 
@@ -107,13 +106,13 @@ async def test_several_intents_come_back_in_the_order_the_code_wants_them():
     assert result.profile_values() == {"gpa": "em GPA 3.5"}
 
 
-async def test_intents_over_the_limit_are_postponed_not_lost():
-    answer = {"cac_y": [y("kien_thuc", f"câu {i}") for i in range(1, 6)]}
+async def test_every_question_is_kept_however_many_the_model_found():
+    asked = [f"câu {i}" for i in range(1, 9)]
+    answer = {"cac_y": [y("kien_thuc", doan) for doan in asked]}
 
-    result = await OllamaSlm(FakeSlm(answer)).read("câu 1, câu 2, câu 3, câu 4, câu 5", None, "")
+    result = await OllamaSlm(FakeSlm(answer)).read(", ".join(asked), None, "")
 
-    assert [i.doan for i in result.cac_y] == ["câu 1", "câu 2", "câu 3"]
-    assert [i.doan for i in result.con_lai] == ["câu 4", "câu 5"]
+    assert [i.doan for i in result.cac_y] == asked
 
 
 async def test_a_greeting_next_to_a_real_question_is_dropped():
