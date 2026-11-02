@@ -40,6 +40,13 @@ const INTAKE_TERM_OPTIONS = [
   { value: "Summer", label: "Kỳ mùa hè (Summer)" },
 ];
 const INTAKE_YEAR_OPTIONS = Array.from({ length: 6 }, (_, i) => String(THIS_YEAR + i));
+// 4 vùng của Cục Thống kê Mỹ, khớp cột region của bảng us_states
+const STATE_REGIONS = [
+  { value: "northeast", label: "Đông Bắc" },
+  { value: "midwest", label: "Trung Tây" },
+  { value: "south", label: "Miền Nam" },
+  { value: "west", label: "Miền Tây" },
+];
 
 function parseIntake(intake?: string | null): { term: string; year: string } | null {
   const m = /^(Fall|Spring|Summer) (20\d\d)$/.exec(intake ?? "");
@@ -65,6 +72,10 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
   };
 
   const [stateSearch, setStateSearch] = useState("");
+  // Khối "Thu hẹp gợi ý" thu gọn sẵn; đã chọn bang hoặc loại trường thì mở để thấy lựa chọn cũ
+  const [showNarrow, setShowNarrow] = useState(
+    (data.targetStates?.length ?? 0) > 0 || (data.targetSchoolType ?? "all") !== "all"
+  );
   const [showStateDropdown, setShowStateDropdown] = useState(false);
 
   const majorInputId = useId();
@@ -118,6 +129,19 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
   const allStates = metadata?.states ?? [];
   const popularStates = allStates.filter((s) => s.isPopular);
   const selectedStates = data.targetStates ?? [];
+  // Bang khớp chữ đang tìm (không dấu, theo tên hoặc mã), chia theo vùng; bang chưa có vùng xếp vào "Khác"
+  const stateQuery = normalizeSearch(stateSearch);
+  const foundStates = allStates.filter(
+    (s) => normalizeSearch(s.name).includes(stateQuery) || normalizeSearch(s.code).includes(stateQuery)
+  );
+  const stateGroups = [...STATE_REGIONS, { value: "", label: "Khác" }]
+    .map((r) => ({
+      ...r,
+      states: foundStates.filter((s) =>
+        r.value ? s.region === r.value : !STATE_REGIONS.some((x) => x.value === s.region)
+      ),
+    }))
+    .filter((g) => g.states.length > 0);
 
   const toggleState = (code: string) => {
     const next = selectedStates.includes(code)
@@ -629,13 +653,26 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
 
       {/* Question 4: Thu hẹp gợi ý — không bắt buộc */}
       <section className="space-y-5 rounded-2xl border border-line bg-ground/50 p-5">
-        <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setShowNarrow(!showNarrow)}
+          aria-expanded={showNarrow}
+          className="flex w-full items-center gap-2 text-left cursor-pointer"
+        >
           <span className="text-sm font-semibold text-foreground">Thu hẹp gợi ý</span>
           <span className="rounded-full bg-surface px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
             Không bắt buộc
           </span>
-        </div>
+          {!showNarrow && (
+            <span className="text-xs text-muted-foreground">Bang mong muốn, loại hình trường</span>
+          )}
+          <ChevronDownIcon
+            className={cn("ml-auto size-4 text-muted-foreground transition-transform", showNarrow && "rotate-180")}
+          />
+        </button>
 
+        {showNarrow && (
+        <>
         {/* Bang mong muốn (Searchable Dropdown + Popular Chips) */}
         <div ref={stateDropdownRef} className="space-y-2 relative">
           <div className="flex items-center justify-between">
@@ -733,32 +770,38 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
                 </div>
               </div>
 
-              <div className="overflow-y-auto max-h-48 p-1.5 grid grid-cols-2 gap-1">
-                {allStates
-                  .filter(
-                    (s) =>
-                      s.name.toLowerCase().includes(stateSearch.toLowerCase()) ||
-                      s.code.toLowerCase().includes(stateSearch.toLowerCase())
-                  )
-                  .map((s) => {
-                    const isSelected = selectedStates.includes(s.code);
-                    return (
-                      <button
-                        key={s.code}
-                        type="button"
-                        onClick={() => toggleState(s.code)}
-                        className={cn(
-                          "flex items-center justify-between rounded-md px-2.5 py-1.5 text-xs text-left cursor-pointer transition-colors",
-                          isSelected
-                            ? "bg-brand text-white font-medium"
-                            : "hover:bg-muted text-foreground"
-                        )}
-                      >
-                        <span className="truncate">{s.name} ({s.code})</span>
-                        {isSelected && <CheckIcon className="size-3.5 shrink-0 ml-1" />}
-                      </button>
-                    );
-                  })}
+              <div className="overflow-y-auto max-h-48 p-1.5 space-y-2">
+                {stateGroups.map((group) => (
+                  <div key={group.value || "other"}>
+                    <p className="px-2.5 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      {group.label}
+                    </p>
+                    <div className="grid grid-cols-2 gap-1">
+                      {group.states.map((s) => {
+                        const isSelected = selectedStates.includes(s.code);
+                        return (
+                          <button
+                            key={s.code}
+                            type="button"
+                            onClick={() => toggleState(s.code)}
+                            className={cn(
+                              "flex items-center justify-between rounded-md px-2.5 py-1.5 text-xs text-left cursor-pointer transition-colors",
+                              isSelected
+                                ? "bg-brand text-white font-medium"
+                                : "hover:bg-muted text-foreground"
+                            )}
+                          >
+                            <span className="truncate">{s.name} ({s.code})</span>
+                            {isSelected && <CheckIcon className="size-3.5 shrink-0 ml-1" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+                {stateGroups.length === 0 && (
+                  <p className="px-2.5 py-2 text-xs text-muted-foreground">Không tìm thấy bang nào.</p>
+                )}
               </div>
             </div>
           )}
@@ -799,6 +842,8 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
             })}
           </div>
         </div>
+        </>
+        )}
       </section>
 
       {/* Bottom Actions */}
