@@ -78,7 +78,8 @@ class LegacyAdviceBranch:
 
 
 # Trả lời câu hồ sơ đang chờ hoặc cập nhật hồ sơ. Hồ sơ vừa đủ trong lượt này thì tư vấn luôn,
-# không bắt học sinh nhắn thêm một lần nữa mới thấy kết quả
+# không bắt học sinh nhắn thêm một lần nữa mới thấy kết quả.
+# Tin đã có ý ho_so thì thôi: ChatFlow sẽ chạy nhánh tư vấn cho ý đó ngay sau, tư vấn ở đây nữa là trả lời hai lần
 class ProfileBranch:
     def __init__(self, handler: ChatProfileHandler, advice: Branch) -> None:
         self._handler = handler
@@ -87,7 +88,7 @@ class ProfileBranch:
     async def run(self, state: ChatState, message: str, slm: SlmTinResult) -> SkillOutput:
         was_ready = self._handler.ready(state, REQUIRED_B3)
         output = await self._handler.collect(state, message, slm)
-        if not was_ready and self._handler.ready(state, REQUIRED_B3):
+        if not was_ready and self._handler.ready(state, REQUIRED_B3) and "ho_so" not in slm.types():
             return combine(output, await self._advice.run(state, message, slm))
         return output
 
