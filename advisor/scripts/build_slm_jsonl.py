@@ -80,11 +80,11 @@ def check_cac_y(intent: str, question: str, pending: str, items: Any, where: str
         result = SlmTinResult.from_raw({"cac_y": items})
     except ValueError as ex:
         raise ValueError(f"{where}: {ex}") from ex
-    if len(result.cac_y) + len(result.con_lai) != len(ys):
+    if len(result.cac_y) != len(ys):
         raise ValueError(
             f"{where}: cac_y chưa đúng chuẩn, có ý bị gộp hoặc bỏ (ý cùng loại hồ sơ phải gộp, bỏ ý chào)"
         )
-    if [y.type for y in ys] != [y.type for y in (*result.cac_y, *result.con_lai)]:
+    if [y.type for y in ys] != [y.type for y in result.cac_y]:
         raise ValueError(f"{where}: mac_dinh phải đứng đầu cac_y, các ý còn lại theo thứ tự học sinh nói")
     if intent not in {y.type for y in ys}:
         raise ValueError(f"{where}: sheet {intent} nhưng cac_y không có ý nào loại {intent}")

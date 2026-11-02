@@ -3,10 +3,6 @@
 Đây là chỗ nối giữa hai phần: bộ phân loại (Dũng) tạo ra SlmTinResult; handler hồ sơ (Việt) và các nhánh còn lại đọc nó.
 Khuôn một ý trùng với phần tử của cột cac_y trong data/slm/du_lieu_slm.xlsx (type, doan, thuc_the).
 Sửa file này thì báo người kia trước, và sửa dữ liệu cho khớp.
-
-CÒN SÓT TỪ KIỂU CŨ (một nhãn chính, một nhãn phụ): PRIORITY, SecondaryIntent, secondaries, check_labels, SlmRead, SlmResult.
-Không còn bộ phân loại nào trả SlmResult. Chỉ còn profile_handler.py và test_profile_handler.py của Việt import SlmResult.
-Việt đổi hai file đó sang SlmTinResult rồi xóa các thứ trên (kèm tham số sub của check_entities).
 """
 
 import hashlib
@@ -61,30 +57,14 @@ SCENARIO_MODES = ("what_if", "goal_seeking")
 SUBTYPES = ("ngoai_le", "nhay_cam", "tam_biet", "mo_ho")
 # thanh_pho không có danh sách cố định: là đoạn chữ nguyên văn trong tin (vd "Sài Gòn", "HN").
 # Danh sách thành phố đổi theo trung tâm trong DB, nhánh trung tâm khớp với CenterFinder.cities() lúc chạy
-# Tin có hai ý (multi-intent, tối đa 2): ý xếp trước là nhãn chính, ý sau là nhãn phụ, trả lời theo thứ tự đó.
-# mac_dinh không làm nhãn phụ (giá trị hồ sơ đã nằm trong thuc_the), ngoai_pham_vi cũng không (câu chào kèm câu hỏi thì bỏ)
-PRIORITY = ("ho_so", "kich_ban", "kien_thuc", "trung_tam")
-SecondaryIntent = Literal["kich_ban", "kien_thuc", "trung_tam"]
-# Số ý cần trả lời tối đa trong một tin. mac_dinh không tính vì luôn chạy (không ghi hồ sơ là mất dữ liệu)
-MAX_Y = 3
-# Số ý hoãn tối đa (hiện thành nút). Ngoài mức này các ý sau bị bỏ, không hiện nút
-MAX_HOAN = 3
-
-
-# Các nhãn phụ hợp lệ của một loại: những loại xếp sau nó trong PRIORITY. Loại ngoài PRIORITY không có nhãn phụ
-def secondaries(intent: str) -> tuple[str, ...]:
-    return PRIORITY[PRIORITY.index(intent) + 1 :] if intent in PRIORITY else ()
-
-
-# Nhãn phụ phải xếp sau nhãn chính trong PRIORITY. Sai thì ném ValueError
-def check_labels(intent: str, sub: str | None) -> None:
-    if sub is not None and sub not in secondaries(intent):
-        raise ValueError(f"nhan_phu '{sub}' phải xếp sau '{intent}' theo thứ tự {' > '.join(PRIORITY)}")
+# Trần kỹ thuật cho số ý của một tin, để model sinh lặp vô hạn không làm hệ thống chạy mãi. Không phải giới hạn
+# sản phẩm: tin có bao nhiêu câu hỏi thì trả lời bấy nhiêu. Vượt trần thì các ý sau bị cắt
+MAX_RAW_Y = 20
 
 
 # Thực thể phải đúng khóa của loại (cộng khóa hồ sơ) và đúng giá trị hệ thống biết. Sai thì ném ValueError
-def check_entities(intent: str, sub: str | None, entities: dict[str, Any]) -> None:
-    allowed = ENTITY_KEYS[intent] | ENTITY_KEYS.get(sub or "", set()) | set(PROFILE_KEYS)
+def check_entities(intent: str, entities: dict[str, Any]) -> None:
+    allowed = ENTITY_KEYS[intent] | set(PROFILE_KEYS)
     unknown = set(entities) - allowed
     if unknown:
         raise ValueError(f"khóa thực thể lạ với loại {intent}: {sorted(unknown)}")
@@ -106,34 +86,6 @@ def check_entities(intent: str, sub: str | None, entities: dict[str, Any]) -> No
                 raise ValueError("mỗi thay_doi cần yeu_to và gia_tri hoặc hanh_dong")
 
 
-# CŨ (một nhãn chính, một nhãn phụ): kết quả SLM kiểu cũ. Không còn bộ phân loại nào trả lớp này, chờ Việt đổi sang SlmTinResult rồi xóa
-class SlmRead(BaseModel):
-    type: Intent
-    # Ý thứ hai khi tin có hai câu hỏi (vd đánh giá hồ sơ rồi hỏi visa), theo PRIORITY. Thường là None
-    nhan_phu: SecondaryIntent | None = None
-    # Thông tin tách từ tin nhắn, khóa theo ENTITY_KEYS của loại cộng khóa hồ sơ. Không nhắc tới thì không có khóa
-    thuc_the: dict[str, Any] = Field(default_factory=dict)
-
-    @model_validator(mode="after")
-    def _check(self) -> "SlmRead":
-        check_labels(self.type, self.nhan_phu)
-        check_entities(self.type, self.nhan_phu, self.thuc_the)
-        return self
-
-    # Giá trị hồ sơ trong tin, nguyên văn đoạn chữ. Handler hồ sơ (Việt) tự chuẩn hóa và kiểm rồi mới lưu
-    def profile_values(self) -> dict[str, str]:
-        return {key: value for key, value in self.thuc_the.items() if key in PROFILE_KEYS}
-
-
-# SlmRead cộng độ tin cậy (confidence). Độ tin cậy do code tính (từ xác suất của model), không để SLM tự khai
-class SlmResult(SlmRead):
-    confidence: float = Field(default=1.0, ge=0, le=1)
-
-    # Tin có cần chuyển qua handler hồ sơ không: trả lời câu đang chờ, hoặc có kèm giá trị hồ sơ
-    def touches_profile(self) -> bool:
-        return self.type == "mac_dinh" or bool(self.profile_values())
-
-
 # Một ý trong tin nhắn. Tin có nhiều ý thì SLM trả một danh sách SlmY, mỗi ý có đoạn chữ và thông tin riêng.
 # doan: kien_thuc và trung_tam được viết lại thành câu hỏi đầy đủ ("I-20 và SAT là gì" tách thành hai ý);
 # mac_dinh phải nguyên văn (kiểm ở bộ phân loại vì cần tin gốc)
@@ -144,7 +96,7 @@ class SlmY(BaseModel):
 
     @model_validator(mode="after")
     def _check(self) -> "SlmY":
-        check_entities(self.type, None, self.thuc_the)
+        check_entities(self.type, self.thuc_the)
         return self
 
     def profile_values(self) -> dict[str, str]:
@@ -163,8 +115,8 @@ def _gop_thuc_the(a: dict[str, Any], b: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-# Đưa danh sách ý SLM trả về về dạng hệ thống chạy được. Trả (các ý trả lời ngay, các ý hoãn lại)
-def chuan_hoa_y(cac_y: list[SlmY]) -> tuple[list[SlmY], list[SlmY]]:
+# Đưa danh sách ý SLM trả về về dạng hệ thống chạy được
+def chuan_hoa_y(cac_y: list[SlmY]) -> list[SlmY]:
     # 1. Ngoài phạm vi: có ý khác thì bỏ hết ý ngoài phạm vi (chào kèm câu hỏi), không thì chỉ giữ ý đầu
     khac = [y for y in cac_y if y.type != "ngoai_pham_vi"]
     cac_y = khac or cac_y[:1]
@@ -183,18 +135,13 @@ def chuan_hoa_y(cac_y: list[SlmY]) -> tuple[list[SlmY], list[SlmY]]:
             )
     # 3. Giữ thứ tự học sinh hỏi; chỉ mac_dinh lên đầu vì ghi hồ sơ phải xong trước các ý khác
     gop = [y for y in gop if y.type == "mac_dinh"] + [y for y in gop if y.type != "mac_dinh"]
-    # 4. Quá MAX_Y ý cần trả lời thì hoãn các ý hỏi sau cùng (hiện thành nút để học sinh bấm hỏi tiếp).
-    # Hoãn quá MAX_HOAN ý thì bỏ hẳn phần còn lại. mac_dinh không bao giờ bị hoãn: hoãn là mất hồ sơ học sinh vừa khai
-    tra_loi = [y for y in gop if y.type != "mac_dinh"][: MAX_Y + MAX_HOAN]
-    con_lai = tra_loi[MAX_Y:]
-    giu = {id(y) for y in tra_loi[:MAX_Y]}
-    return [y for y in gop if y.type == "mac_dinh" or id(y) in giu], con_lai
+    # 4. Không giới hạn số ý trả lời; chỉ cắt khi vượt trần kỹ thuật (mac_dinh đứng đầu nên không bao giờ bị cắt)
+    return gop[:MAX_RAW_Y]
 
 
-# Cả tin nhắn: các ý trả lời ngay (đã qua chuan_hoa_y) và các ý hoãn lại. Luật dưới đây là lưới an toàn, sai thì ném ValueError
+# Cả tin nhắn: các ý cần trả lời (đã qua chuan_hoa_y). Luật dưới đây là lưới an toàn, sai thì ném ValueError
 class SlmTin(BaseModel):
     cac_y: list[SlmY] = Field(min_length=1)
-    con_lai: list[SlmY] = Field(default_factory=list)  # ý hoãn lại: sau câu trả lời hiện thành nút bấm
 
     @model_validator(mode="after")
     def _check(self) -> "SlmTin":
@@ -204,12 +151,10 @@ class SlmTin(BaseModel):
         for t in ONCE:
             if loai.count(t) > 1:
                 raise ValueError(f"loại '{t}' chỉ được một ý, hãy gộp lại")
-        if len([t for t in loai if t != "mac_dinh"]) > MAX_Y:
-            raise ValueError(f"quá {MAX_Y} ý cần trả lời, hãy hoãn bớt vào con_lai")
         if "mac_dinh" in loai and loai[0] != "mac_dinh":
             raise ValueError("mac_dinh phải đứng đầu")
-        if any(y.type in ("mac_dinh", "ngoai_pham_vi") for y in self.con_lai):
-            raise ValueError("mac_dinh và ngoai_pham_vi không được hoãn")
+        if len(loai) > MAX_RAW_Y:
+            raise ValueError(f"quá {MAX_RAW_Y} ý trong một tin")
         return self
 
 
@@ -225,8 +170,8 @@ class SlmTinResult(SlmTin):
         items = raw.get("cac_y")
         if not isinstance(items, list):
             raise ValueError("thiếu danh sách cac_y")
-        cac_y, con_lai = chuan_hoa_y([SlmY.model_validate(item) for item in items])
-        return cls(cac_y=cac_y, con_lai=con_lai, confidence=confidence)
+        cac_y = chuan_hoa_y([SlmY.model_validate(item) for item in items])
+        return cls(cac_y=cac_y, confidence=confidence)
 
     # Các loại của những ý trả lời ngay, theo thứ tự (để ghi log)
     def types(self) -> list[str]:
@@ -352,10 +297,6 @@ _ENTITY_SCHEMA = {
 }
 # Khóa bắt buộc theo loại, khớp với check_entities
 _REQUIRED_KEYS = {"kich_ban": ["che_do"], "ngoai_pham_vi": ["loai_con"]}
-
-
-# Số ý tối đa SLM được sinh trong một tin: mac_dinh (1) + ý trả lời ngay + ý hoãn lại
-MAX_RAW_Y = 1 + MAX_Y + MAX_HOAN
 
 
 # Khuôn cho một ý của loại intent: thuc_the chỉ có khóa của loại đó cộng khóa hồ sơ

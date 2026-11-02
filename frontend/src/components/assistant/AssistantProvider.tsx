@@ -2,8 +2,9 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { ApiError, apiFetch } from "@/lib/api";
-import type { AdvisorChatResponse, ChatMessage, ChatWidget, Citation, QuickReply } from "@/types/api";
+import { ApiError } from "@/lib/api";
+import { streamAdvisorChat } from "@/lib/advisor-stream";
+import type { ChatMessage, ChatWidget, Citation, QuickReply } from "@/types/api";
 
 export type AssistantTurn = ChatMessage & {
   citations?: Citation[];
@@ -15,6 +16,16 @@ export type AssistantTurn = ChatMessage & {
 };
 
 export type AssistantError = { kind: "unavailable" | "auth" | "other"; message: string };
+
+/** Câu trả lời đang hiện dần: advisor trả từng ý khi xong, câu cuối cùng thay thế khi có đủ */
+export type AssistantStreaming = {
+  /** Số câu hỏi advisor sắp trả lời (0 nếu chưa biết) */
+  answers: number;
+  /** Số câu đã trả lời xong */
+  done: number;
+  /** Các câu đã trả lời, nối nhau theo thứ tự hỏi */
+  text: string;
+};
 
 export interface AssistantPageContext {
   /** Nhãn "Đang xem: …" trong khung trợ lý */
@@ -31,6 +42,8 @@ interface AssistantContextValue {
   wide: boolean;
   turns: AssistantTurn[];
   loading: boolean;
+  /** Phần câu trả lời đã nhận khi đang chờ (null nếu chưa có gì); hết lượt thì bị câu cuối cùng thay */
+  streaming: AssistantStreaming | null;
   error: AssistantError | null;
   page: AssistantPageContext;
   openPanel: (question?: string) => void;
@@ -94,6 +107,7 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
   const [wide, setWide] = useState(false);
   const [turns, setTurns] = useState<AssistantTurn[]>([]);
   const [loading, setLoading] = useState(false);
+  const [streaming, setStreaming] = useState<AssistantStreaming | null>(null);
   const [error, setError] = useState<AssistantError | null>(null);
   const [registered, setRegistered] = useState<AssistantPageContext | null>(null);
 
@@ -152,14 +166,23 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
         // D1: lưu ngay nháp form đang chờ, để chat đọc đúng những gì học sinh vừa gõ.
         // Lưu lỗi vẫn gửi chat (form tự báo lỗi lưu của nó)
         await beforeSendRef.current?.().catch(() => undefined);
-        const res = await apiFetch<AdvisorChatResponse>("/api/v1/advisor/chat", {
-          method: "POST",
-          body: JSON.stringify({
+        // Advisor trả từng ý khi xong: hiện dần các câu đã có, rồi câu cuối cùng (res) thay thế tất cả
+        const res = await streamAdvisorChat(
+          {
             sessionId: sessionIdRef.current,
             messages: history.map(({ role, content }) => ({ role, content })),
             studyLevel: pageRef.current.studyLevel || null,
-          }),
-        });
+          },
+          (event) => {
+            if (event.type === "progress") setStreaming({ answers: event.answers, done: 0, text: "" });
+            else
+              setStreaming((cur) => ({
+                answers: cur?.answers ?? 0,
+                done: (cur?.done ?? 0) + 1,
+                text: cur?.text ? `${cur.text}\n\n${event.text}` : event.text,
+              }));
+          },
+        );
         if (res.sessionId) {
           sessionIdRef.current = res.sessionId;
           try {
@@ -187,6 +210,7 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
       } finally {
         loadingRef.current = false;
         setLoading(false);
+        setStreaming(null);
       }
     },
     [commitTurns]
@@ -236,6 +260,7 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
       wide,
       turns,
       loading,
+      streaming,
       error,
       page,
       openPanel,
@@ -248,7 +273,7 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
       setBeforeSend,
       setOnProfileChanged,
     }),
-    [open, wide, turns, loading, error, page, openPanel, newChat, send, retry, setBeforeSend, setOnProfileChanged]
+    [open, wide, turns, loading, streaming, error, page, openPanel, newChat, send, retry, setBeforeSend, setOnProfileChanged]
   );
 
   return <AssistantContext.Provider value={value}>{children}</AssistantContext.Provider>;

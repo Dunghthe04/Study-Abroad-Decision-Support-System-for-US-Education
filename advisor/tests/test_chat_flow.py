@@ -10,9 +10,8 @@ from app.schemas.chat import ChatMessage, ChatRequest, ChatState, ProfileField, 
 from app.schemas.slm import INTENTS, SlmTinResult
 from app.services.chat_flow import (
     BACK_TO_QUESTION,
-    MORE_QUESTIONS,
-    MORE_QUESTIONS_TEXT,
     NOT_READY,
+    PARALLEL_LIMIT,
     QUESTIONS,
     ChatFlow,
     SkillOutput,
@@ -410,7 +409,7 @@ def last_log_record(caplog) -> dict:
 
 
 async def test_each_turn_logs_what_the_slm_read_and_which_branches_ran(caplog):
-    slm = tin("kien_thuc", ("trung_tam", {"thanh_pho": "HN"}), confidence=0.93, con_lai=("kien_thuc",))
+    slm = tin("kien_thuc", ("trung_tam", {"thanh_pho": "HN"}), confidence=0.93)
     flow, _ = make_flow(slm)
 
     with caplog.at_level(logging.INFO, logger="advisor.chat"):
@@ -418,11 +417,7 @@ async def test_each_turn_logs_what_the_slm_read_and_which_branches_ran(caplog):
 
     record = last_log_record(caplog)
     assert record["session_id"] == "abc"
-    assert (record["slm_types"], record["slm_con_lai"], record["slm_confidence"]) == (
-        ["kien_thuc", "trung_tam"],
-        1,
-        0.93,
-    )
+    assert (record["slm_types"], record["slm_confidence"]) == (["kien_thuc", "trung_tam"], 0.93)
     assert record["slm_thuc_the"] == ["thanh_pho"]  # chỉ tên khóa, không ghi chữ học sinh viết
     assert record["ran"] == ["kien_thuc", "trung_tam"]
 
@@ -448,59 +443,10 @@ async def test_choice_turn_is_logged_with_the_session_id_too(caplog):
         await flow.reply(req)
 
     record = last_log_record(caplog)
-    assert record["session_id"] == "abc" and record["slm_types"] == [] and record["slm_con_lai"] == 0
+    assert record["session_id"] == "abc" and record["slm_types"] == []
 
 
-# ---- ý hoãn lại (quá số trả lời ngay) ----
-def left(*doans: str):
-    return tuple(("kien_thuc", {}, doan) for doan in doans)
-
-
-async def test_postponed_intents_become_buttons_after_the_answers():
-    slm = tin("kien_thuc", con_lai=left("OPT là gì", "CPT là gì"))
-    flow, _ = make_flow(slm)
-
-    res = await flow.reply(request("I-20 là gì, OPT là gì, CPT là gì"))
-
-    assert res.answer == "trả lời của kien_thuc\n\n" + MORE_QUESTIONS
-    assert res.quick_replies == [
-        QuickReply(label="OPT là gì", value="OPT là gì"),
-        QuickReply(label="CPT là gì", value="CPT là gì"),
-    ]
-
-
-async def test_postponed_intents_are_only_listed_when_the_answer_already_has_buttons_or_a_widget():
-    output = SkillOutput("hỏi ngành", [QuickReply(label="A", value="a")], Widget(type="major"))
-    slm = tin("ho_so", con_lai=left("OPT là gì"))
-    flow, _ = make_flow(slm, ho_so=FakeBranch("ho_so", [], output))
-
-    res = await flow.reply(request("gợi ý trường, OPT là gì"))
-
-    assert res.answer == "hỏi ngành\n\n" + MORE_QUESTIONS_TEXT + "\n- OPT là gì"
-    assert (
-        res.quick_replies == output.quick_replies and res.widget == output.widget
-    )  # nút của câu hỏi không bị thay
-
-
-async def test_postponed_intents_come_before_the_reminder_so_the_pending_question_stays_last():
-    slm = tin("kien_thuc", con_lai=left("OPT là gì"))
-    flow, _ = make_flow(slm)
-
-    res = await flow.reply(request("I-20 là gì, OPT là gì", pending="D2"))
-
-    assert res.answer.endswith(BACK_TO_QUESTION + QUESTIONS["D2"])
-    assert res.answer.index(MORE_QUESTIONS_TEXT) < res.answer.index(BACK_TO_QUESTION)
-    assert res.quick_replies == []  # đang chờ câu hồ sơ nên chỉ liệt kê, không thêm nút
-
-
-async def test_nothing_is_added_when_no_intent_was_postponed():
-    flow, _ = make_flow(tin("kien_thuc"))
-
-    res = await flow.reply(request("I-20 là gì?"))
-
-    assert (
-        MORE_QUESTIONS not in res.answer and MORE_QUESTIONS_TEXT not in res.answer and res.quick_replies == []
-    )
+# ---- nhiều ý trong một tin: ý nào cũng được trả lời ----
 
 
 # ---- ý chỉ đọc state chạy song song ----
@@ -554,3 +500,93 @@ async def test_intents_that_write_state_still_run_one_after_another_and_before_t
     await flow.reply(request("8.5, I-20 là gì, em nên nộp trường nào", pending="D2"))
 
     assert ran == ["mac_dinh", "ho_so", "kien_thuc"]  # kien_thuc đọc sau khi hồ sơ và tư vấn đã xong
+
+
+async def test_every_question_gets_its_answer_in_order_however_many_there_are():
+    class Echo:
+        async def run(self, state, message, slm):
+            return SkillOutput(f"đáp {message}")
+
+    asked = [f"câu {n}" for n in range(1, 9)]
+    flow, _ = make_flow(tin(*[("kien_thuc", {}, doan) for doan in asked]), kien_thuc=Echo())
+
+    res = await flow.reply(request(", ".join(asked)))
+
+    assert res.answer == "\n\n".join(f"đáp {doan}" for doan in asked)
+    assert res.skills == ["kien_thuc"] * 8 and res.quick_replies == []  # không còn ý hoãn thành nút
+
+
+async def test_no_more_than_the_parallel_limit_run_at_once_but_all_of_them_run():
+    class Gauge:
+        def __init__(self) -> None:
+            self.now = self.peak = self.done = 0
+
+        async def run(self, state, message, slm):
+            self.now += 1
+            self.peak = max(self.peak, self.now)
+            await asyncio.sleep(0.01)
+            self.now -= 1
+            self.done += 1
+            return SkillOutput(message)
+
+    gauge = Gauge()
+    asked = [f"câu {n}" for n in range(1, 4 * PARALLEL_LIMIT)]
+    flow, _ = make_flow(tin(*[("kien_thuc", {}, doan) for doan in asked]), kien_thuc=gauge)
+
+    await flow.reply(request(", ".join(asked)))
+
+    assert gauge.done == len(asked)
+    assert 1 < gauge.peak <= PARALLEL_LIMIT  # chạy song song thật, nhưng không vượt mức cho phép
+
+
+# ---- stream: gửi từng ý ngay khi xong ----
+class Delayed:
+    """Nhánh giả trả lời "đáp <câu>"; câu "chậm" trả lời trễ hơn."""
+
+    async def run(self, state, message, slm):
+        await asyncio.sleep(0.05 if message == "chậm" else 0)
+        return SkillOutput(f"đáp {message}")
+
+
+async def test_streamed_answers_keep_the_order_asked_even_when_a_later_one_is_ready_first():
+    events: list[dict] = []
+    slm = tin(("kien_thuc", {}, "chậm"), ("kien_thuc", {}, "nhanh"))
+    flow, _ = make_flow(slm, kien_thuc=Delayed())
+
+    res = await flow.reply(request("chậm, nhanh"), emit=events.append)
+
+    assert events == [
+        {"type": "progress", "answers": 2},
+        {"type": "partial", "text": "đáp chậm"},  # ý "nhanh" xong trước nhưng phải chờ ý đứng trước
+        {"type": "partial", "text": "đáp nhanh"},
+    ]
+    assert res.answer == "đáp chậm\n\nđáp nhanh"  # câu cuối cùng vẫn là cả hai, như khi không stream
+
+
+async def test_the_profile_answer_is_not_streamed_because_it_stays_at_the_end():
+    events: list[dict] = []
+    slm = tin(("mac_dinh", {"gpa": "8.5"}), ("kien_thuc", {}, "nhanh"))
+    flow, _ = make_flow(slm, kien_thuc=Delayed())
+
+    res = await flow.reply(request("8.5, nhanh", pending="D2"), emit=events.append)
+
+    assert events == [{"type": "progress", "answers": 1}, {"type": "partial", "text": "đáp nhanh"}]
+    assert res.answer == "đáp nhanh\n\ntrả lời của mac_dinh"  # câu hồ sơ nằm cuối, chỉ có ở kết quả cuối
+
+
+async def test_an_intent_with_no_answer_sends_nothing():
+    events: list[dict] = []
+    flow, _ = make_flow(tin("kien_thuc"), kien_thuc=FakeBranch("kien_thuc", [], SkillOutput("")))
+
+    await flow.reply(request("I-20 là gì"), emit=events.append)
+
+    assert events == [{"type": "progress", "answers": 1}]
+
+
+async def test_without_a_listener_the_reply_is_the_same():
+    slm = tin(("kien_thuc", {}, "chậm"), ("kien_thuc", {}, "nhanh"))
+    flow, _ = make_flow(slm, kien_thuc=Delayed())
+
+    res = await flow.reply(request("chậm, nhanh"))
+
+    assert res.answer == "đáp chậm\n\nđáp nhanh"

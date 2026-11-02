@@ -22,6 +22,48 @@ public class AdvisorClient(HttpClient http) : IAdvisorClient
                ?? throw new InvalidOperationException("Advisor service returned an empty response.");
     }
 
+    // ChatAsync gửi và nhận bằng cấu hình mặc định này (camelCase, không phân biệt hoa thường); stream dùng giống hệt
+    private static readonly JsonSerializerOptions StreamJson = new(JsonSerializerDefaults.Web);
+
+    public async Task<AdvisorChatResponse> ChatStreamAsync(
+        AdvisorChatRequest request, Func<AdvisorStreamEvent, Task> onEvent, CancellationToken ct = default)
+    {
+        using var message = new HttpRequestMessage(HttpMethod.Post, "api/v1/chat/stream")
+        {
+            Content = JsonContent.Create(request),
+        };
+        // ResponseHeadersRead: có dòng nào là đọc dòng đó ngay, không chờ advisor trả xong cả thân
+        using var response = await http.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, ct);
+        response.EnsureSuccessStatusCode();
+
+        await using var body = await response.Content.ReadAsStreamAsync(ct);
+        using var reader = new StreamReader(body);
+        AdvisorChatResponse? result = null;
+        // Mỗi dòng một JSON: progress, partial, final (đúng JSON của ChatAsync), hoặc error
+        while (await reader.ReadLineAsync(ct) is { } line)
+        {
+            if (string.IsNullOrWhiteSpace(line))
+                continue;
+            using var doc = JsonDocument.Parse(line);
+            var root = doc.RootElement;
+            switch (root.GetProperty("type").GetString())
+            {
+                case "progress":
+                    await onEvent(new AdvisorStreamEvent("progress", Answers: root.GetProperty("answers").GetInt32()));
+                    break;
+                case "partial":
+                    await onEvent(new AdvisorStreamEvent("partial", Text: root.GetProperty("text").GetString()));
+                    break;
+                case "final":
+                    result = root.GetProperty("response").Deserialize<AdvisorChatResponse>(StreamJson);
+                    break;
+                case "error":
+                    throw new HttpRequestException("Advisor báo lỗi giữa chừng khi trả lời.");
+            }
+        }
+        return result ?? throw new InvalidOperationException("Advisor stream kết thúc mà không có kết quả cuối.");
+    }
+
     public Task<EcResponseDto> ReadEcAsync(EcRequestDto request, CancellationToken ct = default) =>
         PostAsync<EcRequestDto, EcResponseDto>("api/v1/recommend/ec", request, ct);
 

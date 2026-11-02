@@ -33,7 +33,8 @@ export function useAssistantVisible() {
 
 /** Khung "Trợ lý USAS" cố định bên phải; màn hẹp thì phủ kín */
 export function AssistantPanel() {
-  const { open, wide, turns, loading, error, page, closePanel, toggleWide, newChat, send, retry } = useAssistant();
+  const { open, wide, turns, loading, streaming, error, page, closePanel, toggleWide, newChat, send, retry } =
+    useAssistant();
   const visible = useAssistantVisible();
   const pathname = usePathname();
   const [input, setInput] = useState("");
@@ -45,7 +46,7 @@ export function AssistantPanel() {
   useEffect(() => {
     const el = listRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [turns, loading, error, open]);
+  }, [turns, loading, streaming, error, open]);
 
   // Mở khung thì đặt con trỏ vào ô nhập
   useEffect(() => {
@@ -116,11 +117,19 @@ export function AssistantPanel() {
           />
         ))}
 
+        {/* Advisor trả từng ý khi xong: hiện dần các câu đã có, câu cuối cùng sẽ thay thế khi xong cả lượt */}
+        {loading && streaming?.text && <Turn turn={{ role: "assistant", content: streaming.text }} />}
+
         {loading && (
           <TypingIndicator
             recommending={
               turns.at(-2)?.role === "assistant" &&
               turns.at(-2)?.content.includes("đề xuất lộ trình và danh sách trường")
+            }
+            progress={
+              streaming && streaming.answers >= 2
+                ? `Đã trả lời ${streaming.done}/${streaming.answers} câu hỏi...`
+                : undefined
             }
           />
         )}
@@ -214,7 +223,7 @@ export function AssistantPanel() {
 // Giao diện không biết trước lượt nào chạy gợi ý, nên dựa vào thời gian chờ; lượt thường xong trước mốc này
 const SLOW_REPLY_MS = 8000;
 
-function TypingIndicator({ recommending }: { recommending?: boolean }) {
+function TypingIndicator({ recommending, progress }: { recommending?: boolean; progress?: string }) {
   const [slow, setSlow] = useState(false);
   useEffect(() => {
     const timer = setTimeout(() => setSlow(true), SLOW_REPLY_MS);
@@ -230,12 +239,16 @@ function TypingIndicator({ recommending }: { recommending?: boolean }) {
           style={{ animationDelay: `${d * 200}ms` }}
         />
       ))}
-      {slow && (
-        <span className="ml-2 text-xs text-muted-foreground">
-          {recommending
-            ? "Mình đang tính toán các trường phù hợp với bạn, có thể mất khoảng một phút..."
-            : "Mình đang xử lý, bạn chờ thêm một chút nhé..."}
-        </span>
+      {progress ? (
+        <span className="ml-2 text-xs text-muted-foreground">{progress}</span>
+      ) : (
+        slow && (
+          <span className="ml-2 text-xs text-muted-foreground">
+            {recommending
+              ? "Mình đang tính toán các trường phù hợp với bạn, có thể mất khoảng một phút..."
+              : "Mình đang xử lý, bạn chờ thêm một chút nhé..."}
+          </span>
+        )
       )}
     </div>
   );

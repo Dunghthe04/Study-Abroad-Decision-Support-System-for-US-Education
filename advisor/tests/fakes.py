@@ -10,7 +10,7 @@ from app.services.slm_contract import FixedSlm
 
 # Kết quả SLM giả theo danh sách ý. Mỗi ý là tên loại, hoặc (loại, thuc_the), hoặc (loại, thuc_the, doan).
 # Ý mac_dinh phải đứng đầu (như bộ phân loại thật). doan mặc định "x"
-def tin(*intents: Any, confidence: float = 1.0, con_lai: tuple[Any, ...] = ()) -> SlmTinResult:
+def tin(*intents: Any, confidence: float = 1.0) -> SlmTinResult:
     def make(item: Any) -> SlmY:
         if isinstance(item, str):
             return SlmY(type=item, doan="x")
@@ -19,7 +19,6 @@ def tin(*intents: Any, confidence: float = 1.0, con_lai: tuple[Any, ...] = ()) -
 
     return SlmTinResult(
         cac_y=[make(item) for item in intents],
-        con_lai=[make(item) for item in con_lai],
         confidence=confidence,
     )
 

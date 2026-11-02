@@ -6,7 +6,7 @@ from collections import Counter, defaultdict
 import pytest
 from openpyxl import Workbook
 
-from app.schemas.slm import MAX_Y
+from app.schemas.slm import MAX_RAW_Y
 from scripts.build_slm_jsonl import (
     COLUMNS,
     DEFAULT_EXCEL,
@@ -87,7 +87,6 @@ def test_rows_with_several_intents_cover_the_cases_the_model_must_learn(records)
     assert any("mac_dinh" in types and len(types) > 1 for types in rows), "thiếu: khai hồ sơ kèm câu hỏi"
     assert any(types.count("kien_thuc") >= 2 for types in rows), "thiếu: hai câu kiến thức liền nhau"
     assert any(len(types) >= 3 for types in rows), "thiếu: tin từ ba ý trở lên"
-    assert any(len(types) > MAX_Y + 1 for types in rows), "thiếu: tin dài hơn mức trả lời ngay"
 
 
 # ---- script đổi Excel sang JSONL ----
@@ -213,10 +212,11 @@ def test_two_intents_of_a_type_that_must_merge_are_rejected():
         check("ho_so", row(cau_hoi="đánh giá hồ sơ giúp em, em nên làm gì", cac_y=ys(first, second)))
 
 
-def test_a_row_with_more_intents_than_the_model_may_produce_is_rejected():
-    many = [{"type": "kien_thuc", "doan": f"câu {i}", "thuc_the": {}} for i in range(1, 9)]
+def test_a_row_with_more_intents_than_the_technical_ceiling_is_rejected():
+    asked = [f"câu {i}" for i in range(1, MAX_RAW_Y + 2)]
+    many = [{"type": "kien_thuc", "doan": doan, "thuc_the": {}} for doan in asked]
     with pytest.raises(ValueError, match="nhiều nhất"):
-        check("kien_thuc", row(cau_hoi=", ".join(f"câu {i}" for i in range(1, 9)), cac_y=ys(*many)))
+        check("kien_thuc", row(cau_hoi=", ".join(asked), cac_y=ys(*many)))
 
 
 def test_profile_values_in_entities_must_be_text_from_the_message():
