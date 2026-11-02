@@ -1,4 +1,4 @@
-"""Hỏi hồ sơ trong chat: skill_nhu_cau, skill_bac_hoc, skill_ho_so chạy qua nhánh hồ sơ (SLM đọc tin là mac_dinh)."""
+"""Hỏi hồ sơ trong chat: skill_bac_hoc, skill_ho_so chạy qua nhánh hồ sơ (SLM đọc tin là mac_dinh)."""
 
 from app.schemas.chat import ChatMessage, ChatRequest, ChatState, ProfileField
 from app.services.chat_flow import QUESTIONS
@@ -35,7 +35,7 @@ def ho_so(values: dict | None = None, none_fields: list | None = None) -> dict:
 PAGE1_ASKED = {"D1": 1, "N1": 1, "N2": 1, "N3": 1}
 
 
-# B1: skill_nhu_cau
+# Tin đầu tiên, chưa có câu đang chờ
 
 
 async def test_profile_advice_with_missing_items_offers_chat_or_form_first():
