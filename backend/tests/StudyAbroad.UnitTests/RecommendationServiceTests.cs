@@ -158,11 +158,10 @@ public class RecommendationServiceTests
         {
             UniversityId = university.Id,
             StudyLevel = "undergraduate",
-            Majors = [major],
             TuitionUsd = tuition,
             IntlAidPolicy = aidPolicy
         };
-        return new RecommendSchoolInput(university, offering);
+        return new RecommendSchoolInput(university, offering, [major]);
     }
 
     private sealed class FakeAdvisor : IAdvisorClient

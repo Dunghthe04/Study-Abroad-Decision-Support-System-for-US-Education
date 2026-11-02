@@ -57,18 +57,12 @@ public class ProfileFlowRepository(AppDbContext context) : IProfileFlowRepositor
 
     public async Task<IReadOnlyList<string>> GetOfferingMajorsAsync(CancellationToken ct = default)
     {
-        var offerings = await context.UniversityOfferings
+        return await context.Majors
             .AsNoTracking()
-            .Select(o => o.Majors)
+            .Where(m => context.UniversityOfferingMajors.Any(link => link.MajorId == m.Id))
+            .Select(m => m.Name)
+            .OrderBy(name => name)
             .ToListAsync(ct);
-
-        return offerings
-            .SelectMany(m => m)
-            .Where(m => !string.IsNullOrWhiteSpace(m))
-            .Select(m => m.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(m => m)
-            .ToList();
     }
 
     public async Task CommitProfileFlowAsync(

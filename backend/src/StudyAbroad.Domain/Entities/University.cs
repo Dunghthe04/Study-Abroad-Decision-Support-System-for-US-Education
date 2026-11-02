@@ -15,5 +15,6 @@ public class University : BaseEntity
     public string? Control { get; set; }
     public decimal? AcceptanceRate { get; set; }
     public int? InternationalStudentCount { get; set; }
+    public bool IsIvy { get; set; }
     public bool IsActive { get; set; } = true;
 }

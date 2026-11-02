@@ -8,7 +8,7 @@ using System.Text.Json.Nodes;
 namespace StudyAbroad.Application.Recommendations;
 
 //Một trường đã đưa vào gợi ý: hồ sơ trường + số liệu 
-public record RecommendSchoolInput(University University, UniversityOffering Offering);
+public record RecommendSchoolInput(University University, UniversityOffering Offering, IReadOnlyList<string> Majors);
 
 //Kết quả mỗi lượt. Score và Pick null khi không còn trường để gửi cloud
 public record RecommendationRun(
@@ -363,7 +363,7 @@ public class RecommendationService(IAdvisorClient advisor, IRecommendationReposi
         var offering = input.Offering;
         return new FilterSchool(
             input.University.Code,
-            offering.Majors,
+            input.Majors,
             input.University.State,
             input.University.Control,
             TotalCost(offering),

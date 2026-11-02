@@ -11,8 +11,6 @@ public class UniversityOfferingConfiguration : IEntityTypeConfiguration<Universi
         b.HasKey(x => x.Id);
         b.HasOne<University>().WithMany().HasForeignKey(x => x.UniversityId).OnDelete(DeleteBehavior.Cascade);
         b.Property(x => x.StudyLevel).HasMaxLength(32).IsRequired();
-        b.Property(x => x.Majors).HasColumnType("text[]");
-        b.Property(x => x.StemMajors).HasColumnType("text[]");
         b.Property(x => x.AcademicYear).HasMaxLength(16);
         b.Property(x => x.TuitionUsd).HasPrecision(12, 2);
         b.Property(x => x.LivingUsd).HasPrecision(12, 2);
@@ -29,6 +27,9 @@ public class UniversityOfferingConfiguration : IEntityTypeConfiguration<Universi
             t.HasCheckConstraint("ck_university_offerings_sat_range",
                 "(sat25 IS NULL OR sat25 BETWEEN 400 AND 1600) AND (sat75 IS NULL OR sat75 BETWEEN 400 AND 1600) "
                 + "AND (sat25 IS NULL OR sat75 IS NULL OR sat25 <= sat75)");
+            t.HasCheckConstraint("ck_university_offerings_act_range",
+                "(act25 IS NULL OR act25 BETWEEN 1 AND 36) AND (act75 IS NULL OR act75 BETWEEN 1 AND 36) "
+                + "AND (act25 IS NULL OR act75 IS NULL OR act25 <= act75)");
         });
         b.Property(x => x.SatPolicy).HasMaxLength(16);
 
@@ -38,6 +39,7 @@ public class UniversityOfferingConfiguration : IEntityTypeConfiguration<Universi
         b.Property(x => x.C7TestImportance).HasMaxLength(16).HasColumnName("c7_test_importance");
         b.Property(x => x.C7EcImportance).HasMaxLength(16).HasColumnName("c7_ec_importance");
         b.Property(x => x.SatSubmitPct).HasPrecision(5, 4);
+        b.Property(x => x.GpaSubmitPct).HasPrecision(5, 4);
         b.Property(x => x.GpaPct40).HasPrecision(5, 4).HasColumnName("gpa_pct_4_0");
         b.Property(x => x.GpaPct375To399).HasPrecision(5, 4).HasColumnName("gpa_pct_375_399");
         b.Property(x => x.GpaPct350To374).HasPrecision(5, 4).HasColumnName("gpa_pct_350_374");
