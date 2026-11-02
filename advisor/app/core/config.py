@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://localhost:11434"
     # Chỉ dùng khi không có GEMINI_API_KEY (bước B đọc bảng điểm chạy trên Ollama). Có khóa Gemini thì để trống
     llm_model: str = ""
-    slm_model: str = "usas-slm"
+    slm_model: str = "usas-slm-v2"
     slm_format: str = "json"
     llm_timeout_seconds: float = 120
     # Kích thước context window dự kiến
