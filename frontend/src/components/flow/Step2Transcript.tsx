@@ -495,10 +495,12 @@ export function Step2Transcript({
     if (mode === "overall") {
       if (overallValue == null) {
         setValidationError("Vui lòng nhập GPA tổng trước khi tiếp tục.");
+        document.getElementById(overallInputId)?.focus();
         return;
       }
       if (overallValue < 0 || overallValue > Number(overallScale)) {
         setValidationError(`GPA thang ${overallScale} phải từ 0 đến ${overallScale}.`);
+        document.getElementById(overallInputId)?.focus();
         return;
       }
       setValidationError(null);
@@ -652,6 +654,7 @@ export function Step2Transcript({
                 placeholder={overallScale === "10" ? "VD: 8.5" : "VD: 3.4"}
                 value={overallValue ?? ""}
                 onChange={(e) => handleOverallChange(e.target.value)}
+                aria-invalid={Boolean(validationError) || undefined}
                 className="w-40 bg-surface"
               />
             </div>
@@ -664,6 +667,7 @@ export function Step2Transcript({
               </div>
             )}
           </div>
+          {validationError && <p className="text-xs font-medium text-destructive">{validationError}</p>}
         </div>
       ) : (
         <>
@@ -1011,6 +1015,13 @@ export function Step2Transcript({
             </div>
           )}
 
+          {/* Lỗi bảng điểm hiện ngay dưới bảng */}
+          {validationError && (
+            <div className="rounded-xl bg-destructive/10 p-3 text-xs text-destructive font-medium border border-destructive/20 leading-relaxed">
+              {validationError}
+            </div>
+          )}
+
           {/* Dynamic GPA Calculation Card */}
           <div className="rounded-xl border border-brand/30 bg-brand-wash/30 p-4 shadow-2xs">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -1045,17 +1056,6 @@ export function Step2Transcript({
           </div>
         </div>
         </>
-      )}
-
-      {/* Validation Error Notice */}
-      {validationError && (
-        <Alert className="border-destructive/60 bg-destructive/10 animate-in fade-in-50">
-          <AlertTriangleIcon className="size-4 text-destructive" />
-          <AlertTitle className="text-sm font-semibold text-destructive">Chưa đủ dữ liệu bảng điểm</AlertTitle>
-          <AlertDescription className="text-xs text-destructive font-medium leading-relaxed">
-            {validationError}
-          </AlertDescription>
-        </Alert>
       )}
 
       {/* Bottom Actions */}
