@@ -33,6 +33,25 @@ interface Step1GoalProps {
 // Năm tốt nghiệp dự kiến: năm nay → 6 năm tới
 const THIS_YEAR = new Date().getFullYear();
 const GRADUATION_YEAR_OPTIONS = Array.from({ length: 7 }, (_, i) => THIS_YEAR + i);
+// Lớp / năm cuối của từng cấp học, để tính còn mấy năm nữa tốt nghiệp
+const LAST_GRADE: Partial<Record<CurrentEducationLevel, number>> = {
+  middle_school: 9,
+  high_school: 12,
+  college_university: 4,
+  master: 2,
+};
+
+// Năm tốt nghiệp dự kiến theo lớp đang học. Năm học Việt Nam kết thúc tháng 6, từ tháng 8 tính là năm học mới.
+// "Đã tốt nghiệp" hay lớp không đọc được thì trả null (không tự điền)
+function guessGraduationYear(level: CurrentEducationLevel | null | undefined, grade: string | null | undefined) {
+  const last = level ? LAST_GRADE[level] : undefined;
+  if (!last || !grade) return null;
+  const now = new Date();
+  const schoolYearEnd = now.getMonth() >= 7 ? now.getFullYear() + 1 : now.getFullYear();
+  if (grade === "Năm cuối") return schoolYearEnd;
+  const n = Number(/^(?:Lớp|Năm) (\d+)$/.exec(grade)?.[1]);
+  return n ? schoolYearEnd + Math.max(0, last - n) : null;
+}
 // Kỳ nhập học: chọn kỳ rồi chọn năm, lưu ghép "Fall 2027" — khớp IntakeRegex phía BE và câu B1.4 bên chat
 const INTAKE_TERM_OPTIONS = [
   { value: "Fall", label: "Kỳ mùa thu (Fall)" },
@@ -117,9 +136,12 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
   const handleSelectEducationLevel = (level: CurrentEducationLevel) => {
     // Giữ lớp đã chọn nếu vẫn hợp lệ với cấp học mới, không thì để học sinh chọn lại
     const stillValid = !!data.currentGrade && getGradeOptionsForLevel(level).includes(data.currentGrade);
+    const graduationYear = stillValid ? guessGraduationYear(level, data.currentGrade) : null;
     onUpdate({
       currentEducationLevel: level,
       currentGrade: stillValid ? data.currentGrade : null,
+      // "Năm 1" đại học và thạc sĩ ra năm tốt nghiệp khác nhau, nên tính lại
+      ...(graduationYear && { expectedGraduationYear: graduationYear }),
       // Hệ chương trình chỉ có nghĩa với cấp 3 (BE cũng bỏ khi lưu)
       educationSystem: level === "high_school" ? data.educationSystem : null,
     });
@@ -308,7 +330,12 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
                 <select
                   id="currentGrade"
                   value={data.currentGrade ?? ""}
-                  onChange={(e) => onUpdate({ currentGrade: e.target.value || null })}
+                  onChange={(e) => {
+                    // Chọn lớp thì tự điền năm tốt nghiệp, học sinh vẫn sửa lại được
+                    const grade = e.target.value || null;
+                    const graduationYear = guessGraduationYear(data.currentEducationLevel, grade);
+                    onUpdate({ currentGrade: grade, ...(graduationYear && { expectedGraduationYear: graduationYear }) });
+                  }}
                   className="w-full appearance-none rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground shadow-2xs focus:border-brand focus:outline-hidden focus:ring-1 focus:ring-brand cursor-pointer"
                 >
                   <option value="">Chọn lớp / năm</option>
@@ -335,7 +362,7 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
               />
             </div>
 
-            {/* Năm tốt nghiệp dự kiến (Dropdown 5 năm từ năm hiện tại) */}
+            {/* Năm tốt nghiệp dự kiến: tự điền khi chọn lớp, năm nay → 6 năm tới */}
             <div className="space-y-1.5">
               <Label htmlFor="expectedGraduationYear" className="text-xs font-medium text-foreground">
                 Năm tốt nghiệp dự kiến
