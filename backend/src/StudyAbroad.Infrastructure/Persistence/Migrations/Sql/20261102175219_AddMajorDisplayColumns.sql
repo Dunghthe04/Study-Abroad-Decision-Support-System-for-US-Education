@@ -11,7 +11,7 @@ FROM (VALUES
   ('11', 'Khoa học máy tính và thông tin', ARRAY['cntt', 'it', 'may tinh', 'cong nghe thong tin', 'computer science', 'ai', 'tri tue nhan tao', 'an ninh mang', 'du lieu'], TRUE),
   ('12', 'Dịch vụ cá nhân và ẩm thực', ARRAY['am thuc', 'nau an', 'culinary'], FALSE),
   ('13', 'Giáo dục', ARRAY['giao duc', 'su pham', 'education'], FALSE),
-  ('14', 'Kỹ thuật', ARRAY['ky thuat', 'co khi', 'dien', 'dien tu', 'xay dung', 'hang khong', 'ky thuat phan mem', 'engineering'], TRUE),
+  ('14', 'Kỹ thuật', ARRAY['ky thuat', 'ki thuat', 'co khi', 'dien', 'dien tu', 'xay dung', 'hang khong', 'ky thuat phan mem', 'engineering'], TRUE),
   ('15', 'Công nghệ kỹ thuật', ARRAY['cong nghe ky thuat', 'engineering technology'], FALSE),
   ('16', 'Ngoại ngữ, văn học và ngôn ngữ học', ARRAY['ngoai ngu', 'ngon ngu hoc', 'linguistics'], FALSE),
   ('19', 'Khoa học gia đình và tiêu dùng', ARRAY['dinh duong', 'gia dinh'], FALSE),
@@ -37,7 +37,7 @@ FROM (VALUES
   ('48', 'Sản xuất chính xác', ARRAY['san xuat'], FALSE),
   ('49', 'Vận tải', ARRAY['van tai', 'logistics', 'phi cong'], FALSE),
   ('50', 'Nghệ thuật thị giác và biểu diễn', ARRAY['nghe thuat', 'thiet ke do hoa', 'my thuat', 'am nhac', 'dien anh'], FALSE),
-  ('51', 'Y tế và sức khỏe', ARRAY['y khoa', 'y te', 'dieu duong', 'nursing', 'duoc', 'tien y'], TRUE),
+  ('51', 'Y tế và sức khỏe', ARRAY['y khoa', 'y te', 'bac si', 'dieu duong', 'nursing', 'duoc', 'tien y'], TRUE),
   ('52', 'Kinh doanh và marketing', ARRAY['kinh doanh', 'quan tri kinh doanh', 'tai chinh', 'ke toan', 'marketing', 'business', 'finance'], TRUE),
   ('54', 'Lịch sử', ARRAY['lich su', 'history'], FALSE)
 ) AS v(cip_code, name_vi, aliases, is_popular)
