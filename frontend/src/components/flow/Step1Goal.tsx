@@ -58,7 +58,11 @@ const INTAKE_TERM_OPTIONS = [
   { value: "Spring", label: "Kỳ mùa xuân (Spring)" },
   { value: "Summer", label: "Kỳ mùa hè (Summer)" },
 ];
-const INTAKE_YEAR_OPTIONS = Array.from({ length: 6 }, (_, i) => String(THIS_YEAR + i));
+// Năm nhập học: từ năm tốt nghiệp dự kiến (chưa có thì từ năm nay) tới 5 năm sau
+function intakeYearOptions(graduationYear?: number | null): string[] {
+  const from = Math.max(THIS_YEAR, graduationYear ?? THIS_YEAR);
+  return Array.from({ length: 6 }, (_, i) => String(from + i));
+}
 // 4 vùng của Cục Thống kê Mỹ, khớp cột region của bảng us_states
 const STATE_REGIONS = [
   { value: "northeast", label: "Đông Bắc" },
@@ -131,6 +135,7 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
 
   // Grade options based on current level
   const gradeOptions = getGradeOptionsForLevel(data.currentEducationLevel);
+  const yearOptions = intakeYearOptions(data.expectedGraduationYear);
   const isHighSchool = data.currentEducationLevel === "high_school";
 
   const handleSelectEducationLevel = (level: CurrentEducationLevel) => {
@@ -509,10 +514,10 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
               >
                 <option value="">Chọn năm</option>
                 {/* Năm đã lưu từ chat có thể nằm ngoài danh sách — vẫn hiện để không mất */}
-                {intakeYear && !INTAKE_YEAR_OPTIONS.includes(intakeYear) && (
+                {intakeYear && !yearOptions.includes(intakeYear) && (
                   <option value={intakeYear}>{intakeYear}</option>
                 )}
-                {INTAKE_YEAR_OPTIONS.map((yr) => (
+                {yearOptions.map((yr) => (
                   <option key={yr} value={yr}>
                     {yr}
                   </option>
