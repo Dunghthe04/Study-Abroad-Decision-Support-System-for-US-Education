@@ -141,5 +141,7 @@ public record UsMajorMetadataItem(
     [property: JsonPropertyName("id")] string Id,
     [property: JsonPropertyName("name")] string Name,
     [property: JsonPropertyName("englishName")] string EnglishName,
-    [property: JsonPropertyName("category")] string? Category = null
+    [property: JsonPropertyName("category")] string? Category = null,
+    [property: JsonPropertyName("aliases")] IReadOnlyList<string>? Aliases = null,
+    [property: JsonPropertyName("isPopular")] bool IsPopular = false
 );

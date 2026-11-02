@@ -232,8 +232,9 @@ public class ProfileFlowService(
 
         var budgetTiers = await LoadBudgetTiersAsync(ct);
         var certificationTypes = await LoadCertificationTypesAsync(ct);
+        var majorNames = (await repository.GetMajorOptionsAsync(ct)).Select(m => m.Name).ToList();
         var now = DateTime.UtcNow;
-        ValidateForCommit(draft, budgetTiers, certificationTypes, now);
+        ValidateForCommit(draft, budgetTiers, certificationTypes, majorNames, now);
 
         var (scores, activities, certifications) = ApplyDraftToProfile(profile, draft, budgetTiers, certificationTypes, now);
 
@@ -477,6 +478,7 @@ public class ProfileFlowService(
         ProfileFlowDraftDto draft,
         IReadOnlyDictionary<string, BudgetTier> budgetTiers,
         IReadOnlyDictionary<string, CertificationMetadataItem> certificationTypes,
+        IReadOnlyList<string> majorNames,
         DateTime now)
     {
         var errors = new List<string>();
@@ -496,6 +498,10 @@ public class ProfileFlowService(
             errors.Add("Bước 1: lớp / năm học hiện tại tối đa 64 ký tự.");
         if (step1?.TargetMajor?.Trim().Length > 128)
             errors.Add("Bước 1: ngành dự định tối đa 128 ký tự.");
+        // Ngành phải đúng tên trong bảng majors thì mới lọc được trường; để trống là "Chưa chọn ngành"
+        if (NullIfBlank(step1?.TargetMajor) is { } major
+            && !majorNames.Contains(major, StringComparer.OrdinalIgnoreCase))
+            errors.Add($"Bước 1: ngành '{major}' không có trong danh sách.");
         if (NullIfBlank(step1?.TargetIntake) is { } intake && !IntakeRegex.IsMatch(intake))
             errors.Add($"Bước 1: kỳ nhập học '{intake}' không hợp lệ (dạng Fall 2027).");
         if (step1?.ExpectedGraduationYear is { } gradYear

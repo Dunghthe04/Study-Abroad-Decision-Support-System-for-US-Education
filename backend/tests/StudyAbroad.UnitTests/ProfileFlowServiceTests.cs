@@ -59,8 +59,12 @@ public class ProfileFlowServiceTests
         public Task<string?> GetAppSettingValueAsync(string key, CancellationToken ct = default) =>
             Task.FromResult<string?>(key == ProfileConstants.ProfileMetadataAppSettingKey ? MetadataJson : null);
 
-        public Task<IReadOnlyList<string>> GetOfferingMajorsAsync(CancellationToken ct = default) =>
-            Task.FromResult<IReadOnlyList<string>>(["Computer Science", "Business Administration"]);
+        public Task<IReadOnlyList<MajorOption>> GetMajorOptionsAsync(CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<MajorOption>>(
+            [
+                new MajorOption("Computer and information sciences", "Khoa học máy tính và thông tin", [], true),
+                new MajorOption("Business/marketing", "Kinh doanh và marketing", [], true)
+            ]);
 
         public Task<StudentProfile?> GetProfileByUserIdAsync(Guid userId, CancellationToken ct = default)
         {
@@ -222,7 +226,7 @@ public class ProfileFlowServiceTests
             CurrentSchool: "THPT Chuyên Hà Nội - Amsterdam",
             ExpectedGraduationYear: 2027,
             TargetDegreeLevel: StudyLevels.Undergraduate,
-            TargetMajor: "Computer Science",
+            TargetMajor: "Computer and information sciences",
             TargetStates: ["CA", "MA"],
             TargetSchoolType: "private"),
         Step2: new FlowTranscriptDraftDto(
@@ -393,7 +397,7 @@ public class ProfileFlowServiceTests
         Assert.Equal("high_school", p.CurrentEducationLevel);
         Assert.Equal("Lớp 12", p.CurrentGrade);
         Assert.Equal(2027, p.GraduationYear);
-        Assert.Equal("Computer Science", p.IntendedMajor);
+        Assert.Equal("Computer and information sciences", p.IntendedMajor);
         Assert.Equal(["CA", "MA"], p.PreferredStates);
         Assert.Equal("private", p.TargetSchoolType);
 
@@ -525,6 +529,37 @@ public class ProfileFlowServiceTests
 
         Assert.Contains("'Tình nguyện' chưa chọn vai trò", ex.Message);
         Assert.Contains("'Giải Toán' chưa có năm đạt giải", ex.Message);
+    }
+
+    [Fact]
+    public async Task CommitFlowAsync_WhenMajorNotInList_Throws()
+    {
+        var service = new ProfileFlowService(new InMemoryProfileFlowRepository(), new FakeFileStorageService());
+        var draft = FullDraft();
+        draft = draft with { Step1 = draft.Step1! with { TargetMajor = "Computer Science" } };
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.CommitFlowAsync(Guid.NewGuid(), new CommitProfileFlowRequest(draft)));
+
+        Assert.Contains("ngành 'Computer Science' không có trong danh sách", ex.Message);
+    }
+
+    [Theory]
+    [InlineData("business/MARKETING")]
+    [InlineData(null)]
+    [InlineData("  ")]
+    public async Task CommitFlowAsync_MajorInListOrNotChosen_Commits(string? major)
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var service = new ProfileFlowService(repo, new FakeFileStorageService());
+        var userId = Guid.NewGuid();
+        var draft = FullDraft();
+        draft = draft with { Step1 = draft.Step1! with { TargetMajor = major } };
+
+        await service.CommitFlowAsync(userId, new CommitProfileFlowRequest(draft));
+
+        var profile = await repo.GetProfileByUserIdAsync(userId);
+        Assert.Equal(string.IsNullOrWhiteSpace(major) ? null : major, profile!.IntendedMajor);
     }
 
     [Fact]
