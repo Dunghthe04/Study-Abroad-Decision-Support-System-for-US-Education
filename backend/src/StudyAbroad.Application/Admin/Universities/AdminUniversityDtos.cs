@@ -32,7 +32,8 @@ public record AdminUniversityDetailDto(
     int? InternationalStudentCount,
     bool IsIvy,
     bool IsActive,
-    DateTime? UpdatedAt);
+    DateTime? UpdatedAt,
+    string? LastEditedBy);
 
 public record AdminOfferingMajorDto(Guid MajorId, string Name, string? CipCode, bool IsStem, bool IsVerified);
 
@@ -61,7 +62,9 @@ public record AdminUniversityOfferingDto(
     string? Notes,
     string? SourceUrl,
     DateOnly? RetrievedAt,
-    DateTime? UpdatedAt);
+    string? SourceReliability,
+    DateTime? UpdatedAt,
+    string? LastEditedBy);
 
 public record AdminMajorOptionDto(Guid Id, string Name, string? CipCode);
 
@@ -98,6 +101,7 @@ public record UpdateOfferingRequest(
     string? SatPolicy,
     string? SourceUrl,
     DateOnly? RetrievedAt,
+    string? SourceReliability,
     string? Notes,
     IReadOnlyList<UpdateOfferingMajor>? Majors);
 

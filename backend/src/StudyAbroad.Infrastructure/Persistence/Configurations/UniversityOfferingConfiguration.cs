@@ -54,6 +54,10 @@ public class UniversityOfferingConfiguration : IEntityTypeConfiguration<Universi
         b.Property(x => x.DeadlinesJson).HasColumnType("jsonb");
         b.Property(x => x.Notes).HasMaxLength(2000);
         b.Property(x => x.SourceUrl).HasMaxLength(512);
+        b.Property(x => x.SourceReliability).HasMaxLength(16);
+        b.ToTable(t => t.HasCheckConstraint("ck_university_offerings_source_reliability",
+            "source_reliability IS NULL OR source_reliability IN ('official', 'aggregated', 'self_reported')"));
+        b.HasOne<User>().WithMany().HasForeignKey(x => x.LastEditedByUserId).OnDelete(DeleteBehavior.SetNull);
         b.HasIndex(x => new { x.UniversityId, x.StudyLevel }).IsUnique();
     }
 }

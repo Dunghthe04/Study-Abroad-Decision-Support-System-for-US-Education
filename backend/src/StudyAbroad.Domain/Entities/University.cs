@@ -17,4 +17,6 @@ public class University : BaseEntity
     public int? InternationalStudentCount { get; set; }
     public bool IsIvy { get; set; }
     public bool IsActive { get; set; } = true;
+    /// <summary>Người sửa gần nhất (moderator/admin); ngày sửa là UpdatedAt.</summary>
+    public Guid? LastEditedByUserId { get; set; }
 }

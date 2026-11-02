@@ -22,6 +22,9 @@ public interface IAdminUniversityRepository
 
     Task<IReadOnlyList<Major>> ListMajorsAsync(CancellationToken ct = default);
 
+    /// <summary>Tên hiển thị của người sửa; null nếu không có id hoặc tài khoản đã bị xóa.</summary>
+    Task<string?> GetUserDisplayNameAsync(Guid? userId, CancellationToken ct = default);
+
     void AddMajorLink(UniversityOfferingMajor link);
 
     void RemoveMajorLink(UniversityOfferingMajor link);

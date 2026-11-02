@@ -78,6 +78,15 @@ public class AdminUniversityRepository(AppDbContext db) : IAdminUniversityReposi
     public async Task<IReadOnlyList<Major>> ListMajorsAsync(CancellationToken ct = default) =>
         await db.Majors.AsNoTracking().OrderBy(m => m.Name).ToListAsync(ct);
 
+    public async Task<string?> GetUserDisplayNameAsync(Guid? userId, CancellationToken ct = default)
+    {
+        if (userId is null) return null;
+        return await db.Users.AsNoTracking()
+            .Where(u => u.Id == userId)
+            .Select(u => u.FullName)
+            .FirstOrDefaultAsync(ct);
+    }
+
     public void AddMajorLink(UniversityOfferingMajor link) => db.UniversityOfferingMajors.Add(link);
 
     public void RemoveMajorLink(UniversityOfferingMajor link) => db.UniversityOfferingMajors.Remove(link);

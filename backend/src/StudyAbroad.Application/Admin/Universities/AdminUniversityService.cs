@@ -31,6 +31,7 @@ public class AdminUniversityService(
     private const int MaxPageSize = 100;
     private static readonly string[] Controls = ["public", "private"];
     private static readonly string[] SatPolicies = ["required", "optional", "not_accepted"];
+    private static readonly string[] SourceReliabilities = ["official", "aggregated", "self_reported"];
     private static readonly Regex StateCode = new("^[A-Z]{2}$");
 
     public Task<PagedResult<AdminUniversityListItemDto>> SearchAsync(AdminUniversityQuery query, CancellationToken ct = default)
@@ -46,7 +47,8 @@ public class AdminUniversityService(
     public async Task<AdminUniversityDetailDto?> GetAsync(Guid universityId, CancellationToken ct = default)
     {
         var university = await repository.GetUniversityAsync(universityId, ct);
-        return university is null ? null : ToDetailDto(university);
+        if (university is null) return null;
+        return await ToDetailDtoAsync(university, ct);
     }
 
     public async Task<IReadOnlyList<AdminUniversityOfferingDto>?> GetOfferingsAsync(Guid universityId, CancellationToken ct = default)
@@ -62,7 +64,8 @@ public class AdminUniversityService(
         foreach (var offering in offerings)
         {
             var rowsOfOffering = majorRows.Where(r => r.UniversityOfferingId == offering.Id).ToList();
-            result.Add(ToOfferingDto(offering, rowsOfOffering));
+            var lastEditedBy = await repository.GetUserDisplayNameAsync(offering.LastEditedByUserId, ct);
+            result.Add(ToOfferingDto(offering, rowsOfOffering, lastEditedBy));
         }
         return result;
     }
@@ -114,7 +117,7 @@ public class AdminUniversityService(
         AddChange(changes, "internationalStudentCount", university.InternationalStudentCount, request.InternationalStudentCount);
         AddChange(changes, "isIvy", university.IsIvy, request.IsIvy);
 
-        if (changes.Count == 0) return AdminUpdateResult<AdminUniversityDetailDto>.Ok(ToDetailDto(university));
+        if (changes.Count == 0) return AdminUpdateResult<AdminUniversityDetailDto>.Ok(await ToDetailDtoAsync(university, ct));
 
         university.Name = name!;
         university.City = city;
@@ -124,10 +127,11 @@ public class AdminUniversityService(
         university.AcceptanceRate = request.AcceptanceRate;
         university.InternationalStudentCount = request.InternationalStudentCount;
         university.IsIvy = request.IsIvy;
+        university.LastEditedByUserId = actorUserId;
         await repository.SaveChangesAsync(ct);
 
         await WriteAuditAsync(actorUserId, "university.update", "university", university.Id, new { code = university.Code, changes }, ct);
-        return AdminUpdateResult<AdminUniversityDetailDto>.Ok(ToDetailDto(university));
+        return AdminUpdateResult<AdminUniversityDetailDto>.Ok(await ToDetailDtoAsync(university, ct));
     }
 
     public async Task<AdminUpdateResult<AdminUniversityOfferingDto>> UpdateOfferingAsync(
@@ -139,10 +143,13 @@ public class AdminUniversityService(
         var academicYear = Clean(request.AcademicYear);
         var satPolicy = Clean(request.SatPolicy)?.ToLowerInvariant();
         var sourceUrl = Clean(request.SourceUrl);
+        var sourceReliability = Clean(request.SourceReliability)?.ToLowerInvariant();
         var notes = Clean(request.Notes);
         var requestedMajors = request.Majors ?? [];
 
         var errors = ValidateOffering(request, academicYear, satPolicy, sourceUrl, notes);
+        if (sourceReliability is not null && !SourceReliabilities.Contains(sourceReliability))
+            errors["sourceReliability"] = "Mức tin cậy chỉ nhận official, aggregated hoặc self_reported.";
         var knownMajors = await repository.ListMajorsAsync(ct);
         var knownMajorIds = knownMajors.Select(m => m.Id).ToHashSet();
         var seenMajorIds = new HashSet<Guid>();
@@ -173,6 +180,7 @@ public class AdminUniversityService(
         AddChange(changes, "satPolicy", offering.SatPolicy, satPolicy);
         AddChange(changes, "sourceUrl", offering.SourceUrl, sourceUrl);
         AddChange(changes, "retrievedAt", offering.RetrievedAt, request.RetrievedAt);
+        AddChange(changes, "sourceReliability", offering.SourceReliability, sourceReliability);
         AddChange(changes, "notes", offering.Notes, notes);
 
         offering.AcademicYear = academicYear;
@@ -192,6 +200,7 @@ public class AdminUniversityService(
         offering.SatPolicy = satPolicy;
         offering.SourceUrl = sourceUrl;
         offering.RetrievedAt = request.RetrievedAt;
+        offering.SourceReliability = sourceReliability;
         offering.Notes = notes;
 
         var majorChanges = await ApplyMajorChangesAsync(offering.Id, requestedMajors, knownMajors, ct);
@@ -201,13 +210,15 @@ public class AdminUniversityService(
         if (changes.Count > 0)
         {
             offering.UpdatedAt = DateTime.UtcNow;
+            offering.LastEditedByUserId = actorUserId;
             await repository.SaveChangesAsync(ct);
             await WriteAuditAsync(actorUserId, "university_offering.update", "university_offering", offering.Id,
                 new { universityId, studyLevel = offering.StudyLevel, changes }, ct);
         }
 
         var majorRows = await repository.ListMajorRowsAsync([offering.Id], ct);
-        return AdminUpdateResult<AdminUniversityOfferingDto>.Ok(ToOfferingDto(offering, majorRows));
+        var lastEditedBy = await repository.GetUserDisplayNameAsync(offering.LastEditedByUserId, ct);
+        return AdminUpdateResult<AdminUniversityOfferingDto>.Ok(ToOfferingDto(offering, majorRows, lastEditedBy));
     }
 
     public async Task<AdminUniversityDetailDto?> SetVisibilityAsync(Guid universityId, bool isActive, Guid actorUserId, CancellationToken ct = default)
@@ -216,15 +227,16 @@ public class AdminUniversityService(
         if (university is null) return null;
 
         // Bấm lại cùng trạng thái là thao tác hợp lệ, chỉ không ghi thêm audit.
-        if (university.IsActive == isActive) return ToDetailDto(university);
+        if (university.IsActive == isActive) return await ToDetailDtoAsync(university, ct);
 
         university.IsActive = isActive;
+        university.LastEditedByUserId = actorUserId;
         await repository.SaveChangesAsync(ct);
 
         var action = isActive ? "university.show" : "university.hide";
         await WriteAuditAsync(actorUserId, action, "university", university.Id,
             new { code = university.Code, from = !isActive, to = isActive }, ct);
-        return ToDetailDto(university);
+        return await ToDetailDtoAsync(university, ct);
     }
 
     private static Dictionary<string, string> ValidateOffering(
@@ -330,11 +342,16 @@ public class AdminUniversityService(
     private static bool IsHttpUrl(string value) =>
         Uri.TryCreate(value, UriKind.Absolute, out var uri) && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
 
-    private static AdminUniversityDetailDto ToDetailDto(University u) => new(
-        u.Id, u.Code, u.Name, u.City, u.State, u.Website, u.Control, u.AcceptanceRate,
-        u.InternationalStudentCount, u.IsIvy, u.IsActive, u.UpdatedAt);
+    private async Task<AdminUniversityDetailDto> ToDetailDtoAsync(University u, CancellationToken ct)
+    {
+        var lastEditedBy = await repository.GetUserDisplayNameAsync(u.LastEditedByUserId, ct);
+        return new AdminUniversityDetailDto(
+            u.Id, u.Code, u.Name, u.City, u.State, u.Website, u.Control, u.AcceptanceRate,
+            u.InternationalStudentCount, u.IsIvy, u.IsActive, u.UpdatedAt, lastEditedBy);
+    }
 
-    private static AdminUniversityOfferingDto ToOfferingDto(UniversityOffering o, IReadOnlyList<AdminOfferingMajorRow> majorRows)
+    private static AdminUniversityOfferingDto ToOfferingDto(
+        UniversityOffering o, IReadOnlyList<AdminOfferingMajorRow> majorRows, string? lastEditedBy)
     {
         var items = majorRows
             .OrderByDescending(r => r.IsStem)
@@ -347,6 +364,7 @@ public class AdminUniversityService(
         return new AdminUniversityOfferingDto(
             o.Id, o.StudyLevel, o.AcademicYear, o.TuitionUsd, o.LivingUsd, o.FeesUsd, o.OtherExpensesUsd,
             o.MinGpa4, o.MinIelts, o.MinToefl, o.MinDuolingo, o.AvgGpa4, o.Sat25, o.Sat75, o.Act25, o.Act75,
-            o.SatPolicy, majors, stemMajors, items, o.DeadlinesJson, o.Notes, o.SourceUrl, o.RetrievedAt, o.UpdatedAt);
+            o.SatPolicy, majors, stemMajors, items, o.DeadlinesJson, o.Notes, o.SourceUrl, o.RetrievedAt,
+            o.SourceReliability, o.UpdatedAt, lastEditedBy);
     }
 }

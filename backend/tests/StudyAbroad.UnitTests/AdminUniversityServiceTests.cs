@@ -138,6 +138,50 @@ public class AdminUniversityServiceTests
     }
 
     [Fact]
+    public async Task UpdateOfferingAsync_UnknownReliability_ReturnsError()
+    {
+        var repo = new FakeRepository();
+        var service = new AdminUniversityService(repo, new FakeAuditLogs());
+
+        var request = OfferingRequest(repo) with { SourceReliability = "maybe" };
+        var result = await service.UpdateOfferingAsync(repo.University.Id, repo.Offering.Id, request, Actor);
+
+        Assert.Contains("sourceReliability", result.Errors.Keys);
+        Assert.Equal(0, repo.SaveCount);
+    }
+
+    [Fact]
+    public async Task UpdateOfferingAsync_ChangedReliability_RecordsEditorAndAudit()
+    {
+        var repo = new FakeRepository();
+        var audit = new FakeAuditLogs();
+        var service = new AdminUniversityService(repo, audit);
+
+        var request = OfferingRequest(repo) with { SourceReliability = "Official" };
+        var result = await service.UpdateOfferingAsync(repo.University.Id, repo.Offering.Id, request, Actor);
+
+        Assert.True(result.Success);
+        Assert.Equal("official", repo.Offering.SourceReliability);
+        Assert.Equal(Actor, repo.Offering.LastEditedByUserId);
+        Assert.Equal("Moderator A", result.Value!.LastEditedBy);
+        Assert.Contains("sourceReliability", Assert.Single(audit.Entries).DetailJson);
+    }
+
+    [Fact]
+    public async Task UpdateUniversityAsync_Changed_RecordsEditor()
+    {
+        var repo = new FakeRepository();
+        var service = new AdminUniversityService(repo, new FakeAuditLogs());
+        var u = repo.University;
+
+        var result = await service.UpdateUniversityAsync(
+            u.Id, new UpdateUniversityRequest(u.Name, "Boston", u.State, u.Website, u.Control, u.AcceptanceRate, u.InternationalStudentCount, u.IsIvy), Actor);
+
+        Assert.Equal(Actor, u.LastEditedByUserId);
+        Assert.Equal("Moderator A", result.Value!.LastEditedBy);
+    }
+
+    [Fact]
     public async Task SetVisibilityAsync_Hide_WritesAudit_SecondCallDoesNot()
     {
         var repo = new FakeRepository();
@@ -165,7 +209,8 @@ public class AdminUniversityServiceTests
         var o = repo.Offering;
         return new UpdateOfferingRequest(
             o.AcademicYear, o.TuitionUsd, o.LivingUsd, o.FeesUsd, o.OtherExpensesUsd, o.MinGpa4, o.MinIelts, o.MinToefl,
-            o.MinDuolingo, o.AvgGpa4, o.Sat25, o.Sat75, o.Act25, o.Act75, o.SatPolicy, o.SourceUrl, o.RetrievedAt, o.Notes,
+            o.MinDuolingo, o.AvgGpa4, o.Sat25, o.Sat75, o.Act25, o.Act75, o.SatPolicy, o.SourceUrl, o.RetrievedAt,
+            o.SourceReliability, o.Notes,
             [new UpdateOfferingMajor(repo.ComputerScience.Id, true), new UpdateOfferingMajor(repo.Engineering.Id, true)]);
     }
 
@@ -229,6 +274,9 @@ public class AdminUniversityServiceTests
 
         public Task<IReadOnlyList<Major>> ListMajorsAsync(CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<Major>>([ComputerScience, Engineering, Business]);
+
+        public Task<string?> GetUserDisplayNameAsync(Guid? userId, CancellationToken ct = default) =>
+            Task.FromResult(userId == Actor ? "Moderator A" : null);
 
         public void AddMajorLink(UniversityOfferingMajor link) => Added.Add(link);
 
