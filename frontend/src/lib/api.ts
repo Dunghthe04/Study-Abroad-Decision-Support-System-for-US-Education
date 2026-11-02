@@ -30,6 +30,7 @@ export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    public body: unknown = null,
   ) {
     super(message);
     this.name = "ApiError";
@@ -56,7 +57,7 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
         message = `${message} (${errorList})`;
       }
     }
-    throw new ApiError(res.status, message);
+    throw new ApiError(res.status, message, body);
   }
 
   // Handle empty responses (e.g. 204 No Content)

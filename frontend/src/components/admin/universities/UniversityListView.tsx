@@ -31,6 +31,7 @@ import { OfferingsPanel } from "./OfferingsPanel";
 import type { PagedResult } from "@/types/api";
 import type {
   AdminUniversityActiveFilter,
+  AdminUniversityDetail,
   AdminUniversityFilters,
   AdminUniversityListItem,
 } from "@/types/admin-university";
@@ -98,6 +99,31 @@ export function UniversityListView() {
 
   const goToPage = (page: number) => {
     setApplied({ ...applied, page });
+  };
+
+  const handleUniversityChanged = (saved: AdminUniversityDetail) => {
+    const updateRow = (row: AdminUniversityListItem): AdminUniversityListItem => {
+      if (row.id !== saved.id) {
+        return row;
+      }
+      return {
+        ...row,
+        name: saved.name,
+        city: saved.city,
+        state: saved.state,
+        control: saved.control,
+        acceptanceRate: saved.acceptanceRate,
+        isActive: saved.isActive,
+      };
+    };
+
+    if (result && result.data) {
+      const items = result.data.items.map(updateRow);
+      setResult({ ...result, data: { ...result.data, items } });
+    }
+    if (selected) {
+      setSelected(updateRow(selected));
+    }
   };
 
   const totalPages = data?.totalPages ?? 0;
@@ -305,7 +331,11 @@ export function UniversityListView() {
           </div>
         </div>
       </div>
-      <OfferingsPanel university={selected} onClose={() => setSelected(null)} />
+      <OfferingsPanel
+        university={selected}
+        onClose={() => setSelected(null)}
+        onUniversityChanged={handleUniversityChanged}
+      />
     </div>
   );
 }

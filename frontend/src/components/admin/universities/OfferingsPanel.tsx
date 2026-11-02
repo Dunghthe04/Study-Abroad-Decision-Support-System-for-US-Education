@@ -3,10 +3,13 @@
 import { useEffect, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { XIcon } from "lucide-react";
+import { PencilIcon, XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { getAdminUniversityOfferings } from "@/lib/admin-university-api";
+import {
+  getAdminUniversity,
+  getAdminUniversityOfferings,
+} from "@/lib/admin-university-api";
 import {
   formatNumber,
   formatRetrievedAt,
@@ -16,7 +19,11 @@ import {
   satPolicyLabel,
 } from "@/lib/admin-university-display";
 import { studyLevelLabel } from "@/lib/study-levels";
+import { EditOfferingDialog } from "./EditOfferingDialog";
+import { EditUniversityDialog } from "./EditUniversityDialog";
+import { UniversityVisibilityButton } from "./UniversityVisibilityButton";
 import type {
+  AdminUniversityDetail,
   AdminUniversityListItem,
   AdminUniversityOffering,
 } from "@/types/admin-university";
@@ -24,12 +31,22 @@ import type {
 interface OfferingsPanelProps {
   university: AdminUniversityListItem | null;
   onClose: () => void;
+  /** Gọi sau khi sửa thông tin hoặc ẩn/hiện trường, để danh sách cập nhật dòng tương ứng. */
+  onUniversityChanged: (university: AdminUniversityDetail) => void;
 }
 
 interface LoadResult {
   universityId: string;
+  detail: AdminUniversityDetail | null;
   offerings: AdminUniversityOffering[] | null;
   error: string | null;
+}
+
+function formatUpdatedAt(isoDateTime: string | null): string {
+  if (!isoDateTime) {
+    return "—";
+  }
+  return new Date(isoDateTime).toLocaleString("vi-VN");
 }
 
 const FRAME = "overflow-hidden rounded-md border border-border";
@@ -82,7 +99,13 @@ function BlockTable({
   );
 }
 
-function OfferingCard({ offering }: { offering: AdminUniversityOffering }) {
+function OfferingCard({
+  offering,
+  onEdit,
+}: {
+  offering: AdminUniversityOffering;
+  onEdit: () => void;
+}) {
   const deadlines = parseDeadlines(offering.deadlinesJson);
   const totalCost =
     (offering.tuitionUsd ?? 0) +
@@ -113,8 +136,16 @@ function OfferingCard({ offering }: { offering: AdminUniversityOffering }) {
       label: "SAT 25% – 75%",
       value: formatSatRange(offering.sat25, offering.sat75),
     },
+    {
+      label: "ACT 25% – 75%",
+      value: formatSatRange(offering.act25, offering.act75),
+    },
     { label: "Chính sách SAT", value: satPolicyLabel(offering.satPolicy) },
   ];
+
+  const unverifiedCount = offering.majorItems.filter(
+    (item) => !item.isVerified,
+  ).length;
 
   const deadlineRows: DataRow[] =
     deadlines.length === 0
@@ -126,6 +157,7 @@ function OfferingCard({ offering }: { offering: AdminUniversityOffering }) {
 
   const sourceRows: DataRow[] = [
     { label: "Ngày lấy", value: formatRetrievedAt(offering.retrievedAt) },
+    { label: "Sửa lần cuối", value: formatUpdatedAt(offering.updatedAt) },
     {
       label: "Nguồn",
       value: offering.sourceUrl ? (
@@ -152,6 +184,16 @@ function OfferingCard({ offering }: { offering: AdminUniversityOffering }) {
         {offering.academicYear && (
           <Badge variant="outline">{offering.academicYear}</Badge>
         )}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="ml-auto"
+          onClick={onEdit}
+        >
+          <PencilIcon />
+          Sửa
+        </Button>
       </div>
 
       <DataTable title="Chi phí mỗi năm" rows={costRows} />
@@ -180,6 +222,12 @@ function OfferingCard({ offering }: { offering: AdminUniversityOffering }) {
             Ngành tô đậm là ngành STEM.
           </p>
         )}
+        {unverifiedCount > 0 && (
+          <p className="mt-1 text-xs text-muted-foreground">
+            {unverifiedCount} ngành lấy từ College Scorecard, chưa xác minh với
+            CDS.
+          </p>
+        )}
       </BlockTable>
 
       <DataTable title="Nguồn dữ liệu" rows={sourceRows} />
@@ -190,14 +238,25 @@ function OfferingCard({ offering }: { offering: AdminUniversityOffering }) {
   );
 }
 
-export function OfferingsPanel({ university, onClose }: OfferingsPanelProps) {
+export function OfferingsPanel({
+  university,
+  onClose,
+  onUniversityChanged,
+}: OfferingsPanelProps) {
   const [result, setResult] = useState<LoadResult | null>(null);
+  const [editingUniversity, setEditingUniversity] = useState(false);
+  const [editingOfferingId, setEditingOfferingId] = useState<string | null>(
+    null,
+  );
   const universityId = university?.id ?? null;
   const isLoading =
     universityId !== null && result?.universityId !== universityId;
-  const offerings =
-    result?.universityId === universityId ? result.offerings : null;
-  const error = result?.universityId === universityId ? result.error : null;
+  const current = result?.universityId === universityId ? result : null;
+  const detail = current?.detail ?? null;
+  const offerings = current?.offerings ?? null;
+  const error = current?.error ?? null;
+  const editingOffering =
+    offerings?.find((offering) => offering.id === editingOfferingId) ?? null;
 
   useEffect(() => {
     if (!universityId) {
@@ -205,10 +264,18 @@ export function OfferingsPanel({ university, onClose }: OfferingsPanelProps) {
     }
     let cancelled = false;
 
-    getAdminUniversityOfferings(universityId)
-      .then((loaded) => {
+    Promise.all([
+      getAdminUniversity(universityId),
+      getAdminUniversityOfferings(universityId),
+    ])
+      .then(([loadedDetail, loadedOfferings]) => {
         if (!cancelled) {
-          setResult({ universityId, offerings: loaded, error: null });
+          setResult({
+            universityId,
+            detail: loadedDetail,
+            offerings: loadedOfferings,
+            error: null,
+          });
         }
       })
       .catch((err: unknown) => {
@@ -217,7 +284,12 @@ export function OfferingsPanel({ university, onClose }: OfferingsPanelProps) {
             err instanceof Error
               ? err.message
               : "Không thể tải danh sách bậc học.";
-          setResult({ universityId, offerings: null, error: message });
+          setResult({
+            universityId,
+            detail: null,
+            offerings: null,
+            error: message,
+          });
         }
       });
 
@@ -229,6 +301,22 @@ export function OfferingsPanel({ university, onClose }: OfferingsPanelProps) {
   if (!university) {
     return null;
   }
+
+  const handleUniversitySaved = (saved: AdminUniversityDetail) => {
+    if (current) {
+      setResult({ ...current, detail: saved });
+    }
+    onUniversityChanged(saved);
+  };
+
+  const handleOfferingSaved = (saved: AdminUniversityOffering) => {
+    if (current && current.offerings) {
+      const nextOfferings = current.offerings.map((offering) =>
+        offering.id === saved.id ? saved : offering,
+      );
+      setResult({ ...current, offerings: nextOfferings });
+    }
+  };
 
   return (
     <aside
@@ -244,6 +332,23 @@ export function OfferingsPanel({ university, onClose }: OfferingsPanelProps) {
             <p className="text-sm text-muted-foreground">
               Mã {university.code}. Danh sách bậc học (offering) của trường.
             </p>
+            {detail && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setEditingUniversity(true)}
+                >
+                  <PencilIcon />
+                  Sửa trường
+                </Button>
+                <UniversityVisibilityButton
+                  university={detail}
+                  onChanged={handleUniversitySaved}
+                />
+              </div>
+            )}
           </div>
           <Button
             type="button"
@@ -276,9 +381,33 @@ export function OfferingsPanel({ university, onClose }: OfferingsPanelProps) {
         )}
 
         {offerings?.map((offering) => (
-          <OfferingCard key={offering.id} offering={offering} />
+          <OfferingCard
+            key={offering.id}
+            offering={offering}
+            onEdit={() => setEditingOfferingId(offering.id)}
+          />
         ))}
       </div>
+
+      {detail && editingUniversity && (
+        <EditUniversityDialog
+          university={detail}
+          open={editingUniversity}
+          onOpenChange={setEditingUniversity}
+          onSaved={handleUniversitySaved}
+        />
+      )}
+      {editingOffering && (
+        <EditOfferingDialog
+          universityId={university.id}
+          offering={editingOffering}
+          open={editingOffering !== null}
+          onOpenChange={(open) => {
+            if (!open) setEditingOfferingId(null);
+          }}
+          onSaved={handleOfferingSaved}
+        />
+      )}
     </aside>
   );
 }
