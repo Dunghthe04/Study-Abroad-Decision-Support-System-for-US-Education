@@ -297,15 +297,22 @@ export function Step6Review({
               <div className="text-sm font-semibold text-foreground">
                 {activitiesCount} hoạt động · {awardsCount} giải
               </div>
-              <ul className="space-y-1">
+              <ul className="space-y-2">
                 {step5.activities.map((a, i) => (
-                  <li key={a.id ?? i}>
-                    <strong className="text-foreground">{a.name}</strong>
-                    {" · "}
-                    {labelOf(IMPACT_LEVEL_OPTIONS, a.impactLevel) || "Chưa chọn phạm vi"}
-                    {a.category === "activity"
-                      ? ` · ${labelOf(ACTIVITY_ROLE_OPTIONS, a.role) || "Chưa chọn vai trò"}${a.durationMonths ? ` · ${a.durationMonths} tháng` : ""}`
-                      : ` · Năm ${a.year ?? "?"}`}
+                  <li key={a.id ?? i} className="space-y-0.5">
+                    <div>
+                      <strong className="text-foreground">{a.name}</strong>
+                      {" · "}
+                      {labelOf(IMPACT_LEVEL_OPTIONS, a.impactLevel) || "Chưa chọn phạm vi"}
+                      {a.category === "activity"
+                        ? ` · ${labelOf(ACTIVITY_ROLE_OPTIONS, a.role) || "Chưa chọn vai trò"}${a.durationMonths ? ` · ${a.durationMonths} tháng` : ""}`
+                        : ` · Năm ${a.year ?? "?"}`}
+                    </div>
+                    {a.description && (
+                      <p className="text-xs text-muted-foreground italic pl-2 border-l border-brand/40">
+                        &ldquo;{a.description}&rdquo;
+                      </p>
+                    )}
                   </li>
                 ))}
               </ul>

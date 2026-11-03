@@ -242,24 +242,36 @@ public static class ChatProfileMapper
             .Select(c => string.IsNullOrEmpty(c.Id) ? c with { Id = Guid.NewGuid().ToString() } : c)
             .ToList();
 
-    private static JsonNode ActivityToChat(FlowActivityDraftDto item) => new JsonObject
+    private static JsonNode ActivityToChat(FlowActivityDraftDto item)
     {
-        ["name"] = item.Name,
-        ["category"] = "activity",
-        ["role"] = item.Role,
-        ["impactLevel"] = item.ImpactLevel,
-        ["startDate"] = item.StartDate,
-        ["endDate"] = item.EndDate,
-        ["isOngoing"] = item.IsOngoing,
-    };
+        var node = new JsonObject
+        {
+            ["name"] = item.Name,
+            ["category"] = "activity",
+            ["role"] = item.Role,
+            ["impactLevel"] = item.ImpactLevel,
+            ["startDate"] = item.StartDate,
+            ["endDate"] = item.EndDate,
+            ["isOngoing"] = item.IsOngoing,
+        };
+        if (!string.IsNullOrWhiteSpace(item.Description))
+            node["description"] = item.Description;
+        return node;
+    }
 
-    private static JsonNode AwardToChat(FlowActivityDraftDto item) => new JsonObject
+    private static JsonNode AwardToChat(FlowActivityDraftDto item)
     {
-        ["name"] = item.Name,
-        ["category"] = "achievement",
-        ["impactLevel"] = item.ImpactLevel,
-        ["year"] = item.Year,
-    };
+        var node = new JsonObject
+        {
+            ["name"] = item.Name,
+            ["category"] = "achievement",
+            ["impactLevel"] = item.ImpactLevel,
+            ["year"] = item.Year,
+        };
+        if (!string.IsNullOrWhiteSpace(item.Description))
+            node["description"] = item.Description;
+        return node;
+    }
 
     // Thay toàn bộ hoạt động (hoặc giải thưởng) bằng danh sách của chat, giữ id theo vị trí và giữ loại còn lại
     private static List<FlowActivityDraftDto> PutItems(List<FlowActivityDraftDto>? items, bool award, JsonNode? value)
@@ -267,12 +279,47 @@ public static class ChatProfileMapper
         var all = items ?? [];
         var oldIds = all.Where(i => IsAward(i) == award).Select(i => i.Id).ToList();
         var fromChat = (value?.AsArray() ?? [])
-            .Select((node, i) => node.Deserialize<FlowActivityDraftDto>()! with
+            .Select((node, i) =>
             {
-                Id = i < oldIds.Count && oldIds[i] is { } id ? id : Guid.NewGuid().ToString(),
+                var id = i < oldIds.Count && oldIds[i] is { } existingId ? existingId : Guid.NewGuid().ToString();
+                return NodeToActivity(node, award, id);
             });
         var kept = all.Where(i => IsAward(i) != award);
         return award ? kept.Concat(fromChat).ToList() : fromChat.Concat(kept).ToList();
+    }
+
+    private static FlowActivityDraftDto NodeToActivity(JsonNode? node, bool award, string id)
+    {
+        if (node is JsonObject obj)
+        {
+            var name = obj["name"]?.GetValue<string>();
+            var cat = obj["category"]?.GetValue<string>() ?? (award ? "achievement" : "activity");
+            var role = obj["role"]?.GetValue<string>();
+            var impact = obj["impactLevel"]?.GetValue<string>() ?? obj["impact_level"]?.GetValue<string>();
+            var start = obj["startDate"]?.GetValue<string>() ?? obj["start_date"]?.GetValue<string>();
+            var end = obj["endDate"]?.GetValue<string>() ?? obj["end_date"]?.GetValue<string>();
+            var ongoing = obj["isOngoing"]?.GetValue<bool>() ?? obj["is_ongoing"]?.GetValue<bool>() ?? false;
+            var desc = obj["description"]?.GetValue<string>();
+            var year = obj["year"]?.GetValue<int?>();
+            var duration = obj["durationMonths"]?.GetValue<int?>() ?? obj["duration_months"]?.GetValue<int?>();
+
+            return new FlowActivityDraftDto(
+                Id: id,
+                Name: name,
+                Category: cat,
+                Role: role,
+                ImpactLevel: impact,
+                StartDate: start,
+                EndDate: end,
+                IsOngoing: ongoing,
+                DurationMonths: duration,
+                Year: year,
+                Description: desc
+            );
+        }
+
+        var dto = node.Deserialize<FlowActivityDraftDto>() ?? new FlowActivityDraftDto();
+        return dto with { Id = id };
     }
 
     private static bool KeepFromPrevious(string key, JsonNode? previous)

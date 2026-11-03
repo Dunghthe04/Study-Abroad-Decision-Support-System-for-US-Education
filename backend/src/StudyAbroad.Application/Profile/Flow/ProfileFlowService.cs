@@ -586,6 +586,8 @@ public class ProfileFlowService(
                 errors.Add("Bước 5: tên hoạt động / giải thưởng tối đa 256 ký tự.");
                 continue;
             }
+            if (item.Description?.Trim().Length > 1000)
+                errors.Add($"Bước 5: mô tả cho '{name}' tối đa 1000 ký tự.");
             if (item.ImpactLevel is null || !ProfileConstants.ImpactLevelCodes.ToLevel.ContainsKey(item.ImpactLevel))
                 errors.Add($"Bước 5: '{name}' chưa chọn phạm vi.");
 
@@ -863,6 +865,7 @@ public class ProfileFlowService(
                     Title = item.Name!.Trim(),
                     ImpactLevel = impact,
                     AwardYear = item.Year,
+                    Description = NullIfBlank(item.Description),
                 });
                 continue;
             }
@@ -879,6 +882,7 @@ public class ProfileFlowService(
                 EndDate = end,
                 IsOngoing = item.IsOngoing,
                 DurationMonths = CountMonths(start, end ?? today),
+                Description = NullIfBlank(item.Description),
             });
         }
 
@@ -1085,7 +1089,8 @@ public class ProfileFlowService(
                 Name: a.Title,
                 Category: "achievement",
                 ImpactLevel: ProfileConstants.ImpactLevelCodes.FromLevel(a.ImpactLevel),
-                Year: a.AwardYear ?? a.StartDate?.Year)
+                Year: a.AwardYear ?? a.StartDate?.Year,
+                Description: a.Description)
             : new FlowActivityDraftDto(
                 Id: a.Id.ToString(),
                 Name: a.Title,
@@ -1095,7 +1100,8 @@ public class ProfileFlowService(
                 StartDate: a.StartDate?.ToString("MM/yyyy", CultureInfo.InvariantCulture),
                 EndDate: a.EndDate?.ToString("MM/yyyy", CultureInfo.InvariantCulture),
                 IsOngoing: a.IsOngoing,
-                DurationMonths: a.DurationMonths)).ToList());
+                DurationMonths: a.DurationMonths,
+                Description: a.Description)).ToList());
 
         return new ProfileFlowDraftDto(step1, step2, step3, step4, step5);
     }

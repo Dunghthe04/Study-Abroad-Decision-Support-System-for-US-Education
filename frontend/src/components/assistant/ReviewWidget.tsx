@@ -2,10 +2,12 @@
 
 import { cn } from "@/lib/utils";
 import {
+  ACTIVITY_ROLE_OPTIONS,
   DEFAULT_BUDGET_TIERS,
   EDUCATION_LEVEL_OPTIONS,
   EDUCATION_SYSTEM_OPTIONS,
   FUNDING_SOURCE_OPTIONS,
+  IMPACT_LEVEL_OPTIONS,
   SCHOLARSHIP_NEED_OPTIONS,
   SCHOOL_TYPE_OPTIONS,
   labelOf,
@@ -91,7 +93,29 @@ function str(v: unknown): string {
 
 function names(v: unknown): string {
   if (!Array.isArray(v) || v.length === 0) return "";
-  return v.map((item) => str(obj(item).name) || str(item)).filter(Boolean).join(", ");
+  return v
+    .map((item) => {
+      const o = obj(item);
+      const name = str(o.name) || str(item);
+      if (!name) return "";
+      const role = str(o.role);
+      const year = str(o.year);
+      const impact = str(o.impactLevel || o.impact_level);
+      const impactLabel = labelOf(IMPACT_LEVEL_OPTIONS, impact as never) || impact;
+      const parts = [name];
+      if (role) {
+        const roleLabel = labelOf(ACTIVITY_ROLE_OPTIONS, role as never) || role;
+        parts.push(`(${roleLabel})`);
+      } else if (year) {
+        parts.push(`(${year})`);
+      }
+      if (impactLabel) {
+        parts.push(`· Cấp ${impactLabel.toLowerCase()}`);
+      }
+      return parts.join(" ");
+    })
+    .filter(Boolean)
+    .join("; ");
 }
 
 /** Đổi giá trị thô của một ô thành chữ dễ đọc; rỗng nếu không đọc được */

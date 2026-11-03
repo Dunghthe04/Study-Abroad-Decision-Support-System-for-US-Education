@@ -224,6 +224,8 @@ export interface ActivityDraft {
   durationMonths?: number | null;
   // Giải thưởng
   year?: number | null;
+  // Mô tả thêm (tùy chọn)
+  description?: string | null;
 }
 
 export interface ProfileFlowDraft {

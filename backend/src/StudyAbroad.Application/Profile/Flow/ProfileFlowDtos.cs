@@ -139,7 +139,8 @@ public record FlowActivityDraftDto(
     [property: JsonPropertyName("endDate")] string? EndDate = null,
     [property: JsonPropertyName("isOngoing")] bool IsOngoing = false,
     [property: JsonPropertyName("durationMonths")] int? DurationMonths = null,
-    [property: JsonPropertyName("year")] int? Year = null
+    [property: JsonPropertyName("year")] int? Year = null,
+    [property: JsonPropertyName("description")] string? Description = null
 );
 
 /// <summary>Kết quả OCR (giữ dạng kỳ/môn); FE tự ghép vào draft.step2 rồi lưu nháp</summary>

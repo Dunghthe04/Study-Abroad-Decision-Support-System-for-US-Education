@@ -455,6 +455,7 @@ def check_activity(
     start_date: str | None = None,
     end_date: str | None = None,
     is_ongoing: bool = False,
+    description: str | None = None,
     today: date | None = None,
 ) -> dict:
     name = check_item_name(name, "Hoạt động này tên là gì vậy bạn?")
@@ -476,7 +477,7 @@ def check_activity(
         if end < start:
             raise AskAgain("Tháng kết thúc phải sau hoặc bằng tháng bắt đầu. Bạn xem lại giúp mình nhé?")
 
-    return {
+    res = {
         "name": name,
         "category": "activity",
         "role": role,
@@ -485,6 +486,9 @@ def check_activity(
         "endDate": None if is_ongoing else end_date.strip(),
         "isOngoing": is_ongoing,
     }
+    if description and description.strip():
+        res["description"] = description.strip()
+    return res
 
 
 # A5. Danh sách hoạt động: tối đa 4, kiểm tra từng cái
@@ -496,7 +500,11 @@ def check_activities(items: list[dict], today: date | None = None) -> list[dict]
 
 # A9. Một giải thưởng, đúng dạng mục "achievement" của form: tên, phạm vi, năm đạt giải 2000..năm nay
 def check_award(
-    name: str | None, impact_level: str | None = None, year: int | None = None, today: date | None = None
+    name: str | None,
+    impact_level: str | None = None,
+    year: int | None = None,
+    description: str | None = None,
+    today: date | None = None,
 ) -> dict:
     name = check_item_name(name, "Giải thưởng này tên là gì vậy bạn?")
     impact = check_impact(name, impact_level)
@@ -505,7 +513,10 @@ def check_award(
         raise AskAgain(f"Bạn đạt {name} vào năm nào?")
     if not MIN_AWARD_YEAR <= year <= this_year:
         raise AskAgain(f"Năm đạt giải phải từ {MIN_AWARD_YEAR} đến {this_year}. Bạn đạt {name} năm nào?")
-    return {"name": name, "category": "achievement", "impactLevel": impact, "year": year}
+    res = {"name": name, "category": "achievement", "impactLevel": impact, "year": year}
+    if description and description.strip():
+        res["description"] = description.strip()
+    return res
 
 
 # A9. Danh sách giải thưởng: tối đa 3, kiểm tra từng cái

@@ -329,6 +329,41 @@ public class ChatProfileMapperTests
     }
 
     [Fact]
+    public void ChatActivities_WithDescriptionAndSnakeCase_PreservedAndMapped()
+    {
+        var chatJson = """
+        [
+          {
+            "name": "Dự án Mùa Hè Xanh",
+            "category": "activity",
+            "role": "leader",
+            "impact_level": "province",
+            "start_date": "06/2024",
+            "end_date": "08/2024",
+            "is_ongoing": false,
+            "description": "Dẫn dắt 30 tình nguyện viên xây dựng 2 phòng học"
+          }
+        ]
+        """;
+
+        var draft = ToDraft(Confirmed("activities", chatJson));
+        var activity = draft.Step5!.Activities![0];
+
+        Assert.Equal("Dự án Mùa Hè Xanh", activity.Name);
+        Assert.Equal("leader", activity.Role);
+        Assert.Equal("province", activity.ImpactLevel);
+        Assert.Equal("06/2024", activity.StartDate);
+        Assert.Equal("08/2024", activity.EndDate);
+        Assert.False(activity.IsOngoing);
+        Assert.Equal("Dẫn dắt 30 tình nguyện viên xây dựng 2 phòng học", activity.Description);
+
+        // Vòng tròn ngược lại: ToChatProfile phải giữ nguyên description
+        var backToChat = ChatProfileMapper.ToChatProfile(draft);
+        var chatActivity = backToChat["activities"]!["value"]!.AsArray()[0];
+        Assert.Equal("Dẫn dắt 30 tình nguyện viên xây dựng 2 phòng học", chatActivity["description"]!.GetValue<string>());
+    }
+
+    [Fact]
     public void UnknownMajorAndTargetLevel_ClearDraft()
     {
         var old = new ProfileFlowDraftDto(Step1: new FlowGoalDraftDto(TargetDegreeLevel: "master", TargetMajor: "Law"));
