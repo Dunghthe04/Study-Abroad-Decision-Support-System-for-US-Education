@@ -441,6 +441,73 @@ public class AuthServiceTests
     }
 
     [Fact]
+    public async Task AnonymizeUserAccount_Success_AnonymizesPiiAndRevokesSessionsAndLogsAudit()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        var user = _repo.Users[0];
+        user.Status = UserStatuses.Active;
+        var userId = user.Id;
+        var originalEmail = user.Email;
+
+        await _repo.CreateSessionAsync(new UserSession
+        {
+            UserId = userId,
+            TokenHash = "token_hash_abc",
+            ExpiresAt = DateTime.UtcNow.AddDays(7),
+            IsRevoked = false
+        });
+
+        var result = await service.AnonymizeUserAccountAsync(
+            userId,
+            ipAddress: "127.0.0.1",
+            userAgent: "TestAgent/1.0");
+
+        Assert.Equal(AuthError.None, result.Error);
+        Assert.Equal(UserStatuses.Deleted, user.Status);
+        Assert.NotEqual(originalEmail, user.Email);
+        Assert.StartsWith("deleted_", user.Email);
+        Assert.EndsWith("@anonymized.studyabroad", user.Email);
+        Assert.Equal("Người dùng đã xóa", user.FullName);
+        Assert.Null(user.Phone);
+        Assert.Equal(string.Empty, user.PasswordHash);
+        Assert.True(_repo.Sessions[0].IsRevoked);
+
+        var log = Assert.Single(_auditLogs.Entries);
+        Assert.Equal("user.delete_account", log.Action);
+        Assert.Equal(userId, log.ActorUserId);
+        Assert.Equal("127.0.0.1", log.IpAddress);
+        Assert.Equal("TestAgent/1.0", log.UserAgent);
+    }
+
+    [Fact]
+    public async Task AnonymizeUserAccount_AlreadyDeleted_ReturnsValidationError()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        var user = _repo.Users[0];
+        user.Status = UserStatuses.Deleted;
+
+        var result = await service.AnonymizeUserAccountAsync(user.Id);
+
+        Assert.Equal(AuthError.Validation, result.Error);
+        Assert.Contains("đã được xóa", result.Message);
+        Assert.Empty(_auditLogs.Entries);
+    }
+
+    [Fact]
+    public async Task AnonymizeUserAccount_UserNotFound_ReturnsValidationError()
+    {
+        var service = CreateService();
+
+        var result = await service.AnonymizeUserAccountAsync(Guid.NewGuid());
+
+        Assert.Equal(AuthError.Validation, result.Error);
+        Assert.Contains("Không tìm thấy", result.Message);
+        Assert.Empty(_auditLogs.Entries);
+    }
+
+    [Fact]
     public async Task Login_UnverifiedUser_ReturnsUnverifiedError()
     {
         var service = CreateService();
