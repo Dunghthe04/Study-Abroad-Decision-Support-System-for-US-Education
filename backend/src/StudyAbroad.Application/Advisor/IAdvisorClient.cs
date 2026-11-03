@@ -13,8 +13,6 @@ public interface IAdvisorClient
         AdvisorChatRequest request, Func<AdvisorStreamEvent, Task> onEvent, CancellationToken ct = default) =>
         ChatAsync(request, ct);
     Task<EcResponseDto> ReadEcAsync(EcRequestDto request, CancellationToken ct = default);
-    Task<ScoreResponseDto> ScoreAsync(ScoreRequestDto request, CancellationToken ct = default);
-    Task<PickResponseDto> PickAsync(PickRequestDto request, CancellationToken ct = default);
     Task<ExplainResponseDto> ExplainAsync(ExplainRequestDto request, CancellationToken ct = default);
 
 }

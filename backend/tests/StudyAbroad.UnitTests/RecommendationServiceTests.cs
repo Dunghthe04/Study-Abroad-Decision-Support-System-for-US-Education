@@ -7,73 +7,196 @@ using StudyAbroad.Domain.Entities;
 
 namespace StudyAbroad.UnitTests;
 
+// Luồng gợi ý trường: lọc cứng → advisor đọc ngoại khóa → code chấm nhóm và fit score → lưu theo khuôn JSON cũ.
 public class RecommendationServiceTests
 {
-    [Fact]
-    public async Task Recommend_FiltersBeforeQwen_ThenScores_ThenSavesCloudNumbers()
+    private const string Major = "Computer and information sciences";
+
+    private static StudentProfile Profile(string? need = ProfileConstants.ScholarshipNeeds.Preferred, string? major = Major) => new()
+    {
+        UserId = Guid.NewGuid(),
+        TargetLevel = "undergraduate",
+        IntendedMajor = major,
+        BudgetMaxUsd = 50_000m,
+        ScholarshipNeed = need,
+        OverallGpa = 3.6m,
+        Sat = 1350m,
+        Ielts = 6.5m,
+        TargetSchoolType = "all"
+    };
+
+    private static (RecommendationService Service, FakeAdvisor Advisor, FakeRecommendationRepository Store) Setup(
+        StudentProfile? profile = null, IReadOnlyList<RecommendSchoolInput>? schools = null)
     {
         var advisor = new FakeAdvisor();
-        var store = new FakeRecommendationRepository();
-        var service = new RecommendationService(advisor, store, new UnusedProfileFlow());
+        var store = new FakeRecommendationRepository(schools ?? []);
+        return (new RecommendationService(advisor, store, new FakeProfileFlow(profile)), advisor, store);
+    }
 
-        var profile = new StudentProfile
-        {
-            UserId = Guid.NewGuid(),
-            TargetLevel = "undergraduate",
-            IntendedMajor = "Computer and information sciences",
-            BudgetMaxUsd = 50_000m,
-            ScholarshipNeed = ProfileConstants.ScholarshipNeeds.Preferred,
-            OverallGpa = 3.6m,
-            Sat = 1350m,
-            Ielts = 6.5m,
-            TargetSchoolType = "all"
-        };
+    // ---------------------------------------------------------------- luồng chính
 
+    [Fact]
+    public async Task Recommend_FiltersFirst_GradesByCode_AndOnlyTheEcReadGoesToTheAdvisor()
+    {
+        var (service, advisor, store) = Setup();
+        var profile = Profile();
         var schools = new List<RecommendSchoolInput>
         {
-            School("Colgate", 95_610m, "need_and_merit", "Computer and information sciences"),
-            School("B", 38_000m, "none", "Computer and information sciences"),
-            School("D", 20_000m, "none", "History")
+            School("Colgate", 95_610m, "need_and_merit", Major, sat: (1450, 1550), accept: 0.08m),   // vượt ngân sách, rất chọn lọc
+            School("B", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m),     // vừa sức
+            School("D", 20_000m, "none", "History", sat: (1200, 1380), accept: 0.60m)                 // sai ngành
         };
 
         await service.RecommendAsync(profile, [], schools);
 
-        Assert.Equal(["ec", "score", "pick"], advisor.Calls);
-        Assert.Equal(3, advisor.ScoreRequest!.Student.Tier);
-        Assert.DoesNotContain(advisor.ScoreRequest.Schools, s => s.C == "D");
-        Assert.Equal("AID", advisor.PickRequest!.Items.Single(i => i.C == "Colgate").Blk);
-        Assert.Equal("MAIN", advisor.PickRequest.Items.Single(i => i.C == "B").Blk);
+        Assert.Equal(["ec"], advisor.Calls);   // không còn chấm điểm và chọn trường trên cloud
 
         var saved = Assert.Single(store.Rows);
-        Assert.Equal("1.1", saved.AlgorithmVersion);
+        Assert.Equal(RecommendationService.AlgorithmVersion, saved.AlgorithmVersion);
         using var criteria = JsonDocument.Parse(saved.CriteriaJson);
         using var items = JsonDocument.Parse(saved.ItemsJson);
-        Assert.Equal("gemini-test", criteria.RootElement.GetProperty("pickModel").GetString());
-        Assert.Equal(12.9, items.RootElement.GetProperty("scored")[0].GetProperty("s").GetDouble());
-        Assert.Equal("RF", items.RootElement.GetProperty("scored")[0].GetProperty("g2").GetString());
-        Assert.Equal(0.414, items.RootElement.GetProperty("match")[0].GetProperty("x").GetDouble());
+        var root = items.RootElement;
+
+        var scored = root.GetProperty("scored").EnumerateArray().ToDictionary(e => e.GetProperty("code").GetString()!);
+        Assert.False(scored.ContainsKey("D"));
+        Assert.Equal("AidBlock", scored["Colgate"].GetProperty("outcome").GetString());
+        Assert.Equal("R", scored["Colgate"].GetProperty("g2").GetString());     // tỉ lệ nhận 8% nên luôn Khó vào
+        Assert.Equal("M", scored["B"].GetProperty("g2").GetString());
+
+        Assert.Equal("B", root.GetProperty("match")[0].GetProperty("code").GetString());
+        Assert.Equal(0, root.GetProperty("reach").GetArrayLength());           // Colgate cần học bổng lớn nên ở khối riêng
+        Assert.Equal("Colgate", root.GetProperty("aid")[0].GetProperty("code").GetString());
+        var why = root.GetProperty("match")[0].GetProperty("why").EnumerateArray().Select(w => w.GetString()).ToList();
+        Assert.Contains("GPA_MID", why);
+        Assert.Contains("BUDGET_OK", why);
+        Assert.Contains("NEED_AID", root.GetProperty("aid")[0].GetProperty("why").EnumerateArray().Select(w => w.GetString()));
+
+        Assert.Equal(3, criteria.RootElement.GetProperty("tier").GetInt32());
+        Assert.Equal("OK", criteria.RootElement.GetProperty("status").GetString());
     }
 
-    // C7: học bổng trống thì không gợi ý trường, không gọi Qwen/Gemini, không lưu lượt nào
+    [Fact]
+    public async Task Recommend_SavedJsonKeepsTheShapeTheFrontendReads()
+    {
+        var (service, _, store) = Setup();
+        await service.RecommendAsync(Profile(), [], [School("B", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m)]);
+
+        using var items = JsonDocument.Parse(store.Rows.Single().ItemsJson);
+        var row = items.RootElement.GetProperty("scored")[0];
+
+        foreach (var key in new[] { "universityId", "code", "name", "state", "control", "cost", "outcome", "flags",
+                     "g2", "s", "f", "h", "q", "gap", "pg", "ps", "adj", "r" })
+            Assert.True(row.TryGetProperty(key, out _), $"thiếu khóa {key}");
+        foreach (var key in new[] { "reach", "match", "safety", "aid", "other" })
+            Assert.Equal(JsonValueKind.Array, items.RootElement.GetProperty(key).ValueKind);
+        var x = items.RootElement.GetProperty("match")[0].GetProperty("x").GetDouble();
+        Assert.InRange(x, 0.0, 1.0);
+        Assert.InRange(row.GetProperty("pg").GetDouble(), 0.0, 100.0);   // thang 0–100 như bản cũ
+    }
+
+    [Fact]
+    public async Task Recommend_SameInput_GivesTheSameJson()
+    {
+        var schools = new List<RecommendSchoolInput>
+        {
+            School("A", 30_000m, "none", Major, sat: (1200, 1380), accept: 0.6m, avgGpa: 3.5m),
+            School("B", 40_000m, "none", Major, sat: (1200, 1380), accept: 0.6m, avgGpa: 3.5m),
+        };
+        var (service1, _, store1) = Setup();
+        var (service2, _, store2) = Setup();
+
+        await service1.RecommendAsync(Profile(), [], schools);
+        await service2.RecommendAsync(Profile(), [], schools.AsEnumerable().Reverse().ToList());
+
+        Assert.Equal(store1.Rows.Single().ItemsJson, store2.Rows.Single().ItemsJson);
+    }
+
+    [Fact]
+    public async Task Recommend_AtMostFourSchoolsPerBlock()
+    {
+        var (service, _, store) = Setup();
+        var schools = Enumerable.Range(1, 9)
+            .Select(i => School($"S{i}", 30_000m + i * 100, "none", Major, sat: (1200, 1380), accept: 0.6m, avgGpa: 3.5m))
+            .ToList();
+
+        await service.RecommendAsync(Profile(), [], schools);
+
+        using var items = JsonDocument.Parse(store.Rows.Single().ItemsJson);
+        Assert.Equal(4, items.RootElement.GetProperty("match").GetArrayLength());
+        Assert.Equal(9, items.RootElement.GetProperty("scored").GetArrayLength());   // danh sách đầy đủ vẫn được lưu
+    }
+
+    // ---------------------------------------------------------------- công thức đi qua service
+
+    [Fact]
+    public async Task Recommend_SchoolWithoutAcademicData_GoesToTheOtherBlock()
+    {
+        var (service, _, store) = Setup();
+
+        await service.RecommendAsync(Profile(), [], [School("Bare", 30_000m, "none", Major)]);
+
+        using var items = JsonDocument.Parse(store.Rows.Single().ItemsJson);
+        Assert.Equal("NA", items.RootElement.GetProperty("scored")[0].GetProperty("g2").GetString());
+        Assert.Equal("Bare", items.RootElement.GetProperty("other")[0].GetProperty("code").GetString());
+        Assert.Equal(0, items.RootElement.GetProperty("match").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task Recommend_AcceptanceRateIsTakenFromAdmittedOverApplicants_WhenTheColumnIsMissing()
+    {
+        var (service, _, store) = Setup();
+        // 100 / 1.000 = 10% dưới 15%: luôn Khó vào dù điểm cao
+        var school = School("Picky", 30_000m, "none", Major, sat: (1000, 1100), avgGpa: 3.0m, admitted: 100, applicants: 1_000);
+
+        await service.RecommendAsync(Profile(), [], [school]);
+
+        using var items = JsonDocument.Parse(store.Rows.Single().ItemsJson);
+        Assert.Equal("R", items.RootElement.GetProperty("scored")[0].GetProperty("g2").GetString());
+        Assert.Equal("Picky", items.RootElement.GetProperty("reach")[0].GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task Recommend_English_BelowTheMinimum_IsFlaggedNotExcluded()
+    {
+        var (service, _, store) = Setup();
+        var profile = Profile();
+        profile.Ielts = 5.5m;
+        var school = School("Strict", 30_000m, "none", Major, sat: (1200, 1380), accept: 0.6m, avgGpa: 3.5m, minIelts: 7.0m);
+
+        await service.RecommendAsync(profile, [], [school]);
+
+        using var items = JsonDocument.Parse(store.Rows.Single().ItemsJson);
+        var row = items.RootElement.GetProperty("scored")[0];
+        Assert.Contains("ENGLISH_BELOW_MIN", row.GetProperty("flags").EnumerateArray().Select(f => f.GetString()));
+        Assert.Equal(0.0, row.GetProperty("e").GetDouble());   // tiếng Anh chỉ làm giảm fit score
+    }
+
+    [Fact]
+    public async Task Recommend_WithNothingLeftAfterTheFilter_SavesAnEmptyRunWithoutCallingTheAdvisor()
+    {
+        var (service, advisor, store) = Setup();
+
+        await service.RecommendAsync(Profile(), [], [School("D", 20_000m, "none", "History", sat: (1200, 1380))]);
+
+        Assert.Empty(advisor.Calls);   // không còn trường thì không tốn lượt đọc ngoại khóa
+        using var criteria = JsonDocument.Parse(store.Rows.Single().CriteriaJson);
+        using var items = JsonDocument.Parse(store.Rows.Single().ItemsJson);
+        Assert.Equal(JsonValueKind.Null, criteria.RootElement.GetProperty("status").ValueKind);
+        Assert.Equal(0, items.RootElement.GetProperty("scored").GetArrayLength());
+    }
+
+    // ---------------------------------------------------------------- điều kiện hồ sơ
+
+    // C7: học bổng trống thì không gợi ý trường, không gọi advisor, không lưu lượt nào
     [Theory]
     [InlineData(null)]
     [InlineData("")]
-    public async Task Recommend_WithoutScholarshipNeed_IsBlockedBeforeAnyCloudCall(string? need)
+    public async Task Recommend_WithoutScholarshipNeed_IsBlockedBeforeAnyCall(string? need)
     {
-        var advisor = new FakeAdvisor();
-        var store = new FakeRecommendationRepository();
-        var service = new RecommendationService(advisor, store, new UnusedProfileFlow());
-        var profile = new StudentProfile
-        {
-            UserId = Guid.NewGuid(),
-            TargetLevel = "undergraduate",
-            IntendedMajor = "Computer and information sciences",
-            BudgetMaxUsd = 50_000m,
-            ScholarshipNeed = need,
-        };
+        var (service, advisor, store) = Setup();
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            service.RecommendAsync(profile, [], [School("B", 38_000m, "none", "Computer and information sciences")]));
+            service.RecommendAsync(Profile(need), [], [School("B", 38_000m, "none", Major)]));
 
         Assert.Equal(RecommendationService.MissingScholarshipMessage, ex.Message);
         Assert.StartsWith("Hồ sơ", ex.Message); // controller trả 400, không phải 502
@@ -84,25 +207,15 @@ public class RecommendationServiceTests
     [Theory]
     [InlineData(null)]
     [InlineData(" ")]
-    public async Task Recommend_WithoutMajor_IsBlockedBeforeAnyCloudCall(string? major)
+    public async Task Recommend_WithoutMajor_IsBlockedBeforeAnyCall(string? major)
     {
-        var advisor = new FakeAdvisor();
-        var store = new FakeRecommendationRepository();
-        var service = new RecommendationService(advisor, store, new UnusedProfileFlow());
-        var profile = new StudentProfile
-        {
-            UserId = Guid.NewGuid(),
-            TargetLevel = "undergraduate",
-            IntendedMajor = major,
-            BudgetMaxUsd = 50_000m,
-            ScholarshipNeed = ProfileConstants.ScholarshipNeeds.Preferred,
-        };
+        var (service, advisor, store) = Setup();
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            service.RecommendAsync(profile, [], [School("B", 38_000m, "none", "Computer and information sciences")]));
+            service.RecommendAsync(Profile(major: major), [], [School("B", 38_000m, "none", Major)]));
 
         Assert.Equal(RecommendationService.MissingMajorMessage, ex.Message);
-        Assert.StartsWith("Hồ sơ", ex.Message); // controller trả 400, không phải 502
+        Assert.StartsWith("Hồ sơ", ex.Message);
         Assert.Empty(advisor.Calls);
         Assert.Empty(store.Rows);
     }
@@ -110,56 +223,103 @@ public class RecommendationServiceTests
     [Fact]
     public async Task Recommend_WithOptionalScholarship_StillRuns()
     {
-        var advisor = new FakeAdvisor();
-        var service = new RecommendationService(advisor, new FakeRecommendationRepository(), new UnusedProfileFlow());
-        var profile = new StudentProfile
-        {
-            UserId = Guid.NewGuid(),
-            TargetLevel = "undergraduate",
-            IntendedMajor = "Computer and information sciences",
-            BudgetMaxUsd = 50_000m,
-            ScholarshipNeed = ProfileConstants.ScholarshipNeeds.Optional,
-            TargetSchoolType = "all"
-        };
+        var (service, advisor, _) = Setup();
 
-        await service.RecommendAsync(profile, [], [School("B", 38_000m, "none", "Computer and information sciences")]);
+        await service.RecommendAsync(Profile(ProfileConstants.ScholarshipNeeds.Optional), [], [School("B", 38_000m, "none", Major)]);
 
-        Assert.Equal(["ec", "score", "pick"], advisor.Calls); // "không cần" là lựa chọn thật, vẫn chạy như cũ
+        Assert.Equal(["ec"], advisor.Calls); // "không cần" là lựa chọn thật, vẫn chạy
     }
 
-    // Gemini hỏng (hết hạn mức, quá tải): mọi trường chấm lỗi. Phải báo lỗi dịch vụ, không được lưu kết quả rỗng
+    // ---------------------------------------------------------------- đổi nút ưu tiên
+
     [Fact]
-    public async Task Recommend_WhenGeminiScoresNothing_ThrowsServiceErrorAndSavesNothing()
+    public async Task Repick_RecomputesWithNewPriorities_WithoutCallingTheAdvisorAgain()
     {
-        var advisor = new FakeAdvisor { ScoreFailsAll = true };
-        var store = new FakeRecommendationRepository();
-        var service = new RecommendationService(advisor, store, new UnusedProfileFlow());
-        var profile = new StudentProfile
+        var profile = Profile();
+        var schools = new List<RecommendSchoolInput>
         {
-            UserId = Guid.NewGuid(),
-            TargetLevel = "undergraduate",
-            IntendedMajor = "Computer and information sciences",
-            BudgetMaxUsd = 50_000m,
-            ScholarshipNeed = ProfileConstants.ScholarshipNeeds.Optional,
-            TargetSchoolType = "all"
+            School("Cheap", 20_000m, "none", Major, sat: (1200, 1380), accept: 0.6m, avgGpa: 3.5m, quality: 0.50m),
+            School("Famous", 49_000m, "none", Major, sat: (1200, 1380), accept: 0.6m, avgGpa: 3.5m, quality: 0.95m),
         };
+        var (service, advisor, store) = Setup(profile, schools);
 
-        await Assert.ThrowsAsync<HttpRequestException>(() =>
-            service.RecommendAsync(profile, [], [School("B", 38_000m, "none", "Computer and information sciences")]));
+        await service.RecommendAsync(profile, [], schools, [4, 2, 0]);
+        var costFirst = MatchOrder(store.Rows.Last());
+        var again = await service.RepickAsync(profile.UserId, [0, 2, 4], default);
+        var qualityFirst = MatchOrder(again);
 
-        Assert.Equal(["ec", "score"], advisor.Calls); // không gọi bước chọn khi chưa có điểm
-        Assert.Empty(store.Rows); // không lưu lượt rỗng
+        Assert.Equal(["ec"], advisor.Calls);   // đổi ưu tiên không gọi lại advisor
+        Assert.Equal(2, store.Rows.Count);
+        Assert.Equal(["Cheap", "Famous"], costFirst);
+        Assert.Equal(["Famous", "Cheap"], qualityFirst);
+        using var criteria = JsonDocument.Parse(again.CriteriaJson);
+        Assert.Equal(0, criteria.RootElement.GetProperty("pref")[0].GetInt32());
+        Assert.Equal(3, criteria.RootElement.GetProperty("tier").GetInt32());   // giữ bậc ngoại khóa cũ
     }
 
-    private static RecommendSchoolInput School(string code, decimal tuition, string aidPolicy, string major)
+    [Fact]
+    public async Task Repick_DoesNotMoveASchoolBetweenGroups()
     {
-        var university = new University { Code = code, Name = code, State = "NY", Control = "private", IsActive = true };
+        var profile = Profile();
+        var schools = new List<RecommendSchoolInput>
+        {
+            School("A", 30_000m, "none", Major, sat: (1200, 1380), accept: 0.6m, avgGpa: 3.5m),
+            School("B", 40_000m, "none", Major, sat: (1450, 1550), accept: 0.08m),
+        };
+        var (service, _, store) = Setup(profile, schools);
+
+        await service.RecommendAsync(profile, [], schools);
+        var again = await service.RepickAsync(profile.UserId, [4, 0, 0], default);
+
+        using var a = JsonDocument.Parse(store.Rows[0].ItemsJson);
+        using var b = JsonDocument.Parse(again.ItemsJson);
+        var before = a.RootElement.GetProperty("scored").EnumerateArray().ToDictionary(e => e.GetProperty("code").GetString()!, e => e.GetProperty("g2").GetString());
+        var after = b.RootElement.GetProperty("scored").EnumerateArray().ToDictionary(e => e.GetProperty("code").GetString()!, e => e.GetProperty("g2").GetString());
+        Assert.Equal(before, after);   // ưu tiên chỉ đổi thứ tự, không đổi nhóm
+    }
+
+    [Fact]
+    public async Task Repick_WithoutAPreviousRun_ThrowsBeforeDoingAnything()
+    {
+        var (service, advisor, store) = Setup(Profile());
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.RepickAsync(Guid.NewGuid(), [2, 2, 2], default));
+
+        Assert.Empty(advisor.Calls);
+        Assert.Empty(store.Rows);
+    }
+
+    private static List<string> MatchOrder(Recommendation recommendation)
+    {
+        using var items = JsonDocument.Parse(recommendation.ItemsJson);
+        return items.RootElement.GetProperty("match").EnumerateArray().Select(e => e.GetProperty("code").GetString()!).ToList();
+    }
+
+    // ---------------------------------------------------------------- dữ liệu giả
+
+    private static RecommendSchoolInput School(
+        string code, decimal tuition, string aidPolicy, string major,
+        (int Low, int High)? sat = null, decimal? accept = null, decimal? avgGpa = null,
+        decimal? minIelts = null, decimal? quality = null, int? admitted = null, int? applicants = null)
+    {
+        var university = new University
+        {
+            Code = code, Name = code, State = "NY", Control = "private", IsActive = true, AcceptanceRate = accept
+        };
         var offering = new UniversityOffering
         {
             UniversityId = university.Id,
             StudyLevel = "undergraduate",
             TuitionUsd = tuition,
-            IntlAidPolicy = aidPolicy
+            IntlAidPolicy = aidPolicy,
+            Sat25 = sat?.Low,
+            Sat75 = sat?.High,
+            AvgGpa4 = avgGpa,
+            MinIelts = minIelts,
+            RetentionRate1Yr = quality,
+            GradRate6Yr = quality,
+            AdmittedTotal = admitted,
+            ApplicantsTotal = applicants
         };
         return new RecommendSchoolInput(university, offering, [major]);
     }
@@ -167,9 +327,6 @@ public class RecommendationServiceTests
     private sealed class FakeAdvisor : IAdvisorClient
     {
         public List<string> Calls { get; } = [];
-        public bool ScoreFailsAll { get; init; }
-        public ScoreRequestDto? ScoreRequest { get; private set; }
-        public PickRequestDto? PickRequest { get; private set; }
 
         public Task<AdvisorChatResponse> ChatAsync(AdvisorChatRequest request, CancellationToken ct = default) =>
             throw new NotSupportedException();
@@ -180,41 +337,11 @@ public class RecommendationServiceTests
             return Task.FromResult(new EcResponseDto([], 1, 0, 3, "2.0", "qwen-test", false));
         }
 
-        public Task<ScoreResponseDto> ScoreAsync(ScoreRequestDto request, CancellationToken ct = default)
-        {
-            if (!Calls.Contains("ec"))
-                throw new InvalidOperationException("Chưa có bậc ngoại khóa.");
-            Calls.Add("score");
-            ScoreRequest = request;
-            if (ScoreFailsAll)
-                return Task.FromResult(new ScoreResponseDto("1.1", "gemini-test", [], request.Schools.Select(s => s.C).ToList()));
-            var items = request.Schools.Select(school => school.C == "Colgate"
-                ? Item("Colgate", "R", "RF", 12.9, 0, 45610)
-                : Item(school.C, "M", "M", 50, 0.24, null)).ToList();
-            return Task.FromResult(new ScoreResponseDto("1.1", "gemini-test", items, []));
-        }
-
-        public Task<PickResponseDto> PickAsync(PickRequestDto request, CancellationToken ct = default)
-        {
-            if (!Calls.Contains("score"))
-                throw new InvalidOperationException("Chưa có kết quả chấm.");
-            Calls.Add("pick");
-            PickRequest = request;
-            var match = request.Items.Where(i => i.Blk == "MAIN")
-                .Select(i => new PickEntryDto(i.C, 0.414, ["GPA_MID", "BUDGET_OK"])).ToList();
-            var aid = request.Items.Where(i => i.Blk == "AID")
-                .Select(i => new PickEntryDto(i.C, null, ["NEED_AID"])).ToList();
-            return Task.FromResult(new PickResponseDto("1.1", "gemini-test", "OK", [], match, [], aid, []));
-        }
-
         public Task<ExplainResponseDto> ExplainAsync(ExplainRequestDto request, CancellationToken ct = default) =>
             throw new NotSupportedException();
-
-        private static ScoreItemDto Item(string code, string g, string g2, double s, double? f, double? gap) =>
-            new(code, [0.5, 0.5], 50, "H", 50, 50, 0, s, g, 1, g2, f, 0.1, 0.8, gap);
     }
 
-    private sealed class FakeRecommendationRepository : IRecommendationRepository
+    private sealed class FakeRecommendationRepository(IReadOnlyList<RecommendSchoolInput> schools) : IRecommendationRepository
     {
         public List<Recommendation> Rows { get; } = [];
 
@@ -228,16 +355,17 @@ public class RecommendationServiceTests
             Task.FromResult(Rows.LastOrDefault(r => r.UserId == userId));
 
         public Task<IReadOnlyList<RecommendSchoolInput>> ListSchoolsAsync(string studyLevel, CancellationToken ct = default) =>
-            Task.FromResult<IReadOnlyList<RecommendSchoolInput>>([]);
+            Task.FromResult(schools);
 
         public Task<RecommendSchoolInput?> FindSchoolAsync(string code, string studyLevel, CancellationToken ct = default) =>
-            Task.FromResult<RecommendSchoolInput?>(null);
+            Task.FromResult<RecommendSchoolInput?>(schools.FirstOrDefault(s => s.University.Code == code));
     }
 
-    private sealed class UnusedProfileFlow : IProfileFlowRepository
+    private sealed class FakeProfileFlow(StudentProfile? profile) : IProfileFlowRepository
     {
         public Task<string?> GetAppSettingValueAsync(string key, CancellationToken ct = default) => throw new NotSupportedException();
-        public Task<StudentProfile?> GetProfileByUserIdAsync(Guid userId, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<StudentProfile?> GetProfileByUserIdAsync(Guid userId, CancellationToken ct = default) =>
+            profile is not null ? Task.FromResult<StudentProfile?>(profile) : throw new NotSupportedException();
         public Task UpdateProfileAsync(StudentProfile profile, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<StudentProfile> EnsureProfileExistsAsync(Guid userId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<IReadOnlyList<MajorOption>> GetMajorOptionsAsync(CancellationToken ct = default) => throw new NotSupportedException();
@@ -247,46 +375,4 @@ public class RecommendationServiceTests
         public Task<IReadOnlyList<ProfileActivity>> GetProfileActivitiesAsync(Guid profileId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<IReadOnlyList<ProfileCertification>> GetProfileCertificationsAsync(Guid profileId, CancellationToken ct = default) => throw new NotSupportedException();
     }
-
-        [Fact]
-    public async Task Repick_ReusesSavedScores_AndOnlyCallsPick()
-    {
-        var advisor = new FakeAdvisor();
-        var store = new FakeRecommendationRepository();
-        var service = new RecommendationService(advisor, store, new UnusedProfileFlow());
-
-        var profile = new StudentProfile
-        {
-            UserId = Guid.NewGuid(),
-            TargetLevel = "undergraduate",
-            IntendedMajor = "Computer and information sciences",
-            BudgetMaxUsd = 50_000m,
-            ScholarshipNeed = ProfileConstants.ScholarshipNeeds.Preferred,
-            OverallGpa = 3.6m,
-            Sat = 1350m,
-            Ielts = 6.5m,
-            TargetSchoolType = "all"
-        };
-        var schools = new List<RecommendSchoolInput>
-        {
-            School("Colgate", 95_610m, "need_and_merit", "Computer and information sciences"),
-            School("B", 38_000m, "none", "Computer and information sciences")
-        };
-
-        await service.RecommendAsync(profile, [], schools);
-        var again = await service.RepickAsync(profile.UserId, [3, 1, 1], default);
-
-        // Lần chọn lại chỉ thêm đúng một lượt pick, không thêm ec hay score.
-        Assert.Equal(["ec", "score", "pick", "pick"], advisor.Calls);
-        Assert.Equal([3, 1, 1], advisor.PickRequest!.Pref);
-        Assert.Equal("AID", advisor.PickRequest.Items.Single(i => i.C == "Colgate").Blk);
-        Assert.Equal(2, store.Rows.Count);
-
-        using var criteria = JsonDocument.Parse(again.CriteriaJson);
-        using var items = JsonDocument.Parse(again.ItemsJson);
-        Assert.Equal(3, criteria.RootElement.GetProperty("pref")[0].GetInt32());
-        Assert.Equal(12.9, items.RootElement.GetProperty("scored")[0].GetProperty("s").GetDouble());
-        Assert.Equal(0.414, items.RootElement.GetProperty("match")[0].GetProperty("x").GetDouble());
-    }
-
 }

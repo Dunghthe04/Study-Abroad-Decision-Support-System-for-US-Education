@@ -4,7 +4,20 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from app.schemas.pick import WhyCode
+# Mã lý do của một trường (backend suy từ số đã tính, advisor chỉ nhận để viết lời)
+WhyCode = Literal[
+    "GPA_HIGH",
+    "GPA_MID",
+    "GPA_LOW",
+    "SAT_ABOVE",
+    "SAT_IN_RANGE",
+    "SAT_BELOW",
+    "BUDGET_OK",
+    "NEED_AID",
+    "INTL_LOW",
+    "EC_PLUS",
+    "EC_MINUS",
+]
 
 MAX_POINTS = 3  # tối đa 3 ý
 

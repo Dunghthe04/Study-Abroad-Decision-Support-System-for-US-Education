@@ -63,6 +63,7 @@ namespace StudyAbroad.Application.Recommendations
         public const string EnglishNoScore = "ENGLISH_NO_SCORE";
         public const string EnglishMinUnknown = "ENGLISH_MIN_UNKNOWN";
         public const string EnglishNotComparable = "ENGLISH_NOT_COMPARABLE";
+        public const string EnglishBelowMin = "ENGLISH_BELOW_MIN";
     }
     public static class HardFilter
     {
@@ -95,8 +96,9 @@ namespace StudyAbroad.Application.Recommendations
                 else if (!string.Equals(school.Control, c.Control, StringComparison.OrdinalIgnoreCase))
                     return Exclude(school, "CONTROL");
             }
-            var (englishFail, englishFlag) = CheckEnglish(c, school);
-            if (englishFail) return Exclude(school, "ENGLISH");
+            // Tiếng Anh không loại trường: thấp hơn mức tối thiểu thì gắn cờ, còn điểm tiếng Anh tính vào fit score.
+            var (englishBelow, englishFlag) = CheckEnglish(c, school);
+            if (englishBelow) flags.Add(FilterFlags.EnglishBelowMin);
             if (englishFlag is not null) flags.Add(englishFlag);
 
             // Trường k có chi phí -> gán cờ + giữ
@@ -128,8 +130,8 @@ namespace StudyAbroad.Application.Recommendations
         }
 
         // So từng bài với mức tối thiểu cùng loại. Một bài đạt là đủ.
-        // Chỉ loại khi có cặp so được và trượt hết các cặp đó.
-        private static (bool Fail, string? Flag) CheckEnglish(FilterCriteria c, FilterSchool s)
+        // Below = có cặp so được và trượt hết các cặp đó.
+        private static (bool Below, string? Flag) CheckEnglish(FilterCriteria c, FilterSchool s)
         {
             (decimal? Student, decimal? Min)[] pairs =
                [

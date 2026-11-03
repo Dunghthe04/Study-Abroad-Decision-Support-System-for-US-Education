@@ -738,8 +738,6 @@ public class ChatServiceTests
         }
 
         public Task<EcResponseDto> ReadEcAsync(EcRequestDto request, CancellationToken ct = default) => throw new NotSupportedException();
-        public Task<ScoreResponseDto> ScoreAsync(ScoreRequestDto request, CancellationToken ct = default) => throw new NotSupportedException();
-        public Task<PickResponseDto> PickAsync(PickRequestDto request, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<ExplainResponseDto> ExplainAsync(ExplainRequestDto request, CancellationToken ct = default) => throw new NotSupportedException();
     }
 

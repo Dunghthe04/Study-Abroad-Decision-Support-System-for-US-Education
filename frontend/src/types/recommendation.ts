@@ -7,7 +7,7 @@ export type Pref = [number, number, number];
 // R khó vào · RF khó vào xa · M vừa sức · S an toàn hơn · NA thiếu dữ liệu · O nhận gần như tất cả
 export type SchoolGroup = "R" | "RF" | "M" | "S" | "NA" | "O";
 
-// Mã lý do cloud chọn cho từng trường
+// Mã lý do backend suy ra từ số đã tính cho từng trường
 export type WhyCode =
   | "GPA_HIGH"
   | "GPA_MID"
@@ -30,9 +30,10 @@ export type FilterFlag =
   | "AID_UNKNOWN"
   | "ENGLISH_NO_SCORE"
   | "ENGLISH_MIN_UNKNOWN"
-  | "ENGLISH_NOT_COMPARABLE";
+  | "ENGLISH_NOT_COMPARABLE"
+  | "ENGLISH_BELOW_MIN";
 
-// Một trường đã chấm. Số liệu do cloud tính, backend chỉ chép.
+// Một trường đã chấm. Nhóm và số liệu do backend tính bằng code (không qua AI).
 export interface ScoredSchool {
   universityId: string;
   code: string;
@@ -82,10 +83,7 @@ export interface RecommendationCriteria {
   pref: Pref;
   tier: number; // bậc ngoại khóa 1–5
   ecAiUsed: boolean;
-  scoreSkill: string | null;
-  scoreModel: string | null;
-  pickSkill: string | null;
-  pickModel: string | null;
+  algorithm?: string; // phiên bản công thức; lần gợi ý cũ chưa có
   status: "OK" | "FAILED" | null; // null khi không còn trường nào để chọn
 }
 

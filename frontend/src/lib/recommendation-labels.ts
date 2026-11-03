@@ -38,6 +38,7 @@ export const FLAG_TEXT: Record<FilterFlag, string> = {
   ENGLISH_NO_SCORE: "Bạn chưa nhập điểm tiếng Anh",
   ENGLISH_MIN_UNKNOWN: "Trường chưa công bố điểm tiếng Anh tối thiểu",
   ENGLISH_NOT_COMPARABLE: "Không so được điểm tiếng Anh với yêu cầu của trường",
+  ENGLISH_BELOW_MIN: "Điểm tiếng Anh của bạn thấp hơn mức tối thiểu của trường",
 };
 
 // Đổi mã sang chữ, mã lạ thì giữ nguyên để không mất thông tin
