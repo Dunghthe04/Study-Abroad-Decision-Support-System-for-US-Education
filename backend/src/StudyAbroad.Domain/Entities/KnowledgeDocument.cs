@@ -11,23 +11,17 @@ public class KnowledgeDocument : BaseEntity
     /// <summary>Mã băm của Question lúc tạo vector, chỉ tạo lại vector khi câu hỏi đổi.</summary>
     public string? EmbeddingHash { get; set; }
 
-    /// <summary>Tiêu đề hoặc phần đầu của câu hỏi.</summary>
-    public string Title { get; set; } = string.Empty;
-
     /// <summary>Câu hỏi mẫu chuẩn, dùng để tính embedding phục vụ tìm kiếm ngữ nghĩa B5.</summary>
     public string? Question { get; set; }
 
     /// <summary>Câu trả lời chuẩn đã kiểm chứng (đưa cho LLM làm ngữ cảnh context).</summary>
-    public string Content { get; set; } = string.Empty;
+    public string Answer { get; set; } = string.Empty;
 
     /// <summary>Nhãn chủ đề (từ cột "Nhãn phân loại", ví dụ: Chi phí, Visa, Hồ sơ...).</summary>
     public string? Topic { get; set; }
 
     /// <summary>Bậc học: secondary, community_college, undergraduate, master, phd, general.</summary>
     public string StudyLevel { get; set; } = "general";
-
-    /// <summary>Giai đoạn quy trình (tùy chọn: B1, B2, B3, B4, B5, B6...).</summary>
-    public string? Stage { get; set; }
 
     /// <summary>Loại tài liệu: faq, policy, guide, requirement...</summary>
     public string DocType { get; set; } = "faq";

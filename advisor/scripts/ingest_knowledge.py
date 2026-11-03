@@ -8,7 +8,7 @@ Chạy từ thư mục advisor/ (cần Postgres và Ollama đang bật, DATABASE
 Quy tắc (chạy lại nhiều lần an toàn):
   1. Khóa để biết "dòng đã có" là code (KB-001...).
   2. Dòng đã có mà không đổi: giữ nguyên, không đụng tới status và người kiểm chứng.
-  3. Nội dung đổi (question, content, quote): cập nhật, tăng version, dòng verified quay về draft.
+  3. Nội dung đổi (question, answer, quote): cập nhật, tăng version, dòng verified quay về draft.
   4. Chỉ đổi thông tin phụ (chủ đề, nguồn, ngày...): cập nhật, giữ nguyên status.
   5. Chỉ tạo lại vector khi chưa có vector hoặc question đổi (so mã băm sha256 của question).
   6. Dòng trong file ghi verified mà trong DB còn draft thì được nâng lên verified; không bao giờ tự hạ verified xuống.
@@ -35,35 +35,34 @@ BATCH = 16  # số câu hỏi gửi Ollama mỗi lần
 REQUIRED = (
     "code",
     "question",
-    "content",
+    "answer",
     "study_level",
     "scope",
     "status",
     "source_type",
     "doc_type",
-    "title",
 )
 # Thay đổi ở các trường này nghĩa là câu trả lời đổi: phải kiểm chứng lại
-CONTENT_FIELDS = ("question", "content", "quote")
+CONTENT_FIELDS = ("question", "answer", "quote")
 # Các trường phụ: đổi thì cập nhật nhưng không ảnh hưởng trạng thái kiểm chứng
 META_FIELDS = (
-    "title", "topic", "study_level", "scope", "doc_type", "source_type", "source_note", "source_url",
+    "topic", "study_level", "scope", "doc_type", "source_type", "source_note", "source_url",
     "retrieved_at", "review_due_at",
 )  # fmt: skip
 STATUSES = {"draft", "verified", "rejected"}
 
 EXISTING_SQL = """
-SELECT code, status, question, content, quote, title, topic, study_level, scope, doc_type, source_type,
+SELECT code, status, question, answer, quote, topic, study_level, scope, doc_type, source_type,
        source_note, source_url, retrieved_at, review_due_at, embedding_hash, (embedding IS NOT NULL) AS has_vector
 FROM app.knowledge_documents WHERE code <> ''
 """
 
 INSERT_SQL = """
 INSERT INTO app.knowledge_documents
-    (id, code, title, question, content, quote, topic, study_level, scope, doc_type, status, source_type,
+    (id, code, question, answer, quote, topic, study_level, scope, doc_type, status, source_type,
      source_note, source_url, retrieved_at, review_due_at, version, embedding_hash, embedding, ingested_at,
      verified_at, created_at)
-VALUES (gen_random_uuid(), %(code)s, %(title)s, %(question)s, %(content)s, %(quote)s, %(topic)s, %(study_level)s,
+VALUES (gen_random_uuid(), %(code)s, %(question)s, %(answer)s, %(quote)s, %(topic)s, %(study_level)s,
         %(scope)s, %(doc_type)s, %(status)s, %(source_type)s, %(source_note)s, %(source_url)s, %(retrieved_at)s,
         %(review_due_at)s, 1, %(embedding_hash)s, %(embedding)s, %(ingested_at)s, %(verified_at)s, now())
 """
@@ -152,9 +151,8 @@ def _row_values(record: dict[str, Any]) -> dict[str, Any]:
     review_due = record.get("review_due_at")
     return {
         "code": record["code"],
-        "title": record["title"][:300],
         "question": record["question"],
-        "content": record["content"],
+        "answer": record["answer"],
         "quote": record.get("quote"),
         "topic": record.get("topic") or None,
         "study_level": record["study_level"],
