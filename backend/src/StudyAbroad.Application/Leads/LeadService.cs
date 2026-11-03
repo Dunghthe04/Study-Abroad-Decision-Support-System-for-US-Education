@@ -1,10 +1,11 @@
+using StudyAbroad.Application.Common;
 using StudyAbroad.Application.StudyCenters;
 using StudyAbroad.Domain.Entities;
 
 namespace StudyAbroad.Application.Leads;
 
 /// <summary>
-/// [UC-42] Dịch vụ gửi yêu cầu tư vấn tới Trung tâm du học.
+/// [UC-42 / UC-44] Dịch vụ gửi và quản lý danh sách yêu cầu tư vấn tới Trung tâm du học.
 /// </summary>
 public class LeadService(
     ILeadRepository leads,
@@ -70,6 +71,20 @@ public class LeadService(
             return null;
 
         return await leads.GetDtoByIdAsync(leadId, ct);
+    }
+
+    public async Task<PagedResult<LeadDto>> GetMyLeadsAsync(Guid userId, LeadQuery query, CancellationToken ct = default)
+    {
+        var page = Math.Max(1, query.Page);
+        var pageSize = Math.Clamp(query.PageSize, 1, 100);
+        var normalizedQuery = query with
+        {
+            Page = page,
+            PageSize = pageSize,
+            Status = string.IsNullOrWhiteSpace(query.Status) ? null : query.Status.Trim()
+        };
+
+        return await leads.GetMyLeadsAsync(userId, normalizedQuery, ct);
     }
 }
 
