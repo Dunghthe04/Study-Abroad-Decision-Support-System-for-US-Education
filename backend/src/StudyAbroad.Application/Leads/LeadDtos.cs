@@ -20,3 +20,9 @@ public record LeadDto(
     string Status,
     DateTime CreatedAt);
 
+/// <summary>[UC-44] Query phân trang và lọc trạng thái danh sách yêu cầu tư vấn.</summary>
+public record LeadQuery(
+    string? Status = null,
+    int Page = 1,
+    int PageSize = 20);
+
