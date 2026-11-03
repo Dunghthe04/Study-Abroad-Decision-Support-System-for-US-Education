@@ -17,6 +17,8 @@ namespace StudyAbroad.Domain.Constants
         public const string TempLocked = "temp_locked";
         /// <summary>Locked permanently by an admin; login returns 423 and CANNOT be self-unlocked via OTP.</summary>
         public const string Locked = "locked";
+        /// <summary>[UC-80] Account deleted and PII anonymized per PDPA 2025.</summary>
+        public const string Deleted = "deleted";
 
     }
 }

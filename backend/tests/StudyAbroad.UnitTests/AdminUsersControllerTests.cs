@@ -126,6 +126,18 @@ public class AdminUsersControllerTests
             Users.Add(updated);
             return Task.FromResult(AuthResult.Ok(updated, "Đã mở khóa tài khoản."));
         }
+
+        public Task<AuthResult> AnonymizeUserAccountAsync(Guid userId, string? ipAddress = null, string? userAgent = null, CancellationToken ct = default)
+        {
+            var user = Users.FirstOrDefault(u => u.Id == userId);
+            if (user is null)
+                return Task.FromResult(AuthResult.Fail(AuthError.Validation, "Không tìm thấy tài khoản người dùng."));
+
+            var updated = user with { Status = UserStatuses.Deleted, FullName = "Người dùng đã xóa", Phone = null };
+            Users.Remove(user);
+            Users.Add(updated);
+            return Task.FromResult(AuthResult.Ok("Đã xóa tài khoản."));
+        }
     }
 
     [Fact]

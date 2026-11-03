@@ -183,6 +183,32 @@ namespace StudyAbroad.Api.Controllers
                 : Problem(result.Message, statusCode: StatusCodes.Status400BadRequest);
         }
 
+        // [UC-80] Người dùng yêu cầu xóa tài khoản: Ẩn danh hóa PII, thu hồi phiên và dọn dẹp cookie
+        [Authorize]
+        [HttpDelete("me")]
+        public async Task<IActionResult> DeleteMe(CancellationToken ct)
+        {
+            var userId = User.GetUserId();
+            if (userId is null)
+            {
+                return Unauthorized(new { message = "Vui lòng đăng nhập." });
+            }
+
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+            var userAgent = Request.Headers.UserAgent.ToString();
+
+            var result = await auth.AnonymizeUserAccountAsync(userId.Value, ip, userAgent, ct);
+            if (result.Error != AuthError.None)
+            {
+                return Problem(result.Message, statusCode: StatusCodes.Status400BadRequest);
+            }
+
+            // Xóa cookie phiên làm việc
+            Response.Cookies.Delete(AccessTokenCookie, CreateCookieOptions(expires: null));
+
+            return Ok(new { message = result.Message });
+        }
+
         // Token của phiên hiện tại: lấy từ HttpOnly Cookie, không có thì từ header Authorization
         private string GetRawToken()
         {
