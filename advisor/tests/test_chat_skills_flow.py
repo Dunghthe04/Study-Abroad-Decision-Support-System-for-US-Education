@@ -340,10 +340,10 @@ async def test_fix_at_review_overwrites_and_shows_review_again():
 
 
 async def test_budget_question_comes_with_budget_widget():
-    llm = FakeLLM(ho_so({"english": {"type": "ielts", "score": 6.5, "date": None}}))
+    llm = FakeLLM(ho_so({"english": {"type": "ielts", "score": 6.5, "date": "2024-05"}}))
     res = await turn(
         llm,
-        "IELTS 6.5",
+        "IELTS 6.5 thi tháng 5/2024",
         current_step="B2",
         question_id="E1",
         asked={**PAGE1_ASKED, "D3": 1},

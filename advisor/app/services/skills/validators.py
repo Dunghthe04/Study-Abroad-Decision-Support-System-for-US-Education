@@ -149,6 +149,47 @@ def parse_year_month(text: str | None) -> int | None:
     return month_index(year, month) if 1 <= month <= 12 and year >= 1900 else None
 
 
+def parse_month_year_text(text: str | None) -> str | None:
+    """Rút chuỗi ngày thi 'yyyy-MM' từ tin nhắn tự do của học sinh.
+    Ví dụ: '10/2024', 'tháng 5 năm 2025', 'tháng 12/2023', '2024-10' -> 'yyyy-MM'.
+    """
+    if not text:
+        return None
+    s = text.strip().lower()
+
+    # 1. Match 'yyyy-mm' hoặc 'yyyy/mm'
+    m_ym = re.search(r"\b(19\d{2}|20\d{2})[-/](\d{1,2})\b", s)
+    if m_ym:
+        year, month = int(m_ym.group(1)), int(m_ym.group(2))
+        if 1 <= month <= 12:
+            return f"{year:04d}-{month:02d}"
+
+    # 2. Match 'tháng MM năm YYYY' hoặc 'tháng MM/YYYY' hoặc 'tháng MM YYYY'
+    m_vn = re.search(r"tháng\s*(\d{1,2})(?:\s*năm|\s*[-/,\s])\s*(19\d{2}|20\d{2})\b", s)
+    if m_vn:
+        month, year = int(m_vn.group(1)), int(m_vn.group(2))
+        if 1 <= month <= 12:
+            return f"{year:04d}-{month:02d}"
+
+    # 3. Match 'MM/YYYY' hoặc 'M/YYYY'
+    m_my = re.search(r"\b(\d{1,2})/(19\d{2}|20\d{2})\b", s)
+    if m_my:
+        month, year = int(m_my.group(1)), int(m_my.group(2))
+        if 1 <= month <= 12:
+            return f"{year:04d}-{month:02d}"
+
+    # 4. Match 'tháng M' và có năm YYYY ở đâu đó trong câu
+    m_m = re.search(r"tháng\s*(\d{1,2})\b", s)
+    m_y = re.search(r"\b(19\d{2}|20\d{2})\b", s)
+    if m_m and m_y:
+        month = int(m_m.group(1))
+        year = int(m_y.group(1))
+        if 1 <= month <= 12:
+            return f"{year:04d}-{month:02d}"
+
+    return None
+
+
 # A1. GPA: không nói thang thì đoán (<= 4 là thang 4, còn lại thang 10). Trả về (gpa, thang)
 def check_gpa(value: float, scale: int | None = None) -> tuple[float, int]:
     if value < 0:
@@ -185,6 +226,28 @@ def check_act(score: int) -> int:
     return int(check_score("act", score))
 
 
+def parse_month_year_text(text: str) -> str | None:
+    # 1. dạng: tháng 5 năm 2024, tháng 05/2024, tháng 5 2024
+    m = re.search(r"tháng\s*(\d{1,2})(?:[^\d]+(?:năm\s*)?(\d{4}))", text, re.IGNORECASE)
+    if m:
+        month, year = int(m.group(1)), int(m.group(2))
+        if 1 <= month <= 12 and 1900 <= year <= 2100:
+            return f"{year}-{month:02d}"
+    # 2. dạng: MM/YYYY hoặc M/YYYY
+    m = re.search(r"\b(\d{1,2})/(\d{4})\b", text)
+    if m:
+        month, year = int(m.group(1)), int(m.group(2))
+        if 1 <= month <= 12 and 1900 <= year <= 2100:
+            return f"{year}-{month:02d}"
+    # 3. dạng: YYYY-MM
+    m = re.search(r"\b(\d{4})-(\d{1,2})\b", text)
+    if m:
+        year, month = int(m.group(1)), int(m.group(2))
+        if 1 <= month <= 12 and 1900 <= year <= 2100:
+            return f"{year}-{month:02d}"
+    return None
+
+
 # A3. Chứng chỉ tiếng Anh. IELTS là IELTS Academic như form, không hỏi loại.
 # Ngày thi "yyyy-MM" không được ở tương lai (giống ValidateCertifications); nếu là mục tiêu (is_target) thì không được ở quá khứ.
 def check_english(
@@ -193,11 +256,14 @@ def check_english(
     test_date: str | None = None,
     today: date | None = None,
     is_target: bool = False,
+    require_date: bool = False,
 ) -> tuple[str, float, str | None]:
     cert = cert.strip().lower()
     if cert not in ENGLISH_CERTS:
         raise AskAgain("Bạn có chứng chỉ tiếng Anh nào: IELTS, TOEFL, Duolingo hay PTE?")
     check_score(cert, score)
+    if require_date and not test_date:
+        raise AskAgain(f"Bạn thi {CERT_NAMES.get(cert, cert.upper())} vào tháng mấy, năm nào?")
     return cert, score, check_test_date(cert, test_date, today, is_target=is_target)
 
 

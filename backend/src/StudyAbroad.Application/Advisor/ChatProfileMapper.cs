@@ -18,7 +18,7 @@ public static class ChatProfileMapper
     // Thứ tự khóa khi trả về, trùng DRAFT_KEYS
     public static readonly IReadOnlyList<string> DraftKeys =
     [
-        "current_level", "current_grade", "target_level", "major", "gpa", "sat", "act", "english",
+        "current_level", "current_grade", "graduation_year", "target_level", "major", "gpa", "sat", "act", "english",
         "english_plan", "standardized_plan", "certifications", "budget", "scholarship", "activities", "awards", "preferred_states", "school_type",
         "education_system", "funding_source", "intake",
     ];
@@ -45,6 +45,7 @@ public static class ChatProfileMapper
         {
             ["current_level"] = Text(step1?.CurrentEducationLevel),
             ["current_grade"] = Text(step1?.CurrentGrade),
+            ["graduation_year"] = step1?.ExpectedGraduationYear != null ? JsonValue.Create(step1.ExpectedGraduationYear.Value) : null,
             ["target_level"] = Text(step1?.TargetDegreeLevel),
             ["major"] = Text(step1?.TargetMajor),
             ["gpa"] = Gpa(draft.Step2),
@@ -109,6 +110,13 @@ public static class ChatProfileMapper
             {
                 "current_level" => draft with { Step1 = step1 with { CurrentEducationLevel = Str(value) } },
                 "current_grade" => draft with { Step1 = step1 with { CurrentGrade = Str(value) } },
+                "graduation_year" or "expected_graduation_year" => draft with
+                {
+                    Step1 = step1 with
+                    {
+                        ExpectedGraduationYear = value is not null ? value.GetValue<int>() : null
+                    }
+                },
                 "target_level" => draft with { Step1 = step1 with { TargetDegreeLevel = Str(value) } },
                 "major" => draft with
                 {
@@ -150,7 +158,41 @@ public static class ChatProfileMapper
                 _ => draft,
             };
         }
+
+        if (draft.Step1 is { } s1 && s1.ExpectedGraduationYear == null)
+        {
+            var guessed = GuessGraduationYear(s1.CurrentEducationLevel, s1.CurrentGrade);
+            if (guessed.HasValue)
+            {
+                draft = draft with { Step1 = s1 with { ExpectedGraduationYear = guessed.Value } };
+            }
+        }
+
         return draft;
+    }
+
+    public static int? GuessGraduationYear(string? level, string? grade, DateTime? now = null)
+    {
+        var lastGrade = level switch
+        {
+            "high_school" => 12,
+            "middle_school" => 9,
+            "college_university" => 4,
+            "master" => 2,
+            _ => (int?)null,
+        };
+        if (lastGrade == null || string.IsNullOrWhiteSpace(grade)) return null;
+
+        var current = now ?? DateTime.UtcNow;
+        var schoolYearEnd = current.Month >= 8 ? current.Year + 1 : current.Year;
+        if (grade == "Năm cuối") return schoolYearEnd;
+
+        var match = System.Text.RegularExpressions.Regex.Match(grade, @"(?:Lớp|Năm)\s*(\d+)");
+        if (match.Success && int.TryParse(match.Groups[1].Value, out var n))
+        {
+            return schoolYearEnd + Math.Max(0, lastGrade.Value - n);
+        }
+        return null;
     }
 
     // Kế hoạch 3.1: chế độ lấy theo gpaMode (TranscriptGpa.Mode đoán cho nháp cũ)

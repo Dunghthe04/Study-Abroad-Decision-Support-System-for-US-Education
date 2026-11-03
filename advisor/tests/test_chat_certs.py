@@ -141,13 +141,25 @@ async def test_not_tested_english_button_removes_english_cards():
 async def test_english_read_by_qwen_updates_card():
     from tests.test_chat_skills_flow import ho_so
 
-    llm = FakeLLM(ho_so({"english": {"type": "ielts", "score": 7.0, "date": None}}))
-    res = await turn(
-        llm, "em được ielts 7.0", current_step="B2", question_id="E1", asked={"D2": 1, "E1": 1}, profile=GPA
+    # Lượt 1: chat chưa có ngày thi -> hỏi ngày thi và lưu cert_pending
+    llm1 = FakeLLM(ho_so({"english": {"type": "ielts", "score": 7.0, "date": None}}))
+    res1 = await turn(
+        llm1, "em được ielts 7.0", current_step="B2", question_id="E1", asked={"D2": 1, "E1": 1}, profile=GPA
     )
+    assert "cert_pending" in res1.state.profile
+    assert res1.state.profile["cert_pending"].value["score"] == 7.0
+    assert "tháng mấy, năm nào" in res1.answer
+    assert res1.widget is not None and res1.widget.type == "select"
+    assert [f["name"] for f in res1.widget.data["fields"]] == ["test_month", "test_year"]
+    assert [r.label for r in res1.quick_replies] == ["Không nhớ ngày thi"]
 
-    [cert] = certs_of(res)
-    assert (cert["category"], cert["type"], cert["overall"]) == ("english", "ielts", 7.0)
+    # Lượt 2: trả lời ngày thi -> cập nhật thẻ chứng chỉ
+    res2 = await turn(
+        FakeLLM(), "10/2024", **res1.state.model_dump()
+    )
+    [cert] = certs_of(res2)
+    assert (cert["category"], cert["type"], cert["overall"], cert["testDate"]) == ("english", "ielts", 7.0, "2024-10")
+    assert "cert_pending" not in res2.state.profile
 
 
 def test_e1_widget_lists_english_certs_like_form():
@@ -267,4 +279,55 @@ async def test_e3_skip_keeps_standardized_plan_tick():
 
     assert res.state.profile["standardized_plan"] == field({"planned": True, "date": None})
     assert res.state.question_id != "E3"
+
+
+async def test_sat_without_date_asks_for_date_and_saves_on_second_turn():
+    from tests.test_chat_skills_flow import ho_so
+
+    # Lượt 1: chat "em thi SAT 1450" chưa có ngày thi -> hỏi ngày thi và lưu cert_pending
+    llm1 = FakeLLM(ho_so({"sat": 1450}))
+    res1 = await turn(
+        llm1, "em thi SAT 1450", current_step="B2", question_id="D3", asked={"D2": 1, "E1": 1, "D3": 1}, profile=GPA
+    )
+    assert "cert_pending" in res1.state.profile
+    assert res1.state.profile["cert_pending"].value["score"] == 1450
+    assert "Bạn thi SAT (1450) vào tháng mấy, năm nào" in res1.answer
+
+    # Lượt 2: trả lời ngày thi -> cập nhật thẻ SAT
+    res2 = await turn(
+        FakeLLM(), "12/2024", **res1.state.model_dump()
+    )
+    [cert] = [c for c in certs_of(res2) if c["type"] == "sat"]
+    assert (cert["category"], cert["type"], cert["overall"], cert["testDate"]) == ("standardized", "sat", 1450, "2024-12")
+    assert "cert_pending" not in res2.state.profile
+
+
+async def test_sat_with_date_saves_immediately():
+    from tests.test_chat_skills_flow import ho_so
+
+    llm = FakeLLM(ho_so({"sat": 1500}))
+    res = await turn(
+        llm, "em thi SAT 1500 tháng 11/2024", current_step="B2", question_id="D3", asked={"D2": 1, "E1": 1, "D3": 1}, profile=GPA
+    )
+    [cert] = [c for c in certs_of(res) if c["type"] == "sat"]
+    assert (cert["category"], cert["type"], cert["overall"], cert["testDate"]) == ("standardized", "sat", 1500, "2024-11")
+
+
+async def test_cert_pending_skip_saves_without_date():
+    from tests.test_chat_skills_flow import ho_so
+
+    # Lượt 1: chat "IELTS 6.5"
+    llm1 = FakeLLM(ho_so({"english": {"type": "ielts", "score": 6.5, "date": None}}))
+    res1 = await turn(
+        llm1, "IELTS 6.5", current_step="B2", question_id="E1", asked={"D2": 1, "E1": 1}, profile=GPA
+    )
+    assert "cert_pending" in res1.state.profile
+
+    # Lượt 2: học sinh bảo "em không nhớ" -> lưu điểm và testDate là None
+    res2 = await turn(
+        FakeLLM(), "em không nhớ rõ", **res1.state.model_dump()
+    )
+    [cert] = certs_of(res2)
+    assert (cert["category"], cert["type"], cert["overall"], cert["testDate"]) == ("english", "ielts", 6.5, None)
+    assert "cert_pending" not in res2.state.profile
 

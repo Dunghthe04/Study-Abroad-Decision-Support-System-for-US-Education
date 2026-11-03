@@ -103,10 +103,12 @@ public class ChatProfileMapperTests
     [Fact]
     public void RoundTrip_FullProfile()
     {
+        var gradYear = ChatProfileMapper.GuessGraduationYear("high_school", "Lớp 12")!.Value;
         var profile = Profile($$"""
         {
           "current_level":{"value":"high_school","status":"confirmed"},
           "current_grade":{"value":"Lớp 12","status":"confirmed"},
+          "graduation_year":{"value":{{gradYear}},"status":"confirmed"},
           "target_level":{"value":"undergraduate","status":"confirmed"},
           "gpa":{"value":{"value":8.5,"scale":10,"source":"overall"},"status":"confirmed"},
           "sat":{"value":1450,"status":"confirmed"},
@@ -118,6 +120,20 @@ public class ChatProfileMapperTests
         }
         """);
         AssertSame(profile, ChatProfileMapper.ToChatProfile(ToDraft(profile)));
+    }
+
+    [Theory]
+    [InlineData("high_school", "Lớp 10", 2026, 11, 2029)]
+    [InlineData("high_school", "Lớp 12", 2026, 5, 2026)]
+    [InlineData("high_school", "Lớp 12", 2026, 9, 2027)]
+    [InlineData("middle_school", "Lớp 9", 2026, 11, 2027)]
+    [InlineData("college_university", "Năm 2", 2026, 11, 2029)]
+    [InlineData("college_university", "Năm cuối", 2026, 11, 2027)]
+    public void GuessGraduationYear_CalculatesExpectedYear(string level, string grade, int year, int month, int expected)
+    {
+        var now = new DateTime(year, month, 1, 0, 0, 0, DateTimeKind.Utc);
+        var actual = ChatProfileMapper.GuessGraduationYear(level, grade, now);
+        Assert.Equal(expected, actual);
     }
 
     // Trạng thái nháp không lưu được thì lấy lại từ profile lượt trước

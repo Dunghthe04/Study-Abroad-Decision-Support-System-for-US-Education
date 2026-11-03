@@ -120,20 +120,47 @@ export function SelectWidget({ data, onPick }: { data?: Record<string, unknown> 
 
   const valueOf = (f: Field): string => (f.multiple ? (multi[f.name] ?? []).join(", ") : (values[f.name] ?? "").trim());
 
+  const fieldError = (f: Field): string | null => {
+    if (f.kind !== "number") return null;
+    const v = valueOf(f);
+    if (!v) return null;
+    const n = Number(v);
+    if (!Number.isFinite(n)) return "Vui lòng nhập một số hợp lệ.";
+    const min = minOf(f);
+    const max = maxOf(f);
+    if (min !== undefined && max !== undefined && (n < min || n > max)) {
+      return `Điểm phải từ ${min} đến ${max} (bạn đang nhập ${n}).`;
+    }
+    if (min !== undefined && n < min) {
+      return `Điểm tối thiểu là ${min}.`;
+    }
+    if (max !== undefined && n > max) {
+      return `Điểm tối đa là ${max}.`;
+    }
+    return null;
+  };
+
+  const rangeHint = (f: Field): string => {
+    if (f.kind !== "number") return "";
+    const min = minOf(f);
+    const max = maxOf(f);
+    if (min !== undefined && max !== undefined) return `(${min} - ${max})`;
+    if (max !== undefined) return `(tối đa ${max})`;
+    return "";
+  };
+
   const isValid = (f: Field): boolean => {
     if (f.kind === "check") return true;
     const v = valueOf(f);
     if (!v) return Boolean(f.optional);
     if (f.kind !== "number") return true;
-    const n = Number(v);
-    const min = minOf(f);
-    const max = maxOf(f);
-    return Number.isFinite(n) && (min === undefined || n >= min) && (max === undefined || n <= max);
+    return fieldError(f) === null;
   };
 
   const hasAnyValue = shown.some((f) => Boolean(valueOf(f)));
   const allOptional = shown.length > 0 && shown.every((f) => f.optional);
   const ready = shown.every(isValid) && (!allOptional || hasAnyValue);
+  const firstError = shown.map(fieldError).find(Boolean);
 
   const setValue = (name: string, value: string) =>
     setValues((prev) => {
@@ -162,6 +189,9 @@ export function SelectWidget({ data, onPick }: { data?: Record<string, unknown> 
   };
 
   const control = (f: Field) => {
+    const err = fieldError(f);
+    const inputClass = `${controlClass} ${err ? "border-destructive text-destructive focus:border-destructive focus:ring-destructive" : ""}`;
+
     if (f.name === "gpa") {
       const currentScale = values["scale"] ?? "10";
       const presets = currentScale === "4" ? GPA_PRESETS_4 : GPA_PRESETS_10;
@@ -179,8 +209,9 @@ export function SelectWidget({ data, onPick }: { data?: Record<string, unknown> 
             value={values[f.name] ?? ""}
             onChange={(e) => setValue(f.name, e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && submit()}
-            className={controlClass}
+            className={inputClass}
           />
+          {err && <p className="text-[11px] font-medium text-destructive mt-0.5">⚠️ {err}</p>}
           <div className="pt-0.5">
             <button
               type="button"
@@ -223,20 +254,23 @@ export function SelectWidget({ data, onPick }: { data?: Record<string, unknown> 
     }
     if (f.kind === "number" || f.kind === "text")
       return (
-        <input
-          type={f.kind === "number" ? "number" : "text"}
-          inputMode={f.kind === "number" ? "decimal" : undefined}
-          id={`sw-${f.name}`}
-          placeholder={f.placeholder}
-          min={minOf(f)}
-          max={maxOf(f)}
-          step={stepOf(f)}
-          disabled={!onPick}
-          value={values[f.name] ?? ""}
-          onChange={(e) => setValue(f.name, e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && submit()}
-          className={controlClass}
-        />
+        <div className="space-y-1">
+          <input
+            type={f.kind === "number" ? "number" : "text"}
+            inputMode={f.kind === "number" ? "decimal" : undefined}
+            id={`sw-${f.name}`}
+            placeholder={f.placeholder}
+            min={minOf(f)}
+            max={maxOf(f)}
+            step={stepOf(f)}
+            disabled={!onPick}
+            value={values[f.name] ?? ""}
+            onChange={(e) => setValue(f.name, e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && submit()}
+            className={inputClass}
+          />
+          {err && <p className="text-[11px] font-medium text-destructive mt-0.5">⚠️ {err}</p>}
+        </div>
       );
     if (f.multiple)
       return (
@@ -333,6 +367,11 @@ export function SelectWidget({ data, onPick }: { data?: Record<string, unknown> 
               {f.label && (
                 <Label htmlFor={`sw-${f.name}`} className={labelClass}>
                   {f.label.trim() || " "}
+                  {rangeHint(f) && (
+                    <span className="text-[11px] text-muted-foreground font-normal ml-1">
+                      {rangeHint(f)}
+                    </span>
+                  )}
                 </Label>
               )}
               {control(f)}
@@ -342,10 +381,15 @@ export function SelectWidget({ data, onPick }: { data?: Record<string, unknown> 
       </div>
       {upload === "transcript" && <TranscriptUpload onPick={onPick} />}
       <div className="flex items-center justify-between gap-2">
-        <p className="text-[11px] text-muted-foreground">Chọn cho nhanh, hoặc gõ trả lời vào ô chat.</p>
+        {firstError ? (
+          <p className="text-[11px] font-medium text-destructive">⚠️ {firstError}</p>
+        ) : (
+          <p className="text-[11px] text-muted-foreground">Chọn cho nhanh, hoặc gõ trả lời vào ô chat.</p>
+        )}
         <button
           type="button"
           disabled={!onPick || !ready}
+          title={firstError ?? undefined}
           onClick={submit}
           className="inline-flex h-8 shrink-0 cursor-pointer items-center gap-1 rounded-full bg-brand px-3.5 text-xs font-semibold text-white transition-colors hover:bg-brand-ink disabled:cursor-not-allowed disabled:opacity-50"
         >

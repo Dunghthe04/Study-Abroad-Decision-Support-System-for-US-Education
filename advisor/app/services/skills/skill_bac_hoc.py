@@ -202,6 +202,12 @@ def save_read(
         else:
             state.profile[name] = ProfileField(value=value, status=status)
 
+    lvl = getattr(state.profile.get("current_level"), "value", None)
+    grd = getattr(state.profile.get("current_grade"), "value", None)
+    grad_year = buttons.guess_graduation_year(lvl, grd)
+    if grad_year is not None and (not keep_existing or "graduation_year" not in state.profile):
+        state.profile["graduation_year"] = ProfileField(value=grad_year, status=status)
+
 
 def answered(state: ChatState, question_id: str) -> bool:
     return any(name in state.profile for name in QUESTION_FIELDS[question_id])

@@ -98,9 +98,7 @@ BUTTONS = {
         ),
     ),
     "F1": tuple(Button(label, {"budget": confirmed(tier)}) for tier, label in BUDGET_LABELS.items()),
-    "F2": tuple(
-        Button(label, {"scholarship": confirmed(level)}) for level, label in SCHOLARSHIP_LABELS.items()
-    ),
+    "F2": (),
     "D4": (Button("Em chưa có hoạt động", {"activities": NONE}),),
     "D5": (Button("Em chưa có giải", {"awards": NONE}),),
     "N1": (Button("Không có người thân ở Mỹ", {"relatives_state": NONE}),),
@@ -129,6 +127,30 @@ GRADE_OPTIONS = {
     "college_university": ("Năm 1", "Năm 2", "Năm 3", "Năm 4", "Năm cuối", "Đã tốt nghiệp"),
     "master": ("Năm 1", "Năm 2", "Đã tốt nghiệp"),
 }
+
+LAST_GRADE = {
+    "high_school": 12,
+    "middle_school": 9,
+    "college_university": 4,
+    "master": 2,
+}
+
+
+def guess_graduation_year(level: str | None, grade: str | None, today: date | None = None) -> int | None:
+    last = LAST_GRADE.get(level or "")
+    if not last or not grade:
+        return None
+    now = today or date.today()
+    school_year_end = now.year + 1 if now.month >= 8 else now.year
+    if grade == "Năm cuối":
+        return school_year_end
+    import re
+    match = re.search(r"(?:Lớp|Năm)\s*(\d+)", grade)
+    if match:
+        n = int(match.group(1))
+        return school_year_end + max(0, last - n)
+    return None
+
 # Kỳ nhập học: chữ giống INTAKE_TERM_OPTIONS của form, năm từ năm nay tới 5 năm sau
 INTAKE_TERM_LABELS = {
     "Fall": "Kỳ mùa thu (Fall)",
@@ -157,7 +179,15 @@ def choices_of(question_id: str | None) -> tuple[Button, ...]:
         return tuple(
             Button(
                 f"{label}, {grade}",
-                {"current_level": confirmed(level), "current_grade": confirmed(grade)},
+                {
+                    "current_level": confirmed(level),
+                    "current_grade": confirmed(grade),
+                    **(
+                        {"graduation_year": confirmed(guess_graduation_year(level, grade))}
+                        if guess_graduation_year(level, grade)
+                        else {}
+                    ),
+                },
             )
             for level, label in CURRENT_LEVEL_LABELS.items()
             for grade in GRADE_OPTIONS[level]
@@ -173,6 +203,11 @@ def choices_of(question_id: str | None) -> tuple[Button, ...]:
         return tuple(
             Button(label, {"education_system": confirmed(code)})
             for code, label in EDUCATION_SYSTEM_LABELS.items()
+        )
+    if question_id == "F2":
+        return tuple(
+            Button(label, {"scholarship": confirmed(code)})
+            for code, label in SCHOLARSHIP_LABELS.items()
         )
     if question_id == "F3":
         return tuple(
@@ -199,10 +234,30 @@ def month_year(prefix: str, label: str) -> list[dict]:
     ]
 
 
+# Widget chỉ gồm Tháng thi và Năm thi khi học sinh đã nói điểm chứng chỉ nhưng thiếu ngày thi
+def cert_date_widget() -> dict:
+    months = [str(m) for m in range(1, 13)]
+    return {
+        "fields": [
+            {"name": "test_month", "label": "Tháng thi", "placeholder": "Tháng", "options": same_options(months)},
+            {"name": "test_year", "label": "Năm thi", "placeholder": "Năm", "options": same_options(past_years())},
+        ],
+        "format": "tháng {test_month}/{test_year}",
+    }
+
+
+POPULAR_ENGLISH_CERTS = ("ielts", "toefl", "duolingo", "pte")
+POPULAR_STANDARDIZED_CERTS = ("sat", "act", "ap")
+
+
 # Ô nhập một chứng chỉ như thẻ chứng chỉ ở bước 3 form: loại (theo nhóm), môn (AP, A-Level), điểm (giới hạn
 # theo loại), điểm chữ (A-Level), tháng / năm thi. Gửi đi thành câu skill_ho_so.CERT_TEXT đọc được
-def cert_fields(categories: tuple[str, ...], placeholder: str) -> dict:
-    types = {code: spec for code, spec in CERT_TYPES.items() if spec.category in categories}
+def cert_fields(categories: tuple[str, ...], placeholder: str, allowed_codes: tuple[str, ...] | None = None) -> dict:
+    types = {
+        code: spec
+        for code, spec in CERT_TYPES.items()
+        if spec.category in categories and (allowed_codes is None or code in allowed_codes)
+    }
     numeric = {spec.name: CERT_LIMITS[code] for code, spec in types.items() if code in CERT_LIMITS}
     with_subject = [spec.name for spec in types.values() if spec.requires_subject]
     letter = [spec.name for code, spec in types.items() if code not in CERT_LIMITS]
@@ -386,8 +441,8 @@ def select_fields(question_id: str) -> dict | None:
             ],
             "format": "GPA {gpa} thang {scale}",
         },
-        "D3": cert_fields(("standardized", "graduate"), "VD: 1350"),
-        "E1": cert_fields(("english",), "VD: 6.5"),
+        "D3": cert_fields(("standardized", "graduate"), "VD: 1350", allowed_codes=POPULAR_STANDARDIZED_CERTS),
+        "E1": cert_fields(("english",), "VD: 6.5", allowed_codes=POPULAR_ENGLISH_CERTS),
         # E2: hỏi kế hoạch thi tiếng Anh — bài thi, điểm mục tiêu và tháng tất cả đều tùy chọn
         "E2": {
             "fields": [
@@ -396,7 +451,7 @@ def select_fields(question_id: str) -> dict | None:
                     "label": "Bài thi dự kiến (tùy chọn)",
                     "placeholder": "Chọn bài thi",
                     "options": same_options(
-                        [spec.name for code, spec in CERT_TYPES.items() if spec.category == "english"]
+                        [spec.name for code, spec in CERT_TYPES.items() if code in POPULAR_ENGLISH_CERTS]
                     ),
                     "prefix": " ",
                     "optional": True,
@@ -410,23 +465,23 @@ def select_fields(question_id: str) -> dict | None:
                     "minBy": {"type": {name: low for name, (low, _, _) in {
                         spec.name: CERT_LIMITS[code]
                         for code, spec in CERT_TYPES.items()
-                        if spec.category == "english" and code in CERT_LIMITS
+                        if code in POPULAR_ENGLISH_CERTS and code in CERT_LIMITS
                     }.items()}},
                     "maxBy": {"type": {name: high for name, (_, high, _) in {
                         spec.name: CERT_LIMITS[code]
                         for code, spec in CERT_TYPES.items()
-                        if spec.category == "english" and code in CERT_LIMITS
+                        if code in POPULAR_ENGLISH_CERTS and code in CERT_LIMITS
                     }.items()}},
                     "stepBy": {"type": {name: step for name, (_, _, step) in {
                         spec.name: CERT_LIMITS[code]
                         for code, spec in CERT_TYPES.items()
-                        if spec.category == "english" and code in CERT_LIMITS
+                        if code in POPULAR_ENGLISH_CERTS and code in CERT_LIMITS
                     }.items()}},
                     "shownWhen": {
                         "field": "type",
                         "values": [
                             spec.name for code, spec in CERT_TYPES.items()
-                            if spec.category == "english" and code in CERT_LIMITS
+                            if code in POPULAR_ENGLISH_CERTS and code in CERT_LIMITS
                         ],
                     },
                     "optional": True,
@@ -451,7 +506,7 @@ def select_fields(question_id: str) -> dict | None:
                     "label": "Bài thi dự kiến (tùy chọn)",
                     "placeholder": "Chọn bài thi",
                     "options": same_options(
-                        [spec.name for code, spec in CERT_TYPES.items() if spec.category in ("standardized", "graduate")]
+                        [spec.name for code, spec in CERT_TYPES.items() if code in POPULAR_STANDARDIZED_CERTS]
                     ),
                     "prefix": " ",
                     "optional": True,
@@ -465,23 +520,23 @@ def select_fields(question_id: str) -> dict | None:
                     "minBy": {"type": {name: low for name, (low, _, _) in {
                         spec.name: CERT_LIMITS[code]
                         for code, spec in CERT_TYPES.items()
-                        if spec.category in ("standardized", "graduate") and code in CERT_LIMITS
+                        if code in POPULAR_STANDARDIZED_CERTS and code in CERT_LIMITS
                     }.items()}},
                     "maxBy": {"type": {name: high for name, (_, high, _) in {
                         spec.name: CERT_LIMITS[code]
                         for code, spec in CERT_TYPES.items()
-                        if spec.category in ("standardized", "graduate") and code in CERT_LIMITS
+                        if code in POPULAR_STANDARDIZED_CERTS and code in CERT_LIMITS
                     }.items()}},
                     "stepBy": {"type": {name: step for name, (_, _, step) in {
                         spec.name: CERT_LIMITS[code]
                         for code, spec in CERT_TYPES.items()
-                        if spec.category in ("standardized", "graduate") and code in CERT_LIMITS
+                        if code in POPULAR_STANDARDIZED_CERTS and code in CERT_LIMITS
                     }.items()}},
                     "shownWhen": {
                         "field": "type",
                         "values": [
                             spec.name for code, spec in CERT_TYPES.items()
-                            if spec.category in ("standardized", "graduate") and code in CERT_LIMITS
+                            if code in POPULAR_STANDARDIZED_CERTS and code in CERT_LIMITS
                         ],
                     },
                     "optional": True,

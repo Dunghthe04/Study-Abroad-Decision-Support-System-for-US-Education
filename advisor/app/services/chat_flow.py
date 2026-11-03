@@ -178,6 +178,28 @@ def postponed(output: SkillOutput, left: list[SlmY], as_text: bool) -> SkillOutp
     return combine(output, SkillOutput(MORE_QUESTIONS, quick_replies=buttons))
 
 
+# Tái tạo đầy đủ SkillOutput (gồm quick_replies và widget) của câu hỏi đang chờ khi người dùng hỏi xen ngang
+def recreate_question_output(state: ChatState, question_id: str, question_text: str) -> SkillOutput:
+    from app.services.skills import buttons, skill_bac_hoc, skill_ho_so
+
+    saved_asked = dict(state.asked)
+    if question_id == "X1":
+        remind_out = skill_ho_so.review(state)
+    elif question_id in skill_bac_hoc.QUESTION_FIELDS:
+        remind_out = skill_bac_hoc.ask_question(state, question_id)
+    elif question_id in skill_ho_so.QUESTION_FIELDS or question_id in buttons.WIDGETS or buttons.select_fields(question_id):
+        remind_out = skill_ho_so.ask_question(state, question_id, question_text)
+    else:
+        remind_out = buttons.ask_with_buttons(state, question_id)
+    state.asked = saved_asked
+
+    return SkillOutput(
+        answer=BACK_TO_QUESTION + (question_text or remind_out.answer),
+        quick_replies=remind_out.quick_replies,
+        widget=remind_out.widget,
+    )
+
+
 class ChatFlow:
     # slm: bộ phân loại tin nhắn (OllamaSlm, test dùng FixedSlm). branches: loại câu hỏi -> nhánh (build_branches)
     def __init__(self, slm: SlmClassifier, branches: dict[str, Branch]) -> None:
@@ -240,7 +262,8 @@ class ChatFlow:
         # Ý hoãn lại hiện trước câu nhắc, để câu cuối cùng học sinh thấy vẫn là câu đang chờ
         output = postponed(output, slm.con_lai, as_text=bool(output.quick_replies or output.widget or remind))
         if remind:
-            output = combine(output, SkillOutput(BACK_TO_QUESTION + pending[1]))
+            remind_output = recreate_question_output(state, pending[0], pending[1])
+            output = combine(output, remind_output)
 
         # Lượt đầu mà chưa nhánh nào trả lời được: chào như cũ thay vì "đang hoàn thiện"
         if not output.answer:
