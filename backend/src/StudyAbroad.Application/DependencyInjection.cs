@@ -16,6 +16,7 @@ public static class DependencyInjection
     {
         services.AddScoped<IStudyCenterService, StudyCenterService>();
         services.AddScoped<IAdminUniversityService, AdminUniversityService>();
+        services.AddScoped<StudyAbroad.Application.Leads.ILeadService, StudyAbroad.Application.Leads.LeadService>();
         services.AddScoped<IAuthService, AuthService>();
         // [Q11] Liên kết phụ huynh–học sinh và sự đồng ý xử lý dữ liệu trẻ em
         services.AddScoped<IParentLinkService, ParentLinkService>();

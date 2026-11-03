@@ -1,14 +1,18 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using StudyAbroad.Api.Extensions;
 using StudyAbroad.Application.Profile.Financial;
-using System.Security.Claims;
+using StudyAbroad.Domain.Constants;
 
 namespace StudyAbroad.Api.Controllers;
 
 /// <summary>
 /// [USAS-364] Controller quản lý Hồ sơ tài chính và Hoạt động ngoại khóa của học sinh.
-/// Áp dụng cơ chế bảo mật chống IDOR: Chỉ truy vấn và cập nhật dữ liệu của tài khoản hiện tại.
+/// Áp dụng cơ chế bảo mật chống IDOR: Chỉ truy vấn và cập nhật dữ liệu của tài khoản hiện tại qua JWT Claims.
 /// </summary>
 [ApiController]
+[Authorize(Roles = $"{UserRoles.Student},{UserRoles.Parent}")]
+[Authorize(Policy = AgeFeatures.ProcessStudentData)]
 [Route("api/v1/profile")]
 public class FinancialProfileController(IFinancialProfileService profileService) : ControllerBase
 {
@@ -245,27 +249,8 @@ public class FinancialProfileController(IFinancialProfileService profileService)
     // ==========================================
 
     /// <summary>
-    /// Trích xuất an toàn UserId từ phiên đăng nhập.
-    /// 1. Ưu tiên lấy từ Claims Principal (JWT Token).
-    /// 2. Hỗ trợ Header X-User-Id cho môi trường Development / Postman testing.
+    /// Trích xuất an toàn UserId từ JWT Claims Principal của phiên đăng nhập đã xác thực.
+    /// Tuyệt đối không nhận UserId từ Header hoặc Client request để triệt tiêu lỗ hổng IDOR.
     /// </summary>
-    private Guid? GetCurrentUserId()
-    {
-        // 1. Kiểm tra Claims từ JWT Token
-        var claimId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
-                      ?? User.FindFirst("sub")?.Value
-                      ?? User.FindFirst("id")?.Value;
-
-        if (!string.IsNullOrEmpty(claimId) && Guid.TryParse(claimId, out var parsedClaimId))
-            return parsedClaimId;
-
-        // 2. Fallback cho Development/Testing qua header X-User-Id
-        if (Request.Headers.TryGetValue("X-User-Id", out var headerValue) &&
-            Guid.TryParse(headerValue, out var parsedHeaderId))
-        {
-            return parsedHeaderId;
-        }
-
-        return null;
-    }
+    private Guid? GetCurrentUserId() => User.GetUserId();
 }
