@@ -36,6 +36,8 @@ namespace StudyAbroad.Application.Auth
         Task<AuthResult> LockUserAccountAsync(Guid targetUserId, LockUserAccountRequest request, Guid actorAdminId, CancellationToken ct = default);
         /// <summary>[UC-62] Admin mở khóa tài khoản (status locked hoặc temp_locked) kèm lý do và audit.</summary>
         Task<AuthResult> UnlockUserAccountAsync(Guid targetUserId, UnlockUserAccountRequest request, Guid actorAdminId, CancellationToken ct = default);
+        /// <summary>[UC-80] Xóa tài khoản và ẩn danh hóa dữ liệu cá nhân theo luật PDPA 2025.</summary>
+        Task<AuthResult> AnonymizeUserAccountAsync(Guid userId, string? ipAddress = null, string? userAgent = null, CancellationToken ct = default);
     }
 
     public class AuthService(
@@ -882,6 +884,67 @@ namespace StudyAbroad.Application.Auth
             }, ct);
 
             return AuthResult.Ok(ToDto(user), "Đã mở khóa tài khoản.");
+        }
+
+        /// <summary>
+        /// [UC-80] Xóa tài khoản và ẩn danh hóa dữ liệu (Right to be Forgotten - PDPA 2025).
+        /// Áp dụng cơ chế Anonymization thay vì Hard Delete để bảo toàn tính toàn vẹn CSDL và khóa ngoại.
+        /// </summary>
+        public async Task<AuthResult> AnonymizeUserAccountAsync(
+            Guid userId,
+            string? ipAddress = null,
+            string? userAgent = null,
+            CancellationToken ct = default)
+        {
+            var user = await users.GetUserById(userId, ct);
+            if (user is null)
+                return AuthResult.Fail(AuthError.Validation, "Không tìm thấy tài khoản người dùng.");
+
+            if (user.Status == UserStatuses.Deleted)
+                return AuthResult.Fail(AuthError.Validation, "Tài khoản đã được xóa trước đó.");
+
+            var originalEmail = user.Email;
+            var shortId = user.Id.ToString("N")[..8];
+
+            // 1. Ẩn danh hóa thông tin định danh cá nhân (PII)
+            user.Email = $"deleted_{shortId}_{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}@anonymized.studyabroad";
+            user.FullName = "Người dùng đã xóa";
+            user.Phone = null;
+            user.PasswordHash = string.Empty;
+            user.Status = UserStatuses.Deleted;
+            user.FailedLoginAttempts = 0;
+            user.LockoutEnd = null;
+
+            await users.UpdateUserAsync(user, ct);
+
+            // 2. Thu hồi toàn bộ phiên đăng nhập đang hoạt động
+            await users.RevokeAllSessionsAsync(user.Id, ct);
+
+            // 3. Vô hiệu hóa toàn bộ mã OTP liên quan
+            await users.InvalidateOtpsAsync(user.Id, "verify_email", ct);
+            await users.InvalidateOtpsAsync(user.Id, "reset_password", ct);
+
+            // 4. Ghi vết kiểm toán (Audit Trail) bất biến
+            var detailJson = JsonSerializer.Serialize(new
+            {
+                action = "anonymize_account",
+                userId = user.Id,
+                anonymizedAt = DateTime.UtcNow,
+                previousEmailDomain = originalEmail.Contains('@') ? originalEmail.Split('@')[1] : null
+            });
+
+            await auditLogs.AddAsync(new AuditLog
+            {
+                ActorUserId = user.Id,
+                Action = "user.delete_account",
+                EntityType = "user",
+                EntityId = user.Id.ToString(),
+                DetailJson = detailJson,
+                IpAddress = ipAddress,
+                UserAgent = userAgent
+            }, ct);
+
+            return AuthResult.Ok("Tài khoản của bạn đã được xóa và ẩn danh hóa thành công theo quy định bảo vệ dữ liệu.");
         }
     }
 }
