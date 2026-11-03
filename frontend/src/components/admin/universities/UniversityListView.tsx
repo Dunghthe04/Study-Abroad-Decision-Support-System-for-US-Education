@@ -35,8 +35,11 @@ import type {
   AdminUniversityListItem,
 } from "@/types/admin-university";
 
+/** Nền cho ô lọc để tách khỏi nền trang. */
+const FILTER_FIELD_BG = "bg-card dark:bg-input/30";
+
 const ACTIVE_FILTER_OPTIONS: LabeledOption[] = [
-  { value: "all", label: "Tất cả" },
+  { value: "all", label: "Mọi trạng thái" },
   { value: "active", label: "Đang hiển thị" },
   { value: "hidden", label: "Đang ẩn" },
 ];
@@ -134,59 +137,54 @@ export function UniversityListView() {
   const totalPages = data?.totalPages ?? 0;
   const currentPage = data?.page ?? applied.page;
 
+  const activeFilterTextColor =
+    draft.active === "all" ? "text-muted-foreground" : "";
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6 lg:flex-row">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
         <form
           onSubmit={handleSubmit}
-          className="flex shrink-0 flex-wrap items-end gap-3"
+          className="flex shrink-0 flex-wrap items-center gap-3"
         >
-          <label className="flex min-w-56 flex-1 flex-col gap-1 text-sm font-medium">
-            Tìm theo tên hoặc mã
-            <Input
-              value={draft.search}
-              onChange={(event) =>
-                setDraft({ ...draft, search: event.target.value })
-              }
-              placeholder="Ví dụ: Oregon, 209542"
-            />
-          </label>
-          <label className="flex w-24 flex-col gap-1 text-sm font-medium">
-            Bang
-            <Input
-              value={draft.state}
-              onChange={(event) =>
-                setDraft({ ...draft, state: event.target.value })
-              }
-              placeholder="CA"
-              maxLength={2}
-            />
-          </label>
-          <div className="flex flex-col gap-1 text-sm font-medium">
-            <label htmlFor="filter-control">Loại trường</label>
-            <OptionSelect
-              id="filter-control"
-              value={draft.control}
-              options={CONTROL_FILTER_OPTIONS}
-              onChange={(value) => setDraft({ ...draft, control: value })}
-              className="min-w-36"
-            />
-          </div>
-          <div className="flex flex-col gap-1 text-sm font-medium">
-            <label htmlFor="filter-active">Hiển thị</label>
-            <OptionSelect
-              id="filter-active"
-              value={draft.active}
-              options={ACTIVE_FILTER_OPTIONS}
-              onChange={(value) =>
-                setDraft({
-                  ...draft,
-                  active: value as AdminUniversityActiveFilter,
-                })
-              }
-              className="min-w-36"
-            />
-          </div>
+          <Input
+            value={draft.search}
+            onChange={(event) =>
+              setDraft({ ...draft, search: event.target.value })
+            }
+            placeholder="Tìm theo tên hoặc mã trường"
+            aria-label="Tìm theo tên hoặc mã trường"
+            className={`min-w-56 flex-1 ${FILTER_FIELD_BG}`}
+          />
+          <Input
+            value={draft.state}
+            onChange={(event) =>
+              setDraft({ ...draft, state: event.target.value })
+            }
+            placeholder="Bang (CA)"
+            aria-label="Bang"
+            maxLength={2}
+            className={`w-28 ${FILTER_FIELD_BG}`}
+          />
+          <OptionSelect
+            value={draft.control}
+            options={CONTROL_FILTER_OPTIONS}
+            onChange={(value) => setDraft({ ...draft, control: value })}
+            aria-label="Loại trường"
+            className={`w-auto min-w-40 ${FILTER_FIELD_BG}`}
+          />
+          <OptionSelect
+            value={draft.active}
+            options={ACTIVE_FILTER_OPTIONS}
+            onChange={(value) =>
+              setDraft({
+                ...draft,
+                active: value as AdminUniversityActiveFilter,
+              })
+            }
+            aria-label="Trạng thái hiển thị"
+            className={`w-auto min-w-40 ${FILTER_FIELD_BG} ${activeFilterTextColor}`}
+          />
           <div className="flex gap-2">
             <Button type="submit">
               <SearchIcon />

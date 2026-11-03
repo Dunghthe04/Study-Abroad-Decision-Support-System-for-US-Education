@@ -128,6 +128,6 @@ function buildOptions(emptyLabel: string, labels: Record<string, string>): Label
 }
 
 export const CONTROL_OPTIONS = buildOptions("Chưa rõ", CONTROL_LABELS);
-export const CONTROL_FILTER_OPTIONS = buildOptions("Tất cả", CONTROL_LABELS);
+export const CONTROL_FILTER_OPTIONS = buildOptions("Mọi loại trường", CONTROL_LABELS);
 export const SAT_POLICY_OPTIONS = buildOptions("Chưa rõ", SAT_POLICY_LABELS);
 export const SOURCE_RELIABILITY_OPTIONS = buildOptions("Chưa rõ", SOURCE_RELIABILITY_LABELS);
