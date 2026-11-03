@@ -25,7 +25,7 @@ Tài liệu này so 24 work item của sprint v0.1 (Jira USAS-1975 → 1996, 206
 | 1984 | UC-12 Xác nhận trích xuất | Việt | ✅ | Ô cam + nút "Tôi đã kiểm tra bảng điểm" |
 | 1985/1986 | UC-13/14 Điểm thi | Việt | ✅ | |
 | 1987 | UC-15 Tài chính | Việt | ✅ (wizard) | API cũ của Đức xem mục 4.1 |
-| 1988–1990 | UC-16/17/18 | Đức | ✅ wizard / ⚠️ API cũ | Xem mục 4.1 |
+| 1988–1990 | UC-16/17/18 | Đức | ✅ | Đã vá bảo mật API cũ: Authorize, Policy Q11, gỡ bỏ X-User-Id và user giả |
 | 1991 | UC-22 | Dũng | ✅ | Xem mục 4.2 |
 | 1992 | UC-23 | Dương | ✅ | |
 | 1993 | UC-68 Bảng quy đổi GPA | Đức | ❌ | Đã chốt: quy đổi **tuyến tính** (/10 × 4) |
@@ -114,6 +114,8 @@ Hệ quả: ai cũng đọc/sửa được hồ sơ tài chính và học thuậ
   - bỏ `X-User-Id`, GUID mặc định và user giả;
   - không nhận Id từ client;
   - không trả `ex.Message` ra ngoài.
+
+*Cập nhật (03/11/2026): Đức đã hoàn tất xử lý Phương án B — bổ sung Authorize, Policy ProcessStudentData (Q11), trích xuất an toàn User.GetUserId(), gỡ bỏ hoàn toàn header X-User-Id và backdoor tạo user giả; kèm bộ kiểm thử tự động LegacyProfileControllersSecurityTests (377/377 unit tests pass).*
 
 **Ngoài ra:**
 
