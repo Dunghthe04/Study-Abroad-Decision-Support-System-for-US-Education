@@ -115,7 +115,7 @@ def read_plan_text(question_id: str | None, message: str) -> dict | None:
     m_prefix = re.match(r"^(?:em\s+|mình\s+)?dự kiến thi\b", text, re.IGNORECASE)
     if not m_prefix:
         return None
-    rest = text[m_prefix.end():].strip()
+    rest = text[m_prefix.end() :].strip()
 
     date_str = None
     m_date = re.search(r"(?:,\s*)?tháng\s+(\d{1,2})/(\d{4})", rest, re.IGNORECASE)
@@ -123,13 +123,13 @@ def read_plan_text(question_id: str | None, message: str) -> dict | None:
         month = int(m_date.group(1))
         year = int(m_date.group(2))
         date_str = f"{year}-{month:02d}"
-        rest = rest[:m_date.start()] + rest[m_date.end():]
+        rest = rest[: m_date.start()] + rest[m_date.end() :]
 
     target_score = None
     m_score = re.search(r"(?:,\s*)?mục tiêu\s+(\d+(?:[.,]\d+)?)", rest, re.IGNORECASE)
     if m_score:
         target_score = float(m_score.group(1).replace(",", "."))
-        rest = rest[:m_score.start()] + rest[m_score.end():]
+        rest = rest[: m_score.start()] + rest[m_score.end() :]
 
     categories = ("english",) if question_id == "E2" else ("standardized", "graduate")
     valid_types = {code: spec for code, spec in CERT_TYPES.items() if spec.category in categories}
@@ -318,7 +318,10 @@ def check_value(name: str, value: Any) -> Any:
         return {"type": cert, "value": score, "date": test_date}
     if name == "english_plan":
         return check_exam_plan(
-            value.planned, value.date, value.test_type, value.target_score,
+            value.planned,
+            value.date,
+            value.test_type,
+            value.target_score,
             allowed_categories=("english",),
         )
     if name == "standardized_plan":
@@ -383,7 +386,12 @@ def check_values(read: HoSoRaw, question_id: str | None, message: str = "") -> H
             eng.date = eng_date
         elif question_id is not None:
             c_name = CERT_NAMES.get(eng.type, eng.type.upper())
-            result.pending_cert = {"type": eng.type, "score": eng.score, "category": "english", "cert_name": c_name}
+            result.pending_cert = {
+                "type": eng.type,
+                "score": eng.score,
+                "category": "english",
+                "cert_name": c_name,
+            }
             result.ask_again = f"Bạn thi chứng chỉ {c_name} ({eng.score}) vào tháng mấy, năm nào (ví dụ: tháng 5/2025 hoặc 10/2024)?"
             read.values.english = None
             if "english" in found:
@@ -395,7 +403,12 @@ def check_values(read: HoSoRaw, question_id: str | None, message: str = "") -> H
     if read.values.sat is not None:
         sat_date = parse_month_year_text(message)
         if sat_date is None and question_id is not None:
-            result.pending_cert = {"type": "sat", "score": read.values.sat, "category": "standardized", "cert_name": "SAT"}
+            result.pending_cert = {
+                "type": "sat",
+                "score": read.values.sat,
+                "category": "standardized",
+                "cert_name": "SAT",
+            }
             result.ask_again = f"Bạn thi SAT ({read.values.sat:g}) vào tháng mấy, năm nào (ví dụ: tháng 12/2024 hoặc 03/2025)?"
             read.values.sat = None
             if "sat" in found:
@@ -406,7 +419,12 @@ def check_values(read: HoSoRaw, question_id: str | None, message: str = "") -> H
     if read.values.act is not None:
         act_date = parse_month_year_text(message)
         if act_date is None and question_id is not None:
-            result.pending_cert = {"type": "act", "score": read.values.act, "category": "standardized", "cert_name": "ACT"}
+            result.pending_cert = {
+                "type": "act",
+                "score": read.values.act,
+                "category": "standardized",
+                "cert_name": "ACT",
+            }
             result.ask_again = f"Bạn thi ACT ({read.values.act:g}) vào tháng mấy, năm nào (ví dụ: tháng 10/2024 hoặc 04/2025)?"
             read.values.act = None
             if "act" in found:
@@ -458,7 +476,11 @@ class HoSoReader:
 # Ghi kết quả đọc vào hồ sơ. keep_existing=True (thông tin nói ở B0) thì không đè thông tin đã có;
 # còn ở B2 học sinh sửa thì ghi đè. Hoạt động / giải thưởng thì thêm vào danh sách đang có (save_items)
 def save_read(
-    state: ChatState, read: HoSoRead, status: str = "confirmed", keep_existing: bool = False, message: str = ""
+    state: ChatState,
+    read: HoSoRead,
+    status: str = "confirmed",
+    keep_existing: bool = False,
+    message: str = "",
 ) -> None:
     if read.pending_cert:
         state.profile["cert_pending"] = ProfileField(value=read.pending_cert, status="unknown")
@@ -577,10 +599,7 @@ def needed(state: ChatState, question_id: str) -> bool:
         # Hỏi khi học sinh đã tích ô "Chưa thi SAT/ACT" (sat và act đều none)
         sat = state.profile.get("sat")
         act = state.profile.get("act")
-        return (
-            sat is not None and sat.status == "none"
-            and act is not None and act.status == "none"
-        )
+        return sat is not None and sat.status == "none" and act is not None and act.status == "none"
     if question_id == "D1":
         level = state.profile.get("current_level")
         return level is not None and level.value == "high_school"
@@ -632,8 +651,10 @@ def plan_standardized(state: ChatState) -> None:
     sat = state.profile.get("sat")
     act = state.profile.get("act")
     if (
-        sat is not None and sat.status == "none"
-        and act is not None and act.status == "none"
+        sat is not None
+        and sat.status == "none"
+        and act is not None
+        and act.status == "none"
         and "standardized_plan" not in state.profile
     ):
         state.profile["standardized_plan"] = ProfileField(value=PLANNED_NO_DATE, status="confirmed")
@@ -716,8 +737,15 @@ def ask_gpa_scale(state: ChatState, gpa: float) -> SkillOutput:
 def ask_cert_date(state: ChatState, pending: dict, question_text: str | None = None) -> SkillOutput:
     c_name = pending.get("cert_name") or CERT_NAMES.get(pending["type"], pending["type"].upper())
     score_val = pending.get("score")
-    score_str = f" ({score_val:g})" if isinstance(score_val, (int, float)) else (f" ({score_val})" if score_val else "")
-    text = question_text or f"Bạn thi chứng chỉ {c_name}{score_str} vào tháng mấy, năm nào (ví dụ: tháng 5/2025 hoặc 10/2024)?"
+    score_str = (
+        f" ({score_val:g})"
+        if isinstance(score_val, (int, float))
+        else (f" ({score_val})" if score_val else "")
+    )
+    text = (
+        question_text
+        or f"Bạn thi chứng chỉ {c_name}{score_str} vào tháng mấy, năm nào (ví dụ: tháng 5/2025 hoặc 10/2024)?"
+    )
     return SkillOutput(
         text,
         quick_replies=[QuickReply(label="Không nhớ ngày thi", value="Không nhớ")],

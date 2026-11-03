@@ -89,7 +89,12 @@ BUTTONS = {
         Button("Tiến sĩ", {"target_level": confirmed("phd")}),
     ),
     "B1.3": (Button("Em chưa rõ ngành", {"major": UNKNOWN}),),
-    "D3": (Button("Em chưa thi SAT/ACT", {"sat": NONE, "act": NONE, "standardized_plan": confirmed({"planned": True, "date": None})}),),
+    "D3": (
+        Button(
+            "Em chưa thi SAT/ACT",
+            {"sat": NONE, "act": NONE, "standardized_plan": confirmed({"planned": True, "date": None})},
+        ),
+    ),
     # Chưa thi thì tích luôn ô "sẽ thi sau" của form; E2 hỏi tiếp tháng dự kiến (bỏ qua thì ô vẫn tích)
     "E1": (
         Button(
@@ -145,11 +150,13 @@ def guess_graduation_year(level: str | None, grade: str | None, today: date | No
     if grade == "Năm cuối":
         return school_year_end
     import re
+
     match = re.search(r"(?:Lớp|Năm)\s*(\d+)", grade)
     if match:
         n = int(match.group(1))
         return school_year_end + max(0, last - n)
     return None
+
 
 # Kỳ nhập học: chữ giống INTAKE_TERM_OPTIONS của form, năm từ năm nay tới 5 năm sau
 INTAKE_TERM_LABELS = {
@@ -206,8 +213,7 @@ def choices_of(question_id: str | None) -> tuple[Button, ...]:
         )
     if question_id == "F2":
         return tuple(
-            Button(label, {"scholarship": confirmed(code)})
-            for code, label in SCHOLARSHIP_LABELS.items()
+            Button(label, {"scholarship": confirmed(code)}) for code, label in SCHOLARSHIP_LABELS.items()
         )
     if question_id == "F3":
         return tuple(
@@ -239,8 +245,18 @@ def cert_date_widget() -> dict:
     months = [str(m) for m in range(1, 13)]
     return {
         "fields": [
-            {"name": "test_month", "label": "Tháng thi", "placeholder": "Tháng", "options": same_options(months)},
-            {"name": "test_year", "label": "Năm thi", "placeholder": "Năm", "options": same_options(past_years())},
+            {
+                "name": "test_month",
+                "label": "Tháng thi",
+                "placeholder": "Tháng",
+                "options": same_options(months),
+            },
+            {
+                "name": "test_year",
+                "label": "Năm thi",
+                "placeholder": "Năm",
+                "options": same_options(past_years()),
+            },
         ],
         "format": "tháng {test_month}/{test_year}",
     }
@@ -252,7 +268,9 @@ POPULAR_STANDARDIZED_CERTS = ("sat", "act", "ap")
 
 # Ô nhập một chứng chỉ như thẻ chứng chỉ ở bước 3 form: loại (theo nhóm), môn (AP, A-Level), điểm (giới hạn
 # theo loại), điểm chữ (A-Level), tháng / năm thi. Gửi đi thành câu skill_ho_so.CERT_TEXT đọc được
-def cert_fields(categories: tuple[str, ...], placeholder: str, allowed_codes: tuple[str, ...] | None = None) -> dict:
+def cert_fields(
+    categories: tuple[str, ...], placeholder: str, allowed_codes: tuple[str, ...] | None = None
+) -> dict:
     types = {
         code: spec
         for code, spec in CERT_TYPES.items()
@@ -462,25 +480,41 @@ def select_fields(question_id: str) -> dict | None:
                     "label": "Điểm mục tiêu (tùy chọn)",
                     "placeholder": "VD: 7.0",
                     "prefix": ", mục tiêu ",
-                    "minBy": {"type": {name: low for name, (low, _, _) in {
-                        spec.name: CERT_LIMITS[code]
-                        for code, spec in CERT_TYPES.items()
-                        if code in POPULAR_ENGLISH_CERTS and code in CERT_LIMITS
-                    }.items()}},
-                    "maxBy": {"type": {name: high for name, (_, high, _) in {
-                        spec.name: CERT_LIMITS[code]
-                        for code, spec in CERT_TYPES.items()
-                        if code in POPULAR_ENGLISH_CERTS and code in CERT_LIMITS
-                    }.items()}},
-                    "stepBy": {"type": {name: step for name, (_, _, step) in {
-                        spec.name: CERT_LIMITS[code]
-                        for code, spec in CERT_TYPES.items()
-                        if code in POPULAR_ENGLISH_CERTS and code in CERT_LIMITS
-                    }.items()}},
+                    "minBy": {
+                        "type": {
+                            name: low
+                            for name, (low, _, _) in {
+                                spec.name: CERT_LIMITS[code]
+                                for code, spec in CERT_TYPES.items()
+                                if code in POPULAR_ENGLISH_CERTS and code in CERT_LIMITS
+                            }.items()
+                        }
+                    },
+                    "maxBy": {
+                        "type": {
+                            name: high
+                            for name, (_, high, _) in {
+                                spec.name: CERT_LIMITS[code]
+                                for code, spec in CERT_TYPES.items()
+                                if code in POPULAR_ENGLISH_CERTS and code in CERT_LIMITS
+                            }.items()
+                        }
+                    },
+                    "stepBy": {
+                        "type": {
+                            name: step
+                            for name, (_, _, step) in {
+                                spec.name: CERT_LIMITS[code]
+                                for code, spec in CERT_TYPES.items()
+                                if code in POPULAR_ENGLISH_CERTS and code in CERT_LIMITS
+                            }.items()
+                        }
+                    },
                     "shownWhen": {
                         "field": "type",
                         "values": [
-                            spec.name for code, spec in CERT_TYPES.items()
+                            spec.name
+                            for code, spec in CERT_TYPES.items()
                             if code in POPULAR_ENGLISH_CERTS and code in CERT_LIMITS
                         ],
                     },
@@ -494,7 +528,14 @@ def select_fields(question_id: str) -> dict | None:
                     "prefix": ", tháng ",
                     "optional": True,
                 },
-                {"name": "year", "label": " ", "placeholder": "Năm", "options": same_options(years()), "prefix": "/", "optional": True},
+                {
+                    "name": "year",
+                    "label": " ",
+                    "placeholder": "Năm",
+                    "options": same_options(years()),
+                    "prefix": "/",
+                    "optional": True,
+                },
             ],
             "format": "Em dự kiến thi{type}{score}{month}{year}",
         },
@@ -517,25 +558,41 @@ def select_fields(question_id: str) -> dict | None:
                     "label": "Điểm mục tiêu (tùy chọn)",
                     "placeholder": "VD: 1400",
                     "prefix": ", mục tiêu ",
-                    "minBy": {"type": {name: low for name, (low, _, _) in {
-                        spec.name: CERT_LIMITS[code]
-                        for code, spec in CERT_TYPES.items()
-                        if code in POPULAR_STANDARDIZED_CERTS and code in CERT_LIMITS
-                    }.items()}},
-                    "maxBy": {"type": {name: high for name, (_, high, _) in {
-                        spec.name: CERT_LIMITS[code]
-                        for code, spec in CERT_TYPES.items()
-                        if code in POPULAR_STANDARDIZED_CERTS and code in CERT_LIMITS
-                    }.items()}},
-                    "stepBy": {"type": {name: step for name, (_, _, step) in {
-                        spec.name: CERT_LIMITS[code]
-                        for code, spec in CERT_TYPES.items()
-                        if code in POPULAR_STANDARDIZED_CERTS and code in CERT_LIMITS
-                    }.items()}},
+                    "minBy": {
+                        "type": {
+                            name: low
+                            for name, (low, _, _) in {
+                                spec.name: CERT_LIMITS[code]
+                                for code, spec in CERT_TYPES.items()
+                                if code in POPULAR_STANDARDIZED_CERTS and code in CERT_LIMITS
+                            }.items()
+                        }
+                    },
+                    "maxBy": {
+                        "type": {
+                            name: high
+                            for name, (_, high, _) in {
+                                spec.name: CERT_LIMITS[code]
+                                for code, spec in CERT_TYPES.items()
+                                if code in POPULAR_STANDARDIZED_CERTS and code in CERT_LIMITS
+                            }.items()
+                        }
+                    },
+                    "stepBy": {
+                        "type": {
+                            name: step
+                            for name, (_, _, step) in {
+                                spec.name: CERT_LIMITS[code]
+                                for code, spec in CERT_TYPES.items()
+                                if code in POPULAR_STANDARDIZED_CERTS and code in CERT_LIMITS
+                            }.items()
+                        }
+                    },
                     "shownWhen": {
                         "field": "type",
                         "values": [
-                            spec.name for code, spec in CERT_TYPES.items()
+                            spec.name
+                            for code, spec in CERT_TYPES.items()
                             if code in POPULAR_STANDARDIZED_CERTS and code in CERT_LIMITS
                         ],
                     },
@@ -549,7 +606,14 @@ def select_fields(question_id: str) -> dict | None:
                     "prefix": ", tháng ",
                     "optional": True,
                 },
-                {"name": "year", "label": " ", "placeholder": "Năm", "options": same_options(years()), "prefix": "/", "optional": True},
+                {
+                    "name": "year",
+                    "label": " ",
+                    "placeholder": "Năm",
+                    "options": same_options(years()),
+                    "prefix": "/",
+                    "optional": True,
+                },
             ],
             "format": "Em dự kiến thi{type}{score}{month}{year}",
         },
@@ -638,5 +702,7 @@ def ask_with_buttons(
     if question_id == "D2" and text is None and is_middle_school_profile(state.profile):
         text = "Em đặt mục tiêu điểm trung bình (GPA) các năm cấp 3 khoảng bao nhiêu? Em có thể chọn ước lượng hoặc gõ điểm nhé."
     return SkillOutput(
-        text or question, quick_replies=quick_replies(question_id, can_skip), widget=widget(question_id, state.profile)
+        text or question,
+        quick_replies=quick_replies(question_id, can_skip),
+        widget=widget(question_id, state.profile),
     )

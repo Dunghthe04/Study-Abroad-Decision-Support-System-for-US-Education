@@ -362,7 +362,10 @@ def check_standardized_plan(
     today: date | None = None,
 ) -> dict:
     return check_exam_plan(
-        planned, plan_date, test_type, target_score,
+        planned,
+        plan_date,
+        test_type,
+        target_score,
         allowed_categories=("standardized", "graduate"),
         today=today,
     )

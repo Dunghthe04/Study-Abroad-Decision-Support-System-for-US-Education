@@ -172,7 +172,11 @@ def recreate_question_output(state: ChatState, question_id: str, question_text: 
         remind_out = skill_ho_so.review(state)
     elif question_id in skill_bac_hoc.QUESTION_FIELDS:
         remind_out = skill_bac_hoc.ask_question(state, question_id)
-    elif question_id in skill_ho_so.QUESTION_FIELDS or question_id in buttons.WIDGETS or buttons.select_fields(question_id):
+    elif (
+        question_id in skill_ho_so.QUESTION_FIELDS
+        or question_id in buttons.WIDGETS
+        or buttons.select_fields(question_id)
+    ):
         remind_out = skill_ho_so.ask_question(state, question_id, question_text)
     else:
         remind_out = buttons.ask_with_buttons(state, question_id)
