@@ -59,9 +59,21 @@ public class ChatProfileMapperTests
     [Theory]
     [InlineData("""{"planned":true,"date":"2027-06"}""")]
     [InlineData("""{"planned":true,"date":null}""")]
+    [InlineData("""{"planned":true,"date":"2027-06","test_type":"ielts","target_score":7.5}""")]
     public void RoundTrip_EnglishPlan(string planJson)
     {
         var profile = Profile("""{"english":{"value":null,"status":"none"},"english_plan":{"value":""" + planJson + ""","status":"confirmed"}}""");
+
+        AssertSame(profile, ChatProfileMapper.ToChatProfile(ToDraft(profile), profile));
+    }
+
+    [Theory]
+    [InlineData("""{"planned":true,"date":"2027-10"}""")]
+    [InlineData("""{"planned":true,"date":null}""")]
+    [InlineData("""{"planned":true,"date":"2027-10","test_type":"sat","target_score":1450}""")]
+    public void RoundTrip_StandardizedPlan(string planJson)
+    {
+        var profile = Profile("""{"sat":{"value":null,"status":"none"},"act":{"value":null,"status":"none"},"standardized_plan":{"value":""" + planJson + ""","status":"confirmed"}}""");
 
         AssertSame(profile, ChatProfileMapper.ToChatProfile(ToDraft(profile), profile));
     }
@@ -74,6 +86,18 @@ public class ChatProfileMapperTests
         var english = ChatProfileMapper.ToChatProfile(draft)["english"]!;
 
         Assert.Equal("none", english["status"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void StandardizedPlannedInForm_CountsAsNoStandardizedCertificate()
+    {
+        var draft = new ProfileFlowDraftDto { Step3 = new FlowCertificationDraftDto { StandardizedPlanned = true } };
+
+        var sat = ChatProfileMapper.ToChatProfile(draft)["sat"]!;
+        var act = ChatProfileMapper.ToChatProfile(draft)["act"]!;
+
+        Assert.Equal("none", sat["status"]!.GetValue<string>());
+        Assert.Equal("none", act["status"]!.GetValue<string>());
     }
 
     [Fact]
@@ -171,9 +195,9 @@ public class ChatProfileMapperTests
     }
 
     private const string ChatCerts =
-        """[{"id":"c1","category":"english","type":"ielts","customName":null,"subject":null,"overall":6.5,"scaleText":null,"sections":null,"testDate":"2025-05"},"""
-        + """{"id":"c2","category":"standardized","type":"ap","customName":null,"subject":"Calculus BC","overall":5,"scaleText":null,"sections":null,"testDate":"2025-05"},"""
-        + """{"id":"c3","category":"standardized","type":"alevel","customName":null,"subject":"Math","overall":null,"scaleText":"A*","sections":null,"testDate":"2025-06"}]""";
+        """[{"id":"c1","category":"english","type":"ielts","customName":null,"subject":null,"overall":6.5,"scaleText":null,"sections":null,"testDate":"2025-05","isTarget":false},"""
+        + """{"id":"c2","category":"standardized","type":"ap","customName":null,"subject":"Calculus BC","overall":5,"scaleText":null,"sections":null,"testDate":"2025-05","isTarget":false},"""
+        + """{"id":"c3","category":"standardized","type":"alevel","customName":null,"subject":"Math","overall":null,"scaleText":"A*","sections":null,"testDate":"2025-06","isTarget":false}]""";
 
     [Fact]
     public void ChatCertifications_RoundTrip()

@@ -248,7 +248,25 @@ export function Step6Review({
           {step3.englishPlanned && (
             <div>
               <strong className="text-foreground">Dự kiến thi tiếng Anh: </strong>
-              {formatYearMonth(step3.englishPlannedDate) ?? "chưa chọn thời gian"}
+              {[
+                step3.englishPlannedTestType?.toUpperCase(),
+                step3.englishPlannedTargetScore != null ? `mục tiêu ${step3.englishPlannedTargetScore}` : null,
+                formatYearMonth(step3.englishPlannedDate) ? `thi ${formatYearMonth(step3.englishPlannedDate)}` : null,
+              ]
+                .filter(Boolean)
+                .join(" · ") || "chưa chọn thời gian"}
+            </div>
+          )}
+          {step3.standardizedPlanned && (
+            <div>
+              <strong className="text-foreground">Dự kiến thi chuẩn hóa: </strong>
+              {[
+                step3.standardizedPlannedTestType?.toUpperCase(),
+                step3.standardizedPlannedTargetScore != null ? `mục tiêu ${step3.standardizedPlannedTargetScore}` : null,
+                formatYearMonth(step3.standardizedPlannedDate) ? `thi ${formatYearMonth(step3.standardizedPlannedDate)}` : null,
+              ]
+                .filter(Boolean)
+                .join(" · ") || "chưa chọn thời gian"}
             </div>
           )}
         </ReviewCard>

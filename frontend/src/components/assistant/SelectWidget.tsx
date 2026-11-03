@@ -38,6 +38,8 @@ interface Field {
   shownWhen?: { field: string; values: string[] };
   /** Chữ thêm trước giá trị khi ghép câu, vd ", môn " */
   prefix?: string;
+  /** Ô tùy chọn, không bắt buộc điền mới được submit */
+  optional?: boolean;
 }
 
 interface SelectData {
@@ -121,7 +123,7 @@ export function SelectWidget({ data, onPick }: { data?: Record<string, unknown> 
   const isValid = (f: Field): boolean => {
     if (f.kind === "check") return true;
     const v = valueOf(f);
-    if (!v) return false;
+    if (!v) return Boolean(f.optional);
     if (f.kind !== "number") return true;
     const n = Number(v);
     const min = minOf(f);
@@ -129,7 +131,9 @@ export function SelectWidget({ data, onPick }: { data?: Record<string, unknown> 
     return Number.isFinite(n) && (min === undefined || n >= min) && (max === undefined || n <= max);
   };
 
-  const ready = shown.every(isValid);
+  const hasAnyValue = shown.some((f) => Boolean(valueOf(f)));
+  const allOptional = shown.length > 0 && shown.every((f) => f.optional);
+  const ready = shown.every(isValid) && (!allOptional || hasAnyValue);
 
   const setValue = (name: string, value: string) =>
     setValues((prev) => {
@@ -147,7 +151,14 @@ export function SelectWidget({ data, onPick }: { data?: Record<string, unknown> 
     const template = altFormat && isChecked(altFormat.field) ? altFormat.format : format;
     // Ô đang ẩn ghép thành chữ rỗng; chỗ trống của ô không có trong câu này cũng bỏ
     const part = (f: Field) => (isShown(f) && valueOf(f) ? `${f.prefix ?? ""}${valueOf(f)}` : "");
-    onPick(fields.reduce((text, f) => text.replace(`{${f.name}}`, part(f)), template).replace(/\{\w+\}/g, ""));
+    const text = fields
+      .reduce((res, f) => res.replace(`{${f.name}}`, part(f)), template)
+      .replace(/\{\w+\}/g, "")
+      .replace(/\s+,/g, ",")
+      .replace(/,\s*,/g, ",")
+      .replace(/^,\s*/, "")
+      .trim();
+    onPick(text);
   };
 
   const control = (f: Field) => {

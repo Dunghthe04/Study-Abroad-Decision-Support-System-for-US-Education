@@ -41,6 +41,7 @@ async def test_english_cert_text_saves_card_and_asks_for_more_without_qwen():
         "scaleText",
         "sections",
         "testDate",
+        "isTarget",
     }
     assert res.state.profile["english"] == field({"type": "ielts", "value": 6.5, "date": "2025-05"})
     # Vẫn ở E1, hỏi còn chứng chỉ nào nữa, ô nhập vẫn hiện
@@ -178,3 +179,92 @@ def test_check_certification_needs_subject_for_ap():
 def test_check_certification_unknown_type():
     with pytest.raises(AskAgain):
         check_certification("abc", "5", "2025-05", today=date(2026, 1, 1))
+
+
+def test_check_certification_target_future_date_succeeds():
+    cert = check_certification("ielts", "7.5", "2028-06", today=date(2026, 1, 1), is_target=True)
+    assert cert["isTarget"] is True
+    assert cert["testDate"] == "2028-06"
+    assert cert["overall"] == 7.5
+
+
+def test_check_certification_target_past_date_raises():
+    with pytest.raises(AskAgain, match="quá khứ"):
+        check_certification("ielts", "7.5", "2024-06", today=date(2026, 1, 1), is_target=True)
+
+
+def test_check_certification_actual_future_date_raises():
+    with pytest.raises(AskAgain, match="tương lai"):
+        check_certification("ielts", "7.5", "2028-06", today=date(2026, 1, 1), is_target=False)
+
+
+async def test_e2_custom_test_type_and_score_saved_without_qwen():
+    llm = FakeLLM()
+    profile = {"english": field(None, "none"), "english_plan": field({"planned": True, "date": None})}
+    res = await turn(
+        llm,
+        "Em dự kiến thi IELTS, mục tiêu 7.5, tháng 10/2027",
+        current_step="B2",
+        question_id="E2",
+        profile=profile,
+    )
+
+    assert llm.calls == []
+    assert res.state.profile["english_plan"] == field(
+        {"planned": True, "date": "2027-10", "test_type": "ielts", "target_score": 7.5}
+    )
+
+
+async def test_e3_standardized_plan_from_d3_button_and_widget_save():
+    llm = FakeLLM()
+    # Ở câu D3, bấm nút "Em chưa thi SAT/ACT"
+    profile = {**GPA, "english": field({"type": "ielts", "value": 7.0, "date": "2025-05"})}
+    res = await turn(
+        llm,
+        "Em chưa thi SAT/ACT",
+        current_step="B2",
+        question_id="D3",
+        asked={**PAGE1_ASKED, "D2": 1, "E1": 1, "D3": 1},
+        profile=profile,
+    )
+
+    assert res.state.profile["sat"].status == "none"
+    assert res.state.profile["act"].status == "none"
+    assert res.state.profile["standardized_plan"] == field({"planned": True, "date": None})
+    assert res.state.question_id == "E3"
+    assert res.widget is not None and res.widget.type == "select"
+
+    # Ở câu E3, chọn SAT mục tiêu 1450 tháng 12/2027
+    res2 = await turn(
+        FakeLLM(),
+        "Em dự kiến thi SAT, mục tiêu 1450, tháng 12/2027",
+        **res.state.model_dump(exclude={"profile"}),
+        profile=res.state.profile,
+    )
+
+    assert res2.state.profile["standardized_plan"] == field(
+        {"planned": True, "date": "2027-12", "test_type": "sat", "target_score": 1450.0}
+    )
+    assert res2.state.question_id != "E3"
+
+
+async def test_e3_skip_keeps_standardized_plan_tick():
+    profile = {
+        **GPA,
+        "english": field({"type": "ielts", "value": 7.0, "date": "2025-05"}),
+        "sat": field(None, "none"),
+        "act": field(None, "none"),
+        "standardized_plan": field({"planned": True, "date": None}),
+    }
+    res = await turn(
+        FakeLLM(),
+        "Bỏ qua",
+        current_step="B2",
+        question_id="E3",
+        asked={**PAGE1_ASKED, "D2": 1, "E1": 1, "D3": 1, "E3": 1},
+        profile=profile,
+    )
+
+    assert res.state.profile["standardized_plan"] == field({"planned": True, "date": None})
+    assert res.state.question_id != "E3"
+

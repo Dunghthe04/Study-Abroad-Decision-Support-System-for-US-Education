@@ -59,6 +59,7 @@ QUESTIONS = {
     "D3": "Bạn đã thi SAT hoặc ACT chưa? Nếu rồi thì được bao nhiêu điểm?",
     "E1": "Bạn đã có chứng chỉ tiếng Anh nào chưa (IELTS, TOEFL, Duolingo)? Điểm bao nhiêu, thi khi nào?",
     "E2": "Bạn dự định thi khi nào, mục tiêu khoảng bao nhiêu điểm?",
+    "E3": "Bạn có kế hoạch thi bài chuẩn hóa nào (SAT, ACT...) không, dự kiến khi nào và mục tiêu bao nhiêu điểm?",
     "F1": "Gia đình bạn có thể chi khoảng bao nhiêu mỗi năm cho cả học phí và sinh hoạt?",
     "F2": "Bạn cần học bổng ở mức nào: không cần, nên có, hay bắt buộc phải có mới đi được?",
     "F3": "Chi phí du học chủ yếu do ai chi trả?",

@@ -29,7 +29,8 @@ const ROWS: { key: string; label: string }[] = [
   { key: "sat", label: "SAT" },
   { key: "act", label: "ACT" },
   { key: "english", label: "Tiếng Anh" },
-  { key: "english_plan", label: "Kế hoạch thi" },
+  { key: "english_plan", label: "Kế hoạch tiếng Anh" },
+  { key: "standardized_plan", label: "Kế hoạch chuẩn hóa" },
   { key: "budget", label: "Ngân sách / năm" },
   { key: "scholarship", label: "Học bổng" },
   { key: "funding_source", label: "Nguồn tài chính" },
@@ -115,8 +116,20 @@ function formatValue(key: string, value: unknown): string {
     case "english_plan": {
       const p = obj(value);
       if (p.planned === false) return "Chưa có kế hoạch";
+      const type = str(p.test_type).toUpperCase();
+      const score = p.target_score != null ? `mục tiêu ${p.target_score}` : "";
       const date = formatYearMonth(str(p.date));
-      return date ? `Dự định thi ${date}` : p.planned ? "Có dự định thi" : "";
+      const parts = [type, score, date && `thi ${date}`].filter(Boolean).join(" · ");
+      return parts ? `Dự kiến: ${parts}` : p.planned ? "Có dự định thi" : "";
+    }
+    case "standardized_plan": {
+      const p = obj(value);
+      if (p.planned === false) return "Chưa có kế hoạch";
+      const type = str(p.test_type).toUpperCase();
+      const score = p.target_score != null ? `mục tiêu ${p.target_score}` : "";
+      const date = formatYearMonth(str(p.date));
+      const parts = [type, score, date && `thi ${date}`].filter(Boolean).join(" · ");
+      return parts ? `Dự kiến: ${parts}` : p.planned ? "Có dự định thi" : "";
     }
     case "budget":
       return DEFAULT_BUDGET_TIERS.find((t) => t.key === value)?.label ?? str(value);

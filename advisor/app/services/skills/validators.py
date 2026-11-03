@@ -186,27 +186,35 @@ def check_act(score: int) -> int:
 
 
 # A3. Chứng chỉ tiếng Anh. IELTS là IELTS Academic như form, không hỏi loại.
-# Ngày thi "yyyy-MM" không được ở tương lai (giống ValidateCertifications). Trả về (mã, điểm, ngày thi)
+# Ngày thi "yyyy-MM" không được ở tương lai (giống ValidateCertifications); nếu là mục tiêu (is_target) thì không được ở quá khứ.
 def check_english(
-    cert: str, score: float, test_date: str | None = None, today: date | None = None
+    cert: str,
+    score: float,
+    test_date: str | None = None,
+    today: date | None = None,
+    is_target: bool = False,
 ) -> tuple[str, float, str | None]:
     cert = cert.strip().lower()
     if cert not in ENGLISH_CERTS:
         raise AskAgain("Bạn có chứng chỉ tiếng Anh nào: IELTS, TOEFL, Duolingo hay PTE?")
     check_score(cert, score)
-    return cert, score, check_test_date(cert, test_date, today)
+    return cert, score, check_test_date(cert, test_date, today, is_target=is_target)
 
 
-# Ngày thi "yyyy-MM" không được ở tương lai; không nói ngày thì None
-def check_test_date(cert: str, test_date: str | None, today: date | None = None) -> str | None:
+# Ngày thi "yyyy-MM" không được ở tương lai (nếu đã thi); không được ở quá khứ (nếu là mục tiêu dự kiến); không nói ngày thì None
+def check_test_date(
+    cert: str, test_date: str | None, today: date | None = None, is_target: bool = False
+) -> str | None:
     if test_date is None:
         return None
     today = today or date.today()
     taken = parse_year_month(test_date)
     if taken is None:
         raise AskAgain(f"Bạn thi {CERT_NAMES[cert]} vào tháng mấy, năm nào?")
-    if taken > month_index(today.year, today.month):
+    if not is_target and taken > month_index(today.year, today.month):
         raise AskAgain("Ngày thi không được ở tương lai. Bạn thi vào tháng mấy, năm nào?")
+    if is_target and taken < month_index(today.year, today.month):
+        raise AskAgain("Tháng dự kiến thi không được ở quá khứ. Bạn định thi vào tháng mấy, năm nào?")
     return test_date.strip()
 
 
@@ -218,6 +226,7 @@ def check_certification(
     test_date: str | None = None,
     subject: str | None = None,
     today: date | None = None,
+    is_target: bool = False,
 ) -> dict:
     cert = cert.strip().lower()
     spec = CERT_TYPES.get(cert)
@@ -244,22 +253,75 @@ def check_certification(
         "subject": subject,
         "overall": overall,
         "scaleText": scale_text,
-        "testDate": check_test_date(cert, test_date, today),
+        "testDate": check_test_date(cert, test_date, today, is_target=is_target),
+        "isTarget": is_target,
     }
 
 
-# A3. Kế hoạch thi tiếng Anh, đúng 2 ô englishPlanned / englishPlannedDate của form.
-# Chưa có kế hoạch → planned False; có kế hoạch thì tháng không bắt buộc, có thì không được ở quá khứ
+# A3. Kế hoạch thi tiếng Anh / bài thi chuẩn hóa dự kiến: giống các ô trên form
+# Chưa có kế hoạch → planned False; có kế hoạch thì tháng, bài thi, điểm mục tiêu đều không bắt buộc.
+# Bài thi phải đúng nhóm (english hoặc standardized/graduate), điểm mục tiêu (nếu có) đúng khoảng.
+def check_exam_plan(
+    planned: bool,
+    plan_date: str | None = None,
+    test_type: str | None = None,
+    target_score: float | None = None,
+    allowed_categories: tuple[str, ...] = ("english",),
+    today: date | None = None,
+) -> dict:
+    if not planned:
+        return {"planned": False, "date": None}
+    result: dict = {"planned": True, "date": None}
+    if plan_date is not None:
+        today = today or date.today()
+        month = parse_year_month(plan_date)
+        if month is None:
+            raise AskAgain("Bạn dự định thi vào tháng mấy, năm nào? (VD: tháng 5/2027)")
+        if month < month_index(today.year, today.month):
+            raise AskAgain("Tháng dự kiến thi không được ở quá khứ. Bạn định thi vào tháng nào?")
+        result["date"] = plan_date.strip()
+    if test_type is not None:
+        test_type = test_type.strip().lower()
+        spec = CERT_TYPES.get(test_type)
+        if spec is None or spec.category not in allowed_categories:
+            valid = [code for code, s in CERT_TYPES.items() if s.category in allowed_categories]
+            raise AskAgain(
+                f"Mình không nhận ra bài thi '{test_type}'. Bạn chọn một trong: {', '.join(valid).upper()}?"
+            )
+        result["test_type"] = test_type
+        if target_score is not None:
+            if test_type in CERT_LIMITS:
+                low, high, step = CERT_LIMITS[test_type]
+                if not (low <= target_score <= high) or not on_step(target_score, step):
+                    raise AskAgain(
+                        f"Điểm mục tiêu {target_score} không hợp lệ cho {spec.name} "
+                        f"(thang {low}–{high}, bước {step}). Bạn nhập lại nhé?"
+                    )
+            result["target_score"] = target_score
+    elif target_score is not None:
+        # Có điểm mục tiêu nhưng chưa chọn bài thi — ghi luôn để không mất thông tin
+        result["target_score"] = target_score
+    return result
+
+
+# Hàm tiện ích riêng cho tiếng Anh (backward-compat với HoSoValues / check_value)
 def check_english_plan(planned: bool, plan_date: str | None = None, today: date | None = None) -> dict:
-    if not planned or plan_date is None:
-        return {"planned": planned, "date": None}
-    today = today or date.today()
-    month = parse_year_month(plan_date)
-    if month is None:
-        raise AskAgain("Bạn dự định thi tiếng Anh vào tháng mấy, năm nào?")
-    if month < month_index(today.year, today.month):
-        raise AskAgain("Tháng dự kiến thi không được ở quá khứ. Bạn định thi vào tháng nào?")
-    return {"planned": True, "date": plan_date.strip()}
+    return check_exam_plan(planned, plan_date, today=today)
+
+
+# Hàm tiện ích riêng cho bài thi chuẩn hóa (SAT, ACT, AP, GRE...)
+def check_standardized_plan(
+    planned: bool,
+    plan_date: str | None = None,
+    test_type: str | None = None,
+    target_score: float | None = None,
+    today: date | None = None,
+) -> dict:
+    return check_exam_plan(
+        planned, plan_date, test_type, target_score,
+        allowed_categories=("standardized", "graduate"),
+        today=today,
+    )
 
 
 # A4. Đổi số tiền sang USD (VNĐ chia tỷ giá hôm nay)

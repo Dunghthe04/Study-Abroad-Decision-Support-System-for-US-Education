@@ -175,6 +175,8 @@ export interface CertificationItem {
   /** điểm thành phần theo id section trong metadata */
   sections?: Record<string, number | null> | null;
   testDate?: string | null; // "yyyy-MM"
+  /** true nếu là điểm dự tính / mục tiêu (chưa thi chính thức) */
+  isTarget?: boolean;
 }
 
 /** Nháp kiểu cũ (trước khi có danh sách thẻ) — chỉ dùng để chuyển đổi */
@@ -187,6 +189,12 @@ export interface CertificationDraft {
   certifications: CertificationItem[];
   englishPlanned: boolean;
   englishPlannedDate?: string | null; // "yyyy-MM"
+  englishPlannedTestType?: string | null; // loại bài thi dự kiến (ielts, toefl...)
+  englishPlannedTargetScore?: number | null; // điểm mục tiêu dự kiến
+  standardizedPlanned?: boolean;
+  standardizedPlannedDate?: string | null; // "yyyy-MM"
+  standardizedPlannedTestType?: string | null; // loại bài thi dự kiến (sat, act...)
+  standardizedPlannedTargetScore?: number | null; // điểm mục tiêu dự kiến
 }
 
 /** Bước 3 kiểu cũ còn nằm trong nháp đã lưu (server hoặc localStorage) */

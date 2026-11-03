@@ -89,7 +89,7 @@ BUTTONS = {
         Button("Tiến sĩ", {"target_level": confirmed("phd")}),
     ),
     "B1.3": (Button("Em chưa rõ ngành", {"major": UNKNOWN}),),
-    "D3": (Button("Em chưa thi SAT/ACT", {"sat": NONE, "act": NONE}),),
+    "D3": (Button("Em chưa thi SAT/ACT", {"sat": NONE, "act": NONE, "standardized_plan": confirmed({"planned": True, "date": None})}),),
     # Chưa thi thì tích luôn ô "sẽ thi sau" của form; E2 hỏi tiếp tháng dự kiến (bỏ qua thì ô vẫn tích)
     "E1": (
         Button(
@@ -388,17 +388,115 @@ def select_fields(question_id: str) -> dict | None:
         },
         "D3": cert_fields(("standardized", "graduate"), "VD: 1350"),
         "E1": cert_fields(("english",), "VD: 6.5"),
+        # E2: hỏi kế hoạch thi tiếng Anh — bài thi, điểm mục tiêu và tháng tất cả đều tùy chọn
         "E2": {
             "fields": [
                 {
+                    "name": "type",
+                    "label": "Bài thi dự kiến (tùy chọn)",
+                    "placeholder": "Chọn bài thi",
+                    "options": same_options(
+                        [spec.name for code, spec in CERT_TYPES.items() if spec.category == "english"]
+                    ),
+                    "prefix": " ",
+                    "optional": True,
+                },
+                {
+                    "name": "score",
+                    "kind": "number",
+                    "label": "Điểm mục tiêu (tùy chọn)",
+                    "placeholder": "VD: 7.0",
+                    "prefix": ", mục tiêu ",
+                    "minBy": {"type": {name: low for name, (low, _, _) in {
+                        spec.name: CERT_LIMITS[code]
+                        for code, spec in CERT_TYPES.items()
+                        if spec.category == "english" and code in CERT_LIMITS
+                    }.items()}},
+                    "maxBy": {"type": {name: high for name, (_, high, _) in {
+                        spec.name: CERT_LIMITS[code]
+                        for code, spec in CERT_TYPES.items()
+                        if spec.category == "english" and code in CERT_LIMITS
+                    }.items()}},
+                    "stepBy": {"type": {name: step for name, (_, _, step) in {
+                        spec.name: CERT_LIMITS[code]
+                        for code, spec in CERT_TYPES.items()
+                        if spec.category == "english" and code in CERT_LIMITS
+                    }.items()}},
+                    "shownWhen": {
+                        "field": "type",
+                        "values": [
+                            spec.name for code, spec in CERT_TYPES.items()
+                            if spec.category == "english" and code in CERT_LIMITS
+                        ],
+                    },
+                    "optional": True,
+                },
+                {
                     "name": "month",
-                    "label": "Dự kiến thi",
+                    "label": "Dự kiến thi (tùy chọn)",
                     "placeholder": "Tháng",
                     "options": same_options(months),
+                    "prefix": ", tháng ",
+                    "optional": True,
                 },
-                {"name": "year", "label": " ", "placeholder": "Năm", "options": same_options(years())},
+                {"name": "year", "label": " ", "placeholder": "Năm", "options": same_options(years()), "prefix": "/", "optional": True},
             ],
-            "format": "Em dự kiến thi tháng {month}/{year}",
+            "format": "Em dự kiến thi{type}{score}{month}{year}",
+        },
+        # E3: hỏi kế hoạch thi chuẩn hóa — bài thi, điểm mục tiêu và tháng tất cả đều tùy chọn
+        "E3": {
+            "fields": [
+                {
+                    "name": "type",
+                    "label": "Bài thi dự kiến (tùy chọn)",
+                    "placeholder": "Chọn bài thi",
+                    "options": same_options(
+                        [spec.name for code, spec in CERT_TYPES.items() if spec.category in ("standardized", "graduate")]
+                    ),
+                    "prefix": " ",
+                    "optional": True,
+                },
+                {
+                    "name": "score",
+                    "kind": "number",
+                    "label": "Điểm mục tiêu (tùy chọn)",
+                    "placeholder": "VD: 1400",
+                    "prefix": ", mục tiêu ",
+                    "minBy": {"type": {name: low for name, (low, _, _) in {
+                        spec.name: CERT_LIMITS[code]
+                        for code, spec in CERT_TYPES.items()
+                        if spec.category in ("standardized", "graduate") and code in CERT_LIMITS
+                    }.items()}},
+                    "maxBy": {"type": {name: high for name, (_, high, _) in {
+                        spec.name: CERT_LIMITS[code]
+                        for code, spec in CERT_TYPES.items()
+                        if spec.category in ("standardized", "graduate") and code in CERT_LIMITS
+                    }.items()}},
+                    "stepBy": {"type": {name: step for name, (_, _, step) in {
+                        spec.name: CERT_LIMITS[code]
+                        for code, spec in CERT_TYPES.items()
+                        if spec.category in ("standardized", "graduate") and code in CERT_LIMITS
+                    }.items()}},
+                    "shownWhen": {
+                        "field": "type",
+                        "values": [
+                            spec.name for code, spec in CERT_TYPES.items()
+                            if spec.category in ("standardized", "graduate") and code in CERT_LIMITS
+                        ],
+                    },
+                    "optional": True,
+                },
+                {
+                    "name": "month",
+                    "label": "Dự kiến thi (tùy chọn)",
+                    "placeholder": "Tháng",
+                    "options": same_options(months),
+                    "prefix": ", tháng ",
+                    "optional": True,
+                },
+                {"name": "year", "label": " ", "placeholder": "Năm", "options": same_options(years()), "prefix": "/", "optional": True},
+            ],
+            "format": "Em dự kiến thi{type}{score}{month}{year}",
         },
         "N1": {
             "fields": [

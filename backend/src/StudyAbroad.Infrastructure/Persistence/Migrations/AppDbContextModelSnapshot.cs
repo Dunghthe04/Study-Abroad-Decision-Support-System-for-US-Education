@@ -1765,6 +1765,10 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(128)")
                         .HasColumnName("custom_name");
 
+                    b.Property<bool>("IsTarget")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_target");
+
                     b.Property<decimal?>("OverallScore")
                         .HasPrecision(7, 2)
                         .HasColumnType("numeric(7,2)")
