@@ -7,8 +7,10 @@ using System.Text.Json.Nodes;
 
 namespace StudyAbroad.Application.Recommendations;
 
-//Một trường đã đưa vào gợi ý: hồ sơ trường + số liệu 
-public record RecommendSchoolInput(University University, UniversityOffering Offering, IReadOnlyList<string> Majors);
+//Một trường đã đưa vào gợi ý: hồ sơ trường + số liệu + hạng trong các bảng xếp hạng chung (null nếu chưa nạp)
+public record RecommendSchoolInput(
+    University University, UniversityOffering Offering, IReadOnlyList<string> Majors,
+    IReadOnlyList<RankPosition>? Rankings = null);
 
 // Một trường đã chấm nhóm và fit score. Fit null khi trường chưa đủ dữ liệu để xếp nhóm.
 public record ScoredSchool(RecommendSchoolInput School, FilterResult Filter, SchoolGrade Grade, FitScore? Fit);
@@ -431,11 +433,12 @@ public class RecommendationService(IAdvisorClient advisor, IRecommendationReposi
             AcceptRate(input), IntlAcceptRate(input));
     }
 
-    // Số liệu của trường cho fit score. Chất lượng: trung bình tỉ lệ giữ chân và tỉ lệ tốt nghiệp (0–1).
+    // Số liệu của trường cho fit score. Chất lượng tính từ hạng trong các bảng xếp hạng chung; chưa có hạng thì bỏ thành phần Q.
     private static FitSchool ToFitSchool(RecommendSchoolInput input)
     {
         var offering = input.Offering;
-        return new FitSchool(TotalCost(offering), offering.IntlAidAvgUsd, offering.MinIelts, Quality(offering));
+        return new FitSchool(
+            TotalCost(offering), offering.IntlAidAvgUsd, offering.MinIelts, SchoolRanker.QualityFromRanks(input.Rankings));
     }
 
     // Đọc một số từ JSON đã lưu (dùng khi mở chi tiết một trường).
@@ -484,15 +487,6 @@ public class RecommendationService(IAdvisorClient advisor, IRecommendationReposi
         "none" => false,
         _ => true
     };
-    // Skill chỉ chép q. Có cả hai tỷ lệ thì lấy trung bình; có một thì dùng tỷ lệ đó.
-    private static double? Quality(UniversityOffering offering)
-    {
-        var rates = new[] { offering.RetentionRate1Yr, offering.GradRate6Yr }
-            .Where(r => r is not null)
-            .Select(r => (double)r!.Value)
-            .ToList();
-        return rates.Count == 0 ? null : rates.Average();
-    }
     // Đủ 7 khoảng mới dùng. Thứ tự: dưới 2.50 → đúng 4.0.
     private static IReadOnlyList<decimal>? GpaDist(UniversityOffering offering)
     {

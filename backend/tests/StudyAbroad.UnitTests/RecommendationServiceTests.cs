@@ -172,6 +172,21 @@ public class RecommendationServiceTests
     }
 
     [Fact]
+    public async Task Recommend_QualityComesFromTheRankingPosition()
+    {
+        var (service, _, store) = Setup();
+        var ranked = School("Top", 30_000m, "none", Major, sat: (1200, 1380), accept: 0.6m, avgGpa: 3.5m, rank: (10, 100));
+        var unranked = School("None", 30_000m, "none", Major, sat: (1200, 1380), accept: 0.6m, avgGpa: 3.5m);
+
+        await service.RecommendAsync(Profile(), [], [ranked, unranked]);
+
+        using var items = JsonDocument.Parse(store.Rows.Single().ItemsJson);
+        var rows = items.RootElement.GetProperty("scored").EnumerateArray().ToDictionary(e => e.GetProperty("code").GetString()!);
+        Assert.Equal(0.91, rows["Top"].GetProperty("q").GetDouble());               // 1 − (10 − 1) / 100
+        Assert.Equal(JsonValueKind.Null, rows["None"].GetProperty("q").ValueKind);   // chưa có hạng: bỏ thành phần Q
+    }
+
+    [Fact]
     public async Task Recommend_WithNothingLeftAfterTheFilter_SavesAnEmptyRunWithoutCallingTheAdvisor()
     {
         var (service, advisor, store) = Setup();
@@ -238,8 +253,8 @@ public class RecommendationServiceTests
         var profile = Profile();
         var schools = new List<RecommendSchoolInput>
         {
-            School("Cheap", 20_000m, "none", Major, sat: (1200, 1380), accept: 0.6m, avgGpa: 3.5m, quality: 0.50m),
-            School("Famous", 49_000m, "none", Major, sat: (1200, 1380), accept: 0.6m, avgGpa: 3.5m, quality: 0.95m),
+            School("Cheap", 20_000m, "none", Major, sat: (1200, 1380), accept: 0.6m, avgGpa: 3.5m, rank: (166, 332)),
+            School("Famous", 49_000m, "none", Major, sat: (1200, 1380), accept: 0.6m, avgGpa: 3.5m, rank: (17, 332)),
         };
         var (service, advisor, store) = Setup(profile, schools);
 
@@ -300,7 +315,7 @@ public class RecommendationServiceTests
     private static RecommendSchoolInput School(
         string code, decimal tuition, string aidPolicy, string major,
         (int Low, int High)? sat = null, decimal? accept = null, decimal? avgGpa = null,
-        decimal? minIelts = null, decimal? quality = null, int? admitted = null, int? applicants = null)
+        decimal? minIelts = null, (int Rank, int Total)? rank = null, int? admitted = null, int? applicants = null)
     {
         var university = new University
         {
@@ -316,12 +331,10 @@ public class RecommendationServiceTests
             Sat75 = sat?.High,
             AvgGpa4 = avgGpa,
             MinIelts = minIelts,
-            RetentionRate1Yr = quality,
-            GradRate6Yr = quality,
             AdmittedTotal = admitted,
             ApplicantsTotal = applicants
         };
-        return new RecommendSchoolInput(university, offering, [major]);
+        return new RecommendSchoolInput(university, offering, [major], rank is { } r ? [new RankPosition(r.Rank, r.Total)] : null);
     }
 
     private sealed class FakeAdvisor : IAdvisorClient
