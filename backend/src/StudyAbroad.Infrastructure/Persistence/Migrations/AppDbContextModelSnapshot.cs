@@ -2809,6 +2809,10 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_ivy");
 
+                    b.Property<Guid?>("LastEditedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("last_edited_by_user_id");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(256)
@@ -2835,6 +2839,9 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.HasIndex("Code")
                         .IsUnique()
                         .HasDatabaseName("ix_universities_code");
+
+                    b.HasIndex("LastEditedByUserId")
+                        .HasDatabaseName("ix_universities_last_edited_by_user_id");
 
                     b.HasIndex("State")
                         .HasDatabaseName("ix_universities_state");
@@ -2975,6 +2982,10 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("intl_applicants");
 
+                    b.Property<Guid?>("LastEditedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("last_edited_by_user_id");
+
                     b.Property<decimal?>("LivingUsd")
                         .HasPrecision(12, 2)
                         .HasColumnType("numeric(12,2)")
@@ -3037,6 +3048,11 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("numeric(5,4)")
                         .HasColumnName("sat_submit_pct");
 
+                    b.Property<string>("SourceReliability")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("source_reliability");
+
                     b.Property<string>("SourceUrl")
                         .HasMaxLength(512)
                         .HasColumnType("character varying(512)")
@@ -3064,6 +3080,9 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.HasKey("Id")
                         .HasName("pk_university_offerings");
 
+                    b.HasIndex("LastEditedByUserId")
+                        .HasDatabaseName("ix_university_offerings_last_edited_by_user_id");
+
                     b.HasIndex("UniversityId", "StudyLevel")
                         .IsUnique()
                         .HasDatabaseName("ix_university_offerings_university_id_study_level");
@@ -3075,6 +3094,8 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("ck_university_offerings_avg_gpa4", "avg_gpa4 IS NULL OR avg_gpa4 BETWEEN 0 AND 4");
 
                             t.HasCheckConstraint("ck_university_offerings_sat_range", "(sat25 IS NULL OR sat25 BETWEEN 400 AND 1600) AND (sat75 IS NULL OR sat75 BETWEEN 400 AND 1600) AND (sat25 IS NULL OR sat75 IS NULL OR sat25 <= sat75)");
+
+                            t.HasCheckConstraint("ck_university_offerings_source_reliability", "source_reliability IS NULL OR source_reliability IN ('official', 'aggregated', 'self_reported')");
                         });
                 });
 
@@ -3801,8 +3822,23 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasConstraintName("fk_transcript_scores_student_profiles_student_profile_id");
                 });
 
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.University", b =>
+                {
+                    b.HasOne("StudyAbroad.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("LastEditedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_universities_users_last_edited_by_user_id");
+                });
+
             modelBuilder.Entity("StudyAbroad.Domain.Entities.UniversityOffering", b =>
                 {
+                    b.HasOne("StudyAbroad.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("LastEditedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_university_offerings_users_last_edited_by_user_id");
+
                     b.HasOne("StudyAbroad.Domain.Entities.University", null)
                         .WithMany()
                         .HasForeignKey("UniversityId")

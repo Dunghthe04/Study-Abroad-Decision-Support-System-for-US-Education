@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { isAdminRoute } from "@/lib/admin-nav";
 import { isWideRoute } from "@/lib/layout-routes";
 import { cn } from "@/lib/utils";
 import { SiteHeader } from "@/components/layout/SiteHeader";
@@ -13,7 +14,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { open, wide } = useAssistant();
   const visible = useAssistantVisible();
-  const pushed = open && visible;
+  const adminRoute = isAdminRoute(pathname);
+  const showAssistant = !adminRoute;
+  const pushed = showAssistant && open && visible;
 
   return (
     <div
@@ -25,18 +28,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       }
     >
       <div className={cn("flex flex-1 flex-col transition-[padding] duration-200", pushed && "min-[900px]:pr-(--assistant-w)")}>
-        <SiteHeader />
+        {!adminRoute && <SiteHeader />}
         <main
           className={cn(
-            "mx-auto w-full flex-1 px-4 py-8",
-            isWideRoute(pathname) ? "max-w-[1320px] sm:px-6" : "max-w-5xl"
+            "w-full flex-1",
+            adminRoute
+              ? "flex flex-col"
+              : cn("mx-auto px-4 py-8", isWideRoute(pathname) ? "max-w-[1320px] sm:px-6" : "max-w-5xl"),
           )}
         >
           {children}
         </main>
       </div>
-      <AssistantPanel />
-      <AssistantLauncher />
+      {showAssistant && <AssistantPanel />}
+      {showAssistant && <AssistantLauncher />}
       <Toaster />
     </div>
   );
