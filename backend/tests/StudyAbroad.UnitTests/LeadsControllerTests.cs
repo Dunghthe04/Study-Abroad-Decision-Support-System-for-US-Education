@@ -176,5 +176,40 @@ public class LeadsControllerTests
             Assert.Equal("new", l.Status);
         });
     }
+
+    [Fact]
+    public async Task GetMyLeads_PaginationCalculatesCorrectPages()
+    {
+        var userId = Guid.NewGuid();
+        var (controller, service) = CreateController(userId);
+
+        for (int i = 0; i < 25; i++)
+        {
+            service.Leads.Add(new LeadDto(
+                Guid.NewGuid(),
+                userId,
+                Guid.NewGuid(),
+                $"Center {i}",
+                null,
+                "bachelor",
+                "0912345678",
+                $"Msg {i}",
+                false,
+                "new",
+                DateTime.UtcNow.AddMinutes(i)));
+        }
+
+        // Lấy trang 2 với pageSize = 10
+        var actionResult = await controller.GetMyLeads(new LeadQuery(Page: 2, PageSize: 10), CancellationToken.None);
+
+        var okResult = Assert.IsType<OkObjectResult>(actionResult.Result);
+        var paged = Assert.IsType<PagedResult<LeadDto>>(okResult.Value);
+
+        Assert.Equal(25, paged.TotalCount);
+        Assert.Equal(2, paged.Page);
+        Assert.Equal(10, paged.PageSize);
+        Assert.Equal(3, paged.TotalPages);
+        Assert.Equal(10, paged.Items.Count);
+    }
 }
 
