@@ -22,7 +22,9 @@ public record ProfileMetadataResponse(
     [property: JsonPropertyName("usStates")] IReadOnlyList<UsStateMetadataItem> UsStates,
     [property: JsonPropertyName("popularStateCodes")] IReadOnlyList<string> PopularStateCodes,
     [property: JsonPropertyName("usMajors")] IReadOnlyList<UsMajorMetadataItem> UsMajors,
-    [property: JsonPropertyName("institutionTypes")] IReadOnlyList<IdLabelItem> InstitutionTypes
+    [property: JsonPropertyName("institutionTypes")] IReadOnlyList<IdLabelItem> InstitutionTypes,
+    /// <summary>1 USD = ? VNĐ, lấy mới mỗi ngày (không lưu trong app_settings)</summary>
+    [property: JsonPropertyName("vndPerUsd")] decimal? VndPerUsd = null
 );
 
 public record CurrentEducationLevelItem(

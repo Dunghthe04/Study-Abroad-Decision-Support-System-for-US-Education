@@ -20,6 +20,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<ProfileCertification> ProfileCertifications => Set<ProfileCertification>();
     public DbSet<University> Universities => Set<University>();
     public DbSet<UniversityOffering> UniversityOfferings => Set<UniversityOffering>();
+    public DbSet<Major> Majors => Set<Major>();
+    public DbSet<UniversityOfferingMajor> UniversityOfferingMajors => Set<UniversityOfferingMajor>();
+    public DbSet<RankingList> RankingLists => Set<RankingList>();
+    public DbSet<UniversityRanking> UniversityRankings => Set<UniversityRanking>();
     public DbSet<Scholarship> Scholarships => Set<Scholarship>();
     public DbSet<TargetSchool> TargetSchools => Set<TargetSchool>();
     public DbSet<Recommendation> Recommendations => Set<Recommendation>();
@@ -58,12 +62,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         // Business tables live in the "app" schema; the advisor service owns the "advisor" schema (pgvector).
         modelBuilder.HasDefaultSchema("app");
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
-
-        modelBuilder.Entity<StateLivingCost>(builder =>
-        {
-            builder.ToTable("state_living_costs");
-            builder.HasKey(x => x.StateCode);
-        });
     }
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

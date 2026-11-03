@@ -1,3 +1,4 @@
+using StudyAbroad.Application.Audit;
 using StudyAbroad.Application.Auth;
 using StudyAbroad.Application.Common;
 using StudyAbroad.Application.ParentLinks;
@@ -145,6 +146,42 @@ internal sealed class FakeUserRepository : IUserRepository
 
     public Task<List<User>> GetAllUsersAsync(CancellationToken cancellationToken = default) =>
         Task.FromResult(Users.ToList());
+
+    public Task<PagedResult<User>> GetAdminUserAccountListAsync(
+        AdminUserAccountListQuery query,
+        CancellationToken cancellationToken = default)
+    {
+        IEnumerable<User> q = Users;
+        if (!string.IsNullOrEmpty(query.Search))
+        {
+            var s = query.Search;
+            q = q.Where(u =>
+                u.Email.Contains(s, StringComparison.OrdinalIgnoreCase) ||
+                u.FullName.Contains(s, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!string.IsNullOrEmpty(query.Role))
+            q = q.Where(u => u.Role == query.Role);
+        if (!string.IsNullOrEmpty(query.Status))
+            q = q.Where(u => u.Status == query.Status);
+
+        var list = q.OrderByDescending(u => u.CreatedAt).ToList();
+        var page = Math.Max(1, query.Page);
+        var pageSize = Math.Clamp(query.PageSize, 1, 100);
+        var items = list.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+        return Task.FromResult(new PagedResult<User>(items, page, pageSize, list.Count));
+    }
+}
+
+internal sealed class FakeAuditLogRepository : IAuditLogRepository
+{
+    public List<AuditLog> Entries { get; } = [];
+
+    public Task AddAsync(AuditLog entry, CancellationToken cancellationToken = default)
+    {
+        Entries.Add(entry);
+        return Task.CompletedTask;
+    }
 }
 
 internal sealed class FakeEmailSender : IEmailSender

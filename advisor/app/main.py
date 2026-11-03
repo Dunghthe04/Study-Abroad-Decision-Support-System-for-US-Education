@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from logging.handlers import TimedRotatingFileHandler
@@ -9,15 +10,19 @@ from fastapi import Depends, FastAPI
 from app.api.deps import require_api_key
 from app.api.routes import chat, health, profile, recommend
 from app.core.config import get_settings
+from app.core.db import open_pool
+from app.services.branches import build_branches
+from app.services.centers import CenterFinder
 from app.services.chat_flow import ChatFlow
 from app.services.ec_reader import EcReader
 from app.services.explainer import Explainer
 from app.services.gemini import GeminiClient
+from app.services.knowledge import KnowledgeRetriever
 from app.services.ollama import OllamaClient
 from app.services.picker import Picker
 from app.services.scorer import Scorer
-from app.services.skill_picker_loader import load_skill_picker
 from app.services.skills import build_handlers
+from app.services.slm_classifier import OllamaSlm, output_format
 from app.services.transcript_reader import TranscriptReader
 
 
@@ -30,7 +35,12 @@ async def lifespan(app: FastAPI):
     # Tạo kết nối Http đến ollama
     async with (
         httpx.AsyncClient(base_url=settings.ollama_base_url, timeout=settings.llm_timeout_seconds) as http,
-        httpx.AsyncClient(base_url=settings.gemini_base_url, timeout=180) as gemini_http,
+        httpx.AsyncClient(
+            base_url=settings.gemini_base_url, timeout=settings.gemini_timeout_seconds
+        ) as gemini_http,
+        httpx.AsyncClient(
+            base_url=settings.backend_base_url, timeout=settings.backend_timeout_seconds
+        ) as backend_http,
     ):
         app.state.llm = OllamaClient(
             http,
@@ -39,23 +49,49 @@ async def lifespan(app: FastAPI):
             num_gpu=settings.llm_num_gpu,
             seed=settings.llm_seed,
             keep_alive=settings.llm_keep_alive,
+            embedding_model=settings.embedding_model,
         )
-        app.state.transcript_reader = TranscriptReader(http, settings)
-        app.state.ec_reader = EcReader(app.state.llm, settings.llm_model)
         gemini = GeminiClient(
             gemini_http,
             settings.gemini_model,
             settings.gemini_api_key,
             thinking_level=settings.gemini_thinking_level,
+            max_retries=settings.gemini_max_retries,
+            fallback_model=settings.gemini_fallback_model or None,
+        )
+        # Có khóa Gemini thì bước B đọc bảng điểm chạy trên Gemini, không thì dùng model Ollama (transcript_parse_model)
+        app.state.transcript_reader = TranscriptReader(
+            http, settings, gemini if settings.gemini_api_key else None, settings.gemini_model
         )
         app.state.scorer = Scorer(gemini, settings.gemini_model)
         app.state.picker = Picker(gemini, settings.gemini_model)
-        app.state.explainer = Explainer(app.state.llm, settings.llm_model)
-        app.state.chat_flow = ChatFlow(
-            picker=load_skill_picker(http),
-            handlers=build_handlers(app.state.llm, settings.llm_model),
+        app.state.ec_reader = EcReader(gemini, settings.gemini_model)
+        app.state.explainer = Explainer(gemini, settings.gemini_model)
+        # Kho kiến thức: không có DB thì None, chat vẫn chạy nhưng chưa trả lời được câu hỏi kiến thức
+        app.state.db_pool = await asyncio.to_thread(open_pool, settings.database_url)
+        knowledge = None
+        if app.state.db_pool is not None:
+            statuses = [s.strip() for s in settings.knowledge_statuses.split(",") if s.strip()]
+            knowledge = KnowledgeRetriever(app.state.db_pool, statuses, settings.knowledge_top_k)
+        centers = CenterFinder(backend_http) if settings.backend_base_url else None
+        # Gemini viết câu trả lời cho mọi skill; Ollama (app.state.llm) chỉ còn embedding cho kho kiến thức
+        skills = build_handlers(
+            gemini, settings.gemini_model, knowledge, settings.knowledge_min_score, centers, app.state.llm
         )
+        # SLM phân loại tin nhắn (usas-slm): client riêng vì khác model với llm_model, dùng chung kết nối http
+        slm_client = OllamaClient(
+            http,
+            settings.slm_model,
+            num_ctx=settings.llm_num_ctx,
+            num_gpu=settings.llm_num_gpu,
+            seed=settings.llm_seed,
+            keep_alive=settings.llm_keep_alive,
+        )
+        slm = OllamaSlm(slm_client, output_format(settings.slm_format))
+        app.state.chat_flow = ChatFlow(slm, build_branches(skills))
         yield
+        if app.state.db_pool is not None:
+            await asyncio.to_thread(app.state.db_pool.close)
 
 
 ADVISOR_DIR = Path(__file__).resolve().parents[1]  # app/main.py -> advisor/

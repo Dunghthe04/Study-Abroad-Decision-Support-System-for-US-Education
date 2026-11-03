@@ -26,23 +26,31 @@ public record ProfileFlowDraftDto(
     [property: JsonPropertyName("step5")] FlowActivitiesDraftDto? Step5 = null
 );
 
-/// <summary>Bước 1 – Mục tiêu. currentEducationLevel: middle_school | high_school | college_university | master</summary>
+/// <summary>
+/// Bước 1 – Mục tiêu. currentEducationLevel: middle_school | high_school | college_university | master;
+/// educationSystem: mã EducationSystems, chỉ hỏi học sinh cấp 3; targetIntake: kỳ nhập học dạng "Fall 2027";
+/// majorUndecided: học sinh bấm "Chưa rõ" ngành (ở form hoặc chat), lúc đó targetMajor để trống
+/// </summary>
 public record FlowGoalDraftDto(
     [property: JsonPropertyName("currentEducationLevel")] string? CurrentEducationLevel = null,
     [property: JsonPropertyName("currentGrade")] string? CurrentGrade = null,
+    [property: JsonPropertyName("educationSystem")] string? EducationSystem = null,
     [property: JsonPropertyName("currentSchool")] string? CurrentSchool = null,
     [property: JsonPropertyName("expectedGraduationYear")] int? ExpectedGraduationYear = null,
     [property: JsonPropertyName("targetDegreeLevel")] string? TargetDegreeLevel = null,
     [property: JsonPropertyName("targetMajor")] string? TargetMajor = null,
+    [property: JsonPropertyName("targetIntake")] string? TargetIntake = null,
     [property: JsonPropertyName("targetStates")] List<string>? TargetStates = null,
-    [property: JsonPropertyName("targetSchoolType")] string? TargetSchoolType = null
+    [property: JsonPropertyName("targetSchoolType")] string? TargetSchoolType = null,
+    [property: JsonPropertyName("majorUndecided")] bool? MajorUndecided = null
 );
 
 /// <summary>Bước 2 – Bảng điểm theo khối/năm, mỗi môn có điểm HK1, HK2 (thang 10)</summary>
 public record FlowTranscriptDraftDto(
     [property: JsonPropertyName("academicYears")] List<FlowAcademicYearDraftDto>? AcademicYears = null,
     [property: JsonPropertyName("calculatedGpa4Scale")] decimal? CalculatedGpa4Scale = null,
-    [property: JsonPropertyName("manualGpa10Scale")] decimal? ManualGpa10Scale = null
+    [property: JsonPropertyName("manualGpa10Scale")] decimal? ManualGpa10Scale = null,
+    [property: JsonPropertyName("gpaMode")] string? GpaMode = null
 );
 
 public record FlowAcademicYearDraftDto(
@@ -95,10 +103,14 @@ public record FlowOtherTestDraftDto(
     [property: JsonPropertyName("score")] decimal? Score = null
 );
 
-/// <summary>Bước 4 – annualBudgetTier: id tier_* trong metadata; needFinancialAid: mandatory | preferred | optional</summary>
+/// <summary>
+/// Bước 4 – annualBudgetTier: id tier_* trong metadata; needFinancialAid: mandatory | preferred | optional;
+/// fundingSource: mã ProfileConstants.FundingSources (ai chi trả chính)
+/// </summary>
 public record FlowFinancialDraftDto(
     [property: JsonPropertyName("annualBudgetTier")] string? AnnualBudgetTier = null,
-    [property: JsonPropertyName("needFinancialAid")] string? NeedFinancialAid = null
+    [property: JsonPropertyName("needFinancialAid")] string? NeedFinancialAid = null,
+    [property: JsonPropertyName("fundingSource")] string? FundingSource = null
 );
 
 public record FlowActivitiesDraftDto(

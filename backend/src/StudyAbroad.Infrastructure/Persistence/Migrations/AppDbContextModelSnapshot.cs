@@ -35,6 +35,10 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("completion_tokens");
 
+                    b.Property<decimal?>("CostUsd")
+                        .HasColumnType("numeric")
+                        .HasColumnName("cost_usd");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -43,6 +47,10 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)")
                         .HasColumnName("error");
+
+                    b.Property<bool>("FallbackUsed")
+                        .HasColumnType("boolean")
+                        .HasColumnName("fallback_used");
 
                     b.Property<string>("Kind")
                         .IsRequired()
@@ -59,13 +67,29 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(64)")
                         .HasColumnName("model");
 
+                    b.Property<string>("ModelVersion")
+                        .HasColumnType("text")
+                        .HasColumnName("model_version");
+
+                    b.Property<string>("PlanCode")
+                        .HasColumnType("text")
+                        .HasColumnName("plan_code");
+
                     b.Property<int?>("PromptTokens")
                         .HasColumnType("integer")
                         .HasColumnName("prompt_tokens");
 
+                    b.Property<string>("SkillVersion")
+                        .HasColumnType("text")
+                        .HasColumnName("skill_version");
+
                     b.Property<bool>("Success")
                         .HasColumnType("boolean")
                         .HasColumnName("success");
+
+                    b.Property<int?>("TotalTokens")
+                        .HasColumnType("integer")
+                        .HasColumnName("total_tokens");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -228,6 +252,72 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_audit_logs_created_at");
 
                     b.ToTable("audit_logs", "app");
+                });
+
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.CenterReview", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Comment")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("comment");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<bool>("IsVerified")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_verified");
+
+                    b.Property<Guid?>("LeadId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("lead_id");
+
+                    b.Property<int>("Rating")
+                        .HasColumnType("integer")
+                        .HasColumnName("rating");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("visible")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("StudyCenterId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("study_center_id");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_center_reviews");
+
+                    b.HasIndex("LeadId")
+                        .HasDatabaseName("ix_center_reviews_lead_id");
+
+                    b.HasIndex("StudyCenterId")
+                        .HasDatabaseName("ix_center_reviews_study_center_id");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_center_reviews_user_id");
+
+                    b.ToTable("center_reviews", "app", t =>
+                        {
+                            t.HasCheckConstraint("ck_center_reviews_rating", "rating >= 1 AND rating <= 5");
+                        });
                 });
 
             modelBuilder.Entity("StudyAbroad.Domain.Entities.ChatMessage", b =>
@@ -399,6 +489,71 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.ToTable("consents", "app");
                 });
 
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.DataImportBatch", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("BatchCode")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("batch_code");
+
+                    b.Property<string>("CheckedBy")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasDefaultValue("USAS Research Team")
+                        .HasColumnName("checked_by");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("DataYear")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("data_year");
+
+                    b.Property<int>("FlaggedRows")
+                        .HasColumnType("integer")
+                        .HasColumnName("flagged_rows");
+
+                    b.Property<int>("PassedRows")
+                        .HasColumnType("integer")
+                        .HasColumnName("passed_rows");
+
+                    b.Property<string>("SourceName")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("source_name");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("verified")
+                        .HasColumnName("status");
+
+                    b.Property<int>("TotalRows")
+                        .HasColumnType("integer")
+                        .HasColumnName("total_rows");
+
+                    b.HasKey("Id")
+                        .HasName("pk_data_import_batches");
+
+                    b.HasIndex("BatchCode")
+                        .IsUnique()
+                        .HasDatabaseName("ix_data_import_batches_batch_code");
+
+                    b.ToTable("data_import_batches", "app");
+                });
+
             modelBuilder.Entity("StudyAbroad.Domain.Entities.EvalCase", b =>
                 {
                     b.Property<Guid>("Id")
@@ -512,6 +667,175 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_eval_runs_started_at");
 
                     b.ToTable("eval_runs", "app");
+                });
+
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.ExpertRule", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ActionRecommendation")
+                        .HasColumnType("text")
+                        .HasColumnName("action_recommendation");
+
+                    b.Property<decimal>("CertaintyFactor")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(3, 2)
+                        .HasColumnType("numeric(3,2)")
+                        .HasDefaultValue(0.90m)
+                        .HasColumnName("certainty_factor");
+
+                    b.Property<string>("ConditionJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("condition_json");
+
+                    b.Property<string>("ConditionSummary")
+                        .HasColumnType("text")
+                        .HasColumnName("condition_summary");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("DegreeLevel")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasDefaultValue("all")
+                        .HasColumnName("degree_level");
+
+                    b.Property<string>("RuleCode")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("rule_code");
+
+                    b.Property<string>("RuleName")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("rule_name");
+
+                    b.Property<string>("SourceReference")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("source_reference");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("active")
+                        .HasColumnName("status");
+
+                    b.Property<int>("SupportingCentersCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("supporting_centers_count");
+
+                    b.Property<string>("TargetDirection")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("target_direction");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<DateTime>("VerifiedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("verified_at");
+
+                    b.Property<string>("VerifiedBy")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasDefaultValue("USAS Advisory Board")
+                        .HasColumnName("verified_by");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_expert_rules");
+
+                    b.HasIndex("DegreeLevel")
+                        .HasDatabaseName("ix_expert_rules_degree_level");
+
+                    b.HasIndex("RuleCode")
+                        .IsUnique()
+                        .HasDatabaseName("ix_expert_rules_rule_code");
+
+                    b.ToTable("expert_rules", "app");
+                });
+
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.FieldEvidence", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("ExtractedQuote")
+                        .HasColumnType("text")
+                        .HasColumnName("extracted_quote");
+
+                    b.Property<string>("FieldName")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("field_name");
+
+                    b.Property<string>("FieldValue")
+                        .HasColumnType("text")
+                        .HasColumnName("field_value");
+
+                    b.Property<string>("SourceSection")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("source_section");
+
+                    b.Property<string>("SourceUrl")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("source_url");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("verified")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("UniversityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("university_id");
+
+                    b.Property<string>("VerifiedBy")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasDefaultValue("USAS Audit Panel")
+                        .HasColumnName("verified_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_field_evidence");
+
+                    b.HasIndex("UniversityId")
+                        .HasDatabaseName("ix_field_evidence_university_id");
+
+                    b.ToTable("field_evidence", "app");
                 });
 
             modelBuilder.Entity("StudyAbroad.Domain.Entities.ForumPost", b =>
@@ -659,6 +983,12 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("code");
+
                     b.Property<string>("Content")
                         .IsRequired()
                         .HasColumnType("text")
@@ -670,33 +1000,82 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("DocType")
                         .IsRequired()
+                        .ValueGeneratedOnAdd()
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)")
+                        .HasDefaultValue("faq")
                         .HasColumnName("doc_type");
+
+                    b.Property<string>("EmbeddingHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("embedding_hash");
 
                     b.Property<DateTime?>("IngestedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("ingested_at");
 
+                    b.Property<string>("Question")
+                        .HasColumnType("text")
+                        .HasColumnName("question");
+
+                    b.Property<string>("Quote")
+                        .HasColumnType("text")
+                        .HasColumnName("quote");
+
                     b.Property<DateOnly?>("RetrievedAt")
                         .HasColumnType("date")
                         .HasColumnName("retrieved_at");
+
+                    b.Property<DateTime?>("ReviewDueAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("review_due_at");
+
+                    b.Property<string>("Scope")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasDefaultValue("system_advisory")
+                        .HasColumnName("scope");
+
+                    b.Property<string>("SourceNote")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("source_note");
+
+                    b.Property<string>("SourceType")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasDefaultValue("official")
+                        .HasColumnName("source_type");
 
                     b.Property<string>("SourceUrl")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)")
                         .HasColumnName("source_url");
 
+                    b.Property<string>("Stage")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("stage");
+
                     b.Property<string>("Status")
                         .IsRequired()
+                        .ValueGeneratedOnAdd()
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")
+                        .HasDefaultValue("draft")
                         .HasColumnName("status");
 
                     b.Property<string>("StudyLevel")
                         .IsRequired()
+                        .ValueGeneratedOnAdd()
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)")
+                        .HasDefaultValue("general")
                         .HasColumnName("study_level");
 
                     b.Property<string>("Title")
@@ -704,6 +1083,11 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasMaxLength(300)
                         .HasColumnType("character varying(300)")
                         .HasColumnName("title");
+
+                    b.Property<string>("Topic")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("topic");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -717,8 +1101,24 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("verified_by_user_id");
 
+                    b.Property<int>("Version")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("version");
+
                     b.HasKey("Id")
                         .HasName("pk_knowledge_documents");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("ix_knowledge_documents_code");
+
+                    b.HasIndex("Scope")
+                        .HasDatabaseName("ix_knowledge_documents_scope");
+
+                    b.HasIndex("Topic")
+                        .HasDatabaseName("ix_knowledge_documents_topic");
 
                     b.HasIndex("VerifiedByUserId")
                         .HasDatabaseName("ix_knowledge_documents_verified_by_user_id");
@@ -794,6 +1194,111 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_leads_study_center_id_status");
 
                     b.ToTable("leads", "app");
+                });
+
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.LeadMessage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)")
+                        .HasColumnName("content");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("FlagReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("flag_reason");
+
+                    b.Property<bool>("IsFlagged")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_flagged");
+
+                    b.Property<Guid>("LeadId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("lead_id");
+
+                    b.Property<Guid?>("RemovedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("removed_by_user_id");
+
+                    b.Property<Guid>("SenderUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("sender_user_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("visible")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_lead_messages");
+
+                    b.HasIndex("LeadId")
+                        .HasDatabaseName("ix_lead_messages_lead_id");
+
+                    b.HasIndex("RemovedByUserId")
+                        .HasDatabaseName("ix_lead_messages_removed_by_user_id");
+
+                    b.HasIndex("SenderUserId")
+                        .HasDatabaseName("ix_lead_messages_sender_user_id");
+
+                    b.ToTable("lead_messages", "app");
+                });
+
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.Major", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("CipCode")
+                        .HasMaxLength(7)
+                        .HasColumnType("character varying(7)")
+                        .HasColumnName("cip_code");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("name");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_majors");
+
+                    b.HasIndex("CipCode")
+                        .IsUnique()
+                        .HasDatabaseName("ix_majors_cip_code");
+
+                    b.HasIndex("Name")
+                        .IsUnique()
+                        .HasDatabaseName("ix_majors_name");
+
+                    b.ToTable("majors", "app");
                 });
 
             modelBuilder.Entity("StudyAbroad.Domain.Entities.Notification", b =>
@@ -1011,6 +1516,133 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.ToTable("parent_student_links", "app");
                 });
 
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.PaymentTransaction", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("AmountVnd")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("amount_vnd");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Gateway")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("gateway");
+
+                    b.Property<string>("GatewayTransactionId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("gateway_transaction_id");
+
+                    b.Property<DateTime?>("PaidAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("paid_at");
+
+                    b.Property<string>("PayloadJson")
+                        .HasColumnType("text")
+                        .HasColumnName("payload_json");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("pending")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<Guid?>("UserSubscriptionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_subscription_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_payment_transactions");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_payment_transactions_user_id");
+
+                    b.HasIndex("UserSubscriptionId")
+                        .HasDatabaseName("ix_payment_transactions_user_subscription_id");
+
+                    b.ToTable("payment_transactions", "app");
+                });
+
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.PolicyAlert", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AlertType")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("visa")
+                        .HasColumnName("alert_type");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateOnly?>("EffectiveDate")
+                        .HasColumnType("date")
+                        .HasColumnName("effective_date");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<string>("Severity")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("info")
+                        .HasColumnName("severity");
+
+                    b.Property<string>("SourceUrl")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("source_url");
+
+                    b.Property<string>("Summary")
+                        .HasColumnType("text")
+                        .HasColumnName("summary");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("title");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_policy_alerts");
+
+                    b.ToTable("policy_alerts", "app");
+                });
+
             modelBuilder.Entity("StudyAbroad.Domain.Entities.ProfileActivity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1168,6 +1800,55 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.RankingList", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(48)
+                        .HasColumnType("character varying(48)")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Edition")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("edition");
+
+                    b.Property<int?>("EditionYear")
+                        .HasColumnType("integer")
+                        .HasColumnName("edition_year");
+
+                    b.Property<string>("ListGroup")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("list_group");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("Publisher")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("publisher");
+
+                    b.Property<string>("RankType")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("rank_type");
+
+                    b.Property<string>("Url")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("url");
+
+                    b.HasKey("Id")
+                        .HasName("pk_ranking_lists");
+
+                    b.ToTable("ranking_lists", "app");
+                });
+
             modelBuilder.Entity("StudyAbroad.Domain.Entities.Recommendation", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1222,6 +1903,78 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_recommendations_user_id_created_at");
 
                     b.ToTable("recommendations", "app");
+                });
+
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.RecommendationItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("FinancialFitStatus")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("affordable")
+                        .HasColumnName("financial_fit_status");
+
+                    b.Property<string>("GapReasons")
+                        .HasColumnType("text")
+                        .HasColumnName("gap_reasons");
+
+                    b.Property<bool>("IsTierDivergent")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_tier_divergent");
+
+                    b.Property<decimal?>("MatchStrength")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("match_strength");
+
+                    b.Property<string>("ProgramName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("program_name");
+
+                    b.Property<Guid>("RecommendationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("recommendation_id");
+
+                    b.Property<string>("RuleCodesTriggered")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("rule_codes_triggered");
+
+                    b.Property<string>("TierAi")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("tier_ai");
+
+                    b.Property<string>("TierRule")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("tier_rule");
+
+                    b.Property<Guid>("UniversityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("university_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_recommendation_items");
+
+                    b.HasIndex("RecommendationId")
+                        .HasDatabaseName("ix_recommendation_items_recommendation_id");
+
+                    b.HasIndex("UniversityId")
+                        .HasDatabaseName("ix_recommendation_items_university_id");
+
+                    b.ToTable("recommendation_items", "app");
                 });
 
             modelBuilder.Entity("StudyAbroad.Domain.Entities.RoadmapStep", b =>
@@ -1430,6 +2183,59 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.ToTable("skills", "app");
                 });
 
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.StateLivingCost", b =>
+                {
+                    b.Property<string>("StateCode")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("state_code");
+
+                    b.Property<decimal?>("AvgLivingUsdYearly")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("avg_annual_living_usd");
+
+                    b.Property<decimal>("CostIndex")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)")
+                        .HasDefaultValue(100.0m)
+                        .HasColumnName("index_score");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("notes");
+
+                    b.Property<DateOnly?>("RetrievedAt")
+                        .HasColumnType("date")
+                        .HasColumnName("retrieved_at");
+
+                    b.Property<string>("SourceUrl")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("source_url");
+
+                    b.Property<string>("StateName")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("state_name");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("StateCode")
+                        .HasName("pk_state_living_costs");
+
+                    b.ToTable("state_living_costs", "app");
+                });
+
             modelBuilder.Entity("StudyAbroad.Domain.Entities.StudentProfile", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1595,6 +2401,11 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(16)")
                         .HasColumnName("scholarship_need");
 
+                    b.Property<string>("TargetIntake")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("target_intake");
+
                     b.Property<string>("TargetLevel")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -1751,12 +2562,83 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.ToTable("study_centers", "app");
                 });
 
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.SubscriptionPlan", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("code");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<int>("DailyAiChatQuota")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(10)
+                        .HasColumnName("ai_chat_daily_quota");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("description");
+
+                    b.Property<int>("DurationDays")
+                        .HasColumnType("integer")
+                        .HasColumnName("duration_days");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<int>("MaxLeadsQuota")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_leads_quota");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("name");
+
+                    b.Property<decimal>("PriceVnd")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasDefaultValue(0m)
+                        .HasColumnName("price_monthly_vnd");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_subscription_plans");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("ix_subscription_plans_code");
+
+                    b.ToTable("subscription_plans", "app");
+                });
+
             modelBuilder.Entity("StudyAbroad.Domain.Entities.TargetSchool", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
+
+                    b.Property<string>("ApplicationRound")
+                        .HasColumnType("text")
+                        .HasColumnName("application_round");
 
                     b.Property<string>("Category")
                         .HasMaxLength(16)
@@ -1766,6 +2648,14 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("Deadline")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deadline");
+
+                    b.Property<string>("GapAnalysisJson")
+                        .HasColumnType("text")
+                        .HasColumnName("gap_analysis_json");
 
                     b.Property<string>("Notes")
                         .HasMaxLength(1000)
@@ -1915,6 +2805,10 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_active");
 
+                    b.Property<bool>("IsIvy")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_ivy");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(256)
@@ -1959,6 +2853,22 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")
                         .HasColumnName("academic_year");
+
+                    b.Property<int?>("Act25")
+                        .HasColumnType("integer")
+                        .HasColumnName("act25");
+
+                    b.Property<int?>("Act75")
+                        .HasColumnType("integer")
+                        .HasColumnName("act75");
+
+                    b.Property<int?>("AdmittedTotal")
+                        .HasColumnType("integer")
+                        .HasColumnName("admitted_total");
+
+                    b.Property<int?>("ApplicantsTotal")
+                        .HasColumnType("integer")
+                        .HasColumnName("applicants_total");
 
                     b.Property<decimal?>("AvgGpa4")
                         .HasPrecision(3, 2)
@@ -2028,6 +2938,11 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("numeric(5,4)")
                         .HasColumnName("gpa_pct_below_250");
 
+                    b.Property<decimal?>("GpaSubmitPct")
+                        .HasPrecision(5, 4)
+                        .HasColumnType("numeric(5,4)")
+                        .HasColumnName("gpa_submit_pct");
+
                     b.Property<decimal?>("GradRate6Yr")
                         .HasPrecision(5, 4)
                         .HasColumnType("numeric(5,4)")
@@ -2037,6 +2952,10 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasPrecision(5, 4)
                         .HasColumnType("numeric(5,4)")
                         .HasColumnName("intl_acceptance_rate");
+
+                    b.Property<int?>("IntlAdmitted")
+                        .HasColumnType("integer")
+                        .HasColumnName("intl_admitted");
 
                     b.Property<decimal?>("IntlAidAvgUsd")
                         .HasPrecision(12, 2)
@@ -2048,15 +2967,18 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(16)")
                         .HasColumnName("intl_aid_policy");
 
+                    b.Property<int?>("IntlAidRecipients")
+                        .HasColumnType("integer")
+                        .HasColumnName("intl_aid_recipients");
+
+                    b.Property<int?>("IntlApplicants")
+                        .HasColumnType("integer")
+                        .HasColumnName("intl_applicants");
+
                     b.Property<decimal?>("LivingUsd")
                         .HasPrecision(12, 2)
                         .HasColumnType("numeric(12,2)")
                         .HasColumnName("living_usd");
-
-                    b.Property<List<string>>("Majors")
-                        .IsRequired()
-                        .HasColumnType("text[]")
-                        .HasColumnName("majors");
 
                     b.Property<decimal?>("MinDuolingo")
                         .HasPrecision(5, 1)
@@ -2120,11 +3042,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(512)")
                         .HasColumnName("source_url");
 
-                    b.Property<List<string>>("StemMajors")
-                        .IsRequired()
-                        .HasColumnType("text[]")
-                        .HasColumnName("stem_majors");
-
                     b.Property<string>("StudyLevel")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -2153,10 +3070,79 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
 
                     b.ToTable("university_offerings", "app", t =>
                         {
+                            t.HasCheckConstraint("ck_university_offerings_act_range", "(act25 IS NULL OR act25 BETWEEN 1 AND 36) AND (act75 IS NULL OR act75 BETWEEN 1 AND 36) AND (act25 IS NULL OR act75 IS NULL OR act25 <= act75)");
+
                             t.HasCheckConstraint("ck_university_offerings_avg_gpa4", "avg_gpa4 IS NULL OR avg_gpa4 BETWEEN 0 AND 4");
 
                             t.HasCheckConstraint("ck_university_offerings_sat_range", "(sat25 IS NULL OR sat25 BETWEEN 400 AND 1600) AND (sat75 IS NULL OR sat75 BETWEEN 400 AND 1600) AND (sat25 IS NULL OR sat75 IS NULL OR sat25 <= sat75)");
                         });
+                });
+
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.UniversityOfferingMajor", b =>
+                {
+                    b.Property<Guid>("UniversityOfferingId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("university_offering_id");
+
+                    b.Property<Guid>("MajorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("major_id");
+
+                    b.Property<bool>("IsStem")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_stem");
+
+                    b.Property<bool>("IsVerified")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_verified");
+
+                    b.HasKey("UniversityOfferingId", "MajorId")
+                        .HasName("pk_university_offering_majors");
+
+                    b.HasIndex("MajorId")
+                        .HasDatabaseName("ix_university_offering_majors_major_id");
+
+                    b.ToTable("university_offering_majors", "app");
+                });
+
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.UniversityRanking", b =>
+                {
+                    b.Property<Guid>("UniversityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("university_id");
+
+                    b.Property<string>("ListId")
+                        .HasMaxLength(48)
+                        .HasColumnType("character varying(48)")
+                        .HasColumnName("list_id");
+
+                    b.Property<bool>("IsTie")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_tie");
+
+                    b.Property<int>("Rank")
+                        .HasColumnType("integer")
+                        .HasColumnName("rank");
+
+                    b.Property<string>("RankDisplay")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("rank_display");
+
+                    b.HasKey("UniversityId", "ListId")
+                        .HasName("pk_university_rankings");
+
+                    b.HasIndex("ListId")
+                        .HasDatabaseName("ix_university_rankings_list_id");
+
+                    b.ToTable("university_rankings", "app");
                 });
 
             modelBuilder.Entity("StudyAbroad.Domain.Entities.User", b =>
@@ -2186,11 +3172,23 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasDefaultValue(0)
                         .HasColumnName("failed_login_attempts");
 
+                    b.Property<DateTime?>("ForumRestrictedUntil")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("forum_restricted_until");
+
+                    b.Property<string>("ForumRestrictionReason")
+                        .HasColumnType("text")
+                        .HasColumnName("forum_restriction_reason");
+
                     b.Property<string>("FullName")
                         .IsRequired()
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)")
                         .HasColumnName("full_name");
+
+                    b.Property<bool>("IsBirthdateLocked")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_birthdate_locked");
 
                     b.Property<DateTime?>("LockoutEnd")
                         .HasColumnType("timestamp with time zone")
@@ -2241,6 +3239,47 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_users_email");
 
                     b.ToTable("users", "app");
+                });
+
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.UserDailyUsage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("AiChatCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("ai_chat_count");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<int>("LeadsCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("leads_count");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<DateOnly>("UsageDate")
+                        .HasColumnType("date")
+                        .HasColumnName("usage_date");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_user_daily_usages");
+
+                    b.HasIndex("UserId", "UsageDate")
+                        .IsUnique()
+                        .HasDatabaseName("ix_user_daily_usages_user_id_usage_date");
+
+                    b.ToTable("user_daily_usages", "app");
                 });
 
             modelBuilder.Entity("StudyAbroad.Domain.Entities.UserSession", b =>
@@ -2298,6 +3337,114 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.ToTable("user_sessions", "app");
                 });
 
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.UserSubscription", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<bool>("AutoRenew")
+                        .HasColumnType("boolean")
+                        .HasColumnName("auto_renew");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<DateTime>("StartsAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("starts_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("active")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("SubscriptionPlanId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("plan_id");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_user_subscriptions");
+
+                    b.HasIndex("SubscriptionPlanId")
+                        .HasDatabaseName("ix_user_subscriptions_subscription_plan_id");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_user_subscriptions_user_id");
+
+                    b.ToTable("user_subscriptions", "app");
+                });
+
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.WhatIfSimulation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text")
+                        .HasColumnName("notes");
+
+                    b.Property<string>("SimulatedProfileJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("simulated_profile_json");
+
+                    b.Property<string>("SimulatedRecommendationsJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("simulated_recommendations_json");
+
+                    b.Property<Guid?>("StudentProfileId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("student_profile_id");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("title");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_what_if_simulations");
+
+                    b.HasIndex("StudentProfileId")
+                        .HasDatabaseName("ix_what_if_simulations_student_profile_id");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_what_if_simulations_user_id");
+
+                    b.ToTable("what_if_simulations", "app");
+                });
+
             modelBuilder.Entity("StudyAbroad.Domain.Entities.AnalysisResult", b =>
                 {
                     b.HasOne("StudyAbroad.Domain.Entities.StudentProfile", null)
@@ -2306,6 +3453,29 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_analysis_results_student_profiles_student_profile_id");
+                });
+
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.CenterReview", b =>
+                {
+                    b.HasOne("StudyAbroad.Domain.Entities.Lead", null)
+                        .WithMany()
+                        .HasForeignKey("LeadId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_center_reviews_leads_lead_id");
+
+                    b.HasOne("StudyAbroad.Domain.Entities.StudyCenter", null)
+                        .WithMany()
+                        .HasForeignKey("StudyCenterId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_center_reviews_study_centers_study_center_id");
+
+                    b.HasOne("StudyAbroad.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_center_reviews_users_user_id");
                 });
 
             modelBuilder.Entity("StudyAbroad.Domain.Entities.ChatMessage", b =>
@@ -2348,6 +3518,16 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_consents_users_user_id");
+                });
+
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.FieldEvidence", b =>
+                {
+                    b.HasOne("StudyAbroad.Domain.Entities.University", null)
+                        .WithMany()
+                        .HasForeignKey("UniversityId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_field_evidence_universities_university_id");
                 });
 
             modelBuilder.Entity("StudyAbroad.Domain.Entities.ForumPost", b =>
@@ -2420,6 +3600,29 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasConstraintName("fk_leads_users_user_id");
                 });
 
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.LeadMessage", b =>
+                {
+                    b.HasOne("StudyAbroad.Domain.Entities.Lead", null)
+                        .WithMany()
+                        .HasForeignKey("LeadId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_lead_messages_leads_lead_id");
+
+                    b.HasOne("StudyAbroad.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("RemovedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_lead_messages_users_removed_by_user_id");
+
+                    b.HasOne("StudyAbroad.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("SenderUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_lead_messages_users_sender_user_id");
+                });
+
             modelBuilder.Entity("StudyAbroad.Domain.Entities.Notification", b =>
                 {
                     b.HasOne("StudyAbroad.Domain.Entities.User", null)
@@ -2468,6 +3671,22 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasConstraintName("fk_parent_student_links_users_student_user_id");
                 });
 
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.PaymentTransaction", b =>
+                {
+                    b.HasOne("StudyAbroad.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_payment_transactions_users_user_id");
+
+                    b.HasOne("StudyAbroad.Domain.Entities.UserSubscription", null)
+                        .WithMany()
+                        .HasForeignKey("UserSubscriptionId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_payment_transactions_user_subscriptions_user_subscription_id");
+                });
+
             modelBuilder.Entity("StudyAbroad.Domain.Entities.ProfileActivity", b =>
                 {
                     b.HasOne("StudyAbroad.Domain.Entities.StudentProfile", null)
@@ -2502,6 +3721,23 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_recommendations_users_user_id");
+                });
+
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.RecommendationItem", b =>
+                {
+                    b.HasOne("StudyAbroad.Domain.Entities.Recommendation", null)
+                        .WithMany()
+                        .HasForeignKey("RecommendationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_recommendation_items_recommendations_recommendation_id");
+
+                    b.HasOne("StudyAbroad.Domain.Entities.University", null)
+                        .WithMany()
+                        .HasForeignKey("UniversityId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_recommendation_items_universities_university_id");
                 });
 
             modelBuilder.Entity("StudyAbroad.Domain.Entities.Scholarship", b =>
@@ -2575,6 +3811,50 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasConstraintName("fk_university_offerings_universities_university_id");
                 });
 
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.UniversityOfferingMajor", b =>
+                {
+                    b.HasOne("StudyAbroad.Domain.Entities.Major", null)
+                        .WithMany()
+                        .HasForeignKey("MajorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_university_offering_majors_majors_major_id");
+
+                    b.HasOne("StudyAbroad.Domain.Entities.UniversityOffering", null)
+                        .WithMany()
+                        .HasForeignKey("UniversityOfferingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_university_offering_majors_university_offerings_university_");
+                });
+
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.UniversityRanking", b =>
+                {
+                    b.HasOne("StudyAbroad.Domain.Entities.RankingList", null)
+                        .WithMany()
+                        .HasForeignKey("ListId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_university_rankings_ranking_lists_list_id");
+
+                    b.HasOne("StudyAbroad.Domain.Entities.University", null)
+                        .WithMany()
+                        .HasForeignKey("UniversityId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_university_rankings_universities_university_id");
+                });
+
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.UserDailyUsage", b =>
+                {
+                    b.HasOne("StudyAbroad.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_user_daily_usages_users_user_id");
+                });
+
             modelBuilder.Entity("StudyAbroad.Domain.Entities.UserSession", b =>
                 {
                     b.HasOne("StudyAbroad.Domain.Entities.User", null)
@@ -2583,6 +3863,39 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_user_sessions_users_user_id");
+                });
+
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.UserSubscription", b =>
+                {
+                    b.HasOne("StudyAbroad.Domain.Entities.SubscriptionPlan", null)
+                        .WithMany()
+                        .HasForeignKey("SubscriptionPlanId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_user_subscriptions_subscription_plans_subscription_plan_id");
+
+                    b.HasOne("StudyAbroad.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_user_subscriptions_users_user_id");
+                });
+
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.WhatIfSimulation", b =>
+                {
+                    b.HasOne("StudyAbroad.Domain.Entities.StudentProfile", null)
+                        .WithMany()
+                        .HasForeignKey("StudentProfileId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .HasConstraintName("fk_what_if_simulations_student_profiles_student_profile_id");
+
+                    b.HasOne("StudyAbroad.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_what_if_simulations_users_user_id");
                 });
 #pragma warning restore 612, 618
         }

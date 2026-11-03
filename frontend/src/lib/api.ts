@@ -8,11 +8,18 @@ import type {
   ResetPasswordRequest,
   UpdateProfileRequest,
   UserDto,
+  AdminUserAccountListQuery,
+  PagedResult,
+  CreateModeratorAccountRequest,
+  LockUserAccountRequest,
+  UnlockUserAccountRequest,
   VerifyEmailRequest,
   AcademicProfileResponse,
   ParentInviteInfo,
   ParentLinkDto,
   ParentLinkResponse,
+  StudyCenter,
+  CreateStudyCenterRequest,
 } from "@/types/api";
 
 // Browser code calls same-origin /api (Nginx in prod, Next rewrite in dev).
@@ -173,5 +180,56 @@ export const parentLinksApi = {
   getMine: () =>
     apiFetch<ParentLinkResponse<ParentLinkDto[]>>("/api/v1/parent-links/me", {
       method: "GET",
+    }),
+};
+
+// [UC-63 / USAS-362] Quản trị người dùng — chỉ admin (HttpOnly cookie)
+export const adminUsersApi = {
+  /** [UC-60] Danh sách tài khoản — tìm, lọc, phân trang (trước đây trả UserDto[], giờ PagedResult). */
+  list: (params?: AdminUserAccountListQuery) => {
+    const qs = new URLSearchParams();
+    if (params?.search?.trim()) qs.set("search", params.search.trim());
+    if (params?.role) qs.set("role", params.role);
+    if (params?.status) qs.set("status", params.status);
+    if (params?.page != null) qs.set("page", String(params.page));
+    if (params?.pageSize != null) qs.set("pageSize", String(params.pageSize));
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return apiFetch<PagedResult<UserDto>>(`/api/v1/admin/users${suffix}`, {
+      method: "GET",
+    });
+  },
+
+  getById: (id: string) =>
+    apiFetch<UserDto>(`/api/v1/admin/users/${encodeURIComponent(id)}`, {
+      method: "GET",
+    }),
+
+  createModerator: (data: CreateModeratorAccountRequest) =>
+    apiFetch<UserDto>("/api/v1/admin/users/moderators", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  /** [UC-61] Khóa tài khoản (admin). */
+  lock: (id: string, data: LockUserAccountRequest) =>
+    apiFetch<UserDto>(`/api/v1/admin/users/${encodeURIComponent(id)}/lock`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  /** [UC-62] Mở khóa tài khoản (admin). */
+  unlock: (id: string, data: UnlockUserAccountRequest) =>
+    apiFetch<UserDto>(`/api/v1/admin/users/${encodeURIComponent(id)}/unlock`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+};
+
+// [UC-71] API Quản trị danh bạ trung tâm tư vấn (Moderator / Admin)
+export const studyCentersApi = {
+  create: (data: CreateStudyCenterRequest) =>
+    apiFetch<StudyCenter>("/api/v1/study-centers", {
+      method: "POST",
+      body: JSON.stringify(data),
     }),
 };

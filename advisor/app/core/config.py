@@ -25,7 +25,10 @@ class Settings(BaseSettings):
     # Số ngày giữ file log chat, quá hạn thì tự xóa
     chat_log_keep_days: int = 90
     ollama_base_url: str = "http://localhost:11434"
-    llm_model: str = "qwen3:8b"
+    # Chỉ dùng khi không có GEMINI_API_KEY (bước B đọc bảng điểm chạy trên Ollama). Có khóa Gemini thì để trống
+    llm_model: str = ""
+    slm_model: str = "usas-slm-v2"
+    slm_format: str = "json"
     llm_timeout_seconds: float = 120
     # Kích thước context window dự kiến
     llm_num_ctx: int = 6144
@@ -33,6 +36,17 @@ class Settings(BaseSettings):
     llm_num_gpu: int = 99
     # cùng đầu vào cho cùng kết quả
     llm_seed: int = 42
+    embedding_model: str = "bge-m3"
+    database_url: str = ""
+    # Địa chỉ backend .NET: B6 lấy trung tâm qua API của backend (luật chọn trung tâm nằm ở đó).
+    backend_base_url: str = "http://localhost:5080"
+    backend_timeout_seconds: float = 10
+    # khi thử có thể đặt "verified,draft"
+    knowledge_statuses: str = "verified"
+    # Độ tương đồng tối thiểu (cosine, 0 đến 1) giữa câu hỏi và câu hỏi mẫu trong kho; thấp hơn thì từ chối
+    knowledge_min_score: float = 0.72
+    # Số đoạn kiến thức đưa cho AI mỗi lần trả lời
+    knowledge_top_k: int = 4
     llm_keep_alive: str = "30m"  # giữ model trong VRAM giữa các lượt, không nạp lại
     # Đọc bảng điểm: model ảnh chép ảnh thành chữ (bước A), LLM chữ bóc điểm thành JSON (bước B)
     vision_model: str = "glm-ocr"
@@ -47,6 +61,11 @@ class Settings(BaseSettings):
     gemini_base_url: str = "https://generativelanguage.googleapis.com"
     gemini_model: str = "gemini-3.8-flash"
     gemini_thinking_level: str = "low"
+    # Model dự phòng khi model chính quá tải (503) hoặc treo. Để trống = không có dự phòng
+    gemini_fallback_model: str = ""
+    # Thời gian chờ mỗi lần gọi và số lần thử mỗi model. 2 model x 2 lần x 60 giây vẫn dưới 300 giây .NET chờ
+    gemini_timeout_seconds: float = 60
+    gemini_max_retries: int = 2
 
 
 # Lần gọi hàm sau nó lấy đối tượng đã lưu trong lru_cache

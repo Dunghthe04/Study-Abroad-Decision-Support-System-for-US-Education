@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using StudyAbroad.Api.Extensions;
 using StudyAbroad.Application.Auth;
+using StudyAbroad.Application.Common;
 using StudyAbroad.Domain.Constants;
 
 namespace StudyAbroad.Api.Controllers;
@@ -15,14 +17,14 @@ namespace StudyAbroad.Api.Controllers;
 [Route("api/v1/admin/users")]
 public class AdminUsersController(IAuthService auth) : ControllerBase
 {
-    /// <summary>
-    /// [AC-4] Lấy danh sách tất cả tài khoản trong hệ thống (chỉ dành cho Admin).
-    /// </summary>
+    /// <summary>[UC-60] Xem danh sách tài khoản — tìm, lọc, phân trang (chỉ Admin).</summary>
     [HttpGet]
-    public async Task<ActionResult<List<UserDto>>> GetAllUsers(CancellationToken ct)
+    public async Task<ActionResult<PagedResult<UserDto>>> GetAdminUserAccountList(
+        [FromQuery] AdminUserAccountListQuery query,
+        CancellationToken ct)
     {
-        var users = await auth.GetAllUsersAsync(ct);
-        return Ok(users);
+        var result = await auth.GetAdminUserAccountListAsync(query, ct);
+        return Ok(result);
     }
 
     /// <summary>
@@ -33,5 +35,44 @@ public class AdminUsersController(IAuthService auth) : ControllerBase
     {
         var user = await auth.GetMeAsync(id, ct);
         return user is not null ? Ok(user) : NotFound();
+    }
+
+    /// <summary>[UC-63] Tạo tài khoản moderator (khách không tự đăng ký được role này).</summary>
+    [HttpPost("moderators")]
+    public async Task<ActionResult<UserDto>> CreateModerator(CreateModeratorAccountRequest request, CancellationToken ct)
+    {
+        var result = await auth.CreateModeratorAccountAsync(request, ct);
+        if (result.Error != AuthError.None || result.User is null)
+            return ValidationProblem(result.Message);
+
+        return CreatedAtAction(nameof(GetUserById), new { id = result.User.Id }, result.User);
+    }
+
+    /// <summary>[UC-61] Khóa tài khoản kèm lý do (ghi audit).</summary>
+    [HttpPost("{id:guid}/lock")]
+    public async Task<ActionResult<UserDto>> LockUser(Guid id, LockUserAccountRequest request, CancellationToken ct)
+    {
+        if (User.GetUserId() is not { } adminId)
+            return Unauthorized();
+
+        var result = await auth.LockUserAccountAsync(id, request, adminId, ct);
+        if (result.Error != AuthError.None || result.User is null)
+            return ValidationProblem(result.Message);
+
+        return Ok(result.User);
+    }
+
+    /// <summary>[UC-62] Mở khóa tài khoản kèm lý do (ghi audit).</summary>
+    [HttpPost("{id:guid}/unlock")]
+    public async Task<ActionResult<UserDto>> UnlockUser(Guid id, UnlockUserAccountRequest request, CancellationToken ct)
+    {
+        if (User.GetUserId() is not { } adminId)
+            return Unauthorized();
+
+        var result = await auth.UnlockUserAccountAsync(id, request, adminId, ct);
+        if (result.Error != AuthError.None || result.User is null)
+            return ValidationProblem(result.Message);
+
+        return Ok(result.User);
     }
 }

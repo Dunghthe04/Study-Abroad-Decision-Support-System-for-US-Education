@@ -19,6 +19,7 @@ public class StudentProfileConfiguration : IEntityTypeConfiguration<StudentProfi
         b.Property(x => x.GradeScale).HasMaxLength(8).IsRequired();
         b.Property(x => x.OverallGpa).HasPrecision(5, 2);
         b.Property(x => x.IntendedMajor).HasMaxLength(128);
+        b.Property(x => x.TargetIntake).HasMaxLength(16);
         b.Property(x => x.Ielts).HasPrecision(3, 1);
         b.Property(x => x.Toefl).HasPrecision(5, 1);
         b.Property(x => x.Duolingo).HasPrecision(5, 1);

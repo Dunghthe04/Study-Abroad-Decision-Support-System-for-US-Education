@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { profileFlowApi } from "@/lib/profile-flow-api";
-import { calculateLinearGpa, countMonths } from "@/lib/profile-flow-options";
+import { countMonths, draftGpa } from "@/lib/profile-flow-options";
 import { cn } from "@/lib/utils";
 import type {
   ImpactLevel,
@@ -164,10 +164,7 @@ interface FlowProfile {
 
 // Lần gợi ý không trả điểm số hồ sơ → dựng lại từ nháp 6 bước (cùng nguồn backend dùng khi lưu hồ sơ)
 function profileFromDraft(draft: ProfileFlowDraft, meta: ProfileMetadataResponse): FlowProfile {
-  const linear = calculateLinearGpa(draft.step2?.academicYears ?? []);
-  const manual10 = draft.step2?.manualGpa10Scale ?? null;
-  const gpa10 = manual10 ?? linear.gpa10;
-  const gpa4 = draft.step2?.calculatedGpa4Scale ?? (manual10 != null ? round2(manual10 * 0.4) : linear.gpa4);
+  const { gpa10, gpa4 } = draftGpa(draft.step2);
 
   // Mỗi loại chứng chỉ có profileField (ielts/toefl/duolingo/sat); lấy điểm cao nhất như backend
   const scores: Record<string, number> = {};

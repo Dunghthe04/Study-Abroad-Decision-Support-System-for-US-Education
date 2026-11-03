@@ -26,6 +26,8 @@ public static class DependencyInjection
         // [USAS-640] Đăng ký service luồng hồ sơ một cửa
         services.AddScoped<StudyAbroad.Application.Profile.Flow.IProfileFlowService, StudyAbroad.Application.Profile.Flow.ProfileFlowService>();
         services.AddScoped<RecommendationService>();
+        // Chat chạy gợi ý trường qua interface, dùng chung RecommendationService đã đăng ký ở trên
+        services.AddScoped<IRecommendationRunner>(sp => sp.GetRequiredService<RecommendationService>());
         services.AddScoped<StudyAbroad.Application.Advisor.ChatService>();
         return services;
     }

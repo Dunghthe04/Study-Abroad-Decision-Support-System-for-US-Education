@@ -39,7 +39,7 @@ def test_anything_else_is_not_a_choice():
 
 def test_only_keys_the_form_manages_count_as_a_profile():
     assert not has_profile({})
-    assert not has_profile(profile("funding_source", "education_system"))  # chỉ chat nhớ, form không có
+    assert not has_profile(profile("relatives_state", "visa_refused"))  # chỉ chat nhớ, form không có
     assert has_profile(profile("gpa"))
 
 

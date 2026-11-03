@@ -147,5 +147,36 @@ public class UserRepository(AppDbContext db) : IUserRepository
 
     public Task<List<User>> GetAllUsersAsync(CancellationToken cancellationToken = default) =>
         db.Users.AsNoTracking().OrderByDescending(u => u.CreatedAt).ToListAsync(cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<PagedResult<User>> GetAdminUserAccountListAsync(
+        AdminUserAccountListQuery query,
+        CancellationToken cancellationToken = default)
+    {
+        var q = db.Users.AsNoTracking().AsQueryable();
+
+        if (!string.IsNullOrEmpty(query.Search))
+        {
+            var pattern = $"%{query.Search}%";
+            q = q.Where(u =>
+                EF.Functions.ILike(u.Email, pattern) ||
+                EF.Functions.ILike(u.FullName, pattern));
+        }
+
+        if (!string.IsNullOrEmpty(query.Role))
+            q = q.Where(u => u.Role == query.Role);
+
+        if (!string.IsNullOrEmpty(query.Status))
+            q = q.Where(u => u.Status == query.Status);
+
+        var total = await q.CountAsync(cancellationToken);
+        var items = await q
+            .OrderByDescending(u => u.CreatedAt)
+            .Skip((query.Page - 1) * query.PageSize)
+            .Take(query.PageSize)
+            .ToListAsync(cancellationToken);
+
+        return new PagedResult<User>(items, query.Page, query.PageSize, total);
+    }
 }
 

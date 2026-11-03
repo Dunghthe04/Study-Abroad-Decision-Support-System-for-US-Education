@@ -18,6 +18,25 @@ export interface StudyCenter {
   studyLevels: string[];
   services: string[];
   surveyedAt: string | null;
+  phone?: string | null;
+  email?: string | null;
+  description?: string | null;
+  verificationStatus?: string;
+  isActive?: boolean;
+}
+
+export interface CreateStudyCenterRequest {
+  code: string;
+  name: string;
+  website?: string | null;
+  address?: string | null;
+  city?: string | null;
+  studyLevels?: string[];
+  services?: string[];
+  phone?: string | null;
+  email?: string | null;
+  description?: string | null;
+  surveyedAt?: string | null;
 }
 
 export type ChatRole = "user" | "assistant";
@@ -40,7 +59,7 @@ export interface QuickReply {
 
 // Công cụ nhập ngay trong chat; frontend vẽ theo `type`
 export interface ChatWidget {
-  type: "major" | "review" | "budget" | "scholarship" | "form";
+  type: "major" | "review" | "budget" | "scholarship" | "form" | "select" | "recommend";
   data?: Record<string, unknown> | null;
 }
 
@@ -52,10 +71,45 @@ export interface AdvisorChatResponse {
   quickReplies?: QuickReply[] | null;
   widget?: ChatWidget | null;
   profileChanged?: string[] | null; // khóa hồ sơ chat vừa đổi; form cần nạp lại khi có giá trị
+  formStep?: number | null; // trang form (1–6) của câu chat đang hỏi; form chuyển theo
 }
 
+/** Một dòng của POST /api/v1/advisor/chat/stream (mỗi dòng một JSON): trả lời theo từng ý khi xong. */
+export type AdvisorStreamEvent =
+  | { type: "progress"; answers: number } // sắp trả lời N câu hỏi
+  | { type: "partial"; text: string } // câu trả lời của một ý, đúng thứ tự hỏi
+  | { type: "final"; response: AdvisorChatResponse } // câu cuối cùng (kèm sessionId, nút, widget): hiện câu này
+  | { type: "error"; message: string };
+
 // [USAS-362] Kiểu dữ liệu xác thực và người dùng
-export type UserRole = "student" | "parent" | "center" | "admin";
+export type UserRole = "student" | "parent" | "center" | "moderator" | "admin";
+
+/** [UC-60] Tìm, lọc, phân trang danh sách tài khoản (admin). */
+export interface AdminUserAccountListQuery {
+  search?: string;
+  role?: UserRole | "";
+  status?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+/** [UC-63] Admin tạo tài khoản moderator (khách không tự đăng ký). */
+export interface CreateModeratorAccountRequest {
+  email: string;
+  password: string;
+  fullName: string;
+  phone?: string | null;
+}
+
+/** [UC-61] Admin khóa tài khoản kèm lý do. */
+export interface LockUserAccountRequest {
+  reason: string;
+}
+
+/** [UC-62] Admin mở khóa tài khoản kèm lý do. */
+export interface UnlockUserAccountRequest {
+  reason: string;
+}
 
 export interface UserDto {
   id: string;

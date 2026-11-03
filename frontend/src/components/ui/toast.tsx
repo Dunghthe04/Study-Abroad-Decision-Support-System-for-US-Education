@@ -74,7 +74,7 @@ function ToastTitle({ className, ...props }: ToastPrimitive.Title.Props) {
   return (
     <ToastPrimitive.Title
       data-slot="toast-title"
-      className={cn("text-sm font-medium", className)}
+      className={cn("font-sans text-sm leading-snug font-semibold text-foreground", className)}
       {...props}
     />
   )
@@ -136,9 +136,7 @@ function ToastIcon({ type }: { type: string | undefined }) {
   let icon: React.ReactNode = null
 
   if (type === "success") {
-    icon = (
-      <CircleCheckIcon aria-hidden="true" />
-    )
+    icon = <CircleCheckIcon className="size-4" aria-hidden="true" />
   }
 
   if (type === "info") {
@@ -169,11 +167,13 @@ function ToastIcon({ type }: { type: string | undefined }) {
     return null
   }
 
+  const successIconWrap =
+    type === "success"
+      ? "flex size-9 shrink-0 items-center justify-center rounded-full bg-ok/15 text-ok"
+      : "shrink-0 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4"
+
   return (
-    <span
-      data-slot="toast-icon"
-      className="shrink-0 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4"
-    >
+    <span data-slot="toast-icon" className={successIconWrap}>
       {icon}
     </span>
   )
@@ -182,19 +182,47 @@ function ToastIcon({ type }: { type: string | undefined }) {
 function ToastList() {
   const { toasts } = ToastPrimitive.useToastManager()
 
-  return toasts.map((toastItem) => (
-    <Toast key={toastItem.id} toast={toastItem}>
-      <ToastContent>
-        <ToastIcon type={toastItem.type} />
-        <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <ToastTitle />
-          <ToastDescription />
-        </div>
-        <ToastAction />
-        <ToastClose />
-      </ToastContent>
-    </Toast>
-  ))
+  return toasts.map((toastItem) => {
+    const isSuccess = toastItem.type === "success"
+    const hasDescription = Boolean(toastItem.description)
+
+    return (
+      <Toast
+        key={toastItem.id}
+        toast={toastItem}
+        className={cn(
+          isSuccess && "border-ok/20 bg-ok-wash/90 shadow-md backdrop-blur-sm"
+        )}
+      >
+        <ToastContent
+          className={cn(
+            "relative items-start gap-3 py-3.5 pr-10 pl-4",
+            isSuccess && "items-start"
+          )}
+        >
+          <ToastIcon type={toastItem.type} />
+          <div className={cn("min-w-0 flex-1", hasDescription ? "space-y-0.5" : "self-center")}>
+            <ToastTitle />
+            {hasDescription ? (
+              <ToastDescription
+                className={cn(
+                  "font-sans text-xs leading-relaxed break-all",
+                  isSuccess ? "font-medium text-foreground/80" : "text-muted-foreground"
+                )}
+              />
+            ) : null}
+          </div>
+          <ToastAction />
+          <ToastClose
+            className={cn(
+              "absolute top-2.5 right-2",
+              isSuccess && "text-ok/70 hover:text-ok"
+            )}
+          />
+        </ToastContent>
+      </Toast>
+    )
+  })
 }
 
 function Toaster({

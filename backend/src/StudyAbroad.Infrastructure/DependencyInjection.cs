@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using StudyAbroad.Application.Advisor;
+using StudyAbroad.Application.Audit;
 using StudyAbroad.Application.Auth;
 using StudyAbroad.Application.Profile.Financial;
 using StudyAbroad.Application.Recommendations;
@@ -28,6 +29,7 @@ public static class DependencyInjection
 
         services.AddScoped<IStudyCenterRepository, StudyCenterRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<IAuditLogRepository, AuditLogRepository>();
         services.AddScoped<StudyAbroad.Application.ParentLinks.IParentLinkRepository, ParentLinkRepository>();
         services.AddScoped<IFinancialProfileRepository, FinancialProfileRepository>();
         services.AddScoped<StudyAbroad.Application.AcademicProfiles.IAcademicProfileRepository, AcademicProfileRepository>();
@@ -40,6 +42,7 @@ public static class DependencyInjection
         services.AddScoped<StudyAbroad.Application.Profile.Flow.IProfileFileStorageService, StudyAbroad.Infrastructure.Services.ProfileFileStorageService>();
         services.AddScoped<IRecommendationRepository, RecommendationRepository>();
         services.AddScoped<IChatSessionRepository, ChatSessionRepository>();
+        services.AddScoped<IChatAnalysisRepository, ChatAnalysisRepository>();
 
 
         // [USAS-362] Đăng ký JWT Token Service (Ưu tiên nạp key từ biến môi trường JWT_SECRET_KEY).
@@ -78,6 +81,10 @@ public static class DependencyInjection
             ConfigureAdvisorClient(sp, client);
             client.Timeout = TimeSpan.FromSeconds(sp.GetRequiredService<IOptions<AdvisorOptions>>().Value.OcrTimeoutSeconds);
         });
+
+        // Tỷ giá USD→VNĐ cho form ngân sách, chờ tối đa 5 giây
+        services.AddHttpClient<StudyAbroad.Application.Profile.Flow.IExchangeRateProvider, StudyAbroad.Infrastructure.Services.ExchangeRateProvider>(
+            client => client.Timeout = TimeSpan.FromSeconds(5));
 
         // [Scheduled Background Jobs: Unlock expired accounts & Cleanup OTPs]
         services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.AccountUnlockBackgroundService>();

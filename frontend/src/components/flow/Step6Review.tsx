@@ -19,10 +19,12 @@ import {
   ACTIVITY_ROLE_OPTIONS,
   DEFAULT_BUDGET_TIERS,
   EDUCATION_LEVEL_OPTIONS,
+  EDUCATION_SYSTEM_OPTIONS,
+  FUNDING_SOURCE_OPTIONS,
   IMPACT_LEVEL_OPTIONS,
   SCHOLARSHIP_NEED_OPTIONS,
   SCHOOL_TYPE_OPTIONS,
-  calculateLinearGpa,
+  draftGpa,
   labelOf,
 } from "@/lib/profile-flow-options";
 import { findCertType, formatCertSummary, formatYearMonth } from "@/lib/certification-utils";
@@ -116,11 +118,10 @@ export function Step6Review({
   // Transcript stats
   const totalSubjects = step2.academicYears?.reduce((sum, y) => sum + y.subjects.length, 0) ?? 0;
   const totalYears = step2.academicYears?.length ?? 0;
-  const gpa = step2.calculatedGpa4Scale ?? (step2.manualGpa10Scale ? ((step2.manualGpa10Scale / 10) * 4).toFixed(2) : "–");
-
-  const { gpa10 } = calculateLinearGpa(step2.academicYears ?? []);
-  const gpa10Value = gpa10 ?? step2.manualGpa10Scale ?? null;
-  const gpa10Text = gpa10Value != null ? gpa10Value.toFixed(1) : "–";
+  // Cùng cách tính với BE (TranscriptGpa): GPA tổng hoặc tính từ điểm môn
+  const { gpa10, gpa4 } = draftGpa(step2);
+  const gpa = gpa4 != null ? gpa4.toFixed(2) : "–";
+  const gpa10Text = gpa10 != null ? gpa10.toFixed(1) : "–";
   const gradeNames = (step2.academicYears ?? []).map((y) => y.gradeName).join(", ");
 
   // Activities & Awards count
@@ -148,8 +149,15 @@ export function Step6Review({
             {step1.currentGrade && ` · ${step1.currentGrade}`}
             {" → "}
             <span className="text-brand">{studyLevelLabel}</span>
+            {step1.targetIntake && ` · ${step1.targetIntake}`}
           </div>
           {step1.currentSchool && <div>{step1.currentSchool}</div>}
+          {step1.currentEducationLevel === "high_school" && step1.educationSystem && (
+            <div>
+              <strong className="text-foreground">Hệ chương trình: </strong>
+              {labelOf(EDUCATION_SYSTEM_OPTIONS, step1.educationSystem)}
+            </div>
+          )}
           <div>
             <strong className="text-foreground">Ngành: </strong>
             {step1.targetMajor || "Chưa chọn"}
@@ -212,6 +220,12 @@ export function Step6Review({
             <strong className="text-foreground">Học bổng: </strong>
             {financialNeedLabel}
           </div>
+          {step4.fundingSource && (
+            <div>
+              <strong className="text-foreground">Nguồn chi trả: </strong>
+              {labelOf(FUNDING_SOURCE_OPTIONS, step4.fundingSource)}
+            </div>
+          )}
         </ReviewCard>
 
         <ReviewCard

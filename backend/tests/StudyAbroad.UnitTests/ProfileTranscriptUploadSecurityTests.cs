@@ -170,6 +170,7 @@ public class ProfileTranscriptUploadSecurityTests : IDisposable
 
         public Task<ProfileFlowStateDto> GetFlowStateAsync(Guid userId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<ProfileFlowStateDto> SaveDraftAsync(Guid userId, SaveProfileDraftRequest request, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<ProfileFlowStateDto> PatchDraftAsync(Guid userId, System.Text.Json.Nodes.JsonObject chatProfile, IReadOnlyCollection<string> changedKeys, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<CommitProfileFlowResponse> CommitFlowAsync(Guid userId, CommitProfileFlowRequest? request, CancellationToken ct = default) => throw new NotSupportedException();
         public Task ClearDraftAsync(Guid userId, CancellationToken ct = default) => throw new NotSupportedException();
     }

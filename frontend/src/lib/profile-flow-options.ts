@@ -6,9 +6,13 @@ import type {
   ActivityRole,
   BudgetTierId,
   CurrentEducationLevel,
+  EducationSystem,
+  FundingSource,
+  GpaMode,
   ImpactLevel,
   ScholarshipNeed,
   TargetSchoolType,
+  TranscriptDraft,
 } from "@/types/profile-flow";
 
 export const EDUCATION_LEVEL_OPTIONS: { value: CurrentEducationLevel; label: string }[] = [
@@ -16,6 +20,25 @@ export const EDUCATION_LEVEL_OPTIONS: { value: CurrentEducationLevel; label: str
   { value: "high_school", label: "Trung học phổ thông" },
   { value: "college_university", label: "Cao đẳng / Đại học" },
   { value: "master", label: "Thạc sĩ" },
+];
+
+/** Hệ chương trình cấp 3 — chữ giống seed `profile.metadata` (educationSystems), chat dùng cùng chữ trên nút */
+export const EDUCATION_SYSTEM_OPTIONS: { value: EducationSystem; label: string }[] = [
+  { value: "standard", label: "Hệ chuẩn công lập Việt Nam" },
+  { value: "specialized", label: "Hệ chuyên (Trường THPT Chuyên / Năng khiếu)" },
+  { value: "dual_degree", label: "Hệ song bằng (Việt - Anh / Cambridge)" },
+  { value: "international", label: "Hệ quốc tế hoàn toàn (IB, AP, Cambridge)" },
+  { value: "private", label: "Dân lập / Tư thục chất lượng cao" },
+  { value: "other", label: "Hệ khác" },
+];
+
+/** Ai chi trả chính — chữ giống seed `profile.metadata` (fundingSources), chat dùng cùng chữ trên nút */
+export const FUNDING_SOURCE_OPTIONS: { value: FundingSource; label: string }[] = [
+  { value: "family_support", label: "Gia đình hỗ trợ toàn bộ / một phần" },
+  { value: "personal_savings", label: "Tiết kiệm cá nhân" },
+  { value: "bank_loan", label: "Vay vốn du học ngân hàng" },
+  { value: "scholarship", label: "Trông đợi vào học bổng" },
+  { value: "other", label: "Nguồn tài chính khác" },
 ];
 
 export const SCHOOL_TYPE_OPTIONS: { value: TargetSchoolType; label: string }[] = [
@@ -47,6 +70,16 @@ export const DEFAULT_BUDGET_TIERS: { key: BudgetTierId; label: string; descripti
   { key: "tier_50k_70k", label: "50.000 – 70.000 USD", description: "Học phí & sinh hoạt phí $50.000 – $70.000/năm" },
   { key: "tier_above_70k", label: "Trên 70.000 USD", description: "Học phí & sinh hoạt phí trên $70.000/năm" },
 ];
+
+// Tỉ giá chỉ dùng để quy đổi trên form và ô nhập tiền của chat; số tiền không được lưu, chỉ lưu mã mức
+export const BUDGET_RATE = 25000;
+// Ngưỡng trên (USD) của từng mức khi metadata không có minUsd/maxUsd
+export const FALLBACK_MAX_USD: Partial<Record<BudgetTierId, number>> = {
+  tier_under_20k: 20000,
+  tier_20k_35k: 35000,
+  tier_35k_50k: 50000,
+  tier_50k_70k: 70000,
+};
 
 export const SCHOLARSHIP_NEED_OPTIONS: { value: ScholarshipNeed; label: string; description: string }[] = [
   { value: "mandatory", label: "Bắt buộc", description: "Không có học bổng thì chưa thể đi" },
@@ -128,7 +161,25 @@ export function calculateLinearGpa(years: AcademicYearDraft[]): { gpa10: number 
   if (count === 0) return { gpa10: null, gpa4: null };
 
   const gpa10 = Math.round((totalScore10 / count) * 100) / 100;
-  const gpa4 = Math.round(((gpa10 / 10) * 4.0) * 100) / 100;
+  const gpa4 = toGpa4(gpa10);
 
   return { gpa10, gpa4 };
+}
+
+export function toGpa4(gpa10: number): number {
+  return Math.round(((gpa10 / 10) * 4.0) * 100) / 100;
+}
+
+/** Cách nhập GPA của nháp; nháp cũ chưa có gpaMode thì có điểm môn là học bạ (giống TranscriptGpa.Mode phía BE) */
+export function gpaModeOf(step2: TranscriptDraft | undefined): GpaMode {
+  if (step2?.gpaMode === "overall" || step2?.gpaMode === "transcript") return step2.gpaMode;
+  return calculateLinearGpa(step2?.academicYears ?? []).gpa10 === null ? "overall" : "transcript";
+}
+
+/** GPA của nháp theo cách nhập (giống TranscriptGpa.Gpa4 phía BE); GPA tổng nhập thang 4 thì gpa10 là null */
+export function draftGpa(step2: TranscriptDraft | undefined): { gpa10: number | null; gpa4: number | null } {
+  if (gpaModeOf(step2) === "transcript") return calculateLinearGpa(step2?.academicYears ?? []);
+  const manual10 = step2?.manualGpa10Scale ?? null;
+  if (manual10 !== null) return { gpa10: manual10, gpa4: toGpa4(manual10) };
+  return { gpa10: null, gpa4: step2?.calculatedGpa4Scale ?? null };
 }

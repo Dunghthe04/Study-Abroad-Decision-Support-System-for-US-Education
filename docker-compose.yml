@@ -41,7 +41,7 @@ services:
     depends_on: [ollama]
     environment:
       OLLAMA_HOST: http://ollama:11434
-    entrypoint: ["/bin/sh", "-c", "ollama pull ${LLM_MODEL:-qwen3:8b} && ollama pull ${EMBEDDING_MODEL:-bge-m3} && ollama pull ${VISION_MODEL:-glm-ocr} && ( [ -z \"${TRANSCRIPT_PARSE_MODEL:-}\" ] || ollama pull ${TRANSCRIPT_PARSE_MODEL:-} )"]
+    entrypoint: ["/bin/sh", "-c", "ollama pull ${EMBEDDING_MODEL:-bge-m3} && ollama pull ${VISION_MODEL:-glm-ocr} && ( [ -z \"${TRANSCRIPT_PARSE_MODEL:-}\" ] || ollama pull ${TRANSCRIPT_PARSE_MODEL:-} )"]
     restart: "no"
 
   advisor:
@@ -54,12 +54,13 @@ services:
       API_KEY: ${ADVISOR_API_KEY:-}
       DATABASE_URL: postgresql://${POSTGRES_USER:-studyabroad}:${POSTGRES_PASSWORD:-studyabroad}@db:5432/${POSTGRES_DB:-studyabroad}
       OLLAMA_BASE_URL: http://ollama:11434
-      LLM_MODEL: ${LLM_MODEL:-qwen3:8b}
+      BACKEND_BASE_URL: http://api:8080
+      LLM_MODEL: ${LLM_MODEL:-}
       LLM_NUM_CTX: ${LLM_NUM_CTX:-6144}
       LLM_NUM_GPU: ${LLM_NUM_GPU:-99}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-bge-m3}
       VISION_MODEL: ${VISION_MODEL:-glm-ocr}
-      TRANSCRIPT_PARSE_MODEL: ${TRANSCRIPT_PARSE_MODEL:-}  # empty = reuse LLM_MODEL
+      TRANSCRIPT_PARSE_MODEL: ${TRANSCRIPT_PARSE_MODEL:-}  # only without a Gemini key; empty = reuse LLM_MODEL
     ports:
       - "8000:8000"
 

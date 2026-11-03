@@ -7,6 +7,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -35,6 +36,8 @@ public class ProfileFlowService(
         Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
     };
 
+    // Kỳ nhập học: giống INTAKE_PATTERN bên chat (skill_bac_hoc)
+    private static readonly Regex IntakeRegex = new(@"^(Fall|Spring|Summer) 20\d\d$", RegexOptions.Compiled);
     private static readonly Regex TermNameRegex = new(@"^(?<grade>.*?)\s*-?\s*HK\s*(?<sem>[12])\s*$",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
@@ -129,18 +132,30 @@ public class ProfileFlowService(
             DraftTranscript: previous?.DraftTranscript,
             LastUpdatedAt: DateTime.UtcNow);
 
-        var limitErrors = new List<string>();
-        ValidateDraftLimits(stored.Draft!, limitErrors);
-        if (limitErrors.Count > 0)
-            throw new ArgumentException(string.Join(" ", limitErrors));
+        await WriteStoredStateAsync(profile, stored);
+        return ToStateDto(stored, HasCommittedProfile(profile));
+    }
 
-        var json = JsonSerializer.Serialize(stored, JsonOptions);
-        if (json.Length > MaxDraftJsonChars)
-            throw new ArgumentException("Dữ liệu nháp quá lớn, vui lòng rút gọn nội dung.");
+    /// <summary>
+    /// C3: chat ghi các khóa vừa đổi (profile_changed) vào nháp, các ô khác giữ nguyên.
+    /// Chưa có nháp thì sửa trên nháp form đang thấy: dựng từ hồ sơ đã gửi, hoặc nháp rỗng.
+    /// Không đổi bước đang làm, các bước đã xong và file học bạ nháp
+    /// </summary>
+    public async Task<ProfileFlowStateDto> PatchDraftAsync(
+        Guid userId, JsonObject chatProfile, IReadOnlyCollection<string> changedKeys, CancellationToken ct = default)
+    {
+        var current = await GetFlowStateAsync(userId, ct);
+        if (changedKeys.Count == 0) return current;
 
-        profile.DraftFlowStateJson = json;
-        await repository.UpdateProfileAsync(profile, CancellationToken.None);
+        var profile = await repository.EnsureProfileExistsAsync(userId, CancellationToken.None);
+        var stored = new StoredFlowState(
+            CurrentStep: current.CurrentStep,
+            CompletedSteps: current.CompletedSteps.ToList(),
+            Draft: NormalizeDraft(ChatProfileMapper.ApplyChatProfile(current.Draft, chatProfile, changedKeys)),
+            DraftTranscript: ReadStoredState(profile.DraftFlowStateJson)?.DraftTranscript,
+            LastUpdatedAt: DateTime.UtcNow);
 
+        await WriteStoredStateAsync(profile, stored);
         return ToStateDto(stored, HasCommittedProfile(profile));
     }
 
@@ -311,6 +326,22 @@ public class ProfileFlowService(
             LastCompletedStep: completed.Count > 0 ? completed.Max() : 0);
     }
 
+    /// <summary>Kiểm tra giới hạn rồi ghi nháp; dùng chung cho form (SaveDraftAsync) và chat (PatchDraftAsync)</summary>
+    private async Task WriteStoredStateAsync(StudentProfile profile, StoredFlowState stored)
+    {
+        var limitErrors = new List<string>();
+        ValidateDraftLimits(stored.Draft!, limitErrors);
+        if (limitErrors.Count > 0)
+            throw new ArgumentException(string.Join(" ", limitErrors));
+
+        var json = JsonSerializer.Serialize(stored, JsonOptions);
+        if (json.Length > MaxDraftJsonChars)
+            throw new ArgumentException("Dữ liệu nháp quá lớn, vui lòng rút gọn nội dung.");
+
+        profile.DraftFlowStateJson = json;
+        await repository.UpdateProfileAsync(profile, CancellationToken.None);
+    }
+
     /// <summary>Đọc nháp; JSON hỏng thì coi như không có nháp</summary>
     private static StoredFlowState? ReadStoredState(string? json)
     {
@@ -347,7 +378,12 @@ public class ProfileFlowService(
                 : string.IsNullOrWhiteSpace(draft.Step4.NeedFinancialAid) ? null : draft.Step4.NeedFinancialAid,
         };
 
-        return draft with { Step1 = step1, Step3 = NormalizeCertificationStep(draft.Step3), Step4 = step4 };
+        // Mã lạ thì bỏ; không lưu chế độ đoán được, vì form chưa có nút chọn (D5) sẽ giữ nguyên chế độ cũ khi thêm điểm môn
+        var step2 = draft.Step2?.GpaMode is { } mode && !ProfileConstants.GpaModes.All.Contains(mode)
+            ? draft.Step2 with { GpaMode = null }
+            : draft.Step2;
+
+        return draft with { Step1 = step1, Step2 = step2, Step3 = NormalizeCertificationStep(draft.Step3), Step4 = step4 };
     }
 
     /// <summary>
@@ -452,12 +488,16 @@ public class ProfileFlowService(
             errors.Add("Bước 1: chưa chọn bậc học muốn theo học.");
         if (step1?.CurrentEducationLevel is null || !EducationLevelCodes.Contains(step1.CurrentEducationLevel))
             errors.Add("Bước 1: chưa chọn cấp học hiện tại.");
+        if (step1?.EducationSystem is { } system && !EducationSystems.IsValid(system))
+            errors.Add($"Bước 1: hệ chương trình '{system}' không hợp lệ.");
         if (step1?.CurrentSchool?.Trim().Length > 256)
             errors.Add("Bước 1: tên trường tối đa 256 ký tự.");
         if (step1?.CurrentGrade?.Trim().Length > 64)
             errors.Add("Bước 1: lớp / năm học hiện tại tối đa 64 ký tự.");
         if (step1?.TargetMajor?.Trim().Length > 128)
             errors.Add("Bước 1: ngành dự định tối đa 128 ký tự.");
+        if (NullIfBlank(step1?.TargetIntake) is { } intake && !IntakeRegex.IsMatch(intake))
+            errors.Add($"Bước 1: kỳ nhập học '{intake}' không hợp lệ (dạng Fall 2027).");
         if (step1?.ExpectedGraduationYear is { } gradYear
             && (gradYear < MinGraduationYear || gradYear > now.Year + MaxGraduationYearsAhead))
             errors.Add($"Bước 1: năm tốt nghiệp phải từ {MinGraduationYear} đến {now.Year + MaxGraduationYearsAhead}.");
@@ -489,6 +529,21 @@ public class ProfileFlowService(
             }
         }
 
+        if (TranscriptGpa.Mode(draft.Step2) == ProfileConstants.GpaModes.Transcript)
+        {
+            if (TranscriptGpa.SubjectAverage10(draft.Step2) is null)
+                errors.Add("Bước 2: chưa nhập điểm môn nào.");
+        }
+        else if (draft.Step2?.ManualGpa10Scale is { } gpa10)
+        {
+            if (gpa10 is < 0 or > 10) errors.Add("Bước 2: GPA thang 10 phải từ 0 đến 10.");
+        }
+        else if (draft.Step2?.CalculatedGpa4Scale is { } gpa4)
+        {
+            if (gpa4 is < 0 or > 4) errors.Add("Bước 2: GPA thang 4 phải từ 0 đến 4.");
+        }
+        else errors.Add("Bước 2: chưa nhập GPA.");
+
         // Bước 3
         ValidateCertifications(draft.Step3, certificationTypes, now, errors);
 
@@ -498,8 +553,11 @@ public class ProfileFlowService(
             errors.Add("Bước 4: chưa chọn mức ngân sách.");
         else if (!budgetTiers.ContainsKey(tierId))
             errors.Add($"Bước 4: mức ngân sách '{tierId}' không tồn tại.");
-        if (draft.Step4?.NeedFinancialAid is null || !ProfileConstants.ScholarshipNeeds.All.Contains(draft.Step4.NeedFinancialAid))
-            errors.Add("Bước 4: chưa chọn nhu cầu học bổng.");
+        // C6: chat cho xác nhận hồ sơ khi chưa hỏi học bổng (chỉ bắt buộc lúc chọn trường); form vẫn bắt chọn ở giao diện
+        if (draft.Step4?.NeedFinancialAid is { } need && !ProfileConstants.ScholarshipNeeds.All.Contains(need))
+            errors.Add($"Bước 4: nhu cầu học bổng '{need}' không hợp lệ.");
+        if (draft.Step4?.FundingSource is { } funding && !ProfileConstants.FundingSources.All.Contains(funding))
+            errors.Add($"Bước 4: nguồn tài chính '{funding}' không hợp lệ.");
 
         // Bước 5
         var currentYear = DateTime.UtcNow.Year;
@@ -668,7 +726,7 @@ public class ProfileFlowService(
         string.Equals(item.Category, "achievement", StringComparison.OrdinalIgnoreCase)
         || string.Equals(item.Category, "award", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>Ánh xạ draft (đã validate) vào entity. Không ghi các cột luồng 6 bước không thu thập (funding_source, financial_notes, max_expected_tuition_usd).</summary>
+    /// <summary>Ánh xạ draft (đã validate) vào entity. Không ghi các cột luồng 6 bước không thu thập (financial_notes, max_expected_tuition_usd).</summary>
     private static (List<TranscriptScore> Scores, List<ProfileActivity> Activities, List<ProfileCertification> Certifications) ApplyDraftToProfile(
         StudentProfile profile,
         ProfileFlowDraftDto draft,
@@ -681,9 +739,12 @@ public class ProfileFlowService(
         profile.TargetLevel = step1.TargetDegreeLevel!.Trim();
         profile.CurrentEducationLevel = step1.CurrentEducationLevel;
         profile.CurrentGrade = NullIfBlank(step1.CurrentGrade);
+        // Hệ chương trình chỉ có nghĩa với học sinh cấp 3
+        profile.EducationSystem = step1.CurrentEducationLevel == "high_school" ? NullIfBlank(step1.EducationSystem) : null;
         profile.CurrentSchool = NullIfBlank(step1.CurrentSchool);
         profile.GraduationYear = step1.ExpectedGraduationYear;
         profile.IntendedMajor = NullIfBlank(step1.TargetMajor);
+        profile.TargetIntake = NullIfBlank(step1.TargetIntake);
         profile.PreferredStates = (step1.TargetStates ?? [])
             .Where(s => !string.IsNullOrWhiteSpace(s))
             .Select(s => s.Trim())
@@ -721,7 +782,7 @@ public class ProfileFlowService(
             }
         }
         // GPA chỉ tính trên server từ điểm các môn, không nhận số GPA client gửi lên
-        profile.OverallGpa = ComputeGpa4(draft.Step2);
+        profile.OverallGpa = TranscriptGpa.Gpa4(draft.Step2);
 
         // Bước 3
         var certifications = BuildCertifications(draft.Step3, certificationTypes);
@@ -736,6 +797,7 @@ public class ProfileFlowService(
         profile.BudgetMaxUsd = tier.MaxUsd; // null với mức trên 70k = không giới hạn trần
         profile.ScholarshipNeed = draft.Step4.NeedFinancialAid;
         profile.NeedsScholarship = ProfileConstants.ScholarshipNeeds.NeedsScholarship(profile.ScholarshipNeed);
+        profile.FundingSource = NullIfBlank(draft.Step4.FundingSource);
 
         // Điểm ngoại khóa cũ không còn đúng với dữ liệu mới; để bộ tính điểm tính lại
         profile.ExtracurricularScore = null;
@@ -872,22 +934,6 @@ public class ProfileFlowService(
         _ => null
     };
 
-    /// <summary>Giống FE: trung bình các môn (mỗi môn = TB HK1, HK2 nếu có), quy đổi tuyến tính sang thang 4</summary>
-    private static decimal? ComputeGpa4(FlowTranscriptDraftDto? step2)
-    {
-        var subjectAverages = new List<decimal>();
-        foreach (var year in step2?.AcademicYears ?? [])
-        foreach (var subject in year.Subjects ?? [])
-        {
-            var values = new[] { subject.Semester1Score, subject.Semester2Score }.Where(v => v.HasValue).Select(v => v!.Value).ToList();
-            if (values.Count > 0) subjectAverages.Add(values.Average());
-        }
-
-        if (subjectAverages.Count == 0) return null;
-        var gpa10 = Math.Round(subjectAverages.Average(), 2);
-        return Math.Round(gpa10 / 10m * 4m, 2);
-    }
-
     /// <summary>Số tháng tính cả tháng đầu và tháng cuối (09/2024 → 05/2025 = 9 tháng)</summary>
     private static int CountMonths(DateOnly start, DateOnly end) =>
         Math.Max(1, (end.Year - start.Year) * 12 + end.Month - start.Month + 1);
@@ -908,12 +954,16 @@ public class ProfileFlowService(
                 _ => null
             },
             CurrentGrade: profile.CurrentGrade,
+            EducationSystem: EducationSystems.IsValid(profile.EducationSystem) ? profile.EducationSystem : null,
             CurrentSchool: profile.CurrentSchool,
             ExpectedGraduationYear: profile.GraduationYear,
             TargetDegreeLevel: profile.TargetLevel,
             TargetMajor: profile.IntendedMajor,
+            TargetIntake: profile.TargetIntake,
             TargetStates: profile.PreferredStates?.ToList() ?? [],
-            TargetSchoolType: profile.TargetSchoolType ?? "all");
+            TargetSchoolType: profile.TargetSchoolType ?? "all",
+            // Hồ sơ đã lưu mà không có ngành nghĩa là học sinh đã chọn "Chưa rõ" (form và chat đều bắt chọn)
+            MajorUndecided: profile.FlowSubmittedAt.HasValue && string.IsNullOrWhiteSpace(profile.IntendedMajor) ? true : null);
 
         // Bảng điểm: gom theo khối, giữ thứ tự TermOrder; dữ liệu cũ không có grade_name/semester thì tách từ term_name
         var years = new List<FlowAcademicYearDraftDto>();
@@ -934,7 +984,6 @@ public class ProfileFlowService(
             else year.Subjects.Add(subject);
         }
         var step2 = new FlowTranscriptDraftDto(years, profile.OverallGpa, profile.OverallGpa is { } g ? Math.Round(g / 4m * 10m, 2) : null);
-
         var step3 = new FlowCertificationDraftDto(
             Certifications: certifications.Count > 0
                 ? certifications.OrderBy(c => c.SortOrder).Select(ToCertificationDraft).ToList()
@@ -942,7 +991,9 @@ public class ProfileFlowService(
             EnglishPlanned: profile.EnglishTestPlanned,
             EnglishPlannedDate: profile.EnglishPlannedDate?.ToString("yyyy-MM", CultureInfo.InvariantCulture));
 
-        var step4 = new FlowFinancialDraftDto(profile.BudgetTier, profile.ScholarshipNeed);
+        // Hồ sơ cũ có thể lưu mã nguồn tài chính khác (family, loan) thì để trống cho học sinh chọn lại
+        var funding = profile.FundingSource is { } f && ProfileConstants.FundingSources.All.Contains(f) ? f : null;
+        var step4 = new FlowFinancialDraftDto(profile.BudgetTier, profile.ScholarshipNeed, funding);
 
         var step5 = new FlowActivitiesDraftDto(activities.Select(a => string.Equals(a.Kind, "award", StringComparison.OrdinalIgnoreCase)
             ? new FlowActivityDraftDto(

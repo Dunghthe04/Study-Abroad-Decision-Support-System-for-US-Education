@@ -8,7 +8,7 @@ using System.Text.Json.Nodes;
 namespace StudyAbroad.Application.Recommendations;
 
 //Một trường đã đưa vào gợi ý: hồ sơ trường + số liệu 
-public record RecommendSchoolInput(University University, UniversityOffering Offering);
+public record RecommendSchoolInput(University University, UniversityOffering Offering, IReadOnlyList<string> Majors);
 
 //Kết quả mỗi lượt. Score và Pick null khi không còn trường để gửi cloud
 public record RecommendationRun(
@@ -38,10 +38,14 @@ public record SchoolExplanation(
     IReadOnlyList<string> Improvements);
 
 public class RecommendationService(IAdvisorClient advisor, IRecommendationRepository recommendations, IProfileFlowRepository profiles)
+    : IRecommendationRunner
 
 {
     public const decimal BudgetTolerance = 0.10m;
     private static readonly int[] BalancedPref = [2, 2, 2];
+    // Bắt đầu bằng "Hồ sơ" để controller trả 400 kèm câu này
+    public const string MissingScholarshipMessage = "Hồ sơ chưa chọn mức cần học bổng, cần chọn trước khi gợi ý trường.";
+    public const string MissingMajorMessage = "Hồ sơ chưa chọn ngành, cần chọn ngành trước khi gợi ý trường.";
 
     public async Task<RecommendationRun> RecommendAsync(
         StudentProfile profile,
@@ -51,6 +55,14 @@ public class RecommendationService(IAdvisorClient advisor, IRecommendationReposi
         CancellationToken ct = default
     )
     {
+        // C7: học bổng trống không có nghĩa là "không cần học bổng" (ToAidNeed sẽ coi là None, loại sai trường).
+        // Chặn trước khi gọi Qwen/Gemini; chat sẽ hỏi F2 rồi gợi ý lại
+        if (string.IsNullOrWhiteSpace(profile.ScholarshipNeed))
+            throw new InvalidOperationException(MissingScholarshipMessage);
+        // E: ngành "chưa rõ" (null) qua được bước đánh giá, nhưng không có ngành thì không lọc được trường
+        if (string.IsNullOrWhiteSpace(profile.IntendedMajor))
+            throw new InvalidOperationException(MissingMajorMessage);
+
         //Danh sách các tiêu chí của học sinh
         var criteria = new FilterCriteria(
          profile.IntendedMajor,
@@ -97,6 +109,10 @@ public class RecommendationService(IAdvisorClient advisor, IRecommendationReposi
         //Tính điểm trường
         var score = await advisor.ScoreAsync(new ScoreRequestDto(student, scoreSchools), ct);
         CloudResultCheck.EnsureScore(byCode.Keys, score);
+        // Gemini không chấm được trường nào (hết hạn mức, quá tải...): đây là lỗi dịch vụ, không phải "không có trường phù hợp".
+        // Không lưu kết quả rỗng (sẽ che mất lượt gợi ý tốt trước đó); controller trả 503, chat báo đang bận
+        if (score.Items.Count == 0 && score.Failed.Count > 0)
+            throw new HttpRequestException("Dịch vụ chấm điểm không chấm được trường nào (có thể hết hạn mức hoặc quá tải).");
 
         //ToPickSchool  chép điểm Gemini vừa chấm và gán nhãn khối 
         var pickItems = score.Items
@@ -347,7 +363,7 @@ public class RecommendationService(IAdvisorClient advisor, IRecommendationReposi
         var offering = input.Offering;
         return new FilterSchool(
             input.University.Code,
-            offering.Majors,
+            input.Majors,
             input.University.State,
             input.University.Control,
             TotalCost(offering),

@@ -2,16 +2,21 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircleIcon, CheckIcon, Loader2Icon, XIcon } from "lucide-react";
+import { AlertCircleIcon, CheckIcon, Loader2Icon, MessageCircleIcon, XIcon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { useAssistant, useAssistantPageContext } from "@/components/assistant/AssistantProvider";
+import {
+  useAssistant,
+  useAssistantBeforeSend,
+  useAssistantPageContext,
+  useAssistantProfileChanged,
+} from "@/components/assistant/AssistantProvider";
 import { FLOW_STEPS, ProfileFlowStepper } from "./ProfileFlowStepper";
 import { Step1Goal } from "./Step1Goal";
 import { Step2Transcript } from "./Step2Transcript";
 import { Step3Certifications } from "./Step3Certifications";
 import { Step4Financial } from "./Step4Financial";
-import { Step5Extracurricular } from "./Step5Extracurricular";
+import { Step5Extracurricular, getItemProblem } from "./Step5Extracurricular";
 import { Step6Review } from "./Step6Review";
 import { profileFlowApi } from "@/lib/profile-flow-api";
 import { migrateLegacyStep3 } from "@/lib/certification-utils";
@@ -69,10 +74,30 @@ const STEP_SUGGESTIONS: Record<number, string> = {
   6: "Hồ sơ của em đủ chưa?",
 };
 
+// Mục 7: trang đã đủ ô bắt buộc chưa (giống nút "Tiếp tục" của từng trang) để chat được chuyển form qua.
+// Trang 1 không xét ngành: chat tự bắt buộc ngành (hoặc "Chưa rõ"). Trang 2 chỉ cần đã có GPA
+function stepReady(step: number, draft: ProfileFlowDraft): boolean {
+  switch (step) {
+    case 1:
+      return Boolean(draft.step1.currentEducationLevel && draft.step1.targetDegreeLevel);
+    case 2:
+      return draft.step2.calculatedGpa4Scale != null || draft.step2.manualGpa10Scale != null;
+    case 4:
+      return Boolean(draft.step4.annualBudgetTier && draft.step4.needFinancialAid);
+    case 5:
+      return draft.step5.activities.every((a) => !getItemProblem(a));
+    default:
+      return true;
+  }
+}
+
+// Phải khớp CONTINUE_CHAT trong advisor/app/services/intake.py
+const CONTINUE_CHAT = "Tiếp tục bằng chat";
+
 export function ProfileFlowWizard() {
   const router = useRouter();
   const { user } = useAuth();
-  const { open: assistantOpen } = useAssistant();
+  const { open: assistantOpen, openPanel: openAssistant } = useAssistant();
 
   const [currentStep, setCurrentStep] = useState(1);
   const [completedSteps, setCompletedSteps] = useState<number[]>([]);
@@ -93,6 +118,10 @@ export function ProfileFlowWizard() {
   useEffect(() => {
     completedStepsRef.current = completedSteps;
   }, [completedSteps]);
+  const currentStepRef = useRef(1);
+  useEffect(() => {
+    currentStepRef.current = currentStep;
+  }, [currentStep]);
   const lastCompletedStep = completedSteps.length ? Math.max(...completedSteps) : 0;
 
   const stepTitle = FLOW_STEPS.find((s) => s.step === currentStep)?.title ?? "";
@@ -180,6 +209,88 @@ export function ProfileFlowWizard() {
     [user]
   );
 
+  // Lượt tự lưu đang chờ hết 1 giây (null = không có gì chờ lưu)
+  const pendingSaveRef = useRef<{ step: number; draft: ProfileFlowDraft } | null>(null);
+
+  // D2: chat vừa ghi vào nháp thì nạp lại form. Đang gõ dở một ô hoặc còn lượt lưu chờ
+  // thì đợi (đánh dấu reloadWantedRef), để không xoá chữ đang gõ. Chỉ setDraft, không tự lưu lại
+  const reloadWantedRef = useRef(false);
+  const formRef = useRef<HTMLDivElement>(null);
+  const reloadFromChat = useCallback(async (_keys?: string[], formStep?: number | null) => {
+    if (!user) return;
+    // Chỉ xét ô của form; ô gõ chat của trợ lý luôn đang được chọn sau khi gửi
+    const active = document.activeElement;
+    const typing =
+      Boolean(formRef.current?.contains(active)) &&
+      (active instanceof HTMLInputElement ||
+        active instanceof HTMLTextAreaElement ||
+        active instanceof HTMLSelectElement);
+    // Đang gõ thì chỉ nạp lại sau, không nhảy trang (lượt chat sau sẽ gửi trang mới)
+    if (typing || pendingSaveRef.current) {
+      reloadWantedRef.current = true;
+      return;
+    }
+    reloadWantedRef.current = false;
+    const state = await profileFlowApi.getFlowState().catch(() => null);
+    const incomingDraft = state?.draft;
+    if (!incomingDraft) return;
+    // Trong lúc chờ mạng học sinh lại gõ thì để lần sau nạp
+    if (pendingSaveRef.current) {
+      reloadWantedRef.current = true;
+      return;
+    }
+    const nextDraft = mergeDraft(INITIAL_DRAFT, incomingDraft);
+    setDraft((prev) => mergeDraft(prev, incomingDraft));
+    setDraftTranscript(state.draftTranscript ?? null);
+
+    // Mục 7: chuyển sang trang chat đang hỏi. Lùi thì chuyển luôn; tiến thì dừng ở trang đầu tiên
+    // còn thiếu ô bắt buộc. Tích các trang đã đủ rồi lưu như khi bấm "Tiếp tục"
+    const from = currentStepRef.current;
+    if (formStep == null || formStep === from) return;
+    let to = formStep;
+    for (let s = from; s < formStep; s++) {
+      if (!stepReady(s, nextDraft)) {
+        to = s;
+        break;
+      }
+    }
+    if (to === from) return;
+    const ready = [1, 2, 3, 4, 5].filter((s) => s < to && stepReady(s, nextDraft));
+    const nextCompleted = [...new Set([...completedStepsRef.current, ...ready])].sort((a, b) => a - b);
+    setCompletedSteps(nextCompleted);
+    setCurrentStep(to);
+    setSaveStatus("saving");
+    persistDraft(to, nextCompleted, nextDraft)
+      .then(() => setSaveStatus("saved"))
+      .catch(() => setSaveStatus("error"));
+  }, [user, persistDraft]);
+  useAssistantProfileChanged(reloadFromChat);
+
+  // Rời khỏi ô đang gõ thì nạp phần chat đã đổi (đợi focus chuyển xong mới xét)
+  useEffect(() => {
+    const onFocusOut = () => {
+      setTimeout(() => {
+        if (reloadWantedRef.current) void reloadFromChat();
+      }, 0);
+    };
+    document.addEventListener("focusout", onFocusOut);
+    return () => document.removeEventListener("focusout", onFocusOut);
+  }, [reloadFromChat]);
+
+  const savePending = useCallback(async () => {
+    const pending = pendingSaveRef.current;
+    if (!pending || isUploadingRef.current) return;
+    pendingSaveRef.current = null;
+    try {
+      await persistDraft(pending.step, completedStepsRef.current, pending.draft);
+      setSaveStatus("saved");
+      if (reloadWantedRef.current) void reloadFromChat();
+    } catch (err: unknown) {
+      console.error("Lưu nháp thất bại:", err);
+      setSaveStatus("error");
+    }
+  }, [persistDraft, reloadFromChat]);
+
   // 2. Tự động lưu nháp (Debounce 1000ms)
   const triggerAutoSave = useCallback(
     (step: number, currentDraft: ProfileFlowDraft) => {
@@ -190,20 +301,18 @@ export function ProfileFlowWizard() {
       }
 
       setSaveStatus("saving");
-
-      saveTimerRef.current = setTimeout(async () => {
-        if (isUploadingRef.current) return;
-        try {
-          await persistDraft(step, completedStepsRef.current, currentDraft);
-          setSaveStatus("saved");
-        } catch (err: unknown) {
-          console.error("Lưu nháp thất bại:", err);
-          setSaveStatus("error");
-        }
-      }, 1000);
+      pendingSaveRef.current = { step, draft: currentDraft };
+      saveTimerRef.current = setTimeout(savePending, 1000);
     },
-    [persistDraft]
+    [savePending]
   );
+
+  // D1: gửi tin nhắn chat thì lưu ngay nháp đang chờ, không đợi hết 1 giây
+  const flushDraft = useCallback(async () => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    await savePending();
+  }, [savePending]);
+  useAssistantBeforeSend(flushDraft);
 
   // Helper cập nhật từng phần của bản nháp
   const updateStep1 = (val: Partial<GoalDraft>) => {
@@ -263,6 +372,7 @@ export function ProfileFlowWizard() {
 
     // Lưu nháp ngay khi đổi bước; huỷ lượt auto-save đang chờ để nó không ghi đè bước cũ
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    pendingSaveRef.current = null;
     setSaveStatus("saving");
     persistDraft(nextStep, nextCompleted, draft)
       .then(() => setSaveStatus("saved"))
@@ -375,6 +485,17 @@ export function ProfileFlowWizard() {
         <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Hồ sơ chọn trường</span>
         <div className="flex items-center gap-3 text-xs">
           <SaveStatus status={saveStatus} />
+          {/* Mục 1: chuyển sang trả lời trong chat, chat hỏi tiếp các mục còn thiếu */}
+          {user && (
+            <button
+              type="button"
+              onClick={() => openAssistant(CONTINUE_CHAT)}
+              className="inline-flex cursor-pointer items-center gap-1 rounded-md px-2 py-1 font-medium text-brand hover:bg-brand-wash"
+            >
+              <MessageCircleIcon className="size-3.5" />
+              {CONTINUE_CHAT}
+            </button>
+          )}
           <button
             type="button"
             onClick={handleExit}
@@ -398,7 +519,7 @@ export function ProfileFlowWizard() {
       <div className="flex flex-wrap items-start gap-6">
         <div className="min-w-0 flex-[999_1_560px] space-y-5">
           {assistantOpen && stepper("strip")}
-          <div className="rounded-xl border border-line bg-surface p-[18px] shadow-xs sm:p-7">
+          <div ref={formRef} className="rounded-xl border border-line bg-surface p-[18px] shadow-xs sm:p-7">
             {currentStep === 1 && (
               <Step1Goal
                 data={draft.step1}

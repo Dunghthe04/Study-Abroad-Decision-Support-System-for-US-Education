@@ -2,9 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   ArrowUpIcon,
+  FileTextIcon,
+  GraduationCapIcon,
   Maximize2Icon,
   MessageCircleIcon,
   Minimize2Icon,
@@ -15,6 +17,11 @@ import {
 import { cn } from "@/lib/utils";
 import { AGE_FEATURES, useAgeBlock } from "@/lib/age-features";
 import { useAssistant, type AssistantTurn } from "./AssistantProvider";
+import { BudgetWidget } from "./BudgetWidget";
+import { MajorWidget } from "./MajorWidget";
+import { ReviewWidget } from "./ReviewWidget";
+import { ScholarshipWidget } from "./ScholarshipWidget";
+import { SelectWidget } from "./SelectWidget";
 
 // Trang đăng nhập / đăng ký không hiện trợ lý
 const HIDDEN_PREFIXES = ["/login", "/register", "/forgot-password", "/reset-password", "/verify-email"];
@@ -26,7 +33,8 @@ export function useAssistantVisible() {
 
 /** Khung "Trợ lý USAS" cố định bên phải; màn hẹp thì phủ kín */
 export function AssistantPanel() {
-  const { open, wide, turns, loading, error, page, closePanel, toggleWide, newChat, send, retry } = useAssistant();
+  const { open, wide, turns, loading, streaming, error, page, closePanel, toggleWide, newChat, send, retry } =
+    useAssistant();
   const visible = useAssistantVisible();
   const pathname = usePathname();
   const [input, setInput] = useState("");
@@ -38,7 +46,7 @@ export function AssistantPanel() {
   useEffect(() => {
     const el = listRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [turns, loading, error, open]);
+  }, [turns, loading, streaming, error, open]);
 
   // Mở khung thì đặt con trỏ vào ô nhập
   useEffect(() => {
@@ -101,19 +109,29 @@ export function AssistantPanel() {
         )}
 
         {turns.map((t, i) => (
-          <Turn key={i} turn={t} />
+          <Turn
+            key={i}
+            turn={t}
+            // D3: nút trả lời nhanh chỉ bấm được ở lượt cuối, khi không chờ trả lời và không bị chặn tuổi
+            onReply={i === turns.length - 1 && !loading && !ageBlock ? send : undefined}
+          />
         ))}
 
+        {/* Advisor trả từng ý khi xong: hiện dần các câu đã có, câu cuối cùng sẽ thay thế khi xong cả lượt */}
+        {loading && streaming?.text && <Turn turn={{ role: "assistant", content: streaming.text }} />}
+
         {loading && (
-          <div className="flex items-center gap-1 py-1" role="status" aria-label="Đang trả lời">
-            {[0, 1, 2].map((d) => (
-              <span
-                key={d}
-                className="size-1.5 animate-pulse rounded-full bg-muted-foreground"
-                style={{ animationDelay: `${d * 200}ms` }}
-              />
-            ))}
-          </div>
+          <TypingIndicator
+            recommending={
+              turns.at(-2)?.role === "assistant" &&
+              turns.at(-2)?.content.includes("đề xuất lộ trình và danh sách trường")
+            }
+            progress={
+              streaming && streaming.answers >= 2
+                ? `Đã trả lời ${streaming.done}/${streaming.answers} câu hỏi...`
+                : undefined
+            }
+          />
         )}
 
         {error && (
@@ -201,7 +219,43 @@ export function AssistantPanel() {
   );
 }
 
-function Turn({ turn }: { turn: AssistantTurn }) {
+// Lượt chat có chạy gợi ý trường mất khoảng một phút: chờ quá 8 giây thì báo thêm để học sinh không tưởng bị treo.
+// Giao diện không biết trước lượt nào chạy gợi ý, nên dựa vào thời gian chờ; lượt thường xong trước mốc này
+const SLOW_REPLY_MS = 8000;
+
+function TypingIndicator({ recommending, progress }: { recommending?: boolean; progress?: string }) {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setSlow(true), SLOW_REPLY_MS);
+    return () => clearTimeout(timer);
+  }, []);
+
+  return (
+    <div className="flex items-center gap-1 py-1" role="status" aria-label="Đang trả lời">
+      {[0, 1, 2].map((d) => (
+        <span
+          key={d}
+          className="size-1.5 animate-pulse rounded-full bg-muted-foreground"
+          style={{ animationDelay: `${d * 200}ms` }}
+        />
+      ))}
+      {progress ? (
+        <span className="ml-2 text-xs text-muted-foreground">{progress}</span>
+      ) : (
+        slow && (
+          <span className="ml-2 text-xs text-muted-foreground">
+            {recommending
+              ? "Mình đang tính toán các trường phù hợp với bạn, có thể mất khoảng một phút..."
+              : "Mình đang xử lý, bạn chờ thêm một chút nhé..."}
+          </span>
+        )
+      )}
+    </div>
+  );
+}
+
+function Turn({ turn, onReply }: { turn: AssistantTurn; onReply?: (value: string) => void }) {
+  const router = useRouter();
   if (turn.role === "user") {
     return (
       <div className="max-w-[90%] self-end rounded-[16px_4px_16px_16px] bg-[#E7EDF1] px-[15px] py-2.5 whitespace-pre-wrap text-foreground">
@@ -228,6 +282,48 @@ function Turn({ turn }: { turn: AssistantTurn }) {
         </ol>
       )}
       {turn.disclaimer && <p className="mt-2 text-xs text-muted-foreground italic">{turn.disclaimer}</p>}
+      {turn.widget?.type === "review" && <ReviewWidget data={turn.widget.data} />}
+      {/* E: chỉ chọn được ở lượt cuối, giống nút trả lời nhanh */}
+      {turn.widget?.type === "major" && <MajorWidget onPick={onReply} />}
+      {turn.widget?.type === "select" && <SelectWidget data={turn.widget.data} onPick={onReply} />}
+      {turn.widget?.type === "budget" && <BudgetWidget data={turn.widget.data} onPick={onReply} />}
+      {turn.widget?.type === "scholarship" && <ScholarshipWidget data={turn.widget.data} onPick={onReply} />}
+      {/* Mục 1: học sinh chọn điền bằng form */}
+      {turn.widget?.type === "form" && (
+        <Link
+          href="/analysis"
+          className="mt-2.5 inline-flex h-8 items-center gap-1.5 rounded-full bg-brand px-3.5 text-[13px] font-semibold text-white transition-colors hover:bg-brand-ink"
+        >
+          <FileTextIcon className="size-4" />
+          Mở form hồ sơ
+        </Link>
+      )}
+      {/* Chat vừa chạy gợi ý trường: mở trang Gợi ý trường xem đủ danh sách (đọc lượt vừa lưu, không chạy lại) */}
+      {turn.widget?.type === "recommend" && (
+        // Mỗi lần bấm thêm ts khác nhau để trang tải lại kết quả mới nhất, kể cả khi đang đứng sẵn ở trang này
+        <button
+          type="button"
+          onClick={() => router.push(`/recommendations?ts=${Date.now()}`)}
+          className="mt-2.5 inline-flex h-8 items-center gap-1.5 rounded-full bg-brand px-3.5 text-[13px] font-semibold text-white transition-colors hover:bg-brand-ink"
+        >
+          <GraduationCapIcon className="size-4" />
+          Xem đầy đủ danh sách trường
+        </button>
+      )}
+      {onReply && turn.quickReplies && turn.quickReplies.length > 0 && (
+        <div className="mt-2.5 flex flex-wrap gap-2">
+          {turn.quickReplies.map((r) => (
+            <button
+              key={r.value}
+              type="button"
+              onClick={() => onReply(r.value)}
+              className="min-h-8 cursor-pointer rounded-full border border-brand/40 bg-brand-wash/40 px-3 py-1 text-[13px] text-foreground transition-colors hover:border-brand hover:bg-brand-wash"
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

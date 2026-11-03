@@ -1,0 +1,39 @@
+{
+  "_note": "Luật hồ sơ dùng chung cho advisor (Python) và backend (.NET). Sửa ở đây thì sửa cả hai bên; test hai bên so với file này.",
+  "studyLevels": ["community_college", "undergraduate", "master", "phd"],
+  "currentEducationLevels": ["middle_school", "high_school", "college_university", "master"],
+  "gpaModes": ["overall", "transcript"],
+  "gpaScales": [4, 10],
+  "certLimits": {
+    "sat": { "min": 400, "max": 1600, "step": 10 },
+    "act": { "min": 1, "max": 36, "step": 1 },
+    "ielts": { "min": 0, "max": 9, "step": 0.5 },
+    "toefl": { "min": 0, "max": 120, "step": 1 },
+    "duolingo": { "min": 10, "max": 160, "step": 5 },
+    "pte": { "min": 10, "max": 90, "step": 1 },
+    "cambridge": { "min": 80, "max": 230, "step": 1 },
+    "itep": { "min": 0, "max": 6, "step": 0.5 },
+    "languagecert": { "min": 0, "max": 100, "step": 1 },
+    "ap": { "min": 1, "max": 5, "step": 1 },
+    "ib": { "min": 1, "max": 45, "step": 1 },
+    "gre": { "min": 260, "max": 340, "step": 1 },
+    "gmat": { "min": 200, "max": 800, "step": 10 }
+  },
+  "englishCerts": ["ielts", "toefl", "duolingo", "pte"],
+  "budgetTiers": [
+    { "id": "tier_under_20k", "maxUsd": 20000 },
+    { "id": "tier_20k_35k", "maxUsd": 35000 },
+    { "id": "tier_35k_50k", "maxUsd": 50000 },
+    { "id": "tier_50k_70k", "maxUsd": 70000 },
+    { "id": "tier_above_70k", "maxUsd": null }
+  ],
+  "maxAnnualBudgetUsd": 10000000,
+  "scholarshipNeeds": ["mandatory", "preferred", "optional"],
+  "activityRoles": ["founder", "leader", "vice_leader", "member"],
+  "impactLevels": ["school", "district", "province", "national", "international"],
+  "maxLengths": {
+    "major": 128,
+    "activityName": 256,
+    "state": 64
+  }
+}
