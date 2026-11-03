@@ -1,15 +1,16 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using StudyAbroad.Api.Extensions;
+using StudyAbroad.Application.Common;
 using StudyAbroad.Application.Leads;
 using StudyAbroad.Domain.Constants;
 
 namespace StudyAbroad.Api.Controllers;
 
 /// <summary>
-/// [UC-42] API Gửi yêu cầu tư vấn & Chia sẻ hồ sơ cho Trung tâm du học (Lead Request).
+/// [UC-42 / UC-44] API Gửi và Quản lý yêu cầu tư vấn & Chia sẻ hồ sơ cho Trung tâm du học (Lead Request).
 /// Tuân thủ chính sách bảo vệ dữ liệu trẻ em Q11:
-/// - Học sinh/phụ huynh có thể gửi yêu cầu tư vấn.
+/// - Học sinh/phụ huynh có thể gửi và xem lại các yêu cầu tư vấn đã gửi.
 /// - Nếu chọn chia sẻ hồ sơ (SharedProfile = true), người dùng dưới 18 tuổi bị chặn bởi policy AgeFeatures.ShareWithCenter.
 /// </summary>
 [ApiController]
@@ -63,6 +64,24 @@ public class LeadsController(
         {
             return NotFound(new ProblemDetails { Title = "Không tìm thấy", Detail = ex.Message, Status = StatusCodes.Status404NotFound });
         }
+    }
+
+    /// <summary>
+    /// [UC-44] Lấy danh sách yêu cầu tư vấn đã gửi của người dùng hiện tại (có phân trang và lọc trạng thái).
+    /// </summary>
+    [HttpGet("my")]
+    [ProducesResponseType(typeof(PagedResult<LeadDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<PagedResult<LeadDto>>> GetMyLeads(
+        [FromQuery] LeadQuery query,
+        CancellationToken ct)
+    {
+        var userId = User.GetUserId();
+        if (userId is null)
+            return Unauthorized(new { message = "Vui lòng đăng nhập." });
+
+        var result = await leadService.GetMyLeadsAsync(userId.Value, query, ct);
+        return Ok(result);
     }
 
     /// <summary>
