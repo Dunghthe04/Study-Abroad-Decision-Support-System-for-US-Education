@@ -7,10 +7,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -22,12 +18,15 @@ import {
 } from "@/components/ui/table";
 import { getAdminUniversities } from "@/lib/admin-university-api";
 import {
+  CONTROL_FILTER_OPTIONS,
   controlLabel,
   formatAcceptanceRate,
   formatRetrievedAt,
+  type LabeledOption,
 } from "@/lib/admin-university-display";
 import { studyLevelLabel } from "@/lib/study-levels";
 import { OfferingsPanel } from "./OfferingsPanel";
+import { OptionSelect } from "./OptionSelect";
 import type { PagedResult } from "@/types/api";
 import type {
   AdminUniversityActiveFilter,
@@ -35,6 +34,12 @@ import type {
   AdminUniversityFilters,
   AdminUniversityListItem,
 } from "@/types/admin-university";
+
+const ACTIVE_FILTER_OPTIONS: LabeledOption[] = [
+  { value: "all", label: "Tất cả" },
+  { value: "active", label: "Đang hiển thị" },
+  { value: "hidden", label: "Đang ẩn" },
+];
 
 const EMPTY_FILTERS: AdminUniversityFilters = {
   search: "",
@@ -157,37 +162,31 @@ export function UniversityListView() {
               maxLength={2}
             />
           </label>
-          <label className="flex flex-col gap-1 text-sm font-medium">
-            Loại trường
-            <NativeSelect
+          <div className="flex flex-col gap-1 text-sm font-medium">
+            <label htmlFor="filter-control">Loại trường</label>
+            <OptionSelect
+              id="filter-control"
               value={draft.control}
-              onChange={(event) =>
-                setDraft({ ...draft, control: event.target.value })
-              }
-            >
-              <NativeSelectOption value="">Tất cả</NativeSelectOption>
-              <NativeSelectOption value="public">Công lập</NativeSelectOption>
-              <NativeSelectOption value="private">Tư thục</NativeSelectOption>
-            </NativeSelect>
-          </label>
-          <label className="flex flex-col gap-1 text-sm font-medium">
-            Hiển thị
-            <NativeSelect
+              options={CONTROL_FILTER_OPTIONS}
+              onChange={(value) => setDraft({ ...draft, control: value })}
+              className="min-w-36"
+            />
+          </div>
+          <div className="flex flex-col gap-1 text-sm font-medium">
+            <label htmlFor="filter-active">Hiển thị</label>
+            <OptionSelect
+              id="filter-active"
               value={draft.active}
-              onChange={(event) =>
+              options={ACTIVE_FILTER_OPTIONS}
+              onChange={(value) =>
                 setDraft({
                   ...draft,
-                  active: event.target.value as AdminUniversityActiveFilter,
+                  active: value as AdminUniversityActiveFilter,
                 })
               }
-            >
-              <NativeSelectOption value="all">Tất cả</NativeSelectOption>
-              <NativeSelectOption value="active">
-                Đang hiển thị
-              </NativeSelectOption>
-              <NativeSelectOption value="hidden">Đang ẩn</NativeSelectOption>
-            </NativeSelect>
-          </label>
+              className="min-w-36"
+            />
+          </div>
           <div className="flex gap-2">
             <Button type="submit">
               <SearchIcon />

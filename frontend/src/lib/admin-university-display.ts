@@ -113,3 +113,21 @@ export function parseDeadlines(deadlinesJson: string | null): DeadlineEntry[] {
     return [];
   }
 }
+
+export interface LabeledOption {
+  value: string;
+  label: string;
+}
+
+function buildOptions(emptyLabel: string, labels: Record<string, string>): LabeledOption[] {
+  const options: LabeledOption[] = [{ value: "", label: emptyLabel }];
+  for (const [value, label] of Object.entries(labels)) {
+    options.push({ value, label });
+  }
+  return options;
+}
+
+export const CONTROL_OPTIONS = buildOptions("Chưa rõ", CONTROL_LABELS);
+export const CONTROL_FILTER_OPTIONS = buildOptions("Tất cả", CONTROL_LABELS);
+export const SAT_POLICY_OPTIONS = buildOptions("Chưa rõ", SAT_POLICY_LABELS);
+export const SOURCE_RELIABILITY_OPTIONS = buildOptions("Chưa rõ", SOURCE_RELIABILITY_LABELS);
