@@ -116,7 +116,7 @@ async def run(model: str, split: str, limit: int | None, fmt: str) -> None:
             )
             fallbacks += result.confidence == 0.0
             seconds.append(time.perf_counter() - start)
-            pred = {"cac_y": [y.model_dump() for y in (*result.cac_y, *result.con_lai)]}
+            pred = {"cac_y": [y.model_dump() for y in result.cac_y]}
             preds.append(pred)
             rows.append({"id": r["id"], "cau_hoi": r["input"]["cau_hoi"], "nhan": r["output"], "du_doan": pred,
                          "confidence": round(result.confidence, 4), "giay": round(seconds[-1], 2)})  # fmt: skip

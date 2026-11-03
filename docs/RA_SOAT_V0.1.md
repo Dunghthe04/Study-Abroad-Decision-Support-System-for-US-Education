@@ -25,10 +25,10 @@ Tài liệu này so 24 work item của sprint v0.1 (Jira USAS-1975 → 1996, 206
 | 1984 | UC-12 Xác nhận trích xuất | Việt | ✅ | Ô cam + nút "Tôi đã kiểm tra bảng điểm" |
 | 1985/1986 | UC-13/14 Điểm thi | Việt | ✅ | |
 | 1987 | UC-15 Tài chính | Việt | ✅ (wizard) | API cũ của Đức xem mục 4.1 |
-| 1988–1990 | UC-16/17/18 | Đức | ✅ wizard / ⚠️ API cũ | Xem mục 4.1 |
+| 1988–1990 | UC-16/17/18 | Đức | ✅ | Đã vá bảo mật API cũ: Authorize, Policy Q11, gỡ bỏ X-User-Id và user giả |
 | 1991 | UC-22 | Dũng | ✅ | Xem mục 4.2 |
 | 1992 | UC-23 | Dương | ✅ | |
-| 1993 | UC-68 Bảng quy đổi GPA | Đức | ❌ | Đã chốt: quy đổi **tuyến tính** (/10 × 4) |
+| 1993 | UC-68 Bảng quy đổi GPA | Đức | ✅ | Hệ thống dùng bảng cấu hình `app_settings` (`grade_scale.10` chuẩn WES, 8.0 → 3.5); Skill SLM không tự tính quy đổi mà dùng GPA 4.0 do hệ thống tính |
 | 1994 | UC-69 Ngưỡng gợi ý | Dũng | ❌ | Đã chốt: ngưỡng theo dữ liệu từng trường, admin không sửa |
 | 1995 | WI-09 | Phương Anh | ⚠️ | Xem mục 4.4 |
 | 1996 | WI-10 | Phương Anh | ❌ | Chưa có phiếu Feedback Capture Grid |
@@ -44,7 +44,7 @@ Tài liệu này so 24 work item của sprint v0.1 (Jira USAS-1975 → 1996, 206
 | Q4 | Quên mật khẩu qua OTP | Đăng xuất mọi thiết bị + gửi mail thông báo |
 | Q5 | Tài khoản trung tâm `pending` | Vẫn đăng nhập được |
 | Q6 | JWT / khóa tài khoản | JWT 7 ngày; user bị khóa → thu hồi phiên ngay |
-| Q7 | Quy đổi GPA | Tuyến tính /10 × 4 (áp dụng cho UC-18, UC-68) |
+| Q7 | Quy đổi GPA | Sử dụng bảng quy đổi cấu hình trong setting (`app_settings` / `grade_scale.10` chuẩn WES, ví dụ 8.0 → 3.5). Skill/AI tuyệt đối không tự tính chia nhân quy đổi mà dùng trực tiếp `gpa_4` do backend tính sẵn. |
 | Q8 | Ngưỡng gợi ý | Theo dữ liệu từng trường (UC-69) |
 | Q9 | UC-12 | Tô cam ô đọc từ ảnh/scan, điểm bất thường, ô ghi đè/trùng môn; một nút xác nhận chung |
 | Q10 | UC-07 | Bước 6 Review là đủ |
@@ -115,10 +115,11 @@ Hệ quả: ai cũng đọc/sửa được hồ sơ tài chính và học thuậ
   - không nhận Id từ client;
   - không trả `ex.Message` ra ngoài.
 
+*Cập nhật (03/11/2026): Đức đã hoàn tất xử lý Phương án B — bổ sung Authorize, Policy ProcessStudentData (Q11), trích xuất an toàn User.GetUserId(), gỡ bỏ hoàn toàn header X-User-Id và backdoor tạo user giả; kèm bộ kiểm thử tự động LegacyProfileControllersSecurityTests (377/377 unit tests pass).*
+
 **Ngoài ra:**
 
-- **GPA:** API cũ ghi đè `overall_gpa` bằng bảng WES, trái với Q7 (tuyến tính). Wizard đã tính tuyến tính phía server (`ProfileFlowService.ComputeGpa4`).
-- **UC-68 bảng quy đổi:** chưa làm. Theo Q7 chỉ cần công thức tuyến tính, không cần bảng.
+- **GPA & Bảng quy đổi (UC-68):** Hệ thống DSS sử dụng bảng quy đổi lưu trong `app_settings` (key `grade_scale.10`, mặc định theo chuẩn WES: 8.0 → 3.5, 9.0 → 4.0). Các kỹ năng tư vấn AI (Advisor skills) và SLM không được tự ý thực hiện phép chia nhân (như `thang 10 / 10 * 4` ra 3.2), mà bắt buộc phải sử dụng trường `gpa_4` do backend tính toán và truyền sang. Điều này đảm bảo tính nhất quán trên toàn hệ thống và đúng nghiệp vụ thẩm định du học Mỹ.
 
 ### 4.2. Dũng: UC-22, UC-69
 

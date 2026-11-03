@@ -40,18 +40,7 @@ public class AcademicAnalysisRepository : IAcademicAnalysisRepository
             var userExists = await _context.Users.AnyAsync(u => u.Id == userId, ct);
             if (!userExists)
             {
-                var devUser = new User
-                {
-                    Id = userId,
-                    Email = $"dev_{userId:N}@usas.test",
-                    FullName = "Dev Test User",
-                    Role = "student",
-                    Status = "active",
-                    PasswordHash = "dev_bypass_hash",
-                    ParentAcknowledged = true
-                };
-                await _context.Users.AddAsync(devUser, ct);
-                await _context.SaveChangesAsync(ct);
+                throw new KeyNotFoundException($"Không tìm thấy tài khoản người dùng với Id: {userId}");
             }
 
             profile = new StudentProfile

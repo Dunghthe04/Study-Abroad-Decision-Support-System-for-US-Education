@@ -1,6 +1,8 @@
-using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using StudyAbroad.Api.Extensions;
 using StudyAbroad.Application.Profile.Academic;
+using StudyAbroad.Domain.Constants;
 
 namespace StudyAbroad.Api.Controllers;
 
@@ -9,8 +11,11 @@ namespace StudyAbroad.Api.Controllers;
 /// - Nhập/sửa bảng điểm từng môn theo học kỳ
 /// - Kích hoạt thuật toán quy đổi GPA 4.0 và phân nhóm môn
 /// - Truy vấn kết quả phân tích học thuật và cấu hình thang điểm WES
+/// Áp dụng cơ chế bảo mật chống IDOR: Chỉ truy vấn và cập nhật dữ liệu của tài khoản hiện tại qua JWT Claims.
 /// </summary>
 [ApiController]
+[Authorize(Roles = $"{UserRoles.Student},{UserRoles.Parent}")]
+[Authorize(Policy = AgeFeatures.ProcessStudentData)]
 [Route("api/v1/profile/academic")]
 public class AcademicAnalysisController : ControllerBase
 {
@@ -26,10 +31,14 @@ public class AcademicAnalysisController : ControllerBase
     /// </summary>
     [HttpGet("scores")]
     [ProducesResponseType(typeof(IReadOnlyList<TranscriptScoreDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetScores(CancellationToken ct)
     {
         var userId = GetCurrentUserId();
-        var result = await _service.GetScoresAsync(userId, ct);
+        if (userId is null)
+            return Unauthorized(new { message = "Vui lòng đăng nhập." });
+
+        var result = await _service.GetScoresAsync(userId.Value, ct);
         return Ok(result);
     }
 
@@ -39,12 +48,16 @@ public class AcademicAnalysisController : ControllerBase
     [HttpPost("scores")]
     [ProducesResponseType(typeof(IReadOnlyList<TranscriptScoreDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> SaveScores([FromBody] BatchTranscriptScoresRequest request, CancellationToken ct)
     {
+        var userId = GetCurrentUserId();
+        if (userId is null)
+            return Unauthorized(new { message = "Vui lòng đăng nhập." });
+
         try
         {
-            var userId = GetCurrentUserId();
-            var result = await _service.SaveScoresAsync(userId, request, ct);
+            var result = await _service.SaveScoresAsync(userId.Value, request, ct);
             return Ok(result);
         }
         catch (ArgumentException ex)
@@ -63,12 +76,16 @@ public class AcademicAnalysisController : ControllerBase
     [HttpDelete("scores/{scoreId:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> DeleteScore(Guid scoreId, CancellationToken ct)
     {
+        var userId = GetCurrentUserId();
+        if (userId is null)
+            return Unauthorized(new { message = "Vui lòng đăng nhập." });
+
         try
         {
-            var userId = GetCurrentUserId();
-            await _service.DeleteScoreAsync(userId, scoreId, ct);
+            await _service.DeleteScoreAsync(userId.Value, scoreId, ct);
             return NoContent();
         }
         catch (KeyNotFoundException ex)
@@ -92,12 +109,16 @@ public class AcademicAnalysisController : ControllerBase
     [HttpPost("analyze")]
     [ProducesResponseType(typeof(AcademicAnalysisResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> AnalyzeAcademic(CancellationToken ct)
     {
+        var userId = GetCurrentUserId();
+        if (userId is null)
+            return Unauthorized(new { message = "Vui lòng đăng nhập." });
+
         try
         {
-            var userId = GetCurrentUserId();
-            var analysis = await _service.AnalyzeAcademicProfileAsync(userId, ct);
+            var analysis = await _service.AnalyzeAcademicProfileAsync(userId.Value, ct);
             return Ok(analysis);
         }
         catch (Exception ex)
@@ -116,10 +137,14 @@ public class AcademicAnalysisController : ControllerBase
     [HttpGet("analysis")]
     [ProducesResponseType(typeof(AcademicAnalysisResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetLatestAnalysis(CancellationToken ct)
     {
         var userId = GetCurrentUserId();
-        var analysis = await _service.GetLatestAnalysisAsync(userId, ct);
+        if (userId is null)
+            return Unauthorized(new { message = "Vui lòng đăng nhập." });
+
+        var analysis = await _service.GetLatestAnalysisAsync(userId.Value, ct);
         if (analysis == null)
             return NotFound(new { message = "Chưa có kết quả phân tích học thuật nào cho hồ sơ này." });
 
@@ -129,6 +154,7 @@ public class AcademicAnalysisController : ControllerBase
     /// <summary>
     /// [USAS-365] Lấy cấu hình bảng quy đổi thang điểm hiện hành.
     /// </summary>
+    [AllowAnonymous]
     [HttpGet("scale-config")]
     [ProducesResponseType(typeof(GradeScaleConfigDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetScaleConfig(CancellationToken ct)
@@ -138,22 +164,8 @@ public class AcademicAnalysisController : ControllerBase
     }
 
     /// <summary>
-    /// [USAS-365] Helper lấy UserId từ Claims (hoặc header dev).
-    /// Tuyệt đối không nhận userId từ body request để chống tấn công IDOR.
+    /// [USAS-365] Helper lấy UserId từ Claims phiên đăng nhập an toàn.
+    /// Tuyệt đối không nhận userId từ body request hoặc header X-User-Id để chống tấn công IDOR.
     /// </summary>
-    private Guid GetCurrentUserId()
-    {
-        var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        if (Guid.TryParse(claim, out var id))
-            return id;
-
-        if (Request.Headers.TryGetValue("X-User-Id", out var headerVal) &&
-            Guid.TryParse(headerVal.FirstOrDefault(), out var headerId))
-        {
-            return headerId;
-        }
-
-        // Fallback tài khoản dev mặc định
-        return Guid.Parse("00000000-0000-0000-0000-000000000001");
-    }
+    private Guid? GetCurrentUserId() => User.GetUserId();
 }

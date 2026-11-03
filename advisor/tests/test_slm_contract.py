@@ -10,9 +10,7 @@ from app.schemas.chat import ChatState
 from app.schemas.slm import (
     ENTITY_KEYS,
     INTENTS,
-    MAX_HOAN,
     MAX_RAW_Y,
-    MAX_Y,
     PROFILE_KEYS,
     SKILL_SECTIONS,
     SLM_TIN_SCHEMA,
@@ -73,13 +71,13 @@ def test_profile_values_of_an_intent_are_only_the_profile_keys():
     assert item.profile_values() == {"english": "IELTS 6.0"}
 
 
-# ---- gộp, sắp xếp, hoãn ý ----
+# ---- gộp và sắp xếp ý ----
 def types(items: list[SlmY]) -> list[str]:
     return [i.type for i in items]
 
 
 def test_profile_intents_merge_into_one_and_come_first():
-    items, left = chuan_hoa_y(
+    items = chuan_hoa_y(
         [
             y("kien_thuc", "I-20 là gì"),
             y("mac_dinh", "GPA 3.5", gpa="3.5"),
@@ -87,20 +85,18 @@ def test_profile_intents_merge_into_one_and_come_first():
         ]
     )
 
-    assert types(items) == ["mac_dinh", "kien_thuc"] and left == []
+    assert types(items) == ["mac_dinh", "kien_thuc"]
     assert items[0].doan == "GPA 3.5, SAT 1400" and items[0].thuc_the == {"gpa": "3.5", "sat": "1400"}
 
 
 def test_a_later_profile_value_replaces_an_earlier_one():
-    items, _ = chuan_hoa_y([y("mac_dinh", "GPA 3.5", gpa="3.5"), y("mac_dinh", "à nhầm 3.6", gpa="3.6")])
+    items = chuan_hoa_y([y("mac_dinh", "GPA 3.5", gpa="3.5"), y("mac_dinh", "à nhầm 3.6", gpa="3.6")])
 
     assert items[0].thuc_the == {"gpa": "3.6"}
 
 
 def test_advice_questions_merge_into_one_intent_with_all_the_text():
-    items, _ = chuan_hoa_y(
-        [y("ho_so", "đánh giá hồ sơ"), y("kien_thuc", "OPT là gì"), y("ho_so", "nên làm gì")]
-    )
+    items = chuan_hoa_y([y("ho_so", "đánh giá hồ sơ"), y("kien_thuc", "OPT là gì"), y("ho_so", "nên làm gì")])
 
     assert types(items) == ["ho_so", "kien_thuc"]
     assert items[0].doan == "đánh giá hồ sơ, nên làm gì"
@@ -110,78 +106,78 @@ def test_lists_in_merged_entities_are_joined_not_replaced():
     first = y("kich_ban", "nếu SAT 1400", che_do="what_if", thay_doi=[{"yeu_to": "sat", "gia_tri": "1400"}])
     second = y("kich_ban", "và IELTS 7", che_do="what_if", thay_doi=[{"yeu_to": "english", "gia_tri": "7"}])
 
-    items, _ = chuan_hoa_y([first, second])
+    items = chuan_hoa_y([first, second])
 
     assert [c["yeu_to"] for c in items[0].thuc_the["thay_doi"]] == ["sat", "english"]
 
 
 def test_knowledge_and_center_intents_are_never_merged_because_each_is_its_own_lookup():
-    knowledge, _ = chuan_hoa_y([y("kien_thuc", "I-20 là gì"), y("kien_thuc", "SAT là gì")])
-    centers, _ = chuan_hoa_y([y("trung_tam", "ai sửa luận"), y("trung_tam", "ai luyện thi")])
+    knowledge = chuan_hoa_y([y("kien_thuc", "I-20 là gì"), y("kien_thuc", "SAT là gì")])
+    centers = chuan_hoa_y([y("trung_tam", "ai sửa luận"), y("trung_tam", "ai luyện thi")])
 
     assert [i.doan for i in knowledge] == ["I-20 là gì", "SAT là gì"]
     assert [i.doan for i in centers] == ["ai sửa luận", "ai luyện thi"]
 
 
 def test_the_order_the_student_asked_is_kept_apart_from_the_profile_intent():
-    items, _ = chuan_hoa_y([y("trung_tam", "a"), y("kien_thuc", "b"), y("ho_so", "c")])
+    items = chuan_hoa_y([y("trung_tam", "a"), y("kien_thuc", "b"), y("ho_so", "c")])
 
     assert [i.doan for i in items] == ["a", "b", "c"]  # không xếp lại theo loại
 
 
 def test_a_greeting_next_to_a_real_intent_is_dropped():
-    items, _ = chuan_hoa_y([y("ngoai_pham_vi", "chào", loai_con="tam_biet"), y("kien_thuc", "I-20 là gì")])
+    items = chuan_hoa_y([y("ngoai_pham_vi", "chào", loai_con="tam_biet"), y("kien_thuc", "I-20 là gì")])
 
     assert types(items) == ["kien_thuc"]
 
 
 def test_several_out_of_scope_intents_keep_only_the_first():
-    items, _ = chuan_hoa_y(
+    items = chuan_hoa_y(
         [y("ngoai_pham_vi", "chào", loai_con="tam_biet"), y("ngoai_pham_vi", "ừ", loai_con="mo_ho")]
     )
 
     assert [i.doan for i in items] == ["chào"]
 
 
-def test_intents_over_the_limit_are_postponed_in_order_and_the_profile_intent_is_never_among_them():
-    asked = [y("mac_dinh", "GPA", gpa="3.5")] + [y("kien_thuc", f"câu {n}") for n in range(1, 6)]
+def test_every_question_is_kept_in_order_however_many_there_are():
+    asked = [y("mac_dinh", "GPA", gpa="3.5")] + [y("kien_thuc", f"câu {n}") for n in range(1, 13)]
 
-    items, left = chuan_hoa_y(asked)
+    items = chuan_hoa_y(asked)
 
-    assert [i.doan for i in items] == ["GPA", "câu 1", "câu 2", "câu 3"]
-    assert [i.doan for i in left] == ["câu 4", "câu 5"]
-    assert MAX_Y == 3 and "mac_dinh" not in types(left)
+    assert [i.doan for i in items] == ["GPA"] + [f"câu {n}" for n in range(1, 13)]
 
 
-def test_intents_beyond_the_postpone_limit_are_dropped():
-    asked = [y("kien_thuc", f"câu {n}") for n in range(1, MAX_Y + MAX_HOAN + 4)]
+def test_only_the_technical_ceiling_cuts_intents_and_the_profile_intent_is_never_cut():
+    asked = [y("mac_dinh", "GPA", gpa="3.5")] + [y("kien_thuc", f"câu {n}") for n in range(1, MAX_RAW_Y + 6)]
 
-    items, left = chuan_hoa_y(asked)
+    items = chuan_hoa_y(asked)
 
-    assert len(items) == MAX_Y and len(left) == MAX_HOAN
-    assert left[-1].doan == f"câu {MAX_Y + MAX_HOAN}"
+    assert len(items) == MAX_RAW_Y and items[0].type == "mac_dinh"
+    assert items[-1].doan == f"câu {MAX_RAW_Y - 1}"
 
 
-def test_the_raw_limit_covers_the_profile_intent_the_answers_and_the_postponed_ones():
-    assert MAX_RAW_Y == 1 + MAX_Y + MAX_HOAN == 7
+def test_the_technical_ceiling_is_far_above_any_real_question_list():
+    assert MAX_RAW_Y >= 12
 
 
 # ---- cả tin ----
 @pytest.mark.parametrize(
-    ("items", "left", "message"),
+    ("items", "message"),
     [
-        ([y("ngoai_pham_vi", "chào", loai_con="tam_biet"), y("kien_thuc")], [], "đứng một mình"),
-        ([y("ho_so"), y("ho_so")], [], "chỉ được một ý"),
-        ([y("mac_dinh"), y("mac_dinh")], [], "chỉ được một ý"),
-        ([y("kien_thuc")] * (MAX_Y + 1), [], "quá"),
-        ([y("kien_thuc"), y("mac_dinh")], [], "đứng đầu"),
-        ([y("kien_thuc")], [y("mac_dinh")], "không được hoãn"),
-        ([y("kien_thuc")], [y("ngoai_pham_vi", loai_con="mo_ho")], "không được hoãn"),
+        ([y("ngoai_pham_vi", "chào", loai_con="tam_biet"), y("kien_thuc")], "đứng một mình"),
+        ([y("ho_so"), y("ho_so")], "chỉ được một ý"),
+        ([y("mac_dinh"), y("mac_dinh")], "chỉ được một ý"),
+        ([y("kien_thuc")] * (MAX_RAW_Y + 1), "quá"),
+        ([y("kien_thuc"), y("mac_dinh")], "đứng đầu"),
     ],
 )
-def test_a_message_that_was_not_cleaned_up_is_rejected(items, left, message):
+def test_a_message_that_was_not_cleaned_up_is_rejected(items, message):
     with pytest.raises(ValidationError, match=message):
-        SlmTin(cac_y=items, con_lai=left)
+        SlmTin(cac_y=items)
+
+
+def test_a_message_with_many_questions_is_accepted():
+    assert len(SlmTin(cac_y=[y("kien_thuc")] * 12).cac_y) == 12
 
 
 def test_a_message_needs_at_least_one_intent():

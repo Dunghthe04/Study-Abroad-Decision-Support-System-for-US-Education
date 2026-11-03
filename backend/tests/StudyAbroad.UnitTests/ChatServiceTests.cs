@@ -422,6 +422,116 @@ public class ChatServiceTests
         Assert.Equal($"ok\n\n{ChatRecommendation.Busy}", res.Answer);
     }
 
+    // Trả lời theo từng ý (stream): các tin của advisor đi thẳng ra ngoài, còn lại chạy y như lượt chat thường
+    [Fact]
+    public async Task OnEvent_ForwardsTheAdvisorEvents_AndStillSavesTheSession()
+    {
+        var advisor = new FakeAdvisor("B2") { Events = [new("progress", Answers: 2), new("partial", Text: "đáp 1")] };
+        var store = new FakeSessions();
+        var seen = new List<AdvisorStreamEvent>();
+
+        var res = await new ChatService(advisor, store, new FakeProfileFlow()).ChatAsync(
+            Guid.NewGuid(), new AdvisorChatRequest(Hello), default, e => { seen.Add(e); return Task.CompletedTask; });
+
+        Assert.Equal(advisor.Events, seen);
+        Assert.Equal("B2", Assert.Single(store.Rows).CurrentStep);
+        Assert.Null(res.State);                      // trạng thái nội bộ vẫn không lộ ra ngoài
+    }
+
+    [Fact]
+    public async Task WithoutOnEvent_TheAdvisorIsNotAskedToStream()
+    {
+        var advisor = new FakeAdvisor("B2") { Events = [new("partial", Text: "không được gửi")] };
+
+        await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow()).ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Equal(0, advisor.StreamCalls);
+    }
+
+    // Câu cuối cùng vẫn do bước sau advisor quyết định (gợi ý trường thay câu trả lời), nên dòng final mới là câu để hiện
+    [Fact]
+    public async Task OnEvent_TheFinalAnswerStillGoesThroughTheExplainStep()
+    {
+        var userId = Guid.NewGuid();
+        var runner = new FakeRunner { Explanation = Explanation() };
+        var advisor = new FakeAdvisor("B4") { Action = "explain", ActionData = IowaCode, Events = [new("partial", Text: "câu tạm")] };
+
+        var res = await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), null, runner)
+            .ChatAsync(userId, new AdvisorChatRequest(Hello), default, _ => Task.CompletedTask);
+
+        Assert.StartsWith("University of Iowa:", res.Answer);
+    }
+
+    // Đường /chat/stream trả từng dòng JSON: các tin, rồi final là đúng JSON của đường /chat
+    [Fact]
+    public async Task StreamEndpoint_WritesOneJsonLinePerEvent_ThenTheFinalResponse()
+    {
+        var advisor = new FakeAdvisor("B2") { Events = [new("progress", Answers: 1), new("partial", Text: "đáp 1")] };
+        var controller = StreamController(advisor, out var body);
+
+        var result = await controller.ChatStream(new AdvisorChatRequest(Hello), Json(), CancellationToken.None);
+
+        Assert.IsType<Microsoft.AspNetCore.Mvc.EmptyResult>(result);
+        Assert.Equal("application/x-ndjson", controller.Response.ContentType);
+        Assert.Equal("no", controller.Response.Headers["X-Accel-Buffering"]);
+        var lines = Lines(body);
+        Assert.Equal(3, lines.Count);
+        Assert.Equal(("progress", 1), (lines[0].GetProperty("type").GetString(), lines[0].GetProperty("answers").GetInt32()));
+        Assert.Equal("đáp 1", lines[1].GetProperty("text").GetString());
+        var final = lines[2];
+        Assert.Equal("final", final.GetProperty("type").GetString());
+        Assert.Equal("ok", final.GetProperty("response").GetProperty("answer").GetString());
+        Assert.False(final.GetProperty("response").TryGetProperty("action", out var action) && action.ValueKind != JsonValueKind.Null);
+    }
+
+    [Fact]
+    public async Task StreamEndpoint_WhenTheAdvisorFails_EndsWithAnErrorLine()
+    {
+        var advisor = new FakeAdvisor("B2") { Events = [new("progress", Answers: 1)], StreamError = new HttpRequestException("advisor tắt") };
+        var controller = StreamController(advisor, out var body);
+
+        await controller.ChatStream(new AdvisorChatRequest(Hello), Json(), CancellationToken.None);
+
+        var lines = Lines(body);
+        Assert.Equal(["progress", "error"], lines.Select(l => l.GetProperty("type").GetString()));
+    }
+
+    [Fact]
+    public async Task StreamEndpoint_RejectsAnEmptyMessageListBeforeStreaming()
+    {
+        var controller = StreamController(new FakeAdvisor("B2"), out var body);
+
+        var result = await controller.ChatStream(new AdvisorChatRequest([]), Json(), CancellationToken.None);
+
+        Assert.IsNotType<Microsoft.AspNetCore.Mvc.EmptyResult>(result);
+        Assert.Equal(0, body.Length);
+    }
+
+    private static Microsoft.Extensions.Options.IOptions<Microsoft.AspNetCore.Mvc.JsonOptions> Json() =>
+        Microsoft.Extensions.Options.Options.Create(new Microsoft.AspNetCore.Mvc.JsonOptions());
+
+    private static StudyAbroad.Api.Controllers.AdvisorController StreamController(FakeAdvisor advisor, out MemoryStream body)
+    {
+        body = new MemoryStream();
+        var http = new Microsoft.AspNetCore.Http.DefaultHttpContext
+        {
+            User = new System.Security.Claims.ClaimsPrincipal(new System.Security.Claims.ClaimsIdentity(
+                [new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, Guid.NewGuid().ToString())], "test")),
+        };
+        http.Response.Body = body;
+        var service = new ChatService(advisor, new FakeSessions(), new FakeProfileFlow());
+        return new StudyAbroad.Api.Controllers.AdvisorController(service, Microsoft.Extensions.Logging.Abstractions.NullLogger<StudyAbroad.Api.Controllers.AdvisorController>.Instance)
+        {
+            ControllerContext = new Microsoft.AspNetCore.Mvc.ControllerContext { HttpContext = http },
+        };
+    }
+
+    private static List<JsonElement> Lines(MemoryStream body) =>
+        System.Text.Encoding.UTF8.GetString(body.ToArray())
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(l => JsonDocument.Parse(l).RootElement.Clone())
+            .ToList();
+
     // Học sinh đóng trang giữa chừng (request bị hủy) thì không nuốt lỗi: để ASP.NET dừng lượt chat như bình thường
     [Fact]
     public async Task RequestCancelledByTheUser_IsNotSwallowed()
@@ -609,6 +719,22 @@ public class ChatServiceTests
             var state = JsonDocument.Parse($"{{\"currentStep\":\"{nextStep}\"{question}}}").RootElement;
             return Task.FromResult(new AdvisorChatResponse(
                 "ok", [], null, state, QuickReplies: replies, Widget: widget, Profile: Profile, ProfileChanged: Changed, Skills: Skills, Action: Action, ActionData: ActionData));
+        }
+
+        // Trả lời theo từng ý: gọi onEvent cho từng tin trong Events rồi trả kết quả như ChatAsync
+        public IReadOnlyList<AdvisorStreamEvent> Events { get; init; } = [];
+        public int StreamCalls { get; private set; }
+        public Exception? StreamError { get; init; }
+
+        public async Task<AdvisorChatResponse> ChatStreamAsync(
+            AdvisorChatRequest request, Func<AdvisorStreamEvent, Task> onEvent, CancellationToken ct = default)
+        {
+            StreamCalls++;
+            foreach (var e in Events)
+                await onEvent(e);
+            if (StreamError is not null)
+                throw StreamError;
+            return await ChatAsync(request, ct);
         }
 
         public Task<EcResponseDto> ReadEcAsync(EcRequestDto request, CancellationToken ct = default) => throw new NotSupportedException();

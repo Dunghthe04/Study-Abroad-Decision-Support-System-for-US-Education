@@ -146,7 +146,7 @@ class OllamaSlm:
             try:
                 raw, content, logprobs = await self._slm.chat_json_scored(messages, self._output)
                 raw = keep_verbatim(raw, message)  # bỏ giá trị và đoạn không có trong tin
-                # Kiểm từng ý, gộp ý cùng loại, đưa mac_dinh lên đầu, hoãn ý quá trần, rồi kiểm cả tin.
+                # Kiểm từng ý, gộp ý cùng loại, đưa mac_dinh lên đầu, cắt ý quá trần kỹ thuật, rồi kiểm cả tin.
                 # ValidationError của pydantic cũng là ValueError
                 return SlmTinResult.from_raw(raw, confidence=label_confidence(content, logprobs))
             except (OllamaError, ValueError) as ex:
