@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using StudyAbroad.Api.Controllers;
+using StudyAbroad.Application.Common;
 using StudyAbroad.Application.Leads;
 using StudyAbroad.Domain.Constants;
 using Xunit;
@@ -41,6 +42,26 @@ public class LeadsControllerTests
         {
             var lead = Leads.FirstOrDefault(l => l.Id == leadId && l.UserId == userId);
             return Task.FromResult(lead);
+        }
+
+        public Task<PagedResult<LeadDto>> GetMyLeadsAsync(Guid userId, LeadQuery query, CancellationToken ct = default)
+        {
+            var list = Leads.Where(l => l.UserId == userId);
+            if (!string.IsNullOrWhiteSpace(query.Status))
+            {
+                list = list.Where(l => string.Equals(l.Status, query.Status, StringComparison.OrdinalIgnoreCase));
+            }
+
+            var total = list.Count();
+            var page = Math.Max(1, query.Page);
+            var pageSize = Math.Clamp(query.PageSize, 1, 100);
+
+            var items = list.OrderByDescending(l => l.CreatedAt)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
+
+            return Task.FromResult(new PagedResult<LeadDto>(items, page, pageSize, total));
         }
     }
 
@@ -123,6 +144,37 @@ public class LeadsControllerTests
         var dto = Assert.IsType<LeadDto>(created.Value);
         Assert.True(dto.SharedProfile);
         Assert.NotNull(dto.ConsentId);
+    }
+
+    [Fact]
+    public async Task GetMyLeads_ReturnsPagedResult_FiltersByUserAndStatus()
+    {
+        var userId = Guid.NewGuid();
+        var otherUserId = Guid.NewGuid();
+        var (controller, service) = CreateController(userId);
+
+        // Seed leads cho user hiện tại: 2 lead "new", 1 lead "contacted"
+        service.Leads.Add(new LeadDto(Guid.NewGuid(), userId, Guid.NewGuid(), "Center A", null, "bachelor", "0912345678", "Msg 1", false, "new", DateTime.UtcNow.AddMinutes(-10)));
+        service.Leads.Add(new LeadDto(Guid.NewGuid(), userId, Guid.NewGuid(), "Center B", null, "master", "0912345678", "Msg 2", false, "new", DateTime.UtcNow.AddMinutes(-5)));
+        service.Leads.Add(new LeadDto(Guid.NewGuid(), userId, Guid.NewGuid(), "Center C", null, "bachelor", "0912345678", "Msg 3", false, "contacted", DateTime.UtcNow));
+
+        // Seed lead cho user khác (không được xuất hiện trong kết quả)
+        service.Leads.Add(new LeadDto(Guid.NewGuid(), otherUserId, Guid.NewGuid(), "Center D", null, "bachelor", "0999999999", "Other", false, "new", DateTime.UtcNow));
+
+        // Act: Lọc theo status "new"
+        var actionResult = await controller.GetMyLeads(new LeadQuery(Status: "new", Page: 1, PageSize: 10), CancellationToken.None);
+
+        // Assert
+        var okResult = Assert.IsType<OkObjectResult>(actionResult.Result);
+        var paged = Assert.IsType<PagedResult<LeadDto>>(okResult.Value);
+
+        Assert.Equal(2, paged.TotalCount);
+        Assert.Equal(2, paged.Items.Count);
+        Assert.All(paged.Items, l =>
+        {
+            Assert.Equal(userId, l.UserId);
+            Assert.Equal("new", l.Status);
+        });
     }
 }
 
