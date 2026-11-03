@@ -508,6 +508,40 @@ public class AuthServiceTests
     }
 
     [Fact]
+    public async Task CreateCenterAccount_ValidRequest_CreatesActiveCenterUser()
+    {
+        var service = CreateService();
+        var request = new CreateCenterAccountRequest("center@studyabroad.vn", "Password123!", "Trung Tâm Du Học Á Âu", "0912345678");
+
+        var result = await service.CreateCenterAccountAsync(request);
+
+        Assert.Equal(AuthError.None, result.Error);
+        Assert.NotNull(result.User);
+        Assert.Equal("center@studyabroad.vn", result.User.Email);
+        Assert.Equal(UserRoles.Center, result.User.Role);
+        Assert.Equal(UserStatuses.Active, result.User.Status);
+        Assert.Equal("Trung Tâm Du Học Á Âu", result.User.FullName);
+        Assert.Equal("0912345678", result.User.Phone);
+
+        var savedUser = Assert.Single(_repo.Users);
+        Assert.Equal(UserRoles.Center, savedUser.Role);
+        Assert.Equal(UserStatuses.Active, savedUser.Status);
+    }
+
+    [Fact]
+    public async Task CreateCenterAccount_DuplicateEmail_ReturnsValidationError()
+    {
+        var service = CreateService();
+        var request = new CreateCenterAccountRequest("center@studyabroad.vn", "Password123!", "Trung Tâm A", null);
+        await service.CreateCenterAccountAsync(request);
+
+        var duplicateResult = await service.CreateCenterAccountAsync(request);
+
+        Assert.Equal(AuthError.Validation, duplicateResult.Error);
+        Assert.Contains("Email đã được sử dụng", duplicateResult.Message);
+    }
+
+    [Fact]
     public async Task Login_UnverifiedUser_ReturnsUnverifiedError()
     {
         var service = CreateService();

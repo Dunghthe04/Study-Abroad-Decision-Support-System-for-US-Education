@@ -86,6 +86,16 @@ public class AdminUsersControllerTests
             return Task.FromResult(AuthResult.Ok(user, "Đã tạo tài khoản moderator."));
         }
 
+        public CreateCenterAccountRequest? LastCreateCenterRequest { get; private set; }
+
+        public Task<AuthResult> CreateCenterAccountAsync(CreateCenterAccountRequest request, CancellationToken ct = default)
+        {
+            LastCreateCenterRequest = request;
+            var user = new UserDto(Guid.NewGuid(), request.Email, request.FullName, UserRoles.Center, UserStatuses.Active, request.Phone);
+            Users.Add(user);
+            return Task.FromResult(AuthResult.Ok(user, "Đã tạo tài khoản trung tâm tư vấn."));
+        }
+
         public (Guid TargetId, LockUserAccountRequest Request, Guid ActorId)? LastLockCall { get; private set; }
 
         public Task<AuthResult> LockUserAccountAsync(
@@ -216,6 +226,22 @@ public class AdminUsersControllerTests
         var user = Assert.IsType<UserDto>(created.Value);
         Assert.Equal(UserRoles.Moderator, user.Role);
         Assert.Equal("mod@test.com", user.Email);
+    }
+
+    [Fact]
+    public async Task CreateCenter_WhenValid_ReturnsCreatedAtRoute()
+    {
+        var fakeAuth = new FakeAuthService();
+        var controller = new AdminUsersController(fakeAuth);
+        var request = new CreateCenterAccountRequest("center@test.com", "Password1!", "Trung Tâm Du Học Á Âu", "0912345678");
+
+        var result = await controller.CreateCenter(request, CancellationToken.None);
+
+        var created = Assert.IsType<CreatedAtActionResult>(result.Result);
+        var user = Assert.IsType<UserDto>(created.Value);
+        Assert.Equal(UserRoles.Center, user.Role);
+        Assert.Equal("center@test.com", user.Email);
+        Assert.Equal("Trung Tâm Du Học Á Âu", user.FullName);
     }
 
     [Fact]
