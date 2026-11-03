@@ -39,7 +39,6 @@ from app.services.skills.validators import (
     check_budget_tier,
     check_certification,
     check_english,
-    check_english_plan,
     check_exam_plan,
     check_gpa,
     check_sat,

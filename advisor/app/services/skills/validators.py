@@ -226,28 +226,6 @@ def check_act(score: int) -> int:
     return int(check_score("act", score))
 
 
-def parse_month_year_text(text: str) -> str | None:
-    # 1. dạng: tháng 5 năm 2024, tháng 05/2024, tháng 5 2024
-    m = re.search(r"tháng\s*(\d{1,2})(?:[^\d]+(?:năm\s*)?(\d{4}))", text, re.IGNORECASE)
-    if m:
-        month, year = int(m.group(1)), int(m.group(2))
-        if 1 <= month <= 12 and 1900 <= year <= 2100:
-            return f"{year}-{month:02d}"
-    # 2. dạng: MM/YYYY hoặc M/YYYY
-    m = re.search(r"\b(\d{1,2})/(\d{4})\b", text)
-    if m:
-        month, year = int(m.group(1)), int(m.group(2))
-        if 1 <= month <= 12 and 1900 <= year <= 2100:
-            return f"{year}-{month:02d}"
-    # 3. dạng: YYYY-MM
-    m = re.search(r"\b(\d{4})-(\d{1,2})\b", text)
-    if m:
-        year, month = int(m.group(1)), int(m.group(2))
-        if 1 <= month <= 12 and 1900 <= year <= 2100:
-            return f"{year}-{month:02d}"
-    return None
-
-
 # A3. Chứng chỉ tiếng Anh. IELTS là IELTS Academic như form, không hỏi loại.
 # Ngày thi "yyyy-MM" không được ở tương lai (giống ValidateCertifications); nếu là mục tiêu (is_target) thì không được ở quá khứ.
 def check_english(
