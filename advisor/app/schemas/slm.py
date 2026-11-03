@@ -32,6 +32,7 @@ PROFILE_KEYS = (
     "act",
     "english",
     "english_plan",
+    "standardized_plan",
     "budget",
     "scholarship",
     "funding_source",
@@ -163,7 +164,7 @@ class SlmTin(BaseModel):
 class SlmTinResult(SlmTin):
     confidence: float = Field(default=1.0, ge=0, le=1)
 
-    # Dựng từ JSON SLM trả ({"cac_y": [...]}): kiểm từng ý, dọn (gộp, sắp xếp, hoãn ý quá trần) rồi kiểm cả tin.
+    # Dựng từ JSON SLM trả ({"cac_y": [...]}): kiểm từng ý, dọn (gộp, sắp xếp, cắt ý quá trần kỹ thuật) rồi kiểm cả tin.
     # JSON sai thì ném ValueError (ValidationError của pydantic cũng là ValueError)
     @classmethod
     def from_raw(cls, raw: dict[str, Any], confidence: float = 1.0) -> "SlmTinResult":

@@ -22,6 +22,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<UniversityOffering> UniversityOfferings => Set<UniversityOffering>();
     public DbSet<Major> Majors => Set<Major>();
     public DbSet<UniversityOfferingMajor> UniversityOfferingMajors => Set<UniversityOfferingMajor>();
+    public DbSet<UsState> UsStates => Set<UsState>();
     public DbSet<RankingList> RankingLists => Set<RankingList>();
     public DbSet<UniversityRanking> UniversityRankings => Set<UniversityRanking>();
     public DbSet<Scholarship> Scholarships => Set<Scholarship>();

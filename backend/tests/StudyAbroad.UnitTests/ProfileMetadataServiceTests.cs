@@ -21,7 +21,8 @@ public class ProfileMetadataServiceTests
     private sealed class FakeProfileFlowRepository : IProfileFlowRepository
     {
         public string? MockSettingValue { get; set; }
-        public IReadOnlyList<string> MockOfferingMajors { get; set; } = [];
+        public IReadOnlyList<MajorOption> MockMajorOptions { get; set; } = [];
+        public IReadOnlyList<UsStateOption> MockStateOptions { get; set; } = [];
         public int CallCount { get; private set; }
 
         public Task<string?> GetAppSettingValueAsync(string key, CancellationToken ct = default)
@@ -39,8 +40,11 @@ public class ProfileMetadataServiceTests
         public Task<StudentProfile> EnsureProfileExistsAsync(Guid userId, CancellationToken ct = default) =>
             Task.FromResult(new StudentProfile { UserId = userId });
 
-        public Task<IReadOnlyList<string>> GetOfferingMajorsAsync(CancellationToken ct = default) =>
-            Task.FromResult(MockOfferingMajors);
+        public Task<IReadOnlyList<MajorOption>> GetMajorOptionsAsync(CancellationToken ct = default) =>
+            Task.FromResult(MockMajorOptions);
+
+        public Task<IReadOnlyList<UsStateOption>> GetUsStateOptionsAsync(CancellationToken ct = default) =>
+            Task.FromResult(MockStateOptions);
 
         public Task CommitProfileFlowAsync(StudentProfile profile, IEnumerable<TranscriptScore> scores, IEnumerable<ProfileActivity> activities, IEnumerable<ProfileCertification> certifications, CancellationToken ct = default) =>
             Task.CompletedTask;
@@ -132,31 +136,63 @@ public class ProfileMetadataServiceTests
         Assert.Equal("tier_1", result.BudgetTiers[0].Id);
         Assert.Single(result.GradeScales);
         Assert.Equal("10", result.GradeScales[0].Id);
-        Assert.Single(result.UsStates);
-        Assert.Equal("CA", result.UsStates[0].Code);
-        Assert.True(result.UsStates[0].IsPopular);
-        Assert.Single(result.PopularStateCodes);
+        // Bang chỉ lấy từ bảng us_states (ở đây rỗng), không lấy usStates cũ trong JSON
+        Assert.Empty(result.UsStates);
+        Assert.Empty(result.PopularStateCodes);
         Assert.Equal(1, repo.CallCount);
     }
 
     [Fact]
-    public async Task GetMetadataAsync_MergesOfferingMajors_FromRepository()
+    public async Task GetMetadataAsync_UsesOnlyDbMajors_WithVietnameseName()
     {
         var repo = new FakeProfileFlowRepository
         {
             MockSettingValue = ValidMetadataJson,
-            MockOfferingMajors = ["Computer Science", "Artificial Intelligence", "Mechanical Engineering"]
+            MockMajorOptions =
+            [
+                new MajorOption("Computer and information sciences", "Khoa học máy tính và thông tin", ["cntt"], true),
+                new MajorOption("Engineering", null, [], false)
+            ]
         };
         var cache = new MemoryCache(new MemoryCacheOptions());
         var service = new ProfileMetadataService(repo, cache, new FakeRates());
 
         var result = await service.GetMetadataAsync();
 
-        Assert.NotNull(result);
-        // Computer Science existed, so AI and Mechanical Engineering were newly merged -> 3 total majors
-        Assert.Equal(3, result.UsMajors.Count);
-        Assert.Contains(result.UsMajors, m => m.EnglishName == "Artificial Intelligence");
-        Assert.Contains(result.UsMajors, m => m.EnglishName == "Mechanical Engineering");
+        // Không gộp usMajors trong JSON ("Computer Science"), chỉ 2 ngành từ bảng majors
+        Assert.Equal(2, result.UsMajors.Count);
+        Assert.DoesNotContain(result.UsMajors, m => m.EnglishName == "Computer Science");
+        var cs = result.UsMajors[0];
+        Assert.Equal("Khoa học máy tính và thông tin", cs.Name);
+        Assert.Equal("Computer and information sciences", cs.EnglishName);
+        Assert.Equal(["cntt"], cs.Aliases);
+        Assert.True(cs.IsPopular);
+        // Chưa có tên Việt thì hiện tên Anh
+        Assert.Equal("Engineering", result.UsMajors[1].Name);
+    }
+
+    [Fact]
+    public async Task GetMetadataAsync_UsesStatesFromTable_WithRegion()
+    {
+        var repo = new FakeProfileFlowRepository
+        {
+            MockSettingValue = ValidMetadataJson,
+            MockStateOptions =
+            [
+                new UsStateOption("MA", "Massachusetts", "northeast", true),
+                new UsStateOption("OH", "Ohio", "midwest", false)
+            ]
+        };
+        var cache = new MemoryCache(new MemoryCacheOptions());
+        var service = new ProfileMetadataService(repo, cache, new FakeRates());
+
+        var result = await service.GetMetadataAsync();
+
+        // Không gộp bang cũ trong JSON ("CA"), chỉ 2 bang từ bảng us_states
+        Assert.Equal(["MA", "OH"], result.UsStates.Select(s => s.Code));
+        Assert.Equal("northeast", result.UsStates[0].Region);
+        Assert.True(result.UsStates[0].IsPopular);
+        Assert.Equal(["MA"], result.PopularStateCodes);
     }
 
     [Fact]

@@ -22,7 +22,7 @@ from app.schemas.chat import ChatState, ProfileField, QuickReply, Widget
 from app.services.chat_flow import NEED_PROFILE, SkillOutput, ask, go_to
 from app.services.skill_call import SKILLS_DIR, SkillCall
 from app.services.skill_rules import REQUIRED_B3, missing_fields
-from app.services.skills import buttons, exchange_rate
+from app.services.skills import buttons, exchange_rate, state_catalog
 from app.services.skills.validators import (
     CERT_NAMES,
     CERT_TYPES,
@@ -39,11 +39,13 @@ from app.services.skills.validators import (
     check_budget_tier,
     check_certification,
     check_english,
-    check_english_plan,
+    check_exam_plan,
     check_gpa,
     check_sat,
     check_scholarship,
+    check_standardized_plan,
     check_states,
+    parse_month_year_text,
     read_money,
 )
 
@@ -56,6 +58,7 @@ QUESTION_FIELDS = {
     "D3": ["sat", "act"],
     "E1": ["english"],
     "E2": ["english_plan"],
+    "E3": ["standardized_plan"],
     "F1": ["budget"],
     "F2": ["scholarship"],
     "F3": ["funding_source"],
@@ -74,13 +77,14 @@ MAX_ASK = 2
 # Câu bắt buộc cho B3, theo thứ tự hỏi
 REQUIRED_QUESTIONS = ("D2", "E1", "F1")
 # Câu tùy chọn: F2 (học bổng) hỏi sớm vì B4 cần; E2 chỉ hỏi khi học sinh chưa có chứng chỉ tiếng Anh;
+# E3 chỉ hỏi khi học sinh chưa có bài thi chuẩn hóa (bấm "Chưa thi SAT/ACT" ở D3);
 # D1 chỉ hỏi học sinh cấp 3; N1 chỉ hỏi khi chưa có bang muốn học (gợi ý bang theo người thân).
 # N4 (visa) không hỏi ở B2: chỉ hỏi khi học sinh hỏi về visa / lộ trình. N1, N4 không lưu vào form
-OPTIONAL_QUESTIONS = ("F2", "E2", "D1", "D3", "D4", "D5", "F3", "N1", "N2", "N3")
+OPTIONAL_QUESTIONS = ("F2", "E2", "E3", "D1", "D3", "D4", "D5", "F3", "N1", "N2", "N3")
 # Thứ tự hỏi theo trang form: hỏi xong các câu của một trang mới sang trang sau, không quay lại trang trước.
-# Trang 1 mục tiêu (D1, N2, N3), 2 học bạ (D2), 3 tiếng Anh, SAT (E1, E2, D3), 4 tài chính (F1-F3),
+# Trang 1 mục tiêu (D1, N2, N3), 2 học bạ (D2), 3 tiếng Anh, SAT (E1, E2, D3, E3), 4 tài chính (F1-F3),
 # 5 hoạt động, giải thưởng (D4, D5). Hết form mới hỏi thông tin thêm không có trong form (N1 người thân)
-QUESTION_ORDER = ("D1", "N2", "N3", "D2", "E1", "E2", "D3", "F1", "F2", "F3", "D4", "D5", "N1")
+QUESTION_ORDER = ("D1", "N2", "N3", "D2", "E1", "E2", "D3", "E3", "F1", "F2", "F3", "D4", "D5", "N1")
 # Thông tin bắt buộc → câu hỏi để hỏi lại khi học sinh xác nhận mà vẫn còn thiếu
 FIELD_QUESTION = {"gpa": "D2", "english": "E1", "budget": "F1"}
 # Những câu học sinh gõ (hoặc nút bấm gửi) để xác nhận hồ sơ ở X1
@@ -99,9 +103,61 @@ CONFIRM_WORDS = {
 CONFIRM_REPLY = QuickReply(label="Đúng rồi", value="Đúng rồi")
 FIX_REPLY = QuickReply(label="Cần sửa", value="Em cần sửa thông tin")
 SAVED = "Mình đã ghi nhận hồ sơ của bạn."
-# Câu ô chọn E2 ghép: "Em dự kiến thi tháng 5/2027". Khớp thì ghi thẳng, không gọi Qwen
-PLAN_TEXT = re.compile(r"em dự kiến thi tháng (\d{1,2})/(\d{4})", re.IGNORECASE)
-# english_plan khi học sinh chưa thi tiếng Anh và chưa nói tháng dự kiến (ô "sẽ thi sau" của form đã tích)
+# Câu ô chọn E2 / E3 ghép: "Em dự kiến thi tháng 5/2027", "Em dự kiến thi IELTS, mục tiêu 7.5, tháng 10/2027"...
+# Khớp thì ghi thẳng, không gọi Qwen. E2: tiếng Anh; E3: chuẩn hóa.
+PLAN_TEXT = re.compile(r"em dự kiến thi,?\s*tháng (\d{1,2})/(\d{4})", re.IGNORECASE)
+
+
+def read_plan_text(question_id: str | None, message: str) -> dict | None:
+    if question_id not in ("E2", "E3"):
+        return None
+    text = message.strip().rstrip(".")
+    m_prefix = re.match(r"^(?:em\s+|mình\s+)?dự kiến thi\b", text, re.IGNORECASE)
+    if not m_prefix:
+        return None
+    rest = text[m_prefix.end() :].strip()
+
+    date_str = None
+    m_date = re.search(r"(?:,\s*)?tháng\s+(\d{1,2})/(\d{4})", rest, re.IGNORECASE)
+    if m_date:
+        month = int(m_date.group(1))
+        year = int(m_date.group(2))
+        date_str = f"{year}-{month:02d}"
+        rest = rest[: m_date.start()] + rest[m_date.end() :]
+
+    target_score = None
+    m_score = re.search(r"(?:,\s*)?mục tiêu\s+(\d+(?:[.,]\d+)?)", rest, re.IGNORECASE)
+    if m_score:
+        target_score = float(m_score.group(1).replace(",", "."))
+        rest = rest[: m_score.start()] + rest[m_score.end() :]
+
+    categories = ("english",) if question_id == "E2" else ("standardized", "graduate")
+    valid_types = {code: spec for code, spec in CERT_TYPES.items() if spec.category in categories}
+    test_type = None
+    clean_rest = re.sub(r"^[\s,]+|[\s,]+$", "", rest).strip().lower()
+    if clean_rest:
+        for code, spec in valid_types.items():
+            if clean_rest == spec.name.lower() or clean_rest == code.lower():
+                test_type = code
+                break
+        if test_type is None:
+            for code, spec in sorted(valid_types.items(), key=lambda x: -len(x[1].name)):
+                if spec.name.lower() in clean_rest or code.lower() in clean_rest:
+                    test_type = code
+                    break
+
+    if date_str is None and test_type is None and target_score is None:
+        return None
+
+    return {
+        "planned": True,
+        "date": date_str,
+        "test_type": test_type,
+        "target_score": target_score,
+    }
+
+
+# english_plan / standardized_plan khi học sinh chưa thi và chưa nói tháng dự kiến (tích ô form nhưng chưa điền gì)
 PLANNED_NO_DATE = {"planned": True, "date": None}
 # Câu nút xác nhận thang GPA gửi (và ô chọn D2 ghép): "GPA 8.5 thang 10". Khớp thì ghi thẳng, không gọi Qwen
 GPA_TEXT = re.compile(r"gpa\s+(\d+(?:[.,]\d+)?)\s+thang\s+(4|10)", re.IGNORECASE)
@@ -133,7 +189,7 @@ LIST_FIELDS = {
     "activities": ListField("D4", "activity_pending", check_activity, check_activities, MAX_ACTIVITIES),
     "awards": ListField("D5", "award_pending", check_award, check_awards, MAX_AWARDS),
 }
-PENDING_KEYS = tuple(spec.pending_key for spec in LIST_FIELDS.values())
+PENDING_KEYS = tuple(spec.pending_key for spec in LIST_FIELDS.values()) + ("cert_pending",)
 # Một câu D4/D5 được hỏi tiếp tối đa ngần này lần (mỗi lần thường một ý: vai trò, phạm vi, tháng...)
 MAX_FOLLOW_UPS = 4
 # Ghi xong một hoạt động / giải thưởng thì hỏi còn mục nào nữa không, kèm nút để sang câu sau
@@ -175,10 +231,12 @@ class EnglishRead(BaseModel):
     date: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}$")
 
 
-# Kế hoạch thi tiếng Anh: planned False là "chưa có kế hoạch"; có kế hoạch thì tháng có thể chưa biết
+# Kế hoạch thi tiếng Anh: planned False là "chưa có kế hoạch"; có kế hoạch thì tháng / bài thi / điểm mục tiêu có thể chưa biết
 class EnglishPlanRead(BaseModel):
     planned: bool
     date: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}$")
+    test_type: str | None = None
+    target_score: float | None = None
 
 
 # Học sinh nói số tiền (amount, currency) hoặc bấm nút mức (tier). Chỉ mức tier được lưu
@@ -211,6 +269,7 @@ class HoSoValues(BaseModel):
     act: float | None = None
     english: EnglishRead | None = None
     english_plan: EnglishPlanRead | None = None
+    standardized_plan: EnglishPlanRead | None = None  # dùng chung khuôn, kiểm tra nhóm khác
     budget: BudgetRead | None = None
     scholarship: str | None = None
     funding_source: Literal[FUNDING_SOURCES] | None = None
@@ -240,6 +299,7 @@ class HoSoRead:
     ask_again: str | None = None
     ai_used: bool = False
     pending: dict[str, list[dict]] = field(default_factory=dict)
+    pending_cert: dict | None = None
     # Học sinh không nói thang GPA: thang trong values là đoán. Ở B2 thì hỏi lại thang thay vì ghi
     gpa_guessed: bool = False
 
@@ -257,7 +317,15 @@ def check_value(name: str, value: Any) -> Any:
         cert, score, test_date = check_english(value.type, value.score, value.date)
         return {"type": cert, "value": score, "date": test_date}
     if name == "english_plan":
-        return check_english_plan(value.planned, value.date)
+        return check_exam_plan(
+            value.planned,
+            value.date,
+            value.test_type,
+            value.target_score,
+            allowed_categories=("english",),
+        )
+    if name == "standardized_plan":
+        return check_standardized_plan(value.planned, value.date, value.test_type, value.target_score)
     if name == "budget":
         # Có số tiền thì tự quy ra mức, không tin mức Qwen đoán
         if value.amount is not None:
@@ -268,7 +336,8 @@ def check_value(name: str, value: Any) -> Any:
     if name == "scholarship":
         return check_scholarship(value)
     if name == "preferred_states":
-        return check_states(value)
+        # Đổi tên bang sang mã giống form (California → CA)
+        return state_catalog.to_codes(check_states(value), state_catalog.loaded())
     if isinstance(value, str):
         return value.strip()
     return value
@@ -302,12 +371,67 @@ def check_items(result: HoSoRead, name: str, items: list[dict]) -> None:
 
 # Chạy validators cho mọi thông tin đọc được. Thông tin của câu đang hỏi kiểm tra trước,
 # nên nếu có nhiều giá trị sai thì câu hỏi lại là của câu đang hỏi
-def check_values(read: HoSoRaw, question_id: str | None) -> HoSoRead:
+def check_values(read: HoSoRaw, question_id: str | None, message: str = "") -> HoSoRead:
     found = read.values.model_dump(exclude_none=True)
     asked = QUESTION_FIELDS.get(question_id or "", [])
     order = [n for n in asked if n in found] + [n for n in found if n not in asked]
 
     result = HoSoRead(ai_used=True)
+
+    # Yêu cầu ngày tháng thi cho chứng chỉ tiếng Anh (E1 hoặc khi học sinh chat điểm)
+    if read.values.english:
+        eng = read.values.english
+        eng_date = eng.date or parse_month_year_text(message)
+        if eng_date:
+            eng.date = eng_date
+        elif question_id is not None:
+            c_name = CERT_NAMES.get(eng.type, eng.type.upper())
+            result.pending_cert = {
+                "type": eng.type,
+                "score": eng.score,
+                "category": "english",
+                "cert_name": c_name,
+            }
+            result.ask_again = f"Bạn thi chứng chỉ {c_name} ({eng.score}) vào tháng mấy, năm nào (ví dụ: tháng 5/2025 hoặc 10/2024)?"
+            read.values.english = None
+            if "english" in found:
+                found.pop("english")
+            if "english" in order:
+                order.remove("english")
+
+    # Yêu cầu ngày tháng thi cho bài thi chuẩn hóa SAT / ACT
+    if read.values.sat is not None:
+        sat_date = parse_month_year_text(message)
+        if sat_date is None and question_id is not None:
+            result.pending_cert = {
+                "type": "sat",
+                "score": read.values.sat,
+                "category": "standardized",
+                "cert_name": "SAT",
+            }
+            result.ask_again = f"Bạn thi SAT ({read.values.sat:g}) vào tháng mấy, năm nào (ví dụ: tháng 12/2024 hoặc 03/2025)?"
+            read.values.sat = None
+            if "sat" in found:
+                found.pop("sat")
+            if "sat" in order:
+                order.remove("sat")
+
+    if read.values.act is not None:
+        act_date = parse_month_year_text(message)
+        if act_date is None and question_id is not None:
+            result.pending_cert = {
+                "type": "act",
+                "score": read.values.act,
+                "category": "standardized",
+                "cert_name": "ACT",
+            }
+            result.ask_again = f"Bạn thi ACT ({read.values.act:g}) vào tháng mấy, năm nào (ví dụ: tháng 10/2024 hoặc 04/2025)?"
+            read.values.act = None
+            if "act" in found:
+                found.pop("act")
+            if "act" in order:
+                order.remove("act")
+
     for name in order:
         try:
             if name in LIST_FIELDS:
@@ -344,14 +468,22 @@ class HoSoReader:
             "known": known,
         }
         raw = await self._call.run(user, SCHEMA, check_read)
-        return check_values(raw, question_id) if raw is not None else HoSoRead()
+        # Đọc sẵn danh sách bang để check_value đổi tên bang sang mã
+        await state_catalog.states()
+        return check_values(raw, question_id, message) if raw is not None else HoSoRead()
 
 
 # Ghi kết quả đọc vào hồ sơ. keep_existing=True (thông tin nói ở B0) thì không đè thông tin đã có;
 # còn ở B2 học sinh sửa thì ghi đè. Hoạt động / giải thưởng thì thêm vào danh sách đang có (save_items)
 def save_read(
-    state: ChatState, read: HoSoRead, status: str = "confirmed", keep_existing: bool = False
+    state: ChatState,
+    read: HoSoRead,
+    status: str = "confirmed",
+    keep_existing: bool = False,
+    message: str = "",
 ) -> None:
+    if read.pending_cert:
+        state.profile["cert_pending"] = ProfileField(value=read.pending_cert, status="unknown")
     fields = [(name, value, status) for name, value in read.values.items() if name not in LIST_FIELDS]
     fields += [(name, None, "none") for name in read.none_fields]
     written = []
@@ -360,7 +492,9 @@ def save_read(
             continue
         state.profile[name] = ProfileField(value=value, status=field_status)
         written.append(name)
-    certs_from_fields(state, written, status)
+    sat_act_date = parse_month_year_text(message)
+    sat_act_dates = {"sat": sat_act_date, "act": sat_act_date} if sat_act_date else None
+    certs_from_fields(state, written, status, sat_act_dates)
     for name in LIST_FIELDS:
         if not (keep_existing and name in state.profile):
             save_items(state, name, read.values.get(name, []), read.pending.get(name, []), status)
@@ -446,8 +580,12 @@ def answered(state: ChatState, question_id: str) -> bool:
     if question_id == "D3" and any(c.get("category") != "english" for c in saved_certs(state)):
         return True  # đã có AP, IB, GRE... dù chưa có SAT / ACT
     if question_id == "E2":
-        # Ô "sẽ thi sau" đã tích nhưng chưa có tháng dự kiến thì vẫn hỏi tháng
+        # Ô "sẽ thi sau" đã tích nhưng chưa có bài thi / tháng dự kiến thì vẫn hỏi để bổ sung
         plan = state.profile.get("english_plan")
+        return plan is not None and plan.value != PLANNED_NO_DATE
+    if question_id == "E3":
+        # Tương tự: ô thi chuẩn hóa đã tích nhưng chưa có bài thi / tháng dự kiến
+        plan = state.profile.get("standardized_plan")
         return plan is not None and plan.value != PLANNED_NO_DATE
     return any(name in state.profile for name in QUESTION_FIELDS[question_id])
 
@@ -457,6 +595,11 @@ def needed(state: ChatState, question_id: str) -> bool:
     if question_id == "E2":
         english = state.profile.get("english")
         return english is not None and english.status == "none"
+    if question_id == "E3":
+        # Hỏi khi học sinh đã tích ô "Chưa thi SAT/ACT" (sat và act đều none)
+        sat = state.profile.get("sat")
+        act = state.profile.get("act")
+        return sat is not None and sat.status == "none" and act is not None and act.status == "none"
     if question_id == "D1":
         level = state.profile.get("current_level")
         return level is not None and level.value == "high_school"
@@ -503,10 +646,25 @@ def plan_english(state: ChatState) -> None:
         state.profile["english_plan"] = ProfileField(value=PLANNED_NO_DATE, status="confirmed")
 
 
+# Học sinh bấm "Chưa thi SAT/ACT" thì tích ô "sẽ thi sau" chuẩn hóa giống form
+def plan_standardized(state: ChatState) -> None:
+    sat = state.profile.get("sat")
+    act = state.profile.get("act")
+    if (
+        sat is not None
+        and sat.status == "none"
+        and act is not None
+        and act.status == "none"
+        and "standardized_plan" not in state.profile
+    ):
+        state.profile["standardized_plan"] = ProfileField(value=PLANNED_NO_DATE, status="confirmed")
+
+
 # Hỏi câu tiếp theo của B2, hết câu thì sang rà soát. skill_bac_hoc gọi hàm này khi chuyển sang B2.
 # D4/D5 mà đang có mục dở (nói ở B0) thì hỏi luôn ý còn thiếu thay cho câu chung
 def ask_next(state: ChatState) -> SkillOutput:
     plan_english(state)
+    plan_standardized(state)
     question_id = next_question(state)
     if question_id is None:
         return review(state)
@@ -575,14 +733,53 @@ def ask_gpa_scale(state: ChatState, gpa: float) -> SkillOutput:
     return SkillOutput(f"GPA {number} của bạn là trên thang 4 đúng không?", quick_replies=replies)
 
 
+# Học sinh nói chứng chỉ mà thiếu ngày thi: hỏi lại tháng năm kèm widget tháng/năm thi và nút không nhớ
+def ask_cert_date(state: ChatState, pending: dict, question_text: str | None = None) -> SkillOutput:
+    c_name = pending.get("cert_name") or CERT_NAMES.get(pending["type"], pending["type"].upper())
+    score_val = pending.get("score")
+    score_str = (
+        f" ({score_val:g})"
+        if isinstance(score_val, (int, float))
+        else (f" ({score_val})" if score_val else "")
+    )
+    text = (
+        question_text
+        or f"Bạn thi chứng chỉ {c_name}{score_str} vào tháng mấy, năm nào (ví dụ: tháng 5/2025 hoặc 10/2024)?"
+    )
+    return SkillOutput(
+        text,
+        quick_replies=[QuickReply(label="Không nhớ ngày thi", value="Không nhớ")],
+        widget=Widget(type="select", data=buttons.cert_date_widget()),
+    )
+
+
 # Ghi GPA học sinh đã nói rõ thang (bấm nút xác nhận hoặc chọn ở ô chọn), không gọi Qwen
 def save_gpa(state: ChatState, gpa: float, scale: int) -> SkillOutput:
     try:
         value, scale = check_gpa(gpa, scale)
     except AskAgain as err:
         return ask_question(state, "D2", err.question)
+
+    # Kế hoạch đồng bộ 3.1: Nếu GPA đang tính từ học bạ chi tiết (source = transcript)
+    # thì không tự ý ghi đè GPA tổng, mà nhắc học sinh sửa ở bảng điểm Bước 2
+    old_gpa = state.profile.get("gpa")
+    if old_gpa and isinstance(old_gpa.value, dict) and old_gpa.value.get("source") == "transcript":
+        out = review(state) if state.question_id == "X1" else ask_next(state)
+        out.answer = (
+            f"Điểm GPA của em hiện đang được tính từ học bạ chi tiết ở Bước 2. "
+            f"Nếu muốn thay đổi, em hãy mở Bước 2 trên form để cập nhật điểm các môn nhé!\n\n{out.answer}"
+        )
+        return out
+
     state.profile["gpa"] = ProfileField(value={"value": value, "scale": scale}, status="confirmed")
-    return review(state) if state.question_id == "X1" else ask_next(state)
+    out = review(state) if state.question_id == "X1" else ask_next(state)
+    if buttons.is_middle_school_profile(state.profile):
+        out.answer = (
+            f"Mình đã ghi nhận mục tiêu GPA {value:g} (thang {scale}) của bạn. "
+            f"Nếu muốn lập lộ trình điểm chi tiết cho từng năm từ Lớp 9 đến Lớp 12 để theo dõi xu hướng tiến bộ (Grade Trend), "
+            f"bạn có thể mở Bước 2 trên form để chia điểm nhé!\n\n{out.answer}"
+        )
+    return out
 
 
 # Ghi mức ngân sách từ câu số tiền ở F1 ("800 triệu", "36.000 USD"), không gọi Qwen
@@ -595,14 +792,30 @@ def save_budget(state: ChatState, amount: float, currency: str | None) -> SkillO
     return ask_next(state)
 
 
-# Ghi tháng dự kiến thi tiếng Anh học sinh chọn ở ô chọn E2, không gọi Qwen
-def save_english_plan(state: ChatState, month: int, year: int) -> SkillOutput:
+# Ghi kế hoạch thi tiếng Anh / chuẩn hóa (bài thi, điểm mục tiêu, tháng/năm) học sinh chọn ở ô chọn E2 / E3, không gọi Qwen
+def save_plan(state: ChatState, question_id: str, plan_data: dict) -> SkillOutput:
+    categories = ("english",) if question_id == "E2" else ("standardized", "graduate")
+    key = "english_plan" if question_id == "E2" else "standardized_plan"
     try:
-        plan = check_english_plan(True, f"{year}-{month:02d}")
+        plan = check_exam_plan(
+            True,
+            plan_data.get("date"),
+            plan_data.get("test_type"),
+            plan_data.get("target_score"),
+            allowed_categories=categories,
+        )
     except AskAgain as err:
-        return ask_question(state, "E2", err.question)
-    state.profile["english_plan"] = ProfileField(value=plan, status="confirmed")
+        return ask_question(state, question_id, err.question)
+    state.profile[key] = ProfileField(value=plan, status="confirmed")
     return review(state) if state.question_id == "X1" else ask_next(state)
+
+
+def save_english_plan(state: ChatState, month: int, year: int) -> SkillOutput:
+    return save_plan(state, "E2", {"date": f"{year}-{month:02d}"})
+
+
+def save_standardized_plan(state: ChatState, month: int, year: int) -> SkillOutput:
+    return save_plan(state, "E3", {"date": f"{year}-{month:02d}"})
 
 
 # D4 / D5: ghi xong một mục mà chưa tới số mục tối đa thì hỏi còn mục nữa không (ô nhập vẫn hiện),
@@ -691,7 +904,12 @@ def write_certs(state: ChatState, certs: list[dict], status: str) -> None:
 
 
 # Qwen / nút vừa ghi english, sat, act: sửa thẻ chứng chỉ cùng loại; "không có" thì bỏ thẻ loại đó
-def certs_from_fields(state: ChatState, names: list[str], status: str) -> None:
+def certs_from_fields(
+    state: ChatState,
+    names: list[str],
+    status: str,
+    sat_act_dates: dict[str, str | None] | None = None,
+) -> None:
     names = [name for name in names if name in CERT_FIELDS and name in state.profile]
     if not names:
         return
@@ -703,13 +921,14 @@ def certs_from_fields(state: ChatState, names: list[str], status: str) -> None:
             certs = [c for c in certs if (c.get("category") != group if group else c.get("type") != name)]
             continue
         english = name == "english"
+        test_date = value.get("date") if english else (sat_act_dates or {}).get(name)
         cert = {
             "category": "english" if english else "standardized",
             "type": value["type"] if english else name,
             "subject": None,
             "overall": value["value"] if english else value,
             "scaleText": None,
-            "testDate": value.get("date") if english else None,
+            "testDate": test_date,
         }
         certs = put_cert(certs, cert)
     write_certs(state, certs, status)
@@ -789,6 +1008,7 @@ def is_form_text(question_id: str | None, message: str) -> bool:
 def press_button(state: ChatState, button: buttons.Button) -> SkillOutput:
     buttons.press(state, button)
     certs_from_fields(state, list(button.values), "confirmed")
+    state.profile.pop("cert_pending", None)
     for spec in LIST_FIELDS.values():
         if spec.question == state.question_id:
             state.profile.pop(spec.pending_key, None)
@@ -802,7 +1022,12 @@ class HoSoHandler:
     # Ghi giá trị học sinh tự khai ngoài câu đang hỏi: said_in_B0 để xác nhận lại ở X1, được đè giá trị cũ
     async def save_said(self, state: ChatState, message: str) -> None:
         known = {name: f.value for name, f in state.profile.items() if f.value is not None}
-        save_read(state, await self._reader.read(None, message, known, state.branch), status="said_in_B0")
+        save_read(
+            state,
+            await self._reader.read(None, message, known, state.branch),
+            status="said_in_B0",
+            message=message,
+        )
 
     async def run(self, state: ChatState, message: str) -> SkillOutput:
         # Tỷ giá cũ hơn 1 ngày thì lấy lại trước khi đổi tiền hoặc vẽ ô ngân sách
@@ -829,9 +1054,46 @@ class HoSoHandler:
         money = read_money(message) if question_id == "F1" else None
         if money is not None:
             return save_budget(state, *money)
-        plan_text = PLAN_TEXT.fullmatch(message.strip().rstrip("."))
-        if plan_text is not None:
-            return save_english_plan(state, int(plan_text[1]), int(plan_text[2]))
+        plan_data = read_plan_text(question_id, message)
+        if plan_data is not None:
+            return save_plan(state, question_id, plan_data)
+
+        # Xử lý pending_cert nếu học sinh đang được hỏi ngày tháng thi chứng chỉ
+        pending_field = state.profile.get("cert_pending")
+        if pending_field is not None and isinstance(pending_field.value, dict):
+            # Nếu người dùng bấm nút của câu hỏi (hoặc nút bỏ qua):
+            button = buttons.pressed(question_id, message, can_skip=question_id in OPTIONAL_QUESTIONS)
+            if button is not None:
+                state.profile.pop("cert_pending", None)
+                return press_button(state, button)
+
+            date_str = parse_month_year_text(message)
+            pending = pending_field.value
+            msg_lower = message.strip().lower()
+            is_skip = any(w in msg_lower for w in ("không nhớ", "quên", "chưa rõ", "bỏ qua", "skip"))
+
+            if date_str or is_skip:
+                state.profile.pop("cert_pending", None)
+                cert = {
+                    "category": pending.get("category", "english"),
+                    "type": pending["type"],
+                    "subject": pending.get("subject"),
+                    "overall": pending["score"],
+                    "scaleText": None,
+                    "testDate": date_str if date_str else None,
+                }
+                certs = put_cert(saved_certs(state), cert)
+                write_certs(state, certs, "confirmed")
+                fields_from_certs(state, "confirmed")
+                c_name = pending.get("cert_name") or CERT_NAMES.get(pending["type"], pending["type"].upper())
+                out = ask_next(state)
+                if date_str:
+                    out.answer = f"Mình đã ghi nhận chứng chỉ {c_name} (điểm {pending['score']}, thi {date_str}).\n\n{out.answer}"
+                else:
+                    out.answer = f"Mình đã ghi nhận điểm {c_name} {pending['score']}.\n\n{out.answer}"
+                return out
+
+            return ask_cert_date(state, pending)
 
         known = {name: f.value for name, f in state.profile.items() if f.value is not None}
         asked_id = question_id if question_id in QUESTION_FIELDS else None
@@ -840,9 +1102,11 @@ class HoSoHandler:
         read = await self._reader.read(asked_id, message, known, state.branch)
         # GPA không nói thang thì chưa ghi, hỏi lại thang sau khi ghi các thông tin khác
         guessed_gpa = read.values.pop("gpa", None) if read.gpa_guessed else None
-        save_read(state, read)
+        save_read(state, read, message=message)
         if guessed_gpa is not None:
             return ask_gpa_scale(state, guessed_gpa["value"])
+        if read.pending_cert is not None:
+            return ask_cert_date(state, read.pending_cert, read.ask_again)
 
         follow = follow_up(state, before)
         if follow is not None:

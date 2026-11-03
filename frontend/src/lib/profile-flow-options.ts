@@ -96,6 +96,121 @@ export const IMPACT_LEVEL_OPTIONS: { value: ImpactLevel; label: string }[] = [
   { value: "international", label: "Quốc tế" },
 ];
 
+export interface ImpactTierDetail {
+  value: ImpactLevel;
+  tierNumber: number; // 1 (đáy) -> 5 (đỉnh)
+  label: string;
+  shortLabel: string;
+  badge: string;
+  icon: string;
+  summary: string;
+  activityCriteria: string[];
+  awardCriteria: string[];
+}
+
+export const IMPACT_TIER_DETAILS: Record<ImpactLevel, ImpactTierDetail> = {
+  international: {
+    value: "international",
+    tierNumber: 5,
+    label: "Cấp Quốc tế",
+    shortLabel: "Quốc tế",
+    badge: "Xuất sắc / Đỉnh cao",
+    icon: "🌍",
+    summary: "Quy mô toàn cầu, các cuộc thi, kỳ thi Olympic hoặc diễn đàn quốc tế lớn.",
+    activityCriteria: [
+      "Đại diện quốc gia tham gia các diễn đàn, hội nghị quốc tế (Model UN thế giới, thanh niên ASEAN...).",
+      "Sáng lập hoặc điều hành dự án quốc tế, sản phẩm công nghệ có người dùng đa quốc gia.",
+    ],
+    awardCriteria: [
+      "Huy chương Olympic quốc tế (IMO, IOI, IPhO, IChO, IBO...).",
+      "Giải thưởng nghiên cứu khoa học quốc tế (ISEF, Genius Olympiad...).",
+      "Giải thưởng cuộc thi nghệ thuật, thể thao toàn cầu uy tín.",
+    ],
+  },
+  national: {
+    value: "national",
+    tierNumber: 4,
+    label: "Cấp Quốc gia",
+    shortLabel: "Quốc gia",
+    badge: "Rất mạnh / Toàn quốc",
+    icon: "🇻🇳",
+    summary: "Quy mô cấp quốc gia do các Bộ, Ban, Ngành hoặc tổ chức toàn quốc chủ trì.",
+    activityCriteria: [
+      "Lãnh đạo dự án hoặc tổ chức phi lợi nhuận hoạt động trên 3 tỉnh/thành phố.",
+      "Thực tập sinh hoặc tham gia nghiên cứu cấp viện nghiên cứu, tập đoàn lớn.",
+      "Đại biểu thanh niên, tình nguyện viên tiêu biểu cấp toàn quốc.",
+    ],
+    awardCriteria: [
+      "Giải Học sinh Giỏi Quốc gia (HSGQG do Bộ GD&ĐT tổ chức).",
+      "Giải Cuộc thi Khoa học Kỹ thuật cấp Quốc gia (ViSEF).",
+      "Huy chương giải vô địch thể thao, văn nghệ toàn quốc.",
+    ],
+  },
+  province: {
+    value: "province",
+    tierNumber: 3,
+    label: "Cấp Tỉnh / Thành phố",
+    shortLabel: "Tỉnh / TP",
+    badge: "Mạnh / Địa phương",
+    icon: "🏙️",
+    summary: "Quy mô cấp tỉnh hoặc thành phố trực thuộc Trung ương (Hà Nội, TP.HCM, Đà Nẵng...).",
+    activityCriteria: [
+      "Sáng lập hoặc chủ nhiệm CLB, dự án thiện nguyện quy mô toàn tỉnh/thành phố.",
+      "Tổ chức sự kiện lớn thu hút từ 100 người tham gia trở lên ngoài phạm vi trường.",
+    ],
+    awardCriteria: [
+      "Giải Học sinh Giỏi cấp Tỉnh / Thành phố trực thuộc Trung ương.",
+      "Giải thưởng thi đấu thể thao, giải nghệ thuật cấp Tỉnh / Thành phố.",
+      "Giải thưởng sáng tạo khoa học kỹ thuật cấp Tỉnh / Thành phố.",
+    ],
+  },
+  district: {
+    value: "district",
+    tierNumber: 2,
+    label: "Cấp Quận / Huyện",
+    shortLabel: "Quận / Huyện",
+    badge: "Khá / Cụm trường",
+    icon: "🏘️",
+    summary: "Quy mô giao lưu, thi đấu giữa các trường trong quận/huyện hoặc cụm trường.",
+    activityCriteria: [
+      "Lãnh đạo hoặc điều phối dự án liên trường trong địa bàn quận/huyện.",
+      "Thành viên ban tổ chức chiến dịch tình nguyện, dự án cộng đồng địa phương.",
+    ],
+    awardCriteria: [
+      "Giải Học sinh Giỏi cấp Quận / Huyện / Cụm trường.",
+      "Giải thi đấu phong trào thể thao, hội thi văn nghệ cấp Quận / Huyện.",
+    ],
+  },
+  school: {
+    value: "school",
+    tierNumber: 1,
+    label: "Cấp Trường",
+    shortLabel: "Trường",
+    badge: "Tiêu chuẩn / Cơ bản",
+    icon: "🏫",
+    summary: "Các hoạt động, câu lạc bộ và giải thưởng nội bộ trong trường học.",
+    activityCriteria: [
+      "Ban chủ nhiệm, trưởng ban hoặc thành viên tích cực của câu lạc bộ trường.",
+      "Tham gia ban tổ chức các sự kiện trường (Prom, Lễ hội, Ngày hội thông tin...).",
+      "Hoạt động tình nguyện hoặc trách nhiệm nội bộ trường học.",
+    ],
+    awardCriteria: [
+      "Giải Học sinh Giỏi cấp trường / giải Olympic cấp trường.",
+      "Giải thi đấu phong trào thể thao, văn nghệ, giải học thuật cấp trường.",
+      "Học bổng khuyến khích hoặc danh hiệu học sinh tiêu biểu của trường.",
+    ],
+  },
+};
+
+/** Mảng 5 cấp xếp theo thứ tự Kim tự tháp từ Đỉnh (Quốc tế) xuống Đáy (Trường) */
+export const IMPACT_PYRAMID_LEVELS: ImpactLevel[] = [
+  "international",
+  "national",
+  "province",
+  "district",
+  "school",
+];
+
 export const ACTIVITY_ROLE_OPTIONS: { value: ActivityRole; label: string }[] = [
   { value: "founder", label: "Sáng lập" },
   { value: "leader", label: "Trưởng / Chủ nhiệm" },
@@ -183,3 +298,84 @@ export function draftGpa(step2: TranscriptDraft | undefined): { gpa10: number | 
   if (manual10 !== null) return { gpa10: manual10, gpa4: toGpa4(manual10) };
   return { gpa10: null, gpa4: step2?.calculatedGpa4Scale ?? null };
 }
+
+export type GradeTrendType = "strong_upward" | "slight_upward" | "stable" | "downward";
+
+export interface GradeTrendInfo {
+  hasEnoughData: boolean;
+  trend: GradeTrendType | null;
+  changeGpa10: number;
+  yearlyAverages: { gradeName: string; gpa10: number; gpa4: number }[];
+  summaryMessage: string;
+}
+
+/** Đánh giá xu hướng tiến bộ học tập (Grade Trend / Upward Trend) theo chuẩn tuyển sinh Mỹ */
+export function calculateGradeTrend(years: AcademicYearDraft[]): GradeTrendInfo {
+  const yearlyAverages: { gradeName: string; gpa10: number; gpa4: number }[] = [];
+
+  for (const yr of years) {
+    let sum = 0;
+    let count = 0;
+    for (const sub of yr.subjects) {
+      const s1 = typeof sub.semester1Score === "number" ? sub.semester1Score : null;
+      const s2 = typeof sub.semester2Score === "number" ? sub.semester2Score : null;
+      let avg: number | null = null;
+      if (s1 !== null && s2 !== null) avg = (s1 + s2) / 2;
+      else if (s1 !== null) avg = s1;
+      else if (s2 !== null) avg = s2;
+
+      if (avg !== null && avg >= 0 && avg <= 10) {
+        sum += avg;
+        count++;
+      }
+    }
+    if (count > 0) {
+      const gpa10 = Math.round((sum / count) * 100) / 100;
+      yearlyAverages.push({
+        gradeName: yr.gradeName,
+        gpa10,
+        gpa4: toGpa4(gpa10),
+      });
+    }
+  }
+
+  if (yearlyAverages.length < 2) {
+    return {
+      hasEnoughData: false,
+      trend: null,
+      changeGpa10: 0,
+      yearlyAverages,
+      summaryMessage: "",
+    };
+  }
+
+  const firstGpa = yearlyAverages[0].gpa10;
+  const latestGpa = yearlyAverages[yearlyAverages.length - 1].gpa10;
+  const changeGpa10 = Math.round((latestGpa - firstGpa) * 100) / 100;
+
+  let trend: GradeTrendType = "stable";
+  let summaryMessage = "Thành tích học tập duy trì ổn định qua các năm học.";
+
+  if (changeGpa10 >= 0.3) {
+    trend = "strong_upward";
+    summaryMessage = `Điểm số tăng mạnh (+${changeGpa10}) qua các năm — Điểm cộng lớn trong mắt hội đồng tuyển sinh Mỹ!`;
+  } else if (changeGpa10 >= 0.1) {
+    trend = "slight_upward";
+    summaryMessage = `Điểm số có xu hướng tiến bộ (+${changeGpa10}) — Cho thấy đà phát triển và nỗ lực học tập tốt.`;
+  } else if (changeGpa10 <= -0.3) {
+    trend = "downward";
+    summaryMessage = `Điểm số có xu hướng giảm (${changeGpa10}) — Bạn nên chú ý cải thiện điểm số ở các kỳ tới.`;
+  } else if (changeGpa10 <= -0.1) {
+    trend = "downward";
+    summaryMessage = `Điểm số giảm nhẹ (${changeGpa10}) — Hãy duy trì sự tập trung để phục hồi phong độ.`;
+  }
+
+  return {
+    hasEnoughData: true,
+    trend,
+    changeGpa10,
+    yearlyAverages,
+    summaryMessage,
+  };
+}
+

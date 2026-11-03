@@ -803,7 +803,7 @@ class TranscriptReader:
         elif season:
             raw.semester = 1 if season in ("fall", "autumn") else 2
 
-        school = _SCHOOL_GRADE_RE.search(both) or re.search(r"^(10|11|12)$", cls._plain(grade))
+        school = _SCHOOL_GRADE_RE.search(both) or re.search(r"^(6|7|8|9|10|11|12)$", cls._plain(grade))
         uni = _UNI_YEAR_RE.search(both)
         academic = _ACADEMIC_YEAR_RE.search(both)
 

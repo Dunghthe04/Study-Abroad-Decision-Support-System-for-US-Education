@@ -18,8 +18,8 @@ public static class ChatProfileMapper
     // Thứ tự khóa khi trả về, trùng DRAFT_KEYS
     public static readonly IReadOnlyList<string> DraftKeys =
     [
-        "current_level", "current_grade", "target_level", "major", "gpa", "sat", "act", "english",
-        "english_plan", "certifications", "budget", "scholarship", "activities", "awards", "preferred_states", "school_type",
+        "current_level", "current_grade", "graduation_year", "target_level", "major", "gpa", "sat", "act", "english",
+        "english_plan", "standardized_plan", "certifications", "budget", "scholarship", "activities", "awards", "preferred_states", "school_type",
         "education_system", "funding_source", "intake",
     ];
 
@@ -45,6 +45,7 @@ public static class ChatProfileMapper
         {
             ["current_level"] = Text(step1?.CurrentEducationLevel),
             ["current_grade"] = Text(step1?.CurrentGrade),
+            ["graduation_year"] = step1?.ExpectedGraduationYear != null ? JsonValue.Create(step1.ExpectedGraduationYear.Value) : null,
             ["target_level"] = Text(step1?.TargetDegreeLevel),
             ["major"] = Text(step1?.TargetMajor),
             ["gpa"] = Gpa(draft.Step2),
@@ -52,7 +53,10 @@ public static class ChatProfileMapper
             ["act"] = TestScore(certs, "act"),
             ["english"] = MainEnglish(certs),
             ["english_plan"] = draft.Step3?.EnglishPlanned == true
-                ? new JsonObject { ["planned"] = true, ["date"] = Text(draft.Step3.EnglishPlannedDate) }
+                ? PlanNode(draft.Step3.EnglishPlannedDate, draft.Step3.EnglishPlannedTestType, draft.Step3.EnglishPlannedTargetScore)
+                : null,
+            ["standardized_plan"] = draft.Step3?.StandardizedPlanned == true
+                ? PlanNode(draft.Step3.StandardizedPlannedDate, draft.Step3.StandardizedPlannedTestType, draft.Step3.StandardizedPlannedTargetScore)
                 : null,
             // Cả danh sách thẻ chứng chỉ như form, để chat thêm được nhiều chứng chỉ
             ["certifications"] = ListOrNull(certs.Select(c => JsonSerializer.SerializeToNode(c)!)),
@@ -78,8 +82,10 @@ public static class ChatProfileMapper
                 if (undecided)
                     profile[key] = new JsonObject { ["value"] = Unknown, ["status"] = Unknown };
             }
-            // Form tích "sẽ thi sau" là đã trả lời chưa có chứng chỉ tiếng Anh, chat không đòi hỏi lại
+            // Form tích "sẽ thi sau" là đã trả lời chưa có chứng chỉ tiếng Anh / chuẩn hóa, chat không đòi hỏi lại
             else if (key == "english" && draft.Step3?.EnglishPlanned == true)
+                profile[key] = new JsonObject { ["value"] = null, ["status"] = "none" };
+            else if ((key == "sat" || key == "act") && draft.Step3?.StandardizedPlanned == true)
                 profile[key] = new JsonObject { ["value"] = null, ["status"] = "none" };
             else if (KeepFromPrevious(key, previous?[key]))
                 profile[key] = previous![key]!.DeepClone();
@@ -104,6 +110,13 @@ public static class ChatProfileMapper
             {
                 "current_level" => draft with { Step1 = step1 with { CurrentEducationLevel = Str(value) } },
                 "current_grade" => draft with { Step1 = step1 with { CurrentGrade = Str(value) } },
+                "graduation_year" or "expected_graduation_year" => draft with
+                {
+                    Step1 = step1 with
+                    {
+                        ExpectedGraduationYear = value is not null ? value.GetValue<int>() : null
+                    }
+                },
                 "target_level" => draft with { Step1 = step1 with { TargetDegreeLevel = Str(value) } },
                 "major" => draft with
                 {
@@ -124,6 +137,18 @@ public static class ChatProfileMapper
                     {
                         EnglishPlanned = value?["planned"]?.GetValue<bool>() ?? false,
                         EnglishPlannedDate = Str(value?["date"]),
+                        EnglishPlannedTestType = Str(value?["test_type"]),
+                        EnglishPlannedTargetScore = value?["target_score"]?.GetValue<decimal>(),
+                    },
+                },
+                "standardized_plan" => draft with
+                {
+                    Step3 = step3 with
+                    {
+                        StandardizedPlanned = value?["planned"]?.GetValue<bool>() ?? false,
+                        StandardizedPlannedDate = Str(value?["date"]),
+                        StandardizedPlannedTestType = Str(value?["test_type"]),
+                        StandardizedPlannedTargetScore = value?["target_score"]?.GetValue<decimal>(),
                     },
                 },
                 "budget" => draft with { Step4 = step4 with { AnnualBudgetTier = Str(value) } },
@@ -133,7 +158,41 @@ public static class ChatProfileMapper
                 _ => draft,
             };
         }
+
+        if (draft.Step1 is { } s1 && s1.ExpectedGraduationYear == null)
+        {
+            var guessed = GuessGraduationYear(s1.CurrentEducationLevel, s1.CurrentGrade);
+            if (guessed.HasValue)
+            {
+                draft = draft with { Step1 = s1 with { ExpectedGraduationYear = guessed.Value } };
+            }
+        }
+
         return draft;
+    }
+
+    public static int? GuessGraduationYear(string? level, string? grade, DateTime? now = null)
+    {
+        var lastGrade = level switch
+        {
+            "high_school" => 12,
+            "middle_school" => 9,
+            "college_university" => 4,
+            "master" => 2,
+            _ => (int?)null,
+        };
+        if (lastGrade == null || string.IsNullOrWhiteSpace(grade)) return null;
+
+        var current = now ?? DateTime.UtcNow;
+        var schoolYearEnd = current.Month >= 8 ? current.Year + 1 : current.Year;
+        if (grade == "Năm cuối") return schoolYearEnd;
+
+        var match = System.Text.RegularExpressions.Regex.Match(grade, @"(?:Lớp|Năm)\s*(\d+)");
+        if (match.Success && int.TryParse(match.Groups[1].Value, out var n))
+        {
+            return schoolYearEnd + Math.Max(0, lastGrade.Value - n);
+        }
+        return null;
     }
 
     // Kế hoạch 3.1: chế độ lấy theo gpaMode (TranscriptGpa.Mode đoán cho nháp cũ)
@@ -163,17 +222,24 @@ public static class ChatProfileMapper
             : step2 with { ManualGpa10Scale = null, CalculatedGpa4Scale = gpa };
     }
 
-    // SAT / ACT: lấy điểm cao nhất, giống ApplyLegacyCertificationColumns
-    private static JsonNode? TestScore(List<FlowCertificationItemDto> certs, string type) =>
-        certs.Where(c => c.Type == type && c.Overall is not null).Max(c => c.Overall) is { } best
-            ? JsonValue.Create((int)best)
-            : null;
+    // SAT / ACT: ưu tiên điểm thi thật, nếu chưa có thì lấy điểm mục tiêu; lấy điểm cao nhất (ApplyLegacyCertificationColumns)
+    private static JsonNode? TestScore(List<FlowCertificationItemDto> certs, string type)
+    {
+        var matches = certs.Where(c => c.Type == type && c.Overall is not null).ToList();
+        var actual = matches.Where(c => !c.IsTarget).ToList();
+        var candidates = actual.Count > 0 ? actual : matches;
+        return candidates.Max(c => c.Overall) is { } best ? JsonValue.Create((int)best) : null;
+    }
 
-    // Chứng chỉ tiếng Anh chính: ngày thi mới nhất, rồi điểm cao nhất (ApplyLegacyCertificationColumns)
+    // Chứng chỉ tiếng Anh chính: ưu tiên thi thật; ngày thi mới nhất, rồi điểm cao nhất (ApplyLegacyCertificationColumns)
     private static JsonObject? MainEnglish(List<FlowCertificationItemDto> certs)
     {
-        var main = certs
+        var matches = certs
             .Where(c => c.Category == English && c.Overall is not null && !string.IsNullOrEmpty(c.Type) && c.Type != OtherType)
+            .ToList();
+        var actual = matches.Where(c => !c.IsTarget).ToList();
+        var candidates = actual.Count > 0 ? actual : matches;
+        var main = candidates
             .OrderByDescending(c => c.TestDate ?? "", StringComparer.Ordinal) // yyyy-MM so được bằng chuỗi
             .ThenByDescending(c => c.Overall)
             .FirstOrDefault();
@@ -218,24 +284,36 @@ public static class ChatProfileMapper
             .Select(c => string.IsNullOrEmpty(c.Id) ? c with { Id = Guid.NewGuid().ToString() } : c)
             .ToList();
 
-    private static JsonNode ActivityToChat(FlowActivityDraftDto item) => new JsonObject
+    private static JsonNode ActivityToChat(FlowActivityDraftDto item)
     {
-        ["name"] = item.Name,
-        ["category"] = "activity",
-        ["role"] = item.Role,
-        ["impactLevel"] = item.ImpactLevel,
-        ["startDate"] = item.StartDate,
-        ["endDate"] = item.EndDate,
-        ["isOngoing"] = item.IsOngoing,
-    };
+        var node = new JsonObject
+        {
+            ["name"] = item.Name,
+            ["category"] = "activity",
+            ["role"] = item.Role,
+            ["impactLevel"] = item.ImpactLevel,
+            ["startDate"] = item.StartDate,
+            ["endDate"] = item.EndDate,
+            ["isOngoing"] = item.IsOngoing,
+        };
+        if (!string.IsNullOrWhiteSpace(item.Description))
+            node["description"] = item.Description;
+        return node;
+    }
 
-    private static JsonNode AwardToChat(FlowActivityDraftDto item) => new JsonObject
+    private static JsonNode AwardToChat(FlowActivityDraftDto item)
     {
-        ["name"] = item.Name,
-        ["category"] = "achievement",
-        ["impactLevel"] = item.ImpactLevel,
-        ["year"] = item.Year,
-    };
+        var node = new JsonObject
+        {
+            ["name"] = item.Name,
+            ["category"] = "achievement",
+            ["impactLevel"] = item.ImpactLevel,
+            ["year"] = item.Year,
+        };
+        if (!string.IsNullOrWhiteSpace(item.Description))
+            node["description"] = item.Description;
+        return node;
+    }
 
     // Thay toàn bộ hoạt động (hoặc giải thưởng) bằng danh sách của chat, giữ id theo vị trí và giữ loại còn lại
     private static List<FlowActivityDraftDto> PutItems(List<FlowActivityDraftDto>? items, bool award, JsonNode? value)
@@ -243,12 +321,47 @@ public static class ChatProfileMapper
         var all = items ?? [];
         var oldIds = all.Where(i => IsAward(i) == award).Select(i => i.Id).ToList();
         var fromChat = (value?.AsArray() ?? [])
-            .Select((node, i) => node.Deserialize<FlowActivityDraftDto>()! with
+            .Select((node, i) =>
             {
-                Id = i < oldIds.Count && oldIds[i] is { } id ? id : Guid.NewGuid().ToString(),
+                var id = i < oldIds.Count && oldIds[i] is { } existingId ? existingId : Guid.NewGuid().ToString();
+                return NodeToActivity(node, award, id);
             });
         var kept = all.Where(i => IsAward(i) != award);
         return award ? kept.Concat(fromChat).ToList() : fromChat.Concat(kept).ToList();
+    }
+
+    private static FlowActivityDraftDto NodeToActivity(JsonNode? node, bool award, string id)
+    {
+        if (node is JsonObject obj)
+        {
+            var name = obj["name"]?.GetValue<string>();
+            var cat = obj["category"]?.GetValue<string>() ?? (award ? "achievement" : "activity");
+            var role = obj["role"]?.GetValue<string>();
+            var impact = obj["impactLevel"]?.GetValue<string>() ?? obj["impact_level"]?.GetValue<string>();
+            var start = obj["startDate"]?.GetValue<string>() ?? obj["start_date"]?.GetValue<string>();
+            var end = obj["endDate"]?.GetValue<string>() ?? obj["end_date"]?.GetValue<string>();
+            var ongoing = obj["isOngoing"]?.GetValue<bool>() ?? obj["is_ongoing"]?.GetValue<bool>() ?? false;
+            var desc = obj["description"]?.GetValue<string>();
+            var year = obj["year"]?.GetValue<int?>();
+            var duration = obj["durationMonths"]?.GetValue<int?>() ?? obj["duration_months"]?.GetValue<int?>();
+
+            return new FlowActivityDraftDto(
+                Id: id,
+                Name: name,
+                Category: cat,
+                Role: role,
+                ImpactLevel: impact,
+                StartDate: start,
+                EndDate: end,
+                IsOngoing: ongoing,
+                DurationMonths: duration,
+                Year: year,
+                Description: desc
+            );
+        }
+
+        var dto = node.Deserialize<FlowActivityDraftDto>() ?? new FlowActivityDraftDto();
+        return dto with { Id = id };
     }
 
     private static bool KeepFromPrevious(string key, JsonNode? previous)
@@ -256,8 +369,8 @@ public static class ChatProfileMapper
         if (previous is not JsonObject field) return false;
         var status = field["status"]?.GetValue<string>();
         if (!ValueStatuses.Contains(status)) return true;
-        // Nháp chỉ có englishPlanned = false, không phân biệt "chưa hỏi" với "chưa có kế hoạch"
-        return key == "english_plan" && field["value"]?["planned"]?.GetValue<bool>() == false;
+        // Nháp chỉ có englishPlanned / standardizedPlanned = false, không phân biệt "chưa hỏi" với "chưa có kế hoạch"
+        return (key == "english_plan" || key == "standardized_plan") && field["value"]?["planned"]?.GetValue<bool>() == false;
     }
 
     private static string? StatusOf(JsonNode? field) => (field as JsonObject)?["status"]?.GetValue<string>();
@@ -268,6 +381,14 @@ public static class ChatProfileMapper
     private static bool IsAward(FlowActivityDraftDto item) =>
         string.Equals(item.Category, "achievement", StringComparison.OrdinalIgnoreCase)
         || string.Equals(item.Category, "award", StringComparison.OrdinalIgnoreCase);
+
+    private static JsonObject PlanNode(string? date, string? testType, decimal? targetScore)
+    {
+        var node = new JsonObject { ["planned"] = true, ["date"] = Text(date) };
+        if (!string.IsNullOrWhiteSpace(testType)) node["test_type"] = testType;
+        if (targetScore.HasValue) node["target_score"] = targetScore.Value;
+        return node;
+    }
 
     private static JsonNode? Text(string? value) => string.IsNullOrWhiteSpace(value) ? null : JsonValue.Create(value);
 

@@ -59,6 +59,7 @@ QUESTIONS = {
     "D3": "Bạn đã thi SAT hoặc ACT chưa? Nếu rồi thì được bao nhiêu điểm?",
     "E1": "Bạn đã có chứng chỉ tiếng Anh nào chưa (IELTS, TOEFL, Duolingo)? Điểm bao nhiêu, thi khi nào?",
     "E2": "Bạn dự định thi khi nào, mục tiêu khoảng bao nhiêu điểm?",
+    "E3": "Bạn có kế hoạch thi bài chuẩn hóa nào (SAT, ACT...) không, dự kiến khi nào và mục tiêu bao nhiêu điểm?",
     "F1": "Gia đình bạn có thể chi khoảng bao nhiêu mỗi năm cho cả học phí và sinh hoạt?",
     "F2": "Bạn cần học bổng ở mức nào: không cần, nên có, hay bắt buộc phải có mới đi được?",
     "F3": "Chi phí du học chủ yếu do ai chi trả?",
@@ -162,6 +163,32 @@ def view_of(slm: SlmTinResult, y: SlmY) -> SlmTinResult:
     return slm if y.type == "mac_dinh" else slm.model_copy(update={"cac_y": [y]})
 
 
+# Tái tạo đầy đủ SkillOutput (gồm quick_replies và widget) của câu hỏi đang chờ khi người dùng hỏi xen ngang
+def recreate_question_output(state: ChatState, question_id: str, question_text: str) -> SkillOutput:
+    from app.services.skills import buttons, skill_bac_hoc, skill_ho_so
+
+    saved_asked = dict(state.asked)
+    if question_id == "X1":
+        remind_out = skill_ho_so.review(state)
+    elif question_id in skill_bac_hoc.QUESTION_FIELDS:
+        remind_out = skill_bac_hoc.ask_question(state, question_id)
+    elif (
+        question_id in skill_ho_so.QUESTION_FIELDS
+        or question_id in buttons.WIDGETS
+        or buttons.select_fields(question_id)
+    ):
+        remind_out = skill_ho_so.ask_question(state, question_id, question_text)
+    else:
+        remind_out = buttons.ask_with_buttons(state, question_id)
+    state.asked = saved_asked
+
+    return SkillOutput(
+        answer=BACK_TO_QUESTION + (question_text or remind_out.answer),
+        quick_replies=remind_out.quick_replies,
+        widget=remind_out.widget,
+    )
+
+
 class ChatFlow:
     # slm: bộ phân loại tin nhắn (OllamaSlm, test dùng FixedSlm). branches: loại câu hỏi -> nhánh (build_branches)
     def __init__(self, slm: SlmClassifier, branches: dict[str, Branch]) -> None:
@@ -223,7 +250,8 @@ class ChatFlow:
             and (state.question_id, state.last_question) == pending
         )
         if remind:
-            output = combine(output, SkillOutput(BACK_TO_QUESTION + pending[1]))
+            remind_output = recreate_question_output(state, pending[0], pending[1])
+            output = combine(output, remind_output)
 
         # Lượt đầu mà chưa nhánh nào trả lời được: chào như cũ thay vì "đang hoàn thiện"
         if not output.answer:
