@@ -112,4 +112,29 @@ public class LeadServiceTests
         Assert.Equal(100, leadRepo.LastReceivedQuery.PageSize);
         Assert.Equal("new", leadRepo.LastReceivedQuery.Status);
     }
+
+    [Fact]
+    public async Task GetLeadByIdAsync_WhenBelongsToAnotherUser_ReturnsNull_PreventsIDOR()
+    {
+        var leadRepo = new FakeLeadRepository();
+        var centerRepo = new FakeStudyCenterRepository();
+        var service = new LeadService(leadRepo, centerRepo);
+
+        var ownerId = Guid.NewGuid();
+        var attackerId = Guid.NewGuid();
+
+        var lead = new Lead
+        {
+            UserId = ownerId,
+            StudyCenterId = Guid.NewGuid(),
+            Message = "Bí mật hồ sơ của owner",
+            Status = "new"
+        };
+        await leadRepo.CreateLeadAsync(lead);
+
+        // Attacker cố gắng xem lead của owner
+        var result = await service.GetLeadByIdAsync(attackerId, lead.Id);
+
+        Assert.Null(result);
+    }
 }
