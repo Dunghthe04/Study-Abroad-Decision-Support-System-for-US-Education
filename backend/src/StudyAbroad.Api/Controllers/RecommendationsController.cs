@@ -26,6 +26,9 @@ public class RecommendationsController(RecommendationService recommendations) : 
 
     public record RepickRequest(IReadOnlyList<int> Pref);
 
+    // Nhóm đích: reach | match | safety. Bỏ trống thì nhóm cao hơn một bậc so với hiện tại.
+    public record GoalSeekRequest(string? Target);
+
     // Giá trị giả định của trình mô phỏng; trường nào bỏ trống thì giữ nguyên hồ sơ thật.
     public record SimulateRequest(
         decimal? Gpa, decimal? Sat, decimal? Act, decimal? Ielts,
@@ -146,6 +149,30 @@ public class RecommendationsController(RecommendationService recommendations) : 
             return Ok(new SimulationResponse(
                 result.Profile, result.Baseline, result.Simulated, result.Changes,
                 criteria.RootElement.Clone(), items.RootElement.Clone()));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex) when (ex.Message.StartsWith("Chưa") || ex.Message.StartsWith("Hồ sơ"))
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    // "Cần gì để vào trường này": mức tối thiểu của SAT, GPA, ngoại khóa để trường đạt nhóm đích, kèm tài chính và trường thay thế.
+    // Tính từ hồ sơ thật, không lưu, không gọi advisor.
+    [Authorize(Policy = AgeFeatures.ProcessStudentData)] // [Q11] dưới 16 cần phụ huynh đồng ý
+    [HttpPost("schools/{code}/goal-seek")]
+    public async Task<IActionResult> GoalSeek(string code, [FromBody] GoalSeekRequest? request, CancellationToken ct)
+    {
+        var userId = User.GetUserId();
+        if (userId is null)
+            return Unauthorized(new { message = "Vui lòng đăng nhập." });
+
+        try
+        {
+            return Ok(await recommendations.GoalSeekAsync(userId.Value, code, request?.Target, ct));
         }
         catch (ArgumentException ex)
         {

@@ -59,7 +59,7 @@ export interface QuickReply {
 
 // Công cụ nhập ngay trong chat; frontend vẽ theo `type`
 export interface ChatWidget {
-  type: "major" | "review" | "budget" | "scholarship" | "form" | "select" | "recommend";
+  type: "major" | "review" | "budget" | "scholarship" | "form" | "select" | "recommend" | "simulate";
   data?: Record<string, unknown> | null;
 }
 

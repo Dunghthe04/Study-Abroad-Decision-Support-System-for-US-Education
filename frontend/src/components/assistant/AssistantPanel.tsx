@@ -12,9 +12,11 @@ import {
   Minimize2Icon,
   PlusIcon,
   RotateCwIcon,
+  SlidersHorizontalIcon,
   XIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { showSimulation } from "@/lib/simulation-link";
 import { AGE_FEATURES, useAgeBlock } from "@/lib/age-features";
 import { useAssistant, type AssistantTurn } from "./AssistantProvider";
 import { BudgetWidget } from "./BudgetWidget";
@@ -308,6 +310,17 @@ function Turn({ turn, onReply }: { turn: AssistantTurn; onReply?: (value: string
         >
           <GraduationCapIcon className="size-4" />
           Xem đầy đủ danh sách trường
+        </button>
+      )}
+      {/* What-if: mở trang Gợi ý trường với các giá trị vừa thử điền sẵn vào thanh kéo */}
+      {turn.widget?.type === "simulate" && (
+        <button
+          type="button"
+          onClick={() => showSimulation(turn.widget?.data, router.push)}
+          className="mt-2.5 inline-flex h-8 items-center gap-1.5 rounded-full bg-brand px-3.5 text-[13px] font-semibold text-white transition-colors hover:bg-brand-ink"
+        >
+          <SlidersHorizontalIcon className="size-4" />
+          Xem trên thanh kéo
         </button>
       )}
       {onReply && turn.quickReplies && turn.quickReplies.length > 0 && (

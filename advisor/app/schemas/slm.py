@@ -287,7 +287,7 @@ _ENTITY_SCHEMA = {
             "type": "object",
             "additionalProperties": False,
             "required": ["yeu_to"],
-            "properties": {"yeu_to": _TEXT, "gia_tri": _TEXT, "hanh_dong": _TEXT},
+            "properties": {"yeu_to": _TEXT, "gia_tri": _TEXT, "don_vi": _TEXT, "hanh_dong": _TEXT},
         },
     },
     "muc_tieu": _TEXT,

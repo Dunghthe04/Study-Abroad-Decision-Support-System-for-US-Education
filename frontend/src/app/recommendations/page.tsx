@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { AgeGate } from "@/components/auth/AgeGate";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { RecommendationView } from "@/components/recommendation/RecommendationView";
+import { overridesFromParams } from "@/lib/simulation-link";
 
 export const metadata: Metadata = {
   title: "Trường gợi ý – USAS",
@@ -10,17 +11,23 @@ export const metadata: Metadata = {
 
 // ?run=1: vừa gửi hồ sơ xong, chạy gợi ý mới. Không có thì đọc lần đã lưu.
 // ?ts=...: nút trong chat; giá trị đổi mỗi lần bấm nên view được dựng lại và đọc lượt gợi ý mới nhất.
+// ?sat=1500&gpa=3.8...: chat vừa thử một kịch bản what-if, các giá trị điền sẵn vào thanh kéo.
 export default async function RecommendationsPage({
   searchParams,
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
-  const { run, ts } = await searchParams;
+  const params = await searchParams;
+  const { run, ts } = params;
 
   return (
     <ProtectedRoute>
       <AgeGate feature="process_student_data">
-        <RecommendationView key={typeof ts === "string" ? ts : "latest"} autoRun={run === "1"} />
+        <RecommendationView
+          key={typeof ts === "string" ? ts : "latest"}
+          autoRun={run === "1"}
+          initialOverrides={overridesFromParams(params)}
+        />
       </AgeGate>
     </ProtectedRoute>
   );

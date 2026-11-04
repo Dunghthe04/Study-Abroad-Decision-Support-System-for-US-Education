@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { isAdminRoute } from "@/lib/admin-nav";
-import { isWideRoute } from "@/lib/layout-routes";
+import { isFullRoute, isWideRoute } from "@/lib/layout-routes";
 import { cn } from "@/lib/utils";
 
 const links = [
@@ -53,7 +53,7 @@ export function SiteHeader() {
       <nav
         className={cn(
           "mx-auto flex items-center justify-between gap-6 px-4 py-2.5",
-          isAdminRoute(pathname)
+          isAdminRoute(pathname) || isFullRoute(pathname)
             ? "max-w-none sm:px-6"
             : isWideRoute(pathname)
               ? "max-w-[1320px] sm:px-6"

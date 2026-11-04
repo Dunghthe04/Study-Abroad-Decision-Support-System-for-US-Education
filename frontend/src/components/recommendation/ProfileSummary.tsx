@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { RefreshCwIcon } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { profileFlowApi } from "@/lib/profile-flow-api";
 import { countMonths, draftGpa } from "@/lib/profile-flow-options";
@@ -204,11 +205,12 @@ function profileFromDraft(draft: ProfileFlowDraft, meta: ProfileMetadataResponse
 
 interface ProfileSummaryProps {
   rec: Recommendation | null;
+  onRerun?: () => void; // chạy lại gợi ý từ hồ sơ hiện tại
 }
 
 // Thẻ đầu trang gợi ý: bộ lọc từ hồ sơ và khối đánh giá hồ sơ.
 // Việc thử đổi GPA, SAT, ngân sách... nằm ở panel "Mô phỏng hồ sơ" (ProfileSimulator).
-export function ProfileSummary({ rec }: ProfileSummaryProps) {
+export function ProfileSummary({ rec, onRerun }: ProfileSummaryProps) {
   const [flowProfile, setFlowProfile] = useState<FlowProfile | null>(null);
 
   // Đọc nháp 6 bước một lần; lỗi thì ẩn khối đánh giá
@@ -259,12 +261,24 @@ export function ProfileSummary({ rec }: ProfileSummaryProps) {
               </p>
             )}
           </div>
-          <Link
-            href="/analysis?edit=1"
-            className={buttonVariants({ variant: "outline", className: "h-[42px] px-4 print:hidden" })}
-          >
-            Sửa hồ sơ
-          </Link>
+          <div className="flex flex-wrap gap-2 print:hidden">
+            {onRerun && (
+              <button
+                type="button"
+                onClick={onRerun}
+                className={buttonVariants({ variant: "outline", className: "h-[42px] gap-1.5 px-4" })}
+              >
+                <RefreshCwIcon className="size-3.5" />
+                Chạy lại từ hồ sơ
+              </button>
+            )}
+            <Link
+              href="/analysis?edit=1"
+              className={buttonVariants({ variant: "outline", className: "h-[42px] px-4" })}
+            >
+              Sửa hồ sơ
+            </Link>
+          </div>
         </div>
 
         {assessment && (

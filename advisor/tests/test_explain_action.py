@@ -5,6 +5,7 @@
 """
 
 from app.schemas.chat import ChatMessage, ChatRequest, ChatResponse, ChatState, ResultSchool
+from app.services.branches import NEED_RESULTS
 from app.services.chat_flow import SkillOutput
 from tests.fakes import flow_with, tin
 
@@ -76,3 +77,35 @@ async def test_chat_flow_keeps_the_old_school_list_when_net_sends_none():
     await flow.reply(request(None, ChatState(current_step="B4", has_results=True, schools=SCHOOLS)))
 
     assert skill.schools == SCHOOLS
+
+
+# Học sinh gợi ý ở trang Gợi ý trường, chat chưa hề chạy gợi ý: .NET vẫn gửi danh sách đã lưu, nên không được hỏi "cần có danh sách trước"
+WHAT_IF = tin(("kich_ban", {"che_do": "what_if", "thay_doi": [{"yeu_to": "sat", "gia_tri": "1500"}]}))
+
+
+async def test_a_school_list_from_dotnet_means_the_student_already_has_results():
+    flow = flow_with({}, WHAT_IF)
+
+    res = await flow.reply(request(SCHOOLS, ChatState(current_step="B4")))  # chat chưa bật has_results
+
+    assert res.action == "simulate"
+    assert res.state.has_results is True
+
+
+async def test_without_a_school_list_the_scenario_asks_for_one_first():
+    flow = flow_with({}, WHAT_IF)
+
+    for schools in (None, []):
+        res = await flow.reply(request(schools, ChatState(current_step="B4")))
+
+        assert res.action is None
+        assert res.answer == NEED_RESULTS
+        assert res.state.has_results is False
+
+
+async def test_no_school_list_keeps_results_the_chat_already_knew_about():
+    flow = flow_with({}, WHAT_IF)
+
+    res = await flow.reply(request(None, ChatState(current_step="B4", has_results=True)))
+
+    assert res.action == "simulate"

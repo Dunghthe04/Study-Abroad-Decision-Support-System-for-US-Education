@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { ExternalLinkIcon, MapPinIcon, MessageSquareTextIcon } from "lucide-react";
+import { ExternalLinkIcon, MapPinIcon, MessageSquareTextIcon, TargetIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { PickedSchool, SchoolChange, ScoredSchool } from "@/types/recommendation";
@@ -20,14 +20,18 @@ interface SchoolCardProps {
     school: ScoredSchool | undefined; // số liệu đã chấm
     change?: SchoolChange; // có khi đang mô phỏng và trường đổi nhóm so với hồ sơ thật
     onExplain?: (code: string) => void; // bỏ trống khi đang mô phỏng (lời tư vấn chỉ có cho kết quả đã lưu)
+    onGoal?: (code: string) => void; // "Cần gì để vào?": luôn tính từ hồ sơ thật, kể cả khi đang xem giả định
 }
+
+// Trường đã ở nhóm An toàn thì không cần hỏi "cần gì để vào"
+const GOAL_GROUPS = ["R", "RF", "M", "NA"];
 
 // "35%" từ vị trí 0–100 của học sinh trong số sinh viên đã nhập học; thiếu số thì "–"
 const percent = (value: number | null | undefined) => (value == null ? "–" : `${Math.round(value)}%`);
 
 // Một trường dạng hàng ngang như CollegeVine: tên và nơi ở bên trái, các chỉ số ở giữa, nhóm và nút bên phải.
 // Chỉ hiển thị số đã tính, không tính lại gì.
-export function SchoolCard({ picked, school, change, onExplain }: SchoolCardProps) {
+export function SchoolCard({ picked, school, change, onExplain, onGoal }: SchoolCardProps) {
     const name = school?.name ?? picked.code;
     const control =
         school?.control === "public" ? "Công lập" : school?.control === "private" ? "Tư thục" : null;
@@ -102,6 +106,17 @@ export function SchoolCard({ picked, school, change, onExplain }: SchoolCardProp
             {/* Nhóm và nút */}
             <div className="flex items-center justify-between gap-3 md:flex-col md:items-end">
                 {school && <Badge variant={groupVariant(school.g2)}>{groupLabel(school.g2)}</Badge>}
+                {onGoal && school && GOAL_GROUPS.includes(school.g2) && (
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onGoal(picked.code)}
+                        className="gap-1 text-xs font-semibold text-brand hover:bg-brand-wash"
+                    >
+                        <TargetIcon className="size-3.5" />
+                        Cần gì để vào?
+                    </Button>
+                )}
                 {onExplain && (
                     <Button
                         variant="outline"

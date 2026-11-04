@@ -155,6 +155,62 @@ export interface SimulationResponse {
   items: RecommendationItems; // cùng khuôn với lượt gợi ý đã lưu
 }
 
+// ---- "Cần gì để vào trường này" (POST /recommendations/schools/{code}/goal-seek) ----
+
+export type GoalTarget = "reach" | "match" | "safety";
+export type GoalFactor = "sat" | "gpa" | "ecTier";
+export type GoalDifficulty = "easy" | "hard" | "veryHard";
+export type GoalOutcome = "already_reached" | "reachable" | "blocked" | "no_data";
+export type GoalBudgetStatus = "ok" | "need_aid" | "over_budget" | "unknown_cost" | "no_budget";
+
+export interface GoalChange {
+  factor: GoalFactor;
+  from: number | null; // null nếu hồ sơ chưa có
+  to: number;
+}
+
+export interface GoalPlan {
+  changes: GoalChange[];
+  effort: number;
+  difficulty: GoalDifficulty;
+}
+
+export interface GoalBudget {
+  status: GoalBudgetStatus;
+  costUsd: number | null;
+  budgetUsd: number | null;
+  minBudgetUsd: number | null; // ngân sách mỗi năm tối thiểu để trường không bị chặn
+  shortfallUsd: number | null;
+  intlAidAvgUsd: number | null;
+}
+
+export interface GoalAlternative {
+  code: string;
+  name: string;
+  state: string | null;
+  control: string | null;
+  costUsd: number | null;
+  group: string;
+}
+
+// Current, target, best: R | M | S | NA
+export interface SchoolGoalResult {
+  code: string;
+  name: string;
+  current: string;
+  target: string;
+  outcome: GoalOutcome;
+  best: string;
+  reasons: string[]; // mã lý do xếp nhóm
+  cheapest: GoalPlan | null; // mức tối thiểu ít công sức nhất
+  recommended: GoalPlan | null; // mức nên đặt mục tiêu (có đệm)
+  alone: GoalPlan[];
+  noEffect: GoalFactor[];
+  budget: GoalBudget;
+  filterReason: "MAJOR" | "STATE" | "CONTROL" | null; // trường không nằm trong danh sách vì bộ lọc ngoài ngân sách
+  alternatives: GoalAlternative[];
+}
+
 // Lời tư vấn một trường (POST /recommendations/schools/{code}/explain)
 export interface SchoolExplanation {
   code: string;

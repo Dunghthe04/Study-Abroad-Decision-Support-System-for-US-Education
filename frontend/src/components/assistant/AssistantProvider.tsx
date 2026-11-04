@@ -1,9 +1,10 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { ApiError } from "@/lib/api";
 import { streamAdvisorChat } from "@/lib/advisor-stream";
+import { onRecommendationsPage, showSimulation } from "@/lib/simulation-link";
 import type { ChatMessage, ChatWidget, Citation, QuickReply } from "@/types/api";
 
 export type AssistantTurn = ChatMessage & {
@@ -103,6 +104,7 @@ const AssistantContext = createContext<AssistantContextValue | null>(null);
 
 export function AssistantProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [wide, setWide] = useState(false);
   const [turns, setTurns] = useState<AssistantTurn[]>([]);
@@ -202,6 +204,10 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
             widget: res.widget,
           },
         ]);
+        // What-if: đang đứng ở trang Gợi ý trường thì cập nhật thanh kéo và danh sách bên cạnh tại chỗ (không tải lại trang).
+        // Ở trang khác thì không tự chuyển trang, học sinh bấm nút "Xem trên thanh kéo" trong tin nhắn
+        if (res.widget?.type === "simulate" && onRecommendationsPage())
+          showSimulation(res.widget.data, router.push);
         // D2: báo trang biết chat vừa đổi hồ sơ nháp, hoặc đang hỏi sang trang form khác (mục 7)
         if (res.profileChanged?.length || res.formStep != null)
           onProfileChangedRef.current?.(res.profileChanged ?? [], res.formStep ?? null);
@@ -213,7 +219,7 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
         setStreaming(null);
       }
     },
-    [commitTurns]
+    [commitTurns, router]
   );
 
   const send = useCallback(

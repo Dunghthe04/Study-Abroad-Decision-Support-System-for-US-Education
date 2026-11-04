@@ -2,9 +2,11 @@
 
 import { apiFetch, ApiError } from "@/lib/api";
 import type {
+  GoalTarget,
   Pref,
   Recommendation,
   SchoolExplanation,
+  SchoolGoalResult,
   SimulationOverrides,
   SimulationResponse,
 } from "@/types/recommendation";
@@ -36,6 +38,14 @@ export const recommendationApi = {
     apiFetch<SimulationResponse>(`${BASE}/simulate`, {
       method: "POST",
       body: JSON.stringify(overrides),
+    }),
+
+  // "Cần gì để vào trường này": mức tối thiểu để trường đạt nhóm đích, kèm tài chính. target bỏ trống: nhóm cao hơn một bậc.
+  // Tính từ hồ sơ thật, không lưu, không gọi AI.
+  goalSeek: (code: string, target?: GoalTarget | null) =>
+    apiFetch<SchoolGoalResult>(`${BASE}/schools/${encodeURIComponent(code)}/goal-seek`, {
+      method: "POST",
+      body: JSON.stringify({ target: target ?? null }),
     }),
 
   // Mở chi tiết một trường: Qwen viết lời tư vấn từ số đã lưu.

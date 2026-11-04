@@ -210,9 +210,11 @@ class ChatFlow:
         # Hồ sơ trong nháp (do .NET gửi) là nguồn thật; không gửi thì giữ hồ sơ trong state như cũ
         if req.profile is not None:
             state.profile = merge_profile(state.profile, req.profile)
-        # Danh sách trường gợi ý do .NET gửi mỗi lượt; không gửi thì giữ như cũ
+        # Danh sách trường gợi ý do .NET gửi mỗi lượt (lấy từ lần gợi ý đã lưu); không gửi thì giữ như cũ.
+        # Có danh sách nghĩa là học sinh đã có kết quả, dù gợi ý ở trang Gợi ý trường chứ không phải trong chat
         if req.schools is not None:
             state.schools = req.schools
+            state.has_results = state.has_results or bool(req.schools)
         # Chụp hồ sơ đầu lượt để cuối lượt biết khóa nào đổi (sao chép sâu vì nhánh sửa trực tiếp trên state)
         profile_before = {key: field.model_copy(deep=True) for key, field in state.profile.items()}
         message = last_user_message(req)
