@@ -97,6 +97,36 @@ public class ChatServiceTests
         Assert.Equal("confirmed", budget.GetProperty("status").GetString());
     }
 
+    // Học bạ theo năm gửi thành mục riêng, không nằm trong hồ sơ chat (chat chỉ đọc, chỉ form nhập được)
+    [Fact]
+    public async Task SendsTranscriptBesideProfile_NotInsideIt()
+    {
+        var flow = new FakeProfileFlow
+        {
+            Draft = new ProfileFlowDraftDto(Step2: new FlowTranscriptDraftDto(
+                [new FlowAcademicYearDraftDto("Lớp 10", [new FlowSubjectDraftDto("Toán", 8m, 9m)])])),
+        };
+        var advisor = new FakeAdvisor("B2");
+
+        await new ChatService(advisor, new FakeSessions(), flow).ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        var year = advisor.LastRequest!.Transcript!.Value.GetProperty("years")[0];
+        Assert.Equal("Lớp 10", year.GetProperty("grade").GetString());
+        Assert.False(advisor.LastRequest.Profile!.Value.TryGetProperty("transcript", out _));
+    }
+
+    // Nhập GPA tổng: không gửi học bạ
+    [Fact]
+    public async Task OverallGpa_SendsNoTranscript()
+    {
+        var flow = new FakeProfileFlow { Draft = new ProfileFlowDraftDto(Step2: new FlowTranscriptDraftDto(ManualGpa10Scale: 8m, GpaMode: "overall")) };
+        var advisor = new FakeAdvisor("B2");
+
+        await new ChatService(advisor, new FakeSessions(), flow).ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Null(advisor.LastRequest!.Transcript);
+    }
+
     [Fact]
     public async Task KeepsNoneStatusFromPreviousTurn_WhenDraftHasNoValue()
     {

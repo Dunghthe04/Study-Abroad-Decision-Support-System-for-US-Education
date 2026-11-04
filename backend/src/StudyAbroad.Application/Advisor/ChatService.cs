@@ -53,8 +53,14 @@ namespace StudyAbroad.Application.Advisor
             // Đã có danh sách trường thì gửi kèm (lấy lần gợi ý mới nhất, kể cả khi học sinh vừa gợi ý lại ở trang khác)
             var schools = await LatestSchoolsAsync(userId, ct);
 
+            // Học bạ theo năm gửi riêng, không nằm trong hồ sơ chat (chat chỉ đọc, chỉ form nhập được)
+            var transcript = ChatTranscript.From(flow.Draft.Step2) is { } years ? JsonSerializer.SerializeToElement(years) : (JsonElement?)null;
+
             //Gửi request sang Advisor
-            var toAdvisor = request with { State = state, Profile = JsonSerializer.SerializeToElement(profile), Schools = schools };
+            var toAdvisor = request with
+            {
+                State = state, Profile = JsonSerializer.SerializeToElement(profile), Schools = schools, Transcript = transcript,
+            };
             var response = onEvent is null
                 ? await advisor.ChatAsync(toAdvisor, ct)
                 : await advisor.ChatStreamAsync(toAdvisor, onEvent, ct);
