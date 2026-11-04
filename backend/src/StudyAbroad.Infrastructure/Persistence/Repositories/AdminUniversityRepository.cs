@@ -50,6 +50,11 @@ public class AdminUniversityRepository(AppDbContext db) : IAdminUniversityReposi
         return new PagedResult<AdminUniversityListItemDto>(items, query.Page, query.PageSize, total);
     }
 
+    public Task<bool> ExistsCodeAsync(string code, CancellationToken ct = default) =>
+        db.Universities.AnyAsync(u => u.Code == code, ct);
+
+    public void AddUniversity(University university) => db.Universities.Add(university);
+
     public Task<University?> GetUniversityAsync(Guid universityId, CancellationToken ct = default) =>
         db.Universities.FirstOrDefaultAsync(u => u.Id == universityId, ct);
 

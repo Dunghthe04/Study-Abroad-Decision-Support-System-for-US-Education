@@ -29,6 +29,16 @@ public class AdminUniversitiesController(IAdminUniversityService service) : Cont
         return university is null ? NotFound() : Ok(university);
     }
 
+    [HttpPost]
+    public async Task<ActionResult<AdminUniversityDetailDto>> Create([FromBody] CreateUniversityRequest request, CancellationToken ct)
+    {
+        if (User.GetUserId() is not { } actorId) return Unauthorized();
+
+        var result = await service.CreateUniversityAsync(request, actorId, ct);
+        if (!result.Success) return BadRequest(new { errors = result.Errors });
+        return CreatedAtAction(nameof(GetById), new { id = result.Value!.Id }, result.Value);
+    }
+
     [HttpGet("{id:guid}/offerings")]
     public async Task<ActionResult<IReadOnlyList<AdminUniversityOfferingDto>>> GetOfferings(Guid id, CancellationToken ct)
     {

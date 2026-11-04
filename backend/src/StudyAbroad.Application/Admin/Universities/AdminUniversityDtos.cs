@@ -75,6 +75,19 @@ public record AdminMajorOptionDto(Guid Id, string Name, string? CipCode);
 /// <summary>Một dòng ngành của offering, đọc kèm tên và mã CIP.</summary>
 public record AdminOfferingMajorRow(Guid UniversityOfferingId, Guid MajorId, string Name, string? CipCode, bool IsStem, bool IsVerified);
 
+public record CreateUniversityRequest(
+    string Code,
+    string Name,
+    string? City = null,
+    string? State = null,
+    string? Website = null,
+    string? Control = null,
+    decimal? AcceptanceRate = null,
+    int? InternationalStudentCount = null,
+    bool IsIvy = false,
+    string? LogoUrl = null,
+    string? CoverUrl = null);
+
 public record UpdateUniversityRequest(
     string? Name,
     string? City,

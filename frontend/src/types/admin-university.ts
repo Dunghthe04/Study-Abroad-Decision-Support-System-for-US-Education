@@ -75,6 +75,20 @@ export interface AdminUniversityDetail {
   galleryUrls?: string[] | null;
 }
 
+export interface CreateUniversityRequest {
+  code: string;
+  name: string;
+  city: string | null;
+  state: string | null;
+  website: string | null;
+  control: string | null;
+  acceptanceRate: number | null;
+  internationalStudentCount: number | null;
+  isIvy: boolean;
+  logoUrl?: string | null;
+  coverUrl?: string | null;
+}
+
 export interface UpdateUniversityRequest {
   name: string;
   city: string | null;

@@ -1,30 +1,26 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronLeftIcon, ChevronRightIcon, SearchIcon } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
+import { FilterIcon, PlusIcon, RotateCcwIcon, SearchIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
+import { DataTable, type DataTableToolbarSlots } from "@/components/admin/shared/DataTable";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  Popover,
+  PopoverContent,
+  PopoverTitle,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { TablePagination } from "@/components/admin/shared/TablePagination";
 import { getAdminUniversities } from "@/lib/admin-university-api";
 import {
   CONTROL_FILTER_OPTIONS,
-  controlLabel,
-  formatAcceptanceRate,
-  formatRetrievedAt,
   type LabeledOption,
 } from "@/lib/admin-university-display";
-import { studyLevelLabel } from "@/lib/study-levels";
+import { profileFlowApi } from "@/lib/profile-flow-api";
+import type { UsStateOption } from "@/types/profile-flow";
+import { CreateUniversityPanel } from "./CreateUniversityPanel";
+import { universityColumns } from "./university-columns";
 import { OfferingsPanel } from "./OfferingsPanel";
 import { OptionSelect } from "./OptionSelect";
 import type { PagedResult } from "@/types/api";
@@ -65,8 +61,12 @@ export function UniversityListView() {
   const [selected, setSelected] = useState<AdminUniversityListItem | null>(
     null,
   );
+  const [isCreating, setIsCreating] = useState(false);
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [reloadCounter, setReloadCounter] = useState(0);
+  const [states, setStates] = useState<UsStateOption[]>([]);
 
-  const requestKey = JSON.stringify(applied);
+  const requestKey = JSON.stringify({ filters: applied, reloadCounter });
   const isLoading = result === null || result.key !== requestKey;
   const data = isLoading ? null : result.data;
   const error = isLoading ? null : result.error;
@@ -95,14 +95,57 @@ export function UniversityListView() {
     };
   }, [applied, requestKey]);
 
+  useEffect(() => {
+    let cancelled = false;
+    profileFlowApi.getMetadata()
+      .then((metadata) => {
+        if (!cancelled) {
+          setStates(metadata.states);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setStates([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleSelect = (university: AdminUniversityListItem) => {
+    setSelected(university);
+    setIsCreating(false);
+  };
+
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setApplied({ ...draft, page: 1 });
+    setApplied({ ...draft, search: draft.search.trim(), state: draft.state.trim().toUpperCase(), page: 1 });
+    setIsFilterOpen(false);
+  };
+
+  const handleSearch = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setApplied({ ...applied, search: draft.search.trim(), page: 1 });
+  };
+
+  const handleResetFilters = () => {
+    setDraft({ ...EMPTY_FILTERS, search: draft.search });
+    setApplied({ ...EMPTY_FILTERS, search: applied.search });
+    setIsFilterOpen(false);
   };
 
   const handleReset = () => {
     setDraft(EMPTY_FILTERS);
     setApplied(EMPTY_FILTERS);
+    setIsFilterOpen(false);
+  };
+
+  const handleFilterOpenChange = (open: boolean) => {
+    if (open) {
+      setDraft({ ...applied, search: draft.search });
+    }
+    setIsFilterOpen(open);
   };
 
   const goToPage = (page: number) => {
@@ -135,222 +178,171 @@ export function UniversityListView() {
     }
   };
 
+  const handleUniversityCreated = (created: AdminUniversityDetail) => {
+    const newItem: AdminUniversityListItem = {
+      id: created.id,
+      code: created.code,
+      name: created.name,
+      city: created.city,
+      state: created.state,
+      control: created.control,
+      acceptanceRate: created.acceptanceRate,
+      isActive: created.isActive,
+      studyLevels: [],
+      latestRetrievedAt: null,
+      logoUrl: created.logoUrl,
+    };
+
+    setReloadCounter((current) => current + 1);
+    setSelected(newItem);
+    setIsCreating(false);
+  };
+
+  const columns = universityColumns(states, handleSelect);
+
   const totalPages = data?.totalPages ?? 0;
   const currentPage = data?.page ?? applied.page;
 
   const activeFilterTextColor =
     draft.active === "all" ? "text-muted-foreground" : "";
 
+  const activeFilterCount = [
+    applied.state !== "",
+    applied.control !== "",
+    applied.active !== "all",
+  ].filter(Boolean).length;
+
+  const toolbar: DataTableToolbarSlots = {
+    filters: (
+      <Popover open={isFilterOpen} onOpenChange={handleFilterOpenChange}>
+        <PopoverTrigger
+          render={
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-border bg-muted/60 text-foreground hover:bg-muted"
+            />
+          }
+        >
+          <FilterIcon />
+          Bộ lọc{activeFilterCount > 0 && ` (${activeFilterCount})`}
+        </PopoverTrigger>
+        <PopoverContent align="start" className="w-80 max-w-[calc(100vw-2rem)] p-4">
+          <PopoverTitle>Bộ lọc trường</PopoverTitle>
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            <div className="space-y-1.5">
+              <label htmlFor="university-state-filter" className="text-sm font-medium">Bang</label>
+              <Input
+                id="university-state-filter"
+                value={draft.state}
+                onChange={(event) => setDraft({ ...draft, state: event.target.value })}
+                placeholder="Mã bang (CA)"
+                maxLength={2}
+                className={FILTER_FIELD_BG}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label htmlFor="university-control-filter" className="text-sm font-medium">Loại trường</label>
+              <OptionSelect
+                id="university-control-filter"
+                value={draft.control}
+                options={CONTROL_FILTER_OPTIONS}
+                onChange={(value) => setDraft({ ...draft, control: value })}
+                className={FILTER_FIELD_BG}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label htmlFor="university-active-filter" className="text-sm font-medium">Trạng thái hiển thị</label>
+              <OptionSelect
+                id="university-active-filter"
+                value={draft.active}
+                options={ACTIVE_FILTER_OPTIONS}
+                onChange={(value) => setDraft({ ...draft, active: value as AdminUniversityActiveFilter })}
+                className={`${FILTER_FIELD_BG} ${activeFilterTextColor}`}
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={handleResetFilters}>
+                Xóa lọc
+              </Button>
+              <Button type="submit" size="sm">Áp dụng</Button>
+            </div>
+          </form>
+        </PopoverContent>
+      </Popover>
+    ),
+    search: (
+      <form onSubmit={handleSearch} role="search" className="relative">
+        <Input
+          value={draft.search}
+          onChange={(event) => setDraft({ ...draft, search: event.target.value })}
+          placeholder="Tìm theo tên hoặc mã trường"
+          aria-label="Tìm theo tên hoặc mã trường"
+          className={`pr-10 ${FILTER_FIELD_BG}`}
+        />
+        <Button type="submit" variant="ghost" size="icon-sm" aria-label="Tìm trường" className="absolute top-1/2 right-1 -translate-y-1/2">
+          <SearchIcon />
+        </Button>
+      </form>
+    ),
+    actions: (
+      <div className="flex items-center gap-2">
+        {(draft.search || activeFilterCount > 0) && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleReset}
+            className="border-border bg-muted/60 text-foreground hover:bg-muted"
+          >
+            <RotateCcwIcon />
+            Xóa lọc
+          </Button>
+        )}
+        <Button
+          type="button"
+          size="sm"
+          onClick={() => setIsCreating(true)}
+        >
+          <PlusIcon />
+          Thêm trường
+        </Button>
+      </div>
+    ),
+  };
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6 lg:flex-row">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
-        <form
-          onSubmit={handleSubmit}
-          className="flex shrink-0 flex-wrap items-center gap-3"
-        >
-          <Input
-            value={draft.search}
-            onChange={(event) =>
-              setDraft({ ...draft, search: event.target.value })
-            }
-            placeholder="Tìm theo tên hoặc mã trường"
-            aria-label="Tìm theo tên hoặc mã trường"
-            className={`min-w-56 flex-1 ${FILTER_FIELD_BG}`}
-          />
-          <Input
-            value={draft.state}
-            onChange={(event) =>
-              setDraft({ ...draft, state: event.target.value })
-            }
-            placeholder="Bang (CA)"
-            aria-label="Bang"
-            maxLength={2}
-            className={`w-28 ${FILTER_FIELD_BG}`}
-          />
-          <OptionSelect
-            value={draft.control}
-            options={CONTROL_FILTER_OPTIONS}
-            onChange={(value) => setDraft({ ...draft, control: value })}
-            aria-label="Loại trường"
-            className={`w-auto min-w-40 ${FILTER_FIELD_BG}`}
-          />
-          <OptionSelect
-            value={draft.active}
-            options={ACTIVE_FILTER_OPTIONS}
-            onChange={(value) =>
-              setDraft({
-                ...draft,
-                active: value as AdminUniversityActiveFilter,
-              })
-            }
-            aria-label="Trạng thái hiển thị"
-            className={`w-auto min-w-40 ${FILTER_FIELD_BG} ${activeFilterTextColor}`}
-          />
-          <div className="flex gap-2">
-            <Button type="submit">
-              <SearchIcon />
-              Tìm
-            </Button>
-            <Button type="button" variant="outline" onClick={handleReset}>
-              Xóa lọc
-            </Button>
-          </div>
-        </form>
-
-        {error && (
-          <Alert variant="destructive">
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-
-        <Card className="min-h-0 flex-1 py-0">
-          <CardContent className="min-h-0 flex-1 p-0 [&_[data-slot=table-container]]:h-full [&_[data-slot=table-container]]:overflow-auto">
-            <Table className="border-separate border-spacing-0 [&_td]:border-r [&_td]:border-b [&_td]:border-border [&_td]:py-1.5 [&_td:last-child]:border-r-0 [&_th]:border-r [&_th]:border-b [&_th]:border-border [&_th]:bg-muted [&_th]:font-semibold [&_th:last-child]:border-r-0 [&_tr:hover_td]:bg-brand-wash/40">
-              <TableHeader className="sticky top-0 z-10 bg-card">
-                <TableRow>
-                  <TableHead className="w-16">Mã</TableHead>
-                  <TableHead className="w-20 text-center">Logo</TableHead>
-                  <TableHead>Tên trường</TableHead>
-                  <TableHead>Bang</TableHead>
-                  <TableHead>Loại</TableHead>
-                  <TableHead className="text-right">Tỷ lệ nhận</TableHead>
-                  <TableHead>Bậc học</TableHead>
-                  <TableHead>Hiển thị</TableHead>
-                  <TableHead>Dữ liệu cập nhật</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoading &&
-                  Array.from({ length: 6 }, (_, index) => (
-                    <TableRow key={`loading-${index}`}>
-                      <TableCell colSpan={9}>
-                        <Skeleton className="h-5 w-full" />
-                      </TableCell>
-                    </TableRow>
-                  ))}
-
-                {!isLoading && data && data.items.length === 0 && (
-                  <TableRow>
-                    <TableCell
-                      colSpan={9}
-                      className="py-8 text-center text-muted-foreground"
-                    >
-                      Không có trường nào khớp bộ lọc.
-                    </TableCell>
-                  </TableRow>
-                )}
-
-                {!isLoading &&
-                  data?.items.map((university) => (
-                    <TableRow
-                      key={university.id}
-                      className="cursor-pointer"
-                      onClick={() => setSelected(university)}
-                    >
-                      <TableCell className="font-mono text-xs">
-                        {university.code}
-                      </TableCell>
-                      <TableCell className="w-20 p-1 text-center">
-                        {university.logoUrl ? (
-                          <div className="flex items-center justify-center">
-                            <img
-                              src={university.logoUrl}
-                              alt={university.name}
-                              className="h-8 w-14 object-contain"
-                              onError={(e) => {
-                                (e.target as HTMLElement).style.display = "none";
-                              }}
-                            />
-                          </div>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <button
-                          type="button"
-                          className="truncate text-left font-medium text-brand underline-offset-2 hover:underline"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            setSelected(university);
-                          }}
-                        >
-                          {university.name}
-                        </button>
-                        {university.city && (
-                          <div className="text-xs text-muted-foreground">
-                            {university.city}
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell>{university.state ?? "—"}</TableCell>
-                      <TableCell>{controlLabel(university.control)}</TableCell>
-                      <TableCell className="text-right">
-                        {formatAcceptanceRate(university.acceptanceRate)}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-1">
-                          {university.studyLevels.length === 0 && (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                          {university.studyLevels.map((level) => (
-                            <Badge key={level} variant="outline">
-                              {studyLevelLabel(level)}
-                            </Badge>
-                          ))}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={university.isActive ? "brand" : "outline"}
-                        >
-                          {university.isActive ? "Đang hiển thị" : "Đang ẩn"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {formatRetrievedAt(university.latestRetrievedAt)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-
-        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
-          <span>{data ? `${data.totalCount} trường` : "Đang tải..."}</span>
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={isLoading || currentPage <= 1}
-              onClick={() => goToPage(currentPage - 1)}
-            >
-              <ChevronLeftIcon />
-              Trước
-            </Button>
-            <span>
-              Trang {currentPage} / {Math.max(totalPages, 1)}
-            </span>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={isLoading || currentPage >= totalPages}
-              onClick={() => goToPage(currentPage + 1)}
-            >
-              Sau
-              <ChevronRightIcon />
-            </Button>
-          </div>
-        </div>
+        <DataTable
+          columns={columns}
+          items={data?.items ?? []}
+          getRowId={(university) => university.id}
+          selectedRowId={isCreating ? undefined : selected?.id}
+          onRowSelect={handleSelect}
+          isLoading={isLoading}
+          error={error}
+          emptyMessage="Không có trường nào khớp bộ lọc."
+          label="Danh sách trường"
+          toolbar={toolbar}
+          footer={
+            <TablePagination page={currentPage} totalPages={totalPages} totalCount={data?.totalCount}
+              itemLabel="trường" disabled={isLoading || !!error} onPageChange={goToPage} />
+          }
+        />
       </div>
-      <OfferingsPanel
-        university={selected}
-        onClose={() => setSelected(null)}
-        onUniversityChanged={handleUniversityChanged}
-      />
+      {isCreating ? (
+        <CreateUniversityPanel
+          onClose={() => setIsCreating(false)}
+          onCreated={handleUniversityCreated}
+        />
+      ) : (
+        <OfferingsPanel
+          university={selected}
+          onClose={() => setSelected(null)}
+          onUniversityChanged={handleUniversityChanged}
+        />
+      )}
     </div>
   );
 }

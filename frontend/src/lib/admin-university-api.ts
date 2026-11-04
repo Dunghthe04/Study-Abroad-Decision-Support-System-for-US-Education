@@ -7,6 +7,7 @@ import type {
   AdminUniversityFilters,
   AdminUniversityListItem,
   AdminUniversityOffering,
+  CreateUniversityRequest,
   UpdateOfferingRequest,
   UpdateUniversityRequest,
 } from "@/types/admin-university";
@@ -70,6 +71,19 @@ export async function getAdminMajors(): Promise<AdminMajorOption[]> {
     return await apiFetch<AdminMajorOption[]>("/api/v1/admin/universities/majors");
   } catch {
     throw new Error("Không thể tải danh mục ngành. Vui lòng thử lại sau.");
+  }
+}
+
+export async function createAdminUniversity(
+  body: CreateUniversityRequest,
+): Promise<AdminUniversityDetail> {
+  try {
+    return await apiFetch<AdminUniversityDetail>("/api/v1/admin/universities", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    throw toSaveError(err);
   }
 }
 

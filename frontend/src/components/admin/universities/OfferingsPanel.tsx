@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { XIcon } from "lucide-react";
+import { DetailPanel } from "../shared/DetailPanel";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import {
   getAdminUniversity,
@@ -139,30 +138,7 @@ export function OfferingsPanel({
   };
 
   return (
-    <aside
-      aria-label={`Thông tin ${university.name}`}
-      className="w-full shrink-0 rounded-xl bg-card p-4 ring-1 ring-border lg:h-full lg:min-h-0 lg:w-[26rem] lg:overflow-y-auto xl:w-[30rem]"
-    >
-      <div className="space-y-5">
-        <header className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h2 className="text-lg font-semibold leading-tight">
-              {university.name}
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              Mã {university.code}
-            </p>
-          </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            aria-label="Đóng"
-            onClick={onClose}
-          >
-            <XIcon />
-          </Button>
-        </header>
+    <DetailPanel title={university.name} description={`Mã ${university.code}`} onClose={onClose}>
 
         {detail && (
           <UniversityVisibilitySwitch
@@ -237,7 +213,6 @@ export function OfferingsPanel({
             onSaved={handleOfferingSaved}
           />
         ))}
-      </div>
-    </aside>
+    </DetailPanel>
   );
 }

@@ -1,13 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
 import { toast } from "@/components/ui/toast";
-import { findNotNumbers, numberOrNull, textOrNull, toInputValue } from "@/lib/admin-form";
+import { findNotNumbers, numberOrNull, textOrNull } from "@/lib/admin-form";
 import { AdminFormError, updateAdminUniversity } from "@/lib/admin-university-api";
 import {
-  CONTROL_OPTIONS,
   controlLabel,
   formatAcceptanceRate,
   formatLastEdited,
@@ -15,7 +12,11 @@ import {
 } from "@/lib/admin-university-display";
 import type { AdminFieldErrors, AdminUniversityDetail } from "@/types/admin-university";
 import { EditableTable, type TableRow } from "./EditableTable";
-import { OptionSelect } from "./OptionSelect";
+import {
+  buildUniversityEditRows,
+  universityToFormState,
+  type UniversityFormState,
+} from "./UniversityFormFields";
 
 interface UniversityInfoSectionProps {
   university: AdminUniversityDetail;
@@ -25,35 +26,6 @@ interface UniversityInfoSectionProps {
   onStartEdit: () => void;
   onStopEdit: () => void;
   onSaved: (university: AdminUniversityDetail) => void;
-}
-
-interface FormState {
-  name: string;
-  city: string;
-  state: string;
-  website: string;
-  control: string;
-  acceptancePercent: string;
-  internationalStudentCount: string;
-  isIvy: boolean;
-}
-
-function toFormState(university: AdminUniversityDetail): FormState {
-  // Tỷ lệ nhận lưu 0–1, ô nhập theo phần trăm cho dễ đọc.
-  let acceptancePercent = "";
-  if (university.acceptanceRate !== null) {
-    acceptancePercent = String(Math.round(university.acceptanceRate * 10000) / 100);
-  }
-  return {
-    name: university.name,
-    city: toInputValue(university.city),
-    state: toInputValue(university.state),
-    website: toInputValue(university.website),
-    control: toInputValue(university.control),
-    acceptancePercent,
-    internationalStudentCount: toInputValue(university.internationalStudentCount),
-    isIvy: university.isIvy,
-  };
 }
 
 function viewRows(university: AdminUniversityDetail): TableRow[] {
@@ -91,19 +63,19 @@ export function UniversityInfoSection({
   onStopEdit,
   onSaved,
 }: UniversityInfoSectionProps) {
-  const [form, setForm] = useState<FormState>(() => toFormState(university));
+  const [form, setForm] = useState<UniversityFormState>(() => universityToFormState(university));
   const [fieldErrors, setFieldErrors] = useState<AdminFieldErrors>({});
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  const hasChanges = JSON.stringify(form) !== JSON.stringify(toFormState(university));
+  const hasChanges = JSON.stringify(form) !== JSON.stringify(universityToFormState(university));
 
-  const setField = <K extends keyof FormState>(key: K, value: FormState[K]) => {
-    setForm({ ...form, [key]: value });
+  const setField = <K extends keyof UniversityFormState>(key: K, value: UniversityFormState[K]) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
   };
 
   const handleEdit = () => {
-    setForm(toFormState(university));
+    setForm(universityToFormState(university));
     setFieldErrors({});
     setError(null);
     onStartEdit();
@@ -176,128 +148,14 @@ export function UniversityInfoSection({
     return <EditableTable title="Thông tin trường" rows={viewRows(university)} edit={edit} />;
   }
 
-  const editRows: TableRow[] = [
-    {
-      label: "Tên trường *",
-      inputId: "uni-name",
-      error: fieldErrors.name,
-      value: (
-        <Input
-          id="uni-name"
-          value={form.name}
-          onChange={(e) => setField("name", e.target.value)}
-          aria-invalid={Boolean(fieldErrors.name) || undefined}
-          disabled={isSaving}
-          required
-          autoFocus
-        />
-      ),
-    },
-    {
-      label: "Thành phố",
-      inputId: "uni-city",
-      error: fieldErrors.city,
-      value: (
-        <Input
-          id="uni-city"
-          value={form.city}
-          onChange={(e) => setField("city", e.target.value)}
-          aria-invalid={Boolean(fieldErrors.city) || undefined}
-          disabled={isSaving}
-        />
-      ),
-    },
-    {
-      label: "Bang",
-      inputId: "uni-state",
-      error: fieldErrors.state,
-      value: (
-        <Input
-          id="uni-state"
-          value={form.state}
-          onChange={(e) => setField("state", e.target.value.toUpperCase())}
-          aria-invalid={Boolean(fieldErrors.state) || undefined}
-          maxLength={2}
-          placeholder="CA"
-          disabled={isSaving}
-        />
-      ),
-    },
-    {
-      label: "Loại trường",
-      inputId: "uni-control",
-      error: fieldErrors.control,
-      value: (
-        <OptionSelect
-          id="uni-control"
-          value={form.control}
-          options={CONTROL_OPTIONS}
-          onChange={(value) => setField("control", value)}
-          invalid={Boolean(fieldErrors.control)}
-          disabled={isSaving}
-        />
-      ),
-    },
-    {
-      label: "Website",
-      inputId: "uni-website",
-      error: fieldErrors.website,
-      value: (
-        <Input
-          id="uni-website"
-          value={form.website}
-          onChange={(e) => setField("website", e.target.value)}
-          aria-invalid={Boolean(fieldErrors.website) || undefined}
-          placeholder="https://"
-          disabled={isSaving}
-        />
-      ),
-    },
-    {
-      label: "Tỷ lệ nhận (%)",
-      inputId: "uni-acceptance",
-      error: fieldErrors.acceptanceRate,
-      value: (
-        <Input
-          id="uni-acceptance"
-          inputMode="decimal"
-          value={form.acceptancePercent}
-          onChange={(e) => setField("acceptancePercent", e.target.value)}
-          aria-invalid={Boolean(fieldErrors.acceptanceRate) || undefined}
-          placeholder="Ví dụ: 48.2"
-          disabled={isSaving}
-        />
-      ),
-    },
-    {
-      label: "Số du học sinh",
-      inputId: "uni-intl",
-      error: fieldErrors.internationalStudentCount,
-      value: (
-        <Input
-          id="uni-intl"
-          inputMode="numeric"
-          value={form.internationalStudentCount}
-          onChange={(e) => setField("internationalStudentCount", e.target.value)}
-          aria-invalid={Boolean(fieldErrors.internationalStudentCount) || undefined}
-          disabled={isSaving}
-        />
-      ),
-    },
-    {
-      label: "Ivy League",
-      value: (
-        <label className="flex items-center gap-2">
-          <Checkbox
-            checked={form.isIvy}
-            onCheckedChange={(checked) => setField("isIvy", checked === true)}
-            disabled={isSaving}
-          />
-          Thuộc Ivy League
-        </label>
-      ),
-    },
-  ];
+  const editRows = buildUniversityEditRows({
+    form,
+    setField,
+    fieldErrors,
+    isSaving,
+    includeCode: false,
+    includeMedia: false,
+  });
 
   return <EditableTable title="Thông tin trường" rows={editRows} edit={edit} />;
 }

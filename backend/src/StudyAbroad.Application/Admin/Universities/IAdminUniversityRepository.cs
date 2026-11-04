@@ -7,6 +7,10 @@ public interface IAdminUniversityRepository
 {
     Task<PagedResult<AdminUniversityListItemDto>> SearchAsync(AdminUniversityQuery query, CancellationToken ct = default);
 
+    Task<bool> ExistsCodeAsync(string code, CancellationToken ct = default);
+
+    void AddUniversity(University university);
+
     /// <summary>Trường có tracking để sửa; null nếu không có.</summary>
     Task<University?> GetUniversityAsync(Guid universityId, CancellationToken ct = default);
 

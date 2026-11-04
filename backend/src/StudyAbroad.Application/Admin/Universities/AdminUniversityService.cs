@@ -14,6 +14,8 @@ public interface IAdminUniversityService
     /// <summary>null nếu trường không tồn tại.</summary>
     Task<IReadOnlyList<AdminUniversityOfferingDto>?> GetOfferingsAsync(Guid universityId, CancellationToken ct = default);
     Task<IReadOnlyList<AdminMajorOptionDto>> ListMajorsAsync(CancellationToken ct = default);
+    Task<AdminUpdateResult<AdminUniversityDetailDto>> CreateUniversityAsync(
+        CreateUniversityRequest request, Guid actorUserId, CancellationToken ct = default);
     /// <summary>[UC-66] Sửa thông tin trường (kèm ghi audit).</summary>
     Task<AdminUpdateResult<AdminUniversityDetailDto>> UpdateUniversityAsync(
         Guid universityId, UpdateUniversityRequest request, Guid actorUserId, CancellationToken ct = default);
@@ -76,6 +78,57 @@ public class AdminUniversityService(
         return majors.Select(m => new AdminMajorOptionDto(m.Id, m.Name, m.CipCode)).ToList();
     }
 
+    public async Task<AdminUpdateResult<AdminUniversityDetailDto>> CreateUniversityAsync(
+        CreateUniversityRequest request, Guid actorUserId, CancellationToken ct = default)
+    {
+        var code = Clean(request.Code)?.ToUpperInvariant();
+        var name = Clean(request.Name);
+        var city = Clean(request.City);
+        var state = Clean(request.State)?.ToUpperInvariant();
+        var website = Clean(request.Website);
+        var control = Clean(request.Control)?.ToLowerInvariant();
+        var logoUrl = Clean(request.LogoUrl);
+        var coverUrl = Clean(request.CoverUrl);
+
+        var errors = new Dictionary<string, string>();
+        if (code is null)
+            errors["code"] = "Mã trường không được để trống.";
+        else if (code.Length > 32)
+            errors["code"] = "Mã trường tối đa 32 ký tự.";
+        else if (!Regex.IsMatch(code, "^[A-Z0-9_.-]+$"))
+            errors["code"] = "Mã trường chỉ được chứa chữ hoa, số, dấu gạch và chấm.";
+        else if (await repository.ExistsCodeAsync(code, ct))
+            errors["code"] = "Mã trường đã tồn tại trong hệ thống.";
+
+        ValidateUniversityFields(name, city, state, website, control, request.AcceptanceRate, request.InternationalStudentCount, logoUrl, coverUrl, errors);
+        if (errors.Count > 0) return AdminUpdateResult<AdminUniversityDetailDto>.Invalid(errors);
+
+        var university = new University
+        {
+            Code = code!,
+            Name = name!,
+            City = city,
+            State = state,
+            Website = website,
+            Control = control,
+            AcceptanceRate = request.AcceptanceRate,
+            InternationalStudentCount = request.InternationalStudentCount,
+            IsIvy = request.IsIvy,
+            IsActive = true,
+            LastEditedByUserId = actorUserId,
+        };
+
+        repository.AddUniversity(university);
+        if (!string.IsNullOrWhiteSpace(logoUrl) || !string.IsNullOrWhiteSpace(coverUrl))
+        {
+            await repository.SaveUniversityMediaAsync(university.Id, logoUrl, coverUrl, ct);
+        }
+        await repository.SaveChangesAsync(ct);
+
+        await WriteAuditAsync(actorUserId, "university.create", "university", university.Id, new { code = university.Code, name = university.Name }, ct);
+        return AdminUpdateResult<AdminUniversityDetailDto>.Ok(await ToDetailDtoAsync(university, ct));
+    }
+
     public async Task<AdminUpdateResult<AdminUniversityDetailDto>> UpdateUniversityAsync(
         Guid universityId, UpdateUniversityRequest request, Guid actorUserId, CancellationToken ct = default)
     {
@@ -91,26 +144,7 @@ public class AdminUniversityService(
         var coverUrl = Clean(request.CoverUrl);
 
         var errors = new Dictionary<string, string>();
-        if (name is null)
-            errors["name"] = "Tên trường không được để trống.";
-        else if (name.Length > 256)
-            errors["name"] = "Tên trường tối đa 256 ký tự.";
-        if (city is not null && city.Length > 128)
-            errors["city"] = "Thành phố tối đa 128 ký tự.";
-        if (state is not null && !StateCode.IsMatch(state))
-            errors["state"] = "Mã bang gồm 2 chữ cái, ví dụ CA.";
-        if (website is not null && (website.Length > 512 || !IsHttpUrl(website)))
-            errors["website"] = "Website phải là đường dẫn http(s), tối đa 512 ký tự.";
-        if (logoUrl is not null && (logoUrl.Length > 1000 || !IsHttpUrl(logoUrl)))
-            errors["logoUrl"] = "Logo phải là đường dẫn http(s), tối đa 1000 ký tự.";
-        if (coverUrl is not null && (coverUrl.Length > 1000 || !IsHttpUrl(coverUrl)))
-            errors["coverUrl"] = "Ảnh bìa phải là đường dẫn http(s), tối đa 1000 ký tự.";
-        if (control is not null && !Controls.Contains(control))
-            errors["control"] = "Loại trường chỉ nhận public hoặc private.";
-        if (request.AcceptanceRate is < 0 or > 1)
-            errors["acceptanceRate"] = "Tỷ lệ nhận phải trong khoảng 0–1.";
-        if (request.InternationalStudentCount is < 0)
-            errors["internationalStudentCount"] = "Số du học sinh không được âm.";
+        ValidateUniversityFields(name, city, state, website, control, request.AcceptanceRate, request.InternationalStudentCount, logoUrl, coverUrl, errors);
         if (errors.Count > 0) return AdminUpdateResult<AdminUniversityDetailDto>.Invalid(errors);
 
         var currentMedia = await repository.GetUniversityMediaAsync(university.Id, ct);
@@ -251,6 +285,33 @@ public class AdminUniversityService(
         await WriteAuditAsync(actorUserId, action, "university", university.Id,
             new { code = university.Code, from = !isActive, to = isActive }, ct);
         return await ToDetailDtoAsync(university, ct);
+    }
+
+    private static void ValidateUniversityFields(
+        string? name, string? city, string? state, string? website, string? control,
+        decimal? acceptanceRate, int? internationalStudentCount, string? logoUrl, string? coverUrl,
+        Dictionary<string, string> errors)
+    {
+        if (name is null)
+            errors["name"] = "Tên trường không được để trống.";
+        else if (name.Length > 256)
+            errors["name"] = "Tên trường tối đa 256 ký tự.";
+        if (city is not null && city.Length > 128)
+            errors["city"] = "Thành phố tối đa 128 ký tự.";
+        if (state is not null && !StateCode.IsMatch(state))
+            errors["state"] = "Mã bang gồm 2 chữ cái, ví dụ CA.";
+        if (website is not null && (website.Length > 512 || !IsHttpUrl(website)))
+            errors["website"] = "Website phải là đường dẫn http(s), tối đa 512 ký tự.";
+        if (logoUrl is not null && (logoUrl.Length > 1000 || !IsHttpUrl(logoUrl)))
+            errors["logoUrl"] = "Logo phải là đường dẫn http(s), tối đa 1000 ký tự.";
+        if (coverUrl is not null && (coverUrl.Length > 1000 || !IsHttpUrl(coverUrl)))
+            errors["coverUrl"] = "Ảnh bìa phải là đường dẫn http(s), tối đa 1000 ký tự.";
+        if (control is not null && !Controls.Contains(control))
+            errors["control"] = "Loại trường chỉ nhận public hoặc private.";
+        if (acceptanceRate is < 0 or > 1)
+            errors["acceptanceRate"] = "Tỷ lệ nhận phải trong khoảng 0–1.";
+        if (internationalStudentCount is < 0)
+            errors["internationalStudentCount"] = "Số du học sinh không được âm.";
     }
 
     private static Dictionary<string, string> ValidateOffering(

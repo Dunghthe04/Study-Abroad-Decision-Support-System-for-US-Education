@@ -10,6 +10,7 @@ using StudyAbroad.Application.Recommendations;
 using StudyAbroad.Application.StudyCenters;
 using StudyAbroad.Infrastructure.Advisor;
 using StudyAbroad.Infrastructure.Auth;
+using StudyAbroad.Infrastructure.MediaUploads;
 using StudyAbroad.Infrastructure.Persistence;
 using StudyAbroad.Infrastructure.Persistence.Repositories;
 
@@ -36,6 +37,7 @@ public static class DependencyInjection
         services.AddScoped<IFinancialProfileRepository, FinancialProfileRepository>();
         services.AddScoped<StudyAbroad.Application.AcademicProfiles.IAcademicProfileRepository, AcademicProfileRepository>();
         services.AddSingleton<IPasswordHasher, PasswordHasher>();
+        services.AddCloudinaryMedia(configuration);
         // [USAS-365] Đăng ký repository phân tích điểm học thuật
         services.AddScoped<StudyAbroad.Application.Profile.Academic.IAcademicAnalysisRepository, AcademicAnalysisRepository>();
         // [USAS-640] Đăng ký repository luồng hồ sơ và metadata
