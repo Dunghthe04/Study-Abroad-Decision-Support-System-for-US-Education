@@ -81,23 +81,23 @@ public class ChatRecommendationTests
     }
 
     [Fact]
-    public void Summarize_CutsTheAidGroupToThreeNames()
+    public void Summarize_CutsTheAidGroupToFourNames()
     {
         var items = """
-            { "scored": [], "aid": [ {"code":"A1"}, {"code":"A2"}, {"code":"A3"}, {"code":"A4"}, {"code":"A5"} ] }
+            { "scored": [], "aid": [ {"code":"A1"}, {"code":"A2"}, {"code":"A3"}, {"code":"A4"}, {"code":"A5"}, {"code":"A6"} ] }
             """;
 
-        Assert.Contains("- Chỉ đi được nếu có học bổng lớn: A1, A2, A3 và 2 trường khác", ChatRecommendation.Summarize(Run(items)));
+        Assert.Contains("- Chỉ đi được nếu có học bổng lớn: A1, A2, A3, A4 và 2 trường khác", ChatRecommendation.Summarize(Run(items)));
     }
 
     [Fact]
     public void Summarize_CutsAGroupAtItsPageLimit()
     {
         var items = """
-            { "scored": [], "reach": [ {"code":"R1"}, {"code":"R2"}, {"code":"R3"}, {"code":"R4"} ] }
+            { "scored": [], "reach": [ {"code":"R1"}, {"code":"R2"}, {"code":"R3"}, {"code":"R4"}, {"code":"R5"} ] }
             """;
 
-        Assert.Contains("- Khó vào: R1, R2, R3 và 1 trường khác", ChatRecommendation.Summarize(Run(items)));
+        Assert.Contains("- Khó vào: R1, R2, R3, R4 và 1 trường khác", ChatRecommendation.Summarize(Run(items)));
     }
 
     [Fact]

@@ -12,7 +12,7 @@ public class AcademicBlendTests
     [InlineData("very_important", 1.0)]
     [InlineData("important", 0.75)]
     [InlineData("considered", 0.5)]
-    [InlineData("not_considered", 0.25)]
+    [InlineData("not_considered", 0.0)]
     [InlineData("VERY_IMPORTANT", 1.0)]   // không phân biệt hoa thường
     [InlineData(" important ", 0.75)]
     [InlineData(null, 0.5)]
@@ -38,7 +38,7 @@ public class AcademicBlendTests
 
     [Theory]
     [InlineData("very_important", "important", null, 0.43)]
-    [InlineData("very_important", "not_considered", null, 0.39)]
+    [InlineData("very_important", "not_considered", null, 0.35)]    // điểm thi "không xét": chỉ còn p_g
     [InlineData("very_important", "important", 0.3, 0.40)]    // chỉ 30% nộp SAT: trọng số SAT × 0,5
     public void Combine_MatchesTheDocumentExamples(string gpaImp, string testImp, double? submit, double expected)
     {
@@ -63,6 +63,30 @@ public class AcademicBlendTests
 
         Assert.True(gpaHeavy < 0.5);
         Assert.True(testHeavy > 0.5);
+    }
+
+    [Fact]
+    public void Combine_NotConsideredHasNoWeightAtAll()
+    {
+        // trường không xét GPA: p chỉ còn là p_s; không xét điểm thi: chỉ còn p_g
+        Assert.Equal(0.8, AcademicBlend.Combine(0.2, 0.8, "not_considered", "important")!.Value, 9);
+        Assert.Equal(0.2, AcademicBlend.Combine(0.2, 0.8, "important", "not_considered")!.Value, 9);
+    }
+
+    [Fact]
+    public void Combine_WhenBothAreNotConsidered_FallsBackToEqualWeights()
+    {
+        var p = AcademicBlend.Combine(0.35, 0.53, "not_considered", "not_considered");
+
+        Assert.Equal(0.44, p!.Value, 9);   // (0,35 + 0,53) / 2, không chia cho 0
+    }
+
+    [Fact]
+    public void Combine_WhenOnlyAZeroWeightMetricExists_StillGivesThatMetric()
+    {
+        // trường không xét GPA nhưng điểm thi của trường thiếu: có p_g thì dùng p_g, không để thành null
+        Assert.Equal(0.35, AcademicBlend.Combine(0.35, null, "not_considered", "important")!.Value, 9);
+        Assert.Equal(0.53, AcademicBlend.Combine(null, 0.53, "important", "not_considered")!.Value, 9);
     }
 
     [Fact]

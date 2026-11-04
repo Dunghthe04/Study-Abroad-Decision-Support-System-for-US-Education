@@ -1,3 +1,5 @@
+using StudyAbroad.Domain.Entities;
+
 namespace StudyAbroad.Application.Recommendations;
 
 // Công thức xếp nhóm trường Khó vào / Vừa sức / An toàn (CONG_THUC_GOI_Y_TRUONG.docx).
@@ -172,6 +174,7 @@ public static class AcademicBlend
 
     // p = trung bình có trọng số của các chỉ số đang có. Trọng số theo mức trường coi trọng (CDS C7).
     // Thiếu một chỉ số thì p bằng chỉ số còn lại; thiếu cả hai thì null.
+    // Mọi chỉ số đang có đều có trọng số 0 (trường "không xét" cả hai): coi như bằng nhau, không chia cho 0.
     public static double? Combine(
         double? pg, double? ps, string? gpaImportance, string? testImportance,
         decimal? satSubmitPct = null, GroupingOptions? options = null)
@@ -182,10 +185,14 @@ public static class AcademicBlend
         // Ít sinh viên nộp SAT thì P25, P75 chỉ đại diện nhóm có nộp (thường điểm cao): giảm trọng số.
         if (satSubmitPct is decimal share && (double)share < o.LowSubmitPct) ws *= o.LowSubmitFactor;
 
-        double sum = 0, weights = 0;
-        if (pg is double g) { sum += wg * g; weights += wg; }
-        if (ps is double s) { sum += ws * s; weights += ws; }
-        return weights > 0 ? sum / weights : null;
+        var parts = new List<(double Value, double Weight)>();
+        if (pg is double g) parts.Add((g, wg));
+        if (ps is double s) parts.Add((s, ws));
+        if (parts.Count == 0) return null;
+
+        var total = parts.Sum(x => x.Weight);
+        if (total <= 0) return parts.Average(x => x.Value);
+        return parts.Sum(x => x.Value * x.Weight) / total;
     }
 
     // p' = p + hiệu chỉnh ngoại khóa, kẹp trong [0, 1]. Bậc 3 là trung bình nên không đổi.
@@ -197,13 +204,13 @@ public static class AcademicBlend
         return Math.Clamp(p + Math.Clamp(shift, -o.EcCap, o.EcCap), 0, 1);
     }
 
-    // Mức trường coi trọng một tiêu chí (CDS C7); không rõ thì lấy mức giữa.
+    // Mức trường coi trọng một tiêu chí (CDS C7); "không xét" là 0 (thầy chốt); không rõ thì lấy mức giữa.
     public static double Weight(string? level) => level?.Trim().ToLowerInvariant() switch
     {
         "very_important" => 1.0,
         "important" => 0.75,
         "considered" => 0.5,
-        "not_considered" => 0.25,
+        "not_considered" => 0.0,
         _ => 0.5
     };
 
@@ -414,4 +421,87 @@ public static class SchoolRanker
     }
 
     private static double Clamp01(double x) => Math.Clamp(x, 0, 1);
+}
+
+// ---- Bậc ngoại khóa k ----
+
+// Một hoạt động đã có vai trò và phạm vi (học sinh chọn trong form, hoặc đã xác nhận). Role: 1,0 · 0,8 · 0,6 · 0,3.
+public record EcActivityEntry(decimal Role, int Scope, int Months);
+
+// Kết quả tính bậc ngoại khóa: TongHd = tổng điểm hoạt động, Bonus = điểm giải thưởng, M = điểm gộp 0–1, Tier = bậc 1–5.
+public record EcScore(decimal TongHd, decimal Bonus, decimal M, int Tier);
+
+// Tính bậc ngoại khóa k (1 đến 5) bằng code từ vai trò, phạm vi, số tháng của hoạt động và cấp giải thưởng.
+// Cùng danh sách hoạt động thì luôn ra cùng k: không có AI, không có yếu tố ngẫu nhiên.
+public static class ActivityTier
+{
+    public const int MaxActivities = 10;   // chỉ xét tối đa chừng này hoạt động và giải thưởng (theo thứ tự nhập)
+    public const int TopActivities = 4;    // tổng điểm lấy 4 hoạt động cao nhất
+    public const int TopAwards = 3;        // thưởng lấy 3 giải cao nhất
+    private const decimal AwardPoint = 0.05m;   // mỗi cấp giải thưởng được 0,05
+    private const decimal MaxBonus = 0.5m;
+    private const decimal DefaultRole = 0.3m;   // vai trò không rõ coi là thành viên
+    // m dưới 0,10 là bậc 1; dưới 0,25 là bậc 2; dưới 0,45 là bậc 3; dưới 0,65 là bậc 4; còn lại bậc 5
+    private static readonly decimal[] TierCuts = [0.10m, 0.25m, 0.45m, 0.65m];
+
+    // Mã vai trò trong hồ sơ → hệ số: sáng lập 1,0 · trưởng 0,8 · phó 0,6 · thành viên 0,3; mã lạ thì 0,3.
+    public static decimal RoleWeight(string? role) => role switch
+    {
+        "founder" => 1.0m,
+        "leader" => 0.8m,
+        "vice_leader" => 0.6m,
+        _ => DefaultRole
+    };
+
+    // q = 0,4 × (phạm vi / 5) + 0,35 × vai trò + 0,25 × min(số tháng / 24, 1), làm tròn 2 chữ số.
+    public static decimal ActivityPoints(decimal role, int scope, int months) =>
+        Round2(0.4m * Math.Clamp(scope, 1, 5) / 5 + 0.35m * role + 0.25m * Math.Min(Math.Max(months, 0) / 24m, 1m));
+
+    // tong_hd = tổng q của 4 hoạt động cao nhất; bonus = min(0,5, tổng 0,05 × cấp của 3 giải cao nhất);
+    // m = min(1, (tong_hd + bonus) / 4); k theo m. Chưa có hoạt động nào thì m = 0 và k = 1.
+    public static EcScore Compute(IEnumerable<EcActivityEntry> activities, IEnumerable<int> awardLevels)
+    {
+        var tongHd = activities
+            .Take(MaxActivities)
+            .Select(a => ActivityPoints(a.Role, a.Scope, a.Months))
+            .OrderByDescending(q => q)
+            .Take(TopActivities)
+            .Sum();
+        var awardPoints = awardLevels
+            .Take(MaxActivities)
+            .OrderByDescending(level => level)
+            .Take(TopAwards)
+            .Sum(level => level * AwardPoint);
+        var bonus = Round2(Math.Min(MaxBonus, awardPoints));
+        var m = Round2(Math.Min(1m, (tongHd + bonus) / 4));
+        return new EcScore(Round2(tongHd), bonus, m, TierOf(m));
+    }
+
+    public static int TierOf(decimal m) => 1 + TierCuts.Count(cut => m >= cut);
+
+    // Từ danh sách hoạt động trong hồ sơ (ProfileActivity): giữ hoạt động có tên và phạm vi 1–5, tách giải thưởng ra riêng.
+    public static EcScore FromProfile(IEnumerable<ProfileActivity> items)
+    {
+        var valid = items.Where(a => a.ImpactLevel is >= 1 and <= 5 && !string.IsNullOrWhiteSpace(a.Title)).ToList();
+        var activities = valid
+            .Where(a => !IsAward(a))
+            .Take(MaxActivities)
+            .Select(a => new EcActivityEntry(RoleWeight(a.Role), a.ImpactLevel!.Value, Months(a)));
+        var awards = valid.Where(IsAward).Take(MaxActivities).Select(a => a.ImpactLevel!.Value);
+        return Compute(activities, awards);
+    }
+
+    private static bool IsAward(ProfileActivity a) => string.Equals(a.Kind, "award", StringComparison.OrdinalIgnoreCase);
+
+    // Số tháng học sinh khai; không có thì tính từ ngày bắt đầu đến ngày kết thúc (hoặc hôm nay); không có gì thì 0.
+    private static int Months(ProfileActivity activity)
+    {
+        if (activity.DurationMonths is int months) return Math.Clamp(months, 0, 120);
+        if (activity.StartDate is not DateOnly start) return 0;
+        var end = activity.EndDate ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        var count = (end.Year - start.Year) * 12 + end.Month - start.Month;
+        return Math.Clamp(count, 0, 120);
+    }
+
+    private static decimal Round2(decimal value) => Math.Round(value, 2, MidpointRounding.AwayFromZero);
 }
