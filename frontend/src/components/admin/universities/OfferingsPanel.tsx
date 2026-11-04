@@ -11,6 +11,7 @@ import {
 } from "@/lib/admin-university-api";
 import { OfferingSection, type OfferingTable } from "./OfferingSection";
 import { UniversityInfoSection } from "./UniversityInfoSection";
+import { UniversityMediaSection } from "./UniversityMediaSection";
 import { UniversityVisibilitySwitch } from "./UniversityVisibilitySwitch";
 import type {
   AdminUniversityDetail,
@@ -34,6 +35,7 @@ interface LoadResult {
 
 /** Mỗi lúc chỉ sửa một bảng, để không mất dữ liệu đang nhập ở bảng khác. */
 type Editing =
+  | { kind: "media"; universityId: string }
   | { kind: "university"; universityId: string }
   | {
       kind: "offering";
@@ -166,6 +168,20 @@ export function OfferingsPanel({
           <UniversityVisibilitySwitch
             university={detail}
             onChanged={handleUniversityChanged}
+          />
+        )}
+
+        {detail && (
+          <UniversityMediaSection
+            key={`media-${detail.id}`}
+            university={detail}
+            isEditing={editing?.kind === "media"}
+            canEdit={editing === null}
+            onStartEdit={() =>
+              setEditingState({ kind: "media", universityId: detail.id })
+            }
+            onStopEdit={stopEditing}
+            onSaved={handleUniversitySaved}
           />
         )}
 

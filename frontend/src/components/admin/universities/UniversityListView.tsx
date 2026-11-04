@@ -122,6 +122,7 @@ export function UniversityListView() {
         control: saved.control,
         acceptanceRate: saved.acceptanceRate,
         isActive: saved.isActive,
+        logoUrl: saved.logoUrl,
       };
     };
 
@@ -207,7 +208,8 @@ export function UniversityListView() {
             <Table className="border-separate border-spacing-0 [&_td]:border-r [&_td]:border-b [&_td]:border-border [&_td]:py-1.5 [&_td:last-child]:border-r-0 [&_th]:border-r [&_th]:border-b [&_th]:border-border [&_th]:bg-muted [&_th]:font-semibold [&_th:last-child]:border-r-0 [&_tr:hover_td]:bg-brand-wash/40">
               <TableHeader className="sticky top-0 z-10 bg-card">
                 <TableRow>
-                  <TableHead>Mã</TableHead>
+                  <TableHead className="w-16">Mã</TableHead>
+                  <TableHead className="w-20 text-center">Logo</TableHead>
                   <TableHead>Tên trường</TableHead>
                   <TableHead>Bang</TableHead>
                   <TableHead>Loại</TableHead>
@@ -221,7 +223,7 @@ export function UniversityListView() {
                 {isLoading &&
                   Array.from({ length: 6 }, (_, index) => (
                     <TableRow key={`loading-${index}`}>
-                      <TableCell colSpan={8}>
+                      <TableCell colSpan={9}>
                         <Skeleton className="h-5 w-full" />
                       </TableCell>
                     </TableRow>
@@ -230,7 +232,7 @@ export function UniversityListView() {
                 {!isLoading && data && data.items.length === 0 && (
                   <TableRow>
                     <TableCell
-                      colSpan={8}
+                      colSpan={9}
                       className="py-8 text-center text-muted-foreground"
                     >
                       Không có trường nào khớp bộ lọc.
@@ -248,10 +250,26 @@ export function UniversityListView() {
                       <TableCell className="font-mono text-xs">
                         {university.code}
                       </TableCell>
+                      <TableCell className="w-20 p-1 text-center">
+                        {university.logoUrl ? (
+                          <div className="flex items-center justify-center">
+                            <img
+                              src={university.logoUrl}
+                              alt={university.name}
+                              className="h-8 w-14 object-contain"
+                              onError={(e) => {
+                                (e.target as HTMLElement).style.display = "none";
+                              }}
+                            />
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
                       <TableCell>
                         <button
                           type="button"
-                          className="text-left font-medium text-brand underline-offset-2 hover:underline"
+                          className="truncate text-left font-medium text-brand underline-offset-2 hover:underline"
                           onClick={(event) => {
                             event.stopPropagation();
                             setSelected(university);

@@ -144,6 +144,8 @@ export function UniversityInfoSection({
         acceptanceRate,
         internationalStudentCount,
         isIvy: form.isIvy,
+        logoUrl: university.logoUrl,
+        coverUrl: university.coverUrl,
       });
       toast.add({ type: "success", title: "Đã lưu thông tin trường", description: saved.name });
       onSaved(saved);
