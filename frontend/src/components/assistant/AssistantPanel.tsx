@@ -13,16 +13,18 @@ import {
   PlusIcon,
   RotateCwIcon,
   SlidersHorizontalIcon,
+  TargetIcon,
   XIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { showSimulation } from "@/lib/simulation-link";
+import { showGoal, showSimulation } from "@/lib/simulation-link";
 import { AGE_FEATURES, useAgeBlock } from "@/lib/age-features";
 import { useAssistant, type AssistantTurn } from "./AssistantProvider";
 import { BudgetWidget } from "./BudgetWidget";
 import { MajorWidget } from "./MajorWidget";
 import { ReviewWidget } from "./ReviewWidget";
 import { ScholarshipWidget } from "./ScholarshipWidget";
+import { SchoolWidget } from "./SchoolWidget";
 import { SelectWidget } from "./SelectWidget";
 
 // Trang đăng nhập / đăng ký không hiện trợ lý
@@ -288,6 +290,7 @@ function Turn({ turn, onReply }: { turn: AssistantTurn; onReply?: (value: string
       {/* E: chỉ chọn được ở lượt cuối, giống nút trả lời nhanh */}
       {turn.widget?.type === "major" && <MajorWidget onPick={onReply} />}
       {turn.widget?.type === "select" && <SelectWidget data={turn.widget.data} onPick={onReply} />}
+      {turn.widget?.type === "school" && <SchoolWidget data={turn.widget.data} onPick={onReply} />}
       {turn.widget?.type === "budget" && <BudgetWidget data={turn.widget.data} onPick={onReply} />}
       {turn.widget?.type === "scholarship" && <ScholarshipWidget data={turn.widget.data} onPick={onReply} />}
       {/* Mục 1: học sinh chọn điền bằng form */}
@@ -321,6 +324,17 @@ function Turn({ turn, onReply }: { turn: AssistantTurn; onReply?: (value: string
         >
           <SlidersHorizontalIcon className="size-4" />
           Xem trên thanh kéo
+        </button>
+      )}
+      {/* Goal-seeking: mở khung "cần gì để vào" của trường vừa hỏi trên trang Gợi ý trường */}
+      {turn.widget?.type === "goal_seek" && (
+        <button
+          type="button"
+          onClick={() => showGoal(turn.widget?.data, router.push)}
+          className="mt-2.5 inline-flex h-8 items-center gap-1.5 rounded-full bg-brand px-3.5 text-[13px] font-semibold text-white transition-colors hover:bg-brand-ink"
+        >
+          <TargetIcon className="size-4" />
+          Xem bảng chi tiết
         </button>
       )}
       {onReply && turn.quickReplies && turn.quickReplies.length > 0 && (

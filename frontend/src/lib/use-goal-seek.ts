@@ -12,7 +12,7 @@ export interface GoalSeek {
   result: SchoolGoalResult | null;
   loading: boolean;
   error: string | null;
-  open: (code: string) => void;
+  open: (code: string, target?: GoalTarget | null) => void; // target bỏ trống: nhóm cao hơn một bậc
   setTarget: (target: GoalTarget) => void;
   close: () => void;
 }
@@ -23,6 +23,7 @@ export function useGoalSeek(): GoalSeek {
   const [result, setResult] = useState<SchoolGoalResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [nonce, setNonce] = useState(0); // mở lại đúng trường và nhóm đích đó vẫn phải tính lại
   const seq = useRef(0); // chỉ nhận phản hồi của lần gọi mới nhất
 
   useEffect(() => {
@@ -43,11 +44,12 @@ export function useGoalSeek(): GoalSeek {
       .finally(() => {
         if (seq.current === mine) setLoading(false);
       });
-  }, [code, target]);
+  }, [code, target, nonce]);
 
-  const open = useCallback((next: string) => {
+  const open = useCallback((next: string, nextTarget?: GoalTarget | null) => {
     setCode(next);
-    setTargetState(null); // trường mới thì quay về nhóm đích mặc định
+    setTargetState(nextTarget ?? null); // không nêu nhóm đích thì để hệ thống chọn nhóm cao hơn một bậc
+    setNonce((n) => n + 1);
     setResult(null);
     setError(null);
     setLoading(true);

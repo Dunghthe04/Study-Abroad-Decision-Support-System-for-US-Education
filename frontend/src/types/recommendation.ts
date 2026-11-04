@@ -155,6 +155,13 @@ export interface SimulationResponse {
   items: RecommendationItems; // cùng khuôn với lượt gợi ý đã lưu
 }
 
+// Một trường trong ô chọn trường của chat (GET /recommendations/schools/names)
+export interface SchoolOption {
+  code: string;
+  name: string;
+  state: string | null;
+}
+
 // ---- "Cần gì để vào trường này" (POST /recommendations/schools/{code}/goal-seek) ----
 
 export type GoalTarget = "reach" | "match" | "safety";

@@ -7,6 +7,7 @@ import type {
   Recommendation,
   SchoolExplanation,
   SchoolGoalResult,
+  SchoolOption,
   SimulationOverrides,
   SimulationResponse,
 } from "@/types/recommendation";
@@ -39,6 +40,9 @@ export const recommendationApi = {
       method: "POST",
       body: JSON.stringify(overrides),
     }),
+
+  // Danh sách trường cho ô chọn có gợi ý trong chat. Tải một lần, lọc ngay trên máy khi học sinh gõ.
+  schoolOptions: () => apiFetch<SchoolOption[]>(`${BASE}/schools/names`, { method: "GET" }),
 
   // "Cần gì để vào trường này": mức tối thiểu để trường đạt nhóm đích, kèm tài chính. target bỏ trống: nhóm cao hơn một bậc.
   // Tính từ hồ sơ thật, không lưu, không gọi AI.

@@ -10,7 +10,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { useAssistant, useAssistantPageContext } from "@/components/assistant/AssistantProvider";
 import { recommendationApi } from "@/lib/recommendation-api";
 import { statusLabel } from "@/lib/recommendation-labels";
-import { SIMULATE_EVENT } from "@/lib/simulation-link";
+import { GOAL_EVENT, SIMULATE_EVENT, type GoalRequest } from "@/lib/simulation-link";
 import { useGoalSeek, type GoalSeek } from "@/lib/use-goal-seek";
 import { useProfileSimulation, type ProfileSimulation } from "@/lib/use-profile-simulation";
 import type {
@@ -48,9 +48,10 @@ const BALANCED_PREF: Pref = [2, 2, 2];
 interface RecommendationViewProps {
   autoRun: boolean; // true khi vừa gửi hồ sơ xong: chạy gợi ý mới thay vì đọc lần cũ
   initialOverrides?: SimulationOverrides; // giá trị giả định chat vừa thử, điền sẵn vào thanh kéo
+  initialGoal?: GoalRequest | null; // trường chat vừa hỏi "cần gì để vào", mở sẵn khung kết quả
 }
 
-export function RecommendationView({ autoRun, initialOverrides }: RecommendationViewProps) {
+export function RecommendationView({ autoRun, initialOverrides, initialGoal }: RecommendationViewProps) {
   const router = useRouter();
   const [rec, setRec] = useState<Recommendation | null>(null);
   // Vừa gửi hồ sơ thì bắt đầu ở trạng thái "running", còn lại là "loading" (đọc lần đã lưu)
@@ -98,6 +99,22 @@ export function RecommendationView({ autoRun, initialOverrides }: Recommendation
     window.addEventListener(SIMULATE_EVENT, onSimulate);
     return () => window.removeEventListener(SIMULATE_EVENT, onSimulate);
   }, [replaceSimulation]);
+
+  // Chat vừa hỏi "cần gì để vào trường X": mở khung kết quả của trường đó (ngay khi vào trang, hoặc tại chỗ nếu đang ở trang này)
+  const { open: openGoal } = goal;
+  const openedInitialGoal = useRef(false);
+  useEffect(() => {
+    if (initialGoal && !openedInitialGoal.current) {
+      openedInitialGoal.current = true;
+      openGoal(initialGoal.code, initialGoal.target);
+    }
+    const onGoalEvent = (event: Event) => {
+      const detail = (event as CustomEvent<GoalRequest>).detail;
+      openGoal(detail.code, detail.target);
+    };
+    window.addEventListener(GOAL_EVENT, onGoalEvent);
+    return () => window.removeEventListener(GOAL_EVENT, onGoalEvent);
+  }, [initialGoal, openGoal]);
 
   // Có kết quả thì mở trợ lý bên phải một lần như bản demo (màn hẹp thì khung phủ kín nên không tự mở)
   const autoOpened = useRef(false);
@@ -183,6 +200,15 @@ export function RecommendationView({ autoRun, initialOverrides }: Recommendation
         <>
           <ProfileSummary rec={rec} onRerun={runNew} />
           {simulating && <SimulationBanner sim={sim} />}
+          {/* Trường chưa hiện thành thẻ nào (ngoài 4 trường mỗi nhóm): khung kết quả hiện ở đầu danh sách */}
+          {goal.code && !shownCodes(view).has(goal.code) && (
+            <GoalSeekPanel
+              goal={goal}
+              simulating={simulating}
+              schoolName={goal.result?.name ?? goal.code}
+              onApply={applyGoal}
+            />
+          )}
           <ResultBody
             rec={view}
             changes={simulating ? sim.result!.changes : []}
@@ -211,6 +237,12 @@ export function RecommendationView({ autoRun, initialOverrides }: Recommendation
       {main}
     </div>
   );
+}
+
+// Mã các trường đang hiện thành thẻ trong danh sách
+function shownCodes(rec: Recommendation): Set<string> {
+  const { reach, match, safety, aid, other } = rec.items;
+  return new Set([...reach, ...match, ...safety, ...aid, ...other].map((p) => p.code));
 }
 
 // Dải thông báo khi đang xem hồ sơ giả định: số trường mỗi nhóm trước và sau, các trường đổi nhóm
