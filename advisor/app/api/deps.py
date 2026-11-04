@@ -11,6 +11,7 @@ from app.services.chat_flow import ChatFlow
 from app.services.ec_reader import EcReader
 from app.services.explainer import Explainer
 from app.services.ollama import OllamaClient
+from app.services.scenario_writer import ScenarioWriter
 
 
 def require_api_key(
@@ -47,6 +48,11 @@ def get_ec_reader(request: Request) -> EcReader:
 # hàm độc đối tượng trong state
 def get_explainer(request: Request) -> Explainer:
     return request.app.state.explainer
+
+
+# Lời cho kịch bản what-if
+def get_scenario_writer(request: Request) -> ScenarioWriter:
+    return request.app.state.scenario_writer
 
 
 def get_chat_flow(request: Request) -> ChatFlow:
