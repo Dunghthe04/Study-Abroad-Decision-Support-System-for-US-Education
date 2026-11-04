@@ -34,14 +34,17 @@ namespace StudyAbroad.Infrastructure.Persistence.Repositories
                 .ToListAsync(ct);
             var offeringIds = rows.Select(row => row.offering.Id).ToList();
             var majorsByOffering = await LoadMajorNamesAsync(offeringIds, ct);
-            var rankings = await LoadRankingsAsync(rows.Select(row => row.university.Id).ToList(), ct);
+            var universityIds = rows.Select(row => row.university.Id).ToList();
+            var rankings = await LoadRankingsAsync(universityIds, ct);
+            var images = await LoadImagesAsync(universityIds, ct);
 
             var schools = new List<RecommendSchoolInput>();
             foreach (var row in rows)
             {
                 var majors = majorsByOffering.GetValueOrDefault(row.offering.Id) ?? [];
                 schools.Add(new RecommendSchoolInput(
-                    row.university, row.offering, majors, rankings.GetValueOrDefault(row.university.Id)));
+                    row.university, row.offering, majors, rankings.GetValueOrDefault(row.university.Id),
+                    images.GetValueOrDefault(row.university.Id)));
             }
             return schools;
         }
@@ -61,8 +64,29 @@ namespace StudyAbroad.Infrastructure.Persistence.Repositories
             var majorsByOffering = await LoadMajorNamesAsync([row.offering.Id], ct);
             var majors = majorsByOffering.GetValueOrDefault(row.offering.Id) ?? [];
             var rankings = await LoadRankingsAsync([row.university.Id], ct);
+            var images = await LoadImagesAsync([row.university.Id], ct);
             return new RecommendSchoolInput(
-                row.university, row.offering, majors, rankings.GetValueOrDefault(row.university.Id));
+                row.university, row.offering, majors, rankings.GetValueOrDefault(row.university.Id),
+                images.GetValueOrDefault(row.university.Id));
+        }
+
+        // Logo và ảnh bìa của các trường (bảng media). Một truy vấn cho cả danh sách, không truy vấn từng trường.
+        // Một trường có nhiều dòng cùng loại thì lấy dòng đứng đầu theo display_order.
+        private async Task<Dictionary<Guid, SchoolImages>> LoadImagesAsync(List<Guid> universityIds, CancellationToken ct)
+        {
+            var media = await db.Media
+                .Where(m => m.EntityType == "University" && universityIds.Contains(m.EntityId)
+                            && (m.Type == "logo" || m.Type == "cover"))
+                .Select(m => new { m.EntityId, m.Type, m.Url, m.DisplayOrder })
+                .ToListAsync(ct);
+
+            return media
+                .GroupBy(m => m.EntityId)
+                .ToDictionary(
+                    g => g.Key,
+                    g => new SchoolImages(
+                        g.Where(m => m.Type == "logo").OrderBy(m => m.DisplayOrder).Select(m => m.Url).FirstOrDefault(),
+                        g.Where(m => m.Type == "cover").OrderBy(m => m.DisplayOrder).Select(m => m.Url).FirstOrDefault()));
         }
 
         // Nhóm bảng xếp hạng dùng cho chất lượng: các bảng chung (National Universities, Liberal Arts Colleges).

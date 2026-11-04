@@ -269,6 +269,74 @@ def test_the_form_is_checked_ids_come_from_the_sheet_and_blank_rows_are_skipped(
         read_records(path)
 
 
+def test_an_english_workbook_builds_the_same_record_as_the_internal_names(tmp_path):
+    english = [
+        {
+            "type": "scenario",
+            "span": "nếu em đạt GPA 9,0 thang 10 và ngân sách 800 triệu thì sao",
+            "entities": {
+                "mode": "what_if",
+                "changes": [
+                    {"factor": "gpa", "value": "9.0", "unit": "scale_10"},
+                    {"factor": "budget", "value": "800000000", "unit": "VND"},
+                    {"factor": "sat", "action": "skip"},
+                ],
+            },
+        }
+    ]
+    internal = [
+        {
+            "type": "kich_ban",
+            "doan": "nếu em đạt GPA 9,0 thang 10 và ngân sách 800 triệu thì sao",
+            "thuc_the": {
+                "che_do": "what_if",
+                "thay_doi": [
+                    {"yeu_to": "gpa", "gia_tri": "9.0", "don_vi": "thang_10"},
+                    {"yeu_to": "budget", "gia_tri": "800000000", "don_vi": "VND"},
+                    {"yeu_to": "sat", "hanh_dong": "bo_qua"},
+                ],
+            },
+        }
+    ]
+    question = english[0]["span"]
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "scenario"
+    ws.append(["question", "profile", "pending_question", "intents", "split"])
+    ws.append([question, None, None, json.dumps(english, ensure_ascii=False), "train"])
+    path = tmp_path / "en.xlsx"
+    wb.save(path)
+
+    [record] = read_records(path)
+
+    assert record["type"] == "kich_ban" and record["id"] == "kich_ban_001"
+    assert record["input"]["cau_hoi"] == question and record["output"]["cac_y"] == internal
+    assert record["skill_md"] is None  # kịch bản do code tính, không có skill
+
+
+def test_the_scenario_sheet_has_no_skill_column_but_an_old_empty_one_is_still_read(tmp_path):
+    ys = json.dumps(
+        [
+            {
+                "type": "kich_ban",
+                "doan": "cần gì để vào MIT",
+                "thuc_the": {"che_do": "goal_seeking", "truong": "MIT"},
+            }
+        ]
+    )
+    for header in (COLUMNS, COLUMNS[:-1] + ("skill_md", "tap")):
+        wb = Workbook()
+        wb.active.title = "kich_ban"
+        wb.active.append(list(header))
+        wb.active.append(
+            ["cần gì để vào MIT", None, None, ys] + ([None] if "skill_md" in header else []) + ["train"]
+        )
+        path = tmp_path / f"{len(header)}.xlsx"
+        wb.save(path)
+        assert [r["id"] for r in read_records(path)] == ["kich_ban_001"]
+
+
 def test_the_postponed_types_have_no_rows_yet_so_nobody_trains_on_half_finished_data(records):
     for r in records:
         for y in r["output"]["cac_y"]:

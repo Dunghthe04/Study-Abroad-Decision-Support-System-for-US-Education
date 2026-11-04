@@ -5,6 +5,7 @@ import { ExternalLinkIcon, MapPinIcon, MessageSquareTextIcon, TargetIcon } from 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { PickedSchool, SchoolChange, ScoredSchool } from "@/types/recommendation";
+import { SchoolPhoto } from "./SchoolPhoto";
 import {
     flagText,
     formatUsd,
@@ -39,95 +40,100 @@ export function SchoolCard({ picked, school, change, onExplain, onGoal }: School
     const host = siteHost(website);
 
     return (
-        <div className="grid gap-x-8 gap-y-4 rounded-2xl border border-line bg-surface p-5 shadow-2xs transition-colors hover:border-brand/40 md:grid-cols-[minmax(0,1fr)_minmax(0,1.7fr)_auto]">
-            {/* Tên, nơi ở, trang chủ */}
-            <div className="min-w-0 space-y-1.5">
-                <h3 className="text-base font-bold text-foreground">{name}</h3>
-                <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-                    {school?.state && (
-                        <span className="inline-flex items-center gap-1">
-                            <MapPinIcon className="size-3" />
-                            {school.state}
-                        </span>
+        <div className="flex flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-2xs transition-colors hover:border-brand/40 sm:flex-row">
+            {/* Ảnh trường */}
+            <SchoolPhoto name={name} coverUrl={school?.coverUrl} logoUrl={school?.logoUrl} />
+
+            <div className="grid min-w-0 flex-1 gap-x-8 gap-y-4 p-5 md:grid-cols-[minmax(0,1fr)_minmax(0,1.7fr)_auto]">
+                {/* Tên, nơi ở, trang chủ */}
+                <div className="min-w-0 space-y-1.5">
+                    <h3 className="text-base font-bold text-foreground">{name}</h3>
+                    <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+                        {school?.state && (
+                            <span className="inline-flex items-center gap-1">
+                                <MapPinIcon className="size-3" />
+                                {school.state}
+                            </span>
+                        )}
+                        {control && <span>· {control}</span>}
+                    </div>
+                    {website && host && (
+                        <a
+                            href={website}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-xs text-brand underline-offset-4 hover:underline"
+                        >
+                            {host}
+                            <ExternalLinkIcon className="size-3" />
+                        </a>
                     )}
-                    {control && <span>· {control}</span>}
-                </div>
-                {website && host && (
-                    <a
-                        href={website}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-xs text-brand underline-offset-4 hover:underline"
-                    >
-                        {host}
-                        <ExternalLinkIcon className="size-3" />
-                    </a>
-                )}
-                {change && (
-                    <p className="rounded-md bg-brand-wash px-2.5 py-1.5 text-xs font-semibold text-brand">
-                        Đổi so với hồ sơ thật: {statusLabel(change.from)} → {statusLabel(change.to)}
-                    </p>
-                )}
-            </div>
-
-            {/* Chỉ số và lý do */}
-            <div className="min-w-0 space-y-3">
-                <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-5">
-                    <Stat label="Chi phí / năm" value={school?.cost != null ? formatUsd(school.cost) : "Chưa có số liệu"} small={school?.cost == null} />
-                    <Stat
-                        label="Tỷ lệ nhận"
-                        value={percent(school?.acceptRate == null ? null : school.acceptRate * 100)}
-                        hint="số hồ sơ được nhận"
-                    />
-                    <Stat label="GPA của bạn" value={percent(school?.pg)} hint="cao hơn sinh viên của trường" />
-                    <Stat label="SAT của bạn" value={percent(school?.ps)} hint="cao hơn sinh viên của trường" />
-                    <Stat label="Điểm phù hợp" value={picked.x != null ? picked.x.toFixed(2) : "–"} hint="xếp thứ tự trong nhóm" />
+                    {change && (
+                        <p className="rounded-md bg-brand-wash px-2.5 py-1.5 text-xs font-semibold text-brand">
+                            Đổi so với hồ sơ thật: {statusLabel(change.from)} → {statusLabel(change.to)}
+                        </p>
+                    )}
                 </div>
 
-                {school?.outcome === "AidBlock" && school.gap != null && (
-                    <p className="text-xs font-medium text-warn">
-                        Vượt ngân sách khoảng {formatUsd(school.gap)} mỗi năm
-                    </p>
-                )}
+                {/* Chỉ số và lý do */}
+                <div className="min-w-0 space-y-3">
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-5">
+                        <Stat label="Chi phí / năm" value={school?.cost != null ? formatUsd(school.cost) : "Chưa có số liệu"} small={school?.cost == null} />
+                        <Stat
+                            label="Tỷ lệ nhận"
+                            value={percent(school?.acceptRate == null ? null : school.acceptRate * 100)}
+                            hint="số hồ sơ được nhận"
+                        />
+                        <Stat label="GPA của bạn" value={percent(school?.pg)} hint="cao hơn sinh viên của trường" />
+                        <Stat label="SAT của bạn" value={percent(school?.ps)} hint="cao hơn sinh viên của trường" />
+                        <Stat label="Điểm phù hợp" value={picked.x != null ? picked.x.toFixed(2) : "–"} hint="xếp thứ tự trong nhóm" />
+                    </div>
 
-                {picked.why.length > 0 && (
-                    <ul className="grid gap-x-6 gap-y-1 text-xs text-ink-2 lg:grid-cols-2">
-                        {picked.why.map((code) => (
-                            <li key={code}>• {whyText(code)}</li>
-                        ))}
-                    </ul>
-                )}
+                    {school?.outcome === "AidBlock" && school.gap != null && (
+                        <p className="text-xs font-medium text-warn">
+                            Vượt ngân sách khoảng {formatUsd(school.gap)} mỗi năm
+                        </p>
+                    )}
 
-                {school && school.flags.length > 0 && (
-                    <p className="text-[11px] text-ink-3">{school.flags.map(flagText).join(" · ")}</p>
-                )}
-            </div>
+                    {picked.why.length > 0 && (
+                        <ul className="grid gap-x-6 gap-y-1 text-xs text-ink-2 lg:grid-cols-2">
+                            {picked.why.map((code) => (
+                                <li key={code}>• {whyText(code)}</li>
+                            ))}
+                        </ul>
+                    )}
 
-            {/* Nhóm và nút */}
-            <div className="flex items-center justify-between gap-3 md:flex-col md:items-end">
-                {school && <Badge variant={groupVariant(school.g2)}>{groupLabel(school.g2)}</Badge>}
-                {onGoal && school && GOAL_GROUPS.includes(school.g2) && (
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => onGoal(picked.code)}
-                        className="gap-1 text-xs font-semibold text-brand hover:bg-brand-wash"
-                    >
-                        <TargetIcon className="size-3.5" />
-                        Cần gì để vào?
-                    </Button>
-                )}
-                {onExplain && (
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => onExplain(picked.code)}
-                        className="gap-1 text-xs font-semibold text-brand hover:bg-brand-wash"
-                    >
-                        <MessageSquareTextIcon className="size-3.5" />
-                        Xem tư vấn
-                    </Button>
-                )}
+                    {school && school.flags.length > 0 && (
+                        <p className="text-[11px] text-ink-3">{school.flags.map(flagText).join(" · ")}</p>
+                    )}
+                </div>
+
+                {/* Nhóm và nút */}
+                <div className="flex items-center justify-between gap-3 md:flex-col md:items-end">
+                    {school && <Badge variant={groupVariant(school.g2)}>{groupLabel(school.g2)}</Badge>}
+                    {onGoal && school && GOAL_GROUPS.includes(school.g2) && (
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => onGoal(picked.code)}
+                            className="gap-1 text-xs font-semibold text-brand hover:bg-brand-wash"
+                        >
+                            <TargetIcon className="size-3.5" />
+                            Cần gì để vào?
+                        </Button>
+                    )}
+                    {onExplain && (
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => onExplain(picked.code)}
+                            className="gap-1 text-xs font-semibold text-brand hover:bg-brand-wash"
+                        >
+                            <MessageSquareTextIcon className="size-3.5" />
+                            Xem tư vấn
+                        </Button>
+                    )}
+                </div>
             </div>
         </div>
     );

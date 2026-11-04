@@ -7,10 +7,13 @@ using System.Text.Json.Nodes;
 
 namespace StudyAbroad.Application.Recommendations;
 
-//Một trường đã đưa vào gợi ý: hồ sơ trường + số liệu + hạng trong các bảng xếp hạng chung (null nếu chưa nạp)
+// Ảnh của trường (đường dẫn Cloudinary, bảng media). Null nếu trường chưa có ảnh đó
+public record SchoolImages(string? LogoUrl, string? CoverUrl);
+
+//Một trường đã đưa vào gợi ý: hồ sơ trường + số liệu + hạng trong các bảng xếp hạng chung (null nếu chưa nạp) + ảnh
 public record RecommendSchoolInput(
     University University, UniversityOffering Offering, IReadOnlyList<string> Majors,
-    IReadOnlyList<RankPosition>? Rankings = null);
+    IReadOnlyList<RankPosition>? Rankings = null, SchoolImages? Images = null);
 
 // Một trường đã chấm nhóm và fit score. Fit null khi trường chưa đủ dữ liệu để xếp nhóm.
 public record ScoredSchool(RecommendSchoolInput School, FilterResult Filter, SchoolGrade Grade, FitScore? Fit);
@@ -460,6 +463,8 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
             state = school.University.State,
             control = school.University.Control,
             website = school.University.Website,
+            logoUrl = school.Images?.LogoUrl,
+            coverUrl = school.Images?.CoverUrl,
             cost,
             outcome = item.Filter.Outcome.ToString(),
             flags = item.Filter.Flags,
