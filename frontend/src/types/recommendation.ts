@@ -44,6 +44,8 @@ export interface ScoredSchool {
   state: string | null;
   control: string | null; // public | private
   website?: string | null; // trang chủ của trường; lần gợi ý cũ chưa có
+  logoUrl?: string | null; // logo (Cloudinary); lần gợi ý cũ hoặc trường chưa có ảnh thì không có
+  coverUrl?: string | null; // ảnh bìa
   cost: number | null; // tổng chi phí USD/năm
   outcome: "Keep" | "AidBlock";
   flags: FilterFlag[];

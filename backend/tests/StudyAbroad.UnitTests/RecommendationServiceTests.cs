@@ -569,6 +569,30 @@ public class RecommendationServiceTests
         Assert.Equal(saved.RootElement.GetRawText(), simulated.RootElement.GetRawText());
     }
 
+    // Ảnh của trường đi cùng thẻ trường để giao diện hiển thị; trường chưa có ảnh thì để null
+    [Fact]
+    public async Task RecommendAsync_CarriesTheLogoAndCoverOfEachSchool_NullWhenMissing()
+    {
+        var profile = Profile();
+        var withImages = School("B", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m)
+            with { Images = new SchoolImages("https://cdn.test/b-logo.webp", "https://cdn.test/b-cover.webp") };
+        var logoOnly = School("C", 30_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m)
+            with { Images = new SchoolImages("https://cdn.test/c-logo.webp", null) };
+        var without = School("E", 31_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m);
+        var schools = new[] { withImages, logoOnly, without };
+        var (service, _, store) = Setup(profile, schools);
+
+        await service.RecommendAsync(profile, [], schools);
+
+        using var items = JsonDocument.Parse(store.Rows.Single().ItemsJson);
+        var scored = items.RootElement.GetProperty("scored").EnumerateArray().ToDictionary(e => e.GetProperty("code").GetString()!);
+        Assert.Equal("https://cdn.test/b-logo.webp", scored["B"].GetProperty("logoUrl").GetString());
+        Assert.Equal("https://cdn.test/b-cover.webp", scored["B"].GetProperty("coverUrl").GetString());
+        Assert.Equal("https://cdn.test/c-logo.webp", scored["C"].GetProperty("logoUrl").GetString());
+        Assert.Equal(JsonValueKind.Null, scored["C"].GetProperty("coverUrl").ValueKind);
+        Assert.Equal(JsonValueKind.Null, scored["E"].GetProperty("logoUrl").ValueKind);
+    }
+
     // ---------------------------------------------------------------- dữ liệu giả
 
     private static RecommendSchoolInput School(
