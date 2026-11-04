@@ -2,7 +2,7 @@
 
 - Mức GPA / tiếng Anh / SAT / tài chính, bậc ngoại khóa, cơ hội học bổng: lấy từ assess_levels (skill_danh_gia),
   để chat, trang phân tích và skill cùng một kết luận.
-- Xu hướng điểm: từ học bạ theo năm (state.transcript).
+- Điểm TB từng năm từ học bạ theo năm (state.transcript): chỉ ghi điểm, SLM tự nhận xét tăng / giảm.
 - Mốc thời gian: chỉ tháng bắt đầu của kỳ là quy ước; hạn nộp lấy từ dữ liệu trường (DeadlinesJson), không có thì không ghi.
 Thiếu dữ liệu thì bỏ khóa, không đoán.
 """
@@ -30,10 +30,6 @@ TEST_NAMES = {
     "sat": "SAT",
     "act": "ACT",
 }
-
-# Xu hướng điểm giữa lớp đầu và lớp cuối (ngưỡng giống form)
-TREND_STRONG = 0.3
-TREND_SLIGHT = 0.1
 
 # Tháng bắt đầu của từng kỳ nhập học (theo bài ATS). Hạn nộp lấy từ dữ liệu trường, không ghi cứng ở đây
 TERM_START_MONTH = {"Fall": 8, "Spring": 1, "Summer": 5}
@@ -76,24 +72,11 @@ def english_level(facts: Facts, levels: dict[str, Any]) -> str | None:
     return f"{text}, mức {word}" if word else text
 
 
-def grade_trend(transcript: dict | None) -> str | None:
+# TB từng năm, không so sánh: SLM tự đọc rồi nhận xét đoạn nào tăng, đoạn nào giảm
+def grade_by_year(transcript: dict | None) -> str | None:
     years = [y for y in (transcript or {}).get("years", []) if y.get("average") is not None]
-    if not years:
-        return None  # nhập GPA tổng, hoặc THCS chỉ có GPA mục tiêu
-    if len(years) == 1:
-        return "chưa đủ 2 năm để xét xu hướng"
-    first, last = years[0], years[-1]
-    diff = round(last["average"] - first["average"], 2)
-    if diff >= TREND_STRONG:
-        level = "tăng mạnh"
-    elif diff >= TREND_SLIGHT:
-        level = "tăng nhẹ"
-    elif diff <= -TREND_SLIGHT:
-        level = "giảm"
-    else:
-        level = "ổn định"
-    change = "tăng" if diff >= 0 else "giảm"
-    return f"{change} {num(abs(diff))} từ {first['grade']} đến {last['grade']}, {level}"
+    # nhập GPA tổng, hoặc THCS chỉ có GPA mục tiêu → không có dòng này
+    return "; ".join(f"{y['grade']}: {num(y['average'])}" for y in years) or None
 
 
 # Hạn nộp thật của các trường: [{"RD": "2027-02-01", "EA": "2026-11-01"}, ...] → [(tháng, "RD"), ...] tăng dần
@@ -144,7 +127,7 @@ def calc_profile(
     facts = read_facts(profile, today)
     levels = assess_levels(facts)
     result = {
-        "grade_trend": grade_trend(transcript),
+        "grade_by_year": grade_by_year(transcript),
         "gpa_level": gpa_level(facts, levels, is_middle_school_profile(profile)),
         "english_level": english_level(facts, levels),
         "sat_level": f"{facts.sat}, mức {SAT_WORDS[levels['sat']]}" if facts.sat is not None else None,

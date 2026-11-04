@@ -16,8 +16,8 @@ def years(*items) -> dict:
     return {"years": [{"grade": grade, "average": avg} for grade, avg in items]}
 
 
-def trend(*items) -> str | None:
-    return calc_profile({}, years(*items), TODAY).get("grade_trend")
+def by_year(*items) -> str | None:
+    return calc_profile({}, years(*items), TODAY).get("grade_by_year")
 
 
 def test_empty_profile_gives_nothing():
@@ -63,17 +63,16 @@ def test_middle_school_gpa_is_target():
     assert out["gpa_level"] == "mục tiêu 3.6 thang 4, mức giỏi"
 
 
-def test_trend_levels():
-    assert trend(("Lớp 10", 7.5), ("Lớp 11", 7.8)) == "tăng 0.3 từ Lớp 10 đến Lớp 11, tăng mạnh"
-    assert trend(("Lớp 10", 8), ("Lớp 11", 8.15)) == "tăng 0.15 từ Lớp 10 đến Lớp 11, tăng nhẹ"
-    assert trend(("Lớp 10", 8), ("Lớp 11", 7.8)) == "giảm 0.2 từ Lớp 10 đến Lớp 11, giảm"
-    assert trend(("Lớp 10", 8), ("Lớp 11", 8.05)) == "tăng 0.05 từ Lớp 10 đến Lớp 11, ổn định"
+def test_grade_by_year_lists_scores_without_judging():
+    assert (
+        by_year(("Lớp 10", 7.5), ("Lớp 11", 8.2), ("Lớp 12", 7.6)) == "Lớp 10: 7.5; Lớp 11: 8.2; Lớp 12: 7.6"
+    )
+    assert by_year(("Lớp 10", 8)) == "Lớp 10: 8"
 
 
-def test_trend_one_year_or_target_only():
-    assert trend(("Lớp 10", 8)) == "chưa đủ 2 năm để xét xu hướng"
+def test_grade_by_year_missing_when_target_only():
     target_only = {"years": [{"grade": "Lớp 9", "target": 8.5}]}
-    assert "grade_trend" not in calc_profile({}, target_only, TODAY)
+    assert "grade_by_year" not in calc_profile({}, target_only, TODAY)
 
 
 def test_timeline_without_deadlines_is_months_only():
