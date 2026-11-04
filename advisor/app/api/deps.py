@@ -11,8 +11,6 @@ from app.services.chat_flow import ChatFlow
 from app.services.ec_reader import EcReader
 from app.services.explainer import Explainer
 from app.services.ollama import OllamaClient
-from app.services.picker import Picker
-from app.services.scorer import Scorer
 
 
 def require_api_key(
@@ -44,14 +42,6 @@ def get_transcript_reader(request: Request):
 # Lấy EcReader đã tạo lúc khởi động
 def get_ec_reader(request: Request) -> EcReader:
     return request.app.state.ec_reader
-
-
-def get_scorer(request: Request) -> Scorer:
-    return request.app.state.scorer
-
-
-def get_picker(request: Request) -> Picker:
-    return request.app.state.picker
 
 
 # hàm độc đối tượng trong state

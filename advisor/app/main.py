@@ -19,8 +19,6 @@ from app.services.explainer import Explainer
 from app.services.gemini import GeminiClient
 from app.services.knowledge import KnowledgeRetriever
 from app.services.ollama import OllamaClient
-from app.services.picker import Picker
-from app.services.scorer import Scorer
 from app.services.skills import build_handlers
 from app.services.slm_classifier import OllamaSlm, output_format
 from app.services.transcript_reader import TranscriptReader
@@ -63,8 +61,6 @@ async def lifespan(app: FastAPI):
         app.state.transcript_reader = TranscriptReader(
             http, settings, gemini if settings.gemini_api_key else None, settings.gemini_model
         )
-        app.state.scorer = Scorer(gemini, settings.gemini_model)
-        app.state.picker = Picker(gemini, settings.gemini_model)
         app.state.ec_reader = EcReader(gemini, settings.gemini_model)
         app.state.explainer = Explainer(gemini, settings.gemini_model)
         # Kho kiến thức: không có DB thì None, chat vẫn chạy nhưng chưa trả lời được câu hỏi kiến thức

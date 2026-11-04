@@ -64,15 +64,6 @@ public class AdvisorClient(HttpClient http) : IAdvisorClient
         return result ?? throw new InvalidOperationException("Advisor stream kết thúc mà không có kết quả cuối.");
     }
 
-    public Task<EcResponseDto> ReadEcAsync(EcRequestDto request, CancellationToken ct = default) =>
-        PostAsync<EcRequestDto, EcResponseDto>("api/v1/recommend/ec", request, ct);
-
-    public Task<ScoreResponseDto> ScoreAsync(ScoreRequestDto request, CancellationToken ct = default) =>
-        PostAsync<ScoreRequestDto, ScoreResponseDto>("api/v1/recommend/score", request, ct);
-
-    public Task<PickResponseDto> PickAsync(PickRequestDto request, CancellationToken ct = default) =>
-        PostAsync<PickRequestDto, PickResponseDto>("api/v1/recommend/pick", request, ct);
-
     public Task<ExplainResponseDto> ExplainAsync(ExplainRequestDto request, CancellationToken ct = default) =>
         PostAsync<ExplainRequestDto, ExplainResponseDto>("api/v1/recommend/explain", request, ct);
 

@@ -23,10 +23,10 @@ public static class ChatRecommendation
     // Nhóm theo đúng thứ tự và tên trên trang Gợi ý trường (RecommendationView.tsx)
     private static readonly (string Key, string Title, int Max)[] Groups =
     [
-        ("reach", "Khó vào", 3),
-        ("match", "Vừa sức", 5),
+        ("reach", "Khó vào", 4),
+        ("match", "Vừa sức", 4),
         ("safety", "An toàn hơn", 4),
-        ("aid", "Chỉ đi được nếu có học bổng lớn", 3),
+        ("aid", "Chỉ đi được nếu có học bổng lớn", 4),
     ];
 
 

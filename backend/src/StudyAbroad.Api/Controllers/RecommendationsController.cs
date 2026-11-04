@@ -26,6 +26,15 @@ public class RecommendationsController(RecommendationService recommendations) : 
 
     public record RepickRequest(IReadOnlyList<int> Pref);
 
+    // Giá trị giả định của trình mô phỏng; trường nào bỏ trống thì giữ nguyên hồ sơ thật.
+    public record SimulateRequest(
+        decimal? Gpa, decimal? Sat, decimal? Act, decimal? Ielts,
+        decimal? BudgetUsd, string? ScholarshipNeed, int? EcTier, IReadOnlyList<int>? Pref);
+
+    public record SimulationResponse(
+        SimulationProfile Profile, GroupSummary Baseline, GroupSummary Simulated, IReadOnlyList<SchoolChange> Changes,
+        JsonElement Criteria, JsonElement Items);
+
 
     [Authorize(Policy = AgeFeatures.ProcessStudentData)] // [Q11] dưới 16 cần phụ huynh đồng ý
     [HttpPost]
@@ -111,6 +120,40 @@ public class RecommendationsController(RecommendationService recommendations) : 
         catch (HttpRequestException)
         {
             return Problem(detail: "Dịch vụ gợi ý đang bận.", statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+    }
+
+    // Trình mô phỏng hồ sơ: tính lại với GPA, SAT, ngân sách... giả định. Không lưu, không gọi advisor.
+    [Authorize(Policy = AgeFeatures.ProcessStudentData)] // [Q11] dưới 16 cần phụ huynh đồng ý
+    [HttpPost("simulate")]
+    public async Task<IActionResult> Simulate([FromBody] SimulateRequest? request, CancellationToken ct)
+    {
+        var userId = User.GetUserId();
+        if (userId is null)
+            return Unauthorized(new { message = "Vui lòng đăng nhập." });
+
+        request ??= new SimulateRequest(null, null, null, null, null, null, null, null);
+        if (request.Pref is { } pref && (pref.Count != 3 || pref.Any(n => n is < 0 or > 4)))
+            return BadRequest(new { message = "Ưu tiên phải là 3 số từ 0 đến 4: chi phí, học bổng, chất lượng." });
+
+        try
+        {
+            var overrides = new SimulationOverrides(
+                request.Gpa, request.Sat, request.Act, request.Ielts, request.BudgetUsd, request.ScholarshipNeed, request.EcTier);
+            var result = await recommendations.SimulateAsync(userId.Value, overrides, request.Pref, ct);
+            using var criteria = JsonDocument.Parse(result.CriteriaJson);
+            using var items = JsonDocument.Parse(result.ItemsJson);
+            return Ok(new SimulationResponse(
+                result.Profile, result.Baseline, result.Simulated, result.Changes,
+                criteria.RootElement.Clone(), items.RootElement.Clone()));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex) when (ex.Message.StartsWith("Chưa") || ex.Message.StartsWith("Hồ sơ"))
+        {
+            return BadRequest(new { message = ex.Message });
         }
     }
 

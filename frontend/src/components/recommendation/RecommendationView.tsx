@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertCircleIcon, RefreshCwIcon } from "lucide-react";
@@ -9,18 +9,27 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { useAssistant, useAssistantPageContext } from "@/components/assistant/AssistantProvider";
 import { recommendationApi } from "@/lib/recommendation-api";
-import type { PickBlockName, Pref, Recommendation, ScoredSchool } from "@/types/recommendation";
+import { statusLabel } from "@/lib/recommendation-labels";
+import { useProfileSimulation, type ProfileSimulation } from "@/lib/use-profile-simulation";
+import type {
+  GroupSummary,
+  PickBlockName,
+  Pref,
+  Recommendation,
+  SchoolChange,
+  ScoredSchool,
+} from "@/types/recommendation";
 import { ExplainSheet } from "./ExplainSheet";
-import { PrefButtons } from "./PrefButtons";
+import { ProfileSimulator } from "./ProfileSimulator";
 import { ProfileSummary } from "./ProfileSummary";
 import { SchoolCard } from "./SchoolCard";
 
 // Bốn khối chính theo đúng thứ tự trên màn. "other" để riêng ở cuối.
 const BLOCKS: { key: PickBlockName; title: string; note: string }[] = [
-  { key: "reach", title: "Khó vào", note: "Tối đa 3 trường" },
-  { key: "match", title: "Vừa sức", note: "Tối đa 5 trường" },
+  { key: "reach", title: "Khó vào", note: "Tối đa 4 trường" },
+  { key: "match", title: "Vừa sức", note: "Tối đa 4 trường" },
   { key: "safety", title: "An toàn hơn", note: "Tối đa 4 trường" },
-  { key: "aid", title: "Chỉ đi được nếu có học bổng lớn", note: "Xếp theo số tiền còn thiếu" },
+  { key: "aid", title: "Chỉ đi được nếu có học bổng lớn", note: "Xếp theo điểm phù hợp" },
 ];
 
 const RESULT_SUGGESTIONS = [
@@ -28,6 +37,8 @@ const RESULT_SUGGESTIONS = [
   "Nên nộp bao nhiêu trường mỗi nhóm?",
   "Làm sao để lên nhóm Vừa sức?",
 ];
+
+const BALANCED_PREF: Pref = [2, 2, 2];
 
 interface RecommendationViewProps {
   autoRun: boolean; // true khi vừa gửi hồ sơ xong: chạy gợi ý mới thay vì đọc lần cũ
@@ -38,15 +49,24 @@ export function RecommendationView({ autoRun }: RecommendationViewProps) {
   const [rec, setRec] = useState<Recommendation | null>(null);
   // Vừa gửi hồ sơ thì bắt đầu ở trạng thái "running", còn lại là "loading" (đọc lần đã lưu)
   const [phase, setPhase] = useState<"loading" | "running" | "ready">(autoRun ? "running" : "loading");
-  const [repicking, setRepicking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [explainCode, setExplainCode] = useState<string | null>(null);
   const started = useRef(false); // dev mode chạy useEffect 2 lần; không được tạo 2 lần gợi ý
   const { openPanel } = useAssistant();
 
+  // Trình mô phỏng chỉ chạy khi đã có lần gợi ý (cần hồ sơ đã gửi)
+  const basePref = rec?.criteria.pref ?? BALANCED_PREF;
+  const sim = useProfileSimulation(phase === "ready" && rec !== null, basePref);
+
+  // Đang kéo thanh thì danh sách hiện kết quả mô phỏng, không kéo thì hiện lần gợi ý đã lưu
+  const view = useMemo<Recommendation | null>(() => {
+    if (!rec) return null;
+    return sim.isSimulating && sim.result ? { ...rec, criteria: sim.result.criteria, items: sim.result.items } : rec;
+  }, [rec, sim.isSimulating, sim.result]);
+  const simulating = sim.isSimulating && sim.result !== null;
+
   // Ngữ cảnh trợ lý bên phải: lời chào theo số trường, chip hỏi về trường Khó vào đầu tiên
-  const firstReach = rec ? rec.items.scored.find((s) => s.code === rec.items.reach[0]?.code) : undefined;
-  const shownCount = rec ? BLOCKS.reduce((n, b) => n + rec.items[b.key].length, 0) : 0;
+  const firstReach = view ? view.items.scored.find((s) => s.code === view.items.reach[0]?.code) : undefined;
   useAssistantPageContext({
     label: "Trang đề xuất",
     suggestions: firstReach ? [`Vì sao ${firstReach.name} Khó vào?`, ...RESULT_SUGGESTIONS] : RESULT_SUGGESTIONS,
@@ -61,10 +81,11 @@ export function RecommendationView({ autoRun }: RecommendationViewProps) {
     if (window.matchMedia("(min-width: 900px)").matches) openPanel();
   }, [rec, openPanel]);
 
-  // Chạy cả quy trình (lọc → Qwen → Gemini). Mất khoảng nửa phút.
+  // Chạy cả quy trình (lọc cứng, đọc ngoại khóa, chấm nhóm bằng code, lưu)
   const runNew = async () => {
     setPhase("running");
     setError(null);
+    sim.resetAll();
     try {
       setRec(await recommendationApi.create(rec?.criteria.pref));
     } catch (err) {
@@ -78,7 +99,7 @@ export function RecommendationView({ autoRun }: RecommendationViewProps) {
     if (started.current) return;
     started.current = true;
 
-    // Bỏ ?run=1 khỏi URL để tải lại trang chỉ đọc lần đã lưu, không chạy lại AI
+    // Bỏ ?run=1 khỏi URL để tải lại trang chỉ đọc lần đã lưu, không chạy lại
     if (autoRun) router.replace("/recommendations");
 
     // Chỉ gọi setState trong .then/.catch, không gọi ngay trong effect
@@ -89,26 +110,13 @@ export function RecommendationView({ autoRun }: RecommendationViewProps) {
       .finally(() => setPhase("ready"));
   }, [autoRun, router]);
 
-  // Đổi nút ưu tiên: chỉ gọi lại lượt chọn
-  const handleRepick = async (pref: Pref) => {
-    setRepicking(true);
-    setError(null);
-    try {
-      setRec(await recommendationApi.repick(pref));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Chưa sắp xếp lại được.");
-    } finally {
-      setRepicking(false);
-    }
-  };
-
   if (phase !== "ready") {
     return (
       <div className="flex min-h-[50vh] flex-col items-center justify-center gap-3 text-center">
         <Spinner className="size-8 text-brand" />
         <p className="text-sm text-muted-foreground">
           {phase === "running"
-            ? "Đang lọc trường, đọc hoạt động ngoại khóa và chấm điểm. Việc này mất khoảng nửa phút..."
+            ? "Đang lọc trường, đọc hoạt động ngoại khóa và xếp nhóm..."
             : "Đang tải gợi ý của bạn..."}
         </p>
       </div>
@@ -116,14 +124,13 @@ export function RecommendationView({ autoRun }: RecommendationViewProps) {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 px-4 py-8">
+    <div className="mx-auto w-full max-w-[1800px] space-y-6 px-4 py-8 lg:px-6">
       <div className="flex flex-wrap items-end justify-between gap-4 border-b border-line pb-4">
         <div className="space-y-1">
           <h1 className="text-h1 text-foreground">Trường gợi ý cho bạn</h1>
           {rec && (
             <p className="text-xs text-muted-foreground">
               Tạo lúc {new Date(rec.createdAt).toLocaleString("vi-VN")} · Bậc ngoại khóa {rec.criteria.tier}/5
-              {!rec.criteria.ecAiUsed && " (tính từ số bạn khai)"}
             </p>
           )}
         </div>
@@ -132,8 +139,6 @@ export function RecommendationView({ autoRun }: RecommendationViewProps) {
           {rec ? "Chạy lại từ hồ sơ" : "Nhận gợi ý"}
         </Button>
       </div>
-
-      <ProfileSummary rec={rec} />
 
       {error && (
         <Alert variant="destructive">
@@ -153,7 +158,21 @@ export function RecommendationView({ autoRun }: RecommendationViewProps) {
         </div>
       )}
 
-      {rec && <ResultBody rec={rec} repicking={repicking} onRepick={handleRepick} onExplain={setExplainCode} />}
+      {rec && view && (
+        <div className="grid items-start gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">
+          <ProfileSimulator sim={sim} basePref={basePref} />
+
+          <div className="min-w-0 space-y-6">
+            <ProfileSummary rec={rec} />
+            {simulating && <SimulationBanner sim={sim} />}
+            <ResultBody
+              rec={view}
+              changes={simulating ? sim.result!.changes : []}
+              onExplain={simulating ? undefined : setExplainCode}
+            />
+          </div>
+        </div>
+      )}
 
       <p className="text-[11px] text-ink-3">
         Kết quả chỉ để tham khảo, không phải xác suất đỗ. Số liệu lấy từ Common Data Set của từng trường.
@@ -164,16 +183,64 @@ export function RecommendationView({ autoRun }: RecommendationViewProps) {
   );
 }
 
-interface ResultBodyProps {
-  rec: Recommendation;
-  repicking: boolean;
-  onRepick: (pref: Pref) => void;
-  onExplain: (code: string) => void;
+// Dải thông báo khi đang xem hồ sơ giả định: số trường mỗi nhóm trước và sau, các trường đổi nhóm
+function SimulationBanner({ sim }: { sim: ProfileSimulation }) {
+  const result = sim.result;
+  if (!result) return null;
+  const { baseline, simulated, changes } = result;
+  const rows: { label: string; key: keyof GroupSummary }[] = [
+    { label: "Khó vào", key: "reach" },
+    { label: "Vừa sức", key: "match" },
+    { label: "An toàn hơn", key: "safety" },
+    { label: "Cần học bổng lớn", key: "aidBlock" },
+  ];
+
+  return (
+    <div className="space-y-3 rounded-2xl border border-brand/30 bg-brand-wash p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-bold text-brand">Đang xem hồ sơ giả định, không phải hồ sơ thật của bạn</p>
+        <Button variant="outline" size="sm" onClick={sim.resetAll}>
+          Quay lại hồ sơ thật
+        </Button>
+      </div>
+      <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-ink-2">
+        {rows.map((row) => (
+          <span key={row.key}>
+            {row.label}:{" "}
+            <strong className="text-foreground">
+              {baseline[row.key]} → {simulated[row.key]}
+            </strong>
+          </span>
+        ))}
+      </div>
+      {changes.length > 0 ? (
+        <details className="text-xs text-ink-2">
+          <summary className="cursor-pointer font-semibold text-foreground">{changes.length} trường đổi so với hồ sơ thật</summary>
+          <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto">
+            {changes.map((c) => (
+              <li key={c.code}>
+                <span className="font-medium text-foreground">{c.name}</span>: {statusLabel(c.from)} → {statusLabel(c.to)}
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : (
+        <p className="text-xs text-ink-2">Với giá trị này, không trường nào đổi nhóm.</p>
+      )}
+    </div>
+  );
 }
 
-function ResultBody({ rec, repicking, onRepick, onExplain }: ResultBodyProps) {
+interface ResultBodyProps {
+  rec: Recommendation;
+  changes: SchoolChange[]; // trường đổi nhóm khi đang mô phỏng
+  onExplain?: (code: string) => void; // bỏ trống khi đang mô phỏng
+}
+
+function ResultBody({ rec, changes, onExplain }: ResultBodyProps) {
   const { criteria, items } = rec;
   const byCode = new Map<string, ScoredSchool>(items.scored.map((s) => [s.code, s]));
+  const changeByCode = new Map<string, SchoolChange>(changes.map((c) => [c.code, c]));
 
   // Không còn trường nào sau lọc cứng: lượt chọn không chạy
   if (criteria.status === null) {
@@ -190,15 +257,12 @@ function ResultBody({ rec, repicking, onRepick, onExplain }: ResultBodyProps) {
 
   return (
     <div className="space-y-8">
-      <PrefButtons current={criteria.pref} disabled={repicking} onSelect={onRepick} />
-
       {criteria.status === "FAILED" && (
         <Alert>
           <AlertCircleIcon className="size-4" />
           <AlertTitle>Chưa xếp được danh sách</AlertTitle>
           <AlertDescription className="text-xs">
-            Dịch vụ AI đang hết lượt hoặc trả kết quả lỗi. Trường đã được chấm và lưu lại; bấm một nút ưu tiên ở
-            trên để thử xếp lại sau.
+            Chưa xếp được danh sách trường. Bấm &quot;Chạy lại từ hồ sơ&quot; để thử lại.
           </AlertDescription>
         </Alert>
       )}
@@ -207,13 +271,6 @@ function ResultBody({ rec, repicking, onRepick, onExplain }: ResultBodyProps) {
         <p className="text-xs text-warn">
           {items.failed.length} trường chưa chấm được nên không có trong danh sách.
         </p>
-      )}
-
-      {repicking && (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Spinner />
-          Đang sắp xếp lại theo ưu tiên mới...
-        </div>
       )}
 
       {BLOCKS.map((block) => {
@@ -225,9 +282,15 @@ function ResultBody({ rec, repicking, onRepick, onExplain }: ResultBodyProps) {
               <h2 className="text-sm font-bold uppercase tracking-wide text-foreground">{block.title}</h2>
               <span className="text-xs text-muted-foreground">{block.note}</span>
             </div>
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-3">
               {list.map((p) => (
-                <SchoolCard key={p.code} picked={p} school={byCode.get(p.code)} onExplain={onExplain} />
+                <SchoolCard
+                  key={p.code}
+                  picked={p}
+                  school={byCode.get(p.code)}
+                  change={changeByCode.get(p.code)}
+                  onExplain={onExplain}
+                />
               ))}
             </div>
           </section>
@@ -237,7 +300,7 @@ function ResultBody({ rec, repicking, onRepick, onExplain }: ResultBodyProps) {
       {items.other.length > 0 && (
         <details className="rounded-2xl border border-line bg-surface p-4 text-xs text-muted-foreground">
           <summary className="cursor-pointer font-semibold text-foreground">
-            {items.other.length} trường chưa xếp nhóm (thiếu dữ liệu hoặc nhận gần như tất cả)
+            {items.other.length} trường chưa xếp nhóm (thiếu dữ liệu)
           </summary>
           <ul className="mt-2 space-y-1">
             {items.other.map((p) => (

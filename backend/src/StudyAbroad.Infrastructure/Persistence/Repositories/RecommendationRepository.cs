@@ -34,12 +34,14 @@ namespace StudyAbroad.Infrastructure.Persistence.Repositories
                 .ToListAsync(ct);
             var offeringIds = rows.Select(row => row.offering.Id).ToList();
             var majorsByOffering = await LoadMajorNamesAsync(offeringIds, ct);
+            var rankings = await LoadRankingsAsync(rows.Select(row => row.university.Id).ToList(), ct);
 
             var schools = new List<RecommendSchoolInput>();
             foreach (var row in rows)
             {
                 var majors = majorsByOffering.GetValueOrDefault(row.offering.Id) ?? [];
-                schools.Add(new RecommendSchoolInput(row.university, row.offering, majors));
+                schools.Add(new RecommendSchoolInput(
+                    row.university, row.offering, majors, rankings.GetValueOrDefault(row.university.Id)));
             }
             return schools;
         }
@@ -58,7 +60,39 @@ namespace StudyAbroad.Infrastructure.Persistence.Repositories
 
             var majorsByOffering = await LoadMajorNamesAsync([row.offering.Id], ct);
             var majors = majorsByOffering.GetValueOrDefault(row.offering.Id) ?? [];
-            return new RecommendSchoolInput(row.university, row.offering, majors);
+            var rankings = await LoadRankingsAsync([row.university.Id], ct);
+            return new RecommendSchoolInput(
+                row.university, row.offering, majors, rankings.GetValueOrDefault(row.university.Id));
+        }
+
+        // Nhóm bảng xếp hạng dùng cho chất lượng: các bảng chung (National Universities, Liberal Arts Colleges).
+        // Bảng theo ngành, theo khu vực, "giá trị" không dùng vì chỉ có vài trường hoặc đo thứ khác.
+        public const string GeneralRankingGroup = "Tổng quát";
+
+        // Hạng của từng trường trong các bảng chung. Tổng số trường của bảng lấy bằng hạng lớn nhất của bảng đó.
+        private async Task<Dictionary<Guid, IReadOnlyList<RankPosition>>> LoadRankingsAsync(
+            List<Guid> universityIds, CancellationToken ct)
+        {
+            var listIds = await db.RankingLists
+                .Where(l => l.ListGroup == GeneralRankingGroup)
+                .Select(l => l.Id)
+                .ToListAsync(ct);
+
+            var totals = await db.UniversityRankings
+                .Where(r => listIds.Contains(r.ListId))
+                .GroupBy(r => r.ListId)
+                .Select(g => new { ListId = g.Key, Total = g.Max(r => r.Rank) })
+                .ToDictionaryAsync(x => x.ListId, x => x.Total, ct);
+
+            var ranks = await db.UniversityRankings
+                .Where(r => listIds.Contains(r.ListId) && universityIds.Contains(r.UniversityId))
+                .ToListAsync(ct);
+
+            return ranks
+                .GroupBy(r => r.UniversityId)
+                .ToDictionary(
+                    g => g.Key,
+                    g => (IReadOnlyList<RankPosition>)g.Select(r => new RankPosition(r.Rank, totals[r.ListId])).ToList());
         }
 
         private async Task<Dictionary<Guid, List<string>>> LoadMajorNamesAsync(List<Guid> offeringIds, CancellationToken ct)

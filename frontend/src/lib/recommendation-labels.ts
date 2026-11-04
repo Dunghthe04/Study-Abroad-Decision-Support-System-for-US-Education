@@ -1,7 +1,6 @@
 // Chuyển mã của kết quả gợi ý (nhóm, mã lý do, cờ thiếu dữ liệu) thành chữ cho màn kết quả.
 
-import type { FilterFlag, Pref, SchoolGroup, WhyCode } from "@/types/recommendation";
-import { PREF_PRESETS, type PrefPreset } from "@/lib/recommendation-api";
+import type { ChangeStatus, FilterFlag, SchoolGroup, WhyCode } from "@/types/recommendation";
 
 // Tên nhóm hiện trên thẻ trường
 export const GROUP_LABELS: Record<SchoolGroup, string> = {
@@ -15,6 +14,9 @@ export const GROUP_LABELS: Record<SchoolGroup, string> = {
 
 // Mã lý do → một câu ngắn
 export const WHY_TEXT: Record<WhyCode, string> = {
+  LOW_RATE: "Trường rất chọn lọc (nhận dưới 15% hồ sơ) nên luôn xếp Khó vào, dù điểm của bạn cao",
+  RATE_CAP: "Trường nhận dưới 50% hồ sơ nên chưa tính là An toàn",
+  WEAK_CAP: "Có một chỉ số thấp hơn mốc 25% của trường nên chưa tính là An toàn",
   GPA_HIGH: "GPA cao hơn phần lớn sinh viên của trường",
   GPA_MID: "GPA nằm trong khoảng giữa của trường",
   GPA_LOW: "GPA thấp hơn phần lớn sinh viên của trường",
@@ -38,6 +40,7 @@ export const FLAG_TEXT: Record<FilterFlag, string> = {
   ENGLISH_NO_SCORE: "Bạn chưa nhập điểm tiếng Anh",
   ENGLISH_MIN_UNKNOWN: "Trường chưa công bố điểm tiếng Anh tối thiểu",
   ENGLISH_NOT_COMPARABLE: "Không so được điểm tiếng Anh với yêu cầu của trường",
+  ENGLISH_BELOW_MIN: "Điểm tiếng Anh của bạn thấp hơn mức tối thiểu của trường",
 };
 
 // Đổi mã sang chữ, mã lạ thì giữ nguyên để không mất thông tin
@@ -59,11 +62,16 @@ export function formatUsd(value: number | null | undefined): string {
   return `${Math.round(value).toLocaleString("vi-VN")} USD`;
 }
 
-// Tìm nút đang khớp với pref đã lưu; không khớp nút nào thì trả null
-export function findPreset(pref: Pref | null | undefined): PrefPreset | null {
-  if (!pref) return null;
-  return PREF_PRESETS.find((p) => p.pref.every((v, i) => v === pref[i])) ?? null;
-}
+// Trạng thái của một trường trong trình mô phỏng (nhóm, khối học bổng, hoặc bị loại)
+export const STATUS_LABELS: Record<ChangeStatus, string> = {
+  R: "Khó vào",
+  M: "Vừa sức",
+  S: "An toàn hơn",
+  NA: "Chưa đủ dữ liệu",
+  AID: "Cần học bổng lớn",
+  OUT: "Ngoài danh sách",
+};
+export const statusLabel = (status: string) => STATUS_LABELS[status as ChangeStatus] ?? status;
 
 // "https://www.stanford.edu/" → "stanford.edu". Chỉ nhận http/https, link lạ thì trả null.
 export function siteHost(url: string | null | undefined): string | null {

@@ -1,11 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { profileFlowApi } from "@/lib/profile-flow-api";
 import { countMonths, draftGpa } from "@/lib/profile-flow-options";
-import { cn } from "@/lib/utils";
 import type {
   ImpactLevel,
   LegacyCertificationDraft,
@@ -124,9 +123,6 @@ function assessProfile(s: StudentProfile, ecTier: number | null, activitiesCount
   return { levels, strengths, weak };
 }
 
-const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x));
-const round2 = (x: number) => Math.round(x * 100) / 100;
-
 const IMPACT_RANK: Record<ImpactLevel, number> = { school: 1, district: 2, province: 3, national: 4, international: 5 };
 const ROLE_WEIGHT = { founder: 1, leader: 1, vice_leader: 0.75, member: 0.5 } as const;
 
@@ -206,21 +202,14 @@ function profileFromDraft(draft: ProfileFlowDraft, meta: ProfileMetadataResponse
   };
 }
 
-interface SimValues {
-  gpa10?: number;
-  sat?: number;
-  budget?: number;
-}
-
 interface ProfileSummaryProps {
   rec: Recommendation | null;
 }
 
-// Thẻ đầu trang gợi ý: bộ lọc, đánh giá hồ sơ, hàng "Thử thay đổi hồ sơ".
-// Mô phỏng chỉ tính lại khối đánh giá trên máy, không gọi backend hay AI và không đổi danh sách trường.
+// Thẻ đầu trang gợi ý: bộ lọc từ hồ sơ và khối đánh giá hồ sơ.
+// Việc thử đổi GPA, SAT, ngân sách... nằm ở panel "Mô phỏng hồ sơ" (ProfileSimulator).
 export function ProfileSummary({ rec }: ProfileSummaryProps) {
   const [flowProfile, setFlowProfile] = useState<FlowProfile | null>(null);
-  const [sim, setSim] = useState<SimValues>({});
 
   // Đọc nháp 6 bước một lần; lỗi thì ẩn khối đánh giá
   useEffect(() => {
@@ -236,47 +225,7 @@ export function ProfileSummary({ rec }: ProfileSummaryProps) {
   }, []);
 
   const realStudent = flowProfile?.student ?? null;
-  const realBudget = realStudent
-    ? (realStudent.budgetMaxUsd ?? realStudent.budgetMinUsd ?? rec?.criteria.budget ?? null)
-    : null;
-  const simulating = Object.keys(sim).length > 0;
-  const student = useMemo<StudentProfile | null>(() => {
-    if (!realStudent || !simulating) return realStudent;
-    return {
-      ...realStudent,
-      // Dịch GPA thang 4 đúng bằng phần chênh thang 10 (× 0,4) để khớp cách quy đổi của hồ sơ thật
-      gpa4:
-        sim.gpa10 == null
-          ? realStudent.gpa4
-          : clamp(round2((realStudent.gpa4 ?? 0) + (sim.gpa10 - (flowProfile?.gpa10 ?? sim.gpa10)) * 0.4), 0, 4),
-      sat: sim.sat ?? realStudent.sat,
-      ...(sim.budget != null && { budgetMinUsd: null, budgetMaxUsd: sim.budget }),
-    };
-  }, [realStudent, simulating, sim, flowProfile]);
-
-  // Bấm −/+ như bản demo; về đúng giá trị thật thì bỏ khỏi mô phỏng
-  const bump = (key: keyof SimValues, dir: 1 | -1) => {
-    const real = { gpa10: flowProfile?.gpa10 ?? null, sat: realStudent?.sat ?? null, budget: realBudget }[key];
-    const cur = sim[key] ?? real;
-    const step = { gpa10: 0.1, sat: 10, budget: 5000 }[key];
-    const [lo, hi] = { gpa10: [0, 10], sat: [400, 1600], budget: [5000, 200000] }[key];
-    const fallback = { gpa10: 7, sat: 1200, budget: 40000 }[key];
-    const raw = cur == null ? fallback : cur + dir * step;
-    const v = clamp(key === "gpa10" ? Math.round(raw * 10) / 10 : round2(raw), lo, hi); // điểm TB giữ 1 chữ số lẻ như ô hiển thị
-    setSim((prev) => {
-      const next = { ...prev, [key]: v };
-      if (real != null && Math.abs(real - v) < 1e-9) delete next[key];
-      return next;
-    });
-  };
-
-  const simLabel = [
-    sim.gpa10 != null && `Điểm TB ${sim.gpa10}`,
-    sim.sat != null && `SAT ${sim.sat}`,
-    sim.budget != null && `ngân sách ${sim.budget / 1000}k`,
-  ]
-    .filter(Boolean)
-    .join(", ");
+  const student = realStudent;
 
   // Bậc ngoại khóa: ưu tiên bậc backend đã chấm trong lần gợi ý, không có thì tính từ nháp
   const ecTier = rec?.criteria.tier ?? flowProfile?.ecTier ?? null;
@@ -295,10 +244,6 @@ export function ProfileSummary({ rec }: ProfileSummaryProps) {
         ? `${usd(rec.criteria.budget)}/năm`
         : "Chưa đặt ngân sách",
   ].join(" · ");
-  const shownGpa10 = sim.gpa10 ?? flowProfile?.gpa10 ?? null;
-  const shownSat = sim.sat ?? realStudent?.sat ?? null;
-  const shownBudget = sim.budget ?? realBudget;
-
   if (!rec && !flowProfile) return null;
 
   return (
@@ -357,52 +302,8 @@ export function ProfileSummary({ rec }: ProfileSummaryProps) {
           </div>
         )}
 
-        {realStudent && (
-          <>
-            <hr className="border-line print:hidden" />
-            <div className="flex flex-wrap items-end justify-between gap-3 print:hidden">
-              <div className="space-y-2">
-                <div className="text-[15px] font-semibold text-foreground">Thử thay đổi hồ sơ</div>
-                <div className="flex flex-wrap gap-3">
-                  {flowProfile?.gpa10 != null && (
-                    <Stepper
-                      label="Điểm TB (thang 10)"
-                      value={shownGpa10 != null ? shownGpa10.toFixed(1) : "—"}
-                      changed={sim.gpa10 != null}
-                      onBump={(d) => bump("gpa10", d)}
-                    />
-                  )}
-                  <Stepper
-                    label="SAT"
-                    value={shownSat != null ? String(shownSat) : "Chưa thi"}
-                    changed={sim.sat != null}
-                    onBump={(d) => bump("sat", d)}
-                  />
-                  <Stepper
-                    label="Ngân sách / năm"
-                    value={shownBudget != null ? `${Math.round(shownBudget / 1000)}k` : "Chưa đặt"}
-                    changed={sim.budget != null}
-                    onBump={(d) => bump("budget", d)}
-                  />
-                </div>
-              </div>
-              <p className="text-[12.5px] text-muted-foreground">Chỉnh ở đây hoặc hỏi trong khung chat</p>
-            </div>
-          </>
-        )}
       </section>
 
-      {simulating && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-warn/40 bg-warn-wash px-[18px] py-3 print:hidden">
-          <div className="min-w-0 space-y-0.5 text-[13.5px] text-warn">
-            <b className="font-semibold">Đang xem mô phỏng: {simLabel}</b>
-            <p>Hồ sơ thật chưa đổi. Khối đánh giá ở trên tính lại trên máy bạn, danh sách trường giữ nguyên.</p>
-          </div>
-          <Button type="button" variant="outline" onClick={() => setSim({})} className="h-9 px-3.5">
-            Thoát mô phỏng
-          </Button>
-        </div>
-      )}
     </div>
   );
 }
@@ -414,48 +315,6 @@ function Level({ label, value, detail }: ProfileLevel) {
       <span className="text-xs text-muted-foreground">{label}</span>
       <b className="text-[14.5px] font-semibold text-foreground">{value}</b>
       {detail && <span className="text-numeric truncate text-xs text-muted-foreground">{detail}</span>}
-    </div>
-  );
-}
-
-// Nút −/+ của hàng "Thử thay đổi hồ sơ"; đang khác hồ sơ thật thì tô màu mô phỏng
-function Stepper({
-  label,
-  value,
-  changed,
-  onBump,
-}: {
-  label: string;
-  value: string;
-  changed: boolean;
-  onBump: (dir: 1 | -1) => void;
-}) {
-  const btn =
-    "flex w-[34px] cursor-pointer items-center justify-center text-lg text-muted-foreground transition-colors hover:text-foreground";
-  return (
-    <div className="space-y-1">
-      <div className="text-[12.5px] text-muted-foreground">{label}</div>
-      <div
-        className={cn(
-          "flex h-10 items-stretch overflow-hidden rounded-[9px] border",
-          changed ? "border-warn/50 bg-warn-wash" : "border-line bg-surface"
-        )}
-      >
-        <button type="button" aria-label={`Giảm ${label}`} onClick={() => onBump(-1)} className={btn}>
-          −
-        </button>
-        <span
-          className={cn(
-            "text-numeric flex min-w-[64px] items-center justify-center px-1 text-sm font-semibold",
-            changed ? "text-warn" : "text-foreground"
-          )}
-        >
-          {value}
-        </span>
-        <button type="button" aria-label={`Tăng ${label}`} onClick={() => onBump(1)} className={btn}>
-          +
-        </button>
-      </div>
     </div>
   );
 }

@@ -1,86 +1,129 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { ExternalLinkIcon, MapPinIcon, MessageSquareTextIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { PickedSchool, ScoredSchool } from "@/types/recommendation";
-import { flagText, formatUsd, groupLabel, groupVariant, siteHost, whyText } from "@/lib/recommendation-labels";
+import type { PickedSchool, SchoolChange, ScoredSchool } from "@/types/recommendation";
+import {
+    flagText,
+    formatUsd,
+    groupLabel,
+    groupVariant,
+    siteHost,
+    statusLabel,
+    whyText,
+} from "@/lib/recommendation-labels";
 
 interface SchoolCardProps {
-    picked: PickedSchool; // vị trí trong khối + mã lý do (lượt chọn)
-    school: ScoredSchool | undefined; // số liệu đã chấm (lượt chấm)
-    onExplain: (code: string) => void;
+    picked: PickedSchool; // vị trí trong khối + mã lý do
+    school: ScoredSchool | undefined; // số liệu đã chấm
+    change?: SchoolChange; // có khi đang mô phỏng và trường đổi nhóm so với hồ sơ thật
+    onExplain?: (code: string) => void; // bỏ trống khi đang mô phỏng (lời tư vấn chỉ có cho kết quả đã lưu)
 }
 
-// Một thẻ trường. Chỉ hiển thị số đã lưu, không tính lại gì.
-export function SchoolCard({ picked, school, onExplain }: SchoolCardProps) {
+// "35%" từ vị trí 0–100 của học sinh trong số sinh viên đã nhập học; thiếu số thì "–"
+const percent = (value: number | null | undefined) => (value == null ? "–" : `${Math.round(value)}%`);
+
+// Một trường dạng hàng ngang như CollegeVine: tên và nơi ở bên trái, các chỉ số ở giữa, nhóm và nút bên phải.
+// Chỉ hiển thị số đã tính, không tính lại gì.
+export function SchoolCard({ picked, school, change, onExplain }: SchoolCardProps) {
     const name = school?.name ?? picked.code;
     const control =
         school?.control === "public" ? "Công lập" : school?.control === "private" ? "Tư thục" : null;
     const website = school?.website ?? null;
     const host = siteHost(website);
+
     return (
-        <div className="rounded-2xl border border-line bg-surface p-5 shadow-2xs transition-colors hover:border-brand/40">
-            <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 space-y-1">
-                    <h3 className="truncate text-sm font-bold text-foreground">{name}</h3>
-                    <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-                        {school?.state && (
-                            <span className="inline-flex items-center gap-1">
-                                <MapPinIcon className="size-3" />
-                                {school.state}
-                            </span>
-                        )}
-                        {control && <span>· {control}</span>}
-                        <span>· {formatUsd(school?.cost)}/năm</span>
-                    </div>
-                    {website && host && (
-                      <a
-                          href={website}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-xs text-brand underline-offset-4 hover:underline"
-                        >
-                          {host}
-                          <ExternalLinkIcon className="size-3" />
-                        </a>
-                      )}
+        <div className="grid gap-x-8 gap-y-4 rounded-2xl border border-line bg-surface p-5 shadow-2xs transition-colors hover:border-brand/40 md:grid-cols-[minmax(0,1fr)_minmax(0,1.7fr)_auto]">
+            {/* Tên, nơi ở, trang chủ */}
+            <div className="min-w-0 space-y-1.5">
+                <h3 className="text-base font-bold text-foreground">{name}</h3>
+                <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+                    {school?.state && (
+                        <span className="inline-flex items-center gap-1">
+                            <MapPinIcon className="size-3" />
+                            {school.state}
+                        </span>
+                    )}
+                    {control && <span>· {control}</span>}
                 </div>
+                {website && host && (
+                    <a
+                        href={website}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs text-brand underline-offset-4 hover:underline"
+                    >
+                        {host}
+                        <ExternalLinkIcon className="size-3" />
+                    </a>
+                )}
+                {change && (
+                    <p className="rounded-md bg-brand-wash px-2.5 py-1.5 text-xs font-semibold text-brand">
+                        Đổi so với hồ sơ thật: {statusLabel(change.from)} → {statusLabel(change.to)}
+                    </p>
+                )}
+            </div>
+
+            {/* Chỉ số và lý do */}
+            <div className="min-w-0 space-y-3">
+                <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-5">
+                    <Stat label="Chi phí / năm" value={school?.cost != null ? formatUsd(school.cost) : "Chưa có số liệu"} small={school?.cost == null} />
+                    <Stat
+                        label="Tỷ lệ nhận"
+                        value={percent(school?.acceptRate == null ? null : school.acceptRate * 100)}
+                        hint="số hồ sơ được nhận"
+                    />
+                    <Stat label="GPA của bạn" value={percent(school?.pg)} hint="cao hơn sinh viên của trường" />
+                    <Stat label="SAT của bạn" value={percent(school?.ps)} hint="cao hơn sinh viên của trường" />
+                    <Stat label="Điểm phù hợp" value={picked.x != null ? picked.x.toFixed(2) : "–"} hint="xếp thứ tự trong nhóm" />
+                </div>
+
+                {school?.outcome === "AidBlock" && school.gap != null && (
+                    <p className="text-xs font-medium text-warn">
+                        Vượt ngân sách khoảng {formatUsd(school.gap)} mỗi năm
+                    </p>
+                )}
+
+                {picked.why.length > 0 && (
+                    <ul className="grid gap-x-6 gap-y-1 text-xs text-ink-2 lg:grid-cols-2">
+                        {picked.why.map((code) => (
+                            <li key={code}>• {whyText(code)}</li>
+                        ))}
+                    </ul>
+                )}
+
+                {school && school.flags.length > 0 && (
+                    <p className="text-[11px] text-ink-3">{school.flags.map(flagText).join(" · ")}</p>
+                )}
+            </div>
+
+            {/* Nhóm và nút */}
+            <div className="flex items-center justify-between gap-3 md:flex-col md:items-end">
                 {school && <Badge variant={groupVariant(school.g2)}>{groupLabel(school.g2)}</Badge>}
+                {onExplain && (
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onExplain(picked.code)}
+                        className="gap-1 text-xs font-semibold text-brand hover:bg-brand-wash"
+                    >
+                        <MessageSquareTextIcon className="size-3.5" />
+                        Xem tư vấn
+                    </Button>
+                )}
             </div>
+        </div>
+    );
+}
 
-            {school?.outcome === "AidBlock" && school.gap != null && (
-                <p className="mt-3 text-xs font-medium text-warn">
-                    Vượt ngân sách khoảng {formatUsd(school.gap)} mỗi năm
-                </p>
-            )}
-
-            {picked.why.length > 0 && (
-                <ul className="mt-3 space-y-1 text-xs text-ink-2">
-                    {picked.why.map((code) => (
-                        <li key={code}>• {whyText(code)}</li>
-                    ))}
-                </ul>
-            )}
-
-            {school && school.flags.length > 0 && (
-                <p className="mt-2 text-[11px] text-ink-3">{school.flags.map(flagText).join(" · ")}</p>
-            )}
-
-            <div className="mt-4 flex items-center justify-between border-t border-line/60 pt-3">
-                <span className="text-[11px] text-ink-3">
-                    {picked.x != null ? `Điểm xếp hạng ${picked.x.toFixed(3)}` : ""}
-                </span>
-                <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onExplain(picked.code)}
-                    className="h-8 gap-1 text-xs font-semibold text-brand hover:bg-brand-wash"
-                >
-                    <MessageSquareTextIcon className="size-3.5" />
-                    Xem tư vấn
-                </Button>
-            </div>
+function Stat({ label, value, hint, small = false }: { label: string; value: ReactNode; hint?: string; small?: boolean }) {
+    return (
+        <div className="min-w-0">
+            <p className={small ? "text-sm font-semibold text-ink-3" : "text-lg font-bold text-foreground"}>{value}</p>
+            <p className="text-[11px] font-medium text-ink-2">{label}</p>
+            {hint && <p className="text-[10px] text-ink-3">{hint}</p>}
         </div>
     );
 }

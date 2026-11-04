@@ -7,8 +7,11 @@ export type Pref = [number, number, number];
 // R khó vào · RF khó vào xa · M vừa sức · S an toàn hơn · NA thiếu dữ liệu · O nhận gần như tất cả
 export type SchoolGroup = "R" | "RF" | "M" | "S" | "NA" | "O";
 
-// Mã lý do cloud chọn cho từng trường
+// Mã lý do backend suy ra từ số đã tính cho từng trường
 export type WhyCode =
+  | "LOW_RATE"
+  | "RATE_CAP"
+  | "WEAK_CAP"
   | "GPA_HIGH"
   | "GPA_MID"
   | "GPA_LOW"
@@ -30,9 +33,10 @@ export type FilterFlag =
   | "AID_UNKNOWN"
   | "ENGLISH_NO_SCORE"
   | "ENGLISH_MIN_UNKNOWN"
-  | "ENGLISH_NOT_COMPARABLE";
+  | "ENGLISH_NOT_COMPARABLE"
+  | "ENGLISH_BELOW_MIN";
 
-// Một trường đã chấm. Số liệu do cloud tính, backend chỉ chép.
+// Một trường đã chấm. Nhóm và số liệu do backend tính bằng code (không qua AI).
 export interface ScoredSchool {
   universityId: string;
   code: string;
@@ -53,6 +57,7 @@ export interface ScoredSchool {
   ps: number | null;
   adj: number | null;
   r: number | null;
+  acceptRate?: number | null; // tỷ lệ nhận chung 0–1; lần gợi ý cũ chưa có
 }
 
 // Một trường được xếp vào khối
@@ -81,11 +86,7 @@ export interface RecommendationCriteria {
   scholarshipNeed: string | null;
   pref: Pref;
   tier: number; // bậc ngoại khóa 1–5
-  ecAiUsed: boolean;
-  scoreSkill: string | null;
-  scoreModel: string | null;
-  pickSkill: string | null;
-  pickModel: string | null;
+  algorithm?: string; // phiên bản công thức; lần gợi ý cũ chưa có
   status: "OK" | "FAILED" | null; // null khi không còn trường nào để chọn
 }
 
@@ -96,6 +97,62 @@ export interface Recommendation {
   algorithmVersion: string | null;
   criteria: RecommendationCriteria;
   items: RecommendationItems;
+}
+
+// ---- Trình mô phỏng hồ sơ (POST /recommendations/simulate) ----
+
+export type ScholarshipNeed = "optional" | "preferred" | "mandatory";
+
+// Giá trị giả định gửi lên. Trường nào bỏ trống (null hoặc không gửi) thì giữ nguyên hồ sơ thật.
+export interface SimulationOverrides {
+  gpa?: number | null;
+  sat?: number | null;
+  act?: number | null;
+  ielts?: number | null;
+  budgetUsd?: number | null;
+  scholarshipNeed?: ScholarshipNeed | null;
+  ecTier?: number | null;
+  pref?: Pref | null;
+}
+
+// Giá trị của hồ sơ thật, để thanh kéo hiện "hồ sơ" cạnh "giả định"
+export interface SimulationProfile {
+  gpa: number | null;
+  sat: number | null;
+  act: number | null;
+  ielts: number | null;
+  budgetUsd: number | null;
+  scholarshipNeed: string | null;
+  ecTier: number; // bậc tính từ các hoạt động trong hồ sơ
+}
+
+// Số trường mỗi nhóm của một lượt tính
+export interface GroupSummary {
+  kept: number;
+  reach: number;
+  match: number;
+  safety: number;
+  aidBlock: number;
+  noData: number;
+}
+
+// R khó vào · M vừa sức · S an toàn · NA chưa đủ dữ liệu · AID cần học bổng lớn · OUT bị loại
+export type ChangeStatus = "R" | "M" | "S" | "NA" | "AID" | "OUT";
+
+export interface SchoolChange {
+  code: string;
+  name: string;
+  from: ChangeStatus;
+  to: ChangeStatus;
+}
+
+export interface SimulationResponse {
+  profile: SimulationProfile;
+  baseline: GroupSummary;
+  simulated: GroupSummary;
+  changes: SchoolChange[];
+  criteria: RecommendationCriteria;
+  items: RecommendationItems; // cùng khuôn với lượt gợi ý đã lưu
 }
 
 // Lời tư vấn một trường (POST /recommendations/schools/{code}/explain)

@@ -41,4 +41,22 @@ public class HardFilterTests
 
         Assert.Equal((FilterOutcome.Excluded, "BUDGET"), (result.Outcome, result.ExcludeReason));
     }
+
+    [Fact]
+    public void English_BelowTheSchoolsMinimum_IsFlaggedNotExcluded()
+    {
+        // IELTS 6,5 của học sinh thấp hơn mức 7,0: giữ trường, gắn cờ; tiếng Anh tính ở fit score
+        var result = HardFilter.Check(An(), School("Strict", 40_000m, false, minIelts: 7.0m), Tolerance);
+
+        Assert.Equal(FilterOutcome.Keep, result.Outcome);
+        Assert.Contains(FilterFlags.EnglishBelowMin, result.Flags);
+    }
+
+    [Fact]
+    public void English_MeetingTheMinimum_HasNoBelowMinFlag()
+    {
+        var result = HardFilter.Check(An(), School("Open", 40_000m, false, minIelts: 6.5m), Tolerance);
+
+        Assert.DoesNotContain(FilterFlags.EnglishBelowMin, result.Flags);
+    }
 }
