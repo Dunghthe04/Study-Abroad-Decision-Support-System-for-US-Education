@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { isAdminRoute } from "@/lib/admin-nav";
-import { isWideRoute } from "@/lib/layout-routes";
+import { isFullRoute, isWideRoute } from "@/lib/layout-routes";
 import { cn } from "@/lib/utils";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { Toaster } from "@/components/ui/toast";
@@ -34,7 +34,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             "w-full flex-1",
             adminRoute
               ? "flex flex-col"
-              : cn("mx-auto px-4 py-8", isWideRoute(pathname) ? "max-w-[1320px] sm:px-6" : "max-w-5xl"),
+              : isFullRoute(pathname)
+                ? "" // trang tự lo khoảng đệm: thanh bên dính mép, phần chính có lề riêng
+                : cn("mx-auto px-4 py-8", isWideRoute(pathname) ? "max-w-[1320px] sm:px-6" : "max-w-5xl"),
           )}
         >
           {children}

@@ -10,6 +10,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { useAssistant, useAssistantPageContext } from "@/components/assistant/AssistantProvider";
 import { recommendationApi } from "@/lib/recommendation-api";
 import { statusLabel } from "@/lib/recommendation-labels";
+import { SIMULATE_EVENT } from "@/lib/simulation-link";
 import { useProfileSimulation, type ProfileSimulation } from "@/lib/use-profile-simulation";
 import type {
   GroupSummary,
@@ -18,6 +19,7 @@ import type {
   Recommendation,
   SchoolChange,
   ScoredSchool,
+  SimulationOverrides,
 } from "@/types/recommendation";
 import { ExplainSheet } from "./ExplainSheet";
 import { ProfileSimulator } from "./ProfileSimulator";
@@ -42,9 +44,10 @@ const BALANCED_PREF: Pref = [2, 2, 2];
 
 interface RecommendationViewProps {
   autoRun: boolean; // true khi vừa gửi hồ sơ xong: chạy gợi ý mới thay vì đọc lần cũ
+  initialOverrides?: SimulationOverrides; // giá trị giả định chat vừa thử, điền sẵn vào thanh kéo
 }
 
-export function RecommendationView({ autoRun }: RecommendationViewProps) {
+export function RecommendationView({ autoRun, initialOverrides }: RecommendationViewProps) {
   const router = useRouter();
   const [rec, setRec] = useState<Recommendation | null>(null);
   // Vừa gửi hồ sơ thì bắt đầu ở trạng thái "running", còn lại là "loading" (đọc lần đã lưu)
@@ -56,7 +59,7 @@ export function RecommendationView({ autoRun }: RecommendationViewProps) {
 
   // Trình mô phỏng chỉ chạy khi đã có lần gợi ý (cần hồ sơ đã gửi)
   const basePref = rec?.criteria.pref ?? BALANCED_PREF;
-  const sim = useProfileSimulation(phase === "ready" && rec !== null, basePref);
+  const sim = useProfileSimulation(phase === "ready" && rec !== null, basePref, initialOverrides);
 
   // Đang kéo thanh thì danh sách hiện kết quả mô phỏng, không kéo thì hiện lần gợi ý đã lưu
   const view = useMemo<Recommendation | null>(() => {
@@ -72,6 +75,14 @@ export function RecommendationView({ autoRun }: RecommendationViewProps) {
     suggestions: firstReach ? [`Vì sao ${firstReach.name} Khó vào?`, ...RESULT_SUGGESTIONS] : RESULT_SUGGESTIONS,
     greeting: rec ? `Mình là hệ thống tư vấn du học. Bạn cần mình hỗ trợ gì không?:` : undefined,
   });
+
+  // Chat vừa thử một kịch bản what-if: đặt lại thanh kéo tại chỗ, không tải lại trang
+  const { replace: replaceSimulation } = sim;
+  useEffect(() => {
+    const onSimulate = (event: Event) => replaceSimulation((event as CustomEvent<SimulationOverrides>).detail);
+    window.addEventListener(SIMULATE_EVENT, onSimulate);
+    return () => window.removeEventListener(SIMULATE_EVENT, onSimulate);
+  }, [replaceSimulation]);
 
   // Có kết quả thì mở trợ lý bên phải một lần như bản demo (màn hẹp thì khung phủ kín nên không tự mở)
   const autoOpened = useRef(false);
@@ -123,21 +134,16 @@ export function RecommendationView({ autoRun }: RecommendationViewProps) {
     );
   }
 
-  return (
-    <div className="mx-auto w-full max-w-[1800px] space-y-6 px-4 py-8 lg:px-6">
-      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-line pb-4">
-        <div className="space-y-1">
-          <h1 className="text-h1 text-foreground">Trường gợi ý cho bạn</h1>
-          {rec && (
-            <p className="text-xs text-muted-foreground">
-              Tạo lúc {new Date(rec.createdAt).toLocaleString("vi-VN")} · Bậc ngoại khóa {rec.criteria.tier}/5
-            </p>
-          )}
-        </div>
-        <Button variant="outline" size="sm" onClick={runNew} className="gap-1">
-          <RefreshCwIcon className="size-3.5" />
-          {rec ? "Chạy lại từ hồ sơ" : "Nhận gợi ý"}
-        </Button>
+  const main = (
+    <div className="min-w-0 flex-1 space-y-6 px-4 py-6 lg:px-8">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-h1 text-foreground">Trường gợi ý cho bạn</h1>
+        {!rec && (
+          <Button variant="outline" size="sm" onClick={runNew} className="gap-1">
+            <RefreshCwIcon className="size-3.5" />
+            Nhận gợi ý
+          </Button>
+        )}
       </div>
 
       {error && (
@@ -159,19 +165,15 @@ export function RecommendationView({ autoRun }: RecommendationViewProps) {
       )}
 
       {rec && view && (
-        <div className="grid items-start gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">
-          <ProfileSimulator sim={sim} basePref={basePref} />
-
-          <div className="min-w-0 space-y-6">
-            <ProfileSummary rec={rec} />
-            {simulating && <SimulationBanner sim={sim} />}
-            <ResultBody
-              rec={view}
-              changes={simulating ? sim.result!.changes : []}
-              onExplain={simulating ? undefined : setExplainCode}
-            />
-          </div>
-        </div>
+        <>
+          <ProfileSummary rec={rec} onRerun={runNew} />
+          {simulating && <SimulationBanner sim={sim} />}
+          <ResultBody
+            rec={view}
+            changes={simulating ? sim.result!.changes : []}
+            onExplain={simulating ? undefined : setExplainCode}
+          />
+        </>
       )}
 
       <p className="text-[11px] text-ink-3">
@@ -179,6 +181,15 @@ export function RecommendationView({ autoRun }: RecommendationViewProps) {
       </p>
 
       <ExplainSheet code={explainCode} onClose={() => setExplainCode(null)} />
+    </div>
+  );
+
+  // Có kết quả: thanh mô phỏng dính mép trái cao hết khung (như CollegeVine), phần còn lại chiếm hết bề rộng tới khung chat
+  if (!rec || !view) return main;
+  return (
+    <div className="flex flex-col lg:flex-row lg:items-start">
+      <ProfileSimulator sim={sim} basePref={basePref} />
+      {main}
     </div>
   );
 }
