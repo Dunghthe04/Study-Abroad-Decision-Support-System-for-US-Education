@@ -96,6 +96,10 @@ namespace StudyAbroad.Application.Advisor
             if (response.Action == ChatSimulation.Action && recommender is not null)
                 response = await SimulateAsync(userId, response, ct);
 
+            // Học sinh hỏi "cần gì để vào trường X": khớp tên trường, rồi hỏi lại hoặc chạy goal-seeking có sẵn
+            if (response.Action == ChatGoalSeek.Action && recommender is not null)
+                response = await GoalSeekAsync(userId, response, ct);
+
             //Sau khi advisor phản hồi ==> lưu trạng thái mới
             session.StateJson = response.State?.GetRawText();
             //Lưu bước hiện tại
@@ -214,6 +218,69 @@ namespace StudyAbroad.Application.Advisor
                     : ChatSimulation.Failed;
                 return response with { Answer = reason };
             }
+        }
+
+        // Khớp tên trường (chữ thô của SLM). Chắc chắn: chạy goal-seeking. Mơ hồ: hỏi "Ý bạn là...?" kèm nút. Không thấy: báo.
+        // Lỗi thì báo, không làm hỏng cả lượt chat
+        private async Task<AdvisorChatResponse> GoalSeekAsync(Guid userId, AdvisorChatResponse response, CancellationToken ct)
+        {
+            var query = ChatGoalSeek.Parse(response.ActionData);
+            if (query is null)
+                return response with { Answer = ChatGoalSeek.Failed };
+            try
+            {
+                var match = await recommender!.FindSchoolsAsync(userId, query.School, ct);
+                switch (match.Kind)
+                {
+                    case NameMatchKind.NotFound:
+                        return response with
+                        {
+                            Answer = ChatGoalSeek.NotFound(query.School),
+                            QuickReplies = null,
+                            Widget = ChatGoalSeek.SchoolPicker(query.Target),
+                        };
+                    case NameMatchKind.Ambiguous:
+                        return response with
+                        {
+                            Answer = ChatGoalSeek.Clarify(query.School, match.Schools.Count),
+                            QuickReplies = ChatGoalSeek.Choices(match.Schools, query.Target),
+                            Widget = ChatGoalSeek.SchoolPicker(query.Target),
+                        };
+                }
+
+                var result = await recommender.GoalSeekAsync(userId, match.Schools[0].Code, query.Target, ct);
+                var names = (await recommender.ListSchoolOptionsAsync(userId, ct)).Select(o => o.Name).ToList();
+                var answer = await WriteGoalNoteAsync(ChatGoalSeek.Note(result, names), result, ct);
+                return response with { Answer = answer, Widget = ChatGoalSeek.WidgetOf(result), QuickReplies = null };
+            }
+            catch (ArgumentException ex)
+            {
+                return response with { Answer = $"Mình chưa tính được: {ex.Message}" };
+            }
+            catch (InvalidOperationException ex)
+            {
+                var reason = ex.Message.StartsWith("Chưa") || ex.Message.StartsWith("Hồ sơ")
+                    ? $"Mình chưa tính được: {ex.Message}"
+                    : ChatGoalSeek.Failed;
+                return response with { Answer = reason };
+            }
+        }
+
+        // Gemini diễn đạt kết quả goal-seeking. Lỗi, hết lượt hoặc lời không qua kiểm tra thì dùng câu ghép bằng code (cùng dữ kiện)
+        private async Task<string> WriteGoalNoteAsync(GoalNoteRequestDto note, SchoolGoalResult result, CancellationToken ct)
+        {
+            try
+            {
+                var written = await advisor.WriteGoalNoteAsync(note, ct);
+                if (written.Status == "OK" && !string.IsNullOrWhiteSpace(written.Answer))
+                    return written.Answer;
+            }
+            catch (Exception ex) when (ex is HttpRequestException
+                                       || (ex is TaskCanceledException && !ct.IsCancellationRequested))
+            {
+                // Gemini không trả lời được: dùng câu ghép, số liệu vẫn đúng
+            }
+            return ChatGoalSeek.Summarize(result);
         }
 
         private async Task<string> WriteNoteAsync(ScenarioNoteRequestDto note, CancellationToken ct)

@@ -5,6 +5,7 @@ import pytest
 from app.schemas.chat import ChatMessage, ChatRequest, ChatState, ProfileField, Widget
 from app.schemas.slm import INTENTS
 from app.services.branches import (
+    ASK_SCHOOL,
     NEED_RESULTS,
     NOTHING_TO_TRY,
     OUT_OF_SCOPE,
@@ -12,7 +13,7 @@ from app.services.branches import (
     SkillBranch,
     build_branches,
 )
-from app.services.chat_flow import NEED_MAJOR, NEED_PROFILE, NOT_READY, QUESTIONS, SkillOutput, ask, go_to
+from app.services.chat_flow import NEED_MAJOR, NEED_PROFILE, QUESTIONS, SkillOutput, ask, go_to
 from app.services.intake import CHAT_BUTTON, FORM_BUTTON, INTAKE_ASK, INTAKE_ID, INTAKE_MORE
 from app.services.skill_rules import REQUIRED_B3, REQUIRED_B4
 from tests.fakes import flow_with, tin
@@ -101,10 +102,41 @@ async def test_what_if_says_what_it_cannot_try():
     assert mixed.action_data["unsupported"] == ["ngành"]
 
 
-async def test_goal_seeking_is_not_ready_yet():
-    out = await run_scenario(ChatState(has_results=True), che_do="goal_seeking", truong="MIT", yeu_to=["sat"])
+async def test_goal_seeking_hands_the_school_and_target_to_dotnet():
+    out = await run_scenario(
+        ChatState(), che_do="goal_seeking", truong="MIT", muc_tieu="Vừa sức", yeu_to=["sat"]
+    )
 
-    assert out.answer == NOT_READY
+    assert out.action == "goal_seek"
+    assert out.action_data == {"school": "MIT", "target": "match"}
+    assert "MIT" in out.answer
+
+
+async def test_goal_seeking_without_a_target_leaves_it_to_the_system():
+    out = await run_scenario(ChatState(), che_do="goal_seeking", truong="Boston University")
+
+    assert out.action_data == {"school": "Boston University", "target": None}
+
+
+async def test_goal_seeking_works_without_a_saved_recommendation():
+    # Tính từ hồ sơ và dữ liệu trường, không cần danh sách gợi ý có sẵn (khác what-if)
+    out = await run_scenario(ChatState(has_results=False), che_do="goal_seeking", truong="MIT")
+
+    assert out.action == "goal_seek"
+
+
+async def test_goal_seeking_without_a_school_asks_which_one():
+    out = await run_scenario(ChatState(has_results=True), che_do="goal_seeking", yeu_to=["sat"])
+
+    assert out.answer == ASK_SCHOOL and out.action is None
+    # Hiện ô chọn trường thay vì để học sinh tự gõ đúng tên; nhóm đích để trống vì học sinh chưa nói
+    assert out.widget is not None and out.widget.type == "school" and out.widget.data == {"target": None}
+
+
+async def test_goal_seeking_without_a_school_keeps_the_target_in_the_picker():
+    out = await run_scenario(ChatState(), che_do="goal_seeking", muc_tieu="An toàn")
+
+    assert out.widget is not None and out.widget.data == {"target": "safety"}
 
 
 async def test_knowledge_and_center_branches_run_their_skill():

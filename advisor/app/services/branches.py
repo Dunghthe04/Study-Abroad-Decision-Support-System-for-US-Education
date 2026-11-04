@@ -5,7 +5,7 @@ từng ý. Nhánh nào chưa làm xong thì tạm dùng skill cũ bên trong (l�
 làm xong thì thay lớp đó trong build_branches, không phải sửa ChatFlow.
 """
 
-from app.schemas.chat import ChatState
+from app.schemas.chat import ChatState, Widget
 from app.schemas.slm import SlmTinResult
 from app.services.chat_flow import (
     NEED_PROFILE,
@@ -18,6 +18,7 @@ from app.services.chat_flow import (
     combine,
     start_intake,
 )
+from app.services.goal_target import parse_target
 from app.services.scenario import SUPPORTED_TEXT, parse_what_if
 from app.services.skill_rules import REQUIRED_B3, REQUIRED_BY_SKILL, missing_fields
 from app.services.skills.profile_handler import ChatProfileHandler
@@ -42,13 +43,16 @@ class NotReadyBranch:
 # Chưa có danh sách gợi ý thì không có gì để thử kịch bản
 NEED_RESULTS = "Bạn cần có danh sách trường gợi ý trước thì mình mới thử kịch bản được. Bạn muốn mình gợi ý trường trước không?"
 NOTHING_TO_TRY = f"Mình chưa thử được thay đổi này. Hiện mình thử được: {SUPPORTED_TEXT}."
+ASK_SCHOOL = "Bạn muốn vào trường nào? Chọn hoặc gõ tên trường ở ô bên dưới nhé."
 
 
-# Kịch bản what-if: SLM đã trích và chuẩn hóa giá trị, đây kiểm tra rồi giao .NET chạy simulate (action "simulate").
-# goal_seeking chưa làm nên vẫn báo đang hoàn thiện
+# Kịch bản: what_if thì SLM đã trích và chuẩn hóa giá trị, đây kiểm tra rồi giao .NET chạy simulate (action "simulate");
+# goal_seeking thì giao .NET tìm trường và chạy goal-seek (action "goal_seek")
 class ScenarioBranch:
     async def run(self, state: ChatState, message: str, slm: SlmTinResult) -> SkillOutput:
         entities = slm.cac_y[0].thuc_the
+        if entities.get("che_do") == "goal_seeking":
+            return self._goal_seek(entities)
         if entities.get("che_do") != "what_if":
             return SkillOutput(NOT_READY)
         if not state.has_results:
@@ -64,6 +68,21 @@ class ScenarioBranch:
             f"Mình thử kịch bản: {what_if.label()}.{note}",
             action="simulate",
             action_data={"changes": what_if.changes, "unsupported": what_if.unsupported},
+        )
+
+    # "Cần gì để vào trường X": tên trường còn là chữ, .NET khớp với 249 trường rồi chạy goal-seek.
+    # Không cần danh sách gợi ý có sẵn: goal-seek tính từ hồ sơ và dữ liệu trường
+    @staticmethod
+    def _goal_seek(entities: dict) -> SkillOutput:
+        school = str(entities.get("truong") or "").strip()
+        target = parse_target(entities.get("muc_tieu"))
+        if not school:
+            # Chưa nêu trường: hiện ô chọn trường có gợi ý, giữ nhóm đích để câu hỏi gửi lại đúng ý
+            return SkillOutput(ASK_SCHOOL, widget=Widget(type="school", data={"target": target}))
+        return SkillOutput(
+            f"Mình xem giúp bạn cần gì để vào {school} nhé.",
+            action="goal_seek",
+            action_data={"school": school, "target": target},
         )
 
 

@@ -105,7 +105,7 @@ function BudgetLine({ budget }: { budget: GoalBudget }) {
       text = `Chi phí khoảng ${cost} mỗi năm, vượt ngân sách và trường không có học bổng phù hợp nên không nằm trong danh sách của bạn. Cần ngân sách từ ${min} mỗi năm.`;
       break;
     case "no_budget":
-      text = `Bạn chưa đặt ngân sách. Chi phí khoảng ${cost} mỗi năm, cần ngân sách từ ${min} mỗi năm.`;
+      text = `Hồ sơ của bạn không đặt trần ngân sách mỗi năm. Chi phí khoảng ${cost} mỗi năm, cần ngân sách từ ${min} mỗi năm.`;
       break;
     default:
       text = "Trường chưa có số liệu chi phí.";

@@ -791,6 +791,41 @@ public class RecommendationServiceTests
     }
 
     [Fact]
+    public async Task ListSchoolOptions_ReturnsEverySchoolSortedByName_ForThePicker()
+    {
+        var z = School("1", 40_000m, "none", Major);
+        z.University.Name = "Zeta College";
+        var a = School("2", 40_000m, "none", Major);
+        a.University.Name = "Alpha University";
+        var (service, profile) = GoalSetup(z, a);
+
+        var options = await service.ListSchoolOptionsAsync(profile.UserId, default);
+
+        Assert.Equal(["Alpha University", "Zeta College"], options.Select(o => o.Name));
+        Assert.Equal(("2", "NY"), (options[0].Code, options[0].State));
+    }
+
+    [Fact]
+    public async Task FindSchools_MatchesTheTypedNameAgainstTheStudentsSchoolList()
+    {
+        var bu = School("1", 40_000m, "none", Major);
+        bu.University.Name = "Boston University";
+        var baylor = School("2", 40_000m, "none", Major);
+        baylor.University.Name = "Baylor University";
+        var (service, profile) = GoalSetup(bu, baylor);
+
+        var exact = await service.FindSchoolsAsync(profile.UserId, "boston university", default);
+        var acronym = await service.FindSchoolsAsync(profile.UserId, "BU", default);
+        var none = await service.FindSchoolsAsync(profile.UserId, "Yale", default);
+
+        Assert.Equal(NameMatchKind.Found, exact.Kind);
+        Assert.Equal("1", Assert.Single(exact.Schools).Code);
+        Assert.Equal(NameMatchKind.Ambiguous, acronym.Kind);                 // Boston University hoặc Baylor University: hỏi lại
+        Assert.Equal(["1", "2"], acronym.Schools.Select(s => s.Code).OrderBy(c => c));
+        Assert.Equal(NameMatchKind.NotFound, none.Kind);
+    }
+
+    [Fact]
     public async Task GoalSeek_FindsTheSchoolByCodeIgnoringCase()
     {
         var (service, profile) = GoalSetup();
@@ -811,6 +846,9 @@ public class RecommendationServiceTests
             throw new NotSupportedException();
 
         public Task<ScenarioNoteResponseDto> WriteScenarioNoteAsync(ScenarioNoteRequestDto request, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task<GoalNoteResponseDto> WriteGoalNoteAsync(GoalNoteRequestDto request, CancellationToken ct = default) =>
             throw new NotSupportedException();
     }
 

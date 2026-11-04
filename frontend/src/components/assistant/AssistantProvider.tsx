@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { usePathname, useRouter } from "next/navigation";
 import { ApiError } from "@/lib/api";
 import { streamAdvisorChat } from "@/lib/advisor-stream";
-import { onRecommendationsPage, showSimulation } from "@/lib/simulation-link";
+import { onRecommendationsPage, showGoal, showSimulation } from "@/lib/simulation-link";
 import type { ChatMessage, ChatWidget, Citation, QuickReply } from "@/types/api";
 
 export type AssistantTurn = ChatMessage & {
@@ -208,6 +208,8 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
         // Ở trang khác thì không tự chuyển trang, học sinh bấm nút "Xem trên thanh kéo" trong tin nhắn
         if (res.widget?.type === "simulate" && onRecommendationsPage())
           showSimulation(res.widget.data, router.push);
+        // "Cần gì để vào trường X": đang ở trang Gợi ý trường thì mở luôn khung kết quả của trường đó
+        if (res.widget?.type === "goal_seek" && onRecommendationsPage()) showGoal(res.widget.data, router.push);
         // D2: báo trang biết chat vừa đổi hồ sơ nháp, hoặc đang hỏi sang trang form khác (mục 7)
         if (res.profileChanged?.length || res.formStep != null)
           onProfileChangedRef.current?.(res.profileChanged ?? [], res.formStep ?? null);

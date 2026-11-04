@@ -709,6 +709,143 @@ public class ChatServiceTests
         Assert.Null(res.Widget);
     }
 
+    // "Cần gì để vào trường X" trong chat: advisor trả action goal_seek kèm tên trường chữ thô, .NET khớp tên rồi hỏi lại hoặc chạy goal-seeking
+    private static readonly JsonElement BuAction = JsonDocument.Parse("""{"school":"BU","target":"match"}""").RootElement;
+
+    private static NameMatch Found(string code = "188429", string name = "Boston University") =>
+        new(NameMatchKind.Found, [new SchoolRef(code, name)]);
+
+    private static SchoolGoalResult GoalOf() => new(
+        "188429", "Boston University", "R", "M", "reachable", "M", [],
+        new GoalPlanDto([new("sat", 1290, 1430)], 1.4, "hard"), null, [new GoalPlanDto([new("sat", 1290, 1430)], 1.4, "hard")], [],
+        new GoalBudgetDto("ok", 38_000m, 50_000m, 34_600m, null, null), null, []);
+
+    private static async Task<AdvisorChatResponse> GoalChat(JsonElement? data, FakeRunner runner) =>
+        await new ChatService(new FakeAdvisor("B4") { Action = "goal_seek", ActionData = data }, new FakeSessions(), new FakeProfileFlow(), null, runner)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+    [Fact]
+    public async Task GoalSeekAction_WhenTheSchoolIsClear_RunsGoalSeekingAndAnswersWithTheSummary()
+    {
+        var runner = new FakeRunner { Match = Found(), GoalResult = GoalOf() };
+
+        var res = await GoalChat(BuAction, runner);
+
+        Assert.Equal("BU", runner.SearchedFor);
+        Assert.Equal(("188429", "match"), runner.GoalCalledWith);
+        Assert.StartsWith("Mình hiểu bạn hỏi về Boston University, nhóm muốn đạt: Vừa sức.", res.Answer);
+        Assert.Equal("goal_seek", res.Widget!.Type);
+        Assert.Null(res.QuickReplies);
+        Assert.Null(res.Action);     // việc nội bộ, không trả cho trình duyệt
+    }
+
+    private static async Task<AdvisorChatResponse> GoalChatWith(FakeAdvisor advisor, FakeRunner runner) =>
+        await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), null, runner)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+    [Fact]
+    public async Task GoalSeekAction_AnswersWithTheWordsOfTheAdvisor_WhenTheyPassTheCheck()
+    {
+        var advisor = new FakeAdvisor("B4")
+        {
+            Action = "goal_seek", ActionData = BuAction,
+            GoalNote = new GoalNoteResponseDto("1.0", "gemini", "OK", "Để lên nhóm Vừa sức ở Boston University, bạn cần nâng SAT."),
+        };
+        var runner = new FakeRunner { Match = Found(), GoalResult = GoalOf() };
+
+        var res = await GoalChatWith(advisor, runner);
+
+        Assert.Equal("Để lên nhóm Vừa sức ở Boston University, bạn cần nâng SAT.", res.Answer);
+        Assert.Equal("goal_seek", res.Widget!.Type);   // khung kết quả trên trang vẫn mở
+        // Dữ liệu gửi Gemini: trường đã hiểu, nhóm đích, dữ kiện đã tính, và tên các trường khác (không gồm trường đang hỏi)
+        var note = advisor.LastGoalNote!;
+        Assert.Equal(("Boston University", "Vừa sức", "reachable"), (note.School, note.Target, note.Outcome));
+        Assert.StartsWith("Tài chính:", note.Facts[0]);
+        Assert.Equal(["Baylor University", "Harvard University"], note.Others);
+    }
+
+    [Theory]
+    [InlineData("FAILED")]   // Gemini lỗi hoặc lời không qua kiểm tra
+    [InlineData("OK")]       // trả rỗng cũng coi như lỗi
+    public async Task GoalSeekAction_WhenTheWordsAreMissing_UsesTheSentenceBuiltByCode(string status)
+    {
+        var advisor = new FakeAdvisor("B4") { Action = "goal_seek", ActionData = BuAction, GoalNote = new GoalNoteResponseDto("1.0", "gemini", status, "") };
+
+        var res = await GoalChatWith(advisor, new FakeRunner { Match = Found(), GoalResult = GoalOf() });
+
+        Assert.StartsWith("Mình hiểu bạn hỏi về Boston University, nhóm muốn đạt: Vừa sức.", res.Answer);
+        Assert.Equal("goal_seek", res.Widget!.Type);
+    }
+
+    [Fact]
+    public async Task GoalSeekAction_WhenTheAdvisorIsDown_UsesTheSentenceBuiltByCode()
+    {
+        foreach (Exception error in new Exception[] { new HttpRequestException("advisor tắt"), new TaskCanceledException("HttpClient.Timeout") })
+        {
+            var advisor = new FakeAdvisor("B4") { Action = "goal_seek", ActionData = BuAction, GoalNoteError = error };
+
+            var res = await GoalChatWith(advisor, new FakeRunner { Match = Found(), GoalResult = GoalOf() });
+
+            Assert.StartsWith("Mình hiểu bạn hỏi về Boston University", res.Answer);
+        }
+    }
+
+    [Fact]
+    public async Task GoalSeekAction_WhenTheNameCouldBeSeveralSchools_AsksWhichOneWithButtons_AndDoesNotRunGoalSeeking()
+    {
+        var match = new NameMatch(NameMatchKind.Ambiguous, [new SchoolRef("1", "Boston University"), new SchoolRef("2", "Baylor University")]);
+        var runner = new FakeRunner { Match = match, GoalResult = GoalOf() };
+
+        var res = await GoalChat(BuAction, runner);
+
+        Assert.Contains("ý bạn là trường nào", res.Answer);
+        Assert.Equal(
+            [new QuickReply("Boston University", "Cần gì để vào Boston University ở nhóm Vừa sức?"), new QuickReply("Baylor University", "Cần gì để vào Baylor University ở nhóm Vừa sức?")],
+            res.QuickReplies);
+        Assert.Null(runner.GoalCalledWith);
+        // Ngoài các nút còn có ô chọn trường có gợi ý, giữ nhóm đích để câu hỏi gửi lại đúng ý
+        Assert.Equal("school", res.Widget!.Type);
+        Assert.Equal("match", res.Widget.Data!.Value.GetProperty("target").GetString());
+    }
+
+    [Fact]
+    public async Task GoalSeekAction_WhenTheSchoolIsNotInTheList_SaysSo()
+    {
+        var runner = new FakeRunner { Match = new NameMatch(NameMatchKind.NotFound, []) };
+
+        var res = await GoalChat(JsonDocument.Parse("""{"school":"Yale"}""").RootElement, runner);
+
+        Assert.Contains("chưa thấy trường “Yale”", res.Answer);
+        Assert.Null(runner.GoalCalledWith);
+        Assert.Equal("school", res.Widget!.Type);          // không còn ngõ cụt: học sinh tìm trong ô chọn
+        Assert.Equal(JsonValueKind.Null, res.Widget.Data!.Value.GetProperty("target").ValueKind);
+    }
+
+    [Fact]
+    public async Task GoalSeekAction_WithoutASchool_SaysItFailed_AndDoesNotSearch()
+    {
+        var runner = new FakeRunner { Match = Found() };
+
+        var res = await GoalChat(null, runner);
+
+        Assert.Equal(ChatGoalSeek.Failed, res.Answer);
+        Assert.Null(runner.SearchedFor);
+    }
+
+    [Theory]
+    [InlineData(typeof(ArgumentException), "Nhóm đích phải là reach, match hoặc safety.", "Mình chưa tính được: Nhóm đích phải là reach, match hoặc safety.")]
+    [InlineData(typeof(InvalidOperationException), "Hồ sơ chưa có bậc học muốn theo.", "Mình chưa tính được: Hồ sơ chưa có bậc học muốn theo.")]
+    [InlineData(typeof(InvalidOperationException), "Dữ liệu lưu bị hỏng", ChatGoalSeek.Failed)]
+    public async Task GoalSeekAction_WhenGoalSeekingIsRejected_ExplainsWhy(Type type, string message, string expected)
+    {
+        var runner = new FakeRunner { Match = Found(), GoalError = (Exception)Activator.CreateInstance(type, message)! };
+
+        var res = await GoalChat(BuAction, runner);
+
+        Assert.Equal(expected, res.Answer);
+        Assert.Null(res.Widget);
+    }
+
     // Có kết quả rồi thì mỗi lượt gửi kèm danh sách trường mới nhất cho advisor. Lấy từ DB, không dựa vào trạng thái chat
     [Fact]
     public async Task WithResults_SendsTheLatestSchoolListToTheAdvisor()
@@ -786,6 +923,31 @@ public class ChatServiceTests
             return Task.FromResult(Explanation!);
         }
 
+        public IReadOnlyList<SchoolOption> Options { get; init; } =
+            [new SchoolOption("188429", "Boston University", "MA"), new SchoolOption("1", "Baylor University", "TX"), new SchoolOption("2", "Harvard University", "MA")];
+
+        public Task<IReadOnlyList<SchoolOption>> ListSchoolOptionsAsync(Guid userId, CancellationToken ct) => Task.FromResult(Options);
+
+        public NameMatch? Match { get; init; }
+        public SchoolGoalResult? GoalResult { get; init; }
+        public Exception? GoalError { get; init; }
+        public string? SearchedFor { get; private set; }
+        public (string Code, string? Target)? GoalCalledWith { get; private set; }
+
+        public Task<NameMatch> FindSchoolsAsync(Guid userId, string text, CancellationToken ct)
+        {
+            SearchedFor = text;
+            return Task.FromResult(Match!);
+        }
+
+        public Task<SchoolGoalResult> GoalSeekAsync(Guid userId, string code, string? target, CancellationToken ct)
+        {
+            GoalCalledWith = (code, target);
+            if (GoalError is not null)
+                throw GoalError;
+            return Task.FromResult(GoalResult!);
+        }
+
         public SimulationResult? Simulation { get; init; }
         public Exception? SimulateError { get; init; }
         public SimulationOverrides? SimulatedWith { get; private set; }
@@ -854,6 +1016,19 @@ public class ChatServiceTests
         }
 
         public Task<ExplainResponseDto> ExplainAsync(ExplainRequestDto request, CancellationToken ct = default) => throw new NotSupportedException();
+
+        // Mặc định Gemini lỗi: goal-seeking dùng câu ghép bằng code. Test cần lời của Gemini thì đặt GoalNote
+        public GoalNoteResponseDto GoalNote { get; init; } = new("1.0", "gemini", "FAILED", "");
+        public Exception? GoalNoteError { get; init; }
+        public GoalNoteRequestDto? LastGoalNote { get; private set; }
+
+        public Task<GoalNoteResponseDto> WriteGoalNoteAsync(GoalNoteRequestDto request, CancellationToken ct = default)
+        {
+            LastGoalNote = request;
+            if (GoalNoteError is not null)
+                throw GoalNoteError;
+            return Task.FromResult(GoalNote);
+        }
 
         public ScenarioNoteResponseDto? Note { get; init; }
         public Exception? NoteError { get; init; }
