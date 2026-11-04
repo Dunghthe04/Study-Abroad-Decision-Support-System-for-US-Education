@@ -5,6 +5,7 @@ import { AlertTriangleIcon, XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RequiredMark } from "../RequiredMark";
 import { MonthPicker } from "@/components/ui/month-picker";
 import { cn } from "@/lib/utils";
 import {
@@ -139,7 +140,7 @@ export function CertificationForm({
 
       <div className="space-y-1.5">
         <Label htmlFor={`${cert.id}-type`} className="text-xs font-medium">
-          Loại chứng chỉ
+          Loại chứng chỉ <RequiredMark />
         </Label>
         <CertificationTypeCombobox
           id={`${cert.id}-type`}
@@ -156,7 +157,7 @@ export function CertificationForm({
         <>
           <div className="space-y-1.5">
             <Label htmlFor={`${cert.id}-name`} className="text-xs font-medium">
-              Tên chứng chỉ <span className="text-risk">*</span>
+              Tên chứng chỉ <RequiredMark />
             </Label>
             <Input
               id={`${cert.id}-name`}
@@ -171,7 +172,7 @@ export function CertificationForm({
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="space-y-1.5">
               <Label htmlFor={`${cert.id}-overall`} className="text-xs font-medium">
-                Điểm tổng
+                Điểm tổng <RequiredMark />
               </Label>
               <Input
                 id={`${cert.id}-overall`}
@@ -220,7 +221,7 @@ export function CertificationForm({
           {type.requiresSubject && (
             <div className="space-y-1.5">
               <Label htmlFor={`${cert.id}-subject`} className="text-xs font-medium">
-                {type.subjectLabel ?? "Tên môn"} <span className="text-risk">*</span>
+                {type.subjectLabel ?? "Tên môn"} <RequiredMark />
               </Label>
               <Input
                 id={`${cert.id}-subject`}

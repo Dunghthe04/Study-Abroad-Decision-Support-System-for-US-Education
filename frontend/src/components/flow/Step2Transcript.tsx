@@ -24,6 +24,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RequiredMark } from "./RequiredMark";
 import { cn } from "@/lib/utils";
 import { profileFlowApi } from "@/lib/profile-flow-api";
 import {
@@ -859,7 +860,7 @@ export function Step2Transcript({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor={overallInputId} className="text-xs font-semibold text-foreground">
-                {isMiddleSchoolEarly ? "GPA mục tiêu" : "GPA tổng"} (0–{overallScale})
+                {isMiddleSchoolEarly ? "GPA mục tiêu" : "GPA tổng"} (0–{overallScale}) <RequiredMark />
               </Label>
               <Input
                 id={overallInputId}
@@ -970,7 +971,7 @@ export function Step2Transcript({
                     </div>
 
                     <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground">Điểm mục tiêu (0–10)</Label>
+                      <Label className="text-xs text-muted-foreground">Điểm mục tiêu (0–10) <RequiredMark /></Label>
                       <Input
                         type="number"
                         min={0}
