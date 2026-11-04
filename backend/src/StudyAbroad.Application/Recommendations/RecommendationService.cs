@@ -60,7 +60,7 @@ public record SimulationResult(
     SimulationProfile Profile, GroupSummary Baseline, GroupSummary Simulated, IReadOnlyList<SchoolChange> Changes,
     string CriteriaJson, string ItemsJson);
 
-public class RecommendationService(IAdvisorClient advisor, IRecommendationRepository recommendations, IProfileFlowRepository profiles)
+public partial class RecommendationService(IAdvisorClient advisor, IRecommendationRepository recommendations, IProfileFlowRepository profiles)
     : IRecommendationRunner
 
 {
@@ -111,23 +111,23 @@ public class RecommendationService(IAdvisorClient advisor, IRecommendationReposi
             throw new InvalidOperationException(MissingMajorMessage);
     }
 
+    // Các tiêu chí lọc cứng của học sinh
+    private static FilterCriteria CriteriaOf(StudentProfile profile) => new(
+        profile.IntendedMajor,
+        profile.PreferredStates,
+        SchoolControl(profile.TargetSchoolType),
+        profile.BudgetMaxUsd,
+        ToAidNeed(profile.ScholarshipNeed),
+        profile.Ielts,
+        profile.Toefl,
+        profile.Duolingo);
+
     // Lọc cứng. filtered = mọi trường kèm kết quả; kept = các trường còn lại (trong ngân sách hoặc cần học bổng lớn).
     private static (IReadOnlyList<FilterResult> Filtered, IReadOnlyList<FilterResult> Kept) FilterSchools(
         StudentProfile profile, IReadOnlyList<RecommendSchoolInput> schools)
     {
-        //Danh sách các tiêu chí của học sinh
-        var criteria = new FilterCriteria(
-         profile.IntendedMajor,
-         profile.PreferredStates,
-         SchoolControl(profile.TargetSchoolType),
-         profile.BudgetMaxUsd,
-         ToAidNeed(profile.ScholarshipNeed),
-         profile.Ielts,
-         profile.Toefl,
-         profile.Duolingo);
-
         // filtered = danh sách các trường đã lọc cứng (tiêu chí, danh sách trường, dung sai)
-        var filtered = HardFilter.Apply(criteria, schools.Select(ToFilterSchool), BudgetTolerance);
+        var filtered = HardFilter.Apply(CriteriaOf(profile), schools.Select(ToFilterSchool), BudgetTolerance);
         // Chỉ giữ các trường kept, aid
         var kept = filtered.Where(r => r.Outcome != FilterOutcome.Excluded).ToList();
         return (filtered, kept);

@@ -598,6 +598,208 @@ public class RecommendationServiceTests
         return new RecommendSchoolInput(university, offering, [major], rank is { } r ? [new RankPosition(r.Rank, r.Total)] : null);
     }
 
+    // ---------------------------------------------------------------- goal-seeking
+
+    // Hồ sơ yếu: GPA 3,0, SAT 1000, ngoại khóa bậc 1 (chưa khai hoạt động), ngân sách 50.000 (trần 55.000 sau dung sai 10%).
+    // Trường S: SAT 1200–1380, GPA trung bình 3,5, nhận 60%, coi trọng ngoại khóa: với hồ sơ này là Khó vào.
+    private static (RecommendationService Service, StudentProfile Profile) GoalSetup(params RecommendSchoolInput[] schools)
+    {
+        var profile = Profile();
+        profile.OverallGpa = 3.0m;
+        profile.Sat = 1000m;
+        var list = schools.Length > 0
+            ? schools
+            : [School("S", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m, ec: "very_important")];
+        var (service, _, _) = Setup(profile, list);
+        return (service, profile);
+    }
+
+    // Trường mà hồ sơ yếu ở giữa khoảng điểm (SAT 900–1100, GPA 3,0): Vừa sức.
+    private static RecommendSchoolInput MatchSchool(string code, decimal tuition, string control = "private")
+    {
+        var school = School(code, tuition, "none", Major, sat: (900, 1100), accept: 0.60m, avgGpa: 3.0m);
+        school.University.Control = control;
+        return school;
+    }
+
+    [Fact]
+    public async Task GoalSeek_WithoutATarget_AimsOneGroupUp()
+    {
+        var (service, profile) = GoalSetup();
+
+        var result = await service.GoalSeekAsync(profile.UserId, "S", null, default);
+
+        Assert.Equal(("R", "M", "reachable"), (result.Current, result.Target, result.Outcome));
+        Assert.NotNull(result.Cheapest);
+        Assert.Contains(result.Alone, p => p.Changes.Single().Factor == "sat");
+        Assert.Equal("ok", result.Budget.Status);   // 38.000 trong ngân sách
+        Assert.Empty(result.Alternatives);
+    }
+
+    [Fact]
+    public async Task GoalSeek_AnExplicitTargetWins()
+    {
+        var (service, profile) = GoalSetup();
+
+        var result = await service.GoalSeekAsync(profile.UserId, "S", "SAFETY", default);
+
+        Assert.Equal("S", result.Target);
+    }
+
+    [Fact]
+    public async Task GoalSeek_RecommendedIsAHigherBarThanTheMinimum_AndStillReachesTheTarget()
+    {
+        var (service, profile) = GoalSetup();
+
+        var result = await service.GoalSeekAsync(profile.UserId, "S", "match", default);
+
+        Assert.NotNull(result.Recommended);
+        Assert.True(result.Recommended!.Effort >= result.Cheapest!.Effort);
+        // Áp mức nên đặt mục tiêu vào hồ sơ: vẫn là Vừa sức dù ngưỡng nhóm đã nâng thêm khoảng đệm
+        var school = new SchoolAcademics(3.5m, null, 1200, 1380, null, null, null, null, null, null, "very_important", 0.60m, null);
+        var student = new StudentAcademics(3.0m, 1000, null, 1);
+        foreach (var change in result.Recommended.Changes)
+        {
+            student = change.Factor switch
+            {
+                "sat" => student with { Sat = (int)change.To },
+                "gpa" => student with { Gpa4 = change.To },
+                _ => student with { EcTier = (int)change.To },
+            };
+        }
+        var d = new GroupingOptions();
+        var padded = d with { LowerCut = d.LowerCut + RecommendationService.GoalMargin, UpperCut = d.UpperCut + RecommendationService.GoalMargin };
+        Assert.True(SchoolGrouper.Grade(student, school, padded).Group >= SchoolGroup.Match);
+    }
+
+    [Fact]
+    public async Task GoalSeek_AStudentAlreadyInTheTargetGroup_NeedsNothing()
+    {
+        var (service, profile) = GoalSetup();
+        profile.OverallGpa = 3.5m;
+        profile.Sat = 1290m;
+
+        var result = await service.GoalSeekAsync(profile.UserId, "S", "match", default);
+
+        Assert.Equal("already_reached", result.Outcome);
+        Assert.Null(result.Cheapest);
+        Assert.Empty(result.Alone);
+        Assert.Empty(result.Alternatives);
+    }
+
+    [Fact]
+    public async Task GoalSeek_ASchoolThatCannotBeReached_SuggestsSimilarSchoolsAlreadyInTheTargetGroup()
+    {
+        var hard = School("T", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.10m, avgGpa: 3.5m);
+        var (service, profile) = GoalSetup(
+            hard,
+            MatchSchool("M2", 20_000m, "public"),
+            MatchSchool("M1", 40_000m),
+            MatchSchool("M3", 60_000m));   // vượt ngân sách và không có học bổng: không phải lựa chọn
+
+        var result = await service.GoalSeekAsync(profile.UserId, "T", "match", default);
+
+        Assert.Equal(("blocked", "R"), (result.Outcome, result.Best));
+        Assert.Contains(GroupReasons.LowAcceptRate, result.Reasons);
+        Assert.Null(result.Cheapest);
+        // Cùng loại (tư thục) và chi phí gần nhất trước; trường quá ngân sách không được gợi ý
+        Assert.Equal(["M1", "M2"], result.Alternatives.Select(a => a.Code));
+        Assert.All(result.Alternatives, a => Assert.Equal("M", a.Group));
+    }
+
+    [Fact]
+    public async Task GoalSeek_ASchoolWithoutData_IsNoData_AndAlsoSuggestsAlternatives()
+    {
+        var empty = School("E", 38_000m, "none", Major, accept: 0.60m);
+        var (service, profile) = GoalSetup(empty, MatchSchool("M1", 40_000m));
+
+        var result = await service.GoalSeekAsync(profile.UserId, "E", "match", default);
+
+        Assert.Equal(("no_data", "NA"), (result.Outcome, result.Current));
+        Assert.Equal(["M1"], result.Alternatives.Select(a => a.Code));
+    }
+
+    // ---- tài chính
+
+    [Fact]
+    public async Task GoalSeek_ASchoolAboveTheBudgetButWithAid_NeedsAid_AndSaysTheMinimumBudget()
+    {
+        var pricey = School("P", 62_000m, "preferred", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m);
+        var (service, profile) = GoalSetup(pricey);
+
+        var budget = (await service.GoalSeekAsync(profile.UserId, "P", "match", default)).Budget;
+
+        Assert.Equal("need_aid", budget.Status);
+        Assert.Equal((62_000m, 50_000m), (budget.CostUsd, budget.BudgetUsd));
+        Assert.Equal(56_400m, budget.MinBudgetUsd);   // 62.000 / 1,1 = 56.364, làm tròn lên trăm
+        Assert.Equal(7_000m, budget.ShortfallUsd);    // 62.000 - 55.000
+    }
+
+    [Fact]
+    public async Task GoalSeek_ASchoolAboveTheBudgetWithoutAid_IsOverBudget()
+    {
+        var pricey = School("P", 62_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m);
+        var (service, profile) = GoalSetup(pricey);
+
+        var result = await service.GoalSeekAsync(profile.UserId, "P", "match", default);
+
+        Assert.Equal("over_budget", result.Budget.Status);
+        Assert.Null(result.FilterReason);   // ngân sách là lý do riêng, không nằm ở FilterReason
+    }
+
+    [Fact]
+    public async Task GoalSeek_WithoutACostOrABudget_SaysSo()
+    {
+        var noCost = School("N", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m);
+        noCost.Offering.TuitionUsd = null;
+        var (service, profile) = GoalSetup(noCost);
+        Assert.Equal("unknown_cost", (await service.GoalSeekAsync(profile.UserId, "N", "match", default)).Budget.Status);
+
+        var (service2, profile2) = GoalSetup();
+        profile2.BudgetMaxUsd = null;
+        var result = await service2.GoalSeekAsync(profile2.UserId, "S", "match", default);
+        Assert.Equal("no_budget", result.Budget.Status);
+        Assert.Equal(34_600m, result.Budget.MinBudgetUsd);   // 38.000 / 1,1 = 34.545, làm tròn lên trăm
+    }
+
+    [Fact]
+    public async Task GoalSeek_ASchoolOutsideTheStudentsFilters_SaysWhy()
+    {
+        var other = School("O", 38_000m, "none", "Music", sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m);
+        var (service, profile) = GoalSetup(other);
+
+        var result = await service.GoalSeekAsync(profile.UserId, "O", "match", default);
+
+        Assert.Equal("MAJOR", result.FilterReason);
+        Assert.Equal("ok", result.Budget.Status);
+    }
+
+    // ---- đầu vào
+
+    [Fact]
+    public async Task GoalSeek_RejectsAnUnknownSchool_AndABadTarget_AndAnIncompleteProfile()
+    {
+        var (service, profile) = GoalSetup();
+
+        var unknown = await Assert.ThrowsAsync<InvalidOperationException>(() => service.GoalSeekAsync(profile.UserId, "ZZZ", null, default));
+        Assert.StartsWith("Chưa có trường", unknown.Message);
+        await Assert.ThrowsAsync<ArgumentException>(() => service.GoalSeekAsync(profile.UserId, "S", "easy", default));
+
+        profile.ScholarshipNeed = null;
+        var incomplete = await Assert.ThrowsAsync<InvalidOperationException>(() => service.GoalSeekAsync(profile.UserId, "S", null, default));
+        Assert.StartsWith("Hồ sơ", incomplete.Message);
+    }
+
+    [Fact]
+    public async Task GoalSeek_FindsTheSchoolByCodeIgnoringCase()
+    {
+        var (service, profile) = GoalSetup();
+
+        var result = await service.GoalSeekAsync(profile.UserId, "s", "match", default);
+
+        Assert.Equal("S", result.Code);
+    }
+
     private sealed class FakeAdvisor : IAdvisorClient
     {
         public List<string> Calls { get; } = [];
