@@ -63,7 +63,7 @@ class QuickReply(CamelModel):
 
 # Công cụ nhập ngay trong chat (ô chọn ngành, bảng rà soát...); frontend vẽ theo type
 class Widget(CamelModel):
-    type: Literal["major", "review", "budget", "scholarship", "form", "select"]
+    type: Literal["major", "review", "budget", "scholarship", "form", "select", "school"]
     data: dict[str, Any] = {}
 
 
@@ -90,7 +90,8 @@ class ChatResponse(CamelModel):
     profile_changed: list[str] = []  # khóa hồ sơ đổi trong lượt này (điền ở việc 1.5)
     # Việc .NET cần làm sau lượt này. "recommend" = chạy gợi ý trường (pipeline ở .NET),
     # "explain" = viết lời tư vấn một trường (action_data["code"]),
+    # "goal_seek" = tìm mức cần đạt để vào một trường (action_data["school"]: tên trường học sinh nói, ["target"]: reach | match | safety | None),
     # "simulate" = chạy what-if (action_data["changes"]: giá trị đã kiểm tra, ["unsupported"]: yếu tố chưa thử được),
     # None = không có
-    action: Literal["recommend", "explain", "simulate"] | None = None
+    action: Literal["recommend", "explain", "simulate", "goal_seek"] | None = None
     action_data: dict[str, Any] = {}  # dữ liệu kèm action, ví dụ {"code": "ucla"} cho explain

@@ -17,6 +17,7 @@ from app.services.chat_flow import ChatFlow
 from app.services.ec_reader import EcReader
 from app.services.explainer import Explainer
 from app.services.gemini import GeminiClient
+from app.services.goal_writer import GoalWriter
 from app.services.knowledge import KnowledgeRetriever
 from app.services.ollama import OllamaClient
 from app.services.scenario_writer import ScenarioWriter
@@ -65,6 +66,7 @@ async def lifespan(app: FastAPI):
         app.state.ec_reader = EcReader(gemini, settings.gemini_model)
         app.state.explainer = Explainer(gemini, settings.gemini_model)
         app.state.scenario_writer = ScenarioWriter(gemini, settings.gemini_model)
+        app.state.goal_writer = GoalWriter(gemini, settings.gemini_model)
         # Kho kiến thức: không có DB thì None, chat vẫn chạy nhưng chưa trả lời được câu hỏi kiến thức
         app.state.db_pool = await asyncio.to_thread(open_pool, settings.database_url)
         knowledge = None
