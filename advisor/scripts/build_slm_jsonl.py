@@ -5,6 +5,10 @@ dòng nhiều ý đặt ở sheet của một trong các ý. Mỗi dòng: đầu
 mong muốn là cột cac_y, một danh sách ý [{"type", "doan", "thuc_the"}] theo thứ tự học sinh nói (skill md với hồ sơ và kịch bản
 khi có hồ sơ). Dòng sai chuẩn thì báo sheet và số dòng.
 
+File Excel ghi bằng tiếng Anh cho dễ trình bày (tên sheet, cột, khóa trong cột intents, mã loại và mã dịch vụ); script đổi
+về tên nội bộ (tiếng Việt) trước khi kiểm, nên SLM, prompt và code không đổi. Excel cũ ghi tên nội bộ vẫn đọc được.
+Bảng đối chiếu nằm ở EN_* bên dưới, là nơi duy nhất ghi cặp tên.
+
 Chạy trong thư mục advisor:
   python -m scripts.build_slm_jsonl
   python -m scripts.build_slm_jsonl --excel data/slm/du_lieu_slm.xlsx --out data/slm/du_lieu_slm.jsonl
@@ -28,13 +32,99 @@ DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "slm"
 DEFAULT_EXCEL = DATA_DIR / "du_lieu_slm.xlsx"
 DEFAULT_OUT = DATA_DIR / "du_lieu_slm.jsonl"
 
-# Loại có skill riêng của học sinh (chỉ khi đã có hồ sơ). Các loại khác dùng skill chung cố định
-SKILL_TYPES = ("ho_so", "kich_ban")
+# Loại có skill riêng của học sinh (chỉ khi đã có hồ sơ). Các loại khác dùng skill chung cố định.
+# Kịch bản do code tính, SLM chỉ tách thông tin (cột intents), nên không có skill
+SKILL_TYPES = ("ho_so",)
 # Đầu vào (giống nhau ở mọi loại) rồi đầu ra. Loại chính lấy từ tên sheet, id sinh theo sheet và thứ tự dòng
 COLUMNS = ("cau_hoi", "ho_so", "cau_he_thong_dang_hoi", "cac_y", "tap")
 SKILL_COLUMN = "skill_md"  # chỉ có ở sheet của SKILL_TYPES
 SPLITS = ("train", "val", "test")
 _WORD = re.compile(r"[^\W_]+(?:[-.'/][^\W_]+)*")
+
+
+# Tên trong Excel (tiếng Anh) -> tên nội bộ. Tên chưa có trong bảng giữ nguyên, nên tên nội bộ cũng đọc được
+EN_SHEETS = {
+    "collect_profile": "mac_dinh",
+    "profile_review": "ho_so",
+    "scenario": "kich_ban",
+    "knowledge": "kien_thuc",
+    "center_referral": "trung_tam",
+    "out_of_scope": "ngoai_pham_vi",
+}
+EN_COLUMNS = {
+    "question": "cau_hoi",
+    "profile": "ho_so",
+    "pending_question": "cau_he_thong_dang_hoi",
+    "intents": "cac_y",
+    "split": "tap",
+}
+EN_ITEM_KEYS = {"span": "doan", "entities": "thuc_the"}
+EN_ENTITY_KEYS = {
+    "school": "truong",
+    "city": "thanh_pho",
+    "service": "dich_vu",
+    "subtype": "loai_con",
+    "mode": "che_do",
+    "changes": "thay_doi",
+    "factor": "yeu_to",
+    "value": "gia_tri",
+    "unit": "don_vi",
+    "target_group": "muc_tieu",
+    "action": "hanh_dong",
+}
+# Giá trị có mã: chỉ đổi giá trị của khóa tương ứng (khóa ghi theo tên nội bộ, sau khi đã đổi khóa)
+EN_VALUES = {
+    "loai_con": {
+        "exception": "ngoai_le",
+        "sensitive": "nhay_cam",
+        "farewell": "tam_biet",
+        "ambiguous": "mo_ho",
+    },
+    "dich_vu": {
+        "SCHOOL_SELECTION": "CHON_TRUONG",
+        "ESSAY_EDITING": "SUA_BAI_LUAN",
+        "APPLICATION_SUBMISSION": "NOP_HO_SO",
+        "VISA_INTERVIEW_PREP": "LUYEN_PHONG_VAN",
+        "TEST_PREP": "LUYEN_THI",
+        "SCHOLARSHIP_SEARCH": "SAN_HOC_BONG",
+    },
+    "don_vi": {"scale_4": "thang_4", "scale_10": "thang_10"},
+    "hanh_dong": {"skip": "bo_qua"},
+}
+EN_TYPES = EN_SHEETS  # loại trong cột intents trùng tên sheet
+
+
+def _entities_to_internal(value: Any) -> Any:
+    if isinstance(value, list):
+        return [_entities_to_internal(v) for v in value]
+    if not isinstance(value, dict):
+        return value
+    out: dict[str, Any] = {}
+    for key, item in value.items():
+        name = EN_ENTITY_KEYS.get(key, key)
+        item = _entities_to_internal(item)
+        if isinstance(item, str):
+            item = EN_VALUES.get(name, {}).get(item, item)
+        out[name] = item
+    return out
+
+
+# Cột intents ghi bằng tiếng Anh thì đổi về khóa và mã nội bộ trước khi kiểm
+def intents_to_internal(items: Any) -> Any:
+    if not isinstance(items, list):
+        return items
+    result = []
+    for item in items:
+        if not isinstance(item, dict):
+            result.append(item)
+            continue
+        converted = {EN_ITEM_KEYS.get(key, key): value for key, value in item.items()}
+        if isinstance(converted.get("type"), str):
+            converted["type"] = EN_TYPES.get(converted["type"], converted["type"])
+        if "thuc_the" in converted:
+            converted["thuc_the"] = _entities_to_internal(converted["thuc_the"])
+        result.append(converted)
+    return result
 
 
 def columns_of(sheet: str) -> tuple[str, ...]:
@@ -121,7 +211,11 @@ def to_record(intent: str, raw: dict[str, Any], where: str, record_id: str) -> d
     if set(profile) - set(PROFILE_KEYS):
         raise ValueError(f"{where}: ho_so có khóa lạ: {sorted(set(profile) - set(PROFILE_KEYS))}")
     cac_y = check_cac_y(
-        intent, text["cau_hoi"], pending, as_json(raw.get("cac_y"), where, "cac_y") or None, where
+        intent,
+        text["cau_hoi"],
+        pending,
+        intents_to_internal(as_json(raw.get("cac_y"), where, "cac_y")) or None,
+        where,
     )
     skill = text[SKILL_COLUMN]
     if skill and intent not in SKILL_TYPES:
@@ -155,13 +249,20 @@ def read_records(path: Path) -> list[dict[str, Any]]:
     workbook = load_workbook(path, read_only=True, data_only=True)
     records: list[dict[str, Any]] = []
     for sheet in workbook.worksheets:
-        if sheet.title not in TYPES:
+        if sheet.title in ("README", "summary"):
+            continue  # sheet giải thích cho người đọc, không có dữ liệu
+        intent = EN_SHEETS.get(sheet.title, sheet.title)
+        if intent not in TYPES:
             raise ValueError(f"Sheet '{sheet.title}' không phải một loại trong {TYPES} (mỗi loại một sheet)")
         rows = sheet.iter_rows(values_only=True)
-        header = tuple(as_text(cell) for cell in next(rows, ()) if as_text(cell))
-        if header != columns_of(sheet.title):
+        header = tuple(
+            EN_COLUMNS.get(as_text(cell), as_text(cell)) for cell in next(rows, ()) if as_text(cell)
+        )
+        # Sheet kịch bản không có skill, nhưng file cũ còn cột skill_md (để trống) thì vẫn đọc được
+        allowed = {columns_of(intent), columns_of("ho_so")} if intent == "kich_ban" else {columns_of(intent)}
+        if header not in allowed:
             raise ValueError(
-                f"Sheet '{sheet.title}' phải có đúng các cột {columns_of(sheet.title)}, đang là {header}"
+                f"Sheet '{sheet.title}' phải có đúng các cột {columns_of(intent)}, đang là {header}"
             )
         count = 0
         for number, values in enumerate(rows, start=2):
@@ -170,7 +271,7 @@ def read_records(path: Path) -> list[dict[str, Any]]:
                 continue  # dòng trống
             count += 1
             where = f"{sheet.title}, dòng {number}"
-            records.append(to_record(sheet.title, raw, where, f"{sheet.title}_{count:03d}"))
+            records.append(to_record(intent, raw, where, f"{intent}_{count:03d}"))
     return records
 
 
