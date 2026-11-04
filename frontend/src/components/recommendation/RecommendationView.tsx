@@ -11,12 +11,14 @@ import { useAssistant, useAssistantPageContext } from "@/components/assistant/As
 import { recommendationApi } from "@/lib/recommendation-api";
 import { statusLabel } from "@/lib/recommendation-labels";
 import { SIMULATE_EVENT } from "@/lib/simulation-link";
+import { useGoalSeek, type GoalSeek } from "@/lib/use-goal-seek";
 import { useProfileSimulation, type ProfileSimulation } from "@/lib/use-profile-simulation";
 import type {
   GroupSummary,
   PickBlockName,
   Pref,
   Recommendation,
+  GoalPlan,
   SchoolChange,
   ScoredSchool,
   SimulationOverrides,
@@ -24,6 +26,7 @@ import type {
 import { ExplainSheet } from "./ExplainSheet";
 import { ProfileSimulator } from "./ProfileSimulator";
 import { ProfileSummary } from "./ProfileSummary";
+import { GoalSeekPanel } from "./GoalSeekPanel";
 import { SchoolCard } from "./SchoolCard";
 
 // Bốn khối chính theo đúng thứ tự trên màn. "other" để riêng ở cuối.
@@ -67,6 +70,18 @@ export function RecommendationView({ autoRun, initialOverrides }: Recommendation
     return sim.isSimulating && sim.result ? { ...rec, criteria: sim.result.criteria, items: sim.result.items } : rec;
   }, [rec, sim.isSimulating, sim.result]);
   const simulating = sim.isSimulating && sim.result !== null;
+
+  // "Cần gì để vào trường này": tính từ hồ sơ thật; áp dụng kết quả thì đặt giá trị vào thanh kéo
+  const goal = useGoalSeek();
+  const applyGoal = (plan: GoalPlan) => {
+    const next: SimulationOverrides = { pref: sim.overrides.pref };
+    for (const change of plan.changes) {
+      if (change.factor === "sat") next.sat = change.to;
+      else if (change.factor === "gpa") next.gpa = change.to;
+      else next.ecTier = change.to;
+    }
+    sim.replace(next);
+  };
 
   // Ngữ cảnh trợ lý bên phải: lời chào theo số trường, chip hỏi về trường Khó vào đầu tiên
   const firstReach = view ? view.items.scored.find((s) => s.code === view.items.reach[0]?.code) : undefined;
@@ -172,6 +187,10 @@ export function RecommendationView({ autoRun, initialOverrides }: Recommendation
             rec={view}
             changes={simulating ? sim.result!.changes : []}
             onExplain={simulating ? undefined : setExplainCode}
+            onGoal={goal.open}
+            goal={goal}
+            simulating={simulating}
+            onApplyGoal={applyGoal}
           />
         </>
       )}
@@ -246,9 +265,13 @@ interface ResultBodyProps {
   rec: Recommendation;
   changes: SchoolChange[]; // trường đổi nhóm khi đang mô phỏng
   onExplain?: (code: string) => void; // bỏ trống khi đang mô phỏng
+  onGoal?: (code: string) => void;
+  goal: GoalSeek; // khung "Cần gì để vào?" mở ngay dưới thẻ trường đang xét
+  simulating: boolean;
+  onApplyGoal: (plan: GoalPlan) => void;
 }
 
-function ResultBody({ rec, changes, onExplain }: ResultBodyProps) {
+function ResultBody({ rec, changes, onExplain, onGoal, goal, simulating, onApplyGoal }: ResultBodyProps) {
   const { criteria, items } = rec;
   const byCode = new Map<string, ScoredSchool>(items.scored.map((s) => [s.code, s]));
   const changeByCode = new Map<string, SchoolChange>(changes.map((c) => [c.code, c]));
@@ -295,13 +318,23 @@ function ResultBody({ rec, changes, onExplain }: ResultBodyProps) {
             </div>
             <div className="space-y-3">
               {list.map((p) => (
-                <SchoolCard
-                  key={p.code}
-                  picked={p}
-                  school={byCode.get(p.code)}
-                  change={changeByCode.get(p.code)}
-                  onExplain={onExplain}
-                />
+                <div key={p.code} className="space-y-2">
+                  <SchoolCard
+                    picked={p}
+                    school={byCode.get(p.code)}
+                    change={changeByCode.get(p.code)}
+                    onExplain={onExplain}
+                    onGoal={onGoal}
+                  />
+                  {goal.code === p.code && (
+                    <GoalSeekPanel
+                      goal={goal}
+                      simulating={simulating}
+                      schoolName={byCode.get(p.code)?.name ?? p.code}
+                      onApply={onApplyGoal}
+                    />
+                  )}
+                </div>
               ))}
             </div>
           </section>

@@ -43,6 +43,41 @@ export const FLAG_TEXT: Record<FilterFlag, string> = {
   ENGLISH_BELOW_MIN: "Điểm tiếng Anh của bạn thấp hơn mức tối thiểu của trường",
 };
 
+// Mã lý do xếp nhóm (GroupReasons ở backend) → vì sao trường không đạt nhóm đích
+export const GOAL_REASON_TEXT: Record<string, string> = {
+  LOW_ACCEPT_RATE: "Trường chỉ nhận dưới 15% hồ sơ nên luôn xếp Khó vào, điểm cao đến đâu cũng không đổi nhóm.",
+  CAPPED_SELECTIVE: "Trường nhận dưới 50% hồ sơ nên chỉ tối đa là Vừa sức, chưa tính là An toàn.",
+  CAPPED_WEAK_METRIC: "Một chỉ số của bạn còn thấp hơn mốc 25% của trường nên chưa tính là An toàn.",
+  INTL_DOWNGRADE: "Trường nhận du học sinh ít hơn hẳn tỷ lệ chung nên bị hạ một nhóm.",
+  NEED_TEST: "Trường bắt buộc nộp điểm SAT hoặc ACT mà hồ sơ của bạn chưa có.",
+  NO_ACADEMIC_DATA: "Trường chưa có đủ số liệu học thuật để so sánh với hồ sơ của bạn.",
+};
+
+export const FACTOR_LABELS: Record<string, string> = {
+  sat: "SAT",
+  gpa: "GPA (thang 4)",
+  ecTier: "Bậc ngoại khóa",
+};
+
+export const DIFFICULTY_LABELS: Record<string, string> = {
+  easy: "Khả thi",
+  hard: "Khó",
+  veryHard: "Rất khó",
+};
+
+export const GOAL_TARGET_OPTIONS: { value: "reach" | "match" | "safety"; label: string }[] = [
+  { value: "match", label: "Vừa sức" },
+  { value: "safety", label: "An toàn hơn" },
+];
+
+// Một giá trị của yếu tố: SAT và bậc là số nguyên, GPA hai chữ số thập phân
+export function goalValue(factor: string, value: number | null): string {
+  if (value == null) return "Chưa có";
+  return factor === "gpa"
+    ? value.toLocaleString("vi-VN", { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+    : Math.round(value).toLocaleString("vi-VN");
+}
+
 // Đổi mã sang chữ, mã lạ thì giữ nguyên để không mất thông tin
 export const whyText = (code: string) => WHY_TEXT[code as WhyCode] ?? code;
 export const flagText = (code: string) => FLAG_TEXT[code as FilterFlag] ?? code;
