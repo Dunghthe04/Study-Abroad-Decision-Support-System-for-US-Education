@@ -89,6 +89,8 @@ class ChatResponse(CamelModel):
     profile: dict[str, ProfileField] = {}  # hồ sơ sau lượt này (điền ở việc 1.5)
     profile_changed: list[str] = []  # khóa hồ sơ đổi trong lượt này (điền ở việc 1.5)
     # Việc .NET cần làm sau lượt này. "recommend" = chạy gợi ý trường (pipeline ở .NET),
-    # "explain" = viết lời tư vấn một trường (action_data["code"]), None = không có
-    action: Literal["recommend", "explain"] | None = None
+    # "explain" = viết lời tư vấn một trường (action_data["code"]),
+    # "simulate" = chạy what-if (action_data["changes"]: giá trị đã kiểm tra, action_data["unsupported"]: yếu tố chưa thử được),
+    # None = không có
+    action: Literal["recommend", "explain", "simulate"] | None = None
     action_data: dict[str, Any] = {}  # dữ liệu kèm action, ví dụ {"code": "ucla"} cho explain

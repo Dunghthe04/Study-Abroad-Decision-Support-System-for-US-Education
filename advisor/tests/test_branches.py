@@ -4,7 +4,14 @@ import pytest
 
 from app.schemas.chat import ChatMessage, ChatRequest, ChatState, ProfileField, Widget
 from app.schemas.slm import INTENTS
-from app.services.branches import OUT_OF_SCOPE, NotReadyBranch, SkillBranch, build_branches
+from app.services.branches import (
+    NEED_RESULTS,
+    NOTHING_TO_TRY,
+    OUT_OF_SCOPE,
+    NotReadyBranch,
+    SkillBranch,
+    build_branches,
+)
 from app.services.chat_flow import NEED_MAJOR, NEED_PROFILE, NOT_READY, QUESTIONS, SkillOutput, ask, go_to
 from app.services.intake import CHAT_BUTTON, FORM_BUTTON, INTAKE_ASK, INTAKE_ID, INTAKE_MORE
 from app.services.skill_rules import REQUIRED_B3, REQUIRED_B4
@@ -49,8 +56,53 @@ def test_knowledge_and_centers_say_not_ready_when_their_skill_is_not_registered(
     assert isinstance(build_branches(skills([]))["kien_thuc"], SkillBranch)
 
 
-async def test_scenarios_are_not_ready_yet():
-    out = await build_branches(skills([]))["kich_ban"].run(ChatState(), "nếu SAT 1400", tin(("kich_ban", {"che_do": "what_if", "thay_doi": [{"yeu_to": "sat", "gia_tri": "1400"}]})))  # fmt: skip
+def scenario(**entities):
+    return tin(("kich_ban", entities))
+
+
+async def run_scenario(state: ChatState, **entities):
+    return await build_branches(skills([]))["kich_ban"].run(state, "nếu SAT 1400", scenario(**entities))
+
+
+def what_if(*changes: dict) -> dict:
+    return {"che_do": "what_if", "thay_doi": list(changes)}
+
+
+async def test_what_if_hands_the_checked_values_to_dotnet():
+    out = await run_scenario(ChatState(has_results=True), **what_if({"yeu_to": "sat", "gia_tri": "1400"}))
+
+    assert out.action == "simulate"
+    assert out.action_data == {"changes": {"sat": 1400}, "unsupported": []}
+    assert "SAT 1400" in out.answer
+
+
+async def test_what_if_needs_a_recommendation_first():
+    out = await run_scenario(ChatState(), **what_if({"yeu_to": "sat", "gia_tri": "1400"}))
+
+    assert out.answer == NEED_RESULTS and out.action is None
+
+
+async def test_what_if_asks_again_instead_of_simulating_a_bad_value():
+    out = await run_scenario(ChatState(has_results=True), **what_if({"yeu_to": "sat", "gia_tri": "2000"}))
+
+    assert "400 đến 1600" in out.answer and out.action is None
+
+
+async def test_what_if_says_what_it_cannot_try():
+    state = ChatState(has_results=True)
+
+    only_major = await run_scenario(state, **what_if({"yeu_to": "major", "gia_tri": "CS"}))
+    mixed = await run_scenario(
+        state, **what_if({"yeu_to": "sat", "gia_tri": "1450"}, {"yeu_to": "major", "gia_tri": "CS"})
+    )
+
+    assert only_major.answer == NOTHING_TO_TRY and only_major.action is None
+    assert mixed.action == "simulate" and "ngành" in mixed.answer
+    assert mixed.action_data["unsupported"] == ["ngành"]
+
+
+async def test_goal_seeking_is_not_ready_yet():
+    out = await run_scenario(ChatState(has_results=True), che_do="goal_seeking", truong="MIT", yeu_to=["sat"])
 
     assert out.answer == NOT_READY
 

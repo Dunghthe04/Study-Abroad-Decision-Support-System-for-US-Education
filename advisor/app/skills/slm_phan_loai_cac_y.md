@@ -37,7 +37,7 @@ Các khóa hồ sơ: current_level (đang học/làm gì), current_grade (lớp 
 Khóa riêng theo loại:
 - ho_so, kien_thuc: truong = tên trường được nhắc tới.
 - kich_ban: che_do = "what_if" hoặc "goal_seeking" (bắt buộc).
-  - what_if: thay_doi = danh sách {yeu_to, gia_tri} (yeu_to là khóa hồ sơ, gia_tri là giá trị mới như học sinh nói, vd "1400") hoặc {yeu_to, hanh_dong: "bo_qua"} khi bỏ một yếu tố.
+  - what_if: thay_doi = danh sách {yeu_to, gia_tri, don_vi}. yeu_to là khóa hồ sơ; gia_tri là SỐ ĐÃ CHUẨN HÓA (bỏ dấu chấm nghìn, dấu phẩy thành dấu chấm, "1k5" hay "một nghìn năm trăm" thành "1500", "40k" thành "40000", "800 triệu" thành "800000000"); don_vi chỉ ghi khi cần: gpa là "thang_4" hoặc "thang_10", budget là "USD" hoặc "VND" (đúng như học sinh nói, không tự đổi tiền). Riêng scholarship, gia_tri là một trong optional (không cần), preferred (nên có), mandatory (bắt buộc). Khi bỏ một yếu tố thì ghi {yeu_to, hanh_dong: "bo_qua"}.
   - goal_seeking: truong (nếu có), yeu_to = danh sách khóa hồ sơ học sinh hỏi (vd ["sat"]), muc_tieu = nhóm muốn đạt (vd "Vừa sức").
 - trung_tam: dich_vu = một mã: CHON_TRUONG (chọn trường), SUA_BAI_LUAN (sửa bài luận/essay), NOP_HO_SO (nộp hồ sơ hộ, làm hồ sơ), LUYEN_PHONG_VAN (luyện phỏng vấn visa), LUYEN_THI (luyện IELTS, SAT...), SAN_HOC_BONG (săn học bổng). Không khớp mã nào thì bỏ khóa này. thanh_pho = NGUYÊN VĂN tên nơi học sinh viết (vd "Sài Gòn", "HN").
 - ngoai_pham_vi: loai_con (bắt buộc).
@@ -51,6 +51,9 @@ Tin "em GPA 3.5, I-20 là gì, SAT là gì"
 
 Tin "IELTS 7.0, em nên nộp trường nào, nếu em lên SAT 1500 thì sao"
 {"cac_y":[{"type":"mac_dinh","doan":"IELTS 7.0","thuc_the":{"english":"IELTS 7.0"}},{"type":"ho_so","doan":"em nên nộp trường nào","thuc_the":{}},{"type":"kich_ban","doan":"nếu em lên SAT 1500 thì sao","thuc_the":{"che_do":"what_if","thay_doi":[{"yeu_to":"sat","gia_tri":"1500"}]}}]}
+
+Tin "nếu em đạt GPA 9,0 thang 10 và ngân sách 800 triệu thì sao"
+{"cac_y":[{"type":"kich_ban","doan":"nếu em đạt GPA 9,0 thang 10 và ngân sách 800 triệu thì sao","thuc_the":{"che_do":"what_if","thay_doi":[{"yeu_to":"gpa","gia_tri":"9.0","don_vi":"thang_10"},{"yeu_to":"budget","gia_tri":"800000000","don_vi":"VND"}]}}]}
 
 Tin "OPT và CPT là gì ạ"
 {"cac_y":[{"type":"kien_thuc","doan":"OPT là gì","thuc_the":{}},{"type":"kien_thuc","doan":"CPT là gì","thuc_the":{}}]}

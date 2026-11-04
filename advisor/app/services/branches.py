@@ -18,8 +18,10 @@ from app.services.chat_flow import (
     combine,
     start_intake,
 )
+from app.services.scenario import SUPPORTED_TEXT, parse_what_if
 from app.services.skill_rules import REQUIRED_B3, REQUIRED_BY_SKILL, missing_fields
 from app.services.skills.profile_handler import ChatProfileHandler
+from app.services.skills.validators import AskAgain
 
 
 # Nhánh dùng nguyên một skill có sẵn (kiến thức, trung tâm)
@@ -35,6 +37,34 @@ class SkillBranch:
 class NotReadyBranch:
     async def run(self, state: ChatState, message: str, slm: SlmTinResult) -> SkillOutput:
         return SkillOutput(NOT_READY)
+
+
+# Chưa có danh sách gợi ý thì không có gì để thử kịch bản
+NEED_RESULTS = "Bạn cần có danh sách trường gợi ý trước thì mình mới thử kịch bản được. Bạn muốn mình gợi ý trường trước không?"
+NOTHING_TO_TRY = f"Mình chưa thử được thay đổi này. Hiện mình thử được: {SUPPORTED_TEXT}."
+
+
+# Kịch bản what-if: SLM đã trích và chuẩn hóa giá trị, đây kiểm tra rồi giao .NET chạy simulate (action "simulate").
+# goal_seeking chưa làm nên vẫn báo đang hoàn thiện
+class ScenarioBranch:
+    async def run(self, state: ChatState, message: str, slm: SlmTinResult) -> SkillOutput:
+        entities = slm.cac_y[0].thuc_the
+        if entities.get("che_do") != "what_if":
+            return SkillOutput(NOT_READY)
+        if not state.has_results:
+            return SkillOutput(NEED_RESULTS)
+        try:
+            what_if = parse_what_if(entities.get("thay_doi", []))
+        except AskAgain as ask:
+            return SkillOutput(ask.question)
+        if not what_if.changes:
+            return SkillOutput(NOTHING_TO_TRY)
+        note = f" Mình chưa thử được: {', '.join(what_if.unsupported)}." if what_if.unsupported else ""
+        return SkillOutput(
+            f"Mình thử kịch bản: {what_if.label()}.{note}",
+            action="simulate",
+            action_data={"changes": what_if.changes, "unsupported": what_if.unsupported},
+        )
 
 
 # Câu trả lời cố định theo loai_con, không gọi model.
@@ -99,7 +129,7 @@ def build_branches(skills: dict[str, SkillHandler]) -> dict[str, Branch]:
     return {
         "mac_dinh": ProfileBranch(ChatProfileHandler(skills), advice),
         "ho_so": advice,
-        "kich_ban": NotReadyBranch(),
+        "kich_ban": ScenarioBranch(),
         "kien_thuc": SkillBranch(skills["skill_tra_loi"]) if "skill_tra_loi" in skills else NotReadyBranch(),
         "trung_tam": (
             SkillBranch(skills["skill_chuyen_trung_tam"])
