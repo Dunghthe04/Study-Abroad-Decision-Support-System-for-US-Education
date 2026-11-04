@@ -18,7 +18,8 @@ public record AdminUniversityListItemDto(
     decimal? AcceptanceRate,
     bool IsActive,
     IReadOnlyList<string> StudyLevels,
-    DateOnly? LatestRetrievedAt);
+    DateOnly? LatestRetrievedAt,
+    string? LogoUrl = null);
 
 public record AdminUniversityDetailDto(
     Guid Id,
@@ -33,7 +34,10 @@ public record AdminUniversityDetailDto(
     bool IsIvy,
     bool IsActive,
     DateTime? UpdatedAt,
-    string? LastEditedBy);
+    string? LastEditedBy,
+    string? LogoUrl = null,
+    string? CoverUrl = null,
+    IReadOnlyList<string>? GalleryUrls = null);
 
 public record AdminOfferingMajorDto(Guid MajorId, string Name, string? CipCode, bool IsStem, bool IsVerified);
 
@@ -71,6 +75,19 @@ public record AdminMajorOptionDto(Guid Id, string Name, string? CipCode);
 /// <summary>Một dòng ngành của offering, đọc kèm tên và mã CIP.</summary>
 public record AdminOfferingMajorRow(Guid UniversityOfferingId, Guid MajorId, string Name, string? CipCode, bool IsStem, bool IsVerified);
 
+public record CreateUniversityRequest(
+    string Code,
+    string Name,
+    string? City = null,
+    string? State = null,
+    string? Website = null,
+    string? Control = null,
+    decimal? AcceptanceRate = null,
+    int? InternationalStudentCount = null,
+    bool IsIvy = false,
+    string? LogoUrl = null,
+    string? CoverUrl = null);
+
 public record UpdateUniversityRequest(
     string? Name,
     string? City,
@@ -79,7 +96,9 @@ public record UpdateUniversityRequest(
     string? Control,
     decimal? AcceptanceRate,
     int? InternationalStudentCount,
-    bool IsIvy);
+    bool IsIvy,
+    string? LogoUrl = null,
+    string? CoverUrl = null);
 
 public record UpdateOfferingMajor(Guid MajorId, bool IsStem);
 

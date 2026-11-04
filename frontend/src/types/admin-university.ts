@@ -9,6 +9,7 @@ export interface AdminUniversityListItem {
   isActive: boolean;
   studyLevels: string[];
   latestRetrievedAt: string | null;
+  logoUrl?: string | null;
 }
 
 export interface AdminUniversityOffering {
@@ -69,6 +70,23 @@ export interface AdminUniversityDetail {
   isActive: boolean;
   updatedAt: string | null;
   lastEditedBy: string | null;
+  logoUrl?: string | null;
+  coverUrl?: string | null;
+  galleryUrls?: string[] | null;
+}
+
+export interface CreateUniversityRequest {
+  code: string;
+  name: string;
+  city: string | null;
+  state: string | null;
+  website: string | null;
+  control: string | null;
+  acceptanceRate: number | null;
+  internationalStudentCount: number | null;
+  isIvy: boolean;
+  logoUrl?: string | null;
+  coverUrl?: string | null;
 }
 
 export interface UpdateUniversityRequest {
@@ -80,6 +98,8 @@ export interface UpdateUniversityRequest {
   acceptanceRate: number | null;
   internationalStudentCount: number | null;
   isIvy: boolean;
+  logoUrl?: string | null;
+  coverUrl?: string | null;
 }
 
 export interface UpdateOfferingRequest {

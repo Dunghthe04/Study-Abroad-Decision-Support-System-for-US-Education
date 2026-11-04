@@ -11,6 +11,52 @@ public class AdminUniversityServiceTests
     private static readonly Guid Actor = Guid.NewGuid();
 
     [Fact]
+    public async Task CreateUniversityAsync_CreatesSchoolWithMedia()
+    {
+        var repo = new FakeRepository();
+        var service = new AdminUniversityService(repo, new FakeAuditLogs());
+        var result = await service.CreateUniversityAsync(
+            new CreateUniversityRequest(" new-school ", " New School ", State: "ca", LogoUrl: "https://res.cloudinary.com/test/image/upload/logo.png"), Actor);
+
+        Assert.True(result.Success);
+        Assert.Equal("NEW-SCHOOL", result.Value!.Code);
+        Assert.Equal("New School", result.Value.Name);
+        Assert.Equal("CA", result.Value.State);
+        Assert.Equal("https://res.cloudinary.com/test/image/upload/logo.png", result.Value.LogoUrl);
+        Assert.Equal(result.Value.Id, Assert.Single(repo.MediaItems).EntityId);
+        Assert.Equal(1, repo.SaveCount);
+    }
+
+    [Fact]
+    public async Task CreateUniversityAsync_RejectsDuplicateCode()
+    {
+        var repo = new FakeRepository();
+        var service = new AdminUniversityService(repo, new FakeAuditLogs());
+        var result = await service.CreateUniversityAsync(new CreateUniversityRequest(repo.University.Code, "Another School"), Actor);
+
+        Assert.False(result.Success);
+        Assert.Contains("code", result.Errors.Keys);
+        Assert.Equal(0, repo.SaveCount);
+    }
+
+    [Fact]
+    public async Task UpdateUniversityAsync_ClearsMediaWhenUrlsAreEmpty()
+    {
+        var repo = new FakeRepository();
+        var university = repo.University;
+        repo.MediaItems.Add(new Media { EntityType = "University", EntityId = university.Id, Type = "logo", Url = "https://res.cloudinary.com/test/image/upload/logo.png" });
+        var service = new AdminUniversityService(repo, new FakeAuditLogs());
+        var result = await service.UpdateUniversityAsync(university.Id,
+            new UpdateUniversityRequest(university.Name, university.City, university.State, university.Website, university.Control,
+                university.AcceptanceRate, university.InternationalStudentCount, university.IsIvy, LogoUrl: ""), Actor);
+
+        Assert.True(result.Success);
+        Assert.Null(result.Value!.LogoUrl);
+        Assert.Empty(repo.MediaItems);
+        Assert.Equal(1, repo.SaveCount);
+    }
+
+    [Fact]
     public async Task SearchAsync_ClampsPageAndPageSize()
     {
         var repo = new FakeRepository();
@@ -227,7 +273,7 @@ public class AdminUniversityServiceTests
 
     private sealed class FakeRepository : IAdminUniversityRepository
     {
-        public University University { get; } = new()
+        public University University { get; private set; } = new()
         {
             Code = "166683", Name = "Old Name", City = "Cambridge", State = "MA", Control = "private", AcceptanceRate = 0.05m,
         };
@@ -238,6 +284,7 @@ public class AdminUniversityServiceTests
         public List<UniversityOfferingMajor> Links { get; } = [];
         public List<UniversityOfferingMajor> Added { get; } = [];
         public List<UniversityOfferingMajor> Removed { get; } = [];
+        public List<Media> MediaItems { get; } = [];
         public AdminUniversityQuery? LastQuery { get; private set; }
         public int SaveCount { get; private set; }
 
@@ -255,6 +302,31 @@ public class AdminUniversityServiceTests
         {
             LastQuery = query;
             return Task.FromResult(new PagedResult<AdminUniversityListItemDto>([], query.Page, query.PageSize, 0));
+        }
+
+        public Task<bool> ExistsCodeAsync(string code, CancellationToken ct = default) =>
+            Task.FromResult(University.Code == code);
+
+        public void AddUniversity(University university) => University = university;
+
+        public Task<IReadOnlyList<Media>> GetUniversityMediaAsync(Guid universityId, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<Media>>(MediaItems.Where(m => m.EntityType == "University" && m.EntityId == universityId).ToList());
+
+        public Task SaveUniversityMediaAsync(Guid universityId, string? logoUrl, string? coverUrl, CancellationToken ct = default)
+        {
+            SetMedia(universityId, "logo", logoUrl);
+            SetMedia(universityId, "cover", coverUrl);
+            return Task.CompletedTask;
+        }
+
+        private void SetMedia(Guid universityId, string type, string? url)
+        {
+            var existing = MediaItems.FirstOrDefault(m => m.EntityId == universityId && m.Type == type);
+            if (existing is not null) MediaItems.Remove(existing);
+            if (!string.IsNullOrWhiteSpace(url))
+            {
+                MediaItems.Add(new Media { EntityType = "University", EntityId = universityId, Type = type, Url = url });
+            }
         }
 
         public Task<University?> GetUniversityAsync(Guid universityId, CancellationToken ct = default) =>

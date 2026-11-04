@@ -1308,6 +1308,61 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.ToTable("majors", "app");
                 });
 
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.Media", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<int>("DisplayOrder")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("display_order");
+
+                    b.Property<Guid>("EntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("entity_id");
+
+                    b.Property<string>("EntityType")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("entity_type");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("type");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("Url")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("url");
+
+                    b.HasKey("Id")
+                        .HasName("pk_media");
+
+                    b.HasIndex("EntityId", "DisplayOrder")
+                        .HasDatabaseName("ix_media_entity_id_display_order");
+
+                    b.HasIndex("EntityType", "EntityId", "Type")
+                        .HasDatabaseName("ix_media_entity_type_entity_id_type");
+
+                    b.ToTable("media", "app");
+                });
+
             modelBuilder.Entity("StudyAbroad.Domain.Entities.Notification", b =>
                 {
                     b.Property<Guid>("Id")

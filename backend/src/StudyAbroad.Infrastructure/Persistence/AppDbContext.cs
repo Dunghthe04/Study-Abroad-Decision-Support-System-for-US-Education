@@ -42,6 +42,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<ForumReport> ForumReports => Set<ForumReport>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<AppSetting> AppSettings => Set<AppSetting>();
+    public DbSet<Media> Media => Set<Media>();
 
     // 13 thực thể bổ sung chuẩn hóa toàn diện 42 bảng DB First
     public DbSet<StateLivingCost> StateLivingCosts => Set<StateLivingCost>();

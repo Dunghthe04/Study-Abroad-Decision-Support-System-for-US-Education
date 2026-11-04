@@ -43,11 +43,17 @@ public class AdminUniversityRepository(AppDbContext db) : IAdminUniversityReposi
                 u.AcceptanceRate,
                 u.IsActive,
                 db.UniversityOfferings.Where(o => o.UniversityId == u.Id).Select(o => o.StudyLevel).ToList(),
-                db.UniversityOfferings.Where(o => o.UniversityId == u.Id).Max(o => o.RetrievedAt)))
+                db.UniversityOfferings.Where(o => o.UniversityId == u.Id).Max(o => o.RetrievedAt),
+                db.Media.Where((m) => m.EntityType == "University" && m.EntityId == u.Id && m.Type == "logo").Select(m => m.Url).FirstOrDefault()))
             .ToListAsync(ct);
 
         return new PagedResult<AdminUniversityListItemDto>(items, query.Page, query.PageSize, total);
     }
+
+    public Task<bool> ExistsCodeAsync(string code, CancellationToken ct = default) =>
+        db.Universities.AnyAsync(u => u.Code == code, ct);
+
+    public void AddUniversity(University university) => db.Universities.Add(university);
 
     public Task<University?> GetUniversityAsync(Guid universityId, CancellationToken ct = default) =>
         db.Universities.FirstOrDefaultAsync(u => u.Id == universityId, ct);
@@ -92,4 +98,65 @@ public class AdminUniversityRepository(AppDbContext db) : IAdminUniversityReposi
     public void RemoveMajorLink(UniversityOfferingMajor link) => db.UniversityOfferingMajors.Remove(link);
 
     public Task SaveChangesAsync(CancellationToken ct = default) => db.SaveChangesAsync(ct);
+
+    public async Task<IReadOnlyList<Media>> GetUniversityMediaAsync(Guid universityId, CancellationToken ct = default) =>
+        await db.Media.AsNoTracking()
+            .Where(m => m.EntityType == "University" && m.EntityId == universityId)
+            .OrderBy(m => m.DisplayOrder)
+            .ToListAsync(ct);
+
+    public async Task SaveUniversityMediaAsync(Guid universityId, string? logoUrl, string? coverUrl, CancellationToken ct = default)
+    {
+        var existing = await db.Media
+            .Where(m => m.EntityType == "University" && m.EntityId == universityId && (m.Type == "logo" || m.Type == "cover"))
+            .ToListAsync(ct);
+
+        var logo = existing.FirstOrDefault(m => m.Type == "logo");
+        if (logo is not null)
+        {
+            if (string.IsNullOrWhiteSpace(logoUrl))
+            {
+                db.Media.Remove(logo);
+            }
+            else
+            {
+                logo.Url = logoUrl.Trim();
+            }
+        }
+        else if (!string.IsNullOrWhiteSpace(logoUrl))
+        {
+            db.Media.Add(new Media
+            {
+                EntityType = "University",
+                EntityId = universityId,
+                Type = "logo",
+                Url = logoUrl.Trim(),
+                DisplayOrder = 0
+            });
+        }
+
+        var cover = existing.FirstOrDefault(m => m.Type == "cover");
+        if (cover is not null)
+        {
+            if (string.IsNullOrWhiteSpace(coverUrl))
+            {
+                db.Media.Remove(cover);
+            }
+            else
+            {
+                cover.Url = coverUrl.Trim();
+            }
+        }
+        else if (!string.IsNullOrWhiteSpace(coverUrl))
+        {
+            db.Media.Add(new Media
+            {
+                EntityType = "University",
+                EntityId = universityId,
+                Type = "cover",
+                Url = coverUrl.Trim(),
+                DisplayOrder = 0
+            });
+        }
+    }
 }

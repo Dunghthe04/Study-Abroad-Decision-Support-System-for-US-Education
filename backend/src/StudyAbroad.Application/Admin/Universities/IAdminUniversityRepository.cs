@@ -7,6 +7,10 @@ public interface IAdminUniversityRepository
 {
     Task<PagedResult<AdminUniversityListItemDto>> SearchAsync(AdminUniversityQuery query, CancellationToken ct = default);
 
+    Task<bool> ExistsCodeAsync(string code, CancellationToken ct = default);
+
+    void AddUniversity(University university);
+
     /// <summary>Trường có tracking để sửa; null nếu không có.</summary>
     Task<University?> GetUniversityAsync(Guid universityId, CancellationToken ct = default);
 
@@ -30,4 +34,7 @@ public interface IAdminUniversityRepository
     void RemoveMajorLink(UniversityOfferingMajor link);
 
     Task SaveChangesAsync(CancellationToken ct = default);
+
+    Task<IReadOnlyList<Media>> GetUniversityMediaAsync(Guid universityId, CancellationToken ct = default);
+    Task SaveUniversityMediaAsync(Guid universityId, string? logoUrl, string? coverUrl, CancellationToken ct = default);
 }
