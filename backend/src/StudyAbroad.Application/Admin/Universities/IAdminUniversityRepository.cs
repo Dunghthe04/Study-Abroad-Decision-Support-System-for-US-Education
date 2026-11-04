@@ -30,4 +30,7 @@ public interface IAdminUniversityRepository
     void RemoveMajorLink(UniversityOfferingMajor link);
 
     Task SaveChangesAsync(CancellationToken ct = default);
+
+    Task<IReadOnlyList<Media>> GetUniversityMediaAsync(Guid universityId, CancellationToken ct = default);
+    Task SaveUniversityMediaAsync(Guid universityId, string? logoUrl, string? coverUrl, CancellationToken ct = default);
 }

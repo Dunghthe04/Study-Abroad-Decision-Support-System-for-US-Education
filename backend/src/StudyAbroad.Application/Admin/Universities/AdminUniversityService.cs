@@ -87,6 +87,8 @@ public class AdminUniversityService(
         var state = Clean(request.State)?.ToUpperInvariant();
         var website = Clean(request.Website);
         var control = Clean(request.Control)?.ToLowerInvariant();
+        var logoUrl = Clean(request.LogoUrl);
+        var coverUrl = Clean(request.CoverUrl);
 
         var errors = new Dictionary<string, string>();
         if (name is null)
@@ -99,6 +101,10 @@ public class AdminUniversityService(
             errors["state"] = "Mã bang gồm 2 chữ cái, ví dụ CA.";
         if (website is not null && (website.Length > 512 || !IsHttpUrl(website)))
             errors["website"] = "Website phải là đường dẫn http(s), tối đa 512 ký tự.";
+        if (logoUrl is not null && (logoUrl.Length > 1000 || !IsHttpUrl(logoUrl)))
+            errors["logoUrl"] = "Logo phải là đường dẫn http(s), tối đa 1000 ký tự.";
+        if (coverUrl is not null && (coverUrl.Length > 1000 || !IsHttpUrl(coverUrl)))
+            errors["coverUrl"] = "Ảnh bìa phải là đường dẫn http(s), tối đa 1000 ký tự.";
         if (control is not null && !Controls.Contains(control))
             errors["control"] = "Loại trường chỉ nhận public hoặc private.";
         if (request.AcceptanceRate is < 0 or > 1)
@@ -106,6 +112,10 @@ public class AdminUniversityService(
         if (request.InternationalStudentCount is < 0)
             errors["internationalStudentCount"] = "Số du học sinh không được âm.";
         if (errors.Count > 0) return AdminUpdateResult<AdminUniversityDetailDto>.Invalid(errors);
+
+        var currentMedia = await repository.GetUniversityMediaAsync(university.Id, ct);
+        var currentLogo = currentMedia.FirstOrDefault(m => m.Type == "logo")?.Url;
+        var currentCover = currentMedia.FirstOrDefault(m => m.Type == "cover")?.Url;
 
         var changes = new Dictionary<string, object?[]>();
         AddChange(changes, "name", university.Name, name);
@@ -116,6 +126,8 @@ public class AdminUniversityService(
         AddChange(changes, "acceptanceRate", university.AcceptanceRate, request.AcceptanceRate);
         AddChange(changes, "internationalStudentCount", university.InternationalStudentCount, request.InternationalStudentCount);
         AddChange(changes, "isIvy", university.IsIvy, request.IsIvy);
+        AddChange(changes, "logoUrl", currentLogo, logoUrl);
+        AddChange(changes, "coverUrl", currentCover, coverUrl);
 
         if (changes.Count == 0) return AdminUpdateResult<AdminUniversityDetailDto>.Ok(await ToDetailDtoAsync(university, ct));
 
@@ -128,6 +140,8 @@ public class AdminUniversityService(
         university.InternationalStudentCount = request.InternationalStudentCount;
         university.IsIvy = request.IsIvy;
         university.LastEditedByUserId = actorUserId;
+
+        await repository.SaveUniversityMediaAsync(university.Id, logoUrl, coverUrl, ct);
         await repository.SaveChangesAsync(ct);
 
         await WriteAuditAsync(actorUserId, "university.update", "university", university.Id, new { code = university.Code, changes }, ct);
@@ -345,9 +359,15 @@ public class AdminUniversityService(
     private async Task<AdminUniversityDetailDto> ToDetailDtoAsync(University u, CancellationToken ct)
     {
         var lastEditedBy = await repository.GetUserDisplayNameAsync(u.LastEditedByUserId, ct);
+        var medias = await repository.GetUniversityMediaAsync(u.Id, ct);
+        var logoUrl = medias.FirstOrDefault(m => m.Type == "logo")?.Url;
+        var coverUrl = medias.FirstOrDefault(m => m.Type == "cover")?.Url;
+        var galleryUrls = medias.Where(m => m.Type == "gallery").OrderBy(m => m.DisplayOrder).Select(m => m.Url).ToList();
+
         return new AdminUniversityDetailDto(
             u.Id, u.Code, u.Name, u.City, u.State, u.Website, u.Control, u.AcceptanceRate,
-            u.InternationalStudentCount, u.IsIvy, u.IsActive, u.UpdatedAt, lastEditedBy);
+            u.InternationalStudentCount, u.IsIvy, u.IsActive, u.UpdatedAt, lastEditedBy,
+            logoUrl, coverUrl, galleryUrls);
     }
 
     private static AdminUniversityOfferingDto ToOfferingDto(
