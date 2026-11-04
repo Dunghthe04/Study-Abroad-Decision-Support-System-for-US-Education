@@ -92,6 +92,10 @@ namespace StudyAbroad.Application.Advisor
             if (response.Action == ChatExplanation.Action && recommender is not null)
                 response = await ExplainAsync(userId, response, ct);
 
+            // Học sinh hỏi "nếu đổi X thì sao": chạy mô phỏng có sẵn, Gemini nói lại ngắn gọn, panel bên phải hiện chi tiết
+            if (response.Action == ChatSimulation.Action && recommender is not null)
+                response = await SimulateAsync(userId, response, ct);
+
             //Sau khi advisor phản hồi ==> lưu trạng thái mới
             session.StateJson = response.State?.GetRawText();
             //Lưu bước hiện tại
@@ -183,6 +187,48 @@ namespace StudyAbroad.Application.Advisor
             {
                 return response with { Answer = ChatExplanation.Busy };
             }
+        }
+
+        // Chạy what-if (advisor đã kiểm tra giá trị, ở ActionData). Gemini lỗi hoặc lời không qua kiểm tra số liệu thì dùng câu mẫu bằng code.
+        // Lỗi thì báo, không làm hỏng cả lượt chat
+        private async Task<AdvisorChatResponse> SimulateAsync(Guid userId, AdvisorChatResponse response, CancellationToken ct)
+        {
+            var scenario = ChatSimulation.Parse(response.ActionData);
+            if (scenario is null)
+                return response with { Answer = ChatSimulation.Failed };
+            try
+            {
+                var result = await recommender!.SimulateAsync(userId, scenario.Overrides, null, ct);
+                var note = ChatSimulation.Note(result, scenario);
+                return response with { Answer = await WriteNoteAsync(note, ct), Widget = ChatSimulation.WidgetOf(scenario) };
+            }
+            catch (ArgumentException ex)
+            {
+                return response with { Answer = $"Mình chưa thử được kịch bản này: {ex.Message}" };
+            }
+            catch (InvalidOperationException ex)
+            {
+                var reason = ex.Message.StartsWith("Chưa") || ex.Message.StartsWith("Hồ sơ")
+                    ? $"Mình chưa thử được kịch bản này: {ex.Message}"
+                    : ChatSimulation.Failed;
+                return response with { Answer = reason };
+            }
+        }
+
+        private async Task<string> WriteNoteAsync(ScenarioNoteRequestDto note, CancellationToken ct)
+        {
+            try
+            {
+                var written = await advisor.WriteScenarioNoteAsync(note, ct);
+                if (written.Status == "OK" && !string.IsNullOrWhiteSpace(written.Answer))
+                    return written.Answer;
+            }
+            catch (Exception ex) when (ex is HttpRequestException
+                                       || (ex is TaskCanceledException && !ct.IsCancellationRequested))
+            {
+                // Gemini không trả lời được: dùng câu mẫu, số liệu vẫn đúng
+            }
+            return ChatSimulation.Fallback(note);
         }
 
         // Skill nào chạy thì lưu câu trả lời vào analysis_results với loại tương ứng

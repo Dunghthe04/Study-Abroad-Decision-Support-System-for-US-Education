@@ -7,6 +7,34 @@ namespace StudyAbroad.Application.Advisor;
 // Tên viết tắt giữ nguyên key bên Python. Key hoa (L, A, S, F, H, Q, X) phải gắn JsonPropertyName
 // vì camelCase sẽ biến chúng thành chữ thường.
 
+// --- Lời cho what-if trong chat: POST api/v1/recommend/what-if ---
+// Kết quả simulate đã được code tính. Advisor (Gemini) viết lời và chặn tên trường, nhóm, số không có trong dữ liệu này.
+
+// Một trường nêu trong nhóm. MovedFrom có nghĩa là trường vừa đổi nhóm (tên nhóm cũ, tiếng Việt); Reasons là mã lý do, chỉ gắn cho trường đã đổi nhóm.
+public record ScenarioSchoolDto(string Name, string? MovedFrom, IReadOnlyList<string> Reasons, bool NeedAid);
+
+// Key: reach | match | safety | aid. Schools tối đa 4 trường (như trang gợi ý), More là số trường còn lại của nhóm.
+public record ScenarioGroupDto(string Key, string Title, IReadOnlyList<ScenarioSchoolDto> Schools, int More);
+
+public record ScenarioStudentDto(int? BudgetUsd, string? Scholarship);
+
+// Direction: better | worse | mixed | none (không trường nào đổi nhóm, khi đó Groups rỗng).
+// Others: tên các trường khác trong kết quả, để advisor chặn lời nhắc tên ngoài danh sách.
+public record ScenarioNoteRequestDto(
+    string Label,
+    IReadOnlyList<string> Factors,
+    IReadOnlyList<string> Unsupported,
+    string Direction,
+    ScenarioStudentDto Student,
+    IReadOnlyList<ScenarioGroupDto> Groups,
+    IReadOnlyList<string> Others);
+
+public record ScenarioNoteResponseDto(
+    [property: JsonPropertyName("skill_version")] string SkillVersion,
+    string Model,
+    string Status,                       // OK | FAILED
+    string Answer);
+
 // --- Tư vấn từng trường: POST api/v1/recommend/explain ---
 
 // Học sinh. Thiếu số thì null, không gửi 0.

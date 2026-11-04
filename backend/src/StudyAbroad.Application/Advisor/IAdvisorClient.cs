@@ -13,5 +13,6 @@ public interface IAdvisorClient
         AdvisorChatRequest request, Func<AdvisorStreamEvent, Task> onEvent, CancellationToken ct = default) =>
         ChatAsync(request, ct);
     Task<ExplainResponseDto> ExplainAsync(ExplainRequestDto request, CancellationToken ct = default);
+    Task<ScenarioNoteResponseDto> WriteScenarioNoteAsync(ScenarioNoteRequestDto request, CancellationToken ct = default);
 
 }

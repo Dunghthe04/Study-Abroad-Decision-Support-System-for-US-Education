@@ -607,6 +607,9 @@ public class RecommendationServiceTests
 
         public Task<ExplainResponseDto> ExplainAsync(ExplainRequestDto request, CancellationToken ct = default) =>
             throw new NotSupportedException();
+
+        public Task<ScenarioNoteResponseDto> WriteScenarioNoteAsync(ScenarioNoteRequestDto request, CancellationToken ct = default) =>
+            throw new NotSupportedException();
     }
 
     private sealed class FakeRecommendationRepository(IReadOnlyList<RecommendSchoolInput> schools) : IRecommendationRepository

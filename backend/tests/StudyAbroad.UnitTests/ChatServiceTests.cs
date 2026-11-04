@@ -621,6 +621,94 @@ public class ChatServiceTests
         }
     }
 
+    // What-if: advisor trả action simulate kèm giá trị đã kiểm tra, .NET chạy mô phỏng có sẵn rồi nhờ advisor viết lời
+    private static readonly JsonElement Sat1500 = JsonDocument.Parse("""{"changes":{"sat":1500},"unsupported":[]}""").RootElement;
+
+    private static SimulationResult Simulation() => new(
+        new SimulationProfile(3.5m, 1290, null, 6.5m, 40_000m, "preferred", 3),
+        new GroupSummary(2, 1, 1, 0, 0, 0), new GroupSummary(2, 0, 2, 0, 0, 0),
+        [new SchoolChange("bu", "Boston University", "R", "M")],
+        "{}",
+        """{"scored":[{"code":"bu","name":"Boston University"},{"code":"ne","name":"Northeastern University"}],"reach":[],"match":[{"code":"bu","why":["SAT_ABOVE"]},{"code":"ne","why":[]}],"safety":[],"aid":[],"other":[]}""");
+
+    private static ScenarioNoteResponseDto Written(string status = "OK", string answer = "Với SAT 1500, Boston University lên Vừa sức.") =>
+        new("2.0", "gemini", status, answer);
+
+    private static async Task<AdvisorChatResponse> SimulateChat(FakeAdvisor advisor, FakeRunner runner) =>
+        await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), null, runner)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+    [Fact]
+    public async Task SimulateAction_RunsTheSimulationAndAnswersWithTheWordsOfTheAdvisor()
+    {
+        var advisor = new FakeAdvisor("B4") { Action = "simulate", ActionData = Sat1500, Note = Written() };
+        var runner = new FakeRunner { Simulation = Simulation() };
+
+        var res = await SimulateChat(advisor, runner);
+
+        Assert.Equal(1500m, runner.SimulatedWith!.Sat);
+        Assert.Equal("SAT 1500 (hiện tại 1290)", advisor.LastNote!.Label);
+        Assert.Equal("Với SAT 1500, Boston University lên Vừa sức.", res.Answer);
+        Assert.Equal("simulate", res.Widget!.Type);
+        Assert.Equal(1500, res.Widget.Data!.Value.GetProperty("sat").GetInt32());
+        Assert.Null(res.Action);     // việc nội bộ, không trả cho trình duyệt
+        Assert.Null(res.ActionData);
+    }
+
+    [Theory]
+    [InlineData("FAILED")]   // Gemini lỗi hoặc lời không qua kiểm tra số liệu
+    [InlineData("OK")]       // trả rỗng cũng coi như lỗi
+    public async Task SimulateAction_WhenTheWordsAreMissing_UsesTheSentenceBuiltByCode(string status)
+    {
+        var advisor = new FakeAdvisor("B4") { Action = "simulate", ActionData = Sat1500, Note = Written(status, "") };
+
+        var res = await SimulateChat(advisor, new FakeRunner { Simulation = Simulation() });
+
+        Assert.StartsWith("Với SAT 1500 (hiện tại 1290) thì mình gợi ý như sau:", res.Answer);
+        Assert.Contains("- Vừa sức: Boston University, Northeastern University", res.Answer);
+        Assert.Equal("simulate", res.Widget!.Type);   // panel vẫn hiện kết quả
+    }
+
+    [Fact]
+    public async Task SimulateAction_WhenTheAdvisorIsDown_UsesTheSentenceBuiltByCode()
+    {
+        foreach (Exception error in new Exception[] { new HttpRequestException("advisor tắt"), new TaskCanceledException("HttpClient.Timeout") })
+        {
+            var advisor = new FakeAdvisor("B4") { Action = "simulate", ActionData = Sat1500, NoteError = error };
+
+            var res = await SimulateChat(advisor, new FakeRunner { Simulation = Simulation() });
+
+            Assert.StartsWith("Với SAT 1500 (hiện tại 1290) thì mình gợi ý như sau:", res.Answer);
+        }
+    }
+
+    [Fact]
+    public async Task SimulateAction_WithoutUsableValues_SaysItFailed_AndDoesNotSimulate()
+    {
+        var runner = new FakeRunner { Simulation = Simulation() };
+
+        var res = await SimulateChat(new FakeAdvisor("B4") { Action = "simulate" }, runner);
+
+        Assert.Equal(ChatSimulation.Failed, res.Answer);
+        Assert.Null(runner.SimulatedWith);
+        Assert.Null(res.Widget);
+    }
+
+    [Theory]
+    [InlineData(typeof(ArgumentException), "SAT giả định phải từ 400 đến 1600.", "Mình chưa thử được kịch bản này: SAT giả định phải từ 400 đến 1600.")]
+    [InlineData(typeof(InvalidOperationException), "Chưa có hồ sơ.", "Mình chưa thử được kịch bản này: Chưa có hồ sơ.")]
+    [InlineData(typeof(InvalidOperationException), "Hồ sơ chưa có bậc học muốn theo.", "Mình chưa thử được kịch bản này: Hồ sơ chưa có bậc học")]
+    [InlineData(typeof(InvalidOperationException), "Dữ liệu lưu bị hỏng", ChatSimulation.Failed)]
+    public async Task SimulateAction_WhenTheSimulationIsRejected_ExplainsWhy(Type type, string message, string expected)
+    {
+        var runner = new FakeRunner { SimulateError = (Exception)Activator.CreateInstance(type, message)! };
+
+        var res = await SimulateChat(new FakeAdvisor("B4") { Action = "simulate", ActionData = Sat1500 }, runner);
+
+        Assert.Contains(expected, res.Answer);
+        Assert.Null(res.Widget);
+    }
+
     // Có kết quả rồi thì mỗi lượt gửi kèm danh sách trường mới nhất cho advisor; chưa có thì không đọc DB
     [Fact]
     public async Task WithResults_SendsTheLatestSchoolListToTheAdvisor()
@@ -682,6 +770,18 @@ public class ChatServiceTests
             return Task.FromResult(Explanation!);
         }
 
+        public SimulationResult? Simulation { get; init; }
+        public Exception? SimulateError { get; init; }
+        public SimulationOverrides? SimulatedWith { get; private set; }
+
+        public Task<SimulationResult> SimulateAsync(Guid userId, SimulationOverrides overrides, IReadOnlyList<int>? pref, CancellationToken ct)
+        {
+            SimulatedWith = overrides;
+            if (SimulateError is not null)
+                throw SimulateError;
+            return Task.FromResult(Simulation!);
+        }
+
         public Task<Recommendation> CreateAsync(Guid userId, IReadOnlyList<int>? pref, CancellationToken ct)
         {
             CalledFor = userId;
@@ -738,6 +838,18 @@ public class ChatServiceTests
         }
 
         public Task<ExplainResponseDto> ExplainAsync(ExplainRequestDto request, CancellationToken ct = default) => throw new NotSupportedException();
+
+        public ScenarioNoteResponseDto? Note { get; init; }
+        public Exception? NoteError { get; init; }
+        public ScenarioNoteRequestDto? LastNote { get; private set; }
+
+        public Task<ScenarioNoteResponseDto> WriteScenarioNoteAsync(ScenarioNoteRequestDto request, CancellationToken ct = default)
+        {
+            LastNote = request;
+            if (NoteError is not null)
+                throw NoteError;
+            return Task.FromResult(Note!);
+        }
     }
 
     private sealed class FakeSessions : IChatSessionRepository
