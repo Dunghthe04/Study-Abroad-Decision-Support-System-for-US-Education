@@ -13,6 +13,9 @@ namespace StudyAbroad.Application.Recommendations
         Task<Recommendation> CreateAsync(Guid userId, IReadOnlyList<int>? pref, CancellationToken ct);
         Task<Recommendation?> GetLatestAsync(Guid userId, CancellationToken ct);
         Task<SchoolExplanation> ExplainAsync(Guid userId, string code, CancellationToken ct);
+        Task<IReadOnlyList<SchoolOption>> ListSchoolOptionsAsync(Guid userId, CancellationToken ct);
+        Task<NameMatch> FindSchoolsAsync(Guid userId, string text, CancellationToken ct);
+        Task<SchoolGoalResult> GoalSeekAsync(Guid userId, string code, string? target, CancellationToken ct);
         Task<SimulationResult> SimulateAsync(Guid userId, SimulationOverrides overrides, IReadOnlyList<int>? pref, CancellationToken ct);
     }
 }

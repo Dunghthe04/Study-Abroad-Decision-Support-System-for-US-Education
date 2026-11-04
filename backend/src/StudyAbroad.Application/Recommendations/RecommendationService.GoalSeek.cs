@@ -45,12 +45,36 @@ public record SchoolGoalResult(
 
 // ============================== GOAL-SEEKING ==============================
 
+// Một trường trong ô chọn trường của chat: mã, tên, bang
+public record SchoolOption(string Code, string Name, string? State);
+
 public partial class RecommendationService
 {
     // Đệm cho "mức nên đặt mục tiêu": p' phải vượt ngưỡng nhóm thêm chừng này. Số liệu của trường và hồ sơ tự khai đều có sai số.
     public const double GoalMargin = 0.05;
     public const int MaxAlternatives = 3;
     private const decimal MoneyStep = 100m;
+
+    // Danh sách trường (theo tên) cho ô chọn có gợi ý trong chat: giao diện tải một lần rồi lọc ngay trên máy khi học sinh gõ
+    public async Task<IReadOnlyList<SchoolOption>> ListSchoolOptionsAsync(Guid userId, CancellationToken ct)
+    {
+        var profile = await profiles.GetProfileByUserIdAsync(userId, ct);
+        var level = string.IsNullOrWhiteSpace(profile?.TargetLevel) ? "undergraduate" : profile!.TargetLevel!;
+        var schools = await recommendations.ListSchoolsAsync(level, ct);
+        return schools
+            .Select(s => new SchoolOption(s.University.Code, s.University.Name, s.University.State))
+            .OrderBy(o => o.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    // Khớp tên trường học sinh gõ trong chat với danh sách trường của bậc học họ theo. Không bao giờ đoán bừa: xem SchoolNameMatcher.
+    public async Task<NameMatch> FindSchoolsAsync(Guid userId, string text, CancellationToken ct)
+    {
+        var profile = await profiles.GetProfileByUserIdAsync(userId, ct);
+        var level = string.IsNullOrWhiteSpace(profile?.TargetLevel) ? "undergraduate" : profile!.TargetLevel!;
+        var schools = await recommendations.ListSchoolsAsync(level, ct);
+        return SchoolNameMatcher.Match(text, schools.Select(s => new SchoolRef(s.University.Code, s.University.Name)).ToList());
+    }
 
     // Học sinh hỏi "cần gì để vào trường này". target: reach | match | safety; bỏ trống thì nhóm cao hơn một bậc so với hiện tại.
     // Tính từ hồ sơ thật, giữ các yếu tố khác nguyên. Không lưu, không gọi advisor.

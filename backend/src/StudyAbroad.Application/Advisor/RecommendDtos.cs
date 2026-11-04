@@ -35,6 +35,25 @@ public record ScenarioNoteResponseDto(
     string Status,                       // OK | FAILED
     string Answer);
 
+// --- Lời cho goal-seeking trong chat: POST api/v1/recommend/goal-seek ---
+// Kết quả goal-seeking đã được code tính. Advisor (Gemini) diễn đạt lại thành lời, chặn số, tên trường, lời hứa không có trong dữ kiện.
+
+// School: tên trường hệ thống đã hiểu (học sinh thấy để sửa nếu nhầm). Target: tên nhóm muốn đạt. Outcome: already_reached | reachable | blocked | no_data.
+// Facts: dữ kiện do code tính, mỗi câu một ý. Alternatives: trường tương tự. Others: tên các trường khác, để advisor chặn nhắc tên ngoài danh sách.
+public record GoalNoteRequestDto(
+    string School,
+    string Target,
+    string Outcome,
+    IReadOnlyList<string> Facts,
+    IReadOnlyList<string> Alternatives,
+    IReadOnlyList<string> Others);
+
+public record GoalNoteResponseDto(
+    [property: JsonPropertyName("skill_version")] string SkillVersion,
+    string Model,
+    string Status,                       // OK | FAILED
+    string Answer);
+
 // --- Tư vấn từng trường: POST api/v1/recommend/explain ---
 
 // Học sinh. Thiếu số thì null, không gửi 0.

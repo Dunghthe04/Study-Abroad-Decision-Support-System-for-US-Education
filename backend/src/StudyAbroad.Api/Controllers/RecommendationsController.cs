@@ -160,6 +160,17 @@ public class RecommendationsController(RecommendationService recommendations) : 
         }
     }
 
+    // Danh sách trường cho ô chọn có gợi ý trong chat (giao diện lọc ngay trên máy khi học sinh gõ).
+    [Authorize(Policy = AgeFeatures.ProcessStudentData)] // [Q11] dưới 16 cần phụ huynh đồng ý
+    [HttpGet("schools/names")]
+    public async Task<IActionResult> SchoolNames(CancellationToken ct)
+    {
+        var userId = User.GetUserId();
+        if (userId is null)
+            return Unauthorized(new { message = "Vui lòng đăng nhập." });
+        return Ok(await recommendations.ListSchoolOptionsAsync(userId.Value, ct));
+    }
+
     // "Cần gì để vào trường này": mức tối thiểu của SAT, GPA, ngoại khóa để trường đạt nhóm đích, kèm tài chính và trường thay thế.
     // Tính từ hồ sơ thật, không lưu, không gọi advisor.
     [Authorize(Policy = AgeFeatures.ProcessStudentData)] // [Q11] dưới 16 cần phụ huynh đồng ý
