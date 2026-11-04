@@ -247,6 +247,15 @@ export function parseTermName(termName: string): { gradeName: string; semester: 
   return { gradeName: m[1].trim(), semester: m[2] === "2" ? 2 : 1 };
 }
 
+/**
+ * TB cả năm một môn theo cách tính Việt Nam: HK2 hệ số 2 → (HK1 + 2×HK2) / 3. Chỉ có một kỳ thì lấy kỳ đó,
+ * không có kỳ nào thì null. Không làm tròn ở đây (giống TranscriptGpa.YearAverage phía BE)
+ */
+export function yearAverage(s1: number | null, s2: number | null): number | null {
+  if (s1 !== null && s2 !== null) return (s1 + 2 * s2) / 3;
+  return s1 ?? s2;
+}
+
 // Helper tính GPA thang 4 từ thang 10 theo công thức tuyến tính: GPA 4.0 = GPA 10 / 10 * 4.0
 export function calculateLinearGpa(years: AcademicYearDraft[]): { gpa10: number | null; gpa4: number | null } {
   let totalScore10 = 0;
@@ -256,15 +265,7 @@ export function calculateLinearGpa(years: AcademicYearDraft[]): { gpa10: number 
     for (const sub of yr.subjects) {
       const s1 = typeof sub.semester1Score === "number" ? sub.semester1Score : null;
       const s2 = typeof sub.semester2Score === "number" ? sub.semester2Score : null;
-
-      let subAvg: number | null = null;
-      if (s1 !== null && s2 !== null) {
-        subAvg = (s1 + s2) / 2;
-      } else if (s1 !== null) {
-        subAvg = s1;
-      } else if (s2 !== null) {
-        subAvg = s2;
-      }
+      const subAvg = yearAverage(s1, s2);
 
       if (subAvg !== null && subAvg >= 0 && subAvg <= 10) {
         totalScore10 += subAvg;
@@ -319,10 +320,7 @@ export function calculateGradeTrend(years: AcademicYearDraft[]): GradeTrendInfo 
     for (const sub of yr.subjects) {
       const s1 = typeof sub.semester1Score === "number" ? sub.semester1Score : null;
       const s2 = typeof sub.semester2Score === "number" ? sub.semester2Score : null;
-      let avg: number | null = null;
-      if (s1 !== null && s2 !== null) avg = (s1 + s2) / 2;
-      else if (s1 !== null) avg = s1;
-      else if (s2 !== null) avg = s2;
+      const avg = yearAverage(s1, s2);
 
       if (avg !== null && avg >= 0 && avg <= 10) {
         sum += avg;

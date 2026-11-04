@@ -405,9 +405,9 @@ public class ProfileFlowServiceTests
         Assert.Equal(["CA", "MA"], p.PreferredStates);
         Assert.Equal("private", p.TargetSchoolType);
 
-        // Bước 2: GPA = TB môn (8.5, 7, 9) = 8.17 → 3.27
+        // Bước 2: GPA = TB môn, mỗi môn (HK1 + 2×HK2)/3: (8.67, 7, 9) = 8.22 → 3.29
         Assert.Equal("10", p.GradeScale);
-        Assert.Equal(3.27m, p.OverallGpa);
+        Assert.Equal(3.29m, p.OverallGpa);
         var scores = await repo.GetTranscriptScoresAsync(p.Id);
         Assert.Equal(4, scores.Count);
         var grade12 = Assert.Single(scores, s => s.GradeName == "Lớp 12");
@@ -976,7 +976,7 @@ public class ProfileFlowServiceTests
 
         await service.CommitFlowAsync(userId, new CommitProfileFlowRequest(draft));
 
-        Assert.Equal(3.27m, repo.Profiles.Values.Single(p => p.UserId == userId).OverallGpa);
+        Assert.Equal(3.29m, repo.Profiles.Values.Single(p => p.UserId == userId).OverallGpa);
     }
 
     // gpaMode = overall: thang 10 quy đổi lại sang thang 4, không tin số thang 4 client gửi

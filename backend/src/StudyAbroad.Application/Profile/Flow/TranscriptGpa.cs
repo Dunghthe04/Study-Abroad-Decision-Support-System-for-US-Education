@@ -16,14 +16,25 @@ public static class TranscriptGpa
         : SubjectAverage10(step2) is null ? ProfileConstants.GpaModes.Overall
         : ProfileConstants.GpaModes.Transcript;
 
-    /// <summary>Giống FE: trung bình các môn (mỗi môn = TB HK1, HK2 nếu có), thang 10; null nếu chưa có điểm</summary>
+    /// <summary>
+    /// TB cả năm một môn theo cách tính Việt Nam: HK2 hệ số 2 → (HK1 + 2×HK2) / 3. Chỉ có một kỳ thì lấy kỳ đó,
+    /// không có kỳ nào thì null. Không làm tròn ở đây, chỉ làm tròn số cuối. Giống yearAverage bên FE
+    /// </summary>
+    public static decimal? YearAverage(decimal? semester1, decimal? semester2) => (semester1, semester2) switch
+    {
+        ({ } s1, { } s2) => (s1 + 2 * s2) / 3,
+        ({ } s1, null) => s1,
+        (null, { } s2) => s2,
+        _ => null,
+    };
+
+    /// <summary>Giống FE: trung bình TB cả năm (YearAverage) của các môn, thang 10; null nếu chưa có điểm</summary>
     public static decimal? SubjectAverage10(FlowTranscriptDraftDto? step2)
     {
         var averages = (step2?.AcademicYears ?? [])
             .SelectMany(y => y.Subjects ?? [])
-            .Select(s => new[] { s.Semester1Score, s.Semester2Score }.OfType<decimal>().ToList())
-            .Where(scores => scores.Count > 0)
-            .Select(scores => scores.Average())
+            .Select(s => YearAverage(s.Semester1Score, s.Semester2Score))
+            .OfType<decimal>()
             .ToList();
         return averages.Count > 0 ? Math.Round(averages.Average(), 2) : null;
     }

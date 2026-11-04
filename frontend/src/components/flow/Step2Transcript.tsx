@@ -26,7 +26,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { profileFlowApi } from "@/lib/profile-flow-api";
-import { calculateGradeTrend, calculateLinearGpa, parseTermName, toGpa4 } from "@/lib/profile-flow-options";
+import {
+  calculateGradeTrend,
+  calculateLinearGpa,
+  parseTermName,
+  toGpa4,
+  yearAverage,
+} from "@/lib/profile-flow-options";
 import type {
   AcademicYearDraft,
   CurrentEducationLevel,
@@ -343,19 +349,13 @@ export function Step2Transcript({
   const getYearTargetScore = (y: AcademicYearDraft): number | null => {
     const targetSub = y.subjects.find((s) => s.subjectName === "GPA Mục Tiêu");
     if (targetSub && targetSub.semester1Score != null) return targetSub.semester1Score;
-    let sum = 0;
-    let cnt = 0;
-    for (const s of y.subjects) {
-      if (s.semester1Score != null) {
-        sum += s.semester1Score;
-        cnt++;
-      }
-      if (s.semester2Score != null) {
-        sum += s.semester2Score;
-        cnt++;
-      }
-    }
-    return cnt > 0 ? Math.round((sum / cnt) * 10) / 10 : null;
+    // Không có dòng mục tiêu: TB các môn, mỗi môn = TB cả năm (HK2 hệ số 2). Chỉ làm tròn số hiển thị
+    const averages = y.subjects
+      .map((s) => yearAverage(s.semester1Score ?? null, s.semester2Score ?? null))
+      .filter((avg): avg is number => avg !== null);
+    if (averages.length === 0) return null;
+    const mean = averages.reduce((sum, avg) => sum + avg, 0) / averages.length;
+    return Math.round(mean * 10) / 10;
   };
 
   // Cập nhật điểm mục tiêu của một năm cho học sinh THCS
@@ -1451,12 +1451,9 @@ export function Step2Transcript({
                     {years[activeYearIndex].subjects.map((sub, sIdx, subjects) => {
                       const s1 = typeof sub.semester1Score === "number" ? sub.semester1Score : null;
                       const s2 = typeof sub.semester2Score === "number" ? sub.semester2Score : null;
-                      const avg =
-                        s1 !== null && s2 !== null
-                          ? Math.round(((s1 + s2) / 2) * 10) / 10
-                          : s1 !== null
-                          ? s1
-                          : s2;
+                      // TB cả năm (HK2 hệ số 2), làm tròn 1 chữ số chỉ để hiển thị
+                      const yearAvg = yearAverage(s1, s2);
+                      const avg = yearAvg === null ? null : Math.round(yearAvg * 10) / 10;
 
                       // Sau khi AI điền điểm, ô còn trống trong năm đã có điểm được tô vàng để nhắc kiểm tra
                       const flagEmpty =
