@@ -1,7 +1,8 @@
 """Tính sẵn các dòng chữ cho skill ho_so, để skill chỉ đọc rồi nhận xét, không tự tính.
 
-- Mức GPA / tiếng Anh / SAT / tài chính, bậc ngoại khóa, cơ hội học bổng: lấy từ assess_levels (skill_danh_gia),
-  để chat, trang phân tích và skill cùng một kết luận.
+- GPA, tiếng Anh: so với mốc từ dữ liệu trường (benchmarks: TB AvgGpa4, mốc Min* phổ biến nhất của từng chứng chỉ),
+  ra thấp / trung bình / cao kèm mốc; chưa có mốc thì chỉ ghi điểm.
+- Mức SAT / tài chính, bậc ngoại khóa, cơ hội học bổng: vẫn lấy từ assess_levels (skill_danh_gia).
 - Điểm TB từng năm từ học bạ theo năm (state.transcript): chỉ ghi điểm, SLM tự nhận xét tăng / giảm.
 - Mốc thời gian: chỉ tháng bắt đầu của kỳ là quy ước; hạn nộp lấy từ dữ liệu trường (DeadlinesJson), không có thì không ghi.
 Thiếu dữ liệu thì bỏ khóa, không đoán.
@@ -17,9 +18,7 @@ from app.services.skills.skill_danh_gia import Facts, assess_levels, read_facts
 from app.services.skills.validators import month_index, parse_year_month
 
 # Chữ của từng mức (mức "none" = thiếu dữ liệu, không có chữ)
-ACADEMIC_WORDS = {"strong": "giỏi", "medium": "khá", "weak": "trung bình"}
 SAT_WORDS = {"strong": "cao", "medium": "trung bình", "weak": "thấp"}
-ENGLISH_WORDS = {"excellent": "rất tốt", "good": "khá", "near": "gần đạt", "low": "chưa đạt"}
 FINANCE_WORDS = {"ok": "đủ", "tight": "sát", "short": "thiếu"}
 SCHOLARSHIP_WORDS = {"high": "cao", "medium": "trung bình", "low": "thấp"}
 TEST_NAMES = {
@@ -30,6 +29,9 @@ TEST_NAMES = {
     "sat": "SAT",
     "act": "ACT",
 }
+
+# GPA lệch trong ±0.1 so với TB các trường thì coi là trung bình
+GPA_NEAR = 0.1
 
 # Tháng bắt đầu của từng kỳ nhập học (theo bài ATS). Hạn nộp lấy từ dữ liệu trường, không ghi cứng ở đây
 TERM_START_MONTH = {"Fall": 8, "Spring": 1, "Summer": 5}
@@ -56,20 +58,33 @@ def value_of(profile: dict[str, ProfileField], key: str) -> Any:
     return item.value if item is not None else None
 
 
-def gpa_level(facts: Facts, levels: dict[str, Any], middle_school: bool) -> str | None:
+# Dưới mốc: thấp; bằng (hoặc gần, với GPA): trung bình; trên mốc: cao
+def compare(value: float, mark: float, near: float = 0) -> str:
+    diff = round(value - mark, 2)
+    if abs(diff) <= near:
+        return "trung bình"
+    return "cao" if diff > 0 else "thấp"
+
+
+def gpa_level(facts: Facts, benchmarks: dict | None, middle_school: bool) -> str | None:
     if facts.gpa4 is None:
         return None
-    prefix = "mục tiêu " if middle_school else ""
-    return f"{prefix}{num(facts.gpa4)} thang 4, mức {ACADEMIC_WORDS[levels['academic']]}"
+    text = f"{'mục tiêu ' if middle_school else ''}{num(facts.gpa4)} thang 4"
+    mark = (benchmarks or {}).get("gpa4")
+    if mark is None:
+        return text  # chưa có dữ liệu trường thì chỉ ghi điểm
+    return f"{text}, {compare(facts.gpa4, mark, GPA_NEAR)} (TB các trường {num(mark)})"
 
 
-# Ghi điểm gốc của chứng chỉ (không quy đổi IELTS); PTE chưa có ngưỡng nên chỉ ghi điểm
-def english_level(facts: Facts, levels: dict[str, Any]) -> str | None:
+# So với mốc của đúng chứng chỉ đó, không quy đổi; PTE không có cột mốc nên chỉ ghi điểm
+def english_level(facts: Facts, benchmarks: dict | None) -> str | None:
     if facts.english_type is None or facts.english_score is None:
         return None
     text = f"{test_name(facts.english_type, '')} {num(facts.english_score)}"
-    word = ENGLISH_WORDS.get(levels["english"])
-    return f"{text}, mức {word}" if word else text
+    mark = (benchmarks or {}).get("english", {}).get(facts.english_type)
+    if mark is None:
+        return text
+    return f"{text}, {compare(facts.english_score, mark)} (mốc phổ biến {num(mark)})"
 
 
 # TB từng năm, không so sánh: SLM tự đọc rồi nhận xét đoạn nào tăng, đoạn nào giảm
@@ -123,13 +138,14 @@ def calc_profile(
     transcript: dict | None,
     today: date,
     deadlines: list[dict] | None = None,
+    benchmarks: dict | None = None,
 ) -> dict[str, str]:
     facts = read_facts(profile, today)
     levels = assess_levels(facts)
     result = {
         "grade_by_year": grade_by_year(transcript),
-        "gpa_level": gpa_level(facts, levels, is_middle_school_profile(profile)),
-        "english_level": english_level(facts, levels),
+        "gpa_level": gpa_level(facts, benchmarks, is_middle_school_profile(profile)),
+        "english_level": english_level(facts, benchmarks),
         "sat_level": f"{facts.sat}, mức {SAT_WORDS[levels['sat']]}" if facts.sat is not None else None,
         "budget_level": (
             f"{BUDGET_LABELS[facts.budget_tier]} mỗi năm, mức {FINANCE_WORDS[levels['finance']]}"

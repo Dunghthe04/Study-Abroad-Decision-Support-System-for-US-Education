@@ -162,8 +162,8 @@ def test_skill_input_adds_calculated_lines_after_profile_lines():
 
     assert ho_so["gpa"] == "8 thang 10"  # dòng cũ giữ nguyên
     assert ho_so["grade_by_year"] == "Lớp 10: 7.5; Lớp 11: 7.8"
-    assert ho_so["gpa_level"] == "3.2 thang 4, mức khá"
-    assert ho_so["english_level"] == "IELTS 6.5, mức khá"
+    assert ho_so["gpa_level"] == "3.2 thang 4"  # chưa có mốc trường (bước 5d) thì chỉ ghi điểm
+    assert ho_so["english_level"] == "IELTS 6.5"
     assert ho_so["timeline"] == "hôm nay 11/2026, nhập học kỳ Fall 08/2027, còn 9 tháng"
 
 

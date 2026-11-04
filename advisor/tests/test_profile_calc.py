@@ -6,6 +6,7 @@ from app.schemas.chat import ProfileField
 from app.services.profile_calc import calc_profile
 
 TODAY = date(2026, 11, 5)
+MARKS = {"gpa4": 3.6, "english": {"ielts": 6.5, "toefl": 80, "duolingo": 110}}
 
 
 def prof(**values) -> dict[str, ProfileField]:
@@ -34,22 +35,45 @@ def test_levels_text():
         ),
         None,
         TODAY,
+        benchmarks=MARKS,
     )
-    assert out["gpa_level"] == "3.2 thang 4, mức khá"
-    assert out["english_level"] == "IELTS 6.5, mức khá"
+    assert out["gpa_level"] == "3.2 thang 4, thấp (TB các trường 3.6)"
+    assert out["english_level"] == "IELTS 6.5, trung bình (mốc phổ biến 6.5)"
     assert out["sat_level"] == "1250, mức trung bình"
     assert out["budget_level"] == "35.000 – 50.000 USD mỗi năm, mức sát"
     assert out["scholarship_chance"] == "trung bình"
 
 
-def test_toefl_keeps_own_score_no_ielts():
-    out = calc_profile(prof(english={"type": "toefl", "value": 85}), None, TODAY)
-    assert out["english_level"] == "TOEFL 85, mức khá"
+def english(kind: str, score: float, marks: dict | None = MARKS) -> str:
+    return calc_profile(prof(english={"type": kind, "value": score}), None, TODAY, benchmarks=marks)[
+        "english_level"
+    ]
 
 
-def test_pte_has_score_but_no_level():
-    out = calc_profile(prof(english={"type": "pte", "value": 60}), None, TODAY)
-    assert out["english_level"] == "PTE 60"
+def gpa(value: float, marks: dict | None = MARKS) -> str:
+    return calc_profile(prof(gpa={"value": value, "scale": 4}), None, TODAY, benchmarks=marks)["gpa_level"]
+
+
+def test_english_compares_with_own_certificate_mark():
+    assert english("toefl", 85) == "TOEFL 85, cao (mốc phổ biến 80)"
+    assert english("duolingo", 100) == "Duolingo 100, thấp (mốc phổ biến 110)"
+    assert english("ielts", 6.5) == "IELTS 6.5, trung bình (mốc phổ biến 6.5)"
+
+
+def test_english_without_mark_is_score_only():
+    assert english("pte", 60) == "PTE 60"
+    assert english("ielts", 7, marks=None) == "IELTS 7"
+
+
+def test_gpa_near_mark_is_medium():
+    assert gpa(3.7) == "3.7 thang 4, trung bình (TB các trường 3.6)"
+    assert gpa(3.5) == "3.5 thang 4, trung bình (TB các trường 3.6)"
+    assert gpa(3.75) == "3.75 thang 4, cao (TB các trường 3.6)"
+    assert gpa(3.45) == "3.45 thang 4, thấp (TB các trường 3.6)"
+
+
+def test_gpa_without_mark_is_score_only():
+    assert gpa(3.2, marks=None) == "3.2 thang 4"
 
 
 def test_activities_give_ec_tier():
@@ -59,8 +83,10 @@ def test_activities_give_ec_tier():
 
 
 def test_middle_school_gpa_is_target():
-    out = calc_profile(prof(current_level="middle_school", gpa={"value": 9, "scale": 10}), None, TODAY)
-    assert out["gpa_level"] == "mục tiêu 3.6 thang 4, mức giỏi"
+    out = calc_profile(
+        prof(current_level="middle_school", gpa={"value": 9, "scale": 10}), None, TODAY, benchmarks=MARKS
+    )
+    assert out["gpa_level"] == "mục tiêu 3.6 thang 4, trung bình (TB các trường 3.6)"
 
 
 def test_grade_by_year_lists_scores_without_judging():
