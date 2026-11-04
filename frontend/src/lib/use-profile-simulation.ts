@@ -17,11 +17,17 @@ export interface ProfileSimulation {
   set: (patch: SimulationOverrides) => void; // đặt hoặc xóa (null) các giá trị giả định
   reset: (keys: (keyof SimulationOverrides)[]) => void; // bỏ giả định của một nhóm thanh kéo
   resetAll: () => void;
+  replace: (next: SimulationOverrides) => void; // thay toàn bộ giá trị giả định (chat vừa thử một kịch bản mới)
 }
 
 // basePref: ưu tiên của lần gợi ý đã lưu, dùng làm mặc định để mô phỏng không đổi thứ tự khi người dùng chưa đụng tới thanh ưu tiên.
-export function useProfileSimulation(enabled: boolean, basePref: Pref | null): ProfileSimulation {
-  const [overrides, setOverrides] = useState<SimulationOverrides>({});
+// initial: giá trị giả định có sẵn từ đầu (chat vừa thử một kịch bản); chỉ đọc lúc dựng lần đầu.
+export function useProfileSimulation(
+  enabled: boolean,
+  basePref: Pref | null,
+  initial?: SimulationOverrides,
+): ProfileSimulation {
+  const [overrides, setOverrides] = useState<SimulationOverrides>(initial ?? {});
   const [result, setResult] = useState<SimulationResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -67,8 +73,9 @@ export function useProfileSimulation(enabled: boolean, basePref: Pref | null): P
     [],
   );
   const resetAll = useCallback(() => setOverrides({}), []);
+  const replace = useCallback((next: SimulationOverrides) => setOverrides(next), []);
 
   // Chỉ tính các giá trị người dùng đã kéo; ưu tiên mặc định (basePref) không tính
   const isSimulating = Object.values(overrides).some((v) => v !== undefined && v !== null);
-  return { result, overrides, loading, error, isSimulating, set, reset, resetAll };
+  return { result, overrides, loading, error, isSimulating, set, reset, resetAll, replace };
 }
