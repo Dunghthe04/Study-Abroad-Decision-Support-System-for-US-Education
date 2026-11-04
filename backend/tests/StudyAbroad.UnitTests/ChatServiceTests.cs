@@ -709,7 +709,7 @@ public class ChatServiceTests
         Assert.Null(res.Widget);
     }
 
-    // Có kết quả rồi thì mỗi lượt gửi kèm danh sách trường mới nhất cho advisor; chưa có thì không đọc DB
+    // Có kết quả rồi thì mỗi lượt gửi kèm danh sách trường mới nhất cho advisor. Lấy từ DB, không dựa vào trạng thái chat
     [Fact]
     public async Task WithResults_SendsTheLatestSchoolListToTheAdvisor()
     {
@@ -727,7 +727,7 @@ public class ChatServiceTests
     }
 
     [Fact]
-    public async Task WithoutResults_SendsNoSchoolListAndDoesNotReadTheLatestRecommendation()
+    public async Task ARecommendationMadeOnThePage_IsSentEvenThoughTheChatNeverRanOne()
     {
         var userId = Guid.NewGuid();
         var store = new FakeSessions();
@@ -739,8 +739,24 @@ public class ChatServiceTests
         await new ChatService(advisor, store, new FakeProfileFlow(), null, runner)
             .ChatAsync(userId, new AdvisorChatRequest(Hello, session.Id.ToString()));
 
+        Assert.Equal(new ChatSchool("ASU", "Arizona State University", null), Assert.Single(advisor.LastRequest!.Schools!));
+    }
+
+    [Fact]
+    public async Task WithoutAnyRecommendation_SendsNoSchoolList()
+    {
+        var userId = Guid.NewGuid();
+        var store = new FakeSessions();
+        var session = new ChatSession { UserId = userId, StateJson = "{\"currentStep\":\"B4\"}", CurrentStep = "B4" };
+        store.Rows.Add(session);
+        var runner = new FakeRunner();
+        var advisor = new FakeAdvisor("B4");
+
+        await new ChatService(advisor, store, new FakeProfileFlow(), null, runner)
+            .ChatAsync(userId, new AdvisorChatRequest(Hello, session.Id.ToString()));
+
         Assert.Null(advisor.LastRequest!.Schools);
-        Assert.False(runner.LatestRead);
+        Assert.True(runner.LatestRead);
     }
 
     private sealed class FakeRunner : IRecommendationRunner

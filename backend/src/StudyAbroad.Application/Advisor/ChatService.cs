@@ -51,7 +51,7 @@ namespace StudyAbroad.Application.Advisor
             var profile = ChatProfileMapper.ToChatProfile(flow.Draft, PreviousProfile(state));
 
             // Đã có danh sách trường thì gửi kèm (lấy lần gợi ý mới nhất, kể cả khi học sinh vừa gợi ý lại ở trang khác)
-            var schools = await LatestSchoolsAsync(userId, state, ct);
+            var schools = await LatestSchoolsAsync(userId, ct);
 
             //Gửi request sang Advisor
             var toAdvisor = request with { State = state, Profile = JsonSerializer.SerializeToElement(profile), Schools = schools };
@@ -154,11 +154,12 @@ namespace StudyAbroad.Application.Advisor
             }
         }
 
-        // Danh sách trường của lần gợi ý gần nhất; null khi chưa có kết quả (không cần gửi)
-        private async Task<IReadOnlyList<ChatSchool>?> LatestSchoolsAsync(Guid userId, JsonElement? state, CancellationToken ct)
+        // Danh sách trường của lần gợi ý gần nhất; null khi chưa có kết quả (không cần gửi).
+        // Lấy từ DB chứ không dựa vào trạng thái chat: học sinh có thể đã gợi ý ở trang Gợi ý trường, chat chưa hề chạy gợi ý.
+        // Advisor coi danh sách này là "đã có kết quả"
+        private async Task<IReadOnlyList<ChatSchool>?> LatestSchoolsAsync(Guid userId, CancellationToken ct)
         {
-            if (recommender is null || state is not { ValueKind: JsonValueKind.Object } s
-                || !s.TryGetProperty("hasResults", out var has) || has.ValueKind != JsonValueKind.True)
+            if (recommender is null)
                 return null;
             var last = await recommender.GetLatestAsync(userId, ct);
             return last is null ? null : ChatRecommendation.Schools(last);
