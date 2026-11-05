@@ -228,7 +228,7 @@ export function AdminUsersView() {
         description: lockTarget.email,
       });
       if (detailTarget?.id === lockTarget.id) {
-        setDetailTarget((prev) => prev ? { ...prev, status: "locked" } : null);
+        setDetailTarget((prev) => prev ? { ...prev, status: "locked", lockReason: reason } : null);
       }
       setLockTarget(null);
       setLockReason("");
@@ -632,7 +632,7 @@ export function AdminUsersView() {
                                 type="button"
                                 variant="ghost"
                                 size="sm"
-                                className="h-8 px-2 text-muted-foreground hover:text-foreground"
+                                className="size-8 p-0 text-muted-foreground hover:text-foreground shrink-0 flex items-center justify-center"
                                 onClick={() => setDetailTarget(u)}
                                 title="Xem chi tiết"
                               >
@@ -640,33 +640,35 @@ export function AdminUsersView() {
                                 <span className="sr-only">Chi tiết</span>
                               </Button>
 
-                              {canAdminUnlock(u) ? (
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-8 gap-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950 border-emerald-200"
-                                  onClick={() => openUnlockDialog(u)}
-                                >
-                                  <KeyRoundIcon className="size-3.5" aria-hidden />
-                                  Mở khóa
-                                </Button>
-                              ) : canAdminLock(u) ? (
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-8 gap-1 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950 border-rose-200"
-                                  onClick={() => openLockDialog(u)}
-                                >
-                                  <BanIcon className="size-3.5" aria-hidden />
-                                  Khóa
-                                </Button>
-                              ) : (
-                                <span className="inline-block w-16 text-center text-xs text-muted-foreground">
-                                  —
-                                </span>
-                              )}
+                              <div className="w-[88px] shrink-0 flex items-center justify-end">
+                                {canAdminUnlock(u) ? (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8 w-full gap-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950 border-emerald-200"
+                                    onClick={() => openUnlockDialog(u)}
+                                  >
+                                    <KeyRoundIcon className="size-3.5" aria-hidden />
+                                    Mở khóa
+                                  </Button>
+                                ) : canAdminLock(u) ? (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8 w-full gap-1 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950 border-rose-200"
+                                    onClick={() => openLockDialog(u)}
+                                  >
+                                    <BanIcon className="size-3.5" aria-hidden />
+                                    Khóa
+                                  </Button>
+                                ) : (
+                                  <div className="w-full text-center text-xs text-muted-foreground">
+                                    —
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           </TableCell>
                         </TableRow>
@@ -855,6 +857,22 @@ export function AdminUsersView() {
                   </Badge>
                 </span>
               </div>
+
+              {(detailTarget.status === "locked" || detailTarget.status === "temp_locked") && (
+                <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 space-y-1.5">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-destructive">
+                    <BanIcon className="size-4 shrink-0" />
+                    <span>Lý do khóa tài khoản:</span>
+                  </div>
+                  <div className="text-xs text-foreground leading-relaxed font-medium">
+                    {detailTarget.lockReason || (
+                      detailTarget.status === "temp_locked"
+                        ? "Tài khoản bị tạm khóa 15 phút do nhập sai mật khẩu 5 lần liên tiếp."
+                        : "Vi phạm quy chế sử dụng và chính sách của hệ thống."
+                    )}
+                  </div>
+                </div>
+              )}
               <div className="grid grid-cols-3 gap-2 border-b pb-2">
                 <span className="text-muted-foreground font-medium">Số điện thoại:</span>
                 <span className="col-span-2 text-foreground">{detailTarget.phone ?? "Chưa cung cấp"}</span>

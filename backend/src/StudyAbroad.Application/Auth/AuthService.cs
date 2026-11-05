@@ -689,11 +689,23 @@ namespace StudyAbroad.Application.Auth
         private async Task<UserDto> ToDtoAsync(User user, CancellationToken ct)
         {
             var access = await AgeAccess.EvaluateAsync(user, parentLinks, DateTime.UtcNow, ct);
+            string? lockReason = null;
+            if (user.Status == UserStatuses.Locked)
+            {
+                lockReason = await auditLogs.GetLatestLockReasonAsync(user.Id, ct) ?? "Tài khoản bị khóa bởi quản trị viên do vi phạm quy định sử dụng.";
+            }
+            else if (user.Status == UserStatuses.TempLocked)
+            {
+                lockReason = "Nhập sai mật khẩu 5 lần liên tiếp. Tài khoản bị tạm khóa bảo vệ trong 15 phút.";
+            }
+
             return ToDto(user) with
             {
                 AgeGroup = access.AgeGroup,
                 ParentConsentStatus = access.ParentConsentStatus,
                 BlockedFeatures = access.BlockedFeatures,
+                LockReason = lockReason,
+                LockoutEnd = user.LockoutEnd,
             };
         }
 
@@ -732,8 +744,23 @@ namespace StudyAbroad.Application.Auth
             };
 
             var page = await users.GetAdminUserAccountListAsync(normalized, ct);
+            var dtos = new List<UserDto>(page.Items.Count);
+            foreach (var item in page.Items)
+            {
+                string? lockReason = null;
+                if (item.Status == UserStatuses.Locked)
+                {
+                    lockReason = await auditLogs.GetLatestLockReasonAsync(item.Id, ct) ?? "Tài khoản bị khóa bởi quản trị viên do vi phạm quy định sử dụng.";
+                }
+                else if (item.Status == UserStatuses.TempLocked)
+                {
+                    lockReason = "Nhập sai mật khẩu 5 lần liên tiếp. Tài khoản bị tạm khóa bảo vệ trong 15 phút.";
+                }
+                dtos.Add(ToDto(item) with { LockReason = lockReason, LockoutEnd = item.LockoutEnd });
+            }
+
             return new PagedResult<UserDto>(
-                page.Items.Select(ToDto).ToList(),
+                dtos,
                 page.Page,
                 page.PageSize,
                 page.TotalCount);
@@ -892,7 +919,7 @@ namespace StudyAbroad.Application.Auth
                 DetailJson = detailJson,
             }, ct);
 
-            return AuthResult.Ok(ToDto(user), "Đã khóa tài khoản.");
+            return AuthResult.Ok(ToDto(user) with { LockReason = reason }, "Đã khóa tài khoản.");
         }
 
         /// <summary>[UC-62] Mở khóa tài khoản kèm lý do (chỉ tài khoản đang bị locked hoặc temp_locked).</summary>

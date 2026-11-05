@@ -34,7 +34,8 @@ namespace StudyAbroad.Application.Auth
     // [Q11] AgeGroup (child/minor/adult, null nếu không áp), ParentConsentStatus (granted/pending/none/not_required),
     // BlockedFeatures: các chức năng trong AgeFeatures.Rules đang bị chặn (server tính, frontend chỉ dùng để ẩn nút).
     public record UserDto(Guid Id, string Email, string FullName, string Role, string Status, string? Phone = null,
-        string? AgeGroup = null, string? ParentConsentStatus = null, List<string>? BlockedFeatures = null);
+        string? AgeGroup = null, string? ParentConsentStatus = null, List<string>? BlockedFeatures = null,
+        string? LockReason = null, DateTime? LockoutEnd = null);
 
     // [USAS-362] Kết quả đăng nhập thành công. AccessToken chỉ dùng để đặt HttpOnly cookie, controller không trả nó trong body
     public record AuthResponse(string AccessToken, DateTime ExpiresAt, UserDto User);

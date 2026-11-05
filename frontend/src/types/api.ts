@@ -156,6 +156,8 @@ export interface UserDto {
   ageGroup?: "child" | "minor" | "adult" | null;
   parentConsentStatus?: "granted" | "pending" | "none" | "not_required" | null;
   blockedFeatures?: string[] | null;
+  lockReason?: string | null;
+  lockoutEnd?: string | null;
 }
 
 // Token chỉ nằm trong HttpOnly cookie, body không chứa token

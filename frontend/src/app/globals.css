@@ -218,3 +218,64 @@
   font-variant-numeric: tabular-nums;
   font-weight: 600;
 }
+
+/* ==========================================================================
+   Tự động ẩn/hiện và làm mờ thanh cuộn (Auto-hide & subtle slim scrollbar)
+   - Thanh cuộn mỏng (6px), bo góc tròn, màu mờ nhẹ nhàng.
+   - Khi dừng cuộn: tự động ẩn hoàn toàn (trong suốt).
+   - Khi cuộn tiếp: hiện lại.
+   ========================================================================== */
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 9999px;
+  min-height: 36px;
+}
+
+/* Khi đang cuộn (is-scrolling) hoặc khi rê chuột trực tiếp vào thanh cuộn */
+*.is-scrolling::-webkit-scrollbar-thumb {
+  background-color: rgba(100, 116, 139, 0.38);
+}
+
+*.is-scrolling::-webkit-scrollbar-thumb:hover,
+*::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(100, 116, 139, 0.65);
+}
+
+.dark *.is-scrolling::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.28);
+}
+
+.dark *.is-scrolling::-webkit-scrollbar-thumb:hover,
+.dark *::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.55);
+}
+
+/* Hỗ trợ Firefox / W3C */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+*.is-scrolling {
+  scrollbar-color: rgba(100, 116, 139, 0.38) transparent;
+}
+
+.dark *.is-scrolling {
+  scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
+}
+
+/* Không hiện scrollbar với phần tử có cấu hình riêng */
+.no-scrollbar::-webkit-scrollbar,
+[class*="[scrollbar-width:none]"]::-webkit-scrollbar {
+  display: none !important;
+}

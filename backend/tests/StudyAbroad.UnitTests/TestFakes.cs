@@ -182,6 +182,30 @@ internal sealed class FakeAuditLogRepository : IAuditLogRepository
         Entries.Add(entry);
         return Task.CompletedTask;
     }
+
+    public Task<string?> GetLatestLockReasonAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        var idStr = userId.ToString();
+        var last = Entries
+            .Where(x => x.Action == "user.lock" && x.EntityId == idStr)
+            .OrderByDescending(x => x.CreatedAt)
+            .FirstOrDefault();
+
+        if (last == null || string.IsNullOrEmpty(last.DetailJson)) return Task.FromResult<string?>(null);
+
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(last.DetailJson);
+            if (doc.RootElement.TryGetProperty("reason", out var r))
+            {
+                return Task.FromResult<string?>(r.GetString());
+            }
+        }
+        catch
+        {
+        }
+        return Task.FromResult<string?>(null);
+    }
 }
 
 internal sealed class FakeEmailSender : IEmailSender
