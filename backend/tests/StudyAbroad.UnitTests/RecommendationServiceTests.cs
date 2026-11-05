@@ -212,6 +212,57 @@ public class RecommendationServiceTests
         Assert.Equal(0, items.RootElement.GetProperty("scored").GetArrayLength());
     }
 
+    // Thông báo tiếng Anh nằm trong criteria_json của lượt gợi ý
+    [Fact]
+    public async Task Recommend_English_TheCriteriaCarryTheHiddenCountAndTheLadder()
+    {
+        var (service, _, store) = Setup();
+        var profile = Profile();
+        profile.Ielts = 5.5m;
+        var strict = School("Strict", 30_000m, "none", Major, sat: (1200, 1380), accept: 0.6m, avgGpa: 3.5m, minIelts: 7.0m);   // thiếu 1,5 band: bị ẩn
+        var open = School("Open", 30_000m, "none", Major, sat: (1200, 1380), accept: 0.6m, avgGpa: 3.5m, minIelts: 6.0m);       // thiếu 0,5 band: giữ
+
+        await service.RecommendAsync(profile, [], [strict, open]);
+
+        using var criteria = JsonDocument.Parse(store.Rows.Single().CriteriaJson);
+        var english = criteria.RootElement.GetProperty("english");
+        Assert.Equal(1, english.GetProperty("hidden").GetInt32());
+        Assert.False(english.GetProperty("noCertificate").GetBoolean());
+        var ladder = english.GetProperty("ladder");
+        Assert.Equal(1, ladder.GetArrayLength());
+        Assert.Equal(6.5, ladder[0].GetProperty("ielts").GetDouble());
+        Assert.Equal(2, ladder[0].GetProperty("eligible").GetInt32());   // đạt IELTS 6,5 thì cả hai trường đủ điều kiện
+    }
+
+    [Fact]
+    public async Task Recommend_English_TheCriteriaHaveNoNotice_WhenEnglishHidesNothing()
+    {
+        var (service, _, store) = Setup();
+        var school = School("Open", 30_000m, "none", Major, sat: (1200, 1380), accept: 0.6m, avgGpa: 3.5m, minIelts: 6.0m);
+
+        await service.RecommendAsync(Profile(), [], [school]);
+
+        using var criteria = JsonDocument.Parse(store.Rows.Single().CriteriaJson);
+        Assert.Equal(JsonValueKind.Null, criteria.RootElement.GetProperty("english").ValueKind);
+    }
+
+    [Fact]
+    public async Task Recommend_English_AnEmptyListBecauseOfEnglishStillCarriesTheNotice()
+    {
+        var (service, _, store) = Setup();
+        var profile = Profile();
+        profile.Ielts = null;   // chưa có chứng chỉ nào
+        var school = School("Open", 30_000m, "none", Major, sat: (1200, 1380), accept: 0.6m, avgGpa: 3.5m, minIelts: 6.0m);
+
+        await service.RecommendAsync(profile, [], [school]);
+
+        using var criteria = JsonDocument.Parse(store.Rows.Single().CriteriaJson);
+        Assert.Equal(JsonValueKind.Null, criteria.RootElement.GetProperty("status").ValueKind);   // không còn trường nào để chọn
+        var english = criteria.RootElement.GetProperty("english");
+        Assert.True(english.GetProperty("noCertificate").GetBoolean());
+        Assert.Equal(1, english.GetProperty("hidden").GetInt32());
+    }
+
     // Học sinh không có IELTS: thành phần E tính từ bài thi học sinh có, so với mức tối thiểu cùng bài của trường
     [Theory]
     [InlineData(70, null, 0.33)]    // TOEFL 70 so với mức 80: thiếu 10 điểm, 10 / 15 = 0,67 band
