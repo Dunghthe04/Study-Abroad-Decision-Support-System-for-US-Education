@@ -48,6 +48,9 @@ class ChatState(CamelModel):
     # Học bạ theo năm do .NET gửi mỗi lượt cùng hồ sơ; None = nhập GPA tổng. Không nằm trong profile vì chat chỉ đọc
     # (học bạ từng lớp chỉ nhập hoặc OCR ở form), SLM chọn skill và Qwen đọc tin không cần thấy
     transcript: dict[str, Any] | None = None
+    # Mốc từ dữ liệu trường cùng bậc học ({"gpa4": 3.6, "english": {"ielts": 6.5, ...}}), .NET tính và gửi mỗi lượt;
+    # chỉ dùng để ghi mức GPA / tiếng Anh cho skill ho_so. None = chưa có dữ liệu trường thì chỉ ghi điểm
+    benchmarks: dict[str, Any] | None = None
     study_level: StudyLevel | None = None  # bậc học học sinh quan tâm (từ .NET), dùng để lọc kiến thức
 
 
@@ -81,6 +84,8 @@ class ChatRequest(CamelModel):
     schools: list[ResultSchool] | None = None
     # Học bạ theo năm ({"years": [...]}) do .NET gửi cùng hồ sơ; None = không có (nhập GPA tổng)
     transcript: dict[str, Any] | None = None
+    # Mốc GPA / tiếng Anh từ dữ liệu trường do .NET gửi mỗi lượt; None = không gửi (giữ mốc cũ trong state)
+    benchmarks: dict[str, Any] | None = None
 
 
 class ChatResponse(CamelModel):

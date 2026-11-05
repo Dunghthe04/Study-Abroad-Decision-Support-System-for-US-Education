@@ -47,6 +47,7 @@ public static class DependencyInjection
         services.AddScoped<IRecommendationRepository, RecommendationRepository>();
         services.AddScoped<IChatSessionRepository, ChatSessionRepository>();
         services.AddScoped<IChatAnalysisRepository, ChatAnalysisRepository>();
+        services.AddScoped<IChatBenchmarkRepository, ChatBenchmarkRepository>();
 
 
         // [USAS-362] Đăng ký JWT Token Service (Ưu tiên nạp key từ biến môi trường JWT_SECRET_KEY).

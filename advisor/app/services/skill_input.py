@@ -175,5 +175,9 @@ def profile_to_skill_input(profile: dict[str, ProfileField]) -> dict[str, str]:
 # Hạn nộp của trường chưa có đường gửi sang nên timeline tạm chỉ có tháng nhập học
 def skill_input_of(state: ChatState, today: datetime.date | None = None) -> dict[str, str]:
     result = profile_to_skill_input(state.profile)
-    result.update(calc_profile(state.profile, state.transcript, today or datetime.date.today()))
+    result.update(
+        calc_profile(
+            state.profile, state.transcript, today or datetime.date.today(), benchmarks=state.benchmarks
+        )
+    )
     return result

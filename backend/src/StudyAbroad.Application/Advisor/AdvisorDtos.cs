@@ -13,6 +13,7 @@ public record AdvisorStreamEvent(string Type, int? Answers = null, string? Text 
 /// <param name="Profile">Hồ sơ hiện tại (khóa chat → {value, status}) do .NET gửi mỗi lượt; null = không gửi.</param>
 /// <param name="Schools">Trường của lần gợi ý gần nhất, chỉ gửi khi đã có kết quả; skill_explain dùng để biết học sinh nói trường nào.</param>
 /// <param name="Transcript">Học bạ theo năm (ChatTranscript), gửi riêng ngoài Profile vì chat chỉ đọc; null = nhập GPA tổng.</param>
+/// <param name="Benchmarks">Mốc GPA / tiếng Anh từ dữ liệu trường (ChatBenchmarks) cho skill ho_so; null = chưa có dữ liệu.</param>
 public record AdvisorChatRequest(
     IReadOnlyList<ChatMessage> Messages,
     string? SessionId = null,
@@ -20,7 +21,8 @@ public record AdvisorChatRequest(
     JsonElement? State = null,
     JsonElement? Profile = null,
     IReadOnlyList<ChatSchool>? Schools = null,
-    JsonElement? Transcript = null);
+    JsonElement? Transcript = null,
+    JsonElement? Benchmarks = null);
 
 /// <summary>Một trường trong danh sách gợi ý. Group là mã nhóm đã chấm (R, RF, M, S, NA, O), advisor đổi sang chữ.</summary>
 public record ChatSchool(string Code, string Name, string? Group);
