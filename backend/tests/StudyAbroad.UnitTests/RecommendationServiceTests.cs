@@ -26,21 +26,12 @@ public class RecommendationServiceTests
     };
 
     private static (RecommendationService Service, FakeAdvisor Advisor, FakeRecommendationRepository Store) Setup(
-        StudentProfile? profile = null, IReadOnlyList<RecommendSchoolInput>? schools = null,
-        IReadOnlyList<ProfileActivity>? activities = null)
+        StudentProfile? profile = null, IReadOnlyList<RecommendSchoolInput>? schools = null)
     {
         var advisor = new FakeAdvisor();
         var store = new FakeRecommendationRepository(schools ?? []);
-        return (new RecommendationService(advisor, store, new FakeProfileFlow(profile, activities)), advisor, store);
+        return (new RecommendationService(advisor, store, new FakeProfileFlow(profile)), advisor, store);
     }
-
-    // Bốn hoạt động sáng lập cấp quốc tế 24 tháng: điểm gộp tối đa nên bậc 5
-    private static List<ProfileActivity> StrongActivities() => Enumerable.Range(0, 4)
-        .Select(i => new ProfileActivity
-        {
-            Kind = "extracurricular", Title = $"Hoạt động {i}", Role = "founder", ImpactLevel = 5, DurationMonths = 24
-        })
-        .ToList();
 
     // ---------------------------------------------------------------- luồng chính
 
@@ -56,7 +47,7 @@ public class RecommendationServiceTests
             School("D", 20_000m, "none", "History", sat: (1200, 1380), accept: 0.60m)                 // sai ngành
         };
 
-        await service.RecommendAsync(profile, [], schools);
+        await service.RecommendAsync(profile, schools);
 
         Assert.Empty(advisor.Calls);   // gợi ý trường chạy hoàn toàn bằng code, không gọi advisor
 
@@ -80,7 +71,7 @@ public class RecommendationServiceTests
         Assert.Contains("BUDGET_OK", why);
         Assert.Contains("NEED_AID", root.GetProperty("aid")[0].GetProperty("why").EnumerateArray().Select(w => w.GetString()));
 
-        Assert.Equal(1, criteria.RootElement.GetProperty("tier").GetInt32());   // chưa khai hoạt động nào
+        Assert.Equal(3, criteria.RootElement.GetProperty("tier").GetInt32());   // hồ sơ chưa có bậc ngoại khóa: coi là trung bình
         Assert.Equal("OK", criteria.RootElement.GetProperty("status").GetString());
     }
 
@@ -88,7 +79,7 @@ public class RecommendationServiceTests
     public async Task Recommend_SavedJsonKeepsTheShapeTheFrontendReads()
     {
         var (service, _, store) = Setup();
-        await service.RecommendAsync(Profile(), [], [School("B", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m)]);
+        await service.RecommendAsync(Profile(), [School("B", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m)]);
 
         using var items = JsonDocument.Parse(store.Rows.Single().ItemsJson);
         var row = items.RootElement.GetProperty("scored")[0];
@@ -114,8 +105,8 @@ public class RecommendationServiceTests
         var (service1, _, store1) = Setup();
         var (service2, _, store2) = Setup();
 
-        await service1.RecommendAsync(Profile(), [], schools);
-        await service2.RecommendAsync(Profile(), [], schools.AsEnumerable().Reverse().ToList());
+        await service1.RecommendAsync(Profile(), schools);
+        await service2.RecommendAsync(Profile(), schools.AsEnumerable().Reverse().ToList());
 
         Assert.Equal(store1.Rows.Single().ItemsJson, store2.Rows.Single().ItemsJson);
     }
@@ -128,7 +119,7 @@ public class RecommendationServiceTests
             .Select(i => School($"S{i}", 30_000m + i * 100, "none", Major, sat: (1200, 1380), accept: 0.6m, avgGpa: 3.5m))
             .ToList();
 
-        await service.RecommendAsync(Profile(), [], schools);
+        await service.RecommendAsync(Profile(), schools);
 
         using var items = JsonDocument.Parse(store.Rows.Single().ItemsJson);
         Assert.Equal(4, items.RootElement.GetProperty("match").GetArrayLength());
@@ -142,7 +133,7 @@ public class RecommendationServiceTests
     {
         var (service, _, store) = Setup();
 
-        await service.RecommendAsync(Profile(), [], [School("Bare", 30_000m, "none", Major)]);
+        await service.RecommendAsync(Profile(), [School("Bare", 30_000m, "none", Major)]);
 
         using var items = JsonDocument.Parse(store.Rows.Single().ItemsJson);
         Assert.Equal("NA", items.RootElement.GetProperty("scored")[0].GetProperty("g2").GetString());
@@ -157,7 +148,7 @@ public class RecommendationServiceTests
         // 100 / 1.000 = 10% dưới 15%: luôn Khó vào dù điểm cao
         var school = School("Picky", 30_000m, "none", Major, sat: (1000, 1100), avgGpa: 3.0m, admitted: 100, applicants: 1_000);
 
-        await service.RecommendAsync(Profile(), [], [school]);
+        await service.RecommendAsync(Profile(), [school]);
 
         using var items = JsonDocument.Parse(store.Rows.Single().ItemsJson);
         Assert.Equal("R", items.RootElement.GetProperty("scored")[0].GetProperty("g2").GetString());
@@ -176,7 +167,7 @@ public class RecommendationServiceTests
         profile.Ielts = 6.5m;
         var school = School("Strict", 30_000m, "none", Major, sat: (1200, 1380), accept: 0.6m, avgGpa: 3.5m, minIelts: 7.0m);
 
-        await service.RecommendAsync(profile, [], [school]);
+        await service.RecommendAsync(profile, [school]);
 
         using var items = JsonDocument.Parse(store.Rows.Single().ItemsJson);
         var row = items.RootElement.GetProperty("scored")[0];
@@ -321,7 +312,7 @@ public class RecommendationServiceTests
         var ranked = School("Top", 30_000m, "none", Major, sat: (1200, 1380), accept: 0.6m, avgGpa: 3.5m, rank: (10, 100));
         var unranked = School("None", 30_000m, "none", Major, sat: (1200, 1380), accept: 0.6m, avgGpa: 3.5m);
 
-        await service.RecommendAsync(Profile(), [], [ranked, unranked]);
+        await service.RecommendAsync(Profile(), [ranked, unranked]);
 
         using var items = JsonDocument.Parse(store.Rows.Single().ItemsJson);
         var rows = items.RootElement.GetProperty("scored").EnumerateArray().ToDictionary(e => e.GetProperty("code").GetString()!);
@@ -334,7 +325,7 @@ public class RecommendationServiceTests
     {
         var (service, advisor, store) = Setup();
 
-        await service.RecommendAsync(Profile(), [], [School("D", 20_000m, "none", "History", sat: (1200, 1380))]);
+        await service.RecommendAsync(Profile(), [School("D", 20_000m, "none", "History", sat: (1200, 1380))]);
 
         Assert.Empty(advisor.Calls);
         using var criteria = JsonDocument.Parse(store.Rows.Single().CriteriaJson);
@@ -343,32 +334,36 @@ public class RecommendationServiceTests
         Assert.Equal(0, items.RootElement.GetProperty("scored").GetArrayLength());
     }
 
+    // Bậc ngoại khóa do phần hồ sơ tính và lưu; gợi ý trường chỉ đọc. Chưa có bậc thì coi là trung bình (3).
     [Fact]
-    public async Task Recommend_TheEcTierComesFromTheActivitiesInTheProfile()
+    public async Task Recommend_TheEcTierIsReadFromTheProfile_AndABlankOneMeansAverage()
     {
         var (service, _, store) = Setup();
         var school = School("S", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.6m, avgGpa: 3.5m);
+        var strong = Profile();
+        strong.ExtracurricularTier = 5;
 
-        await service.RecommendAsync(Profile(), StrongActivities(), [school]);
-        await service.RecommendAsync(Profile(), [], [school]);
+        await service.RecommendAsync(strong, [school]);
+        await service.RecommendAsync(Profile(), [school]);
 
-        using var strong = JsonDocument.Parse(store.Rows[0].CriteriaJson);
-        using var none = JsonDocument.Parse(store.Rows[1].CriteriaJson);
-        Assert.Equal(5, strong.RootElement.GetProperty("tier").GetInt32());
-        Assert.Equal(1, none.RootElement.GetProperty("tier").GetInt32());
+        using var withTier = JsonDocument.Parse(store.Rows[0].CriteriaJson);
+        using var blank = JsonDocument.Parse(store.Rows[1].CriteriaJson);
+        Assert.Equal(5, withTier.RootElement.GetProperty("tier").GetInt32());
+        Assert.Equal(3, blank.RootElement.GetProperty("tier").GetInt32());
     }
 
     [Fact]
-    public async Task Recommend_ActivitiesChangeTheGroupOnlyAtSchoolsThatCareAboutThem()
+    public async Task Recommend_TheEcTierChangesTheGroupOnlyAtSchoolsThatCareAboutIt()
     {
         var (service, _, store) = Setup();
         var profile = Profile();
         profile.OverallGpa = null;
         profile.Sat = 985m;   // p ≈ 0,22
+        profile.ExtracurricularTier = 5;
         var cares = School("Cares", 38_000m, "none", Major, sat: (1000, 1200), accept: 0.6m, ec: "very_important");
         var ignores = School("Ignores", 38_000m, "none", Major, sat: (1000, 1200), accept: 0.6m, ec: "not_considered");
 
-        await service.RecommendAsync(profile, StrongActivities(), [cares, ignores]);
+        await service.RecommendAsync(profile, [cares, ignores]);
 
         using var items = JsonDocument.Parse(store.Rows.Single().ItemsJson);
         var groups = items.RootElement.GetProperty("scored").EnumerateArray()
@@ -388,7 +383,7 @@ public class RecommendationServiceTests
         var (service, advisor, store) = Setup();
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            service.RecommendAsync(Profile(need), [], [School("B", 38_000m, "none", Major)]));
+            service.RecommendAsync(Profile(need), [School("B", 38_000m, "none", Major)]));
 
         Assert.Equal(RecommendationService.MissingScholarshipMessage, ex.Message);
         Assert.StartsWith("Hồ sơ", ex.Message); // controller trả 400, không phải 502
@@ -404,7 +399,7 @@ public class RecommendationServiceTests
         var (service, advisor, store) = Setup();
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            service.RecommendAsync(Profile(major: major), [], [School("B", 38_000m, "none", Major)]));
+            service.RecommendAsync(Profile(major: major), [School("B", 38_000m, "none", Major)]));
 
         Assert.Equal(RecommendationService.MissingMajorMessage, ex.Message);
         Assert.StartsWith("Hồ sơ", ex.Message);
@@ -417,7 +412,7 @@ public class RecommendationServiceTests
     {
         var (service, advisor, _) = Setup();
 
-        await service.RecommendAsync(Profile(ProfileConstants.ScholarshipNeeds.Optional), [], [School("B", 38_000m, "none", Major)]);
+        await service.RecommendAsync(Profile(ProfileConstants.ScholarshipNeeds.Optional), [School("B", 38_000m, "none", Major)]);
 
         Assert.Empty(advisor.Calls); // "không cần" là lựa chọn thật, vẫn chạy
     }
@@ -435,7 +430,7 @@ public class RecommendationServiceTests
         };
         var (service, advisor, store) = Setup(profile, schools);
 
-        await service.RecommendAsync(profile, [], schools, [4, 2, 0]);
+        await service.RecommendAsync(profile, schools, [4, 2, 0]);
         var costFirst = MatchOrder(store.Rows.Last());
         var again = await service.RepickAsync(profile.UserId, [0, 2, 4], default);
         var qualityFirst = MatchOrder(again);
@@ -446,7 +441,7 @@ public class RecommendationServiceTests
         Assert.Equal(["Famous", "Cheap"], qualityFirst);
         using var criteria = JsonDocument.Parse(again.CriteriaJson);
         Assert.Equal(0, criteria.RootElement.GetProperty("pref")[0].GetInt32());
-        Assert.Equal(1, criteria.RootElement.GetProperty("tier").GetInt32());   // bậc tính từ hoạt động trong hồ sơ (chưa có)
+        Assert.Equal(3, criteria.RootElement.GetProperty("tier").GetInt32());   // bậc đọc từ hồ sơ (chưa có): trung bình
     }
 
     [Fact]
@@ -460,7 +455,7 @@ public class RecommendationServiceTests
         };
         var (service, _, store) = Setup(profile, schools);
 
-        await service.RecommendAsync(profile, [], schools);
+        await service.RecommendAsync(profile, schools);
         var again = await service.RepickAsync(profile.UserId, [4, 0, 0], default);
 
         using var a = JsonDocument.Parse(store.Rows[0].ItemsJson);
@@ -493,20 +488,21 @@ public class RecommendationServiceTests
 
     // Hồ sơ thật: GPA 3,5, SAT 1290 (đúng giữa trường S nên p = 0,5, Vừa sức). Trường S: SAT 1200–1380, GPA trung bình 3,5, nhận 60%.
     private static (RecommendationService Service, FakeAdvisor Advisor, FakeRecommendationRepository Store, StudentProfile Profile) SimSetup(
-        IReadOnlyList<RecommendSchoolInput>? schools = null, IReadOnlyList<ProfileActivity>? activities = null)
+        IReadOnlyList<RecommendSchoolInput>? schools = null, int? ecTier = null)
     {
         var profile = Profile();
+        profile.ExtracurricularTier = ecTier;
         profile.OverallGpa = 3.5m;
         profile.Sat = 1290m;
         var list = schools ?? [School("S", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m)];
-        var (service, advisor, store) = Setup(profile, list, activities);
+        var (service, advisor, store) = Setup(profile, list);
         return (service, advisor, store, profile);
     }
 
     [Fact]
     public async Task Simulate_ReturnsTheRealProfileValuesForTheSliders()
     {
-        var (service, _, _, profile) = SimSetup(activities: StrongActivities());
+        var (service, _, _, profile) = SimSetup(ecTier: 5);
         profile.Act = 28m;
 
         // đổi giá trị giả định không làm đổi "hồ sơ thật" trong kết quả
@@ -672,9 +668,9 @@ public class RecommendationServiceTests
     }
 
     [Fact]
-    public async Task Simulate_UsesTheEcTierComputedFromTheSavedActivities()
+    public async Task Simulate_UsesTheEcTierSavedInTheProfile()
     {
-        var (service, _, store, profile) = SimSetup(activities: StrongActivities());
+        var (service, _, store, profile) = SimSetup(ecTier: 5);
 
         var result = await service.SimulateAsync(profile.UserId, NoChange, null, default);
 
@@ -684,14 +680,14 @@ public class RecommendationServiceTests
     }
 
     [Fact]
-    public async Task Simulate_WithoutAnyActivity_UsesTierOne()
+    public async Task Simulate_WithoutASavedEcTier_UsesTheAverageTier()
     {
         var (service, _, _, profile) = SimSetup();
 
         var result = await service.SimulateAsync(profile.UserId, NoChange, null, default);
 
         using var criteria = JsonDocument.Parse(result.CriteriaJson);
-        Assert.Equal(1, criteria.RootElement.GetProperty("tier").GetInt32());
+        Assert.Equal(3, criteria.RootElement.GetProperty("tier").GetInt32());
     }
 
     [Fact]
@@ -756,7 +752,7 @@ public class RecommendationServiceTests
             School("B", 40_000m, "none", Major, sat: (1200, 1380), accept: 0.6m, avgGpa: 3.5m),
         };
         var (service, _, store) = Setup(profile, schools);
-        await service.RecommendAsync(profile, [], schools, [3, 1, 1]);
+        await service.RecommendAsync(profile, schools, [3, 1, 1]);
 
         var result = await service.SimulateAsync(profile.UserId, NoChange, [3, 1, 1], default);
 
@@ -778,7 +774,7 @@ public class RecommendationServiceTests
         var schools = new[] { withImages, logoOnly, without };
         var (service, _, store) = Setup(profile, schools);
 
-        await service.RecommendAsync(profile, [], schools);
+        await service.RecommendAsync(profile, schools);
 
         using var items = JsonDocument.Parse(store.Rows.Single().ItemsJson);
         var scored = items.RootElement.GetProperty("scored").EnumerateArray().ToDictionary(e => e.GetProperty("code").GetString()!);
@@ -879,7 +875,7 @@ public class RecommendationServiceTests
         Assert.True(result.Recommended!.Effort >= result.Cheapest!.Effort);
         // Áp mức nên đặt mục tiêu vào hồ sơ: vẫn là Vừa sức dù ngưỡng nhóm đã nâng thêm khoảng đệm
         var school = new SchoolAcademics(3.5m, null, 1200, 1380, null, null, null, null, null, null, "very_important", 0.60m, null);
-        var student = new StudentAcademics(3.0m, 1000, null, 1);
+        var student = new StudentAcademics(3.0m, 1000, null, AcademicBlend.NeutralEcTier);   // hồ sơ chưa có bậc ngoại khóa
         foreach (var change in result.Recommended.Changes)
         {
             student = change.Factor switch

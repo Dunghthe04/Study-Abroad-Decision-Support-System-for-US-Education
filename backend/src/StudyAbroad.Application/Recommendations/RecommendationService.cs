@@ -56,7 +56,7 @@ public record GroupSummary(int Kept, int Reach, int Match, int Safety, int AidBl
 // Một trường đổi trạng thái giữa hồ sơ thật và hồ sơ giả định. Trạng thái: R, M, S, NA, AID (cần học bổng lớn), OUT (bị loại).
 public record SchoolChange(string Code, string Name, string From, string To);
 
-// Giá trị của hồ sơ thật, để thanh kéo hiện "hồ sơ" bên cạnh "giả định". EcTier là bậc tính từ các hoạt động trong hồ sơ.
+// Giá trị của hồ sơ thật, để thanh kéo hiện "hồ sơ" bên cạnh "giả định". EcTier là bậc ngoại khóa đã lưu trong hồ sơ (bậc 3 nếu chưa có).
 public record SimulationProfile(
     decimal? Gpa, int? Sat, int? Act, decimal? Ielts, decimal? BudgetUsd, string? ScholarshipNeed, int EcTier,
     decimal? Toefl = null, decimal? Duolingo = null, int ActivityCount = 0, int AwardCount = 0);
@@ -81,13 +81,16 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
 
     public Task<RecommendationRun> RecommendAsync(
         StudentProfile profile,
-        IReadOnlyList<ProfileActivity> activities,
         IReadOnlyList<RecommendSchoolInput> schools, // dánh sách các trường active và đúng bậc học
         IReadOnlyList<int>? pref = null,
         CancellationToken ct = default
-    ) => RunAsync(profile, schools, pref, ActivityTier.FromProfile(activities).Tier, ct);
+    ) => RunAsync(profile, schools, pref, EcTierOf(profile), ct);
 
-    // Lọc cứng, chấm nhóm và fit score bằng code, chọn các khối, lưu. Bậc ngoại khóa tính từ hoạt động đã lưu trong hồ sơ.
+    // Bậc ngoại khóa do phần hồ sơ tính và lưu (cột extracurricular_tier), gợi ý trường chỉ đọc ra, không tự tính lại.
+    // Hồ sơ chưa có bậc thì coi là trung bình (bậc 3): không hiệu chỉnh p', học sinh không bị trừ điểm chỉ vì chưa khai.
+    private static int EcTierOf(StudentProfile profile) => profile.ExtracurricularTier ?? AcademicBlend.NeutralEcTier;
+
+    // Lọc cứng, chấm nhóm và fit score bằng code, chọn các khối, lưu. Bậc ngoại khóa lấy từ hồ sơ (xem EcTierOf).
     private async Task<RecommendationRun> RunAsync(
         StudentProfile profile,
         IReadOnlyList<RecommendSchoolInput> schools,
@@ -212,18 +215,16 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
         if (string.IsNullOrWhiteSpace(profile.TargetLevel))
             throw new InvalidOperationException("Hồ sơ chưa có bậc học muốn theo.");
 
-        //Lấy ra các activity, giải thưởng
-        var activities = await profiles.GetProfileActivitiesAsync(profile.Id, ct);
         //Lấy ra danh sách trường active và đúng bậc học
         var schools = await recommendations.ListSchoolsAsync(profile.TargetLevel, ct);
         //Gợi ý trường
-        await RecommendAsync(profile, activities, schools, pref, ct);
+        await RecommendAsync(profile, schools, pref, ct);
 
         return await recommendations.GetLatestAsync(userId, ct)
             ?? throw new InvalidOperationException("Không lưu được kết quả gợi ý.");
     }
 
-    // Đổi nút ưu tiên: tính lại bằng code với trọng số mới. Không gọi advisor, giữ bậc ngoại khóa của lần gần nhất.
+    // Đổi nút ưu tiên: tính lại bằng code với trọng số mới. Không gọi advisor; bậc ngoại khóa đọc từ hồ sơ.
     public async Task<Recommendation> RepickAsync(Guid userId, IReadOnlyList<int> pref, CancellationToken ct)
     {
         // Lấy lượt gợi ý gần nhất
@@ -232,9 +233,8 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
         var profile = await profiles.GetProfileByUserIdAsync(userId, ct)
             ?? throw new InvalidOperationException("Chưa có hồ sơ.");
 
-        var tier = ActivityTier.FromProfile(await profiles.GetProfileActivitiesAsync(profile.Id, ct)).Tier;
         var schools = await recommendations.ListSchoolsAsync(latest.StudyLevel, ct);
-        await RunAsync(profile, schools, pref, tier, ct);
+        await RunAsync(profile, schools, pref, EcTierOf(profile), ct);
 
         return await recommendations.GetLatestAsync(userId, ct)
             ?? throw new InvalidOperationException("Không lưu được kết quả gợi ý.");
@@ -254,9 +254,10 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
         EnsureRunnable(profile);
         EnsureRunnable(simulated);
 
-        // Bậc ngoại khóa của hồ sơ thật tính từ các hoạt động đã lưu
+        // Bậc ngoại khóa của hồ sơ thật đọc từ cột đã lưu
+        var tier = EcTierOf(profile);
+        // Số hoạt động và giải thưởng đã khai, để giao diện nói "đã khai N hoạt động, M giải thưởng"
         var declared = await profiles.GetProfileActivitiesAsync(profile.Id, ct);
-        var tier = ActivityTier.FromProfile(declared).Tier;
         var (activityCount, awardCount) = ActivityTier.CountDeclared(declared);
 
         var schools = await recommendations.ListSchoolsAsync(profile.TargetLevel, ct);
