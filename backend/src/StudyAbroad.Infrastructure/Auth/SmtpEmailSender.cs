@@ -174,6 +174,64 @@ namespace StudyAbroad.Infrastructure.Auth
             await SendEmailAsync(toEmail, subject, body, ct);
         }
 
+        public async Task SendAccountLockedEmailAsync(string toEmail, string fullName, string reason, CancellationToken ct = default)
+        {
+            var subject = "[USAS] Thông báo: Tài khoản của bạn đã bị khóa";
+            var encodedName = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(fullName) ? "Người dùng USAS" : fullName);
+            var encodedReason = WebUtility.HtmlEncode(reason);
+            var body = $"""
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #fecaca; border-radius: 12px; background-color: #ffffff;">
+                    <h2 style="color: #dc2626; margin-bottom: 16px;">⚠️ Thông báo: Tài khoản của bạn đã bị khóa</h2>
+                    <p style="font-size: 15px; color: #334155;">Xin chào <strong>{encodedName}</strong>,</p>
+                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">
+                        Hệ thống Quản trị USAS thông báo: Tài khoản của bạn ({WebUtility.HtmlEncode(toEmail)}) đã bị khóa quyền truy cập theo quyết định của Quản trị viên.
+                    </p>
+                    <div style="background-color: #fef2f2; border-left: 4px solid #ef4444; border-radius: 6px; padding: 16px; margin: 20px 0;">
+                        <p style="margin: 0 0 6px 0; font-size: 13px; font-weight: bold; color: #991b1b; text-transform: uppercase;">Lý do khóa tài khoản:</p>
+                        <p style="margin: 0; font-size: 14px; color: #7f1d1d; line-height: 1.5; font-style: italic;">"{encodedReason}"</p>
+                    </div>
+                    <p style="font-size: 13px; color: #64748b; line-height: 1.6;">
+                        Trong thời gian bị khóa, bạn sẽ không thể đăng nhập hoặc thực hiện các thao tác trên hệ thống. Nếu bạn cho rằng đây là sự nhầm lẫn hoặc cần giải trình, vui lòng liên hệ Ban Quản trị qua email hỗ trợ của USAS.
+                    </p>
+                    <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+                    <p style="font-size: 12px; color: #94a3b8; text-align: center;">USAS - Hệ thống hỗ trợ ra quyết định du học Mỹ</p>
+                </div>
+                """;
+
+            await SendEmailAsync(toEmail, subject, body, ct);
+        }
+
+        public async Task SendAccountUnlockedEmailAsync(string toEmail, string fullName, string reason, CancellationToken ct = default)
+        {
+            var subject = "[USAS] Thông báo: Tài khoản của bạn đã được mở khóa";
+            var encodedName = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(fullName) ? "Người dùng USAS" : fullName);
+            var encodedReason = WebUtility.HtmlEncode(reason);
+            var loginUrl = $"{_options.AppBaseUrl.TrimEnd('/')}/login";
+            var body = $"""
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #bbf7d0; border-radius: 12px; background-color: #ffffff;">
+                    <h2 style="color: #16a34a; margin-bottom: 16px;">✅ Thông báo: Tài khoản của bạn đã được mở khóa</h2>
+                    <p style="font-size: 15px; color: #334155;">Xin chào <strong>{encodedName}</strong>,</p>
+                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">
+                        Hệ thống Quản trị USAS thông báo: Tài khoản của bạn ({WebUtility.HtmlEncode(toEmail)}) đã được <strong>mở khóa thành công</strong> bởi Quản trị viên.
+                    </p>
+                    <div style="background-color: #f0fdf4; border-left: 4px solid #22c55e; border-radius: 6px; padding: 16px; margin: 20px 0;">
+                        <p style="margin: 0 0 6px 0; font-size: 13px; font-weight: bold; color: #166534; text-transform: uppercase;">Ghi chú từ Quản trị viên:</p>
+                        <p style="margin: 0; font-size: 14px; color: #14532d; line-height: 1.5; font-style: italic;">"{encodedReason}"</p>
+                    </div>
+                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">
+                        Hiện tại bạn đã có thể truy cập lại bình thường vào hệ thống.
+                    </p>
+                    <div style="text-align: center; margin: 24px 0;">
+                        <a href="{WebUtility.HtmlEncode(loginUrl)}" style="display: inline-block; background-color: #2563eb; color: #ffffff; text-decoration: none; font-weight: 600; padding: 12px 28px; border-radius: 8px;">Đăng nhập ngay</a>
+                    </div>
+                    <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+                    <p style="font-size: 12px; color: #94a3b8; text-align: center;">USAS - Hệ thống hỗ trợ ra quyết định du học Mỹ</p>
+                </div>
+                """;
+
+            await SendEmailAsync(toEmail, subject, body, ct);
+        }
+
         private async Task SendEmailAsync(string toEmail, string subject, string htmlBody, CancellationToken ct)
         {
             if (string.IsNullOrWhiteSpace(_options.User) || string.IsNullOrWhiteSpace(_options.Password))

@@ -259,6 +259,18 @@ internal sealed class FakeEmailSender : IEmailSender
         SentEmails.Add((toEmail, linked ? "parent_linked" : "parent_unlinked", parentLabel));
         return Task.CompletedTask;
     }
+
+    public Task SendAccountLockedEmailAsync(string toEmail, string fullName, string reason, CancellationToken ct = default)
+    {
+        SentEmails.Add((toEmail, "account_locked_notice", reason));
+        return Task.CompletedTask;
+    }
+
+    public Task SendAccountUnlockedEmailAsync(string toEmail, string fullName, string reason, CancellationToken ct = default)
+    {
+        SentEmails.Add((toEmail, "account_unlocked_notice", reason));
+        return Task.CompletedTask;
+    }
 }
 
 /// <summary>Giả lập ParentLinkRepository: trả bản sao như AsNoTracking, lưu thay bản cũ; có thể ép ném conflict (xmin).</summary>

@@ -56,6 +56,12 @@ namespace StudyAbroad.Infrastructure.Auth
         public Task SendParentLinkChangedEmailAsync(string toEmail, string studentName, string parentLabel, bool linked, CancellationToken ct = default) =>
             Enqueue(toEmail, (s, t) => s.SendParentLinkChangedEmailAsync(toEmail, studentName, parentLabel, linked, t));
 
+        public Task SendAccountLockedEmailAsync(string toEmail, string fullName, string reason, CancellationToken ct = default) =>
+            Enqueue(toEmail, (s, t) => s.SendAccountLockedEmailAsync(toEmail, fullName, reason, t));
+
+        public Task SendAccountUnlockedEmailAsync(string toEmail, string fullName, string reason, CancellationToken ct = default) =>
+            Enqueue(toEmail, (s, t) => s.SendAccountUnlockedEmailAsync(toEmail, fullName, reason, t));
+
         private Task Enqueue(string toEmail, Func<IEmailSender, CancellationToken, Task> send)
         {
             if (!queue.TryEnqueue(send))

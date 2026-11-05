@@ -9,7 +9,6 @@ import {
   MapPinIcon,
   CheckCircle2Icon,
   StarIcon,
-  PhoneIcon,
   ShieldCheckIcon,
   RotateCcwIcon,
   FlameIcon,
@@ -110,19 +109,28 @@ export function AdminCenterListView() {
   return (
     <div className="flex-1 min-h-0 w-full overflow-y-auto space-y-6 pr-1 pb-10">
       {/* Header bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b pb-5">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-            <Building2Icon className="w-6 h-6 text-brand" />
-            Danh bạ Trung tâm Tư vấn Du học & Đào tạo
+          <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
+            Trung tâm tư vấn
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Quản trị dữ liệu, giấy phép hoạt động, phân loại mô hình và kiểm duyệt hồ sơ trung tâm (UC-59, UC-64, UC-71, UC-72)
+          <p className="text-sm text-muted-foreground">
+            Danh sách đơn vị tư vấn du học, hồ sơ pháp lý và kiểm duyệt
           </p>
         </div>
-
-        <div className="flex items-center gap-2 self-start sm:self-auto">
-          <AddCenterButton />
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void fetchCenters(page)}
+            disabled={isLoading}
+            className="gap-1.5"
+          >
+            <RotateCcwIcon className="size-3.5" />
+            Làm mới
+          </Button>
+          <AddCenterButton size="sm" />
         </div>
       </div>
 
@@ -254,12 +262,6 @@ export function AdminCenterListView() {
                               <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0">
                                 {c.code}
                               </Badge>
-                              {c.phone && (
-                                <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                  <PhoneIcon className="w-3 h-3 text-emerald-600" />
-                                  {c.phone}
-                                </span>
-                              )}
                             </div>
                           </div>
                         </div>

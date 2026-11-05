@@ -5,8 +5,6 @@ import {
   ArrowLeftIcon,
   CheckCircle2Icon,
   MapPinIcon,
-  PhoneIcon,
-  GlobeIcon,
   ClockIcon,
   StarIcon,
   ShieldCheckIcon,
@@ -100,15 +98,10 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
             {/* CTA Buttons */}
             <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto shrink-0 pb-1">
               <ConsultationBookingModal centerName={center.name} />
-              {center.phone && (
-                <a
-                  href={`tel:${center.phone}`}
-                  className={cn(buttonVariants({ variant: "outline", size: "lg" }), "gap-2 inline-flex items-center")}
-                >
-                  <PhoneIcon className="w-4 h-4 text-emerald-600" />
-                  {center.phone}
-                </a>
-              )}
+              <div className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-border bg-card text-xs font-medium text-foreground shadow-2xs">
+                <ClockIcon className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                <span>{profile.operatingHours}</span>
+              </div>
             </div>
           </div>
 
@@ -236,11 +229,11 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
 
       {/* Main Tabs Navigation */}
       <Tabs defaultValue="tong-quan" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4 max-w-xl h-10 p-1">
-          <TabsTrigger value="tong-quan" className="text-xs sm:text-sm">Tổng quan & Cơ sở</TabsTrigger>
-          <TabsTrigger value="dich-vu" className="text-xs sm:text-sm">Dịch vụ & Khóa học</TabsTrigger>
-          <TabsTrigger value="thanh-tich" className="text-xs sm:text-sm">Thành tích đỗ đạt</TabsTrigger>
-          <TabsTrigger value="danh-gia" className="text-xs sm:text-sm">Đánh giá ({profile.reviewCount})</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 max-w-2xl h-11 p-1 rounded-xl border-2 border-border/90 bg-muted/90 shadow-2xs">
+          <TabsTrigger value="tong-quan" className="text-xs sm:text-sm font-medium">Tổng quan & Cơ sở</TabsTrigger>
+          <TabsTrigger value="dich-vu" className="text-xs sm:text-sm font-medium">Dịch vụ & Khóa học</TabsTrigger>
+          <TabsTrigger value="thanh-tich" className="text-xs sm:text-sm font-medium">Thành tích đỗ đạt</TabsTrigger>
+          <TabsTrigger value="danh-gia" className="text-xs sm:text-sm font-medium">Đánh giá ({profile.reviewCount})</TabsTrigger>
         </TabsList>
 
         {/* TAB 1: TỔNG QUAN & CƠ SỞ VẬT CHẤT */}
@@ -342,7 +335,7 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
                       rel="noopener noreferrer"
                       className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "gap-1.5 text-xs inline-flex items-center")}
                     >
-                      <GlobeIcon className="w-3.5 h-3.5" />
+                      <MapPinIcon className="w-3.5 h-3.5 text-brand" />
                       Mở Google Maps chỉ đường
                       <ExternalLinkIcon className="w-3 h-3 ml-1" />
                     </a>
@@ -355,36 +348,20 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
                   <ClockIcon className="w-4 h-4 text-brand" />
-                  Thông tin kết nối & Giờ làm việc
+                  Thời gian làm việc & Kênh tiếp nhận
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 text-xs sm:text-sm">
                 <div>
-                  <span className="font-medium text-foreground">Giờ hoạt động:</span>{" "}
+                  <span className="font-semibold text-foreground">Giờ hoạt động:</span>{" "}
                   <span className="text-muted-foreground">{profile.operatingHours}</span>
                 </div>
-                {center.email && (
-                  <div>
-                    <span className="font-medium text-foreground">Email:</span>{" "}
-                    <a href={`mailto:${center.email}`} className="text-brand hover:underline">
-                      {center.email}
-                    </a>
-                  </div>
-                )}
-                {center.website && (
-                  <div>
-                    <span className="font-medium text-foreground">Website chính thức:</span>{" "}
-                    <a
-                      href={center.website}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-brand hover:underline inline-flex items-center gap-1"
-                    >
-                      {center.website}
-                      <ExternalLinkIcon className="w-3 h-3" />
-                    </a>
-                  </div>
-                )}
+                <div className="pt-2 border-t text-xs text-muted-foreground flex items-start gap-2 bg-muted/40 p-2.5 rounded-lg">
+                  <ShieldCheckIcon className="w-4 h-4 text-brand shrink-0 mt-0.5" />
+                  <span>
+                    Toàn bộ quy trình tiếp nhận tư vấn và đăng ký dịch vụ du học được hỗ trợ và bảo trợ tập trung qua hệ thống USAS để đảm bảo tính xác thực và quyền lợi của người dùng.
+                  </span>
+                </div>
               </CardContent>
             </Card>
           </div>

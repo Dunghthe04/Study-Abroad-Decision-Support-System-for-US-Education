@@ -8,7 +8,6 @@ import {
   MapPinIcon,
   CheckCircle2Icon,
   StarIcon,
-  PhoneIcon,
   ChevronRightIcon,
   Building2Icon,
   RotateCcwIcon,
@@ -293,12 +292,6 @@ export function PublicCenterListView({ initialCenters }: PublicCenterListViewPro
                               <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0">
                                 {c.code}
                               </Badge>
-                              {c.phone && (
-                                <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                  <PhoneIcon className="w-3 h-3 text-emerald-600" />
-                                  {c.phone}
-                                </span>
-                              )}
                             </div>
                           </div>
                         </div>

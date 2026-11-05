@@ -339,6 +339,7 @@ public class AuthServiceTests
         var log = Assert.Single(_auditLogs.Entries);
         Assert.Equal("user.lock", log.Action);
         Assert.Equal(adminId, log.ActorUserId);
+        Assert.Contains(_emailSender.SentEmails, e => e.Purpose == "account_locked_notice");
     }
 
     [Fact]
@@ -404,6 +405,7 @@ public class AuthServiceTests
         var log = Assert.Single(_auditLogs.Entries);
         Assert.Equal("user.unlock", log.Action);
         Assert.Equal(adminId, log.ActorUserId);
+        Assert.Contains(_emailSender.SentEmails, e => e.Purpose == "account_unlocked_notice");
     }
 
     [Fact]

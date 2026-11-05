@@ -28,5 +28,11 @@ namespace StudyAbroad.Application.Auth
 
         /// <summary>Báo cho một bên khi liên kết phụ huynh–học sinh được xác nhận (<paramref name="linked"/> = true) hoặc bị hủy / rút đồng ý.</summary>
         Task SendParentLinkChangedEmailAsync(string toEmail, string studentName, string parentLabel, bool linked, CancellationToken ct = default);
+
+        /// <summary>Gửi email thông báo tài khoản bị khóa bởi quản trị viên kèm lý do khóa.</summary>
+        Task SendAccountLockedEmailAsync(string toEmail, string fullName, string reason, CancellationToken ct = default);
+
+        /// <summary>Gửi email thông báo tài khoản đã được mở khóa bởi quản trị viên kèm lý do / ghi chú.</summary>
+        Task SendAccountUnlockedEmailAsync(string toEmail, string fullName, string reason, CancellationToken ct = default);
     }
 }

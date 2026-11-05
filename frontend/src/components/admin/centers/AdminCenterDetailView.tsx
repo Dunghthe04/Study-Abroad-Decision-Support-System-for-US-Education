@@ -5,8 +5,6 @@ import {
   ArrowLeftIcon,
   CheckCircle2Icon,
   MapPinIcon,
-  PhoneIcon,
-  GlobeIcon,
   ClockIcon,
   StarIcon,
   ShieldCheckIcon,
@@ -14,7 +12,6 @@ import {
   UsersIcon,
   GraduationCapIcon,
   BookOpenIcon,
-  ExternalLinkIcon,
   Building2Icon,
   FlameIcon,
 } from "lucide-react";
@@ -23,10 +20,8 @@ import { getEnrichedCenterProfile } from "@/lib/center-details";
 import { centerServiceLabel } from "@/lib/center-services";
 import { studyLevelLabel } from "@/lib/study-levels";
 import { Badge } from "@/components/ui/badge";
-import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { cn } from "cn";
 
 interface AdminCenterDetailViewProps {
   center: StudyCenter;
@@ -115,28 +110,16 @@ export function AdminCenterDetailView({ center }: AdminCenterDetailViewProps) {
               />
             </div>
 
-            {/* Contact Chips */}
+            {/* Thông tin hoạt động & Kênh tư vấn USAS (Ẩn hotline & website để tránh liên hệ trực tiếp ngoài hệ thống) */}
             <div className="flex flex-wrap items-center gap-2 shrink-0 pb-1">
-              {center.phone && (
-                <a
-                  href={`tel:${center.phone}`}
-                  className={cn(buttonVariants({ variant: "outline", size: "sm" }), "gap-1.5 text-xs")}
-                >
-                  <PhoneIcon className="w-3.5 h-3.5 text-emerald-600" />
-                  {center.phone}
-                </a>
-              )}
-              {center.website && (
-                <a
-                  href={center.website}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={cn(buttonVariants({ variant: "outline", size: "sm" }), "gap-1.5 text-xs")}
-                >
-                  <GlobeIcon className="w-3.5 h-3.5 text-brand" />
-                  Website
-                </a>
-              )}
+              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-card text-xs font-medium text-foreground shadow-2xs">
+                <ClockIcon className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                <span>{profile.operatingHours}</span>
+              </div>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-brand/20 bg-brand/5 text-xs font-medium text-brand">
+                <ShieldCheckIcon className="w-3.5 h-3.5 text-brand shrink-0" />
+                <span>Tư vấn qua hệ thống USAS</span>
+              </div>
             </div>
           </div>
 
@@ -256,11 +239,11 @@ export function AdminCenterDetailView({ center }: AdminCenterDetailViewProps) {
 
       {/* Main Tabs Navigation */}
       <Tabs defaultValue="tong-quan" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4 max-w-xl h-10 p-1">
-          <TabsTrigger value="tong-quan" className="text-xs sm:text-sm">Tổng quan & Cơ sở</TabsTrigger>
-          <TabsTrigger value="dich-vu" className="text-xs sm:text-sm">Dịch vụ & Khóa học</TabsTrigger>
-          <TabsTrigger value="thanh-tich" className="text-xs sm:text-sm">Thành tích đỗ đạt</TabsTrigger>
-          <TabsTrigger value="danh-gia" className="text-xs sm:text-sm">Đánh giá ({profile.reviewCount})</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 max-w-2xl h-11 p-1 rounded-xl border-2 border-border/90 bg-muted/90 shadow-2xs">
+          <TabsTrigger value="tong-quan" className="text-xs sm:text-sm font-medium">Tổng quan & Cơ sở</TabsTrigger>
+          <TabsTrigger value="dich-vu" className="text-xs sm:text-sm font-medium">Dịch vụ & Khóa học</TabsTrigger>
+          <TabsTrigger value="thanh-tich" className="text-xs sm:text-sm font-medium">Thành tích đỗ đạt</TabsTrigger>
+          <TabsTrigger value="danh-gia" className="text-xs sm:text-sm font-medium">Đánh giá ({profile.reviewCount})</TabsTrigger>
         </TabsList>
 
         {/* TAB 1: TỔNG QUAN & CƠ SỞ VẬT CHẤT */}
@@ -331,42 +314,20 @@ export function AdminCenterDetailView({ center }: AdminCenterDetailViewProps) {
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
                   <ClockIcon className="w-4 h-4 text-brand" />
-                  Kênh kết nối & Giờ làm việc
+                  Thời gian làm việc & Kênh tiếp nhận
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 text-xs sm:text-sm">
                 <div>
-                  <span className="font-medium text-foreground">Giờ hoạt động:</span>{" "}
+                  <span className="font-semibold text-foreground">Giờ hoạt động:</span>{" "}
                   <span className="text-muted-foreground">{profile.operatingHours}</span>
                 </div>
-                {center.phone && (
-                  <div>
-                    <span className="font-medium text-foreground">Hotline:</span>{" "}
-                    <span className="text-foreground font-mono">{center.phone}</span>
-                  </div>
-                )}
-                {center.email && (
-                  <div>
-                    <span className="font-medium text-foreground">Email:</span>{" "}
-                    <a href={`mailto:${center.email}`} className="text-brand hover:underline">
-                      {center.email}
-                    </a>
-                  </div>
-                )}
-                {center.website && (
-                  <div>
-                    <span className="font-medium text-foreground">Website:</span>{" "}
-                    <a
-                      href={center.website}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-brand hover:underline inline-flex items-center gap-1"
-                    >
-                      {center.website}
-                      <ExternalLinkIcon className="w-3 h-3" />
-                    </a>
-                  </div>
-                )}
+                <div className="pt-2 border-t text-xs text-muted-foreground flex items-start gap-2 bg-muted/40 p-2.5 rounded-lg">
+                  <ShieldCheckIcon className="w-4 h-4 text-brand shrink-0 mt-0.5" />
+                  <span>
+                    Toàn bộ quy trình tiếp nhận tư vấn, đánh giá hồ sơ và đối soát dịch vụ được thực hiện tập trung qua hệ thống USAS để bảo đảm quyền lợi và bảo mật thông tin.
+                  </span>
+                </div>
               </CardContent>
             </Card>
           </div>

@@ -78,6 +78,45 @@ function canAdminUnlock(user: UserDto): boolean {
   return user.role !== "admin" && (user.status === "locked" || user.status === "temp_locked");
 }
 
+const LOCK_REASONS_STORAGE_KEY = "usas_user_lock_reasons";
+
+function getLockReasonCache(userId: string): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(LOCK_REASONS_STORAGE_KEY);
+    if (!raw) return null;
+    const map = JSON.parse(raw) as Record<string, string>;
+    return typeof map[userId] === "string" && map[userId].trim() ? map[userId].trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveLockReasonCache(userId: string, reason: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    const raw = localStorage.getItem(LOCK_REASONS_STORAGE_KEY);
+    const map = raw ? (JSON.parse(raw) as Record<string, string>) : {};
+    map[userId] = reason;
+    localStorage.setItem(LOCK_REASONS_STORAGE_KEY, JSON.stringify(map));
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+function removeLockReasonCache(userId: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    const raw = localStorage.getItem(LOCK_REASONS_STORAGE_KEY);
+    if (!raw) return;
+    const map = JSON.parse(raw) as Record<string, string>;
+    delete map[userId];
+    localStorage.setItem(LOCK_REASONS_STORAGE_KEY, JSON.stringify(map));
+  } catch {
+    // Ignore storage errors
+  }
+}
+
 function statusBadgeVariant(status: string): "default" | "secondary" | "destructive" | "outline" {
   if (status === "active") return "default";
   if (status === "unverified" || status === "pending") return "secondary";
@@ -152,7 +191,14 @@ export function AdminUsersView() {
         pageSize: ACCOUNT_LIST_PAGE_SIZE,
       });
       if (signal?.cancelled) return;
-      setUsers(data.items);
+      const mergedItems = data.items.map((u) => {
+        if (u.status === "locked" && !u.lockReason) {
+          const cached = getLockReasonCache(u.id);
+          if (cached) return { ...u, lockReason: cached };
+        }
+        return u;
+      });
+      setUsers(mergedItems);
       setTotalCount(data.totalCount);
       setTotalPages(data.totalPages ?? Math.max(1, Math.ceil(data.totalCount / data.pageSize)));
     } catch (err) {
@@ -220,6 +266,10 @@ export function AdminUsersView() {
     setLockSubmitting(true);
     try {
       await adminUsersApi.lock(lockTarget.id, { reason });
+      saveLockReasonCache(lockTarget.id, reason);
+      setUsers((prev) =>
+        prev.map((u) => (u.id === lockTarget.id ? { ...u, status: "locked", lockReason: reason } : u))
+      );
       toast.add({
         type: "success",
         priority: "high",
@@ -265,6 +315,10 @@ export function AdminUsersView() {
     setUnlockSubmitting(true);
     try {
       await adminUsersApi.unlock(unlockTarget.id, { reason });
+      removeLockReasonCache(unlockTarget.id);
+      setUsers((prev) =>
+        prev.map((u) => (u.id === unlockTarget.id ? { ...u, status: "active", lockReason: null } : u))
+      );
       toast.add({
         type: "success",
         priority: "high",
@@ -273,7 +327,7 @@ export function AdminUsersView() {
         description: unlockTarget.email,
       });
       if (detailTarget?.id === unlockTarget.id) {
-        setDetailTarget((prev) => prev ? { ...prev, status: "active" } : null);
+        setDetailTarget((prev) => prev ? { ...prev, status: "active", lockReason: null } : null);
       }
       setUnlockTarget(null);
       setUnlockReason("");
@@ -383,11 +437,11 @@ export function AdminUsersView() {
       {/* Header bar */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="font-heading text-2xl font-bold tracking-tight text-brand-ink">
+          <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
             Quản trị người dùng
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Quản lý tài khoản hệ thống, kiểm soát truy cập, khóa/mở khóa và cấp tài khoản đặc thù (UC-60, UC-61, UC-62, UC-63).
+          <p className="text-sm text-muted-foreground">
+            Quản lý danh sách tài khoản, trạng thái hoạt động và phân quyền đặc thù
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -633,7 +687,13 @@ export function AdminUsersView() {
                                 variant="ghost"
                                 size="sm"
                                 className="size-8 p-0 text-muted-foreground hover:text-foreground shrink-0 flex items-center justify-center"
-                                onClick={() => setDetailTarget(u)}
+                                onClick={() => {
+                                  const cached = getLockReasonCache(u.id);
+                                  setDetailTarget({
+                                    ...u,
+                                    lockReason: u.lockReason || cached || null,
+                                  });
+                                }}
                                 title="Xem chi tiết"
                               >
                                 <EyeIcon className="size-4" />
@@ -865,7 +925,7 @@ export function AdminUsersView() {
                     <span>Lý do khóa tài khoản:</span>
                   </div>
                   <div className="text-xs text-foreground leading-relaxed font-medium">
-                    {detailTarget.lockReason || (
+                    {detailTarget.lockReason || getLockReasonCache(detailTarget.id) || (
                       detailTarget.status === "temp_locked"
                         ? "Tài khoản bị tạm khóa 15 phút do nhập sai mật khẩu 5 lần liên tiếp."
                         : "Vi phạm quy chế sử dụng và chính sách của hệ thống."

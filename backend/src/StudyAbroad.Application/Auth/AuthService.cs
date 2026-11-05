@@ -919,6 +919,9 @@ namespace StudyAbroad.Application.Auth
                 DetailJson = detailJson,
             }, ct);
 
+            // [USAS-362] Gửi email thông báo tài khoản bị khóa kèm lý do
+            _ = emailSender.SendAccountLockedEmailAsync(user.Email, user.FullName, reason, ct);
+
             return AuthResult.Ok(ToDto(user) with { LockReason = reason }, "Đã khóa tài khoản.");
         }
 
@@ -962,6 +965,9 @@ namespace StudyAbroad.Application.Auth
                 EntityId = user.Id.ToString(),
                 DetailJson = detailJson,
             }, ct);
+
+            // [USAS-362] Gửi email thông báo tài khoản đã được mở khóa kèm ghi chú
+            _ = emailSender.SendAccountUnlockedEmailAsync(user.Email, user.FullName, reason, ct);
 
             return AuthResult.Ok(ToDto(user), "Đã mở khóa tài khoản.");
         }

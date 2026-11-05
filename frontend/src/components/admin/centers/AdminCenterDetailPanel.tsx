@@ -3,11 +3,7 @@
 import Link from "next/link";
 import {
   MapPinIcon,
-  PhoneIcon,
-  MailIcon,
-  GlobeIcon,
   CheckCircle2Icon,
-  ExternalLinkIcon,
   ShieldCheckIcon,
   AwardIcon,
   FlameIcon,
@@ -144,39 +140,6 @@ export function AdminCenterDetailPanel({ center, onClose }: AdminCenterDetailPan
             <div className="pl-5.5 text-[11px] text-muted-foreground">
               Khu vực: {center.district ? `${center.district}, ${center.city ?? "Việt Nam"}` : (center.city ?? "Toàn quốc")}
             </div>
-
-            {center.phone && (
-              <div className="flex items-center gap-2 pt-1 border-t">
-                <PhoneIcon className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                <a href={`tel:${center.phone}`} className="text-foreground hover:underline font-mono">
-                  {center.phone}
-                </a>
-              </div>
-            )}
-
-            {center.email && (
-              <div className="flex items-center gap-2">
-                <MailIcon className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                <a href={`mailto:${center.email}`} className="text-brand hover:underline">
-                  {center.email}
-                </a>
-              </div>
-            )}
-
-            {center.website && (
-              <div className="flex items-center gap-2">
-                <GlobeIcon className="w-3.5 h-3.5 text-brand shrink-0" />
-                <a
-                  href={center.website}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-brand hover:underline inline-flex items-center gap-1"
-                >
-                  {center.website}
-                  <ExternalLinkIcon className="w-3 h-3" />
-                </a>
-              </div>
-            )}
 
             <div className="flex items-center gap-2 pt-1 border-t text-[11px]">
               <ClockIcon className="w-3.5 h-3.5 text-amber-600 shrink-0" />

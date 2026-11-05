@@ -20,6 +20,7 @@ import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
+import { cn } from "@/lib/utils";
 
 const COMMON_SERVICES = [
   { key: "CHON_TRUONG", label: "Tư vấn chọn trường" },
@@ -30,7 +31,12 @@ const COMMON_SERVICES = [
   { key: "CHUNG_CHI", label: "Luyện thi chứng chỉ (SAT, IELTS...)" },
 ];
 
-export function AddCenterButton() {
+export interface AddCenterButtonProps {
+  className?: string;
+  size?: "default" | "sm" | "lg" | "xs" | "icon" | "icon-xs" | "icon-sm" | "icon-lg";
+}
+
+export function AddCenterButton({ className, size = "sm" }: AddCenterButtonProps = {}) {
   const { user } = useAuth();
   const router = useRouter();
 
@@ -135,7 +141,12 @@ export function AddCenterButton() {
 
   return (
     <>
-      <Button onClick={handleOpen} className="gap-2">
+      <Button
+        type="button"
+        size={size}
+        onClick={handleOpen}
+        className={cn("gap-1.5 bg-brand text-white hover:bg-brand/90", className)}
+      >
         <PlusIcon className="size-4" aria-hidden />
         Thêm trung tâm
       </Button>
