@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowUpRightIcon, Building2Icon, ExternalLinkIcon, GlobeIcon, GraduationCapIcon, MapPinIcon, PercentIcon, UsersIcon } from "lucide-react";
+import { ArrowUpRightIcon, Building2Icon, GlobeIcon, GraduationCapIcon, MapPinIcon, PercentIcon, UsersIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
@@ -211,10 +211,9 @@ export function UniversityDetailView({ university }: { university: UniversityDet
                               href={safeSourceUrl}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1.5 text-sm font-medium leading-snug text-foreground transition-colors hover:text-brand hover:underline"
+                              className="text-sm font-medium leading-snug text-foreground transition-colors hover:text-brand hover:underline"
                             >
-                              <span>{ranking.name}</span>
-                              <ExternalLinkIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                              {ranking.name}
                             </a>
                           ) : (
                             <p className="text-sm font-medium leading-snug text-foreground">{ranking.name}</p>
