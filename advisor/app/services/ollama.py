@@ -1,4 +1,4 @@
-"""Gọi Ollama /api/chat và ép LLM trả JSON đúng schema (structured outputs)."""
+"""Gọi Ollama /api/chat: ép LLM trả JSON đúng schema (structured outputs), hoặc lấy chữ thường (SLM sinh skill)."""
 
 import json
 from typing import Any
@@ -66,24 +66,36 @@ class OllamaClient:
         result = self._read_json(body)
         return result, body["message"]["content"], body.get("logprobs") or []
 
-    # Gửi request /api/chat, trả nguyên body Ollama trả về. chat_json và chat_json_scored dùng chung
+    # Lấy chữ thường (không ép JSON): SLM sinh skill trả về Markdown
+    async def chat_text(self, messages: list[dict[str, str]], temperature: float = 0.0) -> str:
+        body = await self._chat(messages, None, temperature)
+        try:
+            text = body["message"]["content"]
+        except (KeyError, TypeError) as ex:
+            raise OllamaError("Ollama trả về body không có nội dung") from ex
+        if not isinstance(text, str) or not text.strip():
+            raise OllamaError("Ollama trả về nội dung rỗng")
+        return text
+
+    # Gửi request /api/chat, trả nguyên body Ollama trả về. chat_json, chat_json_scored và chat_text dùng chung
     async def _chat(
         self,
         messages: list[dict[str, str]],
-        schema: dict[str, Any] | str,
+        schema: dict[str, Any] | str | None,
         temperature: float,
         logprobs: bool = False,
     ) -> dict[str, Any]:
         payload = {
             "model": self._model,
             "messages": messages,
-            "format": schema,  # Ollama ép đầu ra khớp JSON schema này
             "stream": False,  # nhận 1 lần cả câu trả lời
             "think": False,  # tắt chế độ suy nghĩ của Qwen3: nhanh hơn, không lẫn <think> vào JSON
             "keep_alive": self._keep_alive,
             # temperature 0.0: câu trả lời ổn định, ít ngẫu nhiên; num_gpu/num_ctx: chạy hết trên GPU
             "options": {**self._options, "temperature": temperature},
         }
+        if schema is not None:
+            payload["format"] = schema  # Ollama ép đầu ra khớp JSON schema này; None là lấy chữ thường
         if logprobs:
             payload["logprobs"] = True  # Ollama trả kèm log xác suất của từng token đã sinh
         try:
