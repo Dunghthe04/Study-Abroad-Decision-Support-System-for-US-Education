@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { connection } from "next/server";
 import { apiFetch } from "@/lib/api";
 import { studyLevelLabel } from "@/lib/study-levels";
@@ -5,8 +6,11 @@ import { centerServiceLabel } from "@/lib/center-services";
 import type { PagedResult, StudyCenter } from "@/types/api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { buttonVariants } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { AddCenterButton } from "@/components/admin/AddCenterButton";
+import { ChevronRightIcon, CheckCircle2Icon } from "lucide-react";
+import { cn } from "cn";
 
 export const metadata = { title: "Trung tâm tư vấn – USAS" };
 
@@ -41,10 +45,22 @@ export default async function CentersPage() {
         <ul className="grid gap-4 sm:grid-cols-2">
           {data.items.map((c) => (
             <li key={c.id}>
-              <Card className="h-full flex flex-col justify-between hover:border-brand/40 transition-colors">
+              <Card className="h-full flex flex-col justify-between hover:border-brand/50 hover:shadow-md transition-all group">
                 <CardHeader>
                   <div className="flex items-start justify-between gap-2">
-                    <CardTitle className="text-lg">{c.name}</CardTitle>
+                    <div className="space-y-1">
+                      <Link href={`/centers/${c.id}`} className="hover:text-brand transition-colors">
+                        <CardTitle className="text-lg group-hover:text-brand transition-colors">
+                          {c.name}
+                        </CardTitle>
+                      </Link>
+                      {c.verificationStatus === "verified" && (
+                        <div className="flex items-center gap-1 text-[11px] text-emerald-600 font-medium">
+                          <CheckCircle2Icon className="w-3.5 h-3.5" />
+                          Đã xác minh
+                        </div>
+                      )}
+                    </div>
                     {c.city && (
                       <Badge variant="outline" className="shrink-0 font-normal">
                         {c.city}
@@ -73,6 +89,16 @@ export default async function CentersPage() {
                     </div>
                   </CardContent>
                 )}
+                <CardFooter className="pt-2 border-t mt-auto flex justify-between items-center text-xs">
+                  <span className="text-muted-foreground text-[11px]">Mã: {c.code}</span>
+                  <Link
+                    href={`/centers/${c.id}`}
+                    className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "gap-1 text-xs hover:text-brand -mr-2")}
+                  >
+                    Xem chi tiết
+                    <ChevronRightIcon className="w-3.5 h-3.5" />
+                  </Link>
+                </CardFooter>
               </Card>
             </li>
           ))}
