@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowLeftIcon, ArrowUpRightIcon, BookOpenIcon, GlobeIcon, MapPinIcon } from "lucide-react";
+import { ArrowUpRightIcon, Building2Icon, GlobeIcon, GraduationCapIcon, MapPinIcon, PercentIcon, UsersIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
@@ -12,31 +12,76 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { cn } from "cn";
 import { studyLevelLabel } from "@/lib/study-levels";
-import { schoolControlLabel, universityDate, universityNumber, universityPercent, universityUrl } from "@/lib/university-display";
+import { schoolControlLabel, universityNumber, universityPercent, universityUrl } from "@/lib/university-display";
 import type { UniversityDetail } from "@/types/university";
-import { DetailRows, DetailSection, SchoolImage, SourceLink } from "./UniversityDetailParts";
+import { DetailSection, GridDataItem, SchoolImage, SourceLink } from "./UniversityDetailParts";
 import { UniversityAdmissions, UniversityCosts, UniversityMajors, UniversityStatistics } from "./UniversityOfferingSections";
 import { UniversitySources } from "./UniversitySources";
 
 export function UniversityDetailView({ university }: { university: UniversityDetail }) {
   const [selectedLevel, setSelectedLevel] = useState(university.offerings[0]?.studyLevel ?? "");
+  const [activeSection, setActiveSection] = useState("overview");
   const offering = university.offerings.find((item) => item.studyLevel === selectedLevel) ?? university.offerings[0];
   const location = [university.city, university.stateName ?? university.state].filter(Boolean).join(", ");
   const website = universityUrl(university.website);
-  const navigation = [
-    { id: "overview", label: "Tổng quan" },
-    ...(offering ? [{ id: "costs", label: "Chi phí & hỗ trợ" }, { id: "admissions", label: "Tuyển sinh" }, { id: "statistics", label: "Thống kê" }, { id: "majors", label: "Ngành học" }] : []),
-    { id: "sources", label: "Nguồn dữ liệu" },
+  const navigation = useMemo(
+    () => [
+      { id: "overview", label: "Tổng quan" },
+      ...(offering
+        ? [
+            { id: "costs", label: "Chi phí & hỗ trợ" },
+            { id: "admissions", label: "Tuyển sinh" },
+            { id: "statistics", label: "Thống kê" },
+            { id: "majors", label: "Ngành học" },
+          ]
+        : []),
+      { id: "sources", label: "Nguồn dữ liệu" },
+    ],
+    [offering],
+  );
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const scrollPosition = window.scrollY + 140;
+      for (let i = navigation.length - 1; i >= 0; i--) {
+        const item = navigation[i];
+        const element = document.getElementById(item.id);
+        if (element && element.offsetTop <= scrollPosition) {
+          setActiveSection(item.id);
+          break;
+        }
+      }
+    };
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    handleScroll();
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, [navigation]);
+
+  const overviewItems = [
+    { icon: MapPinIcon, label: "Vị trí", value: location || "—" },
+    { icon: Building2Icon, label: "Loại trường", value: schoolControlLabel(university.control) },
+    { icon: PercentIcon, label: "Tỷ lệ nhận chung", value: universityPercent(university.acceptanceRate) },
+    { icon: UsersIcon, label: "Sinh viên quốc tế", value: universityNumber(university.internationalStudentCount) },
+    {
+      icon: GraduationCapIcon,
+      label: "Bậc học có dữ liệu",
+      value: university.offerings.length ? university.offerings.map((item) => studyLevelLabel(item.studyLevel)).join(", ") : "—",
+    },
   ];
 
   return (
     <article className="space-y-6 pb-8">
       <Breadcrumb>
         <BreadcrumbList>
-          <BreadcrumbItem><BreadcrumbLink render={<Link href="/" />}><ArrowLeftIcon className="size-3.5" />Trang chủ</BreadcrumbLink></BreadcrumbItem>
+          <BreadcrumbItem>
+            <BreadcrumbLink render={<Link href="/university" />}>Universities</BreadcrumbLink>
+          </BreadcrumbItem>
           <BreadcrumbSeparator />
-          <BreadcrumbItem><BreadcrumbPage>Thông tin trường · Mã {university.code}</BreadcrumbPage></BreadcrumbItem>
+          <BreadcrumbItem>
+            <BreadcrumbPage>{university.name}</BreadcrumbPage>
+          </BreadcrumbItem>
         </BreadcrumbList>
       </Breadcrumb>
 
@@ -60,8 +105,25 @@ export function UniversityDetailView({ university }: { university: UniversityDet
 
       <nav aria-label="Các mục thông tin trường" className="sticky top-14 z-20 border-b border-border bg-background/95 backdrop-blur-sm">
         <ScrollArea className="w-full min-w-0">
-          <div className="flex w-max gap-1 py-2">
-            {navigation.map((item) => <Button key={item.id} variant="ghost" nativeButton={false} role="link" render={<a href={`#${item.id}`} />} className="text-muted-foreground hover:text-brand">{item.label}</Button>)}
+          <div className="flex w-max gap-1">
+            {navigation.map((item) => {
+              const isActive = activeSection === item.id;
+              return (
+                <a
+                  key={item.id}
+                  href={`#${item.id}`}
+                  onClick={() => setActiveSection(item.id)}
+                  className={cn(
+                    "inline-flex items-center justify-center px-4 py-3 text-sm font-medium transition-colors border-b-2 -mb-px outline-none",
+                    isActive
+                      ? "border-brand text-brand font-semibold"
+                      : "border-transparent text-muted-foreground hover:text-foreground hover:border-brand/40"
+                  )}
+                >
+                  {item.label}
+                </a>
+              );
+            })}
           </div>
           <ScrollBar orientation="horizontal" />
         </ScrollArea>
@@ -85,13 +147,16 @@ export function UniversityDetailView({ university }: { university: UniversityDet
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_280px] xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="min-w-0 space-y-5">
           <DetailSection id="overview" title="Tổng quan">
-            <DetailRows rows={[
-              { label: "Vị trí", value: location || "Chưa có dữ liệu" },
-              { label: "Loại trường", value: schoolControlLabel(university.control) },
-              { label: "Tỷ lệ nhận chung", value: universityPercent(university.acceptanceRate) },
-              { label: "Sinh viên quốc tế", value: universityNumber(university.internationalStudentCount) },
-              { label: "Bậc học có dữ liệu", value: university.offerings.length ? university.offerings.map((item) => studyLevelLabel(item.studyLevel)).join(", ") : "Chưa có dữ liệu" },
-            ]} />
+            <div className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
+              {overviewItems.map((item) => (
+                <GridDataItem
+                  key={item.label}
+                  icon={item.icon}
+                  label={item.label}
+                  value={item.value}
+                />
+              ))}
+            </div>
             {website && <div className="mt-5 space-y-4"><Separator /><SourceLink url={website} /></div>}
           </DetailSection>
 
@@ -109,7 +174,7 @@ export function UniversityDetailView({ university }: { university: UniversityDet
           {university.galleryUrls.length > 0 && (
             <DetailSection title="Hình ảnh trường">
               <div className="grid grid-cols-2 gap-3">
-                {university.galleryUrls.map((url, index) => <a key={`${url}-${index}`} href={universityUrl(url) ?? undefined} target="_blank" rel="noopener noreferrer" aria-label={`Mở ảnh ${index + 1} của ${university.name}`}><AspectRatio ratio={4 / 3}><SchoolImage url={url} alt={`Ảnh ${index + 1} của ${university.name}`} className="h-full w-full rounded-md bg-mutsed" /></AspectRatio></a>)}
+                {university.galleryUrls.map((url, index) => <a key={`${url}-${index}`} href={universityUrl(url) ?? undefined} target="_blank" rel="noopener noreferrer" aria-label={`Mở ảnh ${index + 1} của ${university.name}`}><AspectRatio ratio={4 / 3}><SchoolImage url={url} alt={`Ảnh ${index + 1} của ${university.name}`} className="h-full w-full rounded-md bg-muted" /></AspectRatio></a>)}
               </div>
             </DetailSection>
           )}
@@ -132,14 +197,6 @@ export function UniversityDetailView({ university }: { university: UniversityDet
               </ul>
             </DetailSection>
           )}
-          <DetailSection title="Đọc thông tin đúng cách">
-            <div className="space-y-3 text-sm leading-relaxed text-muted-foreground">
-              <p className="flex items-start gap-2"><BookOpenIcon className="mt-0.5 size-4 shrink-0" />Số liệu trên trang là thông tin trường, không phải đánh giá cơ hội trúng tuyển cá nhân.</p>
-              <p>Không có dữ liệu không đồng nghĩa với không có yêu cầu hoặc chi phí bằng 0.</p>
-              <Button variant="link" nativeButton={false} role="link" render={<a href="#sources" />} className="h-auto justify-start p-0 text-brand">Xem nguồn và trạng thái<ArrowUpRightIcon className="size-3.5" /></Button>
-              {offering?.retrievedAt && <><Separator /><p className="text-xs">Ngày lấy nguồn tổng quan: {universityDate(offering.retrievedAt)}</p></>}
-            </div>
-          </DetailSection>
         </aside>
       </div>
     </article>

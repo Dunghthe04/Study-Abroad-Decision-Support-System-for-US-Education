@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { InfoIcon } from "lucide-react";
+import { CoinsIcon, FileTextIcon, GraduationCapIcon, HandCoinsIcon, HeartHandshakeIcon, HomeIcon, InfoIcon, UsersIcon, WalletIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -10,7 +10,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Separator } from "@/components/ui/separator";
 import type { UniversityMajor, UniversityOffering } from "@/types/university";
 import { annualPublishedCost, MISSING_UNIVERSITY_DATA, schoolAidPolicy, schoolImportanceLabel, schoolSatPolicy, scoreRange, universityDate, universityDeadlines, universityMoney, universityNumber, universityPercent } from "@/lib/university-display";
-import { DetailRows, DetailSection, SourceLink } from "./UniversityDetailParts";
+import { DetailRows, DetailSection, GridDataItem, SourceLink } from "./UniversityDetailParts";
 
 export function UniversityAdmissions({ offering }: { offering: UniversityOffering }) {
   const deadlines = universityDeadlines(offering.deadlinesJson);
@@ -29,16 +29,14 @@ export function UniversityAdmissions({ offering }: { offering: UniversityOfferin
         { label: "Mức coi trọng điểm thi", value: schoolImportanceLabel(offering.c7TestImportance) },
         { label: "Mức coi trọng ngoại khóa", value: schoolImportanceLabel(offering.c7EcImportance) },
       ]} />
-      <h3 className="mb-3 mt-7 text-sm font-semibold">Các đợt nộp hồ sơ</h3>
+      <h3 className="mb-4 mt-7 text-sm font-semibold">Các đợt nộp hồ sơ</h3>
       {deadlines.length ? (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2 md:grid-cols-3">
           {deadlines.map((deadline) => (
-            <Card key={deadline.round} size="sm" className="bg-muted/30 shadow-none">
-              <CardContent>
-                <p className="text-xs text-muted-foreground">{deadline.label} ({deadline.round})</p>
-                <p className="mt-1 text-sm font-semibold">{deadline.date}</p>
-              </CardContent>
-            </Card>
+            <div key={deadline.round} className="space-y-1">
+              <p className="text-xs text-muted-foreground">{deadline.label} ({deadline.round})</p>
+              <p className="text-xl font-bold tracking-tight text-foreground">{deadline.date}</p>
+            </div>
           ))}
         </div>
       ) : <p className="text-sm text-muted-foreground">{MISSING_UNIVERSITY_DATA}</p>}
@@ -49,29 +47,58 @@ export function UniversityAdmissions({ offering }: { offering: UniversityOfferin
 
 export function UniversityCosts({ offering }: { offering: UniversityOffering }) {
   const total = annualPublishedCost(offering);
+
+  const costItems = [
+    { icon: GraduationCapIcon, label: "Học phí", value: universityMoney(offering.tuitionUsd) },
+    { icon: HomeIcon, label: "Sinh hoạt phí", value: universityMoney(offering.livingUsd) },
+    { icon: FileTextIcon, label: "Phí bắt buộc", value: universityMoney(offering.feesUsd) },
+    { icon: WalletIcon, label: "Chi phí khác", value: universityMoney(offering.otherExpensesUsd) },
+  ];
+
+  const aidItems = [
+    { icon: HeartHandshakeIcon, label: "Chính sách hỗ trợ", value: schoolAidPolicy(offering.intlAidPolicy) },
+    { icon: HandCoinsIcon, label: "Mức hỗ trợ trung bình được ghi nhận", value: universityMoney(offering.intlAidAvgUsd) },
+    { icon: UsersIcon, label: "Số sinh viên quốc tế nhận hỗ trợ", value: universityNumber(offering.intlAidRecipients) },
+  ];
+
   return (
     <DetailSection id="costs" title="Chi phí & hỗ trợ tài chính" description={offering.academicYear ? `Số liệu chi phí trong hệ thống · năm học ${offering.academicYear} · USD/năm` : "Số liệu chi phí trong hệ thống · USD/năm"}>
-      <DetailRows rows={[
-        { label: "Học phí", value: universityMoney(offering.tuitionUsd) },
-        { label: "Sinh hoạt phí", value: universityMoney(offering.livingUsd) },
-        { label: "Phí bắt buộc", value: universityMoney(offering.feesUsd) },
-        { label: "Chi phí khác", value: universityMoney(offering.otherExpensesUsd) },
-      ]} />
+      <div className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
+        {costItems.map((item) => (
+          <GridDataItem
+            key={item.label}
+            icon={item.icon}
+            label={item.label}
+            value={item.value}
+          />
+        ))}
+      </div>
+
       {total !== null && (
         <Card size="sm" className="mt-5 bg-brand-wash shadow-none ring-0">
           <CardContent className="flex flex-wrap items-center justify-between gap-2 text-brand-ink">
-            <span className="text-sm font-medium">Tổng các khoản trên</span>
+            <div className="flex items-center gap-2">
+              <CoinsIcon className="size-5" />
+              <span className="text-sm font-medium">Tổng các khoản trên</span>
+            </div>
             <strong className="text-lg">{universityMoney(total)} / năm</strong>
           </CardContent>
         </Card>
       )}
+
       <p className="mt-4 text-xs leading-relaxed text-muted-foreground">Đây là chi phí công bố, chưa phải chi phí thực trả của từng sinh viên. Không tự suy ra mức học bổng hoặc trừ hỗ trợ tài chính khỏi các khoản trên.</p>
+
       <h3 className="mb-4 mt-7 text-sm font-semibold">Hỗ trợ cho sinh viên quốc tế</h3>
-      <DetailRows rows={[
-        { label: "Chính sách hỗ trợ", value: schoolAidPolicy(offering.intlAidPolicy) },
-        { label: "Mức hỗ trợ trung bình được ghi nhận", value: universityMoney(offering.intlAidAvgUsd) },
-        { label: "Số sinh viên quốc tế nhận hỗ trợ", value: universityNumber(offering.intlAidRecipients) },
-      ]} />
+      <div className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
+        {aidItems.map((item) => (
+          <GridDataItem
+            key={item.label}
+            icon={item.icon}
+            label={item.label}
+            value={item.value}
+          />
+        ))}
+      </div>
     </DetailSection>
   );
 }
@@ -101,10 +128,7 @@ function MajorList({ majors }: { majors: UniversityMajor[] }) {
       {majors.map((major) => (
         <li key={`${major.cipCode}-${major.name}`} className="flex flex-wrap items-center justify-between gap-2 py-3">
           <div><p className="text-sm font-medium">{major.name}</p>{major.cipCode && <p className="mt-0.5 text-xs text-muted-foreground">CIP {major.cipCode}</p>}</div>
-          <div className="flex gap-1.5">
-            {major.isStem && <Badge variant="secondary">STEM</Badge>}
-            {!major.isVerified && <Badge variant="outline">Chưa xác minh</Badge>}
-          </div>
+          {major.isStem && <Badge variant="secondary">STEM</Badge>}
         </li>
       ))}
     </ul>

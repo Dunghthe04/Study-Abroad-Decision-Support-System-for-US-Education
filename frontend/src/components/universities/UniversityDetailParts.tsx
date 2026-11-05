@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from "react";
 import Image from "next/image";
 import { Building2Icon, ExternalLinkIcon } from "lucide-react";
+import { cn } from "cn";
 import { universityHost, universityUrl } from "@/lib/university-display";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -46,14 +47,40 @@ export function DetailRows({ rows }: { rows: { label: string; value: ReactNode }
   return (
     <Table>
       <TableBody>
-        {rows.map((row) => (
-          <TableRow key={row.label} className="hover:bg-transparent">
-            <TableHead scope="row" className="h-auto w-1/2 py-3 pr-4 pl-0 align-top font-normal whitespace-normal text-muted-foreground">{row.label}</TableHead>
-            <TableCell className="py-3 pr-0 text-right align-top font-medium whitespace-normal">{row.value}</TableCell>
-          </TableRow>
-        ))}
+        {rows.map((row) => {
+          const isMissing = typeof row.value === "string" && (row.value === "—" || row.value === "-");
+          return (
+            <TableRow key={row.label} className="hover:bg-transparent">
+              <TableHead scope="row" className="h-auto w-1/2 py-3 pr-4 pl-0 align-top font-normal whitespace-normal text-muted-foreground">{row.label}</TableHead>
+              <TableCell className={cn("py-3 pr-0 text-right align-top font-medium whitespace-normal", isMissing && "text-muted-foreground/40 font-normal")}>{row.value}</TableCell>
+            </TableRow>
+          );
+        })}
       </TableBody>
     </Table>
+  );
+}
+
+export function GridDataItem({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: React.ReactNode;
+}) {
+  const isMissing = value == null || value === "" || value === "—" || value === "-";
+  return (
+    <div className="flex items-start gap-3.5 py-1">
+      <Icon className="size-6 shrink-0 text-muted-foreground/80 mt-0.5" />
+      <div className="min-w-0 space-y-0.5">
+        <p className="text-xs text-muted-foreground">{label}</p>
+        <p className={cn("text-base font-semibold tracking-tight", isMissing ? "text-muted-foreground/40 font-normal" : "text-foreground")}>
+          {isMissing ? "—" : value}
+        </p>
+      </div>
+    </div>
   );
 }
 
