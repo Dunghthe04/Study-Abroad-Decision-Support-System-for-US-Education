@@ -31,9 +31,11 @@ export type FilterFlag =
   | "COST_UNKNOWN"
   | "NEED_BIG_AID"
   | "AID_UNKNOWN"
-  | "ENGLISH_NO_SCORE"
   | "ENGLISH_MIN_UNKNOWN"
   | "ENGLISH_NOT_COMPARABLE"
+  | "ENGLISH_NEAR"
+  // Hai cờ cũ: backend không còn gắn, nhưng lượt gợi ý đã lưu trước đây vẫn có thể chứa
+  | "ENGLISH_NO_SCORE"
   | "ENGLISH_BELOW_MIN";
 
 // Một trường đã chấm. Nhóm và số liệu do backend tính bằng code (không qua AI).
@@ -81,6 +83,19 @@ export interface RecommendationItems {
   other: PickedSchool[];
 }
 
+// Một nấc của bậc thang mở khóa: nếu đạt IELTS này thì có bấy nhiêu trường đủ điều kiện nộp
+export interface EnglishLadderStep {
+  ielts: number;
+  eligible: number;
+}
+
+// Thông báo tiếng Anh của một lượt gợi ý (backend tính)
+export interface EnglishNotice {
+  hidden: number; // số trường bị ẩn chỉ vì tiếng Anh
+  noCertificate: boolean; // chưa có chứng chỉ tiếng Anh nào
+  ladder: EnglishLadderStep[];
+}
+
 export interface RecommendationCriteria {
   major: string | null;
   states: string[];
@@ -90,6 +105,7 @@ export interface RecommendationCriteria {
   tier: number; // bậc ngoại khóa 1–5
   algorithm?: string; // phiên bản công thức; lần gợi ý cũ chưa có
   status: "OK" | "FAILED" | null; // null khi không còn trường nào để chọn
+  english?: EnglishNotice | null; // null khi không có trường nào bị ẩn chỉ vì tiếng Anh; lần gợi ý cũ chưa có
 }
 
 export interface Recommendation {
