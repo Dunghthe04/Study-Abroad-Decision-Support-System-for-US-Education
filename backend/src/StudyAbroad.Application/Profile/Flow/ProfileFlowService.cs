@@ -267,7 +267,7 @@ public class ProfileFlowService(
             TargetLevel: profile.TargetLevel,
             IntendedMajor: profile.IntendedMajor,
             OverallGpa: profile.OverallGpa,
-            ExtracurricularScore: profile.ExtracurricularScore,
+            ExtracurricularTier: profile.ExtracurricularTier,
             BudgetMinUsd: profile.BudgetMinUsd,
             BudgetMaxUsd: profile.BudgetMaxUsd,
             TargetSchoolType: profile.TargetSchoolType,
@@ -848,8 +848,8 @@ public class ProfileFlowService(
         profile.NeedsScholarship = ProfileConstants.ScholarshipNeeds.NeedsScholarship(profile.ScholarshipNeed);
         profile.FundingSource = NullIfBlank(draft.Step4.FundingSource);
 
-        // Điểm ngoại khóa cũ không còn đúng với dữ liệu mới; để bộ tính điểm tính lại
-        profile.ExtracurricularScore = null;
+        // Bậc ngoại khóa cũ không còn đúng với hoạt động mới; để SLM xác nhận và tính lại
+        profile.ExtracurricularTier = null;
 
         // Bước 5
         var today = DateOnly.FromDateTime(now);

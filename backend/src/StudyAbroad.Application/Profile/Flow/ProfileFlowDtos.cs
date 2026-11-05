@@ -210,7 +210,7 @@ public record CommitProfileFlowResponse(
     [property: JsonPropertyName("targetLevel")] string TargetLevel,
     [property: JsonPropertyName("intendedMajor")] string? IntendedMajor,
     [property: JsonPropertyName("overallGpa")] decimal? OverallGpa,
-    [property: JsonPropertyName("extracurricularScore")] decimal? ExtracurricularScore,
+    [property: JsonPropertyName("extracurricularTier")] int? ExtracurricularTier,
     [property: JsonPropertyName("budgetMinUsd")] decimal? BudgetMinUsd,
     [property: JsonPropertyName("budgetMaxUsd")] decimal? BudgetMaxUsd,
     [property: JsonPropertyName("targetSchoolType")] string? TargetSchoolType = "all",
