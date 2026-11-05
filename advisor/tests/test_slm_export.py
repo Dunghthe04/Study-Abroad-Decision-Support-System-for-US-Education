@@ -230,24 +230,38 @@ def test_every_real_exported_skill_passes_the_skill_check_with_the_request_it_an
         check_skill(row["messages"][2]["content"], request)
 
 
-# Quy tắc đặt Mốc trong prompt phải đúng với dữ liệu, nếu không model học một đằng được dặn một nẻo
-def levels(profile):
-    gpa = float(re.search(r"[\d.]+", profile["gpa"]).group())
-    gpa4 = gpa / 10 * 4 if gpa > 4.0 else gpa
-    sat = re.search(r"\d{3,4}", profile.get("sat", ""))
-    ielts = re.search(r"\d(?:\.\d)?", profile.get("english", ""))
-    budget = int(re.search(r"\d+(?:\.\d{3})+", profile["budget"]).group().replace(".", ""))
-    return {
-        "GPA": "cao" if gpa4 >= 3.5 else "trung bình" if gpa4 >= 3.0 else "thấp",
-        "SAT": "chưa thi" if not sat else "cao" if int(sat.group()) >= 1400 else "trung bình" if int(sat.group()) >= 1200 else "thấp",
-        "tiếng Anh": "chưa thi" if not ielts else "cao" if float(ielts.group()) >= 7 else "trung bình" if float(ielts.group()) >= 6 else "thấp",
-        "ngân sách": "cao" if budget >= 60000 else "trung bình" if budget >= 35000 else "thấp",
-    }  # fmt: skip
+# Mức chữ trong một dòng tính sẵn: "3.2 thang 4, thấp (TB các trường 3.73)" → "thấp", "1200, mức trung bình" →
+# "trung bình". Chưa có mốc trường thì dòng chỉ có điểm ("3.2 thang 4") → None
+def level_in(line: str) -> str | None:
+    match = re.search(r", (?:mức )?(thấp|trung bình|cao)\b", line)
+    return match.group(1) if match else None
 
 
-def test_the_moc_line_of_every_real_skill_follows_the_rules_written_in_the_prompt():
-    for row in real_skill_rows():
+# Dòng Mốc phải lấy mức từ tinh_san (code đã so với mốc trường), không tự xếp theo ngưỡng cứng. Thiếu dòng tính sẵn
+# vì học sinh chưa có điểm / hoạt động thì ghi "chưa thi" / "chưa có"; có điểm mà chưa có mốc trường thì "chưa có mốc"
+def moc_words(tinh_san):
+    def scored(name, key, missing):
+        if key not in tinh_san:
+            return f"{name} {missing}"
+        return f"{name} {level_in(tinh_san[key]) or 'chưa có mốc'}"
+
+    ec = tinh_san.get("ec_level")
+    budget = re.search(r"mức (\S+)$", tinh_san["budget_level"]).group(1)
+    return [
+        scored("GPA", "gpa_level", "chưa có"),
+        scored("tiếng Anh", "english_level", "chưa thi"),
+        scored("SAT", "sat_level", "chưa thi"),
+        f"hoạt động {ec}" if ec else "hoạt động chưa có",
+        f"ngân sách {budget}",
+    ]
+
+
+def test_the_moc_line_of_every_real_skill_copies_the_levels_code_calculated():
+    rows = real_skill_rows()
+
+    assert rows
+    for row in rows:
         request = json.loads(row["messages"][1]["content"])
         moc = re.search(r"# Mốc: (.*)", row["messages"][2]["content"]).group(1)
-        for name, level in levels(request["ho_so"]).items():
-            assert f"{name} {level}" in moc, (request["cau_hoi"], name, level, moc)
+        for words in moc_words(request["tinh_san"]):
+            assert words in moc, (request["cau_hoi"], words, moc)
