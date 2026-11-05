@@ -3,8 +3,7 @@
 // Khung "Cần gì để vào trường này": tài chính trước, rồi mức cần đạt của từng yếu tố, nút áp dụng vào thanh kéo.
 // Chỉ hiển thị số backend đã tính (GoalSeeker), không tính lại gì.
 
-import { useEffect, useRef } from "react";
-import { XIcon } from "lucide-react";
+import { PinIcon, XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import {
@@ -17,30 +16,28 @@ import {
   groupLabel,
 } from "@/lib/recommendation-labels";
 import type { GoalSeek } from "@/lib/use-goal-seek";
-import type { GoalAlternative, GoalBudget, GoalPlan, GoalTarget, SchoolGoalResult } from "@/types/recommendation";
+import type { GoalAlternative, GoalBudget, GoalEnglish, GoalPlan, GoalTarget, SchoolGoalResult } from "@/types/recommendation";
 
 interface GoalSeekPanelProps {
   goal: GoalSeek;
   schoolName: string; // tên trường đang xét, hiện ngay cả khi kết quả chưa về
   simulating: boolean; // đang xem hồ sơ giả định: nói rõ kết quả vẫn tính từ hồ sơ thật
+  pinned?: boolean; // khung ghim ở đầu danh sách (không gắn dưới thẻ trường)
+  onRestore?: () => void; // có khi các thanh giả định vừa được đưa về hồ sơ thật để tính: khôi phục lại giả định trước
   onApply: (plan: GoalPlan) => void; // đặt các giá trị của phương án vào thanh kéo
 }
 
 const TARGET_BY_CODE: Record<string, GoalTarget> = { R: "reach", M: "match", S: "safety" };
 
-export function GoalSeekPanel({ goal, schoolName, simulating, onApply }: GoalSeekPanelProps) {
+export function GoalSeekPanel({ goal, schoolName, simulating, pinned = false, onRestore, onApply }: GoalSeekPanelProps) {
   const result = goal.result;
-  const ref = useRef<HTMLElement>(null);
-  // Mở ngay dưới thẻ trường: chỉ cuộn khi khung bị che dưới mép màn hình, không kéo người dùng đi xa
-  useEffect(() => {
-    ref.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  }, [goal.result]);
   const selected: GoalTarget = goal.target ?? (result ? (TARGET_BY_CODE[result.target] ?? "match") : "match");
 
   return (
-    <section ref={ref} className="space-y-4 rounded-2xl border border-brand/30 bg-brand-wash p-5" aria-live="polite">
+    <section className="space-y-4 rounded-2xl border border-brand/30 bg-brand-wash p-5" aria-live="polite">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
+          {pinned && <PinIcon className="size-4 text-brand" aria-label="Đã ghim ở đầu danh sách" />}
           <p className="text-sm font-bold text-brand">Cần gì để vào {schoolName}?</p>
           <label className="flex items-center gap-1.5 text-xs text-ink-2">
             nhóm muốn đạt
@@ -63,6 +60,15 @@ export function GoalSeekPanel({ goal, schoolName, simulating, onApply }: GoalSee
         </Button>
       </div>
 
+      {onRestore && (
+        <p className="flex flex-wrap items-center gap-x-2 text-xs text-ink-2">
+          Mình đã đưa các thanh giả định về <strong>hồ sơ thật</strong> để tính mức cần đạt.
+          <button type="button" onClick={onRestore} className="font-semibold text-brand underline-offset-4 hover:underline">
+            Khôi phục giả định trước
+          </button>
+        </p>
+      )}
+
       {simulating && (
         <p className="text-xs text-ink-2">
           Bạn đang xem hồ sơ giả định, còn kết quả dưới đây vẫn tính từ <strong>hồ sơ thật</strong> của bạn.
@@ -74,7 +80,7 @@ export function GoalSeekPanel({ goal, schoolName, simulating, onApply }: GoalSee
       {result && (
         <div className="space-y-4 text-sm">
           <BudgetLine budget={result.budget} />
-          {result.filterReason && <FilterNote reason={result.filterReason} />}
+          {result.filterReason && <FilterNote reason={result.filterReason} english={result.english ?? null} />}
           <Academic result={result} onApply={onApply} />
           {result.alternatives.length > 0 && <Alternatives items={result.alternatives} />}
           <p className="text-[11px] text-ink-3">
@@ -126,7 +132,34 @@ const FILTER_TEXT: Record<string, string> = {
   CONTROL: "loại trường (công lập hoặc tư thục) bạn chọn",
 };
 
-function FilterNote({ reason }: { reason: string }) {
+// Mức tiếng Anh tối thiểu của trường, mỗi bài thi một mức ("IELTS 6,5, TOEFL 80 hoặc Duolingo 115")
+function englishNeed(english: GoalEnglish | null): string | null {
+  if (!english) return null;
+  const parts = [
+    english.minIelts != null ? `IELTS ${String(english.minIelts).replace(".", ",")}` : null,
+    english.minToefl != null ? `TOEFL ${english.minToefl}` : null,
+    english.minDuolingo != null ? `Duolingo ${english.minDuolingo}` : null,
+  ].filter(Boolean) as string[];
+  if (parts.length === 0) return null;
+  return parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(", ")} hoặc ${parts[parts.length - 1]}`;
+}
+
+function FilterNote({ reason, english }: { reason: string; english: GoalEnglish | null }) {
+  if (reason === "ENGLISH" || reason === "ENGLISH_NO_CERT") {
+    const need = englishNeed(english);
+    return (
+      <div className="space-y-0.5 text-xs text-warn">
+        <p className="text-[11px] font-bold tracking-wide text-brand uppercase">Tiếng Anh</p>
+        <p>
+          {reason === "ENGLISH_NO_CERT"
+            ? "Bạn chưa có chứng chỉ tiếng Anh nên trường chưa nằm trong danh sách."
+            : "Điểm tiếng Anh của bạn chưa đủ nên trường chưa nằm trong danh sách."}
+          {need && ` Cần đạt ${need} (một bài là đủ).`}
+        </p>
+        <p className="text-ink-2">Phần học thuật dưới đây tính khi trường đã vào danh sách, tức là khi bạn đủ tiếng Anh.</p>
+      </div>
+    );
+  }
   return (
     <p className="text-xs text-warn">
       Trường này không nằm trong danh sách của bạn vì không khớp {FILTER_TEXT[reason] ?? "bộ lọc"}.

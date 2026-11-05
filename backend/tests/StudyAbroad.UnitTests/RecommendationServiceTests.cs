@@ -512,7 +512,61 @@ public class RecommendationServiceTests
         // đổi giá trị giả định không làm đổi "hồ sơ thật" trong kết quả
         var result = await service.SimulateAsync(profile.UserId, NoChange with { Gpa = 2.0m }, null, default);
 
-        Assert.Equal(new SimulationProfile(3.5m, 1290, 28, 6.5m, 50_000m, ProfileConstants.ScholarshipNeeds.Preferred, 5), result.Profile);
+        Assert.Equal(new SimulationProfile(3.5m, 1290, 28, 6.5m, 50_000m, ProfileConstants.ScholarshipNeeds.Preferred, 5, ActivityCount: 4), result.Profile);
+    }
+
+    // TOEFL giả định: trường yêu cầu TOEFL 100, học sinh chỉ có TOEFL 80 (thiếu hơn 1 band) nên bị ẩn; thử TOEFL 100 thì trường hiện ra
+    [Fact]
+    public async Task Simulate_ARaisedToefl_BringsBackASchoolHiddenForEnglish()
+    {
+        var school = School("T", 30_000m, "none", Major, sat: (1200, 1380), accept: 0.6m, avgGpa: 3.5m, minToefl: 100m);
+        var (service, _, _, profile) = SimSetup([school]);
+        profile.Ielts = null;
+        profile.Toefl = 80m;
+
+        var result = await service.SimulateAsync(profile.UserId, NoChange with { Toefl = 100m }, null, default);
+
+        Assert.Equal(0, result.Baseline.Kept);
+        Assert.Equal(1, result.Simulated.Kept);
+        Assert.Equal(80m, result.Profile.Toefl);   // "hồ sơ thật" vẫn là 80
+        var change = Assert.Single(result.Changes);
+        Assert.Equal("OUT", change.From);
+    }
+
+    // Duolingo giả định chỉ thay đúng điểm Duolingo, không đụng các bài thi khác
+    [Fact]
+    public async Task Simulate_ADuolingoValue_OnlyReplacesDuolingo()
+    {
+        var school = School("D", 30_000m, "none", Major, sat: (1200, 1380), accept: 0.6m, avgGpa: 3.5m, minDuolingo: 120m);
+        var (service, _, _, profile) = SimSetup([school]);
+        profile.Ielts = null;
+        profile.Duolingo = 95m;   // thiếu 25 điểm = 1 band: bị ẩn
+
+        var result = await service.SimulateAsync(profile.UserId, NoChange with { Duolingo = 120m }, null, default);
+
+        Assert.Equal(0, result.Baseline.Kept);
+        Assert.Equal(1, result.Simulated.Kept);
+        Assert.Equal(95m, result.Profile.Duolingo);
+    }
+
+    // Số hoạt động và giải thưởng đã khai (để giao diện nói "đã khai N hoạt động, M giải thưởng"); mục thiếu tên hoặc phạm vi không tính
+    [Fact]
+    public async Task Simulate_CountsTheDeclaredActivitiesAndAwards()
+    {
+        var activities = new List<ProfileActivity>
+        {
+            new() { Kind = "extracurricular", Title = "CLB Tin học", Role = "leader", ImpactLevel = 2, DurationMonths = 12 },
+            new() { Kind = "extracurricular", Title = "Tình nguyện", Role = "member", ImpactLevel = 1, DurationMonths = 6 },
+            new() { Kind = "award", Title = "Giải nhì Toán tỉnh", ImpactLevel = 3 },
+            new() { Kind = "extracurricular", Title = "", ImpactLevel = 3 },                 // thiếu tên: không tính
+            new() { Kind = "extracurricular", Title = "Thiếu phạm vi", ImpactLevel = null }, // thiếu phạm vi: không tính
+        };
+        var (service, _, _, profile) = SimSetup(activities: activities);
+
+        var result = await service.SimulateAsync(profile.UserId, NoChange, null, default);
+
+        Assert.Equal(2, result.Profile.ActivityCount);
+        Assert.Equal(1, result.Profile.AwardCount);
     }
 
     [Fact]
@@ -666,6 +720,18 @@ public class RecommendationServiceTests
         var overrides = new SimulationOverrides((decimal?)gpa, (decimal?)sat, (decimal?)act, (decimal?)ielts, (decimal?)budget, null, null);
 
         await Assert.ThrowsAsync<ArgumentException>(() => service.SimulateAsync(profile.UserId, overrides, null, default));
+    }
+
+    [Theory]
+    [InlineData(130.0, null)]   // TOEFL vượt 120
+    [InlineData(null, 5.0)]     // Duolingo dưới 10
+    [InlineData(null, 200.0)]   // Duolingo vượt 160
+    public async Task Simulate_RejectsAToeflOrDuolingoOutOfRange(double? toefl, double? duolingo)
+    {
+        var (service, _, _, profile) = SimSetup();
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            service.SimulateAsync(profile.UserId, NoChange with { Toefl = (decimal?)toefl, Duolingo = (decimal?)duolingo }, null, default));
     }
 
     [Theory]
@@ -928,6 +994,37 @@ public class RecommendationServiceTests
 
         Assert.Equal("MAJOR", result.FilterReason);
         Assert.Equal("ok", result.Budget.Status);
+    }
+
+    // Trường bị ẩn vì tiếng Anh: khung nói rõ lý do và mức cần đạt, không tính như thể trường nằm trong danh sách
+    [Fact]
+    public async Task GoalSeek_ASchoolHiddenForEnglish_SaysWhatScoreIsNeeded()
+    {
+        var strict = School("E", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m,
+            minIelts: 7.5m, minToefl: 100m, minDuolingo: 130m);
+        var (service, profile) = GoalSetup(strict);
+        profile.Ielts = 6.0m;   // thiếu 1,5 band: bị loại
+
+        var result = await service.GoalSeekAsync(profile.UserId, "E", "match", default);
+
+        Assert.Equal("ENGLISH", result.FilterReason);
+        Assert.Equal(7.5m, result.English!.MinIelts);
+        Assert.Equal(100m, result.English.MinToefl);
+        Assert.Equal(130m, result.English.MinDuolingo);
+        Assert.Equal(1.5m, result.English.ShortfallBand);
+    }
+
+    [Fact]
+    public async Task GoalSeek_WithoutAnEnglishCertificate_SaysSo()
+    {
+        var strict = School("E", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m, minIelts: 6.5m);
+        var (service, profile) = GoalSetup(strict);
+        profile.Ielts = null;
+
+        var result = await service.GoalSeekAsync(profile.UserId, "E", "match", default);
+
+        Assert.Equal("ENGLISH_NO_CERT", result.FilterReason);
+        Assert.Null(result.English!.ShortfallBand);
     }
 
     // ---- đầu vào
