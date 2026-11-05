@@ -41,6 +41,7 @@ export function UniversityDetailView({ university }: { university: UniversityDet
   const offering = university.offerings.find((item) => item.studyLevel === selectedLevel) ?? university.offerings[0];
   const location = [university.city, university.stateName ?? university.state].filter(Boolean).join(", ");
   const website = universityUrl(university.website);
+  const coverUrl = universityUrl(university.coverUrl);
   const navigation = useMemo(
     () => [
       { id: "overview", label: "Tổng quan" },
@@ -87,62 +88,83 @@ export function UniversityDetailView({ university }: { university: UniversityDet
   ];
 
   return (
-    <article className="space-y-6 pb-8">
-      <Breadcrumb>
-        <BreadcrumbList>
-          <BreadcrumbItem>
-            <BreadcrumbLink render={<Link href="/university" />}>Universities</BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbPage>{university.name}</BreadcrumbPage>
-          </BreadcrumbItem>
-        </BreadcrumbList>
-      </Breadcrumb>
+    <article className="space-y-6 pb-12">
+      {/* Hero Header với background ảnh bìa mờ tràn toàn màn hình */}
+      <div className="relative w-full overflow-hidden border-b border-border/60 bg-muted/20">
+        {coverUrl && (
+          <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
+            <div
+              className="absolute inset-0 bg-cover bg-center blur-3xl scale-125 opacity-35 brightness-110 saturate-150"
+              style={{ backgroundImage: `url(${coverUrl})` }}
+            />
+            <div className="absolute inset-0 bg-gradient-to-b from-background/30 via-background/60 to-background" />
+          </div>
+        )}
 
-      <header>
-        <SchoolImage url={university.coverUrl} alt={`Khuôn viên ${university.name}`} className="h-48 w-full rounded-lg bg-brand-wash sm:h-64 lg:h-80" priority />
-        <div className="flex flex-wrap items-end justify-between gap-5 pt-5">
-          <div className="flex w-full min-w-0 flex-none items-center gap-4 sm:w-auto sm:flex-1">
-            <SchoolImage url={university.logoUrl} alt={`Logo ${university.name}`} className="size-16 shrink-0 bg-white sm:size-20" contain />
-            <div className="min-w-0">
-              <h1 className="text-2xl font-semibold leading-tight tracking-tight text-foreground sm:text-3xl">{university.name}</h1>
-              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-                {location && <span className="inline-flex items-center gap-1"><MapPinIcon className="size-3.5" />{location}</span>}
-                {university.control && <span>{schoolControlLabel(university.control)}</span>}
-                {university.isIvy && <Badge variant="secondary">Ivy League</Badge>}
+        <div className="mx-auto max-w-[1320px] px-4 pt-4 pb-6 sm:px-6 space-y-5">
+          <Breadcrumb>
+            <BreadcrumbList>
+              <BreadcrumbItem>
+                <BreadcrumbLink render={<Link href="/university" />}>Universities</BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                <BreadcrumbPage>{university.name}</BreadcrumbPage>
+              </BreadcrumbItem>
+            </BreadcrumbList>
+          </Breadcrumb>
+
+          <header>
+            <SchoolImage
+              url={university.coverUrl}
+              alt={`Khuôn viên ${university.name}`}
+              className="h-48 w-full rounded-xl bg-brand-wash shadow-lg ring-1 ring-border/50 sm:h-64 lg:h-80"
+              priority
+            />
+            <div className="flex flex-wrap items-end justify-between gap-5 pt-5">
+              <div className="flex w-full min-w-0 flex-none items-center gap-4 sm:w-auto sm:flex-1">
+                <SchoolImage url={university.logoUrl} alt={`Logo ${university.name}`} className="size-16 shrink-0 bg-white sm:size-20 shadow-sm" contain />
+                <div className="min-w-0">
+                  <h1 className="text-2xl font-semibold leading-tight tracking-tight text-foreground sm:text-3xl">{university.name}</h1>
+                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+                    {location && <span className="inline-flex items-center gap-1"><MapPinIcon className="size-3.5" />{location}</span>}
+                    {university.control && <span>{schoolControlLabel(university.control)}</span>}
+                    {university.isIvy && <Badge variant="secondary">Ivy League</Badge>}
+                  </div>
+                </div>
               </div>
+              {website && <Button variant="outline" nativeButton={false} role="link" render={<a href={website} target="_blank" rel="noopener noreferrer" />}><GlobeIcon />Website trường<ArrowUpRightIcon /></Button>}
             </div>
-          </div>
-          {website && <Button variant="outline" nativeButton={false} role="link" render={<a href={website} target="_blank" rel="noopener noreferrer" />}><GlobeIcon />Website trường<ArrowUpRightIcon /></Button>}
+          </header>
         </div>
-      </header>
+      </div>
 
-      <nav aria-label="Các mục thông tin trường" className="sticky top-14 z-20 border-b border-border bg-background/95 backdrop-blur-sm">
-        <ScrollArea className="w-full min-w-0">
-          <div className="flex w-max gap-1">
-            {navigation.map((item) => {
-              const isActive = activeSection === item.id;
-              return (
-                <a
-                  key={item.id}
-                  href={`#${item.id}`}
-                  onClick={() => setActiveSection(item.id)}
-                  className={cn(
-                    "inline-flex items-center justify-center px-4 py-3 text-sm font-medium transition-colors border-b-2 -mb-px outline-none",
-                    isActive
-                      ? "border-brand text-brand font-semibold"
-                      : "border-transparent text-muted-foreground hover:text-foreground hover:border-brand/40"
-                  )}
-                >
-                  {item.label}
-                </a>
-              );
-            })}
-          </div>
-          <ScrollBar orientation="horizontal" />
-        </ScrollArea>
-      </nav>
+      <div className="mx-auto max-w-[1320px] px-4 sm:px-6 space-y-6">
+        <nav aria-label="Các mục thông tin trường" className="sticky top-14 z-20 border-b border-border bg-background/95 backdrop-blur-sm">
+          <ScrollArea className="w-full min-w-0">
+            <div className="flex w-max gap-1">
+              {navigation.map((item) => {
+                const isActive = activeSection === item.id;
+                return (
+                  <a
+                    key={item.id}
+                    href={`#${item.id}`}
+                    onClick={() => setActiveSection(item.id)}
+                    className={cn(
+                      "inline-flex items-center justify-center px-4 py-3 text-sm font-medium transition-colors border-b-2 -mb-px outline-none",
+                      isActive
+                        ? "border-brand text-brand font-semibold"
+                        : "border-transparent text-muted-foreground hover:text-foreground hover:border-brand/40"
+                    )}
+                  >
+                    {item.label}
+                  </a>
+                );
+              })}
+            </div>
+            <ScrollBar orientation="horizontal" />
+          </ScrollArea>
+        </nav>
 
       {university.offerings.length > 1 && (
         <Card size="sm">
@@ -234,6 +256,7 @@ export function UniversityDetailView({ university }: { university: UniversityDet
           )}
         </aside>
       </div>
-    </article>
+    </div>
+  </article>
   );
 }
