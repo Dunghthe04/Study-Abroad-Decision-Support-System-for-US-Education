@@ -23,6 +23,20 @@ export interface StudyCenter {
   description?: string | null;
   verificationStatus?: string;
   isActive?: boolean;
+  centerType?: string;
+  logoUrl?: string | null;
+  coverImageUrl?: string | null;
+  galleryImages?: string[];
+  district?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  staffCount?: number | null;
+  establishedYear?: number | null;
+  licenseNumber?: string | null;
+  accreditations?: string[];
+  visaSuccessRate?: number | null;
+  averageRating?: number;
+  reviewCount?: number;
 }
 
 export interface CreateStudyCenterRequest {
@@ -37,6 +51,18 @@ export interface CreateStudyCenterRequest {
   email?: string | null;
   description?: string | null;
   surveyedAt?: string | null;
+  centerType?: string;
+  logoUrl?: string | null;
+  coverImageUrl?: string | null;
+  galleryImages?: string[];
+  district?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  staffCount?: number | null;
+  establishedYear?: number | null;
+  licenseNumber?: string | null;
+  accreditations?: string[];
+  visaSuccessRate?: number | null;
 }
 
 export type ChatRole = "user" | "assistant";

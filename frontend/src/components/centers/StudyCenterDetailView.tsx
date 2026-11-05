@@ -264,16 +264,26 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
                 </div>
                 <div>
                   <span className="font-medium text-foreground">Khu vực:</span>{" "}
-                  <span className="text-muted-foreground">{center.city ?? "Toàn quốc"}</span>
+                  <span className="text-muted-foreground">
+                    {center.district ? `${center.district}, ${center.city ?? "Việt Nam"}` : (center.city ?? "Toàn quốc")}
+                  </span>
+                </div>
+                <div>
+                  <span className="font-medium text-foreground">Năm thành lập:</span>{" "}
+                  <span className="text-muted-foreground">{profile.establishedYear}</span>
                 </div>
                 <div>
                   <span className="font-medium text-foreground">Giấy phép cơ sở:</span>{" "}
                   <span className="text-muted-foreground">{profile.licenseIssuedBy}</span>
                 </div>
-                {center.address && (
+                {(center.address || (center.latitude && center.longitude)) && (
                   <div className="pt-2">
                     <a
-                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${center.name} ${center.address}`)}`}
+                      href={
+                        center.latitude && center.longitude
+                          ? `https://www.google.com/maps/search/?api=1&query=${center.latitude},${center.longitude}`
+                          : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${center.name} ${center.address}`)}`
+                      }
                       target="_blank"
                       rel="noopener noreferrer"
                       className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "gap-1.5 text-xs inline-flex items-center")}

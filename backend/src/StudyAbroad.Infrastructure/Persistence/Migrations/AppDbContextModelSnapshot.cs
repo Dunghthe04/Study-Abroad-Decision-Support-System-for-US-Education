@@ -2524,10 +2524,30 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<List<string>>("Accreditations")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("accreditations");
+
                     b.Property<string>("Address")
                         .HasMaxLength(512)
                         .HasColumnType("character varying(512)")
                         .HasColumnName("address");
+
+                    b.Property<decimal>("AverageRating")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(3, 2)
+                        .HasColumnType("numeric(3,2)")
+                        .HasDefaultValue(5.0m)
+                        .HasColumnName("average_rating");
+
+                    b.Property<string>("CenterType")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("study_abroad")
+                        .HasColumnName("center_type");
 
                     b.Property<string>("City")
                         .HasMaxLength(128)
@@ -2540,6 +2560,11 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(32)")
                         .HasColumnName("code");
 
+                    b.Property<string>("CoverImageUrl")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)")
+                        .HasColumnName("cover_image_url");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -2549,14 +2574,46 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(4000)")
                         .HasColumnName("description");
 
+                    b.Property<string>("District")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("district");
+
                     b.Property<string>("Email")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)")
                         .HasColumnName("email");
 
+                    b.Property<int?>("EstablishedYear")
+                        .HasColumnType("integer")
+                        .HasColumnName("established_year");
+
+                    b.Property<List<string>>("GalleryImages")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("gallery_images");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean")
                         .HasColumnName("is_active");
+
+                    b.Property<double?>("Latitude")
+                        .HasColumnType("double precision")
+                        .HasColumnName("latitude");
+
+                    b.Property<string>("LicenseNumber")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("license_number");
+
+                    b.Property<string>("LogoUrl")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)")
+                        .HasColumnName("logo_url");
+
+                    b.Property<double?>("Longitude")
+                        .HasColumnType("double precision")
+                        .HasColumnName("longitude");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -2573,10 +2630,20 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(32)")
                         .HasColumnName("phone");
 
+                    b.Property<int>("ReviewCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("review_count");
+
                     b.Property<List<string>>("Services")
                         .IsRequired()
                         .HasColumnType("text[]")
                         .HasColumnName("services");
+
+                    b.Property<int?>("StaffCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("staff_count");
 
                     b.Property<List<string>>("StudyLevels")
                         .IsRequired()
@@ -2606,6 +2673,10 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("VerifiedByUserId")
                         .HasColumnType("uuid")
                         .HasColumnName("verified_by_user_id");
+
+                    b.Property<double?>("VisaSuccessRate")
+                        .HasColumnType("double precision")
+                        .HasColumnName("visa_success_rate");
 
                     b.Property<string>("Website")
                         .HasMaxLength(512)
