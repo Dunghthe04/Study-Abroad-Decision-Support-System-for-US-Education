@@ -86,7 +86,7 @@ public partial class RecommendationService
             throw new InvalidOperationException("Hồ sơ chưa có bậc học muốn theo.");
         EnsureRunnable(profile);
 
-        var tier = ActivityTier.FromProfile(await profiles.GetProfileActivitiesAsync(profile.Id, ct)).Tier;
+        var tier = EcTierOf(profile);
         var schools = await recommendations.ListSchoolsAsync(profile.TargetLevel, ct);
         var school = schools.FirstOrDefault(s => string.Equals(s.University.Code, code, StringComparison.OrdinalIgnoreCase))
             ?? throw new InvalidOperationException($"Chưa có trường {code} trong dữ liệu.");
