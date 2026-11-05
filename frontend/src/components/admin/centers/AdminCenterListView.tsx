@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Building2Icon,
   SearchIcon,
@@ -13,6 +14,7 @@ import {
   RotateCcwIcon,
   FlameIcon,
   ChevronRightIcon,
+  EyeIcon,
 } from "lucide-react";
 import { studyCentersApi } from "@/lib/api";
 import type { StudyCenter, PagedResult } from "@/types/api";
@@ -21,12 +23,11 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AddCenterButton } from "@/components/admin/AddCenterButton";
 import { TablePagination } from "@/components/admin/shared/TablePagination";
-import { AdminCenterDetailPanel } from "./AdminCenterDetailPanel";
 import { cn } from "cn";
 
 export function AdminCenterListView() {
+  const router = useRouter();
   const [centers, setCenters] = useState<StudyCenter[]>([]);
-  const [selectedCenter, setSelectedCenter] = useState<StudyCenter | null>(null);
   const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(1);
   const pageSize = 10;
@@ -107,7 +108,7 @@ export function AdminCenterListView() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="flex-1 min-h-0 w-full overflow-y-auto space-y-6 pr-1 pb-10">
       {/* Header bar */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b pb-5">
         <div>
@@ -199,10 +200,8 @@ export function AdminCenterListView() {
         </form>
       </div>
 
-      {/* Master-Detail Layout */}
-      <div className="flex min-h-0 flex-1 flex-col gap-6 lg:flex-row items-start">
-        {/* Centers Table */}
-        <div className="bg-card border rounded-xl overflow-hidden shadow-sm flex-1 min-w-0 w-full">
+      {/* Centers Table */}
+      <div className="bg-card border rounded-xl overflow-hidden shadow-sm w-full">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className="bg-muted/50 border-b text-xs font-semibold uppercase text-muted-foreground tracking-wider">
@@ -231,17 +230,11 @@ export function AdminCenterListView() {
               ) : (
                 centers.map((c) => {
                   const isVerified = c.verificationStatus === "verified";
-                  const isSelected = selectedCenter?.id === c.id;
                   return (
                     <tr
                       key={c.id}
-                      onClick={() => setSelectedCenter(c)}
-                      className={cn(
-                        "cursor-pointer transition-colors",
-                        isSelected
-                          ? "bg-brand/10 hover:bg-brand/15 border-l-4 border-l-brand"
-                          : "hover:bg-muted/30"
-                      )}
+                      onClick={() => router.push(`/admin/centers/${c.id}`)}
+                      className="cursor-pointer transition-colors hover:bg-muted/40"
                     >
                       {/* Name & Logo */}
                       <td className="py-3.5 px-4">
@@ -321,26 +314,19 @@ export function AdminCenterListView() {
                       </td>
 
                       {/* Actions */}
-                      <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-end gap-1.5">
-                          <Button
-                            type="button"
-                            variant={isSelected ? "default" : "outline"}
-                            size="sm"
-                            onClick={() => setSelectedCenter(c)}
-                            className="gap-1 text-xs h-8"
-                          >
-                            Xem quản trị
-                            <ChevronRightIcon className="w-3 h-3" />
-                          </Button>
-                          <Link
-                            href={`/admin/centers/${c.id}`}
-                            className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "text-xs h-8 px-2 text-muted-foreground hover:text-foreground")}
-                            title="Mở toàn trang quản trị"
-                          >
-                            Chi tiết
-                          </Link>
-                        </div>
+                      <td className="py-3.5 px-4 text-right">
+                        <Link
+                          href={`/admin/centers/${c.id}`}
+                          className={cn(
+                            buttonVariants({ variant: "outline", size: "sm" }),
+                            "gap-1.5 text-xs h-8 hover:bg-muted text-foreground border-border"
+                          )}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <EyeIcon className="w-3.5 h-3.5 text-muted-foreground" />
+                          Xem chi tiết
+                          <ChevronRightIcon className="w-3 h-3 text-muted-foreground" />
+                        </Link>
                       </td>
                     </tr>
                   );
@@ -361,15 +347,6 @@ export function AdminCenterListView() {
             onPageChange={setPage}
           />
         </div>
-      </div>
-
-      {/* Detail Panel */}
-      {selectedCenter && (
-        <AdminCenterDetailPanel
-          center={selectedCenter}
-          onClose={() => setSelectedCenter(null)}
-        />
-      )}
       </div>
     </div>
   );

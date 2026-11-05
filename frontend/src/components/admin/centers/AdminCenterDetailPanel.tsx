@@ -215,19 +215,6 @@ export function AdminCenterDetailPanel({ center, onClose }: AdminCenterDetailPan
             </div>
           </div>
         )}
-
-        {/* Public view preview link */}
-        <div className="pt-2 border-t">
-          <Link
-            href={`/centers/${center.id}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={cn(buttonVariants({ variant: "outline", size: "sm" }), "w-full gap-1.5 text-xs text-muted-foreground hover:text-foreground")}
-          >
-            <span>Xem giao diện công khai (Học sinh & Phụ huynh)</span>
-            <ExternalLinkIcon className="w-3.5 h-3.5" />
-          </Link>
-        </div>
       </div>
     </DetailPanel>
   );

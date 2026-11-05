@@ -406,7 +406,7 @@ export function AdminUsersView() {
             type="button"
             size="sm"
             onClick={handleOpenCreateModal}
-            className="gap-1.5 bg-brand text-brand-foreground hover:bg-brand/90"
+            className="gap-1.5 bg-brand text-white hover:bg-brand/90"
           >
             <UserPlusIcon className="size-4" />
             Cấp tài khoản mới
@@ -808,7 +808,7 @@ export function AdminUsersView() {
                 >
                   Hủy
                 </Button>
-                <Button type="submit" disabled={isSubmitting} className="gap-2 bg-brand text-brand-foreground hover:bg-brand/90">
+                <Button type="submit" disabled={isSubmitting} className="gap-2 bg-brand text-white hover:bg-brand/90">
                   {isSubmitting ? <Spinner className="size-4" /> : <ShieldCheckIcon className="size-4" />}
                   Tạo tài khoản
                 </Button>

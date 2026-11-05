@@ -51,7 +51,7 @@ export function AdminCenterDetailView({ center }: AdminCenterDetailViewProps) {
   const scholarshipStat = parseScholarshipStat(profile.totalScholarshipsWon);
 
   return (
-    <div className="space-y-6 pb-12">
+    <div className="flex-1 min-h-0 w-full overflow-y-auto space-y-6 pr-1 pb-16">
       {/* Admin Action Bar & Breadcrumbs */}
       <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl border bg-muted/40">
         <div className="flex items-center gap-2 text-sm">
@@ -82,16 +82,6 @@ export function AdminCenterDetailView({ center }: AdminCenterDetailViewProps) {
               Chờ duyệt hồ sơ
             </Badge>
           )}
-
-          <Link
-            href={`/centers/${center.id}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={cn(buttonVariants({ variant: "outline", size: "sm" }), "gap-1.5 text-xs")}
-          >
-            <span>Xem trang công khai (Học sinh)</span>
-            <ExternalLinkIcon className="w-3.5 h-3.5" />
-          </Link>
         </div>
       </div>
 
