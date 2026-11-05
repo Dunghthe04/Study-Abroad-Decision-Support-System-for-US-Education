@@ -50,12 +50,17 @@ export function SchoolCard({ picked, school, change, onExplain, onGoal, highligh
             )}
         >
             {/* Ảnh trường */}
-            <SchoolPhoto name={name} coverUrl={school?.coverUrl} logoUrl={school?.logoUrl} />
+            <SchoolPhoto
+                name={name}
+                coverUrl={school?.coverUrl}
+                logoUrl={school?.logoUrl}
+                href={`/university/${encodeURIComponent(picked.code)}?from=recommendations`}
+            />
 
             <div className="grid min-w-0 flex-1 gap-x-8 gap-y-4 p-5 md:grid-cols-[minmax(0,1fr)_minmax(0,1.7fr)_auto]">
                 {/* Tên, nơi ở, trang chủ */}
                 <div className="min-w-0 space-y-1.5">
-                    <h3 className="text-base font-bold text-foreground"><Link href={`/university/${encodeURIComponent(picked.code)}`} className="hover:text-brand hover:underline">{name}</Link></h3>
+                    <h3 className="text-base font-bold text-foreground"><Link href={`/university/${encodeURIComponent(picked.code)}?from=recommendations`} className="hover:text-brand hover:underline">{name}</Link></h3>
                     <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
                         {school?.state && (
                             <span className="inline-flex items-center gap-1">
