@@ -1,5 +1,6 @@
 using StudyAbroad.Application.Profile.Flow;
 using StudyAbroad.Application.Recommendations;
+using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
 using System;
 using System.Collections.Generic;
@@ -17,9 +18,11 @@ namespace StudyAbroad.Application.Advisor
     // C4: mỗi lượt gửi kèm hồ sơ đọc từ bản nháp form, chat đổi ô nào thì ghi ô đó vào nháp
     // analyses: lưu câu đánh giá / lộ trình vào analysis_results (null thì không lưu, dùng trong test cũ)
     // recommender: chạy gợi ý trường khi advisor trả action "recommend" (null thì bỏ qua, dùng trong test cũ)
+    // benchmarks: đọc dữ liệu trường để tính mốc GPA / tiếng Anh cho skill ho_so (null thì không gửi mốc, dùng trong test cũ)
     public class ChatService(
         IAdvisorClient advisor, IChatSessionRepository sessions, IProfileFlowService profileFlow,
-        IChatAnalysisRepository? analyses = null, IRecommendationRunner? recommender = null)
+        IChatAnalysisRepository? analyses = null, IRecommendationRunner? recommender = null,
+        IChatBenchmarkRepository? benchmarks = null)
     {
         //Dữ liệu FE gửi lên
         // onEvent: chỉ truyền khi trả lời theo từng ý (stream); mỗi tin tiến độ / câu một ý của advisor gọi hàm này ngay.
@@ -53,8 +56,18 @@ namespace StudyAbroad.Application.Advisor
             // Đã có danh sách trường thì gửi kèm (lấy lần gợi ý mới nhất, kể cả khi học sinh vừa gợi ý lại ở trang khác)
             var schools = await LatestSchoolsAsync(userId, ct);
 
+            // Học bạ theo năm gửi riêng, không nằm trong hồ sơ chat (chat chỉ đọc, chỉ form nhập được)
+            var transcript = ChatTranscript.From(flow.Draft.Step2) is { } years ? JsonSerializer.SerializeToElement(years) : (JsonElement?)null;
+
+            // Mốc so sánh GPA / tiếng Anh từ dữ liệu trường, cùng bậc học với gợi ý trường
+            var marks = await BenchmarksAsync(flow.Draft.Step1?.TargetDegreeLevel, ct);
+
             //Gửi request sang Advisor
-            var toAdvisor = request with { State = state, Profile = JsonSerializer.SerializeToElement(profile), Schools = schools };
+            var toAdvisor = request with
+            {
+                State = state, Profile = JsonSerializer.SerializeToElement(profile), Schools = schools, Transcript = transcript,
+                Benchmarks = marks,
+            };
             var response = onEvent is null
                 ? await advisor.ChatAsync(toAdvisor, ct)
                 : await advisor.ChatStreamAsync(toAdvisor, onEvent, ct);
@@ -161,6 +174,17 @@ namespace StudyAbroad.Application.Advisor
         // Danh sách trường của lần gợi ý gần nhất; null khi chưa có kết quả (không cần gửi).
         // Lấy từ DB chứ không dựa vào trạng thái chat: học sinh có thể đã gợi ý ở trang Gợi ý trường, chat chưa hề chạy gợi ý.
         // Advisor coi danh sách này là "đã có kết quả"
+        // Hồ sơ chưa chọn bậc học thì dùng đại học; chưa có dữ liệu trường thì không gửi
+        private async Task<JsonElement?> BenchmarksAsync(string? targetLevel, CancellationToken ct)
+        {
+            if (benchmarks is null)
+                return null;
+            var level = StudyLevels.IsValid(targetLevel) ? targetLevel! : StudyLevels.Undergraduate;
+            return ChatBenchmarks.From(await benchmarks.ListAsync(level, ct)) is { } marks
+                ? JsonSerializer.SerializeToElement(marks)
+                : null;
+        }
+
         private async Task<IReadOnlyList<ChatSchool>?> LatestSchoolsAsync(Guid userId, CancellationToken ct)
         {
             if (recommender is null)

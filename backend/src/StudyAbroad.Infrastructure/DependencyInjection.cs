@@ -47,6 +47,7 @@ public static class DependencyInjection
         services.AddScoped<IRecommendationRepository, RecommendationRepository>();
         services.AddScoped<IChatSessionRepository, ChatSessionRepository>();
         services.AddScoped<IChatAnalysisRepository, ChatAnalysisRepository>();
+        services.AddScoped<IChatBenchmarkRepository, ChatBenchmarkRepository>();
 
 
         // [USAS-362] Đăng ký JWT Token Service (Ưu tiên nạp key từ biến môi trường JWT_SECRET_KEY).
@@ -80,6 +81,8 @@ public static class DependencyInjection
 
         services.Configure<AdvisorOptions>(configuration.GetSection(AdvisorOptions.SectionName));
         services.AddHttpClient<IAdvisorClient, AdvisorClient>(ConfigureAdvisorClient);
+        // Bậc ngoại khóa: SLM xác nhận vai trò, phạm vi rồi advisor tính bậc, gọi lúc lưu hồ sơ
+        services.AddHttpClient<IEcTierClient, EcTierClient>(ConfigureAdvisorClient);
         services.AddHttpClient<ITranscriptOcrClient, TranscriptOcrClient>((sp, client) =>
         {
             ConfigureAdvisorClient(sp, client);

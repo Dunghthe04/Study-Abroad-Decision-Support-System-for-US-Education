@@ -19,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RequiredMark } from "./RequiredMark";
 import { Textarea } from "@/components/ui/textarea";
 import { MonthPicker, type MonthValue } from "@/components/ui/month-picker";
 import { cn } from "@/lib/utils";
@@ -397,7 +398,7 @@ export function Step5Extracurricular({
             {/* Tên hoạt động / giải thưởng */}
             <div className="space-y-1.5">
               <Label htmlFor="itemName" className="text-xs font-medium text-foreground">
-                Tên {category === "activity" ? "hoạt động / câu lạc bộ / dự án" : "giải thưởng"}
+                Tên {category === "activity" ? "hoạt động / câu lạc bộ / dự án" : "giải thưởng"} <RequiredMark />
               </Label>
               <Input
                 id="itemName"
@@ -415,7 +416,7 @@ export function Step5Extracurricular({
             {category === "activity" ? (
               <div className="space-y-4">
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-medium text-foreground">Vai trò của bạn · Chọn 1</Label>
+                  <Label className="text-xs font-medium text-foreground">Vai trò của bạn · Chọn 1 <RequiredMark /></Label>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     {ACTIVITY_ROLE_OPTIONS.map((r) => (
                       <button
@@ -443,7 +444,7 @@ export function Step5Extracurricular({
                 <div className="grid gap-3 sm:grid-cols-2 pt-1">
                   <div className="space-y-1.5">
                     <Label htmlFor="itemStartDate" className="text-xs font-medium text-foreground">
-                      Từ (Tháng/Năm)
+                      Từ (Tháng/Năm) <RequiredMark />
                     </Label>
                     <MonthPicker
                       id="itemStartDate"
@@ -462,7 +463,7 @@ export function Step5Extracurricular({
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
                       <Label htmlFor="itemEndDate" className="text-xs font-medium text-foreground">
-                        Đến (Tháng/Năm)
+                        Đến (Tháng/Năm) {!isOngoing && <RequiredMark />}
                       </Label>
                       <label className="flex items-center gap-1.5 cursor-pointer text-xs font-medium text-brand">
                         <input
@@ -497,7 +498,7 @@ export function Step5Extracurricular({
             ) : (
               <div className="space-y-1.5 max-w-xs">
                 <Label htmlFor="itemYear" className="text-xs font-medium text-foreground">
-                  Năm đạt giải (tối đa {currentYear})
+                  Năm đạt giải (tối đa {currentYear}) <RequiredMark />
                 </Label>
                 <Input
                   id="itemYear"
@@ -521,7 +522,7 @@ export function Step5Extracurricular({
               <div className="flex items-center justify-between">
                 <div>
                   <Label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                    <span>Kim tự tháp phạm vi ảnh hưởng</span>
+                    <span>Kim tự tháp phạm vi ảnh hưởng <RequiredMark /></span>
                     <span className="text-brand font-normal text-[11px]">(Mô hình CollegeVine)</span>
                   </Label>
                   <p className="text-[11px] text-muted-foreground mt-0.5">

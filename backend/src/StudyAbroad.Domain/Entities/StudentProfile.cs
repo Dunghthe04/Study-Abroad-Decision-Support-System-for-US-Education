@@ -41,8 +41,8 @@ public class StudentProfile : BaseEntity
     public DateOnly? EnglishPlannedDate { get; set; }
     /// <summary>kỳ thi khác ngoài cột riêng, dạng {"ap": 4}</summary>
     public string? OtherTestsJson { get; set; }
-    /// <summary>điểm ngoại khóa 0–4 (thang của thầy): LLM đọc hoạt động thành thuộc tính, công thức của nhóm tính điểm; null nếu chưa phân tích</summary>
-    public decimal? ExtracurricularScore { get; set; }
+    /// <summary>bậc ngoại khóa 1–5: SLM xác nhận vai trò, phạm vi từng hoạt động rồi code tính theo công thức q, m; null nếu chưa tính</summary>
+    public int? ExtracurricularTier { get; set; }
     /// <summary>[USAS-640] mức ngân sách (mã metadata budgetTiers): tier_under_20k | tier_20k_35k | tier_35k_50k | tier_50k_70k | tier_above_70k</summary>
     public string? BudgetTier { get; set; }
     /// <summary>Khoảng ngân sách tối thiểu (USD/năm)</summary>

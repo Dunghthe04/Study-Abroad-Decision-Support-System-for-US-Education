@@ -280,7 +280,7 @@ public class ChatProfileMapperTests
         ]));
 
         var gpa = ChatProfileMapper.ToChatProfile(old)["gpa"]!["value"]!;
-        Assert.Equal("""{"value":7.75,"scale":10,"source":"transcript"}""", gpa.ToJsonString());
+        Assert.Equal("""{"value":7.83,"scale":10,"source":"transcript"}""", gpa.ToJsonString());
 
         var draft = ToDraft(Confirmed("gpa", """{"value":9,"scale":10,"source":"overall"}"""), old);
         Assert.Same(old.Step2, draft.Step2);

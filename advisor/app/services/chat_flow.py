@@ -210,6 +210,11 @@ class ChatFlow:
         # Hồ sơ trong nháp (do .NET gửi) là nguồn thật; không gửi thì giữ hồ sơ trong state như cũ
         if req.profile is not None:
             state.profile = merge_profile(state.profile, req.profile)
+            # Học bạ đi cùng hồ sơ: lượt .NET gửi hồ sơ thì thay luôn học bạ, kể cả None (đã chuyển sang GPA tổng)
+            state.transcript = req.transcript
+        # Mốc trường đổi theo bậc học; không gửi thì giữ mốc đã nhớ
+        if req.benchmarks is not None:
+            state.benchmarks = req.benchmarks
         # Danh sách trường gợi ý do .NET gửi mỗi lượt (lấy từ lần gợi ý đã lưu); không gửi thì giữ như cũ.
         # Có danh sách nghĩa là học sinh đã có kết quả, dù gợi ý ở trang Gợi ý trường chứ không phải trong chat
         if req.schools is not None:
