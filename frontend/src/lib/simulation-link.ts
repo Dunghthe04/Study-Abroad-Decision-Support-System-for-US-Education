@@ -11,6 +11,8 @@ const RANGES = {
   sat: [400, 1600],
   act: [1, 36],
   ielts: [0, 9],
+  toefl: [0, 120],
+  duolingo: [10, 160],
   budgetUsd: [0, 10_000_000],
 } as const;
 

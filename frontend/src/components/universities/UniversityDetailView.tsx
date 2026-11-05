@@ -19,7 +19,14 @@ import { DetailRows, DetailSection, SchoolImage, SourceLink } from "./University
 import { UniversityAdmissions, UniversityCosts, UniversityMajors, UniversityStatistics } from "./UniversityOfferingSections";
 import { UniversitySources } from "./UniversitySources";
 
-export function UniversityDetailView({ university }: { university: UniversityDetail }) {
+// back: nơi người dùng đến từ đó (vd trang gợi ý trường) để có nút quay lại đúng chỗ; bỏ trống thì về Trang chủ
+export function UniversityDetailView({
+  university,
+  back = { href: "/", label: "Trang chủ" },
+}: {
+  university: UniversityDetail;
+  back?: { href: string; label: string };
+}) {
   const [selectedLevel, setSelectedLevel] = useState(university.offerings[0]?.studyLevel ?? "");
   const offering = university.offerings.find((item) => item.studyLevel === selectedLevel) ?? university.offerings[0];
   const location = [university.city, university.stateName ?? university.state].filter(Boolean).join(", ");
@@ -34,7 +41,7 @@ export function UniversityDetailView({ university }: { university: UniversityDet
     <article className="space-y-6 pb-8">
       <Breadcrumb>
         <BreadcrumbList>
-          <BreadcrumbItem><BreadcrumbLink render={<Link href="/" />}><ArrowLeftIcon className="size-3.5" />Trang chủ</BreadcrumbLink></BreadcrumbItem>
+          <BreadcrumbItem><BreadcrumbLink render={<Link href={back.href} />}><ArrowLeftIcon className="size-3.5" />{back.label}</BreadcrumbLink></BreadcrumbItem>
           <BreadcrumbSeparator />
           <BreadcrumbItem><BreadcrumbPage>Thông tin trường · Mã {university.code}</BreadcrumbPage></BreadcrumbItem>
         </BreadcrumbList>

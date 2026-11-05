@@ -1,11 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 
 interface SchoolPhotoProps {
     name: string;
     coverUrl?: string | null;
     logoUrl?: string | null;
+    href?: string; // có thì bấm vào ảnh sẽ sang trang này (trang chi tiết trường)
 }
 
 // Chữ cái đầu của tên trường khi không có ảnh nào ("Occidental College" thành "OC")
@@ -17,14 +19,14 @@ function initialsOf(name: string) {
 // Ảnh bên trái thẻ trường, kiểu CollegeVine: ảnh bìa cao hết thẻ, logo nhỏ ở góc.
 // Thiếu ảnh bìa thì hiện logo giữa nền nhạt; thiếu cả hai (hoặc ảnh lỗi) thì hiện chữ cái đầu, để các thẻ vẫn thẳng hàng.
 // Ảnh đã là WebP nhỏ trên CDN Cloudinary nên không cần qua bộ tối ưu ảnh của Next.
-export function SchoolPhoto({ name, coverUrl, logoUrl }: SchoolPhotoProps) {
+export function SchoolPhoto({ name, coverUrl, logoUrl, href }: SchoolPhotoProps) {
     const [failed, setFailed] = useState<string[]>([]);
     const cover = coverUrl && !failed.includes(coverUrl) ? coverUrl : null;
     const logo = logoUrl && !failed.includes(logoUrl) ? logoUrl : null;
     const fail = (url: string) => setFailed((cur) => (cur.includes(url) ? cur : [...cur, url]));
 
-    return (
-        <div className="relative h-40 shrink-0 overflow-hidden bg-brand-wash sm:h-auto sm:w-48 lg:w-56">
+    const photo = (
+        <div className="relative h-40 w-full shrink-0 overflow-hidden bg-brand-wash sm:h-auto sm:w-48 lg:w-56">
             {cover ? (
                 <>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -65,5 +67,13 @@ export function SchoolPhoto({ name, coverUrl, logoUrl }: SchoolPhotoProps) {
                 </div>
             )}
         </div>
+    );
+    // Bấm vào ảnh sang trang chi tiết trường; ảnh vẫn cao hết thẻ nhờ khung flex kéo giãn
+    return href ? (
+        <Link href={href} aria-label={`Xem thông tin ${name}`} className="flex shrink-0 sm:self-stretch">
+            {photo}
+        </Link>
+    ) : (
+        photo
     );
 }

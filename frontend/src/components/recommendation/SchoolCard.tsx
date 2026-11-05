@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ExternalLinkIcon, MapPinIcon, MessageSquareTextIcon, TargetIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import type { PickedSchool, SchoolChange, ScoredSchool } from "@/types/recommendation";
 import { SchoolPhoto } from "./SchoolPhoto";
 import {
@@ -23,6 +24,7 @@ interface SchoolCardProps {
     change?: SchoolChange; // có khi đang mô phỏng và trường đổi nhóm so với hồ sơ thật
     onExplain?: (code: string) => void; // bỏ trống khi đang mô phỏng (lời tư vấn chỉ có cho kết quả đã lưu)
     onGoal?: (code: string) => void; // "Cần gì để vào?": luôn tính từ hồ sơ thật, kể cả khi đang xem giả định
+    highlighted?: boolean; // đây là trường đang được ghim ở đầu trang (khung "Cần gì để vào?"): viền đỏ để nhận ra
 }
 
 // Trường đã ở nhóm An toàn thì không cần hỏi "cần gì để vào"
@@ -33,7 +35,7 @@ const percent = (value: number | null | undefined) => (value == null ? "–" : `
 
 // Một trường dạng hàng ngang như CollegeVine: tên và nơi ở bên trái, các chỉ số ở giữa, nhóm và nút bên phải.
 // Chỉ hiển thị số đã tính, không tính lại gì.
-export function SchoolCard({ picked, school, change, onExplain, onGoal }: SchoolCardProps) {
+export function SchoolCard({ picked, school, change, onExplain, onGoal, highlighted = false }: SchoolCardProps) {
     const name = school?.name ?? picked.code;
     const control =
         school?.control === "public" ? "Công lập" : school?.control === "private" ? "Tư thục" : null;
@@ -41,14 +43,24 @@ export function SchoolCard({ picked, school, change, onExplain, onGoal }: School
     const host = siteHost(website);
 
     return (
-        <div className="flex flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-2xs transition-colors hover:border-brand/40 sm:flex-row">
+        <div
+            className={cn(
+                "flex flex-col overflow-hidden rounded-2xl border bg-surface shadow-2xs transition-colors sm:flex-row",
+                highlighted ? "border-risk ring-2 ring-risk/40" : "border-line hover:border-brand/40",
+            )}
+        >
             {/* Ảnh trường */}
-            <SchoolPhoto name={name} coverUrl={school?.coverUrl} logoUrl={school?.logoUrl} />
+            <SchoolPhoto
+                name={name}
+                coverUrl={school?.coverUrl}
+                logoUrl={school?.logoUrl}
+                href={`/university/${encodeURIComponent(picked.code)}?from=recommendations`}
+            />
 
             <div className="grid min-w-0 flex-1 gap-x-8 gap-y-4 p-5 md:grid-cols-[minmax(0,1fr)_minmax(0,1.7fr)_auto]">
                 {/* Tên, nơi ở, trang chủ */}
                 <div className="min-w-0 space-y-1.5">
-                    <h3 className="text-base font-bold text-foreground"><Link href={`/university/${encodeURIComponent(picked.code)}`} className="hover:text-brand hover:underline">{name}</Link></h3>
+                    <h3 className="text-base font-bold text-foreground"><Link href={`/university/${encodeURIComponent(picked.code)}?from=recommendations`} className="hover:text-brand hover:underline">{name}</Link></h3>
                     <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
                         {school?.state && (
                             <span className="inline-flex items-center gap-1">

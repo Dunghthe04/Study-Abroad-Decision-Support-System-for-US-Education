@@ -127,6 +127,8 @@ export interface SimulationOverrides {
   sat?: number | null;
   act?: number | null;
   ielts?: number | null;
+  toefl?: number | null;
+  duolingo?: number | null;
   budgetUsd?: number | null;
   scholarshipNeed?: ScholarshipNeed | null;
   ecTier?: number | null;
@@ -139,9 +141,13 @@ export interface SimulationProfile {
   sat: number | null;
   act: number | null;
   ielts: number | null;
+  toefl?: number | null; // bản backend cũ chưa trả
+  duolingo?: number | null;
   budgetUsd: number | null;
   scholarshipNeed: string | null;
   ecTier: number; // bậc tính từ các hoạt động trong hồ sơ
+  activityCount?: number; // số hoạt động đã khai
+  awardCount?: number; // số giải thưởng đã khai
 }
 
 // Số trường mỗi nhóm của một lượt tính
@@ -218,6 +224,14 @@ export interface GoalAlternative {
   group: string;
 }
 
+// Mức tiếng Anh tối thiểu của trường (null nếu không công bố bài thi đó); shortfallBand: học sinh còn thiếu bao nhiêu band
+export interface GoalEnglish {
+  minIelts: number | null;
+  minToefl: number | null;
+  minDuolingo: number | null;
+  shortfallBand: number | null;
+}
+
 // Current, target, best: R | M | S | NA
 export interface SchoolGoalResult {
   code: string;
@@ -232,7 +246,8 @@ export interface SchoolGoalResult {
   alone: GoalPlan[];
   noEffect: GoalFactor[];
   budget: GoalBudget;
-  filterReason: "MAJOR" | "STATE" | "CONTROL" | null; // trường không nằm trong danh sách vì bộ lọc ngoài ngân sách
+  filterReason: "MAJOR" | "STATE" | "CONTROL" | "ENGLISH" | "ENGLISH_NO_CERT" | null; // trường không nằm trong danh sách vì bộ lọc ngoài ngân sách
+  english?: GoalEnglish | null; // có khi bị loại vì tiếng Anh
   alternatives: GoalAlternative[];
 }
 

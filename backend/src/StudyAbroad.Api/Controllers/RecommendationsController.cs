@@ -32,7 +32,8 @@ public class RecommendationsController(RecommendationService recommendations) : 
     // Giá trị giả định của trình mô phỏng; trường nào bỏ trống thì giữ nguyên hồ sơ thật.
     public record SimulateRequest(
         decimal? Gpa, decimal? Sat, decimal? Act, decimal? Ielts,
-        decimal? BudgetUsd, string? ScholarshipNeed, int? EcTier, IReadOnlyList<int>? Pref);
+        decimal? BudgetUsd, string? ScholarshipNeed, int? EcTier, IReadOnlyList<int>? Pref,
+        decimal? Toefl = null, decimal? Duolingo = null);
 
     public record SimulationResponse(
         SimulationProfile Profile, GroupSummary Baseline, GroupSummary Simulated, IReadOnlyList<SchoolChange> Changes,
@@ -142,7 +143,8 @@ public class RecommendationsController(RecommendationService recommendations) : 
         try
         {
             var overrides = new SimulationOverrides(
-                request.Gpa, request.Sat, request.Act, request.Ielts, request.BudgetUsd, request.ScholarshipNeed, request.EcTier);
+                request.Gpa, request.Sat, request.Act, request.Ielts, request.BudgetUsd, request.ScholarshipNeed, request.EcTier,
+                request.Toefl, request.Duolingo);
             var result = await recommendations.SimulateAsync(userId.Value, overrides, request.Pref, ct);
             using var criteria = JsonDocument.Parse(result.CriteriaJson);
             using var items = JsonDocument.Parse(result.ItemsJson);

@@ -20,13 +20,17 @@ public record GoalPlanDto(IReadOnlyList<GoalChangeDto> Changes, double Effort, s
 public record GoalBudgetDto(
     string Status, decimal? CostUsd, decimal? BudgetUsd, decimal? MinBudgetUsd, decimal? ShortfallUsd, decimal? IntlAidAvgUsd);
 
+// Mức tiếng Anh tối thiểu của trường (null nếu trường không công bố bài thi đó), kèm mức thiếu của học sinh theo band (null nếu chưa có chứng chỉ).
+public record GoalEnglishDto(decimal? MinIelts, decimal? MinToefl, decimal? MinDuolingo, decimal? ShortfallBand);
+
 // Trường tương tự đang ở đúng nhóm đích, gợi ý khi trường mục tiêu không đạt được.
 public record GoalAlternativeDto(string Code, string Name, string? State, string? Control, decimal? CostUsd, string Group);
 
 // Kết quả goal-seeking cho một trường. Current, Target, Best: R | M | S | NA (chưa đủ dữ liệu).
 // Outcome: already_reached | reachable | blocked | no_data.
 // Cheapest: mức tối thiểu ít công sức nhất. Recommended: mức nên đặt mục tiêu (có đệm, an toàn hơn khi số liệu có sai số); null nếu không có đệm.
-// FilterReason: trường không nằm trong danh sách vì bộ lọc ngoài ngân sách (MAJOR | STATE | CONTROL), null nếu không bị loại.
+// FilterReason: trường không nằm trong danh sách vì bộ lọc ngoài ngân sách (MAJOR | STATE | CONTROL | ENGLISH | ENGLISH_NO_CERT), null nếu không bị loại.
+// English: có khi bị loại vì tiếng Anh, để giao diện nói cần đạt mức nào.
 public record SchoolGoalResult(
     string Code,
     string Name,
@@ -41,7 +45,8 @@ public record SchoolGoalResult(
     IReadOnlyList<string> NoEffect,
     GoalBudgetDto Budget,
     string? FilterReason,
-    IReadOnlyList<GoalAlternativeDto> Alternatives);
+    IReadOnlyList<GoalAlternativeDto> Alternatives,
+    GoalEnglishDto? English = null);
 
 // ============================== GOAL-SEEKING ==============================
 
@@ -123,7 +128,7 @@ public partial class RecommendationService
             ToDto(result.Cheapest), recommended,
             result.Alone.Select(p => ToDto(p)!).ToList(),
             result.NoEffect.Select(FactorCode).ToList(),
-            budget, NonBudgetFilter(filter), alternatives);
+            budget, NonBudgetFilter(filter), alternatives, EnglishOf(filter, school));
     }
 
     // Nhóm đích học sinh chọn. Bỏ trống: Khó vào hoặc chưa đủ dữ liệu thì Vừa sức, Vừa sức thì An toàn.
@@ -164,7 +169,13 @@ public partial class RecommendationService
 
     // Lý do trường không có trong danh sách mà không phải ngân sách (ngành, bang, loại trường)
     private static string? NonBudgetFilter(FilterResult filter) =>
-        filter.Outcome == FilterOutcome.Excluded && filter.ExcludeReason is "MAJOR" or "STATE" or "CONTROL" ? filter.ExcludeReason : null;
+        filter.Outcome == FilterOutcome.Excluded && filter.ExcludeReason is "MAJOR" or "STATE" or "CONTROL" or EnglishExclude.Short or EnglishExclude.NoCertificate ? filter.ExcludeReason : null;
+
+    // Mức tiếng Anh cần đạt khi trường bị loại vì tiếng Anh (cùng số liệu với cổng B4 của lượt gợi ý)
+    private static GoalEnglishDto? EnglishOf(FilterResult filter, RecommendSchoolInput school) =>
+        filter.Outcome == FilterOutcome.Excluded && filter.ExcludeReason is EnglishExclude.Short or EnglishExclude.NoCertificate
+            ? new GoalEnglishDto(school.Offering.MinIelts, school.Offering.MinToefl, school.Offering.MinDuolingo, filter.EnglishShortfall)
+            : null;
 
     // Trường tương tự đang ở đúng nhóm đích với hồ sơ thật: cùng loại (công/tư) trước, rồi chi phí gần nhất, rồi fit score cao nhất.
     private static IReadOnlyList<GoalAlternativeDto> Alternatives(

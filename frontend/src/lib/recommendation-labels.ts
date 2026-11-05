@@ -53,6 +53,10 @@ export const GOAL_REASON_TEXT: Record<string, string> = {
   INTL_DOWNGRADE: "Trường nhận du học sinh ít hơn hẳn tỷ lệ chung nên bị hạ một nhóm.",
   NEED_TEST: "Trường bắt buộc nộp điểm SAT hoặc ACT mà hồ sơ của bạn chưa có.",
   NO_ACADEMIC_DATA: "Trường chưa có đủ số liệu học thuật để so sánh với hồ sơ của bạn.",
+  P_BELOW_RANGE: "Điểm của bạn thấp hơn khoảng thường của sinh viên trường này.",
+  P_IN_RANGE: "Điểm của bạn nằm trong khoảng thường của sinh viên trường này.",
+  P_ABOVE_RANGE: "Điểm của bạn cao hơn khoảng thường của sinh viên trường này.",
+  NO_ACCEPT_RATE: "Trường chưa công bố tỷ lệ nhận nên hệ thống bỏ qua luật theo tỷ lệ nhận.",
 };
 
 export const FACTOR_LABELS: Record<string, string> = {

@@ -52,6 +52,21 @@ public class ChatSimulationTests
         Assert.Equal(["ngành"], scenario.Unsupported);
     }
 
+    [Fact]
+    public void Parse_ReadsToeflAndDuolingo_AndLabelsThemWithTheCurrentValue()
+    {
+        var scenario = ChatSimulation.Parse(Json("""{"changes":{"toefl":100,"duolingo":120}}"""))!;
+
+        Assert.Equal(100m, scenario.Overrides.Toefl);
+        Assert.Equal(120m, scenario.Overrides.Duolingo);
+        var profile = new SimulationProfile(null, null, null, null, null, null, 1, Toefl: 80m);
+        var note = ChatSimulation.Note(new SimulationResult(profile, Counts, Counts, [], "{}", "{}"), scenario);
+        Assert.Equal("TOEFL 100 (hiện tại 80), Duolingo 120", note.Label);
+        Assert.Equal(["toefl", "duolingo"], note.Factors);
+        var widget = ChatSimulation.WidgetOf(scenario);
+        Assert.Equal(100m, widget.Data!.Value.GetProperty("toefl").GetDecimal());
+    }
+
     [Theory]
     [InlineData("""{"changes":{"gpa":{"value":3.8,"scale":4}}}""", 3.8)]
     [InlineData("""{"changes":{"gpa":{"value":9.0,"scale":10}}}""", 3.6)]   // thang 10 đổi sang thang 4 như hồ sơ

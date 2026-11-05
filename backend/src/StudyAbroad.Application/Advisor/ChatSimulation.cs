@@ -85,7 +85,8 @@ public static class ChatSimulation
         }
 
         var need = c.TryGetProperty("scholarshipNeed", out var n) && n.ValueKind == JsonValueKind.String ? n.GetString() : null;
-        var overrides = new SimulationOverrides(gpa, Number("sat"), Number("act"), Number("ielts"), Number("budgetUsd"), need, null);
+        var overrides = new SimulationOverrides(gpa, Number("sat"), Number("act"), Number("ielts"), Number("budgetUsd"), need, null,
+            Number("toefl"), Number("duolingo"));
         if (overrides == new SimulationOverrides(null, null, null, null, null, null, null))
             return null;
 
@@ -109,13 +110,15 @@ public static class ChatSimulation
         if (o.Sat is { } sat) parts.Add($"SAT {Dec(sat)}{Now(p.Sat?.ToString(CultureInfo.InvariantCulture))}");
         if (o.Act is { } act) parts.Add($"ACT {Dec(act)}{Now(p.Act?.ToString(CultureInfo.InvariantCulture))}");
         if (o.Ielts is { } ielts) parts.Add($"IELTS {Dec(ielts)}{Now(p.Ielts is { } i ? Dec(i) : null)}");
+        if (o.Toefl is { } toefl) parts.Add($"TOEFL {Dec(toefl)}{Now(p.Toefl is { } t ? Dec(t) : null)}");
+        if (o.Duolingo is { } duolingo) parts.Add($"Duolingo {Dec(duolingo)}{Now(p.Duolingo is { } d ? Dec(d) : null)}");
         if (o.BudgetUsd is { } budget) parts.Add($"ngân sách {Money(budget)} USD mỗi năm{Now(p.BudgetUsd is { } b ? Money(b) + " USD" : null)}");
         if (o.ScholarshipNeed is { } need)
             parts.Add($"mức cần học bổng {NeedName(need)}{Now(p.ScholarshipNeed is { } pn ? NeedName(pn) : null)}");
         return string.Join(", ", parts);
     }
 
-    // Yếu tố đang thử, theo khóa advisor dùng để giải thích tác động (GPA, SAT làm đổi nhóm; IELTS chỉ làm đổi cảnh báo...)
+    // Yếu tố đang thử, theo khóa advisor dùng để giải thích tác động (GPA, SAT làm đổi nhóm; IELTS, TOEFL, Duolingo chỉ làm trường vào hoặc ra khỏi danh sách)
     private static List<string> Factors(SimulationOverrides o)
     {
         var factors = new List<string>();
@@ -123,6 +126,8 @@ public static class ChatSimulation
         if (o.Sat is not null) factors.Add("sat");
         if (o.Act is not null) factors.Add("act");
         if (o.Ielts is not null) factors.Add("ielts");
+        if (o.Toefl is not null) factors.Add("toefl");
+        if (o.Duolingo is not null) factors.Add("duolingo");
         if (o.BudgetUsd is not null) factors.Add("budget");
         if (o.ScholarshipNeed is not null) factors.Add("scholarship");
         return factors;
@@ -210,6 +215,8 @@ public static class ChatSimulation
         if (o.Sat is { } sat) values["sat"] = sat;
         if (o.Act is { } act) values["act"] = act;
         if (o.Ielts is { } ielts) values["ielts"] = ielts;
+        if (o.Toefl is { } toefl) values["toefl"] = toefl;
+        if (o.Duolingo is { } duolingo) values["duolingo"] = duolingo;
         if (o.BudgetUsd is { } budget) values["budgetUsd"] = budget;
         if (o.ScholarshipNeed is { } need) values["scholarshipNeed"] = need;
         return new Widget(WidgetType, JsonSerializer.SerializeToElement(values));

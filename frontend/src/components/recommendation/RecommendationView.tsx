@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertCircleIcon, RefreshCwIcon } from "lucide-react";
@@ -16,9 +16,11 @@ import { useProfileSimulation, type ProfileSimulation } from "@/lib/use-profile-
 import type {
   GroupSummary,
   PickBlockName,
+  PickedSchool,
   Pref,
   Recommendation,
   GoalPlan,
+  GoalTarget,
   SchoolChange,
   ScoredSchool,
   SimulationOverrides,
@@ -74,8 +76,44 @@ export function RecommendationView({ autoRun, initialOverrides, initialGoal }: R
   const simulating = sim.isSimulating && sim.result !== null;
 
   // "Cần gì để vào trường này": tính từ hồ sơ thật; áp dụng kết quả thì đặt giá trị vào thanh kéo
-  const goal = useGoalSeek();
+  const goalSeek = useGoalSeek();
+  // Giả định đang áp dụng trước khi bấm "Cần gì để vào?": thanh kéo được đưa về hồ sơ thật để tính, giữ lại để khôi phục
+  const [savedOverrides, setSavedOverrides] = useState<SimulationOverrides | null>(null);
+  const { open: openGoalSeek, close: closeGoalSeek } = goalSeek;
+  const pinnedRef = useRef<HTMLDivElement>(null);
+  const { isSimulating, overrides: currentOverrides, resetAll: resetSimulation } = sim;
+  const openGoal = useCallback(
+    (code: string, target?: GoalTarget | null) => {
+      if (isSimulating) {
+        setSavedOverrides(currentOverrides);
+        resetSimulation();
+      }
+      openGoalSeek(code, target);
+    },
+    [isSimulating, currentOverrides, resetSimulation, openGoalSeek],
+  );
+  const goal = useMemo<GoalSeek>(
+    () => ({
+      ...goalSeek,
+      close: () => {
+        setSavedOverrides(null);
+        closeGoalSeek();
+      },
+    }),
+    [goalSeek, closeGoalSeek],
+  );
+  // Bấm "Cần gì để vào?": cuộn lên khung ghim ở đầu trang để xem ngay, không bắt người dùng tự cuộn
+  useEffect(() => {
+    if (goal.code) pinnedRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [goal.code]);
+  const restoreSimulation = savedOverrides
+    ? () => {
+        sim.replace(savedOverrides);
+        goal.close(); // thẻ trở về nhóm giả định nên khung (tính từ hồ sơ thật) cũng đóng
+      }
+    : undefined;
   const applyGoal = (plan: GoalPlan) => {
+    setSavedOverrides(null);
     const next: SimulationOverrides = { pref: sim.overrides.pref };
     for (const change of plan.changes) {
       if (change.factor === "sat") next.sat = change.to;
@@ -102,7 +140,6 @@ export function RecommendationView({ autoRun, initialOverrides, initialGoal }: R
   }, [replaceSimulation]);
 
   // Chat vừa hỏi "cần gì để vào trường X": mở khung kết quả của trường đó (ngay khi vào trang, hoặc tại chỗ nếu đang ở trang này)
-  const { open: openGoal } = goal;
   const openedInitialGoal = useRef(false);
   useEffect(() => {
     if (initialGoal && !openedInitialGoal.current) {
@@ -201,23 +238,27 @@ export function RecommendationView({ autoRun, initialOverrides, initialGoal }: R
         <>
           <ProfileSummary rec={rec} onRerun={runNew} />
           {simulating && <SimulationBanner sim={sim} />}
-          {/* Trường chưa hiện thành thẻ nào (ngoài 4 trường mỗi nhóm): khung kết quả hiện ở đầu danh sách */}
-          {goal.code && !shownCodes(view).has(goal.code) && (
-            <GoalSeekPanel
-              goal={goal}
-              simulating={simulating}
-              schoolName={goal.result?.name ?? goal.code}
-              onApply={applyGoal}
-            />
+          {/* "Cần gì để vào?" ghim ở đầu danh sách: thẻ trường (theo hồ sơ thật) và khung kết quả. Trường cũng nằm trong danh sách bên dưới
+              thì thẻ ở đó có viền đỏ để nhận ra đó là trường đang ghim. */}
+          {goal.code && (
+            <div ref={pinnedRef} className="scroll-mt-20 space-y-3">
+              <PinnedSchool rec={rec} code={goal.code} />
+              <GoalSeekPanel
+                goal={goal}
+                simulating={simulating}
+                pinned
+                onRestore={restoreSimulation}
+                schoolName={goal.result?.name ?? goal.code}
+                onApply={applyGoal}
+              />
+            </div>
           )}
           <ResultBody
             rec={view}
             changes={simulating ? sim.result!.changes : []}
             onExplain={simulating ? undefined : setExplainCode}
-            onGoal={goal.open}
-            goal={goal}
-            simulating={simulating}
-            onApplyGoal={applyGoal}
+            onGoal={openGoal}
+            pinnedCode={goal.code}
           />
         </>
       )}
@@ -241,9 +282,18 @@ export function RecommendationView({ autoRun, initialOverrides, initialGoal }: R
 }
 
 // Mã các trường đang hiện thành thẻ trong danh sách
-function shownCodes(rec: Recommendation): Set<string> {
+// Thẻ của trường đang ghim: tính theo lần gợi ý đã lưu (hồ sơ thật), không đổi khi kéo thanh giả định.
+// Trường không nằm trong khối nào (bị loại) thì chỉ có số liệu, không có điểm xếp hạng hay lý do.
+function PinnedSchool({ rec, code }: { rec: Recommendation; code: string }) {
   const { reach, match, safety, aid, other } = rec.items;
-  return new Set([...reach, ...match, ...safety, ...aid, ...other].map((p) => p.code));
+  const school = rec.items.scored.find((s) => s.code === code);
+  if (!school) return null;
+  const picked: PickedSchool = [...reach, ...match, ...safety, ...aid, ...other].find((p) => p.code === code) ?? {
+    code,
+    x: null,
+    why: [],
+  };
+  return <SchoolCard picked={picked} school={school} />;
 }
 
 // Dải thông báo khi đang xem hồ sơ giả định: số trường mỗi nhóm trước và sau, các trường đổi nhóm
@@ -299,12 +349,10 @@ interface ResultBodyProps {
   changes: SchoolChange[]; // trường đổi nhóm khi đang mô phỏng
   onExplain?: (code: string) => void; // bỏ trống khi đang mô phỏng
   onGoal?: (code: string) => void;
-  goal: GoalSeek; // khung "Cần gì để vào?" mở ngay dưới thẻ trường đang xét
-  simulating: boolean;
-  onApplyGoal: (plan: GoalPlan) => void;
+  pinnedCode: string | null; // trường đang ghim ở đầu trang: thẻ của nó trong danh sách có viền đỏ
 }
 
-function ResultBody({ rec, changes, onExplain, onGoal, goal, simulating, onApplyGoal }: ResultBodyProps) {
+function ResultBody({ rec, changes, onExplain, onGoal, pinnedCode }: ResultBodyProps) {
   const { criteria, items } = rec;
   const byCode = new Map<string, ScoredSchool>(items.scored.map((s) => [s.code, s]));
   const changeByCode = new Map<string, SchoolChange>(changes.map((c) => [c.code, c]));
@@ -363,15 +411,8 @@ function ResultBody({ rec, changes, onExplain, onGoal, goal, simulating, onApply
                     change={changeByCode.get(p.code)}
                     onExplain={onExplain}
                     onGoal={onGoal}
+                    highlighted={pinnedCode === p.code}
                   />
-                  {goal.code === p.code && (
-                    <GoalSeekPanel
-                      goal={goal}
-                      simulating={simulating}
-                      schoolName={byCode.get(p.code)?.name ?? p.code}
-                      onApply={onApplyGoal}
-                    />
-                  )}
                 </div>
               ))}
             </div>

@@ -492,6 +492,13 @@ public static class ActivityTier
         return Compute(activities, awards);
     }
 
+    // Số hoạt động và số giải thưởng đã khai hợp lệ (cùng điều kiện với FromProfile), để giao diện nói "đã khai N hoạt động, M giải thưởng".
+    public static (int Activities, int Awards) CountDeclared(IEnumerable<ProfileActivity> items)
+    {
+        var valid = items.Where(a => a.ImpactLevel is >= 1 and <= 5 && !string.IsNullOrWhiteSpace(a.Title)).ToList();
+        return (valid.Count(a => !IsAward(a)), valid.Count(IsAward));
+    }
+
     private static bool IsAward(ProfileActivity a) => string.Equals(a.Kind, "award", StringComparison.OrdinalIgnoreCase);
 
     // Số tháng học sinh khai; không có thì tính từ ngày bắt đầu đến ngày kết thúc (hoặc hôm nay); không có gì thì 0.
