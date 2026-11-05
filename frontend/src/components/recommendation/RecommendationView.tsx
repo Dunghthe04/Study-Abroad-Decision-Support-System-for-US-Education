@@ -26,6 +26,7 @@ import type {
 import { ExplainSheet } from "./ExplainSheet";
 import { ProfileSimulator } from "./ProfileSimulator";
 import { ProfileSummary } from "./ProfileSummary";
+import { EnglishNoticeBanner } from "./EnglishNoticeBanner";
 import { GoalSeekPanel } from "./GoalSeekPanel";
 import { SchoolCard } from "./SchoolCard";
 
@@ -311,18 +312,23 @@ function ResultBody({ rec, changes, onExplain, onGoal, goal, simulating, onApply
   // Không còn trường nào sau lọc cứng: lượt chọn không chạy
   if (criteria.status === null) {
     return (
-      <div className="rounded-2xl border border-line bg-surface p-8 text-center text-sm text-muted-foreground">
-        Không có trường nào qua bộ lọc. Hãy thử bỏ bớt bang, đổi loại trường hoặc mức ngân sách trong{" "}
-        <Link href="/analysis?edit=1" className="font-semibold text-brand underline-offset-4 hover:underline">
-          hồ sơ
-        </Link>
-        .
+      <div className="space-y-4">
+        {criteria.english && <EnglishNoticeBanner notice={criteria.english} empty />}
+        <div className="rounded-2xl border border-line bg-surface p-8 text-center text-sm text-muted-foreground">
+          Không có trường nào qua bộ lọc. Hãy thử bỏ bớt bang, đổi loại trường hoặc mức ngân sách trong{" "}
+          <Link href="/analysis?edit=1" className="font-semibold text-brand underline-offset-4 hover:underline">
+            hồ sơ
+          </Link>
+          .
+        </div>
       </div>
     );
   }
 
   return (
     <div className="space-y-8">
+      {criteria.english && <EnglishNoticeBanner notice={criteria.english} empty={false} />}
+
       {criteria.status === "FAILED" && (
         <Alert>
           <AlertCircleIcon className="size-4" />
