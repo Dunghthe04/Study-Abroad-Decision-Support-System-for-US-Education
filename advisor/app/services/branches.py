@@ -120,14 +120,18 @@ class LegacyAdviceBranch:
         # Đang hỏi hồ sơ dở (có câu đang chờ) thì chỉ báo cần thêm hồ sơ, ChatFlow nhắc lại câu đang chờ
         missing = missing_fields(state.profile, REQUIRED_BY_SKILL[name]) if name in REQUIRED_BY_SKILL else []
         if missing:
+            # Nhớ câu tư vấn để trả lời ngay khi học sinh xác nhận hồ sơ (ProfileBranch). Chỉ giữ câu đầu tiên
+            if state.pending_advice is None:
+                state.pending_advice = slm.cac_y[0]
             if state.question_id and state.question_id not in OPENING_QUESTIONS:
                 return SkillOutput(NEED_PROFILE)
             return ask_major(state) if missing[0] == "major" else start_intake(state, REQUIRED_BY_SKILL[name])
         return await self._skills[name].run(state, message)
 
 
-# Trả lời câu hồ sơ đang chờ hoặc cập nhật hồ sơ. Hồ sơ vừa đủ trong lượt này thì tư vấn luôn,
-# không bắt học sinh nhắn thêm một lần nữa mới thấy kết quả.
+# Trả lời câu hồ sơ đang chờ hoặc cập nhật hồ sơ. Hồ sơ vừa đủ trong lượt này (học sinh bấm "Đúng rồi" ở X1)
+# thì tư vấn luôn, không bắt học sinh nhắn thêm một lần nữa mới thấy kết quả.
+# Có câu tư vấn bị hoãn (pending_advice) thì trả lời đúng câu đó, không phải tin "Đúng rồi" của lượt này.
 # Tin đã có ý ho_so thì thôi: ChatFlow sẽ chạy nhánh tư vấn cho ý đó ngay sau, tư vấn ở đây nữa là trả lời hai lần
 class ProfileBranch:
     def __init__(self, handler: ChatProfileHandler, advice: Branch) -> None:
@@ -138,6 +142,12 @@ class ProfileBranch:
         was_ready = self._handler.ready(state, REQUIRED_B3)
         output = await self._handler.collect(state, message, slm)
         if not was_ready and self._handler.ready(state, REQUIRED_B3) and "ho_so" not in slm.types():
+            original = state.pending_advice
+            if original is not None:
+                state.pending_advice = None
+                return combine(
+                    output, await self._advice.run(state, original.doan, SlmTinResult(cac_y=[original]))
+                )
             return combine(output, await self._advice.run(state, message, slm))
         return output
 

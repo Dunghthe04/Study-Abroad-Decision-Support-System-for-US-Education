@@ -6,6 +6,7 @@ from pydantic import Field
 
 from app.core.study_levels import StudyLevel
 from app.schemas.common import CamelModel
+from app.schemas.slm import SlmY
 
 Step = Literal["B0", "B1", "B2", "B3", "B4", "B5", "B6", "END"]
 FieldStatus = Literal["confirmed", "said_in_B0", "none", "unknown", "declined"]
@@ -52,6 +53,9 @@ class ChatState(CamelModel):
     # chỉ dùng để ghi mức GPA / tiếng Anh cho skill ho_so. None = chưa có dữ liệu trường thì chỉ ghi điểm
     benchmarks: dict[str, Any] | None = None
     study_level: StudyLevel | None = None  # bậc học học sinh quan tâm (từ .NET), dùng để lọc kiến thức
+    # Câu tư vấn bị hoãn vì thiếu hồ sơ (giữ nguyên ý SLM đã tách: loại, đoạn chữ, thực thể).
+    # Học sinh xác nhận hồ sơ ở X1 thì nhánh hồ sơ lấy ra trả lời rồi xóa. Chỉ giữ câu đầu tiên
+    pending_advice: SlmY | None = None
 
 
 # Nguồn trích dẫn, khớp record Citation bên .NET

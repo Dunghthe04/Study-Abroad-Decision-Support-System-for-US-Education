@@ -265,6 +265,54 @@ async def test_the_last_profile_answer_is_followed_by_the_advice_in_the_same_tur
     assert out.answer == "trả lời của skill_ho_so\n\ntrả lời của skill_danh_gia"
 
 
+async def test_advice_without_a_profile_remembers_the_question():
+    state = ChatState()
+
+    await build_branches(skills([]))["ho_so"].run(
+        state, "em cần lên lộ trình", tin(("ho_so", {}, "em cần lên lộ trình"))
+    )
+
+    assert state.pending_advice is not None and state.pending_advice.doan == "em cần lên lộ trình"
+
+
+async def test_a_second_advice_question_while_waiting_keeps_the_first_one():
+    state = ChatState()
+    branch = build_branches(skills([]))["ho_so"]
+
+    await branch.run(state, "em cần lên lộ trình", tin(("ho_so", {}, "em cần lên lộ trình")))
+    await branch.run(state, "em nên chọn trường nào", tin(("ho_so", {}, "em nên chọn trường nào")))
+
+    assert state.pending_advice.doan == "em cần lên lộ trình"
+
+
+class RecordingMessage(Recording):
+    """Skill cũ giả ghi cả tin nhận được, để biết nhánh tư vấn trả lời câu nào."""
+
+    def __init__(self, name: str, ran: list[str], messages: list[str]) -> None:
+        super().__init__(name, ran)
+        self.messages = messages
+
+    async def run(self, state, message):
+        self.messages.append(message)
+        return await super().run(state, message)
+
+
+async def test_confirming_the_profile_answers_the_question_that_was_waiting():
+    ran: list[str] = []
+    messages: list[str] = []
+    branches = build_branches(skills(ran, skill_ho_so=Recording("skill_ho_so", ran, moves_to="B3"),
+                                     skill_danh_gia=RecordingMessage("skill_danh_gia", ran, messages)))  # fmt: skip
+    state = ChatState(current_step="B2", profile=filled(REQUIRED_B3))
+    state.pending_advice = tin(("ho_so", {}, "em cần lên lộ trình")).cac_y[0]
+    ask(state, "X1")
+
+    await branches["mac_dinh"].run(state, "Đúng rồi", tin("mac_dinh"))
+
+    assert ran == ["skill_ho_so", "skill_danh_gia"]
+    assert messages == ["em cần lên lộ trình"]  # câu hỏi gốc, không phải "Đúng rồi"
+    assert state.pending_advice is None
+
+
 async def test_a_profile_answer_that_still_leaves_questions_does_not_run_the_advice():
     ran: list[str] = []
     state = ChatState(current_step="B2")
