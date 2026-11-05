@@ -26,7 +26,8 @@ namespace StudyAbroad.Application.Profile.Flow;
 public class ProfileFlowService(
     IProfileFlowRepository repository,
     IProfileFileStorageService fileStorageService,
-    ITranscriptOcrClient? ocrClient = null) : IProfileFlowService
+    ITranscriptOcrClient? ocrClient = null,
+    IEcTierClient? ecTierClient = null) : IProfileFlowService
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -252,6 +253,8 @@ public class ProfileFlowService(
 
         profile.FlowSubmittedAt = DateTimeOffset.UtcNow;
         profile.DraftFlowStateJson = null;
+        // Tính bậc ngoại khóa trước khi lưu để bậc vào cùng transaction với hoạt động mới
+        profile.ExtracurricularTier = await ComputeEcTierAsync(activities, ct);
 
         await repository.CommitProfileFlowAsync(profile, scores, activities, certifications, ct);
 
@@ -770,6 +773,50 @@ public class ProfileFlowService(
 
         static string Fmt(decimal value) => value.ToString("0.##", CultureInfo.InvariantCulture);
     }
+
+    private const int MaxEcItems = 10;          // advisor nhận tối đa 10 hoạt động và 10 giải thưởng
+    private const int MaxEcActivityText = 500;  // giới hạn độ dài text bên EcActivity (Python)
+    private const int MaxEcAwardText = 300;     // giới hạn độ dài text bên EcAward (Python)
+    private static readonly HashSet<string> EcRoleCodes = ["founder", "leader", "vice_leader", "member"];
+
+    /// <summary>
+    /// Bậc ngoại khóa 1–5. Không có hoạt động lẫn giải thưởng: bậc 1, không gọi SLM.
+    /// Có thì gửi advisor để SLM xác nhận vai trò, phạm vi; advisor tắt hoặc lỗi thì tính bằng công thức với vai trò, phạm vi học sinh chọn.
+    /// </summary>
+    private async Task<int> ComputeEcTierAsync(IReadOnlyList<ProfileActivity> items, CancellationToken ct)
+    {
+        var valid = items.Where(a => a.ImpactLevel is >= 1 and <= 5 && !string.IsNullOrWhiteSpace(a.Title)).ToList();
+        var act = valid
+            .Where(a => !IsAwardKind(a))
+            .Take(MaxEcItems)
+            .Select(a => new EcActivityDto(
+                Clip(EcText(a), MaxEcActivityText),
+                a.ImpactLevel!.Value,
+                Math.Clamp(a.DurationMonths ?? 0, 0, 120),
+                a.Role is not null && EcRoleCodes.Contains(a.Role) ? a.Role : null))
+            .ToList();
+        var awards = valid
+            .Where(IsAwardKind)
+            .Take(MaxEcItems)
+            .Select(a => new EcAwardDto(Clip(EcText(a), MaxEcAwardText), a.ImpactLevel!.Value))
+            .ToList();
+
+        if (act.Count == 0 && awards.Count == 0)
+            return 1;
+
+        var tier = ecTierClient is null
+            ? null
+            : await ecTierClient.ReadTierAsync(new EcTierRequest(act, awards), ct);
+        return tier ?? StudyAbroad.Application.Recommendations.ActivityTier.FromProfile(valid).Tier;
+    }
+
+    private static bool IsAwardKind(ProfileActivity a) => string.Equals(a.Kind, "award", StringComparison.OrdinalIgnoreCase);
+
+    // SLM đọc tên kèm mô tả để xác nhận vai trò, phạm vi
+    private static string EcText(ProfileActivity a) =>
+        string.IsNullOrWhiteSpace(a.Description) ? a.Title.Trim() : $"{a.Title.Trim()}: {a.Description.Trim()}";
+
+    private static string Clip(string text, int max) => text.Length <= max ? text : text[..max];
 
     private static bool IsAward(FlowActivityDraftDto item) =>
         string.Equals(item.Category, "achievement", StringComparison.OrdinalIgnoreCase)

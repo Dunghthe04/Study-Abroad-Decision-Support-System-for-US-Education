@@ -81,6 +81,8 @@ public static class DependencyInjection
 
         services.Configure<AdvisorOptions>(configuration.GetSection(AdvisorOptions.SectionName));
         services.AddHttpClient<IAdvisorClient, AdvisorClient>(ConfigureAdvisorClient);
+        // Bậc ngoại khóa: SLM xác nhận vai trò, phạm vi rồi advisor tính bậc, gọi lúc lưu hồ sơ
+        services.AddHttpClient<IEcTierClient, EcTierClient>(ConfigureAdvisorClient);
         services.AddHttpClient<ITranscriptOcrClient, TranscriptOcrClient>((sp, client) =>
         {
             ConfigureAdvisorClient(sp, client);
