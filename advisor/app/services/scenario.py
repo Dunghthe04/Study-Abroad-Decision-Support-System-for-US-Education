@@ -98,9 +98,13 @@ def _check_english(value: object, unit: str | None) -> tuple[str, Any] | None:
     if unit is not None and unit not in ENGLISH_TESTS:
         return None
     if unit is None:
-        number = _number(value, "Bạn muốn thử điểm tiếng Anh bao nhiêu, theo bài thi nào (IELTS, TOEFL hay Duolingo)?")
+        number = _number(
+            value, "Bạn muốn thử điểm tiếng Anh bao nhiêu, theo bài thi nào (IELTS, TOEFL hay Duolingo)?"
+        )
         if number > 9:
-            raise AskAgain(f"Điểm {number:g} là của bài thi nào, TOEFL hay Duolingo? Bạn cho mình biết để thử đúng nhé.")
+            raise AskAgain(
+                f"Điểm {number:g} là của bài thi nào, TOEFL hay Duolingo? Bạn cho mình biết để thử đúng nhé."
+            )
         unit = "ielts"
     name = ENGLISH_TESTS[unit]
     return unit, validators.check_score(unit, _number(value, f"Bạn muốn thử {name} bao nhiêu điểm?"))
@@ -141,7 +145,11 @@ def parse_what_if(changes: list[dict[str, Any]]) -> WhatIf:
         if key in SUPPORTED and change.get("hanh_dong") != SKIP_ACTION:
             checked = _check(key, change.get("gia_tri", ""), change.get("don_vi"))
         if checked is None:
-            label = LABELS.get(key, "yếu tố này") if key != "english" else "chứng chỉ tiếng Anh ngoài IELTS, TOEFL, Duolingo"
+            label = (
+                LABELS.get(key, "yếu tố này")
+                if key != "english"
+                else "chứng chỉ tiếng Anh ngoài IELTS, TOEFL, Duolingo"
+            )
             if change.get("hanh_dong") == SKIP_ACTION:
                 label = LABELS.get(key, "yếu tố này")
             if label not in result.unsupported:
