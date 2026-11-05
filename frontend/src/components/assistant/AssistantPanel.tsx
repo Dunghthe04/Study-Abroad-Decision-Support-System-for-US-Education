@@ -293,10 +293,10 @@ function Turn({ turn, onReply }: { turn: AssistantTurn; onReply?: (value: string
       {turn.widget?.type === "school" && <SchoolWidget data={turn.widget.data} onPick={onReply} />}
       {turn.widget?.type === "budget" && <BudgetWidget data={turn.widget.data} onPick={onReply} />}
       {turn.widget?.type === "scholarship" && <ScholarshipWidget data={turn.widget.data} onPick={onReply} />}
-      {/* Mục 1: học sinh chọn điền bằng form */}
+      {/* Mục 1: học sinh chọn điền bằng form. from=chat: điền xong form thì quay về chat trả lời câu đã hỏi */}
       {turn.widget?.type === "form" && (
         <Link
-          href="/analysis"
+          href="/analysis?from=chat"
           className="mt-2.5 inline-flex h-8 items-center gap-1.5 rounded-full bg-brand px-3.5 text-[13px] font-semibold text-white transition-colors hover:bg-brand-ink"
         >
           <FileTextIcon className="size-4" />
