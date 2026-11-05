@@ -33,9 +33,23 @@ interface StudyCenterDetailViewProps {
   center: StudyCenter;
 }
 
+function parseScholarshipStat(raw?: string): { amount: string; note?: string } {
+  if (!raw) return { amount: "—" };
+  const trimmed = raw.trim();
+  const match = trimmed.match(/^(.*?)\s*\((.*?)\)$/);
+  if (match) {
+    return {
+      amount: match[1].trim(),
+      note: match[2].trim(),
+    };
+  }
+  return { amount: trimmed };
+}
+
 export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
   const profile = getEnrichedCenterProfile(center);
   const isVerified = center.verificationStatus === "verified" || profile.center.verificationStatus === "verified";
+  const scholarshipStat = parseScholarshipStat(profile.totalScholarshipsWon);
 
   return (
     <div className="space-y-6 pb-12">
@@ -138,44 +152,84 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
       </div>
 
       {/* 4 Key Highlight Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
-        <Card className="p-4 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center shrink-0">
-            <FlameIcon className="w-5 h-5" />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-3.5">
+        <Card className="p-3.5 sm:p-4 flex flex-col justify-between gap-3 min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs text-muted-foreground font-medium truncate">
+              Tỷ lệ đỗ Visa Mỹ
+            </span>
+            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center shrink-0">
+              <FlameIcon className="w-4 h-4" />
+            </div>
           </div>
-          <div>
-            <div className="text-xs text-muted-foreground">Tỷ lệ đỗ Visa Mỹ</div>
-            <div className="text-lg font-bold text-foreground">{profile.visaSuccessRate}%</div>
-          </div>
-        </Card>
-
-        <Card className="p-4 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0">
-            <AwardIcon className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="text-xs text-muted-foreground">Tổng học bổng đạt được</div>
-            <div className="text-sm font-bold text-foreground truncate">{profile.totalScholarshipsWon}</div>
-          </div>
-        </Card>
-
-        <Card className="p-4 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-blue-500/10 text-blue-600 flex items-center justify-center shrink-0">
-            <UsersIcon className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="text-xs text-muted-foreground">Quy mô nhân sự</div>
-            <div className="text-sm font-bold text-foreground">{profile.staffCount} chuyên viên & GV</div>
+          <div className="min-w-0">
+            <div className="text-lg sm:text-2xl font-bold tracking-tight text-foreground truncate">
+              {profile.visaSuccessRate}%
+            </div>
+            <div className="text-[11px] text-muted-foreground truncate mt-0.5">
+              Hồ sơ phỏng vấn ĐSQ
+            </div>
           </div>
         </Card>
 
-        <Card className="p-4 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-purple-500/10 text-purple-600 flex items-center justify-center shrink-0">
-            <ShieldCheckIcon className="w-5 h-5" />
+        <Card className="p-3.5 sm:p-4 flex flex-col justify-between gap-3 min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs text-muted-foreground font-medium truncate">
+              Học bổng đạt được
+            </span>
+            <div className="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0">
+              <AwardIcon className="w-4 h-4" />
+            </div>
           </div>
-          <div>
-            <div className="text-xs text-muted-foreground">Pháp lý hoạt động</div>
-            <div className="text-sm font-bold text-foreground truncate">{profile.licenseNumber}</div>
+          <div className="min-w-0">
+            <div className="text-lg sm:text-2xl font-bold tracking-tight text-foreground truncate" title={scholarshipStat.amount}>
+              {scholarshipStat.amount}
+            </div>
+            <div
+              className="text-[11px] text-muted-foreground truncate mt-0.5"
+              title={scholarshipStat.note || "Kỳ tuyển sinh gần nhất"}
+            >
+              {scholarshipStat.note || "Kỳ tuyển sinh gần nhất"}
+            </div>
+          </div>
+        </Card>
+
+        <Card className="p-3.5 sm:p-4 flex flex-col justify-between gap-3 min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs text-muted-foreground font-medium truncate">
+              Quy mô nhân sự
+            </span>
+            <div className="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-600 flex items-center justify-center shrink-0">
+              <UsersIcon className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="min-w-0">
+            <div className="text-lg sm:text-2xl font-bold tracking-tight text-foreground truncate">
+              {profile.staffCount}{" "}
+              <span className="text-xs sm:text-sm font-normal text-muted-foreground">chuyên viên</span>
+            </div>
+            <div className="text-[11px] text-muted-foreground truncate mt-0.5">
+              Cố vấn & Giảng viên
+            </div>
+          </div>
+        </Card>
+
+        <Card className="p-3.5 sm:p-4 flex flex-col justify-between gap-3 min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs text-muted-foreground font-medium truncate">
+              Pháp lý cơ sở
+            </span>
+            <div className="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-600 flex items-center justify-center shrink-0">
+              <ShieldCheckIcon className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="min-w-0">
+            <div className="text-base sm:text-lg font-bold tracking-tight text-foreground truncate" title={profile.licenseNumber}>
+              {profile.licenseNumber}
+            </div>
+            <div className="text-[11px] text-muted-foreground truncate mt-0.5" title={profile.licenseIssuedBy}>
+              {profile.licenseIssuedBy}
+            </div>
           </div>
         </Card>
       </div>
@@ -356,7 +410,7 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
                     <div className="w-8 h-8 rounded-md bg-brand/10 text-brand flex items-center justify-center shrink-0 mt-0.5">
                       <CheckCircle2Icon className="w-4 h-4" />
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <div className="text-sm font-semibold text-foreground">{centerServiceLabel(svc)}</div>
                       <div className="text-xs text-muted-foreground mt-0.5">
                         {svc === "CHON_TRUONG" && "Định vị danh sách trường Reach - Target - Safety theo ngân sách và năng lực."}
