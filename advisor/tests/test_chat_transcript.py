@@ -6,7 +6,9 @@ Không nằm trong state.profile nên SLM chọn skill và Qwen đọc tin khôn
 from app.schemas.chat import ChatMessage, ChatRequest, ChatState
 from tests.fakes import flow_with, tin
 
-TRANSCRIPT = {"years": [{"grade": "Lớp 10", "average": 8.67, "subjects": [{"name": "Toán", "average": 8.67}]}]}
+TRANSCRIPT = {
+    "years": [{"grade": "Lớp 10", "average": 8.67, "subjects": [{"name": "Toán", "average": 8.67}]}]
+}
 ASK = tin(("ho_so", {}))
 
 
@@ -20,7 +22,9 @@ def request(state: ChatState, profile: dict | None, transcript: dict | None) -> 
 
 
 def test_request_reads_transcript_in_camel_case():
-    req = ChatRequest.model_validate({"messages": [{"role": "user", "content": "hi"}], "transcript": TRANSCRIPT})
+    req = ChatRequest.model_validate(
+        {"messages": [{"role": "user", "content": "hi"}], "transcript": TRANSCRIPT}
+    )
 
     assert req.transcript == TRANSCRIPT
 
