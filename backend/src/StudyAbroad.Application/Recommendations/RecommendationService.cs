@@ -48,7 +48,7 @@ public record SchoolExplanation(
 // Giá trị giả định của trình mô phỏng hồ sơ. Trường nào null thì giữ nguyên hồ sơ thật.
 public record SimulationOverrides(
     decimal? Gpa, decimal? Sat, decimal? Act, decimal? Ielts,
-    decimal? BudgetUsd, string? ScholarshipNeed, int? EcTier);
+    decimal? BudgetUsd, string? ScholarshipNeed, int? EcTier, decimal? Toefl = null, decimal? Duolingo = null);
 
 // Số trường mỗi nhóm của một lượt tính (đếm trên mọi trường còn sau lọc cứng).
 public record GroupSummary(int Kept, int Reach, int Match, int Safety, int AidBlock, int NoData);
@@ -58,7 +58,8 @@ public record SchoolChange(string Code, string Name, string From, string To);
 
 // Giá trị của hồ sơ thật, để thanh kéo hiện "hồ sơ" bên cạnh "giả định". EcTier là bậc tính từ các hoạt động trong hồ sơ.
 public record SimulationProfile(
-    decimal? Gpa, int? Sat, int? Act, decimal? Ielts, decimal? BudgetUsd, string? ScholarshipNeed, int EcTier);
+    decimal? Gpa, int? Sat, int? Act, decimal? Ielts, decimal? BudgetUsd, string? ScholarshipNeed, int EcTier,
+    decimal? Toefl = null, decimal? Duolingo = null, int ActivityCount = 0, int AwardCount = 0);
 
 // Kết quả mô phỏng: không lưu gì, không gọi advisor. Criteria và Items cùng khuôn với lượt gợi ý đã lưu (của hồ sơ giả định).
 public record SimulationResult(
@@ -254,7 +255,9 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
         EnsureRunnable(simulated);
 
         // Bậc ngoại khóa của hồ sơ thật tính từ các hoạt động đã lưu
-        var tier = ActivityTier.FromProfile(await profiles.GetProfileActivitiesAsync(profile.Id, ct)).Tier;
+        var declared = await profiles.GetProfileActivitiesAsync(profile.Id, ct);
+        var tier = ActivityTier.FromProfile(declared).Tier;
+        var (activityCount, awardCount) = ActivityTier.CountDeclared(declared);
 
         var schools = await recommendations.ListSchoolsAsync(profile.TargetLevel, ct);
         var baselineRun = Evaluate(profile, pref, schools, tier);
@@ -263,7 +266,7 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
         return new SimulationResult(
             new SimulationProfile(
                 profile.OverallGpa, SatScore(profile.Sat), ActScore(profile.Act), profile.Ielts,
-                profile.BudgetMaxUsd, profile.ScholarshipNeed, tier),
+                profile.BudgetMaxUsd, profile.ScholarshipNeed, tier, profile.Toefl, profile.Duolingo, activityCount, awardCount),
             Summarize(baselineRun), Summarize(simulatedRun), Diff(baselineRun, simulatedRun),
             JsonSerializer.Serialize(BuildCriteria(simulated, pref, simulatedRun), StoredJson),
             JsonSerializer.Serialize(BuildItems(simulated.BudgetMaxUsd, simulatedRun), StoredJson));
@@ -276,6 +279,8 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
         if (o.Sat is < 400 or > 1600) throw new ArgumentException("SAT giả định phải từ 400 đến 1600.");
         if (o.Act is < 1 or > 36) throw new ArgumentException("ACT giả định phải từ 1 đến 36.");
         if (o.Ielts is < 0 or > 9) throw new ArgumentException("IELTS giả định phải từ 0 đến 9.");
+        if (o.Toefl is < 0 or > 120) throw new ArgumentException("TOEFL giả định phải từ 0 đến 120.");
+        if (o.Duolingo is < 10 or > 160) throw new ArgumentException("Duolingo giả định phải từ 10 đến 160.");
         if (o.BudgetUsd is < 0) throw new ArgumentException("Ngân sách giả định không được âm.");
         if (o.ScholarshipNeed is not null && !ProfileConstants.ScholarshipNeeds.All.Contains(o.ScholarshipNeed))
             throw new ArgumentException("Mức cần học bổng giả định không hợp lệ.");
@@ -293,8 +298,8 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
             Sat = o.Sat ?? profile.Sat,
             Act = o.Act ?? profile.Act,
             Ielts = o.Ielts ?? profile.Ielts,
-            Toefl = profile.Toefl,
-            Duolingo = profile.Duolingo,
+            Toefl = o.Toefl ?? profile.Toefl,
+            Duolingo = o.Duolingo ?? profile.Duolingo,
             BudgetMaxUsd = o.BudgetUsd ?? profile.BudgetMaxUsd,
             ScholarshipNeed = o.ScholarshipNeed ?? profile.ScholarshipNeed
         };

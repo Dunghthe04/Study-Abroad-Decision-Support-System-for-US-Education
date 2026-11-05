@@ -13,9 +13,9 @@ from typing import Any
 from app.services.skills import validators
 from app.services.skills.validators import AskAgain
 
-# Khóa hồ sơ mô phỏng được. Chứng chỉ tiếng Anh chỉ thử IELTS
+# Khóa hồ sơ mô phỏng được. Chứng chỉ tiếng Anh thử được IELTS, TOEFL, Duolingo (don_vi cho biết bài nào)
 SUPPORTED = ("gpa", "sat", "act", "english", "budget", "scholarship")
-SUPPORTED_TEXT = "GPA, SAT, ACT, IELTS, ngân sách, mức cần học bổng"
+SUPPORTED_TEXT = "GPA, SAT, ACT, IELTS, TOEFL, Duolingo, ngân sách, mức cần học bổng"
 # Học sinh nói "bỏ" một yếu tố: kịch bản chỉ đổi giá trị, không xóa được điểm
 SKIP_ACTION = "bo_qua"
 GPA_SCALES = {"thang_4": 4, "thang_10": 10}
@@ -47,7 +47,7 @@ LABELS = {
 
 @dataclass
 class WhatIf:
-    # Khóa SimulateRequest: gpa {value, scale}, sat, act, ielts, budgetUsd, scholarshipNeed
+    # Khóa SimulateRequest: gpa {value, scale}, sat, act, ielts, toefl, duolingo, budgetUsd, scholarshipNeed
     changes: dict[str, Any] = field(default_factory=dict)
     # Yếu tố học sinh muốn đổi nhưng mô phỏng chưa làm được (tên tiếng Việt, không trùng nhau)
     unsupported: list[str] = field(default_factory=list)
@@ -63,6 +63,10 @@ class WhatIf:
             parts.append(f"ACT {act}")
         if (ielts := self.changes.get("ielts")) is not None:
             parts.append(f"IELTS {ielts:g}")
+        if (toefl := self.changes.get("toefl")) is not None:
+            parts.append(f"TOEFL {toefl:g}")
+        if (duolingo := self.changes.get("duolingo")) is not None:
+            parts.append(f"Duolingo {duolingo:g}")
         if (usd := self.changes.get("budgetUsd")) is not None:
             parts.append(f"ngân sách khoảng {usd:,.0f} USD mỗi năm".replace(",", "."))
         if (need := self.changes.get("scholarshipNeed")) is not None:
@@ -85,6 +89,23 @@ def _budget_usd(amount: float, unit: str | None) -> int:
     return round(validators.to_usd(amount, currency))
 
 
+# Điểm tiếng Anh giả định: don_vi cho biết bài thi (ielts, toefl, duolingo). Chưa rõ bài nào thì chỉ suy ra khi điểm chắc chắn
+# là IELTS (từ 0 đến 9); điểm lớn hơn có thể là TOEFL hoặc Duolingo nên hỏi lại, không đoán. Bài khác (PTE...) mô phỏng chưa làm được
+ENGLISH_TESTS = {"ielts": "IELTS", "toefl": "TOEFL", "duolingo": "Duolingo"}
+
+
+def _check_english(value: object, unit: str | None) -> tuple[str, Any] | None:
+    if unit is not None and unit not in ENGLISH_TESTS:
+        return None
+    if unit is None:
+        number = _number(value, "Bạn muốn thử điểm tiếng Anh bao nhiêu, theo bài thi nào (IELTS, TOEFL hay Duolingo)?")
+        if number > 9:
+            raise AskAgain(f"Điểm {number:g} là của bài thi nào, TOEFL hay Duolingo? Bạn cho mình biết để thử đúng nhé.")
+        unit = "ielts"
+    name = ENGLISH_TESTS[unit]
+    return unit, validators.check_score(unit, _number(value, f"Bạn muốn thử {name} bao nhiêu điểm?"))
+
+
 # Kiểm tra một thay đổi, trả (khóa SimulateRequest, giá trị) hoặc None nếu mô phỏng chưa làm được
 def _check(key: str, value: object, unit: str | None) -> tuple[str, Any] | None:
     unit = unit.strip().lower() if unit else None
@@ -103,11 +124,7 @@ def _check(key: str, value: object, unit: str | None) -> tuple[str, Any] | None:
                 validators.check_score("act", _number(value, "Bạn muốn thử ACT bao nhiêu điểm?"))
             )
         case "english":
-            if unit not in (None, "ielts"):
-                return None
-            return "ielts", validators.check_score(
-                "ielts", _number(value, "Bạn muốn thử IELTS bao nhiêu điểm?")
-            )
+            return _check_english(value, unit)
         case "budget":
             amount = _number(value, "Bạn muốn thử ngân sách bao nhiêu mỗi năm? Cho mình một con số nhé.")
             return "budgetUsd", _budget_usd(amount, unit)
@@ -124,7 +141,7 @@ def parse_what_if(changes: list[dict[str, Any]]) -> WhatIf:
         if key in SUPPORTED and change.get("hanh_dong") != SKIP_ACTION:
             checked = _check(key, change.get("gia_tri", ""), change.get("don_vi"))
         if checked is None:
-            label = LABELS.get(key, "yếu tố này") if key != "english" else "chứng chỉ tiếng Anh ngoài IELTS"
+            label = LABELS.get(key, "yếu tố này") if key != "english" else "chứng chỉ tiếng Anh ngoài IELTS, TOEFL, Duolingo"
             if change.get("hanh_dong") == SKIP_ACTION:
                 label = LABELS.get(key, "yếu tố này")
             if label not in result.unsupported:

@@ -44,7 +44,9 @@ FACTOR_EFFECT = {
     "gpa": "GPA làm đổi nhóm của trường",
     "sat": "SAT làm đổi nhóm của trường",
     "act": "ACT làm đổi nhóm của trường (chỉ khi thiếu SAT)",
-    "ielts": "IELTS không làm đổi nhóm, chỉ ảnh hưởng cảnh báo điểm tiếng Anh tối thiểu và thứ tự trong nhóm",
+    "ielts": "IELTS không làm đổi nhóm, chỉ làm trường vào hoặc ra khỏi danh sách (đủ mức tiếng Anh tối thiểu) và đổi thứ tự trong nhóm",
+    "toefl": "TOEFL không làm đổi nhóm, chỉ làm trường vào hoặc ra khỏi danh sách (đủ mức tiếng Anh tối thiểu) và đổi thứ tự trong nhóm",
+    "duolingo": "Duolingo không làm đổi nhóm, chỉ làm trường vào hoặc ra khỏi danh sách (đủ mức tiếng Anh tối thiểu) và đổi thứ tự trong nhóm",
     "budget": "ngân sách làm trường vào hoặc ra khỏi danh sách, không đổi nhóm của từng trường",
     "scholarship": "mức cần học bổng làm trường vào hoặc ra khỏi danh sách, không đổi nhóm của từng trường",
 }

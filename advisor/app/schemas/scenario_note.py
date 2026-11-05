@@ -37,7 +37,7 @@ class ScenarioNoteRequest(CamelModel):
     label: str = Field(
         min_length=1, max_length=300
     )  # điều đang thử kèm giá trị hiện tại, vd "SAT 1500 (hiện tại 1290)"
-    factors: list[str] = Field(default=[], max_length=6)  # sat, gpa, act, ielts, budget, scholarship
+    factors: list[str] = Field(default=[], max_length=8)  # sat, gpa, act, ielts, toefl, duolingo, budget, scholarship
     unsupported: list[str] = Field(default=[], max_length=10)  # yếu tố học sinh nói nhưng chưa thử được
     direction: Direction  # better: có trường dễ vào hơn, worse: khó vào hơn, mixed: cả hai, none: không trường nào đổi nhóm
     student: ScenarioStudent = ScenarioStudent()
