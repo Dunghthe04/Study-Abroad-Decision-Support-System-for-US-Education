@@ -22,26 +22,29 @@ import { isAdminRoute } from "@/lib/admin-nav";
 import { isFullRoute, isWideRoute } from "@/lib/layout-routes";
 import { cn } from "@/lib/utils";
 
-const links = [
-  { href: "/", label: "Trang chủ" },
-  { href: "/centers", label: "Trung tâm tư vấn" },
-  { href: "/methodology", label: "Giới thiệu phương pháp" },
-  { href: "/analysis", label: "Phân tích tư vấn" },
-];
-
 export function SiteHeader() {
   const { user, isLoading, logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
+  const canOpenAdmin = user?.role === "admin" || user?.role === "moderator";
+
+  const navLinks = [
+    { href: "/", label: "Trang chủ" },
+    { href: canOpenAdmin ? "/admin/centers" : "/centers", label: "Trung tâm tư vấn" },
+    { href: "/methodology", label: "Giới thiệu phương pháp" },
+    { href: "/analysis", label: "Phân tích tư vấn" },
+  ];
+
   const isLinkActive = (href: string) => {
     if (href === "/") {
       return pathname === "/";
     }
+    if (href === "/admin/centers") {
+      return pathname.startsWith("/admin/centers") || pathname.startsWith("/centers");
+    }
     return pathname.startsWith(href);
   };
-
-  const canOpenAdmin = user?.role === "admin" || user?.role === "moderator";
 
   const handleLogout = async () => {
     await logout();
@@ -71,7 +74,7 @@ export function SiteHeader() {
             <span>USAS</span>
           </Link>
           <ul className="flex items-center gap-1 overflow-x-auto text-sm font-medium [scrollbar-width:none]">
-            {links.map((l) => {
+            {navLinks.map((l) => {
               const active = isLinkActive(l.href);
               return (
                 <li key={l.href}>
@@ -136,9 +139,9 @@ export function SiteHeader() {
                   Hồ sơ cá nhân
                 </DropdownMenuItem>
                 {(user.role === "admin" || user.role === "moderator") && (
-                  <DropdownMenuItem render={<Link href="/centers" />}>
+                  <DropdownMenuItem render={<Link href="/admin/centers" />}>
                     <Building2Icon />
-                    Danh bạ trung tâm
+                    Quản lý trung tâm
                   </DropdownMenuItem>
                 )}
                 {user.role === "admin" && (

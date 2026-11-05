@@ -8,11 +8,11 @@ import {
   MapPinIcon,
   CheckCircle2Icon,
   StarIcon,
-  ExternalLinkIcon,
   PhoneIcon,
   ShieldCheckIcon,
   RotateCcwIcon,
   FlameIcon,
+  ChevronRightIcon,
 } from "lucide-react";
 import { studyCentersApi } from "@/lib/api";
 import type { StudyCenter, PagedResult } from "@/types/api";
@@ -21,10 +21,12 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AddCenterButton } from "@/components/admin/AddCenterButton";
 import { TablePagination } from "@/components/admin/shared/TablePagination";
+import { AdminCenterDetailPanel } from "./AdminCenterDetailPanel";
 import { cn } from "cn";
 
 export function AdminCenterListView() {
   const [centers, setCenters] = useState<StudyCenter[]>([]);
+  const [selectedCenter, setSelectedCenter] = useState<StudyCenter | null>(null);
   const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(1);
   const pageSize = 10;
@@ -197,8 +199,10 @@ export function AdminCenterListView() {
         </form>
       </div>
 
-      {/* Centers Table */}
-      <div className="bg-card border rounded-xl overflow-hidden shadow-sm">
+      {/* Master-Detail Layout */}
+      <div className="flex min-h-0 flex-1 flex-col gap-6 lg:flex-row items-start">
+        {/* Centers Table */}
+        <div className="bg-card border rounded-xl overflow-hidden shadow-sm flex-1 min-w-0 w-full">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className="bg-muted/50 border-b text-xs font-semibold uppercase text-muted-foreground tracking-wider">
@@ -227,8 +231,18 @@ export function AdminCenterListView() {
               ) : (
                 centers.map((c) => {
                   const isVerified = c.verificationStatus === "verified";
+                  const isSelected = selectedCenter?.id === c.id;
                   return (
-                    <tr key={c.id} className="hover:bg-muted/30 transition-colors">
+                    <tr
+                      key={c.id}
+                      onClick={() => setSelectedCenter(c)}
+                      className={cn(
+                        "cursor-pointer transition-colors",
+                        isSelected
+                          ? "bg-brand/10 hover:bg-brand/15 border-l-4 border-l-brand"
+                          : "hover:bg-muted/30"
+                      )}
+                    >
                       {/* Name & Logo */}
                       <td className="py-3.5 px-4">
                         <div className="flex items-center gap-3">
@@ -307,15 +321,26 @@ export function AdminCenterListView() {
                       </td>
 
                       {/* Actions */}
-                      <td className="py-3.5 px-4 text-right">
-                        <Link
-                          href={`/centers/${c.id}`}
-                          target="_blank"
-                          className={cn(buttonVariants({ variant: "outline", size: "sm" }), "gap-1 text-xs")}
-                        >
-                          Trang chi tiết
-                          <ExternalLinkIcon className="w-3 h-3 ml-0.5" />
-                        </Link>
+                      <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <Button
+                            type="button"
+                            variant={isSelected ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => setSelectedCenter(c)}
+                            className="gap-1 text-xs h-8"
+                          >
+                            Xem quản trị
+                            <ChevronRightIcon className="w-3 h-3" />
+                          </Button>
+                          <Link
+                            href={`/admin/centers/${c.id}`}
+                            className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "text-xs h-8 px-2 text-muted-foreground hover:text-foreground")}
+                            title="Mở toàn trang quản trị"
+                          >
+                            Chi tiết
+                          </Link>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -336,6 +361,15 @@ export function AdminCenterListView() {
             onPageChange={setPage}
           />
         </div>
+      </div>
+
+      {/* Detail Panel */}
+      {selectedCenter && (
+        <AdminCenterDetailPanel
+          center={selectedCenter}
+          onClose={() => setSelectedCenter(null)}
+        />
+      )}
       </div>
     </div>
   );
