@@ -212,6 +212,57 @@ public class RecommendationServiceTests
         Assert.Equal(0, items.RootElement.GetProperty("scored").GetArrayLength());
     }
 
+    // Học sinh không có IELTS: thành phần E tính từ bài thi học sinh có, so với mức tối thiểu cùng bài của trường
+    [Theory]
+    [InlineData(70, null, 0.33)]    // TOEFL 70 so với mức 80: thiếu 10 điểm, 10 / 15 = 0,67 band
+    [InlineData(null, 100, 0.40)]   // Duolingo 100 so với mức 115: thiếu 15 điểm, 15 / 25 = 0,6 band
+    [InlineData(85, null, 1.00)]    // TOEFL vượt mức tối thiểu
+    public async Task Recommend_English_FitUsesTheTestTheStudentHas(int? toefl, int? duolingo, double expectedE)
+    {
+        var (service, _, store) = Setup();
+        var profile = Profile();
+        profile.Ielts = null;
+        profile.Toefl = toefl;
+        profile.Duolingo = duolingo;
+        var school = School("S", 30_000m, "none", Major, sat: (1200, 1380), accept: 0.6m, avgGpa: 3.5m,
+            minIelts: 6.5m, minToefl: 80m, minDuolingo: 115m);
+
+        await service.RecommendAsync(profile, [], [school]);
+
+        using var items = JsonDocument.Parse(store.Rows.Single().ItemsJson);
+        Assert.Equal(expectedE, items.RootElement.GetProperty("scored")[0].GetProperty("e").GetDouble(), 2);
+    }
+
+    [Fact]
+    public async Task Recommend_English_FitUsesTheBestOfTheStudentsTests()
+    {
+        var (service, _, store) = Setup();
+        var profile = Profile();
+        profile.Ielts = 5.5m;        // thiếu 1 band so với mức 6,5
+        profile.Duolingo = 120m;     // vượt mức 115: bài này đạt nên E = 1
+        var school = School("S", 30_000m, "none", Major, sat: (1200, 1380), accept: 0.6m, avgGpa: 3.5m,
+            minIelts: 6.5m, minDuolingo: 115m);
+
+        await service.RecommendAsync(profile, [], [school]);
+
+        using var items = JsonDocument.Parse(store.Rows.Single().ItemsJson);
+        var row = items.RootElement.GetProperty("scored")[0];
+        Assert.Equal(1.0, row.GetProperty("e").GetDouble(), 9);
+        Assert.DoesNotContain("ENGLISH_NEAR", row.GetProperty("flags").EnumerateArray().Select(f => f.GetString()));
+    }
+
+    [Fact]
+    public async Task Recommend_English_FitDropsTheEnglishPart_WhenTheSchoolHasNoMinimum()
+    {
+        var (service, _, store) = Setup();
+        var school = School("S", 30_000m, "none", Major, sat: (1200, 1380), accept: 0.6m, avgGpa: 3.5m);   // không có mức tối thiểu nào
+
+        await service.RecommendAsync(Profile(), [], [school]);
+
+        using var items = JsonDocument.Parse(store.Rows.Single().ItemsJson);
+        Assert.Equal(JsonValueKind.Null, items.RootElement.GetProperty("scored")[0].GetProperty("e").ValueKind);
+    }
+
     [Fact]
     public async Task Recommend_QualityComesFromTheRankingPosition()
     {
@@ -626,7 +677,7 @@ public class RecommendationServiceTests
     private static RecommendSchoolInput School(
         string code, decimal tuition, string aidPolicy, string major,
         (int Low, int High)? sat = null, decimal? accept = null, decimal? avgGpa = null,
-        decimal? minIelts = null, (int Rank, int Total)? rank = null, int? admitted = null, int? applicants = null,
+        decimal? minIelts = null, decimal? minToefl = null, decimal? minDuolingo = null, (int Rank, int Total)? rank = null, int? admitted = null, int? applicants = null,
         string? ec = null)
     {
         var university = new University
@@ -643,6 +694,8 @@ public class RecommendationServiceTests
             Sat75 = sat?.High,
             AvgGpa4 = avgGpa,
             MinIelts = minIelts,
+            MinToefl = minToefl,
+            MinDuolingo = minDuolingo,
             AdmittedTotal = admitted,
             ApplicantsTotal = applicants,
             C7EcImportance = ec

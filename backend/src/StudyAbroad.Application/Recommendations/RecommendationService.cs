@@ -147,7 +147,7 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
     {
         var byCode = kept.ToDictionary(r => r.School.Code, StringComparer.OrdinalIgnoreCase);
         var student = new StudentAcademics(profile.OverallGpa, SatScore(profile.Sat), ActScore(profile.Act), tier);
-        var fitStudent = new FitStudent(profile.BudgetMaxUsd, profile.Ielts);
+        var fitStudent = new FitStudent(profile.BudgetMaxUsd);
         var weights = SchoolRanker.WeightsFromPriorities(NormalizePref(pref));
 
         // Chấm nhóm cho từng trường còn lại sau lọc cứng
@@ -158,8 +158,9 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
                      .OrderBy(s => s.University.Code, StringComparer.Ordinal))
         {
             var grade = SchoolGrouper.Grade(student, ToSchoolAcademics(school));
-            graded.Add((school, byCode[school.University.Code],
-                new GradedSchool(school.University.Code, grade, ToFitSchool(school))));
+            var filter = byCode[school.University.Code];
+            graded.Add((school, filter,
+                new GradedSchool(school.University.Code, grade, ToFitSchool(school, filter.EnglishShortfall))));
         }
 
         var scored = graded
@@ -570,11 +571,12 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
     }
 
     // Số liệu của trường cho fit score. Chất lượng tính từ hạng trong các bảng xếp hạng chung; chưa có hạng thì bỏ thành phần Q.
-    private static FitSchool ToFitSchool(RecommendSchoolInput input)
+    // englishShortfall: mức thiếu tiếng Anh theo band, lấy từ kết quả lọc (HardFilter) của đúng trường này; null thì bỏ thành phần E.
+    private static FitSchool ToFitSchool(RecommendSchoolInput input, decimal? englishShortfall)
     {
         var offering = input.Offering;
         return new FitSchool(
-            TotalCost(offering), offering.IntlAidAvgUsd, offering.MinIelts, SchoolRanker.QualityFromRanks(input.Rankings));
+            TotalCost(offering), offering.IntlAidAvgUsd, englishShortfall, SchoolRanker.QualityFromRanks(input.Rankings));
     }
 
     // Đọc một số từ JSON đã lưu (dùng khi mở chi tiết một trường).
