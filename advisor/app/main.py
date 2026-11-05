@@ -91,7 +91,8 @@ async def lifespan(app: FastAPI):
         )
         slm = OllamaSlm(slm_client, output_format(settings.slm_format))
         # Cùng một SLM vừa tách ý vừa sinh skill hồ sơ; Gemini viết câu trả lời theo skill đó
-        generator = SkillGenerator(slm_client)
+        skill_log_dir = ADVISOR_DIR / settings.skill_log_dir if settings.skill_log_dir else None
+        generator = SkillGenerator(slm_client, log_dir=skill_log_dir)
         writer = AdviceWriter(gemini)
         app.state.chat_flow = ChatFlow(slm, build_branches(skills, generator, writer))
         yield

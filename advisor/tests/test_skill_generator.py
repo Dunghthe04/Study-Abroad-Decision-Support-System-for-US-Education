@@ -116,3 +116,31 @@ async def test_kind_without_a_prompt_is_a_programming_error():
 
     with pytest.raises(ValueError):
         await SkillGenerator(FakeSlm()).generate(req)
+
+
+async def test_each_generation_is_logged_with_input_skill_and_every_attempt(tmp_path):
+    slm = FakeSlm("## 1. Nhiệm vụ\nthiếu mục", good_skill())
+    generator = SkillGenerator(slm, log_dir=tmp_path)
+
+    await generator.generate(REQ)
+    await generator.generate(REQ)  # lấy từ cache: không ghi thêm dòng
+
+    (log_file,) = tmp_path.glob("skill_*.jsonl")
+    (row,) = [json.loads(line) for line in log_file.read_text(encoding="utf-8").splitlines()]
+    assert (row["cau_hoi"], row["ho_so"], row["tinh_san"]) == (REQ.cau_hoi, REQ.ho_so, REQ.tinh_san)
+    assert row["skill"] == good_skill().strip()
+    first, second = row["tung_lan"]
+    assert first["chu_slm"] == "## 1. Nhiệm vụ\nthiếu mục" and first["loi"]
+    assert second["loi"] is None and second["giay"] >= 0
+
+
+async def test_failed_generation_is_logged_with_reasons(tmp_path):
+    slm = FakeSlm(OllamaError("hết giờ"), "không phải skill")
+
+    assert await SkillGenerator(slm, log_dir=tmp_path).generate(REQ) is None
+
+    (log_file,) = tmp_path.glob("skill_*.jsonl")
+    row = json.loads(log_file.read_text(encoding="utf-8"))
+    assert row["skill"] is None
+    assert [a["chu_slm"] for a in row["tung_lan"]] == [None, "không phải skill"]
+    assert row["tung_lan"][0]["loi"] == "gọi model: hết giờ"
