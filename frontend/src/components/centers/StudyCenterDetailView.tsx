@@ -56,73 +56,35 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
       <div className="relative rounded-xl overflow-hidden border border-border bg-card shadow-sm">
         {/* Cover Background */}
         <div
-          className="h-44 sm:h-56 w-full bg-cover bg-center relative"
+          className="h-44 sm:h-52 w-full bg-cover bg-center relative bg-gradient-to-r from-slate-800 via-sky-900 to-slate-900"
           style={{ backgroundImage: `url(${profile.coverImage})` }}
         >
-          <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-black/20" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
           <div className="absolute top-4 right-4 flex gap-2">
             <Badge
               variant="secondary"
-              className="bg-background/90 backdrop-blur-md text-foreground font-medium text-xs px-2.5 py-1"
+              className="bg-background/90 backdrop-blur-md text-foreground font-medium text-xs px-2.5 py-1 shadow-sm"
             >
               Mã: {center.code}
             </Badge>
           </div>
         </div>
 
-        {/* Header Content Overlay */}
-        <div className="px-6 pb-6 pt-0 relative -mt-16 sm:-mt-14">
-          <div className="flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4">
-            <div className="flex items-start gap-4">
-              {/* Logo / Avatar */}
-              <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl overflow-hidden border-4 border-background bg-card shadow-md shrink-0 flex items-center justify-center">
-                <img
-                  src={profile.logoImage}
-                  alt={center.name}
-                  className="w-full h-full object-cover"
-                />
-              </div>
-
-              {/* Title & Badges */}
-              <div className="space-y-1.5 pt-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
-                    {center.name}
-                  </h1>
-                  {isVerified ? (
-                    <Badge className="bg-emerald-600 hover:bg-emerald-600/90 text-white gap-1 text-xs px-2 py-0.5">
-                      <CheckCircle2Icon className="w-3.5 h-3.5" />
-                      Đã xác minh Sở GD&ĐT
-                    </Badge>
-                  ) : (
-                    <Badge variant="outline" className="text-muted-foreground text-xs">
-                      Chờ xác minh
-                    </Badge>
-                  )}
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm text-muted-foreground">
-                  <Badge variant="secondary" className="font-medium bg-brand/10 text-brand border-brand/20">
-                    {profile.typeLabel}
-                  </Badge>
-                  {center.city && (
-                    <span className="inline-flex items-center gap-1 font-medium text-foreground">
-                      <MapPinIcon className="w-3.5 h-3.5 text-brand" />
-                      {center.city}
-                    </span>
-                  )}
-                  <span>•</span>
-                  <div className="inline-flex items-center gap-1 text-amber-500 font-semibold">
-                    <StarIcon className="w-3.5 h-3.5 fill-current" />
-                    <span>{profile.rating.toFixed(1)}</span>
-                    <span className="text-muted-foreground font-normal">({profile.reviewCount} đánh giá)</span>
-                  </div>
-                </div>
-              </div>
+        {/* Header Content Area */}
+        <div className="px-6 pb-6 pt-0 relative">
+          {/* Top row: Avatar & Action Buttons */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4 -mt-12 sm:-mt-14">
+            {/* Logo / Avatar */}
+            <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl overflow-hidden border-4 border-background bg-card shadow-md shrink-0 flex items-center justify-center">
+              <img
+                src={profile.logoImage}
+                alt={center.name}
+                className="w-full h-full object-cover"
+              />
             </div>
 
             {/* CTA Buttons */}
-            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto shrink-0 pt-2 sm:pt-0">
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto shrink-0 pb-1">
               <ConsultationBookingModal centerName={center.name} />
               {center.phone && (
                 <a
@@ -133,6 +95,43 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
                   {center.phone}
                 </a>
               )}
+            </div>
+          </div>
+
+          {/* Title & Info Block - Cleanly placed on card background */}
+          <div className="mt-4 space-y-2">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+                {center.name}
+              </h1>
+              {isVerified ? (
+                <Badge className="bg-emerald-600 hover:bg-emerald-600/90 text-white gap-1 text-xs px-2.5 py-0.5">
+                  <CheckCircle2Icon className="w-3.5 h-3.5" />
+                  Đã xác minh Sở GD&ĐT
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="text-muted-foreground text-xs px-2.5 py-0.5">
+                  Chờ xác minh
+                </Badge>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm text-muted-foreground">
+              <Badge variant="secondary" className="font-medium bg-brand/10 text-brand border-brand/20">
+                {profile.typeLabel}
+              </Badge>
+              {center.city && (
+                <span className="inline-flex items-center gap-1 font-medium text-foreground">
+                  <MapPinIcon className="w-3.5 h-3.5 text-brand" />
+                  {center.city}
+                </span>
+              )}
+              <span>•</span>
+              <div className="inline-flex items-center gap-1 text-amber-500 font-semibold">
+                <StarIcon className="w-3.5 h-3.5 fill-current" />
+                <span>{profile.rating.toFixed(1)}</span>
+                <span className="text-muted-foreground font-normal">({profile.reviewCount} đánh giá)</span>
+              </div>
             </div>
           </div>
         </div>
