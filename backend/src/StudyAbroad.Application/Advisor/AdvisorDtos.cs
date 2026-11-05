@@ -1,10 +1,55 @@
+using System.Text.Json;
 namespace StudyAbroad.Application.Advisor;
 
 public record ChatMessage(string Role, string Content);
 
-/// <param name="StudyLevel">Level the user asks about (see Domain.Constants.StudyLevels); null = all levels.</param>
-public record AdvisorChatRequest(IReadOnlyList<ChatMessage> Messages, string? SessionId = null, string? StudyLevel = null);
+/// <summary>
+/// Một tin khi advisor trả lời theo từng ý (advisor: POST /api/v1/chat/stream).
+/// Type: "progress" (Answers = số câu sắp trả lời) hoặc "partial" (Text = câu trả lời của một ý, đúng thứ tự hỏi).
+/// </summary>
+public record AdvisorStreamEvent(string Type, int? Answers = null, string? Text = null);
 
+/// <param name="StudyLevel">Level the user asks about (see Domain.Constants.StudyLevels); null = all levels.</param>
+/// <param name="Profile">Hồ sơ hiện tại (khóa chat → {value, status}) do .NET gửi mỗi lượt; null = không gửi.</param>
+/// <param name="Schools">Trường của lần gợi ý gần nhất, chỉ gửi khi đã có kết quả; skill_explain dùng để biết học sinh nói trường nào.</param>
+/// <param name="Transcript">Học bạ theo năm (ChatTranscript), gửi riêng ngoài Profile vì chat chỉ đọc; null = nhập GPA tổng.</param>
+/// <param name="Benchmarks">Mốc GPA / tiếng Anh từ dữ liệu trường (ChatBenchmarks) cho skill ho_so; null = chưa có dữ liệu.</param>
+public record AdvisorChatRequest(
+    IReadOnlyList<ChatMessage> Messages,
+    string? SessionId = null,
+    string? StudyLevel = null,
+    JsonElement? State = null,
+    JsonElement? Profile = null,
+    IReadOnlyList<ChatSchool>? Schools = null,
+    JsonElement? Transcript = null,
+    JsonElement? Benchmarks = null);
+
+/// <summary>Một trường trong danh sách gợi ý. Group là mã nhóm đã chấm (R, RF, M, S, NA, O), advisor đổi sang chữ.</summary>
+public record ChatSchool(string Code, string Name, string? Group);
 public record Citation(string Title, string? Url, string? Snippet);
 
-public record AdvisorChatResponse(string Answer, IReadOnlyList<Citation> Citations, string? Disclaimer);
+/// <summary>Nút gợi ý: Label là chữ trên nút, Value là chữ gửi đi như tin nhắn của học sinh khi bấm.</summary>
+public record QuickReply(string Label, string Value);
+
+/// <summary>Công cụ nhập ngay trong chat. Type: major | review | budget | scholarship; Data tùy loại.</summary>
+public record Widget(string Type, JsonElement? Data = null);
+
+/// <param name="Profile">Hồ sơ sau lượt này (nội bộ, .NET dùng để ghi vào bản nháp).</param>
+/// <param name="ProfileChanged">Khóa hồ sơ đổi trong lượt này.</param>
+/// <param name="FormStep">Trang form (1–6) của câu chat đang hỏi; null = câu không thuộc trang nào.</param>
+public record AdvisorChatResponse(
+    string Answer,
+    IReadOnlyList<Citation> Citations,
+    string? Disclaimer,
+    JsonElement? State = null,
+    string? SessionId = null,
+    IReadOnlyList<QuickReply>? QuickReplies = null,
+    Widget? Widget = null,
+    JsonElement? Profile = null,
+    IReadOnlyList<string>? ProfileChanged = null,
+    int? FormStep = null,
+    IReadOnlyList<string>? Skills = null,
+    // Việc .NET cần làm sau lượt này: "recommend" = chạy gợi ý trường (ChatRecommendation),
+    // "explain" = viết lời tư vấn một trường (ChatExplanation, mã trường nằm ở ActionData.code). Không trả cho trình duyệt
+    string? Action = null,
+    JsonElement? ActionData = null);

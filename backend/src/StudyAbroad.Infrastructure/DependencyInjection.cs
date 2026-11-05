@@ -3,8 +3,14 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using StudyAbroad.Application.Advisor;
+using StudyAbroad.Application.Audit;
+using StudyAbroad.Application.Auth;
+using StudyAbroad.Application.Profile.Financial;
+using StudyAbroad.Application.Recommendations;
 using StudyAbroad.Application.StudyCenters;
 using StudyAbroad.Infrastructure.Advisor;
+using StudyAbroad.Infrastructure.Auth;
+using StudyAbroad.Infrastructure.MediaUploads;
 using StudyAbroad.Infrastructure.Persistence;
 using StudyAbroad.Infrastructure.Persistence.Repositories;
 
@@ -23,17 +29,86 @@ public static class DependencyInjection
             .UseSnakeCaseNamingConvention());
 
         services.AddScoped<IStudyCenterRepository, StudyCenterRepository>();
+        services.AddScoped<StudyAbroad.Application.Admin.Universities.IAdminUniversityRepository, AdminUniversityRepository>();
+        services.AddScoped<StudyAbroad.Application.Leads.ILeadRepository, LeadRepository>();
+        services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<IAuditLogRepository, AuditLogRepository>();
+        services.AddScoped<StudyAbroad.Application.ParentLinks.IParentLinkRepository, ParentLinkRepository>();
+        services.AddScoped<IFinancialProfileRepository, FinancialProfileRepository>();
+        services.AddScoped<StudyAbroad.Application.AcademicProfiles.IAcademicProfileRepository, AcademicProfileRepository>();
+        services.AddSingleton<IPasswordHasher, PasswordHasher>();
+        services.AddCloudinaryMedia(configuration);
+        // [USAS-365] Đăng ký repository phân tích điểm học thuật
+        services.AddScoped<StudyAbroad.Application.Profile.Academic.IAcademicAnalysisRepository, AcademicAnalysisRepository>();
+        // [USAS-640] Đăng ký repository luồng hồ sơ và metadata
+        services.AddScoped<StudyAbroad.Application.Profile.Flow.IProfileFlowRepository, ProfileFlowRepository>();
+        // [USAS-640] Đăng ký service lưu trữ tệp bảng điểm nháp
+        services.AddScoped<StudyAbroad.Application.Profile.Flow.IProfileFileStorageService, StudyAbroad.Infrastructure.Services.ProfileFileStorageService>();
+        services.AddScoped<IRecommendationRepository, RecommendationRepository>();
+        services.AddScoped<IChatSessionRepository, ChatSessionRepository>();
+        services.AddScoped<IChatAnalysisRepository, ChatAnalysisRepository>();
+        services.AddScoped<IChatBenchmarkRepository, ChatBenchmarkRepository>();
+
+
+        // [USAS-362] Đăng ký JWT Token Service (Ưu tiên nạp key từ biến môi trường JWT_SECRET_KEY).
+        // Không có khóa mặc định ở đây: Program.cs kiểm tra độ dài khóa, chỉ dùng khóa dev khi môi trường Development.
+        services.Configure<JwtOptions>(options =>
+        {
+            configuration.GetSection(JwtOptions.SectionName).Bind(options);
+            if (string.IsNullOrWhiteSpace(options.SecretKey))
+                options.SecretKey = configuration["JWT_SECRET_KEY"] ?? string.Empty;
+        });
+        services.AddSingleton<ITokenService, TokenService>();
+
+        // [USAS-12 / USAS-362] Đăng ký Smtp Email Service (Nạp từ configuration hoặc biến môi trường SMTP_*)
+        services.Configure<SmtpOptions>(options =>
+        {
+            configuration.GetSection(SmtpOptions.SectionName).Bind(options);
+            // docker-compose truyền "" khi .env không đặt biến, nên chuỗi rỗng coi như chưa cấu hình
+            options.Host = NonEmpty(configuration["SMTP_HOST"]) ?? options.Host;
+            if (int.TryParse(configuration["SMTP_PORT"], out var port)) options.Port = port;
+            options.User = NonEmpty(configuration["SMTP_USER"]) ?? options.User;
+            options.Password = NonEmpty(configuration["SMTP_PASSWORD"]) ?? options.Password;
+            options.FromEmail = NonEmpty(configuration["SMTP_FROM_EMAIL"]) ?? NonEmpty(configuration["SMTP_SENDER_EMAIL"]) ?? options.FromEmail;
+            options.FromName = NonEmpty(configuration["SMTP_FROM_NAME"]) ?? NonEmpty(configuration["SMTP_SENDER_NAME"]) ?? options.FromName;
+            options.AppBaseUrl = NonEmpty(configuration["APP_PUBLIC_URL"]) ?? options.AppBaseUrl;
+        });
+        // Mail gửi ở nền qua hàng đợi: request không chờ SMTP
+        services.AddSingleton<SmtpEmailSender>();
+        services.AddSingleton<EmailQueue>();
+        services.AddSingleton<IEmailSender, QueuedEmailSender>();
+        services.AddHostedService<EmailDispatchBackgroundService>();
 
         services.Configure<AdvisorOptions>(configuration.GetSection(AdvisorOptions.SectionName));
-        services.AddHttpClient<IAdvisorClient, AdvisorClient>((sp, client) =>
+        services.AddHttpClient<IAdvisorClient, AdvisorClient>(ConfigureAdvisorClient);
+        // Bậc ngoại khóa: SLM xác nhận vai trò, phạm vi rồi advisor tính bậc, gọi lúc lưu hồ sơ
+        services.AddHttpClient<IEcTierClient, EcTierClient>(ConfigureAdvisorClient);
+        services.AddHttpClient<ITranscriptOcrClient, TranscriptOcrClient>((sp, client) =>
         {
-            var options = sp.GetRequiredService<IOptions<AdvisorOptions>>().Value;
-            client.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/");
-            client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
-            if (!string.IsNullOrEmpty(options.ApiKey))
-                client.DefaultRequestHeaders.Add("X-Api-Key", options.ApiKey);
+            ConfigureAdvisorClient(sp, client);
+            client.Timeout = TimeSpan.FromSeconds(sp.GetRequiredService<IOptions<AdvisorOptions>>().Value.OcrTimeoutSeconds);
         });
 
+        // Tỷ giá USD→VNĐ cho form ngân sách, chờ tối đa 5 giây
+        services.AddHttpClient<StudyAbroad.Application.Profile.Flow.IExchangeRateProvider, StudyAbroad.Infrastructure.Services.ExchangeRateProvider>(
+            client => client.Timeout = TimeSpan.FromSeconds(5));
+
+        // [Scheduled Background Jobs: Unlock expired accounts & Cleanup OTPs]
+        services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.AccountUnlockBackgroundService>();
+        services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.OtpCleanupBackgroundService>();
+
         return services;
+    }
+
+    private static string? NonEmpty(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
+
+    //Cả chat và gợi ý trường đều gọi sang advisor: cùng địa chỉ, timeout, API key
+    private static void ConfigureAdvisorClient(IServiceProvider sp, HttpClient client)
+    {
+        var options = sp.GetRequiredService<IOptions<AdvisorOptions>>().Value;
+        client.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/");
+        client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+        if (!string.IsNullOrEmpty(options.ApiKey))
+            client.DefaultRequestHeaders.Add("X-Api-Key", options.ApiKey);
     }
 }

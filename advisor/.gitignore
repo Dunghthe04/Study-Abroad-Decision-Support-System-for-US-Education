@@ -7,3 +7,5 @@ __pycache__/
 # Raw survey data contains personal info -> keep it in Google Drive, never in git.
 data/raw/*
 !data/raw/.gitkeep
+# Log chat chứa tin nhắn của học sinh (thông tin cá nhân), không đưa vào git
+logs/

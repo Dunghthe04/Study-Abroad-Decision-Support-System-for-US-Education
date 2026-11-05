@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Report 3 SRS - Nguyễn Xuân Đức (USAS-364 & USAS-365)</title>
+<style>
+  body {
+    font-family: Calibri, Arial, sans-serif;
+    color: #000000;
+    line-height: 1.5;
+    padding: 24px;
+    background-color: #f1f5f9;
+  }
+  .container {
+    max-width: 960px;
+    margin: 0 auto;
+    background: #ffffff;
+    padding: 40px;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+  }
+  h1 {
+    color: #0f172a;
+    font-size: 22px;
+    text-align: center;
+    border-bottom: 2px solid #e2e8f0;
+    padding-bottom: 12px;
+  }
+  .subtitle {
+    text-align: center;
+    color: #64748b;
+    font-size: 14px;
+    margin-bottom: 24px;
+  }
+  h2 {
+    color: #1e40af;
+    font-size: 17px;
+    margin-top: 36px;
+    border-left: 4px solid #2563eb;
+    padding-left: 10px;
+  }
+  .guide-box {
+    background-color: #fef3c7;
+    border: 1px solid #fde68a;
+    border-left: 5px solid #f59e0b;
+    padding: 16px;
+    border-radius: 6px;
+    margin-bottom: 28px;
+    font-size: 14px;
+    color: #92400e;
+  }
+  .copy-btn {
+    background-color: #ea580c;
+    color: white;
+    border: none;
+    padding: 10px 18px;
+    font-size: 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+    margin-bottom: 12px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+  .copy-btn:hover {
+    background-color: #c2410c;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 30px;
+    font-size: 11pt;
+  }
+  th, td {
+    border: 1px solid #000000;
+    padding: 8px 12px;
+    vertical-align: top;
+  }
+  th {
+    background-color: #fce5cd;
+    color: #783f04;
+    font-weight: bold;
+    text-align: left;
+  }
+  td.field-name {
+    width: 30%;
+    font-weight: bold;
+    color: #274e13;
+  }
+  tr.group-row td {
+    background-color: #f3f3f3;
+    font-weight: bold;
+    color: #000000;
+  }
+  ul {
+    margin: 0;
+    padding-left: 20px;
+  }
+  li {
+    margin-bottom: 4px;
+  }
+  code {
+    font-family: Consolas, monospace;
+    font-size: 10.5pt;
+  }
+  .screen-desc-box {
+    background: #fafafa;
+    border: 1px solid #e2e8f0;
+    padding: 14px;
+    border-radius: 6px;
+    margin-bottom: 14px;
+    font-size: 13.5px;
+  }
+</style>
+<script>
+function copyTable(tableId) {
+  const table = document.getElementById(tableId);
+  const range = document.createRange();
+  range.selectNode(table);
+  window.getSelection().removeAllRanges();
+  window.getSelection().addRange(range);
+  document.execCommand('copy');
+  window.getSelection().removeAllRanges();
+  alert('ĐÃ SAO CHÉP BẢNG!\n\nBây giờ bạn sang Google Docs:\n1. Xóa cái bảng cũ đang bị lỗi đi.\n2. Bấm Ctrl + V là bảng mới sẽ hiện ra đẹp 100%!');
+}
+</script>
+</head>
+<body>
+<div class="container">
+  <h1>REPORT 3: SOFTWARE REQUIREMENTS SPECIFICATION (SRS)</h1>
+  <div class="subtitle">
+    <b>Sinh viên phụ trách:</b> Nguyễn Xuân Đức (<code>ducnxhe186870@fpt.edu.vn</code>)<br>
+    <b>Phân hệ:</b> 1.3 Manage Financial Profile & Extracurricular Activities | 1.4 Academic Performance Analysis & GPA Conversion
+  </div>
+  
+  <div class="guide-box">
+    <strong>👉 HƯỚNG DẪN 3 BƯỚC THAO TÁC CỰC DỄ TRÊN GOOGLE DOCS:</strong><br>
+    <b>Bước 1:</b> Ở đây, bấm vào nút màu cam <b>"📋 Bấm vào đây để Copy Bảng 1.3.1"</b>.<br>
+    <b>Bước 2:</b> Quay lại cửa sổ Google Docs trong ảnh của bạn, bôi đen cả cái bảng cũ đang bị lỗi (hoặc click chuột phải vào bảng chọn <i>Xóa bảng</i> / <i>Delete table</i>).<br>
+    <b>Bước 3:</b> Đặt con trỏ chuột dưới dòng <i>Content #3: Field Description Table</i> rồi nhấn <b>Ctrl + V</b>.<br>
+    <i>(Bảng sẽ tự động hiện ra với đúng màu cam, chữ xanh `Field Name`, phân chia từng dòng hoàn hảo không bị tách đôi!)</i>
+  </div>
+
+  <h2>1. BẢNG TRƯỜNG DỮ LIỆU MÀN HÌNH 1.3.1 (SCREEN 1.3.1)</h2>
+  <button class="copy-btn" onclick="copyTable('table131')">📋 Bấm vào đây để Copy Bảng 1.3.1</button>
+  <table id="table131">
+    <thead>
+      <tr>
+        <th style="background-color: #fce5cd; color: #783f04; border: 1px solid #000;">Field Name</th>
+        <th style="background-color: #fce5cd; color: #783f04; border: 1px solid #000;">Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="group-row">
+        <td colspan="2" style="background-color: #f3f3f3; font-weight: bold; border: 1px solid #000;">Group: Financial Information - Input fields for student financial capability declaration</td>
+      </tr>
+      <tr>
+        <td class="field-name" style="color: #274e13; font-weight: bold; border: 1px solid #000;">AnnualBudgetUsd</td>
+        <td style="border: 1px solid #000;">
+          <ul>
+            <li>Data type: Positive decimal number.</li>
+            <li>Range / Min-Max: Min: 0, Max: 10,000,000 USD.</li>
+            <li>Initial / Default value: 30,000 (hoặc giá trị đã lưu trước đó).</li>
+            <li>Requirement: Required. Nhập 0 thể hiện nhu cầu xin học bổng 100% hoặc hỗ trợ tài chính.</li>
+          </ul>
+        </td>
+      </tr>
+      <tr>
+        <td class="field-name" style="color: #274e13; font-weight: bold; border: 1px solid #000;">FundingSource</td>
+        <td style="border: 1px solid #000;">
+          <ul>
+            <li>Data type: Dropdown selector.</li>
+            <li>Domain values: Family Support (family_support), Personal Savings (personal_savings), Bank Loan (bank_loan), Scholarship (scholarship), Other (other).</li>
+            <li>Initial value: Family Support.</li>
+            <li>Requirement: Required. Khai báo nguồn tài chính chi trả chính.</li>
+          </ul>
+        </td>
+      </tr>
+      <tr>
+        <td class="field-name" style="color: #274e13; font-weight: bold; border: 1px solid #000;">NeedsScholarship</td>
+        <td style="border: 1px solid #000;">
+          <ul>
+            <li>Data type: Boolean checkbox.</li>
+            <li>Initial value: true (Checked).</li>
+            <li>Requirement: Optional. Flags applicant profile to prioritize institutions offering international scholarships.</li>
+          </ul>
+        </td>
+      </tr>
+      <tr>
+        <td class="field-name" style="color: #274e13; font-weight: bold; border: 1px solid #000;">BtnSaveFinancial</td>
+        <td style="border: 1px solid #000;">
+          <ul>
+            <li>Component: Action button.</li>
+            <li>Behavior: Validates financial input against business rules (GBR-FIN-01, GBR-FIN-02) and persists data into student_profiles via POST /api/v1/profile/financial.</li>
+          </ul>
+        </td>
+      </tr>
+      <tr class="group-row">
+        <td colspan="2" style="background-color: #f3f3f3; font-weight: bold; border: 1px solid #000;">Group: Extracurricular Activities - Input fields for extracurricular engagements and leadership</td>
+      </tr>
+      <tr>
+        <td class="field-name" style="color: #274e13; font-weight: bold; border: 1px solid #000;">ActivityTitle</td>
+        <td style="border: 1px solid #000;">
+          <ul>
+            <li>Data type: Text string.</li>
+            <li>Length: 2 – 150 characters.</li>
+            <li>Initial value: Blank.</li>
+            <li>Requirement: Required. Name of extracurricular activity, club, volunteer project, or sports team.</li>
+          </ul>
+        </td>
+      </tr>
+      <tr>
+        <td class="field-name" style="color: #274e13; font-weight: bold; border: 1px solid #000;">OrganizationRole</td>
+        <td style="border: 1px solid #000;">
+          <ul>
+            <li>Data type: Text string.</li>
+            <li>Max length: 100 characters.</li>
+            <li>Initial value: Blank.</li>
+            <li>Requirement: Optional. Sponsoring organization name and leadership or participant role held (e.g., "Chủ nhiệm CLB", "Trưởng ban Hậu cần").</li>
+          </ul>
+        </td>
+      </tr>
+      <tr>
+        <td class="field-name" style="color: #274e13; font-weight: bold; border: 1px solid #000;">ImpactLevel</td>
+        <td style="border: 1px solid #000;">
+          <ul>
+            <li>Data type: Dropdown selector.</li>
+            <li>Domain values: 1: Cấp Trường / CLB, 2: Cấp Quận / Huyện, 3: Cấp Tỉnh / Thành phố, 4: Cấp Quốc gia, 5: Cấp Quốc tế.</li>
+            <li>Initial value: 1.</li>
+            <li>Requirement: Required (GBR-ACT-01). Scope of influence for holistic admission scoring.</li>
+          </ul>
+        </td>
+      </tr>
+      <tr>
+        <td class="field-name" style="color: #274e13; font-weight: bold; border: 1px solid #000;">DurationMonths</td>
+        <td style="border: 1px solid #000;">
+          <ul>
+            <li>Data type: Positive integer number.</li>
+            <li>Range: 1 – 120 months.</li>
+            <li>Initial value: Blank.</li>
+            <li>Requirement: Optional. Total duration of commitment in months.</li>
+          </ul>
+        </td>
+      </tr>
+      <tr>
+        <td class="field-name" style="color: #274e13; font-weight: bold; border: 1px solid #000;">ActivityDescription</td>
+        <td style="border: 1px solid #000;">
+          <ul>
+            <li>Data type: Textarea string.</li>
+            <li>Max length: 1,000 characters.</li>
+            <li>Initial value: Blank.</li>
+            <li>Requirement: Optional. Detailed description of responsibilities, initiatives, and measurable outcomes.</li>
+          </ul>
+        </td>
+      </tr>
+      <tr>
+        <td class="field-name" style="color: #274e13; font-weight: bold; border: 1px solid #000;">BtnAddActivity</td>
+        <td style="border: 1px solid #000;">
+          <ul>
+            <li>Component: Action button.</li>
+            <li>Behavior: Validates input and persists activity record into profile_activities (kind = 'extracurricular').</li>
+          </ul>
+        </td>
+      </tr>
+      <tr>
+        <td class="field-name" style="color: #274e13; font-weight: bold; border: 1px solid #000;">BtnDeleteActivity</td>
+        <td style="border: 1px solid #000;">
+          <ul>
+            <li>Component: Icon action button.</li>
+            <li>Behavior: Dispatches DELETE /api/v1/profile/activities/{id} to remove activity record (HTTP 204 No Content).</li>
+          </ul>
+        </td>
+      </tr>
+      <tr class="group-row">
+        <td colspan="2" style="background-color: #f3f3f3; font-weight: bold; border: 1px solid #000;">Group: Achievements & Awards - Input fields for academic honors, certifications, and research</td>
+      </tr>
+      <tr>
+        <td class="field-name" style="color: #274e13; font-weight: bold; border: 1px solid #000;">AwardTitle</td>
+        <td style="border: 1px solid #000;">
+          <ul>
+            <li>Data type: Text string.</li>
+            <li>Length: 2 – 150 characters.</li>
+            <li>Initial value: Blank.</li>
+            <li>Requirement: Required. Title of competition award, scholastic honor, standardized credential, or research publication (e.g., "Giải Nhì HSG Quốc Gia môn Toán", "Chứng chỉ SAT 1520").</li>
+          </ul>
+        </td>
+      </tr>
+      <tr>
+        <td class="field-name" style="color: #274e13; font-weight: bold; border: 1px solid #000;">Issuer</td>
+        <td style="border: 1px solid #000;">
+          <ul>
+            <li>Data type: Text string.</li>
+            <li>Max length: 150 characters.</li>
+            <li>Initial value: Blank.</li>
+            <li>Requirement: Required. Issuing organization, contest committee, or university (e.g., "Bộ Giáo dục và Đào tạo", "College Board").</li>
+          </ul>
+        </td>
+      </tr>
+      <tr>
+        <td class="field-name" style="color: #274e13; font-weight: bold; border: 1px solid #000;">IssueDate</td>
+        <td style="border: 1px solid #000;">
+          <ul>
+            <li>Data type: Text / Month-Year picker.</li>
+            <li>Format: MM/YYYY.</li>
+            <li>Initial value: Blank.</li>
+            <li>Requirement: Optional. Month and year of award receipt or certificate issuance.</li>
+          </ul>
+        </td>
+      </tr>
+      <tr>
+        <td class="field-name" style="color: #274e13; font-weight: bold; border: 1px solid #000;">AwardDescription</td>
+        <td style="border: 1px solid #000;">
+          <ul>
+            <li>Data type: Textarea string.</li>
+            <li>Max length: 1,000 characters.</li>
+            <li>Initial value: Blank.</li>
+            <li>Requirement: Optional. Details regarding prize ranking (First Place, Gold Medal, Top 1%), score breakdown, or paper topic.</li>
+          </ul>
+        </td>
+      </tr>
+      <tr>
+        <td class="field-name" style="color: #274e13; font-weight: bold; border: 1px solid #000;">BtnAddAward</td>
+        <td style="border: 1px solid #000;">
+          <ul>
+            <li>Component: Action button.</li>
+            <li>Behavior: Validates input and persists award record into profile_activities (kind = 'award').</li>
+          </ul>
+        </td>
+      </tr>
+      <tr>
+        <td class="field-name" style="color: #274e13; font-weight: bold; border: 1px solid #000;">BtnDeleteAward</td>
+        <td style="border: 1px solid #000;">
+          <ul>
+            <li>Component: Icon action button.</li>
+            <li>Behavior: Dispatches DELETE /api/v1/profile/activities/{id} to remove award record (HTTP 204 No Content).</li>
+          </ul>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>2. BẢNG TRƯỜNG DỮ LIỆU MÀN HÌNH 1.4.1 (SCREEN 1.4.1)</h2>
+  <button class="copy-btn" onclick="copyTable('table141')">📋 Bấm vào đây để Copy Bảng 1.4.1</button>
+  <table id="table141">
+    <thead>
+      <tr>
+        <th style="background-color: #fce5cd; color: #783f04; border: 1px solid #000;">Field Name</th>
+        <th style="background-color: #fce5cd; color: #783f04; border: 1px solid #000;">Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="group-row">
+        <td colspan="2" style="background-color: #f3f3f3; font-weight: bold; border: 1px solid #000;">Group: Education Level & Term Settings - Input controls for academic context</td>
+      </tr>
+      <tr>
+        <td class="field-name" style="color: #274e13; font-weight: bold; border: 1px solid #000;">EducationLevelSwitcher</td>
+        <td style="border: 1px solid #000;">
+          <ul>
+            <li>Component: Segmented Control / Radio switch.</li>
+            <li>Domain values: THPT (Cấp 3), Đại học (Tín chỉ).</li>
+            <li>Initial value: THPT (Cấp 3).</li>
+            <li>Requirement: Required. Adapts UI between 3-year high school curriculum and university credit-weighted courses.</li>
+          </ul>
+        </td>
+      </tr>
+      <tr>
+        <td class="field-name" style="color: #274e13; font-weight: bold; border: 1px solid #000;">SemesterSelect</td>
+        <td style="border: 1px solid #000;">
+          <ul>
+            <li>Data type: Dropdown selector.</li>
+            <li>Domain values: Standard 6 semesters (Lớp 10 HK1 to Lớp 12 HK2) or custom term sequence (Kỳ 1 to Kỳ 20).</li>
+            <li>Initial value: Lớp 10 HK1.</li>
+            <li>Requirement: Required. Determines chronological term sequence (term_order 1 to 20).</li>
+          </ul>
+        </td>
+      </tr>
+      <tr>
+        <td class="field-name" style="color: #274e13; font-weight: bold; border: 1px solid #000;">IsCustomTermToggle</td>
+        <td style="border: 1px solid #000;">
+          <ul>
+            <li>Data type: Boolean checkbox.</li>
+            <li>Initial value: false.</li>
+            <li>Requirement: Optional. Enables custom semester name and order for non-standard academic calendars.</li>
+          </ul>
+        </td>
+      </tr>
+      <tr class="group-row">
+        <td colspan="2" style="background-color: #f3f3f3; font-weight: bold; border: 1px solid #000;">Group: Transcript Grade Entry - Input components for course records and scores</td>
+      </tr>
+      <tr>
+        <td class="field-name" style="color: #274e13; font-weight: bold; border: 1px solid #000;">SubjectName</td>
+        <td style="border: 1px solid #000;">
+          <ul>
+            <li>Data type: Text string with autocomplete suggestions.</li>
+            <li>Length: 1 – 100 characters.</li>
+            <li>Requirement: Required. Subject course title (e.g., Toán, Vật lý, Hóa học, Sinh học, Ngữ văn, Lịch sử, Địa lý, Tiếng Anh).</li>
+          </ul>
+        </td>
+      </tr>
+      <tr>
+        <td class="field-name" style="color: #274e13; font-weight: bold; border: 1px solid #000;">Score10</td>
+        <td style="border: 1px solid #000;">
+          <ul>
+            <li>Data type: Decimal number with up to 2 decimal places.</li>
+            <li>Range / Min-Max: Min: 0.00, Max: 10.00.</li>
+            <li>Input step: step="any" (fully accepts fractional decimal scores such as 8.25 or 7.75 without native browser step mismatch errors).</li>
+            <li>Requirement: Required (GBR-ACAD-01). Raw subject course grade on Vietnamese 10.0 scale.</li>
+          </ul>
+        </td>
+      </tr>
+      <tr>
+        <td class="field-name" style="color: #274e13; font-weight: bold; border: 1px solid #000;">CreditsWeight</td>
+        <td style="border: 1px solid #000;">
+          <ul>
+            <li>Data type: Positive decimal number.</li>
+            <li>Range: [0.5, 10.0].</li>
+            <li>Initial / Default value: 1.0 (Standard THPT course weight) or actual university course credits.</li>
+            <li>Requirement: Optional. Course credit multiplier used in Weighted GPA calculation.</li>
+          </ul>
+        </td>
+      </tr>
+      <tr>
+        <td class="field-name" style="color: #274e13; font-weight: bold; border: 1px solid #000;">BtnAddSubject</td>
+        <td style="border: 1px solid #000;">
+          <ul>
+            <li>Component: Action button.</li>
+            <li>Behavior: Validates score boundaries and appends course record into active semester transcript table. Retains form input upon server error.</li>
+          </ul>
+        </td>
+      </tr>
+      <tr>
+        <td class="field-name" style="color: #274e13; font-weight: bold; border: 1px solid #000;">BtnLoadTemplate</td>
+        <td style="border: 1px solid #000;">
+          <ul>
+            <li>Component: Helper button.</li>
+            <li>Behavior: Auto-populates standard 3-year high school curriculum (25 courses across 6 terms) for rapid testing.</li>
+          </ul>
+        </td>
+      </tr>
+      <tr>
+        <td class="field-name" style="color: #274e13; font-weight: bold; border: 1px solid #000;">BtnAnalyze</td>
+        <td style="border: 1px solid #000;">
+          <ul>
+            <li>Component: Primary Action button.</li>
+            <li>Behavior: Dispatches request to POST /api/v1/profile/academic/analyze to execute WES 4.0 conversion, subject grouping, and trajectory classification.</li>
+          </ul>
+        </td>
+      </tr>
+      <tr class="group-row">
+        <td colspan="2" style="background-color: #f3f3f3; font-weight: bold; border: 1px solid #000;">Group: Executive Summary & Academic Metrics - Calculated indicators and visualization components</td>
+      </tr>
+      <tr>
+        <td class="field-name" style="color: #274e13; font-weight: bold; border: 1px solid #000;">UnweightedGpa</td>
+        <td style="border: 1px solid #000;">
+          <ul>
+            <li>Component: Read-only numeric display.</li>
+            <li>Format: Standard US 4.0 scale formatted to 2 decimal places (e.g., 3.65 / 4.0).</li>
+            <li>Calculation: Simple arithmetic mean across all graded subjects converted to WES 4.0 scale.</li>
+          </ul>
+        </td>
+      </tr>
+      <tr>
+        <td class="field-name" style="color: #274e13; font-weight: bold; border: 1px solid #000;">WeightedGpa</td>
+        <td style="border: 1px solid #000;">
+          <ul>
+            <li>Component: Read-only numeric display.</li>
+            <li>Format: Unbounded upper score display up to 4.50 (e.g., 4.15 kèm ghi chú "Tín chỉ / môn nâng cao", không gò bó mẫu số / 4.0).</li>
+            <li>Calculation: Credit-weighted mean incorporating advanced/honors course bonus points (+0.5).</li>
+          </ul>
+        </td>
+      </tr>
+      <tr>
+        <td class="field-name" style="color: #274e13; font-weight: bold; border: 1px solid #000;">VietnameseGpa</td>
+        <td style="border: 1px solid #000;">
+          <ul>
+            <li>Component: Read-only numeric display.</li>
+            <li>Format: Vietnamese 10.0 scale (e.g., 8.82 / 10.0).</li>
+            <li>Calculation: Cumulative grade point average across all submitted semesters.</li>
+          </ul>
+        </td>
+      </tr>
+      <tr>
+        <td class="field-name" style="color: #274e13; font-weight: bold; border: 1px solid #000;">TrendBadge</td>
+        <td style="border: 1px solid #000;">
+          <ul>
+            <li>Component: Visual status badge.</li>
+            <li>Domain values / Display:
+              <ul>
+                <li>Đà tăng trưởng (Growth Mindset) (Green badge, slope &ge; +0.05)</li>
+                <li>Phong độ ổn định (Blue badge, -0.05 &lt; slope &lt; +0.05)</li>
+                <li>Đang có sự giảm sút (Amber badge, slope &le; -0.05)</li>
+                <li>Chưa đủ dữ liệu xu hướng (Neutral slate badge, displayed when recorded terms &lt; 2).</li>
+              </ul>
+            </li>
+            <li>Behavior: Evaluates academic growth trajectory based on linear regression slope across recorded terms (GBR-ACAD-04).</li>
+          </ul>
+        </td>
+      </tr>
+      <tr>
+        <td class="field-name" style="color: #274e13; font-weight: bold; border: 1px solid #000;">SubjectGroupBars</td>
+        <td style="border: 1px solid #000;">
+          <ul>
+            <li>Component: Graphical progress bar breakdown.</li>
+            <li>Metrics displayed: Average 10.0 score, converted 4.0 GPA, subject count, and distinct course tags across three academic clusters: STEM, Languages, and Social Sciences.</li>
+          </ul>
+        </td>
+      </tr>
+      <tr>
+        <td class="field-name" style="color: #274e13; font-weight: bold; border: 1px solid #000;">TermTrendChart</td>
+        <td style="border: 1px solid #000;">
+          <ul>
+            <li>Component: Bar chart visualization.</li>
+            <li>Behavior: Renders semester-by-semester average GPA progression. Features internal horizontal scroll (min-w-[280px]) preventing mobile viewport overflow (375px/768px), 2-line semester labels preventing truncation, and true baseline rendering (0 GPA renders at 0% baseline with legible text).</li>
+          </ul>
+        </td>
+      </tr>
+      <tr>
+        <td class="field-name" style="color: #274e13; font-weight: bold; border: 1px solid #000;">WESDisclaimer</td>
+        <td style="border: 1px solid #000;">
+          <ul>
+            <li>Component: Informational alert notice.</li>
+            <li>Behavior: States that grade conversions strictly follow World Education Services (WES) US standards for guidance, while individual US institutions retain autonomous evaluation policies.</li>
+          </ul>
+        </td>
+      </tr>
+      <tr>
+        <td class="field-name" style="color: #274e13; font-weight: bold; border: 1px solid #000;">ErrorRetryBanner</td>
+        <td style="border: 1px solid #000;">
+          <ul>
+            <li>Component: Alert error state container.</li>
+            <li>Behavior: Displayed when initial data fetch fails (HTTP 500/network error); replaces empty state and provides a "Thử tải lại dữ liệu" retry button without showing misleading empty state.</li>
+          </ul>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+</body>
+</html>

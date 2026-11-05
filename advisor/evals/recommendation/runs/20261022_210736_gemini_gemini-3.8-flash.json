@@ -1,0 +1,121 @@
+{
+ "when": "2026-10-22T21:07:36",
+ "provider": "gemini",
+ "model": "gemini-3.8-flash",
+ "thinking": "low",
+ "batch_size": 8,
+ "skill_version": "1.2",
+ "seconds": 14.5,
+ "summary": {
+  "pairs": 8,
+  "g2_correct_pct": 100.0,
+  "all_steps_correct_pct": 100.0,
+  "first_wrong_step": {},
+  "mean_s_error": 0.0
+ },
+ "rows": [
+  {
+   "case": "P01",
+   "c": "S001",
+   "ok_g2": true,
+   "first_wrong": null,
+   "s_err": 0.0,
+   "got": null,
+   "want": null
+  },
+  {
+   "case": "P01",
+   "c": "S002",
+   "ok_g2": true,
+   "first_wrong": null,
+   "s_err": 0.010000000000005116,
+   "got": null,
+   "want": null
+  },
+  {
+   "case": "P01",
+   "c": "S003",
+   "ok_g2": true,
+   "first_wrong": null,
+   "s_err": null,
+   "got": null,
+   "want": null
+  },
+  {
+   "case": "P01",
+   "c": "S004",
+   "ok_g2": true,
+   "first_wrong": null,
+   "s_err": 0.0,
+   "got": null,
+   "want": null
+  },
+  {
+   "case": "P01",
+   "c": "S005",
+   "ok_g2": true,
+   "first_wrong": null,
+   "s_err": 0.009999999999990905,
+   "got": null,
+   "want": null
+  },
+  {
+   "case": "P01",
+   "c": "S006",
+   "ok_g2": true,
+   "first_wrong": null,
+   "s_err": 0.0,
+   "got": null,
+   "want": null
+  },
+  {
+   "case": "P01",
+   "c": "S007",
+   "ok_g2": true,
+   "first_wrong": null,
+   "s_err": null,
+   "got": null,
+   "want": null
+  },
+  {
+   "case": "P01",
+   "c": "S008",
+   "ok_g2": true,
+   "first_wrong": null,
+   "s_err": 0.0,
+   "got": null,
+   "want": null
+  }
+ ],
+ "latency_seconds": {
+  "calls": 1,
+  "min": 14.5,
+  "median": 14.5,
+  "max": 14.5
+ },
+ "tokens": {
+  "input": 4369,
+  "output": 1249,
+  "thought": 0,
+  "calls": 1
+ },
+ "usage_log": [
+  {
+   "usage": {
+    "total_tokens": 5618,
+    "total_input_tokens": 4369,
+    "input_tokens_by_modality": [
+     {
+      "modality": "text",
+      "tokens": 4369
+     }
+    ],
+    "total_cached_tokens": 0,
+    "total_output_tokens": 1249,
+    "total_tool_use_tokens": 0,
+    "total_thought_tokens": 0
+   },
+   "seconds": 14.49
+  }
+ ]
+}

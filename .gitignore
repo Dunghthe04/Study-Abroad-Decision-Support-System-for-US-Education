@@ -1,6 +1,7 @@
 # Secrets
 .env
 !.env.example
+**/appsettings.Local.json
 
 # Certificates & backups (production)
 deploy/certbot/
@@ -12,3 +13,15 @@ Thumbs.db
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# Uploads
+uploads/
+**/uploads/
+.claude/
+
+# Temp & build caches
+scratch/
+**/__pycache__/
+*.pyc
+# Model fine-tune (vài GB): chia sẻ qua Drive, không đưa lên git
+advisor/models/**/*.gguf

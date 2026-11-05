@@ -1,4 +1,5 @@
 namespace StudyAbroad.Application.StudyCenters;
+public record CenterReferralQuery(string? Service = null, string? StudyLevel = null, string? City = null);
 
 public record StudyCenterDto(
     Guid Id,
@@ -9,7 +10,52 @@ public record StudyCenterDto(
     string? City,
     IReadOnlyList<string> StudyLevels,
     IReadOnlyList<string> Services,
-    DateOnly? SurveyedAt);
+    DateOnly? SurveyedAt,
+    string? Phone = null,
+    string? Email = null,
+    string? Description = null,
+    string? VerificationStatus = "unverified",
+    bool IsActive = true,
+    string CenterType = "study_abroad",
+    string? LogoUrl = null,
+    string? CoverImageUrl = null,
+    IReadOnlyList<string>? GalleryImages = null,
+    string? District = null,
+    double? Latitude = null,
+    double? Longitude = null,
+    int? StaffCount = null,
+    int? EstablishedYear = null,
+    string? LicenseNumber = null,
+    IReadOnlyList<string>? Accreditations = null,
+    double? VisaSuccessRate = null,
+    decimal AverageRating = 5.0m,
+    int ReviewCount = 0);
+
+/// <summary>[UC-71] Moderator / Admin thêm trung tâm tư vấn vào danh bạ.</summary>
+public record CreateStudyCenterRequest(
+    string Code,
+    string Name,
+    string? Website = null,
+    string? Address = null,
+    string? City = null,
+    List<string>? StudyLevels = null,
+    List<string>? Services = null,
+    string? Phone = null,
+    string? Email = null,
+    string? Description = null,
+    DateOnly? SurveyedAt = null,
+    string CenterType = "study_abroad",
+    string? LogoUrl = null,
+    string? CoverImageUrl = null,
+    List<string>? GalleryImages = null,
+    string? District = null,
+    double? Latitude = null,
+    double? Longitude = null,
+    int? StaffCount = null,
+    int? EstablishedYear = null,
+    string? LicenseNumber = null,
+    List<string>? Accreditations = null,
+    double? VisaSuccessRate = null);
 
 public record StudyCenterQuery(
     string? Search = null,

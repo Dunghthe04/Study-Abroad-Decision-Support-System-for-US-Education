@@ -1,0 +1,182 @@
+{
+ "when": "2026-10-22T20:42:09",
+ "provider": "gemini",
+ "model": "gemini-3.8-flash",
+ "thinking": "low",
+ "batch_size": 8,
+ "skill_version": "1.1",
+ "seconds": 190.0,
+ "summary": {
+  "pairs": 16,
+  "g2_correct_pct": 100.0,
+  "all_steps_correct_pct": 56.2,
+  "first_wrong_step": {
+   "w": 4,
+   "ps": 2,
+   "pg": 1
+  },
+  "mean_s_error": 1.04
+ },
+ "rows": [
+  {
+   "case": "P01",
+   "c": "S001",
+   "ok_g2": true,
+   "first_wrong": "w",
+   "s_err": 13.11999999999999
+  },
+  {
+   "case": "P01",
+   "c": "S002",
+   "ok_g2": true,
+   "first_wrong": null,
+   "s_err": 0.010000000000005116
+  },
+  {
+   "case": "P01",
+   "c": "S003",
+   "ok_g2": true,
+   "first_wrong": "w",
+   "s_err": null
+  },
+  {
+   "case": "P01",
+   "c": "S004",
+   "ok_g2": true,
+   "first_wrong": "ps",
+   "s_err": 0.0
+  },
+  {
+   "case": "P01",
+   "c": "S005",
+   "ok_g2": true,
+   "first_wrong": null,
+   "s_err": 0.009999999999990905
+  },
+  {
+   "case": "P01",
+   "c": "S006",
+   "ok_g2": true,
+   "first_wrong": "ps",
+   "s_err": 0.12000000000000455
+  },
+  {
+   "case": "P01",
+   "c": "S007",
+   "ok_g2": true,
+   "first_wrong": null,
+   "s_err": null
+  },
+  {
+   "case": "P01",
+   "c": "S008",
+   "ok_g2": true,
+   "first_wrong": "w",
+   "s_err": 0.0
+  },
+  {
+   "case": "P02",
+   "c": "S041",
+   "ok_g2": true,
+   "first_wrong": null,
+   "s_err": 0.0
+  },
+  {
+   "case": "P02",
+   "c": "S042",
+   "ok_g2": true,
+   "first_wrong": null,
+   "s_err": 0.0
+  },
+  {
+   "case": "P02",
+   "c": "S043",
+   "ok_g2": true,
+   "first_wrong": null,
+   "s_err": 0.030000000000001137
+  },
+  {
+   "case": "P02",
+   "c": "S044",
+   "ok_g2": true,
+   "first_wrong": "pg",
+   "s_err": 1.2800000000000011
+  },
+  {
+   "case": "P02",
+   "c": "S045",
+   "ok_g2": true,
+   "first_wrong": null,
+   "s_err": 0.0
+  },
+  {
+   "case": "P02",
+   "c": "S046",
+   "ok_g2": true,
+   "first_wrong": null,
+   "s_err": 0.0
+  },
+  {
+   "case": "P02",
+   "c": "S047",
+   "ok_g2": true,
+   "first_wrong": null,
+   "s_err": 0.0
+  },
+  {
+   "case": "P02",
+   "c": "S048",
+   "ok_g2": true,
+   "first_wrong": "w",
+   "s_err": 0.0
+  }
+ ],
+ "latency_seconds": {
+  "calls": 2,
+  "min": 73.4,
+  "median": 74.1,
+  "max": 74.1
+ },
+ "tokens": {
+  "input": 6169,
+  "output": 2515,
+  "thought": 0,
+  "calls": 2
+ },
+ "usage_log": [
+  {
+   "usage": {
+    "total_tokens": 4371,
+    "total_input_tokens": 3105,
+    "input_tokens_by_modality": [
+     {
+      "modality": "text",
+      "tokens": 3105
+     }
+    ],
+    "total_cached_tokens": 0,
+    "total_output_tokens": 1266,
+    "total_tool_use_tokens": 0,
+    "total_thought_tokens": 0
+   },
+   "seconds": 73.39
+  },
+  {
+   "usage": {
+    "total_tokens": 4313,
+    "total_input_tokens": 3064,
+    "input_tokens_by_modality": [
+     {
+      "modality": "text",
+      "tokens": 3064
+     }
+    ],
+    "total_cached_tokens": 0,
+    "total_output_tokens": 1249,
+    "total_tool_use_tokens": 0,
+    "total_thought_tokens": 0
+   },
+   "seconds": 74.08
+  }
+ ]
+}

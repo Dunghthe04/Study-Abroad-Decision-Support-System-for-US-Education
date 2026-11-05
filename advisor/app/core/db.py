@@ -1,43 +1,33 @@
-from pathlib import Path
+"""Hồ chứa kết nối Postgres cho kho kiến thức (RAG).
 
-from pgvector.psycopg import register_vector_async
-from psycopg import AsyncConnection
-from psycopg_pool import AsyncConnectionPool
+Dùng bản đồng bộ (sync) của psycopg, gọi qua asyncio.to_thread: bản async của psycopg không chạy được trên Windows
+với vòng lặp mặc định (ProactorEventLoop), mà máy phát triển của nhóm là Windows.
+Không cấu hình DATABASE_URL hoặc không kết nối được thì trả None: chat vẫn chạy, chỉ tắt tính năng trả lời kiến thức.
+"""
 
-from app.core.config import get_settings
+import logging
 
-SQL_DIR = Path(__file__).resolve().parents[2] / "sql"
+from pgvector.psycopg import register_vector
+from psycopg import Connection
+from psycopg_pool import ConnectionPool
 
-_pool: AsyncConnectionPool | None = None
-
-
-async def _configure(conn: AsyncConnection) -> None:
-    await register_vector_async(conn)
-
-
-async def open_pool() -> AsyncConnectionPool:
-    global _pool
-    if _pool is None:
-        _pool = AsyncConnectionPool(get_settings().database_url, configure=_configure, open=False)
-        await _pool.open()
-    return _pool
+logger = logging.getLogger("advisor.db")
 
 
-async def close_pool() -> None:
-    global _pool
-    if _pool is not None:
-        await _pool.close()
-        _pool = None
+# Mỗi kết nối mới được dạy hiểu kiểu vector của pgvector (thiếu extension vector thì bước này lỗi)
+def _configure(conn: Connection) -> None:
+    register_vector(conn)
 
 
-def get_pool() -> AsyncConnectionPool:
-    if _pool is None:
-        raise RuntimeError("Database pool is not open")
-    return _pool
-
-
-async def run_schema_sql() -> None:
-    """Apply idempotent schema files in sql/ (advisor schema, documents table, indexes)."""
-    async with await AsyncConnection.connect(get_settings().database_url, autocommit=True) as conn:
-        for file in sorted(SQL_DIR.glob("*.sql")):
-            await conn.execute(file.read_text(encoding="utf-8"))
+# Mở hồ chứa kết nối; không có URL hoặc DB không phản hồi trong timeout giây thì trả None
+def open_pool(database_url: str, timeout: float = 5) -> ConnectionPool | None:
+    if not database_url:
+        return None
+    pool = ConnectionPool(database_url, min_size=1, max_size=5, configure=_configure, open=False)
+    try:
+        pool.open(wait=True, timeout=timeout)
+    except Exception:
+        logger.exception("Không kết nối được database, tắt tính năng trả lời kiến thức")
+        pool.close()
+        return None
+    return pool

@@ -35,13 +35,13 @@ services:
     #     reservations:
     #       devices: [{ driver: nvidia, count: all, capabilities: [gpu] }]
 
-  # One-shot job: pulls the LLM and the embedding model into the ollama volume.
+  # One-shot job: pulls the LLM, the embedding model and the transcript OCR model(s) into the ollama volume.
   ollama-init:
     image: ollama/ollama:latest
     depends_on: [ollama]
     environment:
       OLLAMA_HOST: http://ollama:11434
-    entrypoint: ["/bin/sh", "-c", "ollama pull ${LLM_MODEL:-qwen3:8b} && ollama pull ${EMBEDDING_MODEL:-bge-m3}"]
+    entrypoint: ["/bin/sh", "-c", "ollama pull ${EMBEDDING_MODEL:-bge-m3} && ollama pull ${VISION_MODEL:-glm-ocr} && ( [ -z \"${TRANSCRIPT_PARSE_MODEL:-}\" ] || ollama pull ${TRANSCRIPT_PARSE_MODEL:-} )"]
     restart: "no"
 
   advisor:
@@ -54,8 +54,13 @@ services:
       API_KEY: ${ADVISOR_API_KEY:-}
       DATABASE_URL: postgresql://${POSTGRES_USER:-studyabroad}:${POSTGRES_PASSWORD:-studyabroad}@db:5432/${POSTGRES_DB:-studyabroad}
       OLLAMA_BASE_URL: http://ollama:11434
-      LLM_MODEL: ${LLM_MODEL:-qwen3:8b}
+      BACKEND_BASE_URL: http://api:8080
+      LLM_MODEL: ${LLM_MODEL:-}
+      LLM_NUM_CTX: ${LLM_NUM_CTX:-6144}
+      LLM_NUM_GPU: ${LLM_NUM_GPU:-99}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-bge-m3}
+      VISION_MODEL: ${VISION_MODEL:-glm-ocr}
+      TRANSCRIPT_PARSE_MODEL: ${TRANSCRIPT_PARSE_MODEL:-}  # only without a Gemini key; empty = reuse LLM_MODEL
     ports:
       - "8000:8000"
 
@@ -70,7 +75,15 @@ services:
       Advisor__BaseUrl: http://advisor:8000
       Advisor__ApiKey: ${ADVISOR_API_KEY:-}
       Cors__AllowedOrigins__0: http://localhost:3000
-      Swagger__Enabled: "true"
+      Jwt__SecretKey: ${JWT_SECRET_KEY:-usas_dev_jwt_secret_key_minimum_32_characters_for_local_development_2026!}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-USAS - Study Abroad Support}
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://localhost:3000}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
     ports:
       - "5080:8080"
 

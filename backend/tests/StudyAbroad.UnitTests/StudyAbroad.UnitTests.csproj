@@ -14,6 +14,7 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
     <PackageReference Include="xunit" Version="2.5.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="8.0.1" />
   </ItemGroup>
 
   <ItemGroup>
@@ -23,6 +24,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\StudyAbroad.Application\StudyAbroad.Application.csproj" />
     <ProjectReference Include="..\..\src\StudyAbroad.Domain\StudyAbroad.Domain.csproj" />
+    <ProjectReference Include="..\..\src\StudyAbroad.Infrastructure\StudyAbroad.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\StudyAbroad.Api\StudyAbroad.Api.csproj" />
   </ItemGroup>
 
 </Project>

@@ -14,8 +14,6 @@ COPY requirements.txt .
 RUN pip install -r requirements.txt
 
 COPY app/ app/
-COPY sql/ sql/
-COPY scripts/ scripts/
 
 USER advisor
 EXPOSE 8000

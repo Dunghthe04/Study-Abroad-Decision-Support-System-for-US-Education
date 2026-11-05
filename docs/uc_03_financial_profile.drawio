@@ -1,0 +1,59 @@
+<?xml version='1.0' encoding='utf-8'?>
+<mxfile>
+  <diagram id="usas-uc-03-2branches" name="UC-03 Two Branches">
+    <mxGraphModel dx="1100" dy="700" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1080" pageHeight="600" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="b3" value="USAS - Financial &amp; Extracurricular Profile Subsystem" style="shape=folder;fontStyle=1;tabWidth=340;tabHeight=30;tabPosition=left;html=1;whiteSpace=wrap;fillColor=#f8fafc;strokeColor=#475569;strokeWidth=2;align=center;verticalAlign=top;spacingTop=10;fontSize=13;fontColor=#0f172a;" vertex="1" parent="1">
+          <mxGeometry x="200" y="30" width="820" height="520" as="geometry" />
+        </mxCell>
+        <mxCell id="act" value="Student" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;fillColor=#dbeafe;strokeColor=#2563eb;strokeWidth=2;fontSize=14;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="60" y="230" width="50" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_main" value="UC-03&#10;Manage Financial Profile&#10;&amp; Extracurricular Activities" style="ellipse;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#1d4ed8;strokeWidth=2;fontSize=12;fontStyle=1;fontColor=#1e3a8a;" vertex="1" parent="1">
+          <mxGeometry x="240" y="245" width="220" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_fin" value="Manage Educational&#10;Financial Profile" style="ellipse;whiteSpace=wrap;html=1;fillColor=#e0f2fe;strokeColor=#0284c7;strokeWidth=2;fontSize=12;fontStyle=1;fontColor=#0369a1;" vertex="1" parent="1">
+          <mxGeometry x="510" y="120" width="200" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="fin1" value="Declare Annual Budget&#10;&amp; Funding Sources" style="ellipse;whiteSpace=wrap;html=1;fillColor=#f1f5f9;strokeColor=#64748b;strokeWidth=1.5;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="760" y="85" width="230" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="fin2" value="Flag Need-Based&#10;Scholarship Requirement" style="ellipse;whiteSpace=wrap;html=1;fillColor=#f1f5f9;strokeColor=#64748b;strokeWidth=1.5;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="760" y="155" width="230" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_act" value="Manage Extracurricular&#10;Activities &amp; Awards" style="ellipse;whiteSpace=wrap;html=1;fillColor=#e0f2fe;strokeColor=#0284c7;strokeWidth=2;fontSize=12;fontStyle=1;fontColor=#0369a1;" vertex="1" parent="1">
+          <mxGeometry x="510" y="370" width="200" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="act1" value="Add Activities &amp; Awards&#10;(with Impact Level 1-5)" style="ellipse;whiteSpace=wrap;html=1;fillColor=#f1f5f9;strokeColor=#64748b;strokeWidth=1.5;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="760" y="335" width="230" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="act2" value="Confirm &amp; Delete Activity&#10;or Award Record" style="ellipse;whiteSpace=wrap;html=1;fillColor=#fef3c7;strokeColor=#d97706;strokeWidth=1.5;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="760" y="405" width="230" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="e_act" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#1d4ed8;strokeWidth=2;endArrow=none;endFill=0;" edge="1" parent="1" source="act" target="uc_main">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_m_fin" value="&amp;lt;&amp;lt;include&amp;gt;&amp;gt;" style="edgeStyle=straight;dashed=1;html=1;strokeColor=#0284c7;strokeWidth=1.5;endArrow=open;endFill=0;fontSize=10;fontColor=#0369a1;" edge="1" parent="1" source="uc_main" target="uc_fin">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_m_act" value="&amp;lt;&amp;lt;include&amp;gt;&amp;gt;" style="edgeStyle=straight;dashed=1;html=1;strokeColor=#0284c7;strokeWidth=1.5;endArrow=open;endFill=0;fontSize=10;fontColor=#0369a1;" edge="1" parent="1" source="uc_main" target="uc_act">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_fin_1" value="&amp;lt;&amp;lt;include&amp;gt;&amp;gt;" style="edgeStyle=straight;dashed=1;html=1;strokeColor=#0284c7;strokeWidth=1.5;endArrow=open;endFill=0;fontSize=10;fontColor=#0369a1;" edge="1" parent="1" source="uc_fin" target="fin1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_fin_2" value="&amp;lt;&amp;lt;include&amp;gt;&amp;gt;" style="edgeStyle=straight;dashed=1;html=1;strokeColor=#0284c7;strokeWidth=1.5;endArrow=open;endFill=0;fontSize=10;fontColor=#0369a1;" edge="1" parent="1" source="uc_fin" target="fin2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_act_1" value="&amp;lt;&amp;lt;include&amp;gt;&amp;gt;" style="edgeStyle=straight;dashed=1;html=1;strokeColor=#0284c7;strokeWidth=1.5;endArrow=open;endFill=0;fontSize=10;fontColor=#0369a1;" edge="1" parent="1" source="uc_act" target="act1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_act_2" value="&amp;lt;&amp;lt;extend&amp;gt;&amp;gt;" style="edgeStyle=straight;dashed=1;html=1;strokeColor=#d97706;strokeWidth=1.5;endArrow=open;endFill=0;fontSize=10;fontColor=#92400e;" edge="1" parent="1" source="uc_act" target="act2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

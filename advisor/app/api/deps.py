@@ -1,7 +1,65 @@
-from fastapi import Request
+# Cung cấp các dependency/service mà API cần dùng,
+# 1. Khởi đông -> tạo 1 OllamaClient
+# 2. Lưu đối tượng vào app.state.llm
 
-from app.services.advisor import AdvisorService
+import secrets
+
+from fastapi import Depends, Header, HTTPException, Request, status
+
+from app.core.config import Settings, get_settings
+from app.services.chat_flow import ChatFlow
+from app.services.ec_reader import EcReader
+from app.services.explainer import Explainer
+from app.services.goal_writer import GoalWriter
+from app.services.ollama import OllamaClient
+from app.services.scenario_writer import ScenarioWriter
 
 
-def get_advisor(request: Request) -> AdvisorService:
-    return request.app.state.advisor
+def require_api_key(
+    x_api_key: str | None = Header(default=None),
+    settings: Settings = Depends(get_settings),
+) -> None:
+    """Chỉ .NET backend (có khoá chung) mới gọi được OCR/LLM, tránh người ngoài chiếm GPU.
+
+    Cấu hình api_key trống thì bỏ qua để chạy local không cần khoá.
+    """
+    expected = settings.api_key
+    if not expected:
+        return
+    # compare_digest: so sánh mất thời gian như nhau, không đoán được khoá qua thời gian phản hồi
+    if not x_api_key or not secrets.compare_digest(x_api_key.encode(), expected.encode()):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Sai hoặc thiếu API key.")
+
+
+def get_llm(request: Request) -> OllamaClient:
+    """Lấy OllamaClient đã tạo lúc khởi động (giống lấy service đã đăng ký trong DI container)."""
+    return request.app.state.llm
+
+
+def get_transcript_reader(request: Request):
+    """Lấy TranscriptReader đã tạo lúc khởi động."""
+    return request.app.state.transcript_reader
+
+
+# Lấy EcReader đã tạo lúc khởi động
+def get_ec_reader(request: Request) -> EcReader:
+    return request.app.state.ec_reader
+
+
+# hàm độc đối tượng trong state
+def get_explainer(request: Request) -> Explainer:
+    return request.app.state.explainer
+
+
+# Lời cho goal-seeking
+def get_goal_writer(request: Request) -> GoalWriter:
+    return request.app.state.goal_writer
+
+
+# Lời cho kịch bản what-if
+def get_scenario_writer(request: Request) -> ScenarioWriter:
+    return request.app.state.scenario_writer
+
+
+def get_chat_flow(request: Request) -> ChatFlow:
+    return request.app.state.chat_flow
