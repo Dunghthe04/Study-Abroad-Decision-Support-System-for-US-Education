@@ -169,19 +169,47 @@ public class RecommendationServiceTests
     }
 
     [Fact]
-    public async Task Recommend_English_BelowTheMinimum_IsFlaggedNotExcluded()
+    public async Task Recommend_English_ShortByHalfABand_IsKeptWithAFlagAndALowerFit()
     {
         var (service, _, store) = Setup();
         var profile = Profile();
-        profile.Ielts = 5.5m;
+        profile.Ielts = 6.5m;
         var school = School("Strict", 30_000m, "none", Major, sat: (1200, 1380), accept: 0.6m, avgGpa: 3.5m, minIelts: 7.0m);
 
         await service.RecommendAsync(profile, [], [school]);
 
         using var items = JsonDocument.Parse(store.Rows.Single().ItemsJson);
         var row = items.RootElement.GetProperty("scored")[0];
-        Assert.Contains("ENGLISH_BELOW_MIN", row.GetProperty("flags").EnumerateArray().Select(f => f.GetString()));
-        Assert.Equal(0.0, row.GetProperty("e").GetDouble());   // tiếng Anh chỉ làm giảm fit score
+        Assert.Contains("ENGLISH_NEAR", row.GetProperty("flags").EnumerateArray().Select(f => f.GetString()));
+        Assert.Equal(0.5, row.GetProperty("e").GetDouble());   // thiếu 0,5 band nên E = 0,5; tiếng Anh chỉ làm giảm fit score, không đổi nhóm
+    }
+
+    [Fact]
+    public async Task Recommend_English_ShortByAFullBand_DropsTheSchool()
+    {
+        var (service, _, store) = Setup();
+        var profile = Profile();
+        profile.Ielts = 5.5m;   // trường yêu cầu 7,0: thiếu 1,5 band
+        var school = School("Strict", 30_000m, "none", Major, sat: (1200, 1380), accept: 0.6m, avgGpa: 3.5m, minIelts: 7.0m);
+
+        await service.RecommendAsync(profile, [], [school]);
+
+        using var items = JsonDocument.Parse(store.Rows.Single().ItemsJson);
+        Assert.Equal(0, items.RootElement.GetProperty("scored").GetArrayLength());   // bị loại, không vào ba nhóm
+    }
+
+    [Fact]
+    public async Task Recommend_English_WithoutAnyCertificate_DropsEverySchool()
+    {
+        var (service, _, store) = Setup();
+        var profile = Profile();
+        profile.Ielts = null;
+        var school = School("Open", 30_000m, "none", Major, sat: (1200, 1380), accept: 0.6m, avgGpa: 3.5m, minIelts: 6.0m);
+
+        await service.RecommendAsync(profile, [], [school]);
+
+        using var items = JsonDocument.Parse(store.Rows.Single().ItemsJson);
+        Assert.Equal(0, items.RootElement.GetProperty("scored").GetArrayLength());
     }
 
     [Fact]

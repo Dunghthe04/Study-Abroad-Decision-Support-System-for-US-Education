@@ -31,9 +31,11 @@ export type FilterFlag =
   | "COST_UNKNOWN"
   | "NEED_BIG_AID"
   | "AID_UNKNOWN"
-  | "ENGLISH_NO_SCORE"
   | "ENGLISH_MIN_UNKNOWN"
   | "ENGLISH_NOT_COMPARABLE"
+  | "ENGLISH_NEAR"
+  // Hai cờ cũ: backend không còn gắn, nhưng lượt gợi ý đã lưu trước đây vẫn có thể chứa
+  | "ENGLISH_NO_SCORE"
   | "ENGLISH_BELOW_MIN";
 
 // Một trường đã chấm. Nhóm và số liệu do backend tính bằng code (không qua AI).
