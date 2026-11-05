@@ -14,6 +14,9 @@ Chạy một lần rồi sửa tay file JSON nếu cần. Quy ước khi chuyể
 - Mốc trường (benchmarks) như .NET gửi vào chat (ChatBenchmarks.From): TB AvgGpa4 và mốc Min* phổ biến nhất của các trường
   bậc đại học đang hoạt động. Chép số cố định từ DB ngày 05/11/2026 (249 dòng, 93 dòng có AvgGpa4) để dữ liệu train không
   đổi theo DB. Vài dòng (dòng thứ 10, 20, 30) bỏ mốc để skill học cả trường hợp chưa có dữ liệu trường.
+- Hồ sơ cũ lệch: GPA cao nhất 9.4/10 (3.76, chỉ trung bình) và toàn IELTS. OVERRIDES sửa vài hồ sơ trước khi chuyển để
+  có đủ mức GPA cao (≥ 9.6/10 = 3.84, trên TB 3.73 quá 0.1) và đủ TOEFL / Duolingo ở cả ba mức thấp, trung bình, cao.
+  Câu hỏi của các dòng này không nhắc điểm nên đổi được.
 """
 
 import json
@@ -48,6 +51,19 @@ NONE_WORDS = ("chưa thi", "chưa có", "không có")
 TRENDS = (0.3, -0.3, 0.0)  # chênh TB năm cuối so với năm đầu, xoay vòng theo dòng
 # Mốc bậc đại học từ DB 05/11/2026, cùng cách tính ChatBenchmarks.From
 UNDERGRAD_BENCHMARKS = {"gpa4": 3.73, "english": {"ielts": 6.5, "toefl": 80, "duolingo": 110}}
+# Sửa hồ sơ chữ trước khi chuyển (xem docstring); chú thích là mức so với UNDERGRAD_BENCHMARKS
+OVERRIDES = {
+    "ho_so_013": {"gpa": "9.7 thang 10"},  # GPA cao
+    "ho_so_016": {"gpa": "9.6 thang 10"},  # GPA cao, có học bạ
+    "ho_so_023": {"gpa": "9.6 thang 10"},  # GPA cao
+    "ho_so_039": {"gpa": "9.8 thang 10"},  # GPA cao, hỏi học bổng
+    "ho_so_002": {"gpa": "9.3 thang 10"},  # GPA trung bình (bù các dòng đã nâng lên cao)
+    "ho_so_044": {"gpa": "9.4 thang 10", "english": "Duolingo 120"},  # GPA trung bình, học bạ; TA cao
+    "ho_so_005": {"english": "Duolingo 95"},  # thấp
+    "ho_so_008": {"english": "TOEFL 80"},  # trung bình
+    "ho_so_024": {"english": "TOEFL 95"},  # cao
+    "ho_so_041": {"english": "TOEFL 65"},  # thấp
+}
 
 
 def field(value) -> dict:
@@ -146,7 +162,9 @@ def convert(ho_so: dict, index: int) -> dict:
 def main(source: Path = DEFAULT_OUT, out: Path = OUT) -> None:
     records = [json.loads(line) for line in source.read_text(encoding="utf-8").splitlines()]
     rows = [r for r in records if r["type"] == "ho_so" and r["skill_md"]]
-    result = {r["id"]: convert(r["input"]["ho_so"], i) for i, r in enumerate(rows)}
+    result = {
+        r["id"]: convert(r["input"]["ho_so"] | OVERRIDES.get(r["id"], {}), i) for i, r in enumerate(rows)
+    }
     out.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
     print(f"{len(result)} hồ sơ → {out}")
 

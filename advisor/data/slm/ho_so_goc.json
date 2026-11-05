@@ -110,7 +110,7 @@
       },
       "gpa": {
         "value": {
-          "value": 9.0,
+          "value": 9.3,
           "scale": 10,
           "source": "transcript"
         },
@@ -167,7 +167,7 @@
       "years": [
         {
           "grade": "Lớp 10",
-          "average": 9.0
+          "average": 9.3
         }
       ]
     },
@@ -393,8 +393,8 @@
       },
       "english": {
         "value": {
-          "type": "ielts",
-          "value": 5.5
+          "type": "duolingo",
+          "value": 95.0
         },
         "status": "confirmed"
       },
@@ -661,8 +661,8 @@
       },
       "english": {
         "value": {
-          "type": "ielts",
-          "value": 6.5
+          "type": "toefl",
+          "value": 80.0
         },
         "status": "confirmed"
       },
@@ -1095,7 +1095,7 @@
       },
       "gpa": {
         "value": {
-          "value": 9.2,
+          "value": 9.7,
           "scale": 10,
           "source": "overall"
         },
@@ -1350,7 +1350,7 @@
       },
       "gpa": {
         "value": {
-          "value": 9.2,
+          "value": 9.6,
           "scale": 10,
           "source": "transcript"
         },
@@ -1407,7 +1407,7 @@
       "years": [
         {
           "grade": "Lớp 10",
-          "average": 9.2
+          "average": 9.6
         }
       ]
     },
@@ -1957,7 +1957,7 @@
       },
       "gpa": {
         "value": {
-          "value": 9.0,
+          "value": 9.6,
           "scale": 10,
           "source": "overall"
         },
@@ -2033,8 +2033,8 @@
       },
       "english": {
         "value": {
-          "type": "ielts",
-          "value": 7.0
+          "type": "toefl",
+          "value": 95.0
         },
         "status": "confirmed"
       },
@@ -2300,7 +2300,7 @@
       },
       "gpa": {
         "value": {
-          "value": 9.4,
+          "value": 9.8,
           "scale": 10,
           "source": "overall"
         },
@@ -2489,8 +2489,8 @@
       },
       "english": {
         "value": {
-          "type": "ielts",
-          "value": 5.5
+          "type": "toefl",
+          "value": 65.0
         },
         "status": "confirmed"
       },
@@ -2704,7 +2704,7 @@
       },
       "gpa": {
         "value": {
-          "value": 9.0,
+          "value": 9.4,
           "scale": 10,
           "source": "transcript"
         },
@@ -2712,8 +2712,8 @@
       },
       "english": {
         "value": {
-          "type": "ielts",
-          "value": 6.5
+          "type": "duolingo",
+          "value": 120.0
         },
         "status": "confirmed"
       },
@@ -2761,7 +2761,7 @@
       "years": [
         {
           "grade": "Lớp 10",
-          "average": 9.0
+          "average": 9.4
         }
       ]
     },
