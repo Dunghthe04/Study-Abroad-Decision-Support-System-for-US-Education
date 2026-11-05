@@ -72,8 +72,8 @@ export function GridDataItem({
 }) {
   const isMissing = value == null || value === "" || value === "—" || value === "-";
   return (
-    <div className="flex items-start gap-3.5 py-1">
-      <Icon className="size-6 shrink-0 text-muted-foreground/80 mt-0.5" />
+    <div className="flex items-center gap-3.5 py-1">
+      <Icon className="size-6 shrink-0 text-muted-foreground/80" />
       <div className="min-w-0 space-y-0.5">
         <p className="text-xs text-muted-foreground">{label}</p>
         <p className={cn("text-base font-semibold tracking-tight", isMissing ? "text-muted-foreground/40 font-normal" : "text-foreground")}>

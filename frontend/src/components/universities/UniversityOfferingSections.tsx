@@ -1,14 +1,11 @@
 "use client";
 
-import { useState } from "react";
 import { CoinsIcon, FileTextIcon, GraduationCapIcon, HandCoinsIcon, HeartHandshakeIcon, HomeIcon, InfoIcon, UsersIcon, WalletIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent } from "@/components/ui/card";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Separator } from "@/components/ui/separator";
-import type { UniversityMajor, UniversityOffering } from "@/types/university";
+import type { UniversityOffering } from "@/types/university";
 import { annualPublishedCost, MISSING_UNIVERSITY_DATA, schoolAidPolicy, schoolImportanceLabel, schoolSatPolicy, scoreRange, universityDate, universityDeadlines, universityMoney, universityNumber, universityPercent } from "@/lib/university-display";
 import { DetailRows, DetailSection, GridDataItem, SourceLink } from "./UniversityDetailParts";
 
@@ -86,8 +83,6 @@ export function UniversityCosts({ offering }: { offering: UniversityOffering }) 
         </Card>
       )}
 
-      <p className="mt-4 text-xs leading-relaxed text-muted-foreground">Đây là chi phí công bố, chưa phải chi phí thực trả của từng sinh viên. Không tự suy ra mức học bổng hoặc trừ hỗ trợ tài chính khỏi các khoản trên.</p>
-
       <h3 className="mb-4 mt-7 text-sm font-semibold">Hỗ trợ cho sinh viên quốc tế</h3>
       <div className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
         {aidItems.map((item) => (
@@ -122,37 +117,31 @@ export function UniversityStatistics({ offering, internationalStudentCount }: { 
   );
 }
 
-function MajorList({ majors }: { majors: UniversityMajor[] }) {
-  return (
-    <ul className="divide-y divide-border/70">
-      {majors.map((major) => (
-        <li key={`${major.cipCode}-${major.name}`} className="flex flex-wrap items-center justify-between gap-2 py-3">
-          <div><p className="text-sm font-medium">{major.name}</p>{major.cipCode && <p className="mt-0.5 text-xs text-muted-foreground">CIP {major.cipCode}</p>}</div>
-          {major.isStem && <Badge variant="secondary">STEM</Badge>}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
 export function UniversityMajors({ offering }: { offering: UniversityOffering }) {
-  const [expanded, setExpanded] = useState(false);
   return (
-    <DetailSection id="majors" title="Ngành học" description="Nhóm ngành có trong dữ liệu hiện tại của bậc học đang chọn.">
+    <DetailSection id="majors" title="Ngành học" description={`Nhóm ngành có trong dữ liệu hiện tại của bậc học đang chọn (${offering.majors.length} nhóm ngành).`}>
       {offering.majors.length ? (
-        <Collapsible open={expanded} onOpenChange={setExpanded}>
-          <MajorList majors={offering.majors.slice(0, 10)} />
-          {offering.majors.length > 10 && (
-            <>
-              <CollapsibleContent><Separator /><MajorList majors={offering.majors.slice(10)} /></CollapsibleContent>
-              <CollapsibleTrigger render={<Button type="button" variant="outline" size="sm" className="mt-4" />}>
-                {expanded ? "Thu gọn" : `Xem tất cả ${offering.majors.length} nhóm ngành`}
-              </CollapsibleTrigger>
-            </>
-          )}
-        </Collapsible>
+        <div className="grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+          {offering.majors.map((major) => (
+            <div
+              key={`${major.cipCode}-${major.name}`}
+              className="flex items-center justify-between gap-2 py-1.5"
+            >
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-foreground">{major.name}</p>
+                {major.cipCode && <p className="text-xs text-muted-foreground">CIP {major.cipCode}</p>}
+              </div>
+              {major.isStem && <Badge variant="secondary" className="shrink-0 text-[10px]">STEM</Badge>}
+            </div>
+          ))}
+        </div>
       ) : <p className="text-sm text-muted-foreground">{MISSING_UNIVERSITY_DATA}</p>}
-      {offering.sourceUrl && <div className="mt-5 space-y-4 text-xs text-muted-foreground"><Separator /><p>Nguồn tổng quan của bậc học: <SourceLink url={offering.sourceUrl} /> · Ngày lấy: {universityDate(offering.retrievedAt)}</p></div>}
+      {offering.sourceUrl && (
+        <div className="mt-5 space-y-4 text-xs text-muted-foreground">
+          <Separator />
+          <p>Nguồn tổng quan của bậc học: <SourceLink url={offering.sourceUrl} /> · Ngày lấy: {universityDate(offering.retrievedAt)}</p>
+        </div>
+      )}
     </DetailSection>
   );
 }
