@@ -11,12 +11,24 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.Sql("""
+                DO $$
+                BEGIN
+                    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'app' AND table_name = 'study_centers' AND column_name = 'accreditations') THEN
+                        UPDATE app.study_centers SET accreditations = '{}'::text[] WHERE accreditations IS NULL;
+                    END IF;
+                    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'app' AND table_name = 'study_centers' AND column_name = 'gallery_images') THEN
+                        UPDATE app.study_centers SET gallery_images = '{}'::text[] WHERE gallery_images IS NULL;
+                    END IF;
+                END $$;
+            """);
             migrationBuilder.AddColumn<List<string>>(
                 name: "accreditations",
                 schema: "app",
                 table: "study_centers",
                 type: "text[]",
-                nullable: false);
+                nullable: false,
+                defaultValueSql: "'{}'");
 
             migrationBuilder.AddColumn<decimal>(
                 name: "average_rating",
@@ -65,7 +77,8 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                 schema: "app",
                 table: "study_centers",
                 type: "text[]",
-                nullable: false);
+                nullable: false,
+                defaultValueSql: "'{}'");
 
             migrationBuilder.AddColumn<double>(
                 name: "latitude",

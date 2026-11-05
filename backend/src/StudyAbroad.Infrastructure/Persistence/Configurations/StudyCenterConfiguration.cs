@@ -27,10 +27,10 @@ public class StudyCenterConfiguration : IEntityTypeConfiguration<StudyCenter>
         builder.Property(x => x.CenterType).HasMaxLength(32).IsRequired().HasDefaultValue("study_abroad");
         builder.Property(x => x.LogoUrl).HasMaxLength(1024);
         builder.Property(x => x.CoverImageUrl).HasMaxLength(1024);
-        builder.Property(x => x.GalleryImages).HasColumnType("text[]");
+        builder.Property(x => x.GalleryImages).HasColumnType("text[]").HasDefaultValueSql("'{}'");
         builder.Property(x => x.District).HasMaxLength(128);
         builder.Property(x => x.LicenseNumber).HasMaxLength(128);
-        builder.Property(x => x.Accreditations).HasColumnType("text[]");
+        builder.Property(x => x.Accreditations).HasColumnType("text[]").HasDefaultValueSql("'{}'");
         builder.Property(x => x.AverageRating).HasPrecision(3, 2).HasDefaultValue(5.0m);
         builder.Property(x => x.ReviewCount).HasDefaultValue(0);
     }

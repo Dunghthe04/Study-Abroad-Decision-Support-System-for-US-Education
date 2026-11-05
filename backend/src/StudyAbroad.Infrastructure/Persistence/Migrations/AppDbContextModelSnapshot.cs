@@ -2526,7 +2526,9 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
 
                     b.Property<List<string>>("Accreditations")
                         .IsRequired()
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("text[]")
+                        .HasDefaultValueSql("'{}'")
                         .HasColumnName("accreditations");
 
                     b.Property<string>("Address")
@@ -2590,7 +2592,9 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
 
                     b.Property<List<string>>("GalleryImages")
                         .IsRequired()
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("text[]")
+                        .HasDefaultValueSql("'{}'")
                         .HasColumnName("gallery_images");
 
                     b.Property<bool>("IsActive")
