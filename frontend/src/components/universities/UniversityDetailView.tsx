@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowUpRightIcon, Building2Icon, GlobeIcon, GraduationCapIcon, MapPinIcon, PercentIcon, UsersIcon } from "lucide-react";
+import { ArrowUpRightIcon, Building2Icon, ExternalLinkIcon, GlobeIcon, GraduationCapIcon, MapPinIcon, PercentIcon, UsersIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
@@ -19,6 +19,21 @@ import type { UniversityDetail } from "@/types/university";
 import { DetailSection, GridDataItem, SchoolImage, SourceLink } from "./UniversityDetailParts";
 import { UniversityAdmissions, UniversityCosts, UniversityMajors, UniversityStatistics } from "./UniversityOfferingSections";
 import { UniversitySources } from "./UniversitySources";
+
+function formatRank(display: string | null | undefined, rank: number): string {
+  if (display) {
+    const cleaned = display.replace(/\s*\(tie\)/i, "").trim();
+    if (cleaned) return cleaned;
+  }
+  return `#${rank}`;
+}
+
+function getRankColorClass(rank: number): string {
+  if (rank <= 3) return "text-amber-600 dark:text-amber-400 font-black text-xl";
+  if (rank <= 10) return "text-emerald-600 dark:text-emerald-400 font-bold text-lg";
+  if (rank <= 50) return "text-brand font-bold text-lg";
+  return "text-muted-foreground font-semibold text-lg";
+}
 
 export function UniversityDetailView({ university }: { university: UniversityDetail }) {
   const [selectedLevel, setSelectedLevel] = useState(university.offerings[0]?.studyLevel ?? "");
@@ -185,15 +200,36 @@ export function UniversityDetailView({ university }: { university: UniversityDet
           {university.rankings.length > 0 && (
             <DetailSection title="Xếp hạng đã ghi nhận">
               <ul className="divide-y divide-border/70">
-                {university.rankings.map((ranking) => (
-                  <li key={`${ranking.publisher}-${ranking.name}-${ranking.edition}`} className="py-4 first:pt-0 last:pb-0">
-                    <div className="flex items-start justify-between gap-3">
-                      <div><p className="text-sm font-medium leading-relaxed">{ranking.name}</p><p className="mt-1 text-xs text-muted-foreground">{ranking.publisher} · {ranking.edition ?? ranking.editionYear ?? "Chưa có năm"}</p></div>
-                      <span className="shrink-0 text-lg font-semibold text-brand">{ranking.rankDisplay || `#${ranking.rank}`}</span>
-                    </div>
-                    {ranking.sourceUrl && <div className="mt-2"><SourceLink url={ranking.sourceUrl} label="Nguồn xếp hạng" /></div>}
-                  </li>
-                ))}
+                {university.rankings.map((ranking) => {
+                  const safeSourceUrl = universityUrl(ranking.sourceUrl);
+                  return (
+                    <li key={`${ranking.publisher}-${ranking.name}-${ranking.edition}`} className="py-3.5 first:pt-0 last:pb-0">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1 space-y-1">
+                          {safeSourceUrl ? (
+                            <a
+                              href={safeSourceUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 text-sm font-medium leading-snug text-foreground transition-colors hover:text-brand hover:underline"
+                            >
+                              <span>{ranking.name}</span>
+                              <ExternalLinkIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                            </a>
+                          ) : (
+                            <p className="text-sm font-medium leading-snug text-foreground">{ranking.name}</p>
+                          )}
+                          <p className="text-xs text-muted-foreground">
+                            {ranking.publisher} · {ranking.edition ?? ranking.editionYear ?? "Chưa có năm"}
+                          </p>
+                        </div>
+                        <span className={cn("shrink-0 tracking-tight", getRankColorClass(ranking.rank))}>
+                          {formatRank(ranking.rankDisplay, ranking.rank)}
+                        </span>
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
             </DetailSection>
           )}
