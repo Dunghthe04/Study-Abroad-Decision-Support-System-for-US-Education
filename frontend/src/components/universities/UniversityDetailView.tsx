@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeftIcon, ArrowUpRightIcon, BookOpenIcon, GlobeIcon, InfoIcon, MapPinIcon } from "lucide-react";
+import { ArrowLeftIcon, ArrowUpRightIcon, BookOpenIcon, GlobeIcon, MapPinIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { studyLevelLabel } from "@/lib/study-levels";
@@ -17,7 +17,6 @@ export function UniversityDetailView({ university }: { university: UniversityDet
   const offering = university.offerings.find((item) => item.studyLevel === selectedLevel) ?? university.offerings[0];
   const location = [university.city, university.stateName ?? university.state].filter(Boolean).join(", ");
   const website = universityUrl(university.website);
-  const hasUnverified = university.sources.some((source) => source.status === "unverified" && source.appliedToSnapshot !== false);
   const navigation = [
     { id: "overview", label: "Tổng quan" },
     ...(offering ? [{ id: "costs", label: "Chi phí & hỗ trợ" }, { id: "admissions", label: "Tuyển sinh" }, { id: "statistics", label: "Thống kê" }, { id: "majors", label: "Ngành học" }] : []),
@@ -62,8 +61,6 @@ export function UniversityDetailView({ university }: { university: UniversityDet
           {offering?.academicYear && <span className="text-xs text-muted-foreground">Năm chi phí: {offering.academicYear}</span>}
         </div>
       )}
-
-      {hasUnverified && <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/40 px-4 py-3 text-xs leading-relaxed text-muted-foreground"><InfoIcon className="mt-0.5 size-4 shrink-0" />Một số thông tin đang dùng chưa được xác minh. Xem trạng thái, năm dữ liệu và nguồn ở cuối trang; xác nhận lại với trường trước khi ra quyết định.</div>}
 
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_280px] xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="min-w-0 space-y-5">
