@@ -183,7 +183,7 @@ public class RecommendationServiceTests
         profile.Ielts = 5.5m;   // trường yêu cầu 7,0: thiếu 1,5 band
         var school = School("Strict", 30_000m, "none", Major, sat: (1200, 1380), accept: 0.6m, avgGpa: 3.5m, minIelts: 7.0m);
 
-        await service.RecommendAsync(profile, [], [school]);
+        await service.RecommendAsync(profile, [school]);
 
         using var items = JsonDocument.Parse(store.Rows.Single().ItemsJson);
         Assert.Equal(0, items.RootElement.GetProperty("scored").GetArrayLength());   // bị loại, không vào ba nhóm
@@ -197,7 +197,7 @@ public class RecommendationServiceTests
         profile.Ielts = null;
         var school = School("Open", 30_000m, "none", Major, sat: (1200, 1380), accept: 0.6m, avgGpa: 3.5m, minIelts: 6.0m);
 
-        await service.RecommendAsync(profile, [], [school]);
+        await service.RecommendAsync(profile, [school]);
 
         using var items = JsonDocument.Parse(store.Rows.Single().ItemsJson);
         Assert.Equal(0, items.RootElement.GetProperty("scored").GetArrayLength());
@@ -213,7 +213,7 @@ public class RecommendationServiceTests
         var strict = School("Strict", 30_000m, "none", Major, sat: (1200, 1380), accept: 0.6m, avgGpa: 3.5m, minIelts: 7.0m);   // thiếu 1,5 band: bị ẩn
         var open = School("Open", 30_000m, "none", Major, sat: (1200, 1380), accept: 0.6m, avgGpa: 3.5m, minIelts: 6.0m);       // thiếu 0,5 band: giữ
 
-        await service.RecommendAsync(profile, [], [strict, open]);
+        await service.RecommendAsync(profile, [strict, open]);
 
         using var criteria = JsonDocument.Parse(store.Rows.Single().CriteriaJson);
         var english = criteria.RootElement.GetProperty("english");
@@ -231,7 +231,7 @@ public class RecommendationServiceTests
         var (service, _, store) = Setup();
         var school = School("Open", 30_000m, "none", Major, sat: (1200, 1380), accept: 0.6m, avgGpa: 3.5m, minIelts: 6.0m);
 
-        await service.RecommendAsync(Profile(), [], [school]);
+        await service.RecommendAsync(Profile(), [school]);
 
         using var criteria = JsonDocument.Parse(store.Rows.Single().CriteriaJson);
         Assert.Equal(JsonValueKind.Null, criteria.RootElement.GetProperty("english").ValueKind);
@@ -245,7 +245,7 @@ public class RecommendationServiceTests
         profile.Ielts = null;   // chưa có chứng chỉ nào
         var school = School("Open", 30_000m, "none", Major, sat: (1200, 1380), accept: 0.6m, avgGpa: 3.5m, minIelts: 6.0m);
 
-        await service.RecommendAsync(profile, [], [school]);
+        await service.RecommendAsync(profile, [school]);
 
         using var criteria = JsonDocument.Parse(store.Rows.Single().CriteriaJson);
         Assert.Equal(JsonValueKind.Null, criteria.RootElement.GetProperty("status").ValueKind);   // không còn trường nào để chọn
@@ -269,7 +269,7 @@ public class RecommendationServiceTests
         var school = School("S", 30_000m, "none", Major, sat: (1200, 1380), accept: 0.6m, avgGpa: 3.5m,
             minIelts: 6.5m, minToefl: 80m, minDuolingo: 115m);
 
-        await service.RecommendAsync(profile, [], [school]);
+        await service.RecommendAsync(profile, [school]);
 
         using var items = JsonDocument.Parse(store.Rows.Single().ItemsJson);
         Assert.Equal(expectedE, items.RootElement.GetProperty("scored")[0].GetProperty("e").GetDouble(), 2);
@@ -285,7 +285,7 @@ public class RecommendationServiceTests
         var school = School("S", 30_000m, "none", Major, sat: (1200, 1380), accept: 0.6m, avgGpa: 3.5m,
             minIelts: 6.5m, minDuolingo: 115m);
 
-        await service.RecommendAsync(profile, [], [school]);
+        await service.RecommendAsync(profile, [school]);
 
         using var items = JsonDocument.Parse(store.Rows.Single().ItemsJson);
         var row = items.RootElement.GetProperty("scored")[0];
@@ -299,7 +299,7 @@ public class RecommendationServiceTests
         var (service, _, store) = Setup();
         var school = School("S", 30_000m, "none", Major, sat: (1200, 1380), accept: 0.6m, avgGpa: 3.5m);   // không có mức tối thiểu nào
 
-        await service.RecommendAsync(Profile(), [], [school]);
+        await service.RecommendAsync(Profile(), [school]);
 
         using var items = JsonDocument.Parse(store.Rows.Single().ItemsJson);
         Assert.Equal(JsonValueKind.Null, items.RootElement.GetProperty("scored")[0].GetProperty("e").ValueKind);
