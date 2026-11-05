@@ -5,11 +5,11 @@ namespace StudyAbroad.UnitTests;
 // Bước 5 của công thức gợi ý trường: fit score để chọn và sắp xếp trong nhóm (CONG_THUC_GOI_Y_TRUONG.docx, mục 7).
 public class SchoolRankerTests
 {
-    private static readonly FitStudent Student = new(45_000m, 6.5m);
+    private static readonly FitStudent Student = new(45_000m);
 
     private static FitSchool School(
-        decimal? cost = 38_000m, decimal? aid = null, decimal? minIelts = 6.0m, params (int, int)[] ranks) =>
-        new(cost, aid, minIelts,
+        decimal? cost = 38_000m, decimal? aid = null, decimal? englishShortfall = 0m, params (int, int)[] ranks) =>
+        new(cost, aid, englishShortfall,
             SchoolRanker.QualityFromRanks(ranks.Select(r => new RankPosition(r.Item1, r.Item2)).ToList()));
 
     private static double Value(double p, FitStudent? student = null, FitSchool? school = null, FitWeights? w = null) =>
@@ -85,24 +85,25 @@ public class SchoolRankerTests
         Assert.Null(SchoolRanker.Score(0.5, Student, School(ranks: (5, 0))).Quality);
     }
 
+    // E = 1 - mức thiếu tiếng Anh (band), mức thiếu đã tính ở bước lọc từ bài thi tốt nhất của học sinh
     [Theory]
-    [InlineData(6.0, 1.0)]    // đã đạt mức tối thiểu
-    [InlineData(6.5, 1.0)]    // đúng bằng
-    [InlineData(7.0, 0.5)]    // thiếu nửa band
-    [InlineData(7.5, 0.0)]    // thiếu một band
-    [InlineData(8.5, 0.0)]    // thiếu nhiều: không âm
-    public void E_LosesOnePointPerMissingBand(double minIelts, double expected)
+    [InlineData(0.0, 1.0)]    // đã đạt mức tối thiểu
+    [InlineData(0.2, 0.8)]    // thiếu 5 điểm Duolingo (0,2 band)
+    [InlineData(0.5, 0.5)]    // thiếu nửa band
+    [InlineData(1.0, 0.0)]    // thiếu một band
+    [InlineData(1.5, 0.0)]    // thiếu nhiều: không âm
+    public void E_IsOneMinusTheShortfallInBands(double shortfall, double expected)
     {
-        var e = SchoolRanker.Score(0.5, Student, School(minIelts: (decimal)minIelts)).English!.Value;
+        var e = SchoolRanker.Score(0.5, Student, School(englishShortfall: (decimal)shortfall)).English!.Value;
 
         Assert.Equal(expected, e, 9);
     }
 
     [Fact]
-    public void E_IsMissing_WhenEitherSideHasNoIelts()
+    public void E_IsMissing_WhenTheShortfallCouldNotBeComputed()
     {
-        Assert.Null(SchoolRanker.Score(0.5, Student, School(minIelts: null)).English);
-        Assert.Null(SchoolRanker.Score(0.5, Student with { Ielts = null }, School()).English);
+        // trường không công bố mức tối thiểu, hoặc không có bài thi nào so được
+        Assert.Null(SchoolRanker.Score(0.5, Student, School(englishShortfall: null)).English);
     }
 
     [Fact]
@@ -118,10 +119,10 @@ public class SchoolRankerTests
     [Fact]
     public void WorkedExample_TwoSchoolsInTheSameGroup_TheFitterOneIsHigher()
     {
-        // U: p' = 0,5, chi phí 38.000, hạng 10/100, IELTS 6,0  →  khoảng 0,77
-        var u = SchoolRanker.Score(0.5, Student, School(38_000m, null, 6.0m, (10, 100))).Value;
-        // V: p' = 0,7, chi phí 60.000 học bổng 3.000, hạng 80/100, IELTS 7,0  →  khoảng 0,30
-        var v = SchoolRanker.Score(0.7, Student, School(60_000m, 3_000m, 7.0m, (80, 100))).Value;
+        // U: p' = 0,5, chi phí 38.000, hạng 10/100, đạt tiếng Anh  →  khoảng 0,77
+        var u = SchoolRanker.Score(0.5, Student, School(38_000m, null, 0m, (10, 100))).Value;
+        // V: p' = 0,7, chi phí 60.000 học bổng 3.000, hạng 80/100, thiếu nửa band tiếng Anh  →  khoảng 0,30
+        var v = SchoolRanker.Score(0.7, Student, School(60_000m, 3_000m, 0.5m, (80, 100))).Value;
 
         Assert.True(Math.Abs(u - 0.77) < 0.005, $"U = {u:F4}");
         Assert.True(Math.Abs(v - 0.30) < 0.005, $"V = {v:F4}");
@@ -132,7 +133,7 @@ public class SchoolRankerTests
     public void MissingComponents_AreDropped_AndTheRestKeepTheirRelativeWeights()
     {
         // trường thiếu chi phí và học bổng: chỉ còn A, Q, E với trọng số 0,30 / 0,20 / 0,10
-        var school = new FitSchool(null, null, 6.0m, 0.91);
+        var school = new FitSchool(null, null, 0m, 0.91);
 
         var score = SchoolRanker.Score(0.5, Student, school);
 
@@ -143,7 +144,7 @@ public class SchoolRankerTests
     [Fact]
     public void WithOnlyThePositionKnown_FitEqualsA()
     {
-        var score = SchoolRanker.Score(0.6, new FitStudent(null, null), new FitSchool(null, null, null, null));
+        var score = SchoolRanker.Score(0.6, new FitStudent(null), new FitSchool(null, null, null, null));
 
         Assert.Equal(score.Position!.Value, score.Value, 9);
     }
@@ -158,8 +159,8 @@ public class SchoolRankerTests
     [Fact]
     public void Weights_CanBeChangedByTheStudentsPriorities()
     {
-        var cheap = School(20_000m, null, 6.0m, (90, 100));      // rẻ, hạng thấp
-        var prestigious = School(70_000m, 10_000m, 6.0m, (2, 100));   // đắt, hạng cao
+        var cheap = School(20_000m, null, 0m, (90, 100));      // rẻ, hạng thấp
+        var prestigious = School(70_000m, 10_000m, 0m, (2, 100));   // đắt, hạng cao
 
         var costFirst = new FitWeights(Position: 0.1, Budget: 0.8, Aid: 0.0, Quality: 0.1, English: 0.0);
         var qualityFirst = new FitWeights(Position: 0.1, Budget: 0.0, Aid: 0.0, Quality: 0.9, English: 0.0);
@@ -208,8 +209,8 @@ public class SchoolRankerTests
     [Fact]
     public void Priorities_ChangeTheOrderInsideAGroup_ButNotTheGroup()
     {
-        var cheap = Graded("CHEAP", SchoolGroup.Match, 0.5, School(20_000m, null, 6.0m, (90, 100)));
-        var famous = Graded("FAMOUS", SchoolGroup.Match, 0.5, School(70_000m, 10_000m, 6.0m, (2, 100)));
+        var cheap = Graded("CHEAP", SchoolGroup.Match, 0.5, School(20_000m, null, 0m, (90, 100)));
+        var famous = Graded("FAMOUS", SchoolGroup.Match, 0.5, School(70_000m, 10_000m, 0m, (2, 100)));
 
         var costFirst = SchoolRanker.Pick([cheap, famous], Student, SchoolRanker.WeightsFromPriorities([4, 2, 0]));
         var qualityFirst = SchoolRanker.Pick([cheap, famous], Student, SchoolRanker.WeightsFromPriorities([0, 2, 4]));
@@ -318,8 +319,8 @@ public class SchoolRankerTests
         // fit chỉ xếp thứ tự trong nhóm: trường Khó vào có fit rất cao vẫn nằm ở Khó vào
         var schools = new[]
         {
-            Graded("R", SchoolGroup.Reach, 0.5, School(10_000m, null, 5.0m, (1, 100))),
-            Graded("S", SchoolGroup.Safety, 0.95, School(90_000m, null, 8.0m, (100, 100))),
+            Graded("R", SchoolGroup.Reach, 0.5, School(10_000m, null, 0m, (1, 100))),
+            Graded("S", SchoolGroup.Safety, 0.95, School(90_000m, null, 1.5m, (100, 100))),
         };
 
         var list = SchoolRanker.Pick(schools, Student);

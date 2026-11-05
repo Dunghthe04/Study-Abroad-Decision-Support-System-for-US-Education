@@ -97,6 +97,66 @@ public class ChatServiceTests
         Assert.Equal("confirmed", budget.GetProperty("status").GetString());
     }
 
+    // Học bạ theo năm gửi thành mục riêng, không nằm trong hồ sơ chat (chat chỉ đọc, chỉ form nhập được)
+    [Fact]
+    public async Task SendsTranscriptBesideProfile_NotInsideIt()
+    {
+        var flow = new FakeProfileFlow
+        {
+            Draft = new ProfileFlowDraftDto(Step2: new FlowTranscriptDraftDto(
+                [new FlowAcademicYearDraftDto("Lớp 10", [new FlowSubjectDraftDto("Toán", 8m, 9m)])])),
+        };
+        var advisor = new FakeAdvisor("B2");
+
+        await new ChatService(advisor, new FakeSessions(), flow).ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        var year = advisor.LastRequest!.Transcript!.Value.GetProperty("years")[0];
+        Assert.Equal("Lớp 10", year.GetProperty("grade").GetString());
+        Assert.False(advisor.LastRequest.Profile!.Value.TryGetProperty("transcript", out _));
+    }
+
+    // Mốc GPA / tiếng Anh tính từ trường cùng bậc học mục tiêu, gửi riêng cạnh hồ sơ
+    [Fact]
+    public async Task SendsBenchmarksOfTargetLevel()
+    {
+        var flow = new FakeProfileFlow { Draft = new ProfileFlowDraftDto(Step1: new FlowGoalDraftDto(TargetDegreeLevel: "master")) };
+        var marks = new FakeBenchmarks([new BenchmarkRow(3.6m, 6.5m, null, null)]);
+        var advisor = new FakeAdvisor("B2");
+
+        await new ChatService(advisor, new FakeSessions(), flow, benchmarks: marks).ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Equal("master", marks.Level);
+        var sent = advisor.LastRequest!.Benchmarks!.Value;
+        Assert.Equal(3.6m, sent.GetProperty("gpa4").GetDecimal());
+        Assert.Equal(6.5m, sent.GetProperty("english").GetProperty("ielts").GetDecimal());
+    }
+
+    // Hồ sơ chưa chọn bậc học thì lấy đại học; chưa có dữ liệu trường thì không gửi mốc
+    [Fact]
+    public async Task NoTargetLevel_UsesUndergraduate_NoDataSendsNull()
+    {
+        var marks = new FakeBenchmarks([]);
+        var advisor = new FakeAdvisor("B2");
+
+        await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), benchmarks: marks)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Equal("undergraduate", marks.Level);
+        Assert.Null(advisor.LastRequest!.Benchmarks);
+    }
+
+    // Nhập GPA tổng: không gửi học bạ
+    [Fact]
+    public async Task OverallGpa_SendsNoTranscript()
+    {
+        var flow = new FakeProfileFlow { Draft = new ProfileFlowDraftDto(Step2: new FlowTranscriptDraftDto(ManualGpa10Scale: 8m, GpaMode: "overall")) };
+        var advisor = new FakeAdvisor("B2");
+
+        await new ChatService(advisor, new FakeSessions(), flow).ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Null(advisor.LastRequest!.Transcript);
+    }
+
     [Fact]
     public async Task KeepsNoneStatusFromPreviousTurn_WhenDraftHasNoValue()
     {
@@ -1057,6 +1117,17 @@ public class ChatServiceTests
         }
 
         public Task SaveAsync(CancellationToken ct = default) => Task.CompletedTask;
+    }
+
+    private sealed class FakeBenchmarks(IReadOnlyList<BenchmarkRow> rows) : IChatBenchmarkRepository
+    {
+        public string? Level { get; private set; }
+
+        public Task<IReadOnlyList<BenchmarkRow>> ListAsync(string studyLevel, CancellationToken ct = default)
+        {
+            Level = studyLevel;
+            return Task.FromResult(rows);
+        }
     }
 
     private sealed class FakeProfileFlow : IProfileFlowService

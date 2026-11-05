@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RequiredMark } from "./RequiredMark";
 import { cn } from "@/lib/utils";
 import { normalizeSearch } from "@/lib/certification-utils";
 import {
@@ -295,7 +296,7 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
       <section className="space-y-4">
         <div>
           <Label className="text-sm font-semibold text-foreground">
-            Hiện tại bạn đang học ở đâu?
+            Hiện tại bạn đang học ở đâu? <RequiredMark />
           </Label>
           <p className="text-xs text-muted-foreground mt-0.5">
             Chọn bậc học hiện tại để hệ thống điều chỉnh lớp học và năm học tương ứng.
@@ -432,7 +433,7 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
       <section id={degreeSectionId} className="space-y-4 pt-2">
         <div>
           <Label className="text-sm font-semibold text-foreground">
-            Bạn muốn học bậc nào ở Mỹ?
+            Bạn muốn học bậc nào ở Mỹ? <RequiredMark />
           </Label>
         </div>
 
@@ -543,7 +544,7 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
               htmlFor={majorInputId}
               className="text-xs font-semibold text-foreground flex items-center gap-1"
             >
-              Ngành học mong muốn <span className="text-destructive font-bold">*</span>
+              Ngành học mong muốn <RequiredMark />
               <span className="text-muted-foreground font-normal">
                 ({allMajors.length > 0 ? `${allMajors.length} ngành` : "Đang tải danh sách..."})
               </span>

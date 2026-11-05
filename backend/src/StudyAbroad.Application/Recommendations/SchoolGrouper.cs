@@ -66,15 +66,17 @@ public static class GroupReasons
 }
 // ---- Bước 5: fit score và chọn trường ----
 
-// Thông tin của học sinh dùng cho fit score.
-public record FitStudent(decimal? BudgetUsd, decimal? Ielts);
+// Thông tin của học sinh dùng cho fit score. Tiếng Anh không nằm ở đây: mức thiếu đã tính ở bước lọc (FitSchool.EnglishShortfall).
+public record FitStudent(decimal? BudgetUsd);
 
 // Hạng của trường trong một bảng xếp hạng: hạng Rank trong tổng số Total trường của bảng.
 public record RankPosition(int Rank, int Total);
 
 // Thông tin của trường dùng cho fit score. TotalCostUsd = học phí + ăn ở + phí + chi khác (một năm).
+// EnglishShortfall: mức thiếu tiếng Anh của học sinh so với trường, tính theo band (0 là đạt), do HardFilter tính từ IELTS, TOEFL, Duolingo;
+// null nếu không so được (thành phần E bị bỏ khỏi tổng).
 // Quality: chất lượng của trường, từ 0 đến 1 (tính từ xếp hạng bằng SchoolRanker.QualityFromRanks, hoặc số thay thế).
-public record FitSchool(decimal? TotalCostUsd, decimal? IntlAidAvgUsd, decimal? MinIelts, double? Quality);
+public record FitSchool(decimal? TotalCostUsd, decimal? IntlAidAvgUsd, decimal? EnglishShortfall, double? Quality);
 
 // Trọng số của năm thành phần. Ba thanh ưu tiên của học sinh (chi phí, học bổng, chất lượng) chỉ đổi các trọng số này.
 public record FitWeights(
@@ -346,10 +348,9 @@ public static class SchoolRanker
             else if (school.IntlAidAvgUsd is decimal aid) h = Clamp01((double)(aid / (cost - budget)));
         }
 
-        // E: tiếng Anh. Đạt mức tối thiểu thì 1; mỗi band thiếu mất 1 điểm.
-        double? e = student.Ielts is decimal ielts && school.MinIelts is decimal min
-            ? Clamp01(1 - (double)(min - ielts))
-            : null;
+        // E: tiếng Anh. Đạt mức tối thiểu thì 1; mỗi band thiếu mất 1 điểm. Mức thiếu lấy từ bài thi tốt nhất của học sinh
+        // (IELTS, TOEFL hoặc Duolingo), đã tính ở bước lọc nên fit score không tính lại.
+        double? e = school.EnglishShortfall is decimal shortfall ? Clamp01(1 - (double)shortfall) : null;
 
         double? q = school.Quality is double quality ? Clamp01(quality) : null;
 

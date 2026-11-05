@@ -27,11 +27,13 @@ public record PickedBlocks(
     IReadOnlyList<RankedSchool> Other);
 
 // Kết quả mỗi lượt. Picked null khi không còn trường nào sau lọc cứng.
+// English: thông báo tiếng Anh (trường bị ẩn chỉ vì tiếng Anh, bậc thang mở khóa); null khi không có gì cần báo.
 public record RecommendationRun(
     int Tier,
     IReadOnlyList<FilterResult> Filters,
     IReadOnlyList<ScoredSchool> Scored,
-    PickedBlocks? Picked
+    PickedBlocks? Picked,
+    EnglishSummary? English = null
 );
 
 // Lời tư vấn một trường, trả cho frontend.
@@ -96,11 +98,21 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
         var (filtered, kept) = FilterSchools(profile, schools);
 
         if (kept.Count == 0)
-            return await SaveAsync(profile, pref, schools, new RecommendationRun(tier, filtered, [], null), ct);
+            return await SaveAsync(profile, pref, schools,
+                WithEnglishNotice(new RecommendationRun(tier, filtered, [], null), profile, schools), ct);
 
-        var run = Compute(profile, pref, schools, filtered, kept, tier);
+        var run = WithEnglishNotice(Compute(profile, pref, schools, filtered, kept, tier), profile, schools);
         return await SaveAsync(profile, pref, schools, run, ct);
     }
+
+    // Gắn thông báo tiếng Anh (số trường bị ẩn chỉ vì tiếng Anh và bậc thang mở khóa) vào kết quả của lượt.
+    private static RecommendationRun WithEnglishNotice(
+        RecommendationRun run, StudentProfile profile, IReadOnlyList<RecommendSchoolInput> schools) =>
+        run with
+        {
+            English = EnglishNotice.Build(
+                CriteriaOf(profile), schools.Select(ToFilterSchool).ToList(), run.Filters, BudgetTolerance)
+        };
 
     // Hồ sơ phải có đủ hai thứ trước khi gợi ý (bắt đầu bằng "Hồ sơ" để controller trả 400).
     private static void EnsureRunnable(StudentProfile profile)
@@ -147,7 +159,7 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
     {
         var byCode = kept.ToDictionary(r => r.School.Code, StringComparer.OrdinalIgnoreCase);
         var student = new StudentAcademics(profile.OverallGpa, SatScore(profile.Sat), ActScore(profile.Act), tier);
-        var fitStudent = new FitStudent(profile.BudgetMaxUsd, profile.Ielts);
+        var fitStudent = new FitStudent(profile.BudgetMaxUsd);
         var weights = SchoolRanker.WeightsFromPriorities(NormalizePref(pref));
 
         // Chấm nhóm cho từng trường còn lại sau lọc cứng
@@ -158,8 +170,9 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
                      .OrderBy(s => s.University.Code, StringComparer.Ordinal))
         {
             var grade = SchoolGrouper.Grade(student, ToSchoolAcademics(school));
-            graded.Add((school, byCode[school.University.Code],
-                new GradedSchool(school.University.Code, grade, ToFitSchool(school))));
+            var filter = byCode[school.University.Code];
+            graded.Add((school, filter,
+                new GradedSchool(school.University.Code, grade, ToFitSchool(school, filter.EnglishShortfall))));
         }
 
         var scored = graded
@@ -292,9 +305,10 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
         StudentProfile profile, IReadOnlyList<int>? pref, IReadOnlyList<RecommendSchoolInput> schools, int tier)
     {
         var (filtered, kept) = FilterSchools(profile, schools);
-        return kept.Count == 0
+        var run = kept.Count == 0
             ? new RecommendationRun(tier, filtered, [], null)
             : Compute(profile, pref, schools, filtered, kept, tier);
+        return WithEnglishNotice(run, profile, schools);
     }
 
     private static GroupSummary Summarize(RecommendationRun run)
@@ -434,7 +448,14 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
         pref = NormalizePref(pref),
         tier = run.Tier,
         algorithm = AlgorithmVersion,
-        status = run.Picked is null ? null : "OK"
+        status = run.Picked is null ? null : "OK",
+        // Thông báo tiếng Anh: chỉ có khi có trường bị ẩn chỉ vì tiếng Anh. Lượt gợi ý lưu trước đây không có khối này.
+        english = run.English is null ? null : (object)new
+        {
+            hidden = run.English.Hidden,
+            noCertificate = run.English.NoCertificate,
+            ladder = run.English.Ladder.Select(step => new { ielts = step.Ielts, eligible = step.Eligible }).ToList()
+        }
     };
 
     private static object BuildItems(decimal? budget, RecommendationRun run) => new
@@ -570,11 +591,12 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
     }
 
     // Số liệu của trường cho fit score. Chất lượng tính từ hạng trong các bảng xếp hạng chung; chưa có hạng thì bỏ thành phần Q.
-    private static FitSchool ToFitSchool(RecommendSchoolInput input)
+    // englishShortfall: mức thiếu tiếng Anh theo band, lấy từ kết quả lọc (HardFilter) của đúng trường này; null thì bỏ thành phần E.
+    private static FitSchool ToFitSchool(RecommendSchoolInput input, decimal? englishShortfall)
     {
         var offering = input.Offering;
         return new FitSchool(
-            TotalCost(offering), offering.IntlAidAvgUsd, offering.MinIelts, SchoolRanker.QualityFromRanks(input.Rankings));
+            TotalCost(offering), offering.IntlAidAvgUsd, englishShortfall, SchoolRanker.QualityFromRanks(input.Rankings));
     }
 
     // Đọc một số từ JSON đã lưu (dùng khi mở chi tiết một trường).

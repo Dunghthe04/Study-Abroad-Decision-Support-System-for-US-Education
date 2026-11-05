@@ -6,8 +6,9 @@ from collections import Counter, defaultdict
 import pytest
 from openpyxl import Workbook
 
-from app.schemas.slm import MAX_RAW_Y
+from app.schemas.slm import MAX_RAW_Y, SKILL_SECTIONS
 from scripts.build_slm_jsonl import (
+    CALC_COLUMN,
     COLUMNS,
     DEFAULT_EXCEL,
     DEFAULT_OUT,
@@ -234,6 +235,65 @@ def test_a_skill_needs_a_profile():
     with pytest.raises(ValueError, match="phải có hồ sơ"):
         only = {"type": "ho_so", "doan": "đánh giá hồ sơ giúp em", "thuc_the": {}}
         check("ho_so", row(skill_md="# skill", cau_hoi="đánh giá hồ sơ giúp em", cac_y=ys(only)))
+
+
+PROFILE_ROW = {
+    "cau_hoi": "đánh giá hồ sơ giúp em",
+    "ho_so": json.dumps({"gpa": "8 thang 10"}),
+    "cac_y": ys({"type": "ho_so", "doan": "đánh giá hồ sơ giúp em", "thuc_the": {}}),
+}
+CALC = {"gpa_level": "3.2 thang 4, thấp (TB các trường 3.6)"}
+
+
+def skill_of(text):
+    return "\n".join(f"## {name}\n{text}" for name in SKILL_SECTIONS["ho_so"])
+
+
+def test_calculated_lines_are_kept_apart_from_the_input_and_the_skill_must_keep_their_numbers():
+    good = skill_of("GPA 8 thang 10, 3.2 thang 4, TB các trường 3.6")
+    record = check(
+        "ho_so", row(**PROFILE_ROW, skill_md=good, **{CALC_COLUMN: json.dumps(CALC, ensure_ascii=False)})
+    )
+
+    assert record["tinh_san"] == CALC
+    assert "tinh_san" not in record["input"]  # đầu vào tách ý không đổi
+    assert "tinh_san" not in check("ho_so", row(**PROFILE_ROW, skill_md=good))  # cột trống thì như dòng cũ
+    with pytest.raises(ValueError, match="bỏ mất số"):
+        check(
+            "ho_so",
+            row(**PROFILE_ROW, skill_md=skill_of("GPA 8 thang 10"), **{CALC_COLUMN: json.dumps(CALC)}),
+        )
+
+
+@pytest.mark.parametrize(
+    ("calc", "message"),
+    [('{"mau_sac": "đỏ"}', "khóa lạ"), ('["3.2"]', "object JSON"), ("{x", "không phải JSON")],
+)
+def test_bad_calculated_lines_are_rejected(calc, message):
+    with pytest.raises(ValueError, match=message):
+        check("ho_so", row(**PROFILE_ROW, **{CALC_COLUMN: calc}))
+
+
+def test_the_profile_sheet_may_have_the_calculated_column_after_the_profile(tmp_path):
+    header = ["question", "profile", "profile_calc", "pending_question", "intents", "skill_md", "split"]
+    wb = Workbook()
+    wb.active.title = "ho_so"
+    wb.active.append(header)
+    wb.active.append(
+        [
+            PROFILE_ROW["cau_hoi"],
+            PROFILE_ROW["ho_so"],
+            json.dumps(CALC),
+            None,
+            PROFILE_ROW["cac_y"],
+            None,
+            "train",
+        ]
+    )
+    path = tmp_path / "calc.xlsx"
+    wb.save(path)
+
+    assert read_records(path)[0]["tinh_san"] == CALC
 
 
 def test_a_scenario_needs_a_mode_and_a_change():

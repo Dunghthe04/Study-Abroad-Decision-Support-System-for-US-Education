@@ -2381,10 +2381,9 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(16)")
                         .HasColumnName("english_test_type");
 
-                    b.Property<decimal?>("ExtracurricularScore")
-                        .HasPrecision(4, 2)
-                        .HasColumnType("numeric(4,2)")
-                        .HasColumnName("extracurricular_score");
+                    b.Property<int?>("ExtracurricularTier")
+                        .HasColumnType("integer")
+                        .HasColumnName("extracurricular_tier");
 
                     b.Property<string>("FinancialNotes")
                         .HasMaxLength(1000)
@@ -2513,7 +2512,7 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
 
                     b.ToTable("student_profiles", "app", t =>
                         {
-                            t.HasCheckConstraint("ck_student_profiles_extracurricular_score", "extracurricular_score IS NULL OR extracurricular_score BETWEEN 0 AND 4");
+                            t.HasCheckConstraint("ck_student_profiles_extracurricular_tier", "extracurricular_tier IS NULL OR extracurricular_tier BETWEEN 1 AND 5");
                         });
                 });
 

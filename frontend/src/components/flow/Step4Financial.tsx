@@ -5,6 +5,7 @@ import { ArrowLeftIcon, ArrowRightIcon, ChevronDownIcon, DollarSignIcon, HelpCir
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RequiredMark } from "./RequiredMark";
 import { cn } from "@/lib/utils";
 import {
   BUDGET_RATE,
@@ -119,7 +120,7 @@ export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Ste
         <div>
           <Label className="text-sm font-semibold text-foreground flex items-center gap-1.5">
             <DollarSignIcon className="size-4 text-brand" />
-            Mức ngân sách mỗi năm · Chọn 1 mức phù hợp nhất
+            Mức ngân sách mỗi năm · Chọn 1 mức phù hợp nhất <RequiredMark />
           </Label>
           <p className="text-xs text-muted-foreground mt-0.5">
             Gồm học phí và chi phí ăn ở mỗi năm (chưa gồm vé máy bay).
@@ -226,7 +227,7 @@ export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Ste
         <div>
           <Label className="text-sm font-semibold text-foreground flex items-center gap-1.5">
             <HelpCircleIcon className="size-4 text-brand" />
-            Bạn có cần học bổng để theo học được không? · Chọn 1 lựa chọn
+            Bạn có cần học bổng để theo học được không? · Chọn 1 lựa chọn <RequiredMark />
           </Label>
         </div>
 

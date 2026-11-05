@@ -32,9 +32,9 @@ public class StudentProfileConfiguration : IEntityTypeConfiguration<StudentProfi
         b.Property(x => x.EnglishTestPlanned).HasDefaultValue(false);
         b.Property(x => x.EnglishPlannedDate);
         b.Property(x => x.OtherTestsJson).HasColumnType("jsonb");
-        b.Property(x => x.ExtracurricularScore).HasPrecision(4, 2);
-        b.ToTable(t => t.HasCheckConstraint("ck_student_profiles_extracurricular_score",
-            "extracurricular_score IS NULL OR extracurricular_score BETWEEN 0 AND 4"));
+        b.Property(x => x.ExtracurricularTier);
+        b.ToTable(t => t.HasCheckConstraint("ck_student_profiles_extracurricular_tier",
+            "extracurricular_tier IS NULL OR extracurricular_tier BETWEEN 1 AND 5"));
         b.Property(x => x.BudgetTier).HasMaxLength(32);
         b.Property(x => x.BudgetMinUsd).HasPrecision(12, 2);
         b.Property(x => x.BudgetMaxUsd).HasPrecision(12, 2);

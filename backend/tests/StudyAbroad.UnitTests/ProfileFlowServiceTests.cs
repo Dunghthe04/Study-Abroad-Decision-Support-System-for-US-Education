@@ -405,9 +405,9 @@ public class ProfileFlowServiceTests
         Assert.Equal(["CA", "MA"], p.PreferredStates);
         Assert.Equal("private", p.TargetSchoolType);
 
-        // Bước 2: GPA = TB môn (8.5, 7, 9) = 8.17 → 3.27
+        // Bước 2: GPA = TB môn, mỗi môn (HK1 + 2×HK2)/3: (8.67, 7, 9) = 8.22 → 3.29
         Assert.Equal("10", p.GradeScale);
-        Assert.Equal(3.27m, p.OverallGpa);
+        Assert.Equal(3.29m, p.OverallGpa);
         var scores = await repo.GetTranscriptScoresAsync(p.Id);
         Assert.Equal(4, scores.Count);
         var grade12 = Assert.Single(scores, s => s.GradeName == "Lớp 12");
@@ -976,7 +976,7 @@ public class ProfileFlowServiceTests
 
         await service.CommitFlowAsync(userId, new CommitProfileFlowRequest(draft));
 
-        Assert.Equal(3.27m, repo.Profiles.Values.Single(p => p.UserId == userId).OverallGpa);
+        Assert.Equal(3.29m, repo.Profiles.Values.Single(p => p.UserId == userId).OverallGpa);
     }
 
     // gpaMode = overall: thang 10 quy đổi lại sang thang 4, không tin số thang 4 client gửi
@@ -1141,5 +1141,88 @@ public class ProfileFlowServiceTests
             Assert.DoesNotContain("storedFileName", json);
             Assert.DoesNotContain("/uploads/", json);
         }
+    }
+
+    // Bậc ngoại khóa lúc lưu hồ sơ
+
+    private sealed class FakeEcTierClient(int? tier) : StudyAbroad.Application.Advisor.IEcTierClient
+    {
+        public StudyAbroad.Application.Advisor.EcTierRequest? Sent { get; private set; }
+
+        public Task<int?> ReadTierAsync(StudyAbroad.Application.Advisor.EcTierRequest request, CancellationToken ct = default)
+        {
+            Sent = request;
+            return Task.FromResult(tier);
+        }
+    }
+
+    [Fact]
+    public async Task CommitFlowAsync_StoresTierFromAdvisor_AndSendsActivitiesAndAwards()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var ec = new FakeEcTierClient(4);
+        var service = new ProfileFlowService(repo, new FakeFileStorageService(), ecTierClient: ec);
+        var userId = Guid.NewGuid();
+
+        var response = await service.CommitFlowAsync(userId, new CommitProfileFlowRequest(FullDraft()));
+
+        Assert.Equal(4, (await repo.GetProfileByUserIdAsync(userId))!.ExtracurricularTier);
+        Assert.Equal(4, response.ExtracurricularTier);
+        var act = Assert.Single(ec.Sent!.Act);
+        Assert.Equal("CLB Robotics", act.Text);
+        Assert.Equal(2, act.Scope);       // district
+        Assert.Equal(21, act.Months);     // 09/2024 → 05/2026, CountMonths tính cả hai đầu
+        Assert.Equal("founder", act.Role);
+        var award = Assert.Single(ec.Sent.Awards);
+        Assert.Equal("HSG Tin học Quốc gia", award.Text);
+        Assert.Equal(4, award.Level);     // national
+    }
+
+    [Fact]
+    public async Task CommitFlowAsync_WhenAdvisorFails_FallsBackToFormulaTier()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var service = new ProfileFlowService(repo, new FakeFileStorageService(), ecTierClient: new FakeEcTierClient(null));
+        var userId = Guid.NewGuid();
+
+        await service.CommitFlowAsync(userId, new CommitProfileFlowRequest(FullDraft()));
+
+        // q = 0.4×2/5 + 0.35×1 + 0.25×21/24 = 0.73; bonus = 0.05×4 = 0.2; m = 0.93/4 = 0.23 → bậc 2
+        Assert.Equal(2, (await repo.GetProfileByUserIdAsync(userId))!.ExtracurricularTier);
+    }
+
+    [Fact]
+    public async Task CommitFlowAsync_WithoutActivities_StoresTier1_WithoutCallingAdvisor()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var ec = new FakeEcTierClient(5);
+        var service = new ProfileFlowService(repo, new FakeFileStorageService(), ecTierClient: ec);
+        var userId = Guid.NewGuid();
+
+        await service.CommitFlowAsync(userId, new CommitProfileFlowRequest(FullDraft(activities: [])));
+
+        Assert.Equal(1, (await repo.GetProfileByUserIdAsync(userId))!.ExtracurricularTier);
+        Assert.Null(ec.Sent);
+    }
+
+    [Fact]
+    public async Task CommitFlowAsync_SendsDescriptionWithName_ForSlmToRead()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var ec = new FakeEcTierClient(3);
+        var service = new ProfileFlowService(repo, new FakeFileStorageService(), ecTierClient: ec);
+        var draft = FullDraft(activities:
+        [
+            new FlowActivityDraftDto(Name: "CLB Tiếng Anh", Category: "activity", Role: "member", ImpactLevel: "school",
+                StartDate: "09/2025", EndDate: "05/2026", IsOngoing: false, Description: "Tổ chức 3 buổi debate"),
+        ]);
+
+        await service.CommitFlowAsync(Guid.NewGuid(), new CommitProfileFlowRequest(draft));
+
+        var act = Assert.Single(ec.Sent!.Act);
+        Assert.Equal("CLB Tiếng Anh: Tổ chức 3 buổi debate", act.Text);
+        Assert.Equal(1, act.Scope);
+        Assert.Equal("member", act.Role);
+        Assert.Empty(ec.Sent.Awards);
     }
 }

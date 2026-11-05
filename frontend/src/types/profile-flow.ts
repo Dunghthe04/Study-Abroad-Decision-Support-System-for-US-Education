@@ -279,7 +279,7 @@ export interface CommitProfileFlowResponse {
   targetLevel?: string;
   intendedMajor?: string | null;
   overallGpa?: number | null;
-  extracurricularScore?: number | null;
+  extracurricularTier?: number | null;
   budgetMinUsd?: number | null;
   budgetMaxUsd?: number | null;
   targetSchoolType?: string | null;
