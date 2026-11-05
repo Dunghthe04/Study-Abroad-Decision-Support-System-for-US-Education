@@ -171,7 +171,7 @@ export function getEnrichedCenterProfile(center: StudyCenter): EnrichedCenterPro
     },
   ];
 
-  let reviews: EnrichedReview[] = [
+  const reviews: EnrichedReview[] = [
     {
       id: "rev-1",
       reviewerName: "Phụ huynh Minh Anh",
