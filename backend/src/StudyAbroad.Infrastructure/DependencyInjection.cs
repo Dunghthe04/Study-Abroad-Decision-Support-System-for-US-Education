@@ -28,6 +28,7 @@ public static class DependencyInjection
                 npgsql.MigrationsHistoryTable("__ef_migrations_history", "app"))
             .UseSnakeCaseNamingConvention());
 
+        services.AddScoped<StudyAbroad.Application.Universities.IUniversityDetailRepository, UniversityDetailRepository>();
         services.AddScoped<IStudyCenterRepository, StudyCenterRepository>();
         services.AddScoped<StudyAbroad.Application.Admin.Universities.IAdminUniversityRepository, AdminUniversityRepository>();
         services.AddScoped<StudyAbroad.Application.Leads.ILeadRepository, LeadRepository>();
