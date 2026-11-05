@@ -4,7 +4,14 @@ import { useState } from "react";
 import Link from "next/link";
 import { ArrowLeftIcon, ArrowUpRightIcon, BookOpenIcon, GlobeIcon, MapPinIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
+import { AspectRatio } from "@/components/ui/aspect-ratio";
+import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
+import { Card, CardContent } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
 import { studyLevelLabel } from "@/lib/study-levels";
 import { schoolControlLabel, universityDate, universityNumber, universityPercent, universityUrl } from "@/lib/university-display";
 import type { UniversityDetail } from "@/types/university";
@@ -25,10 +32,13 @@ export function UniversityDetailView({ university }: { university: UniversityDet
 
   return (
     <article className="space-y-6 pb-8">
-      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-        <Link href="/" className="inline-flex items-center gap-1.5 hover:text-brand"><ArrowLeftIcon className="size-3.5" />Trang chủ</Link>
-        <span>Thông tin trường · Mã {university.code}</span>
-      </div>
+      <Breadcrumb>
+        <BreadcrumbList>
+          <BreadcrumbItem><BreadcrumbLink render={<Link href="/" />}><ArrowLeftIcon className="size-3.5" />Trang chủ</BreadcrumbLink></BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem><BreadcrumbPage>Thông tin trường · Mã {university.code}</BreadcrumbPage></BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
 
       <header>
         <SchoolImage url={university.coverUrl} alt={`Khuôn viên ${university.name}`} className="h-48 w-full rounded-lg bg-brand-wash sm:h-64 lg:h-80" priority />
@@ -44,22 +54,32 @@ export function UniversityDetailView({ university }: { university: UniversityDet
               </div>
             </div>
           </div>
-          {website && <a href={website} target="_blank" rel="noopener noreferrer" className={buttonVariants({ variant: "outline" })}><GlobeIcon />Website trường<ArrowUpRightIcon /></a>}
+          {website && <Button variant="outline" nativeButton={false} role="link" render={<a href={website} target="_blank" rel="noopener noreferrer" />}><GlobeIcon />Website trường<ArrowUpRightIcon /></Button>}
         </div>
       </header>
 
-      <nav aria-label="Các mục thông tin trường" className="sticky top-14 z-20 -mx-1 flex gap-1 overflow-x-auto border-b border-border bg-background/95 px-1 backdrop-blur-sm">
-        {navigation.map((item) => <a key={item.id} href={`#${item.id}`} className="shrink-0 border-b-2 border-transparent px-3 py-3 text-sm font-medium text-muted-foreground transition-colors hover:border-brand hover:text-brand focus-visible:outline-2 focus-visible:outline-brand">{item.label}</a>)}
+      <nav aria-label="Các mục thông tin trường" className="sticky top-14 z-20 border-b border-border bg-background/95 backdrop-blur-sm">
+        <ScrollArea className="w-full min-w-0">
+          <div className="flex w-max gap-1 py-2">
+            {navigation.map((item) => <Button key={item.id} variant="ghost" nativeButton={false} role="link" render={<a href={`#${item.id}`} />} className="text-muted-foreground hover:text-brand">{item.label}</Button>)}
+          </div>
+          <ScrollBar orientation="horizontal" />
+        </ScrollArea>
       </nav>
 
       {university.offerings.length > 1 && (
-        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-4 py-3">
-          <label htmlFor="university-study-level" className="text-sm font-medium">Bậc học</label>
-          <select id="university-study-level" value={selectedLevel} onChange={(event) => setSelectedLevel(event.target.value)} className="rounded-md border border-input bg-background px-3 py-2 text-sm">
-            {university.offerings.map((item) => <option key={item.studyLevel} value={item.studyLevel}>{studyLevelLabel(item.studyLevel)}</option>)}
-          </select>
-          {offering?.academicYear && <span className="text-xs text-muted-foreground">Năm chi phí: {offering.academicYear}</span>}
-        </div>
+        <Card size="sm">
+          <CardContent className="flex flex-wrap items-center gap-3">
+            <Label htmlFor="university-study-level">Bậc học</Label>
+            <Select value={selectedLevel} onValueChange={(value) => { if (value !== null) setSelectedLevel(value); }} items={university.offerings.map((item) => ({ value: item.studyLevel, label: studyLevelLabel(item.studyLevel) }))}>
+              <SelectTrigger id="university-study-level"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {university.offerings.map((item) => <SelectItem key={item.studyLevel} value={item.studyLevel}>{studyLevelLabel(item.studyLevel)}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            {offering?.academicYear && <span className="text-xs text-muted-foreground">Năm chi phí: {offering.academicYear}</span>}
+          </CardContent>
+        </Card>
       )}
 
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_280px] xl:grid-cols-[minmax(0,1fr)_320px]">
@@ -72,7 +92,7 @@ export function UniversityDetailView({ university }: { university: UniversityDet
               { label: "Sinh viên quốc tế", value: universityNumber(university.internationalStudentCount) },
               { label: "Bậc học có dữ liệu", value: university.offerings.length ? university.offerings.map((item) => studyLevelLabel(item.studyLevel)).join(", ") : "Chưa có dữ liệu" },
             ]} />
-            {website && <div className="mt-5 border-t border-border/70 pt-4"><SourceLink url={website} /></div>}
+            {website && <div className="mt-5 space-y-4"><Separator /><SourceLink url={website} /></div>}
           </DetailSection>
 
           {offering ? (
@@ -89,7 +109,7 @@ export function UniversityDetailView({ university }: { university: UniversityDet
           {university.galleryUrls.length > 0 && (
             <DetailSection title="Hình ảnh trường">
               <div className="grid grid-cols-2 gap-3">
-                {university.galleryUrls.map((url, index) => <a key={`${url}-${index}`} href={universityUrl(url) ?? undefined} target="_blank" rel="noopener noreferrer" aria-label={`Mở ảnh ${index + 1} của ${university.name}`}><SchoolImage url={url} alt={`Ảnh ${index + 1} của ${university.name}`} className="aspect-[4/3] w-full rounded-md bg-muted" /></a>)}
+                {university.galleryUrls.map((url, index) => <a key={`${url}-${index}`} href={universityUrl(url) ?? undefined} target="_blank" rel="noopener noreferrer" aria-label={`Mở ảnh ${index + 1} của ${university.name}`}><AspectRatio ratio={4 / 3}><SchoolImage url={url} alt={`Ảnh ${index + 1} của ${university.name}`} className="h-full w-full rounded-md bg-mutsed" /></AspectRatio></a>)}
               </div>
             </DetailSection>
           )}
@@ -116,8 +136,8 @@ export function UniversityDetailView({ university }: { university: UniversityDet
             <div className="space-y-3 text-sm leading-relaxed text-muted-foreground">
               <p className="flex items-start gap-2"><BookOpenIcon className="mt-0.5 size-4 shrink-0" />Số liệu trên trang là thông tin trường, không phải đánh giá cơ hội trúng tuyển cá nhân.</p>
               <p>Không có dữ liệu không đồng nghĩa với không có yêu cầu hoặc chi phí bằng 0.</p>
-              <a href="#sources" className="inline-flex items-center gap-1 font-medium text-brand hover:underline">Xem nguồn và trạng thái<ArrowUpRightIcon className="size-3.5" /></a>
-              {offering?.retrievedAt && <p className="border-t border-border pt-3 text-xs">Ngày lấy nguồn tổng quan: {universityDate(offering.retrievedAt)}</p>}
+              <Button variant="link" nativeButton={false} role="link" render={<a href="#sources" />} className="h-auto justify-start p-0 text-brand">Xem nguồn và trạng thái<ArrowUpRightIcon className="size-3.5" /></Button>
+              {offering?.retrievedAt && <><Separator /><p className="text-xs">Ngày lấy nguồn tổng quan: {universityDate(offering.retrievedAt)}</p></>}
             </div>
           </DetailSection>
         </aside>

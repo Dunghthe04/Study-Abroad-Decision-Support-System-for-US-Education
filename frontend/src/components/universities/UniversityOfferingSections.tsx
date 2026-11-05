@@ -4,7 +4,11 @@ import { useState } from "react";
 import { InfoIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { UniversityOffering } from "@/types/university";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Card, CardContent } from "@/components/ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Separator } from "@/components/ui/separator";
+import type { UniversityMajor, UniversityOffering } from "@/types/university";
 import { annualPublishedCost, MISSING_UNIVERSITY_DATA, schoolAidPolicy, schoolImportanceLabel, schoolSatPolicy, scoreRange, universityDate, universityDeadlines, universityMoney, universityNumber, universityPercent } from "@/lib/university-display";
 import { DetailRows, DetailSection, SourceLink } from "./UniversityDetailParts";
 
@@ -29,14 +33,16 @@ export function UniversityAdmissions({ offering }: { offering: UniversityOfferin
       {deadlines.length ? (
         <div className="grid gap-3 sm:grid-cols-2">
           {deadlines.map((deadline) => (
-            <div key={deadline.round} className="rounded-lg border border-border bg-muted/30 p-4">
-              <p className="text-xs text-muted-foreground">{deadline.label} ({deadline.round})</p>
-              <p className="mt-1 text-sm font-semibold">{deadline.date}</p>
-            </div>
+            <Card key={deadline.round} size="sm" className="bg-muted/30 shadow-none">
+              <CardContent>
+                <p className="text-xs text-muted-foreground">{deadline.label} ({deadline.round})</p>
+                <p className="mt-1 text-sm font-semibold">{deadline.date}</p>
+              </CardContent>
+            </Card>
           ))}
         </div>
       ) : <p className="text-sm text-muted-foreground">{MISSING_UNIVERSITY_DATA}</p>}
-      <p className="mt-4 flex items-start gap-2 text-xs leading-relaxed text-muted-foreground"><InfoIcon className="mt-0.5 size-3.5 shrink-0" />Chính sách và hạn nộp có thể thay đổi theo năm. Hãy xác nhận lại trên website chính thức trước khi nộp hồ sơ.</p>
+      <Alert className="mt-4 bg-muted/30"><InfoIcon /><AlertDescription className="text-xs leading-relaxed">Chính sách và hạn nộp có thể thay đổi theo năm. Hãy xác nhận lại trên website chính thức trước khi nộp hồ sơ.</AlertDescription></Alert>
     </DetailSection>
   );
 }
@@ -52,10 +58,12 @@ export function UniversityCosts({ offering }: { offering: UniversityOffering }) 
         { label: "Chi phí khác", value: universityMoney(offering.otherExpensesUsd) },
       ]} />
       {total !== null && (
-        <div className="mt-5 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-brand-wash px-4 py-3">
-          <span className="text-sm font-medium text-brand-ink">Tổng các khoản trên</span>
-          <strong className="text-lg text-brand-ink">{universityMoney(total)} / năm</strong>
-        </div>
+        <Card size="sm" className="mt-5 bg-brand-wash shadow-none ring-0">
+          <CardContent className="flex flex-wrap items-center justify-between gap-2 text-brand-ink">
+            <span className="text-sm font-medium">Tổng các khoản trên</span>
+            <strong className="text-lg">{universityMoney(total)} / năm</strong>
+          </CardContent>
+        </Card>
       )}
       <p className="mt-4 text-xs leading-relaxed text-muted-foreground">Đây là chi phí công bố, chưa phải chi phí thực trả của từng sinh viên. Không tự suy ra mức học bổng hoặc trừ hỗ trợ tài chính khỏi các khoản trên.</p>
       <h3 className="mb-4 mt-7 text-sm font-semibold">Hỗ trợ cho sinh viên quốc tế</h3>
@@ -87,26 +95,40 @@ export function UniversityStatistics({ offering, internationalStudentCount }: { 
   );
 }
 
+function MajorList({ majors }: { majors: UniversityMajor[] }) {
+  return (
+    <ul className="divide-y divide-border/70">
+      {majors.map((major) => (
+        <li key={`${major.cipCode}-${major.name}`} className="flex flex-wrap items-center justify-between gap-2 py-3">
+          <div><p className="text-sm font-medium">{major.name}</p>{major.cipCode && <p className="mt-0.5 text-xs text-muted-foreground">CIP {major.cipCode}</p>}</div>
+          <div className="flex gap-1.5">
+            {major.isStem && <Badge variant="secondary">STEM</Badge>}
+            {!major.isVerified && <Badge variant="outline">Chưa xác minh</Badge>}
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function UniversityMajors({ offering }: { offering: UniversityOffering }) {
   const [expanded, setExpanded] = useState(false);
-  const majors = expanded ? offering.majors : offering.majors.slice(0, 10);
   return (
     <DetailSection id="majors" title="Ngành học" description="Nhóm ngành có trong dữ liệu hiện tại của bậc học đang chọn.">
-      {majors.length ? (
-        <ul className="divide-y divide-border/70">
-          {majors.map((major) => (
-            <li key={`${major.cipCode}-${major.name}`} className="flex flex-wrap items-center justify-between gap-2 py-3 first:pt-0">
-              <div><p className="text-sm font-medium">{major.name}</p>{major.cipCode && <p className="mt-0.5 text-xs text-muted-foreground">CIP {major.cipCode}</p>}</div>
-              <div className="flex gap-1.5">
-                {major.isStem && <Badge variant="secondary">STEM</Badge>}
-                {!major.isVerified && <Badge variant="outline">Chưa xác minh</Badge>}
-              </div>
-            </li>
-          ))}
-        </ul>
+      {offering.majors.length ? (
+        <Collapsible open={expanded} onOpenChange={setExpanded}>
+          <MajorList majors={offering.majors.slice(0, 10)} />
+          {offering.majors.length > 10 && (
+            <>
+              <CollapsibleContent><Separator /><MajorList majors={offering.majors.slice(10)} /></CollapsibleContent>
+              <CollapsibleTrigger render={<Button type="button" variant="outline" size="sm" className="mt-4" />}>
+                {expanded ? "Thu gọn" : `Xem tất cả ${offering.majors.length} nhóm ngành`}
+              </CollapsibleTrigger>
+            </>
+          )}
+        </Collapsible>
       ) : <p className="text-sm text-muted-foreground">{MISSING_UNIVERSITY_DATA}</p>}
-      {offering.majors.length > 10 && <Button type="button" variant="outline" size="sm" className="mt-4" onClick={() => setExpanded(!expanded)}>{expanded ? "Thu gọn" : `Xem tất cả ${offering.majors.length} nhóm ngành`}</Button>}
-      {offering.sourceUrl && <div className="mt-5 border-t border-border pt-4 text-xs text-muted-foreground">Nguồn tổng quan của bậc học: <SourceLink url={offering.sourceUrl} /> · Ngày lấy: {universityDate(offering.retrievedAt)}</div>}
+      {offering.sourceUrl && <div className="mt-5 space-y-4 text-xs text-muted-foreground"><Separator /><p>Nguồn tổng quan của bậc học: <SourceLink url={offering.sourceUrl} /> · Ngày lấy: {universityDate(offering.retrievedAt)}</p></div>}
     </DetailSection>
   );
 }

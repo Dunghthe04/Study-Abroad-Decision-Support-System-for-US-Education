@@ -4,6 +4,9 @@ import { useState, type ReactNode } from "react";
 import Image from "next/image";
 import { Building2Icon, ExternalLinkIcon } from "lucide-react";
 import { universityHost, universityUrl } from "@/lib/university-display";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableRow } from "@/components/ui/table";
 
 export function SchoolImage({ url, alt, className, priority = false, contain = false }: {
   url: string | null; alt: string; className: string; priority?: boolean; contain?: boolean;
@@ -27,24 +30,30 @@ export function SchoolImage({ url, alt, className, priority = false, contain = f
 
 export function DetailSection({ id, title, description, children }: { id?: string; title: string; description?: string; children: ReactNode }) {
   return (
-    <section id={id} aria-label={title} className="scroll-mt-32 rounded-xl border border-border/70 bg-card p-5 shadow-2xs sm:p-6">
-      <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
-      {description && <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{description}</p>}
-      <div className="mt-5">{children}</div>
+    <section id={id} aria-label={title} className="scroll-mt-32">
+      <Card className="shadow-2xs [--card-spacing:--spacing(5)] sm:[--card-spacing:--spacing(6)]">
+        <CardHeader>
+          <CardTitle><h2 className="font-sans text-lg font-semibold tracking-tight">{title}</h2></CardTitle>
+          {description && <CardDescription className="leading-relaxed">{description}</CardDescription>}
+        </CardHeader>
+        <CardContent>{children}</CardContent>
+      </Card>
     </section>
   );
 }
 
 export function DetailRows({ rows }: { rows: { label: string; value: ReactNode }[] }) {
   return (
-    <dl className="divide-y divide-border/70">
-      {rows.map((row) => (
-        <div key={row.label} className="flex items-start justify-between gap-5 py-3 first:pt-0 last:pb-0">
-          <dt className="text-sm leading-relaxed text-muted-foreground">{row.label}</dt>
-          <dd className="text-right text-sm font-medium leading-relaxed">{row.value}</dd>
-        </div>
-      ))}
-    </dl>
+    <Table>
+      <TableBody>
+        {rows.map((row) => (
+          <TableRow key={row.label} className="hover:bg-transparent">
+            <TableHead scope="row" className="h-auto w-1/2 py-3 pr-4 pl-0 align-top font-normal whitespace-normal text-muted-foreground">{row.label}</TableHead>
+            <TableCell className="py-3 pr-0 text-right align-top font-medium whitespace-normal">{row.value}</TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
   );
 }
 
@@ -52,8 +61,8 @@ export function SourceLink({ url, label }: { url: string | null; label?: string 
   const safe = universityUrl(url);
   if (!safe) return null;
   return (
-    <a href={safe} target="_blank" rel="noopener noreferrer" className="inline-flex max-w-full items-center gap-1.5 break-all text-sm font-medium text-brand underline-offset-4 hover:underline">
-      {label ?? universityHost(safe)}<ExternalLinkIcon className="size-3.5 shrink-0" />
-    </a>
+    <Button variant="link" nativeButton={false} role="link" render={<a href={safe} target="_blank" rel="noopener noreferrer" />} className="h-auto max-w-full justify-start gap-1.5 p-0 text-sm whitespace-normal text-brand">
+      <span className="min-w-0 break-all">{label ?? universityHost(safe)}</span><ExternalLinkIcon className="size-3.5 shrink-0" />
+    </Button>
   );
 }
