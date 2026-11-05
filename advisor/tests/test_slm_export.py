@@ -215,6 +215,14 @@ def test_the_skill_prompt_names_the_sections_of_the_skill():
     assert "slm_sinh_skill_ho_so" in prompt and "## 7. Yêu cầu câu trả lời" in prompt and "# Mốc:" in prompt
 
 
+# Mức do code so với mốc trường (tinh_san); prompt còn ngưỡng cứng thì model được dặn ngược với dữ liệu skill
+def test_the_skill_prompt_takes_levels_from_tinh_san_and_sets_no_threshold_of_its_own():
+    prompt = SKILL_PROMPT_PATH.read_text(encoding="utf-8")
+
+    assert "tinh_san" in prompt
+    assert not re.search(r"\b(?:cao|trung bình|thấp) (?:là )?(?:từ|dưới) \d", prompt)
+
+
 def real_skill_rows():
     records = [json.loads(line) for line in DEFAULT_OUT.read_text(encoding="utf-8").splitlines()]
     prompt = SKILL_PROMPT_PATH.read_text(encoding="utf-8")
