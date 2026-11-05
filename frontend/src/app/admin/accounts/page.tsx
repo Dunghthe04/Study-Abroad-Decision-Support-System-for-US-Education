@@ -1,10 +1,5 @@
-import type { Metadata } from "next";
-import { AdminSection } from "@/components/admin/AdminSection";
-
-export const metadata: Metadata = {
-  title: "Tài khoản – Quản trị USAS",
-};
+import { redirect } from "next/navigation";
 
 export default function AdminAccountsPage() {
-  return <AdminSection href="/admin/accounts" />;
+  redirect("/admin/users");
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRightIcon, HourglassIcon } from "lucide-react";
@@ -23,13 +23,26 @@ export function LoginForm() {
   const redirect =
     redirectParam && /^\/(?![\/\\])/.test(redirectParam) ? redirectParam : "/";
 
-  const { login } = useAuth();
+  const { login, user, isLoading } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [lockType, setLockType] = useState<"temp_locked" | "unverified" | null>(null);
+
+  // Nếu người dùng đã đăng nhập sẵn mà truy cập /login:
+  // Tài khoản admin/moderator tự động chuyển thẳng vào /admin
+  useEffect(() => {
+    if (!isLoading && user) {
+      if (user.role === "admin" || user.role === "moderator") {
+        const target = redirectParam && redirectParam !== "/" ? redirect : "/admin";
+        router.replace(target);
+      } else {
+        router.replace(redirect);
+      }
+    }
+  }, [isLoading, user, redirect, redirectParam, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,8 +57,14 @@ export function LoginForm() {
     setIsSubmitting(true);
     try {
       // [AC-2] Đăng nhập: Gọi API xác thực
-      await login({ email: email.trim(), password });
-      router.push(redirect);
+      const loggedUser = await login({ email: email.trim(), password });
+      if (loggedUser.role === "admin" || loggedUser.role === "moderator") {
+        // Tài khoản admin/moderator thì vào thẳng trang admin luôn không cần vào bên ngoài
+        const target = redirectParam && redirectParam !== "/" ? redirect : "/admin";
+        router.push(target);
+      } else {
+        router.push(redirect);
+      }
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message || "Sai tài khoản hoặc mật khẩu.");

@@ -30,13 +30,16 @@ export function SiteHeader() {
   const canOpenAdmin = user?.role === "admin" || user?.role === "moderator";
 
   const navLinks = [
-    { href: "/", label: "Trang chủ" },
+    { href: canOpenAdmin ? "/admin" : "/", label: canOpenAdmin ? "Quản trị" : "Trang chủ" },
     { href: canOpenAdmin ? "/admin/centers" : "/centers", label: "Trung tâm tư vấn" },
     { href: "/methodology", label: "Giới thiệu phương pháp" },
     { href: "/analysis", label: "Phân tích tư vấn" },
   ];
 
   const isLinkActive = (href: string) => {
+    if (href === "/admin") {
+      return pathname === "/admin";
+    }
     if (href === "/") {
       return pathname === "/";
     }
@@ -65,7 +68,7 @@ export function SiteHeader() {
       >
         <div className="flex min-w-0 items-center gap-6">
           <Link
-            href="/"
+            href={canOpenAdmin ? "/admin" : "/"}
             className="flex items-center gap-2 font-heading text-xl font-bold tracking-tight text-brand-ink transition-opacity hover:opacity-90"
           >
             <span className="flex size-[30px] items-center justify-center rounded-lg bg-brand-ink text-white font-sans text-xs font-black">

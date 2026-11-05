@@ -1,11 +1,59 @@
+"use client";
+
+import { Suspense, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowRightIcon, ClipboardListIcon, MessageCircleIcon } from "lucide-react";
+import { ArrowRightIcon, ClipboardListIcon, MessageCircleIcon, ShieldAlertIcon, ExternalLinkIcon } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { OpenAssistantButton } from "@/components/assistant/OpenAssistantButton";
+import { useAuth } from "@/contexts/AuthContext";
+import { Spinner } from "@/components/ui/spinner";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
-export default function HomePage() {
+function HomeView() {
+  const { user, isLoading } = useAuth();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const isPublicPreview = searchParams.get("view") === "public";
+
+  const isAdmin = user?.role === "admin" || user?.role === "moderator";
+
+  useEffect(() => {
+    // Tài khoản admin/moderator thì vào thẳng trang admin luôn không cần vào bên ngoài
+    if (!isLoading && isAdmin && !isPublicPreview) {
+      router.replace("/admin");
+    }
+  }, [isAdmin, isLoading, isPublicPreview, router]);
+
+  // Nếu là admin và không yêu cầu preview công khai, hiển thị loader ngắn gọn trước khi router.replace hoàn tất
+  if (!isLoading && isAdmin && !isPublicPreview) {
+    return (
+      <div className="flex min-h-[40vh] flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
+        <Spinner />
+        <p>Đang chuyển hướng thẳng đến trang Quản trị...</p>
+      </div>
+    );
+  }
+
   return (
     <section className="mx-auto max-w-[1080px] space-y-6">
+      {isAdmin && isPublicPreview && (
+        <Alert className="border-amber-500/50 bg-amber-500/10 text-amber-900 dark:text-amber-200">
+          <ShieldAlertIcon className="size-4 text-amber-600" />
+          <AlertTitle className="font-semibold">Chế độ xem trước công khai (Admin)</AlertTitle>
+          <AlertDescription className="flex items-center justify-between gap-2 mt-1">
+            <span>Bạn đang xem giao diện trang chủ của học sinh / phụ huynh với tư cách Quản trị viên.</span>
+            <Link
+              href="/admin"
+              className={buttonVariants({ variant: "outline", size: "sm", className: "h-7 text-xs gap-1 shrink-0 bg-background" })}
+            >
+              Vào trang Quản trị
+              <ExternalLinkIcon className="size-3" />
+            </Link>
+          </AlertDescription>
+        </Alert>
+      )}
+
       <div className="space-y-2.5 pt-5">
         <div className="text-[11.5px] font-bold tracking-[0.07em] text-brand uppercase">
           Tư vấn du học Mỹ · bậc Đại học
@@ -55,5 +103,20 @@ export default function HomePage() {
         </Link>
       </p>
     </section>
+  );
+}
+
+export default function HomePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-[40vh] items-center justify-center gap-2 text-sm text-muted-foreground">
+          <Spinner />
+          <span>Đang tải...</span>
+        </div>
+      }
+    >
+      <HomeView />
+    </Suspense>
   );
 }

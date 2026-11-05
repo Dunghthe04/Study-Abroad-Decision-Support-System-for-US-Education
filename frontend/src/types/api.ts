@@ -127,6 +127,14 @@ export interface CreateModeratorAccountRequest {
   phone?: string | null;
 }
 
+/** [Q11 / UC-71 Phụ trợ] Admin tạo tài khoản trung tâm tư vấn. */
+export interface CreateCenterAccountRequest {
+  email: string;
+  password: string;
+  fullName: string;
+  phone?: string | null;
+}
+
 /** [UC-61] Admin khóa tài khoản kèm lý do. */
 export interface LockUserAccountRequest {
   reason: string;

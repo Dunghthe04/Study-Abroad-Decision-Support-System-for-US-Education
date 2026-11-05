@@ -64,9 +64,9 @@ export function AdminUserMenu() {
           <DropdownMenuLabel>{user.fullName}</DropdownMenuLabel>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuItem render={<Link href="/" />}>
+        <DropdownMenuItem render={<Link href="/?view=public" />}>
           <HomeIcon />
-          Về trang chủ
+          Xem trang chủ công khai
         </DropdownMenuItem>
         <DropdownMenuItem render={<Link href="/account" />}>
           <UserIcon />

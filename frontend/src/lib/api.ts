@@ -11,6 +11,7 @@ import type {
   AdminUserAccountListQuery,
   PagedResult,
   CreateModeratorAccountRequest,
+  CreateCenterAccountRequest,
   LockUserAccountRequest,
   UnlockUserAccountRequest,
   VerifyEmailRequest,
@@ -207,6 +208,13 @@ export const adminUsersApi = {
 
   createModerator: (data: CreateModeratorAccountRequest) =>
     apiFetch<UserDto>("/api/v1/admin/users/moderators", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  /** [Q11 / UC-71 Phụ trợ] Admin tạo tài khoản người dùng cho Trung tâm tư vấn. */
+  createCenter: (data: CreateCenterAccountRequest) =>
+    apiFetch<UserDto>("/api/v1/admin/users/centers", {
       method: "POST",
       body: JSON.stringify(data),
     }),
