@@ -3,15 +3,16 @@
 Lấy từ state.profile (nháp .NET gửi mỗi lượt, đã gộp với chat). Chữ viết giống dữ liệu train
 (data/slm/du_lieu_slm.jsonl): "8 thang 10", "IELTS 6.5", "trưởng / chủ nhiệm CLB Tiếng Anh cấp tỉnh / thành phố từ
 09/2024 đến nay".
-skill_input_of ghép thêm các dòng code tính sẵn (profile_calc: mức GPA, điểm TB từng năm, mốc thời gian...) để skill chỉ
-đọc rồi nhận xét, không tự tính. Không gửi cả bảng điểm học bạ: TB từng năm đã nằm trong grade_by_year.
+skill_request_of dựng cả SkillRequest ho_so: hồ sơ làm phẳng (ho_so) và tách riêng các dòng code tính sẵn (tinh_san,
+từ profile_calc: mức GPA, điểm TB từng năm, mốc thời gian...) để skill chỉ đọc rồi nhận xét, không tự tính. Không gửi
+cả bảng điểm học bạ: TB từng năm đã nằm trong grade_by_year.
 """
 
 import datetime
 from typing import Any
 
 from app.schemas.chat import ChatState, ProfileField
-from app.schemas.slm import PROFILE_KEYS
+from app.schemas.slm import PROFILE_KEYS, SkillRequest
 from app.services.profile_calc import calc_profile
 from app.services.skills.buttons import (
     BUDGET_LABELS,
@@ -171,13 +172,12 @@ def profile_to_skill_input(profile: dict[str, ProfileField]) -> dict[str, str]:
     return result
 
 
-# ho_so đầy đủ cho skill: hồ sơ làm phẳng + các dòng code tính sẵn từ hồ sơ và học bạ (state.transcript).
-# Hạn nộp của trường chưa có đường gửi sang nên timeline tạm chỉ có tháng nhập học
-def skill_input_of(state: ChatState, today: datetime.date | None = None) -> dict[str, str]:
-    result = profile_to_skill_input(state.profile)
-    result.update(
-        calc_profile(
-            state.profile, state.transcript, today or datetime.date.today(), benchmarks=state.benchmarks
-        )
+# Đầu vào sinh skill ho_so: hồ sơ làm phẳng, và tách riêng các dòng code tính sẵn từ hồ sơ, học bạ (state.transcript)
+# và mốc trường (state.benchmarks). Hạn nộp của trường chưa có đường gửi sang nên timeline tạm chỉ có tháng nhập học
+def skill_request_of(state: ChatState, cau_hoi: str, today: datetime.date | None = None) -> SkillRequest:
+    tinh_san = calc_profile(
+        state.profile, state.transcript, today or datetime.date.today(), benchmarks=state.benchmarks
     )
-    return result
+    return SkillRequest(
+        loai="ho_so", cau_hoi=cau_hoi, ho_so=profile_to_skill_input(state.profile), tinh_san=tinh_san
+    )

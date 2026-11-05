@@ -3,8 +3,8 @@
 from datetime import date
 
 from app.schemas.chat import ChatState, ProfileField
-from app.schemas.slm import PROFILE_KEYS, SkillRequest
-from app.services.skill_input import NONE_TEXT, profile_to_skill_input, skill_input_of
+from app.schemas.slm import CALC_KEYS, PROFILE_KEYS, SkillRequest
+from app.services.skill_input import NONE_TEXT, profile_to_skill_input, skill_request_of
 from app.services.skills.buttons import NONE, UNKNOWN
 
 
@@ -157,34 +157,37 @@ TRANSCRIPT = {
 }
 
 
-def test_skill_input_adds_calculated_lines_after_profile_lines():
-    ho_so = skill_input_of(ChatState(profile=FULL, transcript=TRANSCRIPT), TODAY)
-
-    assert ho_so["gpa"] == "8 thang 10"  # dòng cũ giữ nguyên
-    assert ho_so["grade_by_year"] == "Lớp 10: 7.5; Lớp 11: 7.8"
-    assert ho_so["gpa_level"] == "3.2 thang 4"  # chưa có mốc trường thì chỉ ghi điểm
-    assert ho_so["english_level"] == "IELTS 6.5"
-    assert ho_so["timeline"] == "hôm nay 11/2026, nhập học kỳ Fall 08/2027, còn 9 tháng"
+def ask(state: ChatState) -> SkillRequest:
+    return skill_request_of(state, "Em có nên nộp Iowa không?", TODAY)
 
 
-def test_skill_input_compares_with_school_benchmarks():
-    marks = {"gpa4": 3.6, "english": {"ielts": 6.5}}
-    ho_so = skill_input_of(ChatState(profile=FULL, benchmarks=marks), TODAY)
+def test_calculated_lines_go_to_tinh_san_not_into_ho_so():
+    req = ask(ChatState(profile=FULL, transcript=TRANSCRIPT))
 
-    assert ho_so["gpa_level"] == "3.2 thang 4, thấp (TB các trường 3.6)"
-    assert ho_so["english_level"] == "IELTS 6.5, trung bình (mốc phổ biến 6.5)"
-    assert "benchmarks" not in ho_so
+    assert req.loai == "ho_so"
+    assert req.ho_so == profile_to_skill_input(FULL)  # hồ sơ giữ nguyên, không lẫn dòng tính sẵn
+    assert set(req.tinh_san) <= set(CALC_KEYS)
+    assert req.tinh_san["grade_by_year"] == "Lớp 10: 7.5; Lớp 11: 7.8"
+    assert req.tinh_san["gpa_level"] == "3.2 thang 4"  # chưa có mốc trường thì chỉ ghi điểm
+    assert req.tinh_san["english_level"] == "IELTS 6.5"
+    assert req.tinh_san["timeline"] == "hôm nay 11/2026, nhập học kỳ Fall 08/2027, còn 9 tháng"
 
 
-def test_skill_input_never_sends_the_whole_transcript():
-    ho_so = skill_input_of(ChatState(profile=FULL, transcript=TRANSCRIPT), TODAY)
+def test_calculated_lines_compare_with_school_benchmarks():
+    req = ask(ChatState(profile=FULL, benchmarks={"gpa4": 3.6, "english": {"ielts": 6.5}}))
 
-    assert "transcript" not in ho_so
-    assert "Hóa học" not in " ".join(ho_so.values())
+    assert req.tinh_san["gpa_level"] == "3.2 thang 4, thấp (TB các trường 3.6)"
+    assert req.tinh_san["english_level"] == "IELTS 6.5, trung bình (mốc phổ biến 6.5)"
+
+
+def test_the_whole_transcript_is_never_sent():
+    req = ask(ChatState(profile=FULL, transcript=TRANSCRIPT))
+
+    assert "Hóa học" not in " ".join([*req.ho_so.values(), *req.tinh_san.values()])
 
 
 def test_overall_gpa_has_no_grade_by_year():
-    ho_so = skill_input_of(ChatState(profile=FULL), TODAY)
+    req = ask(ChatState(profile=FULL))
 
-    assert "grade_by_year" not in ho_so
-    assert "gpa_level" in ho_so
+    assert "grade_by_year" not in req.tinh_san
+    assert "gpa_level" in req.tinh_san

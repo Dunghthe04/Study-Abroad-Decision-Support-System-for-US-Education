@@ -62,12 +62,13 @@ def chat_rows(records: list[dict[str, Any]], prompt: str, split: str) -> list[di
     ]
 
 
-# Đầu vào của việc sinh skill: đúng các trường của SkillRequest (loại, câu hỏi, hồ sơ đã đủ)
+# Đầu vào của việc sinh skill: đúng các trường của SkillRequest (loại, câu hỏi, hồ sơ đã đủ, dòng code tính sẵn)
 def skill_request(record: dict[str, Any]) -> dict[str, Any]:
     return {
         "loai": record["type"],
         "cau_hoi": record["input"]["cau_hoi"],
         "ho_so": profile_text(record["input"]["ho_so"]),
+        "tinh_san": record.get("tinh_san") or {},
     }
 
 

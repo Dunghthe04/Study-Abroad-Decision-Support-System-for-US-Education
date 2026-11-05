@@ -162,6 +162,14 @@ def test_the_skill_request_is_what_skill_request_in_the_contract_accepts():
     )  # danh sách thành một chuỗi
 
 
+def test_the_skill_request_carries_the_calculated_lines_or_an_empty_object():
+    calc = {"gpa_level": "3.2 thang 4"}
+
+    assert skill_request(skill_record(1))["tinh_san"] == {}
+    assert skill_request(skill_record(1) | {"tinh_san": calc})["tinh_san"] == calc
+    SkillRequest.model_validate(skill_request(skill_record(1) | {"tinh_san": calc}))
+
+
 def test_the_skill_conversation_is_the_skill_prompt_then_the_request_then_the_skill_as_the_answer():
     row = skill_rows([skill_record(1)], "PROMPT", "val")[0]["messages"]
 

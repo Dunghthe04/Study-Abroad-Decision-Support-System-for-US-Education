@@ -216,11 +216,28 @@ SKILL_SECTIONS = {
 }
 
 
+# Dòng code tính sẵn cho skill ho_so (profile_calc.calc_profile): mức GPA / tiếng Anh so với mốc dữ liệu trường,
+# điểm TB từng năm, mốc thời gian... Tách khỏi ho_so để SLM phân biệt dữ kiện học sinh khai với phần code so sánh;
+# không nằm trong PROFILE_KEYS vì SLM lần 1 không được tách ra các khóa này từ câu chat
+CALC_KEYS = (
+    "grade_by_year",
+    "gpa_level",
+    "english_level",
+    "sat_level",
+    "budget_level",
+    "ec_level",
+    "scholarship_chance",
+    "timeline",
+)
+
+
 # Đầu vào của SLM lần 2: câu hỏi và hồ sơ đã đủ (giá trị đã được nhánh hồ sơ chuẩn hóa và kiểm)
 class SkillRequest(BaseModel):
     loai: Literal["ho_so", "kich_ban"]
     cau_hoi: str = Field(min_length=1)
     ho_so: dict[str, str]
+    # Chỉ ho_so: các dòng code tính sẵn (khóa trong CALC_KEYS); kịch bản đổi hồ sơ nên các dòng này không còn đúng
+    tinh_san: dict[str, str] = Field(default_factory=dict)
     # Chỉ kịch bản: giá trị muốn thử (áp lên bản sao hồ sơ) hoặc mục tiêu cần đạt, lấy từ thuc_the của SLM lần 1
     thay_doi: list[dict[str, str]] = Field(default_factory=list)
     muc_tieu: str | None = None
@@ -232,6 +249,11 @@ class SkillRequest(BaseModel):
         unknown = set(self.ho_so) - set(PROFILE_KEYS)
         if unknown:
             raise ValueError(f"khóa hồ sơ lạ: {sorted(unknown)}")
+        unknown_calc = set(self.tinh_san) - set(CALC_KEYS)
+        if unknown_calc:
+            raise ValueError(f"khóa tính sẵn lạ: {sorted(unknown_calc)}")
+        if self.tinh_san and self.loai != "ho_so":
+            raise ValueError("chỉ skill ho_so có tinh_san")
         if self.loai == "kich_ban" and not (self.thay_doi or self.muc_tieu):
             raise ValueError("kich_ban cần thay_doi hoặc muc_tieu")
         return self
@@ -258,7 +280,7 @@ def _so_trong(text: str) -> set[str]:
 
 
 # Kiểm skill SLM sinh ra (văn bản .md). Sai thì ném ValueError để bộ gọi dùng skill mặc định của loại.
-# Chỉ kiểm cấu trúc và việc không bỏ số hồ sơ. Số suy ra (GPA thang 4, hạn nộp) và dòng Mốc sẽ kiểm bằng luật riêng
+# Chỉ kiểm cấu trúc và việc không bỏ số của hồ sơ và dòng tính sẵn. Số suy ra (GPA thang 4, hạn nộp) và dòng Mốc sẽ kiểm bằng luật riêng
 def check_skill(text: str, req: SkillRequest) -> None:
     wanted = SKILL_SECTIONS[req.loai]
     parts = re.split(
@@ -270,7 +292,7 @@ def check_skill(text: str, req: SkillRequest) -> None:
     empty = [name for name in wanted if not muc[name].strip()]
     if empty:
         raise ValueError(f"mục rỗng: {empty}")
-    dropped = _so_trong(" ".join(req.ho_so.values())) - _so_trong(text)
+    dropped = _so_trong(" ".join([*req.ho_so.values(), *req.tinh_san.values()])) - _so_trong(text)
     if dropped:
         raise ValueError(f"skill bỏ mất số của hồ sơ: {sorted(dropped)}")
 

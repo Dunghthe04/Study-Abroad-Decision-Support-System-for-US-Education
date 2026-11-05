@@ -24,8 +24,8 @@ from typing import Any
 
 from openpyxl import load_workbook
 
+from app.schemas.slm import CALC_KEYS, MAX_RAW_Y, PROFILE_KEYS, SkillRequest, SlmTinResult, SlmY, check_skill
 from app.schemas.slm import INTENTS as TYPES
-from app.schemas.slm import MAX_RAW_Y, PROFILE_KEYS, SkillRequest, SlmTinResult, SlmY, check_skill
 from app.services.chat_flow import QUESTIONS
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "slm"
@@ -38,6 +38,9 @@ SKILL_TYPES = ("ho_so",)
 # Đầu vào (giống nhau ở mọi loại) rồi đầu ra. Loại chính lấy từ tên sheet, id sinh theo sheet và thứ tự dòng
 COLUMNS = ("cau_hoi", "ho_so", "cau_he_thong_dang_hoi", "cac_y", "tap")
 SKILL_COLUMN = "skill_md"  # chỉ có ở sheet của SKILL_TYPES
+# Dòng code tính sẵn (JSON khóa CALC_KEYS → chữ), đứng sau cột hồ sơ, chỉ ở sheet của SKILL_TYPES. Không bắt buộc (file cũ
+# chưa có). Chỉ đưa vào đầu vào sinh skill, không vào đầu vào tách ý vì lúc chạy SLM lần 1 không thấy các dòng này
+CALC_COLUMN = "ho_so_tinh_san"
 SPLITS = ("train", "val", "test")
 _WORD = re.compile(r"[^\W_]+(?:[-.'/][^\W_]+)*")
 
@@ -54,6 +57,7 @@ EN_SHEETS = {
 EN_COLUMNS = {
     "question": "cau_hoi",
     "profile": "ho_so",
+    "profile_calc": CALC_COLUMN,
     "pending_question": "cau_he_thong_dang_hoi",
     "intents": "cac_y",
     "split": "tap",
@@ -127,8 +131,11 @@ def intents_to_internal(items: Any) -> Any:
     return result
 
 
-def columns_of(sheet: str) -> tuple[str, ...]:
-    return COLUMNS[:-1] + (SKILL_COLUMN, "tap") if sheet in SKILL_TYPES else COLUMNS
+def columns_of(sheet: str, with_calc: bool = False) -> tuple[str, ...]:
+    if sheet not in SKILL_TYPES:
+        return COLUMNS
+    columns = COLUMNS[:-1] + (SKILL_COLUMN, "tap")
+    return columns[:2] + (CALC_COLUMN,) + columns[2:] if with_calc else columns
 
 
 def as_text(value: Any) -> str:
@@ -210,6 +217,11 @@ def to_record(intent: str, raw: dict[str, Any], where: str, record_id: str) -> d
         raise ValueError(f"{where}: cột ho_so phải là một object JSON")
     if set(profile) - set(PROFILE_KEYS):
         raise ValueError(f"{where}: ho_so có khóa lạ: {sorted(set(profile) - set(PROFILE_KEYS))}")
+    calc = as_json(raw.get(CALC_COLUMN), where, CALC_COLUMN)
+    if not isinstance(calc, dict):
+        raise ValueError(f"{where}: cột {CALC_COLUMN} phải là một object JSON")
+    if set(calc) - set(CALC_KEYS):
+        raise ValueError(f"{where}: {CALC_COLUMN} có khóa lạ: {sorted(set(calc) - set(CALC_KEYS))}")
     cac_y = check_cac_y(
         intent,
         text["cau_hoi"],
@@ -228,6 +240,7 @@ def to_record(intent: str, raw: dict[str, Any], where: str, record_id: str) -> d
             loai=intent,
             cau_hoi=text["cau_hoi"],
             ho_so=profile_text(profile),
+            tinh_san=profile_text(calc),
             thay_doi=[{k: str(v) for k, v in change.items()} for change in main.get("thay_doi", [])],
             muc_tieu=main.get("muc_tieu") or (None if main.get("thay_doi") else text["cau_hoi"]),
         )
@@ -235,7 +248,7 @@ def to_record(intent: str, raw: dict[str, Any], where: str, record_id: str) -> d
             check_skill(skill, request)
         except ValueError as ex:
             raise ValueError(f"{where}: skill_md sai: {ex}") from ex
-    return {
+    record = {
         "id": record_id,
         "type": intent,
         "split": text["tap"],
@@ -243,6 +256,10 @@ def to_record(intent: str, raw: dict[str, Any], where: str, record_id: str) -> d
         "output": {"cac_y": cac_y},
         "skill_md": skill or None,
     }
+    # Ngoài input (input là đầu vào tách ý); chỉ ghi khi có, nên dòng cũ giữ nguyên
+    if calc:
+        record["tinh_san"] = profile_text(calc)
+    return record
 
 
 def read_records(path: Path) -> list[dict[str, Any]]:
@@ -260,6 +277,8 @@ def read_records(path: Path) -> list[dict[str, Any]]:
         )
         # Sheet kịch bản không có skill, nhưng file cũ còn cột skill_md (để trống) thì vẫn đọc được
         allowed = {columns_of(intent), columns_of("ho_so")} if intent == "kich_ban" else {columns_of(intent)}
+        if intent in SKILL_TYPES:
+            allowed.add(columns_of(intent, with_calc=True))
         if header not in allowed:
             raise ValueError(
                 f"Sheet '{sheet.title}' phải có đúng các cột {columns_of(intent)}, đang là {header}"

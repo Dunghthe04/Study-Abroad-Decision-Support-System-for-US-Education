@@ -287,6 +287,11 @@ def skill(extra: str = "") -> str:
     [
         ({"ho_so": {}}, "hồ sơ rỗng"),
         ({"ho_so": {"mau_sac": "đỏ"}}, "khóa hồ sơ lạ"),
+        ({"tinh_san": {"mau_sac": "đỏ"}}, "khóa tính sẵn lạ"),
+        (
+            {"loai": "kich_ban", "muc_tieu": "Vừa sức", "tinh_san": {"timeline": "x"}},
+            "chỉ skill ho_so có tinh_san",
+        ),
         ({"loai": "kich_ban"}, "cần thay_doi hoặc muc_tieu"),
         ({"cau_hoi": ""}, ""),
         ({"loai": "kien_thuc"}, ""),
@@ -327,6 +332,14 @@ def test_extra_sections_are_ignored_but_a_missing_or_empty_one_is_not():
 def test_a_skill_that_drops_a_number_of_the_profile_is_rejected():
     with pytest.raises(ValueError, match="bỏ mất số"):
         check_skill(skill().replace("1450", "1400"), request())
+
+
+def test_a_skill_that_drops_a_number_of_the_calculated_lines_is_rejected():
+    req = request(tinh_san={"gpa_level": "3.6 thang 4, trung bình (TB các trường 3.6)"})
+
+    check_skill(skill("GPA 3.6 thang 4, TB các trường 3.6"), req)
+    with pytest.raises(ValueError, match="bỏ mất số"):
+        check_skill(skill(), req)
 
 
 def test_numbers_are_compared_the_way_a_student_writes_them():
