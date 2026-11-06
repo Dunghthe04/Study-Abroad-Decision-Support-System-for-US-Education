@@ -6,7 +6,8 @@ using StudyAbroad.Application.Recommendations;
 namespace StudyAbroad.Application.Advisor;
 
 /// <summary>Điều học sinh hỏi trong chat: tên trường (chữ thô SLM đã trích) và nhóm đích (reach | match | safety | null).</summary>
-public record ChatGoalQuery(string School, string? Target);
+// Code: có khi nút trên giao diện đã biết mã trường (hành động có cấu trúc), khi đó không cần khớp tên
+public record ChatGoalQuery(string School, string? Target, string? Code = null);
 
 /// <summary>
 /// "Cần gì để vào trường X" trong chat: advisor trả action "goal_seek" kèm tên trường chữ thô (ActionData.school) và nhóm đích.
@@ -25,11 +26,15 @@ public static class ChatGoalSeek
     /// <summary>Đọc ActionData của advisor. Null nếu thiếu tên trường.</summary>
     public static ChatGoalQuery? Parse(JsonElement? data)
     {
-        if (data is not { ValueKind: JsonValueKind.Object } d
-            || !d.TryGetProperty("school", out var s) || s.ValueKind != JsonValueKind.String
-            || string.IsNullOrWhiteSpace(s.GetString()))
+        if (data is not { ValueKind: JsonValueKind.Object } d)
             return null;
         var target = d.TryGetProperty("target", out var t) && t.ValueKind == JsonValueKind.String ? t.GetString() : null;
+        // Nút trên giao diện gửi thẳng mã trường: không cần khớp tên
+        if (d.TryGetProperty("code", out var c) && c.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(c.GetString()))
+            return new ChatGoalQuery("", target, c.GetString()!.Trim());
+        if (!d.TryGetProperty("school", out var s) || s.ValueKind != JsonValueKind.String
+            || string.IsNullOrWhiteSpace(s.GetString()))
+            return null;
         return new ChatGoalQuery(s.GetString()!.Trim(), target);
     }
 
@@ -96,12 +101,22 @@ public static class ChatGoalSeek
     };
 
     // Mã lý do xếp nhóm (GroupReasons) → vì sao không đạt nhóm đích
-    private static string Reason(string code) => code switch
+    // Có số liệu (stats) thì nói rõ con số và mốc: "chỉ nhận 9% hồ sơ, dưới mốc 15%", không chỉ "ít hơn hẳn"
+    private static string Pct(decimal fraction) =>
+        (fraction * 100).ToString("0.#", CultureInfo.GetCultureInfo("vi-VN")) + "%";
+
+    private static string Reason(string code, GoalSchoolStats? stats = null) => code switch
     {
-        GroupReasons.LowAcceptRate => "trường chỉ nhận dưới 15% hồ sơ nên luôn xếp Khó vào, điểm cao đến đâu cũng không đổi nhóm",
-        GroupReasons.CappedSelective => "trường nhận dưới 50% hồ sơ nên chỉ tối đa là Vừa sức",
+        GroupReasons.LowAcceptRate => stats?.AcceptRate is { } rate
+            ? $"trường chỉ nhận {Pct(rate)} hồ sơ, dưới mốc {Pct((decimal)stats.AlwaysReachRate)}, nên luôn xếp Khó vào, điểm cao đến đâu cũng không đổi nhóm"
+            : "trường chỉ nhận dưới 15% hồ sơ nên luôn xếp Khó vào, điểm cao đến đâu cũng không đổi nhóm",
+        GroupReasons.CappedSelective => stats?.AcceptRate is { } rate2
+            ? $"trường nhận {Pct(rate2)} hồ sơ, dưới mốc {Pct((decimal)stats.SafetyMinRate)}, nên chỉ tối đa là Vừa sức"
+            : "trường nhận dưới 50% hồ sơ nên chỉ tối đa là Vừa sức",
         GroupReasons.CappedWeakMetric => "một chỉ số của bạn còn thấp hơn mốc 25% của trường nên chưa tính là An toàn",
-        GroupReasons.IntlDowngrade => "trường nhận du học sinh ít hơn hẳn tỷ lệ chung nên bị hạ một nhóm",
+        GroupReasons.IntlDowngrade => stats is { AcceptRate: { } all, IntlAcceptRate: { } intl, IntlRatio: { } ratio }
+            ? $"trường nhận du học sinh {Pct(intl)} trong khi tỷ lệ nhận chung là {Pct(all)}, chỉ bằng {Pct((decimal)ratio)} mức chung và dưới mốc {Pct((decimal)stats.IntlRatioCut)}, nên bị hạ một nhóm"
+            : "trường nhận du học sinh ít hơn hẳn tỷ lệ chung nên bị hạ một nhóm",
         GroupReasons.NeedTest => "trường bắt buộc nộp điểm SAT hoặc ACT mà hồ sơ của bạn chưa có",
         GroupReasons.NoAcademicData => "trường chưa có đủ số liệu học thuật để so sánh",
         _ => "",
@@ -177,11 +192,11 @@ public static class ChatGoalSeek
                     lines.Add("Nên đặt mục tiêu (có đệm): " + Describe(recommended));
                 break;
             case "blocked":
-                lines.Add("Học thuật: " + string.Join("; ", r.Reasons.Select(Reason).Where(s => s != "")) + ".");
+                lines.Add("Học thuật: " + string.Join("; ", r.Reasons.Select(c => Reason(c, r.Stats)).Where(s => s != "")) + ".");
                 lines.Add($"Nhóm cao nhất bạn có thể đạt ở trường này là {GroupName(r.Best)}.");
                 break;
             default:
-                var why = r.Reasons.Select(Reason).FirstOrDefault(s => s != "") ?? "trường chưa đủ dữ liệu";
+                var why = r.Reasons.Select(c => Reason(c, r.Stats)).FirstOrDefault(s => s != "") ?? "trường chưa đủ dữ liệu";
                 lines.Add($"Học thuật: {why}, nên mình chưa tính được mức cần đạt.");
                 break;
         }
@@ -204,9 +219,18 @@ public static class ChatGoalSeek
     }
 
     /// <summary>Công cụ mở khung kết quả trên trang gợi ý: mã trường và nhóm đích.</summary>
+    // code và target: mở khung kết quả trên trang gợi ý. result: toàn bộ kết quả code đã tính (camelCase), để khung chat dựng thẻ
+    // (vị trí của trường, các mức đích, tiếng Anh, tài chính, trường tương tự) mà không phải hỏi lại backend
+    private static readonly JsonSerializerOptions WebJson = new(JsonSerializerDefaults.Web);
+
     public static Widget WidgetOf(SchoolGoalResult result)
     {
-        var data = new JsonObject { ["code"] = result.Code, ["target"] = TargetCode(result.Target) };
+        var data = new JsonObject
+        {
+            ["code"] = result.Code,
+            ["target"] = TargetCode(result.Target),
+            ["result"] = JsonSerializer.SerializeToNode(result, WebJson),
+        };
         return new Widget(WidgetType, JsonSerializer.SerializeToElement(data));
     }
 

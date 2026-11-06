@@ -103,6 +103,42 @@ public class ChatGoalSeekTests
     }
 
     // Trường bị ẩn vì tiếng Anh: dòng tiếng Anh đứng trước tài chính, nêu mức tối thiểu từng bài thi
+    // Lý do bị chặn nói con số cụ thể (tỉ lệ nhận, mốc), không chỉ "ít hơn hẳn"
+    [Fact]
+    public void Summarize_Blocked_StatesTheAcceptRateAndTheThresholds()
+    {
+        var stats = new GoalSchoolStats(0.24m, 0.09m, 0.375, 0.15, 0.5, 0.5);
+        var intl = Result(outcome: "blocked", best: "R", reasons: ["INTL_DOWNGRADE"]) with { Stats = stats };
+        var low = Result(outcome: "blocked", best: "R", reasons: ["LOW_ACCEPT_RATE"]) with { Stats = new GoalSchoolStats(0.08m, 0.04m, 0.5, 0.15, 0.5, 0.5) };
+
+        var intlText = ChatGoalSeek.Summarize(intl);
+        var lowText = ChatGoalSeek.Summarize(low);
+
+        Assert.Contains("nhận du học sinh 9% trong khi tỷ lệ nhận chung là 24%, chỉ bằng 37,5% mức chung và dưới mốc 50%", intlText);
+        Assert.Contains("chỉ nhận 8% hồ sơ, dưới mốc 15%", lowText);
+    }
+
+    // Khung chat dựng thẻ từ chính kết quả code đã tính: widget mang theo toàn bộ kết quả (camelCase), kèm vị trí và các mức đích
+    [Fact]
+    public void WidgetOf_CarriesTheWholeResultForTheChatCard()
+    {
+        var result = Result(alone: [Sat(1290, 1430)]) with
+        {
+            Position = new GoalPosition("in_list", "R", null, false),
+            Targets = [new GoalTargetResult("M", "reachable", "M", [], null, null, [Sat(1290, 1430)], [])],
+        };
+
+        var widget = ChatGoalSeek.WidgetOf(result);
+
+        Assert.Equal("goal_seek", widget.Type);
+        Assert.Equal("188429", widget.Data!.Value.GetProperty("code").GetString());
+        var card = widget.Data.Value.GetProperty("result");
+        Assert.Equal("Boston University", card.GetProperty("name").GetString());
+        Assert.Equal("in_list", card.GetProperty("position").GetProperty("status").GetString());
+        Assert.Equal("M", card.GetProperty("targets")[0].GetProperty("target").GetString());
+        Assert.Equal(1430, card.GetProperty("targets")[0].GetProperty("alone")[0].GetProperty("changes")[0].GetProperty("to").GetDecimal());
+    }
+
     [Fact]
     public void Summarize_ASchoolHiddenForEnglish_SaysTheScoreNeededBeforeFinance()
     {

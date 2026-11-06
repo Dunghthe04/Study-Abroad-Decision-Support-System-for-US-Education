@@ -101,6 +101,22 @@ public static class ChatSimulation
     private static string Money(decimal v) =>
         ((long)Math.Round(v)).ToString("N0", CultureInfo.InvariantCulture).Replace(",", ".");
 
+    /// <summary>Mô tả ngắn các giá trị giả định ("GPA 3.6, SAT 1500"), không kèm giá trị hiện tại. Null nếu không có giá trị nào.</summary>
+    public static string? Describe(SimulationOverrides? o)
+    {
+        if (o is null) return null;
+        var parts = new List<string>();
+        if (o.Gpa is { } gpa) parts.Add($"GPA {Dec(gpa)}");
+        if (o.Sat is { } sat) parts.Add($"SAT {Dec(sat)}");
+        if (o.Act is { } act) parts.Add($"ACT {Dec(act)}");
+        if (o.Ielts is { } ielts) parts.Add($"IELTS {Dec(ielts)}");
+        if (o.Toefl is { } toefl) parts.Add($"TOEFL {Dec(toefl)}");
+        if (o.Duolingo is { } duolingo) parts.Add($"Duolingo {Dec(duolingo)}");
+        if (o.BudgetUsd is { } budget) parts.Add($"ngân sách {Money(budget)} USD mỗi năm");
+        if (o.ScholarshipNeed is { } need) parts.Add($"mức cần học bổng {NeedName(need)}");
+        return parts.Count == 0 ? null : string.Join(", ", parts);
+    }
+
     // "SAT 1500 (hiện tại 1290)": điều đang thử kèm giá trị hiện tại, để học sinh kiểm tra hệ thống hiểu đúng
     private static string Label(SimulationOverrides o, SimulationProfile p)
     {

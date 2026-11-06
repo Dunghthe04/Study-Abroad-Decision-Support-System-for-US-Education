@@ -631,6 +631,75 @@ public class ChatServiceTests
         Assert.Null(res.ActionData);
     }
 
+    // Thẻ giải thích do code dựng gửi trước, rồi mới tới lời tư vấn (AI); widget cũng nằm trong câu trả lời cuối
+    [Fact]
+    public async Task ExplainAction_SendsTheCardBeforeTheAdviceIsWritten()
+    {
+        var order = new List<string>();
+        var runner = new FakeRunner { Explanation = Explanation(), OnExplain = () => order.Add("advice") };
+        AdvisorStreamEvent? card = null;
+
+        var res = await new ChatService(new FakeAdvisor("B4") { Action = "explain", ActionData = IowaCode }, new FakeSessions(), new FakeProfileFlow(), null, runner)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello), default,
+                e => { if (e.Type == "card") { card = e; order.Add("card"); } return Task.CompletedTask; });
+
+        Assert.Equal(["card", "advice"], order);
+        Assert.Equal("explain", card!.Widget!.Type);
+        Assert.Equal("explain", res.Widget!.Type);
+        Assert.Equal("University of Iowa", res.Widget.Data!.Value.GetProperty("card").GetProperty("name").GetString());
+        Assert.Equal("R", res.Widget.Data.Value.GetProperty("card").GetProperty("g2").GetString());
+    }
+
+    // Giải thích đi theo cái học sinh đang xem trên trang: có giá trị giả định thì theo giả định và thẻ ghi rõ gốc
+    private static async Task<(AdvisorChatResponse Res, FakeRunner Runner)> ExplainWith(
+        SimulationOverrides? simulation, string? basis = null)
+    {
+        var runner = new FakeRunner { Explanation = Explanation() };
+        var res = await new ChatService(new FakeAdvisor("B4") { Action = "explain", ActionData = IowaCode }, new FakeSessions(), new FakeProfileFlow(), null, runner)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello, Simulation: simulation, Action: basis is null ? null : new ChatAction("explain", "iowa", null, basis)));
+        return (res, runner);
+    }
+
+    private static readonly SimulationOverrides Gpa36 = new(3.6m, null, null, null, null, null, null);
+
+    [Fact]
+    public async Task Explain_WhileTheStudentIsSimulating_FollowsTheSimulationAndLabelsIt()
+    {
+        var (res, runner) = await ExplainWith(Gpa36);
+
+        Assert.Equal(Gpa36, runner.ExplainOverrides);
+        Assert.Equal("GPA 3.6", runner.ExplainBasisLabel);
+        var basis = res.Widget!.Data!.Value.GetProperty("basis");
+        Assert.Equal(("simulated", "GPA 3.6"), (basis.GetProperty("kind").GetString(), basis.GetProperty("label").GetString()));
+    }
+
+    [Fact]
+    public async Task Explain_WithoutASimulation_IsTheRealProfileAndSaysSo()
+    {
+        var (res, runner) = await ExplainWith(null);
+
+        Assert.Null(runner.ExplainOverrides);
+        Assert.Null(runner.ExplainBasisLabel);
+        Assert.Equal("real", res.Widget!.Data!.Value.GetProperty("basis").GetProperty("kind").GetString());
+    }
+
+    [Fact]
+    public async Task Explain_TheRealProfileButton_IgnoresTheSimulationOnThePage()
+    {
+        var (res, runner) = await ExplainWith(Gpa36, basis: "real");
+
+        Assert.Null(runner.ExplainOverrides);
+        Assert.Equal("real", res.Widget!.Data!.Value.GetProperty("basis").GetProperty("kind").GetString());
+    }
+
+    [Fact]
+    public async Task Explain_AnEmptySimulationIsNotASimulation()
+    {
+        var (_, runner) = await ExplainWith(new SimulationOverrides(null, null, null, null, null, null, null));
+
+        Assert.Null(runner.ExplainOverrides);
+    }
+
     [Fact]
     public async Task ExplainAction_WithoutACode_SaysItFailed()
     {
@@ -797,6 +866,105 @@ public class ChatServiceTests
         Assert.Equal("goal_seek", res.Widget!.Type);
         Assert.Null(res.QuickReplies);
         Assert.Null(res.Action);     // việc nội bộ, không trả cho trình duyệt
+    }
+
+    // ---- hành động có cấu trúc từ nút trên thẻ trường: không qua advisor, không khớp tên
+
+    private static async Task<(AdvisorChatResponse Res, FakeAdvisor Advisor)> ActionChat(ChatAction? action, FakeRunner runner)
+    {
+        var advisor = new FakeAdvisor("B4") { Action = "explain", ActionData = IowaCode };   // nếu advisor bị gọi nhầm sẽ trả kết quả khác hẳn
+        var res = await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), null, runner)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello, Action: action));
+        return (res, advisor);
+    }
+
+    [Fact]
+    public async Task ChatAction_GoalSeek_RunsOnTheCodeWithoutTheAdvisorOrNameMatching()
+    {
+        var runner = new FakeRunner { GoalResult = GoalOf() };
+
+        var (res, advisor) = await ActionChat(new ChatAction("goal_seek", "188429", "safety"), runner);
+
+        Assert.Null(advisor.LastRequest);                 // không gọi SLM
+        Assert.Null(runner.SearchedFor);                  // không khớp tên
+        Assert.Equal(("188429", "safety"), runner.GoalCalledWith);
+        Assert.StartsWith("Mình hiểu bạn hỏi về Boston University", res.Answer);
+        Assert.Equal("goal_seek", res.Widget!.Type);
+        Assert.Null(res.Action);
+    }
+
+    // Thẻ kết quả do code dựng được gửi TRƯỚC khi Gemini được gọi (Gemini chậm), rồi lời mới tới sau trong dòng final
+    [Fact]
+    public async Task GoalSeek_SendsTheCardBeforeAskingGemini()
+    {
+        var order = new List<string>();
+        var advisor = new FakeAdvisor("B4")
+        {
+            Action = "goal_seek", ActionData = BuAction,
+            GoalNote = new GoalNoteResponseDto("1.0", "gemini", "OK", "Để lên nhóm Vừa sức ở Boston University, bạn cần nâng SAT."),
+            OnGoalNote = () => order.Add("gemini"),
+        };
+        var runner = new FakeRunner { Match = Found(), GoalResult = GoalOf() };
+        AdvisorStreamEvent? card = null;
+
+        var res = await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), null, runner).ChatAsync(
+            Guid.NewGuid(), new AdvisorChatRequest(Hello), default,
+            e => { if (e.Type == "card") { card = e; order.Add("card"); } return Task.CompletedTask; });
+
+        Assert.Equal(["card", "gemini"], order);
+        Assert.Equal("goal_seek", card!.Widget!.Type);
+        Assert.StartsWith("Để lên nhóm Vừa sức", res.Answer);
+    }
+
+    [Fact]
+    public async Task ChatAction_GoalSeek_WithoutATarget_LetsTheSystemPickOneGroupUp()
+    {
+        var runner = new FakeRunner { GoalResult = GoalOf() };
+
+        await ActionChat(new ChatAction("goal_seek", "188429"), runner);
+
+        Assert.Equal(("188429", null), runner.GoalCalledWith);
+    }
+
+    [Fact]
+    public async Task ChatAction_Explain_RunsTheSchoolAdviceOnTheCode()
+    {
+        var runner = new FakeRunner { Explanation = Explanation() };
+
+        var (res, advisor) = await ActionChat(new ChatAction("explain", "iowa"), runner);
+
+        Assert.Null(advisor.LastRequest);
+        Assert.Equal("iowa", runner.ExplainedCode);
+        Assert.StartsWith("University of Iowa: ", res.Answer);
+    }
+
+    // Hành động sai (loại lạ, thiếu mã, nhóm đích không hợp lệ, mã quá dài): bỏ qua, chat chạy như thường qua advisor
+    [Theory]
+    [InlineData("unknown", "188429", null)]
+    [InlineData("goal_seek", "", null)]
+    [InlineData("goal_seek", null, null)]
+    [InlineData("goal_seek", "188429", "reach")]
+    [InlineData("goal_seek", "188429", "xyz")]
+    [InlineData("explain", "0123456789012345678901234567890123", null)]
+    public async Task ChatAction_Invalid_FallsBackToTheNormalAdvisorTurn(string type, string? code, string? target)
+    {
+        var runner = new FakeRunner { Explanation = Explanation() };
+
+        var (_, advisor) = await ActionChat(new ChatAction(type, code, target), runner);
+
+        Assert.NotNull(advisor.LastRequest);   // advisor vẫn được gọi
+        Assert.Null(runner.GoalCalledWith);
+    }
+
+    [Fact]
+    public async Task ChatAction_WithoutARunner_IsIgnored()
+    {
+        var advisor = new FakeAdvisor("B4");
+
+        await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow())
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello, Action: new ChatAction("goal_seek", "188429")));
+
+        Assert.NotNull(advisor.LastRequest);
     }
 
     private static async Task<AdvisorChatResponse> GoalChatWith(FakeAdvisor advisor, FakeRunner runner) =>
@@ -974,8 +1142,20 @@ public class ChatServiceTests
             return Task.FromResult(Latest);
         }
 
-        public Task<SchoolExplanation> ExplainAsync(Guid userId, string code, CancellationToken ct)
+        public ExplainSchoolDto ExplainCard { get; init; } =
+            new("University of Iowa", "IA", "public", "R", "MAIN", ["GPA_MID", "BUDGET_OK"], 0.17, 1200, 1400, 40.0, 30.0, 30_000, null);
+        public Action? OnExplain { get; init; }   // chạy ngay khi lời tư vấn được viết, để kiểm thứ tự
+
+        public SimulationOverrides? ExplainOverrides { get; private set; }
+        public string? ExplainBasisLabel { get; private set; }
+
+        public Task<ExplainSchoolDto> ExplainCardAsync(Guid userId, string code, CancellationToken ct, SimulationOverrides? overrides = null) => Task.FromResult(ExplainCard);
+
+        public Task<SchoolExplanation> ExplainAsync(Guid userId, string code, CancellationToken ct, SimulationOverrides? overrides = null, string? basis = null)
         {
+            ExplainOverrides = overrides;
+            ExplainBasisLabel = basis;
+            OnExplain?.Invoke();
             ExplainedFor = userId;
             ExplainedCode = code;
             if (ExplainError is not null)
@@ -1081,9 +1261,11 @@ public class ChatServiceTests
         public GoalNoteResponseDto GoalNote { get; init; } = new("1.0", "gemini", "FAILED", "");
         public Exception? GoalNoteError { get; init; }
         public GoalNoteRequestDto? LastGoalNote { get; private set; }
+        public Action? OnGoalNote { get; init; }   // chạy ngay khi Gemini được gọi, để kiểm thứ tự
 
         public Task<GoalNoteResponseDto> WriteGoalNoteAsync(GoalNoteRequestDto request, CancellationToken ct = default)
         {
+            OnGoalNote?.Invoke();
             LastGoalNote = request;
             if (GoalNoteError is not null)
                 throw GoalNoteError;

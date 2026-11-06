@@ -569,6 +569,65 @@ public class RecommendationServiceTests
         Assert.Equal(1, result.Profile.AwardCount);
     }
 
+    // ---- giải thích theo hồ sơ thật hoặc theo giả định đang xem
+
+    private static async Task<(RecommendationService Service, FakeAdvisor Advisor, StudentProfile Profile)> SavedRunSetup()
+    {
+        var (service, advisor, _, profile) = SimSetup();   // hồ sơ thật: GPA 3,5, SAT 1290, trường S là Vừa sức
+        await service.RecommendAsync(profile, [School("S", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m)]);
+        return (service, advisor, profile);
+    }
+
+    [Fact]
+    public async Task Explain_WithoutOverrides_UsesTheSavedRunAndTheRealProfile()
+    {
+        var (service, advisor, profile) = await SavedRunSetup();
+
+        await service.ExplainAsync(profile.UserId, "S", default);
+
+        Assert.Equal(3.5, advisor.LastExplain!.Student.Gpa);
+        Assert.Equal(1290, advisor.LastExplain.Student.Sat);
+        Assert.Null(advisor.LastExplain.Basis);
+        Assert.Equal("M", advisor.LastExplain.School.G2);
+    }
+
+    // Giải thích đi theo cái đang xem: có giá trị giả định thì số của học sinh và nhóm của trường lấy từ kết quả giả định
+    [Fact]
+    public async Task Explain_WithOverrides_UsesTheSimulatedNumbersAndTheSimulatedGroup()
+    {
+        var (service, advisor, profile) = await SavedRunSetup();
+        var overrides = NoChange with { Gpa = 2.5m, Sat = 1000m };
+
+        await service.ExplainAsync(profile.UserId, "S", default, overrides, "GPA 2.5, SAT 1000");
+
+        Assert.Equal(2.5, advisor.LastExplain!.Student.Gpa);
+        Assert.Equal(1000, advisor.LastExplain.Student.Sat);
+        Assert.Equal("GPA 2.5, SAT 1000", advisor.LastExplain.Basis);
+        Assert.Equal("R", advisor.LastExplain.School.G2);   // điểm giả định thấp hơn nên trường xuống Khó vào
+    }
+
+    [Fact]
+    public async Task ExplainCard_WithOverrides_FollowsTheSimulatedGroup()
+    {
+        var (service, _, profile) = await SavedRunSetup();
+
+        var real = await service.ExplainCardAsync(profile.UserId, "S", default);
+        var simulated = await service.ExplainCardAsync(profile.UserId, "S", default, NoChange with { Gpa = 2.5m, Sat = 1000m });
+
+        Assert.Equal(("M", "R"), (real.G2, simulated.G2));
+    }
+
+    [Fact]
+    public async Task Explain_WithEmptyOverrides_IsTheRealProfile()
+    {
+        var (service, advisor, profile) = await SavedRunSetup();
+
+        await service.ExplainAsync(profile.UserId, "S", default, NoChange, "không có gì");
+
+        Assert.Null(advisor.LastExplain!.Basis);   // không có giá trị nào thì không coi là giả định
+        Assert.Equal(3.5, advisor.LastExplain.Student.Gpa);
+    }
+
     [Fact]
     public async Task Simulate_WithNoOverrides_ChangesNothing()
     {
@@ -1027,6 +1086,99 @@ public class RecommendationServiceTests
         Assert.Null(result.English!.ShortfallBand);
     }
 
+    // ---- vị trí của trường và các mức đích
+
+    // Trường Khó vào: có hai mức đích (Vừa sức và An toàn), mỗi mức một kết quả riêng
+    [Fact]
+    public async Task GoalSeek_AReachSchool_HasBothTargetsAbove()
+    {
+        var (service, profile) = GoalSetup();
+
+        var result = await service.GoalSeekAsync(profile.UserId, "S", null, default);
+
+        Assert.Equal(new GoalPosition("in_list", "R", null, false), result.Position);
+        Assert.Equal(["M", "S"], result.Targets!.Select(t => t.Target));
+        Assert.All(result.Targets!, t => Assert.NotEqual("already_reached", t.Outcome));
+        Assert.True(result.Targets![0].Alone.Any(p => p.Changes.Single().Factor == "sat"));
+    }
+
+    // Trường Vừa sức: chỉ còn mức An toàn
+    [Fact]
+    public async Task GoalSeek_AMatchSchool_HasOnlyTheSafetyTarget()
+    {
+        var (service, profile) = GoalSetup();
+        profile.OverallGpa = 3.5m;
+        profile.Sat = 1290m;
+
+        var result = await service.GoalSeekAsync(profile.UserId, "S", null, default);
+
+        Assert.Equal("M", result.Position!.Group);
+        Assert.Equal(["S"], result.Targets!.Select(t => t.Target));
+    }
+
+    // Trường đã An toàn: không có mức đích nào, chỉ báo vị trí
+    [Fact]
+    public async Task GoalSeek_ASafetySchool_HasNoTargets()
+    {
+        var (service, profile) = GoalSetup();
+        profile.OverallGpa = 4.0m;
+        profile.Sat = 1560m;
+
+        var result = await service.GoalSeekAsync(profile.UserId, "S", null, default);
+
+        Assert.Equal(new GoalPosition("in_list", "S", null, false), result.Position);
+        Assert.Empty(result.Targets!);
+    }
+
+    // Trường vượt ngân sách nhưng có học bổng: vẫn trong danh sách, ở khối cần học bổng lớn
+    [Fact]
+    public async Task GoalSeek_ASchoolThatNeedsAid_IsInTheListFlaggedNeedAid()
+    {
+        var pricey = School("P", 62_000m, "preferred", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m);
+        var (service, profile) = GoalSetup(pricey);
+
+        var result = await service.GoalSeekAsync(profile.UserId, "P", null, default);
+
+        Assert.Equal("in_list", result.Position!.Status);
+        Assert.True(result.Position.NeedAid);
+    }
+
+    // Số liệu tuyển sinh kèm theo để lời giải thích nói được con số và mốc
+    [Fact]
+    public async Task GoalSeek_CarriesTheAcceptRateAndTheThresholds()
+    {
+        var (service, profile) = GoalSetup();
+
+        var stats = (await service.GoalSeekAsync(profile.UserId, "S", null, default)).Stats!;
+
+        Assert.Equal(0.60m, stats.AcceptRate);
+        Assert.Equal((0.15, 0.5, 0.5), (stats.AlwaysReachRate, stats.SafetyMinRate, stats.IntlRatioCut));
+    }
+
+    // Trường bị loại: vẫn có nhóm học thuật ("nếu đủ điều kiện") và các mức đích, kèm lý do bị loại
+    [Theory]
+    [InlineData("MAJOR")]
+    [InlineData("ENGLISH")]
+    [InlineData("BUDGET")]
+    public async Task GoalSeek_AnExcludedSchool_KeepsItsGroupAndTargets_AndSaysWhyItIsOut(string reason)
+    {
+        var school = reason switch
+        {
+            "MAJOR" => School("X", 38_000m, "none", "Music", sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m),
+            "ENGLISH" => School("X", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m, minIelts: 7.5m),
+            _ => School("X", 62_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m),
+        };
+        var (service, profile) = GoalSetup(school);
+        if (reason == "ENGLISH") profile.Ielts = 6.0m;
+
+        var result = await service.GoalSeekAsync(profile.UserId, "X", null, default);
+
+        Assert.Equal("excluded", result.Position!.Status);
+        Assert.Equal(reason, result.Position.ExcludeReason);
+        Assert.Equal("R", result.Position.Group);
+        Assert.Equal(["M", "S"], result.Targets!.Select(t => t.Target));
+    }
+
     // ---- đầu vào
 
     [Fact]
@@ -1095,8 +1247,13 @@ public class RecommendationServiceTests
         public Task<AdvisorChatResponse> ChatAsync(AdvisorChatRequest request, CancellationToken ct = default) =>
             throw new NotSupportedException();
 
-        public Task<ExplainResponseDto> ExplainAsync(ExplainRequestDto request, CancellationToken ct = default) =>
-            throw new NotSupportedException();
+        public ExplainRequestDto? LastExplain { get; private set; }
+
+        public Task<ExplainResponseDto> ExplainAsync(ExplainRequestDto request, CancellationToken ct = default)
+        {
+            LastExplain = request;
+            return Task.FromResult(new ExplainResponseDto("1.0", "gemini", "OK", "Tóm tắt giải thích.", [], []));
+        }
 
         public Task<ScenarioNoteResponseDto> WriteScenarioNoteAsync(ScenarioNoteRequestDto request, CancellationToken ct = default) =>
             throw new NotSupportedException();

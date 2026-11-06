@@ -54,7 +54,7 @@ namespace StudyAbroad.Application.Advisor
             var profile = ChatProfileMapper.ToChatProfile(flow.Draft, PreviousProfile(state));
 
             // Đã có danh sách trường thì gửi kèm (lấy lần gợi ý mới nhất, kể cả khi học sinh vừa gợi ý lại ở trang khác)
-            var schools = await LatestSchoolsAsync(userId, ct);
+            var (schools, otherSchools) = await LatestSchoolsAsync(userId, ct);
 
             // Học bạ theo năm gửi riêng, không nằm trong hồ sơ chat (chat chỉ đọc, chỉ form nhập được)
             var transcript = ChatTranscript.From(flow.Draft.Step2) is { } years ? JsonSerializer.SerializeToElement(years) : (JsonElement?)null;
@@ -66,11 +66,13 @@ namespace StudyAbroad.Application.Advisor
             var toAdvisor = request with
             {
                 State = state, Profile = JsonSerializer.SerializeToElement(profile), Schools = schools, Transcript = transcript,
-                Benchmarks = marks,
+                Benchmarks = marks, OtherSchools = otherSchools, Simulation = null,   // giá trị giả định chỉ .NET dùng, không gửi advisor
             };
-            var response = onEvent is null
-                ? await advisor.ChatAsync(toAdvisor, ct)
-                : await advisor.ChatStreamAsync(toAdvisor, onEvent, ct);
+            // Nút trên giao diện gửi hành động có cấu trúc (mã trường): bỏ qua advisor, dựng sẵn lượt như thể advisor đã hiểu
+            var response = (recommender is not null ? ChatActions.ToResponse(request.Action, state) : null)
+                ?? (onEvent is null
+                    ? await advisor.ChatAsync(toAdvisor, ct)
+                    : await advisor.ChatStreamAsync(toAdvisor, onEvent, ct));
             var changed = await SaveProfileToDraftAsync(userId, response, ct);
 
             // C5: học sinh bấm "Đúng rồi" ở X1 thì chat rời bảng rà soát sang B3, lúc đó lưu hồ sơ chính thức.
@@ -103,7 +105,7 @@ namespace StudyAbroad.Application.Advisor
 
             // Học sinh hỏi về một trường: lời tư vấn lấy từ phần tư vấn từng trường có sẵn, thay câu tạm của advisor
             if (response.Action == ChatExplanation.Action && recommender is not null)
-                response = await ExplainAsync(userId, response, ct);
+                response = await ExplainAsync(userId, response, ct, onEvent, ExplainBasis(request));
 
             // Học sinh hỏi "nếu đổi X thì sao": chạy mô phỏng có sẵn, Gemini nói lại ngắn gọn, panel bên phải hiện chi tiết
             if (response.Action == ChatSimulation.Action && recommender is not null)
@@ -111,7 +113,7 @@ namespace StudyAbroad.Application.Advisor
 
             // Học sinh hỏi "cần gì để vào trường X": khớp tên trường, rồi hỏi lại hoặc chạy goal-seeking có sẵn
             if (response.Action == ChatGoalSeek.Action && recommender is not null)
-                response = await GoalSeekAsync(userId, response, ct);
+                response = await GoalSeekAsync(userId, response, ct, onEvent);
 
             //Sau khi advisor phản hồi ==> lưu trạng thái mới
             session.StateJson = response.State?.GetRawText();
@@ -185,24 +187,42 @@ namespace StudyAbroad.Application.Advisor
                 : null;
         }
 
-        private async Task<IReadOnlyList<ChatSchool>?> LatestSchoolsAsync(Guid userId, CancellationToken ct)
+        // Trường đang hiện trong các khối (đếm vị trí được) và các trường đã chấm còn lại (chỉ để khớp tên)
+        private async Task<(IReadOnlyList<ChatSchool>? Shown, IReadOnlyList<ChatSchool>? Others)> LatestSchoolsAsync(
+            Guid userId, CancellationToken ct)
         {
             if (recommender is null)
-                return null;
+                return (null, null);
             var last = await recommender.GetLatestAsync(userId, ct);
-            return last is null ? null : ChatRecommendation.Schools(last);
+            return last is null ? (null, null) : (ChatRecommendation.Schools(last), ChatRecommendation.OtherSchools(last));
         }
 
+        // Giải thích theo cái học sinh đang xem: có giá trị giả định đang kéo thì theo giả định, trừ khi nút "Xem theo hồ sơ thật" yêu cầu hồ sơ thật.
+        // Không có giá trị nào thì null (hồ sơ thật)
+        private static SimulationOverrides? ExplainBasis(AdvisorChatRequest request) =>
+            request.Action?.Basis == "real" || !RecommendationService.HasValues(request.Simulation) ? null : request.Simulation;
+
         // Viết lời tư vấn một trường (advisor đã chọn trường, mã ở ActionData.code). Lỗi thì báo, không làm hỏng cả lượt chat
-        private async Task<AdvisorChatResponse> ExplainAsync(Guid userId, AdvisorChatResponse response, CancellationToken ct)
+        private async Task<AdvisorChatResponse> ExplainAsync(
+            Guid userId, AdvisorChatResponse response, CancellationToken ct, Func<AdvisorStreamEvent, Task>? onEvent = null,
+            SimulationOverrides? overrides = null)
         {
             var code = ChatExplanation.CodeOf(response.ActionData);
             if (code is null)
                 return response with { Answer = ChatExplanation.Failed };
             try
             {
-                var result = await recommender!.ExplainAsync(userId, code, ct);
-                return response with { Answer = result.Status == "OK" ? ChatExplanation.Format(result) : ChatExplanation.Failed };
+                // Thẻ do code dựng gửi trước để học sinh thấy ngay, rồi mới chờ AI viết lời tư vấn (chậm hơn)
+                var basis = ChatSimulation.Describe(overrides);
+                var widget = ChatExplanation.WidgetOf(code, await recommender!.ExplainCardAsync(userId, code, ct, overrides), basis);
+                if (onEvent is not null)
+                    await onEvent(new AdvisorStreamEvent("card", Widget: widget));
+                var result = await recommender.ExplainAsync(userId, code, ct, overrides, basis);
+                return response with
+                {
+                    Answer = result.Status == "OK" ? ChatExplanation.Format(result) : ChatExplanation.Failed,
+                    Widget = widget,
+                };
             }
             catch (InvalidOperationException ex)
             {
@@ -246,34 +266,43 @@ namespace StudyAbroad.Application.Advisor
 
         // Khớp tên trường (chữ thô của SLM). Chắc chắn: chạy goal-seeking. Mơ hồ: hỏi "Ý bạn là...?" kèm nút. Không thấy: báo.
         // Lỗi thì báo, không làm hỏng cả lượt chat
-        private async Task<AdvisorChatResponse> GoalSeekAsync(Guid userId, AdvisorChatResponse response, CancellationToken ct)
+        private async Task<AdvisorChatResponse> GoalSeekAsync(
+            Guid userId, AdvisorChatResponse response, CancellationToken ct, Func<AdvisorStreamEvent, Task>? onEvent = null)
         {
             var query = ChatGoalSeek.Parse(response.ActionData);
             if (query is null)
                 return response with { Answer = ChatGoalSeek.Failed };
             try
             {
-                var match = await recommender!.FindSchoolsAsync(userId, query.School, ct);
-                switch (match.Kind)
+                var code = query.Code;
+                if (code is null)
                 {
-                    case NameMatchKind.NotFound:
-                        return response with
-                        {
-                            Answer = ChatGoalSeek.NotFound(query.School),
-                            QuickReplies = null,
-                            Widget = ChatGoalSeek.SchoolPicker(query.Target),
-                        };
-                    case NameMatchKind.Ambiguous:
-                        return response with
-                        {
-                            Answer = ChatGoalSeek.Clarify(query.School, match.Schools.Count),
-                            QuickReplies = ChatGoalSeek.Choices(match.Schools, query.Target),
-                            Widget = ChatGoalSeek.SchoolPicker(query.Target),
-                        };
+                    var match = await recommender!.FindSchoolsAsync(userId, query.School, ct);
+                    switch (match.Kind)
+                    {
+                        case NameMatchKind.NotFound:
+                            return response with
+                            {
+                                Answer = ChatGoalSeek.NotFound(query.School),
+                                QuickReplies = null,
+                                Widget = ChatGoalSeek.SchoolPicker(query.Target),
+                            };
+                        case NameMatchKind.Ambiguous:
+                            return response with
+                            {
+                                Answer = ChatGoalSeek.Clarify(query.School, match.Schools.Count),
+                                QuickReplies = ChatGoalSeek.Choices(match.Schools, query.Target),
+                                Widget = ChatGoalSeek.SchoolPicker(query.Target),
+                            };
+                    }
+                    code = match.Schools[0].Code;
                 }
 
-                var result = await recommender.GoalSeekAsync(userId, match.Schools[0].Code, query.Target, ct);
+                var result = await recommender!.GoalSeekAsync(userId, code, query.Target, ct);
                 var names = (await recommender.ListSchoolOptionsAsync(userId, ct)).Select(o => o.Name).ToList();
+                // Thẻ kết quả do code dựng: gửi ngay để học sinh thấy đáp án, rồi mới chờ Gemini viết lời (chậm hơn nhiều)
+                if (onEvent is not null)
+                    await onEvent(new AdvisorStreamEvent("card", Widget: ChatGoalSeek.WidgetOf(result)));
                 var answer = await WriteGoalNoteAsync(ChatGoalSeek.Note(result, names), result, ct);
                 return response with { Answer = answer, Widget = ChatGoalSeek.WidgetOf(result), QuickReplies = null };
             }

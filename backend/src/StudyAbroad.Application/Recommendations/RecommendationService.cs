@@ -352,30 +352,61 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
 
     private static readonly string[] BlockNames = ["reach", "match", "safety", "aid", "other"];
     // Mở chi tiết một trường: Qwen viết lời tư vấn từ số đã lưu. Không lọc, không chấm lại.
-    public async Task<SchoolExplanation> ExplainAsync(Guid userId, string code, CancellationToken ct)
+    // Giá trị giả định có thật sự đặt giá trị nào không (không có thì giải thích theo hồ sơ thật)
+    public static bool HasValues(SimulationOverrides? o) =>
+        o is not null && (o.Gpa is not null || o.Sat is not null || o.Act is not null || o.Ielts is not null
+                          || o.Toefl is not null || o.Duolingo is not null || o.BudgetUsd is not null
+                          || o.ScholarshipNeed is not null || o.EcTier is not null);
+
+    // Số đã chấm và mã lý do của một trường, để giải thích. Gốc là hồ sơ thật (lần gợi ý đã lưu) hoặc, khi có giá trị giả định,
+    // kết quả mô phỏng với giá trị đó: giải thích luôn khớp với danh sách học sinh đang xem. Dùng chung cho thẻ (không AI) và lời tư vấn (có AI)
+    private async Task<(ExplainStudentDto Student, ExplainSchoolDto Target, string Code, string Name)> LoadExplainAsync(
+        Guid userId, string code, SimulationOverrides? overrides, CancellationToken ct)
     {
-        var last = await recommendations.GetLatestAsync(userId, ct)
-            ?? throw new InvalidOperationException("Chưa có lần gợi ý nào.");
         var profile = await profiles.GetProfileByUserIdAsync(userId, ct)
             ?? throw new InvalidOperationException("Chưa có hồ sơ.");
 
-        var criteria = JsonNode.Parse(last.CriteriaJson)!.AsObject();
-        var items = JsonNode.Parse(last.ItemsJson)!.AsObject();
+        StudentProfile who = profile;          // hồ sơ dùng để lấy GPA, SAT, ngân sách của học sinh
+        JsonObject items;
+        int? tier;
+        string studyLevel;
+        var simulated = HasValues(overrides);
+        if (simulated)
+        {
+            if (string.IsNullOrWhiteSpace(profile.TargetLevel))
+                throw new InvalidOperationException("Hồ sơ chưa có bậc học muốn theo.");
+            who = Overlay(profile, overrides!);
+            EnsureRunnable(who);
+            var baseTier = EcTierOf(profile);
+            tier = overrides!.EcTier ?? baseTier;
+            studyLevel = profile.TargetLevel;
+            var run = Evaluate(who, null, await recommendations.ListSchoolsAsync(studyLevel, ct), tier.Value);
+            items = JsonNode.Parse(JsonSerializer.Serialize(BuildItems(who.BudgetMaxUsd, run), StoredJson))!.AsObject();
+        }
+        else
+        {
+            var last = await recommendations.GetLatestAsync(userId, ct)
+                ?? throw new InvalidOperationException("Chưa có lần gợi ý nào.");
+            items = JsonNode.Parse(last.ItemsJson)!.AsObject();
+            tier = JsonNode.Parse(last.CriteriaJson)!.AsObject()["tier"]?.GetValue<int>();
+            studyLevel = last.StudyLevel;
+        }
 
         var scored = items["scored"]!.AsArray()
             .FirstOrDefault(row => string.Equals(row!["code"]?.GetValue<string>(), code, StringComparison.OrdinalIgnoreCase))
-            ?? throw new InvalidOperationException($"Chưa có trường {code} trong lần gợi ý gần nhất.");
-        var school = await recommendations.FindSchoolAsync(scored["code"]!.GetValue<string>(), last.StudyLevel, ct)
+            ?? throw new InvalidOperationException(
+                simulated ? $"Chưa có trường {code} trong kết quả giả định." : $"Chưa có trường {code} trong lần gợi ý gần nhất.");
+        var school = await recommendations.FindSchoolAsync(scored["code"]!.GetValue<string>(), studyLevel, ct)
             ?? throw new InvalidOperationException($"Chưa tìm thấy thông tin trường {code}.");
 
         var university = school.University;
         var offering = school.Offering;
         var student = new ExplainStudentDto(
-            ToDouble(profile.OverallGpa),
-            SatScore(profile.Sat),
-            ToDouble(profile.BudgetMaxUsd),
-            criteria["tier"]?.GetValue<int>(),
-            profile.IntendedMajor);
+            ToDouble(who.OverallGpa),
+            SatScore(who.Sat),
+            ToDouble(who.BudgetMaxUsd),
+            tier,
+            who.IntendedMajor);
         var target = new ExplainSchoolDto(
             university.Name,
             university.State,
@@ -391,8 +422,19 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
             ToDouble(TotalCost(offering)),
             Num(scored, "gap"));
 
-        var result = await advisor.ExplainAsync(new ExplainRequestDto(student, target), ct);
-        return new SchoolExplanation(university.Code, university.Name, result.Status,
+        return (student, target, university.Code, university.Name);
+    }
+
+    public async Task<ExplainSchoolDto> ExplainCardAsync(Guid userId, string code, CancellationToken ct, SimulationOverrides? overrides = null) =>
+        (await LoadExplainAsync(userId, code, overrides, ct)).Target;
+
+    // basis: mô tả giả định học sinh đang xem ("GPA 3.6, SAT 1500"); null là hồ sơ thật. Advisor dùng để nói rõ gốc ở câu đầu
+    public async Task<SchoolExplanation> ExplainAsync(
+        Guid userId, string code, CancellationToken ct, SimulationOverrides? overrides = null, string? basis = null)
+    {
+        var (student, target, universityCode, universityName) = await LoadExplainAsync(userId, code, overrides, ct);
+        var result = await advisor.ExplainAsync(new ExplainRequestDto(student, target, HasValues(overrides) ? basis : null), ct);
+        return new SchoolExplanation(universityCode, universityName, result.Status,
             result.Summary, result.Strengths, result.Improvements);
     }
 
