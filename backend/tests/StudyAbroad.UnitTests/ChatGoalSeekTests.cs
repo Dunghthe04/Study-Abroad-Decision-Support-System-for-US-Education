@@ -102,6 +102,38 @@ public class ChatGoalSeekTests
         Assert.StartsWith("Tài chính: Chi phí khoảng 38.000 USD mỗi năm, nằm trong ngân sách", lines[1]);
     }
 
+    // Trường bị ẩn vì tiếng Anh: dòng tiếng Anh đứng trước tài chính, nêu mức tối thiểu từng bài thi
+    [Fact]
+    public void Summarize_ASchoolHiddenForEnglish_SaysTheScoreNeededBeforeFinance()
+    {
+        var result = Result(alone: [Sat(1290, 1430)]) with
+        {
+            FilterReason = "ENGLISH",
+            English = new GoalEnglishDto(7.5m, 100m, 130m, 1.5m)
+        };
+
+        var lines = ChatGoalSeek.Summarize(result).Split('\n');
+
+        Assert.StartsWith("Tiếng Anh: điểm của bạn chưa đủ", lines[1]);
+        Assert.Contains("IELTS 7,5, TOEFL 100 hoặc Duolingo 130 (một bài là đủ)", lines[1]);
+        Assert.StartsWith("Tài chính:", lines[2]);
+    }
+
+    [Fact]
+    public void Summarize_WithoutACertificate_SaysSoAndShowsTheOnlyScoreTheSchoolAsks()
+    {
+        var result = Result(alone: [Sat(1290, 1430)]) with
+        {
+            FilterReason = "ENGLISH_NO_CERT",
+            English = new GoalEnglishDto(6.5m, null, null, null)
+        };
+
+        var line = ChatGoalSeek.Summarize(result).Split('\n')[1];
+
+        Assert.StartsWith("Tiếng Anh: bạn chưa có chứng chỉ", line);
+        Assert.Contains("Cần đạt IELTS 6,5.", line);
+    }
+
     [Fact]
     public void Summarize_Reachable_ListsEachFactorAloneTheCombinationAndTheRecommendedLevel()
     {

@@ -133,10 +133,33 @@ public static class ChatGoalSeek
 
     private const string SeeTable = "Bạn xem bảng chi tiết và áp dụng thử vào thanh kéo ở trang Gợi ý trường nhé.";
 
+    // Trường chưa nằm trong danh sách vì tiếng Anh: nói rõ cần đạt mức nào (một bài thi là đủ). Cùng nội dung với khung trên trang
+    private static string? EnglishLine(SchoolGoalResult r)
+    {
+        if (r.FilterReason is not ("ENGLISH" or "ENGLISH_NO_CERT")) return null;
+        var parts = new List<string>();
+        if (r.English?.MinIelts is { } ielts) parts.Add($"IELTS {ielts.ToString("0.#", System.Globalization.CultureInfo.GetCultureInfo("vi-VN"))}");
+        if (r.English?.MinToefl is { } toefl) parts.Add($"TOEFL {toefl:0}");
+        if (r.English?.MinDuolingo is { } duolingo) parts.Add($"Duolingo {duolingo:0}");
+        var need = parts.Count switch
+        {
+            0 => "",
+            1 => $" Cần đạt {parts[0]}.",
+            _ => $" Cần đạt {string.Join(", ", parts.Take(parts.Count - 1))} hoặc {parts[^1]} (một bài là đủ).",
+        };
+        var head = r.FilterReason == "ENGLISH_NO_CERT"
+            ? "Tiếng Anh: bạn chưa có chứng chỉ tiếng Anh nên trường chưa nằm trong danh sách."
+            : "Tiếng Anh: điểm của bạn chưa đủ nên trường chưa nằm trong danh sách.";
+        return head + need + " Phần học thuật dưới đây tính khi bạn đã đủ tiếng Anh.";
+    }
+
     // Các dòng dữ kiện do code tính: tài chính, học thuật, trường tương tự. Vừa là thân câu dự phòng, vừa là dữ kiện gửi Gemini
     private static List<string> Body(SchoolGoalResult r)
     {
-        var lines = new List<string> { "Tài chính: " + Finance(r.Budget) };
+        var lines = new List<string>();
+        // Tiếng Anh là điều kiện phải đạt trước: trường bị ẩn vì tiếng Anh thì nói trước, rồi mới đến tài chính và học thuật
+        if (EnglishLine(r) is { } english) lines.Add(english);
+        lines.Add("Tài chính: " + Finance(r.Budget));
 
         switch (r.Outcome)
         {
