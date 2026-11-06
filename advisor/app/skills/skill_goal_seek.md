@@ -26,7 +26,7 @@ Học sinh hỏi "cần gì để vào trường X". Hãy trả lời ngắn g�
 ## 4. NỘI DUNG CẦN NÓI
 - Mở bằng 1 câu nói lại tên trường (đúng như school) và nhóm muốn đạt, kèm kết luận ngắn.
 - 2 đến 4 ý chính, mỗi ý một câu, theo thứ tự: tài chính, học thuật, trường thay thế. Chỉ nêu ý có trong facts. Số liệu lấy đúng từ facts, không làm tròn lại, không tính thêm.
-- Khi outcome = blocked: nói thẳng lý do và gợi ý xem đây là mục tiêu cao, giữ thêm trường khác. Không bịa cách để vượt qua.
+- Khi outcome = blocked: nói thẳng lý do và nói rõ trường này SẼ VẪN Ở nhóm cao nhất mà dữ liệu nêu dù bạn cải thiện hồ sơ. Có thể nộp để thử sức nhưng cơ hội thấp, đừng dựa vào trường này; nên giữ thêm các trường Vừa sức và An toàn hơn. Không dùng cụm "mục tiêu cao" (nghe như cố gắng là đạt được), không bịa cách để vượt qua.
 - Khi outcome = already_reached: nói bạn đã ở nhóm đó, không cần thay đổi gì.
 - Kết bằng 1 câu gợi ý bước tiếp, ví dụ xem bảng chi tiết hoặc thử áp dụng vào thanh kéo ở trang Gợi ý trường.
 
@@ -50,4 +50,4 @@ Trả về JSON: {"intro": "...", "points": ["..."], "closing": "..."}
 Đầu vào:
 {"school":"Massachusetts Institute of Technology","target":"Vừa sức","outcome":"blocked","facts":["Tài chính: Chi phí khoảng 88.914 USD mỗi năm, vượt ngân sách khoảng 33.914 USD: cần ngân sách từ 80.800 USD mỗi năm hoặc học bổng lớn.","Học thuật: trường chỉ nhận dưới 15% hồ sơ nên luôn xếp Khó vào, điểm cao đến đâu cũng không đổi nhóm.","Nhóm cao nhất bạn có thể đạt ở trường này là Khó vào."],"alternatives":["Ohio Wesleyan University","Allegheny College"]}
 Đầu ra:
-{"intro":"Massachusetts Institute of Technology khó có thể lên nhóm Vừa sức, vì trường này luôn là Khó vào với mọi hồ sơ.","points":["Trường chỉ nhận dưới 15% hồ sơ nên điểm cao đến đâu cũng không đổi nhóm.","Về tài chính, chi phí khoảng 88.914 USD mỗi năm, vượt ngân sách khoảng 33.914 USD, cần ngân sách từ 80.800 USD hoặc học bổng lớn.","Bạn có thể xem thêm Ohio Wesleyan University và Allegheny College, hai trường tương tự đang ở nhóm Vừa sức với hồ sơ của bạn."],"closing":"Bạn nên xem MIT là mục tiêu cao và giữ thêm các trường Vừa sức khác trong danh sách."}
+{"intro":"Massachusetts Institute of Technology khó có thể lên nhóm Vừa sức, vì trường này luôn là Khó vào với mọi hồ sơ.","points":["Trường chỉ nhận dưới 15% hồ sơ nên điểm cao đến đâu cũng không đổi nhóm.","Về tài chính, chi phí khoảng 88.914 USD mỗi năm, vượt ngân sách khoảng 33.914 USD, cần ngân sách từ 80.800 USD hoặc học bổng lớn.","Bạn có thể xem thêm Ohio Wesleyan University và Allegheny College, hai trường tương tự đang ở nhóm Vừa sức với hồ sơ của bạn."],"closing":"MIT sẽ vẫn ở nhóm Khó vào dù bạn cải thiện hồ sơ. Bạn có thể nộp để thử sức, nhưng nên giữ thêm các trường Vừa sức và An toàn hơn trong danh sách."}

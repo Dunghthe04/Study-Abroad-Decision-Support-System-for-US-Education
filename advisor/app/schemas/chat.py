@@ -46,6 +46,8 @@ class ChatState(CamelModel):
     intake_mode: Literal["chat", "form"] | None = None  # học sinh chọn điền hồ sơ bằng chat hay form
     has_results: bool = False  # đã có danh sách trường gợi ý chưa (skill_explain, skill_kich_ban cần)
     schools: list[ResultSchool] = []  # danh sách trường gợi ý gần nhất, .NET làm mới mỗi lượt khi has_results
+    # Các trường đã chấm nhưng không nằm trong khối nào đang hiện: chỉ để khớp tên khi học sinh hỏi một trường cụ thể
+    other_schools: list[ResultSchool] = []
     # Học bạ theo năm do .NET gửi mỗi lượt cùng hồ sơ; None = nhập GPA tổng. Không nằm trong profile vì chat chỉ đọc
     # (học bạ từng lớp chỉ nhập hoặc OCR ở form), SLM chọn skill và Qwen đọc tin không cần thấy
     transcript: dict[str, Any] | None = None
@@ -86,6 +88,8 @@ class ChatRequest(CamelModel):
     profile: dict[str, ProfileField] | None = None
     # Danh sách trường của lần gợi ý gần nhất do .NET gửi mỗi lượt; None = không gửi
     schools: list[ResultSchool] | None = None
+    # Các trường đã chấm còn lại (không hiện trong khối nào), chỉ để khớp tên; None = không gửi
+    other_schools: list[ResultSchool] | None = None
     # Học bạ theo năm ({"years": [...]}) do .NET gửi cùng hồ sơ; None = không có (nhập GPA tổng)
     transcript: dict[str, Any] | None = None
     # Mốc GPA / tiếng Anh từ dữ liệu trường do .NET gửi mỗi lượt; None = không gửi (giữ mốc cũ trong state)

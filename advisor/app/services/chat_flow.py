@@ -220,6 +220,8 @@ class ChatFlow:
         if req.schools is not None:
             state.schools = req.schools
             state.has_results = state.has_results or bool(req.schools)
+        if req.other_schools is not None:
+            state.other_schools = req.other_schools
         # Chụp hồ sơ đầu lượt để cuối lượt biết khóa nào đổi (sao chép sâu vì nhánh sửa trực tiếp trên state)
         profile_before = {key: field.model_copy(deep=True) for key, field in state.profile.items()}
         message = last_user_message(req)
