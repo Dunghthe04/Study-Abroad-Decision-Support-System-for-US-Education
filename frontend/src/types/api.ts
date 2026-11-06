@@ -131,7 +131,7 @@ export interface CreateModeratorAccountRequest {
 export interface CreateCenterAccountRequest {
   email: string;
   password: string;
-  fullName: string;
+  fullName?: string | null;
   phone?: string | null;
 }
 

@@ -531,6 +531,20 @@ public class AuthServiceTests
     }
 
     [Fact]
+    public async Task CreateCenterAccount_WithoutFullName_DefaultsToEmailPrefix()
+    {
+        var service = CreateService();
+        var request = new CreateCenterAccountRequest("gse.admin@studyabroad.vn", "Password123!", null, "0912345678");
+
+        var result = await service.CreateCenterAccountAsync(request);
+
+        Assert.Equal(AuthError.None, result.Error);
+        Assert.NotNull(result.User);
+        Assert.Equal("gse.admin", result.User.FullName);
+        Assert.Equal(UserRoles.Center, result.User.Role);
+    }
+
+    [Fact]
     public async Task CreateCenterAccount_DuplicateEmail_ReturnsValidationError()
     {
         var service = CreateService();

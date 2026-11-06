@@ -14,7 +14,7 @@ namespace StudyAbroad.Application.Auth
     public record CreateModeratorAccountRequest(string Email, string Password, string FullName, string? Phone = null);
 
     // [Q11 / UC-71 Phụ trợ] Admin/Moderator tạo tài khoản người dùng cho Trung tâm tư vấn (role center).
-    public record CreateCenterAccountRequest(string Email, string Password, string FullName, string? Phone = null);
+    public record CreateCenterAccountRequest(string Email, string Password, string? FullName = null, string? Phone = null);
 
     /// <summary>[UC-60] Tìm, lọc và phân trang danh sách tài khoản (admin).</summary>
     public record AdminUserAccountListQuery(

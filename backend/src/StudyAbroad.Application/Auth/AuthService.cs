@@ -801,7 +801,9 @@ namespace StudyAbroad.Application.Auth
         public async Task<AuthResult> CreateCenterAccountAsync(CreateCenterAccountRequest request, CancellationToken ct = default)
         {
             var email = NormalizeEmail(request.Email);
-            var fullName = request.FullName?.Trim() ?? string.Empty;
+            var fullName = string.IsNullOrWhiteSpace(request.FullName)
+                ? (email.Contains('@') ? email.Split('@')[0] : "Người dùng trung tâm")
+                : request.FullName.Trim();
             var rawPhone = request.Phone?.Trim();
             string? normalizedPhone = null;
 
@@ -812,8 +814,8 @@ namespace StudyAbroad.Application.Auth
             if (passwordError != null)
                 return AuthResult.Fail(AuthError.Validation, passwordError);
 
-            if (fullName.Length == 0 || fullName.Length > MaxFullNameLength)
-                return AuthResult.Fail(AuthError.Validation, $"Tên trung tâm/người đại diện không được để trống và tối đa {MaxFullNameLength} ký tự.");
+            if (fullName.Length > MaxFullNameLength)
+                return AuthResult.Fail(AuthError.Validation, $"Họ và tên không được vượt quá {MaxFullNameLength} ký tự.");
 
             if (!string.IsNullOrEmpty(rawPhone))
             {

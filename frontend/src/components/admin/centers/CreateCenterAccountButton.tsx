@@ -87,19 +87,15 @@ function CreateCenterAccountFormContent({
     e.preventDefault();
     setError(null);
 
-    const trimmedName = fullName.trim();
+    const trimmedName = fullName.trim() || null;
     const trimmedEmail = email.trim();
 
-    if (!trimmedName) {
-      setError("Vui lòng nhập tên trung tâm hoặc người đại diện.");
-      return;
-    }
-    if (trimmedName.length > 100) {
-      setError("Tên trung tâm tối đa 100 ký tự.");
-      return;
-    }
     if (!trimmedEmail) {
       setError("Vui lòng nhập email đăng nhập.");
+      return;
+    }
+    if (trimmedName && trimmedName.length > 100) {
+      setError("Họ và tên tối đa 100 ký tự.");
       return;
     }
     if (password.length < 8) {
@@ -162,28 +158,16 @@ function CreateCenterAccountFormContent({
       )}
 
       <Field>
-        <FieldLabel htmlFor="center-acc-name">Tên trung tâm / Người đại diện *</FieldLabel>
-        <Input
-          id="center-acc-name"
-          placeholder="Ví dụ: Trung tâm Tư vấn Du học Á-Âu"
-          value={fullName}
-          onChange={(e) => setFullName(e.target.value)}
-          disabled={isSubmitting}
-          required
-          autoFocus
-        />
-      </Field>
-
-      <Field>
         <FieldLabel htmlFor="center-acc-email">Email đăng nhập *</FieldLabel>
         <Input
           id="center-acc-email"
           type="email"
-          placeholder="Ví dụ: contact@aau-edu.vn"
+          placeholder="Ví dụ: contact@aau-edu.vn hoặc admin@center.edu.vn"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           disabled={isSubmitting}
           required
+          autoFocus
         />
       </Field>
 
@@ -220,6 +204,17 @@ function CreateCenterAccountFormContent({
             {showPassword ? <EyeOffIcon className="size-4" /> : <EyeIcon className="size-4" />}
           </button>
         </div>
+      </Field>
+
+      <Field>
+        <FieldLabel htmlFor="center-acc-name">Họ và tên người dùng (tùy chọn)</FieldLabel>
+        <Input
+          id="center-acc-name"
+          placeholder="Ví dụ: Nguyễn Văn A (nếu để trống sẽ tự lấy theo email)"
+          value={fullName}
+          onChange={(e) => setFullName(e.target.value)}
+          disabled={isSubmitting}
+        />
       </Field>
 
       <Field>

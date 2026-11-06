@@ -358,7 +358,7 @@ export function AdminUsersView() {
     const trimmedName = fullName.trim();
 
     if (!trimmedName) {
-      setFormError("Họ tên / Tên đại diện không được để trống.");
+      setFormError("Họ và tên không được để trống.");
       return;
     }
     if (trimmedName.length > 128) {
@@ -811,13 +811,13 @@ export function AdminUsersView() {
 
               <Field>
                 <FieldLabel htmlFor="create-fullName">
-                  {createRole === "center" ? "Tên trung tâm / Người đại diện" : "Họ và tên"}
+                  Họ và tên người dùng
                 </FieldLabel>
                 <Input
                   id="create-fullName"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
-                  placeholder={createRole === "center" ? "Ví dụ: Trung tâm Tư vấn Du học Á-Âu" : "Ví dụ: Nguyễn Văn A"}
+                  placeholder="Ví dụ: Nguyễn Văn A"
                   autoComplete="name"
                   required
                 />

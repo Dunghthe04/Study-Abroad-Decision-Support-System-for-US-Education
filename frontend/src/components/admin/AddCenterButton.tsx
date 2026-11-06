@@ -358,7 +358,7 @@ export function AddCenterButton({ className, size = "sm" }: AddCenterButtonProps
         hideTriggerButton
         isOpenControlled={isCreateAccountOpen}
         onOpenChangeControlled={setIsCreateAccountOpen}
-        initialName={name}
+        initialName=""
         initialEmail={email}
         initialPhone={phone}
       />
