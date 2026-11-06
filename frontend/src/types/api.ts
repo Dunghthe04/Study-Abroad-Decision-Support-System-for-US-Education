@@ -59,8 +59,20 @@ export interface QuickReply {
 
 // Công cụ nhập ngay trong chat; frontend vẽ theo `type`
 export interface ChatWidget {
-  type: "major" | "review" | "budget" | "scholarship" | "form" | "select" | "recommend" | "simulate" | "goal_seek" | "school";
+  type: "major" | "review" | "budget" | "scholarship" | "form" | "select" | "recommend" | "simulate" | "goal_seek" | "explain" | "school";
   data?: Record<string, unknown> | null;
+}
+
+/**
+ * Hành động có cấu trúc từ nút trên giao diện ("Cần gì để vào?", "Xem tư vấn" ở thẻ trường): gửi mã trường thẳng cho backend,
+ * không qua SLM hiểu câu nên nhanh và không nhầm tên trường. target chỉ dùng cho goal_seek (bỏ trống thì hệ thống chọn nhóm cao hơn một bậc).
+ */
+export interface AssistantAction {
+  type: "goal_seek" | "explain";
+  schoolCode: string;
+  target?: "match" | "safety" | null;
+  /** "real": giải thích theo hồ sơ thật dù trang đang xem giả định (nút "Xem theo hồ sơ thật"); bỏ trống: theo cái đang xem */
+  basis?: "real" | null;
 }
 
 export interface AdvisorChatResponse {
@@ -78,6 +90,7 @@ export interface AdvisorChatResponse {
 export type AdvisorStreamEvent =
   | { type: "progress"; answers: number } // sắp trả lời N câu hỏi
   | { type: "partial"; text: string } // câu trả lời của một ý, đúng thứ tự hỏi
+  | { type: "card"; widget: ChatWidget } // thẻ kết quả do code dựng, tới trước lời Gemini để học sinh thấy đáp án ngay
   | { type: "final"; response: AdvisorChatResponse } // câu cuối cùng (kèm sessionId, nút, widget): hiện câu này
   | { type: "error"; message: string };
 

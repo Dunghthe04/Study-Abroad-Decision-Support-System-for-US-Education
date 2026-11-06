@@ -24,7 +24,6 @@ interface SchoolCardProps {
     change?: SchoolChange; // có khi đang mô phỏng và trường đổi nhóm so với hồ sơ thật
     onExplain?: (code: string) => void; // bỏ trống khi đang mô phỏng (lời tư vấn chỉ có cho kết quả đã lưu)
     onGoal?: (code: string) => void; // "Cần gì để vào?": luôn tính từ hồ sơ thật, kể cả khi đang xem giả định
-    highlighted?: boolean; // đây là trường đang được ghim ở đầu trang (khung "Cần gì để vào?"): viền đỏ để nhận ra
 }
 
 // Trường đã ở nhóm An toàn thì không cần hỏi "cần gì để vào"
@@ -35,7 +34,7 @@ const percent = (value: number | null | undefined) => (value == null ? "–" : `
 
 // Một trường dạng hàng ngang như CollegeVine: tên và nơi ở bên trái, các chỉ số ở giữa, nhóm và nút bên phải.
 // Chỉ hiển thị số đã tính, không tính lại gì.
-export function SchoolCard({ picked, school, change, onExplain, onGoal, highlighted = false }: SchoolCardProps) {
+export function SchoolCard({ picked, school, change, onExplain, onGoal }: SchoolCardProps) {
     const name = school?.name ?? picked.code;
     const control =
         school?.control === "public" ? "Công lập" : school?.control === "private" ? "Tư thục" : null;
@@ -48,8 +47,7 @@ export function SchoolCard({ picked, school, change, onExplain, onGoal, highligh
         <div className="@container">
         <div
             className={cn(
-                "flex flex-col overflow-hidden rounded-2xl border bg-surface shadow-2xs transition-colors @2xl:flex-row",
-                highlighted ? "border-risk ring-2 ring-risk/40" : "border-line hover:border-brand/40",
+                "flex flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-2xs transition-colors hover:border-brand/40 @2xl:flex-row",
             )}
         >
             {/* Ảnh trường */}

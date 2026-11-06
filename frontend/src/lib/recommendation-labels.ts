@@ -71,11 +71,6 @@ export const DIFFICULTY_LABELS: Record<string, string> = {
   veryHard: "Rất khó",
 };
 
-export const GOAL_TARGET_OPTIONS: { value: "reach" | "match" | "safety"; label: string }[] = [
-  { value: "match", label: "Vừa sức" },
-  { value: "safety", label: "An toàn hơn" },
-];
-
 // Một giá trị của yếu tố: SAT và bậc là số nguyên, GPA hai chữ số thập phân
 export function goalValue(factor: string, value: number | null): string {
   if (value == null) return "Chưa có";

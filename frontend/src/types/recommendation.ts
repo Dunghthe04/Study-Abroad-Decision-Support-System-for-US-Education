@@ -232,6 +232,39 @@ export interface GoalEnglish {
   shortfallBand: number | null;
 }
 
+// Vị trí của trường với hồ sơ thật. status: in_list (có trong danh sách) | excluded (bị bộ lọc cứng loại).
+// group: nhóm học thuật R | M | S | NA, tính độc lập với bộ lọc nên trường bị loại vẫn có nhóm "nếu đủ điều kiện".
+// excludeReason (khi excluded): MAJOR | STATE | CONTROL | ENGLISH | ENGLISH_NO_CERT | BUDGET. needAid: vượt ngân sách, cần học bổng lớn.
+export interface GoalPosition {
+  status: "in_list" | "excluded";
+  group: string;
+  excludeReason: string | null;
+  needAid: boolean;
+}
+
+// Số liệu tuyển sinh dùng trong các luật chặn (tỉ lệ là 0..1) và các mốc của luật, để lời giải thích nói được con số cụ thể.
+// intlRatio = intlAcceptRate / acceptRate; dưới alwaysReachRate luôn Khó vào; dưới safetyMinRate không được An toàn; intlRatio dưới intlRatioCut thì hạ một nhóm.
+export interface GoalSchoolStats {
+  acceptRate: number | null;
+  intlAcceptRate: number | null;
+  intlRatio: number | null;
+  alwaysReachRate: number;
+  safetyMinRate: number;
+  intlRatioCut: number;
+}
+
+// Kết quả cho MỘT mức đích (nhóm cao hơn nhóm hiện tại): target M | S
+export interface GoalTargetResult {
+  target: string;
+  outcome: "reachable" | "blocked" | "no_data";
+  best: string;
+  reasons: string[];
+  cheapest: GoalPlan | null;
+  recommended: GoalPlan | null;
+  alone: GoalPlan[];
+  noEffect: GoalFactor[];
+}
+
 // Current, target, best: R | M | S | NA
 export interface SchoolGoalResult {
   code: string;
@@ -249,6 +282,33 @@ export interface SchoolGoalResult {
   filterReason: "MAJOR" | "STATE" | "CONTROL" | "ENGLISH" | "ENGLISH_NO_CERT" | null; // trường không nằm trong danh sách vì bộ lọc ngoài ngân sách
   english?: GoalEnglish | null; // có khi bị loại vì tiếng Anh
   alternatives: GoalAlternative[];
+  position?: GoalPosition | null; // bản backend cũ chưa trả
+  stats?: GoalSchoolStats | null; // số liệu tuyển sinh và mốc của các luật chặn
+  targets?: GoalTargetResult[] | null; // các nhóm cao hơn nhóm hiện tại: Khó vào có Vừa sức và An toàn, Vừa sức có An toàn, An toàn rỗng
+}
+
+// Thẻ giải thích một trường do code dựng (số đã lưu và mã lý do của lần gợi ý gần nhất), không có AI.
+// g2: R | RF | M | S | NA | O. blk: MAIN | AID. acc: tỉ lệ nhận chung 0..1. pg, ps: vị trí GPA và SAT của học sinh 0..100.
+export interface ExplainCardData {
+  name: string;
+  state: string | null;
+  control: string | null;
+  g2: string;
+  blk: "MAIN" | "AID";
+  why: string[];
+  acc: number | null;
+  sat25: number | null;
+  sat75: number | null;
+  pg: number | null;
+  ps: number | null;
+  cost: number | null;
+  gap: number | null;
+}
+
+// Gốc của lời giải thích: hồ sơ thật, hoặc giả định học sinh đang xem (label: "GPA 3.6, SAT 1500")
+export interface ExplainBasis {
+  kind: "real" | "simulated";
+  label: string | null;
 }
 
 // Lời tư vấn một trường (POST /recommendations/schools/{code}/explain)

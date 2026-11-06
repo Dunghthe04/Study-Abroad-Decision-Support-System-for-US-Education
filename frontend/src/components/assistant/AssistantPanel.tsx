@@ -13,14 +13,16 @@ import {
   PlusIcon,
   RotateCwIcon,
   SlidersHorizontalIcon,
-  TargetIcon,
   XIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { showGoal, showSimulation } from "@/lib/simulation-link";
+import { describeSimulation, resetSimulation, showSimulation } from "@/lib/simulation-link";
 import { AGE_FEATURES, useAgeBlock } from "@/lib/age-features";
 import { useAssistant, type AssistantTurn } from "./AssistantProvider";
+import type { ExplainBasis, ExplainCardData, SchoolGoalResult } from "@/types/recommendation";
 import { BudgetWidget } from "./BudgetWidget";
+import { ExplainCard } from "./ExplainCard";
+import { GoalSeekCard } from "./GoalSeekCard";
 import { MajorWidget } from "./MajorWidget";
 import { ReviewWidget } from "./ReviewWidget";
 import { ScholarshipWidget } from "./ScholarshipWidget";
@@ -86,6 +88,20 @@ export function AssistantPanel() {
             <span className="size-1.5 shrink-0 rounded-full bg-ok" />
             <span className="truncate">Đang xem: {page.label}</span>
           </div>
+          {/* Trang gợi ý trường: chat đang nói về hồ sơ thật hay về giả định học sinh đang kéo (undefined: trang khác, không có khái niệm này) */}
+          {page.simulation === null && (
+            <div className="mt-1 inline-flex max-w-full items-center rounded-full bg-brand/10 px-2.5 py-0.5 text-xs font-medium text-brand">
+              Đang xem hồ sơ thật
+            </div>
+          )}
+          {page.simulation && (
+            <div className="mt-1 flex max-w-full flex-wrap items-center gap-x-2 gap-y-0.5 rounded-lg bg-warn-wash px-2.5 py-1 text-xs text-warn">
+              <span className="font-medium">Đang xem giả định: {describeSimulation(page.simulation)}</span>
+              <button type="button" onClick={resetSimulation} className="font-semibold underline-offset-4 hover:underline">
+                Về hồ sơ thật
+              </button>
+            </div>
+          )}
         </div>
         <IconButton label="Cuộc trò chuyện mới" onClick={newChat}>
           <PlusIcon className="size-4.5" />
@@ -122,7 +138,9 @@ export function AssistantPanel() {
         ))}
 
         {/* Advisor trả từng ý khi xong: hiện dần các câu đã có, câu cuối cùng sẽ thay thế khi xong cả lượt */}
-        {loading && streaming?.text && <Turn turn={{ role: "assistant", content: streaming.text }} />}
+        {loading && (streaming?.text || streaming?.widget) && (
+          <Turn turn={{ role: "assistant", content: streaming.text, widget: streaming.widget }} />
+        )}
 
         {loading && (
           <TypingIndicator
@@ -267,9 +285,18 @@ function Turn({ turn, onReply }: { turn: AssistantTurn; onReply?: (value: string
       </div>
     );
   }
+  // Goal-seeking: thẻ kết quả (code dựng, có ngay) nằm TRÊN lời Gemini (tới sau), nên khi lời tới thẻ không bị đẩy xuống
+  const goalCard = turn.widget?.type === "goal_seek" ? goalResultOf(turn.widget.data) : null;
+  // Giải thích trường: thẻ do code dựng cũng nằm trên lời tư vấn của AI, cùng lý do như trên
+  const explainCard = turn.widget?.type === "explain" ? explainCardOf(turn.widget.data) : null;
+  const hasCard = Boolean(goalCard || explainCard);
   return (
     <div className="w-full text-foreground">
-      <p className="whitespace-pre-wrap">{turn.content}</p>
+      {goalCard && <GoalSeekCard result={goalCard} />}
+      {explainCard && (
+        <ExplainCard code={String(turn.widget?.data?.code ?? "")} card={explainCard} basis={explainBasisOf(turn.widget?.data)} />
+      )}
+      {turn.content && <p className={cn("whitespace-pre-wrap", hasCard && "mt-2.5")}>{turn.content}</p>}
       {turn.citations && turn.citations.length > 0 && (
         <ol className="mt-2 list-decimal space-y-0.5 pl-5 text-xs text-muted-foreground">
           {turn.citations.map((c, j) => (
@@ -326,17 +353,6 @@ function Turn({ turn, onReply }: { turn: AssistantTurn; onReply?: (value: string
           Xem trên thanh kéo
         </button>
       )}
-      {/* Goal-seeking: mở khung "cần gì để vào" của trường vừa hỏi trên trang Gợi ý trường */}
-      {turn.widget?.type === "goal_seek" && (
-        <button
-          type="button"
-          onClick={() => showGoal(turn.widget?.data, router.push)}
-          className="mt-2.5 inline-flex h-8 items-center gap-1.5 rounded-full bg-brand px-3.5 text-[13px] font-semibold text-white transition-colors hover:bg-brand-ink"
-        >
-          <TargetIcon className="size-4" />
-          Xem bảng chi tiết
-        </button>
-      )}
       {onReply && turn.quickReplies && turn.quickReplies.length > 0 && (
         <div className="mt-2.5 flex flex-wrap gap-2">
           {turn.quickReplies.map((r) => (
@@ -353,6 +369,22 @@ function Turn({ turn, onReply }: { turn: AssistantTurn; onReply?: (value: string
       )}
     </div>
   );
+}
+
+// Kết quả goal-seeking trong widget (backend gửi kèm ở data.result). Không có hoặc thiếu vị trí thì không dựng thẻ
+function explainBasisOf(data: Record<string, unknown> | null | undefined): ExplainBasis {
+  const basis = data?.basis as ExplainBasis | undefined;
+  return basis && (basis.kind === "real" || basis.kind === "simulated") ? basis : { kind: "real", label: null };
+}
+
+function explainCardOf(data: Record<string, unknown> | null | undefined): ExplainCardData | null {
+  const card = data?.card as ExplainCardData | undefined;
+  return card && typeof card === "object" && Array.isArray(card.why) ? card : null;
+}
+
+function goalResultOf(data: Record<string, unknown> | null | undefined): SchoolGoalResult | null {
+  const result = data?.result as SchoolGoalResult | undefined;
+  return result && typeof result === "object" && result.position ? result : null;
 }
 
 function IconButton({

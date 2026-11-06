@@ -1,7 +1,7 @@
 // Chat vừa thử một kịch bản what-if: đưa các giá trị giả định sang trang Gợi ý trường.
 // Đang đứng ở trang đó thì cập nhật thanh kéo tại chỗ (không tải lại trang); ở trang khác thì chuyển trang kèm giá trị qua địa chỉ.
 
-import type { GoalTarget, ScholarshipNeed, SimulationOverrides } from "@/types/recommendation";
+import type { ScholarshipNeed, SimulationOverrides } from "@/types/recommendation";
 
 const NEEDS: ScholarshipNeed[] = ["optional", "preferred", "mandatory"];
 
@@ -64,6 +64,31 @@ export function overridesFromParams(params: Params): SimulationOverrides {
 // Sự kiện báo trang Gợi ý trường đang mở: đặt lại thanh kéo theo kịch bản chat vừa thử (detail: SimulationOverrides)
 export const SIMULATE_EVENT = "usas:simulate";
 
+// Khung chat báo trang Gợi ý trường bỏ hết giá trị giả định (nút "Về hồ sơ thật")
+export const RESET_SIMULATION_EVENT = "usas:simulate-reset";
+
+export function resetSimulation(): void {
+  window.dispatchEvent(new CustomEvent(RESET_SIMULATION_EVENT));
+}
+
+const NUMBER = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 2 });
+const NEED_TEXT: Record<string, string> = { optional: "không cần", preferred: "nên có", mandatory: "bắt buộc" };
+
+// Mô tả ngắn các giá trị giả định đang kéo ("GPA 3,6 · SAT 1.500"), để học sinh biết chat đang nói về giả định nào
+export function describeSimulation(o: SimulationOverrides | null | undefined): string {
+  if (!o) return "";
+  const parts: string[] = [];
+  if (o.gpa != null) parts.push(`GPA ${NUMBER.format(o.gpa)}`);
+  if (o.sat != null) parts.push(`SAT ${NUMBER.format(o.sat)}`);
+  if (o.act != null) parts.push(`ACT ${NUMBER.format(o.act)}`);
+  if (o.ielts != null) parts.push(`IELTS ${NUMBER.format(o.ielts)}`);
+  if (o.toefl != null) parts.push(`TOEFL ${NUMBER.format(o.toefl)}`);
+  if (o.duolingo != null) parts.push(`Duolingo ${NUMBER.format(o.duolingo)}`);
+  if (o.budgetUsd != null) parts.push(`ngân sách ${NUMBER.format(o.budgetUsd)} USD`);
+  if (o.scholarshipNeed != null) parts.push(`học bổng ${NEED_TEXT[o.scholarshipNeed] ?? o.scholarshipNeed}`);
+  return parts.join(" · ");
+}
+
 export function onRecommendationsPage(): boolean {
   return window.location.pathname.startsWith("/recommendations");
 }
@@ -76,47 +101,4 @@ export function showSimulation(values: Record<string, unknown> | null | undefine
   }
   const overrides = overridesFromValues(values);
   if (Object.keys(overrides).length > 0) window.dispatchEvent(new CustomEvent(SIMULATE_EVENT, { detail: overrides }));
-}
-
-// ---- "Cần gì để vào trường X" hỏi trong chat: mở khung kết quả goal-seeking trên trang Gợi ý trường ----
-
-export interface GoalRequest {
-  code: string;
-  target: GoalTarget | null; // null: nhóm cao hơn một bậc
-}
-
-const TARGETS: GoalTarget[] = ["reach", "match", "safety"];
-
-function goalFrom(code: unknown, target: unknown): GoalRequest | null {
-  if (typeof code !== "string" || !/^[\w-]{1,64}$/.test(code)) return null;
-  return { code, target: typeof target === "string" && TARGETS.includes(target as GoalTarget) ? (target as GoalTarget) : null };
-}
-
-// Widget của chat (mã trường và nhóm đích). Giá trị sai thì bỏ, không làm hỏng trang.
-export function goalFromValues(values: Record<string, unknown> | null | undefined): GoalRequest | null {
-  return goalFrom(values?.code, values?.target);
-}
-
-export function goalFromParams(params: Params): GoalRequest | null {
-  return goalFrom(params.goal, params.target);
-}
-
-export function goalHref(goal: GoalRequest): string {
-  const query = new URLSearchParams({ ts: String(Date.now()), goal: goal.code });
-  if (goal.target) query.set("target", goal.target);
-  return `/recommendations?${query.toString()}`;
-}
-
-// Sự kiện báo trang Gợi ý trường đang mở: mở khung goal-seeking của trường (detail: GoalRequest)
-export const GOAL_EVENT = "usas:goal";
-
-// Đang ở trang Gợi ý trường thì mở khung tại chỗ, ở trang khác thì chuyển trang kèm mã trường
-export function showGoal(values: Record<string, unknown> | null | undefined, navigate: (href: string) => void): void {
-  const goal = goalFromValues(values);
-  if (!goal) return;
-  if (!onRecommendationsPage()) {
-    navigate(goalHref(goal));
-    return;
-  }
-  window.dispatchEvent(new CustomEvent(GOAL_EVENT, { detail: goal }));
 }
