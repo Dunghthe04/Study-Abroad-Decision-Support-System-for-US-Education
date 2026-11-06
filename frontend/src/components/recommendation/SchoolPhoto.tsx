@@ -26,7 +26,7 @@ export function SchoolPhoto({ name, coverUrl, logoUrl, href }: SchoolPhotoProps)
     const fail = (url: string) => setFailed((cur) => (cur.includes(url) ? cur : [...cur, url]));
 
     const photo = (
-        <div className="relative h-40 w-full shrink-0 overflow-hidden bg-brand-wash sm:h-auto sm:w-48 lg:w-56">
+        <div className="relative h-40 w-full shrink-0 overflow-hidden bg-brand-wash @2xl:h-auto @2xl:w-44 @4xl:w-56">
             {cover ? (
                 <>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -70,7 +70,7 @@ export function SchoolPhoto({ name, coverUrl, logoUrl, href }: SchoolPhotoProps)
     );
     // Bấm vào ảnh sang trang chi tiết trường; ảnh vẫn cao hết thẻ nhờ khung flex kéo giãn
     return href ? (
-        <Link href={href} aria-label={`Xem thông tin ${name}`} className="flex shrink-0 sm:self-stretch">
+        <Link href={href} aria-label={`Xem thông tin ${name}`} className="flex shrink-0 @2xl:self-stretch">
             {photo}
         </Link>
     ) : (

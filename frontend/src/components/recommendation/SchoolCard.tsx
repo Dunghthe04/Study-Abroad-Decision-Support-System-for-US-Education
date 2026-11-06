@@ -42,10 +42,13 @@ export function SchoolCard({ picked, school, change, onExplain, onGoal, highligh
     const website = school?.website ?? null;
     const host = siteHost(website);
 
+    // Khung ngoài chỉ làm "container": một phần tử không đổi bố cục theo chính bề rộng của nó được,
+    // nên thẻ bên trong dùng các lớp @2xl, @4xl... theo bề rộng của khung này (trang có cột mô phỏng và trợ lý nên thẻ hẹp hơn màn hình nhiều)
     return (
+        <div className="@container">
         <div
             className={cn(
-                "flex flex-col overflow-hidden rounded-2xl border bg-surface shadow-2xs transition-colors sm:flex-row",
+                "flex flex-col overflow-hidden rounded-2xl border bg-surface shadow-2xs transition-colors @2xl:flex-row",
                 highlighted ? "border-risk ring-2 ring-risk/40" : "border-line hover:border-brand/40",
             )}
         >
@@ -57,7 +60,7 @@ export function SchoolCard({ picked, school, change, onExplain, onGoal, highligh
                 href={`/university/${encodeURIComponent(picked.code)}?from=recommendations`}
             />
 
-            <div className="grid min-w-0 flex-1 gap-x-8 gap-y-4 p-5 md:grid-cols-[minmax(0,1fr)_minmax(0,1.7fr)_auto]">
+            <div className="grid min-w-0 flex-1 content-start gap-x-8 gap-y-4 p-5 @7xl:grid-cols-[minmax(0,1fr)_minmax(0,1.7fr)_auto]">
                 {/* Tên, nơi ở, trang chủ */}
                 <div className="min-w-0 space-y-1.5">
                     <h3 className="text-base font-bold text-foreground"><Link href={`/university/${encodeURIComponent(picked.code)}?from=recommendations`} className="hover:text-brand hover:underline">{name}</Link></h3>
@@ -90,7 +93,7 @@ export function SchoolCard({ picked, school, change, onExplain, onGoal, highligh
 
                 {/* Chỉ số và lý do */}
                 <div className="min-w-0 space-y-3">
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-5">
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-3 @lg:grid-cols-3 @4xl:grid-cols-5">
                         <Stat label="Chi phí / năm" value={school?.cost != null ? formatUsd(school.cost) : "Chưa có số liệu"} small={school?.cost == null} />
                         <Stat
                             label="Tỷ lệ nhận"
@@ -109,7 +112,7 @@ export function SchoolCard({ picked, school, change, onExplain, onGoal, highligh
                     )}
 
                     {picked.why.length > 0 && (
-                        <ul className="grid gap-x-6 gap-y-1 text-xs text-ink-2 lg:grid-cols-2">
+                        <ul className="grid gap-x-6 gap-y-1 text-xs text-ink-2 @xl:grid-cols-2">
                             {picked.why.map((code) => (
                                 <li key={code}>• {whyText(code)}</li>
                             ))}
@@ -122,7 +125,7 @@ export function SchoolCard({ picked, school, change, onExplain, onGoal, highligh
                 </div>
 
                 {/* Nhóm và nút */}
-                <div className="flex items-center justify-between gap-3 md:flex-col md:items-end">
+                <div className="flex flex-wrap items-center justify-between gap-3 @7xl:flex-col @7xl:items-end">
                     {school && <Badge variant={groupVariant(school.g2)}>{groupLabel(school.g2)}</Badge>}
                     {onGoal && school && GOAL_GROUPS.includes(school.g2) && (
                         <Button
@@ -148,6 +151,7 @@ export function SchoolCard({ picked, school, change, onExplain, onGoal, highligh
                     )}
                 </div>
             </div>
+        </div>
         </div>
     );
 }
