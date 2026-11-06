@@ -169,24 +169,6 @@ export function AddCenterButton({ className, size = "sm" }: AddCenterButtonProps
               </Alert>
             )}
 
-            {user?.role === "admin" && (
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 rounded-lg border border-brand/20 bg-brand/5 p-3 text-xs">
-                <div className="flex items-center gap-2 text-foreground font-medium">
-                  <UserPlusIcon className="size-4 text-brand shrink-0" />
-                  <span>Cần cấp tài khoản đăng nhập cho người đại diện trung tâm?</span>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="xs"
-                  onClick={() => setIsCreateAccountOpen(true)}
-                  className="gap-1 text-xs border-brand/30 text-brand hover:bg-brand/10 shrink-0 font-medium"
-                >
-                  <UserPlusIcon className="size-3.5" />
-                  Tạo tài khoản cho trung tâm
-                </Button>
-              </div>
-            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field>

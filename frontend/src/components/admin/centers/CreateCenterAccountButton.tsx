@@ -4,7 +4,6 @@ import React, { useState } from "react";
 import {
   UserPlusIcon,
   Building2Icon,
-  ShieldCheckIcon,
   EyeIcon,
   EyeOffIcon,
   SparklesIcon,
@@ -144,12 +143,7 @@ function CreateCenterAccountFormContent({
   return (
     <form onSubmit={handleSubmit} className="space-y-4 pt-1">
       {/* Security notice */}
-      <div className="rounded-lg border border-brand/20 bg-brand/5 p-3 text-xs text-foreground flex items-start gap-2.5">
-        <ShieldCheckIcon className="size-4 text-brand shrink-0 mt-0.5" />
-        <div className="leading-relaxed">
-          Tài khoản sẽ ở trạng thái <strong>Đang hoạt động (active)</strong> ngay lập tức mà không cần qua bước xác thực email công khai.
-        </div>
-      </div>
+
 
       {error && (
         <Alert variant="destructive">
@@ -327,7 +321,7 @@ export function CreateCenterAccountButton({
               <DialogTitle className="text-lg">Tạo tài khoản cho trung tâm</DialogTitle>
             </div>
             <DialogDescription>
-              Cấp tài khoản người dùng với vai trò <strong>Trung tâm (role: center)</strong> để đại diện cơ sở đăng nhập và quản lý dịch vụ trên USAS.
+              Cấp tài khoản người dùng với vai trò <strong>Trung tâm</strong> để đại diện cơ sở đăng nhập và quản lý dịch vụ trên USAS.
             </DialogDescription>
           </DialogHeader>
 
