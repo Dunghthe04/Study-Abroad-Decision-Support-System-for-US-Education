@@ -12,10 +12,12 @@ from app.services.ollama import OllamaError
 from app.services.scenario_writer import (
     FACTOR_EFFECT,
     REASON_TEXT,
+    SKILL_PATH,
     ScenarioWriter,
     allowed_numbers,
     build_user,
 )
+from app.services.skill_call import load_skill
 from tests.fakes import FakeLLM
 
 # JSON backend gửi (camelCase): SAT 1500, ba nhóm; Boston và Northeastern vừa đổi nhóm
@@ -252,4 +254,6 @@ def test_the_route_returns_the_message_with_the_skill_version():
     assert res.status_code == 200
     body = res.json()
     assert body["status"] == "OK" and "Cornell University, Duke University" in body["answer"]
-    assert body["skill_version"] == "2.0" and body["model"] == "gemini-test"
+    assert (
+        body["skill_version"] == load_skill(SKILL_PATH)[1] and body["model"] == "gemini-test"
+    )  # phiên bản đọc từ chính file skill
