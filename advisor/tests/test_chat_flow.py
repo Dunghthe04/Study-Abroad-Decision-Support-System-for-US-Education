@@ -21,6 +21,7 @@ from app.services.chat_flow import (
     last_user_message,
 )
 from app.services.intake import CHAT_BUTTON, CONTINUE_CHAT, FORM_BUTTON, INTAKE_FORM, INTAKE_ID
+from app.services.skill_rules import REQUIRED_B3
 from tests.fakes import tin
 
 
@@ -353,6 +354,35 @@ async def test_continue_in_chat_button_from_the_form_asks_the_missing_items():
     res = await flow.reply(request(CONTINUE_CHAT, current_step="B3"))
 
     assert res.answer == QUESTIONS["B1.1"] and counting.calls == []
+
+
+def waiting_advice():
+    return tin(("ho_so", {}, "em cần lên lộ trình")).cac_y[0]
+
+
+async def test_back_from_a_finished_form_answers_the_question_that_was_waiting():
+    ran: list[str] = []
+    advice = FakeBranch("ho_so", ran)
+    flow, counting = make_flow(tin("kien_thuc"), ran, ho_so=advice)
+    req = request(
+        CONTINUE_CHAT, current_step="B3", profile=confirmed(*REQUIRED_B3), pending_advice=waiting_advice()
+    )
+
+    res = await flow.reply(req)
+
+    assert ran == ["ho_so"] and counting.calls == []
+    assert advice.seen[0][0] == "em cần lên lộ trình"  # câu hỏi gốc, không phải "Tiếp tục bằng chat"
+    assert res.state.pending_advice is None and res.state.intake_mode == "chat"
+
+
+async def test_back_from_an_unfinished_form_keeps_asking_and_keeps_the_question():
+    ran: list[str] = []
+    flow, _ = make_flow(tin("kien_thuc"), ran)
+
+    res = await flow.reply(request(CONTINUE_CHAT, current_step="B3", pending_advice=waiting_advice()))
+
+    assert ran == [] and res.answer == QUESTIONS["B1.1"]
+    assert res.state.pending_advice.doan == "em cần lên lộ trình"
 
 
 async def test_another_message_while_choosing_goes_through_the_slm():

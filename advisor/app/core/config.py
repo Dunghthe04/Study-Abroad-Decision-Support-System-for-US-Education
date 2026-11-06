@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     chat_log_file: str = ""
     # Số ngày giữ file log chat, quá hạn thì tự xóa
     chat_log_keep_days: int = 90
+    # Thư mục ghi nhật ký skill SLM sinh ra (mỗi ngày một file skill_<ngày>.jsonl), để người làm đọc lại skill thật.
+    # Để trống = không ghi. Đường dẫn tương đối tính từ thư mục advisor/
+    skill_log_dir: str = ""
     ollama_base_url: str = "http://localhost:11434"
     # Chỉ dùng khi không có GEMINI_API_KEY (bước B đọc bảng điểm chạy trên Ollama). Có khóa Gemini thì để trống
     llm_model: str = ""

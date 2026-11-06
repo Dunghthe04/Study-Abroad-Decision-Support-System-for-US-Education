@@ -279,7 +279,7 @@ def _so_trong(text: str) -> set[str]:
     return out
 
 
-# Kiểm skill SLM sinh ra (văn bản .md). Sai thì ném ValueError để bộ gọi dùng skill mặc định của loại.
+# Kiểm skill SLM sinh ra (văn bản .md). Sai thì ném ValueError để bộ sinh gọi lại; vẫn sai thì báo chưa có skill (không dùng skill tĩnh).
 # Chỉ kiểm cấu trúc và việc không bỏ số của hồ sơ và dòng tính sẵn. Số suy ra (GPA thang 4, hạn nộp) và dòng Mốc sẽ kiểm bằng luật riêng
 def check_skill(text: str, req: SkillRequest) -> None:
     wanted = SKILL_SECTIONS[req.loai]

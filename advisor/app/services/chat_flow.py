@@ -37,7 +37,7 @@ from app.services.intake import (
 )
 from app.services.pii_mask import mask_personal_info
 from app.services.profile_sync import changed_keys, merge_profile
-from app.services.skill_rules import REQUIRED_B3
+from app.services.skill_rules import REQUIRED_B3, missing_fields
 from app.services.slm_contract import SlmClassifier
 
 # Tạo 1 logger
@@ -232,6 +232,19 @@ class ChatFlow:
             if state.question_id == INTAKE_ID:
                 state.question_id = None
             choice = "chat" if continue_chat else intake_choice(message)
+            # Điền xong form rồi quay về chat: form đã là bước rà soát nên không hỏi X1 nữa,
+            # trả lời luôn câu tư vấn bị hoãn. Hồ sơ còn thiếu thì begin_intake hỏi tiếp trong chat như cũ
+            if continue_chat and state.pending_advice is not None and profile_ready(state):
+                original = state.pending_advice
+                state.pending_advice = None
+                state.intake_mode = "chat"
+                output = await self._branches["ho_so"].run(
+                    state, original.doan, SlmTinResult(cac_y=[original])
+                )
+                log_turn(
+                    state, message, None, ["ho_so"], (time.perf_counter() - started) * 1000, req.session_id
+                )
+                return self._response(state, output, ["ho_so"], profile_before)
             if choice:
                 output = begin_intake(state, choice)
                 log_turn(state, message, None, [], (time.perf_counter() - started) * 1000, req.session_id)
@@ -358,6 +371,13 @@ def is_button(question_id: str | None, message: str) -> bool:
     return buttons.pressed(question_id, message, can_skip=True) is not None or skill_ho_so.is_form_text(
         question_id, message
     )
+
+
+# Hồ sơ đủ mục bắt buộc và không còn giá trị nào chờ xác nhận (said_in_B0)
+def profile_ready(state: ChatState) -> bool:
+    if missing_fields(state.profile, REQUIRED_B3):
+        return False
+    return all(field.status != "said_in_B0" for field in state.profile.values())
 
 
 # Bắt đầu hỏi hồ sơ khi một skill bị chặn vì thiếu hồ sơ

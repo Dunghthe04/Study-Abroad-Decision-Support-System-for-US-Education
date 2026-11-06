@@ -5,8 +5,9 @@ từng ý. Nhánh nào chưa làm xong thì tạm dùng skill cũ bên trong (l�
 làm xong thì thay lớp đó trong build_branches, không phải sửa ChatFlow.
 """
 
-from app.schemas.chat import ChatState, Widget
-from app.schemas.slm import SlmTinResult
+from app.schemas.chat import ChatState, QuickReply, Widget
+from app.schemas.slm import SlmTinResult, SlmY
+from app.services.advice_writer import AdviceWriter
 from app.services.chat_flow import (
     NEED_PROFILE,
     NOT_READY,
@@ -18,9 +19,11 @@ from app.services.chat_flow import (
     combine,
     start_intake,
 )
-from app.services.goal_target import parse_target
+from app.services.goal_target import parse_target, plain
 from app.services.scenario import SUPPORTED_TEXT, parse_what_if
-from app.services.skill_rules import REQUIRED_B3, REQUIRED_BY_SKILL, missing_fields
+from app.services.skill_generator import SkillGenerator
+from app.services.skill_input import skill_request_of
+from app.services.skill_rules import REQUIRED_B3, REQUIRED_B4, REQUIRED_BY_SKILL, missing_fields
 from app.services.skills.profile_handler import ChatProfileHandler
 from app.services.skills.validators import AskAgain
 
@@ -116,18 +119,107 @@ class LegacyAdviceBranch:
             name = "skill_explain"
         else:
             name = "skill_lo_trinh"
-        # Thiếu hồ sơ: hỏi tiếp hồ sơ (thiếu ngành thì hiện ô chọn ngành) thay vì tư vấn khi chưa đủ thông tin.
-        # Đang hỏi hồ sơ dở (có câu đang chờ) thì chỉ báo cần thêm hồ sơ, ChatFlow nhắc lại câu đang chờ
-        missing = missing_fields(state.profile, REQUIRED_BY_SKILL[name]) if name in REQUIRED_BY_SKILL else []
-        if missing:
-            if state.question_id and state.question_id not in OPENING_QUESTIONS:
-                return SkillOutput(NEED_PROFILE)
-            return ask_major(state) if missing[0] == "major" else start_intake(state, REQUIRED_BY_SKILL[name])
+        if name in REQUIRED_BY_SKILL:
+            asked = ask_missing_profile(state, slm.cac_y[0], REQUIRED_BY_SKILL[name])
+            if asked is not None:
+                return asked
         return await self._skills[name].run(state, message)
 
 
-# Trả lời câu hồ sơ đang chờ hoặc cập nhật hồ sơ. Hồ sơ vừa đủ trong lượt này thì tư vấn luôn,
-# không bắt học sinh nhắn thêm một lần nữa mới thấy kết quả.
+# Thiếu hồ sơ: hỏi tiếp hồ sơ (thiếu ngành thì hiện ô chọn ngành) thay vì tư vấn khi chưa đủ thông tin.
+# Đang hỏi hồ sơ dở (có câu đang chờ) thì chỉ báo cần thêm hồ sơ, ChatFlow nhắc lại câu đang chờ.
+# Đủ hồ sơ thì trả None để nhánh tư vấn làm tiếp
+def ask_missing_profile(state: ChatState, y: SlmY, required: list[str]) -> SkillOutput | None:
+    missing = missing_fields(state.profile, required)
+    if not missing:
+        return None
+    # Nhớ câu tư vấn để trả lời ngay khi học sinh xác nhận hồ sơ (ProfileBranch). Chỉ giữ câu đầu tiên
+    if state.pending_advice is None:
+        state.pending_advice = y
+    if state.question_id and state.question_id not in OPENING_QUESTIONS:
+        return SkillOutput(NEED_PROFILE)
+    return ask_major(state) if missing[0] == "major" else start_intake(state, required)
+
+
+# Câu xin danh sách trường (đã bỏ dấu). SLM xếp các câu này vào ho_so; code giao .NET chạy gợi ý trường
+# (pipeline có sẵn), không sinh skill
+SCHOOL_LIST_WORDS = (
+    "truong nao",
+    "chon truong",
+    "nhung truong",
+    "danh sach truong",
+    "goi y truong",
+    "de xuat truong",
+    "nop truong",
+    "apply truong",
+    "which universit",
+    "which school",
+    "which college",
+    "universities should",
+    "schools should",
+    "colleges should",
+    "recommend universit",
+    "recommend school",
+    "recommend college",
+)
+RECOMMENDING = "Mình lọc danh sách trường hợp với hồ sơ và ngành của bạn nhé."
+# Hồ sơ vừa đủ mà học sinh chưa hỏi câu tư vấn nào (tin là "Đúng rồi"): đánh giá hồ sơ như trước đây
+DEFAULT_QUESTION = "Đánh giá hồ sơ của em giúp em."
+SKILL_NOT_READY = (
+    "Phần tư vấn hồ sơ đang bận, mình chưa trả lời được ngay. Bạn bấm hỏi lại giúp mình sau ít phút nhé."
+)
+CANNOT_ANSWER = "Mình chưa viết được câu trả lời cho câu này. Bạn bấm hỏi lại giúp mình nhé."
+ASK_AGAIN_LABEL = "Hỏi lại"
+
+
+def asks_for_school_list(text: str) -> bool:
+    folded = plain(text)
+    return any(word in folded for word in SCHOOL_LIST_WORDS)
+
+
+# Tư vấn theo hồ sơ (phần của Việt). Câu về trường giao code có sẵn: hỏi một trường đã gợi ý thì giải thích
+# trường đó (skill_explain → .NET), xin danh sách trường thì chạy gợi ý (.NET). Câu còn lại (đánh giá hồ sơ,
+# lộ trình, hoặc cả hai: SLM tự nhận ra từ câu hỏi) thì SLM sinh skill riêng cho học sinh, Gemini viết câu trả lời.
+# SLM hoặc Gemini sai thì báo chưa trả lời được kèm nút hỏi lại, không dùng skill tĩnh
+class GeneratedAdviceBranch:
+    def __init__(
+        self, skills: dict[str, SkillHandler], generator: SkillGenerator, writer: AdviceWriter
+    ) -> None:
+        self._skills = skills
+        self._generator = generator
+        self._writer = writer
+
+    async def run(self, state: ChatState, message: str, slm: SlmTinResult) -> SkillOutput:
+        y = slm.cac_y[0]
+        question = y.doan if y.type == "ho_so" else DEFAULT_QUESTION
+        if y.type == "ho_so" and y.thuc_the.get("truong") and state.has_results:
+            return await self._skills["skill_explain"].run(state, question)
+
+        school_list = y.type == "ho_so" and asks_for_school_list(question)
+        # Gợi ý trường cần ngành để lọc trường; tư vấn hồ sơ chỉ cần các mục cơ bản
+        asked = ask_missing_profile(state, y, REQUIRED_B4 if school_list else REQUIRED_B3)
+        if asked is not None:
+            return asked
+        if school_list:
+            return SkillOutput(RECOMMENDING, action="recommend")
+
+        req = skill_request_of(state, question)
+        skill = await self._generator.generate(req)
+        if skill is None:
+            return SkillOutput(
+                SKILL_NOT_READY, quick_replies=[QuickReply(label=ASK_AGAIN_LABEL, value=question)]
+            )
+        answer = await self._writer.write(skill, req, state.schools)
+        if answer is None:
+            return SkillOutput(
+                CANNOT_ANSWER, quick_replies=[QuickReply(label=ASK_AGAIN_LABEL, value=question)]
+            )
+        return SkillOutput(answer)
+
+
+# Trả lời câu hồ sơ đang chờ hoặc cập nhật hồ sơ. Hồ sơ vừa đủ trong lượt này (học sinh bấm "Đúng rồi" ở X1)
+# thì tư vấn luôn, không bắt học sinh nhắn thêm một lần nữa mới thấy kết quả.
+# Có câu tư vấn bị hoãn (pending_advice) thì trả lời đúng câu đó, không phải tin "Đúng rồi" của lượt này.
 # Tin đã có ý ho_so thì thôi: ChatFlow sẽ chạy nhánh tư vấn cho ý đó ngay sau, tư vấn ở đây nữa là trả lời hai lần
 class ProfileBranch:
     def __init__(self, handler: ChatProfileHandler, advice: Branch) -> None:
@@ -138,13 +230,29 @@ class ProfileBranch:
         was_ready = self._handler.ready(state, REQUIRED_B3)
         output = await self._handler.collect(state, message, slm)
         if not was_ready and self._handler.ready(state, REQUIRED_B3) and "ho_so" not in slm.types():
+            original = state.pending_advice
+            if original is not None:
+                state.pending_advice = None
+                return combine(
+                    output, await self._advice.run(state, original.doan, SlmTinResult(cac_y=[original]))
+                )
             return combine(output, await self._advice.run(state, message, slm))
         return output
 
 
-# Bảng nhánh theo loại câu hỏi SLM. skills: các skill cũ do skills.build_handlers tạo
-def build_branches(skills: dict[str, SkillHandler]) -> dict[str, Branch]:
-    advice = LegacyAdviceBranch(skills)
+# Bảng nhánh theo loại câu hỏi SLM. skills: các skill cũ do skills.build_handlers tạo.
+# main.py luôn truyền generator và writer nên chạy thật dùng nhánh tư vấn mới. Chỉ test cũ (chưa viết lại) không
+# truyền, khi đó tạm dùng LegacyAdviceBranch
+def build_branches(
+    skills: dict[str, SkillHandler],
+    generator: SkillGenerator | None = None,
+    writer: AdviceWriter | None = None,
+) -> dict[str, Branch]:
+    advice: Branch = (
+        GeneratedAdviceBranch(skills, generator, writer)
+        if generator is not None and writer is not None
+        else LegacyAdviceBranch(skills)
+    )
     return {
         "mac_dinh": ProfileBranch(ChatProfileHandler(skills), advice),
         "ho_so": advice,
