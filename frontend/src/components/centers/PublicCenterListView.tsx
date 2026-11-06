@@ -63,6 +63,11 @@ export function PublicCenterListView({ initialCenters }: PublicCenterListViewPro
 
   const filteredCenters = useMemo(() => {
     return initialCenters.filter((c) => {
+      // Đối với người dùng phổ thông (học sinh, phụ huynh): Chỉ hiển thị trung tâm đã xác minh
+      if (!isAdmin && c.verificationStatus !== "verified") {
+        return false;
+      }
+
       // Tìm kiếm từ khóa
       if (search.trim()) {
         const q = search.toLowerCase().trim();
@@ -91,8 +96,8 @@ export function PublicCenterListView({ initialCenters }: PublicCenterListViewPro
         }
       }
 
-      // Lọc trạng thái xác thực
-      if (statusFilter !== "all") {
+      // Lọc trạng thái xác thực (chỉ dành cho admin/moderator)
+      if (isAdmin && statusFilter !== "all") {
         const status = c.verificationStatus || "unverified";
         if (status !== statusFilter) {
           return false;
@@ -101,7 +106,7 @@ export function PublicCenterListView({ initialCenters }: PublicCenterListViewPro
 
       return true;
     });
-  }, [initialCenters, search, cityFilter, typeFilter, statusFilter]);
+  }, [initialCenters, search, cityFilter, typeFilter, statusFilter, isAdmin]);
 
   // Phân trang
   const totalCount = filteredCenters.length;
@@ -164,9 +169,9 @@ export function PublicCenterListView({ initialCenters }: PublicCenterListViewPro
       </div>
 
       {/* Filter toolbar */}
-      <div className="bg-card border rounded-xl p-4 space-y-3 shadow-sm">
-        <form onSubmit={(e) => { e.preventDefault(); setPage(1); }} className="flex flex-col md:flex-row gap-3">
-          <div className="relative flex-1">
+      <div className="bg-card border rounded-xl p-4 shadow-sm">
+        <form onSubmit={(e) => { e.preventDefault(); setPage(1); }} className="flex flex-col lg:flex-row gap-3">
+          <div className="relative flex-1 min-w-[240px]">
             <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               value={search}
@@ -175,11 +180,11 @@ export function PublicCenterListView({ initialCenters }: PublicCenterListViewPro
                 setPage(1);
               }}
               placeholder="Tìm theo tên trung tâm, mã (CTY_013, Summit...), địa chỉ..."
-              className="pl-9"
+              className="pl-9 w-full"
             />
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
             <select
               value={cityFilter}
               onChange={(e) => {
@@ -210,36 +215,40 @@ export function PublicCenterListView({ initialCenters }: PublicCenterListViewPro
               ))}
             </select>
 
-            <select
-              value={statusFilter}
-              onChange={(e) => {
-                setStatusFilter(e.target.value);
-                setPage(1);
-              }}
-              className="h-9 px-3 rounded-md border border-input bg-background text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-            >
-              {STATUS_OPTIONS.map((s) => (
-                <option key={s.value} value={s.value}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
+            {isAdmin && (
+              <select
+                value={statusFilter}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value);
+                  setPage(1);
+                }}
+                className="h-9 px-3 rounded-md border border-input bg-background text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              >
+                {STATUS_OPTIONS.map((s) => (
+                  <option key={s.value} value={s.value}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+            )}
 
             <Button type="submit" variant="secondary" size="sm" className="h-9 gap-1.5">
               <SearchIcon className="w-3.5 h-3.5" />
               Tìm kiếm
             </Button>
 
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={handleResetFilters}
-              className="h-9 gap-1 text-muted-foreground hover:text-foreground"
-            >
-              <RotateCcwIcon className="w-3.5 h-3.5" />
-              Đặt lại
-            </Button>
+            {(search || cityFilter !== "all" || typeFilter !== "all" || (isAdmin && statusFilter !== "all")) && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handleResetFilters}
+                className="h-9 gap-1 text-muted-foreground hover:text-foreground"
+              >
+                <RotateCcwIcon className="w-3.5 h-3.5" />
+                Đặt lại
+              </Button>
+            )}
           </div>
         </form>
       </div>
@@ -247,21 +256,21 @@ export function PublicCenterListView({ initialCenters }: PublicCenterListViewPro
       {/* Centers Table - Aligned with Admin UI */}
       <div className="bg-card border rounded-xl overflow-hidden shadow-sm w-full">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
+          <table className="w-full text-left text-sm min-w-[760px]">
             <thead className="bg-muted/50 border-b text-xs font-semibold uppercase text-muted-foreground tracking-wider">
               <tr>
-                <th className="py-3 px-4">Trung tâm & Mã</th>
+                <th className="py-3 px-4 min-w-[220px]">Trung tâm & Mã</th>
                 <th className="py-3 px-4">Mô hình hoạt động</th>
                 <th className="py-3 px-4">Địa điểm & Pháp lý</th>
                 <th className="py-3 px-4">Tỷ lệ Visa & Đánh giá</th>
-                <th className="py-3 px-4">Trạng thái</th>
-                <th className="py-3 px-4 text-right">Thao tác</th>
+                {isAdmin && <th className="py-3 px-4">Trạng thái</th>}
+                <th className="py-3 px-4 text-right min-w-[130px]">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {paginatedCenters.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-muted-foreground">
+                  <td colSpan={isAdmin ? 6 : 5} className="py-12 text-center text-muted-foreground">
                     Không tìm thấy trung tâm nào khớp với bộ lọc tìm kiếm.
                   </td>
                 </tr>
@@ -285,13 +294,27 @@ export function PublicCenterListView({ initialCenters }: PublicCenterListViewPro
                             )}
                           </div>
                           <div className="min-w-0">
-                            <div className="font-semibold text-foreground truncate max-w-[240px]">
-                              {c.name}
+                            <div className="font-semibold text-foreground flex items-center gap-1.5">
+                              <span className="truncate max-w-[220px]">{c.name}</span>
+                              {isVerified && (
+                                <span title="Đã xác minh bởi USAS" className="inline-flex text-emerald-600 shrink-0">
+                                  <CheckCircle2Icon className="w-4 h-4" />
+                                </span>
+                              )}
                             </div>
                             <div className="flex items-center gap-2 mt-0.5">
                               <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0">
                                 {c.code}
                               </Badge>
+                              {isVerified ? (
+                                <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200 text-[10px] px-1.5 py-0">
+                                  Đã xác minh
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-950/40 text-[10px] px-1.5 py-0">
+                                  Chờ duyệt
+                                </Badge>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -331,19 +354,21 @@ export function PublicCenterListView({ initialCenters }: PublicCenterListViewPro
                         </div>
                       </td>
 
-                      {/* Verification Status */}
-                      <td className="py-3.5 px-4">
-                        {isVerified ? (
-                          <Badge className="bg-emerald-600 text-white gap-1 text-xs">
-                            <CheckCircle2Icon className="w-3 h-3" />
-                            Đã xác minh
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-950/40 text-xs">
-                            Chờ duyệt
-                          </Badge>
-                        )}
-                      </td>
+                      {/* Verification Status (Only for Admin) */}
+                      {isAdmin && (
+                        <td className="py-3.5 px-4">
+                          {isVerified ? (
+                            <Badge className="bg-emerald-600 text-white gap-1 text-xs">
+                              <CheckCircle2Icon className="w-3 h-3" />
+                              Đã xác minh
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-950/40 text-xs">
+                              Chờ duyệt
+                            </Badge>
+                          )}
+                        </td>
+                      )}
 
                       {/* Actions */}
                       <td className="py-3.5 px-4 text-right">
@@ -351,7 +376,7 @@ export function PublicCenterListView({ initialCenters }: PublicCenterListViewPro
                           href={`/centers/${c.id}`}
                           className={cn(
                             buttonVariants({ variant: "outline", size: "sm" }),
-                            "gap-1.5 text-xs h-8 hover:bg-muted text-foreground border-border"
+                            "gap-1.5 text-xs h-8 hover:bg-muted text-foreground border-border whitespace-nowrap"
                           )}
                           onClick={(e) => e.stopPropagation()}
                         >

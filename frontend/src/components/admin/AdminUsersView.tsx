@@ -927,7 +927,7 @@ export function AdminUsersView() {
                   <div className="text-xs text-foreground leading-relaxed font-medium">
                     {detailTarget.lockReason || getLockReasonCache(detailTarget.id) || (
                       detailTarget.status === "temp_locked"
-                        ? "Tài khoản bị tạm khóa 15 phút do nhập sai mật khẩu 5 lần liên tiếp."
+                        ? "Tài khoản bị tạm khóa do nhập sai mật khẩu 5 lần liên tiếp (chờ Quản trị viên mở khóa)."
                         : "Vi phạm quy chế sử dụng và chính sách của hệ thống."
                     )}
                   </div>

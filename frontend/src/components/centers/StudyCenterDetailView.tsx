@@ -98,10 +98,6 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
             {/* CTA Buttons */}
             <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto shrink-0 pb-1">
               <ConsultationBookingModal centerName={center.name} />
-              <div className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-border bg-card text-xs font-medium text-foreground shadow-2xs">
-                <ClockIcon className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                <span>{profile.operatingHours}</span>
-              </div>
             </div>
           </div>
 

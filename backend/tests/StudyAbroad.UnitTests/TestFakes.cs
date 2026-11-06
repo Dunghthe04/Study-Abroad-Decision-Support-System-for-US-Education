@@ -224,7 +224,7 @@ internal sealed class FakeEmailSender : IEmailSender
         return Task.CompletedTask;
     }
 
-    public Task SendAccountTempLockedNotificationAsync(string toEmail, string fullName, int lockoutMinutes = 15, CancellationToken ct = default)
+    public Task SendAccountTempLockedNotificationAsync(string toEmail, string fullName, int lockoutMinutes = 0, CancellationToken ct = default)
     {
         SentEmails.Add((toEmail, "temp_locked_notice", $"lockout:{lockoutMinutes}m"));
         return Task.CompletedTask;

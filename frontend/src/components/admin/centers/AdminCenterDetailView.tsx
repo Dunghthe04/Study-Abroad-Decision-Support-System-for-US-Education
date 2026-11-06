@@ -110,12 +110,8 @@ export function AdminCenterDetailView({ center }: AdminCenterDetailViewProps) {
               />
             </div>
 
-            {/* Thông tin hoạt động & Kênh tư vấn USAS (Ẩn hotline & website để tránh liên hệ trực tiếp ngoài hệ thống) */}
+            {/* Kênh tư vấn USAS (Ẩn hotline & website để tránh liên hệ trực tiếp ngoài hệ thống) */}
             <div className="flex flex-wrap items-center gap-2 shrink-0 pb-1">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-card text-xs font-medium text-foreground shadow-2xs">
-                <ClockIcon className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                <span>{profile.operatingHours}</span>
-              </div>
               <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-brand/20 bg-brand/5 text-xs font-medium text-brand">
                 <ShieldCheckIcon className="w-3.5 h-3.5 text-brand shrink-0" />
                 <span>Tư vấn qua hệ thống USAS</span>

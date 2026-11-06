@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowRightIcon, HourglassIcon } from "lucide-react";
+import { ArrowRightIcon, ShieldAlertIcon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { ApiError } from "@/lib/api";
 import { setPendingEmail } from "@/lib/pending-email";
@@ -67,11 +67,14 @@ export function LoginForm() {
       }
     } catch (err) {
       if (err instanceof ApiError) {
-        setError(err.message || "Sai tài khoản hoặc mật khẩu.");
         if (err.status === 423) {
           setLockType("temp_locked");
+          setError("Tài khoản của bạn đã bị khóa do nhập sai mật khẩu quá 5 lần liên tiếp.");
         } else if (err.status === 403 && (err.message.includes("chưa được kích hoạt") || err.message.toLowerCase().includes("unverified"))) {
+          setError(err.message);
           setLockType("unverified");
+        } else {
+          setError(err.message || "Sai tài khoản hoặc mật khẩu.");
         }
       } else {
         setError("Có lỗi kết nối máy chủ. Vui lòng thử lại sau.");
@@ -99,11 +102,11 @@ export function LoginForm() {
               <p>{error}</p>
 
               {lockType === "temp_locked" && (
-                <p>
-                  <span className="inline-flex items-center gap-1 font-medium">
-                    <HourglassIcon className="size-3.5" aria-hidden="true" />
-                    Tự động mở khóa:
-                  </span> Tài khoản của bạn sẽ được hệ thống tự động mở khóa sau 15 phút. Bạn không cần thực hiện thêm thao tác nào, vui lòng quay lại sau thời gian trên.
+                <p className="mt-1.5 flex items-start gap-1.5 text-xs font-medium">
+                  <ShieldAlertIcon className="size-3.5 shrink-0 mt-0.5" aria-hidden="true" />
+                  <span>
+                    Chỉ Quản trị viên (Admin) mới có quyền mở khóa tài khoản này. Vui lòng liên hệ ban quản trị để được hỗ trợ.
+                  </span>
                 </p>
               )}
             </AlertDescription>

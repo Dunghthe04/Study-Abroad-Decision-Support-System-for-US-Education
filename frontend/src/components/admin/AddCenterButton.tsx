@@ -2,10 +2,11 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { PlusIcon } from "lucide-react";
+import { PlusIcon, UserPlusIcon } from "lucide-react";
 import { studyCentersApi, ApiError } from "@/lib/api";
 import { STUDY_LEVELS, STUDY_LEVEL_LABELS } from "@/lib/study-levels";
 import { useAuth } from "@/contexts/AuthContext";
+import { CreateCenterAccountButton } from "./centers/CreateCenterAccountButton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -54,6 +55,7 @@ export function AddCenterButton({ className, size = "sm" }: AddCenterButtonProps
 
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isCreateAccountOpen, setIsCreateAccountOpen] = useState(false);
 
   // Chỉ Moderator hoặc Admin mới được thêm trung tâm vào danh bạ
   const canAdd = user?.role === "admin" || user?.role === "moderator";
@@ -165,6 +167,25 @@ export function AddCenterButton({ className, size = "sm" }: AddCenterButtonProps
               <Alert variant="destructive">
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
+            )}
+
+            {user?.role === "admin" && (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 rounded-lg border border-brand/20 bg-brand/5 p-3 text-xs">
+                <div className="flex items-center gap-2 text-foreground font-medium">
+                  <UserPlusIcon className="size-4 text-brand shrink-0" />
+                  <span>Cần cấp tài khoản đăng nhập cho người đại diện trung tâm?</span>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="xs"
+                  onClick={() => setIsCreateAccountOpen(true)}
+                  className="gap-1 text-xs border-brand/30 text-brand hover:bg-brand/10 shrink-0 font-medium"
+                >
+                  <UserPlusIcon className="size-3.5" />
+                  Tạo tài khoản cho trung tâm
+                </Button>
+              </div>
             )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -306,17 +327,41 @@ export function AddCenterButton({ className, size = "sm" }: AddCenterButtonProps
               />
             </Field>
 
-            <DialogFooter className="pt-2">
-              <Button type="button" variant="outline" onClick={handleClose} disabled={isSubmitting}>
-                Hủy
-              </Button>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? <Spinner className="size-4" /> : "Thêm vào danh bạ"}
-              </Button>
+            <DialogFooter className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              {user?.role === "admin" ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsCreateAccountOpen(true)}
+                  disabled={isSubmitting}
+                  className="gap-1.5 text-xs text-brand border-brand/30 hover:bg-brand/5 mr-auto"
+                >
+                  <UserPlusIcon className="size-3.5" />
+                  Tạo tài khoản cho trung tâm
+                </Button>
+              ) : <div />}
+              <div className="flex items-center gap-2 self-end sm:self-auto">
+                <Button type="button" variant="outline" onClick={handleClose} disabled={isSubmitting}>
+                  Hủy
+                </Button>
+                <Button type="submit" disabled={isSubmitting} className="bg-brand text-white hover:bg-brand/90">
+                  {isSubmitting ? <Spinner className="size-4" /> : "Thêm vào danh bạ"}
+                </Button>
+              </div>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
+
+      <CreateCenterAccountButton
+        hideTriggerButton
+        isOpenControlled={isCreateAccountOpen}
+        onOpenChangeControlled={setIsCreateAccountOpen}
+        initialName={name}
+        initialEmail={email}
+        initialPhone={phone}
+      />
     </>
   );
 }
