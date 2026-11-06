@@ -21,7 +21,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AddCenterButton } from "@/components/admin/AddCenterButton";
-import { CreateCenterAccountButton } from "@/components/admin/centers/CreateCenterAccountButton";
 import { TablePagination } from "@/components/admin/shared/TablePagination";
 import { cn } from "cn";
 
@@ -131,7 +130,6 @@ export function AdminCenterListView() {
             <RotateCcwIcon className="size-3.5" />
             Làm mới
           </Button>
-          <CreateCenterAccountButton size="sm" />
           <AddCenterButton size="sm" />
         </div>
       </div>
