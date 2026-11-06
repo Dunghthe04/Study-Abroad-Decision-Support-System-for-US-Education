@@ -186,7 +186,7 @@ export interface SchoolOption {
   state: string | null;
 }
 
-// ---- "Cần gì để vào trường này" (POST /recommendations/schools/{code}/goal-seek) ----
+// ---- "Cần gì để vào trường này": kết quả goal-seeking (backend gửi trong widget của chat) ----
 
 export type GoalTarget = "reach" | "match" | "safety";
 export type GoalFactor = "sat" | "gpa" | "ecTier";
@@ -311,7 +311,7 @@ export interface ExplainBasis {
   label: string | null;
 }
 
-// Lời tư vấn một trường (POST /recommendations/schools/{code}/explain)
+// Lời tư vấn một trường (ChatService gọi ExplainAsync, hiện trong chat)
 export interface SchoolExplanation {
   code: string;
   name: string;
