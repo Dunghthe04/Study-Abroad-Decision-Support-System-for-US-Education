@@ -35,7 +35,9 @@ public record AdvisorChatRequest(
 /// SchoolCode là mã trường, Target là nhóm đích (match | safety) chỉ dùng cho goal_seek. Basis = "real" thì giải thích theo hồ sơ thật
 /// dù trang đang xem giả định (nút "Xem theo hồ sơ thật"); bỏ trống thì theo cái đang xem. Simulation (ở yêu cầu) là giá trị giả định đang kéo trên trang.
 /// </summary>
-public record ChatAction(string Type, string? SchoolCode = null, string? Target = null, string? Basis = null);
+public record ChatAction(
+    string Type, string? SchoolCode = null, string? Target = null, string? Basis = null, string? Question = null,
+    IReadOnlyList<string>? SchoolCodes = null, IReadOnlyList<string>? Fields = null);
 
 /// <summary>Một trường trong danh sách gợi ý. Group là mã nhóm đã chấm (R, RF, M, S, NA, O), advisor đổi sang chữ.</summary>
 public record ChatSchool(string Code, string Name, string? Group);

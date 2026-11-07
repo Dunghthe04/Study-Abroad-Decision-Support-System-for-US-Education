@@ -1050,6 +1050,697 @@ public class ChatServiceTests
         Assert.Null(res.Action);
     }
 
+    // ---- hỏi thông tin một trường: cơ sở dữ liệu trước, không có mới giữ câu của kho kiến thức
+
+    private static SchoolInfoDto InfoOf(string name = "Harvard University") => new(
+        "harvard", name, "Cambridge", "MA", "private", "https://harvard.example.edu",
+        new SchoolCostInfo(59_000m, 21_000m, 4_000m, 2_000m, 86_000m), new SchoolEnglishInfo(7m, null, null),
+        new SchoolTestInfo("required", 1480, 1580, 33, 36), new SchoolAdmissionInfo(0.04m, 0.03m),
+        new SchoolAidInfo("need_only", 70_000m, 600), new SchoolOutcomeInfo(0.98m, 0.97m), [], ["Economics"], [], null, null);
+
+    private static JsonElement KnowledgeAction(string question, string? school = null, bool kbFound = false, string kb = "ok") =>
+        JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, object?>
+        {
+            ["question"] = question, ["school"] = school, ["kb_answer"] = kb, ["kb_found"] = kbFound,
+        })).RootElement;
+
+    private static async Task<AdvisorChatResponse> KnowledgeChat(JsonElement data, FakeRunner runner) =>
+        // Câu trả lời advisor gửi lên chính là kb_answer trong dữ liệu (kho kiến thức, hoặc câu tạm khi model đã bỏ qua kho), như thật
+        await new ChatService(
+                new FakeAdvisor("B4") { Action = "school_info", ActionData = data, Answer = data.TryGetProperty("kb_answer", out var kb) ? kb.GetString()! : "ok" },
+                new FakeSessions(), new FakeProfileFlow(), null, runner)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+    [Fact]
+    public async Task SchoolInfo_TheSlmGaveTheSchool_AnswersFromTheDatabaseInsteadOfTheKnowledgeBase()
+    {
+        var runner = new FakeRunner { Match = Found("harvard", "Harvard University"), Info = InfoOf() };
+
+        var res = await KnowledgeChat(KnowledgeAction("học phí Harvard bao nhiêu", school: "Harvard"), runner);
+
+        Assert.Equal("harvard", runner.InfoCode);
+        Assert.Contains("học phí 59.000 USD", res.Answer);
+        Assert.NotEqual("ok", res.Answer);
+        Assert.Equal("school_info", res.Widget!.Type);   // thẻ số liệu hiện trên câu trả lời
+        Assert.Equal(["cost"], res.Widget.Data!.Value.GetProperty("fields").EnumerateArray().Select(e => e.GetString()));
+        Assert.Empty(res.Citations);
+        Assert.Null(res.Action);
+    }
+
+    [Fact]
+    public async Task SchoolInfo_TheCardCoversTheText_ExceptWhenTheTextAlsoSaysSomethingTheCardDoesNot()
+    {
+        var runner = new FakeRunner { Match = Found("harvard", "Harvard University"), Info = InfoOf() };
+
+        var plain = await KnowledgeChat(KnowledgeAction("học phí Harvard bao nhiêu", school: "Harvard"), runner);
+        var withUnstored = await KnowledgeChat(KnowledgeAction("học phí và ký túc xá của Harvard", school: "Harvard"), runner);
+
+        Assert.Equal(plain.Answer, plain.Widget!.Data!.Value.GetProperty("coveredText").GetString());   // thẻ nói đủ: giao diện bỏ chữ
+        Assert.False(withUnstored.Widget!.Data!.Value.TryGetProperty("coveredText", out _));            // có lời "chưa lưu": giữ chữ
+        Assert.Contains("hệ thống chưa lưu", withUnstored.Answer);
+    }
+
+    // ---- model đã đọc câu và trả trường lẫn mục: tin model, từ khóa chỉ là dự phòng
+
+    private static JsonElement ModelAction(string question, string? school, string[] fields, bool skipped = true) =>
+        JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, object?>
+        {
+            ["question"] = question, ["school"] = school, ["fields"] = fields,
+            ["kb_answer"] = "Mình đang tra số liệu của trường này nhé.", ["kb_found"] = false, ["kb_skipped"] = skipped,
+        })).RootElement;
+
+    [Fact]
+    public async Task SchoolInfo_TheFieldsTheModelReturnedWinOverTheKeywordsInTheSentence()
+    {
+        var runner = new FakeRunner { Match = Found("harvard", "Harvard University"), Info = InfoOf() with { Gpa = new SchoolGpaInfo(3.9m, 0.7m, 0.9m) } };
+
+        // Câu không có từ khóa nào (chỉ "harvard"), nhưng model đã trả muc = gpa
+        var res = await KnowledgeChat(ModelAction("harvard", "harvard", ["gpa"]), runner);
+
+        Assert.Contains("GPA trung bình của sinh viên trúng tuyển khoảng 3,9", res.Answer);
+        Assert.DoesNotContain("Mình đang tra số liệu", res.Answer);   // câu tạm của advisor đã bị thay
+        Assert.Equal(["gpa"], res.Widget!.Data!.Value.GetProperty("fields").EnumerateArray().Select(e => e.GetString()));
+    }
+
+    [Fact]
+    public async Task SchoolInfo_ModelFieldsDecideEvenWhenTheSentenceMentionsAnotherTopic()
+    {
+        var runner = new FakeRunner { Match = Found("harvard", "Harvard University"), Info = InfoOf() };
+
+        var res = await KnowledgeChat(ModelAction("học phí Harvard", "Harvard", ["xep_hang"]), runner);
+
+        Assert.Equal(["ranking"], res.Widget!.Data!.Value.GetProperty("fields").EnumerateArray().Select(e => e.GetString()));
+    }
+
+    [Fact]
+    public async Task SchoolInfo_ModelSkippedTheKnowledgeBase_ASchoolNotInTheSystemIsSaidClearly()
+    {
+        var runner = new FakeRunner { Match = new NameMatch(NameMatchKind.NotFound, []), Info = InfoOf() };
+
+        var res = await KnowledgeChat(ModelAction("học phí Hogwarts", "Hogwarts", ["chi_phi"]), runner);
+
+        Assert.Contains("chưa thấy trường “Hogwarts”", res.Answer);
+        Assert.DoesNotContain("Mình đang tra số liệu", res.Answer);
+    }
+
+    [Fact]
+    public async Task SchoolInfo_ModelSkippedTheKnowledgeBase_ADatabaseFailureSaysItInsteadOfLeavingTheTempSentence()
+    {
+        var runner = new FakeRunner { Match = Found("harvard", "Harvard University") };   // Info = null: bộ giả ném "Chưa có trường"
+
+        var res = await KnowledgeChat(ModelAction("học phí Harvard", "Harvard", ["chi_phi"]), runner);
+
+        Assert.Equal(ChatSchoolInfo.Unavailable, res.Answer);
+    }
+
+    [Fact]
+    public async Task SchoolInfo_ModelSaysKhacBesideAKnownField_AnswersTheKnownAndAdmitsTheRest()
+    {
+        var runner = new FakeRunner { Match = Found("harvard", "Harvard University"), Info = InfoOf() };
+
+        var res = await KnowledgeChat(ModelAction("học phí và ký túc xá Harvard", "Harvard", ["chi_phi", "khac"]), runner);
+
+        Assert.Contains("học phí 59.000 USD", res.Answer);
+        Assert.Contains("hệ thống chưa lưu", res.Answer);
+    }
+
+    // ---- tìm trường theo điều kiện: model trả bo_loc, advisor chuẩn hóa, backend lọc và trả lời bằng số liệu thật (không Gemini)
+
+    private static JsonElement SearchAction(object filters, string sort = "quality", string[]? unresolved = null) =>
+        JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, object?>
+        {
+            ["question"] = "tìm trường", ["filters"] = filters, ["sort"] = sort, ["unresolved"] = unresolved ?? [],
+            ["kb_answer"] = "Mình đang tra số liệu của trường này nhé.",
+        })).RootElement;
+
+    private static async Task<(AdvisorChatResponse Res, FakeRunner Runner)> SearchChat(JsonElement data, FakeRunner runner)
+    {
+        var res = await new ChatService(
+                new FakeAdvisor("B4") { Action = "school_search", ActionData = data, Answer = "Mình đang tra số liệu của trường này nhé." },
+                new FakeSessions(), new FakeProfileFlow(), null, runner)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+        return (res, runner);
+    }
+
+    private static SchoolSearchItem SearchItem(string name, string state = "CA", decimal? cost = 40_000m, decimal? accept = 0.3m, int? rank = 20) =>
+        new(name.ToLowerInvariant(), name, "Los Angeles", state, "public", cost, accept, "need_and_merit", 20_000m, rank is null ? null : 0.8, rank);
+
+    [Fact]
+    public async Task SchoolSearch_PassesTheNormalizedFiltersAndSortToTheDatabaseSearch()
+    {
+        var runner = new FakeRunner { SearchResult = new SchoolSearchResult(1, [SearchItem("UCLA")], []) };
+        var data = SearchAction(new { states = new[] { "CA", "TX" }, aid = "any", maxCostUsd = 30000, maxIelts = 6.5, ivy = false }, sort: "lowestCost");
+
+        await SearchChat(data, runner);
+
+        var (filters, sort) = runner.SearchedWith!.Value;
+        Assert.Equal(["CA", "TX"], filters.States);
+        Assert.Equal(("any", 30000m, 6.5m), (filters.Aid, filters.MaxCostUsd, filters.MaxIelts));
+        Assert.Equal(SchoolSort.LowestCost, sort);
+    }
+
+    [Fact]
+    public async Task SchoolSearch_SaysHowManyAndListsTheFirstFiveInOrder()
+    {
+        var items = Enumerable.Range(1, 8).Select(i => SearchItem($"School {i}", rank: i)).ToList();
+        var runner = new FakeRunner { SearchResult = new SchoolSearchResult(8, items, []) };
+
+        var (res, _) = await SearchChat(SearchAction(new { states = new[] { "CA" }, aid = "any" }), runner);
+
+        Assert.Contains("Có 8 trường ở CA, có học bổng cho du học sinh.", res.Answer);
+        Assert.Contains("Xếp theo xếp hạng (chất lượng) cao đến thấp.", res.Answer);
+        Assert.Contains("1. School 1 (Los Angeles, CA, công lập): chi phí 40.000 USD · tỷ lệ nhận 30% · hạng #1", res.Answer);
+        Assert.Contains("5. School 5", res.Answer);
+        Assert.DoesNotContain("6. School 6", res.Answer);
+        Assert.Contains("Và 3 trường khác.", res.Answer);
+        Assert.DoesNotContain("Mình đang tra số liệu", res.Answer);
+    }
+
+    [Fact]
+    public async Task SchoolSearch_GivesACardWithEveryResultAndTheNextStepButtons()
+    {
+        var items = Enumerable.Range(1, 8).Select(i => SearchItem($"School {i}", rank: i)).ToList();
+        var runner = new FakeRunner { SearchResult = new SchoolSearchResult(8, items, []) };
+
+        var (res, _) = await SearchChat(SearchAction(new { states = new[] { "CA" } }), runner);
+
+        var data = res.Widget!.Data!.Value;
+        Assert.Equal("school_search", res.Widget.Type);
+        Assert.Equal(8, data.GetProperty("total").GetInt32());
+        Assert.Equal(5, data.GetProperty("visible").GetInt32());
+        Assert.Equal(8, data.GetProperty("items").GetArrayLength());                 // toàn bộ để "Xem thêm" mở ngay, không gửi tin
+        Assert.Equal(res.Answer, data.GetProperty("coveredText").GetString());
+        var compare = res.QuickReplies![0];
+        Assert.Equal("So sánh hai trường đầu", compare.Label);
+        Assert.Equal(new[] { "school 1", "school 2" }, compare.Action!.SchoolCodes);   // hai trường đầu theo thứ tự xếp
+        Assert.Equal("Gợi ý trường theo hồ sơ của em", res.QuickReplies[1].Label);
+    }
+
+    [Fact]
+    public async Task SchoolSearch_OneResult_HasNoCompareButton()
+    {
+        var runner = new FakeRunner { SearchResult = new SchoolSearchResult(1, [SearchItem("Only")], []) };
+
+        var (res, _) = await SearchChat(SearchAction(new { states = new[] { "CA" } }), runner);
+
+        Assert.Equal(["Gợi ý trường theo hồ sơ của em"], res.QuickReplies!.Select(b => b.Label));
+    }
+
+    [Fact]
+    public async Task SchoolSearch_NoResult_HasNoCardAndNoButtons()
+    {
+        var (res, _) = await SearchChat(SearchAction(new { states = new[] { "CA" } }), new FakeRunner());
+
+        Assert.Null(res.Widget);
+        Assert.Null(res.QuickReplies);
+    }
+
+    // Nút "So sánh hai trường đầu": chạy thẳng theo mã trường, không qua advisor, ra bảng so sánh
+    [Fact]
+    public async Task ChatAction_CompareByCodes_RunsTheComparisonWithoutTheAdvisor()
+    {
+        var runner = CompareRunner();
+        runner.MatchByName!["bu"] = Found("bu", "Boston University");
+        runner.MatchByName["nyu"] = Found("nyu", "New York University");
+
+        var (res, advisor) = await ActionChat(new ChatAction("school_compare", SchoolCodes: ["bu", "nyu"], Question: "So sánh"), runner);
+
+        Assert.Null(advisor.LastRequest);
+        Assert.StartsWith("So sánh Boston University và New York University:", res.Answer);
+        Assert.Equal("school_compare", res.Widget!.Type);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(5)]
+    public async Task ChatAction_CompareNeedsTwoToFourCodes(int count)
+    {
+        var codes = Enumerable.Range(0, count).Select(i => $"c{i}").ToArray();
+
+        var (_, advisor) = await ActionChat(new ChatAction("school_compare", SchoolCodes: codes), new FakeRunner { Explanation = Explanation() });
+
+        Assert.NotNull(advisor.LastRequest);              // hành động sai: chat chạy như thường qua advisor
+    }
+
+    [Fact]
+    public async Task SchoolSearch_NoResult_SaysWhichConditionToDropToGetSome()
+    {
+        var runner = new FakeRunner
+        {
+            SearchResult = new SchoolSearchResult(0, [], [new RelaxedFilter("loai_truong", 12), new RelaxedFilter("hoc_bong", 3)]),
+        };
+
+        var (res, _) = await SearchChat(SearchAction(new { states = new[] { "TX" }, control = "public", aid = "any" }), runner);
+
+        Assert.Contains("Không có trường nào thỏa tất cả điều kiện", res.Answer);
+        Assert.Contains("Nếu bỏ điều kiện loại trường thì có 12 trường.", res.Answer);
+        Assert.Contains("Nếu bỏ điều kiện học bổng thì có 3 trường.", res.Answer);
+    }
+
+    [Fact]
+    public async Task SchoolSearch_AConditionThatCouldNotBeReadStopsTheSearchAndAsksAgain()
+    {
+        var runner = new FakeRunner { SearchResult = new SchoolSearchResult(5, [SearchItem("UCLA")], []) };
+
+        var (res, r) = await SearchChat(SearchAction(new { aid = "any" }, unresolved: ["bang “Califonia”"]), runner);
+
+        Assert.Contains("chưa hiểu chắc điều kiện bang “Califonia”", res.Answer);
+        Assert.Null(r.SearchedWith);                 // không tìm với phần điều kiện còn lại: danh sách sẽ sai ý
+    }
+
+    [Fact]
+    public async Task SchoolSearch_NoFilterAtAll_AsksWhatToFilterBy()
+    {
+        var (res, r) = await SearchChat(SearchAction(new { }), new FakeRunner());
+
+        Assert.Equal(ChatSchoolInfo.SearchNoFilter, res.Answer);
+        Assert.Null(r.SearchedWith);
+    }
+
+    // ---- so sánh từ hai trường: model trả cac_truong, advisor chuyển sang, backend lấy số liệu từng trường và dựng bảng
+
+    private static JsonElement CompareAction(string[] schools, string[] fields) =>
+        JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, object?>
+        {
+            ["question"] = "so sánh", ["schools"] = schools, ["fields"] = fields, ["kb_answer"] = "Mình đang tra số liệu của trường này nhé.",
+        })).RootElement;
+
+    private static async Task<AdvisorChatResponse> CompareChat(JsonElement data, FakeRunner runner) =>
+        (await CompareChatWith(data, runner)).Res;
+
+    private static async Task<(AdvisorChatResponse Res, FakeAdvisor Advisor)> CompareChatWith(
+        JsonElement data, FakeRunner runner, CompareNoteResponseDto? note = null, Exception? noteError = null)
+    {
+        var advisor = new FakeAdvisor("B4")
+        {
+            Action = "school_compare", ActionData = data, Answer = "Mình đang tra số liệu của trường này nhé.",
+            CompareNote = note ?? new("1.0", "gemini", "FAILED", ""), CompareNoteError = noteError,
+        };
+        var res = await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), null, runner)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+        return (res, advisor);
+    }
+
+    // ---- nhận xét của Gemini cho phần so sánh: bảng số liệu do code luôn có, nhận xét đứng sau, có nhãn "AI nhận xét"
+
+    [Fact]
+    public async Task SchoolCompare_GeminiAddsAShortNoteAfterTheTable_LabelledAsAi()
+    {
+        var note = new CompareNoteResponseDto("1.0", "gemini", "OK", "New York University tốn ít tiền hơn mỗi năm.");
+
+        var (res, advisor) = await CompareChatWith(CompareAction(["BU", "NYU"], ["chi_phi"]), CompareRunner(), note);
+
+        var parts = res.Answer.Split("\n\nAI nhận xét:\n");
+        Assert.Equal(2, parts.Length);
+        Assert.StartsWith("So sánh Boston University và New York University:", parts[0]);
+        Assert.Equal("New York University tốn ít tiền hơn mỗi năm.", parts[1]);
+        // Gemini nhận đúng các dòng số liệu (kèm câu chênh lệch chi phí, để không phải tự trừ) và tên các trường khác để chặn nhắc nhầm
+        var sent = advisor.LastCompareNote!;
+        // Thẻ so sánh đi kèm: có bảng và nhận xét tách riêng; giao diện bỏ đoạn chữ vì thẻ đã nói đủ
+        var card = res.Widget!;
+        Assert.Equal("school_compare", card.Type);
+        Assert.Equal("New York University tốn ít tiền hơn mỗi năm.", card.Data!.Value.GetProperty("aiNote").GetString());
+        Assert.Equal(res.Answer, card.Data.Value.GetProperty("coveredText").GetString());
+        Assert.Equal(["Boston University", "New York University"], sent.Schools);
+        Assert.Contains(sent.Facts, f => f.StartsWith("Chi phí mỗi năm: Boston University 86.000 USD"));
+        Assert.Contains(sent.Facts, f => f.Contains("rẻ hơn Boston University khoảng 11.000 USD"));
+        Assert.NotEmpty(sent.Others);
+    }
+
+    [Fact]
+    public async Task SchoolCompare_WhenGeminiFailsOrIsRejected_OnlyTheTableShows()
+    {
+        var failed = await CompareChat(CompareAction(["BU", "NYU"], ["chi_phi"]), CompareRunner());                // FAILED mặc định
+        var down = (await CompareChatWith(CompareAction(["BU", "NYU"], ["chi_phi"]), CompareRunner(), noteError: new HttpRequestException("advisor tắt"))).Res;
+
+        Assert.DoesNotContain("AI nhận xét", failed.Answer);
+        Assert.DoesNotContain("AI nhận xét", down.Answer);
+        Assert.StartsWith("So sánh Boston University và New York University:", down.Answer);
+    }
+
+    [Fact]
+    public async Task SchoolCompare_AnEmptyNote_IsTreatedAsNone()
+    {
+        var empty = new CompareNoteResponseDto("1.0", "gemini", "OK", "   ");
+
+        var (res, _) = await CompareChatWith(CompareAction(["BU", "NYU"], ["chi_phi"]), CompareRunner(), empty);
+
+        Assert.DoesNotContain("AI nhận xét", res.Answer);
+    }
+
+    private static FakeRunner CompareRunner() => new()
+    {
+        MatchByName = new()
+        {
+            ["BU"] = Found("bu", "Boston University"),
+            ["NYU"] = Found("nyu", "New York University"),
+            ["Boston"] = new NameMatch(NameMatchKind.Ambiguous, [new SchoolRef("bu", "Boston University"), new SchoolRef("bc", "Boston College")]),
+            ["Hogwarts"] = new NameMatch(NameMatchKind.NotFound, []),
+        },
+        InfoByCode = new()
+        {
+            ["bu"] = InfoOf("Boston University"),
+            ["nyu"] = InfoOf("New York University") with { Code = "nyu", Cost = new SchoolCostInfo(50_000m, 20_000m, 3_000m, 2_000m, 75_000m) },
+        },
+    };
+
+    [Fact]
+    public async Task SchoolCompare_TwoResolvedSchools_GiveATableOfTheirNumbersAndTheCostGap()
+    {
+        var res = await CompareChat(CompareAction(["BU", "NYU"], ["chi_phi"]), CompareRunner());
+
+        Assert.StartsWith("So sánh Boston University và New York University:", res.Answer);
+        Assert.Contains("Boston University 86.000 USD · New York University 75.000 USD", res.Answer);
+        Assert.Contains("New York University rẻ hơn Boston University khoảng 11.000 USD mỗi năm.", res.Answer);
+        Assert.DoesNotContain("Mình đang tra số liệu", res.Answer);
+        Assert.Empty(res.Citations);
+    }
+
+    [Fact]
+    public async Task SchoolCompare_WithoutFieldsFromTheModel_UsesTheDefaultFields()
+    {
+        var res = await CompareChat(CompareAction(["BU", "NYU"], []), CompareRunner());
+
+        Assert.Contains("- Tiếng Anh tối thiểu:", res.Answer);
+        Assert.Contains("- Xếp hạng:", res.Answer);
+    }
+
+    [Fact]
+    public async Task SchoolCompare_ASchoolNotInTheSystem_IsNamedInsteadOfGuessed()
+    {
+        var res = await CompareChat(CompareAction(["BU", "Hogwarts"], ["chi_phi"]), CompareRunner());
+
+        Assert.Contains("“Hogwarts”", res.Answer);
+        Assert.DoesNotContain("So sánh", res.Answer);
+        Assert.Null(res.QuickReplies);            // không có ứng viên để chọn
+    }
+
+    // Tên mơ hồ: hỏi lại đúng trường đó bằng nút; mỗi nút chạy lại so sánh theo mã, giữ trường đã rõ và các mục
+    [Fact]
+    public async Task SchoolCompare_AnAmbiguousName_AsksWhichOneAndKeepsTheOthers()
+    {
+        var res = await CompareChat(CompareAction(["Boston", "NYU"], ["chi_phi"]), CompareRunner());
+
+        Assert.Contains("“Boston”", res.Answer);
+        Assert.DoesNotContain("So sánh Boston", res.Answer);
+        Assert.Equal(["Boston University", "Boston College"], res.QuickReplies!.Select(b => b.Label));
+        var action = res.QuickReplies![1].Action!;                    // chọn Boston College
+        Assert.Equal("school_compare", action.Type);
+        Assert.Equal(["bc", "nyu"], action.SchoolCodes);               // Boston thành mã đã chọn, NYU (đã rõ) thành mã
+        Assert.Equal(["chi_phi"], action.Fields);
+    }
+
+    [Fact]
+    public async Task SchoolCompare_TwoAmbiguousNames_AreAskedOneAtATime()
+    {
+        var runner = CompareRunner();
+        runner.MatchByName!["Washington"] = new NameMatch(NameMatchKind.Ambiguous, [new SchoolRef("gw", "George Washington University"), new SchoolRef("wl", "Washington and Lee University")]);
+
+        var res = await CompareChat(CompareAction(["Boston", "Washington"], ["chi_phi"]), runner);
+
+        Assert.Contains("“Boston”", res.Answer);                                   // hỏi tên đầu trước
+        Assert.Equal(["bu", "Washington"], res.QuickReplies![0].Action!.SchoolCodes);   // tên còn lại giữ chữ để hỏi lượt sau
+    }
+
+    // Bấm nút chọn: so sánh chạy thẳng theo mã (và tên đã rõ), không qua advisor
+    [Fact]
+    public async Task ChatAction_CompareAfterChoosingTheAmbiguousSchool_RunsTheComparison()
+    {
+        var runner = CompareRunner();
+        runner.MatchByName!["bu"] = Found("bu", "Boston University");
+        runner.MatchByName["NYU"] = Found("nyu", "New York University");
+
+        var (res, advisor) = await ActionChat(
+            new ChatAction("school_compare", SchoolCodes: ["bu", "NYU"], Question: "so sánh", Fields: ["chi_phi"]), runner);
+
+        Assert.Null(advisor.LastRequest);
+        Assert.StartsWith("So sánh Boston University và New York University:", res.Answer);
+    }
+
+    [Fact]
+    public async Task SchoolCompare_TheSameSchoolTwice_AsksForTwoDifferentSchools()
+    {
+        var res = await CompareChat(CompareAction(["BU", "BU"], ["chi_phi"]), CompareRunner());
+
+        Assert.Equal(ChatSchoolInfo.CompareNeedsTwo, res.Answer);
+    }
+
+    [Fact]
+    public async Task SchoolCompare_ADatabaseFailure_SaysSoInsteadOfLeavingTheTempSentence()
+    {
+        var runner = CompareRunner();
+        runner.InfoByCode!.Remove("nyu");   // thiếu trường này: bộ giả ném "Chưa có trường"
+
+        var res = await CompareChat(CompareAction(["BU", "NYU"], ["chi_phi"]), runner);
+
+        Assert.Equal(ChatSchoolInfo.Unavailable, res.Answer);
+    }
+
+    [Fact]
+    public async Task SchoolCompare_MoreThanFourSchools_ComparesTheFirstFour()
+    {
+        var runner = CompareRunner();
+        foreach (var n in new[] { "A", "B", "C", "D", "E" })
+        {
+            runner.MatchByName![n] = Found(n.ToLowerInvariant(), $"School {n}");
+            runner.InfoByCode![n.ToLowerInvariant()] = InfoOf($"School {n}") with { Code = n.ToLowerInvariant() };
+        }
+
+        var res = await CompareChat(CompareAction(["A", "B", "C", "D", "E"], ["chi_phi"]), runner);
+
+        Assert.Contains("School D", res.Answer);
+        Assert.DoesNotContain("School E", res.Answer);
+    }
+
+    [Fact]
+    public async Task SchoolInfo_TheSlmGaveNoSchool_FindsItInTheSentence()
+    {
+        var runner = new FakeRunner { Mentioned = [new SchoolRef("harvard", "Harvard University")], Info = InfoOf() };
+
+        var res = await KnowledgeChat(KnowledgeAction("Harvard cần IELTS bao nhiêu"), runner);
+
+        Assert.Equal("harvard", runner.InfoCode);
+        Assert.Contains("Tiếng Anh tối thiểu: IELTS 7.", res.Answer);
+    }
+
+    // Biết đúng trường nhưng không nhận ra mục nào: kho có nguồn thật thì giữ câu của kho, kho không có thì tóm tắt kèm nút chọn mục
+    [Fact]
+    public async Task SchoolInfo_ASchoolWithoutATopic_GivesTheSummaryWhenTheKnowledgeBaseHasNothing()
+    {
+        var runner = new FakeRunner { Match = Found("harvard", "Harvard University"), Info = InfoOf() };
+
+        var res = await KnowledgeChat(KnowledgeAction("Harvard thế nào", school: "Harvard"), runner);
+
+        Assert.StartsWith("Mình chưa rõ bạn muốn biết mục nào của Harvard University.", res.Answer);
+        Assert.Contains("Tóm tắt về Harvard University", res.Answer);
+        Assert.Equal(6, res.QuickReplies!.Count);                                 // nút chọn mục
+        Assert.Equal("school_info", res.Widget!.Type);
+        Assert.Equal(res.Answer, res.Widget.Data!.Value.GetProperty("coveredText").GetString());
+    }
+
+    [Fact]
+    public async Task SchoolInfo_ASchoolWithoutATopic_KeepsTheKnowledgeBaseAnswerWhenItHasASource()
+    {
+        var runner = new FakeRunner { Match = Found("harvard", "Harvard University"), Info = InfoOf() };
+
+        var res = await KnowledgeChat(KnowledgeAction("Harvard là trường như thế nào", school: "Harvard", kbFound: true, kb: "Mô tả của kho"), runner);
+
+        Assert.Equal("Mô tả của kho", res.Answer);
+        Assert.Null(runner.InfoCode);
+    }
+
+    [Fact]
+    public async Task SchoolInfo_AGeneralQuestionWithNoSchool_KeepsTheKnowledgeBaseAnswerEvenWhenItHasNoSource()
+    {
+        var runner = new FakeRunner { Info = InfoOf() };
+
+        var res = await KnowledgeChat(KnowledgeAction("I-20 là gì"), runner);
+
+        Assert.Equal("ok", res.Answer);
+        Assert.Null(runner.InfoCode);
+    }
+
+    [Fact]
+    public async Task SchoolInfo_NoSchoolAnywhere_KeepsTheKnowledgeBaseAnswer()
+    {
+        var runner = new FakeRunner { Info = InfoOf() };
+
+        var res = await KnowledgeChat(KnowledgeAction("học phí đại học Mỹ bao nhiêu"), runner);
+
+        Assert.Equal("ok", res.Answer);
+        Assert.Null(runner.InfoCode);
+    }
+
+    [Fact]
+    public async Task SchoolInfo_AnAmbiguousName_AsksWhichSchoolAndKeepsTheQuestionOnEachButton()
+    {
+        var runner = new FakeRunner
+        {
+            Match = new NameMatch(NameMatchKind.Ambiguous, [new SchoolRef("bu", "Boston University"), new SchoolRef("bc", "Boston College")]),
+            Info = InfoOf(),
+        };
+
+        var res = await KnowledgeChat(KnowledgeAction("học phí Boston bao nhiêu", school: "Boston"), runner);
+
+        Assert.Null(runner.InfoCode);
+        Assert.Contains("Boston", res.Answer);
+        Assert.Equal(["Boston University", "Boston College"], res.QuickReplies!.Select(b => b.Label));
+        Assert.Equal(new ChatAction("school_info", "bu", Question: "học phí Boston bao nhiêu"), res.QuickReplies![0].Action);
+    }
+
+    [Fact]
+    public async Task SchoolInfo_OnlyAnUnstoredTopic_KeepsTheKnowledgeBaseAnswerWhenItHasASource()
+    {
+        var runner = new FakeRunner { Match = Found("harvard", "Harvard University"), Info = InfoOf() };
+
+        var kept = await KnowledgeChat(KnowledgeAction("ký túc xá của Harvard thế nào", school: "Harvard", kbFound: true, kb: "Câu của kho"), runner);
+        var pointed = await KnowledgeChat(KnowledgeAction("ký túc xá của Harvard thế nào", school: "Harvard", kbFound: false), runner);
+
+        Assert.Equal("Câu của kho", kept.Answer);                              // kho có nguồn thật: giữ
+        Assert.Contains("chưa có thông tin này của Harvard University", pointed.Answer);   // kho không có: nói chưa có và chỉ website
+        Assert.Contains("https://harvard.example.edu", pointed.Answer);
+    }
+
+    [Fact]
+    public async Task SchoolInfo_OtherIntentsInTheSameMessageStayIntact()
+    {
+        var runner = new FakeRunner { Match = Found("harvard", "Harvard University"), Info = InfoOf() };
+        var advisor = new FakeAdvisor("B4")
+        {
+            Action = "school_info", Answer = "Mở đầu.\n\nCâu của kho\n\nKết thúc.",
+            ActionData = KnowledgeAction("học phí Harvard bao nhiêu", school: "Harvard", kb: "Câu của kho"),
+        };
+        var res = await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), null, runner)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.StartsWith("Mở đầu.", res.Answer);
+        Assert.EndsWith("Kết thúc.", res.Answer);
+        Assert.Contains("học phí 59.000 USD", res.Answer);
+        Assert.DoesNotContain("Câu của kho", res.Answer);
+    }
+
+    [Fact]
+    public async Task SchoolInfo_ADatabaseFailure_KeepsTheKnowledgeBaseAnswer()
+    {
+        var runner = new FakeRunner { Match = Found("harvard", "Harvard University") };   // Info = null: bộ giả ném "Chưa có trường"
+
+        var res = await KnowledgeChat(KnowledgeAction("học phí Harvard bao nhiêu", school: "Harvard"), runner);
+
+        Assert.Equal("ok", res.Answer);
+    }
+
+    // SLM thật (usas-slm-v2) xếp "MIT cần IELTS bao nhiêu" vào goal-seeking và "UCLA xếp hạng bao nhiêu" vào giải thích hồ sơ: chuyển sang số liệu
+    private static async Task<(AdvisorChatResponse Res, FakeRunner Runner)> TypedChat(
+        string typed, string action, JsonElement data, FakeRunner runner)
+    {
+        var res = await new ChatService(new FakeAdvisor("B4") { Action = action, ActionData = data, Answer = "câu tạm của advisor" },
+                new FakeSessions(), new FakeProfileFlow(), null, runner)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest([new StudyAbroad.Application.Advisor.ChatMessage("user", typed)]));
+        return (res, runner);
+    }
+
+    [Fact]
+    public async Task SchoolInfo_AGoalSeekingTheSlmGaveToAnEnglishRequirementQuestion_AnswersTheNumbersInstead()
+    {
+        var runner = new FakeRunner { Info = InfoOf(), GoalResult = GoalOf(), Match = Found("mit", "MIT") };
+        var data = JsonDocument.Parse("""{"school":"MIT","target":null}""").RootElement;
+
+        var (res, r) = await TypedChat("MIT cần IELTS bao nhiêu", "goal_seek", data, runner);
+
+        Assert.Null(r.GoalCalledWith);                      // không chạy goal-seeking
+        Assert.Contains("Tiếng Anh tối thiểu: IELTS 7", res.Answer);
+        Assert.DoesNotContain("câu tạm của advisor", res.Answer);
+    }
+
+    // Lỗi thật khi thử: "GPA đại học harvard là bao nhiêu" SLM xếp kiến thức không kèm trường, kho không có (knowledge_miss); GPA phải là mục số liệu
+    [Fact]
+    public async Task SchoolInfo_AGpaQuestionWithNoSchoolFromTheSlm_FindsTheSchoolInTheSentenceAndAnswers()
+    {
+        var runner = new FakeRunner
+        {
+            Mentioned = [new SchoolRef("harvard", "Harvard University")],
+            Info = InfoOf() with { Gpa = new SchoolGpaInfo(3.9m, 0.54m, 0.9m) },
+        };
+
+        var res = await KnowledgeChat(KnowledgeAction("GPA đại học harvard là bao nhiêu"), runner);
+
+        Assert.Contains("GPA trung bình của sinh viên trúng tuyển khoảng 3,9 (thang 4)", res.Answer);
+    }
+
+    [Theory]
+    [InlineData("GPA em 3.5 thì vào Harvard được không", "goal_seek")]
+    [InlineData("em IELTS 7.0, Harvard cần IELTS bao nhiêu", "goal_seek")]
+    public async Task SchoolInfo_AStudentsOwnNumbersMeanItIsNotAFactQuestion(string typed, string action)
+    {
+        var runner = new FakeRunner { Info = InfoOf(), GoalResult = GoalOf(), Match = Found("harvard", "Harvard University") };
+
+        await TypedChat(typed, action, JsonDocument.Parse("""{"school":"Harvard"}""").RootElement, runner);
+
+        Assert.Null(runner.InfoCode);
+    }
+
+    [Fact]
+    public async Task SchoolInfo_AnExplainTheSlmGaveToARankingQuestion_AnswersTheNumbersInstead()
+    {
+        var runner = new FakeRunner { Info = InfoOf(), Explanation = Explanation() };
+
+        var (res, r) = await TypedChat("UCLA xếp hạng bao nhiêu", "explain", IowaCode, runner);
+
+        Assert.Null(r.ExplainedCode);                       // không chạy giải thích nhóm
+        Assert.Equal("iowa", r.InfoCode);
+    }
+
+    [Theory]
+    [InlineData("MIT cần gì để vào", "goal_seek")]
+    [InlineData("làm sao để vào Harvard, cần IELTS bao nhiêu", "goal_seek")]
+    [InlineData("vì sao Harvard khó vào", "explain")]            // "khó vào" là nhóm, không phải hỏi tỷ lệ nhận
+    [InlineData("Harvard xếp nhóm nào với hồ sơ của em", "explain")]
+    public async Task SchoolInfo_QuestionsAboutGroupsOrHowToGetIn_KeepTheirOwnFlow(string typed, string action)
+    {
+        var runner = new FakeRunner { Info = InfoOf(), GoalResult = GoalOf(), Explanation = Explanation(), Match = Found("188429", "Boston University") };
+        var data = action == "goal_seek" ? JsonDocument.Parse("""{"school":"MIT"}""").RootElement : IowaCode;
+
+        await TypedChat(typed, action, data, runner);
+
+        Assert.Null(runner.InfoCode);
+    }
+
+    [Fact]
+    public async Task SchoolInfo_AButtonActionIsNeverRerouted()
+    {
+        var runner = new FakeRunner { Info = InfoOf(), GoalResult = GoalOf() };
+
+        var (res, _) = await ActionChat(new ChatAction("goal_seek", "188429"), runner);
+
+        Assert.Equal("goal_seek", res.Widget!.Type);
+        Assert.Null(runner.InfoCode);
+    }
+
+    // Nút chọn trường khi tên mơ hồ: chạy thẳng theo mã và câu hỏi gốc, không qua advisor
+    [Fact]
+    public async Task ChatAction_SchoolInfo_AnswersTheOriginalQuestionForTheChosenSchool()
+    {
+        var runner = new FakeRunner { Info = InfoOf("Boston University") };
+
+        var (res, advisor) = await ActionChat(new ChatAction("school_info", "bu", Question: "học phí Boston bao nhiêu"), runner);
+
+        Assert.Null(advisor.LastRequest);
+        Assert.Equal("bu", runner.InfoCode);
+        Assert.Contains("học phí 59.000 USD", res.Answer);
+    }
+
+    [Fact]
+    public async Task ChatAction_SchoolInfo_WithoutAQuestion_GivesTheSummaryAndFieldButtons()
+    {
+        var runner = new FakeRunner { Info = InfoOf("Boston University") };
+
+        var (res, _) = await ActionChat(new ChatAction("school_info", "bu"), runner);
+
+        Assert.StartsWith("Tóm tắt về Boston University", res.Answer);
+        Assert.Equal(6, res.QuickReplies!.Count);
+    }
+
     // Nút "Cần gì để vào trường em muốn?" không kèm trường: mở ô chọn trường, không gọi advisor và không chạy goal-seeking
     [Fact]
     public async Task ChatAction_GoalSeekWithoutASchool_AsksWhichSchoolWithThePicker()
@@ -1350,6 +2041,8 @@ public class ChatServiceTests
         public Task<NameMatch> FindSchoolsAsync(Guid userId, string text, CancellationToken ct)
         {
             SearchedFor = text;
+            if (MatchByName is not null && MatchByName.TryGetValue(text, out var byName))
+                return Task.FromResult(byName);
             return Task.FromResult(Match!);
         }
 
@@ -1361,6 +2054,30 @@ public class ChatServiceTests
             if (GoalResult is null)
                 throw new InvalidOperationException($"Chưa có trường {code} trong dữ liệu.");
             return Task.FromResult(GoalResult);
+        }
+
+        public SchoolInfoDto? Info { get; init; }
+        public Dictionary<string, SchoolInfoDto>? InfoByCode { get; init; }   // so sánh: mỗi trường một thông tin
+        public Dictionary<string, NameMatch>? MatchByName { get; init; }      // so sánh: mỗi tên một kết quả khớp
+        public string? InfoCode { get; private set; }
+        public IReadOnlyList<SchoolRef> Mentioned { get; init; } = [];
+        public SchoolSearchResult? SearchResult { get; init; }
+        public (SchoolSearchFilters Filters, SchoolSort Sort)? SearchedWith { get; private set; }
+
+        public Task<SchoolSearchResult> SearchSchoolsAsync(Guid userId, SchoolSearchFilters filters, SchoolSort sort, CancellationToken ct)
+        {
+            SearchedWith = (filters, sort);
+            return Task.FromResult(SearchResult ?? new SchoolSearchResult(0, [], []));
+        }
+
+        public Task<IReadOnlyList<SchoolRef>> FindMentionedSchoolsAsync(Guid userId, string text, CancellationToken ct) => Task.FromResult(Mentioned);
+
+        public Task<SchoolInfoDto> SchoolInfoAsync(Guid userId, string code, CancellationToken ct)
+        {
+            InfoCode = code;
+            if (InfoByCode is not null && InfoByCode.TryGetValue(code, out var byCode))
+                return Task.FromResult(byCode);
+            return Task.FromResult(Info ?? throw new InvalidOperationException($"Chưa có trường {code} trong dữ liệu."));
         }
 
         public SimulationResult? Simulation { get; init; }
@@ -1407,6 +2124,7 @@ public class ChatServiceTests
         public IReadOnlyList<string>? Skills { get; init; }
         public string? Action { get; init; }
         public JsonElement? ActionData { get; init; }
+        public string Answer { get; init; } = "ok";
 
         public Task<AdvisorChatResponse> ChatAsync(AdvisorChatRequest request, CancellationToken ct = default)
         {
@@ -1414,7 +2132,7 @@ public class ChatServiceTests
             var question = QuestionId is null ? "" : $",\"questionId\":\"{QuestionId}\"";
             var state = JsonDocument.Parse($"{{\"currentStep\":\"{nextStep}\"{question}}}").RootElement;
             return Task.FromResult(new AdvisorChatResponse(
-                "ok", [], null, state, QuickReplies: replies, Widget: widget, Profile: Profile, ProfileChanged: Changed, Skills: Skills, Action: Action, ActionData: ActionData));
+                Answer, [], null, state, QuickReplies: replies, Widget: widget, Profile: Profile, ProfileChanged: Changed, Skills: Skills, Action: Action, ActionData: ActionData));
         }
 
         // Trả lời theo từng ý: gọi onEvent cho từng tin trong Events rồi trả kết quả như ChatAsync
@@ -1448,6 +2166,19 @@ public class ChatServiceTests
             if (GoalNoteError is not null)
                 throw GoalNoteError;
             return Task.FromResult(GoalNote);
+        }
+
+        // Mặc định Gemini lỗi: so sánh chỉ hiện bảng. Test cần nhận xét của Gemini thì đặt CompareNote
+        public CompareNoteResponseDto CompareNote { get; init; } = new("1.0", "gemini", "FAILED", "");
+        public Exception? CompareNoteError { get; init; }
+        public CompareNoteRequestDto? LastCompareNote { get; private set; }
+
+        public Task<CompareNoteResponseDto> WriteCompareNoteAsync(CompareNoteRequestDto request, CancellationToken ct = default)
+        {
+            LastCompareNote = request;
+            if (CompareNoteError is not null)
+                throw CompareNoteError;
+            return Task.FromResult(CompareNote);
         }
 
         public ScenarioNoteResponseDto? Note { get; init; }
