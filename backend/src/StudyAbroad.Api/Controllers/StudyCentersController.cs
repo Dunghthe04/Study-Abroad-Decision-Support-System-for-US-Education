@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using StudyAbroad.Api.Extensions;
+using StudyAbroad.Application.Auth;
 using StudyAbroad.Application.Common;
 using StudyAbroad.Application.StudyCenters;
 using StudyAbroad.Domain.Constants;
@@ -22,7 +23,7 @@ public class StudyCentersController(IStudyCenterService service) : ControllerBas
         return center is null ? NotFound() : Ok(center);
     }
 
-    /// <summary>[UC-71] Thêm một trung tâm tư vấn vào danh bạ (Moderator hoặc Admin).</summary>
+    /// <summary>[UC-71] Thêm một trung tâm tư vấn vào danh bạ (Admin hoặc Moderator).</summary>
     [HttpPost]
     [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Moderator}")]
     public async Task<ActionResult<StudyCenterDto>> Create(
@@ -37,6 +38,21 @@ public class StudyCentersController(IStudyCenterService service) : ControllerBas
             return ValidationProblem(result.ErrorMessage);
 
         return CreatedAtAction(nameof(GetById), new { id = result.Center.Id }, result.Center);
+    }
+
+    /// <summary>[UC-64] Tạo tài khoản người dùng cho Trung tâm tư vấn (role center - Admin hoặc Moderator).</summary>
+    [HttpPost("accounts")]
+    [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Moderator}")]
+    public async Task<ActionResult<UserDto>> CreateCenterAccount(
+        [FromBody] CreateCenterAccountRequest request,
+        [FromServices] IAuthService auth,
+        CancellationToken ct)
+    {
+        var result = await auth.CreateCenterAccountAsync(request, ct);
+        if (result.Error != AuthError.None || result.User is null)
+            return ValidationProblem(result.Message);
+
+        return Ok(result.User);
     }
 
     /// <summary>Chat (B6) lấy tối đa 3 trung tâm đã xác minh cho một dịch vụ; cùng thành phố xếp trước.</summary>

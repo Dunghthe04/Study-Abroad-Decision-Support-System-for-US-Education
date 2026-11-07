@@ -873,6 +873,16 @@ namespace StudyAbroad.Application.Auth
             if (user.Role == UserRoles.Admin)
                 return AuthResult.Fail(AuthError.Validation, "Không thể khóa tài khoản quản trị viên.");
 
+            var actor = await users.GetUserById(actorAdminId, ct);
+            if (actor is not null && actor.Role == UserRoles.Moderator)
+            {
+                if (user.Role == UserRoles.Moderator)
+                    return AuthResult.Fail(AuthError.Validation, "Kiểm duyệt viên không có quyền khóa tài khoản Kiểm duyệt viên khác.");
+
+                if (user.Role != UserRoles.Center && user.Role != UserRoles.Student && user.Role != UserRoles.Parent)
+                    return AuthResult.Fail(AuthError.Validation, "Kiểm duyệt viên chỉ có quyền khóa tài khoản người dùng và trung tâm.");
+            }
+
             if (!AdminLockableRoles.Contains(user.Role))
                 return AuthResult.Fail(AuthError.Validation, "Vai trò này không được khóa qua chức năng này.");
 
@@ -923,6 +933,19 @@ namespace StudyAbroad.Application.Auth
             var user = await users.GetUserById(targetUserId, ct);
             if (user is null)
                 return AuthResult.Fail(AuthError.Validation, "Không tìm thấy tài khoản.");
+
+            if (user.Role == UserRoles.Admin)
+                return AuthResult.Fail(AuthError.Validation, "Không thể thao tác trên tài khoản quản trị viên.");
+
+            var actor = await users.GetUserById(actorAdminId, ct);
+            if (actor is not null && actor.Role == UserRoles.Moderator)
+            {
+                if (user.Role == UserRoles.Moderator)
+                    return AuthResult.Fail(AuthError.Validation, "Kiểm duyệt viên không có quyền mở khóa tài khoản Kiểm duyệt viên khác.");
+
+                if (user.Role != UserRoles.Center && user.Role != UserRoles.Student && user.Role != UserRoles.Parent)
+                    return AuthResult.Fail(AuthError.Validation, "Kiểm duyệt viên chỉ có quyền mở khóa tài khoản người dùng và trung tâm.");
+            }
 
             if (user.Status != UserStatuses.Locked && user.Status != UserStatuses.TempLocked)
                 return AuthResult.Fail(AuthError.Validation, "Tài khoản không ở trạng thái bị khóa.");

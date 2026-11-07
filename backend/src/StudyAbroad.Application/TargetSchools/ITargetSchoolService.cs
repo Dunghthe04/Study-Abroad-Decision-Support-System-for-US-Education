@@ -1,0 +1,17 @@
+namespace StudyAbroad.Application.TargetSchools;
+
+/// <summary>
+/// Dịch vụ xử lý nghiệp vụ liên quan đến danh sách trường mục tiêu.
+/// </summary>
+public interface ITargetSchoolService
+{
+    /// <summary>
+    /// [UC-30] Thêm một trường vào danh sách mục tiêu của học sinh.
+    /// </summary>
+    Task<AddTargetSchoolResult> AddTargetSchoolAsync(Guid userId, AddTargetSchoolRequest request, CancellationToken ct = default);
+
+    /// <summary>
+    /// Lấy chi tiết một trường mục tiêu theo ID (kiểm tra quyền sở hữu của user).
+    /// </summary>
+    Task<TargetSchoolDto?> GetByIdAsync(Guid id, Guid userId, CancellationToken ct = default);
+}

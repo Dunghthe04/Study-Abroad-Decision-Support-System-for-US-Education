@@ -443,6 +443,121 @@ public class AuthServiceTests
     }
 
     [Fact]
+    public async Task LockUserAccount_ModeratorActor_CanLockSubordinatesOnly()
+    {
+        var service = CreateService();
+        var moderatorActor = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "mod1@test.com",
+            Role = UserRoles.Moderator,
+            Status = UserStatuses.Active,
+            FullName = "Moderator Actor",
+            PasswordHash = "x",
+        };
+        var otherMod = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "mod2@test.com",
+            Role = UserRoles.Moderator,
+            Status = UserStatuses.Active,
+            FullName = "Other Moderator",
+            PasswordHash = "x",
+        };
+        var adminTarget = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "admin@test.com",
+            Role = UserRoles.Admin,
+            Status = UserStatuses.Active,
+            FullName = "Admin Target",
+            PasswordHash = "x",
+        };
+        var centerTarget = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "center@test.com",
+            Role = UserRoles.Center,
+            Status = UserStatuses.Active,
+            FullName = "Center Target",
+            PasswordHash = "x",
+        };
+        var studentTarget = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "student@test.com",
+            Role = UserRoles.Student,
+            Status = UserStatuses.Active,
+            FullName = "Student Target",
+            PasswordHash = "x",
+        };
+        _repo.Users.AddRange([moderatorActor, otherMod, adminTarget, centerTarget, studentTarget]);
+
+        // Moderator cannot lock another Moderator
+        var modLockResult = await service.LockUserAccountAsync(otherMod.Id, new LockUserAccountRequest("reason"), moderatorActor.Id);
+        Assert.Equal(AuthError.Validation, modLockResult.Error);
+        Assert.Contains("Kiểm duyệt viên không có quyền", modLockResult.Message);
+
+        // Moderator cannot lock Admin
+        var adminLockResult = await service.LockUserAccountAsync(adminTarget.Id, new LockUserAccountRequest("reason"), moderatorActor.Id);
+        Assert.Equal(AuthError.Validation, adminLockResult.Error);
+
+        // Moderator CAN lock Center (subordinate)
+        var centerLockResult = await service.LockUserAccountAsync(centerTarget.Id, new LockUserAccountRequest("reason"), moderatorActor.Id);
+        Assert.Equal(AuthError.None, centerLockResult.Error);
+        Assert.Equal(UserStatuses.Locked, centerTarget.Status);
+
+        // Moderator CAN lock Student (subordinate)
+        var studentLockResult = await service.LockUserAccountAsync(studentTarget.Id, new LockUserAccountRequest("reason"), moderatorActor.Id);
+        Assert.Equal(AuthError.None, studentLockResult.Error);
+        Assert.Equal(UserStatuses.Locked, studentTarget.Status);
+    }
+
+    [Fact]
+    public async Task UnlockUserAccount_ModeratorActor_CanUnlockSubordinatesOnly()
+    {
+        var service = CreateService();
+        var moderatorActor = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "mod1@test.com",
+            Role = UserRoles.Moderator,
+            Status = UserStatuses.Active,
+            FullName = "Moderator Actor",
+            PasswordHash = "x",
+        };
+        var otherModLocked = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "mod2@test.com",
+            Role = UserRoles.Moderator,
+            Status = UserStatuses.Locked,
+            FullName = "Other Mod Locked",
+            PasswordHash = "x",
+        };
+        var centerLocked = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "center@test.com",
+            Role = UserRoles.Center,
+            Status = UserStatuses.Locked,
+            FullName = "Center Locked",
+            PasswordHash = "x",
+        };
+        _repo.Users.AddRange([moderatorActor, otherModLocked, centerLocked]);
+
+        // Moderator cannot unlock another Moderator
+        var modUnlockResult = await service.UnlockUserAccountAsync(otherModLocked.Id, new UnlockUserAccountRequest("reason"), moderatorActor.Id);
+        Assert.Equal(AuthError.Validation, modUnlockResult.Error);
+        Assert.Contains("Kiểm duyệt viên không có quyền", modUnlockResult.Message);
+
+        // Moderator CAN unlock Center
+        var centerUnlockResult = await service.UnlockUserAccountAsync(centerLocked.Id, new UnlockUserAccountRequest("reason"), moderatorActor.Id);
+        Assert.Equal(AuthError.None, centerUnlockResult.Error);
+        Assert.Equal(UserStatuses.Active, centerLocked.Status);
+    }
+
+    [Fact]
     public async Task AnonymizeUserAccount_Success_AnonymizesPiiAndRevokesSessionsAndLogsAudit()
     {
         var service = CreateService();
