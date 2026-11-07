@@ -305,7 +305,8 @@ export interface ParentLinkResponse<T> {
 
 // [UC-30] Trường mục tiêu của học sinh (Target Schools)
 export interface AddTargetSchoolRequest {
-  universityId: string;
+  universityId?: string;
+  universityCode?: string;
   category?: "reach" | "match" | "safety" | string | null;
   applicationRound?: string | null;
   deadline?: string | null;
