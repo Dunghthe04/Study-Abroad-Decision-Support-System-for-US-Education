@@ -57,8 +57,8 @@ export function AddCenterButton({ className, size = "sm" }: AddCenterButtonProps
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCreateAccountOpen, setIsCreateAccountOpen] = useState(false);
 
-  // Chỉ Moderator hoặc Admin mới được thêm trung tâm vào danh bạ
-  const canAdd = user?.role === "admin" || user?.role === "moderator";
+  // Chỉ Moderator mới có quyền thêm trung tâm vào danh bạ (UC-71)
+  const canAdd = user?.role === "moderator";
   if (!canAdd) return null;
 
   const handleToggleLevel = (lvl: string) => {
@@ -310,7 +310,7 @@ export function AddCenterButton({ className, size = "sm" }: AddCenterButtonProps
             </Field>
 
             <DialogFooter className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              {user?.role === "admin" ? (
+              {user?.role === "moderator" ? (
                 <Button
                   type="button"
                   variant="outline"
