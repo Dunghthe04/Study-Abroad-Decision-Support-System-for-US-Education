@@ -21,6 +21,8 @@ import type {
   ParentLinkResponse,
   StudyCenter,
   CreateStudyCenterRequest,
+  AddTargetSchoolRequest,
+  TargetSchoolDto,
 } from "@/types/api";
 
 // Browser code calls same-origin /api (Nginx in prod, Next rewrite in dev).
@@ -253,4 +255,17 @@ export const studyCentersApi = {
     return apiFetch<PagedResult<StudyCenter>>(`/api/v1/study-centers${qs ? `?${qs}` : ""}`);
   },
   getById: (id: string) => apiFetch<StudyCenter>(`/api/v1/study-centers/${id}`),
+};
+
+// [UC-30] API Quản lý trường mục tiêu (Student / Parent)
+export const targetSchoolsApi = {
+  /** [UC-30] Thêm một trường vào danh sách mục tiêu */
+  add: (data: AddTargetSchoolRequest) =>
+    apiFetch<TargetSchoolDto>("/api/v1/target-schools", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  /** Lấy chi tiết một trường mục tiêu theo ID */
+  getById: (id: string) =>
+    apiFetch<TargetSchoolDto>(`/api/v1/target-schools/${encodeURIComponent(id)}`),
 };
