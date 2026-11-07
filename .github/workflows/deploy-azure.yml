@@ -13,6 +13,10 @@ on:
           - backend
           - frontend
           - advisor
+  push:
+    branches:
+      - feature/USAS-2097-set-up-deployment-test-server
+      - develop
 
 jobs:
   build-and-deploy:
@@ -32,7 +36,7 @@ jobs:
           password: ${{ secrets.ACR_PASSWORD }}
 
       - name: Build and push Backend image
-        if: ${{ inputs.service == 'all' || inputs.service == 'backend' }}
+        if: ${{ github.event_name == 'push' || inputs.service == 'all' || inputs.service == 'backend' }}
         uses: docker/build-push-action@v6
         with:
           context: ./backend
@@ -45,7 +49,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build and push Advisor image
-        if: ${{ inputs.service == 'all' || inputs.service == 'advisor' }}
+        if: ${{ github.event_name == 'push' || inputs.service == 'all' || inputs.service == 'advisor' }}
         uses: docker/build-push-action@v6
         with:
           context: ./advisor
@@ -58,7 +62,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build and push Frontend image
-        if: ${{ inputs.service == 'all' || inputs.service == 'frontend' }}
+        if: ${{ github.event_name == 'push' || inputs.service == 'all' || inputs.service == 'frontend' }}
         uses: docker/build-push-action@v6
         with:
           context: ./frontend
@@ -76,7 +80,7 @@ jobs:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Deploy Backend to Container App
-        if: ${{ inputs.service == 'all' || inputs.service == 'backend' }}
+        if: ${{ github.event_name == 'push' || inputs.service == 'all' || inputs.service == 'backend' }}
         run: |
           az containerapp update \
             --name usas-backend \
@@ -84,7 +88,7 @@ jobs:
             --image usasreg.azurecr.io/usas-backend:${{ github.sha }}
 
       - name: Deploy Advisor to Container App
-        if: ${{ inputs.service == 'all' || inputs.service == 'advisor' }}
+        if: ${{ github.event_name == 'push' || inputs.service == 'all' || inputs.service == 'advisor' }}
         run: |
           az containerapp update \
             --name usas-advisor \
@@ -92,7 +96,7 @@ jobs:
             --image usasreg.azurecr.io/usas-advisor:${{ github.sha }}
 
       - name: Deploy Frontend to Container App
-        if: ${{ inputs.service == 'all' || inputs.service == 'frontend' }}
+        if: ${{ github.event_name == 'push' || inputs.service == 'all' || inputs.service == 'frontend' }}
         run: |
           az containerapp update \
             --name usas-frontend \
