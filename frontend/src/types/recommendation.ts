@@ -187,6 +187,22 @@ export interface SimulationResponse {
   items: RecommendationItems; // cùng khuôn với lượt gợi ý đã lưu
 }
 
+// ---- [UC-86] Kịch bản what-if đã lưu (/api/v1/scenarios) ----
+
+// Giá trị giả định lúc bấm "Lưu" và bản chụp kết quả lúc đó (backend tự tính, không phải kết quả mới nhất)
+export interface SavedScenario {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string | null;
+  kind: "what_if"; // UC-85 (độ nhạy) sau này thêm loại khác
+  overrides: Omit<SimulationOverrides, "pref">; // backend trả pref riêng ở dưới
+  pref: Pref | null;
+  baseline: GroupSummary | null;
+  simulated: GroupSummary | null;
+  changes: SchoolChange[];
+}
+
 // Một trường trong ô chọn trường của chat (GET /recommendations/schools/names)
 export interface SchoolOption {
   code: string;
