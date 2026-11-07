@@ -51,7 +51,7 @@ export function AdminCenterDetailView({ center }: AdminCenterDetailViewProps) {
       <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl border bg-muted/40">
         <div className="flex items-center gap-2 text-sm">
           <Link
-            href="/moderator/centers"
+            href="/admin/centers"
             className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-foreground font-medium transition-colors"
           >
             <ArrowLeftIcon className="w-4 h-4" />

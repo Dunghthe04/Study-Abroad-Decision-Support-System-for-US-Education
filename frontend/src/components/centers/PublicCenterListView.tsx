@@ -146,7 +146,7 @@ export function PublicCenterListView({ initialCenters }: PublicCenterListViewPro
             <span>Bạn đang đăng nhập với quyền <strong>{user?.role === "admin" ? "Quản trị viên" : "Moderator"}</strong>. Xem trang kiểm duyệt để thêm mới hoặc duyệt hồ sơ cơ sở.</span>
           </div>
           <Link
-            href="/moderator/centers"
+            href="/admin/centers"
             className={cn(buttonVariants({ size: "sm" }), "gap-1.5 text-xs bg-brand text-white hover:bg-brand/90")}
           >
             <span>Vào Quản lý trung tâm (Moderator)</span>

@@ -79,7 +79,7 @@ export function AdminCenterDetailPanel({ center, onClose }: AdminCenterDetailPan
 
           <div className="flex items-center gap-2">
             <Link
-              href={`/moderator/centers/${center.id}`}
+              href={`/admin/centers/${center.id}`}
               className={cn(buttonVariants({ variant: "default", size: "sm" }), "gap-1 text-xs")}
             >
               Xem chi tiết

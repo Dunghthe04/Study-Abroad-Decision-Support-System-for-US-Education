@@ -1,5 +1,15 @@
-import { redirect } from "next/navigation";
+import type { Metadata } from "next";
+import { AdminSection } from "@/components/admin/AdminSection";
+import { AdminCenterListView } from "@/components/admin/centers/AdminCenterListView";
+
+export const metadata: Metadata = {
+  title: "Trung tâm tư vấn – Quản trị & Kiểm duyệt USAS",
+};
 
 export default function AdminCentersPage() {
-  redirect("/moderator/centers");
+  return (
+    <AdminSection href="/admin/centers">
+      <AdminCenterListView />
+    </AdminSection>
+  );
 }
