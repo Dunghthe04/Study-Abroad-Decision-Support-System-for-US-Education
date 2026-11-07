@@ -60,7 +60,7 @@ public class TargetSchoolRepository(AppDbContext db) : ITargetSchoolRepository
 
     public Task<string?> GetUniversityDeadlinesJsonAsync(Guid universityId, CancellationToken ct = default) =>
         db.UniversityOfferings.AsNoTracking()
-            .Where(x => x.UniversityId == universityId && !string.IsNullOrEmpty(x.DeadlinesJson))
+            .Where(x => x.UniversityId == universityId && x.DeadlinesJson != null)
             .Select(x => x.DeadlinesJson)
             .FirstOrDefaultAsync(ct);
 }

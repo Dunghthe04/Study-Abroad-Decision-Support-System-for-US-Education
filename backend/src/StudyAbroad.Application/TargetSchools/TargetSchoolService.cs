@@ -45,7 +45,9 @@ public class TargetSchoolService(
 
         // 4. Xác định ApplicationRound và Deadline
         var round = string.IsNullOrWhiteSpace(request.ApplicationRound) ? null : request.ApplicationRound.Trim();
-        var deadline = request.Deadline;
+        DateTime? deadline = request.Deadline.HasValue
+            ? DateTime.SpecifyKind(request.Deadline.Value, DateTimeKind.Utc)
+            : null;
 
         // Nếu có chọn vòng nộp mà chưa có deadline, thử trích xuất deadline tương ứng từ DeadlinesJson của trường
         if (deadline == null && !string.IsNullOrEmpty(round))
