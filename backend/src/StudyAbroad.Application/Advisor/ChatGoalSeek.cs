@@ -21,6 +21,7 @@ public static class ChatGoalSeek
     public const string PickerType = "school";
 
     public const string Failed = "Mình chưa tính được phần này, bạn thử lại sau ít phút nhé.";
+    public const string AskSchool = "Bạn muốn vào trường nào? Chọn hoặc gõ tên trường ở ô bên dưới nhé.";
     public const int MaxOthers = 400;
 
     /// <summary>Đọc ActionData của advisor. Null nếu thiếu tên trường.</summary>
@@ -222,6 +223,45 @@ public static class ChatGoalSeek
     // code và target: mở khung kết quả trên trang gợi ý. result: toàn bộ kết quả code đã tính (camelCase), để khung chat dựng thẻ
     // (vị trí của trường, các mức đích, tiếng Anh, tài chính, trường tương tự) mà không phải hỏi lại backend
     private static readonly JsonSerializerOptions WebJson = new(JsonSerializerDefaults.Web);
+
+    public const string EditProfileHref = "/analysis?edit=1";
+
+    /// <summary>
+    /// Nút bước tiếp theo khi trường bị bộ lọc cứng loại, theo đúng lý do (không bịa nút khi trường đang trong danh sách):
+    /// khác ngành, bang, loại trường thì sửa hồ sơ; thiếu tiếng Anh thì thử mức cần đạt; vượt ngân sách thì thử mức ngân sách tối thiểu.
+    /// </summary>
+    public static IReadOnlyList<QuickReply> NextSteps(SchoolGoalResult r)
+    {
+        if (r.Position is not { Status: "excluded" } position)
+            return [];
+        switch (position.ExcludeReason)
+        {
+            case "MAJOR" or "STATE" or "CONTROL":
+                return [new QuickReply("Sửa hồ sơ", "Sửa hồ sơ", Href: EditProfileHref)];
+            case "ENGLISH" or "ENGLISH_NO_CERT":
+                {
+                    var (test, min) = r.English switch
+                    {
+                        { MinIelts: { } v } => ("IELTS", v),
+                        { MinToefl: { } v } => ("TOEFL", v),
+                        { MinDuolingo: { } v } => ("Duolingo", v),
+                        _ => ("", 0m),
+                    };
+                    if (test == "")
+                        return [];
+                    var number = min.ToString("0.#", CultureInfo.InvariantCulture);
+                    return [new QuickReply($"Thử {test} {number}", $"Nếu {test} của em là {number} thì sao?")];
+                }
+            case "BUDGET" when r.Budget.MinBudgetUsd is { } needed:
+                {
+                    var amount = (long)Math.Ceiling(needed);
+                    var shown = amount.ToString("N0", CultureInfo.InvariantCulture).Replace(",", ".");
+                    return [new QuickReply($"Thử ngân sách {shown} USD", $"Nếu ngân sách của em là {amount} USD mỗi năm thì sao?")];
+                }
+            default:
+                return [];
+        }
+    }
 
     public static Widget WidgetOf(SchoolGoalResult result)
     {

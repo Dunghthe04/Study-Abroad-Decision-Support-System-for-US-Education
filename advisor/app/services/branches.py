@@ -20,6 +20,8 @@ from app.services.chat_flow import (
     start_intake,
 )
 from app.services.goal_target import parse_target, plain
+from app.services.priority import detect_priorities
+from app.services.priority import label as priority_label
 from app.services.scenario import SUPPORTED_TEXT, parse_what_if
 from app.services.skill_generator import SkillGenerator
 from app.services.skill_input import skill_request_of
@@ -64,14 +66,17 @@ class ScenarioBranch:
             what_if = parse_what_if(entities.get("thay_doi", []))
         except AskAgain as ask:
             return SkillOutput(ask.question)
-        if not what_if.changes:
+        priorities = detect_priorities(message)
+        if not what_if.changes and not priorities:
             return SkillOutput(NOTHING_TO_TRY)
         note = f" Mình chưa thử được: {', '.join(what_if.unsupported)}." if what_if.unsupported else ""
-        return SkillOutput(
-            f"Mình thử kịch bản: {what_if.label()}.{note}",
-            action="simulate",
-            action_data={"changes": what_if.changes, "unsupported": what_if.unsupported},
+        tried = ", ".join(
+            part for part in (what_if.label(), priority_label(priorities) if priorities else "") if part
         )
+        data: dict = {"changes": what_if.changes, "unsupported": what_if.unsupported}
+        if priorities:
+            data["priorities"] = priorities
+        return SkillOutput(f"Mình thử kịch bản: {tried}.{note}", action="simulate", action_data=data)
 
     # "Cần gì để vào trường X": tên trường còn là chữ, .NET khớp với 249 trường rồi chạy goal-seek.
     # Không cần danh sách gợi ý có sẵn: goal-seek tính từ hồ sơ và dữ liệu trường

@@ -19,6 +19,9 @@ public static class ChatActions
     /// </summary>
     public static AdvisorChatResponse? ToResponse(ChatAction? action, JsonElement? state)
     {
+        // "Cần gì để vào trường em muốn?" không kèm trường: hỏi lại bằng ô chọn trường, để học sinh tự chọn trường mình quan tâm
+        if (action is { Type: ChatGoalSeek.Action } && string.IsNullOrWhiteSpace(action.SchoolCode) && action.Target is null)
+            return new AdvisorChatResponse(ChatGoalSeek.AskSchool, [], null, state, Widget: ChatGoalSeek.SchoolPicker(null));
         if (action is null || string.IsNullOrWhiteSpace(action.SchoolCode) || action.SchoolCode.Length > MaxCodeLength)
             return null;
         var code = action.SchoolCode.Trim();

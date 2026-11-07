@@ -9,11 +9,10 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { useAssistant, useAssistantPageContext } from "@/components/assistant/AssistantProvider";
 import { recommendationApi } from "@/lib/recommendation-api";
-import { statusLabel } from "@/lib/recommendation-labels";
-import { RESET_SIMULATION_EVENT, SIMULATE_EVENT } from "@/lib/simulation-link";
+import { whyText } from "@/lib/recommendation-labels";
+import { RESET_SIMULATION_EVENT, SIMULATE_EVENT, describeSimulation } from "@/lib/simulation-link";
 import { useProfileSimulation, type ProfileSimulation } from "@/lib/use-profile-simulation";
 import type {
-  GroupSummary,
   PickBlockName,
   Pref,
   Recommendation,
@@ -206,48 +205,12 @@ export function RecommendationView({ autoRun, initialOverrides }: Recommendation
 
 // Dải thông báo khi đang xem hồ sơ giả định: số trường mỗi nhóm trước và sau, các trường đổi nhóm
 function SimulationBanner({ sim }: { sim: ProfileSimulation }) {
-  const result = sim.result;
-  if (!result) return null;
-  const { baseline, simulated, changes } = result;
-  const rows: { label: string; key: keyof GroupSummary }[] = [
-    { label: "Khó vào", key: "reach" },
-    { label: "Vừa sức", key: "match" },
-    { label: "An toàn hơn", key: "safety" },
-    { label: "Cần học bổng lớn", key: "aidBlock" },
-  ];
-
   return (
-    <div className="space-y-3 rounded-2xl border border-brand/30 bg-brand-wash p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm font-bold text-brand">Đang xem hồ sơ giả định, không phải hồ sơ thật của bạn</p>
-        <Button variant="outline" size="sm" onClick={sim.resetAll}>
-          Quay lại hồ sơ thật
-        </Button>
-      </div>
-      <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-ink-2">
-        {rows.map((row) => (
-          <span key={row.key}>
-            {row.label}:{" "}
-            <strong className="text-foreground">
-              {baseline[row.key]} → {simulated[row.key]}
-            </strong>
-          </span>
-        ))}
-      </div>
-      {changes.length > 0 ? (
-        <details className="text-xs text-ink-2">
-          <summary className="cursor-pointer font-semibold text-foreground">{changes.length} trường đổi so với hồ sơ thật</summary>
-          <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto">
-            {changes.map((c) => (
-              <li key={c.code}>
-                <span className="font-medium text-foreground">{c.name}</span>: {statusLabel(c.from)} → {statusLabel(c.to)}
-              </li>
-            ))}
-          </ul>
-        </details>
-      ) : (
-        <p className="text-xs text-ink-2">Với giá trị này, không trường nào đổi nhóm.</p>
-      )}
+    <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-brand/30 bg-brand-wash px-4 py-2.5">
+      <p className="text-sm font-semibold text-brand">Đang xem giả định: {describeSimulation(sim.overrides)}</p>
+      <Button variant="outline" size="sm" onClick={sim.resetAll}>
+        Quay lại hồ sơ thật
+      </Button>
     </div>
   );
 }
@@ -318,6 +281,7 @@ function ResultBody({ rec, changes, onExplain, onGoal }: ResultBodyProps) {
                     change={changeByCode.get(p.code)}
                     onExplain={onExplain}
                     onGoal={onGoal}
+                    student={{ sat: criteria.studentSat ?? null, gpa: criteria.studentGpa ?? null }}
                   />
                 </div>
               ))}
@@ -329,11 +293,15 @@ function ResultBody({ rec, changes, onExplain, onGoal }: ResultBodyProps) {
       {items.other.length > 0 && (
         <details className="rounded-2xl border border-line bg-surface p-4 text-xs text-muted-foreground">
           <summary className="cursor-pointer font-semibold text-foreground">
-            {items.other.length} trường chưa xếp nhóm (thiếu dữ liệu)
+            {items.other.length} trường chưa xếp được nhóm Khó vào / Vừa sức / An toàn
           </summary>
-          <ul className="mt-2 space-y-1">
+          <p className="mt-2">Hệ thống không đoán khi thiếu số liệu. Các trường này vẫn phù hợp bộ lọc của bạn, chỉ là chưa đủ dữ liệu để so với hồ sơ.</p>
+          <ul className="mt-2 space-y-1.5">
             {items.other.map((p) => (
-              <li key={p.code}>{byCode.get(p.code)?.name ?? p.code}</li>
+              <li key={p.code}>
+                <b className="text-foreground">{byCode.get(p.code)?.name ?? p.code}</b>
+                {p.why.length > 0 && <>: {p.why.map(whyText).join(" ")}</>}
+              </li>
             ))}
           </ul>
         </details>

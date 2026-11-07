@@ -107,6 +107,19 @@ async def test_what_if_says_what_it_cannot_try():
     assert mixed.action_data["unsupported"] == ["ngành"]
 
 
+async def test_what_if_hands_priorities_to_dotnet_even_without_profile_values():
+    state = ChatState(has_results=True)
+    entities = what_if({"yeu_to": "uu_tien", "gia_tri": "uu_tien"})
+
+    out = await build_branches(skills([]))["kich_ban"].run(
+        state, "em ưu tiên học bổng nhất, chi phí thì ít quan tâm", scenario(**entities)
+    )
+
+    assert out.action == "simulate"
+    assert out.action_data == {"changes": {}, "unsupported": [], "priorities": {"aid": 4, "cost": 1}}
+    assert "học bổng nhiều mức 4/4" in out.answer
+
+
 async def test_goal_seeking_hands_the_school_and_target_to_dotnet():
     out = await run_scenario(
         ChatState(), che_do="goal_seeking", truong="MIT", muc_tieu="Vừa sức", yeu_to=["sat"]

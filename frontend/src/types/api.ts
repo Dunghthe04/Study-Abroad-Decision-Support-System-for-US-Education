@@ -55,6 +55,8 @@ export interface Citation {
 export interface QuickReply {
   label: string;
   value: string;
+  action?: AssistantAction | null; // có thì nút chạy thẳng hành động theo mã trường (giải thích, goal-seeking), không qua SLM
+  href?: string | null; // có thì nút chuyển sang trang đó (ví dụ "Sửa hồ sơ"), không gửi tin nhắn
 }
 
 // Công cụ nhập ngay trong chat; frontend vẽ theo `type`
@@ -69,7 +71,7 @@ export interface ChatWidget {
  */
 export interface AssistantAction {
   type: "goal_seek" | "explain";
-  schoolCode: string;
+  schoolCode?: string | null; // goal_seek không kèm trường: hỏi lại bằng ô chọn trường
   target?: "match" | "safety" | null;
   /** "real": giải thích theo hồ sơ thật dù trang đang xem giả định (nút "Xem theo hồ sơ thật"); bỏ trống: theo cái đang xem */
   basis?: "real" | null;

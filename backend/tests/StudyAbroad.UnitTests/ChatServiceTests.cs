@@ -736,6 +736,25 @@ public class ChatServiceTests
         Assert.Contains(expected, res.Answer);
     }
 
+    // Hỏi "vì sao" về trường không nằm trong danh sách (bị bộ lọc cứng loại): nói đúng lý do bằng thẻ goal-seeking, không báo lỗi
+    [Fact]
+    public async Task ExplainAction_ForASchoolOutsideTheList_AnswersWithTheReasonItIsExcluded()
+    {
+        var excluded = GoalOf() with { Position = new GoalPosition("excluded", "M", "STATE", false), FilterReason = "STATE" };
+        var runner = new FakeRunner
+        {
+            ExplainError = new InvalidOperationException("Chưa có trường 188429 trong lần gợi ý gần nhất."),
+            GoalResult = excluded,
+        };
+
+        var res = await new ChatService(new FakeAdvisor("B4") { Action = "explain", ActionData = IowaCode }, new FakeSessions(), new FakeProfileFlow(), null, runner)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Equal("goal_seek", res.Widget!.Type);
+        Assert.DoesNotContain("chưa giải thích được", res.Answer);
+        Assert.Equal("Sửa hồ sơ", res.QuickReplies!.Single().Label);
+    }
+
     [Fact]
     public async Task ExplainAction_WhenTheServiceIsBusyOrTimesOut_SaysBusy()
     {
@@ -782,6 +801,144 @@ public class ChatServiceTests
         Assert.Equal(1500, res.Widget.Data!.Value.GetProperty("sat").GetInt32());
         Assert.Null(res.Action);     // việc nội bộ, không trả cho trình duyệt
         Assert.Null(res.ActionData);
+    }
+
+    // ---- what-if về ưu tiên (chi phí thấp, học bổng nhiều, danh tiếng): code tính, chỉ đổi thứ tự trong nhóm
+
+    private static SimulationResult OrderedSimulation(params string[] matchOrder) => new(
+        new SimulationProfile(3.5m, 1290, null, 6.5m, 40_000m, "preferred", 3),
+        new GroupSummary(2, 0, 2, 0, 0, 0), new GroupSummary(2, 0, 2, 0, 0, 0), [],
+        "{}",
+        "{\"scored\":[{\"code\":\"bu\",\"name\":\"Boston University\",\"cost\":52000,\"aidPolicy\":\"none\",\"h\":0,\"q\":0.9},"
+        + "{\"code\":\"ne\",\"name\":\"Northeastern University\",\"cost\":31000,\"aidAvg\":25000,\"aidPolicy\":\"need_and_merit\",\"h\":1,\"q\":0.7}],"
+        + "\"reach\":[],\"match\":[" + string.Join(",", matchOrder.Select(c => "{\"code\":\"" + c + "\",\"why\":[]}")) + "],\"safety\":[],\"aid\":[],\"other\":[]}");
+
+    private static readonly JsonElement AidFirst =
+        JsonDocument.Parse("""{"changes":{},"unsupported":[],"priorities":{"aid":4}}""").RootElement;
+
+    [Fact]
+    public async Task SimulateAction_WithOnlyPriorities_ReordersInsideTheGroupAndSaysSo()
+    {
+        var advisor = new FakeAdvisor("B4") { Action = "simulate", ActionData = AidFirst };
+        var runner = new FakeRunner
+        {
+            Latest = new Recommendation { CriteriaJson = """{"pref":[3,2,1]}""" },
+            // ưu tiên học bổng 4 (giữ chi phí 3, danh tiếng 1): Northeastern (học bổng cao) lên đầu
+            SimulationFor = pref => pref!.SequenceEqual([3, 4, 1]) ? OrderedSimulation("ne", "bu") : OrderedSimulation("bu", "ne"),
+        };
+
+        var res = await SimulateChat(advisor, runner);
+
+        Assert.Equal([3, 4, 1], runner.SimulatedPrefs[0]);          // học bổng đổi, hai mức kia giữ như lần gợi ý đã lưu
+        Assert.Equal([3, 2, 1], runner.SimulatedPrefs[1]);          // danh sách so sánh: cùng hồ sơ, ưu tiên cũ
+        Assert.Contains("học bổng nhiều 4/4 (trước là 2/4)", res.Answer);
+        Assert.Contains("không đổi nhóm của trường nào", res.Answer);
+        Assert.Contains("Northeastern University (Vừa sức): từ vị trí 2 lên vị trí 1, người được học bổng nhận trung bình 25.000 USD mỗi năm (khoảng 81% chi phí)", res.Answer);
+        Assert.Contains("Boston University (Vừa sức): từ vị trí 1 xuống vị trí 2, trường không có học bổng cho du học sinh", res.Answer);
+        Assert.DoesNotContain("/100", res.Answer);   // nói bằng USD thật, không nói điểm
+        Assert.Null(advisor.LastNote);                              // không có giá trị hồ sơ nên không nhờ AI viết lời
+        Assert.Equal([3, 4, 1], res.Widget!.Data!.Value.GetProperty("pref").EnumerateArray().Select(e => e.GetInt32()));
+    }
+
+    // ---- nút bước tiếp theo sau what-if: hiểu vì sao đổi, rồi xem cần gì để vào trường khó
+
+    private static SimulationResult WithReach() => new(
+        new SimulationProfile(3.5m, 1290, null, 6.5m, 40_000m, "preferred", 3),
+        new GroupSummary(3, 1, 2, 0, 0, 0), new GroupSummary(3, 1, 2, 0, 0, 0),
+        [new SchoolChange("bu", "Boston University", "R", "M"), new SchoolChange("gone", "Gone University", "M", "OUT")],
+        "{}",
+        """{"scored":[{"code":"bu","name":"Boston University"},{"code":"ne","name":"Northeastern University"},{"code":"mit","name":"MIT"}],"reach":[{"code":"bu","why":[]},{"code":"mit","why":[]}],"match":[{"code":"ne","why":[]}],"safety":[],"aid":[],"other":[]}""");
+
+    [Fact]
+    public async Task SimulateAction_OffersTheNextSteps_AsButtonsThatRunByCode()
+    {
+        var advisor = new FakeAdvisor("B4") { Action = "simulate", ActionData = Sat1500, Note = Written() };
+        var runner = new FakeRunner { Simulation = WithReach() };
+
+        var res = await SimulateChat(advisor, runner);
+
+        Assert.Equal(2, res.QuickReplies!.Count);
+        var why = res.QuickReplies[0];
+        Assert.Equal("Vì sao Boston University lên Vừa sức?", why.Label);      // trường bị loại (Gone) không được đưa ra
+        Assert.Equal(new ChatAction("explain", "bu"), why.Action);
+        var need = res.QuickReplies[1];
+        Assert.Equal("Cần gì để vào trường em muốn?", need.Label);               // không chọn sẵn trường: học sinh chưa nói quan tâm trường nào
+        Assert.Equal(new ChatAction("goal_seek"), need.Action);
+    }
+
+    [Fact]
+    public async Task SimulateAction_WithOnlyPriorities_OffersToExplainTheSchoolThatMovedMost()
+    {
+        var advisor = new FakeAdvisor("B4") { Action = "simulate", ActionData = AidFirst };
+        var runner = new FakeRunner
+        {
+            SimulationFor = pref => pref!.SequenceEqual([2, 4, 2]) ? OrderedSimulation("ne", "bu") : OrderedSimulation("bu", "ne"),
+        };
+
+        var res = await SimulateChat(advisor, runner);
+
+        var why = res.QuickReplies!.Single();
+        Assert.Equal("Vì sao Northeastern University lên vị trí 1?", why.Label);
+        Assert.Equal(new ChatAction("explain", "ne"), why.Action);
+    }
+
+    [Fact]
+    public async Task SimulateAction_WhenNothingChanged_OffersNoButtons()
+    {
+        var advisor = new FakeAdvisor("B4") { Action = "simulate", ActionData = Sat1500, Note = Written() };
+        var runner = new FakeRunner { Simulation = OrderedSimulation("bu", "ne") };   // không đổi nhóm, không có trường Khó vào
+
+        var res = await SimulateChat(advisor, runner);
+
+        Assert.Null(res.QuickReplies);
+    }
+
+    [Fact]
+    public async Task SimulateAction_WhenTheOrderDoesNotChange_SaysSoAndInventsNoMoves()
+    {
+        var advisor = new FakeAdvisor("B4") { Action = "simulate", ActionData = AidFirst };
+        var runner = new FakeRunner { Simulation = OrderedSimulation("bu", "ne") };   // không có Latest: mức hiện tại 2-2-2
+
+        var res = await SimulateChat(advisor, runner);
+
+        Assert.Contains("gần như không đổi", res.Answer);
+        Assert.DoesNotContain("từ vị trí", res.Answer);
+    }
+
+    [Fact]
+    public async Task SimulateAction_WithPrioritiesAndProfileValues_AnswersBoth()
+    {
+        var data = JsonDocument.Parse("""{"changes":{"sat":1500},"unsupported":[],"priorities":{"cost":4}}""").RootElement;
+        var advisor = new FakeAdvisor("B4") { Action = "simulate", ActionData = data, Note = Written() };
+        var runner = new FakeRunner { Simulation = OrderedSimulation("bu", "ne") };
+
+        var res = await SimulateChat(advisor, runner);
+
+        Assert.Equal(1500m, runner.SimulatedWith!.Sat);
+        Assert.StartsWith("Với SAT 1500, Boston University lên Vừa sức.", res.Answer);
+        Assert.Contains("chi phí thấp 4/4", res.Answer);
+        var widget = res.Widget!.Data!.Value;
+        Assert.Equal(1500, widget.GetProperty("sat").GetInt32());
+        Assert.Equal(3, widget.GetProperty("pref").GetArrayLength());
+    }
+
+    [Theory]
+    [InlineData("""{"changes":{},"priorities":{"aid":5}}""")]       // mức ngoài 0..4
+    [InlineData("""{"changes":{},"priorities":{"aid":"cao"}}""")]
+    [InlineData("""{"changes":{},"priorities":{}}""")]
+    public void Parse_IgnoresPrioritiesThatAreNotALevelFromZeroToFour(string json)
+    {
+        Assert.Null(ChatSimulation.Parse(JsonDocument.Parse(json).RootElement));
+    }
+
+    [Fact]
+    public void BasePref_ReadsTheSavedOneAndFallsBackToBalanced()
+    {
+        Assert.Equal([0, 4, 2], ChatSimulation.BasePref("""{"pref":[0,4,2]}"""));
+        Assert.Equal([2, 2, 2], ChatSimulation.BasePref(null));
+        Assert.Equal([2, 2, 2], ChatSimulation.BasePref("""{"pref":[9,0,0]}"""));
+        Assert.Equal([2, 2, 2], ChatSimulation.BasePref("không phải json"));
+        Assert.Equal([3, 2, 4], ChatSimulation.MergePref([2, 2, 4], new ChatPriorities(3, null, null)));
     }
 
     [Theory]
@@ -893,6 +1050,20 @@ public class ChatServiceTests
         Assert.Null(res.Action);
     }
 
+    // Nút "Cần gì để vào trường em muốn?" không kèm trường: mở ô chọn trường, không gọi advisor và không chạy goal-seeking
+    [Fact]
+    public async Task ChatAction_GoalSeekWithoutASchool_AsksWhichSchoolWithThePicker()
+    {
+        var runner = new FakeRunner { GoalResult = GoalOf() };
+
+        var (res, advisor) = await ActionChat(new ChatAction("goal_seek"), runner);
+
+        Assert.Null(advisor.LastRequest);
+        Assert.Null(runner.GoalCalledWith);
+        Assert.Equal(ChatGoalSeek.AskSchool, res.Answer);
+        Assert.Equal("school", res.Widget!.Type);
+    }
+
     // Thẻ kết quả do code dựng được gửi TRƯỚC khi Gemini được gọi (Gemini chậm), rồi lời mới tới sau trong dòng final
     [Fact]
     public async Task GoalSeek_SendsTheCardBeforeAskingGemini()
@@ -938,11 +1109,13 @@ public class ChatServiceTests
         Assert.StartsWith("University of Iowa: ", res.Answer);
     }
 
-    // Hành động sai (loại lạ, thiếu mã, nhóm đích không hợp lệ, mã quá dài): bỏ qua, chat chạy như thường qua advisor
+    // Hành động sai (loại lạ, giải thích thiếu mã, goal_seek có nhóm đích mà thiếu mã, nhóm đích không hợp lệ, mã quá dài): bỏ qua, chat chạy như thường qua advisor.
+    // goal_seek không có mã và không có nhóm đích là hợp lệ: mở ô chọn trường (test riêng)
     [Theory]
     [InlineData("unknown", "188429", null)]
-    [InlineData("goal_seek", "", null)]
-    [InlineData("goal_seek", null, null)]
+    [InlineData("explain", "", null)]
+    [InlineData("explain", null, null)]
+    [InlineData("goal_seek", "", "match")]
     [InlineData("goal_seek", "188429", "reach")]
     [InlineData("goal_seek", "188429", "xyz")]
     [InlineData("explain", "0123456789012345678901234567890123", null)]
@@ -1185,19 +1358,24 @@ public class ChatServiceTests
             GoalCalledWith = (code, target);
             if (GoalError is not null)
                 throw GoalError;
-            return Task.FromResult(GoalResult!);
+            if (GoalResult is null)
+                throw new InvalidOperationException($"Chưa có trường {code} trong dữ liệu.");
+            return Task.FromResult(GoalResult);
         }
 
         public SimulationResult? Simulation { get; init; }
         public Exception? SimulateError { get; init; }
         public SimulationOverrides? SimulatedWith { get; private set; }
+        public List<IReadOnlyList<int>?> SimulatedPrefs { get; } = [];
+        public Func<IReadOnlyList<int>?, SimulationResult>? SimulationFor { get; init; }   // kết quả theo ưu tiên, để kiểm thứ tự đổi
 
         public Task<SimulationResult> SimulateAsync(Guid userId, SimulationOverrides overrides, IReadOnlyList<int>? pref, CancellationToken ct)
         {
             SimulatedWith = overrides;
+            SimulatedPrefs.Add(pref);
             if (SimulateError is not null)
                 throw SimulateError;
-            return Task.FromResult(Simulation!);
+            return Task.FromResult(SimulationFor?.Invoke(pref) ?? Simulation!);
         }
 
         public Task<Recommendation> CreateAsync(Guid userId, IReadOnlyList<int>? pref, CancellationToken ct)

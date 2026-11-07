@@ -21,6 +21,63 @@ public class ChatGoalSeekTests
     private static GoalPlanDto Sat(decimal from, decimal to, string difficulty = "hard") =>
         new([new GoalChangeDto("sat", from, to)], 1.4, difficulty);
 
+    // ---------------------------------------------------------------- nút bước tiếp theo khi trường bị bộ lọc cứng loại
+
+    private static SchoolGoalResult Excluded(string reason, GoalEnglishDto? english = null, GoalBudgetDto? budget = null) =>
+        Result(budget: budget) with { Position = new GoalPosition("excluded", "M", reason, false), FilterReason = reason, English = english };
+
+    [Theory]
+    [InlineData("MAJOR")]
+    [InlineData("STATE")]
+    [InlineData("CONTROL")]
+    public void NextSteps_ForAProfileFilter_SendsTheStudentToEditTheProfile(string reason)
+    {
+        var step = Assert.Single(ChatGoalSeek.NextSteps(Excluded(reason)));
+
+        Assert.Equal("Sửa hồ sơ", step.Label);
+        Assert.Equal("/analysis?edit=1", step.Href);
+        Assert.Null(step.Action);
+    }
+
+    [Theory]
+    [InlineData(7.0, null, null, "Thử IELTS 7", "Nếu IELTS của em là 7 thì sao?")]
+    [InlineData(6.5, 90, null, "Thử IELTS 6.5", "Nếu IELTS của em là 6.5 thì sao?")]   // ưu tiên IELTS khi trường có công bố
+    [InlineData(null, 95, 120, "Thử TOEFL 95", "Nếu TOEFL của em là 95 thì sao?")]
+    [InlineData(null, null, 110, "Thử Duolingo 110", "Nếu Duolingo của em là 110 thì sao?")]
+    public void NextSteps_ForEnglish_OffersToTryTheMinimumScore(double? ielts, int? toefl, int? duolingo, string label, string value)
+    {
+        var english = new GoalEnglishDto((decimal?)ielts, toefl, duolingo, 1m);
+
+        var step = Assert.Single(ChatGoalSeek.NextSteps(Excluded("ENGLISH", english)));
+
+        Assert.Equal((label, value), (step.Label, step.Value));
+        Assert.Null(step.Href);
+    }
+
+    [Fact]
+    public void NextSteps_ForEnglishWithoutAPublishedMinimum_OffersNothing()
+    {
+        Assert.Empty(ChatGoalSeek.NextSteps(Excluded("ENGLISH_NO_CERT", new GoalEnglishDto(null, null, null, null))));
+        Assert.Empty(ChatGoalSeek.NextSteps(Excluded("ENGLISH")));
+    }
+
+    [Fact]
+    public void NextSteps_ForBudget_OffersToTryTheMinimumBudget()
+    {
+        var budget = new GoalBudgetDto("over_budget", 62_000m, 40_000m, 56_364.5m, 22_000m, null);
+
+        var step = Assert.Single(ChatGoalSeek.NextSteps(Excluded("BUDGET", budget: budget)));
+
+        Assert.Equal("Thử ngân sách 56.365 USD", step.Label);
+        Assert.Equal("Nếu ngân sách của em là 56365 USD mỗi năm thì sao?", step.Value);
+    }
+
+    [Fact]
+    public void NextSteps_ForASchoolThatIsInTheList_OffersNothing()
+    {
+        Assert.Empty(ChatGoalSeek.NextSteps(Result()));
+    }
+
     // ---------------------------------------------------------------- đọc câu hỏi
 
     [Fact]

@@ -415,8 +415,8 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
             scored["outcome"]!.GetValue<string>() == nameof(FilterOutcome.AidBlock) ? "AID" : "MAIN",
             StoredWhy(items, university.Code),
             ToDouble(university.AcceptanceRate),
-            offering.Sat25,
-            offering.Sat75,
+            SatScale.Clean(offering.Sat25, offering.Sat75).P25,
+            SatScale.Clean(offering.Sat25, offering.Sat75).P75,
             Num(scored, "pg"),
             Num(scored, "ps"),
             ToDouble(TotalCost(offering)),
@@ -495,6 +495,9 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
         scholarshipNeed = profile.ScholarshipNeed,
         pref = NormalizePref(pref),
         tier = run.Tier,
+        // SAT và GPA của học sinh trong lượt này (giả định thì theo giả định), để thẻ trường đặt cạnh khoảng của trường
+        studentSat = SatScore(profile.Sat),
+        studentGpa = profile.OverallGpa,
         algorithm = AlgorithmVersion,
         status = run.Picked is null ? null : "OK",
         // Thông báo tiếng Anh: chỉ có khi có trường bị ẩn chỉ vì tiếng Anh. Lượt gợi ý lưu trước đây không có khối này.
@@ -541,6 +544,9 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
             s = Scale100(grade.PAdjusted),
             f = Round(fit?.Budget),
             h = Round(fit?.Aid),
+            // Số thật để thẻ và chat nói bằng USD thay vì điểm: học bổng trung bình của người được nhận và chính sách học bổng du học sinh
+            aidAvg = school.Offering.IntlAidAvgUsd,
+            aidPolicy = school.Offering.IntlAidPolicy,
             q = Round(fit?.Quality),
             gap = budget is decimal b && cost is decimal c && c > b ? c - b : (decimal?)null,
             pg = Scale100(grade.Pg),
@@ -548,6 +554,12 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
             adj = grade.P is double p && grade.PAdjusted is double pa ? Math.Round((pa - p) * 100, 1) : (double?)null,
             r = IntlRatio(school),
             acceptRate = Round(ToDouble(AcceptRate(school))),
+            // Khoảng SAT tổng của sinh viên trúng tuyển (đã loại mốc sai thang) và tỉ lệ nhận du học sinh, để thẻ trường nói bằng số cụ thể
+            sat25 = SatScale.Clean(school.Offering.Sat25, school.Offering.Sat75).P25,
+            sat75 = SatScale.Clean(school.Offering.Sat25, school.Offering.Sat75).P75,
+            intlAcceptRate = Round(ToDouble(IntlAcceptRate(school))),
+            // Tỉ lệ sinh viên trúng tuyển có GPA đúng 4,0 (0..1). Cao thì GPA 4,0 của học sinh chỉ ngang đa số, không nổi bật
+            gpaTopShare = Round(GpaTopShare(school.Offering)),
             a = Round(fit?.Position),
             e = Round(fit?.English),
             fit = Round(fit?.Value),
@@ -628,10 +640,11 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
     private static SchoolAcademics ToSchoolAcademics(RecommendSchoolInput input)
     {
         var offering = input.Offering;
+        var (sat25, sat75) = SatScale.Clean(offering.Sat25, offering.Sat75);   // mốc sai thang (điểm một phần thi) coi như thiếu
         return new SchoolAcademics(
             offering.AvgGpa4,
             GpaDist(offering),
-            offering.Sat25, offering.Sat75,
+            sat25, sat75,
             offering.Act25, offering.Act75,
             offering.SatPolicy, offering.SatSubmitPct,
             offering.C7GpaImportance, offering.C7TestImportance, offering.C7EcImportance,
@@ -644,7 +657,7 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
     {
         var offering = input.Offering;
         return new FitSchool(
-            TotalCost(offering), offering.IntlAidAvgUsd, englishShortfall, SchoolRanker.QualityFromRanks(input.Rankings));
+            TotalCost(offering), offering.IntlAidAvgUsd, englishShortfall, SchoolRanker.QualityFromRanks(input.Rankings), offering.IntlAidPolicy);
     }
 
     // Đọc một số từ JSON đã lưu (dùng khi mở chi tiết một trường).
@@ -677,6 +690,13 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
         _ => true
     };
     // Đủ 7 khoảng mới dùng. Thứ tự: dưới 2.50 → đúng 4.0.
+    private static double? GpaTopShare(UniversityOffering offering)
+    {
+        var dist = GpaDist(offering);
+        var total = dist?.Sum(x => (double)x) ?? 0;
+        return dist is { Count: 7 } && total > 0 ? (double)dist[6] / total : null;
+    }
+
     private static IReadOnlyList<decimal>? GpaDist(UniversityOffering offering)
     {
         decimal?[] bins =
