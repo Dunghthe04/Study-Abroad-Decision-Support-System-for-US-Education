@@ -56,9 +56,9 @@ export function ConsultationBookingModal({ centerName }: ConsultationBookingModa
       <Button
         size="lg"
         onClick={() => setOpen(true)}
-        className="gap-2 bg-brand text-brand-foreground hover:bg-brand/90 font-medium"
+        className="gap-2 bg-brand text-white hover:bg-brand/90 font-medium shadow-sm"
       >
-        <CalendarIcon className="w-4 h-4" />
+        <CalendarIcon className="w-4 h-4 text-white" />
         Đặt lịch tư vấn 1-1 miễn phí
       </Button>
 

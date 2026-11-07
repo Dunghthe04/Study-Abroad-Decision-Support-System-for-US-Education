@@ -269,6 +269,9 @@ public class AdminUniversityServiceTests
             Entries.Add(entry);
             return Task.CompletedTask;
         }
+
+        public Task<string?> GetLatestLockReasonAsync(Guid userId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<string?>(null);
     }
 
     private sealed class FakeRepository : IAdminUniversityRepository

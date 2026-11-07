@@ -20,6 +20,19 @@ ALTER TABLE app.study_centers ADD COLUMN IF NOT EXISTS max_fee_usd NUMERIC(12,2)
 ALTER TABLE app.study_centers ADD COLUMN IF NOT EXISTS published_fee_notes VARCHAR(1000);
 ALTER TABLE app.study_centers ADD COLUMN IF NOT EXISTS rating_avg NUMERIC(3,2) DEFAULT 0;
 ALTER TABLE app.study_centers ADD COLUMN IF NOT EXISTS review_count INT DEFAULT 0;
+ALTER TABLE app.study_centers ADD COLUMN IF NOT EXISTS center_type VARCHAR(32) DEFAULT 'study_abroad';
+ALTER TABLE app.study_centers ADD COLUMN IF NOT EXISTS logo_url VARCHAR(1024);
+ALTER TABLE app.study_centers ADD COLUMN IF NOT EXISTS cover_image_url VARCHAR(1024);
+ALTER TABLE app.study_centers ADD COLUMN IF NOT EXISTS gallery_images TEXT[] DEFAULT '{}'::text[];
+ALTER TABLE app.study_centers ADD COLUMN IF NOT EXISTS district VARCHAR(128);
+ALTER TABLE app.study_centers ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION;
+ALTER TABLE app.study_centers ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION;
+ALTER TABLE app.study_centers ADD COLUMN IF NOT EXISTS staff_count INT;
+ALTER TABLE app.study_centers ADD COLUMN IF NOT EXISTS established_year INT;
+ALTER TABLE app.study_centers ADD COLUMN IF NOT EXISTS license_number VARCHAR(128);
+ALTER TABLE app.study_centers ADD COLUMN IF NOT EXISTS accreditations TEXT[] DEFAULT '{}'::text[];
+ALTER TABLE app.study_centers ADD COLUMN IF NOT EXISTS visa_success_rate DOUBLE PRECISION;
+ALTER TABLE app.study_centers ADD COLUMN IF NOT EXISTS average_rating NUMERIC(3,2) DEFAULT 5.0;
 ALTER TABLE app.study_centers ALTER COLUMN study_levels SET DEFAULT '{}'::text[];
 ALTER TABLE app.study_centers ALTER COLUMN services SET DEFAULT '{}'::text[];
 

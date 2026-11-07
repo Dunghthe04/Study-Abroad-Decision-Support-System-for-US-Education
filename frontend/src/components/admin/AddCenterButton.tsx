@@ -2,10 +2,11 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { PlusIcon } from "lucide-react";
+import { PlusIcon, UserPlusIcon } from "lucide-react";
 import { studyCentersApi, ApiError } from "@/lib/api";
 import { STUDY_LEVELS, STUDY_LEVEL_LABELS } from "@/lib/study-levels";
 import { useAuth } from "@/contexts/AuthContext";
+import { CreateCenterAccountButton } from "./centers/CreateCenterAccountButton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,6 +21,7 @@ import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
+import { cn } from "@/lib/utils";
 
 const COMMON_SERVICES = [
   { key: "CHON_TRUONG", label: "Tư vấn chọn trường" },
@@ -30,7 +32,12 @@ const COMMON_SERVICES = [
   { key: "CHUNG_CHI", label: "Luyện thi chứng chỉ (SAT, IELTS...)" },
 ];
 
-export function AddCenterButton() {
+export interface AddCenterButtonProps {
+  className?: string;
+  size?: "default" | "sm" | "lg" | "xs" | "icon" | "icon-xs" | "icon-sm" | "icon-lg";
+}
+
+export function AddCenterButton({ className, size = "sm" }: AddCenterButtonProps = {}) {
   const { user } = useAuth();
   const router = useRouter();
 
@@ -48,6 +55,7 @@ export function AddCenterButton() {
 
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isCreateAccountOpen, setIsCreateAccountOpen] = useState(false);
 
   // Chỉ Moderator hoặc Admin mới được thêm trung tâm vào danh bạ
   const canAdd = user?.role === "admin" || user?.role === "moderator";
@@ -135,7 +143,12 @@ export function AddCenterButton() {
 
   return (
     <>
-      <Button onClick={handleOpen} className="gap-2">
+      <Button
+        type="button"
+        size={size}
+        onClick={handleOpen}
+        className={cn("gap-1.5 bg-brand text-white hover:bg-brand/90", className)}
+      >
         <PlusIcon className="size-4" aria-hidden />
         Thêm trung tâm
       </Button>
@@ -155,6 +168,7 @@ export function AddCenterButton() {
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             )}
+
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field>
@@ -295,17 +309,41 @@ export function AddCenterButton() {
               />
             </Field>
 
-            <DialogFooter className="pt-2">
-              <Button type="button" variant="outline" onClick={handleClose} disabled={isSubmitting}>
-                Hủy
-              </Button>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? <Spinner className="size-4" /> : "Thêm vào danh bạ"}
-              </Button>
+            <DialogFooter className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              {user?.role === "admin" ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsCreateAccountOpen(true)}
+                  disabled={isSubmitting}
+                  className="gap-1.5 text-xs text-brand border-brand/30 hover:bg-brand/5 mr-auto"
+                >
+                  <UserPlusIcon className="size-3.5" />
+                  Tạo tài khoản cho trung tâm
+                </Button>
+              ) : <div />}
+              <div className="flex items-center gap-2 self-end sm:self-auto">
+                <Button type="button" variant="outline" onClick={handleClose} disabled={isSubmitting}>
+                  Hủy
+                </Button>
+                <Button type="submit" disabled={isSubmitting} className="bg-brand text-white hover:bg-brand/90">
+                  {isSubmitting ? <Spinner className="size-4" /> : "Thêm vào danh bạ"}
+                </Button>
+              </div>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
+
+      <CreateCenterAccountButton
+        hideTriggerButton
+        isOpenControlled={isCreateAccountOpen}
+        onOpenChangeControlled={setIsCreateAccountOpen}
+        initialName=""
+        initialEmail={email}
+        initialPhone={phone}
+      />
     </>
   );
 }

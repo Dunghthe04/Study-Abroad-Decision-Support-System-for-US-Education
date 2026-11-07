@@ -63,6 +63,18 @@ public class StudyCenterService(
             SurveyedAt = request.SurveyedAt,
             VerificationStatus = "unverified",
             IsActive = true,
+            CenterType = string.IsNullOrWhiteSpace(request.CenterType) ? "study_abroad" : request.CenterType.Trim(),
+            LogoUrl = request.LogoUrl,
+            CoverImageUrl = request.CoverImageUrl,
+            GalleryImages = request.GalleryImages ?? [],
+            District = request.District,
+            Latitude = request.Latitude,
+            Longitude = request.Longitude,
+            StaffCount = request.StaffCount,
+            EstablishedYear = request.EstablishedYear,
+            LicenseNumber = request.LicenseNumber,
+            Accreditations = request.Accreditations ?? [],
+            VisaSuccessRate = request.VisaSuccessRate,
         };
 
         await repository.AddAsync(center, ct);
@@ -119,5 +131,8 @@ public class StudyCenterService(
 
     internal static StudyCenterDto ToDto(StudyCenter c) =>
         new(c.Id, c.Code, c.Name, c.Website, c.Address, c.City, c.StudyLevels, c.Services, c.SurveyedAt,
-            c.Phone, c.Email, c.Description, c.VerificationStatus, c.IsActive);
+            c.Phone, c.Email, c.Description, c.VerificationStatus, c.IsActive,
+            c.CenterType, c.LogoUrl, c.CoverImageUrl, c.GalleryImages, c.District,
+            c.Latitude, c.Longitude, c.StaffCount, c.EstablishedYear, c.LicenseNumber,
+            c.Accreditations, c.VisaSuccessRate, c.AverageRating, c.ReviewCount);
 }

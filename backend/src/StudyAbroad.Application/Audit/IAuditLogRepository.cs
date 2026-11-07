@@ -1,4 +1,7 @@
 using StudyAbroad.Domain.Entities;
+using System;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace StudyAbroad.Application.Audit;
 
@@ -6,4 +9,5 @@ namespace StudyAbroad.Application.Audit;
 public interface IAuditLogRepository
 {
     Task AddAsync(AuditLog entry, CancellationToken cancellationToken = default);
+    Task<string?> GetLatestLockReasonAsync(Guid userId, CancellationToken cancellationToken = default);
 }

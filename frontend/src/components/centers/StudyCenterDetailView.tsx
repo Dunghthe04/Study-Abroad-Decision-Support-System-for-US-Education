@@ -5,8 +5,6 @@ import {
   ArrowLeftIcon,
   CheckCircle2Icon,
   MapPinIcon,
-  PhoneIcon,
-  GlobeIcon,
   ClockIcon,
   StarIcon,
   ShieldCheckIcon,
@@ -33,9 +31,23 @@ interface StudyCenterDetailViewProps {
   center: StudyCenter;
 }
 
+function parseScholarshipStat(raw?: string): { amount: string; note?: string } {
+  if (!raw) return { amount: "—" };
+  const trimmed = raw.trim();
+  const match = trimmed.match(/^(.*?)\s*\((.*?)\)$/);
+  if (match) {
+    return {
+      amount: match[1].trim(),
+      note: match[2].trim(),
+    };
+  }
+  return { amount: trimmed };
+}
+
 export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
   const profile = getEnrichedCenterProfile(center);
   const isVerified = center.verificationStatus === "verified" || profile.center.verificationStatus === "verified";
+  const scholarshipStat = parseScholarshipStat(profile.totalScholarshipsWon);
 
   return (
     <div className="space-y-6 pb-12">
@@ -86,15 +98,6 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
             {/* CTA Buttons */}
             <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto shrink-0 pb-1">
               <ConsultationBookingModal centerName={center.name} />
-              {center.phone && (
-                <a
-                  href={`tel:${center.phone}`}
-                  className={cn(buttonVariants({ variant: "outline", size: "lg" }), "gap-2 inline-flex items-center")}
-                >
-                  <PhoneIcon className="w-4 h-4 text-emerald-600" />
-                  {center.phone}
-                </a>
-              )}
             </div>
           </div>
 
@@ -138,55 +141,95 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
       </div>
 
       {/* 4 Key Highlight Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
-        <Card className="p-4 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center shrink-0">
-            <FlameIcon className="w-5 h-5" />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-3.5">
+        <Card className="p-3.5 sm:p-4 flex flex-col justify-between gap-3 min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs text-muted-foreground font-medium truncate">
+              Tỷ lệ đỗ Visa Mỹ
+            </span>
+            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center shrink-0">
+              <FlameIcon className="w-4 h-4" />
+            </div>
           </div>
-          <div>
-            <div className="text-xs text-muted-foreground">Tỷ lệ đỗ Visa Mỹ</div>
-            <div className="text-lg font-bold text-foreground">{profile.visaSuccessRate}%</div>
-          </div>
-        </Card>
-
-        <Card className="p-4 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0">
-            <AwardIcon className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="text-xs text-muted-foreground">Tổng học bổng đạt được</div>
-            <div className="text-sm font-bold text-foreground truncate">{profile.totalScholarshipsWon}</div>
-          </div>
-        </Card>
-
-        <Card className="p-4 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-blue-500/10 text-blue-600 flex items-center justify-center shrink-0">
-            <UsersIcon className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="text-xs text-muted-foreground">Quy mô nhân sự</div>
-            <div className="text-sm font-bold text-foreground">{profile.staffCount} chuyên viên & GV</div>
+          <div className="min-w-0">
+            <div className="text-lg sm:text-2xl font-bold tracking-tight text-foreground truncate">
+              {profile.visaSuccessRate}%
+            </div>
+            <div className="text-[11px] text-muted-foreground truncate mt-0.5">
+              Hồ sơ phỏng vấn ĐSQ
+            </div>
           </div>
         </Card>
 
-        <Card className="p-4 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-purple-500/10 text-purple-600 flex items-center justify-center shrink-0">
-            <ShieldCheckIcon className="w-5 h-5" />
+        <Card className="p-3.5 sm:p-4 flex flex-col justify-between gap-3 min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs text-muted-foreground font-medium truncate">
+              Học bổng đạt được
+            </span>
+            <div className="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0">
+              <AwardIcon className="w-4 h-4" />
+            </div>
           </div>
-          <div>
-            <div className="text-xs text-muted-foreground">Pháp lý hoạt động</div>
-            <div className="text-sm font-bold text-foreground truncate">{profile.licenseNumber}</div>
+          <div className="min-w-0">
+            <div className="text-lg sm:text-2xl font-bold tracking-tight text-foreground truncate" title={scholarshipStat.amount}>
+              {scholarshipStat.amount}
+            </div>
+            <div
+              className="text-[11px] text-muted-foreground truncate mt-0.5"
+              title={scholarshipStat.note || "Kỳ tuyển sinh gần nhất"}
+            >
+              {scholarshipStat.note || "Kỳ tuyển sinh gần nhất"}
+            </div>
+          </div>
+        </Card>
+
+        <Card className="p-3.5 sm:p-4 flex flex-col justify-between gap-3 min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs text-muted-foreground font-medium truncate">
+              Quy mô nhân sự
+            </span>
+            <div className="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-600 flex items-center justify-center shrink-0">
+              <UsersIcon className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="min-w-0">
+            <div className="text-lg sm:text-2xl font-bold tracking-tight text-foreground truncate">
+              {profile.staffCount}{" "}
+              <span className="text-xs sm:text-sm font-normal text-muted-foreground">chuyên viên</span>
+            </div>
+            <div className="text-[11px] text-muted-foreground truncate mt-0.5">
+              Cố vấn & Giảng viên
+            </div>
+          </div>
+        </Card>
+
+        <Card className="p-3.5 sm:p-4 flex flex-col justify-between gap-3 min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs text-muted-foreground font-medium truncate">
+              Pháp lý cơ sở
+            </span>
+            <div className="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-600 flex items-center justify-center shrink-0">
+              <ShieldCheckIcon className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="min-w-0">
+            <div className="text-base sm:text-lg font-bold tracking-tight text-foreground truncate" title={profile.licenseNumber}>
+              {profile.licenseNumber}
+            </div>
+            <div className="text-[11px] text-muted-foreground truncate mt-0.5" title={profile.licenseIssuedBy}>
+              {profile.licenseIssuedBy}
+            </div>
           </div>
         </Card>
       </div>
 
       {/* Main Tabs Navigation */}
       <Tabs defaultValue="tong-quan" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4 max-w-xl h-10 p-1">
-          <TabsTrigger value="tong-quan" className="text-xs sm:text-sm">Tổng quan & Cơ sở</TabsTrigger>
-          <TabsTrigger value="dich-vu" className="text-xs sm:text-sm">Dịch vụ & Khóa học</TabsTrigger>
-          <TabsTrigger value="thanh-tich" className="text-xs sm:text-sm">Thành tích đỗ đạt</TabsTrigger>
-          <TabsTrigger value="danh-gia" className="text-xs sm:text-sm">Đánh giá ({profile.reviewCount})</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 max-w-2xl h-11 p-1 rounded-xl border-2 border-border/90 bg-muted/90 shadow-2xs">
+          <TabsTrigger value="tong-quan" className="text-xs sm:text-sm font-medium">Tổng quan & Cơ sở</TabsTrigger>
+          <TabsTrigger value="dich-vu" className="text-xs sm:text-sm font-medium">Dịch vụ & Khóa học</TabsTrigger>
+          <TabsTrigger value="thanh-tich" className="text-xs sm:text-sm font-medium">Thành tích đỗ đạt</TabsTrigger>
+          <TabsTrigger value="danh-gia" className="text-xs sm:text-sm font-medium">Đánh giá ({profile.reviewCount})</TabsTrigger>
         </TabsList>
 
         {/* TAB 1: TỔNG QUAN & CƠ SỞ VẬT CHẤT */}
@@ -264,21 +307,31 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
                 </div>
                 <div>
                   <span className="font-medium text-foreground">Khu vực:</span>{" "}
-                  <span className="text-muted-foreground">{center.city ?? "Toàn quốc"}</span>
+                  <span className="text-muted-foreground">
+                    {center.district ? `${center.district}, ${center.city ?? "Việt Nam"}` : (center.city ?? "Toàn quốc")}
+                  </span>
+                </div>
+                <div>
+                  <span className="font-medium text-foreground">Năm thành lập:</span>{" "}
+                  <span className="text-muted-foreground">{profile.establishedYear}</span>
                 </div>
                 <div>
                   <span className="font-medium text-foreground">Giấy phép cơ sở:</span>{" "}
                   <span className="text-muted-foreground">{profile.licenseIssuedBy}</span>
                 </div>
-                {center.address && (
+                {(center.address || (center.latitude && center.longitude)) && (
                   <div className="pt-2">
                     <a
-                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${center.name} ${center.address}`)}`}
+                      href={
+                        center.latitude && center.longitude
+                          ? `https://www.google.com/maps/search/?api=1&query=${center.latitude},${center.longitude}`
+                          : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${center.name} ${center.address}`)}`
+                      }
                       target="_blank"
                       rel="noopener noreferrer"
                       className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "gap-1.5 text-xs inline-flex items-center")}
                     >
-                      <GlobeIcon className="w-3.5 h-3.5" />
+                      <MapPinIcon className="w-3.5 h-3.5 text-brand" />
                       Mở Google Maps chỉ đường
                       <ExternalLinkIcon className="w-3 h-3 ml-1" />
                     </a>
@@ -291,36 +344,20 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
                   <ClockIcon className="w-4 h-4 text-brand" />
-                  Thông tin kết nối & Giờ làm việc
+                  Thời gian làm việc & Kênh tiếp nhận
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 text-xs sm:text-sm">
                 <div>
-                  <span className="font-medium text-foreground">Giờ hoạt động:</span>{" "}
+                  <span className="font-semibold text-foreground">Giờ hoạt động:</span>{" "}
                   <span className="text-muted-foreground">{profile.operatingHours}</span>
                 </div>
-                {center.email && (
-                  <div>
-                    <span className="font-medium text-foreground">Email:</span>{" "}
-                    <a href={`mailto:${center.email}`} className="text-brand hover:underline">
-                      {center.email}
-                    </a>
-                  </div>
-                )}
-                {center.website && (
-                  <div>
-                    <span className="font-medium text-foreground">Website chính thức:</span>{" "}
-                    <a
-                      href={center.website}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-brand hover:underline inline-flex items-center gap-1"
-                    >
-                      {center.website}
-                      <ExternalLinkIcon className="w-3 h-3" />
-                    </a>
-                  </div>
-                )}
+                <div className="pt-2 border-t text-xs text-muted-foreground flex items-start gap-2 bg-muted/40 p-2.5 rounded-lg">
+                  <ShieldCheckIcon className="w-4 h-4 text-brand shrink-0 mt-0.5" />
+                  <span>
+                    Toàn bộ quy trình tiếp nhận tư vấn và đăng ký dịch vụ du học được hỗ trợ và bảo trợ tập trung qua hệ thống USAS để đảm bảo tính xác thực và quyền lợi của người dùng.
+                  </span>
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -346,7 +383,7 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
                     <div className="w-8 h-8 rounded-md bg-brand/10 text-brand flex items-center justify-center shrink-0 mt-0.5">
                       <CheckCircle2Icon className="w-4 h-4" />
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <div className="text-sm font-semibold text-foreground">{centerServiceLabel(svc)}</div>
                       <div className="text-xs text-muted-foreground mt-0.5">
                         {svc === "CHON_TRUONG" && "Định vị danh sách trường Reach - Target - Safety theo ngân sách và năng lực."}

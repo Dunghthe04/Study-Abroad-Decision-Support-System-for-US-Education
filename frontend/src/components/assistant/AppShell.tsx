@@ -6,11 +6,13 @@ import { isFullRoute, isWideRoute } from "@/lib/layout-routes";
 import { cn } from "@/lib/utils";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { Toaster } from "@/components/ui/toast";
+import { useAutoHideScrollbar } from "@/hooks/use-auto-hide-scrollbar";
 import { AssistantLauncher, AssistantPanel, useAssistantVisible } from "./AssistantPanel";
 import { useAssistant } from "./AssistantProvider";
 
 /** Header + nội dung; khi khung trợ lý mở (≥900px) thì đẩy trang sang trái thay vì che */
 export function AppShell({ children }: { children: React.ReactNode }) {
+  useAutoHideScrollbar();
   const pathname = usePathname();
   const { open, wide } = useAssistant();
   const visible = useAssistantVisible();

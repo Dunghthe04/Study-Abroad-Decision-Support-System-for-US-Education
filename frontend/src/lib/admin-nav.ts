@@ -35,12 +35,12 @@ export const ADMIN_NAV: AdminNavItem[] = [
     useCases: [],
   },
   {
-    href: "/admin/accounts",
-    label: "Tài khoản",
-    description: "Danh sách, khóa, mở khóa tài khoản và tạo tài khoản moderator",
+    href: "/admin/users",
+    label: "Quản trị người dùng",
+    description: "Danh sách, khóa, mở khóa tài khoản và cấp tài khoản moderator/trung tâm",
     icon: UsersIcon,
     roles: ["admin"],
-    useCases: ["UC-60", "UC-61", "UC-62", "UC-63"],
+    useCases: [],
   },
   {
     href: "/admin/universities",
@@ -64,7 +64,7 @@ export const ADMIN_NAV: AdminNavItem[] = [
     description: "Thêm, xác minh, sửa hoặc ẩn trung tâm và tạo tài khoản trung tâm",
     icon: BuildingIcon,
     roles: ["admin"],
-    useCases: ["UC-59", "UC-64", "UC-71", "UC-72"],
+    useCases: [],
   },
   {
     href: "/admin/plans",
@@ -108,6 +108,9 @@ export function adminNavForRole(role: UserRole | undefined): AdminNavItem[] {
 }
 
 export function findAdminNavItem(href: string): AdminNavItem | undefined {
+  if (href === "/admin/accounts") {
+    return ADMIN_NAV.find((item) => item.href === "/admin/users");
+  }
   return ADMIN_NAV.find((item) => item.href === href);
 }
 
