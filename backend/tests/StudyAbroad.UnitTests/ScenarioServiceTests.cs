@@ -209,7 +209,7 @@ public class ScenarioServiceTests
     }
 
     // Chỉ SimulateAsync được dùng; các hàm khác không liên quan đến UC-86
-    private sealed class FakeSimulator : IRecommendationRunner
+    internal sealed class FakeSimulator : IRecommendationRunner
     {
         public static readonly GroupSummary Baseline = new(30, 10, 12, 8, 0, 0);
         public static readonly GroupSummary Simulated = new(30, 7, 14, 9, 0, 0);
