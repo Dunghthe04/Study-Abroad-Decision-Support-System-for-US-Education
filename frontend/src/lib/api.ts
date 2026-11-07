@@ -257,7 +257,7 @@ export const studyCentersApi = {
   getById: (id: string) => apiFetch<StudyCenter>(`/api/v1/study-centers/${id}`),
 };
 
-// [UC-30] API Quản lý trường mục tiêu (Student / Parent)
+// [UC-30, UC-31] API Quản lý trường mục tiêu (Student / Parent)
 export const targetSchoolsApi = {
   /** [UC-30] Thêm một trường vào danh sách mục tiêu */
   add: (data: AddTargetSchoolRequest) =>
@@ -268,4 +268,21 @@ export const targetSchoolsApi = {
   /** Lấy chi tiết một trường mục tiêu theo ID */
   getById: (id: string) =>
     apiFetch<TargetSchoolDto>(`/api/v1/target-schools/${encodeURIComponent(id)}`),
+  /** [UC-31] Xóa một trường khỏi danh sách mục tiêu theo ID mục tiêu */
+  remove: (id: string) =>
+    apiFetch<void>(`/api/v1/target-schools/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }),
+  /** [UC-31] Xóa một trường khỏi danh sách mục tiêu theo Mã trường hoặc University ID */
+  removeByUniversity: (universityIdentifier: string) =>
+    apiFetch<void>(`/api/v1/target-schools/by-university/${encodeURIComponent(universityIdentifier)}`, {
+      method: "DELETE",
+    }),
+  /** Kiểm tra trạng thái trường mục tiêu của học sinh */
+  check: (params: { universityCode?: string; universityId?: string }) => {
+    const q = new URLSearchParams();
+    if (params.universityCode) q.set("universityCode", params.universityCode);
+    if (params.universityId) q.set("universityId", params.universityId);
+    return apiFetch<TargetSchoolDto | null>(`/api/v1/target-schools/check?${q.toString()}`);
+  },
 };
