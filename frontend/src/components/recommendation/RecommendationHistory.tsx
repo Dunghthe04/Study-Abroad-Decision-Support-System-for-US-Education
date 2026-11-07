@@ -3,13 +3,14 @@
 // [UC-87] Lịch sử gợi ý: danh sách các lần chạy trước, xem lại một lần, chọn hai lần để so sánh.
 // Chỉ đọc: không chạy lại, không sửa gì.
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { AlertCircleIcon, ArrowLeftIcon, ArrowRightIcon, GitCompareIcon, XIcon } from "lucide-react";
+import { AlertCircleIcon, ArrowLeftIcon, ArrowRightIcon, GitCompareIcon } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
 import { recommendationHistoryApi } from "@/lib/recommendation-history-api";
 import { cn } from "@/lib/utils";
@@ -63,7 +64,6 @@ export function RecommendationHistory() {
   const [comparison, setComparison] = useState<RunComparison | null>(null);
   const [viewing, setViewing] = useState<Recommendation | null>(null);
   const [busy, setBusy] = useState<string | null>(null); // "compare" hoặc id lần đang mở
-  const detailRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     recommendationHistoryApi
@@ -74,11 +74,6 @@ export function RecommendationHistory() {
         setError(errorText(err, "Chưa tải được lịch sử gợi ý."));
       });
   }, []);
-
-  // Mở so sánh hoặc một lần chạy thì cuộn tới khung chi tiết
-  useEffect(() => {
-    if (comparison || viewing) detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, [comparison, viewing]);
 
   const toggle = (id: string) =>
     setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : prev.length < 2 ? [...prev, id] : prev));
@@ -93,7 +88,6 @@ export function RecommendationHistory() {
     setError(null);
     try {
       setComparison(await recommendationHistoryApi.compare(older.id, newer.id));
-      setViewing(null);
     } catch (err) {
       setError(errorText(err, "Chưa so sánh được hai lần gợi ý."));
     } finally {
@@ -106,7 +100,6 @@ export function RecommendationHistory() {
     setError(null);
     try {
       setViewing(await recommendationHistoryApi.get(id));
-      setComparison(null);
     } catch (err) {
       setError(errorText(err, "Chưa mở được lần gợi ý này."));
     } finally {
@@ -160,21 +153,6 @@ export function RecommendationHistory() {
 
       {runs.length > 0 && (
         <section className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-xs text-muted-foreground">
-              Đã chọn {selected.length}/2
-              {selected.length > 0 && (
-                <button type="button" className="ml-2 font-semibold text-brand hover:underline" onClick={() => setSelected([])}>
-                  Bỏ chọn
-                </button>
-              )}
-            </p>
-            <Button size="sm" className="gap-1" disabled={selected.length !== 2 || busy !== null} onClick={compare}>
-              {busy === "compare" ? <Spinner className="size-3.5" /> : <GitCompareIcon className="size-3.5" />}
-              So sánh
-            </Button>
-          </div>
-
           <ul className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-surface">
             {runs.map((run, index) => {
               const checked = selected.includes(run.id);
@@ -210,28 +188,37 @@ export function RecommendationHistory() {
               );
             })}
           </ul>
+
+          {/* Thanh chọn dính đáy màn hình: chọn hai lần ở xa nhau vẫn bấm So sánh được ngay, không phải cuộn lên */}
+          <div className="sticky bottom-4 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-surface/95 px-4 py-3 shadow-lg backdrop-blur">
+            <p className="text-xs text-muted-foreground">
+              {selected.length === 2 ? "Đã chọn 2/2" : `Chọn thêm ${2 - selected.length} lần để so sánh`}
+              {selected.length > 0 && (
+                <button type="button" className="ml-2 font-semibold text-brand hover:underline" onClick={() => setSelected([])}>
+                  Bỏ chọn
+                </button>
+              )}
+            </p>
+            <Button size="sm" className="gap-1" disabled={selected.length !== 2 || busy !== null} onClick={compare}>
+              {busy === "compare" ? <Spinner className="size-3.5" /> : <GitCompareIcon className="size-3.5" />}
+              So sánh
+            </Button>
+          </div>
         </section>
       )}
 
-      <div ref={detailRef} className="scroll-mt-4">
-        {comparison && <ComparisonPanel comparison={comparison} onClose={() => setComparison(null)} />}
-        {viewing && <RunPanel rec={viewing} onClose={() => setViewing(null)} />}
-      </div>
-    </div>
-  );
-}
+      {/* Xem lại một lần và kết quả so sánh đều hiện dạng popup; dài thì cuộn bên trong popup */}
+      <Dialog open={viewing !== null} onOpenChange={(isOpen) => !isOpen && setViewing(null)}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
+          {viewing && <RunBody rec={viewing} />}
+        </DialogContent>
+      </Dialog>
 
-function PanelHeader({ title, sub, onClose }: { title: string; sub: string; onClose: () => void }) {
-  return (
-    <div className="flex items-start justify-between gap-3">
-      <div>
-        <h2 className="text-sm font-bold uppercase tracking-wide text-foreground">{title}</h2>
-        <p className="text-xs text-muted-foreground">{sub}</p>
-      </div>
-      <Button variant="ghost" size="sm" onClick={onClose} aria-label="Đóng" className="gap-1">
-        <XIcon className="size-3.5" />
-        Đóng
-      </Button>
+      <Dialog open={comparison !== null} onOpenChange={(isOpen) => !isOpen && setComparison(null)}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
+          {comparison && <ComparisonBody comparison={comparison} />}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -246,15 +233,16 @@ function Place({ group, rank }: { group: HistoryGroup | null; rank: number | nul
   );
 }
 
-function ComparisonPanel({ comparison, onClose }: { comparison: RunComparison; onClose: () => void }) {
+function ComparisonBody({ comparison }: { comparison: RunComparison }) {
   const { from, to, changes } = comparison;
   return (
-    <section className="space-y-3 rounded-2xl border border-line bg-surface p-4">
-      <PanelHeader
-        title="So sánh hai lần gợi ý"
-        sub={`Lần trước ${formatTime(from.createdAt)} → lần sau ${formatTime(to.createdAt)}`}
-        onClose={onClose}
-      />
+    <>
+      <DialogHeader className="pr-8">
+        <DialogTitle>So sánh hai lần gợi ý</DialogTitle>
+        <DialogDescription className="text-xs">
+          Lần trước {formatTime(from.createdAt)} → lần sau {formatTime(to.createdAt)}
+        </DialogDescription>
+      </DialogHeader>
 
       {changes.length === 0 ? (
         <p className="py-4 text-center text-sm text-muted-foreground">
@@ -305,24 +293,23 @@ function ComparisonPanel({ comparison, onClose }: { comparison: RunComparison; o
         </div>
       )}
       <p className="text-[11px] text-ink-3">Chỉ liệt kê trường có thay đổi. Thứ hạng tính trong từng nhóm.</p>
-    </section>
+    </>
   );
 }
 
 // Xem lại một lần chạy: các nhóm và thẻ trường như trang Gợi ý trường, nhưng chỉ xem (không hỏi trợ lý)
-function RunPanel({ rec, onClose }: { rec: Recommendation; onClose: () => void }) {
+function RunBody({ rec }: { rec: Recommendation }) {
   const { criteria, items } = rec;
   const byCode = new Map<string, ScoredSchool>(items.scored.map((s) => [s.code, s]));
   const student = { sat: criteria.studentSat ?? null, gpa: criteria.studentGpa ?? null };
   const empty = GROUPS.every((g) => items[g.key].length === 0);
 
   return (
-    <section className="space-y-6 rounded-2xl border border-line bg-surface/50 p-4">
-      <PanelHeader
-        title={`Lần gợi ý lúc ${formatTime(rec.createdAt)}`}
-        sub={describePref(criteria.pref ?? null)}
-        onClose={onClose}
-      />
+    <div className="space-y-6">
+      <DialogHeader className="pr-8">
+        <DialogTitle>Lần gợi ý lúc {formatTime(rec.createdAt)}</DialogTitle>
+        <DialogDescription className="text-xs">{describePref(criteria.pref ?? null)}</DialogDescription>
+      </DialogHeader>
 
       {empty && (
         <p className="py-4 text-center text-sm text-muted-foreground">Lần này không có trường nào qua bộ lọc.</p>
@@ -340,6 +327,6 @@ function RunPanel({ rec, onClose }: { rec: Recommendation; onClose: () => void }
           </div>
         );
       })}
-    </section>
+    </div>
   );
 }
