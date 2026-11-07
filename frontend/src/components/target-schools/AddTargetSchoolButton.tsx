@@ -20,7 +20,8 @@ import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 
 export interface AddTargetSchoolButtonProps {
-  universityId: string;
+  universityId?: string;
+  universityCode?: string;
   universityName: string;
   universityCity?: string | null;
   universityState?: string | null;
@@ -46,6 +47,7 @@ const APPLICATION_ROUNDS = [
 
 export function AddTargetSchoolButton({
   universityId,
+  universityCode,
   universityName,
   universityCity,
   universityState,
@@ -86,7 +88,8 @@ export function AddTargetSchoolButton({
 
     try {
       const payload: AddTargetSchoolRequest = {
-        universityId,
+        universityId: universityId || undefined,
+        universityCode: universityCode || undefined,
         category: category || null,
         applicationRound: round || null,
         notes: notes.trim() || null,
