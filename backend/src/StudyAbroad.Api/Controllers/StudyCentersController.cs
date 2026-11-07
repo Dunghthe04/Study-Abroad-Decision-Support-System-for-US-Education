@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using StudyAbroad.Api.Extensions;
+using StudyAbroad.Application.Auth;
 using StudyAbroad.Application.Common;
 using StudyAbroad.Application.StudyCenters;
 using StudyAbroad.Domain.Constants;
@@ -37,6 +38,21 @@ public class StudyCentersController(IStudyCenterService service) : ControllerBas
             return ValidationProblem(result.ErrorMessage);
 
         return CreatedAtAction(nameof(GetById), new { id = result.Center.Id }, result.Center);
+    }
+
+    /// <summary>[Q11 / UC-71 Phụ trợ / UC-64] Moderator hoặc Admin tạo tài khoản người dùng cho Trung tâm tư vấn (role center).</summary>
+    [HttpPost("accounts")]
+    [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Moderator}")]
+    public async Task<ActionResult<UserDto>> CreateCenterAccount(
+        [FromBody] CreateCenterAccountRequest request,
+        [FromServices] IAuthService auth,
+        CancellationToken ct)
+    {
+        var result = await auth.CreateCenterAccountAsync(request, ct);
+        if (result.Error != AuthError.None || result.User is null)
+            return ValidationProblem(result.Message);
+
+        return Ok(result.User);
     }
 
     /// <summary>Chat (B6) lấy tối đa 3 trung tâm đã xác minh cho một dịch vụ; cùng thành phố xếp trước.</summary>
