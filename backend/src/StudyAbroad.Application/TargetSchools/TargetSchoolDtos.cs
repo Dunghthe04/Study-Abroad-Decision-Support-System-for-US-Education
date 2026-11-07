@@ -4,9 +4,11 @@ namespace StudyAbroad.Application.TargetSchools;
 
 /// <summary>
 /// [UC-30] Yêu cầu thêm một trường đại học vào danh sách mục tiêu của học sinh.
+/// Cho phép truyền UniversityId (Guid) hoặc UniversityCode (chuỗi mã trường).
 /// </summary>
 public record AddTargetSchoolRequest(
-    Guid UniversityId,
+    Guid? UniversityId = null,
+    string? UniversityCode = null,
     string? Category = null,
     string? ApplicationRound = null,
     DateTime? Deadline = null,

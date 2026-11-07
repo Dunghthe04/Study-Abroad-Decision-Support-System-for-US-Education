@@ -13,5 +13,6 @@ public interface ITargetSchoolRepository
     Task<bool> ExistsAsync(Guid userId, Guid universityId, CancellationToken ct = default);
     Task<TargetSchool> AddAsync(TargetSchool targetSchool, CancellationToken ct = default);
     Task<University?> GetUniversityAsync(Guid universityId, CancellationToken ct = default);
+    Task<University?> GetUniversityByCodeAsync(string code, CancellationToken ct = default);
     Task<string?> GetUniversityDeadlinesJsonAsync(Guid universityId, CancellationToken ct = default);
 }

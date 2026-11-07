@@ -15,16 +15,22 @@ public class TargetSchoolService(
 
     public async Task<AddTargetSchoolResult> AddTargetSchoolAsync(Guid userId, AddTargetSchoolRequest request, CancellationToken ct = default)
     {
-        if (request.UniversityId == Guid.Empty)
-            return AddTargetSchoolResult.Fail("ID trường đại học không hợp lệ.");
+        // 1. Kiểm tra trường đại học có tồn tại và đang hoạt động không (qua ID hoặc Mã Code)
+        University? university = null;
+        if (request.UniversityId.HasValue && request.UniversityId.Value != Guid.Empty)
+        {
+            university = await repository.GetUniversityAsync(request.UniversityId.Value, ct);
+        }
+        else if (!string.IsNullOrWhiteSpace(request.UniversityCode))
+        {
+            university = await repository.GetUniversityByCodeAsync(request.UniversityCode.Trim(), ct);
+        }
 
-        // 1. Kiểm tra trường đại học có tồn tại và đang hoạt động không
-        var university = await repository.GetUniversityAsync(request.UniversityId, ct);
         if (university == null)
             return AddTargetSchoolResult.Fail("Trường đại học không tồn tại hoặc đã ngừng hoạt động trong hệ thống.");
 
         // 2. Kiểm tra xem trường đã có trong danh sách mục tiêu của học sinh chưa (UC-30 chặn thêm trùng)
-        if (await repository.ExistsAsync(userId, request.UniversityId, ct))
+        if (await repository.ExistsAsync(userId, university.Id, ct))
             return AddTargetSchoolResult.Fail("Trường này đã có trong danh sách mục tiêu của bạn.");
 
         // 3. Chuẩn hóa Category (reach / match / safety)
@@ -44,7 +50,7 @@ public class TargetSchoolService(
         // Nếu có chọn vòng nộp mà chưa có deadline, thử trích xuất deadline tương ứng từ DeadlinesJson của trường
         if (deadline == null && !string.IsNullOrEmpty(round))
         {
-            var deadlinesJson = await repository.GetUniversityDeadlinesJsonAsync(request.UniversityId, ct);
+            var deadlinesJson = await repository.GetUniversityDeadlinesJsonAsync(university.Id, ct);
             if (!string.IsNullOrEmpty(deadlinesJson))
             {
                 deadline = TryExtractDeadline(deadlinesJson, round);
@@ -58,7 +64,7 @@ public class TargetSchoolService(
         var targetSchool = new TargetSchool
         {
             UserId = userId,
-            UniversityId = request.UniversityId,
+            UniversityId = university.Id,
             Category = category,
             Status = "considering",
             Priority = 0,

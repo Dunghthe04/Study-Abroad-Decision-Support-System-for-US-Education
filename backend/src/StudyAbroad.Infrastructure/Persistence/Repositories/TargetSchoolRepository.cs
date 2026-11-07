@@ -55,6 +55,9 @@ public class TargetSchoolRepository(AppDbContext db) : ITargetSchoolRepository
     public Task<University?> GetUniversityAsync(Guid universityId, CancellationToken ct = default) =>
         db.Universities.AsNoTracking().FirstOrDefaultAsync(x => x.Id == universityId && x.IsActive, ct);
 
+    public Task<University?> GetUniversityByCodeAsync(string code, CancellationToken ct = default) =>
+        db.Universities.AsNoTracking().FirstOrDefaultAsync(x => x.Code == code && x.IsActive, ct);
+
     public Task<string?> GetUniversityDeadlinesJsonAsync(Guid universityId, CancellationToken ct = default) =>
         db.UniversityOfferings.AsNoTracking()
             .Where(x => x.UniversityId == universityId && !string.IsNullOrEmpty(x.DeadlinesJson))
