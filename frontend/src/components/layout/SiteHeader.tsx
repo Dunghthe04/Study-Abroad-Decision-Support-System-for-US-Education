@@ -27,10 +27,12 @@ export function SiteHeader() {
   const router = useRouter();
   const pathname = usePathname();
 
-  const canOpenAdmin = user?.role === "admin" || user?.role === "moderator";
+  const isAdmin = user?.role === "admin";
+  const isModerator = user?.role === "moderator";
+  const canOpenAdmin = isAdmin || isModerator;
 
   const navLinks = [
-    { href: canOpenAdmin ? "/admin" : "/", label: canOpenAdmin ? "Quản trị" : "Trang chủ" },
+    { href: canOpenAdmin ? "/admin" : "/", label: isModerator ? "Kiểm duyệt" : isAdmin ? "Quản trị" : "Trang chủ" },
     { href: canOpenAdmin ? "/admin/centers" : "/centers", label: "Trung tâm tư vấn" },
     { href: "/methodology", label: "Giới thiệu phương pháp" },
     { href: "/analysis", label: "Phân tích tư vấn" },
@@ -130,7 +132,7 @@ export function SiteHeader() {
                 {canOpenAdmin && (
                   <DropdownMenuItem render={<Link href="/admin" />}>
                     <LayoutDashboardIcon />
-                    Trang quản trị
+                    {isModerator ? "Khu vực Moderator" : "Trang quản trị"}
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuItem render={<Link href="/analysis" />}>
@@ -141,13 +143,13 @@ export function SiteHeader() {
                   <UserIcon />
                   Hồ sơ cá nhân
                 </DropdownMenuItem>
-                {(user.role === "admin" || user.role === "moderator") && (
+                {canOpenAdmin && (
                   <DropdownMenuItem render={<Link href="/admin/centers" />}>
                     <Building2Icon />
                     Quản lý trung tâm
                   </DropdownMenuItem>
                 )}
-                {user.role === "admin" && (
+                {isAdmin && (
                   <DropdownMenuItem render={<Link href="/admin/users" />}>
                     <ShieldIcon />
                     Quản trị người dùng

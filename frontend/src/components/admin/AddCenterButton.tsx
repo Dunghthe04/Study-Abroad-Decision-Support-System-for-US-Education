@@ -310,7 +310,7 @@ export function AddCenterButton({ className, size = "sm" }: AddCenterButtonProps
             </Field>
 
             <DialogFooter className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              {user?.role === "admin" ? (
+              {user?.role === "admin" || user?.role === "moderator" ? (
                 <Button
                   type="button"
                   variant="outline"

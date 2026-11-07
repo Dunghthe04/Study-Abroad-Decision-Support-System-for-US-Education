@@ -59,7 +59,6 @@ export function LoginForm() {
       // [AC-2] Đăng nhập: Gọi API xác thực
       const loggedUser = await login({ email: email.trim(), password });
       if (loggedUser.role === "admin" || loggedUser.role === "moderator") {
-        // Tài khoản admin/moderator thì vào thẳng trang admin luôn không cần vào bên ngoài
         const target = redirectParam && redirectParam !== "/" ? redirect : "/admin";
         router.push(target);
       } else {
