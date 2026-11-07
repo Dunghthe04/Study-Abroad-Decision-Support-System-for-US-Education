@@ -19,6 +19,20 @@ public record GroupingOptions(
     double SafetyMinRate = 0.50,     // tỉ lệ nhận dưới mốc này: không được là An toàn
     double IntlRatioCut = 0.5);      // tỉ lệ nhận du học sinh / tỉ lệ chung dưới mốc này: hạ một nhóm
 
+// Mốc SAT của trường phải là SAT TỔNG (400 đến 1600). Dữ liệu trường đôi khi nhập nhầm mốc của MỘT phần thi (đọc hoặc toán, tối đa 800),
+// khi đó điểm tổng của học sinh (ví dụ 1200) luôn "vượt" mốc 75% và vị trí thành 100%, làm nhóm trường sai.
+// SAT tổng thật sự không thể có mốc 75% dưới 850, nên mốc 75% từ 850 trở xuống coi là sai thang và bỏ (thiếu dữ liệu), không đoán.
+public static class SatScale
+{
+    public const int MinTotalP75 = 850;
+
+    public static bool IsTotal(int? p25, int? p75) =>
+        p25 is int a && p75 is int b && a >= 400 && b > a && b >= MinTotalP75 && b <= 1600;
+
+    // Trả mốc nếu đúng thang SAT tổng, không thì (null, null)
+    public static (int? P25, int? P75) Clean(int? p25, int? p75) => IsTotal(p25, p75) ? (p25, p75) : (null, null);
+}
+
 // Điểm học thuật của học sinh. EcTier = bậc ngoại khóa 1..5 (3 là trung bình, không hiệu chỉnh).
 public record StudentAcademics(decimal? Gpa4, int? Sat, int? Act, int EcTier = AcademicBlend.NeutralEcTier);
 
@@ -76,7 +90,7 @@ public record RankPosition(int Rank, int Total);
 // EnglishShortfall: mức thiếu tiếng Anh của học sinh so với trường, tính theo band (0 là đạt), do HardFilter tính từ IELTS, TOEFL, Duolingo;
 // null nếu không so được (thành phần E bị bỏ khỏi tổng).
 // Quality: chất lượng của trường, từ 0 đến 1 (tính từ xếp hạng bằng SchoolRanker.QualityFromRanks, hoặc số thay thế).
-public record FitSchool(decimal? TotalCostUsd, decimal? IntlAidAvgUsd, decimal? EnglishShortfall, double? Quality);
+public record FitSchool(decimal? TotalCostUsd, decimal? IntlAidAvgUsd, decimal? EnglishShortfall, double? Quality, string? IntlAidPolicy = null);
 
 // Trọng số của năm thành phần. Ba thanh ưu tiên của học sinh (chi phí, học bổng, chất lượng) chỉ đổi các trọng số này.
 public record FitWeights(
@@ -339,14 +353,18 @@ public static class SchoolRanker
         double a = Clamp01(1 - 2 * Math.Abs(pAdjusted - 0.5));
 
         // C: ngân sách. Càng rẻ hơn ngân sách càng cao; vượt ngân sách thì 0.
-        // H: học bổng bù được bao nhiêu phần vượt ngân sách (không vượt thì đủ, bằng 1).
-        double? c = null, h = null;
+        double? c = null;
         if (student.BudgetUsd is decimal budget && budget > 0 && school.TotalCostUsd is decimal cost)
-        {
             c = Clamp01((double)((budget - cost) / budget));
-            if (cost <= budget) h = 1;
-            else if (school.IntlAidAvgUsd is decimal aid) h = Clamp01((double)(aid / (cost - budget)));
-        }
+
+        // H: học bổng cho du học sinh, KHÔNG phụ thuộc ngân sách (chi phí đã có C). H chính là phần trăm chi phí cả năm mà
+        // học bổng trung bình chi trả (không có hệ số nào; trên 142 trường có số liệu tỷ lệ này trải từ 13% đến 88%). Trường nói rõ không có học bổng cho du học sinh thì 0. Chưa có số liệu thì bỏ thành phần H.
+        // Học bổng trung bình lớn hơn cả chi phí là số liệu nhập sai, coi như thiếu chứ không thưởng.
+        double? h = null;
+        if (string.Equals(school.IntlAidPolicy, "none", StringComparison.OrdinalIgnoreCase))
+            h = 0;
+        else if (school.IntlAidAvgUsd is decimal aid && school.TotalCostUsd is decimal total && total > 0 && aid >= 0 && aid <= total)
+            h = Clamp01((double)(aid / total));
 
         // E: tiếng Anh. Đạt mức tối thiểu thì 1; mỗi band thiếu mất 1 điểm. Mức thiếu lấy từ bài thi tốt nhất của học sinh
         // (IELTS, TOEFL hoặc Duolingo), đã tính ở bước lọc nên fit score không tính lại.
@@ -490,6 +508,13 @@ public static class ActivityTier
             .Select(a => new EcActivityEntry(RoleWeight(a.Role), a.ImpactLevel!.Value, Months(a)));
         var awards = valid.Where(IsAward).Take(MaxActivities).Select(a => a.ImpactLevel!.Value);
         return Compute(activities, awards);
+    }
+
+    // Số hoạt động và số giải thưởng đã khai hợp lệ (cùng điều kiện với FromProfile), để giao diện nói "đã khai N hoạt động, M giải thưởng".
+    public static (int Activities, int Awards) CountDeclared(IEnumerable<ProfileActivity> items)
+    {
+        var valid = items.Where(a => a.ImpactLevel is >= 1 and <= 5 && !string.IsNullOrWhiteSpace(a.Title)).ToList();
+        return (valid.Count(a => !IsAward(a)), valid.Count(IsAward));
     }
 
     private static bool IsAward(ProfileActivity a) => string.Equals(a.Kind, "award", StringComparison.OrdinalIgnoreCase);

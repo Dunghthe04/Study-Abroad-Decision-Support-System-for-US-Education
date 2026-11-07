@@ -93,6 +93,22 @@ namespace StudyAbroad.Infrastructure.Persistence.Repositories
         // Bảng theo ngành, theo khu vực, "giá trị" không dùng vì chỉ có vài trường hoặc đo thứ khác.
         public const string GeneralRankingGroup = "Tổng quát";
 
+        // Thứ tự nhóm bảng khi nói với học sinh: bảng chung trước, rồi nhóm con, theo ngành, khu vực, giá trị
+        private static readonly string[] RankingGroupOrder = [GeneralRankingGroup, "Nhóm con", "Theo ngành", "Khu vực", "Giá trị"];
+
+        public async Task<IReadOnlyList<SchoolRanking>> ListSchoolRankingsAsync(Guid universityId, CancellationToken ct = default)
+        {
+            var rows = await db.UniversityRankings
+                .Where(r => r.UniversityId == universityId)
+                .Join(db.RankingLists, r => r.ListId, l => l.Id, (r, l) => new { l.Name, l.ListGroup, l.EditionYear, r.Rank, r.RankDisplay, r.IsTie })
+                .ToListAsync(ct);
+            return rows
+                .OrderBy(x => Array.IndexOf(RankingGroupOrder, x.ListGroup) is var i and >= 0 ? i : RankingGroupOrder.Length)
+                .ThenBy(x => x.Rank)
+                .Select(x => new SchoolRanking(x.Name, x.ListGroup, x.EditionYear, x.Rank, x.RankDisplay, x.IsTie))
+                .ToList();
+        }
+
         // Hạng của từng trường trong các bảng chung. Tổng số trường của bảng lấy bằng hạng lớn nhất của bảng đó.
         private async Task<Dictionary<Guid, IReadOnlyList<RankPosition>>> LoadRankingsAsync(
             List<Guid> universityIds, CancellationToken ct)

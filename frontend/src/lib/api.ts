@@ -11,6 +11,7 @@ import type {
   AdminUserAccountListQuery,
   PagedResult,
   CreateModeratorAccountRequest,
+  CreateCenterAccountRequest,
   LockUserAccountRequest,
   UnlockUserAccountRequest,
   VerifyEmailRequest,
@@ -211,6 +212,13 @@ export const adminUsersApi = {
       body: JSON.stringify(data),
     }),
 
+  /** [Q11 / UC-71 Phụ trợ] Admin tạo tài khoản người dùng cho Trung tâm tư vấn. */
+  createCenter: (data: CreateCenterAccountRequest) =>
+    apiFetch<UserDto>("/api/v1/admin/users/centers", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
   /** [UC-61] Khóa tài khoản (admin). */
   lock: (id: string, data: LockUserAccountRequest) =>
     apiFetch<UserDto>(`/api/v1/admin/users/${encodeURIComponent(id)}/lock`, {
@@ -233,4 +241,16 @@ export const studyCentersApi = {
       method: "POST",
       body: JSON.stringify(data),
     }),
+  search: (params?: { search?: string; city?: string; service?: string; studyLevel?: string; page?: number; pageSize?: number }) => {
+    const sp = new URLSearchParams();
+    if (params?.search) sp.set("search", params.search);
+    if (params?.city) sp.set("city", params.city);
+    if (params?.service) sp.set("service", params.service);
+    if (params?.studyLevel) sp.set("studyLevel", params.studyLevel);
+    if (params?.page) sp.set("page", String(params.page));
+    if (params?.pageSize) sp.set("pageSize", String(params.pageSize));
+    const qs = sp.toString();
+    return apiFetch<PagedResult<StudyCenter>>(`/api/v1/study-centers${qs ? `?${qs}` : ""}`);
+  },
+  getById: (id: string) => apiFetch<StudyCenter>(`/api/v1/study-centers/${id}`),
 };

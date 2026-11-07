@@ -47,11 +47,68 @@ PROFILE_KEYS = (
 ENTITY_KEYS = {
     "mac_dinh": set(),
     "ho_so": {"truong"},
-    "kich_ban": {"che_do", "thay_doi", "truong", "muc_tieu", "yeu_to"},
-    "kien_thuc": {"truong"},
+    "kich_ban": {"che_do", "thay_doi", "truong", "muc_tieu", "yeu_to", "tiep_noi"},
+    "kien_thuc": {"truong", "cac_truong", "nhiem_vu", "muc", "bo_loc", "sap_xep", "tiep_noi"},
     "trung_tam": {"dich_vu", "thanh_pho"},
     "ngoai_pham_vi": {"loai_con"},
 }
+# Câu kiến thức hỏi số liệu một trường ("học phí Harvard bao nhiêu"): SLM trả truong (tên như học sinh gõ), nhiem_vu = tra_cuu và
+# muc = các mục hỏi. Hệ thống tra cơ sở dữ liệu theo đúng điều model trả, không đoán lại bằng từ khóa.
+# so_sanh: hỏi sự thật của từ hai trường trở lên ("học phí BU và NYU chênh nhau bao nhiêu"): SLM trả cac_truong (tên như học sinh gõ,
+# theo thứ tự trong câu) và muc; khác tư vấn hồ sơ "BU hay NYU hợp với em hơn" (loại ho_so, dùng hồ sơ học sinh).
+# tim_kiem: tìm trường theo điều kiện, không nêu trường nào ("trường nào ở California có học bổng"): SLM trả bo_loc (các điều kiện học sinh nói,
+# điều kiện không nói thì bỏ trống) và sap_xep nếu học sinh nói muốn xếp theo gì ("rẻ nhất", "dễ vào nhất").
+# Không dùng hồ sơ học sinh: ai hỏi cùng câu cũng nhận cùng danh sách (khác "gợi ý trường cho em").
+# Mã mục khớp InfoField bên .NET (ChatSchoolInfo); "khac" là điều hệ thống không lưu (ký túc xá, việc làm...).
+KNOWLEDGE_TASKS = ("tra_cuu", "so_sanh", "tim_kiem")
+INFO_FIELDS = (
+    "chi_phi",
+    "hoc_bong",
+    "tieng_anh",
+    "diem_thi",
+    "gpa",
+    "ty_le_nhan",
+    "han_nop",
+    "tot_nghiep",
+    "nganh",
+    "xep_hang",
+    "vi_tri",
+    "website",
+    "khac",
+)
+# Điều kiện lọc trong bo_loc. Giá trị dạng chữ là CHỮ HỌC SINH GÕ ("texas", "30 nghìn đô", "top 50"), code tự khớp và đổi đơn vị.
+# Các điều kiện cùng có hiệu lực (trường phải thỏa tất cả). Mỗi khóa nói rõ trường phải thỏa gì:
+#   bang (danh sách), thanh_pho, nganh: trường ở bang đó (một trong các bang), ở thành phố đó, có đào tạo ngành đó
+#   loai_truong: cong_lap | tu_thuc
+#   hoc_bong: co (có học bổng cho du học sinh) | theo_nhu_cau | theo_thanh_tich
+#   chinh_sach_thi: khong_bat_buoc (test-optional hoặc không nhận SAT, ACT) | bat_buoc
+#   chi_phi_toi_da: tổng chi phí cả năm không vượt mức này
+#   ielts_toi_da, toefl_toi_da, duolingo_toi_da: mức tối thiểu trường yêu cầu không vượt mức này (học sinh có điểm đó vẫn nộp được)
+#   ty_le_nhan_toi_thieu, ty_le_nhan_toi_da: tỷ lệ nhận từ mức này trở lên (dễ vào) hoặc không quá mức này (chọn lọc)
+#   xep_hang_toi_da: có hạng trong các bảng xếp hạng chung từ hạng này trở lên ("top 50")
+#   ty_le_tot_nghiep_toi_thieu: tỷ lệ tốt nghiệp trong 6 năm từ mức này trở lên
+#   ivy: co (trường Ivy League)
+FILTER_TEXT_KEYS = (
+    "thanh_pho",
+    "nganh",
+    "chi_phi_toi_da",
+    "ielts_toi_da",
+    "toefl_toi_da",
+    "duolingo_toi_da",
+    "ty_le_nhan_toi_thieu",
+    "ty_le_nhan_toi_da",
+    "xep_hang_toi_da",
+    "ty_le_tot_nghiep_toi_thieu",
+)
+FILTER_ENUMS = {
+    "loai_truong": ("cong_lap", "tu_thuc"),
+    "hoc_bong": ("co", "theo_nhu_cau", "theo_thanh_tich"),
+    "chinh_sach_thi": ("khong_bat_buoc", "bat_buoc"),
+    "ivy": ("co",),
+}
+FILTER_KEYS = ("bang", *FILTER_TEXT_KEYS, *FILTER_ENUMS)
+# Cách xếp danh sách học sinh muốn; không nói thì xếp theo xếp hạng (điểm chất lượng của trường)
+SORTS = ("xep_hang", "chi_phi_thap", "de_vao", "chon_loc")
 # Chế độ trong kịch bản
 SCENARIO_MODES = ("what_if", "goal_seeking")
 # giá trị của loai_con trong ngoài phạm vi
@@ -72,6 +129,37 @@ def check_entities(intent: str, entities: dict[str, Any]) -> None:
     for key in (set(entities) & set(PROFILE_KEYS)) | ({"thanh_pho"} & set(entities)):
         if not isinstance(entities[key], str) or not entities[key]:
             raise ValueError(f"giá trị '{key}' phải là đoạn chữ trong tin nhắn")
+    if entities.get("nhiem_vu") is not None and entities["nhiem_vu"] not in KNOWLEDGE_TASKS:
+        raise ValueError(f"nhiem_vu phải là một trong {KNOWLEDGE_TASKS}")
+    # tiep_noi: câu thiếu thông tin và lấy phần thiếu từ ngữ cảnh (dang_noi_ve trong đầu vào). false hoặc vắng = câu tự đứng được
+    if "tiep_noi" in entities and not isinstance(entities["tiep_noi"], bool):
+        raise ValueError("tiep_noi phải là true hoặc false")
+    bo_loc = entities.get("bo_loc")
+    if bo_loc is not None:
+        _check_filters(bo_loc)
+    if entities.get("sap_xep") is not None and entities["sap_xep"] not in SORTS:
+        raise ValueError(f"sap_xep phải là một trong {SORTS}")
+    # Câu tiếp nối chỉ đổi cách xếp ("rẻ nhất đi") không có điều kiện mới: điều kiện lấy từ ngữ cảnh
+    if (
+        entities.get("nhiem_vu") == "tim_kiem"
+        and not bo_loc
+        and not (entities.get("tiep_noi") is True and entities.get("sap_xep") is not None)
+    ):
+        raise ValueError("tim_kiem cần bo_loc có ít nhất một điều kiện")
+    if (bo_loc is not None or entities.get("sap_xep") is not None) and entities.get("nhiem_vu") != "tim_kiem":
+        raise ValueError("bo_loc và sap_xep chỉ đi với nhiem_vu = tim_kiem")
+    cac_truong = entities.get("cac_truong")
+    if cac_truong is not None and not (
+        isinstance(cac_truong, list)
+        and len(cac_truong) >= 2
+        and all(isinstance(t, str) and t.strip() for t in cac_truong)
+    ):
+        raise ValueError("cac_truong phải là danh sách từ hai tên trường trở lên")
+    if entities.get("nhiem_vu") == "so_sanh" and cac_truong is None:
+        raise ValueError("so_sanh cần cac_truong")
+    muc = entities.get("muc")
+    if muc is not None and not (isinstance(muc, list) and muc and all(m in INFO_FIELDS for m in muc)):
+        raise ValueError(f"muc phải là danh sách mã trong {INFO_FIELDS}")
     if entities.get("dich_vu") is not None and entities["dich_vu"] not in SERVICES:
         raise ValueError(f"mã dịch vụ lạ: {entities['dich_vu']}")
     if intent == "ngoai_pham_vi" and entities.get("loai_con") not in SUBTYPES:
@@ -85,6 +173,26 @@ def check_entities(intent: str, entities: dict[str, Any]) -> None:
         for change in changes:
             if "yeu_to" not in change or not ({"gia_tri", "hanh_dong"} & set(change)):
                 raise ValueError("mỗi thay_doi cần yeu_to và gia_tri hoặc hanh_dong")
+
+
+# bo_loc: object có ít nhất một điều kiện, đúng khóa và đúng giá trị. Sai thì ném ValueError
+def _check_filters(bo_loc: Any) -> None:
+    if not isinstance(bo_loc, dict) or not bo_loc:
+        raise ValueError("bo_loc phải là object có ít nhất một điều kiện")
+    unknown = set(bo_loc) - set(FILTER_KEYS)
+    if unknown:
+        raise ValueError(f"điều kiện lọc lạ: {sorted(unknown)}")
+    bang = bo_loc.get("bang")
+    if bang is not None and not (
+        isinstance(bang, list) and bang and all(isinstance(b, str) and b.strip() for b in bang)
+    ):
+        raise ValueError("bang phải là danh sách tên bang")
+    for key in FILTER_TEXT_KEYS:
+        if key in bo_loc and not (isinstance(bo_loc[key], str) and bo_loc[key].strip()):
+            raise ValueError(f"{key} phải là đoạn chữ học sinh gõ")
+    for key, allowed in FILTER_ENUMS.items():
+        if key in bo_loc and bo_loc[key] not in allowed:
+            raise ValueError(f"{key} phải là một trong {allowed}")
 
 
 # Một ý trong tin nhắn. Tin có nhiều ý thì SLM trả một danh sách SlmY, mỗi ý có đoạn chữ và thông tin riêng.
@@ -279,7 +387,7 @@ def _so_trong(text: str) -> set[str]:
     return out
 
 
-# Kiểm skill SLM sinh ra (văn bản .md). Sai thì ném ValueError để bộ gọi dùng skill mặc định của loại.
+# Kiểm skill SLM sinh ra (văn bản .md). Sai thì ném ValueError để bộ sinh gọi lại; vẫn sai thì báo chưa có skill (không dùng skill tĩnh).
 # Chỉ kiểm cấu trúc và việc không bỏ số của hồ sơ và dòng tính sẵn. Số suy ra (GPA thang 4, hạn nộp) và dòng Mốc sẽ kiểm bằng luật riêng
 def check_skill(text: str, req: SkillRequest) -> None:
     wanted = SKILL_SECTIONS[req.loai]
@@ -317,6 +425,21 @@ _ENTITY_SCHEMA = {
     "dich_vu": {"enum": list(SERVICES)},
     "thanh_pho": _TEXT,
     "loai_con": {"enum": list(SUBTYPES)},
+    "cac_truong": {"type": "array", "minItems": 2, "items": _TEXT},
+    "bo_loc": {
+        "type": "object",
+        "additionalProperties": False,
+        "minProperties": 1,
+        "properties": {
+            "bang": {"type": "array", "minItems": 1, "items": _TEXT},
+            **dict.fromkeys(FILTER_TEXT_KEYS, _TEXT),
+            **{key: {"enum": list(values)} for key, values in FILTER_ENUMS.items()},
+        },
+    },
+    "sap_xep": {"enum": list(SORTS)},
+    "tiep_noi": {"type": "boolean"},
+    "nhiem_vu": {"enum": list(KNOWLEDGE_TASKS)},
+    "muc": {"type": "array", "minItems": 1, "items": {"enum": list(INFO_FIELDS)}},
 }
 # Khóa bắt buộc theo loại, khớp với check_entities
 _REQUIRED_KEYS = {"kich_ban": ["che_do"], "ngoai_pham_vi": ["loai_con"]}

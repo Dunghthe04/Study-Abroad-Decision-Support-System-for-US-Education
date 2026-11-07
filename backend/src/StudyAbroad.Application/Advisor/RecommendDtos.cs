@@ -48,6 +48,18 @@ public record GoalNoteRequestDto(
     IReadOnlyList<string> Alternatives,
     IReadOnlyList<string> Others);
 
+// Nhận xét so sánh trường: Schools là tên các trường đang so sánh, Facts là số liệu code đã tra (mỗi dòng một mục), Others là tên các trường khác để advisor chặn nhắc tên ngoài danh sách.
+public record CompareNoteRequestDto(
+    IReadOnlyList<string> Schools,
+    IReadOnlyList<string> Facts,
+    IReadOnlyList<string> Others);
+
+public record CompareNoteResponseDto(
+    [property: JsonPropertyName("skill_version")] string SkillVersion,
+    string Model,
+    string Status,                       // OK | FAILED
+    string Answer);
+
 public record GoalNoteResponseDto(
     [property: JsonPropertyName("skill_version")] string SkillVersion,
     string Model,
@@ -80,7 +92,8 @@ public record ExplainSchoolDto(
     double? Cost,
     double? Gap);
 
-public record ExplainRequestDto(ExplainStudentDto Student, ExplainSchoolDto School);
+// Basis: giả định học sinh đang xem ("GPA 3.6, SAT 1500"); null là hồ sơ thật. Số liệu của Student và School đã tính theo gốc này
+public record ExplainRequestDto(ExplainStudentDto Student, ExplainSchoolDto School, string? Basis = null);
 
 public record ExplainResponseDto(
     [property: JsonPropertyName("skill_version")] string SkillVersion,

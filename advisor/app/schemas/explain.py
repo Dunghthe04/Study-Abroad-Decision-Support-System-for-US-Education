@@ -52,6 +52,8 @@ class ExplainSchool(BaseModel):
 class ExplainRequest(BaseModel):
     student: ExplainStudent
     school: ExplainSchool
+    # Giả định học sinh đang xem ("GPA 3.6, SAT 1500"); None là hồ sơ thật. Số liệu trong student và school đã tính theo gốc này
+    basis: str | None = Field(default=None, max_length=200)
 
 
 # Kết quả trả về từ Qwen: tóm tắt, điểm mạnh, điểm cần cải thiện

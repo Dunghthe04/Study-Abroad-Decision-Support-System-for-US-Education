@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import type { ProfileSimulation } from "@/lib/use-profile-simulation";
 import type { Pref, ScholarshipNeed, SimulationOverrides } from "@/types/recommendation";
 
-type NumericKey = "gpa" | "sat" | "act" | "ielts" | "budgetUsd" | "ecTier";
+type NumericKey = "gpa" | "sat" | "act" | "ielts" | "toefl" | "duolingo" | "budgetUsd" | "ecTier";
 
 const NUMBER = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 2 });
 
@@ -18,6 +18,9 @@ const SCHOLARSHIP_OPTIONS: { value: ScholarshipNeed; label: string }[] = [
   { value: "preferred", label: "Nên có" },
   { value: "mandatory", label: "Bắt buộc" },
 ];
+
+// Tên từng mức ưu tiên (0 đến 4), để học sinh không phải đoán các con số
+const PREF_LEVELS = ["Không quan tâm", "Ít quan tâm", "Bình thường", "Quan tâm nhiều", "Quan tâm nhất"];
 
 const PREF_ROWS: { index: 0 | 1 | 2; label: string }[] = [
   { index: 0, label: "Chi phí thấp" },
@@ -103,7 +106,11 @@ export function ProfileSimulator({ sim, basePref }: ProfileSimulatorProps) {
             />
           </Section>
 
-          <Section title="Tiếng Anh" onReset={() => sim.reset(["ielts"])} changed={o.ielts != null}>
+          <Section
+            title="Tiếng Anh"
+            onReset={() => sim.reset(["ielts", "toefl", "duolingo"])}
+            changed={o.ielts != null || o.toefl != null || o.duolingo != null}
+          >
             <SliderRow
               label="IELTS"
               base={profile.ielts}
@@ -113,6 +120,26 @@ export function ProfileSimulator({ sim, basePref }: ProfileSimulatorProps) {
               step={0.5}
               fallback={6.5}
               onChange={(v) => setNumber("ielts", profile.ielts, v)}
+            />
+            <SliderRow
+              label="TOEFL iBT"
+              base={profile.toefl ?? null}
+              value={o.toefl ?? null}
+              min={0}
+              max={120}
+              step={1}
+              fallback={90}
+              onChange={(v) => setNumber("toefl", profile.toefl ?? null, v)}
+            />
+            <SliderRow
+              label="Duolingo"
+              base={profile.duolingo ?? null}
+              value={o.duolingo ?? null}
+              min={10}
+              max={160}
+              step={5}
+              fallback={115}
+              onChange={(v) => setNumber("duolingo", profile.duolingo ?? null, v)}
             />
           </Section>
 
@@ -150,16 +177,11 @@ export function ProfileSimulator({ sim, basePref }: ProfileSimulatorProps) {
             </div>
           </Section>
 
-          <Section title="Ngoại khóa" onReset={() => sim.reset(["ecTier"])} changed={o.ecTier != null}>
-            <SliderRow
-              label="Bậc ngoại khóa (1 đến 5)"
-              base={profile.ecTier}
-              value={o.ecTier ?? null}
-              min={1}
-              max={5}
-              step={1}
-              fallback={3}
-              onChange={(v) => setNumber("ecTier", profile.ecTier, v)}
+          <Section title="Ngoại khóa" changed={false}>
+            <ExtracurricularSummary
+              tier={profile.ecTier}
+              activities={profile.activityCount ?? 0}
+              awards={profile.awardCount ?? 0}
             />
           </Section>
 
@@ -178,6 +200,7 @@ export function ProfileSimulator({ sim, basePref }: ProfileSimulatorProps) {
                 step={1}
                 fallback={2}
                 colorDelta={false}
+                levels={PREF_LEVELS}
                 onChange={(v) => setPref(row.index, v)}
               />
             ))}
@@ -195,6 +218,46 @@ export function ProfileSimulator({ sim, basePref }: ProfileSimulatorProps) {
 }
 
 // Một nhóm thanh kéo, có thể thu gọn. Thanh tiêu đề màu thương hiệu như bản demo CollegeVine.
+// Tên mức ngoại khóa (bậc 1 đến 5) bằng chữ, để học sinh không phải biết "bậc" là gì
+const EC_LEVELS = ["Chưa nổi bật", "Cơ bản", "Trung bình", "Mạnh", "Rất mạnh"];
+
+// Ngoại khóa chỉ đọc: mức hiện tại, số hoạt động và giải thưởng đã khai, nút sang trang khai báo.
+// Mở tab mới để các giá trị giả định đang chỉnh ở đây không bị mất.
+function ExtracurricularSummary({ tier, activities, awards }: { tier: number; activities: number; awards: number }) {
+  const declared = activities + awards > 0;
+  const level = Math.min(Math.max(tier, 1), 5);
+  return (
+    <div className="space-y-3">
+      {declared ? (
+        <>
+          <div>
+            <p className="text-[10px] font-medium tracking-wide text-ink-3 uppercase">Mức hiện tại</p>
+            <p className="text-lg font-semibold text-brand">{EC_LEVELS[level - 1]}</p>
+            <div aria-hidden className="mt-1 flex gap-1">
+              {EC_LEVELS.map((name, i) => (
+                <span key={name} className={cn("size-2 rounded-full", i < level ? "bg-brand" : "bg-line")} />
+              ))}
+            </div>
+          </div>
+          <p className="text-sm text-ink-2">
+            Bạn đã khai {activities} hoạt động, {awards} giải thưởng.
+          </p>
+        </>
+      ) : (
+        <p className="text-sm text-ink-2">Bạn chưa khai hoạt động ngoại khóa hay giải thưởng nào.</p>
+      )}
+      <Button
+        variant="outline"
+        size="sm"
+        className="text-xs font-semibold text-brand hover:bg-brand-wash"
+        render={<a href="/analysis?edit=1" target="_blank" rel="noopener noreferrer" />}
+      >
+        {declared ? "+ Thêm hoạt động hoặc giải thưởng" : "+ Khai báo ngoại khóa"}
+      </Button>
+    </div>
+  );
+}
+
 function Section({
   title,
   changed,
@@ -203,7 +266,7 @@ function Section({
 }: {
   title: string;
   changed: boolean;
-  onReset: () => void;
+  onReset?: () => void; // bỏ trống thì không có nút đặt lại (mục chỉ đọc)
   children: ReactNode;
 }) {
   return (
@@ -217,14 +280,16 @@ function Section({
       </summary>
       <div className="space-y-4 px-4 py-4">
         {children}
-        <button
-          type="button"
-          onClick={onReset}
-          disabled={!changed}
-          className="text-xs text-brand underline-offset-4 hover:underline disabled:cursor-default disabled:text-ink-3 disabled:no-underline"
-        >
-          Đặt lại phần này
-        </button>
+        {onReset && (
+          <button
+            type="button"
+            onClick={onReset}
+            disabled={!changed}
+            className="text-xs text-brand underline-offset-4 hover:underline disabled:cursor-default disabled:text-ink-3 disabled:no-underline"
+          >
+            Đặt lại phần này
+          </button>
+        )}
       </div>
     </details>
   );
@@ -239,11 +304,12 @@ interface SliderRowProps {
   step: number;
   fallback: number; // vị trí ban đầu của thanh khi hồ sơ chưa có giá trị
   colorDelta?: boolean; // tô xanh khi tăng, đỏ khi giảm
+  levels?: string[]; // tên từng mức (theo chỉ số 0, 1, 2...) khi thang là mức độ chứ không phải điểm số
   onChange: (value: number) => void;
 }
 
 // Một thanh kéo kiểu "HỒ SƠ x · GIẢ ĐỊNH y +z"
-function SliderRow({ label, base, value, min, max, step, fallback, colorDelta = true, onChange }: SliderRowProps) {
+function SliderRow({ label, base, value, min, max, step, fallback, colorDelta = true, levels, onChange }: SliderRowProps) {
   const current = value ?? base ?? fallback;
   const delta = value != null && base != null && value !== base ? value - base : null;
 
@@ -253,12 +319,14 @@ function SliderRow({ label, base, value, min, max, step, fallback, colorDelta = 
       <div className="flex items-end justify-between gap-3">
         <div>
           <p className="text-[10px] font-medium tracking-wide text-ink-3 uppercase">Hồ sơ</p>
-          <p className="text-lg font-semibold text-brand">{base != null ? NUMBER.format(base) : "Chưa có"}</p>
+          <p className={cn("font-semibold text-brand", levels ? "text-base" : "text-lg")}>
+            {base != null ? (levels ? levels[base] : NUMBER.format(base)) : "Chưa có"}
+          </p>
         </div>
         <div className="text-right">
           <p className="text-[10px] font-medium tracking-wide text-ink-3 uppercase">Giả định</p>
-          <p className="text-lg font-semibold text-foreground">
-            {NUMBER.format(current)}
+          <p className={cn("font-semibold text-foreground", levels ? "text-base" : "text-lg")}>
+            {levels ? levels[current] : NUMBER.format(current)}
             {delta != null && (
               <span
                 className={cn(
@@ -268,6 +336,7 @@ function SliderRow({ label, base, value, min, max, step, fallback, colorDelta = 
               >
                 {delta > 0 ? "+" : "−"}
                 {NUMBER.format(Math.abs(delta))}
+                {levels && " mức"}
               </span>
             )}
           </p>
@@ -281,9 +350,17 @@ function SliderRow({ label, base, value, min, max, step, fallback, colorDelta = 
         aria-label={label}
         onValueChange={(v) => onChange(Array.isArray(v) ? v[0] : v)}
       />
+      {levels && (
+        // Một vạch cho mỗi mức, canh với vị trí núm kéo (lề 7px bằng nửa bề rộng núm)
+        <div aria-hidden className="-mt-1 flex justify-between px-[7px]">
+          {levels.map((name, i) => (
+            <span key={name} className={cn("h-1.5 w-px", i === current ? "bg-brand" : "bg-ink-3/60")} />
+          ))}
+        </div>
+      )}
       <div className="flex justify-between text-[10px] text-ink-3">
-        <span>{NUMBER.format(min)}</span>
-        <span>{NUMBER.format(max)}</span>
+        <span>{levels ? levels[min] : NUMBER.format(min)}</span>
+        <span>{levels ? levels[max] : NUMBER.format(max)}</span>
       </div>
     </div>
   );

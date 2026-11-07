@@ -137,4 +137,45 @@ public class StudyCenterServiceTests
         Assert.Contains(expectedError, result.ErrorMessage);
         Assert.Empty(_auditLogs.Entries);
     }
+
+    [Fact]
+    public async Task CreateAsync_WithEnhancedFields_MapsPropertiesCorrectly()
+    {
+        var repo = new FakeRepository();
+        var service = new StudyCenterService(repo, _auditLogs);
+        var actorId = Guid.NewGuid();
+
+        var request = new CreateStudyCenterRequest(
+            Code: "CTY_013",
+            Name: "Summit Education Services",
+            City: "Hà Nội",
+            District: "Đống Đa",
+            Address: "101 Láng Hạ",
+            Website: "https://summit.edu.vn",
+            Phone: "0901702889",
+            Email: "contact@summit.edu.vn",
+            CenterType: "hybrid",
+            LogoUrl: "https://example.com/logo.png",
+            CoverImageUrl: "https://example.com/cover.png",
+            GalleryImages: ["https://example.com/img1.png", "https://example.com/img2.png"],
+            StaffCount: 65,
+            EstablishedYear: 2010,
+            LicenseNumber: "GPHĐ-GD-2010/HN-088",
+            Accreditations: ["AIRC", "ICEF"],
+            VisaSuccessRate: 99.2,
+            Services: ["LUYEN_THI_SAT", "SAN_HOC_BONG"]);
+
+        var result = await service.CreateAsync(request, actorId);
+
+        Assert.True(result.Success);
+        Assert.NotNull(result.Center);
+        Assert.Equal("hybrid", result.Center.CenterType);
+        Assert.Equal("Đống Đa", result.Center.District);
+        Assert.Equal(65, result.Center.StaffCount);
+        Assert.Equal(2010, result.Center.EstablishedYear);
+        Assert.Equal("GPHĐ-GD-2010/HN-088", result.Center.LicenseNumber);
+        Assert.Equal(99.2, result.Center.VisaSuccessRate);
+        Assert.Equal(2, result.Center.GalleryImages?.Count);
+        Assert.Equal(2, result.Center.Accreditations?.Count);
+    }
 }

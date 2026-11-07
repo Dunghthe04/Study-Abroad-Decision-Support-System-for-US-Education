@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowUpRightIcon, Building2Icon, GlobeIcon, GraduationCapIcon, MapPinIcon, PercentIcon, UsersIcon } from "lucide-react";
+import { ArrowLeftIcon, ArrowUpRightIcon, Building2Icon, GlobeIcon, GraduationCapIcon, MapPinIcon, PercentIcon, UsersIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
@@ -35,7 +35,13 @@ function getRankColorClass(rank: number): string {
   return "text-muted-foreground font-semibold text-lg";
 }
 
-export function UniversityDetailView({ university }: { university: UniversityDetail }) {
+export function UniversityDetailView({
+  university,
+  back = { href: "/", label: "Trang chủ" },
+}: {
+  university: UniversityDetail;
+  back?: { href: string; label: string };
+}) {
   const [selectedLevel, setSelectedLevel] = useState(university.offerings[0]?.studyLevel ?? "");
   const [activeSection, setActiveSection] = useState("overview");
   const offering = university.offerings.find((item) => item.studyLevel === selectedLevel) ?? university.offerings[0];
@@ -105,11 +111,14 @@ export function UniversityDetailView({ university }: { university: UniversityDet
           <Breadcrumb>
             <BreadcrumbList>
               <BreadcrumbItem>
-                <BreadcrumbLink render={<Link href="/university" />}>Universities</BreadcrumbLink>
+                <BreadcrumbLink render={<Link href={back.href} />}>
+                  <ArrowLeftIcon className="size-3.5" />
+                  {back.label}
+                </BreadcrumbLink>
               </BreadcrumbItem>
               <BreadcrumbSeparator />
               <BreadcrumbItem>
-                <BreadcrumbPage>{university.name}</BreadcrumbPage>
+                <BreadcrumbPage>Thông tin trường · Mã {university.code}</BreadcrumbPage>
               </BreadcrumbItem>
             </BreadcrumbList>
           </Breadcrumb>

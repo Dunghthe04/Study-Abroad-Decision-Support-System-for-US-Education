@@ -26,13 +26,11 @@ public class RecommendationsController(RecommendationService recommendations) : 
 
     public record RepickRequest(IReadOnlyList<int> Pref);
 
-    // Nhóm đích: reach | match | safety. Bỏ trống thì nhóm cao hơn một bậc so với hiện tại.
-    public record GoalSeekRequest(string? Target);
-
     // Giá trị giả định của trình mô phỏng; trường nào bỏ trống thì giữ nguyên hồ sơ thật.
     public record SimulateRequest(
         decimal? Gpa, decimal? Sat, decimal? Act, decimal? Ielts,
-        decimal? BudgetUsd, string? ScholarshipNeed, int? EcTier, IReadOnlyList<int>? Pref);
+        decimal? BudgetUsd, string? ScholarshipNeed, int? EcTier, IReadOnlyList<int>? Pref,
+        decimal? Toefl = null, decimal? Duolingo = null);
 
     public record SimulationResponse(
         SimulationProfile Profile, GroupSummary Baseline, GroupSummary Simulated, IReadOnlyList<SchoolChange> Changes,
@@ -142,7 +140,8 @@ public class RecommendationsController(RecommendationService recommendations) : 
         try
         {
             var overrides = new SimulationOverrides(
-                request.Gpa, request.Sat, request.Act, request.Ielts, request.BudgetUsd, request.ScholarshipNeed, request.EcTier);
+                request.Gpa, request.Sat, request.Act, request.Ielts, request.BudgetUsd, request.ScholarshipNeed, request.EcTier,
+                request.Toefl, request.Duolingo);
             var result = await recommendations.SimulateAsync(userId.Value, overrides, request.Pref, ct);
             using var criteria = JsonDocument.Parse(result.CriteriaJson);
             using var items = JsonDocument.Parse(result.ItemsJson);
@@ -170,59 +169,4 @@ public class RecommendationsController(RecommendationService recommendations) : 
             return Unauthorized(new { message = "Vui lòng đăng nhập." });
         return Ok(await recommendations.ListSchoolOptionsAsync(userId.Value, ct));
     }
-
-    // "Cần gì để vào trường này": mức tối thiểu của SAT, GPA, ngoại khóa để trường đạt nhóm đích, kèm tài chính và trường thay thế.
-    // Tính từ hồ sơ thật, không lưu, không gọi advisor.
-    [Authorize(Policy = AgeFeatures.ProcessStudentData)] // [Q11] dưới 16 cần phụ huynh đồng ý
-    [HttpPost("schools/{code}/goal-seek")]
-    public async Task<IActionResult> GoalSeek(string code, [FromBody] GoalSeekRequest? request, CancellationToken ct)
-    {
-        var userId = User.GetUserId();
-        if (userId is null)
-            return Unauthorized(new { message = "Vui lòng đăng nhập." });
-
-        try
-        {
-            return Ok(await recommendations.GoalSeekAsync(userId.Value, code, request?.Target, ct));
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
-        catch (InvalidOperationException ex) when (ex.Message.StartsWith("Chưa") || ex.Message.StartsWith("Hồ sơ"))
-        {
-            return BadRequest(new { message = ex.Message });
-        }
-    }
-
-    // Mở chi tiết một trường: Qwen viết lời tư vấn từ số đã lưu.
-    [Authorize(Policy = AgeFeatures.ProcessStudentData)] // [Q11] dưới 16 cần phụ huynh đồng ý
-    [HttpPost("schools/{code}/explain")]
-    public async Task<IActionResult> Explain(string code, CancellationToken ct)
-    {
-        var userId = User.GetUserId();
-        if (userId is null)
-            return Unauthorized(new { message = "Vui lòng đăng nhập." });
-
-        try
-        {
-            var explanation = await recommendations.ExplainAsync(userId.Value, code, ct);
-            return explanation.Status == "OK"
-                ? Ok(explanation)
-                : Problem(detail: "Chưa viết được lời tư vấn, vui lòng thử lại.", statusCode: StatusCodes.Status503ServiceUnavailable);
-        }
-        catch (InvalidOperationException ex) when (ex.Message.StartsWith("Chưa"))
-        {
-            return BadRequest(new { message = ex.Message });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return Problem(detail: ex.Message, statusCode: StatusCodes.Status502BadGateway, title: "Kết quả tư vấn không hợp lệ");
-        }
-        catch (HttpRequestException)
-        {
-            return Problem(detail: "Dịch vụ gợi ý đang bận.", statusCode: StatusCodes.Status503ServiceUnavailable);
-        }
-    }
-
 }

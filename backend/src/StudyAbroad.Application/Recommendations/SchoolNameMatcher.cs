@@ -37,7 +37,8 @@ public static class SchoolNameMatcher
     // Từ học sinh hay thêm vào ("đại học Boston", "trường MIT"), không thuộc tên trường
     private static readonly HashSet<string> Filler = ["truong", "dai", "hoc"];
 
-    public static NameMatch Match(string? query, IReadOnlyList<SchoolRef> schools)
+    // allowFuzzy = false: không chấp nhận gõ sai (dùng khi quét cả câu, tránh khớp nhầm một từ thường với tên trường)
+    public static NameMatch Match(string? query, IReadOnlyList<SchoolRef> schools, bool allowFuzzy = true)
     {
         var q = StripThe(Normalize(query));
         foreach (var word in Filler)
@@ -93,7 +94,56 @@ public static class SchoolNameMatcher
         }
 
         // 4. Gõ sai nhẹ ("harvad", "standford"): chọn trường gần nhất nếu duy nhất
-        return Fuzzy(index, q);
+        return allowFuzzy ? Fuzzy(index, q) : NotFound;
+    }
+
+    // Từ viết hoa hay gặp trong câu hỏi nhưng không phải tên trường (chứng chỉ, tiền tệ...), không coi là viết tắt tên trường
+    private static readonly HashSet<string> NotAcronyms = ["SAT", "ACT", "IELTS", "TOEFL", "GPA", "USD", "VND", "US", "USA", "ED", "EA", "RD", "AP", "IB", "CS", "ESL"];
+
+    private const int MaxWindow = 5;
+
+    /// <summary>
+    /// Tìm trường được nhắc TRONG một câu ("học phí Harvard bao nhiêu", "NYU có học bổng không"), khác Match là khớp một đoạn chữ đã tách sẵn.
+    /// Chỉ nhận khi chắc chắn: tên đầy đủ hoặc nguyên từ đầu tên duy nhất (cụm dài trước), hoặc viết tắt VIẾT HOA (MIT, UCLA, NYU).
+    /// Không nhận gõ sai, không nhận tên mơ hồ (một từ chung như "Boston"). Trả mỗi trường một lần, theo thứ tự xuất hiện.
+    /// Chỉ nên dùng khi câu đã có dấu hiệu hỏi về trường (nhắc mục như học phí, học bổng), vì quét cả câu dễ trùng từ thường.
+    /// </summary>
+    public static IReadOnlyList<SchoolRef> FindMentioned(string? text, IReadOnlyList<SchoolRef> schools)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return [];
+        var tokens = System.Text.RegularExpressions.Regex.Matches(text, @"[\p{L}\p{N}]+").Select(m => m.Value).ToList();
+        var used = new bool[tokens.Count];
+        var found = new List<(int Position, SchoolRef School)>();
+
+        for (var length = Math.Min(MaxWindow, tokens.Count); length >= 1; length--)
+        {
+            for (var start = 0; start + length <= tokens.Count; start++)
+            {
+                if (Enumerable.Range(start, length).Any(i => used[i]))
+                    continue;
+                var window = tokens.GetRange(start, length);
+                var candidate = string.Join(' ', window);
+                if (length == 1)
+                {
+                    var token = window[0];
+                    var acronym = token.Length >= 2 && token.All(char.IsUpper);
+                    if (acronym ? NotAcronyms.Contains(token) : token.Length < 4)
+                        continue;
+                }
+                else if (candidate.Length < 6)
+                {
+                    continue;
+                }
+                var match = Match(candidate, schools, allowFuzzy: false);
+                if (match.Kind != NameMatchKind.Found)
+                    continue;
+                for (var i = start; i < start + length; i++)
+                    used[i] = true;
+                found.Add((start, match.Schools[0]));
+            }
+        }
+        return found.OrderBy(f => f.Position).Select(f => f.School).DistinctBy(s => s.Code).ToList();
     }
 
     private static readonly NameMatch NotFound = new(NameMatchKind.NotFound, []);

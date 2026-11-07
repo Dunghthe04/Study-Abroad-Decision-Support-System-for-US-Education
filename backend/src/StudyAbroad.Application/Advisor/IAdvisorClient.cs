@@ -15,5 +15,6 @@ public interface IAdvisorClient
     Task<ExplainResponseDto> ExplainAsync(ExplainRequestDto request, CancellationToken ct = default);
     Task<GoalNoteResponseDto> WriteGoalNoteAsync(GoalNoteRequestDto request, CancellationToken ct = default);
     Task<ScenarioNoteResponseDto> WriteScenarioNoteAsync(ScenarioNoteRequestDto request, CancellationToken ct = default);
+    Task<CompareNoteResponseDto> WriteCompareNoteAsync(CompareNoteRequestDto request, CancellationToken ct = default);
 
 }

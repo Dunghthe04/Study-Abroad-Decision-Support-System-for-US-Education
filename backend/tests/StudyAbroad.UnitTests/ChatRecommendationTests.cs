@@ -74,6 +74,27 @@ public class ChatRecommendationTests
             schools);
     }
 
+    // Trường đã chấm nhưng không nằm trong khối nào (mỗi nhóm chỉ hiện vài trường) vẫn khớp tên được, chỉ không đếm vị trí
+    [Fact]
+    public void OtherSchools_AreTheScoredOnesThatNoBlockShows()
+    {
+        var run = Run("""
+            {
+              "scored": [
+                { "code": "a", "name": "Alpha University", "g2": "M" },
+                { "code": "b", "name": "Beta University", "g2": "R" },
+                { "code": "c", "name": "Gamma University", "g2": "S" }
+              ],
+              "reach": [ { "code": "b" } ], "match": [ { "code": "a" } ], "safety": [], "aid": [], "other": []
+            }
+            """);
+
+        var others = ChatRecommendation.OtherSchools(run);
+
+        Assert.Equal(["c"], others.Select(s => s.Code));
+        Assert.DoesNotContain(ChatRecommendation.Schools(run), s => s.Code == "c");   // vị trí chỉ đếm trong các khối đang hiện
+    }
+
     [Fact]
     public void Schools_IsEmptyWhenNothingWasFound()
     {

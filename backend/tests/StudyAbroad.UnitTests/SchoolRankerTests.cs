@@ -40,12 +40,14 @@ public class SchoolRankerTests
         Assert.True(Math.Abs(c - expected) < 0.0001, $"C = {c:F4}, mong {expected}");
     }
 
+    // H: học bổng cho du học sinh, không phụ thuộc ngân sách. H chính là phần trăm chi phí cả năm mà học bổng trung bình chi trả
     [Theory]
-    [InlineData(38_000, null, 1.0)]       // trong ngân sách: không cần học bổng
-    [InlineData(48_000, 12_000, 1.0)]     // phần vượt 3.000, học bổng 12.000 bù đủ
-    [InlineData(85_000, 30_000, 0.75)]    // phần vượt 40.000, học bổng 30.000
-    [InlineData(60_000, 0, 0.0)]          // vượt ngân sách mà không có học bổng
-    public void H_IsTheShareOfTheOverBudgetPartThatAidCovers(int cost, int? aid, double expected)
+    [InlineData(40_000, 40_000, 1.0)]     // học bổng bằng cả chi phí
+    [InlineData(40_000, 30_000, 0.75)]    // 75% chi phí
+    [InlineData(60_000, 15_000, 0.25)]    // 25% chi phí
+    [InlineData(80_000, 8_000, 0.1)]      // trường đắt, học bổng nhỏ so với chi phí
+    [InlineData(38_000, 0, 0.0)]          // trong ngân sách mà không có học bổng: KHÔNG được điểm tối đa
+    public void H_IsTheAidAsAShareOfTheCost_NotAnyMoreWhetherTheSchoolFitsTheBudget(int cost, int aid, double expected)
     {
         var h = SchoolRanker.Score(0.5, Student, School(cost, aid)).Aid!.Value;
 
@@ -53,9 +55,36 @@ public class SchoolRankerTests
     }
 
     [Fact]
-    public void H_IsMissing_WhenOverBudgetAndTheAidIsUnknown()
+    public void H_IsTheSame_WhetherOrNotTheSchoolIsInsideTheBudget()
+    {
+        var inside = SchoolRanker.Score(0.5, Student, School(40_000, 12_000)).Aid;      // ngân sách 45.000
+        var outside = SchoolRanker.Score(0.5, new FitStudent(20_000m), School(40_000, 12_000)).Aid;
+
+        Assert.Equal(inside, outside);
+    }
+
+    [Fact]
+    public void H_IsZero_WhenThePolicyStatesThereIsNoAidForInternationalStudents()
+    {
+        // có số trung bình nhưng chính sách nói không có học bổng: tin chính sách
+        Assert.Equal(0.0, SchoolRanker.Score(0.5, Student, new FitSchool(40_000m, 15_000m, 0m, null, "none")).Aid!.Value, 9);
+        Assert.Equal(0.0, SchoolRanker.Score(0.5, Student, new FitSchool(40_000m, null, 0m, null, "none")).Aid!.Value, 9);
+    }
+
+    [Fact]
+    public void H_IsMissing_WhenTheAidIsUnknownOrImplausible()
     {
         Assert.Null(SchoolRanker.Score(0.5, Student, School(60_000, aid: null)).Aid);
+        Assert.Null(SchoolRanker.Score(0.5, Student, School(38_000, aid: null)).Aid);       // trong ngân sách cũng không còn mặc định 1
+        Assert.Null(SchoolRanker.Score(0.5, Student, School(40_000, aid: 90_000)).Aid);     // học bổng lớn hơn cả chi phí là số liệu sai
+    }
+
+    [Fact]
+    public void WithAidPriorityAtTheTop_ASchoolWithBigAidRanksAboveACheapOneWithNone()
+    {
+        // Thành phần H của trường học bổng lớn cao hơn trường rẻ không có học bổng (trước đây trường rẻ được 1 vì trong ngân sách)
+        Assert.True(SchoolRanker.Score(0.5, Student, new FitSchool(60_000m, 35_000m, 0m, 0.5, "need_and_merit")).Aid
+                    > SchoolRanker.Score(0.5, Student, new FitSchool(30_000m, null, 0m, 0.5, "none")).Aid);
     }
 
     [Theory]
@@ -119,13 +148,13 @@ public class SchoolRankerTests
     [Fact]
     public void WorkedExample_TwoSchoolsInTheSameGroup_TheFitterOneIsHigher()
     {
-        // U: p' = 0,5, chi phí 38.000, hạng 10/100, đạt tiếng Anh  →  khoảng 0,77
+        // U: p' = 0,5, chi phí 38.000, chưa có số liệu học bổng (bỏ H), hạng 10/100, đạt tiếng Anh  →  khoảng 0,73
         var u = SchoolRanker.Score(0.5, Student, School(38_000m, null, 0m, (10, 100))).Value;
-        // V: p' = 0,7, chi phí 60.000 học bổng 3.000, hạng 80/100, thiếu nửa band tiếng Anh  →  khoảng 0,30
+        // V: p' = 0,7, chi phí 60.000 học bổng 3.000 (5% chi phí, H = 0,05), hạng 80/100, thiếu nửa band tiếng Anh  →  khoảng 0,28
         var v = SchoolRanker.Score(0.7, Student, School(60_000m, 3_000m, 0.5m, (80, 100))).Value;
 
-        Assert.True(Math.Abs(u - 0.77) < 0.005, $"U = {u:F4}");
-        Assert.True(Math.Abs(v - 0.30) < 0.005, $"V = {v:F4}");
+        Assert.True(Math.Abs(u - 0.73) < 0.005, $"U = {u:F4}");
+        Assert.True(Math.Abs(v - 0.28) < 0.005, $"V = {v:F4}");
         Assert.True(u > v);
     }
 

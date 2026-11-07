@@ -5,6 +5,49 @@ namespace StudyAbroad.UnitTests;
 // Khớp tên trường học sinh nói với danh sách trường: chỉ tự chọn khi chắc chắn, còn lại hỏi lại hoặc báo không thấy.
 public class SchoolNameMatcherTests
 {
+    // ---------------------------------------------------------------- tìm tên trường TRONG câu hỏi (FindMentioned)
+
+    [Theory]
+    [InlineData("học phí Harvard bao nhiêu", "x-harvard")]
+    [InlineData("hoc phi harvard bao nhieu", "x-harvard")]                    // không dấu, chữ thường
+    [InlineData("NYU có học bổng cho du học sinh không", "x-nyu")]            // viết tắt viết hoa
+    [InlineData("UCLA cần IELTS bao nhiêu", "x-ucla")]
+    [InlineData("hạn nộp của Stanford University là khi nào", "x-stanford")]
+    [InlineData("Boston University xếp hạng bao nhiêu", "x-bu")]              // tên đầy đủ, cụm dài trước
+    public void FindMentioned_FindsTheOneSchoolInTheSentence(string question, string code)
+    {
+        var found = SchoolNameMatcher.FindMentioned(question, Schools);
+
+        Assert.Equal(code, Assert.Single(found).Code);
+    }
+
+    [Theory]
+    [InlineData("học phí đại học Mỹ bao nhiêu")]            // không nêu trường nào
+    [InlineData("học phí Boston bao nhiêu")]                // Boston mơ hồ (BU, BC): không đoán
+    [InlineData("em có SAT 1400 và IELTS 7 thì cần học bổng")]   // SAT, IELTS không phải tên trường
+    [InlineData("mit")]                                       // viết tắt chữ thường quá ngắn, dễ trùng từ thường
+    [InlineData("tiếng Anh cần bao nhiêu")]
+    [InlineData("")]
+    [InlineData(null)]
+    public void FindMentioned_WithoutAClearSchool_FindsNothing(string? question)
+    {
+        Assert.Empty(SchoolNameMatcher.FindMentioned(question, Schools));
+    }
+
+    [Fact]
+    public void FindMentioned_ReturnsEachSchoolOnceInTheOrderMentioned()
+    {
+        var found = SchoolNameMatcher.FindMentioned("học phí MIT và Harvard khác nhau thế nào, Harvard đắt hơn không", Schools);
+
+        Assert.Equal(["x-mit", "x-harvard"], found.Select(s => s.Code));
+    }
+
+    [Fact]
+    public void FindMentioned_DoesNotGuessATypo()
+    {
+        Assert.Empty(SchoolNameMatcher.FindMentioned("học phí harvad bao nhiêu", Schools));
+    }
+
     // Danh sách mẫu lấy từ dữ liệu thật, gồm các tên dễ nhầm (Boston, Washington, University of California-*)
     private static readonly IReadOnlyList<SchoolRef> Schools =
     [

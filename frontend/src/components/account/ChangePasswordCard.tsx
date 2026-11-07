@@ -83,7 +83,7 @@ export function ChangePasswordCard() {
           Đổi mật khẩu
         </CardTitle>
         <CardDescription>
-          Sau khi đổi, các thiết bị khác đang đăng nhập sẽ bị đăng xuất. Nhập sai mật khẩu hiện tại 5 lần liên tiếp sẽ tạm khóa tài khoản 15 phút.
+          Sau khi đổi, các thiết bị khác đang đăng nhập sẽ bị đăng xuất. Nhập sai mật khẩu hiện tại 5 lần liên tiếp sẽ khóa tài khoản (cần Quản trị viên mở khóa).
         </CardDescription>
       </CardHeader>
 

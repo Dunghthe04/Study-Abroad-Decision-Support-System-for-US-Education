@@ -48,7 +48,7 @@ public record SchoolExplanation(
 // Giá trị giả định của trình mô phỏng hồ sơ. Trường nào null thì giữ nguyên hồ sơ thật.
 public record SimulationOverrides(
     decimal? Gpa, decimal? Sat, decimal? Act, decimal? Ielts,
-    decimal? BudgetUsd, string? ScholarshipNeed, int? EcTier);
+    decimal? BudgetUsd, string? ScholarshipNeed, int? EcTier, decimal? Toefl = null, decimal? Duolingo = null);
 
 // Số trường mỗi nhóm của một lượt tính (đếm trên mọi trường còn sau lọc cứng).
 public record GroupSummary(int Kept, int Reach, int Match, int Safety, int AidBlock, int NoData);
@@ -58,7 +58,8 @@ public record SchoolChange(string Code, string Name, string From, string To);
 
 // Giá trị của hồ sơ thật, để thanh kéo hiện "hồ sơ" bên cạnh "giả định". EcTier là bậc ngoại khóa đã lưu trong hồ sơ (bậc 3 nếu chưa có).
 public record SimulationProfile(
-    decimal? Gpa, int? Sat, int? Act, decimal? Ielts, decimal? BudgetUsd, string? ScholarshipNeed, int EcTier);
+    decimal? Gpa, int? Sat, int? Act, decimal? Ielts, decimal? BudgetUsd, string? ScholarshipNeed, int EcTier,
+    decimal? Toefl = null, decimal? Duolingo = null, int ActivityCount = 0, int AwardCount = 0);
 
 // Kết quả mô phỏng: không lưu gì, không gọi advisor. Criteria và Items cùng khuôn với lượt gợi ý đã lưu (của hồ sơ giả định).
 public record SimulationResult(
@@ -255,6 +256,9 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
 
         // Bậc ngoại khóa của hồ sơ thật đọc từ cột đã lưu
         var tier = EcTierOf(profile);
+        // Số hoạt động và giải thưởng đã khai, để giao diện nói "đã khai N hoạt động, M giải thưởng"
+        var declared = await profiles.GetProfileActivitiesAsync(profile.Id, ct);
+        var (activityCount, awardCount) = ActivityTier.CountDeclared(declared);
 
         var schools = await recommendations.ListSchoolsAsync(profile.TargetLevel, ct);
         var baselineRun = Evaluate(profile, pref, schools, tier);
@@ -263,7 +267,7 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
         return new SimulationResult(
             new SimulationProfile(
                 profile.OverallGpa, SatScore(profile.Sat), ActScore(profile.Act), profile.Ielts,
-                profile.BudgetMaxUsd, profile.ScholarshipNeed, tier),
+                profile.BudgetMaxUsd, profile.ScholarshipNeed, tier, profile.Toefl, profile.Duolingo, activityCount, awardCount),
             Summarize(baselineRun), Summarize(simulatedRun), Diff(baselineRun, simulatedRun),
             JsonSerializer.Serialize(BuildCriteria(simulated, pref, simulatedRun), StoredJson),
             JsonSerializer.Serialize(BuildItems(simulated.BudgetMaxUsd, simulatedRun), StoredJson));
@@ -276,6 +280,8 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
         if (o.Sat is < 400 or > 1600) throw new ArgumentException("SAT giả định phải từ 400 đến 1600.");
         if (o.Act is < 1 or > 36) throw new ArgumentException("ACT giả định phải từ 1 đến 36.");
         if (o.Ielts is < 0 or > 9) throw new ArgumentException("IELTS giả định phải từ 0 đến 9.");
+        if (o.Toefl is < 0 or > 120) throw new ArgumentException("TOEFL giả định phải từ 0 đến 120.");
+        if (o.Duolingo is < 10 or > 160) throw new ArgumentException("Duolingo giả định phải từ 10 đến 160.");
         if (o.BudgetUsd is < 0) throw new ArgumentException("Ngân sách giả định không được âm.");
         if (o.ScholarshipNeed is not null && !ProfileConstants.ScholarshipNeeds.All.Contains(o.ScholarshipNeed))
             throw new ArgumentException("Mức cần học bổng giả định không hợp lệ.");
@@ -293,8 +299,8 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
             Sat = o.Sat ?? profile.Sat,
             Act = o.Act ?? profile.Act,
             Ielts = o.Ielts ?? profile.Ielts,
-            Toefl = profile.Toefl,
-            Duolingo = profile.Duolingo,
+            Toefl = o.Toefl ?? profile.Toefl,
+            Duolingo = o.Duolingo ?? profile.Duolingo,
             BudgetMaxUsd = o.BudgetUsd ?? profile.BudgetMaxUsd,
             ScholarshipNeed = o.ScholarshipNeed ?? profile.ScholarshipNeed
         };
@@ -346,30 +352,61 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
 
     private static readonly string[] BlockNames = ["reach", "match", "safety", "aid", "other"];
     // Mở chi tiết một trường: Qwen viết lời tư vấn từ số đã lưu. Không lọc, không chấm lại.
-    public async Task<SchoolExplanation> ExplainAsync(Guid userId, string code, CancellationToken ct)
+    // Giá trị giả định có thật sự đặt giá trị nào không (không có thì giải thích theo hồ sơ thật)
+    public static bool HasValues(SimulationOverrides? o) =>
+        o is not null && (o.Gpa is not null || o.Sat is not null || o.Act is not null || o.Ielts is not null
+                          || o.Toefl is not null || o.Duolingo is not null || o.BudgetUsd is not null
+                          || o.ScholarshipNeed is not null || o.EcTier is not null);
+
+    // Số đã chấm và mã lý do của một trường, để giải thích. Gốc là hồ sơ thật (lần gợi ý đã lưu) hoặc, khi có giá trị giả định,
+    // kết quả mô phỏng với giá trị đó: giải thích luôn khớp với danh sách học sinh đang xem. Dùng chung cho thẻ (không AI) và lời tư vấn (có AI)
+    private async Task<(ExplainStudentDto Student, ExplainSchoolDto Target, string Code, string Name)> LoadExplainAsync(
+        Guid userId, string code, SimulationOverrides? overrides, CancellationToken ct)
     {
-        var last = await recommendations.GetLatestAsync(userId, ct)
-            ?? throw new InvalidOperationException("Chưa có lần gợi ý nào.");
         var profile = await profiles.GetProfileByUserIdAsync(userId, ct)
             ?? throw new InvalidOperationException("Chưa có hồ sơ.");
 
-        var criteria = JsonNode.Parse(last.CriteriaJson)!.AsObject();
-        var items = JsonNode.Parse(last.ItemsJson)!.AsObject();
+        StudentProfile who = profile;          // hồ sơ dùng để lấy GPA, SAT, ngân sách của học sinh
+        JsonObject items;
+        int? tier;
+        string studyLevel;
+        var simulated = HasValues(overrides);
+        if (simulated)
+        {
+            if (string.IsNullOrWhiteSpace(profile.TargetLevel))
+                throw new InvalidOperationException("Hồ sơ chưa có bậc học muốn theo.");
+            who = Overlay(profile, overrides!);
+            EnsureRunnable(who);
+            var baseTier = EcTierOf(profile);
+            tier = overrides!.EcTier ?? baseTier;
+            studyLevel = profile.TargetLevel;
+            var run = Evaluate(who, null, await recommendations.ListSchoolsAsync(studyLevel, ct), tier.Value);
+            items = JsonNode.Parse(JsonSerializer.Serialize(BuildItems(who.BudgetMaxUsd, run), StoredJson))!.AsObject();
+        }
+        else
+        {
+            var last = await recommendations.GetLatestAsync(userId, ct)
+                ?? throw new InvalidOperationException("Chưa có lần gợi ý nào.");
+            items = JsonNode.Parse(last.ItemsJson)!.AsObject();
+            tier = JsonNode.Parse(last.CriteriaJson)!.AsObject()["tier"]?.GetValue<int>();
+            studyLevel = last.StudyLevel;
+        }
 
         var scored = items["scored"]!.AsArray()
             .FirstOrDefault(row => string.Equals(row!["code"]?.GetValue<string>(), code, StringComparison.OrdinalIgnoreCase))
-            ?? throw new InvalidOperationException($"Chưa có trường {code} trong lần gợi ý gần nhất.");
-        var school = await recommendations.FindSchoolAsync(scored["code"]!.GetValue<string>(), last.StudyLevel, ct)
+            ?? throw new InvalidOperationException(
+                simulated ? $"Chưa có trường {code} trong kết quả giả định." : $"Chưa có trường {code} trong lần gợi ý gần nhất.");
+        var school = await recommendations.FindSchoolAsync(scored["code"]!.GetValue<string>(), studyLevel, ct)
             ?? throw new InvalidOperationException($"Chưa tìm thấy thông tin trường {code}.");
 
         var university = school.University;
         var offering = school.Offering;
         var student = new ExplainStudentDto(
-            ToDouble(profile.OverallGpa),
-            SatScore(profile.Sat),
-            ToDouble(profile.BudgetMaxUsd),
-            criteria["tier"]?.GetValue<int>(),
-            profile.IntendedMajor);
+            ToDouble(who.OverallGpa),
+            SatScore(who.Sat),
+            ToDouble(who.BudgetMaxUsd),
+            tier,
+            who.IntendedMajor);
         var target = new ExplainSchoolDto(
             university.Name,
             university.State,
@@ -378,15 +415,26 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
             scored["outcome"]!.GetValue<string>() == nameof(FilterOutcome.AidBlock) ? "AID" : "MAIN",
             StoredWhy(items, university.Code),
             ToDouble(university.AcceptanceRate),
-            offering.Sat25,
-            offering.Sat75,
+            SatScale.Clean(offering.Sat25, offering.Sat75).P25,
+            SatScale.Clean(offering.Sat25, offering.Sat75).P75,
             Num(scored, "pg"),
             Num(scored, "ps"),
             ToDouble(TotalCost(offering)),
             Num(scored, "gap"));
 
-        var result = await advisor.ExplainAsync(new ExplainRequestDto(student, target), ct);
-        return new SchoolExplanation(university.Code, university.Name, result.Status,
+        return (student, target, university.Code, university.Name);
+    }
+
+    public async Task<ExplainSchoolDto> ExplainCardAsync(Guid userId, string code, CancellationToken ct, SimulationOverrides? overrides = null) =>
+        (await LoadExplainAsync(userId, code, overrides, ct)).Target;
+
+    // basis: mô tả giả định học sinh đang xem ("GPA 3.6, SAT 1500"); null là hồ sơ thật. Advisor dùng để nói rõ gốc ở câu đầu
+    public async Task<SchoolExplanation> ExplainAsync(
+        Guid userId, string code, CancellationToken ct, SimulationOverrides? overrides = null, string? basis = null)
+    {
+        var (student, target, universityCode, universityName) = await LoadExplainAsync(userId, code, overrides, ct);
+        var result = await advisor.ExplainAsync(new ExplainRequestDto(student, target, HasValues(overrides) ? basis : null), ct);
+        return new SchoolExplanation(universityCode, universityName, result.Status,
             result.Summary, result.Strengths, result.Improvements);
     }
 
@@ -447,6 +495,9 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
         scholarshipNeed = profile.ScholarshipNeed,
         pref = NormalizePref(pref),
         tier = run.Tier,
+        // SAT và GPA của học sinh trong lượt này (giả định thì theo giả định), để thẻ trường đặt cạnh khoảng của trường
+        studentSat = SatScore(profile.Sat),
+        studentGpa = profile.OverallGpa,
         algorithm = AlgorithmVersion,
         status = run.Picked is null ? null : "OK",
         // Thông báo tiếng Anh: chỉ có khi có trường bị ẩn chỉ vì tiếng Anh. Lượt gợi ý lưu trước đây không có khối này.
@@ -493,6 +544,9 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
             s = Scale100(grade.PAdjusted),
             f = Round(fit?.Budget),
             h = Round(fit?.Aid),
+            // Số thật để thẻ và chat nói bằng USD thay vì điểm: học bổng trung bình của người được nhận và chính sách học bổng du học sinh
+            aidAvg = school.Offering.IntlAidAvgUsd,
+            aidPolicy = school.Offering.IntlAidPolicy,
             q = Round(fit?.Quality),
             gap = budget is decimal b && cost is decimal c && c > b ? c - b : (decimal?)null,
             pg = Scale100(grade.Pg),
@@ -500,6 +554,12 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
             adj = grade.P is double p && grade.PAdjusted is double pa ? Math.Round((pa - p) * 100, 1) : (double?)null,
             r = IntlRatio(school),
             acceptRate = Round(ToDouble(AcceptRate(school))),
+            // Khoảng SAT tổng của sinh viên trúng tuyển (đã loại mốc sai thang) và tỉ lệ nhận du học sinh, để thẻ trường nói bằng số cụ thể
+            sat25 = SatScale.Clean(school.Offering.Sat25, school.Offering.Sat75).P25,
+            sat75 = SatScale.Clean(school.Offering.Sat25, school.Offering.Sat75).P75,
+            intlAcceptRate = Round(ToDouble(IntlAcceptRate(school))),
+            // Tỉ lệ sinh viên trúng tuyển có GPA đúng 4,0 (0..1). Cao thì GPA 4,0 của học sinh chỉ ngang đa số, không nổi bật
+            gpaTopShare = Round(GpaTopShare(school.Offering)),
             a = Round(fit?.Position),
             e = Round(fit?.English),
             fit = Round(fit?.Value),
@@ -580,10 +640,11 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
     private static SchoolAcademics ToSchoolAcademics(RecommendSchoolInput input)
     {
         var offering = input.Offering;
+        var (sat25, sat75) = SatScale.Clean(offering.Sat25, offering.Sat75);   // mốc sai thang (điểm một phần thi) coi như thiếu
         return new SchoolAcademics(
             offering.AvgGpa4,
             GpaDist(offering),
-            offering.Sat25, offering.Sat75,
+            sat25, sat75,
             offering.Act25, offering.Act75,
             offering.SatPolicy, offering.SatSubmitPct,
             offering.C7GpaImportance, offering.C7TestImportance, offering.C7EcImportance,
@@ -596,7 +657,7 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
     {
         var offering = input.Offering;
         return new FitSchool(
-            TotalCost(offering), offering.IntlAidAvgUsd, englishShortfall, SchoolRanker.QualityFromRanks(input.Rankings));
+            TotalCost(offering), offering.IntlAidAvgUsd, englishShortfall, SchoolRanker.QualityFromRanks(input.Rankings), offering.IntlAidPolicy);
     }
 
     // Đọc một số từ JSON đã lưu (dùng khi mở chi tiết một trường).
@@ -629,6 +690,13 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
         _ => true
     };
     // Đủ 7 khoảng mới dùng. Thứ tự: dưới 2.50 → đúng 4.0.
+    private static double? GpaTopShare(UniversityOffering offering)
+    {
+        var dist = GpaDist(offering);
+        var total = dist?.Sum(x => (double)x) ?? 0;
+        return dist is { Count: 7 } && total > 0 ? (double)dist[6] / total : null;
+    }
+
     private static IReadOnlyList<decimal>? GpaDist(UniversityOffering offering)
     {
         decimal?[] bins =
