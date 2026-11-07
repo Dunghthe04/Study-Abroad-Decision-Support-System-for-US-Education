@@ -163,24 +163,24 @@ public class AdminUsersControllerTests
     [Fact]
     public void AdminUsersController_ActionAttributes_MatchRbacPolicy()
     {
-        // Khóa và Mở khóa: Chỉ Admin được phép (Moderator không được)
+        // Khóa và Mở khóa: Cả Admin và Moderator (Moderator chỉ thao tác cấp dưới tại logic tầng Service)
         var lockAttr = typeof(AdminUsersController).GetMethod(nameof(AdminUsersController.LockUser))?.GetCustomAttribute<AuthorizeAttribute>();
         Assert.NotNull(lockAttr);
-        Assert.Equal(UserRoles.Admin, lockAttr.Roles);
+        Assert.Equal($"{UserRoles.Admin},{UserRoles.Moderator}", lockAttr.Roles);
 
         var unlockAttr = typeof(AdminUsersController).GetMethod(nameof(AdminUsersController.UnlockUser))?.GetCustomAttribute<AuthorizeAttribute>();
         Assert.NotNull(unlockAttr);
-        Assert.Equal(UserRoles.Admin, unlockAttr.Roles);
+        Assert.Equal($"{UserRoles.Admin},{UserRoles.Moderator}", unlockAttr.Roles);
 
         // Tạo moderator: Chỉ Admin được phép
         var createModAttr = typeof(AdminUsersController).GetMethod(nameof(AdminUsersController.CreateModerator))?.GetCustomAttribute<AuthorizeAttribute>();
         Assert.NotNull(createModAttr);
         Assert.Equal(UserRoles.Admin, createModAttr.Roles);
 
-        // Tạo center: Chỉ Moderator được phép
+        // Tạo center: Cả Admin và Moderator được phép
         var createCenterAttr = typeof(AdminUsersController).GetMethod(nameof(AdminUsersController.CreateCenter))?.GetCustomAttribute<AuthorizeAttribute>();
         Assert.NotNull(createCenterAttr);
-        Assert.Equal(UserRoles.Moderator, createCenterAttr.Roles);
+        Assert.Equal($"{UserRoles.Admin},{UserRoles.Moderator}", createCenterAttr.Roles);
     }
 
     [Fact]

@@ -49,9 +49,9 @@ public class AdminUsersController(IAuthService auth) : ControllerBase
         return CreatedAtAction(nameof(GetUserById), new { id = result.User.Id }, result.User);
     }
 
-    /// <summary>[Q11 / UC-71 Phụ trợ] Tạo tài khoản người dùng cho Trung tâm tư vấn (chỉ Moderator mới được tạo).</summary>
+    /// <summary>[Q11 / UC-71 Phụ trợ] Tạo tài khoản người dùng cho Trung tâm tư vấn (Admin hoặc Moderator).</summary>
     [HttpPost("centers")]
-    [Authorize(Roles = UserRoles.Moderator)]
+    [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Moderator}")]
     public async Task<ActionResult<UserDto>> CreateCenter(CreateCenterAccountRequest request, CancellationToken ct)
     {
         var result = await auth.CreateCenterAccountAsync(request, ct);
@@ -61,30 +61,30 @@ public class AdminUsersController(IAuthService auth) : ControllerBase
         return CreatedAtAction(nameof(GetUserById), new { id = result.User.Id }, result.User);
     }
 
-    /// <summary>[UC-61] Khóa tài khoản kèm lý do (ghi audit - chỉ Admin mới được khóa).</summary>
+    /// <summary>[UC-61] Khóa tài khoản kèm lý do (ghi audit - Admin hoặc Moderator khóa tài khoản cấp dưới).</summary>
     [HttpPost("{id:guid}/lock")]
-    [Authorize(Roles = UserRoles.Admin)]
+    [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Moderator}")]
     public async Task<ActionResult<UserDto>> LockUser(Guid id, LockUserAccountRequest request, CancellationToken ct)
     {
-        if (User.GetUserId() is not { } adminId)
+        if (User.GetUserId() is not { } actorId)
             return Unauthorized();
 
-        var result = await auth.LockUserAccountAsync(id, request, adminId, ct);
+        var result = await auth.LockUserAccountAsync(id, request, actorId, ct);
         if (result.Error != AuthError.None || result.User is null)
             return ValidationProblem(result.Message);
 
         return Ok(result.User);
     }
 
-    /// <summary>[UC-62] Mở khóa tài khoản kèm lý do (ghi audit - chỉ Admin mới được mở khóa).</summary>
+    /// <summary>[UC-62] Mở khóa tài khoản kèm lý do (ghi audit - Admin hoặc Moderator mở khóa tài khoản cấp dưới).</summary>
     [HttpPost("{id:guid}/unlock")]
-    [Authorize(Roles = UserRoles.Admin)]
+    [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Moderator}")]
     public async Task<ActionResult<UserDto>> UnlockUser(Guid id, UnlockUserAccountRequest request, CancellationToken ct)
     {
-        if (User.GetUserId() is not { } adminId)
+        if (User.GetUserId() is not { } actorId)
             return Unauthorized();
 
-        var result = await auth.UnlockUserAccountAsync(id, request, adminId, ct);
+        var result = await auth.UnlockUserAccountAsync(id, request, actorId, ct);
         if (result.Error != AuthError.None || result.User is null)
             return ValidationProblem(result.Message);
 
