@@ -125,6 +125,24 @@ public class TargetSchoolServiceTests
     }
 
     [Fact]
+    public async Task AddTargetSchool_WhenUsingUniversityCode_AddsSuccessfully()
+    {
+        var request = new AddTargetSchoolRequest(
+            UniversityId: null,
+            UniversityCode: "MIT",
+            Category: "reach"
+        );
+
+        var result = await _service.AddTargetSchoolAsync(_userId, request);
+
+        Assert.True(result.Success);
+        Assert.NotNull(result.TargetSchool);
+        Assert.Equal(_uniId, result.TargetSchool.UniversityId);
+        Assert.Equal("MIT", result.TargetSchool.UniversityCode);
+        Assert.Equal("reach", result.TargetSchool.Category);
+    }
+
+    [Fact]
     public async Task GetById_WhenOwnedByUser_ReturnsDto()
     {
         var request = new AddTargetSchoolRequest(UniversityId: _uniId);
@@ -202,6 +220,9 @@ public class TargetSchoolServiceTests
 
         public Task<University?> GetUniversityAsync(Guid universityId, CancellationToken ct = default) =>
             Task.FromResult(Universities.FirstOrDefault(x => x.Id == universityId && x.IsActive));
+
+        public Task<University?> GetUniversityByCodeAsync(string code, CancellationToken ct = default) =>
+            Task.FromResult(Universities.FirstOrDefault(x => x.Code == code && x.IsActive));
 
         public Task<string?> GetUniversityDeadlinesJsonAsync(Guid universityId, CancellationToken ct = default) =>
             Task.FromResult(DeadlinesJsonMap.TryGetValue(universityId, out var json) ? json : null);
