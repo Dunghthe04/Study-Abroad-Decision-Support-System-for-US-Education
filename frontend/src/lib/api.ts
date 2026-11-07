@@ -212,9 +212,9 @@ export const adminUsersApi = {
       body: JSON.stringify(data),
     }),
 
-  /** [Q11 / UC-71 Phụ trợ] Admin tạo tài khoản người dùng cho Trung tâm tư vấn. */
+  /** [Q11 / UC-71 Phụ trợ / UC-64] Moderator/Admin tạo tài khoản người dùng cho Trung tâm tư vấn. */
   createCenter: (data: CreateCenterAccountRequest) =>
-    apiFetch<UserDto>("/api/v1/admin/users/centers", {
+    apiFetch<UserDto>("/api/v1/study-centers/accounts", {
       method: "POST",
       body: JSON.stringify(data),
     }),
@@ -238,6 +238,12 @@ export const adminUsersApi = {
 export const studyCentersApi = {
   create: (data: CreateStudyCenterRequest) =>
     apiFetch<StudyCenter>("/api/v1/study-centers", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  /** [UC-64] Tạo tài khoản trung tâm tư vấn (vai trò role: center) */
+  createAccount: (data: CreateCenterAccountRequest) =>
+    apiFetch<UserDto>("/api/v1/study-centers/accounts", {
       method: "POST",
       body: JSON.stringify(data),
     }),
