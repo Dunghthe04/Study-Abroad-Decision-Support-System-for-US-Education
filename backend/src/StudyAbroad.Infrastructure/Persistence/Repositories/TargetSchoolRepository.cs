@@ -52,6 +52,46 @@ public class TargetSchoolRepository(AppDbContext db) : ITargetSchoolRepository
         return targetSchool;
     }
 
+    public async Task DeleteAsync(TargetSchool targetSchool, CancellationToken ct = default)
+    {
+        db.TargetSchools.Remove(targetSchool);
+        await db.SaveChangesAsync(ct);
+    }
+
+    public Task<TargetSchool?> GetByUserAndUniversityCodeAsync(Guid userId, string code, CancellationToken ct = default) =>
+        db.TargetSchools
+            .Join(db.Universities, ts => ts.UniversityId, u => u.Id, (ts, u) => new { ts, u })
+            .Where(x => x.ts.UserId == userId && x.u.Code == code)
+            .Select(x => x.ts)
+            .FirstOrDefaultAsync(ct);
+
+    public Task<TargetSchoolDto?> GetDtoByUserAndUniversityCodeAsync(Guid userId, string code, CancellationToken ct = default) =>
+        db.TargetSchools.AsNoTracking()
+            .Where(ts => ts.UserId == userId)
+            .Join(db.Universities.AsNoTracking().Where(u => u.Code == code),
+                ts => ts.UniversityId,
+                u => u.Id,
+                (ts, u) => new TargetSchoolDto(
+                    ts.Id,
+                    ts.UserId,
+                    ts.UniversityId,
+                    u.Code,
+                    u.Name,
+                    u.City,
+                    u.State,
+                    u.Website,
+                    u.Control,
+                    u.AcceptanceRate,
+                    ts.Category,
+                    ts.Status,
+                    ts.Priority,
+                    ts.Notes,
+                    ts.ApplicationRound,
+                    ts.Deadline,
+                    ts.CreatedAt,
+                    ts.UpdatedAt))
+            .FirstOrDefaultAsync(ct);
+
     public Task<University?> GetUniversityAsync(Guid universityId, CancellationToken ct = default) =>
         db.Universities.AsNoTracking().FirstOrDefaultAsync(x => x.Id == universityId && x.IsActive, ct);
 
