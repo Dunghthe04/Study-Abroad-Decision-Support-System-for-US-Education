@@ -302,3 +302,34 @@ export interface ParentLinkResponse<T> {
   message: string | null;
   data: T;
 }
+
+// [UC-30] Trường mục tiêu của học sinh (Target Schools)
+export interface AddTargetSchoolRequest {
+  universityId?: string;
+  universityCode?: string;
+  category?: "reach" | "match" | "safety" | string | null;
+  applicationRound?: string | null;
+  deadline?: string | null;
+  notes?: string | null;
+}
+
+export interface TargetSchoolDto {
+  id: string;
+  userId: string;
+  universityId: string;
+  universityCode: string;
+  universityName: string;
+  city?: string | null;
+  state?: string | null;
+  website?: string | null;
+  control?: string | null;
+  acceptanceRate?: number | null;
+  category?: "reach" | "match" | "safety" | string | null;
+  status: "considering" | "applying" | "submitted" | "admitted" | "rejected" | string;
+  priority: number;
+  notes?: string | null;
+  applicationRound?: string | null;
+  deadline?: string | null;
+  createdAt: string;
+  updatedAt?: string | null;
+}
