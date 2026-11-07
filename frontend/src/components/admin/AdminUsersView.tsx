@@ -69,19 +69,37 @@ const ACCOUNT_STATUS_OPTIONS = [
 const filterSelectClass =
   "h-9 w-full min-w-[10rem] rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50";
 
-/** [UC-61] Chỉ Admin mới có quyền khóa tài khoản (moderator không được phép). */
+/** [UC-61] Khóa tài khoản: Admin khóa được moderator, center, users. Moderator chỉ khóa được cấp dưới (center, student, parent). */
 function canAdminLock(target: UserDto, currentUserRole?: string, currentUserId?: string): boolean {
-  if (currentUserRole !== "admin") return false;
-  if (target.role === "admin") return false;
   if (currentUserId && target.id === currentUserId) return false;
-  return target.status !== "locked";
+  if (target.status === "locked") return false;
+  if (target.role === "admin") return false;
+
+  if (currentUserRole === "admin") {
+    return true;
+  }
+
+  if (currentUserRole === "moderator") {
+    return target.role !== "moderator";
+  }
+
+  return false;
 }
 
-/** [UC-62] Chỉ Admin mới có quyền mở khóa tài khoản (moderator không được phép). */
+/** [UC-62] Mở khóa tài khoản: Admin mở khóa được moderator, center, users. Moderator chỉ mở khóa được cấp dưới (center, student, parent). */
 function canAdminUnlock(target: UserDto, currentUserRole?: string): boolean {
-  if (currentUserRole !== "admin") return false;
   if (target.role === "admin") return false;
-  return target.status === "locked" || target.status === "temp_locked";
+  if (target.status !== "locked" && target.status !== "temp_locked") return false;
+
+  if (currentUserRole === "admin") {
+    return true;
+  }
+
+  if (currentUserRole === "moderator") {
+    return target.role !== "moderator";
+  }
+
+  return false;
 }
 
 const LOCK_REASONS_STORAGE_KEY = "usas_user_lock_reasons";
@@ -150,7 +168,6 @@ function formatStatusLabel(status: string): string {
 /** [UC-60..UC-63] Màn hình Quản trị người dùng (Admin User Management). */
 export function AdminUsersView() {
   const { user: currentUser } = useAuth();
-  const isAdmin = currentUser?.role === "admin";
   const isModerator = currentUser?.role === "moderator";
 
   const [users, setUsers] = useState<UserDto[]>([]);
@@ -253,7 +270,7 @@ export function AdminUsersView() {
   };
 
   const openLockDialog = (user: UserDto) => {
-    if (!isAdmin) return;
+    if (!canAdminLock(user, currentUser?.role, currentUser?.id)) return;
     setLockTarget(user);
     setLockReason("");
     setLockDialogError(null);
@@ -267,7 +284,7 @@ export function AdminUsersView() {
   };
 
   const handleConfirmLock = async () => {
-    if (!isAdmin || !lockTarget) return;
+    if (!lockTarget || !canAdminLock(lockTarget, currentUser?.role, currentUser?.id)) return;
     const reason = lockReason.trim();
     if (!reason) {
       setLockDialogError("Vui lòng nhập lý do khóa.");
@@ -303,7 +320,7 @@ export function AdminUsersView() {
   };
 
   const openUnlockDialog = (user: UserDto) => {
-    if (!isAdmin) return;
+    if (!canAdminUnlock(user, currentUser?.role)) return;
     setUnlockTarget(user);
     setUnlockReason("");
     setUnlockDialogError(null);
@@ -317,7 +334,7 @@ export function AdminUsersView() {
   };
 
   const handleConfirmUnlock = async () => {
-    if (!isAdmin || !unlockTarget) return;
+    if (!unlockTarget || !canAdminUnlock(unlockTarget, currentUser?.role)) return;
     const reason = unlockReason.trim();
     if (!reason) {
       setUnlockDialogError("Vui lòng nhập lý do mở khóa.");
@@ -372,10 +389,6 @@ export function AdminUsersView() {
 
     if (isModerator && createRole !== "center") {
       setFormError("Kiểm duyệt viên chỉ có quyền cấp tài khoản cho trung tâm tư vấn.");
-      return;
-    }
-    if (isAdmin && createRole !== "moderator") {
-      setFormError("Quản trị viên chỉ cấp tài khoản kiểm duyệt viên tại khu vực này. Cấp tài khoản trung tâm do Moderator phụ trách.");
       return;
     }
 
@@ -488,7 +501,7 @@ export function AdminUsersView() {
             className="gap-1.5 bg-brand text-white hover:bg-brand/90"
           >
             <UserPlusIcon className="size-4" />
-            {isModerator ? "Cấp tài khoản trung tâm" : "Cấp tài khoản moderator"}
+            {isModerator ? "Cấp tài khoản trung tâm" : "Cấp tài khoản mới"}
           </Button>
         </div>
       </div>
@@ -795,18 +808,18 @@ export function AdminUsersView() {
         </CardContent>
       </Card>
 
-      {/* [UC-63 & UC-71] Dialog Cấp tài khoản mới (Moderator tạo Center, Admin tạo Moderator) */}
+      {/* [UC-63 & UC-71] Dialog Cấp tài khoản mới (Moderator tạo Center, Admin tạo Moderator hoặc Center) */}
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <UserPlusIcon className="size-5 text-brand" />
-              {isModerator ? "Cấp tài khoản Trung tâm tư vấn" : "Cấp tài khoản Kiểm duyệt viên"}
+              {isModerator ? "Cấp tài khoản Trung tâm tư vấn" : "Cấp tài khoản mới"}
             </DialogTitle>
             <DialogDescription>
               {isModerator
                 ? "Tạo tài khoản đại diện cho Trung tâm tư vấn (tài khoản vai trò center được kích hoạt ngay)."
-                : "Tạo tài khoản Kiểm duyệt viên cho nhân sự hệ thống (khách không thể tự đăng ký)."}
+                : "Tạo tài khoản Kiểm duyệt viên hoặc Trung tâm tư vấn (tài khoản được kích hoạt ngay)."}
             </DialogDescription>
           </DialogHeader>
 
@@ -820,13 +833,25 @@ export function AdminUsersView() {
 
               <Field>
                 <FieldLabel htmlFor="create-role">Loại tài khoản</FieldLabel>
-                <div className="h-9 px-3 flex items-center rounded-md border border-input bg-muted/40 text-sm font-medium">
-                  {isModerator ? "Trung tâm tư vấn (Center)" : "Kiểm duyệt viên (Moderator)"}
-                </div>
+                {isModerator ? (
+                  <div className="h-9 px-3 flex items-center rounded-md border border-input bg-muted/40 text-sm font-medium">
+                    Trung tâm tư vấn (Center)
+                  </div>
+                ) : (
+                  <select
+                    id="create-role"
+                    className={filterSelectClass}
+                    value={createRole}
+                    onChange={(e) => setCreateRole(e.target.value as "moderator" | "center")}
+                  >
+                    <option value="moderator">Kiểm duyệt viên (Moderator - UC-63)</option>
+                    <option value="center">Trung tâm tư vấn (Center - UC-64)</option>
+                  </select>
+                )}
                 <FieldDescription>
-                  {isModerator
-                    ? "Tài khoản đại diện quản lý thông tin và chương trình của trung tâm du học."
-                    : "Tài khoản có quyền kiểm duyệt nội dung diễn đàn và bài viết tri thức."}
+                  {createRole === "moderator"
+                    ? "Tài khoản có quyền kiểm duyệt nội dung, quản lý trung tâm và người dùng cấp dưới."
+                    : "Tài khoản đại diện quản lý thông tin và chương trình của trung tâm du học."}
                 </FieldDescription>
               </Field>
 
