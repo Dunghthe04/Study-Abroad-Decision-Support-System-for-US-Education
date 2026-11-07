@@ -226,6 +226,14 @@ namespace StudyAbroad.Application.Advisor
             }
             catch (InvalidOperationException ex)
             {
+                // Trường không có trong danh sách (thường vì bị bộ lọc cứng loại): thay vì báo lỗi, nói đúng lý do bằng thẻ goal-seeking
+                if (ex.Message.StartsWith("Chưa"))
+                {
+                    var data = JsonSerializer.SerializeToElement(new { code });
+                    var why = await GoalSeekAsync(userId, response with { ActionData = data }, ct, onEvent);
+                    if (why.Widget is not null)
+                        return why;
+                }
                 var reason = ex.Message.StartsWith("Chưa")
                     ? $"Mình chưa giải thích được trường này: {ex.Message}"
                     : ChatRecommendation.Invalid;
@@ -247,9 +255,34 @@ namespace StudyAbroad.Application.Advisor
                 return response with { Answer = ChatSimulation.Failed };
             try
             {
-                var result = await recommender!.SimulateAsync(userId, scenario.Overrides, null, ct);
-                var note = ChatSimulation.Note(result, scenario);
-                return response with { Answer = await WriteNoteAsync(note, ct), Widget = ChatSimulation.WidgetOf(scenario) };
+                // Ưu tiên mới tính từ ưu tiên của lần gợi ý đã lưu (mức học sinh không nhắc thì giữ nguyên)
+                IReadOnlyList<int>? basePref = null, newPref = null;
+                if (scenario.Priorities is { } asked)
+                {
+                    var latest = await recommender!.GetLatestAsync(userId, ct);
+                    basePref = ChatSimulation.BasePref(latest?.CriteriaJson);
+                    newPref = ChatSimulation.MergePref(basePref, asked);
+                }
+                var result = await recommender!.SimulateAsync(userId, scenario.Overrides, newPref, ct);
+                var parts = new List<string>();
+                string? beforeItems = null;
+                if (scenario.HasProfileValues)
+                    parts.Add(await WriteNoteAsync(ChatSimulation.Note(result, scenario), ct));
+                if (scenario.Priorities is { } priorities && basePref is not null && newPref is not null)
+                {
+                    // So hai danh sách cùng hồ sơ giả định, chỉ khác ưu tiên: thứ tự đổi là do ưu tiên
+                    var before = await recommender.SimulateAsync(userId, scenario.Overrides, basePref, ct);
+                    beforeItems = before.ItemsJson;
+                    parts.Add(ChatSimulation.PriorityNote(basePref, newPref, priorities, before.ItemsJson, result.ItemsJson));
+                }
+                // Bước tiếp theo của quy trình: hiểu vì sao đổi, rồi xem cần gì để vào trường khó
+                var steps = ChatSimulation.NextSteps(result, beforeItems);
+                return response with
+                {
+                    Answer = string.Join("\n\n", parts),
+                    Widget = ChatSimulation.WidgetOf(scenario, newPref),
+                    QuickReplies = steps.Count == 0 ? null : steps,
+                };
             }
             catch (ArgumentException ex)
             {
@@ -304,7 +337,8 @@ namespace StudyAbroad.Application.Advisor
                 if (onEvent is not null)
                     await onEvent(new AdvisorStreamEvent("card", Widget: ChatGoalSeek.WidgetOf(result)));
                 var answer = await WriteGoalNoteAsync(ChatGoalSeek.Note(result, names), result, ct);
-                return response with { Answer = answer, Widget = ChatGoalSeek.WidgetOf(result), QuickReplies = null };
+                var steps = ChatGoalSeek.NextSteps(result);
+                return response with { Answer = answer, Widget = ChatGoalSeek.WidgetOf(result), QuickReplies = steps.Count == 0 ? null : steps };
             }
             catch (ArgumentException ex)
             {

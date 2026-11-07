@@ -569,6 +569,78 @@ public class RecommendationServiceTests
         Assert.Equal(1, result.Profile.AwardCount);
     }
 
+    // ---- SAT của trường phải là điểm tổng
+
+    // Dữ liệu trường đôi khi lưu mốc SAT của MỘT phần thi (665 đến 739): SAT tổng 1200 của học sinh không được "vượt" mốc đó (vị trí 100%)
+    [Fact]
+    public async Task Recommend_ASchoolWithSectionScaleSat_IsTreatedAsMissingNotAsAHundredPercent()
+    {
+        var profile = Profile();
+        profile.Sat = 1200m;
+        var wrong = School("W", 30_000m, "none", Major, sat: (665, 739), accept: 0.6m, avgGpa: 3.5m);
+        var right = School("R", 30_000m, "none", Major, sat: (1270, 1410), accept: 0.6m, avgGpa: 3.5m);
+        var (service, _, store) = Setup(profile, [wrong, right]);
+
+        await service.RecommendAsync(profile, [wrong, right]);
+
+        using var items = JsonDocument.Parse(store.Rows.Single().ItemsJson);
+        var scored = items.RootElement.GetProperty("scored").EnumerateArray().ToDictionary(e => e.GetProperty("code").GetString()!);
+        Assert.Equal(JsonValueKind.Null, scored["W"].GetProperty("ps").ValueKind);        // thiếu dữ liệu, không phải 100
+        Assert.Equal(JsonValueKind.Null, scored["W"].GetProperty("sat75").ValueKind);
+        Assert.True(scored["R"].GetProperty("ps").GetDouble() < 50);                      // 1200 dưới mốc 25% của trường thật (1270)
+        Assert.Equal(1270, scored["R"].GetProperty("sat25").GetInt32());
+        Assert.Equal(1410, scored["R"].GetProperty("sat75").GetInt32());
+    }
+
+    [Theory]
+    [InlineData(665, 739, false)]    // điểm một phần thi (toán)
+    [InlineData(772, 816, false)]    // lệch thang: mốc 25% và 75% của một phần thi
+    [InlineData(1270, 1410, true)]
+    [InlineData(900, 1100, true)]    // trường rất dễ vào vẫn là SAT tổng
+    [InlineData(1500, 1500, false)]  // mốc 75% phải lớn hơn mốc 25%
+    [InlineData(1500, 1700, false)]  // vượt 1600
+    public void SatScale_AcceptsOnlyTotalScoreQuartiles(int p25, int p75, bool total)
+    {
+        Assert.Equal(total, SatScale.IsTotal(p25, p75));
+    }
+
+    // Trường có nhiều sinh viên GPA 4,0 (53,7%): GPA 4,0 của học sinh chỉ ngang đa số, thẻ cần biết tỉ lệ đó để nói đúng
+    [Fact]
+    public async Task Recommend_StoresTheShareOfStudentsWithAPerfectGpa()
+    {
+        var profile = Profile();
+        profile.OverallGpa = 4.0m;
+        var school = School("T", 30_000m, "none", Major, sat: (1270, 1410), accept: 0.6m);
+        var o = school.Offering;
+        o.GpaPctBelow250 = 0.005m; o.GpaPct250To299 = 0.005m; o.GpaPct300To324 = 0.02m; o.GpaPct325To349 = 0.05m;
+        o.GpaPct350To374 = 0.10m; o.GpaPct375To399 = 0.283m; o.GpaPct40 = 0.537m;
+        var (service, _, store) = Setup(profile, [school]);
+
+        await service.RecommendAsync(profile, [school]);
+
+        using var items = JsonDocument.Parse(store.Rows.Single().ItemsJson);
+        var row = items.RootElement.GetProperty("scored")[0];
+        Assert.Equal(0.537, row.GetProperty("gpaTopShare").GetDouble(), 3);
+        Assert.InRange(row.GetProperty("pg").GetDouble(), 70, 76);   // 4,0 ở khoảng 73%: ngang đa số, chưa vượt mốc 75%
+    }
+
+    // Kết quả mang theo SAT và GPA của học sinh để thẻ trường so với khoảng của trường
+    [Fact]
+    public async Task Recommend_StoresTheStudentsSatAndGpaWithTheCriteria()
+    {
+        var profile = Profile();
+        profile.Sat = 1200m;
+        profile.OverallGpa = 3.7m;
+        var school = School("R", 30_000m, "none", Major, sat: (1270, 1410), accept: 0.6m, avgGpa: 3.5m);
+        var (service, _, store) = Setup(profile, [school]);
+
+        await service.RecommendAsync(profile, [school]);
+
+        using var criteria = JsonDocument.Parse(store.Rows.Single().CriteriaJson);
+        Assert.Equal(1200, criteria.RootElement.GetProperty("studentSat").GetInt32());
+        Assert.Equal(3.7m, criteria.RootElement.GetProperty("studentGpa").GetDecimal());
+    }
+
     // ---- giải thích theo hồ sơ thật hoặc theo giả định đang xem
 
     private static async Task<(RecommendationService Service, FakeAdvisor Advisor, StudentProfile Profile)> SavedRunSetup()

@@ -41,8 +41,12 @@ public record ChatAction(string Type, string? SchoolCode = null, string? Target 
 public record ChatSchool(string Code, string Name, string? Group);
 public record Citation(string Title, string? Url, string? Snippet);
 
-/// <summary>Nút gợi ý: Label là chữ trên nút, Value là chữ gửi đi như tin nhắn của học sinh khi bấm.</summary>
-public record QuickReply(string Label, string Value);
+/// <summary>
+/// Nút gợi ý: Label là chữ trên nút, Value là chữ gửi đi như tin nhắn của học sinh khi bấm.
+/// Có Action thì nút chạy thẳng hành động có cấu trúc (giải thích, goal-seeking) bằng mã trường, không qua SLM hiểu câu nên không nhầm tên trường.
+/// Có Href thì nút chuyển sang trang đó (ví dụ "Sửa hồ sơ"), không gửi tin nhắn.
+/// </summary>
+public record QuickReply(string Label, string Value, ChatAction? Action = null, string? Href = null);
 
 /// <summary>Công cụ nhập ngay trong chat. Type: major | review | budget | scholarship; Data tùy loại.</summary>
 public record Widget(string Type, JsonElement? Data = null);
