@@ -32,14 +32,11 @@ export function LoginForm() {
   const [lockType, setLockType] = useState<"temp_locked" | "unverified" | null>(null);
 
   // Nếu người dùng đã đăng nhập sẵn mà truy cập /login:
-  // Tài khoản admin tự động chuyển thẳng vào /admin, moderator chuyển thẳng vào /moderator/centers
+  // Tài khoản admin/moderator tự động chuyển thẳng vào /admin
   useEffect(() => {
     if (!isLoading && user) {
-      if (user.role === "admin") {
+      if (user.role === "admin" || user.role === "moderator") {
         const target = redirectParam && redirectParam !== "/" ? redirect : "/admin";
-        router.replace(target);
-      } else if (user.role === "moderator") {
-        const target = redirectParam && redirectParam !== "/" ? redirect : "/moderator/centers";
         router.replace(target);
       } else {
         router.replace(redirect);
@@ -61,11 +58,8 @@ export function LoginForm() {
     try {
       // [AC-2] Đăng nhập: Gọi API xác thực
       const loggedUser = await login({ email: email.trim(), password });
-      if (loggedUser.role === "admin") {
+      if (loggedUser.role === "admin" || loggedUser.role === "moderator") {
         const target = redirectParam && redirectParam !== "/" ? redirect : "/admin";
-        router.push(target);
-      } else if (loggedUser.role === "moderator") {
-        const target = redirectParam && redirectParam !== "/" ? redirect : "/moderator/centers";
         router.push(target);
       } else {
         router.push(redirect);
