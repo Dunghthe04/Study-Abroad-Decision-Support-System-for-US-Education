@@ -17,6 +17,7 @@ import {
   UsersIcon,
 } from "lucide-react";
 import { adminUsersApi, ApiError } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 import { formatUserRole, USER_ROLE_LABELS } from "@/lib/user-role-labels";
 import type { CreateCenterAccountRequest, CreateModeratorAccountRequest, UserDto, UserRole } from "@/types/api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -68,14 +69,19 @@ const ACCOUNT_STATUS_OPTIONS = [
 const filterSelectClass =
   "h-9 w-full min-w-[10rem] rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50";
 
-/** [UC-61] Chỉ khóa student/parent/moderator/center chưa locked. */
-function canAdminLock(user: UserDto): boolean {
-  return user.role !== "admin" && user.status !== "locked";
+/** [UC-61] Chỉ Admin mới có quyền khóa tài khoản (moderator không được phép). */
+function canAdminLock(target: UserDto, currentUserRole?: string, currentUserId?: string): boolean {
+  if (currentUserRole !== "admin") return false;
+  if (target.role === "admin") return false;
+  if (currentUserId && target.id === currentUserId) return false;
+  return target.status !== "locked";
 }
 
-/** [UC-62] Chỉ mở khóa tài khoản đang bị locked hoặc temp_locked. */
-function canAdminUnlock(user: UserDto): boolean {
-  return user.role !== "admin" && (user.status === "locked" || user.status === "temp_locked");
+/** [UC-62] Chỉ Admin mới có quyền mở khóa tài khoản (moderator không được phép). */
+function canAdminUnlock(target: UserDto, currentUserRole?: string): boolean {
+  if (currentUserRole !== "admin") return false;
+  if (target.role === "admin") return false;
+  return target.status === "locked" || target.status === "temp_locked";
 }
 
 const LOCK_REASONS_STORAGE_KEY = "usas_user_lock_reasons";
@@ -143,6 +149,10 @@ function formatStatusLabel(status: string): string {
 
 /** [UC-60..UC-63] Màn hình Quản trị người dùng (Admin User Management). */
 export function AdminUsersView() {
+  const { user: currentUser } = useAuth();
+  const isAdmin = currentUser?.role === "admin";
+  const isModerator = currentUser?.role === "moderator";
+
   const [users, setUsers] = useState<UserDto[]>([]);
   const [listLoading, setListLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
@@ -243,6 +253,7 @@ export function AdminUsersView() {
   };
 
   const openLockDialog = (user: UserDto) => {
+    if (!isAdmin) return;
     setLockTarget(user);
     setLockReason("");
     setLockDialogError(null);
@@ -256,7 +267,7 @@ export function AdminUsersView() {
   };
 
   const handleConfirmLock = async () => {
-    if (!lockTarget) return;
+    if (!isAdmin || !lockTarget) return;
     const reason = lockReason.trim();
     if (!reason) {
       setLockDialogError("Vui lòng nhập lý do khóa.");
@@ -292,6 +303,7 @@ export function AdminUsersView() {
   };
 
   const openUnlockDialog = (user: UserDto) => {
+    if (!isAdmin) return;
     setUnlockTarget(user);
     setUnlockReason("");
     setUnlockDialogError(null);
@@ -305,7 +317,7 @@ export function AdminUsersView() {
   };
 
   const handleConfirmUnlock = async () => {
-    if (!unlockTarget) return;
+    if (!isAdmin || !unlockTarget) return;
     const reason = unlockReason.trim();
     if (!reason) {
       setUnlockDialogError("Vui lòng nhập lý do mở khóa.");
@@ -346,13 +358,26 @@ export function AdminUsersView() {
     setFullName("");
     setPhone("");
     setFormError(null);
-    setCreateRole("moderator");
+    if (isModerator) {
+      setCreateRole("center");
+    } else {
+      setCreateRole("moderator");
+    }
     setIsCreateOpen(true);
   };
 
   const handleCreateAccount = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
+
+    if (isModerator && createRole !== "center") {
+      setFormError("Kiểm duyệt viên chỉ có quyền cấp tài khoản cho trung tâm tư vấn.");
+      return;
+    }
+    if (isAdmin && createRole !== "moderator") {
+      setFormError("Quản trị viên chỉ cấp tài khoản kiểm duyệt viên tại khu vực này. Cấp tài khoản trung tâm do Moderator phụ trách.");
+      return;
+    }
 
     const trimmedEmail = email.trim();
     const trimmedName = fullName.trim();
@@ -463,7 +488,7 @@ export function AdminUsersView() {
             className="gap-1.5 bg-brand text-white hover:bg-brand/90"
           >
             <UserPlusIcon className="size-4" />
-            Cấp tài khoản mới
+            {isModerator ? "Cấp tài khoản trung tâm" : "Cấp tài khoản moderator"}
           </Button>
         </div>
       </div>
@@ -701,7 +726,7 @@ export function AdminUsersView() {
                               </Button>
 
                               <div className="w-[88px] shrink-0 flex items-center justify-end">
-                                {canAdminUnlock(u) ? (
+                                {canAdminUnlock(u, currentUser?.role) ? (
                                   <Button
                                     type="button"
                                     variant="outline"
@@ -712,7 +737,7 @@ export function AdminUsersView() {
                                     <KeyRoundIcon className="size-3.5" aria-hidden />
                                     Mở khóa
                                   </Button>
-                                ) : canAdminLock(u) ? (
+                                ) : canAdminLock(u, currentUser?.role, currentUser?.id) ? (
                                   <Button
                                     type="button"
                                     variant="outline"
@@ -770,16 +795,18 @@ export function AdminUsersView() {
         </CardContent>
       </Card>
 
-      {/* [UC-63 & UC-71] Dialog Cấp tài khoản mới (Moderator hoặc Trung tâm) */}
+      {/* [UC-63 & UC-71] Dialog Cấp tài khoản mới (Moderator tạo Center, Admin tạo Moderator) */}
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <UserPlusIcon className="size-5 text-brand" />
-              Cấp tài khoản mới
+              {isModerator ? "Cấp tài khoản Trung tâm tư vấn" : "Cấp tài khoản Kiểm duyệt viên"}
             </DialogTitle>
             <DialogDescription>
-              Tạo tài khoản đặc thù cho Kiểm duyệt viên hoặc Trung tâm tư vấn (tài khoản được kích hoạt ngay).
+              {isModerator
+                ? "Tạo tài khoản đại diện cho Trung tâm tư vấn (tài khoản vai trò center được kích hoạt ngay)."
+                : "Tạo tài khoản Kiểm duyệt viên cho nhân sự hệ thống (khách không thể tự đăng ký)."}
             </DialogDescription>
           </DialogHeader>
 
@@ -793,19 +820,13 @@ export function AdminUsersView() {
 
               <Field>
                 <FieldLabel htmlFor="create-role">Loại tài khoản</FieldLabel>
-                <select
-                  id="create-role"
-                  className={filterSelectClass}
-                  value={createRole}
-                  onChange={(e) => setCreateRole(e.target.value as "moderator" | "center")}
-                >
-                  <option value="moderator">Kiểm duyệt viên (Moderator - UC-63)</option>
-                  <option value="center">Trung tâm tư vấn (Center - UC-71)</option>
-                </select>
+                <div className="h-9 px-3 flex items-center rounded-md border border-input bg-muted/40 text-sm font-medium">
+                  {isModerator ? "Trung tâm tư vấn (Center)" : "Kiểm duyệt viên (Moderator)"}
+                </div>
                 <FieldDescription>
-                  {createRole === "moderator"
-                    ? "Tài khoản có quyền kiểm duyệt nội dung diễn đàn và bài viết tri thức."
-                    : "Tài khoản đại diện quản lý thông tin và chương trình của trung tâm du học."}
+                  {isModerator
+                    ? "Tài khoản đại diện quản lý thông tin và chương trình của trung tâm du học."
+                    : "Tài khoản có quyền kiểm duyệt nội dung diễn đàn và bài viết tri thức."}
                 </FieldDescription>
               </Field>
 
@@ -971,7 +992,7 @@ export function AdminUsersView() {
 
               <DialogFooter className="pt-4 flex items-center justify-between sm:justify-between w-full">
                 <div>
-                  {canAdminUnlock(detailTarget) ? (
+                  {canAdminUnlock(detailTarget, currentUser?.role) ? (
                     <Button
                       type="button"
                       variant="outline"
@@ -985,7 +1006,7 @@ export function AdminUsersView() {
                       <KeyRoundIcon className="size-3.5" />
                       Mở khóa
                     </Button>
-                  ) : canAdminLock(detailTarget) ? (
+                  ) : canAdminLock(detailTarget, currentUser?.role, currentUser?.id) ? (
                     <Button
                       type="button"
                       variant="outline"
