@@ -33,6 +33,7 @@ public static class DependencyInjection
         // Chat chạy gợi ý trường qua interface, dùng chung RecommendationService đã đăng ký ở trên
         services.AddScoped<IRecommendationRunner>(sp => sp.GetRequiredService<RecommendationService>());
         services.AddScoped<StudyAbroad.Application.Advisor.ChatService>();
+        services.AddScoped<RecommendationHistoryService>();   // [UC-87] xem lịch sử gợi ý
         return services;
     }
 }
