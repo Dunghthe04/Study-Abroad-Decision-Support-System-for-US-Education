@@ -153,11 +153,11 @@ public class AdminUsersControllerTests
     [Fact]
     public void AdminUsersController_HasAdminAuthorizeAttribute()
     {
-        // [AC-4] Đảm bảo controller được bảo vệ bởi [Authorize(Roles = "admin")]
+        // [AC-4] Đảm bảo controller được bảo vệ bởi [Authorize(Roles = "admin,moderator")]
         var authAttr = typeof(AdminUsersController).GetCustomAttribute<AuthorizeAttribute>();
 
         Assert.NotNull(authAttr);
-        Assert.Equal(UserRoles.Admin, authAttr.Roles);
+        Assert.Equal($"{UserRoles.Admin},{UserRoles.Moderator}", authAttr.Roles);
     }
 
     [Fact]
