@@ -1,6 +1,7 @@
 import {
   BarChart3Icon,
   BookOpenIcon,
+  BuildingIcon,
   CreditCardIcon,
   LayoutDashboardIcon,
   MessagesSquareIcon,
@@ -56,6 +57,14 @@ export const ADMIN_NAV: AdminNavItem[] = [
     icon: BookOpenIcon,
     roles: ["admin", "moderator"],
     useCases: ["UC-51", "UC-52", "UC-53"],
+  },
+  {
+    href: "/admin/centers",
+    label: "Trung tâm tư vấn",
+    description: "Thêm, xác minh, sửa hoặc ẩn trung tâm và tạo tài khoản trung tâm",
+    icon: BuildingIcon,
+    roles: ["moderator", "admin"],
+    useCases: ["UC-59", "UC-64", "UC-71", "UC-72"],
   },
   {
     href: "/admin/plans",
