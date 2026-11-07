@@ -10,12 +10,13 @@ Khóa đầu ra trùng SimulateRequest bên .NET, và chỉ gồm yếu tố mô
 from dataclasses import dataclass, field
 from typing import Any
 
+from app.services.priority import PRIORITY_KEY
 from app.services.skills import validators
 from app.services.skills.validators import AskAgain
 
 # Khóa hồ sơ mô phỏng được. Chứng chỉ tiếng Anh thử được IELTS, TOEFL, Duolingo (don_vi cho biết bài nào)
 SUPPORTED = ("gpa", "sat", "act", "english", "budget", "scholarship")
-SUPPORTED_TEXT = "GPA, SAT, ACT, IELTS, TOEFL, Duolingo, ngân sách, mức cần học bổng"
+SUPPORTED_TEXT = "GPA, SAT, ACT, IELTS, TOEFL, Duolingo, ngân sách, mức cần học bổng, và ưu tiên (chi phí thấp, học bổng nhiều, danh tiếng)"
 # Học sinh nói "bỏ" một yếu tố: kịch bản chỉ đổi giá trị, không xóa được điểm
 SKIP_ACTION = "bo_qua"
 GPA_SCALES = {"thang_4": 4, "thang_10": 10}
@@ -141,6 +142,8 @@ def parse_what_if(changes: list[dict[str, Any]]) -> WhatIf:
     result = WhatIf()
     for change in changes:
         key = change.get("yeu_to")
+        if key == PRIORITY_KEY:  # ưu tiên đọc riêng bằng quy tắc (priority.py), không phải giá trị hồ sơ
+            continue
         checked = None
         if key in SUPPORTED and change.get("hanh_dong") != SKIP_ACTION:
             checked = _check(key, change.get("gia_tri", ""), change.get("don_vi"))

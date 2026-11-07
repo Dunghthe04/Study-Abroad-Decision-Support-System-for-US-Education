@@ -9,6 +9,7 @@ Các nhánh nằm ở branches.py (main.py tạo rồi truyền vào ChatFlow).
 import asyncio
 import json
 import logging
+import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -36,6 +37,7 @@ from app.services.intake import (
     intake_choice,
 )
 from app.services.pii_mask import mask_personal_info
+from app.services.priority import PRIORITY_KEY, detect_priorities
 from app.services.profile_sync import changed_keys, merge_profile
 from app.services.skill_rules import REQUIRED_B3, missing_fields
 from app.services.slm_contract import SlmClassifier
@@ -158,6 +160,26 @@ def intents_to_run(slm: SlmTinResult) -> list[SlmY]:
     return list(slm.cac_y)
 
 
+# Câu nói về ưu tiên (chi phí thấp, học bổng, danh tiếng) SLM chưa được huấn luyện nên có thể xếp nhầm loại.
+# Quy tắc (priority.py) nhận ra thì đổi thành ý what-if (chưa có kết quả gợi ý thì nhánh kịch bản nhắc cần gợi ý trước),
+# trừ khi đang chờ trả lời một câu hồ sơ (để "em cần học bổng" trả lời câu hỏi hồ sơ không bị hiểu nhầm).
+# Câu chào mở đầu (B0.1, B0.2) không phải câu hồ sơ nên không chặn
+def with_priority_intent(state: ChatState, message: str, slm: SlmTinResult) -> SlmTinResult:
+    waiting = state.question_id is not None and state.question_id not in OPENING_QUESTIONS
+    if waiting or not detect_priorities(message):
+        return slm
+    if any(y.type == "kich_ban" for y in slm.cac_y):
+        return slm
+    scenario = SlmY(
+        type="kich_ban",
+        doan=message,
+        thuc_the={"che_do": "what_if", "thay_doi": [{"yeu_to": PRIORITY_KEY, "gia_tri": "uu_tien"}]},
+    )
+    # Tin có số liệu thì giữ các ý khác (có thể là hồ sơ); chỉ nói về ưu tiên thì bỏ ý SLM đoán sai
+    keep = list(slm.cac_y) if re.search(r"\d", message) else []
+    return slm.model_copy(update={"cac_y": [scenario, *keep]})
+
+
 # Phần kết quả SLM giao cho nhánh của một ý: nhánh hồ sơ cần cả tin, nhánh khác chỉ cần ý của nó
 def view_of(slm: SlmTinResult, y: SlmY) -> SlmTinResult:
     return slm if y.type == "mac_dinh" else slm.model_copy(update={"cac_y": [y]})
@@ -259,6 +281,7 @@ class ChatFlow:
             slm = SlmTinResult(cac_y=[SlmY(type="mac_dinh", doan=message)])
         else:
             slm = await self._slm.classify(state, message)
+            slm = with_priority_intent(state, message, slm)
 
         # 2. Chạy từng ý theo thứ tự, ghép câu trả lời
         names, output = await self._run_intents(state, message, slm, emit)
