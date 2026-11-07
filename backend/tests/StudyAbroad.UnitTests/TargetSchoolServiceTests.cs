@@ -168,6 +168,85 @@ public class TargetSchoolServiceTests
         Assert.Null(dto);
     }
 
+    [Fact]
+    public async Task RemoveTargetSchool_WhenExistsAndOwned_DeletesAndLogsAudit()
+    {
+        var request = new AddTargetSchoolRequest(UniversityId: _uniId, Category: "reach");
+        var addResult = await _service.AddTargetSchoolAsync(_userId, request);
+        var id = addResult.TargetSchool!.Id;
+
+        var removed = await _service.RemoveTargetSchoolAsync(_userId, id);
+
+        Assert.True(removed);
+        Assert.Empty(_repo.TargetSchools);
+        Assert.Contains(_auditLogs.Entries, a => a.Action == "target_school.remove" && a.EntityId == id.ToString() && a.ActorUserId == _userId);
+    }
+
+    [Fact]
+    public async Task RemoveTargetSchool_WhenDifferentUser_ReturnsFalseAndDoesNotDelete()
+    {
+        var request = new AddTargetSchoolRequest(UniversityId: _uniId);
+        var addResult = await _service.AddTargetSchoolAsync(_userId, request);
+        var id = addResult.TargetSchool!.Id;
+
+        var otherUser = Guid.NewGuid();
+        var removed = await _service.RemoveTargetSchoolAsync(otherUser, id);
+
+        Assert.False(removed);
+        Assert.Single(_repo.TargetSchools);
+    }
+
+    [Fact]
+    public async Task RemoveTargetSchool_WhenNotFound_ReturnsFalse()
+    {
+        var removed = await _service.RemoveTargetSchoolAsync(_userId, Guid.NewGuid());
+        Assert.False(removed);
+    }
+
+    [Fact]
+    public async Task RemoveTargetSchoolByUniversity_WhenByCode_DeletesSuccessfully()
+    {
+        var request = new AddTargetSchoolRequest(UniversityId: _uniId);
+        await _service.AddTargetSchoolAsync(_userId, request);
+
+        var removed = await _service.RemoveTargetSchoolByUniversityAsync(_userId, "MIT");
+
+        Assert.True(removed);
+        Assert.Empty(_repo.TargetSchools);
+    }
+
+    [Fact]
+    public async Task RemoveTargetSchoolByUniversity_WhenById_DeletesSuccessfully()
+    {
+        var request = new AddTargetSchoolRequest(UniversityId: _uniId);
+        await _service.AddTargetSchoolAsync(_userId, request);
+
+        var removed = await _service.RemoveTargetSchoolByUniversityAsync(_userId, _uniId.ToString());
+
+        Assert.True(removed);
+        Assert.Empty(_repo.TargetSchools);
+    }
+
+    [Fact]
+    public async Task CheckTargetSchool_WhenSaved_ReturnsDto()
+    {
+        var request = new AddTargetSchoolRequest(UniversityId: _uniId, Category: "match");
+        await _service.AddTargetSchoolAsync(_userId, request);
+
+        var dto = await _service.CheckTargetSchoolAsync(_userId, "MIT", null);
+
+        Assert.NotNull(dto);
+        Assert.Equal("MIT", dto.UniversityCode);
+        Assert.Equal("match", dto.Category);
+    }
+
+    [Fact]
+    public async Task CheckTargetSchool_WhenNotSaved_ReturnsNull()
+    {
+        var dto = await _service.CheckTargetSchoolAsync(_userId, "MIT", null);
+        Assert.Null(dto);
+    }
+
     private sealed class FakeTargetSchoolRepository : ITargetSchoolRepository
     {
         public List<TargetSchool> TargetSchools { get; } = [];
@@ -216,6 +295,46 @@ public class TargetSchoolServiceTests
         {
             TargetSchools.Add(targetSchool);
             return Task.FromResult(targetSchool);
+        }
+
+        public Task DeleteAsync(TargetSchool targetSchool, CancellationToken ct = default)
+        {
+            TargetSchools.Remove(targetSchool);
+            return Task.CompletedTask;
+        }
+
+        public Task<TargetSchool?> GetByUserAndUniversityCodeAsync(Guid userId, string code, CancellationToken ct = default)
+        {
+            var u = Universities.FirstOrDefault(x => x.Code == code);
+            if (u == null) return Task.FromResult<TargetSchool?>(null);
+            return Task.FromResult(TargetSchools.FirstOrDefault(x => x.UserId == userId && x.UniversityId == u.Id));
+        }
+
+        public Task<TargetSchoolDto?> GetDtoByUserAndUniversityCodeAsync(Guid userId, string code, CancellationToken ct = default)
+        {
+            var u = Universities.FirstOrDefault(x => x.Code == code);
+            if (u == null) return Task.FromResult<TargetSchoolDto?>(null);
+            var ts = TargetSchools.FirstOrDefault(x => x.UserId == userId && x.UniversityId == u.Id);
+            if (ts == null) return Task.FromResult<TargetSchoolDto?>(null);
+            return Task.FromResult<TargetSchoolDto?>(new TargetSchoolDto(
+                ts.Id,
+                ts.UserId,
+                ts.UniversityId,
+                u.Code,
+                u.Name,
+                u.City,
+                u.State,
+                u.Website,
+                u.Control,
+                u.AcceptanceRate,
+                ts.Category,
+                ts.Status,
+                ts.Priority,
+                ts.Notes,
+                ts.ApplicationRound,
+                ts.Deadline,
+                ts.CreatedAt,
+                ts.UpdatedAt));
         }
 
         public Task<University?> GetUniversityAsync(Guid universityId, CancellationToken ct = default) =>

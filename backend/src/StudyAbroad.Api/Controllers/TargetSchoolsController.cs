@@ -44,4 +44,46 @@ public class TargetSchoolsController(ITargetSchoolService service) : ControllerB
         var targetSchool = await service.GetByIdAsync(id, userId, ct);
         return targetSchool is null ? NotFound() : Ok(targetSchool);
     }
+
+    /// <summary>
+    /// [UC-31] Xóa một trường khỏi danh sách mục tiêu theo ID của mục tiêu.
+    /// </summary>
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> RemoveTargetSchool(Guid id, CancellationToken ct)
+    {
+        if (User.GetUserId() is not { } userId)
+            return Unauthorized();
+
+        var success = await service.RemoveTargetSchoolAsync(userId, id, ct);
+        return success ? NoContent() : NotFound();
+    }
+
+    /// <summary>
+    /// [UC-31] Xóa một trường khỏi danh sách mục tiêu theo University Code hoặc University ID.
+    /// </summary>
+    [HttpDelete("by-university/{universityIdentifier}")]
+    public async Task<IActionResult> RemoveByUniversity(string universityIdentifier, CancellationToken ct)
+    {
+        if (User.GetUserId() is not { } userId)
+            return Unauthorized();
+
+        var success = await service.RemoveTargetSchoolByUniversityAsync(userId, universityIdentifier, ct);
+        return success ? NoContent() : NotFound();
+    }
+
+    /// <summary>
+    /// Kiểm tra xem một trường đại học đã có trong danh sách mục tiêu của học sinh hay chưa.
+    /// </summary>
+    [HttpGet("check")]
+    public async Task<ActionResult<TargetSchoolDto?>> CheckTargetSchool(
+        [FromQuery] string? universityCode,
+        [FromQuery] Guid? universityId,
+        CancellationToken ct)
+    {
+        if (User.GetUserId() is not { } userId)
+            return Unauthorized();
+
+        var dto = await service.CheckTargetSchoolAsync(userId, universityCode, universityId, ct);
+        return Ok(dto);
+    }
 }
