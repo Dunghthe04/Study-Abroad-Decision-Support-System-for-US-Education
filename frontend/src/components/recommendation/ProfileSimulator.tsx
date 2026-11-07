@@ -249,6 +249,8 @@ function ExtracurricularSummary({ tier, activities, awards }: { tier: number; ac
       <Button
         variant="outline"
         size="sm"
+        nativeButton={false}
+        role="link"
         className="text-xs font-semibold text-brand hover:bg-brand-wash"
         render={<a href="/analysis?edit=1" target="_blank" rel="noopener noreferrer" />}
       >
