@@ -33,6 +33,16 @@ class ResultSchool(CamelModel):
 
 # Trạng thái code giữ giữa các lượt (fw 4.3)
 # Hệ thống lưu lại thông tin về tiến trình hội thoại để khi người dùng nhắn tin tiếp theo, AI biết mình đang làm đến đâu.
+# Ngữ cảnh hội thoại để hiểu câu hỏi tiếp (conversation_context.py). Chỉ thực thể có cấu trúc, mất khi cuộc trò chuyện mới.
+# schools: tên trường đang nói tới (như model trả; .NET khớp lại với danh sách trường); fields: mã mục vừa hỏi;
+# bo_loc, sort: điều kiện tìm trường gần nhất (dạng model trả), để câu tiếp nối thêm điều kiện mới vào
+class ChatContext(CamelModel):
+    schools: list[str] = []
+    fields: list[str] = []
+    bo_loc: dict[str, Any] | None = None
+    sort: str | None = None
+
+
 class ChatState(CamelModel):
     current_step: Step = "B0"
     need: str | None = None
@@ -58,6 +68,7 @@ class ChatState(CamelModel):
     # Câu tư vấn bị hoãn vì thiếu hồ sơ (giữ nguyên ý SLM đã tách: loại, đoạn chữ, thực thể).
     # Học sinh xác nhận hồ sơ ở X1 thì nhánh hồ sơ lấy ra trả lời rồi xóa. Chỉ giữ câu đầu tiên
     pending_advice: SlmY | None = None
+    context: ChatContext = ChatContext()  # trường, mục, điều kiện vừa nói: hiểu câu hỏi tiếp
 
 
 # Nguồn trích dẫn, khớp record Citation bên .NET
@@ -110,6 +121,15 @@ class ChatResponse(CamelModel):
     # "explain" = viết lời tư vấn một trường (action_data["code"]),
     # "goal_seek" = tìm mức cần đạt để vào một trường (action_data["school"]: tên trường học sinh nói, ["target"]: reach | match | safety | None),
     # "simulate" = chạy what-if (action_data["changes"]: giá trị đã kiểm tra, ["unsupported"]: yếu tố chưa thử được),
+    # "school_info" = câu kiến thức có thể hỏi số liệu một trường: .NET thử lấy số từ cơ sở dữ liệu, không có thì giữ câu trả lời của kho kiến thức
+    #   (action_data["question"]: câu hỏi, ["school"]: tên trường SLM trích hoặc None, ["kb_answer"]: câu trả lời của kho, ["kb_found"]: kho có nguồn thật),
+    # "school_compare" = so sánh sự thật của từ hai trường (action_data["schools"]: tên như học sinh gõ, ["fields"]: mã mục, ["question"]),
+    # "school_search" = tìm trường theo điều kiện (action_data["filters"]: bộ lọc đã chuẩn hóa camelCase, ["sort"]: cách xếp, ["unresolved"]: điều chưa đọc được),
     # None = không có
-    action: Literal["recommend", "explain", "simulate", "goal_seek"] | None = None
+    action: (
+        Literal[
+            "recommend", "explain", "simulate", "goal_seek", "school_info", "school_compare", "school_search"
+        ]
+        | None
+    ) = None
     action_data: dict[str, Any] = {}  # dữ liệu kèm action, ví dụ {"code": "ucla"} cho explain

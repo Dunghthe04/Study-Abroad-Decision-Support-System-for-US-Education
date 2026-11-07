@@ -9,13 +9,14 @@ from app.services.branches import (
     ASK_SCHOOL,
     CANNOT_ANSWER,
     DEFAULT_QUESTION,
+    LOOKING_UP,
     NEED_RESULTS,
     NOTHING_TO_TRY,
     OUT_OF_SCOPE,
     RECOMMENDING,
     SKILL_NOT_READY,
+    KnowledgeBranch,
     NotReadyBranch,
-    SkillBranch,
     build_branches,
 )
 from app.services.chat_flow import NEED_MAJOR, NEED_PROFILE, QUESTIONS, SkillOutput, ask, go_to
@@ -59,7 +60,7 @@ def test_knowledge_and_centers_say_not_ready_when_their_skill_is_not_registered(
     assert isinstance(branches["kien_thuc"], NotReadyBranch) and isinstance(
         branches["trung_tam"], NotReadyBranch
     )
-    assert isinstance(build_branches(skills([]))["kien_thuc"], SkillBranch)
+    assert isinstance(build_branches(skills([]))["kien_thuc"], KnowledgeBranch)
 
 
 def scenario(**entities):
@@ -165,6 +166,138 @@ async def test_knowledge_and_center_branches_run_their_skill():
     await branches["trung_tam"].run(ChatState(), "ai sửa bài luận", tin("trung_tam"))
 
     assert ran == ["skill_tra_loi", "skill_chuyen_trung_tam"]
+
+
+async def test_knowledge_branch_hands_the_question_to_dotnet_so_it_can_try_the_database_first():
+    ran: list[str] = []
+    branches = build_branches(skills(ran))
+
+    out = await branches["kien_thuc"].run(
+        ChatState(),
+        "học phí Harvard bao nhiêu",
+        tin(("kien_thuc", {"truong": "Harvard"}, "học phí Harvard bao nhiêu")),
+    )
+
+    assert ran == ["skill_tra_loi"]  # kho kiến thức vẫn chạy: là câu trả lời dự phòng
+    assert out.answer == "trả lời của skill_tra_loi"
+    assert out.action == "school_info"
+    assert out.action_data == {
+        "question": "học phí Harvard bao nhiêu",
+        "school": "Harvard",
+        "fields": [],
+        "task": None,
+        "kb_answer": "trả lời của skill_tra_loi",
+        "kb_found": False,
+        "kb_skipped": False,
+    }
+
+
+async def test_a_comparison_the_model_read_goes_to_dotnet_without_the_knowledge_base():
+    ran: list[str] = []
+    branches = build_branches(skills(ran))
+    thuc_the = {"cac_truong": ["BU", "NYU"], "nhiem_vu": "so_sanh", "muc": ["chi_phi"]}
+
+    out = await branches["kien_thuc"].run(
+        ChatState(),
+        "học phí BU và NYU chênh nhau bao nhiêu",
+        tin(("kien_thuc", thuc_the, "học phí BU và NYU chênh nhau bao nhiêu")),
+    )
+
+    assert ran == []
+    assert out.action == "school_compare"
+    assert out.action_data == {
+        "question": "học phí BU và NYU chênh nhau bao nhiêu",
+        "schools": ["BU", "NYU"],
+        "fields": ["chi_phi"],
+        "kb_answer": LOOKING_UP,
+    }
+    assert out.answer == LOOKING_UP
+
+
+async def test_a_search_the_model_read_is_normalized_and_goes_to_dotnet_without_the_knowledge_base(
+    monkeypatch,
+):
+    from app.services.skills import exchange_rate, major_catalog, state_catalog
+    from app.services.skills.state_catalog import UsState
+
+    state_catalog.set_states([UsState("TX", "Texas")])
+    major_catalog.set_majors([])
+    monkeypatch.setattr(exchange_rate, "_rate", 25_000.0)
+    try:
+        ran: list[str] = []
+        branches = build_branches(skills(ran))
+        thuc_the = {
+            "nhiem_vu": "tim_kiem",
+            "bo_loc": {"bang": ["texas"], "chi_phi_toi_da": "30 nghìn đô", "hoc_bong": "co"},
+            "sap_xep": "chi_phi_thap",
+        }
+
+        out = await branches["kien_thuc"].run(
+            ChatState(), "x", tin(("kien_thuc", thuc_the, "trường rẻ nhất ở texas có học bổng"))
+        )
+    finally:
+        state_catalog.set_states(None)
+        major_catalog.set_majors(None)
+
+    assert ran == []
+    assert out.action == "school_search"
+    assert out.action_data == {
+        "question": "trường rẻ nhất ở texas có học bổng",
+        "filters": {"states": ["TX"], "maxCostUsd": 30000, "aid": "any"},
+        "sort": "lowestCost",
+        "unresolved": [],
+        "bo_loc": {"bang": ["texas"], "chi_phi_toi_da": "30 nghìn đô", "hoc_bong": "co"},
+        "sap_xep": "chi_phi_thap",
+        "kb_answer": LOOKING_UP,
+    }
+
+
+async def test_when_the_model_returns_the_school_and_the_fields_the_knowledge_base_is_skipped():
+    ran: list[str] = []
+    branches = build_branches(skills(ran))
+    thuc_the = {"truong": "harvard", "nhiem_vu": "tra_cuu", "muc": ["gpa", "xep_hang"]}
+
+    out = await branches["kien_thuc"].run(
+        ChatState(),
+        "gpa đại học harvard là bao nhiêu",
+        tin(("kien_thuc", thuc_the, "gpa đại học harvard là bao nhiêu")),
+    )
+
+    assert ran == []  # model đã đọc trường và mục: tin model, không chạy kho kiến thức
+    assert out.answer == LOOKING_UP
+    assert out.action == "school_info"
+    assert out.action_data["fields"] == ["gpa", "xep_hang"]
+    assert out.action_data["school"] == "harvard"
+    assert out.action_data["kb_skipped"] is True
+    assert out.action_data["kb_answer"] == LOOKING_UP  # để .NET thay đúng câu tạm này
+
+
+@pytest.mark.parametrize(
+    "thuc_the",
+    [
+        {"truong": "Harvard"},  # có trường, chưa có mục
+        {"muc": ["chi_phi"]},  # có mục, chưa có trường
+        {"truong": "Harvard", "muc": ["khac"]},  # điều hệ thống không lưu: kho có thể có
+        {"truong": "Harvard", "nhiem_vu": "tra_cuu"},  # có trường và nhiệm vụ, chưa có mục
+    ],
+)
+async def test_the_knowledge_base_still_runs_when_the_model_is_not_sure_enough(thuc_the):
+    ran: list[str] = []
+    branches = build_branches(skills(ran))
+
+    out = await branches["kien_thuc"].run(ChatState(), "x", tin(("kien_thuc", thuc_the, "x")))
+
+    assert ran == ["skill_tra_loi"]
+    assert out.action_data["kb_skipped"] is False
+
+
+async def test_knowledge_branch_without_a_school_still_hands_over_the_question():
+    branches = build_branches(skills([]))
+
+    out = await branches["kien_thuc"].run(ChatState(), "I-20 là gì", tin(("kien_thuc", {}, "I-20 là gì")))
+
+    assert out.action_data["school"] is None
+    assert out.action_data["question"] == "I-20 là gì"
 
 
 # ---- ngoài phạm vi ----

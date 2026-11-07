@@ -52,8 +52,17 @@ async def test_chat_flow_passes_the_action_of_a_skill_to_the_response():
 
 
 async def test_chat_flow_has_no_action_when_no_skill_asks_for_one():
+    flow = flow_with({"skill_chuyen_trung_tam": SkillWith("Có các trung tâm sau ...")}, tin("trung_tam"))
+
+    res = await flow.reply(request("trung tâm nào sửa bài luận"))
+
+    assert res.action is None
+
+
+async def test_knowledge_answers_carry_the_school_info_action_so_dotnet_can_try_the_database_first():
     flow = flow_with({"skill_tra_loi": SkillWith("Phí SEVIS là ...")}, tin("kien_thuc"))
 
     res = await flow.reply(request("phí sevis bao nhiêu"))
 
-    assert res.action is None
+    assert res.action == "school_info"
+    assert res.action_data["kb_answer"] == "Phí SEVIS là ..."

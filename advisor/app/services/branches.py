@@ -6,7 +6,8 @@ làm xong thì thay lớp đó trong build_branches, không phải sửa ChatFlo
 """
 
 from app.schemas.chat import ChatState, QuickReply, Widget
-from app.schemas.slm import SlmTinResult, SlmY
+from app.schemas.slm import INFO_FIELDS, SlmTinResult, SlmY
+from app.services import search_filters
 from app.services.advice_writer import AdviceWriter
 from app.services.chat_flow import (
     NEED_PROFILE,
@@ -21,6 +22,7 @@ from app.services.chat_flow import (
 )
 from app.services.goal_target import parse_target, plain
 from app.services.priority import detect_priorities
+from app.services.priority import from_model as priority_from_model
 from app.services.priority import label as priority_label
 from app.services.scenario import SUPPORTED_TEXT, parse_what_if
 from app.services.skill_generator import SkillGenerator
@@ -37,6 +39,79 @@ class SkillBranch:
 
     async def run(self, state: ChatState, message: str, slm: SlmTinResult) -> SkillOutput:
         return await self._skill.run(state, message)
+
+
+# Kiến thức: kho kiến thức trả lời như cũ, và gửi kèm câu hỏi cho .NET (action "school_info").
+# .NET thử lấy số liệu thật của trường từ cơ sở dữ liệu trước ("học phí Harvard bao nhiêu"); không phải câu hỏi về một trường
+# hoặc cơ sở dữ liệu không có thì giữ nguyên câu trả lời của kho, nên nhánh này không làm hỏng câu kiến thức chung.
+# Bước hiểu mục hỏi và khớp tên trường làm ở .NET, bằng từ khóa và bộ khớp tên (SLM v2 sẽ trả sẵn trường và mục khi đã huấn luyện lại).
+#
+# Model đã đọc câu và trả đủ trường (truong) lẫn mục hỏi (muc) thì tin model: bỏ qua kho kiến thức (nhanh hơn, đỡ một lượt gọi),
+# giao .NET tra thẳng cơ sở dữ liệu theo đúng điều model trả. Câu trả lời tạm LOOKING_UP chỉ hiện nếu .NET chưa kịp thay.
+# Model chỉ trả một trong hai, hoặc mục "khac" (điều hệ thống không lưu) thì vẫn chạy kho kiến thức làm dự phòng như trên.
+LOOKING_UP = "Mình đang tra số liệu của trường này nhé."
+
+
+def info_fields(thuc_the: dict) -> list[str]:
+    """Các mã mục model trả (đã kiểm ở check_entities), theo thứ tự model trả, không trùng."""
+    return list(dict.fromkeys(m for m in thuc_the.get("muc") or [] if m in INFO_FIELDS))
+
+
+class KnowledgeBranch:
+    def __init__(self, skill: SkillHandler) -> None:
+        self._skill = skill
+
+    async def run(self, state: ChatState, message: str, slm: SlmTinResult) -> SkillOutput:
+        y = slm.cac_y[0]
+        school = str(y.thuc_the.get("truong") or "").strip() or None
+        fields = info_fields(y.thuc_the)
+        task = y.thuc_the.get("nhiem_vu")
+        # Tìm trường theo điều kiện: model đã trả bo_loc, đổi chữ học sinh gõ sang bộ lọc chuẩn (mã bang, USD...) rồi giao .NET lọc.
+        # Không chạy kho kiến thức. Điều nào chưa đọc chắc chắn được thì ghi vào unresolved để hệ thống hỏi lại, không bỏ qua lặng lẽ
+        bo_loc = y.thuc_the.get("bo_loc")
+        if task == "tim_kiem" and bo_loc:
+            plan = await search_filters.normalize(bo_loc, y.thuc_the.get("sap_xep"))
+            return SkillOutput(
+                LOOKING_UP,
+                action="school_search",
+                action_data={
+                    "question": y.doan,
+                    "filters": plan.filters,
+                    "sort": plan.sort,
+                    "unresolved": plan.unresolved,
+                    "bo_loc": bo_loc,  # dạng model trả, để câu tiếp nối thêm điều kiện vào
+                    "sap_xep": y.thuc_the.get("sap_xep"),
+                    "kb_answer": LOOKING_UP,
+                },
+            )
+        # So sánh sự thật của từ hai trường: model đã trả các trường (cac_truong), bỏ qua kho kiến thức, .NET lấy số liệu từng trường
+        schools = [t.strip() for t in y.thuc_the.get("cac_truong") or [] if isinstance(t, str) and t.strip()]
+        if task == "so_sanh" and len(schools) >= 2:
+            return SkillOutput(
+                LOOKING_UP,
+                action="school_compare",
+                action_data={
+                    "question": y.doan,
+                    "schools": schools,
+                    "fields": fields,
+                    "kb_answer": LOOKING_UP,
+                },
+            )
+        trusted = task in (None, "tra_cuu") and school is not None and any(f != "khac" for f in fields)
+        out = SkillOutput(LOOKING_UP) if trusted else await self._skill.run(state, message)
+        if out.action is not None:
+            return out
+        out.action = "school_info"
+        out.action_data = {
+            "question": y.doan,
+            "school": school,
+            "fields": fields,
+            "task": task,
+            "kb_answer": out.answer,
+            "kb_found": bool(out.citations),
+            "kb_skipped": trusted,
+        }
+        return out
 
 
 # Nhánh chưa làm: báo đang hoàn thiện (kịch bản; kiến thức khi chưa có DB; trung tâm khi chưa có backend)
@@ -66,7 +141,8 @@ class ScenarioBranch:
             what_if = parse_what_if(entities.get("thay_doi", []))
         except AskAgain as ask:
             return SkillOutput(ask.question)
-        priorities = detect_priorities(message)
+        # Ưu tiên: model trả (priority_*) thì tin model, quy tắc từ khóa bổ sung cho yếu tố model chưa nêu
+        priorities = {**detect_priorities(message), **priority_from_model(entities.get("thay_doi", []))}
         if not what_if.changes and not priorities:
             return SkillOutput(NOTHING_TO_TRY)
         note = f" Mình chưa thử được: {', '.join(what_if.unsupported)}." if what_if.unsupported else ""
@@ -262,7 +338,9 @@ def build_branches(
         "mac_dinh": ProfileBranch(ChatProfileHandler(skills), advice),
         "ho_so": advice,
         "kich_ban": ScenarioBranch(),
-        "kien_thuc": SkillBranch(skills["skill_tra_loi"]) if "skill_tra_loi" in skills else NotReadyBranch(),
+        "kien_thuc": KnowledgeBranch(skills["skill_tra_loi"])
+        if "skill_tra_loi" in skills
+        else NotReadyBranch(),
         "trung_tam": (
             SkillBranch(skills["skill_chuyen_trung_tam"])
             if "skill_chuyen_trung_tam" in skills

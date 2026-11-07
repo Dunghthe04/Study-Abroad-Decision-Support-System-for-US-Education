@@ -142,7 +142,9 @@ def parse_what_if(changes: list[dict[str, Any]]) -> WhatIf:
     result = WhatIf()
     for change in changes:
         key = change.get("yeu_to")
-        if key == PRIORITY_KEY:  # ưu tiên đọc riêng bằng quy tắc (priority.py), không phải giá trị hồ sơ
+        if key == PRIORITY_KEY or str(key).startswith(
+            "priority_"
+        ):  # ưu tiên đọc riêng (priority.py), không phải giá trị hồ sơ
             continue
         checked = None
         if key in SUPPORTED and change.get("hanh_dong") != SKIP_ACTION:

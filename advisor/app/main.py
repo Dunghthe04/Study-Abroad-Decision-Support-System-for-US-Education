@@ -15,6 +15,7 @@ from app.services.advice_writer import AdviceWriter
 from app.services.branches import build_branches
 from app.services.centers import CenterFinder
 from app.services.chat_flow import ChatFlow
+from app.services.compare_writer import CompareWriter
 from app.services.ec_reader import EcReader
 from app.services.explainer import Explainer
 from app.services.gemini import GeminiClient
@@ -69,6 +70,7 @@ async def lifespan(app: FastAPI):
         app.state.explainer = Explainer(gemini, settings.gemini_model)
         app.state.scenario_writer = ScenarioWriter(gemini, settings.gemini_model)
         app.state.goal_writer = GoalWriter(gemini, settings.gemini_model)
+        app.state.compare_writer = CompareWriter(gemini, settings.gemini_model)
         # Kho kiến thức: không có DB thì None, chat vẫn chạy nhưng chưa trả lời được câu hỏi kiến thức
         app.state.db_pool = await asyncio.to_thread(open_pool, settings.database_url)
         knowledge = None
@@ -89,7 +91,7 @@ async def lifespan(app: FastAPI):
             seed=settings.llm_seed,
             keep_alive=settings.llm_keep_alive,
         )
-        slm = OllamaSlm(slm_client, output_format(settings.slm_format))
+        slm = OllamaSlm(slm_client, output_format(settings.slm_format), settings.slm_use_context)
         # Cùng một SLM vừa tách ý vừa sinh skill hồ sơ; Gemini viết câu trả lời theo skill đó
         skill_log_dir = ADVISOR_DIR / settings.skill_log_dir if settings.skill_log_dir else None
         generator = SkillGenerator(slm_client, log_dir=skill_log_dir)

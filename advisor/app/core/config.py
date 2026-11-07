@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     llm_model: str = ""
     slm_model: str = "usas-slm-v2"
     slm_format: str = "json"
+    # Đưa ngữ cảnh hội thoại (dang_noi_ve) vào đầu vào của SLM. Bật SAU khi model đã được huấn luyện với khóa này:
+    # model chưa học thấy khóa lạ có thể đọc sai. Tắt thì chỉ chạy quy tắc dự phòng trong conversation_context
+    slm_use_context: bool = False
     llm_timeout_seconds: float = 120
     # Kích thước context window dự kiến
     llm_num_ctx: int = 6144
