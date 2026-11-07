@@ -569,6 +569,243 @@ public class RecommendationServiceTests
         Assert.Equal(1, result.Profile.AwardCount);
     }
 
+    // ---- thông tin một trường (chat trả lời "học phí X bao nhiêu"): số thật từ dữ liệu, không cần hồ sơ đủ
+
+    private static RecommendSchoolInput InfoSchool()
+    {
+        var school = School("S", 40_000m, "need_and_merit", Major, sat: (1370, 1530), accept: 0.30m, minIelts: 7m, minToefl: 100m);
+        var o = school.Offering;
+        o.LivingUsd = 15_000m; o.FeesUsd = 3_000m; o.OtherExpensesUsd = 2_000m;
+        o.IntlAidAvgUsd = 25_000m; o.IntlAidRecipients = 120; o.SatPolicy = "optional";
+        o.Act25 = 31; o.Act75 = 35; o.RetentionRate1Yr = 0.95m; o.GradRate6Yr = 0.91m;
+        o.IntlApplicants = 1000; o.IntlAdmitted = 100;
+        o.DeadlinesJson = """{"RD":"2027-01-05","ED":"2026-11-01"}""";
+        school.University.City = "Boston"; school.University.Website = "https://example.edu";
+        return school;
+    }
+
+    [Fact]
+    public async Task SchoolInfo_ReturnsTheRealNumbersOfOneSchool()
+    {
+        var (service, _, store) = Setup(Profile(), [InfoSchool()]);
+        store.Rankings.Add(new SchoolRanking("U.S. News Best Colleges 2027 – National Universities", "Tổng quát", 2027, 42, "#42", false));
+
+        var info = await service.SchoolInfoAsync(Guid.NewGuid(), "s", default);   // mã không phân biệt hoa thường
+
+        Assert.Equal(("S", "NY", "private", "Boston"), (info.Code, info.State, info.Control, info.City));
+        Assert.Equal(new SchoolCostInfo(40_000m, 15_000m, 3_000m, 2_000m, 60_000m), info.Cost);
+        Assert.Equal(new SchoolEnglishInfo(7m, 100m, null), info.English);
+        Assert.Equal(new SchoolTestInfo("optional", 1370, 1530, 31, 35), info.Test);
+        Assert.Equal(0.30m, info.Admission.AcceptRate);
+        Assert.Equal(0.10m, info.Admission.IntlAcceptRate);      // 100 / 1000
+        Assert.Equal(new SchoolAidInfo("need_and_merit", 25_000m, 120), info.Aid);
+        Assert.Equal(new SchoolOutcomeInfo(0.95m, 0.91m), info.Outcomes);
+        Assert.Equal([Major], info.Majors);
+        Assert.Equal(42, Assert.Single(info.Rankings).Rank);
+        Assert.Equal([new SchoolDeadline("ED", "2026-11-01"), new SchoolDeadline("RD", "2027-01-05")], info.Deadlines);   // theo ngày
+    }
+
+    [Fact]
+    public async Task SchoolInfo_DropsSatQuartilesThatAreOnTheWrongScale()
+    {
+        var school = InfoSchool();
+        school.Offering.Sat25 = 665; school.Offering.Sat75 = 739;   // điểm một phần thi, không phải SAT tổng
+        var (service, _, _) = Setup(Profile(), [school]);
+
+        var info = await service.SchoolInfoAsync(Guid.NewGuid(), "S", default);
+
+        Assert.Null(info.Test.Sat25);
+        Assert.Null(info.Test.Sat75);
+    }
+
+    [Fact]
+    public async Task SchoolInfo_AUnknownSchool_Throws()
+    {
+        var (service, _, _) = Setup(Profile(), [InfoSchool()]);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.SchoolInfoAsync(Guid.NewGuid(), "ZZZ", default));
+
+        Assert.StartsWith("Chưa có trường ZZZ", ex.Message);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("không phải json")]
+    [InlineData("[1,2]")]
+    [InlineData("""{"RD":null,"ED":42}""")]
+    public void ParseDeadlines_BadOrEmptyData_GivesNoDeadlinesInsteadOfFailing(string? json)
+    {
+        Assert.Empty(RecommendationService.ParseDeadlines(json));
+    }
+
+    // ---- tìm trường theo điều kiện (không dùng hồ sơ học sinh)
+
+    private static RecommendSchoolInput SearchSchool(
+        string code, string state, string control, decimal tuition, string aid = "none", string sat = "required",
+        decimal? accept = 0.5m, decimal? ielts = 6.5m, string[]? majors = null, (int Rank, int Total)? rank = null, string? city = null, bool ivy = false)
+    {
+        var school = School(code, tuition, aid, majors?[0] ?? "Computer Science", accept: accept, minIelts: ielts, rank: rank);
+        school.University.State = state;
+        school.University.Control = control;
+        school.University.City = city;
+        school.University.IsIvy = ivy;
+        school.Offering.SatPolicy = sat;
+        school.Offering.LivingUsd = 10_000m;
+        return majors is { Length: > 1 } ? school with { Majors = majors } : school;
+    }
+
+    private static async Task<SchoolSearchResult> SearchWith(
+        SchoolSearchFilters filters, SchoolSort sort = SchoolSort.Quality, params RecommendSchoolInput[] schools)
+    {
+        var profile = Profile();
+        var (service, _, _) = Setup(profile, schools);
+        return await service.SearchSchoolsAsync(profile.UserId, filters, sort, default);
+    }
+
+    [Fact]
+    public async Task Search_FiltersByStateAndAid_AndSaysHowManyMatched()
+    {
+        var result = await SearchWith(
+            new SchoolSearchFilters(States: ["CA"], Aid: "any"), SchoolSort.Quality,
+            SearchSchool("a", "CA", "private", 40_000m, aid: "need_and_merit"),
+            SearchSchool("b", "CA", "public", 20_000m, aid: "none"),          // không có học bổng cho du học sinh
+            SearchSchool("c", "TX", "private", 30_000m, aid: "merit_only"),    // sai bang
+            SearchSchool("d", "CA", "public", 25_000m, aid: "merit_only"));
+
+        Assert.Equal(2, result.Total);
+        Assert.Equal(["a", "d"], result.Items.Select(i => i.Code).OrderBy(c => c));
+    }
+
+    [Fact]
+    public async Task Search_AllConditionsMustHoldTogether()
+    {
+        var result = await SearchWith(
+            new SchoolSearchFilters(States: ["TX"], Control: "public", MaxCostUsd: 35_000m, TestPolicy: "optional"), SchoolSort.Quality,
+            SearchSchool("ok", "TX", "public", 20_000m, sat: "optional"),                 // chi phí 30.000 (20.000 học phí + 10.000 sinh hoạt)
+            SearchSchool("pricey", "TX", "public", 40_000m, sat: "optional"),            // 50.000 vượt mức
+            SearchSchool("private", "TX", "private", 20_000m, sat: "optional"),
+            SearchSchool("needs-sat", "TX", "public", 20_000m, sat: "required"));
+
+        Assert.Equal(["ok"], result.Items.Select(i => i.Code));
+    }
+
+    [Theory]
+    [InlineData("optional", new[] { "opt", "none" })]       // test-optional và không nhận SAT đều là "không cần SAT"
+    [InlineData("required", new[] { "req" })]
+    public async Task Search_TestPolicy(string wanted, string[] expected)
+    {
+        var result = await SearchWith(
+            new SchoolSearchFilters(TestPolicy: wanted), SchoolSort.Quality,
+            SearchSchool("opt", "TX", "public", 10_000m, sat: "optional"),
+            SearchSchool("none", "TX", "public", 10_000m, sat: "not_accepted"),
+            SearchSchool("req", "TX", "public", 10_000m, sat: "required"));
+
+        Assert.Equal(expected.OrderBy(c => c), result.Items.Select(i => i.Code).OrderBy(c => c));
+    }
+
+    [Theory]
+    [InlineData("need", new[] { "n", "nm" })]
+    [InlineData("merit", new[] { "m", "nm" })]
+    [InlineData("any", new[] { "n", "m", "nm" })]
+    public async Task Search_AidKinds(string wanted, string[] expected)
+    {
+        var result = await SearchWith(
+            new SchoolSearchFilters(Aid: wanted), SchoolSort.Quality,
+            SearchSchool("n", "TX", "public", 10_000m, aid: "need_only"),
+            SearchSchool("m", "TX", "public", 10_000m, aid: "merit_only"),
+            SearchSchool("nm", "TX", "public", 10_000m, aid: "need_and_merit"),
+            SearchSchool("none", "TX", "public", 10_000m, aid: "none"));
+
+        Assert.Equal(expected.OrderBy(c => c), result.Items.Select(i => i.Code).OrderBy(c => c));
+    }
+
+    [Fact]
+    public async Task Search_MajorCityEnglishRankAcceptanceAndIvy()
+    {
+        var schools = new[]
+        {
+            SearchSchool("cs-boston", "MA", "private", 50_000m, ielts: 7m, majors: ["Computer Science", "History"], rank: (10, 100), city: "Boston", accept: 0.2m),
+            SearchSchool("history", "MA", "private", 50_000m, ielts: 6m, majors: ["History"], rank: (60, 100), city: "Boston", accept: 0.6m),
+            SearchSchool("ivy", "RI", "private", 70_000m, ielts: 7.5m, majors: ["Economics"], rank: (14, 100), accept: 0.05m, ivy: true),
+        };
+
+        Assert.Equal(["cs-boston"], (await SearchWith(new SchoolSearchFilters(Major: "computer science"), SchoolSort.Quality, schools)).Items.Select(i => i.Code));
+        Assert.Equal(["cs-boston", "history"], (await SearchWith(new SchoolSearchFilters(City: "boston"), SchoolSort.Quality, schools)).Items.Select(i => i.Code));
+        Assert.Equal(["history"], (await SearchWith(new SchoolSearchFilters(MaxIelts: 6.5m), SchoolSort.Quality, schools)).Items.Select(i => i.Code));
+        Assert.Equal(["cs-boston", "ivy"], (await SearchWith(new SchoolSearchFilters(MaxRank: 20), SchoolSort.Quality, schools)).Items.Select(i => i.Code));
+        Assert.Equal(["cs-boston", "ivy"], (await SearchWith(new SchoolSearchFilters(MaxAcceptRate: 0.25m), SchoolSort.Quality, schools)).Items.Select(i => i.Code));
+        Assert.Equal(["history"], (await SearchWith(new SchoolSearchFilters(MinAcceptRate: 0.5m), SchoolSort.Quality, schools)).Items.Select(i => i.Code));
+        Assert.Equal(["ivy"], (await SearchWith(new SchoolSearchFilters(Ivy: true), SchoolSort.Quality, schools)).Items.Select(i => i.Code));
+    }
+
+    [Fact]
+    public async Task Search_ASchoolWithoutTheNumberBeingFilteredIsNotIncluded()
+    {
+        var unknownCost = SearchSchool("x", "TX", "public", 10_000m);
+        unknownCost.Offering.TuitionUsd = null;                      // chưa có học phí nên không có tổng chi phí
+        var known = SearchSchool("y", "TX", "public", 10_000m);
+
+        var result = await SearchWith(new SchoolSearchFilters(MaxCostUsd: 50_000m), SchoolSort.Quality, unknownCost, known);
+
+        Assert.Equal(["y"], result.Items.Select(i => i.Code));        // không thể nói trường x trong ngân sách khi chưa có số
+    }
+
+    [Fact]
+    public async Task Search_SortsByQualityByDefault_WithTheUnrankedLast()
+    {
+        var result = await SearchWith(
+            new SchoolSearchFilters(States: ["TX"]), SchoolSort.Quality,
+            SearchSchool("unranked", "TX", "public", 10_000m),
+            SearchSchool("mid", "TX", "public", 10_000m, rank: (50, 100)),
+            SearchSchool("top", "TX", "public", 10_000m, rank: (1, 100)));
+
+        Assert.Equal(["top", "mid", "unranked"], result.Items.Select(i => i.Code));
+        Assert.Equal(1, result.Items[0].BestRank);
+    }
+
+    [Fact]
+    public async Task Search_OtherSortOrders()
+    {
+        var schools = new[]
+        {
+            SearchSchool("cheap-hard", "TX", "public", 10_000m, accept: 0.1m),
+            SearchSchool("mid", "TX", "public", 30_000m, accept: 0.5m),
+            SearchSchool("pricey-easy", "TX", "public", 60_000m, accept: 0.9m),
+        };
+        var f = new SchoolSearchFilters(States: ["TX"]);
+
+        Assert.Equal(["cheap-hard", "mid", "pricey-easy"], (await SearchWith(f, SchoolSort.LowestCost, schools)).Items.Select(i => i.Code));
+        Assert.Equal(["pricey-easy", "mid", "cheap-hard"], (await SearchWith(f, SchoolSort.EasiestAdmission, schools)).Items.Select(i => i.Code));
+        Assert.Equal(["cheap-hard", "mid", "pricey-easy"], (await SearchWith(f, SchoolSort.MostSelective, schools)).Items.Select(i => i.Code));
+    }
+
+    [Fact]
+    public async Task Search_NothingMatches_SaysWhichConditionToDropToGetResults()
+    {
+        var result = await SearchWith(
+            new SchoolSearchFilters(States: ["TX"], Control: "public", Aid: "any"), SchoolSort.Quality,
+            SearchSchool("a", "TX", "private", 10_000m, aid: "need_only"),     // sai loại trường
+            SearchSchool("b", "TX", "private", 10_000m, aid: "merit_only"),
+            SearchSchool("c", "TX", "public", 10_000m, aid: "none"));           // không học bổng
+
+        Assert.Equal(0, result.Total);
+        Assert.Empty(result.Items);
+        // bỏ "loai_truong" thì còn 2 trường (a, b); bỏ "hoc_bong" thì còn 1 trường (c); bỏ "bang" vẫn 0 nên không nêu
+        Assert.Equal([("loai_truong", 2), ("hoc_bong", 1)], result.Relaxed.Select(r => (r.Filter, r.Total)));
+    }
+
+    [Fact]
+    public async Task Search_ReturnsAtMostAHundredItemsButTheRealTotal()
+    {
+        var many = Enumerable.Range(0, 130).Select(i => SearchSchool($"s{i:000}", "TX", "public", 10_000m)).ToArray();
+
+        var result = await SearchWith(new SchoolSearchFilters(States: ["TX"]), SchoolSort.Quality, many);
+
+        Assert.Equal(130, result.Total);
+        Assert.Equal(100, result.Items.Count);
+    }
+
     // ---- SAT của trường phải là điểm tổng
 
     // Dữ liệu trường đôi khi lưu mốc SAT của MỘT phần thi (665 đến 739): SAT tổng 1200 của học sinh không được "vượt" mốc đó (vị trí 100%)
@@ -1332,11 +1569,18 @@ public class RecommendationServiceTests
 
         public Task<GoalNoteResponseDto> WriteGoalNoteAsync(GoalNoteRequestDto request, CancellationToken ct = default) =>
             throw new NotSupportedException();
+
+        public Task<CompareNoteResponseDto> WriteCompareNoteAsync(CompareNoteRequestDto request, CancellationToken ct = default) =>
+            throw new NotSupportedException();
     }
 
     private sealed class FakeRecommendationRepository(IReadOnlyList<RecommendSchoolInput> schools) : IRecommendationRepository
     {
         public List<Recommendation> Rows { get; } = [];
+        public List<SchoolRanking> Rankings { get; } = [];
+
+        public Task<IReadOnlyList<SchoolRanking>> ListSchoolRankingsAsync(Guid universityId, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<SchoolRanking>>(Rankings);
 
         public Task AddAsync(Recommendation recommendation, CancellationToken ct = default)
         {

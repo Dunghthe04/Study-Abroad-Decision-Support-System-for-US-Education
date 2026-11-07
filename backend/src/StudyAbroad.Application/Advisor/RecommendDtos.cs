@@ -48,6 +48,18 @@ public record GoalNoteRequestDto(
     IReadOnlyList<string> Alternatives,
     IReadOnlyList<string> Others);
 
+// Nhận xét so sánh trường: Schools là tên các trường đang so sánh, Facts là số liệu code đã tra (mỗi dòng một mục), Others là tên các trường khác để advisor chặn nhắc tên ngoài danh sách.
+public record CompareNoteRequestDto(
+    IReadOnlyList<string> Schools,
+    IReadOnlyList<string> Facts,
+    IReadOnlyList<string> Others);
+
+public record CompareNoteResponseDto(
+    [property: JsonPropertyName("skill_version")] string SkillVersion,
+    string Model,
+    string Status,                       // OK | FAILED
+    string Answer);
+
 public record GoalNoteResponseDto(
     [property: JsonPropertyName("skill_version")] string SkillVersion,
     string Model,

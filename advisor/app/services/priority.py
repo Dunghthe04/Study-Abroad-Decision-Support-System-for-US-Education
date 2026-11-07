@@ -36,6 +36,10 @@ def _plain(text: str) -> str:
     return "".join(c for c in text if unicodedata.category(c) != "Mn")
 
 
+# Chữ thường, bỏ dấu: dùng chung cho các quy tắc đọc câu (ưu tiên, hỏi số liệu trường)
+unaccent = _plain
+
+
 def detect_priorities(message: str) -> dict[str, int]:
     """Yếu tố học sinh nhắc tới kèm mức 0..4; rỗng nếu không có ý nào về ưu tiên."""
     found: dict[str, int] = {}
@@ -55,6 +59,22 @@ def detect_priorities(message: str) -> dict[str, int]:
             continue
         for key in topics:
             found[key] = level
+    return found
+
+
+def from_model(changes: list[dict]) -> dict[str, int]:
+    """Ưu tiên model trả trong thay_doi (yeu_to = priority_cost | priority_aid | priority_prestige, gia_tri = 0..4). Giá trị sai thì bỏ."""
+    found: dict[str, int] = {}
+    for change in changes:
+        key = str(change.get("yeu_to", ""))
+        if not key.startswith("priority_") or key.removeprefix("priority_") not in KEYS:
+            continue
+        try:
+            level = int(str(change.get("gia_tri", "")).strip())
+        except ValueError:
+            continue
+        if 0 <= level <= LEVEL_MAX:
+            found[key.removeprefix("priority_")] = level
     return found
 
 

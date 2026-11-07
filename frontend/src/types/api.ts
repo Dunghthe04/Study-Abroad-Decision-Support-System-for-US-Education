@@ -61,7 +61,7 @@ export interface QuickReply {
 
 // Công cụ nhập ngay trong chat; frontend vẽ theo `type`
 export interface ChatWidget {
-  type: "major" | "review" | "budget" | "scholarship" | "form" | "select" | "recommend" | "simulate" | "goal_seek" | "explain" | "school";
+  type: "major" | "review" | "budget" | "scholarship" | "form" | "select" | "recommend" | "simulate" | "goal_seek" | "explain" | "school_info" | "school_compare" | "school_search" | "school";
   data?: Record<string, unknown> | null;
 }
 
@@ -70,8 +70,11 @@ export interface ChatWidget {
  * không qua SLM hiểu câu nên nhanh và không nhầm tên trường. target chỉ dùng cho goal_seek (bỏ trống thì hệ thống chọn nhóm cao hơn một bậc).
  */
 export interface AssistantAction {
-  type: "goal_seek" | "explain";
+  type: "goal_seek" | "explain" | "school_info" | "school_compare";
+  schoolCodes?: string[] | null; // school_compare: mã từ hai đến bốn trường (hoặc tên chưa được chọn)
+  fields?: string[] | null; // school_compare: mã mục so sánh, giữ nguyên khi chọn lại trường mơ hồ
   schoolCode?: string | null; // goal_seek không kèm trường: hỏi lại bằng ô chọn trường
+  question?: string | null; // school_info: câu hỏi gốc, để biết hỏi mục nào (học phí, học bổng...); trống thì tóm tắt về trường
   target?: "match" | "safety" | null;
   /** "real": giải thích theo hồ sơ thật dù trang đang xem giả định (nút "Xem theo hồ sơ thật"); bỏ trống: theo cái đang xem */
   basis?: "real" | null;

@@ -26,6 +26,7 @@ from app.schemas.chat import (
     Widget,
 )
 from app.schemas.slm import SlmTinResult, SlmY
+from app.services.conversation_context import contextualize, update_context
 from app.services.intake import (
     CHAT_BUTTON,
     CONTINUE_CHAT,
@@ -37,7 +38,7 @@ from app.services.intake import (
     intake_choice,
 )
 from app.services.pii_mask import mask_personal_info
-from app.services.priority import PRIORITY_KEY, detect_priorities
+from app.services.priority import PRIORITY_KEY, detect_priorities, unaccent
 from app.services.profile_sync import changed_keys, merge_profile
 from app.services.skill_rules import REQUIRED_B3, missing_fields
 from app.services.slm_contract import SlmClassifier
@@ -168,7 +169,10 @@ def with_priority_intent(state: ChatState, message: str, slm: SlmTinResult) -> S
     waiting = state.question_id is not None and state.question_id not in OPENING_QUESTIONS
     if waiting or not detect_priorities(message):
         return slm
-    if any(y.type == "kich_ban" for y in slm.cac_y):
+    # SLM thật xếp "ưu tiên chi phí thấp" vào goal_seeking không có trường: đó là ưu tiên, đổi thành what-if.
+    # Giữ nguyên khi SLM đã nhận là what-if (nhánh kịch bản tự đọc thêm ưu tiên) hoặc goal-seeking có nêu trường thật
+    scenarios = [y for y in slm.cac_y if y.type == "kich_ban"]
+    if any(y.thuc_the.get("che_do") == "what_if" or y.thuc_the.get("truong") for y in scenarios):
         return slm
     scenario = SlmY(
         type="kich_ban",
@@ -176,8 +180,32 @@ def with_priority_intent(state: ChatState, message: str, slm: SlmTinResult) -> S
         thuc_the={"che_do": "what_if", "thay_doi": [{"yeu_to": PRIORITY_KEY, "gia_tri": "uu_tien"}]},
     )
     # Tin có số liệu thì giữ các ý khác (có thể là hồ sơ); chỉ nói về ưu tiên thì bỏ ý SLM đoán sai
-    keep = list(slm.cac_y) if re.search(r"\d", message) else []
+    keep = [y for y in slm.cac_y if y.type != "kich_ban"] if re.search(r"\d", message) else []
     return slm.model_copy(update={"cac_y": [scenario, *keep]})
+
+
+# Mục số liệu trường học sinh hay hỏi (khớp bộ từ khóa của .NET ChatSchoolInfo) và dấu hiệu của câu thật sự nhạy cảm (làm giả, khai gian)
+_INFO_WORDS = re.compile(
+    r"\b(gpa|hoc phi|chi phi|hoc bong|ielts|toefl|duolingo|sat|act|ty le nhan|han nop|xep hang|ranking|ty le tot nghiep|nganh)\b"
+)
+_SENSITIVE = re.compile(
+    r"lam gia|gia mao|gian lan|\bbia\b|khai gian|khai khong|sua (gpa|diem|bang)|nang (gpa|diem)|\bfake\b|khong that|mua (bang|diem)|thue (viet|lam)|cheat|hack"
+)
+
+
+# SLM thật xếp nhầm "GPA của The University of Texas at Austin là bao nhiêu" vào ngoại phạm vi nhạy cảm ("hồ sơ cần trung thực").
+# Câu nhắc một mục số liệu trường mà không có dấu hiệu làm giả hay khai gian thì đổi thành câu kiến thức, để nhánh số liệu trường trả lời.
+# Câu nhạy cảm thật (sửa GPA, làm giả bảng điểm) vẫn bị chặn như cũ
+def with_info_intent(message: str, slm: SlmTinResult) -> SlmTinResult:
+    if len(slm.cac_y) != 1:
+        return slm
+    y = slm.cac_y[0]
+    if y.type != "ngoai_pham_vi" or y.thuc_the.get("loai_con") not in ("nhay_cam", "mo_ho"):
+        return slm
+    plain = unaccent(message)
+    if not _INFO_WORDS.search(plain) or _SENSITIVE.search(plain):
+        return slm
+    return slm.model_copy(update={"cac_y": [SlmY(type="kien_thuc", doan=message)]})
 
 
 # Phần kết quả SLM giao cho nhánh của một ý: nhánh hồ sơ cần cả tin, nhánh khác chỉ cần ý của nó
@@ -282,6 +310,8 @@ class ChatFlow:
         else:
             slm = await self._slm.classify(state, message)
             slm = with_priority_intent(state, message, slm)
+            slm = with_info_intent(message, slm)
+            slm = contextualize(state, message, slm)
 
         # 2. Chạy từng ý theo thứ tự, ghép câu trả lời
         names, output = await self._run_intents(state, message, slm, emit)
@@ -301,6 +331,9 @@ class ChatFlow:
         # Lượt đầu mà chưa nhánh nào trả lời được: chào như cũ thay vì "đang hoàn thiện"
         if not output.answer:
             output.answer = QUESTIONS["B0.1"] if first_turn else NOT_READY
+
+        # Nhớ trường, mục, điều kiện vừa nói để hiểu câu hỏi tiếp
+        update_context(state, output)
 
         # 5. Ghi log (dữ liệu để gán nhãn thêm và kiểm tra ngẫu nhiên)
         log_turn(state, message, slm, names, (time.perf_counter() - started) * 1000, req.session_id)

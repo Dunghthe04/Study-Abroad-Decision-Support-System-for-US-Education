@@ -21,9 +21,20 @@ import { cn } from "@/lib/utils";
 import { describeSimulation, resetSimulation, showSimulation } from "@/lib/simulation-link";
 import { AGE_FEATURES, useAgeBlock } from "@/lib/age-features";
 import { useAssistant, type AssistantTurn } from "./AssistantProvider";
-import type { ExplainBasis, ExplainCardData, SchoolGoalResult } from "@/types/recommendation";
+import type {
+  ExplainBasis,
+  ExplainCardData,
+  SchoolCompareData,
+  SchoolGoalResult,
+  SchoolInfoData,
+  SchoolInfoField,
+  SchoolSearchData,
+} from "@/types/recommendation";
 import { BudgetWidget } from "./BudgetWidget";
 import { ExplainCard } from "./ExplainCard";
+import { SchoolCompareCard } from "./SchoolCompareCard";
+import { SchoolSearchCard } from "./SchoolSearchCard";
+import { SchoolInfoCard } from "./SchoolInfoCard";
 import { GoalSeekCard } from "./GoalSeekCard";
 import { MajorWidget } from "./MajorWidget";
 import { ReviewWidget } from "./ReviewWidget";
@@ -317,14 +328,26 @@ function Turn({ turn, onReply }: { turn: AssistantTurn; onReply?: (value: string
   const goalCard = turn.widget?.type === "goal_seek" ? goalResultOf(turn.widget.data) : null;
   // Giải thích trường: thẻ do code dựng cũng nằm trên lời tư vấn của AI, cùng lý do như trên
   const explainCard = turn.widget?.type === "explain" ? explainCardOf(turn.widget.data) : null;
-  const hasCard = Boolean(goalCard || explainCard);
+  // Thông tin một trường: thẻ số liệu thật nằm trên câu trả lời bằng chữ
+  const infoCard = turn.widget?.type === "school_info" ? schoolInfoOf(turn.widget.data) : null;
+  // So sánh từ hai trường: thẻ gồm bảng số liệu và khối "AI nhận xét" tách riêng
+  const compareCard = turn.widget?.type === "school_compare" ? schoolCompareOf(turn.widget.data) : null;
+  // Tìm trường theo điều kiện: 5 trường đầu và nút "Xem thêm"
+  const searchCard = turn.widget?.type === "school_search" ? schoolSearchOf(turn.widget.data) : null;
+  const hasCard = Boolean(goalCard || explainCard || infoCard || compareCard || searchCard);
+  // Thẻ đã nói đủ số liệu: bỏ đoạn chữ trùng, chỉ hiện thẻ cho gọn; các đoạn khác của lượt (nếu có) vẫn hiện
+  const covered = infoCard?.coveredText ?? compareCard?.coveredText ?? searchCard?.coveredText ?? null;
+  const content = covered ? turn.content.replace(covered, "").trim() : turn.content;
   return (
     <div className="w-full text-foreground">
       {goalCard && <GoalSeekCard result={goalCard} />}
+      {infoCard && <SchoolInfoCard info={infoCard.info} fields={infoCard.fields} remember={Boolean(onReply)} />}
+      {compareCard && <SchoolCompareCard data={compareCard} remember={Boolean(onReply)} />}
+      {searchCard && <SchoolSearchCard data={searchCard} remember={Boolean(onReply)} />}
       {explainCard && (
         <ExplainCard code={String(turn.widget?.data?.code ?? "")} card={explainCard} basis={explainBasisOf(turn.widget?.data)} />
       )}
-      {turn.content && <p className={cn("whitespace-pre-wrap", hasCard && "mt-2.5")}>{turn.content}</p>}
+      {content && <p className={cn("whitespace-pre-wrap", hasCard && "mt-2.5")}>{content}</p>}
       {turn.citations && turn.citations.length > 0 && (
         <ol className="mt-2 list-decimal space-y-0.5 pl-5 text-xs text-muted-foreground">
           {turn.citations.map((c, j) => (
@@ -403,6 +426,48 @@ function Turn({ turn, onReply }: { turn: AssistantTurn; onReply?: (value: string
 function explainBasisOf(data: Record<string, unknown> | null | undefined): ExplainBasis {
   const basis = data?.basis as ExplainBasis | undefined;
   return basis && (basis.kind === "real" || basis.kind === "simulated") ? basis : { kind: "real", label: null };
+}
+
+// Thẻ tìm trường trong widget. Thiếu hoặc sai khuôn thì không dựng thẻ, câu trả lời bằng chữ vẫn hiện
+function schoolSearchOf(data: Record<string, unknown> | null | undefined): SchoolSearchData | null {
+  const items = data?.items;
+  if (!Array.isArray(items) || items.length === 0 || typeof data?.total !== "number") return null;
+  if (!items.every((i) => i && typeof i.code === "string" && typeof i.name === "string")) return null;
+  return {
+    total: data.total,
+    summary: typeof data.summary === "string" ? data.summary : "",
+    sortLabel: typeof data.sortLabel === "string" ? data.sortLabel : "",
+    visible: typeof data.visible === "number" && data.visible > 0 ? data.visible : 5,
+    items: items as SchoolSearchData["items"],
+    coveredText: typeof data.coveredText === "string" && data.coveredText.length > 0 ? data.coveredText : null,
+  };
+}
+
+// Thẻ so sánh trong widget. Thiếu hoặc sai khuôn thì không dựng thẻ, câu trả lời bằng chữ vẫn hiện
+function schoolCompareOf(data: Record<string, unknown> | null | undefined): SchoolCompareData | null {
+  const schools = data?.schools;
+  const rows = data?.rows;
+  if (!Array.isArray(schools) || schools.length < 2 || !Array.isArray(rows) || rows.length === 0) return null;
+  const valid = rows.every((r) => r && typeof r.label === "string" && Array.isArray(r.values) && r.values.length === schools.length);
+  if (!valid) return null;
+  return {
+    schools: schools as SchoolCompareData["schools"],
+    rows: rows as SchoolCompareData["rows"],
+    aiNote: typeof data?.aiNote === "string" && data.aiNote.length > 0 ? data.aiNote : null,
+    verify: data?.verify === true,
+    coveredText: typeof data?.coveredText === "string" && data.coveredText.length > 0 ? data.coveredText : null,
+  };
+}
+
+// Thẻ thông tin trường trong widget (backend gửi data.info và data.fields). Thiếu hoặc sai khuôn thì không dựng thẻ, câu trả lời bằng chữ vẫn hiện
+function schoolInfoOf(
+  data: Record<string, unknown> | null | undefined,
+): { info: SchoolInfoData; fields: SchoolInfoField[]; coveredText: string | null } | null {
+  const info = data?.info as SchoolInfoData | undefined;
+  if (!info || typeof info.code !== "string" || typeof info.name !== "string" || !info.cost || !info.aid) return null;
+  const fields = Array.isArray(data?.fields) ? (data.fields as unknown[]).filter((f): f is SchoolInfoField => typeof f === "string") : [];
+  const coveredText = typeof data?.coveredText === "string" && data.coveredText.length > 0 ? data.coveredText : null;
+  return { info, fields, coveredText };
 }
 
 function explainCardOf(data: Record<string, unknown> | null | undefined): ExplainCardData | null {

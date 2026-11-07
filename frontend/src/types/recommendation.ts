@@ -328,3 +328,89 @@ export interface SchoolExplanation {
   strengths: string[];
   improvements: string[];
 }
+
+// ---- Thông tin một trường trong chat (widget "school_info"; backend: SchoolInfoDto). Số liệu null = hệ thống chưa có.
+export interface SchoolRankingData {
+  listName: string;
+  group: string | null;
+  year: number | null;
+  rank: number;
+  rankDisplay: string;
+  isTie: boolean;
+}
+
+export interface SchoolInfoData {
+  code: string;
+  name: string;
+  city: string | null;
+  state: string | null;
+  control: string | null;
+  website: string | null;
+  cost: { tuition: number | null; living: number | null; fees: number | null; other: number | null; total: number | null };
+  english: { minIelts: number | null; minToefl: number | null; minDuolingo: number | null };
+  test: { satPolicy: string | null; sat25: number | null; sat75: number | null; act25: number | null; act75: number | null };
+  admission: { acceptRate: number | null; intlAcceptRate: number | null };
+  aid: { policy: string | null; avgUsd: number | null; recipients: number | null };
+  outcomes: { retentionRate1Yr: number | null; gradRate6Yr: number | null };
+  gpa?: { avg: number | null; shareFour: number | null; shareAbove375: number | null } | null;
+  deadlines: { round: string; date: string }[];
+  majors: string[];
+  rankings: SchoolRankingData[];
+  sourceUrl: string | null;
+  retrievedAt: string | null;
+}
+
+export type SchoolInfoField =
+  | "cost"
+  | "aid"
+  | "english"
+  | "test"
+  | "gpa"
+  | "acceptance"
+  | "deadline"
+  | "outcomes"
+  | "majors"
+  | "ranking"
+  | "location"
+  | "website";
+
+// ---- So sánh từ hai trường trong chat (widget "school_compare"; backend: ChatSchoolInfo.WidgetOfCompare).
+// Mỗi hàng đã định dạng sẵn ở backend, values cùng thứ tự với schools.
+export interface SchoolCompareRow {
+  field: string;
+  label: string;
+  values: string[];
+  gap: string | null; // câu chênh lệch chi phí (chỉ hàng chi phí)
+}
+
+export interface SchoolCompareData {
+  schools: { code: string; name: string; website: string | null }[];
+  rows: SchoolCompareRow[];
+  aiNote: string | null; // nhận xét do AI viết; null khi AI lỗi hoặc không qua kiểm tra
+  verify: boolean; // có chi phí hoặc hạn nộp: nhắc kiểm tra lại trên trang chính thức
+  coveredText: string | null;
+}
+
+// ---- Tìm trường theo điều kiện trong chat (widget "school_search"; backend: ChatSchoolInfo.WidgetOfSearch).
+export interface SchoolSearchItem {
+  code: string;
+  name: string;
+  city: string | null;
+  state: string | null;
+  control: string | null;
+  costUsd: number | null;
+  acceptRate: number | null;
+  aidPolicy: string | null;
+  aidAvgUsd: number | null;
+  quality: number | null;
+  bestRank: number | null;
+}
+
+export interface SchoolSearchData {
+  total: number;
+  summary: string; // điều kiện đã hiểu, nói lại bằng lời
+  sortLabel: string;
+  visible: number; // số trường hiện sẵn, phần còn lại mở bằng "Xem thêm"
+  items: SchoolSearchItem[];
+  coveredText: string | null;
+}
