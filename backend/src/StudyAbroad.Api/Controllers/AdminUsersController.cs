@@ -37,8 +37,9 @@ public class AdminUsersController(IAuthService auth) : ControllerBase
         return user is not null ? Ok(user) : NotFound();
     }
 
-    /// <summary>[UC-63] Tạo tài khoản moderator (khách không tự đăng ký được role này).</summary>
+    /// <summary>[UC-63] Tạo tài khoản moderator (chỉ Admin mới được tạo).</summary>
     [HttpPost("moderators")]
+    [Authorize(Roles = UserRoles.Admin)]
     public async Task<ActionResult<UserDto>> CreateModerator(CreateModeratorAccountRequest request, CancellationToken ct)
     {
         var result = await auth.CreateModeratorAccountAsync(request, ct);
@@ -48,8 +49,9 @@ public class AdminUsersController(IAuthService auth) : ControllerBase
         return CreatedAtAction(nameof(GetUserById), new { id = result.User.Id }, result.User);
     }
 
-    /// <summary>[Q11 / UC-71 Phụ trợ] Tạo tài khoản người dùng cho Trung tâm tư vấn (role center).</summary>
+    /// <summary>[Q11 / UC-71 Phụ trợ] Tạo tài khoản người dùng cho Trung tâm tư vấn (chỉ Moderator mới được tạo).</summary>
     [HttpPost("centers")]
+    [Authorize(Roles = UserRoles.Moderator)]
     public async Task<ActionResult<UserDto>> CreateCenter(CreateCenterAccountRequest request, CancellationToken ct)
     {
         var result = await auth.CreateCenterAccountAsync(request, ct);
@@ -59,8 +61,9 @@ public class AdminUsersController(IAuthService auth) : ControllerBase
         return CreatedAtAction(nameof(GetUserById), new { id = result.User.Id }, result.User);
     }
 
-    /// <summary>[UC-61] Khóa tài khoản kèm lý do (ghi audit).</summary>
+    /// <summary>[UC-61] Khóa tài khoản kèm lý do (ghi audit - chỉ Admin mới được khóa).</summary>
     [HttpPost("{id:guid}/lock")]
+    [Authorize(Roles = UserRoles.Admin)]
     public async Task<ActionResult<UserDto>> LockUser(Guid id, LockUserAccountRequest request, CancellationToken ct)
     {
         if (User.GetUserId() is not { } adminId)
@@ -73,8 +76,9 @@ public class AdminUsersController(IAuthService auth) : ControllerBase
         return Ok(result.User);
     }
 
-    /// <summary>[UC-62] Mở khóa tài khoản kèm lý do (ghi audit).</summary>
+    /// <summary>[UC-62] Mở khóa tài khoản kèm lý do (ghi audit - chỉ Admin mới được mở khóa).</summary>
     [HttpPost("{id:guid}/unlock")]
+    [Authorize(Roles = UserRoles.Admin)]
     public async Task<ActionResult<UserDto>> UnlockUser(Guid id, UnlockUserAccountRequest request, CancellationToken ct)
     {
         if (User.GetUserId() is not { } adminId)

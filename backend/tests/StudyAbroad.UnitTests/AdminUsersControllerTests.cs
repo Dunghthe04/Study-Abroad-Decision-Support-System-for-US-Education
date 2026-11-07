@@ -161,6 +161,29 @@ public class AdminUsersControllerTests
     }
 
     [Fact]
+    public void AdminUsersController_ActionAttributes_MatchRbacPolicy()
+    {
+        // Khóa và Mở khóa: Chỉ Admin được phép (Moderator không được)
+        var lockAttr = typeof(AdminUsersController).GetMethod(nameof(AdminUsersController.LockUser))?.GetCustomAttribute<AuthorizeAttribute>();
+        Assert.NotNull(lockAttr);
+        Assert.Equal(UserRoles.Admin, lockAttr.Roles);
+
+        var unlockAttr = typeof(AdminUsersController).GetMethod(nameof(AdminUsersController.UnlockUser))?.GetCustomAttribute<AuthorizeAttribute>();
+        Assert.NotNull(unlockAttr);
+        Assert.Equal(UserRoles.Admin, unlockAttr.Roles);
+
+        // Tạo moderator: Chỉ Admin được phép
+        var createModAttr = typeof(AdminUsersController).GetMethod(nameof(AdminUsersController.CreateModerator))?.GetCustomAttribute<AuthorizeAttribute>();
+        Assert.NotNull(createModAttr);
+        Assert.Equal(UserRoles.Admin, createModAttr.Roles);
+
+        // Tạo center: Chỉ Moderator được phép
+        var createCenterAttr = typeof(AdminUsersController).GetMethod(nameof(AdminUsersController.CreateCenter))?.GetCustomAttribute<AuthorizeAttribute>();
+        Assert.NotNull(createCenterAttr);
+        Assert.Equal(UserRoles.Moderator, createCenterAttr.Roles);
+    }
+
+    [Fact]
     public async Task GetAdminUserAccountList_ReturnsPagedUsers()
     {
         var fakeAuth = new FakeAuthService
