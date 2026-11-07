@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   ArrowUpIcon,
   FileTextIcon,
+  FlaskConicalIcon,
   GraduationCapIcon,
   Maximize2Icon,
   MessageCircleIcon,
@@ -13,6 +14,7 @@ import {
   PlusIcon,
   RotateCwIcon,
   SlidersHorizontalIcon,
+  Undo2Icon,
   XIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -84,23 +86,14 @@ export function AssistantPanel() {
       <div className="flex items-center gap-2 border-b border-line px-4 py-3">
         <div className="min-w-0 flex-1">
           <div className="font-heading text-base font-semibold text-foreground">Trợ lý USAS</div>
-          <div className="mt-1 inline-flex max-w-full items-center gap-1.5 rounded-full bg-ground px-2.5 py-0.5 text-xs text-muted-foreground">
-            <span className="size-1.5 shrink-0 rounded-full bg-ok" />
-            <span className="truncate">Đang xem: {page.label}</span>
-          </div>
-          {/* Trang gợi ý trường: chat đang nói về hồ sơ thật hay về giả định học sinh đang kéo (undefined: trang khác, không có khái niệm này) */}
-          {page.simulation === null && (
-            <div className="mt-1 inline-flex max-w-full items-center rounded-full bg-brand/10 px-2.5 py-0.5 text-xs font-medium text-brand">
-              Đang xem hồ sơ thật
+          {/* Trang gợi ý trường đã có dải trạng thái bên dưới (hồ sơ thật hay giả định), không hiện thêm nhãn "Đang xem" nữa cho khỏi rối */}
+          {page.simulation === undefined ? (
+            <div className="mt-1 inline-flex max-w-full items-center gap-1.5 rounded-full bg-ground px-2.5 py-0.5 text-xs text-muted-foreground">
+              <span className="size-1.5 shrink-0 rounded-full bg-ok" />
+              <span className="truncate">Đang xem: {page.label}</span>
             </div>
-          )}
-          {page.simulation && (
-            <div className="mt-1 flex max-w-full flex-wrap items-center gap-x-2 gap-y-0.5 rounded-lg bg-warn-wash px-2.5 py-1 text-xs text-warn">
-              <span className="font-medium">Đang xem giả định: {describeSimulation(page.simulation)}</span>
-              <button type="button" onClick={resetSimulation} className="font-semibold underline-offset-4 hover:underline">
-                Về hồ sơ thật
-              </button>
-            </div>
+          ) : (
+            <div className="mt-0.5 text-xs text-muted-foreground">{page.label}</div>
           )}
         </div>
         <IconButton label="Cuộc trò chuyện mới" onClick={newChat}>
@@ -117,6 +110,40 @@ export function AssistantPanel() {
           <XIcon className="size-4.5" />
         </IconButton>
       </div>
+
+      {/* Trang gợi ý trường: chat đang nói về hồ sơ thật hay về giả định học sinh đang kéo (undefined: trang khác, không có khái niệm này) */}
+      {page.simulation === null && (
+        <div className="flex items-center gap-2 border-b border-line bg-brand/5 px-4 py-2 text-xs font-medium text-brand">
+          <span className="size-1.5 shrink-0 rounded-full bg-brand" />
+          Đang xem theo hồ sơ thật của bạn
+        </div>
+      )}
+      {page.simulation && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-warn/20 bg-warn-wash px-4 py-2.5 text-xs text-warn">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+            <span className="inline-flex items-center gap-1 font-semibold">
+              <FlaskConicalIcon className="size-3.5" />
+              Đang thử giả định
+            </span>
+            {describeSimulation(page.simulation)
+              .split(" · ")
+              .filter(Boolean)
+              .map((part) => (
+                <span key={part} className="rounded-full bg-surface/70 px-2 py-0.5 font-medium">
+                  {part}
+                </span>
+              ))}
+          </div>
+          <button
+            type="button"
+            onClick={resetSimulation}
+            className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-full border border-warn/30 bg-surface px-2.5 py-1 font-semibold transition-colors hover:bg-warn/10"
+          >
+            <Undo2Icon className="size-3.5" />
+            Về hồ sơ thật
+          </button>
+        </div>
+      )}
 
       {/* Tin nhắn */}
       <div ref={listRef} className="flex flex-1 flex-col gap-4 overflow-y-auto p-4 text-[14.5px] leading-relaxed">
@@ -278,6 +305,7 @@ function TypingIndicator({ recommending, progress }: { recommending?: boolean; p
 
 function Turn({ turn, onReply }: { turn: AssistantTurn; onReply?: (value: string) => void }) {
   const router = useRouter();
+  const { sendAction } = useAssistant();
   if (turn.role === "user") {
     return (
       <div className="max-w-[90%] self-end rounded-[16px_4px_16px_16px] bg-[#E7EDF1] px-[15px] py-2.5 whitespace-pre-wrap text-foreground">
@@ -359,7 +387,7 @@ function Turn({ turn, onReply }: { turn: AssistantTurn; onReply?: (value: string
             <button
               key={r.value}
               type="button"
-              onClick={() => onReply(r.value)}
+              onClick={() => (r.href ? router.push(r.href) : r.action ? sendAction(r.value, r.action) : onReply(r.value))}
               className="min-h-8 cursor-pointer rounded-full border border-brand/40 bg-brand-wash/40 px-3 py-1 text-[13px] text-foreground transition-colors hover:border-brand hover:bg-brand-wash"
             >
               {r.label}

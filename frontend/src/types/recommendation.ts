@@ -62,6 +62,12 @@ export interface ScoredSchool {
   adj: number | null;
   r: number | null;
   acceptRate?: number | null; // tỷ lệ nhận chung 0–1; lần gợi ý cũ chưa có
+  intlAcceptRate?: number | null; // tỷ lệ nhận du học sinh 0–1
+  gpaTopShare?: number | null; // tỷ lệ sinh viên trúng tuyển có GPA đúng 4,0 (0–1)
+  aidAvg?: number | null; // học bổng trung bình (USD/năm) của người được nhận; không phải mức bạn chắc chắn nhận
+  aidPolicy?: string | null; // none | need_only | merit_only | need_and_merit
+  sat25?: number | null; // khoảng SAT tổng của sinh viên trúng tuyển (null nếu trường chưa có hoặc dữ liệu sai thang)
+  sat75?: number | null;
 }
 
 // Một trường được xếp vào khối
@@ -103,6 +109,8 @@ export interface RecommendationCriteria {
   scholarshipNeed: string | null;
   pref: Pref;
   tier: number; // bậc ngoại khóa 1–5
+  studentSat?: number | null; // SAT của học sinh trong lượt này (giả định thì theo giả định); lần gợi ý cũ chưa có
+  studentGpa?: number | null; // GPA thang 4
   algorithm?: string; // phiên bản công thức; lần gợi ý cũ chưa có
   status: "OK" | "FAILED" | null; // null khi không còn trường nào để chọn
   english?: EnglishNotice | null; // null khi không có trường nào bị ẩn chỉ vì tiếng Anh; lần gợi ý cũ chưa có
