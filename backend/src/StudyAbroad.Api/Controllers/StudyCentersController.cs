@@ -23,9 +23,9 @@ public class StudyCentersController(IStudyCenterService service) : ControllerBas
         return center is null ? NotFound() : Ok(center);
     }
 
-    /// <summary>[UC-71] Thêm một trung tâm tư vấn vào danh bạ (chỉ Moderator mới được thêm).</summary>
+    /// <summary>[UC-71] Thêm một trung tâm tư vấn vào danh bạ (Admin hoặc Moderator).</summary>
     [HttpPost]
-    [Authorize(Roles = UserRoles.Moderator)]
+    [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Moderator}")]
     public async Task<ActionResult<StudyCenterDto>> Create(
         [FromBody] CreateStudyCenterRequest request,
         CancellationToken ct)
@@ -40,9 +40,9 @@ public class StudyCentersController(IStudyCenterService service) : ControllerBas
         return CreatedAtAction(nameof(GetById), new { id = result.Center.Id }, result.Center);
     }
 
-    /// <summary>[UC-64] Moderator tạo tài khoản người dùng cho Trung tâm tư vấn (role center).</summary>
+    /// <summary>[UC-64] Tạo tài khoản người dùng cho Trung tâm tư vấn (role center - Admin hoặc Moderator).</summary>
     [HttpPost("accounts")]
-    [Authorize(Roles = UserRoles.Moderator)]
+    [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Moderator}")]
     public async Task<ActionResult<UserDto>> CreateCenterAccount(
         [FromBody] CreateCenterAccountRequest request,
         [FromServices] IAuthService auth,

@@ -186,14 +186,14 @@ public class StudyCenterServiceTests
     [Fact]
     public void StudyCentersController_ActionAttributes_MatchRbacPolicy()
     {
-        // UC-71: Thêm trung tâm vào danh bạ - chỉ Moderator được phép
+        // UC-71: Thêm trung tâm vào danh bạ - Admin hoặc Moderator được phép
         var createAttr = typeof(StudyCentersController).GetMethod(nameof(StudyCentersController.Create))?.GetCustomAttribute<AuthorizeAttribute>();
         Assert.NotNull(createAttr);
-        Assert.Equal(UserRoles.Moderator, createAttr.Roles);
+        Assert.Equal($"{UserRoles.Admin},{UserRoles.Moderator}", createAttr.Roles);
 
-        // UC-64: Tạo tài khoản đại diện trung tâm - chỉ Moderator được phép
+        // UC-64: Tạo tài khoản đại diện trung tâm - Admin hoặc Moderator được phép
         var createAccountAttr = typeof(StudyCentersController).GetMethod(nameof(StudyCentersController.CreateCenterAccount))?.GetCustomAttribute<AuthorizeAttribute>();
         Assert.NotNull(createAccountAttr);
-        Assert.Equal(UserRoles.Moderator, createAccountAttr.Roles);
+        Assert.Equal($"{UserRoles.Admin},{UserRoles.Moderator}", createAccountAttr.Roles);
     }
 }
