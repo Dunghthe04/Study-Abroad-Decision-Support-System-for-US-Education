@@ -2,6 +2,7 @@ using StudyAbroad.Application.Audit;
 using StudyAbroad.Application.Auth;
 using StudyAbroad.Application.Common;
 using StudyAbroad.Application.ParentLinks;
+using StudyAbroad.Application.Recommendations;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
 
@@ -357,5 +358,46 @@ internal sealed class FakeParentLinkRepository : IParentLinkRepository
         ParentUserId = l.ParentUserId, Status = l.Status, TokenHash = l.TokenHash, TokenExpiresAt = l.TokenExpiresAt,
         InviteSentCount = l.InviteSentCount, LastInviteSentAt = l.LastInviteSentAt, AcceptedAt = l.AcceptedAt,
         ConsentId = l.ConsentId, RevokedAt = l.RevokedAt, RevokedByUserId = l.RevokedByUserId, Version = l.Version,
+    };
+}
+
+/// <summary>Giả lập ScenarioRepository (UC-86): giữ kịch bản trong bộ nhớ, trả bản sao như AsNoTracking.</summary>
+internal sealed class FakeScenarioRepository : IScenarioRepository
+{
+    public List<WhatIfSimulation> Rows { get; } = [];
+
+    public Task<int> CountByUserAsync(Guid userId, CancellationToken ct = default) =>
+        Task.FromResult(Rows.Count(r => r.UserId == userId));
+
+    public Task<List<WhatIfSimulation>> ListByUserAsync(Guid userId, CancellationToken ct = default) =>
+        Task.FromResult(Rows.Where(r => r.UserId == userId).OrderByDescending(r => r.CreatedAt).Select(Clone).ToList());
+
+    public Task<WhatIfSimulation?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
+        Task.FromResult(Rows.Where(r => r.Id == id).Select(Clone).FirstOrDefault());
+
+    public Task AddAsync(WhatIfSimulation row, CancellationToken ct = default)
+    {
+        Rows.Add(Clone(row));
+        return Task.CompletedTask;
+    }
+
+    public Task UpdateAsync(WhatIfSimulation row, CancellationToken ct = default)
+    {
+        var idx = Rows.FindIndex(r => r.Id == row.Id);
+        if (idx >= 0) Rows[idx] = Clone(row);
+        return Task.CompletedTask;
+    }
+
+    public Task DeleteAsync(WhatIfSimulation row, CancellationToken ct = default)
+    {
+        Rows.RemoveAll(r => r.Id == row.Id);
+        return Task.CompletedTask;
+    }
+
+    private static WhatIfSimulation Clone(WhatIfSimulation r) => new()
+    {
+        Id = r.Id, CreatedAt = r.CreatedAt, UpdatedAt = r.UpdatedAt, UserId = r.UserId, StudentProfileId = r.StudentProfileId,
+        Title = r.Title, SimulatedProfileJson = r.SimulatedProfileJson, SimulatedRecommendationsJson = r.SimulatedRecommendationsJson,
+        Notes = r.Notes,
     };
 }
