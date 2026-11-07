@@ -25,7 +25,7 @@ import { ProfileSimulator } from "./ProfileSimulator";
 import { ProfileSummary } from "./ProfileSummary";
 import { EnglishNoticeBanner } from "./EnglishNoticeBanner";
 import { SchoolCard } from "./SchoolCard";
-import { SaveScenarioButton, SavedScenarios, scenarioOverrides, useSavedScenarios } from "./SavedScenarios";
+import { SaveScenarioButton, SavedScenariosButton, scenarioOverrides, useSavedScenarios } from "./SavedScenarios";
 
 // Bốn khối chính theo đúng thứ tự trên màn. "other" để riêng ở cuối.
 const BLOCKS: { key: PickBlockName; title: string; note: string }[] = [
@@ -168,6 +168,8 @@ export function RecommendationView({ autoRun, initialOverrides }: Recommendation
             Nhận gợi ý
           </Button>
         )}
+        {/* [UC-86] popup danh sách kịch bản đã lưu: mở lại, đổi tên, xóa */}
+        {rec && <SavedScenariosButton store={scenarios} onOpen={openScenario} />}
       </div>
 
       {error && (
@@ -192,7 +194,6 @@ export function RecommendationView({ autoRun, initialOverrides }: Recommendation
         <>
           <ProfileSummary rec={rec} onRerun={runNew} />
           {simulating && <SimulationBanner sim={sim} onSave={saveScenario} />}
-          <SavedScenarios store={scenarios} onOpen={openScenario} />
           <ResultBody
             rec={view}
             changes={simulating ? sim.result!.changes : []}
