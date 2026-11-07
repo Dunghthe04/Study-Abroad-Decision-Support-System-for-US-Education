@@ -112,6 +112,77 @@ public class TargetSchoolService(
         return await repository.GetDtoByIdAsync(id, ct);
     }
 
+    public async Task<bool> RemoveTargetSchoolAsync(Guid userId, Guid targetSchoolId, CancellationToken ct = default)
+    {
+        var targetSchool = await repository.GetByIdAsync(targetSchoolId, ct);
+        if (targetSchool == null || targetSchool.UserId != userId)
+            return false;
+
+        var university = await repository.GetUniversityAsync(targetSchool.UniversityId, ct);
+
+        await repository.DeleteAsync(targetSchool, ct);
+
+        // Ghi Audit Log hành động xóa trường mục tiêu
+        var detailJson = JsonSerializer.Serialize(new
+        {
+            userId,
+            universityId = targetSchool.UniversityId,
+            universityName = university?.Name,
+            universityCode = university?.Code,
+            category = targetSchool.Category,
+            round = targetSchool.ApplicationRound,
+        });
+
+        await auditLogs.AddAsync(new AuditLog
+        {
+            ActorUserId = userId,
+            Action = "target_school.remove",
+            EntityType = "target_school",
+            EntityId = targetSchool.Id.ToString(),
+            DetailJson = detailJson,
+        }, ct);
+
+        return true;
+    }
+
+    public async Task<bool> RemoveTargetSchoolByUniversityAsync(Guid userId, string universityIdentifier, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(universityIdentifier))
+            return false;
+
+        var clean = universityIdentifier.Trim();
+        TargetSchool? targetSchool = null;
+
+        if (Guid.TryParse(clean, out var uniId))
+        {
+            targetSchool = await repository.GetByUserAndUniversityAsync(userId, uniId, ct);
+        }
+
+        targetSchool ??= await repository.GetByUserAndUniversityCodeAsync(userId, clean, ct);
+
+        if (targetSchool == null || targetSchool.UserId != userId)
+            return false;
+
+        return await RemoveTargetSchoolAsync(userId, targetSchool.Id, ct);
+    }
+
+    public async Task<TargetSchoolDto?> CheckTargetSchoolAsync(Guid userId, string? universityCode, Guid? universityId, CancellationToken ct = default)
+    {
+        if (universityId.HasValue && universityId.Value != Guid.Empty)
+        {
+            var targetSchool = await repository.GetByUserAndUniversityAsync(userId, universityId.Value, ct);
+            if (targetSchool != null)
+                return await repository.GetDtoByIdAsync(targetSchool.Id, ct);
+        }
+
+        if (!string.IsNullOrWhiteSpace(universityCode))
+        {
+            return await repository.GetDtoByUserAndUniversityCodeAsync(userId, universityCode.Trim(), ct);
+        }
+
+        return null;
+    }
+
     private static DateTime? TryExtractDeadline(string json, string round)
     {
         try
