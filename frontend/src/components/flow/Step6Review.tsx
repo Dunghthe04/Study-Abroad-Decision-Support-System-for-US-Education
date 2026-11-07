@@ -11,6 +11,7 @@ import {
   FileTextIcon,
   GraduationCapIcon,
   Loader2Icon,
+  MessageCircleIcon,
   SparklesIcon,
   TrophyIcon,
 } from "lucide-react";
@@ -108,6 +109,8 @@ interface Step6ReviewProps {
   onEditStep: (stepNumber: number) => void;
   onPrev: () => void;
   onSubmit: () => void;
+  /** Form mở từ chat: nút cuối lưu hồ sơ rồi quay về chat thay vì gợi ý trường */
+  backToChat?: boolean;
   isSubmitting: boolean;
   /** Lỗi BE trả về khi gửi hồ sơ */
   submitError?: string | null;
@@ -120,6 +123,7 @@ export function Step6Review({
   onEditStep,
   onPrev,
   onSubmit,
+  backToChat = false,
   isSubmitting,
   submitError,
 }: Step6ReviewProps) {
@@ -360,7 +364,12 @@ export function Step6Review({
           {isSubmitting ? (
             <>
               <Loader2Icon className="size-4 animate-spin" />
-              Đang lưu và phân tích gợi ý...
+              {backToChat ? "Đang lưu hồ sơ..." : "Đang lưu và phân tích gợi ý..."}
+            </>
+          ) : backToChat ? (
+            <>
+              <MessageCircleIcon className="size-4" />
+              Lưu và quay về chat
             </>
           ) : (
             <>

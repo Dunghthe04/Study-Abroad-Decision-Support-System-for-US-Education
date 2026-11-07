@@ -20,13 +20,45 @@ public record GoalPlanDto(IReadOnlyList<GoalChangeDto> Changes, double Effort, s
 public record GoalBudgetDto(
     string Status, decimal? CostUsd, decimal? BudgetUsd, decimal? MinBudgetUsd, decimal? ShortfallUsd, decimal? IntlAidAvgUsd);
 
+// Mức tiếng Anh tối thiểu của trường (null nếu trường không công bố bài thi đó), kèm mức thiếu của học sinh theo band (null nếu chưa có chứng chỉ).
+public record GoalEnglishDto(decimal? MinIelts, decimal? MinToefl, decimal? MinDuolingo, decimal? ShortfallBand);
+
+// Vị trí của trường với hồ sơ thật (tính từ hồ sơ thật, không phải giả định).
+// Status: in_list (có trong danh sách gợi ý) | excluded (bị bộ lọc cứng loại).
+// Group: nhóm học thuật R | M | S | NA, tính độc lập với bộ lọc nên trường bị loại vẫn có nhóm "nếu đủ điều kiện".
+// ExcludeReason (khi excluded): MAJOR | STATE | CONTROL | ENGLISH | ENGLISH_NO_CERT | BUDGET.
+// NeedAid: vượt ngân sách nhưng có học bổng quốc tế, nằm ở khối "cần học bổng lớn".
+public record GoalPosition(string Status, string Group, string? ExcludeReason, bool NeedAid);
+
+// Số liệu tuyển sinh dùng trong các luật chặn, để lời giải thích nói được con số cụ thể thay vì "ít hơn hẳn".
+// AcceptRate: tỉ lệ nhận chung (0..1). IntlAcceptRate: tỉ lệ nhận du học sinh (0..1). IntlRatio: IntlAcceptRate / AcceptRate.
+// Các mốc lấy từ chính cấu hình xếp nhóm: dưới AlwaysReachRate luôn Khó vào; dưới SafetyMinRate không được An toàn;
+// IntlRatio dưới IntlRatioCut thì hạ một nhóm.
+public record GoalSchoolStats(
+    decimal? AcceptRate, decimal? IntlAcceptRate, double? IntlRatio,
+    double AlwaysReachRate, double SafetyMinRate, double IntlRatioCut);
+
+// Kết quả cho MỘT mức đích (nhóm cao hơn nhóm hiện tại). Target: M | S.
+// Outcome: reachable | blocked | no_data (không có already_reached vì mức đích luôn cao hơn nhóm hiện tại).
+public record GoalTargetResult(
+    string Target,
+    string Outcome,
+    string Best,
+    IReadOnlyList<string> Reasons,
+    GoalPlanDto? Cheapest,
+    GoalPlanDto? Recommended,
+    IReadOnlyList<GoalPlanDto> Alone,
+    IReadOnlyList<string> NoEffect);
+
 // Trường tương tự đang ở đúng nhóm đích, gợi ý khi trường mục tiêu không đạt được.
 public record GoalAlternativeDto(string Code, string Name, string? State, string? Control, decimal? CostUsd, string Group);
 
 // Kết quả goal-seeking cho một trường. Current, Target, Best: R | M | S | NA (chưa đủ dữ liệu).
 // Outcome: already_reached | reachable | blocked | no_data.
 // Cheapest: mức tối thiểu ít công sức nhất. Recommended: mức nên đặt mục tiêu (có đệm, an toàn hơn khi số liệu có sai số); null nếu không có đệm.
-// FilterReason: trường không nằm trong danh sách vì bộ lọc ngoài ngân sách (MAJOR | STATE | CONTROL), null nếu không bị loại.
+// FilterReason: trường không nằm trong danh sách vì bộ lọc ngoài ngân sách (MAJOR | STATE | CONTROL | ENGLISH | ENGLISH_NO_CERT), null nếu không bị loại.
+// English: có khi bị loại vì tiếng Anh, để giao diện nói cần đạt mức nào.
+// Position: vị trí của trường với hồ sơ thật. Targets: kết quả cho từng nhóm cao hơn nhóm hiện tại (Khó vào có Vừa sức và An toàn, Vừa sức có An toàn, An toàn rỗng).
 public record SchoolGoalResult(
     string Code,
     string Name,
@@ -41,7 +73,11 @@ public record SchoolGoalResult(
     IReadOnlyList<string> NoEffect,
     GoalBudgetDto Budget,
     string? FilterReason,
-    IReadOnlyList<GoalAlternativeDto> Alternatives);
+    IReadOnlyList<GoalAlternativeDto> Alternatives,
+    GoalEnglishDto? English = null,
+    GoalPosition? Position = null,
+    IReadOnlyList<GoalTargetResult>? Targets = null,
+    GoalSchoolStats? Stats = null);
 
 // ============================== GOAL-SEEKING ==============================
 
@@ -86,7 +122,7 @@ public partial class RecommendationService
             throw new InvalidOperationException("Hồ sơ chưa có bậc học muốn theo.");
         EnsureRunnable(profile);
 
-        var tier = ActivityTier.FromProfile(await profiles.GetProfileActivitiesAsync(profile.Id, ct)).Tier;
+        var tier = EcTierOf(profile);
         var schools = await recommendations.ListSchoolsAsync(profile.TargetLevel, ct);
         var school = schools.FirstOrDefault(s => string.Equals(s.University.Code, code, StringComparison.OrdinalIgnoreCase))
             ?? throw new InvalidOperationException($"Chưa có trường {code} trong dữ liệu.");
@@ -123,7 +159,54 @@ public partial class RecommendationService
             ToDto(result.Cheapest), recommended,
             result.Alone.Select(p => ToDto(p)!).ToList(),
             result.NoEffect.Select(FactorCode).ToList(),
-            budget, NonBudgetFilter(filter), alternatives);
+            budget, NonBudgetFilter(filter), alternatives, EnglishOf(filter, school),
+            PositionOf(filter, current), TargetsAbove(student, academics, current), StatsOf(school));
+    }
+
+    private static GoalSchoolStats StatsOf(RecommendSchoolInput school)
+    {
+        var o = new GroupingOptions();
+        return new GoalSchoolStats(
+            AcceptRate(school), IntlAcceptRate(school), IntlRatio(school), o.AlwaysReachRate, o.SafetyMinRate, o.IntlRatioCut);
+    }
+
+    // Vị trí của trường với hồ sơ thật: có trong danh sách hay bị loại (và vì sao), kèm nhóm học thuật
+    private static GoalPosition PositionOf(FilterResult filter, SchoolGroup current)
+    {
+        var group = GroupCode(current);
+        if (filter.Outcome != FilterOutcome.Excluded)
+            return new GoalPosition("in_list", group, null, filter.Outcome == FilterOutcome.AidBlock);
+        var reason = filter.ExcludeReason is "BUDGET" or "BUDGET_NO_AID" ? "BUDGET" : filter.ExcludeReason;
+        return new GoalPosition("excluded", group, reason, false);
+    }
+
+    // Các nhóm cao hơn nhóm hiện tại, mỗi nhóm một kết quả: Khó vào hoặc chưa đủ dữ liệu thì Vừa sức và An toàn, Vừa sức thì An toàn, An toàn thì không có
+    private static IReadOnlyList<GoalTargetResult> TargetsAbove(StudentAcademics student, SchoolAcademics academics, SchoolGroup current)
+    {
+        SchoolGroup[] goals = current switch
+        {
+            SchoolGroup.Safety => [],
+            SchoolGroup.Match => [SchoolGroup.Safety],
+            _ => [SchoolGroup.Match, SchoolGroup.Safety],
+        };
+        return goals.Select(goal => TargetOf(student, academics, goal)).ToList();
+    }
+
+    private static GoalTargetResult TargetOf(StudentAcademics student, SchoolAcademics academics, SchoolGroup goal)
+    {
+        var result = GoalSeeker.Seek(student, academics, goal);
+        GoalPlanDto? recommended = null;
+        if (result.Outcome == GoalOutcome.Reachable)
+        {
+            var d = new GroupingOptions();
+            var padded = GoalSeeker.Seek(
+                student, academics, goal, d with { LowerCut = d.LowerCut + GoalMargin, UpperCut = d.UpperCut + GoalMargin });
+            recommended = padded.Outcome == GoalOutcome.Reachable ? ToDto(padded.Cheapest) : null;
+        }
+        return new GoalTargetResult(
+            GroupCode(goal), OutcomeCode(result.Outcome), GroupCode(result.Best), result.Reasons,
+            ToDto(result.Cheapest), recommended, result.Alone.Select(p => ToDto(p)!).ToList(),
+            result.NoEffect.Select(FactorCode).ToList());
     }
 
     // Nhóm đích học sinh chọn. Bỏ trống: Khó vào hoặc chưa đủ dữ liệu thì Vừa sức, Vừa sức thì An toàn.
@@ -164,7 +247,13 @@ public partial class RecommendationService
 
     // Lý do trường không có trong danh sách mà không phải ngân sách (ngành, bang, loại trường)
     private static string? NonBudgetFilter(FilterResult filter) =>
-        filter.Outcome == FilterOutcome.Excluded && filter.ExcludeReason is "MAJOR" or "STATE" or "CONTROL" ? filter.ExcludeReason : null;
+        filter.Outcome == FilterOutcome.Excluded && filter.ExcludeReason is "MAJOR" or "STATE" or "CONTROL" or EnglishExclude.Short or EnglishExclude.NoCertificate ? filter.ExcludeReason : null;
+
+    // Mức tiếng Anh cần đạt khi trường bị loại vì tiếng Anh (cùng số liệu với cổng B4 của lượt gợi ý)
+    private static GoalEnglishDto? EnglishOf(FilterResult filter, RecommendSchoolInput school) =>
+        filter.Outcome == FilterOutcome.Excluded && filter.ExcludeReason is EnglishExclude.Short or EnglishExclude.NoCertificate
+            ? new GoalEnglishDto(school.Offering.MinIelts, school.Offering.MinToefl, school.Offering.MinDuolingo, filter.EnglishShortfall)
+            : null;
 
     // Trường tương tự đang ở đúng nhóm đích với hồ sơ thật: cùng loại (công/tư) trước, rồi chi phí gần nhất, rồi fit score cao nhất.
     private static IReadOnlyList<GoalAlternativeDto> Alternatives(

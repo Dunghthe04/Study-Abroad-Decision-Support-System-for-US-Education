@@ -14,32 +14,34 @@ interface EnglishNoticeBannerProps {
 // hoặc chưa có chứng chỉ) và cần đạt bao nhiêu để mở thêm trường. Số liệu do backend tính; ở đây chỉ dựng câu.
 export function EnglishNoticeBanner({ notice, empty }: EnglishNoticeBannerProps) {
   const { hidden, noCertificate, ladder } = notice;
+  const ladderText = ladder.map((step) => `${ielts(step.ielts)} → ${step.eligible} trường`).join(" · ");
 
-  const title = noCertificate
-    ? "Bạn chưa có chứng chỉ tiếng Anh"
-    : empty
-      ? "Điểm tiếng Anh hiện tại chưa đủ để nộp vào trường nào"
-      : "Một số trường chưa hiển thị vì tiếng Anh";
+  // Không còn trường nào, hoặc chưa có chứng chỉ nào: đây là điều chặn cả danh sách nên giữ khối cảnh báo rõ ràng
+  if (empty || noCertificate) {
+    const title = noCertificate ? "Bạn chưa có chứng chỉ tiếng Anh" : "Điểm tiếng Anh hiện tại chưa đủ để nộp vào trường nào";
+    const text = noCertificate
+      ? `Phần lớn trường yêu cầu IELTS, TOEFL hoặc Duolingo, bạn cần thi trước khi nộp. Có ${hidden} trường chưa hiển thị vì thiếu chứng chỉ này.`
+      : "Điểm tiếng Anh hiện tại của bạn chưa đủ để nộp vào trường nào theo tiêu chí bạn chọn. Bạn cần cải thiện tiếng Anh.";
+    return (
+      <Alert variant="warning">
+        <AlertCircleIcon className="size-4" />
+        <AlertTitle>{title}</AlertTitle>
+        <AlertDescription className="space-y-1 text-xs">
+          <p>{text}</p>
+          {ladder.length > 0 && <p>Số trường đủ điều kiện nếu bạn đạt IELTS: {ladderText}.</p>}
+        </AlertDescription>
+      </Alert>
+    );
+  }
 
-  const body = noCertificate
-    ? `Phần lớn trường yêu cầu IELTS, TOEFL hoặc Duolingo, bạn cần thi trước khi nộp. Có ${hidden} trường chưa hiển thị vì thiếu chứng chỉ này.`
-    : empty
-      ? "Điểm tiếng Anh hiện tại của bạn chưa đủ để nộp vào trường nào theo tiêu chí bạn chọn. Bạn cần cải thiện tiếng Anh."
-      : `Có ${hidden} trường chưa hiển thị vì mức tiếng Anh tối thiểu của trường cao hơn điểm của bạn từ 1 band trở lên.`;
-
+  // Chỉ một số trường bị ẩn: một dòng nhỏ, không phải một nhóm của danh sách. Bấm mới hiện cách mở thêm trường
   return (
-    <Alert variant="warning">
-      <AlertCircleIcon className="size-4" />
-      <AlertTitle>{title}</AlertTitle>
-      <AlertDescription className="space-y-1 text-xs">
-        <p>{body}</p>
-        {ladder.length > 0 && (
-          <p>
-            Số trường đủ điều kiện nếu bạn đạt IELTS:{" "}
-            {ladder.map((step) => `${ielts(step.ielts)} → ${step.eligible} trường`).join(" · ")}.
-          </p>
-        )}
-      </AlertDescription>
-    </Alert>
+    <details className="rounded-lg border border-line bg-surface px-3 py-2 text-xs text-ink-2">
+      <summary className="cursor-pointer">
+        {hidden} trường chưa hiển thị vì tiếng Anh (mức tối thiểu của trường cao hơn điểm của bạn từ 1 band).{" "}
+        {ladder.length > 0 && <span className="font-semibold text-brand">Xem cách mở thêm</span>}
+      </summary>
+      {ladder.length > 0 && <p className="mt-1.5">Số trường đủ điều kiện nếu bạn đạt IELTS: {ladderText}.</p>}
+    </details>
   );
 }

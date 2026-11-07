@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { AgeGate } from "@/components/auth/AgeGate";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { RecommendationView } from "@/components/recommendation/RecommendationView";
-import { goalFromParams, overridesFromParams } from "@/lib/simulation-link";
+import { overridesFromParams } from "@/lib/simulation-link";
 
 export const metadata: Metadata = {
   title: "Trường gợi ý – USAS",
@@ -27,7 +27,6 @@ export default async function RecommendationsPage({
           key={typeof ts === "string" ? ts : "latest"}
           autoRun={run === "1"}
           initialOverrides={overridesFromParams(params)}
-          initialGoal={goalFromParams(params)}
         />
       </AgeGate>
     </ProtectedRoute>

@@ -8,8 +8,9 @@ from fastapi.testclient import TestClient
 from app.api.deps import get_goal_writer
 from app.main import create_app
 from app.schemas.goal_note import GoalNoteRequest
-from app.services.goal_writer import GoalWriter, allowed_numbers, build_user
+from app.services.goal_writer import SKILL_PATH, GoalWriter, allowed_numbers, build_user
 from app.services.ollama import OllamaError
+from app.services.skill_call import load_skill
 from tests.fakes import FakeLLM
 
 # JSON backend gửi (camelCase)
@@ -156,4 +157,6 @@ def test_the_route_returns_the_message_with_the_skill_version():
     assert res.status_code == 200
     body = res.json()
     assert body["status"] == "OK" and body["answer"].startswith("Để lên nhóm Vừa sức ở Boston University")
-    assert body["skill_version"] == "1.0" and body["model"] == "gemini-test"
+    assert (
+        body["skill_version"] == load_skill(SKILL_PATH)[1] and body["model"] == "gemini-test"
+    )  # phiên bản đọc từ chính file skill

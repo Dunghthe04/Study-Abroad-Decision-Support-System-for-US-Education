@@ -9,25 +9,20 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { useAssistant, useAssistantPageContext } from "@/components/assistant/AssistantProvider";
 import { recommendationApi } from "@/lib/recommendation-api";
-import { statusLabel } from "@/lib/recommendation-labels";
-import { GOAL_EVENT, SIMULATE_EVENT, type GoalRequest } from "@/lib/simulation-link";
-import { useGoalSeek, type GoalSeek } from "@/lib/use-goal-seek";
+import { whyText } from "@/lib/recommendation-labels";
+import { RESET_SIMULATION_EVENT, SIMULATE_EVENT, describeSimulation } from "@/lib/simulation-link";
 import { useProfileSimulation, type ProfileSimulation } from "@/lib/use-profile-simulation";
 import type {
-  GroupSummary,
   PickBlockName,
   Pref,
   Recommendation,
-  GoalPlan,
   SchoolChange,
   ScoredSchool,
   SimulationOverrides,
 } from "@/types/recommendation";
-import { ExplainSheet } from "./ExplainSheet";
 import { ProfileSimulator } from "./ProfileSimulator";
 import { ProfileSummary } from "./ProfileSummary";
 import { EnglishNoticeBanner } from "./EnglishNoticeBanner";
-import { GoalSeekPanel } from "./GoalSeekPanel";
 import { SchoolCard } from "./SchoolCard";
 
 // Bốn khối chính theo đúng thứ tự trên màn. "other" để riêng ở cuối.
@@ -49,18 +44,20 @@ const BALANCED_PREF: Pref = [2, 2, 2];
 interface RecommendationViewProps {
   autoRun: boolean; // true khi vừa gửi hồ sơ xong: chạy gợi ý mới thay vì đọc lần cũ
   initialOverrides?: SimulationOverrides; // giá trị giả định chat vừa thử, điền sẵn vào thanh kéo
-  initialGoal?: GoalRequest | null; // trường chat vừa hỏi "cần gì để vào", mở sẵn khung kết quả
 }
 
-export function RecommendationView({ autoRun, initialOverrides, initialGoal }: RecommendationViewProps) {
+export function RecommendationView({ autoRun, initialOverrides }: RecommendationViewProps) {
   const router = useRouter();
   const [rec, setRec] = useState<Recommendation | null>(null);
   // Vừa gửi hồ sơ thì bắt đầu ở trạng thái "running", còn lại là "loading" (đọc lần đã lưu)
   const [phase, setPhase] = useState<"loading" | "running" | "ready">(autoRun ? "running" : "loading");
   const [error, setError] = useState<string | null>(null);
-  const [explainCode, setExplainCode] = useState<string | null>(null);
   const started = useRef(false); // dev mode chạy useEffect 2 lần; không được tạo 2 lần gợi ý
-  const { openPanel } = useAssistant();
+  const { openPanel, sendAction } = useAssistant();
+  // Nút trên thẻ trường gửi câu hỏi vào khung chat kèm mã trường (không qua SLM): chat trả thẻ kết quả rồi lời tư vấn
+  const nameOf = (code: string) => rec?.items.scored.find((s) => s.code === code)?.name ?? code;
+  const askGoal = (code: string) => sendAction(`Cần gì để vào ${nameOf(code)}?`, { type: "goal_seek", schoolCode: code });
+  const askExplain = (code: string) => sendAction(`Vì sao ${nameOf(code)} xếp ở nhóm này?`, { type: "explain", schoolCode: code });
 
   // Trình mô phỏng chỉ chạy khi đã có lần gợi ý (cần hồ sơ đã gửi)
   const basePref = rec?.criteria.pref ?? BALANCED_PREF;
@@ -73,49 +70,28 @@ export function RecommendationView({ autoRun, initialOverrides, initialGoal }: R
   }, [rec, sim.isSimulating, sim.result]);
   const simulating = sim.isSimulating && sim.result !== null;
 
-  // "Cần gì để vào trường này": tính từ hồ sơ thật; áp dụng kết quả thì đặt giá trị vào thanh kéo
-  const goal = useGoalSeek();
-  const applyGoal = (plan: GoalPlan) => {
-    const next: SimulationOverrides = { pref: sim.overrides.pref };
-    for (const change of plan.changes) {
-      if (change.factor === "sat") next.sat = change.to;
-      else if (change.factor === "gpa") next.gpa = change.to;
-      else next.ecTier = change.to;
-    }
-    sim.replace(next);
-  };
-
   // Ngữ cảnh trợ lý bên phải: lời chào theo số trường, chip hỏi về trường Khó vào đầu tiên
   const firstReach = view ? view.items.scored.find((s) => s.code === view.items.reach[0]?.code) : undefined;
   useAssistantPageContext({
     label: "Trang đề xuất",
     suggestions: firstReach ? [`Vì sao ${firstReach.name} Khó vào?`, ...RESULT_SUGGESTIONS] : RESULT_SUGGESTIONS,
     greeting: rec ? `Mình là hệ thống tư vấn du học. Bạn cần mình hỗ trợ gì không?:` : undefined,
+    // Đang kéo thanh giả định thì chat giải thích theo giả định đó (khớp danh sách đang xem)
+    simulation: simulating ? sim.overrides : null,
   });
 
   // Chat vừa thử một kịch bản what-if: đặt lại thanh kéo tại chỗ, không tải lại trang
-  const { replace: replaceSimulation } = sim;
+  const { replace: replaceSimulation, resetAll: resetSimulation } = sim;
   useEffect(() => {
     const onSimulate = (event: Event) => replaceSimulation((event as CustomEvent<SimulationOverrides>).detail);
+    const onReset = () => resetSimulation();
     window.addEventListener(SIMULATE_EVENT, onSimulate);
-    return () => window.removeEventListener(SIMULATE_EVENT, onSimulate);
-  }, [replaceSimulation]);
-
-  // Chat vừa hỏi "cần gì để vào trường X": mở khung kết quả của trường đó (ngay khi vào trang, hoặc tại chỗ nếu đang ở trang này)
-  const { open: openGoal } = goal;
-  const openedInitialGoal = useRef(false);
-  useEffect(() => {
-    if (initialGoal && !openedInitialGoal.current) {
-      openedInitialGoal.current = true;
-      openGoal(initialGoal.code, initialGoal.target);
-    }
-    const onGoalEvent = (event: Event) => {
-      const detail = (event as CustomEvent<GoalRequest>).detail;
-      openGoal(detail.code, detail.target);
+    window.addEventListener(RESET_SIMULATION_EVENT, onReset);
+    return () => {
+      window.removeEventListener(SIMULATE_EVENT, onSimulate);
+      window.removeEventListener(RESET_SIMULATION_EVENT, onReset);
     };
-    window.addEventListener(GOAL_EVENT, onGoalEvent);
-    return () => window.removeEventListener(GOAL_EVENT, onGoalEvent);
-  }, [initialGoal, openGoal]);
+  }, [replaceSimulation, resetSimulation]);
 
   // Có kết quả thì mở trợ lý bên phải một lần như bản demo (màn hẹp thì khung phủ kín nên không tự mở)
   const autoOpened = useRef(false);
@@ -201,23 +177,11 @@ export function RecommendationView({ autoRun, initialOverrides, initialGoal }: R
         <>
           <ProfileSummary rec={rec} onRerun={runNew} />
           {simulating && <SimulationBanner sim={sim} />}
-          {/* Trường chưa hiện thành thẻ nào (ngoài 4 trường mỗi nhóm): khung kết quả hiện ở đầu danh sách */}
-          {goal.code && !shownCodes(view).has(goal.code) && (
-            <GoalSeekPanel
-              goal={goal}
-              simulating={simulating}
-              schoolName={goal.result?.name ?? goal.code}
-              onApply={applyGoal}
-            />
-          )}
           <ResultBody
             rec={view}
             changes={simulating ? sim.result!.changes : []}
-            onExplain={simulating ? undefined : setExplainCode}
-            onGoal={goal.open}
-            goal={goal}
-            simulating={simulating}
-            onApplyGoal={applyGoal}
+            onExplain={askExplain}
+            onGoal={askGoal}
           />
         </>
       )}
@@ -226,7 +190,6 @@ export function RecommendationView({ autoRun, initialOverrides, initialGoal }: R
         Kết quả chỉ để tham khảo, không phải xác suất đỗ. Số liệu lấy từ Common Data Set của từng trường.
       </p>
 
-      <ExplainSheet code={explainCode} onClose={() => setExplainCode(null)} />
     </div>
   );
 
@@ -240,56 +203,14 @@ export function RecommendationView({ autoRun, initialOverrides, initialGoal }: R
   );
 }
 
-// Mã các trường đang hiện thành thẻ trong danh sách
-function shownCodes(rec: Recommendation): Set<string> {
-  const { reach, match, safety, aid, other } = rec.items;
-  return new Set([...reach, ...match, ...safety, ...aid, ...other].map((p) => p.code));
-}
-
 // Dải thông báo khi đang xem hồ sơ giả định: số trường mỗi nhóm trước và sau, các trường đổi nhóm
 function SimulationBanner({ sim }: { sim: ProfileSimulation }) {
-  const result = sim.result;
-  if (!result) return null;
-  const { baseline, simulated, changes } = result;
-  const rows: { label: string; key: keyof GroupSummary }[] = [
-    { label: "Khó vào", key: "reach" },
-    { label: "Vừa sức", key: "match" },
-    { label: "An toàn hơn", key: "safety" },
-    { label: "Cần học bổng lớn", key: "aidBlock" },
-  ];
-
   return (
-    <div className="space-y-3 rounded-2xl border border-brand/30 bg-brand-wash p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm font-bold text-brand">Đang xem hồ sơ giả định, không phải hồ sơ thật của bạn</p>
-        <Button variant="outline" size="sm" onClick={sim.resetAll}>
-          Quay lại hồ sơ thật
-        </Button>
-      </div>
-      <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-ink-2">
-        {rows.map((row) => (
-          <span key={row.key}>
-            {row.label}:{" "}
-            <strong className="text-foreground">
-              {baseline[row.key]} → {simulated[row.key]}
-            </strong>
-          </span>
-        ))}
-      </div>
-      {changes.length > 0 ? (
-        <details className="text-xs text-ink-2">
-          <summary className="cursor-pointer font-semibold text-foreground">{changes.length} trường đổi so với hồ sơ thật</summary>
-          <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto">
-            {changes.map((c) => (
-              <li key={c.code}>
-                <span className="font-medium text-foreground">{c.name}</span>: {statusLabel(c.from)} → {statusLabel(c.to)}
-              </li>
-            ))}
-          </ul>
-        </details>
-      ) : (
-        <p className="text-xs text-ink-2">Với giá trị này, không trường nào đổi nhóm.</p>
-      )}
+    <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-brand/30 bg-brand-wash px-4 py-2.5">
+      <p className="text-sm font-semibold text-brand">Đang xem giả định: {describeSimulation(sim.overrides)}</p>
+      <Button variant="outline" size="sm" onClick={sim.resetAll}>
+        Quay lại hồ sơ thật
+      </Button>
     </div>
   );
 }
@@ -299,12 +220,9 @@ interface ResultBodyProps {
   changes: SchoolChange[]; // trường đổi nhóm khi đang mô phỏng
   onExplain?: (code: string) => void; // bỏ trống khi đang mô phỏng
   onGoal?: (code: string) => void;
-  goal: GoalSeek; // khung "Cần gì để vào?" mở ngay dưới thẻ trường đang xét
-  simulating: boolean;
-  onApplyGoal: (plan: GoalPlan) => void;
 }
 
-function ResultBody({ rec, changes, onExplain, onGoal, goal, simulating, onApplyGoal }: ResultBodyProps) {
+function ResultBody({ rec, changes, onExplain, onGoal }: ResultBodyProps) {
   const { criteria, items } = rec;
   const byCode = new Map<string, ScoredSchool>(items.scored.map((s) => [s.code, s]));
   const changeByCode = new Map<string, SchoolChange>(changes.map((c) => [c.code, c]));
@@ -363,15 +281,8 @@ function ResultBody({ rec, changes, onExplain, onGoal, goal, simulating, onApply
                     change={changeByCode.get(p.code)}
                     onExplain={onExplain}
                     onGoal={onGoal}
+                    student={{ sat: criteria.studentSat ?? null, gpa: criteria.studentGpa ?? null }}
                   />
-                  {goal.code === p.code && (
-                    <GoalSeekPanel
-                      goal={goal}
-                      simulating={simulating}
-                      schoolName={byCode.get(p.code)?.name ?? p.code}
-                      onApply={onApplyGoal}
-                    />
-                  )}
                 </div>
               ))}
             </div>
@@ -382,11 +293,15 @@ function ResultBody({ rec, changes, onExplain, onGoal, goal, simulating, onApply
       {items.other.length > 0 && (
         <details className="rounded-2xl border border-line bg-surface p-4 text-xs text-muted-foreground">
           <summary className="cursor-pointer font-semibold text-foreground">
-            {items.other.length} trường chưa xếp nhóm (thiếu dữ liệu)
+            {items.other.length} trường chưa xếp được nhóm Khó vào / Vừa sức / An toàn
           </summary>
-          <ul className="mt-2 space-y-1">
+          <p className="mt-2">Hệ thống không đoán khi thiếu số liệu. Các trường này vẫn phù hợp bộ lọc của bạn, chỉ là chưa đủ dữ liệu để so với hồ sơ.</p>
+          <ul className="mt-2 space-y-1.5">
             {items.other.map((p) => (
-              <li key={p.code}>{byCode.get(p.code)?.name ?? p.code}</li>
+              <li key={p.code}>
+                <b className="text-foreground">{byCode.get(p.code)?.name ?? p.code}</b>
+                {p.why.length > 0 && <>: {p.why.map(whyText).join(" ")}</>}
+              </li>
             ))}
           </ul>
         </details>

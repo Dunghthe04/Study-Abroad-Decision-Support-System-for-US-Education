@@ -81,11 +81,36 @@ def test_ielts_must_be_on_half_steps():
         parse(change("english", "7.3"))
 
 
+def test_toefl_and_duolingo_are_tested_by_their_unit():
+    assert parse(change("english", "100", "toefl")).changes == {"toefl": 100}
+    assert parse(change("english", "120", "duolingo")).changes == {"duolingo": 120}
+    assert parse(change("english", "100", "TOEFL")).changes == {"toefl": 100}
+
+
+def test_a_big_english_score_without_a_unit_asks_which_test():
+    # 100 có thể là TOEFL hoặc Duolingo: hỏi lại, không đoán
+    with pytest.raises(AskAgain, match="TOEFL hay Duolingo"):
+        parse(change("english", "100"))
+
+
+def test_toefl_and_duolingo_are_checked_against_their_limits():
+    with pytest.raises(AskAgain, match="chỉ từ 0 đến 120"):
+        parse(change("english", "130", "toefl"))
+    with pytest.raises(AskAgain, match="chỉ từ 10 đến 160"):
+        parse(change("english", "5", "duolingo"))
+
+
 def test_other_english_tests_are_reported_as_unsupported():
-    result = parse(change("english", "100", "toefl"))
+    result = parse(change("english", "70", "pte"))
 
     assert result.changes == {}
-    assert result.unsupported == ["chứng chỉ tiếng Anh ngoài IELTS"]
+    assert result.unsupported == ["chứng chỉ tiếng Anh ngoài IELTS, TOEFL, Duolingo"]
+
+
+def test_the_label_names_toefl_and_duolingo():
+    result = parse(change("english", "100", "toefl"), change("english", "120", "duolingo"))
+
+    assert result.label() == "TOEFL 100, Duolingo 120"
 
 
 # ---- ngân sách ----

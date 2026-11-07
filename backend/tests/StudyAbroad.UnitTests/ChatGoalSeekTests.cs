@@ -21,6 +21,63 @@ public class ChatGoalSeekTests
     private static GoalPlanDto Sat(decimal from, decimal to, string difficulty = "hard") =>
         new([new GoalChangeDto("sat", from, to)], 1.4, difficulty);
 
+    // ---------------------------------------------------------------- nút bước tiếp theo khi trường bị bộ lọc cứng loại
+
+    private static SchoolGoalResult Excluded(string reason, GoalEnglishDto? english = null, GoalBudgetDto? budget = null) =>
+        Result(budget: budget) with { Position = new GoalPosition("excluded", "M", reason, false), FilterReason = reason, English = english };
+
+    [Theory]
+    [InlineData("MAJOR")]
+    [InlineData("STATE")]
+    [InlineData("CONTROL")]
+    public void NextSteps_ForAProfileFilter_SendsTheStudentToEditTheProfile(string reason)
+    {
+        var step = Assert.Single(ChatGoalSeek.NextSteps(Excluded(reason)));
+
+        Assert.Equal("Sửa hồ sơ", step.Label);
+        Assert.Equal("/analysis?edit=1", step.Href);
+        Assert.Null(step.Action);
+    }
+
+    [Theory]
+    [InlineData(7.0, null, null, "Thử IELTS 7", "Nếu IELTS của em là 7 thì sao?")]
+    [InlineData(6.5, 90, null, "Thử IELTS 6.5", "Nếu IELTS của em là 6.5 thì sao?")]   // ưu tiên IELTS khi trường có công bố
+    [InlineData(null, 95, 120, "Thử TOEFL 95", "Nếu TOEFL của em là 95 thì sao?")]
+    [InlineData(null, null, 110, "Thử Duolingo 110", "Nếu Duolingo của em là 110 thì sao?")]
+    public void NextSteps_ForEnglish_OffersToTryTheMinimumScore(double? ielts, int? toefl, int? duolingo, string label, string value)
+    {
+        var english = new GoalEnglishDto((decimal?)ielts, toefl, duolingo, 1m);
+
+        var step = Assert.Single(ChatGoalSeek.NextSteps(Excluded("ENGLISH", english)));
+
+        Assert.Equal((label, value), (step.Label, step.Value));
+        Assert.Null(step.Href);
+    }
+
+    [Fact]
+    public void NextSteps_ForEnglishWithoutAPublishedMinimum_OffersNothing()
+    {
+        Assert.Empty(ChatGoalSeek.NextSteps(Excluded("ENGLISH_NO_CERT", new GoalEnglishDto(null, null, null, null))));
+        Assert.Empty(ChatGoalSeek.NextSteps(Excluded("ENGLISH")));
+    }
+
+    [Fact]
+    public void NextSteps_ForBudget_OffersToTryTheMinimumBudget()
+    {
+        var budget = new GoalBudgetDto("over_budget", 62_000m, 40_000m, 56_364.5m, 22_000m, null);
+
+        var step = Assert.Single(ChatGoalSeek.NextSteps(Excluded("BUDGET", budget: budget)));
+
+        Assert.Equal("Thử ngân sách 56.365 USD", step.Label);
+        Assert.Equal("Nếu ngân sách của em là 56365 USD mỗi năm thì sao?", step.Value);
+    }
+
+    [Fact]
+    public void NextSteps_ForASchoolThatIsInTheList_OffersNothing()
+    {
+        Assert.Empty(ChatGoalSeek.NextSteps(Result()));
+    }
+
     // ---------------------------------------------------------------- đọc câu hỏi
 
     [Fact]
@@ -100,6 +157,74 @@ public class ChatGoalSeekTests
 
         Assert.Equal("Mình hiểu bạn hỏi về Boston University, nhóm muốn đạt: Vừa sức.", lines[0]);
         Assert.StartsWith("Tài chính: Chi phí khoảng 38.000 USD mỗi năm, nằm trong ngân sách", lines[1]);
+    }
+
+    // Trường bị ẩn vì tiếng Anh: dòng tiếng Anh đứng trước tài chính, nêu mức tối thiểu từng bài thi
+    // Lý do bị chặn nói con số cụ thể (tỉ lệ nhận, mốc), không chỉ "ít hơn hẳn"
+    [Fact]
+    public void Summarize_Blocked_StatesTheAcceptRateAndTheThresholds()
+    {
+        var stats = new GoalSchoolStats(0.24m, 0.09m, 0.375, 0.15, 0.5, 0.5);
+        var intl = Result(outcome: "blocked", best: "R", reasons: ["INTL_DOWNGRADE"]) with { Stats = stats };
+        var low = Result(outcome: "blocked", best: "R", reasons: ["LOW_ACCEPT_RATE"]) with { Stats = new GoalSchoolStats(0.08m, 0.04m, 0.5, 0.15, 0.5, 0.5) };
+
+        var intlText = ChatGoalSeek.Summarize(intl);
+        var lowText = ChatGoalSeek.Summarize(low);
+
+        Assert.Contains("nhận du học sinh 9% trong khi tỷ lệ nhận chung là 24%, chỉ bằng 37,5% mức chung và dưới mốc 50%", intlText);
+        Assert.Contains("chỉ nhận 8% hồ sơ, dưới mốc 15%", lowText);
+    }
+
+    // Khung chat dựng thẻ từ chính kết quả code đã tính: widget mang theo toàn bộ kết quả (camelCase), kèm vị trí và các mức đích
+    [Fact]
+    public void WidgetOf_CarriesTheWholeResultForTheChatCard()
+    {
+        var result = Result(alone: [Sat(1290, 1430)]) with
+        {
+            Position = new GoalPosition("in_list", "R", null, false),
+            Targets = [new GoalTargetResult("M", "reachable", "M", [], null, null, [Sat(1290, 1430)], [])],
+        };
+
+        var widget = ChatGoalSeek.WidgetOf(result);
+
+        Assert.Equal("goal_seek", widget.Type);
+        Assert.Equal("188429", widget.Data!.Value.GetProperty("code").GetString());
+        var card = widget.Data.Value.GetProperty("result");
+        Assert.Equal("Boston University", card.GetProperty("name").GetString());
+        Assert.Equal("in_list", card.GetProperty("position").GetProperty("status").GetString());
+        Assert.Equal("M", card.GetProperty("targets")[0].GetProperty("target").GetString());
+        Assert.Equal(1430, card.GetProperty("targets")[0].GetProperty("alone")[0].GetProperty("changes")[0].GetProperty("to").GetDecimal());
+    }
+
+    [Fact]
+    public void Summarize_ASchoolHiddenForEnglish_SaysTheScoreNeededBeforeFinance()
+    {
+        var result = Result(alone: [Sat(1290, 1430)]) with
+        {
+            FilterReason = "ENGLISH",
+            English = new GoalEnglishDto(7.5m, 100m, 130m, 1.5m)
+        };
+
+        var lines = ChatGoalSeek.Summarize(result).Split('\n');
+
+        Assert.StartsWith("Tiếng Anh: điểm của bạn chưa đủ", lines[1]);
+        Assert.Contains("IELTS 7,5, TOEFL 100 hoặc Duolingo 130 (một bài là đủ)", lines[1]);
+        Assert.StartsWith("Tài chính:", lines[2]);
+    }
+
+    [Fact]
+    public void Summarize_WithoutACertificate_SaysSoAndShowsTheOnlyScoreTheSchoolAsks()
+    {
+        var result = Result(alone: [Sat(1290, 1430)]) with
+        {
+            FilterReason = "ENGLISH_NO_CERT",
+            English = new GoalEnglishDto(6.5m, null, null, null)
+        };
+
+        var line = ChatGoalSeek.Summarize(result).Split('\n')[1];
+
+        Assert.StartsWith("Tiếng Anh: bạn chưa có chứng chỉ", line);
+        Assert.Contains("Cần đạt IELTS 6,5.", line);
     }
 
     [Fact]
