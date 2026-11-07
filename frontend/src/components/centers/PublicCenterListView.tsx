@@ -138,18 +138,18 @@ export function PublicCenterListView({ initialCenters }: PublicCenterListViewPro
 
   return (
     <div className="space-y-6">
-      {/* Admin Quick Switch Notice Banner */}
+      {/* Moderator Quick Switch Notice Banner */}
       {isAdmin && (
         <div className="p-3.5 rounded-xl border border-brand/20 bg-brand/5 flex flex-wrap items-center justify-between gap-3 text-sm">
           <div className="flex items-center gap-2 text-foreground">
             <ShieldCheckIcon className="w-4 h-4 text-brand shrink-0" />
-            <span>Bạn đang đăng nhập với quyền <strong>Quản trị viên</strong>. Xem trang quản trị để thêm mới hoặc duyệt hồ sơ cơ sở.</span>
+            <span>Bạn đang đăng nhập với quyền <strong>{user?.role === "admin" ? "Quản trị viên" : "Moderator"}</strong>. Xem trang kiểm duyệt để thêm mới hoặc duyệt hồ sơ cơ sở.</span>
           </div>
           <Link
-            href="/admin/centers"
+            href="/moderator/centers"
             className={cn(buttonVariants({ size: "sm" }), "gap-1.5 text-xs bg-brand text-white hover:bg-brand/90")}
           >
-            <span>Vào Quản lý trung tâm (Admin)</span>
+            <span>Vào Quản lý trung tâm (Moderator)</span>
             <ExternalLinkIcon className="w-3.5 h-3.5" />
           </Link>
         </div>

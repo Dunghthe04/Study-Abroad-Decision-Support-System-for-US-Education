@@ -241,7 +241,7 @@ export function AdminCenterListView() {
                   return (
                     <tr
                       key={c.id}
-                      onClick={() => router.push(`/admin/centers/${c.id}`)}
+                      onClick={() => router.push(`/moderator/centers/${c.id}`)}
                       className="cursor-pointer transition-colors hover:bg-muted/40"
                     >
                       {/* Name & Logo */}
@@ -318,7 +318,7 @@ export function AdminCenterListView() {
                       {/* Actions */}
                       <td className="py-3.5 px-4 text-right">
                         <Link
-                          href={`/admin/centers/${c.id}`}
+                          href={`/moderator/centers/${c.id}`}
                           className={cn(
                             buttonVariants({ variant: "outline", size: "sm" }),
                             "gap-1.5 text-xs h-8 hover:bg-muted text-foreground border-border"

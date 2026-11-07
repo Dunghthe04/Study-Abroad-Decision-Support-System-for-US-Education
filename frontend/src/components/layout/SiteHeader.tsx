@@ -27,11 +27,29 @@ export function SiteHeader() {
   const router = useRouter();
   const pathname = usePathname();
 
-  const canOpenAdmin = user?.role === "admin" || user?.role === "moderator";
+  const isAdmin = user?.role === "admin";
+  const isModerator = user?.role === "moderator";
+
+  const getHomeHref = () => {
+    if (isAdmin) return "/admin";
+    if (isModerator) return "/moderator/centers";
+    return "/";
+  };
+
+  const getHomeLabel = () => {
+    if (isAdmin) return "Quản trị";
+    if (isModerator) return "Kiểm duyệt";
+    return "Trang chủ";
+  };
+
+  const getCentersHref = () => {
+    if (isAdmin || isModerator) return "/moderator/centers";
+    return "/centers";
+  };
 
   const navLinks = [
-    { href: canOpenAdmin ? "/admin" : "/", label: canOpenAdmin ? "Quản trị" : "Trang chủ" },
-    { href: canOpenAdmin ? "/admin/centers" : "/centers", label: "Trung tâm tư vấn" },
+    { href: getHomeHref(), label: getHomeLabel() },
+    { href: getCentersHref(), label: "Trung tâm tư vấn" },
     { href: "/methodology", label: "Giới thiệu phương pháp" },
     { href: "/analysis", label: "Phân tích tư vấn" },
   ];
@@ -40,11 +58,14 @@ export function SiteHeader() {
     if (href === "/admin") {
       return pathname === "/admin";
     }
+    if (href === "/moderator") {
+      return pathname === "/moderator";
+    }
     if (href === "/") {
       return pathname === "/";
     }
-    if (href === "/admin/centers") {
-      return pathname.startsWith("/admin/centers") || pathname.startsWith("/centers");
+    if (href.includes("/centers")) {
+      return pathname.includes("/centers");
     }
     return pathname.startsWith(href);
   };
@@ -68,7 +89,7 @@ export function SiteHeader() {
       >
         <div className="flex min-w-0 items-center gap-6">
           <Link
-            href={canOpenAdmin ? "/admin" : "/"}
+            href={getHomeHref()}
             className="flex items-center gap-2 font-heading text-xl font-bold tracking-tight text-brand-ink transition-opacity hover:opacity-90"
           >
             <span className="flex size-[30px] items-center justify-center rounded-lg bg-brand-ink text-white font-sans text-xs font-black">
@@ -127,10 +148,16 @@ export function SiteHeader() {
                   <DropdownMenuLabel>{user.fullName}</DropdownMenuLabel>
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />
-                {canOpenAdmin && (
+                {isAdmin && (
                   <DropdownMenuItem render={<Link href="/admin" />}>
                     <LayoutDashboardIcon />
-                    Trang quản trị
+                    Trang quản trị (Admin)
+                  </DropdownMenuItem>
+                )}
+                {isModerator && (
+                  <DropdownMenuItem render={<Link href="/moderator" />}>
+                    <LayoutDashboardIcon />
+                    Khu vực Moderator
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuItem render={<Link href="/analysis" />}>
@@ -141,13 +168,13 @@ export function SiteHeader() {
                   <UserIcon />
                   Hồ sơ cá nhân
                 </DropdownMenuItem>
-                {(user.role === "admin" || user.role === "moderator") && (
-                  <DropdownMenuItem render={<Link href="/admin/centers" />}>
+                {(isAdmin || isModerator) && (
+                  <DropdownMenuItem render={<Link href="/moderator/centers" />}>
                     <Building2Icon />
                     Quản lý trung tâm
                   </DropdownMenuItem>
                 )}
-                {user.role === "admin" && (
+                {isAdmin && (
                   <DropdownMenuItem render={<Link href="/admin/users" />}>
                     <ShieldIcon />
                     Quản trị người dùng
