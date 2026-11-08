@@ -23,6 +23,8 @@ import type {
   CreateStudyCenterRequest,
   UpdateStudyCenterRequest,
   SetStudyCenterActiveRequest,
+  CenterReceivedLeadDto,
+  CenterLeadsSummaryDto,
 } from "@/types/api";
 
 // Browser code calls same-origin /api (Nginx in prod, Next rewrite in dev).
@@ -281,4 +283,33 @@ export const studyCentersApi = {
       body: JSON.stringify(payload),
     });
   },
+};
+
+/** [UC-73] Quản lý và xử lý yêu cầu liên hệ nhận được phía trung tâm tư vấn (Leads) */
+export const centerLeadsApi = {
+  list: (params?: {
+    page?: number;
+    pageSize?: number;
+    status?: string;
+    search?: string;
+    studyCenterId?: string;
+  }) => {
+    const sp = new URLSearchParams();
+    if (params?.page) sp.set("page", String(params.page));
+    if (params?.pageSize) sp.set("pageSize", String(params.pageSize));
+    if (params?.status && params.status !== "all") sp.set("status", params.status);
+    if (params?.search) sp.set("search", params.search);
+    if (params?.studyCenterId) sp.set("studyCenterId", params.studyCenterId);
+    const qs = sp.toString();
+    return apiFetch<CenterLeadsSummaryDto>(`/api/v1/leads/received${qs ? `?${qs}` : ""}`);
+  },
+
+  getById: (id: string) =>
+    apiFetch<CenterReceivedLeadDto>(`/api/v1/leads/received/${encodeURIComponent(id)}`),
+
+  updateStatus: (id: string, status: string) =>
+    apiFetch<CenterReceivedLeadDto>(`/api/v1/leads/received/${encodeURIComponent(id)}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    }),
 };

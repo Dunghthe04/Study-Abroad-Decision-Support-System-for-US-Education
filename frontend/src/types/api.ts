@@ -336,3 +336,48 @@ export interface ParentLinkResponse<T> {
   message: string | null;
   data: T;
 }
+
+// [UC-73] Quản lý yêu cầu liên hệ nhận được phía Trung tâm tư vấn (Leads)
+export interface SharedProfileSummaryDto {
+  overallGpa?: number | null;
+  targetLevel?: string | null;
+  intendedMajor?: string | null;
+  educationSystem?: string | null;
+  currentGrade?: string | null;
+  englishScore?: number | null;
+  englishTestType?: string | null;
+  satScore?: number | null;
+  actScore?: number | null;
+  extracurricularTier?: number | null;
+  budgetTier?: string | null;
+}
+
+export interface CenterReceivedLeadDto {
+  id: string;
+  studyCenterId: string;
+  studyCenterName: string;
+  studyLevel?: string | null;
+  contactPhone?: string | null;
+  message?: string | null;
+  sharedProfile: boolean;
+  status: "new" | "contacted" | "closed" | string;
+  createdAt: string;
+  studentName?: string | null;
+  studentEmail?: string | null;
+  profileSummary?: SharedProfileSummaryDto | null;
+}
+
+export interface CenterLeadsSummaryDto {
+  items: CenterReceivedLeadDto[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+  newCount: number;
+  contactedCount: number;
+  closedCount: number;
+}
+
+export interface UpdateLeadStatusRequest {
+  status: string;
+}
+

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Building2Icon, FileTextIcon, LayoutDashboardIcon, LogOutIcon, ShieldIcon, UserIcon } from "lucide-react";
+import { Building2Icon, FileTextIcon, InboxIcon, LayoutDashboardIcon, LogOutIcon, ShieldIcon, UserIcon } from "lucide-react";
 import { formatUserRole } from "@/lib/user-role-labels";
 import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -36,6 +36,7 @@ export function SiteHeader() {
     { href: canOpenAdmin ? "/admin/centers" : "/centers", label: "Trung tâm tư vấn" },
     { href: "/methodology", label: "Giới thiệu phương pháp" },
     { href: "/analysis", label: "Phân tích tư vấn" },
+    ...(user?.role === "center" ? [{ href: "/center/leads", label: "Yêu cầu liên hệ" }] : []),
   ];
 
   const isLinkActive = (href: string) => {
@@ -143,6 +144,12 @@ export function SiteHeader() {
                   <UserIcon />
                   Hồ sơ cá nhân
                 </DropdownMenuItem>
+                {(user.role === "center" || canOpenAdmin) && (
+                  <DropdownMenuItem render={<Link href="/center/leads" />}>
+                    <InboxIcon />
+                    Yêu cầu liên hệ nhận được
+                  </DropdownMenuItem>
+                )}
                 {canOpenAdmin && (
                   <DropdownMenuItem render={<Link href="/admin/centers" />}>
                     <Building2Icon />
