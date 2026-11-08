@@ -45,10 +45,18 @@ export function AddCenterButton({ className, size = "sm" }: AddCenterButtonProps
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [city, setCity] = useState("");
+  const [district, setDistrict] = useState("");
   const [address, setAddress] = useState("");
   const [website, setWebsite] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
+  const [centerType, setCenterType] = useState("study_abroad");
+  const [licenseNumber, setLicenseNumber] = useState("");
+  const [establishedYear, setEstablishedYear] = useState<string>("");
+  const [staffCount, setStaffCount] = useState<string>("");
+  const [visaSuccessRate, setVisaSuccessRate] = useState<string>("");
+  const [logoUrl, setLogoUrl] = useState("");
+  const [accreditationsInput, setAccreditationsInput] = useState("");
   const [description, setDescription] = useState("");
   const [selectedLevels, setSelectedLevels] = useState<string[]>([]);
   const [selectedServices, setSelectedServices] = useState<string[]>([]);
@@ -77,10 +85,18 @@ export function AddCenterButton({ className, size = "sm" }: AddCenterButtonProps
     setCode("");
     setName("");
     setCity("");
+    setDistrict("");
     setAddress("");
     setWebsite("");
     setPhone("");
     setEmail("");
+    setCenterType("study_abroad");
+    setLicenseNumber("");
+    setEstablishedYear("");
+    setStaffCount("");
+    setVisaSuccessRate("");
+    setLogoUrl("");
+    setAccreditationsInput("");
     setDescription("");
     setSelectedLevels([]);
     setSelectedServices([]);
@@ -111,14 +127,32 @@ export function AddCenterButton({ className, size = "sm" }: AddCenterButtonProps
     setIsSubmitting(true);
 
     try {
+      const parsedEstYear = establishedYear ? parseInt(establishedYear, 10) : undefined;
+      const parsedStaff = staffCount ? parseInt(staffCount, 10) : undefined;
+      const parsedVisaRate = visaSuccessRate ? parseFloat(visaSuccessRate) : undefined;
+      const parsedAccreditations = accreditationsInput
+        ? accreditationsInput
+            .split(/[,;\n]/)
+            .map((s) => s.trim())
+            .filter(Boolean)
+        : undefined;
+
       await studyCentersApi.create({
         code: trimmedCode,
         name: trimmedName,
         city: city.trim() || null,
+        district: district.trim() || null,
         address: address.trim() || null,
         website: website.trim() || null,
         phone: phone.trim() || null,
         email: email.trim() || null,
+        centerType: centerType.trim() || "study_abroad",
+        licenseNumber: licenseNumber.trim() || null,
+        establishedYear: isNaN(parsedEstYear as number) ? null : parsedEstYear,
+        staffCount: isNaN(parsedStaff as number) ? null : parsedStaff,
+        visaSuccessRate: isNaN(parsedVisaRate as number) ? null : parsedVisaRate,
+        logoUrl: logoUrl.trim() || null,
+        accreditations: parsedAccreditations,
         description: description.trim() || null,
         studyLevels: selectedLevels,
         services: selectedServices,
@@ -198,6 +232,34 @@ export function AddCenterButton({ className, size = "sm" }: AddCenterButtonProps
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field>
+                <FieldLabel htmlFor="center-type">Mô hình hoạt động</FieldLabel>
+                <select
+                  id="center-type"
+                  value={centerType}
+                  onChange={(e) => setCenterType(e.target.value)}
+                  disabled={isSubmitting}
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <option value="study_abroad">Tư vấn Du học</option>
+                  <option value="test_prep">Luyện thi chuẩn hóa (SAT/IELTS)</option>
+                  <option value="hybrid">Toàn diện (Du học & Luyện thi)</option>
+                </select>
+              </Field>
+
+              <Field>
+                <FieldLabel htmlFor="center-logo">Link ảnh Logo (URL)</FieldLabel>
+                <Input
+                  id="center-logo"
+                  placeholder="https://example.com/logo.png"
+                  value={logoUrl}
+                  onChange={(e) => setLogoUrl(e.target.value)}
+                  disabled={isSubmitting}
+                />
+              </Field>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Field>
                 <FieldLabel htmlFor="center-city">Tỉnh / Thành phố</FieldLabel>
                 <Input
                   id="center-city"
@@ -209,6 +271,30 @@ export function AddCenterButton({ className, size = "sm" }: AddCenterButtonProps
               </Field>
 
               <Field>
+                <FieldLabel htmlFor="center-district">Quận / Huyện</FieldLabel>
+                <Input
+                  id="center-district"
+                  placeholder="Ví dụ: Cầu Giấy, Quận 1, Hải Châu..."
+                  value={district}
+                  onChange={(e) => setDistrict(e.target.value)}
+                  disabled={isSubmitting}
+                />
+              </Field>
+            </div>
+
+            <Field>
+              <FieldLabel htmlFor="center-address">Địa chỉ chi tiết</FieldLabel>
+              <Input
+                id="center-address"
+                placeholder="Số nhà, đường, phường/xã..."
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                disabled={isSubmitting}
+              />
+            </Field>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <Field>
                 <FieldLabel htmlFor="center-phone">Số điện thoại</FieldLabel>
                 <Input
                   id="center-phone"
@@ -218,9 +304,7 @@ export function AddCenterButton({ className, size = "sm" }: AddCenterButtonProps
                   disabled={isSubmitting}
                 />
               </Field>
-            </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field>
                 <FieldLabel htmlFor="center-email">Email liên hệ</FieldLabel>
                 <Input
@@ -245,16 +329,74 @@ export function AddCenterButton({ className, size = "sm" }: AddCenterButtonProps
               </Field>
             </div>
 
-            <Field>
-              <FieldLabel htmlFor="center-address">Địa chỉ chi tiết</FieldLabel>
-              <Input
-                id="center-address"
-                placeholder="Số nhà, đường, phường/xã, quận/huyện..."
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                disabled={isSubmitting}
-              />
-            </Field>
+            {/* Khối Pháp lý & Năng lực */}
+            <div className="rounded-lg border bg-muted/20 p-3.5 space-y-3">
+              <div className="text-xs font-semibold text-foreground uppercase tracking-wider">
+                Hồ sơ pháp lý & Năng lực đối soát (Xác minh)
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Field>
+                  <FieldLabel htmlFor="center-license">Số giấy phép Sở GD&ĐT</FieldLabel>
+                  <Input
+                    id="center-license"
+                    placeholder="Ví dụ: GPHĐ-GD-2010/HN-088"
+                    value={licenseNumber}
+                    onChange={(e) => setLicenseNumber(e.target.value)}
+                    disabled={isSubmitting}
+                  />
+                </Field>
+
+                <Field>
+                  <FieldLabel htmlFor="center-year">Năm thành lập</FieldLabel>
+                  <Input
+                    id="center-year"
+                    type="number"
+                    placeholder="Ví dụ: 2010"
+                    value={establishedYear}
+                    onChange={(e) => setEstablishedYear(e.target.value)}
+                    disabled={isSubmitting}
+                  />
+                </Field>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Field>
+                  <FieldLabel htmlFor="center-staff">Quy mô nhân sự (cố vấn)</FieldLabel>
+                  <Input
+                    id="center-staff"
+                    type="number"
+                    placeholder="Ví dụ: 35"
+                    value={staffCount}
+                    onChange={(e) => setStaffCount(e.target.value)}
+                    disabled={isSubmitting}
+                  />
+                </Field>
+
+                <Field>
+                  <FieldLabel htmlFor="center-visa">Tỷ lệ đỗ Visa Mỹ (%)</FieldLabel>
+                  <Input
+                    id="center-visa"
+                    type="number"
+                    step="0.1"
+                    placeholder="Ví dụ: 98.5"
+                    value={visaSuccessRate}
+                    onChange={(e) => setVisaSuccessRate(e.target.value)}
+                    disabled={isSubmitting}
+                  />
+                </Field>
+              </div>
+
+              <Field>
+                <FieldLabel htmlFor="center-accreditations">Chứng nhận / Kiểm định quốc tế (ngăn cách bằng dấu phẩy)</FieldLabel>
+                <Input
+                  id="center-accreditations"
+                  placeholder="Ví dụ: AIRC, ICEF, PIER, British Council"
+                  value={accreditationsInput}
+                  onChange={(e) => setAccreditationsInput(e.target.value)}
+                  disabled={isSubmitting}
+                />
+              </Field>
+            </div>
 
             <Field>
               <FieldLabel>Bậc học tư vấn</FieldLabel>
