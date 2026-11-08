@@ -55,6 +55,24 @@ public class StudyCentersController(IStudyCenterService service) : ControllerBas
         return Ok(result.User);
     }
 
+    /// <summary>[UC-59] Xác minh hoặc hủy xác minh một trung tâm tư vấn (Moderator hoặc Admin).</summary>
+    [HttpPut("{id:guid}/verify")]
+    [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Moderator}")]
+    public async Task<ActionResult<StudyCenterDto>> VerifyCenter(
+        Guid id,
+        [FromBody] VerifyStudyCenterRequest request,
+        CancellationToken ct)
+    {
+        if (User.GetUserId() is not { } actorId)
+            return Unauthorized();
+
+        var result = await service.VerifyCenterAsync(id, request.IsVerified, actorId, ct);
+        if (!result.Success || result.Center is null)
+            return ValidationProblem(result.ErrorMessage);
+
+        return Ok(result.Center);
+    }
+
     /// <summary>Chat (B6) lấy tối đa 3 trung tâm đã xác minh cho một dịch vụ; cùng thành phố xếp trước.</summary>
     [HttpGet("referrals")]
     public async Task<ActionResult<IReadOnlyList<StudyCenterDto>>> Refer(
