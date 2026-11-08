@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeftIcon,
@@ -56,15 +56,11 @@ function parseScholarshipStat(raw?: string): { amount: string; note?: string } {
 }
 
 export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDetailViewProps) {
-  const [currentCenter, setCurrentCenter] = useState<StudyCenter>(initialCenter);
+  const [updatedCenter, setUpdatedCenter] = useState<StudyCenter | null>(null);
   const [confirmAction, setConfirmAction] = useState<"verify" | "unverify" | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  useEffect(() => {
-    setCurrentCenter(initialCenter);
-  }, [initialCenter]);
-
-  const center = currentCenter;
+  const center = updatedCenter ?? initialCenter;
   const profile = getEnrichedCenterProfile(center);
   const isVerified = center.verificationStatus === "verified" || profile.center.verificationStatus === "verified";
   const scholarshipStat = parseScholarshipStat(profile.totalScholarshipsWon);
@@ -76,13 +72,13 @@ export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDeta
 
     try {
       const updated = await studyCentersApi.verify(center.id, targetVerified);
-      setCurrentCenter((prev) => ({
-        ...prev,
+      setUpdatedCenter({
+        ...center,
         ...updated,
         verificationStatus: targetVerified ? "verified" : "unverified",
         verifiedAt: targetVerified ? (updated.verifiedAt ?? new Date().toISOString()) : null,
         verifiedByUserId: targetVerified ? updated.verifiedByUserId : null,
-      }));
+      });
 
       toast.add({
         type: "success",
