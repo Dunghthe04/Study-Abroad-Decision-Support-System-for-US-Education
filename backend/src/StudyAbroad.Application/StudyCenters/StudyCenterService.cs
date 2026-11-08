@@ -171,6 +171,136 @@ public class StudyCenterService(
         return VerifyStudyCenterResult.Ok(ToDto(center));
     }
 
+    public async Task<UpdateStudyCenterResult> UpdateCenterAsync(Guid id, UpdateStudyCenterRequest request, Guid actorUserId, CancellationToken ct = default)
+    {
+        var name = request.Name?.Trim() ?? string.Empty;
+        if (string.IsNullOrEmpty(name))
+            return UpdateStudyCenterResult.Fail("Tên trung tâm không được để trống.");
+
+        if (name.Length > MaxNameLength)
+            return UpdateStudyCenterResult.Fail($"Tên trung tâm không được vượt quá {MaxNameLength} ký tự.");
+
+        var center = await repository.GetByIdForUpdateAsync(id, ct);
+        if (center is null)
+            return UpdateStudyCenterResult.Fail("Không tìm thấy trung tâm tư vấn trong hệ thống.");
+
+        var oldSnapshot = new
+        {
+            center.Name,
+            center.City,
+            center.District,
+            center.Address,
+            center.Phone,
+            center.Email,
+            center.Website,
+            center.CenterType,
+            center.LicenseNumber,
+            center.StaffCount,
+            center.EstablishedYear,
+            center.VisaSuccessRate
+        };
+
+        center.Name = name;
+        center.Website = string.IsNullOrWhiteSpace(request.Website) ? null : request.Website.Trim();
+        center.Address = string.IsNullOrWhiteSpace(request.Address) ? null : request.Address.Trim();
+        center.City = string.IsNullOrWhiteSpace(request.City) ? null : request.City.Trim();
+        center.District = string.IsNullOrWhiteSpace(request.District) ? null : request.District.Trim();
+        center.Phone = string.IsNullOrWhiteSpace(request.Phone) ? null : request.Phone.Trim();
+        center.Email = string.IsNullOrWhiteSpace(request.Email) ? null : request.Email.Trim();
+        center.Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
+        center.CenterType = string.IsNullOrWhiteSpace(request.CenterType) ? center.CenterType : request.CenterType.Trim();
+        center.LogoUrl = string.IsNullOrWhiteSpace(request.LogoUrl) ? null : request.LogoUrl.Trim();
+        center.CoverImageUrl = string.IsNullOrWhiteSpace(request.CoverImageUrl) ? null : request.CoverImageUrl.Trim();
+        center.LicenseNumber = string.IsNullOrWhiteSpace(request.LicenseNumber) ? null : request.LicenseNumber.Trim();
+        center.StaffCount = request.StaffCount;
+        center.EstablishedYear = request.EstablishedYear;
+        center.VisaSuccessRate = request.VisaSuccessRate;
+        center.Latitude = request.Latitude;
+        center.Longitude = request.Longitude;
+
+        if (request.StudyLevels is not null)
+            center.StudyLevels = request.StudyLevels;
+
+        if (request.Services is not null)
+            center.Services = request.Services;
+
+        if (request.GalleryImages is not null)
+            center.GalleryImages = request.GalleryImages;
+
+        if (request.Accreditations is not null)
+            center.Accreditations = request.Accreditations;
+
+        await repository.UpdateAsync(center, ct);
+
+        var detailJson = JsonSerializer.Serialize(new
+        {
+            centerId = center.Id,
+            centerCode = center.Code,
+            actorUserId,
+            old = oldSnapshot,
+            updated = new
+            {
+                center.Name,
+                center.City,
+                center.District,
+                center.Address,
+                center.Phone,
+                center.Email,
+                center.Website,
+                center.CenterType,
+                center.LicenseNumber,
+                center.StaffCount,
+                center.EstablishedYear,
+                center.VisaSuccessRate
+            }
+        });
+
+        await auditLogs.AddAsync(new AuditLog
+        {
+            ActorUserId = actorUserId,
+            Action = "study_center.update",
+            EntityType = "study_center",
+            EntityId = center.Id.ToString(),
+            DetailJson = detailJson,
+        }, ct);
+
+        return UpdateStudyCenterResult.Ok(ToDto(center));
+    }
+
+    public async Task<SetStudyCenterActiveResult> SetCenterActiveAsync(Guid id, bool isActive, Guid actorUserId, CancellationToken ct = default)
+    {
+        var center = await repository.GetByIdForUpdateAsync(id, ct);
+        if (center is null)
+            return SetStudyCenterActiveResult.Fail("Không tìm thấy trung tâm tư vấn trong hệ thống.");
+
+        var previousIsActive = center.IsActive;
+        center.IsActive = isActive;
+
+        await repository.UpdateAsync(center, ct);
+
+        var action = isActive ? "study_center.show" : "study_center.hide";
+        var detailJson = JsonSerializer.Serialize(new
+        {
+            centerId = center.Id,
+            centerCode = center.Code,
+            centerName = center.Name,
+            previousIsActive,
+            newIsActive = isActive,
+            actorUserId
+        });
+
+        await auditLogs.AddAsync(new AuditLog
+        {
+            ActorUserId = actorUserId,
+            Action = action,
+            EntityType = "study_center",
+            EntityId = center.Id.ToString(),
+            DetailJson = detailJson,
+        }, ct);
+
+        return SetStudyCenterActiveResult.Ok(ToDto(center));
+    }
+
     public async Task<IReadOnlyList<string>> GetReferralCitiesAsync(CancellationToken ct = default) =>
         CenterReferral.Cities(await repository.ListReferableAsync(ct));
 
