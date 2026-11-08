@@ -1,6 +1,10 @@
+using System.Reflection;
+using Microsoft.AspNetCore.Authorization;
+using StudyAbroad.Api.Controllers;
 using StudyAbroad.Application.Audit;
 using StudyAbroad.Application.Common;
 using StudyAbroad.Application.StudyCenters;
+using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
 
 namespace StudyAbroad.UnitTests;
@@ -196,7 +200,21 @@ public class StudyCenterServiceTests
     }
 
     [Fact]
-    public async Task VerifyCenterAsync_VerifyCenter_SetsStatusVerified_AndLogsAudit()
+    public void StudyCentersController_ActionAttributes_MatchRbacPolicy()
+    {
+        // UC-71: Thêm trung tâm vào danh bạ - Admin hoặc Moderator được phép
+        var createAttr = typeof(StudyCentersController).GetMethod(nameof(StudyCentersController.Create))?.GetCustomAttribute<AuthorizeAttribute>();
+        Assert.NotNull(createAttr);
+        Assert.Equal($"{UserRoles.Admin},{UserRoles.Moderator}", createAttr.Roles);
+
+        // UC-64: Tạo tài khoản đại diện trung tâm - Admin hoặc Moderator được phép
+        var createAccountAttr = typeof(StudyCentersController).GetMethod(nameof(StudyCentersController.CreateCenterAccount))?.GetCustomAttribute<AuthorizeAttribute>();
+        Assert.NotNull(createAccountAttr);
+        Assert.Equal($"{UserRoles.Admin},{UserRoles.Moderator}", createAccountAttr.Roles);
+    }
+
+    [Fact]
+public async Task VerifyCenterAsync_VerifyCenter_SetsStatusVerified_AndLogsAudit()
     {
         var center = new StudyCenter
         {

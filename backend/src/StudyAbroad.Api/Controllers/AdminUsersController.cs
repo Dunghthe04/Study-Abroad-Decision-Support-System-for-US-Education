@@ -9,11 +9,11 @@ namespace StudyAbroad.Api.Controllers;
 
 /// <summary>
 /// [USAS-362] [AC-4] API Quản trị tài khoản người dùng (RBAC).
-/// Chỉ tài khoản có vai trò 'admin' (UserRoles.Admin) mới có quyền truy cập.
+/// Cho phép các tài khoản có vai trò 'admin' hoặc 'moderator' truy cập phục vụ quản lý và kiểm duyệt tài khoản (UC-60..63).
 /// Nếu học sinh, phụ huynh hoặc trung tâm gọi endpoint này, middleware sẽ chặn và trả về HTTP 403 Forbidden.
 /// </summary>
 [ApiController]
-[Authorize(Roles = UserRoles.Admin)]
+[Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Moderator}")]
 [Route("api/v1/admin/users")]
 public class AdminUsersController(IAuthService auth) : ControllerBase
 {
@@ -37,8 +37,9 @@ public class AdminUsersController(IAuthService auth) : ControllerBase
         return user is not null ? Ok(user) : NotFound();
     }
 
-    /// <summary>[UC-63] Tạo tài khoản moderator (khách không tự đăng ký được role này).</summary>
+    /// <summary>[UC-63] Tạo tài khoản moderator (chỉ Admin mới được tạo).</summary>
     [HttpPost("moderators")]
+    [Authorize(Roles = UserRoles.Admin)]
     public async Task<ActionResult<UserDto>> CreateModerator(CreateModeratorAccountRequest request, CancellationToken ct)
     {
         var result = await auth.CreateModeratorAccountAsync(request, ct);
@@ -48,8 +49,9 @@ public class AdminUsersController(IAuthService auth) : ControllerBase
         return CreatedAtAction(nameof(GetUserById), new { id = result.User.Id }, result.User);
     }
 
-    /// <summary>[Q11 / UC-71 Phụ trợ / UC-64] Tạo tài khoản người dùng cho Trung tâm tư vấn (role center).</summary>
+    /// <summary>[Q11 / UC-71 Phụ trợ / UC-64] Tạo tài khoản người dùng cho Trung tâm tư vấn (role center - Admin hoặc Moderator).</summary>
     [HttpPost("centers")]
+    [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Moderator}")]
     public async Task<ActionResult<UserDto>> CreateCenter(CreateCenterAccountRequest request, CancellationToken ct)
     {
         var result = await auth.CreateCenterAccountAsync(request, ct);
@@ -59,28 +61,30 @@ public class AdminUsersController(IAuthService auth) : ControllerBase
         return CreatedAtAction(nameof(GetUserById), new { id = result.User.Id }, result.User);
     }
 
-    /// <summary>[UC-61] Khóa tài khoản kèm lý do (chỉ Admin).</summary>
+    /// <summary>[UC-61] Khóa tài khoản kèm lý do (ghi audit - Admin hoặc Moderator khóa tài khoản cấp dưới).</summary>
     [HttpPost("{id:guid}/lock")]
+    [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Moderator}")]
     public async Task<ActionResult<UserDto>> LockUser(Guid id, LockUserAccountRequest request, CancellationToken ct)
     {
-        if (User.GetUserId() is not { } adminId)
+        if (User.GetUserId() is not { } actorId)
             return Unauthorized();
 
-        var result = await auth.LockUserAccountAsync(id, request, adminId, ct);
+        var result = await auth.LockUserAccountAsync(id, request, actorId, ct);
         if (result.Error != AuthError.None || result.User is null)
             return ValidationProblem(result.Message);
 
         return Ok(result.User);
     }
 
-    /// <summary>[UC-62] Mở khóa tài khoản kèm lý do (chỉ Admin).</summary>
+    /// <summary>[UC-62] Mở khóa tài khoản kèm lý do (ghi audit - Admin hoặc Moderator mở khóa tài khoản cấp dưới).</summary>
     [HttpPost("{id:guid}/unlock")]
+    [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Moderator}")]
     public async Task<ActionResult<UserDto>> UnlockUser(Guid id, UnlockUserAccountRequest request, CancellationToken ct)
     {
-        if (User.GetUserId() is not { } adminId)
+        if (User.GetUserId() is not { } actorId)
             return Unauthorized();
 
-        var result = await auth.UnlockUserAccountAsync(id, request, adminId, ct);
+        var result = await auth.UnlockUserAccountAsync(id, request, actorId, ct);
         if (result.Error != AuthError.None || result.User is null)
             return ValidationProblem(result.Message);
 

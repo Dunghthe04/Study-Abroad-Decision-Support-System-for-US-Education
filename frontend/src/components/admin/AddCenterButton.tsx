@@ -65,7 +65,7 @@ export function AddCenterButton({ className, size = "sm" }: AddCenterButtonProps
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCreateAccountOpen, setIsCreateAccountOpen] = useState(false);
 
-  // Chỉ Moderator hoặc Admin mới được thêm trung tâm vào danh bạ
+  // Admin hoặc Moderator có quyền thêm trung tâm vào danh bạ (UC-71)
   const canAdd = user?.role === "admin" || user?.role === "moderator";
   if (!canAdd) return null;
 

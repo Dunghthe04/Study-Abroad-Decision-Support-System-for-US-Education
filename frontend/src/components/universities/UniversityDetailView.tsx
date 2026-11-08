@@ -18,6 +18,7 @@ import type { UniversityDetail } from "@/types/university";
 import { DetailRows, DetailSection, SchoolImage, SourceLink } from "./UniversityDetailParts";
 import { UniversityAdmissions, UniversityCosts, UniversityMajors, UniversityStatistics } from "./UniversityOfferingSections";
 import { UniversitySources } from "./UniversitySources";
+import { AddTargetSchoolButton } from "@/components/target-schools/AddTargetSchoolButton";
 
 // back: nơi người dùng đến từ đó (vd trang gợi ý trường) để có nút quay lại đúng chỗ; bỏ trống thì về Trang chủ
 export function UniversityDetailView({
@@ -61,7 +62,15 @@ export function UniversityDetailView({
               </div>
             </div>
           </div>
-          {website && <Button variant="outline" nativeButton={false} role="link" render={<a href={website} target="_blank" rel="noopener noreferrer" />}><GlobeIcon />Website trường<ArrowUpRightIcon /></Button>}
+          <div className="flex flex-wrap items-center gap-3">
+            <AddTargetSchoolButton
+              universityCode={university.code}
+              universityName={university.name}
+              universityCity={university.city}
+              universityState={university.state}
+            />
+            {website && <Button variant="outline" nativeButton={false} role="link" render={<a href={website} target="_blank" rel="noopener noreferrer" />}><GlobeIcon />Website trường<ArrowUpRightIcon /></Button>}
+          </div>
         </div>
       </header>
 

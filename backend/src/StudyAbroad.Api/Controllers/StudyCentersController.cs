@@ -23,7 +23,7 @@ public class StudyCentersController(IStudyCenterService service) : ControllerBas
         return center is null ? NotFound() : Ok(center);
     }
 
-    /// <summary>[UC-71] Thêm một trung tâm tư vấn vào danh bạ (Moderator hoặc Admin).</summary>
+    /// <summary>[UC-71] Thêm một trung tâm tư vấn vào danh bạ (Admin hoặc Moderator).</summary>
     [HttpPost]
     [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Moderator}")]
     public async Task<ActionResult<StudyCenterDto>> Create(
@@ -108,6 +108,7 @@ public class StudyCentersController(IStudyCenterService service) : ControllerBas
 
         return Ok(result.Center);
     }
+
 
     /// <summary>Chat (B6) lấy tối đa 3 trung tâm đã xác minh cho một dịch vụ; cùng thành phố xếp trước.</summary>
     [HttpGet("referrals")]

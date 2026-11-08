@@ -29,6 +29,7 @@ public static class DependencyInjection
             .UseSnakeCaseNamingConvention());
 
         services.AddScoped<StudyAbroad.Application.Universities.IUniversityDetailRepository, UniversityDetailRepository>();
+        services.AddScoped<StudyAbroad.Application.TargetSchools.ITargetSchoolRepository, TargetSchoolRepository>();
         services.AddScoped<IStudyCenterRepository, StudyCenterRepository>();
         services.AddScoped<StudyAbroad.Application.Admin.Universities.IAdminUniversityRepository, AdminUniversityRepository>();
         services.AddScoped<StudyAbroad.Application.Leads.ILeadRepository, LeadRepository>();
