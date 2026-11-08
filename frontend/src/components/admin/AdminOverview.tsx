@@ -13,6 +13,7 @@ import { adminNavForRole } from "@/lib/admin-nav";
 
 export function AdminOverview() {
   const { user } = useAuth();
+  const isModerator = user?.role === "moderator";
   const sections = adminNavForRole(user?.role).filter(
     (item) => item.href !== "/admin",
   );
@@ -20,9 +21,9 @@ export function AdminOverview() {
   return (
     <div className="space-y-6">
       <header className="space-y-1">
-        <h1 className="text-h1">Trang quản trị</h1>
+        <h1 className="text-h1">{isModerator ? "Khu vực Kiểm duyệt & Vận hành" : "Trang quản trị"}</h1>
         <p className="text-body-s text-muted-foreground">
-          Xin chào {user?.fullName}. Chọn một khu vực để bắt đầu.
+          Xin chào <strong>{user?.fullName}</strong>. {isModerator ? "Chọn một phân hệ kiểm duyệt để bắt đầu làm việc." : "Chọn một khu vực quản trị để bắt đầu."}
         </p>
       </header>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">

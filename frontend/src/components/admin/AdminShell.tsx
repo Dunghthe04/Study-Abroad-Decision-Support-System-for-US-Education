@@ -26,7 +26,9 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           href="/admin"
           className="flex items-center gap-2.5 px-4 py-3 font-heading text-lg font-bold tracking-tight text-brand-ink sm:pl-6 md:py-5"
         >
-          <span className="whitespace-nowrap">USAS Admin System</span>
+          <span className="whitespace-nowrap">
+            {user?.role === "moderator" ? "USAS Moderator System" : "USAS Admin System"}
+          </span>
         </Link>
 
         <nav

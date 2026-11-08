@@ -37,6 +37,12 @@ export interface StudyCenter {
   visaSuccessRate?: number | null;
   averageRating?: number;
   reviewCount?: number;
+  verifiedAt?: string | null;
+  verifiedByUserId?: string | null;
+}
+
+export interface VerifyStudyCenterRequest {
+  isVerified: boolean;
 }
 
 export interface CreateStudyCenterRequest {
@@ -63,6 +69,34 @@ export interface CreateStudyCenterRequest {
   licenseNumber?: string | null;
   accreditations?: string[];
   visaSuccessRate?: number | null;
+}
+
+export interface UpdateStudyCenterRequest {
+  name: string;
+  website?: string | null;
+  address?: string | null;
+  city?: string | null;
+  studyLevels?: string[];
+  services?: string[];
+  phone?: string | null;
+  email?: string | null;
+  description?: string | null;
+  centerType?: string;
+  logoUrl?: string | null;
+  coverImageUrl?: string | null;
+  galleryImages?: string[];
+  district?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  staffCount?: number | null;
+  establishedYear?: number | null;
+  licenseNumber?: string | null;
+  accreditations?: string[];
+  visaSuccessRate?: number | null;
+}
+
+export interface SetStudyCenterActiveRequest {
+  isActive: boolean;
 }
 
 export type ChatRole = "user" | "assistant";
@@ -333,3 +367,48 @@ export interface TargetSchoolDto {
   createdAt: string;
   updatedAt?: string | null;
 }
+
+// [UC-73] Quản lý yêu cầu liên hệ nhận được phía Trung tâm tư vấn (Leads)
+export interface SharedProfileSummaryDto {
+  overallGpa?: number | null;
+  targetLevel?: string | null;
+  intendedMajor?: string | null;
+  educationSystem?: string | null;
+  currentGrade?: string | null;
+  englishScore?: number | null;
+  englishTestType?: string | null;
+  satScore?: number | null;
+  actScore?: number | null;
+  extracurricularTier?: number | null;
+  budgetTier?: string | null;
+}
+
+export interface CenterReceivedLeadDto {
+  id: string;
+  studyCenterId: string;
+  studyCenterName: string;
+  studyLevel?: string | null;
+  contactPhone?: string | null;
+  message?: string | null;
+  sharedProfile: boolean;
+  status: "new" | "contacted" | "closed" | string;
+  createdAt: string;
+  studentName?: string | null;
+  studentEmail?: string | null;
+  profileSummary?: SharedProfileSummaryDto | null;
+}
+
+export interface CenterLeadsSummaryDto {
+  items: CenterReceivedLeadDto[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+  newCount: number;
+  contactedCount: number;
+  closedCount: number;
+}
+
+export interface UpdateLeadStatusRequest {
+  status: string;
+}
+
