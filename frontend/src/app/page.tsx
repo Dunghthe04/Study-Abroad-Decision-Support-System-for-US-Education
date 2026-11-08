@@ -16,38 +16,40 @@ function HomeView() {
   const searchParams = useSearchParams();
   const isPublicPreview = searchParams.get("view") === "public";
 
-  const isAdmin = user?.role === "admin" || user?.role === "moderator";
+  const isAdmin = user?.role === "admin";
+  const isModerator = user?.role === "moderator";
+  const isStaff = isAdmin || isModerator;
 
   useEffect(() => {
-    // Tài khoản admin/moderator thì vào thẳng trang admin luôn không cần vào bên ngoài
-    if (!isLoading && isAdmin && !isPublicPreview) {
+    // Tài khoản admin/moderator thì vào thẳng trang quản trị/kiểm duyệt luôn
+    if (!isLoading && !isPublicPreview && isStaff) {
       router.replace("/admin");
     }
-  }, [isAdmin, isLoading, isPublicPreview, router]);
+  }, [isStaff, isLoading, isPublicPreview, router]);
 
-  // Nếu là admin và không yêu cầu preview công khai, hiển thị loader ngắn gọn trước khi router.replace hoàn tất
-  if (!isLoading && isAdmin && !isPublicPreview) {
+  // Nếu là admin/moderator và không yêu cầu preview công khai, hiển thị loader ngắn gọn trước khi router.replace hoàn tất
+  if (!isLoading && isStaff && !isPublicPreview) {
     return (
       <div className="flex min-h-[40vh] flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
         <Spinner />
-        <p>Đang chuyển hướng thẳng đến trang Quản trị...</p>
+        <p>{isModerator ? "Đang chuyển hướng thẳng đến khu vực Moderator..." : "Đang chuyển hướng thẳng đến trang Quản trị..."}</p>
       </div>
     );
   }
 
   return (
     <section className="mx-auto max-w-[1080px] space-y-6">
-      {isAdmin && isPublicPreview && (
+      {isStaff && isPublicPreview && (
         <Alert className="border-amber-500/50 bg-amber-500/10 text-amber-900 dark:text-amber-200">
           <ShieldAlertIcon className="size-4 text-amber-600" />
-          <AlertTitle className="font-semibold">Chế độ xem trước công khai (Admin)</AlertTitle>
+          <AlertTitle className="font-semibold">Chế độ xem trước công khai ({isModerator ? "Moderator" : "Admin"})</AlertTitle>
           <AlertDescription className="flex items-center justify-between gap-2 mt-1">
-            <span>Bạn đang xem giao diện trang chủ của học sinh / phụ huynh với tư cách Quản trị viên.</span>
+            <span>Bạn đang xem giao diện trang chủ của học sinh / phụ huynh với tư cách {isModerator ? "Moderator" : "Quản trị viên"}.</span>
             <Link
               href="/admin"
               className={buttonVariants({ variant: "outline", size: "sm", className: "h-7 text-xs gap-1 shrink-0 bg-background" })}
             >
-              Vào trang Quản trị
+              {isModerator ? "Vào khu vực Moderator" : "Vào trang Quản trị"}
               <ExternalLinkIcon className="size-3" />
             </Link>
           </AlertDescription>

@@ -82,7 +82,7 @@ export function AdminCenterDetailPanel({ center, onClose }: AdminCenterDetailPan
               href={`/admin/centers/${center.id}`}
               className={cn(buttonVariants({ variant: "default", size: "sm" }), "gap-1 text-xs")}
             >
-              Xem trang quản trị
+              Xem chi tiết
               <ChevronRightIcon className="w-3.5 h-3.5" />
             </Link>
           </div>

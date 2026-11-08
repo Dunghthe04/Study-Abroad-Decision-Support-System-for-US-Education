@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using StudyAbroad.Api.Extensions;
+using StudyAbroad.Application.Auth;
 using StudyAbroad.Application.Common;
 using StudyAbroad.Application.StudyCenters;
 using StudyAbroad.Domain.Constants;
@@ -37,6 +38,75 @@ public class StudyCentersController(IStudyCenterService service) : ControllerBas
             return ValidationProblem(result.ErrorMessage);
 
         return CreatedAtAction(nameof(GetById), new { id = result.Center.Id }, result.Center);
+    }
+
+    /// <summary>[Q11 / UC-71 Phụ trợ / UC-64] Moderator hoặc Admin tạo tài khoản người dùng cho Trung tâm tư vấn (role center).</summary>
+    [HttpPost("accounts")]
+    [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Moderator}")]
+    public async Task<ActionResult<UserDto>> CreateCenterAccount(
+        [FromBody] CreateCenterAccountRequest request,
+        [FromServices] IAuthService auth,
+        CancellationToken ct)
+    {
+        var result = await auth.CreateCenterAccountAsync(request, ct);
+        if (result.Error != AuthError.None || result.User is null)
+            return ValidationProblem(result.Message);
+
+        return Ok(result.User);
+    }
+
+    /// <summary>[UC-59] Xác minh hoặc hủy xác minh một trung tâm tư vấn (Moderator hoặc Admin).</summary>
+    [HttpPut("{id:guid}/verify")]
+    [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Moderator}")]
+    public async Task<ActionResult<StudyCenterDto>> VerifyCenter(
+        Guid id,
+        [FromBody] VerifyStudyCenterRequest request,
+        CancellationToken ct)
+    {
+        if (User.GetUserId() is not { } actorId)
+            return Unauthorized();
+
+        var result = await service.VerifyCenterAsync(id, request.IsVerified, actorId, ct);
+        if (!result.Success || result.Center is null)
+            return ValidationProblem(result.ErrorMessage);
+
+        return Ok(result.Center);
+    }
+
+    /// <summary>[UC-72] Sửa thông tin một trung tâm tư vấn trong danh bạ (Moderator hoặc Admin).</summary>
+    [HttpPut("{id:guid}")]
+    [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Moderator}")]
+    public async Task<ActionResult<StudyCenterDto>> Update(
+        Guid id,
+        [FromBody] UpdateStudyCenterRequest request,
+        CancellationToken ct)
+    {
+        if (User.GetUserId() is not { } actorId)
+            return Unauthorized();
+
+        var result = await service.UpdateCenterAsync(id, request, actorId, ct);
+        if (!result.Success || result.Center is null)
+            return ValidationProblem(result.ErrorMessage);
+
+        return Ok(result.Center);
+    }
+
+    /// <summary>[UC-72] Thay đổi trạng thái hoạt động (ẩn/hiện khỏi danh bạ và gợi ý) của trung tâm (Moderator hoặc Admin).</summary>
+    [HttpPut("{id:guid}/status")]
+    [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Moderator}")]
+    public async Task<ActionResult<StudyCenterDto>> SetActiveStatus(
+        Guid id,
+        [FromBody] SetStudyCenterActiveRequest request,
+        CancellationToken ct)
+    {
+        if (User.GetUserId() is not { } actorId)
+            return Unauthorized();
+
+        var result = await service.SetCenterActiveAsync(id, request.IsActive, actorId, ct);
+        if (!result.Success || result.Center is null)
+            return ValidationProblem(result.ErrorMessage);
+
+        return Ok(result.Center);
     }
 
     /// <summary>Chat (B6) lấy tối đa 3 trung tâm đã xác minh cho một dịch vụ; cùng thành phố xếp trước.</summary>

@@ -48,7 +48,7 @@ public class AdminUsersController(IAuthService auth) : ControllerBase
         return CreatedAtAction(nameof(GetUserById), new { id = result.User.Id }, result.User);
     }
 
-    /// <summary>[Q11 / UC-71 Phụ trợ] Tạo tài khoản người dùng cho Trung tâm tư vấn (role center).</summary>
+    /// <summary>[Q11 / UC-71 Phụ trợ / UC-64] Tạo tài khoản người dùng cho Trung tâm tư vấn (role center).</summary>
     [HttpPost("centers")]
     public async Task<ActionResult<UserDto>> CreateCenter(CreateCenterAccountRequest request, CancellationToken ct)
     {
@@ -59,7 +59,7 @@ public class AdminUsersController(IAuthService auth) : ControllerBase
         return CreatedAtAction(nameof(GetUserById), new { id = result.User.Id }, result.User);
     }
 
-    /// <summary>[UC-61] Khóa tài khoản kèm lý do (ghi audit).</summary>
+    /// <summary>[UC-61] Khóa tài khoản kèm lý do (chỉ Admin).</summary>
     [HttpPost("{id:guid}/lock")]
     public async Task<ActionResult<UserDto>> LockUser(Guid id, LockUserAccountRequest request, CancellationToken ct)
     {
@@ -73,7 +73,7 @@ public class AdminUsersController(IAuthService auth) : ControllerBase
         return Ok(result.User);
     }
 
-    /// <summary>[UC-62] Mở khóa tài khoản kèm lý do (ghi audit).</summary>
+    /// <summary>[UC-62] Mở khóa tài khoản kèm lý do (chỉ Admin).</summary>
     [HttpPost("{id:guid}/unlock")]
     public async Task<ActionResult<UserDto>> UnlockUser(Guid id, UnlockUserAccountRequest request, CancellationToken ct)
     {

@@ -19,12 +19,12 @@ export async function generateMetadata({ params }: AdminCenterDetailPageProps): 
   try {
     const center = await apiFetch<StudyCenter>(`/api/v1/study-centers/${id}`);
     if (center?.name) {
-      return { title: `${center.name} – Quản trị Trung tâm USAS` };
+      return { title: `${center.name} – Chi tiết Trung tâm USAS` };
     }
   } catch {
     // ignore
   }
-  return { title: "Chi tiết Trung tâm – Quản trị USAS" };
+  return { title: "Chi tiết Trung tâm – USAS" };
 }
 
 export default async function AdminCenterDetailPage({ params }: AdminCenterDetailPageProps) {
@@ -48,7 +48,7 @@ export default async function AdminCenterDetailPage({ params }: AdminCenterDetai
             <AlertCircleIcon className="w-4 h-4" />
             <AlertTitle>Không tìm thấy trung tâm</AlertTitle>
             <AlertDescription>
-              Trung tâm tư vấn này không tồn tại hoặc đã bị ẩn khỏi hệ thống quản trị.
+              Trung tâm tư vấn này không tồn tại hoặc đã bị ẩn khỏi hệ thống.
             </AlertDescription>
           </Alert>
           <div>
@@ -57,7 +57,7 @@ export default async function AdminCenterDetailPage({ params }: AdminCenterDetai
               className={cn(buttonVariants({ variant: "outline" }), "gap-2 inline-flex items-center text-sm")}
             >
               <ArrowLeftIcon className="w-4 h-4" />
-              Quay lại danh sách quản trị trung tâm
+              Quay lại danh sách trung tâm
             </Link>
           </div>
         </div>
