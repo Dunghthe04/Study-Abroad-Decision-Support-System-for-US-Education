@@ -5,7 +5,7 @@ Bộ phân loại (OllamaSlm) phải đã trả danh sách ý cac_y. Cần Ollam
   python -m scripts.eval_slm --split val --limit 20
   python -m scripts.eval_slm --model usas-slm --prompt slm_phan_loai_cac_y_ngan   # model đã fine-tune, đúng prompt lúc huấn luyện
 
-Ghi từng dự đoán vào data/slm/ket_qua/<model>_<split>.jsonl để xem lại câu sai.
+Ghi từng dự đoán vào data/slm/ket_qua/<model>_<split>.jsonl để xem lại câu sai. Dựng bảng và biểu đồ so sánh: scripts.slm_report.
 """
 
 import argparse
@@ -111,15 +111,19 @@ async def run(model: str, split: str, limit: int | None, fmt: str, prompt: str) 
         fallbacks = 0  # số câu lùi về mơ hồ (model trả sai luật 2 lần)
         for i, r in enumerate(records, start=1):
             start = time.perf_counter()
+            context = r["input"].get(
+                "dang_noi_ve"
+            )  # ngữ cảnh của dòng (nếu có), đưa vào đầu vào như lúc chạy thật
             result = await slm.read(
-                r["input"]["cau_hoi"], r["input"]["ho_so"], r["input"]["cau_he_thong_dang_hoi"]
+                r["input"]["cau_hoi"], r["input"]["ho_so"], r["input"]["cau_he_thong_dang_hoi"], context
             )
             fallbacks += result.confidence == 0.0
             seconds.append(time.perf_counter() - start)
             pred = {"cac_y": [y.model_dump() for y in result.cac_y]}
             preds.append(pred)
             rows.append({"id": r["id"], "cau_hoi": r["input"]["cau_hoi"], "nhan": r["output"], "du_doan": pred,
-                         "confidence": round(result.confidence, 4), "giay": round(seconds[-1], 2)})  # fmt: skip
+                         "confidence": round(result.confidence, 4), "giay": round(seconds[-1], 2),
+                         "dang_noi_ve": context, "lui_ve_mo_ho": result.confidence == 0.0, "model": model, "prompt": prompt, "split": split})  # fmt: skip
             print(f"\r{i}/{len(records)}", end="", flush=True)
     print()
 
