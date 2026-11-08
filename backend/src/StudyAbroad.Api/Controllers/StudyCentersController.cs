@@ -73,6 +73,42 @@ public class StudyCentersController(IStudyCenterService service) : ControllerBas
         return Ok(result.Center);
     }
 
+    /// <summary>[UC-72] Sửa thông tin một trung tâm tư vấn trong danh bạ (Moderator hoặc Admin).</summary>
+    [HttpPut("{id:guid}")]
+    [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Moderator}")]
+    public async Task<ActionResult<StudyCenterDto>> Update(
+        Guid id,
+        [FromBody] UpdateStudyCenterRequest request,
+        CancellationToken ct)
+    {
+        if (User.GetUserId() is not { } actorId)
+            return Unauthorized();
+
+        var result = await service.UpdateCenterAsync(id, request, actorId, ct);
+        if (!result.Success || result.Center is null)
+            return ValidationProblem(result.ErrorMessage);
+
+        return Ok(result.Center);
+    }
+
+    /// <summary>[UC-72] Thay đổi trạng thái hoạt động (ẩn/hiện khỏi danh bạ và gợi ý) của trung tâm (Moderator hoặc Admin).</summary>
+    [HttpPut("{id:guid}/status")]
+    [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Moderator}")]
+    public async Task<ActionResult<StudyCenterDto>> SetActiveStatus(
+        Guid id,
+        [FromBody] SetStudyCenterActiveRequest request,
+        CancellationToken ct)
+    {
+        if (User.GetUserId() is not { } actorId)
+            return Unauthorized();
+
+        var result = await service.SetCenterActiveAsync(id, request.IsActive, actorId, ct);
+        if (!result.Success || result.Center is null)
+            return ValidationProblem(result.ErrorMessage);
+
+        return Ok(result.Center);
+    }
+
     /// <summary>Chat (B6) lấy tối đa 3 trung tâm đã xác minh cho một dịch vụ; cùng thành phố xếp trước.</summary>
     [HttpGet("referrals")]
     public async Task<ActionResult<IReadOnlyList<StudyCenterDto>>> Refer(
