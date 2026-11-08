@@ -44,6 +44,49 @@ public record VerifyStudyCenterResult(StudyCenterDto? Center, string? ErrorMessa
     public static VerifyStudyCenterResult Fail(string error) => new(null, error);
 }
 
+/// <summary>[UC-72] Moderator / Admin sửa thông tin một trung tâm tư vấn trong danh bạ.</summary>
+public record UpdateStudyCenterRequest(
+    string Name,
+    string? Website = null,
+    string? Address = null,
+    string? City = null,
+    List<string>? StudyLevels = null,
+    List<string>? Services = null,
+    string? Phone = null,
+    string? Email = null,
+    string? Description = null,
+    string? CenterType = null,
+    string? LogoUrl = null,
+    string? CoverImageUrl = null,
+    List<string>? GalleryImages = null,
+    string? District = null,
+    double? Latitude = null,
+    double? Longitude = null,
+    int? StaffCount = null,
+    int? EstablishedYear = null,
+    string? LicenseNumber = null,
+    List<string>? Accreditations = null,
+    double? VisaSuccessRate = null);
+
+/// <summary>[UC-72] Kết quả sửa thông tin trung tâm tư vấn.</summary>
+public record UpdateStudyCenterResult(StudyCenterDto? Center, string? ErrorMessage = null)
+{
+    public bool Success => ErrorMessage is null && Center is not null;
+    public static UpdateStudyCenterResult Ok(StudyCenterDto center) => new(center);
+    public static UpdateStudyCenterResult Fail(string error) => new(null, error);
+}
+
+/// <summary>[UC-72] Moderator / Admin thay đổi trạng thái hoạt động (ẩn hoặc hiện khỏi gợi ý).</summary>
+public record SetStudyCenterActiveRequest(bool IsActive);
+
+/// <summary>[UC-72] Kết quả thay đổi trạng thái ẩn/hiện trung tâm tư vấn.</summary>
+public record SetStudyCenterActiveResult(StudyCenterDto? Center, string? ErrorMessage = null)
+{
+    public bool Success => ErrorMessage is null && Center is not null;
+    public static SetStudyCenterActiveResult Ok(StudyCenterDto center) => new(center);
+    public static SetStudyCenterActiveResult Fail(string error) => new(null, error);
+}
+
 /// <summary>[UC-71] Moderator / Admin thêm trung tâm tư vấn vào danh bạ.</summary>
 public record CreateStudyCenterRequest(
     string Code,
