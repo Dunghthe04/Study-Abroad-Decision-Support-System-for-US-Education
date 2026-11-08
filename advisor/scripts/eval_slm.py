@@ -3,7 +3,7 @@
 Bộ phân loại (OllamaSlm) phải đã trả danh sách ý cac_y. Cần Ollama đang chạy và đã pull model. Chạy trong thư mục advisor:
   python -m scripts.eval_slm                       # qwen3:4b trên tập test
   python -m scripts.eval_slm --split val --limit 20
-  python -m scripts.eval_slm --model usas-slm      # model đã fine-tune
+  python -m scripts.eval_slm --model usas-slm --prompt slm_phan_loai_cac_y_ngan   # model đã fine-tune, đúng prompt lúc huấn luyện
 
 Ghi từng dự đoán vào data/slm/ket_qua/<model>_<split>.jsonl để xem lại câu sai.
 """
@@ -96,7 +96,7 @@ def score(records: list[dict[str, Any]], preds: list[dict[str, Any]]) -> dict[st
     }
 
 
-async def run(model: str, split: str, limit: int | None, fmt: str) -> None:
+async def run(model: str, split: str, limit: int | None, fmt: str, prompt: str) -> None:
     settings = get_settings()
     records = [json.loads(line) for line in DEFAULT_OUT.read_text(encoding="utf-8").splitlines()]
     records = [r for r in records if r["split"] == split][:limit]
@@ -106,7 +106,7 @@ async def run(model: str, split: str, limit: int | None, fmt: str) -> None:
         client = OllamaClient(
             http, model, num_ctx=settings.llm_num_ctx, num_gpu=settings.llm_num_gpu, seed=settings.llm_seed
         )
-        slm = OllamaSlm(client, output_format(fmt))
+        slm = OllamaSlm(client, output_format(fmt), prompt=prompt)
         preds, rows, seconds = [], [], []
         fallbacks = 0  # số câu lùi về mơ hồ (model trả sai luật 2 lần)
         for i, r in enumerate(records, start=1):
@@ -161,9 +161,11 @@ def main() -> None:
     parser.add_argument("--split", default="test", choices=("train", "val", "test"))
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--format", default=get_settings().slm_format, choices=("json", "schema"))
+    # Model chưa fine-tune dùng prompt đầy đủ (mặc định), model fine-tune dùng đúng prompt lúc huấn luyện (slm_phan_loai_cac_y_ngan)
+    parser.add_argument("--prompt", default=get_settings().slm_prompt)
 
     args = parser.parse_args()
-    asyncio.run(run(args.model, args.split, args.limit, args.format))
+    asyncio.run(run(args.model, args.split, args.limit, args.format, args.prompt))
 
 
 if __name__ == "__main__":

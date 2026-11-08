@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     llm_model: str = ""
     slm_model: str = "usas-slm-v2"
     slm_format: str = "json"
+    # Prompt tách ý (tên file trong app/skills, không có .md). slm_phan_loai_cac_y là bản đầy đủ (cho model chưa fine-tune);
+    # slm_phan_loai_cac_y_ngan là bản ngắn, dùng cho model fine-tune với đúng bản này (xem scripts/export_slm_chat.py)
+    slm_prompt: str = "slm_phan_loai_cac_y"
     # Đưa ngữ cảnh hội thoại (dang_noi_ve) vào đầu vào của SLM. Bật SAU khi model đã được huấn luyện với khóa này:
     # model chưa học thấy khóa lạ có thể đọc sai. Tắt thì chỉ chạy quy tắc dự phòng trong conversation_context
     slm_use_context: bool = False

@@ -91,7 +91,9 @@ async def lifespan(app: FastAPI):
             seed=settings.llm_seed,
             keep_alive=settings.llm_keep_alive,
         )
-        slm = OllamaSlm(slm_client, output_format(settings.slm_format), settings.slm_use_context)
+        slm = OllamaSlm(
+            slm_client, output_format(settings.slm_format), settings.slm_use_context, settings.slm_prompt
+        )
         # Cùng một SLM vừa tách ý vừa sinh skill hồ sơ; Gemini viết câu trả lời theo skill đó
         skill_log_dir = ADVISOR_DIR / settings.skill_log_dir if settings.skill_log_dir else None
         generator = SkillGenerator(slm_client, log_dir=skill_log_dir)
