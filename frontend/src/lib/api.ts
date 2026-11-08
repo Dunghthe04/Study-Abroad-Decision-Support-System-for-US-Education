@@ -66,10 +66,15 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
 
   // Handle empty responses (e.g. 204 No Content)
   if (res.status === 204) {
-    return {} as T;
+    return null as unknown as T;
   }
 
-  return res.json() as Promise<T>;
+  const text = await res.text();
+  if (!text || text.trim() === "") {
+    return null as unknown as T;
+  }
+
+  return JSON.parse(text) as T;
 }
 
 // [USAS-362] Bộ API Xác thực & Người dùng (Khách: Học sinh / Phụ huynh)
