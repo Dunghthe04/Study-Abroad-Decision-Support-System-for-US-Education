@@ -26,6 +26,7 @@ from app.schemas.chat import (
     Widget,
 )
 from app.schemas.slm import SlmTinResult, SlmY
+from app.services import usage_meter
 from app.services.conversation_context import contextualize, update_context
 from app.services.intake import (
     CHAT_BUTTON,
@@ -88,7 +89,7 @@ OPENING_QUESTIONS = {"B0.1", "B0.2"}
 # Loại ý chỉ ĐỌC state (kien_thuc, trung_tam chỉ đọc study_level), nên nhiều ý cùng loại này chạy song song được.
 # Loại khác (mac_dinh, ho_so...) ghi state nên vẫn chạy lần lượt. Thêm loại vào đây chỉ khi nhánh đó không ghi state
 PARALLEL_SAFE = {"kien_thuc", "trung_tam"}
-# Số ý chạy cùng lúc nhiều nhất trong một tin: tin hỏi 12 câu thì không gửi 12 yêu cầu Gemini cùng một lúc
+# Số ý chạy cùng lúc nhiều nhất trong một tin: tin hỏi 12 câu thì không gửi 12 yêu cầu Claude cùng một lúc
 PARALLEL_LIMIT = 4
 # Ý mac_dinh thay thế khi SLM không tách ý hồ sơ nhưng tin vẫn có giá trị hồ sơ (nằm trong ý khác)
 PROFILE_ONLY = SlmY(type="mac_dinh", doan="thông tin hồ sơ")
@@ -247,6 +248,13 @@ class ChatFlow:
 
     # emit: chỉ truyền khi stream (route /api/v1/chat/stream); không truyền thì chạy như cũ, trả một lần cả câu
     async def reply(self, req: ChatRequest, emit: Emit | None = None) -> ChatResponse:
+        # Mở danh sách token cho lượt này: mọi lần gọi AI trong lượt (kể cả chạy song song) ghi vào đây
+        calls = usage_meter.start()
+        response = await self._reply(req, emit)
+        response.ai_usage = list(calls)
+        return response
+
+    async def _reply(self, req: ChatRequest, emit: Emit | None = None) -> ChatResponse:
         # Cuộc trò chuyện mới: giao diện đã tự hiện lời chào, nên tin nhắn đầu tiên là câu trả lời cho B0.1.
         # Ghi nhận đã chào rồi xử lý tin nhắn như mọi lượt khác, không bỏ qua câu học sinh vừa gõ.
         first_turn = req.state is None

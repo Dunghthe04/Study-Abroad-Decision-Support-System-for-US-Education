@@ -1,10 +1,13 @@
 """Gọi Ollama /api/chat: ép LLM trả JSON đúng schema (structured outputs), hoặc lấy chữ thường (SLM sinh skill)."""
 
 import json
+import time
 from typing import Any
 
 # Thư viện python dùng để gửi http request
 import httpx
+
+from app.services import usage_meter
 
 
 class OllamaError(Exception):
@@ -35,14 +38,18 @@ class OllamaClient:
     # Biến mỗi đoạn chữ thành một vector (bge-m3: 1024 số) để so sánh nghĩa với kho kiến thức
     async def embed(self, texts: list[str]) -> list[list[float]]:
         payload = {"model": self._embedding_model, "input": texts, "keep_alive": self._keep_alive}
+        started = time.perf_counter()
         try:
             resp = await self._http.post("/api/embed", json=payload)
             resp.raise_for_status()
         except httpx.HTTPError as ex:
+            usage_meter.failed("ollama", self._embedding_model, repr(ex), self._elapsed_ms(started))
             raise OllamaError(f"Gọi Ollama embed thất bại: {ex!r}") from ex
 
         try:
-            vectors = resp.json()["embeddings"]
+            body = resp.json()
+            usage_meter.ollama_ok(self._embedding_model, body, self._elapsed_ms(started))
+            vectors = body["embeddings"]
         except (KeyError, ValueError) as ex:
             raise OllamaError("Ollama embed trả về nội dung không đọc được") from ex
         if len(vectors) != len(texts):  # mỗi đoạn chữ phải có đúng một vector
@@ -98,14 +105,22 @@ class OllamaClient:
             payload["format"] = schema  # Ollama ép đầu ra khớp JSON schema này; None là lấy chữ thường
         if logprobs:
             payload["logprobs"] = True  # Ollama trả kèm log xác suất của từng token đã sinh
+        started = time.perf_counter()
         try:
             resp = await self._http.post("/api/chat", json=payload)
             resp.raise_for_status()
-            return resp.json()
+            body = resp.json()
+            usage_meter.ollama_ok(self._model, body, self._elapsed_ms(started))
+            return body
         except httpx.HTTPError as ex:
+            usage_meter.failed("ollama", self._model, repr(ex), self._elapsed_ms(started))
             raise OllamaError(f"Gọi Ollama thất bại: {ex!r}") from ex
         except ValueError as ex:  # body không phải JSON
             raise OllamaError("Ollama trả về nội dung không phải JSON") from ex
+
+    @staticmethod
+    def _elapsed_ms(started: float) -> int:
+        return round((time.perf_counter() - started) * 1000)
 
     # Lấy phần chữ model trả lời trong body rồi đọc thành JSON
     @staticmethod

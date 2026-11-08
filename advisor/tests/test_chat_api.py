@@ -19,7 +19,7 @@ class SilentBranch:
 
 
 def make_client() -> TestClient:
-    # Không dùng "with" nên không chạy lifespan, không cần Ollama, Gemini
+    # Không dùng "with" nên không chạy lifespan, không cần Ollama, Claude
     app = create_app()
     flow = ChatFlow(FixedSlm(tin("kien_thuc")), {"kien_thuc": SilentBranch()})
     app.dependency_overrides[get_chat_flow] = lambda: flow

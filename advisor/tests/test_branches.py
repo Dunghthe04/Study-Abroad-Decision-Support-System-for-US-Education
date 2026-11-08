@@ -509,7 +509,7 @@ async def test_a_profile_answer_with_an_advice_question_gives_the_advice_once():
     assert res.answer.count("trả lời của skill_danh_gia") == 1
 
 
-# ---- tư vấn theo hồ sơ (nhánh mới: SLM sinh skill, Gemini viết) ----
+# ---- tư vấn theo hồ sơ (nhánh mới: SLM sinh skill, Claude viết) ----
 class FakeGenerator:
     """Bộ sinh skill giả: trả skill soạn sẵn (None = SLM sai), ghi lại câu hỏi đã nhận."""
 
@@ -523,7 +523,7 @@ class FakeGenerator:
 
 
 class FakeWriter:
-    """Gemini giả: trả câu soạn sẵn (None = Gemini sai), ghi lại skill đã nhận."""
+    """Claude giả: trả câu soạn sẵn (None = Claude sai), ghi lại skill đã nhận."""
 
     def __init__(self, answer: str | None = "lời tư vấn") -> None:
         self.answer = answer
@@ -541,7 +541,7 @@ def new_advice(ran: list[str], generator=None, writer=None):
 @pytest.mark.parametrize(
     "question", ["đánh giá hồ sơ giúp em", "em cần lên lộ trình thế nào", "học bổng em có không"]
 )
-async def test_profile_advice_goes_through_the_generated_skill_then_gemini(question):
+async def test_profile_advice_goes_through_the_generated_skill_then_claude(question):
     ran: list[str] = []
     generator, writer = FakeGenerator(), FakeWriter()
     state = ChatState(profile=filled(REQUIRED_B3))
@@ -605,7 +605,7 @@ async def test_new_advice_without_a_profile_remembers_the_question_and_asks_for_
         (FakeGenerator(), FakeWriter(None), CANNOT_ANSWER),
     ],
 )
-async def test_slm_or_gemini_failing_offers_to_ask_again_instead_of_a_static_skill(
+async def test_slm_or_claude_failing_offers_to_ask_again_instead_of_a_static_skill(
     generator, writer, expected
 ):
     ran: list[str] = []

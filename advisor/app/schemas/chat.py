@@ -2,7 +2,7 @@
 
 from typing import Any, Literal
 
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from app.core.study_levels import StudyLevel
 from app.schemas.common import CamelModel
@@ -107,6 +107,26 @@ class ChatRequest(CamelModel):
     benchmarks: dict[str, Any] | None = None
 
 
+# Token của MỘT lần gọi AI (Claude hoặc Ollama), số do nhà cung cấp trả về. Một lượt chat có thể gồm nhiều lần gọi
+# (nhiều ý, gọi lại khi lỗi, model dự phòng), .NET cộng lại theo lượt. Xem services/usage_meter.py
+class AiUsageCall(CamelModel):
+    source: str  # claude | ollama
+    model: str
+    purpose: str = ""  # công việc (tên skill), để báo cáo theo tính năng
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cached_tokens: int = 0
+    ok: bool = True
+    error: str | None = None
+    latency_ms: int = 0
+
+
+class AiUsageMixin(BaseModel):
+    """Thêm khóa aiUsage (camelCase) vào các phản hồi của /recommend, những khóa khác của chúng giữ nguyên."""
+
+    ai_usage: list[AiUsageCall] = Field(default_factory=list, alias="aiUsage")
+
+
 class ChatResponse(CamelModel):
     answer: str
     citations: list[Citation] = []
@@ -133,3 +153,6 @@ class ChatResponse(CamelModel):
         | None
     ) = None
     action_data: dict[str, Any] = {}  # dữ liệu kèm action, ví dụ {"code": "ucla"} cho explain
+    ai_usage: list[
+        AiUsageCall
+    ] = []  # token từng lần gọi AI trong lượt này, để .NET ghi nhật ký và tính chi phí

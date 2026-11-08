@@ -188,7 +188,7 @@ class OutOfScopeBranch:
 
 
 # TẠM, phần của bạn: tư vấn theo hồ sơ bằng skill cũ (đánh giá, lộ trình, giải thích một trường).
-# Làm xong nhánh mới (SLM sinh skill cá nhân hóa, Gemini trả lời) thì thay lớp này
+# Làm xong nhánh mới (SLM sinh skill cá nhân hóa, Claude trả lời) thì thay lớp này
 class LegacyAdviceBranch:
     def __init__(self, skills: dict[str, SkillHandler]) -> None:
         self._skills = skills
@@ -260,8 +260,8 @@ def asks_for_school_list(text: str) -> bool:
 
 # Tư vấn theo hồ sơ (phần của Việt). Câu về trường giao code có sẵn: hỏi một trường đã gợi ý thì giải thích
 # trường đó (skill_explain → .NET), xin danh sách trường thì chạy gợi ý (.NET). Câu còn lại (đánh giá hồ sơ,
-# lộ trình, hoặc cả hai: SLM tự nhận ra từ câu hỏi) thì SLM sinh skill riêng cho học sinh, Gemini viết câu trả lời.
-# SLM hoặc Gemini sai thì báo chưa trả lời được kèm nút hỏi lại, không dùng skill tĩnh
+# lộ trình, hoặc cả hai: SLM tự nhận ra từ câu hỏi) thì SLM sinh skill riêng cho học sinh, Claude viết câu trả lời.
+# SLM hoặc Claude sai thì báo chưa trả lời được kèm nút hỏi lại, không dùng skill tĩnh
 class GeneratedAdviceBranch:
     def __init__(
         self, skills: dict[str, SkillHandler], generator: SkillGenerator, writer: AdviceWriter

@@ -66,7 +66,7 @@ async def test_knowledge_skill_embeds_with_the_embedder_and_writes_with_the_llm(
         async def embed(self, texts):
             return [[0.1, 0.2]]
 
-    class Llm:  # giống Gemini: chỉ có chat_json, không có embed
+    class Llm:  # giống Claude: chỉ có chat_json, không có embed
         async def chat_json(self, messages, schema, temperature=0.0):
             return {"enough": True, "answer": "I-20 là giấy xác nhận trường nhận bạn để xin visa du học."}
 
@@ -86,7 +86,7 @@ async def test_knowledge_skill_embeds_with_the_embedder_and_writes_with_the_llm(
                 )
             ]
 
-    handler = TraLoiHandler(Llm(), "gemini", Retriever(), 0.72, Embedder())
+    handler = TraLoiHandler(Llm(), "claude", Retriever(), 0.72, Embedder())
 
     res = await handler.run(ChatState(), "I-20 là gì")
 
@@ -107,7 +107,7 @@ async def test_a_question_below_the_threshold_is_logged_as_a_knowledge_miss(capl
         async def search(self, vector, study_level):
             return [KnowledgeHit("K9", "câu khác", "nội dung khác", None, None, None, None, 0.40)]
 
-    handler = TraLoiHandler(object(), "gemini", Retriever(), 0.72, Embedder())
+    handler = TraLoiHandler(object(), "claude", Retriever(), 0.72, Embedder())
 
     with caplog.at_level(logging.INFO, logger="advisor.knowledge"):
         res = await handler.run(ChatState(), "học bổng ở Mars")

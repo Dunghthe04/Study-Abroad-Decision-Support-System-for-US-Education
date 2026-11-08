@@ -1,4 +1,4 @@
-"""Nhận xét so sánh trường: Gemini diễn đạt lại số liệu code đã tra; số lạ, tên trường lạ, lời hứa, phán trường nào tốt hơn và quên tên trường bị chặn."""
+"""Nhận xét so sánh trường: Claude diễn đạt lại số liệu code đã tra; số lạ, tên trường lạ, lời hứa, phán trường nào tốt hơn và quên tên trường bị chặn."""
 
 import copy
 
@@ -38,7 +38,7 @@ def req(**changes) -> CompareNoteRequest:
 
 
 def writer(llm: FakeLLM) -> CompareWriter:
-    return CompareWriter(llm, "gemini-test")
+    return CompareWriter(llm, "claude-test")
 
 
 def changed(**changes) -> dict:
@@ -117,7 +117,7 @@ async def test_saying_a_school_is_cheaper_is_fine_when_it_is_a_fact():
     assert (await writer(FakeLLM(ok)).write(req())).status == "OK"
 
 
-async def test_a_gemini_error_is_retried_then_reported_as_failed():
+async def test_a_claude_error_is_retried_then_reported_as_failed():
     llm = FakeLLM(OllamaError("hết hạn mức"), OllamaError("hết hạn mức"))
 
     assert (await writer(llm).write(req())).status == "FAILED"
@@ -141,4 +141,4 @@ def test_the_route_returns_the_message_with_the_skill_version():
     assert res.status_code == 200
     body = res.json()
     assert body["status"] == "OK" and body["answer"].startswith("Boston University và New York University")
-    assert body["skill_version"] == load_skill(SKILL_PATH)[1] and body["model"] == "gemini-test"
+    assert body["skill_version"] == load_skill(SKILL_PATH)[1] and body["model"] == "claude-test"

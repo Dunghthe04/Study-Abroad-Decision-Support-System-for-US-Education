@@ -60,7 +60,7 @@ services:
       LLM_NUM_GPU: ${LLM_NUM_GPU:-99}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-bge-m3}
       VISION_MODEL: ${VISION_MODEL:-glm-ocr}
-      TRANSCRIPT_PARSE_MODEL: ${TRANSCRIPT_PARSE_MODEL:-}  # only without a Gemini key; empty = reuse LLM_MODEL
+      TRANSCRIPT_PARSE_MODEL: ${TRANSCRIPT_PARSE_MODEL:-}  # only without a Claude key; empty = reuse LLM_MODEL
     ports:
       - "8000:8000"
 
