@@ -28,14 +28,14 @@ export function SiteHeader() {
   const pathname = usePathname();
 
   const canOpenAdmin = user?.role === "admin" || user?.role === "moderator";
-  const canAccessTargetSchools = user?.role === "student" || user?.role === "parent" || user?.role === "admin" || user?.role === "moderator";
+  const isStudentOrParent = user?.role === "student" || user?.role === "parent";
 
   const navLinks = [
     { href: canOpenAdmin ? "/admin" : "/", label: canOpenAdmin ? "Quản trị" : "Trang chủ" },
     { href: canOpenAdmin ? "/admin/centers" : "/centers", label: "Trung tâm tư vấn" },
     { href: "/methodology", label: "Giới thiệu phương pháp" },
     { href: "/analysis", label: "Phân tích tư vấn" },
-    ...(canAccessTargetSchools ? [{ href: "/target-schools", label: "Trường mục tiêu" }] : []),
+    ...(isStudentOrParent ? [{ href: "/target-schools", label: "Trường mục tiêu" }] : []),
   ];
 
   const isLinkActive = (href: string) => {
@@ -139,7 +139,7 @@ export function SiteHeader() {
                   <FileTextIcon />
                   Phân tích tư vấn
                 </DropdownMenuItem>
-                {canAccessTargetSchools && (
+                {isStudentOrParent && (
                   <DropdownMenuItem render={<Link href="/target-schools" />}>
                     <BookmarkCheckIcon />
                     Trường mục tiêu
