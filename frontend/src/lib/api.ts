@@ -24,6 +24,10 @@ import type {
   AddTargetSchoolRequest,
   TargetSchoolDto,
   TargetSchoolSummaryDto,
+  UpdateStudyCenterRequest,
+  SetStudyCenterActiveRequest,
+  CenterReceivedLeadDto,
+  CenterLeadsSummaryDto,
 } from "@/types/api";
 
 // Browser code calls same-origin /api (Nginx in prod, Next rewrite in dev).
@@ -220,9 +224,9 @@ export const adminUsersApi = {
       body: JSON.stringify(data),
     }),
 
-  /** [Q11 / UC-71 Phụ trợ] Admin tạo tài khoản người dùng cho Trung tâm tư vấn. */
+  /** [Q11 / UC-71 Phụ trợ / UC-64] Moderator/Admin tạo tài khoản người dùng cho Trung tâm tư vấn. */
   createCenter: (data: CreateCenterAccountRequest) =>
-    apiFetch<UserDto>("/api/v1/admin/users/centers", {
+    apiFetch<UserDto>("/api/v1/study-centers/accounts", {
       method: "POST",
       body: JSON.stringify(data),
     }),
@@ -249,6 +253,12 @@ export const studyCentersApi = {
       method: "POST",
       body: JSON.stringify(data),
     }),
+  /** [UC-64] Tạo tài khoản trung tâm tư vấn (vai trò role: center) */
+  createAccount: (data: CreateCenterAccountRequest) =>
+    apiFetch<UserDto>("/api/v1/study-centers/accounts", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
   search: (params?: { search?: string; city?: string; service?: string; studyLevel?: string; page?: number; pageSize?: number }) => {
     const sp = new URLSearchParams();
     if (params?.search) sp.set("search", params.search);
@@ -261,6 +271,55 @@ export const studyCentersApi = {
     return apiFetch<PagedResult<StudyCenter>>(`/api/v1/study-centers${qs ? `?${qs}` : ""}`);
   },
   getById: (id: string) => apiFetch<StudyCenter>(`/api/v1/study-centers/${id}`),
+  /** [UC-59] Xác minh hoặc hủy xác minh trung tâm tư vấn (vai trò: Moderator / Admin) */
+  verify: (id: string, isVerified: boolean) =>
+    apiFetch<StudyCenter>(`/api/v1/study-centers/${encodeURIComponent(id)}/verify`, {
+      method: "PUT",
+      body: JSON.stringify({ isVerified }),
+    }),
+  /** [UC-72] Sửa thông tin trung tâm tư vấn (vai trò: Moderator / Admin) */
+  update: (id: string, data: UpdateStudyCenterRequest) =>
+    apiFetch<StudyCenter>(`/api/v1/study-centers/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  /** [UC-72] Ẩn hoặc hiện trung tâm tư vấn khỏi danh bạ và luồng gợi ý (vai trò: Moderator / Admin) */
+  setActiveStatus: (id: string, isActive: boolean) => {
+    const payload: SetStudyCenterActiveRequest = { isActive };
+    return apiFetch<StudyCenter>(`/api/v1/study-centers/${encodeURIComponent(id)}/status`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+  },
+};
+
+/** [UC-73] Quản lý và xử lý yêu cầu liên hệ nhận được phía trung tâm tư vấn (Leads) */
+export const centerLeadsApi = {
+  list: (params?: {
+    page?: number;
+    pageSize?: number;
+    status?: string;
+    search?: string;
+    studyCenterId?: string;
+  }) => {
+    const sp = new URLSearchParams();
+    if (params?.page) sp.set("page", String(params.page));
+    if (params?.pageSize) sp.set("pageSize", String(params.pageSize));
+    if (params?.status && params.status !== "all") sp.set("status", params.status);
+    if (params?.search) sp.set("search", params.search);
+    if (params?.studyCenterId) sp.set("studyCenterId", params.studyCenterId);
+    const qs = sp.toString();
+    return apiFetch<CenterLeadsSummaryDto>(`/api/v1/leads/received${qs ? `?${qs}` : ""}`);
+  },
+
+  getById: (id: string) =>
+    apiFetch<CenterReceivedLeadDto>(`/api/v1/leads/received/${encodeURIComponent(id)}`),
+
+  updateStatus: (id: string, status: string) =>
+    apiFetch<CenterReceivedLeadDto>(`/api/v1/leads/received/${encodeURIComponent(id)}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    }),
 };
 
 // [UC-30, UC-31, UC-33] API Quản lý trường mục tiêu (Student / Parent)

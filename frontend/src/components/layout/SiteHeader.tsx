@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { BookmarkCheckIcon, Building2Icon, FileTextIcon, LayoutDashboardIcon, LogOutIcon, ShieldIcon, UserIcon } from "lucide-react";
+import { BookmarkCheckIcon, Building2Icon, FileTextIcon, InboxIcon, LayoutDashboardIcon, LogOutIcon, ShieldIcon, UserIcon } from "lucide-react";
 import { formatUserRole } from "@/lib/user-role-labels";
 import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -27,15 +27,18 @@ export function SiteHeader() {
   const router = useRouter();
   const pathname = usePathname();
 
-  const canOpenAdmin = user?.role === "admin" || user?.role === "moderator";
+  const isAdmin = user?.role === "admin";
+  const isModerator = user?.role === "moderator";
+  const canOpenAdmin = isAdmin || isModerator;
   const isStudentOrParent = user?.role === "student" || user?.role === "parent";
 
   const navLinks = [
-    { href: canOpenAdmin ? "/admin" : "/", label: canOpenAdmin ? "Quản trị" : "Trang chủ" },
+    { href: canOpenAdmin ? "/admin" : "/", label: isModerator ? "Kiểm duyệt" : isAdmin ? "Quản trị" : "Trang chủ" },
     { href: canOpenAdmin ? "/admin/centers" : "/centers", label: "Trung tâm tư vấn" },
     { href: "/methodology", label: "Giới thiệu phương pháp" },
     { href: "/analysis", label: "Phân tích tư vấn" },
     ...(isStudentOrParent ? [{ href: "/target-schools", label: "Trường mục tiêu" }] : []),
+    ...(user?.role === "center" ? [{ href: "/center/leads", label: "Yêu cầu liên hệ" }] : []),
   ];
 
   const isLinkActive = (href: string) => {
@@ -132,7 +135,7 @@ export function SiteHeader() {
                 {canOpenAdmin && (
                   <DropdownMenuItem render={<Link href="/admin" />}>
                     <LayoutDashboardIcon />
-                    Trang quản trị
+                    {isModerator ? "Khu vực Moderator" : "Trang quản trị"}
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuItem render={<Link href="/analysis" />}>
@@ -149,13 +152,19 @@ export function SiteHeader() {
                   <UserIcon />
                   Hồ sơ cá nhân
                 </DropdownMenuItem>
-                {(user.role === "admin" || user.role === "moderator") && (
+                {(user.role === "center" || canOpenAdmin) && (
+                  <DropdownMenuItem render={<Link href="/center/leads" />}>
+                    <InboxIcon />
+                    Yêu cầu liên hệ nhận được
+                  </DropdownMenuItem>
+                )}
+                {canOpenAdmin && (
                   <DropdownMenuItem render={<Link href="/admin/centers" />}>
                     <Building2Icon />
                     Quản lý trung tâm
                   </DropdownMenuItem>
                 )}
-                {user.role === "admin" && (
+                {isAdmin && (
                   <DropdownMenuItem render={<Link href="/admin/users" />}>
                     <ShieldIcon />
                     Quản trị người dùng
