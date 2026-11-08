@@ -23,8 +23,6 @@ from scripts.build_slm_jsonl import (
 )
 
 MIN_ROWS_PER_TYPE = 30
-# Loại làm sau cùng, chưa có dữ liệu: gỡ khỏi danh sách này khi bắt đầu gán nhãn kịch bản
-POSTPONED = {"kich_ban"}
 
 
 @pytest.fixture(scope="module")
@@ -41,7 +39,7 @@ def test_every_type_has_enough_rows_and_all_three_splits(records):
     for r in records:
         by_type[r["type"]][r["split"]] += 1
 
-    assert set(by_type) == set(TYPES) - POSTPONED
+    assert set(by_type) == set(TYPES)
     for intent, splits in by_type.items():
         assert sum(splits.values()) >= MIN_ROWS_PER_TYPE, intent
         assert all(splits[s] > 0 for s in SPLITS), f"{intent} thiếu phần {splits}"
@@ -59,13 +57,18 @@ def test_skills_exist_only_for_profile_and_scenario_rows_that_have_a_profile(rec
     assert all(r["input"]["ho_so"] for r in with_skill)
 
 
-def test_the_same_message_in_the_same_context_never_has_two_different_types(records):
+def test_the_same_message_in_the_same_context_never_has_two_different_types(
+    records,
+):  # ngữ cảnh gồm cả dang_noi_ve
     seen: dict[tuple, set[str]] = defaultdict(set)
     for r in records:
         context = (
             r["input"]["cau_hoi"].lower(),
             r["input"]["cau_he_thong_dang_hoi"],
             json.dumps(r["input"]["ho_so"]),
+            json.dumps(
+                r["input"].get("dang_noi_ve"), sort_keys=True
+            ),  # cùng chữ nhưng ngữ cảnh khác thì được khác loại
         )
         seen[context].add(r["type"])
 
@@ -400,21 +403,13 @@ def test_the_scenario_sheet_has_no_skill_column_but_an_old_empty_one_is_still_re
         assert [r["id"] for r in read_records(path)] == ["kich_ban_001"]
 
 
-def test_the_postponed_types_have_no_rows_yet_so_nobody_trains_on_half_finished_data(records):
-    for r in records:
-        for y in r["output"]["cac_y"]:
-            assert y["type"] not in POSTPONED, (
-                f"{r['id']}: {y['type']} chưa gán nhãn, bỏ dòng này hoặc gỡ khỏi POSTPONED"
-            )
-
-
 def test_the_hard_cases_exist_in_the_data(records):
     questions = [r["input"]["cau_hoi"] for r in records]
     types = {y["type"]: y for r in records for y in r["output"]["cac_y"]}
 
     assert any("visa f1 can giay to gi" in q for q in questions), "thiếu câu không dấu"
     assert {y["thuc_the"].get("loai_con") for r in records for y in r["output"]["cac_y"] if y["type"] == "ngoai_pham_vi"} == {
-        "ngoai_le", "nhay_cam", "tam_biet", "mo_ho",
+        "ngoai_le", "nhay_cam", "tam_biet", "mo_ho", "ve_he_thong", "gap_nguoi",
     }  # fmt: skip
     assert types
 
