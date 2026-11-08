@@ -15,8 +15,11 @@ from scripts.build_slm_jsonl import (
     SKILL_TYPES,
     SPLITS,
     TYPES,
+    context_to_internal,
+    intents_to_internal,
     read_records,
     to_record,
+    v2_entities_to_internal,
 )
 
 MIN_ROWS_PER_TYPE = 30
@@ -414,3 +417,208 @@ def test_the_hard_cases_exist_in_the_data(records):
         "ngoai_le", "nhay_cam", "tam_biet", "mo_ho",
     }  # fmt: skip
     assert types
+
+
+# ---- khuôn v2 viết bằng tiếng Anh trong Excel: đổi về tên nội bộ đúng và đủ ----
+@pytest.mark.parametrize(
+    ("kind", "english", "internal"),
+    [
+        (
+            "collect_profile",
+            {"tasks": ["edit"], "sat": "SAT là 1400"},
+            {"nhiem_vu": "sua", "sat": "SAT là 1400"},
+        ),
+        (
+            "collect_profile",
+            {"tasks": ["edit"], "sat": "1450", "follow_up": True},
+            {"nhiem_vu": "sua", "sat": "1450", "tiep_noi": True},
+        ),
+        ("collect_profile", {"tasks": ["status"]}, {"nhiem_vu": "xem_ho_so"}),
+        ("collect_profile", {"tasks": ["restart"]}, {"nhiem_vu": "lam_lai"}),
+        ("collect_profile", {"gpa": "3.5"}, {"gpa": "3.5"}),
+        ("profile_review", {"tasks": []}, {"cac_nhiem_vu": []}),
+        ("profile_review", {"tasks": ["assessment", "roadmap"]}, {"cac_nhiem_vu": ["danh_gia", "lo_trinh"]}),
+        (
+            "profile_review",
+            {"tasks": ["compare"], "schools": ["BU", "NYU"], "follow_up": True},
+            {"cac_nhiem_vu": ["so_sanh"], "cac_truong": ["BU", "NYU"], "tiep_noi": True},
+        ),
+        (
+            "profile_review",
+            {"tasks": ["explain_school"], "schools": ["Duke"]},
+            {"cac_nhiem_vu": ["giai_thich_truong"], "truong": "Duke"},
+        ),
+        (
+            "knowledge",
+            {"tasks": ["school_info"], "schools": ["Harvard"], "fields": ["cost", "aid"]},
+            {"nhiem_vu": "tra_cuu", "truong": "Harvard", "muc": ["chi_phi", "hoc_bong"]},
+        ),
+        (
+            "knowledge",
+            {"tasks": ["compare_facts"], "schools": ["A", "B", "C", "D"], "fields": ["ranking"]},
+            {"nhiem_vu": "so_sanh", "cac_truong": ["A", "B", "C", "D"], "muc": ["xep_hang"]},
+        ),
+        (
+            "knowledge",
+            {
+                "tasks": ["search"],
+                "filters": {"state": "Texas", "school_type": "public", "aid": "yes", "max_cost": "30k"},
+                "sort": "lowest_cost",
+            },
+            {
+                "nhiem_vu": "tim_kiem",
+                "bo_loc": {
+                    "bang": ["Texas"],
+                    "loai_truong": "cong_lap",
+                    "hoc_bong": "co",
+                    "chi_phi_toi_da": "30k",
+                },
+                "sap_xep": "chi_phi_thap",
+            },
+        ),
+        ("knowledge", {"tasks": ["general"]}, {}),  # kiến thức chung không ghi nhiệm vụ
+        (
+            "knowledge",
+            {"tasks": ["school_info"], "schools": ["Purdue"], "field": "cost"},
+            {"nhiem_vu": "tra_cuu", "truong": "Purdue", "muc": ["chi_phi"]},
+        ),
+        (
+            "center_referral",
+            {"tasks": ["find"], "service": "ESSAY_EDITING", "city": "Hà Nội", "follow_up": True},
+            # service và city đổi tên ở bước đổi tên chung (EN_ENTITY_KEYS), không phải ở đây
+            {"nhiem_vu": "tim", "service": "ESSAY_EDITING", "city": "Hà Nội", "tiep_noi": True},
+        ),
+        ("center_referral", {"tasks": ["booking"]}, {"nhiem_vu": "dat_lich"}),
+        (
+            "center_referral",
+            {"tasks": ["compare"], "centers": ["PEC", "Kosam"]},
+            {"nhiem_vu": "so_sanh", "cac_trung_tam": ["PEC", "Kosam"]},
+        ),
+    ],
+)
+def test_the_v2_english_entities_become_the_internal_names(kind, english, internal):
+    assert v2_entities_to_internal(kind, english) == internal
+
+
+def test_an_item_written_with_internal_type_names_is_left_alone():
+    item = {"type": "kien_thuc", "doan": "x", "thuc_the": {"nhiem_vu": "tra_cuu", "truong": "MIT"}}
+
+    assert intents_to_internal([item]) == [item]
+
+
+def test_a_full_english_item_becomes_a_valid_internal_item():
+    items = intents_to_internal(
+        [{"type": "out_of_scope", "span": "bạn là ai", "entities": {"subtype": "about_system"}}]
+    )
+
+    assert items == [{"type": "ngoai_pham_vi", "doan": "bạn là ai", "thuc_the": {"loai_con": "ve_he_thong"}}]
+
+
+def test_the_context_column_is_renamed_like_the_entities():
+    english = {
+        "schools": ["Emory"],
+        "fields": ["gpa"],
+        "filters": {"state": ["Texas"], "aid": "yes"},
+        "last_field": "sat",
+        "last_task": "school_list",
+        "service": "TEST_PREP",
+        "city": "Hà Nội",
+        "centers": ["PEC", "Kosam"],
+        "scenario": {"mode": "what_if", "changes": [{"factor": "english", "value": "7.0", "unit": "ielts"}]},
+    }
+
+    assert context_to_internal(english) == {
+        "truong": ["Emory"],
+        "muc": ["gpa"],
+        "bo_loc": {"bang": ["Texas"], "hoc_bong": "co"},
+        "muc_vua_nhap": "sat",
+        "viec_vua_lam": "chon_truong",
+        "dich_vu": "LUYEN_THI",
+        "thanh_pho": "Hà Nội",
+        "cac_trung_tam": ["PEC", "Kosam"],
+        "kich_ban": {
+            "che_do": "what_if",
+            "thay_doi": [{"yeu_to": "english", "gia_tri": "7.0", "don_vi": "ielts"}],
+        },
+    }
+    assert context_to_internal({}) is None
+    assert context_to_internal(None) is None
+
+
+def test_a_row_with_context_keeps_it_in_the_input_in_the_same_form_the_model_will_get():
+    follow_up = {
+        "type": "kien_thuc",
+        "doan": "còn Yale thì sao",
+        "thuc_the": {"truong": "Yale", "tiep_noi": True},
+    }
+    record = check(
+        "kien_thuc",
+        row(
+            cau_hoi="còn Yale thì sao",
+            cac_y=ys(follow_up),
+            context=json.dumps({"schools": ["Harvard"], "fields": ["cost"]}),
+        ),
+    )
+
+    assert record["input"]["dang_noi_ve"] == {"truong": ["Harvard"], "muc": ["chi_phi"]}
+    assert "dang_noi_ve" not in check("trung_tam", row())["input"]  # không ngữ cảnh: giữ khuôn cũ
+
+
+def test_a_follow_up_may_take_the_city_from_the_context_but_only_that_city():
+    followup = {
+        "type": "trung_tam",
+        "doan": "thế còn luyện phỏng vấn",
+        "thuc_the": {"dich_vu": "LUYEN_PHONG_VAN", "thanh_pho": "Hà Nội", "tiep_noi": True},
+    }
+    good = row(
+        cau_hoi="thế còn luyện phỏng vấn",
+        cac_y=ys(followup),
+        context=json.dumps({"service": "ESSAY_EDITING", "city": "Hà Nội"}),
+    )
+    check("trung_tam", good)
+
+    with pytest.raises(ValueError, match="phải là đoạn chữ"):  # thành phố khác ngữ cảnh
+        check("trung_tam", good | {"context": json.dumps({"city": "Huế"})})
+    not_follow_up = {**followup, "thuc_the": {"dich_vu": "LUYEN_PHONG_VAN", "thanh_pho": "Hà Nội"}}
+    with pytest.raises(
+        ValueError, match="phải là đoạn chữ"
+    ):  # không nối tiếp thì thành phố phải nằm trong câu
+        check("trung_tam", good | {"cac_y": ys(not_follow_up)})
+
+
+def test_the_context_column_is_optional_on_every_sheet(tmp_path):
+    item = {
+        "type": "center_referral",
+        "span": "thế còn luyện phỏng vấn",
+        "entities": {
+            "tasks": ["find"],
+            "service": "VISA_INTERVIEW_PREP",
+            "city": "Hà Nội",
+            "follow_up": True,
+        },
+    }
+    wb = Workbook()
+    wb.active.title = "center_referral"
+    wb.active.append(["question", "profile", "pending_question", "intents", "split", "context"])
+    wb.active.append(
+        [
+            "thế còn luyện phỏng vấn",
+            None,
+            None,
+            json.dumps([item], ensure_ascii=False),
+            "train",
+            json.dumps({"service": "ESSAY_EDITING", "city": "Hà Nội"}),
+        ]
+    )
+    path = tmp_path / "ctx.xlsx"
+    wb.save(path)
+
+    record = read_records(path)[0]
+
+    assert record["input"]["dang_noi_ve"] == {"dich_vu": "SUA_BAI_LUAN", "thanh_pho": "Hà Nội"}
+    assert record["output"]["cac_y"][0]["thuc_the"] == {
+        "nhiem_vu": "tim",
+        "dich_vu": "LUYEN_PHONG_VAN",
+        "thanh_pho": "Hà Nội",
+        "tiep_noi": True,
+    }

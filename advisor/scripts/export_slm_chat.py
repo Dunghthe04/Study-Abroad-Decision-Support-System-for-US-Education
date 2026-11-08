@@ -47,7 +47,9 @@ def answer_text(output: dict[str, Any]) -> str:
 # data/slm/finetune/train.jsonl, dạng {"messages": [{"role": "system", ...}, {"role": "user", ...}, {"role": "assistant", ...}]}
 def to_chat(record: dict[str, Any], prompt: str) -> dict[str, Any]:
     data = record["input"]
-    messages = build_messages(prompt, data["cau_hoi"], data["ho_so"], data["cau_he_thong_dang_hoi"])
+    messages = build_messages(
+        prompt, data["cau_hoi"], data["ho_so"], data["cau_he_thong_dang_hoi"], data.get("dang_noi_ve")
+    )
     return {"messages": [*messages, {"role": "assistant", "content": answer_text(record["output"])}]}
 
 
