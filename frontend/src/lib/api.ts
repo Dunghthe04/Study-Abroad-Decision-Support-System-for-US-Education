@@ -23,6 +23,7 @@ import type {
   CreateStudyCenterRequest,
   AddTargetSchoolRequest,
   TargetSchoolDto,
+  TargetSchoolSummaryDto,
 } from "@/types/api";
 
 // Browser code calls same-origin /api (Nginx in prod, Next rewrite in dev).
@@ -257,8 +258,16 @@ export const studyCentersApi = {
   getById: (id: string) => apiFetch<StudyCenter>(`/api/v1/study-centers/${id}`),
 };
 
-// [UC-30, UC-31] API Quản lý trường mục tiêu (Student / Parent)
+// [UC-30, UC-31, UC-33] API Quản lý trường mục tiêu (Student / Parent)
 export const targetSchoolsApi = {
+  /** [UC-33] Xem danh sách các trường mục tiêu kèm tóm tắt phân nhóm và hạn nộp */
+  list: (params?: { category?: string; status?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.category) q.set("category", params.category);
+    if (params?.status) q.set("status", params.status);
+    const qs = q.toString();
+    return apiFetch<TargetSchoolSummaryDto>(`/api/v1/target-schools${qs ? `?${qs}` : ""}`);
+  },
   /** [UC-30] Thêm một trường vào danh sách mục tiêu */
   add: (data: AddTargetSchoolRequest) =>
     apiFetch<TargetSchoolDto>("/api/v1/target-schools", {
@@ -268,6 +277,12 @@ export const targetSchoolsApi = {
   /** Lấy chi tiết một trường mục tiêu theo ID */
   getById: (id: string) =>
     apiFetch<TargetSchoolDto>(`/api/v1/target-schools/${encodeURIComponent(id)}`),
+  /** [UC-32] Chọn hoặc cập nhật vòng nộp hồ sơ và hạn nộp */
+  updateRound: (id: string, data: { applicationRound: string; deadline?: string | null; autoResolveDeadline?: boolean }) =>
+    apiFetch<TargetSchoolDto>(`/api/v1/target-schools/${encodeURIComponent(id)}/round`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
   /** [UC-31] Xóa một trường khỏi danh sách mục tiêu theo ID mục tiêu */
   remove: (id: string) =>
     apiFetch<void>(`/api/v1/target-schools/${encodeURIComponent(id)}`, {

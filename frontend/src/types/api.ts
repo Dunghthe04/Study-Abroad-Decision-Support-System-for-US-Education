@@ -273,6 +273,22 @@ export interface AcademicProfileResponse {
   updatedAt?: string | null;
 }
 
+export interface TargetSchoolSummaryDto {
+  items: TargetSchoolDto[];
+  totalCount: number;
+  reachCount: number;
+  matchCount: number;
+  safetyCount: number;
+  undecidedCategoryCount: number;
+  nextDeadline?: string | null;
+}
+
+export interface UpdateApplicationRoundRequest {
+  applicationRound: string;
+  deadline?: string | null;
+  autoResolveDeadline?: boolean;
+}
+
 // [Q11] Liên kết phụ huynh – học sinh (đồng ý xử lý dữ liệu trẻ em)
 export type ParentLinkStatus = "pending" | "active" | "revoked" | "expired";
 
@@ -332,4 +348,20 @@ export interface TargetSchoolDto {
   deadline?: string | null;
   createdAt: string;
   updatedAt?: string | null;
+}
+
+export interface TargetSchoolSummaryDto {
+  items: TargetSchoolDto[];
+  totalCount: number;
+  reachCount: number;
+  matchCount: number;
+  safetyCount: number;
+  undecidedCategoryCount: number;
+  nextDeadline?: string | null;
+}
+
+export interface UpdateApplicationRoundRequest {
+  applicationRound: string;
+  deadline?: string | null;
+  autoResolveDeadline?: boolean;
 }

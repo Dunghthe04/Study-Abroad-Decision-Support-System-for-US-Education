@@ -73,6 +73,11 @@ export function AddTargetSchoolButton({
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
 
+  // [UC-32] State chọn và đổi vòng nộp hồ sơ
+  const [isEditingRound, setIsEditingRound] = useState(false);
+  const [selectedEditRound, setSelectedEditRound] = useState("");
+  const [isUpdatingRound, setIsUpdatingRound] = useState(false);
+
   const locationStr = [universityCity, universityState].filter(Boolean).join(", ");
 
   // Kiểm tra xem trường này đã được lưu vào danh sách mục tiêu chưa
@@ -187,6 +192,36 @@ export function AddTargetSchoolButton({
       setError("Không thể xóa trường mục tiêu. Vui lòng thử lại sau.");
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  // [UC-32] Cập nhật vòng nộp hồ sơ
+  const handleUpdateRound = async (newRound: string) => {
+    if (!savedTarget || !newRound) return;
+
+    setIsUpdatingRound(true);
+    setError(null);
+
+    try {
+      const updated = await targetSchoolsApi.updateRound(savedTarget.id, {
+        applicationRound: newRound,
+        autoResolveDeadline: true,
+      });
+
+      setSavedTarget(updated);
+      setIsEditingRound(false);
+
+      toast.add({
+        type: "success",
+        title: "Đã cập nhật vòng nộp",
+        description: `Đã chọn đợt nộp ${newRound} cho ${universityName}.`,
+      });
+
+      onSuccess?.(updated);
+    } catch {
+      setError("Không thể cập nhật vòng nộp hồ sơ. Vui lòng thử lại.");
+    } finally {
+      setIsUpdatingRound(false);
     }
   };
 
@@ -361,10 +396,71 @@ export function AddTargetSchoolButton({
 
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Vòng nộp:</span>
-                  <span className="font-medium text-foreground">
-                    {savedTarget.applicationRound || "Chưa xác định"}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-foreground">
+                      {savedTarget.applicationRound || "Chưa xác định"}
+                    </span>
+                    {!isEditingRound && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="xs"
+                        onClick={() => {
+                          setSelectedEditRound(savedTarget.applicationRound || "Regular Decision");
+                          setIsEditingRound(true);
+                        }}
+                        className="text-xs text-brand h-6 px-1.5 hover:underline"
+                      >
+                        Đổi vòng nộp
+                      </Button>
+                    )}
+                  </div>
                 </div>
+
+                {isEditingRound && (
+                  <div className="rounded-md border border-brand/30 bg-brand/5 p-2.5 space-y-2 mt-1">
+                    <span className="text-xs font-semibold text-foreground block">
+                      [UC-32] Chọn vòng nộp hồ sơ:
+                    </span>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {APPLICATION_ROUNDS.map((r) => (
+                        <Button
+                          key={r.value}
+                          type="button"
+                          size="xs"
+                          variant={selectedEditRound === r.value ? "default" : "outline"}
+                          onClick={() => setSelectedEditRound(r.value)}
+                          className="text-xs justify-start h-7"
+                          disabled={isUpdatingRound}
+                        >
+                          {r.label}
+                        </Button>
+                      ))}
+                    </div>
+                    <div className="flex items-center justify-end gap-1.5 pt-1">
+                      <Button
+                        type="button"
+                        size="xs"
+                        variant="ghost"
+                        onClick={() => setIsEditingRound(false)}
+                        disabled={isUpdatingRound}
+                        className="h-6 text-xs"
+                      >
+                        Hủy
+                      </Button>
+                      <Button
+                        type="button"
+                        size="xs"
+                        onClick={() => handleUpdateRound(selectedEditRound)}
+                        disabled={isUpdatingRound || !selectedEditRound}
+                        className="h-6 text-xs bg-brand text-white hover:bg-brand/90 gap-1"
+                      >
+                        {isUpdatingRound && <Loader2 className="size-3 animate-spin" />}
+                        Lưu vòng nộp
+                      </Button>
+                    </div>
+                  </div>
+                )}
 
                 {savedTarget.deadline && (
                   <div className="flex items-center justify-between">
