@@ -255,7 +255,7 @@ export function TargetSchoolListView() {
                 {total > 0 ? `(${Math.round((reach / total) * 100)}%)` : ""}
               </span>
             </div>
-            <p className="mt-1 text-[11px] text-muted-foreground">Thử thách, với cao</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">Thử thách, khó vào</p>
           </CardContent>
         </Card>
 
@@ -688,10 +688,10 @@ export function TargetSchoolListView() {
                             <span className="text-xs text-muted-foreground">
                               {item.deadline
                                 ? new Date(item.deadline).toLocaleDateString("vi-VN", {
-                                    day: "2-digit",
-                                    month: "2-digit",
-                                    year: "numeric",
-                                  })
+                                  day: "2-digit",
+                                  month: "2-digit",
+                                  year: "numeric",
+                                })
                                 : "Chưa có hạn nộp"}
                             </span>
                           </div>

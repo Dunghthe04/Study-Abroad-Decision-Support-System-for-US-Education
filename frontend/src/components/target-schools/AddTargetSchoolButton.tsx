@@ -36,7 +36,7 @@ export interface AddTargetSchoolButtonProps {
 
 const CATEGORY_OPTIONS = [
   { value: "match", label: "Vừa sức (Match)", desc: "Điểm và hồ sơ nằm trong khoảng tuyển sinh trung bình" },
-  { value: "reach", label: "Mục tiêu cao / Với (Reach)", desc: "Trường có tính cạnh tranh cao hoặc yêu cầu cao hơn hồ sơ hiện tại" },
+  { value: "reach", label: "Khó vào (Reach)", desc: "Trường có tính cạnh tranh cao hoặc yêu cầu cao hơn hồ sơ hiện tại" },
   { value: "safety", label: "An toàn (Safety)", desc: "Hồ sơ vượt trội so với yêu cầu đầu vào thông thường" },
 ];
 
