@@ -37,6 +37,12 @@ export interface StudyCenter {
   visaSuccessRate?: number | null;
   averageRating?: number;
   reviewCount?: number;
+  verifiedAt?: string | null;
+  verifiedByUserId?: string | null;
+}
+
+export interface VerifyStudyCenterRequest {
+  isVerified: boolean;
 }
 
 export interface CreateStudyCenterRequest {
