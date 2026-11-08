@@ -45,31 +45,22 @@ export function TargetSchoolListView() {
   const [deletingSchool, setDeletingSchool] = useState<TargetSchoolDto | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  useEffect(() => {
-    let ignore = false;
-    async function load() {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const summary = await targetSchoolsApi.list();
-        if (!ignore) {
-          setData(summary);
-        }
-      } catch {
-        if (!ignore) {
-          setError("Không thể tải danh sách trường mục tiêu. Vui lòng thử lại sau.");
-        }
-      } finally {
-        if (!ignore) {
-          setIsLoading(false);
-        }
-      }
+  const fetchData = React.useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const summary = await targetSchoolsApi.list();
+      setData(summary);
+    } catch {
+      setError("Không thể tải danh sách trường mục tiêu. Vui lòng thử lại sau.");
+    } finally {
+      setIsLoading(false);
     }
-    load();
-    return () => {
-      ignore = true;
-    };
   }, []);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   // Xóa trường mục tiêu [UC-31]
   const handleDeleteConfirm = async () => {
