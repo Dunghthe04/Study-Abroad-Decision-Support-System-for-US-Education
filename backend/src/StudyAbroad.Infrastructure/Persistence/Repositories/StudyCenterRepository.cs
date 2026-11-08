@@ -37,6 +37,9 @@ public class StudyCenterRepository(AppDbContext db) : IStudyCenterRepository
     public Task<StudyCenter?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
         db.StudyCenters.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
 
+    public Task<StudyCenter?> GetByIdForUpdateAsync(Guid id, CancellationToken ct = default) =>
+        db.StudyCenters.FirstOrDefaultAsync(x => x.Id == id, ct);
+
     public Task<bool> ExistsByCodeAsync(string code, CancellationToken ct = default) =>
         db.StudyCenters.AnyAsync(x => x.Code.ToLower() == code.ToLower(), ct);
 
@@ -44,5 +47,31 @@ public class StudyCenterRepository(AppDbContext db) : IStudyCenterRepository
     {
         await db.StudyCenters.AddAsync(center, ct);
         await db.SaveChangesAsync(ct);
+    }
+
+    public async Task UpdateAsync(StudyCenter center, CancellationToken ct = default)
+    {
+        center.UpdatedAt = DateTime.UtcNow;
+        db.StudyCenters.Update(center);
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task<StudyCenter?> GetByOwnerOrEmailAsync(Guid ownerUserId, string? email, CancellationToken ct = default)
+    {
+        var center = await db.StudyCenters.FirstOrDefaultAsync(x => x.OwnerUserId == ownerUserId, ct);
+        if (center is not null) return center;
+
+        if (!string.IsNullOrWhiteSpace(email))
+        {
+            var normalized = email.Trim().ToLower();
+            center = await db.StudyCenters.FirstOrDefaultAsync(x => x.Email != null && x.Email.ToLower() == normalized, ct);
+            if (center is not null && center.OwnerUserId is null)
+            {
+                center.OwnerUserId = ownerUserId;
+                center.UpdatedAt = DateTime.UtcNow;
+                await db.SaveChangesAsync(ct);
+            }
+        }
+        return center;
     }
 }

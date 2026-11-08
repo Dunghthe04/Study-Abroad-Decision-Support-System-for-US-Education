@@ -49,7 +49,7 @@ public class AdminUsersController(IAuthService auth) : ControllerBase
         return CreatedAtAction(nameof(GetUserById), new { id = result.User.Id }, result.User);
     }
 
-    /// <summary>[Q11 / UC-71 Phụ trợ] Tạo tài khoản người dùng cho Trung tâm tư vấn (Admin hoặc Moderator).</summary>
+    /// <summary>[Q11 / UC-71 Phụ trợ / UC-64] Tạo tài khoản người dùng cho Trung tâm tư vấn (role center - Admin hoặc Moderator).</summary>
     [HttpPost("centers")]
     [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Moderator}")]
     public async Task<ActionResult<UserDto>> CreateCenter(CreateCenterAccountRequest request, CancellationToken ct)
