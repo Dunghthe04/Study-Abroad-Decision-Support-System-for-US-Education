@@ -37,12 +37,22 @@ public class StudyCenterRepository(AppDbContext db) : IStudyCenterRepository
     public Task<StudyCenter?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
         db.StudyCenters.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
 
+    public Task<StudyCenter?> GetByIdForUpdateAsync(Guid id, CancellationToken ct = default) =>
+        db.StudyCenters.FirstOrDefaultAsync(x => x.Id == id, ct);
+
     public Task<bool> ExistsByCodeAsync(string code, CancellationToken ct = default) =>
         db.StudyCenters.AnyAsync(x => x.Code.ToLower() == code.ToLower(), ct);
 
     public async Task AddAsync(StudyCenter center, CancellationToken ct = default)
     {
         await db.StudyCenters.AddAsync(center, ct);
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task UpdateAsync(StudyCenter center, CancellationToken ct = default)
+    {
+        center.UpdatedAt = DateTime.UtcNow;
+        db.StudyCenters.Update(center);
         await db.SaveChangesAsync(ct);
     }
 }
