@@ -1,4 +1,4 @@
-"""Khuôn dữ liệu của lượt viết nhận xét so sánh trường: Gemini diễn đạt lại số liệu code đã tra, không tính lại, không chọn thay học sinh."""
+"""Khuôn dữ liệu của lượt viết nhận xét so sánh trường: Claude diễn đạt lại số liệu code đã tra, không tính lại, không chọn thay học sinh."""
 
 from typing import Any
 
@@ -14,14 +14,14 @@ MAX_OTHERS = 400
 
 class CompareNoteRequest(CamelModel):
     schools: list[str] = Field(min_length=2, max_length=MAX_SCHOOLS)  # tên trường hệ thống đã hiểu
-    # Số liệu do code tra, mỗi dòng một mục (giá trị từng trường, câu chênh lệch chi phí). Gemini chỉ diễn đạt lại
+    # Số liệu do code tra, mỗi dòng một mục (giá trị từng trường, câu chênh lệch chi phí). Claude chỉ diễn đạt lại
     facts: list[str] = Field(min_length=1, max_length=24)
     others: list[str] = Field(
         default=[], max_length=MAX_OTHERS
     )  # tên các trường khác, để chặn nhắc tên ngoài danh sách
 
 
-# Gemini trả: một câu mở, vài điểm khác nhau, một câu giúp chọn theo ưu tiên
+# Claude trả: một câu mở, vài điểm khác nhau, một câu giúp chọn theo ưu tiên
 class CompareNoteResult(BaseModel):
     intro: str = Field(min_length=10, max_length=300)
     points: list[str] = Field(default=[], max_length=MAX_POINTS)

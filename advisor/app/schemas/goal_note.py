@@ -1,4 +1,4 @@
-"""Khuôn dữ liệu của lượt viết lời cho goal-seeking ("cần gì để vào trường X"): Gemini diễn đạt lại kết quả code đã tính."""
+"""Khuôn dữ liệu của lượt viết lời cho goal-seeking ("cần gì để vào trường X"): Claude diễn đạt lại kết quả code đã tính."""
 
 from typing import Any, Literal
 
@@ -19,7 +19,7 @@ class GoalNoteRequest(CamelModel):
     )  # tên trường hệ thống đã hiểu, học sinh sẽ thấy để sửa nếu nhầm
     target: str = Field(min_length=1, max_length=64)  # nhóm muốn đạt (tên tiếng Việt)
     outcome: Outcome
-    # Dữ kiện do code tính, mỗi câu một ý (tài chính, học thuật, mức cần đạt, lý do bị chặn...). Gemini chỉ diễn đạt lại
+    # Dữ kiện do code tính, mỗi câu một ý (tài chính, học thuật, mức cần đạt, lý do bị chặn...). Claude chỉ diễn đạt lại
     facts: list[str] = Field(min_length=1, max_length=16)
     alternatives: list[str] = Field(default=[], max_length=5)  # trường tương tự đang ở nhóm đích với học sinh
     others: list[str] = Field(
@@ -27,7 +27,7 @@ class GoalNoteRequest(CamelModel):
     )  # tên các trường khác, để chặn nhắc tên ngoài danh sách
 
 
-# Gemini trả: lời mở (nói lại trường và nhóm), vài ý chính, lời kết
+# Claude trả: lời mở (nói lại trường và nhóm), vài ý chính, lời kết
 class GoalNoteResult(BaseModel):
     intro: str = Field(min_length=10, max_length=300)
     points: list[str] = Field(default=[], max_length=MAX_POINTS)

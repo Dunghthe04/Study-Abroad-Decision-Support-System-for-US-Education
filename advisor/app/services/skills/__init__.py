@@ -24,7 +24,7 @@ from app.services.skills.skill_nhu_cau import NhuCauHandler
 from app.services.skills.skill_tra_loi import TraLoiHandler
 
 
-# llm: client của LLM viết câu trả lời (Gemini) dùng chung cho các skill; model: tên model, truyền vào SkillCall hoặc để ghi log
+# llm: client của LLM viết câu trả lời (Claude) dùng chung cho các skill; model: tên model, truyền vào SkillCall hoặc để ghi log
 # knowledge: bộ tìm kiến thức; None (chưa có DB) thì không đăng ký skill_tra_loi
 # embedder: client Ollama (bge-m3) biến câu hỏi thành vector cho skill_tra_loi; bỏ trống thì dùng llm
 def build_handlers(

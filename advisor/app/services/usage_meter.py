@@ -1,6 +1,6 @@
 """Đo token của từng lần gọi AI trong một lượt chat.
 
-Mỗi lần gọi Gemini hoặc Ollama, client gọi một hàm ở đây để ghi lại token vào, ra, suy nghĩ, cache (số do chính nhà cung cấp trả về).
+Mỗi lần gọi Claude hoặc Ollama, client gọi một hàm ở đây để ghi lại token vào, ra, cache (số do chính nhà cung cấp trả về).
 Các lần gọi của một lượt chat được gom vào một danh sách; ChatFlow.reply trả danh sách này trong ChatResponse.ai_usage
 để backend .NET ghi vào bảng ai_calls và tính chi phí (giai đoạn 2).
 
@@ -55,20 +55,17 @@ def _int(value: Any) -> int:
     return int(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else 0
 
 
-def gemini_ok(model: str, usage: dict[str, Any] | None, latency_ms: int) -> None:
-    """Một lần gọi Gemini thành công. usage là khối `usage` của phản hồi (có thể thiếu: ghi 0)."""
+def claude_ok(model: str, usage: dict[str, Any] | None, latency_ms: int) -> None:
+    """Một lần gọi Claude thành công. usage của Anthropic: input_tokens (chưa gồm cache), output_tokens, cache_read_input_tokens."""
     u = usage or {}
     _record(
         AiUsageCall(
-            source="gemini",
+            source="claude",
             model=model,
             purpose=_purpose.get(),
-            input_tokens=_int(u.get("total_input_tokens")),
-            output_tokens=_int(u.get("total_output_tokens")),
-            thought_tokens=_int(u.get("total_thought_tokens")),
-            cached_tokens=_int(u.get("total_cached_tokens")),
-            # Số khác với total_input_tokens một lượng cố định; chưa biết Google tính tiền theo số nào nên lưu cả hai
-            initial_input_tokens=_int(u.get("initial_input_tokens")) or None,
+            input_tokens=_int(u.get("input_tokens")),
+            output_tokens=_int(u.get("output_tokens")),
+            cached_tokens=_int(u.get("cache_read_input_tokens")),
             ok=True,
             latency_ms=latency_ms,
         )

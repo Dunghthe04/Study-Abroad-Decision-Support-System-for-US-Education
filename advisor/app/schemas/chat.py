@@ -107,17 +107,15 @@ class ChatRequest(CamelModel):
     benchmarks: dict[str, Any] | None = None
 
 
-# Token của MỘT lần gọi AI (Gemini hoặc Ollama), số do nhà cung cấp trả về. Một lượt chat có thể gồm nhiều lần gọi
+# Token của MỘT lần gọi AI (Claude hoặc Ollama), số do nhà cung cấp trả về. Một lượt chat có thể gồm nhiều lần gọi
 # (nhiều ý, gọi lại khi lỗi, model dự phòng), .NET cộng lại theo lượt. Xem services/usage_meter.py
 class AiUsageCall(CamelModel):
-    source: str  # gemini | ollama
+    source: str  # claude | ollama
     model: str
     purpose: str = ""  # công việc (tên skill), để báo cáo theo tính năng
     input_tokens: int = 0
     output_tokens: int = 0
-    thought_tokens: int = 0  # Gemini tính cùng giá token ra
     cached_tokens: int = 0
-    initial_input_tokens: int | None = None  # chỉ Gemini; xem ghi chú ở usage_meter.gemini_ok
     ok: bool = True
     error: str | None = None
     latency_ms: int = 0

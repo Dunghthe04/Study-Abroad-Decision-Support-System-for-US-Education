@@ -415,7 +415,7 @@ def test_outlier_score_is_flagged_and_text_pdf_scores_are_not():
 
 
 class FakeParser:
-    """Gemini giả cho bước B: ghi lại lời gọi, trả JSON soạn sẵn hoặc ném lỗi."""
+    """Claude giả cho bước B: ghi lại lời gọi, trả JSON soạn sẵn hoặc ném lỗi."""
 
     def __init__(self, parsed: dict | None = None, error: Exception | None = None) -> None:
         self.parsed, self.error, self.calls = parsed, error, []
@@ -429,7 +429,7 @@ class FakeParser:
 
 def test_step_b_runs_on_the_parser_when_there_is_one():
     fake, parser = FakeOllama(markdown=HIGH_SCHOOL_MARKDOWN), FakeParser(HIGH_SCHOOL_PARSED)
-    reader = TranscriptReader(fake, Settings(_env_file=None), parser, "gemini-x")  # type: ignore[arg-type,call-arg]
+    reader = TranscriptReader(fake, Settings(_env_file=None), parser, "claude-x")  # type: ignore[arg-type,call-arg]
     app = create_app()
     app.dependency_overrides[get_transcript_reader] = lambda: reader
 
@@ -438,7 +438,7 @@ def test_step_b_runs_on_the_parser_when_there_is_one():
     assert res.status_code == 200 and res.json()["success"]
     assert len(parser.calls) == 1 and "Lớp 10" in parser.calls[0][0]["content"]
     assert not any("format" in c for c in fake.calls)  # Ollama chỉ chạy bước A (đọc ảnh)
-    assert "gemini-x" in res.json()["modelUsed"]
+    assert "claude-x" in res.json()["modelUsed"]
 
 
 def test_step_b_parser_failure_gives_the_friendly_message():
@@ -446,7 +446,7 @@ def test_step_b_parser_failure_gives_the_friendly_message():
 
     fake = FakeOllama(markdown=HIGH_SCHOOL_MARKDOWN)
     reader = TranscriptReader(
-        fake, Settings(_env_file=None), FakeParser(error=OllamaError("hết hạn mức")), "gemini-x"
+        fake, Settings(_env_file=None), FakeParser(error=OllamaError("hết hạn mức")), "claude-x"
     )  # type: ignore[arg-type,call-arg]
     app = create_app()
     app.dependency_overrides[get_transcript_reader] = lambda: reader

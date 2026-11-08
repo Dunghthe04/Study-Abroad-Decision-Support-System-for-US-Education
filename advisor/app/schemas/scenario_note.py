@@ -1,4 +1,4 @@
-"""Khuôn dữ liệu của lượt viết lời cho kịch bản what-if: Gemini viết lời từ kết quả simulate đã được code tính."""
+"""Khuôn dữ liệu của lượt viết lời cho kịch bản what-if: Claude viết lời từ kết quả simulate đã được code tính."""
 
 from typing import Any, Literal
 
@@ -50,7 +50,7 @@ class ScenarioNoteRequest(CamelModel):
     )  # tên các trường khác trong kết quả, để chặn nhắc tên ngoài danh sách
 
 
-# Phần Gemini nối vào mỗi nhóm: tên trường (phải đúng danh sách của nhóm) và một ghi chú ngắn
+# Phần Claude nối vào mỗi nhóm: tên trường (phải đúng danh sách của nhóm) và một ghi chú ngắn
 class ScenarioNoteGroup(BaseModel):
     key: GroupKey
     schools: list[str] = Field(min_length=1, max_length=MAX_SCHOOLS_PER_GROUP)

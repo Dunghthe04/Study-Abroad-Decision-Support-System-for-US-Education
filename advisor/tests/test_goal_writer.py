@@ -1,4 +1,4 @@
-"""Lời cho goal-seeking: Gemini diễn đạt lại kết quả code đã tính; số lạ, tên trường lạ, lời hứa và quên tên trường bị chặn."""
+"""Lời cho goal-seeking: Claude diễn đạt lại kết quả code đã tính; số lạ, tên trường lạ, lời hứa và quên tên trường bị chặn."""
 
 import copy
 
@@ -44,14 +44,14 @@ def req(**changes) -> GoalNoteRequest:
 
 
 def writer(llm: FakeLLM) -> GoalWriter:
-    return GoalWriter(llm, "gemini-test")
+    return GoalWriter(llm, "claude-test")
 
 
 def changed(**changes) -> dict:
     return {**copy.deepcopy(GOOD), **changes}
 
 
-# ---- dữ liệu gửi Gemini
+# ---- dữ liệu gửi Claude
 def test_the_prompt_carries_the_facts_but_not_the_other_schools():
     user = build_user(req())
 
@@ -59,7 +59,7 @@ def test_the_prompt_carries_the_facts_but_not_the_other_schools():
     assert user["target"] == "Vừa sức"
     assert user["facts"][2] == "SAT 1290 → 1430 (khó)"
     assert user["alternatives"] == ["Ohio Wesleyan University"]
-    assert "Harvard" not in str(user)  # others chỉ dùng để kiểm tra, không gửi cho Gemini
+    assert "Harvard" not in str(user)  # others chỉ dùng để kiểm tra, không gửi cho Claude
 
 
 def test_allowed_numbers_come_from_the_facts_only():
@@ -136,7 +136,7 @@ async def test_the_target_school_and_its_alternatives_are_never_strangers():
     assert res.status == "OK"
 
 
-async def test_a_gemini_error_is_retried_then_reported_as_failed():
+async def test_a_claude_error_is_retried_then_reported_as_failed():
     llm = FakeLLM(OllamaError("hết hạn mức"), OllamaError("hết hạn mức"))
 
     assert (await writer(llm).write(req())).status == "FAILED"
@@ -158,5 +158,5 @@ def test_the_route_returns_the_message_with_the_skill_version():
     body = res.json()
     assert body["status"] == "OK" and body["answer"].startswith("Để lên nhóm Vừa sức ở Boston University")
     assert (
-        body["skill_version"] == load_skill(SKILL_PATH)[1] and body["model"] == "gemini-test"
+        body["skill_version"] == load_skill(SKILL_PATH)[1] and body["model"] == "claude-test"
     )  # phiên bản đọc từ chính file skill

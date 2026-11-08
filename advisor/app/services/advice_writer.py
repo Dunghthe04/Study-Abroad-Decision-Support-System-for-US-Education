@@ -1,4 +1,4 @@
-"""Gemini viết câu trả lời tư vấn hồ sơ theo skill do SLM vừa sinh.
+"""Claude viết câu trả lời tư vấn hồ sơ theo skill do SLM vừa sinh.
 
 System = quy tắc chung (viet_tra_loi_ho_so.md) + skill riêng của học sinh. User = câu hỏi, hồ sơ, mức tính sẵn và
 danh sách trường đã gợi ý. Sai thì gọi lại 1 lần; vẫn sai thì trả None để nhánh tư vấn báo chưa trả lời được.
@@ -34,7 +34,7 @@ PROMISES = (
 )
 
 
-# Lấy câu trả lời từ JSON Gemini trả về; rỗng hoặc có câu hứa đỗ thì ném ValueError
+# Lấy câu trả lời từ JSON Claude trả về; rỗng hoặc có câu hứa đỗ thì ném ValueError
 def check_answer(raw: dict[str, Any]) -> str:
     text = raw.get("tra_loi")
     if not isinstance(text, str) or not text.strip():
@@ -51,7 +51,7 @@ class AdviceWriter:
         self._rules, self.version = load_skill(PROMPT_PATH)  # đọc 1 lần lúc khởi động
 
     async def write(self, skill: str, req: SkillRequest, schools: list[ResultSchool]) -> str | None:
-        """Trả câu trả lời đã kiểm, hoặc None nếu Gemini sai cả MAX_ATTEMPTS lần."""
+        """Trả câu trả lời đã kiểm, hoặc None nếu Claude sai cả MAX_ATTEMPTS lần."""
         user = {
             "cau_hoi": req.cau_hoi,
             "ho_so": req.ho_so,
@@ -67,6 +67,6 @@ class AdviceWriter:
             try:
                 raw = await self._llm.chat_json(messages, ANSWER_SCHEMA, temperature=0.0)
                 return check_answer(raw)
-            except (OllamaError, ValueError):  # GeminiError là OllamaError
+            except (OllamaError, ValueError):  # ClaudeError là OllamaError
                 continue
         return None

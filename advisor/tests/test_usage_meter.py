@@ -1,4 +1,4 @@
-"""Đo token từng lần gọi AI: Gemini và Ollama ghi đúng số nhà cung cấp trả về, lần lỗi cũng được ghi, các lần gọi của một lượt chat được gom lại."""
+"""Đo token từng lần gọi AI: Claude và Ollama ghi đúng số nhà cung cấp trả về, lần lỗi cũng được ghi, các lần gọi của một lượt chat được gom lại."""
 
 import asyncio
 import json
@@ -8,7 +8,7 @@ import pytest
 
 from app.schemas.chat import ChatMessage, ChatRequest
 from app.services import usage_meter
-from app.services.gemini import GeminiClient, GeminiError
+from app.services.claude import ClaudeClient, ClaudeError
 from app.services.ollama import OllamaClient, OllamaError
 from app.services.skill_call import SkillCall
 from tests.fakes import flow_with, tin
@@ -16,32 +16,23 @@ from tests.fakes import flow_with, tin
 SCHEMA = {"type": "object"}
 MESSAGES = [{"role": "system", "content": "skill"}, {"role": "user", "content": "{}"}]
 
-# Khối usage thật của Gemini (lần chạy thử --think high)
-GEMINI_USAGE = {
-    "total_tokens": 748,
-    "total_input_tokens": 83,
-    "input_tokens_by_modality": [{"modality": "text", "tokens": 83}],
-    "total_cached_tokens": 0,
-    "total_output_tokens": 48,
-    "total_tool_use_tokens": 0,
-    "total_thought_tokens": 617,
-    "initial_input_tokens": 126,
-}
+# Khối usage của Anthropic: input_tokens chưa gồm phần đọc từ cache
+CLAUDE_USAGE = {"input_tokens": 83, "output_tokens": 48, "cache_read_input_tokens": 7}
 
 
-def gemini_ok(usage: dict | None = GEMINI_USAGE) -> httpx.Response:
+def claude_ok(usage: dict | None = CLAUDE_USAGE) -> httpx.Response:
     body = {
-        "status": "completed",
-        "steps": [{"type": "model_output", "content": [{"type": "text", "text": json.dumps({"a": 1})}]}],
+        "stop_reason": "tool_use",
+        "content": [{"type": "tool_use", "name": "tra_loi", "input": {"a": 1}}],
     }
     if usage is not None:
         body["usage"] = usage
     return httpx.Response(200, json=body)
 
 
-def gemini(handler, **kwargs) -> GeminiClient:
-    http = httpx.AsyncClient(base_url="http://gemini.test", transport=httpx.MockTransport(handler))
-    return GeminiClient(http, "main", "key", **kwargs)
+def claude(handler, **kwargs) -> ClaudeClient:
+    http = httpx.AsyncClient(base_url="http://claude.test", transport=httpx.MockTransport(handler))
+    return ClaudeClient(http, "main", "key", **kwargs)
 
 
 def ollama(handler) -> OllamaClient:
@@ -54,32 +45,26 @@ def no_wait(monkeypatch):
     async def instant(_seconds):
         return None
 
-    monkeypatch.setattr("app.services.gemini.asyncio.sleep", instant)
+    monkeypatch.setattr("app.services.claude.asyncio.sleep", instant)
 
 
-# ---- Gemini
-async def test_a_gemini_call_records_the_four_token_counts_the_provider_returned():
+# ---- Claude
+async def test_a_claude_call_records_the_token_counts_the_provider_returned():
     calls = usage_meter.start()
 
-    await gemini(lambda request: gemini_ok()).chat_json(MESSAGES, SCHEMA)
+    await claude(lambda request: claude_ok()).chat_json(MESSAGES, SCHEMA)
 
     call = calls[0]
-    assert (call.source, call.model, call.ok) == ("gemini", "main", True)
-    assert (call.input_tokens, call.output_tokens, call.thought_tokens, call.cached_tokens) == (
-        83,
-        48,
-        617,
-        0,
-    )
-    assert call.initial_input_tokens == 126
+    assert (call.source, call.model, call.ok) == ("claude", "main", True)
+    assert (call.input_tokens, call.output_tokens, call.cached_tokens) == (83, 48, 7)
 
 
 async def test_a_response_without_usage_records_zero_tokens_instead_of_failing():
     calls = usage_meter.start()
 
-    await gemini(lambda request: gemini_ok(usage=None)).chat_json(MESSAGES, SCHEMA)
+    await claude(lambda request: claude_ok(usage=None)).chat_json(MESSAGES, SCHEMA)
 
-    assert (calls[0].input_tokens, calls[0].output_tokens, calls[0].initial_input_tokens) == (0, 0, None)
+    assert (calls[0].input_tokens, calls[0].output_tokens) == (0, 0)
 
 
 async def test_every_attempt_is_recorded_including_the_failed_ones_and_the_fallback_model():
@@ -90,13 +75,13 @@ async def test_every_attempt_is_recorded_including_the_failed_ones_and_the_fallb
         model = json.loads(request.content)["model"]
         if model == "main":
             seen["main"] += 1
-            return httpx.Response(503, json={"error": {"message": "high demand"}})
-        return gemini_ok()
+            return httpx.Response(529, json={"error": {"message": "overloaded"}})
+        return claude_ok()
 
-    await gemini(handler, max_retries=2, fallback_model="lite").chat_json(MESSAGES, SCHEMA)
+    await claude(handler, max_retries=2, fallback_model="lite").chat_json(MESSAGES, SCHEMA)
 
     assert [(c.model, c.ok) for c in calls] == [("main", False), ("main", False), ("lite", True)]
-    assert calls[0].error == "HTTP 503"
+    assert calls[0].error == "HTTP 529"
     assert calls[0].input_tokens == 0  # lần lỗi không có token
     assert calls[2].output_tokens == 48
 
@@ -104,8 +89,8 @@ async def test_every_attempt_is_recorded_including_the_failed_ones_and_the_fallb
 async def test_a_rejected_request_is_recorded_as_failed():
     calls = usage_meter.start()
 
-    with pytest.raises(GeminiError):
-        await gemini(lambda request: httpx.Response(400, text="bad"), max_retries=1).chat_json(
+    with pytest.raises(ClaudeError):
+        await claude(lambda request: httpx.Response(400, text="bad"), max_retries=1).chat_json(
             MESSAGES, SCHEMA
         )
 
@@ -123,12 +108,11 @@ async def test_an_ollama_chat_records_prompt_and_eval_counts():
     await ollama(lambda request: httpx.Response(200, json=ollama_body())).chat_json(MESSAGES, SCHEMA)
 
     call = calls[0]
-    assert (call.source, call.model, call.input_tokens, call.output_tokens, call.thought_tokens) == (
+    assert (call.source, call.model, call.input_tokens, call.output_tokens) == (
         "ollama",
         "usas-slm-v2",
         13,
         14,
-        0,
     )
 
 
@@ -161,7 +145,7 @@ async def test_calls_inside_a_skill_are_labelled_with_the_skill_name(tmp_path):
     skill.write_text("# SKILL skill_version 1.0", encoding="utf-8")
     calls = usage_meter.start()
 
-    await SkillCall(gemini(lambda request: gemini_ok()), "main", skill).run({}, SCHEMA, lambda raw: raw)
+    await SkillCall(claude(lambda request: claude_ok()), "main", skill).run({}, SCHEMA, lambda raw: raw)
 
     assert calls[0].purpose == "skill_demo"
 
@@ -169,12 +153,12 @@ async def test_calls_inside_a_skill_are_labelled_with_the_skill_name(tmp_path):
 async def test_without_an_open_turn_nothing_is_recorded_and_nothing_breaks():
     usage_meter._calls.set(None)
 
-    await gemini(lambda request: gemini_ok()).chat_json(MESSAGES, SCHEMA)  # không có lỗi, không ghi gì
+    await claude(lambda request: claude_ok()).chat_json(MESSAGES, SCHEMA)  # không có lỗi, không ghi gì
 
 
 async def test_parallel_tasks_of_the_same_turn_share_one_list():
     calls = usage_meter.start()
-    client = gemini(lambda request: gemini_ok())
+    client = claude(lambda request: claude_ok())
 
     await asyncio.gather(*(client.chat_json(MESSAGES, SCHEMA) for _ in range(4)))
 
@@ -184,7 +168,7 @@ async def test_parallel_tasks_of_the_same_turn_share_one_list():
 async def test_two_turns_running_at_once_do_not_mix_their_calls():
     async def turn(n: int) -> int:
         calls = usage_meter.start()
-        client = gemini(lambda request: gemini_ok())
+        client = claude(lambda request: claude_ok())
         for _ in range(n):
             await client.chat_json(MESSAGES, SCHEMA)
         return len(calls)
@@ -193,9 +177,9 @@ async def test_two_turns_running_at_once_do_not_mix_their_calls():
 
 
 # ---- trong phản hồi chat
-class _OneGeminiCall:
+class _OneClaudeCall:
     def __init__(self) -> None:
-        self._client = gemini(lambda request: gemini_ok())
+        self._client = claude(lambda request: claude_ok())
 
     async def run(self, state, message):
         from app.services.chat_flow import SkillOutput
@@ -205,15 +189,15 @@ class _OneGeminiCall:
 
 
 async def test_the_chat_response_carries_the_token_of_every_ai_call_of_the_turn():
-    flow = flow_with({"skill_tra_loi": _OneGeminiCall()}, tin("kien_thuc"))
+    flow = flow_with({"skill_tra_loi": _OneClaudeCall()}, tin("kien_thuc"))
 
     res = await flow.reply(ChatRequest(messages=[ChatMessage(role="user", content="I-20 là gì")]))
 
-    assert [(c.source, c.input_tokens, c.output_tokens, c.thought_tokens) for c in res.ai_usage] == [
-        ("gemini", 83, 48, 617)
+    assert [(c.source, c.input_tokens, c.output_tokens, c.cached_tokens) for c in res.ai_usage] == [
+        ("claude", 83, 48, 7)
     ]
     body = res.model_dump(by_alias=True)
-    assert body["aiUsage"][0]["inputTokens"] == 83 and body["aiUsage"][0]["thoughtTokens"] == 617
+    assert body["aiUsage"][0]["inputTokens"] == 83 and body["aiUsage"][0]["cachedTokens"] == 7
 
 
 async def test_a_turn_without_ai_calls_has_an_empty_list():
@@ -235,20 +219,20 @@ def test_a_recommend_route_returns_the_token_of_its_ai_call_without_changing_oth
 
     def handler(request: httpx.Request) -> httpx.Response:
         body = {
-            "status": "completed",
-            "steps": [{"type": "model_output", "content": [{"type": "text", "text": json.dumps(GOOD)}]}],
-            "usage": GEMINI_USAGE,
+            "stop_reason": "tool_use",
+            "content": [{"type": "tool_use", "name": "tra_loi", "input": GOOD}],
+            "usage": CLAUDE_USAGE,
         }
         return httpx.Response(200, json=body)
 
     app = create_app()
-    app.dependency_overrides[get_compare_writer] = lambda: CompareWriter(gemini(handler), "main")
+    app.dependency_overrides[get_compare_writer] = lambda: CompareWriter(claude(handler), "main")
 
     res = TestClient(app).post("/api/v1/recommend/compare", json=REQUEST)
 
     body = res.json()
     assert body["status"] == "OK" and "skill_version" in body
     usage = body["aiUsage"]
-    assert [(u["source"], u["purpose"], u["inputTokens"], u["thoughtTokens"]) for u in usage] == [
-        ("gemini", "skill_so_sanh", 83, 617)
+    assert [(u["source"], u["purpose"], u["inputTokens"], u["cachedTokens"]) for u in usage] == [
+        ("claude", "skill_so_sanh", 83, 7)
     ]
