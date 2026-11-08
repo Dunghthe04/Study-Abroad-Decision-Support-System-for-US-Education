@@ -12,5 +12,5 @@ public interface IStudyCenterRepository
     Task<bool> ExistsByCodeAsync(string code, CancellationToken ct = default);
     Task AddAsync(StudyCenter center, CancellationToken ct = default);
     Task UpdateAsync(StudyCenter center, CancellationToken ct = default);
-
+    Task<StudyCenter?> GetByOwnerOrEmailAsync(Guid ownerUserId, string? email, CancellationToken ct = default);
 }
