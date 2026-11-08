@@ -6,6 +6,7 @@ from typing import Any
 
 import httpx  # Gửi HTTP request đến Gemini API.
 
+from app.services import usage_meter
 from app.services.ollama import OllamaError  # Gọi gemini API thay cho Ollama.
 
 
@@ -96,22 +97,32 @@ class GeminiClient:
                 )
             except httpx.HTTPError as ex:
                 last = repr(ex)
+                usage_meter.failed("gemini", body["model"], last, self._elapsed_ms(started))
             else:
                 if resp.status_code == 429 or resp.status_code >= 500:
                     last = f"HTTP {resp.status_code}"
+                    usage_meter.failed("gemini", body["model"], last, self._elapsed_ms(started))
                 else:
                     try:
                         resp.raise_for_status()
                     except httpx.HTTPError as ex:
+                        usage_meter.failed(
+                            "gemini", body["model"], f"HTTP {resp.status_code}", self._elapsed_ms(started)
+                        )
                         raise GeminiError(f"Gemini từ chối yêu cầu: {resp.text[:300]}") from ex
                     data = resp.json()
                     seconds = asyncio.get_running_loop().time() - started
                     self.usage_log.append(
                         {"model": body["model"], "usage": data.get("usage"), "seconds": round(seconds, 2)}
                     )
+                    usage_meter.gemini_ok(body["model"], data.get("usage"), round(seconds * 1000))
                     return data
             await asyncio.sleep(2**attempt * 2)
         raise GeminiUnavailable(f"Gọi Gemini {body['model']} thất bại sau {self._max_retries} lần: {last}")
+
+    @staticmethod
+    def _elapsed_ms(started: float) -> int:
+        return round((asyncio.get_running_loop().time() - started) * 1000)
 
     @staticmethod
     def _extract_text(data: dict[str, Any]) -> str:
