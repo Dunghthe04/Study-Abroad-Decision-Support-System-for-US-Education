@@ -20,6 +20,8 @@ public interface IStudyCenterService
     Task<IReadOnlyList<string>> GetReferralCitiesAsync(CancellationToken ct = default);
     /// <summary>[UC-71] Thêm một trung tâm tư vấn vào danh bạ (kèm ghi audit).</summary>
     Task<CreateStudyCenterResult> CreateAsync(CreateStudyCenterRequest request, Guid actorUserId, CancellationToken ct = default);
+    /// <summary>[UC-59] Moderator / Admin xác minh hoặc hủy xác minh một trung tâm tư vấn.</summary>
+    Task<VerifyStudyCenterResult> VerifyCenterAsync(Guid id, bool isVerified, Guid actorUserId, CancellationToken ct = default);
 }
 
 public class StudyCenterService(
