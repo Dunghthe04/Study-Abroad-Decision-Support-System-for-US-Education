@@ -48,3 +48,35 @@ public record TargetSchoolDto(
     DateTime CreatedAt,
     DateTime? UpdatedAt
 );
+
+/// <summary>
+/// [UC-32] Yêu cầu chọn hoặc thay đổi vòng nộp hồ sơ cho một trường mục tiêu.
+/// </summary>
+public record UpdateApplicationRoundRequest(
+    string ApplicationRound,
+    DateTime? Deadline = null,
+    bool AutoResolveDeadline = true
+);
+
+/// <summary>
+/// Kết quả thực hiện chọn vòng nộp hồ sơ.
+/// </summary>
+public record UpdateApplicationRoundResult(TargetSchoolDto? TargetSchool, string? ErrorMessage = null)
+{
+    public bool Success => ErrorMessage is null && TargetSchool is not null;
+    public static UpdateApplicationRoundResult Ok(TargetSchoolDto targetSchool) => new(targetSchool);
+    public static UpdateApplicationRoundResult Fail(string message) => new(null, message);
+}
+
+/// <summary>
+/// [UC-33] Tổng hợp danh sách trường mục tiêu kèm số lượng theo từng nhóm phân loại và hạn nộp gần nhất.
+/// </summary>
+public record TargetSchoolSummaryDto(
+    List<TargetSchoolDto> Items,
+    int TotalCount,
+    int ReachCount,
+    int MatchCount,
+    int SafetyCount,
+    int UndecidedCategoryCount,
+    DateTime? NextDeadline
+);
