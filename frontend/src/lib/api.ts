@@ -21,6 +21,8 @@ import type {
   ParentLinkResponse,
   StudyCenter,
   CreateStudyCenterRequest,
+  UpdateStudyCenterRequest,
+  SetStudyCenterActiveRequest,
 } from "@/types/api";
 
 // Browser code calls same-origin /api (Nginx in prod, Next rewrite in dev).
@@ -264,5 +266,17 @@ export const studyCentersApi = {
     apiFetch<StudyCenter>(`/api/v1/study-centers/${encodeURIComponent(id)}/verify`, {
       method: "PUT",
       body: JSON.stringify({ isVerified }),
+    }),
+  /** [UC-72] Sửa thông tin trung tâm tư vấn (vai trò: Moderator / Admin) */
+  update: (id: string, data: UpdateStudyCenterRequest) =>
+    apiFetch<StudyCenter>(`/api/v1/study-centers/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  /** [UC-72] Ẩn hoặc hiện trung tâm tư vấn khỏi danh bạ và luồng gợi ý (vai trò: Moderator / Admin) */
+  setActiveStatus: (id: string, isActive: boolean) =>
+    apiFetch<StudyCenter>(`/api/v1/study-centers/${encodeURIComponent(id)}/status`, {
+      method: "PUT",
+      body: JSON.stringify({ isActive }),
     }),
 };

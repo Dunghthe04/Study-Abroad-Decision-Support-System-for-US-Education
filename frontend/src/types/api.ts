@@ -71,6 +71,34 @@ export interface CreateStudyCenterRequest {
   visaSuccessRate?: number | null;
 }
 
+export interface UpdateStudyCenterRequest {
+  name: string;
+  website?: string | null;
+  address?: string | null;
+  city?: string | null;
+  studyLevels?: string[];
+  services?: string[];
+  phone?: string | null;
+  email?: string | null;
+  description?: string | null;
+  centerType?: string;
+  logoUrl?: string | null;
+  coverImageUrl?: string | null;
+  galleryImages?: string[];
+  district?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  staffCount?: number | null;
+  establishedYear?: number | null;
+  licenseNumber?: string | null;
+  accreditations?: string[];
+  visaSuccessRate?: number | null;
+}
+
+export interface SetStudyCenterActiveRequest {
+  isActive: boolean;
+}
+
 export type ChatRole = "user" | "assistant";
 
 export interface ChatMessage {
