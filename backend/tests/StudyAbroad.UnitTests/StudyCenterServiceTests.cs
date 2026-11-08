@@ -27,6 +27,9 @@ public class StudyCenterServiceTests
         public Task<StudyCenter?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
             Task.FromResult(Centers.FirstOrDefault(c => c.Id == id));
 
+        public Task<StudyCenter?> GetByIdForUpdateAsync(Guid id, CancellationToken ct = default) =>
+            Task.FromResult(Centers.FirstOrDefault(c => c.Id == id));
+
         public Task<IReadOnlyList<StudyCenter>> ListReferableAsync(CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<StudyCenter>>(Centers);
 
@@ -36,6 +39,16 @@ public class StudyCenterServiceTests
         public Task AddAsync(StudyCenter center, CancellationToken ct = default)
         {
             Centers.Add(center);
+            return Task.CompletedTask;
+        }
+
+        public Task UpdateAsync(StudyCenter center, CancellationToken ct = default)
+        {
+            var idx = Centers.FindIndex(c => c.Id == center.Id);
+            if (idx >= 0)
+            {
+                Centers[idx] = center;
+            }
             return Task.CompletedTask;
         }
     }
@@ -177,5 +190,77 @@ public class StudyCenterServiceTests
         Assert.Equal(99.2, result.Center.VisaSuccessRate);
         Assert.Equal(2, result.Center.GalleryImages?.Count);
         Assert.Equal(2, result.Center.Accreditations?.Count);
+    }
+
+    [Fact]
+    public async Task VerifyCenterAsync_VerifyCenter_SetsStatusVerified_AndLogsAudit()
+    {
+        var center = new StudyCenter
+        {
+            Code = "CENTER_TEST",
+            Name = "Trung tâm Khảo sát",
+            VerificationStatus = "unverified"
+        };
+        var repo = new FakeRepository(center);
+        var service = new StudyCenterService(repo, _auditLogs);
+        var actorId = Guid.NewGuid();
+
+        var result = await service.VerifyCenterAsync(center.Id, true, actorId);
+
+        Assert.True(result.Success);
+        Assert.NotNull(result.Center);
+        Assert.Equal("verified", result.Center.VerificationStatus);
+        Assert.NotNull(result.Center.VerifiedAt);
+        Assert.Equal(actorId, result.Center.VerifiedByUserId);
+
+        var log = Assert.Single(_auditLogs.Entries);
+        Assert.Equal("study_center.verify", log.Action);
+        Assert.Equal("study_center", log.EntityType);
+        Assert.Equal(center.Id.ToString(), log.EntityId);
+        Assert.Equal(actorId, log.ActorUserId);
+    }
+
+    [Fact]
+    public async Task VerifyCenterAsync_UnverifyCenter_SetsStatusUnverified_ClearsVerificationInfo_AndLogsAudit()
+    {
+        var center = new StudyCenter
+        {
+            Code = "CENTER_TEST_VERIFIED",
+            Name = "Trung tâm Đã Xác minh",
+            VerificationStatus = "verified",
+            VerifiedAt = DateTime.UtcNow.AddDays(-10),
+            VerifiedByUserId = Guid.NewGuid()
+        };
+        var repo = new FakeRepository(center);
+        var service = new StudyCenterService(repo, _auditLogs);
+        var actorId = Guid.NewGuid();
+
+        var result = await service.VerifyCenterAsync(center.Id, false, actorId);
+
+        Assert.True(result.Success);
+        Assert.NotNull(result.Center);
+        Assert.Equal("unverified", result.Center.VerificationStatus);
+        Assert.Null(result.Center.VerifiedAt);
+        Assert.Null(result.Center.VerifiedByUserId);
+
+        var log = Assert.Single(_auditLogs.Entries);
+        Assert.Equal("study_center.unverify", log.Action);
+        Assert.Equal("study_center", log.EntityType);
+        Assert.Equal(center.Id.ToString(), log.EntityId);
+        Assert.Equal(actorId, log.ActorUserId);
+    }
+
+    [Fact]
+    public async Task VerifyCenterAsync_NonExistentCenter_ReturnsFail()
+    {
+        var repo = new FakeRepository();
+        var service = new StudyCenterService(repo, _auditLogs);
+        var nonExistentId = Guid.NewGuid();
+
+        var result = await service.VerifyCenterAsync(nonExistentId, true, Guid.NewGuid());
+
+        Assert.False(result.Success);
+        Assert.Contains("Không tìm thấy", result.ErrorMessage);
+        Assert.Empty(_auditLogs.Entries);
     }
 }

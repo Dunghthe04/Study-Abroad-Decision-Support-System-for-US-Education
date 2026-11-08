@@ -104,6 +104,9 @@ public class CenterReferralTests
         public Task<StudyCenter?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
             throw new NotSupportedException();
 
+        public Task<StudyCenter?> GetByIdForUpdateAsync(Guid id, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
         public Task<IReadOnlyList<StudyCenter>> ListReferableAsync(CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<StudyCenter>>(centers);
 
@@ -111,6 +114,9 @@ public class CenterReferralTests
             Task.FromResult(centers.Any(c => c.Code.Equals(code, StringComparison.OrdinalIgnoreCase)));
 
         public Task AddAsync(StudyCenter center, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task UpdateAsync(StudyCenter center, CancellationToken ct = default) =>
             throw new NotSupportedException();
     }
 
