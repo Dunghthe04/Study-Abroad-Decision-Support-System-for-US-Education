@@ -56,7 +56,7 @@ public class TargetSchoolRepository(AppDbContext db) : ITargetSchoolRepository
             query = query.Where(ts => ts.Status == st);
         }
 
-        return await query
+        var items = await query
             .Join(db.Universities.AsNoTracking(),
                 ts => ts.UniversityId,
                 u => u.Id,
@@ -79,11 +79,14 @@ public class TargetSchoolRepository(AppDbContext db) : ITargetSchoolRepository
                     ts.Deadline,
                     ts.CreatedAt,
                     ts.UpdatedAt))
+            .ToListAsync(ct);
+
+        return items
             .OrderBy(ts => ts.Priority)
             .ThenBy(ts => ts.Deadline == null)
             .ThenBy(ts => ts.Deadline)
             .ThenByDescending(ts => ts.CreatedAt)
-            .ToListAsync(ct);
+            .ToList();
     }
 
     public Task<TargetSchool?> GetByUserAndUniversityAsync(Guid userId, Guid universityId, CancellationToken ct = default) =>
@@ -115,14 +118,14 @@ public class TargetSchoolRepository(AppDbContext db) : ITargetSchoolRepository
     public Task<TargetSchool?> GetByUserAndUniversityCodeAsync(Guid userId, string code, CancellationToken ct = default) =>
         db.TargetSchools
             .Join(db.Universities, ts => ts.UniversityId, u => u.Id, (ts, u) => new { ts, u })
-            .Where(x => x.ts.UserId == userId && x.u.Code == code)
+            .Where(x => x.ts.UserId == userId && (x.u.Code == code || x.u.Code.ToLower() == code.ToLower()))
             .Select(x => x.ts)
             .FirstOrDefaultAsync(ct);
 
     public Task<TargetSchoolDto?> GetDtoByUserAndUniversityCodeAsync(Guid userId, string code, CancellationToken ct = default) =>
         db.TargetSchools.AsNoTracking()
             .Where(ts => ts.UserId == userId)
-            .Join(db.Universities.AsNoTracking().Where(u => u.Code == code),
+            .Join(db.Universities.AsNoTracking().Where(u => u.Code == code || u.Code.ToLower() == code.ToLower()),
                 ts => ts.UniversityId,
                 u => u.Id,
                 (ts, u) => new TargetSchoolDto(
@@ -150,7 +153,7 @@ public class TargetSchoolRepository(AppDbContext db) : ITargetSchoolRepository
         db.Universities.AsNoTracking().FirstOrDefaultAsync(x => x.Id == universityId && x.IsActive, ct);
 
     public Task<University?> GetUniversityByCodeAsync(string code, CancellationToken ct = default) =>
-        db.Universities.AsNoTracking().FirstOrDefaultAsync(x => x.Code == code && x.IsActive, ct);
+        db.Universities.AsNoTracking().FirstOrDefaultAsync(x => (x.Code == code || x.Code.ToLower() == code.ToLower()) && x.IsActive, ct);
 
     public Task<string?> GetUniversityDeadlinesJsonAsync(Guid universityId, CancellationToken ct = default) =>
         db.UniversityOfferings.AsNoTracking()

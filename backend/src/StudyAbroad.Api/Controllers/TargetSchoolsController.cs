@@ -11,7 +11,7 @@ namespace StudyAbroad.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/v1/target-schools")]
-[Authorize(Roles = $"{UserRoles.Student},{UserRoles.Parent}")]
+[Authorize(Roles = $"{UserRoles.Student},{UserRoles.Parent},{UserRoles.Admin},{UserRoles.Moderator}")]
 public class TargetSchoolsController(ITargetSchoolService service) : ControllerBase
 {
     /// <summary>

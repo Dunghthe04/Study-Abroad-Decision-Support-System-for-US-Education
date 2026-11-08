@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 
 export default function TargetSchoolsPage() {
   return (
-    <ProtectedRoute allowedRoles={["student", "parent"]}>
+    <ProtectedRoute allowedRoles={["student", "parent", "admin", "moderator"]}>
       <TargetSchoolListView />
     </ProtectedRoute>
   );
