@@ -274,9 +274,11 @@ export const studyCentersApi = {
       body: JSON.stringify(data),
     }),
   /** [UC-72] Ẩn hoặc hiện trung tâm tư vấn khỏi danh bạ và luồng gợi ý (vai trò: Moderator / Admin) */
-  setActiveStatus: (id: string, isActive: boolean) =>
-    apiFetch<StudyCenter>(`/api/v1/study-centers/${encodeURIComponent(id)}/status`, {
+  setActiveStatus: (id: string, isActive: boolean) => {
+    const payload: SetStudyCenterActiveRequest = { isActive };
+    return apiFetch<StudyCenter>(`/api/v1/study-centers/${encodeURIComponent(id)}/status`, {
       method: "PUT",
-      body: JSON.stringify({ isActive }),
-    }),
+      body: JSON.stringify(payload),
+    });
+  },
 };
