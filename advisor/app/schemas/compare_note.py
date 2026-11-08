@@ -4,6 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from app.schemas.chat import AiUsageMixin
 from app.schemas.common import CamelModel
 
 MAX_SCHOOLS = 4
@@ -28,7 +29,7 @@ class CompareNoteResult(BaseModel):
 
 
 # status OK thì answer là nhận xét hoàn chỉnh đã qua kiểm tra, FAILED thì backend chỉ hiện bảng số liệu
-class CompareNoteResponse(BaseModel):
+class CompareNoteResponse(AiUsageMixin):
     skill_version: str
     model: str
     status: str  # OK | FAILED

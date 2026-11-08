@@ -222,3 +222,33 @@ async def test_a_turn_without_ai_calls_has_an_empty_list():
     res = await flow.reply(ChatRequest(messages=[ChatMessage(role="user", content="tạm biệt")]))
 
     assert res.ai_usage == []
+
+
+# ---- route ngoài chat (/recommend): token cũng nằm trong phản hồi, khóa aiUsage; các khóa cũ giữ nguyên
+def test_a_recommend_route_returns_the_token_of_its_ai_call_without_changing_other_keys():
+    from fastapi.testclient import TestClient
+
+    from app.api.deps import get_compare_writer
+    from app.main import create_app
+    from app.services.compare_writer import CompareWriter
+    from tests.test_compare_writer import GOOD, REQUEST
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = {
+            "status": "completed",
+            "steps": [{"type": "model_output", "content": [{"type": "text", "text": json.dumps(GOOD)}]}],
+            "usage": GEMINI_USAGE,
+        }
+        return httpx.Response(200, json=body)
+
+    app = create_app()
+    app.dependency_overrides[get_compare_writer] = lambda: CompareWriter(gemini(handler), "main")
+
+    res = TestClient(app).post("/api/v1/recommend/compare", json=REQUEST)
+
+    body = res.json()
+    assert body["status"] == "OK" and "skill_version" in body
+    usage = body["aiUsage"]
+    assert [(u["source"], u["purpose"], u["inputTokens"], u["thoughtTokens"]) for u in usage] == [
+        ("gemini", "skill_so_sanh", 83, 617)
+    ]

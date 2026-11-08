@@ -4,6 +4,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from app.schemas.chat import AiUsageMixin
 from app.schemas.common import CamelModel
 
 Outcome = Literal["already_reached", "reachable", "blocked", "no_data"]
@@ -34,7 +35,7 @@ class GoalNoteResult(BaseModel):
 
 
 # status OK thì answer là tin nhắn hoàn chỉnh đã qua kiểm tra, FAILED thì backend dùng câu ghép bằng code
-class GoalNoteResponse(BaseModel):
+class GoalNoteResponse(AiUsageMixin):
     skill_version: str
     model: str
     status: str  # OK | FAILED

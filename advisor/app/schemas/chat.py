@@ -2,7 +2,7 @@
 
 from typing import Any, Literal
 
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from app.core.study_levels import StudyLevel
 from app.schemas.common import CamelModel
@@ -121,6 +121,12 @@ class AiUsageCall(CamelModel):
     ok: bool = True
     error: str | None = None
     latency_ms: int = 0
+
+
+class AiUsageMixin(BaseModel):
+    """Thêm khóa aiUsage (camelCase) vào các phản hồi của /recommend, những khóa khác của chúng giữ nguyên."""
+
+    ai_usage: list[AiUsageCall] = Field(default_factory=list, alias="aiUsage")
 
 
 class ChatResponse(CamelModel):

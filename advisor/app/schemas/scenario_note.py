@@ -4,6 +4,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from app.schemas.chat import AiUsageMixin
 from app.schemas.common import CamelModel
 
 GroupKey = Literal["reach", "match", "safety", "aid"]
@@ -63,7 +64,7 @@ class ScenarioNoteResult(BaseModel):
 
 
 # Kết quả trả về: status OK thì answer là tin nhắn hoàn chỉnh đã qua kiểm tra, FAILED thì backend dùng câu mẫu bằng code
-class ScenarioNoteResponse(BaseModel):
+class ScenarioNoteResponse(AiUsageMixin):
     skill_version: str
     model: str
     status: str  # OK | FAILED

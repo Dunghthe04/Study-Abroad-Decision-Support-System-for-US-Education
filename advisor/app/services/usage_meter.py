@@ -9,7 +9,7 @@ Dùng contextvars để không phải đổi chữ ký các hàm: danh sách "đ
 danh sách nào đang mở thì mọi hàm ghi đều không làm gì.
 """
 
-from collections.abc import Iterator
+from collections.abc import Awaitable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any
@@ -25,6 +25,14 @@ def start() -> list[AiUsageCall]:
     calls: list[AiUsageCall] = []
     _calls.set(calls)
     return calls
+
+
+async def metered(awaitable: Awaitable[Any]) -> Any:
+    """Chạy một lượt AI ngoài chat (route /recommend): mở danh sách, chờ kết quả, gắn token vào kết quả."""
+    calls = start()
+    result = await awaitable
+    result.ai_usage = list(calls)
+    return result
 
 
 @contextmanager
