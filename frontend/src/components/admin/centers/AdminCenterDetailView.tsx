@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeftIcon,
@@ -8,6 +9,7 @@ import {
   ClockIcon,
   StarIcon,
   ShieldCheckIcon,
+  ShieldAlertIcon,
   AwardIcon,
   UsersIcon,
   GraduationCapIcon,
@@ -16,12 +18,25 @@ import {
   FlameIcon,
 } from "lucide-react";
 import type { StudyCenter } from "@/types/api";
+import { studyCentersApi, ApiError } from "@/lib/api";
 import { getEnrichedCenterProfile } from "@/lib/center-details";
 import { centerServiceLabel } from "@/lib/center-services";
 import { studyLevelLabel } from "@/lib/study-levels";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { toast } from "@/components/ui/toast";
+import { CreateCenterAccountButton } from "@/components/admin/centers/CreateCenterAccountButton";
 
 interface AdminCenterDetailViewProps {
   center: StudyCenter;
@@ -40,10 +55,54 @@ function parseScholarshipStat(raw?: string): { amount: string; note?: string } {
   return { amount: trimmed };
 }
 
-export function AdminCenterDetailView({ center }: AdminCenterDetailViewProps) {
+export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDetailViewProps) {
+  const [currentCenter, setCurrentCenter] = useState<StudyCenter>(initialCenter);
+  const [confirmAction, setConfirmAction] = useState<"verify" | "unverify" | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    setCurrentCenter(initialCenter);
+  }, [initialCenter]);
+
+  const center = currentCenter;
   const profile = getEnrichedCenterProfile(center);
   const isVerified = center.verificationStatus === "verified" || profile.center.verificationStatus === "verified";
   const scholarshipStat = parseScholarshipStat(profile.totalScholarshipsWon);
+
+  const handleToggleVerification = async () => {
+    if (!confirmAction) return;
+    setIsSubmitting(true);
+    const targetVerified = confirmAction === "verify";
+
+    try {
+      const updated = await studyCentersApi.verify(center.id, targetVerified);
+      setCurrentCenter((prev) => ({
+        ...prev,
+        ...updated,
+        verificationStatus: targetVerified ? "verified" : "unverified",
+        verifiedAt: targetVerified ? (updated.verifiedAt ?? new Date().toISOString()) : null,
+        verifiedByUserId: targetVerified ? updated.verifiedByUserId : null,
+      }));
+
+      toast.add({
+        type: "success",
+        title: targetVerified ? "Đã xác minh trung tâm" : "Đã hủy xác minh trung tâm",
+        description: targetVerified
+          ? `Trung tâm ${center.name} đã được xác minh thành công.`
+          : `Đã hủy trạng thái xác minh của ${center.name}.`,
+      });
+      setConfirmAction(null);
+    } catch (err: unknown) {
+      const msg = err instanceof ApiError ? err.message : "Không thể cập nhật trạng thái xác minh.";
+      toast.add({
+        type: "error",
+        title: "Thao tác thất bại",
+        description: msg,
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <div className="flex-1 min-h-0 w-full overflow-y-auto space-y-6 pr-1 pb-16">
@@ -66,17 +125,49 @@ export function AdminCenterDetailView({ center }: AdminCenterDetailViewProps) {
           </Badge>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {isVerified ? (
-            <Badge className="bg-emerald-600 text-white gap-1 text-xs px-2.5 py-1">
-              <CheckCircle2Icon className="w-3.5 h-3.5" />
-              Đã xác minh Sở GD&ĐT
-            </Badge>
+            <div className="flex items-center gap-2">
+              <Badge className="bg-emerald-600 text-white gap-1 text-xs px-2.5 py-1">
+                <CheckCircle2Icon className="w-3.5 h-3.5" />
+                Đã xác minh Sở GD&ĐT
+              </Badge>
+              {center.verifiedAt && (
+                <span className="hidden sm:inline-flex items-center gap-1 text-xs text-muted-foreground">
+                  <ClockIcon className="w-3 h-3" />
+                  {new Date(center.verifiedAt).toLocaleDateString("vi-VN")}
+                </span>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setConfirmAction("unverify")}
+                className="h-8 gap-1.5 text-xs text-rose-600 border-rose-200 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+              >
+                <ShieldAlertIcon className="w-3.5 h-3.5" />
+                Hủy xác minh
+              </Button>
+            </div>
           ) : (
-            <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-950/40 text-xs px-2.5 py-1">
-              Chờ duyệt hồ sơ
-            </Badge>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-950/40 text-xs px-2.5 py-1">
+                Chờ duyệt hồ sơ
+              </Badge>
+              <Button
+                size="sm"
+                onClick={() => setConfirmAction("verify")}
+                className="h-8 gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+              >
+                <ShieldCheckIcon className="w-3.5 h-3.5" />
+                Xác minh trung tâm
+              </Button>
+            </div>
           )}
+          <CreateCenterAccountButton
+            initialName={center.name}
+            initialEmail={center.email || ""}
+            initialPhone={center.phone || ""}
+          />
         </div>
       </div>
 
@@ -485,6 +576,81 @@ export function AdminCenterDetailView({ center }: AdminCenterDetailViewProps) {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Confirmation Dialog for Verify / Unverify */}
+      <Dialog
+        open={confirmAction !== null}
+        onOpenChange={(open) => {
+          if (!open && !isSubmitting) setConfirmAction(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {confirmAction === "verify" ? (
+                <>
+                  <ShieldCheckIcon className="w-5 h-5 text-emerald-600" />
+                  <span>Xác minh trung tâm tư vấn</span>
+                </>
+              ) : (
+                <>
+                  <ShieldAlertIcon className="w-5 h-5 text-rose-600" />
+                  <span>Hủy xác minh trung tâm tư vấn</span>
+                </>
+              )}
+            </DialogTitle>
+            <DialogDescription className="pt-2 text-sm leading-relaxed">
+              {confirmAction === "verify" ? (
+                <>
+                  Bạn có chắc chắn muốn xác minh trung tâm{" "}
+                  <strong className="text-foreground">{center.name}</strong>?
+                  <br />
+                  Sau khi xác minh, trung tâm sẽ được gắn huy hiệu &quot;Đã xác minh&quot; và đủ điều kiện xuất hiện trong danh bạ đề xuất cho học sinh, phụ huynh.
+                </>
+              ) : (
+                <>
+                  Bạn có chắc chắn muốn hủy trạng thái xác minh của trung tâm{" "}
+                  <strong className="text-foreground">{center.name}</strong>?
+                  <br />
+                  Trung tâm sẽ chuyển về trạng thái Chưa xác minh (&quot;unverified&quot;) và không còn được hiển thị huy hiệu xác minh trên toàn hệ thống.
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-4 gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setConfirmAction(null)}
+              disabled={isSubmitting}
+            >
+              Hủy bỏ
+            </Button>
+            <Button
+              variant={confirmAction === "verify" ? "default" : "destructive"}
+              onClick={handleToggleVerification}
+              disabled={isSubmitting}
+              className={confirmAction === "verify" ? "bg-emerald-600 hover:bg-emerald-700 text-white" : undefined}
+            >
+              {isSubmitting ? (
+                <>
+                  <Spinner className="w-4 h-4 mr-1.5" />
+                  Đang xử lý...
+                </>
+              ) : confirmAction === "verify" ? (
+                <>
+                  <CheckCircle2Icon className="w-4 h-4 mr-1.5" />
+                  Xác nhận xác minh
+                </>
+              ) : (
+                <>
+                  <ShieldAlertIcon className="w-4 h-4 mr-1.5" />
+                  Xác nhận hủy xác minh
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
