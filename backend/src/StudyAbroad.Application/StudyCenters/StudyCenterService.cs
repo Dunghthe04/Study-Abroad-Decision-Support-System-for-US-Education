@@ -128,6 +128,45 @@ public class StudyCenterService(
         return CenterReferral.Pick(centers, query.Service, query.StudyLevel, query.City).Select(ToDto).ToList();
     }
 
+    public async Task<VerifyStudyCenterResult> VerifyCenterAsync(Guid id, bool isVerified, Guid actorUserId, CancellationToken ct = default)
+    {
+        var center = await repository.GetByIdForUpdateAsync(id, ct);
+        if (center is null)
+            return VerifyStudyCenterResult.Fail("Không tìm thấy trung tâm tư vấn trong hệ thống.");
+
+        var previousStatus = center.VerificationStatus;
+        var newStatus = isVerified ? CenterReferral.Verified : "unverified";
+
+        center.VerificationStatus = newStatus;
+        center.VerifiedAt = isVerified ? DateTime.UtcNow : null;
+        center.VerifiedByUserId = isVerified ? actorUserId : null;
+
+        await repository.UpdateAsync(center, ct);
+
+        var action = isVerified ? "study_center.verify" : "study_center.unverify";
+        var detailJson = JsonSerializer.Serialize(new
+        {
+            centerId = center.Id,
+            centerName = center.Name,
+            centerCode = center.Code,
+            previousStatus,
+            newStatus,
+            verifiedAt = center.VerifiedAt,
+            actorUserId
+        });
+
+        await auditLogs.AddAsync(new AuditLog
+        {
+            ActorUserId = actorUserId,
+            Action = action,
+            EntityType = "study_center",
+            EntityId = center.Id.ToString(),
+            DetailJson = detailJson,
+        }, ct);
+
+        return VerifyStudyCenterResult.Ok(ToDto(center));
+    }
+
     public async Task<IReadOnlyList<string>> GetReferralCitiesAsync(CancellationToken ct = default) =>
         CenterReferral.Cities(await repository.ListReferableAsync(ct));
 
@@ -136,5 +175,6 @@ public class StudyCenterService(
             c.Phone, c.Email, c.Description, c.VerificationStatus, c.IsActive,
             c.CenterType, c.LogoUrl, c.CoverImageUrl, c.GalleryImages, c.District,
             c.Latitude, c.Longitude, c.StaffCount, c.EstablishedYear, c.LicenseNumber,
-            c.Accreditations, c.VisaSuccessRate, c.AverageRating, c.ReviewCount);
+            c.Accreditations, c.VisaSuccessRate, c.AverageRating, c.ReviewCount,
+            c.VerifiedAt, c.VerifiedByUserId);
 }
