@@ -354,6 +354,27 @@ class SlmTinResult(SlmTin):
 SKILL_KINDS = ("ho_so", "kich_ban")
 # Các mục bắt buộc của một skill, đúng thứ tự. Mỗi mục là một dòng "## TÊN MỤC" rồi nội dung
 SKILL_SECTIONS = {
+    # Khuôn 7 mục: không còn mục "Đề xuất trường" vì danh sách trường do hệ thống tính riêng (skill chỉ đánh giá hồ sơ và lộ trình)
+    "ho_so": (
+        "0. Câu hỏi kích hoạt",
+        "1. Nhiệm vụ",
+        "2. Dữ liệu dùng để tính",
+        "3. Cách hiểu hoạt động và giải thưởng",
+        "4. Góc nhìn về hồ sơ",
+        "5. Lộ trình",
+        "6. Yêu cầu câu trả lời",
+    ),
+    "kich_ban": (
+        "0. Câu hỏi kích hoạt",
+        "1. Nhiệm vụ",
+        "2. Hồ sơ gốc",
+        "3. Cách làm",
+        "4. Yêu cầu câu trả lời",
+    ),
+}
+# Khuôn cũ 8 mục (có "5. Đề xuất trường"). Vẫn nhận trong lúc chuyển sang khuôn 7 mục, vì model usas-slm-v2 đang chạy và dữ liệu cũ
+# còn viết theo khuôn này. Bỏ khi model huấn luyện lại bằng khuôn 7 mục đã chạy thật
+LEGACY_SKILL_SECTIONS = {
     "ho_so": (
         "0. Câu hỏi kích hoạt",
         "1. Nhiệm vụ",
@@ -363,13 +384,6 @@ SKILL_SECTIONS = {
         "5. Đề xuất trường",
         "6. Lộ trình",
         "7. Yêu cầu câu trả lời",
-    ),
-    "kich_ban": (
-        "0. Câu hỏi kích hoạt",
-        "1. Nhiệm vụ",
-        "2. Hồ sơ gốc",
-        "3. Cách làm",
-        "4. Yêu cầu câu trả lời",
     ),
 }
 
@@ -440,13 +454,19 @@ def _so_trong(text: str) -> set[str]:
 # Kiểm skill SLM sinh ra (văn bản .md). Sai thì ném ValueError để bộ sinh gọi lại; vẫn sai thì báo chưa có skill (không dùng skill tĩnh).
 # Chỉ kiểm cấu trúc và việc không bỏ số của hồ sơ và dòng tính sẵn. Số suy ra (GPA thang 4, hạn nộp) và dòng Mốc sẽ kiểm bằng luật riêng
 def check_skill(text: str, req: SkillRequest) -> None:
-    wanted = SKILL_SECTIONS[req.loai]
+    layouts = [SKILL_SECTIONS[req.loai]]  # khuôn chuẩn đứng đầu, khuôn cũ (nếu còn nhận) đứng sau
+    if req.loai in LEGACY_SKILL_SECTIONS:
+        layouts.append(LEGACY_SKILL_SECTIONS[req.loai])
     parts = re.split(
         r"^## (.+?)\s*$", text, flags=re.M
     )  # [chữ trước, tên mục, nội dung, tên mục, nội dung, ...]
     muc = dict(zip(parts[1::2], parts[2::2], strict=True))
-    if tuple(name for name in parts[1::2] if name in wanted) != wanted:
-        raise ValueError(f"skill {req.loai} phải có đủ các mục theo thứ tự: {', '.join(wanted)}")
+    wanted = next(
+        (layout for layout in layouts if tuple(name for name in parts[1::2] if name in layout) == layout),
+        None,
+    )
+    if wanted is None:
+        raise ValueError(f"skill {req.loai} phải có đủ các mục theo thứ tự: {', '.join(layouts[0])}")
     empty = [name for name in wanted if not muc[name].strip()]
     if empty:
         raise ValueError(f"mục rỗng: {empty}")

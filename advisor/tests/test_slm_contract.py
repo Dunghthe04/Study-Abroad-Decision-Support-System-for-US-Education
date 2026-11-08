@@ -11,6 +11,7 @@ from app.schemas.slm import (
     CENTER_TASKS,
     ENTITY_KEYS,
     INTENTS,
+    LEGACY_SKILL_SECTIONS,
     MAX_RAW_Y,
     PROFILE_KEYS,
     PROFILE_TASKS,
@@ -410,9 +411,37 @@ def test_extra_sections_are_ignored_but_a_missing_or_empty_one_is_not():
     check_skill(skill() + "\n## 8. Ví dụ cách viết\nGPA 9/10", request())
 
     with pytest.raises(ValueError, match="đủ các mục"):
-        check_skill(skill().replace("## 5. Đề xuất trường", "## 5x"), request())
+        check_skill(skill().replace("## 5. Lộ trình", "## 5x"), request())
     with pytest.raises(ValueError, match="mục rỗng"):
-        check_skill(skill().replace("## 6. Lộ trình\nGPA 9/10, SAT 1450 ", "## 6. Lộ trình\n"), request())
+        check_skill(skill().replace("## 5. Lộ trình\nGPA 9/10, SAT 1450 ", "## 5. Lộ trình\n"), request())
+
+
+def legacy_skill() -> str:
+    return "\n".join(f"## {name}\nGPA 9/10, SAT 1450" for name in LEGACY_SKILL_SECTIONS["ho_so"])
+
+
+def test_the_old_eight_section_skill_is_still_accepted_while_the_model_is_retrained():
+    check_skill(legacy_skill(), request())  # model usas-slm-v2 và dữ liệu cũ
+
+
+def test_the_error_names_the_new_seven_section_layout():
+    with pytest.raises(ValueError, match="5. Lộ trình, 6. Yêu cầu câu trả lời"):
+        check_skill(skill().replace("## 4. Góc nhìn về hồ sơ", "## 4x"), request())
+
+
+def test_sections_of_the_two_layouts_cannot_be_mixed_in_the_wrong_order():
+    swapped = (
+        skill()
+        .replace("## 5. Lộ trình", "## 6. Lộ trình")
+        .replace("## 6. Yêu cầu câu trả lời", "## 5. Đề xuất trường")
+    )
+
+    with pytest.raises(ValueError, match="đủ các mục"):
+        check_skill(swapped, request())
+
+
+def test_the_scenario_skill_has_only_one_layout():
+    assert "kich_ban" not in LEGACY_SKILL_SECTIONS
 
 
 def test_a_skill_that_drops_a_number_of_the_profile_is_rejected():
@@ -442,7 +471,8 @@ def test_list_numbers_at_the_start_of_a_line_are_not_counted_as_profile_numbers(
 
 
 def test_each_type_of_skill_has_its_own_sections():
-    assert len(SKILL_SECTIONS["ho_so"]) == 8 and len(SKILL_SECTIONS["kich_ban"]) == 5
+    assert len(SKILL_SECTIONS["ho_so"]) == 7 and len(SKILL_SECTIONS["kich_ban"]) == 5
+    assert len(LEGACY_SKILL_SECTIONS["ho_so"]) == 8 and "5. Đề xuất trường" not in SKILL_SECTIONS["ho_so"]
     assert SKILL_SECTIONS["ho_so"][0] == SKILL_SECTIONS["kich_ban"][0] == "0. Câu hỏi kích hoạt"
 
 
