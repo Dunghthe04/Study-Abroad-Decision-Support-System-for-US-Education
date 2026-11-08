@@ -118,6 +118,9 @@ public class CenterReferralTests
 
         public Task UpdateAsync(StudyCenter center, CancellationToken ct = default) =>
             throw new NotSupportedException();
+
+        public Task<StudyCenter?> GetByOwnerOrEmailAsync(Guid ownerUserId, string? email, CancellationToken ct = default) =>
+            Task.FromResult(centers.FirstOrDefault(c => c.OwnerUserId == ownerUserId || (email != null && string.Equals(c.Email, email, StringComparison.OrdinalIgnoreCase))));
     }
 
     private readonly FakeAuditLogRepository _auditLogs = new();

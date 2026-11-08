@@ -51,6 +51,9 @@ public class StudyCenterServiceTests
             }
             return Task.CompletedTask;
         }
+
+        public Task<StudyCenter?> GetByOwnerOrEmailAsync(Guid ownerUserId, string? email, CancellationToken ct = default) =>
+            Task.FromResult(Centers.FirstOrDefault(c => c.OwnerUserId == ownerUserId || (email != null && string.Equals(c.Email, email, StringComparison.OrdinalIgnoreCase))));
     }
 
     private readonly FakeAuditLogRepository _auditLogs = new();
