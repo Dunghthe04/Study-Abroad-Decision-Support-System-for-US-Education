@@ -86,7 +86,13 @@ export function AddTargetSchoolButton({
     targetSchoolsApi
       .check({ universityCode, universityId })
       .then((res) => {
-        if (!cancelled) setSavedTarget(res);
+        if (!cancelled) {
+          if (res && res.id) {
+            setSavedTarget(res);
+          } else {
+            setSavedTarget(null);
+          }
+        }
       })
       .catch(() => {
         if (!cancelled) setSavedTarget(null);
@@ -113,7 +119,7 @@ export function AddTargetSchoolButton({
     setError(null);
     setConfirmDelete(false);
 
-    if (savedTarget) {
+    if (savedTarget && savedTarget.id) {
       // Đã có trong danh sách -> Mở modal xem thông tin và tùy chọn xóa (UC-31)
       setIsOpenManage(true);
     } else {
@@ -163,15 +169,23 @@ export function AddTargetSchoolButton({
 
   // [UC-31] Xóa trường khỏi danh sách mục tiêu
   const handleDeleteTargetSchool = async () => {
-    if (!savedTarget) return;
+    if (!savedTarget && !universityCode && !universityId) return;
 
     setIsDeleting(true);
     setError(null);
 
     try {
-      await targetSchoolsApi.remove(savedTarget.id);
+      if (savedTarget?.id) {
+        await targetSchoolsApi.remove(savedTarget.id);
+      } else if (universityCode) {
+        await targetSchoolsApi.removeByUniversity(universityCode);
+      } else if (universityId) {
+        await targetSchoolsApi.removeByUniversity(universityId);
+      } else {
+        throw new Error("Không tìm thấy thông tin trường để xóa.");
+      }
 
-      const targetId = savedTarget.id;
+      const targetId = savedTarget?.id;
       setSavedTarget(null);
       setIsOpenManage(false);
       setConfirmDelete(false);
@@ -182,7 +196,9 @@ export function AddTargetSchoolButton({
         description: `${universityName} đã được xóa khỏi danh sách trường mục tiêu của bạn.`,
       });
 
-      onRemove?.(targetId);
+      if (targetId) {
+        onRemove?.(targetId);
+      }
     } catch {
       setError("Không thể xóa trường mục tiêu. Vui lòng thử lại sau.");
     } finally {
@@ -203,21 +219,23 @@ export function AddTargetSchoolButton({
     }
   };
 
+  const isSaved = Boolean(savedTarget && savedTarget.id);
+
   return (
     <>
       <Button
-        variant={savedTarget ? "secondary" : variant}
+        variant={isSaved ? "secondary" : variant}
         size={size}
         onClick={handleClickButton}
         disabled={isChecking}
-        className={cn("gap-2", savedTarget && "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300", className)}
+        className={cn("gap-2", isSaved && "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300", className)}
       >
         {isChecking ? (
           <>
             <Loader2 className="size-4 animate-spin text-muted-foreground" />
             <span>Đang kiểm tra...</span>
           </>
-        ) : savedTarget ? (
+        ) : isSaved ? (
           <>
             <BookmarkCheckIcon className="size-4 text-emerald-600 dark:text-emerald-400" />
             <span>Đã trong mục tiêu</span>
