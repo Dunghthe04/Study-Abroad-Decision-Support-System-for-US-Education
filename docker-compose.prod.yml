@@ -61,6 +61,9 @@ services:
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-bge-m3}
       VISION_MODEL: ${VISION_MODEL:-glm-ocr}
       TRANSCRIPT_PARSE_MODEL: ${TRANSCRIPT_PARSE_MODEL:-}  # only without a Claude key; empty = reuse LLM_MODEL
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-}
+      ANTHROPIC_FALLBACK_MODEL: ${ANTHROPIC_FALLBACK_MODEL:-}
 
   api:
     build: ./backend
