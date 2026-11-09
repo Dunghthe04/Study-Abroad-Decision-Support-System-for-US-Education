@@ -54,3 +54,32 @@ async def test_wrong_twice_gives_none():
 
     assert await AdviceWriter(llm).write(SKILL, REQ, []) is None
     assert len(llm.calls) == 2
+
+
+def test_promise_error_names_only_the_matched_phrase():
+    with pytest.raises(ValueError) as e:
+        check_answer({"tra_loi": "GPA 8.5 của bạn tốt, chắc chắn đỗ Iowa."})
+
+    # Chỉ nêu cụm khớp bộ lọc, không chép câu trả lời (có số liệu hồ sơ của học sinh) vào lỗi
+    assert str(e.value) == 'câu trả lời hứa đỗ: "chac chan do"'
+
+
+async def test_each_failed_attempt_is_logged_with_its_reason(caplog):
+    llm = FakeLLM(ClaudeError("HTTP 529"), {"tra_loi": "Chắc chắn đỗ!"})
+
+    with caplog.at_level("WARNING", logger="app.services.advice_writer"):
+        assert await AdviceWriter(llm).write(SKILL, REQ, []) is None
+
+    assert [r.getMessage() for r in caplog.records] == [
+        "Writer hỏng lần 1/2: HTTP 529",
+        'Writer hỏng lần 2/2: câu trả lời hứa đỗ: "chac chan do"',
+    ]
+
+
+async def test_a_good_answer_logs_nothing(caplog):
+    llm = FakeLLM({"tra_loi": "Bạn có cơ hội tốt."})
+
+    with caplog.at_level("WARNING", logger="app.services.advice_writer"):
+        await AdviceWriter(llm).write(SKILL, REQ, [])
+
+    assert caplog.records == []

@@ -5,6 +5,7 @@ danh sách trường đã gợi ý. Sai thì gọi lại 1 lần; vẫn sai thì
 """
 
 import json
+import logging
 from typing import Any
 
 from app.schemas.chat import ResultSchool
@@ -13,6 +14,8 @@ from app.services.explainer import GROUP_LABEL
 from app.services.goal_target import plain
 from app.services.ollama import OllamaError
 from app.services.skill_call import MAX_ATTEMPTS, SKILLS_DIR, load_skill
+
+logger = logging.getLogger(__name__)
 
 PROMPT_PATH = SKILLS_DIR / "viet_tra_loi_ho_so.md"
 ANSWER_SCHEMA = {
@@ -40,8 +43,10 @@ def check_answer(raw: dict[str, Any]) -> str:
     if not isinstance(text, str) or not text.strip():
         raise ValueError("câu trả lời rỗng")
     folded = plain(text)
-    if any(promise in folded for promise in PROMISES):
-        raise ValueError("câu trả lời hứa đỗ")
+    for promise in PROMISES:
+        if promise in folded:
+            # Chỉ nêu cụm khớp, không chép câu trả lời (có số liệu hồ sơ của học sinh) vào lỗi và log
+            raise ValueError(f'câu trả lời hứa đỗ: "{promise}"')
     return text.strip()
 
 
@@ -63,10 +68,11 @@ class AdviceWriter:
             {"role": "system", "content": skill},
             {"role": "user", "content": json.dumps(user, ensure_ascii=False, separators=(",", ":"))},
         ]
-        for _ in range(MAX_ATTEMPTS):
+        for attempt in range(1, MAX_ATTEMPTS + 1):
             try:
                 raw = await self._llm.chat_json(messages, ANSWER_SCHEMA, temperature=0.0)
                 return check_answer(raw)
-            except (OllamaError, ValueError):  # ClaudeError là OllamaError
-                continue
+            except (OllamaError, ValueError) as e:  # ClaudeError là OllamaError
+                # Ghi lý do để biết vì sao học sinh nhận câu "chưa viết được"; không ghi hồ sơ hay câu trả lời
+                logger.warning("Writer hỏng lần %d/%d: %s", attempt, MAX_ATTEMPTS, e or type(e).__name__)
         return None
