@@ -399,7 +399,6 @@ export interface UpdateApplicationRoundRequest {
   deadline?: string | null;
   autoResolveDeadline?: boolean;
 }
-
 // [UC-73] Quản lý yêu cầu liên hệ nhận được phía Trung tâm tư vấn (Leads)
 export interface SharedProfileSummaryDto {
   overallGpa?: number | null;
