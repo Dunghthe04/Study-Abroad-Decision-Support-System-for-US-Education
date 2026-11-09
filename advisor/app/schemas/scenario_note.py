@@ -1,9 +1,10 @@
-"""Khuôn dữ liệu của lượt viết lời cho kịch bản what-if: Gemini viết lời từ kết quả simulate đã được code tính."""
+"""Khuôn dữ liệu của lượt viết lời cho kịch bản what-if: Claude viết lời từ kết quả simulate đã được code tính."""
 
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from app.schemas.chat import AiUsageMixin
 from app.schemas.common import CamelModel
 
 GroupKey = Literal["reach", "match", "safety", "aid"]
@@ -49,7 +50,7 @@ class ScenarioNoteRequest(CamelModel):
     )  # tên các trường khác trong kết quả, để chặn nhắc tên ngoài danh sách
 
 
-# Phần Gemini nối vào mỗi nhóm: tên trường (phải đúng danh sách của nhóm) và một ghi chú ngắn
+# Phần Claude nối vào mỗi nhóm: tên trường (phải đúng danh sách của nhóm) và một ghi chú ngắn
 class ScenarioNoteGroup(BaseModel):
     key: GroupKey
     schools: list[str] = Field(min_length=1, max_length=MAX_SCHOOLS_PER_GROUP)
@@ -63,7 +64,7 @@ class ScenarioNoteResult(BaseModel):
 
 
 # Kết quả trả về: status OK thì answer là tin nhắn hoàn chỉnh đã qua kiểm tra, FAILED thì backend dùng câu mẫu bằng code
-class ScenarioNoteResponse(BaseModel):
+class ScenarioNoteResponse(AiUsageMixin):
     skill_version: str
     model: str
     status: str  # OK | FAILED

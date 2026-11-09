@@ -77,6 +77,8 @@ def test_a_malformed_comparison_is_rejected(entities):
         check_entities("kien_thuc", entities)
 
 
-def test_the_schools_list_belongs_to_knowledge_only():
-    with pytest.raises(ValueError):
-        check_entities("ho_so", {"cac_truong": ["BU", "NYU"]})
+def test_the_schools_list_belongs_to_knowledge_and_profile_review_only():
+    check_entities("ho_so", {"cac_truong": ["BU", "NYU"]})  # so sánh hai trường theo hồ sơ
+    for kind in ("mac_dinh", "trung_tam", "kich_ban", "ngoai_pham_vi"):
+        with pytest.raises(ValueError):
+            check_entities(kind, {"cac_truong": ["BU", "NYU"]})

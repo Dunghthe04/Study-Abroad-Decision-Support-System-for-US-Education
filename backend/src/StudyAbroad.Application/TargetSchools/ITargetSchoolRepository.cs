@@ -9,9 +9,14 @@ public interface ITargetSchoolRepository
 {
     Task<TargetSchool?> GetByIdAsync(Guid id, CancellationToken ct = default);
     Task<TargetSchoolDto?> GetDtoByIdAsync(Guid id, CancellationToken ct = default);
+    Task<List<TargetSchoolDto>> GetListByUserAsync(Guid userId, string? category = null, string? status = null, CancellationToken ct = default);
     Task<TargetSchool?> GetByUserAndUniversityAsync(Guid userId, Guid universityId, CancellationToken ct = default);
     Task<bool> ExistsAsync(Guid userId, Guid universityId, CancellationToken ct = default);
     Task<TargetSchool> AddAsync(TargetSchool targetSchool, CancellationToken ct = default);
+    Task DeleteAsync(TargetSchool targetSchool, CancellationToken ct = default);
+    Task UpdateAsync(TargetSchool targetSchool, CancellationToken ct = default);
+    Task<TargetSchool?> GetByUserAndUniversityCodeAsync(Guid userId, string code, CancellationToken ct = default);
+    Task<TargetSchoolDto?> GetDtoByUserAndUniversityCodeAsync(Guid userId, string code, CancellationToken ct = default);
     Task<University?> GetUniversityAsync(Guid universityId, CancellationToken ct = default);
     Task<University?> GetUniversityByCodeAsync(string code, CancellationToken ct = default);
     Task<string?> GetUniversityDeadlinesJsonAsync(Guid universityId, CancellationToken ct = default);

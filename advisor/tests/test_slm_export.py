@@ -3,7 +3,7 @@
 import json
 import re
 
-from app.schemas.slm import SkillRequest, SlmTinResult, check_skill
+from app.schemas.slm import SKILL_SECTIONS, SkillRequest, SlmTinResult, check_skill
 from app.services.slm_classifier import OllamaSlm
 from scripts.build_slm_jsonl import DEFAULT_OUT
 from scripts.export_slm_chat import (
@@ -212,7 +212,10 @@ def test_a_skill_of_the_test_split_is_never_exported():
 def test_the_skill_prompt_names_the_sections_of_the_skill():
     prompt = SKILL_PROMPT_PATH.read_text(encoding="utf-8")
 
-    assert "slm_sinh_skill_ho_so" in prompt and "## 7. Yêu cầu câu trả lời" in prompt and "# Mốc:" in prompt
+    assert "slm_sinh_skill_ho_so" in prompt and "## 6. Yêu cầu câu trả lời" in prompt and "# Mốc:" in prompt
+    # Prompt phải liệt kê đúng các mục của khuôn chuẩn (7 mục), không còn mục "Đề xuất trường" của khuôn cũ
+    assert all(f'"## {name}"' in prompt for name in SKILL_SECTIONS["ho_so"])
+    assert "Đề xuất trường" not in prompt
 
 
 # Mức do code so với mốc trường (tinh_san); prompt còn ngưỡng cứng thì model được dặn ngược với dữ liệu skill

@@ -1,7 +1,7 @@
-"""Lời cho kịch bản what-if: Gemini viết lời từ kết quả simulate do code tính, không tính lại, không đổi nhóm.
+"""Lời cho kịch bản what-if: Claude viết lời từ kết quả simulate do code tính, không tính lại, không đổi nhóm.
 
-Gemini trả JSON có cấu trúc (lời mở, từng nhóm kèm tên trường và ghi chú, lời kết). Code kiểm tra tên trường,
-nhóm và số rồi nối thành tin nhắn: mọi chữ trong tin vẫn do Gemini viết, nhưng không thể nêu sai nhóm hay bịa tên trường.
+Claude trả JSON có cấu trúc (lời mở, từng nhóm kèm tên trường và ghi chú, lời kết). Code kiểm tra tên trường,
+nhóm và số rồi nối thành tin nhắn: mọi chữ trong tin vẫn do Claude viết, nhưng không thể nêu sai nhóm hay bịa tên trường.
 """
 
 import re
@@ -21,7 +21,7 @@ SKILL_PATH = Path(SKILLS_DIR) / "skill_kich_ban.md"
 NUMBER = re.compile(r"\d+(?:[.,]\d+)*")
 THOUSANDS = re.compile(r"\d{1,3}(?:[.,]\d{3})+")
 
-# Mã lý do của một trường (backend suy từ số đã tính) → câu đúng. Gemini chỉ diễn đạt lại, không tự so sánh
+# Mã lý do của một trường (backend suy từ số đã tính) → câu đúng. Claude chỉ diễn đạt lại, không tự so sánh
 REASON_TEXT = {
     "GPA_HIGH": "GPA cao hơn mặt bằng sinh viên trúng tuyển",
     "GPA_MID": "GPA nằm trong mặt bằng sinh viên trúng tuyển",
@@ -60,7 +60,7 @@ def numbers(text: str) -> list[float]:
     ]
 
 
-# Gom dữ liệu thành đúng một JSON để gửi Gemini (khóa camelCase, khớp mô tả trong skill)
+# Gom dữ liệu thành đúng một JSON để gửi Claude (khóa camelCase, khớp mô tả trong skill)
 def build_user(req: ScenarioNoteRequest) -> dict[str, Any]:
     def school(s) -> dict[str, Any]:
         out: dict[str, Any] = {"name": s.name}
@@ -85,7 +85,7 @@ def build_user(req: ScenarioNoteRequest) -> dict[str, Any]:
     }
 
 
-# Mọi số Gemini được phép nhắc: số trong dữ liệu gửi đi (nhãn, ngân sách, tên, các câu lý do và tác động)
+# Mọi số Claude được phép nhắc: số trong dữ liệu gửi đi (nhãn, ngân sách, tên, các câu lý do và tác động)
 def allowed_numbers(req: ScenarioNoteRequest) -> set[float]:
     texts = [req.label, *req.unsupported, *(s.name for g in req.groups for s in g.schools)]
     texts += [REASON_TEXT[r] for g in req.groups for s in g.schools for r in s.reasons if r in REASON_TEXT]
@@ -129,7 +129,7 @@ def check_answer(raw: dict[str, Any], req: ScenarioNoteRequest) -> ScenarioNoteR
     return result
 
 
-# Nối các phần Gemini viết thành tin nhắn: lời mở, mỗi nhóm một dòng, lời kết
+# Nối các phần Claude viết thành tin nhắn: lời mở, mỗi nhóm một dòng, lời kết
 def render(result: ScenarioNoteResult, req: ScenarioNoteRequest) -> str:
     titles = {g.key: g.title for g in req.groups}
     lines = [result.intro.strip()]
@@ -143,7 +143,7 @@ def render(result: ScenarioNoteResult, req: ScenarioNoteRequest) -> str:
     return "\n".join(lines)
 
 
-# Một lượt AI: gửi kết quả cho Gemini, kiểm tra lời, đóng gói trả về
+# Một lượt AI: gửi kết quả cho Claude, kiểm tra lời, đóng gói trả về
 class ScenarioWriter:
     def __init__(self, llm: Any, model: str, skill_path: Path = SKILL_PATH) -> None:
         self._call = SkillCall(llm, model, skill_path)

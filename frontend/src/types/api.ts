@@ -307,6 +307,22 @@ export interface AcademicProfileResponse {
   updatedAt?: string | null;
 }
 
+export interface TargetSchoolSummaryDto {
+  items: TargetSchoolDto[];
+  totalCount: number;
+  reachCount: number;
+  matchCount: number;
+  safetyCount: number;
+  undecidedCategoryCount: number;
+  nextDeadline?: string | null;
+}
+
+export interface UpdateApplicationRoundRequest {
+  applicationRound: string;
+  deadline?: string | null;
+  autoResolveDeadline?: boolean;
+}
+
 // [Q11] Liên kết phụ huynh – học sinh (đồng ý xử lý dữ liệu trẻ em)
 export type ParentLinkStatus = "pending" | "active" | "revoked" | "expired";
 
@@ -368,6 +384,21 @@ export interface TargetSchoolDto {
   updatedAt?: string | null;
 }
 
+export interface TargetSchoolSummaryDto {
+  items: TargetSchoolDto[];
+  totalCount: number;
+  reachCount: number;
+  matchCount: number;
+  safetyCount: number;
+  undecidedCategoryCount: number;
+  nextDeadline?: string | null;
+}
+
+export interface UpdateApplicationRoundRequest {
+  applicationRound: string;
+  deadline?: string | null;
+  autoResolveDeadline?: boolean;
+}
 // [UC-73] Quản lý yêu cầu liên hệ nhận được phía Trung tâm tư vấn (Leads)
 export interface SharedProfileSummaryDto {
   overallGpa?: number | null;

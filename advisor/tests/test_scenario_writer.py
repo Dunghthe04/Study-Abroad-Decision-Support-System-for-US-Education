@@ -1,4 +1,4 @@
-"""Lời cho kịch bản what-if: Gemini viết lời, code chặn tên trường, nhóm và số không có trong kết quả."""
+"""Lời cho kịch bản what-if: Claude viết lời, code chặn tên trường, nhóm và số không có trong kết quả."""
 
 import copy
 
@@ -84,7 +84,7 @@ def req(base: dict = REQUEST) -> ScenarioNoteRequest:
 
 
 def writer(llm: FakeLLM) -> ScenarioWriter:
-    return ScenarioWriter(llm, "gemini-test")
+    return ScenarioWriter(llm, "claude-test")
 
 
 def changed(good: dict, **changes) -> dict:
@@ -95,7 +95,7 @@ def group(key: str, schools: list[str], note: str = "") -> dict:
     return {"key": key, "schools": schools, "note": note}
 
 
-# ---- dữ liệu gửi Gemini ----
+# ---- dữ liệu gửi Claude ----
 def test_the_prompt_carries_names_reasons_and_effects_but_not_the_other_schools():
     user = build_user(req())
 
@@ -110,7 +110,7 @@ def test_the_prompt_carries_names_reasons_and_effects_but_not_the_other_schools(
         "needAid": True,
     }
     assert user["student"] == {"budgetUsd": 40000, "scholarship": "nên có"}
-    assert "Harvard" not in str(user)  # others chỉ dùng để kiểm tra, không gửi cho Gemini
+    assert "Harvard" not in str(user)  # others chỉ dùng để kiểm tra, không gửi cho Claude
 
 
 def test_unknown_reason_codes_are_dropped():
@@ -230,7 +230,7 @@ async def test_an_empty_or_short_intro_fails_validation():
     assert (await writer(llm).write(req())).status == "FAILED"
 
 
-async def test_a_gemini_error_is_retried_then_reported_as_failed():
+async def test_a_claude_error_is_retried_then_reported_as_failed():
     llm = FakeLLM(OllamaError("hết hạn mức"), OllamaError("hết hạn mức"))
 
     assert (await writer(llm).write(req())).status == "FAILED"
@@ -255,5 +255,5 @@ def test_the_route_returns_the_message_with_the_skill_version():
     body = res.json()
     assert body["status"] == "OK" and "Cornell University, Duke University" in body["answer"]
     assert (
-        body["skill_version"] == load_skill(SKILL_PATH)[1] and body["model"] == "gemini-test"
+        body["skill_version"] == load_skill(SKILL_PATH)[1] and body["model"] == "claude-test"
     )  # phiên bản đọc từ chính file skill

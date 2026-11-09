@@ -108,6 +108,7 @@ public class StudyCentersController(IStudyCenterService service) : ControllerBas
 
         return Ok(result.Center);
     }
+
     /// <summary>Chat (B6) lấy tối đa 3 trung tâm đã xác minh cho một dịch vụ; cùng thành phố xếp trước.</summary>
     [HttpGet("referrals")]
     public async Task<ActionResult<IReadOnlyList<StudyCenterDto>>> Refer(

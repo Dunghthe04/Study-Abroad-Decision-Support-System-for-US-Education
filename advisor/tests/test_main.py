@@ -3,7 +3,7 @@ from fastapi.testclient import TestClient
 from app.main import create_app
 from app.schemas.slm import INTENTS
 from app.services.centers import CenterFinder
-from app.services.gemini import GeminiClient
+from app.services.claude import ClaudeClient
 from app.services.ollama import OllamaClient
 from app.services.slm_classifier import OllamaSlm
 
@@ -32,7 +32,7 @@ def test_startup_builds_the_chat_flow_from_the_slm_and_the_branches(monkeypatch)
         flow = client.app.state.chat_flow  # kiểm tra nội bộ để chắc main.py đã nối SLM, nhánh và skill
         assert set(flow._branches) == set(INTENTS)  # đủ 6 nhánh theo loại câu hỏi SLM
         assert isinstance(flow._slm, OllamaSlm)
-        assert isinstance(seen["llm"], GeminiClient)  # Gemini viết câu trả lời, không còn Qwen
+        assert isinstance(seen["llm"], ClaudeClient)  # Claude viết câu trả lời, không còn Qwen
         assert seen["embedder"] is client.app.state.llm  # embedding vẫn chạy trên Ollama
         assert seen["knowledge"] is None  # không có DATABASE_URL thì không có bộ tìm kiến thức
         # BACKEND_BASE_URL mặc định có nên bật gợi ý trung tâm

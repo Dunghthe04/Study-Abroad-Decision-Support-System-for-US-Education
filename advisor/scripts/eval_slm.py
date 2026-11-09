@@ -3,9 +3,9 @@
 Bộ phân loại (OllamaSlm) phải đã trả danh sách ý cac_y. Cần Ollama đang chạy và đã pull model. Chạy trong thư mục advisor:
   python -m scripts.eval_slm                       # qwen3:4b trên tập test
   python -m scripts.eval_slm --split val --limit 20
-  python -m scripts.eval_slm --model usas-slm      # model đã fine-tune
+  python -m scripts.eval_slm --model usas-slm --prompt slm_phan_loai_cac_y_ngan   # model đã fine-tune, đúng prompt lúc huấn luyện
 
-Ghi từng dự đoán vào data/slm/ket_qua/<model>_<split>.jsonl để xem lại câu sai.
+Ghi từng dự đoán vào data/slm/ket_qua/<model>_<split>.jsonl để xem lại câu sai. Dựng bảng và biểu đồ so sánh: scripts.slm_report.
 """
 
 import argparse
@@ -96,7 +96,7 @@ def score(records: list[dict[str, Any]], preds: list[dict[str, Any]]) -> dict[st
     }
 
 
-async def run(model: str, split: str, limit: int | None, fmt: str) -> None:
+async def run(model: str, split: str, limit: int | None, fmt: str, prompt: str) -> None:
     settings = get_settings()
     records = [json.loads(line) for line in DEFAULT_OUT.read_text(encoding="utf-8").splitlines()]
     records = [r for r in records if r["split"] == split][:limit]
@@ -106,20 +106,24 @@ async def run(model: str, split: str, limit: int | None, fmt: str) -> None:
         client = OllamaClient(
             http, model, num_ctx=settings.llm_num_ctx, num_gpu=settings.llm_num_gpu, seed=settings.llm_seed
         )
-        slm = OllamaSlm(client, output_format(fmt))
+        slm = OllamaSlm(client, output_format(fmt), prompt=prompt)
         preds, rows, seconds = [], [], []
         fallbacks = 0  # số câu lùi về mơ hồ (model trả sai luật 2 lần)
         for i, r in enumerate(records, start=1):
             start = time.perf_counter()
+            context = r["input"].get(
+                "dang_noi_ve"
+            )  # ngữ cảnh của dòng (nếu có), đưa vào đầu vào như lúc chạy thật
             result = await slm.read(
-                r["input"]["cau_hoi"], r["input"]["ho_so"], r["input"]["cau_he_thong_dang_hoi"]
+                r["input"]["cau_hoi"], r["input"]["ho_so"], r["input"]["cau_he_thong_dang_hoi"], context
             )
             fallbacks += result.confidence == 0.0
             seconds.append(time.perf_counter() - start)
             pred = {"cac_y": [y.model_dump() for y in result.cac_y]}
             preds.append(pred)
             rows.append({"id": r["id"], "cau_hoi": r["input"]["cau_hoi"], "nhan": r["output"], "du_doan": pred,
-                         "confidence": round(result.confidence, 4), "giay": round(seconds[-1], 2)})  # fmt: skip
+                         "confidence": round(result.confidence, 4), "giay": round(seconds[-1], 2),
+                         "dang_noi_ve": context, "lui_ve_mo_ho": result.confidence == 0.0, "model": model, "prompt": prompt, "split": split})  # fmt: skip
             print(f"\r{i}/{len(records)}", end="", flush=True)
     print()
 
@@ -161,9 +165,11 @@ def main() -> None:
     parser.add_argument("--split", default="test", choices=("train", "val", "test"))
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--format", default=get_settings().slm_format, choices=("json", "schema"))
+    # Model chưa fine-tune dùng prompt đầy đủ (mặc định), model fine-tune dùng đúng prompt lúc huấn luyện (slm_phan_loai_cac_y_ngan)
+    parser.add_argument("--prompt", default=get_settings().slm_prompt)
 
     args = parser.parse_args()
-    asyncio.run(run(args.model, args.split, args.limit, args.format))
+    asyncio.run(run(args.model, args.split, args.limit, args.format, args.prompt))
 
 
 if __name__ == "__main__":

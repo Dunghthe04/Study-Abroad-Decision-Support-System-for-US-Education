@@ -123,7 +123,7 @@ Hệ quả: ai cũng đọc/sửa được hồ sơ tài chính và học thuậ
 
 ### 4.2. Dũng: UC-22, UC-69
 
-- **`GEMINI_API_KEY` không vào container:** advisor đọc `settings.gemini_api_key` nhưng `docker-compose*.yml` không truyền `GEMINI_API_KEY`, nên chạy Docker sẽ không có key. Cần thêm vào `environment` của service `advisor` và `.env.example`.
+- **`ANTHROPIC_API_KEY` vào container:** trước đây `GEMINI_API_KEY` (nay là Claude) không được truyền qua `docker-compose*.yml`. Đã thêm `ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL` / `ANTHROPIC_FALLBACK_MODEL` vào `environment` của service `advisor` và `.env.example`.
 - **Rate limit:** gợi ý trường mới giới hạn theo IP ở nginx, cần thêm rate limit theo user ở backend.
 - **UC-69:** đã chốt ngưỡng theo dữ liệu từng trường và admin không sửa. Cần xem lại phạm vi UC (có thể đổi thành "hiển thị ngưỡng", không phải "cấu hình").
 - **Code chưa đụng:** `SchoolExplaination` để nguyên, chưa rà sâu.
