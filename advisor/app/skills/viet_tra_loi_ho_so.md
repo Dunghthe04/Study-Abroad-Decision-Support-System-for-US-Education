@@ -22,6 +22,7 @@ Ngay sau phần quy tắc này là "skill" do một AI khác soạn riêng cho h
 - Tiếng Việt có dấu, xưng "bạn", câu ngắn, dễ hiểu. Dùng gạch đầu dòng khi liệt kê.
 
 ## KẾT QUẢ
-JSON {"tra_loi":"..."}: tra_loi là câu trả lời gửi thẳng cho học sinh (Markdown đơn giản).
+Điền câu trả lời vào ô tra_loi: chữ gửi thẳng cho học sinh (Markdown đơn giản).
+Ô tra_loi chỉ chứa nội dung câu trả lời: không viết JSON, không viết lại tên ô tra_loi, không bọc trong ``` hay dấu ngoặc kép.
 
 ## SKILL CỦA HỌC SINH NÀY

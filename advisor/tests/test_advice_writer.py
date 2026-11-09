@@ -94,6 +94,76 @@ async def test_a_promise_retry_tells_claude_which_phrase_to_rephrase():
     assert '"chắc chắn đỗ"' in second[-1]["content"]
 
 
+WRAPPED = json.dumps({"tra_loi": "Bạn có cơ hội tốt."}, ensure_ascii=False)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        WRAPPED,  # Claude nhét cả {"tra_loi": ...} vào ô tra_loi
+        json.dumps({"tra_loi": WRAPPED}, ensure_ascii=False),  # bọc 2 lớp
+        f"```json\n{WRAPPED}\n```",  # bọc trong khung code
+        f"  \n{WRAPPED}\n",
+    ],
+)
+def test_a_json_wrapped_answer_is_unwrapped(text, caplog):
+    with caplog.at_level("WARNING", logger="app.services.advice_writer"):
+        assert check_answer({"tra_loi": text}) == "Bạn có cơ hội tốt."
+
+    # Log chỉ báo đã gỡ, không chép câu trả lời
+    assert caplog.records and all(
+        r.getMessage() == "Writer: đã gỡ câu trả lời bọc JSON" for r in caplog.records
+    )
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        '{"tra_loi": "Bạn có cơ hội tốt."',  # bọc dở, thiếu }
+        '{"cau_tra_loi": "Bạn có cơ hội tốt."}',  # không có ô tra_loi
+        '{"tra_loi": 5}',
+        "{Mục tiêu} là IELTS 6.5.",  # bắt đầu bằng { nhưng không phải JSON
+        json.dumps({"tra_loi": json.dumps({"tra_loi": WRAPPED})}),  # bọc quá 2 lớp
+    ],
+)
+def test_json_that_cannot_be_unwrapped_is_rejected(text):
+    with pytest.raises(ValueError, match="câu trả lời là JSON thô"):
+        check_answer({"tra_loi": text})
+
+
+@pytest.mark.parametrize("text", ["Mục tiêu {IELTS 6.5} trước tháng 12.", "- Bước 1: {chuẩn bị} hồ sơ"])
+def test_braces_inside_a_normal_answer_are_kept(text):
+    assert check_answer({"tra_loi": text}) == text
+
+
+def test_an_unwrapped_promise_is_still_blocked():
+    with pytest.raises(ValueError, match="hứa đỗ"):
+        check_answer({"tra_loi": json.dumps({"tra_loi": "Bạn chắc chắn đỗ."}, ensure_ascii=False)})
+
+
+def test_an_empty_unwrapped_answer_is_rejected():
+    with pytest.raises(ValueError, match="rỗng"):
+        check_answer({"tra_loi": '{"tra_loi": "   "}'})
+
+
+async def test_a_raw_json_retry_tells_claude_not_to_write_json():
+    llm = FakeLLM({"tra_loi": '{"tra_loi": "Bạn có cơ hội'}, {"tra_loi": "Bạn có cơ hội tốt."})
+
+    assert await AdviceWriter(llm).write(SKILL, REQ, []) == "Bạn có cơ hội tốt."
+    first, second = llm.calls[0]["messages"], llm.calls[1]["messages"]
+    assert second[:-1] == first
+    assert second[-1]["role"] == "user" and "không viết JSON" in second[-1]["content"]
+    # Câu trả lời hỏng không bị gửi lại (không cần, và tránh chép hồ sơ thêm lần nữa)
+    assert "Bạn có cơ hội" not in second[-1]["content"]
+
+
+async def test_a_wrapped_answer_needs_no_second_call():
+    llm = FakeLLM({"tra_loi": WRAPPED})
+
+    assert await AdviceWriter(llm).write(SKILL, REQ, []) == "Bạn có cơ hội tốt."
+    assert len(llm.calls) == 1
+
+
 async def test_an_http_error_retries_without_a_note():
     llm = FakeLLM(ClaudeError("HTTP 529"), {"tra_loi": "Bạn có cơ hội tốt."})
 

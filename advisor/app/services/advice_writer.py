@@ -35,20 +35,68 @@ NEGATION = re.compile(r"\b(?:không|chẳng|chưa|khó)(?:\s+\S+){0,3}\s*$")
 # "không chỉ/không những" là nối ý, không phải phủ định
 NOT_NEGATION = re.compile(r"\bkhông\s+(?:chỉ|những)\b")
 CLAUSE_END = re.compile(r"[,.;:!?\n]")
-# Lần viết lại: nói rõ cụm nào bị bắt để Claude chỉ đổi cách nói (gửi y nguyên thì temperature 0 ra lại đúng câu cũ)
-RETRY_NOTE = (
+# Lần viết lại: nói rõ lỗi để Claude sửa đúng chỗ (gửi y nguyên thì temperature 0 ra lại đúng câu cũ)
+PROMISE_NOTE = (
     "Câu trả lời trước của bạn:\n{answer}\n\n"
     'Câu đó có cụm "{phrase}" bị coi là hứa kết quả tuyển sinh. Viết lại câu trả lời: giữ nguyên nội dung, '
     'chỉ đổi cách nói về khả năng đỗ thành "cơ hội", "khả năng", "phù hợp".'
 )
+RAW_JSON_NOTE = (
+    "Câu trả lời trước của bạn bị viết dưới dạng JSON. Viết lại: ô tra_loi chỉ chứa chữ gửi thẳng cho học sinh, "
+    "không viết JSON, không viết tên ô tra_loi, không bọc trong ``` hay dấu ngoặc kép."
+)
+# Câu trả lời bị bọc trong khung code ```json ... ```
+FENCE = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.DOTALL)
+MAX_WRAPS = 2  # Claude bọc tối đa 2 lớp là gỡ; sâu hơn coi như hỏng
 
 
 class PromiseError(ValueError):
     """Câu trả lời có cụm hứa đỗ. Lỗi chỉ nêu cụm khớp, không chép câu trả lời (có số liệu hồ sơ của học sinh)."""
 
-    def __init__(self, phrase: str) -> None:
+    def __init__(self, phrase: str, answer: str) -> None:
         super().__init__(f'câu trả lời hứa đỗ: "{phrase}"')
         self.phrase = phrase
+        self.answer = answer  # chỉ để gửi lại Claude khi viết lại, không nằm trong lời lỗi nên không vào log
+
+
+class RawJsonError(ValueError):
+    """Câu trả lời là JSON mà không gỡ được (hỏng, bọc dở, hoặc không có ô tra_loi)."""
+
+    def __init__(self) -> None:
+        super().__init__("câu trả lời là JSON thô")
+
+
+# Claude đôi khi nhét cả {"tra_loi": "..."} vào trong ô tra_loi: gỡ ra lấy chữ bên trong.
+# Không bắt đầu bằng { thì giữ nguyên; là JSON mà gỡ không được thì ném RawJsonError để viết lại
+def unwrap_json(text: str) -> str:
+    for _ in range(MAX_WRAPS + 1):
+        body = text.strip()
+        fence = FENCE.fullmatch(body)
+        if fence:
+            body = fence.group(1)
+        if not body.startswith("{"):
+            return text
+        try:
+            inner = json.loads(body)
+        except json.JSONDecodeError:
+            inner = None
+        if not isinstance(inner, dict) or not isinstance(inner.get("tra_loi"), str):
+            raise RawJsonError()
+        # Đếm được bao lần Claude còn bọc JSON; không ghi nội dung câu trả lời
+        logger.warning("Writer: đã gỡ câu trả lời bọc JSON")
+        text = inner["tra_loi"]
+    raise RawJsonError()  # bọc quá MAX_WRAPS lớp
+
+
+# Tin nhắc kèm lần viết lại tùy lỗi; lỗi mạng/HTTP/rỗng thì không nhắc gì (gửi lại y nguyên)
+def retry_note_for(error: Exception) -> dict[str, str] | None:
+    if isinstance(error, PromiseError):
+        content = PROMISE_NOTE.format(answer=error.answer, phrase=error.phrase)
+    elif isinstance(error, RawJsonError):
+        content = RAW_JSON_NOTE
+    else:
+        return None
+    return {"role": "user", "content": content}
 
 
 # Trả cụm hứa đỗ đầu tiên trong câu trả lời, None nếu không có. Cụm nằm sau phủ định cùng vế câu thì bỏ qua
@@ -62,15 +110,19 @@ def find_promise(text: str) -> str | None:
     return None
 
 
-# Lấy câu trả lời từ JSON Claude trả về; rỗng thì ném ValueError, có câu hứa đỗ thì ném PromiseError
+# Lấy câu trả lời từ JSON Claude trả về: gỡ JSON bọc thừa, rỗng thì ném ValueError,
+# JSON không gỡ được thì RawJsonError, có câu hứa đỗ thì PromiseError
 def check_answer(raw: dict[str, Any]) -> str:
     text = raw.get("tra_loi")
-    if not isinstance(text, str) or not text.strip():
+    if not isinstance(text, str):
+        raise ValueError("câu trả lời rỗng")
+    text = unwrap_json(text).strip()
+    if not text:
         raise ValueError("câu trả lời rỗng")
     phrase = find_promise(text)
     if phrase:
-        raise PromiseError(phrase)
-    return text.strip()
+        raise PromiseError(phrase, text)
+    return text
 
 
 class AdviceWriter:
@@ -101,7 +153,5 @@ class AdviceWriter:
             except (OllamaError, ValueError) as e:  # ClaudeError là OllamaError
                 # Ghi lý do để biết vì sao học sinh nhận câu "chưa viết được"; không ghi hồ sơ hay câu trả lời
                 logger.warning("Writer hỏng lần %d/%d: %s", attempt, MAX_ATTEMPTS, e or type(e).__name__)
-                if isinstance(e, PromiseError):
-                    note = RETRY_NOTE.format(answer=raw["tra_loi"], phrase=e.phrase)
-                    retry_note = {"role": "user", "content": note}
+                retry_note = retry_note_for(e)
         return None
