@@ -214,7 +214,7 @@ public class StudyCenterServiceTests
     }
 
     [Fact]
-public async Task VerifyCenterAsync_VerifyCenter_SetsStatusVerified_AndLogsAudit()
+    public async Task VerifyCenterAsync_VerifyCenter_SetsStatusVerified_AndLogsAudit()
     {
         var center = new StudyCenter
         {
