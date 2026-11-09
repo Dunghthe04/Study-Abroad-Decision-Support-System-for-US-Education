@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using StudyAbroad.Application.Profile.Academic;
 using StudyAbroad.Domain.Constants;
 
 namespace StudyAbroad.Application.Profile.Flow;
@@ -47,5 +48,13 @@ public static class TranscriptGpa
         return SubjectAverage10(step2) is { } average ? To4(average) : null;
     }
 
-    public static decimal To4(decimal gpa10) => Math.Round(gpa10 / 10m * 4m, 2);
+    /// <summary>
+    /// Quy đổi thang 10 sang thang 4 theo bảng WES mặc định (AcademicAnalysisService.GetDefaultWesScaleConfig), giống
+    /// toGpa4 bên FE và gpa10_to_4 bên advisor. Chỉ xét cận dưới (MinScore) để số như 8.995 không rơi vào khe giữa
+    /// hai khoảng: 8.99 vẫn là 3.7
+    /// </summary>
+    public static decimal To4(decimal gpa10) =>
+        AcademicAnalysisService.GetDefaultWesScaleConfig().Rules
+            .OrderByDescending(rule => rule.MinScore)
+            .FirstOrDefault(rule => gpa10 >= rule.MinScore)?.Gpa4 ?? 0m;
 }

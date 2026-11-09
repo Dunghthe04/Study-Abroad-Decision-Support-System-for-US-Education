@@ -405,9 +405,9 @@ public class ProfileFlowServiceTests
         Assert.Equal(["CA", "MA"], p.PreferredStates);
         Assert.Equal("private", p.TargetSchoolType);
 
-        // Bước 2: GPA = TB môn, mỗi môn (HK1 + 2×HK2)/3: (8.67, 7, 9) = 8.22 → 3.29
+        // Bước 2: GPA = TB môn, mỗi môn (HK1 + 2×HK2)/3: (8.67, 7, 9) = 8.22 → 3.5 (bảng WES, từ 8.0)
         Assert.Equal("10", p.GradeScale);
-        Assert.Equal(3.29m, p.OverallGpa);
+        Assert.Equal(3.5m, p.OverallGpa);
         var scores = await repo.GetTranscriptScoresAsync(p.Id);
         Assert.Equal(4, scores.Count);
         var grade12 = Assert.Single(scores, s => s.GradeName == "Lớp 12");
@@ -976,12 +976,12 @@ public class ProfileFlowServiceTests
 
         await service.CommitFlowAsync(userId, new CommitProfileFlowRequest(draft));
 
-        Assert.Equal(3.29m, repo.Profiles.Values.Single(p => p.UserId == userId).OverallGpa);
+        Assert.Equal(3.5m, repo.Profiles.Values.Single(p => p.UserId == userId).OverallGpa);
     }
 
     // gpaMode = overall: thang 10 quy đổi lại sang thang 4, không tin số thang 4 client gửi
     [Theory]
-    [InlineData(8.5, 1.0, 3.4)]
+    [InlineData(8.5, 1.0, 3.7)]
     [InlineData(null, 3.6, 3.6)]
     public async Task CommitFlowAsync_OverallMode_UsesEnteredGpa(double? gpa10, double gpa4, double expected)
     {

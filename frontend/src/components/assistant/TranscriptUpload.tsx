@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { UploadIcon } from "lucide-react";
 import { profileFlowApi } from "@/lib/profile-flow-api";
-import { calculateLinearGpa } from "@/lib/profile-flow-options";
+import { calculateTranscriptGpa } from "@/lib/profile-flow-options";
 import {
   TRANSCRIPT_ACCEPT,
   TRANSCRIPT_EXTENSIONS,
@@ -40,7 +40,7 @@ export function TranscriptUpload({ onPick }: { onPick?: (text: string) => void }
         ? draft.step2.academicYears
         : getInitialAcademicYears(draft.step1?.currentEducationLevel, draft.step1?.currentGrade);
       const academicYears = mergeExtractedTerms(current, terms, 0);
-      const gpa = calculateLinearGpa(academicYears);
+      const gpa = calculateTranscriptGpa(academicYears);
       if (gpa.gpa10 == null) {
         setNotice("Mình chưa tính được GPA từ bảng điểm này. Bạn gõ GPA vào ô chat nhé.");
         return;

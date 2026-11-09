@@ -256,8 +256,8 @@ export function yearAverage(s1: number | null, s2: number | null): number | null
   return s1 ?? s2;
 }
 
-// Helper tính GPA thang 4 từ thang 10 theo công thức tuyến tính: GPA 4.0 = GPA 10 / 10 * 4.0
-export function calculateLinearGpa(years: AcademicYearDraft[]): { gpa10: number | null; gpa4: number | null } {
+// TB thang 10 của các môn (TB cả năm từng môn) và GPA thang 4 quy đổi theo bảng WES (toGpa4)
+export function calculateTranscriptGpa(years: AcademicYearDraft[]): { gpa10: number | null; gpa4: number | null } {
   let totalScore10 = 0;
   let count = 0;
 
@@ -282,19 +282,37 @@ export function calculateLinearGpa(years: AcademicYearDraft[]): { gpa10: number 
   return { gpa10, gpa4 };
 }
 
+/**
+ * Bảng WES quy đổi điểm thang 10 sang GPA thang 4: [điểm từ, GPA 4]. Phải khớp AcademicAnalysisService.
+ * GetDefaultWesScaleConfig (BE) và WES_GPA10_TO_4 (advisor); sửa thì sửa cả ba. Chỉ xét cận dưới: 8.99 vẫn là 3.7
+ */
+export const WES_GPA10_TO_4: readonly (readonly [number, number])[] = [
+  [9.0, 4.0],
+  [8.5, 3.7],
+  [8.0, 3.5],
+  [7.0, 3.0],
+  [6.5, 2.5],
+  [5.5, 2.0],
+  [5.0, 1.5],
+  [4.0, 1.0],
+];
+
 export function toGpa4(gpa10: number): number {
-  return Math.round(((gpa10 / 10) * 4.0) * 100) / 100;
+  for (const [cut, gpa4] of WES_GPA10_TO_4) {
+    if (gpa10 >= cut) return gpa4;
+  }
+  return 0;
 }
 
 /** Cách nhập GPA của nháp; nháp cũ chưa có gpaMode thì có điểm môn là học bạ (giống TranscriptGpa.Mode phía BE) */
 export function gpaModeOf(step2: TranscriptDraft | undefined): GpaMode {
   if (step2?.gpaMode === "overall" || step2?.gpaMode === "transcript") return step2.gpaMode;
-  return calculateLinearGpa(step2?.academicYears ?? []).gpa10 === null ? "overall" : "transcript";
+  return calculateTranscriptGpa(step2?.academicYears ?? []).gpa10 === null ? "overall" : "transcript";
 }
 
 /** GPA của nháp theo cách nhập (giống TranscriptGpa.Gpa4 phía BE); GPA tổng nhập thang 4 thì gpa10 là null */
 export function draftGpa(step2: TranscriptDraft | undefined): { gpa10: number | null; gpa4: number | null } {
-  if (gpaModeOf(step2) === "transcript") return calculateLinearGpa(step2?.academicYears ?? []);
+  if (gpaModeOf(step2) === "transcript") return calculateTranscriptGpa(step2?.academicYears ?? []);
   const manual10 = step2?.manualGpa10Scale ?? null;
   if (manual10 !== null) return { gpa10: manual10, gpa4: toGpa4(manual10) };
   return { gpa10: null, gpa4: step2?.calculatedGpa4Scale ?? null };

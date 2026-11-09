@@ -48,7 +48,7 @@ const pillars = [
     title: "Năng lực học thuật",
     weight: "50%",
     items: [
-      "GPA 3 năm gần nhất quy đổi tuyến tính sang thang 4.0 (GPA 10 / 10 × 4.0), so với trung vị của trường.",
+      "GPA 3 năm gần nhất quy đổi sang thang 4.0 theo bảng WES (9.0→4.0, 8.5→3.7, 8.0→3.5, 7.0→3.0…), so với trung vị của trường.",
       "SAT/ACT so với khoảng 25% – 75% của khoá sinh viên năm nhất trường đã nhận.",
       "Chứng chỉ tiếng Anh (IELTS, TOEFL, Duolingo) là điều kiện sàn tối thiểu.",
     ],
