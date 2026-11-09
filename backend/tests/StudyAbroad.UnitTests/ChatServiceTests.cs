@@ -1351,10 +1351,11 @@ public class ChatServiceTests
 
         var (res, advisor) = await CompareChatWith(CompareAction(["BU", "NYU"], ["chi_phi"]), CompareRunner(), note);
 
-        var parts = res.Answer.Split("\n\nAI nhận xét:\n");
-        Assert.Equal(2, parts.Length);
-        Assert.StartsWith("So sánh Boston University và New York University:", parts[0]);
-        Assert.Equal("New York University tốn ít tiền hơn mỗi năm.", parts[1]);
+        // Chỉ lời của AI (đã nêu đủ số liệu), không kèm bảng code dựng để khỏi nói hai lần; chi phí thì thêm lời nhắc kiểm tra lại
+        Assert.StartsWith("New York University tốn ít tiền hơn mỗi năm.", res.Answer);
+        Assert.Contains("kiểm tra lại", res.Answer);
+        Assert.DoesNotContain("So sánh Boston University và New York University:", res.Answer);
+        Assert.DoesNotContain("AI nhận xét", res.Answer);
         // Gemini nhận đúng các dòng số liệu (kèm câu chênh lệch chi phí, để không phải tự trừ) và tên các trường khác để chặn nhắc nhầm
         var sent = advisor.LastCompareNote!;
         // Thẻ so sánh đi kèm: có bảng và nhận xét tách riêng; giao diện bỏ đoạn chữ vì thẻ đã nói đủ
