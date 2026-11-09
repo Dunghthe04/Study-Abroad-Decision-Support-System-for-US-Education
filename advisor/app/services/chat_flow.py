@@ -487,8 +487,32 @@ def ask_next_missing(state: ChatState, prefix: str = "") -> SkillOutput:
     return output
 
 
+# Khóa ghi cả giá trị: mã cố định của hợp đồng (nhiệm vụ, chế độ, loại con, dịch vụ, mục, cách xếp, tiếp nối) và tên
+# trường, trung tâm (tên công khai, có trong danh sách của hệ thống; không phải thông tin cá nhân của học sinh)
+LOGGED_VALUE_KEYS = (
+    "nhiem_vu",
+    "cac_nhiem_vu",
+    "che_do",
+    "loai_con",
+    "dich_vu",
+    "muc",
+    "sap_xep",
+    "tiep_noi",
+    "truong",
+    "cac_truong",
+    "cac_trung_tam",
+)
+
+
+# Từng ý SLM đọc ra: loại, các giá trị ở trên, và tên các khóa còn lại. Giá trị còn lại là chữ học sinh viết
+# (số điểm, thành phố, điều kiện lọc) nên chỉ ghi tên khóa
+def log_item(y: Any) -> dict[str, Any]:
+    values = {key: y.thuc_the[key] for key in LOGGED_VALUE_KEYS if key in y.thuc_the}
+    return {"type": y.type, **values, "khoa": sorted(key for key in y.thuc_the if key not in values)}
+
+
 # Mỗi lượt ghi một dòng JSON: tin nhắn, SLM đọc ra gì, nhánh nào chạy.
-# Chỉ ghi tên khóa thực thể, không ghi giá trị (giá trị là chữ học sinh viết, có thể chứa thông tin cá nhân)
+# Chỉ ghi mã cố định, tên trường/trung tâm và tên khóa của các thực thể còn lại (số điểm, thành phố... có thể là thông tin cá nhân)
 def log_turn(
     state: ChatState,
     message: str,
@@ -507,6 +531,7 @@ def log_turn(
                 "message": mask_personal_info(message),
                 "slm_types": slm.types() if slm else [],
                 "slm_thuc_the": sorted({key for y in slm.cac_y for key in y.thuc_the}) if slm else [],
+                "slm_cac_y": [log_item(y) for y in slm.cac_y] if slm else [],
                 "slm_confidence": round(slm.confidence, 3) if slm else None,
                 "ran": ran,
                 "ms": round(ms),

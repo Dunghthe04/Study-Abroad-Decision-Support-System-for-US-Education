@@ -452,6 +452,40 @@ async def test_each_turn_logs_what_the_slm_read_and_which_branches_ran(caplog):
     assert record["ran"] == ["kien_thuc", "trung_tam"]
 
 
+async def test_log_lists_each_item_with_codes_and_school_names_but_not_other_written_values(caplog):
+    slm = tin(
+        (
+            "kien_thuc",
+            {
+                "nhiem_vu": "so_sanh",
+                "cac_truong": ["Yale", "MIT"],
+                "muc": ["chi_phi"],
+                "tiep_noi": True,
+                "gpa": "9.2",
+            },
+        ),
+        ("trung_tam", {"nhiem_vu": "dat_lich", "dich_vu": "SUA_BAI_LUAN"}),
+    )
+    flow, _ = make_flow(slm)
+
+    with caplog.at_level(logging.INFO, logger="advisor.chat"):
+        await flow.reply(request("so sánh học phí Yale và MIT"))
+
+    record = last_log_record(caplog)
+    assert record["slm_cac_y"] == [
+        {
+            "type": "kien_thuc",
+            "nhiem_vu": "so_sanh",
+            "cac_truong": ["Yale", "MIT"],
+            "muc": ["chi_phi"],
+            "tiep_noi": True,
+            "khoa": ["gpa"],
+        },
+        {"type": "trung_tam", "nhiem_vu": "dat_lich", "dich_vu": "SUA_BAI_LUAN", "khoa": []},
+    ]
+    assert "9.2" not in json.dumps(record["slm_cac_y"])
+
+
 async def test_log_masks_personal_info_but_the_reply_is_not_masked(caplog):
     flow, _ = make_flow(tin("kien_thuc"), kien_thuc=FakeBranch("kien_thuc", [], SkillOutput("ok")))
 
