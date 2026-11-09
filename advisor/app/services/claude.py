@@ -41,26 +41,22 @@ class ClaudeClient:
     async def chat_json(
         self, messages: list[dict[str, str]], schema: dict[str, Any], temperature: float = 0.0
     ) -> dict[str, Any]:
+        # temperature chỉ để giữ chữ ký chung với OllamaClient: Claude Haiku 5.5 từ chối tham số này ("deprecated for this model")
         system = "\n\n".join(m["content"] for m in messages if m["role"] == "system")
         user = "\n\n".join(m["content"] for m in messages if m["role"] == "user")
         try:
-            data = await self._post_with_retry(self._body(self._model, system, user, schema, temperature))
+            data = await self._post_with_retry(self._body(self._model, system, user, schema))
         except ClaudeUnavailable:
             if not self._fallback_model:
                 raise
-            data = await self._post_with_retry(
-                self._body(self._fallback_model, system, user, schema, temperature)
-            )
+            data = await self._post_with_retry(self._body(self._fallback_model, system, user, schema))
         return self._extract_json(data)
 
     # Ép trả JSON bằng cách bắt Claude "gọi" một công cụ có input_schema đúng schema cần; phần input chính là JSON
-    def _body(
-        self, model: str, system: str, user: str, schema: dict[str, Any], temperature: float
-    ) -> dict[str, Any]:
+    def _body(self, model: str, system: str, user: str, schema: dict[str, Any]) -> dict[str, Any]:
         body: dict[str, Any] = {
             "model": model,
             "max_tokens": self._max_tokens,
-            "temperature": temperature,
             "messages": [{"role": "user", "content": user}],
             "tools": [
                 {

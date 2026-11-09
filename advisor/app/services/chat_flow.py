@@ -209,6 +209,27 @@ def with_info_intent(message: str, slm: SlmTinResult) -> SlmTinResult:
     return slm.model_copy(update={"cac_y": [SlmY(type="kien_thuc", doan=message)]})
 
 
+# SLM thật xếp "So sánh 2 trường A và B" vào nhánh hồ sơ (so sánh theo hồ sơ), nhánh này sinh skill rất lâu rồi báo chưa so sánh được.
+# Câu so sánh từ hai trường trở lên mà không nhắc gì đến hồ sơ của học sinh là so sánh số liệu trường (dữ liệu huấn luyện cũng gán như vậy):
+# đổi sang câu kiến thức so_sanh để chạy bảng số liệu. Có từ hỏi theo hồ sơ ("hợp với em", "hồ sơ của em") thì giữ nhánh hồ sơ
+_PERSONAL_COMPARE = re.compile(
+    r"\b(ho so|hop voi|phu hop|hop ho so|nen chon|nen nop|truong nao hop|cai nao hop|voi em|cua em|voi minh|cua minh|kha nang)\b"
+)
+
+
+def with_comparison_intent(message: str, slm: SlmTinResult) -> SlmTinResult:
+    if len(slm.cac_y) != 1:
+        return slm
+    y = slm.cac_y[0]
+    if y.type != "ho_so" or y.thuc_the.get("cac_nhiem_vu") != ["so_sanh"]:
+        return slm
+    schools = [s for s in y.thuc_the.get("cac_truong") or [] if isinstance(s, str) and s.strip()]
+    if len(schools) < 2 or _PERSONAL_COMPARE.search(unaccent(message)):
+        return slm
+    compare = SlmY(type="kien_thuc", doan=y.doan, thuc_the={"nhiem_vu": "so_sanh", "cac_truong": schools})
+    return slm.model_copy(update={"cac_y": [compare]})
+
+
 # Phần kết quả SLM giao cho nhánh của một ý: nhánh hồ sơ cần cả tin, nhánh khác chỉ cần ý của nó
 def view_of(slm: SlmTinResult, y: SlmY) -> SlmTinResult:
     return slm if y.type == "mac_dinh" else slm.model_copy(update={"cac_y": [y]})
@@ -319,6 +340,7 @@ class ChatFlow:
             slm = await self._slm.classify(state, message)
             slm = with_priority_intent(state, message, slm)
             slm = with_info_intent(message, slm)
+            slm = with_comparison_intent(message, slm)
             slm = contextualize(state, message, slm)
 
         # 2. Chạy từng ý theo thứ tự, ghép câu trả lời

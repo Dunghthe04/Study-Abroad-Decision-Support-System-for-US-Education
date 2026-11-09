@@ -1,5 +1,7 @@
 """Bước 2.9: luật code chọn skill chạy thật. Hàm thuần nên không cần AI, DB hay Ollama."""
 
+import pytest
+
 from app.schemas.chat import ChatState, ProfileField
 from app.services.skill_rules import REQUIRED_B3, Blocked, missing_fields, plan_skills
 
@@ -152,3 +154,28 @@ def test_only_blocked_skill_is_removed_the_other_still_runs():
 
     assert plan.skills == ["skill_tra_loi"]  # chưa đủ hồ sơ thì chưa chấm, nhưng vẫn trả lời kiến thức
     assert [b.skill for b in plan.blocked] == ["skill_danh_gia"]
+
+
+# ---- mọi skill viết câu trả lời phải nói rõ: chỉ dựa trên dữ liệu gửi lên, không bịa
+WRITING_SKILLS = [
+    "skill_tra_loi",
+    "skill_chuyen_trung_tam",
+    "skill_giai_thich_trung_tam",
+    "skill_so_sanh",
+    "skill_goal_seek",
+    "skill_kich_ban",
+    "skill_explain",
+    "skill_danh_gia",
+    "skill_lo_trinh",
+    "viet_tra_loi_ho_so",
+]
+
+
+@pytest.mark.parametrize("name", WRITING_SKILLS)
+def test_every_writing_skill_says_to_use_only_the_data_sent_and_never_invent(name):
+    from app.services.skill_call import SKILLS_DIR
+
+    text = (SKILLS_DIR / f"{name}.md").read_text(encoding="utf-8")
+    assert "NGUYÊN TẮC DỮ LIỆU (BẮT BUỘC)" in text
+    section = text.split("NGUYÊN TẮC DỮ LIỆU (BẮT BUỘC)", 1)[1].split("\n## ", 1)[0]
+    assert "KHÔNG bịa" in section and "CÓ TRONG dữ liệu" in section

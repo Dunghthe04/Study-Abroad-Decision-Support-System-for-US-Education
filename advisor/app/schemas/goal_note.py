@@ -8,7 +8,7 @@ from app.schemas.chat import AiUsageMixin
 from app.schemas.common import CamelModel
 
 Outcome = Literal["already_reached", "reachable", "blocked", "no_data"]
-MAX_POINTS = 4
+MAX_POINTS = 5
 MAX_OTHERS = 400
 MAX_ANSWER_CHARS = 900
 

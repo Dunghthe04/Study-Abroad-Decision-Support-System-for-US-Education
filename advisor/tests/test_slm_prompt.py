@@ -73,7 +73,7 @@ def test_both_prompts_are_the_same_version_so_a_change_to_one_is_not_forgotten()
 
 
 def test_the_default_prompt_is_the_full_one_and_training_uses_the_short_one():
-    assert Settings().slm_prompt == FULL
+    assert Settings(_env_file=None).slm_prompt == FULL
     assert PROMPT_PATH.stem == FULL
     assert TRAIN_PROMPT == SHORT and TRAIN_PROMPT_PATH.stem == SHORT
 
