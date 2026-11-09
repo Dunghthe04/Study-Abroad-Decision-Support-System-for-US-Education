@@ -40,21 +40,22 @@ public static class TranscriptGpa
         return averages.Count > 0 ? Math.Round(averages.Average(), 2) : null;
     }
 
-    /// <summary>GPA thang 4 lưu vào hồ sơ. GPA tổng thang 10 thì quy đổi lại, không tin số thang 4 client gửi</summary>
-    public static decimal? Gpa4(FlowTranscriptDraftDto? step2)
+    /// <summary>
+    /// GPA thang 4 lưu vào hồ sơ. GPA tổng thang 10 thì quy đổi lại, không tin số thang 4 client gửi.
+    /// scale là bảng grade_scale.10 đang dùng (IGradeScaleProvider); null thì dùng bảng mặc định
+    /// </summary>
+    public static decimal? Gpa4(FlowTranscriptDraftDto? step2, GradeScaleConfigDto? scale = null)
     {
         if (Mode(step2) == ProfileConstants.GpaModes.Overall)
-            return step2?.ManualGpa10Scale is { } gpa10 ? To4(gpa10) : step2?.CalculatedGpa4Scale;
-        return SubjectAverage10(step2) is { } average ? To4(average) : null;
+            return step2?.ManualGpa10Scale is { } gpa10 ? To4(gpa10, scale) : step2?.CalculatedGpa4Scale;
+        return SubjectAverage10(step2) is { } average ? To4(average, scale) : null;
     }
 
     /// <summary>
-    /// Quy đổi thang 10 sang thang 4 theo bảng WES mặc định (AcademicAnalysisService.GetDefaultWesScaleConfig), giống
-    /// toGpa4 bên FE và gpa10_to_4 bên advisor. Chỉ xét cận dưới (MinScore) để số như 8.995 không rơi vào khe giữa
-    /// hai khoảng: 8.99 vẫn là 3.7
+    /// Quy đổi thang 10 sang thang 4 theo bảng scale (bảng trong DB, grade_scale.10); null thì bảng mặc định
+    /// AcademicAnalysisService.GetDefaultWesScaleConfig. Giống toGpa4 bên FE và gpa10_to_4 bên advisor. Chỉ xét cận
+    /// dưới (MinScore) để số như 8.995 không rơi vào khe giữa hai khoảng: 8.99 vẫn là 3.7
     /// </summary>
-    public static decimal To4(decimal gpa10) =>
-        AcademicAnalysisService.GetDefaultWesScaleConfig().Rules
-            .OrderByDescending(rule => rule.MinScore)
-            .FirstOrDefault(rule => gpa10 >= rule.MinScore)?.Gpa4 ?? 0m;
+    public static decimal To4(decimal gpa10, GradeScaleConfigDto? scale = null) =>
+        GradeScale.Lookup(gpa10, scale ?? AcademicAnalysisService.GetDefaultWesScaleConfig());
 }

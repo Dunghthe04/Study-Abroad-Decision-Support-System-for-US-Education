@@ -1,3 +1,4 @@
+using StudyAbroad.Application.Profile.Academic;
 using StudyAbroad.Application.Profile.Flow;
 using StudyAbroad.Application.Recommendations;
 using StudyAbroad.Domain.Constants;
@@ -19,10 +20,11 @@ namespace StudyAbroad.Application.Advisor
     // analyses: lưu câu đánh giá / lộ trình vào analysis_results (null thì không lưu, dùng trong test cũ)
     // recommender: chạy gợi ý trường khi advisor trả action "recommend" (null thì bỏ qua, dùng trong test cũ)
     // benchmarks: đọc dữ liệu trường để tính mốc GPA / tiếng Anh cho skill ho_so (null thì không gửi mốc, dùng trong test cũ)
+    // gradeScale: bảng quy đổi grade_scale.10 trong DB cho what-if GPA thang 10 (null thì bảng mặc định, dùng trong test cũ)
     public class ChatService(
         IAdvisorClient advisor, IChatSessionRepository sessions, IProfileFlowService profileFlow,
         IChatAnalysisRepository? analyses = null, IRecommendationRunner? recommender = null,
-        IChatBenchmarkRepository? benchmarks = null)
+        IChatBenchmarkRepository? benchmarks = null, IGradeScaleProvider? gradeScale = null)
     {
         //Dữ liệu FE gửi lên
         // onEvent: chỉ truyền khi trả lời theo từng ý (stream); mỗi tin tiến độ / câu một ý của advisor gọi hàm này ngay.
@@ -270,7 +272,8 @@ namespace StudyAbroad.Application.Advisor
         // Lỗi thì báo, không làm hỏng cả lượt chat
         private async Task<AdvisorChatResponse> SimulateAsync(Guid userId, AdvisorChatResponse response, CancellationToken ct)
         {
-            var scenario = ChatSimulation.Parse(response.ActionData);
+            var scale = gradeScale is null ? null : await gradeScale.GetAsync(ct);
+            var scenario = ChatSimulation.Parse(response.ActionData, scale);
             if (scenario is null)
                 return response with { Answer = ChatSimulation.Failed };
             try

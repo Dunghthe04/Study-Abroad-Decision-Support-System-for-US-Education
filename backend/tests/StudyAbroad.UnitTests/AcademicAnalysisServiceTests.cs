@@ -284,6 +284,10 @@ internal class FakeAcademicAnalysisRepository : IAcademicAnalysisRepository
     private readonly List<AnalysisResult> _analysisResults = new();
     private readonly Dictionary<string, AppSetting> _settings = new();
 
+    /// <summary>Đặt một dòng app_settings giả (dùng cho test bảng quy đổi grade_scale.10).</summary>
+    public void SetSetting(string key, string valueJson) =>
+        _settings[key] = new AppSetting { Key = key, ValueJson = valueJson };
+
     public Task<StudentProfile?> GetProfileByUserIdAsync(Guid userId, CancellationToken ct = default)
     {
         var profile = _profiles.Values.FirstOrDefault(p => p.UserId == userId);

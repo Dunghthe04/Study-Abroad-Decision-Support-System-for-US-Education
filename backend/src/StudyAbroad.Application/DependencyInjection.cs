@@ -25,6 +25,7 @@ public static class DependencyInjection
         services.AddScoped<IFinancialProfileService, FinancialProfileService>();
         // [USAS-365] Đăng ký service phân tích điểm học thuật
         services.AddScoped<StudyAbroad.Application.Profile.Academic.IAcademicAnalysisService, StudyAbroad.Application.Profile.Academic.AcademicAnalysisService>();
+        services.AddScoped<StudyAbroad.Application.Profile.Academic.IGradeScaleProvider, StudyAbroad.Application.Profile.Academic.GradeScaleProvider>();
         services.AddScoped<IAcademicProfileService, AcademicProfileService>();
         // [USAS-640] Đăng ký service metadata động cho biểu mẫu hồ sơ
         services.AddScoped<StudyAbroad.Application.Profile.Flow.IProfileMetadataService, StudyAbroad.Application.Profile.Flow.ProfileMetadataService>();

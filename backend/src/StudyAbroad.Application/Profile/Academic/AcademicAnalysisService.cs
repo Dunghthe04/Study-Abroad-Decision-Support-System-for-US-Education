@@ -16,10 +16,12 @@ namespace StudyAbroad.Application.Profile.Academic;
 public class AcademicAnalysisService : IAcademicAnalysisService
 {
     private readonly IAcademicAnalysisRepository _repository;
+    private readonly IGradeScaleProvider? _gradeScale;
 
-    public AcademicAnalysisService(IAcademicAnalysisRepository repository)
+    public AcademicAnalysisService(IAcademicAnalysisRepository repository, IGradeScaleProvider? gradeScale = null)
     {
         _repository = repository;
+        _gradeScale = gradeScale;
     }
 
     /// <summary>
@@ -313,25 +315,12 @@ public class AcademicAnalysisService : IAcademicAnalysisService
     /// </summary>
     public async Task<GradeScaleConfigDto> GetGradeScaleConfigAsync(CancellationToken ct = default)
     {
-        var setting = await _repository.GetAppSettingByKeyAsync(AcademicConstants.GradeScale10AppSettingKey, ct);
-        if (setting != null && !string.IsNullOrWhiteSpace(setting.ValueJson))
-        {
-            try
-            {
-                var parsed = JsonSerializer.Deserialize<GradeScaleConfigDto>(setting.ValueJson, new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                });
-                if (parsed != null && parsed.Rules != null && parsed.Rules.Count > 0)
-                    return parsed;
-            }
-            catch
-            {
-                // Fallback to default WES
-            }
-        }
+        if (_gradeScale is not null)
+            return await _gradeScale.GetAsync(ct);
 
-        return GetDefaultWesScaleConfig();
+        // Không có provider (test cũ): đọc thẳng DB, bảng sai luật thì về bảng mặc định
+        var setting = await _repository.GetAppSettingByKeyAsync(AcademicConstants.GradeScale10AppSettingKey, ct);
+        return GradeScale.Parse(setting?.ValueJson) ?? GetDefaultWesScaleConfig();
     }
 
     /// <summary>
@@ -345,9 +334,7 @@ public class AcademicAnalysisService : IAcademicAnalysisService
             throw new ArgumentOutOfRangeException(nameof(rawScore), "Điểm số phải nằm trong khoảng từ 0.0 đến 10.0.");
 
         // Bảng thiếu khoảng thấp nhất thì điểm dưới mọi mốc là 0, giống TranscriptGpa.To4
-        return config.Rules
-            .OrderByDescending(rule => rule.MinScore)
-            .FirstOrDefault(rule => rawScore >= rule.MinScore)?.Gpa4 ?? 0m;
+        return GradeScale.Lookup(rawScore, config);
     }
 
     /// <summary>
