@@ -486,7 +486,8 @@ namespace StudyAbroad.Application.Advisor
                 var names = (await recommender!.ListSchoolOptionsAsync(userId, ct)).Select(o => o.Name).ToList();
                 var note = await WriteCompareNoteAsync(
                     new CompareNoteRequestDto(infos.Select(i => i.Name).ToList(), ChatSchoolInfo.CompareFacts(infos, fields), names), ct);
-                var text = note is null ? table : $"{table}\n\n{ChatSchoolInfo.CompareNoteLabel}\n{note}";
+                // Có lời AI thì chỉ hiện lời AI (đã nêu đủ số liệu); bảng code dựng chỉ làm câu thay thế khi AI lỗi
+                var text = note is null ? table : ChatSchoolInfo.CompareAnswerFromNote(infos, fields, note);
                 // Thẻ so sánh nói đủ bảng lẫn nhận xét (tách riêng khối "AI nhận xét"), nên giao diện bỏ đoạn chữ này, chỉ hiện thẻ
                 return MergeSchoolInfo(response, asQuery, text, clearKb: true) with { Widget = ChatSchoolInfo.WidgetOfCompare(infos, fields, note, text) };
             }

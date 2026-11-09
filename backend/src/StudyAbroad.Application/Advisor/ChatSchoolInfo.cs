@@ -398,6 +398,13 @@ public static class ChatSchoolInfo
         return string.Join("\n", lines);
     }
 
+    /// <summary>
+    /// Câu trả lời so sánh khi AI viết được lời: chỉ lời của AI (đã nêu đủ số liệu của từng mục), kèm lời nhắc kiểm tra lại nếu có chi phí hoặc hạn nộp.
+    /// Bảng do code dựng chỉ dùng làm câu thay thế khi AI lỗi, không hiện cùng lời AI để khỏi nói hai lần.
+    /// </summary>
+    public static string CompareAnswerFromNote(IReadOnlyList<SchoolInfoDto> schools, IReadOnlyList<InfoField> fields, string note) =>
+        NeedsVerifyNote(CompareRows(schools, fields)) ? $"{note}\n\n{Verify}" : note;
+
     /// <summary>Một hàng của bảng so sánh: mục, nhãn, giá trị ngắn của từng trường (cùng thứ tự các trường), và câu chênh lệch chi phí nếu là hàng chi phí.</summary>
     public record CompareRow(string Field, string Label, IReadOnlyList<string> Values, string? Gap);
 

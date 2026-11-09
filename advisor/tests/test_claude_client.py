@@ -43,6 +43,7 @@ async def test_tra_json_va_gui_dung_yeu_cau():
     assert seen["headers"]["anthropic-version"] == "2023-06-01"
     body = httpx.Response(200, content=seen["body"]).json()
     assert body["system"] == "skill"
+    assert "temperature" not in body  # Haiku 5.5 từ chối tham số này
     assert body["tool_choice"] == {"type": "tool", "name": "tra_loi"}
     assert body["tools"][0]["input_schema"] == SCHEMA
 

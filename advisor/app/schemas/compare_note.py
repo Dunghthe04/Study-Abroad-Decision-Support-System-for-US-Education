@@ -8,7 +8,7 @@ from app.schemas.chat import AiUsageMixin
 from app.schemas.common import CamelModel
 
 MAX_SCHOOLS = 4
-MAX_POINTS = 3
+MAX_POINTS = 5
 MAX_OTHERS = 400
 
 

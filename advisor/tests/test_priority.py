@@ -4,7 +4,7 @@ import pytest
 
 from app.schemas.chat import ChatState
 from app.schemas.slm import SlmTinResult, SlmY
-from app.services.chat_flow import with_info_intent, with_priority_intent
+from app.services.chat_flow import with_comparison_intent, with_info_intent, with_priority_intent
 from app.services.priority import detect_priorities
 
 
@@ -169,3 +169,41 @@ async def test_a_what_if_with_only_model_priorities_goes_to_dotnet_with_them():
     assert out.action == "simulate"
     assert out.action_data["priorities"] == {"cost": 0, "aid": 4}
     assert out.action_data["unsupported"] == []  # ưu tiên không bị báo là "chưa thử được"
+
+
+# ---- "So sánh 2 trường A và B" SLM xếp nhầm vào nhánh hồ sơ (lỗi thật khi thử với usas-slm-v3)
+def profile_compare(*schools: str) -> SlmTinResult:
+    entities = {"cac_nhiem_vu": ["so_sanh"], "cac_truong": list(schools)}
+    return SlmTinResult(cac_y=[SlmY(type="ho_so", doan="x", thuc_the=entities)])
+
+
+def test_comparing_schools_without_mentioning_the_profile_becomes_a_fact_comparison():
+    message = "So sánh 2 trường Florida State University và The University of Texas at Austin"
+
+    slm = with_comparison_intent(
+        message, profile_compare("Florida State University", "The University of Texas at Austin")
+    )
+
+    y = slm.cac_y[0]
+    assert (y.type, y.thuc_the["nhiem_vu"]) == ("kien_thuc", "so_sanh")
+    assert y.thuc_the["cac_truong"] == ["Florida State University", "The University of Texas at Austin"]
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "So sánh Purdue và Ohio State giúp em, với hồ sơ của em thì chọn trường nào?",
+        "so sánh USC NYU xem cái nào hợp với em",
+        "so sánh Stanford và MIT, em có khả năng vào trường nào",
+    ],
+)
+def test_a_comparison_about_the_students_own_profile_stays_in_the_profile_branch(message):
+    slm = with_comparison_intent(message, profile_compare("Purdue", "Ohio State"))
+
+    assert slm.types() == ["ho_so"]
+
+
+def test_other_profile_tasks_are_left_alone():
+    other_task = SlmTinResult(cac_y=[SlmY(type="ho_so", doan="x", thuc_the={"cac_nhiem_vu": ["danh_gia"]})])
+
+    assert with_comparison_intent("đánh giá hồ sơ em", other_task).types() == ["ho_so"]
