@@ -35,6 +35,66 @@ async def test_rules_and_skill_go_to_system_and_the_profile_goes_to_user():
     }
 
 
+async def test_the_classifier_tasks_go_to_claude_by_name():
+    llm = FakeLLM({"tra_loi": "Đánh giá và lộ trình."})
+
+    await AdviceWriter(llm).write(SKILL, REQ, [], ["danh_gia", "lo_trinh"])
+
+    user = json.loads(llm.calls[0]["messages"][-1]["content"])
+    assert user["nhiem_vu"] == ["đánh giá hồ sơ", "lộ trình chuẩn bị"]
+
+
+@pytest.mark.parametrize("tasks", [None, [], ["ma_la"]])
+async def test_no_known_task_sends_no_task_list(tasks):
+    llm = FakeLLM({"tra_loi": "ok"})
+
+    await AdviceWriter(llm).write(SKILL, REQ, [], tasks)
+
+    assert "nhiem_vu" not in json.loads(llm.calls[0]["messages"][-1]["content"])
+
+
+BOTH = ["danh_gia", "lo_trinh"]
+NO_ROADMAP = "Hồ sơ của bạn ở mức trung bình."
+WITH_ROADMAP = "Hồ sơ trung bình.\n\n**Lộ trình chuẩn bị**\n- Thi IELTS trước."
+
+
+async def test_an_answer_missing_the_roadmap_is_rewritten_with_a_note():
+    llm = FakeLLM({"tra_loi": NO_ROADMAP}, {"tra_loi": WITH_ROADMAP})
+
+    assert await AdviceWriter(llm).write(SKILL, REQ, [], BOTH) == WITH_ROADMAP
+    first, second = llm.calls[0]["messages"], llm.calls[1]["messages"]
+    assert second[:-1] == first
+    assert second[-1]["role"] == "user" and '"Lộ trình chuẩn bị"' in second[-1]["content"]
+    assert NO_ROADMAP not in second[-1]["content"]  # không gửi lại câu trả lời cũ
+
+
+async def test_still_missing_the_roadmap_gives_the_partial_answer_instead_of_nothing(caplog):
+    llm = FakeLLM({"tra_loi": NO_ROADMAP}, ClaudeError("HTTP 529"))
+
+    with caplog.at_level("WARNING", logger="app.services.advice_writer"):
+        assert await AdviceWriter(llm).write(SKILL, REQ, [], BOTH) == NO_ROADMAP
+
+    # Log nêu việc thiếu, không chép câu trả lời
+    assert [r.getMessage() for r in caplog.records] == [
+        "Writer hỏng lần 1/2: câu trả lời thiếu phần lộ trình chuẩn bị",
+        "Writer hỏng lần 2/2: HTTP 529",
+    ]
+
+
+@pytest.mark.parametrize("tasks", [None, ["danh_gia"]])
+async def test_no_roadmap_asked_means_no_roadmap_check(tasks):
+    llm = FakeLLM({"tra_loi": NO_ROADMAP})
+
+    assert await AdviceWriter(llm).write(SKILL, REQ, [], tasks) == NO_ROADMAP
+    assert len(llm.calls) == 1
+
+
+async def test_a_promise_after_a_missing_roadmap_still_gives_the_partial_answer():
+    llm = FakeLLM({"tra_loi": NO_ROADMAP}, {"tra_loi": "Lộ trình: bạn chắc chắn đỗ."})
+
+    assert await AdviceWriter(llm).write(SKILL, REQ, [], BOTH) == NO_ROADMAP
+
+
 @pytest.mark.parametrize(
     "text",
     [

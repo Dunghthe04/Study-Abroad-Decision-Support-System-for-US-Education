@@ -528,9 +528,11 @@ class FakeWriter:
     def __init__(self, answer: str | None = "lời tư vấn") -> None:
         self.answer = answer
         self.skills: list[str] = []
+        self.tasks: list[list[str] | None] = []
 
-    async def write(self, skill, req, schools):
+    async def write(self, skill, req, schools, tasks=None):
         self.skills.append(skill)
+        self.tasks.append(tasks)
         return self.answer
 
 
@@ -551,6 +553,19 @@ async def test_profile_advice_goes_through_the_generated_skill_then_claude(quest
     assert out.answer == "lời tư vấn" and out.action is None
     assert generator.questions == [question] and writer.skills == ["skill riêng"]
     assert ran == []  # không chạy skill tĩnh nào
+
+
+@pytest.mark.parametrize("tasks", [["danh_gia", "lo_trinh"], None])
+async def test_the_tasks_the_classifier_split_go_to_the_writer(tasks):
+    writer = FakeWriter()
+    thuc_the = {"cac_nhiem_vu": tasks} if tasks else {}
+    question = "đánh giá hồ sơ và lên lộ trình cho em"
+
+    await new_advice([], writer=writer).run(
+        ChatState(profile=filled(REQUIRED_B3)), question, tin(("ho_so", thuc_the, question))
+    )
+
+    assert writer.tasks == [tasks]
 
 
 @pytest.mark.parametrize(

@@ -290,7 +290,9 @@ class GeneratedAdviceBranch:
             return SkillOutput(
                 SKILL_NOT_READY, quick_replies=[QuickReply(label=ASK_AGAIN_LABEL, value=question)]
             )
-        answer = await self._writer.write(skill, req, state.schools)
+        # Danh sách việc bộ phân loại đã tách (vd đánh giá + lộ trình): writer làm đủ, kể cả khi skill tự mâu thuẫn
+        tasks = y.thuc_the.get("cac_nhiem_vu") if y.type == "ho_so" else None
+        answer = await self._writer.write(skill, req, state.schools, tasks)
         if answer is None:
             return SkillOutput(
                 CANNOT_ANSWER, quick_replies=[QuickReply(label=ASK_AGAIN_LABEL, value=question)]

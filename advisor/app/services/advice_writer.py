@@ -45,6 +45,22 @@ RAW_JSON_NOTE = (
     "Câu trả lời trước của bạn bị viết dưới dạng JSON. Viết lại: ô tra_loi chỉ chứa chữ gửi thẳng cho học sinh, "
     "không viết JSON, không viết tên ô tra_loi, không bọc trong ``` hay dấu ngoặc kép."
 )
+# Tên tiếng Việt của các việc bộ phân loại tách ra (REVIEW_TASKS): writer phải làm đủ các việc này, kể cả khi skill
+# SLM có dòng bảo bỏ một việc (skill đôi khi ghi 2 việc ở mục 1 rồi lại ghi "chỉ đánh giá, không đưa lộ trình")
+TASK_LABEL = {
+    "danh_gia": "đánh giá hồ sơ",
+    "lo_trinh": "lộ trình chuẩn bị",
+    "chon_truong": "chọn trường",
+    "so_sanh": "so sánh trường",
+    "giai_thich_truong": "giải thích về trường",
+}
+# Việc kiểm được bằng chữ trong câu trả lời: học sinh có hỏi lộ trình mà câu trả lời không nhắc "lộ trình" là
+# thiếu phần đó (skill có lúc ghi "chỉ đánh giá, không đưa lộ trình" ở cuối và Claude làm theo)
+TASK_WORD = {"lo_trinh": "lộ trình"}
+MISSING_TASK_NOTE = (
+    "Câu trả lời trước của bạn thiếu phần {label} mà học sinh có hỏi. Viết lại đầy đủ mọi việc trong nhiem_vu, "
+    'có một phần tiêu đề "{title}" dựa theo mục Lộ trình của skill, bỏ qua dòng nào trong skill bảo không đưa phần này.'
+)
 # Câu trả lời bị bọc trong khung code ```json ... ```
 FENCE = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.DOTALL)
 MAX_WRAPS = 2  # Claude bọc tối đa 2 lớp là gỡ; sâu hơn coi như hỏng
@@ -64,6 +80,25 @@ class RawJsonError(ValueError):
 
     def __init__(self) -> None:
         super().__init__("câu trả lời là JSON thô")
+
+
+class MissingTaskError(ValueError):
+    """Câu trả lời thiếu một việc học sinh hỏi. Giữ câu trả lời để dùng nếu lần viết lại vẫn thiếu."""
+
+    def __init__(self, task: str, answer: str) -> None:
+        super().__init__(f"câu trả lời thiếu phần {TASK_LABEL[task]}")
+        self.task = task
+        self.answer = answer  # không nằm trong lời lỗi nên không vào log
+
+
+# Việc đầu tiên trong tasks mà câu trả lời không nhắc tới (chỉ xét việc có trong TASK_WORD), None nếu đủ
+def missing_task(text: str, tasks: list[str] | None) -> str | None:
+    folded = unicodedata.normalize("NFC", text).lower()
+    for task in tasks or []:
+        word = TASK_WORD.get(task)
+        if word and word not in folded:
+            return task
+    return None
 
 
 # Claude đôi khi nhét cả {"tra_loi": "..."} vào trong ô tra_loi: gỡ ra lấy chữ bên trong.
@@ -94,6 +129,9 @@ def retry_note_for(error: Exception) -> dict[str, str] | None:
         content = PROMISE_NOTE.format(answer=error.answer, phrase=error.phrase)
     elif isinstance(error, RawJsonError):
         content = RAW_JSON_NOTE
+    elif isinstance(error, MissingTaskError):
+        label = TASK_LABEL[error.task]
+        content = MISSING_TASK_NOTE.format(label=label, title=label.capitalize())
     else:
         return None
     return {"role": "user", "content": content}
@@ -130,28 +168,44 @@ class AdviceWriter:
         self._llm = llm
         self._rules, self.version = load_skill(PROMPT_PATH)  # đọc 1 lần lúc khởi động
 
-    async def write(self, skill: str, req: SkillRequest, schools: list[ResultSchool]) -> str | None:
-        """Trả câu trả lời đã kiểm, hoặc None nếu Claude sai cả MAX_ATTEMPTS lần."""
-        user = {
+    async def write(
+        self, skill: str, req: SkillRequest, schools: list[ResultSchool], tasks: list[str] | None = None
+    ) -> str | None:
+        """Trả câu trả lời đã kiểm, hoặc None nếu Claude sai cả MAX_ATTEMPTS lần.
+
+        tasks: mã việc bộ phân loại tách từ câu hỏi (cac_nhiem_vu). Rỗng/None thì không gửi, để skill quyết định.
+        """
+        user: dict[str, Any] = {
             "cau_hoi": req.cau_hoi,
             "ho_so": req.ho_so,
             "tinh_san": req.tinh_san,
             "schools": [{"name": s.name, "group": GROUP_LABEL.get(s.group or "", s.group)} for s in schools],
         }
+        labels = [TASK_LABEL[t] for t in tasks or [] if t in TASK_LABEL]
+        if labels:
+            user["nhiem_vu"] = labels
         messages = [
             {"role": "system", "content": self._rules},
             {"role": "system", "content": skill},
             {"role": "user", "content": json.dumps(user, ensure_ascii=False, separators=(",", ":"))},
         ]
         retry_note: dict[str, str] | None = None
+        partial: str | None = None  # câu trả lời đúng mực nhưng thiếu một việc, dùng nếu viết lại vẫn hỏng
         for attempt in range(1, MAX_ATTEMPTS + 1):
             try:
                 raw = await self._llm.chat_json(
                     messages + ([retry_note] if retry_note else []), ANSWER_SCHEMA, temperature=0.0
                 )
-                return check_answer(raw)
+                text = check_answer(raw)
+                task = missing_task(text, tasks)
+                if task:
+                    raise MissingTaskError(task, text)
+                return text
             except (OllamaError, ValueError) as e:  # ClaudeError là OllamaError
                 # Ghi lý do để biết vì sao học sinh nhận câu "chưa viết được"; không ghi hồ sơ hay câu trả lời
                 logger.warning("Writer hỏng lần %d/%d: %s", attempt, MAX_ATTEMPTS, e or type(e).__name__)
+                if isinstance(e, MissingTaskError):
+                    partial = e.answer
                 retry_note = retry_note_for(e)
-        return None
+        # Thiếu một phần vẫn hơn báo "chưa viết được": câu đó đã qua kiểm hứa đỗ và JSON
+        return partial
