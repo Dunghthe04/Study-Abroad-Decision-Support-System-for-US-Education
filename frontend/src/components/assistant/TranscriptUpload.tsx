@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { UploadIcon } from "lucide-react";
+import { useGradeScale } from "@/hooks/use-grade-scale";
 import { profileFlowApi } from "@/lib/profile-flow-api";
 import { calculateTranscriptGpa } from "@/lib/profile-flow-options";
 import {
@@ -14,6 +15,7 @@ import {
 
 /** D2: tải học bạ giống bước 2 của form. Điểm đọc được ghi vào nháp (chế độ học bạ), rồi gửi "GPA x thang 10" cho chat */
 export function TranscriptUpload({ onPick }: { onPick?: (text: string) => void }) {
+  useGradeScale(); // tải sẵn bảng quy đổi để GPA tính từ bảng điểm tải lên dùng đúng bảng
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);

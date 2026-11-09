@@ -26,6 +26,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RequiredMark } from "./RequiredMark";
 import { cn } from "@/lib/utils";
+import { useGradeScale } from "@/hooks/use-grade-scale";
 import { profileFlowApi } from "@/lib/profile-flow-api";
 import {
   calculateGradeTrend,
@@ -292,6 +293,7 @@ export function Step2Transcript({
   onPrev,
   onNext,
 }: Step2TranscriptProps) {
+  useGradeScale(); // GPA thang 4 quy đổi theo bảng moderator sửa, vẽ lại khi bảng tải xong
   // Khởi tạo các năm học dựa theo bậc học & lớp hiện tại của người dùng
   const defaultYears = getInitialAcademicYears(currentEducationLevel, currentGrade);
   const years = data.academicYears && data.academicYears.length > 0 ? data.academicYears : defaultYears;

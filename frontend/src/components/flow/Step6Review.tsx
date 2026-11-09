@@ -16,6 +16,7 @@ import {
   TrophyIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useGradeScale } from "@/hooks/use-grade-scale";
 import { cn } from "@/lib/utils";
 import {
   ACTIVITY_ROLE_OPTIONS,
@@ -127,6 +128,7 @@ export function Step6Review({
   isSubmitting,
   submitError,
 }: Step6ReviewProps) {
+  useGradeScale(); // GPA thang 4 quy đổi theo bảng moderator sửa, vẽ lại khi bảng tải xong
   const { step1, step2, step3, step4, step5 } = draft;
   const stepErrors = splitStepErrors(submitError);
 
