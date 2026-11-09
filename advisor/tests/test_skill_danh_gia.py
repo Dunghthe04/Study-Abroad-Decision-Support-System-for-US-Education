@@ -3,13 +3,17 @@ from datetime import date
 from app.schemas.chat import ChatState, ProfileField
 from app.services.ollama import OllamaError
 from app.services.skills.skill_danh_gia import (
+    FREE_NUMBERS,
+    TIER_FINANCE,
     Assessor,
     DanhGiaHandler,
+    allowed_numbers,
     assess_levels,
     ec_tier_of,
     gpa10_to_4,
     read_facts,
 )
+from app.services.skills.validators import BUDGET_RANGES
 from tests.fakes import FakeLLM
 
 TODAY = date(2026, 10, 28)
@@ -86,11 +90,27 @@ def test_pte_not_converted_like_frontend():
     assert levels_of(english={"type": "pte", "value": 65})["english"] == "none"
 
 
-def test_budget_tier_thresholds_unchanged():
+def test_budget_tier_to_finance_level():
+    # Giữ kết quả ngưỡng cũ (≥ 60k ok, ≥ 35k tight); mức trên 70k không có trần nhưng vẫn là ok
     assert levels_of(budget="tier_under_20k")["finance"] == "short"
     assert levels_of(budget="tier_20k_35k")["finance"] == "tight"
     assert levels_of(budget="tier_35k_50k")["finance"] == "tight"
     assert levels_of(budget="tier_50k_70k")["finance"] == "ok"
+    assert levels_of(budget="tier_above_70k")["finance"] == "ok"
+
+
+def test_every_budget_tier_has_finance_level():
+    assert set(TIER_FINANCE) == set(BUDGET_RANGES)
+
+
+def test_budget_numbers_allowed_are_tier_bounds():
+    def budget_numbers(tier):
+        # Bỏ các số luôn được phép (mốc ngưỡng như 1400, 35.000) và số nhỏ như thang điểm
+        return {n for n in allowed_numbers(read_facts(profile(budget=tier), TODAY)) - FREE_NUMBERS if n >= 20}
+
+    assert budget_numbers("tier_50k_70k") == {50.0, 70.0, 50_000.0, 70_000.0}
+    # Mức trên 70k chỉ có sàn: không có số trần nào được phép
+    assert budget_numbers("tier_above_70k") == {70.0, 70_000.0}
 
 
 def test_scholarship_chance():

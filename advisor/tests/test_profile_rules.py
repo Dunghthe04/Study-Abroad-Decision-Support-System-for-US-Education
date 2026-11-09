@@ -35,10 +35,10 @@ def test_english_certs():
 
 
 def test_budget_tiers():
+    # File chung chỉ ghi trần; sàn của mỗi mức là trần của mức trước (mức đầu từ 0)
     tiers = RULES["budgetTiers"]
-    assert v.BUDGET_TIERS == [(t["maxUsd"], t["id"]) for t in tiers[:-1]]
-    assert tiers[-1]["maxUsd"] is None
-    assert v.TOP_TIER == tiers[-1]["id"]
+    floors = [0, *(t["maxUsd"] for t in tiers[:-1])]
+    assert v.BUDGET_RANGES == {t["id"]: (floor, t["maxUsd"]) for t, floor in zip(tiers, floors, strict=True)}
     assert v.MAX_BUDGET_USD == RULES["maxAnnualBudgetUsd"]
 
 

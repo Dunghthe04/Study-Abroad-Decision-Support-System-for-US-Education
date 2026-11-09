@@ -19,7 +19,7 @@ from app.schemas.chat import ChatState, ProfileField, QuickReply
 from app.services.chat_flow import SkillOutput, ask, go_to
 from app.services.skill_call import SKILLS_DIR, SkillCall
 from app.services.skills.buttons import BUDGET_LABELS
-from app.services.skills.validators import IMPACT_LEVELS, month_index, parse_month_year
+from app.services.skills.validators import BUDGET_RANGES, IMPACT_LEVELS, month_index, parse_month_year
 
 logger = logging.getLogger("advisor.chat")
 
@@ -29,21 +29,21 @@ SKILL_PATH = SKILLS_DIR / "skill_danh_gia.md"
 ACADEMIC_CUTS = [(3.5, "strong"), (3.0, "medium")]  # GPA thang 4
 SAT_CUTS = [(1400, "strong"), (1200, "medium")]
 ENGLISH_CUTS = [(7.0, "excellent"), (6.0, "good"), (5.5, "near")]  # quy về IELTS
-FINANCE_CUTS = [(60_000, "ok"), (35_000, "tight")]  # USD mỗi năm. Chưa chốt Q3b: không sửa
-LOWEST = {"academic": "weak", "sat": "weak", "english": "low", "finance": "short"}
+LOWEST = {"academic": "weak", "sat": "weak", "english": "low"}
 
 # Đổi TOEFL / Duolingo sang IELTS tương đương (ieltsEquivalent bên frontend): (điểm từ, IELTS)
 TOEFL_TO_IELTS = [(110, 8.0), (94, 7.0), (79, 6.0), (72, 5.5)]
 DUOLINGO_TO_IELTS = [(135, 7.5), (120, 7.0), (105, 6.0), (95, 5.5)]
 BELOW_TABLE_IELTS = 5.0
 
-# Mức ngân sách → số USD dùng để so ngưỡng (budgetMaxUsd, mức cao nhất không có trần thì lấy budgetMinUsd)
-TIER_USD = {
-    "tier_under_20k": 20_000,
-    "tier_20k_35k": 35_000,
-    "tier_35k_50k": 50_000,
-    "tier_50k_70k": 70_000,
-    "tier_above_70k": 70_000,
+# Mức ngân sách → mức tài chính, xếp thẳng theo mã (khoảng tiền xem BUDGET_RANGES). Không đổi mức ra một con số
+# vì mức trên 70k không có trần. Kết quả giữ như ngưỡng cũ (≥ 60k ok, ≥ 35k tight); chưa chốt Q3b: không sửa
+TIER_FINANCE = {
+    "tier_under_20k": "short",  # 0 – 20.000
+    "tier_20k_35k": "tight",  # 20.000 – 35.000
+    "tier_35k_50k": "tight",  # 35.000 – 50.000
+    "tier_50k_70k": "ok",  # 50.000 – 70.000
+    "tier_above_70k": "ok",  # từ 70.000, không trần
 }
 
 # Bậc ngoại khóa 1–5 (ecTierOf bên frontend)
@@ -125,7 +125,6 @@ class Facts:
     english_score: float | None = None
     ielts: float | None = None  # IELTS tương đương
     budget_tier: str | None = None
-    budget_usd: int | None = None
     ec_tier: int | None = None
     activities: int = 0
 
@@ -196,8 +195,8 @@ def read_facts(profile: dict[str, ProfileField], today: date | None = None) -> F
         facts.ielts = ielts_equivalent(facts.english_type, facts.english_score)
 
     tier = value_of(profile, "budget")
-    if tier in TIER_USD:
-        facts.budget_tier, facts.budget_usd = tier, TIER_USD[tier]
+    if tier in TIER_FINANCE:
+        facts.budget_tier = tier
 
     activities = value_of(profile, "activities")
     activities = activities if isinstance(activities, list) else []
@@ -229,7 +228,7 @@ def assess_levels(facts: Facts) -> dict[str, Any]:
         "academic": academic,
         "sat": level_of(facts.sat, SAT_CUTS, LOWEST["sat"]),
         "english": english,
-        "finance": level_of(facts.budget_usd, FINANCE_CUTS, LOWEST["finance"]),
+        "finance": TIER_FINANCE.get(facts.budget_tier, "none"),
         "ec_tier": facts.ec_tier,
         "scholarship": SCHOLARSHIP_CHANCES[2 - hits],
     }
@@ -352,10 +351,11 @@ def readings(token: str) -> set[float]:
 # Các số được phép xuất hiện trong lời nhận xét: số trong hồ sơ, thang điểm
 def allowed_numbers(facts: Facts) -> set[float]:
     numbers = {facts.gpa, facts.gpa_scale, facts.gpa4, facts.sat, facts.english_score, facts.ielts}
-    numbers |= {facts.budget_usd, facts.ec_tier, facts.activities}
+    numbers |= {facts.ec_tier, facts.activities}
     if facts.budget_tier:
-        numbers |= {float(n) * 1000 for n in re.findall(r"\d+", facts.budget_tier)}
-        numbers |= {float(n) for n in re.findall(r"\d+", facts.budget_tier)}
+        # Sàn và trần của mức ngân sách, viết đủ (35.000) hoặc theo nghìn (35k); bỏ sàn 0 và trần không có
+        bounds = {n for n in BUDGET_RANGES[facts.budget_tier] if n}
+        numbers |= bounds | {n / 1000 for n in bounds}
     return {float(n) for n in numbers if n is not None} | FREE_NUMBERS
 
 
