@@ -15,7 +15,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from app.schemas.chat import ChatState, ProfileField, QuickReply
+from app.schemas.chat import ChatState, GradeScaleRule, ProfileField, QuickReply
 from app.services.chat_flow import SkillOutput, ask, go_to
 from app.services.skill_call import SKILLS_DIR, SkillCall
 from app.services.skills.buttons import BUDGET_LABELS
@@ -107,8 +107,16 @@ WES_GPA10_TO_4 = [
 BELOW_WES_GPA4 = 0.0
 
 
-def gpa10_to_4(score: float) -> float:
-    for cut, gpa4 in WES_GPA10_TO_4:
+# Bảng (điểm từ, GPA 4) lấy từ grade_scale trong state (.NET gửi bảng moderator sửa); None hoặc rỗng = bảng WES
+def gpa_table_of(rules: list[GradeScaleRule] | None) -> list[tuple[float, float]] | None:
+    if not rules:
+        return None
+    return sorted(((float(r.min_score), float(r.gpa4)) for r in rules), reverse=True)
+
+
+# Chỉ điểm tổng (TB thang 10) mới quy sang thang 4; điểm từng môn giữ nguyên thang 10
+def gpa10_to_4(score: float, table: list[tuple[float, float]] | None = None) -> float:
+    for cut, gpa4 in table or WES_GPA10_TO_4:
         if score >= cut:
             return gpa4
     return BELOW_WES_GPA4
@@ -176,14 +184,18 @@ def ec_tier_of(activities: list[dict], awards: list[dict], today: date) -> int:
     return 1 + sum(1 for cut in EC_CUTS if m >= cut)
 
 
-def read_facts(profile: dict[str, ProfileField], today: date | None = None) -> Facts:
+def read_facts(
+    profile: dict[str, ProfileField],
+    today: date | None = None,
+    gpa_table: list[tuple[float, float]] | None = None,
+) -> Facts:
     today = today or date.today()
     facts = Facts()
 
     gpa = value_of(profile, "gpa")
     if isinstance(gpa, dict) and gpa.get("value") is not None:
         facts.gpa, facts.gpa_scale = float(gpa["value"]), int(gpa.get("scale") or 10)
-        facts.gpa4 = facts.gpa if facts.gpa_scale == 4 else gpa10_to_4(facts.gpa)
+        facts.gpa4 = facts.gpa if facts.gpa_scale == 4 else gpa10_to_4(facts.gpa, gpa_table)
 
     sat = value_of(profile, "sat")
     facts.sat = int(sat) if isinstance(sat, int | float) else None
@@ -406,8 +418,13 @@ class Assessor:
         self._call = SkillCall(llm, model, SKILL_PATH)
         self.skill_version = self._call.skill_version
 
-    async def assess(self, profile: dict[str, ProfileField], today: date | None = None) -> Assessment:
-        facts = read_facts(profile, today)
+    async def assess(
+        self,
+        profile: dict[str, ProfileField],
+        today: date | None = None,
+        gpa_table: list[tuple[float, float]] | None = None,
+    ) -> Assessment:
+        facts = read_facts(profile, today, gpa_table)
         levels = assess_levels(facts)
 
         def check(raw: dict[str, Any]) -> Assessment:
@@ -435,6 +452,6 @@ class DanhGiaHandler:
         self._assessor = Assessor(llm, model)
 
     async def run(self, state: ChatState, message: str) -> SkillOutput:
-        result = await self._assessor.assess(state.profile)
+        result = await self._assessor.assess(state.profile, gpa_table=gpa_table_of(state.grade_scale))
         go_to(state, "B4")
         return SkillOutput(f"{render(result)}\n\n{ask(state, 'X2')}", quick_replies=[YES_REPLY, NO_REPLY])

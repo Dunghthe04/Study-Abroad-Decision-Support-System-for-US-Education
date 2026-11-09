@@ -294,6 +294,9 @@ class ChatFlow:
         # Mốc trường đổi theo bậc học; không gửi thì giữ mốc đã nhớ
         if req.benchmarks is not None:
             state.benchmarks = req.benchmarks
+        # Bảng quy đổi điểm do moderator sửa; không gửi thì giữ bảng đã nhớ (chưa từng gửi thì dùng bảng WES)
+        if req.grade_scale:
+            state.grade_scale = req.grade_scale
         # Danh sách trường gợi ý do .NET gửi mỗi lượt (lấy từ lần gợi ý đã lưu); không gửi thì giữ như cũ.
         # Có danh sách nghĩa là học sinh đã có kết quả, dù gợi ý ở trang Gợi ý trường chứ không phải trong chat
         if req.schools is not None:

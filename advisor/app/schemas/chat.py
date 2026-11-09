@@ -43,6 +43,14 @@ class ChatContext(CamelModel):
     sort: str | None = None
 
 
+# Một dòng bảng quy đổi grade_scale.10, khớp record GradeScaleRuleDto bên .NET. Tra GPA chỉ dùng min_score (cận dưới)
+class GradeScaleRule(CamelModel):
+    min_score: float
+    max_score: float | None = None
+    gpa4: float
+    letter_grade: str | None = None
+
+
 class ChatState(CamelModel):
     current_step: Step = "B0"
     need: str | None = None
@@ -64,6 +72,8 @@ class ChatState(CamelModel):
     # Mốc từ dữ liệu trường cùng bậc học ({"gpa4": 3.6, "english": {"ielts": 6.5, ...}}), .NET tính và gửi mỗi lượt;
     # chỉ dùng để ghi mức GPA / tiếng Anh cho skill ho_so. None = chưa có dữ liệu trường thì chỉ ghi điểm
     benchmarks: dict[str, Any] | None = None
+    # Bảng quy đổi điểm thang 10 sang GPA 4 (grade_scale.10 moderator sửa), .NET gửi mỗi lượt; None = dùng bảng WES mặc định
+    grade_scale: list[GradeScaleRule] | None = None
     study_level: StudyLevel | None = None  # bậc học học sinh quan tâm (từ .NET), dùng để lọc kiến thức
     # Câu tư vấn bị hoãn vì thiếu hồ sơ (giữ nguyên ý SLM đã tách: loại, đoạn chữ, thực thể).
     # Học sinh xác nhận hồ sơ ở X1 thì nhánh hồ sơ lấy ra trả lời rồi xóa. Chỉ giữ câu đầu tiên
@@ -105,6 +115,8 @@ class ChatRequest(CamelModel):
     transcript: dict[str, Any] | None = None
     # Mốc GPA / tiếng Anh từ dữ liệu trường do .NET gửi mỗi lượt; None = không gửi (giữ mốc cũ trong state)
     benchmarks: dict[str, Any] | None = None
+    # Bảng quy đổi điểm trong DB do .NET gửi mỗi lượt; None = không gửi (giữ bảng cũ trong state)
+    grade_scale: list[GradeScaleRule] | None = None
 
 
 # Token của MỘT lần gọi AI (Claude hoặc Ollama), số do nhà cung cấp trả về. Một lượt chat có thể gồm nhiều lần gọi

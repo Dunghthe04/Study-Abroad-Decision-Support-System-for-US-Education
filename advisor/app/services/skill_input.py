@@ -25,6 +25,7 @@ from app.services.skills.buttons import (
     SCHOLARSHIP_LABELS,
     SCHOOL_TYPE_LABELS,
 )
+from app.services.skills.skill_danh_gia import gpa_table_of
 from app.services.skills.validators import BUDGET_RANGES, CERT_NAMES
 
 # Trạng thái có giá trị thật; declined (không muốn nói) thì bỏ khóa
@@ -173,7 +174,11 @@ def profile_to_skill_input(profile: dict[str, ProfileField]) -> dict[str, str]:
 # và mốc trường (state.benchmarks). Hạn nộp của trường chưa có đường gửi sang nên timeline tạm chỉ có tháng nhập học
 def skill_request_of(state: ChatState, cau_hoi: str, today: datetime.date | None = None) -> SkillRequest:
     tinh_san = calc_profile(
-        state.profile, state.transcript, today or datetime.date.today(), benchmarks=state.benchmarks
+        state.profile,
+        state.transcript,
+        today or datetime.date.today(),
+        benchmarks=state.benchmarks,
+        gpa_table=gpa_table_of(state.grade_scale),
     )
     return SkillRequest(
         loai="ho_so", cau_hoi=cau_hoi, ho_so=profile_to_skill_input(state.profile), tinh_san=tinh_san
