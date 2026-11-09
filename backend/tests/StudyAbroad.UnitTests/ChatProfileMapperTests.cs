@@ -59,9 +59,21 @@ public class ChatProfileMapperTests
     [Theory]
     [InlineData("""{"planned":true,"date":"2027-06"}""")]
     [InlineData("""{"planned":true,"date":null}""")]
+    [InlineData("""{"planned":true,"date":"2027-06","test_type":"ielts","target_score":7.5}""")]
     public void RoundTrip_EnglishPlan(string planJson)
     {
         var profile = Profile("""{"english":{"value":null,"status":"none"},"english_plan":{"value":""" + planJson + ""","status":"confirmed"}}""");
+
+        AssertSame(profile, ChatProfileMapper.ToChatProfile(ToDraft(profile), profile));
+    }
+
+    [Theory]
+    [InlineData("""{"planned":true,"date":"2027-10"}""")]
+    [InlineData("""{"planned":true,"date":null}""")]
+    [InlineData("""{"planned":true,"date":"2027-10","test_type":"sat","target_score":1450}""")]
+    public void RoundTrip_StandardizedPlan(string planJson)
+    {
+        var profile = Profile("""{"sat":{"value":null,"status":"none"},"act":{"value":null,"status":"none"},"standardized_plan":{"value":""" + planJson + ""","status":"confirmed"}}""");
 
         AssertSame(profile, ChatProfileMapper.ToChatProfile(ToDraft(profile), profile));
     }
@@ -77,12 +89,26 @@ public class ChatProfileMapperTests
     }
 
     [Fact]
+    public void StandardizedPlannedInForm_CountsAsNoStandardizedCertificate()
+    {
+        var draft = new ProfileFlowDraftDto { Step3 = new FlowCertificationDraftDto { StandardizedPlanned = true } };
+
+        var sat = ChatProfileMapper.ToChatProfile(draft)["sat"]!;
+        var act = ChatProfileMapper.ToChatProfile(draft)["act"]!;
+
+        Assert.Equal("none", sat["status"]!.GetValue<string>());
+        Assert.Equal("none", act["status"]!.GetValue<string>());
+    }
+
+    [Fact]
     public void RoundTrip_FullProfile()
     {
+        var gradYear = ChatProfileMapper.GuessGraduationYear("high_school", "Lớp 12")!.Value;
         var profile = Profile($$"""
         {
           "current_level":{"value":"high_school","status":"confirmed"},
           "current_grade":{"value":"Lớp 12","status":"confirmed"},
+          "graduation_year":{"value":{{gradYear}},"status":"confirmed"},
           "target_level":{"value":"undergraduate","status":"confirmed"},
           "gpa":{"value":{"value":8.5,"scale":10,"source":"overall"},"status":"confirmed"},
           "sat":{"value":1450,"status":"confirmed"},
@@ -94,6 +120,20 @@ public class ChatProfileMapperTests
         }
         """);
         AssertSame(profile, ChatProfileMapper.ToChatProfile(ToDraft(profile)));
+    }
+
+    [Theory]
+    [InlineData("high_school", "Lớp 10", 2026, 11, 2029)]
+    [InlineData("high_school", "Lớp 12", 2026, 5, 2026)]
+    [InlineData("high_school", "Lớp 12", 2026, 9, 2027)]
+    [InlineData("middle_school", "Lớp 9", 2026, 11, 2027)]
+    [InlineData("college_university", "Năm 2", 2026, 11, 2029)]
+    [InlineData("college_university", "Năm cuối", 2026, 11, 2027)]
+    public void GuessGraduationYear_CalculatesExpectedYear(string level, string grade, int year, int month, int expected)
+    {
+        var now = new DateTime(year, month, 1, 0, 0, 0, DateTimeKind.Utc);
+        var actual = ChatProfileMapper.GuessGraduationYear(level, grade, now);
+        Assert.Equal(expected, actual);
     }
 
     // Trạng thái nháp không lưu được thì lấy lại từ profile lượt trước
@@ -171,9 +211,9 @@ public class ChatProfileMapperTests
     }
 
     private const string ChatCerts =
-        """[{"id":"c1","category":"english","type":"ielts","customName":null,"subject":null,"overall":6.5,"scaleText":null,"sections":null,"testDate":"2025-05"},"""
-        + """{"id":"c2","category":"standardized","type":"ap","customName":null,"subject":"Calculus BC","overall":5,"scaleText":null,"sections":null,"testDate":"2025-05"},"""
-        + """{"id":"c3","category":"standardized","type":"alevel","customName":null,"subject":"Math","overall":null,"scaleText":"A*","sections":null,"testDate":"2025-06"}]""";
+        """[{"id":"c1","category":"english","type":"ielts","customName":null,"subject":null,"overall":6.5,"scaleText":null,"sections":null,"testDate":"2025-05","isTarget":false},"""
+        + """{"id":"c2","category":"standardized","type":"ap","customName":null,"subject":"Calculus BC","overall":5,"scaleText":null,"sections":null,"testDate":"2025-05","isTarget":false},"""
+        + """{"id":"c3","category":"standardized","type":"alevel","customName":null,"subject":"Math","overall":null,"scaleText":"A*","sections":null,"testDate":"2025-06","isTarget":false}]""";
 
     [Fact]
     public void ChatCertifications_RoundTrip()
@@ -240,7 +280,7 @@ public class ChatProfileMapperTests
         ]));
 
         var gpa = ChatProfileMapper.ToChatProfile(old)["gpa"]!["value"]!;
-        Assert.Equal("""{"value":7.75,"scale":10,"source":"transcript"}""", gpa.ToJsonString());
+        Assert.Equal("""{"value":7.83,"scale":10,"source":"transcript"}""", gpa.ToJsonString());
 
         var draft = ToDraft(Confirmed("gpa", """{"value":9,"scale":10,"source":"overall"}"""), old);
         Assert.Same(old.Step2, draft.Step2);
@@ -302,6 +342,41 @@ public class ChatProfileMapperTests
         Assert.Null(items[0].DurationMonths);            // .NET tự tính số tháng khi commit
         Assert.NotNull(items[1].Id);
         Assert.Equal(oldAward, items[2]);                // giải thưởng không bị đụng
+    }
+
+    [Fact]
+    public void ChatActivities_WithDescriptionAndSnakeCase_PreservedAndMapped()
+    {
+        var chatJson = """
+        [
+          {
+            "name": "Dự án Mùa Hè Xanh",
+            "category": "activity",
+            "role": "leader",
+            "impact_level": "province",
+            "start_date": "06/2024",
+            "end_date": "08/2024",
+            "is_ongoing": false,
+            "description": "Dẫn dắt 30 tình nguyện viên xây dựng 2 phòng học"
+          }
+        ]
+        """;
+
+        var draft = ToDraft(Confirmed("activities", chatJson));
+        var activity = draft.Step5!.Activities![0];
+
+        Assert.Equal("Dự án Mùa Hè Xanh", activity.Name);
+        Assert.Equal("leader", activity.Role);
+        Assert.Equal("province", activity.ImpactLevel);
+        Assert.Equal("06/2024", activity.StartDate);
+        Assert.Equal("08/2024", activity.EndDate);
+        Assert.False(activity.IsOngoing);
+        Assert.Equal("Dẫn dắt 30 tình nguyện viên xây dựng 2 phòng học", activity.Description);
+
+        // Vòng tròn ngược lại: ToChatProfile phải giữ nguyên description
+        var backToChat = ChatProfileMapper.ToChatProfile(draft);
+        var chatActivity = backToChat["activities"]!["value"]!.AsArray()[0];
+        Assert.Equal("Dẫn dắt 30 tình nguyện viên xây dựng 2 phòng học", chatActivity["description"]!.GetValue<string>());
     }
 
     [Fact]

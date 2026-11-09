@@ -8,11 +8,12 @@ from fastapi import Depends, Header, HTTPException, Request, status
 
 from app.core.config import Settings, get_settings
 from app.services.chat_flow import ChatFlow
+from app.services.compare_writer import CompareWriter
 from app.services.ec_reader import EcReader
 from app.services.explainer import Explainer
+from app.services.goal_writer import GoalWriter
 from app.services.ollama import OllamaClient
-from app.services.picker import Picker
-from app.services.scorer import Scorer
+from app.services.scenario_writer import ScenarioWriter
 
 
 def require_api_key(
@@ -46,17 +47,24 @@ def get_ec_reader(request: Request) -> EcReader:
     return request.app.state.ec_reader
 
 
-def get_scorer(request: Request) -> Scorer:
-    return request.app.state.scorer
-
-
-def get_picker(request: Request) -> Picker:
-    return request.app.state.picker
-
-
 # hàm độc đối tượng trong state
 def get_explainer(request: Request) -> Explainer:
     return request.app.state.explainer
+
+
+# Nhận xét so sánh trường
+def get_compare_writer(request: Request) -> CompareWriter:
+    return request.app.state.compare_writer
+
+
+# Lời cho goal-seeking
+def get_goal_writer(request: Request) -> GoalWriter:
+    return request.app.state.goal_writer
+
+
+# Lời cho kịch bản what-if
+def get_scenario_writer(request: Request) -> ScenarioWriter:
+    return request.app.state.scenario_writer
 
 
 def get_chat_flow(request: Request) -> ChatFlow:

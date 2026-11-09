@@ -57,11 +57,17 @@ def ok_gpa(value: Any, profile: dict, today: date) -> bool:
     return True
 
 
-# Không có chứng chỉ thì vẫn lưu được; có thì điểm đúng thang và ngày thi không ở tương lai
+# Không có chứng chỉ thì vẫn lưu được; có thì điểm đúng thang và ngày thi hợp lệ (không ở tương lai nếu đã thi, không ở quá khứ nếu là mục tiêu)
 def ok_english(value: Any, profile: dict, today: date) -> bool:
     if value is None:
         return True
-    check_english(value["type"], value["value"], value.get("date"), today=today)
+    check_english(
+        value["type"],
+        value["value"],
+        value.get("date"),
+        today=today,
+        is_target=bool(value.get("isTarget")),
+    )
     return True
 
 

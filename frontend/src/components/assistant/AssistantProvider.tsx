@@ -1,10 +1,12 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { ApiError } from "@/lib/api";
 import { streamAdvisorChat } from "@/lib/advisor-stream";
-import type { ChatMessage, ChatWidget, Citation, QuickReply } from "@/types/api";
+import { onRecommendationsPage, showSimulation } from "@/lib/simulation-link";
+import type { AssistantAction, ChatMessage, ChatWidget, Citation, QuickReply } from "@/types/api";
+import type { SimulationOverrides } from "@/types/recommendation";
 
 export type AssistantTurn = ChatMessage & {
   citations?: Citation[];
@@ -25,6 +27,8 @@ export type AssistantStreaming = {
   done: number;
   /** Các câu đã trả lời, nối nhau theo thứ tự hỏi */
   text: string;
+  /** Thẻ kết quả do code dựng, tới trước lời Gemini (goal-seeking) */
+  widget?: ChatWidget;
 };
 
 export interface AssistantPageContext {
@@ -35,6 +39,8 @@ export interface AssistantPageContext {
   studyLevel?: string | null;
   /** Lời chào thay câu mặc định khi chưa có tin nhắn */
   greeting?: string;
+  /** Giá trị giả định đang kéo trên trang (không có thì là hồ sơ thật): gửi kèm để chat giải thích đúng cái học sinh đang xem */
+  simulation?: SimulationOverrides | null;
 }
 
 interface AssistantContextValue {
@@ -51,6 +57,8 @@ interface AssistantContextValue {
   toggleWide: () => void;
   newChat: () => void;
   send: (text: string) => void;
+  /** Gửi một câu kèm hành động có cấu trúc (mã trường): hiện câu trong khung chat, backend chạy thẳng không qua SLM */
+  sendAction: (text: string, action: AssistantAction) => void;
   retry: () => void;
   setPageContext: (ctx: AssistantPageContext | null) => void;
   setBeforeSend: (fn: BeforeSend | null) => void;
@@ -103,6 +111,7 @@ const AssistantContext = createContext<AssistantContextValue | null>(null);
 
 export function AssistantProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [wide, setWide] = useState(false);
   const [turns, setTurns] = useState<AssistantTurn[]>([]);
@@ -113,6 +122,7 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
 
   const turnsRef = useRef<AssistantTurn[]>([]);
   const loadingRef = useRef(false);
+  const lastActionRef = useRef<AssistantAction | null>(null); // hành động của lượt gần nhất, để "Thử lại" gửi lại đúng như cũ
   const restoredRef = useRef(false);
   const sessionIdRef = useRef<string | null>(null);
   const beforeSendRef = useRef<BeforeSend | null>(null);
@@ -158,7 +168,8 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const request = useCallback(
-    async (history: AssistantTurn[]) => {
+    async (history: AssistantTurn[], action?: AssistantAction) => {
+      lastActionRef.current = action ?? null;
       loadingRef.current = true;
       setLoading(true);
       setError(null);
@@ -172,9 +183,13 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
             sessionId: sessionIdRef.current,
             messages: history.map(({ role, content }) => ({ role, content })),
             studyLevel: pageRef.current.studyLevel || null,
+            simulation: pageRef.current.simulation ?? undefined,
+            action: action ?? undefined,
           },
           (event) => {
             if (event.type === "progress") setStreaming({ answers: event.answers, done: 0, text: "" });
+            else if (event.type === "card")
+              setStreaming((cur) => ({ answers: cur?.answers ?? 0, done: cur?.done ?? 0, text: cur?.text ?? "", widget: event.widget }));
             else
               setStreaming((cur) => ({
                 answers: cur?.answers ?? 0,
@@ -202,6 +217,11 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
             widget: res.widget,
           },
         ]);
+        // What-if: đang đứng ở trang Gợi ý trường thì cập nhật thanh kéo và danh sách bên cạnh tại chỗ (không tải lại trang).
+        // Ở trang khác thì không tự chuyển trang, học sinh bấm nút "Xem trên thanh kéo" trong tin nhắn
+        if (res.widget?.type === "simulate" && onRecommendationsPage())
+          showSimulation(res.widget.data, router.push);
+        // Goal-seeking và giải thích trường hiện ngay trong khung chat (thẻ do code dựng), không mở khung riêng trên trang
         // D2: báo trang biết chat vừa đổi hồ sơ nháp, hoặc đang hỏi sang trang form khác (mục 7)
         if (res.profileChanged?.length || res.formStep != null)
           onProfileChangedRef.current?.(res.profileChanged ?? [], res.formStep ?? null);
@@ -213,7 +233,7 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
         setStreaming(null);
       }
     },
-    [commitTurns]
+    [commitTurns, router]
   );
 
   const send = useCallback(
@@ -227,10 +247,24 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
     [commitTurns, request]
   );
 
+  const sendAction = useCallback(
+    (text: string, action: AssistantAction) => {
+      const content = text.trim().slice(0, 1000);
+      if (!content || loadingRef.current) return;
+      // Bấm nút trên trang: mở khung chat (nếu đang đóng) rồi hiện câu hỏi và gửi hành động
+      restore();
+      setOpen(true);
+      const history: AssistantTurn[] = [...turnsRef.current, { role: "user", content }];
+      commitTurns(history);
+      void request(history, action);
+    },
+    [commitTurns, request, restore]
+  );
+
   const retry = useCallback(() => {
     const history = turnsRef.current;
     if (loadingRef.current || history.length === 0 || history[history.length - 1].role !== "user") return;
-    void request(history);
+    void request(history, lastActionRef.current ?? undefined);
   }, [request]);
 
   const openPanel = useCallback(
@@ -268,12 +302,13 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
       toggleWide: () => setWide((w) => !w),
       newChat,
       send,
+      sendAction,
       retry,
       setPageContext: setRegistered,
       setBeforeSend,
       setOnProfileChanged,
     }),
-    [open, wide, turns, loading, streaming, error, page, openPanel, newChat, send, retry, setBeforeSend, setOnProfileChanged]
+    [open, wide, turns, loading, streaming, error, page, openPanel, newChat, send, sendAction, retry, setBeforeSend, setOnProfileChanged]
   );
 
   return <AssistantContext.Provider value={value}>{children}</AssistantContext.Provider>;

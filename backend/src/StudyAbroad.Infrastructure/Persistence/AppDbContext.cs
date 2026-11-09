@@ -22,6 +22,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<UniversityOffering> UniversityOfferings => Set<UniversityOffering>();
     public DbSet<Major> Majors => Set<Major>();
     public DbSet<UniversityOfferingMajor> UniversityOfferingMajors => Set<UniversityOfferingMajor>();
+    public DbSet<UsState> UsStates => Set<UsState>();
     public DbSet<RankingList> RankingLists => Set<RankingList>();
     public DbSet<UniversityRanking> UniversityRankings => Set<UniversityRanking>();
     public DbSet<Scholarship> Scholarships => Set<Scholarship>();
@@ -41,6 +42,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<ForumReport> ForumReports => Set<ForumReport>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<AppSetting> AppSettings => Set<AppSetting>();
+    public DbSet<Media> Media => Set<Media>();
 
     // 13 thực thể bổ sung chuẩn hóa toàn diện 42 bảng DB First
     public DbSet<StateLivingCost> StateLivingCosts => Set<StateLivingCost>();

@@ -87,14 +87,14 @@ def check_answer(raw: dict[str, Any], question: str, hit: KnowledgeHit) -> Compo
     for word in FORBIDDEN:
         if word in lowered:
             raise ValueError(f"dùng từ hứa kết quả: {word}")
-    extra = numbers_in(answer) - numbers_in(question) - numbers_in(hit.content)
+    extra = numbers_in(answer) - numbers_in(question) - numbers_in(hit.answer)
     if extra:
         raise ValueError(f"số không có trong nội dung tham khảo: {sorted(extra)}")
     # Giữ đủ ý: mọi con số của câu chuẩn phải còn, và câu viết lại không được ngắn đi quá nhiều
-    dropped = numbers_in(_ENUM_RE.sub("", hit.content)) - numbers_in(answer)
+    dropped = numbers_in(_ENUM_RE.sub("", hit.answer)) - numbers_in(answer)
     if dropped:
         raise ValueError(f"bỏ mất số của câu chuẩn: {sorted(dropped)}")
-    if len(answer) < MIN_KEEP_RATIO * len(hit.content):
+    if len(answer) < MIN_KEEP_RATIO * len(hit.answer):
         raise ValueError("câu viết lại ngắn hơn nhiều so với câu chuẩn, có thể đã bỏ ý")
     return Composed(True, answer)
 
@@ -102,7 +102,7 @@ def check_answer(raw: dict[str, Any], question: str, hit: KnowledgeHit) -> Compo
 # lấy thông tin của một đoạn kiến thức và chuyển nó thành một đối tượng trích dẫn (Citation) để đính kèm vào câu trả lời cho người dùng.
 def citation_of(hit: KnowledgeHit) -> Citation:
     title = hit.quote or hit.source_note or "Kho kiến thức tư vấn du học"
-    return Citation(title=title, url=hit.source_url, snippet=hit.content[:SNIPPET_CHARS])
+    return Citation(title=title, url=hit.source_url, snippet=hit.answer[:SNIPPET_CHARS])
 
 
 class TraLoiHandler:
@@ -142,7 +142,7 @@ class TraLoiHandler:
 
         # Gọi ollama chạy skill
         composed = await self._call.run(
-            {"question": message, "passage": best.content},
+            {"question": message, "passage": best.answer},
             SCHEMA,
             lambda raw: check_answer(raw, message, best),
         )
@@ -150,7 +150,7 @@ class TraLoiHandler:
             return SkillOutput(NO_BASIS, quick_replies=[CENTER_BUTTON])
         if composed is None:  # Qwen sai hai lần: dùng câu trả lời chuẩn của dòng đó
             logger.warning("Qwen không trả được câu hợp lệ sau 2 lần, dùng câu chuẩn của %s", best.code)
-            answer = best.content
+            answer = best.answer
         else:
             answer = composed.answer
         return SkillOutput(answer, citations=[citation_of(best)], disclaimer=DISCLAIMER)

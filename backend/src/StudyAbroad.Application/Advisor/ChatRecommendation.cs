@@ -23,10 +23,10 @@ public static class ChatRecommendation
     // Nhóm theo đúng thứ tự và tên trên trang Gợi ý trường (RecommendationView.tsx)
     private static readonly (string Key, string Title, int Max)[] Groups =
     [
-        ("reach", "Khó vào", 3),
-        ("match", "Vừa sức", 5),
+        ("reach", "Khó vào", 4),
+        ("match", "Vừa sức", 4),
         ("safety", "An toàn hơn", 4),
-        ("aid", "Chỉ đi được nếu có học bổng lớn", 3),
+        ("aid", "Chỉ đi được nếu có học bổng lớn", 4),
     ];
 
 
@@ -67,6 +67,22 @@ public static class ChatRecommendation
     /// Các trường học sinh đang thấy (4 nhóm hiển thị, đủ danh sách không cắt), theo thứ tự trang Gợi ý trường.
     /// Gửi cho advisor mỗi lượt để skill_explain biết học sinh hỏi trường nào.
     /// </summary>
+    /// <summary>
+    /// Các trường đã chấm nhưng KHÔNG nằm trong khối nào đang hiện (mỗi nhóm chỉ hiện tối đa vài trường). Advisor chỉ dùng
+    /// để khớp tên khi học sinh hỏi một trường cụ thể ("vì sao Texas Austin Khó vào"), không dùng để đếm vị trí ("trường thứ ba").
+    /// </summary>
+    public static IReadOnlyList<ChatSchool> OtherSchools(Recommendation recommendation)
+    {
+        var shown = Schools(recommendation).Select(s => s.Code).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var items = JsonNode.Parse(recommendation.ItemsJson) as JsonObject;
+        return (items?["scored"] as JsonArray ?? [])
+            .OfType<JsonObject>()
+            .Where(s => s["code"] is not null && s["name"] is not null)
+            .Select(s => new ChatSchool(s["code"]!.GetValue<string>(), s["name"]!.GetValue<string>(), s["g2"]?.GetValue<string>()))
+            .Where(s => shown.Add(s.Code))
+            .ToList();
+    }
+
     public static IReadOnlyList<ChatSchool> Schools(Recommendation recommendation)
     {
         var items = JsonNode.Parse(recommendation.ItemsJson) as JsonObject;

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Building2Icon, FileTextIcon, LogOutIcon, ShieldIcon, UserIcon } from "lucide-react";
+import { Building2Icon, FileTextIcon, InboxIcon, LayoutDashboardIcon, LogOutIcon, ShieldIcon, UserIcon } from "lucide-react";
 import { formatUserRole } from "@/lib/user-role-labels";
 import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -18,24 +18,36 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
-import { isWideRoute } from "@/lib/layout-routes";
+import { isAdminRoute } from "@/lib/admin-nav";
+import { isFullRoute, isWideRoute } from "@/lib/layout-routes";
 import { cn } from "@/lib/utils";
-
-const links = [
-  { href: "/", label: "Trang chủ" },
-  { href: "/centers", label: "Trung tâm tư vấn" },
-  { href: "/methodology", label: "Giới thiệu phương pháp" },
-  { href: "/analysis", label: "Phân tích tư vấn" },
-];
 
 export function SiteHeader() {
   const { user, isLoading, logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
+  const isAdmin = user?.role === "admin";
+  const isModerator = user?.role === "moderator";
+  const canOpenAdmin = isAdmin || isModerator;
+
+  const navLinks = [
+    { href: canOpenAdmin ? "/admin" : "/", label: isModerator ? "Kiểm duyệt" : isAdmin ? "Quản trị" : "Trang chủ" },
+    { href: canOpenAdmin ? "/admin/centers" : "/centers", label: "Trung tâm tư vấn" },
+    { href: "/methodology", label: "Giới thiệu phương pháp" },
+    { href: "/analysis", label: "Phân tích tư vấn" },
+    ...(user?.role === "center" ? [{ href: "/center/leads", label: "Yêu cầu liên hệ" }] : []),
+  ];
+
   const isLinkActive = (href: string) => {
+    if (href === "/admin") {
+      return pathname === "/admin";
+    }
     if (href === "/") {
       return pathname === "/";
+    }
+    if (href === "/admin/centers") {
+      return pathname.startsWith("/admin/centers") || pathname.startsWith("/centers");
     }
     return pathname.startsWith(href);
   };
@@ -50,12 +62,16 @@ export function SiteHeader() {
       <nav
         className={cn(
           "mx-auto flex items-center justify-between gap-6 px-4 py-2.5",
-          isWideRoute(pathname) ? "max-w-[1320px] sm:px-6" : "max-w-5xl"
+          isAdminRoute(pathname) || isFullRoute(pathname)
+            ? "max-w-none sm:px-6"
+            : isWideRoute(pathname)
+              ? "max-w-[1320px] sm:px-6"
+              : "max-w-5xl"
         )}
       >
         <div className="flex min-w-0 items-center gap-6">
           <Link
-            href="/"
+            href={canOpenAdmin ? "/admin" : "/"}
             className="flex items-center gap-2 font-heading text-xl font-bold tracking-tight text-brand-ink transition-opacity hover:opacity-90"
           >
             <span className="flex size-[30px] items-center justify-center rounded-lg bg-brand-ink text-white font-sans text-xs font-black">
@@ -64,7 +80,7 @@ export function SiteHeader() {
             <span>USAS</span>
           </Link>
           <ul className="flex items-center gap-1 overflow-x-auto text-sm font-medium [scrollbar-width:none]">
-            {links.map((l) => {
+            {navLinks.map((l) => {
               const active = isLinkActive(l.href);
               return (
                 <li key={l.href}>
@@ -114,6 +130,12 @@ export function SiteHeader() {
                   <DropdownMenuLabel>{user.fullName}</DropdownMenuLabel>
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />
+                {canOpenAdmin && (
+                  <DropdownMenuItem render={<Link href="/admin" />}>
+                    <LayoutDashboardIcon />
+                    {isModerator ? "Khu vực Moderator" : "Trang quản trị"}
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem render={<Link href="/analysis" />}>
                   <FileTextIcon />
                   Phân tích tư vấn
@@ -122,13 +144,19 @@ export function SiteHeader() {
                   <UserIcon />
                   Hồ sơ cá nhân
                 </DropdownMenuItem>
-                {(user.role === "admin" || user.role === "moderator") && (
-                  <DropdownMenuItem render={<Link href="/centers" />}>
-                    <Building2Icon />
-                    Danh bạ trung tâm
+                {(user.role === "center" || canOpenAdmin) && (
+                  <DropdownMenuItem render={<Link href="/center/leads" />}>
+                    <InboxIcon />
+                    Yêu cầu liên hệ nhận được
                   </DropdownMenuItem>
                 )}
-                {user.role === "admin" && (
+                {canOpenAdmin && (
+                  <DropdownMenuItem render={<Link href="/admin/centers" />}>
+                    <Building2Icon />
+                    Quản lý trung tâm
+                  </DropdownMenuItem>
+                )}
+                {isAdmin && (
                   <DropdownMenuItem render={<Link href="/admin/users" />}>
                     <ShieldIcon />
                     Quản trị người dùng

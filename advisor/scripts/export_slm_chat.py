@@ -7,20 +7,26 @@ Ghép bằng đúng build_messages mà OllamaSlm dùng lúc chạy, và viết �
 thuc_the), nên model học đúng thứ nó sẽ nhận và sẽ sinh. Chỉ xuất train và val, tập test không bao giờ đem đi train.
 
 Chạy trong thư mục advisor, sau khi đã chạy scripts.build_slm_jsonl:
-  python -m scripts.export_slm_chat
+  python -m scripts.export_slm_chat                 # prompt tách ý NGẮN (slm_phan_loai_cac_y_ngan), dùng để huấn luyện
+  python -m scripts.export_slm_chat --prompt slm_phan_loai_cac_y   # bản đầy đủ (dài gấp 3, huấn luyện chậm hơn nhiều)
 Ra data/slm/finetune/train.jsonl và val.jsonl, mỗi dòng {"messages": [system, user, assistant]}. Mang 2 file lên Colab.
 """
 
+import argparse
 import json
 import sys
 from typing import Any
 
 from app.schemas.slm import SLM_TIN_SCHEMA
 from app.services.skill_call import SKILLS_DIR, load_skill
-from app.services.slm_classifier import PROMPT_PATH, build_messages
+from app.services.slm_classifier import build_messages, prompt_path
 from scripts.build_slm_jsonl import DEFAULT_OUT, profile_text
 
 SKILL_PROMPT_PATH = SKILLS_DIR / "slm_sinh_skill_ho_so.md"
+# Prompt tách ý dùng để huấn luyện. Mặc định là bản NGẮN: model fine-tune học khuôn từ dữ liệu nên không cần cả bản đầy đủ,
+# và prompt ngắn làm huấn luyện nhanh hơn ~2 lần, chạy thật ít token hơn. Chạy thật phải dùng đúng prompt này (SLM_PROMPT)
+TRAIN_PROMPT = "slm_phan_loai_cac_y_ngan"
+PROMPT_PATH = SKILLS_DIR / f"{TRAIN_PROMPT}.md"  # file prompt dùng để huấn luyện (tests đọc để kiểm nội dung)
 SKILL_REPEAT = 3  # mỗi skill train xuất 3 lần, để model nhỏ học được khuôn dài từ ít mẫu
 SKILL_HOLDOUT_EVERY = 8  # cứ 8 skill train giữ lại 1 để kiểm skill, không đem đi train
 OUT_DIR = DEFAULT_OUT.parent / "finetune"
@@ -47,7 +53,9 @@ def answer_text(output: dict[str, Any]) -> str:
 # data/slm/finetune/train.jsonl, dạng {"messages": [{"role": "system", ...}, {"role": "user", ...}, {"role": "assistant", ...}]}
 def to_chat(record: dict[str, Any], prompt: str) -> dict[str, Any]:
     data = record["input"]
-    messages = build_messages(prompt, data["cau_hoi"], data["ho_so"], data["cau_he_thong_dang_hoi"])
+    messages = build_messages(
+        prompt, data["cau_hoi"], data["ho_so"], data["cau_he_thong_dang_hoi"], data.get("dang_noi_ve")
+    )
     return {"messages": [*messages, {"role": "assistant", "content": answer_text(record["output"])}]}
 
 
@@ -62,12 +70,13 @@ def chat_rows(records: list[dict[str, Any]], prompt: str, split: str) -> list[di
     ]
 
 
-# Đầu vào của việc sinh skill: đúng các trường của SkillRequest (loại, câu hỏi, hồ sơ đã đủ)
+# Đầu vào của việc sinh skill: đúng các trường của SkillRequest (loại, câu hỏi, hồ sơ đã đủ, dòng code tính sẵn)
 def skill_request(record: dict[str, Any]) -> dict[str, Any]:
     return {
         "loai": record["type"],
         "cau_hoi": record["input"]["cau_hoi"],
         "ho_so": profile_text(record["input"]["ho_so"]),
+        "tinh_san": record.get("tinh_san") or {},
     }
 
 
@@ -103,7 +112,14 @@ def skill_rows(records: list[dict[str, Any]], prompt: str, split: str) -> list[d
 
 def main() -> None:
     sys.stdout.reconfigure(encoding="utf-8")
-    prompt, version = load_skill(PROMPT_PATH)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "--prompt", default=TRAIN_PROMPT, help="tên prompt tách ý trong app/skills (không có .md)"
+    )
+    args = parser.parse_args()
+    prompt, version = load_skill(prompt_path(args.prompt))
     skill_prompt, skill_version = load_skill(SKILL_PROMPT_PATH)
     records = [json.loads(line) for line in DEFAULT_OUT.read_text(encoding="utf-8").splitlines()]
     OUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -112,7 +128,7 @@ def main() -> None:
         out = OUT_DIR / f"{split}.jsonl"
         out.write_text("".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows), encoding="utf-8")
         print(f"{split}: {len(rows)} hội thoại -> {out}")
-    print(f"Prompt tách ý phiên bản {version}, prompt sinh skill phiên bản {skill_version}")
+    print(f"Prompt tách ý {args.prompt} phiên bản {version}, prompt sinh skill phiên bản {skill_version}")
 
 
 if __name__ == "__main__":

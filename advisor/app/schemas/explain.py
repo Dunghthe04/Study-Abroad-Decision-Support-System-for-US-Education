@@ -4,7 +4,22 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from app.schemas.pick import WhyCode
+from app.schemas.chat import AiUsageMixin
+
+# Mã lý do của một trường (backend suy từ số đã tính, advisor chỉ nhận để viết lời)
+WhyCode = Literal[
+    "GPA_HIGH",
+    "GPA_MID",
+    "GPA_LOW",
+    "SAT_ABOVE",
+    "SAT_IN_RANGE",
+    "SAT_BELOW",
+    "BUDGET_OK",
+    "NEED_AID",
+    "INTL_LOW",
+    "EC_PLUS",
+    "EC_MINUS",
+]
 
 MAX_POINTS = 3  # tối đa 3 ý
 
@@ -39,6 +54,8 @@ class ExplainSchool(BaseModel):
 class ExplainRequest(BaseModel):
     student: ExplainStudent
     school: ExplainSchool
+    # Giả định học sinh đang xem ("GPA 3.6, SAT 1500"); None là hồ sơ thật. Số liệu trong student và school đã tính theo gốc này
+    basis: str | None = Field(default=None, max_length=200)
 
 
 # Kết quả trả về từ Qwen: tóm tắt, điểm mạnh, điểm cần cải thiện
@@ -49,7 +66,7 @@ class ExplainResult(BaseModel):
 
 
 # Kết quả trả về từ API: phiên bản, trạng thái, kết quả
-class ExplainResponse(BaseModel):
+class ExplainResponse(AiUsageMixin):
     skill_version: str
     model: str
     status: str  # OK | FAILED

@@ -298,25 +298,10 @@ namespace StudyAbroad.Application.Auth
             }
 
             // 1. Tạm khóa do sai 5 lần: kiểm TRƯỚC mật khẩu để tài khoản đang khóa không thành nơi dò mật khẩu.
-            //    Tự động mở khóa sau 15 phút.
+            //    Yêu cầu Quản trị viên mở khóa (không tự động mở khóa).
             if (user.Status == UserStatuses.TempLocked)
             {
-                if (user.LockoutEnd.HasValue && user.LockoutEnd.Value <= DateTime.UtcNow)
-                {
-                    user.Status = user.Role == UserRoles.Center ? UserStatuses.Pending : UserStatuses.Active;
-                    user.FailedLoginAttempts = 0;
-                    user.LockoutEnd = null;
-                    if (!await TryUpdateUserAsync(user, ct))
-                        return AuthResult.Fail(AuthError.InvalidCredentials, InvalidCredentialsMessage);
-                }
-                else
-                {
-                    var remainingMinutes = user.LockoutEnd.HasValue
-                        ? Math.Max(1, (int)Math.Ceiling((user.LockoutEnd.Value - DateTime.UtcNow).TotalMinutes))
-                        : TempLockoutMinutes;
-
-                    return AuthResult.Fail(AuthError.TempLocked, $"Tài khoản tạm thời bị khóa do nhập sai mật khẩu {MaxFailedLoginAttempts} lần liên tiếp. Hệ thống sẽ tự động mở khóa sau {remainingMinutes} phút.");
-                }
+                return AuthResult.Fail(AuthError.TempLocked, $"Tài khoản đã bị khóa do nhập sai mật khẩu {MaxFailedLoginAttempts} lần liên tiếp. Vui lòng liên hệ Quản trị viên để được mở khóa tài khoản.");
             }
 
             // 2. Bị Admin khóa / chưa kích hoạt email: chỉ báo trạng thái khi mật khẩu đúng (chống dò tài khoản).
@@ -341,13 +326,13 @@ namespace StudyAbroad.Application.Auth
             {
                 if (user.FailedLoginAttempts >= MaxFailedLoginAttempts)
                 {
-                    // Đạt 5 lần sai -> Tạm khóa 15 phút và gửi email thông báo (email chỉ để thông báo)
+                    // Đạt 5 lần sai -> Khóa tài khoản và gửi email thông báo (cần Admin mở khóa)
                     user.Status = UserStatuses.TempLocked;
-                    user.LockoutEnd = DateTime.UtcNow.AddMinutes(TempLockoutMinutes);
+                    user.LockoutEnd = null;
                     if (await TryUpdateUserAsync(user, ct))
-                        await emailSender.SendAccountTempLockedNotificationAsync(user.Email, user.FullName, TempLockoutMinutes, ct);
+                        await emailSender.SendAccountTempLockedNotificationAsync(user.Email, user.FullName, 0, ct);
 
-                    return AuthResult.Fail(AuthError.TempLocked, $"Tài khoản đã bị tạm khóa do nhập sai mật khẩu {MaxFailedLoginAttempts} lần liên tiếp. Hệ thống sẽ tự động mở khóa sau {TempLockoutMinutes} phút.");
+                    return AuthResult.Fail(AuthError.TempLocked, $"Tài khoản đã bị khóa do nhập sai mật khẩu {MaxFailedLoginAttempts} lần liên tiếp. Vui lòng liên hệ Quản trị viên để được mở khóa tài khoản.");
                 }
 
                 return AuthResult.Fail(AuthError.InvalidCredentials, InvalidCredentialsMessage);
@@ -384,7 +369,7 @@ namespace StudyAbroad.Application.Auth
 
             // Anti-enumeration: Luôn trả về thông báo thành công dù email có tồn tại hay không.
             // Mail đi qua hàng đợi nền nên thời gian phản hồi cũng như nhau.
-            if (user != null && user.Status != UserStatuses.Locked &&
+            if (user != null && user.Status != UserStatuses.Locked && user.Status != UserStatuses.TempLocked &&
                 await CanSendOtpAsync(user.Id, OtpPurposes.ResetPassword, ct))
             {
                 var otpCode = await IssueOtpAsync(user.Id, OtpPurposes.ResetPassword, ct);
@@ -402,7 +387,7 @@ namespace StudyAbroad.Application.Auth
 
             var email = NormalizeEmail(request.Email);
             var user = await users.GetUserByEmail(email, ct);
-            if (user == null || user.Status == UserStatuses.Locked)
+            if (user == null || user.Status == UserStatuses.Locked || user.Status == UserStatuses.TempLocked)
                 return AuthResult.Fail(AuthError.OtpInvalid, OtpFailedMessage);
 
             if (!await TryConsumeOtpAsync(user.Id, OtpPurposes.ResetPassword, request.OtpCode, ct))
@@ -410,11 +395,6 @@ namespace StudyAbroad.Application.Auth
 
             user.PasswordHash = hasher.Hash(request.NewPassword);
             user.FailedLoginAttempts = 0;
-            if (user.Status == UserStatuses.TempLocked)
-            {
-                user.Status = user.Role == UserRoles.Center ? UserStatuses.Pending : UserStatuses.Active;
-                user.LockoutEnd = null;
-            }
 
             await users.UpdateUserAsync(user, ct);
 
@@ -455,14 +435,14 @@ namespace StudyAbroad.Application.Auth
                 if (user.FailedLoginAttempts >= MaxFailedLoginAttempts)
                 {
                     user.Status = UserStatuses.TempLocked;
-                    user.LockoutEnd = DateTime.UtcNow.AddMinutes(TempLockoutMinutes);
+                    user.LockoutEnd = null;
                     if (await TryUpdateUserAsync(user, ct))
                     {
                         await users.RevokeAllSessionsAsync(user.Id, ct);
-                        await emailSender.SendAccountTempLockedNotificationAsync(user.Email, user.FullName, TempLockoutMinutes, ct);
+                        await emailSender.SendAccountTempLockedNotificationAsync(user.Email, user.FullName, 0, ct);
                     }
 
-                    return AuthResult.Fail(AuthError.TempLocked, $"Tài khoản đã bị tạm khóa do nhập sai mật khẩu {MaxFailedLoginAttempts} lần liên tiếp. Hệ thống sẽ tự động mở khóa sau {TempLockoutMinutes} phút.");
+                    return AuthResult.Fail(AuthError.TempLocked, $"Tài khoản đã bị khóa do nhập sai mật khẩu hiện tại {MaxFailedLoginAttempts} lần liên tiếp. Vui lòng liên hệ Quản trị viên để được mở khóa tài khoản.");
                 }
 
                 return AuthResult.Fail(AuthError.InvalidCredentials, WrongCurrentPasswordMessage);
@@ -689,11 +669,23 @@ namespace StudyAbroad.Application.Auth
         private async Task<UserDto> ToDtoAsync(User user, CancellationToken ct)
         {
             var access = await AgeAccess.EvaluateAsync(user, parentLinks, DateTime.UtcNow, ct);
+            string? lockReason = null;
+            if (user.Status == UserStatuses.Locked)
+            {
+                lockReason = await auditLogs.GetLatestLockReasonAsync(user.Id, ct) ?? "Tài khoản bị khóa bởi quản trị viên do vi phạm quy định sử dụng.";
+            }
+            else if (user.Status == UserStatuses.TempLocked)
+            {
+                lockReason = "Nhập sai mật khẩu 5 lần liên tiếp. Tài khoản bị tạm khóa bảo vệ trong 15 phút.";
+            }
+
             return ToDto(user) with
             {
                 AgeGroup = access.AgeGroup,
                 ParentConsentStatus = access.ParentConsentStatus,
                 BlockedFeatures = access.BlockedFeatures,
+                LockReason = lockReason,
+                LockoutEnd = user.LockoutEnd,
             };
         }
 
@@ -732,8 +724,23 @@ namespace StudyAbroad.Application.Auth
             };
 
             var page = await users.GetAdminUserAccountListAsync(normalized, ct);
+            var dtos = new List<UserDto>(page.Items.Count);
+            foreach (var item in page.Items)
+            {
+                string? lockReason = null;
+                if (item.Status == UserStatuses.Locked)
+                {
+                    lockReason = await auditLogs.GetLatestLockReasonAsync(item.Id, ct) ?? "Tài khoản bị khóa bởi quản trị viên do vi phạm quy định sử dụng.";
+                }
+                else if (item.Status == UserStatuses.TempLocked)
+                {
+                    lockReason = "Nhập sai mật khẩu 5 lần liên tiếp. Tài khoản bị tạm khóa bảo vệ trong 15 phút.";
+                }
+                dtos.Add(ToDto(item) with { LockReason = lockReason, LockoutEnd = item.LockoutEnd });
+            }
+
             return new PagedResult<UserDto>(
-                page.Items.Select(ToDto).ToList(),
+                dtos,
                 page.Page,
                 page.PageSize,
                 page.TotalCount);
@@ -794,7 +801,9 @@ namespace StudyAbroad.Application.Auth
         public async Task<AuthResult> CreateCenterAccountAsync(CreateCenterAccountRequest request, CancellationToken ct = default)
         {
             var email = NormalizeEmail(request.Email);
-            var fullName = request.FullName?.Trim() ?? string.Empty;
+            var fullName = string.IsNullOrWhiteSpace(request.FullName)
+                ? (email.Contains('@') ? email.Split('@')[0] : "Người dùng trung tâm")
+                : request.FullName.Trim();
             var rawPhone = request.Phone?.Trim();
             string? normalizedPhone = null;
 
@@ -805,8 +814,8 @@ namespace StudyAbroad.Application.Auth
             if (passwordError != null)
                 return AuthResult.Fail(AuthError.Validation, passwordError);
 
-            if (fullName.Length == 0 || fullName.Length > MaxFullNameLength)
-                return AuthResult.Fail(AuthError.Validation, $"Tên trung tâm/người đại diện không được để trống và tối đa {MaxFullNameLength} ký tự.");
+            if (fullName.Length > MaxFullNameLength)
+                return AuthResult.Fail(AuthError.Validation, $"Họ và tên không được vượt quá {MaxFullNameLength} ký tự.");
 
             if (!string.IsNullOrEmpty(rawPhone))
             {
@@ -864,6 +873,16 @@ namespace StudyAbroad.Application.Auth
             if (user.Role == UserRoles.Admin)
                 return AuthResult.Fail(AuthError.Validation, "Không thể khóa tài khoản quản trị viên.");
 
+            var actor = await users.GetUserById(actorAdminId, ct);
+            if (actor is not null && actor.Role == UserRoles.Moderator)
+            {
+                if (user.Role == UserRoles.Moderator)
+                    return AuthResult.Fail(AuthError.Validation, "Kiểm duyệt viên không có quyền khóa tài khoản Kiểm duyệt viên khác.");
+
+                if (user.Role != UserRoles.Center && user.Role != UserRoles.Student && user.Role != UserRoles.Parent)
+                    return AuthResult.Fail(AuthError.Validation, "Kiểm duyệt viên chỉ có quyền khóa tài khoản người dùng và trung tâm.");
+            }
+
             if (!AdminLockableRoles.Contains(user.Role))
                 return AuthResult.Fail(AuthError.Validation, "Vai trò này không được khóa qua chức năng này.");
 
@@ -892,7 +911,10 @@ namespace StudyAbroad.Application.Auth
                 DetailJson = detailJson,
             }, ct);
 
-            return AuthResult.Ok(ToDto(user), "Đã khóa tài khoản.");
+            // [USAS-362] Gửi email thông báo tài khoản bị khóa kèm lý do
+            _ = emailSender.SendAccountLockedEmailAsync(user.Email, user.FullName, reason, ct);
+
+            return AuthResult.Ok(ToDto(user) with { LockReason = reason }, "Đã khóa tài khoản.");
         }
 
         /// <summary>[UC-62] Mở khóa tài khoản kèm lý do (chỉ tài khoản đang bị locked hoặc temp_locked).</summary>
@@ -911,6 +933,19 @@ namespace StudyAbroad.Application.Auth
             var user = await users.GetUserById(targetUserId, ct);
             if (user is null)
                 return AuthResult.Fail(AuthError.Validation, "Không tìm thấy tài khoản.");
+
+            if (user.Role == UserRoles.Admin)
+                return AuthResult.Fail(AuthError.Validation, "Không thể thao tác trên tài khoản quản trị viên.");
+
+            var actor = await users.GetUserById(actorAdminId, ct);
+            if (actor is not null && actor.Role == UserRoles.Moderator)
+            {
+                if (user.Role == UserRoles.Moderator)
+                    return AuthResult.Fail(AuthError.Validation, "Kiểm duyệt viên không có quyền mở khóa tài khoản Kiểm duyệt viên khác.");
+
+                if (user.Role != UserRoles.Center && user.Role != UserRoles.Student && user.Role != UserRoles.Parent)
+                    return AuthResult.Fail(AuthError.Validation, "Kiểm duyệt viên chỉ có quyền mở khóa tài khoản người dùng và trung tâm.");
+            }
 
             if (user.Status != UserStatuses.Locked && user.Status != UserStatuses.TempLocked)
                 return AuthResult.Fail(AuthError.Validation, "Tài khoản không ở trạng thái bị khóa.");
@@ -935,6 +970,9 @@ namespace StudyAbroad.Application.Auth
                 EntityId = user.Id.ToString(),
                 DetailJson = detailJson,
             }, ct);
+
+            // [USAS-362] Gửi email thông báo tài khoản đã được mở khóa kèm ghi chú
+            _ = emailSender.SendAccountUnlockedEmailAsync(user.Email, user.FullName, reason, ct);
 
             return AuthResult.Ok(ToDto(user), "Đã mở khóa tài khoản.");
         }

@@ -182,6 +182,30 @@ internal sealed class FakeAuditLogRepository : IAuditLogRepository
         Entries.Add(entry);
         return Task.CompletedTask;
     }
+
+    public Task<string?> GetLatestLockReasonAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        var idStr = userId.ToString();
+        var last = Entries
+            .Where(x => x.Action == "user.lock" && x.EntityId == idStr)
+            .OrderByDescending(x => x.CreatedAt)
+            .FirstOrDefault();
+
+        if (last == null || string.IsNullOrEmpty(last.DetailJson)) return Task.FromResult<string?>(null);
+
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(last.DetailJson);
+            if (doc.RootElement.TryGetProperty("reason", out var r))
+            {
+                return Task.FromResult<string?>(r.GetString());
+            }
+        }
+        catch
+        {
+        }
+        return Task.FromResult<string?>(null);
+    }
 }
 
 internal sealed class FakeEmailSender : IEmailSender
@@ -200,7 +224,7 @@ internal sealed class FakeEmailSender : IEmailSender
         return Task.CompletedTask;
     }
 
-    public Task SendAccountTempLockedNotificationAsync(string toEmail, string fullName, int lockoutMinutes = 15, CancellationToken ct = default)
+    public Task SendAccountTempLockedNotificationAsync(string toEmail, string fullName, int lockoutMinutes = 0, CancellationToken ct = default)
     {
         SentEmails.Add((toEmail, "temp_locked_notice", $"lockout:{lockoutMinutes}m"));
         return Task.CompletedTask;
@@ -233,6 +257,18 @@ internal sealed class FakeEmailSender : IEmailSender
     public Task SendParentLinkChangedEmailAsync(string toEmail, string studentName, string parentLabel, bool linked, CancellationToken ct = default)
     {
         SentEmails.Add((toEmail, linked ? "parent_linked" : "parent_unlinked", parentLabel));
+        return Task.CompletedTask;
+    }
+
+    public Task SendAccountLockedEmailAsync(string toEmail, string fullName, string reason, CancellationToken ct = default)
+    {
+        SentEmails.Add((toEmail, "account_locked_notice", reason));
+        return Task.CompletedTask;
+    }
+
+    public Task SendAccountUnlockedEmailAsync(string toEmail, string fullName, string reason, CancellationToken ct = default)
+    {
+        SentEmails.Add((toEmail, "account_unlocked_notice", reason));
         return Task.CompletedTask;
     }
 }

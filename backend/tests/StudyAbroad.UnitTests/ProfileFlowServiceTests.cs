@@ -59,8 +59,16 @@ public class ProfileFlowServiceTests
         public Task<string?> GetAppSettingValueAsync(string key, CancellationToken ct = default) =>
             Task.FromResult<string?>(key == ProfileConstants.ProfileMetadataAppSettingKey ? MetadataJson : null);
 
-        public Task<IReadOnlyList<string>> GetOfferingMajorsAsync(CancellationToken ct = default) =>
-            Task.FromResult<IReadOnlyList<string>>(["Computer Science", "Business Administration"]);
+        public Task<IReadOnlyList<MajorOption>> GetMajorOptionsAsync(CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<MajorOption>>(
+            [
+                new MajorOption("Computer and information sciences", "Khoa học máy tính và thông tin", [], true),
+                new MajorOption("Business/marketing", "Kinh doanh và marketing", [], true)
+            ]);
+
+        // Bảng us_states rỗng: metadata giữ bang trong JSON
+        public Task<IReadOnlyList<UsStateOption>> GetUsStateOptionsAsync(CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<UsStateOption>>([]);
 
         public Task<StudentProfile?> GetProfileByUserIdAsync(Guid userId, CancellationToken ct = default)
         {
@@ -222,7 +230,7 @@ public class ProfileFlowServiceTests
             CurrentSchool: "THPT Chuyên Hà Nội - Amsterdam",
             ExpectedGraduationYear: 2027,
             TargetDegreeLevel: StudyLevels.Undergraduate,
-            TargetMajor: "Computer Science",
+            TargetMajor: "Computer and information sciences",
             TargetStates: ["CA", "MA"],
             TargetSchoolType: "private"),
         Step2: new FlowTranscriptDraftDto(
@@ -393,13 +401,13 @@ public class ProfileFlowServiceTests
         Assert.Equal("high_school", p.CurrentEducationLevel);
         Assert.Equal("Lớp 12", p.CurrentGrade);
         Assert.Equal(2027, p.GraduationYear);
-        Assert.Equal("Computer Science", p.IntendedMajor);
+        Assert.Equal("Computer and information sciences", p.IntendedMajor);
         Assert.Equal(["CA", "MA"], p.PreferredStates);
         Assert.Equal("private", p.TargetSchoolType);
 
-        // Bước 2: GPA = TB môn (8.5, 7, 9) = 8.17 → 3.27
+        // Bước 2: GPA = TB môn, mỗi môn (HK1 + 2×HK2)/3: (8.67, 7, 9) = 8.22 → 3.29
         Assert.Equal("10", p.GradeScale);
-        Assert.Equal(3.27m, p.OverallGpa);
+        Assert.Equal(3.29m, p.OverallGpa);
         var scores = await repo.GetTranscriptScoresAsync(p.Id);
         Assert.Equal(4, scores.Count);
         var grade12 = Assert.Single(scores, s => s.GradeName == "Lớp 12");
@@ -528,6 +536,37 @@ public class ProfileFlowServiceTests
     }
 
     [Fact]
+    public async Task CommitFlowAsync_WhenMajorNotInList_Throws()
+    {
+        var service = new ProfileFlowService(new InMemoryProfileFlowRepository(), new FakeFileStorageService());
+        var draft = FullDraft();
+        draft = draft with { Step1 = draft.Step1! with { TargetMajor = "Computer Science" } };
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.CommitFlowAsync(Guid.NewGuid(), new CommitProfileFlowRequest(draft)));
+
+        Assert.Contains("ngành 'Computer Science' không có trong danh sách", ex.Message);
+    }
+
+    [Theory]
+    [InlineData("business/MARKETING")]
+    [InlineData(null)]
+    [InlineData("  ")]
+    public async Task CommitFlowAsync_MajorInListOrNotChosen_Commits(string? major)
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var service = new ProfileFlowService(repo, new FakeFileStorageService());
+        var userId = Guid.NewGuid();
+        var draft = FullDraft();
+        draft = draft with { Step1 = draft.Step1! with { TargetMajor = major } };
+
+        await service.CommitFlowAsync(userId, new CommitProfileFlowRequest(draft));
+
+        var profile = await repo.GetProfileByUserIdAsync(userId);
+        Assert.Equal(string.IsNullOrWhiteSpace(major) ? null : major, profile!.IntendedMajor);
+    }
+
+    [Fact]
     public async Task CommitFlowAsync_TwoIelts_LegacyColumnKeepsHighestScore_AndPlannedEnglishIsStored()
     {
         var repo = new InMemoryProfileFlowRepository();
@@ -610,12 +649,63 @@ public class ProfileFlowServiceTests
     public async Task CommitFlowAsync_WhenTestDateInFuture_Throws()
     {
         var service = new ProfileFlowService(new InMemoryProfileFlowRepository(), new FakeFileStorageService());
-        var draft = FullDraft(certifications: [new(Category: "english", Type: "ielts", Overall: 7m, TestDate: "2099-01")]);
+        var draft = FullDraft(certifications: [new(Category: "english", Type: "ielts", Overall: 7m, TestDate: "2099-01", IsTarget: false)]);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             service.CommitFlowAsync(Guid.NewGuid(), new CommitProfileFlowRequest(draft)));
 
         Assert.Contains("không được ở tương lai", ex.Message);
+    }
+
+    [Fact]
+    public async Task CommitFlowAsync_WhenTargetDateInFuture_SucceedsAndStoresIsTarget()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var service = new ProfileFlowService(repo, new FakeFileStorageService());
+        var userId = Guid.NewGuid();
+        var draft = FullDraft(certifications:
+        [
+            new(Category: "english", Type: "ielts", Overall: 7.5m, TestDate: "2029-06", IsTarget: true),
+        ]);
+
+        await service.CommitFlowAsync(userId, new CommitProfileFlowRequest(draft));
+
+        var p = (await repo.GetProfileByUserIdAsync(userId))!;
+        var cert = Assert.Single(repo.Certifications[p.Id]);
+        Assert.True(cert.IsTarget);
+        Assert.Equal(7.5m, cert.OverallScore);
+        Assert.Equal(new DateOnly(2029, 6, 1), cert.TestDate);
+        Assert.Equal(7.5m, p.Ielts);
+    }
+
+    [Fact]
+    public async Task CommitFlowAsync_WhenTargetDateInPast_Throws()
+    {
+        var service = new ProfileFlowService(new InMemoryProfileFlowRepository(), new FakeFileStorageService());
+        var draft = FullDraft(certifications: [new(Category: "english", Type: "ielts", Overall: 7m, TestDate: "2020-01", IsTarget: true)]);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.CommitFlowAsync(Guid.NewGuid(), new CommitProfileFlowRequest(draft)));
+
+        Assert.Contains("không được ở quá khứ", ex.Message);
+    }
+
+    [Fact]
+    public async Task CommitFlowAsync_WhenBothActualAndTargetExist_ActualScoreTakesPrecedenceInLegacyColumns()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var service = new ProfileFlowService(repo, new FakeFileStorageService());
+        var userId = Guid.NewGuid();
+        var draft = FullDraft(certifications:
+        [
+            new(Category: "english", Type: "ielts", Overall: 6.5m, TestDate: "2025-05", IsTarget: false),
+            new(Category: "english", Type: "ielts", Overall: 8.0m, TestDate: "2028-12", IsTarget: true),
+        ]);
+
+        await service.CommitFlowAsync(userId, new CommitProfileFlowRequest(draft));
+
+        var p = (await repo.GetProfileByUserIdAsync(userId))!;
+        Assert.Equal(6.5m, p.Ielts); // Thực tế 6.5 thắng mục tiêu 8.0 cho profile field chính thức
     }
 
     [Fact]
@@ -799,10 +889,64 @@ public class ProfileFlowServiceTests
         var service = new ProfileFlowService(repo, new FakeFileStorageService());
         var userId = Guid.NewGuid();
         var profile = await repo.EnsureProfileExistsAsync(userId);
-
         await service.PatchDraftAsync(userId, ChatProfile("""{ "budget": { "value": "tier_35k_50k", "status": "confirmed" } }"""), []);
 
         Assert.Null(profile.DraftFlowStateJson);
+    }
+
+    [Fact]
+    public async Task SaveDraftAsync_PreservesStandardizedAndEnglishPlan()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var service = new ProfileFlowService(repo, new FakeFileStorageService());
+        var userId = Guid.NewGuid();
+        var step3 = new FlowCertificationDraftDto(
+            EnglishPlanned: true,
+            EnglishPlannedDate: "2027-10",
+            EnglishPlannedTestType: "ielts",
+            EnglishPlannedTargetScore: 7.5m,
+            StandardizedPlanned: true,
+            StandardizedPlannedDate: "2027-12",
+            StandardizedPlannedTestType: "sat",
+            StandardizedPlannedTargetScore: 1450m);
+        var draft = new ProfileFlowDraftDto { Step3 = step3 };
+
+        await service.SaveDraftAsync(userId, new SaveProfileDraftRequest(3, [1, 2], draft));
+        var state = await service.GetFlowStateAsync(userId);
+
+        Assert.NotNull(state.Draft?.Step3);
+        Assert.True(state.Draft.Step3.StandardizedPlanned);
+        Assert.Equal("2027-12", state.Draft.Step3.StandardizedPlannedDate);
+        Assert.Equal("sat", state.Draft.Step3.StandardizedPlannedTestType);
+        Assert.Equal(1450m, state.Draft.Step3.StandardizedPlannedTargetScore);
+        Assert.True(state.Draft.Step3.EnglishPlanned);
+        Assert.Equal("2027-10", state.Draft.Step3.EnglishPlannedDate);
+        Assert.Equal("ielts", state.Draft.Step3.EnglishPlannedTestType);
+        Assert.Equal(7.5m, state.Draft.Step3.EnglishPlannedTargetScore);
+    }
+
+    [Fact]
+    public async Task PatchDraftAsync_StandardizedPlanFromChat_TicksCheckboxInDraft()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var service = new ProfileFlowService(repo, new FakeFileStorageService());
+        var userId = Guid.NewGuid();
+
+        // Chat đổi standardized_plan (học sinh bấm nút "Em chưa thi SAT/ACT")
+        var chat = ChatProfile("""
+        {
+          "standardized_plan": {
+            "value": { "planned": true, "date": null },
+            "status": "confirmed"
+          }
+        }
+        """);
+        await service.PatchDraftAsync(userId, chat, ["standardized_plan"]);
+        var state = await service.GetFlowStateAsync(userId);
+
+        Assert.NotNull(state.Draft?.Step3);
+        Assert.True(state.Draft.Step3.StandardizedPlanned);
+        Assert.Null(state.Draft.Step3.StandardizedPlannedDate);
     }
 
     // C6: chat xác nhận hồ sơ khi chưa hỏi học bổng; chọn trường mới bắt buộc (C7)
@@ -832,7 +976,7 @@ public class ProfileFlowServiceTests
 
         await service.CommitFlowAsync(userId, new CommitProfileFlowRequest(draft));
 
-        Assert.Equal(3.27m, repo.Profiles.Values.Single(p => p.UserId == userId).OverallGpa);
+        Assert.Equal(3.29m, repo.Profiles.Values.Single(p => p.UserId == userId).OverallGpa);
     }
 
     // gpaMode = overall: thang 10 quy đổi lại sang thang 4, không tin số thang 4 client gửi
@@ -997,5 +1141,88 @@ public class ProfileFlowServiceTests
             Assert.DoesNotContain("storedFileName", json);
             Assert.DoesNotContain("/uploads/", json);
         }
+    }
+
+    // Bậc ngoại khóa lúc lưu hồ sơ
+
+    private sealed class FakeEcTierClient(int? tier) : StudyAbroad.Application.Advisor.IEcTierClient
+    {
+        public StudyAbroad.Application.Advisor.EcTierRequest? Sent { get; private set; }
+
+        public Task<int?> ReadTierAsync(StudyAbroad.Application.Advisor.EcTierRequest request, CancellationToken ct = default)
+        {
+            Sent = request;
+            return Task.FromResult(tier);
+        }
+    }
+
+    [Fact]
+    public async Task CommitFlowAsync_StoresTierFromAdvisor_AndSendsActivitiesAndAwards()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var ec = new FakeEcTierClient(4);
+        var service = new ProfileFlowService(repo, new FakeFileStorageService(), ecTierClient: ec);
+        var userId = Guid.NewGuid();
+
+        var response = await service.CommitFlowAsync(userId, new CommitProfileFlowRequest(FullDraft()));
+
+        Assert.Equal(4, (await repo.GetProfileByUserIdAsync(userId))!.ExtracurricularTier);
+        Assert.Equal(4, response.ExtracurricularTier);
+        var act = Assert.Single(ec.Sent!.Act);
+        Assert.Equal("CLB Robotics", act.Text);
+        Assert.Equal(2, act.Scope);       // district
+        Assert.Equal(21, act.Months);     // 09/2024 → 05/2026, CountMonths tính cả hai đầu
+        Assert.Equal("founder", act.Role);
+        var award = Assert.Single(ec.Sent.Awards);
+        Assert.Equal("HSG Tin học Quốc gia", award.Text);
+        Assert.Equal(4, award.Level);     // national
+    }
+
+    [Fact]
+    public async Task CommitFlowAsync_WhenAdvisorFails_FallsBackToFormulaTier()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var service = new ProfileFlowService(repo, new FakeFileStorageService(), ecTierClient: new FakeEcTierClient(null));
+        var userId = Guid.NewGuid();
+
+        await service.CommitFlowAsync(userId, new CommitProfileFlowRequest(FullDraft()));
+
+        // q = 0.4×2/5 + 0.35×1 + 0.25×21/24 = 0.73; bonus = 0.05×4 = 0.2; m = 0.93/4 = 0.23 → bậc 2
+        Assert.Equal(2, (await repo.GetProfileByUserIdAsync(userId))!.ExtracurricularTier);
+    }
+
+    [Fact]
+    public async Task CommitFlowAsync_WithoutActivities_StoresTier1_WithoutCallingAdvisor()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var ec = new FakeEcTierClient(5);
+        var service = new ProfileFlowService(repo, new FakeFileStorageService(), ecTierClient: ec);
+        var userId = Guid.NewGuid();
+
+        await service.CommitFlowAsync(userId, new CommitProfileFlowRequest(FullDraft(activities: [])));
+
+        Assert.Equal(1, (await repo.GetProfileByUserIdAsync(userId))!.ExtracurricularTier);
+        Assert.Null(ec.Sent);
+    }
+
+    [Fact]
+    public async Task CommitFlowAsync_SendsDescriptionWithName_ForSlmToRead()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var ec = new FakeEcTierClient(3);
+        var service = new ProfileFlowService(repo, new FakeFileStorageService(), ecTierClient: ec);
+        var draft = FullDraft(activities:
+        [
+            new FlowActivityDraftDto(Name: "CLB Tiếng Anh", Category: "activity", Role: "member", ImpactLevel: "school",
+                StartDate: "09/2025", EndDate: "05/2026", IsOngoing: false, Description: "Tổ chức 3 buổi debate"),
+        ]);
+
+        await service.CommitFlowAsync(Guid.NewGuid(), new CommitProfileFlowRequest(draft));
+
+        var act = Assert.Single(ec.Sent!.Act);
+        Assert.Equal("CLB Tiếng Anh: Tổ chức 3 buổi debate", act.Text);
+        Assert.Equal(1, act.Scope);
+        Assert.Equal("member", act.Role);
+        Assert.Empty(ec.Sent.Awards);
     }
 }

@@ -1,6 +1,7 @@
 # Secrets
 .env
 !.env.example
+**/appsettings.Local.json
 
 # Certificates & backups (production)
 deploy/certbot/

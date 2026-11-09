@@ -16,6 +16,13 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
+if (builder.Environment.IsDevelopment())
+{
+    builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true)
+        .AddEnvironmentVariables()
+        .AddCommandLine(args);
+}
+
 builder.Host.UseSerilog((context, config) => config
     .ReadFrom.Configuration(context.Configuration)
     .Enrich.FromLogContext()
@@ -129,6 +136,7 @@ builder.Services.AddScoped<IAuthorizationHandler, AgeFeatureHandler>();
 builder.Services.AddSingleton<IAuthorizationMiddlewareResultHandler, AgeRestrictionResultHandler>();
 builder.Services.AddTranscriptUploadRateLimiter();
 builder.Services.AddAuthRateLimiter();
+builder.Services.AddMediaUploadRateLimiter();
 
 builder.Services.AddControllers();
 builder.Services.AddProblemDetails();

@@ -1,0 +1,3045 @@
+{
+  "ho_so_001": {
+    "profile": {
+      "current_level": {
+        "value": "high_school",
+        "status": "confirmed"
+      },
+      "current_grade": {
+        "value": "Lớp 12",
+        "status": "confirmed"
+      },
+      "target_level": {
+        "value": "undergraduate",
+        "status": "confirmed"
+      },
+      "major": {
+        "value": "Tài chính",
+        "status": "confirmed"
+      },
+      "intake": {
+        "value": "Fall 2027",
+        "status": "confirmed"
+      },
+      "gpa": {
+        "value": {
+          "value": 8.0,
+          "scale": 10,
+          "source": "overall"
+        },
+        "status": "confirmed"
+      },
+      "english": {
+        "value": {
+          "type": "ielts",
+          "value": 6.0
+        },
+        "status": "confirmed"
+      },
+      "sat": {
+        "value": 1200,
+        "status": "confirmed"
+      },
+      "budget": {
+        "value": "tier_35k_50k",
+        "status": "confirmed"
+      },
+      "scholarship": {
+        "value": "preferred",
+        "status": "confirmed"
+      },
+      "activities": {
+        "value": [
+          {
+            "name": "CLB Tiếng Anh",
+            "category": "activity",
+            "role": "leader",
+            "impactLevel": "province",
+            "startDate": "09/2024",
+            "endDate": null,
+            "isOngoing": true
+          },
+          {
+            "name": "CLB Văn nghệ",
+            "category": "activity",
+            "role": "member",
+            "impactLevel": "school",
+            "startDate": "09/2024",
+            "endDate": null,
+            "isOngoing": true
+          }
+        ],
+        "status": "confirmed"
+      },
+      "awards": {
+        "value": null,
+        "status": "none"
+      }
+    },
+    "transcript": null,
+    "benchmarks": {
+      "gpa4": 3.73,
+      "english": {
+        "ielts": 6.5,
+        "toefl": 80,
+        "duolingo": 110
+      }
+    }
+  },
+  "ho_so_002": {
+    "profile": {
+      "current_level": {
+        "value": "high_school",
+        "status": "confirmed"
+      },
+      "current_grade": {
+        "value": "Lớp 11",
+        "status": "confirmed"
+      },
+      "target_level": {
+        "value": "undergraduate",
+        "status": "confirmed"
+      },
+      "major": {
+        "value": "Khoa học máy tính",
+        "status": "confirmed"
+      },
+      "intake": {
+        "value": "Spring 2028",
+        "status": "confirmed"
+      },
+      "gpa": {
+        "value": {
+          "value": 9.3,
+          "scale": 10,
+          "source": "transcript"
+        },
+        "status": "confirmed"
+      },
+      "english": {
+        "value": {
+          "type": "ielts",
+          "value": 6.5
+        },
+        "status": "confirmed"
+      },
+      "sat": {
+        "value": 1250,
+        "status": "confirmed"
+      },
+      "budget": {
+        "value": "tier_35k_50k",
+        "status": "confirmed"
+      },
+      "scholarship": {
+        "value": "preferred",
+        "status": "confirmed"
+      },
+      "activities": {
+        "value": [
+          {
+            "name": "Đội tình nguyện môi trường",
+            "category": "activity",
+            "role": "member",
+            "impactLevel": "district",
+            "startDate": "01/2024",
+            "endDate": null,
+            "isOngoing": true
+          },
+          {
+            "name": "CLB Bóng rổ",
+            "category": "activity",
+            "role": "member",
+            "impactLevel": "school",
+            "startDate": "09/2023",
+            "endDate": null,
+            "isOngoing": true
+          }
+        ],
+        "status": "confirmed"
+      },
+      "awards": {
+        "value": null,
+        "status": "none"
+      }
+    },
+    "transcript": {
+      "years": [
+        {
+          "grade": "Lớp 10",
+          "average": 9.3
+        }
+      ]
+    },
+    "benchmarks": {
+      "gpa4": 3.73,
+      "english": {
+        "ielts": 6.5,
+        "toefl": 80,
+        "duolingo": 110
+      }
+    }
+  },
+  "ho_so_003": {
+    "profile": {
+      "current_level": {
+        "value": "high_school",
+        "status": "confirmed"
+      },
+      "current_grade": {
+        "value": "Lớp 11",
+        "status": "confirmed"
+      },
+      "target_level": {
+        "value": "undergraduate",
+        "status": "confirmed"
+      },
+      "major": {
+        "value": "Quản trị kinh doanh",
+        "status": "confirmed"
+      },
+      "intake": {
+        "value": "Fall 2028",
+        "status": "confirmed"
+      },
+      "gpa": {
+        "value": {
+          "value": 7.0,
+          "scale": 10,
+          "source": "overall"
+        },
+        "status": "confirmed"
+      },
+      "english": {
+        "value": {
+          "type": "ielts",
+          "value": 6.0
+        },
+        "status": "confirmed"
+      },
+      "sat": {
+        "value": 1300,
+        "status": "confirmed"
+      },
+      "budget": {
+        "value": "tier_35k_50k",
+        "status": "confirmed"
+      },
+      "scholarship": {
+        "value": "preferred",
+        "status": "confirmed"
+      },
+      "activities": {
+        "value": [
+          {
+            "name": "CLB Âm nhạc",
+            "category": "activity",
+            "role": "vice_leader",
+            "impactLevel": "school",
+            "startDate": "09/2023",
+            "endDate": null,
+            "isOngoing": true
+          },
+          {
+            "name": "Dạy kèm học sinh lớp dưới",
+            "category": "activity",
+            "role": "member",
+            "impactLevel": "district",
+            "startDate": "06/2024",
+            "endDate": null,
+            "isOngoing": true
+          }
+        ],
+        "status": "confirmed"
+      },
+      "awards": {
+        "value": null,
+        "status": "none"
+      }
+    },
+    "transcript": null,
+    "benchmarks": {
+      "gpa4": 3.73,
+      "english": {
+        "ielts": 6.5,
+        "toefl": 80,
+        "duolingo": 110
+      }
+    }
+  },
+  "ho_so_004": {
+    "profile": {
+      "current_level": {
+        "value": "high_school",
+        "status": "confirmed"
+      },
+      "current_grade": {
+        "value": "Lớp 11",
+        "status": "confirmed"
+      },
+      "target_level": {
+        "value": "undergraduate",
+        "status": "confirmed"
+      },
+      "major": {
+        "value": "Kỹ thuật điện",
+        "status": "confirmed"
+      },
+      "intake": {
+        "value": "Summer 2028",
+        "status": "confirmed"
+      },
+      "gpa": {
+        "value": {
+          "value": 8.0,
+          "scale": 10,
+          "source": "transcript"
+        },
+        "status": "confirmed"
+      },
+      "english": {
+        "value": {
+          "type": "ielts",
+          "value": 8.0
+        },
+        "status": "confirmed"
+      },
+      "sat": {
+        "value": 1200,
+        "status": "confirmed"
+      },
+      "budget": {
+        "value": "tier_35k_50k",
+        "status": "confirmed"
+      },
+      "scholarship": {
+        "value": "preferred",
+        "status": "confirmed"
+      },
+      "activities": {
+        "value": [
+          {
+            "name": "CLB Tiếng Anh",
+            "category": "activity",
+            "role": "leader",
+            "impactLevel": "province",
+            "startDate": "09/2024",
+            "endDate": null,
+            "isOngoing": true
+          },
+          {
+            "name": "CLB Văn nghệ",
+            "category": "activity",
+            "role": "member",
+            "impactLevel": "school",
+            "startDate": "09/2024",
+            "endDate": null,
+            "isOngoing": true
+          }
+        ],
+        "status": "confirmed"
+      },
+      "awards": {
+        "value": null,
+        "status": "none"
+      }
+    },
+    "transcript": {
+      "years": [
+        {
+          "grade": "Lớp 10",
+          "average": 8.0
+        }
+      ]
+    },
+    "benchmarks": {
+      "gpa4": 3.73,
+      "english": {
+        "ielts": 6.5,
+        "toefl": 80,
+        "duolingo": 110
+      }
+    }
+  },
+  "ho_so_005": {
+    "profile": {
+      "current_level": {
+        "value": "high_school",
+        "status": "confirmed"
+      },
+      "current_grade": {
+        "value": "Lớp 12",
+        "status": "confirmed"
+      },
+      "target_level": {
+        "value": "undergraduate",
+        "status": "confirmed"
+      },
+      "major": {
+        "value": "Tâm lý học",
+        "status": "confirmed"
+      },
+      "intake": {
+        "value": "Fall 2027",
+        "status": "confirmed"
+      },
+      "gpa": {
+        "value": {
+          "value": 8.2,
+          "scale": 10,
+          "source": "overall"
+        },
+        "status": "confirmed"
+      },
+      "english": {
+        "value": {
+          "type": "duolingo",
+          "value": 95.0
+        },
+        "status": "confirmed"
+      },
+      "sat": {
+        "value": 1250,
+        "status": "confirmed"
+      },
+      "budget": {
+        "value": "tier_35k_50k",
+        "status": "confirmed"
+      },
+      "scholarship": {
+        "value": "preferred",
+        "status": "confirmed"
+      },
+      "activities": {
+        "value": [
+          {
+            "name": "Đội tình nguyện môi trường",
+            "category": "activity",
+            "role": "member",
+            "impactLevel": "district",
+            "startDate": "01/2024",
+            "endDate": null,
+            "isOngoing": true
+          },
+          {
+            "name": "CLB Bóng rổ",
+            "category": "activity",
+            "role": "member",
+            "impactLevel": "school",
+            "startDate": "09/2023",
+            "endDate": null,
+            "isOngoing": true
+          }
+        ],
+        "status": "confirmed"
+      },
+      "awards": {
+        "value": null,
+        "status": "none"
+      }
+    },
+    "transcript": null,
+    "benchmarks": {
+      "gpa4": 3.73,
+      "english": {
+        "ielts": 6.5,
+        "toefl": 80,
+        "duolingo": 110
+      }
+    }
+  },
+  "ho_so_006": {
+    "profile": {
+      "current_level": {
+        "value": "high_school",
+        "status": "confirmed"
+      },
+      "current_grade": {
+        "value": "Lớp 11",
+        "status": "confirmed"
+      },
+      "target_level": {
+        "value": "undergraduate",
+        "status": "confirmed"
+      },
+      "major": {
+        "value": "Truyền thông",
+        "status": "confirmed"
+      },
+      "intake": {
+        "value": "Spring 2028",
+        "status": "confirmed"
+      },
+      "gpa": {
+        "value": {
+          "value": 7.8,
+          "scale": 10,
+          "source": "transcript"
+        },
+        "status": "confirmed"
+      },
+      "english": {
+        "value": {
+          "type": "ielts",
+          "value": 6.0
+        },
+        "status": "confirmed"
+      },
+      "sat": {
+        "value": 1530,
+        "status": "confirmed"
+      },
+      "budget": {
+        "value": "tier_35k_50k",
+        "status": "confirmed"
+      },
+      "scholarship": {
+        "value": "preferred",
+        "status": "confirmed"
+      },
+      "activities": {
+        "value": [
+          {
+            "name": "CLB Âm nhạc",
+            "category": "activity",
+            "role": "vice_leader",
+            "impactLevel": "school",
+            "startDate": "09/2023",
+            "endDate": null,
+            "isOngoing": true
+          },
+          {
+            "name": "Dạy kèm học sinh lớp dưới",
+            "category": "activity",
+            "role": "member",
+            "impactLevel": "district",
+            "startDate": "06/2024",
+            "endDate": null,
+            "isOngoing": true
+          }
+        ],
+        "status": "confirmed"
+      },
+      "awards": {
+        "value": null,
+        "status": "none"
+      }
+    },
+    "transcript": {
+      "years": [
+        {
+          "grade": "Lớp 10",
+          "average": 7.8
+        }
+      ]
+    },
+    "benchmarks": {
+      "gpa4": 3.73,
+      "english": {
+        "ielts": 6.5,
+        "toefl": 80,
+        "duolingo": 110
+      }
+    }
+  },
+  "ho_so_007": {
+    "profile": {
+      "current_level": {
+        "value": "high_school",
+        "status": "confirmed"
+      },
+      "current_grade": {
+        "value": "Lớp 11",
+        "status": "confirmed"
+      },
+      "target_level": {
+        "value": "undergraduate",
+        "status": "confirmed"
+      },
+      "major": {
+        "value": "Sinh học",
+        "status": "confirmed"
+      },
+      "intake": {
+        "value": "Fall 2028",
+        "status": "confirmed"
+      },
+      "gpa": {
+        "value": {
+          "value": 8.0,
+          "scale": 10,
+          "source": "overall"
+        },
+        "status": "confirmed"
+      },
+      "english": {
+        "value": {
+          "type": "ielts",
+          "value": 6.0
+        },
+        "status": "confirmed"
+      },
+      "sat": {
+        "value": 1050,
+        "status": "confirmed"
+      },
+      "budget": {
+        "value": "tier_35k_50k",
+        "status": "confirmed"
+      },
+      "scholarship": {
+        "value": "preferred",
+        "status": "confirmed"
+      },
+      "activities": {
+        "value": [
+          {
+            "name": "CLB Tiếng Anh",
+            "category": "activity",
+            "role": "leader",
+            "impactLevel": "province",
+            "startDate": "09/2024",
+            "endDate": null,
+            "isOngoing": true
+          },
+          {
+            "name": "CLB Văn nghệ",
+            "category": "activity",
+            "role": "member",
+            "impactLevel": "school",
+            "startDate": "09/2024",
+            "endDate": null,
+            "isOngoing": true
+          }
+        ],
+        "status": "confirmed"
+      },
+      "awards": {
+        "value": null,
+        "status": "none"
+      }
+    },
+    "transcript": null,
+    "benchmarks": {
+      "gpa4": 3.73,
+      "english": {
+        "ielts": 6.5,
+        "toefl": 80,
+        "duolingo": 110
+      }
+    }
+  },
+  "ho_so_008": {
+    "profile": {
+      "current_level": {
+        "value": "high_school",
+        "status": "confirmed"
+      },
+      "current_grade": {
+        "value": "Lớp 11",
+        "status": "confirmed"
+      },
+      "target_level": {
+        "value": "undergraduate",
+        "status": "confirmed"
+      },
+      "major": {
+        "value": "Kinh tế",
+        "status": "confirmed"
+      },
+      "intake": {
+        "value": "Summer 2028",
+        "status": "confirmed"
+      },
+      "gpa": {
+        "value": {
+          "value": 8.2,
+          "scale": 10,
+          "source": "transcript"
+        },
+        "status": "confirmed"
+      },
+      "english": {
+        "value": {
+          "type": "toefl",
+          "value": 80.0
+        },
+        "status": "confirmed"
+      },
+      "sat": {
+        "value": 1250,
+        "status": "confirmed"
+      },
+      "budget": {
+        "value": "tier_35k_50k",
+        "status": "confirmed"
+      },
+      "scholarship": {
+        "value": "preferred",
+        "status": "confirmed"
+      },
+      "activities": {
+        "value": [
+          {
+            "name": "CLB Robotics của trường",
+            "category": "activity",
+            "role": "leader",
+            "impactLevel": "school",
+            "startDate": "09/2023",
+            "endDate": null,
+            "isOngoing": true
+          },
+          {
+            "name": "Đội tuyển Olympic Toán",
+            "category": "activity",
+            "role": "member",
+            "impactLevel": "national",
+            "startDate": "01/2024",
+            "endDate": null,
+            "isOngoing": true
+          }
+        ],
+        "status": "confirmed"
+      },
+      "awards": {
+        "value": [
+          {
+            "name": "Giải Ba",
+            "category": "achievement",
+            "impactLevel": "national"
+          }
+        ],
+        "status": "confirmed"
+      }
+    },
+    "transcript": {
+      "years": [
+        {
+          "grade": "Lớp 10",
+          "average": 8.2
+        }
+      ]
+    },
+    "benchmarks": {
+      "gpa4": 3.73,
+      "english": {
+        "ielts": 6.5,
+        "toefl": 80,
+        "duolingo": 110
+      }
+    }
+  },
+  "ho_so_009": {
+    "profile": {
+      "current_level": {
+        "value": "high_school",
+        "status": "confirmed"
+      },
+      "current_grade": {
+        "value": "Lớp 12",
+        "status": "confirmed"
+      },
+      "target_level": {
+        "value": "undergraduate",
+        "status": "confirmed"
+      },
+      "major": {
+        "value": "Kỹ thuật cơ khí",
+        "status": "confirmed"
+      },
+      "intake": {
+        "value": "Fall 2027",
+        "status": "confirmed"
+      },
+      "gpa": {
+        "value": {
+          "value": 7.8,
+          "scale": 10,
+          "source": "overall"
+        },
+        "status": "confirmed"
+      },
+      "english": {
+        "value": {
+          "type": "ielts",
+          "value": 6.0
+        },
+        "status": "confirmed"
+      },
+      "sat": {
+        "value": 1300,
+        "status": "confirmed"
+      },
+      "budget": {
+        "value": "tier_35k_50k",
+        "status": "confirmed"
+      },
+      "scholarship": {
+        "value": "preferred",
+        "status": "confirmed"
+      },
+      "activities": {
+        "value": null,
+        "status": "none"
+      },
+      "awards": {
+        "value": null,
+        "status": "none"
+      }
+    },
+    "transcript": null,
+    "benchmarks": {
+      "gpa4": 3.73,
+      "english": {
+        "ielts": 6.5,
+        "toefl": 80,
+        "duolingo": 110
+      }
+    }
+  },
+  "ho_so_010": {
+    "profile": {
+      "current_level": {
+        "value": "high_school",
+        "status": "confirmed"
+      },
+      "current_grade": {
+        "value": "Lớp 11",
+        "status": "confirmed"
+      },
+      "target_level": {
+        "value": "undergraduate",
+        "status": "confirmed"
+      },
+      "major": {
+        "value": "Khoa học dữ liệu",
+        "status": "confirmed"
+      },
+      "intake": {
+        "value": "Spring 2028",
+        "status": "confirmed"
+      },
+      "gpa": {
+        "value": {
+          "value": 8.0,
+          "scale": 10,
+          "source": "transcript"
+        },
+        "status": "confirmed"
+      },
+      "english": {
+        "value": {
+          "type": "ielts",
+          "value": 6.0
+        },
+        "status": "confirmed"
+      },
+      "sat": {
+        "value": 1200,
+        "status": "confirmed"
+      },
+      "budget": {
+        "value": "tier_50k_70k",
+        "status": "confirmed"
+      },
+      "scholarship": {
+        "value": "preferred",
+        "status": "confirmed"
+      },
+      "activities": {
+        "value": [
+          {
+            "name": "CLB Tiếng Anh",
+            "category": "activity",
+            "role": "leader",
+            "impactLevel": "province",
+            "startDate": "09/2024",
+            "endDate": null,
+            "isOngoing": true
+          },
+          {
+            "name": "CLB Văn nghệ",
+            "category": "activity",
+            "role": "member",
+            "impactLevel": "school",
+            "startDate": "09/2024",
+            "endDate": null,
+            "isOngoing": true
+          }
+        ],
+        "status": "confirmed"
+      },
+      "awards": {
+        "value": null,
+        "status": "none"
+      }
+    },
+    "transcript": {
+      "years": [
+        {
+          "grade": "Lớp 10",
+          "average": 8.0
+        }
+      ]
+    },
+    "benchmarks": null
+  },
+  "ho_so_011": {
+    "profile": {
+      "current_level": {
+        "value": "high_school",
+        "status": "confirmed"
+      },
+      "current_grade": {
+        "value": "Lớp 11",
+        "status": "confirmed"
+      },
+      "target_level": {
+        "value": "undergraduate",
+        "status": "confirmed"
+      },
+      "major": {
+        "value": "Ngôn ngữ Anh",
+        "status": "confirmed"
+      },
+      "intake": {
+        "value": "Fall 2028",
+        "status": "confirmed"
+      },
+      "gpa": {
+        "value": {
+          "value": 8.2,
+          "scale": 10,
+          "source": "overall"
+        },
+        "status": "confirmed"
+      },
+      "english": {
+        "value": {
+          "type": "ielts",
+          "value": 6.5
+        },
+        "status": "confirmed"
+      },
+      "sat": {
+        "value": 1250,
+        "status": "confirmed"
+      },
+      "budget": {
+        "value": "tier_20k_35k",
+        "status": "confirmed"
+      },
+      "scholarship": {
+        "value": "mandatory",
+        "status": "confirmed"
+      },
+      "activities": {
+        "value": [
+          {
+            "name": "Đội tình nguyện môi trường",
+            "category": "activity",
+            "role": "member",
+            "impactLevel": "district",
+            "startDate": "01/2024",
+            "endDate": null,
+            "isOngoing": true
+          },
+          {
+            "name": "CLB Bóng rổ",
+            "category": "activity",
+            "role": "member",
+            "impactLevel": "school",
+            "startDate": "09/2023",
+            "endDate": null,
+            "isOngoing": true
+          }
+        ],
+        "status": "confirmed"
+      },
+      "awards": {
+        "value": null,
+        "status": "none"
+      }
+    },
+    "transcript": null,
+    "benchmarks": {
+      "gpa4": 3.73,
+      "english": {
+        "ielts": 6.5,
+        "toefl": 80,
+        "duolingo": 110
+      }
+    }
+  },
+  "ho_so_012": {
+    "profile": {
+      "current_level": {
+        "value": "high_school",
+        "status": "confirmed"
+      },
+      "current_grade": {
+        "value": "Lớp 11",
+        "status": "confirmed"
+      },
+      "target_level": {
+        "value": "undergraduate",
+        "status": "confirmed"
+      },
+      "major": {
+        "value": "Kiến trúc",
+        "status": "confirmed"
+      },
+      "intake": {
+        "value": "Summer 2028",
+        "status": "confirmed"
+      },
+      "gpa": {
+        "value": {
+          "value": 7.8,
+          "scale": 10,
+          "source": "transcript"
+        },
+        "status": "confirmed"
+      },
+      "english": {
+        "value": {
+          "type": "ielts",
+          "value": 7.0
+        },
+        "status": "confirmed"
+      },
+      "sat": {
+        "value": null,
+        "status": "none"
+      },
+      "budget": {
+        "value": "tier_35k_50k",
+        "status": "confirmed"
+      },
+      "scholarship": {
+        "value": "preferred",
+        "status": "confirmed"
+      },
+      "activities": {
+        "value": [
+          {
+            "name": "Tổ chức sự kiện thiện nguyện",
+            "category": "activity",
+            "role": "leader",
+            "impactLevel": "province",
+            "startDate": "06/2023",
+            "endDate": null,
+            "isOngoing": true
+          },
+          {
+            "name": "Podcast học thuật",
+            "category": "activity",
+            "role": "founder",
+            "impactLevel": "international",
+            "startDate": "10/2023",
+            "endDate": null,
+            "isOngoing": true
+          }
+        ],
+        "status": "confirmed"
+      },
+      "awards": {
+        "value": [
+          {
+            "name": "Giải Khuyến khích",
+            "category": "achievement",
+            "impactLevel": "international"
+          }
+        ],
+        "status": "confirmed"
+      }
+    },
+    "transcript": {
+      "years": [
+        {
+          "grade": "Lớp 10",
+          "average": 7.8
+        }
+      ]
+    },
+    "benchmarks": {
+      "gpa4": 3.73,
+      "english": {
+        "ielts": 6.5,
+        "toefl": 80,
+        "duolingo": 110
+      }
+    }
+  },
+  "ho_so_013": {
+    "profile": {
+      "current_level": {
+        "value": "high_school",
+        "status": "confirmed"
+      },
+      "current_grade": {
+        "value": "Lớp 12",
+        "status": "confirmed"
+      },
+      "target_level": {
+        "value": "undergraduate",
+        "status": "confirmed"
+      },
+      "major": {
+        "value": "Tài chính",
+        "status": "confirmed"
+      },
+      "intake": {
+        "value": "Fall 2027",
+        "status": "confirmed"
+      },
+      "gpa": {
+        "value": {
+          "value": 9.7,
+          "scale": 10,
+          "source": "overall"
+        },
+        "status": "confirmed"
+      },
+      "english": {
+        "value": {
+          "type": "ielts",
+          "value": 8.0
+        },
+        "status": "confirmed"
+      },
+      "sat": {
+        "value": 1480,
+        "status": "confirmed"
+      },
+      "budget": {
+        "value": "tier_50k_70k",
+        "status": "confirmed"
+      },
+      "scholarship": {
+        "value": "preferred",
+        "status": "confirmed"
+      },
+      "activities": {
+        "value": [
+          {
+            "name": "CLB Tranh biện",
+            "category": "activity",
+            "role": "leader",
+            "impactLevel": "province",
+            "startDate": "09/2023",
+            "endDate": null,
+            "isOngoing": true
+          },
+          {
+            "name": "Dự án gây quỹ cộng đồng",
+            "category": "activity",
+            "role": "founder",
+            "impactLevel": "national",
+            "startDate": "03/2024",
+            "endDate": null,
+            "isOngoing": true
+          }
+        ],
+        "status": "confirmed"
+      },
+      "awards": {
+        "value": [
+          {
+            "name": "Giải Nhì Olympic",
+            "category": "achievement",
+            "impactLevel": "province"
+          }
+        ],
+        "status": "confirmed"
+      }
+    },
+    "transcript": null,
+    "benchmarks": {
+      "gpa4": 3.73,
+      "english": {
+        "ielts": 6.5,
+        "toefl": 80,
+        "duolingo": 110
+      }
+    }
+  },
+  "ho_so_014": {
+    "profile": {
+      "current_level": {
+        "value": "high_school",
+        "status": "confirmed"
+      },
+      "current_grade": {
+        "value": "Lớp 11",
+        "status": "confirmed"
+      },
+      "target_level": {
+        "value": "undergraduate",
+        "status": "confirmed"
+      },
+      "major": {
+        "value": "Khoa học máy tính",
+        "status": "confirmed"
+      },
+      "intake": {
+        "value": "Spring 2028",
+        "status": "confirmed"
+      },
+      "gpa": {
+        "value": {
+          "value": 6.0,
+          "scale": 10,
+          "source": "transcript"
+        },
+        "status": "confirmed"
+      },
+      "english": {
+        "value": {
+          "type": "ielts",
+          "value": 5.5
+        },
+        "status": "confirmed"
+      },
+      "sat": {
+        "value": 1100,
+        "status": "confirmed"
+      },
+      "budget": {
+        "value": "tier_20k_35k",
+        "status": "confirmed"
+      },
+      "scholarship": {
+        "value": "mandatory",
+        "status": "confirmed"
+      },
+      "activities": {
+        "value": null,
+        "status": "none"
+      },
+      "awards": {
+        "value": null,
+        "status": "none"
+      }
+    },
+    "transcript": {
+      "years": [
+        {
+          "grade": "Lớp 10",
+          "average": 6.0
+        }
+      ]
+    },
+    "benchmarks": {
+      "gpa4": 3.73,
+      "english": {
+        "ielts": 6.5,
+        "toefl": 80,
+        "duolingo": 110
+      }
+    }
+  },
+  "ho_so_015": {
+    "profile": {
+      "current_level": {
+        "value": "high_school",
+        "status": "confirmed"
+      },
+      "current_grade": {
+        "value": "Lớp 11",
+        "status": "confirmed"
+      },
+      "target_level": {
+        "value": "undergraduate",
+        "status": "confirmed"
+      },
+      "major": {
+        "value": "Quản trị kinh doanh",
+        "status": "confirmed"
+      },
+      "intake": {
+        "value": "Fall 2028",
+        "status": "confirmed"
+      },
+      "gpa": {
+        "value": {
+          "value": 9.4,
+          "scale": 10,
+          "source": "overall"
+        },
+        "status": "confirmed"
+      },
+      "english": {
+        "value": {
+          "type": "ielts",
+          "value": 7.0
+        },
+        "status": "confirmed"
+      },
+      "sat": {
+        "value": null,
+        "status": "none"
+      },
+      "budget": {
+        "value": "tier_20k_35k",
+        "status": "confirmed"
+      },
+      "scholarship": {
+        "value": "mandatory",
+        "status": "confirmed"
+      },
+      "activities": {
+        "value": [
+          {
+            "name": "CLB Âm nhạc",
+            "category": "activity",
+            "role": "vice_leader",
+            "impactLevel": "school",
+            "startDate": "09/2023",
+            "endDate": null,
+            "isOngoing": true
+          },
+          {
+            "name": "Dạy kèm học sinh lớp dưới",
+            "category": "activity",
+            "role": "member",
+            "impactLevel": "district",
+            "startDate": "06/2024",
+            "endDate": null,
+            "isOngoing": true
+          }
+        ],
+        "status": "confirmed"
+      },
+      "awards": {
+        "value": null,
+        "status": "none"
+      }
+    },
+    "transcript": null,
+    "benchmarks": {
+      "gpa4": 3.73,
+      "english": {
+        "ielts": 6.5,
+        "toefl": 80,
+        "duolingo": 110
+      }
+    }
+  },
+  "ho_so_016": {
+    "profile": {
+      "current_level": {
+        "value": "high_school",
+        "status": "confirmed"
+      },
+      "current_grade": {
+        "value": "Lớp 11",
+        "status": "confirmed"
+      },
+      "target_level": {
+        "value": "undergraduate",
+        "status": "confirmed"
+      },
+      "major": {
+        "value": "Kỹ thuật điện",
+        "status": "confirmed"
+      },
+      "intake": {
+        "value": "Summer 2028",
+        "status": "confirmed"
+      },
+      "gpa": {
+        "value": {
+          "value": 9.6,
+          "scale": 10,
+          "source": "transcript"
+        },
+        "status": "confirmed"
+      },
+      "english": {
+        "value": {
+          "type": "ielts",
+          "value": 6.0
+        },
+        "status": "confirmed"
+      },
+      "sat": {
+        "value": 1480,
+        "status": "confirmed"
+      },
+      "budget": {
+        "value": "tier_20k_35k",
+        "status": "confirmed"
+      },
+      "scholarship": {
+        "value": "mandatory",
+        "status": "confirmed"
+      },
+      "activities": {
+        "value": [
+          {
+            "name": "CLB Tiếng Anh",
+            "category": "activity",
+            "role": "leader",
+            "impactLevel": "province",
+            "startDate": "09/2024",
+            "endDate": null,
+            "isOngoing": true
+          },
+          {
+            "name": "CLB Văn nghệ",
+            "category": "activity",
+            "role": "member",
+            "impactLevel": "school",
+            "startDate": "09/2024",
+            "endDate": null,
+            "isOngoing": true
+          }
+        ],
+        "status": "confirmed"
+      },
+      "awards": {
+        "value": null,
+        "status": "none"
+      }
+    },
+    "transcript": {
+      "years": [
+        {
+          "grade": "Lớp 10",
+          "average": 9.6
+        }
+      ]
+    },
+    "benchmarks": {
+      "gpa4": 3.73,
+      "english": {
+        "ielts": 6.5,
+        "toefl": 80,
+        "duolingo": 110
+      }
+    }
+  },
+  "ho_so_017": {
+    "profile": {
+      "current_level": {
+        "value": "high_school",
+        "status": "confirmed"
+      },
+      "current_grade": {
+        "value": "Lớp 12",
+        "status": "confirmed"
+      },
+      "target_level": {
+        "value": "undergraduate",
+        "status": "confirmed"
+      },
+      "major": {
+        "value": "Tâm lý học",
+        "status": "confirmed"
+      },
+      "intake": {
+        "value": "Fall 2027",
+        "status": "confirmed"
+      },
+      "gpa": {
+        "value": {
+          "value": 6.0,
+          "scale": 10,
+          "source": "overall"
+        },
+        "status": "confirmed"
+      },
+      "english": {
+        "value": {
+          "type": "ielts",
+          "value": 7.5
+        },
+        "status": "confirmed"
+      },
+      "sat": {
+        "value": 1420,
+        "status": "confirmed"
+      },
+      "budget": {
+        "value": "tier_35k_50k",
+        "status": "confirmed"
+      },
+      "scholarship": {
+        "value": "preferred",
+        "status": "confirmed"
+      },
+      "activities": {
+        "value": [
+          {
+            "name": "CLB Robotics của trường",
+            "category": "activity",
+            "role": "leader",
+            "impactLevel": "school",
+            "startDate": "09/2023",
+            "endDate": null,
+            "isOngoing": true
+          },
+          {
+            "name": "Đội tuyển Olympic Toán",
+            "category": "activity",
+            "role": "member",
+            "impactLevel": "national",
+            "startDate": "01/2024",
+            "endDate": null,
+            "isOngoing": true
+          }
+        ],
+        "status": "confirmed"
+      },
+      "awards": {
+        "value": [
+          {
+            "name": "Giải Ba",
+            "category": "achievement",
+            "impactLevel": "national"
+          }
+        ],
+        "status": "confirmed"
+      }
+    },
+    "transcript": null,
+    "benchmarks": {
+      "gpa4": 3.73,
+      "english": {
+        "ielts": 6.5,
+        "toefl": 80,
+        "duolingo": 110
+      }
+    }
+  },
+  "ho_so_018": {
+    "profile": {
+      "current_level": {
+        "value": "high_school",
+        "status": "confirmed"
+      },
+      "current_grade": {
+        "value": "Lớp 11",
+        "status": "confirmed"
+      },
+      "target_level": {
+        "value": "undergraduate",
+        "status": "confirmed"
+      },
+      "major": {
+        "value": "Truyền thông",
+        "status": "confirmed"
+      },
+      "intake": {
+        "value": "Spring 2028",
+        "status": "confirmed"
+      },
+      "gpa": {
+        "value": {
+          "value": 7.8,
+          "scale": 10,
+          "source": "transcript"
+        },
+        "status": "confirmed"
+      },
+      "english": {
+        "value": {
+          "type": "ielts",
+          "value": 5.0
+        },
+        "status": "confirmed"
+      },
+      "sat": {
+        "value": null,
+        "status": "none"
+      },
+      "budget": {
+        "value": "tier_20k_35k",
+        "status": "confirmed"
+      },
+      "scholarship": {
+        "value": "mandatory",
+        "status": "confirmed"
+      },
+      "activities": {
+        "value": null,
+        "status": "none"
+      },
+      "awards": {
+        "value": null,
+        "status": "none"
+      }
+    },
+    "transcript": {
+      "years": [
+        {
+          "grade": "Lớp 10",
+          "average": 7.8
+        }
+      ]
+    },
+    "benchmarks": {
+      "gpa4": 3.73,
+      "english": {
+        "ielts": 6.5,
+        "toefl": 80,
+        "duolingo": 110
+      }
+    }
+  },
+  "ho_so_019": {
+    "profile": {
+      "current_level": {
+        "value": "high_school",
+        "status": "confirmed"
+      },
+      "current_grade": {
+        "value": "Lớp 11",
+        "status": "confirmed"
+      },
+      "target_level": {
+        "value": "undergraduate",
+        "status": "confirmed"
+      },
+      "major": {
+        "value": "Sinh học",
+        "status": "confirmed"
+      },
+      "intake": {
+        "value": "Fall 2028",
+        "status": "confirmed"
+      },
+      "gpa": {
+        "value": {
+          "value": 9.2,
+          "scale": 10,
+          "source": "overall"
+        },
+        "status": "confirmed"
+      },
+      "english": {
+        "value": null,
+        "status": "none"
+      },
+      "sat": {
+        "value": null,
+        "status": "none"
+      },
+      "budget": {
+        "value": "tier_50k_70k",
+        "status": "confirmed"
+      },
+      "scholarship": {
+        "value": "preferred",
+        "status": "confirmed"
+      },
+      "activities": {
+        "value": [
+          {
+            "name": "CLB Tranh biện",
+            "category": "activity",
+            "role": "leader",
+            "impactLevel": "province",
+            "startDate": "09/2023",
+            "endDate": null,
+            "isOngoing": true
+          },
+          {
+            "name": "Dự án gây quỹ cộng đồng",
+            "category": "activity",
+            "role": "founder",
+            "impactLevel": "national",
+            "startDate": "03/2024",
+            "endDate": null,
+            "isOngoing": true
+          }
+        ],
+        "status": "confirmed"
+      },
+      "awards": {
+        "value": [
+          {
+            "name": "Giải Nhì Olympic",
+            "category": "achievement",
+            "impactLevel": "province"
+          }
+        ],
+        "status": "confirmed"
+      }
+    },
+    "transcript": null,
+    "benchmarks": {
+      "gpa4": 3.73,
+      "english": {
+        "ielts": 6.5,
+        "toefl": 80,
+        "duolingo": 110
+      }
+    }
+  },
+  "ho_so_020": {
+    "profile": {
+      "current_level": {
+        "value": "high_school",
+        "status": "confirmed"
+      },
+      "current_grade": {
+        "value": "Lớp 11",
+        "status": "confirmed"
+      },
+      "target_level": {
+        "value": "undergraduate",
+        "status": "confirmed"
+      },
+      "major": {
+        "value": "Kinh tế",
+        "status": "confirmed"
+      },
+      "intake": {
+        "value": "Summer 2028",
+        "status": "confirmed"
+      },
+      "gpa": {
+        "value": {
+          "value": 6.0,
+          "scale": 10,
+          "source": "transcript"
+        },
+        "status": "confirmed"
+      },
+      "english": {
+        "value": {
+          "type": "ielts",
+          "value": 6.5
+        },
+        "status": "confirmed"
+      },
+      "sat": {
+        "value": null,
+        "status": "none"
+      },
+      "budget": {
+        "value": "tier_50k_70k",
+        "status": "confirmed"
+      },
+      "scholarship": {
+        "value": "preferred",
+        "status": "confirmed"
+      },
+      "activities": {
+        "value": [
+          {
+            "name": "Đội tình nguyện môi trường",
+            "category": "activity",
+            "role": "member",
+            "impactLevel": "district",
+            "startDate": "01/2024",
+            "endDate": null,
+            "isOngoing": true
+          },
+          {
+            "name": "CLB Bóng rổ",
+            "category": "activity",
+            "role": "member",
+            "impactLevel": "school",
+            "startDate": "09/2023",
+            "endDate": null,
+            "isOngoing": true
+          }
+        ],
+        "status": "confirmed"
+      },
+      "awards": {
+        "value": null,
+        "status": "none"
+      }
+    },
+    "transcript": {
+      "years": [
+        {
+          "grade": "Lớp 10",
+          "average": 6.0
+        }
+      ]
+    },
+    "benchmarks": null
+  },
+  "ho_so_021": {
+    "profile": {
+      "current_level": {
+        "value": "high_school",
+        "status": "confirmed"
+      },
+      "current_grade": {
+        "value": "Lớp 12",
+        "status": "confirmed"
+      },
+      "target_level": {
+        "value": "undergraduate",
+        "status": "confirmed"
+      },
+      "major": {
+        "value": "Kỹ thuật cơ khí",
+        "status": "confirmed"
+      },
+      "intake": {
+        "value": "Fall 2027",
+        "status": "confirmed"
+      },
+      "gpa": {
+        "value": {
+          "value": 9.4,
+          "scale": 10,
+          "source": "overall"
+        },
+        "status": "confirmed"
+      },
+      "english": {
+        "value": {
+          "type": "ielts",
+          "value": 5.0
+        },
+        "status": "confirmed"
+      },
+      "sat": {
+        "value": 1530,
+        "status": "confirmed"
+      },
+      "budget": {
+        "value": "tier_35k_50k",
+        "status": "confirmed"
+      },
+      "scholarship": {
+        "value": "preferred",
+        "status": "confirmed"
+      },
+      "activities": {
+        "value": [
+          {
+            "name": "Tổ chức sự kiện thiện nguyện",
+            "category": "activity",
+            "role": "leader",
+            "impactLevel": "province",
+            "startDate": "06/2023",
+            "endDate": null,
+            "isOngoing": true
+          },
+          {
+            "name": "Podcast học thuật",
+            "category": "activity",
+            "role": "founder",
+            "impactLevel": "international",
+            "startDate": "10/2023",
+            "endDate": null,
+            "isOngoing": true
+          }
+        ],
+        "status": "confirmed"
+      },
+      "awards": {
+        "value": [
+          {
+            "name": "Giải Khuyến khích",
+            "category": "achievement",
+            "impactLevel": "international"
+          }
+        ],
+        "status": "confirmed"
+      }
+    },
+    "transcript": null,
+    "benchmarks": {
+      "gpa4": 3.73,
+      "english": {
+        "ielts": 6.5,
+        "toefl": 80,
+        "duolingo": 110
+      }
+    }
+  },
+  "ho_so_022": {
+    "profile": {
+      "current_level": {
+        "value": "high_school",
+        "status": "confirmed"
+      },
+      "current_grade": {
+        "value": "Lớp 11",
+        "status": "confirmed"
+      },
+      "target_level": {
+        "value": "undergraduate",
+        "status": "confirmed"
+      },
+      "major": {
+        "value": "Khoa học dữ liệu",
+        "status": "confirmed"
+      },
+      "intake": {
+        "value": "Spring 2028",
+        "status": "confirmed"
+      },
+      "gpa": {
+        "value": {
+          "value": 8.0,
+          "scale": 10,
+          "source": "transcript"
+        },
+        "status": "confirmed"
+      },
+      "english": {
+        "value": {
+          "type": "ielts",
+          "value": 6.0
+        },
+        "status": "confirmed"
+      },
+      "sat": {
+        "value": null,
+        "status": "none"
+      },
+      "budget": {
+        "value": "tier_35k_50k",
+        "status": "confirmed"
+      },
+      "scholarship": {
+        "value": "preferred",
+        "status": "confirmed"
+      },
+      "activities": {
+        "value": null,
+        "status": "none"
+      },
+      "awards": {
+        "value": null,
+        "status": "none"
+      }
+    },
+    "transcript": {
+      "years": [
+        {
+          "grade": "Lớp 10",
+          "average": 8.0
+        }
+      ]
+    },
+    "benchmarks": {
+      "gpa4": 3.73,
+      "english": {
+        "ielts": 6.5,
+        "toefl": 80,
+        "duolingo": 110
+      }
+    }
+  },
+  "ho_so_023": {
+    "profile": {
+      "current_level": {
+        "value": "high_school",
+        "status": "confirmed"
+      },
+      "current_grade": {
+        "value": "Lớp 11",
+        "status": "confirmed"
+      },
+      "target_level": {
+        "value": "undergraduate",
+        "status": "confirmed"
+      },
+      "major": {
+        "value": "Ngôn ngữ Anh",
+        "status": "confirmed"
+      },
+      "intake": {
+        "value": "Fall 2028",
+        "status": "confirmed"
+      },
+      "gpa": {
+        "value": {
+          "value": 9.6,
+          "scale": 10,
+          "source": "overall"
+        },
+        "status": "confirmed"
+      },
+      "english": {
+        "value": {
+          "type": "ielts",
+          "value": 7.5
+        },
+        "status": "confirmed"
+      },
+      "sat": {
+        "value": 1250,
+        "status": "confirmed"
+      },
+      "budget": {
+        "value": "tier_35k_50k",
+        "status": "confirmed"
+      },
+      "scholarship": {
+        "value": "preferred",
+        "status": "confirmed"
+      },
+      "activities": {
+        "value": null,
+        "status": "none"
+      },
+      "awards": {
+        "value": null,
+        "status": "none"
+      }
+    },
+    "transcript": null,
+    "benchmarks": {
+      "gpa4": 3.73,
+      "english": {
+        "ielts": 6.5,
+        "toefl": 80,
+        "duolingo": 110
+      }
+    }
+  },
+  "ho_so_024": {
+    "profile": {
+      "current_level": {
+        "value": "high_school",
+        "status": "confirmed"
+      },
+      "current_grade": {
+        "value": "Lớp 11",
+        "status": "confirmed"
+      },
+      "target_level": {
+        "value": "undergraduate",
+        "status": "confirmed"
+      },
+      "major": {
+        "value": "Kiến trúc",
+        "status": "confirmed"
+      },
+      "intake": {
+        "value": "Summer 2028",
+        "status": "confirmed"
+      },
+      "gpa": {
+        "value": {
+          "value": 7.8,
+          "scale": 10,
+          "source": "transcript"
+        },
+        "status": "confirmed"
+      },
+      "english": {
+        "value": {
+          "type": "toefl",
+          "value": 95.0
+        },
+        "status": "confirmed"
+      },
+      "sat": {
+        "value": 1530,
+        "status": "confirmed"
+      },
+      "budget": {
+        "value": "tier_20k_35k",
+        "status": "confirmed"
+      },
+      "scholarship": {
+        "value": "mandatory",
+        "status": "confirmed"
+      },
+      "activities": {
+        "value": [
+          {
+            "name": "CLB Âm nhạc",
+            "category": "activity",
+            "role": "vice_leader",
+            "impactLevel": "school",
+            "startDate": "09/2023",
+            "endDate": null,
+            "isOngoing": true
+          },
+          {
+            "name": "Dạy kèm học sinh lớp dưới",
+            "category": "activity",
+            "role": "member",
+            "impactLevel": "district",
+            "startDate": "06/2024",
+            "endDate": null,
+            "isOngoing": true
+          }
+        ],
+        "status": "confirmed"
+      },
+      "awards": {
+        "value": null,
+        "status": "none"
+      }
+    },
+    "transcript": {
+      "years": [
+        {
+          "grade": "Lớp 10",
+          "average": 7.8
+        }
+      ]
+    },
+    "benchmarks": {
+      "gpa4": 3.73,
+      "english": {
+        "ielts": 6.5,
+        "toefl": 80,
+        "duolingo": 110
+      }
+    }
+  },
+  "ho_so_037": {
+    "profile": {
+      "current_level": {
+        "value": "high_school",
+        "status": "confirmed"
+      },
+      "current_grade": {
+        "value": "Lớp 12",
+        "status": "confirmed"
+      },
+      "target_level": {
+        "value": "undergraduate",
+        "status": "confirmed"
+      },
+      "major": {
+        "value": "Tài chính",
+        "status": "confirmed"
+      },
+      "intake": {
+        "value": "Fall 2027",
+        "status": "confirmed"
+      },
+      "gpa": {
+        "value": {
+          "value": 8.0,
+          "scale": 10,
+          "source": "overall"
+        },
+        "status": "confirmed"
+      },
+      "english": {
+        "value": {
+          "type": "ielts",
+          "value": 8.0
+        },
+        "status": "confirmed"
+      },
+      "sat": {
+        "value": 1200,
+        "status": "confirmed"
+      },
+      "budget": {
+        "value": "tier_35k_50k",
+        "status": "confirmed"
+      },
+      "scholarship": {
+        "value": "preferred",
+        "status": "confirmed"
+      },
+      "activities": {
+        "value": [
+          {
+            "name": "CLB Tiếng Anh",
+            "category": "activity",
+            "role": "leader",
+            "impactLevel": "province",
+            "startDate": "09/2024",
+            "endDate": null,
+            "isOngoing": true
+          },
+          {
+            "name": "CLB Văn nghệ",
+            "category": "activity",
+            "role": "member",
+            "impactLevel": "school",
+            "startDate": "09/2024",
+            "endDate": null,
+            "isOngoing": true
+          }
+        ],
+        "status": "confirmed"
+      },
+      "awards": {
+        "value": null,
+        "status": "none"
+      }
+    },
+    "transcript": null,
+    "benchmarks": {
+      "gpa4": 3.73,
+      "english": {
+        "ielts": 6.5,
+        "toefl": 80,
+        "duolingo": 110
+      }
+    }
+  },
+  "ho_so_038": {
+    "profile": {
+      "current_level": {
+        "value": "high_school",
+        "status": "confirmed"
+      },
+      "current_grade": {
+        "value": "Lớp 11",
+        "status": "confirmed"
+      },
+      "target_level": {
+        "value": "undergraduate",
+        "status": "confirmed"
+      },
+      "major": {
+        "value": "Khoa học máy tính",
+        "status": "confirmed"
+      },
+      "intake": {
+        "value": "Spring 2028",
+        "status": "confirmed"
+      },
+      "gpa": {
+        "value": {
+          "value": 8.2,
+          "scale": 10,
+          "source": "transcript"
+        },
+        "status": "confirmed"
+      },
+      "english": {
+        "value": {
+          "type": "ielts",
+          "value": 6.5
+        },
+        "status": "confirmed"
+      },
+      "sat": {
+        "value": 1250,
+        "status": "confirmed"
+      },
+      "budget": {
+        "value": "tier_50k_70k",
+        "status": "confirmed"
+      },
+      "scholarship": {
+        "value": "preferred",
+        "status": "confirmed"
+      },
+      "activities": {
+        "value": [
+          {
+            "name": "Đội tình nguyện môi trường",
+            "category": "activity",
+            "role": "member",
+            "impactLevel": "district",
+            "startDate": "01/2024",
+            "endDate": null,
+            "isOngoing": true
+          },
+          {
+            "name": "CLB Bóng rổ",
+            "category": "activity",
+            "role": "member",
+            "impactLevel": "school",
+            "startDate": "09/2023",
+            "endDate": null,
+            "isOngoing": true
+          }
+        ],
+        "status": "confirmed"
+      },
+      "awards": {
+        "value": null,
+        "status": "none"
+      }
+    },
+    "transcript": {
+      "years": [
+        {
+          "grade": "Lớp 10",
+          "average": 8.2
+        }
+      ]
+    },
+    "benchmarks": {
+      "gpa4": 3.73,
+      "english": {
+        "ielts": 6.5,
+        "toefl": 80,
+        "duolingo": 110
+      }
+    }
+  },
+  "ho_so_039": {
+    "profile": {
+      "current_level": {
+        "value": "high_school",
+        "status": "confirmed"
+      },
+      "current_grade": {
+        "value": "Lớp 11",
+        "status": "confirmed"
+      },
+      "target_level": {
+        "value": "undergraduate",
+        "status": "confirmed"
+      },
+      "major": {
+        "value": "Quản trị kinh doanh",
+        "status": "confirmed"
+      },
+      "intake": {
+        "value": "Fall 2028",
+        "status": "confirmed"
+      },
+      "gpa": {
+        "value": {
+          "value": 9.8,
+          "scale": 10,
+          "source": "overall"
+        },
+        "status": "confirmed"
+      },
+      "english": {
+        "value": {
+          "type": "ielts",
+          "value": 7.0
+        },
+        "status": "confirmed"
+      },
+      "sat": {
+        "value": null,
+        "status": "none"
+      },
+      "budget": {
+        "value": "tier_20k_35k",
+        "status": "confirmed"
+      },
+      "scholarship": {
+        "value": "mandatory",
+        "status": "confirmed"
+      },
+      "activities": {
+        "value": [
+          {
+            "name": "CLB Âm nhạc",
+            "category": "activity",
+            "role": "vice_leader",
+            "impactLevel": "school",
+            "startDate": "09/2023",
+            "endDate": null,
+            "isOngoing": true
+          },
+          {
+            "name": "Dạy kèm học sinh lớp dưới",
+            "category": "activity",
+            "role": "member",
+            "impactLevel": "district",
+            "startDate": "06/2024",
+            "endDate": null,
+            "isOngoing": true
+          }
+        ],
+        "status": "confirmed"
+      },
+      "awards": {
+        "value": null,
+        "status": "none"
+      }
+    },
+    "transcript": null,
+    "benchmarks": {
+      "gpa4": 3.73,
+      "english": {
+        "ielts": 6.5,
+        "toefl": 80,
+        "duolingo": 110
+      }
+    }
+  },
+  "ho_so_040": {
+    "profile": {
+      "current_level": {
+        "value": "high_school",
+        "status": "confirmed"
+      },
+      "current_grade": {
+        "value": "Lớp 11",
+        "status": "confirmed"
+      },
+      "target_level": {
+        "value": "undergraduate",
+        "status": "confirmed"
+      },
+      "major": {
+        "value": "Kỹ thuật điện",
+        "status": "confirmed"
+      },
+      "intake": {
+        "value": "Summer 2028",
+        "status": "confirmed"
+      },
+      "gpa": {
+        "value": {
+          "value": 8.0,
+          "scale": 10,
+          "source": "transcript"
+        },
+        "status": "confirmed"
+      },
+      "english": {
+        "value": {
+          "type": "ielts",
+          "value": 6.0
+        },
+        "status": "confirmed"
+      },
+      "sat": {
+        "value": 1200,
+        "status": "confirmed"
+      },
+      "budget": {
+        "value": "tier_20k_35k",
+        "status": "confirmed"
+      },
+      "scholarship": {
+        "value": "mandatory",
+        "status": "confirmed"
+      },
+      "activities": {
+        "value": [
+          {
+            "name": "CLB Tiếng Anh",
+            "category": "activity",
+            "role": "leader",
+            "impactLevel": "province",
+            "startDate": "09/2024",
+            "endDate": null,
+            "isOngoing": true
+          },
+          {
+            "name": "CLB Văn nghệ",
+            "category": "activity",
+            "role": "member",
+            "impactLevel": "school",
+            "startDate": "09/2024",
+            "endDate": null,
+            "isOngoing": true
+          }
+        ],
+        "status": "confirmed"
+      },
+      "awards": {
+        "value": null,
+        "status": "none"
+      }
+    },
+    "transcript": {
+      "years": [
+        {
+          "grade": "Lớp 10",
+          "average": 8.0
+        }
+      ]
+    },
+    "benchmarks": {
+      "gpa4": 3.73,
+      "english": {
+        "ielts": 6.5,
+        "toefl": 80,
+        "duolingo": 110
+      }
+    }
+  },
+  "ho_so_041": {
+    "profile": {
+      "current_level": {
+        "value": "high_school",
+        "status": "confirmed"
+      },
+      "current_grade": {
+        "value": "Lớp 12",
+        "status": "confirmed"
+      },
+      "target_level": {
+        "value": "undergraduate",
+        "status": "confirmed"
+      },
+      "major": {
+        "value": "Tâm lý học",
+        "status": "confirmed"
+      },
+      "intake": {
+        "value": "Fall 2027",
+        "status": "confirmed"
+      },
+      "gpa": {
+        "value": {
+          "value": 6.0,
+          "scale": 10,
+          "source": "overall"
+        },
+        "status": "confirmed"
+      },
+      "english": {
+        "value": {
+          "type": "toefl",
+          "value": 65.0
+        },
+        "status": "confirmed"
+      },
+      "sat": {
+        "value": 1100,
+        "status": "confirmed"
+      },
+      "budget": {
+        "value": "tier_20k_35k",
+        "status": "confirmed"
+      },
+      "scholarship": {
+        "value": "mandatory",
+        "status": "confirmed"
+      },
+      "activities": {
+        "value": null,
+        "status": "none"
+      },
+      "awards": {
+        "value": null,
+        "status": "none"
+      }
+    },
+    "transcript": null,
+    "benchmarks": {
+      "gpa4": 3.73,
+      "english": {
+        "ielts": 6.5,
+        "toefl": 80,
+        "duolingo": 110
+      }
+    }
+  },
+  "ho_so_042": {
+    "profile": {
+      "current_level": {
+        "value": "high_school",
+        "status": "confirmed"
+      },
+      "current_grade": {
+        "value": "Lớp 11",
+        "status": "confirmed"
+      },
+      "target_level": {
+        "value": "undergraduate",
+        "status": "confirmed"
+      },
+      "major": {
+        "value": "Truyền thông",
+        "status": "confirmed"
+      },
+      "intake": {
+        "value": "Spring 2028",
+        "status": "confirmed"
+      },
+      "gpa": {
+        "value": {
+          "value": 7.8,
+          "scale": 10,
+          "source": "transcript"
+        },
+        "status": "confirmed"
+      },
+      "english": {
+        "value": {
+          "type": "ielts",
+          "value": 6.0
+        },
+        "status": "confirmed"
+      },
+      "sat": {
+        "value": 1300,
+        "status": "confirmed"
+      },
+      "budget": {
+        "value": "tier_35k_50k",
+        "status": "confirmed"
+      },
+      "scholarship": {
+        "value": "preferred",
+        "status": "confirmed"
+      },
+      "activities": {
+        "value": null,
+        "status": "none"
+      },
+      "awards": {
+        "value": null,
+        "status": "none"
+      }
+    },
+    "transcript": {
+      "years": [
+        {
+          "grade": "Lớp 10",
+          "average": 7.8
+        }
+      ]
+    },
+    "benchmarks": null
+  },
+  "ho_so_043": {
+    "profile": {
+      "current_level": {
+        "value": "high_school",
+        "status": "confirmed"
+      },
+      "current_grade": {
+        "value": "Lớp 11",
+        "status": "confirmed"
+      },
+      "target_level": {
+        "value": "undergraduate",
+        "status": "confirmed"
+      },
+      "major": {
+        "value": "Sinh học",
+        "status": "confirmed"
+      },
+      "intake": {
+        "value": "Fall 2028",
+        "status": "confirmed"
+      },
+      "gpa": {
+        "value": {
+          "value": 8.0,
+          "scale": 10,
+          "source": "overall"
+        },
+        "status": "confirmed"
+      },
+      "english": {
+        "value": {
+          "type": "ielts",
+          "value": 5.0
+        },
+        "status": "confirmed"
+      },
+      "sat": {
+        "value": 1200,
+        "status": "confirmed"
+      },
+      "budget": {
+        "value": "tier_35k_50k",
+        "status": "confirmed"
+      },
+      "scholarship": {
+        "value": "preferred",
+        "status": "confirmed"
+      },
+      "activities": {
+        "value": [
+          {
+            "name": "CLB Tiếng Anh",
+            "category": "activity",
+            "role": "leader",
+            "impactLevel": "province",
+            "startDate": "09/2024",
+            "endDate": null,
+            "isOngoing": true
+          },
+          {
+            "name": "CLB Văn nghệ",
+            "category": "activity",
+            "role": "member",
+            "impactLevel": "school",
+            "startDate": "09/2024",
+            "endDate": null,
+            "isOngoing": true
+          }
+        ],
+        "status": "confirmed"
+      },
+      "awards": {
+        "value": null,
+        "status": "none"
+      }
+    },
+    "transcript": null,
+    "benchmarks": {
+      "gpa4": 3.73,
+      "english": {
+        "ielts": 6.5,
+        "toefl": 80,
+        "duolingo": 110
+      }
+    }
+  },
+  "ho_so_044": {
+    "profile": {
+      "current_level": {
+        "value": "high_school",
+        "status": "confirmed"
+      },
+      "current_grade": {
+        "value": "Lớp 11",
+        "status": "confirmed"
+      },
+      "target_level": {
+        "value": "undergraduate",
+        "status": "confirmed"
+      },
+      "major": {
+        "value": "Kinh tế",
+        "status": "confirmed"
+      },
+      "intake": {
+        "value": "Summer 2028",
+        "status": "confirmed"
+      },
+      "gpa": {
+        "value": {
+          "value": 9.4,
+          "scale": 10,
+          "source": "transcript"
+        },
+        "status": "confirmed"
+      },
+      "english": {
+        "value": {
+          "type": "duolingo",
+          "value": 120.0
+        },
+        "status": "confirmed"
+      },
+      "sat": {
+        "value": 1250,
+        "status": "confirmed"
+      },
+      "budget": {
+        "value": "tier_35k_50k",
+        "status": "confirmed"
+      },
+      "scholarship": {
+        "value": "preferred",
+        "status": "confirmed"
+      },
+      "activities": {
+        "value": [
+          {
+            "name": "Đội tình nguyện môi trường",
+            "category": "activity",
+            "role": "member",
+            "impactLevel": "district",
+            "startDate": "01/2024",
+            "endDate": null,
+            "isOngoing": true
+          },
+          {
+            "name": "CLB Bóng rổ",
+            "category": "activity",
+            "role": "member",
+            "impactLevel": "school",
+            "startDate": "09/2023",
+            "endDate": null,
+            "isOngoing": true
+          }
+        ],
+        "status": "confirmed"
+      },
+      "awards": {
+        "value": null,
+        "status": "none"
+      }
+    },
+    "transcript": {
+      "years": [
+        {
+          "grade": "Lớp 10",
+          "average": 9.4
+        }
+      ]
+    },
+    "benchmarks": {
+      "gpa4": 3.73,
+      "english": {
+        "ielts": 6.5,
+        "toefl": 80,
+        "duolingo": 110
+      }
+    }
+  },
+  "ho_so_045": {
+    "profile": {
+      "current_level": {
+        "value": "high_school",
+        "status": "confirmed"
+      },
+      "current_grade": {
+        "value": "Lớp 12",
+        "status": "confirmed"
+      },
+      "target_level": {
+        "value": "undergraduate",
+        "status": "confirmed"
+      },
+      "major": {
+        "value": "Tâm lý học",
+        "status": "confirmed"
+      },
+      "intake": {
+        "value": "Fall 2027",
+        "status": "confirmed"
+      },
+      "gpa": {
+        "value": {
+          "value": 8.2,
+          "scale": 10,
+          "source": "overall"
+        },
+        "status": "confirmed"
+      },
+      "english": {
+        "value": {
+          "type": "ielts",
+          "value": 6.5
+        },
+        "status": "confirmed"
+      },
+      "sat": {
+        "value": 1250,
+        "status": "confirmed"
+      },
+      "budget": {
+        "value": "tier_35k_50k",
+        "status": "confirmed"
+      },
+      "scholarship": {
+        "value": "preferred",
+        "status": "confirmed"
+      },
+      "activities": {
+        "value": [
+          {
+            "name": "Đội tình nguyện môi trường",
+            "category": "activity",
+            "role": "member",
+            "impactLevel": "district",
+            "startDate": "01/2024",
+            "endDate": null,
+            "isOngoing": true
+          },
+          {
+            "name": "CLB Bóng rổ",
+            "category": "activity",
+            "role": "member",
+            "impactLevel": "school",
+            "startDate": "09/2023",
+            "endDate": null,
+            "isOngoing": true
+          }
+        ],
+        "status": "confirmed"
+      },
+      "awards": {
+        "value": null,
+        "status": "none"
+      }
+    },
+    "transcript": null,
+    "benchmarks": {
+      "gpa4": 3.73,
+      "english": {
+        "ielts": 6.5,
+        "toefl": 80,
+        "duolingo": 110
+      }
+    }
+  },
+  "ho_so_046": {
+    "profile": {
+      "current_level": {
+        "value": "high_school",
+        "status": "confirmed"
+      },
+      "current_grade": {
+        "value": "Lớp 11",
+        "status": "confirmed"
+      },
+      "target_level": {
+        "value": "undergraduate",
+        "status": "confirmed"
+      },
+      "major": {
+        "value": "Truyền thông",
+        "status": "confirmed"
+      },
+      "intake": {
+        "value": "Spring 2028",
+        "status": "confirmed"
+      },
+      "gpa": {
+        "value": {
+          "value": 7.8,
+          "scale": 10,
+          "source": "transcript"
+        },
+        "status": "confirmed"
+      },
+      "english": {
+        "value": {
+          "type": "ielts",
+          "value": 7.0
+        },
+        "status": "confirmed"
+      },
+      "sat": {
+        "value": 1300,
+        "status": "confirmed"
+      },
+      "budget": {
+        "value": "tier_35k_50k",
+        "status": "confirmed"
+      },
+      "scholarship": {
+        "value": "preferred",
+        "status": "confirmed"
+      },
+      "activities": {
+        "value": [
+          {
+            "name": "CLB Âm nhạc",
+            "category": "activity",
+            "role": "vice_leader",
+            "impactLevel": "school",
+            "startDate": "09/2023",
+            "endDate": null,
+            "isOngoing": true
+          },
+          {
+            "name": "Dạy kèm học sinh lớp dưới",
+            "category": "activity",
+            "role": "member",
+            "impactLevel": "district",
+            "startDate": "06/2024",
+            "endDate": null,
+            "isOngoing": true
+          }
+        ],
+        "status": "confirmed"
+      },
+      "awards": {
+        "value": null,
+        "status": "none"
+      }
+    },
+    "transcript": {
+      "years": [
+        {
+          "grade": "Lớp 10",
+          "average": 7.8
+        }
+      ]
+    },
+    "benchmarks": {
+      "gpa4": 3.73,
+      "english": {
+        "ielts": 6.5,
+        "toefl": 80,
+        "duolingo": 110
+      }
+    }
+  },
+  "ho_so_047": {
+    "profile": {
+      "current_level": {
+        "value": "high_school",
+        "status": "confirmed"
+      },
+      "current_grade": {
+        "value": "Lớp 11",
+        "status": "confirmed"
+      },
+      "target_level": {
+        "value": "undergraduate",
+        "status": "confirmed"
+      },
+      "major": {
+        "value": "Sinh học",
+        "status": "confirmed"
+      },
+      "intake": {
+        "value": "Fall 2028",
+        "status": "confirmed"
+      },
+      "gpa": {
+        "value": {
+          "value": 8.0,
+          "scale": 10,
+          "source": "overall"
+        },
+        "status": "confirmed"
+      },
+      "english": {
+        "value": {
+          "type": "ielts",
+          "value": 6.0
+        },
+        "status": "confirmed"
+      },
+      "sat": {
+        "value": 1050,
+        "status": "confirmed"
+      },
+      "budget": {
+        "value": "tier_35k_50k",
+        "status": "confirmed"
+      },
+      "scholarship": {
+        "value": "preferred",
+        "status": "confirmed"
+      },
+      "activities": {
+        "value": [
+          {
+            "name": "CLB Tiếng Anh",
+            "category": "activity",
+            "role": "leader",
+            "impactLevel": "province",
+            "startDate": "09/2024",
+            "endDate": null,
+            "isOngoing": true
+          },
+          {
+            "name": "CLB Văn nghệ",
+            "category": "activity",
+            "role": "member",
+            "impactLevel": "school",
+            "startDate": "09/2024",
+            "endDate": null,
+            "isOngoing": true
+          }
+        ],
+        "status": "confirmed"
+      },
+      "awards": {
+        "value": null,
+        "status": "none"
+      }
+    },
+    "transcript": null,
+    "benchmarks": {
+      "gpa4": 3.73,
+      "english": {
+        "ielts": 6.5,
+        "toefl": 80,
+        "duolingo": 110
+      }
+    }
+  }
+}

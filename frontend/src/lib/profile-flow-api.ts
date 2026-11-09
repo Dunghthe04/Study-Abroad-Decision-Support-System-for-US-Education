@@ -10,16 +10,19 @@ import type {
   CertificationCategory,
   CertificationSectionOption,
   CertificationTypeOption,
+  MajorOption,
 } from "@/types/profile-flow";
 
 export const profileFlowApi = {
-  // Lấy siêu dữ liệu động (bậc học, mức tiền, 51 bang, 366 ngành)
+  // Lấy siêu dữ liệu động (bậc học, mức tiền, 51 bang, ngành trong bảng majors)
   getMetadata: async (): Promise<ProfileMetadataResponse> => {
     interface RawMajorItem {
       id?: string;
       name?: string;
       englishName?: string;
       category?: string;
+      aliases?: string[] | null;
+      isPopular?: boolean;
     }
 
     interface RawStateItem {
@@ -94,12 +97,20 @@ export const profileFlowApi = {
       isPopular: Boolean(s.isPopular || popularCodes.has(s.code)),
     }));
 
-    const offeringMajorsSet = new Set<string>();
+    // BE trả usMajors từ bảng majors: name = tên Việt (hiện), englishName = tên Anh (lưu)
+    const majors: MajorOption[] = [];
     for (const m of (raw.usMajors ?? raw.offeringMajors ?? [])) {
-      const name = typeof m === "string" ? m : (m.englishName || m.name || "");
-      if (name.trim()) offeringMajorsSet.add(name.trim());
+      const value = (typeof m === "string" ? m : (m.englishName || m.name || "")).trim();
+      if (!value || majors.some((x) => x.value === value)) continue;
+      majors.push({
+        value,
+        label: typeof m === "string" ? value : (m.name?.trim() || value),
+        aliases: typeof m === "string" ? [] : (m.aliases ?? []),
+        isPopular: typeof m === "string" ? false : Boolean(m.isPopular),
+      });
     }
-    const offeringMajors = Array.from(offeringMajorsSet).sort((a, b) => a.localeCompare(b));
+    majors.sort((a, b) => a.label.localeCompare(b.label, "vi"));
+    const offeringMajors = majors.map((m) => m.value).sort((a, b) => a.localeCompare(b));
 
     const studyLevels = (raw.studyLevels ?? []).map((l) => ({
       key: l.key ?? l.id ?? "undergraduate",
@@ -154,6 +165,7 @@ export const profileFlowApi = {
         ),
       states,
       offeringMajors,
+      majors,
       vndPerUsd: raw.vndPerUsd ?? null,
     };
   },

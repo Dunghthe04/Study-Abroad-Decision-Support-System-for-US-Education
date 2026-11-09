@@ -32,6 +32,26 @@ public class StudyCenter : BaseEntity
     /// <summary>Tài khoản vai trò center quản lý hồ sơ này (cổng trung tâm, backlog #41).</summary>
     public Guid? OwnerUserId { get; set; }
 
+    /// <summary>study_abroad | test_prep | hybrid</summary>
+    public string CenterType { get; set; } = "study_abroad";
+
+    public string? LogoUrl { get; set; }
+    public string? CoverImageUrl { get; set; }
+    public List<string> GalleryImages { get; set; } = [];
+
+    public string? District { get; set; }
+    public double? Latitude { get; set; }
+    public double? Longitude { get; set; }
+
+    public int? StaffCount { get; set; }
+    public int? EstablishedYear { get; set; }
+    public string? LicenseNumber { get; set; }
+    public List<string> Accreditations { get; set; } = [];
+
+    public double? VisaSuccessRate { get; set; }
+    public decimal AverageRating { get; set; } = 5.0m;
+    public int ReviewCount { get; set; } = 0;
+
     public DateOnly? SurveyedAt { get; set; }
     public bool IsActive { get; set; } = true;
 }

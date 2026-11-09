@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using StudyAbroad.Application.AcademicProfiles;
+using StudyAbroad.Application.Admin.Universities;
 using StudyAbroad.Application.Advisor;
 using StudyAbroad.Application.Auth;
 using StudyAbroad.Application.ParentLinks;
@@ -13,7 +14,10 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
+        services.AddScoped<StudyAbroad.Application.Universities.IUniversityDetailService, StudyAbroad.Application.Universities.UniversityDetailService>();
+        services.AddScoped<StudyAbroad.Application.TargetSchools.ITargetSchoolService, StudyAbroad.Application.TargetSchools.TargetSchoolService>();
         services.AddScoped<IStudyCenterService, StudyCenterService>();
+        services.AddScoped<IAdminUniversityService, AdminUniversityService>();
         services.AddScoped<StudyAbroad.Application.Leads.ILeadService, StudyAbroad.Application.Leads.LeadService>();
         services.AddScoped<IAuthService, AuthService>();
         // [Q11] Liên kết phụ huynh–học sinh và sự đồng ý xử lý dữ liệu trẻ em

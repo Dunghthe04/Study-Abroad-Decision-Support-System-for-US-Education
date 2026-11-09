@@ -11,16 +11,19 @@ from app.api.deps import require_api_key
 from app.api.routes import chat, health, profile, recommend
 from app.core.config import get_settings
 from app.core.db import open_pool
+from app.services.advice_writer import AdviceWriter
 from app.services.branches import build_branches
 from app.services.centers import CenterFinder
 from app.services.chat_flow import ChatFlow
+from app.services.claude import ClaudeClient
+from app.services.compare_writer import CompareWriter
 from app.services.ec_reader import EcReader
 from app.services.explainer import Explainer
-from app.services.gemini import GeminiClient
+from app.services.goal_writer import GoalWriter
 from app.services.knowledge import KnowledgeRetriever
 from app.services.ollama import OllamaClient
-from app.services.picker import Picker
-from app.services.scorer import Scorer
+from app.services.scenario_writer import ScenarioWriter
+from app.services.skill_generator import SkillGenerator
 from app.services.skills import build_handlers
 from app.services.slm_classifier import OllamaSlm, output_format
 from app.services.transcript_reader import TranscriptReader
@@ -36,8 +39,8 @@ async def lifespan(app: FastAPI):
     async with (
         httpx.AsyncClient(base_url=settings.ollama_base_url, timeout=settings.llm_timeout_seconds) as http,
         httpx.AsyncClient(
-            base_url=settings.gemini_base_url, timeout=settings.gemini_timeout_seconds
-        ) as gemini_http,
+            base_url=settings.anthropic_base_url, timeout=settings.anthropic_timeout_seconds
+        ) as claude_http,
         httpx.AsyncClient(
             base_url=settings.backend_base_url, timeout=settings.backend_timeout_seconds
         ) as backend_http,
@@ -51,22 +54,22 @@ async def lifespan(app: FastAPI):
             keep_alive=settings.llm_keep_alive,
             embedding_model=settings.embedding_model,
         )
-        gemini = GeminiClient(
-            gemini_http,
-            settings.gemini_model,
-            settings.gemini_api_key,
-            thinking_level=settings.gemini_thinking_level,
-            max_retries=settings.gemini_max_retries,
-            fallback_model=settings.gemini_fallback_model or None,
+        claude = ClaudeClient(
+            claude_http,
+            settings.anthropic_model,
+            settings.anthropic_api_key,
+            max_retries=settings.anthropic_max_retries,
+            fallback_model=settings.anthropic_fallback_model or None,
         )
-        # Có khóa Gemini thì bước B đọc bảng điểm chạy trên Gemini, không thì dùng model Ollama (transcript_parse_model)
+        # Có khóa Claude thì bước B đọc bảng điểm chạy trên Claude, không thì dùng model Ollama (transcript_parse_model)
         app.state.transcript_reader = TranscriptReader(
-            http, settings, gemini if settings.gemini_api_key else None, settings.gemini_model
+            http, settings, claude if settings.anthropic_api_key else None, settings.anthropic_model
         )
-        app.state.scorer = Scorer(gemini, settings.gemini_model)
-        app.state.picker = Picker(gemini, settings.gemini_model)
-        app.state.ec_reader = EcReader(gemini, settings.gemini_model)
-        app.state.explainer = Explainer(gemini, settings.gemini_model)
+        app.state.ec_reader = EcReader(claude, settings.anthropic_model)
+        app.state.explainer = Explainer(claude, settings.anthropic_model)
+        app.state.scenario_writer = ScenarioWriter(claude, settings.anthropic_model)
+        app.state.goal_writer = GoalWriter(claude, settings.anthropic_model)
+        app.state.compare_writer = CompareWriter(claude, settings.anthropic_model)
         # Kho kiến thức: không có DB thì None, chat vẫn chạy nhưng chưa trả lời được câu hỏi kiến thức
         app.state.db_pool = await asyncio.to_thread(open_pool, settings.database_url)
         knowledge = None
@@ -74,9 +77,9 @@ async def lifespan(app: FastAPI):
             statuses = [s.strip() for s in settings.knowledge_statuses.split(",") if s.strip()]
             knowledge = KnowledgeRetriever(app.state.db_pool, statuses, settings.knowledge_top_k)
         centers = CenterFinder(backend_http) if settings.backend_base_url else None
-        # Gemini viết câu trả lời cho mọi skill; Ollama (app.state.llm) chỉ còn embedding cho kho kiến thức
+        # Claude viết câu trả lời cho mọi skill; Ollama (app.state.llm) chỉ còn embedding cho kho kiến thức
         skills = build_handlers(
-            gemini, settings.gemini_model, knowledge, settings.knowledge_min_score, centers, app.state.llm
+            claude, settings.anthropic_model, knowledge, settings.knowledge_min_score, centers, app.state.llm
         )
         # SLM phân loại tin nhắn (usas-slm): client riêng vì khác model với llm_model, dùng chung kết nối http
         slm_client = OllamaClient(
@@ -87,8 +90,14 @@ async def lifespan(app: FastAPI):
             seed=settings.llm_seed,
             keep_alive=settings.llm_keep_alive,
         )
-        slm = OllamaSlm(slm_client, output_format(settings.slm_format))
-        app.state.chat_flow = ChatFlow(slm, build_branches(skills))
+        slm = OllamaSlm(
+            slm_client, output_format(settings.slm_format), settings.slm_use_context, settings.slm_prompt
+        )
+        # Cùng một SLM vừa tách ý vừa sinh skill hồ sơ; Claude viết câu trả lời theo skill đó
+        skill_log_dir = ADVISOR_DIR / settings.skill_log_dir if settings.skill_log_dir else None
+        generator = SkillGenerator(slm_client, log_dir=skill_log_dir)
+        writer = AdviceWriter(claude)
+        app.state.chat_flow = ChatFlow(slm, build_branches(skills, generator, writer))
         yield
         if app.state.db_pool is not None:
             await asyncio.to_thread(app.state.db_pool.close)

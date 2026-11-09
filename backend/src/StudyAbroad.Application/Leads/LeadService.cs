@@ -1,11 +1,12 @@
 using StudyAbroad.Application.Common;
 using StudyAbroad.Application.StudyCenters;
+using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
 
 namespace StudyAbroad.Application.Leads;
 
 /// <summary>
-/// [UC-42 / UC-44] Dịch vụ gửi và quản lý danh sách yêu cầu tư vấn tới Trung tâm du học.
+/// [UC-42 / UC-44 / UC-73] Dịch vụ gửi, xem và xử lý yêu cầu tư vấn tới Trung tâm du học.
 /// </summary>
 public class LeadService(
     ILeadRepository leads,
@@ -13,6 +14,29 @@ public class LeadService(
 {
     public const int MaxMessageLength = 2000;
     public const int MaxPhoneLength = 32;
+
+    private static readonly HashSet<string> ValidStatuses = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "new", "contacted", "closed"
+    };
+
+    private async Task<Guid?> ResolveCenterIdAsync(Guid userId, string? userEmail, string userRole, Guid? targetCenterId, CancellationToken ct)
+    {
+        if (userRole == UserRoles.Admin || userRole == UserRoles.Moderator)
+        {
+            return targetCenterId;
+        }
+
+        if (userRole == UserRoles.Center)
+        {
+            var center = await studyCenters.GetByOwnerOrEmailAsync(userId, userEmail, ct);
+            if (center is null)
+                throw new KeyNotFoundException("Tài khoản chưa được liên kết với trung tâm tư vấn nào trong hệ thống.");
+            return center.Id;
+        }
+
+        throw new UnauthorizedAccessException("Bạn không có quyền truy cập danh sách yêu cầu của trung tâm.");
+    }
 
     public async Task<LeadDto> CreateLeadAsync(
         Guid userId,
@@ -85,6 +109,60 @@ public class LeadService(
         };
 
         return await leads.GetMyLeadsAsync(userId, normalizedQuery, ct);
+    }
+
+    public async Task<CenterLeadsSummaryDto> GetReceivedLeadsForCenterUserAsync(
+        Guid userId,
+        string? userEmail,
+        string userRole,
+        Guid? targetCenterId,
+        string? status,
+        string? search,
+        int page,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        var centerId = await ResolveCenterIdAsync(userId, userEmail, userRole, targetCenterId, ct);
+        return await leads.GetReceivedLeadsAsync(centerId, status, search, page, pageSize, ct);
+    }
+
+    public async Task<CenterReceivedLeadDto?> GetReceivedLeadDetailForCenterUserAsync(
+        Guid userId,
+        string? userEmail,
+        string userRole,
+        Guid leadId,
+        CancellationToken ct = default)
+    {
+        var centerId = await ResolveCenterIdAsync(userId, userEmail, userRole, null, ct);
+        return await leads.GetReceivedLeadDetailAsync(leadId, centerId, ct);
+    }
+
+    public async Task<CenterReceivedLeadDto> UpdateReceivedLeadStatusAsync(
+        Guid userId,
+        string? userEmail,
+        string userRole,
+        Guid leadId,
+        string newStatus,
+        CancellationToken ct = default)
+    {
+        var normalizedStatus = newStatus?.Trim().ToLower() ?? "";
+        if (!ValidStatuses.Contains(normalizedStatus))
+            throw new ArgumentException("Trạng thái không hợp lệ. Chỉ chấp nhận 'new', 'contacted', hoặc 'closed'.");
+
+        var centerId = await ResolveCenterIdAsync(userId, userEmail, userRole, null, ct);
+
+        var lead = await leads.GetLeadForUpdateAsync(leadId, ct);
+        if (lead is null)
+            throw new KeyNotFoundException("Không tìm thấy yêu cầu liên hệ.");
+
+        if (centerId.HasValue && lead.StudyCenterId != centerId.Value)
+            throw new UnauthorizedAccessException("Bạn không có quyền cập nhật yêu cầu liên hệ của trung tâm khác.");
+
+        lead.Status = normalizedStatus;
+        await leads.UpdateAsync(lead, ct);
+
+        var updated = await leads.GetReceivedLeadDetailAsync(leadId, centerId, ct);
+        return updated ?? throw new KeyNotFoundException("Không thể tải thông tin sau khi cập nhật.");
     }
 }
 

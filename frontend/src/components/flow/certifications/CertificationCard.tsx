@@ -35,15 +35,21 @@ export function CertificationCard({ cert, type, onEdit, onRemove, disabled }: Ce
       <div className="min-w-0 space-y-1">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-semibold text-foreground">{getCertDisplayName(cert, type)}</span>
-          {expiry && (
-            <span
-              className={cn(
-                "rounded-full px-2 py-0.5 text-xs font-medium",
-                expiry.expired ? "bg-risk-wash text-risk" : "bg-ok-wash text-ok"
-              )}
-            >
-              {expiry.label}
+          {cert.isTarget ? (
+            <span className="rounded-full bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 px-2 py-0.5 text-xs font-medium border border-indigo-200 dark:border-indigo-800">
+              🎯 Điểm dự tính
             </span>
+          ) : (
+            expiry && (
+              <span
+                className={cn(
+                  "rounded-full px-2 py-0.5 text-xs font-medium",
+                  expiry.expired ? "bg-risk-wash text-risk" : "bg-ok-wash text-ok"
+                )}
+              >
+                {expiry.label}
+              </span>
+            )
           )}
           {cert.type === "other" && (
             <span className="rounded-full bg-warn-wash px-2 py-0.5 text-xs font-medium text-warn">

@@ -9,6 +9,7 @@ Các nhánh nằm ở branches.py (main.py tạo rồi truyền vào ChatFlow).
 import asyncio
 import json
 import logging
+import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -25,6 +26,8 @@ from app.schemas.chat import (
     Widget,
 )
 from app.schemas.slm import SlmTinResult, SlmY
+from app.services import usage_meter
+from app.services.conversation_context import contextualize, update_context
 from app.services.intake import (
     CHAT_BUTTON,
     CONTINUE_CHAT,
@@ -36,8 +39,9 @@ from app.services.intake import (
     intake_choice,
 )
 from app.services.pii_mask import mask_personal_info
+from app.services.priority import PRIORITY_KEY, detect_priorities, unaccent
 from app.services.profile_sync import changed_keys, merge_profile
-from app.services.skill_rules import REQUIRED_B3
+from app.services.skill_rules import REQUIRED_B3, missing_fields
 from app.services.slm_contract import SlmClassifier
 
 # Tạo 1 logger
@@ -59,6 +63,7 @@ QUESTIONS = {
     "D3": "Bạn đã thi SAT hoặc ACT chưa? Nếu rồi thì được bao nhiêu điểm?",
     "E1": "Bạn đã có chứng chỉ tiếng Anh nào chưa (IELTS, TOEFL, Duolingo)? Điểm bao nhiêu, thi khi nào?",
     "E2": "Bạn dự định thi khi nào, mục tiêu khoảng bao nhiêu điểm?",
+    "E3": "Bạn có kế hoạch thi bài chuẩn hóa nào (SAT, ACT...) không, dự kiến khi nào và mục tiêu bao nhiêu điểm?",
     "F1": "Gia đình bạn có thể chi khoảng bao nhiêu mỗi năm cho cả học phí và sinh hoạt?",
     "F2": "Bạn cần học bổng ở mức nào: không cần, nên có, hay bắt buộc phải có mới đi được?",
     "F3": "Chi phí du học chủ yếu do ai chi trả?",
@@ -84,7 +89,7 @@ OPENING_QUESTIONS = {"B0.1", "B0.2"}
 # Loại ý chỉ ĐỌC state (kien_thuc, trung_tam chỉ đọc study_level), nên nhiều ý cùng loại này chạy song song được.
 # Loại khác (mac_dinh, ho_so...) ghi state nên vẫn chạy lần lượt. Thêm loại vào đây chỉ khi nhánh đó không ghi state
 PARALLEL_SAFE = {"kien_thuc", "trung_tam"}
-# Số ý chạy cùng lúc nhiều nhất trong một tin: tin hỏi 12 câu thì không gửi 12 yêu cầu Gemini cùng một lúc
+# Số ý chạy cùng lúc nhiều nhất trong một tin: tin hỏi 12 câu thì không gửi 12 yêu cầu Claude cùng một lúc
 PARALLEL_LIMIT = 4
 # Ý mac_dinh thay thế khi SLM không tách ý hồ sơ nhưng tin vẫn có giá trị hồ sơ (nằm trong ý khác)
 PROFILE_ONLY = SlmY(type="mac_dinh", doan="thông tin hồ sơ")
@@ -157,9 +162,82 @@ def intents_to_run(slm: SlmTinResult) -> list[SlmY]:
     return list(slm.cac_y)
 
 
+# Câu nói về ưu tiên (chi phí thấp, học bổng, danh tiếng) SLM chưa được huấn luyện nên có thể xếp nhầm loại.
+# Quy tắc (priority.py) nhận ra thì đổi thành ý what-if (chưa có kết quả gợi ý thì nhánh kịch bản nhắc cần gợi ý trước),
+# trừ khi đang chờ trả lời một câu hồ sơ (để "em cần học bổng" trả lời câu hỏi hồ sơ không bị hiểu nhầm).
+# Câu chào mở đầu (B0.1, B0.2) không phải câu hồ sơ nên không chặn
+def with_priority_intent(state: ChatState, message: str, slm: SlmTinResult) -> SlmTinResult:
+    waiting = state.question_id is not None and state.question_id not in OPENING_QUESTIONS
+    if waiting or not detect_priorities(message):
+        return slm
+    # SLM thật xếp "ưu tiên chi phí thấp" vào goal_seeking không có trường: đó là ưu tiên, đổi thành what-if.
+    # Giữ nguyên khi SLM đã nhận là what-if (nhánh kịch bản tự đọc thêm ưu tiên) hoặc goal-seeking có nêu trường thật
+    scenarios = [y for y in slm.cac_y if y.type == "kich_ban"]
+    if any(y.thuc_the.get("che_do") == "what_if" or y.thuc_the.get("truong") for y in scenarios):
+        return slm
+    scenario = SlmY(
+        type="kich_ban",
+        doan=message,
+        thuc_the={"che_do": "what_if", "thay_doi": [{"yeu_to": PRIORITY_KEY, "gia_tri": "uu_tien"}]},
+    )
+    # Tin có số liệu thì giữ các ý khác (có thể là hồ sơ); chỉ nói về ưu tiên thì bỏ ý SLM đoán sai
+    keep = [y for y in slm.cac_y if y.type != "kich_ban"] if re.search(r"\d", message) else []
+    return slm.model_copy(update={"cac_y": [scenario, *keep]})
+
+
+# Mục số liệu trường học sinh hay hỏi (khớp bộ từ khóa của .NET ChatSchoolInfo) và dấu hiệu của câu thật sự nhạy cảm (làm giả, khai gian)
+_INFO_WORDS = re.compile(
+    r"\b(gpa|hoc phi|chi phi|hoc bong|ielts|toefl|duolingo|sat|act|ty le nhan|han nop|xep hang|ranking|ty le tot nghiep|nganh)\b"
+)
+_SENSITIVE = re.compile(
+    r"lam gia|gia mao|gian lan|\bbia\b|khai gian|khai khong|sua (gpa|diem|bang)|nang (gpa|diem)|\bfake\b|khong that|mua (bang|diem)|thue (viet|lam)|cheat|hack"
+)
+
+
+# SLM thật xếp nhầm "GPA của The University of Texas at Austin là bao nhiêu" vào ngoại phạm vi nhạy cảm ("hồ sơ cần trung thực").
+# Câu nhắc một mục số liệu trường mà không có dấu hiệu làm giả hay khai gian thì đổi thành câu kiến thức, để nhánh số liệu trường trả lời.
+# Câu nhạy cảm thật (sửa GPA, làm giả bảng điểm) vẫn bị chặn như cũ
+def with_info_intent(message: str, slm: SlmTinResult) -> SlmTinResult:
+    if len(slm.cac_y) != 1:
+        return slm
+    y = slm.cac_y[0]
+    if y.type != "ngoai_pham_vi" or y.thuc_the.get("loai_con") not in ("nhay_cam", "mo_ho"):
+        return slm
+    plain = unaccent(message)
+    if not _INFO_WORDS.search(plain) or _SENSITIVE.search(plain):
+        return slm
+    return slm.model_copy(update={"cac_y": [SlmY(type="kien_thuc", doan=message)]})
+
+
 # Phần kết quả SLM giao cho nhánh của một ý: nhánh hồ sơ cần cả tin, nhánh khác chỉ cần ý của nó
 def view_of(slm: SlmTinResult, y: SlmY) -> SlmTinResult:
     return slm if y.type == "mac_dinh" else slm.model_copy(update={"cac_y": [y]})
+
+
+# Tái tạo đầy đủ SkillOutput (gồm quick_replies và widget) của câu hỏi đang chờ khi người dùng hỏi xen ngang
+def recreate_question_output(state: ChatState, question_id: str, question_text: str) -> SkillOutput:
+    from app.services.skills import buttons, skill_bac_hoc, skill_ho_so
+
+    saved_asked = dict(state.asked)
+    if question_id == "X1":
+        remind_out = skill_ho_so.review(state)
+    elif question_id in skill_bac_hoc.QUESTION_FIELDS:
+        remind_out = skill_bac_hoc.ask_question(state, question_id)
+    elif (
+        question_id in skill_ho_so.QUESTION_FIELDS
+        or question_id in buttons.WIDGETS
+        or buttons.select_fields(question_id)
+    ):
+        remind_out = skill_ho_so.ask_question(state, question_id, question_text)
+    else:
+        remind_out = buttons.ask_with_buttons(state, question_id)
+    state.asked = saved_asked
+
+    return SkillOutput(
+        answer=BACK_TO_QUESTION + (question_text or remind_out.answer),
+        quick_replies=remind_out.quick_replies,
+        widget=remind_out.widget,
+    )
 
 
 class ChatFlow:
@@ -170,6 +248,13 @@ class ChatFlow:
 
     # emit: chỉ truyền khi stream (route /api/v1/chat/stream); không truyền thì chạy như cũ, trả một lần cả câu
     async def reply(self, req: ChatRequest, emit: Emit | None = None) -> ChatResponse:
+        # Mở danh sách token cho lượt này: mọi lần gọi AI trong lượt (kể cả chạy song song) ghi vào đây
+        calls = usage_meter.start()
+        response = await self._reply(req, emit)
+        response.ai_usage = list(calls)
+        return response
+
+    async def _reply(self, req: ChatRequest, emit: Emit | None = None) -> ChatResponse:
         # Cuộc trò chuyện mới: giao diện đã tự hiện lời chào, nên tin nhắn đầu tiên là câu trả lời cho B0.1.
         # Ghi nhận đã chào rồi xử lý tin nhắn như mọi lượt khác, không bỏ qua câu học sinh vừa gõ.
         first_turn = req.state is None
@@ -183,9 +268,18 @@ class ChatFlow:
         # Hồ sơ trong nháp (do .NET gửi) là nguồn thật; không gửi thì giữ hồ sơ trong state như cũ
         if req.profile is not None:
             state.profile = merge_profile(state.profile, req.profile)
-        # Danh sách trường gợi ý do .NET gửi mỗi lượt; không gửi thì giữ như cũ
+            # Học bạ đi cùng hồ sơ: lượt .NET gửi hồ sơ thì thay luôn học bạ, kể cả None (đã chuyển sang GPA tổng)
+            state.transcript = req.transcript
+        # Mốc trường đổi theo bậc học; không gửi thì giữ mốc đã nhớ
+        if req.benchmarks is not None:
+            state.benchmarks = req.benchmarks
+        # Danh sách trường gợi ý do .NET gửi mỗi lượt (lấy từ lần gợi ý đã lưu); không gửi thì giữ như cũ.
+        # Có danh sách nghĩa là học sinh đã có kết quả, dù gợi ý ở trang Gợi ý trường chứ không phải trong chat
         if req.schools is not None:
             state.schools = req.schools
+            state.has_results = state.has_results or bool(req.schools)
+        if req.other_schools is not None:
+            state.other_schools = req.other_schools
         # Chụp hồ sơ đầu lượt để cuối lượt biết khóa nào đổi (sao chép sâu vì nhánh sửa trực tiếp trên state)
         profile_before = {key: field.model_copy(deep=True) for key, field in state.profile.items()}
         message = last_user_message(req)
@@ -198,6 +292,19 @@ class ChatFlow:
             if state.question_id == INTAKE_ID:
                 state.question_id = None
             choice = "chat" if continue_chat else intake_choice(message)
+            # Điền xong form rồi quay về chat: form đã là bước rà soát nên không hỏi X1 nữa,
+            # trả lời luôn câu tư vấn bị hoãn. Hồ sơ còn thiếu thì begin_intake hỏi tiếp trong chat như cũ
+            if continue_chat and state.pending_advice is not None and profile_ready(state):
+                original = state.pending_advice
+                state.pending_advice = None
+                state.intake_mode = "chat"
+                output = await self._branches["ho_so"].run(
+                    state, original.doan, SlmTinResult(cac_y=[original])
+                )
+                log_turn(
+                    state, message, None, ["ho_so"], (time.perf_counter() - started) * 1000, req.session_id
+                )
+                return self._response(state, output, ["ho_so"], profile_before)
             if choice:
                 output = begin_intake(state, choice)
                 log_turn(state, message, None, [], (time.perf_counter() - started) * 1000, req.session_id)
@@ -210,6 +317,9 @@ class ChatFlow:
             slm = SlmTinResult(cac_y=[SlmY(type="mac_dinh", doan=message)])
         else:
             slm = await self._slm.classify(state, message)
+            slm = with_priority_intent(state, message, slm)
+            slm = with_info_intent(message, slm)
+            slm = contextualize(state, message, slm)
 
         # 2. Chạy từng ý theo thứ tự, ghép câu trả lời
         names, output = await self._run_intents(state, message, slm, emit)
@@ -223,11 +333,15 @@ class ChatFlow:
             and (state.question_id, state.last_question) == pending
         )
         if remind:
-            output = combine(output, SkillOutput(BACK_TO_QUESTION + pending[1]))
+            remind_output = recreate_question_output(state, pending[0], pending[1])
+            output = combine(output, remind_output)
 
         # Lượt đầu mà chưa nhánh nào trả lời được: chào như cũ thay vì "đang hoàn thiện"
         if not output.answer:
             output.answer = QUESTIONS["B0.1"] if first_turn else NOT_READY
+
+        # Nhớ trường, mục, điều kiện vừa nói để hiểu câu hỏi tiếp
+        update_context(state, output)
 
         # 5. Ghi log (dữ liệu để gán nhãn thêm và kiểm tra ngẫu nhiên)
         log_turn(state, message, slm, names, (time.perf_counter() - started) * 1000, req.session_id)
@@ -323,6 +437,13 @@ def is_button(question_id: str | None, message: str) -> bool:
     return buttons.pressed(question_id, message, can_skip=True) is not None or skill_ho_so.is_form_text(
         question_id, message
     )
+
+
+# Hồ sơ đủ mục bắt buộc và không còn giá trị nào chờ xác nhận (said_in_B0)
+def profile_ready(state: ChatState) -> bool:
+    if missing_fields(state.profile, REQUIRED_B3):
+        return False
+    return all(field.status != "said_in_B0" for field in state.profile.values())
 
 
 # Bắt đầu hỏi hồ sơ khi một skill bị chặn vì thiếu hồ sơ

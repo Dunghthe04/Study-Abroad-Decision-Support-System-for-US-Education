@@ -38,6 +38,8 @@ interface Field {
   shownWhen?: { field: string; values: string[] };
   /** Chữ thêm trước giá trị khi ghép câu, vd ", môn " */
   prefix?: string;
+  /** Ô tùy chọn, không bắt buộc điền mới được submit */
+  optional?: boolean;
 }
 
 interface SelectData {
@@ -55,9 +57,25 @@ const controlClass =
   "w-full min-w-0 rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground shadow-2xs focus:border-brand focus:outline-hidden focus:ring-1 focus:ring-brand disabled:cursor-not-allowed disabled:opacity-60";
 const labelClass = "text-xs font-medium text-foreground";
 
+const GPA_PRESETS_10 = [
+  { label: "Xuất sắc (9.0 - 10)", value: "9.5" },
+  { label: "Giỏi (8.0 - 8.9)", value: "8.5" },
+  { label: "Khá (7.0 - 7.9)", value: "7.5" },
+  { label: "TB Khá (6.5 - 6.9)", value: "6.7" },
+  { label: "TB (5.0 - 6.4)", value: "5.7" },
+];
+
+const GPA_PRESETS_4 = [
+  { label: "Xuất sắc (3.6 - 4.0)", value: "3.8" },
+  { label: "Giỏi (3.2 - 3.59)", value: "3.4" },
+  { label: "Khá (2.5 - 3.19)", value: "2.8" },
+  { label: "TB (2.0 - 2.49)", value: "2.2" },
+];
+
 /** Ô chọn theo mẫu form cho câu đang hỏi; chọn xong gửi câu ghép như tin nhắn. Vẫn gõ chat được bình thường */
 export function SelectWidget({ data, onPick }: { data?: Record<string, unknown> | null; onPick?: (text: string) => void }) {
   const { fields = [], format = "", altFormat, upload } = (data ?? {}) as SelectData;
+  const [showGpaEstimator, setShowGpaEstimator] = useState(false);
   const [values, setValues] = useState<Record<string, string>>({});
   const [multi, setMulti] = useState<Record<string, string[]>>({});
   const [states, setStates] = useState<UsStateOption[]>([]);
@@ -102,18 +120,47 @@ export function SelectWidget({ data, onPick }: { data?: Record<string, unknown> 
 
   const valueOf = (f: Field): string => (f.multiple ? (multi[f.name] ?? []).join(", ") : (values[f.name] ?? "").trim());
 
+  const fieldError = (f: Field): string | null => {
+    if (f.kind !== "number") return null;
+    const v = valueOf(f);
+    if (!v) return null;
+    const n = Number(v);
+    if (!Number.isFinite(n)) return "Vui lòng nhập một số hợp lệ.";
+    const min = minOf(f);
+    const max = maxOf(f);
+    if (min !== undefined && max !== undefined && (n < min || n > max)) {
+      return `Điểm phải từ ${min} đến ${max} (bạn đang nhập ${n}).`;
+    }
+    if (min !== undefined && n < min) {
+      return `Điểm tối thiểu là ${min}.`;
+    }
+    if (max !== undefined && n > max) {
+      return `Điểm tối đa là ${max}.`;
+    }
+    return null;
+  };
+
+  const rangeHint = (f: Field): string => {
+    if (f.kind !== "number") return "";
+    const min = minOf(f);
+    const max = maxOf(f);
+    if (min !== undefined && max !== undefined) return `(${min} - ${max})`;
+    if (max !== undefined) return `(tối đa ${max})`;
+    return "";
+  };
+
   const isValid = (f: Field): boolean => {
     if (f.kind === "check") return true;
     const v = valueOf(f);
-    if (!v) return false;
+    if (!v) return Boolean(f.optional);
     if (f.kind !== "number") return true;
-    const n = Number(v);
-    const min = minOf(f);
-    const max = maxOf(f);
-    return Number.isFinite(n) && (min === undefined || n >= min) && (max === undefined || n <= max);
+    return fieldError(f) === null;
   };
 
-  const ready = shown.every(isValid);
+  const hasAnyValue = shown.some((f) => Boolean(valueOf(f)));
+  const allOptional = shown.length > 0 && shown.every((f) => f.optional);
+  const ready = shown.every(isValid) && (!allOptional || hasAnyValue);
+  const firstError = shown.map(fieldError).find(Boolean);
 
   const setValue = (name: string, value: string) =>
     setValues((prev) => {
@@ -131,26 +178,99 @@ export function SelectWidget({ data, onPick }: { data?: Record<string, unknown> 
     const template = altFormat && isChecked(altFormat.field) ? altFormat.format : format;
     // Ô đang ẩn ghép thành chữ rỗng; chỗ trống của ô không có trong câu này cũng bỏ
     const part = (f: Field) => (isShown(f) && valueOf(f) ? `${f.prefix ?? ""}${valueOf(f)}` : "");
-    onPick(fields.reduce((text, f) => text.replace(`{${f.name}}`, part(f)), template).replace(/\{\w+\}/g, ""));
+    const text = fields
+      .reduce((res, f) => res.replace(`{${f.name}}`, part(f)), template)
+      .replace(/\{\w+\}/g, "")
+      .replace(/\s+,/g, ",")
+      .replace(/,\s*,/g, ",")
+      .replace(/^,\s*/, "")
+      .trim();
+    onPick(text);
   };
 
   const control = (f: Field) => {
+    const err = fieldError(f);
+    const inputClass = `${controlClass} ${err ? "border-destructive text-destructive focus:border-destructive focus:ring-destructive" : ""}`;
+
+    if (f.name === "gpa") {
+      const currentScale = values["scale"] ?? "10";
+      const presets = currentScale === "4" ? GPA_PRESETS_4 : GPA_PRESETS_10;
+      return (
+        <div className="space-y-2">
+          <input
+            type="number"
+            inputMode="decimal"
+            id={`sw-${f.name}`}
+            placeholder={f.placeholder}
+            min={minOf(f)}
+            max={maxOf(f)}
+            step={stepOf(f)}
+            disabled={!onPick}
+            value={values[f.name] ?? ""}
+            onChange={(e) => setValue(f.name, e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && submit()}
+            className={inputClass}
+          />
+          {err && <p className="text-[11px] font-medium text-destructive mt-0.5">⚠️ {err}</p>}
+          <div className="pt-0.5">
+            <button
+              type="button"
+              disabled={!onPick}
+              onClick={() => setShowGpaEstimator((prev) => !prev)}
+              className="text-xs font-medium text-brand hover:underline inline-flex items-center gap-1 cursor-pointer"
+            >
+              {showGpaEstimator ? "Ẩn bảng ước lượng" : "💡 Chưa rõ GPA? Bấm chọn khoảng ước tính"}
+            </button>
+            {showGpaEstimator && (
+              <div className="mt-1.5 flex flex-wrap gap-1.5 p-2 rounded-lg bg-surface-raised border border-line">
+                {presets.map((preset) => {
+                  const isSelected = values["gpa"] === preset.value;
+                  return (
+                    <button
+                      key={preset.value}
+                      type="button"
+                      disabled={!onPick}
+                      onClick={() => {
+                        if (!values["scale"]) {
+                          setValue("scale", currentScale);
+                        }
+                        setValue("gpa", preset.value);
+                      }}
+                      className={`px-2 py-0.5 text-[11px] rounded-full border transition-all cursor-pointer ${
+                        isSelected
+                          ? "bg-brand text-white border-brand font-semibold shadow-xs"
+                          : "bg-surface text-foreground border-line hover:border-brand/50 hover:bg-brand-wash"
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
     if (f.kind === "number" || f.kind === "text")
       return (
-        <input
-          type={f.kind === "number" ? "number" : "text"}
-          inputMode={f.kind === "number" ? "decimal" : undefined}
-          id={`sw-${f.name}`}
-          placeholder={f.placeholder}
-          min={minOf(f)}
-          max={maxOf(f)}
-          step={stepOf(f)}
-          disabled={!onPick}
-          value={values[f.name] ?? ""}
-          onChange={(e) => setValue(f.name, e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && submit()}
-          className={controlClass}
-        />
+        <div className="space-y-1">
+          <input
+            type={f.kind === "number" ? "number" : "text"}
+            inputMode={f.kind === "number" ? "decimal" : undefined}
+            id={`sw-${f.name}`}
+            placeholder={f.placeholder}
+            min={minOf(f)}
+            max={maxOf(f)}
+            step={stepOf(f)}
+            disabled={!onPick}
+            value={values[f.name] ?? ""}
+            onChange={(e) => setValue(f.name, e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && submit()}
+            className={inputClass}
+          />
+          {err && <p className="text-[11px] font-medium text-destructive mt-0.5">⚠️ {err}</p>}
+        </div>
       );
     if (f.multiple)
       return (
@@ -247,6 +367,11 @@ export function SelectWidget({ data, onPick }: { data?: Record<string, unknown> 
               {f.label && (
                 <Label htmlFor={`sw-${f.name}`} className={labelClass}>
                   {f.label.trim() || " "}
+                  {rangeHint(f) && (
+                    <span className="text-[11px] text-muted-foreground font-normal ml-1">
+                      {rangeHint(f)}
+                    </span>
+                  )}
                 </Label>
               )}
               {control(f)}
@@ -256,10 +381,15 @@ export function SelectWidget({ data, onPick }: { data?: Record<string, unknown> 
       </div>
       {upload === "transcript" && <TranscriptUpload onPick={onPick} />}
       <div className="flex items-center justify-between gap-2">
-        <p className="text-[11px] text-muted-foreground">Chọn cho nhanh, hoặc gõ trả lời vào ô chat.</p>
+        {firstError ? (
+          <p className="text-[11px] font-medium text-destructive">⚠️ {firstError}</p>
+        ) : (
+          <p className="text-[11px] text-muted-foreground">Chọn cho nhanh, hoặc gõ trả lời vào ô chat.</p>
+        )}
         <button
           type="button"
           disabled={!onPick || !ready}
+          title={firstError ?? undefined}
           onClick={submit}
           className="inline-flex h-8 shrink-0 cursor-pointer items-center gap-1 rounded-full bg-brand px-3.5 text-xs font-semibold text-white transition-colors hover:bg-brand-ink disabled:cursor-not-allowed disabled:opacity-50"
         >

@@ -70,6 +70,14 @@ export interface UsStateOption {
   isPopular: boolean;
 }
 
+/** Một ngành trong bảng majors: value (tiếng Anh) lưu vào hồ sơ, label (tiếng Việt) để hiện */
+export interface MajorOption {
+  value: string;
+  label: string;
+  aliases: string[];
+  isPopular: boolean;
+}
+
 export interface ProfileMetadataResponse {
   studyLevels: StudyLevelOption[];
   budgetTiers: BudgetTierOption[];
@@ -77,7 +85,9 @@ export interface ProfileMetadataResponse {
   impactLevels: ImpactLevelOption[];
   certificationTypes: CertificationTypeOption[];
   states: UsStateOption[];
+  /** Tên tiếng Anh của các ngành (ô chọn ngành ở chat dùng) */
   offeringMajors: string[];
+  majors: MajorOption[];
   /** 1 USD = ? VNĐ, BE lấy mới mỗi ngày; null thì dùng BUDGET_RATE */
   vndPerUsd?: number | null;
 }
@@ -165,6 +175,8 @@ export interface CertificationItem {
   /** điểm thành phần theo id section trong metadata */
   sections?: Record<string, number | null> | null;
   testDate?: string | null; // "yyyy-MM"
+  /** true nếu là điểm dự tính / mục tiêu (chưa thi chính thức) */
+  isTarget?: boolean;
 }
 
 /** Nháp kiểu cũ (trước khi có danh sách thẻ) — chỉ dùng để chuyển đổi */
@@ -177,6 +189,12 @@ export interface CertificationDraft {
   certifications: CertificationItem[];
   englishPlanned: boolean;
   englishPlannedDate?: string | null; // "yyyy-MM"
+  englishPlannedTestType?: string | null; // loại bài thi dự kiến (ielts, toefl...)
+  englishPlannedTargetScore?: number | null; // điểm mục tiêu dự kiến
+  standardizedPlanned?: boolean;
+  standardizedPlannedDate?: string | null; // "yyyy-MM"
+  standardizedPlannedTestType?: string | null; // loại bài thi dự kiến (sat, act...)
+  standardizedPlannedTargetScore?: number | null; // điểm mục tiêu dự kiến
 }
 
 /** Bước 3 kiểu cũ còn nằm trong nháp đã lưu (server hoặc localStorage) */
@@ -206,6 +224,8 @@ export interface ActivityDraft {
   durationMonths?: number | null;
   // Giải thưởng
   year?: number | null;
+  // Mô tả thêm (tùy chọn)
+  description?: string | null;
 }
 
 export interface ProfileFlowDraft {
@@ -259,7 +279,7 @@ export interface CommitProfileFlowResponse {
   targetLevel?: string;
   intendedMajor?: string | null;
   overallGpa?: number | null;
-  extracurricularScore?: number | null;
+  extracurricularTier?: number | null;
   budgetMinUsd?: number | null;
   budgetMaxUsd?: number | null;
   targetSchoolType?: string | null;

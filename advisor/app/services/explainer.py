@@ -94,11 +94,14 @@ def build_user(req: ExplainRequest) -> dict[str, Any]:
         "cost": sc.cost,
         "gap": sc.gap,
     }
-    return {
+    user: dict[str, Any] = {
         "student": st.model_dump(exclude_none=True),
         "school": {k: v for k, v in school.items() if v is not None},
         "facts": build_facts(req),
     }
+    if req.basis:
+        user["basis"] = req.basis
+    return user
 
 
 # Một lượt AI: gửi JSON cho Qwen, kiểm tra kết quả, đóng gói trả về

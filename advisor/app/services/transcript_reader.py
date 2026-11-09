@@ -2,7 +2,7 @@
 
 Quy trình 2 bước, vì model nhỏ vừa đọc ảnh vừa suy luận ra JSON thì rất dễ sai khi đổi bố cục:
 - Bước A "chép": model đọc ảnh (vision_model) chép nguyên văn ảnh thành Markdown. PDF có chữ thì bỏ qua bước này.
-- Bước B "hiểu": LLM chữ đọc Markdown, trả JSON theo schema (structured output). Có `parser` (Gemini) thì dùng Gemini,
+- Bước B "hiểu": LLM chữ đọc Markdown, trả JSON theo schema (structured output). Có `parser` (Claude) thì dùng Claude,
   không có thì dùng model Ollama (transcript_parse_model, để trống thì dùng llm_model).
 Sau đó code hậu kiểm: điểm phải có thật trong văn bản bước A và nằm trong 0–10, rồi chuẩn hoá tên môn / tên kỳ.
 """
@@ -273,7 +273,7 @@ class _FileResult:
 
 
 class TranscriptReader:
-    # parser: client LLM có chat_json (Gemini) cho bước B; None thì bước B chạy trên Ollama
+    # parser: client LLM có chat_json (Claude) cho bước B; None thì bước B chạy trên Ollama
     def __init__(
         self, http: httpx.AsyncClient, settings: Settings, parser: Any = None, parser_model: str = ""
     ) -> None:
@@ -613,12 +613,12 @@ class TranscriptReader:
         return result
 
     async def _parse_with_parser(self, source: str, file_name: str, model_used: str | None) -> _FileResult:
-        """Bước B trên Gemini: văn bản đã che họ tên, ngày sinh, mã số trước khi tới đây."""
+        """Bước B trên Claude: văn bản đã che họ tên, ngày sinh, mã số trước khi tới đây."""
         used = " + ".join(m for m in (model_used, self._parser_model) if m)
         messages = [{"role": "user", "content": PARSE_PROMPT + source}]
         try:
             data = await self._parser.chat_json(messages, PARSE_SCHEMA, temperature=0.0)
-        except OllamaError as ex:  # GeminiError kế thừa OllamaError: hết hạn mức, quá tải, JSON hỏng
+        except OllamaError as ex:  # ClaudeError kế thừa OllamaError: hết hạn mức, quá tải, JSON hỏng
             logger.warning("Bước B lỗi (%s, %s): %s", self._parser_model, file_name, ex)
             return _FileResult(model=used, warnings=[f"Tệp '{file_name}': {FRIENDLY_AI_BUSY}"])
         result = self._check_parsed(data, source, file_name)
@@ -803,7 +803,7 @@ class TranscriptReader:
         elif season:
             raw.semester = 1 if season in ("fall", "autumn") else 2
 
-        school = _SCHOOL_GRADE_RE.search(both) or re.search(r"^(10|11|12)$", cls._plain(grade))
+        school = _SCHOOL_GRADE_RE.search(both) or re.search(r"^(6|7|8|9|10|11|12)$", cls._plain(grade))
         uni = _UNI_YEAR_RE.search(both)
         academic = _ACADEMIC_YEAR_RE.search(both)
 

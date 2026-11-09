@@ -11,6 +11,7 @@ import type {
   AdminUserAccountListQuery,
   PagedResult,
   CreateModeratorAccountRequest,
+  CreateCenterAccountRequest,
   LockUserAccountRequest,
   UnlockUserAccountRequest,
   VerifyEmailRequest,
@@ -20,6 +21,13 @@ import type {
   ParentLinkResponse,
   StudyCenter,
   CreateStudyCenterRequest,
+  AddTargetSchoolRequest,
+  TargetSchoolDto,
+  TargetSchoolSummaryDto,
+  UpdateStudyCenterRequest,
+  SetStudyCenterActiveRequest,
+  CenterReceivedLeadDto,
+  CenterLeadsSummaryDto,
 } from "@/types/api";
 
 // Browser code calls same-origin /api (Nginx in prod, Next rewrite in dev).
@@ -30,6 +38,7 @@ export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    public body: unknown = null,
   ) {
     super(message);
     this.name = "ApiError";
@@ -56,7 +65,7 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
         message = `${message} (${errorList})`;
       }
     }
-    throw new ApiError(res.status, message);
+    throw new ApiError(res.status, message, body);
   }
 
   // Handle empty responses (e.g. 204 No Content)
@@ -210,6 +219,13 @@ export const adminUsersApi = {
       body: JSON.stringify(data),
     }),
 
+  /** [Q11 / UC-71 Phụ trợ / UC-64] Moderator/Admin tạo tài khoản người dùng cho Trung tâm tư vấn. */
+  createCenter: (data: CreateCenterAccountRequest) =>
+    apiFetch<UserDto>("/api/v1/study-centers/accounts", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
   /** [UC-61] Khóa tài khoản (admin). */
   lock: (id: string, data: LockUserAccountRequest) =>
     apiFetch<UserDto>(`/api/v1/admin/users/${encodeURIComponent(id)}/lock`, {
@@ -232,4 +248,115 @@ export const studyCentersApi = {
       method: "POST",
       body: JSON.stringify(data),
     }),
+  /** [UC-64] Tạo tài khoản trung tâm tư vấn (vai trò role: center) */
+  createAccount: (data: CreateCenterAccountRequest) =>
+    apiFetch<UserDto>("/api/v1/study-centers/accounts", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  search: (params?: { search?: string; city?: string; service?: string; studyLevel?: string; page?: number; pageSize?: number }) => {
+    const sp = new URLSearchParams();
+    if (params?.search) sp.set("search", params.search);
+    if (params?.city) sp.set("city", params.city);
+    if (params?.service) sp.set("service", params.service);
+    if (params?.studyLevel) sp.set("studyLevel", params.studyLevel);
+    if (params?.page) sp.set("page", String(params.page));
+    if (params?.pageSize) sp.set("pageSize", String(params.pageSize));
+    const qs = sp.toString();
+    return apiFetch<PagedResult<StudyCenter>>(`/api/v1/study-centers${qs ? `?${qs}` : ""}`);
+  },
+  getById: (id: string) => apiFetch<StudyCenter>(`/api/v1/study-centers/${id}`),
+  /** [UC-59] Xác minh hoặc hủy xác minh trung tâm tư vấn (vai trò: Moderator / Admin) */
+  verify: (id: string, isVerified: boolean) =>
+    apiFetch<StudyCenter>(`/api/v1/study-centers/${encodeURIComponent(id)}/verify`, {
+      method: "PUT",
+      body: JSON.stringify({ isVerified }),
+    }),
+  /** [UC-72] Sửa thông tin trung tâm tư vấn (vai trò: Moderator / Admin) */
+  update: (id: string, data: UpdateStudyCenterRequest) =>
+    apiFetch<StudyCenter>(`/api/v1/study-centers/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  /** [UC-72] Ẩn hoặc hiện trung tâm tư vấn khỏi danh bạ và luồng gợi ý (vai trò: Moderator / Admin) */
+  setActiveStatus: (id: string, isActive: boolean) => {
+    const payload: SetStudyCenterActiveRequest = { isActive };
+    return apiFetch<StudyCenter>(`/api/v1/study-centers/${encodeURIComponent(id)}/status`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+  },
+};
+
+/** [UC-73] Quản lý và xử lý yêu cầu liên hệ nhận được phía trung tâm tư vấn (Leads) */
+export const centerLeadsApi = {
+  list: (params?: {
+    page?: number;
+    pageSize?: number;
+    status?: string;
+    search?: string;
+    studyCenterId?: string;
+  }) => {
+    const sp = new URLSearchParams();
+    if (params?.page) sp.set("page", String(params.page));
+    if (params?.pageSize) sp.set("pageSize", String(params.pageSize));
+    if (params?.status && params.status !== "all") sp.set("status", params.status);
+    if (params?.search) sp.set("search", params.search);
+    if (params?.studyCenterId) sp.set("studyCenterId", params.studyCenterId);
+    const qs = sp.toString();
+    return apiFetch<CenterLeadsSummaryDto>(`/api/v1/leads/received${qs ? `?${qs}` : ""}`);
+  },
+
+  getById: (id: string) =>
+    apiFetch<CenterReceivedLeadDto>(`/api/v1/leads/received/${encodeURIComponent(id)}`),
+
+  updateStatus: (id: string, status: string) =>
+    apiFetch<CenterReceivedLeadDto>(`/api/v1/leads/received/${encodeURIComponent(id)}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    }),
+};
+
+// [UC-30, UC-31, UC-33] API Quản lý trường mục tiêu (Student / Parent)
+export const targetSchoolsApi = {
+  /** [UC-33] Xem danh sách các trường mục tiêu kèm tóm tắt phân nhóm và hạn nộp */
+  list: (params?: { category?: string; status?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.category) q.set("category", params.category);
+    if (params?.status) q.set("status", params.status);
+    const qs = q.toString();
+    return apiFetch<TargetSchoolSummaryDto>(`/api/v1/target-schools${qs ? `?${qs}` : ""}`);
+  },
+  /** [UC-30] Thêm một trường vào danh sách mục tiêu */
+  add: (data: AddTargetSchoolRequest) =>
+    apiFetch<TargetSchoolDto>("/api/v1/target-schools", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  /** Lấy chi tiết một trường mục tiêu theo ID */
+  getById: (id: string) =>
+    apiFetch<TargetSchoolDto>(`/api/v1/target-schools/${encodeURIComponent(id)}`),
+  /** [UC-32] Chọn hoặc cập nhật vòng nộp hồ sơ và hạn nộp */
+  updateRound: (id: string, data: { applicationRound: string; deadline?: string | null; autoResolveDeadline?: boolean }) =>
+    apiFetch<TargetSchoolDto>(`/api/v1/target-schools/${encodeURIComponent(id)}/round`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  /** [UC-31] Xóa một trường khỏi danh sách mục tiêu theo ID mục tiêu */
+  remove: (id: string) =>
+    apiFetch<void>(`/api/v1/target-schools/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }),
+  /** [UC-31] Xóa một trường khỏi danh sách mục tiêu theo Mã trường hoặc University ID */
+  removeByUniversity: (universityIdentifier: string) =>
+    apiFetch<void>(`/api/v1/target-schools/by-university/${encodeURIComponent(universityIdentifier)}`, {
+      method: "DELETE",
+    }),
+  /** Kiểm tra trạng thái trường mục tiêu của học sinh */
+  check: (params: { universityCode?: string; universityId?: string }) => {
+    const q = new URLSearchParams();
+    if (params.universityCode) q.set("universityCode", params.universityCode);
+    if (params.universityId) q.set("universityId", params.universityId);
+    return apiFetch<TargetSchoolDto | null>(`/api/v1/target-schools/check?${q.toString()}`);
+  },
 };

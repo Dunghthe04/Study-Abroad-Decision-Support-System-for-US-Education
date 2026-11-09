@@ -11,6 +11,9 @@ public class MajorConfiguration : IEntityTypeConfiguration<Major>
         b.HasKey(x => x.Id);
         b.Property(x => x.Name).HasMaxLength(128).IsRequired();
         b.Property(x => x.CipCode).HasMaxLength(7);
+        b.Property(x => x.NameVi).HasMaxLength(128);
+        b.Property(x => x.Aliases).HasColumnType("text[]").HasDefaultValueSql("'{}'");
+        b.Property(x => x.IsPopular).HasDefaultValue(false);
         b.HasIndex(x => x.Name).IsUnique();
         b.HasIndex(x => x.CipCode).IsUnique();
     }

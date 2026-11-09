@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ArrowLeftIcon, ArrowRightIcon, PlusIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MonthPicker } from "@/components/ui/month-picker";
 import { findCertType, newCertId, parseYearMonth, toYearMonth } from "@/lib/certification-utils";
@@ -60,6 +61,13 @@ export function Step3Certifications({ data, certificationTypes, onUpdate, onPrev
   const certifications = data.certifications ?? [];
   const [editing, setEditing] = useState<EditingState | null>(null);
   const hasEnglish = certifications.some((c) => c.category === "english");
+  const hasStandardized = certifications.some((c) => ["standardized", "graduate"].includes(c.category));
+
+  const englishTypes = certificationTypes.filter((t) => t.category === "english");
+  const standardizedTypes = certificationTypes.filter((t) => ["standardized", "graduate"].includes(t.category));
+
+  const selectedEnglishType = englishTypes.find((t) => t.id === data.englishPlannedTestType);
+  const selectedStandardizedType = standardizedTypes.find((t) => t.id === data.standardizedPlannedTestType);
 
   const now = new Date();
   const thisMonth = { year: now.getFullYear(), month: now.getMonth() + 1 };
@@ -74,13 +82,28 @@ export function Step3Certifications({ data, certificationTypes, onUpdate, onPrev
 
   const handleSave = (cert: CertificationItem) => {
     const exists = certifications.some((c) => c.id === cert.id);
-    // Đã có chứng chỉ tiếng Anh thì bỏ cờ "sẽ thi sau"
     const englishAdded = cert.category === "english";
+    const standardizedAdded = ["standardized", "graduate"].includes(cert.category);
     onUpdate({
       certifications: exists
         ? certifications.map((c) => (c.id === cert.id ? cert : c))
         : [...certifications, cert],
-      ...(englishAdded && data.englishPlanned ? { englishPlanned: false, englishPlannedDate: null } : {}),
+      ...(englishAdded && data.englishPlanned
+        ? {
+            englishPlanned: false,
+            englishPlannedDate: null,
+            englishPlannedTestType: null,
+            englishPlannedTargetScore: null,
+          }
+        : {}),
+      ...(standardizedAdded && data.standardizedPlanned
+        ? {
+            standardizedPlanned: false,
+            standardizedPlannedDate: null,
+            standardizedPlannedTestType: null,
+            standardizedPlannedTargetScore: null,
+          }
+        : {}),
     });
     setEditing(null);
   };
@@ -136,7 +159,7 @@ export function Step3Certifications({ data, certificationTypes, onUpdate, onPrev
             onSave={handleSave}
             onCancel={() => setEditing(null)}
           />
-        ) : section.key === "english" && data.englishPlanned ? null : (
+        ) : (
           <button
             type="button"
             onClick={() => startAdd(section)}
@@ -167,35 +190,160 @@ export function Step3Certifications({ data, certificationTypes, onUpdate, onPrev
 
         {/* Kế hoạch thi tiếng Anh — chỉ hỏi khi chưa có chứng chỉ tiếng Anh nào */}
         {!hasEnglish && (
-        <div className="space-y-3 rounded-xl bg-ground/50 px-4 py-3">
-          <Label className="flex cursor-pointer items-center gap-2.5 text-sm font-normal text-foreground">
-            <Checkbox
-              checked={data.englishPlanned}
-              onCheckedChange={(checked) =>
-                onUpdate({ englishPlanned: checked, englishPlannedDate: checked ? data.englishPlannedDate : null })
-              }
-            />
-            Tôi chưa có chứng chỉ tiếng Anh, sẽ thi sau
-          </Label>
-          {data.englishPlanned && (
-            <div className="max-w-xs space-y-1.5 pl-6.5">
-              <Label htmlFor="englishPlannedDate" className="text-xs font-medium">
-                Dự kiến thi (tháng/năm)
-              </Label>
-              <MonthPicker
-                id="englishPlannedDate"
-                placeholder="Tháng / năm"
-                value={parseYearMonth(data.englishPlannedDate)}
-                min={thisMonth}
-                onChange={(m) => onUpdate({ englishPlannedDate: toYearMonth(m) })}
+          <div className="space-y-3 rounded-xl bg-ground/50 p-4 border border-line/60">
+            <Label className="flex cursor-pointer items-center gap-2.5 text-sm font-medium text-foreground">
+              <Checkbox
+                checked={data.englishPlanned}
+                onCheckedChange={(checked) =>
+                  onUpdate({
+                    englishPlanned: Boolean(checked),
+                    englishPlannedDate: checked ? data.englishPlannedDate : null,
+                    englishPlannedTestType: checked ? data.englishPlannedTestType : null,
+                    englishPlannedTargetScore: checked ? data.englishPlannedTargetScore : null,
+                  })
+                }
               />
-            </div>
-          )}
-        </div>
+              Tôi chưa có chứng chỉ tiếng Anh, sẽ thi sau
+            </Label>
+            {data.englishPlanned && (
+              <div className="grid gap-3 sm:grid-cols-3 pl-6.5 pt-1 animate-in fade-in-50 duration-150">
+                <div className="space-y-1.5">
+                  <Label htmlFor="englishPlannedTestType" className="text-xs font-medium text-muted-foreground">
+                    Bài thi dự kiến (tùy chọn)
+                  </Label>
+                  <select
+                    id="englishPlannedTestType"
+                    value={data.englishPlannedTestType ?? ""}
+                    onChange={(e) => onUpdate({ englishPlannedTestType: e.target.value || null })}
+                    className="flex h-9 w-full rounded-md border border-line bg-surface px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand text-foreground"
+                  >
+                    <option value="">Chưa chọn bài thi</option>
+                    {englishTypes.map((opt) => (
+                      <option key={opt.id} value={opt.id}>
+                        {opt.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="englishPlannedTargetScore" className="text-xs font-medium text-muted-foreground">
+                    Điểm mục tiêu (tùy chọn)
+                  </Label>
+                  <Input
+                    id="englishPlannedTargetScore"
+                    type="number"
+                    step={selectedEnglishType?.step ?? "any"}
+                    placeholder={
+                      selectedEnglishType && selectedEnglishType.min != null && selectedEnglishType.max != null
+                        ? `${selectedEnglishType.min}–${selectedEnglishType.max}`
+                        : "VD: 6.5"
+                    }
+                    value={data.englishPlannedTargetScore ?? ""}
+                    onChange={(e) => {
+                      const val = e.target.value.trim() === "" ? null : Number(e.target.value);
+                      onUpdate({ englishPlannedTargetScore: val });
+                    }}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="englishPlannedDate" className="text-xs font-medium text-muted-foreground">
+                    Dự kiến thi (tùy chọn)
+                  </Label>
+                  <MonthPicker
+                    id="englishPlannedDate"
+                    placeholder="Tháng / năm"
+                    value={parseYearMonth(data.englishPlannedDate)}
+                    min={thisMonth}
+                    onChange={(m) => onUpdate({ englishPlannedDate: toYearMonth(m) })}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
         )}
       </div>
 
-      <div className="border-t border-line pt-6">{renderSection(SECTIONS[1])}</div>
+      <div className="space-y-4 border-t border-line pt-6">
+        {renderSection(SECTIONS[1])}
+
+        {/* Kế hoạch thi bài thi chuẩn hóa — chỉ hỏi khi chưa có bài thi chuẩn hóa nào */}
+        {!hasStandardized && (
+          <div className="space-y-3 rounded-xl bg-ground/50 p-4 border border-line/60">
+            <Label className="flex cursor-pointer items-center gap-2.5 text-sm font-medium text-foreground">
+              <Checkbox
+                checked={data.standardizedPlanned}
+                onCheckedChange={(checked) =>
+                  onUpdate({
+                    standardizedPlanned: Boolean(checked),
+                    standardizedPlannedDate: checked ? data.standardizedPlannedDate : null,
+                    standardizedPlannedTestType: checked ? data.standardizedPlannedTestType : null,
+                    standardizedPlannedTargetScore: checked ? data.standardizedPlannedTargetScore : null,
+                  })
+                }
+              />
+              Tôi chưa thi bài thi chuẩn hóa, sẽ thi sau
+            </Label>
+            {data.standardizedPlanned && (
+              <div className="grid gap-3 sm:grid-cols-3 pl-6.5 pt-1 animate-in fade-in-50 duration-150">
+                <div className="space-y-1.5">
+                  <Label htmlFor="standardizedPlannedTestType" className="text-xs font-medium text-muted-foreground">
+                    Bài thi dự kiến (tùy chọn)
+                  </Label>
+                  <select
+                    id="standardizedPlannedTestType"
+                    value={data.standardizedPlannedTestType ?? ""}
+                    onChange={(e) => onUpdate({ standardizedPlannedTestType: e.target.value || null })}
+                    className="flex h-9 w-full rounded-md border border-line bg-surface px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand text-foreground"
+                  >
+                    <option value="">Chưa chọn bài thi</option>
+                    {standardizedTypes.map((opt) => (
+                      <option key={opt.id} value={opt.id}>
+                        {opt.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="standardizedPlannedTargetScore" className="text-xs font-medium text-muted-foreground">
+                    Điểm mục tiêu (tùy chọn)
+                  </Label>
+                  <Input
+                    id="standardizedPlannedTargetScore"
+                    type="number"
+                    step={selectedStandardizedType?.step ?? "any"}
+                    placeholder={
+                      selectedStandardizedType && selectedStandardizedType.min != null && selectedStandardizedType.max != null
+                        ? `${selectedStandardizedType.min}–${selectedStandardizedType.max}`
+                        : "VD: 1450"
+                    }
+                    value={data.standardizedPlannedTargetScore ?? ""}
+                    onChange={(e) => {
+                      const val = e.target.value.trim() === "" ? null : Number(e.target.value);
+                      onUpdate({ standardizedPlannedTargetScore: val });
+                    }}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="standardizedPlannedDate" className="text-xs font-medium text-muted-foreground">
+                    Dự kiến thi (tùy chọn)
+                  </Label>
+                  <MonthPicker
+                    id="standardizedPlannedDate"
+                    placeholder="Tháng / năm"
+                    value={parseYearMonth(data.standardizedPlannedDate)}
+                    min={thisMonth}
+                    onChange={(m) => onUpdate({ standardizedPlannedDate: toYearMonth(m) })}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Bottom Actions — bước không bắt buộc, luôn đi tiếp được */}
       <div className="flex justify-between pt-4 border-t border-line">

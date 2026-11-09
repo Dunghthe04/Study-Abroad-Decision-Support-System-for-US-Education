@@ -120,6 +120,26 @@ async def test_a_full_school_name_skips_the_ai_and_asks_net_to_explain():
     assert llm.calls == []
 
 
+async def test_a_school_scored_but_not_shown_is_found_by_its_full_name_without_the_ai():
+    llm = FakeLLM()
+    texas = ResultSchool(code="texas", name="The University of Texas at Austin", group="R")
+    st = state()
+    st.other_schools = [texas]
+
+    out = await handler(llm).run(st, "Vì sao The University of Texas at Austin Khó vào?")
+
+    assert out.action == "explain" and out.action_data == {"code": "texas"}
+    assert llm.calls == []
+
+
+async def test_a_position_never_counts_the_schools_that_are_not_shown():
+    st = state()
+    st.other_schools = [ResultSchool(code="texas", name="The University of Texas at Austin", group="R")]
+
+    # "trường cuối cùng" là trường cuối của danh sách đang hiện, không phải trường nằm ngoài
+    assert match_by_position("giải thích trường cuối cùng", st.schools) == ASU
+
+
 async def test_the_ai_picks_the_school_when_the_name_is_not_written_in_full():
     llm = FakeLLM(pick("asu", "ASU"))
 

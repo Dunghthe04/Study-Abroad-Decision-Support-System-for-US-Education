@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -19,13 +19,13 @@ public class LeadsControllerTests
         public Task<LeadDto> CreateLeadAsync(Guid userId, CreateLeadRequest request, string? clientIp = null, CancellationToken ct = default)
         {
             if (request.StudyCenterId == Guid.Empty)
-                throw new ArgumentException("Mã trung tâm tư vấn không được để trống.");
+                throw new ArgumentException("MĂ£ trung tĂ¢m tÆ° váº¥n khĂ´ng Ä‘Æ°á»£c Ä‘á»ƒ trá»‘ng.");
 
             var lead = new LeadDto(
                 Guid.NewGuid(),
                 userId,
                 request.StudyCenterId,
-                "Trung Tâm Du Học Test",
+                "Trung TĂ¢m Du Há»c Test",
                 request.SharedProfile ? Guid.NewGuid() : null,
                 request.StudyLevel,
                 request.ContactPhone,
@@ -62,6 +62,70 @@ public class LeadsControllerTests
                 .ToList();
 
             return Task.FromResult(new PagedResult<LeadDto>(items, page, pageSize, total));
+        }
+
+        public List<CenterReceivedLeadDto> ReceivedLeads { get; } = [];
+
+        public Task<CenterLeadsSummaryDto> GetReceivedLeadsForCenterUserAsync(
+            Guid userId,
+            string? userEmail,
+            string userRole,
+            Guid? targetCenterId,
+            string? status,
+            string? search,
+            int page,
+            int pageSize,
+            CancellationToken ct = default)
+        {
+            var items = ReceivedLeads.AsEnumerable();
+            if (targetCenterId.HasValue && targetCenterId.Value != Guid.Empty)
+            {
+                items = items.Where(l => l.StudyCenterId == targetCenterId.Value);
+            }
+            if (!string.IsNullOrWhiteSpace(status) && !string.Equals(status, "all", StringComparison.OrdinalIgnoreCase))
+            {
+                items = items.Where(l => l.Status.Equals(status, StringComparison.OrdinalIgnoreCase));
+            }
+            var list = items.ToList();
+            return Task.FromResult(new CenterLeadsSummaryDto(
+                list,
+                list.Count,
+                page,
+                pageSize,
+                list.Count(l => l.Status == "new"),
+                list.Count(l => l.Status == "contacted"),
+                list.Count(l => l.Status == "closed")));
+        }
+
+        public Task<CenterReceivedLeadDto?> GetReceivedLeadDetailForCenterUserAsync(
+            Guid userId,
+            string? userEmail,
+            string userRole,
+            Guid leadId,
+            CancellationToken ct = default)
+        {
+            var lead = ReceivedLeads.FirstOrDefault(l => l.Id == leadId);
+            return Task.FromResult(lead);
+        }
+
+        public Task<CenterReceivedLeadDto> UpdateReceivedLeadStatusAsync(
+            Guid userId,
+            string? userEmail,
+            string userRole,
+            Guid leadId,
+            string newStatus,
+            CancellationToken ct = default)
+        {
+            if (newStatus != "new" && newStatus != "contacted" && newStatus != "closed")
+                throw new ArgumentException("Tráº¡ng thĂ¡i khĂ´ng há»£p lá»‡.");
+
+            var lead = ReceivedLeads.FirstOrDefault(l => l.Id == leadId)
+                ?? throw new KeyNotFoundException("KhĂ´ng tĂ¬m tháº¥y yĂªu cáº§u liĂªn há»‡.");
+
+            var updated = lead with { Status = newStatus };
+            var idx = ReceivedLeads.IndexOf(lead);
+            ReceivedLeads[idx] = updated;
+            return Task.FromResult(updated);
         }
     }
 
@@ -105,7 +169,7 @@ public class LeadsControllerTests
         var centerId = Guid.NewGuid();
         var (controller, service) = CreateController(userId, isMinor: true);
 
-        var request = new CreateLeadRequest(centerId, "bachelor", "0912345678", "Em muốn tư vấn du học Mỹ", false);
+        var request = new CreateLeadRequest(centerId, "bachelor", "0912345678", "Em muá»‘n tÆ° váº¥n du há»c Má»¹", false);
         var result = await controller.CreateLead(request, CancellationToken.None);
 
         var created = Assert.IsType<CreatedAtActionResult>(result);
@@ -121,9 +185,9 @@ public class LeadsControllerTests
     {
         var userId = Guid.NewGuid();
         var centerId = Guid.NewGuid();
-        var (controller, _) = CreateController(userId, isMinor: true); // Chưa đủ 18 tuổi
+        var (controller, _) = CreateController(userId, isMinor: true); // ChÆ°a Ä‘á»§ 18 tuá»•i
 
-        var request = new CreateLeadRequest(centerId, "bachelor", "0912345678", "Em gửi hồ sơ", true);
+        var request = new CreateLeadRequest(centerId, "bachelor", "0912345678", "Em gá»­i há»“ sÆ¡", true);
         var result = await controller.CreateLead(request, CancellationToken.None);
 
         var statusResult = Assert.IsType<ObjectResult>(result);
@@ -135,9 +199,9 @@ public class LeadsControllerTests
     {
         var userId = Guid.NewGuid();
         var centerId = Guid.NewGuid();
-        var (controller, service) = CreateController(userId, isMinor: false); // Đủ 18 tuổi
+        var (controller, service) = CreateController(userId, isMinor: false); // Äá»§ 18 tuá»•i
 
-        var request = new CreateLeadRequest(centerId, "master", "0912345678", "Em muốn chia sẻ hồ sơ học thuật", true);
+        var request = new CreateLeadRequest(centerId, "master", "0912345678", "Em muá»‘n chia sáº» há»“ sÆ¡ há»c thuáº­t", true);
         var result = await controller.CreateLead(request, CancellationToken.None);
 
         var created = Assert.IsType<CreatedAtActionResult>(result);
@@ -153,15 +217,15 @@ public class LeadsControllerTests
         var otherUserId = Guid.NewGuid();
         var (controller, service) = CreateController(userId);
 
-        // Seed leads cho user hiện tại: 2 lead "new", 1 lead "contacted"
+        // Seed leads cho user hiá»‡n táº¡i: 2 lead "new", 1 lead "contacted"
         service.Leads.Add(new LeadDto(Guid.NewGuid(), userId, Guid.NewGuid(), "Center A", null, "bachelor", "0912345678", "Msg 1", false, "new", DateTime.UtcNow.AddMinutes(-10)));
         service.Leads.Add(new LeadDto(Guid.NewGuid(), userId, Guid.NewGuid(), "Center B", null, "master", "0912345678", "Msg 2", false, "new", DateTime.UtcNow.AddMinutes(-5)));
         service.Leads.Add(new LeadDto(Guid.NewGuid(), userId, Guid.NewGuid(), "Center C", null, "bachelor", "0912345678", "Msg 3", false, "contacted", DateTime.UtcNow));
 
-        // Seed lead cho user khác (không được xuất hiện trong kết quả)
+        // Seed lead cho user khĂ¡c (khĂ´ng Ä‘Æ°á»£c xuáº¥t hiá»‡n trong káº¿t quáº£)
         service.Leads.Add(new LeadDto(Guid.NewGuid(), otherUserId, Guid.NewGuid(), "Center D", null, "bachelor", "0999999999", "Other", false, "new", DateTime.UtcNow));
 
-        // Act: Lọc theo status "new"
+        // Act: Lá»c theo status "new"
         var actionResult = await controller.GetMyLeads(new LeadQuery(Status: "new", Page: 1, PageSize: 10), CancellationToken.None);
 
         // Assert
@@ -199,7 +263,7 @@ public class LeadsControllerTests
                 DateTime.UtcNow.AddMinutes(i)));
         }
 
-        // Lấy trang 2 với pageSize = 10
+        // Láº¥y trang 2 vá»›i pageSize = 10
         var actionResult = await controller.GetMyLeads(new LeadQuery(Page: 2, PageSize: 10), CancellationToken.None);
 
         var okResult = Assert.IsType<OkObjectResult>(actionResult.Result);
@@ -210,6 +274,202 @@ public class LeadsControllerTests
         Assert.Equal(10, paged.PageSize);
         Assert.Equal(3, paged.TotalPages);
         Assert.Equal(10, paged.Items.Count);
+    }
+
+    private static (LeadsController Controller, FakeLeadService Service) CreateCenterController(
+        Guid userId,
+        string role = UserRoles.Center,
+        string email = "center@example.com")
+    {
+        var fakeLeadService = new FakeLeadService();
+        var fakeAuthService = new FakeAuthService(true);
+        var controller = new LeadsController(fakeLeadService, fakeAuthService)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = new ClaimsPrincipal(new ClaimsIdentity(new[]
+                    {
+                        new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
+                        new Claim(ClaimTypes.Email, email),
+                        new Claim(ClaimTypes.Role, role),
+                    }, "TestAuth"))
+                }
+            }
+        };
+
+        return (controller, fakeLeadService);
+    }
+
+    [Fact]
+    public async Task GetReceivedLeads_AsCenter_ReturnsOkWithLeadsSummary()
+    {
+        var centerUserId = Guid.NewGuid();
+        var centerId = Guid.NewGuid();
+        var (controller, service) = CreateCenterController(centerUserId);
+
+        service.ReceivedLeads.Add(new CenterReceivedLeadDto(
+            Guid.NewGuid(),
+            centerId,
+            "Du Há»c Ă Ă‚u",
+            "bachelor",
+            "0912345678",
+            "Xin tÆ° váº¥n há»c bá»•ng",
+            false,
+            "new",
+            DateTime.UtcNow,
+            null,
+            null,
+            null));
+
+        var result = await controller.GetReceivedLeads(status: "all", page: 1, pageSize: 10, ct: CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var summary = Assert.IsType<CenterLeadsSummaryDto>(ok.Value);
+        Assert.Equal(1, summary.TotalCount);
+        Assert.Equal(1, summary.NewCount);
+        Assert.Single(summary.Items);
+        Assert.Null(summary.Items[0].StudentName);
+    }
+
+    [Fact]
+    public async Task GetReceivedLeadDetail_WhenNotShared_HidesProfileAndStudentEmail()
+    {
+        var centerUserId = Guid.NewGuid();
+        var centerId = Guid.NewGuid();
+        var leadId = Guid.NewGuid();
+        var (controller, service) = CreateCenterController(centerUserId);
+
+        service.ReceivedLeads.Add(new CenterReceivedLeadDto(
+            leadId,
+            centerId,
+            "Du Há»c Quá»‘c Táº¿",
+            "master",
+            "0987654321",
+            "Cáº§n thĂ´ng tin chi phĂ­",
+            false,
+            "new",
+            DateTime.UtcNow,
+            null,
+            null,
+            null));
+
+        var result = await controller.GetReceivedLeadDetail(leadId, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var detail = Assert.IsType<CenterReceivedLeadDto>(ok.Value);
+        Assert.Equal(leadId, detail.Id);
+        Assert.False(detail.SharedProfile);
+        Assert.Null(detail.StudentName);
+        Assert.Null(detail.StudentEmail);
+        Assert.Null(detail.ProfileSummary);
+        Assert.Equal("0987654321", detail.ContactPhone);
+    }
+
+    [Fact]
+    public async Task GetReceivedLeadDetail_WhenShared_IncludesProfileAndStudentInfo()
+    {
+        var centerUserId = Guid.NewGuid();
+        var centerId = Guid.NewGuid();
+        var leadId = Guid.NewGuid();
+        var (controller, service) = CreateCenterController(centerUserId);
+
+        var profile = new SharedProfileSummaryDto(
+            3.85m,
+            "bachelor",
+            "Computer Science",
+            "specialized",
+            "Lá»›p 12",
+            7.5m,
+            "ielts",
+            1480m,
+            null,
+            2,
+            "tier_35k_50k");
+
+        service.ReceivedLeads.Add(new CenterReceivedLeadDto(
+            leadId,
+            centerId,
+            "Du Há»c Quá»‘c Táº¿",
+            "bachelor",
+            "0987654321",
+            "Em gá»­i há»“ sÆ¡ Ä‘áº§y Ä‘á»§",
+            true,
+            "new",
+            DateTime.UtcNow,
+            "Nguyen Van A",
+            "student@example.com",
+            profile));
+
+        var result = await controller.GetReceivedLeadDetail(leadId, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var detail = Assert.IsType<CenterReceivedLeadDto>(ok.Value);
+        Assert.True(detail.SharedProfile);
+        Assert.Equal("Nguyen Van A", detail.StudentName);
+        Assert.Equal("student@example.com", detail.StudentEmail);
+        Assert.NotNull(detail.ProfileSummary);
+        Assert.Equal(3.85m, detail.ProfileSummary.OverallGpa);
+        Assert.Equal("Computer Science", detail.ProfileSummary.IntendedMajor);
+    }
+
+    [Fact]
+    public async Task UpdateLeadStatus_WithValidStatus_ReturnsUpdatedLead()
+    {
+        var centerUserId = Guid.NewGuid();
+        var centerId = Guid.NewGuid();
+        var leadId = Guid.NewGuid();
+        var (controller, service) = CreateCenterController(centerUserId);
+
+        service.ReceivedLeads.Add(new CenterReceivedLeadDto(
+            leadId,
+            centerId,
+            "Du Há»c Test",
+            "bachelor",
+            "0911223344",
+            "TÆ° váº¥n visa",
+            false,
+            "new",
+            DateTime.UtcNow,
+            null,
+            null,
+            null));
+
+        var request = new UpdateLeadStatusRequest("contacted");
+        var result = await controller.UpdateLeadStatus(leadId, request, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var updated = Assert.IsType<CenterReceivedLeadDto>(ok.Value);
+        Assert.Equal("contacted", updated.Status);
+    }
+
+    [Fact]
+    public async Task UpdateLeadStatus_WithInvalidStatus_ReturnsBadRequest()
+    {
+        var centerUserId = Guid.NewGuid();
+        var centerId = Guid.NewGuid();
+        var leadId = Guid.NewGuid();
+        var (controller, service) = CreateCenterController(centerUserId);
+
+        service.ReceivedLeads.Add(new CenterReceivedLeadDto(
+            leadId,
+            centerId,
+            "Du Há»c Test",
+            "bachelor",
+            "0911223344",
+            "TÆ° váº¥n visa",
+            false,
+            "new",
+            DateTime.UtcNow,
+            null,
+            null,
+            null));
+
+        var request = new UpdateLeadStatusRequest("invalid_status");
+        var result = await controller.UpdateLeadStatus(leadId, request, CancellationToken.None);
+
+        Assert.IsType<ObjectResult>(result);
     }
 }
 

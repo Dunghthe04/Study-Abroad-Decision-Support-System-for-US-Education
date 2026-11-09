@@ -64,17 +64,17 @@ public class AdvisorClient(HttpClient http) : IAdvisorClient
         return result ?? throw new InvalidOperationException("Advisor stream kết thúc mà không có kết quả cuối.");
     }
 
-    public Task<EcResponseDto> ReadEcAsync(EcRequestDto request, CancellationToken ct = default) =>
-        PostAsync<EcRequestDto, EcResponseDto>("api/v1/recommend/ec", request, ct);
-
-    public Task<ScoreResponseDto> ScoreAsync(ScoreRequestDto request, CancellationToken ct = default) =>
-        PostAsync<ScoreRequestDto, ScoreResponseDto>("api/v1/recommend/score", request, ct);
-
-    public Task<PickResponseDto> PickAsync(PickRequestDto request, CancellationToken ct = default) =>
-        PostAsync<PickRequestDto, PickResponseDto>("api/v1/recommend/pick", request, ct);
-
     public Task<ExplainResponseDto> ExplainAsync(ExplainRequestDto request, CancellationToken ct = default) =>
         PostAsync<ExplainRequestDto, ExplainResponseDto>("api/v1/recommend/explain", request, ct);
+
+    public Task<GoalNoteResponseDto> WriteGoalNoteAsync(GoalNoteRequestDto request, CancellationToken ct = default) =>
+        PostAsync<GoalNoteRequestDto, GoalNoteResponseDto>("api/v1/recommend/goal-seek", request, ct);
+
+    public Task<CompareNoteResponseDto> WriteCompareNoteAsync(CompareNoteRequestDto request, CancellationToken ct = default) =>
+        PostAsync<CompareNoteRequestDto, CompareNoteResponseDto>("api/v1/recommend/compare", request, ct);
+
+    public Task<ScenarioNoteResponseDto> WriteScenarioNoteAsync(ScenarioNoteRequestDto request, CancellationToken ct = default) =>
+        PostAsync<ScenarioNoteRequestDto, ScenarioNoteResponseDto>("api/v1/recommend/what-if", request, ct);
 
     private async Task<TResponse> PostAsync<TRequest, TResponse>(string url, TRequest request, CancellationToken ct)
     {

@@ -15,6 +15,7 @@ DRAFT_KEYS = {
     "act",
     "english",
     "english_plan",
+    "standardized_plan",
     "certifications",
     "budget",
     "scholarship",

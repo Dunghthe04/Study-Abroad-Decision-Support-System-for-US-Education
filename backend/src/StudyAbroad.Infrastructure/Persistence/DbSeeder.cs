@@ -11,24 +11,8 @@ public static class DbSeeder
     /// <param name="adminPassword">Mật khẩu admin mặc định (env SEED_ADMIN_PASSWORD). Để trống thì không tạo admin.</param>
     public static async Task SeedAsync(AppDbContext db, string? adminPassword, CancellationToken ct = default)
     {
-        // 1. Seed trung tâm du học mẫu
-        if (!await db.StudyCenters.AnyAsync(ct))
-        {
-            db.StudyCenters.AddRange(
-                new StudyCenter
-                {
-                    Code = "DEMO_001", Name = "Demo Center Hà Nội", City = "Hà Nội",
-                    StudyLevels = [StudyLevels.Secondary, StudyLevels.Undergraduate, StudyLevels.Master],
-                    Services = ["CHON_TRUONG", "SAN_HOC_BONG", "LUYEN_PHONG_VAN"],
-                },
-                new StudyCenter
-                {
-                    Code = "DEMO_002", Name = "Demo Center TP.HCM", City = "TP.HCM",
-                    StudyLevels = [StudyLevels.CommunityCollege, StudyLevels.Undergraduate, StudyLevels.Master, StudyLevels.Phd],
-                    Services = ["CHON_TRUONG", "LUYEN_THI", "SUA_BAI_LUAN"],
-                });
-            await db.SaveChangesAsync(ct);
-        }
+        // 1. Seed danh sách trung tâm du học từ khảo sát thực tế và dữ liệu chuẩn hoá
+        await SeedStudyCentersAsync(db, ct);
 
         // 2. [USAS-362] Seed tài khoản Quản trị viên (Admin) mặc định, chỉ khi có mật khẩu từ env (không fix cứng trong code)
         if (!string.IsNullOrWhiteSpace(adminPassword) && !await db.Users.AnyAsync(u => u.Role == UserRoles.Admin, ct))
@@ -883,455 +867,6 @@ public static class DbSeeder
       "label": "Thành viên"
     }
   ],
-  "usStates": [
-    {
-      "code": "AL",
-      "name": "Alabama",
-      "isPopular": false
-    },
-    {
-      "code": "AK",
-      "name": "Alaska",
-      "isPopular": false
-    },
-    {
-      "code": "AZ",
-      "name": "Arizona",
-      "isPopular": false
-    },
-    {
-      "code": "AR",
-      "name": "Arkansas",
-      "isPopular": false
-    },
-    {
-      "code": "CA",
-      "name": "California",
-      "isPopular": true
-    },
-    {
-      "code": "CO",
-      "name": "Colorado",
-      "isPopular": false
-    },
-    {
-      "code": "CT",
-      "name": "Connecticut",
-      "isPopular": false
-    },
-    {
-      "code": "DE",
-      "name": "Delaware",
-      "isPopular": false
-    },
-    {
-      "code": "FL",
-      "name": "Florida",
-      "isPopular": true
-    },
-    {
-      "code": "GA",
-      "name": "Georgia",
-      "isPopular": false
-    },
-    {
-      "code": "HI",
-      "name": "Hawaii",
-      "isPopular": false
-    },
-    {
-      "code": "ID",
-      "name": "Idaho",
-      "isPopular": false
-    },
-    {
-      "code": "IL",
-      "name": "Illinois",
-      "isPopular": true
-    },
-    {
-      "code": "IN",
-      "name": "Indiana",
-      "isPopular": false
-    },
-    {
-      "code": "IA",
-      "name": "Iowa",
-      "isPopular": false
-    },
-    {
-      "code": "KS",
-      "name": "Kansas",
-      "isPopular": false
-    },
-    {
-      "code": "KY",
-      "name": "Kentucky",
-      "isPopular": false
-    },
-    {
-      "code": "LA",
-      "name": "Louisiana",
-      "isPopular": false
-    },
-    {
-      "code": "ME",
-      "name": "Maine",
-      "isPopular": false
-    },
-    {
-      "code": "MD",
-      "name": "Maryland",
-      "isPopular": false
-    },
-    {
-      "code": "MA",
-      "name": "Massachusetts",
-      "isPopular": true
-    },
-    {
-      "code": "MI",
-      "name": "Michigan",
-      "isPopular": false
-    },
-    {
-      "code": "MN",
-      "name": "Minnesota",
-      "isPopular": false
-    },
-    {
-      "code": "MS",
-      "name": "Mississippi",
-      "isPopular": false
-    },
-    {
-      "code": "MO",
-      "name": "Missouri",
-      "isPopular": false
-    },
-    {
-      "code": "MT",
-      "name": "Montana",
-      "isPopular": false
-    },
-    {
-      "code": "NE",
-      "name": "Nebraska",
-      "isPopular": false
-    },
-    {
-      "code": "NV",
-      "name": "Nevada",
-      "isPopular": false
-    },
-    {
-      "code": "NH",
-      "name": "New Hampshire",
-      "isPopular": false
-    },
-    {
-      "code": "NJ",
-      "name": "New Jersey",
-      "isPopular": false
-    },
-    {
-      "code": "NM",
-      "name": "New Mexico",
-      "isPopular": false
-    },
-    {
-      "code": "NY",
-      "name": "New York",
-      "isPopular": true
-    },
-    {
-      "code": "NC",
-      "name": "North Carolina",
-      "isPopular": false
-    },
-    {
-      "code": "ND",
-      "name": "North Dakota",
-      "isPopular": false
-    },
-    {
-      "code": "OH",
-      "name": "Ohio",
-      "isPopular": false
-    },
-    {
-      "code": "OK",
-      "name": "Oklahoma",
-      "isPopular": false
-    },
-    {
-      "code": "OR",
-      "name": "Oregon",
-      "isPopular": false
-    },
-    {
-      "code": "PA",
-      "name": "Pennsylvania",
-      "isPopular": true
-    },
-    {
-      "code": "RI",
-      "name": "Rhode Island",
-      "isPopular": false
-    },
-    {
-      "code": "SC",
-      "name": "South Carolina",
-      "isPopular": false
-    },
-    {
-      "code": "SD",
-      "name": "South Dakota",
-      "isPopular": false
-    },
-    {
-      "code": "TN",
-      "name": "Tennessee",
-      "isPopular": false
-    },
-    {
-      "code": "TX",
-      "name": "Texas",
-      "isPopular": true
-    },
-    {
-      "code": "UT",
-      "name": "Utah",
-      "isPopular": false
-    },
-    {
-      "code": "VT",
-      "name": "Vermont",
-      "isPopular": false
-    },
-    {
-      "code": "VA",
-      "name": "Virginia",
-      "isPopular": false
-    },
-    {
-      "code": "WA",
-      "name": "Washington",
-      "isPopular": true
-    },
-    {
-      "code": "WV",
-      "name": "West Virginia",
-      "isPopular": false
-    },
-    {
-      "code": "WI",
-      "name": "Wisconsin",
-      "isPopular": false
-    },
-    {
-      "code": "WY",
-      "name": "Wyoming",
-      "isPopular": false
-    },
-    {
-      "code": "DC",
-      "name": "District of Columbia",
-      "isPopular": false
-    }
-  ],
-  "popularStateCodes": [
-    "CA",
-    "TX",
-    "NY",
-    "MA",
-    "IL",
-    "PA",
-    "WA",
-    "FL"
-  ],
-  "usMajors": [
-    {
-      "id": "cs",
-      "name": "Khoa học máy tính",
-      "englishName": "Computer Science",
-      "category": "STEM"
-    },
-    {
-      "id": "ds",
-      "name": "Khoa học dữ liệu",
-      "englishName": "Data Science",
-      "category": "STEM"
-    },
-    {
-      "id": "ai",
-      "name": "Trí tuệ nhân tạo",
-      "englishName": "Artificial Intelligence",
-      "category": "STEM"
-    },
-    {
-      "id": "se",
-      "name": "Kỹ thuật phần mềm",
-      "englishName": "Software Engineering",
-      "category": "STEM"
-    },
-    {
-      "id": "ce",
-      "name": "Kỹ thuật máy tính",
-      "englishName": "Computer Engineering",
-      "category": "STEM"
-    },
-    {
-      "id": "it",
-      "name": "Công nghệ thông tin",
-      "englishName": "Information Technology",
-      "category": "STEM"
-    },
-    {
-      "id": "cyber",
-      "name": "An toàn không gian mạng",
-      "englishName": "Cybersecurity",
-      "category": "STEM"
-    },
-    {
-      "id": "me",
-      "name": "Kỹ thuật cơ khí",
-      "englishName": "Mechanical Engineering",
-      "category": "STEM"
-    },
-    {
-      "id": "ee",
-      "name": "Kỹ thuật điện - điện tử",
-      "englishName": "Electrical Engineering",
-      "category": "STEM"
-    },
-    {
-      "id": "cve",
-      "name": "Kỹ thuật xây dựng & dân dụng",
-      "englishName": "Civil Engineering",
-      "category": "STEM"
-    },
-    {
-      "id": "che",
-      "name": "Kỹ thuật hóa học",
-      "englishName": "Chemical Engineering",
-      "category": "STEM"
-    },
-    {
-      "id": "bme",
-      "name": "Kỹ thuật y sinh",
-      "englishName": "Biomedical Engineering",
-      "category": "STEM"
-    },
-    {
-      "id": "ae",
-      "name": "Kỹ thuật hàng không vũ trụ",
-      "englishName": "Aerospace Engineering",
-      "category": "STEM"
-    },
-    {
-      "id": "ie",
-      "name": "Kỹ thuật công nghiệp",
-      "englishName": "Industrial Engineering",
-      "category": "STEM"
-    },
-    {
-      "id": "bio",
-      "name": "Khoa học sinh học",
-      "englishName": "Biological Sciences",
-      "category": "Khoa học tự nhiên"
-    },
-    {
-      "id": "chem",
-      "name": "Hóa học",
-      "englishName": "Chemistry",
-      "category": "Khoa học tự nhiên"
-    },
-    {
-      "id": "phy",
-      "name": "Vật lý học",
-      "englishName": "Physics",
-      "category": "Khoa học tự nhiên"
-    },
-    {
-      "id": "math",
-      "name": "Toán học & Thống kê",
-      "englishName": "Mathematics",
-      "category": "Khoa học tự nhiên"
-    },
-    {
-      "id": "ba",
-      "name": "Quản trị kinh doanh",
-      "englishName": "Business Administration",
-      "category": "Kinh doanh & Quản lý"
-    },
-    {
-      "id": "fin",
-      "name": "Tài chính",
-      "englishName": "Finance",
-      "category": "Kinh doanh & Quản lý"
-    },
-    {
-      "id": "acc",
-      "name": "Kế toán",
-      "englishName": "Accounting",
-      "category": "Kinh doanh & Quản lý"
-    },
-    {
-      "id": "mkt",
-      "name": "Tiếp thị & Truyền thông",
-      "englishName": "Marketing",
-      "category": "Kinh doanh & Quản lý"
-    },
-    {
-      "id": "eco",
-      "name": "Kinh tế học",
-      "englishName": "Economics",
-      "category": "Kinh doanh & Quản lý"
-    },
-    {
-      "id": "psy",
-      "name": "Tâm lý học",
-      "englishName": "Psychology",
-      "category": "Khoa học xã hội"
-    },
-    {
-      "id": "comm",
-      "name": "Truyền thông & Đa phương tiện",
-      "englishName": "Communication",
-      "category": "Khoa học xã hội"
-    },
-    {
-      "id": "arch",
-      "name": "Kiến trúc & Quy hoạch",
-      "englishName": "Architecture",
-      "category": "Nghệ thuật & Thiết kế"
-    },
-    {
-      "id": "design",
-      "name": "Thiết kế đồ họa & Tương tác",
-      "englishName": "Graphic Design",
-      "category": "Nghệ thuật & Thiết kế"
-    },
-    {
-      "id": "nursing",
-      "name": "Điều dưỡng & Y tế",
-      "englishName": "Nursing",
-      "category": "Y tế & Sức khỏe"
-    },
-    {
-      "id": "premed",
-      "name": "Dự bị y khoa",
-      "englishName": "Pre-Medicine",
-      "category": "Y tế & Sức khỏe"
-    },
-    {
-      "id": "undecided",
-      "name": "Chưa quyết định / Khám phá",
-      "englishName": "Undecided / Exploratory",
-      "category": "Tổng quát"
-    }
-  ],
   "institutionTypes": [
     {
       "id": "any",
@@ -1348,5 +883,425 @@ public static class DbSeeder
   ]
 }
 """;
+    }
+
+    private static async Task SeedStudyCentersAsync(AppDbContext db, CancellationToken ct)
+    {
+        var centers = GetPredefinedStudyCenters();
+        foreach (var center in centers)
+        {
+            var existing = await db.StudyCenters.FirstOrDefaultAsync(s => s.Code == center.Code, ct);
+            if (existing is null)
+            {
+                db.StudyCenters.Add(center);
+            }
+            else
+            {
+                existing.Name = center.Name;
+                existing.CenterType = center.CenterType;
+                existing.City = center.City;
+                existing.District = center.District;
+                existing.Address = center.Address;
+                existing.Latitude = center.Latitude;
+                existing.Longitude = center.Longitude;
+                existing.Phone = center.Phone;
+                existing.Email = center.Email;
+                existing.Website = center.Website;
+                existing.Description = center.Description;
+                existing.StudyLevels = center.StudyLevels;
+                existing.Services = center.Services;
+                existing.StaffCount = center.StaffCount;
+                existing.EstablishedYear = center.EstablishedYear;
+                existing.LicenseNumber = center.LicenseNumber;
+                existing.Accreditations = center.Accreditations;
+                existing.VisaSuccessRate = center.VisaSuccessRate;
+                existing.AverageRating = center.AverageRating;
+                existing.ReviewCount = center.ReviewCount;
+                existing.LogoUrl = center.LogoUrl;
+                existing.CoverImageUrl = center.CoverImageUrl;
+                existing.GalleryImages = center.GalleryImages;
+                existing.VerificationStatus = center.VerificationStatus;
+                existing.IsActive = center.IsActive;
+            }
+        }
+        await db.SaveChangesAsync(ct);
+    }
+
+    private static List<StudyCenter> GetPredefinedStudyCenters()
+    {
+        return
+        [
+            new StudyCenter
+            {
+                Code = "CTY_013",
+                Name = "Summit Education Services",
+                CenterType = "hybrid",
+                City = "Hà Nội",
+                District = "Đống Đa",
+                Address = "Tầng 2, Tòa nhà 101 Láng Hạ, Đống Đa, Hà Nội",
+                Latitude = 21.0152,
+                Longitude = 105.8156,
+                Phone = "0901 702 889",
+                Email = "contact@summit.edu.vn",
+                Website = "https://summit.edu.vn",
+                StaffCount = 65,
+                EstablishedYear = 2010,
+                LicenseNumber = "GPHĐ-GD-2010/HN-088",
+                Accreditations = ["AIRC Accredited", "ICEF Agent Member", "ETS Certified Partner", "British Council Platinum Member"],
+                VisaSuccessRate = 99.2,
+                AverageRating = 4.90m,
+                ReviewCount = 186,
+                VerificationStatus = "verified",
+                StudyLevels = [StudyLevels.Secondary, StudyLevels.Undergraduate, StudyLevels.Master],
+                Services = ["CHON_TRUONG", "SAN_HOC_BONG", "LUYEN_THI_SAT", "LUYEN_THI_IELTS", "HOAT_DONG_NGOAI_KHOA", "SUA_BAI_LUAN", "LUYEN_PHONG_VAN", "XIN_VISA"],
+                Description = "Summit Education Services là tổ chức tư vấn du học và đào tạo học thuật uy tín hàng đầu, chuyên sâu chiến lược săn học bổng vào các trường Đại học Top đầu Mỹ và Ivy League. Cung cấp chẩn đoán SAT miễn phí, lộ trình 1-1 cá nhân hóa, đồng hành xây dựng hoạt động ngoại khóa theo chiều sâu ngành học và cố vấn các vòng nộp đơn Early/Regular.",
+                LogoUrl = "https://images.unsplash.com/photo-1546410531-bb4caa6b424d?auto=format&fit=crop&w=400&q=80",
+                CoverImageUrl = "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?auto=format&fit=crop&w=1600&q=80",
+                GalleryImages =
+                [
+                    "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=800&q=80",
+                    "https://images.unsplash.com/photo-1577896851231-70ef18881754?auto=format&fit=crop&w=800&q=80",
+                    "https://images.unsplash.com/photo-1517486808906-6ca8b3f04846?auto=format&fit=crop&w=800&q=80"
+                ]
+            },
+            new StudyCenter
+            {
+                Code = "CTY_014",
+                Name = "Du học New Ocean (Tân Đại Dương)",
+                CenterType = "study_abroad",
+                City = "Hà Nội",
+                District = "Cầu Giấy",
+                Address = "Tòa nhà New Ocean, 56 Phạm Thận Duật, Mai Dịch, Cầu Giấy, Hà Nội",
+                Latitude = 21.0402,
+                Longitude = 105.7761,
+                Phone = "0964 562 233",
+                Email = "contact@newocean.edu.vn",
+                Website = "https://newocean.edu.vn",
+                StaffCount = 48,
+                EstablishedYear = 2007,
+                LicenseNumber = "ĐKKD-0102381920/Sở GD&ĐT Hà Nội",
+                Accreditations = ["ICEF Screened Agency", "WEBA Member", "VIECA Vietnam"],
+                VisaSuccessRate = 98.6,
+                AverageRating = 4.80m,
+                ReviewCount = 142,
+                VerificationStatus = "verified",
+                StudyLevels = [StudyLevels.CommunityCollege, StudyLevels.Undergraduate, StudyLevels.Master, StudyLevels.Phd],
+                Services = ["CHON_TRUONG", "CHUYEN_TIEP_2_CONG_2", "THAC_SI_STEM", "CHUNG_MINH_TAI_CHINH", "LUYEN_PHONG_VAN", "XIN_VISA"],
+                Description = "Với gần 20 năm kinh nghiệm tư vấn du học và di trú Hoa Kỳ, New Ocean chuyên sâu xử lý các bộ hồ sơ chứng minh tài chính phức tạp, giải trình nguồn tiền an toàn, chuyển tiếp CĐCĐ 2+2 tối ưu chi phí và lộ trình Thạc sĩ khối STEM ở lại làm việc 3 năm (OPT 36 tháng).",
+                LogoUrl = "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=400&q=80",
+                CoverImageUrl = "https://images.unsplash.com/photo-1498243691581-b145c3f54a5a?auto=format&fit=crop&w=1600&q=80",
+                GalleryImages =
+                [
+                    "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=800&q=80",
+                    "https://images.unsplash.com/photo-1531482615713-2afd69097998?auto=format&fit=crop&w=800&q=80"
+                ]
+            },
+            new StudyCenter
+            {
+                Code = "CTY_010",
+                Name = "Học viện Giáo dục & Du học American Study",
+                CenterType = "hybrid",
+                City = "Hà Nội",
+                District = "Cầu Giấy",
+                Address = "Tòa nhà Yên Hòa Sunshine, số 9 Vũ Phạm Hàm, Yên Hòa, Cầu Giấy, Hà Nội",
+                Latitude = 21.0185,
+                Longitude = 105.7972,
+                Phone = "0964 102 268",
+                Email = "contact@americanstudy.edu.vn",
+                Website = "https://americanstudy.edu.vn",
+                StaffCount = 80,
+                EstablishedYear = 2014,
+                LicenseNumber = "GP-2819/QĐ-SGDĐT-HN",
+                Accreditations = ["College Board Test Center", "ACT Global Partner", "NACAC Member", "AIRC Certified"],
+                VisaSuccessRate = 99.5,
+                AverageRating = 4.95m,
+                ReviewCount = 215,
+                VerificationStatus = "verified",
+                StudyLevels = [StudyLevels.Secondary, StudyLevels.Undergraduate, StudyLevels.Master],
+                Services = ["LUYEN_THI_SAT", "LUYEN_THI_ACT", "SAN_HOC_BONG", "HOAT_DONG_NGOAI_KHOA", "SUA_BAI_LUAN", "LUYEN_PHONG_VAN", "XIN_VISA"],
+                Description = "American Study là học viện hàng đầu chuyên luyện thi SAT/ACT/AP và tư vấn chiến lược du học Mỹ vào các trường Top 10 - Top 50. Hỗ trợ học sinh xây dựng bài luận mang đậm dấu ấn cá nhân và dự án ngoại khóa quốc tế giúp chinh phục học bổng lên tới 100% học phí.",
+                LogoUrl = "https://images.unsplash.com/photo-1594608661623-aa0bd3a69d98?auto=format&fit=crop&w=400&q=80",
+                CoverImageUrl = "https://images.unsplash.com/photo-1541339907198-e08756dedf3f?auto=format&fit=crop&w=1600&q=80",
+                GalleryImages =
+                [
+                    "https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=800&q=80",
+                    "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=800&q=80"
+                ]
+            },
+            new StudyCenter
+            {
+                Code = "CTY_005",
+                Name = "Du học New World (New World Education)",
+                CenterType = "study_abroad",
+                City = "TP.HCM",
+                District = "Quận 3",
+                Address = "Tòa nhà New World, 183 Trần Cao Vân, Phường 6, Quận 3, TP. Hồ Chí Minh",
+                Latitude = 10.7845,
+                Longitude = 106.6942,
+                Phone = "0908 898 699",
+                Email = "info@newworldedu.vn",
+                Website = "https://newworldedu.vn",
+                StaffCount = 52,
+                EstablishedYear = 2012,
+                LicenseNumber = "0311749202/Sở GD&ĐT TP.HCM",
+                Accreditations = ["AIRC Certified", "ICEF Agency Member", "English USA Partner"],
+                VisaSuccessRate = 98.8,
+                AverageRating = 4.85m,
+                ReviewCount = 168,
+                VerificationStatus = "verified",
+                StudyLevels = [StudyLevels.Secondary, StudyLevels.CommunityCollege, StudyLevels.Undergraduate, StudyLevels.Master],
+                Services = ["CHON_TRUONG", "CHUYEN_TIEP_2_CONG_2", "SAN_HOC_BONG", "LUYEN_PHONG_VAN", "XIN_VISA"],
+                Description = "Đại diện tuyển sinh chính thức của hơn 300 trường đại học và cao đẳng danh tiếng tại Mỹ. Nổi bật với chương trình Hoàn tất trung học kép (High School Completion) từ 16 tuổi, chuyển tiếp CĐCĐ bang Washington và săn học bổng Merit tự động theo GPA.",
+                LogoUrl = "https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&w=400&q=80",
+                CoverImageUrl = "https://images.unsplash.com/photo-1562774053-701939374585?auto=format&fit=crop&w=1600&q=80",
+                GalleryImages =
+                [
+                    "https://images.unsplash.com/photo-1517486808906-6ca8b3f04846?auto=format&fit=crop&w=800&q=80",
+                    "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=800&q=80"
+                ]
+            },
+            new StudyCenter
+            {
+                Code = "CTY_009",
+                Name = "Tổ chức Giáo dục Quốc tế PEC (PEC Education)",
+                CenterType = "hybrid",
+                City = "Hải Phòng",
+                District = "Ngô Quyền",
+                Address = "41 Lạch Tray, Quận Ngô Quyền, TP. Hải Phòng",
+                Latitude = 20.8491,
+                Longitude = 106.6897,
+                Phone = "0931 595 588",
+                Email = "duhoc@pec.edu.vn",
+                Website = "https://pec.edu.vn",
+                StaffCount = 38,
+                EstablishedYear = 2005,
+                LicenseNumber = "GPHĐ-02013894/Sở GD&ĐT Hải Phòng",
+                Accreditations = ["British Council Test Centre", "IDP IELTS Partner", "ICEF Trained"],
+                VisaSuccessRate = 97.9,
+                AverageRating = 4.75m,
+                ReviewCount = 110,
+                VerificationStatus = "verified",
+                StudyLevels = [StudyLevels.Secondary, StudyLevels.CommunityCollege, StudyLevels.Undergraduate, StudyLevels.Master],
+                Services = ["LUYEN_THI_IELTS", "LUYEN_THI_SAT", "CHON_TRUONG", "SAN_HOC_BONG", "LUYEN_PHONG_VAN", "XIN_VISA"],
+                Description = "Hệ thống Anh ngữ và Tư vấn Du học Quốc tế uy tín bậc nhất tại Hải Phòng và khu vực Duyên hải phía Bắc. Cung cấp quy trình khép kín từ đào tạo IELTS/SAT cam kết đầu ra đến nộp hồ sơ xin I-20 và luyện phỏng vấn visa cùng cố vấn nước ngoài.",
+                LogoUrl = "https://images.unsplash.com/photo-1577495508048-b635879837f1?auto=format&fit=crop&w=400&q=80",
+                CoverImageUrl = "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=1600&q=80",
+                GalleryImages =
+                [
+                    "https://images.unsplash.com/photo-1517486808906-6ca8b3f04846?auto=format&fit=crop&w=800&q=80"
+                ]
+            },
+            new StudyCenter
+            {
+                Code = "CTY_003",
+                Name = "Tư vấn Du học & Học bổng Edu4life",
+                CenterType = "study_abroad",
+                City = "Hà Nội",
+                District = "Ba Đình",
+                Address = "Tầng 4, Tòa nhà DMC, 535 Kim Mã, Ngọc Khánh, Ba Đình, Hà Nội",
+                Latitude = 21.0312,
+                Longitude = 105.8123,
+                Phone = "0983 234 580",
+                Email = "info@edu4life.vn",
+                Website = "https://edu4life.vn",
+                StaffCount = 25,
+                EstablishedYear = 2016,
+                LicenseNumber = "1204/QĐ-SGDĐT Hà Nội",
+                Accreditations = ["EducationUSA Network Associate", "ICEF Qualified Agency", "VIECA"],
+                VisaSuccessRate = 98.2,
+                AverageRating = 4.80m,
+                ReviewCount = 95,
+                VerificationStatus = "verified",
+                StudyLevels = [StudyLevels.Undergraduate, StudyLevels.Master],
+                Services = ["CHON_TRUONG", "SAN_HOC_BONG", "SUA_BAI_LUAN", "LUYEN_PHONG_VAN", "XIN_VISA"],
+                Description = "Tư vấn du học dựa trên phương pháp 3 phễu lọc và đối soát ngân sách thực tế. Chuyên gia đồng hành hỗ trợ học sinh xây dựng bài luận giàu cảm xúc, khắc phục điểm GPA khiêm tốn bằng hoạt động ngoại khóa có chiều sâu và luyện phỏng vấn visa di trú INA 214(b).",
+                LogoUrl = "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=400&q=80",
+                CoverImageUrl = "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?auto=format&fit=crop&w=1600&q=80",
+                GalleryImages =
+                [
+                    "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=800&q=80"
+                ]
+            },
+            new StudyCenter
+            {
+                Code = "CTY_004",
+                Name = "Du học DuhocEZ (EZ Education Vietnam)",
+                CenterType = "study_abroad",
+                City = "TP.HCM",
+                District = "Bình Thạnh",
+                Address = "Tòa nhà Landmark Plus, 208 Nguyễn Hữu Cảnh, Phường 22, Bình Thạnh, TP. Hồ Chí Minh",
+                Latitude = 10.7938,
+                Longitude = 106.7214,
+                Phone = "0974 930 860",
+                Email = "contact@duhocez.com",
+                Website = "https://duhocez.com",
+                StaffCount = 30,
+                EstablishedYear = 2018,
+                LicenseNumber = "GP-031589123/TP.HCM",
+                Accreditations = ["AIRC Institutional Member", "ICEF Verified", "NAFSA Attendee"],
+                VisaSuccessRate = 98.4,
+                AverageRating = 4.85m,
+                ReviewCount = 124,
+                VerificationStatus = "verified",
+                StudyLevels = [StudyLevels.CommunityCollege, StudyLevels.Undergraduate, StudyLevels.Master],
+                Services = ["CHON_TRUONG", "CHUYEN_TIEP_2_CONG_2", "LUYEN_PHONG_VAN", "XIN_VISA"],
+                Description = "Nền tảng tư vấn du học số hóa giúp rút ngắn quy trình nộp đơn. Chuyên gia hướng dẫn khai đơn DS-160 chuẩn xác, giải trình sổ tiết kiệm và dòng tiền gia đình minh bạch, đảm bảo tối đa tỷ lệ cấp visa F-1.",
+                LogoUrl = "https://images.unsplash.com/photo-1498243691581-b145c3f54a5a?auto=format&fit=crop&w=400&q=80",
+                CoverImageUrl = "https://images.unsplash.com/photo-1492538368677-f6e0afe31dcc?auto=format&fit=crop&w=1600&q=80",
+                GalleryImages =
+                [
+                    "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=800&q=80"
+                ]
+            },
+            new StudyCenter
+            {
+                Code = "CTY_012",
+                Name = "Tổ chức Hướng nghiệp & Du học Mission Edu",
+                CenterType = "study_abroad",
+                City = "Hà Nội",
+                District = "Nam Từ Liêm",
+                Address = "Tòa tháp The Manor, Đường Mễ Trì, Mỹ Đình 1, Nam Từ Liêm, Hà Nội",
+                Latitude = 21.0140,
+                Longitude = 105.7766,
+                Phone = "0915 638 998",
+                Email = "admissions@missionedu.vn",
+                Website = "https://missionedu.vn",
+                StaffCount = 22,
+                EstablishedYear = 2017,
+                LicenseNumber = "892/QĐ-GDĐT Hà Nội",
+                Accreditations = ["ICEF Screened", "EducationUSA Partner"],
+                VisaSuccessRate = 98.0,
+                AverageRating = 4.78m,
+                ReviewCount = 88,
+                VerificationStatus = "verified",
+                StudyLevels = [StudyLevels.Secondary, StudyLevels.Undergraduate],
+                Services = ["CHON_TRUONG", "SAN_HOC_BONG", "SUA_BAI_LUAN", "LUYEN_PHONG_VAN", "XIN_VISA"],
+                Description = "Đơn vị chuyên tư vấn định hướng du học sớm bậc THPT và Đại học tại Mỹ. Hỗ trợ phụ huynh quản lý ngân sách vừa vặn ($25k - $35k/năm) và cá nhân hóa lộ trình chuẩn bị bài luận 650 từ.",
+                LogoUrl = "https://images.unsplash.com/photo-1577896851231-70ef18881754?auto=format&fit=crop&w=400&q=80",
+                CoverImageUrl = "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?auto=format&fit=crop&w=1600&q=80",
+                GalleryImages =
+                [
+                    "https://images.unsplash.com/photo-1517486808906-6ca8b3f04846?auto=format&fit=crop&w=800&q=80"
+                ]
+            },
+            new StudyCenter
+            {
+                Code = "CTY_011",
+                Name = "Học viện Du học Sau Đại học & Thạc sĩ Kosam",
+                CenterType = "study_abroad",
+                City = "Hà Nội",
+                District = "Hoàn Kiếm",
+                Address = "Tầng 6, Số 24 Tràng Tiền, Phường Tràng Tiền, Hoàn Kiếm, Hà Nội",
+                Latitude = 21.0253,
+                Longitude = 105.8561,
+                Phone = "0904 886 522",
+                Email = "consult@kosam.edu.vn",
+                Website = "https://kosam.edu.vn",
+                StaffCount = 20,
+                EstablishedYear = 2015,
+                LicenseNumber = "GP-4521/Sở GD&ĐT Hà Nội",
+                Accreditations = ["GRE/GMAT Educational Partner", "AIRC Member", "NAFSA Member"],
+                VisaSuccessRate = 99.0,
+                AverageRating = 4.88m,
+                ReviewCount = 76,
+                VerificationStatus = "verified",
+                StudyLevels = [StudyLevels.Undergraduate, StudyLevels.Master, StudyLevels.Phd],
+                Services = ["CHON_TRUONG", "SAN_HOC_BONG", "SUA_BAI_LUAN", "LUYEN_PHONG_VAN", "XIN_VISA"],
+                Description = "Đơn vị tư vấn hàng đầu về các chương trình Thạc sĩ, Tiến sĩ và nghiên cứu chuyên sâu tại Mỹ (AI, Data Science, Kỹ thuật phần mềm, MBA). Hướng dẫn sinh viên trái ngành bổ sung môn tiên quyết, tối ưu SOP và chuẩn bị thực tập CPT/OPT.",
+                LogoUrl = "https://images.unsplash.com/photo-1531482615713-2afd69097998?auto=format&fit=crop&w=400&q=80",
+                CoverImageUrl = "https://images.unsplash.com/photo-1562774053-701939374585?auto=format&fit=crop&w=1600&q=80",
+                GalleryImages =
+                [
+                    "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=800&q=80"
+                ]
+            },
+            new StudyCenter
+            {
+                Code = "CTY_002",
+                Name = "Tổ chức Giáo dục Beestudious",
+                CenterType = "study_abroad",
+                City = "Hà Nội",
+                District = "Cầu Giấy",
+                Address = "Tầng 5, Tòa nhà Detech, số 8 Tôn Thất Thuyết, Cầu Giấy, Hà Nội",
+                Latitude = 21.0289,
+                Longitude = 105.7818,
+                Phone = "0989 332 211",
+                Email = "contact@beestudious.edu.vn",
+                Website = "https://beestudious.edu.vn",
+                StaffCount = 18,
+                EstablishedYear = 2019,
+                LicenseNumber = "010789221/Sở GD&ĐT Hà Nội",
+                Accreditations = ["ICEF Screened", "VIECA Member"],
+                VisaSuccessRate = 97.5,
+                AverageRating = 4.70m,
+                ReviewCount = 62,
+                VerificationStatus = "verified",
+                StudyLevels = [StudyLevels.Secondary, StudyLevels.Undergraduate],
+                Services = ["CHON_TRUONG", "SUA_BAI_LUAN", "LUYEN_PHONG_VAN", "XIN_VISA"],
+                Description = "Đồng hành xây dựng năng lực tự chủ cho học sinh, khai phá tiềm năng cá nhân và thiết kế hồ sơ du học Mỹ sáng tạo, thực chất.",
+                LogoUrl = "https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=400&q=80",
+                CoverImageUrl = "https://images.unsplash.com/photo-1498243691581-b145c3f54a5a?auto=format&fit=crop&w=1600&q=80",
+                GalleryImages =
+                [
+                    "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?auto=format&fit=crop&w=800&q=80"
+                ]
+            },
+            new StudyCenter
+            {
+                Code = "DEMO_001",
+                Name = "Demo Center Hà Nội",
+                CenterType = "study_abroad",
+                City = "Hà Nội",
+                District = "Cầu Giấy",
+                Address = "Số 1 Đại Cồ Việt, Hai Bà Trưng, Hà Nội",
+                Latitude = 21.0074,
+                Longitude = 105.8431,
+                Phone = "0988 888 001",
+                Email = "hanoi@democenter.edu.vn",
+                Website = "https://democenter.edu.vn",
+                StaffCount = 20,
+                EstablishedYear = 2018,
+                LicenseNumber = "DEMO-HN-2018",
+                Accreditations = ["AIRC Candidate"],
+                VisaSuccessRate = 98.0,
+                AverageRating = 4.80m,
+                ReviewCount = 45,
+                VerificationStatus = "verified",
+                StudyLevels = [StudyLevels.Secondary, StudyLevels.Undergraduate, StudyLevels.Master],
+                Services = ["CHON_TRUONG", "SAN_HOC_BONG", "LUYEN_PHONG_VAN"],
+                Description = "Trung tâm khảo nghiệm mẫu phục vụ đào tạo và kiểm thử hệ thống tại Hà Nội.",
+                LogoUrl = "https://images.unsplash.com/photo-1546410531-bb4caa6b424d?auto=format&fit=crop&w=400&q=80",
+                CoverImageUrl = "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?auto=format&fit=crop&w=1600&q=80",
+                GalleryImages = ["https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=800&q=80"]
+            },
+            new StudyCenter
+            {
+                Code = "DEMO_002",
+                Name = "Demo Center TP.HCM",
+                CenterType = "hybrid",
+                City = "TP.HCM",
+                District = "Quận 1",
+                Address = "Tòa nhà Bitexco, số 2 Hải Triều, Bến Nghé, Quận 1, TP. Hồ Chí Minh",
+                Latitude = 10.7718,
+                Longitude = 106.7044,
+                Phone = "0988 888 002",
+                Email = "hcm@democenter.edu.vn",
+                Website = "https://democenter.edu.vn",
+                StaffCount = 25,
+                EstablishedYear = 2019,
+                LicenseNumber = "DEMO-HCM-2019",
+                Accreditations = ["ICEF Screened"],
+                VisaSuccessRate = 98.5,
+                AverageRating = 4.85m,
+                ReviewCount = 58,
+                VerificationStatus = "verified",
+                StudyLevels = [StudyLevels.CommunityCollege, StudyLevels.Undergraduate, StudyLevels.Master, StudyLevels.Phd],
+                Services = ["CHON_TRUONG", "LUYEN_THI", "SUA_BAI_LUAN"],
+                Description = "Trung tâm khảo nghiệm mẫu phục vụ đào tạo và kiểm thử hệ thống tại TP. Hồ Chí Minh.",
+                LogoUrl = "https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&w=400&q=80",
+                CoverImageUrl = "https://images.unsplash.com/photo-1562774053-701939374585?auto=format&fit=crop&w=1600&q=80",
+                GalleryImages = ["https://images.unsplash.com/photo-1517486808906-6ca8b3f04846?auto=format&fit=crop&w=800&q=80"]
+            }
+        ];
     }
 }

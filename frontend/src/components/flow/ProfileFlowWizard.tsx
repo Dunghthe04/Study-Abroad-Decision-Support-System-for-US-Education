@@ -109,6 +109,8 @@ export function ProfileFlowWizard() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "error" | "idle">("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // Mở form từ chat (?from=chat): bước 6 lưu hồ sơ rồi quay về chat trả lời câu học sinh đã hỏi, không gợi ý trường
+  const [fromChat, setFromChat] = useState(false);
 
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isInitialMount = useRef(true);
@@ -138,7 +140,11 @@ export function ProfileFlowWizard() {
     async function loadInitialData() {
       try {
         // Đã có kết quả gợi ý thì vào thẳng trang kết quả (khỏi gửi AI lại); "Sửa hồ sơ" mở ?edit=1 để vào form
-        const editing = new URLSearchParams(window.location.search).get("edit") === "1";
+        // Mở từ chat cũng vào form, không chuyển sang trang kết quả
+        const params = new URLSearchParams(window.location.search);
+        const openedFromChat = params.get("from") === "chat";
+        setFromChat(openedFromChat);
+        const editing = params.get("edit") === "1" || openedFromChat;
         // Tải metadata động song song với trạng thái nháp
         const [metaData, stateData, latest] = await Promise.all([
           profileFlowApi.getMetadata().catch(() => null),
@@ -431,7 +437,7 @@ export function ProfileFlowWizard() {
       } catch {
         // trình duyệt chặn storage → coi như hồ sơ mới
       }
-      if (lastCommitted === draftJson && (await recommendationApi.getLatest().catch(() => null))) {
+      if (!fromChat && lastCommitted === draftJson && (await recommendationApi.getLatest().catch(() => null))) {
         router.push("/recommendations");
         return;
       }
@@ -444,6 +450,11 @@ export function ProfileFlowWizard() {
           localStorage.setItem(LAST_COMMITTED_KEY, draftJson);
         } catch {
           // bỏ qua
+        }
+        // Mở từ chat: mở khung chat, advisor thấy hồ sơ đủ thì trả lời luôn câu học sinh đã hỏi
+        if (fromChat) {
+          openAssistant(CONTINUE_CHAT);
+          return;
         }
         router.push("/recommendations?run=1");
       } else {
@@ -507,7 +518,8 @@ export function ProfileFlowWizard() {
         </div>
       </div>
 
-      {errorMessage && (
+      {/* Lỗi khi gửi hồ sơ hiện ở bước 6, cạnh thẻ của từng bước */}
+      {errorMessage && currentStep !== 6 && (
         <Alert variant="destructive" className="mb-6">
           <AlertCircleIcon className="size-4" />
           <AlertTitle>Không thể lưu hồ sơ</AlertTitle>
@@ -582,7 +594,9 @@ export function ProfileFlowWizard() {
                 onEditStep={handleSelectStep}
                 onPrev={handlePrev}
                 onSubmit={handleSubmitCommit}
+                backToChat={fromChat}
                 isSubmitting={isSubmitting}
+                submitError={errorMessage}
               />
             )}
           </div>

@@ -10,6 +10,7 @@ using StudyAbroad.Application.Recommendations;
 using StudyAbroad.Application.StudyCenters;
 using StudyAbroad.Infrastructure.Advisor;
 using StudyAbroad.Infrastructure.Auth;
+using StudyAbroad.Infrastructure.MediaUploads;
 using StudyAbroad.Infrastructure.Persistence;
 using StudyAbroad.Infrastructure.Persistence.Repositories;
 
@@ -27,7 +28,10 @@ public static class DependencyInjection
                 npgsql.MigrationsHistoryTable("__ef_migrations_history", "app"))
             .UseSnakeCaseNamingConvention());
 
+        services.AddScoped<StudyAbroad.Application.Universities.IUniversityDetailRepository, UniversityDetailRepository>();
+        services.AddScoped<StudyAbroad.Application.TargetSchools.ITargetSchoolRepository, TargetSchoolRepository>();
         services.AddScoped<IStudyCenterRepository, StudyCenterRepository>();
+        services.AddScoped<StudyAbroad.Application.Admin.Universities.IAdminUniversityRepository, AdminUniversityRepository>();
         services.AddScoped<StudyAbroad.Application.Leads.ILeadRepository, LeadRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IAuditLogRepository, AuditLogRepository>();
@@ -35,6 +39,7 @@ public static class DependencyInjection
         services.AddScoped<IFinancialProfileRepository, FinancialProfileRepository>();
         services.AddScoped<StudyAbroad.Application.AcademicProfiles.IAcademicProfileRepository, AcademicProfileRepository>();
         services.AddSingleton<IPasswordHasher, PasswordHasher>();
+        services.AddCloudinaryMedia(configuration);
         // [USAS-365] Đăng ký repository phân tích điểm học thuật
         services.AddScoped<StudyAbroad.Application.Profile.Academic.IAcademicAnalysisRepository, AcademicAnalysisRepository>();
         // [USAS-640] Đăng ký repository luồng hồ sơ và metadata
@@ -44,6 +49,7 @@ public static class DependencyInjection
         services.AddScoped<IRecommendationRepository, RecommendationRepository>();
         services.AddScoped<IChatSessionRepository, ChatSessionRepository>();
         services.AddScoped<IChatAnalysisRepository, ChatAnalysisRepository>();
+        services.AddScoped<IChatBenchmarkRepository, ChatBenchmarkRepository>();
 
 
         // [USAS-362] Đăng ký JWT Token Service (Ưu tiên nạp key từ biến môi trường JWT_SECRET_KEY).
@@ -77,6 +83,8 @@ public static class DependencyInjection
 
         services.Configure<AdvisorOptions>(configuration.GetSection(AdvisorOptions.SectionName));
         services.AddHttpClient<IAdvisorClient, AdvisorClient>(ConfigureAdvisorClient);
+        // Bậc ngoại khóa: SLM xác nhận vai trò, phạm vi rồi advisor tính bậc, gọi lúc lưu hồ sơ
+        services.AddHttpClient<IEcTierClient, EcTierClient>(ConfigureAdvisorClient);
         services.AddHttpClient<ITranscriptOcrClient, TranscriptOcrClient>((sp, client) =>
         {
             ConfigureAdvisorClient(sp, client);

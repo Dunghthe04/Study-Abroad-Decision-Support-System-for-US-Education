@@ -8,10 +8,14 @@ from pydantic import ValidationError
 
 from app.schemas.chat import ChatState
 from app.schemas.slm import (
+    CENTER_TASKS,
     ENTITY_KEYS,
     INTENTS,
+    LEGACY_SKILL_SECTIONS,
     MAX_RAW_Y,
     PROFILE_KEYS,
+    PROFILE_TASKS,
+    REVIEW_TASKS,
     SKILL_SECTIONS,
     SLM_TIN_SCHEMA,
     Intent,
@@ -69,6 +73,89 @@ def test_profile_values_of_an_intent_are_only_the_profile_keys():
     item = y("trung_tam", dich_vu="LUYEN_THI", english="IELTS 6.0")
 
     assert item.profile_values() == {"english": "IELTS 6.0"}
+
+
+# ---- nhiệm vụ mới: nhập hồ sơ, tư vấn hồ sơ, trung tâm (khuôn v2) ----
+@pytest.mark.parametrize(
+    ("kind", "entities"),
+    [
+        ("mac_dinh", {"nhiem_vu": "sua", "sat": "SAT là 1400"}),  # sửa một mục đã nhập
+        (
+            "mac_dinh",
+            {"nhiem_vu": "sua", "sat": "1450", "tiep_noi": True},
+        ),  # "à nhầm, 1450 mới đúng": mục lấy từ ngữ cảnh
+        ("mac_dinh", {"nhiem_vu": "xem_ho_so"}),
+        ("mac_dinh", {"nhiem_vu": "lam_lai"}),
+        ("mac_dinh", {"nhiem_vu": "tra_loi", "gpa": "3.5"}),
+        ("ho_so", {"cac_nhiem_vu": ["danh_gia", "lo_trinh"]}),
+        ("ho_so", {"cac_nhiem_vu": []}),  # chưa rõ muốn gì: hệ thống hỏi lại bằng nút
+        ("ho_so", {"cac_nhiem_vu": ["giai_thich_truong"], "truong": "Duke", "tiep_noi": True}),
+        ("ho_so", {"cac_nhiem_vu": ["so_sanh"], "cac_truong": ["BU", "NYU"]}),
+        ("trung_tam", {"nhiem_vu": "tim", "dich_vu": "SUA_BAI_LUAN", "thanh_pho": "Hà Nội"}),
+        ("trung_tam", {"nhiem_vu": "dat_lich", "tiep_noi": True}),
+        ("trung_tam", {"nhiem_vu": "so_sanh", "cac_trung_tam": ["PEC", "Kosam"]}),
+        ("ngoai_pham_vi", {"loai_con": "ve_he_thong"}),
+        ("ngoai_pham_vi", {"loai_con": "gap_nguoi"}),
+    ],
+)
+def test_the_new_task_keys_are_accepted(kind, entities):
+    assert y(kind, **entities).type == kind
+
+
+@pytest.mark.parametrize(
+    ("kind", "entities"),
+    [
+        ("mac_dinh", {"nhiem_vu": "sua"}),  # sửa mà không nói mục nào
+        ("mac_dinh", {"nhiem_vu": "xem_ho_so", "gpa": "3.5"}),  # xem hồ sơ không kèm giá trị
+        ("mac_dinh", {"nhiem_vu": "lam_lai", "gpa": "3.5"}),
+        ("mac_dinh", {"nhiem_vu": "tra_cuu"}),  # nhiệm vụ của loại khác
+        ("mac_dinh", {"tiep_noi": "true"}),  # phải là boolean
+        ("ho_so", {"cac_nhiem_vu": ["danh_gia", "danh_gia"]}),  # lặp
+        ("ho_so", {"cac_nhiem_vu": ["viet_luan"]}),  # nhiệm vụ lạ
+        ("ho_so", {"cac_nhiem_vu": "danh_gia"}),  # phải là danh sách
+        ("ho_so", {"cac_nhiem_vu": ["so_sanh"]}),  # so sánh mà không có hai trường
+        ("ho_so", {"cac_nhiem_vu": ["so_sanh"], "cac_truong": ["BU"]}),  # chỉ một trường
+        ("ho_so", {"nhiem_vu": "so_sanh"}),  # ho_so dùng cac_nhiem_vu, không dùng nhiem_vu
+        ("trung_tam", {"nhiem_vu": "tim_kiem"}),  # nhiệm vụ của kiến thức
+        ("trung_tam", {"nhiem_vu": "so_sanh"}),  # so sánh mà không có tên trung tâm
+        ("trung_tam", {"nhiem_vu": "so_sanh", "cac_trung_tam": ["PEC"]}),  # chỉ một trung tâm
+        (
+            "trung_tam",
+            {"nhiem_vu": "tim", "cac_trung_tam": ["PEC", "Kosam"]},
+        ),  # danh sách trung tâm chỉ đi với so_sanh
+        ("kich_ban", {"che_do": "goal_seeking", "nhiem_vu": "tim"}),  # kịch bản không có nhiem_vu
+    ],
+)
+def test_the_new_task_keys_that_break_the_rules_are_rejected(kind, entities):
+    with pytest.raises(ValidationError):
+        y(kind, **entities)
+
+
+def test_centers_and_knowledge_both_have_a_compare_task_without_mixing_their_rules():
+    y("trung_tam", nhiem_vu="so_sanh", cac_trung_tam=["PEC", "Kosam"])  # không đòi cac_truong
+    with pytest.raises(ValidationError):
+        y("kien_thuc", nhiem_vu="so_sanh", cac_trung_tam=["PEC", "Kosam"])  # kiến thức vẫn đòi cac_truong
+
+
+def test_each_branch_of_the_json_schema_lists_the_tasks_of_its_own_type():
+    props = {kind: branch["properties"]["thuc_the"]["properties"] for kind, branch in branches().items()}
+    assert props["mac_dinh"]["nhiem_vu"]["enum"] == list(PROFILE_TASKS)
+    assert props["trung_tam"]["nhiem_vu"]["enum"] == list(CENTER_TASKS)
+    assert props["ho_so"]["cac_nhiem_vu"]["items"]["enum"] == list(REVIEW_TASKS)
+    assert props["ho_so"]["cac_nhiem_vu"]["uniqueItems"] is True
+    assert props["trung_tam"]["cac_trung_tam"]["minItems"] == 2
+    assert "ve_he_thong" in props["ngoai_pham_vi"]["loai_con"]["enum"]
+
+
+def test_merging_two_profile_review_intents_does_not_repeat_a_task():
+    merged = chuan_hoa_y(
+        [
+            y("ho_so", "đánh giá", cac_nhiem_vu=["danh_gia"]),
+            y("ho_so", "đánh giá và lộ trình", cac_nhiem_vu=["danh_gia", "lo_trinh"]),
+        ]
+    )
+
+    assert merged[0].thuc_the["cac_nhiem_vu"] == ["danh_gia", "lo_trinh"]
 
 
 # ---- gộp và sắp xếp ý ----
@@ -287,6 +374,11 @@ def skill(extra: str = "") -> str:
     [
         ({"ho_so": {}}, "hồ sơ rỗng"),
         ({"ho_so": {"mau_sac": "đỏ"}}, "khóa hồ sơ lạ"),
+        ({"tinh_san": {"mau_sac": "đỏ"}}, "khóa tính sẵn lạ"),
+        (
+            {"loai": "kich_ban", "muc_tieu": "Vừa sức", "tinh_san": {"timeline": "x"}},
+            "chỉ skill ho_so có tinh_san",
+        ),
         ({"loai": "kich_ban"}, "cần thay_doi hoặc muc_tieu"),
         ({"cau_hoi": ""}, ""),
         ({"loai": "kien_thuc"}, ""),
@@ -319,14 +411,50 @@ def test_extra_sections_are_ignored_but_a_missing_or_empty_one_is_not():
     check_skill(skill() + "\n## 8. Ví dụ cách viết\nGPA 9/10", request())
 
     with pytest.raises(ValueError, match="đủ các mục"):
-        check_skill(skill().replace("## 5. Đề xuất trường", "## 5x"), request())
+        check_skill(skill().replace("## 5. Lộ trình", "## 5x"), request())
     with pytest.raises(ValueError, match="mục rỗng"):
-        check_skill(skill().replace("## 6. Lộ trình\nGPA 9/10, SAT 1450 ", "## 6. Lộ trình\n"), request())
+        check_skill(skill().replace("## 5. Lộ trình\nGPA 9/10, SAT 1450 ", "## 5. Lộ trình\n"), request())
+
+
+def legacy_skill() -> str:
+    return "\n".join(f"## {name}\nGPA 9/10, SAT 1450" for name in LEGACY_SKILL_SECTIONS["ho_so"])
+
+
+def test_the_old_eight_section_skill_is_still_accepted_while_the_model_is_retrained():
+    check_skill(legacy_skill(), request())  # model usas-slm-v2 và dữ liệu cũ
+
+
+def test_the_error_names_the_new_seven_section_layout():
+    with pytest.raises(ValueError, match="5. Lộ trình, 6. Yêu cầu câu trả lời"):
+        check_skill(skill().replace("## 4. Góc nhìn về hồ sơ", "## 4x"), request())
+
+
+def test_sections_of_the_two_layouts_cannot_be_mixed_in_the_wrong_order():
+    swapped = (
+        skill()
+        .replace("## 5. Lộ trình", "## 6. Lộ trình")
+        .replace("## 6. Yêu cầu câu trả lời", "## 5. Đề xuất trường")
+    )
+
+    with pytest.raises(ValueError, match="đủ các mục"):
+        check_skill(swapped, request())
+
+
+def test_the_scenario_skill_has_only_one_layout():
+    assert "kich_ban" not in LEGACY_SKILL_SECTIONS
 
 
 def test_a_skill_that_drops_a_number_of_the_profile_is_rejected():
     with pytest.raises(ValueError, match="bỏ mất số"):
         check_skill(skill().replace("1450", "1400"), request())
+
+
+def test_a_skill_that_drops_a_number_of_the_calculated_lines_is_rejected():
+    req = request(tinh_san={"gpa_level": "3.6 thang 4, trung bình (TB các trường 3.6)"})
+
+    check_skill(skill("GPA 3.6 thang 4, TB các trường 3.6"), req)
+    with pytest.raises(ValueError, match="bỏ mất số"):
+        check_skill(skill(), req)
 
 
 def test_numbers_are_compared_the_way_a_student_writes_them():
@@ -343,7 +471,8 @@ def test_list_numbers_at_the_start_of_a_line_are_not_counted_as_profile_numbers(
 
 
 def test_each_type_of_skill_has_its_own_sections():
-    assert len(SKILL_SECTIONS["ho_so"]) == 8 and len(SKILL_SECTIONS["kich_ban"]) == 5
+    assert len(SKILL_SECTIONS["ho_so"]) == 7 and len(SKILL_SECTIONS["kich_ban"]) == 5
+    assert len(LEGACY_SKILL_SECTIONS["ho_so"]) == 8 and "5. Đề xuất trường" not in SKILL_SECTIONS["ho_so"]
     assert SKILL_SECTIONS["ho_so"][0] == SKILL_SECTIONS["kich_ban"][0] == "0. Câu hỏi kích hoạt"
 
 

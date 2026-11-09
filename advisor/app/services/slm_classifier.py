@@ -8,16 +8,28 @@ import json
 import logging
 import math
 import re
+from pathlib import Path
 from typing import Any
 
 from app.schemas.chat import ChatState
 from app.schemas.slm import PROFILE_KEYS, SLM_TIN_SCHEMA, SlmTinResult, SlmY
+from app.services.conversation_context import context_for_model
 from app.services.ollama import OllamaError
 from app.services.skill_call import SKILLS_DIR, load_skill
 
 logger = logging.getLogger(__name__)
 
 PROMPT_PATH = SKILLS_DIR / "slm_phan_loai_cac_y.md"
+
+
+# Tên prompt (không có .md) thành đường dẫn; tên không có file thì báo ngay lúc khởi động
+def prompt_path(name: str) -> Path:
+    path = SKILLS_DIR / f"{name}.md"
+    if not path.is_file():
+        raise ValueError(f"không có prompt tách ý '{name}' trong {SKILLS_DIR}")
+    return path
+
+
 MAX_ATTEMPTS = 2  # sai thì gọi lại đúng 1 lần
 # Hai lần đều sai (model trả sai luật, Ollama tắt): coi là tin mơ hồ, confidence 0 để chat hỏi lại học sinh
 FALLBACK = SlmTinResult(
@@ -30,16 +42,25 @@ SPAN_KEYS = {*PROFILE_KEYS, "truong", "thanh_pho"}
 
 
 # Đầu vào của SLM, cùng khóa với cột đầu vào trong file dữ liệu
-def slm_input(message: str, profile: dict[str, str] | None, pending: str) -> dict[str, Any]:
-    return {"cau_hoi": message, "ho_so": profile or None, "cau_he_thong_dang_hoi": pending}
+def slm_input(
+    message: str, profile: dict[str, str] | None, pending: str, context: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    data: dict[str, Any] = {"cau_hoi": message, "ho_so": profile or None, "cau_he_thong_dang_hoi": pending}
+    if context:  # chỉ thêm khi có, để câu không có ngữ cảnh giữ nguyên khuôn cũ
+        data["dang_noi_ve"] = context
+    return data
 
 
 # Hội thoại gửi cho SLM: system là prompt, user là JSON đầu vào viết liền.
 # Dùng chung cho lúc chạy (OllamaSlm.read) và lúc xuất dữ liệu fine-tune, để model học đúng thứ nó sẽ nhận
 def build_messages(
-    prompt: str, message: str, profile: dict[str, str] | None, pending: str
+    prompt: str,
+    message: str,
+    profile: dict[str, str] | None,
+    pending: str,
+    context: dict[str, Any] | None = None,
 ) -> list[dict[str, str]]:
-    user = slm_input(message, profile, pending)
+    user = slm_input(message, profile, pending, context)
     return [
         {"role": "system", "content": prompt},
         {"role": "user", "content": json.dumps(user, ensure_ascii=False, separators=(",", ":"))},
@@ -50,7 +71,7 @@ def build_messages(
 #   thuc_the: bỏ giá trị không có nguyên văn trong tin (model hay chép từ hồ sơ đầu vào, hoặc tự điền "null", "không có")
 #   doan: có chữ không nằm trong tin (hoặc rỗng) thì dùng nguyên tin thay cho đoạn đó
 # Ý không phải object thì giữ nguyên để SlmTinResult.from_raw báo lỗi và gọi lại model
-def keep_verbatim(raw: dict[str, Any], message: str) -> dict[str, Any]:
+def keep_verbatim(raw: dict[str, Any], message: str, context_names: set[str] | None = None) -> dict[str, Any]:
     items = raw.get("cac_y")
     if not isinstance(items, list):
         return raw
@@ -60,11 +81,20 @@ def keep_verbatim(raw: dict[str, Any], message: str) -> dict[str, Any]:
         if not isinstance(item, dict):
             cleaned.append(item)
             continue
-        thuc_the = {
-            key: value
-            for key, value in (item.get("thuc_the") or {}).items()
-            if key not in SPAN_KEYS or (isinstance(value, str) and value.lower() in text)
-        }
+        entities = item.get("thuc_the") or {}
+        # Câu tiếp nối: trường lấy từ ngữ cảnh không có trong tin nhưng hợp lệ nếu đúng tên trường đang nói tới
+        carried = bool(entities.get("tiep_noi") is True and context_names)
+
+        def keep(key: str, value: Any, carried: bool = carried) -> bool:
+            if key not in SPAN_KEYS:
+                return True
+            if not isinstance(value, str):
+                return False
+            return value.lower() in text or bool(
+                carried and key == "truong" and value.lower() in context_names
+            )
+
+        thuc_the = {key: value for key, value in entities.items() if keep(key, value)}
         doan = item.get("doan")
         if not isinstance(doan, str) or not doan.strip() or words(doan) - spoken:
             doan = message
@@ -131,21 +161,37 @@ class OllamaSlm:
     """Làm đúng hợp đồng SlmClassifier trong slm_contract.py."""
 
     # output: định dạng đầu ra, lấy bằng output_format(settings.slm_format). Mặc định ép SLM_TIN_SCHEMA
-    def __init__(self, slm: Any, output: dict[str, Any] | str = SLM_TIN_SCHEMA) -> None:
+    # prompt: tên file prompt trong app/skills (không có .md). Model fine-tune phải dùng đúng prompt lúc huấn luyện
+    def __init__(
+        self,
+        slm: Any,
+        output: dict[str, Any] | str = SLM_TIN_SCHEMA,
+        use_context: bool = False,
+        prompt: str = PROMPT_PATH.stem,
+    ) -> None:
+        self._use_context = use_context
 
         self._slm = slm
         self._output = output
-        self.prompt, self.prompt_version = load_skill(PROMPT_PATH)
+        self.prompt, self.prompt_version = load_skill(prompt_path(prompt))
 
     async def classify(self, state: ChatState, message: str) -> SlmTinResult:
-        return await self.read(message, profile_text(state), state.last_question)
+        context = context_for_model(state) if self._use_context else None
+        return await self.read(message, profile_text(state), state.last_question, context)
 
-    async def read(self, message: str, profile: dict[str, str] | None, pending: str) -> SlmTinResult:
-        messages = build_messages(self.prompt, message, profile, pending)
+    async def read(
+        self,
+        message: str,
+        profile: dict[str, str] | None,
+        pending: str,
+        context: dict[str, Any] | None = None,
+    ) -> SlmTinResult:
+        messages = build_messages(self.prompt, message, profile, pending, context)
+        names = {name.lower() for name in (context or {}).get("truong", [])}
         for _ in range(MAX_ATTEMPTS):
             try:
                 raw, content, logprobs = await self._slm.chat_json_scored(messages, self._output)
-                raw = keep_verbatim(raw, message)  # bỏ giá trị và đoạn không có trong tin
+                raw = keep_verbatim(raw, message, names)  # bỏ giá trị và đoạn không có trong tin
                 # Kiểm từng ý, gộp ý cùng loại, đưa mac_dinh lên đầu, cắt ý quá trần kỹ thuật, rồi kiểm cả tin.
                 # ValidationError của pydantic cũng là ValueError
                 return SlmTinResult.from_raw(raw, confidence=label_confidence(content, logprobs))

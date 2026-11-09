@@ -74,4 +74,8 @@ public class UniversityOffering : BaseEntity
     public string? Notes { get; set; }
     public string? SourceUrl { get; set; }
     public DateOnly? RetrievedAt { get; set; }
+    /// <summary>Mức tin cậy của nguồn: official (trường/cơ quan công bố) | aggregated (bên thứ ba tổng hợp) | self_reported (tự khai). Null = chưa rõ.</summary>
+    public string? SourceReliability { get; set; }
+    /// <summary>Người sửa gần nhất (moderator/admin); ngày sửa là UpdatedAt.</summary>
+    public Guid? LastEditedByUserId { get; set; }
 }

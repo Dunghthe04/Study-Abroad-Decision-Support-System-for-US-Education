@@ -74,6 +74,27 @@ public class ChatRecommendationTests
             schools);
     }
 
+    // Trường đã chấm nhưng không nằm trong khối nào (mỗi nhóm chỉ hiện vài trường) vẫn khớp tên được, chỉ không đếm vị trí
+    [Fact]
+    public void OtherSchools_AreTheScoredOnesThatNoBlockShows()
+    {
+        var run = Run("""
+            {
+              "scored": [
+                { "code": "a", "name": "Alpha University", "g2": "M" },
+                { "code": "b", "name": "Beta University", "g2": "R" },
+                { "code": "c", "name": "Gamma University", "g2": "S" }
+              ],
+              "reach": [ { "code": "b" } ], "match": [ { "code": "a" } ], "safety": [], "aid": [], "other": []
+            }
+            """);
+
+        var others = ChatRecommendation.OtherSchools(run);
+
+        Assert.Equal(["c"], others.Select(s => s.Code));
+        Assert.DoesNotContain(ChatRecommendation.Schools(run), s => s.Code == "c");   // vị trí chỉ đếm trong các khối đang hiện
+    }
+
     [Fact]
     public void Schools_IsEmptyWhenNothingWasFound()
     {
@@ -81,23 +102,23 @@ public class ChatRecommendationTests
     }
 
     [Fact]
-    public void Summarize_CutsTheAidGroupToThreeNames()
+    public void Summarize_CutsTheAidGroupToFourNames()
     {
         var items = """
-            { "scored": [], "aid": [ {"code":"A1"}, {"code":"A2"}, {"code":"A3"}, {"code":"A4"}, {"code":"A5"} ] }
+            { "scored": [], "aid": [ {"code":"A1"}, {"code":"A2"}, {"code":"A3"}, {"code":"A4"}, {"code":"A5"}, {"code":"A6"} ] }
             """;
 
-        Assert.Contains("- Chỉ đi được nếu có học bổng lớn: A1, A2, A3 và 2 trường khác", ChatRecommendation.Summarize(Run(items)));
+        Assert.Contains("- Chỉ đi được nếu có học bổng lớn: A1, A2, A3, A4 và 2 trường khác", ChatRecommendation.Summarize(Run(items)));
     }
 
     [Fact]
     public void Summarize_CutsAGroupAtItsPageLimit()
     {
         var items = """
-            { "scored": [], "reach": [ {"code":"R1"}, {"code":"R2"}, {"code":"R3"}, {"code":"R4"} ] }
+            { "scored": [], "reach": [ {"code":"R1"}, {"code":"R2"}, {"code":"R3"}, {"code":"R4"}, {"code":"R5"} ] }
             """;
 
-        Assert.Contains("- Khó vào: R1, R2, R3 và 1 trường khác", ChatRecommendation.Summarize(Run(items)));
+        Assert.Contains("- Khó vào: R1, R2, R3, R4 và 1 trường khác", ChatRecommendation.Summarize(Run(items)));
     }
 
     [Fact]

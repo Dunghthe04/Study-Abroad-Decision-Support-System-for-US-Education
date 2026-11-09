@@ -129,14 +129,16 @@ export function getCertSummaryParts(
   const hasSections = (type?.sections.length ?? 0) > 0;
 
   if (cert.overall != null) {
-    const label = hasSections ? "Điểm tổng" : "Điểm";
+    const label = cert.isTarget
+      ? (hasSections ? "Mục tiêu tổng" : "Mục tiêu")
+      : (hasSections ? "Điểm tổng" : "Điểm");
     let suffix: string | undefined;
     if (isOtherCert(cert)) suffix = cert.scaleText?.trim() ? `/ ${cert.scaleText.trim()}` : undefined;
     else if (type?.requiresSubject && type.max != null) suffix = `/ ${formatScore(type.max, type.step)}`;
     parts.push({ label, value: formatScore(cert.overall, type?.step), strong: true, suffix });
   } else if (!isOtherCert(cert) && cert.scaleText?.trim()) {
     // Loại không có thang số (A-Level) → điểm chữ nằm ở scaleText
-    parts.push({ label: "Điểm", value: cert.scaleText.trim(), strong: true });
+    parts.push({ label: cert.isTarget ? "Mục tiêu" : "Điểm", value: cert.scaleText.trim(), strong: true });
   }
 
   for (const section of type?.sections ?? []) {
@@ -145,7 +147,7 @@ export function getCertSummaryParts(
   }
 
   const date = formatYearMonth(cert.testDate);
-  if (date) parts.push({ label: "Thi", value: date });
+  if (date) parts.push({ label: cert.isTarget ? "Dự kiến thi" : "Thi", value: date });
   return parts;
 }
 
@@ -211,8 +213,10 @@ export function validateCertification(
   }
 
   const ym = parseYearMonth(cert.testDate);
-  if (ym && ym.year * 12 + ym.month > now.getFullYear() * 12 + now.getMonth() + 1)
+  if (!cert.isTarget && ym && ym.year * 12 + ym.month > now.getFullYear() * 12 + now.getMonth() + 1)
     errors.testDate = "Ngày thi không được ở tương lai";
+  if (cert.isTarget && ym && ym.year * 12 + ym.month < now.getFullYear() * 12 + now.getMonth() + 1)
+    errors.testDate = "Ngày dự kiến thi không được ở quá khứ";
 
   return errors;
 }
@@ -231,13 +235,30 @@ const LEGACY_STANDARDIZED = new Set(["SAT", "ACT", "AP"]);
 export function migrateLegacyStep3(
   raw: (Partial<CertificationDraft> & LegacyCertificationDraft) | null | undefined
 ): CertificationDraft {
-  if (!raw) return { certifications: [], englishPlanned: false, englishPlannedDate: null };
+  if (!raw)
+    return {
+      certifications: [],
+      englishPlanned: false,
+      englishPlannedDate: null,
+      englishPlannedTestType: null,
+      englishPlannedTargetScore: null,
+      standardizedPlanned: false,
+      standardizedPlannedDate: null,
+      standardizedPlannedTestType: null,
+      standardizedPlannedTargetScore: null,
+    };
 
   if (Array.isArray(raw.certifications)) {
     return {
       certifications: raw.certifications.map((c) => ({ ...c, id: c.id || newCertId() })),
       englishPlanned: Boolean(raw.englishPlanned),
       englishPlannedDate: raw.englishPlannedDate ?? null,
+      englishPlannedTestType: raw.englishPlannedTestType ?? null,
+      englishPlannedTargetScore: raw.englishPlannedTargetScore != null ? Number(raw.englishPlannedTargetScore) : null,
+      standardizedPlanned: Boolean(raw.standardizedPlanned),
+      standardizedPlannedDate: raw.standardizedPlannedDate ?? null,
+      standardizedPlannedTestType: raw.standardizedPlannedTestType ?? null,
+      standardizedPlannedTargetScore: raw.standardizedPlannedTargetScore != null ? Number(raw.standardizedPlannedTargetScore) : null,
     };
   }
 

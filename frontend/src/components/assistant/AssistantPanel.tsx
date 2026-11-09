@@ -6,21 +6,40 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   ArrowUpIcon,
   FileTextIcon,
+  FlaskConicalIcon,
   GraduationCapIcon,
   Maximize2Icon,
   MessageCircleIcon,
   Minimize2Icon,
   PlusIcon,
   RotateCwIcon,
+  SlidersHorizontalIcon,
+  Undo2Icon,
   XIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { describeSimulation, resetSimulation, showSimulation } from "@/lib/simulation-link";
 import { AGE_FEATURES, useAgeBlock } from "@/lib/age-features";
 import { useAssistant, type AssistantTurn } from "./AssistantProvider";
+import type {
+  ExplainBasis,
+  ExplainCardData,
+  SchoolCompareData,
+  SchoolGoalResult,
+  SchoolInfoData,
+  SchoolInfoField,
+  SchoolSearchData,
+} from "@/types/recommendation";
 import { BudgetWidget } from "./BudgetWidget";
+import { ExplainCard } from "./ExplainCard";
+import { SchoolCompareCard } from "./SchoolCompareCard";
+import { SchoolSearchCard } from "./SchoolSearchCard";
+import { SchoolInfoCard } from "./SchoolInfoCard";
+import { GoalSeekCard } from "./GoalSeekCard";
 import { MajorWidget } from "./MajorWidget";
 import { ReviewWidget } from "./ReviewWidget";
 import { ScholarshipWidget } from "./ScholarshipWidget";
+import { SchoolWidget } from "./SchoolWidget";
 import { SelectWidget } from "./SelectWidget";
 
 // Trang đăng nhập / đăng ký không hiện trợ lý
@@ -78,10 +97,15 @@ export function AssistantPanel() {
       <div className="flex items-center gap-2 border-b border-line px-4 py-3">
         <div className="min-w-0 flex-1">
           <div className="font-heading text-base font-semibold text-foreground">Trợ lý USAS</div>
-          <div className="mt-1 inline-flex max-w-full items-center gap-1.5 rounded-full bg-ground px-2.5 py-0.5 text-xs text-muted-foreground">
-            <span className="size-1.5 shrink-0 rounded-full bg-ok" />
-            <span className="truncate">Đang xem: {page.label}</span>
-          </div>
+          {/* Trang gợi ý trường đã có dải trạng thái bên dưới (hồ sơ thật hay giả định), không hiện thêm nhãn "Đang xem" nữa cho khỏi rối */}
+          {page.simulation === undefined ? (
+            <div className="mt-1 inline-flex max-w-full items-center gap-1.5 rounded-full bg-ground px-2.5 py-0.5 text-xs text-muted-foreground">
+              <span className="size-1.5 shrink-0 rounded-full bg-ok" />
+              <span className="truncate">Đang xem: {page.label}</span>
+            </div>
+          ) : (
+            <div className="mt-0.5 text-xs text-muted-foreground">{page.label}</div>
+          )}
         </div>
         <IconButton label="Cuộc trò chuyện mới" onClick={newChat}>
           <PlusIcon className="size-4.5" />
@@ -97,6 +121,40 @@ export function AssistantPanel() {
           <XIcon className="size-4.5" />
         </IconButton>
       </div>
+
+      {/* Trang gợi ý trường: chat đang nói về hồ sơ thật hay về giả định học sinh đang kéo (undefined: trang khác, không có khái niệm này) */}
+      {page.simulation === null && (
+        <div className="flex items-center gap-2 border-b border-line bg-brand/5 px-4 py-2 text-xs font-medium text-brand">
+          <span className="size-1.5 shrink-0 rounded-full bg-brand" />
+          Đang xem theo hồ sơ thật của bạn
+        </div>
+      )}
+      {page.simulation && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-warn/20 bg-warn-wash px-4 py-2.5 text-xs text-warn">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+            <span className="inline-flex items-center gap-1 font-semibold">
+              <FlaskConicalIcon className="size-3.5" />
+              Đang thử giả định
+            </span>
+            {describeSimulation(page.simulation)
+              .split(" · ")
+              .filter(Boolean)
+              .map((part) => (
+                <span key={part} className="rounded-full bg-surface/70 px-2 py-0.5 font-medium">
+                  {part}
+                </span>
+              ))}
+          </div>
+          <button
+            type="button"
+            onClick={resetSimulation}
+            className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-full border border-warn/30 bg-surface px-2.5 py-1 font-semibold transition-colors hover:bg-warn/10"
+          >
+            <Undo2Icon className="size-3.5" />
+            Về hồ sơ thật
+          </button>
+        </div>
+      )}
 
       {/* Tin nhắn */}
       <div ref={listRef} className="flex flex-1 flex-col gap-4 overflow-y-auto p-4 text-[14.5px] leading-relaxed">
@@ -118,7 +176,9 @@ export function AssistantPanel() {
         ))}
 
         {/* Advisor trả từng ý khi xong: hiện dần các câu đã có, câu cuối cùng sẽ thay thế khi xong cả lượt */}
-        {loading && streaming?.text && <Turn turn={{ role: "assistant", content: streaming.text }} />}
+        {loading && (streaming?.text || streaming?.widget) && (
+          <Turn turn={{ role: "assistant", content: streaming.text, widget: streaming.widget }} />
+        )}
 
         {loading && (
           <TypingIndicator
@@ -256,6 +316,7 @@ function TypingIndicator({ recommending, progress }: { recommending?: boolean; p
 
 function Turn({ turn, onReply }: { turn: AssistantTurn; onReply?: (value: string) => void }) {
   const router = useRouter();
+  const { sendAction } = useAssistant();
   if (turn.role === "user") {
     return (
       <div className="max-w-[90%] self-end rounded-[16px_4px_16px_16px] bg-[#E7EDF1] px-[15px] py-2.5 whitespace-pre-wrap text-foreground">
@@ -263,9 +324,30 @@ function Turn({ turn, onReply }: { turn: AssistantTurn; onReply?: (value: string
       </div>
     );
   }
+  // Goal-seeking: thẻ kết quả (code dựng, có ngay) nằm TRÊN lời Gemini (tới sau), nên khi lời tới thẻ không bị đẩy xuống
+  const goalCard = turn.widget?.type === "goal_seek" ? goalResultOf(turn.widget.data) : null;
+  // Giải thích trường: thẻ do code dựng cũng nằm trên lời tư vấn của AI, cùng lý do như trên
+  const explainCard = turn.widget?.type === "explain" ? explainCardOf(turn.widget.data) : null;
+  // Thông tin một trường: thẻ số liệu thật nằm trên câu trả lời bằng chữ
+  const infoCard = turn.widget?.type === "school_info" ? schoolInfoOf(turn.widget.data) : null;
+  // So sánh từ hai trường: thẻ gồm bảng số liệu và khối "AI nhận xét" tách riêng
+  const compareCard = turn.widget?.type === "school_compare" ? schoolCompareOf(turn.widget.data) : null;
+  // Tìm trường theo điều kiện: 5 trường đầu và nút "Xem thêm"
+  const searchCard = turn.widget?.type === "school_search" ? schoolSearchOf(turn.widget.data) : null;
+  const hasCard = Boolean(goalCard || explainCard || infoCard || compareCard || searchCard);
+  // Thẻ đã nói đủ số liệu: bỏ đoạn chữ trùng, chỉ hiện thẻ cho gọn; các đoạn khác của lượt (nếu có) vẫn hiện
+  const covered = infoCard?.coveredText ?? compareCard?.coveredText ?? searchCard?.coveredText ?? null;
+  const content = covered ? turn.content.replace(covered, "").trim() : turn.content;
   return (
     <div className="w-full text-foreground">
-      <p className="whitespace-pre-wrap">{turn.content}</p>
+      {goalCard && <GoalSeekCard result={goalCard} />}
+      {infoCard && <SchoolInfoCard info={infoCard.info} fields={infoCard.fields} remember={Boolean(onReply)} />}
+      {compareCard && <SchoolCompareCard data={compareCard} remember={Boolean(onReply)} />}
+      {searchCard && <SchoolSearchCard data={searchCard} remember={Boolean(onReply)} />}
+      {explainCard && (
+        <ExplainCard code={String(turn.widget?.data?.code ?? "")} card={explainCard} basis={explainBasisOf(turn.widget?.data)} />
+      )}
+      {content && <p className={cn("whitespace-pre-wrap", hasCard && "mt-2.5")}>{content}</p>}
       {turn.citations && turn.citations.length > 0 && (
         <ol className="mt-2 list-decimal space-y-0.5 pl-5 text-xs text-muted-foreground">
           {turn.citations.map((c, j) => (
@@ -286,12 +368,13 @@ function Turn({ turn, onReply }: { turn: AssistantTurn; onReply?: (value: string
       {/* E: chỉ chọn được ở lượt cuối, giống nút trả lời nhanh */}
       {turn.widget?.type === "major" && <MajorWidget onPick={onReply} />}
       {turn.widget?.type === "select" && <SelectWidget data={turn.widget.data} onPick={onReply} />}
+      {turn.widget?.type === "school" && <SchoolWidget data={turn.widget.data} onPick={onReply} />}
       {turn.widget?.type === "budget" && <BudgetWidget data={turn.widget.data} onPick={onReply} />}
       {turn.widget?.type === "scholarship" && <ScholarshipWidget data={turn.widget.data} onPick={onReply} />}
-      {/* Mục 1: học sinh chọn điền bằng form */}
+      {/* Mục 1: học sinh chọn điền bằng form. from=chat: điền xong form thì quay về chat trả lời câu đã hỏi */}
       {turn.widget?.type === "form" && (
         <Link
-          href="/analysis"
+          href="/analysis?from=chat"
           className="mt-2.5 inline-flex h-8 items-center gap-1.5 rounded-full bg-brand px-3.5 text-[13px] font-semibold text-white transition-colors hover:bg-brand-ink"
         >
           <FileTextIcon className="size-4" />
@@ -310,13 +393,24 @@ function Turn({ turn, onReply }: { turn: AssistantTurn; onReply?: (value: string
           Xem đầy đủ danh sách trường
         </button>
       )}
+      {/* What-if: mở trang Gợi ý trường với các giá trị vừa thử điền sẵn vào thanh kéo */}
+      {turn.widget?.type === "simulate" && (
+        <button
+          type="button"
+          onClick={() => showSimulation(turn.widget?.data, router.push)}
+          className="mt-2.5 inline-flex h-8 items-center gap-1.5 rounded-full bg-brand px-3.5 text-[13px] font-semibold text-white transition-colors hover:bg-brand-ink"
+        >
+          <SlidersHorizontalIcon className="size-4" />
+          Xem trên thanh kéo
+        </button>
+      )}
       {onReply && turn.quickReplies && turn.quickReplies.length > 0 && (
         <div className="mt-2.5 flex flex-wrap gap-2">
           {turn.quickReplies.map((r) => (
             <button
               key={r.value}
               type="button"
-              onClick={() => onReply(r.value)}
+              onClick={() => (r.href ? router.push(r.href) : r.action ? sendAction(r.value, r.action) : onReply(r.value))}
               className="min-h-8 cursor-pointer rounded-full border border-brand/40 bg-brand-wash/40 px-3 py-1 text-[13px] text-foreground transition-colors hover:border-brand hover:bg-brand-wash"
             >
               {r.label}
@@ -326,6 +420,64 @@ function Turn({ turn, onReply }: { turn: AssistantTurn; onReply?: (value: string
       )}
     </div>
   );
+}
+
+// Kết quả goal-seeking trong widget (backend gửi kèm ở data.result). Không có hoặc thiếu vị trí thì không dựng thẻ
+function explainBasisOf(data: Record<string, unknown> | null | undefined): ExplainBasis {
+  const basis = data?.basis as ExplainBasis | undefined;
+  return basis && (basis.kind === "real" || basis.kind === "simulated") ? basis : { kind: "real", label: null };
+}
+
+// Thẻ tìm trường trong widget. Thiếu hoặc sai khuôn thì không dựng thẻ, câu trả lời bằng chữ vẫn hiện
+function schoolSearchOf(data: Record<string, unknown> | null | undefined): SchoolSearchData | null {
+  const items = data?.items;
+  if (!Array.isArray(items) || items.length === 0 || typeof data?.total !== "number") return null;
+  if (!items.every((i) => i && typeof i.code === "string" && typeof i.name === "string")) return null;
+  return {
+    total: data.total,
+    summary: typeof data.summary === "string" ? data.summary : "",
+    sortLabel: typeof data.sortLabel === "string" ? data.sortLabel : "",
+    visible: typeof data.visible === "number" && data.visible > 0 ? data.visible : 5,
+    items: items as SchoolSearchData["items"],
+    coveredText: typeof data.coveredText === "string" && data.coveredText.length > 0 ? data.coveredText : null,
+  };
+}
+
+// Thẻ so sánh trong widget. Thiếu hoặc sai khuôn thì không dựng thẻ, câu trả lời bằng chữ vẫn hiện
+function schoolCompareOf(data: Record<string, unknown> | null | undefined): SchoolCompareData | null {
+  const schools = data?.schools;
+  const rows = data?.rows;
+  if (!Array.isArray(schools) || schools.length < 2 || !Array.isArray(rows) || rows.length === 0) return null;
+  const valid = rows.every((r) => r && typeof r.label === "string" && Array.isArray(r.values) && r.values.length === schools.length);
+  if (!valid) return null;
+  return {
+    schools: schools as SchoolCompareData["schools"],
+    rows: rows as SchoolCompareData["rows"],
+    aiNote: typeof data?.aiNote === "string" && data.aiNote.length > 0 ? data.aiNote : null,
+    verify: data?.verify === true,
+    coveredText: typeof data?.coveredText === "string" && data.coveredText.length > 0 ? data.coveredText : null,
+  };
+}
+
+// Thẻ thông tin trường trong widget (backend gửi data.info và data.fields). Thiếu hoặc sai khuôn thì không dựng thẻ, câu trả lời bằng chữ vẫn hiện
+function schoolInfoOf(
+  data: Record<string, unknown> | null | undefined,
+): { info: SchoolInfoData; fields: SchoolInfoField[]; coveredText: string | null } | null {
+  const info = data?.info as SchoolInfoData | undefined;
+  if (!info || typeof info.code !== "string" || typeof info.name !== "string" || !info.cost || !info.aid) return null;
+  const fields = Array.isArray(data?.fields) ? (data.fields as unknown[]).filter((f): f is SchoolInfoField => typeof f === "string") : [];
+  const coveredText = typeof data?.coveredText === "string" && data.coveredText.length > 0 ? data.coveredText : null;
+  return { info, fields, coveredText };
+}
+
+function explainCardOf(data: Record<string, unknown> | null | undefined): ExplainCardData | null {
+  const card = data?.card as ExplainCardData | undefined;
+  return card && typeof card === "object" && Array.isArray(card.why) ? card : null;
+}
+
+function goalResultOf(data: Record<string, unknown> | null | undefined): SchoolGoalResult | null {
+  const result = data?.result as SchoolGoalResult | undefined;
+  return result && typeof result === "object" && result.position ? result : null;
 }
 
 function IconButton({

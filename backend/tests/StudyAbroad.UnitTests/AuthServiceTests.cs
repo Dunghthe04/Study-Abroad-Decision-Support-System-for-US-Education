@@ -339,6 +339,7 @@ public class AuthServiceTests
         var log = Assert.Single(_auditLogs.Entries);
         Assert.Equal("user.lock", log.Action);
         Assert.Equal(adminId, log.ActorUserId);
+        Assert.Contains(_emailSender.SentEmails, e => e.Purpose == "account_locked_notice");
     }
 
     [Fact]
@@ -404,6 +405,7 @@ public class AuthServiceTests
         var log = Assert.Single(_auditLogs.Entries);
         Assert.Equal("user.unlock", log.Action);
         Assert.Equal(adminId, log.ActorUserId);
+        Assert.Contains(_emailSender.SentEmails, e => e.Purpose == "account_unlocked_notice");
     }
 
     [Fact]
@@ -438,6 +440,121 @@ public class AuthServiceTests
 
         Assert.Equal(AuthError.Validation, result.Error);
         Assert.Empty(_auditLogs.Entries);
+    }
+
+    [Fact]
+    public async Task LockUserAccount_ModeratorActor_CanLockSubordinatesOnly()
+    {
+        var service = CreateService();
+        var moderatorActor = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "mod1@test.com",
+            Role = UserRoles.Moderator,
+            Status = UserStatuses.Active,
+            FullName = "Moderator Actor",
+            PasswordHash = "x",
+        };
+        var otherMod = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "mod2@test.com",
+            Role = UserRoles.Moderator,
+            Status = UserStatuses.Active,
+            FullName = "Other Moderator",
+            PasswordHash = "x",
+        };
+        var adminTarget = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "admin@test.com",
+            Role = UserRoles.Admin,
+            Status = UserStatuses.Active,
+            FullName = "Admin Target",
+            PasswordHash = "x",
+        };
+        var centerTarget = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "center@test.com",
+            Role = UserRoles.Center,
+            Status = UserStatuses.Active,
+            FullName = "Center Target",
+            PasswordHash = "x",
+        };
+        var studentTarget = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "student@test.com",
+            Role = UserRoles.Student,
+            Status = UserStatuses.Active,
+            FullName = "Student Target",
+            PasswordHash = "x",
+        };
+        _repo.Users.AddRange([moderatorActor, otherMod, adminTarget, centerTarget, studentTarget]);
+
+        // Moderator cannot lock another Moderator
+        var modLockResult = await service.LockUserAccountAsync(otherMod.Id, new LockUserAccountRequest("reason"), moderatorActor.Id);
+        Assert.Equal(AuthError.Validation, modLockResult.Error);
+        Assert.Contains("Kiểm duyệt viên không có quyền", modLockResult.Message);
+
+        // Moderator cannot lock Admin
+        var adminLockResult = await service.LockUserAccountAsync(adminTarget.Id, new LockUserAccountRequest("reason"), moderatorActor.Id);
+        Assert.Equal(AuthError.Validation, adminLockResult.Error);
+
+        // Moderator CAN lock Center (subordinate)
+        var centerLockResult = await service.LockUserAccountAsync(centerTarget.Id, new LockUserAccountRequest("reason"), moderatorActor.Id);
+        Assert.Equal(AuthError.None, centerLockResult.Error);
+        Assert.Equal(UserStatuses.Locked, centerTarget.Status);
+
+        // Moderator CAN lock Student (subordinate)
+        var studentLockResult = await service.LockUserAccountAsync(studentTarget.Id, new LockUserAccountRequest("reason"), moderatorActor.Id);
+        Assert.Equal(AuthError.None, studentLockResult.Error);
+        Assert.Equal(UserStatuses.Locked, studentTarget.Status);
+    }
+
+    [Fact]
+    public async Task UnlockUserAccount_ModeratorActor_CanUnlockSubordinatesOnly()
+    {
+        var service = CreateService();
+        var moderatorActor = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "mod1@test.com",
+            Role = UserRoles.Moderator,
+            Status = UserStatuses.Active,
+            FullName = "Moderator Actor",
+            PasswordHash = "x",
+        };
+        var otherModLocked = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "mod2@test.com",
+            Role = UserRoles.Moderator,
+            Status = UserStatuses.Locked,
+            FullName = "Other Mod Locked",
+            PasswordHash = "x",
+        };
+        var centerLocked = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "center@test.com",
+            Role = UserRoles.Center,
+            Status = UserStatuses.Locked,
+            FullName = "Center Locked",
+            PasswordHash = "x",
+        };
+        _repo.Users.AddRange([moderatorActor, otherModLocked, centerLocked]);
+
+        // Moderator cannot unlock another Moderator
+        var modUnlockResult = await service.UnlockUserAccountAsync(otherModLocked.Id, new UnlockUserAccountRequest("reason"), moderatorActor.Id);
+        Assert.Equal(AuthError.Validation, modUnlockResult.Error);
+        Assert.Contains("Kiểm duyệt viên không có quyền", modUnlockResult.Message);
+
+        // Moderator CAN unlock Center
+        var centerUnlockResult = await service.UnlockUserAccountAsync(centerLocked.Id, new UnlockUserAccountRequest("reason"), moderatorActor.Id);
+        Assert.Equal(AuthError.None, centerUnlockResult.Error);
+        Assert.Equal(UserStatuses.Active, centerLocked.Status);
     }
 
     [Fact]
@@ -529,6 +646,20 @@ public class AuthServiceTests
     }
 
     [Fact]
+    public async Task CreateCenterAccount_WithoutFullName_DefaultsToEmailPrefix()
+    {
+        var service = CreateService();
+        var request = new CreateCenterAccountRequest("gse.admin@studyabroad.vn", "Password123!", null, "0912345678");
+
+        var result = await service.CreateCenterAccountAsync(request);
+
+        Assert.Equal(AuthError.None, result.Error);
+        Assert.NotNull(result.User);
+        Assert.Equal("gse.admin", result.User.FullName);
+        Assert.Equal(UserRoles.Center, result.User.Role);
+    }
+
+    [Fact]
     public async Task CreateCenterAccount_DuplicateEmail_ReturnsValidationError()
     {
         var service = CreateService();
@@ -584,7 +715,6 @@ public class AuthServiceTests
         var service = CreateService();
         await service.RegisterAsync(Request());
         _repo.Users[0].Status = UserStatuses.TempLocked;
-        _repo.Users[0].LockoutEnd = DateTime.UtcNow.AddMinutes(10);
 
         // Kể cả nhập ĐÚNG mật khẩu
         var result = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
@@ -593,22 +723,18 @@ public class AuthServiceTests
     }
 
     [Fact]
-    public async Task Login_TempLockedUser_After15Minutes_AutoUnlocksAtRuntimeAndSucceeds()
+    public async Task Login_TempLockedUser_NeverAutoUnlocksAtRuntime_RequiresAdminToUnlock()
     {
         var service = CreateService();
         await service.RegisterAsync(Request());
         var user = _repo.Users[0];
         user.Status = UserStatuses.TempLocked;
         user.FailedLoginAttempts = 5;
-        user.LockoutEnd = DateTime.UtcNow.AddMinutes(-1); // Đã qua 15 phút
 
         var loginResult = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
 
-        Assert.Equal(AuthError.None, loginResult.Error);
-        Assert.NotNull(loginResult.Response);
-        Assert.Equal(UserStatuses.Active, user.Status);
-        Assert.Equal(0, user.FailedLoginAttempts);
-        Assert.Null(user.LockoutEnd);
+        Assert.Equal(AuthError.TempLocked, loginResult.Error);
+        Assert.Equal(UserStatuses.TempLocked, user.Status);
     }
 
     [Fact]
@@ -949,7 +1075,7 @@ public class AuthServiceTests
     }
 
     [Fact]
-    public async Task Login_WrongPassword5Times_TempLocksUserFor15Minutes_AndSendsNoticeEmail()
+    public async Task Login_WrongPassword5Times_LocksUser_AndRequiresAdminToUnlock()
     {
         var service = CreateService();
         await service.RegisterAsync(Request());
@@ -965,50 +1091,54 @@ public class AuthServiceTests
             Assert.Equal(UserStatuses.Active, user.Status);
         }
 
-        // Nhập sai lần thứ 5 -> Tạm khóa 15 phút
+        // Nhập sai lần thứ 5 -> Khóa tài khoản
         var lockRes = await service.LoginAsync(new LoginRequest("a@test.com", "wrongpass"));
         Assert.Equal(AuthError.TempLocked, lockRes.Error);
         Assert.Equal(UserStatuses.TempLocked, user.Status);
-        Assert.NotNull(user.LockoutEnd);
-        Assert.True(user.LockoutEnd > DateTime.UtcNow.AddMinutes(14) && user.LockoutEnd <= DateTime.UtcNow.AddMinutes(15));
+        Assert.Null(user.LockoutEnd);
 
         // Kiểm tra email thông báo đã được gửi (không chứa mã OTP mở khóa)
         Assert.Contains(_emailSender.SentEmails, e => e.Purpose == "temp_locked_notice");
     }
 
     [Fact]
-    public async Task Login_TempLockedUser_Within15Minutes_IsBlocked()
+    public async Task Login_TempLockedUser_IsBlocked_EvenWithCorrectPassword()
     {
         var service = CreateService();
         await service.RegisterAsync(Request());
         var user = _repo.Users[0];
         user.Status = UserStatuses.TempLocked;
-        user.LockoutEnd = DateTime.UtcNow.AddMinutes(10); // Còn 10 phút nữa
 
         // Kể cả gõ đúng mật khẩu vẫn bị chặn
         var result = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
 
         Assert.Equal(AuthError.TempLocked, result.Error);
-        Assert.Contains("tự động mở khóa sau", result.Message!);
+        Assert.Contains("liên hệ Quản trị viên", result.Message!);
     }
 
     [Fact]
-    public async Task Login_TempLockedUser_After15Minutes_AutoUnlocksAndSucceeds()
+    public async Task Login_TempLockedUser_NeverAutoUnlocks_RequiresAdminUnlock()
     {
         var service = CreateService();
         await service.RegisterAsync(Request());
         var user = _repo.Users[0];
         user.Status = UserStatuses.TempLocked;
         user.FailedLoginAttempts = 5;
-        user.LockoutEnd = DateTime.UtcNow.AddMinutes(-1); // Đã quá 15 phút
 
+        // Thử đăng nhập vẫn bị chặn
         var result = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
+        Assert.Equal(AuthError.TempLocked, result.Error);
+        Assert.Equal(UserStatuses.TempLocked, user.Status);
 
-        Assert.Equal(AuthError.None, result.Error);
-        Assert.NotNull(result.Response);
+        // Chỉ khi Admin mở khóa thì mới đăng nhập được
+        var adminId = Guid.NewGuid();
+        var unlockResult = await service.UnlockUserAccountAsync(user.Id, new UnlockUserAccountRequest("Admin mở khóa"), adminId);
+        Assert.Equal(AuthError.None, unlockResult.Error);
         Assert.Equal(UserStatuses.Active, user.Status);
-        Assert.Equal(0, user.FailedLoginAttempts);
-        Assert.Null(user.LockoutEnd);
+
+        var loginAfterAdminUnlock = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
+        Assert.Equal(AuthError.None, loginAfterAdminUnlock.Error);
+        Assert.NotNull(loginAfterAdminUnlock.Response);
     }
 
     [Fact]
@@ -1437,6 +1567,7 @@ public class AuthServiceTests
 
         Assert.Equal(AuthError.TempLocked, lockRes.Error);
         Assert.Equal(UserStatuses.TempLocked, user.Status);
+        Assert.Null(user.LockoutEnd);
         Assert.All(_repo.Sessions, s => Assert.True(s.IsRevoked));
         Assert.Contains(_emailSender.SentEmails, e => e.Purpose == "temp_locked_notice");
     }

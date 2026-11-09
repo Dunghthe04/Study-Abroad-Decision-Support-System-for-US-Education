@@ -1,7 +1,6 @@
 // Chuyển mã của kết quả gợi ý (nhóm, mã lý do, cờ thiếu dữ liệu) thành chữ cho màn kết quả.
 
-import type { FilterFlag, Pref, SchoolGroup, WhyCode } from "@/types/recommendation";
-import { PREF_PRESETS, type PrefPreset } from "@/lib/recommendation-api";
+import type { ChangeStatus, FilterFlag, SchoolGroup, WhyCode } from "@/types/recommendation";
 
 // Tên nhóm hiện trên thẻ trường
 export const GROUP_LABELS: Record<SchoolGroup, string> = {
@@ -15,6 +14,9 @@ export const GROUP_LABELS: Record<SchoolGroup, string> = {
 
 // Mã lý do → một câu ngắn
 export const WHY_TEXT: Record<WhyCode, string> = {
+  LOW_RATE: "Trường rất chọn lọc (nhận dưới 15% hồ sơ) nên luôn xếp Khó vào, dù điểm của bạn cao",
+  RATE_CAP: "Trường nhận dưới 50% hồ sơ nên chưa tính là An toàn",
+  WEAK_CAP: "Có một chỉ số thấp hơn mốc 25% của trường nên chưa tính là An toàn",
   GPA_HIGH: "GPA cao hơn phần lớn sinh viên của trường",
   GPA_MID: "GPA nằm trong khoảng giữa của trường",
   GPA_LOW: "GPA thấp hơn phần lớn sinh viên của trường",
@@ -35,10 +37,47 @@ export const FLAG_TEXT: Record<FilterFlag, string> = {
   COST_UNKNOWN: "Chưa có số liệu chi phí",
   NEED_BIG_AID: "Cần học bổng lớn",
   AID_UNKNOWN: "Chưa rõ học bổng cho du học sinh",
-  ENGLISH_NO_SCORE: "Bạn chưa nhập điểm tiếng Anh",
   ENGLISH_MIN_UNKNOWN: "Trường chưa công bố điểm tiếng Anh tối thiểu",
   ENGLISH_NOT_COMPARABLE: "Không so được điểm tiếng Anh với yêu cầu của trường",
+  ENGLISH_NEAR: "Điểm tiếng Anh của bạn thấp hơn mức tối thiểu của trường, cần đạt mức đó trước hạn nộp",
+  // Cờ cũ, giữ cho lượt gợi ý đã lưu trước đây
+  ENGLISH_NO_SCORE: "Bạn chưa nhập điểm tiếng Anh",
+  ENGLISH_BELOW_MIN: "Điểm tiếng Anh của bạn thấp hơn mức tối thiểu của trường",
 };
+
+// Mã lý do xếp nhóm (GroupReasons ở backend) → vì sao trường không đạt nhóm đích
+export const GOAL_REASON_TEXT: Record<string, string> = {
+  LOW_ACCEPT_RATE: "Trường chỉ nhận dưới 15% hồ sơ nên luôn xếp Khó vào, điểm cao đến đâu cũng không đổi nhóm.",
+  CAPPED_SELECTIVE: "Trường nhận dưới 50% hồ sơ nên chỉ tối đa là Vừa sức, chưa tính là An toàn.",
+  CAPPED_WEAK_METRIC: "Một chỉ số của bạn còn thấp hơn mốc 25% của trường nên chưa tính là An toàn.",
+  INTL_DOWNGRADE: "Trường nhận du học sinh ít hơn hẳn tỷ lệ chung nên bị hạ một nhóm.",
+  NEED_TEST: "Trường bắt buộc nộp điểm SAT hoặc ACT mà hồ sơ của bạn chưa có.",
+  NO_ACADEMIC_DATA: "Trường chưa có đủ số liệu học thuật để so sánh với hồ sơ của bạn.",
+  P_BELOW_RANGE: "Điểm của bạn thấp hơn khoảng thường của sinh viên trường này.",
+  P_IN_RANGE: "Điểm của bạn nằm trong khoảng thường của sinh viên trường này.",
+  P_ABOVE_RANGE: "Điểm của bạn cao hơn khoảng thường của sinh viên trường này.",
+  NO_ACCEPT_RATE: "Trường chưa công bố tỷ lệ nhận nên hệ thống bỏ qua luật theo tỷ lệ nhận.",
+};
+
+export const FACTOR_LABELS: Record<string, string> = {
+  sat: "SAT",
+  gpa: "GPA (thang 4)",
+  ecTier: "Bậc ngoại khóa",
+};
+
+export const DIFFICULTY_LABELS: Record<string, string> = {
+  easy: "Khả thi",
+  hard: "Khó",
+  veryHard: "Rất khó",
+};
+
+// Một giá trị của yếu tố: SAT và bậc là số nguyên, GPA hai chữ số thập phân
+export function goalValue(factor: string, value: number | null): string {
+  if (value == null) return "Chưa có";
+  return factor === "gpa"
+    ? value.toLocaleString("vi-VN", { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+    : Math.round(value).toLocaleString("vi-VN");
+}
 
 // Đổi mã sang chữ, mã lạ thì giữ nguyên để không mất thông tin
 export const whyText = (code: string) => WHY_TEXT[code as WhyCode] ?? code;
@@ -59,11 +98,16 @@ export function formatUsd(value: number | null | undefined): string {
   return `${Math.round(value).toLocaleString("vi-VN")} USD`;
 }
 
-// Tìm nút đang khớp với pref đã lưu; không khớp nút nào thì trả null
-export function findPreset(pref: Pref | null | undefined): PrefPreset | null {
-  if (!pref) return null;
-  return PREF_PRESETS.find((p) => p.pref.every((v, i) => v === pref[i])) ?? null;
-}
+// Trạng thái của một trường trong trình mô phỏng (nhóm, khối học bổng, hoặc bị loại)
+export const STATUS_LABELS: Record<ChangeStatus, string> = {
+  R: "Khó vào",
+  M: "Vừa sức",
+  S: "An toàn hơn",
+  NA: "Chưa đủ dữ liệu",
+  AID: "Cần học bổng lớn",
+  OUT: "Ngoài danh sách",
+};
+export const statusLabel = (status: string) => STATUS_LABELS[status as ChangeStatus] ?? status;
 
 // "https://www.stanford.edu/" → "stanford.edu". Chỉ nhận http/https, link lạ thì trả null.
 export function siteHost(url: string | null | undefined): string | null {

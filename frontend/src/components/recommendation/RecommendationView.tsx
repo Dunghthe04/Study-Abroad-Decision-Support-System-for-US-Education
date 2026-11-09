@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertCircleIcon, RefreshCwIcon } from "lucide-react";
@@ -9,18 +9,28 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { useAssistant, useAssistantPageContext } from "@/components/assistant/AssistantProvider";
 import { recommendationApi } from "@/lib/recommendation-api";
-import type { PickBlockName, Pref, Recommendation, ScoredSchool } from "@/types/recommendation";
-import { ExplainSheet } from "./ExplainSheet";
-import { PrefButtons } from "./PrefButtons";
+import { whyText } from "@/lib/recommendation-labels";
+import { RESET_SIMULATION_EVENT, SIMULATE_EVENT, describeSimulation } from "@/lib/simulation-link";
+import { useProfileSimulation, type ProfileSimulation } from "@/lib/use-profile-simulation";
+import type {
+  PickBlockName,
+  Pref,
+  Recommendation,
+  SchoolChange,
+  ScoredSchool,
+  SimulationOverrides,
+} from "@/types/recommendation";
+import { ProfileSimulator } from "./ProfileSimulator";
 import { ProfileSummary } from "./ProfileSummary";
+import { EnglishNoticeBanner } from "./EnglishNoticeBanner";
 import { SchoolCard } from "./SchoolCard";
 
 // Bốn khối chính theo đúng thứ tự trên màn. "other" để riêng ở cuối.
 const BLOCKS: { key: PickBlockName; title: string; note: string }[] = [
-  { key: "reach", title: "Khó vào", note: "Tối đa 3 trường" },
-  { key: "match", title: "Vừa sức", note: "Tối đa 5 trường" },
+  { key: "reach", title: "Khó vào", note: "Tối đa 4 trường" },
+  { key: "match", title: "Vừa sức", note: "Tối đa 4 trường" },
   { key: "safety", title: "An toàn hơn", note: "Tối đa 4 trường" },
-  { key: "aid", title: "Chỉ đi được nếu có học bổng lớn", note: "Xếp theo số tiền còn thiếu" },
+  { key: "aid", title: "Chỉ đi được nếu có học bổng lớn", note: "Xếp theo điểm phù hợp" },
 ];
 
 const RESULT_SUGGESTIONS = [
@@ -29,29 +39,59 @@ const RESULT_SUGGESTIONS = [
   "Làm sao để lên nhóm Vừa sức?",
 ];
 
+const BALANCED_PREF: Pref = [2, 2, 2];
+
 interface RecommendationViewProps {
   autoRun: boolean; // true khi vừa gửi hồ sơ xong: chạy gợi ý mới thay vì đọc lần cũ
+  initialOverrides?: SimulationOverrides; // giá trị giả định chat vừa thử, điền sẵn vào thanh kéo
 }
 
-export function RecommendationView({ autoRun }: RecommendationViewProps) {
+export function RecommendationView({ autoRun, initialOverrides }: RecommendationViewProps) {
   const router = useRouter();
   const [rec, setRec] = useState<Recommendation | null>(null);
   // Vừa gửi hồ sơ thì bắt đầu ở trạng thái "running", còn lại là "loading" (đọc lần đã lưu)
   const [phase, setPhase] = useState<"loading" | "running" | "ready">(autoRun ? "running" : "loading");
-  const [repicking, setRepicking] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [explainCode, setExplainCode] = useState<string | null>(null);
   const started = useRef(false); // dev mode chạy useEffect 2 lần; không được tạo 2 lần gợi ý
-  const { openPanel } = useAssistant();
+  const { openPanel, sendAction } = useAssistant();
+  // Nút trên thẻ trường gửi câu hỏi vào khung chat kèm mã trường (không qua SLM): chat trả thẻ kết quả rồi lời tư vấn
+  const nameOf = (code: string) => rec?.items.scored.find((s) => s.code === code)?.name ?? code;
+  const askGoal = (code: string) => sendAction(`Cần gì để vào ${nameOf(code)}?`, { type: "goal_seek", schoolCode: code });
+  const askExplain = (code: string) => sendAction(`Vì sao ${nameOf(code)} xếp ở nhóm này?`, { type: "explain", schoolCode: code });
+
+  // Trình mô phỏng chỉ chạy khi đã có lần gợi ý (cần hồ sơ đã gửi)
+  const basePref = rec?.criteria.pref ?? BALANCED_PREF;
+  const sim = useProfileSimulation(phase === "ready" && rec !== null, basePref, initialOverrides);
+
+  // Đang kéo thanh thì danh sách hiện kết quả mô phỏng, không kéo thì hiện lần gợi ý đã lưu
+  const view = useMemo<Recommendation | null>(() => {
+    if (!rec) return null;
+    return sim.isSimulating && sim.result ? { ...rec, criteria: sim.result.criteria, items: sim.result.items } : rec;
+  }, [rec, sim.isSimulating, sim.result]);
+  const simulating = sim.isSimulating && sim.result !== null;
 
   // Ngữ cảnh trợ lý bên phải: lời chào theo số trường, chip hỏi về trường Khó vào đầu tiên
-  const firstReach = rec ? rec.items.scored.find((s) => s.code === rec.items.reach[0]?.code) : undefined;
-  const shownCount = rec ? BLOCKS.reduce((n, b) => n + rec.items[b.key].length, 0) : 0;
+  const firstReach = view ? view.items.scored.find((s) => s.code === view.items.reach[0]?.code) : undefined;
   useAssistantPageContext({
     label: "Trang đề xuất",
     suggestions: firstReach ? [`Vì sao ${firstReach.name} Khó vào?`, ...RESULT_SUGGESTIONS] : RESULT_SUGGESTIONS,
     greeting: rec ? `Mình là hệ thống tư vấn du học. Bạn cần mình hỗ trợ gì không?:` : undefined,
+    // Đang kéo thanh giả định thì chat giải thích theo giả định đó (khớp danh sách đang xem)
+    simulation: simulating ? sim.overrides : null,
   });
+
+  // Chat vừa thử một kịch bản what-if: đặt lại thanh kéo tại chỗ, không tải lại trang
+  const { replace: replaceSimulation, resetAll: resetSimulation } = sim;
+  useEffect(() => {
+    const onSimulate = (event: Event) => replaceSimulation((event as CustomEvent<SimulationOverrides>).detail);
+    const onReset = () => resetSimulation();
+    window.addEventListener(SIMULATE_EVENT, onSimulate);
+    window.addEventListener(RESET_SIMULATION_EVENT, onReset);
+    return () => {
+      window.removeEventListener(SIMULATE_EVENT, onSimulate);
+      window.removeEventListener(RESET_SIMULATION_EVENT, onReset);
+    };
+  }, [replaceSimulation, resetSimulation]);
 
   // Có kết quả thì mở trợ lý bên phải một lần như bản demo (màn hẹp thì khung phủ kín nên không tự mở)
   const autoOpened = useRef(false);
@@ -61,10 +101,11 @@ export function RecommendationView({ autoRun }: RecommendationViewProps) {
     if (window.matchMedia("(min-width: 900px)").matches) openPanel();
   }, [rec, openPanel]);
 
-  // Chạy cả quy trình (lọc → Qwen → Gemini). Mất khoảng nửa phút.
+  // Chạy cả quy trình (lọc cứng, đọc ngoại khóa, chấm nhóm bằng code, lưu)
   const runNew = async () => {
     setPhase("running");
     setError(null);
+    sim.resetAll();
     try {
       setRec(await recommendationApi.create(rec?.criteria.pref));
     } catch (err) {
@@ -78,7 +119,7 @@ export function RecommendationView({ autoRun }: RecommendationViewProps) {
     if (started.current) return;
     started.current = true;
 
-    // Bỏ ?run=1 khỏi URL để tải lại trang chỉ đọc lần đã lưu, không chạy lại AI
+    // Bỏ ?run=1 khỏi URL để tải lại trang chỉ đọc lần đã lưu, không chạy lại
     if (autoRun) router.replace("/recommendations");
 
     // Chỉ gọi setState trong .then/.catch, không gọi ngay trong effect
@@ -89,51 +130,30 @@ export function RecommendationView({ autoRun }: RecommendationViewProps) {
       .finally(() => setPhase("ready"));
   }, [autoRun, router]);
 
-  // Đổi nút ưu tiên: chỉ gọi lại lượt chọn
-  const handleRepick = async (pref: Pref) => {
-    setRepicking(true);
-    setError(null);
-    try {
-      setRec(await recommendationApi.repick(pref));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Chưa sắp xếp lại được.");
-    } finally {
-      setRepicking(false);
-    }
-  };
-
   if (phase !== "ready") {
     return (
       <div className="flex min-h-[50vh] flex-col items-center justify-center gap-3 text-center">
         <Spinner className="size-8 text-brand" />
         <p className="text-sm text-muted-foreground">
           {phase === "running"
-            ? "Đang lọc trường, đọc hoạt động ngoại khóa và chấm điểm. Việc này mất khoảng nửa phút..."
+            ? "Đang lọc trường, đọc hoạt động ngoại khóa và xếp nhóm..."
             : "Đang tải gợi ý của bạn..."}
         </p>
       </div>
     );
   }
 
-  return (
-    <div className="mx-auto max-w-5xl space-y-6 px-4 py-8">
-      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-line pb-4">
-        <div className="space-y-1">
-          <h1 className="text-h1 text-foreground">Trường gợi ý cho bạn</h1>
-          {rec && (
-            <p className="text-xs text-muted-foreground">
-              Tạo lúc {new Date(rec.createdAt).toLocaleString("vi-VN")} · Bậc ngoại khóa {rec.criteria.tier}/5
-              {!rec.criteria.ecAiUsed && " (tính từ số bạn khai)"}
-            </p>
-          )}
-        </div>
-        <Button variant="outline" size="sm" onClick={runNew} className="gap-1">
-          <RefreshCwIcon className="size-3.5" />
-          {rec ? "Chạy lại từ hồ sơ" : "Nhận gợi ý"}
-        </Button>
+  const main = (
+    <div className="min-w-0 flex-1 space-y-6 px-4 py-6 lg:px-8">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-h1 text-foreground">Trường gợi ý cho bạn</h1>
+        {!rec && (
+          <Button variant="outline" size="sm" onClick={runNew} className="gap-1">
+            <RefreshCwIcon className="size-3.5" />
+            Nhận gợi ý
+          </Button>
+        )}
       </div>
-
-      <ProfileSummary rec={rec} />
 
       {error && (
         <Alert variant="destructive">
@@ -153,52 +173,86 @@ export function RecommendationView({ autoRun }: RecommendationViewProps) {
         </div>
       )}
 
-      {rec && <ResultBody rec={rec} repicking={repicking} onRepick={handleRepick} onExplain={setExplainCode} />}
+      {rec && view && (
+        <>
+          <ProfileSummary rec={rec} onRerun={runNew} />
+          {simulating && <SimulationBanner sim={sim} />}
+          <ResultBody
+            rec={view}
+            changes={simulating ? sim.result!.changes : []}
+            onExplain={askExplain}
+            onGoal={askGoal}
+          />
+        </>
+      )}
 
       <p className="text-[11px] text-ink-3">
         Kết quả chỉ để tham khảo, không phải xác suất đỗ. Số liệu lấy từ Common Data Set của từng trường.
       </p>
 
-      <ExplainSheet code={explainCode} onClose={() => setExplainCode(null)} />
+    </div>
+  );
+
+  // Có kết quả: thanh mô phỏng dính mép trái cao hết khung (như CollegeVine), phần còn lại chiếm hết bề rộng tới khung chat
+  if (!rec || !view) return main;
+  return (
+    <div className="flex flex-col lg:flex-row lg:items-start">
+      <ProfileSimulator sim={sim} basePref={basePref} />
+      {main}
+    </div>
+  );
+}
+
+// Dải thông báo khi đang xem hồ sơ giả định: số trường mỗi nhóm trước và sau, các trường đổi nhóm
+function SimulationBanner({ sim }: { sim: ProfileSimulation }) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-brand/30 bg-brand-wash px-4 py-2.5">
+      <p className="text-sm font-semibold text-brand">Đang xem giả định: {describeSimulation(sim.overrides)}</p>
+      <Button variant="outline" size="sm" onClick={sim.resetAll}>
+        Quay lại hồ sơ thật
+      </Button>
     </div>
   );
 }
 
 interface ResultBodyProps {
   rec: Recommendation;
-  repicking: boolean;
-  onRepick: (pref: Pref) => void;
-  onExplain: (code: string) => void;
+  changes: SchoolChange[]; // trường đổi nhóm khi đang mô phỏng
+  onExplain?: (code: string) => void; // bỏ trống khi đang mô phỏng
+  onGoal?: (code: string) => void;
 }
 
-function ResultBody({ rec, repicking, onRepick, onExplain }: ResultBodyProps) {
+function ResultBody({ rec, changes, onExplain, onGoal }: ResultBodyProps) {
   const { criteria, items } = rec;
   const byCode = new Map<string, ScoredSchool>(items.scored.map((s) => [s.code, s]));
+  const changeByCode = new Map<string, SchoolChange>(changes.map((c) => [c.code, c]));
 
   // Không còn trường nào sau lọc cứng: lượt chọn không chạy
   if (criteria.status === null) {
     return (
-      <div className="rounded-2xl border border-line bg-surface p-8 text-center text-sm text-muted-foreground">
-        Không có trường nào qua bộ lọc. Hãy thử bỏ bớt bang, đổi loại trường hoặc mức ngân sách trong{" "}
-        <Link href="/analysis?edit=1" className="font-semibold text-brand underline-offset-4 hover:underline">
-          hồ sơ
-        </Link>
-        .
+      <div className="space-y-4">
+        {criteria.english && <EnglishNoticeBanner notice={criteria.english} empty />}
+        <div className="rounded-2xl border border-line bg-surface p-8 text-center text-sm text-muted-foreground">
+          Không có trường nào qua bộ lọc. Hãy thử bỏ bớt bang, đổi loại trường hoặc mức ngân sách trong{" "}
+          <Link href="/analysis?edit=1" className="font-semibold text-brand underline-offset-4 hover:underline">
+            hồ sơ
+          </Link>
+          .
+        </div>
       </div>
     );
   }
 
   return (
     <div className="space-y-8">
-      <PrefButtons current={criteria.pref} disabled={repicking} onSelect={onRepick} />
+      {criteria.english && <EnglishNoticeBanner notice={criteria.english} empty={false} />}
 
       {criteria.status === "FAILED" && (
         <Alert>
           <AlertCircleIcon className="size-4" />
           <AlertTitle>Chưa xếp được danh sách</AlertTitle>
           <AlertDescription className="text-xs">
-            Dịch vụ AI đang hết lượt hoặc trả kết quả lỗi. Trường đã được chấm và lưu lại; bấm một nút ưu tiên ở
-            trên để thử xếp lại sau.
+            Chưa xếp được danh sách trường. Bấm &quot;Chạy lại từ hồ sơ&quot; để thử lại.
           </AlertDescription>
         </Alert>
       )}
@@ -207,13 +261,6 @@ function ResultBody({ rec, repicking, onRepick, onExplain }: ResultBodyProps) {
         <p className="text-xs text-warn">
           {items.failed.length} trường chưa chấm được nên không có trong danh sách.
         </p>
-      )}
-
-      {repicking && (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Spinner />
-          Đang sắp xếp lại theo ưu tiên mới...
-        </div>
       )}
 
       {BLOCKS.map((block) => {
@@ -225,9 +272,18 @@ function ResultBody({ rec, repicking, onRepick, onExplain }: ResultBodyProps) {
               <h2 className="text-sm font-bold uppercase tracking-wide text-foreground">{block.title}</h2>
               <span className="text-xs text-muted-foreground">{block.note}</span>
             </div>
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-3">
               {list.map((p) => (
-                <SchoolCard key={p.code} picked={p} school={byCode.get(p.code)} onExplain={onExplain} />
+                <div key={p.code} className="space-y-2">
+                  <SchoolCard
+                    picked={p}
+                    school={byCode.get(p.code)}
+                    change={changeByCode.get(p.code)}
+                    onExplain={onExplain}
+                    onGoal={onGoal}
+                    student={{ sat: criteria.studentSat ?? null, gpa: criteria.studentGpa ?? null }}
+                  />
+                </div>
               ))}
             </div>
           </section>
@@ -237,11 +293,15 @@ function ResultBody({ rec, repicking, onRepick, onExplain }: ResultBodyProps) {
       {items.other.length > 0 && (
         <details className="rounded-2xl border border-line bg-surface p-4 text-xs text-muted-foreground">
           <summary className="cursor-pointer font-semibold text-foreground">
-            {items.other.length} trường chưa xếp nhóm (thiếu dữ liệu hoặc nhận gần như tất cả)
+            {items.other.length} trường chưa xếp được nhóm Khó vào / Vừa sức / An toàn
           </summary>
-          <ul className="mt-2 space-y-1">
+          <p className="mt-2">Hệ thống không đoán khi thiếu số liệu. Các trường này vẫn phù hợp bộ lọc của bạn, chỉ là chưa đủ dữ liệu để so với hồ sơ.</p>
+          <ul className="mt-2 space-y-1.5">
             {items.other.map((p) => (
-              <li key={p.code}>{byCode.get(p.code)?.name ?? p.code}</li>
+              <li key={p.code}>
+                <b className="text-foreground">{byCode.get(p.code)?.name ?? p.code}</b>
+                {p.why.length > 0 && <>: {p.why.map(whyText).join(" ")}</>}
+              </li>
             ))}
           </ul>
         </details>
