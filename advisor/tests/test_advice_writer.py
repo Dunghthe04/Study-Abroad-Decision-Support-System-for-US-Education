@@ -5,7 +5,7 @@ import pytest
 from app.schemas.chat import ResultSchool
 from app.schemas.slm import SkillRequest
 from app.services.advice_writer import AdviceWriter, check_answer
-from app.services.gemini import GeminiError
+from app.services.claude import ClaudeError
 from tests.fakes import FakeLLM
 
 REQ = SkillRequest(
@@ -50,7 +50,7 @@ async def test_a_promise_is_retried_once():
 
 
 async def test_wrong_twice_gives_none():
-    llm = FakeLLM(GeminiError("quá tải"), {"tra_loi": ""})
+    llm = FakeLLM(ClaudeError("quá tải"), {"tra_loi": ""})
 
     assert await AdviceWriter(llm).write(SKILL, REQ, []) is None
     assert len(llm.calls) == 2

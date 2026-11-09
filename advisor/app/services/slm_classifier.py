@@ -8,6 +8,7 @@ import json
 import logging
 import math
 import re
+from pathlib import Path
 from typing import Any
 
 from app.schemas.chat import ChatState
@@ -19,6 +20,16 @@ from app.services.skill_call import SKILLS_DIR, load_skill
 logger = logging.getLogger(__name__)
 
 PROMPT_PATH = SKILLS_DIR / "slm_phan_loai_cac_y.md"
+
+
+# Tên prompt (không có .md) thành đường dẫn; tên không có file thì báo ngay lúc khởi động
+def prompt_path(name: str) -> Path:
+    path = SKILLS_DIR / f"{name}.md"
+    if not path.is_file():
+        raise ValueError(f"không có prompt tách ý '{name}' trong {SKILLS_DIR}")
+    return path
+
+
 MAX_ATTEMPTS = 2  # sai thì gọi lại đúng 1 lần
 # Hai lần đều sai (model trả sai luật, Ollama tắt): coi là tin mơ hồ, confidence 0 để chat hỏi lại học sinh
 FALLBACK = SlmTinResult(
@@ -150,14 +161,19 @@ class OllamaSlm:
     """Làm đúng hợp đồng SlmClassifier trong slm_contract.py."""
 
     # output: định dạng đầu ra, lấy bằng output_format(settings.slm_format). Mặc định ép SLM_TIN_SCHEMA
+    # prompt: tên file prompt trong app/skills (không có .md). Model fine-tune phải dùng đúng prompt lúc huấn luyện
     def __init__(
-        self, slm: Any, output: dict[str, Any] | str = SLM_TIN_SCHEMA, use_context: bool = False
+        self,
+        slm: Any,
+        output: dict[str, Any] | str = SLM_TIN_SCHEMA,
+        use_context: bool = False,
+        prompt: str = PROMPT_PATH.stem,
     ) -> None:
         self._use_context = use_context
 
         self._slm = slm
         self._output = output
-        self.prompt, self.prompt_version = load_skill(PROMPT_PATH)
+        self.prompt, self.prompt_version = load_skill(prompt_path(prompt))
 
     async def classify(self, state: ChatState, message: str) -> SlmTinResult:
         context = context_for_model(state) if self._use_context else None

@@ -9,6 +9,9 @@ File Excel ghi bằng tiếng Anh cho dễ trình bày (tên sheet, cột, khóa
 về tên nội bộ (tiếng Việt) trước khi kiểm, nên SLM, prompt và code không đổi. Excel cũ ghi tên nội bộ vẫn đọc được.
 Bảng đối chiếu nằm ở EN_* bên dưới, là nơi duy nhất ghi cặp tên.
 
+Cột context (tùy chọn, ở mọi sheet): điều hệ thống đang nói tới, ghi tiếng Anh, script đổi về tên nội bộ rồi đưa vào đầu vào của SLM
+(khóa dang_noi_ve) giống lúc chạy thật. Dòng không có ngữ cảnh thì bỏ trống, bản ghi giữ nguyên khuôn cũ.
+
 Chạy trong thư mục advisor:
   python -m scripts.build_slm_jsonl
   python -m scripts.build_slm_jsonl --excel data/slm/du_lieu_slm.xlsx --out data/slm/du_lieu_slm.jsonl
@@ -41,6 +44,7 @@ SKILL_COLUMN = "skill_md"  # chỉ có ở sheet của SKILL_TYPES
 # Dòng code tính sẵn (JSON khóa CALC_KEYS → chữ), đứng sau cột hồ sơ, chỉ ở sheet của SKILL_TYPES. Không bắt buộc (file cũ
 # chưa có). Chỉ đưa vào đầu vào sinh skill, không vào đầu vào tách ý vì lúc chạy SLM lần 1 không thấy các dòng này
 CALC_COLUMN = "ho_so_tinh_san"
+CONTEXT_COLUMN = "context"  # tùy chọn, ở mọi sheet: điều hệ thống đang nói tới (JSON, ghi tiếng Anh)
 SPLITS = ("train", "val", "test")
 _WORD = re.compile(r"[^\W_]+(?:[-.'/][^\W_]+)*")
 
@@ -83,6 +87,8 @@ EN_VALUES = {
         "sensitive": "nhay_cam",
         "farewell": "tam_biet",
         "ambiguous": "mo_ho",
+        "about_system": "ve_he_thong",
+        "human_handoff": "gap_nguoi",
     },
     "dich_vu": {
         "SCHOOL_SELECTION": "CHON_TRUONG",
@@ -96,6 +102,165 @@ EN_VALUES = {
     "hanh_dong": {"skip": "bo_qua"},
 }
 EN_TYPES = EN_SHEETS  # loại trong cột intents trùng tên sheet
+
+# ---- Khuôn v2: nhiệm vụ, danh sách trường / trung tâm, mục, bộ lọc, cách xếp, nối tiếp. Các cặp tên này đổi cả tên khóa lẫn mã
+EN_PROFILE_TASKS = {
+    "answer": "tra_loi",
+    "edit": "sua",
+    "status": "xem_ho_so",
+    "restart": "lam_lai",
+}  # collect_profile
+EN_REVIEW_TASKS = {  # profile_review, ghi thành danh sách cac_nhiem_vu
+    "assessment": "danh_gia",
+    "school_list": "chon_truong",
+    "roadmap": "lo_trinh",
+    "compare": "so_sanh",
+    "explain_school": "giai_thich_truong",
+}
+EN_KNOWLEDGE_TASKS = {
+    "school_info": "tra_cuu",
+    "compare_facts": "so_sanh",
+    "search": "tim_kiem",
+}  # general = không ghi nhiem_vu
+EN_CENTER_TASKS = {"find": "tim", "booking": "dat_lich", "compare": "so_sanh"}  # center_referral
+EN_FIELDS = {
+    "cost": "chi_phi",
+    "aid": "hoc_bong",
+    "english_requirement": "tieng_anh",
+    "test_policy": "diem_thi",
+    "gpa": "gpa",
+    "acceptance_rate": "ty_le_nhan",
+    "deadline": "han_nop",
+    "graduation_rate": "tot_nghiep",
+    "majors": "nganh",
+    "ranking": "xep_hang",
+    "location": "vi_tri",
+    "website": "website",
+    "other": "khac",
+}
+EN_FILTER_KEYS = {
+    "state": "bang",
+    "city": "thanh_pho",
+    "major": "nganh",
+    "school_type": "loai_truong",
+    "aid": "hoc_bong",
+    "test_policy": "chinh_sach_thi",
+    "max_cost": "chi_phi_toi_da",
+    "max_ielts": "ielts_toi_da",
+    "max_toefl": "toefl_toi_da",
+    "max_duolingo": "duolingo_toi_da",
+    "min_acceptance_rate": "ty_le_nhan_toi_thieu",
+    "max_acceptance_rate": "ty_le_nhan_toi_da",
+    "max_rank": "xep_hang_toi_da",
+    "min_graduation_rate": "ty_le_tot_nghiep_toi_thieu",
+    "ivy": "ivy",
+}
+EN_FILTER_VALUES = {  # theo khóa nội bộ; khóa không có ở đây giữ nguyên chữ học sinh gõ
+    "loai_truong": {"public": "cong_lap", "private": "tu_thuc"},
+    "hoc_bong": {"yes": "co", "need_based": "theo_nhu_cau", "merit_based": "theo_thanh_tich"},
+    "chinh_sach_thi": {"optional": "khong_bat_buoc", "required": "bat_buoc"},
+    "ivy": {"yes": "co"},
+}
+EN_SORTS = {
+    "ranking": "xep_hang",
+    "lowest_cost": "chi_phi_thap",
+    "easiest_admission": "de_vao",
+    "most_selective": "chon_loc",
+}
+# Khóa của cột context (điều hệ thống đang nói tới): tên Anh -> tên nội bộ
+EN_CONTEXT_KEYS = {
+    "schools": "truong",
+    "fields": "muc",
+    "filters": "bo_loc",
+    "scenario": "kich_ban",
+    "last_field": "muc_vua_nhap",
+    "last_task": "viec_vua_lam",
+    "service": "dich_vu",
+    "city": "thanh_pho",
+    "centers": "cac_trung_tam",
+}
+
+
+def _filters_to_internal(filters: dict[str, Any]) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    for key, value in filters.items():
+        name = EN_FILTER_KEYS.get(key, key)
+        if name == "bang" and isinstance(value, str):
+            value = [value]
+        if isinstance(value, str):
+            value = EN_FILTER_VALUES.get(name, {}).get(value, value)
+        out[name] = value
+    return out
+
+
+# Khóa và mã của khuôn v2 trong thuc_the của một ý -> tên nội bộ. kind là loại ghi trong Excel (tên Anh);
+# loại ghi tên nội bộ (file cũ) giữ nguyên
+def v2_entities_to_internal(kind: str, entities: dict[str, Any]) -> dict[str, Any]:
+    if kind not in EN_SHEETS:
+        return entities
+    tasks = entities.get("tasks")
+    first = tasks[0] if isinstance(tasks, list) and tasks else None
+    out: dict[str, Any] = {}
+    for key, value in entities.items():
+        if key == "tasks":
+            if kind == "collect_profile" and first:
+                out["nhiem_vu"] = EN_PROFILE_TASKS.get(first, first)
+            elif kind == "profile_review":
+                out["cac_nhiem_vu"] = [EN_REVIEW_TASKS.get(t, t) for t in value]
+            elif kind == "knowledge" and first and first != "general":
+                out["nhiem_vu"] = EN_KNOWLEDGE_TASKS.get(first, first)
+            elif kind == "center_referral" and first:
+                out["nhiem_vu"] = EN_CENTER_TASKS.get(first, first)
+            elif kind not in ("collect_profile", "knowledge", "center_referral"):
+                out["tasks"] = (
+                    value  # loại không có nhiệm vụ (kịch bản, ngoài phạm vi): giữ nguyên để bộ kiểm báo lỗi
+                )
+        elif key == "schools":
+            comparing = any(
+                t in ("compare_facts", "compare") for t in (tasks if isinstance(tasks, list) else [])
+            )
+            if len(value) >= 2 or comparing:
+                out["cac_truong"] = list(value)
+            elif len(value) == 1:
+                out["truong"] = value[0]
+        elif key == "centers":
+            out["cac_trung_tam"] = list(value)
+        elif key == "fields":
+            out["muc"] = [EN_FIELDS.get(f, f) for f in value]
+        elif key == "field" and isinstance(value, str):  # khuôn v2 cũ ghi một mục
+            out["muc"] = [EN_FIELDS.get(value, value)]
+        elif key == "filters":
+            out["bo_loc"] = _filters_to_internal(value)
+        elif key == "sort":
+            out["sap_xep"] = EN_SORTS.get(value, value)
+        elif key == "follow_up":
+            out["tiep_noi"] = value
+        else:
+            out[key] = value
+    return out
+
+
+# Cột context -> khóa nội bộ của dang_noi_ve. Rỗng thì None (dòng không có ngữ cảnh)
+def context_to_internal(context: Any) -> dict[str, Any] | None:
+    if not context:
+        return None
+    if not isinstance(context, dict):
+        raise ValueError("cột context phải là một object JSON")
+    out: dict[str, Any] = {}
+    for key, value in context.items():
+        name = EN_CONTEXT_KEYS.get(key, key)
+        if name == "muc":
+            value = [EN_FIELDS.get(f, f) for f in value]
+        elif name == "bo_loc":
+            value = _filters_to_internal(value)
+        elif name == "kich_ban":
+            value = _entities_to_internal(v2_entities_to_internal("scenario", value))
+        elif name == "viec_vua_lam":
+            value = EN_REVIEW_TASKS.get(value, value)
+        elif name == "dich_vu":
+            value = EN_VALUES["dich_vu"].get(value, value)
+        out[name] = value
+    return out
 
 
 def _entities_to_internal(value: Any) -> Any:
@@ -123,6 +288,10 @@ def intents_to_internal(items: Any) -> Any:
             result.append(item)
             continue
         converted = {EN_ITEM_KEYS.get(key, key): value for key, value in item.items()}
+        if isinstance(
+            converted.get("thuc_the"), dict
+        ):  # khuôn v2: cần biết loại ghi bằng tên Anh nên làm trước khi đổi loại
+            converted["thuc_the"] = v2_entities_to_internal(str(item.get("type")), converted["thuc_the"])
         if isinstance(converted.get("type"), str):
             converted["type"] = EN_TYPES.get(converted["type"], converted["type"])
         if "thuc_the" in converted:
@@ -167,7 +336,9 @@ def words(text: str) -> set[str]:
 
 # Kiểm cột cac_y: từng ý hợp lệ, doan chỉ dùng chữ có trong câu hỏi, giá trị hồ sơ nguyên văn, và không ý nào bị
 # gộp hay bỏ khi chuẩn hóa (dữ liệu phải ghi sẵn đúng chuẩn, nếu không model học sai)
-def check_cac_y(intent: str, question: str, pending: str, items: Any, where: str) -> list[dict[str, Any]]:
+def check_cac_y(
+    intent: str, question: str, pending: str, items: Any, where: str, context: dict[str, Any] | None = None
+) -> list[dict[str, Any]]:
     if not isinstance(items, list) or not items:
         raise ValueError(f"{where}: cac_y phải là danh sách ý, ít nhất một ý")
     if len(items) > MAX_RAW_Y:
@@ -194,7 +365,14 @@ def check_cac_y(intent: str, question: str, pending: str, items: Any, where: str
             raise ValueError(f"{where}: giá trị hồ sơ chỉ ghi ở ý mac_dinh, không ghi vào ý {y.type}")
         for key, value in y.thuc_the.items():
             if (key in PROFILE_KEYS or key == "thanh_pho") and value not in question:
-                raise ValueError(f"{where}: {key} '{value}' phải là đoạn chữ có trong cau_hoi")
+                # Câu nối tiếp ("thế còn luyện phỏng vấn") lấy thành phố từ ngữ cảnh: phải đúng thành phố trong ngữ cảnh
+                from_context = (
+                    key == "thanh_pho"
+                    and y.thuc_the.get("tiep_noi") is True
+                    and value == (context or {}).get("thanh_pho")
+                )
+                if not from_context:
+                    raise ValueError(f"{where}: {key} '{value}' phải là đoạn chữ có trong cau_hoi")
         # mac_dinh rỗng chỉ hợp lệ khi đang có câu chờ (tin mơ hồ, hỏi lại). Không có câu chờ thì phải có giá trị hồ sơ,
         # không thì là ngoai_pham_vi/mo_ho
         if y.type == "mac_dinh" and not pending and not y.thuc_the:
@@ -204,7 +382,7 @@ def check_cac_y(intent: str, question: str, pending: str, items: Any, where: str
 
 # Một dòng trong sheet thành một bản ghi. Sai chuẩn thì ném ValueError có tên sheet và số dòng
 def to_record(intent: str, raw: dict[str, Any], where: str, record_id: str) -> dict[str, Any]:
-    text = {key: as_text(raw.get(key)) for key in (*COLUMNS, SKILL_COLUMN)}
+    text = {key: as_text(raw.get(key)) for key in (*COLUMNS, SKILL_COLUMN)}  # context đọc riêng bên dưới
     if not text["cau_hoi"]:
         raise ValueError(f"{where}: thiếu cau_hoi")
     if text["tap"] not in SPLITS:
@@ -222,12 +400,14 @@ def to_record(intent: str, raw: dict[str, Any], where: str, record_id: str) -> d
         raise ValueError(f"{where}: cột {CALC_COLUMN} phải là một object JSON")
     if set(calc) - set(CALC_KEYS):
         raise ValueError(f"{where}: {CALC_COLUMN} có khóa lạ: {sorted(set(calc) - set(CALC_KEYS))}")
+    context = context_to_internal(as_json(raw.get("context"), where, "context"))
     cac_y = check_cac_y(
         intent,
         text["cau_hoi"],
         pending,
         intents_to_internal(as_json(raw.get("cac_y"), where, "cac_y")) or None,
         where,
+        context,
     )
     skill = text[SKILL_COLUMN]
     if skill and intent not in SKILL_TYPES:
@@ -256,6 +436,9 @@ def to_record(intent: str, raw: dict[str, Any], where: str, record_id: str) -> d
         "output": {"cac_y": cac_y},
         "skill_md": skill or None,
     }
+    # Ngữ cảnh là đầu vào của SLM (giống lúc chạy: slm_input); chỉ ghi khi có, nên dòng không ngữ cảnh giữ nguyên khuôn cũ
+    if context:
+        record["input"]["dang_noi_ve"] = context
     # Ngoài input (input là đầu vào tách ý); chỉ ghi khi có, nên dòng cũ giữ nguyên
     if calc:
         record["tinh_san"] = profile_text(calc)
@@ -272,9 +455,12 @@ def read_records(path: Path) -> list[dict[str, Any]]:
         if intent not in TYPES:
             raise ValueError(f"Sheet '{sheet.title}' không phải một loại trong {TYPES} (mỗi loại một sheet)")
         rows = sheet.iter_rows(values_only=True)
-        header = tuple(
+        full_header = tuple(
             EN_COLUMNS.get(as_text(cell), as_text(cell)) for cell in next(rows, ()) if as_text(cell)
         )
+        header = tuple(
+            name for name in full_header if name != CONTEXT_COLUMN
+        )  # cột context tùy chọn, không tính vào bộ cột bắt buộc
         # Sheet kịch bản không có skill, nhưng file cũ còn cột skill_md (để trống) thì vẫn đọc được
         allowed = {columns_of(intent), columns_of("ho_so")} if intent == "kich_ban" else {columns_of(intent)}
         if intent in SKILL_TYPES:
@@ -285,7 +471,7 @@ def read_records(path: Path) -> list[dict[str, Any]]:
             )
         count = 0
         for number, values in enumerate(rows, start=2):
-            raw = dict(zip(header, values, strict=False))
+            raw = dict(zip(full_header, values, strict=False))
             if not any(as_text(v) for v in raw.values()):
                 continue  # dòng trống
             count += 1
