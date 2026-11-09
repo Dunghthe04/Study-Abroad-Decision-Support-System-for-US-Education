@@ -17,6 +17,7 @@ import { ParentLinksCard } from "@/components/account/ParentLinksCard";
 import { PersonalInfoCard } from "@/components/account/PersonalInfoCard";
 import {
   ArrowRightIcon,
+  BookmarkCheckIcon,
   BookOpenIcon,
   Building2Icon,
   GraduationCapIcon,
@@ -208,6 +209,19 @@ export function AccountView() {
                   {label}
                 </button>
               ))}
+
+              {isStudentOrParent && (
+                <Link
+                  href="/target-schools"
+                  className={cn(
+                    "flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-left text-sm whitespace-nowrap transition-colors",
+                    "text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                  )}
+                >
+                  <BookmarkCheckIcon className="size-4" aria-hidden />
+                  Trường mục tiêu
+                </Link>
+              )}
 
               <button
                 type="button"

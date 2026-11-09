@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Building2Icon, FileTextIcon, InboxIcon, LayoutDashboardIcon, LogOutIcon, ShieldIcon, UserIcon } from "lucide-react";
+import { BookmarkCheckIcon, Building2Icon, FileTextIcon, InboxIcon, LayoutDashboardIcon, LogOutIcon, ShieldIcon, UserIcon } from "lucide-react";
 import { formatUserRole } from "@/lib/user-role-labels";
 import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -30,12 +30,14 @@ export function SiteHeader() {
   const isAdmin = user?.role === "admin";
   const isModerator = user?.role === "moderator";
   const canOpenAdmin = isAdmin || isModerator;
+  const isStudentOrParent = user?.role === "student" || user?.role === "parent";
 
   const navLinks = [
     { href: canOpenAdmin ? "/admin" : "/", label: isModerator ? "Kiểm duyệt" : isAdmin ? "Quản trị" : "Trang chủ" },
     { href: canOpenAdmin ? "/admin/centers" : "/centers", label: "Trung tâm tư vấn" },
     { href: "/methodology", label: "Giới thiệu phương pháp" },
     { href: "/analysis", label: "Phân tích tư vấn" },
+    ...(isStudentOrParent ? [{ href: "/target-schools", label: "Trường mục tiêu" }] : []),
     ...(user?.role === "center" ? [{ href: "/center/leads", label: "Yêu cầu liên hệ" }] : []),
   ];
 
@@ -140,6 +142,12 @@ export function SiteHeader() {
                   <FileTextIcon />
                   Phân tích tư vấn
                 </DropdownMenuItem>
+                {isStudentOrParent && (
+                  <DropdownMenuItem render={<Link href="/target-schools" />}>
+                    <BookmarkCheckIcon />
+                    Trường mục tiêu
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem render={<Link href="/account" />}>
                   <UserIcon />
                   Hồ sơ cá nhân

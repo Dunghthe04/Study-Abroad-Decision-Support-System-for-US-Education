@@ -81,17 +81,31 @@ public class TargetSchoolsController(ITargetSchoolService service) : ControllerB
     }
 
     /// <summary>
-    /// [UC-31] Xóa một trường khỏi danh sách mục tiêu theo ID của mục tiêu.
+    /// [UC-31] Xóa một trường khỏi danh sách mục tiêu theo TargetSchool ID hoặc University Code / ID.
     /// </summary>
-    [HttpDelete("{id:guid}")]
-    public async Task<IActionResult> RemoveTargetSchool(Guid id, CancellationToken ct)
+    [HttpDelete("{identifier}")]
+    public async Task<IActionResult> RemoveTargetSchool(string identifier, CancellationToken ct)
     {
         if (User.GetUserId() is not { } userId)
             return Unauthorized();
 
-        var success = await service.RemoveTargetSchoolAsync(userId, id, ct);
-        return success ? NoContent() : NotFound();
+        if (string.IsNullOrWhiteSpace(identifier) || string.Equals(identifier, "undefined", StringComparison.OrdinalIgnoreCase))
+            return BadRequest("Mã định danh trường không hợp lệ.");
+
+        if (Guid.TryParse(identifier, out var id))
+        {
+            var success = await service.RemoveTargetSchoolAsync(userId, id, ct);
+            if (success)
+                return NoContent();
+        }
+
+        var successByUni = await service.RemoveTargetSchoolByUniversityAsync(userId, identifier, ct);
+        return successByUni ? NoContent() : NotFound();
     }
+
+    [NonAction]
+    public Task<IActionResult> RemoveTargetSchool(Guid id, CancellationToken ct) =>
+        RemoveTargetSchool(id.ToString(), ct);
 
     /// <summary>
     /// [UC-31] Xóa một trường khỏi danh sách mục tiêu theo University Code hoặc University ID.
@@ -119,6 +133,6 @@ public class TargetSchoolsController(ITargetSchoolService service) : ControllerB
             return Unauthorized();
 
         var dto = await service.CheckTargetSchoolAsync(userId, universityCode, universityId, ct);
-        return Ok(dto);
+        return dto is not null ? Ok(dto) : NoContent();
     }
 }
