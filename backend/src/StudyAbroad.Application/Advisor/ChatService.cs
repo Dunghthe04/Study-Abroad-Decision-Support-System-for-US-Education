@@ -64,11 +64,16 @@ namespace StudyAbroad.Application.Advisor
             // Mốc so sánh GPA / tiếng Anh từ dữ liệu trường, cùng bậc học với gợi ý trường
             var marks = await BenchmarksAsync(flow.Draft.Step1?.TargetDegreeLevel, ct);
 
+            // Bảng quy đổi điểm thang 10 sang GPA thang 4 trong DB (moderator sửa) để advisor đổi GPA giống .NET và form.
+            // Luôn lấy từ server, không tin bảng trình duyệt gửi; không có provider thì null, advisor dùng bảng mặc định
+            var scaleRules = gradeScale is null ? null : (await gradeScale.GetAsync(ct)).Rules;
+
             //Gửi request sang Advisor
             var toAdvisor = request with
             {
                 State = state, Profile = JsonSerializer.SerializeToElement(profile), Schools = schools, Transcript = transcript,
                 Benchmarks = marks, OtherSchools = otherSchools, Simulation = null,   // giá trị giả định chỉ .NET dùng, không gửi advisor
+                GradeScale = scaleRules,
             };
             // Nút trên giao diện gửi hành động có cấu trúc (mã trường): bỏ qua advisor, dựng sẵn lượt như thể advisor đã hiểu
             var response = (recommender is not null ? ChatActions.ToResponse(request.Action, state) : null)

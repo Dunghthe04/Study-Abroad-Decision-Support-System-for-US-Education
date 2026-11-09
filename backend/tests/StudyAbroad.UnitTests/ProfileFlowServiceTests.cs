@@ -320,7 +320,7 @@ public class ProfileFlowServiceTests
 
         Assert.True(ocrClient.Called);
         Assert.Single(uploadResult.ExtractedTerms);
-        Assert.Equal(3.6m, uploadResult.CalculatedGpa4);
+        Assert.Equal(4.0m, uploadResult.CalculatedGpa4); // TB 9.0 tra bảng WES ra 4.0, không lấy 3.6 advisor trả
 
         var state = await service.GetFlowStateAsync(userId);
         Assert.Equal("hoc_ba.png", state.DraftTranscript!.OriginalFileName);

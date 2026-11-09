@@ -216,7 +216,7 @@ public class ProfileFlowService(
         return new UploadDraftTranscriptResultDto(
             DraftTranscript: publicInfo,
             ExtractedTerms: ocrResponse?.Terms ?? [],
-            CalculatedGpa4: ocrResponse?.CalculatedGpa4,
+            CalculatedGpa4: await OcrGpa4Async(ocrResponse, ct),
             OcrMessage: ocrResponse?.Message,
             Warnings: ocrResponse?.Warnings,
             DraftFile: publicInfo
@@ -448,6 +448,11 @@ public class ProfileFlowService(
     /// <summary>Bảng quy đổi grade_scale.10 trong DB; không có provider (test cũ) thì null = bảng mặc định</summary>
     private async Task<GradeScaleConfigDto?> GetGradeScaleAsync(CancellationToken ct) =>
         gradeScale is null ? null : await gradeScale.GetAsync(ct);
+
+    // GPA thang 4 của bảng điểm OCR: advisor tra bảng mặc định, nên .NET tra lại TB thang 10 theo bảng trong DB
+    // (moderator sửa). Advisor không trả TB thang 10 thì giữ số advisor tính
+    private async Task<decimal?> OcrGpa4Async(TranscriptOcrResponse? ocr, CancellationToken ct) =>
+        ocr?.AverageScoreScale10 is { } average10 ? TranscriptGpa.To4(average10, await GetGradeScaleAsync(ct)) : ocr?.CalculatedGpa4;
 
     private async Task<Dictionary<string, BudgetTier>> LoadBudgetTiersAsync(CancellationToken ct)
     {
