@@ -2,6 +2,7 @@
 const WIDE_PREFIXES = ["/analysis", "/recommendations", "/admin", "/centers", "/center", "/university/", "/target-schools"];
 
 export function isWideRoute(pathname: string) {
+  if (pathname === "/") return true;
   return WIDE_PREFIXES.some((p) => pathname.startsWith(p));
 }
 

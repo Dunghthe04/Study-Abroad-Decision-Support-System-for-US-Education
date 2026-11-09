@@ -67,7 +67,7 @@ export function SiteHeader() {
           isAdminRoute(pathname) || isFullRoute(pathname)
             ? "max-w-none sm:px-6"
             : isWideRoute(pathname)
-              ? "max-w-[1320px] sm:px-6"
+              ? "max-w-[1560px] px-4 sm:px-8 lg:px-12"
               : "max-w-5xl"
         )}
       >
