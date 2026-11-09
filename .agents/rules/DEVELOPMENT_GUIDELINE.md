@@ -50,7 +50,7 @@ Mỗi class, function, hoặc khối logic nghiệp vụ phải có tag Jira tư
 ### Quy tắc viết comment:
 1. **Comment "Tại sao (Why)" thay vì "Làm gì (What)":**
    - ❌ *Không viết:* `// tính điểm trung bình`
-   - ✅ *Viết:* `// [USAS-365] Tính Unweighted GPA theo thang 4.0 chuẩn WES (mặc định Điểm hệ 10 * 0.4 theo quy định trong Scope of Work)`
+   - ✅ *Viết:* `// [USAS-365] Tính Unweighted GPA theo thang 4.0 theo bảng quy đổi WES (chỉ xét cận dưới mỗi khoảng, không nhân 0.4)`
 2. **XML Docstring chuẩn cho Backend (C#):**
    ```csharp
    /// <summary>
