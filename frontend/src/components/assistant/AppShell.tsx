@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { isAdminRoute } from "@/lib/admin-nav";
 import { isFullRoute, isWideRoute } from "@/lib/layout-routes";
 import { cn } from "@/lib/utils";
+import { SiteFooter } from "@/components/layout/SiteFooter";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { Toaster } from "@/components/ui/toast";
 import { useAutoHideScrollbar } from "@/hooks/use-auto-hide-scrollbar";
@@ -38,11 +39,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               ? "flex flex-col"
               : isFullRoute(pathname)
                 ? "" // trang tự lo khoảng đệm: thanh bên dính mép, phần chính có lề riêng
-                : cn("mx-auto px-4 py-8", isWideRoute(pathname) ? "max-w-[1320px] sm:px-6" : "max-w-5xl"),
+                : cn("mx-auto px-4 py-8", isWideRoute(pathname) ? "max-w-[1560px] px-4 sm:px-8 lg:px-12" : "max-w-5xl"),
           )}
         >
           {children}
         </main>
+        {pathname === "/" && <SiteFooter />}
       </div>
       {showAssistant && <AssistantPanel />}
       {showAssistant && <AssistantLauncher />}
