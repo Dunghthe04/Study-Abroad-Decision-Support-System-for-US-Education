@@ -4,6 +4,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from app.schemas.chat import AiUsageMixin
+
 # Mã lý do của một trường (backend suy từ số đã tính, advisor chỉ nhận để viết lời)
 WhyCode = Literal[
     "GPA_HIGH",
@@ -64,7 +66,7 @@ class ExplainResult(BaseModel):
 
 
 # Kết quả trả về từ API: phiên bản, trạng thái, kết quả
-class ExplainResponse(BaseModel):
+class ExplainResponse(AiUsageMixin):
     skill_version: str
     model: str
     status: str  # OK | FAILED

@@ -112,6 +112,113 @@ public class TargetSchoolService(
         return await repository.GetDtoByIdAsync(id, ct);
     }
 
+    public async Task<TargetSchoolSummaryDto> GetTargetSchoolsAsync(Guid userId, string? category = null, string? status = null, CancellationToken ct = default)
+    {
+        var allItems = await repository.GetListByUserAsync(userId, null, null, ct);
+
+        var reachCount = allItems.Count(x => string.Equals(x.Category, "reach", StringComparison.OrdinalIgnoreCase));
+        var matchCount = allItems.Count(x => string.Equals(x.Category, "match", StringComparison.OrdinalIgnoreCase));
+        var safetyCount = allItems.Count(x => string.Equals(x.Category, "safety", StringComparison.OrdinalIgnoreCase));
+        var undecidedCount = allItems.Count(x => string.IsNullOrEmpty(x.Category));
+
+        var now = DateTime.UtcNow;
+        var nextDeadline = allItems
+            .Where(x => x.Deadline.HasValue && x.Deadline.Value >= now)
+            .OrderBy(x => x.Deadline!.Value)
+            .Select(x => x.Deadline)
+            .FirstOrDefault();
+
+        var filteredItems = allItems;
+        if (!string.IsNullOrWhiteSpace(category))
+        {
+            var cat = category.Trim().ToLowerInvariant();
+            filteredItems = filteredItems.Where(x => string.Equals(x.Category, cat, StringComparison.OrdinalIgnoreCase)).ToList();
+        }
+
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            var st = status.Trim().ToLowerInvariant();
+            filteredItems = filteredItems.Where(x => string.Equals(x.Status, st, StringComparison.OrdinalIgnoreCase)).ToList();
+        }
+
+        return new TargetSchoolSummaryDto(
+            Items: filteredItems,
+            TotalCount: allItems.Count,
+            ReachCount: reachCount,
+            MatchCount: matchCount,
+            SafetyCount: safetyCount,
+            UndecidedCategoryCount: undecidedCount,
+            NextDeadline: nextDeadline
+        );
+    }
+
+    public async Task<UpdateApplicationRoundResult> UpdateApplicationRoundAsync(
+        Guid userId,
+        Guid targetSchoolId,
+        UpdateApplicationRoundRequest request,
+        CancellationToken ct = default)
+    {
+        // 1. Kiểm tra target school có tồn tại và thuộc về user không (Anti-IDOR)
+        var targetSchool = await repository.GetByIdAsync(targetSchoolId, ct);
+        if (targetSchool == null || targetSchool.UserId != userId)
+            return UpdateApplicationRoundResult.Fail("Không tìm thấy trường mục tiêu trong danh sách của bạn.");
+
+        var round = request.ApplicationRound?.Trim() ?? string.Empty;
+        if (string.IsNullOrEmpty(round))
+            return UpdateApplicationRoundResult.Fail("Vui lòng chọn vòng nộp hồ sơ.");
+
+        if (round.Length > 100)
+            return UpdateApplicationRoundResult.Fail("Tên vòng nộp hồ sơ tối đa 100 ký tự.");
+
+        // 2. Xác định deadline (tự động trích xuất từ DeadlinesJson nếu không truyền cụ thể)
+        DateTime? deadline = request.Deadline.HasValue
+            ? DateTime.SpecifyKind(request.Deadline.Value, DateTimeKind.Utc)
+            : null;
+
+        if (deadline == null && request.AutoResolveDeadline)
+        {
+            var deadlinesJson = await repository.GetUniversityDeadlinesJsonAsync(targetSchool.UniversityId, ct);
+            if (!string.IsNullOrEmpty(deadlinesJson))
+            {
+                deadline = TryExtractDeadline(deadlinesJson, round);
+            }
+        }
+
+        var previousRound = targetSchool.ApplicationRound;
+        var previousDeadline = targetSchool.Deadline;
+
+        targetSchool.ApplicationRound = round;
+        targetSchool.Deadline = deadline;
+
+        await repository.UpdateAsync(targetSchool, ct);
+
+        // 3. Ghi Audit Log hành động cập nhật đợt nộp
+        var detailJson = JsonSerializer.Serialize(new
+        {
+            userId,
+            targetSchoolId,
+            universityId = targetSchool.UniversityId,
+            previousRound,
+            newRound = targetSchool.ApplicationRound,
+            previousDeadline,
+            newDeadline = targetSchool.Deadline,
+        });
+
+        await auditLogs.AddAsync(new AuditLog
+        {
+            ActorUserId = userId,
+            Action = "target_school.update_round",
+            EntityType = "target_school",
+            EntityId = targetSchool.Id.ToString(),
+            DetailJson = detailJson,
+        }, ct);
+
+        var dto = await repository.GetDtoByIdAsync(targetSchool.Id, ct);
+        return dto is not null
+            ? UpdateApplicationRoundResult.Ok(dto)
+            : UpdateApplicationRoundResult.Fail("Không thể tải thông tin sau khi cập nhật.");
+    }
+
     public async Task<bool> RemoveTargetSchoolAsync(Guid userId, Guid targetSchoolId, CancellationToken ct = default)
     {
         var targetSchool = await repository.GetByIdAsync(targetSchoolId, ct);

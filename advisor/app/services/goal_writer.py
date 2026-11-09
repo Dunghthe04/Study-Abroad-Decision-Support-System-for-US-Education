@@ -1,6 +1,6 @@
-"""Lời cho goal-seeking: Gemini diễn đạt lại kết quả code đã tính, không tính lại, không đổi nhóm, không thêm trường.
+"""Lời cho goal-seeking: Claude diễn đạt lại kết quả code đã tính, không tính lại, không đổi nhóm, không thêm trường.
 
-Gemini trả JSON (lời mở, vài ý chính, lời kết). Code kiểm tra rồi nối thành tin nhắn: lời mở phải nhắc đúng tên trường đã hiểu,
+Claude trả JSON (lời mở, vài ý chính, lời kết). Code kiểm tra rồi nối thành tin nhắn: lời mở phải nhắc đúng tên trường đã hiểu,
 mọi số phải có trong dữ kiện, không nhắc tên trường ngoài trường đang hỏi và các trường tương tự, không hứa hẹn kết quả.
 """
 
@@ -26,7 +26,7 @@ PROMISES = (
 )
 
 
-# Gom dữ liệu thành đúng một JSON để gửi Gemini. others chỉ dùng để kiểm tra, không gửi
+# Gom dữ liệu thành đúng một JSON để gửi Claude. others chỉ dùng để kiểm tra, không gửi
 def build_user(req: GoalNoteRequest) -> dict[str, Any]:
     return {
         "school": req.school,
@@ -37,7 +37,7 @@ def build_user(req: GoalNoteRequest) -> dict[str, Any]:
     }
 
 
-# Mọi số Gemini được phép nhắc: số trong tên trường, nhóm đích và các dữ kiện
+# Mọi số Claude được phép nhắc: số trong tên trường, nhóm đích và các dữ kiện
 def allowed_numbers(req: GoalNoteRequest) -> set[float]:
     texts = [req.school, req.target, *req.facts, *req.alternatives]
     return {n for text in texts for n in numbers(text)}
@@ -75,7 +75,7 @@ def check_answer(raw: dict[str, Any], req: GoalNoteRequest) -> GoalNoteResult:
     return result
 
 
-# Nối các phần Gemini viết thành tin nhắn: lời mở, các ý chính, lời kết
+# Nối các phần Claude viết thành tin nhắn: lời mở, các ý chính, lời kết
 def render(result: GoalNoteResult) -> str:
     lines = [result.intro.strip()]
     if result.points:
@@ -86,7 +86,7 @@ def render(result: GoalNoteResult) -> str:
     return "\n".join(lines)
 
 
-# Một lượt AI: gửi dữ kiện cho Gemini, kiểm tra lời, đóng gói trả về
+# Một lượt AI: gửi dữ kiện cho Claude, kiểm tra lời, đóng gói trả về
 class GoalWriter:
     def __init__(self, llm: Any, model: str, skill_path: Path = SKILL_PATH) -> None:
         self._call = SkillCall(llm, model, skill_path)

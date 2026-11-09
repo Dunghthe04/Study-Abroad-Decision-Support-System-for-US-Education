@@ -16,6 +16,16 @@ public interface ITargetSchoolService
     Task<TargetSchoolDto?> GetByIdAsync(Guid id, Guid userId, CancellationToken ct = default);
 
     /// <summary>
+    /// [UC-33] Lấy danh sách trường mục tiêu kèm tóm tắt số lượng theo phân nhóm và hạn nộp gần nhất.
+    /// </summary>
+    Task<TargetSchoolSummaryDto> GetTargetSchoolsAsync(Guid userId, string? category = null, string? status = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// [UC-32] Chọn hoặc thay đổi vòng nộp hồ sơ (Early Action, Early Decision, Regular...) và hạn nộp.
+    /// </summary>
+    Task<UpdateApplicationRoundResult> UpdateApplicationRoundAsync(Guid userId, Guid targetSchoolId, UpdateApplicationRoundRequest request, CancellationToken ct = default);
+
+    /// <summary>
     /// [UC-31] Xóa một trường khỏi danh sách mục tiêu theo TargetSchool ID.
     /// </summary>
     Task<bool> RemoveTargetSchoolAsync(Guid userId, Guid targetSchoolId, CancellationToken ct = default);

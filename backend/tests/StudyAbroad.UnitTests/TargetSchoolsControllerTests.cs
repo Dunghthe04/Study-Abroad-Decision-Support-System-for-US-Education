@@ -47,6 +47,34 @@ public class TargetSchoolsControllerTests
 
         public Task<TargetSchoolDto?> CheckTargetSchoolAsync(Guid userId, string? universityCode, Guid? universityId, CancellationToken ct = default) =>
             Task.FromResult<TargetSchoolDto?>(null);
+
+        public Task<TargetSchoolSummaryDto> GetTargetSchoolsAsync(Guid userId, string? category = null, string? status = null, CancellationToken ct = default) =>
+            Task.FromResult(new TargetSchoolSummaryDto([], 0, 0, 0, 0, 0, null));
+
+        public Task<UpdateApplicationRoundResult> UpdateApplicationRoundAsync(Guid userId, Guid targetSchoolId, UpdateApplicationRoundRequest request, CancellationToken ct = default)
+        {
+            var dto = new TargetSchoolDto(
+                targetSchoolId,
+                userId,
+                Guid.NewGuid(),
+                "110653",
+                "UC Irvine",
+                "Irvine",
+                "CA",
+                "https://uci.edu",
+                "public",
+                0.21m,
+                "reach",
+                "considering",
+                0,
+                null,
+                request.ApplicationRound,
+                request.Deadline,
+                DateTime.UtcNow,
+                DateTime.UtcNow
+            );
+            return Task.FromResult(UpdateApplicationRoundResult.Ok(dto));
+        }
     }
 
     [Fact]
@@ -114,5 +142,29 @@ public class TargetSchoolsControllerTests
 
         var result = await controller.RemoveByUniversity("110653", default);
         Assert.IsType<NoContentResult>(result);
+    }
+
+    [Fact]
+    public async Task GetTargetSchools_ReturnsOkWithSummary()
+    {
+        var service = new FakeTargetSchoolService();
+        var controller = new TargetSchoolsController(service);
+
+        var userId = Guid.NewGuid();
+        var user = new ClaimsPrincipal(new ClaimsIdentity(new[]
+        {
+            new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
+            new Claim(ClaimTypes.Role, "student")
+        }, "TestAuth"));
+
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext { User = user }
+        };
+
+        var result = await controller.GetTargetSchools(null, null, default);
+        var okResult = Assert.IsType<OkObjectResult>(result.Result);
+        var summary = Assert.IsType<TargetSchoolSummaryDto>(okResult.Value);
+        Assert.Equal(0, summary.TotalCount);
     }
 }

@@ -28,10 +28,13 @@ class Settings(BaseSettings):
     # Để trống = không ghi. Đường dẫn tương đối tính từ thư mục advisor/
     skill_log_dir: str = ""
     ollama_base_url: str = "http://localhost:11434"
-    # Chỉ dùng khi không có GEMINI_API_KEY (bước B đọc bảng điểm chạy trên Ollama). Có khóa Gemini thì để trống
+    # Chỉ dùng khi không có ANTHROPIC_API_KEY (bước B đọc bảng điểm chạy trên Ollama). Có khóa Claude thì để trống
     llm_model: str = ""
     slm_model: str = "usas-slm-v2"
     slm_format: str = "json"
+    # Prompt tách ý (tên file trong app/skills, không có .md). slm_phan_loai_cac_y là bản đầy đủ (cho model chưa fine-tune);
+    # slm_phan_loai_cac_y_ngan là bản ngắn, dùng cho model fine-tune với đúng bản này (xem scripts/export_slm_chat.py)
+    slm_prompt: str = "slm_phan_loai_cac_y"
     # Đưa ngữ cảnh hội thoại (dang_noi_ve) vào đầu vào của SLM. Bật SAU khi model đã được huấn luyện với khóa này:
     # model chưa học thấy khóa lạ có thể đọc sai. Tắt thì chỉ chạy quy tắc dự phòng trong conversation_context
     slm_use_context: bool = False
@@ -63,15 +66,14 @@ class Settings(BaseSettings):
     # Để trống = dùng chung llm_model. Máy GPU yếu / server chỉ có CPU nên đặt qwen3:4b cho nhanh
     transcript_parse_model: str = ""
     transcript_parse_timeout_seconds: float = 180
-    gemini_api_key: str = ""
-    gemini_base_url: str = "https://generativelanguage.googleapis.com"
-    gemini_model: str = "gemini-3.8-flash"
-    gemini_thinking_level: str = "low"
-    # Model dự phòng khi model chính quá tải (503) hoặc treo. Để trống = không có dự phòng
-    gemini_fallback_model: str = ""
+    anthropic_api_key: str = ""
+    anthropic_base_url: str = "https://api.anthropic.com"
+    anthropic_model: str = "claude-haiku-5-5"
+    # Model dự phòng khi model chính quá tải (529, 5xx) hoặc treo. Để trống = không có dự phòng
+    anthropic_fallback_model: str = ""
     # Thời gian chờ mỗi lần gọi và số lần thử mỗi model. 2 model x 2 lần x 60 giây vẫn dưới 300 giây .NET chờ
-    gemini_timeout_seconds: float = 60
-    gemini_max_retries: int = 2
+    anthropic_timeout_seconds: float = 60
+    anthropic_max_retries: int = 2
 
 
 # Lần gọi hàm sau nó lấy đối tượng đã lưu trong lru_cache

@@ -45,11 +45,11 @@ PROFILE_KEYS = (
 )
 # Khóa thực thể riêng của từng loại. Loại nào cũng được kèm thêm khóa hồ sơ khi tin có giá trị hồ sơ
 ENTITY_KEYS = {
-    "mac_dinh": set(),
-    "ho_so": {"truong"},
+    "mac_dinh": {"nhiem_vu", "tiep_noi"},
+    "ho_so": {"truong", "cac_truong", "cac_nhiem_vu", "tiep_noi"},
     "kich_ban": {"che_do", "thay_doi", "truong", "muc_tieu", "yeu_to", "tiep_noi"},
     "kien_thuc": {"truong", "cac_truong", "nhiem_vu", "muc", "bo_loc", "sap_xep", "tiep_noi"},
-    "trung_tam": {"dich_vu", "thanh_pho"},
+    "trung_tam": {"dich_vu", "thanh_pho", "nhiem_vu", "cac_trung_tam", "tiep_noi"},
     "ngoai_pham_vi": {"loai_con"},
 }
 # Câu kiến thức hỏi số liệu một trường ("học phí Harvard bao nhiêu"): SLM trả truong (tên như học sinh gõ), nhiem_vu = tra_cuu và
@@ -111,8 +111,17 @@ FILTER_KEYS = ("bang", *FILTER_TEXT_KEYS, *FILTER_ENUMS)
 SORTS = ("xep_hang", "chi_phi_thap", "de_vao", "chon_loc")
 # Chế độ trong kịch bản
 SCENARIO_MODES = ("what_if", "goal_seeking")
-# giá trị của loai_con trong ngoài phạm vi
-SUBTYPES = ("ngoai_le", "nhay_cam", "tam_biet", "mo_ho")
+# giá trị của loai_con trong ngoài phạm vi. ve_he_thong: hỏi về chính hệ thống ("bạn là ai", "bạn làm được gì");
+# gap_nguoi: muốn nói chuyện với người thật
+SUBTYPES = ("ngoai_le", "nhay_cam", "tam_biet", "mo_ho", "ve_he_thong", "gap_nguoi")
+# Nhiệm vụ của ý nhập hồ sơ (mac_dinh), khóa nhiem_vu: tra_loi (mặc định, trả lời câu hệ thống đang hỏi), sua (sửa một mục đã nhập),
+# xem_ho_so (hỏi đã nhập gì, còn thiếu gì), lam_lai (nhập lại từ đầu)
+PROFILE_TASKS = ("tra_loi", "sua", "xem_ho_so", "lam_lai")
+# Nhiệm vụ của ý tư vấn hồ sơ (ho_so), khóa cac_nhiem_vu là danh sách vì một câu có thể hỏi nhiều việc ("đánh giá hồ sơ và cho em lộ trình").
+# Vắng hoặc rỗng = chưa rõ muốn gì, hệ thống hỏi lại bằng nút. so_sanh cần cac_truong; giai_thich_truong có truong (hoặc lấy từ ngữ cảnh)
+REVIEW_TASKS = ("danh_gia", "chon_truong", "lo_trinh", "so_sanh", "giai_thich_truong")
+# Nhiệm vụ của ý trung tâm (trung_tam), khóa nhiem_vu: tim (mặc định), dat_lich, so_sanh (cần cac_trung_tam, từ hai tên trở lên)
+CENTER_TASKS = ("tim", "dat_lich", "so_sanh")
 # thanh_pho không có danh sách cố định: là đoạn chữ nguyên văn trong tin (vd "Sài Gòn", "HN").
 # Danh sách thành phố đổi theo trung tâm trong DB, nhánh trung tâm khớp với CenterFinder.cities() lúc chạy
 # Trần kỹ thuật cho số ý của một tin, để model sinh lặp vô hạn không làm hệ thống chạy mãi. Không phải giới hạn
@@ -129,8 +138,12 @@ def check_entities(intent: str, entities: dict[str, Any]) -> None:
     for key in (set(entities) & set(PROFILE_KEYS)) | ({"thanh_pho"} & set(entities)):
         if not isinstance(entities[key], str) or not entities[key]:
             raise ValueError(f"giá trị '{key}' phải là đoạn chữ trong tin nhắn")
-    if entities.get("nhiem_vu") is not None and entities["nhiem_vu"] not in KNOWLEDGE_TASKS:
-        raise ValueError(f"nhiem_vu phải là một trong {KNOWLEDGE_TASKS}")
+    task = entities.get("nhiem_vu")
+    task_values = {"kien_thuc": KNOWLEDGE_TASKS, "mac_dinh": PROFILE_TASKS, "trung_tam": CENTER_TASKS}.get(
+        intent, ()
+    )
+    if task is not None and task not in task_values:
+        raise ValueError(f"nhiem_vu của loại {intent} phải là một trong {task_values}")
     # tiep_noi: câu thiếu thông tin và lấy phần thiếu từ ngữ cảnh (dang_noi_ve trong đầu vào). false hoặc vắng = câu tự đứng được
     if "tiep_noi" in entities and not isinstance(entities["tiep_noi"], bool):
         raise ValueError("tiep_noi phải là true hoặc false")
@@ -155,8 +168,9 @@ def check_entities(intent: str, entities: dict[str, Any]) -> None:
         and all(isinstance(t, str) and t.strip() for t in cac_truong)
     ):
         raise ValueError("cac_truong phải là danh sách từ hai tên trường trở lên")
-    if entities.get("nhiem_vu") == "so_sanh" and cac_truong is None:
+    if intent == "kien_thuc" and task == "so_sanh" and cac_truong is None:
         raise ValueError("so_sanh cần cac_truong")
+    _check_task_entities(intent, entities, task, cac_truong)
     muc = entities.get("muc")
     if muc is not None and not (isinstance(muc, list) and muc and all(m in INFO_FIELDS for m in muc)):
         raise ValueError(f"muc phải là danh sách mã trong {INFO_FIELDS}")
@@ -173,6 +187,38 @@ def check_entities(intent: str, entities: dict[str, Any]) -> None:
         for change in changes:
             if "yeu_to" not in change or not ({"gia_tri", "hanh_dong"} & set(change)):
                 raise ValueError("mỗi thay_doi cần yeu_to và gia_tri hoặc hanh_dong")
+
+
+# Quy tắc nhiệm vụ của nhập hồ sơ, tư vấn hồ sơ và trung tâm. Sai thì ném ValueError
+def _check_task_entities(intent: str, entities: dict[str, Any], task: Any, cac_truong: Any) -> None:
+    if intent == "mac_dinh":
+        has_profile = bool(set(entities) & set(PROFILE_KEYS))
+        if task == "sua" and not has_profile:
+            raise ValueError("sua cần ít nhất một mục hồ sơ (sửa mục nào)")
+        if task in ("xem_ho_so", "lam_lai") and has_profile:
+            raise ValueError(f"{task} không kèm giá trị hồ sơ")
+    elif intent == "ho_so":
+        tasks = entities.get("cac_nhiem_vu")
+        if tasks is not None and not (
+            isinstance(tasks, list)
+            and len(set(tasks)) == len(tasks)
+            and all(t in REVIEW_TASKS for t in tasks)
+        ):
+            raise ValueError(f"cac_nhiem_vu phải là danh sách không lặp các mã trong {REVIEW_TASKS}")
+        if tasks and "so_sanh" in tasks and cac_truong is None:
+            raise ValueError("so_sanh cần cac_truong")
+    elif intent == "trung_tam":
+        centers = entities.get("cac_trung_tam")
+        if centers is not None and not (
+            isinstance(centers, list)
+            and len(centers) >= 2
+            and all(isinstance(c, str) and c.strip() for c in centers)
+        ):
+            raise ValueError("cac_trung_tam phải là danh sách từ hai tên trung tâm trở lên")
+        if task == "so_sanh" and centers is None:
+            raise ValueError("so_sanh cần cac_trung_tam")
+        if centers is not None and task != "so_sanh":
+            raise ValueError("cac_trung_tam chỉ đi với nhiem_vu = so_sanh")
 
 
 # bo_loc: object có ít nhất một điều kiện, đúng khóa và đúng giá trị. Sai thì ném ValueError
@@ -220,7 +266,11 @@ ONCE = ("mac_dinh", "ho_so", "kich_ban")
 def _gop_thuc_the(a: dict[str, Any], b: dict[str, Any]) -> dict[str, Any]:
     out = dict(a)
     for key, value in b.items():
-        out[key] = out[key] + value if isinstance(value, list) and isinstance(out.get(key), list) else value
+        out[key] = (
+            out[key] + [x for x in value if x not in out[key]]
+            if isinstance(value, list) and isinstance(out.get(key), list)
+            else value
+        )
     return out
 
 
@@ -304,6 +354,27 @@ class SlmTinResult(SlmTin):
 SKILL_KINDS = ("ho_so", "kich_ban")
 # Các mục bắt buộc của một skill, đúng thứ tự. Mỗi mục là một dòng "## TÊN MỤC" rồi nội dung
 SKILL_SECTIONS = {
+    # Khuôn 7 mục: không còn mục "Đề xuất trường" vì danh sách trường do hệ thống tính riêng (skill chỉ đánh giá hồ sơ và lộ trình)
+    "ho_so": (
+        "0. Câu hỏi kích hoạt",
+        "1. Nhiệm vụ",
+        "2. Dữ liệu dùng để tính",
+        "3. Cách hiểu hoạt động và giải thưởng",
+        "4. Góc nhìn về hồ sơ",
+        "5. Lộ trình",
+        "6. Yêu cầu câu trả lời",
+    ),
+    "kich_ban": (
+        "0. Câu hỏi kích hoạt",
+        "1. Nhiệm vụ",
+        "2. Hồ sơ gốc",
+        "3. Cách làm",
+        "4. Yêu cầu câu trả lời",
+    ),
+}
+# Khuôn cũ 8 mục (có "5. Đề xuất trường"). Vẫn nhận trong lúc chuyển sang khuôn 7 mục, vì model usas-slm-v2 đang chạy và dữ liệu cũ
+# còn viết theo khuôn này. Bỏ khi model huấn luyện lại bằng khuôn 7 mục đã chạy thật
+LEGACY_SKILL_SECTIONS = {
     "ho_so": (
         "0. Câu hỏi kích hoạt",
         "1. Nhiệm vụ",
@@ -313,13 +384,6 @@ SKILL_SECTIONS = {
         "5. Đề xuất trường",
         "6. Lộ trình",
         "7. Yêu cầu câu trả lời",
-    ),
-    "kich_ban": (
-        "0. Câu hỏi kích hoạt",
-        "1. Nhiệm vụ",
-        "2. Hồ sơ gốc",
-        "3. Cách làm",
-        "4. Yêu cầu câu trả lời",
     ),
 }
 
@@ -390,13 +454,19 @@ def _so_trong(text: str) -> set[str]:
 # Kiểm skill SLM sinh ra (văn bản .md). Sai thì ném ValueError để bộ sinh gọi lại; vẫn sai thì báo chưa có skill (không dùng skill tĩnh).
 # Chỉ kiểm cấu trúc và việc không bỏ số của hồ sơ và dòng tính sẵn. Số suy ra (GPA thang 4, hạn nộp) và dòng Mốc sẽ kiểm bằng luật riêng
 def check_skill(text: str, req: SkillRequest) -> None:
-    wanted = SKILL_SECTIONS[req.loai]
+    layouts = [SKILL_SECTIONS[req.loai]]  # khuôn chuẩn đứng đầu, khuôn cũ (nếu còn nhận) đứng sau
+    if req.loai in LEGACY_SKILL_SECTIONS:
+        layouts.append(LEGACY_SKILL_SECTIONS[req.loai])
     parts = re.split(
         r"^## (.+?)\s*$", text, flags=re.M
     )  # [chữ trước, tên mục, nội dung, tên mục, nội dung, ...]
     muc = dict(zip(parts[1::2], parts[2::2], strict=True))
-    if tuple(name for name in parts[1::2] if name in wanted) != wanted:
-        raise ValueError(f"skill {req.loai} phải có đủ các mục theo thứ tự: {', '.join(wanted)}")
+    wanted = next(
+        (layout for layout in layouts if tuple(name for name in parts[1::2] if name in layout) == layout),
+        None,
+    )
+    if wanted is None:
+        raise ValueError(f"skill {req.loai} phải có đủ các mục theo thứ tự: {', '.join(layouts[0])}")
     empty = [name for name in wanted if not muc[name].strip()]
     if empty:
         raise ValueError(f"mục rỗng: {empty}")
@@ -438,9 +508,21 @@ _ENTITY_SCHEMA = {
     },
     "sap_xep": {"enum": list(SORTS)},
     "tiep_noi": {"type": "boolean"},
-    "nhiem_vu": {"enum": list(KNOWLEDGE_TASKS)},
+    "nhiem_vu": {
+        "enum": list(KNOWLEDGE_TASKS)
+    },  # mặc định cho kien_thuc; mac_dinh và trung_tam đổi ở _entity_schema
+    "cac_nhiem_vu": {"type": "array", "uniqueItems": True, "items": {"enum": list(REVIEW_TASKS)}},
+    "cac_trung_tam": {"type": "array", "minItems": 2, "items": _TEXT},
     "muc": {"type": "array", "minItems": 1, "items": {"enum": list(INFO_FIELDS)}},
 }
+# nhiem_vu có tập giá trị riêng theo loại
+_TASK_ENUMS = {"kien_thuc": KNOWLEDGE_TASKS, "mac_dinh": PROFILE_TASKS, "trung_tam": CENTER_TASKS}
+
+
+def _entity_schema(intent: str, key: str) -> dict[str, Any]:
+    return {"enum": list(_TASK_ENUMS[intent])} if key == "nhiem_vu" else _ENTITY_SCHEMA[key]
+
+
 # Khóa bắt buộc theo loại, khớp với check_entities
 _REQUIRED_KEYS = {"kich_ban": ["che_do"], "ngoai_pham_vi": ["loai_con"]}
 
@@ -460,7 +542,7 @@ def _y_branch(intent: str) -> dict[str, Any]:
                 "required": _REQUIRED_KEYS.get(intent, []),
                 "properties": {
                     **dict.fromkeys(PROFILE_KEYS, _TEXT),
-                    **{key: _ENTITY_SCHEMA[key] for key in sorted(ENTITY_KEYS[intent])},
+                    **{key: _entity_schema(intent, key) for key in sorted(ENTITY_KEYS[intent])},
                 },
             },
         },

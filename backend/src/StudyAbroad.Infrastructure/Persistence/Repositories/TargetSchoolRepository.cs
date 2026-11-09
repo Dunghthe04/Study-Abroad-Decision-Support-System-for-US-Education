@@ -39,6 +39,53 @@ public class TargetSchoolRepository(AppDbContext db) : ITargetSchoolRepository
                     ts.UpdatedAt))
             .FirstOrDefaultAsync(ct);
 
+    public async Task<List<TargetSchoolDto>> GetListByUserAsync(Guid userId, string? category = null, string? status = null, CancellationToken ct = default)
+    {
+        var query = db.TargetSchools.AsNoTracking()
+            .Where(ts => ts.UserId == userId);
+
+        if (!string.IsNullOrWhiteSpace(category))
+        {
+            var cat = category.Trim().ToLowerInvariant();
+            query = query.Where(ts => ts.Category == cat);
+        }
+
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            var st = status.Trim().ToLowerInvariant();
+            query = query.Where(ts => ts.Status == st);
+        }
+
+        return await query
+            .Join(db.Universities.AsNoTracking(),
+                ts => ts.UniversityId,
+                u => u.Id,
+                (ts, u) => new TargetSchoolDto(
+                    ts.Id,
+                    ts.UserId,
+                    ts.UniversityId,
+                    u.Code,
+                    u.Name,
+                    u.City,
+                    u.State,
+                    u.Website,
+                    u.Control,
+                    u.AcceptanceRate,
+                    ts.Category,
+                    ts.Status,
+                    ts.Priority,
+                    ts.Notes,
+                    ts.ApplicationRound,
+                    ts.Deadline,
+                    ts.CreatedAt,
+                    ts.UpdatedAt))
+            .OrderBy(ts => ts.Priority)
+            .ThenBy(ts => ts.Deadline == null)
+            .ThenBy(ts => ts.Deadline)
+            .ThenByDescending(ts => ts.CreatedAt)
+            .ToListAsync(ct);
+    }
+
     public Task<TargetSchool?> GetByUserAndUniversityAsync(Guid userId, Guid universityId, CancellationToken ct = default) =>
         db.TargetSchools.FirstOrDefaultAsync(x => x.UserId == userId && x.UniversityId == universityId, ct);
 
@@ -55,6 +102,13 @@ public class TargetSchoolRepository(AppDbContext db) : ITargetSchoolRepository
     public async Task DeleteAsync(TargetSchool targetSchool, CancellationToken ct = default)
     {
         db.TargetSchools.Remove(targetSchool);
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task UpdateAsync(TargetSchool targetSchool, CancellationToken ct = default)
+    {
+        targetSchool.UpdatedAt = DateTime.UtcNow;
+        db.TargetSchools.Update(targetSchool);
         await db.SaveChangesAsync(ct);
     }
 

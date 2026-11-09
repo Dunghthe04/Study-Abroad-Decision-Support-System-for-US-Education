@@ -6,6 +6,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, TypeVar
 
+from app.services import usage_meter
 from app.services.ollama import OllamaError
 
 SKILLS_DIR = Path(__file__).resolve().parent.parent / "skills"
@@ -28,6 +29,7 @@ class SkillCall:
         self._llm = llm
         self.model = model
         self.skill, self.skill_version = load_skill(skill_path)  # đọc 1 lần lúc khởi động
+        self.name = skill_path.stem  # tên skill, gắn nhãn cho các lần gọi AI trong báo cáo token
 
     async def run(
         self, user: dict[str, Any], schema: dict[str, Any], check: Callable[[dict[str, Any]], T]
@@ -41,10 +43,11 @@ class SkillCall:
             # viết liền không khoảng trắng để tiết kiệm token
             {"role": "user", "content": json.dumps(user, ensure_ascii=False, separators=(",", ":"))},
         ]
-        for _ in range(MAX_ATTEMPTS):
-            try:
-                raw = await self._llm.chat_json(messages, schema, temperature=0.0)
-                return check(raw)
-            except (OllamaError, ValueError):  # ValidationError của pydantic cũng là ValueError
-                continue
+        with usage_meter.purpose(self.name):
+            for _ in range(MAX_ATTEMPTS):
+                try:
+                    raw = await self._llm.chat_json(messages, schema, temperature=0.0)
+                    return check(raw)
+                except (OllamaError, ValueError):  # ValidationError của pydantic cũng là ValueError
+                    continue
         return None
