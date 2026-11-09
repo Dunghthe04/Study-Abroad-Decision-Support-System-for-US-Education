@@ -150,6 +150,49 @@ public class GradeScaleSettingServiceTests
         Assert.Equal(3, item.New!.Rules.Count);
     }
 
+    // TB học bạ 8.22: bảng WES cũ ra 3.5, bảng mới (từ 8 là 4.0) ra 4.0.
+    // Hồ sơ GPA 3.5 khớp bảng cũ → GPA lấy từ học bạ → đổi thành 4.0; hồ sơ GPA 3.2 là tự nhập → giữ nguyên
+    [Fact]
+    public async Task Update_RecomputesOnlyProfilesWhoseGpaCameFromTranscript()
+    {
+        var seeded = Seeded();
+        var (service, repo, _) = Create(seeded);
+        var fromTranscript = new StudentProfile { OverallGpa = 3.5m, GradeScale = GradeScales.Scale10 };
+        var typedByStudent = new StudentProfile { OverallGpa = 3.2m, GradeScale = GradeScales.Scale10 };
+        repo.TranscriptProfiles.Add((fromTranscript, Scores822()));
+        repo.TranscriptProfiles.Add((typedByStudent, Scores822()));
+
+        var result = await service.UpdateAsync(new UpdateGradeScaleRequest(ValidRules(), null, seeded.CreatedAt), ModeratorId);
+
+        Assert.Equal(GradeScaleUpdateStatus.Ok, result.Status);
+        Assert.Equal(1, result.RecomputedProfiles);
+        Assert.Equal(4m, fromTranscript.OverallGpa);
+        Assert.Equal(3.2m, typedByStudent.OverallGpa);
+        using var detail = JsonDocument.Parse(Assert.Single(repo.Audits).DetailJson!);
+        Assert.Equal(1, detail.RootElement.GetProperty("recomputedProfiles").GetInt32());
+    }
+
+    [Fact]
+    public async Task Update_InvalidTable_DoesNotTouchProfiles()
+    {
+        var seeded = Seeded();
+        var (service, repo, _) = Create(seeded);
+        var profile = new StudentProfile { OverallGpa = 3.5m, GradeScale = GradeScales.Scale10 };
+        repo.TranscriptProfiles.Add((profile, Scores822()));
+
+        await service.UpdateAsync(new UpdateGradeScaleRequest([new(0m, 5m, "A")], null, seeded.CreatedAt), ModeratorId);
+
+        Assert.Equal(3.5m, profile.OverallGpa);
+    }
+
+    private static IReadOnlyList<TranscriptScore> Scores822() =>
+    [
+        new() { TermOrder = 1, Semester = 1, Subject = "Toán", Score = 8m },
+        new() { TermOrder = 2, Semester = 2, Subject = "Toán", Score = 9m },
+        new() { TermOrder = 1, Semester = 1, Subject = "Văn", Score = 7m },
+        new() { TermOrder = 4, Semester = 2, Subject = "Toán", Score = 9m },
+    ];
+
     [Fact]
     public void Controller_AdminAndModeratorRead_OnlyModeratorWrites()
     {
@@ -169,8 +212,13 @@ public class GradeScaleSettingServiceTests
         public AppSetting? Setting { get; set; }
         public bool SavedAsNew { get; private set; }
         public List<AuditLog> Audits { get; } = [];
+        public List<(StudentProfile, IReadOnlyList<TranscriptScore>)> TranscriptProfiles { get; } = [];
 
         public Task<AppSetting?> GetAsync(CancellationToken ct = default) => Task.FromResult(Setting);
+
+        public Task<IReadOnlyList<(StudentProfile Profile, IReadOnlyList<TranscriptScore> Scores)>> GetTranscriptGpaProfilesAsync(
+            CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<(StudentProfile, IReadOnlyList<TranscriptScore>)>>(TranscriptProfiles);
 
         public Task SaveAsync(AppSetting setting, bool isNew, AuditLog audit, CancellationToken ct = default)
         {

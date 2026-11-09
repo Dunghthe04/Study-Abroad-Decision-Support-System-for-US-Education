@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using StudyAbroad.Application.Profile.Academic;
 using StudyAbroad.Domain.Constants;
+using StudyAbroad.Domain.Entities;
 
 namespace StudyAbroad.Application.Profile.Flow;
 
@@ -35,6 +37,24 @@ public static class TranscriptGpa
         var averages = (step2?.AcademicYears ?? [])
             .SelectMany(y => y.Subjects ?? [])
             .Select(s => YearAverage(s.Semester1Score, s.Semester2Score))
+            .OfType<decimal>()
+            .ToList();
+        return averages.Count > 0 ? Math.Round(averages.Average(), 2) : null;
+    }
+
+    /// <summary>
+    /// Như SubjectAverage10 nhưng đọc lại từ transcript_scores đã lưu (khi tính lại GPA sau lúc đổi bảng quy đổi).
+    /// Lúc gửi hồ sơ mỗi khối có 2 kỳ: TermOrder 1–2 là khối thứ nhất, 3–4 là khối thứ hai…; điểm HK1/HK2 cùng môn cùng
+    /// khối ghép lại bằng YearAverage. Bỏ dòng dữ liệu cũ không có Semester. Null nếu không còn điểm nào
+    /// </summary>
+    public static decimal? SubjectAverage10(IEnumerable<TranscriptScore> scores)
+    {
+        var averages = scores
+            .Where(s => s.Semester is 1 or 2)
+            .GroupBy(s => ((s.TermOrder + 1) / 2, s.Subject.Trim()))
+            .Select(g => YearAverage(
+                g.FirstOrDefault(s => s.Semester == 1)?.Score,
+                g.FirstOrDefault(s => s.Semester == 2)?.Score))
             .OfType<decimal>()
             .ToList();
         return averages.Count > 0 ? Math.Round(averages.Average(), 2) : null;

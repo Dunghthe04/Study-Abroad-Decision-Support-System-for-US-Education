@@ -1,4 +1,5 @@
 using StudyAbroad.Application.Profile.Flow;
+using StudyAbroad.Domain.Entities;
 
 namespace StudyAbroad.UnitTests;
 
@@ -45,7 +46,23 @@ public class TranscriptGpaTests
     public void SubjectAverage10_NoScores_IsNull()
     {
         Assert.Null(TranscriptGpa.SubjectAverage10(new FlowTranscriptDraftDto([new FlowAcademicYearDraftDto("Lớp 10", [])])));
-        Assert.Null(TranscriptGpa.SubjectAverage10(null));
+        Assert.Null(TranscriptGpa.SubjectAverage10((FlowTranscriptDraftDto?)null));
+    }
+
+    // Cùng ví dụ trên nhưng đọc từ transcript_scores đã lưu (lớp 11 là TermOrder 1–2, lớp 12 là 3–4): phải ra cùng 8.22
+    [Fact]
+    public void SubjectAverage10_FromSavedScores_MatchesDraft()
+    {
+        TranscriptScore Row(int termOrder, int semester, string subject, decimal score) =>
+            new() { TermOrder = termOrder, Semester = semester, Subject = subject, Score = score };
+
+        var scores = new[]
+        {
+            Row(1, 1, "Toán", 8m), Row(2, 2, "Toán ", 9m), Row(1, 1, "Văn", 7m), Row(4, 2, "Toán", 9m),
+        };
+
+        Assert.Equal(8.22m, TranscriptGpa.SubjectAverage10(scores));
+        Assert.Null(TranscriptGpa.SubjectAverage10(Array.Empty<TranscriptScore>()));
     }
 
     // Bảng WES, chỉ xét cận dưới: 8.995 không rơi vào khe 8.99–9.0 của bảng

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using StudyAbroad.Application.Profile.Academic;
+using StudyAbroad.Application.Profile.Flow;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
 
@@ -15,7 +16,8 @@ public interface IGradeScaleSettingService
 /// <summary>
 /// Moderator sửa bảng quy đổi grade_scale.10, admin xem (quyền đặt ở controller).
 /// Lưu: kiểm tra luật (GradeScale.Validate) → so Version để chặn ghi đè bảng người khác vừa sửa (409)
-/// → lưu kèm audit_logs (bảng cũ / mới) → xoá cache để chỗ tính GPA dùng bảng mới ngay.
+/// → tính lại overall_gpa các hồ sơ lấy GPA từ học bạ → lưu kèm audit_logs (bảng cũ / mới) → xoá cache để chỗ tính GPA
+/// dùng bảng mới ngay.
 /// </summary>
 public class GradeScaleSettingService(
     IGradeScaleSettingRepository repository,
@@ -44,6 +46,7 @@ public class GradeScaleSettingService(
             return GradeScaleUpdateResult.Conflict(ToDto(setting));
 
         var oldConfig = GradeScale.Parse(setting?.ValueJson);
+        var recomputed = await RecomputeTranscriptGpasAsync(oldConfig ?? AcademicAnalysisService.GetDefaultWesScaleConfig(), config, ct);
         var isNew = setting is null;
         setting ??= new AppSetting
         {
@@ -58,12 +61,12 @@ public class GradeScaleSettingService(
             Action = AuditAction,
             EntityType = "app_setting",
             EntityId = AcademicConstants.GradeScale10AppSettingKey,
-            DetailJson = JsonSerializer.Serialize(new { old = oldConfig, @new = config }, JsonOptions),
+            DetailJson = JsonSerializer.Serialize(new { old = oldConfig, @new = config, recomputedProfiles = recomputed }, JsonOptions),
         };
         await repository.SaveAsync(setting, isNew, audit, ct);
         provider.Invalidate();
 
-        return GradeScaleUpdateResult.Ok(ToDto(setting));
+        return GradeScaleUpdateResult.Ok(ToDto(setting), recomputed);
     }
 
     public async Task<IReadOnlyList<GradeScaleHistoryItemDto>> GetHistoryAsync(int limit, CancellationToken ct = default)
@@ -74,6 +77,25 @@ public class GradeScaleSettingService(
             var (oldConfig, newConfig) = ReadDetail(r.Log.DetailJson);
             return new GradeScaleHistoryItemDto(r.Log.CreatedAt, r.Log.ActorUserId, r.ActorName, oldConfig, newConfig);
         }).ToList();
+    }
+
+    // Hồ sơ không lưu cách nhập GPA (học bạ hay tự nhập) và không lưu GPA thang 10 tự nhập, nên chỉ tính lại hồ sơ mà
+    // overall_gpa đúng bằng số tra TB học bạ theo bảng cũ, tức là GPA lấy từ học bạ. Hồ sơ tự nhập GPA giữ nguyên.
+    // Trả số hồ sơ đổi GPA; các hồ sơ được theo dõi nên SaveAsync lưu luôn
+    private async Task<int> RecomputeTranscriptGpasAsync(GradeScaleConfigDto oldConfig, GradeScaleConfigDto newConfig, CancellationToken ct)
+    {
+        var count = 0;
+        foreach (var (profile, scores) in await repository.GetTranscriptGpaProfilesAsync(ct))
+        {
+            if (TranscriptGpa.SubjectAverage10(scores) is not { } average10) continue;
+            if (profile.OverallGpa != GradeScale.Lookup(average10, oldConfig)) continue;
+
+            var newGpa = GradeScale.Lookup(average10, newConfig);
+            if (newGpa == profile.OverallGpa) continue;
+            profile.OverallGpa = newGpa;
+            count++;
+        }
+        return count;
     }
 
     // Sắp theo mốc tăng dần, MaxScore = mốc kế tiếp − 0.01 (khoảng cao nhất tới 10), chỉ để hiển thị: tra GPA chỉ dùng MinScore

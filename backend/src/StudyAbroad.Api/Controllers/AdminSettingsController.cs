@@ -25,7 +25,7 @@ public class AdminSettingsController(IGradeScaleSettingService gradeScale) : Con
     /// <summary>Chỉ moderator (hai Authorize cộng lại: thuộc admin/moderator VÀ là moderator).</summary>
     [HttpPut("grade-scale")]
     [Authorize(Roles = UserRoles.Moderator)]
-    public async Task<ActionResult<GradeScaleSettingDto>> UpdateGradeScale(
+    public async Task<ActionResult<GradeScaleSavedDto>> UpdateGradeScale(
         [FromBody] UpdateGradeScaleRequest request, CancellationToken ct)
     {
         if (User.GetUserId() is not { } actorId) return Unauthorized();
@@ -35,7 +35,7 @@ public class AdminSettingsController(IGradeScaleSettingService gradeScale) : Con
         {
             GradeScaleUpdateStatus.Invalid => BadRequest(new { errors = result.Errors }),
             GradeScaleUpdateStatus.Conflict => Conflict(new { errors = result.Errors, current = result.Value }),
-            _ => Ok(result.Value),
+            _ => Ok(new GradeScaleSavedDto(result.Value!, result.RecomputedProfiles)),
         };
     }
 }

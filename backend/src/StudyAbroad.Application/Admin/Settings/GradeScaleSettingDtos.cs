@@ -18,11 +18,16 @@ public record UpdateGradeScaleRequest(List<GradeScaleRuleInput>? Rules, string? 
 public record GradeScaleHistoryItemDto(
     DateTime ChangedAt, Guid? ActorUserId, string? ActorName, GradeScaleConfigDto? Old, GradeScaleConfigDto? New);
 
+/// <summary>Kết quả lưu: bảng mới và số hồ sơ đã tính lại GPA (chỉ hồ sơ có GPA lấy từ học bạ).</summary>
+public record GradeScaleSavedDto(GradeScaleSettingDto Setting, int RecomputedProfiles);
+
 public enum GradeScaleUpdateStatus { Ok, Invalid, Conflict }
 
-public record GradeScaleUpdateResult(GradeScaleUpdateStatus Status, GradeScaleSettingDto? Value, IReadOnlyList<string> Errors)
+public record GradeScaleUpdateResult(
+    GradeScaleUpdateStatus Status, GradeScaleSettingDto? Value, IReadOnlyList<string> Errors, int RecomputedProfiles = 0)
 {
-    public static GradeScaleUpdateResult Ok(GradeScaleSettingDto value) => new(GradeScaleUpdateStatus.Ok, value, []);
+    public static GradeScaleUpdateResult Ok(GradeScaleSettingDto value, int recomputedProfiles) =>
+        new(GradeScaleUpdateStatus.Ok, value, [], recomputedProfiles);
     public static GradeScaleUpdateResult Invalid(IReadOnlyList<string> errors) => new(GradeScaleUpdateStatus.Invalid, null, errors);
     public static GradeScaleUpdateResult Conflict(GradeScaleSettingDto current) =>
         new(GradeScaleUpdateStatus.Conflict, current, ["Bảng đã được người khác sửa, hãy tải lại rồi sửa tiếp."]);
