@@ -16,6 +16,7 @@ import type {
   PickBlockName,
   Pref,
   Recommendation,
+  SavedScenario,
   SchoolChange,
   ScoredSchool,
   SimulationOverrides,
@@ -24,6 +25,7 @@ import { ProfileSimulator } from "./ProfileSimulator";
 import { ProfileSummary } from "./ProfileSummary";
 import { EnglishNoticeBanner } from "./EnglishNoticeBanner";
 import { SchoolCard } from "./SchoolCard";
+import { SaveScenarioButton, SavedScenariosButton, scenarioOverrides, useSavedScenarios } from "./SavedScenarios";
 
 // Bốn khối chính theo đúng thứ tự trên màn. "other" để riêng ở cuối.
 const BLOCKS: { key: PickBlockName; title: string; note: string }[] = [
@@ -69,6 +71,19 @@ export function RecommendationView({ autoRun, initialOverrides }: Recommendation
     return sim.isSimulating && sim.result ? { ...rec, criteria: sim.result.criteria, items: sim.result.items } : rec;
   }, [rec, sim.isSimulating, sim.result]);
   const simulating = sim.isSimulating && sim.result !== null;
+
+  // [UC-86] Kịch bản đã lưu. Lưu kèm ưu tiên đang dùng (kể cả khi chưa kéo thanh ưu tiên),
+  // để bản chụp backend tính khớp với danh sách đang xem.
+  const scenarios = useSavedScenarios(rec !== null);
+  const saveScenario = (title: string) =>
+    scenarios.save(title, { ...sim.overrides, pref: sim.overrides.pref ?? basePref });
+  // Mở lại: đặt thanh kéo theo kịch bản. Ưu tiên trùng ưu tiên hiện tại thì bỏ, để dải giả định không hiện thừa.
+  const openScenario = (s: SavedScenario) => {
+    const next = scenarioOverrides(s);
+    if (next.pref && next.pref.every((n, i) => n === basePref[i])) delete next.pref;
+    sim.replace(next);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   // Ngữ cảnh trợ lý bên phải: lời chào theo số trường, chip hỏi về trường Khó vào đầu tiên
   const firstReach = view ? view.items.scored.find((s) => s.code === view.items.reach[0]?.code) : undefined;
@@ -153,6 +168,8 @@ export function RecommendationView({ autoRun, initialOverrides }: Recommendation
             Nhận gợi ý
           </Button>
         )}
+        {/* [UC-86] popup danh sách kịch bản đã lưu: mở lại, đổi tên, xóa */}
+        {rec && <SavedScenariosButton store={scenarios} onOpen={openScenario} />}
       </div>
 
       {error && (
@@ -176,7 +193,7 @@ export function RecommendationView({ autoRun, initialOverrides }: Recommendation
       {rec && view && (
         <>
           <ProfileSummary rec={rec} onRerun={runNew} />
-          {simulating && <SimulationBanner sim={sim} />}
+          {simulating && <SimulationBanner sim={sim} onSave={saveScenario} />}
           <ResultBody
             rec={view}
             changes={simulating ? sim.result!.changes : []}
@@ -204,13 +221,17 @@ export function RecommendationView({ autoRun, initialOverrides }: Recommendation
 }
 
 // Dải thông báo khi đang xem hồ sơ giả định: số trường mỗi nhóm trước và sau, các trường đổi nhóm
-function SimulationBanner({ sim }: { sim: ProfileSimulation }) {
+function SimulationBanner({ sim, onSave }: { sim: ProfileSimulation; onSave: (title: string) => Promise<void> }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-brand/30 bg-brand-wash px-4 py-2.5">
       <p className="text-sm font-semibold text-brand">Đang xem giả định: {describeSimulation(sim.overrides)}</p>
-      <Button variant="outline" size="sm" onClick={sim.resetAll}>
-        Quay lại hồ sơ thật
-      </Button>
+      <div className="flex flex-wrap items-center gap-2">
+        {/* [UC-86] chỉ lưu khi bấm nút, không lưu mỗi lần kéo thanh */}
+        <SaveScenarioButton overrides={sim.overrides} onSave={onSave} />
+        <Button variant="outline" size="sm" onClick={sim.resetAll}>
+          Quay lại hồ sơ thật
+        </Button>
+      </div>
     </div>
   );
 }
