@@ -47,6 +47,7 @@ public static class DependencyInjection
         // [USAS-640] Đăng ký service lưu trữ tệp bảng điểm nháp
         services.AddScoped<StudyAbroad.Application.Profile.Flow.IProfileFileStorageService, StudyAbroad.Infrastructure.Services.ProfileFileStorageService>();
         services.AddScoped<IRecommendationRepository, RecommendationRepository>();
+        services.AddScoped<IRecommendationHistoryRepository, RecommendationHistoryRepository>();   // [UC-87] đọc lịch sử gợi ý
         services.AddScoped<IChatSessionRepository, ChatSessionRepository>();
         services.AddScoped<IChatAnalysisRepository, ChatAnalysisRepository>();
         services.AddScoped<IChatBenchmarkRepository, ChatBenchmarkRepository>();
