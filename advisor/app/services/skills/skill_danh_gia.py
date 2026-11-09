@@ -92,6 +92,28 @@ def from_table(score: float, table: list[tuple[float, float]]) -> float:
     return BELOW_TABLE_IELTS
 
 
+# Quy đổi điểm thang 10 sang GPA thang 4 theo bảng WES (điểm từ, GPA 4). Phải khớp bảng mặc định của backend
+# (AcademicAnalysisService.GetDefaultWesScaleConfig), sửa thì sửa cả hai bên. Chỉ xét cận dưới: 8.99 vẫn là 3.7
+WES_GPA10_TO_4 = [
+    (9.0, 4.0),
+    (8.5, 3.7),
+    (8.0, 3.5),
+    (7.0, 3.0),
+    (6.5, 2.5),
+    (5.5, 2.0),
+    (5.0, 1.5),
+    (4.0, 1.0),
+]
+BELOW_WES_GPA4 = 0.0
+
+
+def gpa10_to_4(score: float) -> float:
+    for cut, gpa4 in WES_GPA10_TO_4:
+        if score >= cut:
+            return gpa4
+    return BELOW_WES_GPA4
+
+
 # Các con số đã đọc từ hồ sơ chat, đủ để tính mức
 @dataclass
 class Facts:
@@ -162,7 +184,7 @@ def read_facts(profile: dict[str, ProfileField], today: date | None = None) -> F
     gpa = value_of(profile, "gpa")
     if isinstance(gpa, dict) and gpa.get("value") is not None:
         facts.gpa, facts.gpa_scale = float(gpa["value"]), int(gpa.get("scale") or 10)
-        facts.gpa4 = facts.gpa if facts.gpa_scale == 4 else round(facts.gpa / 10 * 4, 2)
+        facts.gpa4 = facts.gpa if facts.gpa_scale == 4 else gpa10_to_4(facts.gpa)
 
     sat = value_of(profile, "sat")
     facts.sat = int(sat) if isinstance(sat, int | float) else None

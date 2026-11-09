@@ -7,6 +7,7 @@ from app.services.skills.skill_danh_gia import (
     DanhGiaHandler,
     assess_levels,
     ec_tier_of,
+    gpa10_to_4,
     read_facts,
 )
 from tests.fakes import FakeLLM
@@ -44,10 +45,22 @@ def test_levels_good_profile():
 
 
 def test_gpa_10_converted_to_4_scale():
-    # 8.5/10 → 3.4/4: trung bình (ngưỡng mạnh là 3.5)
-    assert levels_of(gpa={"value": 8.5, "scale": 10})["academic"] == "medium"
+    # Bảng WES: 8.5/10 → 3.7/4 là mạnh (ngưỡng mạnh 3.5), 7.0/10 → 3.0/4 là trung bình
+    assert levels_of(gpa={"value": 8.5, "scale": 10})["academic"] == "strong"
     assert levels_of(gpa={"value": 3.5, "scale": 4})["academic"] == "strong"
-    assert levels_of(gpa={"value": 7.0, "scale": 10})["academic"] == "weak"
+    assert levels_of(gpa={"value": 7.0, "scale": 10})["academic"] == "medium"
+    assert levels_of(gpa={"value": 6.9, "scale": 10})["academic"] == "weak"
+
+
+def test_gpa10_to_4_follows_wes_table_lower_bounds():
+    # Chỉ xét cận dưới: chưa chạm mốc thì lấy mức dưới (8.99 vẫn là 3.7)
+    cases = {10: 4.0, 9.0: 4.0, 8.99: 3.7, 8.5: 3.7, 8.0: 3.5, 7.99: 3.0, 4.0: 1.0, 3.99: 0.0, 0: 0.0}
+    assert {score: gpa10_to_4(score) for score in cases} == cases
+
+
+def test_gpa_scale_4_kept_as_is():
+    assert read_facts(profile(gpa={"value": 3.62, "scale": 4}), TODAY).gpa4 == 3.62
+    assert read_facts(profile(gpa={"value": 9.0, "scale": 10}), TODAY).gpa4 == 4.0
 
 
 def test_missing_data_is_none_not_guessed():
@@ -160,7 +173,7 @@ async def test_number_formats_from_profile_allowed():
     levels = assess_levels(read_facts(tight, TODAY))
     text = ai_answer(
         levels,
-        summary="GPA 8,5 tương đương 3.4 thang 4; ngân sách khoảng 35.000 USD.",
+        summary="GPA 8,5 tương đương 3.7 thang 4; ngân sách khoảng 35.000 USD.",
         strengths=["GPA 8.5 ổn định."],
         weaknesses=["Chưa có SAT."],
     )
