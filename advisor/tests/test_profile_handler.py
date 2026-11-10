@@ -191,6 +191,17 @@ async def test_nothing_new_keeps_ready_profile():
     assert llm.calls == []
 
 
+async def test_edit_without_item_shows_review_and_asks_what_to_fix():
+    llm = FakeLLM()
+    state = ChatState(current_step="B3", profile=full_profile(), intake_mode="chat")
+    slm = tin(("collect_profile", {"tasks": ["edit"]}))
+    output = await make_handler(llm).collect(state, "em muốn sửa hồ sơ", slm)
+    assert output.answer == skill_ho_so.ASK_WHAT_TO_FIX
+    assert output.widget.type == "review"
+    assert state.question_id == "X1"
+    assert llm.calls == []
+
+
 async def test_unreadable_value_keeps_ready_profile():
     llm = FakeLLM({"values": {}, "none_fields": []})
     state = ChatState(current_step="B3", profile=full_profile(), intake_mode="chat")

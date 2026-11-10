@@ -1,9 +1,10 @@
 import hashlib
 import json
+from dataclasses import replace
 from typing import Any
 
 from app.schemas.chat import ChatState
-from app.schemas.slm import SlmTinResult
+from app.schemas.slm import SlmTinResult, task_of
 from app.services.chat_flow import OPENING_QUESTIONS, SkillOutput, ask_next_missing, start_intake
 from app.services.skill_rules import REQUIRED_B3, missing_fields
 from app.services.skills import skill_bac_hoc, skill_ho_so
@@ -30,6 +31,9 @@ class ChatProfileHandler:
     async def collect(self, state: ChatState, message: str, slm: SlmTinResult) -> SkillOutput:
         said = set(slm.profile_values())
         if self.pending_question(state) is None:
+            # Muốn sửa mà chưa nói sửa gì: hiện bảng rà soát và hỏi sửa mục nào
+            if wants_edit(slm) and not said:
+                return replace(skill_ho_so.review(state), answer=skill_ho_so.ASK_WHAT_TO_FIX)
             await self._save_said(state, message, said)
             if self.ready(state, REQUIRED_B3):
                 return SkillOutput(PROFILE_DONE)
@@ -70,3 +74,8 @@ class ChatProfileHandler:
         if missing_fields(state.profile, required) or self.pending_question(state) is not None:
             return False
         return all(field.status != "said_in_B0" for field in state.profile.values())
+
+
+# Tin có ý collect_profile với nhiệm vụ edit
+def wants_edit(slm: SlmTinResult) -> bool:
+    return any(y.type == "collect_profile" and task_of(y.entities) == "edit" for y in slm.intents)
