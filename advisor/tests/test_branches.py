@@ -7,6 +7,7 @@ from app.schemas.slm import INTENTS
 from app.services.branches import (
     ASK_AGAIN_LABEL,
     ASK_SCHOOL,
+    ASK_WHICH_SCHOOLS,
     CANNOT_ANSWER,
     DEFAULT_QUESTION,
     LOOKING_UP,
@@ -14,7 +15,6 @@ from app.services.branches import (
     NOTHING_TO_TRY,
     OUT_OF_SCOPE,
     RECOMMENDING,
-    SKILL_NOT_READY,
     KnowledgeBranch,
     NotReadyBranch,
     build_branches,
@@ -509,7 +509,10 @@ async def test_a_profile_answer_with_an_advice_question_gives_the_advice_once():
     assert res.answer.count("trả lời của skill_danh_gia") == 1
 
 
-# ---- tư vấn theo hồ sơ (nhánh mới: SLM sinh skill, Claude viết) ----
+# ---- tư vấn theo hồ sơ (nhánh mới: code dựng skill từ khuôn, Claude viết) ----
+KHUON = "# SKILL TƯ VẤN HỒ SƠ (skill_ho_so_khuon)"
+
+
 class FakeGenerator:
     """Bộ sinh skill giả: trả skill soạn sẵn (None = SLM sai), ghi lại câu hỏi đã nhận."""
 
@@ -529,10 +532,12 @@ class FakeWriter:
         self.answer = answer
         self.skills: list[str] = []
         self.tasks: list[list[str] | None] = []
+        self.questions: list[str] = []
 
     async def write(self, skill, req, schools, tasks=None):
         self.skills.append(skill)
         self.tasks.append(tasks)
+        self.questions.append(req.cau_hoi)
         return self.answer
 
 
@@ -543,7 +548,7 @@ def new_advice(ran: list[str], generator=None, writer=None):
 @pytest.mark.parametrize(
     "question", ["đánh giá hồ sơ giúp em", "em cần lên lộ trình thế nào", "học bổng em có không"]
 )
-async def test_profile_advice_goes_through_the_generated_skill_then_claude(question):
+async def test_profile_advice_goes_through_the_template_skill_then_claude(question):
     ran: list[str] = []
     generator, writer = FakeGenerator(), FakeWriter()
     state = ChatState(profile=filled(REQUIRED_B3))
@@ -551,21 +556,90 @@ async def test_profile_advice_goes_through_the_generated_skill_then_claude(quest
     out = await new_advice(ran, generator, writer).run(state, question, tin(("ho_so", {}, question)))
 
     assert out.answer == "lời tư vấn" and out.action is None
-    assert generator.questions == [question] and writer.skills == ["skill riêng"]
+    assert writer.questions == [question] and writer.skills[0].startswith(KHUON)
+    assert generator.questions == []  # B2: không gọi SLM sinh skill
     assert ran == []  # không chạy skill tĩnh nào
 
 
-@pytest.mark.parametrize("tasks", [["danh_gia", "lo_trinh"], None])
-async def test_the_tasks_the_classifier_split_go_to_the_writer(tasks):
+# Writer chỉ nhận việc của khuôn, theo thứ tự SLM trả; việc của Dũng bị bỏ; không có việc nào thì làm cả hai
+@pytest.mark.parametrize(
+    ("tasks", "expected"),
+    [
+        (["lo_trinh", "danh_gia"], ["lo_trinh", "danh_gia"]),
+        (["danh_gia", "chon_truong", "lo_trinh"], ["danh_gia", "lo_trinh"]),
+        (["danh_gia", "so_sanh"], ["danh_gia"]),
+        ([], ["danh_gia", "lo_trinh"]),
+        (None, ["danh_gia", "lo_trinh"]),
+    ],
+)
+async def test_only_the_template_tasks_go_to_the_skill_and_the_writer(tasks, expected):
     writer = FakeWriter()
-    thuc_the = {"cac_nhiem_vu": tasks} if tasks else {}
-    question = "đánh giá hồ sơ và lên lộ trình cho em"
+    thuc_the = {"cac_nhiem_vu": tasks} if tasks is not None else {}
+    if tasks and "so_sanh" in tasks:
+        thuc_the["cac_truong"] = ["Iowa", "Purdue"]  # schema: so_sanh luôn kèm từ hai trường
+    question = "đánh giá hồ sơ và cho em biết nên làm gì"
 
     await new_advice([], writer=writer).run(
         ChatState(profile=filled(REQUIRED_B3)), question, tin(("ho_so", thuc_the, question))
     )
 
-    assert writer.tasks == [tasks]
+    assert writer.tasks == [expected]
+    assert "Chọn trường" not in writer.skills[0].split("## 2.")[0]  # mục 1 chỉ có việc của khuôn
+
+
+async def test_only_choosing_schools_runs_the_recommendation_even_without_the_school_list_words():
+    writer = FakeWriter()
+    question = "em thuộc nhóm trường nào"
+    state = ChatState(profile=filled(REQUIRED_B4))
+
+    out = await new_advice([], writer=writer).run(
+        state, question, tin(("ho_so", {"cac_nhiem_vu": ["chon_truong"]}, question))
+    )
+
+    assert out.action == "recommend" and out.answer == RECOMMENDING
+    assert writer.skills == []
+
+
+@pytest.mark.parametrize("tasks", [["so_sanh"], ["so_sanh", "giai_thich_truong"]])
+async def test_only_comparing_runs_the_school_data_comparison(tasks):
+    writer = FakeWriter()
+    question = "Iowa và Purdue trường nào hợp với em hơn"
+    thuc_the = {"cac_nhiem_vu": tasks, "cac_truong": ["Iowa", "Purdue"]}
+
+    out = await new_advice([], writer=writer).run(ChatState(), question, tin(("ho_so", thuc_the, question)))
+
+    assert out.action == "school_compare"
+    assert out.action_data["schools"] == ["Iowa", "Purdue"] and out.action_data["question"] == question
+    assert writer.skills == []  # không cần hồ sơ, không gọi Claude
+
+
+async def test_explaining_a_school_without_its_name_asks_which_school():
+    writer = FakeWriter()
+    question = "trường đó có hợp với em không"
+
+    out = await new_advice([], writer=writer).run(
+        ChatState(profile=filled(REQUIRED_B4)),
+        question,
+        tin(("ho_so", {"cac_nhiem_vu": ["giai_thich_truong"]}, question)),
+    )
+
+    assert out.answer == ASK_WHICH_SCHOOLS and out.action is None
+    assert writer.skills == []
+
+
+async def test_explaining_a_named_school_before_any_recommendation_runs_the_recommendation():
+    ran: list[str] = []
+    question = "vì sao Iowa hợp với em"
+    thuc_the = {"cac_nhiem_vu": ["giai_thich_truong"], "truong": "Iowa"}
+
+    out = await new_advice(ran).run(
+        ChatState(has_results=False, profile=filled(REQUIRED_B4)),
+        question,
+        tin(("ho_so", thuc_the, question)),
+    )
+
+    assert out.action == "recommend" and out.answer == RECOMMENDING
+    assert ran == []  # chưa có kết quả gợi ý thì chưa giải thích được
 
 
 @pytest.mark.parametrize(
@@ -613,36 +687,27 @@ async def test_new_advice_without_a_profile_remembers_the_question_and_asks_for_
     assert state.pending_advice.doan == "đánh giá hồ sơ giúp em"
 
 
-@pytest.mark.parametrize(
-    ("generator", "writer", "expected"),
-    [
-        (FakeGenerator(None), FakeWriter(), SKILL_NOT_READY),
-        (FakeGenerator(), FakeWriter(None), CANNOT_ANSWER),
-    ],
-)
-async def test_slm_or_claude_failing_offers_to_ask_again_instead_of_a_static_skill(
-    generator, writer, expected
-):
+async def test_claude_failing_offers_to_ask_again_instead_of_a_static_skill():
     ran: list[str] = []
     state = ChatState(profile=filled(REQUIRED_B3))
 
-    out = await new_advice(ran, generator, writer).run(
+    out = await new_advice(ran, FakeGenerator(None), FakeWriter(None)).run(
         state, "x", tin(("ho_so", {}, "đánh giá hồ sơ giúp em"))
     )
 
-    assert out.answer == expected and ran == []
+    assert out.answer == CANNOT_ANSWER and ran == []
     assert out.quick_replies == [QuickReply(label=ASK_AGAIN_LABEL, value="đánh giá hồ sơ giúp em")]
 
 
 async def test_confirming_the_profile_without_a_question_waiting_evaluates_the_profile():
     ran: list[str] = []
-    generator = FakeGenerator()
+    writer = FakeWriter()
     branches = build_branches(
-        skills(ran, skill_ho_so=Recording("skill_ho_so", ran, moves_to="B3")), generator, FakeWriter()
+        skills(ran, skill_ho_so=Recording("skill_ho_so", ran, moves_to="B3")), FakeGenerator(), writer
     )
     state = ChatState(current_step="B2", profile=filled(REQUIRED_B3))
     ask(state, "X1")
 
     await branches["mac_dinh"].run(state, "Đúng rồi", tin("mac_dinh"))
 
-    assert generator.questions == [DEFAULT_QUESTION]  # không đem "Đúng rồi" đi sinh skill
+    assert writer.questions == [DEFAULT_QUESTION]  # không đem "Đúng rồi" đi dựng skill
