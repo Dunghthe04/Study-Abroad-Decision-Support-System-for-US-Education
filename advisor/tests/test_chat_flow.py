@@ -84,52 +84,56 @@ def confirmed(*keys: str) -> dict[str, ProfileField]:
 
 async def test_one_label_runs_its_branch_and_returns_its_answer():
     ran: list[str] = []
-    flow, _ = make_flow(tin("kien_thuc"), ran)
+    flow, _ = make_flow(tin("knowledge"), ran)
 
     res = await flow.reply(request("I-20 là gì?"))
 
-    assert ran == ["kien_thuc"] and res.skills == ["kien_thuc"]
-    assert res.answer == "trả lời của kien_thuc"
+    assert ran == ["knowledge"] and res.skills == ["knowledge"]
+    assert res.answer == "trả lời của knowledge"
 
 
 async def test_a_message_with_two_questions_runs_both_branches_in_order_and_joins_the_answers():
     ran: list[str] = []
-    flow, _ = make_flow(tin("kien_thuc", "trung_tam"), ran)
+    flow, _ = make_flow(tin("knowledge", "center_referral"), ran)
 
     res = await flow.reply(request("phỏng vấn visa hỏi gì, có chỗ nào luyện không"))
 
-    assert ran == ["kien_thuc", "trung_tam"]
-    assert res.answer == "trả lời của kien_thuc\n\ntrả lời của trung_tam"
+    assert ran == ["knowledge", "center_referral"]
+    assert res.answer == "trả lời của knowledge\n\ntrả lời của center_referral"
 
 
 async def test_the_profile_branch_runs_first_but_its_answer_comes_last():
     ran: list[str] = []
-    flow, _ = make_flow(tin(("mac_dinh", {"gpa": "8.5 ạ"}), "kien_thuc"), ran)
+    flow, _ = make_flow(tin(("collect_profile", {"gpa": "8.5 ạ"}), "knowledge"), ran)
 
     res = await flow.reply(request("8.5 ạ, mà I-20 là gì?", pending="D2"))
 
-    assert ran == ["mac_dinh", "kien_thuc"]  # ghi hồ sơ trước để các ý khác thấy hồ sơ mới
-    assert res.answer == "trả lời của kien_thuc\n\ntrả lời của mac_dinh"  # câu hồ sơ kế tiếp nằm cuối tin
-    assert res.skills == ["mac_dinh", "kien_thuc"]
+    assert ran == ["collect_profile", "knowledge"]  # ghi hồ sơ trước để các ý khác thấy hồ sơ mới
+    assert (
+        res.answer == "trả lời của knowledge\n\ntrả lời của collect_profile"
+    )  # câu hồ sơ kế tiếp nằm cuối tin
+    assert res.skills == ["collect_profile", "knowledge"]
     assert BACK_TO_QUESTION not in res.answer  # nhánh hồ sơ đã chạy nên không nhắc lại câu cũ
 
 
 async def test_two_questions_of_the_same_type_each_run_their_branch_with_their_own_text():
-    first = FakeBranch("kien_thuc", [])
-    slm = tin(("kien_thuc", {}, "I-20 là gì"), ("kien_thuc", {}, "SAT là gì"))
-    flow, _ = make_flow(slm, kien_thuc=first)
+    first = FakeBranch("knowledge", [])
+    slm = tin(("knowledge", {}, "I-20 là gì"), ("knowledge", {}, "SAT là gì"))
+    flow, _ = make_flow(slm, knowledge=first)
 
     res = await flow.reply(request("I-20 là gì, SAT là gì"))
 
     assert [message for message, _ in first.seen] == ["I-20 là gì", "SAT là gì"]  # mỗi ý nhận đúng câu của nó
-    assert [view.cac_y[0].doan for _, view in first.seen] == ["I-20 là gì", "SAT là gì"]
-    assert res.answer == "trả lời của kien_thuc\n\ntrả lời của kien_thuc"
+    assert [view.intents[0].span for _, view in first.seen] == ["I-20 là gì", "SAT là gì"]
+    assert res.answer == "trả lời của knowledge\n\ntrả lời của knowledge"
 
 
 async def test_the_profile_branch_gets_the_whole_message_and_the_values_of_every_intent():
-    profile = FakeBranch("mac_dinh", [])
-    slm = tin(("mac_dinh", {"gpa": "em GPA 3.5"}, "em GPA 3.5"), ("ho_so", {}, "tư vấn trường"))
-    flow, _ = make_flow(slm, mac_dinh=profile)
+    profile = FakeBranch("collect_profile", [])
+    slm = tin(
+        ("collect_profile", {"gpa": "em GPA 3.5"}, "em GPA 3.5"), ("profile_review", {}, "tư vấn trường")
+    )
+    flow, _ = make_flow(slm, collect_profile=profile)
 
     await flow.reply(request("em GPA 3.5, tư vấn trường"))
 
@@ -139,17 +143,17 @@ async def test_the_profile_branch_gets_the_whole_message_and_the_values_of_every
 
 async def test_values_of_a_profile_inside_another_intent_still_reach_the_profile_branch_first():
     ran: list[str] = []
-    flow, _ = make_flow(tin(("ho_so", {"gpa": "GPA 3.5"})), ran)
+    flow, _ = make_flow(tin(("profile_review", {"gpa": "GPA 3.5"})), ran)
 
     await flow.reply(request("GPA 3.5, em nên nộp trường nào"))
 
-    assert ran == ["mac_dinh", "ho_so"]
+    assert ran == ["collect_profile", "profile_review"]
 
 
 async def test_the_branch_gets_the_slm_result_with_its_entities():
-    slm = tin(("trung_tam", {"dich_vu": "SUA_BAI_LUAN", "thanh_pho": "HN"}))
-    branch = FakeBranch("trung_tam", [])
-    flow, _ = make_flow(slm, trung_tam=branch)
+    slm = tin(("center_referral", {"service": "ESSAY_EDITING", "city": "HN"}))
+    branch = FakeBranch("center_referral", [])
+    flow, _ = make_flow(slm, center_referral=branch)
 
     await flow.reply(request("ai sửa bài luận ở HN"))
 
@@ -158,33 +162,33 @@ async def test_the_branch_gets_the_slm_result_with_its_entities():
 
 async def test_pressing_a_button_of_the_pending_question_goes_to_the_profile_branch_without_the_slm():
     ran: list[str] = []
-    flow, counting = make_flow(tin(("ngoai_pham_vi", {"loai_con": "tam_biet"})), ran)
+    flow, counting = make_flow(tin(("out_of_scope", {"subtype": "farewell"})), ran)
 
     await flow.reply(request("Bỏ qua", pending="F2"))
 
-    assert counting.calls == [] and ran == ["mac_dinh"]
+    assert counting.calls == [] and ran == ["collect_profile"]
 
 
 # ---- nhắc lại câu hồ sơ đang chờ ----
 async def test_a_question_asked_in_the_middle_of_the_profile_reminds_the_pending_question():
-    flow, _ = make_flow(tin("kien_thuc"))
+    flow, _ = make_flow(tin("knowledge"))
 
     res = await flow.reply(request("I-20 là gì?", pending="D2"))
 
-    assert res.answer == "trả lời của kien_thuc\n\n" + BACK_TO_QUESTION + QUESTIONS["D2"]
+    assert res.answer == "trả lời của knowledge\n\n" + BACK_TO_QUESTION + QUESTIONS["D2"]
     assert (res.state.question_id, res.state.asked) == ("D2", {"D2": 1})  # vẫn chờ, không tính hỏi thêm lần
 
 
 async def test_off_topic_and_scenario_messages_also_remind_the_pending_question():
-    for slm in (tin(("ngoai_pham_vi", {"loai_con": "ngoai_le"})),
-                tin(("kich_ban", {"che_do": "goal_seeking"}))):  # fmt: skip
+    for slm in (tin(("out_of_scope", {"subtype": "exception"})),
+                tin(("scenario", {"mode": "goal_seeking"}))):  # fmt: skip
         flow, _ = make_flow(slm)
         res = await flow.reply(request("x", pending="D2"))
         assert res.answer.endswith(BACK_TO_QUESTION + QUESTIONS["D2"])
 
 
 async def test_no_reminder_when_nothing_is_pending():
-    flow, _ = make_flow(tin("kien_thuc"))
+    flow, _ = make_flow(tin("knowledge"))
 
     res = await flow.reply(request("I-20 là gì?"))
 
@@ -192,7 +196,7 @@ async def test_no_reminder_when_nothing_is_pending():
 
 
 async def test_no_reminder_when_the_profile_branch_answered_the_pending_question():
-    flow, _ = make_flow(tin(("mac_dinh", {"gpa": "8.5"})))
+    flow, _ = make_flow(tin(("collect_profile", {"gpa": "8.5"})))
 
     res = await flow.reply(request("8.5", pending="D2"))
 
@@ -201,7 +205,9 @@ async def test_no_reminder_when_the_profile_branch_answered_the_pending_question
 
 async def test_no_reminder_when_a_branch_already_moved_on_to_a_new_question():
     ran: list[str] = []
-    flow, _ = make_flow(tin("ho_so"), ran, ho_so=FakeBranch("ho_so", ran, asks="X2"))
+    flow, _ = make_flow(
+        tin("profile_review"), ran, profile_review=FakeBranch("profile_review", ran, asks="X2")
+    )
 
     res = await flow.reply(request("đánh giá hồ sơ em", pending="D2"))
 
@@ -210,14 +216,14 @@ async def test_no_reminder_when_a_branch_already_moved_on_to_a_new_question():
 
 async def test_no_reminder_for_the_opening_questions():
     for opening in ("B0.1", "B0.2"):
-        flow, _ = make_flow(tin("kien_thuc"))
+        flow, _ = make_flow(tin("knowledge"))
         res = await flow.reply(request("I-20 là gì?", pending=opening))
         assert BACK_TO_QUESTION not in res.answer
 
 
 # ---- câu trả lời mặc định ----
 async def test_a_first_turn_that_nobody_answered_greets_like_before():
-    flow, _ = make_flow(tin("kien_thuc"), kien_thuc=FakeBranch("kien_thuc", [], SkillOutput("")))
+    flow, _ = make_flow(tin("knowledge"), knowledge=FakeBranch("knowledge", [], SkillOutput("")))
 
     res = await flow.reply(ChatRequest(messages=[ChatMessage(role="user", content="chào")]))
 
@@ -226,8 +232,8 @@ async def test_a_first_turn_that_nobody_answered_greets_like_before():
 
 
 async def test_a_later_turn_that_nobody_answered_says_not_ready():
-    flow, _ = make_flow(tin(("kich_ban", {"che_do": "goal_seeking"})),
-                        kich_ban=FakeBranch("kich_ban", [], SkillOutput("")))  # fmt: skip
+    flow, _ = make_flow(tin(("scenario", {"mode": "goal_seeking"})),
+                        scenario=FakeBranch("scenario", [], SkillOutput("")))  # fmt: skip
 
     res = await flow.reply(request("cần SAT bao nhiêu để vào MIT"))
 
@@ -251,7 +257,7 @@ def test_combine_joins_answers_and_the_later_part_wins_buttons_widget_and_action
 async def test_response_carries_buttons_widget_and_action_of_the_branch():
     buttons = [QuickReply(label="Trả lời trong chat", value="Trả lời trong chat")]
     output = SkillOutput("hỏi ngành", buttons, Widget(type="major"), action="recommend", action_data={"x": 1})
-    flow, _ = make_flow(tin("ho_so"), ho_so=FakeBranch("ho_so", [], output))
+    flow, _ = make_flow(tin("profile_review"), profile_review=FakeBranch("profile_review", [], output))
 
     res = await flow.reply(request("gợi ý trường cho em"))
 
@@ -260,7 +266,7 @@ async def test_response_carries_buttons_widget_and_action_of_the_branch():
 
 
 async def test_response_has_no_buttons_widget_or_action_by_default():
-    flow, _ = make_flow(tin("kien_thuc"))
+    flow, _ = make_flow(tin("knowledge"))
 
     res = await flow.reply(request("I-20 là gì?"))
 
@@ -273,7 +279,7 @@ def request_with_draft(message: str, draft: dict | None, **state_fields) -> Chat
 
 
 async def test_without_draft_the_profile_in_state_is_kept():
-    flow, _ = make_flow(tin("kien_thuc"))
+    flow, _ = make_flow(tin("knowledge"))
 
     res = await flow.reply(request_with_draft("I-20 là gì?", None, profile=confirmed("gpa")))
 
@@ -281,7 +287,7 @@ async def test_without_draft_the_profile_in_state_is_kept():
 
 
 async def test_empty_draft_clears_what_the_form_removed():
-    flow, _ = make_flow(tin("kien_thuc"))
+    flow, _ = make_flow(tin("knowledge"))
 
     res = await flow.reply(request_with_draft("I-20 là gì?", {}, profile=confirmed("gpa")))
 
@@ -289,7 +295,7 @@ async def test_empty_draft_clears_what_the_form_removed():
 
 
 async def test_said_in_b0_is_not_promoted_when_the_draft_has_the_same_value():
-    flow, _ = make_flow(tin("kien_thuc"))
+    flow, _ = make_flow(tin("knowledge"))
     state_profile = {"gpa": ProfileField(value="x", status="said_in_B0")}
 
     res = await flow.reply(request_with_draft("ok", confirmed("gpa"), profile=state_profile))
@@ -298,7 +304,7 @@ async def test_said_in_b0_is_not_promoted_when_the_draft_has_the_same_value():
 
 
 async def test_new_chat_preloads_the_profile_from_the_form():
-    flow, _ = make_flow(tin("kien_thuc"), kien_thuc=FakeBranch("kien_thuc", [], SkillOutput("")))
+    flow, _ = make_flow(tin("knowledge"), knowledge=FakeBranch("knowledge", [], SkillOutput("")))
     req = ChatRequest(
         messages=[ChatMessage(role="user", content="chào")], profile=confirmed("gpa", "english")
     )
@@ -311,8 +317,8 @@ async def test_new_chat_preloads_the_profile_from_the_form():
 
 async def test_a_field_written_by_a_branch_is_reported_as_changed():
     ran: list[str] = []
-    branch = FakeBranch("mac_dinh", ran, writes={"english": {"type": "ielts", "total": 7.0}})
-    flow, _ = make_flow(tin(("mac_dinh", {"english": "IELTS em 7.0"})), ran, mac_dinh=branch)
+    branch = FakeBranch("collect_profile", ran, writes={"english": {"type": "ielts", "total": 7.0}})
+    flow, _ = make_flow(tin(("collect_profile", {"english": "IELTS em 7.0"})), ran, collect_profile=branch)
 
     res = await flow.reply(request_with_draft("IELTS em 7.0", confirmed("gpa")))
 
@@ -320,8 +326,8 @@ async def test_a_field_written_by_a_branch_is_reported_as_changed():
 
 
 async def test_changes_to_chat_only_keys_are_not_reported():
-    branch = FakeBranch("mac_dinh", [], writes={"relatives_state": "CA"})
-    flow, _ = make_flow(tin(("mac_dinh", {"relatives_state": "chú em ở CA"})), mac_dinh=branch)
+    branch = FakeBranch("collect_profile", [], writes={"relatives_state": "CA"})
+    flow, _ = make_flow(tin(("collect_profile", {"relatives_state": "chú em ở CA"})), collect_profile=branch)
 
     res = await flow.reply(request_with_draft("chú em ở CA", confirmed("gpa")))
 
@@ -330,7 +336,7 @@ async def test_changes_to_chat_only_keys_are_not_reported():
 
 # ---- chọn cách điền hồ sơ (chat hay form): nhận bằng chữ trên nút, không cần SLM ----
 async def test_choosing_chat_asks_the_first_missing_question_without_the_slm():
-    flow, counting = make_flow(tin("kien_thuc"))
+    flow, counting = make_flow(tin("knowledge"))
 
     res = await flow.reply(request(CHAT_BUTTON.value, current_step="B3", question_id=INTAKE_ID))
 
@@ -340,7 +346,7 @@ async def test_choosing_chat_asks_the_first_missing_question_without_the_slm():
 
 
 async def test_choosing_form_opens_the_form_widget():
-    flow, _ = make_flow(tin("kien_thuc"))
+    flow, _ = make_flow(tin("knowledge"))
 
     res = await flow.reply(request(FORM_BUTTON.value, current_step="B3", question_id=INTAKE_ID))
 
@@ -349,7 +355,7 @@ async def test_choosing_form_opens_the_form_widget():
 
 
 async def test_continue_in_chat_button_from_the_form_asks_the_missing_items():
-    flow, counting = make_flow(tin("kien_thuc"))
+    flow, counting = make_flow(tin("knowledge"))
 
     res = await flow.reply(request(CONTINUE_CHAT, current_step="B3"))
 
@@ -357,41 +363,41 @@ async def test_continue_in_chat_button_from_the_form_asks_the_missing_items():
 
 
 def waiting_advice():
-    return tin(("ho_so", {}, "em cần lên lộ trình")).cac_y[0]
+    return tin(("profile_review", {}, "em cần lên lộ trình")).intents[0]
 
 
 async def test_back_from_a_finished_form_answers_the_question_that_was_waiting():
     ran: list[str] = []
-    advice = FakeBranch("ho_so", ran)
-    flow, counting = make_flow(tin("kien_thuc"), ran, ho_so=advice)
+    advice = FakeBranch("profile_review", ran)
+    flow, counting = make_flow(tin("knowledge"), ran, profile_review=advice)
     req = request(
         CONTINUE_CHAT, current_step="B3", profile=confirmed(*REQUIRED_B3), pending_advice=waiting_advice()
     )
 
     res = await flow.reply(req)
 
-    assert ran == ["ho_so"] and counting.calls == []
+    assert ran == ["profile_review"] and counting.calls == []
     assert advice.seen[0][0] == "em cần lên lộ trình"  # câu hỏi gốc, không phải "Tiếp tục bằng chat"
     assert res.state.pending_advice is None and res.state.intake_mode == "chat"
 
 
 async def test_back_from_an_unfinished_form_keeps_asking_and_keeps_the_question():
     ran: list[str] = []
-    flow, _ = make_flow(tin("kien_thuc"), ran)
+    flow, _ = make_flow(tin("knowledge"), ran)
 
     res = await flow.reply(request(CONTINUE_CHAT, current_step="B3", pending_advice=waiting_advice()))
 
     assert ran == [] and res.answer == QUESTIONS["B1.1"]
-    assert res.state.pending_advice.doan == "em cần lên lộ trình"
+    assert res.state.pending_advice.span == "em cần lên lộ trình"
 
 
 async def test_another_message_while_choosing_goes_through_the_slm():
     ran: list[str] = []
-    flow, _ = make_flow(tin("kien_thuc"), ran)
+    flow, _ = make_flow(tin("knowledge"), ran)
 
     res = await flow.reply(request("I-20 là gì ạ?", current_step="B3", question_id=INTAKE_ID))
 
-    assert ran == ["kien_thuc"] and res.state.question_id is None  # không còn chờ lựa chọn
+    assert ran == ["knowledge"] and res.state.question_id is None  # không còn chờ lựa chọn
 
 
 # ---- hàm dùng chung ----
@@ -439,7 +445,7 @@ def last_log_record(caplog) -> dict:
 
 
 async def test_each_turn_logs_what_the_slm_read_and_which_branches_ran(caplog):
-    slm = tin("kien_thuc", ("trung_tam", {"thanh_pho": "HN"}), confidence=0.93)
+    slm = tin("knowledge", ("center_referral", {"city": "HN"}), confidence=0.93)
     flow, _ = make_flow(slm)
 
     with caplog.at_level(logging.INFO, logger="advisor.chat"):
@@ -447,24 +453,24 @@ async def test_each_turn_logs_what_the_slm_read_and_which_branches_ran(caplog):
 
     record = last_log_record(caplog)
     assert record["session_id"] == "abc"
-    assert (record["slm_types"], record["slm_confidence"]) == (["kien_thuc", "trung_tam"], 0.93)
-    assert record["slm_thuc_the"] == ["thanh_pho"]  # chỉ tên khóa, không ghi chữ học sinh viết
-    assert record["ran"] == ["kien_thuc", "trung_tam"]
+    assert (record["slm_types"], record["slm_confidence"]) == (["knowledge", "center_referral"], 0.93)
+    assert record["slm_entity_keys"] == ["city"]  # chỉ tên khóa, không ghi chữ học sinh viết
+    assert record["ran"] == ["knowledge", "center_referral"]
 
 
 async def test_log_lists_each_item_with_codes_and_school_names_but_not_other_written_values(caplog):
     slm = tin(
         (
-            "kien_thuc",
+            "knowledge",
             {
-                "nhiem_vu": "so_sanh",
-                "cac_truong": ["Yale", "MIT"],
-                "muc": ["chi_phi"],
-                "tiep_noi": True,
+                "tasks": ["compare_facts"],
+                "schools": ["Yale", "MIT"],
+                "fields": ["cost"],
+                "follow_up": True,
                 "gpa": "9.2",
             },
         ),
-        ("trung_tam", {"nhiem_vu": "dat_lich", "dich_vu": "SUA_BAI_LUAN"}),
+        ("center_referral", {"tasks": ["booking"], "service": "ESSAY_EDITING"}),
     )
     flow, _ = make_flow(slm)
 
@@ -472,22 +478,22 @@ async def test_log_lists_each_item_with_codes_and_school_names_but_not_other_wri
         await flow.reply(request("so sánh học phí Yale và MIT"))
 
     record = last_log_record(caplog)
-    assert record["slm_cac_y"] == [
+    assert record["slm_intents"] == [
         {
-            "type": "kien_thuc",
-            "nhiem_vu": "so_sanh",
-            "cac_truong": ["Yale", "MIT"],
-            "muc": ["chi_phi"],
-            "tiep_noi": True,
-            "khoa": ["gpa"],
+            "type": "knowledge",
+            "tasks": ["compare_facts"],
+            "schools": ["Yale", "MIT"],
+            "fields": ["cost"],
+            "follow_up": True,
+            "other_keys": ["gpa"],
         },
-        {"type": "trung_tam", "nhiem_vu": "dat_lich", "dich_vu": "SUA_BAI_LUAN", "khoa": []},
+        {"type": "center_referral", "tasks": ["booking"], "service": "ESSAY_EDITING", "other_keys": []},
     ]
-    assert "9.2" not in json.dumps(record["slm_cac_y"])
+    assert "9.2" not in json.dumps(record["slm_intents"])
 
 
 async def test_log_masks_personal_info_but_the_reply_is_not_masked(caplog):
-    flow, _ = make_flow(tin("kien_thuc"), kien_thuc=FakeBranch("kien_thuc", [], SkillOutput("ok")))
+    flow, _ = make_flow(tin("knowledge"), knowledge=FakeBranch("knowledge", [], SkillOutput("ok")))
 
     with caplog.at_level(logging.INFO, logger="advisor.chat"):
         res = await flow.reply(request("email em là hoa@gmail.com, số 0912 345 678, SAT 1420"))
@@ -498,7 +504,7 @@ async def test_log_masks_personal_info_but_the_reply_is_not_masked(caplog):
 
 
 async def test_choice_turn_is_logged_with_the_session_id_too(caplog):
-    flow, _ = make_flow(tin("kien_thuc"))
+    flow, _ = make_flow(tin("knowledge"))
     req = request(CHAT_BUTTON.value, current_step="B3", question_id=INTAKE_ID).model_copy(
         update={"session_id": "abc"}
     )
@@ -533,8 +539,8 @@ class Rendezvous:
 
 async def test_read_only_intents_run_at_the_same_time():
     branch = Rendezvous(size=2)
-    slm = tin(("kien_thuc", {}, "I-20 là gì"), ("kien_thuc", {}, "SAT là gì"))
-    flow, _ = make_flow(slm, kien_thuc=branch)
+    slm = tin(("knowledge", {}, "I-20 là gì"), ("knowledge", {}, "SAT là gì"))
+    flow, _ = make_flow(slm, knowledge=branch)
 
     res = await flow.reply(request("I-20 là gì, SAT là gì"))
 
@@ -547,23 +553,27 @@ async def test_answers_keep_the_order_of_the_intents_even_when_a_later_one_finis
             await asyncio.sleep(0.05 if message == "chậm" else 0)
             return SkillOutput(message)
 
-    slm = tin(("kien_thuc", {}, "chậm"), ("kien_thuc", {}, "nhanh"), ("trung_tam", {}, "trung tâm"))
-    flow, _ = make_flow(slm, kien_thuc=Slow(), trung_tam=Slow())
+    slm = tin(("knowledge", {}, "chậm"), ("knowledge", {}, "nhanh"), ("center_referral", {}, "trung tâm"))
+    flow, _ = make_flow(slm, knowledge=Slow(), center_referral=Slow())
 
     res = await flow.reply(request("chậm, nhanh, trung tâm"))
 
     assert res.answer == "chậm\n\nnhanh\n\ntrung tâm"
-    assert res.skills == ["kien_thuc", "kien_thuc", "trung_tam"]
+    assert res.skills == ["knowledge", "knowledge", "center_referral"]
 
 
 async def test_intents_that_write_state_still_run_one_after_another_and_before_the_read_only_ones():
     ran: list[str] = []
-    slm = tin(("mac_dinh", {"gpa": "8.5"}), "kien_thuc", "ho_so")
-    flow, _ = make_flow(slm, ran, mac_dinh=FakeBranch("mac_dinh", ran, writes={"gpa": "8.5"}))
+    slm = tin(("collect_profile", {"gpa": "8.5"}), "knowledge", "profile_review")
+    flow, _ = make_flow(slm, ran, collect_profile=FakeBranch("collect_profile", ran, writes={"gpa": "8.5"}))
 
     await flow.reply(request("8.5, I-20 là gì, em nên nộp trường nào", pending="D2"))
 
-    assert ran == ["mac_dinh", "ho_so", "kien_thuc"]  # kien_thuc đọc sau khi hồ sơ và tư vấn đã xong
+    assert ran == [
+        "collect_profile",
+        "profile_review",
+        "knowledge",
+    ]  # knowledge đọc sau khi hồ sơ và tư vấn đã xong
 
 
 async def test_every_question_gets_its_answer_in_order_however_many_there_are():
@@ -572,12 +582,12 @@ async def test_every_question_gets_its_answer_in_order_however_many_there_are():
             return SkillOutput(f"đáp {message}")
 
     asked = [f"câu {n}" for n in range(1, 9)]
-    flow, _ = make_flow(tin(*[("kien_thuc", {}, doan) for doan in asked]), kien_thuc=Echo())
+    flow, _ = make_flow(tin(*[("knowledge", {}, span) for span in asked]), knowledge=Echo())
 
     res = await flow.reply(request(", ".join(asked)))
 
-    assert res.answer == "\n\n".join(f"đáp {doan}" for doan in asked)
-    assert res.skills == ["kien_thuc"] * 8 and res.quick_replies == []  # không còn ý hoãn thành nút
+    assert res.answer == "\n\n".join(f"đáp {span}" for span in asked)
+    assert res.skills == ["knowledge"] * 8 and res.quick_replies == []  # không còn ý hoãn thành nút
 
 
 async def test_no_more_than_the_parallel_limit_run_at_once_but_all_of_them_run():
@@ -595,7 +605,7 @@ async def test_no_more_than_the_parallel_limit_run_at_once_but_all_of_them_run()
 
     gauge = Gauge()
     asked = [f"câu {n}" for n in range(1, 4 * PARALLEL_LIMIT)]
-    flow, _ = make_flow(tin(*[("kien_thuc", {}, doan) for doan in asked]), kien_thuc=gauge)
+    flow, _ = make_flow(tin(*[("knowledge", {}, span) for span in asked]), knowledge=gauge)
 
     await flow.reply(request(", ".join(asked)))
 
@@ -614,8 +624,8 @@ class Delayed:
 
 async def test_streamed_answers_keep_the_order_asked_even_when_a_later_one_is_ready_first():
     events: list[dict] = []
-    slm = tin(("kien_thuc", {}, "chậm"), ("kien_thuc", {}, "nhanh"))
-    flow, _ = make_flow(slm, kien_thuc=Delayed())
+    slm = tin(("knowledge", {}, "chậm"), ("knowledge", {}, "nhanh"))
+    flow, _ = make_flow(slm, knowledge=Delayed())
 
     res = await flow.reply(request("chậm, nhanh"), emit=events.append)
 
@@ -629,18 +639,20 @@ async def test_streamed_answers_keep_the_order_asked_even_when_a_later_one_is_re
 
 async def test_the_profile_answer_is_not_streamed_because_it_stays_at_the_end():
     events: list[dict] = []
-    slm = tin(("mac_dinh", {"gpa": "8.5"}), ("kien_thuc", {}, "nhanh"))
-    flow, _ = make_flow(slm, kien_thuc=Delayed())
+    slm = tin(("collect_profile", {"gpa": "8.5"}), ("knowledge", {}, "nhanh"))
+    flow, _ = make_flow(slm, knowledge=Delayed())
 
     res = await flow.reply(request("8.5, nhanh", pending="D2"), emit=events.append)
 
     assert events == [{"type": "progress", "answers": 1}, {"type": "partial", "text": "đáp nhanh"}]
-    assert res.answer == "đáp nhanh\n\ntrả lời của mac_dinh"  # câu hồ sơ nằm cuối, chỉ có ở kết quả cuối
+    assert (
+        res.answer == "đáp nhanh\n\ntrả lời của collect_profile"
+    )  # câu hồ sơ nằm cuối, chỉ có ở kết quả cuối
 
 
 async def test_an_intent_with_no_answer_sends_nothing():
     events: list[dict] = []
-    flow, _ = make_flow(tin("kien_thuc"), kien_thuc=FakeBranch("kien_thuc", [], SkillOutput("")))
+    flow, _ = make_flow(tin("knowledge"), knowledge=FakeBranch("knowledge", [], SkillOutput("")))
 
     await flow.reply(request("I-20 là gì"), emit=events.append)
 
@@ -648,8 +660,8 @@ async def test_an_intent_with_no_answer_sends_nothing():
 
 
 async def test_without_a_listener_the_reply_is_the_same():
-    slm = tin(("kien_thuc", {}, "chậm"), ("kien_thuc", {}, "nhanh"))
-    flow, _ = make_flow(slm, kien_thuc=Delayed())
+    slm = tin(("knowledge", {}, "chậm"), ("knowledge", {}, "nhanh"))
+    flow, _ = make_flow(slm, knowledge=Delayed())
 
     res = await flow.reply(request("chậm, nhanh"))
 

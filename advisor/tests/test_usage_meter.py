@@ -189,7 +189,7 @@ class _OneClaudeCall:
 
 
 async def test_the_chat_response_carries_the_token_of_every_ai_call_of_the_turn():
-    flow = flow_with({"skill_tra_loi": _OneClaudeCall()}, tin("kien_thuc"))
+    flow = flow_with({"skill_tra_loi": _OneClaudeCall()}, tin("knowledge"))
 
     res = await flow.reply(ChatRequest(messages=[ChatMessage(role="user", content="I-20 là gì")]))
 
@@ -201,7 +201,7 @@ async def test_the_chat_response_carries_the_token_of_every_ai_call_of_the_turn(
 
 
 async def test_a_turn_without_ai_calls_has_an_empty_list():
-    flow = flow_with({}, tin(("ngoai_pham_vi", {"loai_con": "tam_biet"}, "tạm biệt")))
+    flow = flow_with({}, tin(("out_of_scope", {"subtype": "farewell"}, "tạm biệt")))
 
     res = await flow.reply(ChatRequest(messages=[ChatMessage(role="user", content="tạm biệt")]))
 

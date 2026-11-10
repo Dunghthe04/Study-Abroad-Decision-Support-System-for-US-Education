@@ -5,10 +5,13 @@ cùng thành phố xếp trước, tối đa 3. Advisor chỉ gọi API, không 
 giống phần gợi ý trường: lọc theo luật ở backend, advisor chỉ làm phần AI.
 """
 
+import re
 from dataclasses import dataclass
 from typing import Any
 
 import httpx
+
+from app.services.priority import unaccent
 
 # Danh mục dịch vụ: mã lưu trong cột services -> tên hiển thị cho học sinh.
 # Một nguồn duy nhất cho lời nhắc của AI, nút gợi ý và câu trả lời. Thêm dịch vụ mới thì thêm ở đây.
@@ -20,6 +23,50 @@ SERVICES = {
     "LUYEN_THI": "luyện thi IELTS, SAT",
     "SAN_HOC_BONG": "săn học bổng",
 }
+
+# TẠM: mã dịch vụ model trả (SERVICE_CODES trong schemas/slm.py, tiếng Anh) -> mã lưu trong DB (SERVICES, tiếng Việt).
+# Chỉ đổi tên ở đây, nơi duy nhất gọi backend. Bỏ bảng này khi DB và backend đổi mã sang tiếng Anh (có test kiểm đủ 6 mã)
+MODEL_SERVICE_TO_DB = {
+    "SCHOOL_SELECTION": "CHON_TRUONG",
+    "ESSAY_EDITING": "SUA_BAI_LUAN",
+    "APPLICATION_SUBMISSION": "NOP_HO_SO",
+    "VISA_INTERVIEW_PREP": "LUYEN_PHONG_VAN",
+    "TEST_PREP": "LUYEN_THI",
+    "SCHOLARSHIP_SEARCH": "SAN_HOC_BONG",
+}
+
+
+def db_service(model_code: str | None) -> str | None:
+    """Mã dịch vụ trong DB ứng với mã model trả; None khi model không nêu dịch vụ hoặc trả mã lạ."""
+    return MODEL_SERVICE_TO_DB.get(model_code or "")
+
+
+# Thành phố học sinh viết ("Sài Gòn", "HCM", "TP.HCM", "HN", "Hanoi") khác tên chuẩn trong DB ("TP.HCM", "Hà Nội").
+# So sau khi bỏ dấu, bỏ ký tự lạ và bỏ "TP", "thành phố" ở đầu; các cách viết tắt hay gặp quy về một tên
+_CITY_ALIASES = {
+    "hcm": "ho chi minh",
+    "hcmc": "ho chi minh",
+    "tphcm": "ho chi minh",
+    "sai gon": "ho chi minh",
+    "saigon": "ho chi minh",
+    "hn": "ha noi",
+    "hanoi": "ha noi",
+}
+
+
+def _city_key(text: str) -> str:
+    folded = re.sub(r"[^a-z0-9]+", " ", unaccent(text)).strip()
+    folded = re.sub(r"^(?:thanh pho|tp) ", "", folded)
+    return _CITY_ALIASES.get(folded, folded)
+
+
+def match_city(text: str | None, cities: list[str]) -> str | None:
+    """Tên thành phố trong DB (đúng chữ của `cities`) ứng với chữ học sinh viết; None khi không nói hoặc không khớp thành phố nào."""
+    if not text or not text.strip():
+        return None
+    key = _city_key(text)
+    return next((city for city in cities if _city_key(city) == key), None)
+
 
 REFERRALS_PATH = "api/v1/study-centers/referrals"
 CITIES_PATH = "api/v1/study-centers/referral-cities"

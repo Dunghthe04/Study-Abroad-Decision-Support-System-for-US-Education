@@ -74,32 +74,37 @@ public static class ChatSchoolInfo
         string Question, string? School, string? Code, string? KbAnswer, bool KbFound,
         IReadOnlyList<string> SlmFields, bool KbSkipped);
 
-    // Mã mục model trả (advisor: INFO_FIELDS) → mục số liệu. "khac" không có trong bảng: điều hệ thống không lưu
+    // Mã model trả mà hệ thống chưa lưu: "other" (điều ngoài danh mục) và bốn mục mới của hợp đồng SLM (nhà ở, tỷ lệ sinh viên trên giảng viên,
+    // hoạt động sinh viên, khuôn viên) vì chưa có InfoField tương ứng. Khi có InfoField cho mục nào thì chuyển mã đó sang SlmFieldCodes và bỏ khỏi đây
+    private static readonly HashSet<string> UnstoredCodes =
+        ["other", "housing", "student_faculty_ratio", "student_activities", "campus_setting"];
+
+    // Mã mục model trả (advisor: INFO_FIELDS, tiếng Anh như dữ liệu huấn luyện) → mục số liệu. Mã không có trong bảng (và không phải mã "chưa lưu") bị bỏ
     private static readonly Dictionary<string, InfoField> SlmFieldCodes = new()
     {
-        ["chi_phi"] = InfoField.Cost,
-        ["hoc_bong"] = InfoField.Aid,
-        ["tieng_anh"] = InfoField.English,
-        ["diem_thi"] = InfoField.Test,
+        ["cost"] = InfoField.Cost,
+        ["aid"] = InfoField.Aid,
+        ["english_requirement"] = InfoField.English,
+        ["test_policy"] = InfoField.Test,
         ["gpa"] = InfoField.Gpa,
-        ["ty_le_nhan"] = InfoField.Acceptance,
-        ["han_nop"] = InfoField.Deadline,
-        ["tot_nghiep"] = InfoField.Outcomes,
-        ["nganh"] = InfoField.Majors,
-        ["xep_hang"] = InfoField.Ranking,
-        ["vi_tri"] = InfoField.Location,
+        ["acceptance_rate"] = InfoField.Acceptance,
+        ["deadline"] = InfoField.Deadline,
+        ["graduation_rate"] = InfoField.Outcomes,
+        ["majors"] = InfoField.Majors,
+        ["ranking"] = InfoField.Ranking,
+        ["location"] = InfoField.Location,
         ["website"] = InfoField.Website,
     };
 
-    /// <summary>Mục model trả, đổi sang mục số liệu, theo thứ tự cố định của danh sách mục. Mã lạ hoặc "khac" bị bỏ.</summary>
+    /// <summary>Mục model trả, đổi sang mục số liệu, theo thứ tự cố định của danh sách mục. Mã lạ hoặc "other" bị bỏ.</summary>
     public static IReadOnlyList<InfoField> FieldsFromModel(IEnumerable<string> codes)
     {
         var wanted = codes.Select(c => SlmFieldCodes.GetValueOrDefault(c, (InfoField)(-1))).Where(f => (int)f >= 0).ToHashSet();
         return Enum.GetValues<InfoField>().Where(wanted.Contains).ToList();
     }
 
-    /// <summary>Model báo câu có điều hệ thống không lưu (mã "khac")?</summary>
-    public static bool ModelSaysUnstored(IEnumerable<string> codes) => codes.Contains("khac");
+    /// <summary>Model báo câu có điều hệ thống không lưu (mã "other", hoặc một trong bốn mục mới chưa có số liệu)?</summary>
+    public static bool ModelSaysUnstored(IEnumerable<string> codes) => codes.Any(UnstoredCodes.Contains);
 
     /// <summary>Dữ liệu so sánh: Question là câu hỏi, Schools là tên các trường như học sinh gõ, Fields là mã mục model trả, KbAnswer là câu tạm của advisor.</summary>
     public record CompareQuery(string Question, IReadOnlyList<string> Schools, IReadOnlyList<string> Fields, string? KbAnswer);

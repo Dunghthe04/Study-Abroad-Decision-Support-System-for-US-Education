@@ -2,10 +2,10 @@
 
 Phần lớn skill giống nhau giữa các học sinh, chỉ khoảng vài phần trăm là riêng. Vì vậy không để SLM sinh cả skill:
 khuôn 9 mục nằm ở skills/skill_ho_so_khuon.md, code chỉ điền ba chỗ riêng của từng học sinh:
-- {nhiem_vu} (mục 1): các việc học sinh hỏi, lấy từ cac_nhiem_vu SLM phân loại;
+- {nhiem_vu} (mục 1): các việc học sinh hỏi, lấy từ tasks SLM phân loại;
 - {du_lieu} (mục 3): bảng hồ sơ, chép nguyên chữ của ho_so và tinh_san (skill_request_of);
 - {noi_dung} (mục 5): nhóm điểm mạnh / ở mức giữa / cần lưu ý theo mức code tính, và lộ trình của skill_lo_trinh.
-Skill dựng bằng code không qua check_skill của SLM vì mọi chữ đều chép từ dữ liệu, không có chữ do model viết.
+Mọi chữ của skill đều chép từ dữ liệu, không có chữ do model viết, nên không cần kiểm lại nội dung skill.
 """
 
 import re
@@ -21,11 +21,11 @@ from app.services.skills.skill_lo_trinh import choose_route, render, template_re
 
 TEMPLATE_PATH = SKILLS_DIR / "skill_ho_so_khuon.md"
 # Việc khuôn này làm được. Câu không nói việc nào (hoặc chỉ nói việc khác) thì làm cả hai
-TEMPLATE_TASKS = ("danh_gia", "lo_trinh")
-TASK_TITLES = {"danh_gia": "Đánh giá hồ sơ", "lo_trinh": "Lộ trình chuẩn bị"}
+TEMPLATE_TASKS = ("assessment", "roadmap")
+TASK_TITLES = {"assessment": "Đánh giá hồ sơ", "roadmap": "Lộ trình chuẩn bị"}
 TASK_GOALS = {
-    "danh_gia": "nhận xét điểm mạnh, phần ở mức giữa và phần cần lưu ý của hồ sơ",
-    "lo_trinh": "nói lộ trình phù hợp, các mốc thời gian và các bước chuẩn bị theo thứ tự",
+    "assessment": "nhận xét điểm mạnh, phần ở mức giữa và phần cần lưu ý của hồ sơ",
+    "roadmap": "nói lộ trình phù hợp, các mốc thời gian và các bước chuẩn bị theo thứ tự",
 }
 
 # Mức trong dòng tính sẵn: "3.48 thang 4, thấp (TB các trường 3.73)", "1350, mức trung bình"
@@ -291,7 +291,7 @@ def fill_noi_dung(
     middle_school = is_middle_school_profile(profile)
     parts = []
     for task in tasks:
-        if task == "danh_gia":
+        if task == "assessment":
             parts.append(assessment_part(req, middle_school))
         else:
             parts.append(roadmap_part(req, profile, today, gpa_table, middle_school))

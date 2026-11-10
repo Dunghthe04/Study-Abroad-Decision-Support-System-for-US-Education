@@ -1,8 +1,9 @@
 """skill_chuyen_trung_tam (B6): học sinh cần một dịch vụ hệ thống không làm thay được thì gợi ý trung tâm.
 
-Luồng: AI lượt 1 hiểu nhu cầu (dịch vụ, thành phố, lời khuyên chung) -> backend chọn tối đa 3 trung tâm
--> AI lượt 2 viết mỗi trung tâm một câu "vì sao hợp" (AI không thấy tên trung tâm) -> code ghép tên và kiểm tra lời cấm.
-AI không chọn trung tâm, không xin liên hệ, không nêu giá, không khen chê. Gửi yêu cầu liên hệ làm sau.
+Luồng: SLM tách ý đã đọc nhu cầu (service, city trong entities của ý center_referral) -> code đổi mã dịch vụ sang mã DB,
+chuẩn hóa thành phố -> backend chọn tối đa 3 trung tâm -> Claude (skill giải thích trung tâm) viết đoạn mở đầu và mỗi
+trung tâm một câu "vì sao hợp" (AI không thấy tên trung tâm) -> code kiểm lời cấm, ghép tên và website.
+AI không chọn trung tâm, không xin liên hệ, không nêu giá, không khen chê. Đặt lịch và so sánh trung tâm chưa có backend.
 """
 
 import logging
@@ -12,28 +13,19 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.schemas.chat import ChatState, QuickReply
-from app.services.centers import SERVICES, CenterFinder, CenterHit
+from app.services.centers import SERVICES, CenterFinder, CenterHit, db_service, match_city
 from app.services.chat_flow import SkillOutput
 from app.services.skill_call import SKILLS_DIR, SkillCall
 from app.services.small_talk import plain
 
 logger = logging.getLogger("advisor.centers")
 
-NEED_PATH = SKILLS_DIR / "skill_chuyen_trung_tam.md"
 EXPLAIN_PATH = SKILLS_DIR / "skill_giai_thich_trung_tam.md"
 
-NEED_SCHEMA = {
+ANSWER_SCHEMA = {
     "type": "object",
     "properties": {
-        "service": {"type": ["string", "null"]},
-        "city": {"type": ["string", "null"]},
-        "general_help": {"type": "string"},
-    },
-    "required": ["service", "city", "general_help"],
-}
-REASON_SCHEMA = {
-    "type": "object",
-    "properties": {
+        "opening": {"type": "string"},
         "reasons": {
             "type": "array",
             "items": {
@@ -41,9 +33,9 @@ REASON_SCHEMA = {
                 "properties": {"id": {"type": "integer"}, "reason": {"type": "string"}},
                 "required": ["id", "reason"],
             },
-        }
+        },
     },
-    "required": ["reasons"],
+    "required": ["opening", "reasons"],
 }
 
 ASK_SERVICE = "Bạn cần hỗ trợ phần nào? Bạn chọn giúp mình nhé."
@@ -53,6 +45,11 @@ NO_CENTER = (
     "Bạn có thể xem danh sách trung tâm đầy đủ ở trang Trung tâm."
 )
 UNAVAILABLE = "Phần gợi ý trung tâm đang tạm gián đoạn, bạn thử lại sau ít phút nhé."
+# Việc model tách ra (tasks) mà hệ thống chưa làm được: nói rõ rồi vẫn gợi ý trung tâm theo dịch vụ
+TASK_NOTES = {
+    "booking": "Mình chưa đặt lịch hẹn thay bạn được, nhưng mình gợi ý các trung tâm để bạn tự tìm hiểu nhé.",
+    "compare": "Mình chưa so sánh các trung tâm với nhau được, nhưng mình gợi ý các trung tâm phù hợp để bạn tự tìm hiểu nhé.",
+}
 # Học sinh xin điều hệ thống không cung cấp (số điện thoại, giá, xếp hạng, đánh giá trung tâm)
 NOT_PROVIDED = (
     "Mình không cung cấp số điện thoại, mức giá hay xếp hạng, đánh giá của trung tâm. "
@@ -101,15 +98,26 @@ BANNED = (
     "đảm bảo",
 )
 MAX_REASON_WORDS = 40
+MAX_OPENING_WORDS = 45
 _DIGIT_RE = re.compile(r"\d")
 
 
-# Nhu cầu đã kiểm tra
+# Nhu cầu đã đọc từ model: service là mã DB (None = chưa rõ dịch vụ), model_service là mã model trả (đưa lại cho model
+# làm ngữ cảnh), city là tên thành phố trong DB (None = không nói hoặc không khớp thành phố nào),
+# asked_city là thành phố học sinh nói đúng chữ họ viết (có cả khi không có trung tâm ở đó, để nói rõ với học sinh)
 @dataclass(frozen=True)
 class Need:
     service: str | None
+    model_service: str | None
     city: str | None
-    general_help: str
+    asked_city: str | None = None
+
+
+# Phần AI viết: đoạn mở đầu và một câu cho mỗi trung tâm
+@dataclass(frozen=True)
+class Explained:
+    opening: str
+    reasons: dict[int, str]
 
 
 # Lời của AI có chữ cấm hoặc con số thì ném ValueError để SkillCall gọi lại
@@ -118,29 +126,24 @@ def check_text(text: str, forbidden_names: Sequence[str] = ()) -> None:
     for word in BANNED:
         if word in lowered:
             raise ValueError(f"có chữ cấm: {word}")
-    for name in forbidden_names:
-        if name.lower() in lowered:
+    for name in (
+        forbidden_names
+    ):  # nguyên tên (cả từ), để tên ngắn như "Trung tâm C" không dính vào "trung tâm cùng thành phố"
+        if re.search(rf"(?<!\w){re.escape(name.lower())}(?!\w)", lowered):
             raise ValueError(f"tự nêu tên trung tâm: {name}")
     if _DIGIT_RE.search(text):
         raise ValueError("có con số (số liệu thuộc B5, phải có nguồn)")
 
 
-# Kiểm tra lượt 1: dịch vụ phải thuộc danh mục; thành phố lạ thì coi như không nói.
-# Lời khuyên có chữ cấm thì bỏ lời khuyên, vẫn giữ dịch vụ (không để học sinh mất danh sách vì câu chữ)
-def check_need(raw: dict[str, Any], cities: list[str]) -> Need:
-    service = raw.get("service") or None
-    if service is not None and service not in SERVICES:
-        raise ValueError(f"mã dịch vụ lạ: {service}")
-    city = raw.get("city") or None
-    if city not in cities:
-        city = None
-    general_help = str(raw.get("general_help") or "").strip()
-    try:
-        check_text(general_help)
-    except ValueError as exc:
-        logger.warning("Bỏ lời khuyên chung của AI: %s", exc)
-        general_help = ""
-    return Need(service, city, general_help if service else "")
+# Đọc nhu cầu từ entities của ý center_referral (service, city, follow_up). Câu nối tiếp thiếu dịch vụ hay thành phố
+# thì lấy từ ngữ cảnh lượt trước. Dịch vụ lạ coi như chưa nói; thành phố không khớp thành phố nào trong DB coi như không nói
+def read_need(entities: dict[str, Any], context: Any, cities: list[str]) -> Need:
+    follow_up = entities.get("follow_up") is True
+    model_service = entities.get("service") or (context.service if follow_up else None)
+    asked_city = entities.get("city") or (context.city if follow_up else None)
+    city = match_city(asked_city, cities)
+    service = db_service(model_service)
+    return Need(service, model_service if service else None, city, asked_city)
 
 
 def same_city(center_city: str | None, student_city: str | None) -> bool:
@@ -161,7 +164,7 @@ def check_grounded(reason: str, center: CenterHit, student_city: str | None) -> 
             raise ValueError(f"nêu bậc học trung tâm không nhận: {label}")
 
 
-# Kiểm tra lượt 2: đủ một câu cho mỗi trung tâm, câu ngắn, không chữ cấm, không tên trung tâm, đúng dữ liệu
+# Kiểm tra lượt AI: đủ một câu cho mỗi trung tâm, câu ngắn, không chữ cấm, không tên trung tâm, đúng dữ liệu
 def check_reasons(raw: dict[str, Any], centers: list[CenterHit], student_city: str | None) -> dict[int, str]:
     reasons = {int(item["id"]): str(item["reason"]).strip() for item in raw["reasons"]}
     if set(reasons) != set(range(1, len(centers) + 1)):
@@ -174,6 +177,32 @@ def check_reasons(raw: dict[str, Any], centers: list[CenterHit], student_city: s
         check_text(reason, names)
         check_grounded(reason, center, student_city)
     return reasons
+
+
+# Đoạn mở đầu của AI: ngắn, không chữ cấm, không tên trung tâm. Học sinh nêu thành phố mà danh sách không có trung tâm nào ở đó
+# thì phải nói thẳng điều đó (chép đúng tên thành phố) và không được nói như thể trung tâm ở gần học sinh
+def check_opening(
+    opening: str, centers: list[CenterHit], asked_city: str | None, city_has_centers: bool | None
+) -> str:
+    opening = opening.strip()
+    if not opening or len(opening.split()) > MAX_OPENING_WORDS:
+        raise ValueError("đoạn mở đầu rỗng hoặc quá dài")
+    # Tên thành phố của học sinh có thể có số ("Quận 7"): không tính vào luật cấm con số
+    scanned = re.sub(re.escape(asked_city), "", opening, flags=re.IGNORECASE) if asked_city else opening
+    check_text(scanned, [c.name for c in centers])
+    if asked_city and city_has_centers is False:
+        if asked_city.lower() not in opening.lower():
+            raise ValueError("không nói thẳng chưa có trung tâm ở thành phố học sinh nêu")
+        if "cùng thành phố" in opening.lower() or "gần bạn" in opening.lower():
+            raise ValueError("nói trung tâm ở gần trong khi không có trung tâm nào ở thành phố đó")
+    return opening
+
+
+# Mở đầu dựng bằng code: dùng khi AI sai hai lần
+def fallback_opening(label: str, asked_city: str | None, city_has_centers: bool | None) -> str:
+    if asked_city and city_has_centers is False:
+        return f"Hiện chưa có trung tâm đã xác minh ở {asked_city}, các trung tâm dưới đây ở nơi khác:"
+    return INTRO.format(label=label)
 
 
 # Câu giải thích dựng bằng code từ dữ liệu trung tâm: dùng khi AI sai hai lần
@@ -196,33 +225,33 @@ def service_buttons() -> list[QuickReply]:
 class ChuyenTrungTamHandler:
     def __init__(self, llm: Any, model: str, finder: CenterFinder) -> None:
         self._finder = finder
-        self._need = SkillCall(llm, model, NEED_PATH)
         self._explain = SkillCall(llm, model, EXPLAIN_PATH)
 
+    # entities: entities của ý center_referral do SLM tách (service, city, tasks, follow_up). Thiếu thì coi như chưa rõ dịch vụ.
     # Học sinh xin số điện thoại, giá, xếp hạng: nói rõ không cung cấp rồi gợi ý trung tâm như bình thường
-    async def run(self, state: ChatState, message: str) -> SkillOutput:
-        output = await self._suggest(state, message)
+    async def run(
+        self, state: ChatState, message: str, entities: dict[str, Any] | None = None
+    ) -> SkillOutput:
+        output = await self._suggest(state, entities or {})
         if _NOT_PROVIDED_RE.search(plain(message)):
             output.answer = f"{NOT_PROVIDED}\n\n{output.answer}"
         return output
 
-    async def _suggest(self, state: ChatState, message: str) -> SkillOutput:
+    async def _suggest(self, state: ChatState, entities: dict[str, Any]) -> SkillOutput:
         try:
             cities = await self._finder.cities()
         except Exception:  # backend tắt hoặc lỗi: nói thật là đang gián đoạn, không bịa danh sách
             logger.exception("Lấy danh sách thành phố thất bại")
             return SkillOutput(UNAVAILABLE)
 
-        services = [{"code": code, "label": label} for code, label in SERVICES.items()]
-        need = await self._need.run(
-            {"message": message, "services": services, "cities": cities},
-            NEED_SCHEMA,
-            lambda raw: check_need(raw, cities),
-        )
-        # Chưa rõ dịch vụ (hoặc AI sai hai lần): hỏi lại bằng nút, học sinh bấm là gửi lại một câu rõ dịch vụ
-        if need is None or need.service is None:
-            return SkillOutput(ASK_SERVICE, quick_replies=service_buttons())
+        need = read_need(entities, state.context, cities)
+        notes = [TASK_NOTES[task] for task in entities.get("tasks") or [] if task in TASK_NOTES]
+        # Chưa rõ dịch vụ: hỏi lại bằng nút, học sinh bấm là gửi lại một câu rõ dịch vụ
+        if need.service is None:
+            return SkillOutput("\n\n".join([*notes, ASK_SERVICE]), quick_replies=service_buttons())
 
+        # Nhớ dịch vụ và thành phố để hiểu câu nối tiếp ("thế còn luyện phỏng vấn")
+        state.context.service, state.context.city = need.model_service, need.city
         level = state.study_level
         try:
             centers = await self._finder.find(need.service, level, need.city)
@@ -231,28 +260,34 @@ class ChuyenTrungTamHandler:
             return SkillOutput(UNAVAILABLE)
 
         label = SERVICES[need.service]
-        parts = [need.general_help] if need.general_help else []
+        parts = list(notes)
         if not centers:  # TH-63: không có trung tâm đã xác minh cho dịch vụ này
             parts.append(NO_CENTER.format(label=label))
             return SkillOutput("\n\n".join(parts))
 
-        reasons = await self._explain_centers(centers, need, level)
-        lines = [INTRO.format(label=label)]
+        explained = await self._explain_centers(centers, need, level)
+        lines = [explained.opening]
         for i, center in enumerate(centers, start=1):
             where = f" ({center.city})" if center.city else ""
             site = f" Website: {center.website}" if center.website else ""
-            lines.append(f"- {center.name}{where}: {reasons[i]}{site}")
+            lines.append(f"- {center.name}{where}: {explained.reasons[i]}{site}")
         parts.append("\n".join(lines))
         return SkillOutput("\n\n".join(parts), disclaimer=DISCLAIMER)
 
-    # AI viết mỗi trung tâm một câu "vì sao hợp". AI không thấy tên trung tâm; code tự so thành phố, bậc học
+    # Claude viết đoạn mở đầu và mỗi trung tâm một câu "vì sao hợp". AI không thấy tên trung tâm; code tự so thành phố, bậc học
     # rồi đưa kết quả đúng/sai cho AI (AI so chữ hay nhầm, ví dụ nói "cùng thành phố" khi không phải)
-    async def _explain_centers(
-        self, centers: list[CenterHit], need: Need, level: str | None
-    ) -> dict[int, str]:
+    async def _explain_centers(self, centers: list[CenterHit], need: Need, level: str | None) -> Explained:
+        if not need.asked_city:
+            city_has_centers = None
+        elif need.city:
+            city_has_centers = any(same_city(c.city, need.city) for c in centers)
+        else:
+            city_has_centers = False
         payload = {
             "need": SERVICES[need.service],
             "student_level": LEVEL_LABELS.get(level) if level else None,
+            "student_city": need.asked_city,
+            "city_has_centers": city_has_centers,
             "centers": [
                 {
                     "id": i,
@@ -263,12 +298,19 @@ class ChuyenTrungTamHandler:
                 for i, c in enumerate(centers, start=1)
             ],
         }
-        reasons = await self._explain.run(
-            payload, REASON_SCHEMA, lambda raw: check_reasons(raw, centers, need.city)
-        )
-        if reasons is None:
-            logger.warning("AI không viết được câu giải thích hợp lệ, dùng câu dựng sẵn")
-            return {
-                i: template_reason(c, need.service, level, need.city) for i, c in enumerate(centers, start=1)
-            }
-        return reasons
+
+        def check(raw: dict[str, Any]) -> Explained:
+            opening = check_opening(str(raw.get("opening") or ""), centers, need.asked_city, city_has_centers)
+            return Explained(opening, check_reasons(raw, centers, need.city))
+
+        explained = await self._explain.run(payload, ANSWER_SCHEMA, check)
+        if explained is None:
+            logger.warning("AI không viết được câu trả lời hợp lệ, dùng câu dựng sẵn")
+            return Explained(
+                fallback_opening(SERVICES[need.service], need.asked_city, city_has_centers),
+                {
+                    i: template_reason(c, need.service, level, need.city)
+                    for i, c in enumerate(centers, start=1)
+                },
+            )
+        return explained

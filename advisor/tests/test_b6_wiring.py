@@ -11,7 +11,7 @@ CENTER_ANSWER = "Dưới đây là một số trung tâm đã xác minh có hỗ
 
 
 class CenterSkill:
-    async def run(self, state, message):
+    async def run(self, state, message, entities=None):
         return SkillOutput(CENTER_ANSWER)
 
 
@@ -32,7 +32,7 @@ async def test_asking_for_a_center_while_answering_the_profile_repeats_the_pendi
     ask(state, "D2")  # đang chờ học sinh trả lời GPA
     flow = flow_with(
         {"skill_chuyen_trung_tam": CenterSkill()},
-        tin(("trung_tam", {"dich_vu": "SUA_BAI_LUAN"})),
+        tin(("center_referral", {"service": "ESSAY_EDITING"})),
     )
 
     res = await flow.reply(

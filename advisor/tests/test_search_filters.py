@@ -56,23 +56,23 @@ def test_rank_is_a_positive_integer(text, rank):
 async def test_every_filter_is_normalized_for_dotnet():
     plan = await search_filters.normalize(
         {
-            "bang": ["texas", "California"],
-            "thanh_pho": " Austin ",
-            "nganh": "khoa học máy tính",
-            "loai_truong": "cong_lap",
-            "hoc_bong": "theo_nhu_cau",
-            "chinh_sach_thi": "khong_bat_buoc",
-            "chi_phi_toi_da": "30 nghìn đô",
-            "ielts_toi_da": "6,5",
-            "toefl_toi_da": "90",
-            "duolingo_toi_da": "110",
-            "ty_le_nhan_toi_thieu": "50%",
-            "ty_le_nhan_toi_da": "25%",
-            "xep_hang_toi_da": "top 50",
-            "ty_le_tot_nghiep_toi_thieu": "80%",
-            "ivy": "co",
+            "state": ["texas", "California"],
+            "city": " Austin ",
+            "major": "khoa học máy tính",
+            "school_type": "public",
+            "aid": "need_based",
+            "test_policy": "optional",
+            "max_cost": "30 nghìn đô",
+            "max_ielts": "6,5",
+            "max_toefl": "90",
+            "max_duolingo": "110",
+            "min_acceptance_rate": "50%",
+            "max_acceptance_rate": "25%",
+            "max_rank": "top 50",
+            "min_graduation_rate": "80%",
+            "ivy": "yes",
         },
-        "chi_phi_thap",
+        "lowest_cost",
     )
 
     assert plan.unresolved == []
@@ -97,41 +97,47 @@ async def test_every_filter_is_normalized_for_dotnet():
 
 
 async def test_only_the_conditions_the_student_said_are_in_the_filters():
-    plan = await search_filters.normalize({"bang": ["new york"], "hoc_bong": "co"})
+    plan = await search_filters.normalize({"state": ["new york"], "aid": "yes"})
 
     assert plan.filters == {"states": ["NY"], "aid": "any"}
     assert plan.sort == "quality"  # mặc định
 
 
 @pytest.mark.parametrize(
-    ("bo_loc", "expected"),
+    ("filters", "expected"),
     [
-        ({"bang": ["Califonia"]}, "bang “Califonia”"),  # gõ sai: không đoán
-        ({"nganh": "ngành không tồn tại xyz"}, "ngành “ngành không tồn tại xyz”"),
-        ({"chi_phi_toi_da": "rẻ thôi"}, "mức chi phí “rẻ thôi”"),
-        ({"ielts_toi_da": "12"}, "mức IELTS “12”"),  # ngoài thang 0 đến 9
-        ({"xep_hang_toi_da": "cao"}, "thứ hạng “cao”"),
-        ({"ty_le_nhan_toi_da": "nhiều"}, "tỷ lệ nhận “nhiều”"),
+        ({"state": ["Califonia"]}, "bang “Califonia”"),  # gõ sai: không đoán
+        ({"major": "ngành không tồn tại xyz"}, "ngành “ngành không tồn tại xyz”"),
+        ({"max_cost": "rẻ thôi"}, "mức chi phí “rẻ thôi”"),
+        ({"max_ielts": "12"}, "mức IELTS “12”"),  # ngoài thang 0 đến 9
+        ({"max_rank": "cao"}, "thứ hạng “cao”"),
+        ({"max_acceptance_rate": "nhiều"}, "tỷ lệ nhận “nhiều”"),
     ],
 )
-async def test_what_cannot_be_read_is_reported_not_silently_dropped(bo_loc, expected):
-    plan = await search_filters.normalize(bo_loc)
+async def test_what_cannot_be_read_is_reported_not_silently_dropped(filters, expected):
+    plan = await search_filters.normalize(filters)
 
     assert plan.unresolved == [expected]
     assert plan.filters == {}
 
 
 async def test_a_good_condition_survives_next_to_a_bad_one():
-    plan = await search_filters.normalize({"bang": ["texas", "Narnia"], "hoc_bong": "co"})
+    plan = await search_filters.normalize({"state": ["texas", "Narnia"], "aid": "yes"})
 
     assert plan.filters == {"states": ["TX"], "aid": "any"}
     assert plan.unresolved == ["bang “Narnia”"]
 
 
+async def test_state_may_be_one_name_as_the_model_returns_it():
+    plan = await search_filters.normalize({"state": "texas"})
+
+    assert plan.filters == {"states": ["TX"]}
+
+
 async def test_when_the_state_catalog_is_unavailable_the_states_are_reported():
     state_catalog.set_states([])  # không đọc được danh mục bang: không dám đoán mã
 
-    plan = await search_filters.normalize({"bang": ["Texas"]})
+    plan = await search_filters.normalize({"state": ["Texas"]})
 
     assert plan.filters == {}
     assert plan.unresolved == ["bang “Texas”"]

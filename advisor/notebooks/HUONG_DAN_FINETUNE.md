@@ -84,7 +84,7 @@ Mỗi ô có tiêu đề giải thích. Tóm tắt:
    ```
    ollama create usas-slm-v4 -f Modelfile
    ```
-3. **Chưa chạy bằng code hệ thống được**: code hiện tại vẫn đọc tên tiếng Việt, anh em phải đổi theo `data/slm/TEN_KHOA_ANH_VIET.md`. Trong lúc chờ, thử trực tiếp bằng `ollama run usas-slm-v4` với đúng prompt `slm_intents.md` và tin user dạng JSON.
+3. **Cho hệ thống dùng model mới**: trong `advisor/.env` đặt `SLM_MODEL=usas-slm-v4` và `SLM_PROMPT=slm_intents` (hoặc xóa hai dòng này để dùng mặc định trong `app/core/config.py`). Code đọc đúng thứ model trả (`intents`, `span`, `entities`), không đổi tên. Model cũ (v3) trả tên tiếng Việt nên **không dùng được** với code hiện tại.
 4. **Đo chính thức** (sau khi Đức duyệt dữ liệu, train lại bản cuối): chạy `eval_slm` trên tập **test**, báo F1 theo nhãn, so với baseline Qwen gốc.
 5. Nếu muốn chia sẻ cho anh em: đẩy lên Hugging Face như model v3, ghi rõ trong README **prompt và dạng tin user phải dùng**.
 

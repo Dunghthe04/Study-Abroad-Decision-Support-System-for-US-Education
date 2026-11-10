@@ -1,10 +1,10 @@
-"""C4. Làm phẳng hồ sơ chat thành ho_so của SkillRequest (khóa → chữ) để SLM sinh skill.
+"""C4. Làm phẳng hồ sơ chat thành ho_so của SkillRequest (khóa → chữ) để code dựng skill từ khuôn (skill_template).
 
 Lấy từ state.profile (nháp .NET gửi mỗi lượt, đã gộp với chat). Chữ viết giống dữ liệu train
 (data/slm/du_lieu_slm.jsonl): "8 thang 10", "IELTS 6.5", "trưởng / chủ nhiệm CLB Tiếng Anh cấp tỉnh / thành phố từ
 09/2024 đến nay".
 skill_request_of dựng cả SkillRequest ho_so: hồ sơ làm phẳng (ho_so) và tách riêng các dòng code tính sẵn (tinh_san,
-từ profile_calc: mức GPA, điểm TB từng năm, mốc thời gian...) để skill chỉ đọc rồi nhận xét, không tự tính. Không gửi
+từ profile_calc: mức GPA, điểm TB từng năm, mốc thời gian...) để skill chỉ chép lại, không tự tính. Không gửi
 cả bảng điểm học bạ: TB từng năm đã nằm trong grade_by_year.
 """
 

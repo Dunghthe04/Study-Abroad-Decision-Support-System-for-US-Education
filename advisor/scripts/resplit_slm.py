@@ -44,16 +44,16 @@ from scripts.check_slm_data import (
 RATIOS = {"train": 0.70, "val": 0.15, "test": 0.15}
 SEED = "usas-slm-v9"
 # Khóa thực thể là tên trường, thành phố, trung tâm: che đi để các câu chỉ khác tên được coi là cùng khuôn
-MASKED_KEYS = ("truong", "cac_truong", "thanh_pho", "cac_trung_tam", "dich_vu")
+MASKED_KEYS = ("school", "schools", "city", "centers", "service")
 
 
 def skeleton(item: Item) -> str:
     """Khuôn câu hỏi: chữ thường, che tên trường / thành phố / trung tâm theo thực thể của ý, che chữ số."""
-    text = norm(item.record["input"]["cau_hoi"])
+    text = norm(item.record["input"]["question"])
     names: list[str] = []
-    for y in item.record["output"]["cac_y"]:
+    for y in item.record["output"]["intents"]:
         for key in MASKED_KEYS:
-            value = y["thuc_the"].get(key)
+            value = y["entities"].get(key)
             names.extend(value if isinstance(value, list) else [value] if value else [])
     for name in sorted({norm(n) for n in names}, key=len, reverse=True):
         text = text.replace(name, "<x>")
@@ -100,11 +100,11 @@ def stable_order(key: str, seed: str) -> str:
 def assign_splits(items: list[Item], min_test: int = MIN_TEST, seed: str = SEED) -> list[str]:
     groups = group_items(items)
     row_labels = [
-        Counter(label for y in it.record["output"]["cac_y"] for label in labels_of(y)) for it in items
+        Counter(label for y in it.record["output"]["intents"] for label in labels_of(y)) for it in items
     ]
     group_labels = [sum((row_labels[i] for i in g), Counter()) for g in groups]
     group_key = [
-        min(norm(items[i].record["input"]["cau_hoi"]) + str(items[i].row) + items[i].sheet for i in g)
+        min(norm(items[i].record["input"]["question"]) + str(items[i].row) + items[i].sheet for i in g)
         for g in groups
     ]
     total_label = Counter()
@@ -159,17 +159,17 @@ def group_keys(items: list[Item], group: list[int]) -> Counter:
     keys: Counter = Counter()
     for i in group:
         record = items[i].record
-        for y in record["output"]["cac_y"]:
+        for y in record["output"]["intents"]:
             for label in labels_of(y):
                 keys[("nhãn", label)] += 1
-            for field in y["thuc_the"].get("muc") or []:
+            for field in y["entities"].get("fields") or []:
                 keys[("mục", field)] += 1
-            if y["type"] == "mac_dinh":
-                for key in y["thuc_the"]:
+            if y["type"] == "collect_profile":
+                for key in y["entities"]:
                     keys[("khóa hồ sơ", key)] += 1
-        if record["input"]["cau_he_thong_dang_hoi"]:
+        if record["input"]["pending_question"]:
             keys[("câu đang hỏi", record["type"])] += 1
-        if len(record["output"]["cac_y"]) >= MULTI_MIN_INTENTS:
+        if len(record["output"]["intents"]) >= MULTI_MIN_INTENTS:
             keys[("nhiều ý", f"từ {MULTI_MIN_INTENTS} ý")] += 1
     return keys
 
@@ -193,7 +193,7 @@ def rebalance(items: list[Item], splits: list[str], min_test: int = MIN_TEST, se
         rows[split] += len(groups[g])
     target = {s: RATIOS[s] * len(items) for s in SPLITS}
     group_key = [
-        min(norm(items[i].record["input"]["cau_hoi"]) + str(items[i].row) + items[i].sheet for i in g)
+        min(norm(items[i].record["input"]["question"]) + str(items[i].row) + items[i].sheet for i in g)
         for g in groups
     ]
     order = sorted(range(len(groups)), key=lambda g: stable_order(group_key[g], seed))

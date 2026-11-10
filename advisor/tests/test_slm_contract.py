@@ -1,5 +1,7 @@
 """Hợp đồng SLM (danh sách ý): một ý, gộp và cắt ý, kết quả cả tin, khuôn JSON, skill cá nhân hóa, và khớp với dữ liệu."""
 
+import json
+from pathlib import Path
 from typing import get_args
 
 import pytest
@@ -10,57 +12,62 @@ from app.schemas.slm import (
     CENTER_TASKS,
     ENTITY_KEYS,
     INTENTS,
-    LEGACY_SKILL_SECTIONS,
     MAX_RAW_Y,
     PROFILE_KEYS,
     PROFILE_TASKS,
     REVIEW_TASKS,
-    SKILL_SECTIONS,
+    SERVICE_CODES,
     SLM_TIN_SCHEMA,
     Intent,
     SkillRequest,
     SlmTin,
     SlmTinResult,
     SlmY,
-    check_skill,
     chuan_hoa_y,
-    skill_key,
+    single_school,
+    task_of,
 )
-from app.services.centers import SERVICES
 from app.services.skills import info_to_field
 from app.services.slm_contract import FixedSlm
-from scripts.build_slm_jsonl import DEFAULT_EXCEL, read_records
 
 
-def y(kind: str, doan: str = "x", **thuc_the) -> SlmY:
-    return SlmY(type=kind, doan=doan, thuc_the=thuc_the)
+def y(kind: str, span: str = "x", **entities) -> SlmY:
+    return SlmY(type=kind, span=span, entities=entities)
 
 
 def raw(*items: SlmY) -> dict:
-    return {"cac_y": [i.model_dump() for i in items]}
+    return {"intents": [i.model_dump() for i in items]}
 
 
 # ---- một ý ----
 def test_a_typical_intent_is_read_with_defaults_for_the_rest():
-    item = SlmY.model_validate({"type": "kien_thuc", "doan": "I-20 là gì"})
+    item = SlmY.model_validate({"type": "knowledge", "span": "I-20 là gì"})
 
-    assert (item.type, item.doan, item.thuc_the) == ("kien_thuc", "I-20 là gì", {})
+    assert (item.type, item.span, item.entities) == ("knowledge", "I-20 là gì", {})
 
 
 @pytest.mark.parametrize(
     "answer",
     [
-        {"type": "nhu_cau", "doan": "x"},  # loại lạ
-        {"type": "kien_thuc", "doan": ""},  # đoạn chữ rỗng
-        {"type": "kien_thuc"},  # thiếu đoạn chữ
-        {"type": "kien_thuc", "doan": "x", "thuc_the": {"dich_vu": "SUA_BAI_LUAN"}},  # khóa của loại khác
-        {"type": "trung_tam", "doan": "x", "thuc_the": {"dich_vu": "LAM_VISA_HO"}},  # mã dịch vụ lạ
-        {"type": "kich_ban", "doan": "x", "thuc_the": {"che_do": "what_if"}},  # what-if mà không nói đổi gì
-        {"type": "kich_ban", "doan": "x"},  # thiếu che_do
-        {"type": "ngoai_pham_vi", "doan": "x"},  # thiếu loai_con
-        {"type": "ngoai_pham_vi", "doan": "x", "thuc_the": {"loai_con": "la"}},  # loai_con lạ
-        {"type": "mac_dinh", "doan": "x", "thuc_the": {"gpa": 8.5}},  # giá trị hồ sơ phải là chữ
-        {"type": "mac_dinh", "doan": "x", "thuc_the": {"mau_sac": "đỏ"}},  # khóa lạ
+        {"type": "nhu_cau", "span": "x"},  # loại lạ
+        {"type": "kien_thuc", "span": "x"},  # tên loại cũ không còn
+        {"type": "knowledge", "span": ""},  # đoạn chữ rỗng
+        {"type": "knowledge"},  # thiếu đoạn chữ
+        {"type": "knowledge", "span": "x", "entities": {"service": "ESSAY_EDITING"}},  # khóa của loại khác
+        {"type": "center_referral", "span": "x", "entities": {"service": "LAM_VISA_HO"}},  # mã dịch vụ lạ
+        {"type": "center_referral", "span": "x", "entities": {"service": "SUA_BAI_LUAN"}},  # mã dịch vụ cũ
+        {"type": "scenario", "span": "x", "entities": {"mode": "what_if"}},  # what-if mà không nói đổi gì
+        {"type": "scenario", "span": "x"},  # thiếu mode
+        {
+            "type": "scenario",
+            "span": "x",
+            "entities": {"mode": "goal_seeking", "target_group": "Vừa sức"},
+        },  # nhóm lạ
+        {"type": "out_of_scope", "span": "x"},  # thiếu subtype
+        {"type": "out_of_scope", "span": "x", "entities": {"subtype": "la"}},  # subtype lạ
+        {"type": "collect_profile", "span": "x", "entities": {"gpa": 8.5}},  # giá trị hồ sơ phải là chữ
+        {"type": "collect_profile", "span": "x", "entities": {"mau_sac": "đỏ"}},  # khóa lạ
+        {"type": "knowledge", "span": "x", "entities": {"schools": "Harvard"}},  # schools luôn là danh sách
     ],
 )
 def test_intents_that_break_the_rules_are_rejected(answer):
@@ -69,92 +76,111 @@ def test_intents_that_break_the_rules_are_rejected(answer):
 
 
 def test_profile_values_of_an_intent_are_only_the_profile_keys():
-    item = y("trung_tam", dich_vu="LUYEN_THI", english="IELTS 6.0")
+    item = y("center_referral", service="TEST_PREP", english="IELTS 6.0")
 
     assert item.profile_values() == {"english": "IELTS 6.0"}
 
 
-# ---- nhiệm vụ mới: nhập hồ sơ, tư vấn hồ sơ, trung tâm (khuôn v2) ----
+# ---- nhiệm vụ: nhập hồ sơ, tư vấn hồ sơ, trung tâm ----
 @pytest.mark.parametrize(
     ("kind", "entities"),
     [
-        ("mac_dinh", {"nhiem_vu": "sua", "sat": "SAT là 1400"}),  # sửa một mục đã nhập
+        ("collect_profile", {"tasks": ["edit"], "sat": "SAT là 1400"}),  # sửa một mục đã nhập
         (
-            "mac_dinh",
-            {"nhiem_vu": "sua", "sat": "1450", "tiep_noi": True},
+            "collect_profile",
+            {"tasks": ["edit"], "sat": "1450", "follow_up": True},
         ),  # "à nhầm, 1450 mới đúng": mục lấy từ ngữ cảnh
-        ("mac_dinh", {"nhiem_vu": "xem_ho_so"}),
-        ("mac_dinh", {"nhiem_vu": "lam_lai"}),
-        ("mac_dinh", {"nhiem_vu": "tra_loi", "gpa": "3.5"}),
-        ("ho_so", {"cac_nhiem_vu": ["danh_gia", "lo_trinh"]}),
-        ("ho_so", {"cac_nhiem_vu": []}),  # chưa rõ muốn gì: hệ thống hỏi lại bằng nút
-        ("ho_so", {"cac_nhiem_vu": ["giai_thich_truong"], "truong": "Duke", "tiep_noi": True}),
-        ("ho_so", {"cac_nhiem_vu": ["so_sanh"], "cac_truong": ["BU", "NYU"]}),
-        ("trung_tam", {"nhiem_vu": "tim", "dich_vu": "SUA_BAI_LUAN", "thanh_pho": "Hà Nội"}),
-        ("trung_tam", {"nhiem_vu": "dat_lich", "tiep_noi": True}),
-        ("trung_tam", {"nhiem_vu": "so_sanh", "cac_trung_tam": ["PEC", "Kosam"]}),
-        ("ngoai_pham_vi", {"loai_con": "ve_he_thong"}),
-        ("ngoai_pham_vi", {"loai_con": "gap_nguoi"}),
+        ("collect_profile", {"tasks": ["status"]}),
+        ("collect_profile", {"tasks": ["restart"]}),
+        ("collect_profile", {"gpa": "3.5"}),  # vắng tasks = trả lời câu đang chờ
+        ("profile_review", {"tasks": ["assessment", "roadmap"]}),
+        ("profile_review", {"tasks": []}),  # chưa rõ muốn gì: hệ thống hỏi lại bằng nút
+        ("profile_review", {"tasks": ["explain_school"], "schools": ["Duke"], "follow_up": True}),
+        ("profile_review", {"tasks": ["compare"], "schools": ["BU", "NYU"]}),
+        ("center_referral", {"service": "ESSAY_EDITING", "city": "Hà Nội"}),  # vắng tasks = tìm trung tâm
+        ("center_referral", {"tasks": ["booking"], "follow_up": True}),
+        ("center_referral", {"tasks": ["compare"], "centers": ["PEC", "Kosam"]}),
+        ("out_of_scope", {"subtype": "about_system"}),
+        ("out_of_scope", {"subtype": "human_handoff"}),
     ],
 )
-def test_the_new_task_keys_are_accepted(kind, entities):
+def test_the_task_keys_are_accepted(kind, entities):
     assert y(kind, **entities).type == kind
 
 
 @pytest.mark.parametrize(
     ("kind", "entities"),
     [
-        ("mac_dinh", {"nhiem_vu": "sua"}),  # sửa mà không nói mục nào
-        ("mac_dinh", {"nhiem_vu": "xem_ho_so", "gpa": "3.5"}),  # xem hồ sơ không kèm giá trị
-        ("mac_dinh", {"nhiem_vu": "lam_lai", "gpa": "3.5"}),
-        ("mac_dinh", {"nhiem_vu": "tra_cuu"}),  # nhiệm vụ của loại khác
-        ("mac_dinh", {"tiep_noi": "true"}),  # phải là boolean
-        ("ho_so", {"cac_nhiem_vu": ["danh_gia", "danh_gia"]}),  # lặp
-        ("ho_so", {"cac_nhiem_vu": ["viet_luan"]}),  # nhiệm vụ lạ
-        ("ho_so", {"cac_nhiem_vu": "danh_gia"}),  # phải là danh sách
-        ("ho_so", {"cac_nhiem_vu": ["so_sanh"]}),  # so sánh mà không có hai trường
-        ("ho_so", {"cac_nhiem_vu": ["so_sanh"], "cac_truong": ["BU"]}),  # chỉ một trường
-        ("ho_so", {"nhiem_vu": "so_sanh"}),  # ho_so dùng cac_nhiem_vu, không dùng nhiem_vu
-        ("trung_tam", {"nhiem_vu": "tim_kiem"}),  # nhiệm vụ của kiến thức
-        ("trung_tam", {"nhiem_vu": "so_sanh"}),  # so sánh mà không có tên trung tâm
-        ("trung_tam", {"nhiem_vu": "so_sanh", "cac_trung_tam": ["PEC"]}),  # chỉ một trung tâm
+        ("collect_profile", {"tasks": ["edit"]}),  # sửa mà không nói mục nào
+        ("collect_profile", {"tasks": ["status"], "gpa": "3.5"}),  # xem hồ sơ không kèm giá trị
+        ("collect_profile", {"tasks": ["restart"], "gpa": "3.5"}),
+        ("collect_profile", {"tasks": ["school_info"]}),  # nhiệm vụ của loại khác
+        ("collect_profile", {"tasks": ["edit", "status"], "gpa": "3.5"}),  # loại này chỉ một nhiệm vụ mỗi ý
+        ("collect_profile", {"follow_up": "true"}),  # phải là boolean
+        ("profile_review", {"tasks": ["assessment", "assessment"]}),  # lặp
+        ("profile_review", {"tasks": ["write_essay"]}),  # nhiệm vụ lạ
+        ("profile_review", {"tasks": "assessment"}),  # phải là danh sách
+        ("profile_review", {"tasks": ["compare"]}),  # so sánh mà không có hai trường
+        ("profile_review", {"tasks": ["compare"], "schools": ["BU"]}),  # chỉ một trường
+        ("profile_review", {"tasks": ["compare"], "schools": "BU"}),  # schools phải là danh sách
+        ("center_referral", {"tasks": ["search"]}),  # nhiệm vụ của kiến thức
+        ("center_referral", {"tasks": ["compare"]}),  # so sánh mà không có tên trung tâm
+        ("center_referral", {"tasks": ["compare"], "centers": ["PEC"]}),  # chỉ một trung tâm
         (
-            "trung_tam",
-            {"nhiem_vu": "tim", "cac_trung_tam": ["PEC", "Kosam"]},
-        ),  # danh sách trung tâm chỉ đi với so_sanh
-        ("kich_ban", {"che_do": "goal_seeking", "nhiem_vu": "tim"}),  # kịch bản không có nhiem_vu
+            "center_referral",
+            {"tasks": ["booking"], "centers": ["PEC", "Kosam"]},
+        ),  # centers chỉ đi với compare
+        ("center_referral", {"centers": ["PEC", "Kosam"]}),  # vắng tasks cũng không đi với centers
+        (
+            "center_referral",
+            {"tasks": ["booking", "compare"], "centers": ["PEC", "Kosam"]},
+        ),  # một nhiệm vụ mỗi ý
+        ("scenario", {"mode": "goal_seeking", "tasks": ["search"]}),  # kịch bản không có tasks
     ],
 )
-def test_the_new_task_keys_that_break_the_rules_are_rejected(kind, entities):
+def test_the_task_keys_that_break_the_rules_are_rejected(kind, entities):
     with pytest.raises(ValidationError):
         y(kind, **entities)
 
 
 def test_centers_and_knowledge_both_have_a_compare_task_without_mixing_their_rules():
-    y("trung_tam", nhiem_vu="so_sanh", cac_trung_tam=["PEC", "Kosam"])  # không đòi cac_truong
+    y("center_referral", tasks=["compare"], centers=["PEC", "Kosam"])  # không đòi schools
     with pytest.raises(ValidationError):
-        y("kien_thuc", nhiem_vu="so_sanh", cac_trung_tam=["PEC", "Kosam"])  # kiến thức vẫn đòi cac_truong
+        y("knowledge", tasks=["compare_facts"], centers=["PEC", "Kosam"])  # kiến thức không có centers
+    with pytest.raises(ValidationError):
+        y("knowledge", tasks=["compare_facts"], schools=["BU"])  # kiến thức đòi schools từ hai tên
+
+
+def test_task_of_and_single_school_read_the_entities_the_way_the_branches_do():
+    assert task_of({"tasks": ["school_info"]}) == "school_info"
+    assert task_of({"tasks": []}) is None and task_of({}) is None
+    assert single_school({"schools": [" Duke "]}) == "Duke"
+    assert single_school({"schools": ["BU", "NYU"]}) is None
+    assert single_school({"schools": ["BU"], "tasks": ["compare"]}) is None
+    assert single_school({}) is None
 
 
 def test_each_branch_of_the_json_schema_lists_the_tasks_of_its_own_type():
-    props = {kind: branch["properties"]["thuc_the"]["properties"] for kind, branch in branches().items()}
-    assert props["mac_dinh"]["nhiem_vu"]["enum"] == list(PROFILE_TASKS)
-    assert props["trung_tam"]["nhiem_vu"]["enum"] == list(CENTER_TASKS)
-    assert props["ho_so"]["cac_nhiem_vu"]["items"]["enum"] == list(REVIEW_TASKS)
-    assert props["ho_so"]["cac_nhiem_vu"]["uniqueItems"] is True
-    assert props["trung_tam"]["cac_trung_tam"]["minItems"] == 2
-    assert "ve_he_thong" in props["ngoai_pham_vi"]["loai_con"]["enum"]
+    props = {kind: branch["properties"]["entities"]["properties"] for kind, branch in branches().items()}
+    assert props["collect_profile"]["tasks"]["items"]["enum"] == list(PROFILE_TASKS)
+    assert props["center_referral"]["tasks"]["items"]["enum"] == list(CENTER_TASKS)
+    assert props["profile_review"]["tasks"]["items"]["enum"] == list(REVIEW_TASKS)
+    assert props["profile_review"]["tasks"]["uniqueItems"] is True
+    assert props["collect_profile"]["tasks"]["maxItems"] == props["knowledge"]["tasks"]["maxItems"] == 1
+    assert props["center_referral"]["centers"]["minItems"] == 2
+    assert props["knowledge"]["schools"]["minItems"] == 1
+    assert "about_system" in props["out_of_scope"]["subtype"]["enum"]
 
 
 def test_merging_two_profile_review_intents_does_not_repeat_a_task():
     merged = chuan_hoa_y(
         [
-            y("ho_so", "đánh giá", cac_nhiem_vu=["danh_gia"]),
-            y("ho_so", "đánh giá và lộ trình", cac_nhiem_vu=["danh_gia", "lo_trinh"]),
+            y("profile_review", "đánh giá", tasks=["assessment"]),
+            y("profile_review", "đánh giá và lộ trình", tasks=["assessment", "roadmap"]),
         ]
     )
 
-    assert merged[0].thuc_the["cac_nhiem_vu"] == ["danh_gia", "lo_trinh"]
+    assert merged[0].entities["tasks"] == ["assessment", "roadmap"]
 
 
 # ---- gộp và sắp xếp ý ----
@@ -165,81 +191,91 @@ def types(items: list[SlmY]) -> list[str]:
 def test_profile_intents_merge_into_one_and_come_first():
     items = chuan_hoa_y(
         [
-            y("kien_thuc", "I-20 là gì"),
-            y("mac_dinh", "GPA 3.5", gpa="3.5"),
-            y("mac_dinh", "SAT 1400", sat="1400"),
+            y("knowledge", "I-20 là gì"),
+            y("collect_profile", "GPA 3.5", gpa="3.5"),
+            y("collect_profile", "SAT 1400", sat="1400"),
         ]
     )
 
-    assert types(items) == ["mac_dinh", "kien_thuc"]
-    assert items[0].doan == "GPA 3.5, SAT 1400" and items[0].thuc_the == {"gpa": "3.5", "sat": "1400"}
+    assert types(items) == ["collect_profile", "knowledge"]
+    assert items[0].span == "GPA 3.5, SAT 1400" and items[0].entities == {"gpa": "3.5", "sat": "1400"}
 
 
 def test_a_later_profile_value_replaces_an_earlier_one():
-    items = chuan_hoa_y([y("mac_dinh", "GPA 3.5", gpa="3.5"), y("mac_dinh", "à nhầm 3.6", gpa="3.6")])
+    items = chuan_hoa_y(
+        [y("collect_profile", "GPA 3.5", gpa="3.5"), y("collect_profile", "à nhầm 3.6", gpa="3.6")]
+    )
 
-    assert items[0].thuc_the == {"gpa": "3.6"}
+    assert items[0].entities == {"gpa": "3.6"}
 
 
 def test_advice_questions_merge_into_one_intent_with_all_the_text():
-    items = chuan_hoa_y([y("ho_so", "đánh giá hồ sơ"), y("kien_thuc", "OPT là gì"), y("ho_so", "nên làm gì")])
+    items = chuan_hoa_y(
+        [
+            y("profile_review", "đánh giá hồ sơ"),
+            y("knowledge", "OPT là gì"),
+            y("profile_review", "nên làm gì"),
+        ]
+    )
 
-    assert types(items) == ["ho_so", "kien_thuc"]
-    assert items[0].doan == "đánh giá hồ sơ, nên làm gì"
+    assert types(items) == ["profile_review", "knowledge"]
+    assert items[0].span == "đánh giá hồ sơ, nên làm gì"
 
 
 def test_lists_in_merged_entities_are_joined_not_replaced():
-    first = y("kich_ban", "nếu SAT 1400", che_do="what_if", thay_doi=[{"yeu_to": "sat", "gia_tri": "1400"}])
-    second = y("kich_ban", "và IELTS 7", che_do="what_if", thay_doi=[{"yeu_to": "english", "gia_tri": "7"}])
+    first = y("scenario", "nếu SAT 1400", mode="what_if", changes=[{"factor": "sat", "value": "1400"}])
+    second = y("scenario", "và IELTS 7", mode="what_if", changes=[{"factor": "english", "value": "7"}])
 
     items = chuan_hoa_y([first, second])
 
-    assert [c["yeu_to"] for c in items[0].thuc_the["thay_doi"]] == ["sat", "english"]
+    assert [c["factor"] for c in items[0].entities["changes"]] == ["sat", "english"]
 
 
 def test_knowledge_and_center_intents_are_never_merged_because_each_is_its_own_lookup():
-    knowledge = chuan_hoa_y([y("kien_thuc", "I-20 là gì"), y("kien_thuc", "SAT là gì")])
-    centers = chuan_hoa_y([y("trung_tam", "ai sửa luận"), y("trung_tam", "ai luyện thi")])
+    knowledge = chuan_hoa_y([y("knowledge", "I-20 là gì"), y("knowledge", "SAT là gì")])
+    centers = chuan_hoa_y([y("center_referral", "ai sửa luận"), y("center_referral", "ai luyện thi")])
 
-    assert [i.doan for i in knowledge] == ["I-20 là gì", "SAT là gì"]
-    assert [i.doan for i in centers] == ["ai sửa luận", "ai luyện thi"]
+    assert [i.span for i in knowledge] == ["I-20 là gì", "SAT là gì"]
+    assert [i.span for i in centers] == ["ai sửa luận", "ai luyện thi"]
 
 
 def test_the_order_the_student_asked_is_kept_apart_from_the_profile_intent():
-    items = chuan_hoa_y([y("trung_tam", "a"), y("kien_thuc", "b"), y("ho_so", "c")])
+    items = chuan_hoa_y([y("center_referral", "a"), y("knowledge", "b"), y("profile_review", "c")])
 
-    assert [i.doan for i in items] == ["a", "b", "c"]  # không xếp lại theo loại
+    assert [i.span for i in items] == ["a", "b", "c"]  # không xếp lại theo loại
 
 
 def test_a_greeting_next_to_a_real_intent_is_dropped():
-    items = chuan_hoa_y([y("ngoai_pham_vi", "chào", loai_con="tam_biet"), y("kien_thuc", "I-20 là gì")])
+    items = chuan_hoa_y([y("out_of_scope", "chào", subtype="farewell"), y("knowledge", "I-20 là gì")])
 
-    assert types(items) == ["kien_thuc"]
+    assert types(items) == ["knowledge"]
 
 
 def test_several_out_of_scope_intents_keep_only_the_first():
     items = chuan_hoa_y(
-        [y("ngoai_pham_vi", "chào", loai_con="tam_biet"), y("ngoai_pham_vi", "ừ", loai_con="mo_ho")]
+        [y("out_of_scope", "chào", subtype="farewell"), y("out_of_scope", "ừ", subtype="ambiguous")]
     )
 
-    assert [i.doan for i in items] == ["chào"]
+    assert [i.span for i in items] == ["chào"]
 
 
 def test_every_question_is_kept_in_order_however_many_there_are():
-    asked = [y("mac_dinh", "GPA", gpa="3.5")] + [y("kien_thuc", f"câu {n}") for n in range(1, 13)]
+    asked = [y("collect_profile", "GPA", gpa="3.5")] + [y("knowledge", f"câu {n}") for n in range(1, 13)]
 
     items = chuan_hoa_y(asked)
 
-    assert [i.doan for i in items] == ["GPA"] + [f"câu {n}" for n in range(1, 13)]
+    assert [i.span for i in items] == ["GPA"] + [f"câu {n}" for n in range(1, 13)]
 
 
 def test_only_the_technical_ceiling_cuts_intents_and_the_profile_intent_is_never_cut():
-    asked = [y("mac_dinh", "GPA", gpa="3.5")] + [y("kien_thuc", f"câu {n}") for n in range(1, MAX_RAW_Y + 6)]
+    asked = [y("collect_profile", "GPA", gpa="3.5")] + [
+        y("knowledge", f"câu {n}") for n in range(1, MAX_RAW_Y + 6)
+    ]
 
     items = chuan_hoa_y(asked)
 
-    assert len(items) == MAX_RAW_Y and items[0].type == "mac_dinh"
-    assert items[-1].doan == f"câu {MAX_RAW_Y - 1}"
+    assert len(items) == MAX_RAW_Y and items[0].type == "collect_profile"
+    assert items[-1].span == f"câu {MAX_RAW_Y - 1}"
 
 
 def test_the_technical_ceiling_is_far_above_any_real_question_list():
@@ -250,38 +286,47 @@ def test_the_technical_ceiling_is_far_above_any_real_question_list():
 @pytest.mark.parametrize(
     ("items", "message"),
     [
-        ([y("ngoai_pham_vi", "chào", loai_con="tam_biet"), y("kien_thuc")], "đứng một mình"),
-        ([y("ho_so"), y("ho_so")], "chỉ được một ý"),
-        ([y("mac_dinh"), y("mac_dinh")], "chỉ được một ý"),
-        ([y("kien_thuc")] * (MAX_RAW_Y + 1), "quá"),
-        ([y("kien_thuc"), y("mac_dinh")], "đứng đầu"),
+        ([y("out_of_scope", "chào", subtype="farewell"), y("knowledge")], "đứng một mình"),
+        ([y("profile_review"), y("profile_review")], "chỉ được một ý"),
+        ([y("collect_profile"), y("collect_profile")], "chỉ được một ý"),
+        ([y("knowledge")] * (MAX_RAW_Y + 1), "quá"),
+        ([y("knowledge"), y("collect_profile")], "đứng đầu"),
     ],
 )
 def test_a_message_that_was_not_cleaned_up_is_rejected(items, message):
     with pytest.raises(ValidationError, match=message):
-        SlmTin(cac_y=items)
+        SlmTin(intents=items)
 
 
 def test_a_message_with_many_questions_is_accepted():
-    assert len(SlmTin(cac_y=[y("kien_thuc")] * 12).cac_y) == 12
+    assert len(SlmTin(intents=[y("knowledge")] * 12).intents) == 12
 
 
 def test_a_message_needs_at_least_one_intent():
     with pytest.raises(ValidationError):
-        SlmTin(cac_y=[])
+        SlmTin(intents=[])
 
 
 # ---- kết quả cả tin ----
 def test_from_raw_cleans_up_what_the_model_returned():
     result = SlmTinResult.from_raw(
-        raw(y("kien_thuc", "I-20 là gì"), y("mac_dinh", "em GPA 3.5", gpa="em GPA 3.5")), confidence=0.9
+        raw(y("knowledge", "I-20 là gì"), y("collect_profile", "em GPA 3.5", gpa="em GPA 3.5")),
+        confidence=0.9,
     )
 
-    assert result.types() == ["mac_dinh", "kien_thuc"] and result.confidence == 0.9
+    assert result.types() == ["collect_profile", "knowledge"] and result.confidence == 0.9
 
 
 @pytest.mark.parametrize(
-    "bad", [{}, {"cac_y": []}, {"cac_y": "x"}, {"cac_y": ["x"]}, {"cac_y": [{"type": "la"}]}]
+    "bad",
+    [
+        {},
+        {"intents": []},
+        {"intents": "x"},
+        {"intents": ["x"]},
+        {"intents": [{"type": "la"}]},
+        {"cac_y": [{"type": "knowledge", "span": "x"}]},  # tên khóa cũ không còn được đọc
+    ],
 )
 def test_from_raw_rejects_a_wrong_shape_with_a_value_error(bad):
     with pytest.raises(ValueError):
@@ -291,11 +336,13 @@ def test_from_raw_rejects_a_wrong_shape_with_a_value_error(bad):
 @pytest.mark.parametrize("value", [-0.1, 1.2])
 def test_confidence_must_be_between_0_and_1(value):
     with pytest.raises(ValidationError):
-        SlmTinResult(cac_y=[y("kien_thuc")], confidence=value)
+        SlmTinResult(intents=[y("knowledge")], confidence=value)
 
 
 def test_profile_values_are_gathered_from_every_intent_and_the_later_one_wins():
-    result = SlmTinResult(cac_y=[y("mac_dinh", "a", gpa="3.5", sat="1300"), y("ho_so", "b", sat="1400")])
+    result = SlmTinResult(
+        intents=[y("collect_profile", "a", gpa="3.5", sat="1300"), y("profile_review", "b", sat="1400")]
+    )
 
     assert result.profile_values() == {"gpa": "3.5", "sat": "1400"}
 
@@ -303,29 +350,29 @@ def test_profile_values_are_gathered_from_every_intent_and_the_later_one_wins():
 @pytest.mark.parametrize(
     ("items", "expected"),
     [
-        ([y("mac_dinh")], True),  # trả lời câu hồ sơ đang chờ (kể cả "ừ" mơ hồ, nhánh hồ sơ hỏi lại)
-        ([y("kien_thuc", gpa="GPA em 8.5")], True),  # hỏi kèm giá trị hồ sơ
-        ([y("kien_thuc", truong="Iowa")], False),
-        ([y("ngoai_pham_vi", loai_con="tam_biet")], False),
+        ([y("collect_profile")], True),  # trả lời câu hồ sơ đang chờ (kể cả "ừ" mơ hồ, nhánh hồ sơ hỏi lại)
+        ([y("knowledge", gpa="GPA em 8.5")], True),  # hỏi kèm giá trị hồ sơ
+        ([y("knowledge", schools=["Iowa"])], False),
+        ([y("out_of_scope", subtype="farewell")], False),
     ],
 )
 def test_the_profile_branch_runs_for_profile_answers_or_messages_that_carry_profile_values(items, expected):
-    assert SlmTinResult(cac_y=items).touches_profile() is expected
+    assert SlmTinResult(intents=items).touches_profile() is expected
 
 
 # ---- khuôn JSON ép SLM ----
 def branches() -> dict:
     return {
-        b["properties"]["type"]["const"]: b for b in SLM_TIN_SCHEMA["properties"]["cac_y"]["items"]["anyOf"]
+        b["properties"]["type"]["const"]: b for b in SLM_TIN_SCHEMA["properties"]["intents"]["items"]["anyOf"]
     }
 
 
 def test_the_json_schema_has_one_branch_per_type_and_a_list_of_bounded_size():
-    cac_y = SLM_TIN_SCHEMA["properties"]["cac_y"]
+    intents = SLM_TIN_SCHEMA["properties"]["intents"]
 
     assert set(branches()) == set(INTENTS) == set(get_args(Intent))
-    assert (cac_y["minItems"], cac_y["maxItems"]) == (1, MAX_RAW_Y)
-    assert SLM_TIN_SCHEMA["required"] == ["cac_y"]
+    assert (intents["minItems"], intents["maxItems"]) == (1, MAX_RAW_Y)
+    assert SLM_TIN_SCHEMA["required"] == ["intents"]
 
 
 # Khuôn ép SLM và class đọc kết quả phải cùng tên khóa, nếu lệch thì mọi câu trả lời của model đều bị từ chối
@@ -336,17 +383,17 @@ def test_every_branch_has_the_same_keys_as_the_class_that_reads_it():
 
 def test_a_branch_only_allows_the_keys_of_its_own_type_and_the_profile():
     for kind, branch in branches().items():
-        keys = set(branch["properties"]["thuc_the"]["properties"])
+        keys = set(branch["properties"]["entities"]["properties"])
         assert keys == ENTITY_KEYS[kind] | set(PROFILE_KEYS), kind
-    assert "dich_vu" not in branches()["kich_ban"]["properties"]["thuc_the"]["properties"]
+    assert "service" not in branches()["scenario"]["properties"]["entities"]["properties"]
 
 
 def test_the_schema_requires_what_the_contract_requires_and_knows_the_services():
-    assert branches()["ngoai_pham_vi"]["properties"]["thuc_the"]["required"] == ["loai_con"]
-    assert branches()["kich_ban"]["properties"]["thuc_the"]["required"] == ["che_do"]
-    assert branches()["kien_thuc"]["properties"]["thuc_the"]["required"] == []
-    assert branches()["trung_tam"]["properties"]["thuc_the"]["properties"]["dich_vu"]["enum"] == list(
-        SERVICES
+    assert branches()["out_of_scope"]["properties"]["entities"]["required"] == ["subtype"]
+    assert branches()["scenario"]["properties"]["entities"]["required"] == ["mode"]
+    assert branches()["knowledge"]["properties"]["entities"]["required"] == []
+    assert branches()["center_referral"]["properties"]["entities"]["properties"]["service"]["enum"] == list(
+        SERVICE_CODES
     )
 
 
@@ -354,7 +401,7 @@ def test_profile_keys_are_the_same_as_the_ones_the_chat_saves():
     assert PROFILE_KEYS == info_to_field.PROFILE_KEYS
 
 
-# ---- skill cá nhân hóa (SLM lần 2) ----
+# ---- đầu vào dựng skill hồ sơ ----
 def request(**overrides) -> SkillRequest:
     base = {
         "loai": "ho_so",
@@ -364,22 +411,14 @@ def request(**overrides) -> SkillRequest:
     return SkillRequest.model_validate(base | overrides)
 
 
-def skill(extra: str = "") -> str:
-    return "\n".join(f"## {name}\nGPA 9/10, SAT 1450 {extra}" for name in SKILL_SECTIONS["ho_so"])
-
-
 @pytest.mark.parametrize(
     ("overrides", "message"),
     [
         ({"ho_so": {}}, "hồ sơ rỗng"),
         ({"ho_so": {"mau_sac": "đỏ"}}, "khóa hồ sơ lạ"),
         ({"tinh_san": {"mau_sac": "đỏ"}}, "khóa tính sẵn lạ"),
-        (
-            {"loai": "kich_ban", "muc_tieu": "Vừa sức", "tinh_san": {"timeline": "x"}},
-            "chỉ skill ho_so có tinh_san",
-        ),
-        ({"loai": "kich_ban"}, "cần thay_doi hoặc muc_tieu"),
         ({"cau_hoi": ""}, ""),
+        ({"loai": "kich_ban"}, ""),  # chỉ còn skill hồ sơ
         ({"loai": "kien_thuc"}, ""),
     ],
 )
@@ -388,112 +427,38 @@ def test_a_skill_request_must_be_complete(overrides, message):
         request(**overrides)
 
 
-def test_a_scenario_request_is_complete_with_a_change_or_a_goal():
-    assert request(loai="kich_ban", muc_tieu="Vừa sức").muc_tieu == "Vừa sức"
-    assert request(loai="kich_ban", thay_doi=[{"yeu_to": "sat", "gia_tri": "1500"}]).thay_doi
-
-
-def test_the_skill_key_is_stable_and_changes_with_any_value():
-    same = request(ho_so={"sat": "1450", "gpa": "9 thang 10"})  # khác thứ tự khóa nhưng cùng nội dung
-
-    assert skill_key(request()) == skill_key(same)
-    assert skill_key(request()) != skill_key(request(ho_so={"gpa": "9 thang 10", "sat": "1460"}))
-    assert skill_key(request()) != skill_key(request(cau_hoi="em hợp trường nào"))
-    assert len(skill_key(request())) == 16
-
-
-def test_a_complete_skill_passes_the_check():
-    check_skill(skill(), request())
-
-
-def test_extra_sections_are_ignored_but_a_missing_or_empty_one_is_not():
-    check_skill(skill() + "\n## 8. Ví dụ cách viết\nGPA 9/10", request())
-
-    with pytest.raises(ValueError, match="đủ các mục"):
-        check_skill(skill().replace("## 5. Lộ trình", "## 5x"), request())
-    with pytest.raises(ValueError, match="mục rỗng"):
-        check_skill(skill().replace("## 5. Lộ trình\nGPA 9/10, SAT 1450 ", "## 5. Lộ trình\n"), request())
-
-
-def legacy_skill() -> str:
-    return "\n".join(f"## {name}\nGPA 9/10, SAT 1450" for name in LEGACY_SKILL_SECTIONS["ho_so"])
-
-
-def test_the_old_eight_section_skill_is_still_accepted_while_the_model_is_retrained():
-    check_skill(legacy_skill(), request())  # model usas-slm-v2 và dữ liệu cũ
-
-
-def test_the_error_names_the_new_seven_section_layout():
-    with pytest.raises(ValueError, match="5. Lộ trình, 6. Yêu cầu câu trả lời"):
-        check_skill(skill().replace("## 4. Góc nhìn về hồ sơ", "## 4x"), request())
-
-
-def test_sections_of_the_two_layouts_cannot_be_mixed_in_the_wrong_order():
-    swapped = (
-        skill()
-        .replace("## 5. Lộ trình", "## 6. Lộ trình")
-        .replace("## 6. Yêu cầu câu trả lời", "## 5. Đề xuất trường")
-    )
-
-    with pytest.raises(ValueError, match="đủ các mục"):
-        check_skill(swapped, request())
-
-
-def test_the_scenario_skill_has_only_one_layout():
-    assert "kich_ban" not in LEGACY_SKILL_SECTIONS
-
-
-def test_a_skill_that_drops_a_number_of_the_profile_is_rejected():
-    with pytest.raises(ValueError, match="bỏ mất số"):
-        check_skill(skill().replace("1450", "1400"), request())
-
-
-def test_a_skill_that_drops_a_number_of_the_calculated_lines_is_rejected():
-    req = request(tinh_san={"gpa_level": "3.6 thang 4, trung bình (TB các trường 3.6)"})
-
-    check_skill(skill("GPA 3.6 thang 4, TB các trường 3.6"), req)
-    with pytest.raises(ValueError, match="bỏ mất số"):
-        check_skill(skill(), req)
-
-
-def test_numbers_are_compared_the_way_a_student_writes_them():
-    profile = request(ho_so={"budget": "khoảng 40.000 USD", "english": "IELTS 6.", "gpa": "9 thang 10"})
-    body = "\n".join(f"## {name}\n40000 USD, IELTS 6.0, GPA 9/10" for name in SKILL_SECTIONS["ho_so"])
-
-    check_skill(body, profile)  # 40.000 và 40000 là một số, 6 và 6.0 là một số
-
-
-def test_list_numbers_at_the_start_of_a_line_are_not_counted_as_profile_numbers():
-    body = skill("\n1. Giữ GPA\n2. Thi lại SAT")  # "1." và "2." chỉ là số thứ tự
-
-    check_skill(body, request())
-
-
-def test_each_type_of_skill_has_its_own_sections():
-    assert len(SKILL_SECTIONS["ho_so"]) == 7 and len(SKILL_SECTIONS["kich_ban"]) == 5
-    assert len(LEGACY_SKILL_SECTIONS["ho_so"]) == 8 and "5. Đề xuất trường" not in SKILL_SECTIONS["ho_so"]
-    assert SKILL_SECTIONS["ho_so"][0] == SKILL_SECTIONS["kich_ban"][0] == "0. Câu hỏi kích hoạt"
+def test_a_skill_request_carries_the_calculated_lines():
+    assert request(tinh_san={"gpa_level": "3.2 thang 4, thấp (TB các trường 3.6)"}).tinh_san
 
 
 # ---- khớp với dữ liệu ----
+DATA = Path(__file__).resolve().parents[1] / "data" / "slm" / "du_lieu_slm.jsonl"
+
+
+def labelled_outputs() -> list[dict]:
+    return [
+        json.loads(line)["output"] for line in DATA.read_text(encoding="utf-8").splitlines() if line.strip()
+    ]
+
+
 # Đầu ra trong dữ liệu chính là thứ SLM học để trả, nên dòng nào cũng phải đọc được bằng hợp đồng
 def test_every_labelled_output_in_the_dataset_is_a_valid_answer():
-    for record in read_records(DEFAULT_EXCEL):
-        SlmTinResult.from_raw(record["output"])
+    for output in labelled_outputs():
+        SlmTinResult.from_raw(output)
 
 
 # Mỗi ý trong dữ liệu phải nằm gọn trong nhánh của loại nó ở khuôn SLM_TIN_SCHEMA, nếu không model bị khuôn chặn không học được
 def test_every_labelled_intent_fits_the_branch_of_its_type():
-    for record in read_records(DEFAULT_EXCEL):
-        for item in record["output"]["cac_y"]:
-            thuc_the = branches()[item["type"]]["properties"]["thuc_the"]
-            assert set(item["thuc_the"]) <= set(thuc_the["properties"]), item
-            assert set(thuc_the["required"]) <= set(item["thuc_the"]), item
+    for output in labelled_outputs():
+        for item in output["intents"]:
+            entities = branches()[item["type"]]["properties"]["entities"]
+            assert set(item["entities"]) <= set(entities["properties"]), item
+            assert set(entities["required"]) <= set(item["entities"]), item
 
 
 async def test_the_fixed_slm_returns_its_result_whatever_the_message_is():
-    slm = FixedSlm(SlmTinResult(cac_y=[y("mac_dinh")], confidence=0.9))
+    slm = FixedSlm(SlmTinResult(intents=[y("collect_profile")], confidence=0.9))
 
     result = await slm.classify(ChatState(), "6.5 ạ")
 
-    assert (result.types(), result.confidence) == (["mac_dinh"], 0.9)
+    assert (result.types(), result.confidence) == (["collect_profile"], 0.9)

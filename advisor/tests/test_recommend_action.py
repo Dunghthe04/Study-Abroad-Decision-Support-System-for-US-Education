@@ -13,7 +13,7 @@ class SkillWith:
     def __init__(self, answer: str, action: str | None = None) -> None:
         self._output = SkillOutput(answer, action=action)
 
-    async def run(self, state, message):
+    async def run(self, state, message, entities=None):
         return self._output
 
 
@@ -44,7 +44,7 @@ def test_response_has_no_action_by_default_and_sends_it_as_camel_case():
 
 async def test_chat_flow_passes_the_action_of_a_skill_to_the_response():
     # skill_lo_trinh cần đủ hồ sơ mới chạy; ở đây chỉ kiểm tra ChatFlow chuyển action nên dùng nhánh kiến thức
-    flow = flow_with({"skill_tra_loi": SkillWith("...", RECOMMEND_ACTION)}, tin("kien_thuc"))
+    flow = flow_with({"skill_tra_loi": SkillWith("...", RECOMMEND_ACTION)}, tin("knowledge"))
 
     res = await flow.reply(request())
 
@@ -52,7 +52,9 @@ async def test_chat_flow_passes_the_action_of_a_skill_to_the_response():
 
 
 async def test_chat_flow_has_no_action_when_no_skill_asks_for_one():
-    flow = flow_with({"skill_chuyen_trung_tam": SkillWith("Có các trung tâm sau ...")}, tin("trung_tam"))
+    flow = flow_with(
+        {"skill_chuyen_trung_tam": SkillWith("Có các trung tâm sau ...")}, tin("center_referral")
+    )
 
     res = await flow.reply(request("trung tâm nào sửa bài luận"))
 
@@ -60,7 +62,7 @@ async def test_chat_flow_has_no_action_when_no_skill_asks_for_one():
 
 
 async def test_knowledge_answers_carry_the_school_info_action_so_dotnet_can_try_the_database_first():
-    flow = flow_with({"skill_tra_loi": SkillWith("Phí SEVIS là ...")}, tin("kien_thuc"))
+    flow = flow_with({"skill_tra_loi": SkillWith("Phí SEVIS là ...")}, tin("knowledge"))
 
     res = await flow.reply(request("phí sevis bao nhiêu"))
 

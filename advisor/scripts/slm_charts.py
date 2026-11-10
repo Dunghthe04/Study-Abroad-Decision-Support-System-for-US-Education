@@ -14,7 +14,6 @@ matplotlib.use("Agg")  # vẽ ra file, không mở cửa sổ
 import matplotlib.pyplot as plt  # noqa: E402
 
 from app.schemas.slm import INTENTS  # noqa: E402
-from scripts.build_slm_jsonl import EN_SHEETS  # noqa: E402
 from scripts.slm_metrics import ERRORS, LEVELS, NONE  # noqa: E402
 
 PALETTE = ["#E69F00", "#0072B2", "#009E73", "#CC79A7", "#56B4E9"]
@@ -29,7 +28,7 @@ LEVEL_NAMES = {
 ERROR_NAMES = {
     "dung_het": "Đúng hoàn toàn", "json_loi": "Không dùng được (lùi về mơ hồ)", "thieu_y": "Thiếu ý", "thua_y": "Thừa ý",
     "sai_loai": "Sai loại ý", "sai_thu_tu": "Sai thứ tự", "sai_nhiem_vu": "Sai nhiệm vụ", "sai_thuc_the": "Sai thực thể",
-    "sai_tiep_noi": "Sai tiep_noi",
+    "sai_follow_up": "Sai follow_up",
 }  # fmt: skip
 ERROR_COLORS = [
     "#009E73",
@@ -63,12 +62,10 @@ NOTES = {
     ),
     "f1_type": (
         "Cách đọc: mỗi nhóm cột là một loại ý, cột càng cao càng tốt. F1 (0 đến 100%) là điểm tổng hợp của precision (model đoán loại này "
-        "thì đúng bao nhiêu) và recall (trong các ý thật thuộc loại này, model tìm ra bao nhiêu).\n"
-        "Tên loại: mac_dinh = collect_profile, ho_so = profile_review, kich_ban = scenario, kien_thuc = knowledge, "
-        "trung_tam = center_referral, ngoai_pham_vi = out_of_scope."
+        "thì đúng bao nhiêu) và recall (trong các ý thật thuộc loại này, model tìm ra bao nhiêu)."
     ),
     "f1_label": (
-        "Cách đọc: mỗi hàng là một nhãn 'loại/nhiệm vụ' (ví dụ kien_thuc/tra_cuu), n là số ý thật có nhãn này trong tập đo. "
+        "Cách đọc: mỗi hàng là một nhãn 'loại/nhiệm vụ' (ví dụ knowledge/school_info), n là số ý thật có nhãn này trong tập đo. "
         "Thanh càng dài (gần 1.0) càng tốt, hàng không có thanh nghĩa là F1 bằng 0.\n"
         "Nhãn có n nhỏ (khoảng 10 trở xuống) thì điểm dao động mạnh, chỉ nên xem như gợi ý."
     ),
@@ -413,11 +410,7 @@ def chart_dataset(records: list[dict[str, Any]], path: Path) -> Path:
     fig, ax = plt.subplots(figsize=(9, 4.4))
     bottom = [0] * len(kinds)
     for split, col in splits:
-        # du_lieu_slm.jsonl ghi loại bằng tiếng Anh (collect_profile...), INTENTS là tên nội bộ (mac_dinh...): đổi trước khi đếm
-        counts = [
-            sum(1 for r in records if EN_SHEETS.get(r["type"], r["type"]) == k and r["split"] == split)
-            for k in kinds
-        ]
+        counts = [sum(1 for r in records if r["type"] == k and r["split"] == split) for k in kinds]
         ax.bar(kinds, counts, bottom=bottom, color=col, label=f"{split} ({sum(counts)})")
         bottom = [a + b for a, b in zip(bottom, counts, strict=True)]
     for i, total in enumerate(bottom):

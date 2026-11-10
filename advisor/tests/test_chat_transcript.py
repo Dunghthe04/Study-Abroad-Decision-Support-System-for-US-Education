@@ -9,7 +9,7 @@ from tests.fakes import flow_with, tin
 TRANSCRIPT = {
     "years": [{"grade": "Lớp 10", "average": 8.67, "subjects": [{"name": "Toán", "average": 8.67}]}]
 }
-ASK = tin(("ho_so", {}))
+ASK = tin("profile_review")
 
 
 def request(state: ChatState, profile: dict | None, transcript: dict | None) -> ChatRequest:

@@ -4,7 +4,7 @@ from app.schemas.chat import ChatMessage, ChatRequest, ChatState
 from tests.fakes import flow_with, tin
 
 MARKS = {"gpa4": 3.6, "english": {"ielts": 6.5, "toefl": 80}}
-ASK = tin(("ho_so", {}))
+ASK = tin("profile_review")
 
 
 def request(state: ChatState, benchmarks: dict | None) -> ChatRequest:

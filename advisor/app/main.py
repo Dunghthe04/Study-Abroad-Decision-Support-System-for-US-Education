@@ -23,7 +23,6 @@ from app.services.goal_writer import GoalWriter
 from app.services.knowledge import KnowledgeRetriever
 from app.services.ollama import OllamaClient
 from app.services.scenario_writer import ScenarioWriter
-from app.services.skill_generator import SkillGenerator
 from app.services.skills import build_handlers
 from app.services.slm_classifier import OllamaSlm, output_format
 from app.services.transcript_reader import TranscriptReader
@@ -93,11 +92,9 @@ async def lifespan(app: FastAPI):
         slm = OllamaSlm(
             slm_client, output_format(settings.slm_format), settings.slm_use_context, settings.slm_prompt
         )
-        # Cùng một SLM vừa tách ý vừa sinh skill hồ sơ; Claude viết câu trả lời theo skill đó
-        skill_log_dir = ADVISOR_DIR / settings.skill_log_dir if settings.skill_log_dir else None
-        generator = SkillGenerator(slm_client, log_dir=skill_log_dir)
+        # Skill hồ sơ do code dựng từ khuôn (skill_template); Claude viết câu trả lời theo skill đó
         writer = AdviceWriter(claude)
-        app.state.chat_flow = ChatFlow(slm, build_branches(skills, generator, writer))
+        app.state.chat_flow = ChatFlow(slm, build_branches(skills, writer))
         yield
         if app.state.db_pool is not None:
             await asyncio.to_thread(app.state.db_pool.close)

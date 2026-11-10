@@ -24,26 +24,25 @@ def make(
     profile: dict | None = None,
     sheet: str = "knowledge",
     split: str = "train",
-    **thuc_the,
+    **entities,
 ) -> Item:
     record = {
         "id": f"{sheet}_{row}",
-        "type": "kien_thuc",
+        "type": "knowledge",
         "split": split,
-        "input": {"cau_hoi": question, "ho_so": profile, "cau_he_thong_dang_hoi": ""},
+        "input": {"question": question, "profile": profile, "pending_question": ""},
         "output": {
-            "cac_y": [
-                {"type": "kien_thuc", "doan": question, "thuc_the": {"nhiem_vu": "tra_cuu", **thuc_the}}
+            "intents": [
+                {"type": "knowledge", "span": question, "entities": {"tasks": ["school_info"], **entities}}
             ]
         },
-        "skill_md": None,
     }
     return Item(sheet, row, record)
 
 
 def test_the_skeleton_hides_school_names_and_digits():
-    a = make(1, "học phí của Purdue năm 2026", truong="Purdue")
-    b = make(2, "học phí của Stanford năm 2027", truong="Stanford")
+    a = make(1, "học phí của Purdue năm 2026", schools=["Purdue"])
+    b = make(2, "học phí của Stanford năm 2027", schools=["Stanford"])
 
     assert skeleton(a) == skeleton(b)
 
@@ -120,9 +119,9 @@ def test_applying_sorts_every_sheet_train_val_test_and_keeps_every_cell_even_emp
 
     def key(it):
         return (
-            it.record["input"]["cau_hoi"],
-            str(it.record["input"]["ho_so"]),
-            it.record["input"]["cau_he_thong_dang_hoi"],
+            it.record["input"]["question"],
+            str(it.record["input"]["profile"]),
+            it.record["input"]["pending_question"],
             str(it.record["output"]),
         )
 
@@ -156,7 +155,9 @@ def test_rebalance_moves_groups_to_train_but_never_below_the_minimum_of_a_label(
     for i in range(100):
         items.append(make(1000 + i, f"câu b {words(i)} nói về chuyện B", split="train"))
     for it in items:
-        it.record["output"]["cac_y"][0]["thuc_the"]["nhiem_vu"] = "tra_cuu" if it.row < 1000 else "so_sanh"
+        it.record["output"]["intents"][0]["entities"]["tasks"] = (
+            ["school_info"] if it.row < 1000 else ["compare_facts"]
+        )
     splits = [it.record["split"] for it in items]
 
     after = rebalance(items, splits, min_test=10)

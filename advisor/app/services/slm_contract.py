@@ -22,7 +22,7 @@ class SlmClassifier(Protocol):
 class ProfileHandler(Protocol):
     # Nhận tin nhắn khi slm.touches_profile() hoặc học sinh bấm nút, điền form: ghi giá trị, hỏi câu kế tiếp.
     # Giá trị hồ sơ lấy bằng slm.profile_values(): đoạn chữ nguyên văn trong tin (vd "GPA em khoảng 8.0"),
-    # phải tự chuẩn hóa và kiểm trước khi lưu. Có ý mac_dinh mà không có giá trị nào là tin mơ hồ, hỏi lại
+    # phải tự chuẩn hóa và kiểm trước khi lưu. Có ý collect_profile mà không có giá trị nào là tin mơ hồ, hỏi lại
     async def collect(self, state: ChatState, message: str, slm: SlmTinResult) -> "SkillOutput": ...
 
     # Câu hồ sơ đang chờ học sinh trả lời (để thêm "Quay lại câu mình đang hỏi..."), None nếu không có
