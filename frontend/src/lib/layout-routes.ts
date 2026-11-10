@@ -5,8 +5,8 @@ export function isWideRoute(pathname: string) {
   return WIDE_PREFIXES.some((p) => pathname.startsWith(p));
 }
 
-// Trang tràn hết bề rộng, không căn giữa: thanh mô phỏng dính mép trái, danh sách chiếm phần còn lại sát khung chat
-const FULL_PREFIXES = ["/recommendations"];
+// Trang tự quản lý lề và độ rộng (ví dụ full bleed banner hoặc thanh dính mép)
+const FULL_PREFIXES = ["/recommendations", "/university/"];
 
 export function isFullRoute(pathname: string) {
   return FULL_PREFIXES.some((p) => pathname.startsWith(p));

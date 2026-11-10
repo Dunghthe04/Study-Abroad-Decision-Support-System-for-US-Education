@@ -1,6 +1,6 @@
 import type { UniversityOffering } from "@/types/university";
 
-export const MISSING_UNIVERSITY_DATA = "Chưa có dữ liệu";
+export const MISSING_UNIVERSITY_DATA = "—";
 const numbers = new Intl.NumberFormat("vi-VN");
 const dollars = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 const percentages = new Intl.NumberFormat("vi-VN", { style: "percent", maximumFractionDigits: 1 });
