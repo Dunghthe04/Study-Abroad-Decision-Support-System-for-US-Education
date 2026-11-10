@@ -3,7 +3,17 @@
 import httpx
 import pytest
 
-from app.services.centers import CITIES_PATH, REFERRALS_PATH, SERVICES, CenterFinder, CenterHit
+from app.schemas.slm import SERVICE_CODES
+from app.services.centers import (
+    CITIES_PATH,
+    MODEL_SERVICE_TO_DB,
+    REFERRALS_PATH,
+    SERVICES,
+    CenterFinder,
+    CenterHit,
+    db_service,
+    match_city,
+)
 from app.services.skill_rules import ORDER
 
 # Đúng dạng JSON backend trả (StudyCenterDto, camelCase)
@@ -41,6 +51,49 @@ def test_service_codes_are_upper_snake_case_with_a_vietnamese_label():
 def test_service_catalog_covers_the_codes_used_by_the_demo_centers():
     # mã trong DbSeeder (CHON_TRUONG, LUYEN_THI, SUA_BAI_LUAN, SAN_HOC_BONG, LUYEN_PHONG_VAN) phải có tên hiển thị
     assert {"CHON_TRUONG", "LUYEN_THI", "SUA_BAI_LUAN", "SAN_HOC_BONG", "LUYEN_PHONG_VAN"} <= set(SERVICES)
+
+
+def test_every_service_code_of_the_model_maps_to_exactly_one_db_code_and_back():
+    # Thêm mã dịch vụ vào hợp đồng hay vào DB mà quên bảng ánh xạ thì test này báo
+    assert set(MODEL_SERVICE_TO_DB) == set(SERVICE_CODES)
+    assert set(MODEL_SERVICE_TO_DB.values()) == set(SERVICES)
+    assert len(set(MODEL_SERVICE_TO_DB.values())) == len(
+        MODEL_SERVICE_TO_DB
+    )  # không hai mã model về cùng một mã DB
+
+
+def test_db_service_translates_the_model_code_and_ignores_none_or_unknown():
+    assert db_service("ESSAY_EDITING") == "SUA_BAI_LUAN"
+    assert db_service("SCHOLARSHIP_SEARCH") == "SAN_HOC_BONG"
+    assert db_service(None) is None
+    assert db_service("LAM_VISA_HO") is None
+    assert db_service("SUA_BAI_LUAN") is None  # mã DB không phải mã model
+
+
+DB_CITIES = ["Hà Nội", "TP.HCM", "Hải Phòng", "Đà Nẵng"]
+
+
+@pytest.mark.parametrize(
+    ("written", "expected"),
+    [
+        ("Hà Nội", "Hà Nội"),
+        ("hà nội", "Hà Nội"),
+        ("Hanoi", "Hà Nội"),
+        ("HN", "Hà Nội"),
+        ("Tp Hà Nội", "Hà Nội"),
+        ("TP.HCM", "TP.HCM"),
+        ("HCM", "TP.HCM"),
+        ("Sài Gòn", "TP.HCM"),
+        ("Sai Gon", "TP.HCM"),
+        ("Thành phố Hồ Chí Minh", "TP.HCM"),
+        ("da nang", "Đà Nẵng"),
+        ("Huế", None),  # không có trung tâm ở đó
+        ("", None),
+        (None, None),
+    ],
+)
+def test_match_city_maps_the_ways_students_write_a_city_to_the_name_in_the_db(written, expected):
+    assert match_city(written, DB_CITIES) == expected
 
 
 def test_b6_skill_is_a_known_skill_label():
