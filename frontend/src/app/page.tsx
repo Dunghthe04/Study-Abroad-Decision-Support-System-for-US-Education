@@ -27,6 +27,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Spinner } from "@/components/ui/spinner";
 import { OpenAssistantButton } from "@/components/assistant/OpenAssistantButton";
 import { useAssistant } from "@/components/assistant/AssistantProvider";
+import { LayerStack } from "@/components/landing/LayerStack";
 import { useAuth } from "@/contexts/AuthContext";
 import { GROUP_LABELS } from "@/lib/recommendation-labels";
 import { cn } from "@/lib/utils";
@@ -363,6 +364,15 @@ function HomeView() {
             </Bubble>
           </div>
         </Card>
+      </section>
+
+      {/* CÁC LỚP CỦA HỆ THỐNG */}
+      <section className="space-y-10">
+        <SectionHead
+          title="Năm lớp làm việc cùng nhau để trả lời đúng"
+          desc="Cuộn xuống hoặc bấm vào từng lớp để xem lớp đó làm gì."
+        />
+        <LayerStack />
       </section>
 
       {/* TRƯỜNG */}
