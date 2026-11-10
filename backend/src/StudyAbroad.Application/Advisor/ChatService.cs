@@ -183,6 +183,7 @@ namespace StudyAbroad.Application.Advisor
                     Answer = $"{response.Answer}\n\n{ChatRecommendation.Summarize(saved)}",
                     State = ChatRecommendation.WithResults(response.State),
                     Widget = new Widget(ChatRecommendation.WidgetType),
+                    QuickReplies = ChatNextSteps.AfterRecommend(Suggested(ChatRecommendation.Schools(saved))),
                 };
             }
             catch (InvalidOperationException ex)
@@ -212,6 +213,15 @@ namespace StudyAbroad.Application.Advisor
             return ChatBenchmarks.From(await benchmarks.ListAsync(level, ct)) is { } marks
                 ? JsonSerializer.SerializeToElement(marks)
                 : null;
+        }
+
+        // Vài trường đầu danh sách gợi ý để hiện sẵn trong ô chọn trường (bỏ trường vừa nói tới nếu có)
+        private static IReadOnlyList<string>? Suggested(IReadOnlyList<ChatSchool>? shown, string? except = null)
+        {
+            var codes = (shown ?? []).Select(s => s.Code)
+                .Where(c => !string.Equals(c, except, StringComparison.OrdinalIgnoreCase))
+                .Take(ChatActions.MaxSuggested).ToList();
+            return codes.Count == 0 ? null : codes;
         }
 
         // Trường đang hiện trong các khối (đếm vị trí được) và các trường đã chấm còn lại (chỉ để khớp tên)
@@ -249,6 +259,9 @@ namespace StudyAbroad.Application.Advisor
                 {
                     Answer = result.Status == "OK" ? ChatExplanation.Format(result) : ChatExplanation.Failed,
                     Widget = widget,
+                    QuickReplies = result.Status == "OK"
+                        ? ChatNextSteps.AfterExplain(code, Suggested((await LatestSchoolsAsync(userId, ct)).Shown, code))
+                        : null,
                 };
             }
             catch (InvalidOperationException ex)
@@ -309,7 +322,7 @@ namespace StudyAbroad.Application.Advisor
                 {
                     Answer = string.Join("\n\n", parts),
                     Widget = ChatSimulation.WidgetOf(scenario, newPref),
-                    QuickReplies = steps.Count == 0 ? null : steps,
+                    QuickReplies = steps.Count == 0 ? null : ChatNextSteps.WithCenter(steps),   // không có bước nào thì không có nút nào
                 };
             }
             catch (ArgumentException ex)
@@ -562,7 +575,10 @@ namespace StudyAbroad.Application.Advisor
                     await onEvent(new AdvisorStreamEvent("card", Widget: ChatGoalSeek.WidgetOf(result)));
                 var answer = await WriteGoalNoteAsync(ChatGoalSeek.Note(result, names), result, ct);
                 var steps = ChatGoalSeek.NextSteps(result);
-                return response with { Answer = answer, Widget = ChatGoalSeek.WidgetOf(result), QuickReplies = steps.Count == 0 ? null : steps };
+                // Trường đang trong danh sách thì có thể giải thích vì sao xếp nhóm này; trường bị loại đã có nút riêng theo lý do loại
+                if (steps.Count == 0)
+                    steps = [new QuickReply("Giải thích trường này", "Giải thích trường này", new ChatAction(ChatExplanation.Action, result.Code))];
+                return response with { Answer = answer, Widget = ChatGoalSeek.WidgetOf(result), QuickReplies = ChatNextSteps.WithCenter(steps) };
             }
             catch (ArgumentException ex)
             {
