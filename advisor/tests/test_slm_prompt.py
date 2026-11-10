@@ -75,7 +75,8 @@ def test_both_prompts_are_the_same_version_so_a_change_to_one_is_not_forgotten()
 def test_the_default_prompt_is_the_full_one_and_training_uses_the_short_one():
     assert Settings(_env_file=None).slm_prompt == FULL
     assert PROMPT_PATH.stem == FULL
-    assert TRAIN_PROMPT == SHORT and TRAIN_PROMPT_PATH.stem == SHORT
+    # Dữ liệu train đã tiếng Anh nên huấn luyện dùng prompt tiếng Anh slm_intents; prompt ngắn tiếng Việt (2.3 và bản 2.2 cho v3) giữ cho chạy thật tới khi đổi code
+    assert TRAIN_PROMPT == "slm_intents" and TRAIN_PROMPT_PATH.stem == "slm_intents"
 
 
 class CaptureSlm:
@@ -109,29 +110,34 @@ def test_a_training_row_with_context_carries_it_to_the_user_message():
     record = {
         "split": "train",
         "input": {
-            "cau_hoi": "còn Yale thì sao",
-            "ho_so": None,
-            "cau_he_thong_dang_hoi": "",
-            "dang_noi_ve": {"truong": ["Harvard"], "muc": ["chi_phi"]},
+            "question": "còn Yale thì sao",
+            "profile": None,
+            "pending_question": "",
+            "context": {"schools": ["Harvard"], "fields": ["cost"]},
         },
         "output": {
-            "cac_y": [
+            "intents": [
                 {
-                    "type": "kien_thuc",
-                    "doan": "còn Yale thì sao",
-                    "thuc_the": {"truong": "Yale", "tiep_noi": True},
+                    "type": "knowledge",
+                    "span": "còn Yale thì sao",
+                    "entities": {
+                        "tasks": ["school_info"],
+                        "schools": ["Yale"],
+                        "fields": ["cost"],
+                        "follow_up": True,
+                    },
                 }
             ]
         },
     }
 
-    chat = to_chat(record, load_skill(prompt_path(SHORT))[0])
+    chat = to_chat(record, load_skill(TRAIN_PROMPT_PATH)[0])
 
-    assert json.loads(chat["messages"][1]["content"])["dang_noi_ve"] == {
-        "truong": ["Harvard"],
-        "muc": ["chi_phi"],
+    assert json.loads(chat["messages"][1]["content"])["context"] == {
+        "schools": ["Harvard"],
+        "fields": ["cost"],
     }
-    assert chat["messages"][0]["content"].startswith(f"# PHÂN LOẠI TIN NHẮN ({SHORT})")
+    assert chat["messages"][0]["content"].startswith("# PHÂN LOẠI TIN NHẮN (slm_intents)")
 
 
 def test_the_frozen_prompt_for_model_v3_keeps_its_old_version_and_contract():

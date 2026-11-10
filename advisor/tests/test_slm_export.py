@@ -1,140 +1,224 @@
-"""Xuất dữ liệu fine-tune: hội thoại giống hệt lúc chạy, đáp án đúng thứ tự khuôn, không lẫn tập test."""
+"""Xuất dữ liệu fine-tune (tiếng Anh): hội thoại gồm prompt, đầu vào JSON, đáp án đúng thứ tự khóa, không lẫn tập test."""
 
 import json
 import re
 
-from app.schemas.slm import SKILL_SECTIONS, SkillRequest, SlmTinResult, check_skill
-from app.services.slm_classifier import OllamaSlm
-from scripts.build_slm_jsonl import DEFAULT_EXCEL, read_records
+from app.schemas.slm import PROFILE_KEYS, SKILL_SECTIONS, SkillRequest, check_skill
+from scripts.build_slm_jsonl import (
+    DEFAULT_EXCEL,
+    DEFAULT_OUT,
+    EN_CENTER_TASKS,
+    EN_FIELDS,
+    EN_FILTER_KEYS,
+    EN_KNOWLEDGE_TASKS,
+    EN_PROFILE_TASKS,
+    EN_REVIEW_TASKS,
+    EN_SHEETS,
+    EN_SORTS,
+    EN_VALUES,
+    check_cac_y,
+    context_to_internal,
+    intents_to_internal,
+    read_records,
+)
 from scripts.export_slm_chat import (
-    _KEY_ORDER,
+    ENTITY_ORDER,
     PROMPT_PATH,
     SKILL_HOLDOUT_EVERY,
     SKILL_PROMPT_PATH,
     SKILL_REPEAT,
     answer_text,
     chat_rows,
+    ordered_entities,
     skill_messages,
     skill_request,
     skill_rows,
     to_chat,
+    user_message,
 )
 
 RECORD = {
     "split": "train",
     "input": {
-        "cau_hoi": "8.5 ạ, mà I-20 là gì",
-        "ho_so": {"sat": "1400"},
-        "cau_he_thong_dang_hoi": "Điểm GPA?",
+        "question": "8.5 ạ, mà I-20 là gì",
+        "profile": {"sat": "1400"},
+        "pending_question": "Điểm GPA?",
     },
     "output": {
-        "cac_y": [
-            {"type": "mac_dinh", "doan": "8.5 ạ", "thuc_the": {"gpa": "8.5 ạ"}},
-            {"type": "kien_thuc", "doan": "I-20 là gì", "thuc_the": {}},
+        "intents": [
+            {"type": "collect_profile", "span": "8.5 ạ", "entities": {"gpa": "8.5 ạ"}},
+            {"type": "knowledge", "span": "I-20 là gì", "entities": {}},
         ]
     },
 }
 
 
-class CaptureSlm:
-    """SLM giả: ghi lại hội thoại OllamaSlm gửi đi rồi trả một đáp án hợp lệ."""
-
-    def __init__(self):
-        self.messages = None
-
-    async def chat_json_scored(self, messages, schema):
-        self.messages = messages
-        answer = {"cac_y": [{"type": "ngoai_pham_vi", "doan": "x", "thuc_the": {"loai_con": "tam_biet"}}]}
-        return answer, json.dumps(answer), []
+def real_records():
+    return [json.loads(line) for line in DEFAULT_OUT.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
-# Test quan trọng nhất: hai tin đầu của dữ liệu train phải trùng từng ký tự với thứ model nhận lúc chạy thật
-async def test_the_training_conversation_is_exactly_what_the_model_gets_at_run_time():
-    slm = CaptureSlm()
-    classifier = OllamaSlm(slm)
+def test_the_user_message_is_compact_json_with_english_keys_and_the_profile_as_text():
+    data = {**RECORD["input"], "profile": {"sat": "1400", "activities": ["CLB A", "CLB B"]}}
 
-    await classifier.read(
-        RECORD["input"]["cau_hoi"], RECORD["input"]["ho_so"], RECORD["input"]["cau_he_thong_dang_hoi"]
+    user = json.loads(user_message(data))
+
+    assert user == {
+        "question": "8.5 ạ, mà I-20 là gì",
+        "profile": {"sat": "1400", "activities": "CLB A; CLB B"},
+        "pending_question": "Điểm GPA?",
+    }
+    assert " " not in user_message({"question": "a", "profile": None, "pending_question": ""})  # viết liền
+
+
+def test_the_user_message_has_context_only_when_there_is_one_and_a_null_profile_when_none():
+    plain = json.loads(user_message({"question": "a", "profile": None, "pending_question": ""}))
+    with_context = json.loads(
+        user_message(
+            {"question": "a", "profile": None, "pending_question": "", "context": {"schools": ["Harvard"]}}
+        )
     )
-    chat = to_chat(RECORD, classifier.prompt)["messages"]
 
-    assert chat[:2] == slm.messages
-    assert chat[2]["role"] == "assistant"
+    assert plain["profile"] is None and "context" not in plain
+    assert with_context["context"] == {"schools": ["Harvard"]}
 
 
 def test_the_answer_is_the_list_of_intents_written_the_way_the_model_must_produce_it():
-    assert answer_text(RECORD["output"]) == (
-        '{"cac_y":[{"type":"mac_dinh","doan":"8.5 ạ","thuc_the":{"gpa":"8.5 ạ"}},'
-        '{"type":"kien_thuc","doan":"I-20 là gì","thuc_the":{}}]}'
-    )
+    answer = answer_text(RECORD["output"])
+
+    assert json.loads(answer) == RECORD["output"]
+    assert answer == answer.strip() and "\n" not in answer and ", " not in answer  # viết liền
 
 
-def test_the_answer_lists_entity_keys_in_the_order_the_schema_forces():
-    output = {
-        "cac_y": [
-            {
-                "type": "kich_ban",
-                "doan": "nếu em lên SAT 1400 thì sao",
-                "thuc_the": {"thay_doi": [{"yeu_to": "sat", "gia_tri": "1400"}], "che_do": "what_if"},
-            }
-        ]
-    }
+def test_each_intent_is_written_with_type_first_then_span_then_entities():
+    answer = json.loads(answer_text(RECORD["output"]))
 
-    keys = list(json.loads(answer_text(output))["cac_y"][0]["thuc_the"])
-
-    assert keys == ["che_do", "thay_doi"]  # theo thứ tự của khuôn, không theo thứ tự trong dữ liệu
-    assert keys == [key for key in _KEY_ORDER["kich_ban"] if key in keys]
+    assert all(list(intent) == ["type", "span", "entities"] for intent in answer["intents"])
 
 
-def test_each_intent_is_written_with_type_first_then_doan_then_thuc_the():
-    y = json.loads(answer_text(RECORD["output"]))["cac_y"][1]
+def test_entity_keys_are_written_in_one_fixed_order_whatever_the_order_in_the_data():
+    messy = {"follow_up": True, "fields": ["cost"], "tasks": ["school_info"], "schools": ["Yale"], "gpa": "8"}
 
-    assert list(y) == ["type", "doan", "thuc_the"]
-
-
-def test_the_answer_of_a_record_is_read_back_by_the_contract():
-    result = SlmTinResult.from_raw(json.loads(answer_text(RECORD["output"])))
-
-    assert [y.type for y in result.cac_y] == ["mac_dinh", "kien_thuc"]
+    assert list(ordered_entities(messy)) == ["gpa", "tasks", "schools", "fields", "follow_up"]
+    assert [k for k in ENTITY_ORDER if k in PROFILE_KEYS] == list(PROFILE_KEYS)  # khóa hồ sơ đứng trước
+    assert list(ordered_entities({"zzz": 1, "tasks": ["edit"]})) == ["tasks", "zzz"]  # khóa lạ viết sau cùng
 
 
-def test_the_prompt_describes_the_list_of_intents_and_the_answer_the_example_shows():
-    prompt = PROMPT_PATH.read_text(encoding="utf-8")
+def test_a_conversation_is_the_prompt_then_the_input_then_the_answer():
+    chat = to_chat(RECORD, "PROMPT")["messages"]
 
-    assert "skill_version 2." in prompt and '"cac_y"' in prompt and "nhan_phu" not in prompt
-
-
-def record(question, split):
-    return {"split": split, "input": {"cau_hoi": question, "ho_so": None, "cau_he_thong_dang_hoi": ""},
-            "output": {"cac_y": [{"type": "ngoai_pham_vi", "doan": question, "thuc_the": {"loai_con": "tam_biet"}}]}}  # fmt: skip
+    assert [m["role"] for m in chat] == ["system", "user", "assistant"]
+    assert chat[0]["content"] == "PROMPT"
+    assert json.loads(chat[1]["content"])["question"] == "8.5 ạ, mà I-20 là gì"
+    assert json.loads(chat[2]["content"]) == RECORD["output"]
 
 
 def test_only_the_requested_split_is_exported_and_questions_of_the_test_set_never_are():
-    records = [record("cảm ơn bạn", "test"), record("Cảm ơn bạn", "train"), record("bye nhé", "train")]
+    def row(question, split):
+        return {
+            "split": split,
+            "input": {"question": question, "profile": None, "pending_question": ""},
+            "output": RECORD["output"],
+        }
 
-    rows = chat_rows(records, "prompt", "train")
+    records = [
+        row("câu train", "train"),
+        row("Câu Test", "train"),
+        row("câu test", "test"),
+        row("câu val", "val"),
+    ]
 
-    assert [json.loads(row["messages"][1]["content"])["cau_hoi"] for row in rows] == ["bye nhé"]
-    assert chat_rows(records, "prompt", "val") == []
+    assert len(chat_rows(records, "P", "train")) == 1  # câu train; câu trùng chữ với test bị bỏ
+    assert len(chat_rows(records, "P", "val")) == 1
+    assert chat_rows(records, "P", "test") == []
 
 
 # Trên dữ liệu thật: train và val không chứa câu nào của tập test
 def test_the_real_export_has_no_question_of_the_test_set():
-    records = read_records(DEFAULT_EXCEL)
-    test_questions = {r["input"]["cau_hoi"].lower() for r in records if r["split"] == "test"}
+    records = real_records()
+    test_questions = {r["input"]["question"].lower() for r in records if r["split"] == "test"}
 
     for split in ("train", "val"):
-        rows = chat_rows(records, "prompt", split)
-        users = {json.loads(row["messages"][1]["content"])["cau_hoi"].lower() for row in rows}
-        assert rows and not users & test_questions
+        for chat in chat_rows(records, "P", split):
+            assert json.loads(chat["messages"][1]["content"])["question"].lower() not in test_questions
 
 
-# Mọi đáp án trong dữ liệu thật phải đọc lại được bằng hợp đồng, nếu không model được dạy sinh thứ hệ thống từ chối
 def test_every_real_answer_is_read_back_by_the_contract():
-    records = read_records(DEFAULT_EXCEL)
+    for record in real_records():
+        intents = json.loads(answer_text(record["output"]))["intents"]
+        internal = check_cac_y(
+            EN_SHEETS[record["type"]],
+            record["input"]["question"],
+            record["input"]["pending_question"],
+            intents_to_internal(intents) or None,
+            record["id"],
+            context_to_internal(record["input"].get("context")),
+        )
+        assert internal
 
-    for r in records:
-        SlmTinResult.from_raw(json.loads(answer_text(r["output"])))
+
+def prompt_text():
+    return PROMPT_PATH.read_text(encoding="utf-8")
+
+
+# Mọi mã và khóa của hợp đồng tiếng Anh: thêm một mã vào dữ liệu mà quên cập nhật prompt thì test này báo
+def contract_words() -> set[str]:
+    words = {
+        "intents", "type", "span", "entities", "tasks", "schools", "school", "fields", "filters", "sort", "changes", "factor", "value", "unit",
+        "action", "mode", "target_group", "service", "city", "centers", "subtype", "follow_up", "context", "profile", "question", "pending_question",
+    }  # fmt: skip
+    words |= set(PROFILE_KEYS) | set(EN_FIELDS) | set(EN_FILTER_KEYS) | set(EN_SORTS)
+    words |= set(EN_PROFILE_TASKS) - {"answer"}
+    words |= (
+        set(EN_REVIEW_TASKS) | set(EN_KNOWLEDGE_TASKS) | (set(EN_CENTER_TASKS) - {"find"})
+    )  # find là mặc định (vắng tasks), prompt không cần nêu mã
+    words |= set(EN_SHEETS)
+    for key in ("dich_vu", "loai_con", "don_vi", "muc_tieu", "hanh_dong"):
+        words |= set(EN_VALUES[key])
+    words |= {"what_if", "goal_seeking", "optional", "preferred", "mandatory"}
+    return words
+
+
+def test_the_prompt_names_every_key_and_code_of_the_english_contract():
+    text = prompt_text()
+
+    missing = sorted(w for w in contract_words() if w not in text)
+
+    assert not missing, f"prompt thiếu: {missing}"
+
+
+def test_every_example_in_the_prompt_is_a_valid_answer():
+    lines = prompt_text().splitlines()
+    checked = 0
+    for i, line in enumerate(lines):
+        if not line.startswith('{"intents":'):
+            continue
+        header = lines[i - 1]
+        question = re.search(r'question "(.*)"$', header).group(1)
+        context = (
+            json.loads(re.search(r"context (\{.*?\}), question", header).group(1))
+            if header.startswith("context")
+            else None
+        )
+        intents = json.loads(line)["intents"]
+        check_cac_y(
+            EN_SHEETS[intents[0]["type"]],
+            question,
+            "",
+            intents_to_internal(intents),
+            f"prompt, ví dụ {checked + 1}",
+            context_to_internal(context),
+        )
+        checked += 1
+    assert checked >= 3
+
+
+def test_the_prompt_says_that_spans_are_verbatim_and_that_fields_are_never_guessed():
+    text = prompt_text()
+
+    assert "nguyên văn" in text and "Không đoán mục" in text
+
+
+# ---- skill (công cụ kiểm skill cũ, giữ lại; skill sẽ do code điền khuôn) ----
 
 
 # ---- dữ liệu sinh skill ----

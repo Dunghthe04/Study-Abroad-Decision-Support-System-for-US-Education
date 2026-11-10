@@ -20,8 +20,10 @@ Dữ liệu train đã **tiếng Anh**: `du_lieu_slm.xlsx` (nguồn) và `du_lie
 | `app/schemas/slm.py` | Tên loại, khóa, mã nhiệm vụ, mã mục, bộ lọc, schema đầu ra SLM (`SLM_TIN_SCHEMA`): theo bảng bên dưới |
 | `app/services/slm_classifier.py`, `slm_contract.py`, `conversation_context.py` | Đọc `intents`, `span`, `entities` thay cho `cac_y`, `doan`, `thuc_the`; dựng đầu vào với `question`, `profile`, `pending_question`, `context` |
 | `app/services/branches.py`, `chat_flow.py`, `priority.py`… | Các nhánh theo loại ý và nhiệm vụ: đọc `tasks` (danh sách), `schools` (danh sách), `fields` (danh sách) |
-| `app/skills/slm_phan_loai_cac_y.md` và `slm_phan_loai_cac_y_ngan.md` | Viết lại prompt bằng tên tiếng Anh, cùng một phiên bản. `slm_phan_loai_cac_y_ngan_v22.md` là bản đông lạnh cho model v3, **không sửa** |
-| `scripts/eval_slm.py`, `export_slm_chat.py`, `eval_skill.py`, `slm_metrics.py`, `slm_charts.py`, `slm_report.py`, `make_ho_so_goc.py`, `fill_ho_so_excel.py` | Đọc `du_lieu_slm.jsonl` theo dạng mới (mục 1) |
+| `app/skills/slm_intents.md` | **Đã có**: prompt tiếng Anh dùng để train (phiên bản 3.0). Lúc chạy phải dùng đúng prompt này. Prompt tiếng Việt `slm_phan_loai_cac_y*.md` giữ cho model v3, `slm_phan_loai_cac_y_ngan_v22.md` là bản đông lạnh của v3, **không sửa** |
+| Tin nhắn gửi model lúc chạy | Dựng đúng như `user_message()` trong `scripts/export_slm_chat.py`: JSON viết liền `{"question","profile","pending_question"}`, thêm `context` khi có; hồ sơ là dict chữ, giá trị danh sách nối bằng `"; "` |
+| `scripts/export_slm_chat.py` | **Đã đổi**: đọc `du_lieu_slm.jsonl` tiếng Anh, dùng prompt `slm_intents`, xuất `finetune/train.jsonl` và `val.jsonl` (hết train skill) |
+| `scripts/eval_slm.py`, `eval_skill.py`, `slm_metrics.py`, `slm_charts.py`, `slm_report.py`, `make_ho_so_goc.py`, `fill_ho_so_excel.py` | Đọc `du_lieu_slm.jsonl` theo dạng mới (mục 1) và đầu ra model dạng `{"intents": [...]}` |
 | `tests/` các file `test_slm_*`, `test_chat_*`, `test_priority.py`, `test_branches.py`… | Đổi tên theo bảng; `test_slm_data.py`, `test_slm_english.py`, `test_check_slm_data.py` đã dùng tên tiếng Anh |
 | Train lại model | Bắt buộc: model v3 sinh tên tiếng Việt. Train bằng `du_lieu_slm.jsonl` với **đúng prompt mới** |
 
