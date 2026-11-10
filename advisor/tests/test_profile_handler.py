@@ -292,3 +292,93 @@ async def test_first_fill_still_asks_next_question():
     ask(state, "D2")
     await make_handler(FakeLLM()).collect(state, "GPA 3.8 thang 4", MAC_DINH)
     assert state.question_id not in ("D2", "X1")
+
+
+# Sửa nhiều mục một lúc mà chưa có giá trị mới: hỏi lần lượt từng mục theo thứ tự hồ sơ, hết thì về bảng rà soát
+async def test_edit_many_items_asks_each_in_turn_then_review():
+    state = ChatState(current_step="B2", profile=full_profile(), intake_mode="chat")
+    ask(state, "X1")
+    slm = tin(("collect_profile", {"tasks": ["edit"], "sat": "SAT", "gpa": "GPA"}))
+    chat = make_handler(FakeLLM(NO_HO_SO))
+    await chat.collect(state, "sửa GPA và SAT", slm)
+    assert (state.question_id, state.edit_queue) == ("D2", ["D3"])
+    await chat.collect(state, "GPA 3.8 thang 4", MAC_DINH)
+    assert (state.question_id, state.edit_queue) == ("D3", [])
+    output = await chat.collect(state, "Em chưa thi SAT/ACT", MAC_DINH)
+    assert (state.question_id, state.edit_queue) == ("X1", None)  # hết mục: về bảng, thôi đánh dấu đang sửa
+    assert output.widget.type == "review"
+
+
+# Hàng đợi đi qua được cả câu bậc học (B1) lẫn câu hồ sơ (B2), không đổi bước
+async def test_edit_queue_crosses_bac_hoc_and_ho_so_questions():
+    state = ChatState(current_step="B3", profile=full_profile(), intake_mode="chat")
+    slm = tin(("collect_profile", {"tasks": ["edit"], "gpa": "GPA", "major": "ngành"}))
+    chat = make_handler(FakeLLM(NO_BAC_HOC, NO_HO_SO))
+    await chat.collect(state, "sửa ngành và GPA", slm)
+    assert (state.question_id, state.edit_queue) == ("B1.3", ["D2"])
+    # Hồ sơ điền bằng form, chat chưa từng hiện bảng: vẫn sang mục kế tiếp chứ không hỏi tiếp cả loạt câu khác
+    await chat.collect(state, "Em chưa rõ ngành", MAC_DINH)
+    assert (state.question_id, state.edit_queue) == ("D2", [])
+    assert state.current_step == "B3"
+    output = await chat.collect(state, "GPA 3.8 thang 4", MAC_DINH)
+    assert (state.question_id, output.widget.type) == ("X1", "review")
+
+
+# Mục có giá trị mới thì ghi luôn, chỉ hỏi mục chưa có giá trị
+async def test_edit_saves_items_with_value_and_asks_the_rest():
+    llm = FakeLLM({"values": {"gpa": {"value": 3.8, "scale": 4}}, "none_fields": []})
+    state = ChatState(current_step="B2", profile=full_profile(), intake_mode="chat")
+    ask(state, "X1")
+    slm = tin(("collect_profile", {"tasks": ["edit"], "gpa": "3.8", "sat": "SAT"}))
+    await make_handler(llm).collect(state, "sửa GPA thành 3.8 hệ 4 và sửa SAT", slm)
+    assert state.profile["gpa"].value == {"value": 3.8, "scale": 4}
+    assert (state.question_id, state.edit_queue) == ("D3", [])
+
+
+# SAT và ACT chung một câu D3: chỉ hỏi một lần
+async def test_edit_sat_and_act_asks_once():
+    state = ChatState(current_step="B2", profile=full_profile(), intake_mode="chat")
+    ask(state, "X1")
+    slm = tin(("collect_profile", {"tasks": ["edit"], "sat": "SAT", "act": "ACT"}))
+    await make_handler(FakeLLM(NO_HO_SO)).collect(state, "sửa SAT và ACT", slm)
+    assert (state.question_id, state.edit_queue) == ("D3", [])
+
+
+# Bấm "Bỏ qua" ở câu tùy chọn cũng sang mục kế tiếp
+async def test_skip_moves_to_next_item_in_queue():
+    state = ChatState(current_step="B2", profile=full_profile(), intake_mode="chat", asked={"X1": 1})
+    state.edit_queue = ["F1"]
+    ask(state, "D3")
+    await make_handler(FakeLLM()).collect(state, "Bỏ qua", MAC_DINH)
+    assert (state.question_id, state.edit_queue) == ("F1", [])
+
+
+# Giá trị sai thì hỏi lại đúng câu đó, các mục sau vẫn còn trong hàng đợi
+async def test_invalid_answer_keeps_queue():
+    state = ChatState(current_step="B2", profile=full_profile(), intake_mode="chat", asked={"X1": 1})
+    state.edit_queue = ["D3"]
+    ask(state, "D2")
+    await make_handler(FakeLLM()).collect(state, "GPA 7 thang 4", MAC_DINH)
+    assert (state.question_id, state.edit_queue) == ("D2", ["D3"])
+
+
+# Đang sửa dở mà muốn sửa thêm mục khác: mục mới hỏi trước, mục đang hỏi và các mục chưa hỏi vẫn giữ
+async def test_new_edit_while_editing_keeps_unanswered_items():
+    state = ChatState(current_step="B2", profile=full_profile(), intake_mode="chat", asked={"X1": 1})
+    state.edit_queue = ["F1"]
+    ask(state, "D3")
+    slm = tin(("collect_profile", {"tasks": ["edit"], "awards": "giải thưởng"}))
+    await make_handler(FakeLLM(NO_HO_SO)).collect(state, "à sửa cả giải thưởng", slm)
+    assert (state.question_id, state.edit_queue) == ("D5", ["D3", "F1"])
+
+
+# Đang hỏi một mục trong hàng đợi mà học sinh trả lời kèm chữ "sửa" (SLM gắn edit): vẫn là câu trả lời, sang mục kế
+async def test_answer_tagged_edit_while_editing_moves_on():
+    llm = FakeLLM({"values": {"gpa": {"value": 3.8, "scale": 4}}, "none_fields": []})
+    state = ChatState(current_step="B2", profile=full_profile(), intake_mode="chat", asked={"X1": 1})
+    state.edit_queue = ["F1"]
+    ask(state, "D2")
+    slm = tin(("collect_profile", {"tasks": ["edit"], "gpa": "3.8"}))
+    await make_handler(llm).collect(state, "sửa GPA thành 3.8 hệ 4", slm)
+    assert state.profile["gpa"].value == {"value": 3.8, "scale": 4}
+    assert (state.question_id, state.edit_queue) == ("F1", [])

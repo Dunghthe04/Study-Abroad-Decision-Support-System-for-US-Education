@@ -624,10 +624,10 @@ def next_question(state: ChatState) -> str | None:
     return None
 
 
-# Đã hiện bảng rà soát X1 nghĩa là học sinh đang sửa hồ sơ: trả lời xong câu của mục cần sửa thì quay về bảng,
-# không hỏi tiếp các câu khác (hồ sơ điền bằng form thì chat chưa hỏi câu nào, sẽ bị hỏi cả loạt)
+# Đã hiện bảng rà soát X1, hoặc học sinh đang sửa mục hồ sơ (edit_queue khác None, kể cả hồ sơ điền bằng form chưa
+# từng thấy bảng trong chat): trả lời xong câu của mục cần sửa thì quay về bảng, không hỏi tiếp các câu khác
 def reviewed(state: ChatState) -> bool:
-    return state.asked.get("X1", 0) > 0
+    return state.asked.get("X1", 0) > 0 or state.edit_queue is not None
 
 
 # Bảng rà soát X1: widget review hiện toàn bộ hồ sơ (trừ mục dở *_pending), kèm hai nút Đúng / Cần sửa
