@@ -1,15 +1,19 @@
 """Đo SLM trên dữ liệu gán nhãn: tách đủ ý, đúng loại, đúng thứ tự, thực thể, tốc độ. Dùng để có baseline trước fine-tune và so sau.
 
-Bộ phân loại (OllamaSlm) phải đã trả danh sách ý cac_y. Cần Ollama đang chạy và đã pull model. Chạy trong thư mục advisor:
-  python -m scripts.eval_slm                       # qwen3:4b trên tập test
-  python -m scripts.eval_slm --split val --limit 20
-  python -m scripts.eval_slm --model usas-slm --prompt slm_phan_loai_cac_y_ngan   # model đã fine-tune, đúng prompt lúc huấn luyện
+Cần Ollama đang chạy và đã pull model. Chạy trong thư mục advisor. Có hai đường, chọn bằng --prompt:
+  Đường tiếng Anh (prompt slm_intents, khóa tiếng Anh): model gốc few-shot và model fine-tune bằng dữ liệu tiếng Anh
+    python -m scripts.eval_slm --model qwen3:4b-instruct --prompt slm_intents --shots 8     # baseline: model gốc, 8 ví dụ lấy từ train
+    python -m scripts.eval_slm --model usas-slm-v4 --prompt slm_intents                       # model đã fine-tune, không cần ví dụ
+  Đường tiếng Việt (prompt slm_phan_loai_cac_y*, khóa tiếng Việt): model v3 cũ
+    python -m scripts.eval_slm --model usas-slm-v3 --prompt slm_phan_loai_cac_y_ngan_v22
+Thêm --split val --limit 20 để thử nhanh. Nhãn lấy từ Excel qua build_slm_jsonl (đã đổi sang tên nội bộ để chấm).
 
-Ghi từng dự đoán vào data/slm/ket_qua/<model>_<split>.jsonl để xem lại câu sai. Dựng bảng và biểu đồ so sánh: scripts.slm_report.
+Ghi từng dự đoán vào data/slm/ket_qua/<model>[_shotsN]_<split>.jsonl để xem lại câu sai. Dựng bảng và biểu đồ so sánh: scripts.slm_report.
 """
 
 import argparse
 import asyncio
+import hashlib
 import json
 import re
 import statistics
@@ -21,10 +25,12 @@ from typing import Any
 import httpx
 
 from app.core.config import get_settings
-from app.schemas.slm import INTENTS
-from app.services.ollama import OllamaClient
-from app.services.slm_classifier import OllamaSlm, output_format
-from scripts.build_slm_jsonl import DEFAULT_OUT
+from app.schemas.slm import INTENTS, SlmTinResult
+from app.services.ollama import OllamaClient, OllamaError
+from app.services.skill_call import SKILLS_DIR, load_skill
+from app.services.slm_classifier import FALLBACK, OllamaSlm, keep_verbatim, label_confidence, output_format
+from scripts.build_slm_jsonl import DEFAULT_EXCEL, DEFAULT_OUT, EN_SHEETS, intents_to_internal, read_all
+from scripts.export_slm_chat import answer_text, user_message
 
 RESULT_DIR = DEFAULT_OUT.parent / "ket_qua"
 
@@ -96,17 +102,83 @@ def score(records: list[dict[str, Any]], preds: list[dict[str, Any]]) -> dict[st
     }
 
 
-async def run(model: str, split: str, limit: int | None, fmt: str, prompt: str) -> None:
+# ---- Đường tiếng Anh: prompt slm_intents (khóa tiếng Anh) cho model gốc (few-shot) và model fine-tune bằng dữ liệu tiếng Anh ----
+# Câu trả lời của model là {"intents": [...]}; đổi về dạng nội bộ để chấm bằng cùng bộ đo (slm_metrics, slm_report)
+ENGLISH_PROMPTS = {"slm_intents"}
+
+
+def pick_shots(english: list[dict[str, Any]], n: int, exclude: set[str]) -> list[dict[str, Any]]:
+    """n ví dụ lấy CHỈ từ tập train, cố định mỗi lần chạy: mỗi loại ý một ví dụ một ý, rồi các ví dụ nhiều ý.
+    Bỏ câu trùng chữ với một câu của tập test để model không thấy trước đáp án."""
+    train = [e for e in english if e["split"] == "train" and e["input"]["question"].lower() not in exclude]
+    train.sort(key=lambda e: hashlib.sha1(e["id"].encode()).hexdigest())
+    chosen: list[dict[str, Any]] = []
+    for kind in EN_SHEETS:
+        single = next(
+            (
+                e
+                for e in train
+                if len(e["output"]["intents"]) == 1 and e["output"]["intents"][0]["type"] == kind
+            ),
+            None,
+        )
+        if single is not None:
+            chosen.append(single)
+    for e in train:
+        if len(chosen) >= n:
+            break
+        if len(e["output"]["intents"]) >= 3 and e not in chosen:
+            chosen.append(e)
+    return chosen[:n]
+
+
+def english_messages(prompt: str, shots: list[dict[str, Any]], data: dict[str, Any]) -> list[dict[str, str]]:
+    messages = [{"role": "system", "content": prompt}]
+    for shot in shots:
+        messages.append({"role": "user", "content": user_message(shot["input"])})
+        messages.append({"role": "assistant", "content": answer_text(shot["output"])})
+    messages.append({"role": "user", "content": user_message(data)})
+    return messages
+
+
+async def read_english(
+    client: OllamaClient, messages: list[dict[str, str]], question: str, context: dict[str, Any] | None
+) -> SlmTinResult:
+    """Gọi model, đổi đáp án tiếng Anh về dạng nội bộ, làm sạch như lúc chạy thật (keep_verbatim) rồi kiểm bằng hợp đồng.
+    Sai luật hai lần thì lùi về tin mơ hồ (confidence 0), giống OllamaSlm."""
+    names = {name.lower() for name in (context or {}).get("truong", [])}
+    for _ in range(2):
+        try:
+            raw, content, logprobs = await client.chat_json_scored(messages, "json")
+            internal = {"cac_y": intents_to_internal(raw["intents"])}
+            internal = keep_verbatim(internal, question, names)
+            return SlmTinResult.from_raw(internal, confidence=label_confidence(content, logprobs))
+        except (OllamaError, ValueError, TypeError, KeyError, AttributeError):
+            continue
+    return FALLBACK.model_copy(deep=True)
+
+
+async def run(model: str, split: str, limit: int | None, fmt: str, prompt: str, shots: int = 0) -> None:
     settings = get_settings()
-    records = [json.loads(line) for line in DEFAULT_OUT.read_text(encoding="utf-8").splitlines()]
-    records = [r for r in records if r["split"] == split][:limit]
+    # records: bản ghi tên nội bộ (nhãn để chấm); english: cùng dòng ở dạng tiếng Anh (đầu vào cho đường tiếng Anh). Cùng thứ tự
+    all_records, all_english = read_all(DEFAULT_EXCEL)
+    picked = [i for i, r in enumerate(all_records) if r["split"] == split][:limit]
+    records = [all_records[i] for i in picked]
+    english_inputs = [all_english[i]["input"] for i in picked]
+    use_english = prompt in ENGLISH_PROMPTS
+    english_prompt, prompt_version, few = "", "", []
+    if use_english:
+        english_prompt, prompt_version = load_skill(SKILLS_DIR / f"{prompt}.md")
+        test_questions = {r["input"]["question"].lower() for r in all_english if r["split"] == "test"}
+        few = pick_shots(all_english, shots, test_questions)
+        print(f"Đường tiếng Anh: prompt {prompt} {prompt_version}, {len(few)} ví dụ lấy từ tập train")
     async with httpx.AsyncClient(
         base_url=settings.ollama_base_url, timeout=settings.llm_timeout_seconds
     ) as http:
         client = OllamaClient(
             http, model, num_ctx=settings.llm_num_ctx, num_gpu=settings.llm_num_gpu, seed=settings.llm_seed
         )
-        slm = OllamaSlm(client, output_format(fmt), prompt=prompt)
+        slm = None if use_english else OllamaSlm(client, output_format(fmt), prompt=prompt)
         preds, rows, seconds = [], [], []
         fallbacks = 0  # số câu lùi về mơ hồ (model trả sai luật 2 lần)
         for i, r in enumerate(records, start=1):
@@ -114,9 +186,13 @@ async def run(model: str, split: str, limit: int | None, fmt: str, prompt: str) 
             context = r["input"].get(
                 "dang_noi_ve"
             )  # ngữ cảnh của dòng (nếu có), đưa vào đầu vào như lúc chạy thật
-            result = await slm.read(
-                r["input"]["cau_hoi"], r["input"]["ho_so"], r["input"]["cau_he_thong_dang_hoi"], context
-            )
+            if use_english:
+                messages = english_messages(english_prompt, few, english_inputs[i - 1])
+                result = await read_english(client, messages, r["input"]["cau_hoi"], context)
+            else:
+                result = await slm.read(
+                    r["input"]["cau_hoi"], r["input"]["ho_so"], r["input"]["cau_he_thong_dang_hoi"], context
+                )
             fallbacks += result.confidence == 0.0
             seconds.append(time.perf_counter() - start)
             pred = {"cac_y": [y.model_dump() for y in result.cac_y]}
@@ -128,7 +204,10 @@ async def run(model: str, split: str, limit: int | None, fmt: str, prompt: str) 
     print()
 
     RESULT_DIR.mkdir(parents=True, exist_ok=True)
-    out = RESULT_DIR / f"{model.replace(':', '_').replace('/', '_')}_{split}.jsonl"
+    tag = (
+        f"_shots{len(few)}" if use_english and few else ""
+    )  # baseline có ví dụ ghi riêng, không đè bản không ví dụ
+    out = RESULT_DIR / f"{model.replace(':', '_').replace('/', '_')}{tag}_{split}.jsonl"
     out.write_text("".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows), encoding="utf-8")
 
     result = score(records, preds)
@@ -148,7 +227,8 @@ async def run(model: str, split: str, limit: int | None, fmt: str, prompt: str) 
         "lui_ve_mo_ho": fallbacks,
         "confidence_khi_dung": round(statistics.mean(conf_right), 3) if conf_right else None,
         "confidence_khi_sai": round(statistics.mean(conf_wrong), 3) if conf_wrong else None,
-        "prompt_version": slm.prompt_version,
+        "prompt_version": prompt_version if use_english else slm.prompt_version,
+        "so_vi_du": len(few),
         "dinh_dang": fmt,
     }
     print(f"Model {model}, tập {split}")
@@ -167,9 +247,11 @@ def main() -> None:
     parser.add_argument("--format", default=get_settings().slm_format, choices=("json", "schema"))
     # Model chưa fine-tune dùng prompt đầy đủ (mặc định), model fine-tune dùng đúng prompt lúc huấn luyện (slm_phan_loai_cac_y_ngan)
     parser.add_argument("--prompt", default=get_settings().slm_prompt)
+    # Chỉ đường tiếng Anh (--prompt slm_intents): số ví dụ lấy từ train đưa kèm làm few-shot. Model gốc dùng 8, model đã fine-tune dùng 0
+    parser.add_argument("--shots", type=int, default=0)
 
     args = parser.parse_args()
-    asyncio.run(run(args.model, args.split, args.limit, args.format, args.prompt))
+    asyncio.run(run(args.model, args.split, args.limit, args.format, args.prompt, args.shots))
 
 
 if __name__ == "__main__":
