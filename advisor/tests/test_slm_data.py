@@ -17,6 +17,7 @@ from scripts.build_slm_jsonl import (
     TYPES,
     context_to_internal,
     intents_to_internal,
+    read_all,
     read_records,
     to_record,
     v2_entities_to_internal,
@@ -27,11 +28,13 @@ MIN_ROWS_PER_TYPE = 30
 
 @pytest.fixture(scope="module")
 def records():
-    return [json.loads(line) for line in DEFAULT_OUT.read_text(encoding="utf-8").splitlines()]
+    return read_records(DEFAULT_EXCEL)  # bản ghi tên nội bộ, dựng thẳng từ Excel
 
 
-def test_the_jsonl_is_exactly_what_the_excel_builds_so_nobody_forgot_to_rebuild(records):
-    assert records == read_records(DEFAULT_EXCEL)
+def test_the_jsonl_is_exactly_what_the_excel_builds_so_nobody_forgot_to_rebuild():
+    english = [json.loads(line) for line in DEFAULT_OUT.read_text(encoding="utf-8").splitlines()]
+
+    assert english == read_all(DEFAULT_EXCEL)[1]
 
 
 def test_every_type_has_enough_rows_and_all_three_splits(records):
@@ -49,10 +52,14 @@ def test_ids_are_unique(records):
     assert len({r["id"] for r in records}) == len(records)
 
 
-def test_skills_exist_only_for_profile_and_scenario_rows_that_have_a_profile(records):
+def test_the_training_data_has_no_skill_because_code_fills_the_skill_template(records):
+    # v9: skill do code điền khuôn, SLM chỉ học tách ý (cac_y), nên dữ liệu thật không còn skill_md
+    assert not [r["id"] for r in records if r["skill_md"]]
+
+
+def test_skills_in_a_record_would_still_only_belong_to_profile_rows_with_a_profile(records):
     with_skill = [r for r in records if r["skill_md"]]
 
-    assert with_skill, "chưa có dòng nào có skill"
     assert {r["type"] for r in with_skill} <= set(SKILL_TYPES)
     assert all(r["input"]["ho_so"] for r in with_skill)
 
@@ -617,3 +624,33 @@ def test_the_context_column_is_optional_on_every_sheet(tmp_path):
         "thanh_pho": "Hà Nội",
         "tiep_noi": True,
     }
+
+
+def test_the_review_column_is_ignored_by_the_build_and_does_not_reach_the_data(tmp_path):
+    from openpyxl import Workbook
+
+    path = tmp_path / "du_lieu.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "knowledge"
+    ws.append(["question", "profile", "pending_question", "intents", "split", "context", "review"])
+    ws.append(
+        [
+            "I-20 là gì",
+            None,
+            None,
+            '[{"type": "knowledge", "span": "I-20 là gì", "entities": {}}]',
+            "train",
+            None,
+            "v10",
+        ]
+    )
+    wb.save(path)
+
+    records, english = read_all(path)
+
+    assert (
+        len(records) == 1
+        and "review" not in json.dumps(records[0])
+        and "review" not in json.dumps(english[0])
+    )

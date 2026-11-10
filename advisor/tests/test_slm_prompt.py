@@ -95,7 +95,7 @@ async def test_the_slm_sends_the_prompt_that_was_chosen():
         await reader.read("em lớp 12", None, "")
 
         assert slm.messages[0]["content"].startswith(f"# PHÂN LOẠI TIN NHẮN ({name})")
-        assert reader.prompt_version == "2.2"
+        assert reader.prompt_version == "2.3"
 
 
 def test_an_unknown_prompt_name_is_rejected_at_start_up():
@@ -132,3 +132,12 @@ def test_a_training_row_with_context_carries_it_to_the_user_message():
         "muc": ["chi_phi"],
     }
     assert chat["messages"][0]["content"].startswith(f"# PHÂN LOẠI TIN NHẮN ({SHORT})")
+
+
+def test_the_frozen_prompt_for_model_v3_keeps_its_old_version_and_contract():
+    # usas-slm-v3 được train với prompt 2.2 (13 mục, chưa có nhà ở, khuôn viên...). Prompt mới 2.3 chỉ dùng cho model train lại
+    frozen = text_of("slm_phan_loai_cac_y_ngan_v22")
+
+    assert "skill_version 2.2" in frozen.splitlines()[0]
+    assert "nha_o" not in frozen and "khuon_vien" not in frozen
+    assert "nha_o" in text_of(SHORT) and "skill_version 2.3" in text_of(SHORT).splitlines()[0]

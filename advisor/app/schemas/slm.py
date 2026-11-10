@@ -74,6 +74,10 @@ INFO_FIELDS = (
     "xep_hang",
     "vi_tri",
     "website",
+    "nha_o",  # ký túc xá: loại nhà ở, nhà riêng cho du học sinh, tỷ lệ sinh viên ở ký túc, tiền phòng, tiền cọc
+    "ty_le_sv_giang_vien",  # tỷ lệ sinh viên trên giảng viên, lớp đông hay nhỏ
+    "hoat_dong_sv",  # câu lạc bộ, đội nhóm, đời sống sinh viên
+    "khuon_vien",  # khuôn viên ở thành phố, ngoại ô, thị trấn hay nông thôn, quy mô
     "khac",
 )
 # Điều kiện lọc trong bo_loc. Giá trị dạng chữ là CHỮ HỌC SINH GÕ ("texas", "30 nghìn đô", "top 50"), code tự khớp và đổi đơn vị.

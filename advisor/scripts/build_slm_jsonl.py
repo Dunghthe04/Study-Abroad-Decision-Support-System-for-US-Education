@@ -14,7 +14,7 @@ Cột context (tùy chọn, ở mọi sheet): điều hệ thống đang nói t�
 
 Chạy trong thư mục advisor:
   python -m scripts.build_slm_jsonl
-  python -m scripts.build_slm_jsonl --excel data/slm/du_lieu_slm.xlsx --out data/slm/du_lieu_slm.jsonl
+  python -m scripts.build_slm_jsonl --excel data/slm/du_lieu_slm.xlsx --out data/slm/du_lieu_slm.jsonl   (ghi MỘT file JSONL tiếng Anh)
 """
 
 import argparse
@@ -33,7 +33,10 @@ from app.services.chat_flow import QUESTIONS
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "slm"
 DEFAULT_EXCEL = DATA_DIR / "du_lieu_slm.xlsx"
+# MỘT file JSONL duy nhất, tiếng Anh: đúng tên khóa và mã như trong Excel, không đổi tên ở giữa. Code và prompt còn dùng tên tiếng Việt
+# chưa đọc được file này: chuyển theo data/slm/TEN_KHOA_ANH_VIET.md
 DEFAULT_OUT = DATA_DIR / "du_lieu_slm.jsonl"
+REVIEW_COLUMN = "review"  # tùy chọn, ở mọi sheet: đánh dấu dòng mới chờ duyệt (v9, v10…); người duyệt ghi ok / sửa / xóa. Không đi vào dữ liệu
 
 # Loại có skill riêng của học sinh (chỉ khi đã có hồ sơ). Các loại khác dùng skill chung cố định.
 # Kịch bản do code tính, SLM chỉ tách thông tin (cột intents), nên không có skill
@@ -100,6 +103,7 @@ EN_VALUES = {
     },
     "don_vi": {"scale_4": "thang_4", "scale_10": "thang_10"},
     "hanh_dong": {"skip": "bo_qua"},
+    "muc_tieu": {"reach": "Khó vào", "target": "Vừa sức", "safety": "An toàn"},
 }
 EN_TYPES = EN_SHEETS  # loại trong cột intents trùng tên sheet
 
@@ -136,6 +140,10 @@ EN_FIELDS = {
     "ranking": "xep_hang",
     "location": "vi_tri",
     "website": "website",
+    "housing": "nha_o",
+    "student_faculty_ratio": "ty_le_sv_giang_vien",
+    "student_activities": "hoat_dong_sv",
+    "campus_setting": "khuon_vien",
     "other": "khac",
 }
 EN_FILTER_KEYS = {
@@ -445,9 +453,37 @@ def to_record(intent: str, raw: dict[str, Any], where: str, record_id: str) -> d
     return record
 
 
-def read_records(path: Path) -> list[dict[str, Any]]:
+def to_english_record(
+    sheet_title: str, count: int, raw: dict[str, Any], where: str, record: dict[str, Any]
+) -> dict[str, Any]:
+    """Bản ghi tiếng Anh: câu hỏi, hồ sơ, câu đang hỏi, ngữ cảnh và các ý đúng như ghi trong Excel (đã qua kiểm ở bản nội bộ)."""
+    sheet_en = (
+        sheet_title
+        if sheet_title in EN_SHEETS
+        else next((en for en, vi in EN_SHEETS.items() if vi == sheet_title), sheet_title)
+    )
+    inp: dict[str, Any] = {
+        "question": record["input"]["cau_hoi"],
+        "profile": record["input"]["ho_so"],
+        "pending_question": record["input"]["cau_he_thong_dang_hoi"],
+    }
+    context = as_json(raw.get("context"), where, "context")
+    if context:
+        inp["context"] = context
+    return {
+        "id": f"{sheet_en}_{count:03d}",
+        "type": sheet_en,
+        "split": record["split"],
+        "input": inp,
+        "output": {"intents": as_json(raw.get("cac_y"), where, "cac_y")},
+    }
+
+
+def read_all(path: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Đọc Excel thành (bản ghi tên nội bộ tiếng Việt, bản ghi tiếng Anh giữ nguyên tên trong Excel). Hai danh sách cùng thứ tự."""
     workbook = load_workbook(path, read_only=True, data_only=True)
     records: list[dict[str, Any]] = []
+    english: list[dict[str, Any]] = []
     for sheet in workbook.worksheets:
         if sheet.title in ("README", "summary"):
             continue  # sheet giải thích cho người đọc, không có dữ liệu
@@ -459,12 +495,15 @@ def read_records(path: Path) -> list[dict[str, Any]]:
             EN_COLUMNS.get(as_text(cell), as_text(cell)) for cell in next(rows, ()) if as_text(cell)
         )
         header = tuple(
-            name for name in full_header if name != CONTEXT_COLUMN
-        )  # cột context tùy chọn, không tính vào bộ cột bắt buộc
+            name for name in full_header if name not in (CONTEXT_COLUMN, REVIEW_COLUMN)
+        )  # cột context và review tùy chọn, không tính vào bộ cột bắt buộc
         # Sheet kịch bản không có skill, nhưng file cũ còn cột skill_md (để trống) thì vẫn đọc được
         allowed = {columns_of(intent), columns_of("ho_so")} if intent == "kich_ban" else {columns_of(intent)}
         if intent in SKILL_TYPES:
             allowed.add(columns_of(intent, with_calc=True))
+            # Bỏ cột skill_md khỏi Excel (skill do code điền khuôn, SLM không học viết skill): vẫn đọc được
+            allowed.add(COLUMNS)
+            allowed.add(COLUMNS[:2] + (CALC_COLUMN,) + COLUMNS[2:])
         if header not in allowed:
             raise ValueError(
                 f"Sheet '{sheet.title}' phải có đúng các cột {columns_of(intent)}, đang là {header}"
@@ -476,8 +515,14 @@ def read_records(path: Path) -> list[dict[str, Any]]:
                 continue  # dòng trống
             count += 1
             where = f"{sheet.title}, dòng {number}"
-            records.append(to_record(intent, raw, where, f"{intent}_{count:03d}"))
-    return records
+            record = to_record(intent, raw, where, f"{intent}_{count:03d}")
+            records.append(record)
+            english.append(to_english_record(sheet.title, count, raw, where, record))
+    return records, english
+
+
+def read_records(path: Path) -> list[dict[str, Any]]:
+    return read_all(path)[0]
 
 
 def write_jsonl(records: list[dict[str, Any]], out: Path) -> None:
@@ -495,9 +540,9 @@ def main() -> None:
     parser.add_argument("--excel", type=Path, default=DEFAULT_EXCEL)
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
     args = parser.parse_args()
-    records = read_records(args.excel)
-    write_jsonl(records, args.out)
-    print(f"Đã ghi {len(records)} dòng vào {args.out}")
+    records, english = read_all(args.excel)
+    write_jsonl(english, args.out)
+    print(f"Đã ghi {len(records)} dòng (tiếng Anh) vào {args.out}")
     for intent in TYPES:
         rows = [r for r in records if r["type"] == intent]
         by_split = Counter(r["split"] for r in rows)

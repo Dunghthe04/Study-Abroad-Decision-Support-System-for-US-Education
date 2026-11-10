@@ -5,7 +5,7 @@ import re
 
 from app.schemas.slm import SKILL_SECTIONS, SkillRequest, SlmTinResult, check_skill
 from app.services.slm_classifier import OllamaSlm
-from scripts.build_slm_jsonl import DEFAULT_OUT
+from scripts.build_slm_jsonl import DEFAULT_EXCEL, read_records
 from scripts.export_slm_chat import (
     _KEY_ORDER,
     PROMPT_PATH,
@@ -120,7 +120,7 @@ def test_only_the_requested_split_is_exported_and_questions_of_the_test_set_neve
 
 # Trên dữ liệu thật: train và val không chứa câu nào của tập test
 def test_the_real_export_has_no_question_of_the_test_set():
-    records = [json.loads(line) for line in DEFAULT_OUT.read_text(encoding="utf-8").splitlines()]
+    records = read_records(DEFAULT_EXCEL)
     test_questions = {r["input"]["cau_hoi"].lower() for r in records if r["split"] == "test"}
 
     for split in ("train", "val"):
@@ -131,7 +131,7 @@ def test_the_real_export_has_no_question_of_the_test_set():
 
 # Mọi đáp án trong dữ liệu thật phải đọc lại được bằng hợp đồng, nếu không model được dạy sinh thứ hệ thống từ chối
 def test_every_real_answer_is_read_back_by_the_contract():
-    records = [json.loads(line) for line in DEFAULT_OUT.read_text(encoding="utf-8").splitlines()]
+    records = read_records(DEFAULT_EXCEL)
 
     for r in records:
         SlmTinResult.from_raw(json.loads(answer_text(r["output"])))
@@ -227,7 +227,7 @@ def test_the_skill_prompt_takes_levels_from_tinh_san_and_sets_no_threshold_of_it
 
 
 def real_skill_rows():
-    records = [json.loads(line) for line in DEFAULT_OUT.read_text(encoding="utf-8").splitlines()]
+    records = read_records(DEFAULT_EXCEL)
     prompt = SKILL_PROMPT_PATH.read_text(encoding="utf-8")
     return [row for split in ("train", "val") for row in skill_rows(records, prompt, split)]
 
@@ -235,7 +235,9 @@ def real_skill_rows():
 def test_every_real_exported_skill_passes_the_skill_check_with_the_request_it_answers():
     rows = real_skill_rows()
 
-    assert rows
+    assert (
+        not rows
+    )  # v9: dữ liệu thật không còn skill (code điền khuôn); khi có skill lại thì kiểm từng dòng ở dưới
     for row in rows:
         request = SkillRequest.model_validate(json.loads(row["messages"][1]["content"]))
         check_skill(row["messages"][2]["content"], request)
@@ -270,7 +272,9 @@ def moc_words(tinh_san):
 def test_the_moc_line_of_every_real_skill_copies_the_levels_code_calculated():
     rows = real_skill_rows()
 
-    assert rows
+    assert (
+        not rows
+    )  # v9: dữ liệu thật không còn skill; khi có skill lại thì mỗi dòng Mốc phải khớp mức code tính
     for row in rows:
         request = json.loads(row["messages"][1]["content"])
         moc = re.search(r"# Mốc: (.*)", row["messages"][2]["content"]).group(1)
