@@ -1,14 +1,14 @@
 """Xuất dữ liệu SLM sang dạng hội thoại để fine-tune: system = prompt, user = JSON đầu vào, assistant = đáp án.
-Hai việc trong cùng một file, phân biệt bằng prompt: tách ý (prompt slm_phan_loai_cac_y) và sinh skill hồ sơ (prompt
-slm_sinh_skill_ho_so). Skill sinh từ cột skill_md của dòng có skill; vài dòng skill giữ riêng làm tập kiểm skill,
-và skill train được lặp lại vì chỉ có vài chục mẫu mà mỗi mẫu dài.
+Đọc thẳng data/slm/du_lieu_slm.jsonl (tiếng Anh, đúng tên khóa như Excel) và dùng prompt tiếng Anh app/skills/slm_intents.md,
+nên dữ liệu, prompt và đáp án dùng MỘT bộ tên. Skill hồ sơ không còn train (code điền khuôn), các hàm skill bên dưới giữ lại chỉ để
+công cụ kiểm skill cũ còn chạy.
 
-Ghép bằng đúng build_messages mà OllamaSlm dùng lúc chạy, và viết đáp án theo một thứ tự khóa cố định (type, doan,
-thuc_the), nên model học đúng thứ nó sẽ nhận và sẽ sinh. Chỉ xuất train và val, tập test không bao giờ đem đi train.
+Tin user là JSON viết liền {"question", "profile", "pending_question", ["context"]}; đáp án là {"intents":[{"type","span","entities"}]}
+với khóa trong entities theo một thứ tự cố định, để model học nhất quán. Chỉ xuất train và val, tập test không bao giờ đem đi train.
+Lúc chạy thật phải dựng tin user đúng như hàm user_message ở đây và dùng đúng prompt này.
 
 Chạy trong thư mục advisor, sau khi đã chạy scripts.build_slm_jsonl:
-  python -m scripts.export_slm_chat                 # prompt tách ý NGẮN (slm_phan_loai_cac_y_ngan), dùng để huấn luyện
-  python -m scripts.export_slm_chat --prompt slm_phan_loai_cac_y   # bản đầy đủ (dài gấp 3, huấn luyện chậm hơn nhiều)
+  python -m scripts.export_slm_chat
 Ra data/slm/finetune/train.jsonl và val.jsonl, mỗi dòng {"messages": [system, user, assistant]}. Mang 2 file lên Colab.
 """
 
@@ -17,56 +17,72 @@ import json
 import sys
 from typing import Any
 
-from app.schemas.slm import SLM_TIN_SCHEMA
+from app.schemas.slm import PROFILE_KEYS
 from app.services.skill_call import SKILLS_DIR, load_skill
-from app.services.slm_classifier import build_messages, prompt_path
 from scripts.build_slm_jsonl import DEFAULT_OUT, profile_text
 
 SKILL_PROMPT_PATH = SKILLS_DIR / "slm_sinh_skill_ho_so.md"
-# Prompt tách ý dùng để huấn luyện. Mặc định là bản NGẮN: model fine-tune học khuôn từ dữ liệu nên không cần cả bản đầy đủ,
-# và prompt ngắn làm huấn luyện nhanh hơn ~2 lần, chạy thật ít token hơn. Chạy thật phải dùng đúng prompt này (SLM_PROMPT)
-TRAIN_PROMPT = "slm_phan_loai_cac_y_ngan"
+# Prompt tách ý dùng để huấn luyện (tiếng Anh). Chạy thật phải dùng đúng prompt này
+TRAIN_PROMPT = "slm_intents"
 PROMPT_PATH = SKILLS_DIR / f"{TRAIN_PROMPT}.md"  # file prompt dùng để huấn luyện (tests đọc để kiểm nội dung)
 SKILL_REPEAT = 3  # mỗi skill train xuất 3 lần, để model nhỏ học được khuôn dài từ ít mẫu
 SKILL_HOLDOUT_EVERY = 8  # cứ 8 skill train giữ lại 1 để kiểm skill, không đem đi train
 OUT_DIR = DEFAULT_OUT.parent / "finetune"
 SPLITS = ("train", "val")
-# Khóa trong thuc_the của mỗi loại ý luôn viết theo một thứ tự cố định (khóa hồ sơ rồi khóa riêng của loại, đúng thứ tự
-# khai báo trong khuôn) để model học nhất quán. Lưu ý: khi nhận khuôn, Ollama ép khóa theo bảng chữ cái chứ không theo
-# thứ tự này, nên model đã fine-tune chạy với slm_format="json" (xem output_format trong slm_classifier.py)
-_KEY_ORDER = {
-    branch["properties"]["type"]["const"]: list(branch["properties"]["thuc_the"]["properties"])
-    for branch in SLM_TIN_SCHEMA["properties"]["cac_y"]["items"]["anyOf"]
-}
+# Khóa trong entities luôn viết theo một thứ tự cố định (khóa hồ sơ, rồi các khóa còn lại) để model học nhất quán.
+# Khóa lạ (nếu có) viết sau cùng theo thứ tự gặp
+ENTITY_ORDER = [
+    *PROFILE_KEYS, "tasks", "schools", "school", "fields", "filters", "sort", "mode", "changes", "factor", "target_group",
+    "service", "city", "centers", "subtype", "follow_up",
+]  # fmt: skip
 
 
-# Đáp án viết liền như model sinh ra: {"cac_y": [{type, doan, thuc_the}, ...]}, khóa trong thuc_the theo thứ tự của khuôn
+def ordered_entities(entities: dict[str, Any]) -> dict[str, Any]:
+    known = {key: entities[key] for key in ENTITY_ORDER if key in entities}
+    return {**known, **{key: value for key, value in entities.items() if key not in known}}
+
+
+# Đáp án viết liền như model sinh ra: {"intents": [{type, span, entities}, ...]}
 def answer_text(output: dict[str, Any]) -> str:
-    cac_y = []
-    for y in output["cac_y"]:
-        thuc_the = {key: y["thuc_the"][key] for key in _KEY_ORDER[y["type"]] if key in y["thuc_the"]}
-        cac_y.append({"type": y["type"], "doan": y["doan"], "thuc_the": thuc_the})
-    return json.dumps({"cac_y": cac_y}, ensure_ascii=False, separators=(",", ":"))
+    intents = [
+        {"type": y["type"], "span": y["span"], "entities": ordered_entities(y["entities"])}
+        for y in output["intents"]
+    ]
+    return json.dumps({"intents": intents}, ensure_ascii=False, separators=(",", ":"))
 
 
-# Một dòng dữ liệu thành một hội thoại: 2 tin như lúc chạy thật, cộng tin đáp án. Mỗi hội thoại là một dòng trong
+# Đầu vào của SLM: JSON viết liền, hồ sơ thành chữ (giá trị danh sách nối bằng "; "), context chỉ có khi có
+def user_message(data: dict[str, Any]) -> str:
+    user: dict[str, Any] = {
+        "question": data["question"],
+        "profile": profile_text(data["profile"]) if data.get("profile") else None,
+        "pending_question": data["pending_question"],
+    }
+    if data.get("context"):
+        user["context"] = data["context"]
+    return json.dumps(user, ensure_ascii=False, separators=(",", ":"))
+
+
+# Một dòng dữ liệu thành một hội thoại: system = prompt, user = đầu vào, assistant = đáp án. Mỗi hội thoại là một dòng trong
 # data/slm/finetune/train.jsonl, dạng {"messages": [{"role": "system", ...}, {"role": "user", ...}, {"role": "assistant", ...}]}
 def to_chat(record: dict[str, Any], prompt: str) -> dict[str, Any]:
-    data = record["input"]
-    messages = build_messages(
-        prompt, data["cau_hoi"], data["ho_so"], data["cau_he_thong_dang_hoi"], data.get("dang_noi_ve")
-    )
-    return {"messages": [*messages, {"role": "assistant", "content": answer_text(record["output"])}]}
+    return {
+        "messages": [
+            {"role": "system", "content": prompt},
+            {"role": "user", "content": user_message(record["input"])},
+            {"role": "assistant", "content": answer_text(record["output"])},
+        ]
+    }
 
 
 # Câu trùng chữ với một câu của tập test thì không xuất (vd câu mẫu v5 lặp lại với hồ sơ khác),
 # để model không học thuộc đáp án của câu test rồi làm điểm test cao giả
 def chat_rows(records: list[dict[str, Any]], prompt: str, split: str) -> list[dict[str, Any]]:
-    test_questions = {r["input"]["cau_hoi"].lower() for r in records if r["split"] == "test"}
+    test_questions = {r["input"]["question"].lower() for r in records if r["split"] == "test"}
     return [
         to_chat(record, prompt)
         for record in records
-        if record["split"] == split and record["input"]["cau_hoi"].lower() not in test_questions
+        if record["split"] == split and record["input"]["question"].lower() not in test_questions
     ]
 
 
@@ -115,20 +131,19 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument(
-        "--prompt", default=TRAIN_PROMPT, help="tên prompt tách ý trong app/skills (không có .md)"
-    )
+    parser.add_argument("--prompt", default=TRAIN_PROMPT, help="tên prompt trong app/skills (không có .md)")
     args = parser.parse_args()
-    prompt, version = load_skill(prompt_path(args.prompt))
-    skill_prompt, skill_version = load_skill(SKILL_PROMPT_PATH)
-    records = [json.loads(line) for line in DEFAULT_OUT.read_text(encoding="utf-8").splitlines()]
+    prompt, version = load_skill(SKILLS_DIR / f"{args.prompt}.md")
+    records = [
+        json.loads(line) for line in DEFAULT_OUT.read_text(encoding="utf-8").splitlines() if line.strip()
+    ]
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     for split in SPLITS:
-        rows = chat_rows(records, prompt, split) + skill_rows(records, skill_prompt, split)
+        rows = chat_rows(records, prompt, split)
         out = OUT_DIR / f"{split}.jsonl"
         out.write_text("".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows), encoding="utf-8")
         print(f"{split}: {len(rows)} hội thoại -> {out}")
-    print(f"Prompt tách ý {args.prompt} phiên bản {version}, prompt sinh skill phiên bản {skill_version}")
+    print(f"Prompt {args.prompt} phiên bản {version}")
 
 
 if __name__ == "__main__":
