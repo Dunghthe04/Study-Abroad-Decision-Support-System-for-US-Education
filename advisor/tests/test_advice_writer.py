@@ -38,7 +38,7 @@ async def test_rules_and_skill_go_to_system_and_the_profile_goes_to_user():
 async def test_the_classifier_tasks_go_to_claude_by_name():
     llm = FakeLLM({"tra_loi": "Đánh giá và lộ trình."})
 
-    await AdviceWriter(llm).write(SKILL, REQ, [], ["danh_gia", "lo_trinh"])
+    await AdviceWriter(llm).write(SKILL, REQ, [], ["assessment", "roadmap"])
 
     user = json.loads(llm.calls[0]["messages"][-1]["content"])
     assert user["nhiem_vu"] == ["đánh giá hồ sơ", "lộ trình chuẩn bị"]
@@ -53,7 +53,7 @@ async def test_no_known_task_sends_no_task_list(tasks):
     assert "nhiem_vu" not in json.loads(llm.calls[0]["messages"][-1]["content"])
 
 
-BOTH = ["danh_gia", "lo_trinh"]
+BOTH = ["assessment", "roadmap"]
 NO_ROADMAP = "Hồ sơ của bạn ở mức trung bình."
 WITH_ROADMAP = "Hồ sơ trung bình.\n\n**Lộ trình chuẩn bị**\n- Thi IELTS trước."
 
@@ -81,7 +81,7 @@ async def test_still_missing_the_roadmap_gives_the_partial_answer_instead_of_not
     ]
 
 
-@pytest.mark.parametrize("tasks", [None, ["danh_gia"]])
+@pytest.mark.parametrize("tasks", [None, ["assessment"]])
 async def test_no_roadmap_asked_means_no_roadmap_check(tasks):
     llm = FakeLLM({"tra_loi": NO_ROADMAP})
 

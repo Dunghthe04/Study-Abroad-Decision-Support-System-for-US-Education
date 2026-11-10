@@ -35,12 +35,15 @@ class ResultSchool(CamelModel):
 # Hệ thống lưu lại thông tin về tiến trình hội thoại để khi người dùng nhắn tin tiếp theo, AI biết mình đang làm đến đâu.
 # Ngữ cảnh hội thoại để hiểu câu hỏi tiếp (conversation_context.py). Chỉ thực thể có cấu trúc, mất khi cuộc trò chuyện mới.
 # schools: tên trường đang nói tới (như model trả; .NET khớp lại với danh sách trường); fields: mã mục vừa hỏi;
-# bo_loc, sort: điều kiện tìm trường gần nhất (dạng model trả), để câu tiếp nối thêm điều kiện mới vào
+# filters, sort: điều kiện tìm trường gần nhất (dạng model trả), để câu tiếp nối thêm điều kiện mới vào;
+# service, city: dịch vụ (mã model trả) và thành phố (tên trong DB) của lần gợi ý trung tâm gần nhất, cho câu nối tiếp về trung tâm
 class ChatContext(CamelModel):
     schools: list[str] = []
     fields: list[str] = []
-    bo_loc: dict[str, Any] | None = None
+    filters: dict[str, Any] | None = None
     sort: str | None = None
+    service: str | None = None
+    city: str | None = None
 
 
 # Một dòng bảng quy đổi grade_scale.10, khớp record GradeScaleRuleDto bên .NET. Tra GPA chỉ dùng min_score (cận dưới)

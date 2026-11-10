@@ -24,20 +24,17 @@ class Settings(BaseSettings):
     chat_log_file: str = ""
     # Số ngày giữ file log chat, quá hạn thì tự xóa
     chat_log_keep_days: int = 90
-    # Thư mục ghi nhật ký skill SLM sinh ra (mỗi ngày một file skill_<ngày>.jsonl), để người làm đọc lại skill thật.
-    # Để trống = không ghi. Đường dẫn tương đối tính từ thư mục advisor/
-    skill_log_dir: str = ""
     ollama_base_url: str = "http://localhost:11434"
     # Chỉ dùng khi không có ANTHROPIC_API_KEY (bước B đọc bảng điểm chạy trên Ollama). Có khóa Claude thì để trống
     llm_model: str = ""
-    slm_model: str = "usas-slm-v3"
+    slm_model: str = "usas-slm-v4"
     slm_format: str = "json"
-    # Prompt tách ý (tên file trong app/skills, không có .md). slm_phan_loai_cac_y là bản đầy đủ (cho model chưa fine-tune);
-    # slm_phan_loai_cac_y_ngan là bản ngắn, dùng cho model fine-tune với đúng bản này (xem scripts/export_slm_chat.py)
-    slm_prompt: str = "slm_phan_loai_cac_y"
-    # Đưa ngữ cảnh hội thoại (dang_noi_ve) vào đầu vào của SLM. Bật SAU khi model đã được huấn luyện với khóa này:
+    # Prompt tách ý (tên file trong app/skills, không có .md). Model fine-tune phải dùng đúng prompt lúc huấn luyện
+    # (xem scripts/export_slm_chat.py): usas-slm-v4 dùng slm_intents
+    slm_prompt: str = "slm_intents"
+    # Đưa ngữ cảnh hội thoại (context) vào đầu vào của SLM. Chỉ bật với model đã được huấn luyện với khóa này (usas-slm-v4 có):
     # model chưa học thấy khóa lạ có thể đọc sai. Tắt thì chỉ chạy quy tắc dự phòng trong conversation_context
-    slm_use_context: bool = False
+    slm_use_context: bool = True
     llm_timeout_seconds: float = 120
     # Kích thước context window dự kiến
     llm_num_ctx: int = 6144

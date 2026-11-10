@@ -15,8 +15,8 @@ image = modal.Image.from_registry("nvidia/cuda:12.4.1-runtime-ubuntu22.04", add_
 )
 
 HF_REPO_ID = os.environ.get("SLM_HF_REPO", "Dunghthe04/usas-slm")
-HF_MODEL_FILENAME = os.environ.get("SLM_HF_FILENAME", "usas-slm-v3.Q4_K_M.gguf")
-MODEL_NAME = os.environ.get("SLM_MODEL_NAME", "usas-slm-v3")
+HF_MODEL_FILENAME = os.environ.get("SLM_HF_FILENAME", "usas-slm-v4.Q4_K_M.gguf")
+MODEL_NAME = os.environ.get("SLM_MODEL_NAME", "usas-slm-v4")
 
 
 @app.cls(

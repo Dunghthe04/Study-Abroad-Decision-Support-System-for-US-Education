@@ -1,4 +1,4 @@
-"""Hỏi hồ sơ trong chat: skill_bac_hoc, skill_ho_so chạy qua nhánh hồ sơ (SLM đọc tin là mac_dinh)."""
+"""Hỏi hồ sơ trong chat: skill_bac_hoc, skill_ho_so chạy qua nhánh hồ sơ (SLM đọc tin là collect_profile)."""
 
 from app.schemas.chat import ChatMessage, ChatRequest, ChatState, ProfileField
 from app.services.chat_flow import QUESTIONS
@@ -313,7 +313,7 @@ async def test_confirm_at_review_confirms_said_info_and_assesses_right_away():
 
     assert all(f.status == "confirmed" for f in res.state.profile.values())
     # Xác nhận xong thì nhánh hồ sơ đánh giá luôn trong lượt này rồi hỏi X2, không hỏi lại "có muốn xem không"
-    assert res.skills == ["mac_dinh"]
+    assert res.skills == ["collect_profile"]
     assert (res.state.current_step, res.state.question_id) == ("B4", "X2")
     assert res.answer.startswith(SAVED)
     assert res.answer.endswith(QUESTIONS["X2"])

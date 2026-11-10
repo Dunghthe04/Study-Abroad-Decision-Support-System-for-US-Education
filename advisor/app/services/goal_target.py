@@ -1,17 +1,13 @@
-"""Goal-seeking trong chat: đọc nhóm đích học sinh nói ("Vừa sức", "an toàn", "match") thành mã backend hiểu.
+"""Goal-seeking trong chat: nhóm đích model trả (target_group) thành mã backend hiểu.
 
-SLM chỉ trích đoạn chữ (muc_tieu). Tên trường cũng chỉ là chữ: việc chọn đúng trường trong 249 trường làm ở backend,
+SLM trả đúng một trong reach | target | safety. Tên trường chỉ là chữ: việc chọn đúng trường trong 249 trường làm ở backend,
 vì cần chắc chắn và dùng chung cho các câu hỏi về một trường khác.
 """
 
 import unicodedata
 
-# Mã nhóm đích của API goal-seek. Dò "an toàn" trước vì "Vừa sức" và "An toàn hơn" có thể xuất hiện chung trong một câu
-TARGET_WORDS = (
-    ("safety", ("an toan", "safety")),
-    ("match", ("vua suc", "match", "target")),
-    ("reach", ("kho vao", "reach")),
-)
+# Nhóm đích model trả -> mã nhóm của API goal-seek (backend gọi nhóm "target" là "match")
+TARGET_CODES = {"reach": "reach", "target": "match", "safety": "safety"}
 
 
 # Bỏ dấu và hoa thường để so chữ: "Vừa sức" thành "vua suc"
@@ -20,12 +16,6 @@ def plain(text: str) -> str:
     return "".join(ch for ch in decomposed if unicodedata.category(ch) != "Mn").strip()
 
 
-# Nhóm đích: safety | match | reach. Không nói hoặc không nhận ra thì None để hệ thống chọn nhóm cao hơn một bậc
-def parse_target(text: object) -> str | None:
-    if not isinstance(text, str) or not text.strip():
-        return None
-    words = plain(text)
-    for code, options in TARGET_WORDS:
-        if any(option in words for option in options):
-            return code
-    return None
+# Mã nhóm đích của API: safety | match | reach. Không nói thì None để hệ thống chọn nhóm cao hơn một bậc
+def target_code(group: object) -> str | None:
+    return TARGET_CODES.get(group) if isinstance(group, str) else None

@@ -159,7 +159,6 @@ def test_only_blocked_skill_is_removed_the_other_still_runs():
 # ---- mọi skill viết câu trả lời phải nói rõ: chỉ dựa trên dữ liệu gửi lên, không bịa
 WRITING_SKILLS = [
     "skill_tra_loi",
-    "skill_chuyen_trung_tam",
     "skill_giai_thich_trung_tam",
     "skill_so_sanh",
     "skill_goal_seek",

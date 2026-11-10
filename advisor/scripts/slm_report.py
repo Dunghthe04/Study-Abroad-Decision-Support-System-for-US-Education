@@ -101,12 +101,12 @@ def comparison_table(summaries: dict[str, dict[str, Any]]) -> tuple[list[str], l
         + [f"{s['f1_nhan']['macro_f1']:.3f}" for s in summaries.values()]
     )
     rows.append(
-        ["tiep_noi: độ chính xác"]
-        + [percent(s["tiep_noi"]["accuracy"]) if s["tiep_noi"] else "-" for s in summaries.values()]
+        ["follow_up: độ chính xác"]
+        + [percent(s["follow_up"]["accuracy"]) if s["follow_up"] else "-" for s in summaries.values()]
     )
     rows.append(
-        ["tiep_noi: F1 của câu nối tiếp"]
-        + [f"{s['tiep_noi']['f1']:.3f}" if s["tiep_noi"] else "-" for s in summaries.values()]
+        ["follow_up: F1 của câu nối tiếp"]
+        + [f"{s['follow_up']['f1']:.3f}" if s["follow_up"] else "-" for s in summaries.values()]
     )
     for key in m.ERRORS[1:]:
         rows.append(
@@ -133,9 +133,9 @@ def wrong_cases(rows: list[dict[str, Any]]) -> list[list[Any]]:
             [
                 r["id"],
                 j["loi"],
-                r["cau_hoi"],
-                json.dumps(r["nhan"]["cac_y"], ensure_ascii=False),
-                json.dumps(r["du_doan"]["cac_y"], ensure_ascii=False),
+                r["question"],
+                json.dumps(r["nhan"]["intents"], ensure_ascii=False),
+                json.dumps(r["du_doan"]["intents"], ensure_ascii=False),
             ]
         )
     return out
@@ -202,11 +202,10 @@ def markdown(
         "## Cách đo",
         "",
         "- Đơn vị đo là một tin nhắn. Các mức đúng xếp từ lỏng đến chặt, mức sau gồm mức trước: dùng được, đúng loại ý, đúng thứ tự, đúng nhiệm vụ, "
-        "đúng thực thể, đúng hoàn toàn (kể cả tiep_noi, tức follow_up). Phép đo chưa so chữ của span (đoạn trích của từng ý), "
-        "chỉ so loại ý, nhiệm vụ, thực thể và tiep_noi.",
-        "- Precision, recall, F1 tính trên từng ý (một tin có thể có nhiều ý), theo loại ý và theo nhãn loại/nhiệm vụ.",
-        "- Tên loại ý trong báo cáo là tên nội bộ: mac_dinh = collect_profile, ho_so = profile_review, kich_ban = scenario, "
-        "kien_thuc = knowledge, trung_tam = center_referral, ngoai_pham_vi = out_of_scope.",
+        "đúng thực thể (entities), đúng hoàn toàn (kể cả follow_up). Phép đo chưa so chữ của span (đoạn trích của từng ý), "
+        "chỉ so loại ý, nhiệm vụ (tasks, mode, subtype), entities và follow_up.",
+        "- Precision, recall, F1 tính trên từng ý (một tin có thể có nhiều ý), theo loại ý và theo nhãn loại/nhiệm vụ. "
+        "Ý không có tasks tính vào việc mặc định của loại (collect_profile/answer, knowledge/general, center_referral/find).",
         "- Tập test không dùng để huấn luyện; chọn điểm tốt nhất và dừng sớm (nếu có) dựa trên val, không dựa trên test.",
         "",
         "## Các file",

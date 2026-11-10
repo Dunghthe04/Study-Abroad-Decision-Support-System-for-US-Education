@@ -10,7 +10,7 @@ from app.services.chat_flow import SkillOutput
 from tests.fakes import flow_with, tin
 
 # SLM đọc là tư vấn theo hồ sơ, có nêu tên trường: nhánh tư vấn gọi skill_explain
-EXPLAIN = tin(("ho_so", {"truong": "Iowa"}))
+EXPLAIN = tin(("profile_review", {"tasks": ["explain_school"], "schools": ["Iowa"]}))
 
 SCHOOLS = [
     ResultSchool(code="iowa", name="University of Iowa", group="R"),
@@ -80,7 +80,7 @@ async def test_chat_flow_keeps_the_old_school_list_when_net_sends_none():
 
 
 # Học sinh gợi ý ở trang Gợi ý trường, chat chưa hề chạy gợi ý: .NET vẫn gửi danh sách đã lưu, nên không được hỏi "cần có danh sách trước"
-WHAT_IF = tin(("kich_ban", {"che_do": "what_if", "thay_doi": [{"yeu_to": "sat", "gia_tri": "1500"}]}))
+WHAT_IF = tin(("scenario", {"mode": "what_if", "changes": [{"factor": "sat", "value": "1500"}]}))
 
 
 async def test_a_school_list_from_dotnet_means_the_student_already_has_results():

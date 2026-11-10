@@ -1,7 +1,6 @@
 """Xuất dữ liệu SLM sang dạng hội thoại để fine-tune: system = prompt, user = JSON đầu vào, assistant = đáp án.
 Đọc thẳng data/slm/du_lieu_slm.jsonl (tiếng Anh, đúng tên khóa như Excel) và dùng prompt tiếng Anh app/skills/slm_intents.md,
-nên dữ liệu, prompt và đáp án dùng MỘT bộ tên. Skill hồ sơ không còn train (code điền khuôn), các hàm skill bên dưới giữ lại chỉ để
-công cụ kiểm skill cũ còn chạy.
+nên dữ liệu, prompt và đáp án dùng MỘT bộ tên. Skill hồ sơ không train (code điền khuôn).
 
 Tin user là JSON viết liền {"question", "profile", "pending_question", ["context"]}; đáp án là {"intents":[{"type","span","entities"}]}
 với khóa trong entities theo một thứ tự cố định, để model học nhất quán. Chỉ xuất train và val, tập test không bao giờ đem đi train.
@@ -21,12 +20,9 @@ from app.schemas.slm import PROFILE_KEYS
 from app.services.skill_call import SKILLS_DIR, load_skill
 from scripts.build_slm_jsonl import DEFAULT_OUT, profile_text
 
-SKILL_PROMPT_PATH = SKILLS_DIR / "slm_sinh_skill_ho_so.md"
 # Prompt tách ý dùng để huấn luyện (tiếng Anh). Chạy thật phải dùng đúng prompt này
 TRAIN_PROMPT = "slm_intents"
 PROMPT_PATH = SKILLS_DIR / f"{TRAIN_PROMPT}.md"  # file prompt dùng để huấn luyện (tests đọc để kiểm nội dung)
-SKILL_REPEAT = 3  # mỗi skill train xuất 3 lần, để model nhỏ học được khuôn dài từ ít mẫu
-SKILL_HOLDOUT_EVERY = 8  # cứ 8 skill train giữ lại 1 để kiểm skill, không đem đi train
 OUT_DIR = DEFAULT_OUT.parent / "finetune"
 SPLITS = ("train", "val")
 # Khóa trong entities luôn viết theo một thứ tự cố định (khóa hồ sơ, rồi các khóa còn lại) để model học nhất quán.
@@ -83,46 +79,6 @@ def chat_rows(records: list[dict[str, Any]], prompt: str, split: str) -> list[di
         to_chat(record, prompt)
         for record in records
         if record["split"] == split and record["input"]["question"].lower() not in test_questions
-    ]
-
-
-# Đầu vào của việc sinh skill: đúng các trường của SkillRequest (loại, câu hỏi, hồ sơ đã đủ, dòng code tính sẵn)
-def skill_request(record: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "loai": record["type"],
-        "cau_hoi": record["input"]["cau_hoi"],
-        "ho_so": profile_text(record["input"]["ho_so"]),
-        "tinh_san": record.get("tinh_san") or {},
-    }
-
-
-# Hai tin như lúc chạy thật: prompt sinh skill và JSON đầu vào viết liền
-def skill_messages(prompt: str, request: dict[str, Any]) -> list[dict[str, str]]:
-    return [
-        {"role": "system", "content": prompt},
-        {"role": "user", "content": json.dumps(request, ensure_ascii=False, separators=(",", ":"))},
-    ]
-
-
-# Dòng skill của một tập. val gồm các dòng val và các dòng train được giữ lại; train lặp SKILL_REPEAT lần
-def skill_rows(records: list[dict[str, Any]], prompt: str, split: str) -> list[dict[str, Any]]:
-    skills = sorted((r for r in records if r["skill_md"] and r["type"] == "ho_so"), key=lambda r: r["id"])
-    train = [r for r in skills if r["split"] == "train"]
-    holdout = train[::SKILL_HOLDOUT_EVERY]
-    chosen = {
-        "train": [r for r in train if r not in holdout],
-        "val": [r for r in skills if r["split"] == "val"] + holdout,
-    }[split]
-    repeat = SKILL_REPEAT if split == "train" else 1
-    return [
-        {
-            "messages": [
-                *skill_messages(prompt, skill_request(r)),
-                {"role": "assistant", "content": r["skill_md"].strip()},
-            ]
-        }
-        for r in chosen
-        for _ in range(repeat)
     ]
 
 

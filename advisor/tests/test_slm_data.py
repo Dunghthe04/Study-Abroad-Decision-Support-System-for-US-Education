@@ -1,4 +1,4 @@
-"""Dữ liệu của SLM: đủ 6 loại, đúng chuẩn (danh sách ý cac_y), không tự mâu thuẫn, và JSONL khớp với Excel."""
+"""Dữ liệu của SLM: đủ 6 loại, đúng chuẩn (danh sách ý intents), không tự mâu thuẫn, và JSONL khớp với Excel."""
 
 import json
 from collections import Counter, defaultdict
@@ -6,21 +6,15 @@ from collections import Counter, defaultdict
 import pytest
 from openpyxl import Workbook
 
-from app.schemas.slm import MAX_RAW_Y, SKILL_SECTIONS
+from app.schemas.slm import MAX_RAW_Y, SUBTYPES
 from scripts.build_slm_jsonl import (
-    CALC_COLUMN,
     COLUMNS,
     DEFAULT_EXCEL,
     DEFAULT_OUT,
-    SKILL_TYPES,
     SPLITS,
     TYPES,
-    context_to_internal,
-    intents_to_internal,
-    read_all,
     read_records,
     to_record,
-    v2_entities_to_internal,
 )
 
 MIN_ROWS_PER_TYPE = 30
@@ -28,13 +22,13 @@ MIN_ROWS_PER_TYPE = 30
 
 @pytest.fixture(scope="module")
 def records():
-    return read_records(DEFAULT_EXCEL)  # bản ghi tên nội bộ, dựng thẳng từ Excel
+    return read_records(DEFAULT_EXCEL)  # dựng thẳng từ Excel
 
 
 def test_the_jsonl_is_exactly_what_the_excel_builds_so_nobody_forgot_to_rebuild():
-    english = [json.loads(line) for line in DEFAULT_OUT.read_text(encoding="utf-8").splitlines()]
+    on_disk = [json.loads(line) for line in DEFAULT_OUT.read_text(encoding="utf-8").splitlines()]
 
-    assert english == read_all(DEFAULT_EXCEL)[1]
+    assert on_disk == read_records(DEFAULT_EXCEL)
 
 
 def test_every_type_has_enough_rows_and_all_three_splits(records):
@@ -52,29 +46,21 @@ def test_ids_are_unique(records):
     assert len({r["id"] for r in records}) == len(records)
 
 
-def test_the_training_data_has_no_skill_because_code_fills_the_skill_template(records):
-    # v9: skill do code điền khuôn, SLM chỉ học tách ý (cac_y), nên dữ liệu thật không còn skill_md
-    assert not [r["id"] for r in records if r["skill_md"]]
+def test_a_record_has_exactly_the_fields_of_the_jsonl_line(records):
+    assert all(set(r) == {"id", "type", "split", "input", "output"} for r in records)
+    assert all(set(r["output"]) == {"intents"} for r in records)
+    assert all({"question", "profile", "pending_question"} <= set(r["input"]) for r in records)
 
 
-def test_skills_in_a_record_would_still_only_belong_to_profile_rows_with_a_profile(records):
-    with_skill = [r for r in records if r["skill_md"]]
-
-    assert {r["type"] for r in with_skill} <= set(SKILL_TYPES)
-    assert all(r["input"]["ho_so"] for r in with_skill)
-
-
-def test_the_same_message_in_the_same_context_never_has_two_different_types(
-    records,
-):  # ngữ cảnh gồm cả dang_noi_ve
+def test_the_same_message_in_the_same_context_never_has_two_different_types(records):
     seen: dict[tuple, set[str]] = defaultdict(set)
     for r in records:
         context = (
-            r["input"]["cau_hoi"].lower(),
-            r["input"]["cau_he_thong_dang_hoi"],
-            json.dumps(r["input"]["ho_so"]),
+            r["input"]["question"].lower(),
+            r["input"]["pending_question"],
+            json.dumps(r["input"]["profile"]),
             json.dumps(
-                r["input"].get("dang_noi_ve"), sort_keys=True
+                r["input"].get("context"), sort_keys=True
             ),  # cùng chữ nhưng ngữ cảnh khác thì được khác loại
         )
         seen[context].add(r["type"])
@@ -85,36 +71,55 @@ def test_the_same_message_in_the_same_context_never_has_two_different_types(
 
 def test_scenarios_always_say_which_mode(records):
     for r in records:
-        for y in r["output"]["cac_y"]:
-            if y["type"] == "kich_ban":
-                assert y["thuc_the"]["che_do"] in ("what_if", "goal_seeking"), r["id"]
+        for y in r["output"]["intents"]:
+            if y["type"] == "scenario":
+                assert y["entities"]["mode"] in ("what_if", "goal_seeking"), r["id"]
 
 
 def test_the_sheet_type_is_always_one_of_the_intents_of_the_row(records):
     for r in records:
-        assert r["type"] in {y["type"] for y in r["output"]["cac_y"]}, r["id"]
+        assert r["type"] in {y["type"] for y in r["output"]["intents"]}, r["id"]
 
 
 def test_rows_with_several_intents_cover_the_cases_the_model_must_learn(records):
-    rows = [[y["type"] for y in r["output"]["cac_y"]] for r in records]
+    rows = [[y["type"] for y in r["output"]["intents"]] for r in records]
 
-    assert any("mac_dinh" in types and len(types) > 1 for types in rows), "thiếu: khai hồ sơ kèm câu hỏi"
-    assert any(types.count("kien_thuc") >= 2 for types in rows), "thiếu: hai câu kiến thức liền nhau"
+    assert any("collect_profile" in types and len(types) > 1 for types in rows), (
+        "thiếu: khai hồ sơ kèm câu hỏi"
+    )
+    assert any(types.count("knowledge") >= 2 for types in rows), "thiếu: hai câu kiến thức liền nhau"
     assert any(len(types) >= 3 for types in rows), "thiếu: tin từ ba ý trở lên"
+
+
+def test_the_hard_cases_exist_in_the_data(records):
+    questions = [r["input"]["question"] for r in records]
+    subtypes = {
+        y["entities"].get("subtype")
+        for r in records
+        for y in r["output"]["intents"]
+        if y["type"] == "out_of_scope"
+    }
+
+    assert any("visa f1 can giay to gi" in q for q in questions), "thiếu câu không dấu"
+    assert subtypes == set(SUBTYPES)
 
 
 # ---- script đổi Excel sang JSONL ----
 CENTER = {
-    "type": "trung_tam",
-    "doan": "tìm trung tâm sửa bài luận ở Sài Gòn",
-    "thuc_the": {"dich_vu": "SUA_BAI_LUAN", "thanh_pho": "Sài Gòn"},
+    "type": "center_referral",
+    "span": "tìm trung tâm sửa bài luận ở Sài Gòn",
+    "entities": {"service": "ESSAY_EDITING", "city": "Sài Gòn"},
 }
-GREETING = {"type": "ngoai_pham_vi", "doan": "chào", "thuc_the": {"loai_con": "tam_biet"}}
+GREETING = {"type": "out_of_scope", "span": "chào", "entities": {"subtype": "farewell"}}
 
 
 def row(**overrides):
     base = dict.fromkeys(COLUMNS)
-    base |= {"cau_hoi": "tìm trung tâm sửa bài luận ở Sài Gòn", "tap": "train", "cac_y": json.dumps([CENTER])}
+    base |= {
+        "question": "tìm trung tâm sửa bài luận ở Sài Gòn",
+        "split": "train",
+        "intents": json.dumps([CENTER]),
+    }
     return base | overrides
 
 
@@ -127,64 +132,71 @@ def check(intent, raw):
 
 
 def test_a_good_row_becomes_a_record():
-    record = check("trung_tam", row())
+    record = check("center_referral", row())
 
-    assert record["output"] == {"cac_y": [CENTER]}
-    assert record["input"]["ho_so"] is None and record["skill_md"] is None
+    assert record["output"] == {"intents": [CENTER]}
+    assert record["input"]["profile"] is None
+    assert set(record) == {"id", "type", "split", "input", "output"}
 
 
 def test_a_row_with_several_intents_keeps_them_in_the_order_the_student_said_them():
     record = check(
-        "mac_dinh",
+        "collect_profile",
         row(
-            cau_hoi="em GPA 3.5, I-20 là gì, SAT là gì",
-            cac_y=ys(
-                {"type": "mac_dinh", "doan": "em GPA 3.5", "thuc_the": {"gpa": "GPA 3.5"}},
-                {"type": "kien_thuc", "doan": "I-20 là gì", "thuc_the": {}},
-                {"type": "kien_thuc", "doan": "SAT là gì", "thuc_the": {}},
+            question="em GPA 3.5, I-20 là gì, SAT là gì",
+            intents=ys(
+                {"type": "collect_profile", "span": "em GPA 3.5", "entities": {"gpa": "GPA 3.5"}},
+                {"type": "knowledge", "span": "I-20 là gì", "entities": {}},
+                {"type": "knowledge", "span": "SAT là gì", "entities": {}},
             ),
         ),
     )
 
-    assert [y["doan"] for y in record["output"]["cac_y"]] == ["em GPA 3.5", "I-20 là gì", "SAT là gì"]
+    assert [y["span"] for y in record["output"]["intents"]] == ["em GPA 3.5", "I-20 là gì", "SAT là gì"]
 
 
-def test_a_rewritten_doan_is_fine_when_it_only_uses_words_of_the_message():
+def test_a_rewritten_span_is_fine_when_it_only_uses_words_of_the_message():
     record = check(
-        "kien_thuc",
+        "knowledge",
         row(
-            cau_hoi="I-20 và SAT là gì?",
-            cac_y=ys(
-                {"type": "kien_thuc", "doan": "I-20 là gì", "thuc_the": {}},
-                {"type": "kien_thuc", "doan": "SAT là gì", "thuc_the": {}},
+            question="I-20 và SAT là gì?",
+            intents=ys(
+                {"type": "knowledge", "span": "I-20 là gì", "entities": {}},
+                {"type": "knowledge", "span": "SAT là gì", "entities": {}},
             ),
         ),
     )
 
-    assert len(record["output"]["cac_y"]) == 2
+    assert len(record["output"]["intents"]) == 2
 
 
-def test_mac_dinh_must_come_first_even_when_the_student_says_the_profile_last():
-    with pytest.raises(ValueError, match="mac_dinh phải đứng đầu"):
+def test_collect_profile_must_come_first_even_when_the_student_says_the_profile_last():
+    with pytest.raises(ValueError, match="collect_profile phải đứng đầu"):
         check(
-            "kien_thuc",
+            "knowledge",
             row(
-                cau_hoi="I-20 là gì, à em GPA 3.5",
-                cac_y=ys(
-                    {"type": "kien_thuc", "doan": "I-20 là gì", "thuc_the": {}},
-                    {"type": "mac_dinh", "doan": "em GPA 3.5", "thuc_the": {"gpa": "GPA 3.5"}},
+                question="I-20 là gì, à em GPA 3.5",
+                intents=ys(
+                    {"type": "knowledge", "span": "I-20 là gì", "entities": {}},
+                    {"type": "collect_profile", "span": "em GPA 3.5", "entities": {"gpa": "GPA 3.5"}},
                 ),
             ),
         )
 
 
-def test_profile_values_belong_to_the_mac_dinh_intent_never_to_a_question_intent():
-    with pytest.raises(ValueError, match="chỉ ghi ở ý mac_dinh"):
+def test_profile_values_belong_to_the_collect_profile_intent_never_to_a_question_intent():
+    with pytest.raises(ValueError, match="chỉ ghi ở ý collect_profile"):
         check(
-            "ho_so",
+            "profile_review",
             row(
-                cau_hoi="GPA 3.5, em nên nộp trường nào",
-                cac_y=ys({"type": "ho_so", "doan": "em nên nộp trường nào", "thuc_the": {"gpa": "GPA 3.5"}}),
+                question="GPA 3.5, em nên nộp trường nào",
+                intents=ys(
+                    {
+                        "type": "profile_review",
+                        "span": "em nên nộp trường nào",
+                        "entities": {"gpa": "GPA 3.5"},
+                    }
+                ),
             ),
         )
 
@@ -192,143 +204,93 @@ def test_profile_values_belong_to_the_mac_dinh_intent_never_to_a_question_intent
 @pytest.mark.parametrize(
     ("overrides", "message"),
     [
-        ({"tap": "dev"}, "tap phải là"),
-        ({"cau_hoi": None}, "thiếu cau_hoi"),
-        ({"cac_y": None}, "ít nhất một ý"),
-        ({"cac_y": "[]"}, "ít nhất một ý"),
-        ({"cac_y": "{không phải json"}, "không phải JSON"),
-        ({"cac_y": '{"type": "trung_tam"}'}, "phải là danh sách ý"),
-        ({"cac_y": ys({**CENTER, "thuc_the": {"dich_vu": "LAM_VISA_HO"}})}, "mã dịch vụ lạ"),
+        ({"split": "dev"}, "split phải là"),
+        ({"question": None}, "thiếu question"),
+        ({"intents": None}, "ít nhất một ý"),
+        ({"intents": "[]"}, "ít nhất một ý"),
+        ({"intents": "{không phải json"}, "không phải JSON"),
+        ({"intents": '{"type": "center_referral"}'}, "phải là danh sách ý"),
+        ({"intents": ys({**CENTER, "entities": {"service": "LAM_VISA_HO"}})}, "mã dịch vụ lạ"),
         (
-            {"cac_y": ys({**CENTER, "thuc_the": {"thanh_pho": "TP.HCM"}})},
-            "có trong cau_hoi",
+            {"intents": ys({**CENTER, "entities": {"city": "TP.HCM"}})},
+            "có trong question",
         ),  # phải ghi "Sài Gòn"
-        ({"cac_y": ys({**CENTER, "thuc_the": {"mau_sac": "đỏ"}})}, "khóa thực thể lạ"),
-        ({"cac_y": ys({**CENTER, "doan": "tìm trung tâm luyện visa"})}, "không có trong câu hỏi"),
-        ({"cac_y": ys({**CENTER, "type": "kien_thuc", "thuc_the": {}})}, "không có ý nào loại trung_tam"),
+        ({"intents": ys({**CENTER, "entities": {"mau_sac": "đỏ"}})}, "khóa entities lạ"),
+        ({"intents": ys({**CENTER, "span": "tìm trung tâm luyện visa"})}, "không có trong câu hỏi"),
         (
-            {"cau_hoi": "chào, tìm trung tâm sửa bài luận ở Sài Gòn", "cac_y": ys(GREETING, CENTER)},
+            {"intents": ys({**CENTER, "type": "knowledge", "entities": {}})},
+            "không có ý nào loại center_referral",
+        ),
+        (
+            {"question": "chào, tìm trung tâm sửa bài luận ở Sài Gòn", "intents": ys(GREETING, CENTER)},
             "bị gộp hoặc bỏ",  # câu chào đi kèm ý thật thì không ghi vào dữ liệu
         ),
-        ({"skill_md": "# skill"}, "không có skill riêng"),
-        ({"cau_he_thong_dang_hoi": "Câu hỏi không có trong chat"}, "không khớp câu nào"),
+        ({"pending_question": "Câu hỏi không có trong chat"}, "không khớp câu nào"),
+        ({"profile": '{"mau_sac": "đỏ"}'}, "profile có khóa lạ"),
+        ({"profile": '["gpa"]'}, "object JSON"),
+        ({"context": '["Harvard"]'}, "object JSON"),
+        (
+            {"intents": ys({**CENTER, "entities": {"tasks": "booking"}})},
+            "tasks của loại",
+        ),  # tasks luôn là danh sách
     ],
 )
 def test_bad_rows_are_rejected_with_the_sheet_and_line(overrides, message):
     with pytest.raises(ValueError, match=message):
-        check("trung_tam", row(**overrides))
+        check("center_referral", row(**overrides))
 
 
 def test_two_intents_of_a_type_that_must_merge_are_rejected():
-    first = {"type": "ho_so", "doan": "đánh giá hồ sơ giúp em", "thuc_the": {}}
-    second = {"type": "ho_so", "doan": "em nên làm gì", "thuc_the": {}}
+    first = {"type": "profile_review", "span": "đánh giá hồ sơ giúp em", "entities": {}}
+    second = {"type": "profile_review", "span": "em nên làm gì", "entities": {}}
     with pytest.raises(ValueError, match="bị gộp hoặc bỏ"):
-        check("ho_so", row(cau_hoi="đánh giá hồ sơ giúp em, em nên làm gì", cac_y=ys(first, second)))
+        check(
+            "profile_review",
+            row(question="đánh giá hồ sơ giúp em, em nên làm gì", intents=ys(first, second)),
+        )
 
 
 def test_a_row_with_more_intents_than_the_technical_ceiling_is_rejected():
     asked = [f"câu {i}" for i in range(1, MAX_RAW_Y + 2)]
-    many = [{"type": "kien_thuc", "doan": doan, "thuc_the": {}} for doan in asked]
+    many = [{"type": "knowledge", "span": span, "entities": {}} for span in asked]
     with pytest.raises(ValueError, match="nhiều nhất"):
-        check("kien_thuc", row(cau_hoi=", ".join(asked), cac_y=ys(*many)))
+        check("knowledge", row(question=", ".join(asked), intents=ys(*many)))
 
 
 def test_profile_values_in_entities_must_be_text_from_the_message():
     with pytest.raises(ValueError, match="đoạn chữ"):
-        check("trung_tam", row(cac_y=ys({**CENTER, "thuc_the": {"dich_vu": "SUA_BAI_LUAN", "gpa": 8.2}})))
+        check(
+            "center_referral",
+            row(intents=ys({**CENTER, "entities": {"service": "ESSAY_EDITING", "gpa": 8.2}})),
+        )
 
 
 def test_a_profile_answer_without_a_pending_question_must_carry_a_value():
     with pytest.raises(ValueError, match="phải có giá trị hồ sơ"):
-        only = {"type": "mac_dinh", "doan": "cập nhật SAT giúp em", "thuc_the": {}}
-        check("mac_dinh", row(cau_hoi="cập nhật SAT giúp em", cac_y=ys(only)))
-
-
-def test_a_skill_needs_a_profile():
-    with pytest.raises(ValueError, match="phải có hồ sơ"):
-        only = {"type": "ho_so", "doan": "đánh giá hồ sơ giúp em", "thuc_the": {}}
-        check("ho_so", row(skill_md="# skill", cau_hoi="đánh giá hồ sơ giúp em", cac_y=ys(only)))
-
-
-PROFILE_ROW = {
-    "cau_hoi": "đánh giá hồ sơ giúp em",
-    "ho_so": json.dumps({"gpa": "8 thang 10"}),
-    "cac_y": ys({"type": "ho_so", "doan": "đánh giá hồ sơ giúp em", "thuc_the": {}}),
-}
-CALC = {"gpa_level": "3.2 thang 4, thấp (TB các trường 3.6)"}
-
-
-def skill_of(text):
-    return "\n".join(f"## {name}\n{text}" for name in SKILL_SECTIONS["ho_so"])
-
-
-def test_calculated_lines_are_kept_apart_from_the_input_and_the_skill_must_keep_their_numbers():
-    good = skill_of("GPA 8 thang 10, 3.2 thang 4, TB các trường 3.6")
-    record = check(
-        "ho_so", row(**PROFILE_ROW, skill_md=good, **{CALC_COLUMN: json.dumps(CALC, ensure_ascii=False)})
-    )
-
-    assert record["tinh_san"] == CALC
-    assert "tinh_san" not in record["input"]  # đầu vào tách ý không đổi
-    assert "tinh_san" not in check("ho_so", row(**PROFILE_ROW, skill_md=good))  # cột trống thì như dòng cũ
-    with pytest.raises(ValueError, match="bỏ mất số"):
-        check(
-            "ho_so",
-            row(**PROFILE_ROW, skill_md=skill_of("GPA 8 thang 10"), **{CALC_COLUMN: json.dumps(CALC)}),
-        )
-
-
-@pytest.mark.parametrize(
-    ("calc", "message"),
-    [('{"mau_sac": "đỏ"}', "khóa lạ"), ('["3.2"]', "object JSON"), ("{x", "không phải JSON")],
-)
-def test_bad_calculated_lines_are_rejected(calc, message):
-    with pytest.raises(ValueError, match=message):
-        check("ho_so", row(**PROFILE_ROW, **{CALC_COLUMN: calc}))
-
-
-def test_the_profile_sheet_may_have_the_calculated_column_after_the_profile(tmp_path):
-    header = ["question", "profile", "profile_calc", "pending_question", "intents", "skill_md", "split"]
-    wb = Workbook()
-    wb.active.title = "ho_so"
-    wb.active.append(header)
-    wb.active.append(
-        [
-            PROFILE_ROW["cau_hoi"],
-            PROFILE_ROW["ho_so"],
-            json.dumps(CALC),
-            None,
-            PROFILE_ROW["cac_y"],
-            None,
-            "train",
-        ]
-    )
-    path = tmp_path / "calc.xlsx"
-    wb.save(path)
-
-    assert read_records(path)[0]["tinh_san"] == CALC
+        only = {"type": "collect_profile", "span": "cập nhật SAT giúp em", "entities": {}}
+        check("collect_profile", row(question="cập nhật SAT giúp em", intents=ys(only)))
 
 
 def test_a_scenario_needs_a_mode_and_a_change():
-    with pytest.raises(ValueError, match="cần thay_doi"):
+    with pytest.raises(ValueError, match="cần changes"):
         only = {
-            "type": "kich_ban",
-            "doan": "tìm trung tâm sửa bài luận ở Sài Gòn",
-            "thuc_the": {"che_do": "what_if"},
+            "type": "scenario",
+            "span": "tìm trung tâm sửa bài luận ở Sài Gòn",
+            "entities": {"mode": "what_if"},
         }
-        check("kich_ban", row(cac_y=ys(only)))
+        check("scenario", row(intents=ys(only)))
 
 
 def test_the_form_is_checked_ids_come_from_the_sheet_and_blank_rows_are_skipped(tmp_path):
     wb = Workbook()
-    wb.active.title = "trung_tam"
+    wb.active.title = "center_referral"
     wb.active.append(list(COLUMNS))
     wb.active.append([row()[c] for c in COLUMNS])
     wb.active.append([None] * len(COLUMNS))
     wb.active.append([row()[c] for c in COLUMNS])
     path = tmp_path / "du_lieu.xlsx"
     wb.save(path)
-    assert [r["id"] for r in read_records(path)] == ["trung_tam_001", "trung_tam_002"]
+    assert [r["id"] for r in read_records(path)] == ["center_referral_001", "center_referral_002"]
 
     wb.active.cell(1, len(COLUMNS) + 1, "ghi_chu")
     wb.save(path)
@@ -342,262 +304,64 @@ def test_the_form_is_checked_ids_come_from_the_sheet_and_blank_rows_are_skipped(
         read_records(path)
 
 
-def test_an_english_workbook_builds_the_same_record_as_the_internal_names(tmp_path):
-    english = [
-        {
-            "type": "scenario",
-            "span": "nếu em đạt GPA 9,0 thang 10 và ngân sách 800 triệu thì sao",
-            "entities": {
-                "mode": "what_if",
-                "changes": [
-                    {"factor": "gpa", "value": "9.0", "unit": "scale_10"},
-                    {"factor": "budget", "value": "800000000", "unit": "VND"},
-                    {"factor": "sat", "action": "skip"},
-                ],
-            },
-        }
-    ]
-    internal = [
-        {
-            "type": "kich_ban",
-            "doan": "nếu em đạt GPA 9,0 thang 10 và ngân sách 800 triệu thì sao",
-            "thuc_the": {
-                "che_do": "what_if",
-                "thay_doi": [
-                    {"yeu_to": "gpa", "gia_tri": "9.0", "don_vi": "thang_10"},
-                    {"yeu_to": "budget", "gia_tri": "800000000", "don_vi": "VND"},
-                    {"yeu_to": "sat", "hanh_dong": "bo_qua"},
-                ],
-            },
-        }
-    ]
-    question = english[0]["span"]
-
+def test_the_readme_and_summary_sheets_are_not_data(tmp_path):
     wb = Workbook()
-    ws = wb.active
-    ws.title = "scenario"
-    ws.append(["question", "profile", "pending_question", "intents", "split"])
-    ws.append([question, None, None, json.dumps(english, ensure_ascii=False), "train"])
-    path = tmp_path / "en.xlsx"
+    wb.active.title = "README"
+    wb.active.append(["giải thích cho người đọc"])
+    wb.create_sheet("summary").append(["sheet", "v3"])
+    ws = wb.create_sheet("knowledge")
+    ws.append(list(COLUMNS))
+    ws.append(
+        ["I-20 là gì", None, None, '[{"type": "knowledge", "span": "I-20 là gì", "entities": {}}]', "train"]
+    )
+    path = tmp_path / "du_lieu.xlsx"
     wb.save(path)
 
-    [record] = read_records(path)
-
-    assert record["type"] == "kich_ban" and record["id"] == "kich_ban_001"
-    assert record["input"]["cau_hoi"] == question and record["output"]["cac_y"] == internal
-    assert record["skill_md"] is None  # kịch bản do code tính, không có skill
-
-
-def test_the_scenario_sheet_has_no_skill_column_but_an_old_empty_one_is_still_read(tmp_path):
-    ys = json.dumps(
-        [
-            {
-                "type": "kich_ban",
-                "doan": "cần gì để vào MIT",
-                "thuc_the": {"che_do": "goal_seeking", "truong": "MIT"},
-            }
-        ]
-    )
-    for header in (COLUMNS, COLUMNS[:-1] + ("skill_md", "tap")):
-        wb = Workbook()
-        wb.active.title = "kich_ban"
-        wb.active.append(list(header))
-        wb.active.append(
-            ["cần gì để vào MIT", None, None, ys] + ([None] if "skill_md" in header else []) + ["train"]
-        )
-        path = tmp_path / f"{len(header)}.xlsx"
-        wb.save(path)
-        assert [r["id"] for r in read_records(path)] == ["kich_ban_001"]
-
-
-def test_the_hard_cases_exist_in_the_data(records):
-    questions = [r["input"]["cau_hoi"] for r in records]
-    types = {y["type"]: y for r in records for y in r["output"]["cac_y"]}
-
-    assert any("visa f1 can giay to gi" in q for q in questions), "thiếu câu không dấu"
-    assert {y["thuc_the"].get("loai_con") for r in records for y in r["output"]["cac_y"] if y["type"] == "ngoai_pham_vi"} == {
-        "ngoai_le", "nhay_cam", "tam_biet", "mo_ho", "ve_he_thong", "gap_nguoi",
-    }  # fmt: skip
-    assert types
-
-
-# ---- khuôn v2 viết bằng tiếng Anh trong Excel: đổi về tên nội bộ đúng và đủ ----
-@pytest.mark.parametrize(
-    ("kind", "english", "internal"),
-    [
-        (
-            "collect_profile",
-            {"tasks": ["edit"], "sat": "SAT là 1400"},
-            {"nhiem_vu": "sua", "sat": "SAT là 1400"},
-        ),
-        (
-            "collect_profile",
-            {"tasks": ["edit"], "sat": "1450", "follow_up": True},
-            {"nhiem_vu": "sua", "sat": "1450", "tiep_noi": True},
-        ),
-        ("collect_profile", {"tasks": ["status"]}, {"nhiem_vu": "xem_ho_so"}),
-        ("collect_profile", {"tasks": ["restart"]}, {"nhiem_vu": "lam_lai"}),
-        ("collect_profile", {"gpa": "3.5"}, {"gpa": "3.5"}),
-        ("profile_review", {"tasks": []}, {"cac_nhiem_vu": []}),
-        ("profile_review", {"tasks": ["assessment", "roadmap"]}, {"cac_nhiem_vu": ["danh_gia", "lo_trinh"]}),
-        (
-            "profile_review",
-            {"tasks": ["compare"], "schools": ["BU", "NYU"], "follow_up": True},
-            {"cac_nhiem_vu": ["so_sanh"], "cac_truong": ["BU", "NYU"], "tiep_noi": True},
-        ),
-        (
-            "profile_review",
-            {"tasks": ["explain_school"], "schools": ["Duke"]},
-            {"cac_nhiem_vu": ["giai_thich_truong"], "truong": "Duke"},
-        ),
-        (
-            "knowledge",
-            {"tasks": ["school_info"], "schools": ["Harvard"], "fields": ["cost", "aid"]},
-            {"nhiem_vu": "tra_cuu", "truong": "Harvard", "muc": ["chi_phi", "hoc_bong"]},
-        ),
-        (
-            "knowledge",
-            {"tasks": ["compare_facts"], "schools": ["A", "B", "C", "D"], "fields": ["ranking"]},
-            {"nhiem_vu": "so_sanh", "cac_truong": ["A", "B", "C", "D"], "muc": ["xep_hang"]},
-        ),
-        (
-            "knowledge",
-            {
-                "tasks": ["search"],
-                "filters": {"state": "Texas", "school_type": "public", "aid": "yes", "max_cost": "30k"},
-                "sort": "lowest_cost",
-            },
-            {
-                "nhiem_vu": "tim_kiem",
-                "bo_loc": {
-                    "bang": ["Texas"],
-                    "loai_truong": "cong_lap",
-                    "hoc_bong": "co",
-                    "chi_phi_toi_da": "30k",
-                },
-                "sap_xep": "chi_phi_thap",
-            },
-        ),
-        ("knowledge", {"tasks": ["general"]}, {}),  # kiến thức chung không ghi nhiệm vụ
-        (
-            "knowledge",
-            {"tasks": ["school_info"], "schools": ["Purdue"], "field": "cost"},
-            {"nhiem_vu": "tra_cuu", "truong": "Purdue", "muc": ["chi_phi"]},
-        ),
-        (
-            "center_referral",
-            {"tasks": ["find"], "service": "ESSAY_EDITING", "city": "Hà Nội", "follow_up": True},
-            # service và city đổi tên ở bước đổi tên chung (EN_ENTITY_KEYS), không phải ở đây
-            {"nhiem_vu": "tim", "service": "ESSAY_EDITING", "city": "Hà Nội", "tiep_noi": True},
-        ),
-        ("center_referral", {"tasks": ["booking"]}, {"nhiem_vu": "dat_lich"}),
-        (
-            "center_referral",
-            {"tasks": ["compare"], "centers": ["PEC", "Kosam"]},
-            {"nhiem_vu": "so_sanh", "cac_trung_tam": ["PEC", "Kosam"]},
-        ),
-    ],
-)
-def test_the_v2_english_entities_become_the_internal_names(kind, english, internal):
-    assert v2_entities_to_internal(kind, english) == internal
-
-
-def test_an_item_written_with_internal_type_names_is_left_alone():
-    item = {"type": "kien_thuc", "doan": "x", "thuc_the": {"nhiem_vu": "tra_cuu", "truong": "MIT"}}
-
-    assert intents_to_internal([item]) == [item]
-
-
-def test_a_full_english_item_becomes_a_valid_internal_item():
-    items = intents_to_internal(
-        [{"type": "out_of_scope", "span": "bạn là ai", "entities": {"subtype": "about_system"}}]
-    )
-
-    assert items == [{"type": "ngoai_pham_vi", "doan": "bạn là ai", "thuc_the": {"loai_con": "ve_he_thong"}}]
-
-
-def test_the_context_column_is_renamed_like_the_entities():
-    english = {
-        "schools": ["Emory"],
-        "fields": ["gpa"],
-        "filters": {"state": ["Texas"], "aid": "yes"},
-        "last_field": "sat",
-        "last_task": "school_list",
-        "service": "TEST_PREP",
-        "city": "Hà Nội",
-        "centers": ["PEC", "Kosam"],
-        "scenario": {"mode": "what_if", "changes": [{"factor": "english", "value": "7.0", "unit": "ielts"}]},
-    }
-
-    assert context_to_internal(english) == {
-        "truong": ["Emory"],
-        "muc": ["gpa"],
-        "bo_loc": {"bang": ["Texas"], "hoc_bong": "co"},
-        "muc_vua_nhap": "sat",
-        "viec_vua_lam": "chon_truong",
-        "dich_vu": "LUYEN_THI",
-        "thanh_pho": "Hà Nội",
-        "cac_trung_tam": ["PEC", "Kosam"],
-        "kich_ban": {
-            "che_do": "what_if",
-            "thay_doi": [{"yeu_to": "english", "gia_tri": "7.0", "don_vi": "ielts"}],
-        },
-    }
-    assert context_to_internal({}) is None
-    assert context_to_internal(None) is None
+    assert [r["id"] for r in read_records(path)] == ["knowledge_001"]
 
 
 def test_a_row_with_context_keeps_it_in_the_input_in_the_same_form_the_model_will_get():
     follow_up = {
-        "type": "kien_thuc",
-        "doan": "còn Yale thì sao",
-        "thuc_the": {"truong": "Yale", "tiep_noi": True},
+        "type": "knowledge",
+        "span": "còn Yale thì sao",
+        "entities": {"tasks": ["school_info"], "schools": ["Yale"], "follow_up": True},
     }
+    context = {"schools": ["Harvard"], "fields": ["cost"]}
     record = check(
-        "kien_thuc",
-        row(
-            cau_hoi="còn Yale thì sao",
-            cac_y=ys(follow_up),
-            context=json.dumps({"schools": ["Harvard"], "fields": ["cost"]}),
-        ),
+        "knowledge", row(question="còn Yale thì sao", intents=ys(follow_up), context=json.dumps(context))
     )
 
-    assert record["input"]["dang_noi_ve"] == {"truong": ["Harvard"], "muc": ["chi_phi"]}
-    assert "dang_noi_ve" not in check("trung_tam", row())["input"]  # không ngữ cảnh: giữ khuôn cũ
+    assert record["input"]["context"] == context
+    assert "context" not in check("center_referral", row())["input"]  # không ngữ cảnh: không có khóa
 
 
 def test_a_follow_up_may_take_the_city_from_the_context_but_only_that_city():
     followup = {
-        "type": "trung_tam",
-        "doan": "thế còn luyện phỏng vấn",
-        "thuc_the": {"dich_vu": "LUYEN_PHONG_VAN", "thanh_pho": "Hà Nội", "tiep_noi": True},
+        "type": "center_referral",
+        "span": "thế còn luyện phỏng vấn",
+        "entities": {"service": "VISA_INTERVIEW_PREP", "city": "Hà Nội", "follow_up": True},
     }
     good = row(
-        cau_hoi="thế còn luyện phỏng vấn",
-        cac_y=ys(followup),
+        question="thế còn luyện phỏng vấn",
+        intents=ys(followup),
         context=json.dumps({"service": "ESSAY_EDITING", "city": "Hà Nội"}),
     )
-    check("trung_tam", good)
+    check("center_referral", good)
 
     with pytest.raises(ValueError, match="phải là đoạn chữ"):  # thành phố khác ngữ cảnh
-        check("trung_tam", good | {"context": json.dumps({"city": "Huế"})})
-    not_follow_up = {**followup, "thuc_the": {"dich_vu": "LUYEN_PHONG_VAN", "thanh_pho": "Hà Nội"}}
+        check("center_referral", good | {"context": json.dumps({"city": "Huế"})})
+    not_follow_up = {**followup, "entities": {"service": "VISA_INTERVIEW_PREP", "city": "Hà Nội"}}
     with pytest.raises(
         ValueError, match="phải là đoạn chữ"
     ):  # không nối tiếp thì thành phố phải nằm trong câu
-        check("trung_tam", good | {"cac_y": ys(not_follow_up)})
+        check("center_referral", good | {"intents": ys(not_follow_up)})
 
 
 def test_the_context_column_is_optional_on_every_sheet(tmp_path):
     item = {
         "type": "center_referral",
         "span": "thế còn luyện phỏng vấn",
-        "entities": {
-            "tasks": ["find"],
-            "service": "VISA_INTERVIEW_PREP",
-            "city": "Hà Nội",
-            "follow_up": True,
-        },
+        "entities": {"service": "VISA_INTERVIEW_PREP", "city": "Hà Nội", "follow_up": True},
     }
     wb = Workbook()
     wb.active.title = "center_referral"
@@ -617,18 +381,11 @@ def test_the_context_column_is_optional_on_every_sheet(tmp_path):
 
     record = read_records(path)[0]
 
-    assert record["input"]["dang_noi_ve"] == {"dich_vu": "SUA_BAI_LUAN", "thanh_pho": "Hà Nội"}
-    assert record["output"]["cac_y"][0]["thuc_the"] == {
-        "nhiem_vu": "tim",
-        "dich_vu": "LUYEN_PHONG_VAN",
-        "thanh_pho": "Hà Nội",
-        "tiep_noi": True,
-    }
+    assert record["input"]["context"] == {"service": "ESSAY_EDITING", "city": "Hà Nội"}
+    assert record["output"]["intents"] == [item]
 
 
 def test_the_review_column_is_ignored_by_the_build_and_does_not_reach_the_data(tmp_path):
-    from openpyxl import Workbook
-
     path = tmp_path / "du_lieu.xlsx"
     wb = Workbook()
     ws = wb.active
@@ -647,10 +404,6 @@ def test_the_review_column_is_ignored_by_the_build_and_does_not_reach_the_data(t
     )
     wb.save(path)
 
-    records, english = read_all(path)
+    records = read_records(path)
 
-    assert (
-        len(records) == 1
-        and "review" not in json.dumps(records[0])
-        and "review" not in json.dumps(english[0])
-    )
+    assert len(records) == 1 and "review" not in json.dumps(records[0])

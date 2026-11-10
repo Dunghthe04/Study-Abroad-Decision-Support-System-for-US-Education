@@ -16,7 +16,7 @@ def make_handler(llm) -> ChatProfileHandler:
 
 
 handler = make_handler(FakeLLM())
-MAC_DINH = tin("mac_dinh")
+MAC_DINH = tin("collect_profile")
 
 
 def test_pending_question_none_when_no_question():
@@ -140,7 +140,7 @@ async def test_update_after_confirm_returns_to_review():
         intake_mode="chat",
         asked=dict.fromkeys(skill_ho_so.QUESTION_ORDER, 1),
     )
-    slm = tin(("mac_dinh", {"gpa": "9.0"}))
+    slm = tin(("collect_profile", {"gpa": "9.0"}))
     await make_handler(llm).collect(state, "GPA em giờ 9.0 hệ 10", slm)
     assert state.profile["gpa"].value["value"] == 9.0
     assert state.profile["gpa"].status == "said_in_B0"
@@ -156,7 +156,7 @@ async def test_said_value_of_other_group_saved_with_pending_question():
     )
     state = ChatState(current_step="B2", intake_mode="chat")
     ask(state, "D2")
-    slm = tin(("mac_dinh", {"gpa": "8.5", "major": "CS"}))
+    slm = tin(("collect_profile", {"gpa": "8.5", "major": "CS"}))
     await make_handler(llm).collect(state, "GPA 8.5 hệ 10, ngành CS", slm)
     assert state.profile["major"].status == "said_in_B0"
     assert state.profile["gpa"].status == "confirmed"
@@ -166,7 +166,7 @@ async def test_opening_message_saves_values_and_invites():
     llm = FakeLLM({"values": {"gpa": {"value": 8.5, "scale": 10}}, "none_fields": []})
     state = ChatState()
     ask(state, "B0.1")
-    slm = tin(("mac_dinh", {"gpa": "8.5"}))
+    slm = tin(("collect_profile", {"gpa": "8.5"}))
     await make_handler(llm).collect(state, "GPA 8.5", slm)
     assert state.profile["gpa"].status == "said_in_B0"
     assert state.question_id == INTAKE_ID
@@ -194,7 +194,7 @@ async def test_nothing_new_keeps_ready_profile():
 async def test_unreadable_value_keeps_ready_profile():
     llm = FakeLLM({"values": {}, "none_fields": []})
     state = ChatState(current_step="B3", profile=full_profile(), intake_mode="chat")
-    slm = tin(("mac_dinh", {"gpa": "cao"}))
+    slm = tin(("collect_profile", {"gpa": "cao"}))
     await make_handler(llm).collect(state, "GPA em cao", slm)
     assert (state.current_step, state.question_id) == ("B3", None)
     assert handler.ready(state, REQUIRED_B3)

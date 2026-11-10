@@ -96,7 +96,7 @@ def test_nine_sections_in_order_and_no_placeholder_left():
 
 
 def test_assessment_only():
-    skill = skill_of(state_of(FULL), ["danh_gia"])
+    skill = skill_of(state_of(FULL), ["assessment"])
 
     assert ASSESS in skill
     assert ROADMAP not in skill
@@ -104,23 +104,23 @@ def test_assessment_only():
 
 
 def test_roadmap_only():
-    skill = skill_of(state_of(FULL), ["lo_trinh"])
+    skill = skill_of(state_of(FULL), ["roadmap"])
 
     assert ROADMAP in skill
     assert ASSESS not in skill
     assert "Lộ trình phù hợp với bạn: Đại học thẳng." in skill
 
 
-@pytest.mark.parametrize("tasks", [None, [], ["chon_truong"], ["lo_trinh", "danh_gia", "lo_trinh"]])
+@pytest.mark.parametrize("tasks", [None, [], ["school_list"], ["roadmap", "assessment", "roadmap"]])
 def test_both_tasks(tasks):
     skill = skill_of(state_of(FULL), tasks)
 
     assert ASSESS in skill and ROADMAP in skill
-    assert tasks_of(tasks) in (["danh_gia", "lo_trinh"], ["lo_trinh", "danh_gia"])
+    assert tasks_of(tasks) in (["assessment", "roadmap"], ["roadmap", "assessment"])
 
 
 def test_tasks_follow_student_order():
-    skill = skill_of(state_of(FULL), ["lo_trinh", "danh_gia"])
+    skill = skill_of(state_of(FULL), ["roadmap", "assessment"])
 
     assert skill.index(ROADMAP) < skill.index(ASSESS)
 
@@ -203,7 +203,7 @@ def test_no_number_outside_data(values):
         for token in NUMBER.findall(text):
             allowed |= readings(token)
 
-    filled = fill_du_lieu(req) + fill_noi_dung(req, ["danh_gia", "lo_trinh"], state.profile, TODAY)
+    filled = fill_du_lieu(req) + fill_noi_dung(req, ["assessment", "roadmap"], state.profile, TODAY)
 
     for token in NUMBER.findall(filled):
         assert any(abs(r - a) < 0.005 for r in readings(token) for a in allowed), token

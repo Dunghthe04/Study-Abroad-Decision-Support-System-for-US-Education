@@ -1,7 +1,7 @@
 # Hướng dẫn gán nhãn dữ liệu SLM
 
 Dành cho người thêm hoặc kiểm dòng trong `du_lieu_slm.xlsx`. Chỉ có **hai file dữ liệu**: `du_lieu_slm.xlsx` là nguồn duy nhất, ghi **toàn bộ bằng tiếng Anh**; `du_lieu_slm.jsonl` (tiếng Anh, đúng tên trong Excel) sinh từ Excel bằng
-`python -m scripts.build_slm_jsonl`, không sửa tay. Code và prompt còn dùng tên tiếng Việt: xem `TEN_KHOA_ANH_VIET.md` để biết phải đổi gì thành gì. Script kiểm từng dòng và báo tên sheet, số dòng nếu sai.
+`python -m scripts.build_slm_jsonl`, không sửa tay. Tên loại, khóa và mã trong Excel trùng từng chữ với JSONL, prompt (`app/skills/slm_intents.md`) và code (`app/schemas/slm.py`): hệ thống đọc đúng thứ model trả, không đổi tên ở giữa. Script kiểm từng dòng và báo tên sheet, số dòng nếu sai.
 
 ## 1. Một dòng gồm những gì
 

@@ -27,8 +27,8 @@ _CARE = r"uu tien|quan tam|chu trong|coi trong|quan trong|chuong|can nhac"
 _TOP = r"\bnhat\b|hang dau|tren het|tuyet doi|\b(rat|het suc|cuc ky|cuc)\b"
 
 LEVEL_MAX = 4
-# Khóa giữ chỗ trong thay_doi khi tin chỉ nói về ưu tiên (ý kich_ban cần thay_doi không rỗng)
-PRIORITY_KEY = "uu_tien"
+# Khóa giữ chỗ trong changes khi tin chỉ nói về ưu tiên (ý scenario cần changes không rỗng)
+PRIORITY_KEY = "priority"
 
 
 def _plain(text: str) -> str:
@@ -63,14 +63,14 @@ def detect_priorities(message: str) -> dict[str, int]:
 
 
 def from_model(changes: list[dict]) -> dict[str, int]:
-    """Ưu tiên model trả trong thay_doi (yeu_to = priority_cost | priority_aid | priority_prestige, gia_tri = 0..4). Giá trị sai thì bỏ."""
+    """Ưu tiên model trả trong changes (factor = priority_cost | priority_aid | priority_prestige, value = 0..4). Giá trị sai thì bỏ."""
     found: dict[str, int] = {}
     for change in changes:
-        key = str(change.get("yeu_to", ""))
+        key = str(change.get("factor", ""))
         if not key.startswith("priority_") or key.removeprefix("priority_") not in KEYS:
             continue
         try:
-            level = int(str(change.get("gia_tri", "")).strip())
+            level = int(str(change.get("value", "")).strip())
         except ValueError:
             continue
         if 0 <= level <= LEVEL_MAX:
