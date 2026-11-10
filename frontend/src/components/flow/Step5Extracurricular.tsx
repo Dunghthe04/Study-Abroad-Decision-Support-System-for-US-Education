@@ -244,7 +244,7 @@ export function Step5Extracurricular({
       {activities.length > 0 && (
         <section className="space-y-3">
           <div className="flex items-center justify-between">
-            <Label className="text-xs font-semiboldr text-muted-foreground">
+            <Label className="text-xs font-semibold text-muted-foreground">
               Đã thêm ({activities.length} mục)
             </Label>
             <span className="text-xs text-muted-foreground">

@@ -104,7 +104,7 @@ export function UniversityCard({ university }: UniversityCardProps) {
             )}
           </div>
           <div className="min-w-0 text-white">
-            <span className="text-xs font-semiboldr text-white/80">
+            <span className="text-xs font-semibold text-white/80">
               {university.code}
             </span>
             {location && (

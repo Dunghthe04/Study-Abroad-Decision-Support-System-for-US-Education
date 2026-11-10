@@ -220,7 +220,7 @@ export function TargetSchoolListView() {
         >
           <CardContent className="p-4 sm:p-5">
             <div className="flex items-center justify-between text-muted-foreground">
-              <span className="text-xs font-semiboldr">Tổng mục tiêu</span>
+              <span className="text-xs font-semibold">Tổng mục tiêu</span>
               <GraduationCapIcon className="size-4 text-brand" />
             </div>
             <div className="mt-2 flex items-baseline gap-2">
@@ -242,7 +242,7 @@ export function TargetSchoolListView() {
         >
           <CardContent className="p-4 sm:p-5">
             <div className="flex items-center justify-between text-muted-foreground">
-              <span className="text-xs font-semiboldr text-rose-600 dark:text-rose-400">
+              <span className="text-xs font-semibold text-rose-600 dark:text-rose-400">
                 Mục tiêu cao (Reach)
               </span>
               <TrendingUpIcon className="size-4 text-rose-500" />
@@ -268,7 +268,7 @@ export function TargetSchoolListView() {
         >
           <CardContent className="p-4 sm:p-5">
             <div className="flex items-center justify-between text-muted-foreground">
-              <span className="text-xs font-semiboldr text-sky-600 dark:text-sky-400">
+              <span className="text-xs font-semibold text-sky-600 dark:text-sky-400">
                 Vừa sức (Match)
               </span>
               <CheckCircle2Icon className="size-4 text-sky-500" />
@@ -294,7 +294,7 @@ export function TargetSchoolListView() {
         >
           <CardContent className="p-4 sm:p-5">
             <div className="flex items-center justify-between text-muted-foreground">
-              <span className="text-xs font-semiboldr text-emerald-600 dark:text-emerald-400">
+              <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
                 An toàn (Safety)
               </span>
               <ShieldCheckIcon className="size-4 text-emerald-500" />
@@ -320,7 +320,7 @@ export function TargetSchoolListView() {
               <ClockIcon className="size-5" />
             </div>
             <div>
-              <p className="text-xs font-mediumr text-amber-700 dark:text-amber-400">
+              <p className="text-xs font-medium text-amber-700 dark:text-amber-400">
                 Hạn chót nộp hồ sơ gần nhất
               </p>
               <p className="font-semibold text-sm">

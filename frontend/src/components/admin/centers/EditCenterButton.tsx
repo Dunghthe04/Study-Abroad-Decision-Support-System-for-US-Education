@@ -339,7 +339,7 @@ export function EditCenterButton({
 
             {/* Khối Pháp lý & Năng lực */}
             <div className="rounded-lg border bg-muted/20 p-3.5 space-y-3">
-              <div className="text-xs font-semibold text-foregroundr">
+              <div className="text-xs font-semibold text-foreground">
                 Hồ sơ pháp lý & Năng lực đối soát (Xác minh)
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

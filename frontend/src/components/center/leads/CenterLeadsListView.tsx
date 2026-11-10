@@ -616,7 +616,7 @@ export function CenterLeadsListView() {
                 {/* Contact Card */}
                 <Card size="sm" className="bg-muted/30">
                   <CardContent className="pt-4 space-y-3">
-                    <h4 className="text-xs font-semiboldr text-muted-foreground">
+                    <h4 className="text-xs font-semibold text-muted-foreground">
                       Thông tin liên hệ
                     </h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
@@ -685,7 +685,7 @@ export function CenterLeadsListView() {
 
                 {/* Message Content */}
                 <div className="space-y-1.5">
-                  <h4 className="text-xs font-semiboldr text-muted-foreground">
+                  <h4 className="text-xs font-semibold text-muted-foreground">
                     Lời nhắn từ học sinh / phụ huynh
                   </h4>
                   <div className="rounded-lg border bg-card p-3.5 text-sm text-foreground whitespace-pre-wrap leading-relaxed">
@@ -698,7 +698,7 @@ export function CenterLeadsListView() {
                 {/* Shared Profile Section */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <h4 className="text-xs font-semiboldr text-muted-foreground flex items-center gap-1.5">
+                    <h4 className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
                       <GraduationCapIcon className="size-4 text-brand" />
                       Hồ sơ học sinh được chia sẻ
                     </h4>
@@ -800,7 +800,7 @@ export function CenterLeadsListView() {
 
                 {/* Status Transition Control */}
                 <div className="space-y-2 pt-2 border-t">
-                  <h4 className="text-xs font-semiboldr text-muted-foreground">
+                  <h4 className="text-xs font-semibold text-muted-foreground">
                     Chuyển trạng thái xử lý
                   </h4>
                   <div className="flex flex-wrap items-center gap-2">

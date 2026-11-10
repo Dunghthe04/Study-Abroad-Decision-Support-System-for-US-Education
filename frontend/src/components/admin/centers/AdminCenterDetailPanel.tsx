@@ -129,7 +129,7 @@ export function AdminCenterDetailPanel({ center, onClose }: AdminCenterDetailPan
 
         {/* Contact details */}
         <div className="space-y-2 text-xs">
-          <div className="font-semibold text-foreground text-xsr text-muted-foreground">
+          <div className="font-semibold text-foreground text-xs text-muted-foreground">
             Thông tin liên hệ & Địa điểm
           </div>
           <div className="space-y-1.5 p-3 rounded-lg border bg-card text-muted-foreground">
@@ -151,7 +151,7 @@ export function AdminCenterDetailPanel({ center, onClose }: AdminCenterDetailPan
         {/* Services & Study Levels */}
         {center.services.length > 0 && (
           <div className="space-y-2 text-xs">
-            <div className="font-semibold text-foreground text-xsr text-muted-foreground">
+            <div className="font-semibold text-foreground text-xs text-muted-foreground">
               Dịch vụ tư vấn ({center.services.length})
             </div>
             <div className="flex flex-wrap gap-1.5">
@@ -166,7 +166,7 @@ export function AdminCenterDetailPanel({ center, onClose }: AdminCenterDetailPan
 
         {center.studyLevels.length > 0 && (
           <div className="space-y-2 text-xs">
-            <div className="font-semibold text-foreground text-xsr text-muted-foreground">
+            <div className="font-semibold text-foreground text-xs text-muted-foreground">
               Bậc học đào tạo ({center.studyLevels.length})
             </div>
             <div className="flex flex-wrap gap-1.5">

@@ -250,7 +250,7 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
 
               {/* Chứng nhận quốc tế */}
               <div className="pt-2 border-t">
-                <div className="text-xs font-semibold text-foreground mb-2r">
+                <div className="text-xs font-semibold text-foreground mb-2">
                   Chứng nhận kiểm định & Đối tác quốc tế:
                 </div>
                 <div className="flex flex-wrap gap-2">

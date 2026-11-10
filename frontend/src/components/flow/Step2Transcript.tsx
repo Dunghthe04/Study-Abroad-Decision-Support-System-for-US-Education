@@ -1063,7 +1063,7 @@ export function Step2Transcript({
                     ) : (
                       <TrendingUpIcon className="size-4 text-emerald-600" />
                     )}
-                    <span className="text-xs font-boldr text-foreground">
+                    <span className="text-xs font-bold text-foreground">
                       Kỳ vọng xu hướng điểm số (Grade Trend)
                     </span>
                   </div>
@@ -1598,7 +1598,7 @@ export function Step2Transcript({
                     ) : (
                       <TrendingUpIcon className="size-4 text-emerald-600" />
                     )}
-                    <span className="text-xs font-boldr text-foreground">
+                    <span className="text-xs font-bold text-foreground">
                       Xu hướng điểm số (Grade Trend)
                     </span>
                   </div>

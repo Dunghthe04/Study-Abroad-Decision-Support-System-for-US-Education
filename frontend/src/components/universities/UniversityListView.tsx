@@ -176,7 +176,7 @@ export function UniversityListView({
             <span className="flex size-8 items-center justify-center rounded-lg bg-brand text-white">
               <Building2Icon className="size-4" />
             </span>
-            <span className="text-xs font-boldr text-brand">
+            <span className="text-xs font-bold text-brand">
               Dữ liệu tuyển sinh đại học Mỹ
             </span>
           </div>

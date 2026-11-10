@@ -300,7 +300,7 @@ export function AdminCenterListView() {
       <div className="bg-card border rounded-xl overflow-hidden w-full">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="bg-muted/50 border-b text-xs font-semibold text-muted-foregroundr">
+            <thead className="bg-muted/50 border-b text-xs font-semibold text-muted-foreground">
               <tr>
                 <th className="py-3 px-4">Trung tâm & Mã</th>
                 <th className="py-3 px-4">Mô hình hoạt động</th>
