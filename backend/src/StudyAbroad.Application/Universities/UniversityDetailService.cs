@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using StudyAbroad.Application.Common;
 using StudyAbroad.Domain.Entities;
 
 namespace StudyAbroad.Application.Universities;
@@ -39,6 +40,12 @@ public class UniversityDetailService(IUniversityDetailRepository repository) : I
             media.Where(m => m.Type == "gallery").Select(m => PublicUrl(m.Url)).OfType<string>().Distinct().Take(20).ToList(),
             offerings, data.Rankings.Select(r => r with { SourceUrl = PublicUrl(r.SourceUrl) }).ToList(), sources);
     }
+
+    public Task<PagedResult<UniversityListItemDto>> SearchAsync(UniversitySearchQuery query, CancellationToken ct = default) =>
+        repository.SearchAsync(query, ct);
+
+    public Task<UniversityFilterOptionsDto> GetFilterOptionsAsync(CancellationToken ct = default) =>
+        repository.GetFilterOptionsAsync(ct);
 
     public static string? PublicUrl(string? value)
     {
