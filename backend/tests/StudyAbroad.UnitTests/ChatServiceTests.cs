@@ -1163,7 +1163,7 @@ public class ChatServiceTests
     {
         var runner = new FakeRunner { Match = Found("harvard", "Harvard University"), Info = InfoOf() };
 
-        var res = await KnowledgeChat(ModelAction("học phí Harvard", "Harvard", ["xep_hang"]), runner);
+        var res = await KnowledgeChat(ModelAction("học phí Harvard", "Harvard", ["ranking"]), runner);
 
         Assert.Equal(["ranking"], res.Widget!.Data!.Value.GetProperty("fields").EnumerateArray().Select(e => e.GetString()));
     }
@@ -1173,7 +1173,7 @@ public class ChatServiceTests
     {
         var runner = new FakeRunner { Match = new NameMatch(NameMatchKind.NotFound, []), Info = InfoOf() };
 
-        var res = await KnowledgeChat(ModelAction("học phí Hogwarts", "Hogwarts", ["chi_phi"]), runner);
+        var res = await KnowledgeChat(ModelAction("học phí Hogwarts", "Hogwarts", ["cost"]), runner);
 
         Assert.Contains("chưa thấy trường “Hogwarts”", res.Answer);
         Assert.DoesNotContain("Mình đang tra số liệu", res.Answer);
@@ -1184,7 +1184,7 @@ public class ChatServiceTests
     {
         var runner = new FakeRunner { Match = Found("harvard", "Harvard University") };   // Info = null: bộ giả ném "Chưa có trường"
 
-        var res = await KnowledgeChat(ModelAction("học phí Harvard", "Harvard", ["chi_phi"]), runner);
+        var res = await KnowledgeChat(ModelAction("học phí Harvard", "Harvard", ["cost"]), runner);
 
         Assert.Equal(ChatSchoolInfo.Unavailable, res.Answer);
     }
@@ -1194,7 +1194,18 @@ public class ChatServiceTests
     {
         var runner = new FakeRunner { Match = Found("harvard", "Harvard University"), Info = InfoOf() };
 
-        var res = await KnowledgeChat(ModelAction("học phí và ký túc xá Harvard", "Harvard", ["chi_phi", "khac"]), runner);
+        var res = await KnowledgeChat(ModelAction("học phí và ký túc xá Harvard", "Harvard", ["cost", "other"]), runner);
+
+        Assert.Contains("học phí 59.000 USD", res.Answer);
+        Assert.Contains("hệ thống chưa lưu", res.Answer);
+    }
+
+    [Fact]
+    public async Task SchoolInfo_ModelAsksAboutHousing_AnswersTheKnownFieldAndAdmitsTheSystemHasNoHousingData()
+    {
+        var runner = new FakeRunner { Match = Found("harvard", "Harvard University"), Info = InfoOf() };
+
+        var res = await KnowledgeChat(ModelAction("học phí và ký túc xá Harvard", "Harvard", ["cost", "housing"]), runner);
 
         Assert.Contains("học phí 59.000 USD", res.Answer);
         Assert.Contains("hệ thống chưa lưu", res.Answer);
@@ -1354,7 +1365,7 @@ public class ChatServiceTests
         Assert.Null(r.SearchedWith);
     }
 
-    // ---- so sánh từ hai trường: model trả cac_truong, advisor chuyển sang, backend lấy số liệu từng trường và dựng bảng
+    // ---- so sánh từ hai trường: model trả schools, advisor chuyển sang, backend lấy số liệu từng trường và dựng bảng
 
     private static JsonElement CompareAction(string[] schools, string[] fields) =>
         JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, object?>
@@ -1385,7 +1396,7 @@ public class ChatServiceTests
     {
         var note = new CompareNoteResponseDto("1.0", "gemini", "OK", "New York University tốn ít tiền hơn mỗi năm.");
 
-        var (res, advisor) = await CompareChatWith(CompareAction(["BU", "NYU"], ["chi_phi"]), CompareRunner(), note);
+        var (res, advisor) = await CompareChatWith(CompareAction(["BU", "NYU"], ["cost"]), CompareRunner(), note);
 
         // Chỉ lời của AI (đã nêu đủ số liệu), không kèm bảng code dựng để khỏi nói hai lần; chi phí thì thêm lời nhắc kiểm tra lại
         Assert.StartsWith("New York University tốn ít tiền hơn mỗi năm.", res.Answer);
@@ -1408,8 +1419,8 @@ public class ChatServiceTests
     [Fact]
     public async Task SchoolCompare_WhenGeminiFailsOrIsRejected_OnlyTheTableShows()
     {
-        var failed = await CompareChat(CompareAction(["BU", "NYU"], ["chi_phi"]), CompareRunner());                // FAILED mặc định
-        var down = (await CompareChatWith(CompareAction(["BU", "NYU"], ["chi_phi"]), CompareRunner(), noteError: new HttpRequestException("advisor tắt"))).Res;
+        var failed = await CompareChat(CompareAction(["BU", "NYU"], ["cost"]), CompareRunner());                // FAILED mặc định
+        var down = (await CompareChatWith(CompareAction(["BU", "NYU"], ["cost"]), CompareRunner(), noteError: new HttpRequestException("advisor tắt"))).Res;
 
         Assert.DoesNotContain("AI nhận xét", failed.Answer);
         Assert.DoesNotContain("AI nhận xét", down.Answer);
@@ -1421,7 +1432,7 @@ public class ChatServiceTests
     {
         var empty = new CompareNoteResponseDto("1.0", "gemini", "OK", "   ");
 
-        var (res, _) = await CompareChatWith(CompareAction(["BU", "NYU"], ["chi_phi"]), CompareRunner(), empty);
+        var (res, _) = await CompareChatWith(CompareAction(["BU", "NYU"], ["cost"]), CompareRunner(), empty);
 
         Assert.DoesNotContain("AI nhận xét", res.Answer);
     }
@@ -1445,7 +1456,7 @@ public class ChatServiceTests
     [Fact]
     public async Task SchoolCompare_TwoResolvedSchools_GiveATableOfTheirNumbersAndTheCostGap()
     {
-        var res = await CompareChat(CompareAction(["BU", "NYU"], ["chi_phi"]), CompareRunner());
+        var res = await CompareChat(CompareAction(["BU", "NYU"], ["cost"]), CompareRunner());
 
         Assert.StartsWith("So sánh Boston University và New York University:", res.Answer);
         Assert.Contains("Boston University 86.000 USD · New York University 75.000 USD", res.Answer);
@@ -1466,7 +1477,7 @@ public class ChatServiceTests
     [Fact]
     public async Task SchoolCompare_ASchoolNotInTheSystem_IsNamedInsteadOfGuessed()
     {
-        var res = await CompareChat(CompareAction(["BU", "Hogwarts"], ["chi_phi"]), CompareRunner());
+        var res = await CompareChat(CompareAction(["BU", "Hogwarts"], ["cost"]), CompareRunner());
 
         Assert.Contains("“Hogwarts”", res.Answer);
         Assert.DoesNotContain("So sánh", res.Answer);
@@ -1477,7 +1488,7 @@ public class ChatServiceTests
     [Fact]
     public async Task SchoolCompare_AnAmbiguousName_AsksWhichOneAndKeepsTheOthers()
     {
-        var res = await CompareChat(CompareAction(["Boston", "NYU"], ["chi_phi"]), CompareRunner());
+        var res = await CompareChat(CompareAction(["Boston", "NYU"], ["cost"]), CompareRunner());
 
         Assert.Contains("“Boston”", res.Answer);
         Assert.DoesNotContain("So sánh Boston", res.Answer);
@@ -1485,7 +1496,7 @@ public class ChatServiceTests
         var action = res.QuickReplies![1].Action!;                    // chọn Boston College
         Assert.Equal("school_compare", action.Type);
         Assert.Equal(["bc", "nyu"], action.SchoolCodes);               // Boston thành mã đã chọn, NYU (đã rõ) thành mã
-        Assert.Equal(["chi_phi"], action.Fields);
+        Assert.Equal(["cost"], action.Fields);
     }
 
     [Fact]
@@ -1494,7 +1505,7 @@ public class ChatServiceTests
         var runner = CompareRunner();
         runner.MatchByName!["Washington"] = new NameMatch(NameMatchKind.Ambiguous, [new SchoolRef("gw", "George Washington University"), new SchoolRef("wl", "Washington and Lee University")]);
 
-        var res = await CompareChat(CompareAction(["Boston", "Washington"], ["chi_phi"]), runner);
+        var res = await CompareChat(CompareAction(["Boston", "Washington"], ["cost"]), runner);
 
         Assert.Contains("“Boston”", res.Answer);                                   // hỏi tên đầu trước
         Assert.Equal(["bu", "Washington"], res.QuickReplies![0].Action!.SchoolCodes);   // tên còn lại giữ chữ để hỏi lượt sau
@@ -1509,7 +1520,7 @@ public class ChatServiceTests
         runner.MatchByName["NYU"] = Found("nyu", "New York University");
 
         var (res, advisor) = await ActionChat(
-            new ChatAction("school_compare", SchoolCodes: ["bu", "NYU"], Question: "so sánh", Fields: ["chi_phi"]), runner);
+            new ChatAction("school_compare", SchoolCodes: ["bu", "NYU"], Question: "so sánh", Fields: ["cost"]), runner);
 
         Assert.Null(advisor.LastRequest);
         Assert.StartsWith("So sánh Boston University và New York University:", res.Answer);
@@ -1518,7 +1529,7 @@ public class ChatServiceTests
     [Fact]
     public async Task SchoolCompare_TheSameSchoolTwice_AsksForTwoDifferentSchools()
     {
-        var res = await CompareChat(CompareAction(["BU", "BU"], ["chi_phi"]), CompareRunner());
+        var res = await CompareChat(CompareAction(["BU", "BU"], ["cost"]), CompareRunner());
 
         Assert.Equal(ChatSchoolInfo.CompareNeedsTwo, res.Answer);
     }
@@ -1529,7 +1540,7 @@ public class ChatServiceTests
         var runner = CompareRunner();
         runner.InfoByCode!.Remove("nyu");   // thiếu trường này: bộ giả ném "Chưa có trường"
 
-        var res = await CompareChat(CompareAction(["BU", "NYU"], ["chi_phi"]), runner);
+        var res = await CompareChat(CompareAction(["BU", "NYU"], ["cost"]), runner);
 
         Assert.Equal(ChatSchoolInfo.Unavailable, res.Answer);
     }
@@ -1544,7 +1555,7 @@ public class ChatServiceTests
             runner.InfoByCode![n.ToLowerInvariant()] = InfoOf($"School {n}") with { Code = n.ToLowerInvariant() };
         }
 
-        var res = await CompareChat(CompareAction(["A", "B", "C", "D", "E"], ["chi_phi"]), runner);
+        var res = await CompareChat(CompareAction(["A", "B", "C", "D", "E"], ["cost"]), runner);
 
         Assert.Contains("School D", res.Answer);
         Assert.DoesNotContain("School E", res.Answer);
