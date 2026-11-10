@@ -232,6 +232,8 @@ def ask_question(state: ChatState, question_id: str) -> SkillOutput:
 
 # Hỏi câu B1 tiếp theo; hết câu thì sang B2 và hỏi câu đầu của skill_ho_so. skill_nhu_cau gọi hàm này
 def ask_next(state: ChatState) -> SkillOutput:
+    if skill_ho_so.reviewed(state):  # đang sửa hồ sơ: quay về bảng rà soát, không đổi bước
+        return skill_ho_so.review(state)
     question_id = next_question(state)
     if question_id:
         return ask_question(state, question_id)

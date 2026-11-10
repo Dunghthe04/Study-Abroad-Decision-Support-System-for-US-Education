@@ -1,5 +1,7 @@
+import pytest
+
 from app.schemas.chat import ChatState, ProfileField
-from app.services.chat_flow import ask
+from app.services.chat_flow import QUESTIONS, ask
 from app.services.intake import INTAKE_ID
 from app.services.skill_rules import REQUIRED_B3
 from app.services.skills import skill_ho_so
@@ -209,3 +211,84 @@ async def test_unreadable_value_keeps_ready_profile():
     await make_handler(llm).collect(state, "GPA em cao", slm)
     assert (state.current_step, state.question_id) == ("B3", None)
     assert handler.ready(state, REQUIRED_B3)
+
+
+NO_HO_SO = {"values": {}, "none_fields": []}
+NO_BAC_HOC = {
+    "current_level": None,
+    "current_grade": None,
+    "target_level": None,
+    "major": None,
+    "intake": None,
+}
+
+
+# Sửa một mục bất kỳ mà chưa nói giá trị mới: hỏi lại đúng câu của mục đó (vài mục ở các nhóm khác nhau làm ví dụ)
+@pytest.mark.parametrize(
+    ("name", "said", "question_id", "llm_answer"),
+    [
+        ("gpa", "GPA", "D2", NO_HO_SO),
+        ("english", "tiếng Anh", "E1", NO_HO_SO),
+        ("budget", "ngân sách", "F1", NO_HO_SO),
+        ("preferred_states", "bang", "N2", NO_HO_SO),
+        ("awards", "giải thưởng", "D5", NO_HO_SO),
+        ("major", "ngành", "B1.3", NO_BAC_HOC),
+        ("intake", "kỳ nhập học", "B1.4", NO_BAC_HOC),
+    ],
+)
+async def test_edit_item_without_value_asks_that_item_question(name, said, question_id, llm_answer):
+    state = ChatState(current_step="B3", profile=full_profile(), intake_mode="chat")
+    slm = tin(("collect_profile", {"tasks": ["edit"], name: said}))
+    output = await make_handler(FakeLLM(llm_answer)).collect(state, f"em muốn sửa {said}", slm)
+    assert state.question_id == question_id
+    assert output.answer == QUESTIONS[question_id]
+    assert state.profile == full_profile()  # chưa đổi gì
+
+
+# Đang ở bảng rà soát, bấm sửa một mục cũng hỏi đúng câu của mục đó
+async def test_edit_item_at_review_asks_that_item_question():
+    state = ChatState(current_step="B2", profile=full_profile(), intake_mode="chat")
+    ask(state, "X1")
+    slm = tin(("collect_profile", {"tasks": ["edit"], "sat": "SAT"}))
+    await make_handler(FakeLLM(NO_HO_SO)).collect(state, "sửa SAT", slm)
+    assert state.question_id == "D3"
+
+
+# Nói luôn giá trị mới thì ghi luôn, không hỏi lại câu của mục
+async def test_edit_item_with_value_saves_and_shows_review():
+    llm = FakeLLM({"values": {"gpa": {"value": 3.8, "scale": 4}}, "none_fields": []})
+    state = ChatState(current_step="B2", profile=full_profile(), intake_mode="chat")
+    ask(state, "X1")
+    slm = tin(("collect_profile", {"tasks": ["edit"], "gpa": "3.8"}))
+    output = await make_handler(llm).collect(state, "sửa GPA thành 3.8 hệ 4", slm)
+    assert state.profile["gpa"].value == {"value": 3.8, "scale": 4}
+    assert state.question_id == "X1"
+    assert output.widget.type == "review"
+
+
+# Đã hiện bảng rà soát rồi (đang sửa): trả lời xong câu của mục thì quay về bảng, không hỏi tiếp câu khác.
+# Hồ sơ điền bằng form nên chat chưa hỏi câu tùy chọn nào; trước đây sẽ hỏi tiếp cả loạt
+async def test_after_editing_ho_so_item_returns_to_review():
+    state = ChatState(current_step="B3", profile=full_profile(), intake_mode="chat", asked={"X1": 1})
+    ask(state, "D2")
+    output = await make_handler(FakeLLM()).collect(state, "GPA 3.8 thang 4", MAC_DINH)
+    assert state.profile["gpa"].value == {"value": 3.8, "scale": 4}
+    assert state.question_id == "X1"
+    assert output.widget.type == "review"
+
+
+async def test_after_editing_bac_hoc_item_returns_to_review():
+    llm = FakeLLM({**NO_BAC_HOC, "intake": "Fall 2027"})
+    state = ChatState(current_step="B3", profile=full_profile(), intake_mode="chat", asked={"X1": 1})
+    ask(state, "B1.4")
+    output = await make_handler(llm).collect(state, "kỳ Fall 2027", MAC_DINH)
+    assert state.question_id == "X1"
+    assert output.widget.type == "review"
+
+
+# Chưa từng hiện bảng (đang điền lần đầu): vẫn hỏi câu tiếp như cũ
+async def test_first_fill_still_asks_next_question():
+    state = ChatState(current_step="B2", intake_mode="chat")
+    ask(state, "D2")
+    await make_handler(FakeLLM()).collect(state, "GPA 3.8 thang 4", MAC_DINH)
+    assert state.question_id not in ("D2", "X1")

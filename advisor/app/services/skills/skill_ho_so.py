@@ -624,6 +624,12 @@ def next_question(state: ChatState) -> str | None:
     return None
 
 
+# Đã hiện bảng rà soát X1 nghĩa là học sinh đang sửa hồ sơ: trả lời xong câu của mục cần sửa thì quay về bảng,
+# không hỏi tiếp các câu khác (hồ sơ điền bằng form thì chat chưa hỏi câu nào, sẽ bị hỏi cả loạt)
+def reviewed(state: ChatState) -> bool:
+    return state.asked.get("X1", 0) > 0
+
+
 # Bảng rà soát X1: widget review hiện toàn bộ hồ sơ (trừ mục dở *_pending), kèm hai nút Đúng / Cần sửa
 def review(state: ChatState) -> SkillOutput:
     profile = {name: f for name, f in state.profile.items() if name not in PENDING_KEYS}
@@ -667,6 +673,8 @@ def plan_standardized(state: ChatState) -> None:
 def ask_next(state: ChatState) -> SkillOutput:
     plan_english(state)
     plan_standardized(state)
+    if reviewed(state):
+        return review(state)
     question_id = next_question(state)
     if question_id is None:
         return review(state)
