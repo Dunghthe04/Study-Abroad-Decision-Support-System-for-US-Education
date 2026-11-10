@@ -14,7 +14,6 @@ matplotlib.use("Agg")  # vẽ ra file, không mở cửa sổ
 import matplotlib.pyplot as plt  # noqa: E402
 
 from app.schemas.slm import INTENTS  # noqa: E402
-from scripts.build_slm_jsonl import EN_SHEETS  # noqa: E402
 from scripts.slm_metrics import ERRORS, LEVELS, NONE  # noqa: E402
 
 PALETTE = ["#E69F00", "#0072B2", "#009E73", "#CC79A7", "#56B4E9"]
@@ -411,11 +410,7 @@ def chart_dataset(records: list[dict[str, Any]], path: Path) -> Path:
     fig, ax = plt.subplots(figsize=(9, 4.4))
     bottom = [0] * len(kinds)
     for split, col in splits:
-        # du_lieu_slm.jsonl ghi loại bằng tiếng Anh (collect_profile...), INTENTS là tên nội bộ (mac_dinh...): đổi trước khi đếm
-        counts = [
-            sum(1 for r in records if EN_SHEETS.get(r["type"], r["type"]) == k and r["split"] == split)
-            for k in kinds
-        ]
+        counts = [sum(1 for r in records if r["type"] == k and r["split"] == split) for k in kinds]
         ax.bar(kinds, counts, bottom=bottom, color=col, label=f"{split} ({sum(counts)})")
         bottom = [a + b for a, b in zip(bottom, counts, strict=True)]
     for i, total in enumerate(bottom):
