@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://localhost:11434"
     # Chỉ dùng khi không có ANTHROPIC_API_KEY (bước B đọc bảng điểm chạy trên Ollama). Có khóa Claude thì để trống
     llm_model: str = ""
-    slm_model: str = "usas-slm-v3"
+    slm_model: str = "usas-slm-v4"
     slm_format: str = "json"
     # Prompt tách ý (tên file trong app/skills, không có .md). slm_phan_loai_cac_y là bản đầy đủ (cho model chưa fine-tune);
     # slm_phan_loai_cac_y_ngan là bản ngắn, dùng cho model fine-tune với đúng bản này (xem scripts/export_slm_chat.py)
