@@ -71,6 +71,18 @@ public class UniversityOffering : BaseEntity
     /// <summary>Tỉ lệ tốt nghiệp trong 6 năm (CDS B / College Scorecard C150_4). Dùng tính Q ở tầng 3.</summary>
     public decimal? GradRate6Yr { get; set; }
 
+    public decimal? AvgGpaWeighted { get; set; }
+    public string? GpaScaleType { get; set; }
+    public decimal? FyOnCampusPct { get; set; }
+    public decimal? UgOnCampusPct { get; set; }
+    public string? HousingTypes { get; set; }
+    public bool? IntlHousing { get; set; }
+    public decimal? HousingOnlyUsd { get; set; }
+    public decimal? HousingDepositUsd { get; set; }
+    public int? StudentFacultyRatio { get; set; }
+    public string? Activities { get; set; }
+    public string? CampusSetting { get; set; }
+
     public string? Notes { get; set; }
     public string? SourceUrl { get; set; }
     public DateOnly? RetrievedAt { get; set; }
