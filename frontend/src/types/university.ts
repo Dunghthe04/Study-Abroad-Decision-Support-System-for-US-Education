@@ -92,3 +92,62 @@ export interface UniversityDetail {
   rankings: UniversityRanking[];
   sources: UniversitySource[];
 }
+
+export interface UniversityListItem {
+  id: string;
+  code: string;
+  name: string;
+  city: string | null;
+  state: string | null;
+  stateName: string | null;
+  control: string | null;
+  acceptanceRate: number | null;
+  isIvy: boolean;
+  logoUrl: string | null;
+  coverUrl: string | null;
+  tuitionUsd: number | null;
+  totalCostUsd: number | null;
+  minIelts: number | null;
+  minToefl: number | null;
+  minDuolingo: number | null;
+  bestRank: number | null;
+  bestRankPublisher: string | null;
+  satPolicy: string | null;
+  intlAidPolicy: string | null;
+  majors: string[];
+}
+
+export interface UniversityFilterOptionItem {
+  value: string;
+  label: string;
+}
+
+export interface UniversityFilterOptions {
+  states: UniversityFilterOptionItem[];
+  controls: UniversityFilterOptionItem[];
+  majors: string[];
+  minTuitionUsd: number;
+  maxTuitionUsd: number;
+  minTotalCostUsd: number;
+  maxTotalCostUsd: number;
+}
+
+export interface UniversitySearchParams {
+  search?: string;
+  state?: string;
+  control?: string;
+  major?: string;
+  maxTuitionUsd?: number;
+  maxTotalCostUsd?: number;
+  maxMinIelts?: number;
+  maxMinToefl?: number;
+  maxMinDuolingo?: number;
+  minAcceptanceRate?: number;
+  maxAcceptanceRate?: number;
+  isIvy?: boolean;
+  sortBy?: string;
+  studyLevel?: string;
+  page?: number;
+  pageSize?: number;
+}
+
