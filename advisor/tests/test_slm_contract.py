@@ -1,6 +1,5 @@
 """Hợp đồng SLM (danh sách ý): một ý, gộp và cắt ý, kết quả cả tin, khuôn JSON, skill cá nhân hóa, và khớp với dữ liệu."""
 
-import json
 from typing import get_args
 
 import pytest
@@ -30,7 +29,7 @@ from app.schemas.slm import (
 from app.services.centers import SERVICES
 from app.services.skills import info_to_field
 from app.services.slm_contract import FixedSlm
-from scripts.build_slm_jsonl import DEFAULT_OUT
+from scripts.build_slm_jsonl import DEFAULT_EXCEL, read_records
 
 
 def y(kind: str, doan: str = "x", **thuc_the) -> SlmY:
@@ -479,15 +478,14 @@ def test_each_type_of_skill_has_its_own_sections():
 # ---- khớp với dữ liệu ----
 # Đầu ra trong dữ liệu chính là thứ SLM học để trả, nên dòng nào cũng phải đọc được bằng hợp đồng
 def test_every_labelled_output_in_the_dataset_is_a_valid_answer():
-    for line in DEFAULT_OUT.read_text(encoding="utf-8").splitlines():
-        record = json.loads(line)
+    for record in read_records(DEFAULT_EXCEL):
         SlmTinResult.from_raw(record["output"])
 
 
 # Mỗi ý trong dữ liệu phải nằm gọn trong nhánh của loại nó ở khuôn SLM_TIN_SCHEMA, nếu không model bị khuôn chặn không học được
 def test_every_labelled_intent_fits_the_branch_of_its_type():
-    for line in DEFAULT_OUT.read_text(encoding="utf-8").splitlines():
-        for item in json.loads(line)["output"]["cac_y"]:
+    for record in read_records(DEFAULT_EXCEL):
+        for item in record["output"]["cac_y"]:
             thuc_the = branches()[item["type"]]["properties"]["thuc_the"]
             assert set(item["thuc_the"]) <= set(thuc_the["properties"]), item
             assert set(thuc_the["required"]) <= set(item["thuc_the"]), item
