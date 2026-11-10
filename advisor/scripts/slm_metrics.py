@@ -325,7 +325,7 @@ def write_csv(path: Path, header: list[str], rows: list[list[Any]]) -> None:
 
 
 def load_training_log(path: str | Path) -> list[dict[str, float]]:
-    """Log huấn luyện: file .csv (cột step, epoch, train_loss, eval_loss, tùy chọn val_*) hoặc trainer_state.json của HuggingFace.
+    """Log huấn luyện: file .csv (cột step, epoch, train_loss hoặc loss, eval_loss, tùy chọn val_*) hoặc trainer_state.json của HuggingFace.
     Trả danh sách điểm {step, epoch, train_loss?, eval_loss?, ...} theo thứ tự bước."""
     path = Path(path)
     points: dict[float, dict[str, float]] = {}
@@ -352,11 +352,19 @@ def load_training_log(path: str | Path) -> list[dict[str, float]]:
                 )
     else:
         with open(path, encoding="utf-8-sig", newline="") as f:
-            for row in csv.DictReader(f):
+            reader = csv.DictReader(f)
+            # CSV xuất từ log_history của HuggingFace Trainer: train loss từng lần ghi nằm ở cột "loss";
+            # cột "train_loss" chỉ có một giá trị trung bình ở dòng cuối nên không dùng. CSV tự soạn thì dùng thẳng "train_loss".
+            from_trainer = "loss" in (reader.fieldnames or [])
+            for row in reader:
                 step = row.get("step")
                 if step in (None, ""):
                     continue
-                put(float(step), **{k: v for k, v in row.items() if k != "step"})
+                values = {k: v for k, v in row.items() if k != "step"}
+                if from_trainer:
+                    values.pop("train_loss", None)
+                    values["train_loss"] = values.pop("loss")
+                put(float(step), **values)
     return [points[s] for s in sorted(points)]
 
 

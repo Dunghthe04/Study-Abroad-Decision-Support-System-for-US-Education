@@ -288,6 +288,22 @@ def test_the_huggingface_trainer_state_is_read_the_same_way(tmp_path):
     ]
 
 
+def test_a_trainer_csv_uses_the_loss_column_not_the_one_final_train_loss_average(tmp_path):
+    text = (
+        "epoch,eval_loss,loss,step,train_loss\n"
+        "0.1,,2.0,10,\n0.2,,1.5,20,\n0.2,1.8,,20,\n0.3,,1.0,30,\n0.3,1.2,,30,\n0.3,,,30,0.9\n"
+    )
+    path = tmp_path / "training_log.csv"
+    path.write_text(text, encoding="utf-8")
+
+    log = load_training_log(path)
+
+    assert [(p["step"], p.get("train_loss")) for p in log] == [(10, 2.0), (20, 1.5), (30, 1.0)]
+    assert [p["eval_loss"] for p in log if "eval_loss" in p] == [1.8, 1.2]
+    s = training_summary(log)
+    assert round(s["chenh_val_train_tai_tot_nhat"], 3) == round(1.2 - 1.0, 3)
+
+
 def test_the_training_summary_finds_the_best_step_and_flags_overfit_or_not_converged(tmp_path):
     path = tmp_path / "training_log.csv"
     path.write_text(CSV_LOG, encoding="utf-8")
@@ -346,6 +362,8 @@ def test_the_report_builds_every_table_and_chart(tmp_path, monkeypatch):
             "1.8",
             "--data",
             str(data),
+            "--config",
+            "Model gốc: qwen3:4b-instruct, 8 ví dụ từ train",
         ],
     )
 
@@ -359,13 +377,32 @@ def test_the_report_builds_every_table_and_chart(tmp_path, monkeypatch):
         assert (out / name).is_file() and (out / name).stat().st_size > (
             3000 if name.endswith(".png") else 0
         ), name
+    assert (out / "du_doan_tho" / "goc.jsonl").read_bytes() == base.read_bytes()
+    assert (out / "du_doan_tho" / "moi.jsonl").is_file() and (out / "training_log.csv").is_file()
+    manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["cau_hinh"] == ["Model gốc: qwen3:4b-instruct, 8 ví dụ từ train"]
+    assert [r["ten"] for r in manifest["lan_chay"]] == ["Model gốc", "Đã huấn luyện"]
+    assert (
+        manifest["dap_an_tho"][0]["file"] == "du_doan_tho/goc.jsonl"
+        and len(manifest["dap_an_tho"][0]["sha256"]) == 64
+    )
+    assert (
+        manifest["log_huan_luyen"]["file"] == "training_log.csv"
+        and manifest["du_lieu"]["file"] == "du_lieu.jsonl"
+    )
+    assert "slm_report" in manifest["lenh_dung_lai"]
+    assert "git_commit" in manifest and manifest["co_sua_chua_commit"] in (True, False, None)
     report = (out / "BAO_CAO.md").read_text(encoding="utf-8")
+    assert "manifest.json" in report and "du_doan_tho/" in report
     assert (
         "Model gốc" in report
         and "Đã huấn luyện" in report
         and "30.0%" in report
         and "90.0%" in report
         and "Overfit" in report
+        and "## Cấu hình thí nghiệm" in report
+        and "8 ví dụ từ train" in report
+        and "Chênh val loss trừ train loss" in report
     )
     metrics = json.loads((out / "chi_so.json").read_text(encoding="utf-8"))
     assert (
