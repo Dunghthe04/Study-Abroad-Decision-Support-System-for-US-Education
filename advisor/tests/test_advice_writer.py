@@ -265,3 +265,23 @@ async def test_a_good_answer_logs_nothing(caplog):
         await AdviceWriter(llm).write(SKILL, REQ, [])
 
     assert caplog.records == []
+
+
+async def test_last_attempts_counts_a_first_try_pass():
+    writer = AdviceWriter(FakeLLM({"tra_loi": "Bạn có cơ hội tốt."}))
+
+    await writer.write(SKILL, REQ, [])
+
+    assert (writer.last_attempts, writer.last_errors) == (1, [])
+
+
+async def test_last_errors_keeps_only_the_error_code_of_each_failed_try():
+    writer = AdviceWriter(FakeLLM({"tra_loi": "Chắc chắn đỗ!"}, {"tra_loi": NO_ROADMAP}))
+
+    assert await writer.write(SKILL, REQ, [], BOTH) == NO_ROADMAP
+    assert (writer.last_attempts, writer.last_errors) == (2, ["hua_do", "thieu_viec"])
+
+    # Lần write sau bắt đầu đếm lại từ đầu
+    writer._llm = FakeLLM(ClaudeError("HTTP 529"), {"tra_loi": ""})
+    assert await writer.write(SKILL, REQ, []) is None
+    assert (writer.last_attempts, writer.last_errors) == (2, ["goi_model", "rong"])

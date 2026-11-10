@@ -163,10 +163,26 @@ def check_answer(raw: dict[str, Any]) -> str:
     return text
 
 
+# Mã ngắn của lỗi một lần viết, để script đo đếm theo loại (không chứa câu trả lời hay hồ sơ)
+def error_code(error: Exception) -> str:
+    if isinstance(error, PromiseError):
+        return "hua_do"
+    if isinstance(error, RawJsonError):
+        return "json_tho"
+    if isinstance(error, MissingTaskError):
+        return "thieu_viec"
+    if isinstance(error, OllamaError):
+        return "goi_model"
+    return "rong"
+
+
 class AdviceWriter:
     def __init__(self, llm: Any) -> None:
         self._llm = llm
         self._rules, self.version = load_skill(PROMPT_PATH)  # đọc 1 lần lúc khởi động
+        # Lần write() gần nhất: số lần gọi Claude và mã lỗi từng lần hỏng (để scripts đo, không dùng khi chạy thật)
+        self.last_attempts = 0
+        self.last_errors: list[str] = []
 
     async def write(
         self, skill: str, req: SkillRequest, schools: list[ResultSchool], tasks: list[str] | None = None
@@ -189,9 +205,11 @@ class AdviceWriter:
             {"role": "system", "content": skill},
             {"role": "user", "content": json.dumps(user, ensure_ascii=False, separators=(",", ":"))},
         ]
+        self.last_attempts, self.last_errors = 0, []
         retry_note: dict[str, str] | None = None
         partial: str | None = None  # câu trả lời đúng mực nhưng thiếu một việc, dùng nếu viết lại vẫn hỏng
         for attempt in range(1, MAX_ATTEMPTS + 1):
+            self.last_attempts = attempt
             try:
                 raw = await self._llm.chat_json(
                     messages + ([retry_note] if retry_note else []), ANSWER_SCHEMA, temperature=0.0
@@ -204,6 +222,7 @@ class AdviceWriter:
             except (OllamaError, ValueError) as e:  # ClaudeError là OllamaError
                 # Ghi lý do để biết vì sao học sinh nhận câu "chưa viết được"; không ghi hồ sơ hay câu trả lời
                 logger.warning("Writer hỏng lần %d/%d: %s", attempt, MAX_ATTEMPTS, e or type(e).__name__)
+                self.last_errors.append(error_code(e))
                 if isinstance(e, MissingTaskError):
                     partial = e.answer
                 retry_note = retry_note_for(e)
