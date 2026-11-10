@@ -4,7 +4,7 @@
 // Số liệu null thì ghi "Chưa có số liệu" thay vì để trống hay đoán.
 
 import type { ReactNode } from "react";
-import { formatUsd } from "@/lib/recommendation-labels";
+import { formatPct, formatUsd } from "@/lib/recommendation-labels";
 import type { SchoolInfoData, SchoolInfoField } from "@/types/recommendation";
 import { RememberedLine } from "./RememberedLine";
 
@@ -30,8 +30,7 @@ const NO_DATA = (
   <span className="text-xs font-normal text-ink-3">Chưa có số liệu</span>
 );
 
-const pct = (fraction: number) =>
-  `${(Math.round(fraction * 1000) / 10).toLocaleString("vi-VN")}%`;
+const pct = (fraction: number) => formatPct(fraction);
 const score = (value: number) => value.toLocaleString("vi-VN");
 
 const CONTROL: Record<string, string> = {

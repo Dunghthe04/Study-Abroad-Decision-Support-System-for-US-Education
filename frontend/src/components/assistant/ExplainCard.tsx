@@ -22,7 +22,7 @@ export function ExplainCard({ code, card, basis }: { code: string; card: Explain
   const place = [card.state, control].filter(Boolean).join(" · ");
   const badge =
     card.blk === "AID"
-      ? { text: "Cần học bổng lớn", variant: "warn" as const }
+      ? { text: "Cần học bổng lớn", variant: groupVariant("AID") }
       : { text: groupLabel(card.g2), variant: groupVariant(card.g2) };
 
   return (

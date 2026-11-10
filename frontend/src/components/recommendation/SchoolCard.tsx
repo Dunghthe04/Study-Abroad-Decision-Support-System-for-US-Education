@@ -13,6 +13,8 @@ import {
     formatUsd,
     groupLabel,
     groupVariant,
+    formatPct,
+    formatGpa,
     siteHost,
     statusLabel,
     whyText,
@@ -22,6 +24,7 @@ interface SchoolCardProps {
     picked: PickedSchool; // vị trí trong khối + mã lý do
     school: ScoredSchool | undefined; // số liệu đã chấm
     change?: SchoolChange; // có khi đang mô phỏng và trường đổi nhóm so với hồ sơ thật
+    simulated?: boolean; // đang xem kết quả giả định: viền nét đứt để không nhầm với kết quả thật
     onExplain?: (code: string) => void; // bỏ trống khi đang mô phỏng (lời tư vấn chỉ có cho kết quả đã lưu)
     onGoal?: (code: string) => void; // "Cần gì để vào?": luôn tính từ hồ sơ thật, kể cả khi đang xem giả định
     student?: { sat: number | null; gpa: number | null }; // SAT và GPA của học sinh trong lượt này, để đặt cạnh khoảng của trường
@@ -32,7 +35,7 @@ const GOAL_GROUPS = ["R", "RF", "M", "NA"];
 
 // Một trường dạng hàng ngang như CollegeVine: tên và nơi ở bên trái, các chỉ số ở giữa, nhóm và nút bên phải.
 // Chỉ hiển thị số đã tính, không tính lại gì.
-export function SchoolCard({ picked, school, change, onExplain, onGoal, student }: SchoolCardProps) {
+export function SchoolCard({ picked, school, change, simulated, onExplain, onGoal, student }: SchoolCardProps) {
     const name = school?.name ?? picked.code;
     const control =
         school?.control === "public" ? "Công lập" : school?.control === "private" ? "Tư thục" : null;
@@ -45,7 +48,8 @@ export function SchoolCard({ picked, school, change, onExplain, onGoal, student 
         <div className="@container">
         <div
             className={cn(
-                "flex flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-2xs transition-colors hover:border-brand/40 @2xl:flex-row",
+                "flex flex-col overflow-hidden rounded-xl border border-line bg-surface transition-colors hover:border-brand/40 @2xl:flex-row",
+                simulated && "border-dashed border-ink-3",
             )}
         >
             {/* Ảnh trường */}
@@ -105,7 +109,7 @@ export function SchoolCard({ picked, school, change, onExplain, onGoal, student 
                     )}
 
                     {school && school.flags.length > 0 && (
-                        <p className="text-[11px] text-ink-3">{school.flags.map(flagText).join(" · ")}</p>
+                        <p className="text-xs text-ink-3">{school.flags.map(flagText).join(" · ")}</p>
                     )}
                 </div>
 
@@ -147,10 +151,10 @@ export function SchoolCard({ picked, school, change, onExplain, onGoal, student 
 function Stat({ label, value, note, tone = "muted" }: { label: string; value: ReactNode; note?: ReactNode; tone?: "muted" | "ok" | "warn" }) {
     return (
         <div className="min-w-0 space-y-0.5">
-            <p className="text-[11px] font-medium text-ink-2">{label}</p>
-            <p className="text-lg leading-tight font-bold text-foreground">{value}</p>
+            <p className="text-xs font-medium text-ink-2">{label}</p>
+            <p className="text-numeric text-lg leading-tight font-bold text-foreground">{value}</p>
             {note && (
-                <p className={cn("text-[11px]", tone === "ok" ? "text-ok" : tone === "warn" ? "font-medium text-warn" : "text-ink-3")}>
+                <p className={cn("text-xs", tone === "ok" ? "text-ok" : tone === "warn" ? "font-medium text-warn" : "text-ink-3")}>
                     {note}
                 </p>
             )}
@@ -185,7 +189,7 @@ function AcceptStat({ school }: { school: ScoredSchool | undefined }) {
     );
 }
 
-const pct = (fraction: number) => `${Math.round(fraction * 1000) / 10}%`;
+const pct = (fraction: number) => formatPct(fraction);
 
 // SAT: số của bạn, khoảng của trường và một thanh nhỏ cho thấy bạn đứng ở đâu. Trường chưa có khoảng hợp lệ thì nói chưa có
 function SatStat({ school, studentSat }: { school: ScoredSchool | undefined; studentSat: number | null }) {
@@ -200,10 +204,10 @@ function SatStat({ school, studentSat }: { school: ScoredSchool | undefined; stu
     const where = studentSat < p25 ? "Dưới mức thường của trường" : studentSat > p75 ? "Trên mức thường của trường" : "Trong mức thường của trường";
     return (
         <div className="min-w-0 space-y-1">
-            <p className="text-[11px] font-medium text-ink-2">SAT: bạn {studentSat}</p>
-            <p className="text-sm font-bold text-foreground">Trường {p25}–{p75}</p>
+            <p className="text-xs font-medium text-ink-2">SAT: bạn {studentSat}</p>
+            <p className="text-numeric text-sm font-bold text-foreground">Trường {p25}–{p75}</p>
             <SatBar student={studentSat} p25={p25} p75={p75} />
-            <p className={cn("text-[11px]", studentSat < p25 ? "font-medium text-warn" : "text-ink-3")}>{where}</p>
+            <p className={cn("text-xs", studentSat < p25 ? "font-medium text-warn" : "text-ink-3")}>{where}</p>
         </div>
     );
 }
@@ -220,27 +224,27 @@ function SatBar({ student, p25, p75 }: { student: number; p25: number; p75: numb
             aria-label={`SAT của bạn ${student}, khoảng của trường ${p25} đến ${p75}`}
         >
             <div className="absolute inset-y-0 rounded-full bg-brand/40" style={{ left: at(p25), width: `calc(${at(p75)} - ${at(p25)})` }} />
-            <div className="absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-surface bg-brand shadow" style={{ left: at(student) }} />
+            <div className="absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-surface bg-brand" style={{ left: at(student) }} />
         </div>
     );
 }
 
 // GPA: vị trí so với sinh viên của trường nói bằng lời (cùng ngưỡng 25% và 75% với các lý do bên dưới)
 function GpaStat({ pg, studentGpa, topShare }: { pg: number | null; studentGpa: number | null; topShare: number | null }) {
-    const label = studentGpa != null ? `GPA: bạn ${studentGpa.toFixed(2)}` : "GPA";
+    const label = studentGpa != null ? `GPA: bạn ${formatGpa(studentGpa)}` : "GPA";
     if (pg == null) return <Stat label={label} value={<span className="text-sm text-ink-3">Trường chưa có số liệu</span>} />;
     // GPA tối đa 4,0 nhưng nhiều trường có phần lớn sinh viên trúng tuyển cũng 4,0: nói rõ để học sinh khỏi thắc mắc vì sao "4,0 mà chỉ ở giữa"
     const crowded = studentGpa != null && studentGpa >= 4 && topShare != null && topShare >= 0.4;
     const text = crowded
         ? "Ngang đa số sinh viên"
         : pg >= 75 ? "Cao hơn đa số sinh viên" : pg >= 25 ? "Ở khoảng giữa của trường" : "Thấp hơn đa số sinh viên";
-    const note = crowded ? `${pct(topShare)} sinh viên trúng tuyển cũng có GPA 4.0` : pg < 25 ? "Điểm yếu so với trường này" : "So với sinh viên đã trúng tuyển";
+    const note = crowded ? `${pct(topShare)} sinh viên trúng tuyển cũng có GPA 4,0` : pg < 25 ? "Điểm yếu so với trường này" : "So với sinh viên đã trúng tuyển";
     return (
         <div className="min-w-0 space-y-1">
-            <p className="text-[11px] font-medium text-ink-2">{label}</p>
+            <p className="text-xs font-medium text-ink-2">{label}</p>
             <p className="text-sm font-bold text-foreground">{text}</p>
             <PositionBar at={pg} label={`${label}, ${text}`} />
-            <p className={cn("text-[11px]", pg < 25 ? "font-medium text-warn" : "text-ink-3")}>{note}</p>
+            <p className={cn("text-xs", pg < 25 ? "font-medium text-warn" : "text-ink-3")}>{note}</p>
         </div>
     );
 }
@@ -251,7 +255,7 @@ function PositionBar({ at, label }: { at: number; label: string }) {
     return (
         <div className="relative h-2 w-full max-w-[160px] rounded-full bg-line" role="img" aria-label={label}>
             <div className="absolute inset-y-0 rounded-full bg-brand/40" style={{ left: x(25), width: "50%" }} />
-            <div className="absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-surface bg-brand shadow" style={{ left: x(at) }} />
+            <div className="absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-surface bg-brand" style={{ left: x(at) }} />
         </div>
     );
 }

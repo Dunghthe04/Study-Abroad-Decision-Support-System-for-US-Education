@@ -197,6 +197,7 @@ export function RecommendationView({ autoRun, initialOverrides }: Recommendation
           <ResultBody
             rec={view}
             changes={simulating ? sim.result!.changes : []}
+            simulated={simulating}
             onExplain={askExplain}
             onGoal={askGoal}
           />
@@ -239,11 +240,12 @@ function SimulationBanner({ sim, onSave }: { sim: ProfileSimulation; onSave: (ti
 interface ResultBodyProps {
   rec: Recommendation;
   changes: SchoolChange[]; // trường đổi nhóm khi đang mô phỏng
+  simulated: boolean; // đang xem kết quả giả định
   onExplain?: (code: string) => void; // bỏ trống khi đang mô phỏng
   onGoal?: (code: string) => void;
 }
 
-function ResultBody({ rec, changes, onExplain, onGoal }: ResultBodyProps) {
+function ResultBody({ rec, changes, simulated, onExplain, onGoal }: ResultBodyProps) {
   const { criteria, items } = rec;
   const byCode = new Map<string, ScoredSchool>(items.scored.map((s) => [s.code, s]));
   const changeByCode = new Map<string, SchoolChange>(changes.map((c) => [c.code, c]));
@@ -290,7 +292,7 @@ function ResultBody({ rec, changes, onExplain, onGoal }: ResultBodyProps) {
         return (
           <section key={block.key} className="space-y-3">
             <div className="flex items-baseline gap-2">
-              <h2 className="text-sm font-bold uppercase tracking-wide text-foreground">{block.title}</h2>
+              <h2 className="text-h3 text-foreground">{block.title}</h2>
               <span className="text-xs text-muted-foreground">{block.note}</span>
             </div>
             <div className="space-y-3">
@@ -300,6 +302,7 @@ function ResultBody({ rec, changes, onExplain, onGoal }: ResultBodyProps) {
                     picked={p}
                     school={byCode.get(p.code)}
                     change={changeByCode.get(p.code)}
+                    simulated={simulated}
                     onExplain={onExplain}
                     onGoal={onGoal}
                     student={{ sat: criteria.studentSat ?? null, gpa: criteria.studentGpa ?? null }}

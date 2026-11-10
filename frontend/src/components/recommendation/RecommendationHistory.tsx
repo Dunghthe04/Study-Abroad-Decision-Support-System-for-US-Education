@@ -320,7 +320,7 @@ function RunBody({ rec }: { rec: Recommendation }) {
         if (list.length === 0) return null;
         return (
           <div key={g.key} className="space-y-3">
-            <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">{g.title}</h3>
+            <h3 className="text-h3 text-foreground">{g.title}</h3>
             {list.map((p) => (
               <SchoolCard key={p.code} picked={p} school={byCode.get(p.code)} student={student} />
             ))}
