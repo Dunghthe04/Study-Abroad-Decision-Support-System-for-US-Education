@@ -1,9 +1,8 @@
 import hashlib
 import json
-from dataclasses import replace
 from typing import Any
 
-from app.schemas.chat import ChatState
+from app.schemas.chat import ChatState, Widget
 from app.schemas.slm import PROFILE_KEYS, SlmTinResult, task_of
 from app.services.chat_flow import OPENING_QUESTIONS, SkillOutput, ask_next_missing, start_intake
 from app.services.skill_rules import REQUIRED_B3, missing_fields
@@ -41,14 +40,20 @@ class ChatProfileHandler:
             return await self._edit(state, message, said)
         return await self._collect(state, message, said)
 
+    # Ở bảng rà soát: nút Cần sửa, ô chọn nhóm, Sửa trên form, Điền lại từ đầu thì xử lý luôn, không gọi skill.
+    # Đang sửa mà bấm Giữ như cũ thì sang câu kế tiếp, hồ sơ không đổi.
     # Đang sửa: trả lời xong một mục thì skill quay về bảng rà soát X1. Còn mục chờ sửa thì hỏi mục kế tiếp,
     # hết thì để bảng hiện và thôi đánh dấu đang sửa
     async def _collect(self, state: ChatState, message: str, said: set[str]) -> SkillOutput:
+        if state.question_id == "X1":
+            choice = edit_choice(state, message)
+            if choice is not None:
+                return choice
+        if state.edit_queue is not None and buttons.same_text(message, skill_ho_so.KEEP_REPLY.value):
+            return next_edit_question(state)
         output = await self._answer(state, message, said)
         if state.question_id == "X1" and state.edit_queue is not None:
-            if state.edit_queue:
-                return ask_edit_question(state, state.edit_queue.pop(0))
-            state.edit_queue = None
+            return next_edit_question(state, output)
         return output
 
     async def _answer(self, state: ChatState, message: str, said: set[str]) -> SkillOutput:
@@ -72,7 +77,7 @@ class ChatProfileHandler:
     async def _edit(self, state: ChatState, message: str, said: set[str]) -> SkillOutput:
         if not said:
             state.edit_queue = None
-            return replace(skill_ho_so.review(state), answer=skill_ho_so.ASK_WHAT_TO_FIX)
+            return skill_ho_so.edit_menu(state)
         at_review = state.question_id == "X1"
         waiting = state.question_id if state.question_id in ALL_QUESTION_FIELDS else None
         old_queue, state.edit_queue = state.edit_queue or [], None
@@ -94,11 +99,7 @@ class ChatProfileHandler:
         if not queue:
             return output
         # Ở bảng rà soát mà giá trị sai thì skill_ho_so đã soạn câu hỏi lại (không kèm bảng): giữ câu đó
-        text = (
-            output.answer
-            if at_review and output.widget is None and output.answer != skill_ho_so.ASK_WHAT_TO_FIX
-            else None
-        )
+        text = output.answer if at_review and output.widget is None else None
         state.edit_queue = queue[1:]
         return ask_edit_question(state, queue[0], text)
 
@@ -137,9 +138,45 @@ def wants_edit(slm: SlmTinResult) -> bool:
     return any(y.type == "collect_profile" and task_of(y.entities) == "edit" for y in slm.intents)
 
 
-# Hỏi câu của mục cần sửa kèm nút, ô chọn như lúc điền hồ sơ trong chat
+# Hỏi câu của mục cần sửa kèm nút, ô chọn như lúc điền hồ sơ trong chat.
+# Đang sửa mà mục đã có giá trị thì thêm nút "Giữ như cũ"
 def ask_edit_question(state: ChatState, question_id: str, text: str | None = None) -> SkillOutput:
     if question_id in skill_bac_hoc.QUESTION_FIELDS:
         can_skip = question_id in skill_bac_hoc.SKIPPABLE_QUESTIONS
-        return buttons.ask_with_buttons(state, question_id, text, can_skip=can_skip)
-    return skill_ho_so.ask_question(state, question_id, text)
+        output = buttons.ask_with_buttons(state, question_id, text, can_skip=can_skip)
+    else:
+        output = skill_ho_so.ask_question(state, question_id, text)
+    if state.edit_queue is not None and any(
+        name in state.profile for name in ALL_QUESTION_FIELDS[question_id]
+    ):
+        output.quick_replies = [*output.quick_replies, skill_ho_so.KEEP_REPLY]
+    return output
+
+
+# Hỏi câu kế tiếp trong hàng chờ sửa, bỏ câu không cần hỏi với hồ sơ lúc này (vd D1 khi không học cấp 3).
+# Hết câu thì thôi đánh dấu đang sửa và hiện bảng rà soát (output: bảng skill vừa trả, nếu có)
+def next_edit_question(state: ChatState, output: SkillOutput | None = None) -> SkillOutput:
+    while state.edit_queue:
+        question_id = state.edit_queue.pop(0)
+        if skill_ho_so.needed(state, question_id):
+            return ask_edit_question(state, question_id)
+    state.edit_queue = None
+    return output or skill_ho_so.review(state)
+
+
+# Bấm nút hoặc gửi ô chọn ở bảng rà soát. Không phải các nút này thì None
+def edit_choice(state: ChatState, message: str) -> SkillOutput | None:
+    if buttons.same_text(message, skill_ho_so.FIX_REPLY.value):
+        state.edit_queue = None
+        return skill_ho_so.edit_menu(state)
+    if buttons.same_text(message, skill_ho_so.FORM_REPLY.value):
+        state.edit_queue = None
+        return SkillOutput(skill_ho_so.EDIT_ON_FORM, widget=Widget(type="form"))
+    if buttons.same_text(message, skill_ho_so.RESTART_REPLY.value):
+        state.edit_queue = list(skill_ho_so.EDIT_ORDER)
+        return next_edit_question(state)
+    sections = skill_ho_so.read_edit_menu(message)
+    if sections is None:
+        return None
+    state.edit_queue = skill_ho_so.edit_questions(sections)
+    return next_edit_question(state)

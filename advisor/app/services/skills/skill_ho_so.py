@@ -104,7 +104,31 @@ CONFIRM_REPLY = QuickReply(label="Đúng rồi", value="Đúng rồi")
 FIX_REPLY = QuickReply(label="Cần sửa", value="Em cần sửa thông tin")
 SAVED = "Mình đã ghi nhận hồ sơ của bạn."
 # Bấm "Cần sửa" hoặc nói muốn sửa mà chưa nói sửa gì: hỏi lại mục cần sửa thay vì hiện lại bảng
-ASK_WHAT_TO_FIX = 'Bạn muốn sửa mục nào? Bạn nhắn mục và giá trị mới giúp mình, ví dụ "sửa SAT thành 1450".'
+
+# Ô chọn "sửa mục nào" khi bấm Cần sửa: tên nhóm → các câu hỏi của nhóm. Câu B1 viết thẳng mã vì skill_bac_hoc
+# đã import file này. Tên nhóm không có dấu phẩy vì ô chọn nối các nhóm đã tích bằng ", "
+EDIT_SECTIONS = {
+    "Mục tiêu": ("B1.1", "B1.2", "B1.3", "B1.4"),
+    "Học lực (GPA)": ("D1", "D2"),
+    "Tiếng Anh": ("E1", "E2"),
+    "SAT/ACT": ("D3", "E3"),
+    "Tài chính": ("F1", "F2", "F3"),
+    "Hoạt động và giải thưởng": ("D4", "D5"),
+    "Nguyện vọng": ("N2", "N3", "N1"),
+}
+# Thứ tự hỏi khi sửa: câu bậc học rồi câu hồ sơ theo thứ tự form. Không có N4 (visa) vì chat không hỏi câu đó
+EDIT_ORDER = ("B1.1", "B1.2", "B1.3", "B1.4", *QUESTION_ORDER)
+EDIT_MENU = (
+    "Bạn muốn sửa những mục nào? Bạn chọn một hoặc nhiều mục rồi bấm Gửi, mình sẽ hỏi lại lần lượt từng mục. "
+    'Bạn cũng có thể nhắn thẳng mục và giá trị mới, ví dụ "sửa SAT thành 1450".'
+)
+EDIT_MENU_TEXT = re.compile(
+    r"em muốn sửa\s+(.+)", re.IGNORECASE
+)  # câu ô chọn ghép: "Em muốn sửa Tiếng Anh, Tài chính"
+FORM_REPLY = QuickReply(label="Sửa trên form", value="Sửa trên form")
+RESTART_REPLY = QuickReply(label="Điền lại từ đầu", value="Điền lại từ đầu")
+KEEP_REPLY = QuickReply(label="Giữ như cũ", value="Giữ như cũ")
+EDIT_ON_FORM = "Bạn bấm nút bên dưới để mở form hồ sơ và sửa trực tiếp nhé."
 # Câu ô chọn E2 / E3 ghép: "Em dự kiến thi tháng 5/2027", "Em dự kiến thi IELTS, mục tiêu 7.5, tháng 10/2027"...
 # Khớp thì ghi thẳng, không gọi Qwen. E2: tiếng Anh; E3: chuẩn hóa.
 PLAN_TEXT = re.compile(r"em dự kiến thi,?\s*tháng (\d{1,2})/(\d{4})", re.IGNORECASE)
@@ -642,6 +666,41 @@ def review(state: ChatState) -> SkillOutput:
     )
 
 
+# Các nhóm học sinh đã tích trong ô chọn sửa mục. Có tên không phải nhóm (học sinh tự gõ) thì None để SLM đọc
+def read_edit_menu(message: str) -> list[str] | None:
+    match = EDIT_MENU_TEXT.fullmatch(message.strip())
+    if match is None:
+        return None
+    sections = []
+    for part in match.group(1).split(","):
+        name = next((name for name in EDIT_SECTIONS if buttons.same_text(name, part)), None)
+        if name is None:
+            return None
+        sections.append(name)
+    return sections
+
+
+# Câu hỏi của các nhóm đã chọn, theo thứ tự hỏi khi sửa
+def edit_questions(sections: list[str]) -> list[str]:
+    wanted = {question_id for name in sections for question_id in EDIT_SECTIONS[name]}
+    return [question_id for question_id in EDIT_ORDER if question_id in wanted]
+
+
+# Ô chọn nhóm cần sửa (chọn được nhiều nhóm) kèm 3 nút: sửa trên form, điền lại từ đầu, hồ sơ đã đúng.
+# Vẫn ở câu X1 để bấm "Đúng rồi" là xác nhận hồ sơ như ở bảng rà soát
+def edit_menu(state: ChatState) -> SkillOutput:
+    ask(state, "X1")
+    field = {
+        "name": "sections",
+        "multiple": True,
+        "label": "Mục cần sửa",
+        "placeholder": "Chọn mục",
+        "options": buttons.same_options(list(EDIT_SECTIONS)),
+    }
+    widget = Widget(type="select", data={"fields": [field], "format": "Em muốn sửa {sections}"})
+    return SkillOutput(EDIT_MENU, quick_replies=[FORM_REPLY, RESTART_REPLY, CONFIRM_REPLY], widget=widget)
+
+
 # Hỏi một câu B2 kèm nút; câu tùy chọn có thêm nút "Bỏ qua". text: câu khác câu chuẩn (câu hỏi lại)
 def ask_question(state: ChatState, question_id: str, text: str | None = None) -> SkillOutput:
     return buttons.ask_with_buttons(state, question_id, text, can_skip=question_id in OPTIONAL_QUESTIONS)
@@ -1006,9 +1065,14 @@ def save_cert_text(state: ChatState, item: dict) -> SkillOutput:
 
 # Câu ghép từ ô nhập hoặc nút "Không còn ..." của câu đang hỏi là câu trả lời rõ: chat_flow không nhờ model
 # đoán skill (model có thể đoán nhầm "Không còn ..." là muốn dừng)
+# Ở bảng rà soát: nút Cần sửa, câu ô chọn nhóm, nút Sửa trên form, Điền lại từ đầu. Câu nào cũng có thể có nút Giữ như cũ
 def is_form_text(question_id: str | None, message: str) -> bool:
+    edit_replies = (FIX_REPLY, FORM_REPLY, RESTART_REPLY)
     return (
-        (question_id in NO_MORE and buttons.same_text(message, NO_MORE[question_id]))
+        (question_id == "X1" and any(buttons.same_text(message, reply.value) for reply in edit_replies))
+        or (question_id == "X1" and read_edit_menu(message) is not None)
+        or buttons.same_text(message, KEEP_REPLY.value)
+        or (question_id in NO_MORE and buttons.same_text(message, NO_MORE[question_id]))
         or (question_id in CERT_QUESTIONS and buttons.same_text(message, NO_MORE_CERT))
         or read_item_text(question_id, message) is not None
         or read_cert_text(question_id, message) is not None
@@ -1133,10 +1197,10 @@ class HoSoHandler:
                 return more
         if question_id == "X1":
             # Học sinh sửa thông tin ở bảng rà soát: sai thì hỏi lại, đúng thì hiện lại bảng,
-            # chưa nói sửa gì (vd bấm "Cần sửa") thì hỏi sửa mục nào
+            # chưa nói sửa gì thì hiện ô chọn mục cần sửa
             if read.ask_again:
                 return SkillOutput(read.ask_again)
-            return review(state) if profile_snapshot(state) != snapshot else SkillOutput(ASK_WHAT_TO_FIX)
+            return review(state) if profile_snapshot(state) != snapshot else edit_menu(state)
         # Câu bắt buộc chưa có câu trả lời (giá trị sai, hoặc học sinh không nói) thì hỏi lại, tối đa 2 lần.
         # Câu tùy chọn chỉ hỏi lại khi giá trị sai
         limit = MAX_ASK if asked_id in REQUIRED_QUESTIONS or read.ask_again else 1

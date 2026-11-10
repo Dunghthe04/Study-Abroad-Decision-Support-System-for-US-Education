@@ -193,13 +193,13 @@ async def test_nothing_new_keeps_ready_profile():
     assert llm.calls == []
 
 
-async def test_edit_without_item_shows_review_and_asks_what_to_fix():
+async def test_edit_without_item_shows_edit_menu():
     llm = FakeLLM()
     state = ChatState(current_step="B3", profile=full_profile(), intake_mode="chat")
     slm = tin(("collect_profile", {"tasks": ["edit"]}))
     output = await make_handler(llm).collect(state, "em muốn sửa hồ sơ", slm)
-    assert output.answer == skill_ho_so.ASK_WHAT_TO_FIX
-    assert output.widget.type == "review"
+    assert output.answer == skill_ho_so.EDIT_MENU
+    assert output.widget.type == "select"
     assert state.question_id == "X1"
     assert llm.calls == []
 
@@ -382,3 +382,140 @@ async def test_answer_tagged_edit_while_editing_moves_on():
     await make_handler(llm).collect(state, "sửa GPA thành 3.8 hệ 4", slm)
     assert state.profile["gpa"].value == {"value": 3.8, "scale": 4}
     assert (state.question_id, state.edit_queue) == ("F1", [])
+
+
+# Ô chọn mục cần sửa: học sinh tích nhiều nhóm, chat hỏi lần lượt câu của từng nhóm rồi về bảng rà soát
+KEEP = skill_ho_so.KEEP_REPLY.value
+
+
+def at_review(profile: dict[str, ProfileField] | None = None) -> ChatState:
+    state = ChatState(current_step="B2", profile=profile or full_profile(), intake_mode="chat")
+    ask(state, "X1")
+    return state
+
+
+def labels(output) -> list[str]:
+    return [reply.label for reply in output.quick_replies]
+
+
+# Bấm "Cần sửa": hiện ô chọn nhiều nhóm và 3 nút, không gọi Qwen
+async def test_fix_button_shows_edit_menu():
+    llm = FakeLLM()
+    state = at_review()
+    assert skill_ho_so.is_form_text("X1", skill_ho_so.FIX_REPLY.value)
+    output = await make_handler(llm).collect(state, skill_ho_so.FIX_REPLY.value, MAC_DINH)
+    assert output.answer == skill_ho_so.EDIT_MENU
+    assert output.widget.type == "select"
+    field = output.widget.data["fields"][0]
+    assert field["multiple"] is True
+    assert [o["label"] for o in field["options"]] == list(skill_ho_so.EDIT_SECTIONS)
+    assert labels(output) == ["Sửa trên form", "Điền lại từ đầu", "Đúng rồi"]
+    assert (state.question_id, state.edit_queue) == ("X1", None)
+    assert llm.calls == []
+
+
+# Chọn hai nhóm: hỏi lần lượt theo thứ tự form, bỏ câu không cần hỏi (D1 chỉ hỏi học sinh cấp 3), hết thì về bảng
+async def test_pick_sections_asks_each_question_then_review():
+    llm = FakeLLM()
+    chat = make_handler(llm)
+    state = at_review()
+    message = "Em muốn sửa Học lực (GPA), SAT/ACT"
+    assert skill_ho_so.is_form_text("X1", message)
+    output = await chat.collect(state, message, MAC_DINH)
+    assert (state.question_id, state.edit_queue) == ("D2", ["D3", "E3"])
+    assert output.answer == QUESTIONS["D2"]
+    assert KEEP in labels(output)  # GPA đã có giá trị
+    assert llm.calls == []
+    output = await chat.collect(state, "GPA 3.8 thang 4", MAC_DINH)
+    assert (state.question_id, state.edit_queue) == ("D3", ["E3"])
+    assert KEEP not in labels(output)  # chưa có SAT/ACT thì không có gì để giữ
+    await chat.collect(state, "Em chưa thi SAT/ACT", MAC_DINH)
+    assert (state.question_id, state.edit_queue) == ("E3", [])  # chưa thi thì hỏi kế hoạch thi
+    output = await chat.collect(state, "Bỏ qua", MAC_DINH)
+    assert (state.question_id, state.edit_queue) == ("X1", None)
+    assert output.widget.type == "review"
+
+
+# Hàng chờ đi từ câu bậc học (B1) sang câu tài chính (F)
+async def test_pick_goal_and_finance_crosses_steps():
+    state = at_review()
+    await make_handler(FakeLLM()).collect(state, "Em muốn sửa Mục tiêu, Tài chính", MAC_DINH)
+    assert (state.question_id, state.edit_queue) == ("B1.1", ["B1.2", "B1.3", "B1.4", "F1", "F2", "F3"])
+
+
+# Câu chỉ hỏi khi cần được xét lúc tới lượt: đã có chứng chỉ tiếng Anh thì không hỏi kế hoạch thi
+@pytest.mark.parametrize(("status", "next_id"), [("confirmed", "X1"), ("none", "E2")])
+async def test_english_plan_asked_only_when_needed(status, next_id):
+    english = ProfileField(value=None if status == "none" else "x", status=status)
+    state = at_review({**full_profile(), "english": english})
+    chat = make_handler(FakeLLM())
+    await chat.collect(state, "Em muốn sửa Tiếng Anh", MAC_DINH)
+    assert (state.question_id, state.edit_queue) == ("E1", ["E2"])
+    await chat.collect(state, KEEP, MAC_DINH)
+    assert state.question_id == next_id
+
+
+# Nhóm Nguyện vọng: N1 (người thân ở bang) chỉ hỏi khi chưa có bang muốn học
+async def test_pick_wishes_skips_relatives_when_states_known():
+    states = ProfileField(value=["Texas"], status="confirmed")
+    state = at_review({**full_profile(), "preferred_states": states})
+    chat = make_handler(FakeLLM())
+    await chat.collect(state, "Em muốn sửa Nguyện vọng", MAC_DINH)
+    assert (state.question_id, state.edit_queue) == ("N2", ["N3", "N1"])
+    await chat.collect(state, KEEP, MAC_DINH)
+    assert (state.question_id, state.edit_queue) == ("N3", ["N1"])
+    output = await chat.collect(state, "Bỏ qua", MAC_DINH)
+    assert (state.question_id, state.edit_queue) == ("X1", None)
+    assert output.widget.type == "review"
+
+
+# Có tên không phải nhóm của ô chọn (học sinh tự gõ) thì không coi là bấm ô chọn, để SLM đọc như tin thường
+@pytest.mark.parametrize(
+    "message", ["Em muốn sửa Abc", "Em muốn sửa GPA", "Em muốn sửa ", "Em muốn sửa Tiếng Anh, Abc"]
+)
+def test_unknown_section_is_not_menu_text(message):
+    assert skill_ho_so.read_edit_menu(message) is None
+    assert not skill_ho_so.is_form_text("X1", message)
+
+
+async def test_edit_on_form_shows_form_link():
+    state = at_review()
+    output = await make_handler(FakeLLM()).collect(state, "Sửa trên form", MAC_DINH)
+    assert output.widget.type == "form"
+    assert state.edit_queue is None
+
+
+# Điền lại từ đầu: hỏi lại mọi câu theo thứ tự form, bắt đầu từ B1.1; không hỏi visa (N4)
+async def test_restart_asks_every_question_from_start():
+    state = at_review()
+    output = await make_handler(FakeLLM()).collect(state, "Điền lại từ đầu", MAC_DINH)
+    assert state.question_id == "B1.1"
+    assert state.edit_queue == list(skill_ho_so.EDIT_ORDER[1:])
+    assert "N4" not in state.edit_queue
+    assert KEEP in labels(output)
+
+
+# Bấm "Giữ như cũ": không đổi hồ sơ, không gọi Qwen, sang câu kế tiếp
+async def test_keep_moves_on_without_change():
+    llm = FakeLLM()
+    state = ChatState(current_step="B2", profile=full_profile(), intake_mode="chat", asked={"X1": 1})
+    state.edit_queue = ["F1"]
+    ask(state, "D2")
+    await make_handler(llm).collect(state, KEEP, MAC_DINH)
+    assert state.profile == full_profile()
+    assert (state.question_id, state.edit_queue) == ("F1", [])
+    assert llm.calls == []
+
+
+# Giữ hết hoặc bỏ qua câu chưa có giá trị: đi hết lượt điền lại thì về bảng, hồ sơ cũ còn nguyên
+async def test_restart_keeping_everything_returns_to_review():
+    state = at_review()
+    chat = make_handler(FakeLLM())
+    output = await chat.collect(state, "Điền lại từ đầu", MAC_DINH)
+    for _ in range(len(skill_ho_so.EDIT_ORDER)):
+        if state.edit_queue is None:
+            break
+        output = await chat.collect(state, KEEP if KEEP in labels(output) else "Bỏ qua", MAC_DINH)
+    assert (state.question_id, state.edit_queue) == ("X1", None)
+    assert output.widget.type == "review"
+    assert state.profile == full_profile()

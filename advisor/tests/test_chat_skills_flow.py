@@ -5,7 +5,7 @@ from app.services.chat_flow import QUESTIONS
 from app.services.intake import CHAT_BUTTON, FORM_BUTTON, INTAKE_ASK, INTAKE_ID
 from app.services.ollama import OllamaError
 from app.services.skills import build_handlers
-from app.services.skills.skill_ho_so import ASK_WHAT_TO_FIX, OPTIONAL_QUESTIONS, SAVED, next_question
+from app.services.skills.skill_ho_so import EDIT_MENU, OPTIONAL_QUESTIONS, SAVED, next_question
 from tests.fakes import FakeLLM, flow_with
 
 
@@ -336,16 +336,16 @@ async def test_fix_at_review_overwrites_and_shows_review_again():
     assert res.widget.type == "review"
 
 
-async def test_fix_button_without_new_value_asks_what_to_fix():
-    # Bấm "Cần sửa": Qwen không đọc được giá trị nào, hồ sơ không đổi thì hỏi sửa mục nào, không hiện lại bảng
+async def test_fix_button_shows_edit_menu():
+    # Bấm "Cần sửa": hiện ô chọn các nhóm cần sửa, hồ sơ không đổi
     profile = {**full_profile(), "budget": field("tier_35k_50k")}
     res = await turn(
         FakeLLM(ho_so()), "Em cần sửa thông tin", current_step="B2", question_id="X1", profile=profile
     )
 
-    assert res.answer == ASK_WHAT_TO_FIX
+    assert res.answer == EDIT_MENU
     assert res.state.question_id == "X1"
-    assert res.widget is None
+    assert res.widget.type == "select"
     assert res.state.profile == {name: f for name, f in profile.items()}
 
 
