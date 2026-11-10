@@ -103,6 +103,8 @@ CONFIRM_WORDS = {
 CONFIRM_REPLY = QuickReply(label="Đúng rồi", value="Đúng rồi")
 FIX_REPLY = QuickReply(label="Cần sửa", value="Em cần sửa thông tin")
 SAVED = "Mình đã ghi nhận hồ sơ của bạn."
+# Bấm "Cần sửa" hoặc nói muốn sửa mà chưa nói sửa gì: hỏi lại mục cần sửa thay vì hiện lại bảng
+ASK_WHAT_TO_FIX = 'Bạn muốn sửa mục nào? Bạn nhắn mục và giá trị mới giúp mình, ví dụ "sửa SAT thành 1450".'
 # Câu ô chọn E2 / E3 ghép: "Em dự kiến thi tháng 5/2027", "Em dự kiến thi IELTS, mục tiêu 7.5, tháng 10/2027"...
 # Khớp thì ghi thẳng, không gọi Qwen. E2: tiếng Anh; E3: chuẩn hóa.
 PLAN_TEXT = re.compile(r"em dự kiến thi,?\s*tháng (\d{1,2})/(\d{4})", re.IGNORECASE)
@@ -1015,6 +1017,11 @@ def press_button(state: ChatState, button: buttons.Button) -> SkillOutput:
     return ask_next(state)
 
 
+# Giá trị và trạng thái từng trường, để biết lượt này có sửa gì không
+def profile_snapshot(state: ChatState) -> dict[str, tuple[Any, str]]:
+    return {name: (deepcopy(f.value), f.status) for name, f in state.profile.items()}
+
+
 class HoSoHandler:
     def __init__(self, llm: Any, model: str) -> None:
         self._reader = HoSoReader(llm, model)
@@ -1099,6 +1106,7 @@ class HoSoHandler:
         asked_id = question_id if question_id in QUESTION_FIELDS else None
         before = {key: deepcopy(state.profile[key].value) for key in PENDING_KEYS if key in state.profile}
         count_before = list_count(state, question_id)
+        snapshot = profile_snapshot(state)
         read = await self._reader.read(asked_id, message, known, state.branch)
         # GPA không nói thang thì chưa ghi, hỏi lại thang sau khi ghi các thông tin khác
         guessed_gpa = read.values.pop("gpa", None) if read.gpa_guessed else None
@@ -1116,8 +1124,11 @@ class HoSoHandler:
             if more is not None:
                 return more
         if question_id == "X1":
-            # Học sinh sửa thông tin ở bảng rà soát: sai thì hỏi lại, đúng thì hiện lại bảng
-            return SkillOutput(read.ask_again) if read.ask_again else review(state)
+            # Học sinh sửa thông tin ở bảng rà soát: sai thì hỏi lại, đúng thì hiện lại bảng,
+            # chưa nói sửa gì (vd bấm "Cần sửa") thì hỏi sửa mục nào
+            if read.ask_again:
+                return SkillOutput(read.ask_again)
+            return review(state) if profile_snapshot(state) != snapshot else SkillOutput(ASK_WHAT_TO_FIX)
         # Câu bắt buộc chưa có câu trả lời (giá trị sai, hoặc học sinh không nói) thì hỏi lại, tối đa 2 lần.
         # Câu tùy chọn chỉ hỏi lại khi giá trị sai
         limit = MAX_ASK if asked_id in REQUIRED_QUESTIONS or read.ask_again else 1
