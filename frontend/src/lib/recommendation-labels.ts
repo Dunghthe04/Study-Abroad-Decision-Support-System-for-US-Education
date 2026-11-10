@@ -84,12 +84,28 @@ export const whyText = (code: string) => WHY_TEXT[code as WhyCode] ?? code;
 export const flagText = (code: string) => FLAG_TEXT[code as FilterFlag] ?? code;
 export const groupLabel = (g: string) => GROUP_LABELS[g as SchoolGroup] ?? g;
 
-// Màu badge theo nhóm, dùng các variant đã có trong components/ui/badge.tsx
-export function groupVariant(g: string): "risk" | "warn" | "ok" | "neutral" {
-  if (g === "R" || g === "RF") return "risk";
-  if (g === "M") return "warn";
-  if (g === "S") return "ok";
+// Màu nhóm dùng chung cho mọi màn (thẻ trường, trợ lý, mô phỏng, trang phương pháp).
+// Khó vào tím, Vừa sức xanh thương hiệu, An toàn hơn xanh lá, Cần học bổng lớn cam. Đỏ chỉ dành cho lỗi.
+export type GroupVariant = "reach" | "brand" | "ok" | "warn" | "neutral";
+export function groupVariant(g: string): GroupVariant {
+  if (g === "R" || g === "RF") return "reach";
+  if (g === "M") return "brand";
+  if (g === "S" || g === "O") return "ok";
+  if (g === "AID") return "warn";
   return "neutral";
+}
+
+// ---------------------------------------------------------------- định dạng số (vi-VN cho mọi số)
+// 0.125 → "12,5%"
+export function formatPct(fraction: number | null | undefined): string {
+  if (fraction == null) return "Chưa có số liệu";
+  return `${(Math.round(fraction * 1000) / 10).toLocaleString("vi-VN")}%`;
+}
+
+// 3.856 → "3,86"
+export function formatGpa(value: number | null | undefined, digits = 2): string {
+  if (value == null) return "Chưa có";
+  return value.toLocaleString("vi-VN", { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }
 
 // 95610 → "95.610 USD"
