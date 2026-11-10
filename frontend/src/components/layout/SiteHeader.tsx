@@ -34,6 +34,7 @@ export function SiteHeader() {
 
   const navLinks = [
     { href: canOpenAdmin ? "/admin" : "/", label: isModerator ? "Kiểm duyệt" : isAdmin ? "Quản trị" : "Trang chủ" },
+    { href: "/universities", label: "Tìm trường" },
     { href: canOpenAdmin ? "/admin/centers" : "/centers", label: "Trung tâm tư vấn" },
     { href: "/methodology", label: "Giới thiệu phương pháp" },
     { href: "/analysis", label: "Phân tích tư vấn" },
@@ -50,6 +51,9 @@ export function SiteHeader() {
     }
     if (href === "/admin/centers") {
       return pathname.startsWith("/admin/centers") || pathname.startsWith("/centers");
+    }
+    if (href === "/universities") {
+      return pathname.startsWith("/universities") || pathname.startsWith("/university");
     }
     return pathname.startsWith(href);
   };
