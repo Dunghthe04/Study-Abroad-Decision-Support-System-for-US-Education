@@ -181,9 +181,9 @@ function AcceptStat({ school }: { school: ScoredSchool | undefined }) {
     const intl = school?.intlAcceptRate;
     return (
         <Stat
-            label="Tỷ lệ nhận"
+            label="Trường nhận chung"
             value={pct(rate)}
-            note={intl != null ? `Du học sinh: ${pct(intl)}` : "Số hồ sơ được nhận"}
+            note={intl != null ? `Du học sinh: ${pct(intl)}` : "Của mọi hồ sơ, không phải cơ hội riêng của bạn"}
             tone={intl != null && rate > 0 && intl / rate < 0.5 ? "warn" : "muted"}
         />
     );
