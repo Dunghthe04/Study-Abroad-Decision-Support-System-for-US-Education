@@ -64,7 +64,7 @@ export function SiteHeader() {
       <nav
         className={cn(
           "mx-auto flex items-center justify-between gap-6 px-4 py-2.5",
-          isAdminRoute(pathname) || isFullRoute(pathname)
+          isAdminRoute(pathname) || pathname.startsWith("/recommendations")
             ? "max-w-none sm:px-6"
             : isWideRoute(pathname)
               ? "max-w-[1560px] px-4 sm:px-8 lg:px-12"
