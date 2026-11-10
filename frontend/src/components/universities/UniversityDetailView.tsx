@@ -48,7 +48,6 @@ export function UniversityDetailView({
   const offering = university.offerings.find((item) => item.studyLevel === selectedLevel) ?? university.offerings[0];
   const location = [university.city, university.stateName ?? university.state].filter(Boolean).join(", ");
   const website = universityUrl(university.website);
-  const coverUrl = universityUrl(university.coverUrl);
   const navigation = useMemo(
     () => [
       { id: "overview", label: "Tổng quan" },
@@ -96,17 +95,8 @@ export function UniversityDetailView({
 
   return (
     <article className="space-y-6 pb-12">
-      {/* Hero Header với background ảnh bìa mờ tràn toàn màn hình */}
+      {/* Phần đầu trang: ảnh bìa, tên trường và các nút chính */}
       <div className="relative w-full overflow-hidden border-b border-border/60 bg-muted/20">
-        {coverUrl && (
-          <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
-            <div
-              className="absolute inset-0 bg-cover bg-center blur-3xl scale-125 opacity-35 brightness-110 saturate-150"
-              style={{ backgroundImage: `url(${coverUrl})` }}
-            />
-            <div className="absolute inset-0 bg-gradient-to-b from-background/30 via-background/60 to-background" />
-          </div>
-        )}
 
         <div className="mx-auto max-w-[1320px] px-4 pt-4 pb-6 sm:px-6 space-y-5">
           <Breadcrumb>
@@ -128,12 +118,12 @@ export function UniversityDetailView({
             <SchoolImage
               url={university.coverUrl}
               alt={`Khuôn viên ${university.name}`}
-              className="h-48 w-full rounded-xl bg-brand-wash shadow-lg ring-1 ring-border/50 sm:h-64 lg:h-80"
+              className="h-48 w-full rounded-xl bg-brand-wash ring-1 ring-border/50 sm:h-64 lg:h-80"
               priority
             />
             <div className="flex flex-wrap items-end justify-between gap-5 pt-5">
               <div className="flex w-full min-w-0 flex-none items-center gap-4 sm:w-auto sm:flex-1">
-                <SchoolImage url={university.logoUrl} alt={`Logo ${university.name}`} className="size-16 shrink-0 bg-white sm:size-20 shadow-sm" contain />
+                <SchoolImage url={university.logoUrl} alt={`Logo ${university.name}`} className="size-16 shrink-0 bg-white sm:size-20 " contain />
                 <div className="min-w-0">
                   <h1 className="text-2xl font-semibold leading-tight tracking-tight text-foreground sm:text-3xl">{university.name}</h1>
                   <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
@@ -158,7 +148,7 @@ export function UniversityDetailView({
       </div>
 
       <div className="mx-auto max-w-[1320px] px-4 sm:px-6 space-y-6">
-        <nav aria-label="Các mục thông tin trường" className="sticky top-14 z-20 border-b border-border bg-background/95 backdrop-blur-sm">
+        <nav aria-label="Các mục thông tin trường" className="sticky top-14 z-20 border-b border-border bg-background/95 ">
           <ScrollArea className="w-full min-w-0">
             <div className="flex w-max gap-1">
               {navigation.map((item) => {

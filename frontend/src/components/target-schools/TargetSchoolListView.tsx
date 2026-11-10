@@ -201,7 +201,7 @@ export function TargetSchoolListView() {
         </div>
         <div className="flex items-center gap-2">
           <Link href="/recommendations">
-            <Button size="sm" className="gap-1.5 shadow-sm">
+            <Button size="sm" className="gap-1.5 ">
               <PlusIcon className="size-4" />
               Thêm trường mới
             </Button>
@@ -213,7 +213,7 @@ export function TargetSchoolListView() {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:gap-4">
         <Card
           className={cn(
-            "cursor-pointer transition-all hover:shadow-md",
+            "cursor-pointer transition-all",
             selectedCategory === "all" ? "ring-2 ring-brand border-brand" : ""
           )}
           onClick={() => setSelectedCategory("all")}
@@ -235,7 +235,7 @@ export function TargetSchoolListView() {
 
         <Card
           className={cn(
-            "cursor-pointer transition-all hover:shadow-md",
+            "cursor-pointer transition-all",
             selectedCategory === "reach" ? "ring-2 ring-rose-500 border-rose-500" : ""
           )}
           onClick={() => setSelectedCategory(selectedCategory === "reach" ? "all" : "reach")}
@@ -261,7 +261,7 @@ export function TargetSchoolListView() {
 
         <Card
           className={cn(
-            "cursor-pointer transition-all hover:shadow-md",
+            "cursor-pointer transition-all",
             selectedCategory === "match" ? "ring-2 ring-sky-500 border-sky-500" : ""
           )}
           onClick={() => setSelectedCategory(selectedCategory === "match" ? "all" : "match")}
@@ -287,7 +287,7 @@ export function TargetSchoolListView() {
 
         <Card
           className={cn(
-            "cursor-pointer transition-all hover:shadow-md",
+            "cursor-pointer transition-all",
             selectedCategory === "safety" ? "ring-2 ring-emerald-500 border-emerald-500" : ""
           )}
           onClick={() => setSelectedCategory(selectedCategory === "safety" ? "all" : "safety")}
@@ -374,7 +374,7 @@ export function TargetSchoolListView() {
               className={cn(
                 "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
                 selectedCategory === "all"
-                  ? "bg-surface font-semibold text-foreground shadow-sm"
+                  ? "bg-surface font-semibold text-foreground "
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
@@ -386,7 +386,7 @@ export function TargetSchoolListView() {
               className={cn(
                 "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
                 selectedCategory === "reach"
-                  ? "bg-surface font-semibold text-rose-600 shadow-sm"
+                  ? "bg-surface font-semibold text-rose-600 "
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
@@ -398,7 +398,7 @@ export function TargetSchoolListView() {
               className={cn(
                 "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
                 selectedCategory === "match"
-                  ? "bg-surface font-semibold text-sky-600 shadow-sm"
+                  ? "bg-surface font-semibold text-sky-600 "
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
@@ -410,7 +410,7 @@ export function TargetSchoolListView() {
               className={cn(
                 "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
                 selectedCategory === "safety"
-                  ? "bg-surface font-semibold text-emerald-600 shadow-sm"
+                  ? "bg-surface font-semibold text-emerald-600 "
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
@@ -426,7 +426,7 @@ export function TargetSchoolListView() {
               className={cn(
                 "inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
                 viewMode === "grid"
-                  ? "bg-surface font-semibold text-brand shadow-sm"
+                  ? "bg-surface font-semibold text-brand "
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
@@ -439,7 +439,7 @@ export function TargetSchoolListView() {
               className={cn(
                 "inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
                 viewMode === "timeline"
-                  ? "bg-surface font-semibold text-brand shadow-sm"
+                  ? "bg-surface font-semibold text-brand "
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
@@ -506,7 +506,7 @@ export function TargetSchoolListView() {
               <Card
                 key={item.id}
                 className={cn(
-                  "flex flex-col justify-between transition-shadow hover:shadow-md",
+                  "flex flex-col justify-between transition-colors",
                   catConfig.borderClass
                 )}
               >
@@ -660,7 +660,7 @@ export function TargetSchoolListView() {
                       )}
                     />
 
-                    <div className="rounded-xl border border-line bg-surface p-4 transition-all hover:shadow-sm">
+                    <div className="rounded-xl border border-line bg-surface p-4 transition-all ">
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <div>
                           <div className="flex flex-wrap items-center gap-2">

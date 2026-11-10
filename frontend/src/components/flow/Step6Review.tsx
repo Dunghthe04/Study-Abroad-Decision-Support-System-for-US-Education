@@ -71,7 +71,7 @@ function ReviewCard({
   return (
     <div
       className={cn(
-        "rounded-2xl border bg-surface p-5 shadow-2xs transition-colors",
+        "rounded-2xl border bg-surface p-5 transition-colors",
         hasErrors ? "border-destructive/60" : "border-line hover:border-brand/40",
         className
       )}
@@ -361,7 +361,7 @@ export function Step6Review({
           onClick={onSubmit}
           disabled={isSubmitting}
           size="lg"
-          className="gap-2 bg-brand hover:bg-brand-ink text-white font-semibold shadow-xs px-6"
+          className="gap-2 bg-brand hover:bg-brand-ink text-white font-semibold px-6"
         >
           {isSubmitting ? (
             <>

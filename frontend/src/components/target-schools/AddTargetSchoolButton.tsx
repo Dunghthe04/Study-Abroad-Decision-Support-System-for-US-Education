@@ -340,7 +340,7 @@ export function AddTargetSchoolButton({
                 <select
                   value={round}
                   onChange={(e) => setRound(e.target.value)}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
                 >
                   <option value="">-- Chưa chọn vòng nộp --</option>
                   {APPLICATION_ROUNDS.map((r) => (

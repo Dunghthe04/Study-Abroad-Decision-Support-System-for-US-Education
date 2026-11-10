@@ -47,7 +47,7 @@ export function AdminCenterDetailPanel({ center, onClose }: AdminCenterDetailPan
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
           <div className="absolute bottom-2.5 left-3 flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-lg overflow-hidden border-2 border-background bg-card shadow shrink-0 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-lg overflow-hidden border-2 border-background bg-card shrink-0 flex items-center justify-center">
               <img
                 src={profile.logoImage}
                 alt={center.name}
@@ -55,7 +55,7 @@ export function AdminCenterDetailPanel({ center, onClose }: AdminCenterDetailPan
               />
             </div>
             <div className="text-white min-w-0">
-              <div className="text-xs font-semibold truncate leading-tight drop-shadow">{center.name}</div>
+              <div className="text-xs font-semibold truncate leading-tight ">{center.name}</div>
               <div className="text-xs text-white/80">{profile.typeLabel}</div>
             </div>
           </div>

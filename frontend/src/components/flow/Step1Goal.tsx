@@ -346,7 +346,7 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
                     const graduationYear = guessGraduationYear(data.currentEducationLevel, grade);
                     onUpdate({ currentGrade: grade, ...(graduationYear && { expectedGraduationYear: graduationYear }) });
                   }}
-                  className="w-full appearance-none rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground shadow-2xs focus:border-brand focus:outline-hidden focus:ring-1 focus:ring-brand cursor-pointer"
+                  className="w-full appearance-none rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground focus:border-brand focus:outline-hidden focus:ring-1 focus:ring-brand cursor-pointer"
                 >
                   <option value="">Chọn lớp / năm</option>
                   {gradeOptions.map((g) => (
@@ -388,7 +388,7 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
                         : null,
                     })
                   }
-                  className="w-full appearance-none rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground shadow-2xs focus:border-brand focus:outline-hidden focus:ring-1 focus:ring-brand cursor-pointer"
+                  className="w-full appearance-none rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground focus:border-brand focus:outline-hidden focus:ring-1 focus:ring-brand cursor-pointer"
                 >
                   <option value="">Chưa xác định</option>
                   {GRADUATION_YEAR_OPTIONS.map((yr) => (
@@ -412,7 +412,7 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
                     id="educationSystem"
                     value={data.educationSystem ?? ""}
                     onChange={(e) => onUpdate({ educationSystem: (e.target.value || null) as EducationSystem | null })}
-                    className="w-full appearance-none rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground shadow-2xs focus:border-brand focus:outline-hidden focus:ring-1 focus:ring-brand cursor-pointer"
+                    className="w-full appearance-none rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground focus:border-brand focus:outline-hidden focus:ring-1 focus:ring-brand cursor-pointer"
                   >
                     <option value="">Chưa chọn</option>
                     {EDUCATION_SYSTEM_OPTIONS.map((opt) => (
@@ -449,7 +449,7 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
                   setDegreeError(null);
                 }}
                 className={cn(
-                  "flex flex-col items-start justify-between rounded-xl border p-4 text-left transition-all cursor-pointer h-full shadow-2xs",
+                  "flex flex-col items-start justify-between rounded-xl border p-4 text-left transition-all cursor-pointer h-full",
                   isSelected
                     ? "border-brand bg-brand-wash/40 ring-2 ring-brand text-brand-ink"
                     : "border-line bg-surface hover:border-brand/40 hover:bg-muted/30"
@@ -499,7 +499,7 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
                 aria-label="Kỳ nhập học"
                 value={intakeTerm}
                 onChange={(e) => updateIntake(e.target.value, intakeYear)}
-                className="w-full appearance-none rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground shadow-2xs focus:border-brand focus:outline-hidden focus:ring-1 focus:ring-brand cursor-pointer"
+                className="w-full appearance-none rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground focus:border-brand focus:outline-hidden focus:ring-1 focus:ring-brand cursor-pointer"
               >
                 <option value="">Chọn kỳ</option>
                 {INTAKE_TERM_OPTIONS.map((opt) => (
@@ -516,7 +516,7 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
                 aria-label="Năm nhập học"
                 value={intakeYear}
                 onChange={(e) => updateIntake(intakeTerm, e.target.value)}
-                className="w-full appearance-none rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground shadow-2xs focus:border-brand focus:outline-hidden focus:ring-1 focus:ring-brand cursor-pointer"
+                className="w-full appearance-none rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground focus:border-brand focus:outline-hidden focus:ring-1 focus:ring-brand cursor-pointer"
               >
                 <option value="">Chọn năm</option>
                 {/* Năm đã lưu từ chat có thể nằm ngoài danh sách — vẫn hiện để không mất */}
@@ -639,7 +639,7 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
                     className={cn(
                       "rounded-md border px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer",
                       isSelected
-                        ? "border-brand bg-brand text-white shadow-xs"
+                        ? "border-brand bg-brand text-white "
                         : "border-line bg-surface text-muted-foreground hover:border-brand/40 hover:text-foreground"
                     )}
                   >
@@ -652,7 +652,7 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
 
           {/* Searchable Dropdown List */}
           {showMajorDropdown && (
-            <div className="absolute z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border border-line bg-surface p-1.5 shadow-xl">
+            <div className="absolute z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border border-line bg-surface p-1.5 ">
               <div className="px-2 py-1 text-xs font-semibold text-muted-foreground border-b border-line/60 mb-1">
                 {filteredMajors.length > 0
                   ? `Tìm thấy ${filteredMajors.length} ngành`
@@ -728,7 +728,7 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
                 return (
                   <span
                     key={code}
-                    className="inline-flex items-center gap-1 rounded-md bg-brand-wash px-2.5 py-1 text-xs font-medium text-brand-ink border border-brand/20 shadow-2xs"
+                    className="inline-flex items-center gap-1 rounded-md bg-brand-wash px-2.5 py-1 text-xs font-medium text-brand-ink border border-brand/20 "
                   >
                     {s?.name ?? code} ({code})
                     <button
@@ -757,7 +757,7 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
                   className={cn(
                     "rounded-md border px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer",
                     isSelected
-                      ? "border-brand bg-brand text-white shadow-xs"
+                      ? "border-brand bg-brand text-white "
                       : "border-line bg-surface text-muted-foreground hover:border-brand/40 hover:text-foreground"
                   )}
                 >
@@ -794,7 +794,7 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
 
           {/* Searchable State Dropdown List */}
           {showStateDropdown && (
-            <div className="absolute z-30 mt-1 max-h-60 w-full max-w-md overflow-hidden rounded-xl border border-line bg-surface shadow-xl flex flex-col">
+            <div className="absolute z-30 mt-1 max-h-60 w-full max-w-md overflow-hidden rounded-xl border border-line bg-surface flex flex-col">
               <div className="p-2 border-b border-line bg-muted/20">
                 <div className="relative">
                   <SearchIcon className="absolute left-2.5 top-2 size-3.5 text-muted-foreground pointer-events-none" />

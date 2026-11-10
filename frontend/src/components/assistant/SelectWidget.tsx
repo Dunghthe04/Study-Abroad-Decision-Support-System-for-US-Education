@@ -54,7 +54,7 @@ interface SelectData {
 
 // Giống ô chọn / ô nhập của form hồ sơ (Step1Goal, Step4Financial)
 const controlClass =
-  "w-full min-w-0 rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground shadow-2xs focus:border-brand focus:outline-hidden focus:ring-1 focus:ring-brand disabled:cursor-not-allowed disabled:opacity-60";
+  "w-full min-w-0 rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground focus:border-brand focus:outline-hidden focus:ring-1 focus:ring-brand disabled:cursor-not-allowed disabled:opacity-60";
 const labelClass = "text-xs font-medium text-foreground";
 
 const GPA_PRESETS_10 = [
@@ -238,7 +238,7 @@ export function SelectWidget({ data, onPick }: { data?: Record<string, unknown> 
                       }}
                       className={`px-2 py-0.5 text-xs rounded-full border transition-all cursor-pointer ${
                         isSelected
-                          ? "bg-brand text-white border-brand font-semibold shadow-xs"
+                          ? "bg-brand text-white border-brand font-semibold "
                           : "bg-surface text-foreground border-line hover:border-brand/50 hover:bg-brand-wash"
                       }`}
                     >

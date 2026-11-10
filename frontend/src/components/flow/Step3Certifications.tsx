@@ -215,7 +215,7 @@ export function Step3Certifications({ data, certificationTypes, onUpdate, onPrev
                     id="englishPlannedTestType"
                     value={data.englishPlannedTestType ?? ""}
                     onChange={(e) => onUpdate({ englishPlannedTestType: e.target.value || null })}
-                    className="flex h-9 w-full rounded-md border border-line bg-surface px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand text-foreground"
+                    className="flex h-9 w-full rounded-md border border-line bg-surface px-3 py-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand text-foreground"
                   >
                     <option value="">Chưa chọn bài thi</option>
                     {englishTypes.map((opt) => (
@@ -295,7 +295,7 @@ export function Step3Certifications({ data, certificationTypes, onUpdate, onPrev
                     id="standardizedPlannedTestType"
                     value={data.standardizedPlannedTestType ?? ""}
                     onChange={(e) => onUpdate({ standardizedPlannedTestType: e.target.value || null })}
-                    className="flex h-9 w-full rounded-md border border-line bg-surface px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand text-foreground"
+                    className="flex h-9 w-full rounded-md border border-line bg-surface px-3 py-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand text-foreground"
                   >
                     <option value="">Chưa chọn bài thi</option>
                     {standardizedTypes.map((opt) => (

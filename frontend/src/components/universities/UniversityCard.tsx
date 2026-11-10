@@ -34,7 +34,7 @@ export function UniversityCard({ university }: UniversityCardProps) {
         : null;
 
   return (
-    <Card className="group relative flex flex-col overflow-hidden transition-all duration-200 hover:shadow-lg border-line hover:border-brand/40 bg-card">
+    <Card className="group relative flex flex-col overflow-hidden transition-all duration-200 border-line hover:border-brand/40 bg-card">
       <div className="relative aspect-[16/9] w-full overflow-hidden bg-muted">
         {coverUrl ? (
           <Image
@@ -45,7 +45,7 @@ export function UniversityCard({ university }: UniversityCardProps) {
             className="object-cover transition-transform duration-300 group-hover:scale-105"
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-brand/10 via-brand-wash to-muted">
+          <div className="flex h-full w-full items-center justify-center bg-brand-wash">
             <span className="font-heading text-4xl font-black tracking-wider text-brand/20 select-none">
               {university.code}
             </span>
@@ -56,7 +56,7 @@ export function UniversityCard({ university }: UniversityCardProps) {
 
         <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
           {university.bestRank != null && (
-            <Badge className="bg-amber-500/90 text-white font-semibold backdrop-blur-sm border-none shadow-sm gap-1">
+            <Badge className="bg-amber-500/90 text-white font-semibold border-none gap-1">
               <TrophyIcon className="size-3" />
               <span>#{university.bestRank}</span>
               {university.bestRankPublisher && (
@@ -65,12 +65,12 @@ export function UniversityCard({ university }: UniversityCardProps) {
             </Badge>
           )}
           {university.isIvy && (
-            <Badge className="bg-emerald-700/90 text-white font-semibold backdrop-blur-sm border-none shadow-sm">
+            <Badge className="bg-emerald-700/90 text-white font-semibold border-none ">
               Ivy League
             </Badge>
           )}
           {university.control && (
-            <Badge variant="secondary" className="bg-black/40 text-white backdrop-blur-sm border-white/20">
+            <Badge variant="secondary" className="bg-black/40 text-white border-white/20">
               {schoolControlLabel(university.control)}
             </Badge>
           )}
@@ -85,12 +85,12 @@ export function UniversityCard({ university }: UniversityCardProps) {
             universityState={university.state}
             variant="secondary"
             size="sm"
-            className="h-8 bg-black/40 text-white hover:bg-black/60 backdrop-blur-sm border-white/20"
+            className="h-8 bg-black/40 text-white hover:bg-black/60 border-white/20"
           />
         </div>
 
         <div className="absolute bottom-3 left-3 flex items-center gap-2.5">
-          <div className="relative flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white p-1 shadow-md ring-2 ring-white/80">
+          <div className="relative flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white p-1 ring-2 ring-white/80">
             {logoUrl ? (
               <Image
                 src={logoUrl}

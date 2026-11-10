@@ -170,7 +170,7 @@ export function UniversityListView({
   return (
     <div className="space-y-6">
       {/* Header bar: Title, description, quick search */}
-      <div className="rounded-2xl bg-gradient-to-r from-brand-wash via-surface to-muted/30 border border-line p-6 md:p-8">
+      <div className="rounded-xl bg-surface border border-line p-6 md:p-8">
         <div className="max-w-3xl space-y-3">
           <div className="flex items-center gap-2">
             <span className="flex size-8 items-center justify-center rounded-lg bg-brand text-white">
@@ -196,7 +196,7 @@ export function UniversityListView({
                 placeholder="Tìm theo tên trường, mã trường (MIT, Harvard...) hoặc thành phố"
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
-                className="pl-10 h-11 bg-background text-sm shadow-sm"
+                className="pl-10 h-11 bg-background text-sm "
               />
               {searchInput && (
                 <button
@@ -211,7 +211,7 @@ export function UniversityListView({
                 </button>
               )}
             </div>
-            <Button type="submit" className="h-11 px-6 font-semibold shadow-sm">
+            <Button type="submit" className="h-11 px-6 font-semibold ">
               Tìm kiếm
             </Button>
           </form>
@@ -233,7 +233,7 @@ export function UniversityListView({
         {/* Content Section */}
         <div className="lg:col-span-3 space-y-5">
           {/* Controls Bar: Mobile Filter Button, Result Count, Sort */}
-          <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-line bg-card p-4 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-line bg-card p-4 ">
             <div className="flex items-center gap-3">
               {/* Mobile Filter Trigger Sheet */}
               <div className="lg:hidden">

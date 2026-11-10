@@ -38,7 +38,7 @@ export function SchoolPhoto({ name, coverUrl, logoUrl, href }: SchoolPhotoProps)
                         onError={() => fail(cover)}
                     />
                     {logo && (
-                        <div className="absolute bottom-2 left-2 flex size-12 items-center justify-center rounded-lg bg-white p-1 shadow-sm">
+                        <div className="absolute bottom-2 left-2 flex size-12 items-center justify-center rounded-lg bg-white p-1 ">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
                                 src={logo}

@@ -222,7 +222,7 @@ export function AdminCenterListView() {
       </div>
 
       {/* Filter toolbar */}
-      <div className="bg-card border rounded-xl p-4 space-y-3 shadow-sm">
+      <div className="bg-card border rounded-xl p-4 space-y-3 ">
         <form onSubmit={handleSearchSubmit} className="flex flex-col md:flex-row gap-3">
           <div className="relative flex-1">
             <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -297,7 +297,7 @@ export function AdminCenterListView() {
       </div>
 
       {/* Centers Table */}
-      <div className="bg-card border rounded-xl overflow-hidden shadow-sm w-full">
+      <div className="bg-card border rounded-xl overflow-hidden w-full">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className="bg-muted/50 border-b text-xs font-semibold text-muted-foregroundr">

@@ -169,7 +169,7 @@ export function PublicCenterListView({ initialCenters }: PublicCenterListViewPro
       </div>
 
       {/* Filter toolbar */}
-      <div className="bg-card border rounded-xl p-4 shadow-sm">
+      <div className="bg-card border rounded-xl p-4 ">
         <form onSubmit={(e) => { e.preventDefault(); setPage(1); }} className="flex flex-col lg:flex-row gap-3">
           <div className="relative flex-1 min-w-[240px]">
             <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -254,7 +254,7 @@ export function PublicCenterListView({ initialCenters }: PublicCenterListViewPro
       </div>
 
       {/* Centers Table - Aligned with Admin UI */}
-      <div className="bg-card border rounded-xl overflow-hidden shadow-sm w-full">
+      <div className="bg-card border rounded-xl overflow-hidden w-full">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm min-w-[760px]">
             <thead className="bg-muted/50 border-b text-xs font-semibold text-muted-foregroundr">

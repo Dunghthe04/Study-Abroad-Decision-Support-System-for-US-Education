@@ -914,7 +914,7 @@ export function Step2Transcript({
                       key={preset.range}
                       type="button"
                       onClick={() => handleOverallChange(String(preset.midpoint))}
-                      className="flex flex-col items-start p-3 rounded-lg border border-line bg-surface hover:border-brand hover:bg-brand-wash/40 text-left transition-all cursor-pointer group shadow-2xs"
+                      className="flex flex-col items-start p-3 rounded-lg border border-line bg-surface hover:border-brand hover:bg-brand-wash/40 text-left transition-all cursor-pointer group "
                     >
                       <div className="flex items-center justify-between w-full">
                         <span className="text-xs font-bold text-foreground group-hover:text-brand">
@@ -963,7 +963,7 @@ export function Step2Transcript({
                 return (
                   <div
                     key={y.gradeName}
-                    className="rounded-xl border border-line bg-surface p-4 space-y-3 shadow-2xs hover:border-brand/40 transition-all"
+                    className="rounded-xl border border-line bg-surface p-4 space-y-3 hover:border-brand/40 transition-all"
                   >
                     <div className="flex items-center justify-between">
                       <span className="font-bold text-sm text-foreground">{y.gradeName}</span>
@@ -1021,7 +1021,7 @@ export function Step2Transcript({
 
           {/* Dynamic GPA Calculation Card & Grade Trend */}
           <div className="space-y-3">
-            <div className="rounded-xl border border-brand/30 bg-brand-wash/30 p-4 shadow-2xs">
+            <div className="rounded-xl border border-brand/30 bg-brand-wash/30 p-4 ">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div>
                   <div className="font-semibold text-sm text-foreground flex items-center gap-1.5">
@@ -1093,7 +1093,7 @@ export function Step2Transcript({
                   {gradeTrend.yearlyAverages.map((y, idx) => (
                     <div
                       key={y.gradeName}
-                      className="flex items-center gap-1.5 text-xs bg-surface border border-line rounded-lg px-2.5 py-1 shadow-2xs"
+                      className="flex items-center gap-1.5 text-xs bg-surface border border-line rounded-lg px-2.5 py-1 "
                     >
                       <span className="font-medium text-foreground">{y.gradeName}:</span>
                       <span className="font-bold text-brand">{y.gpa10.toFixed(2)}</span>
@@ -1238,7 +1238,7 @@ export function Step2Transcript({
                   type="button"
                   size="sm"
                   onClick={triggerFileInput}
-                  className="gap-2 cursor-pointer shadow-xs font-semibold text-xs bg-brand hover:bg-brand-ink text-white"
+                  className="gap-2 cursor-pointer font-semibold text-xs bg-brand hover:bg-brand-ink text-white"
                 >
                   <FileUpIcon className="size-3.5" />
                   {draftTranscript ? "Tải tệp khác" : "Chọn tệp từ máy"}
@@ -1295,7 +1295,7 @@ export function Step2Transcript({
 
           {/* Quick Assignment Dialog khi bảng điểm thiếu khối lớp / học kỳ */}
           {pendingTerms && pendingTerms.length > 0 && (
-            <div className="rounded-xl border-2 border-brand bg-brand-wash/50 p-4 space-y-3 animate-in fade-in-50 shadow-sm">
+            <div className="rounded-xl border-2 border-brand bg-brand-wash/50 p-4 space-y-3 animate-in fade-in-50 ">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-start gap-3">
                   <div className="p-2 rounded-lg bg-brand text-white shrink-0 mt-0.5">
@@ -1385,9 +1385,9 @@ export function Step2Transcript({
                   type="button"
                   onClick={() => setActiveYearIndex(idx)}
                   className={cn(
-                    "rounded-lg px-4 py-2 text-xs font-semibold transition-all cursor-pointer shadow-2xs",
+                    "rounded-lg px-4 py-2 text-xs font-semibold transition-all cursor-pointer",
                     activeYearIndex === idx
-                      ? "bg-brand text-white shadow-xs"
+                      ? "bg-brand text-white "
                       : "bg-surface border border-line text-muted-foreground hover:border-brand/40 hover:text-foreground"
                   )}
                 >
@@ -1439,7 +1439,7 @@ export function Step2Transcript({
           {/* Subjects Table */}
           {years[activeYearIndex] && (
             <div className="space-y-4">
-              <div className="overflow-hidden rounded-xl border border-line bg-surface shadow-2xs">
+              <div className="overflow-hidden rounded-xl border border-line bg-surface ">
                 <table className="w-full text-left text-xs">
                   <thead className="border-b border-line bg-muted/30 text-muted-foreground font-semibold text-xs">
                     <tr>
@@ -1556,7 +1556,7 @@ export function Step2Transcript({
 
           {/* Dynamic GPA Calculation Card & Grade Trend */}
           <div className="space-y-3">
-            <div className="rounded-xl border border-brand/30 bg-brand-wash/30 p-4 shadow-2xs">
+            <div className="rounded-xl border border-brand/30 bg-brand-wash/30 p-4 ">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div>
                   <div className="font-semibold text-sm text-foreground flex items-center gap-1.5">
@@ -1628,7 +1628,7 @@ export function Step2Transcript({
                   {gradeTrend.yearlyAverages.map((y, idx) => (
                     <div
                       key={y.gradeName}
-                      className="flex items-center gap-1.5 text-xs bg-surface border border-line rounded-lg px-2.5 py-1 shadow-2xs"
+                      className="flex items-center gap-1.5 text-xs bg-surface border border-line rounded-lg px-2.5 py-1 "
                     >
                       <span className="font-medium text-foreground">{y.gradeName}:</span>
                       <span className="font-bold text-brand">{y.gpa10.toFixed(2)}</span>

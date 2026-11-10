@@ -140,7 +140,7 @@ export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Ste
                   onUpdate({ annualBudgetTier: tier.key });
                 }}
                 className={cn(
-                  "flex flex-col items-start justify-between rounded-xl border p-4 text-left transition-all cursor-pointer h-full shadow-2xs",
+                  "flex flex-col items-start justify-between rounded-xl border p-4 text-left transition-all cursor-pointer h-full",
                   isSelected
                     ? "border-brand bg-brand-wash/40 ring-2 ring-brand text-brand-ink"
                     : "border-line bg-surface hover:border-brand/40 hover:bg-muted/30"
@@ -243,7 +243,7 @@ export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Ste
                   onUpdate({ needFinancialAid: opt.key });
                 }}
                 className={cn(
-                  "flex flex-col items-start justify-between rounded-xl border p-4 text-left transition-all cursor-pointer h-full shadow-2xs",
+                  "flex flex-col items-start justify-between rounded-xl border p-4 text-left transition-all cursor-pointer h-full",
                   isSelected
                     ? "border-brand bg-brand-wash/40 ring-2 ring-brand text-brand-ink"
                     : "border-line bg-surface hover:border-brand/40 hover:bg-muted/30"
@@ -280,7 +280,7 @@ export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Ste
             id="fundingSource"
             value={data.fundingSource ?? ""}
             onChange={(e) => onUpdate({ fundingSource: (e.target.value || null) as FundingSource | null })}
-            className="w-full appearance-none rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground shadow-2xs focus:border-brand focus:outline-hidden focus:ring-1 focus:ring-brand cursor-pointer"
+            className="w-full appearance-none rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground focus:border-brand focus:outline-hidden focus:ring-1 focus:ring-brand cursor-pointer"
           >
             <option value="">Chưa chọn</option>
             {FUNDING_SOURCE_OPTIONS.map((opt) => (

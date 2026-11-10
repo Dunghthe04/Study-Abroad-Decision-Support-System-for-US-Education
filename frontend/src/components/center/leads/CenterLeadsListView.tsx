@@ -434,7 +434,7 @@ export function CenterLeadsListView() {
           )}
         </div>
       ) : (
-        <div className="rounded-xl border border-border overflow-hidden bg-card shadow-sm">
+        <div className="rounded-xl border border-border overflow-hidden bg-card ">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs">
               <thead>

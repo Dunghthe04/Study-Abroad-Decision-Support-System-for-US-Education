@@ -139,7 +139,7 @@ export function ProfileFlowStepper({
 
   if (variant === "strip") {
     return (
-      <nav aria-label="Tiến trình hoàn thiện hồ sơ" className="overflow-x-auto rounded-xl border border-line bg-surface px-3 py-3.5 shadow-xs">
+      <nav aria-label="Tiến trình hoàn thiện hồ sơ" className="overflow-x-auto rounded-xl border border-line bg-surface px-3 py-3.5 ">
         {/* 6 cột đều nhau, chấm nằm giữa cột, đường nối chạy từ chấm trước tới chấm này */}
         <ol className="grid min-w-[456px] grid-cols-6">
           {FLOW_STEPS.map((s, i) => {
@@ -194,7 +194,7 @@ export function ProfileFlowStepper({
   }
 
   return (
-    <aside className="rounded-xl border border-line bg-surface p-6 shadow-xs">
+    <aside className="rounded-xl border border-line bg-surface p-6 ">
       <div className="space-y-6">
         <div>
           <h2 className="text-label text-xs tracking-wider text-muted-foreground font-semibold">
@@ -224,7 +224,7 @@ export function ProfileFlowStepper({
                 <div
                   className={cn(
                     "flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold transition-colors mt-0.5",
-                    isCurrent && "bg-brand text-white shadow-xs",
+                    isCurrent && "bg-brand text-white",
                     !isCurrent && isCompleted && "bg-ok text-white",
                     !isCurrent && !isCompleted && "bg-muted text-muted-foreground border border-line"
                   )}

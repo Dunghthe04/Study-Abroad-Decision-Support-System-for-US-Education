@@ -260,7 +260,7 @@ export function Step5Extracurricular({
                 <div
                   key={item.id ?? idx}
                   className={cn(
-                    "rounded-xl border bg-surface p-4 shadow-2xs hover:border-brand/40 transition-all space-y-2.5",
+                    "rounded-xl border bg-surface p-4 hover:border-brand/40 transition-all space-y-2.5",
                     problem ? "border-destructive/50" : "border-line"
                   )}
                 >
@@ -268,7 +268,7 @@ export function Step5Extracurricular({
                     <div className="flex items-start gap-3">
                       <div
                         className={cn(
-                          "mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl text-xs font-bold shadow-2xs",
+                          "mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl text-xs font-bold",
                           item.category === "activity" ? "bg-brand-wash text-brand" : "bg-warn-wash text-warn"
                         )}
                       >
@@ -364,13 +364,13 @@ export function Step5Extracurricular({
           type="button"
           variant="outline"
           onClick={() => setShowAddForm(true)}
-          className="w-full py-6 border-dashed border-2 hover:border-brand hover:bg-brand-wash/20 text-brand font-semibold text-sm gap-2 cursor-pointer shadow-2xs"
+          className="w-full py-6 border-dashed border-2 hover:border-brand hover:bg-brand-wash/20 text-brand font-semibold text-sm gap-2 cursor-pointer "
         >
           <PlusIcon className="size-4" />
           Thêm hoạt động hoặc giải thưởng mới
         </Button>
       ) : (
-        <section className="rounded-2xl border border-brand/40 bg-surface p-5 sm:p-6 space-y-6 shadow-xs">
+        <section className="rounded-2xl border border-brand/40 bg-surface p-5 sm:p-6 space-y-6 ">
           <div className="flex items-center justify-between border-b border-line pb-3">
             <div className="font-semibold text-sm text-foreground">Bạn muốn thêm gì?</div>
             <div className="flex gap-1 rounded-lg bg-ground p-1 border border-line">
@@ -384,7 +384,7 @@ export function Step5Extracurricular({
                   }}
                   className={cn(
                     "rounded-md px-3 py-1 text-xs font-semibold transition-all cursor-pointer",
-                    category === c ? "bg-brand text-white shadow-xs" : "text-muted-foreground hover:text-foreground"
+                    category === c ? "bg-brand text-white " : "text-muted-foreground hover:text-foreground"
                   )}
                 >
                   {c === "activity" ? "Hoạt động" : "Giải thưởng"}
@@ -429,7 +429,7 @@ export function Step5Extracurricular({
                         className={cn(
                           "rounded-lg border px-3 py-2 text-xs font-medium transition-all cursor-pointer text-center",
                           role === r.value
-                            ? "border-brand bg-brand-wash text-brand ring-1 ring-brand font-semibold shadow-2xs"
+                            ? "border-brand bg-brand-wash text-brand ring-1 ring-brand font-semibold "
                             : "border-line bg-surface text-muted-foreground hover:border-brand/40"
                         )}
                       >
@@ -556,7 +556,7 @@ export function Step5Extracurricular({
               </div>
 
               {/* Graphic Pyramid */}
-              <div className="rounded-2xl border border-line/80 bg-gradient-to-b from-surface to-ground/50 p-4 space-y-2">
+              <div className="rounded-2xl border border-line/80 bg-surface p-4 space-y-2">
                 <div className="flex flex-col items-center gap-1.5 w-full max-w-xl mx-auto py-1">
                   {IMPACT_PYRAMID_LEVELS.map((levelKey, tierIdx) => {
                     const detail = IMPACT_TIER_DETAILS[levelKey];
@@ -580,10 +580,10 @@ export function Step5Extracurricular({
                           setFormErrors({});
                         }}
                         className={cn(
-                          "group relative flex items-center justify-between rounded-xl px-3 py-2 text-xs font-medium transition-all duration-150 cursor-pointer border shadow-2xs",
+                          "group relative flex items-center justify-between rounded-xl px-3 py-2 text-xs font-medium transition-all duration-150 cursor-pointer border",
                           widthClasses[tierIdx],
                           isSelected
-                            ? "border-brand bg-brand-wash/80 text-foreground ring-2 ring-brand shadow-xs scale-[1.01]"
+                            ? "border-brand bg-brand-wash/80 text-foreground ring-2 ring-brand scale-[1.01]"
                             : "border-line bg-surface/90 text-muted-foreground hover:border-brand/40 hover:bg-surface hover:text-foreground"
                         )}
                       >

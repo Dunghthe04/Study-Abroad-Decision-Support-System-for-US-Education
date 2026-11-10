@@ -32,7 +32,7 @@ export function SchoolImage({ url, alt, className, priority = false, contain = f
 export function DetailSection({ id, title, description, children }: { id?: string; title: string; description?: string; children: ReactNode }) {
   return (
     <section id={id} aria-label={title} className="scroll-mt-32">
-      <Card className="shadow-2xs [--card-spacing:--spacing(5)] sm:[--card-spacing:--spacing(6)]">
+      <Card className=" [--card-spacing:--spacing(5)] sm:[--card-spacing:--spacing(6)]">
         <CardHeader>
           <CardTitle><h2 className="font-sans text-lg font-semibold tracking-tight">{title}</h2></CardTitle>
           {description && <CardDescription className="leading-relaxed">{description}</CardDescription>}

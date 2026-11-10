@@ -79,7 +79,7 @@ export function AssistantPanel() {
   return (
     <aside
       aria-label="Trợ lý USAS"
-      className="fixed inset-0 z-50 flex flex-col bg-surface min-[900px]:left-auto min-[900px]:w-(--assistant-w) min-[900px]:border-l min-[900px]:border-line min-[900px]:shadow-[-8px_0_24px_-12px_rgba(15,23,42,0.18)]"
+      className="fixed inset-0 z-50 flex flex-col bg-surface min-[900px]:left-auto min-[900px]:w-(--assistant-w) min-[900px]:border-l min-[900px]:border-line min-[900px]:"
     >
       {/* Header */}
       <div className="flex items-center gap-2 border-b border-line px-4 py-3">
@@ -379,7 +379,7 @@ function Turn({ turn, onReply }: { turn: AssistantTurn; onReply?: (value: string
               key={r.value}
               type="button"
               onClick={() => (r.href ? router.push(r.href) : r.action ? sendAction(r.value, r.action) : onReply(r.value))}
-              className="group inline-flex min-h-8 cursor-pointer items-center gap-1 rounded-full border border-brand/30 bg-surface px-3.5 py-1 text-left text-[13px] font-medium text-brand shadow-sm transition-colors hover:border-brand hover:bg-brand hover:text-white"
+              className="group inline-flex min-h-8 cursor-pointer items-center gap-1 rounded-full border border-brand/30 bg-surface px-3.5 py-1 text-left text-[13px] font-medium text-brand transition-colors hover:border-brand hover:bg-brand hover:text-white"
             >
               {r.label}
               <ChevronRightIcon className="size-3.5 shrink-0 opacity-60 transition-transform group-hover:translate-x-0.5 group-hover:opacity-100" />
@@ -427,7 +427,7 @@ export function AssistantLauncher() {
     <button
       type="button"
       onClick={() => openPanel()}
-      className="fixed right-5 bottom-5 z-30 inline-flex min-h-[50px] cursor-pointer items-center gap-2 rounded-full bg-brand px-5 text-sm font-semibold text-white shadow-[0_8px_24px_-6px_rgba(14,95,122,0.5)] transition-transform hover:-translate-y-0.5 print:hidden"
+      className="fixed right-5 bottom-5 z-30 inline-flex min-h-[50px] cursor-pointer items-center gap-2 rounded-full bg-brand px-5 text-sm font-semibold text-white transition-transform hover:-translate-y-0.5 print:hidden"
     >
       <MessageCircleIcon className="size-5" />
       Hỏi trợ lý

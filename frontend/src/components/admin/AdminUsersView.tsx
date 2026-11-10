@@ -67,7 +67,7 @@ const ACCOUNT_STATUS_OPTIONS = [
 ] as const;
 
 const filterSelectClass =
-  "h-9 w-full min-w-[10rem] rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50";
+  "h-9 w-full min-w-[10rem] rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50";
 
 /** [UC-61] Khóa tài khoản: Admin khóa được moderator, center, users. Moderator chỉ khóa được cấp dưới (center, student, parent). */
 function canAdminLock(target: UserDto, currentUserRole?: string, currentUserId?: string): boolean {
@@ -508,7 +508,7 @@ export function AdminUsersView() {
 
       {/* KPI Cards */}
       <div className="grid gap-3 grid-cols-2 sm:grid-cols-4">
-        <Card className="border border-border/70 shadow-2xs">
+        <Card className="border border-border/70 ">
           <CardContent className="flex items-center gap-3 p-4">
             <div className="rounded-lg bg-brand/10 p-2 text-brand">
               <UsersIcon className="size-5" />
@@ -520,7 +520,7 @@ export function AdminUsersView() {
           </CardContent>
         </Card>
 
-        <Card className="border border-border/70 shadow-2xs">
+        <Card className="border border-border/70 ">
           <CardContent className="flex items-center gap-3 p-4">
             <div className="rounded-lg bg-emerald-500/10 p-2 text-emerald-600">
               <CheckCircle2Icon className="size-5" />
@@ -532,7 +532,7 @@ export function AdminUsersView() {
           </CardContent>
         </Card>
 
-        <Card className="border border-border/70 shadow-2xs">
+        <Card className="border border-border/70 ">
           <CardContent className="flex items-center gap-3 p-4">
             <div className="rounded-lg bg-rose-500/10 p-2 text-rose-600">
               <ShieldAlertIcon className="size-5" />
@@ -544,7 +544,7 @@ export function AdminUsersView() {
           </CardContent>
         </Card>
 
-        <Card className="border border-border/70 shadow-2xs">
+        <Card className="border border-border/70 ">
           <CardContent className="flex items-center gap-3 p-4">
             <div className="rounded-lg bg-amber-500/10 p-2 text-amber-600">
               <ClockIcon className="size-5" />
@@ -558,7 +558,7 @@ export function AdminUsersView() {
       </div>
 
       {/* [UC-60] Tìm, lọc, phân trang danh sách tài khoản */}
-      <Card className="border border-border/80 shadow-2xs">
+      <Card className="border border-border/80 ">
         <CardHeader className="pb-3">
           <CardTitle className="text-lg flex items-center justify-between">
             <span>Danh sách tài khoản</span>
