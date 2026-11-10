@@ -93,6 +93,7 @@ def test_profile_values_of_an_intent_are_only_the_profile_keys():
         ("collect_profile", {"tasks": ["status"]}),
         ("collect_profile", {"tasks": ["restart"]}),
         ("collect_profile", {"gpa": "3.5"}),  # vắng tasks = trả lời câu đang chờ
+        ("collect_profile", {"tasks": ["edit"]}),  # sửa mà chưa nói mục nào: skill hồ sơ hỏi lại
         ("profile_review", {"tasks": ["assessment", "roadmap"]}),
         ("profile_review", {"tasks": []}),  # chưa rõ muốn gì: hệ thống hỏi lại bằng nút
         ("profile_review", {"tasks": ["explain_school"], "schools": ["Duke"], "follow_up": True}),
@@ -111,7 +112,6 @@ def test_the_task_keys_are_accepted(kind, entities):
 @pytest.mark.parametrize(
     ("kind", "entities"),
     [
-        ("collect_profile", {"tasks": ["edit"]}),  # sửa mà không nói mục nào
         ("collect_profile", {"tasks": ["status"], "gpa": "3.5"}),  # xem hồ sơ không kèm giá trị
         ("collect_profile", {"tasks": ["restart"], "gpa": "3.5"}),
         ("collect_profile", {"tasks": ["school_info"]}),  # nhiệm vụ của loại khác
