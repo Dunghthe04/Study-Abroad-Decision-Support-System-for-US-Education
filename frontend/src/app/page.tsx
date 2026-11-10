@@ -29,7 +29,7 @@ import { OpenAssistantButton } from "@/components/assistant/OpenAssistantButton"
 import { useAssistant } from "@/components/assistant/AssistantProvider";
 import { LayerStack } from "@/components/landing/LayerStack";
 import { useAuth } from "@/contexts/AuthContext";
-import { GROUP_LABELS } from "@/lib/recommendation-labels";
+import { GROUP_LABELS, formatPct, groupVariant } from "@/lib/recommendation-labels";
 import { cn } from "@/lib/utils";
 
 type IconType = ComponentType<{ className?: string }>;
@@ -37,11 +37,12 @@ type IconType = ComponentType<{ className?: string }>;
 /* ----------------------------- Dữ liệu trang ----------------------------- */
 
 // Tên nhóm lấy từ GROUP_LABELS để trang chủ nói cùng ngôn ngữ với màn kết quả
+// Tỷ lệ nhận lấy từ số liệu công bố gần nhất, chỉ để minh họa cách đặt nhóm cạnh tỷ lệ chung
 const SAMPLE_RESULT = [
-  { name: "Carnegie Mellon University", tier: GROUP_LABELS.R, variant: "risk" },
-  { name: "University of Washington", tier: GROUP_LABELS.M, variant: "brand" },
-  { name: "Arizona State University", tier: GROUP_LABELS.S, variant: "ok" },
-] as const;
+  { name: "Carnegie Mellon University", group: "R", rate: 0.11 },
+  { name: "University of Washington", group: "M", rate: 0.43 },
+  { name: "Arizona State University", group: "S", rate: 0.9 },
+];
 
 const STEPS = [
   {
@@ -177,6 +178,14 @@ const FAQS = [
     q: "Trợ lý có bịa số liệu không?",
     a: "Trợ lý chỉ diễn đạt lại số liệu có trong hệ thống. Khi chưa có dữ liệu, trợ lý nói rõ là chưa có. Với quyết định quan trọng, hãy kiểm tra lại trên trang chính thức của trường.",
   },
+  {
+    q: "Tỷ lệ nhận của trường có phải là cơ hội đỗ của em không?",
+    a: "Không. Tỷ lệ nhận là con số chung cho mọi hồ sơ nộp vào trường. USAS đặt nhóm của bạn ngay cạnh con số đó để bạn thấy hồ sơ mình đứng ở đâu so với trường, thay vì đoán từ tỷ lệ chung.",
+  },
+  {
+    q: "Trung tâm tư vấn có trả tiền để được gợi ý trường không?",
+    a: "Không. Danh sách trường chỉ dựa trên hồ sơ của bạn và số liệu tuyển sinh, theo các ngưỡng công khai ở trang Giới thiệu phương pháp. Trung tâm chỉ nhận yêu cầu khi bạn tự chọn và gửi.",
+  },
 ];
 
 /* --------------------------------- Thành phần -------------------------------- */
@@ -255,11 +264,11 @@ function HomeView() {
             Nhập GPA, điểm thi và ngân sách. USAS so hồ sơ với số liệu tuyển sinh của từng trường, xếp vào bốn nhóm và giải thích lý do cho từng trường.
           </p>
           <div className="flex flex-wrap gap-3">
-            <Link href="/analysis" className={buttonVariants({ size: "lg", className: "h-11 px-5 text-[15px]" })}>
+            <Link href="/analysis" className={buttonVariants({ size: "xl" })}>
               Phân tích hồ sơ
               <ArrowRightIcon />
             </Link>
-            <Link href="/methodology" className={buttonVariants({ variant: "outline", size: "lg", className: "h-11 px-5 text-[15px]" })}>
+            <Link href="/methodology" className={buttonVariants({ variant: "outline", size: "xl" })}>
               Cách hệ thống xếp trường
             </Link>
           </div>
@@ -276,8 +285,11 @@ function HomeView() {
             <ul className="divide-y divide-line">
               {SAMPLE_RESULT.map((r) => (
                 <li key={r.name} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
-                  <span className="text-sm font-medium text-ink">{r.name}</span>
-                  <Badge variant={r.variant}>{r.tier}</Badge>
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-ink">{r.name}</div>
+                    <div className="text-xs text-ink-2">Trường nhận chung <span className="text-numeric">{formatPct(r.rate)}</span></div>
+                  </div>
+                  <Badge variant={groupVariant(r.group)}>{GROUP_LABELS[r.group as "R" | "M" | "S"]}</Badge>
                 </li>
               ))}
             </ul>
@@ -460,7 +472,7 @@ function HomeView() {
             title="Khi cần người làm cùng"
             desc="USAS lo phần phân tích và gợi ý trường. Bài luận, hồ sơ, luyện thi và visa do trung tâm tư vấn đảm nhận. Bạn chọn trung tâm và gửi yêu cầu ngay trên hệ thống, trung tâm sẽ liên hệ lại."
           />
-          <Link href="/centers" className={buttonVariants({ size: "lg", className: "h-11 px-5 text-[15px]" })}>
+          <Link href="/centers" className={buttonVariants({ size: "xl" })}>
             Xem các trung tâm
             <ArrowRightIcon />
           </Link>
@@ -503,11 +515,11 @@ function HomeView() {
       <section className="flex flex-col items-start gap-5 border-t border-line pt-12 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-h1 text-balance text-ink">Có danh sách trường đầu tiên sau vài phút</h2>
         <div className="flex flex-wrap gap-3">
-          <Link href="/analysis" className={buttonVariants({ size: "lg", className: "h-11 px-5 text-[15px]" })}>
+          <Link href="/analysis" className={buttonVariants({ size: "xl" })}>
             Phân tích hồ sơ
             <ArrowRightIcon />
           </Link>
-          <OpenAssistantButton className="h-11 px-5 text-[15px]">Hỏi trợ lý</OpenAssistantButton>
+          <OpenAssistantButton size="xl">Hỏi trợ lý</OpenAssistantButton>
         </div>
       </section>
     </div>
