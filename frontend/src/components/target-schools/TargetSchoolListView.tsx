@@ -27,6 +27,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/toast";
+import { groupVariant } from "@/lib/recommendation-labels";
 import { cn } from "@/lib/utils";
 
 type ViewMode = "grid" | "timeline";
@@ -127,30 +128,30 @@ export function TargetSchoolListView() {
     switch (cat?.toLowerCase()) {
       case "reach":
         return {
-          label: "Mục tiêu cao (Reach)",
-          badgeVariant: "destructive" as const,
-          borderClass: "border-l-4 border-l-rose-500",
+          label: "Khó vào",
+          badgeVariant: groupVariant("R"),
+          borderClass: "",
           desc: "Trường có tính cạnh tranh cao so với hồ sơ",
         };
       case "match":
         return {
-          label: "Vừa sức (Match)",
-          badgeVariant: "brand" as const,
-          borderClass: "border-l-4 border-l-sky-500",
+          label: "Vừa sức",
+          badgeVariant: groupVariant("M"),
+          borderClass: "",
           desc: "Điểm và hồ sơ nằm trong khoảng tuyển sinh",
         };
       case "safety":
         return {
-          label: "An toàn (Safety)",
-          badgeVariant: "default" as const,
-          borderClass: "border-l-4 border-l-emerald-500",
+          label: "An toàn hơn",
+          badgeVariant: groupVariant("S"),
+          borderClass: "",
           desc: "Hồ sơ vượt trội so với yêu cầu đầu vào",
         };
       default:
         return {
           label: "Chưa phân loại",
-          badgeVariant: "outline" as const,
-          borderClass: "border-l-4 border-l-slate-300",
+          badgeVariant: "neutral" as const,
+          borderClass: "",
           desc: "",
         };
     }
@@ -214,7 +215,7 @@ export function TargetSchoolListView() {
         <Card
           className={cn(
             "cursor-pointer transition-all",
-            selectedCategory === "all" ? "ring-2 ring-brand border-brand" : ""
+            selectedCategory === "all" ? "ring-2 ring-ink-2" : ""
           )}
           onClick={() => setSelectedCategory("all")}
         >
@@ -224,7 +225,7 @@ export function TargetSchoolListView() {
               <GraduationCapIcon className="size-4 text-brand" />
             </div>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl font-black tracking-tight text-foreground sm:text-3xl">
+              <span className="text-numeric text-2xl font-bold text-foreground sm:text-3xl">
                 {total}
               </span>
               <span className="text-xs text-muted-foreground">trường</span>
@@ -236,19 +237,19 @@ export function TargetSchoolListView() {
         <Card
           className={cn(
             "cursor-pointer transition-all",
-            selectedCategory === "reach" ? "ring-2 ring-rose-500 border-rose-500" : ""
+            selectedCategory === "reach" ? "ring-2 ring-reach" : ""
           )}
           onClick={() => setSelectedCategory(selectedCategory === "reach" ? "all" : "reach")}
         >
           <CardContent className="p-4 sm:p-5">
             <div className="flex items-center justify-between text-muted-foreground">
-              <span className="text-xs font-semibold text-rose-600 dark:text-rose-400">
-                Mục tiêu cao (Reach)
+              <span className="text-xs font-semibold text-reach">
+                Khó vào
               </span>
-              <TrendingUpIcon className="size-4 text-rose-500" />
+              <TrendingUpIcon className="size-4 text-reach" />
             </div>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl font-black tracking-tight text-rose-600 dark:text-rose-400 sm:text-3xl">
+              <span className="text-numeric text-2xl font-bold text-reach sm:text-3xl">
                 {reach}
               </span>
               <span className="text-xs text-muted-foreground">
@@ -262,19 +263,19 @@ export function TargetSchoolListView() {
         <Card
           className={cn(
             "cursor-pointer transition-all",
-            selectedCategory === "match" ? "ring-2 ring-sky-500 border-sky-500" : ""
+            selectedCategory === "match" ? "ring-2 ring-brand" : ""
           )}
           onClick={() => setSelectedCategory(selectedCategory === "match" ? "all" : "match")}
         >
           <CardContent className="p-4 sm:p-5">
             <div className="flex items-center justify-between text-muted-foreground">
-              <span className="text-xs font-semibold text-sky-600 dark:text-sky-400">
-                Vừa sức (Match)
+              <span className="text-xs font-semibold text-brand">
+                Vừa sức
               </span>
-              <CheckCircle2Icon className="size-4 text-sky-500" />
+              <CheckCircle2Icon className="size-4 text-brand" />
             </div>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl font-black tracking-tight text-sky-600 dark:text-sky-400 sm:text-3xl">
+              <span className="text-numeric text-2xl font-bold text-brand sm:text-3xl">
                 {match}
               </span>
               <span className="text-xs text-muted-foreground">
@@ -288,19 +289,19 @@ export function TargetSchoolListView() {
         <Card
           className={cn(
             "cursor-pointer transition-all",
-            selectedCategory === "safety" ? "ring-2 ring-emerald-500 border-emerald-500" : ""
+            selectedCategory === "safety" ? "ring-2 ring-ok" : ""
           )}
           onClick={() => setSelectedCategory(selectedCategory === "safety" ? "all" : "safety")}
         >
           <CardContent className="p-4 sm:p-5">
             <div className="flex items-center justify-between text-muted-foreground">
-              <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                An toàn (Safety)
+              <span className="text-xs font-semibold text-ok">
+                An toàn hơn
               </span>
-              <ShieldCheckIcon className="size-4 text-emerald-500" />
+              <ShieldCheckIcon className="size-4 text-ok" />
             </div>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl font-black tracking-tight text-emerald-600 dark:text-emerald-400 sm:text-3xl">
+              <span className="text-numeric text-2xl font-bold text-ok sm:text-3xl">
                 {safety}
               </span>
               <span className="text-xs text-muted-foreground">
@@ -314,13 +315,13 @@ export function TargetSchoolListView() {
 
       {/* Banner Hạn Chót Gần Nhất (Next Deadline Banner) */}
       {data?.nextDeadline && (
-        <div className="flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50/80 p-4 text-amber-900 sm:flex-row sm:items-center sm:justify-between dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+        <div className="flex flex-col gap-2 rounded-xl border border-warn/25 bg-warn-wash p-4 text-ink sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-900/60 dark:text-amber-300">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-surface text-warn">
               <ClockIcon className="size-5" />
             </div>
             <div>
-              <p className="text-xs font-medium text-amber-700 dark:text-amber-400">
+              <p className="text-xs font-medium text-warn">
                 Hạn chót nộp hồ sơ gần nhất
               </p>
               <p className="font-semibold text-sm">
@@ -338,9 +339,7 @@ export function TargetSchoolListView() {
               variant="outline"
               className={cn(
                 "w-fit font-semibold",
-                nextDeadlineDays <= 14
-                  ? "border-rose-400 bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300"
-                  : "border-amber-400 bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
+                nextDeadlineDays <= 14 ? "border-risk/25 bg-risk-wash text-risk" : "border-warn/25 bg-surface text-warn"
               )}
             >
               {nextDeadlineDays > 0
@@ -386,11 +385,11 @@ export function TargetSchoolListView() {
               className={cn(
                 "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
                 selectedCategory === "reach"
-                  ? "bg-surface font-semibold text-rose-600 "
+                  ? "bg-surface font-semibold text-reach"
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
-              Reach ({reach})
+              Khó vào ({reach})
             </button>
             <button
               type="button"
@@ -398,11 +397,11 @@ export function TargetSchoolListView() {
               className={cn(
                 "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
                 selectedCategory === "match"
-                  ? "bg-surface font-semibold text-sky-600 "
+                  ? "bg-surface font-semibold text-brand"
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
-              Match ({match})
+              Vừa sức ({match})
             </button>
             <button
               type="button"
@@ -410,11 +409,11 @@ export function TargetSchoolListView() {
               className={cn(
                 "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
                 selectedCategory === "safety"
-                  ? "bg-surface font-semibold text-emerald-600 "
+                  ? "bg-surface font-semibold text-ok"
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
-              Safety ({safety})
+              An toàn hơn ({safety})
             </button>
           </div>
 
@@ -566,10 +565,10 @@ export function TargetSchoolListView() {
                           className={cn(
                             "rounded px-1.5 py-0.5 text-xs font-semibold",
                             daysRemaining <= 14
-                              ? "bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300"
+                              ? "bg-risk-wash text-risk"
                               : daysRemaining <= 45
-                                ? "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
-                                : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+                                ? "bg-warn-wash text-warn"
+                                : "bg-ok-wash text-ok"
                           )}
                         >
                           {daysRemaining > 0
@@ -655,7 +654,7 @@ export function TargetSchoolListView() {
                       className={cn(
                         "absolute -left-[31px] top-1 flex size-4 items-center justify-center rounded-full border-2 bg-surface",
                         daysRemaining !== null && daysRemaining <= 14
-                          ? "border-rose-500 bg-rose-500"
+                          ? "border-risk bg-risk"
                           : "border-brand bg-brand"
                       )}
                     />
@@ -702,8 +701,8 @@ export function TargetSchoolListView() {
                               className={cn(
                                 "font-semibold text-xs",
                                 daysRemaining <= 14
-                                  ? "border-rose-300 bg-rose-50 text-rose-700"
-                                  : "border-emerald-300 bg-emerald-50 text-emerald-700"
+                                  ? "border-risk/25 bg-risk-wash text-risk"
+                                  : "border-ok/25 bg-ok-wash text-ok"
                               )}
                             >
                               {daysRemaining > 0
