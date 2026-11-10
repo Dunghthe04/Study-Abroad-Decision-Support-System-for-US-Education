@@ -1,3 +1,4 @@
+using StudyAbroad.Application.Profile.Academic;
 using StudyAbroad.Application.Profile.Flow;
 using StudyAbroad.Application.Recommendations;
 using StudyAbroad.Domain.Constants;
@@ -19,10 +20,11 @@ namespace StudyAbroad.Application.Advisor
     // analyses: lưu câu đánh giá / lộ trình vào analysis_results (null thì không lưu, dùng trong test cũ)
     // recommender: chạy gợi ý trường khi advisor trả action "recommend" (null thì bỏ qua, dùng trong test cũ)
     // benchmarks: đọc dữ liệu trường để tính mốc GPA / tiếng Anh cho skill ho_so (null thì không gửi mốc, dùng trong test cũ)
+    // gradeScale: bảng quy đổi grade_scale.10 trong DB cho what-if GPA thang 10 (null thì bảng mặc định, dùng trong test cũ)
     public class ChatService(
         IAdvisorClient advisor, IChatSessionRepository sessions, IProfileFlowService profileFlow,
         IChatAnalysisRepository? analyses = null, IRecommendationRunner? recommender = null,
-        IChatBenchmarkRepository? benchmarks = null)
+        IChatBenchmarkRepository? benchmarks = null, IGradeScaleProvider? gradeScale = null)
     {
         //Dữ liệu FE gửi lên
         // onEvent: chỉ truyền khi trả lời theo từng ý (stream); mỗi tin tiến độ / câu một ý của advisor gọi hàm này ngay.
@@ -62,11 +64,16 @@ namespace StudyAbroad.Application.Advisor
             // Mốc so sánh GPA / tiếng Anh từ dữ liệu trường, cùng bậc học với gợi ý trường
             var marks = await BenchmarksAsync(flow.Draft.Step1?.TargetDegreeLevel, ct);
 
+            // Bảng quy đổi điểm thang 10 sang GPA thang 4 trong DB (moderator sửa) để advisor đổi GPA giống .NET và form.
+            // Luôn lấy từ server, không tin bảng trình duyệt gửi; không có provider thì null, advisor dùng bảng mặc định
+            var scaleRules = gradeScale is null ? null : (await gradeScale.GetAsync(ct)).Rules;
+
             //Gửi request sang Advisor
             var toAdvisor = request with
             {
                 State = state, Profile = JsonSerializer.SerializeToElement(profile), Schools = schools, Transcript = transcript,
                 Benchmarks = marks, OtherSchools = otherSchools, Simulation = null,   // giá trị giả định chỉ .NET dùng, không gửi advisor
+                GradeScale = scaleRules,
             };
             // Nút trên giao diện gửi hành động có cấu trúc (mã trường): bỏ qua advisor, dựng sẵn lượt như thể advisor đã hiểu
             var response = (recommender is not null ? ChatActions.ToResponse(request.Action, state) : null)
@@ -270,7 +277,8 @@ namespace StudyAbroad.Application.Advisor
         // Lỗi thì báo, không làm hỏng cả lượt chat
         private async Task<AdvisorChatResponse> SimulateAsync(Guid userId, AdvisorChatResponse response, CancellationToken ct)
         {
-            var scenario = ChatSimulation.Parse(response.ActionData);
+            var scale = gradeScale is null ? null : await gradeScale.GetAsync(ct);
+            var scenario = ChatSimulation.Parse(response.ActionData, scale);
             if (scenario is null)
                 return response with { Answer = ChatSimulation.Failed };
             try

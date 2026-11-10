@@ -20,7 +20,14 @@ from pydantic import BaseModel, Field
 from app.schemas.chat import ChatState, ProfileField
 from app.services.chat_flow import SkillOutput, go_to
 from app.services.skill_call import SKILLS_DIR, SkillCall
-from app.services.skills.skill_danh_gia import Facts, assess_levels, check_text, read_facts, value_of
+from app.services.skills.skill_danh_gia import (
+    Facts,
+    assess_levels,
+    check_text,
+    gpa_table_of,
+    read_facts,
+    value_of,
+)
 from app.services.skills.validators import month_index, parse_year_month
 
 logger = logging.getLogger("advisor.chat")
@@ -110,11 +117,13 @@ def english_status(english: str, plan: Any, intake: Intake | None, today_index: 
 
 # F3. Chọn lộ trình bằng code
 def choose_route(
-    profile: dict[str, ProfileField], today: date | None = None
+    profile: dict[str, ProfileField],
+    today: date | None = None,
+    gpa_table: list[tuple[float, float]] | None = None,
 ) -> tuple[Route, Facts, Intake | None]:
     today = today or date.today()
     today_index = month_index(today.year, today.month)
-    facts = read_facts(profile, today)
+    facts = read_facts(profile, today, gpa_table)
     levels = assess_levels(facts)
     intake = Intake.parse(value_of(profile, "intake"))
     months = intake.deadline - today_index if intake else None
@@ -232,9 +241,12 @@ class RoutePlanner:
         self.skill_version = self._call.skill_version
 
     async def plan(
-        self, profile: dict[str, ProfileField], today: date | None = None
+        self,
+        profile: dict[str, ProfileField],
+        today: date | None = None,
+        gpa_table: list[tuple[float, float]] | None = None,
     ) -> tuple[Route, Intake | None]:
-        route, facts, intake = choose_route(profile, today)
+        route, facts, intake = choose_route(profile, today, gpa_table)
 
         def check(raw: dict[str, Any]) -> Route:
             return check_route(raw, route, facts, intake)
@@ -275,6 +287,6 @@ class LoTrinhHandler:
         self._planner = RoutePlanner(llm, model)
 
     async def run(self, state: ChatState, message: str) -> SkillOutput:
-        route, intake = await self._planner.plan(state.profile)
+        route, intake = await self._planner.plan(state.profile, gpa_table=gpa_table_of(state.grade_scale))
         go_to(state, "B4")
         return SkillOutput(render(route, intake, value_of(state.profile, "major")), action=action_for(route))

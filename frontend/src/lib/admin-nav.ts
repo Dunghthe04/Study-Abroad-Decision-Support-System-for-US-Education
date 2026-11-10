@@ -79,7 +79,8 @@ export const ADMIN_NAV: AdminNavItem[] = [
     label: "Tham số hệ thống",
     description: "Bảng quy đổi điểm, ngưỡng gợi ý, tỷ giá và luật tư vấn",
     icon: SlidersHorizontalIcon,
-    roles: ["admin"],
+    // Moderator vào để sửa bảng quy đổi điểm (UC-68); admin chỉ xem bảng này
+    roles: ["admin", "moderator"],
     useCases: ["UC-68", "UC-69", "UC-70", "UC-88"],
   },
   {

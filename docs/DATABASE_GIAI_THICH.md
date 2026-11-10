@@ -471,7 +471,7 @@ Các tham số admin chỉnh được mà không cần sửa code, lưu dạng k
 | `key` | `value_json` ví dụ | Dùng ở |
 |---|---|---|
 | `recommend.weights` | `{"weights":{"academic":0.4,"finance":0.3,"english":0.1,"extracurricular":0.2},"gpaBand":0.3,"budgetTolerance":0.10,"maxResults":12,"perCategory":{"reach":3,"match":5,"safety":4},"aiTimeoutSeconds":120,"extracurricularTimeoutSeconds":60}` | Cấu hình gợi ý trường (#6), đọc bằng `RecommendSettings`: trọng số SAW 4 tiêu chí (chứng minh bằng AHP), ngưỡng GPA, số trường mỗi nhóm, giới hạn thời gian AI. Khóa nào thiếu hoặc sai tên thì dùng giá trị mặc định trong code (cũng là các giá trị ở ví dụ này) |
-| `grade_scale.10` | `[{"min":9,"max":10,"gpa4":4.0},{"min":8,"max":8.99,"gpa4":3.5}]` | Quy đổi điểm thang 10 sang GPA 4 (#4, #13) |
+| `grade_scale.10` | `{"scaleKey":"grade_scale.10","sourceName":"Chuẩn thẩm định WES ...","method":"table","rules":[{"minScore":9.0,"maxScore":10,"gpa4":4.0,"letterGrade":"A"},{"minScore":8.5,"maxScore":8.99,"gpa4":3.7,"letterGrade":"A-"},...]}` | Quy đổi **điểm trung bình tổng** thang 10 sang GPA thang 4 (#4, #13); điểm từng môn giữ nguyên thang 10. Tra theo cận dưới `minScore` (`maxScore` chỉ để hiển thị). Chưa có dòng này thì dùng bảng WES mặc định trong code. Moderator sửa, admin chỉ xem (trang Tham số hệ thống); mỗi lần lưu ghi `audit_logs` action `grade_scale.update` và tính lại `overall_gpa` của hồ sơ lấy GPA từ học bạ. Chi tiết: `docs/BANG_QUY_DOI_DIEM.md` |
 | `major_weights` | `{"Computer Science":{"Toán":0.4,"Tin":0.3}}` | Môn quan trọng theo ngành (#15) |
 | `moderation.rules` | `[{"pattern":"zalo","action":"flag"}]` | Luật kiểm duyệt diễn đàn (#28) |
 

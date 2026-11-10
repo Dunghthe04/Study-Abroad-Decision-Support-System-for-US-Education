@@ -1,6 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using StudyAbroad.Application.Profile.Academic;
 using StudyAbroad.Domain.Constants;
+using StudyAbroad.Domain.Entities;
 
 namespace StudyAbroad.Application.Profile.Flow;
 
@@ -39,13 +42,40 @@ public static class TranscriptGpa
         return averages.Count > 0 ? Math.Round(averages.Average(), 2) : null;
     }
 
-    /// <summary>GPA thang 4 lưu vào hồ sơ. GPA tổng thang 10 thì quy đổi lại, không tin số thang 4 client gửi</summary>
-    public static decimal? Gpa4(FlowTranscriptDraftDto? step2)
+    /// <summary>
+    /// Như SubjectAverage10 nhưng đọc lại từ transcript_scores đã lưu (khi tính lại GPA sau lúc đổi bảng quy đổi).
+    /// Lúc gửi hồ sơ mỗi khối có 2 kỳ: TermOrder 1–2 là khối thứ nhất, 3–4 là khối thứ hai…; điểm HK1/HK2 cùng môn cùng
+    /// khối ghép lại bằng YearAverage. Bỏ dòng dữ liệu cũ không có Semester. Null nếu không còn điểm nào
+    /// </summary>
+    public static decimal? SubjectAverage10(IEnumerable<TranscriptScore> scores)
     {
-        if (Mode(step2) == ProfileConstants.GpaModes.Overall)
-            return step2?.ManualGpa10Scale is { } gpa10 ? To4(gpa10) : step2?.CalculatedGpa4Scale;
-        return SubjectAverage10(step2) is { } average ? To4(average) : null;
+        var averages = scores
+            .Where(s => s.Semester is 1 or 2)
+            .GroupBy(s => ((s.TermOrder + 1) / 2, s.Subject.Trim()))
+            .Select(g => YearAverage(
+                g.FirstOrDefault(s => s.Semester == 1)?.Score,
+                g.FirstOrDefault(s => s.Semester == 2)?.Score))
+            .OfType<decimal>()
+            .ToList();
+        return averages.Count > 0 ? Math.Round(averages.Average(), 2) : null;
     }
 
-    public static decimal To4(decimal gpa10) => Math.Round(gpa10 / 10m * 4m, 2);
+    /// <summary>
+    /// GPA thang 4 lưu vào hồ sơ. GPA tổng thang 10 thì quy đổi lại, không tin số thang 4 client gửi.
+    /// scale là bảng grade_scale.10 đang dùng (IGradeScaleProvider); null thì dùng bảng mặc định
+    /// </summary>
+    public static decimal? Gpa4(FlowTranscriptDraftDto? step2, GradeScaleConfigDto? scale = null)
+    {
+        if (Mode(step2) == ProfileConstants.GpaModes.Overall)
+            return step2?.ManualGpa10Scale is { } gpa10 ? To4(gpa10, scale) : step2?.CalculatedGpa4Scale;
+        return SubjectAverage10(step2) is { } average ? To4(average, scale) : null;
+    }
+
+    /// <summary>
+    /// Quy đổi thang 10 sang thang 4 theo bảng scale (bảng trong DB, grade_scale.10); null thì bảng mặc định
+    /// AcademicAnalysisService.GetDefaultWesScaleConfig. Giống toGpa4 bên FE và gpa10_to_4 bên advisor. Chỉ xét cận
+    /// dưới (MinScore) để số như 8.995 không rơi vào khe giữa hai khoảng: 8.99 vẫn là 3.7
+    /// </summary>
+    public static decimal To4(decimal gpa10, GradeScaleConfigDto? scale = null) =>
+        GradeScale.Lookup(gpa10, scale ?? AcademicAnalysisService.GetDefaultWesScaleConfig());
 }

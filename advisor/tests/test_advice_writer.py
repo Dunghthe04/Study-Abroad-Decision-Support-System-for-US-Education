@@ -1,4 +1,5 @@
 import json
+import unicodedata
 
 import pytest
 
@@ -34,12 +35,104 @@ async def test_rules_and_skill_go_to_system_and_the_profile_goes_to_user():
     }
 
 
+async def test_the_classifier_tasks_go_to_claude_by_name():
+    llm = FakeLLM({"tra_loi": "Đánh giá và lộ trình."})
+
+    await AdviceWriter(llm).write(SKILL, REQ, [], ["danh_gia", "lo_trinh"])
+
+    user = json.loads(llm.calls[0]["messages"][-1]["content"])
+    assert user["nhiem_vu"] == ["đánh giá hồ sơ", "lộ trình chuẩn bị"]
+
+
+@pytest.mark.parametrize("tasks", [None, [], ["ma_la"]])
+async def test_no_known_task_sends_no_task_list(tasks):
+    llm = FakeLLM({"tra_loi": "ok"})
+
+    await AdviceWriter(llm).write(SKILL, REQ, [], tasks)
+
+    assert "nhiem_vu" not in json.loads(llm.calls[0]["messages"][-1]["content"])
+
+
+BOTH = ["danh_gia", "lo_trinh"]
+NO_ROADMAP = "Hồ sơ của bạn ở mức trung bình."
+WITH_ROADMAP = "Hồ sơ trung bình.\n\n**Lộ trình chuẩn bị**\n- Thi IELTS trước."
+
+
+async def test_an_answer_missing_the_roadmap_is_rewritten_with_a_note():
+    llm = FakeLLM({"tra_loi": NO_ROADMAP}, {"tra_loi": WITH_ROADMAP})
+
+    assert await AdviceWriter(llm).write(SKILL, REQ, [], BOTH) == WITH_ROADMAP
+    first, second = llm.calls[0]["messages"], llm.calls[1]["messages"]
+    assert second[:-1] == first
+    assert second[-1]["role"] == "user" and '"Lộ trình chuẩn bị"' in second[-1]["content"]
+    assert NO_ROADMAP not in second[-1]["content"]  # không gửi lại câu trả lời cũ
+
+
+async def test_still_missing_the_roadmap_gives_the_partial_answer_instead_of_nothing(caplog):
+    llm = FakeLLM({"tra_loi": NO_ROADMAP}, ClaudeError("HTTP 529"))
+
+    with caplog.at_level("WARNING", logger="app.services.advice_writer"):
+        assert await AdviceWriter(llm).write(SKILL, REQ, [], BOTH) == NO_ROADMAP
+
+    # Log nêu việc thiếu, không chép câu trả lời
+    assert [r.getMessage() for r in caplog.records] == [
+        "Writer hỏng lần 1/2: câu trả lời thiếu phần lộ trình chuẩn bị",
+        "Writer hỏng lần 2/2: HTTP 529",
+    ]
+
+
+@pytest.mark.parametrize("tasks", [None, ["danh_gia"]])
+async def test_no_roadmap_asked_means_no_roadmap_check(tasks):
+    llm = FakeLLM({"tra_loi": NO_ROADMAP})
+
+    assert await AdviceWriter(llm).write(SKILL, REQ, [], tasks) == NO_ROADMAP
+    assert len(llm.calls) == 1
+
+
+async def test_a_promise_after_a_missing_roadmap_still_gives_the_partial_answer():
+    llm = FakeLLM({"tra_loi": NO_ROADMAP}, {"tra_loi": "Lộ trình: bạn chắc chắn đỗ."})
+
+    assert await AdviceWriter(llm).write(SKILL, REQ, [], BOTH) == NO_ROADMAP
+
+
 @pytest.mark.parametrize(
-    "text", ["", "   ", "Bạn chắc chắn đỗ Iowa.", "Mình đảm bảo đậu nhé", "You are guaranteed"]
+    "text",
+    [
+        "",
+        "   ",
+        "Bạn chắc chắn đỗ Iowa.",
+        "Mình đảm bảo đậu nhé",
+        "You are guaranteed",
+        "Bạn chắc chắn trúng tuyển.",
+        "100% đỗ luôn!",
+        "Mình cam kết bạn sẽ đậu.",
+        "Đảm bảo là bạn sẽ được nhận.",
+        unicodedata.normalize("NFD", "Bạn chắc chắn đỗ."),  # chữ có dấu tổ hợp vẫn bị bắt
+        "Không chỉ vậy, bạn chắc chắn đỗ.",  # "không chỉ" là nối ý, không phải phủ định
+        "Không sao đâu, đảm bảo đỗ.",  # phủ định ở vế câu khác
+    ],
 )
 def test_empty_or_promising_answers_are_rejected(text):
     with pytest.raises(ValueError):
         check_answer({"tra_loi": text})
+
+
+# Câu tư vấn bình thường: trước đây bị bắt nhầm vì bỏ dấu ("độ/đó/đơn" thành "do", "đầu" thành "dau") hoặc vì phủ định
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Bạn nên đảm bảo độ dài bài luận.",
+        "Hãy đảm bảo đầu ra IELTS 6.5.",
+        "Chắc chắn đó là điểm mạnh.",
+        "Hoàn thành 100% đơn trước tháng 12.",
+        "Không ai có thể đảm bảo đỗ, nhưng bạn có cơ hội tốt.",
+        "Mình không thể chắc chắn đậu thay bạn.",
+        "Chưa thể chắc chắn đỗ khi còn thiếu SAT.",
+        "Đảm bảo nhận đủ thư giới thiệu trước tháng 11.",
+    ],
+)
+def test_normal_advice_passes(text):
+    assert check_answer({"tra_loi": text}) == text
 
 
 async def test_a_promise_is_retried_once():
@@ -49,8 +142,146 @@ async def test_a_promise_is_retried_once():
     assert len(llm.calls) == 2
 
 
+async def test_a_promise_retry_tells_claude_which_phrase_to_rephrase():
+    llm = FakeLLM({"tra_loi": "Bạn chắc chắn đỗ Iowa."}, {"tra_loi": "Bạn có cơ hội tốt ở Iowa."})
+
+    assert await AdviceWriter(llm).write(SKILL, REQ, []) == "Bạn có cơ hội tốt ở Iowa."
+    first, second = llm.calls[0]["messages"], llm.calls[1]["messages"]
+    # Lần 2 = lần 1 + một tin user nêu câu cũ và cụm bị bắt (gửi y nguyên thì temperature 0 ra lại đúng câu cũ)
+    assert second[:-1] == first
+    assert second[-1]["role"] == "user"
+    assert "Bạn chắc chắn đỗ Iowa." in second[-1]["content"]
+    assert '"chắc chắn đỗ"' in second[-1]["content"]
+
+
+WRAPPED = json.dumps({"tra_loi": "Bạn có cơ hội tốt."}, ensure_ascii=False)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        WRAPPED,  # Claude nhét cả {"tra_loi": ...} vào ô tra_loi
+        json.dumps({"tra_loi": WRAPPED}, ensure_ascii=False),  # bọc 2 lớp
+        f"```json\n{WRAPPED}\n```",  # bọc trong khung code
+        f"  \n{WRAPPED}\n",
+    ],
+)
+def test_a_json_wrapped_answer_is_unwrapped(text, caplog):
+    with caplog.at_level("WARNING", logger="app.services.advice_writer"):
+        assert check_answer({"tra_loi": text}) == "Bạn có cơ hội tốt."
+
+    # Log chỉ báo đã gỡ, không chép câu trả lời
+    assert caplog.records and all(
+        r.getMessage() == "Writer: đã gỡ câu trả lời bọc JSON" for r in caplog.records
+    )
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        '{"tra_loi": "Bạn có cơ hội tốt."',  # bọc dở, thiếu }
+        '{"cau_tra_loi": "Bạn có cơ hội tốt."}',  # không có ô tra_loi
+        '{"tra_loi": 5}',
+        "{Mục tiêu} là IELTS 6.5.",  # bắt đầu bằng { nhưng không phải JSON
+        json.dumps({"tra_loi": json.dumps({"tra_loi": WRAPPED})}),  # bọc quá 2 lớp
+    ],
+)
+def test_json_that_cannot_be_unwrapped_is_rejected(text):
+    with pytest.raises(ValueError, match="câu trả lời là JSON thô"):
+        check_answer({"tra_loi": text})
+
+
+@pytest.mark.parametrize("text", ["Mục tiêu {IELTS 6.5} trước tháng 12.", "- Bước 1: {chuẩn bị} hồ sơ"])
+def test_braces_inside_a_normal_answer_are_kept(text):
+    assert check_answer({"tra_loi": text}) == text
+
+
+def test_an_unwrapped_promise_is_still_blocked():
+    with pytest.raises(ValueError, match="hứa đỗ"):
+        check_answer({"tra_loi": json.dumps({"tra_loi": "Bạn chắc chắn đỗ."}, ensure_ascii=False)})
+
+
+def test_an_empty_unwrapped_answer_is_rejected():
+    with pytest.raises(ValueError, match="rỗng"):
+        check_answer({"tra_loi": '{"tra_loi": "   "}'})
+
+
+async def test_a_raw_json_retry_tells_claude_not_to_write_json():
+    llm = FakeLLM({"tra_loi": '{"tra_loi": "Bạn có cơ hội'}, {"tra_loi": "Bạn có cơ hội tốt."})
+
+    assert await AdviceWriter(llm).write(SKILL, REQ, []) == "Bạn có cơ hội tốt."
+    first, second = llm.calls[0]["messages"], llm.calls[1]["messages"]
+    assert second[:-1] == first
+    assert second[-1]["role"] == "user" and "không viết JSON" in second[-1]["content"]
+    # Câu trả lời hỏng không bị gửi lại (không cần, và tránh chép hồ sơ thêm lần nữa)
+    assert "Bạn có cơ hội" not in second[-1]["content"]
+
+
+async def test_a_wrapped_answer_needs_no_second_call():
+    llm = FakeLLM({"tra_loi": WRAPPED})
+
+    assert await AdviceWriter(llm).write(SKILL, REQ, []) == "Bạn có cơ hội tốt."
+    assert len(llm.calls) == 1
+
+
+async def test_an_http_error_retries_without_a_note():
+    llm = FakeLLM(ClaudeError("HTTP 529"), {"tra_loi": "Bạn có cơ hội tốt."})
+
+    assert await AdviceWriter(llm).write(SKILL, REQ, []) == "Bạn có cơ hội tốt."
+    assert llm.calls[1]["messages"] == llm.calls[0]["messages"]
+
+
 async def test_wrong_twice_gives_none():
     llm = FakeLLM(ClaudeError("quá tải"), {"tra_loi": ""})
 
     assert await AdviceWriter(llm).write(SKILL, REQ, []) is None
     assert len(llm.calls) == 2
+
+
+def test_promise_error_names_only_the_matched_phrase():
+    with pytest.raises(ValueError) as e:
+        check_answer({"tra_loi": "GPA 8.5 của bạn tốt, chắc chắn đỗ Iowa."})
+
+    # Chỉ nêu cụm khớp bộ lọc, không chép câu trả lời (có số liệu hồ sơ của học sinh) vào lỗi
+    assert str(e.value) == 'câu trả lời hứa đỗ: "chắc chắn đỗ"'
+
+
+async def test_each_failed_attempt_is_logged_with_its_reason(caplog):
+    llm = FakeLLM(ClaudeError("HTTP 529"), {"tra_loi": "Chắc chắn đỗ!"})
+
+    with caplog.at_level("WARNING", logger="app.services.advice_writer"):
+        assert await AdviceWriter(llm).write(SKILL, REQ, []) is None
+
+    assert [r.getMessage() for r in caplog.records] == [
+        "Writer hỏng lần 1/2: HTTP 529",
+        'Writer hỏng lần 2/2: câu trả lời hứa đỗ: "chắc chắn đỗ"',
+    ]
+
+
+async def test_a_good_answer_logs_nothing(caplog):
+    llm = FakeLLM({"tra_loi": "Bạn có cơ hội tốt."})
+
+    with caplog.at_level("WARNING", logger="app.services.advice_writer"):
+        await AdviceWriter(llm).write(SKILL, REQ, [])
+
+    assert caplog.records == []
+
+
+async def test_last_attempts_counts_a_first_try_pass():
+    writer = AdviceWriter(FakeLLM({"tra_loi": "Bạn có cơ hội tốt."}))
+
+    await writer.write(SKILL, REQ, [])
+
+    assert (writer.last_attempts, writer.last_errors) == (1, [])
+
+
+async def test_last_errors_keeps_only_the_error_code_of_each_failed_try():
+    writer = AdviceWriter(FakeLLM({"tra_loi": "Chắc chắn đỗ!"}, {"tra_loi": NO_ROADMAP}))
+
+    assert await writer.write(SKILL, REQ, [], BOTH) == NO_ROADMAP
+    assert (writer.last_attempts, writer.last_errors) == (2, ["hua_do", "thieu_viec"])
+
+    # Lần write sau bắt đầu đếm lại từ đầu
+    writer._llm = FakeLLM(ClaudeError("HTTP 529"), {"tra_loi": ""})
+    assert await writer.write(SKILL, REQ, []) is None
+    assert (writer.last_attempts, writer.last_errors) == (2, ["goi_model", "rong"])

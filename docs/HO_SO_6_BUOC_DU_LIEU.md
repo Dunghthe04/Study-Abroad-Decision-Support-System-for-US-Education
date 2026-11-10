@@ -36,8 +36,8 @@ Bộ tính điểm chỉ cần đọc các bảng dưới đây, không cần đ
 | `subject`, `score` | Tên môn, điểm thang 10 (0–10) |
 
 `student_profiles`:
-- `overall_gpa`: GPA **thang 4** do BE tính. Mỗi môn lấy trung bình các học kỳ có điểm, rồi lấy trung bình các môn ra GPA10 (làm tròn 2 số), sau đó nhân `/10*4`.
-  - Đây là cách quy đổi tạm, tuyến tính. Doc tính điểm (mục "Lưu ý về GPA đầu vào") yêu cầu ghi rõ cách quy đổi. Nếu đổi công thức thì tính lại từ `transcript_scores`.
+- `overall_gpa`: GPA **thang 4** do BE tính. Mỗi môn lấy trung bình các học kỳ có điểm, rồi lấy trung bình các môn ra GPA10 (làm tròn 2 số), sau đó đổi sang thang 4 theo bảng WES (`TranscriptGpa.To4`, chỉ xét cận dưới mỗi khoảng, ví dụ 8,17 → 3,5).
+  - Cách quy đổi ghi rõ theo yêu cầu của doc tính điểm (mục "Lưu ý về GPA đầu vào"). Nếu đổi bảng thì tính lại từ `transcript_scores`.
 - `grade_scale`: luôn `"10"`.
 - `transcript_file_url`: file bảng điểm gốc, nếu có tải lên.
 

@@ -1,4 +1,5 @@
 using StudyAbroad.Application.Advisor;
+using StudyAbroad.Application.Profile.Academic;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
 using System;
@@ -27,7 +28,8 @@ public class ProfileFlowService(
     IProfileFlowRepository repository,
     IProfileFileStorageService fileStorageService,
     ITranscriptOcrClient? ocrClient = null,
-    IEcTierClient? ecTierClient = null) : IProfileFlowService
+    IEcTierClient? ecTierClient = null,
+    IGradeScaleProvider? gradeScale = null) : IProfileFlowService
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -152,7 +154,7 @@ public class ProfileFlowService(
         var stored = new StoredFlowState(
             CurrentStep: current.CurrentStep,
             CompletedSteps: current.CompletedSteps.ToList(),
-            Draft: NormalizeDraft(ChatProfileMapper.ApplyChatProfile(current.Draft, chatProfile, changedKeys)),
+            Draft: NormalizeDraft(ChatProfileMapper.ApplyChatProfile(current.Draft, chatProfile, changedKeys, await GetGradeScaleAsync(ct))),
             DraftTranscript: ReadStoredState(profile.DraftFlowStateJson)?.DraftTranscript,
             LastUpdatedAt: DateTime.UtcNow);
 
@@ -214,7 +216,7 @@ public class ProfileFlowService(
         return new UploadDraftTranscriptResultDto(
             DraftTranscript: publicInfo,
             ExtractedTerms: ocrResponse?.Terms ?? [],
-            CalculatedGpa4: ocrResponse?.CalculatedGpa4,
+            CalculatedGpa4: await OcrGpa4Async(ocrResponse, ct),
             OcrMessage: ocrResponse?.Message,
             Warnings: ocrResponse?.Warnings,
             DraftFile: publicInfo
@@ -237,7 +239,8 @@ public class ProfileFlowService(
         var now = DateTime.UtcNow;
         ValidateForCommit(draft, budgetTiers, certificationTypes, majorNames, now);
 
-        var (scores, activities, certifications) = ApplyDraftToProfile(profile, draft, budgetTiers, certificationTypes, now);
+        var scale = await GetGradeScaleAsync(ct);
+        var (scores, activities, certifications) = ApplyDraftToProfile(profile, draft, budgetTiers, certificationTypes, scale, now);
 
         // Chuyển file bảng điểm nháp (theo trạng thái trên server) sang thư mục chính thức
         var previousOfficialUrl = profile.TranscriptFileUrl;
@@ -441,6 +444,15 @@ public class ProfileFlowService(
     }
 
     // ───────────────────────────── Commit: validate + ánh xạ ─────────────────────────────
+
+    /// <summary>Bảng quy đổi grade_scale.10 trong DB; không có provider (test cũ) thì null = bảng mặc định</summary>
+    private async Task<GradeScaleConfigDto?> GetGradeScaleAsync(CancellationToken ct) =>
+        gradeScale is null ? null : await gradeScale.GetAsync(ct);
+
+    // GPA thang 4 của bảng điểm OCR: advisor tra bảng mặc định, nên .NET tra lại TB thang 10 theo bảng trong DB
+    // (moderator sửa). Advisor không trả TB thang 10 thì giữ số advisor tính
+    private async Task<decimal?> OcrGpa4Async(TranscriptOcrResponse? ocr, CancellationToken ct) =>
+        ocr?.AverageScoreScale10 is { } average10 ? TranscriptGpa.To4(average10, await GetGradeScaleAsync(ct)) : ocr?.CalculatedGpa4;
 
     private async Task<Dictionary<string, BudgetTier>> LoadBudgetTiersAsync(CancellationToken ct)
     {
@@ -828,6 +840,7 @@ public class ProfileFlowService(
         ProfileFlowDraftDto draft,
         IReadOnlyDictionary<string, BudgetTier> budgetTiers,
         IReadOnlyDictionary<string, CertificationMetadataItem> certificationTypes,
+        GradeScaleConfigDto? scale,
         DateTime now)
     {
         // Bước 1
@@ -878,7 +891,7 @@ public class ProfileFlowService(
             }
         }
         // GPA chỉ tính trên server từ điểm các môn, không nhận số GPA client gửi lên
-        profile.OverallGpa = TranscriptGpa.Gpa4(draft.Step2);
+        profile.OverallGpa = TranscriptGpa.Gpa4(draft.Step2, scale);
 
         // Bước 3
         var certifications = BuildCertifications(draft.Step3, certificationTypes);

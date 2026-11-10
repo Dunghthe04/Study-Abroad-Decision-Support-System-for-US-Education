@@ -1,4 +1,5 @@
 using StudyAbroad.Application.Profile.Academic;
+using StudyAbroad.Application.Profile.Flow;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
 using Xunit;
@@ -45,22 +46,23 @@ public class AcademicAnalysisServiceTests
     }
 
     [Theory]
-    [InlineData(10.0, 4.0)]
-    [InlineData(8.5, 3.4)]
-    [InlineData(7.0, 2.8)]
-    [InlineData(5.0, 2.0)]
-    public void ConvertScoreToGpa4_LinearScale_ReturnsRawScoreTimesPointFour(decimal rawScore, decimal expectedGpa)
+    [InlineData(8.995, 3.7)]   // giữa 8.99 và 9.0: chưa chạm mốc 9.0 nên vẫn 3.7, không rơi xuống ×0.4
+    [InlineData(8.49, 3.5)]
+    [InlineData(4.995, 1.0)]
+    [InlineData(3.995, 0.0)]
+    public void ConvertScoreToGpa4_BetweenBands_UsesLowerBoundOnly(decimal rawScore, decimal expectedGpa)
     {
-        // [USAS-365] Kiểm thử quy đổi tuyến tính raw * 0.4 theo SOW v6
-        var linearConfig = new GradeScaleConfigDto(
-            ScaleKey: "grade_scale.10",
-            SourceName: "Quy tắc tuyến tính SOW v6 (raw * 0.4)",
-            Method: "linear_0.4",
-            Rules: new List<GradeScaleRuleDto>()
-        );
+        var wesConfig = AcademicAnalysisService.GetDefaultWesScaleConfig();
+        Assert.Equal(expectedGpa, AcademicAnalysisService.ConvertScoreToGpa4(rawScore, wesConfig));
+    }
 
-        var result = AcademicAnalysisService.ConvertScoreToGpa4(rawScore, linearConfig);
-        Assert.Equal(expectedGpa, result);
+    [Fact]
+    public void ConvertScoreToGpa4_SameAsTranscriptGpaTo4()
+    {
+        // Trang phân tích học bạ và GPA lưu trong hồ sơ dùng cùng một cách đổi
+        var wesConfig = AcademicAnalysisService.GetDefaultWesScaleConfig();
+        for (var score = 0m; score <= 10m; score += 0.005m)
+            Assert.Equal(TranscriptGpa.To4(score), AcademicAnalysisService.ConvertScoreToGpa4(score, wesConfig));
     }
 
     [Fact]
@@ -281,6 +283,10 @@ internal class FakeAcademicAnalysisRepository : IAcademicAnalysisRepository
     private readonly List<TranscriptScore> _scores = new();
     private readonly List<AnalysisResult> _analysisResults = new();
     private readonly Dictionary<string, AppSetting> _settings = new();
+
+    /// <summary>Đặt một dòng app_settings giả (dùng cho test bảng quy đổi grade_scale.10).</summary>
+    public void SetSetting(string key, string valueJson) =>
+        _settings[key] = new AppSetting { Key = key, ValueJson = valueJson };
 
     public Task<StudentProfile?> GetProfileByUserIdAsync(Guid userId, CancellationToken ct = default)
     {

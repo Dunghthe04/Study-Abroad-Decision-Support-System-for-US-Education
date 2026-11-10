@@ -33,6 +33,7 @@ from app.schemas.transcript_ocr import (
 )
 from app.services.ollama import OllamaError
 from app.services.pii_mask import mask_personal_info
+from app.services.skills.skill_danh_gia import gpa10_to_4
 from app.services.transcript_text import read_term_tables, tidy_transcription
 
 logger = logging.getLogger(__name__)
@@ -360,9 +361,9 @@ class TranscriptReader:
                 )
             final_terms.append(TranscriptTerm(term_order=order, term_name=term_name, scores=score_items))
 
-        # Quy đổi GPA: trung bình tất cả các điểm môn / 10 * 4
+        # Quy đổi GPA: trung bình tất cả các điểm môn, tra bảng WES sang thang 4 (cùng bảng với chat)
         avg_score_10 = round(sum(all_scores) / len(all_scores), 2)
-        gpa4 = round((avg_score_10 / 10.0) * 4.0, 2)
+        gpa4 = gpa10_to_4(avg_score_10)
 
         return TranscriptOcrResponse(
             success=True,

@@ -15,11 +15,11 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from app.schemas.chat import ChatState, ProfileField, QuickReply
+from app.schemas.chat import ChatState, GradeScaleRule, ProfileField, QuickReply
 from app.services.chat_flow import SkillOutput, ask, go_to
 from app.services.skill_call import SKILLS_DIR, SkillCall
 from app.services.skills.buttons import BUDGET_LABELS
-from app.services.skills.validators import IMPACT_LEVELS, month_index, parse_month_year
+from app.services.skills.validators import BUDGET_RANGES, IMPACT_LEVELS, month_index, parse_month_year
 
 logger = logging.getLogger("advisor.chat")
 
@@ -29,21 +29,21 @@ SKILL_PATH = SKILLS_DIR / "skill_danh_gia.md"
 ACADEMIC_CUTS = [(3.5, "strong"), (3.0, "medium")]  # GPA thang 4
 SAT_CUTS = [(1400, "strong"), (1200, "medium")]
 ENGLISH_CUTS = [(7.0, "excellent"), (6.0, "good"), (5.5, "near")]  # quy về IELTS
-FINANCE_CUTS = [(60_000, "ok"), (35_000, "tight")]  # USD mỗi năm. Chưa chốt Q3b: không sửa
-LOWEST = {"academic": "weak", "sat": "weak", "english": "low", "finance": "short"}
+LOWEST = {"academic": "weak", "sat": "weak", "english": "low"}
 
 # Đổi TOEFL / Duolingo sang IELTS tương đương (ieltsEquivalent bên frontend): (điểm từ, IELTS)
 TOEFL_TO_IELTS = [(110, 8.0), (94, 7.0), (79, 6.0), (72, 5.5)]
 DUOLINGO_TO_IELTS = [(135, 7.5), (120, 7.0), (105, 6.0), (95, 5.5)]
 BELOW_TABLE_IELTS = 5.0
 
-# Mức ngân sách → số USD dùng để so ngưỡng (budgetMaxUsd, mức cao nhất không có trần thì lấy budgetMinUsd)
-TIER_USD = {
-    "tier_under_20k": 20_000,
-    "tier_20k_35k": 35_000,
-    "tier_35k_50k": 50_000,
-    "tier_50k_70k": 70_000,
-    "tier_above_70k": 70_000,
+# Mức ngân sách → mức tài chính, xếp thẳng theo mã (khoảng tiền xem BUDGET_RANGES). Không đổi mức ra một con số
+# vì mức trên 70k không có trần. Kết quả giữ như ngưỡng cũ (≥ 60k ok, ≥ 35k tight); chưa chốt Q3b: không sửa
+TIER_FINANCE = {
+    "tier_under_20k": "short",  # 0 – 20.000
+    "tier_20k_35k": "tight",  # 20.000 – 35.000
+    "tier_35k_50k": "tight",  # 35.000 – 50.000
+    "tier_50k_70k": "ok",  # 50.000 – 70.000
+    "tier_above_70k": "ok",  # từ 70.000, không trần
 }
 
 # Bậc ngoại khóa 1–5 (ecTierOf bên frontend)
@@ -92,6 +92,36 @@ def from_table(score: float, table: list[tuple[float, float]]) -> float:
     return BELOW_TABLE_IELTS
 
 
+# Quy đổi điểm thang 10 sang GPA thang 4 theo bảng WES (điểm từ, GPA 4). Phải khớp bảng mặc định của backend
+# (AcademicAnalysisService.GetDefaultWesScaleConfig), sửa thì sửa cả hai bên. Chỉ xét cận dưới: 8.99 vẫn là 3.7
+WES_GPA10_TO_4 = [
+    (9.0, 4.0),
+    (8.5, 3.7),
+    (8.0, 3.5),
+    (7.0, 3.0),
+    (6.5, 2.5),
+    (5.5, 2.0),
+    (5.0, 1.5),
+    (4.0, 1.0),
+]
+BELOW_WES_GPA4 = 0.0
+
+
+# Bảng (điểm từ, GPA 4) lấy từ grade_scale trong state (.NET gửi bảng moderator sửa); None hoặc rỗng = bảng WES
+def gpa_table_of(rules: list[GradeScaleRule] | None) -> list[tuple[float, float]] | None:
+    if not rules:
+        return None
+    return sorted(((float(r.min_score), float(r.gpa4)) for r in rules), reverse=True)
+
+
+# Chỉ điểm tổng (TB thang 10) mới quy sang thang 4; điểm từng môn giữ nguyên thang 10
+def gpa10_to_4(score: float, table: list[tuple[float, float]] | None = None) -> float:
+    for cut, gpa4 in table or WES_GPA10_TO_4:
+        if score >= cut:
+            return gpa4
+    return BELOW_WES_GPA4
+
+
 # Các con số đã đọc từ hồ sơ chat, đủ để tính mức
 @dataclass
 class Facts:
@@ -103,7 +133,6 @@ class Facts:
     english_score: float | None = None
     ielts: float | None = None  # IELTS tương đương
     budget_tier: str | None = None
-    budget_usd: int | None = None
     ec_tier: int | None = None
     activities: int = 0
 
@@ -155,14 +184,18 @@ def ec_tier_of(activities: list[dict], awards: list[dict], today: date) -> int:
     return 1 + sum(1 for cut in EC_CUTS if m >= cut)
 
 
-def read_facts(profile: dict[str, ProfileField], today: date | None = None) -> Facts:
+def read_facts(
+    profile: dict[str, ProfileField],
+    today: date | None = None,
+    gpa_table: list[tuple[float, float]] | None = None,
+) -> Facts:
     today = today or date.today()
     facts = Facts()
 
     gpa = value_of(profile, "gpa")
     if isinstance(gpa, dict) and gpa.get("value") is not None:
         facts.gpa, facts.gpa_scale = float(gpa["value"]), int(gpa.get("scale") or 10)
-        facts.gpa4 = facts.gpa if facts.gpa_scale == 4 else round(facts.gpa / 10 * 4, 2)
+        facts.gpa4 = facts.gpa if facts.gpa_scale == 4 else gpa10_to_4(facts.gpa, gpa_table)
 
     sat = value_of(profile, "sat")
     facts.sat = int(sat) if isinstance(sat, int | float) else None
@@ -174,8 +207,8 @@ def read_facts(profile: dict[str, ProfileField], today: date | None = None) -> F
         facts.ielts = ielts_equivalent(facts.english_type, facts.english_score)
 
     tier = value_of(profile, "budget")
-    if tier in TIER_USD:
-        facts.budget_tier, facts.budget_usd = tier, TIER_USD[tier]
+    if tier in TIER_FINANCE:
+        facts.budget_tier = tier
 
     activities = value_of(profile, "activities")
     activities = activities if isinstance(activities, list) else []
@@ -207,7 +240,7 @@ def assess_levels(facts: Facts) -> dict[str, Any]:
         "academic": academic,
         "sat": level_of(facts.sat, SAT_CUTS, LOWEST["sat"]),
         "english": english,
-        "finance": level_of(facts.budget_usd, FINANCE_CUTS, LOWEST["finance"]),
+        "finance": TIER_FINANCE.get(facts.budget_tier, "none"),
         "ec_tier": facts.ec_tier,
         "scholarship": SCHOLARSHIP_CHANCES[2 - hits],
     }
@@ -330,10 +363,11 @@ def readings(token: str) -> set[float]:
 # Các số được phép xuất hiện trong lời nhận xét: số trong hồ sơ, thang điểm
 def allowed_numbers(facts: Facts) -> set[float]:
     numbers = {facts.gpa, facts.gpa_scale, facts.gpa4, facts.sat, facts.english_score, facts.ielts}
-    numbers |= {facts.budget_usd, facts.ec_tier, facts.activities}
+    numbers |= {facts.ec_tier, facts.activities}
     if facts.budget_tier:
-        numbers |= {float(n) * 1000 for n in re.findall(r"\d+", facts.budget_tier)}
-        numbers |= {float(n) for n in re.findall(r"\d+", facts.budget_tier)}
+        # Sàn và trần của mức ngân sách, viết đủ (35.000) hoặc theo nghìn (35k); bỏ sàn 0 và trần không có
+        bounds = {n for n in BUDGET_RANGES[facts.budget_tier] if n}
+        numbers |= bounds | {n / 1000 for n in bounds}
     return {float(n) for n in numbers if n is not None} | FREE_NUMBERS
 
 
@@ -384,8 +418,13 @@ class Assessor:
         self._call = SkillCall(llm, model, SKILL_PATH)
         self.skill_version = self._call.skill_version
 
-    async def assess(self, profile: dict[str, ProfileField], today: date | None = None) -> Assessment:
-        facts = read_facts(profile, today)
+    async def assess(
+        self,
+        profile: dict[str, ProfileField],
+        today: date | None = None,
+        gpa_table: list[tuple[float, float]] | None = None,
+    ) -> Assessment:
+        facts = read_facts(profile, today, gpa_table)
         levels = assess_levels(facts)
 
         def check(raw: dict[str, Any]) -> Assessment:
@@ -413,6 +452,6 @@ class DanhGiaHandler:
         self._assessor = Assessor(llm, model)
 
     async def run(self, state: ChatState, message: str) -> SkillOutput:
-        result = await self._assessor.assess(state.profile)
+        result = await self._assessor.assess(state.profile, gpa_table=gpa_table_of(state.grade_scale))
         go_to(state, "B4")
         return SkillOutput(f"{render(result)}\n\n{ask(state, 'X2')}", quick_replies=[YES_REPLY, NO_REPLY])

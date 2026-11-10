@@ -18,6 +18,7 @@ public static class DependencyInjection
         services.AddScoped<StudyAbroad.Application.TargetSchools.ITargetSchoolService, StudyAbroad.Application.TargetSchools.TargetSchoolService>();
         services.AddScoped<IStudyCenterService, StudyCenterService>();
         services.AddScoped<IAdminUniversityService, AdminUniversityService>();
+        services.AddScoped<StudyAbroad.Application.Admin.Settings.IGradeScaleSettingService, StudyAbroad.Application.Admin.Settings.GradeScaleSettingService>();
         services.AddScoped<StudyAbroad.Application.Leads.ILeadService, StudyAbroad.Application.Leads.LeadService>();
         services.AddScoped<IAuthService, AuthService>();
         // [Q11] Liên kết phụ huynh–học sinh và sự đồng ý xử lý dữ liệu trẻ em
@@ -25,6 +26,7 @@ public static class DependencyInjection
         services.AddScoped<IFinancialProfileService, FinancialProfileService>();
         // [USAS-365] Đăng ký service phân tích điểm học thuật
         services.AddScoped<StudyAbroad.Application.Profile.Academic.IAcademicAnalysisService, StudyAbroad.Application.Profile.Academic.AcademicAnalysisService>();
+        services.AddScoped<StudyAbroad.Application.Profile.Academic.IGradeScaleProvider, StudyAbroad.Application.Profile.Academic.GradeScaleProvider>();
         services.AddScoped<IAcademicProfileService, AcademicProfileService>();
         // [USAS-640] Đăng ký service metadata động cho biểu mẫu hồ sơ
         services.AddScoped<StudyAbroad.Application.Profile.Flow.IProfileMetadataService, StudyAbroad.Application.Profile.Flow.ProfileMetadataService>();
