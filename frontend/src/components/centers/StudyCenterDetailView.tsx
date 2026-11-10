@@ -155,7 +155,7 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
             <div className="text-lg sm:text-2xl font-bold tracking-tight text-foreground truncate">
               {profile.visaSuccessRate}%
             </div>
-            <div className="text-[11px] text-muted-foreground truncate mt-0.5">
+            <div className="text-xs text-muted-foreground truncate mt-0.5">
               Hồ sơ phỏng vấn ĐSQ
             </div>
           </div>
@@ -175,7 +175,7 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
               {scholarshipStat.amount}
             </div>
             <div
-              className="text-[11px] text-muted-foreground truncate mt-0.5"
+              className="text-xs text-muted-foreground truncate mt-0.5"
               title={scholarshipStat.note || "Kỳ tuyển sinh gần nhất"}
             >
               {scholarshipStat.note || "Kỳ tuyển sinh gần nhất"}
@@ -197,7 +197,7 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
               {profile.staffCount}{" "}
               <span className="text-xs sm:text-sm font-normal text-muted-foreground">chuyên viên</span>
             </div>
-            <div className="text-[11px] text-muted-foreground truncate mt-0.5">
+            <div className="text-xs text-muted-foreground truncate mt-0.5">
               Cố vấn & Giảng viên
             </div>
           </div>
@@ -216,7 +216,7 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
             <div className="text-base sm:text-lg font-bold tracking-tight text-foreground truncate" title={profile.licenseNumber}>
               {profile.licenseNumber}
             </div>
-            <div className="text-[11px] text-muted-foreground truncate mt-0.5" title={profile.licenseIssuedBy}>
+            <div className="text-xs text-muted-foreground truncate mt-0.5" title={profile.licenseIssuedBy}>
               {profile.licenseIssuedBy}
             </div>
           </div>
@@ -250,7 +250,7 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
 
               {/* Chứng nhận quốc tế */}
               <div className="pt-2 border-t">
-                <div className="text-xs font-semibold text-foreground mb-2 uppercase tracking-wider">
+                <div className="text-xs font-semibold text-foreground mb-2r">
                   Chứng nhận kiểm định & Đối tác quốc tế:
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -480,7 +480,7 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
                   <div key={i} className="p-4 rounded-lg border bg-card shadow-sm space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="font-semibold text-foreground text-sm">{story.studentName}</span>
-                      <Badge variant="secondary" className="text-[10px]">
+                      <Badge variant="secondary" className="text-xs">
                         {story.year}
                       </Badge>
                     </div>
@@ -552,7 +552,7 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
                       <div className="flex items-center gap-2">
                         <span className="font-semibold text-sm text-foreground">{rev.reviewerName}</span>
                         {rev.verified && (
-                          <Badge variant="outline" className="text-emerald-600 border-emerald-300 text-[10px] py-0">
+                          <Badge variant="outline" className="text-emerald-600 border-emerald-300 text-xs py-0">
                             ✓ Học viên xác thực
                           </Badge>
                         )}

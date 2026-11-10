@@ -56,7 +56,7 @@ export function AdminCenterDetailPanel({ center, onClose }: AdminCenterDetailPan
             </div>
             <div className="text-white min-w-0">
               <div className="text-xs font-semibold truncate leading-tight drop-shadow">{center.name}</div>
-              <div className="text-[10px] text-white/80">{profile.typeLabel}</div>
+              <div className="text-xs text-white/80">{profile.typeLabel}</div>
             </div>
           </div>
         </div>
@@ -129,7 +129,7 @@ export function AdminCenterDetailPanel({ center, onClose }: AdminCenterDetailPan
 
         {/* Contact details */}
         <div className="space-y-2 text-xs">
-          <div className="font-semibold text-foreground text-xs uppercase tracking-wider text-muted-foreground">
+          <div className="font-semibold text-foreground text-xsr text-muted-foreground">
             Thông tin liên hệ & Địa điểm
           </div>
           <div className="space-y-1.5 p-3 rounded-lg border bg-card text-muted-foreground">
@@ -137,11 +137,11 @@ export function AdminCenterDetailPanel({ center, onClose }: AdminCenterDetailPan
               <MapPinIcon className="w-3.5 h-3.5 text-brand shrink-0 mt-0.5" />
               <span>{center.address ?? "Chưa cập nhật địa chỉ"}</span>
             </div>
-            <div className="pl-5.5 text-[11px] text-muted-foreground">
+            <div className="pl-5.5 text-xs text-muted-foreground">
               Khu vực: {center.district ? `${center.district}, ${center.city ?? "Việt Nam"}` : (center.city ?? "Toàn quốc")}
             </div>
 
-            <div className="flex items-center gap-2 pt-1 border-t text-[11px]">
+            <div className="flex items-center gap-2 pt-1 border-t text-xs">
               <ClockIcon className="w-3.5 h-3.5 text-amber-600 shrink-0" />
               <span>{profile.operatingHours}</span>
             </div>
@@ -151,12 +151,12 @@ export function AdminCenterDetailPanel({ center, onClose }: AdminCenterDetailPan
         {/* Services & Study Levels */}
         {center.services.length > 0 && (
           <div className="space-y-2 text-xs">
-            <div className="font-semibold text-foreground text-xs uppercase tracking-wider text-muted-foreground">
+            <div className="font-semibold text-foreground text-xsr text-muted-foreground">
               Dịch vụ tư vấn ({center.services.length})
             </div>
             <div className="flex flex-wrap gap-1.5">
               {center.services.map((svc) => (
-                <Badge key={svc} variant="secondary" className="text-[11px] font-normal py-0.5">
+                <Badge key={svc} variant="secondary" className="text-xs font-normal py-0.5">
                   {centerServiceLabel(svc)}
                 </Badge>
               ))}
@@ -166,12 +166,12 @@ export function AdminCenterDetailPanel({ center, onClose }: AdminCenterDetailPan
 
         {center.studyLevels.length > 0 && (
           <div className="space-y-2 text-xs">
-            <div className="font-semibold text-foreground text-xs uppercase tracking-wider text-muted-foreground">
+            <div className="font-semibold text-foreground text-xsr text-muted-foreground">
               Bậc học đào tạo ({center.studyLevels.length})
             </div>
             <div className="flex flex-wrap gap-1.5">
               {center.studyLevels.map((lvl) => (
-                <Badge key={lvl} variant="outline" className="text-[11px] font-normal py-0.5">
+                <Badge key={lvl} variant="outline" className="text-xs font-normal py-0.5">
                   {studyLevelLabel(lvl)}
                 </Badge>
               ))}

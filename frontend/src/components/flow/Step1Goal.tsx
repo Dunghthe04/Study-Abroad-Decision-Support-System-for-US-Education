@@ -281,7 +281,7 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
     <div className="space-y-8 animate-in fade-in-50 duration-200">
       {/* Step Header */}
       <div className="space-y-2 border-b border-line pb-4">
-        <div className="text-xs font-semibold text-brand tracking-wide uppercase">
+        <div className="text-xs font-semibold text-brand">
           Bước 1/6 · khoảng 1 phút
         </div>
         <h1 className="text-h1 text-foreground">
@@ -653,7 +653,7 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
           {/* Searchable Dropdown List */}
           {showMajorDropdown && (
             <div className="absolute z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border border-line bg-surface p-1.5 shadow-xl">
-              <div className="px-2 py-1 text-[11px] font-semibold text-muted-foreground uppercase border-b border-line/60 mb-1">
+              <div className="px-2 py-1 text-xs font-semibold text-muted-foreground border-b border-line/60 mb-1">
                 {filteredMajors.length > 0
                   ? `Tìm thấy ${filteredMajors.length} ngành`
                   : "Không tìm thấy ngành phù hợp"}
@@ -698,7 +698,7 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
           className="flex w-full items-center gap-2 text-left cursor-pointer"
         >
           <span className="text-sm font-semibold text-foreground">Thu hẹp gợi ý</span>
-          <span className="rounded-full bg-surface px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+          <span className="rounded-full bg-surface px-2 py-0.5 text-xs font-medium text-muted-foreground">
             Không bắt buộc
           </span>
           {!showNarrow && (
@@ -811,7 +811,7 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
               <div className="overflow-y-auto max-h-48 p-1.5 space-y-2">
                 {stateGroups.map((group) => (
                   <div key={group.value || "other"}>
-                    <p className="px-2.5 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    <p className="px-2.5 pb-1 text-xs font-semibold text-muted-foreground">
                       {group.label}
                     </p>
                     <div className="grid grid-cols-2 gap-1">

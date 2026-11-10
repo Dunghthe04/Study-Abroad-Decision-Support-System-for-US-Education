@@ -60,7 +60,7 @@ export function UniversityCard({ university }: UniversityCardProps) {
               <TrophyIcon className="size-3" />
               <span>#{university.bestRank}</span>
               {university.bestRankPublisher && (
-                <span className="text-[10px] opacity-90 hidden sm:inline">({university.bestRankPublisher})</span>
+                <span className="text-xs opacity-90 hidden sm:inline">({university.bestRankPublisher})</span>
               )}
             </Badge>
           )}
@@ -104,7 +104,7 @@ export function UniversityCard({ university }: UniversityCardProps) {
             )}
           </div>
           <div className="min-w-0 text-white">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-white/80">
+            <span className="text-xs font-semiboldr text-white/80">
               {university.code}
             </span>
             {location && (
@@ -129,26 +129,26 @@ export function UniversityCard({ university }: UniversityCardProps) {
 
           <div className="grid grid-cols-2 gap-2 rounded-lg bg-muted/40 p-2.5 text-xs">
             <div>
-              <span className="text-muted-foreground block text-[11px]">Học phí/năm:</span>
+              <span className="text-muted-foreground block text-xs">Học phí/năm:</span>
               <span className="font-semibold text-foreground">
                 {university.tuitionUsd != null ? universityMoney(university.tuitionUsd) : "Chưa có"}
               </span>
             </div>
             <div>
-              <span className="text-muted-foreground block text-[11px]">Tỷ lệ nhận:</span>
+              <span className="text-muted-foreground block text-xs">Tỷ lệ nhận:</span>
               <span className="font-semibold text-foreground">
                 {university.acceptanceRate != null ? universityPercent(university.acceptanceRate) : "Chưa có"}
               </span>
             </div>
             {englishReq && (
               <div>
-                <span className="text-muted-foreground block text-[11px]">Yêu cầu tiếng Anh:</span>
+                <span className="text-muted-foreground block text-xs">Yêu cầu tiếng Anh:</span>
                 <span className="font-medium text-foreground">{englishReq}</span>
               </div>
             )}
             {university.satPolicy && (
               <div>
-                <span className="text-muted-foreground block text-[11px]">SAT/ACT:</span>
+                <span className="text-muted-foreground block text-xs">SAT/ACT:</span>
                 <span className="font-medium text-foreground capitalize">
                   {university.satPolicy === "optional"
                     ? "Tùy chọn"
@@ -162,7 +162,7 @@ export function UniversityCard({ university }: UniversityCardProps) {
 
           {university.majors && university.majors.length > 0 && (
             <div className="space-y-1 pt-1">
-              <span className="text-[11px] font-medium text-muted-foreground flex items-center gap-1">
+              <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
                 <GraduationCapIcon className="size-3" />
                 Ngành nổi bật:
               </span>
@@ -171,13 +171,13 @@ export function UniversityCard({ university }: UniversityCardProps) {
                   <Badge
                     key={major}
                     variant="outline"
-                    className="text-[10px] font-normal py-0 px-2 max-w-[200px] truncate"
+                    className="text-xs font-normal py-0 px-2 max-w-[200px] truncate"
                   >
                     {major}
                   </Badge>
                 ))}
                 {university.majors.length > 3 && (
-                  <span className="text-[10px] text-muted-foreground self-center">
+                  <span className="text-xs text-muted-foreground self-center">
                     +{university.majors.length - 3}
                   </span>
                 )}

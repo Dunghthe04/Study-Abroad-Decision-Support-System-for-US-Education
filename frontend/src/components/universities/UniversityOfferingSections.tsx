@@ -131,7 +131,7 @@ export function UniversityMajors({ offering }: { offering: UniversityOffering })
                 <p className="truncate text-sm font-medium text-foreground">{major.name}</p>
                 {major.cipCode && <p className="text-xs text-muted-foreground">CIP {major.cipCode}</p>}
               </div>
-              {major.isStem && <Badge variant="secondary" className="shrink-0 text-[10px]">STEM</Badge>}
+              {major.isStem && <Badge variant="secondary" className="shrink-0 text-xs">STEM</Badge>}
             </div>
           ))}
         </div>

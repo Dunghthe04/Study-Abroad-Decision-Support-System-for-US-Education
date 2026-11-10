@@ -231,7 +231,7 @@ export function Step5Extracurricular({
     <div className="space-y-8 animate-in fade-in-50 duration-200">
       {/* Step Header */}
       <div className="space-y-2 border-b border-line pb-4">
-        <div className="text-xs font-semibold text-brand tracking-wide uppercase">
+        <div className="text-xs font-semibold text-brand">
           Bước 5/6 · khoảng 2 phút
         </div>
         <h1 className="text-h1 text-foreground">Bạn đã làm gì ngoài giờ học?</h1>
@@ -244,10 +244,10 @@ export function Step5Extracurricular({
       {activities.length > 0 && (
         <section className="space-y-3">
           <div className="flex items-center justify-between">
-            <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <Label className="text-xs font-semiboldr text-muted-foreground">
               Đã thêm ({activities.length} mục)
             </Label>
-            <span className="text-[11px] text-muted-foreground">
+            <span className="text-xs text-muted-foreground">
               Tối đa 10 mục tiêu biểu
             </span>
           </div>
@@ -282,14 +282,14 @@ export function Step5Extracurricular({
                       <div>
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-semibold text-sm text-foreground">{item.name}</span>
-                          <Badge variant="secondary" className="text-[10px] font-medium">
+                          <Badge variant="secondary" className="text-xs font-medium">
                             {item.category === "activity" ? "Hoạt động" : "Giải thưởng"}
                           </Badge>
                           {tierInfo && (
                             <Badge
                               variant="outline"
                               className={cn(
-                                "text-[10px] font-semibold gap-1",
+                                "text-xs font-semibold gap-1",
                                 item.impactLevel === "international" && "border-purple-300 bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300",
                                 item.impactLevel === "national" && "border-amber-300 bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300",
                                 item.impactLevel === "province" && "border-sky-300 bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300",
@@ -302,7 +302,7 @@ export function Step5Extracurricular({
                             </Badge>
                           )}
                           {problem && (
-                            <Badge variant="destructive" className="text-[10px]">
+                            <Badge variant="destructive" className="text-xs">
                               Thiếu: {problem}
                             </Badge>
                           )}
@@ -523,9 +523,9 @@ export function Step5Extracurricular({
                 <div>
                   <Label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
                     <span>Kim tự tháp phạm vi ảnh hưởng <RequiredMark /></span>
-                    <span className="text-brand font-normal text-[11px]">(Mô hình CollegeVine)</span>
+                    <span className="text-brand font-normal text-xs">(Mô hình CollegeVine)</span>
                   </Label>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                  <p className="text-xs text-muted-foreground mt-0.5">
                     Bấm vào tầng phù hợp nhất với tầm vóc của mục này, hoặc dùng phím mũi tên.
                   </p>
                 </div>
@@ -597,7 +597,7 @@ export function Step5Extracurricular({
                         <div className="flex items-center gap-2">
                           <span
                             className={cn(
-                              "text-[10px] px-1.5 py-0.5 rounded-md font-semibold",
+                              "text-xs px-1.5 py-0.5 rounded-md font-semibold",
                               isSelected
                                 ? "bg-brand text-white"
                                 : "bg-ground text-muted-foreground group-hover:text-foreground"
@@ -622,20 +622,20 @@ export function Step5Extracurricular({
                         <SparklesIcon className="size-3.5 text-brand" />
                         <span>Tiêu chí tham chiếu: {selectedTierDetail.label}</span>
                       </div>
-                      <Badge variant="outline" className="text-[10px] font-semibold border-brand/30 bg-surface">
+                      <Badge variant="outline" className="text-xs font-semibold border-brand/30 bg-surface">
                         {selectedTierDetail.badge}
                       </Badge>
                     </div>
 
-                    <p className="text-muted-foreground text-[11px] leading-relaxed">
+                    <p className="text-muted-foreground text-xs leading-relaxed">
                       {selectedTierDetail.summary}
                     </p>
 
                     <div className="space-y-1.5 pt-1">
-                      <div className="font-medium text-foreground text-[11px]">
+                      <div className="font-medium text-foreground text-xs">
                         Ví dụ {category === "activity" ? "hoạt động phù hợp" : "giải thưởng phù hợp"}:
                       </div>
-                      <ul className="list-disc list-inside space-y-1 text-muted-foreground text-[11px] pl-1">
+                      <ul className="list-disc list-inside space-y-1 text-muted-foreground text-xs pl-1">
                         {(category === "activity"
                           ? selectedTierDetail.activityCriteria
                           : selectedTierDetail.awardCriteria
@@ -645,7 +645,7 @@ export function Step5Extracurricular({
                       </ul>
                     </div>
 
-                    <div className="text-[10px] text-muted-foreground/90 border-t border-brand/10 pt-2 flex items-center gap-1">
+                    <div className="text-xs text-muted-foreground/90 border-t border-brand/10 pt-2 flex items-center gap-1">
                       <InfoIcon className="size-3 text-brand shrink-0" />
                       <span>
                         Mẹo: Nếu phân vân giữa 2 mức (ví dụ Cấp Trường hay Cấp Quận), bạn có thể tự tin chọn mức cao hơn.
@@ -669,11 +669,11 @@ export function Step5Extracurricular({
               <div className="flex items-center justify-between">
                 <Label htmlFor="itemDesc" className="text-xs font-medium text-foreground flex items-center gap-1.5">
                   <span>Mô tả thêm (không bắt buộc)</span>
-                  <span className="text-[11px] text-muted-foreground font-normal">
+                  <span className="text-xs text-muted-foreground font-normal">
                     · Giúp tăng độ tin cậy và điểm hồ sơ
                   </span>
                 </Label>
-                <span className="text-[10px] text-muted-foreground">
+                <span className="text-xs text-muted-foreground">
                   {description.length}/500 ký tự
                 </span>
               </div>
@@ -693,7 +693,7 @@ export function Step5Extracurricular({
                 }}
                 className="text-xs resize-none"
               />
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 Gợi ý: Nêu rõ kết quả có số liệu (quantifiable results), vai trò và kỹ năng đạt được.
               </p>
               <FieldError message={formErrors.desc} />

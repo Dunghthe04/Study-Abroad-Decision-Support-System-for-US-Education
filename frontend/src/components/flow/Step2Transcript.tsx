@@ -788,7 +788,7 @@ export function Step2Transcript({
     <div className="space-y-8 animate-in fade-in-50 duration-200">
       {/* Step Header */}
       <div className="space-y-2 border-b border-line pb-4">
-        <div className="text-xs font-semibold text-brand tracking-wide uppercase">
+        <div className="text-xs font-semibold text-brand">
           Bước 2/6 · khoảng 1 phút
         </div>
         <h1 className="text-h1 text-foreground">
@@ -904,7 +904,7 @@ export function Step2Transcript({
                   <span className="text-xs font-semibold text-foreground">
                     Chọn mức học lực tương ứng để tự động điền GPA trung bình:
                   </span>
-                  <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                  <Badge variant="outline" className="text-xs text-muted-foreground">
                     Thang {overallScale}
                   </Badge>
                 </div>
@@ -920,14 +920,14 @@ export function Step2Transcript({
                         <span className="text-xs font-bold text-foreground group-hover:text-brand">
                           {preset.label}
                         </span>
-                        <Badge variant="secondary" className="text-[10px] font-semibold px-1.5 py-0">
+                        <Badge variant="secondary" className="text-xs font-semibold px-1.5 py-0">
                           {preset.range}
                         </Badge>
                       </div>
-                      <p className="text-[11px] text-muted-foreground mt-1 leading-snug">
+                      <p className="text-xs text-muted-foreground mt-1 leading-snug">
                         {preset.desc}
                       </p>
-                      <span className="text-[10px] font-semibold text-brand mt-2 group-hover:underline">
+                      <span className="text-xs font-semibold text-brand mt-2 group-hover:underline">
                         → Điền ngay: {preset.midpoint}
                       </span>
                     </button>
@@ -967,7 +967,7 @@ export function Step2Transcript({
                   >
                     <div className="flex items-center justify-between">
                       <span className="font-bold text-sm text-foreground">{y.gradeName}</span>
-                      <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                      <Badge variant="outline" className="text-xs text-muted-foreground">
                         {usYearName}
                       </Badge>
                     </div>
@@ -987,7 +987,7 @@ export function Step2Transcript({
                     </div>
 
                     <div className="space-y-1 pt-1 border-t border-line/60">
-                      <span className="text-[10px] text-muted-foreground block">Chọn nhanh:</span>
+                      <span className="text-xs text-muted-foreground block">Chọn nhanh:</span>
                       <div className="flex flex-wrap gap-1">
                         {[8.0, 8.5, 9.0, 9.5].map((presetScore) => (
                           <button
@@ -995,7 +995,7 @@ export function Step2Transcript({
                             type="button"
                             onClick={() => handleYearTargetChange(yIdx, String(presetScore))}
                             className={cn(
-                              "text-[10px] font-semibold px-2 py-0.5 rounded border transition-colors cursor-pointer",
+                              "text-xs font-semibold px-2 py-0.5 rounded border transition-colors cursor-pointer",
                               targetScore === presetScore
                                 ? "bg-brand text-white border-brand"
                                 : "bg-muted/40 hover:bg-brand-wash border-line text-muted-foreground hover:text-brand"
@@ -1026,7 +1026,7 @@ export function Step2Transcript({
                 <div>
                   <div className="font-semibold text-sm text-foreground flex items-center gap-1.5">
                     <span>GPA mục tiêu tổng 4 năm</span>
-                    <Badge variant="outline" className="text-[10px] border-brand/40 text-brand">
+                    <Badge variant="outline" className="text-xs border-brand/40 text-brand">
                       Quy đổi thang 4: bảng WES
                     </Badge>
                   </div>
@@ -1037,14 +1037,14 @@ export function Step2Transcript({
 
                 <div className="flex items-center gap-4">
                   <div className="text-right">
-                    <div className="text-[11px] text-muted-foreground">Thang điểm 10</div>
+                    <div className="text-xs text-muted-foreground">Thang điểm 10</div>
                     <div className="text-lg font-bold text-foreground">
                       {gpa10 !== null ? gpa10.toFixed(2) : "—"}
                     </div>
                   </div>
                   <div className="h-8 w-px bg-line" />
                   <div className="text-right">
-                    <div className="text-[11px] text-brand font-semibold">Quy đổi thang 4</div>
+                    <div className="text-xs text-brand font-semibold">Quy đổi thang 4</div>
                     <div className="text-2xl font-extrabold text-brand">
                       {gpa4 !== null ? gpa4.toFixed(2) : "—"}
                     </div>
@@ -1063,14 +1063,14 @@ export function Step2Transcript({
                     ) : (
                       <TrendingUpIcon className="size-4 text-emerald-600" />
                     )}
-                    <span className="text-xs font-bold uppercase tracking-wider text-foreground">
+                    <span className="text-xs font-boldr text-foreground">
                       Kỳ vọng xu hướng điểm số (Grade Trend)
                     </span>
                   </div>
                   <Badge
                     variant="outline"
                     className={cn(
-                      "text-[10px] font-semibold",
+                      "text-xs font-semibold",
                       gradeTrend.trend === "strong_upward" || gradeTrend.trend === "slight_upward"
                         ? "border-emerald-500 text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30"
                         : gradeTrend.trend === "downward"
@@ -1097,7 +1097,7 @@ export function Step2Transcript({
                     >
                       <span className="font-medium text-foreground">{y.gradeName}:</span>
                       <span className="font-bold text-brand">{y.gpa10.toFixed(2)}</span>
-                      <span className="text-[10px] text-muted-foreground">({y.gpa4.toFixed(2)}/4.0)</span>
+                      <span className="text-xs text-muted-foreground">({y.gpa4.toFixed(2)}/4.0)</span>
                       {idx < gradeTrend.yearlyAverages.length - 1 && (
                         <span className="text-muted-foreground font-semibold ml-1">→</span>
                       )}
@@ -1229,7 +1229,7 @@ export function Step2Transcript({
 
               <div className="flex items-center gap-2 shrink-0">
                 {draftTranscript && (
-                  <Badge variant="secondary" className="text-[11px] gap-1 px-2.5 py-1">
+                  <Badge variant="secondary" className="text-xs gap-1 px-2.5 py-1">
                     <CheckCircle2Icon className="size-3 text-ok" />
                     Đã tải file
                   </Badge>
@@ -1263,7 +1263,7 @@ export function Step2Transcript({
             <div className="flex items-center gap-2 text-foreground font-medium">
               <FileTextIcon className="size-4 text-brand" />
               <span>{draftTranscript.originalFileName}</span>
-              <Badge variant="secondary" className="text-[10px]">Đã quét AI</Badge>
+              <Badge variant="secondary" className="text-xs">Đã quét AI</Badge>
             </div>
             <button
               type="button"
@@ -1323,13 +1323,13 @@ export function Step2Transcript({
               <div className="flex flex-wrap gap-2 pt-1 border-t border-brand/20">
                 {years.map((y) => (
                   <div key={y.gradeName} className="flex flex-wrap items-center gap-1 bg-surface/90 p-1 rounded-lg border border-line">
-                    <span className="text-[11px] font-bold text-foreground px-1.5">{y.gradeName}:</span>
+                    <span className="text-xs font-bold text-foreground px-1.5">{y.gradeName}:</span>
                     <Button
                       type="button"
                       size="sm"
                       variant="outline"
                       onClick={() => handleAssignPendingTerm(y.gradeName, 1)}
-                      className="h-7 px-2 text-[11px] font-medium bg-surface hover:bg-brand hover:text-white cursor-pointer"
+                      className="h-7 px-2 text-xs font-medium bg-surface hover:bg-brand hover:text-white cursor-pointer"
                     >
                       Học kỳ 1
                     </Button>
@@ -1338,7 +1338,7 @@ export function Step2Transcript({
                       size="sm"
                       variant="outline"
                       onClick={() => handleAssignPendingTerm(y.gradeName, 2)}
-                      className="h-7 px-2 text-[11px] font-medium bg-surface hover:bg-brand hover:text-white cursor-pointer"
+                      className="h-7 px-2 text-xs font-medium bg-surface hover:bg-brand hover:text-white cursor-pointer"
                     >
                       Học kỳ 2
                     </Button>
@@ -1347,7 +1347,7 @@ export function Step2Transcript({
                       size="sm"
                       variant="outline"
                       onClick={() => handleAssignPendingTerm(y.gradeName, "all")}
-                      className="h-7 px-2 text-[11px] font-medium bg-surface hover:bg-brand hover:text-white cursor-pointer"
+                      className="h-7 px-2 text-xs font-medium bg-surface hover:bg-brand hover:text-white cursor-pointer"
                     >
                       Cả năm
                     </Button>
@@ -1441,7 +1441,7 @@ export function Step2Transcript({
             <div className="space-y-4">
               <div className="overflow-hidden rounded-xl border border-line bg-surface shadow-2xs">
                 <table className="w-full text-left text-xs">
-                  <thead className="border-b border-line bg-muted/30 text-muted-foreground uppercase font-semibold text-[10px]">
+                  <thead className="border-b border-line bg-muted/30 text-muted-foreground font-semibold text-xs">
                     <tr>
                       <th className="py-2.5 px-3">Môn học</th>
                       <th className="py-2.5 px-3 w-28 text-center">Học kỳ 1</th>
@@ -1540,7 +1540,7 @@ export function Step2Transcript({
                   <PlusIcon className="size-3.5" />
                   Thêm môn học
                 </Button>
-                <span className="text-[11px] text-muted-foreground">
+                <span className="text-xs text-muted-foreground">
                   Điểm số tính theo thang điểm 10 của Việt Nam
                 </span>
               </div>
@@ -1561,7 +1561,7 @@ export function Step2Transcript({
                 <div>
                   <div className="font-semibold text-sm text-foreground flex items-center gap-1.5">
                     <span>Điểm TB tự tính</span>
-                    <Badge variant="outline" className="text-[10px] border-brand/40 text-brand">
+                    <Badge variant="outline" className="text-xs border-brand/40 text-brand">
                       Quy đổi thang 4: bảng WES
                     </Badge>
                   </div>
@@ -1572,14 +1572,14 @@ export function Step2Transcript({
 
                 <div className="flex items-center gap-4">
                   <div className="text-right">
-                    <div className="text-[11px] text-muted-foreground">Thang điểm 10</div>
+                    <div className="text-xs text-muted-foreground">Thang điểm 10</div>
                     <div className="text-lg font-bold text-foreground">
                       {gpa10 !== null ? gpa10.toFixed(2) : "—"}
                     </div>
                   </div>
                   <div className="h-8 w-px bg-line" />
                   <div className="text-right">
-                    <div className="text-[11px] text-brand font-semibold">Quy đổi thang 4</div>
+                    <div className="text-xs text-brand font-semibold">Quy đổi thang 4</div>
                     <div className="text-2xl font-extrabold text-brand">
                       {gpa4 !== null ? gpa4.toFixed(2) : "—"}
                     </div>
@@ -1598,14 +1598,14 @@ export function Step2Transcript({
                     ) : (
                       <TrendingUpIcon className="size-4 text-emerald-600" />
                     )}
-                    <span className="text-xs font-bold uppercase tracking-wider text-foreground">
+                    <span className="text-xs font-boldr text-foreground">
                       Xu hướng điểm số (Grade Trend)
                     </span>
                   </div>
                   <Badge
                     variant="outline"
                     className={cn(
-                      "text-[10px] font-semibold",
+                      "text-xs font-semibold",
                       gradeTrend.trend === "strong_upward" || gradeTrend.trend === "slight_upward"
                         ? "border-emerald-500 text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30"
                         : gradeTrend.trend === "downward"
@@ -1632,7 +1632,7 @@ export function Step2Transcript({
                     >
                       <span className="font-medium text-foreground">{y.gradeName}:</span>
                       <span className="font-bold text-brand">{y.gpa10.toFixed(2)}</span>
-                      <span className="text-[10px] text-muted-foreground">({y.gpa4.toFixed(2)}/4.0)</span>
+                      <span className="text-xs text-muted-foreground">({y.gpa4.toFixed(2)}/4.0)</span>
                       {idx < gradeTrend.yearlyAverages.length - 1 && (
                         <span className="text-muted-foreground font-semibold ml-1">→</span>
                       )}

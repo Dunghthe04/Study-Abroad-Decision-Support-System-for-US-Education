@@ -31,7 +31,7 @@ export function ExplainCard({ code, card, basis }: { code: string; card: Explain
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <p className="text-[13px] font-bold text-brand">{card.name}</p>
-          {place && <p className="text-[11px] text-ink-3">{place}</p>}
+          {place && <p className="text-xs text-ink-3">{place}</p>}
         </div>
         <Badge variant={badge.variant}>{badge.text}</Badge>
       </div>
@@ -49,7 +49,7 @@ export function ExplainCard({ code, card, basis }: { code: string; card: Explain
 
       {card.why.length > 0 && (
         <div className="space-y-0.5">
-          <p className="text-[11px] font-bold tracking-wide text-brand uppercase">Vì sao xếp nhóm này</p>
+          <p className="text-xs font-bold text-brand">Vì sao xếp nhóm này</p>
           <ul className="space-y-0.5 text-xs text-ink-2">
             {card.why.map((code) => (
               <li key={code}>• {whyText(code)}</li>
@@ -83,7 +83,7 @@ export function ExplainCard({ code, card, basis }: { code: string; card: Explain
           Cần gì để vào?
         </Button>
       )}
-      <p className="text-[11px] text-ink-3">Tính từ hồ sơ thật của bạn, so với sinh viên đã trúng tuyển. Đây là mức tham chiếu, không phải cam kết đỗ.</p>
+      <p className="text-xs text-ink-3">Tính từ hồ sơ thật của bạn, so với sinh viên đã trúng tuyển. Đây là mức tham chiếu, không phải cam kết đỗ.</p>
     </div>
   );
 }
@@ -92,8 +92,8 @@ function Stat({ label, value, hint }: { label: string; value: string; hint?: str
   return (
     <div className="min-w-0">
       <p className="text-sm font-bold text-foreground">{value}</p>
-      <p className="text-[11px] font-medium text-ink-2">{label}</p>
-      {hint && <p className="text-[10px] text-ink-3">{hint}</p>}
+      <p className="text-xs font-medium text-ink-2">{label}</p>
+      {hint && <p className="text-xs text-ink-3">{hint}</p>}
     </div>
   );
 }

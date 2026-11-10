@@ -11,7 +11,7 @@ export function RememberedLine({
   hint: string;
 }) {
   return (
-    <p className="text-[11px] text-ink-3">
+    <p className="text-xs text-ink-3">
       Đang nói về: <b className="font-semibold text-ink-2">{about}</b>. {hint}
     </p>
   );

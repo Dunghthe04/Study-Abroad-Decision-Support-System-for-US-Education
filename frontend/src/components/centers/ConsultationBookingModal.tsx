@@ -84,7 +84,7 @@ export function ConsultationBookingModal({ centerName }: ConsultationBookingModa
           ) : (
             <form onSubmit={handleSubmit}>
               <DialogHeader>
-                <div className="flex items-center gap-2 text-brand text-xs font-semibold uppercase tracking-wider">
+                <div className="flex items-center gap-2 text-brand text-xs font-semiboldr">
                   <SparklesIcon className="w-3.5 h-3.5" />
                   Kết nối trực tiếp trung tâm
                 </div>

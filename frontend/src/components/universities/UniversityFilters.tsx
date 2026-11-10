@@ -253,7 +253,7 @@ export function UniversityFilters({
               ))}
             </SelectContent>
           </Select>
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             Lọc các trường có điểm sàn IELTS không vượt quá mức này.
           </p>
         </div>
@@ -287,7 +287,7 @@ export function UniversityFilters({
             <Label htmlFor={ivySwitchId} className="text-xs font-semibold cursor-pointer">
               Ivy League
             </Label>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Chỉ 8 trường Ivy League danh giá
             </p>
           </div>

@@ -292,7 +292,7 @@ function ComparisonBody({ comparison }: { comparison: RunComparison }) {
           </table>
         </div>
       )}
-      <p className="text-[11px] text-ink-3">Chỉ liệt kê trường có thay đổi. Thứ hạng tính trong từng nhóm.</p>
+      <p className="text-xs text-ink-3">Chỉ liệt kê trường có thay đổi. Thứ hạng tính trong từng nhóm.</p>
     </>
   );
 }

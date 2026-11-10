@@ -178,7 +178,7 @@ export function Step3Certifications({ data, certificationTypes, onUpdate, onPrev
     <div className="space-y-8 animate-in fade-in-50 duration-200">
       {/* Step Header */}
       <div className="space-y-2 border-b border-line pb-4">
-        <div className="text-xs font-semibold text-brand tracking-wide uppercase">Bước 3/6 · khoảng 1 phút</div>
+        <div className="text-xs font-semibold text-brand">Bước 3/6 · khoảng 1 phút</div>
         <h1 className="text-h1 text-foreground">Chứng chỉ của bạn</h1>
         <p className="text-body text-muted-foreground">
           Thêm từng chứng chỉ bạn đã có. Chưa có cũng không sao, bạn có thể bổ sung sau.

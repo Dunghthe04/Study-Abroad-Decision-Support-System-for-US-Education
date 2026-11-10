@@ -220,7 +220,7 @@ export function TargetSchoolListView() {
         >
           <CardContent className="p-4 sm:p-5">
             <div className="flex items-center justify-between text-muted-foreground">
-              <span className="text-xs font-semibold uppercase tracking-wider">Tổng mục tiêu</span>
+              <span className="text-xs font-semiboldr">Tổng mục tiêu</span>
               <GraduationCapIcon className="size-4 text-brand" />
             </div>
             <div className="mt-2 flex items-baseline gap-2">
@@ -229,7 +229,7 @@ export function TargetSchoolListView() {
               </span>
               <span className="text-xs text-muted-foreground">trường</span>
             </div>
-            <p className="mt-1 text-[11px] text-muted-foreground">Toàn bộ kế hoạch lưu</p>
+            <p className="mt-1 text-xs text-muted-foreground">Toàn bộ kế hoạch lưu</p>
           </CardContent>
         </Card>
 
@@ -242,7 +242,7 @@ export function TargetSchoolListView() {
         >
           <CardContent className="p-4 sm:p-5">
             <div className="flex items-center justify-between text-muted-foreground">
-              <span className="text-xs font-semibold uppercase tracking-wider text-rose-600 dark:text-rose-400">
+              <span className="text-xs font-semiboldr text-rose-600 dark:text-rose-400">
                 Mục tiêu cao (Reach)
               </span>
               <TrendingUpIcon className="size-4 text-rose-500" />
@@ -255,7 +255,7 @@ export function TargetSchoolListView() {
                 {total > 0 ? `(${Math.round((reach / total) * 100)}%)` : ""}
               </span>
             </div>
-            <p className="mt-1 text-[11px] text-muted-foreground">Thử thách, khó vào</p>
+            <p className="mt-1 text-xs text-muted-foreground">Thử thách, khó vào</p>
           </CardContent>
         </Card>
 
@@ -268,7 +268,7 @@ export function TargetSchoolListView() {
         >
           <CardContent className="p-4 sm:p-5">
             <div className="flex items-center justify-between text-muted-foreground">
-              <span className="text-xs font-semibold uppercase tracking-wider text-sky-600 dark:text-sky-400">
+              <span className="text-xs font-semiboldr text-sky-600 dark:text-sky-400">
                 Vừa sức (Match)
               </span>
               <CheckCircle2Icon className="size-4 text-sky-500" />
@@ -281,7 +281,7 @@ export function TargetSchoolListView() {
                 {total > 0 ? `(${Math.round((match / total) * 100)}%)` : ""}
               </span>
             </div>
-            <p className="mt-1 text-[11px] text-muted-foreground">Cạnh tranh ngang sức</p>
+            <p className="mt-1 text-xs text-muted-foreground">Cạnh tranh ngang sức</p>
           </CardContent>
         </Card>
 
@@ -294,7 +294,7 @@ export function TargetSchoolListView() {
         >
           <CardContent className="p-4 sm:p-5">
             <div className="flex items-center justify-between text-muted-foreground">
-              <span className="text-xs font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+              <span className="text-xs font-semiboldr text-emerald-600 dark:text-emerald-400">
                 An toàn (Safety)
               </span>
               <ShieldCheckIcon className="size-4 text-emerald-500" />
@@ -307,7 +307,7 @@ export function TargetSchoolListView() {
                 {total > 0 ? `(${Math.round((safety / total) * 100)}%)` : ""}
               </span>
             </div>
-            <p className="mt-1 text-[11px] text-muted-foreground">Đảm bảo cơ hội đỗ</p>
+            <p className="mt-1 text-xs text-muted-foreground">Đảm bảo cơ hội đỗ</p>
           </CardContent>
         </Card>
       </div>
@@ -320,7 +320,7 @@ export function TargetSchoolListView() {
               <ClockIcon className="size-5" />
             </div>
             <div>
-              <p className="text-xs font-medium uppercase tracking-wider text-amber-700 dark:text-amber-400">
+              <p className="text-xs font-mediumr text-amber-700 dark:text-amber-400">
                 Hạn chót nộp hồ sơ gần nhất
               </p>
               <p className="font-semibold text-sm">
@@ -512,7 +512,7 @@ export function TargetSchoolListView() {
               >
                 <CardHeader className="p-4 pb-2">
                   <div className="flex items-start justify-between gap-2">
-                    <Badge variant={catConfig.badgeVariant} className="text-[11px] font-semibold">
+                    <Badge variant={catConfig.badgeVariant} className="text-xs font-semibold">
                       {catConfig.label}
                     </Badge>
                     <span className="font-mono text-xs text-muted-foreground">Mã {item.universityCode}</span>
@@ -564,7 +564,7 @@ export function TargetSchoolListView() {
                       <div className="flex justify-end pt-0.5">
                         <span
                           className={cn(
-                            "rounded px-1.5 py-0.5 text-[10px] font-semibold",
+                            "rounded px-1.5 py-0.5 text-xs font-semibold",
                             daysRemaining <= 14
                               ? "bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300"
                               : daysRemaining <= 45
@@ -600,7 +600,7 @@ export function TargetSchoolListView() {
 
                   {/* Ghi chú cá nhân */}
                   {item.notes && (
-                    <div className="border-t border-line/60 pt-2 text-[11px] text-muted-foreground">
+                    <div className="border-t border-line/60 pt-2 text-xs text-muted-foreground">
                       <span className="font-semibold text-foreground/80">Ghi chú:</span>{" "}
                       <span className="italic">{item.notes}</span>
                     </div>
@@ -670,7 +670,7 @@ export function TargetSchoolListView() {
                             >
                               {item.universityName}
                             </Link>
-                            <Badge variant={catConfig.badgeVariant} className="text-[10px]">
+                            <Badge variant={catConfig.badgeVariant} className="text-xs">
                               {catConfig.label}
                             </Badge>
                           </div>

@@ -178,7 +178,7 @@ export function ProfileFlowStepper({
                   </span>
                   <span
                     className={cn(
-                      "text-[11.5px] leading-tight",
+                      "text-xs leading-tight",
                       isCurrent ? "font-semibold text-brand" : "text-muted-foreground"
                     )}
                   >

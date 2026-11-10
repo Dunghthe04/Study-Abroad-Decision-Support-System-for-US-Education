@@ -104,7 +104,7 @@ export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Ste
     <div className="space-y-8 animate-in fade-in-50 duration-200">
       {/* Step Header */}
       <div className="space-y-2 border-b border-line pb-4">
-        <div className="text-xs font-semibold text-brand tracking-wide uppercase">
+        <div className="text-xs font-semibold text-brand">
           Bước 4/6 · khoảng 30 giây
         </div>
         <h1 className="text-h1 text-foreground">

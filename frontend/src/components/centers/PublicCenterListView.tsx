@@ -257,7 +257,7 @@ export function PublicCenterListView({ initialCenters }: PublicCenterListViewPro
       <div className="bg-card border rounded-xl overflow-hidden shadow-sm w-full">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm min-w-[760px]">
-            <thead className="bg-muted/50 border-b text-xs font-semibold uppercase text-muted-foreground tracking-wider">
+            <thead className="bg-muted/50 border-b text-xs font-semibold text-muted-foregroundr">
               <tr>
                 <th className="py-3 px-4 min-w-[220px]">Trung tâm & Mã</th>
                 <th className="py-3 px-4">Mô hình hoạt động</th>
@@ -303,15 +303,15 @@ export function PublicCenterListView({ initialCenters }: PublicCenterListViewPro
                               )}
                             </div>
                             <div className="flex items-center gap-2 mt-0.5">
-                              <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0">
+                              <Badge variant="outline" className="text-xs font-mono px-1.5 py-0">
                                 {c.code}
                               </Badge>
                               {isVerified ? (
-                                <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200 text-[10px] px-1.5 py-0">
+                                <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200 text-xs px-1.5 py-0">
                                   Đã xác minh
                                 </Badge>
                               ) : (
-                                <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-950/40 text-[10px] px-1.5 py-0">
+                                <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-950/40 text-xs px-1.5 py-0">
                                   Chờ duyệt
                                 </Badge>
                               )}

@@ -300,7 +300,7 @@ export function AdminCenterListView() {
       <div className="bg-card border rounded-xl overflow-hidden shadow-sm w-full">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="bg-muted/50 border-b text-xs font-semibold uppercase text-muted-foreground tracking-wider">
+            <thead className="bg-muted/50 border-b text-xs font-semibold text-muted-foregroundr">
               <tr>
                 <th className="py-3 px-4">Trung tâm & Mã</th>
                 <th className="py-3 px-4">Mô hình hoạt động</th>
@@ -347,7 +347,7 @@ export function AdminCenterListView() {
                               {c.name}
                             </div>
                             <div className="flex items-center gap-2 mt-0.5">
-                              <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0">
+                              <Badge variant="outline" className="text-xs font-mono px-1.5 py-0">
                                 {c.code}
                               </Badge>
                             </div>
@@ -399,7 +399,7 @@ export function AdminCenterListView() {
                                 Đã xác minh
                               </Badge>
                               {c.verifiedAt && (
-                                <span className="text-[10px] text-muted-foreground">
+                                <span className="text-xs text-muted-foreground">
                                   {new Date(c.verifiedAt).toLocaleDateString("vi-VN")}
                                 </span>
                               )}
@@ -410,7 +410,7 @@ export function AdminCenterListView() {
                             </Badge>
                           )}
                           {c.isActive === false && (
-                            <Badge variant="outline" className="text-rose-600 border-rose-300 bg-rose-50 dark:bg-rose-950/40 text-[10px] px-1.5 py-0">
+                            <Badge variant="outline" className="text-rose-600 border-rose-300 bg-rose-50 dark:bg-rose-950/40 text-xs px-1.5 py-0">
                               Đã ẩn
                             </Badge>
                           )}

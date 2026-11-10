@@ -248,7 +248,7 @@ export function GoalSeekCard({ result }: { result: SchoolGoalResult }) {
           Vì sao xếp nhóm này?
         </Button>
       )}
-      <p className="text-[11px] text-ink-3">
+      <p className="text-xs text-ink-3">
         Tính từ hồ sơ thật của bạn, so với sinh viên đã trúng tuyển. Đây là mức tham chiếu, không phải cam kết đỗ.
       </p>
     </div>

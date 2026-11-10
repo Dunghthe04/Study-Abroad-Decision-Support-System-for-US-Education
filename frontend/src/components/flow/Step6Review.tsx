@@ -77,7 +77,7 @@ function ReviewCard({
       )}
     >
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
           <Icon className="size-3.5 text-brand" />
           {eyebrow}
         </div>
@@ -177,7 +177,7 @@ export function Step6Review({
     <div className="space-y-8 animate-in fade-in-50 duration-200">
       {/* Step Header */}
       <div className="space-y-2 border-b border-line pb-4">
-        <div className="text-xs font-semibold text-brand tracking-wide uppercase">
+        <div className="text-xs font-semibold text-brand">
           Bước 6/6 · khoảng 1 phút
         </div>
         <h1 className="text-h1 text-foreground">Xem lại hồ sơ của bạn</h1>
@@ -227,16 +227,16 @@ export function Step6Review({
                 {totalYears > 0 ? `${totalSubjects} môn · ${gradeNames}` : "Chưa nhập điểm"}
               </div>
               {draftTranscript && (
-                <div className="flex items-center gap-1 text-[11px] text-ok">
+                <div className="flex items-center gap-1 text-xs text-ok">
                   <CheckCircle2Icon className="size-3" />
                   Đã tải tệp: {draftTranscript.originalFileName}
                 </div>
               )}
             </div>
             <div className="shrink-0 rounded-xl bg-brand-wash px-3 py-1.5 text-center">
-              <div className="text-[10px] font-semibold text-brand-ink">Điểm TB tự tính</div>
+              <div className="text-xs font-semibold text-brand-ink">Điểm TB tự tính</div>
               <div className="text-numeric text-base font-bold text-brand">{gpa10Text}</div>
-              <div className="text-[10px] text-brand-ink">thang 4: {gpa}</div>
+              <div className="text-xs text-brand-ink">thang 4: {gpa}</div>
             </div>
           </div>
         </ReviewCard>

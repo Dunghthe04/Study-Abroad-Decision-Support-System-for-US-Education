@@ -27,7 +27,7 @@ export interface TableEditState {
 
 const FRAME = "overflow-hidden rounded-md border border-border";
 const HEADER =
-  "flex min-h-9 items-center justify-between gap-2 bg-muted px-3 py-1 text-xs font-semibold tracking-wide text-foreground uppercase";
+  "flex min-h-9 items-center justify-between gap-2 bg-muted px-3 py-1 text-xs font-semibold text-foreground";
 const LABEL_CELL =
   "w-1/2 border-t border-r border-border bg-muted px-3 py-1.5 text-left align-middle text-xs font-normal text-muted-foreground";
 const VALUE_CELL = "border-t border-border px-3 py-1.5 text-right text-sm font-medium";

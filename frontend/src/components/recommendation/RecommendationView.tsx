@@ -204,7 +204,7 @@ export function RecommendationView({ autoRun, initialOverrides }: Recommendation
         </>
       )}
 
-      <p className="text-[11px] text-ink-3">
+      <p className="text-xs text-ink-3">
         Kết quả chỉ để tham khảo, không phải xác suất đỗ. Số liệu lấy từ Common Data Set của từng trường.
       </p>
 

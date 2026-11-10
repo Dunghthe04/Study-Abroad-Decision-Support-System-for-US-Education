@@ -493,7 +493,7 @@ export function ProfileFlowWizard() {
     <div className="pb-16">
       {/* Trạng thái lưu nháp + Thoát */}
       <div className="mb-4 flex items-center justify-between gap-4">
-        <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Hồ sơ chọn trường</span>
+        <span className="text-xs font-semibold text-muted-foreground">Hồ sơ chọn trường</span>
         <div className="flex items-center gap-3 text-xs">
           <SaveStatus status={saveStatus} />
           {/* Mục 1: chuyển sang trả lời trong chat, chat hỏi tiếp các mục còn thiếu */}
