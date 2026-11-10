@@ -25,7 +25,8 @@ from app.services.skills.buttons import (
     SCHOLARSHIP_LABELS,
     SCHOOL_TYPE_LABELS,
 )
-from app.services.skills.validators import BUDGET_TIERS, CERT_NAMES, TOP_TIER
+from app.services.skills.skill_danh_gia import gpa_table_of
+from app.services.skills.validators import BUDGET_RANGES, CERT_NAMES
 
 # Trạng thái có giá trị thật; declined (không muốn nói) thì bỏ khóa
 VALUE_STATUSES = ("confirmed", "said_in_B0")
@@ -74,19 +75,16 @@ def english_text(value: dict) -> str:
     return f"{CERT_NAMES.get(value['type'], value['type'].upper())} {number(value['value'])}"
 
 
-# Mức ngân sách → khoảng tiền, mốc lấy từ BUDGET_TIERS
+# Mức ngân sách → khoảng tiền, sàn và trần lấy từ BUDGET_RANGES
 def budget_text(tier: str) -> str:
-    floors = [0, *(ceiling for ceiling, _ in BUDGET_TIERS)]
-    if tier == TOP_TIER:
-        return f"trên {usd(floors[-1])} USD mỗi năm"
-    for (ceiling, code), floor in zip(BUDGET_TIERS, floors, strict=False):
-        if code == tier:
-            return (
-                f"dưới {usd(ceiling)} USD mỗi năm"
-                if floor == 0
-                else f"khoảng {usd(floor)} đến {usd(ceiling)} USD mỗi năm"
-            )
-    return BUDGET_LABELS.get(tier, tier)
+    if tier not in BUDGET_RANGES:
+        return BUDGET_LABELS.get(tier, tier)
+    floor, ceiling = BUDGET_RANGES[tier]
+    if ceiling is None:
+        return f"trên {usd(floor)} USD mỗi năm"
+    if floor == 0:
+        return f"dưới {usd(ceiling)} USD mỗi năm"
+    return f"khoảng {usd(floor)} đến {usd(ceiling)} USD mỗi năm"
 
 
 # {"planned": True, "date": "2027-05", "test_type": "ielts", "target_score": 7} → "dự định thi IELTS tháng 05/2027, mục tiêu 7"
@@ -176,7 +174,11 @@ def profile_to_skill_input(profile: dict[str, ProfileField]) -> dict[str, str]:
 # và mốc trường (state.benchmarks). Hạn nộp của trường chưa có đường gửi sang nên timeline tạm chỉ có tháng nhập học
 def skill_request_of(state: ChatState, cau_hoi: str, today: datetime.date | None = None) -> SkillRequest:
     tinh_san = calc_profile(
-        state.profile, state.transcript, today or datetime.date.today(), benchmarks=state.benchmarks
+        state.profile,
+        state.transcript,
+        today or datetime.date.today(),
+        benchmarks=state.benchmarks,
+        gpa_table=gpa_table_of(state.grade_scale),
     )
     return SkillRequest(
         loai="ho_so", cau_hoi=cau_hoi, ho_so=profile_to_skill_input(state.profile), tinh_san=tinh_san

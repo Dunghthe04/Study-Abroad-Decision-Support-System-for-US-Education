@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using StudyAbroad.Application.Profile.Academic;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
 using StudyAbroad.Infrastructure.Auth;
@@ -46,6 +47,19 @@ public static class DbSeeder
         else
         {
             existingMetadata.ValueJson = defaultMetadataJson;
+            await db.SaveChangesAsync(ct);
+        }
+
+        // 4. Bảng quy đổi điểm thang 10 → thang 4 (grade_scale.10). Chỉ thêm khi chưa có, không ghi đè:
+        // moderator sửa bảng này trên trang quản trị, ghi đè mỗi lần chạy sẽ mất bảng đã sửa
+        if (!await db.AppSettings.AnyAsync(s => s.Key == AcademicConstants.GradeScale10AppSettingKey, ct))
+        {
+            db.AppSettings.Add(new AppSetting
+            {
+                Key = AcademicConstants.GradeScale10AppSettingKey,
+                ValueJson = GradeScale.DefaultJson(),
+                Description = "Bảng quy đổi điểm thang 10 sang GPA thang 4 (tra cận dưới MinScore), moderator sửa trên trang quản trị."
+            });
             await db.SaveChangesAsync(ct);
         }
     }

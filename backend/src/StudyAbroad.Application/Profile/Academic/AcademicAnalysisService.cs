@@ -16,10 +16,12 @@ namespace StudyAbroad.Application.Profile.Academic;
 public class AcademicAnalysisService : IAcademicAnalysisService
 {
     private readonly IAcademicAnalysisRepository _repository;
+    private readonly IGradeScaleProvider? _gradeScale;
 
-    public AcademicAnalysisService(IAcademicAnalysisRepository repository)
+    public AcademicAnalysisService(IAcademicAnalysisRepository repository, IGradeScaleProvider? gradeScale = null)
     {
         _repository = repository;
+        _gradeScale = gradeScale;
     }
 
     /// <summary>
@@ -313,50 +315,26 @@ public class AcademicAnalysisService : IAcademicAnalysisService
     /// </summary>
     public async Task<GradeScaleConfigDto> GetGradeScaleConfigAsync(CancellationToken ct = default)
     {
-        var setting = await _repository.GetAppSettingByKeyAsync(AcademicConstants.GradeScale10AppSettingKey, ct);
-        if (setting != null && !string.IsNullOrWhiteSpace(setting.ValueJson))
-        {
-            try
-            {
-                var parsed = JsonSerializer.Deserialize<GradeScaleConfigDto>(setting.ValueJson, new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                });
-                if (parsed != null && parsed.Rules != null && parsed.Rules.Count > 0)
-                    return parsed;
-            }
-            catch
-            {
-                // Fallback to default WES
-            }
-        }
+        if (_gradeScale is not null)
+            return await _gradeScale.GetAsync(ct);
 
-        return GetDefaultWesScaleConfig();
+        // Không có provider (test cũ): đọc thẳng DB, bảng sai luật thì về bảng mặc định
+        var setting = await _repository.GetAppSettingByKeyAsync(AcademicConstants.GradeScale10AppSettingKey, ct);
+        return GradeScale.Parse(setting?.ValueJson) ?? GetDefaultWesScaleConfig();
     }
 
     /// <summary>
-    /// [USAS-365] Quy đổi một điểm hệ 10 sang thang 4.0 theo quy tắc.
+    /// [USAS-365] Quy đổi một điểm hệ 10 sang thang 4.0 theo bảng khoảng điểm (mặc định bảng WES), giống
+    /// TranscriptGpa.To4, toGpa4 bên FE và gpa10_to_4 bên advisor. Chỉ xét cận dưới (MinScore) để số như 8.995 không
+    /// rơi vào khe giữa hai khoảng (8.99 và 9.0): 8.995 vẫn là 3.7. Không còn quy đổi tuyến tính ×0.4
     /// </summary>
     public static decimal ConvertScoreToGpa4(decimal rawScore, GradeScaleConfigDto config)
     {
         if (rawScore < 0m || rawScore > 10m)
             throw new ArgumentOutOfRangeException(nameof(rawScore), "Điểm số phải nằm trong khoảng từ 0.0 đến 10.0.");
 
-        // Nếu phương thức cấu hình là linear (raw * 0.4 theo SOW v6)
-        if (string.Equals(config.Method, "linear_0.4", StringComparison.OrdinalIgnoreCase))
-        {
-            return Math.Round(rawScore * 0.4m, 2);
-        }
-
-        // Mặc định dò theo bảng khoảng điểm (WES Standard Rule)
-        foreach (var rule in config.Rules.OrderByDescending(r => r.MinScore))
-        {
-            if (rawScore >= rule.MinScore && rawScore <= rule.MaxScore)
-                return rule.Gpa4;
-        }
-
-        // Fallback an toàn
-        return Math.Round(rawScore * 0.4m, 2);
+        // Bảng thiếu khoảng thấp nhất thì điểm dưới mọi mốc là 0, giống TranscriptGpa.To4
+        return GradeScale.Lookup(rawScore, config);
     }
 
     /// <summary>

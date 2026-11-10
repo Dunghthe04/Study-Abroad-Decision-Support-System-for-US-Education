@@ -81,15 +81,17 @@ ALEVEL_GRADES = ("A*", "A", "B", "C", "D", "E")
 CURRENCIES = ("USD", "VND")
 # Ngân sách tối đa mỗi năm (giống MaxAnnualBudget của .NET)
 MAX_BUDGET_USD = 10_000_000
-# Mức ngân sách: (trần USD, mã tier), dò từ thấp lên cao
-BUDGET_TIERS = [
-    (20_000, "tier_under_20k"),
-    (35_000, "tier_20k_35k"),
-    (50_000, "tier_35k_50k"),
-    (70_000, "tier_50k_70k"),
-]
-TOP_TIER = "tier_above_70k"
-ALL_TIERS = (*(tier for _, tier in BUDGET_TIERS), TOP_TIER)
+# Mức ngân sách (USD mỗi năm): mã → (sàn, trần), xếp từ thấp lên cao. Trần None = không giới hạn.
+# Bảng duy nhất cho mọi chỗ cần khoảng tiền của một mức; phải giống budgetTiers (minUsd, maxUsd) trong
+# backend DbSeeder.cs và shared/profile_rules.json
+BUDGET_RANGES: dict[str, tuple[int, int | None]] = {
+    "tier_under_20k": (0, 20_000),
+    "tier_20k_35k": (20_000, 35_000),
+    "tier_35k_50k": (35_000, 50_000),
+    "tier_50k_70k": (50_000, 70_000),
+    "tier_above_70k": (70_000, None),
+}
+ALL_TIERS = tuple(BUDGET_RANGES)
 
 # Mã của form (Bước 4, Bước 1, Bước 5)
 SCHOLARSHIP_LEVELS = ("mandatory", "preferred", "optional")
@@ -378,10 +380,7 @@ def to_usd(amount: float, currency: str) -> float:
 
 # A4. Chọn mức ngân sách theo số USD mỗi năm. Giống form: đúng bằng trần thì sang mức trên (20.000 → 20k–35k)
 def budget_tier(usd: float) -> str:
-    for ceiling, tier in BUDGET_TIERS:
-        if usd < ceiling:
-            return tier
-    return TOP_TIER
+    return next(tier for tier, (_, ceiling) in BUDGET_RANGES.items() if ceiling is None or usd < ceiling)
 
 
 # A4. Ngân sách mỗi năm: chỉ lưu mức tier (giống annualBudgetTier của form), số tiền chỉ dùng để quy đổi.

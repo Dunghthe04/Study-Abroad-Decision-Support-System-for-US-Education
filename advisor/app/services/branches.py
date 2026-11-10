@@ -5,6 +5,8 @@ từng ý. Nhánh nào chưa làm xong thì tạm dùng skill cũ bên trong (l�
 làm xong thì thay lớp đó trong build_branches, không phải sửa ChatFlow.
 """
 
+import datetime
+
 from app.schemas.chat import ChatState, QuickReply, Widget
 from app.schemas.slm import INFO_FIELDS, SlmTinResult, SlmY
 from app.services import search_filters
@@ -28,7 +30,9 @@ from app.services.scenario import SUPPORTED_TEXT, parse_what_if
 from app.services.skill_generator import SkillGenerator
 from app.services.skill_input import skill_request_of
 from app.services.skill_rules import REQUIRED_B3, REQUIRED_B4, REQUIRED_BY_SKILL, missing_fields
+from app.services.skill_template import TEMPLATE_TASKS, build_skill, tasks_of
 from app.services.skills.profile_handler import ChatProfileHandler
+from app.services.skills.skill_danh_gia import gpa_table_of
 from app.services.skills.validators import AskAgain
 
 
@@ -246,8 +250,10 @@ SCHOOL_LIST_WORDS = (
 RECOMMENDING = "Mình lọc danh sách trường hợp với hồ sơ và ngành của bạn nhé."
 # Hồ sơ vừa đủ mà học sinh chưa hỏi câu tư vấn nào (tin là "Đúng rồi"): đánh giá hồ sơ như trước đây
 DEFAULT_QUESTION = "Đánh giá hồ sơ của em giúp em."
-SKILL_NOT_READY = (
-    "Phần tư vấn hồ sơ đang bận, mình chưa trả lời được ngay. Bạn bấm hỏi lại giúp mình sau ít phút nhé."
+# Câu chỉ hỏi giải thích trường mà chưa nêu trường nào
+ASK_WHICH_SCHOOLS = (
+    "Bạn muốn hỏi về trường nào? Bạn nhắn tên trường giúp mình nhé, "
+    'hoặc nhắn "gợi ý trường cho em" để mình lọc danh sách trường hợp với hồ sơ của bạn.'
 )
 CANNOT_ANSWER = "Mình chưa viết được câu trả lời cho câu này. Bạn bấm hỏi lại giúp mình nhé."
 ASK_AGAIN_LABEL = "Hỏi lại"
@@ -258,15 +264,39 @@ def asks_for_school_list(text: str) -> bool:
     return any(word in folded for word in SCHOOL_LIST_WORDS)
 
 
+# Câu ho_so chỉ có so sánh hoặc giải thích trường (không có việc của khuôn, không chọn trường):
+# - so_sanh (schema bắt có từ hai trường): giao .NET so số liệu như câu so sánh kiến thức, kể cả khi câu có
+#   chữ "trường nào" ("Iowa và Purdue trường nào hợp với em hơn")
+# - giai_thich_truong chưa nêu trường và không xin danh sách trường: nhờ nêu tên trường
+# - còn lại (có tên trường mà chưa có kết quả gợi ý, hoặc xin danh sách): trả None để chạy gợi ý trường
+def others_only_output(y: SlmY, tasks: list[str], school_list_words: bool) -> SkillOutput | None:
+    schools = [t.strip() for t in y.thuc_the.get("cac_truong") or [] if isinstance(t, str) and t.strip()]
+    if "so_sanh" in tasks and len(schools) >= 2:
+        return SkillOutput(
+            LOOKING_UP,
+            action="school_compare",
+            action_data={
+                "question": y.doan,
+                "schools": schools,
+                "fields": info_fields(y.thuc_the),
+                "kb_answer": LOOKING_UP,
+            },
+        )
+    if not school_list_words and not str(y.thuc_the.get("truong") or "").strip():
+        return SkillOutput(ASK_WHICH_SCHOOLS)
+    return None
+
+
 # Tư vấn theo hồ sơ (phần của Việt). Câu về trường giao code có sẵn: hỏi một trường đã gợi ý thì giải thích
 # trường đó (skill_explain → .NET), xin danh sách trường thì chạy gợi ý (.NET). Câu còn lại (đánh giá hồ sơ,
-# lộ trình, hoặc cả hai: SLM tự nhận ra từ câu hỏi) thì SLM sinh skill riêng cho học sinh, Claude viết câu trả lời.
-# SLM hoặc Claude sai thì báo chưa trả lời được kèm nút hỏi lại, không dùng skill tĩnh
+# lộ trình, hoặc cả hai: SLM tách sẵn trong cac_nhiem_vu) thì code dựng skill từ khuôn (skill_ho_so_khuon),
+# Claude viết câu trả lời. Claude sai thì báo chưa trả lời được kèm nút hỏi lại, không dùng skill tĩnh
 class GeneratedAdviceBranch:
     def __init__(
         self, skills: dict[str, SkillHandler], generator: SkillGenerator, writer: AdviceWriter
     ) -> None:
         self._skills = skills
+        # B2: không dùng nữa (skill dựng bằng khuôn). Giữ tham số để build_branches (phần của Dũng) không phải sửa
         self._generator = generator
         self._writer = writer
 
@@ -276,7 +306,15 @@ class GeneratedAdviceBranch:
         if y.type == "ho_so" and y.thuc_the.get("truong") and state.has_results:
             return await self._skills["skill_explain"].run(state, question)
 
-        school_list = y.type == "ho_so" and asks_for_school_list(question)
+        # Việc bộ phân loại tách ra. Khuôn chỉ làm danh_gia, lo_trinh; chọn trường, so sánh, giải thích trường là
+        # phần của Dũng. Câu chỉ có việc của Dũng thì giao code có sẵn (xem others_only_output)
+        tasks = (y.thuc_the.get("cac_nhiem_vu") or None) if y.type == "ho_so" else None
+        others_only = tasks is not None and not any(t in TEMPLATE_TASKS for t in tasks)
+        school_list = y.type == "ho_so" and (asks_for_school_list(question) or others_only)
+        if others_only and "chon_truong" not in tasks:
+            out = others_only_output(y, tasks, asks_for_school_list(question))
+            if out is not None:
+                return out
         # Gợi ý trường cần ngành để lọc trường; tư vấn hồ sơ chỉ cần các mục cơ bản
         asked = ask_missing_profile(state, y, REQUIRED_B4 if school_list else REQUIRED_B3)
         if asked is not None:
@@ -284,13 +322,11 @@ class GeneratedAdviceBranch:
         if school_list:
             return SkillOutput(RECOMMENDING, action="recommend")
 
-        req = skill_request_of(state, question)
-        skill = await self._generator.generate(req)
-        if skill is None:
-            return SkillOutput(
-                SKILL_NOT_READY, quick_replies=[QuickReply(label=ASK_AGAIN_LABEL, value=question)]
-            )
-        answer = await self._writer.write(skill, req, state.schools)
+        # Code dựng skill từ khuôn (không gọi SLM, không hỏng); writer chỉ nhận việc của khuôn
+        today = datetime.date.today()
+        req = skill_request_of(state, question, today)
+        skill = build_skill(req, tasks, state.profile, today, gpa_table_of(state.grade_scale))
+        answer = await self._writer.write(skill, req, state.schools, tasks_of(tasks))
         if answer is None:
             return SkillOutput(
                 CANNOT_ANSWER, quick_replies=[QuickReply(label=ASK_AGAIN_LABEL, value=question)]

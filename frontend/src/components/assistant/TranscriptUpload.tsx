@@ -2,8 +2,9 @@
 
 import { useRef, useState } from "react";
 import { UploadIcon } from "lucide-react";
+import { useGradeScale } from "@/hooks/use-grade-scale";
 import { profileFlowApi } from "@/lib/profile-flow-api";
-import { calculateLinearGpa } from "@/lib/profile-flow-options";
+import { calculateTranscriptGpa } from "@/lib/profile-flow-options";
 import {
   TRANSCRIPT_ACCEPT,
   TRANSCRIPT_EXTENSIONS,
@@ -14,6 +15,7 @@ import {
 
 /** D2: tải học bạ giống bước 2 của form. Điểm đọc được ghi vào nháp (chế độ học bạ), rồi gửi "GPA x thang 10" cho chat */
 export function TranscriptUpload({ onPick }: { onPick?: (text: string) => void }) {
+  useGradeScale(); // tải sẵn bảng quy đổi để GPA tính từ bảng điểm tải lên dùng đúng bảng
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -40,7 +42,7 @@ export function TranscriptUpload({ onPick }: { onPick?: (text: string) => void }
         ? draft.step2.academicYears
         : getInitialAcademicYears(draft.step1?.currentEducationLevel, draft.step1?.currentGrade);
       const academicYears = mergeExtractedTerms(current, terms, 0);
-      const gpa = calculateLinearGpa(academicYears);
+      const gpa = calculateTranscriptGpa(academicYears);
       if (gpa.gpa10 == null) {
         setNotice("Mình chưa tính được GPA từ bảng điểm này. Bạn gõ GPA vào ô chat nhé.");
         return;

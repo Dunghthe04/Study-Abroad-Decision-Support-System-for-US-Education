@@ -26,10 +26,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RequiredMark } from "./RequiredMark";
 import { cn } from "@/lib/utils";
+import { useGradeScale } from "@/hooks/use-grade-scale";
 import { profileFlowApi } from "@/lib/profile-flow-api";
 import {
   calculateGradeTrend,
-  calculateLinearGpa,
+  calculateTranscriptGpa,
   parseTermName,
   toGpa4,
   yearAverage,
@@ -292,6 +293,7 @@ export function Step2Transcript({
   onPrev,
   onNext,
 }: Step2TranscriptProps) {
+  useGradeScale(); // GPA thang 4 quy đổi theo bảng moderator sửa, vẽ lại khi bảng tải xong
   // Khởi tạo các năm học dựa theo bậc học & lớp hiện tại của người dùng
   const defaultYears = getInitialAcademicYears(currentEducationLevel, currentGrade);
   const years = data.academicYears && data.academicYears.length > 0 ? data.academicYears : defaultYears;
@@ -377,7 +379,7 @@ export function Step2Transcript({
         ],
       };
     });
-    const newGpas = calculateLinearGpa(updatedYears);
+    const newGpas = calculateTranscriptGpa(updatedYears);
     onUpdate({
       gpaMode: "transcript",
       academicYears: updatedYears,
@@ -386,7 +388,7 @@ export function Step2Transcript({
     });
   };
 
-  const { gpa10, gpa4 } = calculateLinearGpa(years);
+  const { gpa10, gpa4 } = calculateTranscriptGpa(years);
   const reviewCount = countReviewCells(years);
   const gradeTrend = calculateGradeTrend(years);
 
@@ -460,7 +462,7 @@ export function Step2Transcript({
       return { ...y, subjects: newSubjects };
     });
 
-    const newGpas = calculateLinearGpa(updatedYears);
+    const newGpas = calculateTranscriptGpa(updatedYears);
     onUpdate({
       gpaMode: "transcript",
       academicYears: updatedYears,
@@ -493,7 +495,7 @@ export function Step2Transcript({
       };
     });
 
-    const newGpas = calculateLinearGpa(updatedYears);
+    const newGpas = calculateTranscriptGpa(updatedYears);
     onUpdate({
       gpaMode: "transcript",
       academicYears: updatedYears,
@@ -514,7 +516,7 @@ export function Step2Transcript({
       })),
     };
     const updatedYears = [grade9Year, ...years].sort((a, b) => gradeOrder(a.gradeName) - gradeOrder(b.gradeName));
-    const newGpas = calculateLinearGpa(updatedYears);
+    const newGpas = calculateTranscriptGpa(updatedYears);
     onUpdate({
       academicYears: updatedYears,
       manualGpa10Scale: newGpas.gpa10,
@@ -535,7 +537,7 @@ export function Step2Transcript({
     const targetIdx = years.findIndex((y) => normalizeGrade(y.gradeName) === normalizeGrade(targetGradeName));
     const fallback = targetIdx !== -1 ? targetIdx : activeYearIndex;
     const updatedYears = mergeExtractedTerms(years, [syntheticTerm], fallback);
-    const newGpas = calculateLinearGpa(updatedYears);
+    const newGpas = calculateTranscriptGpa(updatedYears);
 
     onUpdate({
       gpaMode: "transcript",
@@ -623,7 +625,7 @@ export function Step2Transcript({
 
         if (knownTerms.length > 0) {
           currentYears = mergeExtractedTerms(currentYears, knownTerms, activeYearIndex);
-          const newGpas = calculateLinearGpa(currentYears);
+          const newGpas = calculateTranscriptGpa(currentYears);
           onUpdate({
             gpaMode: "transcript",
             academicYears: currentYears,
@@ -1025,7 +1027,7 @@ export function Step2Transcript({
                   <div className="font-semibold text-sm text-foreground flex items-center gap-1.5">
                     <span>GPA mục tiêu tổng 4 năm</span>
                     <Badge variant="outline" className="text-[10px] border-brand/40 text-brand">
-                      Quy đổi: GPA 10 / 10 * 4.0
+                      Quy đổi thang 4: bảng WES
                     </Badge>
                   </div>
                   <div className="text-xs text-muted-foreground mt-0.5">
@@ -1560,7 +1562,7 @@ export function Step2Transcript({
                   <div className="font-semibold text-sm text-foreground flex items-center gap-1.5">
                     <span>Điểm TB tự tính</span>
                     <Badge variant="outline" className="text-[10px] border-brand/40 text-brand">
-                      Tuyến tính: GPA 10 / 10 * 4.0
+                      Quy đổi thang 4: bảng WES
                     </Badge>
                   </div>
                   <div className="text-xs text-muted-foreground mt-0.5">

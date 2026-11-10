@@ -2527,8 +2527,8 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .ValueGeneratedOnAdd()
                         .HasColumnType("text[]")
-                        .HasDefaultValueSql("'{}'")
-                        .HasColumnName("accreditations");
+                        .HasColumnName("accreditations")
+                        .HasDefaultValueSql("'{}'");
 
                     b.Property<string>("Address")
                         .HasMaxLength(512)
@@ -2593,8 +2593,8 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .ValueGeneratedOnAdd()
                         .HasColumnType("text[]")
-                        .HasDefaultValueSql("'{}'")
-                        .HasColumnName("gallery_images");
+                        .HasColumnName("gallery_images")
+                        .HasDefaultValueSql("'{}'");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean")
@@ -3009,6 +3009,11 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("act75");
 
+                    b.Property<string>("Activities")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("activities");
+
                     b.Property<int?>("AdmittedTotal")
                         .HasColumnType("integer")
                         .HasColumnName("admitted_total");
@@ -3021,6 +3026,11 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasPrecision(3, 2)
                         .HasColumnType("numeric(3,2)")
                         .HasColumnName("avg_gpa4");
+
+                    b.Property<decimal?>("AvgGpaWeighted")
+                        .HasPrecision(3, 2)
+                        .HasColumnType("numeric(3,2)")
+                        .HasColumnName("avg_gpa_weighted");
 
                     b.Property<string>("C7EcImportance")
                         .HasMaxLength(16)
@@ -3037,6 +3047,11 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(16)")
                         .HasColumnName("c7_test_importance");
 
+                    b.Property<string>("CampusSetting")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("campus_setting");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -3049,6 +3064,11 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasPrecision(12, 2)
                         .HasColumnType("numeric(12,2)")
                         .HasColumnName("fees_usd");
+
+                    b.Property<decimal?>("FyOnCampusPct")
+                        .HasPrecision(5, 4)
+                        .HasColumnType("numeric(5,4)")
+                        .HasColumnName("fy_on_campus_pct");
 
                     b.Property<decimal?>("GpaPct250To299")
                         .HasPrecision(5, 4)
@@ -3085,6 +3105,11 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("numeric(5,4)")
                         .HasColumnName("gpa_pct_below_250");
 
+                    b.Property<string>("GpaScaleType")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("gpa_scale_type");
+
                     b.Property<decimal?>("GpaSubmitPct")
                         .HasPrecision(5, 4)
                         .HasColumnType("numeric(5,4)")
@@ -3094,6 +3119,21 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasPrecision(5, 4)
                         .HasColumnType("numeric(5,4)")
                         .HasColumnName("grad_rate_6yr");
+
+                    b.Property<decimal?>("HousingDepositUsd")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("housing_deposit_usd");
+
+                    b.Property<decimal?>("HousingOnlyUsd")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("housing_only_usd");
+
+                    b.Property<string>("HousingTypes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("housing_types");
 
                     b.Property<decimal?>("IntlAcceptanceRate")
                         .HasPrecision(5, 4)
@@ -3121,6 +3161,10 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.Property<int?>("IntlApplicants")
                         .HasColumnType("integer")
                         .HasColumnName("intl_applicants");
+
+                    b.Property<bool?>("IntlHousing")
+                        .HasColumnType("boolean")
+                        .HasColumnName("intl_housing");
 
                     b.Property<Guid?>("LastEditedByUserId")
                         .HasColumnType("uuid")
@@ -3198,6 +3242,10 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(512)")
                         .HasColumnName("source_url");
 
+                    b.Property<int?>("StudentFacultyRatio")
+                        .HasColumnType("integer")
+                        .HasColumnName("student_faculty_ratio");
+
                     b.Property<string>("StudyLevel")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -3208,6 +3256,11 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasPrecision(12, 2)
                         .HasColumnType("numeric(12,2)")
                         .HasColumnName("tuition_usd");
+
+                    b.Property<decimal?>("UgOnCampusPct")
+                        .HasPrecision(5, 4)
+                        .HasColumnType("numeric(5,4)")
+                        .HasColumnName("ug_on_campus_pct");
 
                     b.Property<Guid>("UniversityId")
                         .HasColumnType("uuid")
@@ -3232,6 +3285,10 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("ck_university_offerings_act_range", "(act25 IS NULL OR act25 BETWEEN 1 AND 36) AND (act75 IS NULL OR act75 BETWEEN 1 AND 36) AND (act25 IS NULL OR act75 IS NULL OR act25 <= act75)");
 
                             t.HasCheckConstraint("ck_university_offerings_avg_gpa4", "avg_gpa4 IS NULL OR avg_gpa4 BETWEEN 0 AND 4");
+
+                            t.HasCheckConstraint("ck_university_offerings_avg_gpa_weighted", "avg_gpa_weighted IS NULL OR avg_gpa_weighted >= 0");
+
+                            t.HasCheckConstraint("ck_university_offerings_gpa_scale_type", "gpa_scale_type IS NULL OR gpa_scale_type IN ('weighted', 'unweighted', 'both')");
 
                             t.HasCheckConstraint("ck_university_offerings_sat_range", "(sat25 IS NULL OR sat25 BETWEEN 400 AND 1600) AND (sat75 IS NULL OR sat75 BETWEEN 400 AND 1600) AND (sat25 IS NULL OR sat75 IS NULL OR sat25 <= sat75)");
 

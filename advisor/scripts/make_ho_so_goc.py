@@ -25,7 +25,7 @@ from pathlib import Path
 
 from app.schemas.chat import ProfileField
 from app.services.skills.buttons import IMPACT_LABELS, SCHOLARSHIP_LABELS
-from app.services.skills.validators import BUDGET_TIERS, TOP_TIER
+from app.services.skills.validators import BUDGET_RANGES
 from scripts.build_slm_jsonl import DATA_DIR, DEFAULT_OUT
 
 OUT = DATA_DIR / "ho_so_goc.json"
@@ -80,7 +80,7 @@ def is_none(text: str) -> bool:
 def budget_tier(text: str) -> str:
     low, high = (int(x.replace(".", "")) for x in re.findall(r"\d[\d.]*", text)[:2])
     mid = (low + high) / 2
-    return next((code for ceiling, code in BUDGET_TIERS if mid <= ceiling), TOP_TIER)
+    return next(code for code, (_, ceiling) in BUDGET_RANGES.items() if ceiling is None or mid <= ceiling)
 
 
 def impact_code(text: str) -> str:

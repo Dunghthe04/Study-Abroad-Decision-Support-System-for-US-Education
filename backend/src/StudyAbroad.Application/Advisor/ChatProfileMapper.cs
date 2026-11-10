@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using StudyAbroad.Application.Profile.Academic;
 using StudyAbroad.Application.Profile.Flow;
 using GpaModes = StudyAbroad.Domain.Constants.ProfileConstants.GpaModes;
 
@@ -96,8 +97,10 @@ public static class ChatProfileMapper
     /// <summary>
     /// C2: ghi các khóa chat vừa đổi vào nháp, các ô khác giữ nguyên.
     /// Khóa không có giá trị (none / unknown / declined / đã xóa) thì xóa ô tương ứng trong nháp.
+    /// scale là bảng grade_scale.10 đang dùng để quy đổi GPA thang 10; null thì bảng mặc định.
     /// </summary>
-    public static ProfileFlowDraftDto ApplyChatProfile(ProfileFlowDraftDto draft, JsonObject profile, IEnumerable<string> changedKeys)
+    public static ProfileFlowDraftDto ApplyChatProfile(
+        ProfileFlowDraftDto draft, JsonObject profile, IEnumerable<string> changedKeys, GradeScaleConfigDto? scale = null)
     {
         // certifications là cả danh sách nên ghi sau cùng, đè lên english / sat / act (chỉ là điểm rút ra từ danh sách)
         foreach (var key in changedKeys.OrderBy(k => k == "certifications"))
@@ -127,7 +130,7 @@ public static class ChatProfileMapper
                 "education_system" => draft with { Step1 = step1 with { EducationSystem = Str(value) } },
                 "intake" => draft with { Step1 = step1 with { TargetIntake = Str(value) } },
                 "funding_source" => draft with { Step4 = step4 with { FundingSource = Str(value) } },
-                "gpa" => draft with { Step2 = ApplyGpa(draft.Step2, value) },
+                "gpa" => draft with { Step2 = ApplyGpa(draft.Step2, value, scale) },
                 "sat" or "act" => draft with { Step3 = step3 with { Certifications = PutCert(step3.Certifications, Standardized, key, value is null ? null : (value.GetValue<decimal>(), null)) } },
                 "english" => draft with { Step3 = step3 with { Certifications = PutEnglish(step3.Certifications, value) } },
                 "certifications" => draft with { Step3 = step3 with { Certifications = CertsFromChat(value) } },
@@ -210,7 +213,7 @@ public static class ChatProfileMapper
 
     // GPA đang tính từ học bạ thì chat không ghi đè (kế hoạch 3.1). Chọn học bạ mà chưa có điểm môn
     // thì không mất gì, cho chat ghi GPA tổng để khỏi hỏi đi hỏi lại
-    private static FlowTranscriptDraftDto? ApplyGpa(FlowTranscriptDraftDto? step2, JsonNode? value)
+    private static FlowTranscriptDraftDto? ApplyGpa(FlowTranscriptDraftDto? step2, JsonNode? value, GradeScaleConfigDto? scale)
     {
         if (Gpa(step2)?["source"]?.GetValue<string>() == GpaModes.Transcript) return step2;
         step2 = (step2 ?? new FlowTranscriptDraftDto()) with { GpaMode = GpaModes.Overall };
@@ -218,7 +221,7 @@ public static class ChatProfileMapper
 
         var gpa = value["value"]!.GetValue<decimal>();
         return value["scale"]!.GetValue<int>() == 10
-            ? step2 with { ManualGpa10Scale = gpa, CalculatedGpa4Scale = TranscriptGpa.To4(gpa) }
+            ? step2 with { ManualGpa10Scale = gpa, CalculatedGpa4Scale = TranscriptGpa.To4(gpa, scale) }
             : step2 with { ManualGpa10Scale = null, CalculatedGpa4Scale = gpa };
     }
 

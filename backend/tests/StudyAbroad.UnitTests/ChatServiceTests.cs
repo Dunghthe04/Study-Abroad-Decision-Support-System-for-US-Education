@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using StudyAbroad.Application.Advisor;
+using StudyAbroad.Application.Profile.Academic;
 using StudyAbroad.Application.Profile.Flow;
 using StudyAbroad.Application.Recommendations;
 using StudyAbroad.Domain.Entities;
@@ -143,6 +144,41 @@ public class ChatServiceTests
 
         Assert.Equal("undergraduate", marks.Level);
         Assert.Null(advisor.LastRequest!.Benchmarks);
+    }
+
+    // Bảng quy đổi gửi advisor lấy từ DB (provider), bảng trình duyệt gửi bị bỏ
+    [Fact]
+    public async Task SendsGradeScaleFromServer_IgnoresBrowserTable()
+    {
+        var advisor = new FakeAdvisor("B2");
+        var fromBrowser = new List<GradeScaleRuleDto> { new(0m, 10m, 4m, "A") };
+
+        await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), gradeScale: new FakeGradeScale())
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello, GradeScale: fromBrowser));
+
+        Assert.Equal(AcademicAnalysisService.GetDefaultWesScaleConfig().Rules, advisor.LastRequest!.GradeScale);
+        var json = JsonSerializer.SerializeToElement(advisor.LastRequest, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        var first = json.GetProperty("gradeScale")[0];
+        Assert.Equal(9.0m, first.GetProperty("minScore").GetDecimal());
+        Assert.Equal(4.0m, first.GetProperty("gpa4").GetDecimal());
+    }
+
+    [Fact]
+    public async Task NoGradeScaleProvider_SendsNoTable()
+    {
+        var advisor = new FakeAdvisor("B2");
+
+        await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow())
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello, GradeScale: [new(0m, 10m, 4m, "A")]));
+
+        Assert.Null(advisor.LastRequest!.GradeScale);
+    }
+
+    private sealed class FakeGradeScale : IGradeScaleProvider
+    {
+        public Task<GradeScaleConfigDto> GetAsync(CancellationToken ct = default) =>
+            Task.FromResult(AcademicAnalysisService.GetDefaultWesScaleConfig());
+        public void Invalidate() { }
     }
 
     // Nhập GPA tổng: không gửi học bạ

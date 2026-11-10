@@ -139,8 +139,9 @@ def calc_profile(
     today: date,
     deadlines: list[dict] | None = None,
     benchmarks: dict | None = None,
+    gpa_table: list[tuple[float, float]] | None = None,
 ) -> dict[str, str]:
-    facts = read_facts(profile, today)
+    facts = read_facts(profile, today, gpa_table)
     levels = assess_levels(facts)
     result = {
         "grade_by_year": grade_by_year(transcript),

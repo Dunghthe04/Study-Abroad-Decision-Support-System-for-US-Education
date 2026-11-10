@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using StudyAbroad.Application.Profile.Academic;
 using StudyAbroad.Application.Profile.Flow;
 using StudyAbroad.Application.Recommendations;
 
@@ -76,8 +77,11 @@ public static class ChatSimulation
         _ => need,
     };
 
-    /// <summary>Đọc ActionData của advisor. Null nếu thiếu hoặc không có giá trị giả định nào.</summary>
-    public static ChatScenario? Parse(JsonElement? data)
+    /// <summary>
+    /// Đọc ActionData của advisor. Null nếu thiếu hoặc không có giá trị giả định nào.
+    /// gradeScale là bảng grade_scale.10 để quy đổi GPA thang 10; null thì bảng mặc định.
+    /// </summary>
+    public static ChatScenario? Parse(JsonElement? data, GradeScaleConfigDto? gradeScale = null)
     {
         if (data is not { ValueKind: JsonValueKind.Object } d
             || !d.TryGetProperty("changes", out var c) || c.ValueKind != JsonValueKind.Object)
@@ -91,7 +95,7 @@ public static class ChatSimulation
             && g.TryGetProperty("value", out var gv) && gv.ValueKind == JsonValueKind.Number && gv.TryGetDecimal(out var value))
         {
             var scale = g.TryGetProperty("scale", out var s) && s.TryGetInt32(out var sc) ? sc : 4;
-            gpa = scale == 10 ? TranscriptGpa.To4(value) : value;
+            gpa = scale == 10 ? TranscriptGpa.To4(value, gradeScale) : value;
         }
 
         var need = c.TryGetProperty("scholarshipNeed", out var n) && n.ValueKind == JsonValueKind.String ? n.GetString() : null;

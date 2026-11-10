@@ -37,11 +37,11 @@ def test_levels_text():
         TODAY,
         benchmarks=MARKS,
     )
-    assert out["gpa_level"] == "3.2 thang 4, thấp (TB các trường 3.6)"
+    assert out["gpa_level"] == "3.5 thang 4, trung bình (TB các trường 3.6)"
     assert out["english_level"] == "IELTS 6.5, trung bình (mốc phổ biến 6.5)"
     assert out["sat_level"] == "1250, mức trung bình"
     assert out["budget_level"] == "35.000 – 50.000 USD mỗi năm, mức sát"
-    assert out["scholarship_chance"] == "trung bình"
+    assert out["scholarship_chance"] == "cao"  # 8/10 → 3.5 theo WES là học lực mạnh
 
 
 def english(kind: str, score: float, marks: dict | None = MARKS) -> str:
@@ -86,7 +86,7 @@ def test_middle_school_gpa_is_target():
     out = calc_profile(
         prof(current_level="middle_school", gpa={"value": 9, "scale": 10}), None, TODAY, benchmarks=MARKS
     )
-    assert out["gpa_level"] == "mục tiêu 3.6 thang 4, trung bình (TB các trường 3.6)"
+    assert out["gpa_level"] == "mục tiêu 4 thang 4, cao (TB các trường 3.6)"
 
 
 def test_grade_by_year_lists_scores_without_judging():

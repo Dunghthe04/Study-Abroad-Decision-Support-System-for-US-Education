@@ -1,4 +1,5 @@
 using System.Text.Json;
+using StudyAbroad.Application.Profile.Academic;
 using StudyAbroad.Application.Recommendations;
 
 namespace StudyAbroad.Application.Advisor;
@@ -28,7 +29,8 @@ public record AdvisorChatRequest(
     JsonElement? Benchmarks = null,
     ChatAction? Action = null,
     IReadOnlyList<ChatSchool>? OtherSchools = null,
-    SimulationOverrides? Simulation = null);
+    SimulationOverrides? Simulation = null,
+    IReadOnlyList<GradeScaleRuleDto>? GradeScale = null);
 
 /// <summary>
 /// Hành động có cấu trúc từ một nút trên giao diện (không qua SLM hiểu câu): Type là goal_seek hoặc explain,

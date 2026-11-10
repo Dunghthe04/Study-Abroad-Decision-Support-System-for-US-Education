@@ -1,6 +1,7 @@
 "use client";
 
 import { CheckIcon } from "lucide-react";
+import { useGradeScale } from "@/hooks/use-grade-scale";
 import { cn } from "@/lib/utils";
 import { findCertType, getCertDisplayName } from "@/lib/certification-utils";
 import { DEFAULT_BUDGET_TIERS, draftGpa, gpaModeOf } from "@/lib/profile-flow-options";
@@ -129,6 +130,7 @@ export function ProfileFlowStepper({
   lastCompletedStep,
   onSelectStep,
 }: ProfileFlowStepperProps) {
+  useGradeScale(); // GPA thang 4 quy đổi theo bảng moderator sửa, vẽ lại khi bảng tải xong
   const stateOf = (step: number) => ({
     isCompleted: step < currentStep || step <= lastCompletedStep,
     isCurrent: step === currentStep,
