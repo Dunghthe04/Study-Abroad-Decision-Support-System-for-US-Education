@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -307,9 +308,9 @@ function Turn({ turn, onReply }: { turn: AssistantTurn; onReply?: (value: string
   const { sendAction } = useAssistant();
   if (turn.role === "user") {
     return (
-      <div className="max-w-[90%] self-end rounded-[16px_4px_16px_16px] bg-[#E7EDF1] px-[15px] py-2.5 whitespace-pre-wrap text-foreground">
-        {turn.content}
-      </div>
+      <Bubble align="end" variant="secondary" className="max-w-[90%]">
+        <BubbleContent className="px-3.5 py-2.5 whitespace-pre-wrap">{turn.content}</BubbleContent>
+      </Bubble>
     );
   }
   // Mọi câu trả lời là chữ do AI viết đầy đủ (không còn thẻ số liệu đi kèm); các nút và widget chọn bên dưới vẫn giữ
