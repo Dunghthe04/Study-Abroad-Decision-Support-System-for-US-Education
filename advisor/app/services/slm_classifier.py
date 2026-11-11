@@ -16,6 +16,7 @@ from app.schemas.chat import ChatState
 from app.schemas.slm import PROFILE_KEYS, SLM_TIN_SCHEMA, SlmTinResult, SlmY
 from app.services.conversation_context import context_for_model
 from app.services.ollama import OllamaError
+from app.services import usage_meter
 from app.services.skill_call import SKILLS_DIR, load_skill
 
 logger = logging.getLogger(__name__)
@@ -182,6 +183,7 @@ class OllamaSlm:
 
         self._slm = slm
         self._output = output
+        self.prompt_name = prompt  # gắn nhãn các lần gọi SLM trong báo cáo token (cùng cách với SkillCall.name)
         self.prompt, self.prompt_version = load_skill(prompt_path(prompt))
 
     async def classify(self, state: ChatState, message: str) -> SlmTinResult:
@@ -197,13 +199,14 @@ class OllamaSlm:
     ) -> SlmTinResult:
         messages = build_messages(self.prompt, message, profile, pending, context)
         names = {name.lower() for name in (context or {}).get("schools", [])}
-        for _ in range(MAX_ATTEMPTS):
-            try:
-                raw, content, logprobs = await self._slm.chat_json_scored(messages, self._output)
-                raw = keep_verbatim(raw, message, names)  # bỏ giá trị và đoạn không có trong tin
-                # Kiểm từng ý, gộp ý cùng loại, đưa collect_profile lên đầu, cắt ý quá trần kỹ thuật, rồi kiểm cả tin.
-                # ValidationError của pydantic cũng là ValueError
-                return SlmTinResult.from_raw(raw, confidence=label_confidence(content, logprobs))
-            except (OllamaError, ValueError) as ex:
-                logger.warning("SLM trả kết quả không dùng được: %s", ex)
+        with usage_meter.purpose(self.prompt_name, self.prompt_version):
+            for _ in range(MAX_ATTEMPTS):
+                try:
+                    raw, content, logprobs = await self._slm.chat_json_scored(messages, self._output)
+                    raw = keep_verbatim(raw, message, names)  # bỏ giá trị và đoạn không có trong tin
+                    # Kiểm từng ý, gộp ý cùng loại, đưa collect_profile lên đầu, cắt ý quá trần kỹ thuật, rồi kiểm cả tin.
+                    # ValidationError của pydantic cũng là ValueError
+                    return SlmTinResult.from_raw(raw, confidence=label_confidence(content, logprobs))
+                except (OllamaError, ValueError) as ex:
+                    logger.warning("SLM trả kết quả không dùng được: %s", ex)
         return FALLBACK.model_copy(deep=True)

@@ -128,6 +128,7 @@ class AiUsageCall(CamelModel):
     source: str  # claude | ollama
     model: str
     purpose: str = ""  # công việc (tên skill), để báo cáo theo tính năng
+    skill_version: str = ""  # phiên bản của skill đó (dòng đầu file skill), để biết câu trả lời do bản nào tạo ra
     input_tokens: int = 0
     output_tokens: int = 0
     cached_tokens: int = 0

@@ -148,6 +148,33 @@ async def test_calls_inside_a_skill_are_labelled_with_the_skill_name(tmp_path):
     await SkillCall(claude(lambda request: claude_ok()), "main", skill).run({}, SCHEMA, lambda raw: raw)
 
     assert calls[0].purpose == "skill_demo"
+    assert calls[0].skill_version == "1.0"
+
+
+async def test_slm_classifier_calls_are_labelled_with_the_prompt_name_and_version():
+    from app.services.slm_classifier import OllamaSlm
+
+    calls = usage_meter.start()
+
+    class FakeSlm:
+        # Giống OllamaClient thật: ghi token rồi trả kết quả. Ở đây trả kết quả hỏng để chỉ kiểm tra nhãn của hai lần gọi
+        async def chat_json_scored(self, messages, output):
+            usage_meter.ollama_ok("usas-slm-v4", {"prompt_eval_count": 10, "eval_count": 3}, 5)
+            raise ValueError("kết quả không dùng được")
+
+    await OllamaSlm(FakeSlm(), prompt="slm_intents").read("em GPA 3.5", None, "")
+
+    assert len(calls) == 2  # gọi lại một lần khi kết quả hỏng
+    assert {(c.purpose, c.skill_version) for c in calls} == {("slm_intents", "3.0")}
+
+
+async def test_label_does_not_leak_outside_the_block():
+    calls = usage_meter.start()
+    with usage_meter.purpose("skill_a", "9.9"):
+        usage_meter.ollama_ok("m", {}, 1)
+    usage_meter.ollama_ok("m", {}, 1)
+
+    assert [(c.purpose, c.skill_version) for c in calls] == [("skill_a", "9.9"), ("", "")]
 
 
 async def test_without_an_open_turn_nothing_is_recorded_and_nothing_breaks():
