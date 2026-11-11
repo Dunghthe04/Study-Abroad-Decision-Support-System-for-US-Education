@@ -131,6 +131,16 @@ export function schoolSatPolicy(value: string | null): string {
   return ({ required: "Yêu cầu SAT/ACT", optional: "Không bắt buộc SAT/ACT", not_accepted: "Không sử dụng SAT/ACT" } as Record<string, string>)[value ?? ""] ?? MISSING_UNIVERSITY_DATA;
 }
 
+export function schoolSatPolicyShort(value: string | null): string | null {
+  if (!value) return null;
+  const map: Record<string, string> = {
+    required: "Bắt buộc",
+    optional: "Tùy chọn",
+    not_accepted: "Không sử dụng",
+  };
+  return map[value] ?? null;
+}
+
 export function schoolAidPolicy(value: string | null): string {
   return ({ none: "Không có hỗ trợ được ghi nhận", need_only: "Theo nhu cầu tài chính", merit_only: "Theo thành tích", need_and_merit: "Theo nhu cầu và thành tích", need_based: "Theo nhu cầu tài chính", merit_based: "Theo thành tích" } as Record<string, string>)[value ?? ""] ?? MISSING_UNIVERSITY_DATA;
 }
@@ -148,20 +158,54 @@ export function annualPublishedCost(offering: UniversityOffering): number | null
   return values.reduce<number>((total, value) => total + (value ?? 0), 0);
 }
 
-export function universityDeadlines(value: string | null): { round: string; label: string; date: string }[] {
+export function universityDeadlines(value: string | null): { round: string; label: string; date: string; rawDate: string }[] {
   if (!value) return [];
   const labels: Record<string, string> = { ED: "Early Decision", ED2: "Early Decision II", EA: "Early Action", RD: "Regular Decision", Rolling: "Rolling Admission" };
   try {
     const parsed: unknown = JSON.parse(value);
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return [];
-    const result: { round: string; label: string; date: string }[] = [];
+    const result: { round: string; label: string; date: string; rawDate: string }[] = [];
     for (const [round, date] of Object.entries(parsed)) {
-      if (typeof date === "string" && date.trim()) result.push({ round, label: labels[round] ?? round, date: universityDate(date) });
+      if (typeof date === "string" && date.trim()) {
+        result.push({
+          round,
+          label: labels[round] ?? round,
+          date: universityDate(date),
+          rawDate: date.trim(),
+        });
+      }
     }
     return result;
   } catch {
     return [];
   }
+}
+
+export function deadlineRemainingText(
+  targetDateStr: string | null | undefined,
+  referenceDate: Date = new Date()
+): { isPassed: boolean; label: string } | null {
+  if (!targetDateStr) return null;
+  const target = new Date(targetDateStr);
+  if (isNaN(target.getTime())) return null;
+
+  const today = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), referenceDate.getDate());
+  const targetDay = new Date(target.getFullYear(), target.getMonth(), target.getDate());
+
+  const diffMs = targetDay.getTime() - today.getTime();
+  const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays < 0) {
+    return { isPassed: true, label: "Đã qua hạn" };
+  }
+  if (diffDays === 0) {
+    return { isPassed: false, label: "Hôm nay là hạn chót" };
+  }
+  if (diffDays < 60) {
+    return { isPassed: false, label: `Còn ${diffDays} ngày` };
+  }
+  const months = Math.round(diffDays / 30);
+  return { isPassed: false, label: `Còn ${months} tháng` };
 }
 
 export const UNIVERSITY_FIELD_LABELS: Record<string, string> = {

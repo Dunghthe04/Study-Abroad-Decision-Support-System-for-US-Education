@@ -4,9 +4,8 @@ import { useState, type ReactNode } from "react";
 import Image from "next/image";
 import { Building2Icon, ExternalLinkIcon } from "lucide-react";
 import { cn } from "cn";
-import { universityHost, universityPercent, universityUrl } from "@/lib/university-display";
+import { universityHost, universityNumber, universityPercent, universityUrl } from "@/lib/university-display";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableRow } from "@/components/ui/table";
 
 export function SchoolImage({ url, alt, className, priority = false, contain = false }: {
@@ -29,16 +28,26 @@ export function SchoolImage({ url, alt, className, priority = false, contain = f
   );
 }
 
-export function DetailSection({ id, title, description, children }: { id?: string; title: string; description?: string; children: ReactNode }) {
+export function DetailSection({
+  id,
+  title,
+  description,
+  children,
+  className,
+}: {
+  id?: string;
+  title: string;
+  description?: string;
+  children: ReactNode;
+  className?: string;
+}) {
   return (
-    <section id={id} aria-label={title} className="scroll-mt-32">
-      <Card className=" [--card-spacing:--spacing(5)] sm:[--card-spacing:--spacing(6)]">
-        <CardHeader>
-          <CardTitle><h2 className="font-sans text-lg font-semibold tracking-tight">{title}</h2></CardTitle>
-          {description && <CardDescription className="leading-relaxed">{description}</CardDescription>}
-        </CardHeader>
-        <CardContent>{children}</CardContent>
-      </Card>
+    <section id={id} aria-label={title} className={cn("scroll-mt-32 space-y-4", className)}>
+      <div className="space-y-1">
+        <h2 className="font-sans text-xl font-semibold tracking-tight text-ink">{title}</h2>
+        {description && <p className="text-sm leading-relaxed text-ink-2">{description}</p>}
+      </div>
+      {children}
     </section>
   );
 }
@@ -94,23 +103,45 @@ export function SourceLink({ url, label }: { url: string | null; label?: string 
   );
 }
 
+export type GaugeTone = "brand" | "reach" | "warn" | "ok";
+
+export function acceptanceRateTone(rate: number): GaugeTone {
+  const pct = rate > 1 ? rate : rate * 100;
+  if (pct < 15) return "reach";
+  if (pct <= 40) return "warn";
+  return "ok";
+}
+
 export function Gauge({
   value,
   label,
-  colorClassName = "text-brand",
+  tone = "brand",
+  colorClassName,
   className,
 }: {
   value: number;
   label: string;
+  tone?: GaugeTone;
   colorClassName?: string;
   className?: string;
 }) {
-  const fraction = Math.max(0, Math.min(1, value > 1 ? value / 100 : value));
+  const rawFraction = Math.max(0, Math.min(1, value > 1 ? value / 100 : value));
+  // Đảm bảo cung quét tối thiểu (ít nhất 7%) để số nhỏ như 4.6% vẫn hiện rõ vệt màu và đầu bo tròn
+  const fraction = rawFraction > 0 ? Math.max(0.07, rawFraction) : 0;
   const radius = 42;
   const strokeWidth = 8;
   const arcLength = Math.PI * radius;
   const offset = arcLength * (1 - fraction);
-  const formattedPct = universityPercent(fraction);
+  const formattedPct = universityPercent(rawFraction);
+
+  const toneClasses = {
+    brand: { track: "text-line", fill: "text-brand" },
+    reach: { track: "text-reach-wash", fill: "text-reach" },
+    warn: { track: "text-warn-wash", fill: "text-warn" },
+    ok: { track: "text-ok-wash", fill: "text-ok" },
+  }[tone];
+
+  const fillClass = colorClassName ?? toneClasses.fill;
 
   return (
     <svg
@@ -125,7 +156,7 @@ export function Gauge({
         stroke="currentColor"
         strokeWidth={strokeWidth}
         strokeLinecap="round"
-        className="text-line"
+        className={toneClasses.track}
       />
       {fraction > 0 && (
         <path
@@ -136,11 +167,22 @@ export function Gauge({
           strokeLinecap="round"
           strokeDasharray={arcLength}
           strokeDashoffset={offset}
-          className={colorClassName}
+          className={fillClass}
         />
       )}
     </svg>
   );
+}
+
+export type TrackDifficulty = "risk" | "warn" | "ok";
+
+export function difficultyTone(val: number, min: number, max: number): TrackDifficulty {
+  const range = max - min;
+  if (range <= 0) return "warn";
+  const p = (val - min) / range;
+  if (p >= 0.8) return "risk";
+  if (p <= 0.25) return "ok";
+  return "warn";
 }
 
 export function RangeTrack({
@@ -149,6 +191,9 @@ export function RangeTrack({
   low,
   high,
   point,
+  fillToMax = false,
+  tone,
+  showScaleEnds = true,
   ariaLabel,
   className,
 }: {
@@ -157,6 +202,9 @@ export function RangeTrack({
   low?: number | null;
   high?: number | null;
   point?: number | null;
+  fillToMax?: boolean;
+  tone?: TrackDifficulty;
+  showScaleEnds?: boolean;
   ariaLabel: string;
   className?: string;
 }) {
@@ -172,50 +220,97 @@ export function RangeTrack({
   const hasPoint = point != null && Number.isFinite(point);
   const pointPct = hasPoint ? toPct(point!) : 0;
 
+  // Xác định độ khó và màu tương ứng
+  const refValue = hasRange ? (low! + high!) / 2 : hasPoint ? point! : min;
+  const resolvedTone: TrackDifficulty = tone ?? difficultyTone(refValue, min, max);
+  const difficultyLabel = resolvedTone === "risk" ? "cao" : resolvedTone === "ok" ? "thấp" : "trung bình";
+
+  const colorStyles = {
+    risk: { band: "bg-risk/40", dot: "bg-risk" },
+    warn: { band: "bg-warn/40", dot: "bg-warn" },
+    ok: { band: "bg-ok/40", dot: "bg-ok" },
+  }[resolvedTone];
+
+  const isFillToMax = fillToMax || (hasPoint && !hasRange);
+
   return (
-    <div
-      role="img"
-      aria-label={ariaLabel}
-      className={cn("relative h-2.5 w-full min-w-16 rounded-full bg-line", className)}
-    >
-      {hasRange && (
-        <div
-          className="absolute inset-y-0 rounded-full bg-brand/40"
-          style={{ left: `${rangeLeft}%`, width: `${rangeWidth}%` }}
-        />
-      )}
-      {hasPoint && (
-        <div
-          className="absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-brand ring-2 ring-surface"
-          style={{ left: `${pointPct}%` }}
-        />
+    <div className={cn("w-full space-y-1", className)}>
+      <div
+        role="img"
+        aria-label={`${ariaLabel} (mức khó: ${difficultyLabel})`}
+        className="relative h-2.5 w-full min-w-16 rounded-full bg-line"
+      >
+        {hasRange && (
+          <div
+            className={cn("absolute inset-y-0 rounded-full", colorStyles.band)}
+            style={{ left: `${rangeLeft}%`, width: `${rangeWidth}%` }}
+          />
+        )}
+        {isFillToMax && hasPoint && (
+          <div
+            className={cn("absolute inset-y-0 rounded-full", colorStyles.band)}
+            style={{ left: `${pointPct}%`, width: `${100 - pointPct}%` }}
+          />
+        )}
+        {hasPoint && (
+          <div
+            className={cn(
+              "absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-surface",
+              colorStyles.dot
+            )}
+            style={{ left: `${pointPct}%` }}
+          />
+        )}
+      </div>
+      {showScaleEnds && (
+        <div className="flex items-center justify-between text-xs text-ink-3 tabular-nums">
+          <span>{universityNumber(min)}</span>
+          <span>{universityNumber(max)}</span>
+        </div>
       )}
     </div>
   );
 }
 
 export function GaugeDataItem({
+  icon: Icon,
   label,
   value,
   formattedValue,
-  colorClassName = "text-brand",
+  tone = "brand",
+  colorClassName,
   subtitle,
+  gaugeClassName,
+  className,
 }: {
+  icon?: React.ComponentType<{ className?: string }>;
   label: string;
   value: number;
   formattedValue?: string;
+  tone?: GaugeTone;
   colorClassName?: string;
   subtitle?: string;
+  gaugeClassName?: string;
+  className?: string;
 }) {
   const display = formattedValue ?? universityPercent(value);
   return (
-    <div className="flex items-center justify-between gap-3.5 py-1">
-      <div className="min-w-0 space-y-0.5">
-        <p className="text-xs text-ink-3">{label}</p>
-        <p className="text-base font-semibold tracking-tight text-ink">{display}</p>
-        {subtitle && <p className="text-xs text-ink-3">{subtitle}</p>}
+    <div className={cn("flex items-center justify-between gap-3.5 py-1", className)}>
+      <div className="flex items-center gap-3.5 min-w-0">
+        {Icon && <Icon className="size-6 shrink-0 text-muted-foreground/80" />}
+        <div className="min-w-0 space-y-0.5">
+          <p className="text-xs text-ink-3">{label}</p>
+          <p className="text-base font-semibold tracking-tight text-ink">{display}</p>
+          {subtitle && <p className="text-xs text-ink-3">{subtitle}</p>}
+        </div>
       </div>
-      <Gauge value={value} label={label} colorClassName={colorClassName} />
+      <Gauge
+        value={value}
+        label={label}
+        tone={tone}
+        colorClassName={colorClassName}
+        className={gaugeClassName}
+      />
     </div>
   );
 }
