@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ArrowUpRightIcon, Building2Icon, GlobeIcon, GraduationCapIcon, MapPinIcon, PercentIcon, UsersIcon } from "lucide-react";
+import { ArrowUpRightIcon, Building2Icon, GlobeIcon, GraduationCapIcon, MapPinIcon, UsersIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
@@ -11,10 +11,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { cn } from "cn";
 import { studyLevelLabel } from "@/lib/study-levels";
-import { schoolControlLabel, universityNumber, universityPercent, universityUrl } from "@/lib/university-display";
+import { campusSettingLabel, schoolControlLabel, universityNumber, universityUrl } from "@/lib/university-display";
 import type { UniversityDetail } from "@/types/university";
-import { DetailSection, GridDataItem, SchoolImage, SourceLink } from "./UniversityDetailParts";
-import { UniversityAdmissions, UniversityCosts, UniversityMajors, UniversityStatistics } from "./UniversityOfferingSections";
+import { DetailSection, GaugeDataItem, GridDataItem, SchoolImage, SourceLink } from "./UniversityDetailParts";
+import { UniversityAdmissions, UniversityCampusLife, UniversityCosts, UniversityMajors, UniversityStatistics } from "./UniversityOfferingSections";
 import { UniversitySources } from "./UniversitySources";
 import { AddTargetSchoolButton } from "@/components/target-schools/AddTargetSchoolButton";
 
@@ -27,10 +27,10 @@ function formatRank(display: string | null | undefined, rank: number): string {
 }
 
 function getRankColorClass(rank: number): string {
-  if (rank <= 3) return "text-amber-600 dark:text-amber-400 font-black text-xl";
-  if (rank <= 10) return "text-emerald-600 dark:text-emerald-400 font-bold text-lg";
-  if (rank <= 50) return "text-brand font-bold text-lg";
-  return "text-muted-foreground font-semibold text-lg";
+  if (rank <= 3) return "text-brand font-black text-xl";
+  if (rank <= 10) return "text-brand font-bold text-lg";
+  if (rank <= 50) return "text-ink font-bold text-lg";
+  return "text-ink-3 font-semibold text-lg";
 }
 
 export function UniversityDetailView({ university }: { university: UniversityDetail }) {
@@ -39,6 +39,17 @@ export function UniversityDetailView({ university }: { university: UniversityDet
   const offering = university.offerings.find((item) => item.studyLevel === selectedLevel) ?? university.offerings[0];
   const location = [university.city, university.stateName ?? university.state].filter(Boolean).join(", ");
   const website = universityUrl(university.website);
+
+  const hasCampusData = Boolean(
+    offering && (
+      offering.fyOnCampusPct != null ||
+      offering.ugOnCampusPct != null ||
+      offering.housingTypes ||
+      offering.housingOnlyUsd != null ||
+      offering.activities
+    )
+  );
+
   const navigation = useMemo(
     () => [
       { id: "overview", label: "Tổng quan" },
@@ -46,13 +57,14 @@ export function UniversityDetailView({ university }: { university: UniversityDet
         ? [
             { id: "costs", label: "Chi phí & hỗ trợ" },
             { id: "admissions", label: "Tuyển sinh" },
+            ...(hasCampusData ? [{ id: "campus", label: "Khuôn viên & nhà ở" }] : []),
             { id: "statistics", label: "Thống kê" },
             { id: "majors", label: "Ngành học" },
           ]
         : []),
       { id: "sources", label: "Nguồn dữ liệu" },
     ],
-    [offering],
+    [offering, hasCampusData],
   );
 
   useEffect(() => {
@@ -73,16 +85,17 @@ export function UniversityDetailView({ university }: { university: UniversityDet
   }, [navigation]);
 
   const overviewItems = [
-    { icon: MapPinIcon, label: "Vị trí", value: location || "—" },
-    { icon: Building2Icon, label: "Loại trường", value: schoolControlLabel(university.control) },
-    { icon: PercentIcon, label: "Tỷ lệ nhận chung", value: universityPercent(university.acceptanceRate) },
-    { icon: UsersIcon, label: "Sinh viên quốc tế", value: universityNumber(university.internationalStudentCount) },
-    {
+    location ? { icon: MapPinIcon, label: "Vị trí", value: location } : null,
+    university.control ? { icon: Building2Icon, label: "Loại trường", value: schoolControlLabel(university.control) } : null,
+    offering?.campusSetting ? { icon: Building2Icon, label: "Bối cảnh khuôn viên", value: campusSettingLabel(offering.campusSetting) } : null,
+    offering?.studentFacultyRatio != null ? { icon: UsersIcon, label: "Tỷ lệ SV / giảng viên", value: `${offering.studentFacultyRatio} : 1` } : null,
+    university.internationalStudentCount != null ? { icon: UsersIcon, label: "Sinh viên quốc tế", value: universityNumber(university.internationalStudentCount) } : null,
+    university.offerings.length ? {
       icon: GraduationCapIcon,
       label: "Bậc học có dữ liệu",
-      value: university.offerings.length ? university.offerings.map((item) => studyLevelLabel(item.studyLevel)).join(", ") : "—",
-    },
-  ];
+      value: university.offerings.map((item) => studyLevelLabel(item.studyLevel)).join(", "),
+    } : null,
+  ].filter((item): item is NonNullable<typeof item> => Boolean(item));
 
   return (
     <article className="space-y-6 pb-12">
@@ -101,9 +114,9 @@ export function UniversityDetailView({ university }: { university: UniversityDet
               <SchoolImage url={university.logoUrl} alt={`Logo ${university.name}`} className="-mt-8 size-20 shrink-0 rounded-xl border border-line bg-white sm:-mt-10 sm:size-24" contain />
               <div className="min-w-0 pt-4">
                 <h1 className="text-2xl leading-tight font-semibold tracking-tight text-balance text-ink sm:text-3xl">{university.name}</h1>
-                <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink-2">
-                  {location && <span className="inline-flex items-center gap-1"><MapPinIcon className="size-4" />{location}</span>}
-                  {university.control && <span>{schoolControlLabel(university.control)}</span>}
+                {/* Vị trí · loại trường, ngăn cách bằng dấu chấm giữa */}
+                <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-2">
+                  {[location, university.control && schoolControlLabel(university.control)].filter(Boolean).join(" · ")}
                   {university.isIvy && <Badge variant="secondary">Ivy League</Badge>}
                 </div>
               </div>
@@ -179,6 +192,13 @@ export function UniversityDetailView({ university }: { university: UniversityDet
         <div className="min-w-0 space-y-5">
           <DetailSection id="overview" title="Tổng quan">
             <div className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
+              {university.acceptanceRate != null && (
+                <GaugeDataItem
+                  label="Tỷ lệ nhận chung"
+                  value={university.acceptanceRate}
+                  subtitle="Tỷ lệ trúng tuyển toàn trường"
+                />
+              )}
               {overviewItems.map((item) => (
                 <GridDataItem
                   key={item.label}
@@ -195,6 +215,7 @@ export function UniversityDetailView({ university }: { university: UniversityDet
             <div key={offering.studyLevel} className="space-y-5">
               <UniversityCosts offering={offering} />
               <UniversityAdmissions offering={offering} />
+              <UniversityCampusLife offering={offering} />
               <UniversityStatistics offering={offering} internationalStudentCount={university.internationalStudentCount} />
               <UniversityMajors offering={offering} />
             </div>
