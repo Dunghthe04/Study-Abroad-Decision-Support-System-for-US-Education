@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { AlertCircleIcon, RefreshCwIcon } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { ErrorFallback } from "@/components/ui/error-fallback";
 import { Spinner } from "@/components/ui/spinner";
 import { useAssistant, useAssistantPageContext } from "@/components/assistant/AssistantProvider";
 import { recommendationApi } from "@/lib/recommendation-api";
@@ -155,6 +156,19 @@ export function RecommendationView({ autoRun, initialOverrides }: Recommendation
             : "Đang tải gợi ý của bạn..."}
         </p>
       </div>
+    );
+  }
+
+  if (!rec && error) {
+    return (
+      <ErrorFallback
+        title="Không thể tải gợi ý trường học"
+        description={error}
+        action={{
+          label: "Thử lại",
+          onClick: runNew,
+        }}
+      />
     );
   }
 
