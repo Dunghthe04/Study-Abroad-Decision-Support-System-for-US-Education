@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { Spinner } from "@/components/ui/spinner";
+import { AuthSplitLayout } from "@/components/auth/AuthSplitLayout";
 import { ParentConsentForm } from "@/components/auth/ParentConsentForm";
 
 export const metadata: Metadata = {
@@ -10,10 +11,10 @@ export const metadata: Metadata = {
 
 export default function ParentConsentPage() {
   return (
-    <div className="flex min-h-[calc(100vh-12rem)] items-center justify-center py-6">
+    <AuthSplitLayout containerClassName="max-w-[540px]">
       <Suspense
         fallback={
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <div className="flex items-center gap-2 text-sm text-ink-2">
             <Spinner />
             Đang tải...
           </div>
@@ -21,6 +22,6 @@ export default function ParentConsentPage() {
       >
         <ParentConsentForm />
       </Suspense>
-    </div>
+    </AuthSplitLayout>
   );
 }
