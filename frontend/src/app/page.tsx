@@ -346,11 +346,7 @@ function HomeView() {
       </section>
 
       {/* CÁC LỚP CỦA HỆ THỐNG */}
-      <section className="space-y-10">
-        <SectionHead
-          title="Năm lớp làm việc cùng nhau để trả lời đúng"
-          desc="Cuộn xuống hoặc bấm vào từng lớp để xem lớp đó làm gì."
-        />
+      <section>
         <LayerStack />
       </section>
 

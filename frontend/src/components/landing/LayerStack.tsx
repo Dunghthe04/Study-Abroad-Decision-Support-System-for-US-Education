@@ -1,8 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { CheckIcon } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 type Layer = {
@@ -155,9 +153,12 @@ export function LayerStack() {
   return (
     <div ref={wrapRef} className="lg:h-[260vh]">
       <div className="lg:sticky lg:top-24">
-        <div className="grid items-center gap-8 lg:grid-cols-12">
+        <div className="mx-auto grid max-w-5xl items-center gap-8 lg:grid-cols-12 lg:gap-12">
           {/* Cột trái: danh sách lớp + nội dung */}
           <div className="order-2 space-y-6 lg:order-1 lg:col-span-5">
+            <h2 className="text-h1 text-balance text-ink sm:text-[2rem]">
+              Năm lớp làm việc cùng nhau để trả lời đúng
+            </h2>
             <ol className="flex flex-wrap gap-1.5" aria-label="Các lớp của hệ thống">
               {LAYERS.map((l) => {
                 const on = l.level === active;
@@ -180,21 +181,12 @@ export function LayerStack() {
               })}
             </ol>
 
-            <div key={current.level} className="min-h-[300px] space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-500">
-              <Badge variant="neutral">{current.tech}</Badge>
-              <h3 className="text-h1 text-balance text-ink">{current.title}</h3>
+            <div key={current.level} className="min-h-[220px] space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-500">
+              <h3 className="text-h2 text-balance text-ink">{current.title}</h3>
               <p className="text-body text-ink-2">{current.desc}</p>
               <p className="text-sm text-ink">
                 <span className="font-semibold">Bạn nhận được:</span> {current.gives}
               </p>
-              <ul className="space-y-2">
-                {current.bullets.map((b) => (
-                  <li key={b} className="flex items-start gap-2 text-sm text-ink-2">
-                    <CheckIcon className="mt-0.5 size-4 shrink-0 text-ok" />
-                    {b}
-                  </li>
-                ))}
-              </ul>
             </div>
           </div>
 
