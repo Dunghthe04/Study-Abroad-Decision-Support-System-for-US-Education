@@ -56,10 +56,11 @@ export function UniversityCard({ university }: UniversityCardProps) {
   const acceptance = university.acceptanceRate != null ? universityPercent(university.acceptanceRate) : "Chưa có";
   const english = englishRequirement(university) ?? "Chưa có";
   const satPolicy = satPolicyLabel(university.satPolicy) ?? "Chưa có";
+  const hasBadges = university.bestRank != null || university.isIvy;
 
   return (
     <Card className="group gap-0 py-0">
-      <div className="relative aspect-[16/9] w-full overflow-hidden bg-muted">
+      <div className="relative aspect-[4/3] w-full overflow-hidden bg-muted">
         {coverUrl ? (
           <Image
             src={coverUrl}
@@ -74,19 +75,9 @@ export function UniversityCard({ university }: UniversityCardProps) {
           </div>
         )}
 
-        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
 
-        <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
-          {university.bestRank != null && (
-            <Badge className="border-none bg-amber-500 text-white" title={university.bestRankList ?? undefined}>
-              #{university.bestRank}
-              {university.bestRankList && <span className="font-normal opacity-90">{university.bestRankList}</span>}
-            </Badge>
-          )}
-          {university.isIvy && <Badge className="border-none bg-emerald-700 text-white">Ivy League</Badge>}
-        </div>
-
-        <div className="absolute bottom-3 left-3 right-3 flex items-center gap-2.5">
+        <div className="absolute bottom-3 left-3 right-3 flex items-end gap-3">
           <div className="relative flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white">
             {logoUrl ? (
               <Image src={logoUrl} alt={`Logo ${university.name}`} fill sizes="44px" className="object-contain p-1" />
@@ -94,20 +85,33 @@ export function UniversityCard({ university }: UniversityCardProps) {
               <Building2Icon className="size-5 text-brand" />
             )}
           </div>
-          {subtitleParts.length > 0 && (
-            <p className="min-w-0 truncate text-sm font-medium text-white">{subtitleParts.join(" · ")}</p>
-          )}
+          <div className="min-w-0">
+            <Link
+              href={detailHref}
+              className="line-clamp-2 font-heading text-lg font-bold leading-snug text-white hover:underline"
+              title={university.name}
+            >
+              {university.name}
+            </Link>
+            {subtitleParts.length > 0 && (
+              <p className="truncate text-sm text-white/85">{subtitleParts.join(" · ")}</p>
+            )}
+          </div>
         </div>
       </div>
 
       <CardContent className="flex flex-1 flex-col gap-3 py-4">
-        <Link
-          href={detailHref}
-          className="line-clamp-2 font-heading text-lg font-bold text-foreground transition-colors hover:text-brand"
-          title={university.name}
-        >
-          {university.name}
-        </Link>
+        {hasBadges && (
+          <div className="flex flex-wrap gap-1.5">
+            {university.bestRank != null && (
+              <Badge className="border-none bg-amber-500 text-white" title={university.bestRankList ?? undefined}>
+                #{university.bestRank}
+                {university.bestRankList && <span className="font-normal opacity-90">{university.bestRankList}</span>}
+              </Badge>
+            )}
+            {university.isIvy && <Badge className="border-none bg-emerald-700 text-white">Ivy League</Badge>}
+          </div>
+        )}
 
         <dl className="grid grid-cols-2 gap-x-4 gap-y-2">
           <StatItem label="Học phí/năm" value={tuition} />
