@@ -4,7 +4,7 @@
 // Hiện sẵn vài trường đầu theo thứ tự xếp, "Xem thêm" mở phần còn lại ngay trong thẻ (dữ liệu đã có sẵn, không gửi thêm tin).
 
 import { useState } from "react";
-import { formatUsd } from "@/lib/recommendation-labels";
+import { formatPct, formatUsd } from "@/lib/recommendation-labels";
 import { Button } from "@/components/ui/button";
 import type {
   SchoolSearchData,
@@ -16,8 +16,7 @@ const CONTROL: Record<string, string> = {
   public: "Công lập",
   private: "Tư thục",
 };
-const pct = (fraction: number) =>
-  `${(Math.round(fraction * 1000) / 10).toLocaleString("vi-VN")}%`;
+const pct = (fraction: number) => formatPct(fraction);
 
 function Row({ index, school }: { index: number; school: SchoolSearchItem }) {
   const place = [school.city, school.state].filter(Boolean).join(", ");
@@ -28,11 +27,11 @@ function Row({ index, school }: { index: number; school: SchoolSearchItem }) {
         {index}. {school.name}
       </p>
       {(place || control) && (
-        <p className="text-[11px] text-ink-2">
+        <p className="text-xs text-ink-2">
           {[place, control].filter(Boolean).join(" · ")}
         </p>
       )}
-      <p className="text-[11px] text-ink-2">
+      <p className="text-xs text-ink-2">
         {[
           school.costUsd != null
             ? `Chi phí ${formatUsd(school.costUsd)}/năm`
@@ -66,7 +65,7 @@ export function SchoolSearchCard({
         <p className="text-[13px] font-bold text-brand">
           Có {data.total} trường {data.summary}
         </p>
-        <p className="text-[11px] text-ink-3">Xếp theo {data.sortLabel}</p>
+        <p className="text-xs text-ink-3">Xếp theo {data.sortLabel}</p>
       </div>
       <ol className="list-none">
         {shown.map((school, i) => (
@@ -90,7 +89,7 @@ export function SchoolSearchCard({
         />
       )}
       {expanded && clipped && (
-        <p className="text-[11px] text-ink-3">
+        <p className="text-xs text-ink-3">
           Còn {data.total - data.items.length} trường nữa, bạn thêm điều kiện
           (bang, ngành, loại trường) để thu hẹp danh sách.
         </p>

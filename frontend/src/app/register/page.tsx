@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { AuthSplitLayout } from "@/components/auth/AuthSplitLayout";
 import { RegisterForm } from "@/components/auth/RegisterForm";
 
 export const metadata: Metadata = {
@@ -8,8 +9,8 @@ export const metadata: Metadata = {
 
 export default function RegisterPage() {
   return (
-    <div className="flex min-h-[calc(100vh-12rem)] items-center justify-center py-6">
+    <AuthSplitLayout>
       <RegisterForm />
-    </div>
+    </AuthSplitLayout>
   );
 }

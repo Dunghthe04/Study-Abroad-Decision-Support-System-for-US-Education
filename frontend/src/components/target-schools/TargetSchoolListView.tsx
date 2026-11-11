@@ -22,11 +22,13 @@ import {
 import { targetSchoolsApi } from "@/lib/api";
 import type { TargetSchoolDto, TargetSchoolSummaryDto } from "@/types/api";
 import { Button } from "@/components/ui/button";
+import { ErrorFallback } from "@/components/ui/error-fallback";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/toast";
+import { groupVariant } from "@/lib/recommendation-labels";
 import { cn } from "@/lib/utils";
 
 type ViewMode = "grid" | "timeline";
@@ -127,30 +129,30 @@ export function TargetSchoolListView() {
     switch (cat?.toLowerCase()) {
       case "reach":
         return {
-          label: "Mục tiêu cao (Reach)",
-          badgeVariant: "destructive" as const,
-          borderClass: "border-l-4 border-l-rose-500",
+          label: "Khó vào",
+          badgeVariant: groupVariant("R"),
+          borderClass: "",
           desc: "Trường có tính cạnh tranh cao so với hồ sơ",
         };
       case "match":
         return {
-          label: "Vừa sức (Match)",
-          badgeVariant: "brand" as const,
-          borderClass: "border-l-4 border-l-sky-500",
+          label: "Vừa sức",
+          badgeVariant: groupVariant("M"),
+          borderClass: "",
           desc: "Điểm và hồ sơ nằm trong khoảng tuyển sinh",
         };
       case "safety":
         return {
-          label: "An toàn (Safety)",
-          badgeVariant: "default" as const,
-          borderClass: "border-l-4 border-l-emerald-500",
+          label: "An toàn hơn",
+          badgeVariant: groupVariant("S"),
+          borderClass: "",
           desc: "Hồ sơ vượt trội so với yêu cầu đầu vào",
         };
       default:
         return {
           label: "Chưa phân loại",
-          badgeVariant: "outline" as const,
-          borderClass: "border-l-4 border-l-slate-300",
+          badgeVariant: "neutral" as const,
+          borderClass: "",
           desc: "",
         };
     }
@@ -167,12 +169,13 @@ export function TargetSchoolListView() {
 
   if (error) {
     return (
-      <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-8 text-center">
-        <p className="text-sm font-medium text-destructive">{error}</p>
-        <Button onClick={fetchData} variant="outline" size="sm" className="mt-4 gap-2">
-          Thử lại
-        </Button>
-      </div>
+      <ErrorFallback
+        description={error}
+        action={{
+          label: "Thử lại",
+          onClick: fetchData,
+        }}
+      />
     );
   }
 
@@ -201,7 +204,7 @@ export function TargetSchoolListView() {
         </div>
         <div className="flex items-center gap-2">
           <Link href="/recommendations">
-            <Button size="sm" className="gap-1.5 shadow-sm">
+            <Button size="sm" className="gap-1.5 ">
               <PlusIcon className="size-4" />
               Thêm trường mới
             </Button>
@@ -213,114 +216,114 @@ export function TargetSchoolListView() {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:gap-4">
         <Card
           className={cn(
-            "cursor-pointer transition-all hover:shadow-md",
-            selectedCategory === "all" ? "ring-2 ring-brand border-brand" : ""
+            "cursor-pointer transition-all",
+            selectedCategory === "all" ? "ring-2 ring-ink-2" : ""
           )}
           onClick={() => setSelectedCategory("all")}
         >
           <CardContent className="p-4 sm:p-5">
             <div className="flex items-center justify-between text-muted-foreground">
-              <span className="text-xs font-semibold uppercase tracking-wider">Tổng mục tiêu</span>
+              <span className="text-xs font-semibold">Tổng mục tiêu</span>
               <GraduationCapIcon className="size-4 text-brand" />
             </div>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl font-black tracking-tight text-foreground sm:text-3xl">
+              <span className="text-numeric text-2xl font-bold text-foreground sm:text-3xl">
                 {total}
               </span>
               <span className="text-xs text-muted-foreground">trường</span>
             </div>
-            <p className="mt-1 text-[11px] text-muted-foreground">Toàn bộ kế hoạch lưu</p>
+            <p className="mt-1 text-xs text-muted-foreground">Toàn bộ kế hoạch lưu</p>
           </CardContent>
         </Card>
 
         <Card
           className={cn(
-            "cursor-pointer transition-all hover:shadow-md",
-            selectedCategory === "reach" ? "ring-2 ring-rose-500 border-rose-500" : ""
+            "cursor-pointer transition-all",
+            selectedCategory === "reach" ? "ring-2 ring-reach" : ""
           )}
           onClick={() => setSelectedCategory(selectedCategory === "reach" ? "all" : "reach")}
         >
           <CardContent className="p-4 sm:p-5">
             <div className="flex items-center justify-between text-muted-foreground">
-              <span className="text-xs font-semibold uppercase tracking-wider text-rose-600 dark:text-rose-400">
-                Mục tiêu cao (Reach)
+              <span className="text-xs font-semibold text-reach">
+                Khó vào
               </span>
-              <TrendingUpIcon className="size-4 text-rose-500" />
+              <TrendingUpIcon className="size-4 text-reach" />
             </div>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl font-black tracking-tight text-rose-600 dark:text-rose-400 sm:text-3xl">
+              <span className="text-numeric text-2xl font-bold text-reach sm:text-3xl">
                 {reach}
               </span>
               <span className="text-xs text-muted-foreground">
                 {total > 0 ? `(${Math.round((reach / total) * 100)}%)` : ""}
               </span>
             </div>
-            <p className="mt-1 text-[11px] text-muted-foreground">Thử thách, khó vào</p>
+            <p className="mt-1 text-xs text-muted-foreground">Thử thách, khó vào</p>
           </CardContent>
         </Card>
 
         <Card
           className={cn(
-            "cursor-pointer transition-all hover:shadow-md",
-            selectedCategory === "match" ? "ring-2 ring-sky-500 border-sky-500" : ""
+            "cursor-pointer transition-all",
+            selectedCategory === "match" ? "ring-2 ring-brand" : ""
           )}
           onClick={() => setSelectedCategory(selectedCategory === "match" ? "all" : "match")}
         >
           <CardContent className="p-4 sm:p-5">
             <div className="flex items-center justify-between text-muted-foreground">
-              <span className="text-xs font-semibold uppercase tracking-wider text-sky-600 dark:text-sky-400">
-                Vừa sức (Match)
+              <span className="text-xs font-semibold text-brand">
+                Vừa sức
               </span>
-              <CheckCircle2Icon className="size-4 text-sky-500" />
+              <CheckCircle2Icon className="size-4 text-brand" />
             </div>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl font-black tracking-tight text-sky-600 dark:text-sky-400 sm:text-3xl">
+              <span className="text-numeric text-2xl font-bold text-brand sm:text-3xl">
                 {match}
               </span>
               <span className="text-xs text-muted-foreground">
                 {total > 0 ? `(${Math.round((match / total) * 100)}%)` : ""}
               </span>
             </div>
-            <p className="mt-1 text-[11px] text-muted-foreground">Cạnh tranh ngang sức</p>
+            <p className="mt-1 text-xs text-muted-foreground">Cạnh tranh ngang sức</p>
           </CardContent>
         </Card>
 
         <Card
           className={cn(
-            "cursor-pointer transition-all hover:shadow-md",
-            selectedCategory === "safety" ? "ring-2 ring-emerald-500 border-emerald-500" : ""
+            "cursor-pointer transition-all",
+            selectedCategory === "safety" ? "ring-2 ring-ok" : ""
           )}
           onClick={() => setSelectedCategory(selectedCategory === "safety" ? "all" : "safety")}
         >
           <CardContent className="p-4 sm:p-5">
             <div className="flex items-center justify-between text-muted-foreground">
-              <span className="text-xs font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-                An toàn (Safety)
+              <span className="text-xs font-semibold text-ok">
+                An toàn hơn
               </span>
-              <ShieldCheckIcon className="size-4 text-emerald-500" />
+              <ShieldCheckIcon className="size-4 text-ok" />
             </div>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl font-black tracking-tight text-emerald-600 dark:text-emerald-400 sm:text-3xl">
+              <span className="text-numeric text-2xl font-bold text-ok sm:text-3xl">
                 {safety}
               </span>
               <span className="text-xs text-muted-foreground">
                 {total > 0 ? `(${Math.round((safety / total) * 100)}%)` : ""}
               </span>
             </div>
-            <p className="mt-1 text-[11px] text-muted-foreground">Đảm bảo cơ hội đỗ</p>
+            <p className="mt-1 text-xs text-muted-foreground">Đảm bảo cơ hội đỗ</p>
           </CardContent>
         </Card>
       </div>
 
       {/* Banner Hạn Chót Gần Nhất (Next Deadline Banner) */}
       {data?.nextDeadline && (
-        <div className="flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50/80 p-4 text-amber-900 sm:flex-row sm:items-center sm:justify-between dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+        <div className="flex flex-col gap-2 rounded-xl border border-warn/25 bg-warn-wash p-4 text-ink sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-900/60 dark:text-amber-300">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-surface text-warn">
               <ClockIcon className="size-5" />
             </div>
             <div>
-              <p className="text-xs font-medium uppercase tracking-wider text-amber-700 dark:text-amber-400">
+              <p className="text-xs font-medium text-warn">
                 Hạn chót nộp hồ sơ gần nhất
               </p>
               <p className="font-semibold text-sm">
@@ -338,9 +341,7 @@ export function TargetSchoolListView() {
               variant="outline"
               className={cn(
                 "w-fit font-semibold",
-                nextDeadlineDays <= 14
-                  ? "border-rose-400 bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300"
-                  : "border-amber-400 bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
+                nextDeadlineDays <= 14 ? "border-risk/25 bg-risk-wash text-risk" : "border-warn/25 bg-surface text-warn"
               )}
             >
               {nextDeadlineDays > 0
@@ -374,7 +375,7 @@ export function TargetSchoolListView() {
               className={cn(
                 "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
                 selectedCategory === "all"
-                  ? "bg-surface font-semibold text-foreground shadow-sm"
+                  ? "bg-surface font-semibold text-foreground "
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
@@ -386,11 +387,11 @@ export function TargetSchoolListView() {
               className={cn(
                 "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
                 selectedCategory === "reach"
-                  ? "bg-surface font-semibold text-rose-600 shadow-sm"
+                  ? "bg-surface font-semibold text-reach"
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
-              Reach ({reach})
+              Khó vào ({reach})
             </button>
             <button
               type="button"
@@ -398,11 +399,11 @@ export function TargetSchoolListView() {
               className={cn(
                 "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
                 selectedCategory === "match"
-                  ? "bg-surface font-semibold text-sky-600 shadow-sm"
+                  ? "bg-surface font-semibold text-brand"
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
-              Match ({match})
+              Vừa sức ({match})
             </button>
             <button
               type="button"
@@ -410,11 +411,11 @@ export function TargetSchoolListView() {
               className={cn(
                 "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
                 selectedCategory === "safety"
-                  ? "bg-surface font-semibold text-emerald-600 shadow-sm"
+                  ? "bg-surface font-semibold text-ok"
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
-              Safety ({safety})
+              An toàn hơn ({safety})
             </button>
           </div>
 
@@ -426,7 +427,7 @@ export function TargetSchoolListView() {
               className={cn(
                 "inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
                 viewMode === "grid"
-                  ? "bg-surface font-semibold text-brand shadow-sm"
+                  ? "bg-surface font-semibold text-brand "
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
@@ -439,7 +440,7 @@ export function TargetSchoolListView() {
               className={cn(
                 "inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
                 viewMode === "timeline"
-                  ? "bg-surface font-semibold text-brand shadow-sm"
+                  ? "bg-surface font-semibold text-brand "
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
@@ -506,13 +507,13 @@ export function TargetSchoolListView() {
               <Card
                 key={item.id}
                 className={cn(
-                  "flex flex-col justify-between transition-shadow hover:shadow-md",
+                  "flex flex-col justify-between transition-colors",
                   catConfig.borderClass
                 )}
               >
                 <CardHeader className="p-4 pb-2">
                   <div className="flex items-start justify-between gap-2">
-                    <Badge variant={catConfig.badgeVariant} className="text-[11px] font-semibold">
+                    <Badge variant={catConfig.badgeVariant} className="text-xs font-semibold">
                       {catConfig.label}
                     </Badge>
                     <span className="font-mono text-xs text-muted-foreground">Mã {item.universityCode}</span>
@@ -564,12 +565,12 @@ export function TargetSchoolListView() {
                       <div className="flex justify-end pt-0.5">
                         <span
                           className={cn(
-                            "rounded px-1.5 py-0.5 text-[10px] font-semibold",
+                            "rounded px-1.5 py-0.5 text-xs font-semibold",
                             daysRemaining <= 14
-                              ? "bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300"
+                              ? "bg-risk-wash text-risk"
                               : daysRemaining <= 45
-                                ? "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
-                                : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+                                ? "bg-warn-wash text-warn"
+                                : "bg-ok-wash text-ok"
                           )}
                         >
                           {daysRemaining > 0
@@ -600,7 +601,7 @@ export function TargetSchoolListView() {
 
                   {/* Ghi chú cá nhân */}
                   {item.notes && (
-                    <div className="border-t border-line/60 pt-2 text-[11px] text-muted-foreground">
+                    <div className="border-t border-line/60 pt-2 text-xs text-muted-foreground">
                       <span className="font-semibold text-foreground/80">Ghi chú:</span>{" "}
                       <span className="italic">{item.notes}</span>
                     </div>
@@ -655,12 +656,12 @@ export function TargetSchoolListView() {
                       className={cn(
                         "absolute -left-[31px] top-1 flex size-4 items-center justify-center rounded-full border-2 bg-surface",
                         daysRemaining !== null && daysRemaining <= 14
-                          ? "border-rose-500 bg-rose-500"
+                          ? "border-risk bg-risk"
                           : "border-brand bg-brand"
                       )}
                     />
 
-                    <div className="rounded-xl border border-line bg-surface p-4 transition-all hover:shadow-sm">
+                    <div className="rounded-xl border border-line bg-surface p-4 transition-all ">
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <div>
                           <div className="flex flex-wrap items-center gap-2">
@@ -670,7 +671,7 @@ export function TargetSchoolListView() {
                             >
                               {item.universityName}
                             </Link>
-                            <Badge variant={catConfig.badgeVariant} className="text-[10px]">
+                            <Badge variant={catConfig.badgeVariant} className="text-xs">
                               {catConfig.label}
                             </Badge>
                           </div>
@@ -702,8 +703,8 @@ export function TargetSchoolListView() {
                               className={cn(
                                 "font-semibold text-xs",
                                 daysRemaining <= 14
-                                  ? "border-rose-300 bg-rose-50 text-rose-700"
-                                  : "border-emerald-300 bg-emerald-50 text-emerald-700"
+                                  ? "border-risk/25 bg-risk-wash text-risk"
+                                  : "border-ok/25 bg-ok-wash text-ok"
                               )}
                             >
                               {daysRemaining > 0

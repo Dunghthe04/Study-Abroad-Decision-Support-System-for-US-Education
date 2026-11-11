@@ -2,6 +2,7 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+/* Chưa có dark mode: giữ biến thể dark gắn với class .dark (không bao giờ bật) để các class dark: cũ không ăn theo chế độ tối của hệ điều hành */
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
@@ -23,6 +24,10 @@
   --color-warn-wash: var(--warn-wash);
   --color-risk: var(--risk);
   --color-risk-wash: var(--risk-wash);
+  --color-reach: var(--reach);
+  --color-reach-wash: var(--reach-wash);
+  --color-gold: var(--gold);
+  --color-gold-wash: var(--gold-wash);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -66,20 +71,28 @@
 :root {
   --ink: #0f2233;
   --ink-2: #55697c;
-  --ink-3: #7c8d9d;
+  --ink-3: #62748a; /* 4.8:1 trên nền trắng, đạt AA */
   --ground: #f5f7f9;
   --surface: #ffffff;
   --line: #dce4eb;
-  --brand: #0e5f7a;
+  /* Xanh Old Glory Blue của cờ Mỹ (#0A3161), 12.8:1 với chữ trắng */
+  --brand: #0a3161;
   --brand-foreground: #ffffff;
-  --brand-ink: #0a4256;
-  --brand-wash: #e4eff3;
-  --ok: #1e7a5a;
+  --brand-ink: #071f3e;
+  --brand-wash: #e7ecf4;
+  --ok: #1b7052;
   --ok-wash: #e3f1eb;
-  --warn: #a85d18;
+  --warn: #94500f;
   --warn-wash: #f7ede3;
-  --risk: #9e3830;
-  --risk-wash: #f6e6e4;
+  /* Đỏ Old Glory Red của cờ Mỹ (#B31942), 6.2:1 với chữ trắng; chỉ dùng cho lỗi và cảnh báo nguy hiểm */
+  --risk: #b31942;
+  --risk-wash: #f9e6eb;
+  /* Màu nhóm Khó vào: tím sẫm, không dùng đỏ để học sinh không đọc thành "trượt". Đỏ (risk) chỉ dành cho lỗi */
+  --reach: #5e4a8c;
+  --reach-wash: #efebf6;
+  /* Vàng kim cho thứ hạng top 11-25: 4.9:1 trên nền trắng, đạt AA */
+  --gold: #8a6d00;
+  --gold-wash: #fbf6e6;
 
   --background: var(--ground);
   --foreground: var(--ink);
@@ -93,18 +106,21 @@
   --secondary-foreground: var(--brand-ink);
   --muted: var(--ground);
   --muted-foreground: var(--ink-2);
+  /* shadcn dùng accent cho nền hover của nút viền và mục menu, nên giữ trung tính */
   --accent: var(--brand-wash);
   --accent-foreground: var(--brand-ink);
   --destructive: var(--risk);
   --border: var(--line);
   --input: var(--line);
   --ring: var(--brand);
+  /* Bảng màu biểu đồ tách khỏi màu ngữ nghĩa, để đường xu hướng không bị đọc thành "rủi ro" hay "an toàn" */
   --chart-1: var(--brand);
-  --chart-2: var(--ok);
-  --chart-3: var(--warn);
-  --chart-4: var(--risk);
-  --chart-5: var(--ink-3);
+  --chart-2: #3f6aa8;
+  --chart-3: #8fa9cf;
+  --chart-4: #5b6f86;
+  --chart-5: #b98a3e;
   --radius: 0.5rem;
+  --header-h: 6.5rem; /* thanh đầu 2 hàng (56px + 48px + viền), để ảnh đầu trang chủ nằm dưới nó */
   --sidebar: var(--surface);
   --sidebar-foreground: var(--ink);
   --sidebar-primary: var(--brand);
@@ -113,41 +129,6 @@
   --sidebar-accent-foreground: var(--brand-ink);
   --sidebar-border: var(--line);
   --sidebar-ring: var(--brand);
-}
-
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
-  --brand-foreground: #ffffff;
 }
 
 @layer base {
@@ -164,6 +145,10 @@
   }
   html {
     @apply font-sans;
+  }
+  ::selection {
+    background-color: var(--brand-wash);
+    color: var(--brand-ink);
   }
 }
 @utility text-display {
@@ -202,15 +187,13 @@
 @utility text-body-s {
   font-size: 0.8125rem;
   line-height: 1.55;
-  color: var(--ink-3);
 }
 
 @utility text-label {
-  font-size: 0.6875rem;
-  line-height: 1.4;
+  /* Không viết hoa: chữ hoa có dấu (Ố, Ặ) chồng lên nhau và khó đọc */
+  font-size: 0.75rem;
+  line-height: 1.5;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
   color: var(--ink-2);
 }
 
@@ -251,14 +234,7 @@
   background-color: rgba(100, 116, 139, 0.65);
 }
 
-.dark *.is-scrolling::-webkit-scrollbar-thumb {
-  background-color: rgba(255, 255, 255, 0.28);
-}
 
-.dark *.is-scrolling::-webkit-scrollbar-thumb:hover,
-.dark *::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(255, 255, 255, 0.55);
-}
 
 /* Hỗ trợ Firefox / W3C */
 * {
@@ -270,12 +246,15 @@
   scrollbar-color: rgba(100, 116, 139, 0.38) transparent;
 }
 
-.dark *.is-scrolling {
-  scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
-}
 
 /* Không hiện scrollbar với phần tử có cấu hình riêng */
 .no-scrollbar::-webkit-scrollbar,
 [class*="[scrollbar-width:none]"]::-webkit-scrollbar {
   display: none !important;
+}
+
+/* Dải logo trường ở trang chủ: chạy nửa chiều rộng (một bản sao) rồi lặp lại */
+@keyframes usas-logo-strip {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
 }

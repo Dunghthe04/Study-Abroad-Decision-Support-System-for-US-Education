@@ -7,6 +7,16 @@ const devApiTarget = process.env.API_PROXY_TARGET;
 const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
+  // Cho phép mở dev server từ máy khác trong mạng LAN (chỉ có tác dụng khi chạy next dev)
+  allowedDevOrigins: ["192.168.*.*"],
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "res.cloudinary.com",
+      },
+    ],
+  },
   async rewrites() {
     return devApiTarget ? [{ source: "/api/:path*", destination: `${devApiTarget}/api/:path*` }] : [];
   },

@@ -1,54 +1,61 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { ArrowLeftIcon, ArrowUpRightIcon, Building2Icon, GlobeIcon, GraduationCapIcon, MapPinIcon, PercentIcon, UsersIcon } from "lucide-react";
+import { ArrowUpRightIcon, GlobeIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
-import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
 import { cn } from "cn";
 import { studyLevelLabel } from "@/lib/study-levels";
-import { schoolControlLabel, universityNumber, universityPercent, universityUrl } from "@/lib/university-display";
+import { campusSettingLabel, schoolControlLabel, universityNumber, universityUrl } from "@/lib/university-display";
 import type { UniversityDetail } from "@/types/university";
-import { DetailSection, GridDataItem, SchoolImage, SourceLink } from "./UniversityDetailParts";
-import { UniversityAdmissions, UniversityCosts, UniversityMajors, UniversityStatistics } from "./UniversityOfferingSections";
+import { acceptanceRateTone, DetailSection, Gauge, SchoolImage } from "./UniversityDetailParts";
+import { UniversityAdmissions, UniversityCampusLife, UniversityCosts, UniversityMajors, UniversityStatistics } from "./UniversityOfferingSections";
 import { UniversitySources } from "./UniversitySources";
 import { AddTargetSchoolButton } from "@/components/target-schools/AddTargetSchoolButton";
 
-function formatRank(display: string | null | undefined, rank: number): string {
+function cleanRankNumber(display: string | null | undefined, rank: number): string {
   if (display) {
-    const cleaned = display.replace(/\s*\(tie\)/i, "").trim();
+    const cleaned = display.replace(/\s*\(tie\)/i, "").replace(/^#/, "").trim();
     if (cleaned) return cleaned;
   }
-  return `#${rank}`;
+  return String(rank);
 }
 
-function getRankColorClass(rank: number): string {
-  if (rank <= 3) return "text-amber-600 dark:text-amber-400 font-black text-xl";
-  if (rank <= 10) return "text-emerald-600 dark:text-emerald-400 font-bold text-lg";
-  if (rank <= 50) return "text-brand font-bold text-lg";
-  return "text-muted-foreground font-semibold text-lg";
+function rankTone(rank: number): string {
+  if (rank <= 3) return "text-risk";
+  if (rank <= 10) return "text-warn";
+  if (rank <= 25) return "text-gold";
+  return "text-ink";
 }
 
-export function UniversityDetailView({
-  university,
-  back = { href: "/", label: "Trang chủ" },
-}: {
-  university: UniversityDetail;
-  back?: { href: string; label: string };
-}) {
+function rankTextSize(rankStr: string): string {
+  const digits = rankStr.replace(/\D/g, "").length;
+  if (digits >= 4) return "text-2xl";
+  if (digits === 3) return "text-3xl";
+  return "text-4xl";
+}
+
+export function UniversityDetailView({ university }: { university: UniversityDetail }) {
   const [selectedLevel, setSelectedLevel] = useState(university.offerings[0]?.studyLevel ?? "");
   const [activeSection, setActiveSection] = useState("overview");
   const offering = university.offerings.find((item) => item.studyLevel === selectedLevel) ?? university.offerings[0];
   const location = [university.city, university.stateName ?? university.state].filter(Boolean).join(", ");
   const website = universityUrl(university.website);
-  const coverUrl = universityUrl(university.coverUrl);
+
+  const hasCampusData = Boolean(
+    offering && (
+      offering.fyOnCampusPct != null ||
+      offering.ugOnCampusPct != null ||
+      offering.housingTypes ||
+      offering.housingOnlyUsd != null ||
+      offering.activities
+    )
+  );
+
   const navigation = useMemo(
     () => [
       { id: "overview", label: "Tổng quan" },
@@ -56,13 +63,14 @@ export function UniversityDetailView({
         ? [
             { id: "costs", label: "Chi phí & hỗ trợ" },
             { id: "admissions", label: "Tuyển sinh" },
+            ...(hasCampusData ? [{ id: "campus", label: "Khuôn viên & nhà ở" }] : []),
             { id: "statistics", label: "Thống kê" },
             { id: "majors", label: "Ngành học" },
           ]
         : []),
       { id: "sources", label: "Nguồn dữ liệu" },
     ],
-    [offering],
+    [offering, hasCampusData],
   );
 
   useEffect(() => {
@@ -82,84 +90,75 @@ export function UniversityDetailView({
     return () => window.removeEventListener("scroll", handleScroll);
   }, [navigation]);
 
-  const overviewItems = [
-    { icon: MapPinIcon, label: "Vị trí", value: location || "—" },
-    { icon: Building2Icon, label: "Loại trường", value: schoolControlLabel(university.control) },
-    { icon: PercentIcon, label: "Tỷ lệ nhận chung", value: universityPercent(university.acceptanceRate) },
-    { icon: UsersIcon, label: "Sinh viên quốc tế", value: universityNumber(university.internationalStudentCount) },
-    {
-      icon: GraduationCapIcon,
-      label: "Bậc học có dữ liệu",
-      value: university.offerings.length ? university.offerings.map((item) => studyLevelLabel(item.studyLevel)).join(", ") : "—",
-    },
-  ];
+  const overviewRows = [
+    offering?.campusSetting ? { label: "Bối cảnh khuôn viên", value: campusSettingLabel(offering.campusSetting) } : null,
+    offering?.studentFacultyRatio != null ? { label: "Tỷ lệ SV / giảng viên", value: `${offering.studentFacultyRatio} : 1` } : null,
+    university.internationalStudentCount != null ? { label: "Sinh viên quốc tế", value: universityNumber(university.internationalStudentCount) } : null,
+  ].filter((item): item is NonNullable<typeof item> => Boolean(item));
+
+  const acceptanceTone = university.acceptanceRate != null ? acceptanceRateTone(university.acceptanceRate) : "brand";
+  const acceptanceToneClass = {
+    reach: "text-reach",
+    warn: "text-warn",
+    ok: "text-ok",
+    brand: "text-brand",
+  }[acceptanceTone];
+  const acceptancePct = university.acceptanceRate != null ? (university.acceptanceRate > 1 ? university.acceptanceRate : university.acceptanceRate * 100) : null;
+  const acceptanceDisplayNumber = acceptancePct != null ? universityNumber(Number(acceptancePct.toFixed(1))) : null;
 
   return (
     <article className="space-y-6 pb-12">
-      {/* Hero Header với background ảnh bìa mờ tràn toàn màn hình */}
-      <div className="relative w-full overflow-hidden border-b border-border/60 bg-muted/20">
-        {coverUrl && (
-          <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
-            <div
-              className="absolute inset-0 bg-cover bg-center blur-3xl scale-125 opacity-35 brightness-110 saturate-150"
-              style={{ backgroundImage: `url(${coverUrl})` }}
-            />
-            <div className="absolute inset-0 bg-gradient-to-b from-background/30 via-background/60 to-background" />
-          </div>
-        )}
+      {/* Ảnh bìa lớn tràn mép, nằm dưới thanh đầu trong suốt giống trang chủ */}
+      <header>
+        <div className="relative -mt-(--header-h) h-[min(60svh,520px)] min-h-72 overflow-hidden bg-brand-ink">
+          <SchoolImage url={university.coverUrl} alt={`Khuôn viên ${university.name}`} className="size-full" priority />
+          {/* Chỉ làm tối phần trên để chữ thanh đầu đọc được */}
+          <div className="absolute inset-x-0 top-0 h-48 bg-linear-to-b from-brand-ink/80 to-transparent" />
+        </div>
 
-        <div className="mx-auto max-w-[1320px] px-4 pt-4 pb-6 sm:px-6 space-y-5">
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem>
-                <BreadcrumbLink render={<Link href={back.href} />}>
-                  <ArrowLeftIcon className="size-3.5" />
-                  {back.label}
-                </BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-              <BreadcrumbItem>
-                <BreadcrumbPage>Thông tin trường · Mã {university.code}</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-
-          <header>
-            <SchoolImage
-              url={university.coverUrl}
-              alt={`Khuôn viên ${university.name}`}
-              className="h-48 w-full rounded-xl bg-brand-wash shadow-lg ring-1 ring-border/50 sm:h-64 lg:h-80"
-              priority
-            />
-            <div className="flex flex-wrap items-end justify-between gap-5 pt-5">
-              <div className="flex w-full min-w-0 flex-none items-center gap-4 sm:w-auto sm:flex-1">
-                <SchoolImage url={university.logoUrl} alt={`Logo ${university.name}`} className="size-16 shrink-0 bg-white sm:size-20 shadow-sm" contain />
-                <div className="min-w-0">
-                  <h1 className="text-2xl font-semibold leading-tight tracking-tight text-foreground sm:text-3xl">{university.name}</h1>
-                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-                    {location && <span className="inline-flex items-center gap-1"><MapPinIcon className="size-3.5" />{location}</span>}
-                    {university.control && <span>{schoolControlLabel(university.control)}</span>}
-                    {university.isIvy && <Badge variant="secondary">Ivy League</Badge>}
-                  </div>
+        {/* Dưới ảnh: logo đè nhẹ lên mép ảnh, tên và vị trí bên trái, các nút bên phải canh giữa theo khối tên */}
+        <div className="border-b border-line bg-surface">
+          <div className="mx-auto flex w-full max-w-[1560px] flex-wrap items-center justify-between gap-5 px-4 pb-6 sm:px-8 lg:px-12">
+            <div className="flex min-w-0 items-end gap-4">
+              <SchoolImage url={university.logoUrl} alt={`Logo ${university.name}`} className="-mt-8 size-20 shrink-0 rounded-xl border border-line bg-white sm:-mt-10 sm:size-24" contain />
+              <div className="min-w-0 pt-4">
+                <h1 className="text-2xl leading-tight font-semibold tracking-tight text-balance text-ink sm:text-3xl">{university.name}</h1>
+                {/* Vị trí · loại trường, ngăn cách bằng dấu chấm giữa */}
+                <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-2">
+                  {[location, university.control && schoolControlLabel(university.control)].filter(Boolean).join(" · ")}
+                  {university.isIvy && <Badge variant="secondary">Ivy League</Badge>}
                 </div>
               </div>
-              <div className="flex flex-wrap items-center gap-3">
-                <AddTargetSchoolButton
-                  universityCode={university.code}
-                  universityName={university.name}
-                  universityCity={university.city}
-                  universityState={university.state}
-                />
-                {website && <Button variant="outline" nativeButton={false} role="link" render={<a href={website} target="_blank" rel="noopener noreferrer" />}><GlobeIcon />Website trường<ArrowUpRightIcon /></Button>}
-              </div>
             </div>
-          </header>
+            <div className="flex flex-wrap items-center gap-3 pt-4">
+              <AddTargetSchoolButton
+                universityCode={university.code}
+                universityName={university.name}
+                universityCity={university.city}
+                universityState={university.state}
+                size="lg"
+                className="!border-transparent !bg-brand-wash !text-brand-ink hover:!bg-brand-wash/70"
+              />
+              {website && (
+                <Button
+                  size="lg"
+                  nativeButton={false}
+                  role="link"
+                  render={<a href={website} target="_blank" rel="noopener noreferrer" />}
+                >
+                  <GlobeIcon />Website trường<ArrowUpRightIcon />
+                </Button>
+              )}
+            </div>
+          </div>
         </div>
-      </div>
+      </header>
 
-      <div className="mx-auto max-w-[1320px] px-4 sm:px-6 space-y-6">
-        <nav aria-label="Các mục thông tin trường" className="sticky top-14 z-20 border-b border-border bg-background/95 backdrop-blur-sm">
-          <ScrollArea className="w-full min-w-0">
+      <div className="mx-auto max-w-[1560px] px-4 sm:px-8 lg:px-12 space-y-6">
+        {/* Nền đặc và tràn ra cả phần lề hai bên, để viền thẻ bên dưới không lộ ra khi cuộn.
+            Cuộn ngang bằng overflow gốc, ẩn thanh cuộn (ScrollArea luôn vẽ thêm thanh dọc) */}
+        <nav aria-label="Các mục thông tin trường" className="sticky top-(--header-h) z-20 -mx-4 sm:-mx-8 lg:-mx-12 bg-background px-4 sm:px-8 lg:px-12">
+          <div className="overflow-x-auto border-b border-border [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <div className="flex w-max gap-1">
               {navigation.map((item) => {
                 const isActive = activeSection === item.id;
@@ -180,8 +179,7 @@ export function UniversityDetailView({
                 );
               })}
             </div>
-            <ScrollBar orientation="horizontal" />
-          </ScrollArea>
+          </div>
         </nav>
 
       {university.offerings.length > 1 && (
@@ -200,81 +198,124 @@ export function UniversityDetailView({
       )}
 
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_280px] xl:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="min-w-0 space-y-5">
+        <div className="min-w-0 space-y-8">
           <DetailSection id="overview" title="Tổng quan">
-            <div className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
-              {overviewItems.map((item) => (
-                <GridDataItem
-                  key={item.label}
-                  icon={item.icon}
-                  label={item.label}
-                  value={item.value}
-                />
-              ))}
+            <div className="overflow-hidden rounded-xl border border-line bg-surface">
+              {university.acceptanceRate != null && (
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6 p-5 sm:p-6">
+                  <div className="space-y-1">
+                    <p className="text-base font-medium text-ink">Tỷ lệ nhận chung</p>
+                    <p className="text-sm text-ink-2">Tỷ lệ trúng tuyển toàn trường</p>
+                    <div className="pt-2 flex items-baseline gap-1">
+                      <span className={cn("text-5xl sm:text-6xl font-semibold tracking-tight tabular-nums", acceptanceToneClass)}>
+                        {acceptanceDisplayNumber}
+                      </span>
+                      <span className={cn("text-2xl font-semibold", acceptanceToneClass)}>%</span>
+                    </div>
+                  </div>
+                  <div className="shrink-0 self-center sm:self-auto">
+                    <Gauge
+                      value={university.acceptanceRate}
+                      label="Tỷ lệ nhận chung"
+                      tone={acceptanceTone}
+                      className="w-48 sm:w-56 md:w-60"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {overviewRows.length > 0 && (
+                <div className={cn("divide-y divide-line", university.acceptanceRate != null && "border-t border-line")}>
+                  {overviewRows.map((row) => (
+                    <div key={row.label} className="flex items-center justify-between px-5 py-3.5 sm:px-6">
+                      <span className="text-sm text-ink-2">{row.label}</span>
+                      <span className="text-sm font-semibold text-ink tabular-nums">{row.value}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-            {website && <div className="mt-5 space-y-4"><Separator /><SourceLink url={website} /></div>}
           </DetailSection>
 
           {offering ? (
-            <div key={offering.studyLevel} className="space-y-5">
+            <div key={offering.studyLevel} className="space-y-8">
               <UniversityCosts offering={offering} />
               <UniversityAdmissions offering={offering} />
+              <UniversityCampusLife offering={offering} />
               <UniversityStatistics offering={offering} internationalStudentCount={university.internationalStudentCount} />
               <UniversityMajors offering={offering} />
             </div>
           ) : (
-            <DetailSection title="Thông tin tuyển sinh & chi phí"><p className="text-sm leading-relaxed text-muted-foreground">Trường chưa có dữ liệu bậc học trong hệ thống. Bạn có thể tham khảo website chính thức của trường.</p></DetailSection>
+            <DetailSection title="Thông tin tuyển sinh & chi phí">
+              <div className="rounded-xl border border-line bg-surface p-5 sm:p-6">
+                <p className="text-sm leading-relaxed text-ink-2">
+                  Trường chưa có dữ liệu bậc học trong hệ thống. Bạn có thể tham khảo website chính thức của trường.
+                </p>
+              </div>
+            </DetailSection>
           )}
 
           {university.galleryUrls.length > 0 && (
             <DetailSection title="Hình ảnh trường">
-              <div className="grid grid-cols-2 gap-3">
-                {university.galleryUrls.map((url, index) => <a key={`${url}-${index}`} href={universityUrl(url) ?? undefined} target="_blank" rel="noopener noreferrer" aria-label={`Mở ảnh ${index + 1} của ${university.name}`}><AspectRatio ratio={4 / 3}><SchoolImage url={url} alt={`Ảnh ${index + 1} của ${university.name}`} className="h-full w-full rounded-md bg-muted" /></AspectRatio></a>)}
+              <div className="rounded-xl border border-line bg-surface p-5 sm:p-6">
+                <div className="grid grid-cols-2 gap-3">
+                  {university.galleryUrls.map((url, index) => (
+                    <a key={`${url}-${index}`} href={universityUrl(url) ?? undefined} target="_blank" rel="noopener noreferrer" aria-label={`Mở ảnh ${index + 1} của ${university.name}`}>
+                      <AspectRatio ratio={4 / 3}>
+                        <SchoolImage url={url} alt={`Ảnh ${index + 1} của ${university.name}`} className="h-full w-full rounded-md bg-muted" />
+                      </AspectRatio>
+                    </a>
+                  ))}
+                </div>
               </div>
             </DetailSection>
           )}
           <UniversitySources sources={university.sources} />
         </div>
 
-        <aside aria-label="Thông tin bổ sung" className="space-y-5 lg:sticky lg:top-32">
+        <aside aria-label="Thông tin bổ sung" className="space-y-5 lg:sticky lg:top-[calc(var(--header-h)+4.5rem)]">
           {university.rankings.length > 0 && (
             <DetailSection title="Xếp hạng đã ghi nhận">
-              <ul className="divide-y divide-border/70">
-                {university.rankings.map((ranking) => {
-                  const safeSourceUrl = universityUrl(ranking.sourceUrl);
-                  return (
-                    <li key={`${ranking.publisher}-${ranking.name}-${ranking.edition}`} className="py-3.5 first:pt-0 last:pb-0">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0 flex-1 space-y-1">
+              <div className="overflow-hidden rounded-xl border border-line bg-surface">
+                <ul>
+                  {university.rankings.map((ranking) => {
+                    const safeSourceUrl = universityUrl(ranking.sourceUrl);
+                    const numStr = cleanRankNumber(ranking.rankDisplay, ranking.rank);
+                    return (
+                      <li key={`${ranking.publisher}-${ranking.name}-${ranking.edition}`} className="group flex items-center gap-4 pl-4 sm:pl-5">
+                        <div className="flex shrink-0 items-baseline gap-0.5 font-heading font-semibold tabular-nums">
+                          <span className="text-sm font-normal opacity-70">#</span>
+                          <span className={cn("leading-none", rankTone(ranking.rank), rankTextSize(numStr))}>
+                            {numStr}
+                          </span>
+                        </div>
+                        <div className="min-w-0 flex-1 py-3.5 pr-4 sm:pr-5 border-b border-line/70 group-last:border-b-0 space-y-0.5">
                           {safeSourceUrl ? (
                             <a
                               href={safeSourceUrl}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-sm font-medium leading-snug text-foreground transition-colors hover:text-brand hover:underline"
+                              className="line-clamp-2 text-sm font-medium leading-snug text-ink transition-colors hover:text-brand hover:underline"
                             >
                               {ranking.name}
                             </a>
                           ) : (
-                            <p className="text-sm font-medium leading-snug text-foreground">{ranking.name}</p>
+                            <p className="line-clamp-2 text-sm font-medium leading-snug text-ink">{ranking.name}</p>
                           )}
-                          <p className="text-xs text-muted-foreground">
+                          <p className="text-xs text-ink-3">
                             {ranking.publisher} · {ranking.edition ?? ranking.editionYear ?? "Chưa có năm"}
                           </p>
                         </div>
-                        <span className={cn("shrink-0 tracking-tight", getRankColorClass(ranking.rank))}>
-                          {formatRank(ranking.rankDisplay, ranking.rank)}
-                        </span>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
             </DetailSection>
           )}
         </aside>
       </div>
-    </div>
-  </article>
+      </div>
+    </article>
   );
 }

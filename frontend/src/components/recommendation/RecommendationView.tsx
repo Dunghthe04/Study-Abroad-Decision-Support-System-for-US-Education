@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { AlertCircleIcon, ClockIcon, RefreshCwIcon } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { ErrorFallback } from "@/components/ui/error-fallback";
 import { Spinner } from "@/components/ui/spinner";
 import { useAssistant, useAssistantPageContext } from "@/components/assistant/AssistantProvider";
 import { recommendationApi } from "@/lib/recommendation-api";
@@ -177,6 +178,19 @@ export function RecommendationView({ autoRun, initialOverrides }: Recommendation
     );
   }
 
+  if (!rec && error) {
+    return (
+      <ErrorFallback
+        title="Không thể tải gợi ý trường học"
+        description={error}
+        action={{
+          label: "Thử lại",
+          onClick: runNew,
+        }}
+      />
+    );
+  }
+
   const main = (
     <div className="min-w-0 flex-1 space-y-6 px-4 py-6 lg:px-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -245,13 +259,14 @@ export function RecommendationView({ autoRun, initialOverrides }: Recommendation
           <ResultBody
             rec={view}
             changes={simulating ? sim.result!.changes : []}
+            simulated={simulating}
             onExplain={askExplain}
             onGoal={askGoal}
           />
         </>
       )}
 
-      <p className="text-[11px] text-ink-3">
+      <p className="text-xs text-ink-3">
         Kết quả chỉ để tham khảo, không phải xác suất đỗ. Số liệu lấy từ Common Data Set của từng trường.
       </p>
 
@@ -287,11 +302,12 @@ function SimulationBanner({ sim, onSave }: { sim: ProfileSimulation; onSave: (ti
 interface ResultBodyProps {
   rec: Recommendation;
   changes: SchoolChange[]; // trường đổi nhóm khi đang mô phỏng
+  simulated: boolean; // đang xem kết quả giả định
   onExplain?: (code: string) => void; // bỏ trống khi đang mô phỏng
   onGoal?: (code: string) => void;
 }
 
-function ResultBody({ rec, changes, onExplain, onGoal }: ResultBodyProps) {
+function ResultBody({ rec, changes, simulated, onExplain, onGoal }: ResultBodyProps) {
   const { criteria, items } = rec;
   const byCode = new Map<string, ScoredSchool>(items.scored.map((s) => [s.code, s]));
   const changeByCode = new Map<string, SchoolChange>(changes.map((c) => [c.code, c]));
@@ -338,7 +354,7 @@ function ResultBody({ rec, changes, onExplain, onGoal }: ResultBodyProps) {
         return (
           <section key={block.key} className="space-y-3">
             <div className="flex items-baseline gap-2">
-              <h2 className="text-sm font-bold uppercase tracking-wide text-foreground">{block.title}</h2>
+              <h2 className="text-h3 text-foreground">{block.title}</h2>
               <span className="text-xs text-muted-foreground">{block.note}</span>
             </div>
             <div className="space-y-3">
@@ -348,6 +364,7 @@ function ResultBody({ rec, changes, onExplain, onGoal }: ResultBodyProps) {
                     picked={p}
                     school={byCode.get(p.code)}
                     change={changeByCode.get(p.code)}
+                    simulated={simulated}
                     onExplain={onExplain}
                     onGoal={onGoal}
                     student={{ sat: criteria.studentSat ?? null, gpa: criteria.studentGpa ?? null }}

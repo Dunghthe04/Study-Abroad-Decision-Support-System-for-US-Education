@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRightIcon, AwardIcon, DollarSignIcon, GraduationCapIcon, ScaleIcon, TrendingUpIcon } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { groupVariant } from "@/lib/recommendation-labels";
 import { OpenAssistantButton } from "@/components/assistant/OpenAssistantButton";
 import { cn } from "@/lib/utils";
 
@@ -14,28 +16,28 @@ export const metadata: Metadata = {
 const tiers = [
   {
     name: "Khó vào",
-    tone: "bg-risk-wash text-risk",
+    group: "R",
     description: "Hồ sơ hiện tại thấp hơn mức thường nhận của trường. Nên xem như mục tiêu cao.",
     criteria: "GPA ≤ GPA TB trường − 0.3, hoặc SAT dưới mốc 25% của trường",
     share: "20–25%",
   },
   {
     name: "Vừa sức",
-    tone: "bg-brand-wash text-brand",
+    group: "M",
     description: "Hồ sơ nằm trong khoảng thường nhận của trường. Nhóm nên tập trung nhất.",
     criteria: "Hồ sơ trong khoảng 25% – 75% của trường, GPA chênh trong ±0.3",
     share: "45–50%",
   },
   {
     name: "An toàn hơn",
-    tone: "bg-ok-wash text-ok",
+    group: "S",
     description: "Hồ sơ cao hơn mức thường nhận của trường, khả năng đậu cao.",
     criteria: "GPA ≥ GPA TB trường + 0.3, hoặc SAT từ mốc 75%. Cao đẳng cộng đồng mặc định an toàn",
     share: "25–30%",
   },
   {
     name: "Chỉ đi được nếu có học bổng lớn",
-    tone: "bg-warn-wash text-warn",
+    group: "AID",
     description: "Phù hợp về học thuật nhưng chi phí vượt ngân sách của bạn nếu không có học bổng lớn.",
     criteria: "Tổng chi phí/năm > 110% ngân sách gia đình tự chi trả",
     share: "Tuỳ ngân sách",
@@ -101,7 +103,7 @@ function SectionCard({ title, note, children, className }: { title: string; note
   return (
     <section className={cn("rounded-xl border border-line bg-surface p-5 sm:p-6", className)}>
       <h2 className="font-sans text-lg font-semibold text-foreground">{title}</h2>
-      {note && <p className="mt-1 text-[13px] text-muted-foreground">{note}</p>}
+      {note && <p className="mt-1 text-body-s text-muted-foreground text-muted-foreground">{note}</p>}
       <div className="mt-4">{children}</div>
     </section>
   );
@@ -111,8 +113,7 @@ export default function MethodologyPage() {
   return (
     <div className="mx-auto max-w-[900px] space-y-6 pb-16">
       <div className="space-y-2 pt-5">
-        <div className="text-[11.5px] font-bold tracking-[0.07em] text-brand uppercase">Giới thiệu phương pháp</div>
-        <h1 className="text-[34px] leading-tight font-semibold text-foreground">Cách hệ thống xếp trường</h1>
+                <h1 className="text-display text-foreground">Cách hệ thống xếp trường</h1>
         <p className="max-w-[62ch] text-muted-foreground">
           Hồ sơ được so với số liệu tuyển sinh của từng trường: GPA trung bình, SAT, tỉ lệ nhận học sinh quốc tế và
           chi phí. Kết quả là nhóm, không phải xác suất đỗ.
@@ -123,9 +124,9 @@ export default function MethodologyPage() {
         <div className="space-y-2.5">
           {tiers.map((t) => (
             <div key={t.name} className="flex items-start gap-3">
-              <span className={cn("inline-flex h-[26px] shrink-0 items-center rounded-[7px] px-2.5 text-[12.5px] font-bold whitespace-nowrap", t.tone)}>
+              <Badge variant={groupVariant(t.group)} className="h-6 shrink-0 px-2.5 text-[13px] font-semibold">
                 {t.name}
-              </span>
+              </Badge>
               <span className="pt-0.5 text-sm text-muted-foreground">{t.description}</span>
             </div>
           ))}
@@ -135,7 +136,7 @@ export default function MethodologyPage() {
       <section className="overflow-hidden rounded-xl border border-line bg-surface">
         <div className="px-5 pt-5 pb-2 sm:px-6">
           <h2 className="font-sans text-lg font-semibold text-foreground">Ngưỡng phân nhóm</h2>
-          <p className="mt-1 text-[13px] text-muted-foreground">So hồ sơ của bạn với số liệu tuyển sinh của từng trường.</p>
+          <p className="mt-1 text-body-s text-muted-foreground text-muted-foreground">So hồ sơ của bạn với số liệu tuyển sinh của từng trường.</p>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[560px] text-sm">
@@ -170,7 +171,7 @@ export default function MethodologyPage() {
                   <span className="font-semibold text-foreground">{p.title}</span>
                   <span className="text-numeric ml-auto text-sm text-brand">{p.weight}</span>
                 </div>
-                <ul className="list-disc space-y-1.5 pl-4 text-[13.5px] text-muted-foreground">
+                <ul className="list-disc space-y-1.5 pl-4 text-sm text-muted-foreground">
                   {p.items.map((it) => (
                     <li key={it}>{it}</li>
                   ))}
@@ -202,7 +203,7 @@ export default function MethodologyPage() {
           </div>
           <div className="space-y-2 rounded-lg bg-ground p-4">
             <div className="text-sm font-semibold text-foreground">Công thức</div>
-            <div className="font-mono text-[13px] text-brand-ink">Điểm = Σ (Trọng số × Điểm chuẩn hoá) / Σ Trọng số</div>
+            <div className="font-mono text-body-s text-muted-foreground text-brand-ink">Điểm = Σ (Trọng số × Điểm chuẩn hoá) / Σ Trọng số</div>
             <p className="text-xs text-muted-foreground">
               Thiếu một tiêu chí (ví dụ chưa thi SAT) thì chuẩn hoá lại trên các tiêu chí còn lại, không tính là 0.
             </p>
@@ -231,7 +232,7 @@ export default function MethodologyPage() {
           {aiRules.map((r) => (
             <div key={r.title} className="space-y-1">
               <div className="text-sm font-semibold text-foreground">{r.title}</div>
-              <p className="text-[13.5px] text-muted-foreground">{r.body}</p>
+              <p className="text-sm text-muted-foreground">{r.body}</p>
             </div>
           ))}
         </div>

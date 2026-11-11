@@ -156,7 +156,7 @@ export function ProfileSummary({ rec, onRerun }: ProfileSummaryProps) {
     <section className="space-y-2.5 rounded-xl border border-line bg-surface px-4 py-3 sm:px-5">
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-0.5">
-          <span className="text-[11.5px] font-bold tracking-[0.07em] text-brand uppercase">Hồ sơ của bạn</span>
+          <span className="text-xs font-bold text-brand">Hồ sơ của bạn</span>
           <span className="text-[13px] text-muted-foreground">
             {filterText}
             {majorValue && (

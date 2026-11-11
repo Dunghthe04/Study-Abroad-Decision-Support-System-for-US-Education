@@ -77,7 +77,12 @@ class ModelServer:
                         "name": f"{MODEL_NAME}:latest",
                         "model": MODEL_NAME,
                         "details": {"family": "qwen", "parameter_size": "4B"},
-                    }
+                    },
+                    {
+                        "name": "usas-slm:latest",
+                        "model": "usas-slm",
+                        "details": {"family": "qwen", "parameter_size": "4B"},
+                    },
                 ]
             }
 

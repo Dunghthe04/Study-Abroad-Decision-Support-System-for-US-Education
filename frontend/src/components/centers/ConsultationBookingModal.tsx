@@ -56,7 +56,7 @@ export function ConsultationBookingModal({ centerName }: ConsultationBookingModa
       <Button
         size="lg"
         onClick={() => setOpen(true)}
-        className="gap-2 bg-brand text-white hover:bg-brand/90 font-medium shadow-sm"
+        className="gap-2 bg-brand text-white hover:bg-brand/90 font-medium "
       >
         <CalendarIcon className="w-4 h-4 text-white" />
         Đặt lịch tư vấn 1-1 miễn phí
@@ -84,7 +84,7 @@ export function ConsultationBookingModal({ centerName }: ConsultationBookingModa
           ) : (
             <form onSubmit={handleSubmit}>
               <DialogHeader>
-                <div className="flex items-center gap-2 text-brand text-xs font-semibold uppercase tracking-wider">
+                <div className="flex items-center gap-2 text-brand text-xs font-semibold">
                   <SparklesIcon className="w-3.5 h-3.5" />
                   Kết nối trực tiếp trung tâm
                 </div>
@@ -164,7 +164,7 @@ export function ConsultationBookingModal({ centerName }: ConsultationBookingModa
                   </Label>
                   <select
                     id="c-degree"
-                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                     value={targetDegree}
                     onChange={(e) => setTargetDegree(e.target.value)}
                   >

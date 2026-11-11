@@ -534,7 +534,7 @@ export function ProfileFlowWizard() {
     <div className="pb-16">
       {/* Trạng thái lưu nháp + Thoát */}
       <div className="mb-4 flex items-center justify-between gap-4">
-        <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Hồ sơ chọn trường</span>
+        <span className="text-xs font-semibold text-muted-foreground">Hồ sơ chọn trường</span>
         <div className="flex items-center gap-3 text-xs">
           <SaveStatus status={saveStatus} />
           {/* Mục 1: chuyển sang trả lời trong chat, chat hỏi tiếp các mục còn thiếu */}
@@ -572,7 +572,7 @@ export function ProfileFlowWizard() {
       <div className="flex flex-wrap items-start gap-6">
         <div className="min-w-0 flex-[999_1_560px] space-y-5">
           {assistantOpen && stepper("strip")}
-          <div ref={formRef} className="rounded-xl border border-line bg-surface p-[18px] shadow-xs sm:p-7">
+          <div ref={formRef} className="rounded-xl border border-line bg-surface p-[18px] sm:p-7">
             {currentStep === 1 && (
               <Step1Goal
                 data={draft.step1}

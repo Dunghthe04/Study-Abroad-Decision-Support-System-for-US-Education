@@ -2,7 +2,9 @@
 
 // Nhãn nói rõ lời giải thích hoặc kết quả dựa trên cái gì: hồ sơ thật hay giả định học sinh đang thử.
 // Hiện ở đầu mỗi thẻ trong chat để không bao giờ nhầm hai thứ này với nhau.
+// Giả định dùng viền nét đứt, giống thẻ trường đang mô phỏng, nên ảnh chụp màn hình cũng không bị hiểu nhầm.
 
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 interface BasisBadgeProps {
@@ -14,13 +16,11 @@ interface BasisBadgeProps {
 export function BasisBadge({ kind, label }: BasisBadgeProps) {
   const simulated = kind === "simulated";
   return (
-    <span
-      className={cn(
-        "inline-flex max-w-full items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold",
-        simulated ? "bg-warn-wash text-warn" : "bg-brand/10 text-brand",
-      )}
+    <Badge
+      variant={simulated ? "neutral" : "brand"}
+      className={cn("h-auto max-w-full whitespace-normal py-0.5", simulated && "border-dashed border-ink-2 text-ink")}
     >
-      {simulated ? `Theo giả định bạn đang thử${label ? `: ${label}` : ""}` : "Theo hồ sơ thật của bạn"}
-    </span>
+      {simulated ? `Giả định, chưa phải kết quả thật${label ? `: ${label}` : ""}` : "Theo hồ sơ thật của bạn"}
+    </Badge>
   );
 }

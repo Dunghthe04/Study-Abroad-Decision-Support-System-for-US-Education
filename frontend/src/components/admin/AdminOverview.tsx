@@ -31,7 +31,7 @@ export function AdminOverview() {
           const Icon = item.icon;
           return (
             <Link key={item.href} href={item.href} className="group">
-              <Card className="h-full transition-shadow group-hover:ring-2 group-hover:ring-brand/40">
+              <Card className="h-full transition-colors group-hover:ring-2 group-hover:ring-brand/40">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Icon className="size-4 text-brand" />

@@ -246,7 +246,7 @@ export function EditCenterButton({
                   value={centerType}
                   onChange={(e) => setCenterType(e.target.value)}
                   disabled={isSubmitting}
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <option value="study_abroad">Tư vấn Du học</option>
                   <option value="test_prep">Luyện thi chuẩn hóa (SAT/IELTS)</option>
@@ -339,7 +339,7 @@ export function EditCenterButton({
 
             {/* Khối Pháp lý & Năng lực */}
             <div className="rounded-lg border bg-muted/20 p-3.5 space-y-3">
-              <div className="text-xs font-semibold text-foreground uppercase tracking-wider">
+              <div className="text-xs font-semibold text-foreground">
                 Hồ sơ pháp lý & Năng lực đối soát (Xác minh)
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

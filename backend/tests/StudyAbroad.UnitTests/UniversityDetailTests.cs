@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using StudyAbroad.Application.Common;
 using StudyAbroad.Infrastructure.Persistence;
 using StudyAbroad.Infrastructure.Persistence.Repositories;
 using StudyAbroad.Api.Controllers;
@@ -41,7 +42,24 @@ public class UniversityDetailTests
     public async Task MapsExistingInformationWithoutAuditFields()
     {
         var data = CreateData();
-        var offering = new UniversityOffering { UniversityId = data.University.Id, StudyLevel = "undergraduate", TuitionUsd = 45000, MinGpa4 = 4.2m };
+        var offering = new UniversityOffering
+        {
+            UniversityId = data.University.Id,
+            StudyLevel = "undergraduate",
+            TuitionUsd = 45000,
+            MinGpa4 = 4.2m,
+            AvgGpaWeighted = 4.35m,
+            GpaScaleType = "weighted",
+            FyOnCampusPct = 0.85m,
+            UgOnCampusPct = 0.35m,
+            HousingTypes = "Coed|Single",
+            IntlHousing = true,
+            HousingOnlyUsd = 9000m,
+            HousingDepositUsd = 200m,
+            StudentFacultyRatio = 15,
+            Activities = "Music|Debate",
+            CampusSetting = "City: Midsize"
+        };
         var repository = new FakeRepository(data with
         {
             Offerings = [offering],
@@ -57,6 +75,17 @@ public class UniversityDetailTests
         var resultOffering = Assert.Single(result.Offerings);
         Assert.Equal(45000m, resultOffering.TuitionUsd);
         Assert.Equal(4.2m, resultOffering.MinGpa4);
+        Assert.Equal(4.35m, resultOffering.AvgGpaWeighted);
+        Assert.Equal("weighted", resultOffering.GpaScaleType);
+        Assert.Equal(0.85m, resultOffering.FyOnCampusPct);
+        Assert.Equal(0.35m, resultOffering.UgOnCampusPct);
+        Assert.Equal("Coed|Single", resultOffering.HousingTypes);
+        Assert.True(resultOffering.IntlHousing);
+        Assert.Equal(9000m, resultOffering.HousingOnlyUsd);
+        Assert.Equal(200m, resultOffering.HousingDepositUsd);
+        Assert.Equal(15, resultOffering.StudentFacultyRatio);
+        Assert.Equal("Music|Debate", resultOffering.Activities);
+        Assert.Equal("City: Midsize", resultOffering.CampusSetting);
         Assert.False(Assert.Single(resultOffering.Majors).IsVerified);
         var json = JsonSerializer.Serialize(result);
         Assert.DoesNotContain("LastEditedBy", json);
@@ -170,6 +199,59 @@ public class UniversityDetailTests
         Assert.Equal("TEST", Assert.IsType<UniversityDetailDto>(ok.Value).Code);
     }
 
+    [Fact]
+    public async Task ControllerSearchReturnsPagedResult()
+    {
+        var repo = new FakeRepository(CreateData());
+        var controller = new UniversitiesController(new UniversityDetailService(repo));
+        var query = new UniversitySearchQuery(Search: "Test", State: "CA", Page: 1, PageSize: 10);
+        var response = await controller.Search(query, default);
+        var ok = Assert.IsType<OkObjectResult>(response.Result);
+        var result = Assert.IsType<PagedResult<UniversityListItemDto>>(ok.Value);
+        Assert.Equal(1, result.TotalCount);
+        Assert.Single(result.Items);
+        Assert.Equal("TEST", result.Items[0].Code);
+        Assert.Equal(query, repo.LastQuery);
+    }
+
+    [Fact]
+    public async Task ControllerFilterOptionsReturnsOptions()
+    {
+        var repo = new FakeRepository(CreateData());
+        var controller = new UniversitiesController(new UniversityDetailService(repo));
+        var response = await controller.GetFilterOptions(default);
+        var ok = Assert.IsType<OkObjectResult>(response.Result);
+        var options = Assert.IsType<UniversityFilterOptionsDto>(ok.Value);
+        Assert.Single(options.States);
+        Assert.Equal("CA", options.States[0].Value);
+        Assert.Equal(2, options.Controls.Count);
+        Assert.Equal(10000m, options.MinTuitionUsd);
+    }
+
+    [Fact]
+    public async Task ServiceSearchForwardsQueryAndToken()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var repo = new FakeRepository(CreateData());
+        var service = new UniversityDetailService(repo);
+        var query = new UniversitySearchQuery(Search: "Stanford", IsIvy: true);
+        var result = await service.SearchAsync(query, cancellation.Token);
+        Assert.Equal(query, repo.LastQuery);
+        Assert.Equal(cancellation.Token, repo.Token);
+        Assert.NotNull(result);
+    }
+
+    [Fact]
+    public async Task ServiceFilterOptionsForwardsToken()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var repo = new FakeRepository(CreateData());
+        var service = new UniversityDetailService(repo);
+        var result = await service.GetFilterOptionsAsync(cancellation.Token);
+        Assert.Equal(cancellation.Token, repo.Token);
+        Assert.NotNull(result);
+    }
+
     [Theory]
     [InlineData("QueryMajors")]
     [InlineData("QueryRankings")]
@@ -198,6 +280,8 @@ public class UniversityDetailTests
     {
         public string? Code { get; private set; }
         public CancellationToken Token { get; private set; }
+        public UniversitySearchQuery? LastQuery { get; private set; }
+
         public Task<UniversityDetailData?> GetByCodeAsync(string code, CancellationToken ct = default)
         {
             Code = code;
@@ -205,5 +289,34 @@ public class UniversityDetailTests
             ct.ThrowIfCancellationRequested();
             return Task.FromResult(data);
         }
+
+        public Task<PagedResult<UniversityListItemDto>> SearchAsync(UniversitySearchQuery query, CancellationToken ct = default)
+        {
+            LastQuery = query;
+            Token = ct;
+            ct.ThrowIfCancellationRequested();
+            var items = new List<UniversityListItemDto>();
+            if (data != null && data.University.IsActive)
+            {
+                items.Add(new UniversityListItemDto(
+                    data.University.Id, data.University.Code, data.University.Name,
+                    data.University.City, data.University.State, data.StateName,
+                    data.University.Control, data.University.AcceptanceRate, data.University.IsIvy,
+                    null, null, 45000, 60000, 6.5m, 80, 105, 10, "US News", "optional", "need_and_merit", []));
+            }
+            return Task.FromResult(new PagedResult<UniversityListItemDto>(items, query.Page, query.PageSize, items.Count));
+        }
+
+        public Task<UniversityFilterOptionsDto> GetFilterOptionsAsync(CancellationToken ct = default)
+        {
+            Token = ct;
+            ct.ThrowIfCancellationRequested();
+            return Task.FromResult(new UniversityFilterOptionsDto(
+                [new("CA", "California (CA)")],
+                [new("public", "Công lập (Public)"), new("private", "Tư thục (Private)")],
+                ["Computer Science"],
+                10000, 60000, 15000, 85000));
+        }
     }
 }
+

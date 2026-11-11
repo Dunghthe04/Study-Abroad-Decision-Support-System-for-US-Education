@@ -22,7 +22,18 @@ public record UniversityOfferingDto(
     decimal? GpaPct250To299, decimal? GpaPctBelow250,
     string? IntlAidPolicy, decimal? IntlAidAvgUsd, int? IntlAidRecipients,
     decimal? RetentionRate1Yr, decimal? GradRate6Yr, IReadOnlyList<UniversityMajorDto> Majors,
-    string? SourceUrl, DateOnly? RetrievedAt, string? SourceReliability);
+    string? SourceUrl, DateOnly? RetrievedAt, string? SourceReliability,
+    decimal? AvgGpaWeighted = null,
+    string? GpaScaleType = null,
+    decimal? FyOnCampusPct = null,
+    decimal? UgOnCampusPct = null,
+    string? HousingTypes = null,
+    bool? IntlHousing = null,
+    decimal? HousingOnlyUsd = null,
+    decimal? HousingDepositUsd = null,
+    int? StudentFacultyRatio = null,
+    string? Activities = null,
+    string? CampusSetting = null);
 
 public record UniversityRankingDto(
     string Publisher, string Name, int Rank, bool IsTie, string RankDisplay,
@@ -31,3 +42,55 @@ public record UniversityRankingDto(
 public record UniversitySourceDto(
     string FieldName, string? FieldValue, string? SourceUrl, string? SourceSection,
     string Status, DateOnly? RetrievedAt, string? DataYear, bool? AppliedToSnapshot, string? Normalization);
+
+public record UniversitySearchQuery(
+    string? Search = null,
+    string? State = null,
+    string? Control = null,
+    string? Major = null,
+    decimal? MaxTuitionUsd = null,
+    decimal? MaxTotalCostUsd = null,
+    decimal? MaxMinIelts = null,
+    decimal? MaxMinToefl = null,
+    decimal? MaxMinDuolingo = null,
+    decimal? MinAcceptanceRate = null,
+    decimal? MaxAcceptanceRate = null,
+    bool? IsIvy = null,
+    string? SortBy = null,
+    string? StudyLevel = "undergraduate",
+    int Page = 1,
+    int PageSize = 12);
+
+public record UniversityListItemDto(
+    Guid Id,
+    string Code,
+    string Name,
+    string? City,
+    string? State,
+    string? StateName,
+    string? Control,
+    decimal? AcceptanceRate,
+    bool IsIvy,
+    string? LogoUrl,
+    string? CoverUrl,
+    decimal? TuitionUsd,
+    decimal? TotalCostUsd,
+    decimal? MinIelts,
+    decimal? MinToefl,
+    decimal? MinDuolingo,
+    int? BestRank,
+    string? BestRankList,
+    string? SatPolicy,
+    string? IntlAidPolicy,
+    IReadOnlyList<string> Majors);
+
+public record UniversityFilterOptionItem(string Value, string Label);
+
+public record UniversityFilterOptionsDto(
+    IReadOnlyList<UniversityFilterOptionItem> States,
+    IReadOnlyList<UniversityFilterOptionItem> Controls,
+    IReadOnlyList<string> Majors,
+    decimal MinTuitionUsd,
+    decimal MaxTuitionUsd,
+    decimal MinTotalCostUsd,
+    decimal MaxTotalCostUsd);

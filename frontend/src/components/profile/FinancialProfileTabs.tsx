@@ -37,7 +37,7 @@ export function FinancialProfileTabs() {
               onClick={() => setActiveTab(tab.key)}
               className={`flex-1 flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
                 isActive
-                  ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200"
+                  ? "bg-white text-slate-900 ring-1 ring-slate-200"
                   : "text-slate-500 hover:text-slate-700 hover:bg-slate-50"
               }`}
             >

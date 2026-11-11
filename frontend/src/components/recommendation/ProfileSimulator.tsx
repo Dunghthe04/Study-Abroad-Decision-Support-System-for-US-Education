@@ -52,7 +52,7 @@ export function ProfileSimulator({ sim, basePref }: ProfileSimulatorProps) {
   const scholarshipNow = (o.scholarshipNeed ?? profile?.scholarshipNeed ?? null) as ScholarshipNeed | null;
 
   return (
-    <aside className="w-full shrink-0 overflow-hidden border-b border-line bg-surface lg:sticky lg:top-14 lg:h-[calc(100vh-3.5rem)] lg:w-[320px] lg:overflow-y-auto lg:border-r lg:border-b-0">
+    <aside className="w-full shrink-0 overflow-hidden border-b border-line bg-surface lg:sticky lg:top-(--header-h) lg:h-[calc(100vh-var(--header-h))] lg:w-[320px] lg:overflow-y-auto lg:border-r lg:border-b-0">
       <div className="space-y-1 px-4 pt-4 pb-3">
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-base font-bold text-foreground">Mô phỏng hồ sơ</h2>
@@ -186,7 +186,7 @@ export function ProfileSimulator({ sim, basePref }: ProfileSimulatorProps) {
           </Section>
 
           <Section title="Ưu tiên của bạn" onReset={() => sim.reset(["pref"])} changed={o.pref != null}>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Chỉ đổi thứ tự các trường trong cùng một nhóm, không đổi nhóm.
             </p>
             {PREF_ROWS.map((row) => (
@@ -231,7 +231,7 @@ function ExtracurricularSummary({ tier, activities, awards }: { tier: number; ac
       {declared ? (
         <>
           <div>
-            <p className="text-[10px] font-medium tracking-wide text-ink-3 uppercase">Mức hiện tại</p>
+            <p className="text-xs font-medium text-ink-3">Mức hiện tại</p>
             <p className="text-lg font-semibold text-brand">{EC_LEVELS[level - 1]}</p>
             <div aria-hidden className="mt-1 flex gap-1">
               {EC_LEVELS.map((name, i) => (
@@ -276,7 +276,7 @@ function Section({
       <summary className="flex cursor-pointer list-none items-center justify-between bg-brand px-4 py-2.5 text-sm font-semibold text-white [&::-webkit-details-marker]:hidden">
         <span>
           {title}
-          {changed && <span className="ml-2 rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-medium">đã đổi</span>}
+          {changed && <span className="ml-2 rounded-full bg-white/20 px-2 py-0.5 text-xs font-medium">đã đổi</span>}
         </span>
         <ChevronDownIcon className="size-4 transition-transform group-open:rotate-180" />
       </summary>
@@ -320,13 +320,13 @@ function SliderRow({ label, base, value, min, max, step, fallback, colorDelta = 
       <p className="text-xs font-semibold text-foreground">{label}</p>
       <div className="flex items-end justify-between gap-3">
         <div>
-          <p className="text-[10px] font-medium tracking-wide text-ink-3 uppercase">Hồ sơ</p>
+          <p className="text-xs font-medium text-ink-3">Hồ sơ</p>
           <p className={cn("font-semibold text-brand", levels ? "text-base" : "text-lg")}>
             {base != null ? (levels ? levels[base] : NUMBER.format(base)) : "Chưa có"}
           </p>
         </div>
         <div className="text-right">
-          <p className="text-[10px] font-medium tracking-wide text-ink-3 uppercase">Giả định</p>
+          <p className="text-xs font-medium text-ink-3">Giả định</p>
           <p className={cn("font-semibold text-foreground", levels ? "text-base" : "text-lg")}>
             {levels ? levels[current] : NUMBER.format(current)}
             {delta != null && (
@@ -360,7 +360,7 @@ function SliderRow({ label, base, value, min, max, step, fallback, colorDelta = 
           ))}
         </div>
       )}
-      <div className="flex justify-between text-[10px] text-ink-3">
+      <div className="flex justify-between text-xs text-ink-3">
         <span>{levels ? levels[min] : NUMBER.format(min)}</span>
         <span>{levels ? levels[max] : NUMBER.format(max)}</span>
       </div>

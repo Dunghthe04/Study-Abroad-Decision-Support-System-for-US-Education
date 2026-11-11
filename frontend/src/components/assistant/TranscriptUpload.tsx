@@ -84,7 +84,7 @@ export function TranscriptUpload({ onPick }: { onPick?: (text: string) => void }
         <UploadIcon className="size-3.5" />
         {uploading ? "Đang đọc học bạ…" : "Tải học bạ (PDF, PNG, JPG, tối đa 10MB)"}
       </button>
-      {notice && <p className="text-[11px] text-warn">{notice}</p>}
+      {notice && <p className="text-xs text-warn">{notice}</p>}
     </div>
   );
 }

@@ -54,7 +54,7 @@ interface SelectData {
 
 // Giống ô chọn / ô nhập của form hồ sơ (Step1Goal, Step4Financial)
 const controlClass =
-  "w-full min-w-0 rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground shadow-2xs focus:border-brand focus:outline-hidden focus:ring-1 focus:ring-brand disabled:cursor-not-allowed disabled:opacity-60";
+  "w-full min-w-0 rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground focus:border-brand focus:outline-hidden focus:ring-1 focus:ring-brand disabled:cursor-not-allowed disabled:opacity-60";
 const labelClass = "text-xs font-medium text-foreground";
 
 const GPA_PRESETS_10 = [
@@ -211,7 +211,7 @@ export function SelectWidget({ data, onPick }: { data?: Record<string, unknown> 
             onKeyDown={(e) => e.key === "Enter" && submit()}
             className={inputClass}
           />
-          {err && <p className="text-[11px] font-medium text-destructive mt-0.5">⚠️ {err}</p>}
+          {err && <p className="text-xs font-medium text-destructive mt-0.5">⚠️ {err}</p>}
           <div className="pt-0.5">
             <button
               type="button"
@@ -236,9 +236,9 @@ export function SelectWidget({ data, onPick }: { data?: Record<string, unknown> 
                         }
                         setValue("gpa", preset.value);
                       }}
-                      className={`px-2 py-0.5 text-[11px] rounded-full border transition-all cursor-pointer ${
+                      className={`px-2 py-0.5 text-xs rounded-full border transition-all cursor-pointer ${
                         isSelected
-                          ? "bg-brand text-white border-brand font-semibold shadow-xs"
+                          ? "bg-brand text-white border-brand font-semibold "
                           : "bg-surface text-foreground border-line hover:border-brand/50 hover:bg-brand-wash"
                       }`}
                     >
@@ -269,7 +269,7 @@ export function SelectWidget({ data, onPick }: { data?: Record<string, unknown> 
             onKeyDown={(e) => e.key === "Enter" && submit()}
             className={inputClass}
           />
-          {err && <p className="text-[11px] font-medium text-destructive mt-0.5">⚠️ {err}</p>}
+          {err && <p className="text-xs font-medium text-destructive mt-0.5">⚠️ {err}</p>}
         </div>
       );
     if (f.multiple)
@@ -368,7 +368,7 @@ export function SelectWidget({ data, onPick }: { data?: Record<string, unknown> 
                 <Label htmlFor={`sw-${f.name}`} className={labelClass}>
                   {f.label.trim() || " "}
                   {rangeHint(f) && (
-                    <span className="text-[11px] text-muted-foreground font-normal ml-1">
+                    <span className="text-xs text-muted-foreground font-normal ml-1">
                       {rangeHint(f)}
                     </span>
                   )}
@@ -382,9 +382,9 @@ export function SelectWidget({ data, onPick }: { data?: Record<string, unknown> 
       {upload === "transcript" && <TranscriptUpload onPick={onPick} />}
       <div className="flex items-center justify-between gap-2">
         {firstError ? (
-          <p className="text-[11px] font-medium text-destructive">⚠️ {firstError}</p>
+          <p className="text-xs font-medium text-destructive">⚠️ {firstError}</p>
         ) : (
-          <p className="text-[11px] text-muted-foreground">Chọn cho nhanh, hoặc gõ trả lời vào ô chat.</p>
+          <p className="text-xs text-muted-foreground">Chọn cho nhanh, hoặc gõ trả lời vào ô chat.</p>
         )}
         <button
           type="button"

@@ -125,7 +125,7 @@ export function CertificationForm({
   );
 
   return (
-    <div className="space-y-5 rounded-xl border border-brand/40 bg-surface p-5 shadow-xs">
+    <div className="space-y-5 rounded-xl border border-brand/40 bg-surface p-5 ">
       <div className="flex items-center justify-between">
         <h3 className="font-semibold text-foreground">{title}</h3>
         <button

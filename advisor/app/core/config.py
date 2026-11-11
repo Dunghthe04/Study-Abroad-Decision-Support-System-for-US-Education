@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     # Số ngày giữ file log chat, quá hạn thì tự xóa
     chat_log_keep_days: int = 90
     ollama_base_url: str = "http://localhost:11434"
+    # Địa chỉ riêng cho SLM, đọc ảnh và embedding (hạ tầng cloud). Để trống = dùng ollama_base_url
+    slm_base_url: str = ""
+    vision_base_url: str = ""
+    embedding_base_url: str = ""
+    embedding_api_key: str = ""
     # Chỉ dùng khi không có ANTHROPIC_API_KEY (bước B đọc bảng điểm chạy trên Ollama). Có khóa Claude thì để trống
     llm_model: str = ""
     slm_model: str = "usas-slm-v4"

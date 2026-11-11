@@ -3,6 +3,7 @@ import logging
 from contextlib import asynccontextmanager
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
+from typing import Any
 
 import httpx  # gửi request đến ollama
 from fastapi import Depends, FastAPI
@@ -18,6 +19,7 @@ from app.services.chat_flow import ChatFlow
 from app.services.claude import ClaudeClient
 from app.services.compare_writer import CompareWriter
 from app.services.ec_reader import EcReader
+from app.services.embedding import OpenAiEmbeddingClient
 from app.services.explainer import Explainer
 from app.services.goal_writer import GoalWriter
 from app.services.knowledge import KnowledgeRetriever
@@ -35,15 +37,22 @@ from app.services.what_if_writer import WhatIfWriter
 # Quản lý việc khởi tạo và dọn dẹp tài nguyên theo vòng đời của ứng dụng.
 async def lifespan(app: FastAPI):
     settings = get_settings()
-    # Tạo kết nối Http đến ollama
+    slm_url = settings.slm_base_url or settings.ollama_base_url
+    vision_url = settings.vision_base_url or settings.ollama_base_url
     async with (
         httpx.AsyncClient(base_url=settings.ollama_base_url, timeout=settings.llm_timeout_seconds) as http,
+        httpx.AsyncClient(base_url=slm_url, timeout=settings.llm_timeout_seconds) as slm_http,
+        httpx.AsyncClient(base_url=vision_url, timeout=settings.vision_timeout_seconds) as vision_http,
         httpx.AsyncClient(
             base_url=settings.anthropic_base_url, timeout=settings.anthropic_timeout_seconds
         ) as claude_http,
         httpx.AsyncClient(
             base_url=settings.backend_base_url, timeout=settings.backend_timeout_seconds
         ) as backend_http,
+        httpx.AsyncClient(
+            base_url=settings.embedding_base_url or settings.ollama_base_url,
+            timeout=settings.llm_timeout_seconds,
+        ) as embed_http,
     ):
         app.state.llm = OllamaClient(
             http,
@@ -63,7 +72,7 @@ async def lifespan(app: FastAPI):
         )
         # Có khóa Claude thì bước B đọc bảng điểm chạy trên Claude, không thì dùng model Ollama (transcript_parse_model)
         app.state.transcript_reader = TranscriptReader(
-            http, settings, claude if settings.anthropic_api_key else None, settings.anthropic_model
+            vision_http, settings, claude if settings.anthropic_api_key else None, settings.anthropic_model
         )
         app.state.ec_reader = EcReader(claude, settings.anthropic_model)
         app.state.explainer = Explainer(claude, settings.anthropic_model)
@@ -78,12 +87,18 @@ async def lifespan(app: FastAPI):
             knowledge = KnowledgeRetriever(app.state.db_pool, statuses, settings.knowledge_top_k)
         centers = CenterFinder(backend_http) if settings.backend_base_url else None
         # Claude viết câu trả lời cho mọi skill; Ollama (app.state.llm) chỉ còn embedding cho kho kiến thức
+        # Embedding chạy trên dịch vụ tương thích OpenAI nếu có cấu hình, không thì dùng Ollama (app.state.llm)
+        embedder: Any = (
+            OpenAiEmbeddingClient(embed_http, settings.embedding_model, settings.embedding_api_key)
+            if settings.embedding_base_url
+            else app.state.llm
+        )
         skills = build_handlers(
-            claude, settings.anthropic_model, knowledge, settings.knowledge_min_score, centers, app.state.llm
+            claude, settings.anthropic_model, knowledge, settings.knowledge_min_score, centers, embedder
         )
         # SLM phân loại tin nhắn (usas-slm): client riêng vì khác model với llm_model, dùng chung kết nối http
         slm_client = OllamaClient(
-            http,
+            slm_http,
             settings.slm_model,
             num_ctx=settings.llm_num_ctx,
             num_gpu=settings.llm_num_gpu,

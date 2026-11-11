@@ -434,7 +434,7 @@ export function CenterLeadsListView() {
           )}
         </div>
       ) : (
-        <div className="rounded-xl border border-border overflow-hidden bg-card shadow-sm">
+        <div className="rounded-xl border border-border overflow-hidden bg-card ">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs">
               <thead>
@@ -467,7 +467,7 @@ export function CenterLeadsListView() {
                       {/* Date */}
                       <td className="py-3.5 px-4 whitespace-nowrap text-muted-foreground">
                         <div>{new Date(lead.createdAt).toLocaleDateString("vi-VN")}</div>
-                        <div className="text-[11px] text-muted-foreground/70">
+                        <div className="text-xs text-muted-foreground/70">
                           {new Date(lead.createdAt).toLocaleTimeString("vi-VN", {
                             hour: "2-digit",
                             minute: "2-digit",
@@ -481,7 +481,7 @@ export function CenterLeadsListView() {
                           <div>
                             <span className="font-semibold text-foreground">{lead.studentName}</span>
                             {lead.studentEmail && (
-                              <div className="text-[11px] text-muted-foreground">{lead.studentEmail}</div>
+                              <div className="text-xs text-muted-foreground">{lead.studentEmail}</div>
                             )}
                           </div>
                         ) : (
@@ -520,7 +520,7 @@ export function CenterLeadsListView() {
 
                       {/* Study level */}
                       <td className="py-3.5 px-4 whitespace-nowrap">
-                        <Badge variant="secondary" className="font-normal text-[11px]">
+                        <Badge variant="secondary" className="font-normal text-xs">
                           {formatStudyLevel(lead.studyLevel)}
                         </Badge>
                       </td>
@@ -535,12 +535,12 @@ export function CenterLeadsListView() {
                       {/* Shared Profile Badge */}
                       <td className="py-3.5 px-4 whitespace-nowrap">
                         {lead.sharedProfile ? (
-                          <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-300 gap-1 text-[11px]">
+                          <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-300 gap-1 text-xs">
                             <ShieldCheckIcon className="size-3" />
                             Đã chia sẻ
                           </Badge>
                         ) : (
-                          <Badge variant="outline" className="text-muted-foreground gap-1 text-[11px]">
+                          <Badge variant="outline" className="text-muted-foreground gap-1 text-xs">
                             <LockIcon className="size-3" />
                             Chỉ liên hệ
                           </Badge>
@@ -550,17 +550,17 @@ export function CenterLeadsListView() {
                       {/* Status */}
                       <td className="py-3.5 px-4 whitespace-nowrap">
                         {isNew && (
-                          <Badge className="bg-blue-600 text-white font-medium text-[11px] px-2 py-0.5">
+                          <Badge className="bg-blue-600 text-white font-medium text-xs px-2 py-0.5">
                             Mới nhận
                           </Badge>
                         )}
                         {isContacted && (
-                          <Badge className="bg-amber-600 text-white font-medium text-[11px] px-2 py-0.5">
+                          <Badge className="bg-amber-600 text-white font-medium text-xs px-2 py-0.5">
                             Đang trao đổi
                           </Badge>
                         )}
                         {isClosed && (
-                          <Badge variant="outline" className="text-emerald-700 border-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 font-medium text-[11px] px-2 py-0.5">
+                          <Badge variant="outline" className="text-emerald-700 border-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 font-medium text-xs px-2 py-0.5">
                             Đã hoàn tất
                           </Badge>
                         )}
@@ -616,7 +616,7 @@ export function CenterLeadsListView() {
                 {/* Contact Card */}
                 <Card size="sm" className="bg-muted/30">
                   <CardContent className="pt-4 space-y-3">
-                    <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    <h4 className="text-xs font-semibold text-muted-foreground">
                       Thông tin liên hệ
                     </h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
@@ -685,7 +685,7 @@ export function CenterLeadsListView() {
 
                 {/* Message Content */}
                 <div className="space-y-1.5">
-                  <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  <h4 className="text-xs font-semibold text-muted-foreground">
                     Lời nhắn từ học sinh / phụ huynh
                   </h4>
                   <div className="rounded-lg border bg-card p-3.5 text-sm text-foreground whitespace-pre-wrap leading-relaxed">
@@ -698,7 +698,7 @@ export function CenterLeadsListView() {
                 {/* Shared Profile Section */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                    <h4 className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
                       <GraduationCapIcon className="size-4 text-brand" />
                       Hồ sơ học sinh được chia sẻ
                     </h4>
@@ -800,7 +800,7 @@ export function CenterLeadsListView() {
 
                 {/* Status Transition Control */}
                 <div className="space-y-2 pt-2 border-t">
-                  <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  <h4 className="text-xs font-semibold text-muted-foreground">
                     Chuyển trạng thái xử lý
                   </h4>
                   <div className="flex flex-wrap items-center gap-2">

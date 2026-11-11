@@ -190,7 +190,7 @@ export function RecommendationHistory() {
           </ul>
 
           {/* Thanh chọn dính đáy màn hình: chọn hai lần ở xa nhau vẫn bấm So sánh được ngay, không phải cuộn lên */}
-          <div className="sticky bottom-4 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-surface/95 px-4 py-3 shadow-lg backdrop-blur">
+          <div className="sticky bottom-4 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-surface/95 px-4 py-3 ">
             <p className="text-xs text-muted-foreground">
               {selected.length === 2 ? "Đã chọn 2/2" : `Chọn thêm ${2 - selected.length} lần để so sánh`}
               {selected.length > 0 && (
@@ -292,7 +292,7 @@ function ComparisonBody({ comparison }: { comparison: RunComparison }) {
           </table>
         </div>
       )}
-      <p className="text-[11px] text-ink-3">Chỉ liệt kê trường có thay đổi. Thứ hạng tính trong từng nhóm.</p>
+      <p className="text-xs text-ink-3">Chỉ liệt kê trường có thay đổi. Thứ hạng tính trong từng nhóm.</p>
     </>
   );
 }
@@ -320,7 +320,7 @@ function RunBody({ rec }: { rec: Recommendation }) {
         if (list.length === 0) return null;
         return (
           <div key={g.key} className="space-y-3">
-            <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">{g.title}</h3>
+            <h3 className="text-h3 text-foreground">{g.title}</h3>
             {list.map((p) => (
               <SchoolCard key={p.code} picked={p} school={byCode.get(p.code)} student={student} />
             ))}

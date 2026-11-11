@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { GraduationCapIcon } from "lucide-react";
+import { PHOTO_CREDITS } from "@/lib/landing-schools";
 
 const COLUMNS: { title: string; links: { href: string; label: string }[] }[] = [
   {
@@ -28,24 +28,16 @@ const COLUMNS: { title: string; links: { href: string; label: string }[] }[] = [
   },
 ];
 
-/** Chân trang cho trang chủ: nền navy, sọc đỏ trắng, lưu ý về tính tham khảo của thông tin */
+/** Chân trang cho trang chủ, dùng màu theo token của hệ thống */
 export function SiteFooter() {
   return (
-    <footer className="mt-8 bg-[#0B1F44] text-white">
-      <div
-        aria-hidden
-        className="h-2 w-full"
-        style={{ backgroundImage: "repeating-linear-gradient(90deg,#B31942 0 36px,#ffffff 36px 72px)" }}
-      />
-      <div className="mx-auto grid max-w-6xl gap-10 px-6 py-14 sm:px-8 lg:grid-cols-12">
+    <footer className="mt-8 border-t border-line bg-surface text-ink">
+      <div className="mx-auto grid max-w-[1560px] gap-10 px-4 py-14 sm:px-8 lg:grid-cols-12 lg:px-12">
         <div className="space-y-4 lg:col-span-5">
           <div className="flex items-center gap-2.5">
-            <span className="flex size-10 items-center justify-center rounded-xl bg-[#B31942] shadow-lg">
-              <GraduationCapIcon className="size-5" />
-            </span>
-            <span className="font-heading text-2xl font-extrabold tracking-tight">USAS</span>
+            <span className="font-heading text-xl font-semibold">USAS</span>
           </div>
-          <p className="max-w-sm text-sm leading-relaxed text-white/70">
+          <p className="max-w-sm text-sm leading-relaxed text-ink-2">
             Hệ thống hỗ trợ ra quyết định du học Mỹ: phân tích hồ sơ, gợi ý trường, giải đáp bằng tiếng Việt và kết nối trung tâm tư vấn.
           </p>
         </div>
@@ -53,11 +45,11 @@ export function SiteFooter() {
         <div className="grid grid-cols-2 gap-8 sm:grid-cols-3 lg:col-span-7">
           {COLUMNS.map((c) => (
             <div key={c.title}>
-              <div className="mb-4 text-xs font-bold uppercase tracking-[0.16em] text-[#e7c85a]">{c.title}</div>
+              <h3 className="mb-3 text-sm font-semibold text-ink">{c.title}</h3>
               <ul className="space-y-2.5">
                 {c.links.map((l) => (
                   <li key={l.href}>
-                    <Link href={l.href} className="text-sm text-white/80 transition-colors hover:text-white">
+                    <Link href={l.href} className="text-sm text-ink-2 transition-colors hover:text-brand">
                       {l.label}
                     </Link>
                   </li>
@@ -68,13 +60,14 @@ export function SiteFooter() {
         </div>
       </div>
 
-      <div className="border-t border-white/10">
-        <div className="mx-auto flex max-w-6xl flex-col gap-2 px-6 py-6 text-xs text-white/50 sm:flex-row sm:items-center sm:justify-between sm:px-8">
+      <div className="border-t border-line">
+        <div className="mx-auto flex max-w-[1560px] flex-col gap-2 px-4 py-6 text-xs text-ink-3 sm:flex-row sm:items-center sm:justify-between sm:px-8 lg:px-12">
           <span>© 2026 USAS · Study Abroad Decision Support System for US Education</span>
           <span className="max-w-xl sm:text-right">
             Thông tin chỉ mang tính tham khảo, không cam kết kết quả trúng tuyển hay học bổng. Hãy kiểm tra trang chính thức của trường trước khi quyết định.
           </span>
         </div>
+        <p className="mx-auto max-w-[1560px] px-4 pb-6 text-xs text-ink-3 sm:px-8 lg:px-12">Ảnh khuôn viên từ Wikimedia Commons: {PHOTO_CREDITS}.</p>
       </div>
     </footer>
   );

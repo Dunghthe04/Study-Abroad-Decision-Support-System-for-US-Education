@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { Button, buttonVariants } from "@/components/ui/button";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -15,12 +16,14 @@ import {
   PlusIcon,
   RotateCwIcon,
   SlidersHorizontalIcon,
+  TriangleAlertIcon,
   Undo2Icon,
   XIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { describeSimulation, resetSimulation, showSimulation } from "@/lib/simulation-link";
 import { AGE_FEATURES, useAgeBlock } from "@/lib/age-features";
+import { isAuthRoute } from "@/lib/layout-routes";
 import { useAssistant, type AssistantTurn } from "./AssistantProvider";
 import { BudgetWidget } from "./BudgetWidget";
 import { ChatText } from "./ChatText";
@@ -31,11 +34,9 @@ import { SchoolWidget } from "./SchoolWidget";
 import { SelectWidget } from "./SelectWidget";
 
 // Trang đăng nhập / đăng ký không hiện trợ lý
-const HIDDEN_PREFIXES = ["/login", "/register", "/forgot-password", "/reset-password", "/verify-email"];
-
 export function useAssistantVisible() {
   const pathname = usePathname();
-  return !HIDDEN_PREFIXES.some((p) => pathname.startsWith(p));
+  return !isAuthRoute(pathname);
 }
 
 /** Khung "Trợ lý USAS" cố định bên phải; màn hẹp thì phủ kín */
@@ -60,12 +61,12 @@ export function AssistantPanel() {
     if (open) inputRef.current?.focus();
   }, [open]);
 
-  // Textarea tự cao theo nội dung, tối đa 120px
+  // Textarea tự cao theo nội dung, tối đa 160px
   useEffect(() => {
     const el = inputRef.current;
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
   }, [input]);
 
   if (!visible || !open) return null;
@@ -76,168 +77,184 @@ export function AssistantPanel() {
     setInput("");
   };
 
+  const empty = turns.length === 0 && !loading && !error;
+
   return (
     <aside
-      aria-label="Trợ lý USAS"
-      className="fixed inset-0 z-50 flex flex-col bg-surface min-[900px]:left-auto min-[900px]:w-(--assistant-w) min-[900px]:border-l min-[900px]:border-line min-[900px]:shadow-[-8px_0_24px_-12px_rgba(15,23,42,0.18)]"
+      aria-label="USAS Advisor"
+      className={cn(
+        "fixed inset-0 z-50 flex flex-col overflow-hidden bg-surface",
+        // Màn rộng: khung dính mép phải, cao hết màn hình, đẩy trang sang trái
+        "min-[900px]:left-auto min-[900px]:w-(--assistant-w) min-[900px]:border-l min-[900px]:border-line",
+        "motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-right-4 motion-safe:duration-300",
+      )}
     >
-      {/* Header */}
-      <div className="flex items-center gap-2 border-b border-line px-4 py-3">
-        <div className="min-w-0 flex-1">
-          <div className="font-heading text-base font-semibold text-foreground">Trợ lý USAS</div>
-          {/* Trang gợi ý trường đã có dải trạng thái bên dưới (hồ sơ thật hay giả định), không hiện thêm nhãn "Đang xem" nữa cho khỏi rối */}
-          {page.simulation === undefined ? (
-            <div className="mt-1 inline-flex max-w-full items-center gap-1.5 rounded-full bg-ground px-2.5 py-0.5 text-xs text-muted-foreground">
-              <span className="size-1.5 shrink-0 rounded-full bg-ok" />
-              <span className="truncate">Đang xem: {page.label}</span>
+      <div ref={listRef} className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        {/* Đầu khung dính trên cùng, nền mờ dần xuống dưới để tin nhắn trượt qua bên dưới */}
+        <div className="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface)_70%,transparent)] px-3 pt-3 pb-6">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={newChat}
+              aria-label="Cuộc trò chuyện mới"
+              title="Cuộc trò chuyện mới"
+              className="inline-flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full border border-line text-ink-2 transition-colors hover:border-brand/40 hover:bg-brand-wash hover:text-brand active:scale-95"
+            >
+              <PlusIcon className="size-4.5" />
+            </button>
+            <h2 className="min-w-0 flex-1 truncate font-heading text-base font-semibold text-ink">USAS Advisor</h2>
+            <div className="flex shrink-0 items-center rounded-lg border border-line p-0.5">
+              <IconButton
+                label={wide ? "Thu hẹp khung" : "Mở rộng khung"}
+                onClick={toggleWide}
+                className="hidden min-[900px]:inline-flex"
+              >
+                {wide ? <Minimize2Icon className="size-4" /> : <Maximize2Icon className="size-4" />}
+              </IconButton>
+              <IconButton label="Đóng trợ lý" onClick={closePanel}>
+                <XIcon className="size-4.5" />
+              </IconButton>
             </div>
-          ) : (
-            <div className="mt-0.5 text-xs text-muted-foreground">{page.label}</div>
+          </div>
+
+          {/* Trang gợi ý trường: chat đang nói về hồ sơ thật hay về giả định học sinh đang kéo (undefined: trang khác) */}
+          {page.simulation === null && (
+            <div className="mt-2.5 flex items-center gap-2 rounded-lg bg-brand-wash px-3 py-2 text-xs font-medium text-brand">
+              <span className="size-1.5 shrink-0 rounded-full bg-brand" />
+              Đang xem theo hồ sơ thật của bạn
+            </div>
+          )}
+          {page.simulation && (
+            <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-dashed border-ink-3 bg-surface px-3 py-2.5 text-xs text-ink">
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+                <span className="inline-flex items-center gap-1 font-semibold">
+                  <FlaskConicalIcon className="size-3.5" />
+                  Giả định, chưa phải kết quả thật
+                </span>
+                {describeSimulation(page.simulation)
+                  .split(" · ")
+                  .filter(Boolean)
+                  .map((part) => (
+                    <span key={part} className="rounded-md bg-ground px-2 py-0.5 font-medium">
+                      {part}
+                    </span>
+                  ))}
+              </div>
+              <button
+                type="button"
+                onClick={resetSimulation}
+                className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-md border border-line px-2.5 py-1 font-semibold transition-colors hover:bg-ground"
+              >
+                <Undo2Icon className="size-3.5" />
+                Về hồ sơ thật
+              </button>
+            </div>
           )}
         </div>
-        <IconButton label="Cuộc trò chuyện mới" onClick={newChat}>
-          <PlusIcon className="size-4.5" />
-        </IconButton>
-        <IconButton
-          label={wide ? "Thu hẹp khung" : "Mở rộng khung"}
-          onClick={toggleWide}
-          className="hidden min-[900px]:inline-flex"
-        >
-          {wide ? <Minimize2Icon className="size-4" /> : <Maximize2Icon className="size-4" />}
-        </IconButton>
-        <IconButton label="Đóng trợ lý" onClick={closePanel}>
-          <XIcon className="size-4.5" />
-        </IconButton>
-      </div>
 
-      {/* Trang gợi ý trường: chat đang nói về hồ sơ thật hay về giả định học sinh đang kéo (undefined: trang khác, không có khái niệm này) */}
-      {page.simulation === null && (
-        <div className="flex items-center gap-2 border-b border-line bg-brand/5 px-4 py-2 text-xs font-medium text-brand">
-          <span className="size-1.5 shrink-0 rounded-full bg-brand" />
-          Đang xem theo hồ sơ thật của bạn
-        </div>
-      )}
-      {page.simulation && (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-warn/20 bg-warn-wash px-4 py-2.5 text-xs text-warn">
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
-            <span className="inline-flex items-center gap-1 font-semibold">
-              <FlaskConicalIcon className="size-3.5" />
-              Đang thử giả định
-            </span>
-            {describeSimulation(page.simulation)
-              .split(" · ")
-              .filter(Boolean)
-              .map((part) => (
-                <span key={part} className="rounded-full bg-surface/70 px-2 py-0.5 font-medium">
-                  {part}
+        {empty ? (
+          /* Chưa hỏi gì: lời chào ở giữa khung và các câu hỏi gợi ý xếp dọc */
+          <div className="flex flex-1 flex-col items-center justify-center px-6 pb-10 text-center">
+            <p className="font-heading text-xl font-semibold text-ink">USAS Advisor</p>
+            <p className="mt-1.5 max-w-[34ch] text-sm leading-relaxed text-ink-2">
+              {page.greeting ?? "Tôi có thể giúp gì cho bạn?"}
+            </p>
+            {!ageBlock && page.suggestions.length > 0 && (
+              <div className="mt-6 flex w-full max-w-xs flex-col gap-2">
+                {page.suggestions.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => send(s)}
+                    className="min-h-10 cursor-pointer rounded-lg border border-line bg-surface px-3.5 py-2 text-sm text-ink transition-colors hover:border-brand/40 hover:bg-brand-wash active:translate-y-px"
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex flex-col gap-5 px-4 pb-4 text-[14.5px] leading-relaxed">
+            {turns.map((t, i) => (
+              <Turn
+                key={i}
+                turn={t}
+                // D3: nút trả lời nhanh chỉ bấm được ở lượt cuối, khi không chờ trả lời và không bị chặn tuổi
+                onReply={i === turns.length - 1 && !loading && !ageBlock ? send : undefined}
+              />
+            ))}
+
+            {/* Advisor trả từng ý khi xong: hiện dần các câu đã có, câu cuối cùng sẽ thay thế khi xong cả lượt */}
+            {loading && streaming?.text && (
+              <Turn turn={{ role: "assistant", content: streaming.text, widget: streaming.widget }} />
+            )}
+
+            {loading && (
+              <TypingIndicator
+                recommending={
+                  turns.at(-2)?.role === "assistant" &&
+                  turns.at(-2)?.content.includes("đề xuất lộ trình và danh sách trường")
+                }
+                progress={
+                  streaming && streaming.answers >= 2
+                    ? `Đã trả lời ${streaming.done}/${streaming.answers} câu hỏi...`
+                    : undefined
+                }
+              />
+            )}
+
+            {error && (
+              <div role="alert" className="flex items-start gap-3 px-1">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-risk-wash text-risk">
+                  <TriangleAlertIcon className="size-4.5" />
                 </span>
-              ))}
-          </div>
-          <button
-            type="button"
-            onClick={resetSimulation}
-            className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-full border border-warn/30 bg-surface px-2.5 py-1 font-semibold transition-colors hover:bg-warn/10"
-          >
-            <Undo2Icon className="size-3.5" />
-            Về hồ sơ thật
-          </button>
-        </div>
-      )}
-
-      {/* Tin nhắn */}
-      <div ref={listRef} className="flex flex-1 flex-col gap-4 overflow-y-auto p-4 text-[14.5px] leading-relaxed">
-        {turns.length === 0 && page.greeting && <p className="text-foreground">{page.greeting}</p>}
-        {turns.length === 0 && !page.greeting && (
-          <p className="text-foreground">
-            Chào bạn, mình thấy bạn đang ở <b className="font-semibold">{page.label}</b>. Mình giải thích, kiểm tra
-            những gì bạn đang điền, và trả lời câu hỏi về du học Mỹ.
-          </p>
-        )}
-
-        {turns.map((t, i) => (
-          <Turn
-            key={i}
-            turn={t}
-            // D3: nút trả lời nhanh chỉ bấm được ở lượt cuối, khi không chờ trả lời và không bị chặn tuổi
-            onReply={i === turns.length - 1 && !loading && !ageBlock ? send : undefined}
-          />
-        ))}
-
-        {/* Advisor trả từng ý khi xong: hiện dần các câu đã có, câu cuối cùng sẽ thay thế khi xong cả lượt */}
-        {loading && streaming?.text && (
-          <Turn turn={{ role: "assistant", content: streaming.text, widget: streaming.widget }} />
-        )}
-
-        {loading && (
-          <TypingIndicator
-            recommending={
-              turns.at(-2)?.role === "assistant" &&
-              turns.at(-2)?.content.includes("đề xuất lộ trình và danh sách trường")
-            }
-            progress={
-              streaming && streaming.answers >= 2
-                ? `Đã trả lời ${streaming.done}/${streaming.answers} câu hỏi...`
-                : undefined
-            }
-          />
-        )}
-
-        {error && (
-          <div className="rounded-lg border border-warn/30 bg-warn-wash px-3 py-2.5 text-[13px] text-warn">
-            <p>{error.message}</p>
-            <div className="mt-1.5 flex gap-3 font-medium">
-              {error.kind === "auth" ? (
-                <Link href={`/login?redirect=${encodeURIComponent(pathname)}`} className="underline">
-                  Đăng nhập để hỏi trợ lý
-                </Link>
-              ) : (
-                <button type="button" onClick={retry} className="inline-flex cursor-pointer items-center gap-1 underline">
-                  <RotateCwIcon className="size-3.5" />
-                  Thử lại
-                </button>
-              )}
-            </div>
+                <div className="min-w-0 space-y-1.5">
+                  <p className="text-sm font-semibold text-ink">
+                    {error.kind === "auth" ? "Cần đăng nhập để hỏi tiếp" : "Đã có lỗi xảy ra"}
+                  </p>
+                  <p className="text-xs text-ink-2">{error.message}</p>
+                  {error.kind === "auth" ? (
+                    <Link
+                      href={`/login?redirect=${encodeURIComponent(pathname)}`}
+                      className={buttonVariants({ variant: "outline", size: "sm" })}
+                    >
+                      Đăng nhập
+                    </Link>
+                  ) : (
+                    <Button variant="outline" size="sm" onClick={retry}>
+                      <RotateCwIcon />
+                      Thử lại
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
 
-      {/* Chip gợi ý + ô nhập */}
-      <div className="border-t border-line px-4 pt-3 pb-4">
+      {/* Ô nhập */}
+      <div className="px-3 pt-1 pb-3">
         {ageBlock ? (
           // [Q11] Chat gửi dữ liệu cá nhân cho AI: học sinh dưới 16 cần phụ huynh đồng ý
-          <p className="text-sm text-muted-foreground">
+          <p className="rounded-xl border border-line px-3.5 py-3 text-sm text-ink-2">
             {ageBlock.message}{" "}
-            <Link href="/account" className="font-medium text-brand underline">
+            <Link href="/account#parent-links" className="font-medium text-brand underline">
               Mời phụ huynh xác nhận
             </Link>
           </p>
         ) : (
-          <>
-          {page.suggestions.length > 0 && (
-            <div className="-mx-4 mb-3 flex gap-2 overflow-x-auto px-4 pb-0.5 [scrollbar-width:none]">
-              {page.suggestions.map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  disabled={loading}
-                  onClick={() => send(s)}
-                  className="h-8 shrink-0 cursor-pointer rounded-full border border-line bg-surface px-3 text-[13px] whitespace-nowrap text-foreground transition-colors hover:border-brand/50 hover:bg-brand-wash/50 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-          )}
           <form
             onSubmit={(e) => {
               e.preventDefault();
               submit();
             }}
-            className="flex items-end gap-2"
+            className="flex flex-col gap-2 rounded-2xl border border-line bg-surface px-3.5 pt-3 pb-2.5 transition-colors focus-within:border-brand focus-within:ring-3 focus-within:ring-ring/20"
           >
             <textarea
               ref={inputRef}
-              rows={1}
+              rows={2}
               value={input}
               maxLength={1000}
               onChange={(e) => setInput(e.target.value)}
@@ -247,20 +264,19 @@ export function AssistantPanel() {
                   submit();
                 }
               }}
-              placeholder="Hỏi về trang này, hoặc bất cứ điều gì…"
+              placeholder="Hỏi USAS Advisor"
               aria-label="Câu hỏi cho trợ lý"
-              className="min-h-[42px] flex-1 resize-none rounded-xl border border-line bg-surface px-3.5 py-2.5 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-brand focus:ring-2 focus:ring-brand/20"
+              className="min-h-12 w-full resize-none bg-transparent text-sm text-ink outline-none placeholder:text-ink-3"
             />
             <button
               type="submit"
               aria-label="Gửi"
               disabled={loading || !input.trim()}
-              className="flex size-[42px] shrink-0 cursor-pointer items-center justify-center rounded-xl bg-brand text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+              className="flex size-9 shrink-0 cursor-pointer items-center justify-center self-end rounded-lg bg-brand text-brand-foreground transition-[opacity,transform] hover:opacity-90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
             >
               <ArrowUpIcon className="size-4.5" />
             </button>
           </form>
-          </>
         )}
       </div>
     </aside>
@@ -307,14 +323,12 @@ function Turn({ turn, onReply }: { turn: AssistantTurn; onReply?: (value: string
   const { sendAction } = useAssistant();
   if (turn.role === "user") {
     return (
-      <div className="max-w-[90%] self-end rounded-[16px_4px_16px_16px] bg-[#E7EDF1] px-[15px] py-2.5 whitespace-pre-wrap text-foreground">
-        {turn.content}
-      </div>
+      <div className="rounded-xl bg-brand-wash px-4 py-3 whitespace-pre-wrap text-ink">{turn.content}</div>
     );
   }
   // Mọi câu trả lời là chữ do AI viết đầy đủ (không còn thẻ số liệu đi kèm); các nút và widget chọn bên dưới vẫn giữ
   return (
-    <div className="w-full text-foreground">
+    <div className="w-full px-1 text-foreground">
       {turn.content && <ChatText text={turn.content} />}
       {turn.citations && turn.citations.length > 0 && (
         <ol className="mt-2 list-decimal space-y-0.5 pl-5 text-xs text-muted-foreground">
@@ -391,7 +405,7 @@ function Turn({ turn, onReply }: { turn: AssistantTurn; onReply?: (value: string
               key={r.value}
               type="button"
               onClick={() => (r.href ? router.push(r.href) : r.action ? sendAction(r.value, r.action) : onReply(r.value))}
-              className="group inline-flex min-h-8 cursor-pointer items-center gap-1 rounded-full border border-brand/30 bg-surface px-3.5 py-1 text-left text-[13px] font-medium text-brand shadow-sm transition-colors hover:border-brand hover:bg-brand hover:text-white"
+              className="group inline-flex min-h-9 cursor-pointer items-center gap-1 rounded-lg border border-line bg-surface px-3 py-1.5 text-left text-[13px] font-medium text-ink transition-colors hover:border-brand/40 hover:bg-brand-wash hover:text-brand active:translate-y-px"
             >
               {r.label}
               <ChevronRightIcon className="size-3.5 shrink-0 opacity-60 transition-transform group-hover:translate-x-0.5 group-hover:opacity-100" />
@@ -421,7 +435,7 @@ function IconButton({
       title={label}
       onClick={onClick}
       className={cn(
-        "inline-flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+        "inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-md text-ink-2 transition-colors hover:bg-ground hover:text-ink active:scale-95",
         className
       )}
     >
@@ -430,19 +444,105 @@ function IconButton({
   );
 }
 
-/** Nút nổi "Hỏi trợ lý" ở góc dưới phải, chỉ hiện khi khung đang đóng */
+// Thẻ chào nhỏ hiện khi mới vào trang; bấm X thì thu về nút tròn, lựa chọn nhớ trong phiên (sessionStorage)
+const PEEK_KEY = "usas.advisor.peek-dismissed";
+const peekListeners = new Set<() => void>();
+function readPeekDismissed() {
+  try {
+    return sessionStorage.getItem(PEEK_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+function subscribePeek(fn: () => void) {
+  peekListeners.add(fn);
+  return () => peekListeners.delete(fn);
+}
+
+/**
+ * Lối vào trợ lý ở góc dưới phải khi khung lớn đang đóng.
+ * Lần đầu vào: thẻ nhỏ "USAS Advisor · Tôi có thể giúp gì cho bạn?" có sẵn ô hỏi; gửi câu thì mở khung lớn và hỏi luôn.
+ * Bấm X: thẻ thu thành nút tròn chỉ có icon, bấm nút để mở lại khung lớn.
+ */
 export function AssistantLauncher() {
   const { open, openPanel } = useAssistant();
   const visible = useAssistantVisible();
+  // Server và lần render đầu coi như đã thu gọn để HTML khớp nhau, sau đó đọc sessionStorage
+  const dismissed = useSyncExternalStore(subscribePeek, readPeekDismissed, () => true);
+  const [text, setText] = useState("");
+
   if (!visible || open) return null;
+
+  const dismiss = () => {
+    try {
+      sessionStorage.setItem(PEEK_KEY, "1");
+    } catch {
+      // trình duyệt chặn lưu trữ: thẻ sẽ hiện lại ở lần tải sau
+    }
+    peekListeners.forEach((fn) => fn());
+  };
+
+  if (dismissed) {
+    return (
+      <button
+        type="button"
+        onClick={() => openPanel()}
+        aria-label="Mở USAS Advisor"
+        title="USAS Advisor"
+        className="fixed right-5 bottom-5 z-30 flex size-14 cursor-pointer items-center justify-center rounded-2xl bg-brand text-brand-foreground transition-transform hover:-translate-y-0.5 active:scale-95 motion-safe:animate-in motion-safe:zoom-in-90 motion-safe:duration-200 print:hidden"
+      >
+        <MessageCircleIcon className="size-6" />
+      </button>
+    );
+  }
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const q = text.trim();
+    openPanel(q || undefined);
+    setText("");
+  };
+
   return (
-    <button
-      type="button"
-      onClick={() => openPanel()}
-      className="fixed right-5 bottom-5 z-30 inline-flex min-h-[50px] cursor-pointer items-center gap-2 rounded-full bg-brand px-5 text-sm font-semibold text-white shadow-[0_8px_24px_-6px_rgba(14,95,122,0.5)] transition-transform hover:-translate-y-0.5 print:hidden"
+    <div
+      role="dialog"
+      aria-labelledby="advisor-peek-title"
+      className="fixed right-5 bottom-5 z-30 w-[min(22rem,calc(100vw-2.5rem))] rounded-2xl border border-line bg-surface p-4 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 motion-safe:duration-300 print:hidden"
     >
-      <MessageCircleIcon className="size-5" />
-      Hỏi trợ lý
-    </button>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p id="advisor-peek-title" className="font-heading text-base font-semibold text-ink">
+            USAS Advisor
+          </p>
+          <p className="mt-1 text-sm text-ink-2">Tôi có thể giúp gì cho bạn?</p>
+        </div>
+        <IconButton label="Thu gọn" onClick={dismiss} className="-mt-1 -mr-1">
+          <XIcon className="size-4.5" />
+        </IconButton>
+      </div>
+      <form
+        onSubmit={submit}
+        className="mt-3 flex items-center gap-2 rounded-xl border border-line py-1.5 pr-1.5 pl-3.5 transition-colors focus-within:border-brand focus-within:ring-3 focus-within:ring-ring/20"
+      >
+        <label htmlFor="advisor-peek-input" className="sr-only">
+          Câu hỏi cho USAS Advisor
+        </label>
+        <input
+          id="advisor-peek-input"
+          value={text}
+          maxLength={1000}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="Aa"
+          className="min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-ink-3"
+        />
+        <button
+          type="submit"
+          aria-label="Gửi"
+          className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg bg-brand text-brand-foreground transition-[opacity,transform] hover:opacity-90 active:scale-95"
+        >
+          <ArrowUpIcon className="size-4" />
+        </button>
+      </form>
+    </div>
   );
 }

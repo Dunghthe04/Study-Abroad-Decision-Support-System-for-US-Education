@@ -11,6 +11,7 @@ import {
   goalValue,
   groupLabel,
   groupVariant,
+  formatPct,
 } from "@/lib/recommendation-labels";
 import { MessageSquareTextIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -97,7 +98,7 @@ function planText(plan: GoalPlan): string {
 
 const difficulty = (plan: GoalPlan) => DIFFICULTY_LABELS[plan.difficulty] ?? plan.difficulty;
 
-const pct = (fraction: number) => `${(fraction * 100).toLocaleString("vi-VN", { maximumFractionDigits: 1 })}%`;
+const pct = formatPct;
 
 // Lý do xếp nhóm, nói rõ con số và mốc khi có số liệu tuyển sinh ("nhận 24% hồ sơ, dưới mốc 50%") thay vì "ít hơn hẳn"
 function reasonLine(code: string, stats: GoalSchoolStats | null | undefined): string {
@@ -200,7 +201,7 @@ export function GoalSeekCard({ result }: { result: SchoolGoalResult }) {
     position.status === "excluded"
       ? { text: "Chưa trong danh sách", variant: "neutral" as const }
       : position.needAid
-        ? { text: "Cần học bổng lớn", variant: "warn" as const }
+        ? { text: "Cần học bổng lớn", variant: groupVariant("AID") }
         : { text: groupLabel(position.group), variant: groupVariant(position.group) };
   const targets = result.targets ?? [];
   const merged = sameBlock(targets);
@@ -247,7 +248,7 @@ export function GoalSeekCard({ result }: { result: SchoolGoalResult }) {
           Vì sao xếp nhóm này?
         </Button>
       )}
-      <p className="text-[11px] text-ink-3">
+      <p className="text-xs text-ink-3">
         Tính từ hồ sơ thật của bạn, so với sinh viên đã trúng tuyển. Đây là mức tham chiếu, không phải cam kết đỗ.
       </p>
     </div>

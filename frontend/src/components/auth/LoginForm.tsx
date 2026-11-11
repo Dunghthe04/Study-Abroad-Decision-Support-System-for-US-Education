@@ -9,7 +9,6 @@ import { ApiError } from "@/lib/api";
 import { setPendingEmail } from "@/lib/pending-email";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
@@ -84,99 +83,94 @@ export function LoginForm() {
   };
 
   return (
-    <Card className="mx-auto w-full max-w-md">
-      <CardHeader className="text-center">
-        <CardTitle>
-          <h1>Đăng nhập</h1>
-        </CardTitle>
-        <CardDescription>
-          Truy cập tài khoản học sinh / phụ huynh để quản lý thông tin
-        </CardDescription>
-      </CardHeader>
+    <div className="space-y-6">
+      <div className="space-y-2">
+        <h1 className="font-heading text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
+          Đăng nhập vào USAS
+        </h1>
+      </div>
 
-      <CardContent className="space-y-6">
-        {error && (
-          <Alert variant="destructive">
-            <AlertDescription>
-              <p>{error}</p>
+      {error && (
+        <Alert variant="destructive">
+          <AlertDescription>
+            <p>{error}</p>
 
-              {lockType === "temp_locked" && (
-                <p className="mt-1.5 flex items-start gap-1.5 text-xs font-medium">
-                  <ShieldAlertIcon className="size-3.5 shrink-0 mt-0.5" aria-hidden="true" />
-                  <span>
-                    Chỉ Quản trị viên (Admin) mới có quyền mở khóa tài khoản này. Vui lòng liên hệ ban quản trị để được hỗ trợ.
-                  </span>
-                </p>
-              )}
-            </AlertDescription>
-          </Alert>
-        )}
+            {lockType === "temp_locked" && (
+              <p className="mt-1.5 flex items-start gap-1.5 text-xs font-medium">
+                <ShieldAlertIcon className="size-3.5 shrink-0 mt-0.5" aria-hidden="true" />
+                <span>
+                  Chỉ Quản trị viên (Admin) mới có quyền mở khóa tài khoản này. Vui lòng liên hệ ban quản trị để được hỗ trợ.
+                </span>
+              </p>
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
 
-        {error && lockType === "unverified" && (
-          <Link
-            href="/verify-email"
-            onClick={() => setPendingEmail(email.trim())}
-            className={buttonVariants({ size: "sm" })}
-          >
-            Kích hoạt tài khoản bằng mã OTP
-            <ArrowRightIcon aria-hidden="true" />
-          </Link>
-        )}
+      {error && lockType === "unverified" && (
+        <Link
+          href="/verify-email"
+          onClick={() => setPendingEmail(email.trim())}
+          className={buttonVariants({ size: "sm" })}
+        >
+          Kích hoạt tài khoản bằng mã OTP
+          <ArrowRightIcon aria-hidden="true" />
+        </Link>
+      )}
 
-        <form onSubmit={handleSubmit}>
-          <FieldGroup>
-            {/* Email */}
-            <Field>
-              <FieldLabel htmlFor="email">Email</FieldLabel>
-              <Input
-                id="email"
-                type="email"
-                required
-                maxLength={100}
-                autoComplete="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="example@gmail.com"
-              />
-            </Field>
+      <form onSubmit={handleSubmit}>
+        <FieldGroup>
+          {/* Email của bạn */}
+          <Field>
+            <FieldLabel htmlFor="email">Email của bạn</FieldLabel>
+            <Input
+              id="email"
+              type="email"
+              required
+              maxLength={100}
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="example@gmail.com"
+            />
+          </Field>
 
-            {/* Mật khẩu */}
-            <Field>
-              <div className="flex items-center justify-between">
-                <FieldLabel htmlFor="password">Mật khẩu</FieldLabel>
-                <Link
-                  href="/forgot-password"
-                  className="text-primary hover:underline"
-                >
-                  Quên mật khẩu?
-                </Link>
-              </div>
-              <Input
-                id="password"
-                type="password"
-                required
-                maxLength={100}
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-              />
-            </Field>
+          {/* Mật khẩu */}
+          <Field>
+            <FieldLabel htmlFor="password">Mật khẩu</FieldLabel>
+            <Input
+              id="password"
+              type="password"
+              required
+              maxLength={100}
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+            />
+          </Field>
 
-            <Button type="submit" size="lg" disabled={isSubmitting} className="w-full">
-              {isSubmitting && <Spinner data-icon="inline-start" />}
-              {isSubmitting ? "Đang đăng nhập..." : "Đăng nhập"}
-            </Button>
-          </FieldGroup>
-        </form>
+          <Button type="submit" size="xl" disabled={isSubmitting} className="w-full">
+            {isSubmitting && <Spinner data-icon="inline-start" />}
+            {isSubmitting ? "Đang đăng nhập..." : "Đăng nhập"}
+          </Button>
+        </FieldGroup>
+      </form>
 
-        <p className="text-center text-muted-foreground">
+      <div className="space-y-2 pt-2 text-center text-sm text-ink-2">
+        <p>
           Chưa có tài khoản?{" "}
-          <Link href="/register" className="text-primary hover:underline">
+          <Link href="/register" className="font-semibold text-brand hover:underline">
             Đăng ký ngay
           </Link>
         </p>
-      </CardContent>
-    </Card>
+        <p>
+          Quên mật khẩu?{" "}
+          <Link href="/forgot-password" className="font-semibold text-brand hover:underline">
+            Khôi phục tài khoản
+          </Link>
+        </p>
+      </div>
+    </div>
   );
 }

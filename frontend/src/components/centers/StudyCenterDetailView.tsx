@@ -65,17 +65,17 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
       </div>
 
       {/* Hero Banner Section */}
-      <div className="relative rounded-xl overflow-hidden border border-border bg-card shadow-sm">
+      <div className="relative rounded-xl overflow-hidden border border-border bg-card ">
         {/* Cover Background */}
         <div
-          className="h-44 sm:h-52 w-full bg-cover bg-center relative bg-gradient-to-r from-slate-800 via-sky-900 to-slate-900"
+          className="h-44 sm:h-52 w-full bg-cover bg-center relative bg-brand-ink"
           style={{ backgroundImage: `url(${profile.coverImage})` }}
         >
           <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
           <div className="absolute top-4 right-4 flex gap-2">
             <Badge
               variant="secondary"
-              className="bg-background/90 backdrop-blur-md text-foreground font-medium text-xs px-2.5 py-1 shadow-sm"
+              className="bg-background/90 text-foreground font-medium text-xs px-2.5 py-1 "
             >
               Mã: {center.code}
             </Badge>
@@ -87,7 +87,7 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
           {/* Top row: Avatar & Action Buttons */}
           <div className="flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4 -mt-12 sm:-mt-14">
             {/* Logo / Avatar */}
-            <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl overflow-hidden border-4 border-background bg-card shadow-md shrink-0 flex items-center justify-center">
+            <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl overflow-hidden border-4 border-background bg-card shrink-0 flex items-center justify-center">
               <img
                 src={profile.logoImage}
                 alt={center.name}
@@ -155,7 +155,7 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
             <div className="text-lg sm:text-2xl font-bold tracking-tight text-foreground truncate">
               {profile.visaSuccessRate}%
             </div>
-            <div className="text-[11px] text-muted-foreground truncate mt-0.5">
+            <div className="text-xs text-muted-foreground truncate mt-0.5">
               Hồ sơ phỏng vấn ĐSQ
             </div>
           </div>
@@ -175,7 +175,7 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
               {scholarshipStat.amount}
             </div>
             <div
-              className="text-[11px] text-muted-foreground truncate mt-0.5"
+              className="text-xs text-muted-foreground truncate mt-0.5"
               title={scholarshipStat.note || "Kỳ tuyển sinh gần nhất"}
             >
               {scholarshipStat.note || "Kỳ tuyển sinh gần nhất"}
@@ -197,7 +197,7 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
               {profile.staffCount}{" "}
               <span className="text-xs sm:text-sm font-normal text-muted-foreground">chuyên viên</span>
             </div>
-            <div className="text-[11px] text-muted-foreground truncate mt-0.5">
+            <div className="text-xs text-muted-foreground truncate mt-0.5">
               Cố vấn & Giảng viên
             </div>
           </div>
@@ -216,7 +216,7 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
             <div className="text-base sm:text-lg font-bold tracking-tight text-foreground truncate" title={profile.licenseNumber}>
               {profile.licenseNumber}
             </div>
-            <div className="text-[11px] text-muted-foreground truncate mt-0.5" title={profile.licenseIssuedBy}>
+            <div className="text-xs text-muted-foreground truncate mt-0.5" title={profile.licenseIssuedBy}>
               {profile.licenseIssuedBy}
             </div>
           </div>
@@ -225,7 +225,7 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
 
       {/* Main Tabs Navigation */}
       <Tabs defaultValue="tong-quan" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 max-w-2xl h-11 p-1 rounded-xl border-2 border-border/90 bg-muted/90 shadow-2xs">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 max-w-2xl h-11 p-1 rounded-xl border-2 border-border/90 bg-muted/90 ">
           <TabsTrigger value="tong-quan" className="text-xs sm:text-sm font-medium">Tổng quan & Cơ sở</TabsTrigger>
           <TabsTrigger value="dich-vu" className="text-xs sm:text-sm font-medium">Dịch vụ & Khóa học</TabsTrigger>
           <TabsTrigger value="thanh-tich" className="text-xs sm:text-sm font-medium">Thành tích đỗ đạt</TabsTrigger>
@@ -250,7 +250,7 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
 
               {/* Chứng nhận quốc tế */}
               <div className="pt-2 border-t">
-                <div className="text-xs font-semibold text-foreground mb-2 uppercase tracking-wider">
+                <div className="text-xs font-semibold text-foreground mb-2">
                   Chứng nhận kiểm định & Đối tác quốc tế:
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -438,7 +438,7 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
                 {profile.courses.map((course, idx) => (
                   <div
                     key={idx}
-                    className="p-4 rounded-lg border bg-gradient-to-b from-card to-muted/20 flex flex-col justify-between"
+                    className="p-4 rounded-lg border bg-card flex flex-col justify-between"
                   >
                     <div className="space-y-2">
                       <div className="font-semibold text-foreground text-sm leading-snug">{course.name}</div>
@@ -477,10 +477,10 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
             <CardContent>
               <div className="grid sm:grid-cols-3 gap-3.5">
                 {profile.successStories.map((story, i) => (
-                  <div key={i} className="p-4 rounded-lg border bg-card shadow-sm space-y-2">
+                  <div key={i} className="p-4 rounded-lg border bg-card space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="font-semibold text-foreground text-sm">{story.studentName}</span>
-                      <Badge variant="secondary" className="text-[10px]">
+                      <Badge variant="secondary" className="text-xs">
                         {story.year}
                       </Badge>
                     </div>
@@ -552,7 +552,7 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
                       <div className="flex items-center gap-2">
                         <span className="font-semibold text-sm text-foreground">{rev.reviewerName}</span>
                         {rev.verified && (
-                          <Badge variant="outline" className="text-emerald-600 border-emerald-300 text-[10px] py-0">
+                          <Badge variant="outline" className="text-emerald-600 border-emerald-300 text-xs py-0">
                             ✓ Học viên xác thực
                           </Badge>
                         )}

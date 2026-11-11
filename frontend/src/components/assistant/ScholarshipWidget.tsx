@@ -19,7 +19,7 @@ export function ScholarshipWidget({ data, onPick }: { data?: Record<string, unkn
             disabled={!onPick}
             onClick={() => onPick?.(label)}
             className={cn(
-              "flex flex-col items-start rounded-xl border border-line bg-surface p-3 text-left shadow-2xs transition-colors",
+              "flex flex-col items-start rounded-xl border border-line bg-surface p-3 text-left transition-colors",
               onPick ? "cursor-pointer hover:border-brand/40 hover:bg-muted/30" : "cursor-not-allowed opacity-60"
             )}
           >

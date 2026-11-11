@@ -8,13 +8,7 @@ import type { UniversityDetail } from "@/types/university";
 
 interface UniversityPageProps {
   params: Promise<{ code: string }>;
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
-
-// Nơi người dùng đến từ đó, qua ?from=. Chỉ nhận các nơi đã biết, không nhận địa chỉ tùy ý
-const BACK_LINKS: Record<string, { href: string; label: string }> = {
-  recommendations: { href: "/recommendations", label: "Trường gợi ý cho bạn" },
-};
 
 export async function generateMetadata({ params }: UniversityPageProps): Promise<Metadata> {
   const { code } = await params;
@@ -29,11 +23,9 @@ export async function generateMetadata({ params }: UniversityPageProps): Promise
   }
 }
 
-export default async function UniversityDetailPage({ params, searchParams }: UniversityPageProps) {
+export default async function UniversityDetailPage({ params }: UniversityPageProps) {
   await connection();
   const { code } = await params;
-  const from = (await searchParams).from;
-  const back = typeof from === "string" ? BACK_LINKS[from] : undefined;
   if (!code.trim() || code.length > 32) notFound();
   let university: UniversityDetail;
   try {
@@ -42,5 +34,5 @@ export default async function UniversityDetailPage({ params, searchParams }: Uni
     if (error instanceof ApiError && error.status === 404) notFound();
     throw error;
   }
-  return <UniversityDetailView key={university.code} university={university} back={back} />;
+  return <UniversityDetailView key={university.code} university={university} />;
 }

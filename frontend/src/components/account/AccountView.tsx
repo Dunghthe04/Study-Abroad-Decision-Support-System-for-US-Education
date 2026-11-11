@@ -64,10 +64,21 @@ export function AccountView() {
           },
         ]
       : []),
-    { id: "password", label: "Đổi mật khẩu", icon: KeyRoundIcon },
+    { id: "password", label: "Bảo mật tài khoản", icon: KeyRoundIcon },
   ];
 
   const [activeSection, setActiveSection] = useState<SectionId>(() => readSectionFromHash(sections));
+
+  // Menu tài khoản ở thanh đầu trang trỏ tới /account#academic, #password...: đang ở trang này thì chỉ đổi hash, không tải lại
+  const sectionIds = sections.map((s) => s.id).join(",");
+  useEffect(() => {
+    const onHash = () => {
+      const id = window.location.hash.slice(1);
+      if (sectionIds.split(",").includes(id)) setActiveSection(id as SectionId);
+    };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, [sectionIds]);
 
   // Trạng thái Hồ sơ học thuật
   const [profile, setProfile] = useState<AcademicProfileResponse | null>(null);
