@@ -5,13 +5,10 @@ import { useRouter } from "next/navigation";
 import {
   Building2Icon,
   RotateCcwIcon,
-  SearchIcon,
   SlidersHorizontalIcon,
   XIcon,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Sheet,
   SheetContent,
@@ -47,7 +44,6 @@ export function UniversityListView({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
-  const [searchInput, setSearchInput] = useState(currentParams.search || "");
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
 
   const applyParams = (next: Partial<UniversitySearchParams>, resetPage = true) => {
@@ -82,13 +78,7 @@ export function UniversityListView({
     });
   };
 
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    applyParams({ search: searchInput });
-  };
-
   const handleResetFilters = () => {
-    setSearchInput("");
     startTransition(() => {
       router.push("/universities");
     });
@@ -100,10 +90,7 @@ export function UniversityListView({
     activeChips.push({
       key: "search",
       label: `Từ khóa: "${currentParams.search}"`,
-      onRemove: () => {
-        setSearchInput("");
-        applyParams({ search: undefined });
-      },
+      onRemove: () => applyParams({ search: undefined }),
     });
   }
 
@@ -166,36 +153,6 @@ export function UniversityListView({
 
   return (
     <div className="space-y-6">
-      <form onSubmit={handleSearchSubmit} className="flex gap-2">
-        <div className="relative flex-1">
-          <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Tìm theo tên trường, mã trường hoặc thành phố"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            className="h-10 pl-9"
-            aria-label="Tìm trường"
-          />
-          {searchInput && (
-            <button
-              type="button"
-              aria-label="Xóa từ khóa"
-              onClick={() => {
-                setSearchInput("");
-                applyParams({ search: undefined });
-              }}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-            >
-              <XIcon className="size-4" />
-            </button>
-          )}
-        </div>
-        <Button type="submit" className="h-10 px-5">
-          Tìm kiếm
-        </Button>
-      </form>
-
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 items-start">
         <aside className="hidden lg:block lg:col-span-1 sticky top-20">
           <UniversityFilters
@@ -256,28 +213,28 @@ export function UniversityListView({
 
           {activeChips.length > 0 && (
             <div className="flex flex-wrap items-center gap-2 pt-1">
-              <span className="text-xs text-muted-foreground">Đang lọc:</span>
+              <span className="text-sm font-medium text-muted-foreground">Đang lọc:</span>
               {activeChips.map((chip) => (
-                <Badge
+                <span
                   key={chip.key}
-                  variant="secondary"
-                  className="gap-1.5 pl-2.5 pr-1.5 py-1 text-xs bg-muted/80 hover:bg-muted"
+                  className="inline-flex items-center gap-2 rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-medium text-foreground shadow-xs transition-colors hover:border-brand/40"
                 >
                   <span>{chip.label}</span>
                   <button
                     type="button"
                     onClick={chip.onRemove}
-                    className="rounded-full hover:bg-foreground/10 p-0.5"
+                    className="rounded-full p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    aria-label={`Xóa bộ lọc ${chip.label}`}
                   >
-                    <XIcon className="size-3" />
+                    <XIcon className="size-3.5" />
                   </button>
-                </Badge>
+                </span>
               ))}
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={handleResetFilters}
-                className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+                className="h-8 px-2.5 text-sm text-muted-foreground hover:text-foreground"
               >
                 Xóa tất cả
               </Button>
@@ -285,7 +242,7 @@ export function UniversityListView({
           )}
 
           {initialData.items.length === 0 ? (
-            <div className="rounded-2xl border border-line bg-card p-12 text-center space-y-4">
+            <div className="py-16 text-center space-y-4">
               <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-muted text-muted-foreground">
                 <Building2Icon className="size-7" />
               </div>
