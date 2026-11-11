@@ -1,5 +1,7 @@
 """Hỏi hồ sơ trong chat: skill_bac_hoc, skill_ho_so chạy qua nhánh hồ sơ (SLM đọc tin là collect_profile)."""
 
+import pytest
+
 from app.schemas.chat import ChatMessage, ChatRequest, ChatState, ProfileField
 from app.services.chat_flow import QUESTIONS
 from app.services.intake import CHAT_BUTTON, FORM_BUTTON, INTAKE_ASK, INTAKE_ID
@@ -317,6 +319,21 @@ async def test_confirm_at_review_confirms_said_info_and_assesses_right_away():
     assert (res.state.current_step, res.state.question_id) == ("B4", "X2")
     assert res.answer.startswith(SAVED)
     assert res.answer.endswith(QUESTIONS["X2"])
+    assert "gpa" in res.profile_changed
+
+
+# Bấm nút Đúng rồi hay gõ câu xác nhận ở X1 đều lưu hồ sơ, không nhờ SLM (SLM có thể đoán nhầm là profile_review)
+@pytest.mark.parametrize("message", ["Đúng rồi", "đúng", "Vâng."])
+async def test_confirm_at_review_skips_slm(message):
+    llm = FakeLLM(OllamaError("tắt máy"), OllamaError("tắt máy"))  # đánh giá dùng câu mẫu
+    flow = flow_with(build_handlers(llm, "qwen3:8b"), tin(("profile_review", {"tasks": ["assessment"]})))
+    profile = {**full_profile(), "budget": field("tier_35k_50k")}
+    state = ChatState(current_step="B2", question_id="X1", last_question=QUESTIONS["X1"], profile=profile)
+    res = await flow.reply(ChatRequest(messages=[ChatMessage(role="user", content=message)], state=state))
+
+    assert res.skills == ["collect_profile"]
+    assert all(f.status == "confirmed" for f in res.state.profile.values())
+    assert res.answer.startswith(SAVED)
     assert "gpa" in res.profile_changed
 
 

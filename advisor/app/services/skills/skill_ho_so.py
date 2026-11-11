@@ -1065,12 +1065,14 @@ def save_cert_text(state: ChatState, item: dict) -> SkillOutput:
 
 # Câu ghép từ ô nhập hoặc nút "Không còn ..." của câu đang hỏi là câu trả lời rõ: chat_flow không nhờ model
 # đoán skill (model có thể đoán nhầm "Không còn ..." là muốn dừng)
-# Ở bảng rà soát: nút Cần sửa, câu ô chọn nhóm, nút Sửa trên form, Điền lại từ đầu. Câu nào cũng có thể có nút Giữ như cũ
+# Ở bảng rà soát: nút Đúng rồi hoặc câu gõ xác nhận (CONFIRM_WORDS), nút Cần sửa, câu ô chọn nhóm, nút Sửa trên form,
+# Điền lại từ đầu. Câu nào cũng có thể có nút Giữ như cũ
 def is_form_text(question_id: str | None, message: str) -> bool:
     edit_replies = (FIX_REPLY, FORM_REPLY, RESTART_REPLY)
     return (
         (question_id == "X1" and any(buttons.same_text(message, reply.value) for reply in edit_replies))
         or (question_id == "X1" and read_edit_menu(message) is not None)
+        or (question_id == "X1" and is_confirm(message))
         or buttons.same_text(message, KEEP_REPLY.value)
         or (question_id in NO_MORE and buttons.same_text(message, NO_MORE[question_id]))
         or (question_id in CERT_QUESTIONS and buttons.same_text(message, NO_MORE_CERT))
