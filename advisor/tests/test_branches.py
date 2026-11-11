@@ -672,6 +672,51 @@ async def test_only_choosing_schools_runs_the_recommendation_even_without_the_sc
     assert writer.skills == []
 
 
+@pytest.mark.parametrize(
+    ("question", "tasks"),
+    [
+        ("đề xuất trường và lên lộ trình cho em", ["school_list", "roadmap"]),
+        ("đánh giá hồ sơ và đề xuất trường cho em", ["assessment", "school_list"]),
+    ],
+)
+async def test_a_school_list_with_template_tasks_writes_them_then_runs_the_recommendation(question, tasks):
+    writer = FakeWriter()
+
+    out = await new_advice([], writer=writer).run(
+        ChatState(profile=filled(REQUIRED_B4)), question, tin(("profile_review", {"tasks": tasks}, question))
+    )
+
+    assert out.action == "recommend" and out.answer == "lời tư vấn"
+    assert writer.tasks == [[t for t in tasks if t != "school_list"]]  # khuôn chỉ nhận việc của khuôn
+
+
+async def test_a_school_list_still_runs_when_the_writer_fails():
+    question = "đánh giá hồ sơ và đề xuất trường cho em"
+
+    out = await new_advice([], writer=FakeWriter(answer=None)).run(
+        ChatState(profile=filled(REQUIRED_B4)),
+        question,
+        tin(("profile_review", {"tasks": ["assessment", "school_list"]}, question)),
+    )
+
+    assert out.answer == CANNOT_ANSWER and out.action == "recommend"
+
+
+async def test_a_school_list_with_template_tasks_asks_the_major_first():
+    profile = filled([k for k in REQUIRED_B4 if k != "major"]) | {"major": ProfileField(status="unknown")}
+    question = "đề xuất trường và lên lộ trình cho em"
+    writer = FakeWriter()
+
+    out = await new_advice([], writer=writer).run(
+        ChatState(profile=profile),
+        question,
+        tin(("profile_review", {"tasks": ["school_list", "roadmap"]}, question)),
+    )
+
+    assert out.answer == NEED_MAJOR and out.widget == Widget(type="major")
+    assert writer.skills == []
+
+
 @pytest.mark.parametrize("tasks", [["compare"], ["compare", "explain_school"]])
 async def test_only_comparing_runs_the_school_data_comparison(tasks):
     writer = FakeWriter()

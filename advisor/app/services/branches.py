@@ -372,8 +372,12 @@ class GeneratedAdviceBranch:
         asked = ask_missing_profile(state, y, REQUIRED_B4 if school_list else REQUIRED_B3)
         if asked is not None:
             return asked
-        if school_list:
+        # Chỉ xin trường thì chạy gợi ý luôn. Có cả việc của khuôn (đánh giá, lộ trình chung) thì khuôn viết trước,
+        # .NET chạy gợi ý rồi nối danh sách trường vào sau câu trả lời
+        template_work = any(t in TEMPLATE_TASKS for t in tasks or [])
+        if school_list and not template_work:
             return SkillOutput(RECOMMENDING, action="recommend")
+        recommend = "recommend" if school_list else None
 
         # Code dựng skill từ khuôn (không gọi SLM, không hỏng); writer chỉ nhận việc của khuôn
         today = datetime.date.today()
@@ -382,9 +386,11 @@ class GeneratedAdviceBranch:
         answer = await self._writer.write(skill, req, state.schools, tasks_of(tasks))
         if answer is None:
             return SkillOutput(
-                CANNOT_ANSWER, quick_replies=[QuickReply(label=ASK_AGAIN_LABEL, value=question)]
+                CANNOT_ANSWER,
+                quick_replies=[QuickReply(label=ASK_AGAIN_LABEL, value=question)],
+                action=recommend,
             )
-        return SkillOutput(answer)
+        return SkillOutput(answer, action=recommend)
 
 
 # Hồ sơ vừa lưu mà không có câu tư vấn bị hoãn: hỏi học sinh muốn làm gì tiếp. Nút gửi câu như học sinh tự gõ,
