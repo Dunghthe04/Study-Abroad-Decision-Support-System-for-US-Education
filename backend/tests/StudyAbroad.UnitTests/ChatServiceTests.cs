@@ -248,6 +248,113 @@ public class ChatServiceTests
         Assert.Equal(2, saved.Rows.Count);
     }
 
+    // ---- advisor sập hẳn: câu hỏi không được mất
+
+    [Fact]
+    public async Task AdvisorDown_SavesTheQuestionAndAFailedSystemRow_AndStillThrowsForTheController()
+    {
+        var store = new FakeSessions();
+        var saved = new FakeMessages();
+        var advisor = new FakeAdvisor("B0") { ChatError = new HttpRequestException("máy chủ nội bộ 10.0.0.5 không phản hồi") };
+
+        await Assert.ThrowsAsync<HttpRequestException>(() =>
+            new ChatService(advisor, store, new FakeProfileFlow(), messages: saved)
+                .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello)));   // học sinh vẫn nhận 503 như cũ
+
+        Assert.Equal(["user", "system"], saved.Rows.Select(r => r.Role));
+        var (question, failure) = (saved.Rows[0], saved.Rows[1]);
+        Assert.Equal("chào", question.Content);
+        Assert.Equal(("failed", "open"), (failure.Outcome, failure.ReviewStatus));
+        Assert.Equal(question.Id, failure.ReplyToMessageId);
+        Assert.Equal(store.Rows.Single().Id, question.ChatSessionId);          // phiên mới được lưu để tin nhắn có chỗ bám
+        Assert.Equal(question.ChatSessionId, failure.ChatSessionId);
+        var meta = JsonDocument.Parse(failure.MetaJson!).RootElement;
+        Assert.Equal("HttpRequestException", meta.GetProperty("error").GetString());
+        Assert.Equal(["advisor"], meta.GetProperty("failedSteps").EnumerateArray().Select(e => e.GetString()));
+    }
+
+    [Fact]
+    public async Task AdvisorDown_NeverStoresTheErrorMessage_ItMayHoldInternalAddresses()
+    {
+        var saved = new FakeMessages();
+        var advisor = new FakeAdvisor("B0") { ChatError = new HttpRequestException("máy chủ nội bộ 10.0.0.5 không phản hồi") };
+
+        await Assert.ThrowsAsync<HttpRequestException>(() =>
+            new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), messages: saved)
+                .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello)));
+
+        Assert.DoesNotContain(saved.Rows, r => (r.Content + r.MetaJson).Contains("10.0.0.5"));
+    }
+
+    [Fact]
+    public async Task AdvisorDown_OnAnExistingSession_KeepsThatSession()
+    {
+        var userId = Guid.NewGuid();
+        var store = new FakeSessions();
+        var session = new ChatSession { UserId = userId, StateJson = "{\"currentStep\":\"B1\"}", CurrentStep = "B1" };
+        store.Rows.Add(session);
+        var saved = new FakeMessages();
+        var advisor = new FakeAdvisor("B2") { ChatError = new HttpRequestException() };
+
+        await Assert.ThrowsAsync<HttpRequestException>(() =>
+            new ChatService(advisor, store, new FakeProfileFlow(), messages: saved)
+                .ChatAsync(userId, new AdvisorChatRequest(Hello, session.Id.ToString())));
+
+        Assert.Single(store.Rows);                                              // không tạo thêm phiên
+        Assert.All(saved.Rows, r => Assert.Equal(session.Id, r.ChatSessionId));
+        Assert.Equal("{\"currentStep\":\"B1\"}", session.StateJson);            // trạng thái cũ không bị đổi
+    }
+
+    [Fact]
+    public async Task AdvisorDown_WhileStreaming_IsSavedToo()
+    {
+        var saved = new FakeMessages();
+        var advisor = new FakeAdvisor("B0") { StreamError = new HttpRequestException() };
+
+        await Assert.ThrowsAsync<HttpRequestException>(() =>
+            new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), messages: saved)
+                .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello), onEvent: _ => Task.CompletedTask));
+
+        Assert.Equal(["user", "system"], saved.Rows.Select(r => r.Role));
+    }
+
+    [Fact]
+    public async Task WhenTheStudentCancels_NothingIsRecorded()
+    {
+        // Học sinh đóng tab giữa chừng không phải lỗi hệ thống, không đưa vào hàng đợi của admin
+        var saved = new FakeMessages();
+        using var cancelled = new CancellationTokenSource();
+        cancelled.Cancel();
+        var advisor = new FakeAdvisor("B0") { ChatError = new TaskCanceledException() };
+
+        await Assert.ThrowsAsync<TaskCanceledException>(() =>
+            new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), messages: saved)
+                .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello), cancelled.Token));
+
+        Assert.Empty(saved.Rows);
+    }
+
+    [Fact]
+    public async Task FailureToRecordTheFailure_DoesNotHideTheOriginalError()
+    {
+        var advisor = new FakeAdvisor("B0") { ChatError = new HttpRequestException("lỗi gốc") };
+
+        var thrown = await Assert.ThrowsAsync<HttpRequestException>(() =>
+            new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), messages: new FakeMessages { Fail = true })
+                .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello)));
+
+        Assert.Equal("lỗi gốc", thrown.Message);   // bộ điều khiển vẫn thấy đúng lỗi advisor, không phải lỗi ghi database
+    }
+
+    [Fact]
+    public async Task AdvisorDown_WithoutARepository_ThrowsAsBefore()
+    {
+        var advisor = new FakeAdvisor("B0") { ChatError = new HttpRequestException() };
+
+        await Assert.ThrowsAsync<HttpRequestException>(() =>
+            new ChatService(advisor, new FakeSessions(), new FakeProfileFlow()).ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello)));
+    }
+
     [Fact]
     public async Task EmptyStudentMessage_SavesOnlyTheReply()
     {
@@ -2402,9 +2509,13 @@ public class ChatServiceTests
         public IReadOnlyList<AiUsageDto>? AiUsage { get; init; }
         public AdvisorSlmDto? Slm { get; init; }
 
+        public Exception? ChatError { get; init; }   // advisor sập hẳn: ChatAsync ném lỗi này
+
         public Task<AdvisorChatResponse> ChatAsync(AdvisorChatRequest request, CancellationToken ct = default)
         {
             LastRequest = request;
+            if (ChatError is not null)
+                throw ChatError;
             var question = QuestionId is null ? "" : $",\"questionId\":\"{QuestionId}\"";
             var state = JsonDocument.Parse($"{{\"currentStep\":\"{nextStep}\"{question}}}").RootElement;
             return Task.FromResult(new AdvisorChatResponse(

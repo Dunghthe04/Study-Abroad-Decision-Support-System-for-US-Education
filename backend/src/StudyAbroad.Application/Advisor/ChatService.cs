@@ -83,10 +83,20 @@ namespace StudyAbroad.Application.Advisor
                 GradeScale = scaleRules,
             };
             // Nút trên giao diện gửi hành động có cấu trúc (mã trường): bỏ qua advisor, dựng sẵn lượt như thể advisor đã hiểu
-            var response = (recommender is not null ? ChatActions.ToResponse(request.Action, state) : null)
-                ?? (onEvent is null
-                    ? await advisor.ChatAsync(toAdvisor, ct)
-                    : await advisor.ChatStreamAsync(toAdvisor, onEvent, ct));
+            AdvisorChatResponse response;
+            try
+            {
+                response = (recommender is not null ? ChatActions.ToResponse(request.Action, state) : null)
+                    ?? (onEvent is null
+                        ? await advisor.ChatAsync(toAdvisor, ct)
+                        : await advisor.ChatStreamAsync(toAdvisor, onEvent, ct));
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested)
+            {
+                // Advisor sập hẳn (503, hết thời gian...): học sinh nhận lỗi như cũ, nhưng câu hỏi không được mất vì đây là lỗi admin cần biết nhất
+                await RecordAdvisorFailureAsync(session, isNew, request, askedAt, ex, turnClock.ElapsedMilliseconds, ct);
+                throw;
+            }
             // Chụp ngay các tín hiệu của advisor (nhãn model gán, số đo AI, hành động) trước khi các bước sau thay response.
             // Dùng để đánh giá lượt (ChatTurn) và ghi chat_messages ở cuối
             var advisorSignals = new TurnSignals(askedAt, response.Slm, response.AiUsage, response.Action, response.Skills);
@@ -234,6 +244,49 @@ namespace StudyAbroad.Application.Advisor
             {
                 logger?.LogWarning(ex, "Không lưu được tin nhắn của phiên chat {SessionId}; lượt chat vẫn trả lời bình thường", session.Id);
                 return null;
+            }
+        }
+
+        // Advisor lỗi hẳn nên không có câu trả lời. Lưu câu hỏi và một dòng vai trò system ghi lỗi (outcome failed, review_status open)
+        // để câu không biến mất khỏi hàng đợi của admin. Không dùng vai trò assistant vì trợ lý chưa hề trả lời.
+        // Chỉ ghi tên loại lỗi, không ghi thông báo lỗi (có thể chứa địa chỉ máy chủ nội bộ). Lỗi khi ghi chỉ cảnh báo, không che lỗi gốc
+        private async Task RecordAdvisorFailureAsync(
+            ChatSession session, bool isNew, AdvisorChatRequest request, DateTime askedAt, Exception error, long turnMs, CancellationToken ct)
+        {
+            if (messages is null)
+                return;
+            try
+            {
+                // Phiên mới chưa được lưu (bình thường lưu ở cuối lượt), nhưng tin nhắn cần phiên có sẵn
+                if (isNew)
+                {
+                    session.UpdatedAt = DateTime.UtcNow;
+                    await sessions.AddAsync(session, ct);
+                }
+
+                var rows = new List<StudyAbroad.Domain.Entities.ChatMessage>();
+                StudyAbroad.Domain.Entities.ChatMessage? question = null;
+                if (request.Messages.LastOrDefault(m => m.Role == "user")?.Content is { Length: > 0 } asked)
+                {
+                    question = new() { ChatSessionId = session.Id, Role = "user", Content = asked, CreatedAt = askedAt };
+                    rows.Add(question);
+                }
+                var errorName = error.GetType().Name;
+                rows.Add(new()
+                {
+                    ChatSessionId = session.Id,
+                    Role = "system",
+                    ReplyToMessageId = question?.Id,
+                    Content = $"Advisor không phản hồi ({errorName}).",
+                    Outcome = ChatOutcomes.Failed,
+                    ReviewStatus = ChatReviewStatuses.Open,
+                    MetaJson = ChatTurn.AdvisorFailedMeta(errorName, turnMs),
+                });
+                await messages.AddRangeAsync(rows, ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger?.LogWarning(ex, "Không lưu được tin nhắn của lượt chat lỗi, phiên {SessionId}", session.Id);
             }
         }
 

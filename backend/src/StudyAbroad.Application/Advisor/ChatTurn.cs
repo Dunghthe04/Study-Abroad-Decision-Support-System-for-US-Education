@@ -76,6 +76,13 @@ public static class ChatTurn
         }, MetaJson);
     }
 
+    /// <summary>
+    /// meta_json của dòng lỗi (vai trò system) khi advisor sập hẳn nên lượt không có câu trả lời. error là tên loại lỗi (HttpRequestException...),
+    /// không phải thông báo lỗi đầy đủ. failedSteps ghi "advisor" để lọc cùng các bước AI lỗi khác.
+    /// </summary>
+    public static string AdvisorFailedMeta(string error, long turnMs) =>
+        JsonSerializer.Serialize(new { v = MetaVersion, turnMs, error, failedSteps = new[] { "advisor" } }, MetaJson);
+
     // Cộng các lần gọi của một nhóm: số lần, token vào/ra/cache, tổng thời gian
     private static object Bucket(IEnumerable<AiUsageDto> calls)
     {
