@@ -38,6 +38,7 @@ import { OpenAssistantButton } from "@/components/assistant/OpenAssistantButton"
 import { useAssistant } from "@/components/assistant/AssistantProvider";
 import { LandingHero } from "@/components/landing/LandingHero";
 import { LayerStack } from "@/components/landing/LayerStack";
+import { SchoolLogoStrip } from "@/components/landing/SchoolLogoStrip";
 import { UniversityCard } from "@/components/universities/UniversityCard";
 import { LANDING_SCHOOLS, type LandingSchool } from "@/lib/landing-schools";
 import { searchUniversities } from "@/lib/university-api";
@@ -254,7 +255,6 @@ function HomeView() {
   const isAdmin = user?.role === "admin";
   const isModerator = user?.role === "moderator";
   const isStaff = isAdmin || isModerator;
-  const isStudentOrParent = user?.role === "student" || user?.role === "parent";
 
   useEffect(() => {
     if (!isLoading && !isPublicPreview && isStaff) router.replace("/admin");
@@ -272,6 +272,7 @@ function HomeView() {
   return (
     <>
     <LandingHero />
+    <SchoolLogoStrip />
     <div className="mx-auto max-w-[1560px] space-y-20 px-4 pt-12 pb-20 sm:space-y-28 sm:px-8 sm:pt-16 lg:px-12">
       {isStaff && isPublicPreview && (
         <Alert variant="warning">
@@ -287,19 +288,6 @@ function HomeView() {
         </Alert>
       )}
 
-      {/* KHÔNG GIAN CÁ NHÂN (đã đăng nhập) */}
-      {isStudentOrParent && (
-        <section className="flex flex-col gap-4 rounded-xl border border-line bg-surface p-5 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="font-sans text-h3 text-ink">Chào {user?.fullName || "bạn"}</h2>
-            <p className="text-sm text-ink-2">Tiếp tục từ chỗ bạn dừng lại.</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Link href="/analysis" className={buttonVariants({ size: "lg" })}>Tiếp tục phân tích</Link>
-            <Link href="/target-schools" className={buttonVariants({ variant: "outline", size: "lg" })}>Trường mục tiêu</Link>
-          </div>
-        </section>
-      )}
 
       {/* CÁCH HOẠT ĐỘNG */}
       <section className="space-y-8">
