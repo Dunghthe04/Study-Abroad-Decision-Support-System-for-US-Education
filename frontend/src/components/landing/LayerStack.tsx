@@ -6,11 +6,8 @@ import { cn } from "@/lib/utils";
 type Layer = {
   level: number;
   name: string;
-  tech: string;
   title: string;
   desc: string;
-  gives: string;
-  bullets: string[];
   label: string;
 };
 
@@ -19,51 +16,36 @@ const LAYERS: Layer[] = [
   {
     level: 5,
     name: "Con người",
-    tech: "Trung tâm tư vấn",
     title: "Người thật làm phần việc cần người",
     desc: "Bài luận, hồ sơ và visa cần người đồng hành, nên hệ thống chuyển sang trung tâm bạn chọn thay vì tự làm.",
-    gives: "Có người đồng hành đúng lúc cần",
-    bullets: ["Phần việc của hệ thống và của trung tâm tách bạch rõ ràng"],
     label: "Chuyển sang trung tâm",
   },
   {
     level: 4,
     name: "Viết câu trả lời",
-    tech: "Mô hình ngôn ngữ lớn (LLM)",
     title: "Viết lại số liệu thành câu dễ hiểu",
     desc: "Nhận số liệu đã lấy sẵn và viết thành tiếng Việt có bố cục rõ ràng. Chỉ dùng đúng những gì được cung cấp.",
-    gives: "Dễ đọc mà không bịa thêm",
-    bullets: ["Không có số liệu thì nói rõ là chưa có", "Không hứa hẹn kết quả trúng tuyển"],
     label: "Chỉ viết từ số liệu có sẵn",
   },
   {
     level: 3,
     name: "Hiểu câu hỏi",
-    tech: "Mô hình nhỏ (SLM)",
     title: "Hiểu đúng bạn đang hỏi gì",
     desc: "Một mô hình nhỏ huấn luyện riêng cho du học, tách câu hỏi nhiều ý thành từng việc và chọn đúng công cụ để xử lý.",
-    gives: "Hỏi tự nhiên vẫn được hiểu đúng",
-    bullets: ["Nhẹ và nhanh, không cần gọi mô hình lớn cho bước này"],
     label: "Tách câu hỏi nhiều ý",
   },
   {
     level: 2,
     name: "Quy tắc xếp nhóm",
-    tech: "Hệ hỗ trợ ra quyết định",
     title: "Quy tắc rõ ràng, kết quả giải thích được",
     desc: "So hồ sơ với số liệu từng trường theo ngưỡng cố định, nên cùng một hồ sơ luôn cho cùng một kết quả.",
-    gives: "Biết vì sao trường nằm ở nhóm đó",
-    bullets: ["Ngưỡng phân nhóm công khai ở trang Giới thiệu phương pháp"],
     label: "Ngưỡng cố định",
   },
   {
     level: 1,
     name: "Dữ liệu",
-    tech: "OCR · Cơ sở dữ liệu",
     title: "Mọi con số đều có nguồn",
     desc: "Bảng điểm, hồ sơ của bạn và số liệu các trường được lưu và quản trị tại đây. Mọi lớp phía trên đều dựa vào lớp này.",
-    gives: "Số liệu kiểm tra được",
-    bullets: ["Dữ liệu trường được quản trị viên cập nhật"],
     label: "Bảng điểm · Dữ liệu trường",
   },
 ];
@@ -152,40 +134,19 @@ export function LayerStack() {
 
   return (
     <div ref={wrapRef} className="lg:h-[260vh]">
-      <div className="lg:sticky lg:top-24">
-        <div className="mx-auto grid max-w-5xl items-center gap-8 lg:grid-cols-12 lg:gap-12">
-          {/* Cột trái: danh sách lớp + nội dung */}
-          <div className="order-2 space-y-6 lg:order-1 lg:col-span-5">
-            <h2 className="text-h1 text-balance text-ink sm:text-[2rem]">
+      <div className="lg:sticky lg:top-[var(--header-h)] lg:flex lg:h-[calc(100svh-var(--header-h))] lg:items-center">
+        <div className="mx-auto grid w-full max-w-5xl items-center gap-8 lg:grid-cols-12 lg:gap-12">
+          {/* Cột trái: tiêu đề + nội dung tầng đang chọn */}
+          <div className="order-2 space-y-4 lg:order-1 lg:col-span-5">
+            <h2 className="text-sm font-semibold tracking-wide text-brand sm:text-base">
               Năm lớp làm việc cùng nhau để trả lời đúng
             </h2>
-            <ol className="flex flex-wrap gap-1.5" aria-label="Các lớp của hệ thống">
-              {LAYERS.map((l) => {
-                const on = l.level === active;
-                return (
-                  <li key={l.level}>
-                    <button
-                      type="button"
-                      onClick={() => setActive(l.level)}
-                      aria-current={on ? "step" : undefined}
-                      className={cn(
-                        "inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[13px] font-medium transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-                        on ? "border-brand bg-brand text-brand-foreground" : "border-line bg-surface text-ink-2 hover:text-ink"
-                      )}
-                    >
-                      <span className="text-numeric">{l.level}</span>
-                      {l.name}
-                    </button>
-                  </li>
-                );
-              })}
-            </ol>
-
-            <div key={current.level} className="min-h-[220px] space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-500">
-              <h3 className="text-h2 text-balance text-ink">{current.title}</h3>
-              <p className="text-body text-ink-2">{current.desc}</p>
-              <p className="text-sm text-ink">
-                <span className="font-semibold">Bạn nhận được:</span> {current.gives}
+            <div key={current.level} className="min-h-[180px] space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-500">
+              <h3 className="text-h1 sm:text-[2.25rem] font-semibold text-balance text-ink leading-tight">
+                {current.title}
+              </h3>
+              <p className="text-body max-w-[52ch] text-ink-2 leading-relaxed">
+                {current.desc}
               </p>
             </div>
           </div>
@@ -215,8 +176,18 @@ export function LayerStack() {
                 return (
                   <g
                     key={l.level}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Lớp ${l.level}: ${l.name}`}
+                    aria-pressed={on}
                     onClick={() => setActive(l.level)}
-                    className="cursor-pointer"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setActive(l.level);
+                      }
+                    }}
+                    className="cursor-pointer outline-none focus-visible:outline-2 focus-visible:outline-brand focus-visible:outline-offset-4"
                     style={{ transform: `translate(250px, ${y}px)`, transition: "transform 0.6s cubic-bezier(.2,.8,.2,1)" }}
                   >
                     {/* Cạnh dày của tầng, giả lập bằng nhiều bản sao lệch xuống */}

@@ -182,6 +182,7 @@ function HomeView() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isPublicPreview = searchParams.get("view") === "public";
+  const [customQuestion, setCustomQuestion] = useState("");
   const [schoolFilter, setSchoolFilter] = useState<"all" | SchoolType>("all");
 
   const isAdmin = user?.role === "admin";
@@ -267,11 +268,13 @@ function HomeView() {
 
       {/* TRỢ LÝ */}
       <section className="grid gap-10 lg:grid-cols-12 lg:items-center lg:gap-16">
-        <div className="space-y-6 lg:col-span-5">
-          <SectionHead
-            title="USAS Advisor"
-            desc="Trợ lý đắc lực của bạn"
-          />
+        <div className="space-y-6 lg:col-span-6">
+          <div className="space-y-3">
+            <h2 className="text-display text-balance text-ink">USAS Advisor</h2>
+            <p className="text-body text-pretty text-ink-2">
+              <span className="font-semibold text-ink">Trợ lý đắc lực của bạn.</span> Hỏi bằng tiếng Việt về điểm chuẩn, học phí, học bổng hay so sánh trường. Advisor trả lời từ số liệu trong hệ thống và gợi ý bước tiếp theo cho hồ sơ của bạn.
+            </p>
+          </div>
           <div className="flex flex-col items-start gap-2">
             {ASK_EXAMPLES.map((q) => (
               <Button
@@ -285,10 +288,41 @@ function HomeView() {
               </Button>
             ))}
           </div>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              const q = customQuestion.trim();
+              if (!q) return;
+              openPanel(q);
+              setCustomQuestion("");
+            }}
+            className="relative w-full max-w-md pt-1"
+          >
+            <label htmlFor="landing-advisor-input" className="sr-only">
+              Đặt câu hỏi cho USAS Advisor
+            </label>
+            <input
+              id="landing-advisor-input"
+              type="text"
+              maxLength={1000}
+              value={customQuestion}
+              onChange={(e) => setCustomQuestion(e.target.value)}
+              placeholder="Câu hỏi của bạn…"
+              className="h-11 w-full rounded-xl border border-line bg-surface pr-12 pl-4 text-sm text-ink outline-none transition-colors placeholder:text-ink-3 focus-visible:border-brand focus-visible:ring-3 focus-visible:ring-ring/20"
+            />
+            <button
+              type="submit"
+              aria-label="Gửi câu hỏi"
+              disabled={!customQuestion.trim()}
+              className="absolute top-[calc(50%+2px)] right-1.5 flex size-8 -translate-y-1/2 items-center justify-center rounded-lg bg-brand text-brand-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <ArrowUpIcon className="size-4" />
+            </button>
+          </form>
         </div>
 
-        <Card className="gap-0 overflow-hidden rounded-2xl border-line bg-surface py-0 lg:col-span-7" aria-label="Ví dụ hội thoại với trợ lý">
-          <div aria-hidden className="flex items-center gap-2 border-b border-line px-4 py-3 select-none">
+        <Card className="gap-0 overflow-hidden rounded-2xl border-line bg-surface py-0 lg:col-span-6 lg:max-w-xl lg:justify-self-end" aria-label="Ví dụ hội thoại với trợ lý">
+          <div aria-hidden className="flex items-center gap-2 px-4 py-3 select-none">
             <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-line text-ink-2">
               <PlusIcon className="size-4" />
             </span>
@@ -329,16 +363,16 @@ function HomeView() {
                 Cả hai trường có học bổng theo thành tích cho sinh viên quốc tế. Mức hỗ trợ phụ thuộc vào hồ sơ, nên bước tiếp theo là xem hồ sơ của em thuộc nhóm nào.
               </p>
               <div className="flex flex-wrap gap-2">
-                <span className="inline-flex items-center gap-1 rounded-lg border border-line bg-surface px-3 py-1.5 text-[13px] font-medium text-ink">
+                <span className="inline-flex items-center gap-1 rounded-lg border border-brand/20 bg-brand-wash px-3 py-1.5 text-[13px] font-medium text-brand">
                   Phân tích hồ sơ
                 </span>
-                <span className="inline-flex items-center gap-1 rounded-lg border border-line bg-surface px-3 py-1.5 text-[13px] font-medium text-ink">
+                <span className="inline-flex items-center gap-1 rounded-lg border border-brand/20 bg-brand-wash px-3 py-1.5 text-[13px] font-medium text-brand">
                   Nhập ngân sách
                 </span>
               </div>
             </div>
           </div>
-          <div aria-hidden className="border-t border-line/60 p-3 pt-1 select-none">
+          <div aria-hidden className="p-3 pt-1 select-none">
             <div className="flex flex-col gap-2 rounded-2xl border border-line bg-surface px-3.5 pt-3 pb-2.5">
               <div className="min-h-11 w-full text-sm text-ink-3">Hỏi USAS Advisor</div>
               <div className="flex size-9 shrink-0 items-center justify-center self-end rounded-lg bg-brand text-brand-foreground">
