@@ -33,7 +33,8 @@ public record ScenarioNoteResponseDto(
     [property: JsonPropertyName("skill_version")] string SkillVersion,
     string Model,
     string Status,                       // OK | FAILED
-    string Answer);
+    string Answer,
+    [property: JsonPropertyName("aiUsage")] IReadOnlyList<AiUsageDto>? AiUsage = null);
 
 // --- Lời cho goal-seeking trong chat: POST api/v1/recommend/goal-seek ---
 // Kết quả goal-seeking đã được code tính. Advisor (Gemini) diễn đạt lại thành lời, chặn số, tên trường, lời hứa không có trong dữ kiện.
@@ -58,13 +59,15 @@ public record CompareNoteResponseDto(
     [property: JsonPropertyName("skill_version")] string SkillVersion,
     string Model,
     string Status,                       // OK | FAILED
-    string Answer);
+    string Answer,
+    [property: JsonPropertyName("aiUsage")] IReadOnlyList<AiUsageDto>? AiUsage = null);
 
 public record GoalNoteResponseDto(
     [property: JsonPropertyName("skill_version")] string SkillVersion,
     string Model,
     string Status,                       // OK | FAILED
-    string Answer);
+    string Answer,
+    [property: JsonPropertyName("aiUsage")] IReadOnlyList<AiUsageDto>? AiUsage = null);
 
 // --- Tư vấn từng trường: POST api/v1/recommend/explain ---
 
@@ -101,4 +104,5 @@ public record ExplainResponseDto(
     string Status,                       // OK | FAILED
     string Summary,
     IReadOnlyList<string> Strengths,
-    IReadOnlyList<string> Improvements);
+    IReadOnlyList<string> Improvements,
+    [property: JsonPropertyName("aiUsage")] IReadOnlyList<AiUsageDto>? AiUsage = null);

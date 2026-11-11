@@ -166,6 +166,7 @@ namespace StudyAbroad.Application.Advisor
                 Skills = null,
                 Action = null,
                 ActionData = null,
+                AiUsage = null,   // số token là việc nội bộ, học sinh không thấy
             };
         }
 

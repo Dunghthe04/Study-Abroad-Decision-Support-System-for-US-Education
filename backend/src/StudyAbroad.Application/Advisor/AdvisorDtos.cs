@@ -75,4 +75,6 @@ public record AdvisorChatResponse(
     // Việc .NET cần làm sau lượt này: "recommend" = chạy gợi ý trường (ChatRecommendation),
     // "explain" = viết lời tư vấn một trường (ChatExplanation, mã trường nằm ở ActionData.code). Không trả cho trình duyệt
     string? Action = null,
-    JsonElement? ActionData = null);
+    JsonElement? ActionData = null,
+    // Số đo từng lần gọi AI của lượt này, để ghi nhật ký ai_calls. Nội bộ: không trả cho trình duyệt
+    IReadOnlyList<AiUsageDto>? AiUsage = null);
