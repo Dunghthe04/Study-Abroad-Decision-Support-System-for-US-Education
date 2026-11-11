@@ -133,8 +133,8 @@ export function LayerStack() {
   const current = LAYERS.find((l) => l.level === active) ?? LAYERS[2];
 
   return (
-    <div ref={wrapRef} className="lg:h-[260vh]">
-      <div className="lg:sticky lg:top-[var(--header-h)] lg:flex lg:h-[calc(100svh-var(--header-h))] lg:items-center">
+    <div ref={wrapRef} className="lg:h-[260vh] lg:max-h-[2200px]">
+      <div className="lg:sticky lg:top-[var(--header-h)] lg:flex lg:h-[calc(100svh-var(--header-h))] lg:max-h-[800px] lg:items-center">
         <div className="mx-auto grid w-full max-w-5xl items-center gap-8 lg:grid-cols-12 lg:gap-12">
           {/* Cột trái: tiêu đề + nội dung tầng đang chọn */}
           <div className="order-2 space-y-4 lg:order-1 lg:col-span-5">
