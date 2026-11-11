@@ -12,6 +12,7 @@ from typing import Any
 
 from app.schemas.chat import ResultSchool
 from app.schemas.slm import SkillRequest
+from app.services import usage_meter
 from app.services.explainer import GROUP_LABEL
 from app.services.ollama import OllamaError
 from app.services.skill_call import MAX_ATTEMPTS, SKILLS_DIR, load_skill
@@ -19,6 +20,7 @@ from app.services.skill_call import MAX_ATTEMPTS, SKILLS_DIR, load_skill
 logger = logging.getLogger(__name__)
 
 PROMPT_PATH = SKILLS_DIR / "viet_tra_loi_ho_so.md"
+PURPOSE = PROMPT_PATH.stem  # nhãn trong báo cáo token (ai_calls.purpose): viet_tra_loi_ho_so
 ANSWER_SCHEMA = {
     "type": "object",
     "properties": {"tra_loi": {"type": "string"}},
@@ -48,15 +50,15 @@ RAW_JSON_NOTE = (
 # Tên tiếng Việt của các việc bộ phân loại tách ra (REVIEW_TASKS): writer phải làm đủ các việc này, kể cả khi skill
 # SLM có dòng bảo bỏ một việc (skill đôi khi ghi 2 việc ở mục 1 rồi lại ghi "chỉ đánh giá, không đưa lộ trình")
 TASK_LABEL = {
-    "danh_gia": "đánh giá hồ sơ",
-    "lo_trinh": "lộ trình chuẩn bị",
-    "chon_truong": "chọn trường",
-    "so_sanh": "so sánh trường",
-    "giai_thich_truong": "giải thích về trường",
+    "assessment": "đánh giá hồ sơ",
+    "roadmap": "lộ trình chuẩn bị",
+    "school_list": "chọn trường",
+    "compare": "so sánh trường",
+    "explain_school": "giải thích về trường",
 }
 # Việc kiểm được bằng chữ trong câu trả lời: học sinh có hỏi lộ trình mà câu trả lời không nhắc "lộ trình" là
 # thiếu phần đó (skill có lúc ghi "chỉ đánh giá, không đưa lộ trình" ở cuối và Claude làm theo)
-TASK_WORD = {"lo_trinh": "lộ trình"}
+TASK_WORD = {"roadmap": "lộ trình"}
 MISSING_TASK_NOTE = (
     "Câu trả lời trước của bạn thiếu phần {label} mà học sinh có hỏi. Viết lại đầy đủ mọi việc trong nhiem_vu, "
     'có một phần tiêu đề "{title}" dựa theo mục Lộ trình của skill, bỏ qua dòng nào trong skill bảo không đưa phần này.'
@@ -189,7 +191,7 @@ class AdviceWriter:
     ) -> str | None:
         """Trả câu trả lời đã kiểm, hoặc None nếu Claude sai cả MAX_ATTEMPTS lần.
 
-        tasks: mã việc bộ phân loại tách từ câu hỏi (cac_nhiem_vu). Rỗng/None thì không gửi, để skill quyết định.
+        tasks: mã việc bộ phân loại tách từ câu hỏi (tasks). Rỗng/None thì không gửi, để skill quyết định.
         """
         user: dict[str, Any] = {
             "cau_hoi": req.cau_hoi,
@@ -211,9 +213,11 @@ class AdviceWriter:
         for attempt in range(1, MAX_ATTEMPTS + 1):
             self.last_attempts = attempt
             try:
-                raw = await self._llm.chat_json(
-                    messages + ([retry_note] if retry_note else []), ANSWER_SCHEMA, temperature=0.0
-                )
+                # Gắn nhãn để báo cáo token biết đây là lời tư vấn hồ sơ (trước đây dòng này để trống nhãn)
+                with usage_meter.purpose(PURPOSE, self.version):
+                    raw = await self._llm.chat_json(
+                        messages + ([retry_note] if retry_note else []), ANSWER_SCHEMA, temperature=0.0
+                    )
                 text = check_answer(raw)
                 task = missing_task(text, tasks)
                 if task:

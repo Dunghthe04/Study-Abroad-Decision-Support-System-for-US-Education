@@ -34,7 +34,9 @@ public record TranscriptOcrResponse(
     decimal? AverageScoreScale10,
     decimal? CalculatedGpa4,
     string? Message,
-    IReadOnlyList<string>? Warnings = null
+    IReadOnlyList<string>? Warnings = null,
+    // Số đo token của các lần gọi AI khi đọc học bạ (advisor: khóa aiUsage), để ghi nhật ký ai_calls. Nội bộ, không trả cho trình duyệt
+    IReadOnlyList<AiUsageDto>? AiUsage = null
 );
 
 /// <summary>

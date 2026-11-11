@@ -25,10 +25,10 @@ from app.services.goal_writer import GoalWriter
 from app.services.knowledge import KnowledgeRetriever
 from app.services.ollama import OllamaClient
 from app.services.scenario_writer import ScenarioWriter
-from app.services.skill_generator import SkillGenerator
 from app.services.skills import build_handlers
 from app.services.slm_classifier import OllamaSlm, output_format
 from app.services.transcript_reader import TranscriptReader
+from app.services.what_if_writer import WhatIfWriter
 
 
 # Khai báo vòng đơi fastapi
@@ -49,6 +49,10 @@ async def lifespan(app: FastAPI):
         httpx.AsyncClient(
             base_url=settings.backend_base_url, timeout=settings.backend_timeout_seconds
         ) as backend_http,
+        httpx.AsyncClient(
+            base_url=settings.embedding_base_url or settings.ollama_base_url,
+            timeout=settings.llm_timeout_seconds,
+        ) as embed_http,
     ):
         app.state.llm = OllamaClient(
             http,
@@ -82,63 +86,34 @@ async def lifespan(app: FastAPI):
             statuses = [s.strip() for s in settings.knowledge_statuses.split(",") if s.strip()]
             knowledge = KnowledgeRetriever(app.state.db_pool, statuses, settings.knowledge_top_k)
         centers = CenterFinder(backend_http) if settings.backend_base_url else None
-
-        embedder: Any
-        if settings.embedding_base_url:
-            async with httpx.AsyncClient(
-                base_url=settings.embedding_base_url, timeout=settings.llm_timeout_seconds
-            ) as embed_http:
-                embedder = OpenAiEmbeddingClient(
-                    embed_http, settings.embedding_model, settings.embedding_api_key
-                )
-                skills = build_handlers(
-                    claude,
-                    settings.anthropic_model,
-                    knowledge,
-                    settings.knowledge_min_score,
-                    centers,
-                    embedder,
-                )
-                slm_client = OllamaClient(
-                    slm_http,
-                    settings.slm_model,
-                    num_ctx=settings.llm_num_ctx,
-                    num_gpu=settings.llm_num_gpu,
-                    seed=settings.llm_seed,
-                    keep_alive=settings.llm_keep_alive,
-                )
-                slm = OllamaSlm(
-                    slm_client,
-                    output_format(settings.slm_format),
-                    settings.slm_use_context,
-                    settings.slm_prompt,
-                )
-                skill_log_dir = ADVISOR_DIR / settings.skill_log_dir if settings.skill_log_dir else None
-                generator = SkillGenerator(slm_client, log_dir=skill_log_dir)
-                writer = AdviceWriter(claude)
-                app.state.chat_flow = ChatFlow(slm, build_branches(skills, generator, writer))
-                yield
-        else:
-            embedder = app.state.llm
-            skills = build_handlers(
-                claude, settings.anthropic_model, knowledge, settings.knowledge_min_score, centers, embedder
-            )
-            slm_client = OllamaClient(
-                slm_http,
-                settings.slm_model,
-                num_ctx=settings.llm_num_ctx,
-                num_gpu=settings.llm_num_gpu,
-                seed=settings.llm_seed,
-                keep_alive=settings.llm_keep_alive,
-            )
-            slm = OllamaSlm(
-                slm_client, output_format(settings.slm_format), settings.slm_use_context, settings.slm_prompt
-            )
-            skill_log_dir = ADVISOR_DIR / settings.skill_log_dir if settings.skill_log_dir else None
-            generator = SkillGenerator(slm_client, log_dir=skill_log_dir)
-            writer = AdviceWriter(claude)
-            app.state.chat_flow = ChatFlow(slm, build_branches(skills, generator, writer))
-            yield
+        # Claude viết câu trả lời cho mọi skill; Ollama (app.state.llm) chỉ còn embedding cho kho kiến thức
+        # Embedding chạy trên dịch vụ tương thích OpenAI nếu có cấu hình, không thì dùng Ollama (app.state.llm)
+        embedder: Any = (
+            OpenAiEmbeddingClient(embed_http, settings.embedding_model, settings.embedding_api_key)
+            if settings.embedding_base_url
+            else app.state.llm
+        )
+        skills = build_handlers(
+            claude, settings.anthropic_model, knowledge, settings.knowledge_min_score, centers, embedder
+        )
+        # SLM phân loại tin nhắn (usas-slm): client riêng vì khác model với llm_model, dùng chung kết nối http
+        slm_client = OllamaClient(
+            slm_http,
+            settings.slm_model,
+            num_ctx=settings.llm_num_ctx,
+            num_gpu=settings.llm_num_gpu,
+            seed=settings.llm_seed,
+            keep_alive=settings.llm_keep_alive,
+        )
+        slm = OllamaSlm(
+            slm_client, output_format(settings.slm_format), settings.slm_use_context, settings.slm_prompt
+        )
+        # Skill hồ sơ do code dựng từ khuôn (skill_template); Claude viết câu trả lời theo skill đó
+        writer = AdviceWriter(claude)
+        # Câu "nếu đổi X" mà X không thử được (ngành, bang, kỳ nhập học...): Claude viết lời giải thích
+        what_if_writer = WhatIfWriter(claude, settings.anthropic_model)
+        app.state.chat_flow = ChatFlow(slm, build_branches(skills, writer, what_if_writer))
+        yield
         if app.state.db_pool is not None:
             await asyncio.to_thread(app.state.db_pool.close)
 

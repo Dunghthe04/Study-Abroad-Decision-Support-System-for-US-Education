@@ -1,4 +1,4 @@
-"""Điều kiện tìm trường (bo_loc của SLM) → bộ lọc đã chuẩn hóa cho .NET.
+"""Điều kiện tìm trường (filters của SLM) → bộ lọc đã chuẩn hóa cho .NET.
 
 SLM trả chữ học sinh gõ ("texas", "30 nghìn đô", "top 50", "khoa học máy tính"). Ở đây đổi sang dạng .NET lọc được:
 mã bang (danh mục 51 bang), tên ngành trong danh mục, số USD, tỉ lệ 0..1, hạng. Điều nào không đọc chắc chắn được thì KHÔNG bỏ qua
@@ -14,31 +14,30 @@ from app.services.skills import exchange_rate, major_catalog, state_catalog
 from app.services.skills.validators import MONEY_UNITS, VND_GUESS_FROM, read_money, to_usd
 
 # Mức điểm hợp lệ của từng bài tiếng Anh (khớp kiểm tra của hồ sơ)
-ENGLISH_RANGES = {"ielts_toi_da": (0.0, 9.0), "toefl_toi_da": (0.0, 120.0), "duolingo_toi_da": (10.0, 160.0)}
-ENGLISH_KEYS = {"ielts_toi_da": "maxIelts", "toefl_toi_da": "maxToefl", "duolingo_toi_da": "maxDuolingo"}
-CONTROL = {"cong_lap": "public", "tu_thuc": "private"}
-AID = {"co": "any", "theo_nhu_cau": "need", "theo_thanh_tich": "merit"}
-TEST_POLICY = {"khong_bat_buoc": "optional", "bat_buoc": "required"}
+ENGLISH_RANGES = {"max_ielts": (0.0, 9.0), "max_toefl": (0.0, 120.0), "max_duolingo": (10.0, 160.0)}
+ENGLISH_KEYS = {"max_ielts": "maxIelts", "max_toefl": "maxToefl", "max_duolingo": "maxDuolingo"}
+# Học bổng: yes là có học bổng cho du học sinh (bất kể loại), .NET gọi là any
+AID = {"yes": "any", "need_based": "need", "merit_based": "merit"}
 # Cách xếp học sinh muốn → tên cách xếp bên .NET
 SORT = {
-    "xep_hang": "quality",
-    "chi_phi_thap": "lowestCost",
-    "de_vao": "easiestAdmission",
-    "chon_loc": "mostSelective",
+    "ranking": "quality",
+    "lowest_cost": "lowestCost",
+    "easiest_admission": "easiestAdmission",
+    "most_selective": "mostSelective",
 }
 DEFAULT_SORT = "quality"
 # Tên điều kiện nói với học sinh khi cần hỏi lại
 LABELS = {
-    "bang": "bang",
-    "nganh": "ngành",
-    "chi_phi_toi_da": "mức chi phí",
-    "ielts_toi_da": "mức IELTS",
-    "toefl_toi_da": "mức TOEFL",
-    "duolingo_toi_da": "mức Duolingo",
-    "ty_le_nhan_toi_thieu": "tỷ lệ nhận",
-    "ty_le_nhan_toi_da": "tỷ lệ nhận",
-    "xep_hang_toi_da": "thứ hạng",
-    "ty_le_tot_nghiep_toi_thieu": "tỷ lệ tốt nghiệp",
+    "state": "bang",
+    "major": "ngành",
+    "max_cost": "mức chi phí",
+    "max_ielts": "mức IELTS",
+    "max_toefl": "mức TOEFL",
+    "max_duolingo": "mức Duolingo",
+    "min_acceptance_rate": "tỷ lệ nhận",
+    "max_acceptance_rate": "tỷ lệ nhận",
+    "max_rank": "thứ hạng",
+    "min_graduation_rate": "tỷ lệ tốt nghiệp",
 }
 
 
@@ -92,67 +91,68 @@ def read_cost_usd(text: str) -> float | None:
     return round(to_usd(amount, currency))
 
 
-async def normalize(bo_loc: dict[str, Any], sap_xep: str | None = None) -> SearchPlan:
-    plan = SearchPlan(sort=SORT.get(sap_xep or "", DEFAULT_SORT))
+async def normalize(filters: dict[str, Any], sort: str | None = None) -> SearchPlan:
+    plan = SearchPlan(sort=SORT.get(sort or "", DEFAULT_SORT))
     out = plan.filters
 
     def fail(key: str, text: str) -> None:
         plan.unresolved.append(f"{LABELS.get(key, key)} “{text}”")
 
-    if names := bo_loc.get("bang"):
+    if names := filters.get("state"):
+        names = [names] if isinstance(names, str) else names  # model trả một tên hoặc danh sách tên
         states = await state_catalog.states()
         codes = []
         for name in names:
             found = state_catalog.match(name, states) if states else None
             if found is None or found.exact is None:
-                fail("bang", name)
+                fail("state", name)
             elif found.exact.code not in codes:
                 codes.append(found.exact.code)
         if codes:
             out["states"] = codes
-    if city := bo_loc.get("thanh_pho"):
+    if city := filters.get("city"):
         out["city"] = city.strip()
-    if text := bo_loc.get("nganh"):
+    if text := filters.get("major"):
         found = major_catalog.match(text, await major_catalog.majors())
         major = found.exact or (found.near[0] if len(found.near) == 1 else None)
         if major is None:
-            fail("nganh", text)
+            fail("major", text)
         else:
             out["major"] = major.name
-    if kind := bo_loc.get("loai_truong"):
-        out["control"] = CONTROL[kind]
-    if kind := bo_loc.get("hoc_bong"):
+    if kind := filters.get("school_type"):
+        out["control"] = kind  # public | private, trùng mã bên .NET
+    if kind := filters.get("aid"):
         out["aid"] = AID[kind]
-    if kind := bo_loc.get("chinh_sach_thi"):
-        out["testPolicy"] = TEST_POLICY[kind]
-    if text := bo_loc.get("chi_phi_toi_da"):
+    if kind := filters.get("test_policy"):
+        out["testPolicy"] = kind  # optional | required, trùng mã bên .NET
+    if text := filters.get("max_cost"):
         cost = read_cost_usd(text)
         if cost is None:
-            fail("chi_phi_toi_da", text)
+            fail("max_cost", text)
         else:
             out["maxCostUsd"] = cost
     for key, (low, high) in ENGLISH_RANGES.items():
-        if text := bo_loc.get(key):
+        if text := filters.get(key):
             score = _number(text)
             if score is None or not low <= score <= high:
                 fail(key, text)
             else:
                 out[ENGLISH_KEYS[key]] = score
-    for key, target in (("ty_le_nhan_toi_thieu", "minAcceptRate"), ("ty_le_nhan_toi_da", "maxAcceptRate"),
-                        ("ty_le_tot_nghiep_toi_thieu", "minGradRate")):  # fmt: skip
-        if text := bo_loc.get(key):
+    for key, target in (("min_acceptance_rate", "minAcceptRate"), ("max_acceptance_rate", "maxAcceptRate"),
+                        ("min_graduation_rate", "minGradRate")):  # fmt: skip
+        if text := filters.get(key):
             rate = read_rate(text)
             if rate is None:
                 fail(key, text)
             else:
                 out[target] = rate
-    if text := bo_loc.get("xep_hang_toi_da"):
+    if text := filters.get("max_rank"):
         rank = read_rank(text)
         if rank is None:
-            fail("xep_hang_toi_da", text)
+            fail("max_rank", text)
         else:
             out["maxRank"] = rank
-    if bo_loc.get("ivy"):
+    if filters.get("ivy"):
         out["ivy"] = True
     return plan
 

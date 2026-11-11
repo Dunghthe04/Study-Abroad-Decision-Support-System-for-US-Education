@@ -1,38 +1,25 @@
-"""Goal-seeking trong chat: đọc nhóm đích học sinh nói thành mã backend hiểu."""
+"""Goal-seeking trong chat: nhóm đích model trả (target_group) thành mã backend hiểu."""
 
 import pytest
 
-from app.services.goal_target import parse_target, plain
+from app.services.goal_target import plain, target_code
 
 
 @pytest.mark.parametrize(
-    ("said", "expected"),
+    ("group", "expected"),
     [
-        ("Vừa sức", "match"),
-        ("vua suc", "match"),
-        ("VỪA SỨC", "match"),
-        ("Match", "match"),
-        ("An toàn", "safety"),
-        ("an toàn hơn", "safety"),
-        ("safety", "safety"),
-        ("Khó vào", "reach"),
         ("reach", "reach"),
-        ("em muốn thành vừa sức", "match"),
-        ("lên nhóm an toàn", "safety"),
+        ("target", "match"),  # backend gọi nhóm vừa sức là "match"
+        ("safety", "safety"),
     ],
 )
-def test_target_words_become_backend_codes(said, expected):
-    assert parse_target(said) == expected
+def test_target_groups_become_backend_codes(group, expected):
+    assert target_code(group) == expected
 
 
-@pytest.mark.parametrize("said", [None, "", "   ", "trường tốt", 42, ["match"]])
-def test_no_or_unknown_target_leaves_the_choice_to_the_system(said):
-    assert parse_target(said) is None
-
-
-def test_a_sentence_naming_two_groups_picks_the_safer_one_first():
-    # "Vừa sức" và "An toàn" cùng xuất hiện: dò An toàn trước, vì học sinh thường nhắc nhóm họ muốn đạt sau
-    assert parse_target("từ vừa sức lên an toàn") == "safety"
+@pytest.mark.parametrize("group", [None, "", "   ", "match", "Vừa sức", "trường tốt", 42, ["target"]])
+def test_no_or_unknown_target_leaves_the_choice_to_the_system(group):
+    assert target_code(group) is None
 
 
 def test_plain_drops_accents_and_the_vietnamese_d_bar():

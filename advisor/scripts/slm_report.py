@@ -1,21 +1,36 @@
 """Báo cáo đo SLM: so sánh các lần chạy (model gốc và model đã huấn luyện) trên cùng một tập, kèm bảng CSV và biểu đồ.
 
-Bước 1: chạy scripts.eval_slm cho từng model, cùng một tập (test), ra data/slm/ket_qua/<model>_test.jsonl:
-  python -m scripts.eval_slm --model qwen3:4b-instruct --split test --format schema --prompt slm_phan_loai_cac_y
-  python -m scripts.eval_slm --model usas-slm-v3 --split test --format json --prompt slm_phan_loai_cac_y_ngan
+Bước 1: chạy scripts.eval_slm cho từng model, cùng một tập (test), ra data/slm/ket_qua/<model>[_shotsN]_<tập>.jsonl:
+  python -m scripts.eval_slm --model qwen3:4b-instruct --prompt slm_intents --shots 8 --split test
+  python -m scripts.eval_slm --model usas-slm-v4 --prompt slm_intents --split test
 Bước 2: dựng báo cáo. Lần chạy ĐẦU TIÊN là model gốc (baseline), các lần sau là model đã huấn luyện:
 Công cụ dùng được cho cả hai tập: --split val để phát triển (chọn prompt, chọn epoch), --split test MỘT LẦN để lấy số báo cáo cuối.
 Báo cáo tự ghi đúng tập đã đo. Ví dụ dựng báo cáo trên test:
-  python -m scripts.slm_report --run "Model gốc=data/slm/ket_qua/qwen3_4b-instruct_test.jsonl" \\
-      --run "Đã huấn luyện=data/slm/ket_qua/usas-slm-v3_test.jsonl" --out data/slm/bao_cao/lan1
+  python -m scripts.slm_report --run "Model gốc=data/slm/ket_qua/qwen3_4b-instruct_shots8_test.jsonl" \\
+      --run "Đã huấn luyện=data/slm/ket_qua/usas-slm-v4_test.jsonl" --out data/slm/bao_cao/2026-11-10_v4_test_ban_thu \\
+      --log training_log.csv --config "Model gốc: ..." --config "Đã huấn luyện: ..."
 Thêm đường cong huấn luyện (log từ notebook Colab: training_log.csv hoặc trainer_state.json) và val loss của model gốc:
   ... --log training_log.csv --baseline-val-loss 2.31
-Ra thư mục --out: BAO_CAO.md, chi_so.json, các bảng .csv (mở bằng Excel), các biểu đồ .png.
+
+Mỗi lần dựng báo cáo ra MỘT thư mục tự chứa đủ để xem lại và kiểm tra, đặt tên --out theo dạng
+  data/slm/bao_cao/<YYYY-MM-DD>_<model>_<tập>_<ban_thu|chinh_thuc>
+  BAO_CAO.md          báo cáo tổng hợp (đọc trước)
+  manifest.json       lần chạy này dùng gì: ngày, commit git (và có sửa chưa commit không), cấu hình, lệnh, mã băm sha256 của đáp án thô, log và dữ liệu
+  chi_so.json         toàn bộ chỉ số dạng máy đọc
+  *.csv, *.png        bảng (mở bằng Excel) và biểu đồ có chú thích
+  du_doan_tho/        bản sao đáp án thô của từng model đã dùng để dựng báo cáo
+  <log huấn luyện>    bản sao log (nếu có --log)
+Bản thử không commit (thư mục bao_cao và ket_qua nằm trong .gitignore); số chính thức thì commit bằng git add -f.
 """
 
 import argparse
+import hashlib
 import json
+import shlex
+import shutil
+import subprocess
 import sys
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -86,12 +101,12 @@ def comparison_table(summaries: dict[str, dict[str, Any]]) -> tuple[list[str], l
         + [f"{s['f1_nhan']['macro_f1']:.3f}" for s in summaries.values()]
     )
     rows.append(
-        ["tiep_noi: độ chính xác"]
-        + [percent(s["tiep_noi"]["accuracy"]) if s["tiep_noi"] else "-" for s in summaries.values()]
+        ["follow_up: độ chính xác"]
+        + [percent(s["follow_up"]["accuracy"]) if s["follow_up"] else "-" for s in summaries.values()]
     )
     rows.append(
-        ["tiep_noi: F1 của câu nối tiếp"]
-        + [f"{s['tiep_noi']['f1']:.3f}" if s["tiep_noi"] else "-" for s in summaries.values()]
+        ["follow_up: F1 của câu nối tiếp"]
+        + [f"{s['follow_up']['f1']:.3f}" if s["follow_up"] else "-" for s in summaries.values()]
     )
     for key in m.ERRORS[1:]:
         rows.append(
@@ -118,16 +133,20 @@ def wrong_cases(rows: list[dict[str, Any]]) -> list[list[Any]]:
             [
                 r["id"],
                 j["loi"],
-                r["cau_hoi"],
-                json.dumps(r["nhan"]["cac_y"], ensure_ascii=False),
-                json.dumps(r["du_doan"]["cac_y"], ensure_ascii=False),
+                r["question"],
+                json.dumps(r["nhan"]["intents"], ensure_ascii=False),
+                json.dumps(r["du_doan"]["intents"], ensure_ascii=False),
             ]
         )
     return out
 
 
 def markdown(
-    summaries: dict[str, dict[str, Any]], split_note: str, training: dict[str, Any] | None, made: list[str]
+    summaries: dict[str, dict[str, Any]],
+    split_note: str,
+    training: dict[str, Any] | None,
+    made: list[str],
+    config: list[str] | None = None,
 ) -> str:
     header, rows = comparison_table(summaries)
     lines = [
@@ -135,7 +154,12 @@ def markdown(
         "",
         f"Tập đo: {split_note}. Số tin: {', '.join(f'{n} = {s["so_tin"]}' for n, s in summaries.items())}.",
         "Lần chạy đầu tiên là model gốc (chưa huấn luyện); các lần sau là model đã huấn luyện. Cùng một tập, cùng cách chấm.",
+        f"Ngày dựng báo cáo: {date.today().isoformat()}.",
         "",
+    ]
+    if config:
+        lines += ["## Cấu hình thí nghiệm", "", *[f"- {c}" for c in config], ""]
+    lines += [
         "## So sánh",
         "",
         "| " + " | ".join(header) + " |",
@@ -157,6 +181,19 @@ def markdown(
                     else ""
                 ),
                 f"- Val loss ở lần đo cuối: {training['val_loss_cuoi']:.4f} (số lần đo val: {training['so_lan_do_val']})",
+                *(
+                    [
+                        f"- Chênh val loss trừ train loss: {training['chenh_val_train_tai_tot_nhat']:.4f} tại điểm thấp nhất"
+                        + (
+                            f", {training['chenh_val_train_cuoi']:.4f} ở lần đo cuối"
+                            if training.get("chenh_val_train_cuoi") is not None
+                            else ""
+                        )
+                        + " (tăng dần qua các lần đo là dấu hiệu học thuộc)"
+                    ]
+                    if training.get("chenh_val_train_tai_tot_nhat") is not None
+                    else []
+                ),
                 f"- Overfit (val loss tăng trên 5% sau điểm thấp nhất): {'có' if training['overfit'] else 'không thấy'}",
                 f"- Đã hội tụ (điểm thấp nhất không nằm ở lần đo cuối): {'chưa, val loss còn giảm ở cuối' if training['chua_hoi_tu'] else 'rồi'}",
             ]
@@ -165,15 +202,80 @@ def markdown(
         "## Cách đo",
         "",
         "- Đơn vị đo là một tin nhắn. Các mức đúng xếp từ lỏng đến chặt, mức sau gồm mức trước: dùng được, đúng loại ý, đúng thứ tự, đúng nhiệm vụ, "
-        "đúng thực thể, đúng hoàn toàn (kể cả tiep_noi). Chữ doan được phép viết lại nên không bắt giống từng chữ.",
-        "- Precision, recall, F1 tính trên từng ý (một tin có thể có nhiều ý), theo loại ý và theo nhãn loại/nhiệm vụ.",
-        "- Tập test không dùng để huấn luyện hay chọn epoch; chọn epoch và dừng sớm dựa trên val.",
+        "đúng thực thể (entities), đúng hoàn toàn (kể cả follow_up). Phép đo chưa so chữ của span (đoạn trích của từng ý), "
+        "chỉ so loại ý, nhiệm vụ (tasks, mode, subtype), entities và follow_up.",
+        "- Precision, recall, F1 tính trên từng ý (một tin có thể có nhiều ý), theo loại ý và theo nhãn loại/nhiệm vụ. "
+        "Ý không có tasks tính vào việc mặc định của loại (collect_profile/answer, knowledge/general, center_referral/find).",
+        "- Tập test không dùng để huấn luyện; chọn điểm tốt nhất và dừng sớm (nếu có) dựa trên val, không dựa trên test.",
         "",
         "## Các file",
         "",
         *[f"- {name}" for name in made],
     ]
     return "\n".join(lines) + "\n"
+
+
+def sha256_of(path: Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def git_output(*args: str) -> str | None:
+    """Kết quả một lệnh git trong repo; None nếu không chạy trong repo git hoặc không có git."""
+    try:
+        done = subprocess.run(  # noqa: S603
+            ["git", *args],  # noqa: S607
+            capture_output=True,
+            text=True,
+            cwd=Path(__file__).resolve().parent,
+            timeout=10,
+            check=True,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return done.stdout.strip()
+
+
+def git_state() -> dict[str, Any]:
+    """Commit đang đứng và mã nguồn đã sửa chưa commit hay chưa (file mới chưa theo dõi không tính)."""
+    commit = git_output("rev-parse", "--short", "HEAD") or None
+    changes = git_output("status", "--porcelain", "--untracked-files=no")
+    return {"git_commit": commit, "co_sua_chua_commit": None if changes is None else bool(changes)}
+
+
+def archive_inputs(
+    out: Path, run_files: list[tuple[str, Path]], log: Path | None, data: Path
+) -> tuple[dict[str, Any], list[str]]:
+    """Chép đáp án thô và log huấn luyện vào thư mục báo cáo, trả về (phần manifest, tên các file đã chép).
+    Báo cáo nhờ vậy tự chứa đủ đầu vào, kèm mã băm để biết sau này file có bị đổi không."""
+    names = [path.name for _, path in run_files]
+    if len(set(names)) != len(names):
+        raise SystemExit(
+            f"Hai lần chạy trùng tên file {names}: không chép được vào du_doan_tho. Đổi tên một file."
+        )
+    raw_dir = out / "du_doan_tho"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    for _, path in run_files:
+        shutil.copy2(path, raw_dir / path.name)
+    info: dict[str, Any] = {
+        "dap_an_tho": [
+            {"ten": name, "file": f"du_doan_tho/{path.name}", "sha256": sha256_of(path)}
+            for name, path in run_files
+        ],
+        "log_huan_luyen": None,
+        "du_lieu": {"file": data.name, "sha256": sha256_of(data)} if data.is_file() else None,
+    }
+    made = [f"du_doan_tho/ (bản sao đáp án thô: {', '.join(names)})"]
+    if log:
+        target = out / log.name
+        if log.resolve() != target.resolve():
+            shutil.copy2(log, target)
+        info["log_huan_luyen"] = {"file": log.name, "sha256": sha256_of(log)}
+        made.append(f"{log.name}: log huấn luyện (bản sao)")
+    return info, made
 
 
 def main() -> None:
@@ -188,7 +290,12 @@ def main() -> None:
         required=True,
         help='"Tên=file dự đoán"; lần đầu là model gốc',
     )
-    parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument(
+        "--out",
+        type=Path,
+        required=True,
+        help="thư mục báo cáo, đặt tên dạng data/slm/bao_cao/<YYYY-MM-DD>_<model>_<tập>_<ban_thu|chinh_thuc>",
+    )
     parser.add_argument(
         "--log", type=Path, default=None, help="log huấn luyện: training_log.csv hoặc trainer_state.json"
     )
@@ -200,6 +307,12 @@ def main() -> None:
     )
     parser.add_argument(
         "--data", type=Path, default=DEFAULT_OUT, help="du_lieu_slm.jsonl, để vẽ phân bố dữ liệu"
+    )
+    parser.add_argument(
+        "--config",
+        action="append",
+        default=[],
+        help='một dòng cấu hình thí nghiệm ghi vào báo cáo, dùng nhiều lần. Ví dụ: --config "Model gốc: qwen3:4b-instruct, 8 ví dụ từ train, prompt slm_intents v3.0"',
     )
     parser.add_argument(
         "--split-note",
@@ -297,8 +410,21 @@ def main() -> None:
         json.dumps({"lan_chay": slim, "huan_luyen": training}, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     made.append("chi_so.json: toàn bộ chỉ số dạng máy đọc")
+    archived, archived_names = archive_inputs(out, args.run, args.log, args.data)
+    made += archived_names
+    manifest = {
+        "ngay_dung_bao_cao": date.today().isoformat(),
+        "tap_do": split,
+        **git_state(),
+        "cau_hinh": args.config,
+        "lan_chay": [{"ten": name, "so_tin": len(runs[name])} for name, _ in args.run],
+        "lenh_dung_lai": f"python -m scripts.slm_report {shlex.join(sys.argv[1:])}",
+        **archived,
+    }
+    (out / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    made.append("manifest.json: ngày, commit git, cấu hình, lệnh và mã băm của đầu vào")
     (out / "BAO_CAO.md").write_text(
-        markdown(summaries, args.split_note or SPLIT_NOTES.get(split, split), training, made),
+        markdown(summaries, args.split_note or SPLIT_NOTES.get(split, split), training, made, args.config),
         encoding="utf-8",
     )
     print(f"Đã ghi báo cáo vào {out} ({len(made)} file). Mở BAO_CAO.md trước.")

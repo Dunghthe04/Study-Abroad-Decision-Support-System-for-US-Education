@@ -1,5 +1,6 @@
 "use client";
 
+import { useStateNames } from "@/lib/us-state-names";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { ExternalLinkIcon, MapPinIcon, MessageSquareTextIcon, TargetIcon } from "lucide-react";
@@ -36,6 +37,7 @@ const GOAL_GROUPS = ["R", "RF", "M", "NA"];
 // Một trường dạng hàng ngang như CollegeVine: tên và nơi ở bên trái, các chỉ số ở giữa, nhóm và nút bên phải.
 // Chỉ hiển thị số đã tính, không tính lại gì.
 export function SchoolCard({ picked, school, change, simulated, onExplain, onGoal, student }: SchoolCardProps) {
+    const stateName = useStateNames();
     const name = school?.name ?? picked.code;
     const control =
         school?.control === "public" ? "Công lập" : school?.control === "private" ? "Tư thục" : null;
@@ -68,7 +70,7 @@ export function SchoolCard({ picked, school, change, simulated, onExplain, onGoa
                         {school?.state && (
                             <span className="inline-flex items-center gap-1">
                                 <MapPinIcon className="size-3" />
-                                {school.state}
+                                {stateName(school.state)}
                             </span>
                         )}
                         {control && <span>· {control}</span>}
@@ -135,7 +137,7 @@ export function SchoolCard({ picked, school, change, simulated, onExplain, onGoa
                             className="gap-1 text-xs font-semibold text-brand hover:bg-brand-wash"
                         >
                             <MessageSquareTextIcon className="size-3.5" />
-                            Xem tư vấn
+                            Vì sao nhóm này?
                         </Button>
                     )}
                 </div>

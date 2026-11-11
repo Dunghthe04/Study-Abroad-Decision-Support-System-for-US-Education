@@ -11,7 +11,7 @@ from app.services.skills.skill_lo_trinh import choose_route
 from tests.fakes import flow_with, tin
 
 TODAY = date(2026, 11, 10)
-ASK = tin(("ho_so", {}))
+ASK = tin("profile_review")
 # Bảng moderator sửa: khác WES ở mốc 8.0 (WES 3.5) để thấy rõ bảng nào được dùng. Cố ý để thứ tự lộn xộn
 RULES = [
     GradeScaleRule(min_score=8.0, max_score=8.99, gpa4=3.3, letter_grade="B+"),

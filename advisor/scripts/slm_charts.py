@@ -4,6 +4,7 @@ Màu cố định theo thứ tự các lần chạy: cam (model gốc), xanh dư
 Bộ màu Okabe-Ito, phân biệt được cả với người khó phân biệt màu.
 """
 
+import textwrap
 from pathlib import Path
 from typing import Any
 
@@ -27,7 +28,7 @@ LEVEL_NAMES = {
 ERROR_NAMES = {
     "dung_het": "Đúng hoàn toàn", "json_loi": "Không dùng được (lùi về mơ hồ)", "thieu_y": "Thiếu ý", "thua_y": "Thừa ý",
     "sai_loai": "Sai loại ý", "sai_thu_tu": "Sai thứ tự", "sai_nhiem_vu": "Sai nhiệm vụ", "sai_thuc_the": "Sai thực thể",
-    "sai_tiep_noi": "Sai tiep_noi",
+    "sai_follow_up": "Sai follow_up",
 }  # fmt: skip
 ERROR_COLORS = [
     "#009E73",
@@ -52,8 +53,92 @@ def style() -> None:
     )  # fmt: skip
 
 
-def save(fig: Any, path: Path) -> Path:
+# Chú thích dưới mỗi biểu đồ: cách đọc và ý nghĩa, để dán ảnh riêng lẻ vào báo cáo hay slide vẫn hiểu được
+NOTES = {
+    "compare": (
+        "Cách đọc: mỗi nhóm cột là một mức chấm, từ lỏng (trái) đến chặt (phải), cột càng cao càng tốt. Mức sau gồm cả mức trước. "
+        "'Đúng hoàn toàn' là tin được tách đúng loại ý, thứ tự, nhiệm vụ, thực thể và câu nối tiếp.\n"
+        "Vạch đen là khoảng tin cậy 95%: hai cột có vạch không chồng nhau thì khác biệt là thật, không phải do may rủi."
+    ),
+    "f1_type": (
+        "Cách đọc: mỗi nhóm cột là một loại ý, cột càng cao càng tốt. F1 (0 đến 100%) là điểm tổng hợp của precision (model đoán loại này "
+        "thì đúng bao nhiêu) và recall (trong các ý thật thuộc loại này, model tìm ra bao nhiêu)."
+    ),
+    "f1_label": (
+        "Cách đọc: mỗi hàng là một nhãn 'loại/nhiệm vụ' (ví dụ knowledge/school_info), n là số ý thật có nhãn này trong tập đo. "
+        "Thanh càng dài (gần 1.0) càng tốt, hàng không có thanh nghĩa là F1 bằng 0.\n"
+        "Nhãn có n nhỏ (khoảng 10 trở xuống) thì điểm dao động mạnh, chỉ nên xem như gợi ý."
+    ),
+    "confusion": (
+        "Cách đọc: mỗi hàng là loại ý đúng, mỗi cột là loại model đoán, số trong ô là số ý. Ô trên đường chéo là đoán đúng; "
+        "ô ngoài đường chéo là nhầm lẫn. Màu càng đậm là chiếm tỉ lệ càng lớn trong hàng đó.\n"
+        "Cột (không có) là ý bị bỏ sót; dòng (không có) là ý model tự thêm thừa."
+    ),
+    "errors": (
+        "Cách đọc: mỗi thanh là 100% số tin đo. Phần xanh lá (đúng hoàn toàn) càng dài càng tốt, các màu còn lại là lỗi. "
+        "Mỗi tin chỉ vào một nhóm: nhóm lỗi đầu tiên gặp khi chấm từ mức lỏng đến mức chặt (không dùng được, thiếu ý, thừa ý, "
+        "sai loại ý, sai thứ tự, sai nhiệm vụ, sai thực thể, sai câu nối tiếp). Số ghi trên thanh chỉ hiện khi từ 4% trở lên."
+    ),
+    "groups": (
+        "Cách đọc: mỗi cột là tỉ lệ tin đúng hoàn toàn trong một nhóm tin, càng cao càng tốt. Ba biểu đồ chia theo ba cách: số ý trong tin "
+        "(1, 2, 3 trở lên), tin có hay không có ngữ cảnh câu trước, và loại ý chính của tin.\n"
+        "Cột thấp cho biết nhóm tin model còn yếu."
+    ),
+    "latency": (
+        "Cách đọc: mỗi hộp là thời gian trả lời một tin. Vạch cam trong hộp là trung vị, hộp chứa nửa số tin ở giữa, hai đầu ria là "
+        "khoảng thường gặp (không vẽ điểm ngoại lai); 'tb' là trung bình. Hộp nằm càng trái càng nhanh.\n"
+        "Thời gian phụ thuộc phần cứng của máy chạy đo."
+    ),
+    "confidence": (
+        "Cách đọc: trục ngang là độ tin cậy model tự báo (0 đến 1), trục dọc là số tin. Trong mỗi khoảng có hai cột đứng cạnh nhau: "
+        "xanh là tin đúng hoàn toàn, cam là tin sai. Model có độ tin cậy dùng được thì cột cam nằm bên trái và cột xanh dồn bên phải.\n"
+        "Nếu cột cam cũng dồn ở gần 1.0, model sai mà vẫn rất tự tin, nên không dùng độ tin cậy để tự phát hiện lỗi."
+    ),
+    "dataset": (
+        "Cách đọc: mỗi cột là một loại ý, chia màu theo tập train (để học), val (để theo dõi lúc huấn luyện) và test (chỉ để đo cuối). "
+        "Số trên cột là tổng số dòng của loại đó.\n"
+        "Đây là toàn bộ dữ liệu; khi xuất file huấn luyện có bỏ các câu trùng chữ với câu test nên số dòng train và val thực tế ít hơn."
+    ),
+    "training": (
+        "Cách đọc: trục ngang là bước huấn luyện, trục dọc là loss (độ sai, càng thấp càng tốt). Đường xanh là train loss (sai trên dữ liệu "
+        "đang học, ghi dày); đường cam là val loss (sai trên dữ liệu chưa học, đo thưa hơn). Cả hai cùng giảm là đang học tốt.\n"
+        "Nếu val loss tăng lại trong khi train loss vẫn giảm là học thuộc (overfit). Nét đứt xanh lá đánh dấu bước có val loss thấp nhất."
+    ),
+    "gap": (
+        "Cách đọc: mỗi chấm là val loss trừ train loss ở một lần đo val. Chênh nhỏ và ổn định là model học tốt mà không học thuộc; "
+        "chênh tăng đều qua các lần đo là dấu hiệu overfit.\n"
+        "Lưu ý: train loss lấy ở lần ghi gần nhất nên tự dao động, đường lên xuống nhẹ chưa phải bằng chứng."
+    ),
+    "val_metrics": (
+        "Cách đọc: mỗi đường là một chỉ số đo trên tập val sau mỗi lần đánh giá lúc huấn luyện (0 đến 1, càng cao càng tốt). "
+        "Dùng để xem chất lượng thật có tăng theo bước không, bổ sung cho val loss."
+    ),
+}  # fmt: skip
+
+
+def add_note(fig: Any, note: str) -> None:
+    """Chữ chú thích dưới đáy biểu đồ (dưới cả legend), xuống dòng theo bề rộng ảnh."""
+    fig.canvas.draw()
+    box = fig.get_tightbbox(fig.canvas.get_renderer())  # inch, gốc ở góc dưới trái của figure
+    width_in, height_in = fig.get_size_inches()
+    chars = max(40, int(box.width * 14))  # khoảng 14 ký tự mỗi inch ở cỡ chữ 9
+    text = "\n".join(textwrap.fill(part, width=chars) for part in note.split("\n"))
+    fig.text(
+        box.x0 / width_in,
+        (box.y0 - 0.15) / height_in,
+        text,
+        ha="left",
+        va="top",
+        fontsize=9,
+        color="#333333",
+        linespacing=1.4,
+    )
+
+
+def save(fig: Any, path: Path, note: str = "") -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
+    if note:
+        add_note(fig, note)
     fig.savefig(path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     return path
@@ -129,7 +214,7 @@ def chart_compare(summaries: dict[str, dict[str, Any]], path: Path, split: str =
     grouped_bars(ax, groups, series, errors)
     ax.set_title(f"So sánh các mức đúng trên tập {split} (vạch đen: khoảng tin cậy 95%)")
     legend_below(ax, len(series))
-    return save(fig, path)
+    return save(fig, path, NOTES["compare"])
 
 
 def chart_f1_per_type(summaries: dict[str, dict[str, Any]], path: Path) -> Path:
@@ -139,7 +224,7 @@ def chart_f1_per_type(summaries: dict[str, dict[str, Any]], path: Path) -> Path:
     grouped_bars(ax, list(INTENTS), series)
     ax.set_title("F1 theo từng loại ý")
     legend_below(ax, len(series))
-    return save(fig, path)
+    return save(fig, path, NOTES["f1_type"])
 
 
 def chart_f1_per_label(summaries: dict[str, dict[str, Any]], path: Path) -> Path:
@@ -165,8 +250,10 @@ def chart_f1_per_label(summaries: dict[str, dict[str, Any]], path: Path) -> Path
     ax.invert_yaxis()
     ax.set_xlim(0, 1.02)
     ax.set_title("F1 theo nhãn loại/nhiệm vụ (n = số ý có trong nhãn đúng)")
-    ax.legend(loc="lower right")
-    return save(fig, path)
+    ax.legend(
+        loc="upper center", bbox_to_anchor=(0.5, -0.06), ncol=len(summaries), frameon=False
+    )  # dưới trục, không che thanh
+    return save(fig, path, NOTES["f1_label"])
 
 
 def heatmap(ax: Any, c: dict[str, Any], title: str) -> Any:
@@ -204,7 +291,7 @@ def chart_confusion(summaries: dict[str, dict[str, Any]], path: Path) -> Path:
     fig.suptitle(
         f"Ma trận nhầm lẫn giữa các loại ý. Dòng và cột {NONE} là ý bị thiếu hoặc ý thừa", fontweight="bold"
     )
-    return save(fig, path)
+    return save(fig, path, NOTES["confusion"])
 
 
 def chart_errors(summaries: dict[str, dict[str, Any]], path: Path) -> Path:
@@ -232,7 +319,7 @@ def chart_errors(summaries: dict[str, dict[str, Any]], path: Path) -> Path:
     ax.set_xticks([0, 0.25, 0.5, 0.75, 1], ["0%", "25%", "50%", "75%", "100%"])
     ax.set_title("Phân loại kết quả theo từng tin nhắn")
     ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.12), ncol=3, fontsize=8, frameon=False)
-    return save(fig, path)
+    return save(fig, path, NOTES["errors"])
 
 
 def chart_groups(summaries: dict[str, dict[str, Any]], path: Path) -> Path:
@@ -259,7 +346,7 @@ def chart_groups(summaries: dict[str, dict[str, Any]], path: Path) -> Path:
         handles, names, loc="lower center", bbox_to_anchor=(0.5, -0.06), ncol=len(names), frameon=False
     )
     fig.suptitle("Tỉ lệ đúng hoàn toàn theo nhóm tin", fontweight="bold")
-    return save(fig, path)
+    return save(fig, path, NOTES["groups"])
 
 
 def chart_latency(summaries: dict[str, dict[str, Any]], path: Path) -> Path | None:
@@ -279,11 +366,14 @@ def chart_latency(summaries: dict[str, dict[str, Any]], path: Path) -> Path | No
         patch.set_facecolor(color(i))
         patch.set_alpha(0.7)
     for i, v in enumerate(data.values(), start=1):
-        ax.text(max(v) * 1.01, i, f"tb {sum(v) / len(v):.2f}s", va="center", fontsize=8)
+        # x tính theo khung vẽ (1.01 = ngay sát mép phải): đặt theo giá trị lớn nhất sẽ kéo ảnh dài ra khi có điểm ngoại lai không vẽ
+        ax.text(
+            1.01, i, f"tb {sum(v) / len(v):.2f}s", va="center", fontsize=8, transform=ax.get_yaxis_transform()
+        )
     ax.invert_yaxis()
     ax.set_xlabel("Giây cho một tin (không vẽ điểm ngoại lai)")
     ax.set_title("Thời gian trả lời")
-    return save(fig, path)
+    return save(fig, path, NOTES["latency"])
 
 
 def chart_confidence(summaries: dict[str, dict[str, Any]], path: Path) -> Path | None:
@@ -297,14 +387,19 @@ def chart_confidence(summaries: dict[str, dict[str, Any]], path: Path) -> Path |
     fig, axes = plt.subplots(1, len(usable), figsize=(5.5 * len(usable), 3.6), squeeze=False)
     for ax, (name, s) in zip(axes[0], usable.items(), strict=True):
         bins = [i / 10 for i in range(11)]
-        ax.hist(s["tin_cay"]["khi_dung"], bins=bins, alpha=0.7, color="#009E73", label="khi đúng hoàn toàn")
-        ax.hist(s["tin_cay"]["khi_sai"], bins=bins, alpha=0.7, color="#D55E00", label="khi sai")
+        # hai cột cạnh nhau trong mỗi khoảng (không chồng lên nhau, tránh ra màu nâu khó hiểu ở chỗ chồng)
+        ax.hist(
+            [s["tin_cay"]["khi_dung"], s["tin_cay"]["khi_sai"]],
+            bins=bins,
+            color=["#009E73", "#D55E00"],
+            label=["khi đúng hoàn toàn", "khi sai"],
+        )
         ax.set_title(name, fontsize=10)
         ax.set_xlabel("Độ tin cậy")
         ax.set_ylabel("Số tin")
         ax.legend()
     fig.suptitle("Độ tin cậy của model khi đúng và khi sai", fontweight="bold")
-    return save(fig, path)
+    return save(fig, path, NOTES["confidence"])
 
 
 def chart_dataset(records: list[dict[str, Any]], path: Path) -> Path:
@@ -323,7 +418,7 @@ def chart_dataset(records: list[dict[str, Any]], path: Path) -> Path:
     ax.set_ylabel("Số dòng")
     ax.set_title(f"Dữ liệu theo loại và theo tập (tổng {len(records)} dòng)")
     ax.legend()
-    return save(fig, path)
+    return save(fig, path, NOTES["dataset"])
 
 
 def chart_training(
@@ -371,7 +466,7 @@ def chart_training(
     ax.set_ylabel("Loss")
     ax.set_title("Đường cong huấn luyện")
     ax.legend()
-    return save(fig, path)
+    return save(fig, path, NOTES["training"])
 
 
 def chart_gap(log: list[dict[str, float]], path: Path) -> Path | None:
@@ -394,7 +489,7 @@ def chart_gap(log: list[dict[str, float]], path: Path) -> Path | None:
     ax.set_xlabel("Bước huấn luyện")
     ax.set_ylabel("val loss trừ train loss")
     ax.set_title("Khoảng cách val và train (tăng dần = overfit)")
-    return save(fig, path)
+    return save(fig, path, NOTES["gap"])
 
 
 def chart_val_metrics(log: list[dict[str, float]], path: Path) -> Path | None:
@@ -411,4 +506,4 @@ def chart_val_metrics(log: list[dict[str, float]], path: Path) -> Path | None:
     ax.set_xlabel("Bước huấn luyện")
     ax.set_title("Chỉ số trên val theo bước huấn luyện")
     ax.legend()
-    return save(fig, path)
+    return save(fig, path, NOTES["val_metrics"])

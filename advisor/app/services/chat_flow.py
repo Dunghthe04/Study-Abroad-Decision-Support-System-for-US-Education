@@ -1,7 +1,7 @@
 """
 Điều phối luồng chat theo kiến trúc mới: SLM đọc tin nhắn, chạy nhánh theo loại câu hỏi, trả câu trả lời và trạng thái.
 Vòng xử lý một tin nhắn:
-1. SLM tách tin thành danh sách ý -> 2. mỗi ý chạy nhánh theo loại của nó (ý mac_dinh chạy trước), ghép câu trả lời
+1. SLM tách tin thành danh sách ý -> 2. mỗi ý chạy nhánh theo loại của nó (ý collect_profile chạy trước), ghép câu trả lời
 -> 3. nhắc lại câu hồ sơ đang chờ nếu chưa được trả lời -> 4. ghi log, trả kết quả.
 Các nhánh nằm ở branches.py (main.py tạo rồi truyền vào ChatFlow).
 """
@@ -22,6 +22,8 @@ from app.schemas.chat import (
     Citation,
     ProfileField,
     QuickReply,
+    SlmSummary,
+    SlmSummaryIntent,
     Step,
     Widget,
 )
@@ -86,13 +88,13 @@ NEED_PROFILE = (
 NEED_MAJOR = "Để gợi ý trường mình cần biết ngành bạn muốn học. Bạn chọn ngành giúp mình nhé."
 BACK_TO_QUESTION = "Quay lại câu mình đang hỏi nhé: "
 OPENING_QUESTIONS = {"B0.1", "B0.2"}
-# Loại ý chỉ ĐỌC state (kien_thuc, trung_tam chỉ đọc study_level), nên nhiều ý cùng loại này chạy song song được.
-# Loại khác (mac_dinh, ho_so...) ghi state nên vẫn chạy lần lượt. Thêm loại vào đây chỉ khi nhánh đó không ghi state
-PARALLEL_SAFE = {"kien_thuc", "trung_tam"}
+# Loại ý chỉ ĐỌC state (knowledge, center_referral chỉ đọc study_level), nên nhiều ý cùng loại này chạy song song được.
+# Loại khác (collect_profile, profile_review...) ghi state nên vẫn chạy lần lượt. Thêm loại vào đây chỉ khi nhánh đó không ghi state
+PARALLEL_SAFE = {"knowledge", "center_referral"}
 # Số ý chạy cùng lúc nhiều nhất trong một tin: tin hỏi 12 câu thì không gửi 12 yêu cầu Claude cùng một lúc
 PARALLEL_LIMIT = 4
-# Ý mac_dinh thay thế khi SLM không tách ý hồ sơ nhưng tin vẫn có giá trị hồ sơ (nằm trong ý khác)
-PROFILE_ONLY = SlmY(type="mac_dinh", doan="thông tin hồ sơ")
+# Ý collect_profile thay thế khi SLM không tách ý hồ sơ nhưng tin vẫn có giá trị hồ sơ (nằm trong ý khác)
+PROFILE_ONLY = SlmY(type="collect_profile", span="thông tin hồ sơ")
 # Chế độ stream: ChatFlow gọi hàm này mỗi khi có tin để gửi cho trình duyệt ngay, không chờ cả lượt xong.
 # Hai loại tin: {"type": "progress", "answers": số ý sắp trả lời} và {"type": "partial", "text": câu trả lời của một ý}
 Emit = Callable[[dict[str, Any]], None]
@@ -136,7 +138,7 @@ class SkillHandler(Protocol):
 
 # Hợp đồng chung của mọi nhánh (branches.py): như SkillHandler nhưng nhận thêm kết quả SLM.
 # message và slm là phần dành cho nhánh này: nhánh hồ sơ nhận cả tin (gom giá trị hồ sơ của mọi ý),
-# nhánh khác nhận đoạn chữ và kết quả của đúng một ý (slm.cac_y chỉ có ý đó)
+# nhánh khác nhận đoạn chữ và kết quả của đúng một ý (slm.intents chỉ có ý đó)
 class Branch(Protocol):
     async def run(self, state: ChatState, message: str, slm: SlmTinResult) -> SkillOutput: ...
 
@@ -154,12 +156,12 @@ def combine(first: SkillOutput, second: SkillOutput) -> SkillOutput:
     )
 
 
-# Các ý chạy cho một tin, ý mac_dinh đứng đầu để hồ sơ được ghi trước khi các ý khác chạy.
-# SLM không tách ý hồ sơ mà tin vẫn có giá trị hồ sơ (nằm trong ý khác) thì thêm một ý mac_dinh
+# Các ý chạy cho một tin, ý collect_profile đứng đầu để hồ sơ được ghi trước khi các ý khác chạy.
+# SLM không tách ý hồ sơ mà tin vẫn có giá trị hồ sơ (nằm trong ý khác) thì thêm một ý collect_profile
 def intents_to_run(slm: SlmTinResult) -> list[SlmY]:
-    if slm.touches_profile() and "mac_dinh" not in slm.types():
-        return [PROFILE_ONLY, *slm.cac_y]
-    return list(slm.cac_y)
+    if slm.touches_profile() and "collect_profile" not in slm.types():
+        return [PROFILE_ONLY, *slm.intents]
+    return list(slm.intents)
 
 
 # Câu nói về ưu tiên (chi phí thấp, học bổng, danh tiếng) SLM chưa được huấn luyện nên có thể xếp nhầm loại.
@@ -172,17 +174,17 @@ def with_priority_intent(state: ChatState, message: str, slm: SlmTinResult) -> S
         return slm
     # SLM thật xếp "ưu tiên chi phí thấp" vào goal_seeking không có trường: đó là ưu tiên, đổi thành what-if.
     # Giữ nguyên khi SLM đã nhận là what-if (nhánh kịch bản tự đọc thêm ưu tiên) hoặc goal-seeking có nêu trường thật
-    scenarios = [y for y in slm.cac_y if y.type == "kich_ban"]
-    if any(y.thuc_the.get("che_do") == "what_if" or y.thuc_the.get("truong") for y in scenarios):
+    scenarios = [y for y in slm.intents if y.type == "scenario"]
+    if any(y.entities.get("mode") == "what_if" or y.entities.get("school") for y in scenarios):
         return slm
     scenario = SlmY(
-        type="kich_ban",
-        doan=message,
-        thuc_the={"che_do": "what_if", "thay_doi": [{"yeu_to": PRIORITY_KEY, "gia_tri": "uu_tien"}]},
+        type="scenario",
+        span=message,
+        entities={"mode": "what_if", "changes": [{"factor": PRIORITY_KEY, "value": PRIORITY_KEY}]},
     )
     # Tin có số liệu thì giữ các ý khác (có thể là hồ sơ); chỉ nói về ưu tiên thì bỏ ý SLM đoán sai
-    keep = [y for y in slm.cac_y if y.type != "kich_ban"] if re.search(r"\d", message) else []
-    return slm.model_copy(update={"cac_y": [scenario, *keep]})
+    keep = [y for y in slm.intents if y.type != "scenario"] if re.search(r"\d", message) else []
+    return slm.model_copy(update={"intents": [scenario, *keep]})
 
 
 # Mục số liệu trường học sinh hay hỏi (khớp bộ từ khóa của .NET ChatSchoolInfo) và dấu hiệu của câu thật sự nhạy cảm (làm giả, khai gian)
@@ -198,41 +200,41 @@ _SENSITIVE = re.compile(
 # Câu nhắc một mục số liệu trường mà không có dấu hiệu làm giả hay khai gian thì đổi thành câu kiến thức, để nhánh số liệu trường trả lời.
 # Câu nhạy cảm thật (sửa GPA, làm giả bảng điểm) vẫn bị chặn như cũ
 def with_info_intent(message: str, slm: SlmTinResult) -> SlmTinResult:
-    if len(slm.cac_y) != 1:
+    if len(slm.intents) != 1:
         return slm
-    y = slm.cac_y[0]
-    if y.type != "ngoai_pham_vi" or y.thuc_the.get("loai_con") not in ("nhay_cam", "mo_ho"):
+    y = slm.intents[0]
+    if y.type != "out_of_scope" or y.entities.get("subtype") not in ("sensitive", "ambiguous"):
         return slm
     plain = unaccent(message)
     if not _INFO_WORDS.search(plain) or _SENSITIVE.search(plain):
         return slm
-    return slm.model_copy(update={"cac_y": [SlmY(type="kien_thuc", doan=message)]})
+    return slm.model_copy(update={"intents": [SlmY(type="knowledge", span=message)]})
 
 
 # SLM thật xếp "So sánh 2 trường A và B" vào nhánh hồ sơ (so sánh theo hồ sơ), nhánh này sinh skill rất lâu rồi báo chưa so sánh được.
 # Câu so sánh từ hai trường trở lên mà không nhắc gì đến hồ sơ của học sinh là so sánh số liệu trường (dữ liệu huấn luyện cũng gán như vậy):
-# đổi sang câu kiến thức so_sanh để chạy bảng số liệu. Có từ hỏi theo hồ sơ ("hợp với em", "hồ sơ của em") thì giữ nhánh hồ sơ
+# đổi sang câu kiến thức compare_facts để chạy bảng số liệu. Có từ hỏi theo hồ sơ ("hợp với em", "hồ sơ của em") thì giữ nhánh hồ sơ
 _PERSONAL_COMPARE = re.compile(
     r"\b(ho so|hop voi|phu hop|hop ho so|nen chon|nen nop|truong nao hop|cai nao hop|voi em|cua em|voi minh|cua minh|kha nang)\b"
 )
 
 
 def with_comparison_intent(message: str, slm: SlmTinResult) -> SlmTinResult:
-    if len(slm.cac_y) != 1:
+    if len(slm.intents) != 1:
         return slm
-    y = slm.cac_y[0]
-    if y.type != "ho_so" or y.thuc_the.get("cac_nhiem_vu") != ["so_sanh"]:
+    y = slm.intents[0]
+    if y.type != "profile_review" or y.entities.get("tasks") != ["compare"]:
         return slm
-    schools = [s for s in y.thuc_the.get("cac_truong") or [] if isinstance(s, str) and s.strip()]
+    schools = y.entities.get("schools") or []
     if len(schools) < 2 or _PERSONAL_COMPARE.search(unaccent(message)):
         return slm
-    compare = SlmY(type="kien_thuc", doan=y.doan, thuc_the={"nhiem_vu": "so_sanh", "cac_truong": schools})
-    return slm.model_copy(update={"cac_y": [compare]})
+    compare = SlmY(type="knowledge", span=y.span, entities={"tasks": ["compare_facts"], "schools": schools})
+    return slm.model_copy(update={"intents": [compare]})
 
 
 # Phần kết quả SLM giao cho nhánh của một ý: nhánh hồ sơ cần cả tin, nhánh khác chỉ cần ý của nó
 def view_of(slm: SlmTinResult, y: SlmY) -> SlmTinResult:
-    return slm if y.type == "mac_dinh" else slm.model_copy(update={"cac_y": [y]})
+    return slm if y.type == "collect_profile" else slm.model_copy(update={"intents": [y]})
 
 
 # Tái tạo đầy đủ SkillOutput (gồm quick_replies và widget) của câu hỏi đang chờ khi người dùng hỏi xen ngang
@@ -322,13 +324,18 @@ class ChatFlow:
                 original = state.pending_advice
                 state.pending_advice = None
                 state.intake_mode = "chat"
-                output = await self._branches["ho_so"].run(
-                    state, original.doan, SlmTinResult(cac_y=[original])
+                output = await self._branches["profile_review"].run(
+                    state, original.span, SlmTinResult(intents=[original])
                 )
                 log_turn(
-                    state, message, None, ["ho_so"], (time.perf_counter() - started) * 1000, req.session_id
+                    state,
+                    message,
+                    None,
+                    ["profile_review"],
+                    (time.perf_counter() - started) * 1000,
+                    req.session_id,
                 )
-                return self._response(state, output, ["ho_so"], profile_before)
+                return self._response(state, output, ["profile_review"], profile_before)
             if choice:
                 output = begin_intake(state, choice)
                 log_turn(state, message, None, [], (time.perf_counter() - started) * 1000, req.session_id)
@@ -336,11 +343,19 @@ class ChatFlow:
 
         # Câu hồ sơ đang chờ, chụp trước khi chạy nhánh để cuối lượt biết đã được trả lời chưa
         pending = (state.question_id, state.last_question)
-        # 1. SLM đọc tin nhắn. Bấm nút của câu đang hỏi là trả lời hồ sơ rõ ràng, không cần SLM đoán
-        if state.question_id and is_button(state.question_id, message):
-            slm = SlmTinResult(cac_y=[SlmY(type="mac_dinh", doan=message)])
+        # 1. SLM đọc tin nhắn. Bấm nút của câu đang hỏi, hoặc bấm nút ở menu sửa hồ sơ, là trả lời hồ sơ rõ ràng, không cần SLM đoán
+        asked_slm = not (
+            (state.question_id and is_button(state.question_id, message)) or is_edit_menu(state, message)
+        )
+        fell_back = False
+        model_intents: list[SlmY] = []
+        if not asked_slm:
+            slm = SlmTinResult(intents=[SlmY(type="collect_profile", span=message)])
         else:
             slm = await self._slm.classify(state, message)
+            # Chụp trước khi các luật code bên dưới đổi ý: đây là nhãn model gán. Model hỏng thì không có đầu ra thật để lưu
+            fell_back = slm.fallback
+            model_intents = [] if fell_back else list(slm.intents)
             slm = with_priority_intent(state, message, slm)
             slm = with_info_intent(message, slm)
             slm = with_comparison_intent(message, slm)
@@ -354,7 +369,7 @@ class ChatFlow:
         remind = bool(
             pending[0]
             and pending[0] not in OPENING_QUESTIONS
-            and "mac_dinh" not in names
+            and "collect_profile" not in names
             and (state.question_id, state.last_question) == pending
         )
         if remind:
@@ -370,9 +385,11 @@ class ChatFlow:
 
         # 5. Ghi log (dữ liệu để gán nhãn thêm và kiểm tra ngẫu nhiên)
         log_turn(state, message, slm, names, (time.perf_counter() - started) * 1000, req.session_id)
-        return self._response(state, output, names, profile_before)
+        response = self._response(state, output, names, profile_before)
+        response.slm = slm_summary(slm, asked_slm, fell_back, model_intents)
+        return response
 
-    # Mỗi ý chạy nhánh của loại nó. Ý mac_dinh chạy TRƯỚC để các ý khác thấy hồ sơ mới, nhưng câu trả lời của nó
+    # Mỗi ý chạy nhánh của loại nó. Ý collect_profile chạy TRƯỚC để các ý khác thấy hồ sơ mới, nhưng câu trả lời của nó
     # đặt CUỐI để tin nhắn kết thúc bằng câu hồ sơ kế tiếp (hoặc lời xác nhận).
     # Các ý chỉ đọc state (PARALLEL_SAFE) chạy song song (tối đa PARALLEL_LIMIT ý cùng lúc) cho nhanh;
     # Khi stream (emit), mỗi ý xong thì gửi đi ngay, nhưng chỉ khi mọi ý đứng trước nó đã gửi (đúng thứ tự hỏi)
@@ -383,18 +400,18 @@ class ChatFlow:
         results: dict[int, SkillOutput] = {}
         sent = 0  # số ý đầu danh sách đã xét gửi đi
         if emit:
-            emit({"type": "progress", "answers": sum(y.type != "mac_dinh" for y in intents)})
+            emit({"type": "progress", "answers": sum(y.type != "collect_profile" for y in intents)})
 
         def flush() -> None:
             nonlocal sent
             while sent in results:
                 answer = results[sent].answer
-                # Câu trả lời ý mac_dinh đặt cuối tin (câu hồ sơ kế tiếp) nên không gửi theo từng ý
-                if emit and intents[sent].type != "mac_dinh" and answer:
+                # Câu trả lời ý collect_profile đặt cuối tin (câu hồ sơ kế tiếp) nên không gửi theo từng ý
+                if emit and intents[sent].type != "collect_profile" and answer:
                     emit({"type": "partial", "text": answer})
                 sent += 1
 
-        # Ý ghi state chạy lần lượt theo thứ tự (mac_dinh đứng đầu)
+        # Ý ghi state chạy lần lượt theo thứ tự (collect_profile đứng đầu)
         for i, y in enumerate(intents):
             if y.type not in PARALLEL_SAFE:
                 results[i] = await self._run_one(state, message, slm, y)
@@ -412,7 +429,7 @@ class ChatFlow:
         output = SkillOutput("")
         profile_output: SkillOutput | None = None
         for i, y in enumerate(intents):
-            if y.type == "mac_dinh":
+            if y.type == "collect_profile":
                 profile_output = results[i]
             else:
                 output = combine(output, results[i])
@@ -424,7 +441,7 @@ class ChatFlow:
     # ý hồ sơ nhận cả tin
     async def _run_one(self, state: ChatState, message: str, slm: SlmTinResult, y: SlmY) -> SkillOutput:
         return await self._branches[y.type].run(
-            state, message if y.type == "mac_dinh" else y.doan, view_of(slm, y)
+            state, message if y.type == "collect_profile" else y.span, view_of(slm, y)
         )
 
     @staticmethod
@@ -464,6 +481,14 @@ def is_button(question_id: str | None, message: str) -> bool:
     )
 
 
+# Không có câu đang hỏi mà tin là câu ô chọn sửa hồ sơ ("Em muốn sửa Mục tiêu", vd nút của câu trả lời kịch bản):
+# cũng là bấm nút, giao nhánh hồ sơ mở luồng sửa
+def is_edit_menu(state: ChatState, message: str) -> bool:
+    from app.services.skills import skill_ho_so
+
+    return state.question_id is None and skill_ho_so.read_edit_menu(message) is not None
+
+
 # Hồ sơ đủ mục bắt buộc và không còn giá trị nào chờ xác nhận (said_in_B0)
 def profile_ready(state: ChatState) -> bool:
     if missing_fields(state.profile, REQUIRED_B3):
@@ -471,8 +496,23 @@ def profile_ready(state: ChatState) -> bool:
     return all(field.status != "said_in_B0" for field in state.profile.values())
 
 
+# Hồ sơ có giá trị không phải chỉ nói ở câu đầu (said_in_B0): giá trị từ DB, form hoặc lần trước
+def has_saved_profile(state: ChatState) -> bool:
+    return any(field.status != "said_in_B0" for field in state.profile.values())
+
+
+# Bắt đầu hỏi mà hồ sơ đã có từ trước: chỉ hỏi mục bắt buộc của việc đang làm (gộp với việc trước nếu đã đặt).
+# Đang hỏi đủ trong chat (hồ sơ trống lúc bắt đầu) thì giữ nguyên, không đổi giữa chừng
+def limit_to_required(state: ChatState, required: list[str]) -> None:
+    if state.required_only is not None:
+        state.required_only = list(dict.fromkeys([*state.required_only, *required]))
+    elif state.intake_mode != "chat" and has_saved_profile(state):
+        state.required_only = list(required)
+
+
 # Bắt đầu hỏi hồ sơ khi một skill bị chặn vì thiếu hồ sơ
 def start_intake(state: ChatState, required: list[str] = REQUIRED_B3) -> SkillOutput:
+    limit_to_required(state, required)
     # Đang trả lời trong chat thì hỏi tiếp phần còn thiếu
     if state.intake_mode == "chat":
         return ask_next_missing(state, INTAKE_MORE)
@@ -515,25 +555,42 @@ def ask_next_missing(state: ChatState, prefix: str = "") -> SkillOutput:
 # Khóa ghi cả giá trị: mã cố định của hợp đồng (nhiệm vụ, chế độ, loại con, dịch vụ, mục, cách xếp, tiếp nối) và tên
 # trường, trung tâm (tên công khai, có trong danh sách của hệ thống; không phải thông tin cá nhân của học sinh)
 LOGGED_VALUE_KEYS = (
-    "nhiem_vu",
-    "cac_nhiem_vu",
-    "che_do",
-    "loai_con",
-    "dich_vu",
-    "muc",
-    "sap_xep",
-    "tiep_noi",
-    "truong",
-    "cac_truong",
-    "cac_trung_tam",
+    "tasks",
+    "mode",
+    "subtype",
+    "service",
+    "fields",
+    "sort",
+    "follow_up",
+    "school",
+    "schools",
+    "centers",
 )
 
 
 # Từng ý SLM đọc ra: loại, các giá trị ở trên, và tên các khóa còn lại. Giá trị còn lại là chữ học sinh viết
 # (số điểm, thành phố, điều kiện lọc) nên chỉ ghi tên khóa
 def log_item(y: Any) -> dict[str, Any]:
-    values = {key: y.thuc_the[key] for key in LOGGED_VALUE_KEYS if key in y.thuc_the}
-    return {"type": y.type, **values, "khoa": sorted(key for key in y.thuc_the if key not in values)}
+    values = {key: y.entities[key] for key in LOGGED_VALUE_KEYS if key in y.entities}
+    return {"type": y.type, **values, "other_keys": sorted(key for key in y.entities if key not in values)}
+
+
+# Tóm tắt SLM đọc tin ra sao, gửi .NET để đánh dấu câu chưa trả lời được và để admin xem nhãn model gán.
+# slm là kết quả SAU luật code (cái hệ thống đã chạy); model_intents là đầu ra nguyên văn của model TRƯỚC luật code.
+# Có chữ của học sinh trong model_intents (đoạn chữ, thực thể): .NET chỉ lưu vào bảng dữ liệu cá nhân, không trả cho trình duyệt.
+# asked_slm = False khi bấm nút trả lời câu hồ sơ (không gọi SLM): không có độ tin cậy.
+# fell_back lấy ngay sau khi SLM trả lời, trước các luật code đổi ý, nên vẫn là True khi luật cứu được câu mà SLM đã hỏng
+def slm_summary(slm: SlmTinResult, asked_slm: bool, fell_back: bool, model_intents: list[SlmY]) -> SlmSummary:
+    subtype = next((y.entities.get("subtype") for y in slm.intents if y.type == "out_of_scope"), None)
+    return SlmSummary(
+        model_intents=[
+            SlmSummaryIntent(type=y.type, span=y.span, entities=dict(y.entities)) for y in model_intents
+        ],
+        intents=slm.types(),
+        out_of_scope=subtype if isinstance(subtype, str) else None,
+        confidence=round(slm.confidence, 3) if asked_slm else None,
+        fallback=fell_back,
+    )
 
 
 # Mỗi lượt ghi một dòng JSON: tin nhắn, SLM đọc ra gì, nhánh nào chạy.
@@ -555,8 +612,8 @@ def log_turn(
                 "last_question": state.last_question,
                 "message": mask_personal_info(message),
                 "slm_types": slm.types() if slm else [],
-                "slm_thuc_the": sorted({key for y in slm.cac_y for key in y.thuc_the}) if slm else [],
-                "slm_cac_y": [log_item(y) for y in slm.cac_y] if slm else [],
+                "slm_entity_keys": sorted({key for y in slm.intents for key in y.entities}) if slm else [],
+                "slm_intents": [log_item(y) for y in slm.intents] if slm else [],
                 "slm_confidence": round(slm.confidence, 3) if slm else None,
                 "ran": ran,
                 "ms": round(ms),

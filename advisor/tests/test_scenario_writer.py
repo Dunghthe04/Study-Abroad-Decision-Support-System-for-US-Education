@@ -162,6 +162,16 @@ async def test_no_change_gives_a_short_reply_without_lists():
     assert "IELTS không làm đổi nhóm" in res.answer
 
 
+async def test_saying_something_was_not_tried_when_everything_was_tried_is_rejected():
+    bad = changed(GOOD, closing="Mình chưa thử được: không có yếu tố nào chưa thử được.")
+    llm = FakeLLM(bad, GOOD)
+
+    res = await writer(llm).write(req())
+
+    assert res.status == "OK" and "chưa thử được" not in res.answer
+    assert len(llm.calls) == 2  # lần đầu bị chặn, gọi lại một lần
+
+
 # ---- chặn lời sai ----
 BAD = {
     "wrong-group": changed(

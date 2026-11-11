@@ -1143,6 +1143,137 @@ public class ProfileFlowServiceTests
         }
     }
 
+    // Nhật ký token của các lần gọi advisor ngoài chat (ngoại khóa, OCR)
+
+    private sealed class FakeAiCalls : StudyAbroad.Application.Advisor.IAiCallRepository
+    {
+        public List<AiCall> Rows { get; } = [];
+        public int Writes { get; private set; }
+        public bool Fail { get; init; }
+        public Action? OnWrite { get; init; }
+
+        public Task AddRangeAsync(IReadOnlyList<AiCall> calls, CancellationToken ct = default)
+        {
+            Writes++;
+            OnWrite?.Invoke();
+            if (Fail)
+                throw new InvalidOperationException("Database không ghi được");
+            Rows.AddRange(calls);
+            return Task.CompletedTask;
+        }
+    }
+
+    // Giống EcTierClient thật: bỏ số đo vào giỏ chung của yêu cầu rồi trả bậc
+    private sealed class UsageEcTierClient(StudyAbroad.Application.Advisor.IAiUsageCollector basket, int tier) : StudyAbroad.Application.Advisor.IEcTierClient
+    {
+        public Task<int?> ReadTierAsync(StudyAbroad.Application.Advisor.EcTierRequest request, CancellationToken ct = default)
+        {
+            basket.Add([new StudyAbroad.Application.Advisor.AiUsageDto("claude", "claude-haiku-5-5", "skill_ec", "1.0", 900, 120, 0, true, null, 2500)]);
+            return Task.FromResult<int?>(tier);
+        }
+    }
+
+    // Giống TranscriptOcrClient thật: bỏ số đo của hai bước OCR vào giỏ chung
+    private sealed class UsageOcrClient(StudyAbroad.Application.Advisor.IAiUsageCollector basket) : StudyAbroad.Application.Advisor.ITranscriptOcrClient
+    {
+        public Task<StudyAbroad.Application.Advisor.TranscriptOcrResponse> OcrTranscriptAsync(
+            StudyAbroad.Application.Advisor.TranscriptOcrRequest request, CancellationToken ct = default)
+        {
+            basket.Add(
+            [
+                new StudyAbroad.Application.Advisor.AiUsageDto("ollama", "qwen3-vl", "transcript_ocr_read", "", 700, 300, 0, true, null, 18000),
+                new StudyAbroad.Application.Advisor.AiUsageDto("claude", "claude-haiku-5-5", "transcript_ocr_parse", "", 2100, 400, 0, true, null, 2200),
+            ]);
+            return Task.FromResult(new StudyAbroad.Application.Advisor.TranscriptOcrResponse(
+                true, "qwen3-vl",
+                [new FlowTranscriptTermDto(1, "Lớp 10 HK1", [new FlowTranscriptSubjectScoreDto("Toán", 9.0m, "9.0", 1m)])],
+                9.0m, 4.0m, null));
+        }
+    }
+
+    private static ProfileFlowService WithUsage(
+        InMemoryProfileFlowRepository repo, StudyAbroad.Application.Advisor.IAiUsageCollector basket, FakeAiCalls calls) =>
+        new(repo, new FakeFileStorageService(), new UsageOcrClient(basket), new UsageEcTierClient(basket, 4), aiCalls: calls, usageCollector: basket);
+
+    [Fact]
+    public async Task CommitFlowAsync_LogsTheEcCallWithTheUser_AndNoMessage_AfterTheCommit()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var committedWhenLogged = -1;
+        var calls = new FakeAiCalls { OnWrite = () => committedWhenLogged = repo.CommitCount };
+        var userId = Guid.NewGuid();
+
+        await WithUsage(repo, new StudyAbroad.Application.Advisor.AiUsageCollector(), calls)
+            .CommitFlowAsync(userId, new CommitProfileFlowRequest(FullDraft()));
+
+        var row = Assert.Single(calls.Rows);
+        Assert.Equal(("claude", "skill_ec", userId), (row.Kind, row.Purpose, row.UserId));
+        Assert.Null(row.ChatMessageId);                        // nằm ngoài chat nên không có tin nhắn để nối
+        Assert.Equal((900, 120), (row.PromptTokens, row.CompletionTokens));
+        Assert.Equal(1, committedWhenLogged);                  // ghi SAU commit, không để SaveChanges của ai_calls lưu sớm profile dở
+    }
+
+    [Fact]
+    public async Task UploadDraftTranscriptAsync_LogsBothOcrSteps_WithTheUser()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var calls = new FakeAiCalls();
+        var service = WithUsage(repo, new StudyAbroad.Application.Advisor.AiUsageCollector(), calls);
+        var userId = Guid.NewGuid();
+        await service.SaveDraftAsync(userId, new SaveProfileDraftRequest(2, [1], FullDraft()));
+
+        using var file = new MemoryStream([1, 2, 3, 4]);
+        await service.UploadDraftTranscriptAsync(userId, file, "hoc_ba.png", "image/png", 4);
+
+        Assert.Equal(["transcript_ocr_read", "transcript_ocr_parse"], calls.Rows.Select(r => r.Purpose));
+        Assert.Equal(["ollama", "claude"], calls.Rows.Select(r => r.Kind));
+        Assert.All(calls.Rows, r => Assert.Equal(userId, r.UserId));
+        Assert.All(calls.Rows, r => Assert.Null(r.ChatMessageId));
+    }
+
+    [Fact]
+    public async Task TheBasketIsEmptiedAfterEachWrite_SoNothingIsLoggedTwice()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var basket = new StudyAbroad.Application.Advisor.AiUsageCollector();
+        var calls = new FakeAiCalls();
+        var service = WithUsage(repo, basket, calls);
+        var userId = Guid.NewGuid();
+        await service.SaveDraftAsync(userId, new SaveProfileDraftRequest(2, [1], FullDraft()));
+
+        using var file = new MemoryStream([1, 2, 3, 4]);
+        await service.UploadDraftTranscriptAsync(userId, file, "hoc_ba.png", "image/png", 4);   // 2 dòng OCR
+        await service.CommitFlowAsync(userId, new CommitProfileFlowRequest(FullDraft()));       // thêm 1 dòng ngoại khóa
+
+        Assert.Equal(3, calls.Rows.Count);
+        Assert.Empty(basket.Snapshot());
+    }
+
+    [Fact]
+    public async Task FailureToLogTokens_NeverBreaksSavingTheProfile()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var userId = Guid.NewGuid();
+
+        var response = await WithUsage(repo, new StudyAbroad.Application.Advisor.AiUsageCollector(), new FakeAiCalls { Fail = true })
+            .CommitFlowAsync(userId, new CommitProfileFlowRequest(FullDraft()));
+
+        Assert.True(response.Succeeded);
+        Assert.Equal(4, (await repo.GetProfileByUserIdAsync(userId))!.ExtracurricularTier);
+    }
+
+    [Fact]
+    public async Task WhenNothingWasMeasured_NothingIsWritten()
+    {
+        var calls = new FakeAiCalls();
+        var basket = new StudyAbroad.Application.Advisor.AiUsageCollector();
+        var service = new ProfileFlowService(new InMemoryProfileFlowRepository(), new FakeFileStorageService(), aiCalls: calls, usageCollector: basket);
+
+        await service.CommitFlowAsync(Guid.NewGuid(), new CommitProfileFlowRequest(FullDraft()));
+
+        Assert.Equal(0, calls.Writes);   // không có client nào gọi advisor nên giỏ rỗng
+    }
+
     // Bậc ngoại khóa lúc lưu hồ sơ
 
     private sealed class FakeEcTierClient(int? tier) : StudyAbroad.Application.Advisor.IEcTierClient

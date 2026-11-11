@@ -78,6 +78,9 @@ export const SIMULATE_EVENT = "usas:simulate";
 // Khung chat báo trang Gợi ý trường bỏ hết giá trị giả định (nút "Về hồ sơ thật")
 export const RESET_SIMULATION_EVENT = "usas:simulate-reset";
 
+// Khung chat báo trang Gợi ý trường: hồ sơ chính thức vừa được lưu, danh sách đang xem có thể đã cũ
+export const PROFILE_SAVED_EVENT = "usas:profile-saved";
+
 export function resetSimulation(): void {
   window.dispatchEvent(new CustomEvent(RESET_SIMULATION_EVENT));
 }

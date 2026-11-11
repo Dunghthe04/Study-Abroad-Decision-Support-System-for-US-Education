@@ -1,17 +1,18 @@
 """Chỉ số đo SLM tách ý, tính từ file dự đoán của scripts.eval_slm (data/slm/ket_qua/<model>_<split>.jsonl). Không cần Ollama.
 
-Mỗi dòng của file dự đoán: {"id", "cau_hoi", "nhan": {"cac_y": [...]}, "du_doan": {"cac_y": [...]}, "confidence", "giay"},
-và (từ bản mới) "dang_noi_ve" (ngữ cảnh đưa vào), "lui_ve_mo_ho" (model trả sai luật hai lần nên hệ thống lùi về "mơ hồ").
+Mỗi dòng của file dự đoán: {"id", "question", "nhan": {"intents": [...]}, "du_doan": {"intents": [...]}, "confidence", "giay"},
+và "context" (ngữ cảnh đưa vào), "lui_ve_mo_ho" (model trả sai luật hai lần nên hệ thống lùi về "mơ hồ"). nhan là đáp án đúng,
+du_doan là điều model trả; mỗi ý là {"type", "span", "entities"} đúng như hợp đồng (app/schemas/slm.py).
 
 Đơn vị đo là MỘT TIN NHẮN (một dòng). Các mức đúng xếp từ lỏng đến chặt, mức sau gồm mức trước:
   hop_le          model trả được kết quả dùng được (không phải lùi về mơ hồ)
   dung_tap_loai   đủ các loại ý, không xét thứ tự
   dung_thu_tu     đủ loại ý và đúng thứ tự
-  dung_nhiem_vu   thêm: mỗi ý đúng nhiệm vụ (nhiem_vu, cac_nhiem_vu, che_do, loai_con)
-  dung_thuc_the   thêm: mỗi ý đúng toàn bộ thực thể (trường, mục, bộ lọc, hồ sơ...). Chưa xét tiep_noi
-  dung_het        thêm: đúng cả tiep_noi (đúng hoàn toàn, trừ chữ doan vì doan được phép viết lại)
+  dung_nhiem_vu   thêm: mỗi ý đúng nhiệm vụ (tasks, mode, subtype)
+  dung_thuc_the   thêm: mỗi ý đúng toàn bộ entities (trường, mục, bộ lọc, hồ sơ...). Chưa xét follow_up
+  dung_het        thêm: đúng cả follow_up (đúng hoàn toàn, trừ chữ span vì span được phép viết lại)
 Ngoài ra: precision / recall / F1 theo từng loại ý và theo nhãn "loại/nhiệm vụ", ma trận nhầm lẫn, phân loại lỗi,
-độ chính xác của tiep_noi, kết quả theo số ý và theo có hoặc không có ngữ cảnh, thời gian, khoảng tin cậy 95% (bootstrap).
+độ chính xác của follow_up, kết quả theo số ý và theo có hoặc không có ngữ cảnh, thời gian, khoảng tin cậy 95% (bootstrap).
 """
 
 import csv
@@ -37,16 +38,18 @@ ERRORS = (
     "sai_thu_tu",
     "sai_nhiem_vu",
     "sai_thuc_the",
-    "sai_tiep_noi",
+    "sai_follow_up",
 )
+# Việc mặc định của loại có tasks khi model không ghi tasks (xem app/schemas/slm.py)
+DEFAULT_TASK = {"collect_profile": "answer", "knowledge": "general", "center_referral": "find"}
 
 
 def load_rows(path: str | Path) -> list[dict[str, Any]]:
     rows = [json.loads(line) for line in Path(path).read_text(encoding="utf-8").splitlines() if line.strip()]
     for r in rows:
-        if "cac_y" not in r.get("nhan", {}) or "cac_y" not in r.get("du_doan", {}):
+        if "intents" not in r.get("nhan", {}) or "intents" not in r.get("du_doan", {}):
             raise ValueError(
-                f"{path}: dòng {r.get('id')} không có cac_y (file dự đoán của bản cũ, hãy chạy lại scripts.eval_slm)"
+                f"{path}: dòng {r.get('id')} không có intents (file dự đoán của bản cũ, hãy chạy lại scripts.eval_slm)"
             )
     return rows
 
@@ -57,19 +60,16 @@ def types_of(intents: list[dict[str, Any]]) -> list[str]:
 
 # Nhiệm vụ của một ý, một chữ để so sánh: mỗi loại có khóa nhiệm vụ riêng
 def task_of(y: dict[str, Any]) -> str:
-    e = y.get("thuc_the") or {}
+    e = y.get("entities") or {}
     kind = y["type"]
-    if kind == "kich_ban":
-        return str(e.get("che_do"))
-    if kind == "ngoai_pham_vi":
-        return str(e.get("loai_con"))
-    if kind == "ho_so":
-        return ",".join(sorted(e.get("cac_nhiem_vu") or [])) or "chua_ro"
-    if kind == "mac_dinh":
-        return str(e.get("nhiem_vu", "tra_loi"))
-    if kind == "kien_thuc":
-        return str(e.get("nhiem_vu", "chung"))
-    return str(e.get("nhiem_vu", "tim"))  # trung_tam
+    if kind == "scenario":
+        return str(e.get("mode"))
+    if kind == "out_of_scope":
+        return str(e.get("subtype"))
+    tasks = e.get("tasks") or []
+    if kind == "profile_review":
+        return ",".join(sorted(tasks)) or "unclear"
+    return str(tasks[0]) if tasks else DEFAULT_TASK[kind]
 
 
 def label_of(y: dict[str, Any]) -> str:
@@ -77,30 +77,30 @@ def label_of(y: dict[str, Any]) -> str:
 
 
 # Các danh sách mà thứ tự không có nghĩa (nhiệm vụ, mục, yếu tố, bang, thay đổi): so sánh như tập hợp.
-# Danh sách mà thứ tự có nghĩa (cac_truong, cac_trung_tam: theo thứ tự học sinh nói) giữ nguyên
-SET_KEYS = ("cac_nhiem_vu", "muc", "yeu_to")
+# Danh sách mà thứ tự có nghĩa (schools, centers: theo thứ tự học sinh nói) giữ nguyên
+SET_KEYS = ("tasks", "fields", "factor")
 
 
 def canonical(entities: dict[str, Any]) -> dict[str, Any]:
-    out = {k: v for k, v in entities.items() if k != "tiep_noi"}
+    out = {k: v for k, v in entities.items() if k != "follow_up"}
     for key in SET_KEYS:
         if isinstance(out.get(key), list):
             out[key] = sorted(out[key])
-    if isinstance(out.get("bo_loc"), dict) and isinstance(out["bo_loc"].get("bang"), list):
-        out["bo_loc"] = {**out["bo_loc"], "bang": sorted(out["bo_loc"]["bang"])}
-    if isinstance(out.get("thay_doi"), list):
-        out["thay_doi"] = sorted(
-            out["thay_doi"], key=lambda c: json.dumps(c, sort_keys=True, ensure_ascii=False)
+    if isinstance(out.get("filters"), dict) and isinstance(out["filters"].get("state"), list):
+        out["filters"] = {**out["filters"], "state": sorted(out["filters"]["state"])}
+    if isinstance(out.get("changes"), list):
+        out["changes"] = sorted(
+            out["changes"], key=lambda c: json.dumps(c, sort_keys=True, ensure_ascii=False)
         )
     return out
 
 
 def entities_without_follow_up(y: dict[str, Any]) -> dict[str, Any]:
-    return canonical(y.get("thuc_the") or {})
+    return canonical(y.get("entities") or {})
 
 
 def follow_up_of(y: dict[str, Any]) -> bool:
-    return bool((y.get("thuc_the") or {}).get("tiep_noi"))
+    return bool((y.get("entities") or {}).get("follow_up"))
 
 
 def is_fallback(row: dict[str, Any]) -> bool:
@@ -125,7 +125,7 @@ def align(gold: list[str], pred: list[str]) -> list[tuple[int | None, int | None
 
 def judge(row: dict[str, Any]) -> dict[str, Any]:
     """Mức đúng, loại lỗi và một số cờ của MỘT tin."""
-    gold, pred = row["nhan"]["cac_y"], row["du_doan"]["cac_y"]
+    gold, pred = row["nhan"]["intents"], row["du_doan"]["intents"]
     gt, pt = types_of(gold), types_of(pred)
     valid = not is_fallback(row)
     same_set = sorted(gt) == sorted(pt)
@@ -151,7 +151,7 @@ def judge(row: dict[str, Any]) -> dict[str, Any]:
     elif same_follow:
         error = "dung_het"
     elif same_order:
-        error = "sai_nhiem_vu" if not same_task else "sai_thuc_the" if not same_entity else "sai_tiep_noi"
+        error = "sai_nhiem_vu" if not same_task else "sai_thuc_the" if not same_entity else "sai_follow_up"
     elif same_set:
         error = "sai_thu_tu"
     elif len(pt) < len(gt) and not (Counter(pt) - Counter(gt)):
@@ -182,7 +182,7 @@ def per_label(rows: list[dict[str, Any]], kind: str = "type") -> dict[str, dict[
     name = (lambda y: y["type"]) if kind == "type" else label_of
     tp, fp, fn = Counter(), Counter(), Counter()
     for r in rows:
-        gold, pred = Counter(map(name, r["nhan"]["cac_y"])), Counter(map(name, r["du_doan"]["cac_y"]))
+        gold, pred = Counter(map(name, r["nhan"]["intents"])), Counter(map(name, r["du_doan"]["intents"]))
         for label in gold | pred:
             hit = min(gold[label], pred[label])
             tp[label] += hit
@@ -208,19 +208,19 @@ def confusion(rows: list[dict[str, Any]]) -> dict[str, Any]:
     index = {name: i for i, name in enumerate(labels)}
     matrix = [[0] * len(labels) for _ in labels]  # hàng = nhãn đúng, cột = dự đoán
     for r in rows:
-        gt, pt = types_of(r["nhan"]["cac_y"]), types_of(r["du_doan"]["cac_y"])
+        gt, pt = types_of(r["nhan"]["intents"]), types_of(r["du_doan"]["intents"])
         for g, p in align(gt, pt):
             matrix[index[gt[g] if g is not None else NONE]][index[pt[p] if p is not None else NONE]] += 1
     return {"labels": labels, "matrix": matrix}
 
 
 def follow_up_scores(rows: list[dict[str, Any]]) -> dict[str, Any] | None:
-    """Độ chính xác của tiep_noi trên các tin có ngữ cảnh, tính trên các ý ghép được theo thứ tự."""
+    """Độ chính xác của follow_up trên các tin có ngữ cảnh, tính trên các ý ghép được theo thứ tự."""
     tp = fp = fn = tn = 0
     for r in rows:
-        if not r.get("dang_noi_ve"):
+        if not r.get("context"):
             continue
-        gold, pred = r["nhan"]["cac_y"], r["du_doan"]["cac_y"]
+        gold, pred = r["nhan"]["intents"], r["du_doan"]["intents"]
         for g, p in align(types_of(gold), types_of(pred)):
             if g is None or p is None:
                 continue
@@ -282,13 +282,15 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "f1_loai": macro_micro(by_type),
         "f1_nhan": macro_micro(by_task),
         "nham_lan": confusion(rows),
-        "tiep_noi": follow_up_scores(rows),
+        "follow_up": follow_up_scores(rows),
         "theo_so_y": group(
-            lambda r: str(min(len(r["nhan"]["cac_y"]), 3)) + ("+" if len(r["nhan"]["cac_y"]) >= 3 else "")
+            lambda r: str(min(len(r["nhan"]["intents"]), 3)) + ("+" if len(r["nhan"]["intents"]) >= 3 else "")
         ),
-        "theo_ngu_canh": group(lambda r: "co_ngu_canh" if r.get("dang_noi_ve") else "khong_ngu_canh"),
+        "theo_ngu_canh": group(lambda r: "co_ngu_canh" if r.get("context") else "khong_ngu_canh"),
         "theo_loai_chinh": group(
-            lambda r: next((y["type"] for y in r["nhan"]["cac_y"] if y["type"] != "mac_dinh"), "mac_dinh")
+            lambda r: next(
+                (y["type"] for y in r["nhan"]["intents"] if y["type"] != "collect_profile"), "collect_profile"
+            )
         ),
         "thoi_gian": {
             "trung_binh": statistics.mean(seconds),
@@ -325,7 +327,7 @@ def write_csv(path: Path, header: list[str], rows: list[list[Any]]) -> None:
 
 
 def load_training_log(path: str | Path) -> list[dict[str, float]]:
-    """Log huấn luyện: file .csv (cột step, epoch, train_loss, eval_loss, tùy chọn val_*) hoặc trainer_state.json của HuggingFace.
+    """Log huấn luyện: file .csv (cột step, epoch, train_loss hoặc loss, eval_loss, tùy chọn val_*) hoặc trainer_state.json của HuggingFace.
     Trả danh sách điểm {step, epoch, train_loss?, eval_loss?, ...} theo thứ tự bước."""
     path = Path(path)
     points: dict[float, dict[str, float]] = {}
@@ -352,11 +354,19 @@ def load_training_log(path: str | Path) -> list[dict[str, float]]:
                 )
     else:
         with open(path, encoding="utf-8-sig", newline="") as f:
-            for row in csv.DictReader(f):
+            reader = csv.DictReader(f)
+            # CSV xuất từ log_history của HuggingFace Trainer: train loss từng lần ghi nằm ở cột "loss";
+            # cột "train_loss" chỉ có một giá trị trung bình ở dòng cuối nên không dùng. CSV tự soạn thì dùng thẳng "train_loss".
+            from_trainer = "loss" in (reader.fieldnames or [])
+            for row in reader:
                 step = row.get("step")
                 if step in (None, ""):
                     continue
-                put(float(step), **{k: v for k, v in row.items() if k != "step"})
+                values = {k: v for k, v in row.items() if k != "step"}
+                if from_trainer:
+                    values.pop("train_loss", None)
+                    values["train_loss"] = values.pop("loss")
+                put(float(step), **values)
     return [points[s] for s in sorted(points)]
 
 

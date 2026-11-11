@@ -1,7 +1,7 @@
-"""Kịch bản what-if trong chat: kiểm tra `thay_doi` của SLM rồi đổi thành giá trị cho API simulate của .NET.
+"""Kịch bản what-if trong chat: kiểm tra `changes` của SLM rồi đổi thành giá trị cho API simulate của .NET.
 
-SLM đã hiểu câu và chuẩn hóa: gia_tri là số sạch ("1500", "3.8", "800000000"), don_vi cho biết thang GPA
-(thang_4, thang_10) hoặc tiền tệ (USD, VND). Code chỉ làm hai việc SLM không làm được:
+SLM đã hiểu câu và chuẩn hóa: value là số sạch ("1500", "3.8", "800000000"), unit cho biết thang GPA
+(scale_4, scale_10) hoặc tiền tệ (USD, VND). Code chỉ làm hai việc SLM không làm được:
 đổi VNĐ sang USD theo tỷ giá hôm nay, và chốt kiểm tra bằng đúng luật của hồ sơ (validators.py),
 vì model nhỏ vẫn có lúc trả số vô lý. Sai thì hỏi lại học sinh, không đem đi mô phỏng.
 Khóa đầu ra trùng SimulateRequest bên .NET, và chỉ gồm yếu tố mô phỏng được (SimulationOverrides).
@@ -14,12 +14,12 @@ from app.services.priority import PRIORITY_KEY
 from app.services.skills import validators
 from app.services.skills.validators import AskAgain
 
-# Khóa hồ sơ mô phỏng được. Chứng chỉ tiếng Anh thử được IELTS, TOEFL, Duolingo (don_vi cho biết bài nào)
+# Khóa hồ sơ mô phỏng được. Chứng chỉ tiếng Anh thử được IELTS, TOEFL, Duolingo (unit cho biết bài nào)
 SUPPORTED = ("gpa", "sat", "act", "english", "budget", "scholarship")
 SUPPORTED_TEXT = "GPA, SAT, ACT, IELTS, TOEFL, Duolingo, ngân sách, mức cần học bổng, và ưu tiên (chi phí thấp, học bổng nhiều, danh tiếng)"
 # Học sinh nói "bỏ" một yếu tố: kịch bản chỉ đổi giá trị, không xóa được điểm
-SKIP_ACTION = "bo_qua"
-GPA_SCALES = {"thang_4": 4, "thang_10": 10}
+SKIP_ACTION = "skip"
+GPA_SCALES = {"scale_4": 4, "scale_10": 10}
 SCHOLARSHIP_TEXT = {"optional": "không cần", "preferred": "nên có", "mandatory": "bắt buộc"}
 
 # Tên tiếng Việt của yếu tố chưa thử được, để câu trả lời nói rõ
@@ -44,6 +44,26 @@ LABELS = {
     "school_type": "loại trường",
     "visa_refused": "lịch sử visa",
 }
+# Mục lọc trường bên .NET (RecommendationService lọc theo ngành, bậc học, bang, loại trường): đổi là đổi hồ sơ thật,
+# không thử tạm được. Mỗi mục kèm nhóm của ô chọn sửa hồ sơ (skill_ho_so.EDIT_SECTIONS) để gắn nút sửa
+FILTER_FACTORS = {
+    "major": "Mục tiêu",
+    "target_level": "Mục tiêu",
+    "preferred_states": "Nguyện vọng",
+    "school_type": "Nguyện vọng",
+}
+# Mục phần gợi ý trường bên .NET không dùng: đổi cũng không làm đổi danh sách trường
+NO_EFFECT_FACTORS = (
+    "intake",
+    "education_system",
+    "current_grade",
+    "current_level",
+    "english_plan",
+    "standardized_plan",
+    "funding_source",
+    "relatives_state",
+    "visa_refused",
+)
 
 
 @dataclass
@@ -52,6 +72,9 @@ class WhatIf:
     changes: dict[str, Any] = field(default_factory=dict)
     # Yếu tố học sinh muốn đổi nhưng mô phỏng chưa làm được (tên tiếng Việt, không trùng nhau)
     unsupported: list[str] = field(default_factory=list)
+    # Trong số đó: mục lọc trường và mục không làm đổi danh sách trường (mã mục, không trùng nhau)
+    filters: list[str] = field(default_factory=list)
+    no_effect: list[str] = field(default_factory=list)
 
     def label(self) -> str:
         """Nói lại các thay đổi bằng lời, để học sinh biết mình đang thử gì."""
@@ -75,7 +98,7 @@ class WhatIf:
         return ", ".join(parts)
 
 
-# gia_tri là số SLM đã chuẩn hóa. Không đọc được thì hỏi lại. Chấp nhận dấu phẩy thập phân phòng SLM chưa chuẩn
+# value là số SLM đã chuẩn hóa. Không đọc được thì hỏi lại. Chấp nhận dấu phẩy thập phân phòng SLM chưa chuẩn
 def _number(value: object, ask: str) -> float:
     try:
         return float(str(value).strip().replace(",", "."))
@@ -90,7 +113,7 @@ def _budget_usd(amount: float, unit: str | None) -> int:
     return round(validators.to_usd(amount, currency))
 
 
-# Điểm tiếng Anh giả định: don_vi cho biết bài thi (ielts, toefl, duolingo). Chưa rõ bài nào thì chỉ suy ra khi điểm chắc chắn
+# Điểm tiếng Anh giả định: unit cho biết bài thi (ielts, toefl, duolingo). Chưa rõ bài nào thì chỉ suy ra khi điểm chắc chắn
 # là IELTS (từ 0 đến 9); điểm lớn hơn có thể là TOEFL hoặc Duolingo nên hỏi lại, không đoán. Bài khác (PTE...) mô phỏng chưa làm được
 ENGLISH_TESTS = {"ielts": "IELTS", "toefl": "TOEFL", "duolingo": "Duolingo"}
 
@@ -137,28 +160,37 @@ def _check(key: str, value: object, unit: str | None) -> tuple[str, Any] | None:
             return "scholarshipNeed", validators.check_scholarship(str(value))
 
 
-# Đọc danh sách thay_doi của SLM. Giá trị sai thì ném AskAgain; yếu tố mô phỏng chưa làm được thì ghi vào unsupported
+# Đọc danh sách changes của SLM. Giá trị sai thì ném AskAgain; yếu tố mô phỏng chưa làm được thì ghi vào unsupported
 def parse_what_if(changes: list[dict[str, Any]]) -> WhatIf:
     result = WhatIf()
     for change in changes:
-        key = change.get("yeu_to")
+        key = change.get("factor")
         if key == PRIORITY_KEY or str(key).startswith(
             "priority_"
         ):  # ưu tiên đọc riêng (priority.py), không phải giá trị hồ sơ
             continue
         checked = None
-        if key in SUPPORTED and change.get("hanh_dong") != SKIP_ACTION:
-            checked = _check(key, change.get("gia_tri", ""), change.get("don_vi"))
+        if key in SUPPORTED and change.get("action") != SKIP_ACTION:
+            checked = _check(key, change.get("value", ""), change.get("unit"))
         if checked is None:
             label = (
                 LABELS.get(key, "yếu tố này")
                 if key != "english"
                 else "chứng chỉ tiếng Anh ngoài IELTS, TOEFL, Duolingo"
             )
-            if change.get("hanh_dong") == SKIP_ACTION:
+            if change.get("action") == SKIP_ACTION:
                 label = LABELS.get(key, "yếu tố này")
             if label not in result.unsupported:
                 result.unsupported.append(label)
+            group = (
+                result.filters
+                if key in FILTER_FACTORS
+                else result.no_effect
+                if key in NO_EFFECT_FACTORS
+                else None
+            )
+            if group is not None and key not in group:
+                group.append(key)
             continue
         name, value = checked
         result.changes[name] = value

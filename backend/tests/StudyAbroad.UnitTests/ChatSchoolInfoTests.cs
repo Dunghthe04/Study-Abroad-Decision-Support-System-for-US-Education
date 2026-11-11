@@ -369,13 +369,13 @@ public class ChatSchoolInfoTests
     [Fact]
     public void ParseCompare_ReadsTheSchoolsAndFields_AndNeedsAtLeastTwo()
     {
-        var ok = System.Text.Json.JsonDocument.Parse("""{"question":"q","schools":["BU","NYU"],"fields":["chi_phi"],"kb_answer":"tạm"}""").RootElement;
+        var ok = System.Text.Json.JsonDocument.Parse("""{"question":"q","schools":["BU","NYU"],"fields":["cost"],"kb_answer":"tạm"}""").RootElement;
         var one = System.Text.Json.JsonDocument.Parse("""{"schools":["BU"]}""").RootElement;
 
         var query = ChatSchoolInfo.ParseCompare(ok)!;
 
         Assert.Equal(["BU", "NYU"], query.Schools);
-        Assert.Equal(["chi_phi"], query.Fields);
+        Assert.Equal(["cost"], query.Fields);
         Assert.Equal("tạm", query.KbAnswer);
         Assert.Null(ChatSchoolInfo.ParseCompare(one));
         Assert.Null(ChatSchoolInfo.ParseCompare(null));
@@ -386,16 +386,27 @@ public class ChatSchoolInfoTests
     [Fact]
     public void FieldsFromModel_MapsTheCodesInTheFixedOrderAndDropsUnknownOnes()
     {
-        var fields = ChatSchoolInfo.FieldsFromModel(["xep_hang", "chi_phi", "khac", "ma_la", "gpa"]);
+        var fields = ChatSchoolInfo.FieldsFromModel(["ranking", "cost", "other", "ma_la", "gpa"]);
 
         Assert.Equal([InfoField.Cost, InfoField.Gpa, InfoField.Ranking], fields);
     }
 
     [Fact]
-    public void ModelSaysUnstored_OnlyForTheKhacCode()
+    public void ModelSaysUnstored_OnlyForTheOtherCode()
     {
-        Assert.True(ChatSchoolInfo.ModelSaysUnstored(["chi_phi", "khac"]));
-        Assert.False(ChatSchoolInfo.ModelSaysUnstored(["chi_phi"]));
+        Assert.True(ChatSchoolInfo.ModelSaysUnstored(["cost", "other"]));
+        Assert.False(ChatSchoolInfo.ModelSaysUnstored(["cost"]));
+    }
+
+    [Theory]
+    [InlineData("housing")]
+    [InlineData("student_faculty_ratio")]
+    [InlineData("student_activities")]
+    [InlineData("campus_setting")]
+    public void ModelSaysUnstored_AlsoForTheFourNewSchoolFieldsThatHaveNoInfoFieldYet(string code)
+    {
+        Assert.True(ChatSchoolInfo.ModelSaysUnstored(["cost", code]));
+        Assert.Equal([InfoField.Cost], ChatSchoolInfo.FieldsFromModel(["cost", code]));   // vẫn không thành mục số liệu
     }
 
     [Fact]

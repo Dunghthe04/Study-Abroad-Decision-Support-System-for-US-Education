@@ -90,7 +90,17 @@ public class DbContextSchemaTests
         AssertForeignKey<PaymentTransaction>(db, nameof(PaymentTransaction.UserId), "users", DeleteBehavior.Cascade);
         AssertForeignKey<PaymentTransaction>(db, nameof(PaymentTransaction.UserSubscriptionId), "user_subscriptions", DeleteBehavior.SetNull);
         AssertForeignKey<FieldEvidence>(db, nameof(FieldEvidence.UniversityId), "universities", DeleteBehavior.Cascade);
+        // Nhật ký AI nối với tin trả lời của trợ lý; xóa tin thì giữ dòng nhật ký (token đã tiêu thật), chỉ bỏ liên kết
+        AssertForeignKey<AiCall>(db, nameof(AiCall.ChatMessageId), "chat_messages", DeleteBehavior.SetNull);
+        // Tin trợ lý trỏ tới tin hỏi nó trả lời; xóa tin hỏi thì giữ tin trả lời
+        AssertForeignKey<ChatMessage>(db, nameof(ChatMessage.ReplyToMessageId), "chat_messages", DeleteBehavior.SetNull);
 
+        // Màn token của admin: tổng thể (theo thời gian), theo người (người rồi thời gian), theo lượt chat (tin trả lời)
+        Assert.True(HasIndex<AiCall>(db, nameof(AiCall.CreatedAt)));
+        Assert.True(HasIndex<AiCall>(db, nameof(AiCall.UserId), nameof(AiCall.CreatedAt)));
+        Assert.True(HasIndex<AiCall>(db, nameof(AiCall.ChatMessageId)));
+
+        Assert.Equal("jsonb", ColumnType<ChatMessage>(db, nameof(ChatMessage.MetaJson)));
         Assert.Equal("jsonb", ColumnType<ExpertRule>(db, nameof(ExpertRule.ConditionJson)));
         Assert.Equal("jsonb", ColumnType<WhatIfSimulation>(db, nameof(WhatIfSimulation.SimulatedProfileJson)));
         Assert.Equal("jsonb", ColumnType<WhatIfSimulation>(db, nameof(WhatIfSimulation.SimulatedRecommendationsJson)));
@@ -106,6 +116,10 @@ public class DbContextSchemaTests
 
     private static string? ColumnType<T>(AppDbContext db, string propertyName) where T : class
         => db.Model.FindEntityType(typeof(T))!.FindProperty(propertyName)!.GetColumnType();
+
+    private static bool HasIndex<T>(AppDbContext db, params string[] propertyNames) where T : class
+        => db.Model.FindEntityType(typeof(T))!.GetIndexes()
+            .Any(index => index.Properties.Select(p => p.Name).SequenceEqual(propertyNames));
 
     private static bool HasUniqueIndex<T>(AppDbContext db, params string[] propertyNames) where T : class
         => db.Model.FindEntityType(typeof(T))!.GetIndexes()

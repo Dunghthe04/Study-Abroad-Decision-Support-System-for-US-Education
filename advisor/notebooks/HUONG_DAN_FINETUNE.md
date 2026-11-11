@@ -15,7 +15,7 @@ Dùng cùng `train_slm.ipynb` trong thư mục này. Notebook chạy trên Googl
 **Nén 4-bit (quantization) là gì?** Lưu mỗi tham số bằng 4 bit thay vì 16 bit để model vừa bộ nhớ GPU của Colab. Chất lượng giảm rất ít. Cuối cùng khi xuất file `.gguf` cũng nén kiểu này (`q4_k_m`) để chạy bằng Ollama.
 
 **Epoch, batch, bước (step):**
-- **Epoch**: một lượt đi qua hết dữ liệu train. `EPOCHS = 3` là tối đa 3 lượt.
+- **Epoch**: một lượt đi qua hết dữ liệu train. `EPOCHS = 2` là tối đa 2 lượt (đủ cho dữ liệu này; thêm lượt dễ học thuộc và rất tốn giờ GPU).
 - **Batch**: số hội thoại xử lý cùng lúc (`BATCH = 2`). Gom 8 lần rồi mới cập nhật (`GRAD_ACCUM = 8`), nên mỗi lần cập nhật dùng 2 × 8 = **16 hội thoại**.
 - **Bước (step)**: một lần cập nhật. Với 4.278 hội thoại thì một epoch khoảng 267 bước.
 
@@ -55,7 +55,7 @@ Mở `train_slm.ipynb` (tải lên Colab hoặc mở từ Drive). **Runtime → 
 Mỗi ô có tiêu đề giải thích. Tóm tắt:
 1. **Cài Unsloth** (vài phút). Nếu Colab đòi khởi động lại thì khởi động lại rồi chạy tiếp.
 2. **Tải 2 file dữ liệu lên Colab** (hộp thoại chọn file, chọn cả `train.jsonl` và `val.jsonl`) **và nối Drive** để lưu kết quả. Ô tự kiểm file đúng phiên bản mới.
-3. **Thông số**: nếu muốn bản thử nhanh, đổi `EPOCHS = 2`.
+3. **Thông số**: giữ mặc định. Tên lần train `VERSION` (ở ô Bước 3) phải **đổi mỗi lần train bằng dữ liệu mới** (v5, v6…); giữ nguyên khi chạy tiếp một lần train bị ngắt.
 4. **Tải model gốc** ở dạng nén 4-bit.
 5. **Gắn LoRA**: thêm các miếng vá sẽ được học.
 6. **Đọc dữ liệu và ghép thành chữ** theo khuôn mà Qwen quen. Ô in ra một mẫu để bạn nhìn bằng mắt.
@@ -79,12 +79,12 @@ Mỗi ô có tiêu đề giải thích. Tóm tắt:
 
 ## Phần C. Sau khi train
 
-1. **Tải về máy** `.gguf` và `Modelfile` từ `MyDrive/usas_slm/v4/` (cần khoảng 2,5 GB trống; **ổ C: đang gần đầy nên đặt vào ổ D:**).
+1. **Tải về máy** `.gguf` và `Modelfile` từ `MyDrive/usas_slm/<VERSION>/` (ví dụ `v5`; cần khoảng 2,5 GB trống; **ổ C: đang gần đầy nên đặt vào ổ D:**).
 2. Đặt vào `advisor/models/usas-slm-v4/`, mở `Modelfile` kiểm dòng `FROM` trỏ đúng tên file `.gguf`, rồi nạp vào Ollama:
    ```
    ollama create usas-slm-v4 -f Modelfile
    ```
-3. **Chưa chạy bằng code hệ thống được**: code hiện tại vẫn đọc tên tiếng Việt, anh em phải đổi theo `data/slm/TEN_KHOA_ANH_VIET.md`. Trong lúc chờ, thử trực tiếp bằng `ollama run usas-slm-v4` với đúng prompt `slm_intents.md` và tin user dạng JSON.
+3. **Cho hệ thống dùng model mới**: trong `advisor/.env` đặt `SLM_MODEL=usas-slm-v4` và `SLM_PROMPT=slm_intents` (hoặc xóa hai dòng này để dùng mặc định trong `app/core/config.py`). Code đọc đúng thứ model trả (`intents`, `span`, `entities`), không đổi tên. Model cũ (v3) trả tên tiếng Việt nên **không dùng được** với code hiện tại.
 4. **Đo chính thức** (sau khi Đức duyệt dữ liệu, train lại bản cuối): chạy `eval_slm` trên tập **test**, báo F1 theo nhãn, so với baseline Qwen gốc.
 5. Nếu muốn chia sẻ cho anh em: đẩy lên Hugging Face như model v3, ghi rõ trong README **prompt và dạng tin user phải dùng**.
 

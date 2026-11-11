@@ -43,7 +43,7 @@ class SkillCall:
             # viết liền không khoảng trắng để tiết kiệm token
             {"role": "user", "content": json.dumps(user, ensure_ascii=False, separators=(",", ":"))},
         ]
-        with usage_meter.purpose(self.name):
+        with usage_meter.purpose(self.name, self.skill_version):
             for _ in range(MAX_ATTEMPTS):
                 try:
                     raw = await self._llm.chat_json(messages, schema, temperature=0.0)

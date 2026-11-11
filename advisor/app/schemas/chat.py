@@ -35,12 +35,15 @@ class ResultSchool(CamelModel):
 # Hệ thống lưu lại thông tin về tiến trình hội thoại để khi người dùng nhắn tin tiếp theo, AI biết mình đang làm đến đâu.
 # Ngữ cảnh hội thoại để hiểu câu hỏi tiếp (conversation_context.py). Chỉ thực thể có cấu trúc, mất khi cuộc trò chuyện mới.
 # schools: tên trường đang nói tới (như model trả; .NET khớp lại với danh sách trường); fields: mã mục vừa hỏi;
-# bo_loc, sort: điều kiện tìm trường gần nhất (dạng model trả), để câu tiếp nối thêm điều kiện mới vào
+# filters, sort: điều kiện tìm trường gần nhất (dạng model trả), để câu tiếp nối thêm điều kiện mới vào;
+# service, city: dịch vụ (mã model trả) và thành phố (tên trong DB) của lần gợi ý trung tâm gần nhất, cho câu nối tiếp về trung tâm
 class ChatContext(CamelModel):
     schools: list[str] = []
     fields: list[str] = []
-    bo_loc: dict[str, Any] | None = None
+    filters: dict[str, Any] | None = None
     sort: str | None = None
+    service: str | None = None
+    city: str | None = None
 
 
 # Một dòng bảng quy đổi grade_scale.10, khớp record GradeScaleRuleDto bên .NET. Tra GPA chỉ dùng min_score (cận dưới)
@@ -60,8 +63,14 @@ class ChatState(CamelModel):
     # mã câu đang chờ học sinh trả lời, ví dụ "B2.D2"; None = không có câu nào chờ
     question_id: str | None = None
     asked: dict[str, int] = {}  # mã câu hỏi → số lần đã hỏi (tối đa 2) ví dụ câu hỏi B0 hỏi tối đa 2
+    # Đang sửa hồ sơ trong chat: mã câu các mục học sinh muốn sửa còn chờ hỏi (vd ["D3", "F1"]), hỏi lần lượt,
+    # hết thì về bảng rà soát X1. [] = đang hỏi mục cuối; None = không sửa gì
+    edit_queue: list[str] | None = None
     return_to: Step | None = None  # bước dở cần quay lại sau B5, B6
     intake_mode: Literal["chat", "form"] | None = None  # học sinh chọn điền hồ sơ bằng chat hay form
+    # Hồ sơ đã có từ trước (DB, form, lần trước): chỉ hỏi mục bắt buộc còn thiếu của việc học sinh đang muốn làm,
+    # không hỏi câu tùy chọn, xong thì hiện bảng rà soát. None = hồ sơ trống lúc bắt đầu hỏi, hỏi đủ các câu
+    required_only: list[str] | None = None
     has_results: bool = False  # đã có danh sách trường gợi ý chưa (skill_explain, skill_kich_ban cần)
     schools: list[ResultSchool] = []  # danh sách trường gợi ý gần nhất, .NET làm mới mỗi lượt khi has_results
     # Các trường đã chấm nhưng không nằm trong khối nào đang hiện: chỉ để khớp tên khi học sinh hỏi một trường cụ thể
@@ -125,12 +134,43 @@ class AiUsageCall(CamelModel):
     source: str  # claude | ollama
     model: str
     purpose: str = ""  # công việc (tên skill), để báo cáo theo tính năng
+    skill_version: str = (
+        ""  # phiên bản của skill đó (dòng đầu file skill), để biết câu trả lời do bản nào tạo ra
+    )
     input_tokens: int = 0
     output_tokens: int = 0
     cached_tokens: int = 0
     ok: bool = True
     error: str | None = None
     latency_ms: int = 0
+
+
+# Một ý do model đọc ra: loại, đoạn chữ học sinh viết (nguyên văn) và thực thể. Admin xem để biết model đã gán nhãn gì rồi sửa nhãn.
+# Có chữ của học sinh nên .NET chỉ lưu vào chat_messages.meta_json (bảng dữ liệu cá nhân, chỉ admin và moderator xem), không trả cho trình duyệt
+class SlmSummaryIntent(CamelModel):
+    type: str
+    span: str = ""
+    entities: dict[str, Any] = {}
+
+
+# SLM đã hiểu tin nhắn ra sao ở lượt này, để .NET đánh dấu câu chưa trả lời được (chat_messages.outcome) và admin xem chất lượng SLM.
+# Chỉ có khi lượt đi qua nhánh đọc tin (không có ở lượt nút chuyển thẳng)
+class SlmSummary(CamelModel):
+    # Kết quả NGUYÊN VĂN của model, lấy ngay sau khi model trả lời, trước các luật code đổi ý. Đây là "nhãn model gán" để admin đối chiếu và sửa.
+    # Rỗng khi bấm nút (không gọi SLM) hoặc khi model hỏng và phải dùng kết quả dự phòng (không có đầu ra thật của model)
+    model_intents: list[SlmSummaryIntent] = []
+    intents: list[
+        str
+    ] = []  # loại các ý hệ thống THỰC SỰ đã chạy, sau khi luật code hậu xử lý (collect_profile, knowledge, out_of_scope...)
+    out_of_scope: str | None = (
+        None  # loại con nếu có ý out_of_scope: exception | sensitive | farewell | ambiguous | about_system | human_handoff
+    )
+    confidence: float | None = (
+        None  # độ tin cậy 0 đến 1 của SLM; None khi không gọi SLM (bấm nút trả lời câu hồ sơ)
+    )
+    fallback: bool = (
+        False  # SLM hai lần đều sai, phải dùng kết quả dự phòng (ngay cả khi luật code sau đó cứu được câu)
+    )
 
 
 class AiUsageMixin(BaseModel):
@@ -168,3 +208,4 @@ class ChatResponse(CamelModel):
     ai_usage: list[
         AiUsageCall
     ] = []  # token từng lần gọi AI trong lượt này, để .NET ghi nhật ký và tính chi phí
+    slm: SlmSummary | None = None  # SLM hiểu tin nhắn ra sao; None nếu lượt không qua bước đọc tin

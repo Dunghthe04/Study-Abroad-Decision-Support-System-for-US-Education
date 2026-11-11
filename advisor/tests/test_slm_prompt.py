@@ -1,4 +1,4 @@
-"""Prompt tách ý: hai bản (đầy đủ và ngắn) phải nêu đủ hợp đồng, ví dụ trong prompt phải hợp lệ, và chọn được prompt cho OllamaSlm."""
+"""Prompt tách ý slm_intents: phải nêu đủ hợp đồng, ví dụ trong prompt phải hợp lệ, và chọn được prompt cho OllamaSlm."""
 
 import json
 
@@ -7,24 +7,27 @@ import pytest
 from app.core.config import Settings
 from app.schemas.slm import (
     CENTER_TASKS,
+    FILTER_ENUMS,
     FILTER_KEYS,
     INFO_FIELDS,
+    INTENTS,
     KNOWLEDGE_TASKS,
+    PROFILE_KEYS,
     PROFILE_TASKS,
     REVIEW_TASKS,
     SCENARIO_MODES,
+    SERVICE_CODES,
     SORTS,
     SUBTYPES,
+    TARGET_GROUPS,
     SlmTinResult,
 )
-from app.services.centers import SERVICES
 from app.services.skill_call import SKILLS_DIR, load_skill
 from app.services.slm_classifier import PROMPT_PATH, OllamaSlm, prompt_path
 from scripts.export_slm_chat import PROMPT_PATH as TRAIN_PROMPT_PATH
 from scripts.export_slm_chat import TRAIN_PROMPT, to_chat
 
-FULL = "slm_phan_loai_cac_y"
-SHORT = "slm_phan_loai_cac_y_ngan"
+NAME = "slm_intents"
 
 
 def text_of(name: str) -> str:
@@ -34,50 +37,49 @@ def text_of(name: str) -> str:
 # Mọi mã và khóa của hợp đồng: thêm một mã vào slm.py mà quên cập nhật prompt thì test này báo
 def contract_words() -> set[str]:
     words = {
-        "nhiem_vu", "cac_nhiem_vu", "cac_truong", "cac_trung_tam", "tiep_noi", "dang_noi_ve", "muc", "bo_loc", "sap_xep",
-        "muc_tieu", "thay_doi", "yeu_to", "gia_tri", "don_vi", "che_do", "loai_con", "dich_vu", "thanh_pho",
+        "intents", "type", "span", "entities", "question", "profile", "pending_question", "context",
+        "tasks", "schools", "school", "fields", "filters", "sort", "follow_up", "centers", "changes",
+        "factor", "value", "unit", "action", "skip", "mode", "target_group", "subtype", "service", "city",
+        "scale_4", "scale_10",
     }  # fmt: skip
-    words |= set(KNOWLEDGE_TASKS) | set(REVIEW_TASKS) | set(CENTER_TASKS) | set(INFO_FIELDS) | set(SORTS)
-    words |= set(PROFILE_TASKS) - {"tra_loi"}  # tra_loi là mặc định (vắng nhiem_vu), prompt không cần nêu
-    words |= set(FILTER_KEYS) | set(SERVICES) | set(SUBTYPES) | set(SCENARIO_MODES)
+    words |= set(INTENTS) | set(PROFILE_KEYS)
+    words |= set(KNOWLEDGE_TASKS) | set(REVIEW_TASKS) | set(CENTER_TASKS) | set(PROFILE_TASKS)
+    words |= set(INFO_FIELDS) | set(SORTS) | set(FILTER_KEYS) | set(SERVICE_CODES) | set(SUBTYPES)
+    words |= set(SCENARIO_MODES) | set(TARGET_GROUPS)
+    words |= {value for values in FILTER_ENUMS.values() for value in values}
     return words
 
 
-@pytest.mark.parametrize("name", [FULL, SHORT])
-def test_each_prompt_names_every_key_and_code_of_the_contract(name):
-    text = text_of(name)
+def test_the_prompt_names_every_key_and_code_of_the_contract():
+    text = text_of(NAME)
 
     missing = sorted(w for w in contract_words() if w not in text)
 
-    assert not missing, f"{name} thiếu: {missing}"
+    assert not missing, f"{NAME} thiếu: {missing}"
 
 
-@pytest.mark.parametrize("name", [FULL, SHORT])
-def test_every_example_in_a_prompt_is_a_valid_answer(name):
-    examples = [line for line in text_of(name).splitlines() if line.startswith('{"cac_y":[{')]
+def test_every_example_in_the_prompt_is_a_valid_answer():
+    examples = [line for line in text_of(NAME).splitlines() if line.startswith('{"intents":[{')]
 
     assert examples
     for line in examples:
         SlmTinResult.from_raw(json.loads(line))
 
 
-def test_the_short_prompt_stays_short_so_training_and_serving_stay_cheap():
-    short, full = text_of(SHORT), text_of(FULL)
+def test_the_prompt_does_not_use_the_old_vietnamese_contract():
+    text = text_of(NAME)
 
-    assert len(short) <= 5000  # khoảng 1.5k token; bản đầy đủ khoảng 4.6k token
-    assert len(short) < len(full) / 2
+    assert not [
+        w
+        for w in ("cac_y", "thuc_the", "doan", "nhiem_vu", "mac_dinh", "kien_thuc", "ngoai_pham_vi")
+        if w in text
+    ]
 
 
-def test_both_prompts_are_the_same_version_so_a_change_to_one_is_not_forgotten():
-    assert load_skill(SKILLS_DIR / f"{FULL}.md")[1] == load_skill(SKILLS_DIR / f"{SHORT}.md")[1]
-
-
-def test_the_default_prompt_is_the_short_one_the_v4_model_was_tuned_on():
-    # usas-slm-v4 được fine-tune với prompt ngắn nên chạy thật mặc định dùng bản ngắn
-    assert Settings(_env_file=None).slm_prompt == SHORT
-    assert PROMPT_PATH.stem == FULL
-    # Dữ liệu train đã tiếng Anh nên huấn luyện dùng prompt tiếng Anh slm_intents; prompt ngắn tiếng Việt (2.3 và bản 2.2 cho v3) giữ cho chạy thật tới khi đổi code
-    assert TRAIN_PROMPT == "slm_intents" and TRAIN_PROMPT_PATH.stem == "slm_intents"
+def test_the_default_prompt_is_the_one_training_uses():
+    assert Settings(_env_file=None).slm_prompt == NAME
+    assert PROMPT_PATH.stem == NAME
+    assert TRAIN_PROMPT == NAME and TRAIN_PROMPT_PATH.stem == NAME
 
 
 class CaptureSlm:
@@ -90,14 +92,13 @@ class CaptureSlm:
 
 
 async def test_the_slm_sends_the_prompt_that_was_chosen():
-    for name in (FULL, SHORT):
-        slm = CaptureSlm()
-        reader = OllamaSlm(slm, prompt=name)
+    slm = CaptureSlm()
+    reader = OllamaSlm(slm, prompt=NAME)
 
-        await reader.read("em lớp 12", None, "")
+    await reader.read("em lớp 12", None, "")
 
-        assert slm.messages[0]["content"].startswith(f"# PHÂN LOẠI TIN NHẮN ({name})")
-        assert reader.prompt_version == "2.3"
+    assert slm.messages[0]["content"].startswith(f"# PHÂN LOẠI TIN NHẮN ({NAME})")
+    assert reader.prompt_version == "3.0"
 
 
 def test_an_unknown_prompt_name_is_rejected_at_start_up():
@@ -139,12 +140,3 @@ def test_a_training_row_with_context_carries_it_to_the_user_message():
         "fields": ["cost"],
     }
     assert chat["messages"][0]["content"].startswith("# PHÂN LOẠI TIN NHẮN (slm_intents)")
-
-
-def test_the_frozen_prompt_for_model_v3_keeps_its_old_version_and_contract():
-    # usas-slm-v3 được train với prompt 2.2 (13 mục, chưa có nhà ở, khuôn viên...). Prompt mới 2.3 chỉ dùng cho model train lại
-    frozen = text_of("slm_phan_loai_cac_y_ngan_v22")
-
-    assert "skill_version 2.2" in frozen.splitlines()[0]
-    assert "nha_o" not in frozen and "khuon_vien" not in frozen
-    assert "nha_o" in text_of(SHORT) and "skill_version 2.3" in text_of(SHORT).splitlines()[0]

@@ -50,12 +50,12 @@ async def test_a_skill_in_the_registry_is_run_by_its_branch_in_chat_flow():
 
 
 async def test_out_of_scope_works_without_any_registered_skill():
-    flow = flow_with({}, tin(("ngoai_pham_vi", {"loai_con": "tam_biet"})))
+    flow = flow_with({}, tin(("out_of_scope", {"subtype": "farewell"})))
     req = ChatRequest(messages=[ChatMessage(role="user", content="em cảm ơn ạ")], state=ChatState())
 
     res = await flow.reply(req)
 
-    assert res.skills == ["ngoai_pham_vi"] and res.answer
+    assert res.skills == ["out_of_scope"] and res.answer
 
 
 async def test_knowledge_skill_embeds_with_the_embedder_and_writes_with_the_llm():

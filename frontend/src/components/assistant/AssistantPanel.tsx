@@ -350,7 +350,19 @@ function Turn({ turn, onReply }: { turn: AssistantTurn; onReply?: (value: string
       {/* E: chỉ chọn được ở lượt cuối, giống nút trả lời nhanh */}
       {turn.widget?.type === "major" && <MajorWidget onPick={onReply} />}
       {turn.widget?.type === "select" && <SelectWidget data={turn.widget.data} onPick={onReply} />}
-      {turn.widget?.type === "school" && <SchoolWidget data={turn.widget.data} onPick={onReply} />}
+      {turn.widget?.type === "school" && (
+        <SchoolWidget
+          data={turn.widget.data}
+          onPick={
+            onReply
+              ? (question, schoolCode) =>
+                  turn.widget?.data?.kind === "explain"
+                    ? sendAction(question, { type: "explain", schoolCode })
+                    : onReply(question)
+              : undefined
+          }
+        />
+      )}
       {turn.widget?.type === "budget" && <BudgetWidget data={turn.widget.data} onPick={onReply} />}
       {turn.widget?.type === "scholarship" && <ScholarshipWidget data={turn.widget.data} onPick={onReply} />}
       {/* Mục 1: học sinh chọn điền bằng form. from=chat: điền xong form thì quay về chat trả lời câu đã hỏi */}

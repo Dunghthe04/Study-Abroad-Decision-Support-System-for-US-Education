@@ -1,11 +1,15 @@
 """Việc 2.3: bắt đầu hỏi hồ sơ. Các hàm thuần nên không cần AI hay DB."""
 
+import pytest
+
 from app.schemas.chat import ProfileField
+from app.schemas.slm import SlmY
 from app.services.chat_flow import QUESTIONS
 from app.services.intake import (
     CHAT_BUTTON,
     FIELD_QUESTION,
     FORM_BUTTON,
+    form_goals,
     has_profile,
     intake_choice,
     next_question,
@@ -63,3 +67,34 @@ def test_every_required_field_has_a_question_that_exists():
     for step, question_id in FIELD_QUESTION.values():
         assert question_id in QUESTIONS
         assert step in {"B1", "B2"}
+
+
+# Mở form từ chat: mục tiêu tích sẵn theo câu đang chờ, khớp việc GeneratedAdviceBranch sẽ làm
+@pytest.mark.parametrize(
+    ("span", "tasks", "goals"),
+    [
+        ("đánh giá hồ sơ cho em", ["assessment"], ["danh_gia"]),
+        ("lên lộ trình cho em", ["roadmap"], ["lo_trinh"]),
+        ("hồ sơ em thế nào", [], ["danh_gia", "lo_trinh"]),
+        ("gợi ý trường cho em", [], ["goi_y_truong"]),
+        (
+            "đánh giá hồ sơ và đề xuấ trường cho tôi",
+            ["assessment", "school_list"],
+            ["danh_gia", "goi_y_truong"],
+        ),
+        ("lộ trình và gợi ý trường", ["roadmap"], ["lo_trinh", "goi_y_truong"]),
+        (
+            "đánh giá, lộ trình, chọn trường",
+            ["roadmap", "assessment", "school_list"],
+            ["danh_gia", "lo_trinh", "goi_y_truong"],
+        ),
+    ],
+)
+def test_form_goals_follow_the_pending_question(span: str, tasks: list[str], goals: list[str]):
+    pending = SlmY(type="profile_review", span=span, entities={"tasks": tasks} if tasks else {})
+    assert form_goals(pending) == goals
+
+
+def test_form_goals_are_empty_without_a_pending_profile_review():
+    assert form_goals(None) == []
+    assert form_goals(SlmY(type="knowledge", span="SAT là gì", entities={})) == []

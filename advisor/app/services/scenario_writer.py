@@ -119,6 +119,10 @@ def check_answer(raw: dict[str, Any], req: ScenarioNoteRequest) -> ScenarioNoteR
     if extra:
         raise ValueError(f"lời nhắc số không có trong kết quả: {extra}")
 
+    # Không có yếu tố nào chưa thử được thì không được nói "chưa thử được" (có lần Claude viết "không có yếu tố nào chưa thử được")
+    if not req.unsupported and "chưa thử được" in text.lower():
+        raise ValueError("nói chưa thử được trong khi mọi yếu tố đều đã thử")
+
     # Bỏ các tên trường hợp lệ rồi tìm tên trường khác của kết quả: nhắc tới là sai (có thể là nhầm nhóm hoặc bịa)
     rest = text.lower()
     for name in sorted({s.name for g in req.groups for s in g.schools}, key=len, reverse=True):

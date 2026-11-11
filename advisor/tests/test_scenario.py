@@ -2,17 +2,17 @@
 
 import pytest
 
-from app.services.scenario import SKIP_ACTION, parse_what_if
-from app.services.skills import exchange_rate
+from app.services.scenario import FILTER_FACTORS, SKIP_ACTION, parse_what_if
+from app.services.skills import exchange_rate, skill_ho_so
 from app.services.skills.validators import AskAgain
 
 
 def change(key: str, value: str | None = None, unit: str | None = None, **extra) -> dict[str, str]:
-    out = {"yeu_to": key, **extra}
+    out = {"factor": key, **extra}
     if value is not None:
-        out["gia_tri"] = value
+        out["value"] = value
     if unit is not None:
-        out["don_vi"] = unit
+        out["unit"] = unit
     return out
 
 
@@ -51,7 +51,7 @@ def test_a_missing_value_asks_again():
 
 # ---- GPA ----
 def test_gpa_keeps_the_scale_the_slm_read():
-    result = parse(change("gpa", "9.0", "thang_10"))
+    result = parse(change("gpa", "9.0", "scale_10"))
 
     assert result.changes == {"gpa": {"value": 9.0, "scale": 10}}
 
@@ -63,11 +63,11 @@ def test_gpa_without_a_scale_is_guessed_like_the_profile_does():
 
 def test_gpa_above_its_scale_asks_again():
     with pytest.raises(AskAgain, match="lớn hơn thang"):
-        parse(change("gpa", "4.5", "thang_4"))
+        parse(change("gpa", "4.5", "scale_4"))
 
 
 def test_a_decimal_comma_is_tolerated():
-    assert parse(change("gpa", "3,8", "thang_4")).changes["gpa"]["value"] == 3.8
+    assert parse(change("gpa", "3,8", "scale_4")).changes["gpa"]["value"] == 3.8
 
 
 # ---- tiếng Anh ----
@@ -148,7 +148,7 @@ def test_scholarship_must_be_one_of_the_three_levels():
 
 # ---- yếu tố chưa thử được ----
 def test_skipping_a_factor_cannot_be_simulated():
-    result = parse(change("sat", hanh_dong=SKIP_ACTION))
+    result = parse(change("sat", action=SKIP_ACTION))
 
     assert result.changes == {}
     assert result.unsupported == ["SAT"]
@@ -174,9 +174,28 @@ def test_the_last_value_wins_when_a_factor_repeats():
 
 # ---- lời nói lại ----
 def test_label_restates_every_change_in_words():
-    result = parse(change("gpa", "3.8", "thang_4"), change("sat", "1500"), change("english", "7.5"),
+    result = parse(change("gpa", "3.8", "scale_4"), change("sat", "1500"), change("english", "7.5"),
                    change("budget", "40000", "USD"), change("scholarship", "mandatory"))  # fmt: skip
 
     assert result.label() == (
         "GPA 3.8 (thang 4), SAT 1500, IELTS 7.5, ngân sách khoảng 40.000 USD mỗi năm, mức cần học bổng: bắt buộc"
     )
+
+
+# Mục không thử được chia nhóm: lọc trường, không ảnh hưởng danh sách; mục khác không vào nhóm nào
+def test_unsupported_factors_are_grouped():
+    result = parse(
+        change("major", "CS"),
+        change("intake", "Fall 2027"),
+        change("activities", "x"),
+        change("major", "Toán"),
+    )
+
+    assert result.filters == ["major"]
+    assert result.no_effect == ["intake"]
+    assert result.unsupported == ["ngành", "kỳ nhập học", "hoạt động ngoại khóa"]
+
+
+# Nút sửa của mục lọc trường mở đúng nhóm có trong ô chọn sửa hồ sơ
+def test_filter_factors_point_to_edit_sections():
+    assert set(FILTER_FACTORS.values()) <= set(skill_ho_so.EDIT_SECTIONS)

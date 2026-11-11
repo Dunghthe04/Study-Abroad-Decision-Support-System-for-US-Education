@@ -21,7 +21,7 @@ class SilentBranch:
 def make_client() -> TestClient:
     # Không dùng "with" nên không chạy lifespan, không cần Ollama, Claude
     app = create_app()
-    flow = ChatFlow(FixedSlm(tin("kien_thuc")), {"kien_thuc": SilentBranch()})
+    flow = ChatFlow(FixedSlm(tin("knowledge")), {"knowledge": SilentBranch()})
     app.dependency_overrides[get_chat_flow] = lambda: flow
     return TestClient(app)
 
@@ -96,8 +96,8 @@ class Broken:
 
 
 def test_the_stream_sends_progress_each_answer_then_the_same_json_as_the_plain_endpoint():
-    slm = tin(("kien_thuc", {}, "I-20 là gì"), ("kien_thuc", {}, "SAT là gì"))
-    client = stream_client(ChatFlow(FixedSlm(slm), {"kien_thuc": Echo()}))
+    slm = tin(("knowledge", {}, "I-20 là gì"), ("knowledge", {}, "SAT là gì"))
+    client = stream_client(ChatFlow(FixedSlm(slm), {"knowledge": Echo()}))
     body = {
         "messages": [{"role": "user", "content": "I-20 là gì, SAT là gì"}],
         "state": {"currentStep": "B3"},
@@ -115,7 +115,7 @@ def test_the_stream_sends_progress_each_answer_then_the_same_json_as_the_plain_e
 
 
 def test_an_error_while_answering_ends_the_stream_with_an_error_line():
-    client = stream_client(ChatFlow(FixedSlm(tin("kien_thuc")), {"kien_thuc": Broken()}))
+    client = stream_client(ChatFlow(FixedSlm(tin("knowledge")), {"knowledge": Broken()}))
 
     res = client.post("/api/v1/chat/stream", json={"messages": [{"role": "user", "content": "x"}]})
 

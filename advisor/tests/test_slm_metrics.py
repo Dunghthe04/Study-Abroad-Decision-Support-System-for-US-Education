@@ -22,16 +22,16 @@ from scripts.slm_metrics import (
 )
 
 
-def y(kind: str, doan: str = "x", **entities) -> dict:
-    return {"type": kind, "doan": doan, "thuc_the": entities}
+def y(kind: str, span: str = "x", **entities) -> dict:
+    return {"type": kind, "span": span, "entities": entities}
 
 
 def row(row_id: str, gold: list, pred: list, **extra) -> dict:
     return {
         "id": row_id,
-        "cau_hoi": "câu hỏi",
-        "nhan": {"cac_y": gold},
-        "du_doan": {"cac_y": pred},
+        "question": "câu hỏi",
+        "nhan": {"intents": gold},
+        "du_doan": {"intents": pred},
         "confidence": 1.0,
         "giay": 1.0,
         **extra,
@@ -39,12 +39,12 @@ def row(row_id: str, gold: list, pred: list, **extra) -> dict:
 
 
 # ---- chấm một tin ----
-def test_a_perfect_answer_passes_every_level_and_the_wording_of_doan_does_not_matter():
+def test_a_perfect_answer_passes_every_level_and_the_wording_of_span_does_not_matter():
     j = judge(
         row(
             "a",
-            [y("kien_thuc", "học phí Harvard", truong="Harvard")],
-            [y("kien_thuc", "Harvard học phí", truong="Harvard")],
+            [y("knowledge", "học phí Harvard", schools=["Harvard"])],
+            [y("knowledge", "Harvard học phí", schools=["Harvard"])],
         )
     )
 
@@ -56,21 +56,31 @@ def test_a_perfect_answer_passes_every_level_and_the_wording_of_doan_does_not_ma
 @pytest.mark.parametrize(
     ("gold", "pred", "error", "last_level"),
     [
-        ([y("kien_thuc"), y("trung_tam")], [y("kien_thuc")], "thieu_y", None),
-        ([y("kien_thuc")], [y("kien_thuc"), y("trung_tam")], "thua_y", None),
-        ([y("kien_thuc")], [y("ho_so")], "sai_loai", None),
-        ([y("kien_thuc"), y("trung_tam")], [y("trung_tam"), y("kien_thuc")], "sai_thu_tu", "dung_tap_loai"),
+        ([y("knowledge"), y("center_referral")], [y("knowledge")], "thieu_y", None),
+        ([y("knowledge")], [y("knowledge"), y("center_referral")], "thua_y", None),
+        ([y("knowledge")], [y("profile_review")], "sai_loai", None),
         (
-            [y("ho_so", cac_nhiem_vu=["danh_gia"])],
-            [y("ho_so", cac_nhiem_vu=["lo_trinh"])],
+            [y("knowledge"), y("center_referral")],
+            [y("center_referral"), y("knowledge")],
+            "sai_thu_tu",
+            "dung_tap_loai",
+        ),
+        (
+            [y("profile_review", tasks=["assessment"])],
+            [y("profile_review", tasks=["roadmap"])],
             "sai_nhiem_vu",
             "dung_thu_tu",
         ),
-        ([y("kien_thuc", truong="MIT")], [y("kien_thuc", truong="Yale")], "sai_thuc_the", "dung_nhiem_vu"),
         (
-            [y("kien_thuc", truong="MIT", tiep_noi=True)],
-            [y("kien_thuc", truong="MIT")],
-            "sai_tiep_noi",
+            [y("knowledge", schools=["MIT"])],
+            [y("knowledge", schools=["Yale"])],
+            "sai_thuc_the",
+            "dung_nhiem_vu",
+        ),
+        (
+            [y("knowledge", schools=["MIT"], follow_up=True)],
+            [y("knowledge", schools=["MIT"])],
+            "sai_follow_up",
             "dung_thuc_the",
         ),
     ],
@@ -89,8 +99,8 @@ def test_a_fallback_answer_counts_as_unusable_whatever_it_says():
     j = judge(
         row(
             "a",
-            [y("ngoai_pham_vi", loai_con="mo_ho")],
-            [y("ngoai_pham_vi", loai_con="mo_ho")],
+            [y("out_of_scope", subtype="ambiguous")],
+            [y("out_of_scope", subtype="ambiguous")],
             lui_ve_mo_ho=True,
         )
     )
@@ -99,52 +109,54 @@ def test_a_fallback_answer_counts_as_unusable_whatever_it_says():
 
 
 def test_an_old_file_without_the_flag_uses_confidence_zero_as_the_fallback_mark():
-    j = judge(row("a", [y("kien_thuc")], [y("kien_thuc")], confidence=0.0))
+    j = judge(row("a", [y("knowledge")], [y("knowledge")], confidence=0.0))
 
     assert j["loi"] == "json_loi"
 
 
 def test_the_task_of_each_type_is_read_from_its_own_key():
     same = [
-        (y("kich_ban", che_do="what_if"), y("kich_ban", che_do="goal_seeking")),
-        (y("ngoai_pham_vi", loai_con="tam_biet"), y("ngoai_pham_vi", loai_con="mo_ho")),
-        (y("mac_dinh"), y("mac_dinh", nhiem_vu="sua")),
-        (y("trung_tam"), y("trung_tam", nhiem_vu="dat_lich")),
-        (y("ho_so", cac_nhiem_vu=[]), y("ho_so", cac_nhiem_vu=["danh_gia"])),
+        (y("scenario", mode="what_if"), y("scenario", mode="goal_seeking")),
+        (y("out_of_scope", subtype="farewell"), y("out_of_scope", subtype="ambiguous")),
+        (y("collect_profile"), y("collect_profile", tasks=["edit"])),
+        (y("center_referral"), y("center_referral", tasks=["booking"])),
+        (y("profile_review", tasks=[]), y("profile_review", tasks=["assessment"])),
     ]
     for g, p in same:
         assert judge(row("a", [g], [p]))["loi"] == "sai_nhiem_vu", g["type"]
     assert judge(
         row(
             "a",
-            [y("ho_so", cac_nhiem_vu=["lo_trinh", "danh_gia"])],
-            [y("ho_so", cac_nhiem_vu=["danh_gia", "lo_trinh"])],
+            [y("profile_review", tasks=["roadmap", "assessment"])],
+            [y("profile_review", tasks=["assessment", "roadmap"])],
         )
     )["dung_het"]  # thứ tự nhiệm vụ không quan trọng
 
 
 # ---- F1 ----
 def test_precision_recall_f1_count_every_intent_of_a_message():
-    rows = [row("a", [y("kien_thuc"), y("kien_thuc")], [y("kien_thuc"), y("trung_tam")])]
+    rows = [row("a", [y("knowledge"), y("knowledge")], [y("knowledge"), y("center_referral")])]
 
     t = per_label(rows)
 
-    assert (t["kien_thuc"]["tp"], t["kien_thuc"]["fn"], t["kien_thuc"]["fp"]) == (1, 1, 0)
+    assert (t["knowledge"]["tp"], t["knowledge"]["fn"], t["knowledge"]["fp"]) == (1, 1, 0)
     assert (
-        t["kien_thuc"]["precision"] == 1
-        and t["kien_thuc"]["recall"] == 0.5
-        and round(t["kien_thuc"]["f1"], 3) == 0.667
+        t["knowledge"]["precision"] == 1
+        and t["knowledge"]["recall"] == 0.5
+        and round(t["knowledge"]["f1"], 3) == 0.667
     )
-    assert (t["trung_tam"]["tp"], t["trung_tam"]["fp"], t["trung_tam"]["fn"]) == (0, 1, 0) and t["trung_tam"][
-        "f1"
-    ] == 0
+    assert (t["center_referral"]["tp"], t["center_referral"]["fp"], t["center_referral"]["fn"]) == (
+        0,
+        1,
+        0,
+    ) and t["center_referral"]["f1"] == 0
 
 
 def test_f1_by_type_and_task_label_differ_when_only_the_task_is_wrong():
-    rows = [row("a", [y("kich_ban", che_do="what_if")], [y("kich_ban", che_do="goal_seeking")])]
+    rows = [row("a", [y("scenario", mode="what_if")], [y("scenario", mode="goal_seeking")])]
 
-    assert per_label(rows, "type")["kich_ban"]["f1"] == 1
-    assert per_label(rows, "task")["kich_ban/what_if"]["f1"] == 0
+    assert per_label(rows, "type")["scenario"]["f1"] == 1
+    assert per_label(rows, "task")["scenario/what_if"]["f1"] == 0
 
 
 def test_prf_handles_empty_counts():
@@ -154,9 +166,9 @@ def test_prf_handles_empty_counts():
 # ---- ma trận nhầm lẫn ----
 def test_the_confusion_matrix_pairs_intents_in_order_and_marks_missing_and_extra():
     rows = [
-        row("a", [y("mac_dinh"), y("kien_thuc")], [y("mac_dinh"), y("ho_so")]),
-        row("b", [y("kien_thuc"), y("trung_tam")], [y("kien_thuc")]),
-        row("c", [y("kien_thuc")], [y("kien_thuc"), y("kich_ban")]),
+        row("a", [y("collect_profile"), y("knowledge")], [y("collect_profile"), y("profile_review")]),
+        row("b", [y("knowledge"), y("center_referral")], [y("knowledge")]),
+        row("c", [y("knowledge")], [y("knowledge"), y("scenario")]),
     ]
 
     c = confusion(rows)
@@ -166,10 +178,10 @@ def test_the_confusion_matrix_pairs_intents_in_order_and_marks_missing_and_extra
         for p in c["labels"]
     }
 
-    assert at[("kien_thuc", "ho_so")] == 1  # nhầm loại
-    assert at[("trung_tam", NONE)] == 1  # thiếu ý
-    assert at[(NONE, "kich_ban")] == 1  # thừa ý
-    assert at[("mac_dinh", "mac_dinh")] == 1 and at[("kien_thuc", "kien_thuc")] == 2
+    assert at[("knowledge", "profile_review")] == 1  # nhầm loại
+    assert at[("center_referral", NONE)] == 1  # thiếu ý
+    assert at[(NONE, "scenario")] == 1  # thừa ý
+    assert at[("collect_profile", "collect_profile")] == 1 and at[("knowledge", "knowledge")] == 2
 
 
 def test_align_pairs_equal_blocks_first():
@@ -177,23 +189,23 @@ def test_align_pairs_equal_blocks_first():
     assert align([], ["a"]) == [(None, 0)]
 
 
-# ---- tiep_noi ----
+# ---- follow_up ----
 def test_follow_up_scores_only_use_messages_that_have_context():
-    ctx = {"truong": ["Harvard"]}
+    ctx = {"schools": ["Harvard"]}
     rows = [
         row(
-            "a", [y("kien_thuc", tiep_noi=True)], [y("kien_thuc", tiep_noi=True)], dang_noi_ve=ctx
+            "a", [y("knowledge", follow_up=True)], [y("knowledge", follow_up=True)], context=ctx
         ),  # đúng, là nối tiếp
-        row("b", [y("kien_thuc", tiep_noi=True)], [y("kien_thuc")], dang_noi_ve=ctx),  # bỏ sót nối tiếp
-        row("c", [y("kien_thuc")], [y("kien_thuc", tiep_noi=True)], dang_noi_ve=ctx),  # nối tiếp nhầm
-        row("d", [y("kien_thuc")], [y("kien_thuc")], dang_noi_ve=ctx),  # đúng, không nối tiếp
-        row("e", [y("kien_thuc")], [y("kien_thuc", tiep_noi=True)]),  # không có ngữ cảnh: không tính
+        row("b", [y("knowledge", follow_up=True)], [y("knowledge")], context=ctx),  # bỏ sót nối tiếp
+        row("c", [y("knowledge")], [y("knowledge", follow_up=True)], context=ctx),  # nối tiếp nhầm
+        row("d", [y("knowledge")], [y("knowledge")], context=ctx),  # đúng, không nối tiếp
+        row("e", [y("knowledge")], [y("knowledge", follow_up=True)]),  # không có ngữ cảnh: không tính
     ]
 
     s = follow_up_scores(rows)
 
     assert s["so_y"] == 4 and s["accuracy"] == 0.5 and s["precision"] == 0.5 and s["recall"] == 0.5
-    assert follow_up_scores([row("e", [y("kien_thuc")], [y("kien_thuc")])]) is None
+    assert follow_up_scores([row("e", [y("knowledge")], [y("knowledge")])]) is None
 
 
 # ---- khoảng tin cậy ----
@@ -210,16 +222,16 @@ def test_the_confidence_interval_is_reproducible_and_contains_the_mean():
 def sample_rows(good: int, bad: int) -> list[dict]:
     """good tin đúng rồi bad tin sai (sai thực thể). Id là r0, r1, ... nên hai lần chạy cùng tổng số tin thì cùng một tập tin."""
     rows = [
-        row(f"r{i}", [y("kien_thuc", truong="MIT")], [y("kien_thuc", truong="MIT")], giay=0.5 + i / 100)
+        row(f"r{i}", [y("knowledge", schools=["MIT"])], [y("knowledge", schools=["MIT"])], giay=0.5 + i / 100)
         for i in range(good)
     ]
     rows += [
         row(
             f"r{good + i}",
-            [y("kien_thuc", truong="MIT")],
-            [y("kien_thuc", truong="Yale")],
+            [y("knowledge", schools=["MIT"])],
+            [y("knowledge", schools=["Yale"])],
             giay=1.0,
-            dang_noi_ve={"truong": ["A"]},
+            context={"schools": ["A"]},
         )
         for i in range(bad)
     ]
@@ -243,7 +255,8 @@ def test_the_summary_counts_every_message_once_and_splits_by_group():
 def test_a_file_from_the_old_single_intent_format_is_rejected_with_a_clear_message(tmp_path):
     path = tmp_path / "cu.jsonl"
     path.write_text(
-        json.dumps({"id": "x", "nhan": {"type": "mac_dinh"}, "du_doan": {"type": "mac_dinh"}}) + "\n",
+        json.dumps({"id": "x", "nhan": {"type": "collect_profile"}, "du_doan": {"type": "collect_profile"}})
+        + "\n",
         encoding="utf-8",
     )
 
@@ -288,6 +301,22 @@ def test_the_huggingface_trainer_state_is_read_the_same_way(tmp_path):
     ]
 
 
+def test_a_trainer_csv_uses_the_loss_column_not_the_one_final_train_loss_average(tmp_path):
+    text = (
+        "epoch,eval_loss,loss,step,train_loss\n"
+        "0.1,,2.0,10,\n0.2,,1.5,20,\n0.2,1.8,,20,\n0.3,,1.0,30,\n0.3,1.2,,30,\n0.3,,,30,0.9\n"
+    )
+    path = tmp_path / "training_log.csv"
+    path.write_text(text, encoding="utf-8")
+
+    log = load_training_log(path)
+
+    assert [(p["step"], p.get("train_loss")) for p in log] == [(10, 2.0), (20, 1.5), (30, 1.0)]
+    assert [p["eval_loss"] for p in log if "eval_loss" in p] == [1.8, 1.2]
+    s = training_summary(log)
+    assert round(s["chenh_val_train_tai_tot_nhat"], 3) == round(1.2 - 1.0, 3)
+
+
 def test_the_training_summary_finds_the_best_step_and_flags_overfit_or_not_converged(tmp_path):
     path = tmp_path / "training_log.csv"
     path.write_text(CSV_LOG, encoding="utf-8")
@@ -323,7 +352,7 @@ def test_the_report_builds_every_table_and_chart(tmp_path, monkeypatch):
     data.write_text(
         "".join(
             json.dumps({"type": t, "split": s}) + "\n"
-            for t in ("kien_thuc", "ho_so")
+            for t in ("knowledge", "profile_review")
             for s in ("train", "val", "test")
         ),
         encoding="utf-8",
@@ -346,6 +375,8 @@ def test_the_report_builds_every_table_and_chart(tmp_path, monkeypatch):
             "1.8",
             "--data",
             str(data),
+            "--config",
+            "Model gốc: qwen3:4b-instruct, 8 ví dụ từ train",
         ],
     )
 
@@ -359,13 +390,32 @@ def test_the_report_builds_every_table_and_chart(tmp_path, monkeypatch):
         assert (out / name).is_file() and (out / name).stat().st_size > (
             3000 if name.endswith(".png") else 0
         ), name
+    assert (out / "du_doan_tho" / "goc.jsonl").read_bytes() == base.read_bytes()
+    assert (out / "du_doan_tho" / "moi.jsonl").is_file() and (out / "training_log.csv").is_file()
+    manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["cau_hinh"] == ["Model gốc: qwen3:4b-instruct, 8 ví dụ từ train"]
+    assert [r["ten"] for r in manifest["lan_chay"]] == ["Model gốc", "Đã huấn luyện"]
+    assert (
+        manifest["dap_an_tho"][0]["file"] == "du_doan_tho/goc.jsonl"
+        and len(manifest["dap_an_tho"][0]["sha256"]) == 64
+    )
+    assert (
+        manifest["log_huan_luyen"]["file"] == "training_log.csv"
+        and manifest["du_lieu"]["file"] == "du_lieu.jsonl"
+    )
+    assert "slm_report" in manifest["lenh_dung_lai"]
+    assert "git_commit" in manifest and manifest["co_sua_chua_commit"] in (True, False, None)
     report = (out / "BAO_CAO.md").read_text(encoding="utf-8")
+    assert "manifest.json" in report and "du_doan_tho/" in report
     assert (
         "Model gốc" in report
         and "Đã huấn luyện" in report
         and "30.0%" in report
         and "90.0%" in report
         and "Overfit" in report
+        and "## Cấu hình thí nghiệm" in report
+        and "8 ví dụ từ train" in report
+        and "Chênh val loss trừ train loss" in report
     )
     metrics = json.loads((out / "chi_so.json").read_text(encoding="utf-8"))
     assert (

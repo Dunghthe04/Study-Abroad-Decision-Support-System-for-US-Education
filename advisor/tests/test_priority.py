@@ -39,49 +39,49 @@ def test_ignores_profile_values_and_knowledge_questions(message):
     assert detect_priorities(message) == {}
 
 
-def mac_dinh(message: str) -> SlmTinResult:
-    return SlmTinResult(cac_y=[SlmY(type="mac_dinh", doan=message)])
+def collect_profile(message: str) -> SlmTinResult:
+    return SlmTinResult(intents=[SlmY(type="collect_profile", span=message)])
 
 
 def test_priority_message_becomes_a_what_if_when_results_exist():
     state = ChatState(has_results=True)
-    slm = with_priority_intent(state, "em ưu tiên học bổng", mac_dinh("em ưu tiên học bổng"))
+    slm = with_priority_intent(state, "em ưu tiên học bổng", collect_profile("em ưu tiên học bổng"))
 
-    assert slm.types() == ["kich_ban"]
-    assert slm.cac_y[0].thuc_the["che_do"] == "what_if"
+    assert slm.types() == ["scenario"]
+    assert slm.intents[0].entities["mode"] == "what_if"
 
 
 def test_priority_is_left_alone_while_a_profile_question_waits():
     message = "em ưu tiên học bổng"
     waiting = ChatState(has_results=True, question_id="B3.4")
-    assert with_priority_intent(waiting, message, mac_dinh(message)).types() == ["mac_dinh"]
+    assert with_priority_intent(waiting, message, collect_profile(message)).types() == ["collect_profile"]
 
 
 def test_the_opening_greeting_question_does_not_block_it():
-    # Lỗi thật: chat mới mở còn đang ở câu chào B0.1, "Em ưu tiên học bổng nhất" bị SLM xếp mac_dinh và trả "hồ sơ đã đủ"
+    # Lỗi thật: chat mới mở còn đang ở câu chào B0.1, "Em ưu tiên học bổng nhất" bị SLM xếp collect_profile và trả "hồ sơ đã đủ"
     message = "Em ưu tiên học bổng nhất"
     greeting = ChatState(question_id="B0.1")
-    assert with_priority_intent(greeting, message, mac_dinh(message)).types() == ["kich_ban"]
+    assert with_priority_intent(greeting, message, collect_profile(message)).types() == ["scenario"]
 
 
 def test_without_results_the_scenario_branch_asks_for_recommendations_first():
     message = "em ưu tiên học bổng"
-    assert with_priority_intent(ChatState(), message, mac_dinh(message)).types() == ["kich_ban"]
+    assert with_priority_intent(ChatState(), message, collect_profile(message)).types() == ["scenario"]
 
 
 def test_keeps_other_intents_when_the_message_also_has_numbers():
     state = ChatState(has_results=True)
     message = "SAT 1500 và ưu tiên học bổng"
-    slm = with_priority_intent(state, message, mac_dinh(message))
+    slm = with_priority_intent(state, message, collect_profile(message))
 
-    assert slm.types() == ["kich_ban", "mac_dinh"]
+    assert slm.types() == ["scenario", "collect_profile"]
 
 
 def goal_seeking(message: str, school: str | None = None) -> SlmTinResult:
-    thuc_the = {"che_do": "goal_seeking", "muc_tieu": "Chi phí thấp"}
+    entities = {"mode": "goal_seeking"}
     if school:
-        thuc_the["truong"] = school
-    return SlmTinResult(cac_y=[SlmY(type="kich_ban", doan=message, thuc_the=thuc_the)])
+        entities["school"] = school
+    return SlmTinResult(intents=[SlmY(type="scenario", span=message, entities=entities)])
 
 
 def test_a_priority_the_slm_took_for_goal_seeking_without_a_school_becomes_a_what_if():
@@ -89,19 +89,19 @@ def test_a_priority_the_slm_took_for_goal_seeking_without_a_school_becomes_a_wha
     message = "ưu tiên chi phí thấp"
     slm = with_priority_intent(ChatState(has_results=True), message, goal_seeking(message))
 
-    assert slm.types() == ["kich_ban"]
-    assert slm.cac_y[0].thuc_the["che_do"] == "what_if"
+    assert slm.types() == ["scenario"]
+    assert slm.intents[0].entities["mode"] == "what_if"
 
 
 def test_goal_seeking_with_a_real_school_is_left_alone():
     message = "em ưu tiên học bổng, cần gì để vào Harvard"
     slm = with_priority_intent(ChatState(has_results=True), message, goal_seeking(message, "Harvard"))
 
-    assert slm.cac_y[0].thuc_the["che_do"] == "goal_seeking"
+    assert slm.intents[0].entities["mode"] == "goal_seeking"
 
 
 def out_of_scope(kind: str) -> SlmTinResult:
-    return SlmTinResult(cac_y=[SlmY(type="ngoai_pham_vi", doan="x", thuc_the={"loai_con": kind})])
+    return SlmTinResult(intents=[SlmY(type="out_of_scope", span="x", entities={"subtype": kind})])
 
 
 @pytest.mark.parametrize(
@@ -113,10 +113,10 @@ def out_of_scope(kind: str) -> SlmTinResult:
     ],
 )
 def test_a_school_fact_question_the_slm_took_for_sensitive_becomes_a_knowledge_question(message):
-    slm = with_info_intent(message, out_of_scope("nhay_cam"))
+    slm = with_info_intent(message, out_of_scope("sensitive"))
 
-    assert slm.types() == ["kien_thuc"]
-    assert slm.cac_y[0].doan == message
+    assert slm.types() == ["knowledge"]
+    assert slm.intents[0].span == message
 
 
 @pytest.mark.parametrize(
@@ -129,24 +129,24 @@ def test_a_school_fact_question_the_slm_took_for_sensitive_becomes_a_knowledge_q
     ],
 )
 def test_truly_sensitive_questions_stay_blocked_even_when_they_mention_a_field(message):
-    assert with_info_intent(message, out_of_scope("nhay_cam")).types() == ["ngoai_pham_vi"]
+    assert with_info_intent(message, out_of_scope("sensitive")).types() == ["out_of_scope"]
 
 
 def test_other_out_of_scope_kinds_and_other_intents_are_left_alone():
-    assert with_info_intent("học phí là gì", out_of_scope("tam_biet")).types() == ["ngoai_pham_vi"]
-    assert with_info_intent("học phí MIT", mac_dinh("học phí MIT")).types() == ["mac_dinh"]
+    assert with_info_intent("học phí là gì", out_of_scope("farewell")).types() == ["out_of_scope"]
+    assert with_info_intent("học phí MIT", collect_profile("học phí MIT")).types() == ["collect_profile"]
 
 
-# ---- ưu tiên do model trả (priority_*) trong thay_doi
+# ---- ưu tiên do model trả (priority_*) trong changes
 def test_priorities_the_model_returned_are_read_and_bad_values_are_dropped():
     from app.services.priority import from_model
 
     changes = [
-        {"yeu_to": "priority_aid", "gia_tri": "4"},
-        {"yeu_to": "priority_cost", "gia_tri": "9"},  # ngoài 0..4
-        {"yeu_to": "priority_prestige", "gia_tri": "cao"},  # không phải số
-        {"yeu_to": "priority_unknown", "gia_tri": "2"},  # yếu tố lạ
-        {"yeu_to": "sat", "gia_tri": "1500"},  # không phải ưu tiên
+        {"factor": "priority_aid", "value": "4"},
+        {"factor": "priority_cost", "value": "9"},  # ngoài 0..4
+        {"factor": "priority_prestige", "value": "cao"},  # không phải số
+        {"factor": "priority_unknown", "value": "2"},  # yếu tố lạ
+        {"factor": "sat", "value": "1500"},  # không phải ưu tiên
     ]
 
     assert from_model(changes) == {"aid": 4}
@@ -158,12 +158,12 @@ async def test_a_what_if_with_only_model_priorities_goes_to_dotnet_with_them():
     from tests.test_branches import skills
 
     entities = {
-        "che_do": "what_if",
-        "thay_doi": [{"yeu_to": "priority_cost", "gia_tri": "0"}, {"yeu_to": "priority_aid", "gia_tri": "4"}],
+        "mode": "what_if",
+        "changes": [{"factor": "priority_cost", "value": "0"}, {"factor": "priority_aid", "value": "4"}],
     }
 
-    out = await build_branches(skills([]))["kich_ban"].run(
-        ChatState(has_results=True), "x", tin(("kich_ban", entities, "đổi ưu tiên"))
+    out = await build_branches(skills([]))["scenario"].run(
+        ChatState(has_results=True), "x", tin(("scenario", entities, "đổi ưu tiên"))
     )
 
     assert out.action == "simulate"
@@ -173,8 +173,8 @@ async def test_a_what_if_with_only_model_priorities_goes_to_dotnet_with_them():
 
 # ---- "So sánh 2 trường A và B" SLM xếp nhầm vào nhánh hồ sơ (lỗi thật khi thử với usas-slm-v3)
 def profile_compare(*schools: str) -> SlmTinResult:
-    entities = {"cac_nhiem_vu": ["so_sanh"], "cac_truong": list(schools)}
-    return SlmTinResult(cac_y=[SlmY(type="ho_so", doan="x", thuc_the=entities)])
+    entities = {"tasks": ["compare"], "schools": list(schools)}
+    return SlmTinResult(intents=[SlmY(type="profile_review", span="x", entities=entities)])
 
 
 def test_comparing_schools_without_mentioning_the_profile_becomes_a_fact_comparison():
@@ -184,9 +184,9 @@ def test_comparing_schools_without_mentioning_the_profile_becomes_a_fact_compari
         message, profile_compare("Florida State University", "The University of Texas at Austin")
     )
 
-    y = slm.cac_y[0]
-    assert (y.type, y.thuc_the["nhiem_vu"]) == ("kien_thuc", "so_sanh")
-    assert y.thuc_the["cac_truong"] == ["Florida State University", "The University of Texas at Austin"]
+    y = slm.intents[0]
+    assert (y.type, y.entities["tasks"]) == ("knowledge", ["compare_facts"])
+    assert y.entities["schools"] == ["Florida State University", "The University of Texas at Austin"]
 
 
 @pytest.mark.parametrize(
@@ -200,10 +200,12 @@ def test_comparing_schools_without_mentioning_the_profile_becomes_a_fact_compari
 def test_a_comparison_about_the_students_own_profile_stays_in_the_profile_branch(message):
     slm = with_comparison_intent(message, profile_compare("Purdue", "Ohio State"))
 
-    assert slm.types() == ["ho_so"]
+    assert slm.types() == ["profile_review"]
 
 
 def test_other_profile_tasks_are_left_alone():
-    other_task = SlmTinResult(cac_y=[SlmY(type="ho_so", doan="x", thuc_the={"cac_nhiem_vu": ["danh_gia"]})])
+    other_task = SlmTinResult(
+        intents=[SlmY(type="profile_review", span="x", entities={"tasks": ["assessment"]})]
+    )
 
-    assert with_comparison_intent("đánh giá hồ sơ em", other_task).types() == ["ho_so"]
+    assert with_comparison_intent("đánh giá hồ sơ em", other_task).types() == ["profile_review"]

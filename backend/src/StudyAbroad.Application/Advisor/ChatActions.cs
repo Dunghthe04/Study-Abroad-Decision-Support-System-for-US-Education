@@ -12,6 +12,9 @@ public static class ChatActions
 {
     public const int MaxCodeLength = 32;
     public const int MaxQuestionLength = 300;
+    // Số trường tối đa trong ô chọn đã thu hẹp (các trường vừa đổi nhóm)
+    public const int MaxPickerCodes = 12;
+    public const int MaxSuggested = 6;
     // So sánh nhận mã trường hoặc tên học sinh gõ (khi một trong các trường chưa được chọn), nên cho dài hơn mã
     public const int MaxCompareNameLength = 64;
     private static readonly string[] Targets = ["match", "safety"];   // nhóm đích hợp lệ; Khó vào là mức thấp nhất nên không là đích
@@ -20,11 +23,29 @@ public static class ChatActions
     /// Lượt trả lời dựng sẵn cho hành động. Trả null nếu không có hành động hoặc hành động không hợp lệ
     /// (khi đó chat chạy như thường qua advisor). state là trạng thái hội thoại hiện tại, giữ nguyên.
     /// </summary>
+    // Mã trường từ trình duyệt: bỏ rỗng, quá dài, trùng; không còn gì thì null
+    private static List<string>? Clean(IReadOnlyList<string>? codes, int max)
+    {
+        var clean = (codes ?? []).Where(c => !string.IsNullOrWhiteSpace(c) && c.Length <= MaxCodeLength)
+            .Select(c => c.Trim()).Distinct().Take(max).ToList();
+        return clean.Count == 0 ? null : clean;
+    }
+
     public static AdvisorChatResponse? ToResponse(ChatAction? action, JsonElement? state)
     {
         // "Cần gì để vào trường em muốn?" không kèm trường: hỏi lại bằng ô chọn trường, để học sinh tự chọn trường mình quan tâm
         if (action is { Type: ChatGoalSeek.Action } && string.IsNullOrWhiteSpace(action.SchoolCode) && action.Target is null)
-            return new AdvisorChatResponse(ChatGoalSeek.AskSchool, [], null, state, Widget: ChatGoalSeek.SchoolPicker(null));
+            return new AdvisorChatResponse(
+                ChatGoalSeek.AskSchool, [], null, state, Widget: ChatGoalSeek.SchoolPicker(null, suggested: Clean(action.Suggested, MaxSuggested)));
+        // "Giải thích một trường" không kèm trường: cũng mở ô chọn trường, chọn xong thì giải thích trường đó
+        // SchoolCodes (nếu có) thu hẹp ô chọn vào các trường đó, ví dụ các trường vừa đổi nhóm sau what-if
+        if (action is { Type: ChatExplanation.Action } && string.IsNullOrWhiteSpace(action.SchoolCode))
+        {
+            var only = Clean(action.SchoolCodes, MaxPickerCodes);
+            return new AdvisorChatResponse(
+                ChatGoalSeek.AskExplainSchool, [], null, state,
+                Widget: ChatGoalSeek.SchoolPicker(null, ChatExplanation.Action, only, Clean(action.Suggested, MaxSuggested)));
+        }
         // So sánh các trường (nút "So sánh hai trường đầu" sau danh sách tìm trường): mã các trường, 2 đến MaxCompare
         if (action is { Type: ChatSchoolInfo.CompareAction })
         {

@@ -25,3 +25,8 @@ scratch/
 *.pyc
 # Model fine-tune (vài GB): chia sẻ qua Drive, không đưa lên git
 advisor/models/**/*.gguf
+
+# Kết quả đo SLM bản thử: tạo lại được bằng scripts.eval_slm và scripts.slm_report.
+# Số chính thức (sau khi đóng băng dữ liệu) thì đưa vào bằng: git add -f advisor/data/slm/bao_cao/<thư mục lần đo>
+advisor/data/slm/ket_qua/
+advisor/data/slm/bao_cao/

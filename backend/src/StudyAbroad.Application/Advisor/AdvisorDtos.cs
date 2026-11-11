@@ -39,7 +39,9 @@ public record AdvisorChatRequest(
 /// </summary>
 public record ChatAction(
     string Type, string? SchoolCode = null, string? Target = null, string? Basis = null, string? Question = null,
-    IReadOnlyList<string>? SchoolCodes = null, IReadOnlyList<string>? Fields = null);
+    IReadOnlyList<string>? SchoolCodes = null, IReadOnlyList<string>? Fields = null,
+    // Chỉ cho ô chọn trường: các trường nên hiện sẵn dạng nút bấm (vd các trường đầu danh sách gợi ý)
+    IReadOnlyList<string>? Suggested = null);
 
 /// <summary>Một trường trong danh sách gợi ý. Group là mã nhóm đã chấm (R, RF, M, S, NA, O), advisor đổi sang chữ.</summary>
 public record ChatSchool(string Code, string Name, string? Group);
@@ -73,4 +75,12 @@ public record AdvisorChatResponse(
     // Việc .NET cần làm sau lượt này: "recommend" = chạy gợi ý trường (ChatRecommendation),
     // "explain" = viết lời tư vấn một trường (ChatExplanation, mã trường nằm ở ActionData.code). Không trả cho trình duyệt
     string? Action = null,
-    JsonElement? ActionData = null);
+    JsonElement? ActionData = null,
+    // Số đo từng lần gọi AI của lượt này, để ghi nhật ký ai_calls. Nội bộ: không trả cho trình duyệt
+    IReadOnlyList<AiUsageDto>? AiUsage = null,
+    // SLM đã hiểu tin nhắn ra sao (nhãn model gán, độ tin cậy, có dùng kết quả dự phòng không), để đánh dấu câu chưa trả lời được.
+    // Có chữ của học sinh nên nội bộ: không trả cho trình duyệt
+    AdvisorSlmDto? Slm = null,
+    // Lượt này vừa lưu hồ sơ chính thức (bấm "Đúng rồi" ở bảng rà soát): trang Gợi ý trường hiện nút cập nhật danh sách.
+    // Chỉ .NET đặt, advisor không gửi
+    bool? ProfileSaved = null);

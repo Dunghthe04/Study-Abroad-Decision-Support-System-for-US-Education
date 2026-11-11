@@ -289,7 +289,7 @@ def test_skill_tra_loi_is_registered_only_when_the_knowledge_store_exists():
 
 
 # SLM đọc là câu hỏi kiến thức: nhánh kiến thức gọi skill_tra_loi
-KNOWLEDGE = tin("kien_thuc")
+KNOWLEDGE = tin("knowledge")
 
 
 async def test_chat_returns_the_citations_and_disclaimer_to_the_client():

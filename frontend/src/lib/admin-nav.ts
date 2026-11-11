@@ -92,9 +92,9 @@ export const ADMIN_NAV: AdminNavItem[] = [
     useCases: ["UC-54", "UC-55", "UC-56", "UC-57", "UC-58"],
   },
   {
-    href: "/admin/reports",
-    label: "Báo cáo",
-    description: "Mức dùng AI, chi phí và chất lượng AI",
+    href: "/admin/ai-usage",
+    label: "Quản lý token",
+    description: "Token, chi phí và chất lượng các lần gọi AI",
     icon: BarChart3Icon,
     roles: ["admin"],
     useCases: ["UC-83", "UC-90"],
