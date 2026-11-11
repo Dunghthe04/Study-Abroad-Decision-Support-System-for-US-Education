@@ -66,11 +66,24 @@ public class LeadServiceTests
         public Task<Lead?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
             Task.FromResult(Leads.FirstOrDefault(l => l.Id == id));
 
+        public List<Consent> Consents { get; } = [];
+
         public Task<LeadDto?> GetDtoByIdAsync(Guid id, CancellationToken ct = default) =>
-            throw new NotImplementedException();
+            Task.FromResult(Leads.Where(l => l.Id == id).Select(l => new LeadDto(
+                l.Id, l.UserId, l.StudyCenterId, "Test Center", l.ConsentId, l.StudyLevel,
+                l.ContactPhone, l.Message, l.SharedProfile, l.Status, l.CreatedAt)
+            {
+                SubmittedByUserId = l.SubmittedByUserId,
+                SharedFields = l.SharedFields,
+            }).FirstOrDefault());
 
         public Task<Lead> CreateLeadAsync(Lead lead, Consent? consent = null, CancellationToken ct = default)
         {
+            if (consent != null)
+            {
+                Consents.Add(consent);
+                lead.ConsentId = consent.Id;
+            }
             Leads.Add(lead);
             return Task.FromResult(lead);
         }
@@ -213,7 +226,7 @@ public class LeadServiceTests
         leadRepo.Leads.Add(new Lead { Id = Guid.NewGuid(), StudyCenterId = centerId, Status = "new", ContactPhone = "0912345678" });
         leadRepo.Leads.Add(new Lead { Id = Guid.NewGuid(), StudyCenterId = Guid.NewGuid(), Status = "new", ContactPhone = "0987654321" });
 
-        var service = new LeadService(leadRepo, centerRepo);
+        var service = new LeadService(leadRepo, centerRepo, new FakeUserRepository(), new FakeParentLinkRepository());
 
         var result = await service.GetReceivedLeadsForCenterUserAsync(
             centerOwnerId,
@@ -236,7 +249,7 @@ public class LeadServiceTests
         var unlinkedUserId = Guid.NewGuid();
         var centerRepo = new FakeStudyCenterRepo();
         var leadRepo = new FakeLeadRepo();
-        var service = new LeadService(leadRepo, centerRepo);
+        var service = new LeadService(leadRepo, centerRepo, new FakeUserRepository(), new FakeParentLinkRepository());
 
         await Assert.ThrowsAsync<KeyNotFoundException>(() =>
             service.GetReceivedLeadsForCenterUserAsync(
@@ -263,7 +276,7 @@ public class LeadServiceTests
         var leadRepo = new FakeLeadRepo();
         leadRepo.Leads.Add(new Lead { Id = leadId, StudyCenterId = centerId, Status = "new", ContactPhone = "0912345678" });
 
-        var service = new LeadService(leadRepo, centerRepo);
+        var service = new LeadService(leadRepo, centerRepo, new FakeUserRepository(), new FakeParentLinkRepository());
 
         var updated = await service.UpdateReceivedLeadStatusAsync(
             centerOwnerId,
@@ -288,7 +301,7 @@ public class LeadServiceTests
         var leadRepo = new FakeLeadRepo();
         leadRepo.Leads.Add(new Lead { Id = leadId, StudyCenterId = centerId, Status = "new" });
 
-        var service = new LeadService(leadRepo, centerRepo);
+        var service = new LeadService(leadRepo, centerRepo, new FakeUserRepository(), new FakeParentLinkRepository());
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
             service.UpdateReceivedLeadStatusAsync(
@@ -313,7 +326,7 @@ public class LeadServiceTests
         var leadRepo = new FakeLeadRepo();
         leadRepo.Leads.Add(new Lead { Id = leadId, StudyCenterId = otherCenterId, Status = "new" });
 
-        var service = new LeadService(leadRepo, centerRepo);
+        var service = new LeadService(leadRepo, centerRepo, new FakeUserRepository(), new FakeParentLinkRepository());
 
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
             service.UpdateReceivedLeadStatusAsync(
@@ -339,7 +352,7 @@ public class LeadServiceTests
         leadRepo.Leads.Add(new Lead { Id = leadId, UserId = studentId, StudyCenterId = centerId, Status = "new" });
 
         var auditRepo = new FakeAuditRepo();
-        var service = new LeadService(leadRepo, centerRepo, auditRepo);
+        var service = new LeadService(leadRepo, centerRepo, new FakeUserRepository(), new FakeParentLinkRepository(), auditRepo);
 
         var res = await service.SendLeadMessageForCenterUserAsync(
             centerOwnerId,
@@ -374,7 +387,7 @@ public class LeadServiceTests
         leadRepo.Leads.Add(new Lead { Id = leadId, UserId = Guid.NewGuid(), StudyCenterId = centerId, Status = "contacted" });
 
         var auditRepo = new FakeAuditRepo();
-        var service = new LeadService(leadRepo, centerRepo, auditRepo);
+        var service = new LeadService(leadRepo, centerRepo, new FakeUserRepository(), new FakeParentLinkRepository(), auditRepo);
 
         var res = await service.SendLeadMessageForCenterUserAsync(
             centerOwnerId,
@@ -408,7 +421,7 @@ public class LeadServiceTests
         var leadRepo = new FakeLeadRepo();
         leadRepo.Leads.Add(new Lead { Id = leadId, UserId = Guid.NewGuid(), StudyCenterId = centerId, Status = "new" });
 
-        var service = new LeadService(leadRepo, centerRepo);
+        var service = new LeadService(leadRepo, centerRepo, new FakeUserRepository(), new FakeParentLinkRepository());
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
             service.SendLeadMessageForCenterUserAsync(centerOwnerId, "owner@center.com", UserRoles.Center, leadId, content));
@@ -427,7 +440,7 @@ public class LeadServiceTests
         var leadRepo = new FakeLeadRepo();
         leadRepo.Leads.Add(new Lead { Id = leadId, UserId = Guid.NewGuid(), StudyCenterId = centerId, Status = "new" });
 
-        var service = new LeadService(leadRepo, centerRepo);
+        var service = new LeadService(leadRepo, centerRepo, new FakeUserRepository(), new FakeParentLinkRepository());
         var tooLong = new string('a', LeadService.MaxReplyMessageLength + 1);
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
@@ -448,7 +461,7 @@ public class LeadServiceTests
         var leadRepo = new FakeLeadRepo();
         leadRepo.Leads.Add(new Lead { Id = leadId, UserId = Guid.NewGuid(), StudyCenterId = otherCenterId, Status = "new" });
 
-        var service = new LeadService(leadRepo, centerRepo);
+        var service = new LeadService(leadRepo, centerRepo, new FakeUserRepository(), new FakeParentLinkRepository());
 
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
             service.GetReceivedLeadMessagesForCenterUserAsync(centerOwnerId, "a@center.com", UserRoles.Center, leadId));
@@ -508,7 +521,7 @@ public class LeadServiceTests
             CreatedAt = DateTime.UtcNow,
         });
 
-        var service = new LeadService(leadRepo, centerRepo);
+        var service = new LeadService(leadRepo, centerRepo, new FakeUserRepository(), new FakeParentLinkRepository());
 
         var thread = await service.GetReceivedLeadMessagesForCenterUserAsync(
             centerOwnerId,
@@ -567,7 +580,7 @@ public class LeadServiceTests
             CreatedAt = DateTime.UtcNow.AddMinutes(-1),
         });
 
-        var service = new LeadService(leadRepo, centerRepo);
+        var service = new LeadService(leadRepo, centerRepo, new FakeUserRepository(), new FakeParentLinkRepository());
 
         var thread = await service.GetReceivedLeadMessagesForCenterUserAsync(
             centerOwnerId,
@@ -597,7 +610,7 @@ public class LeadServiceTests
         var leadRepo = new FakeLeadRepo();
         leadRepo.Leads.Add(new Lead { Id = leadId, UserId = Guid.NewGuid(), StudyCenterId = centerId, Status = initialStatus });
 
-        var service = new LeadService(leadRepo, centerRepo);
+        var service = new LeadService(leadRepo, centerRepo, new FakeUserRepository(), new FakeParentLinkRepository());
 
         var result = await service.SendLeadMessageForCenterUserAsync(
             centerOwnerId,
@@ -625,7 +638,7 @@ public class LeadServiceTests
         var leadRepo = new FakeLeadRepo();
         leadRepo.Leads.Add(new Lead { Id = leadId, UserId = Guid.NewGuid(), StudyCenterId = centerId, Status = "new" });
 
-        var service = new LeadService(leadRepo, centerRepo);
+        var service = new LeadService(leadRepo, centerRepo, new FakeUserRepository(), new FakeParentLinkRepository());
 
         var result = await service.SendLeadMessageForCenterUserAsync(
             staffId,
@@ -650,7 +663,7 @@ public class LeadServiceTests
         centerRepo.Centers.Add(new StudyCenter { Id = centerId, Name = "Trung Tâm Test", OwnerUserId = centerOwnerId });
 
         var leadRepo = new FakeLeadRepo();
-        var service = new LeadService(leadRepo, centerRepo);
+        var service = new LeadService(leadRepo, centerRepo, new FakeUserRepository(), new FakeParentLinkRepository());
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
             service.GetReceivedLeadMessagesForCenterUserAsync(centerOwnerId, "owner@center.com", UserRoles.Center, Guid.Empty));
@@ -669,12 +682,261 @@ public class LeadServiceTests
         var leadRepo = new FakeLeadRepo();
         leadRepo.Leads.Add(new Lead { Id = leadId, UserId = studentId, StudyCenterId = Guid.NewGuid(), Status = "new" });
 
-        var service = new LeadService(leadRepo, centerRepo);
+        var service = new LeadService(leadRepo, centerRepo, new FakeUserRepository(), new FakeParentLinkRepository());
 
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
             service.GetReceivedLeadMessagesForCenterUserAsync(studentId, "student@example.com", UserRoles.Student, leadId));
 
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
             service.SendLeadMessageForCenterUserAsync(studentId, "student@example.com", UserRoles.Student, leadId, "Xin chào"));
+    }
+
+    // ===== UC-42: gửi yêu cầu liên hệ =====
+
+    /// <summary>Dữ liệu chung cho test CreateLead: một trung tâm đã xác minh và các fake rỗng.</summary>
+    private sealed class CreateLeadSetup
+    {
+        public FakeLeadRepo LeadRepo { get; } = new();
+        public FakeStudyCenterRepo CenterRepo { get; } = new();
+        public FakeUserRepository UserRepo { get; } = new();
+        public FakeParentLinkRepository LinkRepo { get; } = new();
+        public Guid CenterId { get; } = Guid.NewGuid();
+        public LeadService Service { get; }
+
+        public CreateLeadSetup()
+        {
+            CenterRepo.Centers.Add(new StudyCenter
+            {
+                Id = CenterId, Name = "Trung Tâm Xác Minh", IsActive = true, VerificationStatus = CenterReferral.Verified,
+            });
+            Service = new LeadService(LeadRepo, CenterRepo, UserRepo, LinkRepo);
+        }
+
+        /// <summary>Thêm học sinh <paramref name="age"/> tuổi (sinh nhật đã qua 1 ngày, theo giờ Việt Nam).</summary>
+        public User AddStudent(int age)
+        {
+            var today = AgePolicy.TodayInVietnam(DateTime.UtcNow);
+            var user = new User { Role = UserRoles.Student, DateOfBirth = today.AddYears(-age).AddDays(-1) };
+            UserRepo.Users.Add(user);
+            return user;
+        }
+
+        public User AddParent(params User[] linkedChildren)
+        {
+            var parent = new User { Role = UserRoles.Parent };
+            UserRepo.Users.Add(parent);
+            foreach (var child in linkedChildren)
+            {
+                LinkRepo.Links.Add(new ParentStudentLink
+                {
+                    StudentUserId = child.Id, ParentUserId = parent.Id, Status = ParentLinkStatuses.Active,
+                });
+            }
+            return parent;
+        }
+
+        public CreateLeadRequest Request(
+            IReadOnlyList<string>? fields = null,
+            Guid? studentUserId = null,
+            bool ack = false,
+            bool consent = true,
+            Guid? centerId = null) =>
+            new(centerId ?? CenterId,
+                StudentUserId: studentUserId,
+                SharedFields: fields ?? [LeadSharedFields.Contact],
+                ConsentAccepted: consent,
+                AcknowledgedCenterContact: ack);
+    }
+
+    private static async Task<LeadRuleException> AssertRule(Func<Task> act, string code, int status)
+    {
+        var ex = await Assert.ThrowsAsync<LeadRuleException>(act);
+        Assert.Equal(code, ex.Code);
+        Assert.Equal(status, ex.Status);
+        return ex;
+    }
+
+    [Fact]
+    public async Task CreateLead_CenterNotVerified_Returns400()
+    {
+        var s = new CreateLeadSetup();
+        var student = s.AddStudent(18);
+        s.CenterRepo.Centers[0].VerificationStatus = "unverified";
+
+        await AssertRule(() => s.Service.CreateLeadAsync(student.Id, s.Request()), "center_not_verified", 400);
+        Assert.Empty(s.LeadRepo.Leads);
+    }
+
+    [Fact]
+    public async Task CreateLead_Student15_AgeRestricted()
+    {
+        var s = new CreateLeadSetup();
+        var student = s.AddStudent(15);
+
+        await AssertRule(() => s.Service.CreateLeadAsync(student.Id, s.Request(ack: true)), "age_restricted", 403);
+    }
+
+    [Fact]
+    public async Task CreateLead_Student16WithoutAcknowledgement_Returns400()
+    {
+        var s = new CreateLeadSetup();
+        var student = s.AddStudent(16);
+
+        await AssertRule(() => s.Service.CreateLeadAsync(student.Id, s.Request(ack: false)), "acknowledgement_required", 400);
+    }
+
+    [Fact]
+    public async Task CreateLead_Student16WithAcknowledgement_SavesLeadAndConsent()
+    {
+        var s = new CreateLeadSetup();
+        var student = s.AddStudent(16);
+
+        var dto = await s.Service.CreateLeadAsync(
+            student.Id,
+            s.Request(fields: [LeadSharedFields.Goals, "CONTACT", LeadSharedFields.Goals], ack: true),
+            clientIp: "1.2.3.4");
+
+        var lead = Assert.Single(s.LeadRepo.Leads);
+        Assert.Equal(student.Id, lead.UserId);
+        Assert.Equal(student.Id, lead.SubmittedByUserId);
+        Assert.Equal([LeadSharedFields.Contact, LeadSharedFields.Goals], lead.SharedFields); // bỏ trùng, đúng thứ tự chuẩn
+        Assert.True(lead.SharedProfile);
+        Assert.True(lead.AcknowledgedCenterContact);
+
+        var consent = Assert.Single(s.LeadRepo.Consents);
+        Assert.Equal(student.Id, consent.UserId);
+        Assert.Equal(AgeFeatures.ShareWithCenter, consent.Purpose);
+        Assert.Null(consent.GrantedByUserId);
+        Assert.Equal("1.2.3.4", consent.GrantedIp);
+        Assert.Equal(consent.Id, dto.ConsentId);
+    }
+
+    [Fact]
+    public async Task CreateLead_Student18WithoutAcknowledgement_Passes()
+    {
+        var s = new CreateLeadSetup();
+        var student = s.AddStudent(18);
+
+        await s.Service.CreateLeadAsync(student.Id, s.Request());
+
+        var lead = Assert.Single(s.LeadRepo.Leads);
+        Assert.False(lead.SharedProfile); // chỉ chia sẻ contact
+    }
+
+    [Fact]
+    public async Task CreateLead_ParentWithoutStudent_Returns400()
+    {
+        var s = new CreateLeadSetup();
+        var parent = s.AddParent(s.AddStudent(14));
+
+        await AssertRule(() => s.Service.CreateLeadAsync(parent.Id, s.Request()), "student_required", 400);
+    }
+
+    [Fact]
+    public async Task CreateLead_ParentWithUnlinkedStudent_Returns403()
+    {
+        var s = new CreateLeadSetup();
+        var parent = s.AddParent(s.AddStudent(14));
+        var stranger = s.AddStudent(17);
+
+        await AssertRule(() => s.Service.CreateLeadAsync(parent.Id, s.Request(studentUserId: stranger.Id)), "not_linked", 403);
+    }
+
+    [Fact]
+    public async Task CreateLead_ParentForLinkedChild14_Passes()
+    {
+        var s = new CreateLeadSetup();
+        var child = s.AddStudent(14);
+        var parent = s.AddParent(child);
+
+        await s.Service.CreateLeadAsync(parent.Id, s.Request(studentUserId: child.Id));
+
+        var lead = Assert.Single(s.LeadRepo.Leads);
+        Assert.Equal(child.Id, lead.UserId);
+        Assert.Equal(parent.Id, lead.SubmittedByUserId);
+        Assert.False(lead.AcknowledgedCenterContact);
+        var consent = Assert.Single(s.LeadRepo.Consents);
+        Assert.Equal(child.Id, consent.UserId);
+        Assert.Equal(parent.Id, consent.GrantedByUserId);
+    }
+
+    [Fact]
+    public async Task CreateLead_MissingContact_Returns400()
+    {
+        var s = new CreateLeadSetup();
+        var student = s.AddStudent(18);
+
+        await AssertRule(() => s.Service.CreateLeadAsync(student.Id, s.Request(fields: [LeadSharedFields.Academic])), "contact_required", 400);
+    }
+
+    [Fact]
+    public async Task CreateLead_UnknownField_Returns400()
+    {
+        var s = new CreateLeadSetup();
+        var student = s.AddStudent(18);
+
+        await AssertRule(() => s.Service.CreateLeadAsync(student.Id, s.Request(fields: [LeadSharedFields.Contact, "password"])), "invalid_shared_fields", 400);
+    }
+
+    [Fact]
+    public async Task CreateLead_ConsentNotAccepted_Returns400()
+    {
+        var s = new CreateLeadSetup();
+        var student = s.AddStudent(18);
+
+        await AssertRule(() => s.Service.CreateLeadAsync(student.Id, s.Request(consent: false)), "consent_required", 400);
+    }
+
+    [Fact]
+    public async Task CreateLead_SameCenterWithin7Days_Returns429WithRetryTime()
+    {
+        var s = new CreateLeadSetup();
+        var student = s.AddStudent(18);
+        var sentAt = DateTime.UtcNow.AddDays(-3);
+        s.LeadRepo.Leads.Add(new Lead { UserId = student.Id, SubmittedByUserId = student.Id, StudyCenterId = s.CenterId, CreatedAt = sentAt });
+
+        var ex = await AssertRule(() => s.Service.CreateLeadAsync(student.Id, s.Request()), "center_cooldown", 429);
+        Assert.Equal(sentAt.AddDays(7), ex.RetryAfterUtc);
+    }
+
+    [Fact]
+    public async Task CreateLead_SameCenterAfter7Days_Passes()
+    {
+        var s = new CreateLeadSetup();
+        var student = s.AddStudent(18);
+        s.LeadRepo.Leads.Add(new Lead { UserId = student.Id, SubmittedByUserId = student.Id, StudyCenterId = s.CenterId, CreatedAt = DateTime.UtcNow.AddDays(-8) });
+
+        await s.Service.CreateLeadAsync(student.Id, s.Request());
+
+        Assert.Equal(2, s.LeadRepo.Leads.Count);
+    }
+
+    [Fact]
+    public async Task CreateLead_SixthLeadInOneDay_Returns429()
+    {
+        var s = new CreateLeadSetup();
+        var student = s.AddStudent(18);
+        for (var i = 0; i < LeadService.MaxLeadsPerDay; i++)
+            s.LeadRepo.Leads.Add(new Lead { UserId = student.Id, SubmittedByUserId = student.Id, StudyCenterId = Guid.NewGuid() });
+
+        await AssertRule(() => s.Service.CreateLeadAsync(student.Id, s.Request()), "daily_limit", 429);
+    }
+
+    [Fact]
+    public async Task CreateLead_ParentLeadsCountTowardParentLimit()
+    {
+        var s = new CreateLeadSetup();
+        var child = s.AddStudent(14);
+        var parent = s.AddParent(child);
+        for (var i = 0; i < LeadService.MaxLeadsPerDay; i++)
+            s.LeadRepo.Leads.Add(new Lead { UserId = child.Id, SubmittedByUserId = parent.Id, StudyCenterId = Guid.NewGuid() });
+
+        // Phụ huynh hết lượt trong ngày
+        await AssertRule(() => s.Service.CreateLeadAsync(parent.Id, s.Request(studentUserId: child.Id)), "daily_limit", 429);
+
+        // Lead phụ huynh gửi không tính vào lượt của học sinh 18 tuổi khác
+        var adult = s.AddStudent(18);
+        await s.Service.CreateLeadAsync(adult.Id, s.Request());
+        Assert.Equal(LeadService.MaxLeadsPerDay + 1, s.LeadRepo.Leads.Count);
     }
 }
