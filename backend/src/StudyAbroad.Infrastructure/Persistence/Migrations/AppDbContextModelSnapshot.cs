@@ -33,19 +33,23 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
 
                     b.Property<int?>("CachedTokens")
                         .HasColumnType("integer")
-                        .HasColumnName("cached_tokens");
+                        .HasColumnName("cached_tokens")
+                        .HasComment("Token Claude đọc từ cache, tính tiền khác token thường. Luôn 0 với Ollama.");
 
                     b.Property<Guid?>("ChatMessageId")
                         .HasColumnType("uuid")
-                        .HasColumnName("chat_message_id");
+                        .HasColumnName("chat_message_id")
+                        .HasComment("Tin TRẢ LỜI của trợ lý do lần gọi này tạo ra. Một tin có nhiều lần gọi. Xóa tin thì giữ dòng này (token đã tiêu thật), chỉ bỏ liên kết.");
 
                     b.Property<int?>("CompletionTokens")
                         .HasColumnType("integer")
-                        .HasColumnName("completion_tokens");
+                        .HasColumnName("completion_tokens")
+                        .HasComment("Token RA: phần AI viết trả về.");
 
                     b.Property<decimal?>("CostUsd")
                         .HasColumnType("numeric")
-                        .HasColumnName("cost_usd");
+                        .HasColumnName("cost_usd")
+                        .HasComment("Chi phí tính bằng USD. Chỉ Claude có tiền; Ollama chạy local nên để trống hoặc 0. Chưa được tính ở giai đoạn hiện tại.");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -54,7 +58,8 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.Property<string>("Error")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)")
-                        .HasColumnName("error");
+                        .HasColumnName("error")
+                        .HasComment("Lý do lỗi ngắn, chỉ có khi success = false.");
 
                     b.Property<bool>("FallbackUsed")
                         .HasColumnType("boolean")
@@ -64,16 +69,19 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")
-                        .HasColumnName("kind");
+                        .HasColumnName("kind")
+                        .HasComment("Nguồn gọi: claude (trả phí theo token) hoặc ollama (model chạy trên máy mình, không tốn tiền).");
 
                     b.Property<int?>("LatencyMs")
                         .HasColumnType("integer")
-                        .HasColumnName("latency_ms");
+                        .HasColumnName("latency_ms")
+                        .HasComment("Thời gian của lần gọi, tính bằng mili giây.");
 
                     b.Property<string>("Model")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
-                        .HasColumnName("model");
+                        .HasColumnName("model")
+                        .HasComment("Tên model đã gọi, ví dụ claude-haiku-5-5 hoặc usas-slm-v4.");
 
                     b.Property<string>("ModelVersion")
                         .HasColumnType("text")
@@ -85,24 +93,29 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
 
                     b.Property<int?>("PromptTokens")
                         .HasColumnType("integer")
-                        .HasColumnName("prompt_tokens");
+                        .HasColumnName("prompt_tokens")
+                        .HasComment("Token VÀO: phần gửi lên AI. Với Claude, chưa gồm phần đọc từ cache (xem cached_tokens).");
 
                     b.Property<string>("Purpose")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
-                        .HasColumnName("purpose");
+                        .HasColumnName("purpose")
+                        .HasComment("Việc của lần gọi = tên file skill (slm_intents, skill_tra_loi...). Rỗng với embedding. Dùng để báo cáo token theo tính năng.");
 
                     b.Property<string>("SkillVersion")
                         .HasColumnType("text")
-                        .HasColumnName("skill_version");
+                        .HasColumnName("skill_version")
+                        .HasComment("Số phiên bản ở dòng đầu file skill (ví dụ 3.0). Sửa nội dung skill thì phải tăng số này, nếu không không so sánh được trước và sau.");
 
                     b.Property<bool>("Success")
                         .HasColumnType("boolean")
-                        .HasColumnName("success");
+                        .HasColumnName("success")
+                        .HasComment("False nếu lần gọi lỗi (quá tải, hết thời gian, bị từ chối). Khi đó token bằng 0 và cột error có lý do.");
 
                     b.Property<int?>("TotalTokens")
                         .HasColumnType("integer")
-                        .HasColumnName("total_tokens");
+                        .HasColumnName("total_tokens")
+                        .HasComment("Token vào cộng token ra.");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -110,7 +123,8 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
 
                     b.Property<Guid?>("UserId")
                         .HasColumnType("uuid")
-                        .HasColumnName("user_id");
+                        .HasColumnName("user_id")
+                        .HasComment("Học sinh gây ra lần gọi. Null nếu gọi ngoài phiên đăng nhập.");
 
                     b.HasKey("Id")
                         .HasName("pk_ai_calls");
@@ -121,7 +135,10 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.HasIndex("CreatedAt")
                         .HasDatabaseName("ix_ai_calls_created_at");
 
-                    b.ToTable("ai_calls", "app");
+                    b.ToTable("ai_calls", "app", t =>
+                        {
+                            t.HasComment("Nhật ký MỖI LẦN gọi AI (Claude hoặc Ollama). Một lượt chat gồm vài lần gọi, mỗi lần một dòng. Để admin xem token, tốc độ, lỗi theo tính năng và theo tin nhắn. Chỉ chứa số đo, không chứa nội dung chat.");
+                        });
                 });
 
             modelBuilder.Entity("StudyAbroad.Domain.Entities.AnalysisResult", b =>
@@ -350,7 +367,8 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.Property<string>("Content")
                         .IsRequired()
                         .HasColumnType("text")
-                        .HasColumnName("content");
+                        .HasColumnName("content")
+                        .HasComment("Nội dung tin nhắn.");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -358,27 +376,32 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("MetaJson")
                         .HasColumnType("jsonb")
-                        .HasColumnName("meta_json");
+                        .HasColumnName("meta_json")
+                        .HasComment("Tóm tắt lượt cho admin (JSON): intents (các ý SLM tách), actions, slmFallback, confidence, totalLatencyMs, totalTokens. Chỉ ở tin trả lời của trợ lý. Lọc được vào từng khóa, ví dụ meta_json ->> 'slmFallback' = 'true'.");
 
                     b.Property<string>("Outcome")
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")
-                        .HasColumnName("outcome");
+                        .HasColumnName("outcome")
+                        .HasComment("Kết quả lượt chat, hệ thống tự ghi và KHÔNG đổi sau đó: answered (trả lời được), no_answer (không hiểu hoặc không có dữ liệu), failed (bước AI bị lỗi). Chỉ ở tin trả lời của trợ lý, tin của học sinh để null.");
 
                     b.Property<string>("ReviewStatus")
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")
-                        .HasColumnName("review_status");
+                        .HasColumnName("review_status")
+                        .HasComment("Admin đã xử lý chưa. Chỉ dùng khi outcome là no_answer hoặc failed: open (mới, chưa xem), resolved (đã xử lý, ví dụ bổ sung tài liệu), ignored (xem rồi, bỏ qua). Null nếu hệ thống trả lời được.");
 
                     b.Property<string>("Role")
                         .IsRequired()
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")
-                        .HasColumnName("role");
+                        .HasColumnName("role")
+                        .HasComment("user (học sinh), assistant (trợ lý) hoặc system.");
 
                     b.Property<string>("SourcesJson")
                         .HasColumnType("jsonb")
-                        .HasColumnName("sources_json");
+                        .HasColumnName("sources_json")
+                        .HasComment("Nguồn trích dẫn của câu trả lời (title, url).");
 
                     b.Property<string>("Step")
                         .HasMaxLength(8)
@@ -402,7 +425,10 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.HasIndex("ChatSessionId", "CreatedAt")
                         .HasDatabaseName("ix_chat_messages_chat_session_id_created_at");
 
-                    b.ToTable("chat_messages", "app");
+                    b.ToTable("chat_messages", "app", t =>
+                        {
+                            t.HasComment("Tin nhắn của cuộc chat: tin của học sinh và tin trả lời của trợ lý. Chứa nội dung chat nên là dữ liệu cá nhân (GPA, tài chính, có thể là học sinh vị thành niên): chỉ admin và moderator được xem.");
+                        });
                 });
 
             modelBuilder.Entity("StudyAbroad.Domain.Entities.ChatSession", b =>
