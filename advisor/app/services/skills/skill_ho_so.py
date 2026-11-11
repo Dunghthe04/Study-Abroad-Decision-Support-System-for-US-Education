@@ -634,11 +634,24 @@ def needed(state: ChatState, question_id: str) -> bool:
     return True
 
 
+# Hồ sơ đã có từ trước: các mục bắt buộc còn thiếu của việc đang làm. Hồ sơ trống lúc bắt đầu thì None (hỏi đủ)
+def required_missing(state: ChatState) -> set[str] | None:
+    if state.required_only is None:
+        return None
+    return set(missing_fields(state.profile, state.required_only))
+
+
 # Chọn câu tiếp theo theo thứ tự trang form: câu bắt buộc còn thiếu (hỏi tối đa 2 lần),
-# câu tùy chọn cần hỏi mà chưa hỏi (1 lần). Hết thì None
+# câu tùy chọn cần hỏi mà chưa hỏi (1 lần). Hồ sơ đã có từ trước thì chỉ hỏi câu của mục bắt buộc còn thiếu.
+# Hết thì None
 def next_question(state: ChatState) -> str | None:
+    missing = required_missing(state)
     for question_id in QUESTION_ORDER:
         if answered(state, question_id):
+            continue
+        if missing is not None:
+            if missing & set(QUESTION_FIELDS[question_id]) and state.asked.get(question_id, 0) < MAX_ASK:
+                return question_id
             continue
         if question_id in REQUIRED_QUESTIONS:
             if state.asked.get(question_id, 0) < MAX_ASK:

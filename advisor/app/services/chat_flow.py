@@ -484,8 +484,23 @@ def profile_ready(state: ChatState) -> bool:
     return all(field.status != "said_in_B0" for field in state.profile.values())
 
 
+# Hồ sơ có giá trị không phải chỉ nói ở câu đầu (said_in_B0): giá trị từ DB, form hoặc lần trước
+def has_saved_profile(state: ChatState) -> bool:
+    return any(field.status != "said_in_B0" for field in state.profile.values())
+
+
+# Bắt đầu hỏi mà hồ sơ đã có từ trước: chỉ hỏi mục bắt buộc của việc đang làm (gộp với việc trước nếu đã đặt).
+# Đang hỏi đủ trong chat (hồ sơ trống lúc bắt đầu) thì giữ nguyên, không đổi giữa chừng
+def limit_to_required(state: ChatState, required: list[str]) -> None:
+    if state.required_only is not None:
+        state.required_only = list(dict.fromkeys([*state.required_only, *required]))
+    elif state.intake_mode != "chat" and has_saved_profile(state):
+        state.required_only = list(required)
+
+
 # Bắt đầu hỏi hồ sơ khi một skill bị chặn vì thiếu hồ sơ
 def start_intake(state: ChatState, required: list[str] = REQUIRED_B3) -> SkillOutput:
+    limit_to_required(state, required)
     # Đang trả lời trong chat thì hỏi tiếp phần còn thiếu
     if state.intake_mode == "chat":
         return ask_next_missing(state, INTAKE_MORE)

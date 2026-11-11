@@ -529,3 +529,19 @@ async def test_edit_menu_text_without_pending_question_starts_edit():
     assert (state.question_id, state.edit_queue) == ("B1.1", ["B1.2", "B1.3", "B1.4"])
     assert KEEP in labels(output)
     assert llm.calls == []
+
+
+# Hồ sơ đã có từ trước, đang hỏi kỳ nhập học (không bắt buộc) mà học sinh tự nói SAT: ghi SAT, hiện bảng rà soát,
+# không hỏi lại kỳ nhập học. Hồ sơ trống lúc bắt đầu (required_only None) thì vẫn hỏi lại câu đang chờ như cũ
+@pytest.mark.parametrize(("required_only", "question_id"), [(REQUIRED_B3, "X1"), (None, "B1.4")])
+async def test_volunteered_value_with_saved_profile_shows_review(required_only, question_id):
+    profile = full_profile()
+    del profile["intake"]
+    state = ChatState(current_step="B1", profile=profile, intake_mode="chat", required_only=required_only)
+    ask(state, "B1.4")
+    slm = tin(("collect_profile", {"tasks": ["edit"], "sat": "SAT 1400"}))
+    llm = FakeLLM({"values": {"sat": 1400}, "none_fields": []}, NO_BAC_HOC)
+    output = await make_handler(llm).collect(state, "à tôi SAT 1400", slm)
+    assert state.profile["sat"].value == 1400
+    assert state.question_id == question_id
+    assert (output.widget is not None and output.widget.type == "review") == (question_id == "X1")

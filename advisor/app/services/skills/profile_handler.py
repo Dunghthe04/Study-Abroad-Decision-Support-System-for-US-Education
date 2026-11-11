@@ -4,7 +4,13 @@ from typing import Any
 
 from app.schemas.chat import ChatState, Widget
 from app.schemas.slm import PROFILE_KEYS, SlmTinResult, task_of
-from app.services.chat_flow import OPENING_QUESTIONS, SkillOutput, ask_next_missing, start_intake
+from app.services.chat_flow import (
+    OPENING_QUESTIONS,
+    SkillOutput,
+    ask_next_missing,
+    limit_to_required,
+    start_intake,
+)
 from app.services.skill_rules import REQUIRED_B3, missing_fields
 from app.services.skills import buttons, skill_bac_hoc, skill_ho_so
 
@@ -61,6 +67,8 @@ class ChatProfileHandler:
 
     async def _answer(self, state: ChatState, message: str, said: set[str]) -> SkillOutput:
         if self.pending_question(state) is None:
+            # Hồ sơ đã có từ trước (xét trước khi ghi giá trị tự khai): chỉ hỏi mục bắt buộc, rồi hiện bảng rà soát
+            limit_to_required(state, REQUIRED_B3)
             await self._save_said(state, message, said)
             if self.ready(state, REQUIRED_B3):
                 return SkillOutput(PROFILE_DONE)

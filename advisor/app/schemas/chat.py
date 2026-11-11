@@ -68,6 +68,9 @@ class ChatState(CamelModel):
     edit_queue: list[str] | None = None
     return_to: Step | None = None  # bước dở cần quay lại sau B5, B6
     intake_mode: Literal["chat", "form"] | None = None  # học sinh chọn điền hồ sơ bằng chat hay form
+    # Hồ sơ đã có từ trước (DB, form, lần trước): chỉ hỏi mục bắt buộc còn thiếu của việc học sinh đang muốn làm,
+    # không hỏi câu tùy chọn, xong thì hiện bảng rà soát. None = hồ sơ trống lúc bắt đầu hỏi, hỏi đủ các câu
+    required_only: list[str] | None = None
     has_results: bool = False  # đã có danh sách trường gợi ý chưa (skill_explain, skill_kich_ban cần)
     schools: list[ResultSchool] = []  # danh sách trường gợi ý gần nhất, .NET làm mới mỗi lượt khi has_results
     # Các trường đã chấm nhưng không nằm trong khối nào đang hiện: chỉ để khớp tên khi học sinh hỏi một trường cụ thể
