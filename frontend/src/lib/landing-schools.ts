@@ -11,6 +11,7 @@ export interface LandingSchool {
   type: SchoolType;
   typeLabel: string;
   image: string; // ảnh khuôn viên, dùng cho cả ảnh nền và thẻ trường
+  logo?: string; // logo trường (Cloudinary của hệ thống), hiện ở dải logo chạy ngang
   credit?: string; // tác giả và giấy phép ảnh, hiện một dòng ở chân trang
   highlight: string;
   majors: string[];
@@ -28,6 +29,7 @@ export const SAMPLE_PROFILE = {
 export const LANDING_SCHOOLS: LandingSchool[] = [
   {
     name: "Harvard University",
+    logo: "https://res.cloudinary.com/kse7jkd6/image/upload/v1793801647/usdss/universities/166027/UNI_166027_logo.webp",
     city: "Cambridge, MA",
     type: "private",
     typeLabel: "Ivy League",
@@ -41,6 +43,7 @@ export const LANDING_SCHOOLS: LandingSchool[] = [
   },
   {
     name: "Stanford University",
+    logo: "https://res.cloudinary.com/kse7jkd6/image/upload/v1793801708/usdss/universities/243744/UNI_243744_logo.webp",
     city: "Stanford, CA",
     type: "private",
     typeLabel: "Tư thục",
@@ -53,6 +56,7 @@ export const LANDING_SCHOOLS: LandingSchool[] = [
   },
   {
     name: "Massachusetts Institute of Technology",
+    logo: "https://res.cloudinary.com/kse7jkd6/image/upload/v1793801419/usdss/universities/166683/UNI_166683_logo.webp",
     city: "Cambridge, MA",
     type: "private",
     typeLabel: "Tư thục",
@@ -65,6 +69,7 @@ export const LANDING_SCHOOLS: LandingSchool[] = [
   },
   {
     name: "University of California, Berkeley",
+    logo: "https://res.cloudinary.com/kse7jkd6/image/upload/v1793801612/usdss/universities/110635/UNI_110635_logo.webp",
     city: "Berkeley, CA",
     type: "public",
     typeLabel: "Công lập",
@@ -90,6 +95,7 @@ export const LANDING_SCHOOLS: LandingSchool[] = [
   },
   {
     name: "University of Michigan",
+    logo: "https://res.cloudinary.com/kse7jkd6/image/upload/v1793801634/usdss/universities/170976/UNI_170976_logo.webp",
     city: "Ann Arbor, MI",
     type: "public",
     typeLabel: "Công lập",
@@ -102,6 +108,7 @@ export const LANDING_SCHOOLS: LandingSchool[] = [
   },
   {
     name: "Purdue University",
+    logo: "https://res.cloudinary.com/kse7jkd6/image/upload/v1793801723/usdss/universities/243780/UNI_243780_logo.webp",
     city: "West Lafayette, IN",
     type: "public",
     typeLabel: "Công lập",
@@ -115,6 +122,7 @@ export const LANDING_SCHOOLS: LandingSchool[] = [
   },
   {
     name: "Arizona State University",
+    logo: "https://res.cloudinary.com/kse7jkd6/image/upload/v1793801541/usdss/universities/104151/UNI_104151_logo.webp",
     city: "Tempe, AZ",
     type: "public",
     typeLabel: "Công lập",
@@ -128,6 +136,7 @@ export const LANDING_SCHOOLS: LandingSchool[] = [
   },
   {
     name: "Princeton University",
+    logo: "https://res.cloudinary.com/kse7jkd6/image/upload/v1793801610/usdss/universities/186131/UNI_186131_logo.webp",
     city: "Princeton, NJ",
     type: "private",
     typeLabel: "Ivy League",
@@ -140,6 +149,7 @@ export const LANDING_SCHOOLS: LandingSchool[] = [
   },
   {
     name: "Williams College",
+    logo: "https://res.cloudinary.com/kse7jkd6/image/upload/v1793801494/usdss/universities/168342/UNI_168342_logo.webp",
     city: "Williamstown, MA",
     type: "liberal",
     typeLabel: "Liberal Arts",
@@ -156,3 +166,12 @@ export const HERO_SCHOOLS = LANDING_SCHOOLS.filter((s) => s.inHero);
 
 // Dòng ghi công ảnh ở chân trang (giấy phép CC BY/BY-SA yêu cầu ghi tác giả)
 export const PHOTO_CREDITS = LANDING_SCHOOLS.filter((s) => s.credit).map((s) => s.credit).join(" · ");
+
+// Dải logo chạy ngang dưới phần đầu trang: các trường có logo, thêm Columbia chỉ để làm dài dải
+export const LOGO_STRIP: { name: string; logo: string }[] = [
+  ...LANDING_SCHOOLS.filter((s): s is LandingSchool & { logo: string } => Boolean(s.logo)).map((s) => ({ name: s.name, logo: s.logo })),
+  {
+    name: "Columbia University",
+    logo: "https://res.cloudinary.com/kse7jkd6/image/upload/v1793801529/usdss/universities/190150/UNI_190150_logo.webp",
+  },
+];
