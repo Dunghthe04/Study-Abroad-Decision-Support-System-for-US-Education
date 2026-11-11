@@ -5,19 +5,22 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
   ArrowRightIcon,
+  BookOpenIcon,
   BookmarkCheckIcon,
   Building2Icon,
-  FileTextIcon,
   InboxIcon,
+  KeyRoundIcon,
   LayoutDashboardIcon,
   LogOutIcon,
   SearchIcon,
   ShieldIcon,
   UserIcon,
+  UsersIcon,
 } from "lucide-react";
 import { formatUserRole } from "@/lib/user-role-labels";
 import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -165,52 +168,87 @@ export function SiteHeader() {
                     </AvatarFallback>
                   </Avatar>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="min-w-56">
+                <DropdownMenuContent align="end" className="w-64">
+                  {/* Đầu menu: ảnh đại diện, tên, vai trò */}
                   <DropdownMenuGroup>
-                    <DropdownMenuLabel className="flex flex-col gap-0.5">
-                      <span className="truncate text-sm font-semibold text-ink">{user.fullName}</span>
-                      <span className="text-xs font-normal text-ink-2">{formatUserRole(user.role)}</span>
+                    <DropdownMenuLabel className="flex items-center gap-3 px-2 py-2.5">
+                      <Avatar className="size-10">
+                        <AvatarFallback className="bg-brand-wash font-semibold text-brand-ink">
+                          {user.fullName.charAt(0).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span className="flex min-w-0 flex-col items-start gap-1">
+                        <span className="w-full truncate text-sm font-semibold text-ink">{user.fullName}</span>
+                        <Badge variant="neutral">{formatUserRole(user.role)}</Badge>
+                      </span>
                     </DropdownMenuLabel>
                   </DropdownMenuGroup>
-                  <DropdownMenuSeparator />
-                  {canOpenAdmin && (
-                    <DropdownMenuItem render={<Link href="/admin" />}>
-                      <LayoutDashboardIcon />
-                      {isModerator ? "Khu vực kiểm duyệt" : "Trang quản trị"}
-                    </DropdownMenuItem>
+
+                  {isStudentOrParent && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem render={<Link href="/target-schools" />}>
+                        <BookmarkCheckIcon />
+                        Trường mục tiêu
+                      </DropdownMenuItem>
+                    </>
                   )}
-                  <DropdownMenuItem render={<Link href="/analysis" />}>
-                    <FileTextIcon />
-                    Phân tích hồ sơ
+
+                  {/* Hồ sơ */}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem render={<Link href="/account#personal" />}>
+                    <UserIcon />
+                    Thông tin cá nhân
                   </DropdownMenuItem>
                   {isStudentOrParent && (
-                    <DropdownMenuItem render={<Link href="/target-schools" />}>
-                      <BookmarkCheckIcon />
-                      Trường mục tiêu
+                    <DropdownMenuItem render={<Link href="/account#academic" />}>
+                      <BookOpenIcon />
+                      Hồ sơ học thuật
                     </DropdownMenuItem>
                   )}
-                  <DropdownMenuItem render={<Link href="/account" />}>
-                    <UserIcon />
-                    Hồ sơ cá nhân
+
+                  {/* Tài khoản */}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem render={<Link href="/account#password" />}>
+                    <KeyRoundIcon />
+                    Bảo mật tài khoản
                   </DropdownMenuItem>
+                  {isStudentOrParent && (
+                    <DropdownMenuItem render={<Link href="/account#parent-links" />}>
+                      <UsersIcon />
+                      {user.role === "student" ? "Liên kết phụ huynh" : "Con đã liên kết"}
+                    </DropdownMenuItem>
+                  )}
+
+                  {/* Khu vực theo vai trò (trung tâm, quản trị) */}
                   {(user.role === "center" || canOpenAdmin) && (
-                    <DropdownMenuItem render={<Link href="/center/leads" />}>
-                      <InboxIcon />
-                      Yêu cầu liên hệ nhận được
-                    </DropdownMenuItem>
+                    <>
+                      <DropdownMenuSeparator />
+                      {canOpenAdmin && (
+                        <DropdownMenuItem render={<Link href="/admin" />}>
+                          <LayoutDashboardIcon />
+                          {isModerator ? "Khu vực kiểm duyệt" : "Trang quản trị"}
+                        </DropdownMenuItem>
+                      )}
+                      <DropdownMenuItem render={<Link href="/center/leads" />}>
+                        <InboxIcon />
+                        Yêu cầu liên hệ nhận được
+                      </DropdownMenuItem>
+                      {canOpenAdmin && (
+                        <DropdownMenuItem render={<Link href="/admin/centers" />}>
+                          <Building2Icon />
+                          Quản lý trung tâm
+                        </DropdownMenuItem>
+                      )}
+                      {isAdmin && (
+                        <DropdownMenuItem render={<Link href="/admin/users" />}>
+                          <ShieldIcon />
+                          Quản trị người dùng
+                        </DropdownMenuItem>
+                      )}
+                    </>
                   )}
-                  {canOpenAdmin && (
-                    <DropdownMenuItem render={<Link href="/admin/centers" />}>
-                      <Building2Icon />
-                      Quản lý trung tâm
-                    </DropdownMenuItem>
-                  )}
-                  {isAdmin && (
-                    <DropdownMenuItem render={<Link href="/admin/users" />}>
-                      <ShieldIcon />
-                      Quản trị người dùng
-                    </DropdownMenuItem>
-                  )}
+
                   <DropdownMenuSeparator />
                   <DropdownMenuItem variant="destructive" onClick={handleLogout}>
                     <LogOutIcon />
