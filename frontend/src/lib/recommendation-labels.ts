@@ -108,6 +108,11 @@ export function formatGpa(value: number | null | undefined, digits = 2): string 
   return value.toLocaleString("vi-VN", { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }
 
+// Điểm chứng chỉ: 6.5 → "6,5", 1250 → "1.250"
+export function formatScore(value: number): string {
+  return value.toLocaleString("vi-VN", { maximumFractionDigits: 2 });
+}
+
 // 95610 → "95.610 USD"
 export function formatUsd(value: number | null | undefined): string {
   if (value == null) return "Chưa có số liệu";

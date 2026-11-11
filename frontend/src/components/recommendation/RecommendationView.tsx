@@ -100,7 +100,7 @@ export function RecommendationView({ autoRun, initialOverrides }: Recommendation
   useAssistantPageContext({
     label: "Trang đề xuất",
     suggestions: firstReach ? [`Vì sao ${firstReach.name} Khó vào?`, ...RESULT_SUGGESTIONS] : RESULT_SUGGESTIONS,
-    greeting: rec ? `Mình là hệ thống tư vấn du học. Bạn cần mình hỗ trợ gì không?:` : undefined,
+    greeting: rec ? `Mình là hệ thống tư vấn du học. Bạn cần mình hỗ trợ gì không?` : undefined,
     // Đang kéo thanh giả định thì chat giải thích theo giả định đó (khớp danh sách đang xem)
     simulation: simulating ? sim.overrides : null,
   });

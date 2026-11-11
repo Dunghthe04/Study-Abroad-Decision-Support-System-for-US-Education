@@ -160,13 +160,13 @@ export function AssistantPanel() {
               {page.greeting ?? "Tôi có thể giúp gì cho bạn?"}
             </p>
             {!ageBlock && page.suggestions.length > 0 && (
-              <div className="mt-6 flex w-full max-w-xs flex-col gap-2">
+              <div className="mt-6 flex w-full min-w-0 max-w-xs flex-col gap-2">
                 {page.suggestions.map((s) => (
                   <button
                     key={s}
                     type="button"
                     onClick={() => send(s)}
-                    className="min-h-10 cursor-pointer rounded-lg border border-line bg-surface px-3.5 py-2 text-sm text-ink transition-colors hover:border-brand/40 hover:bg-brand-wash active:translate-y-px"
+                    className="min-h-10 w-full min-w-0 cursor-pointer whitespace-normal break-words rounded-lg border border-line bg-surface px-3.5 py-2 text-sm leading-snug text-ink transition-colors hover:border-brand/40 hover:bg-brand-wash active:translate-y-px"
                   >
                     {s}
                   </button>

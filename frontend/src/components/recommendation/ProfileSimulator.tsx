@@ -320,13 +320,13 @@ function SliderRow({ label, base, value, min, max, step, fallback, colorDelta = 
       <p className="text-xs font-semibold text-foreground">{label}</p>
       <div className="flex items-end justify-between gap-3">
         <div>
-          <p className="text-xs font-medium text-ink-3">Hồ sơ</p>
+          <p className="text-[13px] font-medium text-ink-3">Hồ sơ</p>
           <p className={cn("font-semibold text-brand", levels ? "text-base" : "text-lg")}>
             {base != null ? (levels ? levels[base] : NUMBER.format(base)) : "Chưa có"}
           </p>
         </div>
         <div className="text-right">
-          <p className="text-xs font-medium text-ink-3">Giả định</p>
+          <p className="text-[13px] font-medium text-ink-3">Giả định</p>
           <p className={cn("font-semibold text-foreground", levels ? "text-base" : "text-lg")}>
             {levels ? levels[current] : NUMBER.format(current)}
             {delta != null && (
@@ -350,6 +350,7 @@ function SliderRow({ label, base, value, min, max, step, fallback, colorDelta = 
         max={max}
         step={step}
         aria-label={label}
+        getAriaValueText={(_text, v) => (levels ? (levels[v] ?? NUMBER.format(v)) : NUMBER.format(v))}
         onValueChange={(v) => onChange(Array.isArray(v) ? v[0] : v)}
       />
       {levels && (

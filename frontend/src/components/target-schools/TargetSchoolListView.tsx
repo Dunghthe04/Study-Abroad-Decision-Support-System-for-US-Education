@@ -28,7 +28,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/toast";
-import { groupVariant } from "@/lib/recommendation-labels";
+import { groupLabel, groupVariant } from "@/lib/recommendation-labels";
 import { cn } from "@/lib/utils";
 
 type ViewMode = "grid" | "timeline";
@@ -129,21 +129,21 @@ export function TargetSchoolListView() {
     switch (cat?.toLowerCase()) {
       case "reach":
         return {
-          label: "Khó vào",
+          label: groupLabel("R"),
           badgeVariant: groupVariant("R"),
           borderClass: "",
           desc: "Trường có tính cạnh tranh cao so với hồ sơ",
         };
       case "match":
         return {
-          label: "Vừa sức",
+          label: groupLabel("M"),
           badgeVariant: groupVariant("M"),
           borderClass: "",
           desc: "Điểm và hồ sơ nằm trong khoảng tuyển sinh",
         };
       case "safety":
         return {
-          label: "An toàn hơn",
+          label: groupLabel("S"),
           badgeVariant: groupVariant("S"),
           borderClass: "",
           desc: "Hồ sơ vượt trội so với yêu cầu đầu vào",
@@ -232,7 +232,7 @@ export function TargetSchoolListView() {
               </span>
               <span className="text-xs text-muted-foreground">trường</span>
             </div>
-            <p className="mt-1 text-xs text-muted-foreground">Toàn bộ kế hoạch lưu</p>
+            <p className="mt-1 text-[13px] text-muted-foreground">Toàn bộ kế hoạch lưu</p>
           </CardContent>
         </Card>
 
@@ -258,7 +258,7 @@ export function TargetSchoolListView() {
                 {total > 0 ? `(${Math.round((reach / total) * 100)}%)` : ""}
               </span>
             </div>
-            <p className="mt-1 text-xs text-muted-foreground">Thử thách, khó vào</p>
+            <p className="mt-1 text-[13px] text-muted-foreground">Thử thách, khó vào</p>
           </CardContent>
         </Card>
 
@@ -284,7 +284,7 @@ export function TargetSchoolListView() {
                 {total > 0 ? `(${Math.round((match / total) * 100)}%)` : ""}
               </span>
             </div>
-            <p className="mt-1 text-xs text-muted-foreground">Cạnh tranh ngang sức</p>
+            <p className="mt-1 text-[13px] text-muted-foreground">Cạnh tranh ngang sức</p>
           </CardContent>
         </Card>
 
@@ -310,7 +310,7 @@ export function TargetSchoolListView() {
                 {total > 0 ? `(${Math.round((safety / total) * 100)}%)` : ""}
               </span>
             </div>
-            <p className="mt-1 text-xs text-muted-foreground">Đảm bảo cơ hội đỗ</p>
+            <p className="mt-1 text-[13px] text-muted-foreground">Đảm bảo cơ hội đỗ</p>
           </CardContent>
         </Card>
       </div>
@@ -361,6 +361,7 @@ export function TargetSchoolListView() {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            aria-label="Tìm trường mục tiêu theo tên, mã hoặc bang"
             placeholder="Tìm theo tên trường, mã, bang..."
             className="pl-9"
           />

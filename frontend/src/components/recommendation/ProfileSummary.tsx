@@ -7,6 +7,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { useAssistant } from "@/components/assistant/AssistantProvider";
 import { profileFlowApi } from "@/lib/profile-flow-api";
 import { draftGpa } from "@/lib/profile-flow-options";
+import { formatGpa, formatScore, formatUsd } from "@/lib/recommendation-labels";
 import type {
   LegacyCertificationDraft,
   ProfileFlowDraft,
@@ -26,18 +27,13 @@ interface StudentProfile {
   budgetMaxUsd: number | null;
 }
 
-const money = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 0,
-});
-const usd = (v: number) => money.format(v);
+const usd = formatUsd; // "20.000 USD", cùng định dạng vi-VN với thẻ trường và mô phỏng
 
 // Mức ngân sách: khoảng min–max, "Dưới max" hoặc "Trên min" (mức cao nhất không có trần)
 function budgetLabel(s: StudentProfile): string | null {
   const min = s.budgetMinUsd && s.budgetMinUsd > 0 ? s.budgetMinUsd : null;
   const max = s.budgetMaxUsd ?? null;
-  if (min && max) return `${usd(min)} – ${usd(max)}`;
+  if (min && max) return `${usd(min).replace(" USD", "")} – ${usd(max)}`;
   if (max) return `Dưới ${usd(max)}`;
   if (min) return `Trên ${usd(min)}`;
   return null;
@@ -51,10 +47,10 @@ interface ProfileFact {
 // Các dữ kiện học sinh đã nhập, ngắn gọn để xếp thành một hàng nhãn nhỏ. Không phán xét mạnh hay yếu:
 // việc đánh giá do trợ lý làm (một nguồn duy nhất)
 function profileFacts(s: StudentProfile, activitiesCount: number): ProfileFact[] {
-  const english = s.ielts ? `IELTS ${s.ielts}` : s.toefl ? `TOEFL ${s.toefl}` : s.duolingo ? `Duolingo ${s.duolingo}` : null;
+  const english = s.ielts ? `IELTS ${formatScore(s.ielts)}` : s.toefl ? `TOEFL ${formatScore(s.toefl)}` : s.duolingo ? `Duolingo ${formatScore(s.duolingo)}` : null;
   const budget = budgetLabel(s);
   return [
-    { label: "GPA", value: s.gpa4 != null ? `${s.gpa4.toFixed(2)}/4` : "chưa có" },
+    { label: "GPA", value: s.gpa4 != null ? `${formatGpa(s.gpa4)}/4` : "chưa có" },
     { label: "SAT", value: s.sat != null ? String(s.sat) : "chưa thi" },
     { label: "Tiếng Anh", value: english ?? "chưa có" },
     { label: "Ngân sách", value: budget ? `${budget.replace(/ – /g, "–")}/năm` : "chưa đặt" },

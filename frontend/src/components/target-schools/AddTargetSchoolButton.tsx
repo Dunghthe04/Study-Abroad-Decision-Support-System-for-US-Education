@@ -17,6 +17,7 @@ import {
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { groupLabel } from "@/lib/recommendation-labels";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Select,
@@ -45,22 +46,22 @@ export interface AddTargetSchoolButtonProps {
 const CATEGORY_OPTIONS = [
   {
     value: "match",
-    title: "Vừa sức",
-    badge: "Match",
+    title: groupLabel("M"),
+    englishTerm: "Match",
     badgeVariant: "brand" as const,
     desc: "Điểm và hồ sơ nằm trong khoảng tuyển sinh trung bình",
   },
   {
     value: "reach",
-    title: "Khó vào",
-    badge: "Reach",
+    title: groupLabel("R"),
+    englishTerm: "Reach",
     badgeVariant: "reach" as const,
     desc: "Trường có tính cạnh tranh cao hoặc yêu cầu cao hơn hồ sơ hiện tại",
   },
   {
     value: "safety",
-    title: "An toàn",
-    badge: "Safety",
+    title: groupLabel("S"),
+    englishTerm: "Safety",
     badgeVariant: "ok" as const,
     desc: "Hồ sơ vượt trội so với yêu cầu đầu vào thông thường",
   },
@@ -271,11 +272,11 @@ export function AddTargetSchoolButton({
   const getCategoryLabel = (cat?: string | null) => {
     switch (cat?.toLowerCase()) {
       case "reach":
-        return { label: "Mục tiêu cao (Reach)", color: "destructive" as const };
+        return { label: groupLabel("R"), color: "destructive" as const };
       case "match":
-        return { label: "Vừa sức (Match)", color: "brand" as const };
+        return { label: groupLabel("M"), color: "brand" as const };
       case "safety":
-        return { label: "An toàn (Safety)", color: "default" as const };
+        return { label: groupLabel("S"), color: "default" as const };
       default:
         return { label: "Chưa phân loại", color: "outline" as const };
     }
@@ -356,11 +357,8 @@ export function AddTargetSchoolButton({
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2.5">
                           <RadioGroupItem id={`cat-${opt.value}`} value={opt.value} />
-                          <span className="font-semibold text-sm">{opt.title}</span>
+                          <span className="font-semibold text-sm" title={opt.englishTerm}>{opt.title}</span>
                         </div>
-                        <Badge variant={opt.badgeVariant} className="font-medium text-xs">
-                          {opt.badge}
-                        </Badge>
                       </div>
                       <p className="mt-1 pl-6.5 text-xs text-muted-foreground">{opt.desc}</p>
                     </label>

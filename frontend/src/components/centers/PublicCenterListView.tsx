@@ -179,6 +179,7 @@ export function PublicCenterListView({ initialCenters }: PublicCenterListViewPro
                 setSearch(e.target.value);
                 setPage(1);
               }}
+              aria-label="Tìm trung tâm theo tên, mã hoặc địa chỉ"
               placeholder="Tìm theo tên trung tâm, mã (CTY_013, Summit...), địa chỉ..."
               className="pl-9 w-full"
             />
@@ -187,6 +188,7 @@ export function PublicCenterListView({ initialCenters }: PublicCenterListViewPro
           <div className="flex flex-wrap items-center gap-2 shrink-0">
             <select
               value={cityFilter}
+              aria-label="Lọc theo thành phố"
               onChange={(e) => {
                 setCityFilter(e.target.value);
                 setPage(1);
@@ -202,6 +204,7 @@ export function PublicCenterListView({ initialCenters }: PublicCenterListViewPro
 
             <select
               value={typeFilter}
+              aria-label="Lọc theo loại trung tâm"
               onChange={(e) => {
                 setTypeFilter(e.target.value);
                 setPage(1);
@@ -218,6 +221,7 @@ export function PublicCenterListView({ initialCenters }: PublicCenterListViewPro
             {isAdmin && (
               <select
                 value={statusFilter}
+                aria-label="Lọc theo trạng thái xác minh"
                 onChange={(e) => {
                   setStatusFilter(e.target.value);
                   setPage(1);
@@ -303,15 +307,15 @@ export function PublicCenterListView({ initialCenters }: PublicCenterListViewPro
                               )}
                             </div>
                             <div className="flex items-center gap-2 mt-0.5">
-                              <Badge variant="outline" className="text-xs font-mono px-1.5 py-0">
+                              <Badge variant="outline" className="text-[13px] font-mono px-1.5 py-0">
                                 {c.code}
                               </Badge>
                               {isVerified ? (
-                                <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200 text-xs px-1.5 py-0">
+                                <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200 text-[13px] px-1.5 py-0">
                                   Đã xác minh
                                 </Badge>
                               ) : (
-                                <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-950/40 text-xs px-1.5 py-0">
+                                <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-950/40 text-[13px] px-1.5 py-0">
                                   Chờ duyệt
                                 </Badge>
                               )}
