@@ -38,7 +38,8 @@ public class AiCallConfiguration : IEntityTypeConfiguration<AiCall>
 
         // Xóa tin nhắn thì giữ lại dòng nhật ký (số token đã tiêu thật), chỉ bỏ liên kết
         b.HasOne<ChatMessage>().WithMany().HasForeignKey(x => x.ChatMessageId).OnDelete(DeleteBehavior.SetNull);
-        b.HasIndex(x => x.CreatedAt);
-        b.HasIndex(x => x.ChatMessageId);
+        b.HasIndex(x => x.CreatedAt);                          // màn tổng thể: lọc theo khoảng thời gian rồi nhóm
+        b.HasIndex(x => x.ChatMessageId);                      // từ một lượt chat tra ra các lần gọi AI của nó
+        b.HasIndex(x => new { x.UserId, x.CreatedAt });        // màn theo người: token của một học sinh theo thời gian
     }
 }

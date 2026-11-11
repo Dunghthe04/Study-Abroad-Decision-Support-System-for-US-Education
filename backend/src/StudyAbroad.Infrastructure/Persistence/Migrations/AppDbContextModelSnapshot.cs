@@ -135,6 +135,9 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.HasIndex("CreatedAt")
                         .HasDatabaseName("ix_ai_calls_created_at");
 
+                    b.HasIndex("UserId", "CreatedAt")
+                        .HasDatabaseName("ix_ai_calls_user_id_created_at");
+
                     b.ToTable("ai_calls", "app", t =>
                         {
                             t.HasComment("Nhật ký MỖI LẦN gọi AI (Claude hoặc Ollama). Một lượt chat gồm vài lần gọi, mỗi lần một dòng. Để admin xem token, tốc độ, lỗi theo tính năng và theo tin nhắn. Chỉ chứa số đo, không chứa nội dung chat.");
