@@ -99,8 +99,8 @@
   --secondary-foreground: var(--brand-ink);
   --muted: var(--ground);
   --muted-foreground: var(--ink-2);
-  --accent: var(--brand-wash);
-  --accent-foreground: var(--brand-ink);
+  --accent: #a86308; /* hổ phách ấm, tương phản 4.7:1 với chữ trắng (đạt AA) */
+  --accent-foreground: #ffffff;
   --destructive: var(--risk);
   --border: var(--line);
   --input: var(--line);

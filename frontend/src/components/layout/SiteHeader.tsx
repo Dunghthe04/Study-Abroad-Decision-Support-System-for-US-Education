@@ -97,7 +97,7 @@ export function SiteHeader() {
       data-clear={clear || undefined}
       className={cn(
         "group/header sticky top-0 z-40 border-b transition-colors duration-300 print:hidden",
-        clear ? "border-white/15 bg-transparent text-white" : "border-line bg-surface",
+        clear ? "border-white/15 bg-brand-ink/55 text-white" : "border-line bg-surface",
       )}
     >
       <div
@@ -333,9 +333,8 @@ export function SiteHeader() {
             <Link
               href="/analysis"
               className={buttonVariants({
-                variant: clear ? "ghost" : "default",
                 size: "lg",
-                className: cn("shrink-0 active:translate-y-px", clear && "!bg-white !text-brand-ink hover:!bg-white/90"),
+                className: "shrink-0 !bg-accent !text-accent-foreground hover:!bg-accent/90 active:translate-y-px",
               })}
             >
               <span className="hidden sm:inline">Phân tích hồ sơ của bạn</span>
