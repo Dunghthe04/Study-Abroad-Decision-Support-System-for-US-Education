@@ -11,20 +11,24 @@ import { LOGO_STRIP } from "@/lib/landing-schools";
 export function SchoolLogoStrip() {
   const items = [...LOGO_STRIP, ...LOGO_STRIP];
   return (
-    <section aria-label="Một số trường học sinh Việt Nam quan tâm" className="border-b border-line bg-surface py-8">
-      <p className="mb-5 text-center text-sm text-ink-2">Học sinh Việt Nam quan tâm những trường như</p>
+    // Cùng khung rộng và lề với các mục bên dưới (1560px), nền trong suốt
+    <section
+      aria-label="Một số trường học sinh Việt Nam quan tâm"
+      className="mx-auto mt-10 max-w-[1560px] px-4 sm:mt-14 sm:px-8 lg:px-12"
+    >
       <div className="group relative overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_8%,black_92%,transparent)]">
-        <ul className="flex w-max animate-[usas-logo-strip_45s_linear_infinite] items-center gap-14 group-hover:[animation-play-state:paused] motion-reduce:animate-none">
+        <ul className="flex w-max animate-[usas-logo-strip_45s_linear_infinite] items-center gap-24 group-hover:[animation-play-state:paused] motion-reduce:animate-none">
           {items.map((s, i) => (
-            <li key={`${s.name}-${i}`} aria-hidden={i >= LOGO_STRIP.length || undefined} className="flex shrink-0 items-center gap-3">
+            <li key={`${s.name}-${i}`} aria-hidden={i >= LOGO_STRIP.length || undefined} className="shrink-0">
+              {/* Chỉ logo; tên trường nằm ở alt và title cho người dùng trình đọc màn hình và khi rê chuột */}
               <Image
                 src={s.logo}
                 alt={i < LOGO_STRIP.length ? s.name : ""}
-                width={44}
-                height={44}
-                className="size-11 object-contain"
+                title={s.name}
+                width={64}
+                height={64}
+                className="size-16 object-contain"
               />
-              <span className="font-heading text-lg font-semibold whitespace-nowrap text-ink-2">{s.name}</span>
             </li>
           ))}
         </ul>
