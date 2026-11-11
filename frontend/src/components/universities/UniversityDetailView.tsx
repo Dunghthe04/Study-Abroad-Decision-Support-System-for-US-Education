@@ -1,36 +1,42 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ArrowUpRightIcon, Building2Icon, GlobeIcon, GraduationCapIcon, MapPinIcon, UsersIcon } from "lucide-react";
+import { ArrowUpRightIcon, GlobeIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
 import { cn } from "cn";
 import { studyLevelLabel } from "@/lib/study-levels";
 import { campusSettingLabel, schoolControlLabel, universityNumber, universityUrl } from "@/lib/university-display";
 import type { UniversityDetail } from "@/types/university";
-import { DetailSection, GaugeDataItem, GridDataItem, SchoolImage, SourceLink } from "./UniversityDetailParts";
+import { acceptanceRateTone, DetailSection, Gauge, SchoolImage } from "./UniversityDetailParts";
 import { UniversityAdmissions, UniversityCampusLife, UniversityCosts, UniversityMajors, UniversityStatistics } from "./UniversityOfferingSections";
 import { UniversitySources } from "./UniversitySources";
 import { AddTargetSchoolButton } from "@/components/target-schools/AddTargetSchoolButton";
 
-function formatRank(display: string | null | undefined, rank: number): string {
+function cleanRankNumber(display: string | null | undefined, rank: number): string {
   if (display) {
-    const cleaned = display.replace(/\s*\(tie\)/i, "").trim();
+    const cleaned = display.replace(/\s*\(tie\)/i, "").replace(/^#/, "").trim();
     if (cleaned) return cleaned;
   }
-  return `#${rank}`;
+  return String(rank);
 }
 
-function getRankColorClass(rank: number): string {
-  if (rank <= 3) return "text-brand font-black text-xl";
-  if (rank <= 10) return "text-brand font-bold text-lg";
-  if (rank <= 50) return "text-ink font-bold text-lg";
-  return "text-ink-3 font-semibold text-lg";
+function rankTone(rank: number): string {
+  if (rank <= 3) return "text-risk";
+  if (rank <= 10) return "text-warn";
+  if (rank <= 25) return "text-gold";
+  return "text-ink";
+}
+
+function rankTextSize(rankStr: string): string {
+  const digits = rankStr.replace(/\D/g, "").length;
+  if (digits >= 4) return "text-2xl";
+  if (digits === 3) return "text-3xl";
+  return "text-4xl";
 }
 
 export function UniversityDetailView({ university }: { university: UniversityDetail }) {
@@ -84,18 +90,21 @@ export function UniversityDetailView({ university }: { university: UniversityDet
     return () => window.removeEventListener("scroll", handleScroll);
   }, [navigation]);
 
-  const overviewItems = [
-    location ? { icon: MapPinIcon, label: "Vị trí", value: location } : null,
-    university.control ? { icon: Building2Icon, label: "Loại trường", value: schoolControlLabel(university.control) } : null,
-    offering?.campusSetting ? { icon: Building2Icon, label: "Bối cảnh khuôn viên", value: campusSettingLabel(offering.campusSetting) } : null,
-    offering?.studentFacultyRatio != null ? { icon: UsersIcon, label: "Tỷ lệ SV / giảng viên", value: `${offering.studentFacultyRatio} : 1` } : null,
-    university.internationalStudentCount != null ? { icon: UsersIcon, label: "Sinh viên quốc tế", value: universityNumber(university.internationalStudentCount) } : null,
-    university.offerings.length ? {
-      icon: GraduationCapIcon,
-      label: "Bậc học có dữ liệu",
-      value: university.offerings.map((item) => studyLevelLabel(item.studyLevel)).join(", "),
-    } : null,
+  const overviewRows = [
+    offering?.campusSetting ? { label: "Bối cảnh khuôn viên", value: campusSettingLabel(offering.campusSetting) } : null,
+    offering?.studentFacultyRatio != null ? { label: "Tỷ lệ SV / giảng viên", value: `${offering.studentFacultyRatio} : 1` } : null,
+    university.internationalStudentCount != null ? { label: "Sinh viên quốc tế", value: universityNumber(university.internationalStudentCount) } : null,
   ].filter((item): item is NonNullable<typeof item> => Boolean(item));
+
+  const acceptanceTone = university.acceptanceRate != null ? acceptanceRateTone(university.acceptanceRate) : "brand";
+  const acceptanceToneClass = {
+    reach: "text-reach",
+    warn: "text-warn",
+    ok: "text-ok",
+    brand: "text-brand",
+  }[acceptanceTone];
+  const acceptancePct = university.acceptanceRate != null ? (university.acceptanceRate > 1 ? university.acceptanceRate : university.acceptanceRate * 100) : null;
+  const acceptanceDisplayNumber = acceptancePct != null ? universityNumber(Number(acceptancePct.toFixed(1))) : null;
 
   return (
     <article className="space-y-6 pb-12">
@@ -109,7 +118,7 @@ export function UniversityDetailView({ university }: { university: UniversityDet
 
         {/* Dưới ảnh: logo đè nhẹ lên mép ảnh, tên và vị trí bên trái, các nút bên phải canh giữa theo khối tên */}
         <div className="border-b border-line bg-surface">
-          <div className="mx-auto flex w-full max-w-[1320px] flex-wrap items-center justify-between gap-5 px-4 pb-6 sm:px-6">
+          <div className="mx-auto flex w-full max-w-[1560px] flex-wrap items-center justify-between gap-5 px-4 pb-6 sm:px-8 lg:px-12">
             <div className="flex min-w-0 items-end gap-4">
               <SchoolImage url={university.logoUrl} alt={`Logo ${university.name}`} className="-mt-8 size-20 shrink-0 rounded-xl border border-line bg-white sm:-mt-10 sm:size-24" contain />
               <div className="min-w-0 pt-4">
@@ -145,10 +154,10 @@ export function UniversityDetailView({ university }: { university: UniversityDet
         </div>
       </header>
 
-      <div className="mx-auto max-w-[1320px] px-4 sm:px-6 space-y-6">
+      <div className="mx-auto max-w-[1560px] px-4 sm:px-8 lg:px-12 space-y-6">
         {/* Nền đặc và tràn ra cả phần lề hai bên, để viền thẻ bên dưới không lộ ra khi cuộn.
             Cuộn ngang bằng overflow gốc, ẩn thanh cuộn (ScrollArea luôn vẽ thêm thanh dọc) */}
-        <nav aria-label="Các mục thông tin trường" className="sticky top-(--header-h) z-20 -mx-4 bg-background px-4 sm:-mx-6 sm:px-6">
+        <nav aria-label="Các mục thông tin trường" className="sticky top-(--header-h) z-20 -mx-4 sm:-mx-8 lg:-mx-12 bg-background px-4 sm:px-8 lg:px-12">
           <div className="overflow-x-auto border-b border-border [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <div className="flex w-max gap-1">
               {navigation.map((item) => {
@@ -189,30 +198,47 @@ export function UniversityDetailView({ university }: { university: UniversityDet
       )}
 
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_280px] xl:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="min-w-0 space-y-5">
+        <div className="min-w-0 space-y-8">
           <DetailSection id="overview" title="Tổng quan">
-            <div className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="overflow-hidden rounded-xl border border-line bg-surface">
               {university.acceptanceRate != null && (
-                <GaugeDataItem
-                  label="Tỷ lệ nhận chung"
-                  value={university.acceptanceRate}
-                  subtitle="Tỷ lệ trúng tuyển toàn trường"
-                />
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6 p-5 sm:p-6">
+                  <div className="space-y-1">
+                    <p className="text-base font-medium text-ink">Tỷ lệ nhận chung</p>
+                    <p className="text-sm text-ink-2">Tỷ lệ trúng tuyển toàn trường</p>
+                    <div className="pt-2 flex items-baseline gap-1">
+                      <span className={cn("text-5xl sm:text-6xl font-semibold tracking-tight tabular-nums", acceptanceToneClass)}>
+                        {acceptanceDisplayNumber}
+                      </span>
+                      <span className={cn("text-2xl font-semibold", acceptanceToneClass)}>%</span>
+                    </div>
+                  </div>
+                  <div className="shrink-0 self-center sm:self-auto">
+                    <Gauge
+                      value={university.acceptanceRate}
+                      label="Tỷ lệ nhận chung"
+                      tone={acceptanceTone}
+                      className="w-48 sm:w-56 md:w-60"
+                    />
+                  </div>
+                </div>
               )}
-              {overviewItems.map((item) => (
-                <GridDataItem
-                  key={item.label}
-                  icon={item.icon}
-                  label={item.label}
-                  value={item.value}
-                />
-              ))}
+
+              {overviewRows.length > 0 && (
+                <div className={cn("divide-y divide-line", university.acceptanceRate != null && "border-t border-line")}>
+                  {overviewRows.map((row) => (
+                    <div key={row.label} className="flex items-center justify-between px-5 py-3.5 sm:px-6">
+                      <span className="text-sm text-ink-2">{row.label}</span>
+                      <span className="text-sm font-semibold text-ink tabular-nums">{row.value}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-            {website && <div className="mt-5 space-y-4"><Separator /><SourceLink url={website} /></div>}
           </DetailSection>
 
           {offering ? (
-            <div key={offering.studyLevel} className="space-y-5">
+            <div key={offering.studyLevel} className="space-y-8">
               <UniversityCosts offering={offering} />
               <UniversityAdmissions offering={offering} />
               <UniversityCampusLife offering={offering} />
@@ -220,13 +246,27 @@ export function UniversityDetailView({ university }: { university: UniversityDet
               <UniversityMajors offering={offering} />
             </div>
           ) : (
-            <DetailSection title="Thông tin tuyển sinh & chi phí"><p className="text-sm leading-relaxed text-muted-foreground">Trường chưa có dữ liệu bậc học trong hệ thống. Bạn có thể tham khảo website chính thức của trường.</p></DetailSection>
+            <DetailSection title="Thông tin tuyển sinh & chi phí">
+              <div className="rounded-xl border border-line bg-surface p-5 sm:p-6">
+                <p className="text-sm leading-relaxed text-ink-2">
+                  Trường chưa có dữ liệu bậc học trong hệ thống. Bạn có thể tham khảo website chính thức của trường.
+                </p>
+              </div>
+            </DetailSection>
           )}
 
           {university.galleryUrls.length > 0 && (
             <DetailSection title="Hình ảnh trường">
-              <div className="grid grid-cols-2 gap-3">
-                {university.galleryUrls.map((url, index) => <a key={`${url}-${index}`} href={universityUrl(url) ?? undefined} target="_blank" rel="noopener noreferrer" aria-label={`Mở ảnh ${index + 1} của ${university.name}`}><AspectRatio ratio={4 / 3}><SchoolImage url={url} alt={`Ảnh ${index + 1} của ${university.name}`} className="h-full w-full rounded-md bg-muted" /></AspectRatio></a>)}
+              <div className="rounded-xl border border-line bg-surface p-5 sm:p-6">
+                <div className="grid grid-cols-2 gap-3">
+                  {university.galleryUrls.map((url, index) => (
+                    <a key={`${url}-${index}`} href={universityUrl(url) ?? undefined} target="_blank" rel="noopener noreferrer" aria-label={`Mở ảnh ${index + 1} của ${university.name}`}>
+                      <AspectRatio ratio={4 / 3}>
+                        <SchoolImage url={url} alt={`Ảnh ${index + 1} của ${university.name}`} className="h-full w-full rounded-md bg-muted" />
+                      </AspectRatio>
+                    </a>
+                  ))}
+                </div>
               </div>
             </DetailSection>
           )}
@@ -236,42 +276,46 @@ export function UniversityDetailView({ university }: { university: UniversityDet
         <aside aria-label="Thông tin bổ sung" className="space-y-5 lg:sticky lg:top-[calc(var(--header-h)+4.5rem)]">
           {university.rankings.length > 0 && (
             <DetailSection title="Xếp hạng đã ghi nhận">
-              <ul className="divide-y divide-border/70">
-                {university.rankings.map((ranking) => {
-                  const safeSourceUrl = universityUrl(ranking.sourceUrl);
-                  return (
-                    <li key={`${ranking.publisher}-${ranking.name}-${ranking.edition}`} className="py-3.5 first:pt-0 last:pb-0">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0 flex-1 space-y-1">
+              <div className="overflow-hidden rounded-xl border border-line bg-surface">
+                <ul>
+                  {university.rankings.map((ranking) => {
+                    const safeSourceUrl = universityUrl(ranking.sourceUrl);
+                    const numStr = cleanRankNumber(ranking.rankDisplay, ranking.rank);
+                    return (
+                      <li key={`${ranking.publisher}-${ranking.name}-${ranking.edition}`} className="group flex items-center gap-4 pl-4 sm:pl-5">
+                        <div className="flex shrink-0 items-baseline gap-0.5 font-heading font-semibold tabular-nums">
+                          <span className="text-sm font-normal opacity-70">#</span>
+                          <span className={cn("leading-none", rankTone(ranking.rank), rankTextSize(numStr))}>
+                            {numStr}
+                          </span>
+                        </div>
+                        <div className="min-w-0 flex-1 py-3.5 pr-4 sm:pr-5 border-b border-line/70 group-last:border-b-0 space-y-0.5">
                           {safeSourceUrl ? (
                             <a
                               href={safeSourceUrl}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-sm font-medium leading-snug text-foreground transition-colors hover:text-brand hover:underline"
+                              className="line-clamp-2 text-sm font-medium leading-snug text-ink transition-colors hover:text-brand hover:underline"
                             >
                               {ranking.name}
                             </a>
                           ) : (
-                            <p className="text-sm font-medium leading-snug text-foreground">{ranking.name}</p>
+                            <p className="line-clamp-2 text-sm font-medium leading-snug text-ink">{ranking.name}</p>
                           )}
-                          <p className="text-xs text-muted-foreground">
+                          <p className="text-xs text-ink-3">
                             {ranking.publisher} · {ranking.edition ?? ranking.editionYear ?? "Chưa có năm"}
                           </p>
                         </div>
-                        <span className={cn("shrink-0 tracking-tight", getRankColorClass(ranking.rank))}>
-                          {formatRank(ranking.rankDisplay, ranking.rank)}
-                        </span>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
             </DetailSection>
           )}
         </aside>
       </div>
-    </div>
-  </article>
+      </div>
+    </article>
   );
 }
