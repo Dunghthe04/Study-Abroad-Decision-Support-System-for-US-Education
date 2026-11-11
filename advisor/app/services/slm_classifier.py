@@ -37,6 +37,7 @@ MAX_ATTEMPTS = 2  # sai thì gọi lại đúng 1 lần
 FALLBACK = SlmTinResult(
     intents=[SlmY(type="out_of_scope", span="tin không rõ", entities={"subtype": "ambiguous"})],
     confidence=0.0,
+    fallback=True,
 )
 _TYPE_VALUE_RE = re.compile(r'"type"\s*:\s*"([^"]*)"')
 _WORD_RE = re.compile(r"[^\W_]+(?:[-.'/][^\W_]+)*")

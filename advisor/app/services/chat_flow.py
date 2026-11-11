@@ -22,6 +22,8 @@ from app.schemas.chat import (
     Citation,
     ProfileField,
     QuickReply,
+    SlmSummary,
+    SlmSummaryIntent,
     Step,
     Widget,
 )
@@ -342,10 +344,16 @@ class ChatFlow:
         # Câu hồ sơ đang chờ, chụp trước khi chạy nhánh để cuối lượt biết đã được trả lời chưa
         pending = (state.question_id, state.last_question)
         # 1. SLM đọc tin nhắn. Bấm nút của câu đang hỏi là trả lời hồ sơ rõ ràng, không cần SLM đoán
-        if state.question_id and is_button(state.question_id, message):
+        asked_slm = not (state.question_id and is_button(state.question_id, message))
+        fell_back = False
+        model_intents: list[SlmY] = []
+        if not asked_slm:
             slm = SlmTinResult(intents=[SlmY(type="collect_profile", span=message)])
         else:
             slm = await self._slm.classify(state, message)
+            # Chụp trước khi các luật code bên dưới đổi ý: đây là nhãn model gán. Model hỏng thì không có đầu ra thật để lưu
+            fell_back = slm.fallback
+            model_intents = [] if fell_back else list(slm.intents)
             slm = with_priority_intent(state, message, slm)
             slm = with_info_intent(message, slm)
             slm = with_comparison_intent(message, slm)
@@ -375,7 +383,9 @@ class ChatFlow:
 
         # 5. Ghi log (dữ liệu để gán nhãn thêm và kiểm tra ngẫu nhiên)
         log_turn(state, message, slm, names, (time.perf_counter() - started) * 1000, req.session_id)
-        return self._response(state, output, names, profile_before)
+        response = self._response(state, output, names, profile_before)
+        response.slm = slm_summary(slm, asked_slm, fell_back, model_intents)
+        return response
 
     # Mỗi ý chạy nhánh của loại nó. Ý collect_profile chạy TRƯỚC để các ý khác thấy hồ sơ mới, nhưng câu trả lời của nó
     # đặt CUỐI để tin nhắn kết thúc bằng câu hồ sơ kế tiếp (hoặc lời xác nhận).
@@ -538,6 +548,22 @@ LOGGED_VALUE_KEYS = (
 def log_item(y: Any) -> dict[str, Any]:
     values = {key: y.entities[key] for key in LOGGED_VALUE_KEYS if key in y.entities}
     return {"type": y.type, **values, "other_keys": sorted(key for key in y.entities if key not in values)}
+
+
+# Tóm tắt SLM đọc tin ra sao, gửi .NET để đánh dấu câu chưa trả lời được và để admin xem nhãn model gán.
+# slm là kết quả SAU luật code (cái hệ thống đã chạy); model_intents là đầu ra nguyên văn của model TRƯỚC luật code.
+# Có chữ của học sinh trong model_intents (đoạn chữ, thực thể): .NET chỉ lưu vào bảng dữ liệu cá nhân, không trả cho trình duyệt.
+# asked_slm = False khi bấm nút trả lời câu hồ sơ (không gọi SLM): không có độ tin cậy.
+# fell_back lấy ngay sau khi SLM trả lời, trước các luật code đổi ý, nên vẫn là True khi luật cứu được câu mà SLM đã hỏng
+def slm_summary(slm: SlmTinResult, asked_slm: bool, fell_back: bool, model_intents: list[SlmY]) -> SlmSummary:
+    subtype = next((y.entities.get("subtype") for y in slm.intents if y.type == "out_of_scope"), None)
+    return SlmSummary(
+        model_intents=[SlmSummaryIntent(type=y.type, span=y.span, entities=dict(y.entities)) for y in model_intents],
+        intents=slm.types(),
+        out_of_scope=subtype if isinstance(subtype, str) else None,
+        confidence=round(slm.confidence, 3) if asked_slm else None,
+        fallback=fell_back,
+    )
 
 
 # Mỗi lượt ghi một dòng JSON: tin nhắn, SLM đọc ra gì, nhánh nào chạy.
