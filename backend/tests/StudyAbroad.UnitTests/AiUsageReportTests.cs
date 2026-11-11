@@ -14,6 +14,8 @@ namespace StudyAbroad.UnitTests;
 // API token tổng thể cho admin: truy vấn gộp (số liệu đúng, EF dịch ra SQL được), dịch vụ (khoảng ngày, cộng dồn) và controller (chỉ Admin).
 public class AiUsageReportTests
 {
+    private static AdminAiUsageController Controller(IAiUsageReportService service) => new(service, TestPricing.Haiku());
+
     private static readonly DateTime From = new(2026, 11, 1, 0, 0, 0, DateTimeKind.Utc);
     private static readonly DateTime ToExclusive = new(2026, 11, 8, 0, 0, 0, DateTimeKind.Utc);
 
@@ -919,7 +921,7 @@ public class AiUsageReportTests
     {
         var service = new FakeService(Sample);
 
-        var result = await new AdminAiUsageController(service).GetOverview(new DateOnly(2026, 11, 1), new DateOnly(2026, 11, 7), default);
+        var result = await Controller(service).GetOverview(new DateOnly(2026, 11, 1), new DateOnly(2026, 11, 7), default);
 
         Assert.Same(Sample, Assert.IsType<OkObjectResult>(result.Result).Value);
         Assert.Equal((new DateOnly(2026, 11, 1), new DateOnly(2026, 11, 7)), service.Asked);
@@ -928,7 +930,7 @@ public class AiUsageReportTests
     [Fact]
     public async Task Controller_AnInvalidRange_Is400WithTheReason()
     {
-        var result = await new AdminAiUsageController(new FakeService(error: new ArgumentException("Khoảng sai")))
+        var result = await Controller(new FakeService(error: new ArgumentException("Khoảng sai")))
             .GetOverview(null, null, default);
 
         var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
@@ -954,7 +956,7 @@ public class AiUsageReportTests
     {
         var service = new FakeService(users: SampleUsers);
 
-        var result = await new AdminAiUsageController(service).GetUsers(new DateOnly(2026, 11, 1), new DateOnly(2026, 11, 7), 2, 50, default);
+        var result = await Controller(service).GetUsers(new DateOnly(2026, 11, 1), new DateOnly(2026, 11, 7), 2, 50, default);
 
         Assert.Same(SampleUsers, Assert.IsType<OkObjectResult>(result.Result).Value);
         Assert.Equal((2, 50), service.AskedPage);
@@ -964,7 +966,7 @@ public class AiUsageReportTests
     [Fact]
     public async Task Controller_Users_ABadRangeIs400()
     {
-        var result = await new AdminAiUsageController(new FakeService(error: new ArgumentException("Khoảng sai")))
+        var result = await Controller(new FakeService(error: new ArgumentException("Khoảng sai")))
             .GetUsers(null, null, 1, 20, default);
 
         Assert.Contains("Khoảng sai", Assert.IsType<BadRequestObjectResult>(result.Result).Value!.ToString());
@@ -976,7 +978,7 @@ public class AiUsageReportTests
         var overview = new AiUsageUserOverviewDto(Id(1), "Lan", "lan@x.vn", Sample);
         var service = new FakeService(userOverview: overview);
 
-        var result = await new AdminAiUsageController(service).GetUserOverview(Id(1), null, null, default);
+        var result = await Controller(service).GetUserOverview(Id(1), null, null, default);
 
         Assert.Same(overview, Assert.IsType<OkObjectResult>(result.Result).Value);
         Assert.Equal(Id(1), service.AskedUser);
@@ -985,7 +987,7 @@ public class AiUsageReportTests
     [Fact]
     public async Task Controller_UserOverview_OfAnUnknownUserIs404()
     {
-        var result = await new AdminAiUsageController(new FakeService(userOverview: null)).GetUserOverview(Id(77), null, null, default);
+        var result = await Controller(new FakeService(userOverview: null)).GetUserOverview(Id(77), null, null, default);
 
         Assert.IsType<NotFoundResult>(result.Result);
     }
@@ -993,7 +995,7 @@ public class AiUsageReportTests
     [Fact]
     public async Task Controller_UserOverview_ABadRangeIs400()
     {
-        var result = await new AdminAiUsageController(new FakeService(error: new ArgumentException("Khoảng sai")))
+        var result = await Controller(new FakeService(error: new ArgumentException("Khoảng sai")))
             .GetUserOverview(Id(1), null, null, default);
 
         Assert.IsType<BadRequestObjectResult>(result.Result);
@@ -1012,7 +1014,7 @@ public class AiUsageReportTests
     {
         var service = new FakeService(turns: SampleTurns);
 
-        var result = await new AdminAiUsageController(service).GetUserTurns(Id(1), new DateOnly(2026, 11, 1), new DateOnly(2026, 11, 7), 2, 50, default);
+        var result = await Controller(service).GetUserTurns(Id(1), new DateOnly(2026, 11, 1), new DateOnly(2026, 11, 7), 2, 50, default);
 
         Assert.Same(SampleTurns, Assert.IsType<OkObjectResult>(result.Result).Value);
         Assert.Equal((Id(1), 2, 50), (service.AskedUser, service.AskedPage?.Page, service.AskedPage?.PageSize));
@@ -1021,8 +1023,8 @@ public class AiUsageReportTests
     [Fact]
     public async Task Controller_UserTurns_OfAnUnknownUserIs404_AndABadRangeIs400()
     {
-        var notFound = await new AdminAiUsageController(new FakeService(turns: null)).GetUserTurns(Id(77), null, null, 1, 20, default);
-        var bad = await new AdminAiUsageController(new FakeService(error: new ArgumentException("Khoảng sai"))).GetUserTurns(Id(1), null, null, 1, 20, default);
+        var notFound = await Controller(new FakeService(turns: null)).GetUserTurns(Id(77), null, null, 1, 20, default);
+        var bad = await Controller(new FakeService(error: new ArgumentException("Khoảng sai"))).GetUserTurns(Id(1), null, null, 1, 20, default);
 
         Assert.IsType<NotFoundResult>(notFound.Result);
         Assert.IsType<BadRequestObjectResult>(bad.Result);
@@ -1033,8 +1035,8 @@ public class AiUsageReportTests
     {
         var service = new FakeService(turn: SampleTurn);
 
-        var found = await new AdminAiUsageController(service).GetTurn(Id(201), default);
-        var missing = await new AdminAiUsageController(new FakeService(turn: null)).GetTurn(Id(999), default);
+        var found = await Controller(service).GetTurn(Id(201), default);
+        var missing = await Controller(new FakeService(turn: null)).GetTurn(Id(999), default);
 
         Assert.Same(SampleTurn, Assert.IsType<OkObjectResult>(found.Result).Value);
         Assert.Equal(Id(201), service.AskedTurn);

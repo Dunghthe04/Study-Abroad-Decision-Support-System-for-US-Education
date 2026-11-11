@@ -13,7 +13,7 @@ public static class AiCallMapper
     private const int ModelMax = 64;      // khớp cột model
     private const int ErrorMax = 1000;    // khớp cột error
 
-    public static AiCall ToEntity(AiUsageDto usage, Guid? userId, Guid? chatMessageId) => new()
+    public static AiCall ToEntity(AiUsageDto usage, Guid? userId, Guid? chatMessageId, AiPricing pricing) => new()
     {
         UserId = userId,
         ChatMessageId = chatMessageId,
@@ -24,14 +24,14 @@ public static class AiCallMapper
         PromptTokens = usage.InputTokens,
         CompletionTokens = usage.OutputTokens,
         CachedTokens = usage.CachedTokens,
-        TotalTokens = usage.InputTokens + usage.OutputTokens,   // token vào cộng token ra; token đọc từ cache tính riêng
+        TotalTokens = usage.InputTokens + usage.OutputTokens,   // token vào cộng token ra
         LatencyMs = usage.LatencyMs,
         Success = usage.Ok,
         Error = Cut(usage.Error, ErrorMax),
         // Tiền tính và lưu ngay lúc gọi: đổi giá sau này không làm lệch dòng cũ. Model Claude lạ thì null (chưa biết giá).
         // Lần gọi lỗi chưa tiêu token nên tiền là 0, không phải "chưa biết giá"
         CostUsd = usage.Ok
-            ? AiPricing.Cost(usage.Source, usage.Model, usage.InputTokens, usage.OutputTokens, usage.CachedTokens)
+            ? pricing.Cost(usage.Source, usage.Model, usage.InputTokens, usage.OutputTokens)
             : 0m,
     };
 

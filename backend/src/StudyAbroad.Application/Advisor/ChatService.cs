@@ -33,7 +33,7 @@ namespace StudyAbroad.Application.Advisor
         IChatAnalysisRepository? analyses = null, IRecommendationRunner? recommender = null,
         IChatBenchmarkRepository? benchmarks = null, IGradeScaleProvider? gradeScale = null,
         IChatMessageRepository? messages = null, ILogger<ChatService>? logger = null,
-        IAiCallRepository? aiCalls = null, IAiUsageCollector? usageCollector = null)
+        IAiCallRepository? aiCalls = null, IAiUsageCollector? usageCollector = null, AiPricing? pricing = null)
     {
         //Dữ liệu FE gửi lên
         // onEvent: chỉ truyền khi trả lời theo từng ý (stream); mỗi tin tiến độ / câu một ý của advisor gọi hàm này ngay.
@@ -264,7 +264,7 @@ namespace StudyAbroad.Application.Advisor
         // Ghi mỗi lần gọi AI một dòng ai_calls (nguồn, skill, token, thời gian, lỗi), nối với tin trả lời nếu có.
         // Lỗi khi ghi chỉ cảnh báo, không bao giờ làm hỏng lượt chat. Không có số đo thì không làm gì
         private Task RecordAiCallsAsync(Guid userId, Guid? replyId, IReadOnlyList<AiUsageDto>? usage, CancellationToken ct) =>
-            aiCalls is null ? Task.CompletedTask : new AiCallRecorder(aiCalls, logger).RecordAsync(userId, replyId, usage, ct);
+            aiCalls is null ? Task.CompletedTask : new AiCallRecorder(aiCalls, pricing, logger).RecordAsync(userId, replyId, usage, ct);
 
         // Advisor lỗi hẳn nên không có câu trả lời. Lưu câu hỏi và một dòng vai trò system ghi lỗi (outcome failed, review_status open)
         // để câu không biến mất khỏi hàng đợi của admin. Không dùng vai trò assistant vì trợ lý chưa hề trả lời.

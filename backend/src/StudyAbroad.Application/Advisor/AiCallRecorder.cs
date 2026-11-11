@@ -7,7 +7,7 @@ namespace StudyAbroad.Application.Advisor;
 /// Dùng chung cho lượt chat (có chat_message_id) và các luồng ngoài chat như OCR bảng điểm, bậc ngoại khóa (chat_message_id trống).
 /// Lỗi khi ghi chỉ cảnh báo, không bao giờ làm hỏng việc chính của người dùng. Không có số đo thì không làm gì.
 /// </summary>
-public class AiCallRecorder(IAiCallRepository repository, ILogger? logger = null)
+public class AiCallRecorder(IAiCallRepository repository, AiPricing? pricing = null, ILogger? logger = null)
 {
     public async Task RecordAsync(Guid userId, Guid? chatMessageId, IReadOnlyList<AiUsageDto>? usage, CancellationToken ct)
     {
@@ -15,7 +15,7 @@ public class AiCallRecorder(IAiCallRepository repository, ILogger? logger = null
             return;
         try
         {
-            await repository.AddRangeAsync(usage.Select(call => AiCallMapper.ToEntity(call, userId, chatMessageId)).ToList(), ct);
+            await repository.AddRangeAsync(usage.Select(call => AiCallMapper.ToEntity(call, userId, chatMessageId, pricing ?? AiPricing.None)).ToList(), ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

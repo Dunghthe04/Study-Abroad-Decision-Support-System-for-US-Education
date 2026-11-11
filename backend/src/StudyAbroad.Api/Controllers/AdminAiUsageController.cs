@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using StudyAbroad.Application.Admin.AiUsage;
+using StudyAbroad.Application.Advisor;
 using StudyAbroad.Application.Common;
 using StudyAbroad.Domain.Constants;
 
@@ -13,8 +14,12 @@ namespace StudyAbroad.Api.Controllers;
 [ApiController]
 [Authorize(Roles = UserRoles.Admin)]
 [Route("api/v1/admin/ai-usage")]
-public class AdminAiUsageController(IAiUsageReportService report) : ControllerBase
+public class AdminAiUsageController(IAiUsageReportService report, AiPricing pricing) : ControllerBase
 {
+    /// <summary>Bảng giá token đang áp dụng (chỉ đọc). Giá đọc từ cấu hình (appsettings hoặc biến môi trường AiPricing__...).</summary>
+    [HttpGet("pricing")]
+    public ActionResult<IReadOnlyList<AiPricing.PriceInfo>> GetPricing() => Ok(pricing.Catalog());
+
     /// <summary>Tổng quan cả hệ thống: tổng, theo nguồn (local hay cloud), theo tính năng, theo ngày.</summary>
     [HttpGet("overview")]
     public async Task<ActionResult<AiUsageOverviewDto>> GetOverview(

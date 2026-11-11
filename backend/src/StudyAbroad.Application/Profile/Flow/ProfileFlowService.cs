@@ -36,7 +36,8 @@ public class ProfileFlowService(
     IGradeScaleProvider? gradeScale = null,
     IAiCallRepository? aiCalls = null,
     IAiUsageCollector? usageCollector = null,
-    ILogger<ProfileFlowService>? logger = null) : IProfileFlowService
+    ILogger<ProfileFlowService>? logger = null,
+    AiPricing? pricing = null) : IProfileFlowService
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -843,7 +844,7 @@ public class ProfileFlowService(
             return;
         var usage = usageCollector.Snapshot();
         usageCollector.Clear();
-        await new AiCallRecorder(aiCalls, logger).RecordAsync(userId, null, usage, ct);
+        await new AiCallRecorder(aiCalls, pricing, logger).RecordAsync(userId, null, usage, ct);
     }
 
     private static bool IsAwardKind(ProfileActivity a) => string.Equals(a.Kind, "award", StringComparison.OrdinalIgnoreCase);
