@@ -26,6 +26,7 @@ export function universityDate(value: string | null | undefined): string {
 
 export function universityUrl(value: string | null | undefined): string | null {
   if (!value) return null;
+  if (value.startsWith("/")) return value;
   try {
     const url = new URL(value);
     return url.protocol === "https:" || url.protocol === "http:" ? url.href : null;

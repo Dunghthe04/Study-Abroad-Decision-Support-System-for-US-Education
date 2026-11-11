@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState, type ComponentType } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState, type ComponentType } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -8,6 +8,8 @@ import {
   ArrowUpIcon,
   AwardIcon,
   BookOpenCheckIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
   ExternalLinkIcon,
   FileTextIcon,
   HandCoinsIcon,
@@ -27,7 +29,8 @@ import {
 } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Spinner } from "@/components/ui/spinner";
@@ -35,9 +38,12 @@ import { OpenAssistantButton } from "@/components/assistant/OpenAssistantButton"
 import { useAssistant } from "@/components/assistant/AssistantProvider";
 import { LandingHero } from "@/components/landing/LandingHero";
 import { LayerStack } from "@/components/landing/LayerStack";
-import { LANDING_SCHOOLS, type SchoolType } from "@/lib/landing-schools";
+import { UniversityCard } from "@/components/universities/UniversityCard";
+import { LANDING_SCHOOLS, type LandingSchool } from "@/lib/landing-schools";
+import { searchUniversities } from "@/lib/university-api";
 import { useAuth } from "@/contexts/AuthContext";
 import { GROUP_LABELS } from "@/lib/recommendation-labels";
+import type { UniversityListItem } from "@/types/university";
 import { cn } from "@/lib/utils";
 
 type IconType = ComponentType<{ className?: string }>;
@@ -88,31 +94,24 @@ const ASK_EXAMPLES = [
   "Trường nào có học bổng cho sinh viên quốc tế?",
 ];
 
-const SCHOOL_FILTERS: { key: "all" | SchoolType; label: string }[] = [
-  { key: "all", label: "Tất cả" },
-  { key: "private", label: "Tư thục" },
-  { key: "public", label: "Công lập" },
-  { key: "liberal", label: "Liberal Arts" },
-];
-
 const SCHOLARSHIPS: { icon: IconType; title: string; tag: string; desc: string; examples: string }[] = [
   {
     icon: HeartHandshakeIcon,
-    title: "Theo nhu cầu tài chính",
+    title: "Xin bằng giấy nhu cầu tài chính?",
     tag: "Need-based",
     desc: "Trường xét khả năng chi trả của gia đình. Một số trường top đầu xét need-blind, tức không để nhu cầu hỗ trợ ảnh hưởng đến quyết định nhận.",
     examples: "Harvard, MIT, Yale, Princeton, Amherst",
   },
   {
     icon: AwardIcon,
-    title: "Theo thành tích",
+    title: "Xin bằng thành tích?",
     tag: "Merit-based",
     desc: "Dựa trên GPA, điểm chuẩn hóa và hoạt động nổi bật. Nhiều trường công lập và tư thục tầm trung có loại này cho sinh viên quốc tế.",
     examples: "Arizona State, University of Alabama",
   },
   {
     icon: WalletIcon,
-    title: "Học phí thấp hoặc miễn học phí",
+    title: "Học phí thấp hoặc miễn học phí?",
     tag: "Tiết kiệm",
     desc: "Trường có chi phí thấp, hoặc không thu học phí và đổi lại sinh viên làm việc trong trường.",
     examples: "Berea College, các trường công lập",
@@ -152,24 +151,38 @@ const FAQS = [
   },
 ];
 
-/* --------------------------------- Thành phần -------------------------------- */
+function fallbackToUniversityListItem(s: LandingSchool, idx: number): UniversityListItem {
+  const [city, state] = s.city.split(", ");
+  return {
+    id: `landing-${idx}`,
+    code: s.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+    name: s.name,
+    city: city ?? null,
+    state: state ?? null,
+    stateName: null,
+    control: s.type === "public" ? "public" : "private",
+    acceptanceRate: s.acceptRate,
+    isIvy: s.typeLabel === "Ivy League",
+    logoUrl: null,
+    coverUrl: s.image,
+    tuitionUsd: null,
+    totalCostUsd: null,
+    minIelts: null,
+    minToefl: null,
+    minDuolingo: null,
+    bestRank: null,
+    bestRankList: null,
+    satPolicy: null,
+    intlAidPolicy: null,
+    majors: s.majors,
+  };
+}
 
 function SectionHead({ title, desc, className }: { title: string; desc?: string; className?: string }) {
   return (
     <div className={cn("max-w-2xl space-y-2", className)}>
       <h2 className="text-h1 text-balance text-ink sm:text-[2rem]">{title}</h2>
       {desc && <p className="text-body text-pretty text-ink-2">{desc}</p>}
-    </div>
-  );
-}
-
-function SchoolImage({ src, alt }: { src: string; alt: string }) {
-  const [broken, setBroken] = useState(false);
-  if (broken) return <div aria-hidden className="aspect-[16/10] w-full bg-brand-wash" />;
-  return (
-    <div className="overflow-hidden">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={src} alt={alt} loading="lazy" onError={() => setBroken(true)} className="aspect-[16/10] w-full object-cover transition-transform duration-500 ease-out group-hover/card:scale-[1.03] motion-reduce:transition-none" />
     </div>
   );
 }
@@ -183,7 +196,60 @@ function HomeView() {
   const searchParams = useSearchParams();
   const isPublicPreview = searchParams.get("view") === "public";
   const [customQuestion, setCustomQuestion] = useState("");
-  const [schoolFilter, setSchoolFilter] = useState<"all" | SchoolType>("all");
+  const [schools, setSchools] = useState<UniversityListItem[]>(() =>
+    LANDING_SCHOOLS.map(fallbackToUniversityListItem),
+  );
+  const [schoolsLoading, setSchoolsLoading] = useState(true);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    searchUniversities({ sortBy: "rank", pageSize: 10 })
+      .then((res) => {
+        if (!alive) return;
+        if (res.items && res.items.length > 0) {
+          setSchools(res.items);
+        }
+      })
+      .catch(() => {
+        // Giữ fallback đã khởi tạo từ LANDING_SCHOOLS
+      })
+      .finally(() => {
+        if (alive) setSchoolsLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const updateScrollState = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 4);
+    setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 4);
+  }, []);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    updateScrollState();
+    el.addEventListener("scroll", updateScrollState, { passive: true });
+    window.addEventListener("resize", updateScrollState);
+    return () => {
+      el.removeEventListener("scroll", updateScrollState);
+      window.removeEventListener("resize", updateScrollState);
+    };
+  }, [schools, schoolsLoading, updateScrollState]);
+
+  const scrollByCard = (direction: "left" | "right") => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const firstChild = el.firstElementChild as HTMLElement | null;
+    const delta = firstChild ? firstChild.offsetWidth + 20 : 340;
+    el.scrollBy({ left: direction === "left" ? -delta : delta, behavior: "smooth" });
+  };
 
   const isAdmin = user?.role === "admin";
   const isModerator = user?.role === "moderator";
@@ -202,8 +268,6 @@ function HomeView() {
       </div>
     );
   }
-
-  const schools = schoolFilter === "all" ? LANDING_SCHOOLS : LANDING_SCHOOLS.filter((s) => s.type === schoolFilter);
 
   return (
     <>
@@ -389,61 +453,73 @@ function HomeView() {
       </section>
 
       {/* TRƯỜNG */}
-      <section className="space-y-8">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <SectionHead title="Một số trường học sinh Việt Nam hay hỏi" desc="Kiểm tra nhanh trường nằm ở nhóm nào với hồ sơ của bạn." />
-          <div role="group" aria-label="Lọc theo loại trường" className="flex flex-wrap gap-1.5">
-            {SCHOOL_FILTERS.map((f) => (
-              <Button
-                key={f.key}
-                variant={schoolFilter === f.key ? "secondary" : "ghost"}
-                aria-pressed={schoolFilter === f.key}
-                onClick={() => setSchoolFilter(f.key)}
-              >
-                {f.label}
-              </Button>
-            ))}
-          </div>
+      <section className="space-y-6">
+        <div className="flex items-center justify-between gap-4">
+          <h2 className="text-h1 text-balance text-ink sm:text-[2rem]">Mỹ có các trường gì?</h2>
+          <Link
+            href="/universities"
+            className={buttonVariants({ variant: "outline", size: "default" })}
+          >
+            Xem tất cả
+          </Link>
         </div>
 
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {schools.map((s) => (
-            <Card key={s.name} className="!pt-0">
-              <SchoolImage src={s.image} alt={s.name} />
-              <CardHeader>
-                <div className="flex items-start justify-between gap-2">
-                  <CardTitle>{s.name}</CardTitle>
-                  <Badge variant="neutral" className="mt-1">{s.typeLabel}</Badge>
-                </div>
-                <p className="flex items-center gap-1 text-body-s">
-                  <MapPinIcon className="size-3.5" />
-                  {s.city}
-                </p>
-              </CardHeader>
-              <CardContent className="flex flex-1 flex-col gap-3">
-                <p className="text-sm leading-relaxed text-ink-2">{s.highlight}</p>
-                <p className="text-body-s">{s.majors.join(" · ")}</p>
-              </CardContent>
-              <CardFooter className="justify-between gap-2 bg-transparent">
-                <Link href={`/analysis?school=${encodeURIComponent(s.name)}`} className={buttonVariants({ variant: "link", className: "px-0" })}>
-                  Kiểm tra hồ sơ
-                  <ArrowRightIcon />
-                </Link>
-                <Button variant="ghost" size="sm" onClick={() => openPanel(`Cho em biết điều kiện tuyển sinh và học bổng của ${s.name}`)}>
-                  Hỏi trợ lý
-                </Button>
-              </CardFooter>
-            </Card>
-          ))}
+        <div className="relative group/carousel">
+          {/* Nút cuộn trái */}
+          <button
+            type="button"
+            aria-label="Cuộn sang trái"
+            disabled={!canScrollLeft}
+            onClick={() => scrollByCard("left")}
+            className="absolute -left-3 sm:-left-5 top-1/2 z-20 flex size-10 -translate-y-1/2 items-center justify-center rounded-full border border-line bg-surface text-ink shadow-sm transition-all hover:bg-ground active:scale-95 disabled:pointer-events-none disabled:opacity-0"
+          >
+            <ChevronLeftIcon className="size-5" />
+          </button>
+
+          {/* Dải thẻ trường cuộn ngang */}
+          <div
+            ref={scrollRef}
+            className="flex gap-5 overflow-x-auto pb-4 pt-1 snap-x snap-mandatory scroll-smooth [scrollbar-width:none] [-webkit-overflow-scrolling:touch]"
+          >
+            {schoolsLoading
+              ? Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="w-[300px] sm:w-[340px] shrink-0 snap-start">
+                    <Card className="gap-0 py-0">
+                      <Skeleton className="aspect-[4/3] w-full" />
+                      <div className="space-y-3 p-4">
+                        <Skeleton className="h-5 w-3/4" />
+                        <Skeleton className="h-4 w-1/2" />
+                        <div className="grid grid-cols-2 gap-2 pt-2">
+                          <Skeleton className="h-9 w-full" />
+                          <Skeleton className="h-9 w-full" />
+                        </div>
+                      </div>
+                    </Card>
+                  </div>
+                ))
+              : schools.map((school) => (
+                  <div key={school.id || school.code} className="w-[300px] sm:w-[340px] shrink-0 snap-start">
+                    <UniversityCard university={school} />
+                  </div>
+                ))}
+          </div>
+
+          {/* Nút cuộn phải */}
+          <button
+            type="button"
+            aria-label="Cuộn sang phải"
+            disabled={!canScrollRight}
+            onClick={() => scrollByCard("right")}
+            className="absolute -right-3 sm:-right-5 top-1/2 z-20 flex size-10 -translate-y-1/2 items-center justify-center rounded-full border border-line bg-surface text-ink shadow-sm transition-all hover:bg-ground active:scale-95 disabled:pointer-events-none disabled:opacity-0"
+          >
+            <ChevronRightIcon className="size-5" />
+          </button>
         </div>
       </section>
 
       {/* HỌC BỔNG */}
       <section className="space-y-8">
-        <SectionHead
-          title="Ba hướng để giảm chi phí"
-          desc="Nhập ngân sách, hệ thống tách riêng những trường chỉ đi được khi có học bổng lớn."
-        />
+        <SectionHead title="Săn học bổng" />
         <dl className="grid divide-y divide-line rounded-xl border border-line bg-surface md:grid-cols-3 md:divide-x md:divide-y-0">
           {SCHOLARSHIPS.map((s) => (
             <div key={s.title} className="flex flex-col gap-3 p-5 sm:p-6">
@@ -453,17 +529,10 @@ function HomeView() {
               </div>
               <dt className="text-h3 text-ink">{s.title}</dt>
               <dd className="flex-1 text-sm leading-relaxed text-ink-2">{s.desc}</dd>
-              <dd className="border-t border-line pt-3 text-body-s">Ví dụ: {s.examples}</dd>
+              <dd className="text-body-s text-ink-3">Ví dụ: {s.examples}</dd>
             </div>
           ))}
         </dl>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-body-s">Chính sách học bổng thay đổi theo năm. Kiểm tra lại trên trang của trường trước khi nộp.</p>
-          <Link href="/profile/financial" className={buttonVariants({ variant: "outline", size: "lg", className: "self-start" })}>
-            Nhập ngân sách
-            <ArrowRightIcon />
-          </Link>
-        </div>
       </section>
 
       {/* TRUNG TÂM */}
