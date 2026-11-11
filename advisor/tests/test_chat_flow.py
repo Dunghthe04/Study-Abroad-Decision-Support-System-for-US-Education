@@ -169,6 +169,17 @@ async def test_pressing_a_button_of_the_pending_question_goes_to_the_profile_bra
     assert counting.calls == [] and ran == ["collect_profile"]
 
 
+async def test_a_button_turn_reports_no_confidence_because_the_slm_was_not_asked():
+    flow, counting = make_flow(tin("knowledge"))
+
+    res = await flow.reply(request("Bỏ qua", pending="F2"))
+
+    assert counting.calls == []
+    assert res.slm.intents == ["collect_profile"]
+    assert res.slm.confidence is None and res.slm.fallback is False
+    assert res.slm.model_intents == []  # không gọi SLM thì không có nhãn của model
+
+
 # ---- nhắc lại câu hồ sơ đang chờ ----
 async def test_a_question_asked_in_the_middle_of_the_profile_reminds_the_pending_question():
     flow, _ = make_flow(tin("knowledge"))

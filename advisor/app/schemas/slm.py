@@ -375,6 +375,8 @@ class SlmTin(BaseModel):
 # Đây là kết quả bộ phân loại trả cho ChatFlow và các nhánh
 class SlmTinResult(SlmTin):
     confidence: float = Field(default=1.0, ge=0, le=1)
+    # True khi SLM hai lần đều trả sai (hoặc Ollama tắt) và bộ phân loại phải dùng kết quả dự phòng. Báo cho admin biết SLM hỏng, không phải câu mơ hồ thật
+    fallback: bool = False
 
     # Dựng từ JSON SLM trả ({"intents": [...]}): kiểm từng ý, dọn (gộp, sắp xếp, cắt ý quá trần kỹ thuật) rồi kiểm cả tin.
     # JSON sai thì ném ValueError (ValidationError của pydantic cũng là ValueError)

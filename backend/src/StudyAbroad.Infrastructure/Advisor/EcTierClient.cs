@@ -8,8 +8,11 @@ using System.Threading.Tasks;
 
 namespace StudyAbroad.Infrastructure.Advisor;
 
-/// <summary>Gọi advisor tính bậc ngoại khóa; advisor tắt hoặc lỗi thì trả null, không làm hỏng việc lưu hồ sơ</summary>
-public class EcTierClient(HttpClient http, ILogger<EcTierClient> logger) : IEcTierClient
+/// <summary>
+/// Gọi advisor tính bậc ngoại khóa; advisor tắt hoặc lỗi thì trả null, không làm hỏng việc lưu hồ sơ.
+/// collector: số đo token của lần gọi được bỏ vào giỏ chung của yêu cầu, ProfileFlowService đổ xuống ai_calls (null thì bỏ qua)
+/// </summary>
+public class EcTierClient(HttpClient http, ILogger<EcTierClient> logger, IAiUsageCollector? collector = null) : IEcTierClient
 {
     public async Task<int?> ReadTierAsync(EcTierRequest request, CancellationToken ct = default)
     {
@@ -23,6 +26,8 @@ public class EcTierClient(HttpClient http, ILogger<EcTierClient> logger) : IEcTi
             }
 
             var result = await response.Content.ReadFromJsonAsync<EcTierResponse>(ct);
+            // Token đã tiêu thật dù bậc trả về có hợp lệ hay không, nên ghi trước khi kiểm bậc
+            collector?.Add(result?.AiUsage);
             if (result is null || result.Tier is < 1 or > 5)
             {
                 logger.LogWarning("Advisor /ec trả bậc không hợp lệ, dùng công thức dự phòng");

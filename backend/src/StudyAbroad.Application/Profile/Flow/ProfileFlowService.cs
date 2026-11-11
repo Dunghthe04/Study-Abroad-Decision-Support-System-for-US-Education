@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using StudyAbroad.Application.Advisor;
 using StudyAbroad.Application.Profile.Academic;
 using StudyAbroad.Domain.Constants;
@@ -23,13 +24,20 @@ namespace StudyAbroad.Application.Profile.Flow;
 /// - Commit: validate rồi ánh xạ draft vào student_profiles / transcript_scores / profile_activities / profile_certifications
 ///   trong 1 transaction. Danh mục loại chứng chỉ lấy từ app_settings profile.metadata, không viết cứng trong code
 /// - Mở lại hồ sơ đã gửi: dựng draft từ DB bằng BuildDraftFromProfile
+/// aiCalls, usageCollector, logger: ghi token của các lần gọi advisor ngoài chat (OCR bảng điểm, bậc ngoại khóa) vào ai_calls.
+///   Các client OCR và ngoại khóa bỏ số đo vào giỏ chung (usageCollector), service này đổ giỏ xuống ai_calls kèm user_id
+///   (không có chat_message_id vì nằm ngoài chat). Null thì không ghi, dùng trong test cũ
 /// </summary>
 public class ProfileFlowService(
     IProfileFlowRepository repository,
     IProfileFileStorageService fileStorageService,
     ITranscriptOcrClient? ocrClient = null,
     IEcTierClient? ecTierClient = null,
-    IGradeScaleProvider? gradeScale = null) : IProfileFlowService
+    IGradeScaleProvider? gradeScale = null,
+    IAiCallRepository? aiCalls = null,
+    IAiUsageCollector? usageCollector = null,
+    ILogger<ProfileFlowService>? logger = null,
+    AiPricing? pricing = null) : IProfileFlowService
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -195,6 +203,8 @@ public class ProfileFlowService(
             {
                 // OCR lỗi (client OCR đã ghi log) thì không chặn luồng upload; FE báo người dùng tự nhập điểm
             }
+            // Token của OCR (AI local đọc ảnh, Claude bóc tách) ghi ngay, tới đây profile chưa bị sửa nên an toàn
+            await RecordAiCallsAsync(userId, ct);
         }
 
         // 3. Chỉ ghi thông tin file vào nháp; điểm OCR do FE ghép vào draft.step2 rồi tự lưu nháp
@@ -260,6 +270,10 @@ public class ProfileFlowService(
         profile.ExtracurricularTier = await ComputeEcTierAsync(activities, ct);
 
         await repository.CommitProfileFlowAsync(profile, scores, activities, certifications, ct);
+
+        // Token của lần gọi advisor đọc bậc ngoại khóa. Phải ghi SAU khi commit: ghi sớm thì SaveChanges của ai_calls sẽ lưu luôn
+        // các sửa đổi dở của profile ra ngoài transaction của CommitProfileFlowAsync
+        await RecordAiCallsAsync(userId, ct);
 
         // Đã lưu xong hồ sơ mới thì xoá file bảng điểm chính thức cũ, không giữ dữ liệu cá nhân thừa
         if (!string.IsNullOrWhiteSpace(previousOfficialUrl) && previousOfficialUrl != profile.TranscriptFileUrl)
@@ -820,6 +834,17 @@ public class ProfileFlowService(
             ? null
             : await ecTierClient.ReadTierAsync(new EcTierRequest(act, awards), ct);
         return tier ?? StudyAbroad.Application.Recommendations.ActivityTier.FromProfile(valid).Tier;
+    }
+
+    // Đổ giỏ số đo (do các client OCR, ngoại khóa bỏ vào) xuống ai_calls kèm user_id; chat_message_id trống vì nằm ngoài chat.
+    // Đổ giỏ sau khi lấy để lần ghi sau trong cùng yêu cầu không ghi trùng. Lỗi ghi chỉ cảnh báo (AiCallRecorder)
+    private async Task RecordAiCallsAsync(Guid userId, CancellationToken ct)
+    {
+        if (aiCalls is null || usageCollector is null)
+            return;
+        var usage = usageCollector.Snapshot();
+        usageCollector.Clear();
+        await new AiCallRecorder(aiCalls, pricing, logger).RecordAsync(userId, null, usage, ct);
     }
 
     private static bool IsAwardKind(ProfileActivity a) => string.Equals(a.Kind, "award", StringComparison.OrdinalIgnoreCase);

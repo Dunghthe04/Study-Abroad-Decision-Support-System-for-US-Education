@@ -76,6 +76,11 @@ public record AdvisorChatResponse(
     // "explain" = viết lời tư vấn một trường (ChatExplanation, mã trường nằm ở ActionData.code). Không trả cho trình duyệt
     string? Action = null,
     JsonElement? ActionData = null,
+    // Số đo từng lần gọi AI của lượt này, để ghi nhật ký ai_calls. Nội bộ: không trả cho trình duyệt
+    IReadOnlyList<AiUsageDto>? AiUsage = null,
+    // SLM đã hiểu tin nhắn ra sao (nhãn model gán, độ tin cậy, có dùng kết quả dự phòng không), để đánh dấu câu chưa trả lời được.
+    // Có chữ của học sinh nên nội bộ: không trả cho trình duyệt
+    AdvisorSlmDto? Slm = null,
     // Lượt này vừa lưu hồ sơ chính thức (bấm "Đúng rồi" ở bảng rà soát): trang Gợi ý trường hiện nút cập nhật danh sách.
     // Chỉ .NET đặt, advisor không gửi
     bool? ProfileSaved = null);

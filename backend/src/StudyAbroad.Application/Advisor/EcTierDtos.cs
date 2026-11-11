@@ -25,7 +25,8 @@ public record EcTierRequest(
 /// <summary>Phần cần dùng trong EcResponse bên Python: bậc 1–5 và SLM có đọc được hay đã dùng vai trò học sinh chọn</summary>
 public record EcTierResponse(
     [property: JsonPropertyName("tier")] int Tier,
-    [property: JsonPropertyName("ai_used")] bool AiUsed);
+    [property: JsonPropertyName("ai_used")] bool AiUsed,
+    [property: JsonPropertyName("aiUsage")] IReadOnlyList<AiUsageDto>? AiUsage = null);
 
 /// <summary>Gọi advisor: SLM xác nhận vai trò, phạm vi từng hoạt động rồi Python tính bậc ngoại khóa</summary>
 public interface IEcTierClient

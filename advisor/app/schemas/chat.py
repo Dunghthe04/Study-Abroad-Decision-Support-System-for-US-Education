@@ -134,12 +134,43 @@ class AiUsageCall(CamelModel):
     source: str  # claude | ollama
     model: str
     purpose: str = ""  # công việc (tên skill), để báo cáo theo tính năng
+    skill_version: str = (
+        ""  # phiên bản của skill đó (dòng đầu file skill), để biết câu trả lời do bản nào tạo ra
+    )
     input_tokens: int = 0
     output_tokens: int = 0
     cached_tokens: int = 0
     ok: bool = True
     error: str | None = None
     latency_ms: int = 0
+
+
+# Một ý do model đọc ra: loại, đoạn chữ học sinh viết (nguyên văn) và thực thể. Admin xem để biết model đã gán nhãn gì rồi sửa nhãn.
+# Có chữ của học sinh nên .NET chỉ lưu vào chat_messages.meta_json (bảng dữ liệu cá nhân, chỉ admin và moderator xem), không trả cho trình duyệt
+class SlmSummaryIntent(CamelModel):
+    type: str
+    span: str = ""
+    entities: dict[str, Any] = {}
+
+
+# SLM đã hiểu tin nhắn ra sao ở lượt này, để .NET đánh dấu câu chưa trả lời được (chat_messages.outcome) và admin xem chất lượng SLM.
+# Chỉ có khi lượt đi qua nhánh đọc tin (không có ở lượt nút chuyển thẳng)
+class SlmSummary(CamelModel):
+    # Kết quả NGUYÊN VĂN của model, lấy ngay sau khi model trả lời, trước các luật code đổi ý. Đây là "nhãn model gán" để admin đối chiếu và sửa.
+    # Rỗng khi bấm nút (không gọi SLM) hoặc khi model hỏng và phải dùng kết quả dự phòng (không có đầu ra thật của model)
+    model_intents: list[SlmSummaryIntent] = []
+    intents: list[
+        str
+    ] = []  # loại các ý hệ thống THỰC SỰ đã chạy, sau khi luật code hậu xử lý (collect_profile, knowledge, out_of_scope...)
+    out_of_scope: str | None = (
+        None  # loại con nếu có ý out_of_scope: exception | sensitive | farewell | ambiguous | about_system | human_handoff
+    )
+    confidence: float | None = (
+        None  # độ tin cậy 0 đến 1 của SLM; None khi không gọi SLM (bấm nút trả lời câu hồ sơ)
+    )
+    fallback: bool = (
+        False  # SLM hai lần đều sai, phải dùng kết quả dự phòng (ngay cả khi luật code sau đó cứu được câu)
+    )
 
 
 class AiUsageMixin(BaseModel):
@@ -177,3 +208,4 @@ class ChatResponse(CamelModel):
     ai_usage: list[
         AiUsageCall
     ] = []  # token từng lần gọi AI trong lượt này, để .NET ghi nhật ký và tính chi phí
+    slm: SlmSummary | None = None  # SLM hiểu tin nhắn ra sao; None nếu lượt không qua bước đọc tin

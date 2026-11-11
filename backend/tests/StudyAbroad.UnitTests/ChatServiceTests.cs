@@ -65,6 +65,482 @@ public class ChatServiceTests
     }
 
     [Fact]
+    public async Task AiUsage_FromAdvisor_IsNotSentToTheBrowser()
+    {
+        // Số token là việc nội bộ của admin: advisor gửi cho backend, backend không chuyển tiếp cho học sinh
+        var advisor = new FakeAdvisor("B0")
+        {
+            AiUsage = [new AiUsageDto("ollama", "usas-slm-v4", "slm_intents", "3.0", 1700, 180, 0, true, null, 21000)],
+            // Nhãn model gán chứa chữ của học sinh, chỉ lưu cho admin
+            Slm = new AdvisorSlmDto([new AdvisorSlmIntentDto("collect_profile", "em GPA 3.5")], ["collect_profile"], null, 0.9, false),
+        };
+
+        var res = await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow()).ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Null(res.AiUsage);
+        Assert.Null(res.Slm);
+    }
+
+    // ---- lưu tin nhắn cho admin xem (chat_messages)
+
+    [Fact]
+    public async Task EachTurn_IsSavedAsTheStudentsMessageAndTheAssistantsReply()
+    {
+        var store = new FakeSessions();
+        var saved = new FakeMessages();
+        var userId = Guid.NewGuid();
+
+        var res = await new ChatService(new FakeAdvisor("B0"), store, new FakeProfileFlow(), messages: saved)
+            .ChatAsync(userId, new AdvisorChatRequest(Hello));
+
+        var session = Assert.Single(store.Rows);
+        Assert.Equal(["user", "assistant"], saved.Rows.Select(r => r.Role));
+        Assert.All(saved.Rows, r => Assert.Equal(session.Id, r.ChatSessionId));
+        Assert.Equal(session.Id.ToString(), res.SessionId);
+        Assert.Equal("chào", saved.Rows[0].Content);
+        Assert.Equal("ok", saved.Rows[1].Content);
+        Assert.True(saved.Rows[0].CreatedAt <= saved.Rows[1].CreatedAt);   // tin hỏi đứng trước tin trả lời
+    }
+
+    [Fact]
+    public async Task OutcomeAndMeta_AreOnlyOnTheAssistantsReply()
+    {
+        var saved = new FakeMessages();
+
+        await new ChatService(new FakeAdvisor("B0"), new FakeSessions(), new FakeProfileFlow(), messages: saved)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        var (student, reply) = (saved.Rows[0], saved.Rows[1]);
+        Assert.Null(student.Outcome);
+        Assert.Null(student.MetaJson);
+        Assert.Null(student.ReviewStatus);
+        Assert.Equal("answered", reply.Outcome);
+        Assert.Null(reply.ReviewStatus);                                  // trả lời được thì admin không phải xem
+        Assert.Equal(1, JsonDocument.Parse(reply.MetaJson!).RootElement.GetProperty("v").GetInt32());
+    }
+
+    [Fact]
+    public async Task UnderstoodNothing_GoesToTheAdminQueue_WithTheLabelTheModelGave()
+    {
+        var saved = new FakeMessages();
+        var advisor = new FakeAdvisor("B0")
+        {
+            Slm = new AdvisorSlmDto([new AdvisorSlmIntentDto("out_of_scope", "asdfgh")], ["out_of_scope"], "ambiguous", 0.2, false),
+        };
+
+        await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), messages: saved)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest([new Application.Advisor.ChatMessage("user", "asdfgh")]));
+
+        var (student, reply) = (saved.Rows[0], saved.Rows[1]);
+        Assert.Equal("no_answer", reply.Outcome);
+        Assert.Equal("open", reply.ReviewStatus);
+        // Nhãn model gán thuộc về CÂU HỎI nên nằm ở tin của học sinh, không phải tin trả lời
+        var label = JsonDocument.Parse(student.MetaJson!).RootElement.GetProperty("slm").GetProperty("modelIntents")[0];
+        Assert.Equal("asdfgh", label.GetProperty("span").GetString());
+        Assert.False(JsonDocument.Parse(reply.MetaJson!).RootElement.TryGetProperty("slm", out _));
+    }
+
+    [Fact]
+    public async Task TheReplyPointsExactlyAtTheQuestionItAnswers()
+    {
+        var saved = new FakeMessages();
+
+        await new ChatService(new FakeAdvisor("B0"), new FakeSessions(), new FakeProfileFlow(), messages: saved)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        var (student, reply) = (saved.Rows[0], saved.Rows[1]);
+        Assert.Equal(student.Id, reply.ReplyToMessageId);
+        Assert.Null(student.ReplyToMessageId);
+    }
+
+    [Fact]
+    public async Task ReplyMeta_SplitsLocalAndCloudTokensOfTheTurn()
+    {
+        var saved = new FakeMessages();
+        var advisor = new FakeAdvisor("B0")
+        {
+            AiUsage =
+            [
+                new AiUsageDto("ollama", "usas-slm-v4", "slm_intents", "3.0", 1700, 180, 0, true, null, 21000),
+                new AiUsageDto("claude", "claude-haiku-5-5", "skill_tra_loi", "1.0", 2400, 500, 0, true, null, 3000),
+            ],
+        };
+
+        await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), messages: saved)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        var meta = JsonDocument.Parse(saved.Rows[1].MetaJson!).RootElement;
+        Assert.Equal(1700, meta.GetProperty("local").GetProperty("inputTokens").GetInt32());
+        Assert.Equal(2400, meta.GetProperty("cloud").GetProperty("inputTokens").GetInt32());
+    }
+
+    [Fact]
+    public async Task ReplyWithoutAQuestion_PointsAtNothing()
+    {
+        var saved = new FakeMessages();
+
+        await new ChatService(new FakeAdvisor("B0"), new FakeSessions(), new FakeProfileFlow(), messages: saved)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest([]));
+
+        Assert.Null(saved.Rows.Single().ReplyToMessageId);
+    }
+
+    [Fact]
+    public async Task AiStepThatAlwaysFailed_IsSavedAsFailedAndQueued()
+    {
+        var saved = new FakeMessages();
+        var advisor = new FakeAdvisor("B0")
+        {
+            AiUsage = [new AiUsageDto("claude", "m", "skill_tra_loi", "1.0", 0, 0, 0, false, "timeout", 30000)],
+        };
+
+        await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), messages: saved)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Equal(("failed", "open"), (saved.Rows[1].Outcome, saved.Rows[1].ReviewStatus));
+    }
+
+    [Fact]
+    public async Task FailureToSaveMessages_NeverBreaksTheChat()
+    {
+        var store = new FakeSessions();
+
+        var res = await new ChatService(new FakeAdvisor("B0"), store, new FakeProfileFlow(), messages: new FakeMessages { Fail = true })
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Equal("ok", res.Answer);                  // học sinh vẫn nhận câu trả lời
+        Assert.Equal(store.Rows.Single().Id.ToString(), res.SessionId);   // phiên vẫn lưu
+    }
+
+    [Fact]
+    public async Task WithoutARepository_NothingIsSaved_AndTheChatStillWorks()
+    {
+        var res = await new ChatService(new FakeAdvisor("B0"), new FakeSessions(), new FakeProfileFlow())
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Equal("ok", res.Answer);
+    }
+
+    [Fact]
+    public async Task NextTurnOfAnExistingSession_IsSavedUnderThatSession()
+    {
+        var userId = Guid.NewGuid();
+        var store = new FakeSessions();
+        var session = new ChatSession { UserId = userId, StateJson = "{\"currentStep\":\"B1\"}", CurrentStep = "B1" };
+        store.Rows.Add(session);
+        var saved = new FakeMessages();
+
+        await new ChatService(new FakeAdvisor("B2"), store, new FakeProfileFlow(), messages: saved)
+            .ChatAsync(userId, new AdvisorChatRequest(Hello, session.Id.ToString()));
+
+        Assert.All(saved.Rows, r => Assert.Equal(session.Id, r.ChatSessionId));
+        Assert.Single(store.Rows);
+    }
+
+    [Fact]
+    public async Task StreamingTurn_IsSavedToo()
+    {
+        var saved = new FakeMessages();
+
+        await new ChatService(new FakeAdvisor("B0"), new FakeSessions(), new FakeProfileFlow(), messages: saved)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello), onEvent: _ => Task.CompletedTask);
+
+        Assert.Equal(2, saved.Rows.Count);
+    }
+
+    // ---- nhật ký các lần gọi AI (ai_calls)
+
+    private static readonly IReadOnlyList<AiUsageDto> TwoCalls =
+    [
+        new AiUsageDto("ollama", "usas-slm-v4", "slm_intents", "3.0", 1700, 180, 0, true, null, 21000),
+        new AiUsageDto("claude", "claude-haiku-5-5", "skill_tra_loi", "1.0", 2400, 500, 0, true, null, 3000),
+    ];
+
+    [Fact]
+    public async Task EveryAiCallOfTheTurn_IsLoggedOnceAndLinkedToTheReplyAndTheUser()
+    {
+        var saved = new FakeMessages();
+        var calls = new FakeAiCalls();
+        var userId = Guid.NewGuid();
+
+        await new ChatService(new FakeAdvisor("B0") { AiUsage = TwoCalls }, new FakeSessions(), new FakeProfileFlow(), messages: saved, aiCalls: calls)
+            .ChatAsync(userId, new AdvisorChatRequest(Hello));
+
+        Assert.Equal(["ollama", "claude"], calls.Rows.Select(c => c.Kind));
+        Assert.All(calls.Rows, c => Assert.Equal(userId, c.UserId));
+        Assert.All(calls.Rows, c => Assert.Equal(saved.Rows[1].Id, c.ChatMessageId));   // nối với tin TRẢ LỜI, không phải tin hỏi
+        Assert.Equal((1700, 180), (calls.Rows[0].PromptTokens, calls.Rows[0].CompletionTokens));
+    }
+
+    [Fact]
+    public async Task TokensAreStillLogged_WhenStoringMessagesIsSwitchedOff()
+    {
+        // Tắt lưu nội dung chat vì riêng tư thì vẫn theo dõi được token (chỉ là số đo), chỉ không có liên kết tới tin nhắn
+        var calls = new FakeAiCalls();
+
+        await new ChatService(new FakeAdvisor("B0") { AiUsage = TwoCalls }, new FakeSessions(), new FakeProfileFlow(), aiCalls: calls)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Equal(2, calls.Rows.Count);
+        Assert.All(calls.Rows, c => Assert.Null(c.ChatMessageId));
+    }
+
+    [Fact]
+    public async Task TokensAreStillLogged_WhenSavingTheMessagesFailed()
+    {
+        var calls = new FakeAiCalls();
+
+        await new ChatService(new FakeAdvisor("B0") { AiUsage = TwoCalls }, new FakeSessions(), new FakeProfileFlow(),
+                messages: new FakeMessages { Fail = true }, aiCalls: calls)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Equal(2, calls.Rows.Count);
+        Assert.All(calls.Rows, c => Assert.Null(c.ChatMessageId));   // tin không lưu được nên không có gì để nối, không được nối vào mã không tồn tại
+    }
+
+    [Fact]
+    public async Task FailureToLogAiCalls_NeverBreaksTheChat()
+    {
+        var res = await new ChatService(new FakeAdvisor("B0") { AiUsage = TwoCalls }, new FakeSessions(), new FakeProfileFlow(),
+                aiCalls: new FakeAiCalls { Fail = true })
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Equal("ok", res.Answer);
+    }
+
+    [Fact]
+    public async Task NoMeasurements_MeansNothingIsWritten()
+    {
+        var calls = new FakeAiCalls();
+
+        await new ChatService(new FakeAdvisor("B0"), new FakeSessions(), new FakeProfileFlow(), aiCalls: calls)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Equal(0, calls.Writes);   // advisor cũ không gửi aiUsage: không ghi gì, không lỗi
+    }
+
+    [Fact]
+    public async Task FailedAiCall_IsLoggedWithItsError()
+    {
+        var calls = new FakeAiCalls();
+        var usage = new[] { new AiUsageDto("claude", "m", "skill_tra_loi", "1.0", 0, 0, 0, false, "quá tải", 30000) };
+
+        await new ChatService(new FakeAdvisor("B0") { AiUsage = usage }, new FakeSessions(), new FakeProfileFlow(), aiCalls: calls)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        var call = Assert.Single(calls.Rows);
+        Assert.Equal((false, "quá tải"), (call.Success, call.Error));
+    }
+
+    // ---- một lượt gọi advisor nhiều lần: gom đủ số đo của cả giỏ (goal-seek gọi advisor chat rồi gọi thêm advisor viết lời)
+
+    private static FakeAdvisor GoalSeekAdvisor(AiUsageDto? noteCall = null) => new("B4")
+    {
+        Action = "goal_seek", ActionData = BuAction,
+        AiUsage = [new AiUsageDto("ollama", "usas-slm-v4", "slm_intents", "3.0", 1700, 180, 0, true, null, 21000)],
+        GoalNote = new GoalNoteResponseDto("1.0", "claude", "OK", "Để lên nhóm Vừa sức ở Boston University, bạn cần nâng SAT.",
+            [noteCall ?? new AiUsageDto("claude", "claude-haiku-5-5", "skill_goal_seek", "1.0", 2400, 500, 0, true, null, 3000)]),
+    };
+
+    private static ChatService WithBasket(FakeAdvisor advisor, AiUsageCollector basket, FakeMessages saved, FakeAiCalls calls) =>
+        new(new UsageCollectingAdvisorClient(advisor, basket), new FakeSessions(), new FakeProfileFlow(), null,
+            new FakeRunner { Match = Found(), GoalResult = GoalOf() }, messages: saved, aiCalls: calls, usageCollector: basket);
+
+    [Fact]
+    public async Task ATurnThatCallsTheAdvisorTwice_LogsBothCalls_NotOnlyTheFirst()
+    {
+        var (basket, saved, calls) = (new AiUsageCollector(), new FakeMessages(), new FakeAiCalls());
+
+        await WithBasket(GoalSeekAdvisor(), basket, saved, calls).ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Equal(["slm_intents", "skill_goal_seek"], calls.Rows.Select(c => c.Purpose));   // đủ hai lần, không đếm trùng
+        Assert.All(calls.Rows, c => Assert.Equal(saved.Rows[1].Id, c.ChatMessageId));
+    }
+
+    [Fact]
+    public async Task MetaJson_CountsEveryCallOfTheTurn_SplitIntoLocalAndCloud()
+    {
+        var (basket, saved, calls) = (new AiUsageCollector(), new FakeMessages(), new FakeAiCalls());
+
+        await WithBasket(GoalSeekAdvisor(), basket, saved, calls).ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        var meta = JsonDocument.Parse(saved.Rows[1].MetaJson!).RootElement;
+        Assert.Equal(1, meta.GetProperty("local").GetProperty("calls").GetInt32());
+        Assert.Equal(1700, meta.GetProperty("local").GetProperty("inputTokens").GetInt32());
+        Assert.Equal(1, meta.GetProperty("cloud").GetProperty("calls").GetInt32());
+        Assert.Equal(2400, meta.GetProperty("cloud").GetProperty("inputTokens").GetInt32());   // lần gọi thêm không bị bỏ sót nữa
+    }
+
+    [Fact]
+    public async Task AnExtraStepThatAlwaysFailed_MakesTheTurnFailed()
+    {
+        var failedNote = new AiUsageDto("claude", "claude-haiku-5-5", "skill_goal_seek", "1.0", 0, 0, 0, false, "quá tải", 30000);
+        var (basket, saved, calls) = (new AiUsageCollector(), new FakeMessages(), new FakeAiCalls());
+
+        await WithBasket(GoalSeekAdvisor(failedNote), basket, saved, calls).ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        // Lần gọi chat đầu ổn nhưng bước viết lời hỏng hẳn: trước đây lỗi này không ai thấy
+        Assert.Equal(("failed", "open"), (saved.Rows[1].Outcome, saved.Rows[1].ReviewStatus));
+        Assert.Contains("skill_goal_seek", calls.Rows.Where(c => !c.Success).Select(c => c.Purpose));
+    }
+
+    [Fact]
+    public async Task TheBasketIsEmptiedAtTheStartOfEachTurn_SoOldUsageNeverLeaksIn()
+    {
+        var basket = new AiUsageCollector();
+        basket.Add([new AiUsageDto("claude", "m", "stale_from_a_previous_turn", "1", 999, 999, 0, true, null, 1)]);
+        var (saved, calls) = (new FakeMessages(), new FakeAiCalls());
+
+        await WithBasket(GoalSeekAdvisor(), basket, saved, calls).ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.DoesNotContain(calls.Rows, c => c.Purpose == "stale_from_a_previous_turn");
+        Assert.Equal(2, calls.Rows.Count);
+    }
+
+    [Fact]
+    public async Task AnEmptyBasket_FallsBackToTheUsageOfTheChatCall()
+    {
+        // Advisor chưa được bọc (hoặc test cũ): giỏ rỗng nên dùng số đo đi kèm phản hồi chat, không mất dữ liệu
+        var calls = new FakeAiCalls();
+
+        await new ChatService(new FakeAdvisor("B0") { AiUsage = TwoCalls }, new FakeSessions(), new FakeProfileFlow(),
+                aiCalls: calls, usageCollector: new AiUsageCollector())
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Equal(2, calls.Rows.Count);
+    }
+
+    // ---- advisor sập hẳn: câu hỏi không được mất
+
+    [Fact]
+    public async Task AdvisorDown_SavesTheQuestionAndAFailedSystemRow_AndStillThrowsForTheController()
+    {
+        var store = new FakeSessions();
+        var saved = new FakeMessages();
+        var advisor = new FakeAdvisor("B0") { ChatError = new HttpRequestException("máy chủ nội bộ 10.0.0.5 không phản hồi") };
+
+        await Assert.ThrowsAsync<HttpRequestException>(() =>
+            new ChatService(advisor, store, new FakeProfileFlow(), messages: saved)
+                .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello)));   // học sinh vẫn nhận 503 như cũ
+
+        Assert.Equal(["user", "system"], saved.Rows.Select(r => r.Role));
+        var (question, failure) = (saved.Rows[0], saved.Rows[1]);
+        Assert.Equal("chào", question.Content);
+        Assert.Equal(("failed", "open"), (failure.Outcome, failure.ReviewStatus));
+        Assert.Equal(question.Id, failure.ReplyToMessageId);
+        Assert.Equal(store.Rows.Single().Id, question.ChatSessionId);          // phiên mới được lưu để tin nhắn có chỗ bám
+        Assert.Equal(question.ChatSessionId, failure.ChatSessionId);
+        var meta = JsonDocument.Parse(failure.MetaJson!).RootElement;
+        Assert.Equal("HttpRequestException", meta.GetProperty("error").GetString());
+        Assert.Equal(["advisor"], meta.GetProperty("failedSteps").EnumerateArray().Select(e => e.GetString()));
+    }
+
+    [Fact]
+    public async Task AdvisorDown_NeverStoresTheErrorMessage_ItMayHoldInternalAddresses()
+    {
+        var saved = new FakeMessages();
+        var advisor = new FakeAdvisor("B0") { ChatError = new HttpRequestException("máy chủ nội bộ 10.0.0.5 không phản hồi") };
+
+        await Assert.ThrowsAsync<HttpRequestException>(() =>
+            new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), messages: saved)
+                .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello)));
+
+        Assert.DoesNotContain(saved.Rows, r => (r.Content + r.MetaJson).Contains("10.0.0.5"));
+    }
+
+    [Fact]
+    public async Task AdvisorDown_OnAnExistingSession_KeepsThatSession()
+    {
+        var userId = Guid.NewGuid();
+        var store = new FakeSessions();
+        var session = new ChatSession { UserId = userId, StateJson = "{\"currentStep\":\"B1\"}", CurrentStep = "B1" };
+        store.Rows.Add(session);
+        var saved = new FakeMessages();
+        var advisor = new FakeAdvisor("B2") { ChatError = new HttpRequestException() };
+
+        await Assert.ThrowsAsync<HttpRequestException>(() =>
+            new ChatService(advisor, store, new FakeProfileFlow(), messages: saved)
+                .ChatAsync(userId, new AdvisorChatRequest(Hello, session.Id.ToString())));
+
+        Assert.Single(store.Rows);                                              // không tạo thêm phiên
+        Assert.All(saved.Rows, r => Assert.Equal(session.Id, r.ChatSessionId));
+        Assert.Equal("{\"currentStep\":\"B1\"}", session.StateJson);            // trạng thái cũ không bị đổi
+    }
+
+    [Fact]
+    public async Task AdvisorDown_WhileStreaming_IsSavedToo()
+    {
+        var saved = new FakeMessages();
+        var advisor = new FakeAdvisor("B0") { StreamError = new HttpRequestException() };
+
+        await Assert.ThrowsAsync<HttpRequestException>(() =>
+            new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), messages: saved)
+                .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello), onEvent: _ => Task.CompletedTask));
+
+        Assert.Equal(["user", "system"], saved.Rows.Select(r => r.Role));
+    }
+
+    [Fact]
+    public async Task WhenTheStudentCancels_NothingIsRecorded()
+    {
+        // Học sinh đóng tab giữa chừng không phải lỗi hệ thống, không đưa vào hàng đợi của admin
+        var saved = new FakeMessages();
+        using var cancelled = new CancellationTokenSource();
+        cancelled.Cancel();
+        var advisor = new FakeAdvisor("B0") { ChatError = new TaskCanceledException() };
+
+        await Assert.ThrowsAsync<TaskCanceledException>(() =>
+            new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), messages: saved)
+                .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello), cancelled.Token));
+
+        Assert.Empty(saved.Rows);
+    }
+
+    [Fact]
+    public async Task FailureToRecordTheFailure_DoesNotHideTheOriginalError()
+    {
+        var advisor = new FakeAdvisor("B0") { ChatError = new HttpRequestException("lỗi gốc") };
+
+        var thrown = await Assert.ThrowsAsync<HttpRequestException>(() =>
+            new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), messages: new FakeMessages { Fail = true })
+                .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello)));
+
+        Assert.Equal("lỗi gốc", thrown.Message);   // bộ điều khiển vẫn thấy đúng lỗi advisor, không phải lỗi ghi database
+    }
+
+    [Fact]
+    public async Task AdvisorDown_WithoutARepository_ThrowsAsBefore()
+    {
+        var advisor = new FakeAdvisor("B0") { ChatError = new HttpRequestException() };
+
+        await Assert.ThrowsAsync<HttpRequestException>(() =>
+            new ChatService(advisor, new FakeSessions(), new FakeProfileFlow()).ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello)));
+    }
+
+    [Fact]
+    public async Task EmptyStudentMessage_SavesOnlyTheReply()
+    {
+        var saved = new FakeMessages();
+
+        await new ChatService(new FakeAdvisor("B0"), new FakeSessions(), new FakeProfileFlow(), messages: saved)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest([]));
+
+        Assert.Equal(["assistant"], saved.Rows.Select(r => r.Role));
+    }
+
+    [Fact]
+    public async Task SavedMessageDoesNotLeakInternalSignalsToTheBrowser()
+    {
+        var advisor = new FakeAdvisor("B0") { Slm = new AdvisorSlmDto([new AdvisorSlmIntentDto("knowledge", "I-20 là gì")]) };
+
+        var res = await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), messages: new FakeMessages())
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Null(res.Slm);
+        Assert.Null(res.AiUsage);
+    }
+
+    [Fact]
     public async Task QuickRepliesAndWidget_FromAdvisor_ReachTheBrowser()
     {
         var replies = new List<QuickReply> { new("Điền bằng form", "Điền bằng form") };
@@ -2195,14 +2671,21 @@ public class ChatServiceTests
         public string? Action { get; init; }
         public JsonElement? ActionData { get; init; }
         public string Answer { get; init; } = "ok";
+        public IReadOnlyList<AiUsageDto>? AiUsage { get; init; }
+        public AdvisorSlmDto? Slm { get; init; }
+
+        public Exception? ChatError { get; init; }   // advisor sập hẳn: ChatAsync ném lỗi này
 
         public Task<AdvisorChatResponse> ChatAsync(AdvisorChatRequest request, CancellationToken ct = default)
         {
             LastRequest = request;
+            if (ChatError is not null)
+                throw ChatError;
             var question = QuestionId is null ? "" : $",\"questionId\":\"{QuestionId}\"";
             var state = JsonDocument.Parse($"{{\"currentStep\":\"{nextStep}\"{question}}}").RootElement;
             return Task.FromResult(new AdvisorChatResponse(
-                Answer, [], null, state, QuickReplies: replies, Widget: widget, Profile: Profile, ProfileChanged: Changed, Skills: Skills, Action: Action, ActionData: ActionData));
+                Answer, [], null, state, QuickReplies: replies, Widget: widget, Profile: Profile, ProfileChanged: Changed, Skills: Skills, Action: Action, ActionData: ActionData,
+                AiUsage: AiUsage, Slm: Slm));
         }
 
         // Trả lời theo từng ý: gọi onEvent cho từng tin trong Events rồi trả kết quả như ChatAsync
@@ -2261,6 +2744,36 @@ public class ChatServiceTests
             if (NoteError is not null)
                 throw NoteError;
             return Task.FromResult(Note!);
+        }
+    }
+
+    private sealed class FakeAiCalls : IAiCallRepository
+    {
+        public List<AiCall> Rows { get; } = [];
+        public int Writes { get; private set; }
+        public bool Fail { get; init; }
+
+        public Task AddRangeAsync(IReadOnlyList<AiCall> calls, CancellationToken ct = default)
+        {
+            Writes++;
+            if (Fail)
+                throw new InvalidOperationException("Database không ghi được");
+            Rows.AddRange(calls);
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class FakeMessages : IChatMessageRepository
+    {
+        public List<StudyAbroad.Domain.Entities.ChatMessage> Rows { get; } = [];
+        public bool Fail { get; init; }
+
+        public Task AddRangeAsync(IReadOnlyList<StudyAbroad.Domain.Entities.ChatMessage> messages, CancellationToken ct = default)
+        {
+            if (Fail)
+                throw new InvalidOperationException("Database không ghi được");
+            Rows.AddRange(messages);
+            return Task.CompletedTask;
         }
     }
 

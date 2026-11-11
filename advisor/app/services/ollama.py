@@ -35,8 +35,13 @@ class OllamaClient:
         self._options = {"num_ctx": num_ctx, "num_gpu": num_gpu, "seed": seed}
         self._keep_alive = keep_alive
 
-    # Biến mỗi đoạn chữ thành một vector (bge-m3: 1024 số) để so sánh nghĩa với kho kiến thức
+    # Biến mỗi đoạn chữ thành một vector (bge-m3: 1024 số) để so sánh nghĩa với kho kiến thức.
+    # Gắn nhãn embedding để báo cáo token không có dòng trống nhãn
     async def embed(self, texts: list[str]) -> list[list[float]]:
+        with usage_meter.purpose("embedding"):
+            return await self._embed(texts)
+
+    async def _embed(self, texts: list[str]) -> list[list[float]]:
         payload = {"model": self._embedding_model, "input": texts, "keep_alive": self._keep_alive}
         started = time.perf_counter()
         try:

@@ -18,6 +18,7 @@ from app.schemas.chat import AiUsageCall
 
 _calls: ContextVar[list[AiUsageCall] | None] = ContextVar("ai_usage_calls", default=None)
 _purpose: ContextVar[str] = ContextVar("ai_usage_purpose", default="")
+_skill_version: ContextVar[str] = ContextVar("ai_usage_skill_version", default="")
 
 
 def start() -> list[AiUsageCall]:
@@ -36,12 +37,14 @@ async def metered(awaitable: Awaitable[Any]) -> Any:
 
 
 @contextmanager
-def purpose(name: str) -> Iterator[None]:
-    """Trong khối này, các lần gọi AI được gắn nhãn công việc (ví dụ tên skill) để báo cáo theo tính năng."""
+def purpose(name: str, version: str = "") -> Iterator[None]:
+    """Trong khối này, các lần gọi AI được gắn nhãn công việc (tên skill) và phiên bản skill để báo cáo theo tính năng."""
     token = _purpose.set(name)
+    version_token = _skill_version.set(version)
     try:
         yield
     finally:
+        _skill_version.reset(version_token)
         _purpose.reset(token)
 
 
@@ -63,6 +66,7 @@ def claude_ok(model: str, usage: dict[str, Any] | None, latency_ms: int) -> None
             source="claude",
             model=model,
             purpose=_purpose.get(),
+            skill_version=_skill_version.get(),
             input_tokens=_int(u.get("input_tokens")),
             output_tokens=_int(u.get("output_tokens")),
             cached_tokens=_int(u.get("cache_read_input_tokens")),
@@ -79,6 +83,7 @@ def ollama_ok(model: str, body: dict[str, Any], latency_ms: int) -> None:
             source="ollama",
             model=model,
             purpose=_purpose.get(),
+            skill_version=_skill_version.get(),
             input_tokens=_int(body.get("prompt_eval_count")),
             output_tokens=_int(body.get("eval_count")),
             ok=True,
@@ -94,6 +99,7 @@ def failed(source: str, model: str, error: str, latency_ms: int) -> None:
             source=source,
             model=model,
             purpose=_purpose.get(),
+            skill_version=_skill_version.get(),
             ok=False,
             error=error[:200],
             latency_ms=latency_ms,
