@@ -11,11 +11,14 @@ import {
   FileTextIcon,
   HandCoinsIcon,
   HeartHandshakeIcon,
+  LayoutGridIcon,
   MapPinIcon,
   MessageSquareTextIcon,
   PenLineIcon,
   PlaneIcon,
   ShieldAlertIcon,
+  SlidersHorizontalIcon,
+  UsersIcon,
   WalletIcon,
 } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -38,18 +41,35 @@ type IconType = ComponentType<{ className?: string }>;
 
 /* ----------------------------- Dữ liệu trang ----------------------------- */
 
-const STEPS = [
+const STEPS: {
+  title: string;
+  desc: string;
+  icon: IconType;
+}[] = [
   {
     title: "Khai báo hồ sơ",
-    desc: "Nhập điểm hoặc tải ảnh bảng điểm. Hệ thống quy đổi GPA sang thang 4.0, bạn kiểm tra lại trước khi lưu.",
+    desc: "Nhập điểm hoặc tải bảng điểm để quy đổi GPA sang thang 4.0 và lưu hồ sơ.",
+    icon: FileTextIcon,
   },
   {
     title: "Xem trường theo nhóm",
-    desc: `${GROUP_LABELS.R}, ${GROUP_LABELS.M}, ${GROUP_LABELS.S} hoặc Cần học bổng lớn. Trường nào cũng có lý do đi kèm.`,
+    desc: `Xếp vào các nhóm ${GROUP_LABELS.R}, ${GROUP_LABELS.M}, ${GROUP_LABELS.S} kèm lý do rõ ràng.`,
+    icon: LayoutGridIcon,
   },
   {
     title: "Thử kịch bản “nếu như”",
-    desc: "Tăng điểm SAT hay đổi ngân sách để xem danh sách trường thay đổi ra sao.",
+    desc: "Tăng điểm SAT hay đổi ngân sách để xem danh sách trường thay đổi ngay lập tức.",
+    icon: SlidersHorizontalIcon,
+  },
+  {
+    title: "Hỏi USAS Advisor",
+    desc: "Hỏi so sánh trường, điều kiện tuyển sinh và chính sách học bổng bằng tiếng Việt.",
+    icon: MessageSquareTextIcon,
+  },
+  {
+    title: "Gặp trung tâm tư vấn",
+    desc: "Kết nối trung tâm hỗ trợ bài luận, hoàn thiện hồ sơ và luyện phỏng vấn visa.",
+    icon: UsersIcon,
   },
 ];
 
@@ -208,14 +228,31 @@ function HomeView() {
       )}
 
       {/* CÁCH HOẠT ĐỘNG */}
-      <section className="space-y-10">
-        <SectionHead title="Ba bước để có danh sách trường" />
-        <ol className="grid gap-8 border-t border-line pt-8 md:grid-cols-3 md:gap-10">
+      <section className="space-y-8">
+        <SectionHead title="Năm bước từ hồ sơ đến quyết định" />
+        <ol className="grid gap-4 sm:grid-cols-2 lg:grid-flow-col lg:auto-cols-fr">
           {STEPS.map((s, i) => (
-            <li key={s.title} className="space-y-2">
-              <span className="text-numeric text-sm text-brand">Bước {i + 1}</span>
-              <h3 className="text-h3 text-ink">{s.title}</h3>
-              <p className="text-sm leading-relaxed text-ink-2">{s.desc}</p>
+            <li key={s.title} className="relative flex">
+              <Card className="flex flex-1 flex-col justify-between border-line bg-surface p-5">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand-wash font-heading text-lg font-bold text-brand">
+                      0{i + 1}
+                    </span>
+                    <div className="flex size-9 items-center justify-center rounded-lg bg-ground text-brand">
+                      <s.icon className="size-5" />
+                    </div>
+                  </div>
+                  <h3 className="font-heading text-base font-semibold text-ink">{s.title}</h3>
+                  <p className="text-sm leading-relaxed text-ink-2">{s.desc}</p>
+                </div>
+              </Card>
+              {i < STEPS.length - 1 && (
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute top-10 -right-4 z-10 hidden h-0.5 w-4 bg-line lg:block"
+                />
+              )}
             </li>
           ))}
         </ol>
