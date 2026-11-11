@@ -362,7 +362,8 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
 
                     b.Property<Guid>("ChatSessionId")
                         .HasColumnType("uuid")
-                        .HasColumnName("chat_session_id");
+                        .HasColumnName("chat_session_id")
+                        .HasComment("Cuộc chat chứa tin này (bảng chat_sessions). Sắp theo created_at ra đúng thứ tự hội thoại.");
 
                     b.Property<string>("Content")
                         .IsRequired()
@@ -445,7 +446,8 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.Property<string>("CurrentStep")
                         .HasMaxLength(8)
                         .HasColumnType("character varying(8)")
-                        .HasColumnName("current_step");
+                        .HasColumnName("current_step")
+                        .HasComment("Bước hiện tại của hội thoại (B0..B6), cập nhật sau mỗi lượt.");
 
                     b.Property<Guid?>("SkillId")
                         .HasColumnType("uuid")
@@ -453,12 +455,14 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("StateJson")
                         .HasColumnType("jsonb")
-                        .HasColumnName("state_json");
+                        .HasColumnName("state_json")
+                        .HasComment("Trạng thái hội thoại advisor trả về sau mỗi lượt, gửi lại ở lượt sau. Nội bộ, không trả cho trình duyệt.");
 
                     b.Property<string>("StudyLevel")
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)")
-                        .HasColumnName("study_level");
+                        .HasColumnName("study_level")
+                        .HasComment("Bậc học học sinh đang hỏi về.");
 
                     b.Property<string>("Title")
                         .HasMaxLength(200)
@@ -471,7 +475,8 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid")
-                        .HasColumnName("user_id");
+                        .HasColumnName("user_id")
+                        .HasComment("Chủ cuộc chat. Xóa tài khoản thì xóa luôn cuộc chat và các tin nhắn.");
 
                     b.HasKey("Id")
                         .HasName("pk_chat_sessions");
@@ -482,7 +487,10 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.HasIndex("UserId", "CreatedAt")
                         .HasDatabaseName("ix_chat_sessions_user_id_created_at");
 
-                    b.ToTable("chat_sessions", "app");
+                    b.ToTable("chat_sessions", "app", t =>
+                        {
+                            t.HasComment("Một cuộc chat của một học sinh. Các tin nhắn nằm ở bảng chat_messages (nối bằng chat_session_id).");
+                        });
                 });
 
             modelBuilder.Entity("StudyAbroad.Domain.Entities.Consent", b =>

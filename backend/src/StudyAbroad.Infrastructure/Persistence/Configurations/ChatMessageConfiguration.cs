@@ -14,6 +14,7 @@ public class ChatMessageConfiguration : IEntityTypeConfiguration<ChatMessage>
 
         b.HasKey(x => x.Id);
         b.HasOne<ChatSession>().WithMany().HasForeignKey(x => x.ChatSessionId).OnDelete(DeleteBehavior.Cascade);
+        b.Property(x => x.ChatSessionId).HasComment("Cuộc chat chứa tin này (bảng chat_sessions). Sắp theo created_at ra đúng thứ tự hội thoại.");
         b.Property(x => x.Role).HasMaxLength(16).IsRequired().HasComment("user (học sinh), assistant (trợ lý) hoặc system.");
         b.Property(x => x.Content).IsRequired().HasComment("Nội dung tin nhắn.");
         b.Property(x => x.Step).HasMaxLength(8);
