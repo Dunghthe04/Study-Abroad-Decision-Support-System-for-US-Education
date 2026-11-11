@@ -5,7 +5,6 @@ import { RotateCcwIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Combobox,
@@ -64,8 +63,8 @@ const ACCEPT_RATE_OPTIONS = [
 
 function FilterSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <fieldset className="space-y-2.5">
-      <legend className="mb-2.5 text-sm font-semibold text-foreground">{title}</legend>
+    <fieldset>
+      <legend className="mb-1.5 text-sm font-semibold text-foreground">{title}</legend>
       {children}
     </fieldset>
   );
@@ -127,7 +126,7 @@ function SearchableFilter({ items, value, placeholder, onValueChange }: Searchab
       isItemEqualToValue={(a, b) => a.value === b.value}
       autoHighlight
     >
-      <ComboboxInput placeholder={placeholder} showClear={selected !== null} className="h-9 w-full" />
+      <ComboboxInput placeholder={placeholder} showClear={selected !== null} className="h-9 w-full bg-surface" />
       <ComboboxContent>
         <ComboboxEmpty>Không tìm thấy</ComboboxEmpty>
         <ComboboxList>
@@ -166,7 +165,7 @@ export function UniversityFilters({ options, values, onChange, onReset, classNam
   return (
     <div className={cn("space-y-5", className)}>
       <div className="flex h-8 items-center justify-between">
-        <h2 className="font-heading text-base font-bold text-foreground">Bộ lọc</h2>
+        <h2 className="font-heading text-xl font-bold text-foreground">Bộ lọc</h2>
         {hasActiveFilter && (
           <Button variant="ghost" size="sm" onClick={onReset} className="text-muted-foreground">
             <RotateCcwIcon />
@@ -194,8 +193,6 @@ export function UniversityFilters({ options, values, onChange, onReset, classNam
           onValueChange={(major) => onChange({ major })}
         />
       </FilterSection>
-
-      <Separator />
 
       <FilterSection title="Loại trường">
         <RadioFilter
@@ -235,8 +232,6 @@ export function UniversityFilters({ options, values, onChange, onReset, classNam
           }}
         />
       </FilterSection>
-
-      <Separator />
 
       <div className="flex items-center gap-2.5">
         <Checkbox
