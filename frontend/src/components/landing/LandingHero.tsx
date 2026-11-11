@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { ArrowRightIcon, MapPinIcon, PauseIcon, PlayIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { GROUP_LABELS, formatGpa, formatPct, groupVariant } from "@/lib/recommendation-labels";
 import { HERO_SCHOOLS, SAMPLE_PROFILE } from "@/lib/landing-schools";
+import { SchoolPhotoBackdrop, useSchoolPhotoCycle } from "./SchoolPhotoBackdrop";
 import { cn } from "@/lib/utils";
 
 const INTERVAL_MS = 6000;
@@ -17,17 +18,9 @@ const INTERVAL_MS = 6000;
  * để khách thấy ngay sản phẩm làm gì thay vì một câu khẩu hiệu.
  */
 export function LandingHero() {
-  const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
   const count = HERO_SCHOOLS.length;
-
-  useEffect(() => {
-    if (paused || count < 2) return;
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (reduce) return;
-    const id = window.setInterval(() => setIndex((i) => (i + 1) % count), INTERVAL_MS);
-    return () => window.clearInterval(id);
-  }, [paused, count]);
+  const [index, setIndex] = useSchoolPhotoCycle(count, INTERVAL_MS, paused);
 
   const current = HERO_SCHOOLS[index];
 
@@ -37,24 +30,7 @@ export function LandingHero() {
       className="relative isolate -mt-[var(--header-h)] flex min-h-[min(100svh,960px)] items-end overflow-hidden bg-brand-ink text-white"
     >
       {/* Ảnh nền: mọi ảnh nằm chồng lên nhau, ảnh đang chọn hiện dần */}
-      <div aria-hidden className="absolute inset-0 -z-10">
-        {HERO_SCHOOLS.map((s, i) => (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            key={s.name}
-            src={s.image}
-            alt=""
-            fetchPriority={i === 0 ? "high" : "low"}
-            loading={i === 0 ? "eager" : "lazy"}
-            className={cn(
-              "absolute inset-0 size-full object-cover transition-[opacity,scale] duration-[1600ms] ease-out motion-reduce:transition-none",
-              i === index ? "scale-100 opacity-100" : "scale-[1.04] opacity-0",
-            )}
-          />
-        ))}
-        {/* Lớp tối để chữ trắng đọc được trên mọi ảnh (đạt AA ở vùng chữ) */}
-        <div className="absolute inset-0 bg-[linear-gradient(to_top,rgb(10_66_86/0.92)_0%,rgb(10_66_86/0.7)_45%,rgb(10_66_86/0.35)_100%)]" />
-      </div>
+      <SchoolPhotoBackdrop schools={HERO_SCHOOLS} activeIndex={index} />
 
       <div className="mx-auto grid w-full max-w-[1560px] gap-10 px-4 pt-[calc(var(--header-h)+4rem)] pb-12 sm:px-8 sm:pb-16 lg:grid-cols-12 lg:items-end lg:px-12 lg:pb-20">
         <div className="space-y-6 lg:col-span-8 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-3 motion-safe:duration-700">
