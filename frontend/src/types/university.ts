@@ -45,6 +45,17 @@ export interface UniversityOffering {
   intlAidRecipients: number | null;
   retentionRate1Yr: number | null;
   gradRate6Yr: number | null;
+  avgGpaWeighted: number | null;
+  gpaScaleType: string | null;
+  fyOnCampusPct: number | null;
+  ugOnCampusPct: number | null;
+  housingTypes: string | null;
+  intlHousing: boolean | null;
+  housingOnlyUsd: number | null;
+  housingDepositUsd: number | null;
+  studentFacultyRatio: number | null;
+  activities: string | null;
+  campusSetting: string | null;
   majors: UniversityMajor[];
   sourceUrl: string | null;
   retrievedAt: string | null;
