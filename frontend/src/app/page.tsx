@@ -273,7 +273,7 @@ function HomeView() {
     <>
     <LandingHero />
     <SchoolLogoStrip />
-    <div className="mx-auto max-w-[1560px] space-y-20 px-4 pt-12 pb-20 sm:space-y-28 sm:px-8 sm:pt-16 lg:px-12">
+    <div className="mx-auto max-w-[1560px] space-y-28 px-4 pt-16 pb-28 sm:space-y-40 sm:px-8 sm:pt-24 lg:px-12">
       {isStaff && isPublicPreview && (
         <Alert variant="warning">
           <ShieldAlertIcon />
@@ -381,7 +381,6 @@ function HomeView() {
             <span className="min-w-0 flex-1 truncate font-heading text-base font-semibold text-ink">
               USAS Advisor
             </span>
-            <Badge variant="neutral">Minh họa</Badge>
             <div className="flex shrink-0 items-center rounded-lg border border-line p-0.5">
               <span className="inline-flex size-7 items-center justify-center text-ink-2">
                 <Maximize2Icon className="size-3.5" />
