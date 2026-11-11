@@ -81,6 +81,149 @@ public class ChatServiceTests
         Assert.Null(res.Slm);
     }
 
+    // ---- lưu tin nhắn cho admin xem (chat_messages)
+
+    [Fact]
+    public async Task EachTurn_IsSavedAsTheStudentsMessageAndTheAssistantsReply()
+    {
+        var store = new FakeSessions();
+        var saved = new FakeMessages();
+        var userId = Guid.NewGuid();
+
+        var res = await new ChatService(new FakeAdvisor("B0"), store, new FakeProfileFlow(), messages: saved)
+            .ChatAsync(userId, new AdvisorChatRequest(Hello));
+
+        var session = Assert.Single(store.Rows);
+        Assert.Equal(["user", "assistant"], saved.Rows.Select(r => r.Role));
+        Assert.All(saved.Rows, r => Assert.Equal(session.Id, r.ChatSessionId));
+        Assert.Equal(session.Id.ToString(), res.SessionId);
+        Assert.Equal("chào", saved.Rows[0].Content);
+        Assert.Equal("ok", saved.Rows[1].Content);
+        Assert.True(saved.Rows[0].CreatedAt <= saved.Rows[1].CreatedAt);   // tin hỏi đứng trước tin trả lời
+    }
+
+    [Fact]
+    public async Task OutcomeAndMeta_AreOnlyOnTheAssistantsReply()
+    {
+        var saved = new FakeMessages();
+
+        await new ChatService(new FakeAdvisor("B0"), new FakeSessions(), new FakeProfileFlow(), messages: saved)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        var (student, reply) = (saved.Rows[0], saved.Rows[1]);
+        Assert.Null(student.Outcome);
+        Assert.Null(student.MetaJson);
+        Assert.Null(student.ReviewStatus);
+        Assert.Equal("answered", reply.Outcome);
+        Assert.Null(reply.ReviewStatus);                                  // trả lời được thì admin không phải xem
+        Assert.Equal(1, JsonDocument.Parse(reply.MetaJson!).RootElement.GetProperty("v").GetInt32());
+    }
+
+    [Fact]
+    public async Task UnderstoodNothing_GoesToTheAdminQueue_WithTheLabelTheModelGave()
+    {
+        var saved = new FakeMessages();
+        var advisor = new FakeAdvisor("B0")
+        {
+            Slm = new AdvisorSlmDto([new AdvisorSlmIntentDto("out_of_scope", "asdfgh")], ["out_of_scope"], "ambiguous", 0.2, false),
+        };
+
+        await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), messages: saved)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest([new Application.Advisor.ChatMessage("user", "asdfgh")]));
+
+        var reply = saved.Rows[1];
+        Assert.Equal("no_answer", reply.Outcome);
+        Assert.Equal("open", reply.ReviewStatus);
+        var label = JsonDocument.Parse(reply.MetaJson!).RootElement.GetProperty("slm").GetProperty("modelIntents")[0];
+        Assert.Equal("asdfgh", label.GetProperty("span").GetString());   // admin thấy model đã gán nhãn gì cho đoạn chữ nào
+    }
+
+    [Fact]
+    public async Task AiStepThatAlwaysFailed_IsSavedAsFailedAndQueued()
+    {
+        var saved = new FakeMessages();
+        var advisor = new FakeAdvisor("B0")
+        {
+            AiUsage = [new AiUsageDto("claude", "m", "skill_tra_loi", "1.0", 0, 0, 0, false, "timeout", 30000)],
+        };
+
+        await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), messages: saved)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Equal(("failed", "open"), (saved.Rows[1].Outcome, saved.Rows[1].ReviewStatus));
+    }
+
+    [Fact]
+    public async Task FailureToSaveMessages_NeverBreaksTheChat()
+    {
+        var store = new FakeSessions();
+
+        var res = await new ChatService(new FakeAdvisor("B0"), store, new FakeProfileFlow(), messages: new FakeMessages { Fail = true })
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Equal("ok", res.Answer);                  // học sinh vẫn nhận câu trả lời
+        Assert.Equal(store.Rows.Single().Id.ToString(), res.SessionId);   // phiên vẫn lưu
+    }
+
+    [Fact]
+    public async Task WithoutARepository_NothingIsSaved_AndTheChatStillWorks()
+    {
+        var res = await new ChatService(new FakeAdvisor("B0"), new FakeSessions(), new FakeProfileFlow())
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Equal("ok", res.Answer);
+    }
+
+    [Fact]
+    public async Task NextTurnOfAnExistingSession_IsSavedUnderThatSession()
+    {
+        var userId = Guid.NewGuid();
+        var store = new FakeSessions();
+        var session = new ChatSession { UserId = userId, StateJson = "{\"currentStep\":\"B1\"}", CurrentStep = "B1" };
+        store.Rows.Add(session);
+        var saved = new FakeMessages();
+
+        await new ChatService(new FakeAdvisor("B2"), store, new FakeProfileFlow(), messages: saved)
+            .ChatAsync(userId, new AdvisorChatRequest(Hello, session.Id.ToString()));
+
+        Assert.All(saved.Rows, r => Assert.Equal(session.Id, r.ChatSessionId));
+        Assert.Single(store.Rows);
+    }
+
+    [Fact]
+    public async Task StreamingTurn_IsSavedToo()
+    {
+        var saved = new FakeMessages();
+
+        await new ChatService(new FakeAdvisor("B0"), new FakeSessions(), new FakeProfileFlow(), messages: saved)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello), onEvent: _ => Task.CompletedTask);
+
+        Assert.Equal(2, saved.Rows.Count);
+    }
+
+    [Fact]
+    public async Task EmptyStudentMessage_SavesOnlyTheReply()
+    {
+        var saved = new FakeMessages();
+
+        await new ChatService(new FakeAdvisor("B0"), new FakeSessions(), new FakeProfileFlow(), messages: saved)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest([]));
+
+        Assert.Equal(["assistant"], saved.Rows.Select(r => r.Role));
+    }
+
+    [Fact]
+    public async Task SavedMessageDoesNotLeakInternalSignalsToTheBrowser()
+    {
+        var advisor = new FakeAdvisor("B0") { Slm = new AdvisorSlmDto([new AdvisorSlmIntentDto("knowledge", "I-20 là gì")]) };
+
+        var res = await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), messages: new FakeMessages())
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Null(res.Slm);
+        Assert.Null(res.AiUsage);
+    }
+
     [Fact]
     public async Task QuickRepliesAndWidget_FromAdvisor_ReachTheBrowser()
     {
@@ -2278,6 +2421,20 @@ public class ChatServiceTests
             if (NoteError is not null)
                 throw NoteError;
             return Task.FromResult(Note!);
+        }
+    }
+
+    private sealed class FakeMessages : IChatMessageRepository
+    {
+        public List<StudyAbroad.Domain.Entities.ChatMessage> Rows { get; } = [];
+        public bool Fail { get; init; }
+
+        public Task AddRangeAsync(IReadOnlyList<StudyAbroad.Domain.Entities.ChatMessage> messages, CancellationToken ct = default)
+        {
+            if (Fail)
+                throw new InvalidOperationException("Database không ghi được");
+            Rows.AddRange(messages);
+            return Task.CompletedTask;
         }
     }
 

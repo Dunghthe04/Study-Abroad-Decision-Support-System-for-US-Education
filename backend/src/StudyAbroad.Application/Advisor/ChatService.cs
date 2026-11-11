@@ -3,8 +3,10 @@ using StudyAbroad.Application.Profile.Flow;
 using StudyAbroad.Application.Recommendations;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
@@ -21,10 +23,13 @@ namespace StudyAbroad.Application.Advisor
     // recommender: chạy gợi ý trường khi advisor trả action "recommend" (null thì bỏ qua, dùng trong test cũ)
     // benchmarks: đọc dữ liệu trường để tính mốc GPA / tiếng Anh cho skill ho_so (null thì không gửi mốc, dùng trong test cũ)
     // gradeScale: bảng quy đổi grade_scale.10 trong DB cho what-if GPA thang 10 (null thì bảng mặc định, dùng trong test cũ)
+    // messages: lưu tin hỏi và tin trả lời vào chat_messages cho admin xem (null thì không lưu: cấu hình Chat:StoreMessages = false, hoặc test cũ)
+    // logger: ghi cảnh báo khi lưu tin lỗi (lưu lỗi không bao giờ làm hỏng lượt chat)
     public class ChatService(
         IAdvisorClient advisor, IChatSessionRepository sessions, IProfileFlowService profileFlow,
         IChatAnalysisRepository? analyses = null, IRecommendationRunner? recommender = null,
-        IChatBenchmarkRepository? benchmarks = null, IGradeScaleProvider? gradeScale = null)
+        IChatBenchmarkRepository? benchmarks = null, IGradeScaleProvider? gradeScale = null,
+        IChatMessageRepository? messages = null, ILogger<ChatService>? logger = null)
     {
         //Dữ liệu FE gửi lên
         // onEvent: chỉ truyền khi trả lời theo từng ý (stream); mỗi tin tiến độ / câu một ý của advisor gọi hàm này ngay.
@@ -33,6 +38,8 @@ namespace StudyAbroad.Application.Advisor
             Guid userId, AdvisorChatRequest request, CancellationToken ct = default,
             Func<AdvisorStreamEvent, Task>? onEvent = null)
         {
+            var askedAt = DateTime.UtcNow;   // lúc học sinh hỏi, để ghi thời điểm tin của học sinh
+            var turnClock = Stopwatch.StartNew();
             // SessionId do trình duyệt gửi chỉ dùng để tìm phiên; State của trình duyệt bị bỏ, luôn lấy từ DB
             var isNew = false;
             ChatSession? session = null;
@@ -80,6 +87,9 @@ namespace StudyAbroad.Application.Advisor
                 ?? (onEvent is null
                     ? await advisor.ChatAsync(toAdvisor, ct)
                     : await advisor.ChatStreamAsync(toAdvisor, onEvent, ct));
+            // Chụp ngay các tín hiệu của advisor (nhãn model gán, số đo AI, hành động) trước khi các bước sau thay response.
+            // Dùng để đánh giá lượt (ChatTurn) và ghi chat_messages ở cuối
+            var advisorSignals = new TurnSignals(askedAt, response.Slm, response.AiUsage, response.Action, response.Skills);
             var changed = await SaveProfileToDraftAsync(userId, response, ct);
 
             // C5: học sinh bấm "Đúng rồi" ở X1 thì chat rời bảng rà soát sang B3, lúc đó lưu hồ sơ chính thức.
@@ -154,6 +164,9 @@ namespace StudyAbroad.Application.Advisor
             else
                 await sessions.SaveAsync(ct);
 
+            // Phiên đã lưu (khóa ngoại của tin nhắn cần phiên có sẵn): ghi tin hỏi và tin trả lời cho admin xem
+            await RecordTurnAsync(session, request, response, advisorSignals, turnClock.ElapsedMilliseconds, ct);
+
             //Trả về trình duyệt: có mã phiên, ko lộ trạng thái nội bôk.
             // ProfileChanged để form biết mà nạp lại nháp (D2)
             return response with
@@ -169,6 +182,49 @@ namespace StudyAbroad.Application.Advisor
                 AiUsage = null,   // số token là việc nội bộ, học sinh không thấy
                 Slm = null,       // nhãn model gán chứa chữ của học sinh, chỉ lưu cho admin
             };
+        }
+
+        // Tín hiệu của advisor ở lượt này, chụp trước khi .NET xử lý tiếp: lúc học sinh hỏi, nhãn model gán, số đo từng lần gọi AI, hành động, skill đã chạy
+        private record TurnSignals(
+            DateTime AskedAt, AdvisorSlmDto? Slm, IReadOnlyList<AiUsageDto>? Usage, string? Action, IReadOnlyList<string>? Skills);
+
+        // Lưu tin của học sinh và tin trả lời của trợ lý vào chat_messages để admin xem câu nào hệ thống chưa trả lời được.
+        // Tin trả lời mang outcome (answered | no_answer | failed), review_status (open khi cần admin xem) và meta_json.
+        // Lỗi khi lưu chỉ ghi cảnh báo và bỏ qua, không bao giờ làm hỏng lượt chat. Trả mã tin trả lời; null nếu không lưu hoặc lưu lỗi
+        private async Task<Guid?> RecordTurnAsync(
+            ChatSession session, AdvisorChatRequest request, AdvisorChatResponse response, TurnSignals signals, long turnMs, CancellationToken ct)
+        {
+            if (messages is null)
+                return null;
+            try
+            {
+                var rows = new List<StudyAbroad.Domain.Entities.ChatMessage>();
+                if (request.Messages.LastOrDefault(m => m.Role == "user")?.Content is { Length: > 0 } asked)
+                    rows.Add(new() { ChatSessionId = session.Id, Role = "user", Content = asked, CreatedAt = signals.AskedAt });
+
+                var outcome = ChatTurn.Outcome(signals.Slm, signals.Usage);
+                var reply = new StudyAbroad.Domain.Entities.ChatMessage
+                {
+                    ChatSessionId = session.Id,
+                    Role = "assistant",
+                    Content = response.Answer,
+                    SourcesJson = response.Citations is { Count: > 0 } cites
+                        ? JsonSerializer.Serialize(cites.Select(c => new { title = c.Title, url = c.Url }))
+                        : null,
+                    Outcome = outcome,
+                    ReviewStatus = ChatTurn.ReviewStatus(outcome),
+                    MetaJson = ChatTurn.Meta(signals.Slm, signals.Usage, signals.Action, signals.Skills, turnMs),
+                };
+                rows.Add(reply);
+
+                await messages.AddRangeAsync(rows, ct);
+                return reply.Id;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger?.LogWarning(ex, "Không lưu được tin nhắn của phiên chat {SessionId}; lượt chat vẫn trả lời bình thường", session.Id);
+                return null;
+            }
         }
 
         private const string ReviewQuestion = "X1";

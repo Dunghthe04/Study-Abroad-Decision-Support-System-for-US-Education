@@ -51,6 +51,9 @@ public static class DependencyInjection
         services.AddScoped<IRecommendationRepository, RecommendationRepository>();
         services.AddScoped<IRecommendationHistoryRepository, RecommendationHistoryRepository>();   // [UC-87] đọc lịch sử gợi ý
         services.AddScoped<IChatSessionRepository, ChatSessionRepository>();
+        // Lưu nội dung chat cho admin xem câu chưa trả lời được. Là dữ liệu cá nhân: đặt Chat:StoreMessages = false để tắt mà không sửa code
+        if (configuration.GetValue("Chat:StoreMessages", true))
+            services.AddScoped<IChatMessageRepository, ChatMessageRepository>();
         services.AddScoped<IChatAnalysisRepository, ChatAnalysisRepository>();
         services.AddScoped<IChatBenchmarkRepository, ChatBenchmarkRepository>();
 
