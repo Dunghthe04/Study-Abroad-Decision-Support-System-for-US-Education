@@ -106,8 +106,8 @@ export function Gauge({
   className?: string;
 }) {
   const fraction = Math.max(0, Math.min(1, value > 1 ? value / 100 : value));
-  const radius = 18;
-  const strokeWidth = 4;
+  const radius = 42;
+  const strokeWidth = 8;
   const arcLength = Math.PI * radius;
   const offset = arcLength * (1 - fraction);
   const formattedPct = universityPercent(fraction);
@@ -116,11 +116,11 @@ export function Gauge({
     <svg
       role="img"
       aria-label={`${label}: ${formattedPct}`}
-      viewBox="0 0 44 26"
-      className={cn("h-6 w-11 shrink-0 overflow-visible", className)}
+      viewBox="0 0 104 58"
+      className={cn("h-auto w-24 shrink-0 overflow-visible sm:w-28", className)}
     >
       <path
-        d="M 4 22 A 18 18 0 0 1 40 22"
+        d="M 10 50 A 42 42 0 0 1 94 50"
         fill="none"
         stroke="currentColor"
         strokeWidth={strokeWidth}
@@ -129,7 +129,7 @@ export function Gauge({
       />
       {fraction > 0 && (
         <path
-          d="M 4 22 A 18 18 0 0 1 40 22"
+          d="M 10 50 A 42 42 0 0 1 94 50"
           fill="none"
           stroke="currentColor"
           strokeWidth={strokeWidth}
@@ -209,13 +209,13 @@ export function GaugeDataItem({
 }) {
   const display = formattedValue ?? universityPercent(value);
   return (
-    <div className="flex items-center gap-3.5 py-1">
-      <Gauge value={value} label={label} colorClassName={colorClassName} />
+    <div className="flex items-center justify-between gap-3.5 py-1">
       <div className="min-w-0 space-y-0.5">
         <p className="text-xs text-ink-3">{label}</p>
         <p className="text-base font-semibold tracking-tight text-ink">{display}</p>
         {subtitle && <p className="text-xs text-ink-3">{subtitle}</p>}
       </div>
+      <Gauge value={value} label={label} colorClassName={colorClassName} />
     </div>
   );
 }
