@@ -174,7 +174,10 @@ export function ProfileFlowWizard() {
             // bỏ qua
           }
         }
-        setGoals(parseGoals(openedFromChat ? params.get("goal") : savedGoals));
+        const startGoals = parseGoals(openedFromChat ? params.get("goal") : savedGoals);
+        setGoals(startGoals);
+        // Vào form trực tiếp mà chưa tích mục tiêu (nháp cũ đang ở bước sau): mở trang 1 để chọn trước
+        const startStep = (saved: number) => (!openedFromChat && startGoals.length === 0 ? 1 : saved);
         const editing = params.get("edit") === "1" || openedFromChat;
         // Tải metadata động song song với trạng thái nháp
         const [metaData, stateData, latest] = await Promise.all([
@@ -193,7 +196,7 @@ export function ProfileFlowWizard() {
         if (metaData) setMetadata(metaData);
 
         if (stateData) {
-          setCurrentStep(stateData.currentStep || 1);
+          setCurrentStep(startStep(stateData.currentStep || 1));
           setCompletedSteps(stateData.completedSteps ?? []);
           setDraftTranscript(stateData.draftTranscript ?? null);
           const incomingDraft = stateData.draft;
@@ -207,7 +210,7 @@ export function ProfileFlowWizard() {
             try {
               const parsed = JSON.parse(localDraftStr);
               if (parsed?.draft) setDraft(mergeDraft(INITIAL_DRAFT, parsed.draft));
-              if (parsed?.currentStep) setCurrentStep(parsed.currentStep);
+              if (parsed?.currentStep) setCurrentStep(startStep(parsed.currentStep));
               if (Array.isArray(parsed?.completedSteps)) setCompletedSteps(parsed.completedSteps);
             } catch {
               // ignore
