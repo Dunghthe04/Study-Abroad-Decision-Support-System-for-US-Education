@@ -208,22 +208,22 @@ public static class ChatSimulation
     {
         var steps = new List<QuickReply>();
 
-        var change = result.Changes
+        // Nút không nêu tên trường: bấm vào mở ô chọn, trong ô chỉ có các trường vừa đổi nhóm (hoặc đổi vị trí) để học sinh chọn
+        var changed = result.Changes
             .Where(c => c.To != "OUT" && Rank(c.To) != Rank(c.From))
             .OrderByDescending(c => Math.Abs(Rank(c.To) - Rank(c.From)))
-            .FirstOrDefault();
-        if (change is not null)
+            .Select(c => c.Code)
+            .ToList();
+        if (changed.Count > 0)
         {
-            var up = Rank(change.To) > Rank(change.From);
-            steps.Add(ExplainStep(change.Code, change.Name, $"Vì sao {change.Name} {(up ? "lên" : "xuống")} {StatusName(change.To)}?"));
+            steps.Add(ExplainSome("Vì sao các trường đổi nhóm?", changed));
         }
         else if (beforeItemsJson is not null)
         {
-            var move = Moves(JsonNode.Parse(beforeItemsJson) as JsonObject, JsonNode.Parse(result.ItemsJson) as JsonObject).FirstOrDefault();
-            if (move is not null)
-            {
-                steps.Add(ExplainStep(move.Code, move.Name, $"Vì sao {move.Name} {(move.To < move.From ? "lên" : "xuống")} vị trí {move.To}?"));
-            }
+            var moved = Moves(JsonNode.Parse(beforeItemsJson) as JsonObject, JsonNode.Parse(result.ItemsJson) as JsonObject)
+                .Select(m => m.Code).ToList();
+            if (moved.Count > 0)
+                steps.Add(ExplainSome("Vì sao các trường đổi vị trí?", moved));
         }
 
         // Có trường Khó vào trong danh sách thì mới có "mục tiêu" để hỏi cần gì
@@ -236,8 +236,9 @@ public static class ChatSimulation
         return steps;
     }
 
-    private static QuickReply ExplainStep(string code, string name, string label) =>
-        new(label, $"Vì sao {name} xếp ở nhóm này?", new ChatAction("explain", code));
+    // Giải thích một trong các trường đã đổi: không kèm mã trường, chỉ kèm danh sách mã để ô chọn trường thu hẹp lại
+    private static QuickReply ExplainSome(string label, IReadOnlyList<string> codes) =>
+        new(label, label, new ChatAction("explain", SchoolCodes: codes.Take(ChatActions.MaxPickerCodes).ToList()));
 
     private static string? PriorityFact(int factor, JsonObject school)
     {

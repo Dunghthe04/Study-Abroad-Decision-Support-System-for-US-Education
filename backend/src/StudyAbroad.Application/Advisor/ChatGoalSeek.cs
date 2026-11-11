@@ -22,6 +22,7 @@ public static class ChatGoalSeek
 
     public const string Failed = "Mình chưa tính được phần này, bạn thử lại sau ít phút nhé.";
     public const string AskSchool = "Bạn muốn vào trường nào? Chọn hoặc gõ tên trường ở ô bên dưới nhé.";
+    public const string AskExplainSchool = "Bạn muốn xem giải thích về trường nào? Chọn hoặc gõ tên trường ở ô bên dưới nhé.";
     public const int MaxOthers = 400;
 
     /// <summary>Đọc ActionData của advisor. Null nếu thiếu tên trường.</summary>
@@ -46,8 +47,21 @@ public static class ChatGoalSeek
         $"Mình chưa thấy trường “{text}” trong danh sách của hệ thống. Bạn tìm trong ô bên dưới nhé.";
 
     /// <summary>Ô chọn trường có gợi ý (gõ đến đâu hiện đến đó). Data.target là nhóm đích học sinh đã nói, để câu hỏi gửi lại giữ nguyên.</summary>
-    public static Widget SchoolPicker(string? target) =>
-        new(PickerType, JsonSerializer.SerializeToElement(new JsonObject { ["target"] = target }));
+    // kind: việc làm sau khi chọn trường. Không có là "cần gì để vào", "explain" là giải thích trường (frontend đổi câu gửi lại)
+    // codes: chỉ cho chọn trong các trường này (null là tất cả trường)
+    // suggested: các trường hiện sẵn dạng nút bấm khi học sinh chưa gõ gì (vd đầu danh sách gợi ý)
+    public static Widget SchoolPicker(
+        string? target, string? kind = null, IReadOnlyList<string>? codes = null, IReadOnlyList<string>? suggested = null) =>
+        new(PickerType, JsonSerializer.SerializeToElement(new JsonObject
+        {
+            ["target"] = target,
+            ["kind"] = kind,
+            ["codes"] = Codes(codes),
+            ["suggested"] = Codes(suggested),
+        }));
+
+    private static JsonArray? Codes(IReadOnlyList<string>? codes) =>
+        codes is null ? null : new JsonArray(codes.Select(c => (JsonNode?)JsonValue.Create(c)).ToArray());
 
     /// <summary>Gõ tắt hoặc mơ hồ: hỏi "Ý bạn là trường nào?" và đưa các trường có thể đúng.</summary>
     public static string Clarify(string text, int count) =>

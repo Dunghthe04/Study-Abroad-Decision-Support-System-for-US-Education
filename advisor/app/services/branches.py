@@ -10,7 +10,7 @@ from typing import Any
 
 from app.schemas.chat import ChatState, QuickReply, Widget
 from app.schemas.slm import INFO_FIELDS, SlmTinResult, SlmY, single_school, task_of
-from app.services import search_filters
+from app.services import search_filters, small_talk
 from app.services.advice_writer import AdviceWriter
 from app.services.chat_flow import (
     NEED_PROFILE,
@@ -241,10 +241,25 @@ OUT_OF_SCOPE = {
 }
 
 
+# Lời chào: model chưa có nhãn riêng nên thường trả ambiguous. Tin chỉ có lời chào (luật ở small_talk) thì chào lại và gợi ý việc làm được
+GREETING_REPLY = (
+    "Xin chào! Mình là trợ lý tư vấn du học Mỹ. Mình có thể gợi ý trường hợp với hồ sơ của bạn, "
+    "thử các kịch bản (nếu điểm SAT, GPA thay đổi), giải đáp về visa, học phí, học bổng, hoặc giới thiệu trung tâm tư vấn. "
+    "Bạn muốn bắt đầu từ đâu?"
+)
+GREETING_BUTTONS = [
+    QuickReply(label="Gợi ý trường hợp với mình", value="Gợi ý trường phù hợp với hồ sơ của mình"),
+    QuickReply(label="Hỏi về visa du học Mỹ", value="Visa F-1 cần chuẩn bị gì?"),
+    QuickReply(label="Gợi ý trung tâm tư vấn", value="Em muốn gặp tư vấn viên"),
+]
+
+
 # Ngoài phạm vi: trả câu cố định. Câu hồ sơ đang chờ (nếu có) do ChatFlow nhắc lại như mọi câu hỏi xen ngang
 class OutOfScopeBranch:
     async def run(self, state: ChatState, message: str, slm: SlmTinResult) -> SkillOutput:
         kind = slm.intents[0].entities.get("subtype", "ambiguous")
+        if kind in ("ambiguous", "farewell") and small_talk.classify(message) == "greeting":
+            return SkillOutput(GREETING_REPLY, quick_replies=list(GREETING_BUTTONS))
         return SkillOutput(OUT_OF_SCOPE.get(kind, OUT_OF_SCOPE["ambiguous"]))
 
 
@@ -308,10 +323,9 @@ RECOMMENDING = "Mình lọc danh sách trường hợp với hồ sơ và ngành
 # Hồ sơ vừa đủ mà học sinh chưa hỏi câu tư vấn nào (tin là "Đúng rồi"): đánh giá hồ sơ như trước đây
 DEFAULT_QUESTION = "Đánh giá hồ sơ của em giúp em."
 # Câu chỉ hỏi giải thích trường mà chưa nêu trường nào
-ASK_WHICH_SCHOOLS = (
-    "Bạn muốn hỏi về trường nào? Bạn nhắn tên trường giúp mình nhé, "
-    'hoặc nhắn "gợi ý trường cho em" để mình lọc danh sách trường hợp với hồ sơ của bạn.'
-)
+ASK_WHICH_SCHOOLS = "Bạn muốn mình giải thích trường nào? Chọn hoặc gõ tên trường ở ô bên dưới nhé."
+# Số trường đầu danh sách gợi ý hiện sẵn trong ô chọn (cùng giá trị với ChatActions.MaxSuggested bên .NET)
+MAX_SUGGESTED = 6
 CANNOT_ANSWER = "Mình chưa viết được câu trả lời cho câu này. Bạn bấm hỏi lại giúp mình nhé."
 ASK_AGAIN_LABEL = "Hỏi lại"
 
@@ -326,7 +340,9 @@ def asks_for_school_list(text: str) -> bool:
 #   chữ "trường nào" ("Iowa và Purdue trường nào hợp với em hơn")
 # - explain_school chưa nêu trường và không xin danh sách trường: nhờ nêu tên trường
 # - còn lại (có tên trường mà chưa có kết quả gợi ý, hoặc xin danh sách): trả None để chạy gợi ý trường
-def others_only_output(y: SlmY, tasks: list[str], school_list_words: bool) -> SkillOutput | None:
+def others_only_output(
+    y: SlmY, tasks: list[str], school_list_words: bool, state: ChatState | None = None
+) -> SkillOutput | None:
     schools = [t.strip() for t in y.entities.get("schools") or []]
     if "compare" in tasks and len(schools) >= 2:
         return SkillOutput(
@@ -340,7 +356,14 @@ def others_only_output(y: SlmY, tasks: list[str], school_list_words: bool) -> Sk
             },
         )
     if not school_list_words and not single_school(y.entities):
-        return SkillOutput(ASK_WHICH_SCHOOLS)
+        # Ô chọn trường (chọn xong .NET giải thích trường đó), hiện sẵn vài trường đầu danh sách gợi ý nếu có
+        suggested = [s.code for s in (state.schools if state else None) or []][:MAX_SUGGESTED]
+        return SkillOutput(
+            ASK_WHICH_SCHOOLS,
+            widget=Widget(
+                type="school", data={"target": None, "kind": "explain", "suggested": suggested or None}
+            ),
+        )
     return None
 
 
@@ -365,7 +388,7 @@ class GeneratedAdviceBranch:
         others_only = tasks is not None and not any(t in TEMPLATE_TASKS for t in tasks)
         school_list = y.type == "profile_review" and (asks_for_school_list(question) or others_only)
         if others_only and "school_list" not in tasks:
-            out = others_only_output(y, tasks, asks_for_school_list(question))
+            out = others_only_output(y, tasks, asks_for_school_list(question), state)
             if out is not None:
                 return out
         # Gợi ý trường cần ngành để lọc trường; tư vấn hồ sơ chỉ cần các mục cơ bản

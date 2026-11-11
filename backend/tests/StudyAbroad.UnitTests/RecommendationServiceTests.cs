@@ -927,6 +927,18 @@ public class RecommendationServiceTests
     }
 
     [Fact]
+    public async Task ExplainCard_ShowsTheFullStateName_ButTheAdvisorStillGetsTheCode()
+    {
+        var (service, advisor, profile) = await SavedRunSetup();
+
+        var card = await service.ExplainCardAsync(profile.UserId, "S", default);
+        await service.ExplainAsync(profile.UserId, "S", default);
+
+        Assert.Equal("New York", card.State);
+        Assert.Equal("NY", advisor.LastExplain!.School.State);
+    }
+
+    [Fact]
     public async Task Explain_WithEmptyOverrides_IsTheRealProfile()
     {
         var (service, advisor, profile) = await SavedRunSetup();
@@ -1606,7 +1618,8 @@ public class RecommendationServiceTests
         public Task UpdateProfileAsync(StudentProfile profile, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<StudentProfile> EnsureProfileExistsAsync(Guid userId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<IReadOnlyList<MajorOption>> GetMajorOptionsAsync(CancellationToken ct = default) => throw new NotSupportedException();
-        public Task<IReadOnlyList<UsStateOption>> GetUsStateOptionsAsync(CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<IReadOnlyList<UsStateOption>> GetUsStateOptionsAsync(CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<UsStateOption>>([new("NY", "New York", "northeast", true)]);
         public Task CommitProfileFlowAsync(StudentProfile profile, IEnumerable<TranscriptScore> scores, IEnumerable<ProfileActivity> activities, IEnumerable<ProfileCertification> certifications, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<IReadOnlyList<TranscriptScore>> GetTranscriptScoresAsync(Guid profileId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<IReadOnlyList<ProfileActivity>> GetProfileActivitiesAsync(Guid profileId, CancellationToken ct = default) =>

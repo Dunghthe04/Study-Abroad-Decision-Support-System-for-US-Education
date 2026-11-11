@@ -425,8 +425,16 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
         return (student, target, university.Code, university.Name);
     }
 
-    public async Task<ExplainSchoolDto> ExplainCardAsync(Guid userId, string code, CancellationToken ct, SimulationOverrides? overrides = null) =>
-        (await LoadExplainAsync(userId, code, overrides, ct)).Target;
+    // Thẻ hiển thị cho học sinh: bang ghi tên đầy đủ (join bảng us_states), không phải mã "FL".
+    // Chỉ đổi ở thẻ; lượt gửi advisor (ExplainAsync) vẫn dùng mã bang như cũ.
+    public async Task<ExplainSchoolDto> ExplainCardAsync(Guid userId, string code, CancellationToken ct, SimulationOverrides? overrides = null)
+    {
+        var card = (await LoadExplainAsync(userId, code, overrides, ct)).Target;
+        if (string.IsNullOrWhiteSpace(card.State)) return card;
+        var states = await profiles.GetUsStateOptionsAsync(ct);
+        var name = states.FirstOrDefault(s => string.Equals(s.Code, card.State, StringComparison.OrdinalIgnoreCase))?.Name;
+        return name is null ? card : card with { State = name };
+    }
 
     // basis: mô tả giả định học sinh đang xem ("GPA 3.6, SAT 1500"); null là hồ sơ thật. Advisor dùng để nói rõ gốc ở câu đầu
     public async Task<SchoolExplanation> ExplainAsync(
