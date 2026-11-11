@@ -9,7 +9,6 @@ import { ApiError } from "@/lib/api";
 import { setPendingEmail } from "@/lib/pending-email";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -174,29 +173,28 @@ export function RegisterForm() {
   };
 
   return (
-    <Card className="mx-auto w-full max-w-md">
-      <CardHeader className="text-center">
-        <CardTitle>
-          <h1>Đăng ký tài khoản</h1>
-        </CardTitle>
-        <CardDescription>
+    <div className="space-y-6">
+      <div className="space-y-1">
+        <h1 className="font-heading text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
+          Đăng ký tài khoản
+        </h1>
+        <p className="text-sm text-ink-2">
           Tạo tài khoản để nhận tư vấn du học Mỹ và quản lý hồ sơ cá nhân
-        </CardDescription>
-      </CardHeader>
+        </p>
+      </div>
 
-      <CardContent className="space-y-6">
-        {error && (
-          <Alert variant="destructive">
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
+      {error && (
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
 
-        <form onSubmit={handleSubmit}>
-          <FieldGroup>
-            {/* Lựa chọn vai trò: Học sinh, Phụ huynh (trung tâm do admin tạo tài khoản) */}
-            <Field>
-              <Label>Bạn là:</Label>
-              <div className="grid grid-cols-2 gap-2">
+      <form onSubmit={handleSubmit}>
+        <FieldGroup>
+          {/* Lựa chọn vai trò: Học sinh, Phụ huynh (trung tâm do admin tạo tài khoản) */}
+          <Field>
+            <Label>Bạn là:</Label>
+            <div className="grid grid-cols-2 gap-2">
               <Button
                 type="button"
                 variant={role === "student" ? "default" : "outline"}
@@ -213,153 +211,154 @@ export function RegisterForm() {
                 <UsersIcon aria-hidden="true" />
                 Phụ huynh
               </Button>
-              </div>
-            </Field>
+            </div>
+          </Field>
 
-            {/* Họ và tên */}
-            <Field>
-              <FieldLabel htmlFor="fullName">
-                Họ và tên <span className="text-destructive">*</span>
-              </FieldLabel>
-              <Input
-                id="fullName"
-                type="text"
-                required
-                maxLength={100}
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                placeholder="Nguyễn Văn A"
-              />
-            </Field>
+          {/* Họ và tên */}
+          <Field>
+            <FieldLabel htmlFor="fullName">
+              Họ và tên <span className="text-destructive">*</span>
+            </FieldLabel>
+            <Input
+              id="fullName"
+              type="text"
+              required
+              maxLength={100}
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              placeholder="Nguyễn Văn A"
+            />
+          </Field>
 
-            {/* Ngày sinh: dùng để tính nhóm tuổi */}
-            <Field>
-              <FieldLabel htmlFor="dateOfBirth">
-                Ngày sinh <span className="text-destructive">*</span>
-              </FieldLabel>
-              <Input
-                id="dateOfBirth"
-                type="date"
-                required
-                max={todayInVietnam()}
-                value={dateOfBirth}
-                onChange={(e) => setDateOfBirth(e.target.value)}
-              />
-              {role === "parent" && (
-                <FieldDescription>Tài khoản phụ huynh dành cho người từ {ADULT_AGE} tuổi.</FieldDescription>
-              )}
-            </Field>
-
-            {/* Email đăng nhập */}
-            <Field>
-              <FieldLabel htmlFor="email">
-                Email <span className="text-destructive">*</span>
-              </FieldLabel>
-              <Input
-                id="email"
-                type="email"
-                required
-                maxLength={100}
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="example@gmail.com"
-              />
-            </Field>
-
-            {/* Số điện thoại Việt Nam */}
-            <Field>
-              <FieldLabel htmlFor="phone">Số điện thoại liên hệ (Việt Nam)</FieldLabel>
-              <Input
-                id="phone"
-                type="tel"
-                maxLength={20}
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="0912 345 678 hoặc +84912345678"
-              />
-              <FieldDescription>
-                Chỉ chấp nhận số điện thoại di động Việt Nam (10 chữ số, đầu số 03, 05, 07, 08, 09).
-              </FieldDescription>
-            </Field>
-
-            {/* Mật khẩu */}
-            <Field>
-              <FieldLabel htmlFor="password">
-                Mật khẩu <span className="text-destructive">*</span>
-              </FieldLabel>
-              <Input
-                id="password"
-                type="password"
-                required
-                minLength={8}
-                maxLength={100}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Tối thiểu 8 ký tự, tối đa 100"
-              />
-            </Field>
-
-            {/* Xác nhận mật khẩu */}
-            <Field>
-              <FieldLabel htmlFor="confirmPassword">
-                Xác nhận mật khẩu <span className="text-destructive">*</span>
-              </FieldLabel>
-              <Input
-                id="confirmPassword"
-                type="password"
-                required
-                maxLength={100}
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Nhập lại mật khẩu"
-              />
-            </Field>
-
-            {/* Email phụ huynh: học sinh dưới 18 (bắt buộc khi dưới 16) */}
-            {isMinorStudent && (
-              <>
-                <Alert role="status">
-                  <InfoIcon aria-hidden="true" />
-                  <AlertDescription>
-                    {parentEmailRequired
-                      ? `Theo Luật Bảo vệ dữ liệu cá nhân, với học sinh dưới ${CHILD_MAX_AGE_EXCLUSIVE} tuổi hệ thống cần cha mẹ hoặc người giám hộ đồng ý trước khi lưu và phân tích hồ sơ. Bạn vẫn dùng được tài khoản; các chức năng hồ sơ, gợi ý trường và tư vấn AI sẽ mở khi phụ huynh bấm đồng ý trong email mời.`
-                      : `Bạn chưa đủ ${ADULT_AGE} tuổi: có thể nhập email phụ huynh để mời liên kết tài khoản (không bắt buộc). Một số chức năng như chia sẻ hồ sơ cho trung tâm chỉ dành cho người từ ${ADULT_AGE} tuổi.`}
-                  </AlertDescription>
-                </Alert>
-                <Field>
-                  <FieldLabel htmlFor="parentEmail">
-                    Email phụ huynh {parentEmailRequired && <span className="text-destructive">*</span>}
-                  </FieldLabel>
-                  <Input
-                    id="parentEmail"
-                    type="email"
-                    required={parentEmailRequired}
-                    maxLength={100}
-                    value={parentEmail}
-                    onChange={(e) => setParentEmail(e.target.value)}
-                    placeholder="phuhuynh@gmail.com"
-                  />
-                  <FieldDescription>
-                    Lời mời được gửi tới email này sau khi bạn xác thực email của mình.
-                  </FieldDescription>
-                </Field>
-              </>
+          {/* Ngày sinh: dùng để tính nhóm tuổi */}
+          <Field>
+            <FieldLabel htmlFor="dateOfBirth">
+              Ngày sinh <span className="text-destructive">*</span>
+            </FieldLabel>
+            <Input
+              id="dateOfBirth"
+              type="date"
+              required
+              max={todayInVietnam()}
+              value={dateOfBirth}
+              onChange={(e) => setDateOfBirth(e.target.value)}
+            />
+            {role === "parent" && (
+              <FieldDescription>Tài khoản phụ huynh dành cho người từ {ADULT_AGE} tuổi.</FieldDescription>
             )}
+          </Field>
 
-            <Button type="submit" size="lg" disabled={isSubmitting} className="w-full">
-              {isSubmitting && <Spinner data-icon="inline-start" />}
-              {isSubmitting ? "Đang xử lý..." : "Tạo tài khoản"}
-            </Button>
-          </FieldGroup>
-        </form>
+          {/* Email đăng nhập */}
+          <Field>
+            <FieldLabel htmlFor="email">
+              Email <span className="text-destructive">*</span>
+            </FieldLabel>
+            <Input
+              id="email"
+              type="email"
+              required
+              maxLength={100}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="example@gmail.com"
+            />
+          </Field>
 
-        <p className="text-center text-muted-foreground">
+          {/* Số điện thoại Việt Nam */}
+          <Field>
+            <FieldLabel htmlFor="phone">Số điện thoại liên hệ (Việt Nam)</FieldLabel>
+            <Input
+              id="phone"
+              type="tel"
+              maxLength={20}
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="0912 345 678 hoặc +84912345678"
+            />
+            <FieldDescription>
+              Chỉ chấp nhận số điện thoại di động Việt Nam (10 chữ số, đầu số 03, 05, 07, 08, 09).
+            </FieldDescription>
+          </Field>
+
+          {/* Mật khẩu */}
+          <Field>
+            <FieldLabel htmlFor="password">
+              Mật khẩu <span className="text-destructive">*</span>
+            </FieldLabel>
+            <Input
+              id="password"
+              type="password"
+              required
+              minLength={8}
+              maxLength={100}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Tối thiểu 8 ký tự, tối đa 100"
+            />
+          </Field>
+
+          {/* Xác nhận mật khẩu */}
+          <Field>
+            <FieldLabel htmlFor="confirmPassword">
+              Xác nhận mật khẩu <span className="text-destructive">*</span>
+            </FieldLabel>
+            <Input
+              id="confirmPassword"
+              type="password"
+              required
+              maxLength={100}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Nhập lại mật khẩu"
+            />
+          </Field>
+
+          {/* Email phụ huynh: học sinh dưới 18 (bắt buộc khi dưới 16) */}
+          {isMinorStudent && (
+            <>
+              <Alert role="status">
+                <InfoIcon aria-hidden="true" />
+                <AlertDescription>
+                  {parentEmailRequired
+                    ? `Theo Luật Bảo vệ dữ liệu cá nhân, với học sinh dưới ${CHILD_MAX_AGE_EXCLUSIVE} tuổi hệ thống cần cha mẹ hoặc người giám hộ đồng ý trước khi lưu và phân tích hồ sơ. Bạn vẫn dùng được tài khoản; các chức năng hồ sơ, gợi ý trường và tư vấn AI sẽ mở khi phụ huynh bấm đồng ý trong email mời.`
+                    : `Bạn chưa đủ ${ADULT_AGE} tuổi: có thể nhập email phụ huynh để mời liên kết tài khoản (không bắt buộc). Một số chức năng như chia sẻ hồ sơ cho trung tâm chỉ dành cho người từ ${ADULT_AGE} tuổi.`}
+                </AlertDescription>
+              </Alert>
+              <Field>
+                <FieldLabel htmlFor="parentEmail">
+                  Email phụ huynh {parentEmailRequired && <span className="text-destructive">*</span>}
+                </FieldLabel>
+                <Input
+                  id="parentEmail"
+                  type="email"
+                  required={parentEmailRequired}
+                  maxLength={100}
+                  value={parentEmail}
+                  onChange={(e) => setParentEmail(e.target.value)}
+                  placeholder="phuhuynh@gmail.com"
+                />
+                <FieldDescription>
+                  Lời mời được gửi tới email này sau khi bạn xác thực email của mình.
+                </FieldDescription>
+              </Field>
+            </>
+          )}
+
+          <Button type="submit" size="xl" disabled={isSubmitting} className="w-full">
+            {isSubmitting && <Spinner data-icon="inline-start" />}
+            {isSubmitting ? "Đang xử lý..." : "Tạo tài khoản"}
+          </Button>
+        </FieldGroup>
+      </form>
+
+      <div className="pt-2 text-center text-sm text-ink-2">
+        <p>
           Đã có tài khoản?{" "}
-          <Link href="/login" className="text-primary hover:underline">
+          <Link href="/login" className="font-semibold text-brand hover:underline">
             Đăng nhập ngay
           </Link>
         </p>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
