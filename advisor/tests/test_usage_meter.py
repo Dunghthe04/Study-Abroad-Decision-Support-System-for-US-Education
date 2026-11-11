@@ -263,3 +263,64 @@ def test_a_recommend_route_returns_the_token_of_its_ai_call_without_changing_oth
     assert [(u["source"], u["purpose"], u["inputTokens"], u["cachedTokens"]) for u in usage] == [
         ("claude", "skill_so_sanh", 83, 7)
     ]
+
+
+# ---- đường OCR bảng điểm: trước đây không đo gì, token của Ollama vision và Claude khi đọc học bạ bị bỏ
+class _OcrReaderThatCallsTheAi:
+    """Đọc học bạ giả: gọi Ollama (đọc ảnh) rồi Claude (bóc tách), như TranscriptReader thật, rồi trả kết quả."""
+
+    def __init__(self) -> None:
+        self._claude = claude(lambda request: claude_ok())
+
+    async def read_transcript(self, request):
+        from app.schemas.transcript_ocr import TranscriptOcrResponse
+
+        usage_meter.ollama_ok("qwen3-vl", {"prompt_eval_count": 900, "eval_count": 400}, 18000)
+        await self._claude.chat_json(MESSAGES, SCHEMA)
+        return TranscriptOcrResponse(success=True, model_used="qwen3-vl")
+
+
+def _ocr_client(reader):
+    from fastapi.testclient import TestClient
+
+    from app.api.deps import get_transcript_reader
+    from app.main import create_app
+
+    app = create_app()
+    app.dependency_overrides[get_transcript_reader] = lambda: reader
+    return TestClient(app)
+
+
+def test_the_ocr_route_returns_the_token_of_both_ai_calls_labelled_transcript_ocr():
+    res = _ocr_client(_OcrReaderThatCallsTheAi()).post("/api/v1/profile/transcript-ocr", json={})
+
+    usage = res.json()["aiUsage"]
+    assert [(u["source"], u["purpose"], u["inputTokens"], u["outputTokens"]) for u in usage] == [
+        ("ollama", "transcript_ocr", 900, 400),
+        ("claude", "transcript_ocr", 83, 48),
+    ]
+
+
+def test_the_ocr_route_keeps_its_existing_keys_in_camel_case():
+    body = _ocr_client(_OcrReaderThatCallsTheAi()).post("/api/v1/profile/transcript-ocr", json={}).json()
+
+    assert body["success"] is True and body["modelUsed"] == "qwen3-vl"
+    assert {"terms", "averageScoreScale10", "calculatedGpa4", "message", "warnings"} <= set(body)
+
+
+def test_the_ocr_route_without_any_ai_call_has_an_empty_usage_list():
+    class NoAiReader:
+        async def read_transcript(self, request):
+            from app.schemas.transcript_ocr import TranscriptOcrResponse
+
+            return TranscriptOcrResponse(success=False, message="Không đọc được")
+
+    body = _ocr_client(NoAiReader()).post("/api/v1/profile/transcript-ocr", json={}).json()
+
+    assert body["aiUsage"] == []
+
+
+def test_the_purpose_label_does_not_leak_out_of_the_ocr_route():
+    _ocr_client(_OcrReaderThatCallsTheAi()).post("/api/v1/profile/transcript-ocr", json={})
+
+    assert usage_meter._purpose.get() == ""  # route xong thì nhãn được trả về như cũ
