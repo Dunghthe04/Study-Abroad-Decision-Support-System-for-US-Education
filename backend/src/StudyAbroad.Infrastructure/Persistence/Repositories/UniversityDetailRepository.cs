@@ -161,6 +161,11 @@ public class UniversityDetailRepository(AppDbContext db) : IUniversityDetailRepo
 
         var total = await q.CountAsync(ct);
 
+        var generalListIds = await db.RankingLists.AsNoTracking()
+            .Where(l => l.ListGroup == RecommendationRepository.GeneralRankingGroup)
+            .Select(l => l.Id)
+            .ToListAsync(ct);
+
         IQueryable<University> sorted = (query.SortBy?.ToLowerInvariant()) switch
         {
             "name" => q.OrderBy(u => u.Name),
@@ -189,8 +194,12 @@ public class UniversityDetailRepository(AppDbContext db) : IUniversityDetailRepo
                 .ThenByDescending(u => u.AcceptanceRate)
                 .ThenBy(u => u.Name),
             _ => q
-                .OrderBy(u => db.UniversityRankings.Where(r => r.UniversityId == u.Id).Min(r => (int?)r.Rank) == null)
-                .ThenBy(u => db.UniversityRankings.Where(r => r.UniversityId == u.Id).Min(r => (int?)r.Rank))
+                .OrderBy(u => db.UniversityRankings
+                    .Where(r => r.UniversityId == u.Id && generalListIds.Contains(r.ListId))
+                    .Min(r => (int?)r.Rank) == null)
+                .ThenBy(u => db.UniversityRankings
+                    .Where(r => r.UniversityId == u.Id && generalListIds.Contains(r.ListId))
+                    .Min(r => (int?)r.Rank))
                 .ThenBy(u => u.Name),
         };
 
@@ -245,8 +254,8 @@ public class UniversityDetailRepository(AppDbContext db) : IUniversityDetailRepo
                 ct);
 
         var allRankings = await db.UniversityRankings.AsNoTracking()
-            .Where(r => universityIds.Contains(r.UniversityId))
-            .Join(db.RankingLists.AsNoTracking(), r => r.ListId, l => l.Id, (r, l) => new { r.UniversityId, r.Rank, Publisher = l.Publisher ?? l.Name })
+            .Where(r => universityIds.Contains(r.UniversityId) && generalListIds.Contains(r.ListId))
+            .Join(db.RankingLists.AsNoTracking(), r => r.ListId, l => l.Id, (r, l) => new { r.UniversityId, r.Rank, ListName = l.Name })
             .OrderBy(x => x.Rank)
             .ToListAsync(ct);
 
@@ -296,7 +305,7 @@ public class UniversityDetailRepository(AppDbContext db) : IUniversityDetailRepo
                 offering?.MinToefl,
                 offering?.MinDuolingo,
                 bestRank?.Rank,
-                bestRank?.Publisher,
+                bestRank?.ListName,
                 offering?.SatPolicy,
                 offering?.IntlAidPolicy,
                 majors);

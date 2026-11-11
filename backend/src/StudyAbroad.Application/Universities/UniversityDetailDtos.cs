@@ -68,7 +68,7 @@ public record UniversityListItemDto(
     decimal? MinToefl,
     decimal? MinDuolingo,
     int? BestRank,
-    string? BestRankPublisher,
+    string? BestRankList,
     string? SatPolicy,
     string? IntlAidPolicy,
     IReadOnlyList<string> Majors);
