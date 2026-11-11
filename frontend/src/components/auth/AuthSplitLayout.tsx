@@ -36,7 +36,7 @@ export function AuthSplitLayout({ children, containerClassName }: AuthSplitLayou
           </h1>
         </div>
 
-        <p className="absolute right-4 bottom-3 z-10 text-[11px] text-white/80 select-none sm:right-6 sm:bottom-4 sm:text-xs">
+        <p className="absolute right-4 bottom-3 z-10 text-xs text-white/80 select-none sm:right-6 sm:bottom-4">
           Ảnh chụp tại {currentSchool.name}
         </p>
       </div>
