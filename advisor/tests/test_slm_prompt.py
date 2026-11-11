@@ -72,8 +72,9 @@ def test_both_prompts_are_the_same_version_so_a_change_to_one_is_not_forgotten()
     assert load_skill(SKILLS_DIR / f"{FULL}.md")[1] == load_skill(SKILLS_DIR / f"{SHORT}.md")[1]
 
 
-def test_the_default_prompt_is_the_full_one_and_training_uses_the_short_one():
-    assert Settings(_env_file=None).slm_prompt == FULL
+def test_the_default_prompt_is_the_short_one_the_v4_model_was_tuned_on():
+    # usas-slm-v4 được fine-tune với prompt ngắn nên chạy thật mặc định dùng bản ngắn
+    assert Settings(_env_file=None).slm_prompt == SHORT
     assert PROMPT_PATH.stem == FULL
     # Dữ liệu train đã tiếng Anh nên huấn luyện dùng prompt tiếng Anh slm_intents; prompt ngắn tiếng Việt (2.3 và bản 2.2 cho v3) giữ cho chạy thật tới khi đổi code
     assert TRAIN_PROMPT == "slm_intents" and TRAIN_PROMPT_PATH.stem == "slm_intents"

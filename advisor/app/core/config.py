@@ -83,6 +83,7 @@ class Settings(BaseSettings):
     def model_post_init(self, __context: Any) -> None:
         if ADVISOR_ENV_FILE.is_file():
             from dotenv import dotenv_values
+
             env_vals = dotenv_values(ADVISOR_ENV_FILE)
             if not self.anthropic_api_key and env_vals.get("ANTHROPIC_API_KEY"):
                 self.anthropic_api_key = env_vals["ANTHROPIC_API_KEY"]

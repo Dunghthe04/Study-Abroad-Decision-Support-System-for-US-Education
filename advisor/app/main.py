@@ -3,6 +3,7 @@ import logging
 from contextlib import asynccontextmanager
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
+from typing import Any
 
 import httpx  # gửi request đến ollama
 from fastapi import Depends, FastAPI
@@ -84,10 +85,19 @@ async def lifespan(app: FastAPI):
 
         embedder: Any
         if settings.embedding_base_url:
-            async with httpx.AsyncClient(base_url=settings.embedding_base_url, timeout=settings.llm_timeout_seconds) as embed_http:
-                embedder = OpenAiEmbeddingClient(embed_http, settings.embedding_model, settings.embedding_api_key)
+            async with httpx.AsyncClient(
+                base_url=settings.embedding_base_url, timeout=settings.llm_timeout_seconds
+            ) as embed_http:
+                embedder = OpenAiEmbeddingClient(
+                    embed_http, settings.embedding_model, settings.embedding_api_key
+                )
                 skills = build_handlers(
-                    claude, settings.anthropic_model, knowledge, settings.knowledge_min_score, centers, embedder
+                    claude,
+                    settings.anthropic_model,
+                    knowledge,
+                    settings.knowledge_min_score,
+                    centers,
+                    embedder,
                 )
                 slm_client = OllamaClient(
                     slm_http,
@@ -98,7 +108,10 @@ async def lifespan(app: FastAPI):
                     keep_alive=settings.llm_keep_alive,
                 )
                 slm = OllamaSlm(
-                    slm_client, output_format(settings.slm_format), settings.slm_use_context, settings.slm_prompt
+                    slm_client,
+                    output_format(settings.slm_format),
+                    settings.slm_use_context,
+                    settings.slm_prompt,
                 )
                 skill_log_dir = ADVISOR_DIR / settings.skill_log_dir if settings.skill_log_dir else None
                 generator = SkillGenerator(slm_client, log_dir=skill_log_dir)

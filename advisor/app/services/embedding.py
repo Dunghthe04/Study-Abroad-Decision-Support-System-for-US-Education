@@ -1,10 +1,9 @@
 import time
-from typing import Any
 
 import httpx
 
 from app.services import usage_meter
-from app.services.ollama import OllamaClient, OllamaError
+from app.services.ollama import OllamaError
 
 
 class OpenAiEmbeddingClient:
