@@ -12,9 +12,9 @@ from typing import Any
 
 from app.schemas.chat import ResultSchool
 from app.schemas.slm import SkillRequest
+from app.services import usage_meter
 from app.services.explainer import GROUP_LABEL
 from app.services.ollama import OllamaError
-from app.services import usage_meter
 from app.services.skill_call import MAX_ATTEMPTS, SKILLS_DIR, load_skill
 
 logger = logging.getLogger(__name__)

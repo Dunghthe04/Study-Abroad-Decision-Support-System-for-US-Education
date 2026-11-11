@@ -14,9 +14,9 @@ from typing import Any
 
 from app.schemas.chat import ChatState
 from app.schemas.slm import PROFILE_KEYS, SLM_TIN_SCHEMA, SlmTinResult, SlmY
+from app.services import usage_meter
 from app.services.conversation_context import context_for_model
 from app.services.ollama import OllamaError
-from app.services import usage_meter
 from app.services.skill_call import SKILLS_DIR, load_skill
 
 logger = logging.getLogger(__name__)
@@ -184,7 +184,9 @@ class OllamaSlm:
 
         self._slm = slm
         self._output = output
-        self.prompt_name = prompt  # gắn nhãn các lần gọi SLM trong báo cáo token (cùng cách với SkillCall.name)
+        self.prompt_name = (
+            prompt  # gắn nhãn các lần gọi SLM trong báo cáo token (cùng cách với SkillCall.name)
+        )
         self.prompt, self.prompt_version = load_skill(prompt_path(prompt))
 
     async def classify(self, state: ChatState, message: str) -> SlmTinResult:

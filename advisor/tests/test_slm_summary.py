@@ -28,12 +28,15 @@ async def test_summary_lists_the_intents_and_confidence_of_the_turn():
 
 async def test_model_intents_keep_the_raw_model_label_even_when_a_code_rule_rewrites_the_turn():
     # SLM gán nhầm câu hỏi số liệu vào "mơ hồ"; luật code cứu thành câu kiến thức. Admin phải thấy nhãn GỐC của model
-    flow = flow_with({"skill_tra_loi": _Say("trả lời")}, tin(("out_of_scope", {"subtype": "ambiguous"}, "gpa cua truong x")))
+    flow = flow_with(
+        {"skill_tra_loi": _Say("trả lời")},
+        tin(("out_of_scope", {"subtype": "ambiguous"}, "gpa cua truong x")),
+    )
 
     res = await flow.reply(ask("gpa cua truong x"))
 
-    assert res.slm.intents == ["knowledge"]                                       # cái hệ thống đã chạy
-    assert [y.type for y in res.slm.model_intents] == ["out_of_scope"]            # cái model đã nói
+    assert res.slm.intents == ["knowledge"]  # cái hệ thống đã chạy
+    assert [y.type for y in res.slm.model_intents] == ["out_of_scope"]  # cái model đã nói
     assert res.slm.model_intents[0].entities == {"subtype": "ambiguous"}
 
 
@@ -62,7 +65,9 @@ async def test_the_fallback_result_of_the_classifier_is_flagged():
     assert res.slm.fallback is True
     assert res.slm.out_of_scope == "ambiguous"
     assert res.slm.confidence == 0.0
-    assert res.slm.model_intents == []  # model hỏng: không có đầu ra thật để lưu, câu "tin không rõ" là do code dựng
+    assert (
+        res.slm.model_intents == []
+    )  # model hỏng: không có đầu ra thật để lưu, câu "tin không rõ" là do code dựng
 
 
 async def test_the_real_classifier_marks_fallback_after_two_bad_answers():

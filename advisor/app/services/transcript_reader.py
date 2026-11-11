@@ -55,6 +55,7 @@ def _error_label(ex: Exception) -> str:
         return f"HTTP {ex.response.status_code}"
     return type(ex).__name__
 
+
 # Model đọc ảnh dự phòng khi chưa tải đúng vision_model, ưu tiên từ trái sang phải
 VISION_MODEL_PRIORITY = ("glm-ocr", "qwen3-vl", "qwen2.5vl", "minicpm-v", "llava")
 
@@ -695,7 +696,9 @@ class TranscriptReader:
         """Nhận chữ dần dần. Model đọc ảnh hay chép xong bảng rồi mới lặp chữ ở phần chữ ký/con dấu,
         Ollama dừng giữa chừng với lỗi "repeat limit": giữ lại phần đã chép thay vì bỏ hết."""
         parts: list[str] = []
-        final: dict[str, Any] = {}  # dòng cuối (done = true) mang số token; thiếu khi dừng giữa chừng vì lặp chữ
+        final: dict[
+            str, Any
+        ] = {}  # dòng cuối (done = true) mang số token; thiếu khi dừng giữa chừng vì lặp chữ
         started = time.perf_counter()
         try:
             async with self._http.stream("POST", "/api/chat", json=payload, timeout=timeout) as resp:
@@ -708,7 +711,9 @@ class TranscriptReader:
                     chunk = json.loads(line)
                     if error := chunk.get("error"):
                         if parts and "repeat limit" in error:
-                            logger.info("%s lặp chữ sau %d đoạn, giữ phần đã chép", payload["model"], len(parts))
+                            logger.info(
+                                "%s lặp chữ sau %d đoạn, giữ phần đã chép", payload["model"], len(parts)
+                            )
                             break
                         raise OllamaUnavailableError(error)
                     if chunk.get("done"):

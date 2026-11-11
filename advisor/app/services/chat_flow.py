@@ -583,7 +583,9 @@ def log_item(y: Any) -> dict[str, Any]:
 def slm_summary(slm: SlmTinResult, asked_slm: bool, fell_back: bool, model_intents: list[SlmY]) -> SlmSummary:
     subtype = next((y.entities.get("subtype") for y in slm.intents if y.type == "out_of_scope"), None)
     return SlmSummary(
-        model_intents=[SlmSummaryIntent(type=y.type, span=y.span, entities=dict(y.entities)) for y in model_intents],
+        model_intents=[
+            SlmSummaryIntent(type=y.type, span=y.span, entities=dict(y.entities)) for y in model_intents
+        ],
         intents=slm.types(),
         out_of_scope=subtype if isinstance(subtype, str) else None,
         confidence=round(slm.confidence, 3) if asked_slm else None,

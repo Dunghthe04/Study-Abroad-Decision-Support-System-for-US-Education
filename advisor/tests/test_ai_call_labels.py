@@ -49,7 +49,11 @@ def _reader(fake: FakeOllama, parser=None) -> TranscriptReader:
 
 
 def _request() -> TranscriptOcrRequest:
-    return TranscriptOcrRequest(files=[TranscriptFilePayload(image_base64=_png_base64(), file_name="hb.png", content_type="image/png")])
+    return TranscriptOcrRequest(
+        files=[
+            TranscriptFilePayload(image_base64=_png_base64(), file_name="hb.png", content_type="image/png")
+        ]
+    )
 
 
 def _claude_parser():
@@ -70,14 +74,21 @@ def _rows(calls) -> list[tuple]:
 
 # ---- OCR bảng điểm: hai bước, hai nhãn, token thật của Ollama
 
+
 async def test_ocr_labels_the_vision_step_and_the_parse_step_differently():
     calls = usage_meter.start()
 
     await _reader(CountingOllama(PROSE, UNIVERSITY_PARSED), _claude_parser()).read_transcript(_request())
 
     assert _rows(calls) == [
-        ("ollama", "transcript_ocr_read", 700, 300, True),    # AI local đọc ảnh, token lấy từ dòng cuối của stream
-        ("claude", "transcript_ocr_parse", 83, 48, True),     # Claude bóc tách văn bản
+        (
+            "ollama",
+            "transcript_ocr_read",
+            700,
+            300,
+            True,
+        ),  # AI local đọc ảnh, token lấy từ dòng cuối của stream
+        ("claude", "transcript_ocr_parse", 83, 48, True),  # Claude bóc tách văn bản
     ]
 
 
@@ -106,12 +117,17 @@ async def test_ocr_vision_stopped_by_repeat_limit_is_still_recorded_as_a_call():
     calls = usage_meter.start()
 
     await _reader(
-        CountingOllama(PROSE, UNIVERSITY_PARSED, stream_error="prediction aborted, token repeat limit reached"),
+        CountingOllama(
+            PROSE, UNIVERSITY_PARSED, stream_error="prediction aborted, token repeat limit reached"
+        ),
         _claude_parser(),
     ).read_transcript(_request())
 
     read = next(c for c in calls if c.purpose == "transcript_ocr_read")
-    assert (read.ok, read.input_tokens) == (True, 0)   # giữ phần đã chép, không có dòng done nên chưa biết token
+    assert (read.ok, read.input_tokens) == (
+        True,
+        0,
+    )  # giữ phần đã chép, không có dòng done nên chưa biết token
 
 
 async def test_the_ocr_label_does_not_leak_after_reading():
@@ -123,6 +139,7 @@ async def test_the_ocr_label_does_not_leak_after_reading():
 
 
 # ---- Lời tư vấn hồ sơ và embedding: trước đây để trống nhãn
+
 
 class _ClaudeLike:
     """Giống ClaudeClient: ghi token của lần gọi rồi trả câu trả lời."""
@@ -171,7 +188,9 @@ async def test_a_failed_embedding_is_labelled_too():
 async def test_the_embedding_label_does_not_leak():
     usage_meter.start()
 
-    await ollama(lambda request: httpx.Response(200, json={"embeddings": [[0.1]], "prompt_eval_count": 1})).embed(["x"])
+    await ollama(
+        lambda request: httpx.Response(200, json={"embeddings": [[0.1]], "prompt_eval_count": 1})
+    ).embed(["x"])
 
     assert usage_meter._purpose.get() == ""
 
@@ -202,7 +221,9 @@ def test_every_ai_call_site_is_known_so_no_call_goes_unlabelled():
         f"Chỗ gọi AI mới chưa có nhãn trong báo cáo token: {sorted(unknown)}. "
         "Bọc lời gọi bằng usage_meter.purpose('<nhãn>') (hoặc dùng SkillCall) rồi thêm file vào KNOWN_AI_CALL_SITES."
     )
-    assert not set(KNOWN_AI_CALL_SITES) - found, "Có file trong KNOWN_AI_CALL_SITES không còn gọi AI nữa, bỏ khỏi danh sách"
+    assert not set(KNOWN_AI_CALL_SITES) - found, (
+        "Có file trong KNOWN_AI_CALL_SITES không còn gọi AI nữa, bỏ khỏi danh sách"
+    )
 
 
 def test_every_skill_call_gets_its_file_name_as_label():
