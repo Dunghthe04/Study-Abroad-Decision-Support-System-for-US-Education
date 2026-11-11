@@ -15,6 +15,16 @@ public interface IAiUsageReportRepository
     Task<(IReadOnlyList<AiUsageUserRow> Rows, int TotalUsers)> ByUserPageAsync(
         DateTime fromUtc, DateTime toUtcExclusive, int skip, int take, CancellationToken ct = default);
 
+    /// <summary>Một trang các lượt chat của một người (mới nhất trước) kèm số đo, và tổng số lượt trong khoảng. Không có nội dung chat.</summary>
+    Task<(IReadOnlyList<AiUsageTurnRow> Rows, int TotalTurns)> TurnsPageAsync(
+        Guid userId, DateTime fromUtc, DateTime toUtcExclusive, int skip, int take, CancellationToken ct = default);
+
+    /// <summary>Thông tin chung của một lượt chat; null nếu không có tin nhắn đó.</summary>
+    Task<AiUsageTurnHeader?> FindTurnAsync(Guid messageId, CancellationToken ct = default);
+
+    /// <summary>Các lần gọi AI của một lượt theo thứ tự thời gian.</summary>
+    Task<IReadOnlyList<AiUsageCallDetailDto>> CallsOfTurnAsync(Guid messageId, CancellationToken ct = default);
+
     /// <summary>Họ tên, email của các người dùng còn tồn tại trong số mã được hỏi (tài khoản đã xóa thì không có trong kết quả).</summary>
     Task<IReadOnlyList<AiUsageUserInfo>> UsersByIdAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default);
 }

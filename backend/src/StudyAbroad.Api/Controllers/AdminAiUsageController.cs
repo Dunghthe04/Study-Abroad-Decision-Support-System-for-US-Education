@@ -46,6 +46,34 @@ public class AdminAiUsageController(IAiUsageReportService report) : ControllerBa
         }
     }
 
+    /// <summary>
+    /// Các lượt chat của một người (mới nhất trước), mỗi lượt kèm tổng token, số lần gọi, lỗi, thời gian, kết quả.
+    /// Không có nội dung chat. 404 nếu không có người dùng đó.
+    /// </summary>
+    [HttpGet("users/{userId:guid}/turns")]
+    public async Task<ActionResult<PagedResult<AiUsageTurnRowDto>>> GetUserTurns(
+        Guid userId, [FromQuery] DateOnly? from, [FromQuery] DateOnly? to,
+        [FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default)
+    {
+        try
+        {
+            var turns = await report.GetUserTurnsAsync(userId, from, to, page, pageSize, ct);
+            return turns is null ? NotFound() : Ok(turns);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>Chi tiết một lượt chat: từng lần gọi AI (nguồn, tính năng, model, token, thời gian, lỗi). Không có nội dung chat. 404 nếu không có.</summary>
+    [HttpGet("turns/{messageId:guid}")]
+    public async Task<ActionResult<AiUsageTurnDetailDto>> GetTurn(Guid messageId, CancellationToken ct)
+    {
+        var turn = await report.GetTurnAsync(messageId, ct);
+        return turn is null ? NotFound() : Ok(turn);
+    }
+
     /// <summary>Tổng quan token riêng của một người dùng (cùng cấu trúc với tổng quan hệ thống). 404 nếu không có người dùng đó.</summary>
     [HttpGet("users/{userId:guid}")]
     public async Task<ActionResult<AiUsageUserOverviewDto>> GetUserOverview(

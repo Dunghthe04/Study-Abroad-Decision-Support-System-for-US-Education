@@ -30,6 +30,56 @@ public record AiUsageUserRankDto(Guid UserId, string? FullName, string? Email, A
 /// <summary>Tổng quan token riêng của một người: cùng cấu trúc với tổng thể nhưng chỉ tính các lần gọi của người đó.</summary>
 public record AiUsageUserOverviewDto(Guid UserId, string FullName, string Email, AiUsageOverviewDto Overview);
 
+/// <summary>
+/// Một lượt chat trong danh sách của một người: tin trả lời của hệ thống (Role assistant) hoặc dòng báo lỗi khi advisor sập (Role system),
+/// cùng số đo cộng từ các lần gọi AI của lượt (bảng ai_calls). KHÔNG có nội dung chat: màn token chỉ cần số đo,
+/// nội dung nằm ở API hàng đợi câu hỏi (có ghi lại ai đã xem).
+/// </summary>
+public record AiUsageTurnRowDto(Guid MessageId, Guid SessionId, DateTime CreatedAt, string Role, string? Outcome, AiUsageMetrics Metrics);
+
+/// <summary>Một lần gọi AI trong lượt chat: nguồn, tính năng, phiên bản skill, model, token, thời gian, lỗi.</summary>
+public record AiUsageCallDetailDto(
+    Guid Id,
+    DateTime CreatedAt,
+    string Kind,
+    string? Purpose,
+    string? SkillVersion,
+    string? Model,
+    int InputTokens,
+    int OutputTokens,
+    int CachedTokens,
+    int LatencyMs,
+    bool Success,
+    string? Error);
+
+/// <summary>Chi tiết một lượt chat: tổng và từng lần gọi AI theo thứ tự thời gian. Không có nội dung chat.</summary>
+public record AiUsageTurnDetailDto(
+    Guid MessageId,
+    Guid SessionId,
+    Guid UserId,
+    DateTime CreatedAt,
+    string Role,
+    string? Outcome,
+    AiUsageMetrics Total,
+    IReadOnlyList<AiUsageCallDetailDto> Calls);
+
+/// <summary>Dòng thô của một lượt do truy vấn gộp trả về (chưa tính trung bình), cùng ý nghĩa với AiUsageGroupRow.</summary>
+public record AiUsageTurnRow(
+    Guid MessageId,
+    Guid SessionId,
+    DateTime CreatedAt,
+    string Role,
+    string? Outcome,
+    int Calls,
+    int FailedCalls,
+    long InputTokens,
+    long OutputTokens,
+    long CachedTokens,
+    long LatencySumMs);
+
+/// <summary>Thông tin chung của một lượt chat (tin nhắn và phiên chứa nó), để dựng chi tiết một lượt.</summary>
+public record AiUsageTurnHeader(Guid MessageId, Guid SessionId, Guid UserId, DateTime CreatedAt, string Role, string? Outcome);
+
 /// <summary>Họ tên và email của người dùng, lấy từ bảng users để gắn vào số liệu.</summary>
 public record AiUsageUserInfo(Guid Id, string FullName, string Email);
 

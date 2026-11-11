@@ -18,6 +18,16 @@ public interface IAiUsageReportService
 
     /// <summary>Tổng quan token riêng của một người. Trả null nếu không có người dùng đó. Khoảng sai thì ném ArgumentException.</summary>
     Task<AiUsageUserOverviewDto?> GetUserOverviewAsync(Guid userId, DateOnly? from, DateOnly? to, CancellationToken ct = default);
+
+    /// <summary>
+    /// Các lượt chat của một người (mới nhất trước) kèm số đo, phân trang như GetUsersAsync. Trả null nếu không có người dùng đó.
+    /// Không có nội dung chat. Khoảng sai thì ném ArgumentException.
+    /// </summary>
+    Task<PagedResult<AiUsageTurnRowDto>?> GetUserTurnsAsync(
+        Guid userId, DateOnly? from, DateOnly? to, int page, int pageSize, CancellationToken ct = default);
+
+    /// <summary>Chi tiết một lượt chat: tổng và từng lần gọi AI. Trả null nếu không có tin nhắn đó. Không có nội dung chat.</summary>
+    Task<AiUsageTurnDetailDto?> GetTurnAsync(Guid messageId, CancellationToken ct = default);
 }
 
 public class AiUsageReportService(IAiUsageReportRepository repository, TimeProvider? clock = null) : IAiUsageReportService
@@ -58,6 +68,34 @@ public class AiUsageReportService(IAiUsageReportRepository repository, TimeProvi
         if (user is null)
             return null;
         return new AiUsageUserOverviewDto(user.Id, user.FullName, user.Email, await BuildOverviewAsync(from, to, userId, ct));
+    }
+
+    public async Task<PagedResult<AiUsageTurnRowDto>?> GetUserTurnsAsync(
+        Guid userId, DateOnly? from, DateOnly? to, int page, int pageSize, CancellationToken ct = default)
+    {
+        var (start, end) = Range(from, to);   // khoảng sai luôn báo lỗi, dù người dùng có tồn tại hay không
+        if ((await repository.UsersByIdAsync([userId], ct)).Count == 0)
+            return null;
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, MaxPageSize);
+
+        var (rows, total) = await repository.TurnsPageAsync(userId, FromUtc(start), ToUtcExclusive(end), (page - 1) * pageSize, pageSize, ct);
+        var items = rows
+            .Select(row => new AiUsageTurnRowDto(row.MessageId, row.SessionId, row.CreatedAt, row.Role, row.Outcome, Metrics([Row(row)])))
+            .ToList();
+        return new PagedResult<AiUsageTurnRowDto>(items, page, pageSize, total);
+    }
+
+    public async Task<AiUsageTurnDetailDto?> GetTurnAsync(Guid messageId, CancellationToken ct = default)
+    {
+        var header = await repository.FindTurnAsync(messageId, ct);
+        if (header is null)
+            return null;
+        var calls = await repository.CallsOfTurnAsync(messageId, ct);
+        return new AiUsageTurnDetailDto(
+            header.MessageId, header.SessionId, header.UserId, header.CreatedAt, header.Role, header.Outcome,
+            Metrics(calls.Select(Row)),
+            calls);
     }
 
     private async Task<AiUsageOverviewDto> BuildOverviewAsync(DateOnly? from, DateOnly? to, Guid? userId, CancellationToken ct)
@@ -110,6 +148,13 @@ public class AiUsageReportService(IAiUsageReportRepository repository, TimeProvi
     // Dòng theo người có cùng các số đo với dòng theo nhóm, đổi sang một kiểu để dùng chung hàm cộng dồn
     private static AiUsageGroupRow Row(AiUsageUserRow row) =>
         new("", null, null, row.Calls, row.FailedCalls, row.InputTokens, row.OutputTokens, row.CachedTokens, row.LatencySumMs);
+
+    // Dòng của một lượt và một lần gọi AI cũng đổi sang cùng kiểu dòng thô để dùng chung hàm cộng dồn
+    private static AiUsageGroupRow Row(AiUsageTurnRow row) =>
+        new("", null, null, row.Calls, row.FailedCalls, row.InputTokens, row.OutputTokens, row.CachedTokens, row.LatencySumMs);
+
+    private static AiUsageGroupRow Row(AiUsageCallDetailDto call) =>
+        new(call.Kind, call.Purpose, null, 1, call.Success ? 0 : 1, call.InputTokens, call.OutputTokens, call.CachedTokens, call.LatencyMs);
 
     // Cộng các dòng thô rồi mới chia: trung bình thời gian của cả nhóm = tổng thời gian chia tổng số lần gọi
     private static AiUsageMetrics Metrics(IEnumerable<AiUsageGroupRow> rows)

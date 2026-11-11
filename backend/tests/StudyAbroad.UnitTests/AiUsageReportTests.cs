@@ -18,9 +18,15 @@ public class AiUsageReportTests
     private static readonly DateTime ToExclusive = new(2026, 11, 8, 0, 0, 0, DateTimeKind.Utc);
 
     private static AiCall Call(string kind, string? purpose, DateTime at, int? input = 100, int? output = 10, int? cached = 0,
-        int? latency = 1000, bool success = true, Guid? user = null) =>
+        int? latency = 1000, bool success = true, Guid? user = null, Guid? message = null) =>
         new() { Kind = kind, Purpose = purpose, CreatedAt = at, PromptTokens = input, CompletionTokens = output, CachedTokens = cached,
-            LatencyMs = latency, Success = success, UserId = user };
+            LatencyMs = latency, Success = success, UserId = user, ChatMessageId = message };
+
+    // Phiên chat và tin nhắn: mã phiên bắt đầu từ 100, mã tin nhắn từ 200, mã người dùng là 1, 2, ...
+    private static ChatSession Session(int n, Guid user) => new() { Id = Id(100 + n), UserId = user };
+
+    private static ChatMessage Msg(int n, int session, string role, DateTime at, string? outcome = "answered") =>
+        new() { Id = Id(200 + n), ChatSessionId = Id(100 + session), Role = role, CreatedAt = at, Outcome = outcome, Content = "x" };
 
     // Mã cố định theo thứ tự tăng dần để kiểm thứ tự khi bằng nhau
     private static Guid Id(int n) => Guid.Parse($"00000000-0000-0000-0000-{n:D12}");
@@ -193,6 +199,129 @@ public class AiUsageReportTests
         Assert.Contains("user_id", filtered);
     }
 
+    // ---- theo lượt chat
+
+    [Fact]
+    public void TurnsPage_SumsTheCallsOfEachTurn_NewestFirst_AndLeavesOutTheStudentsOwnMessages()
+    {
+        var sessions = new[] { Session(1, Id(1)) }.AsQueryable();
+        var messages = new[]
+        {
+            Msg(1, 1, "user", Day(2, 9)),                       // tin của học sinh: không phải một lượt
+            Msg(2, 1, "assistant", Day(2, 10)),
+            Msg(3, 1, "assistant", Day(3, 10), outcome: "no_answer"),
+        }.AsQueryable();
+        var calls = new[]
+        {
+            Call("ollama", "slm_intents", Day(2, 10), input: 1700, output: 180, latency: 21000, message: Id(202)),
+            Call("claude", "skill_kich_ban", Day(2, 10), input: 2400, output: 500, latency: 3000, message: Id(202)),
+            Call("claude", "skill_tra_loi", Day(3, 10), input: 10, output: 1, latency: 100, success: false, message: Id(203)),
+        }.AsQueryable();
+
+        var rows = AiUsageAggregator.TurnsPage(messages, sessions, calls, Id(1), From, ToExclusive, 0, 10).ToList();
+
+        Assert.Equal([Id(203), Id(202)], rows.Select(r => r.MessageId));                  // mới nhất trước
+        var turn = rows[1];
+        Assert.Equal((2, 0, 4100L, 680L, 24000L), (turn.Calls, turn.FailedCalls, turn.InputTokens, turn.OutputTokens, turn.LatencySumMs));
+        Assert.Equal(("answered", Id(101)), (turn.Outcome, turn.SessionId));
+        Assert.Equal((1, 1, "no_answer"), (rows[0].Calls, rows[0].FailedCalls, rows[0].Outcome));
+    }
+
+    [Fact]
+    public void TurnsPage_OnlyIncludesTheUsersOwnSessions()
+    {
+        var sessions = new[] { Session(1, Id(1)), Session(2, Id(2)) }.AsQueryable();
+        var messages = new[] { Msg(1, 1, "assistant", Day(2)), Msg(2, 2, "assistant", Day(2)) }.AsQueryable();
+
+        var rows = AiUsageAggregator.TurnsPage(messages, sessions, Array.Empty<AiCall>().AsQueryable(), Id(1), From, ToExclusive, 0, 10).ToList();
+
+        Assert.Equal([Id(201)], rows.Select(r => r.MessageId));   // tin của người khác không lộ ra
+    }
+
+    [Fact]
+    public void ATurnWithoutAnyAiCall_ShowsZeros_AndTheSystemFailureRowIsStillListed()
+    {
+        var sessions = new[] { Session(1, Id(1)) }.AsQueryable();
+        var messages = new[] { Msg(1, 1, "system", Day(2), outcome: "failed") }.AsQueryable();   // advisor sập: không có lần gọi nào
+
+        var row = Assert.Single(AiUsageAggregator.TurnsPage(messages, sessions, Array.Empty<AiCall>().AsQueryable(), Id(1), From, ToExclusive, 0, 10).ToList());
+
+        Assert.Equal(("system", "failed", 0, 0L), (row.Role, row.Outcome, row.Calls, row.InputTokens));
+    }
+
+    [Fact]
+    public void TurnsPage_RespectsTheWindow_AndPagesWithoutOverlap()
+    {
+        var sessions = new[] { Session(1, Id(1)) }.AsQueryable();
+        var messages = new[]
+        {
+            Msg(0, 1, "assistant", From.AddTicks(-1)),    // trước khoảng
+            Msg(1, 1, "assistant", Day(2)),
+            Msg(2, 1, "assistant", Day(3)),
+            Msg(3, 1, "assistant", Day(4)),
+            Msg(4, 1, "assistant", ToExclusive),          // đúng cuối khoảng: không tính
+        }.AsQueryable();
+        var none = Array.Empty<AiCall>().AsQueryable();
+
+        var page1 = AiUsageAggregator.TurnsPage(messages, sessions, none, Id(1), From, ToExclusive, 0, 2).Select(r => r.MessageId).ToList();
+        var page2 = AiUsageAggregator.TurnsPage(messages, sessions, none, Id(1), From, ToExclusive, 2, 2).Select(r => r.MessageId).ToList();
+
+        Assert.Equal([Id(203), Id(202)], page1);
+        Assert.Equal([Id(201)], page2);
+        Assert.Equal(3, AiUsageAggregator.TurnIds(messages, sessions, Id(1), From, ToExclusive).Count());
+    }
+
+    [Fact]
+    public void TurnHeader_FindsTheOwnerThroughTheSession_AndIsEmptyForAnUnknownMessage()
+    {
+        var sessions = new[] { Session(1, Id(7)) }.AsQueryable();
+        var messages = new[] { Msg(1, 1, "assistant", Day(2)) }.AsQueryable();
+
+        var header = Assert.Single(AiUsageAggregator.TurnHeader(messages, sessions, Id(201)).ToList());
+
+        Assert.Equal((Id(201), Id(101), Id(7)), (header.MessageId, header.SessionId, header.UserId));
+        Assert.Empty(AiUsageAggregator.TurnHeader(messages, sessions, Id(999)).ToList());
+    }
+
+    [Fact]
+    public void CallsOfTurn_AreInTimeOrder_OnlyOfThatTurn_WithMissingNumbersAsZero()
+    {
+        var calls = new[]
+        {
+            Call("claude", "sau", Day(2, 11), message: Id(201)),
+            Call("ollama", "dau", Day(2, 10), input: null, output: null, cached: null, latency: null, message: Id(201)),
+            Call("claude", "khac", Day(2, 10), message: Id(202)),
+        }.AsQueryable();
+
+        var details = AiUsageAggregator.CallsOfTurn(calls, Id(201)).ToList();
+
+        Assert.Equal(["dau", "sau"], details.Select(d => d.Purpose));
+        Assert.Equal((0, 0, 0, 0), (details[0].InputTokens, details[0].OutputTokens, details[0].CachedTokens, details[0].LatencyMs));
+    }
+
+    [Fact]
+    public void TheTurnQueries_TranslateToSql()
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseNpgsql("Host=localhost;Database=usas_schema_check")
+            .UseSnakeCaseNamingConvention()
+            .Options;
+        using var db = new AppDbContext(options);
+
+        var page = AiUsageAggregator.TurnsPage(db.ChatMessages, db.ChatSessions, db.AiCalls, Id(1), From, ToExclusive, 20, 10).ToQueryString();
+        var count = AiUsageAggregator.TurnIds(db.ChatMessages, db.ChatSessions, Id(1), From, ToExclusive).ToQueryString();
+        var header = AiUsageAggregator.TurnHeader(db.ChatMessages, db.ChatSessions, Id(201)).ToQueryString();
+        var calls = AiUsageAggregator.CallsOfTurn(db.AiCalls, Id(201)).ToQueryString();
+
+        Assert.Contains("JOIN", page);
+        Assert.Contains("ORDER BY", page);
+        Assert.Contains("LIMIT", page);          // phân trang ở database
+        Assert.Contains("chat_message_id", page);   // số đo cộng từ ai_calls qua chat_message_id
+        Assert.Contains("JOIN", count);
+        Assert.Contains("JOIN", header);
+        Assert.Contains("ORDER BY", calls);
+    }
+
     // Kiểm tra EF dịch được ra SQL: nếu biểu thức không dịch được thì ToQueryString ném lỗi (không cần kết nối database)
     [Fact]
     public void TheAggregations_TranslateToSqlWithGroupBy_SoTheDatabaseDoesTheWork()
@@ -243,6 +372,27 @@ public class AiUsageReportTests
             AskedPage = (skip, take);
             return Task.FromResult<(IReadOnlyList<AiUsageUserRow>, int)>((UserRows, TotalUsers));
         }
+
+        public List<AiUsageTurnRow> TurnRows { get; init; } = [];
+        public int TotalTurns { get; init; }
+        public AiUsageTurnHeader? Header { get; init; }
+        public List<AiUsageCallDetailDto> TurnCalls { get; init; } = [];
+        public Guid? AskedTurnsUser { get; private set; }
+
+        public Task<(IReadOnlyList<AiUsageTurnRow> Rows, int TotalTurns)> TurnsPageAsync(
+            Guid userId, DateTime fromUtc, DateTime toUtcExclusive, int skip, int take, CancellationToken ct = default)
+        {
+            Asked = (fromUtc, toUtcExclusive);
+            AskedPage = (skip, take);
+            AskedTurnsUser = userId;
+            return Task.FromResult<(IReadOnlyList<AiUsageTurnRow>, int)>((TurnRows, TotalTurns));
+        }
+
+        public Task<AiUsageTurnHeader?> FindTurnAsync(Guid messageId, CancellationToken ct = default) =>
+            Task.FromResult(Header is not null && Header.MessageId == messageId ? Header : null);
+
+        public Task<IReadOnlyList<AiUsageCallDetailDto>> CallsOfTurnAsync(Guid messageId, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<AiUsageCallDetailDto>>(TurnCalls);
 
         public Task<IReadOnlyList<AiUsageUserInfo>> UsersByIdAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<AiUsageUserInfo>>(Users.Where(u => ids.Contains(u.Id)).ToList());
@@ -513,12 +663,147 @@ public class AiUsageReportTests
         Assert.Null(repo.AskedUser);
     }
 
+    // ---- dịch vụ: theo lượt chat
+
+    private static AiUsageTurnRow TurnRow(int n, string role = "assistant", string? outcome = "answered", int calls = 2, long input = 4100, long output = 680, long latency = 24000, int failed = 0) =>
+        new(Id(200 + n), Id(101), Day(2), role, outcome, calls, failed, input, output, 0, latency);
+
+    private static FakeRepo WithUser(FakeRepo? repo = null) => repo ?? new FakeRepo { Users = [new AiUsageUserInfo(Id(1), "Lan", "lan@x.vn")] };
+
+    [Fact]
+    public async Task UserTurns_MapEachTurnToItsMetrics_InTheOrderTheDatabaseGave()
+    {
+        var repo = new FakeRepo
+        {
+            Users = [new AiUsageUserInfo(Id(1), "Lan", "lan@x.vn")],
+            TurnRows = [TurnRow(2, outcome: "no_answer", calls: 1, input: 10, output: 1, latency: 100, failed: 1), TurnRow(1)],
+            TotalTurns = 2,
+        };
+
+        var page = (await Service(repo).GetUserTurnsAsync(Id(1), null, null, 1, 20))!;
+
+        Assert.Equal([Id(202), Id(201)], page.Items.Select(i => i.MessageId));
+        Assert.Equal(("no_answer", 1, 1), (page.Items[0].Outcome, page.Items[0].Metrics.Calls, page.Items[0].Metrics.FailedCalls));
+        Assert.Equal((2, 4100L, 680L, 12000d), (page.Items[1].Metrics.Calls, page.Items[1].Metrics.InputTokens,
+            page.Items[1].Metrics.OutputTokens, page.Items[1].Metrics.AvgLatencyMs));
+        Assert.Equal(Id(1), repo.AskedTurnsUser);
+    }
+
+    [Fact]
+    public async Task UserTurns_OfAnUnknownUser_AreNull_WithoutQueryingTheMessages()
+    {
+        var repo = new FakeRepo();
+
+        Assert.Null(await Service(repo).GetUserTurnsAsync(Id(77), null, null, 1, 20));
+        Assert.Null(repo.AskedPage);
+    }
+
+    [Theory]
+    [InlineData(1, 20, 0, 20)]
+    [InlineData(3, 10, 20, 10)]
+    [InlineData(0, 10, 0, 10)]
+    [InlineData(2, 500, 100, 100)]
+    public async Task UserTurns_PagingIsClampedAndTurnedIntoSkipAndTake(int page, int pageSize, int skip, int take)
+    {
+        var repo = WithUser();
+
+        await Service(repo).GetUserTurnsAsync(Id(1), null, null, page, pageSize);
+
+        Assert.Equal((skip, take), repo.AskedPage);
+    }
+
+    [Fact]
+    public async Task UserTurns_UseTheSameDateRangeRules()
+    {
+        var repo = WithUser();
+
+        await Service(repo).GetUserTurnsAsync(Id(1), new DateOnly(2026, 11, 1), new DateOnly(2026, 11, 7), 1, 20);
+        Assert.Equal((From, ToExclusive), repo.Asked);
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            Service(repo).GetUserTurnsAsync(Id(1), new DateOnly(2026, 11, 10), new DateOnly(2026, 11, 1), 1, 20));
+        // Khoảng sai báo lỗi kể cả khi người dùng không tồn tại
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            Service(new FakeRepo()).GetUserTurnsAsync(Id(77), new DateOnly(2026, 11, 10), new DateOnly(2026, 11, 1), 1, 20));
+    }
+
+    [Fact]
+    public async Task UserTurns_ReportPageAndTotals()
+    {
+        var repo = new FakeRepo { Users = [new AiUsageUserInfo(Id(1), "Lan", "lan@x.vn")], TotalTurns = 45 };
+
+        var page = (await Service(repo).GetUserTurnsAsync(Id(1), null, null, 3, 20))!;
+
+        Assert.Equal((3, 20, 45, 3), (page.Page, page.PageSize, page.TotalCount, page.TotalPages));
+    }
+
+    private static AiUsageCallDetailDto CallDetail(string kind, string purpose, int input, int output, int latency, bool ok = true, string? error = null) =>
+        new(Guid.NewGuid(), Day(2), kind, purpose, "1.0", "model", input, output, 0, latency, ok, error);
+
+    [Fact]
+    public async Task TurnDetail_TotalsTheCalls_AndKeepsThemInOrder()
+    {
+        var repo = new FakeRepo
+        {
+            Header = new AiUsageTurnHeader(Id(201), Id(101), Id(1), Day(2), "assistant", "failed"),
+            TurnCalls =
+            [
+                CallDetail("ollama", "slm_intents", 1700, 180, 21000),
+                CallDetail("claude", "skill_tra_loi", 0, 0, 3000, ok: false, error: "HTTP 500"),
+            ],
+        };
+
+        var turn = (await Service(repo).GetTurnAsync(Id(201)))!;
+
+        Assert.Equal(["slm_intents", "skill_tra_loi"], turn.Calls.Select(c => c.Purpose));
+        Assert.Equal((2, 1, 1700L, 180L, 12000d), (turn.Total.Calls, turn.Total.FailedCalls, turn.Total.InputTokens, turn.Total.OutputTokens, turn.Total.AvgLatencyMs));
+        Assert.Equal((Id(1), "failed"), (turn.UserId, turn.Outcome));
+        Assert.Equal("HTTP 500", turn.Calls[1].Error);
+    }
+
+    [Fact]
+    public async Task TurnDetail_OfAnUnknownMessage_IsNull()
+    {
+        Assert.Null(await Service(new FakeRepo()).GetTurnAsync(Id(999)));
+    }
+
+    [Fact]
+    public async Task TurnDetail_OfATurnWithoutCalls_IsZeros()
+    {
+        var repo = new FakeRepo { Header = new AiUsageTurnHeader(Id(201), Id(101), Id(1), Day(2), "system", "failed") };
+
+        var turn = (await Service(repo).GetTurnAsync(Id(201)))!;
+
+        Assert.Equal(new AiUsageMetrics(0, 0, 0, 0, 0, 0), turn.Total);
+        Assert.Empty(turn.Calls);
+    }
+
     // ---- controller
 
     private sealed class FakeService(
         AiUsageOverviewDto? overview = null, Exception? error = null,
-        PagedResult<AiUsageUserRankDto>? users = null, AiUsageUserOverviewDto? userOverview = null) : IAiUsageReportService
+        PagedResult<AiUsageUserRankDto>? users = null, AiUsageUserOverviewDto? userOverview = null,
+        PagedResult<AiUsageTurnRowDto>? turns = null, AiUsageTurnDetailDto? turn = null) : IAiUsageReportService
     {
+        public Task<PagedResult<AiUsageTurnRowDto>?> GetUserTurnsAsync(
+            Guid userId, DateOnly? from, DateOnly? to, int page, int pageSize, CancellationToken ct = default)
+        {
+            Asked = (from, to);
+            AskedPage = (page, pageSize);
+            AskedUser = userId;
+            if (error is not null)
+                throw error;
+            return Task.FromResult(turns);
+        }
+
+        public Task<AiUsageTurnDetailDto?> GetTurnAsync(Guid messageId, CancellationToken ct = default)
+        {
+            AskedTurn = messageId;
+            return Task.FromResult(turn);
+        }
+
+        public Guid? AskedTurn { get; private set; }
+
         public (DateOnly? From, DateOnly? To)? Asked { get; private set; }
         public (int Page, int PageSize)? AskedPage { get; private set; }
         public Guid? AskedUser { get; private set; }
@@ -636,6 +921,62 @@ public class AiUsageReportTests
             .GetUserOverview(Id(1), null, null, default);
 
         Assert.IsType<BadRequestObjectResult>(result.Result);
+    }
+
+    // ---- controller: theo lượt chat
+
+    private static readonly PagedResult<AiUsageTurnRowDto> SampleTurns = new(
+        [new AiUsageTurnRowDto(Id(201), Id(101), Day(2), "assistant", "answered", new AiUsageMetrics(2, 0, 4100, 680, 0, 12000))], 1, 20, 1);
+
+    private static readonly AiUsageTurnDetailDto SampleTurn = new(
+        Id(201), Id(101), Id(1), Day(2), "assistant", "answered", new AiUsageMetrics(0, 0, 0, 0, 0, 0), []);
+
+    [Fact]
+    public async Task Controller_UserTurns_ReturnsThePage_AndPassesTheArguments()
+    {
+        var service = new FakeService(turns: SampleTurns);
+
+        var result = await new AdminAiUsageController(service).GetUserTurns(Id(1), new DateOnly(2026, 11, 1), new DateOnly(2026, 11, 7), 2, 50, default);
+
+        Assert.Same(SampleTurns, Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal((Id(1), 2, 50), (service.AskedUser, service.AskedPage?.Page, service.AskedPage?.PageSize));
+    }
+
+    [Fact]
+    public async Task Controller_UserTurns_OfAnUnknownUserIs404_AndABadRangeIs400()
+    {
+        var notFound = await new AdminAiUsageController(new FakeService(turns: null)).GetUserTurns(Id(77), null, null, 1, 20, default);
+        var bad = await new AdminAiUsageController(new FakeService(error: new ArgumentException("Khoảng sai"))).GetUserTurns(Id(1), null, null, 1, 20, default);
+
+        Assert.IsType<NotFoundResult>(notFound.Result);
+        Assert.IsType<BadRequestObjectResult>(bad.Result);
+    }
+
+    [Fact]
+    public async Task Controller_Turn_ReturnsTheDetail_Or404()
+    {
+        var service = new FakeService(turn: SampleTurn);
+
+        var found = await new AdminAiUsageController(service).GetTurn(Id(201), default);
+        var missing = await new AdminAiUsageController(new FakeService(turn: null)).GetTurn(Id(999), default);
+
+        Assert.Same(SampleTurn, Assert.IsType<OkObjectResult>(found.Result).Value);
+        Assert.Equal(Id(201), service.AskedTurn);
+        Assert.IsType<NotFoundResult>(missing.Result);
+    }
+
+    [Fact]
+    public void Controller_TurnRoutes_AreDeclared_AndTheDtosCarryNoChatContent()
+    {
+        var type = typeof(AdminAiUsageController);
+
+        Assert.Equal("users/{userId:guid}/turns", type.GetMethod(nameof(AdminAiUsageController.GetUserTurns))!.GetCustomAttribute<HttpGetAttribute>()!.Template);
+        Assert.Equal("turns/{messageId:guid}", type.GetMethod(nameof(AdminAiUsageController.GetTurn))!.GetCustomAttribute<HttpGetAttribute>()!.Template);
+
+        // Màn token không được lộ nội dung chat: không DTO nào có thuộc tính nội dung, câu hỏi, câu trả lời
+        var names = new[] { typeof(AiUsageTurnRowDto), typeof(AiUsageTurnDetailDto), typeof(AiUsageCallDetailDto), typeof(AiUsageTurnHeader) }
+            .SelectMany(t => t.GetProperties().Select(p => p.Name));
+        Assert.DoesNotContain(names, n => n.Contains("Content") || n.Contains("Question") || n.Contains("Answer") || n.Contains("Meta"));
     }
 
     [Fact]
