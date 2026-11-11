@@ -1,13 +1,9 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { connection } from "next/server";
 import { apiFetch } from "@/lib/api";
 import type { StudyCenter } from "@/types/api";
 import { StudyCenterDetailView } from "@/components/centers/StudyCenterDetailView";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { buttonVariants } from "@/components/ui/button";
-import { ArrowLeftIcon, AlertCircleIcon } from "lucide-react";
-import { cn } from "cn";
+import { ErrorFallback } from "@/components/ui/error-fallback";
 
 interface CenterPageProps {
   params: Promise<{ id: string }>;
@@ -41,24 +37,18 @@ export default async function CenterDetailPage({ params }: CenterPageProps) {
 
   if (fetchError || !center) {
     return (
-      <div className="max-w-xl mx-auto py-12 space-y-4">
-        <Alert variant="destructive">
-          <AlertCircleIcon className="w-4 h-4" />
-          <AlertTitle>Không tìm thấy trung tâm</AlertTitle>
-          <AlertDescription>
-            Trung tâm tư vấn này không tồn tại hoặc đã bị ẩn khỏi danh bạ hệ thống.
-          </AlertDescription>
-        </Alert>
-        <div>
-          <Link
-            href="/centers"
-            className={cn(buttonVariants({ variant: "outline" }), "gap-2 inline-flex items-center")}
-          >
-            <ArrowLeftIcon className="w-4 h-4" />
-            Quay lại danh sách trung tâm
-          </Link>
-        </div>
-      </div>
+      <ErrorFallback
+        title="Không tìm thấy trung tâm"
+        description="Trung tâm tư vấn này không tồn tại hoặc đã bị ẩn khỏi danh bạ hệ thống."
+        action={{
+          label: "Quay lại danh sách trung tâm",
+          href: "/centers",
+        }}
+        secondaryAction={{
+          label: "Về trang chủ",
+          href: "/",
+        }}
+      />
     );
   }
 
