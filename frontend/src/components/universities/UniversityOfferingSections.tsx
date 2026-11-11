@@ -1,5 +1,6 @@
 "use client";
 
+import { useSyncExternalStore } from "react";
 import Image from "next/image";
 import {
   FileTextIcon,
@@ -7,25 +8,22 @@ import {
   HandCoinsIcon,
   HeartHandshakeIcon,
   HomeIcon,
-  InfoIcon,
   UsersIcon,
   WalletIcon,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import type { UniversityOffering } from "@/types/university";
 import {
   activityLabel,
   annualPublishedCost,
+  deadlineRemainingText,
   gpaScaleTypeLabel,
   housingTypeLabel,
   MISSING_UNIVERSITY_DATA,
   schoolAidPolicy,
   schoolImportanceClass,
   schoolImportanceLabel,
-  schoolSatPolicy,
   scoreRange,
   universityDate,
   universityDeadlines,
@@ -110,8 +108,8 @@ export function UniversityCosts({ offering }: { offering: UniversityOffering }) 
           : "Số liệu chi phí trong hệ thống · USD/năm"
       }
     >
-      {displayTotal !== null ? (
-        <div className="space-y-6">
+      <div className="space-y-6">
+        {displayTotal !== null ? (
           <div className="rounded-xl border border-line bg-surface p-5 sm:p-6">
             <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-2 border-b border-line pb-4">
               <div>
@@ -180,58 +178,77 @@ export function UniversityCosts({ offering }: { offering: UniversityOffering }) 
               </div>
             )}
           </div>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
-          <GridDataItem icon={GraduationCapIcon} label="Học phí" value={universityMoney(offering.tuitionUsd)} />
-          <GridDataItem icon={HomeIcon} label="Sinh hoạt phí" value={universityMoney(offering.livingUsd)} />
-          <GridDataItem icon={FileTextIcon} label="Phí bắt buộc" value={universityMoney(offering.feesUsd)} />
-          <GridDataItem icon={WalletIcon} label="Chi phí khác" value={universityMoney(offering.otherExpensesUsd)} />
-        </div>
-      )}
-
-      {hasAid && (
-        <div className="mt-8 border-t border-line pt-6">
-          <h3 className="mb-4 text-sm font-semibold text-ink">Hỗ trợ cho sinh viên quốc tế</h3>
-          <div className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
-            {offering.intlAidPolicy && (
-              <GridDataItem
-                icon={HeartHandshakeIcon}
-                label="Chính sách hỗ trợ"
-                value={schoolAidPolicy(offering.intlAidPolicy)}
-              />
-            )}
-            {offering.intlAidAvgUsd != null && (
-              <GridDataItem
-                icon={HandCoinsIcon}
-                label="Mức hỗ trợ trung bình"
-                value={universityMoney(offering.intlAidAvgUsd)}
-              />
-            )}
-            {offering.intlAidRecipients != null && (
-              <GridDataItem
-                icon={UsersIcon}
-                label="Số sinh viên nhận hỗ trợ"
-                value={universityNumber(offering.intlAidRecipients)}
-              />
-            )}
-          </div>
-          {displayTotal != null && offering.intlAidAvgUsd != null && (
-            <div className="mt-4 rounded-lg bg-brand-wash p-3.5 text-sm text-brand-ink">
-              <span className="font-semibold">Chi phí ước tính sau hỗ trợ trung bình: </span>
-              <span className="font-bold">
-                {universityMoney(Math.max(0, displayTotal - offering.intlAidAvgUsd))} / năm
-              </span>
-              <span className="text-xs text-ink-2 ml-2">(chưa bao gồm các học bổng bên ngoài)</span>
+        ) : (
+          <div className="rounded-xl border border-line bg-surface p-5 sm:p-6">
+            <div className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
+              <GridDataItem icon={GraduationCapIcon} label="Học phí" value={universityMoney(offering.tuitionUsd)} />
+              <GridDataItem icon={HomeIcon} label="Sinh hoạt phí" value={universityMoney(offering.livingUsd)} />
+              <GridDataItem icon={FileTextIcon} label="Phí bắt buộc" value={universityMoney(offering.feesUsd)} />
+              <GridDataItem icon={WalletIcon} label="Chi phí khác" value={universityMoney(offering.otherExpensesUsd)} />
             </div>
-          )}
-        </div>
-      )}
+          </div>
+        )}
+
+        {hasAid && (
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-ink">Hỗ trợ cho sinh viên quốc tế</h3>
+            <div className="overflow-hidden rounded-xl border border-line bg-surface">
+              <div className="p-5 sm:p-6">
+                <div className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
+                  {offering.intlAidPolicy && (
+                    <GridDataItem
+                      icon={HeartHandshakeIcon}
+                      label="Chính sách hỗ trợ"
+                      value={schoolAidPolicy(offering.intlAidPolicy)}
+                    />
+                  )}
+                  {offering.intlAidAvgUsd != null && (
+                    <GridDataItem
+                      icon={HandCoinsIcon}
+                      label="Mức hỗ trợ trung bình"
+                      value={universityMoney(offering.intlAidAvgUsd)}
+                    />
+                  )}
+                  {offering.intlAidRecipients != null && (
+                    <GridDataItem
+                      icon={UsersIcon}
+                      label="Số sinh viên nhận hỗ trợ"
+                      value={universityNumber(offering.intlAidRecipients)}
+                    />
+                  )}
+                </div>
+              </div>
+              {displayTotal != null && offering.intlAidAvgUsd != null && (
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-brand px-5 py-4 sm:px-6 text-white">
+                  <div>
+                    <p className="text-base font-semibold leading-tight text-white">
+                      Chi phí ước tính sau hỗ trợ
+                    </p>
+                    <p className="mt-1 text-sm text-white/75">Chưa gồm học bổng bên ngoài</p>
+                  </div>
+                  <div className="flex items-baseline gap-1.5 shrink-0">
+                    <span className="text-2xl sm:text-3xl font-semibold tracking-tight tabular-nums text-white">
+                      {universityMoney(Math.max(0, displayTotal - offering.intlAidAvgUsd))}
+                    </span>
+                    <span className="text-sm font-normal text-white/80">/ năm</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
     </DetailSection>
   );
 }
 
 export function UniversityAdmissions({ offering }: { offering: UniversityOffering }) {
+  const clientMounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false
+  );
+
   const deadlines = universityDeadlines(offering.deadlinesJson);
 
   const hasSat = offering.sat25 != null || offering.sat75 != null;
@@ -239,6 +256,8 @@ export function UniversityAdmissions({ offering }: { offering: UniversityOfferin
   const hasGpa4 = offering.avgGpa4 != null || offering.minGpa4 != null;
   const hasGpaWeighted = offering.avgGpaWeighted != null;
   const hasAnyScore = hasSat || hasAct || hasGpa4 || hasGpaWeighted;
+
+  const isSatRequired = offering.satPolicy === "required";
 
   const englishRequirements = [
     {
@@ -289,199 +308,205 @@ export function UniversityAdmissions({ offering }: { offering: UniversityOfferin
     <DetailSection
       id="admissions"
       title="Tuyển sinh"
-      description="Yêu cầu và thống kê đã được lưu trong hệ thống; không phải mức điểm bảo đảm trúng tuyển."
     >
-      {offering.satPolicy && (
-        <div className="mb-5">
-          <Badge variant="secondary">{schoolSatPolicy(offering.satPolicy)}</Badge>
-        </div>
-      )}
-
-      {hasAnyScore && (
-        <div className="space-y-4">
-          <h3 className="text-sm font-semibold text-ink">Khoảng điểm & học lực trúng tuyển</h3>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {hasSat && (
-              <div className="rounded-xl border border-line bg-surface p-4 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-ink-2">SAT (khoảng 25% – 75%)</span>
-                  <span className="text-xs text-ink-3">Thang 400 – 1600</span>
-                </div>
-                <div className="flex items-baseline justify-between">
-                  <span className="text-lg font-bold text-ink">
-                    {scoreRange(offering.sat25, offering.sat75)}
-                  </span>
-                </div>
-                <RangeTrack
-                  min={400}
-                  max={1600}
-                  low={offering.sat25}
-                  high={offering.sat75}
-                  ariaLabel={`SAT khoảng 25%–75%: ${scoreRange(offering.sat25, offering.sat75)} trên thang 400–1600`}
-                />
-              </div>
-            )}
-
-            {hasAct && (
-              <div className="rounded-xl border border-line bg-surface p-4 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-ink-2">ACT (khoảng 25% – 75%)</span>
-                  <span className="text-xs text-ink-3">Thang 1 – 36</span>
-                </div>
-                <div className="flex items-baseline justify-between">
-                  <span className="text-lg font-bold text-ink">
-                    {scoreRange(offering.act25, offering.act75)}
-                  </span>
-                </div>
-                <RangeTrack
-                  min={1}
-                  max={36}
-                  low={offering.act25}
-                  high={offering.act75}
-                  ariaLabel={`ACT khoảng 25%–75%: ${scoreRange(offering.act25, offering.act75)} trên thang 1–36`}
-                />
-              </div>
-            )}
-
-            {hasGpa4 && (
-              <div className="rounded-xl border border-line bg-surface p-4 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-ink-2">GPA chuẩn (thang 4.0)</span>
-                  <span className="text-xs text-ink-3">Thang 0 – 4.0</span>
-                </div>
-                <div className="flex items-baseline justify-between">
-                  <div className="flex flex-wrap items-baseline gap-2">
-                    {offering.avgGpa4 != null && (
-                      <span className="text-lg font-bold text-ink">
-                        TB: {universityNumber(offering.avgGpa4)}
-                      </span>
-                    )}
-                    {offering.minGpa4 != null && (
-                      <span className="text-xs text-ink-2">
-                        (Tối thiểu: {universityNumber(offering.minGpa4)})
-                      </span>
+      <div className="space-y-6">
+        {hasAnyScore && (
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-ink">Khoảng điểm & học lực trúng tuyển</h3>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {hasSat && (
+                <div className="rounded-xl border border-line bg-surface p-4 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-ink-2 truncate">SAT (khoảng 25% – 75%)</span>
+                    {isSatRequired && (
+                      <Badge className="border-transparent bg-risk-wash text-risk text-[11px] font-medium py-0.5 px-2 shrink-0">
+                        Bắt buộc
+                      </Badge>
                     )}
                   </div>
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-lg font-bold text-ink">
+                      {scoreRange(offering.sat25, offering.sat75)}
+                    </span>
+                  </div>
+                  <RangeTrack
+                    min={400}
+                    max={1600}
+                    low={offering.sat25}
+                    high={offering.sat75}
+                    ariaLabel={`SAT khoảng 25%–75%: ${scoreRange(offering.sat25, offering.sat75)}`}
+                  />
                 </div>
-                <RangeTrack
-                  min={0}
-                  max={4}
-                  low={offering.minGpa4}
-                  high={offering.avgGpa4}
-                  point={offering.avgGpa4 ?? offering.minGpa4}
-                  ariaLabel={`GPA thang 4.0: ${offering.avgGpa4 ? `Trung bình ${offering.avgGpa4}` : `Tối thiểu ${offering.minGpa4}`}`}
-                />
-              </div>
-            )}
+              )}
 
-            {hasGpaWeighted && (
-              <div className="rounded-xl border border-line bg-surface p-4 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-ink-2">GPA có trọng số (Weighted)</span>
-                  <span className="text-xs text-ink-3">{gpaScaleTypeLabel(offering.gpaScaleType)}</span>
+              {hasAct && (
+                <div className="rounded-xl border border-line bg-surface p-4 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-ink-2 truncate">ACT (khoảng 25% – 75%)</span>
+                    {isSatRequired && (
+                      <Badge className="border-transparent bg-risk-wash text-risk text-[11px] font-medium py-0.5 px-2 shrink-0">
+                        Bắt buộc
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-lg font-bold text-ink">
+                      {scoreRange(offering.act25, offering.act75)}
+                    </span>
+                  </div>
+                  <RangeTrack
+                    min={1}
+                    max={36}
+                    low={offering.act25}
+                    high={offering.act75}
+                    ariaLabel={`ACT khoảng 25%–75%: ${scoreRange(offering.act25, offering.act75)}`}
+                  />
                 </div>
-                <div className="flex items-baseline justify-between">
-                  <span className="text-lg font-bold text-ink">
-                    {universityNumber(offering.avgGpaWeighted)}
-                  </span>
-                  <span className="text-xs text-ink-3">Thang điểm có tính điểm thưởng AP/IB</span>
+              )}
+
+              {hasGpa4 && (
+                <div className="rounded-xl border border-line bg-surface p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-ink-2">GPA chuẩn (thang 4.0)</span>
+                  </div>
+                  <div className="flex items-baseline justify-between">
+                    <div className="flex flex-wrap items-baseline gap-2">
+                      {offering.avgGpa4 != null && (
+                        <span className="text-lg font-bold text-ink">
+                          TB: {universityNumber(offering.avgGpa4)}
+                        </span>
+                      )}
+                      {offering.minGpa4 != null && (
+                        <span className="text-xs text-ink-2">
+                          (Tối thiểu: {universityNumber(offering.minGpa4)})
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <RangeTrack
+                    min={0}
+                    max={4}
+                    low={offering.minGpa4}
+                    high={offering.avgGpa4}
+                    point={offering.avgGpa4 ?? offering.minGpa4}
+                    ariaLabel={`GPA thang 4.0: ${offering.avgGpa4 ? `Trung bình ${offering.avgGpa4}` : `Tối thiểu ${offering.minGpa4}`}`}
+                  />
                 </div>
-                <RangeTrack
-                  min={0}
-                  max={5}
-                  point={offering.avgGpaWeighted}
-                  ariaLabel={`GPA có trọng số: ${offering.avgGpaWeighted} trên thang 5.0`}
-                />
-              </div>
-            )}
+              )}
+
+              {hasGpaWeighted && (
+                <div className="rounded-xl border border-line bg-surface p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-ink-2">GPA có trọng số (Weighted)</span>
+                    <span className="text-xs text-ink-3">{gpaScaleTypeLabel(offering.gpaScaleType)}</span>
+                  </div>
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-lg font-bold text-ink">
+                      {universityNumber(offering.avgGpaWeighted)}
+                    </span>
+                    <span className="text-xs text-ink-3">Thang điểm có tính điểm thưởng AP/IB</span>
+                  </div>
+                  <RangeTrack
+                    min={0}
+                    max={5}
+                    point={offering.avgGpaWeighted}
+                    ariaLabel={`GPA có trọng số: ${offering.avgGpaWeighted}`}
+                  />
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {englishRequirements.length > 0 && (
-        <div className="mt-7 space-y-3 border-t border-line pt-6">
-          <h3 className="text-sm font-semibold text-ink">Yêu cầu chứng chỉ tiếng Anh tối thiểu</h3>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            {englishRequirements.map((item) => (
-              <div
-                key={item.id}
-                className="flex flex-col justify-between rounded-xl border border-line bg-surface p-4"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-xs text-ink-3">{item.label}</p>
-                    <p className="mt-1 text-2xl font-bold tracking-tight text-ink">
-                      {universityNumber(item.value)}
-                    </p>
+        {englishRequirements.length > 0 && (
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-ink">Yêu cầu chứng chỉ tiếng Anh tối thiểu</h3>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              {englishRequirements.map((item) => (
+                <div
+                  key={item.id}
+                  className="flex flex-col justify-between rounded-xl border border-line bg-surface p-4"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-xs text-ink-3">{item.label}</p>
+                      <p className="mt-1 text-2xl font-bold tracking-tight text-ink">
+                        {universityNumber(item.value)}
+                      </p>
+                    </div>
+                    <div className="flex h-10 w-28 shrink-0 items-center justify-end">
+                      <Image
+                        src={item.logo}
+                        alt={item.name}
+                        width={item.logoWidth}
+                        height={item.logoHeight}
+                        className="h-8 sm:h-9 w-auto max-w-full object-contain"
+                      />
+                    </div>
                   </div>
-                  <div className="flex h-10 w-28 shrink-0 items-center justify-end">
-                    <Image
-                      src={item.logo}
-                      alt={item.name}
-                      width={item.logoWidth}
-                      height={item.logoHeight}
-                      className="h-8 sm:h-9 w-auto max-w-full object-contain"
+
+                  <div className="mt-3.5">
+                    <RangeTrack
+                      min={item.min}
+                      max={item.max}
+                      point={item.value}
+                      fillToMax
+                      ariaLabel={`${item.name} yêu cầu tối thiểu ${universityNumber(item.value)}`}
                     />
                   </div>
                 </div>
-
-                <div className="mt-3.5 space-y-1.5">
-                  <RangeTrack
-                    min={item.min}
-                    max={item.max}
-                    point={item.value}
-                    ariaLabel={`${item.name} yêu cầu tối thiểu ${universityNumber(item.value)} trên ${item.scaleLabel}`}
-                  />
-                  <div className="flex items-center justify-between text-xs text-ink-3">
-                    <span>{item.scaleLabel}</span>
-                  </div>
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
-      )}
-
-      {importanceFactors.length > 0 && (
-        <div className="mt-7 space-y-3 border-t border-line pt-6">
-          <h3 className="text-sm font-semibold text-ink">Mức độ coi trọng các yếu tố tuyển sinh (CDS C7)</h3>
-          <div className="divide-y divide-line/70 rounded-xl border border-line bg-surface px-4">
-            {importanceFactors.map((item) => (
-              <div key={item.label} className="flex items-center justify-between py-3">
-                <span className="text-sm text-ink">{item.label}</span>
-                <span className={cn("text-sm", schoolImportanceClass(item.value))}>
-                  {schoolImportanceLabel(item.value)}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className="mt-7 border-t border-line pt-6">
-        <h3 className="mb-4 text-sm font-semibold text-ink">Các đợt nộp hồ sơ</h3>
-        {deadlines.length ? (
-          <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2 md:grid-cols-3">
-            {deadlines.map((deadline) => (
-              <div key={deadline.round} className="space-y-1">
-                <p className="text-xs text-ink-3">
-                  {deadline.label} ({deadline.round})
-                </p>
-                <p className="text-xl font-bold tracking-tight text-ink">{deadline.date}</p>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-sm text-ink-3">{MISSING_UNIVERSITY_DATA}</p>
         )}
-      </div>
 
-      <Alert className="mt-6 border-line bg-ground text-ink">
-        <InfoIcon className="text-brand shrink-0" />
-        <AlertDescription className="text-xs leading-relaxed text-ink-2">
-          Chính sách và hạn nộp có thể thay đổi theo từng năm. Hãy luôn xác nhận lại trên website chính thức của trường trước khi nộp hồ sơ.
-        </AlertDescription>
-      </Alert>
+        {importanceFactors.length > 0 && (
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-ink">Mức độ coi trọng các yếu tố tuyển sinh (CDS C7)</h3>
+            <div className="divide-y divide-line/70 rounded-xl border border-line bg-surface px-5 sm:px-6">
+              {importanceFactors.map((item) => (
+                <div key={item.label} className="flex items-center justify-between py-3">
+                  <span className="text-sm text-ink">{item.label}</span>
+                  <span className={cn("text-sm", schoolImportanceClass(item.value))}>
+                    {schoolImportanceLabel(item.value)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-ink">Các đợt nộp hồ sơ</h3>
+          <div className="rounded-xl border border-line bg-surface p-5 sm:p-6">
+            {deadlines.length ? (
+              <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2 md:grid-cols-3">
+                {deadlines.map((deadline) => {
+                  const remaining = clientMounted ? deadlineRemainingText(deadline.rawDate) : null;
+                  const isPassed = remaining?.isPassed ?? false;
+                  return (
+                    <div key={deadline.round} className="space-y-1">
+                      <p className={cn("text-xs", isPassed ? "text-ink-3" : "text-ink-2")}>
+                        {deadline.label} ({deadline.round})
+                      </p>
+                      <p className={cn("text-xl font-bold tracking-tight", isPassed ? "text-ink-3 line-through decoration-ink-3/40" : "text-ink")}>
+                        {deadline.date}
+                      </p>
+                      {remaining && (
+                        <p className={cn("text-xs font-medium", isPassed ? "text-ink-3" : "text-brand")}>
+                          {remaining.label}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-sm text-ink-3">{MISSING_UNIVERSITY_DATA}</p>
+            )}
+          </div>
+        </div>
+      </div>
     </DetailSection>
   );
 }
@@ -512,39 +537,43 @@ export function UniversityCampusLife({ offering }: { offering: UniversityOfferin
       description="Thông tin chỗ ở tại ký túc xá và hoạt động ngoại khóa dành cho sinh viên."
     >
       <div className="space-y-6">
-        <div className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
-          {offering.fyOnCampusPct != null && (
-            <GaugeDataItem
-              label="SV năm nhất ở KTX"
-              value={offering.fyOnCampusPct}
-              subtitle="Sinh viên năm 1 nội trú"
-            />
-          )}
-          {offering.ugOnCampusPct != null && (
-            <GaugeDataItem
-              label="SV đại học ở KTX"
-              value={offering.ugOnCampusPct}
-              subtitle="Toàn bộ sinh viên đại học"
-            />
-          )}
-          {offering.housingOnlyUsd != null && (
-            <GridDataItem
-              icon={HomeIcon}
-              label="Tiền phòng ở KTX"
-              value={`${universityMoney(offering.housingOnlyUsd)} / năm`}
-            />
-          )}
-          {offering.housingDepositUsd != null && (
-            <GridDataItem
-              icon={WalletIcon}
-              label="Tiền đặt cọc phòng"
-              value={universityMoney(offering.housingDepositUsd)}
-            />
-          )}
-        </div>
+        {(hasOnCampus || hasHousingCost) && (
+          <div className="rounded-xl border border-line bg-surface p-5 sm:p-6">
+            <div className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
+              {offering.fyOnCampusPct != null && (
+                <GaugeDataItem
+                  label="SV năm nhất ở KTX"
+                  value={offering.fyOnCampusPct}
+                  subtitle="Sinh viên năm 1 nội trú"
+                />
+              )}
+              {offering.ugOnCampusPct != null && (
+                <GaugeDataItem
+                  label="SV đại học ở KTX"
+                  value={offering.ugOnCampusPct}
+                  subtitle="Toàn bộ sinh viên đại học"
+                />
+              )}
+              {offering.housingOnlyUsd != null && (
+                <GridDataItem
+                  icon={HomeIcon}
+                  label="Tiền phòng ở KTX"
+                  value={`${universityMoney(offering.housingOnlyUsd)} / năm`}
+                />
+              )}
+              {offering.housingDepositUsd != null && (
+                <GridDataItem
+                  icon={WalletIcon}
+                  label="Tiền đặt cọc phòng"
+                  value={universityMoney(offering.housingDepositUsd)}
+                />
+              )}
+            </div>
+          </div>
+        )}
 
         {offering.intlHousing != null && (
-          <div className="rounded-xl border border-line bg-surface p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="rounded-xl border border-line bg-surface p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
               <p className="text-sm font-semibold text-ink">Khu nhà ở cho sinh viên quốc tế</p>
               <p className="text-xs text-ink-2 mt-0.5">
@@ -565,31 +594,35 @@ export function UniversityCampusLife({ offering }: { offering: UniversityOfferin
         {housingList.length > 0 && (
           <div className="space-y-3">
             <h3 className="text-sm font-semibold text-ink">Các loại hình nhà ở có sẵn ({housingList.length})</h3>
-            <div className="flex flex-wrap gap-2">
-              {housingList.map((item) => (
-                <span
-                  key={item}
-                  className="inline-flex items-center rounded-md border border-line bg-surface px-2.5 py-1 text-xs font-medium text-ink"
-                >
-                  {housingTypeLabel(item)}
-                </span>
-              ))}
+            <div className="rounded-xl border border-line bg-surface p-5 sm:p-6">
+              <div className="flex flex-wrap gap-2">
+                {housingList.map((item) => (
+                  <span
+                    key={item}
+                    className="inline-flex items-center rounded-md border border-line bg-surface px-2.5 py-1 text-xs font-medium text-ink"
+                  >
+                    {housingTypeLabel(item)}
+                  </span>
+                ))}
+              </div>
             </div>
           </div>
         )}
 
         {activitiesList.length > 0 && (
-          <div className="space-y-3 border-t border-line pt-5">
+          <div className="space-y-3">
             <h3 className="text-sm font-semibold text-ink">Câu lạc bộ & hoạt động sinh viên ({activitiesList.length})</h3>
-            <div className="flex flex-wrap gap-2">
-              {activitiesList.map((item) => (
-                <span
-                  key={item}
-                  className="inline-flex items-center rounded-md bg-brand-wash px-2.5 py-1 text-xs font-medium text-brand-ink"
-                >
-                  {activityLabel(item)}
-                </span>
-              ))}
+            <div className="rounded-xl border border-line bg-surface p-5 sm:p-6">
+              <div className="flex flex-wrap gap-2">
+                {activitiesList.map((item) => (
+                  <span
+                    key={item}
+                    className="inline-flex items-center rounded-md bg-brand-wash px-2.5 py-1 text-xs font-medium text-brand-ink"
+                  >
+                    {activityLabel(item)}
+                  </span>
+                ))}
+              </div>
             </div>
           </div>
         )}
@@ -654,22 +687,26 @@ export function UniversityStatistics({
     >
       <div className="space-y-6">
         {percentageStats.length > 0 && (
-          <div className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
-            {percentageStats.map((item) => (
-              <GaugeDataItem
-                key={item.key}
-                label={item.label}
-                value={item.value}
-                subtitle={item.subtitle}
-              />
-            ))}
+          <div className="rounded-xl border border-line bg-surface p-5 sm:p-6">
+            <div className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
+              {percentageStats.map((item) => (
+                <GaugeDataItem
+                  key={item.key}
+                  label={item.label}
+                  value={item.value}
+                  subtitle={item.subtitle}
+                />
+              ))}
+            </div>
           </div>
         )}
 
         {countRows.length > 0 && (
-          <div className="border-t border-line pt-5">
-            <h3 className="mb-4 text-sm font-semibold text-ink">Số lượng hồ sơ & tuyển sinh</h3>
-            <DetailRows rows={countRows} />
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-ink">Số lượng hồ sơ & tuyển sinh</h3>
+            <div className="rounded-xl border border-line bg-surface p-5 sm:p-6">
+              <DetailRows rows={countRows} />
+            </div>
           </div>
         )}
       </div>
@@ -684,33 +721,34 @@ export function UniversityMajors({ offering }: { offering: UniversityOffering })
       title="Ngành học"
       description={`Nhóm ngành có trong dữ liệu hiện tại của bậc học đang chọn (${offering.majors.length} nhóm ngành).`}
     >
-      {offering.majors.length ? (
-        <div className="grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
-          {offering.majors.map((major) => (
-            <div
-              key={`${major.cipCode}-${major.name}`}
-              className="flex items-center justify-between gap-2 py-1.5"
-            >
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-ink">{major.name}</p>
-                {major.cipCode && <p className="text-xs text-ink-3">CIP {major.cipCode}</p>}
-              </div>
-              {major.isStem && <Badge variant="secondary" className="shrink-0 text-xs">STEM</Badge>}
+      <div className="space-y-4">
+        <div className="rounded-xl border border-line bg-surface p-5 sm:p-6">
+          {offering.majors.length ? (
+            <div className="grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+              {offering.majors.map((major) => (
+                <div
+                  key={`${major.cipCode}-${major.name}`}
+                  className="flex items-center justify-between gap-2 py-1.5"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-ink">{major.name}</p>
+                    {major.cipCode && <p className="text-xs text-ink-3">CIP {major.cipCode}</p>}
+                  </div>
+                  {major.isStem && <Badge variant="secondary" className="shrink-0 text-xs">STEM</Badge>}
+                </div>
+              ))}
             </div>
-          ))}
+          ) : (
+            <p className="text-sm text-ink-3">{MISSING_UNIVERSITY_DATA}</p>
+          )}
         </div>
-      ) : (
-        <p className="text-sm text-ink-3">{MISSING_UNIVERSITY_DATA}</p>
-      )}
-      {offering.sourceUrl && (
-        <div className="mt-5 space-y-4 text-xs text-ink-3">
-          <Separator />
-          <p>
+        {offering.sourceUrl && (
+          <p className="text-xs text-ink-3">
             Nguồn tổng quan của bậc học: <SourceLink url={offering.sourceUrl} /> · Ngày lấy:{" "}
             {universityDate(offering.retrievedAt)}
           </p>
-        </div>
-      )}
+        )}
+      </div>
     </DetailSection>
   );
 }
