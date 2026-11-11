@@ -92,11 +92,11 @@ export function SiteHeader() {
   };
 
   return (
+    // Nền xanh thương hiệu trên mọi trang; trang chủ khi chưa cuộn thì trong suốt nằm trên ảnh trường
     <header
-      data-clear={clear || undefined}
       className={cn(
-        "group/header sticky top-0 z-40 border-b transition-colors duration-300 print:hidden",
-        clear ? "border-white/15 bg-brand-ink/55 text-white" : "border-line bg-surface",
+        "sticky top-0 z-40 border-b text-white transition-colors duration-300 print:hidden",
+        clear ? "border-white/15 bg-brand-ink/55" : "border-brand-ink bg-brand",
       )}
     >
       <div
@@ -113,12 +113,9 @@ export function SiteHeader() {
         <div className="flex h-14 items-center gap-4 lg:gap-8">
           <Link
             href={canOpenAdmin ? "/admin" : "/"}
-            className="flex shrink-0 items-center gap-2 font-heading text-xl font-bold tracking-tight text-brand-ink transition-opacity hover:opacity-90 group-data-clear/header:text-white"
+            className="shrink-0 font-heading text-xl font-bold tracking-tight text-white transition-opacity hover:opacity-90"
           >
-            <span className="flex size-[30px] items-center justify-center rounded-lg bg-brand-ink font-sans text-xs font-black text-brand-foreground transition-colors group-data-clear/header:bg-white group-data-clear/header:text-brand-ink">
-              US
-            </span>
-            <span>USAS</span>
+            USAS
           </Link>
 
           <form role="search" onSubmit={submitSearch} className="relative hidden max-w-2xl flex-1 md:block">
@@ -131,8 +128,8 @@ export function SiteHeader() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Tìm trường theo tên, thành phố, bang…"
-              // Ô tìm kiếm luôn nền trắng, kể cả khi thanh đầu trong suốt trên ảnh
-              className="h-10 w-full rounded-lg border border-line bg-surface pr-11 pl-3.5 text-sm text-ink outline-none transition-colors placeholder:text-ink-3 focus-visible:border-brand focus-visible:ring-3 focus-visible:ring-ring/30 group-data-clear/header:border-transparent"
+              // Ô tìm kiếm luôn nền trắng trên nền xanh của thanh đầu
+              className="h-10 w-full rounded-lg border border-transparent bg-surface pr-11 pl-3.5 text-sm text-ink outline-none transition-colors placeholder:text-ink-3 focus-visible:ring-3 focus-visible:ring-white/40"
             />
             <button
               type="submit"
@@ -150,12 +147,10 @@ export function SiteHeader() {
               <DropdownMenu>
                 <DropdownMenuTrigger
                   aria-label={`Tài khoản của ${user.fullName}`}
-                  className="rounded-full outline-none transition-transform hover:scale-105 focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-95"
+                  className="rounded-full outline-none transition-transform hover:scale-105 focus-visible:ring-3 focus-visible:ring-white/50 active:scale-95"
                 >
                   <Avatar className="size-9">
-                    <AvatarFallback
-                      className={cn("font-semibold", clear ? "bg-white text-brand-ink" : "bg-brand-wash text-brand-ink")}
-                    >
+                    <AvatarFallback className="bg-white font-semibold text-brand-ink">
                       {user.fullName.charAt(0).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
@@ -250,24 +245,15 @@ export function SiteHeader() {
               </DropdownMenu>
             ) : (
               <>
-                <p className={cn("hidden text-sm lg:block", clear ? "text-white/85" : "text-ink-2")}>
+                <p className="hidden text-sm text-white/85 lg:block">
                   Đã có tài khoản?{" "}
-                  <Link
-                    href="/login"
-                    className={cn(
-                      "font-semibold underline-offset-4 hover:underline",
-                      clear ? "text-white" : "text-brand",
-                    )}
-                  >
+                  <Link href="/login" className="font-semibold text-white underline-offset-4 hover:underline">
                     Đăng nhập
                   </Link>
                 </p>
                 <Link
                   href="/login"
-                  className={buttonVariants({
-                    variant: "ghost",
-                    className: cn("lg:hidden", clear && "!text-white hover:!bg-white/10"),
-                  })}
+                  className={buttonVariants({ variant: "ghost", className: "lg:hidden !text-white hover:!bg-white/10" })}
                 >
                   Đăng nhập
                 </Link>
@@ -276,12 +262,7 @@ export function SiteHeader() {
                   className={buttonVariants({
                     variant: "outline",
                     size: "lg",
-                    className: cn(
-                      "active:translate-y-px",
-                      clear
-                        ? "!border-white/60 !bg-transparent !text-white hover:!bg-white/10"
-                        : "!border-brand !bg-surface !text-brand hover:!bg-brand-wash",
-                    ),
+                    className: "active:translate-y-px !border-white/60 !bg-transparent !text-white hover:!bg-white/10",
                   })}
                 >
                   Đăng ký ngay
@@ -304,15 +285,8 @@ export function SiteHeader() {
                     className={cn(
                       "relative inline-flex h-12 items-center whitespace-nowrap px-3 text-sm font-medium transition-colors",
                       "after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:origin-left after:scale-x-0 after:rounded-full after:transition-transform after:duration-300 hover:after:scale-x-100 motion-reduce:after:transition-none",
-                      clear ? "after:bg-white" : "after:bg-brand",
-                      active && "font-semibold after:scale-x-100",
-                      clear
-                        ? active
-                          ? "text-white"
-                          : "text-white/80 hover:text-white"
-                        : active
-                          ? "text-brand"
-                          : "text-ink-2 hover:text-ink",
+                      "after:bg-white",
+                      active ? "font-semibold text-white after:scale-x-100" : "text-white/80 hover:text-white",
                     )}
                   >
                     {l.label}
@@ -325,12 +299,9 @@ export function SiteHeader() {
             <Link
               href="/analysis"
               className={buttonVariants({
-                variant: clear ? "ghost" : "default",
+                variant: "ghost",
                 size: "lg",
-                className: cn(
-                  "shrink-0 active:translate-y-px",
-                  clear && "!bg-white !text-brand-ink hover:!bg-white/90",
-                ),
+                className: "shrink-0 active:translate-y-px !bg-white !text-brand-ink hover:!bg-white/90",
               })}
             >
               Phân tích hồ sơ của tôi

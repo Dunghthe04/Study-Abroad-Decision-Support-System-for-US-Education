@@ -35,9 +35,8 @@ export function AuthSplitLayout({ children, containerClassName }: AuthSplitLayou
         {/* Chữ USAS về trang chủ, góc trên bên trái */}
         <Link
           href="/"
-          className="absolute top-4 left-5 z-10 flex items-center gap-2 rounded-md font-heading text-lg font-bold tracking-tight text-white outline-none focus-visible:ring-3 focus-visible:ring-white/60 sm:left-6 min-[900px]:top-8 min-[900px]:left-12 lg:min-[900px]:left-16 xl:min-[900px]:left-20"
+          className="absolute top-4 left-5 z-10 rounded-md font-heading text-xl font-bold tracking-tight text-white outline-none focus-visible:ring-3 focus-visible:ring-white/60 sm:left-6 min-[900px]:top-8 min-[900px]:left-12 lg:min-[900px]:left-16 xl:min-[900px]:left-20"
         >
-          <span className="flex size-[30px] items-center justify-center rounded-lg bg-white font-sans text-xs font-black text-brand-ink">US</span>
           USAS
         </Link>
 
