@@ -72,4 +72,44 @@ public record CenterLeadsSummaryDto(
 /// </summary>
 public record UpdateLeadStatusRequest(string Status);
 
+/// <summary>
+/// [USAS-2053 / UC-74] Một tin nhắn trong luồng trao đổi của yêu cầu liên hệ.
+/// Nội dung đã bị gỡ (Status = "removed") được ẩn bởi lớp truy vấn;
+/// tên học sinh/phụ huynh được ẩn danh nếu Lead chưa bật SharedProfile.
+/// </summary>
+public record LeadMessageDto(
+    Guid Id,
+    Guid LeadId,
+    Guid SenderUserId,
+    string SenderName,
+    string SenderRole,
+    bool IsFromCenter,
+    string Content,
+    bool IsFlagged,
+    string? FlagReason,
+    string Status,
+    DateTime CreatedAt);
+
+/// <summary>
+/// [USAS-2053 / UC-74] Toàn bộ luồng tin nhắn của một yêu cầu liên hệ kèm trạng thái hiện tại.
+/// </summary>
+public record LeadMessagesThreadDto(
+    Guid LeadId,
+    string LeadStatus,
+    IReadOnlyList<LeadMessageDto> Messages,
+    int FlaggedCount);
+
+/// <summary>
+/// [USAS-2053 / UC-74] Yêu cầu gửi tin nhắn trả lời từ phía Trung tâm tư vấn.
+/// </summary>
+public record SendLeadMessageRequest(string Content);
+
+/// <summary>
+/// [USAS-2053 / UC-74] Kết quả sau khi gửi tin nhắn thành công, kèm trạng thái mới nhất của yêu cầu liên hệ.
+/// </summary>
+public record SendLeadMessageResultDto(
+    LeadMessageDto Message,
+    string LeadStatus);
+
+
 
