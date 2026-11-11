@@ -94,7 +94,7 @@ export function UniversityCard({ university }: UniversityCardProps) {
               {university.name}
             </Link>
             {subtitleParts.length > 0 && (
-              <p className="truncate text-sm text-white/85">{subtitleParts.join(" · ")}</p>
+              <p className="truncate text-xs text-white/85">{subtitleParts.join(" · ")}</p>
             )}
           </div>
         </div>
@@ -104,12 +104,12 @@ export function UniversityCard({ university }: UniversityCardProps) {
         {hasBadges && (
           <div className="flex flex-wrap gap-1.5">
             {university.bestRank != null && (
-              <Badge className="border-none bg-amber-500 text-white" title={university.bestRankList ?? undefined}>
+              <Badge variant="brand" title={university.bestRankList ?? undefined}>
                 #{university.bestRank}
-                {university.bestRankList && <span className="font-normal opacity-90">{university.bestRankList}</span>}
+                {university.bestRankList && <span className="font-normal">{university.bestRankList}</span>}
               </Badge>
             )}
-            {university.isIvy && <Badge className="border-none bg-emerald-700 text-white">Ivy League</Badge>}
+            {university.isIvy && <Badge variant="brand">Ivy League</Badge>}
           </div>
         )}
 
