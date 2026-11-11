@@ -41,8 +41,9 @@ export function AuthSplitLayout({ children, containerClassName }: AuthSplitLayou
         </p>
       </div>
 
-      {/* Cột phải: form bắt đầu ở 33svh trên desktop */}
-      <div className="flex flex-1 flex-col justify-start bg-surface px-5 py-6 sm:px-6 sm:py-8 min-[900px]:w-[38%] min-[900px]:min-w-[420px] min-[900px]:px-10 lg:min-[900px]:px-12 xl:min-[900px]:px-16 min-[900px]:pt-[33svh] min-[900px]:pb-16 overflow-y-auto">
+      {/* Cột phải: form bắt đầu ở 33svh trên desktop.
+          Tailwind v4 xếp min-[900px]: trước sm: trong CSS, nên khoảng đệm trên của màn nhỏ phải giới hạn bằng max-[899px]: để không đè pt-[33svh] */}
+      <div className="flex flex-1 flex-col justify-start overflow-y-auto bg-surface px-5 pb-6 max-[639px]:pt-6 sm:px-6 sm:pb-8 min-[640px]:max-[899px]:pt-8 min-[900px]:w-[38%] min-[900px]:min-w-[420px] min-[900px]:px-10 min-[900px]:pt-[33svh] min-[900px]:pb-16 lg:min-[900px]:px-12 xl:min-[900px]:px-16">
         <div
           className={cn(
             "w-full max-w-[420px] mx-auto motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 motion-safe:duration-300",
