@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { BookmarkIcon, BookmarkCheckIcon, Loader2, Sparkles, Trash2Icon, CalendarIcon, AlertCircleIcon } from "lucide-react";
+import { BookmarkIcon, BookmarkCheckIcon, Loader2, Trash2Icon, CalendarIcon, AlertCircleIcon } from "lucide-react";
 import { targetSchoolsApi, ApiError } from "@/lib/api";
 import type { AddTargetSchoolRequest, TargetSchoolDto } from "@/types/api";
 import { useAuth } from "@/contexts/AuthContext";
@@ -14,9 +14,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Field, FieldLabel, FieldDescription } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 
@@ -35,12 +43,31 @@ export interface AddTargetSchoolButtonProps {
 }
 
 const CATEGORY_OPTIONS = [
-  { value: "match", label: "Vừa sức (Match)", desc: "Điểm và hồ sơ nằm trong khoảng tuyển sinh trung bình" },
-  { value: "reach", label: "Khó vào (Reach)", desc: "Trường có tính cạnh tranh cao hoặc yêu cầu cao hơn hồ sơ hiện tại" },
-  { value: "safety", label: "An toàn (Safety)", desc: "Hồ sơ vượt trội so với yêu cầu đầu vào thông thường" },
+  {
+    value: "match",
+    title: "Vừa sức",
+    badge: "Match",
+    badgeVariant: "brand" as const,
+    desc: "Điểm và hồ sơ nằm trong khoảng tuyển sinh trung bình",
+  },
+  {
+    value: "reach",
+    title: "Khó vào",
+    badge: "Reach",
+    badgeVariant: "reach" as const,
+    desc: "Trường có tính cạnh tranh cao hoặc yêu cầu cao hơn hồ sơ hiện tại",
+  },
+  {
+    value: "safety",
+    title: "An toàn",
+    badge: "Safety",
+    badgeVariant: "ok" as const,
+    desc: "Hồ sơ vượt trội so với yêu cầu đầu vào thông thường",
+  },
 ];
 
 const APPLICATION_ROUNDS = [
+  { value: "none", label: "-- Chưa chọn vòng nộp --" },
   { value: "Early Action", label: "Early Action (EA)" },
   { value: "Early Decision", label: "Early Decision (ED)" },
   { value: "Regular Decision", label: "Regular Decision (RD)" },
@@ -263,7 +290,11 @@ export function AddTargetSchoolButton({
         size={size}
         onClick={handleClickButton}
         disabled={isChecking}
-        className={cn("gap-2", isSaved && "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300", className)}
+        className={cn(
+          "gap-2 hover:bg-brand-wash hover:text-brand-ink hover:border-brand/40 transition-colors",
+          isSaved && "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300",
+          className
+        )}
       >
         {isChecking ? (
           <>
@@ -288,8 +319,7 @@ export function AddTargetSchoolButton({
         <DialogContent className="max-w-md">
           <form onSubmit={handleSubmitAdd} className="space-y-4">
             <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-lg">
-                <Sparkles className="size-5 text-brand" />
+              <DialogTitle className="text-lg font-bold">
                 Lưu vào danh sách mục tiêu
               </DialogTitle>
               <DialogDescription>
@@ -306,77 +336,77 @@ export function AddTargetSchoolButton({
 
             <div className="space-y-3">
               <Field>
-                <FieldLabel>Phân loại mục tiêu</FieldLabel>
-                <div className="grid grid-cols-1 gap-2">
+                <FieldLabel className="text-sm font-semibold">Phân loại mục tiêu</FieldLabel>
+                <RadioGroup
+                  value={category}
+                  onValueChange={(val) => setCategory(String(val))}
+                  className="gap-2 pt-1"
+                >
                   {CATEGORY_OPTIONS.map((opt) => (
                     <label
                       key={opt.value}
+                      htmlFor={`cat-${opt.value}`}
                       className={cn(
-                        "flex cursor-pointer flex-col rounded-lg border p-2.5 transition-colors",
+                        "flex cursor-pointer flex-col rounded-xl border p-3 transition-colors",
                         category === opt.value
                           ? "border-brand bg-brand/5 text-foreground"
                           : "border-border hover:bg-muted/50"
                       )}
                     >
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="radio"
-                          name="category"
-                          value={opt.value}
-                          checked={category === opt.value}
-                          onChange={(e) => setCategory(e.target.value)}
-                          className="size-4 text-brand"
-                        />
-                        <span className="font-medium text-sm">{opt.label}</span>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2.5">
+                          <RadioGroupItem id={`cat-${opt.value}`} value={opt.value} />
+                          <span className="font-semibold text-sm">{opt.title}</span>
+                        </div>
+                        <Badge variant={opt.badgeVariant} className="font-medium text-xs">
+                          {opt.badge}
+                        </Badge>
                       </div>
-                      <span className="mt-1 pl-6 text-xs text-muted-foreground">{opt.desc}</span>
+                      <p className="mt-1 pl-6.5 text-xs text-muted-foreground">{opt.desc}</p>
                     </label>
                   ))}
-                </div>
+                </RadioGroup>
               </Field>
 
               <Field>
-                <FieldLabel>Vòng nộp dự kiến (Tùy chọn)</FieldLabel>
-                <select
-                  value={round}
-                  onChange={(e) => setRound(e.target.value)}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+                <FieldLabel className="text-sm font-semibold">Vòng nộp dự kiến (Tùy chọn)</FieldLabel>
+                <Select
+                  value={round || "none"}
+                  onValueChange={(val) => {
+                    if (val !== null) setRound(val === "none" ? "" : String(val));
+                  }}
+                  items={APPLICATION_ROUNDS}
                 >
-                  <option value="">-- Chưa chọn vòng nộp --</option>
-                  {APPLICATION_ROUNDS.map((r) => (
-                    <option key={r.value} value={r.value}>
-                      {r.label}
-                    </option>
-                  ))}
-                </select>
-                <FieldDescription>
-                  Hệ thống sẽ tự động xác định hạn nộp hồ sơ từ dữ liệu tuyển sinh của trường.
-                </FieldDescription>
+                  <SelectTrigger className="w-full text-sm">
+                    <SelectValue placeholder="-- Chưa chọn vòng nộp --" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {APPLICATION_ROUNDS.map((r) => (
+                      <SelectItem key={r.value} value={r.value}>
+                        {r.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </Field>
 
               <Field>
-                <FieldLabel>Ghi chú cá nhân (Tùy chọn)</FieldLabel>
-                <Input
+                <FieldLabel className="text-sm font-semibold">Ghi chú cá nhân (Tùy chọn)</FieldLabel>
+                <Textarea
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder="Ví dụ: Ngành Computer Science, cần xin hỗ trợ tài chính..."
                   maxLength={1000}
+                  rows={3}
+                  className="resize-none text-sm"
                 />
               </Field>
             </div>
 
-            <DialogFooter className="gap-2 sm:gap-0">
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => setIsOpenAdd(false)}
-                disabled={isSubmitting}
-              >
-                Hủy
-              </Button>
-              <Button type="submit" disabled={isSubmitting} className="gap-2">
+            <DialogFooter className="pt-2 sm:justify-stretch">
+              <Button type="submit" disabled={isSubmitting} className="w-full gap-2 font-semibold">
                 {isSubmitting && <Loader2 className="size-4 animate-spin" />}
-                Xác nhận lưu
+                Lưu
               </Button>
             </DialogFooter>
           </form>
