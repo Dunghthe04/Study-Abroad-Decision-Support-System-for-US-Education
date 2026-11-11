@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertCircleIcon, RefreshCwIcon } from "lucide-react";
+import { AlertCircleIcon, ClockIcon, RefreshCwIcon } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -183,8 +183,24 @@ export function RecommendationView({ autoRun, initialOverrides }: Recommendation
             Nhận gợi ý
           </Button>
         )}
-        {/* [UC-86] popup danh sách kịch bản đã lưu: mở lại, đổi tên, xóa */}
-        {rec && <SavedScenariosButton store={scenarios} onOpen={openScenario} />}
+        {rec && (
+          <div className="flex flex-wrap items-center gap-2">
+            {/* [UC-86] popup danh sách kịch bản đã lưu: mở lại, đổi tên, xóa */}
+            <SavedScenariosButton store={scenarios} onOpen={openScenario} />
+            {/* [UC-87] sang trang lịch sử gợi ý: xem lại các lần chạy và so sánh hai lần */}
+            <Button
+              variant="outline"
+              size="sm"
+              nativeButton={false}
+              role="link"
+              render={<Link href="/recommendations/history" />}
+              className="gap-1"
+            >
+              <ClockIcon className="size-3.5" />
+              Lịch sử gợi ý
+            </Button>
+          </div>
+        )}
       </div>
 
       {error && (
