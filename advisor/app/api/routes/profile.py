@@ -16,6 +16,5 @@ async def ocr_transcript(
     reader: Annotated[TranscriptReader, Depends(get_transcript_reader)],
 ) -> TranscriptOcrResponse:
     """[USAS-640] OCR đọc và bóc tách bảng điểm học bạ THPT thành các môn và học kỳ bằng Ollama Vision / LLM."""
-    # Đo token của mọi lần gọi AI khi đọc học bạ (Ollama vision, Claude), gắn nhãn transcript_ocr để báo cáo theo tính năng
-    with usage_meter.purpose("transcript_ocr"):
-        return await usage_meter.metered(reader.read_transcript(request))
+    # Đo token của mọi lần gọi AI khi đọc học bạ. Nhãn từng bước (transcript_ocr_read, transcript_ocr_parse) do TranscriptReader đặt
+    return await usage_meter.metered(reader.read_transcript(request))

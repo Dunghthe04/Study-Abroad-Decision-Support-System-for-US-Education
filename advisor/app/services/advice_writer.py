@@ -14,11 +14,13 @@ from app.schemas.chat import ResultSchool
 from app.schemas.slm import SkillRequest
 from app.services.explainer import GROUP_LABEL
 from app.services.ollama import OllamaError
+from app.services import usage_meter
 from app.services.skill_call import MAX_ATTEMPTS, SKILLS_DIR, load_skill
 
 logger = logging.getLogger(__name__)
 
 PROMPT_PATH = SKILLS_DIR / "viet_tra_loi_ho_so.md"
+PURPOSE = PROMPT_PATH.stem  # nhãn trong báo cáo token (ai_calls.purpose): viet_tra_loi_ho_so
 ANSWER_SCHEMA = {
     "type": "object",
     "properties": {"tra_loi": {"type": "string"}},
@@ -211,9 +213,11 @@ class AdviceWriter:
         for attempt in range(1, MAX_ATTEMPTS + 1):
             self.last_attempts = attempt
             try:
-                raw = await self._llm.chat_json(
-                    messages + ([retry_note] if retry_note else []), ANSWER_SCHEMA, temperature=0.0
-                )
+                # Gắn nhãn để báo cáo token biết đây là lời tư vấn hồ sơ (trước đây dòng này để trống nhãn)
+                with usage_meter.purpose(PURPOSE, self.version):
+                    raw = await self._llm.chat_json(
+                        messages + ([retry_note] if retry_note else []), ANSWER_SCHEMA, temperature=0.0
+                    )
                 text = check_answer(raw)
                 task = missing_task(text, tasks)
                 if task:

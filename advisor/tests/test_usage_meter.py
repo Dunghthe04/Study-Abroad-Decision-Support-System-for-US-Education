@@ -291,13 +291,14 @@ def _ocr_client(reader):
     return TestClient(app)
 
 
-def test_the_ocr_route_returns_the_token_of_both_ai_calls_labelled_transcript_ocr():
+def test_the_ocr_route_returns_the_token_of_every_ai_call_of_the_reader():
     res = _ocr_client(_OcrReaderThatCallsTheAi()).post("/api/v1/profile/transcript-ocr", json={})
 
+    # Nhãn từng bước do TranscriptReader đặt (kiểm ở tests/test_ai_call_labels.py), route chỉ gom
     usage = res.json()["aiUsage"]
-    assert [(u["source"], u["purpose"], u["inputTokens"], u["outputTokens"]) for u in usage] == [
-        ("ollama", "transcript_ocr", 900, 400),
-        ("claude", "transcript_ocr", 83, 48),
+    assert [(u["source"], u["inputTokens"], u["outputTokens"]) for u in usage] == [
+        ("ollama", 900, 400),
+        ("claude", 83, 48),
     ]
 
 
@@ -318,9 +319,3 @@ def test_the_ocr_route_without_any_ai_call_has_an_empty_usage_list():
     body = _ocr_client(NoAiReader()).post("/api/v1/profile/transcript-ocr", json={}).json()
 
     assert body["aiUsage"] == []
-
-
-def test_the_purpose_label_does_not_leak_out_of_the_ocr_route():
-    _ocr_client(_OcrReaderThatCallsTheAi()).post("/api/v1/profile/transcript-ocr", json={})
-
-    assert usage_meter._purpose.get() == ""  # route xong thì nhãn được trả về như cũ
