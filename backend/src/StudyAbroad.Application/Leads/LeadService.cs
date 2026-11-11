@@ -209,7 +209,8 @@ public class LeadService(
     public async Task<LeadDto?> GetLeadByIdAsync(Guid userId, Guid leadId, CancellationToken ct = default)
     {
         var lead = await leads.GetByIdAsync(leadId, ct);
-        if (lead is null || lead.UserId != userId)
+        // [UC-42] Phụ huynh gửi thay con vẫn xem được lead mình đã gửi
+        if (lead is null || (lead.UserId != userId && lead.SubmittedByUserId != userId))
             return null;
 
         return await leads.GetDtoByIdAsync(leadId, ct);

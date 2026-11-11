@@ -14,9 +14,13 @@ public class LeadsControllerTests
     private sealed class FakeLeadService : ILeadService
     {
         public List<LeadDto> Leads { get; } = [];
+        /// <summary>Nếu đặt, CreateLeadAsync ném lỗi này (giả lập service từ chối theo quy tắc UC-42).</summary>
+        public LeadRuleException? RuleToThrow { get; set; }
 
         public Task<LeadDto> CreateLeadAsync(Guid userId, CreateLeadRequest request, string? clientIp = null, CancellationToken ct = default)
         {
+            if (RuleToThrow is not null)
+                throw RuleToThrow;
             if (request.StudyCenterId == Guid.Empty)
                 throw new ArgumentException("Mã trung tâm tư vấn không được để trống.");
 
@@ -182,22 +186,10 @@ public class LeadsControllerTests
         }
     }
 
-    private sealed class FakeAuthService(bool allowShare) : IAuthorizationService
-    {
-        public Task<AuthorizationResult> AuthorizeAsync(ClaimsPrincipal user, object? resource, IEnumerable<IAuthorizationRequirement> requirements) =>
-            Task.FromResult(allowShare ? AuthorizationResult.Success() : AuthorizationResult.Failed());
-
-        public Task<AuthorizationResult> AuthorizeAsync(ClaimsPrincipal user, object? resource, string policyName) =>
-            Task.FromResult(allowShare ? AuthorizationResult.Success() : AuthorizationResult.Failed());
-    }
-
-    private static (LeadsController Controller, FakeLeadService Service) CreateController(
-        Guid userId,
-        bool isMinor = false)
+    private static (LeadsController Controller, FakeLeadService Service) CreateController(Guid userId)
     {
         var fakeLeadService = new FakeLeadService();
-        var fakeAuthService = new FakeAuthService(!isMinor);
-        var controller = new LeadsController(fakeLeadService, fakeAuthService)
+        var controller = new LeadsController(fakeLeadService)
         {
             ControllerContext = new ControllerContext
             {
@@ -220,7 +212,7 @@ public class LeadsControllerTests
     {
         var userId = Guid.NewGuid();
         var centerId = Guid.NewGuid();
-        var (controller, service) = CreateController(userId, isMinor: true);
+        var (controller, service) = CreateController(userId);
 
         var request = new CreateLeadRequest(centerId, "bachelor", "0912345678", "Em muốn tư vấn du học Mỹ", false);
         var result = await controller.CreateLead(request, CancellationToken.None);
@@ -233,18 +225,43 @@ public class LeadsControllerTests
         Assert.Null(dto.ConsentId);
     }
 
-    [Fact]
-    public async Task CreateLead_MinorSharesProfile_ReturnsForbiddenWithAgeRestrictedCode()
+    /// <summary>Đọc thuộc tính <paramref name="name"/> của body ẩn danh { code, message, retryAt }.</summary>
+    private static object? BodyValue(ObjectResult result, string name) =>
+        result.Value!.GetType().GetProperty(name)?.GetValue(result.Value);
+
+    [Theory]
+    [InlineData("age_restricted", StatusCodes.Status403Forbidden)]
+    [InlineData("not_linked", StatusCodes.Status403Forbidden)]
+    [InlineData("daily_limit", StatusCodes.Status429TooManyRequests)]
+    [InlineData("consent_required", StatusCodes.Status400BadRequest)]
+    [InlineData("acknowledgement_required", StatusCodes.Status400BadRequest)]
+    public async Task CreateLead_ServiceRejectsByRule_ReturnsStatusAndCode(string code, int status)
     {
-        var userId = Guid.NewGuid();
-        var centerId = Guid.NewGuid();
-        var (controller, _) = CreateController(userId, isMinor: true); // Chưa đủ 18 tuổi
+        var (controller, service) = CreateController(Guid.NewGuid());
+        service.RuleToThrow = new LeadRuleException(code, status, "Không gửi được.");
 
-        var request = new CreateLeadRequest(centerId, "bachelor", "0912345678", "Em gửi hồ sơ", true);
-        var result = await controller.CreateLead(request, CancellationToken.None);
+        var result = await controller.CreateLead(new CreateLeadRequest(Guid.NewGuid()), CancellationToken.None);
 
-        var statusResult = Assert.IsType<ObjectResult>(result);
-        Assert.Equal(StatusCodes.Status403Forbidden, statusResult.StatusCode);
+        var obj = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(status, obj.StatusCode);
+        Assert.Equal(code, BodyValue(obj, "code"));
+        Assert.Equal("Không gửi được.", BodyValue(obj, "message"));
+        Assert.Null(BodyValue(obj, "retryAt"));
+    }
+
+    [Fact]
+    public async Task CreateLead_CenterCooldown_Returns429WithRetryAt()
+    {
+        var retryAt = new DateTime(2026, 11, 19, 3, 0, 0, DateTimeKind.Utc);
+        var (controller, service) = CreateController(Guid.NewGuid());
+        service.RuleToThrow = new LeadRuleException("center_cooldown", StatusCodes.Status429TooManyRequests, "Đợi 7 ngày.", retryAt);
+
+        var result = await controller.CreateLead(new CreateLeadRequest(Guid.NewGuid()), CancellationToken.None);
+
+        var obj = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status429TooManyRequests, obj.StatusCode);
+        Assert.Equal("center_cooldown", BodyValue(obj, "code"));
+        Assert.Equal(retryAt, BodyValue(obj, "retryAt"));
     }
 
     [Fact]
@@ -252,7 +269,7 @@ public class LeadsControllerTests
     {
         var userId = Guid.NewGuid();
         var centerId = Guid.NewGuid();
-        var (controller, service) = CreateController(userId, isMinor: false); // Đủ 18 tuổi
+        var (controller, service) = CreateController(userId);
 
         var request = new CreateLeadRequest(centerId, "master", "0912345678", "Em muốn chia sẻ hồ sơ học thuật", true);
         var result = await controller.CreateLead(request, CancellationToken.None);
@@ -269,8 +286,7 @@ public class LeadsControllerTests
         string email = "center@example.com")
     {
         var fakeLeadService = new FakeLeadService();
-        var fakeAuthService = new FakeAuthService(true);
-        var controller = new LeadsController(fakeLeadService, fakeAuthService)
+        var controller = new LeadsController(fakeLeadService)
         {
             ControllerContext = new ControllerContext
             {
@@ -606,7 +622,7 @@ public class LeadsControllerTests
     [Fact]
     public async Task GetAndSendLeadMessages_Unauthenticated_ReturnsUnauthorized()
     {
-        var controller = new LeadsController(new FakeLeadService(), new FakeAuthService(true))
+        var controller = new LeadsController(new FakeLeadService())
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
         };

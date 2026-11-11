@@ -939,4 +939,19 @@ public class LeadServiceTests
         await s.Service.CreateLeadAsync(adult.Id, s.Request());
         Assert.Equal(LeadService.MaxLeadsPerDay + 1, s.LeadRepo.Leads.Count);
     }
+
+    [Fact]
+    public async Task GetLeadById_ParentWhoSubmitted_CanReadChildLead()
+    {
+        var s = new CreateLeadSetup();
+        var child = s.AddStudent(14);
+        var parent = s.AddParent(child);
+        var stranger = s.AddParent();
+
+        var created = await s.Service.CreateLeadAsync(parent.Id, s.Request(studentUserId: child.Id));
+
+        Assert.NotNull(await s.Service.GetLeadByIdAsync(parent.Id, created.Id));
+        Assert.NotNull(await s.Service.GetLeadByIdAsync(child.Id, created.Id));
+        Assert.Null(await s.Service.GetLeadByIdAsync(stranger.Id, created.Id));
+    }
 }
