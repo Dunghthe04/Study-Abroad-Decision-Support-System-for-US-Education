@@ -28,7 +28,10 @@ public class UniversityDetailService(IUniversityDetailRepository repository) : I
             o.GpaPct250To299, o.GpaPctBelow250, o.IntlAidPolicy, o.IntlAidAvgUsd, o.IntlAidRecipients,
             o.RetentionRate1Yr, o.GradRate6Yr,
             majors[o.Id].OrderBy(m => m.Name).Select(m => new UniversityMajorDto(m.Name, m.CipCode, m.IsStem, m.IsVerified)).ToList(),
-            PublicUrl(o.SourceUrl), o.RetrievedAt, o.SourceReliability)).ToList();
+            PublicUrl(o.SourceUrl), o.RetrievedAt, o.SourceReliability,
+            o.AvgGpaWeighted, o.GpaScaleType, o.FyOnCampusPct, o.UgOnCampusPct, o.HousingTypes,
+            o.IntlHousing, o.HousingOnlyUsd, o.HousingDepositUsd, o.StudentFacultyRatio,
+            o.Activities, o.CampusSetting)).ToList();
         var sources = data.Evidence.OrderByDescending(e => e.CreatedAt).ThenBy(e => e.FieldName).ThenBy(e => e.Id)
             .Select(MapSource).Where(s => s.SourceUrl is not null)
             .DistinctBy(s => new { s.FieldName, s.SourceUrl, s.FieldValue, s.Status, s.DataYear, s.AppliedToSnapshot, s.Normalization })

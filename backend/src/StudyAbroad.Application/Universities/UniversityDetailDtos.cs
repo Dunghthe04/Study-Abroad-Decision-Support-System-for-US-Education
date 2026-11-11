@@ -22,7 +22,18 @@ public record UniversityOfferingDto(
     decimal? GpaPct250To299, decimal? GpaPctBelow250,
     string? IntlAidPolicy, decimal? IntlAidAvgUsd, int? IntlAidRecipients,
     decimal? RetentionRate1Yr, decimal? GradRate6Yr, IReadOnlyList<UniversityMajorDto> Majors,
-    string? SourceUrl, DateOnly? RetrievedAt, string? SourceReliability);
+    string? SourceUrl, DateOnly? RetrievedAt, string? SourceReliability,
+    decimal? AvgGpaWeighted = null,
+    string? GpaScaleType = null,
+    decimal? FyOnCampusPct = null,
+    decimal? UgOnCampusPct = null,
+    string? HousingTypes = null,
+    bool? IntlHousing = null,
+    decimal? HousingOnlyUsd = null,
+    decimal? HousingDepositUsd = null,
+    int? StudentFacultyRatio = null,
+    string? Activities = null,
+    string? CampusSetting = null);
 
 public record UniversityRankingDto(
     string Publisher, string Name, int Rank, bool IsTie, string RankDisplay,

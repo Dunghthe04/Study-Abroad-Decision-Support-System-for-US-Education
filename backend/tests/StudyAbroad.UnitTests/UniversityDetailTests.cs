@@ -42,7 +42,24 @@ public class UniversityDetailTests
     public async Task MapsExistingInformationWithoutAuditFields()
     {
         var data = CreateData();
-        var offering = new UniversityOffering { UniversityId = data.University.Id, StudyLevel = "undergraduate", TuitionUsd = 45000, MinGpa4 = 4.2m };
+        var offering = new UniversityOffering
+        {
+            UniversityId = data.University.Id,
+            StudyLevel = "undergraduate",
+            TuitionUsd = 45000,
+            MinGpa4 = 4.2m,
+            AvgGpaWeighted = 4.35m,
+            GpaScaleType = "weighted",
+            FyOnCampusPct = 0.85m,
+            UgOnCampusPct = 0.35m,
+            HousingTypes = "Coed|Single",
+            IntlHousing = true,
+            HousingOnlyUsd = 9000m,
+            HousingDepositUsd = 200m,
+            StudentFacultyRatio = 15,
+            Activities = "Music|Debate",
+            CampusSetting = "City: Midsize"
+        };
         var repository = new FakeRepository(data with
         {
             Offerings = [offering],
@@ -58,6 +75,17 @@ public class UniversityDetailTests
         var resultOffering = Assert.Single(result.Offerings);
         Assert.Equal(45000m, resultOffering.TuitionUsd);
         Assert.Equal(4.2m, resultOffering.MinGpa4);
+        Assert.Equal(4.35m, resultOffering.AvgGpaWeighted);
+        Assert.Equal("weighted", resultOffering.GpaScaleType);
+        Assert.Equal(0.85m, resultOffering.FyOnCampusPct);
+        Assert.Equal(0.35m, resultOffering.UgOnCampusPct);
+        Assert.Equal("Coed|Single", resultOffering.HousingTypes);
+        Assert.True(resultOffering.IntlHousing);
+        Assert.Equal(9000m, resultOffering.HousingOnlyUsd);
+        Assert.Equal(200m, resultOffering.HousingDepositUsd);
+        Assert.Equal(15, resultOffering.StudentFacultyRatio);
+        Assert.Equal("Music|Debate", resultOffering.Activities);
+        Assert.Equal("City: Midsize", resultOffering.CampusSetting);
         Assert.False(Assert.Single(resultOffering.Majors).IsVerified);
         var json = JsonSerializer.Serialize(result);
         Assert.DoesNotContain("LastEditedBy", json);
