@@ -26,12 +26,14 @@ namespace StudyAbroad.Application.Advisor
     // messages: lưu tin hỏi và tin trả lời vào chat_messages cho admin xem (null thì không lưu: cấu hình Chat:StoreMessages = false, hoặc test cũ)
     // logger: ghi cảnh báo khi lưu tin lỗi (lưu lỗi không bao giờ làm hỏng lượt chat)
     // aiCalls: ghi nhật ký token, thời gian, lỗi của từng lần gọi AI vào ai_calls (null thì không ghi, dùng trong test cũ). Độc lập với messages
+    // usageCollector: "giỏ chung" gom số đo của MỌI lần gọi advisor trong lượt (chat, giải thích, what-if, goal-seek, so sánh), do lớp bọc
+    //   IAdvisorClient bỏ vào. Có số liệu thì dùng cả giỏ; không có (test cũ, advisor chưa bọc) thì dùng số đo của lần gọi chat
     public class ChatService(
         IAdvisorClient advisor, IChatSessionRepository sessions, IProfileFlowService profileFlow,
         IChatAnalysisRepository? analyses = null, IRecommendationRunner? recommender = null,
         IChatBenchmarkRepository? benchmarks = null, IGradeScaleProvider? gradeScale = null,
         IChatMessageRepository? messages = null, ILogger<ChatService>? logger = null,
-        IAiCallRepository? aiCalls = null)
+        IAiCallRepository? aiCalls = null, IAiUsageCollector? usageCollector = null)
     {
         //Dữ liệu FE gửi lên
         // onEvent: chỉ truyền khi trả lời theo từng ý (stream); mỗi tin tiến độ / câu một ý của advisor gọi hàm này ngay.
@@ -42,6 +44,7 @@ namespace StudyAbroad.Application.Advisor
         {
             var askedAt = DateTime.UtcNow;   // lúc học sinh hỏi, để ghi thời điểm tin của học sinh
             var turnClock = Stopwatch.StartNew();
+            usageCollector?.Clear();         // giỏ số đo của lượt này bắt đầu rỗng
             // SessionId do trình duyệt gửi chỉ dùng để tìm phiên; State của trình duyệt bị bỏ, luôn lấy từ DB
             var isNew = false;
             ChatSession? session = null;
@@ -177,9 +180,11 @@ namespace StudyAbroad.Application.Advisor
                 await sessions.SaveAsync(ct);
 
             // Phiên đã lưu (khóa ngoại của tin nhắn cần phiên có sẵn): ghi tin hỏi và tin trả lời cho admin xem
-            var replyId = await RecordTurnAsync(session, request, response, advisorSignals, turnClock.ElapsedMilliseconds, ct);
+            // Đến đây mọi lần gọi advisor của lượt đã xong: lấy cả giỏ số đo (không chỉ lần gọi chat đầu) để outcome, meta_json và ai_calls đủ
+            var turnSignals = advisorSignals with { Usage = TurnUsage(advisorSignals.Usage) };
+            var replyId = await RecordTurnAsync(session, request, response, turnSignals, turnClock.ElapsedMilliseconds, ct);
             // Token ghi sau tin trả lời để nối được (chat_message_id). Tin không lưu (tắt công tắc hoặc lỗi) thì vẫn ghi token, chỉ không có liên kết
-            await RecordAiCallsAsync(userId, replyId, advisorSignals.Usage, ct);
+            await RecordAiCallsAsync(userId, replyId, turnSignals.Usage, ct);
 
             //Trả về trình duyệt: có mã phiên, ko lộ trạng thái nội bôk.
             // ProfileChanged để form biết mà nạp lại nháp (D2)
@@ -250,6 +255,11 @@ namespace StudyAbroad.Application.Advisor
                 return null;
             }
         }
+
+        // Số đo của cả lượt: lấy cả giỏ chung nếu có số liệu (đã gồm lần gọi chat vì lớp bọc cũng bỏ nó vào giỏ, nên không đếm hai lần).
+        // Giỏ rỗng (test cũ, hoặc advisor chưa được bọc) thì dùng số đo của lần gọi chat đầu
+        private IReadOnlyList<AiUsageDto>? TurnUsage(IReadOnlyList<AiUsageDto>? chatCallUsage) =>
+            usageCollector?.Snapshot() is { Count: > 0 } all ? all : chatCallUsage;
 
         // Ghi mỗi lần gọi AI một dòng ai_calls (nguồn, skill, token, thời gian, lỗi), nối với tin trả lời nếu có.
         // Lỗi khi ghi chỉ cảnh báo, không bao giờ làm hỏng lượt chat. Không có số đo thì không làm gì

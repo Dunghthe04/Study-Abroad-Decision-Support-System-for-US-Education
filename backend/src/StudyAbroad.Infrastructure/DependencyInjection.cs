@@ -90,7 +90,11 @@ public static class DependencyInjection
         services.AddHostedService<EmailDispatchBackgroundService>();
 
         services.Configure<AdvisorOptions>(configuration.GetSection(AdvisorOptions.SectionName));
-        services.AddHttpClient<IAdvisorClient, AdvisorClient>(ConfigureAdvisorClient);
+        // Mọi lần gọi advisor đi qua lớp bọc để gom số đo token vào "giỏ chung" của yêu cầu (một lượt chat gọi advisor nhiều lần)
+        services.AddHttpClient<AdvisorClient>(ConfigureAdvisorClient);
+        services.AddScoped<IAiUsageCollector, AiUsageCollector>();
+        services.AddScoped<IAdvisorClient>(sp => new UsageCollectingAdvisorClient(
+            sp.GetRequiredService<AdvisorClient>(), sp.GetRequiredService<IAiUsageCollector>()));
         // Bậc ngoại khóa: SLM xác nhận vai trò, phạm vi rồi advisor tính bậc, gọi lúc lưu hồ sơ
         services.AddHttpClient<IEcTierClient, EcTierClient>(ConfigureAdvisorClient);
         services.AddHttpClient<ITranscriptOcrClient, TranscriptOcrClient>((sp, client) =>

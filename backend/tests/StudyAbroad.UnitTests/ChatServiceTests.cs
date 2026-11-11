@@ -332,6 +332,84 @@ public class ChatServiceTests
         Assert.Equal((false, "quá tải"), (call.Success, call.Error));
     }
 
+    // ---- một lượt gọi advisor nhiều lần: gom đủ số đo của cả giỏ (goal-seek gọi advisor chat rồi gọi thêm advisor viết lời)
+
+    private static FakeAdvisor GoalSeekAdvisor(AiUsageDto? noteCall = null) => new("B4")
+    {
+        Action = "goal_seek", ActionData = BuAction,
+        AiUsage = [new AiUsageDto("ollama", "usas-slm-v4", "slm_intents", "3.0", 1700, 180, 0, true, null, 21000)],
+        GoalNote = new GoalNoteResponseDto("1.0", "claude", "OK", "Để lên nhóm Vừa sức ở Boston University, bạn cần nâng SAT.",
+            [noteCall ?? new AiUsageDto("claude", "claude-haiku-5-5", "skill_goal_seek", "1.0", 2400, 500, 0, true, null, 3000)]),
+    };
+
+    private static ChatService WithBasket(FakeAdvisor advisor, AiUsageCollector basket, FakeMessages saved, FakeAiCalls calls) =>
+        new(new UsageCollectingAdvisorClient(advisor, basket), new FakeSessions(), new FakeProfileFlow(), null,
+            new FakeRunner { Match = Found(), GoalResult = GoalOf() }, messages: saved, aiCalls: calls, usageCollector: basket);
+
+    [Fact]
+    public async Task ATurnThatCallsTheAdvisorTwice_LogsBothCalls_NotOnlyTheFirst()
+    {
+        var (basket, saved, calls) = (new AiUsageCollector(), new FakeMessages(), new FakeAiCalls());
+
+        await WithBasket(GoalSeekAdvisor(), basket, saved, calls).ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Equal(["slm_intents", "skill_goal_seek"], calls.Rows.Select(c => c.Purpose));   // đủ hai lần, không đếm trùng
+        Assert.All(calls.Rows, c => Assert.Equal(saved.Rows[1].Id, c.ChatMessageId));
+    }
+
+    [Fact]
+    public async Task MetaJson_CountsEveryCallOfTheTurn_SplitIntoLocalAndCloud()
+    {
+        var (basket, saved, calls) = (new AiUsageCollector(), new FakeMessages(), new FakeAiCalls());
+
+        await WithBasket(GoalSeekAdvisor(), basket, saved, calls).ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        var meta = JsonDocument.Parse(saved.Rows[1].MetaJson!).RootElement;
+        Assert.Equal(1, meta.GetProperty("local").GetProperty("calls").GetInt32());
+        Assert.Equal(1700, meta.GetProperty("local").GetProperty("inputTokens").GetInt32());
+        Assert.Equal(1, meta.GetProperty("cloud").GetProperty("calls").GetInt32());
+        Assert.Equal(2400, meta.GetProperty("cloud").GetProperty("inputTokens").GetInt32());   // lần gọi thêm không bị bỏ sót nữa
+    }
+
+    [Fact]
+    public async Task AnExtraStepThatAlwaysFailed_MakesTheTurnFailed()
+    {
+        var failedNote = new AiUsageDto("claude", "claude-haiku-5-5", "skill_goal_seek", "1.0", 0, 0, 0, false, "quá tải", 30000);
+        var (basket, saved, calls) = (new AiUsageCollector(), new FakeMessages(), new FakeAiCalls());
+
+        await WithBasket(GoalSeekAdvisor(failedNote), basket, saved, calls).ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        // Lần gọi chat đầu ổn nhưng bước viết lời hỏng hẳn: trước đây lỗi này không ai thấy
+        Assert.Equal(("failed", "open"), (saved.Rows[1].Outcome, saved.Rows[1].ReviewStatus));
+        Assert.Contains("skill_goal_seek", calls.Rows.Where(c => !c.Success).Select(c => c.Purpose));
+    }
+
+    [Fact]
+    public async Task TheBasketIsEmptiedAtTheStartOfEachTurn_SoOldUsageNeverLeaksIn()
+    {
+        var basket = new AiUsageCollector();
+        basket.Add([new AiUsageDto("claude", "m", "stale_from_a_previous_turn", "1", 999, 999, 0, true, null, 1)]);
+        var (saved, calls) = (new FakeMessages(), new FakeAiCalls());
+
+        await WithBasket(GoalSeekAdvisor(), basket, saved, calls).ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.DoesNotContain(calls.Rows, c => c.Purpose == "stale_from_a_previous_turn");
+        Assert.Equal(2, calls.Rows.Count);
+    }
+
+    [Fact]
+    public async Task AnEmptyBasket_FallsBackToTheUsageOfTheChatCall()
+    {
+        // Advisor chưa được bọc (hoặc test cũ): giỏ rỗng nên dùng số đo đi kèm phản hồi chat, không mất dữ liệu
+        var calls = new FakeAiCalls();
+
+        await new ChatService(new FakeAdvisor("B0") { AiUsage = TwoCalls }, new FakeSessions(), new FakeProfileFlow(),
+                aiCalls: calls, usageCollector: new AiUsageCollector())
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Equal(2, calls.Rows.Count);
+    }
+
     // ---- advisor sập hẳn: câu hỏi không được mất
 
     [Fact]
