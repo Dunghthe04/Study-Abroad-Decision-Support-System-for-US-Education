@@ -87,46 +87,47 @@ export function UniversityDetailView({ university }: { university: UniversityDet
   return (
     <article className="space-y-6 pb-12">
       {/* Ảnh bìa lớn tràn mép, nằm dưới thanh đầu trong suốt giống trang chủ */}
-      <header className="relative isolate -mt-(--header-h) flex min-h-[min(72svh,640px)] items-end overflow-hidden bg-brand-ink text-white">
-        <div className="absolute inset-0 -z-10">
+      <header>
+        <div className="relative -mt-(--header-h) h-[min(60svh,520px)] min-h-72 overflow-hidden bg-brand-ink">
           <SchoolImage url={university.coverUrl} alt={`Khuôn viên ${university.name}`} className="size-full" priority />
-          <div className="absolute inset-0 bg-linear-to-t from-brand-ink/90 via-brand-ink/45 via-50% to-brand-ink/60" />
+          {/* Chỉ làm tối phần trên để chữ thanh đầu đọc được */}
+          <div className="absolute inset-x-0 top-0 h-48 bg-linear-to-b from-brand-ink/80 to-transparent" />
         </div>
 
-        {/* Tên trường bên trái, các nút bên phải, cùng canh giữa theo khối tên và vị trí */}
-        <div className="mx-auto flex w-full max-w-[1320px] flex-wrap items-center justify-between gap-5 px-4 pt-[calc(var(--header-h)+3rem)] pb-8 sm:px-6 sm:pb-10">
-          <div className="flex min-w-0 items-center gap-4">
-            <SchoolImage url={university.logoUrl} alt={`Logo ${university.name}`} className="size-16 shrink-0 rounded-lg bg-white sm:size-20" contain />
-            <div className="min-w-0">
-              <h1 className="text-3xl leading-tight font-semibold tracking-tight text-balance text-white sm:text-4xl lg:text-5xl">{university.name}</h1>
-              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-white/85 sm:text-base">
-                {location && <span className="inline-flex items-center gap-1"><MapPinIcon className="size-4" />{location}</span>}
-                {university.control && <span>{schoolControlLabel(university.control)}</span>}
-                {university.isIvy && <Badge variant="secondary">Ivy League</Badge>}
+        {/* Dưới ảnh: logo đè nhẹ lên mép ảnh, tên và vị trí bên trái, các nút bên phải canh giữa theo khối tên */}
+        <div className="border-b border-line bg-surface">
+          <div className="mx-auto flex w-full max-w-[1320px] flex-wrap items-center justify-between gap-5 px-4 pb-6 sm:px-6">
+            <div className="flex min-w-0 items-end gap-4">
+              <SchoolImage url={university.logoUrl} alt={`Logo ${university.name}`} className="-mt-8 size-20 shrink-0 rounded-xl border border-line bg-white sm:-mt-10 sm:size-24" contain />
+              <div className="min-w-0 pt-4">
+                <h1 className="text-2xl leading-tight font-semibold tracking-tight text-balance text-ink sm:text-3xl">{university.name}</h1>
+                <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink-2">
+                  {location && <span className="inline-flex items-center gap-1"><MapPinIcon className="size-4" />{location}</span>}
+                  {university.control && <span>{schoolControlLabel(university.control)}</span>}
+                  {university.isIvy && <Badge variant="secondary">Ivy League</Badge>}
+                </div>
               </div>
             </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <AddTargetSchoolButton
-              universityCode={university.code}
-              universityName={university.name}
-              universityCity={university.city}
-              universityState={university.state}
-              size="lg"
-              className="!border-transparent !bg-white !text-brand-ink hover:!bg-white/90"
-            />
-            {website && (
-              <Button
-                variant="outline"
+            <div className="flex flex-wrap items-center gap-3 pt-4">
+              <AddTargetSchoolButton
+                universityCode={university.code}
+                universityName={university.name}
+                universityCity={university.city}
+                universityState={university.state}
                 size="lg"
-                nativeButton={false}
-                role="link"
-                render={<a href={website} target="_blank" rel="noopener noreferrer" />}
-                className="!border-white/30 !bg-brand !text-white hover:!bg-brand-ink"
-              >
-                <GlobeIcon />Website trường<ArrowUpRightIcon />
-              </Button>
-            )}
+                className="!border-transparent !bg-brand-wash !text-brand-ink hover:!bg-brand-wash/70"
+              />
+              {website && (
+                <Button
+                  size="lg"
+                  nativeButton={false}
+                  role="link"
+                  render={<a href={website} target="_blank" rel="noopener noreferrer" />}
+                >
+                  <GlobeIcon />Website trường<ArrowUpRightIcon />
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       </header>
