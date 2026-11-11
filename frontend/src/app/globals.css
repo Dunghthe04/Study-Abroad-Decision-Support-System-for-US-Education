@@ -73,16 +73,18 @@
   --ground: #f5f7f9;
   --surface: #ffffff;
   --line: #dce4eb;
-  --brand: #0e5f7a;
+  /* Xanh Old Glory Blue của cờ Mỹ (#0A3161), 12.8:1 với chữ trắng */
+  --brand: #0a3161;
   --brand-foreground: #ffffff;
-  --brand-ink: #0a4256;
-  --brand-wash: #e4eff3;
+  --brand-ink: #071f3e;
+  --brand-wash: #e7ecf4;
   --ok: #1b7052;
   --ok-wash: #e3f1eb;
   --warn: #94500f;
   --warn-wash: #f7ede3;
-  --risk: #9e3830;
-  --risk-wash: #f6e6e4;
+  /* Đỏ Old Glory Red của cờ Mỹ (#B31942), 6.2:1 với chữ trắng; chỉ dùng cho lỗi và cảnh báo nguy hiểm */
+  --risk: #b31942;
+  --risk-wash: #f9e6eb;
   /* Màu nhóm Khó vào: tím sẫm, không dùng đỏ để học sinh không đọc thành "trượt". Đỏ (risk) chỉ dành cho lỗi */
   --reach: #5e4a8c;
   --reach-wash: #efebf6;
@@ -99,16 +101,17 @@
   --secondary-foreground: var(--brand-ink);
   --muted: var(--ground);
   --muted-foreground: var(--ink-2);
-  --accent: #a86308; /* hổ phách ấm, tương phản 4.7:1 với chữ trắng (đạt AA) */
-  --accent-foreground: #ffffff;
+  /* shadcn dùng accent cho nền hover của nút viền và mục menu, nên giữ trung tính */
+  --accent: var(--brand-wash);
+  --accent-foreground: var(--brand-ink);
   --destructive: var(--risk);
   --border: var(--line);
   --input: var(--line);
   --ring: var(--brand);
   /* Bảng màu biểu đồ tách khỏi màu ngữ nghĩa, để đường xu hướng không bị đọc thành "rủi ro" hay "an toàn" */
   --chart-1: var(--brand);
-  --chart-2: #3d7fa0;
-  --chart-3: #7fb3c9;
+  --chart-2: #3f6aa8;
+  --chart-3: #8fa9cf;
   --chart-4: #5b6f86;
   --chart-5: #b98a3e;
   --radius: 0.5rem;

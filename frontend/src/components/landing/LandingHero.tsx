@@ -41,7 +41,7 @@ export function LandingHero() {
             Nhập GPA, điểm thi và ngân sách. USAS so hồ sơ với số liệu tuyển sinh của từng trường, xếp vào bốn nhóm và giải thích lý do cho từng trường.
           </p>
           <div className="flex flex-wrap gap-3">
-            <Link href="/analysis" className={buttonVariants({ size: "xl", className: "!bg-accent !text-accent-foreground hover:!bg-accent/90 active:translate-y-px" })}>
+            <Link href="/analysis" className={buttonVariants({ size: "xl", className: "!bg-white !text-brand-ink hover:!bg-white/90 active:translate-y-px" })}>
               Phân tích hồ sơ
               <ArrowRightIcon className="transition-transform group-hover/button:translate-x-0.5" />
             </Link>
