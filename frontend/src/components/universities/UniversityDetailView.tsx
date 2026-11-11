@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "cn";
@@ -133,8 +132,10 @@ export function UniversityDetailView({ university }: { university: UniversityDet
       </header>
 
       <div className="mx-auto max-w-[1320px] px-4 sm:px-6 space-y-6">
-        <nav aria-label="Các mục thông tin trường" className="sticky top-(--header-h) z-20 border-b border-border bg-background/95 ">
-          <ScrollArea className="w-full min-w-0">
+        {/* Nền đặc và tràn ra cả phần lề hai bên, để viền thẻ bên dưới không lộ ra khi cuộn.
+            Cuộn ngang bằng overflow gốc, ẩn thanh cuộn (ScrollArea luôn vẽ thêm thanh dọc) */}
+        <nav aria-label="Các mục thông tin trường" className="sticky top-(--header-h) z-20 -mx-4 bg-background px-4 sm:-mx-6 sm:px-6">
+          <div className="overflow-x-auto border-b border-border [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <div className="flex w-max gap-1">
               {navigation.map((item) => {
                 const isActive = activeSection === item.id;
@@ -155,8 +156,7 @@ export function UniversityDetailView({ university }: { university: UniversityDet
                 );
               })}
             </div>
-            <ScrollBar orientation="horizontal" />
-          </ScrollArea>
+          </div>
         </nav>
 
       {university.offerings.length > 1 && (
@@ -211,7 +211,7 @@ export function UniversityDetailView({ university }: { university: UniversityDet
           <UniversitySources sources={university.sources} />
         </div>
 
-        <aside aria-label="Thông tin bổ sung" className="space-y-5 lg:sticky lg:top-32">
+        <aside aria-label="Thông tin bổ sung" className="space-y-5 lg:sticky lg:top-[calc(var(--header-h)+4.5rem)]">
           {university.rankings.length > 0 && (
             <DetailSection title="Xếp hạng đã ghi nhận">
               <ul className="divide-y divide-border/70">
