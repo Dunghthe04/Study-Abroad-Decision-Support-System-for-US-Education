@@ -17,11 +17,12 @@ from app.services.branches import (
     ASK_SCHOOL,
     ASK_WHICH_SCHOOLS,
     CANNOT_ANSWER,
-    DEFAULT_QUESTION,
     GREETING_BUTTONS,
     GREETING_REPLY,
     LOOKING_UP,
     NEED_RESULTS,
+    NEXT_AFTER_SAVE,
+    NEXT_AFTER_SAVE_REPLIES,
     NOTHING_TO_TRY,
     OUT_OF_SCOPE,
     RECOMMENDING,
@@ -32,7 +33,8 @@ from app.services.branches import (
 from app.services.chat_flow import NEED_MAJOR, NEED_PROFILE, QUESTIONS, SkillOutput, ask, go_to
 from app.services.intake import CHAT_BUTTON, FORM_BUTTON, INTAKE_ASK, INTAKE_ID, INTAKE_MORE
 from app.services.skill_rules import REQUIRED_B3, REQUIRED_B4
-from tests.fakes import flow_with, tin
+from app.services.what_if_writer import WhatIfWriter
+from tests.fakes import FakeLLM, flow_with, tin
 
 
 class Recording:
@@ -113,9 +115,63 @@ async def test_what_if_says_what_it_cannot_try():
         state, **what_if({"factor": "sat", "value": "1450"}, {"factor": "major", "value": "CS"})
     )
 
-    assert only_major.answer == NOTHING_TO_TRY and only_major.action is None
+    assert only_major.answer.startswith("Ngành là điều kiện lọc trường") and only_major.action is None
     assert mixed.action == "simulate" and "ngành" in mixed.answer
     assert mixed.action_data["unsupported"] == ["ngành"]
+
+
+# Mục lọc trường: kèm nút mở luồng sửa đúng nhóm của ô chọn sửa hồ sơ, mỗi nhóm một nút
+async def test_what_if_filter_factors_offer_edit_buttons():
+    state = ChatState(has_results=True)
+    out = await run_scenario(
+        state,
+        **what_if(
+            {"factor": "major", "value": "CS"},
+            {"factor": "school_type", "value": "public"},
+            {"factor": "target_level", "value": "graduate"},
+        ),
+    )
+
+    assert out.answer.startswith("Ngành, loại trường và bậc học là điều kiện lọc trường")
+    assert "gợi ý trường lại" in out.answer
+    assert [(r.label, r.value) for r in out.quick_replies] == [
+        ("Sửa Mục tiêu", "Em muốn sửa Mục tiêu"),
+        ("Sửa Nguyện vọng", "Em muốn sửa Nguyện vọng"),
+    ]
+    assert out.action is None
+
+
+# Mục phần gợi ý trường không dùng: nói không làm đổi danh sách, gợi ý mục thử được, không có nút
+@pytest.mark.parametrize(("factor", "name"), [("visa_refused", "Lịch sử visa"), ("intake", "Kỳ nhập học")])
+async def test_what_if_no_effect_factors_say_list_unchanged(factor, name):
+    out = await run_scenario(ChatState(has_results=True), **what_if({"factor": factor, "value": "x"}))
+
+    assert out.answer.startswith(f"{name} không làm thay đổi danh sách trường gợi ý.")
+    assert "Bạn thử đổi được: GPA" in out.answer
+    assert out.quick_replies == [] and out.action is None
+
+
+# Mục không thuộc hai nhóm trên (hoạt động, giải thưởng...) vẫn trả câu chung
+async def test_what_if_other_factors_keep_the_general_answer():
+    out = await run_scenario(ChatState(has_results=True), **what_if({"factor": "activities", "value": "x"}))
+
+    assert out.answer == NOTHING_TO_TRY
+
+
+# Thử được kèm mục không thử được: câu ghi chú nói rõ từng loại
+async def test_what_if_note_explains_each_group():
+    out = await run_scenario(
+        ChatState(has_results=True),
+        **what_if(
+            {"factor": "sat", "value": "1450"},
+            {"factor": "activities", "value": "x"},
+            {"factor": "visa_refused", "value": "x"},
+        ),
+    )
+
+    assert out.action == "simulate"
+    assert "Mình chưa thử được: hoạt động ngoại khóa." in out.answer
+    assert "Lịch sử visa không làm thay đổi danh sách trường gợi ý." in out.answer
 
 
 async def test_what_if_hands_priorities_to_dotnet_even_without_profile_values():
@@ -460,7 +516,7 @@ async def test_profile_answer_goes_to_the_skill_owning_the_pending_question(ques
     assert ran == [expected]
 
 
-async def test_the_last_profile_answer_is_followed_by_the_advice_in_the_same_turn():
+async def test_the_last_profile_answer_asks_what_next_without_advising():
     ran: list[str] = []
     branches = build_branches(skills(ran, skill_ho_so=Recording("skill_ho_so", ran, moves_to="B3")))
     state = ChatState(current_step="B2", profile=filled(REQUIRED_B3))
@@ -468,8 +524,10 @@ async def test_the_last_profile_answer_is_followed_by_the_advice_in_the_same_tur
 
     out = await branches["collect_profile"].run(state, "8.5", tin("collect_profile"))
 
-    assert ran == ["skill_ho_so", "skill_danh_gia"]
-    assert out.answer == "trả lời của skill_ho_so\n\ntrả lời của skill_danh_gia"
+    # Lưu xong chỉ hỏi muốn làm gì tiếp, không tự đánh giá hay lên lộ trình
+    assert ran == ["skill_ho_so"]
+    assert out.answer == f"trả lời của skill_ho_so\n\n{NEXT_AFTER_SAVE}"
+    assert out.quick_replies == NEXT_AFTER_SAVE_REPLIES
 
 
 async def test_advice_without_a_profile_remembers_the_question():
@@ -624,8 +682,9 @@ async def test_only_the_template_tasks_go_to_the_skill_and_the_writer(tasks, exp
         entities["schools"] = ["Iowa", "Purdue"]  # schema: compare luôn kèm từ hai trường
     question = "đánh giá hồ sơ và cho em biết nên làm gì"
 
+    # Đủ B4: có school_list là chạy gợi ý trường, cần ngành
     await new_advice([], writer=writer).run(
-        ChatState(profile=filled(REQUIRED_B3)), question, tin(("profile_review", entities, question))
+        ChatState(profile=filled(REQUIRED_B4)), question, tin(("profile_review", entities, question))
     )
 
     assert writer.tasks == [expected]
@@ -642,6 +701,53 @@ async def test_only_choosing_schools_runs_the_recommendation_even_without_the_sc
     )
 
     assert out.action == "recommend" and out.answer == RECOMMENDING
+    assert writer.skills == []
+
+
+@pytest.mark.parametrize(
+    ("question", "tasks"),
+    [
+        ("đề xuất trường và lên lộ trình cho em", ["school_list", "roadmap"]),
+        ("đánh giá hồ sơ và đề xuất trường cho em", ["assessment", "school_list"]),
+        # Gõ sai, không khớp chữ xin trường: vẫn chạy gợi ý vì SLM đã tách ra việc chọn trường
+        ("đánh giá hồ sơ và đề xuấ trường cho tôi", ["assessment", "school_list"]),
+    ],
+)
+async def test_a_school_list_with_template_tasks_writes_them_then_runs_the_recommendation(question, tasks):
+    writer = FakeWriter()
+
+    out = await new_advice([], writer=writer).run(
+        ChatState(profile=filled(REQUIRED_B4)), question, tin(("profile_review", {"tasks": tasks}, question))
+    )
+
+    assert out.action == "recommend" and out.answer == "lời tư vấn"
+    assert writer.tasks == [[t for t in tasks if t != "school_list"]]  # khuôn chỉ nhận việc của khuôn
+
+
+async def test_a_school_list_still_runs_when_the_writer_fails():
+    question = "đánh giá hồ sơ và đề xuất trường cho em"
+
+    out = await new_advice([], writer=FakeWriter(answer=None)).run(
+        ChatState(profile=filled(REQUIRED_B4)),
+        question,
+        tin(("profile_review", {"tasks": ["assessment", "school_list"]}, question)),
+    )
+
+    assert out.answer == CANNOT_ANSWER and out.action == "recommend"
+
+
+async def test_a_school_list_with_template_tasks_asks_the_major_first():
+    profile = filled([k for k in REQUIRED_B4 if k != "major"]) | {"major": ProfileField(status="unknown")}
+    question = "đề xuất trường và lên lộ trình cho em"
+    writer = FakeWriter()
+
+    out = await new_advice([], writer=writer).run(
+        ChatState(profile=profile),
+        question,
+        tin(("profile_review", {"tasks": ["school_list", "roadmap"]}, question)),
+    )
+
+    assert out.answer == NEED_MAJOR and out.widget == Widget(type="major")
     assert writer.skills == []
 
 
@@ -758,13 +864,55 @@ async def test_claude_failing_offers_to_ask_again_instead_of_a_static_skill():
     assert out.quick_replies == [QuickReply(label=ASK_AGAIN_LABEL, value="đánh giá hồ sơ giúp em")]
 
 
-async def test_confirming_the_profile_without_a_question_waiting_evaluates_the_profile():
+async def test_confirming_the_profile_without_a_question_waiting_does_not_advise():
     ran: list[str] = []
     writer = FakeWriter()
     branches = build_branches(skills(ran, skill_ho_so=Recording("skill_ho_so", ran, moves_to="B3")), writer)
     state = ChatState(current_step="B2", profile=filled(REQUIRED_B3))
     ask(state, "X1")
 
-    await branches["collect_profile"].run(state, "Đúng rồi", tin("collect_profile"))
+    out = await branches["collect_profile"].run(state, "Đúng rồi", tin("collect_profile"))
 
-    assert writer.questions == [DEFAULT_QUESTION]  # không đem "Đúng rồi" đi dựng skill
+    assert writer.questions == []  # không dựng skill tư vấn nào
+    assert out.answer.endswith(NEXT_AFTER_SAVE)
+    assert out.quick_replies == NEXT_AFTER_SAVE_REPLIES
+
+
+CLAUDE_FILTER = {"answer": "Ngành là điều kiện lọc trường. Bạn bấm Sửa Mục tiêu rồi nhờ mình gợi ý lại nhé."}
+
+
+async def run_with_writer(llm: FakeLLM, *changes: dict):
+    branch = build_branches(skills([]), None, WhatIfWriter(llm, "claude-test"))["scenario"]
+    return await branch.run(ChatState(has_results=True), "nếu đổi", scenario(**what_if(*changes)))
+
+
+# Có writer: lời do Claude viết, nút sửa vẫn do code gắn
+async def test_what_if_writer_writes_cannot_try_answer():
+    llm = FakeLLM(CLAUDE_FILTER)
+    out = await run_with_writer(llm, {"factor": "major", "value": "CS"})
+
+    assert out.answer == CLAUDE_FILTER["answer"]
+    assert [r.label for r in out.quick_replies] == ["Sửa Mục tiêu"]
+    assert out.action is None and len(llm.calls) == 1
+
+
+# Claude sai cả hai lần (thiếu tên mục): dùng câu cố định, vẫn có nút
+async def test_what_if_writer_failure_keeps_fixed_answer():
+    bad = {"answer": "Mục này mình không thử tạm được đâu bạn nhé."}
+    llm = FakeLLM(bad, bad)
+    out = await run_with_writer(llm, {"factor": "major", "value": "CS"})
+
+    assert out.answer.startswith("Ngành là điều kiện lọc trường")
+    assert [r.label for r in out.quick_replies] == ["Sửa Mục tiêu"]
+    assert len(llm.calls) == 2
+
+
+# Không gọi Claude khi: mục không thuộc hai nhóm, hoặc có thay đổi thử được (đường simulate của GPA, SAT giữ nguyên)
+async def test_what_if_writer_not_called_for_other_factors_or_simulate():
+    llm = FakeLLM()
+    other = await run_with_writer(llm, {"factor": "activities", "value": "x"})
+    sat = await run_with_writer(llm, {"factor": "sat", "value": "1450"}, {"factor": "major", "value": "CS"})
+
+    assert other.answer == NOTHING_TO_TRY
+    assert sat.action == "simulate" and sat.action_data["changes"] == {"sat": 1450}
+    assert llm.calls == []

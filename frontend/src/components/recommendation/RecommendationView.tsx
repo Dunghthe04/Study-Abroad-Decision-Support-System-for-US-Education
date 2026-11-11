@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertCircleIcon, RefreshCwIcon } from "lucide-react";
+import { AlertCircleIcon, ClockIcon, RefreshCwIcon } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -11,7 +11,12 @@ import { useAssistant, useAssistantPageContext } from "@/components/assistant/As
 import { recommendationApi } from "@/lib/recommendation-api";
 import { whyText } from "@/lib/recommendation-labels";
 import { useAuth } from "@/contexts/AuthContext";
-import { RESET_SIMULATION_EVENT, SIMULATE_EVENT, describeSimulation } from "@/lib/simulation-link";
+import {
+  PROFILE_SAVED_EVENT,
+  RESET_SIMULATION_EVENT,
+  SIMULATE_EVENT,
+  describeSimulation,
+} from "@/lib/simulation-link";
 import { useProfileSimulation, type ProfileSimulation } from "@/lib/use-profile-simulation";
 import type {
   PickBlockName,
@@ -112,6 +117,15 @@ export function RecommendationView({ autoRun, initialOverrides }: Recommendation
     };
   }, [replaceSimulation, resetSimulation]);
 
+  // Chat vừa lưu hồ sơ chính thức: danh sách đang xem tính theo hồ sơ cũ, hiện thanh báo để học sinh tự bấm cập nhật
+  // (không tự chạy, tránh thêm lượt vào lịch sử gợi ý khi học sinh chưa muốn)
+  const [profileSaved, setProfileSaved] = useState(false);
+  useEffect(() => {
+    const onSaved = () => setProfileSaved(true);
+    window.addEventListener(PROFILE_SAVED_EVENT, onSaved);
+    return () => window.removeEventListener(PROFILE_SAVED_EVENT, onSaved);
+  }, []);
+
   // Có kết quả thì mở trợ lý bên phải một lần như bản demo (màn hẹp thì khung phủ kín nên không tự mở)
   const autoOpened = useRef(false);
   useEffect(() => {
@@ -122,6 +136,7 @@ export function RecommendationView({ autoRun, initialOverrides }: Recommendation
 
   // Chạy cả quy trình (lọc cứng, đọc ngoại khóa, chấm nhóm bằng code, lưu)
   const runNew = async () => {
+    setProfileSaved(false);
     setPhase("running");
     setError(null);
     sim.resetAll();
@@ -172,8 +187,24 @@ export function RecommendationView({ autoRun, initialOverrides }: Recommendation
             Nhận gợi ý
           </Button>
         )}
-        {/* [UC-86] popup danh sách kịch bản đã lưu: mở lại, đổi tên, xóa */}
-        {rec && <SavedScenariosButton store={scenarios} onOpen={openScenario} />}
+        {rec && (
+          <div className="flex flex-wrap items-center gap-2">
+            {/* [UC-86] popup danh sách kịch bản đã lưu: mở lại, đổi tên, xóa */}
+            <SavedScenariosButton store={scenarios} onOpen={openScenario} />
+            {/* [UC-87] sang trang lịch sử gợi ý: xem lại các lần chạy và so sánh hai lần */}
+            <Button
+              variant="outline"
+              size="sm"
+              nativeButton={false}
+              role="link"
+              render={<Link href="/recommendations/history" />}
+              className="gap-1"
+            >
+              <ClockIcon className="size-3.5" />
+              Lịch sử gợi ý
+            </Button>
+          </div>
+        )}
       </div>
 
       {error && (
@@ -181,6 +212,19 @@ export function RecommendationView({ autoRun, initialOverrides }: Recommendation
           <AlertCircleIcon className="size-4" />
           <AlertTitle>Có lỗi</AlertTitle>
           <AlertDescription className="text-xs">{error}</AlertDescription>
+        </Alert>
+      )}
+
+      {profileSaved && rec && (
+        <Alert>
+          <RefreshCwIcon className="size-4" />
+          <AlertTitle>Hồ sơ vừa được cập nhật</AlertTitle>
+          <AlertDescription className="flex flex-wrap items-center justify-between gap-2 text-xs">
+            <span>Danh sách bên dưới vẫn tính theo hồ sơ cũ.</span>
+            <Button size="sm" onClick={runNew}>
+              Cập nhật danh sách
+            </Button>
+          </AlertDescription>
         </Alert>
       )}
 

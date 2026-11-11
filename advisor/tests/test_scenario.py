@@ -2,8 +2,8 @@
 
 import pytest
 
-from app.services.scenario import SKIP_ACTION, parse_what_if
-from app.services.skills import exchange_rate
+from app.services.scenario import FILTER_FACTORS, SKIP_ACTION, parse_what_if
+from app.services.skills import exchange_rate, skill_ho_so
 from app.services.skills.validators import AskAgain
 
 
@@ -180,3 +180,22 @@ def test_label_restates_every_change_in_words():
     assert result.label() == (
         "GPA 3.8 (thang 4), SAT 1500, IELTS 7.5, ngân sách khoảng 40.000 USD mỗi năm, mức cần học bổng: bắt buộc"
     )
+
+
+# Mục không thử được chia nhóm: lọc trường, không ảnh hưởng danh sách; mục khác không vào nhóm nào
+def test_unsupported_factors_are_grouped():
+    result = parse(
+        change("major", "CS"),
+        change("intake", "Fall 2027"),
+        change("activities", "x"),
+        change("major", "Toán"),
+    )
+
+    assert result.filters == ["major"]
+    assert result.no_effect == ["intake"]
+    assert result.unsupported == ["ngành", "kỳ nhập học", "hoạt động ngoại khóa"]
+
+
+# Nút sửa của mục lọc trường mở đúng nhóm có trong ô chọn sửa hồ sơ
+def test_filter_factors_point_to_edit_sections():
+    assert set(FILTER_FACTORS.values()) <= set(skill_ho_so.EDIT_SECTIONS)

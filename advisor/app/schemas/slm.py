@@ -258,9 +258,8 @@ def _check_scenario(entities: dict[str, Any]) -> None:
 # Quy tắc nhiệm vụ của nhập hồ sơ, tư vấn hồ sơ và trung tâm. Sai thì ném ValueError
 def _check_task_entities(intent: str, entities: dict[str, Any], tasks: list[str], schools: Any) -> None:
     if intent == "collect_profile":
+        # edit không nói mục nào vẫn hợp lệ (vd bấm "Cần sửa"): skill hồ sơ hỏi lại sửa mục nào
         has_profile = bool(set(entities) & set(PROFILE_KEYS))
-        if "edit" in tasks and not has_profile:
-            raise ValueError("edit cần ít nhất một mục hồ sơ (sửa mục nào)")
         if ({"status", "restart"} & set(tasks)) and has_profile:
             raise ValueError(f"{tasks[0]} không kèm giá trị hồ sơ")
     elif intent == "profile_review":

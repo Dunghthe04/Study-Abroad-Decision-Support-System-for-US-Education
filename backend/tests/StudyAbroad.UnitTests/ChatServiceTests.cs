@@ -768,6 +768,7 @@ public class ChatServiceTests
         Assert.Equal(1, flow.Commits);
         Assert.Equal("ok", res.Answer);
         Assert.Equal("B3", session.CurrentStep);
+        Assert.True(res.ProfileSaved); // trang Gợi ý trường biết mà hiện nút cập nhật danh sách
     }
 
     // Đánh giá chạy ngay trong lượt xác nhận và chuyển chat sang B4: vẫn phải lưu hồ sơ chính thức
@@ -800,10 +801,11 @@ public class ChatServiceTests
         store.Rows.Add(session);
         var flow = new FakeProfileFlow();
 
-        await new ChatService(new FakeAdvisor("B4"), store, flow)
+        var res = await new ChatService(new FakeAdvisor("B4"), store, flow)
             .ChatAsync(userId, new AdvisorChatRequest(Hello, session.Id.ToString()));
 
         Assert.Equal(0, flow.Commits);
+        Assert.Null(res.ProfileSaved);
     }
 
     [Fact]
@@ -831,6 +833,7 @@ public class ChatServiceTests
         Assert.Equal("B2", session.CurrentStep);
         Assert.Equal(["budget"], flow.PatchedKeys); // nháp vẫn giữ những gì vừa nói
         Assert.Equal(["budget"], res.ProfileChanged);
+        Assert.Null(res.ProfileSaved); // chưa lưu được thì không báo trang cập nhật
     }
 
     [Fact]

@@ -27,13 +27,14 @@ from app.services.goal_target import plain, target_code
 from app.services.priority import detect_priorities
 from app.services.priority import from_model as priority_from_model
 from app.services.priority import label as priority_label
-from app.services.scenario import SUPPORTED_TEXT, parse_what_if
+from app.services.scenario import FILTER_FACTORS, LABELS, SUPPORTED_TEXT, WhatIf, parse_what_if
 from app.services.skill_input import skill_request_of
 from app.services.skill_rules import REQUIRED_B3, REQUIRED_B4, REQUIRED_BY_SKILL, missing_fields
 from app.services.skill_template import TEMPLATE_TASKS, build_skill, tasks_of
 from app.services.skills.profile_handler import ChatProfileHandler
 from app.services.skills.skill_danh_gia import gpa_table_of
 from app.services.skills.validators import AskAgain
+from app.services.what_if_writer import WhatIfWriter
 
 
 # Trung tâm: dùng dịch vụ, thành phố, việc (tasks) model đã tách trong ý center_referral; skill chỉ đổi mã dịch vụ sang mã DB,
@@ -129,11 +130,57 @@ class NotReadyBranch:
 NEED_RESULTS = "Bạn cần có danh sách trường gợi ý trước thì mình mới thử kịch bản được. Bạn muốn mình gợi ý trường trước không?"
 NOTHING_TO_TRY = f"Mình chưa thử được thay đổi này. Hiện mình thử được: {SUPPORTED_TEXT}."
 ASK_SCHOOL = "Bạn muốn vào trường nào? Chọn hoặc gõ tên trường ở ô bên dưới nhé."
+# Mục lọc trường: không thử tạm được, sửa hồ sơ rồi gợi ý lại (.NET không tự chạy lại gợi ý khi hồ sơ đổi)
+FILTER_TEXT = (
+    "{names} là điều kiện lọc trường nên mình không thử tạm được. Bạn sửa {names} trong hồ sơ rồi nhờ mình "
+    "gợi ý trường lại thì danh sách sẽ theo {names} mới. Sau này muốn đổi lại lúc nào cũng được."
+)
+# Mục phần gợi ý trường không dùng
+NO_EFFECT_TEXT = "{names} không làm thay đổi danh sách trường gợi ý."
+TRY_INSTEAD = f"Bạn thử đổi được: {SUPPORTED_TEXT}."
+
+
+# Câu về mục lọc trường và mục không làm đổi danh sách trường (rỗng nếu không có). Tên mục nối bằng dấu phẩy và "và",
+# viết hoa chữ đầu câu: "Ngành, loại trường và bậc học là..."
+def group_sentences(what_if: WhatIf) -> list[str]:
+    sentences = []
+    for keys, text in ((what_if.filters, FILTER_TEXT), (what_if.no_effect, NO_EFFECT_TEXT)):
+        if keys:
+            names = [LABELS[key] for key in keys]
+            joined = f"{', '.join(names[:-1])} và {names[-1]}" if len(names) > 1 else names[0]
+            sentence = text.format(names=joined)
+            sentences.append(sentence[:1].upper() + sentence[1:])
+    return sentences
+
+
+# Không có gì thử được: mục lọc trường thì kèm nút mở luồng sửa nhóm đó, mục không ảnh hưởng thì gợi ý mục thử được.
+# Mục khác (vd hoạt động, chứng chỉ tiếng Anh khác) vẫn trả câu chung
+def cannot_try(what_if: WhatIf) -> SkillOutput:
+    sentences = group_sentences(what_if)
+    if not sentences:
+        return SkillOutput(NOTHING_TO_TRY)
+    if not what_if.filters:
+        sentences.append(TRY_INSTEAD)
+    sections = dict.fromkeys(FILTER_FACTORS[key] for key in what_if.filters)
+    replies = [QuickReply(label=f"Sửa {name}", value=f"Em muốn sửa {name}") for name in sections]
+    return SkillOutput(" ".join(sentences), quick_replies=replies)
+
+
+# Có thay đổi thử được kèm mục không thử được: nói rõ từng loại sau câu "Mình thử kịch bản"
+def cannot_try_note(what_if: WhatIf) -> str:
+    grouped = {LABELS[key] for key in what_if.filters + what_if.no_effect}
+    others = [label for label in what_if.unsupported if label not in grouped]
+    sentences = ([f"Mình chưa thử được: {', '.join(others)}."] if others else []) + group_sentences(what_if)
+    return "".join(f" {sentence}" for sentence in sentences)
 
 
 # Kịch bản: what_if thì SLM đã trích và chuẩn hóa giá trị, đây kiểm tra rồi giao .NET chạy simulate (action "simulate");
 # goal_seeking thì giao .NET tìm trường và chạy goal-seek (action "goal_seek")
 class ScenarioBranch:
+    # writer: Claude viết lời khi không có gì thử được; None thì dùng câu cố định
+    def __init__(self, writer: WhatIfWriter | None = None) -> None:
+        self._writer = writer
+
     async def run(self, state: ChatState, message: str, slm: SlmTinResult) -> SkillOutput:
         entities = slm.intents[0].entities
         if entities.get("mode") == "goal_seeking":
@@ -149,8 +196,8 @@ class ScenarioBranch:
         # Ưu tiên: model trả (priority_*) thì tin model, quy tắc từ khóa bổ sung cho yếu tố model chưa nêu
         priorities = {**detect_priorities(message), **priority_from_model(entities.get("changes", []))}
         if not what_if.changes and not priorities:
-            return SkillOutput(NOTHING_TO_TRY)
-        note = f" Mình chưa thử được: {', '.join(what_if.unsupported)}." if what_if.unsupported else ""
+            return await self._cannot_try(what_if, entities.get("changes", []))
+        note = cannot_try_note(what_if)
         tried = ", ".join(
             part for part in (what_if.label(), priority_label(priorities) if priorities else "") if part
         )
@@ -158,6 +205,15 @@ class ScenarioBranch:
         if priorities:
             data["priorities"] = priorities
         return SkillOutput(f"Mình thử kịch bản: {tried}.{note}", action="simulate", action_data=data)
+
+    # Không có gì thử được mà có mục lọc trường hoặc mục không ảnh hưởng: Claude viết lời, nút sửa vẫn do code gắn.
+    # Không có writer hoặc Claude sai cả hai lần thì dùng câu cố định (cannot_try)
+    async def _cannot_try(self, what_if: WhatIf, changes: list[dict]) -> SkillOutput:
+        fallback = cannot_try(what_if)
+        if self._writer is None or not (what_if.filters or what_if.no_effect):
+            return fallback
+        answer = await self._writer.write(what_if, changes)
+        return SkillOutput(answer, quick_replies=fallback.quick_replies) if answer else fallback
 
     # "Cần gì để vào trường X": tên trường còn là chữ, .NET khớp với 249 trường rồi chạy goal-seek.
     # Không cần danh sách gợi ý có sẵn: goal-seek tính từ hồ sơ và dữ liệu trường
@@ -330,7 +386,10 @@ class GeneratedAdviceBranch:
         # phần của Dũng. Câu chỉ có việc của Dũng thì giao code có sẵn (xem others_only_output)
         tasks = (y.entities.get("tasks") or None) if y.type == "profile_review" else None
         others_only = tasks is not None and not any(t in TEMPLATE_TASKS for t in tasks)
-        school_list = y.type == "profile_review" and (asks_for_school_list(question) or others_only)
+        # Xin trường: câu có chữ xin trường, hoặc SLM tách ra việc chọn trường (câu gõ sai, nói kiểu khác vẫn nhận)
+        school_list = y.type == "profile_review" and (
+            asks_for_school_list(question) or others_only or "school_list" in (tasks or [])
+        )
         if others_only and "school_list" not in tasks:
             out = others_only_output(y, tasks, asks_for_school_list(question), state)
             if out is not None:
@@ -339,8 +398,12 @@ class GeneratedAdviceBranch:
         asked = ask_missing_profile(state, y, REQUIRED_B4 if school_list else REQUIRED_B3)
         if asked is not None:
             return asked
-        if school_list:
+        # Chỉ xin trường thì chạy gợi ý luôn. Có cả việc của khuôn (đánh giá, lộ trình chung) thì khuôn viết trước,
+        # .NET chạy gợi ý rồi nối danh sách trường vào sau câu trả lời
+        template_work = any(t in TEMPLATE_TASKS for t in tasks or [])
+        if school_list and not template_work:
             return SkillOutput(RECOMMENDING, action="recommend")
+        recommend = "recommend" if school_list else None
 
         # Code dựng skill từ khuôn (không gọi SLM, không hỏng); writer chỉ nhận việc của khuôn
         today = datetime.date.today()
@@ -349,14 +412,26 @@ class GeneratedAdviceBranch:
         answer = await self._writer.write(skill, req, state.schools, tasks_of(tasks))
         if answer is None:
             return SkillOutput(
-                CANNOT_ANSWER, quick_replies=[QuickReply(label=ASK_AGAIN_LABEL, value=question)]
+                CANNOT_ANSWER,
+                quick_replies=[QuickReply(label=ASK_AGAIN_LABEL, value=question)],
+                action=recommend,
             )
-        return SkillOutput(answer)
+        return SkillOutput(answer, action=recommend)
 
 
-# Trả lời câu hồ sơ đang chờ hoặc cập nhật hồ sơ. Hồ sơ vừa đủ trong lượt này (học sinh bấm "Đúng rồi" ở X1)
-# thì tư vấn luôn, không bắt học sinh nhắn thêm một lần nữa mới thấy kết quả.
-# Có câu tư vấn bị hoãn (pending_advice) thì trả lời đúng câu đó, không phải tin "Đúng rồi" của lượt này.
+# Hồ sơ vừa lưu mà không có câu tư vấn bị hoãn: hỏi học sinh muốn làm gì tiếp. Nút gửi câu như học sinh tự gõ,
+# đi qua SLM nên chỉ chạy đúng việc được chọn
+NEXT_AFTER_SAVE = "Bạn muốn mình làm gì tiếp?"
+NEXT_AFTER_SAVE_REPLIES = [
+    QuickReply(label="Gợi ý trường", value="Gợi ý trường cho em"),
+    QuickReply(label="Đánh giá hồ sơ", value="Đánh giá hồ sơ của em"),
+    QuickReply(label="Lên lộ trình", value="Lên lộ trình cho em"),
+]
+
+
+# Trả lời câu hồ sơ đang chờ hoặc cập nhật hồ sơ. Hồ sơ vừa đủ trong lượt này (học sinh bấm "Đúng rồi" ở X1):
+# có câu tư vấn bị hoãn (pending_advice) thì trả lời luôn đúng câu đó, không bắt học sinh nhắn lại;
+# không có thì chỉ lưu rồi hỏi muốn làm gì tiếp, không tự đánh giá hay lên lộ trình.
 # Tin đã có ý profile_review thì thôi: ChatFlow sẽ chạy nhánh tư vấn cho ý đó ngay sau, tư vấn ở đây nữa là trả lời hai lần
 class ProfileBranch:
     def __init__(self, handler: ChatProfileHandler, advice: Branch) -> None:
@@ -373,21 +448,25 @@ class ProfileBranch:
                 return combine(
                     output, await self._advice.run(state, original.span, SlmTinResult(intents=[original]))
                 )
-            return combine(output, await self._advice.run(state, message, slm))
+            return combine(output, SkillOutput(NEXT_AFTER_SAVE, quick_replies=list(NEXT_AFTER_SAVE_REPLIES)))
         return output
 
 
 # Bảng nhánh theo loại câu hỏi SLM. skills: các skill cũ do skills.build_handlers tạo.
 # main.py luôn truyền writer nên chạy thật dùng nhánh tư vấn mới. Chỉ test cũ (chưa viết lại) không
 # truyền, khi đó tạm dùng LegacyAdviceBranch
-def build_branches(skills: dict[str, SkillHandler], writer: AdviceWriter | None = None) -> dict[str, Branch]:
+def build_branches(
+    skills: dict[str, SkillHandler],
+    writer: AdviceWriter | None = None,
+    what_if_writer: WhatIfWriter | None = None,
+) -> dict[str, Branch]:
     advice: Branch = (
         GeneratedAdviceBranch(skills, writer) if writer is not None else LegacyAdviceBranch(skills)
     )
     return {
         "collect_profile": ProfileBranch(ChatProfileHandler(skills), advice),
         "profile_review": advice,
-        "scenario": ScenarioBranch(),
+        "scenario": ScenarioBranch(what_if_writer),
         "knowledge": KnowledgeBranch(skills["skill_tra_loi"])
         if "skill_tra_loi" in skills
         else NotReadyBranch(),

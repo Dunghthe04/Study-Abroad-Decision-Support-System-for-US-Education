@@ -111,9 +111,11 @@ namespace StudyAbroad.Application.Advisor
             // Đánh giá chạy luôn trong lượt này nên chat có thể đã sang B4.
             // Lưu lỗi thì giữ nguyên trạng thái cũ (vẫn ở X1) và nháp, báo lỗi để học sinh sửa rồi xác nhận lại
             var nextStep = CurrentStep(response.State);
+            var profileSaved = false;
             if (QuestionOf(state) == ReviewQuestion && IsPastReview(nextStep) && !IsPastReview(session.CurrentStep))
             {
                 var commitError = await CommitProfileAsync(userId, ct);
+                profileSaved = commitError is null;
                 if (commitError is not null)
                 {
                     response = response with
@@ -193,6 +195,7 @@ namespace StudyAbroad.Application.Advisor
                 State = null,
                 Profile = null,
                 ProfileChanged = changed,
+                ProfileSaved = profileSaved ? true : null,
                 FormStep = FormStepOf(response.State),
                 SessionId = session.Id.ToString(),
                 Skills = null,

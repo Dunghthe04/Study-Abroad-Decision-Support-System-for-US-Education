@@ -26,6 +26,7 @@ from app.services.scenario_writer import ScenarioWriter
 from app.services.skills import build_handlers
 from app.services.slm_classifier import OllamaSlm, output_format
 from app.services.transcript_reader import TranscriptReader
+from app.services.what_if_writer import WhatIfWriter
 
 
 # Khai báo vòng đơi fastapi
@@ -94,7 +95,9 @@ async def lifespan(app: FastAPI):
         )
         # Skill hồ sơ do code dựng từ khuôn (skill_template); Claude viết câu trả lời theo skill đó
         writer = AdviceWriter(claude)
-        app.state.chat_flow = ChatFlow(slm, build_branches(skills, writer))
+        # Câu "nếu đổi X" mà X không thử được (ngành, bang, kỳ nhập học...): Claude viết lời giải thích
+        what_if_writer = WhatIfWriter(claude, settings.anthropic_model)
+        app.state.chat_flow = ChatFlow(slm, build_branches(skills, writer, what_if_writer))
         yield
         if app.state.db_pool is not None:
             await asyncio.to_thread(app.state.db_pool.close)

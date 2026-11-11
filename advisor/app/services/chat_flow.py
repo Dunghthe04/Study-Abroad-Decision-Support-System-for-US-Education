@@ -343,8 +343,10 @@ class ChatFlow:
 
         # Câu hồ sơ đang chờ, chụp trước khi chạy nhánh để cuối lượt biết đã được trả lời chưa
         pending = (state.question_id, state.last_question)
-        # 1. SLM đọc tin nhắn. Bấm nút của câu đang hỏi là trả lời hồ sơ rõ ràng, không cần SLM đoán
-        asked_slm = not (state.question_id and is_button(state.question_id, message))
+        # 1. SLM đọc tin nhắn. Bấm nút của câu đang hỏi, hoặc bấm nút ở menu sửa hồ sơ, là trả lời hồ sơ rõ ràng, không cần SLM đoán
+        asked_slm = not (
+            (state.question_id and is_button(state.question_id, message)) or is_edit_menu(state, message)
+        )
         fell_back = False
         model_intents: list[SlmY] = []
         if not asked_slm:
@@ -479,6 +481,14 @@ def is_button(question_id: str | None, message: str) -> bool:
     )
 
 
+# Không có câu đang hỏi mà tin là câu ô chọn sửa hồ sơ ("Em muốn sửa Mục tiêu", vd nút của câu trả lời kịch bản):
+# cũng là bấm nút, giao nhánh hồ sơ mở luồng sửa
+def is_edit_menu(state: ChatState, message: str) -> bool:
+    from app.services.skills import skill_ho_so
+
+    return state.question_id is None and skill_ho_so.read_edit_menu(message) is not None
+
+
 # Hồ sơ đủ mục bắt buộc và không còn giá trị nào chờ xác nhận (said_in_B0)
 def profile_ready(state: ChatState) -> bool:
     if missing_fields(state.profile, REQUIRED_B3):
@@ -486,8 +496,23 @@ def profile_ready(state: ChatState) -> bool:
     return all(field.status != "said_in_B0" for field in state.profile.values())
 
 
+# Hồ sơ có giá trị không phải chỉ nói ở câu đầu (said_in_B0): giá trị từ DB, form hoặc lần trước
+def has_saved_profile(state: ChatState) -> bool:
+    return any(field.status != "said_in_B0" for field in state.profile.values())
+
+
+# Bắt đầu hỏi mà hồ sơ đã có từ trước: chỉ hỏi mục bắt buộc của việc đang làm (gộp với việc trước nếu đã đặt).
+# Đang hỏi đủ trong chat (hồ sơ trống lúc bắt đầu) thì giữ nguyên, không đổi giữa chừng
+def limit_to_required(state: ChatState, required: list[str]) -> None:
+    if state.required_only is not None:
+        state.required_only = list(dict.fromkeys([*state.required_only, *required]))
+    elif state.intake_mode != "chat" and has_saved_profile(state):
+        state.required_only = list(required)
+
+
 # Bắt đầu hỏi hồ sơ khi một skill bị chặn vì thiếu hồ sơ
 def start_intake(state: ChatState, required: list[str] = REQUIRED_B3) -> SkillOutput:
+    limit_to_required(state, required)
     # Đang trả lời trong chat thì hỏi tiếp phần còn thiếu
     if state.intake_mode == "chat":
         return ask_next_missing(state, INTAKE_MORE)
