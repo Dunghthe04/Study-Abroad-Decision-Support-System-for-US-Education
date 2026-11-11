@@ -342,7 +342,7 @@ class ChatFlow:
         # Câu hồ sơ đang chờ, chụp trước khi chạy nhánh để cuối lượt biết đã được trả lời chưa
         pending = (state.question_id, state.last_question)
         # 1. SLM đọc tin nhắn. Bấm nút của câu đang hỏi là trả lời hồ sơ rõ ràng, không cần SLM đoán
-        if state.question_id and is_button(state.question_id, message):
+        if (state.question_id and is_button(state.question_id, message)) or is_edit_menu(state, message):
             slm = SlmTinResult(intents=[SlmY(type="collect_profile", span=message)])
         else:
             slm = await self._slm.classify(state, message)
@@ -467,6 +467,14 @@ def is_button(question_id: str | None, message: str) -> bool:
     return buttons.pressed(question_id, message, can_skip=True) is not None or skill_ho_so.is_form_text(
         question_id, message
     )
+
+
+# Không có câu đang hỏi mà tin là câu ô chọn sửa hồ sơ ("Em muốn sửa Mục tiêu", vd nút của câu trả lời kịch bản):
+# cũng là bấm nút, giao nhánh hồ sơ mở luồng sửa
+def is_edit_menu(state: ChatState, message: str) -> bool:
+    from app.services.skills import skill_ho_so
+
+    return state.question_id is None and skill_ho_so.read_edit_menu(message) is not None
 
 
 # Hồ sơ đủ mục bắt buộc và không còn giá trị nào chờ xác nhận (said_in_B0)

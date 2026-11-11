@@ -27,7 +27,7 @@ from app.services.goal_target import plain, target_code
 from app.services.priority import detect_priorities
 from app.services.priority import from_model as priority_from_model
 from app.services.priority import label as priority_label
-from app.services.scenario import SUPPORTED_TEXT, parse_what_if
+from app.services.scenario import FILTER_FACTORS, LABELS, SUPPORTED_TEXT, WhatIf, parse_what_if
 from app.services.skill_input import skill_request_of
 from app.services.skill_rules import REQUIRED_B3, REQUIRED_B4, REQUIRED_BY_SKILL, missing_fields
 from app.services.skill_template import TEMPLATE_TASKS, build_skill, tasks_of
@@ -129,6 +129,48 @@ class NotReadyBranch:
 NEED_RESULTS = "Bạn cần có danh sách trường gợi ý trước thì mình mới thử kịch bản được. Bạn muốn mình gợi ý trường trước không?"
 NOTHING_TO_TRY = f"Mình chưa thử được thay đổi này. Hiện mình thử được: {SUPPORTED_TEXT}."
 ASK_SCHOOL = "Bạn muốn vào trường nào? Chọn hoặc gõ tên trường ở ô bên dưới nhé."
+# Mục lọc trường: không thử tạm được, sửa hồ sơ rồi gợi ý lại (.NET không tự chạy lại gợi ý khi hồ sơ đổi)
+FILTER_TEXT = (
+    "{names} là điều kiện lọc trường nên mình không thử tạm được. Bạn sửa {names} trong hồ sơ rồi nhờ mình "
+    "gợi ý trường lại thì danh sách sẽ theo {names} mới. Sau này muốn đổi lại lúc nào cũng được."
+)
+# Mục phần gợi ý trường không dùng
+NO_EFFECT_TEXT = "{names} không làm thay đổi danh sách trường gợi ý."
+TRY_INSTEAD = f"Bạn thử đổi được: {SUPPORTED_TEXT}."
+
+
+# Câu về mục lọc trường và mục không làm đổi danh sách trường (rỗng nếu không có). Tên mục nối bằng dấu phẩy và "và",
+# viết hoa chữ đầu câu: "Ngành, loại trường và bậc học là..."
+def group_sentences(what_if: WhatIf) -> list[str]:
+    sentences = []
+    for keys, text in ((what_if.filters, FILTER_TEXT), (what_if.no_effect, NO_EFFECT_TEXT)):
+        if keys:
+            names = [LABELS[key] for key in keys]
+            joined = f"{', '.join(names[:-1])} và {names[-1]}" if len(names) > 1 else names[0]
+            sentence = text.format(names=joined)
+            sentences.append(sentence[:1].upper() + sentence[1:])
+    return sentences
+
+
+# Không có gì thử được: mục lọc trường thì kèm nút mở luồng sửa nhóm đó, mục không ảnh hưởng thì gợi ý mục thử được.
+# Mục khác (vd hoạt động, chứng chỉ tiếng Anh khác) vẫn trả câu chung
+def cannot_try(what_if: WhatIf) -> SkillOutput:
+    sentences = group_sentences(what_if)
+    if not sentences:
+        return SkillOutput(NOTHING_TO_TRY)
+    if not what_if.filters:
+        sentences.append(TRY_INSTEAD)
+    sections = dict.fromkeys(FILTER_FACTORS[key] for key in what_if.filters)
+    replies = [QuickReply(label=f"Sửa {name}", value=f"Em muốn sửa {name}") for name in sections]
+    return SkillOutput(" ".join(sentences), quick_replies=replies)
+
+
+# Có thay đổi thử được kèm mục không thử được: nói rõ từng loại sau câu "Mình thử kịch bản"
+def cannot_try_note(what_if: WhatIf) -> str:
+    grouped = {LABELS[key] for key in what_if.filters + what_if.no_effect}
+    others = [label for label in what_if.unsupported if label not in grouped]
+    sentences = ([f"Mình chưa thử được: {', '.join(others)}."] if others else []) + group_sentences(what_if)
+    return "".join(f" {sentence}" for sentence in sentences)
 
 
 # Kịch bản: what_if thì SLM đã trích và chuẩn hóa giá trị, đây kiểm tra rồi giao .NET chạy simulate (action "simulate");
@@ -149,8 +191,8 @@ class ScenarioBranch:
         # Ưu tiên: model trả (priority_*) thì tin model, quy tắc từ khóa bổ sung cho yếu tố model chưa nêu
         priorities = {**detect_priorities(message), **priority_from_model(entities.get("changes", []))}
         if not what_if.changes and not priorities:
-            return SkillOutput(NOTHING_TO_TRY)
-        note = f" Mình chưa thử được: {', '.join(what_if.unsupported)}." if what_if.unsupported else ""
+            return cannot_try(what_if)
+        note = cannot_try_note(what_if)
         tried = ", ".join(
             part for part in (what_if.label(), priority_label(priorities) if priorities else "") if part
         )

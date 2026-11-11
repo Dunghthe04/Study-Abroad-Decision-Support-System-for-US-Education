@@ -41,11 +41,14 @@ class ChatProfileHandler:
         return await self._collect(state, message, said)
 
     # Ở bảng rà soát: nút Cần sửa, ô chọn nhóm, Sửa trên form, Điền lại từ đầu thì xử lý luôn, không gọi skill.
+    # Không có câu đang hỏi (vd nút sửa của câu trả lời kịch bản) thì chỉ nhận câu ô chọn nhóm.
     # Đang sửa mà bấm Giữ như cũ thì sang câu kế tiếp, hồ sơ không đổi.
     # Đang sửa: trả lời xong một mục thì skill quay về bảng rà soát X1. Còn mục chờ sửa thì hỏi mục kế tiếp,
     # hết thì để bảng hiện và thôi đánh dấu đang sửa
     async def _collect(self, state: ChatState, message: str, said: set[str]) -> SkillOutput:
-        if state.question_id == "X1":
+        if state.question_id == "X1" or (
+            state.question_id is None and skill_ho_so.read_edit_menu(message) is not None
+        ):
             choice = edit_choice(state, message)
             if choice is not None:
                 return choice

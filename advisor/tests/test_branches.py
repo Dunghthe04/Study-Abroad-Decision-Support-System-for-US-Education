@@ -103,9 +103,63 @@ async def test_what_if_says_what_it_cannot_try():
         state, **what_if({"factor": "sat", "value": "1450"}, {"factor": "major", "value": "CS"})
     )
 
-    assert only_major.answer == NOTHING_TO_TRY and only_major.action is None
+    assert only_major.answer.startswith("Ngành là điều kiện lọc trường") and only_major.action is None
     assert mixed.action == "simulate" and "ngành" in mixed.answer
     assert mixed.action_data["unsupported"] == ["ngành"]
+
+
+# Mục lọc trường: kèm nút mở luồng sửa đúng nhóm của ô chọn sửa hồ sơ, mỗi nhóm một nút
+async def test_what_if_filter_factors_offer_edit_buttons():
+    state = ChatState(has_results=True)
+    out = await run_scenario(
+        state,
+        **what_if(
+            {"factor": "major", "value": "CS"},
+            {"factor": "school_type", "value": "public"},
+            {"factor": "target_level", "value": "graduate"},
+        ),
+    )
+
+    assert out.answer.startswith("Ngành, loại trường và bậc học là điều kiện lọc trường")
+    assert "gợi ý trường lại" in out.answer
+    assert [(r.label, r.value) for r in out.quick_replies] == [
+        ("Sửa Mục tiêu", "Em muốn sửa Mục tiêu"),
+        ("Sửa Nguyện vọng", "Em muốn sửa Nguyện vọng"),
+    ]
+    assert out.action is None
+
+
+# Mục phần gợi ý trường không dùng: nói không làm đổi danh sách, gợi ý mục thử được, không có nút
+@pytest.mark.parametrize(("factor", "name"), [("visa_refused", "Lịch sử visa"), ("intake", "Kỳ nhập học")])
+async def test_what_if_no_effect_factors_say_list_unchanged(factor, name):
+    out = await run_scenario(ChatState(has_results=True), **what_if({"factor": factor, "value": "x"}))
+
+    assert out.answer.startswith(f"{name} không làm thay đổi danh sách trường gợi ý.")
+    assert "Bạn thử đổi được: GPA" in out.answer
+    assert out.quick_replies == [] and out.action is None
+
+
+# Mục không thuộc hai nhóm trên (hoạt động, giải thưởng...) vẫn trả câu chung
+async def test_what_if_other_factors_keep_the_general_answer():
+    out = await run_scenario(ChatState(has_results=True), **what_if({"factor": "activities", "value": "x"}))
+
+    assert out.answer == NOTHING_TO_TRY
+
+
+# Thử được kèm mục không thử được: câu ghi chú nói rõ từng loại
+async def test_what_if_note_explains_each_group():
+    out = await run_scenario(
+        ChatState(has_results=True),
+        **what_if(
+            {"factor": "sat", "value": "1450"},
+            {"factor": "activities", "value": "x"},
+            {"factor": "visa_refused", "value": "x"},
+        ),
+    )
+
+    assert out.action == "simulate"
+    assert "Mình chưa thử được: hoạt động ngoại khóa." in out.answer
+    assert "Lịch sử visa không làm thay đổi danh sách trường gợi ý." in out.answer
 
 
 async def test_what_if_hands_priorities_to_dotnet_even_without_profile_values():

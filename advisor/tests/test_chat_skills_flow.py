@@ -6,7 +6,7 @@ from app.services.intake import CHAT_BUTTON, FORM_BUTTON, INTAKE_ASK, INTAKE_ID
 from app.services.ollama import OllamaError
 from app.services.skills import build_handlers
 from app.services.skills.skill_ho_so import EDIT_MENU, OPTIONAL_QUESTIONS, SAVED, next_question
-from tests.fakes import FakeLLM, flow_with
+from tests.fakes import FakeLLM, flow_with, tin
 
 
 async def turn(llm: FakeLLM, message: str, **state_fields):
@@ -683,3 +683,17 @@ async def test_funding_button_saves_db_code():
     )
 
     assert res.state.profile["funding_source"].value == "bank_loan"
+
+
+# Nút sửa của câu trả lời kịch bản lúc không có câu đang hỏi: đi thẳng vào luồng sửa, không qua SLM
+# (SLM giả trả out_of_scope, nếu bị gọi thì sẽ không hỏi câu B1.1)
+async def test_edit_button_after_results_skips_slm():
+    flow = flow_with(build_handlers(FakeLLM(), "qwen3:8b"), tin(("out_of_scope", {"subtype": "ambiguous"})))
+    state = ChatState(
+        current_step="B3", profile=full_profile(), intake_mode="chat", asked={"X1": 1}, has_results=True
+    )
+    req = ChatRequest(messages=[ChatMessage(role="user", content="Em muốn sửa Mục tiêu")], state=state)
+    res = await flow.reply(req)
+
+    assert res.state.question_id == "B1.1"
+    assert res.state.edit_queue == ["B1.2", "B1.3", "B1.4"]

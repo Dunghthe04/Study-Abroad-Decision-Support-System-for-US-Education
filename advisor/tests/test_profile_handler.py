@@ -519,3 +519,13 @@ async def test_restart_keeping_everything_returns_to_review():
     assert (state.question_id, state.edit_queue) == ("X1", None)
     assert output.widget.type == "review"
     assert state.profile == full_profile()
+
+
+# Nút sửa của câu trả lời kịch bản: không có câu đang hỏi mà nhận câu ô chọn thì mở luồng sửa nhóm đó, không gọi Qwen
+async def test_edit_menu_text_without_pending_question_starts_edit():
+    llm = FakeLLM()
+    state = ChatState(current_step="B3", profile=full_profile(), intake_mode="chat", asked={"X1": 1})
+    output = await make_handler(llm).collect(state, "Em muốn sửa Mục tiêu", MAC_DINH)
+    assert (state.question_id, state.edit_queue) == ("B1.1", ["B1.2", "B1.3", "B1.4"])
+    assert KEEP in labels(output)
+    assert llm.calls == []
