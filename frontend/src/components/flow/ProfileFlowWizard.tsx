@@ -21,6 +21,7 @@ import { Step6Review } from "./Step6Review";
 import { profileFlowApi } from "@/lib/profile-flow-api";
 import { migrateLegacyStep3 } from "@/lib/certification-utils";
 import { recommendationApi } from "@/lib/recommendation-api";
+import { goalsNeedMajor, goalsQuestion, onlySchoolList, parseGoals, type FormGoal } from "@/lib/form-goals";
 import type {
   GoalDraft,
   TranscriptDraft,
@@ -76,10 +77,14 @@ const STEP_SUGGESTIONS: Record<number, string> = {
 
 // Mục 7: trang đã đủ ô bắt buộc chưa (giống nút "Tiếp tục" của từng trang) để chat được chuyển form qua.
 // Trang 1 không xét ngành: chat tự bắt buộc ngành (hoặc "Chưa rõ"). Trang 2 chỉ cần đã có GPA
-function stepReady(step: number, draft: ProfileFlowDraft): boolean {
+function stepReady(step: number, draft: ProfileFlowDraft, goals: FormGoal[]): boolean {
   switch (step) {
     case 1:
-      return Boolean(draft.step1.currentEducationLevel && draft.step1.targetDegreeLevel);
+      return Boolean(
+        draft.step1.currentEducationLevel &&
+          draft.step1.targetDegreeLevel &&
+          (!goalsNeedMajor(goals) || draft.step1.targetMajor)
+      );
     case 2:
       return draft.step2.calculatedGpa4Scale != null || draft.step2.manualGpa10Scale != null;
     case 4:
@@ -93,6 +98,8 @@ function stepReady(step: number, draft: ProfileFlowDraft): boolean {
 
 // Phải khớp CONTINUE_CHAT trong advisor/app/services/intake.py
 const CONTINUE_CHAT = "Tiếp tục bằng chat";
+// Mục tiêu đã tích khi vào form trực tiếp; không lưu vào nháp hồ sơ vì đây là việc muốn làm, không phải thông tin hồ sơ
+const GOALS_KEY = "usas_flow_goals";
 
 export function ProfileFlowWizard() {
   const router = useRouter();
@@ -111,6 +118,21 @@ export function ProfileFlowWizard() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   // Mở form từ chat (?from=chat): bước 6 lưu hồ sơ rồi quay về chat trả lời câu học sinh đã hỏi, không gợi ý trường
   const [fromChat, setFromChat] = useState(false);
+  // Mục tiêu ở trang 1. Mở từ chat có ?goal= thì lấy theo câu hỏi trong chat và khóa lại
+  const [goals, setGoals] = useState<FormGoal[]>([]);
+  const goalsLocked = fromChat && goals.length > 0;
+  const goalsRef = useRef<FormGoal[]>([]);
+  useEffect(() => {
+    goalsRef.current = goals;
+  }, [goals]);
+  const updateGoals = (next: FormGoal[]) => {
+    setGoals(next);
+    try {
+      sessionStorage.setItem(GOALS_KEY, next.join(","));
+    } catch {
+      // trình duyệt chặn storage → chỉ giữ trong trang
+    }
+  };
 
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isInitialMount = useRef(true);
@@ -144,6 +166,15 @@ export function ProfileFlowWizard() {
         const params = new URLSearchParams(window.location.search);
         const openedFromChat = params.get("from") === "chat";
         setFromChat(openedFromChat);
+        let savedGoals: string | null = null;
+        if (!openedFromChat) {
+          try {
+            savedGoals = sessionStorage.getItem(GOALS_KEY);
+          } catch {
+            // bỏ qua
+          }
+        }
+        setGoals(parseGoals(openedFromChat ? params.get("goal") : savedGoals));
         const editing = params.get("edit") === "1" || openedFromChat;
         // Tải metadata động song song với trạng thái nháp
         const [metaData, stateData, latest] = await Promise.all([
@@ -255,13 +286,13 @@ export function ProfileFlowWizard() {
     if (formStep == null || formStep === from) return;
     let to = formStep;
     for (let s = from; s < formStep; s++) {
-      if (!stepReady(s, nextDraft)) {
+      if (!stepReady(s, nextDraft, goalsRef.current)) {
         to = s;
         break;
       }
     }
     if (to === from) return;
-    const ready = [1, 2, 3, 4, 5].filter((s) => s < to && stepReady(s, nextDraft));
+    const ready = [1, 2, 3, 4, 5].filter((s) => s < to && stepReady(s, nextDraft, goalsRef.current));
     const nextCompleted = [...new Set([...completedStepsRef.current, ...ready])].sort((a, b) => a - b);
     setCompletedSteps(nextCompleted);
     setCurrentStep(to);
@@ -412,6 +443,8 @@ export function ProfileFlowWizard() {
   };
 
   // Xác nhận commit ở bước 6
+  // Chỉ tích "Gợi ý trường" (hoặc chưa tích gì, như form cũ) thì sang trang gợi ý trường; còn lại về chat
+  const backToChat = fromChat || (goals.length > 0 && !onlySchoolList(goals));
   const handleSubmitCommit = async () => {
     setIsSubmitting(true);
     setErrorMessage(null);
@@ -437,7 +470,7 @@ export function ProfileFlowWizard() {
       } catch {
         // trình duyệt chặn storage → coi như hồ sơ mới
       }
-      if (!fromChat && lastCommitted === draftJson && (await recommendationApi.getLatest().catch(() => null))) {
+      if (!backToChat && lastCommitted === draftJson && (await recommendationApi.getLatest().catch(() => null))) {
         router.push("/recommendations");
         return;
       }
@@ -454,6 +487,11 @@ export function ProfileFlowWizard() {
         // Mở từ chat: mở khung chat, advisor thấy hồ sơ đủ thì trả lời luôn câu học sinh đã hỏi
         if (fromChat) {
           openAssistant(CONTINUE_CHAT);
+          return;
+        }
+        // Vào form trực tiếp mà tích cả đánh giá hay lộ trình: gửi một câu gộp các việc đã tích, chat trả lời đủ
+        if (backToChat) {
+          openAssistant(goalsQuestion(goals));
           return;
         }
         router.push("/recommendations?run=1");
@@ -538,6 +576,10 @@ export function ProfileFlowWizard() {
                 metadata={metadata}
                 onUpdate={updateStep1}
                 onNext={handleNext}
+                goals={goals}
+                goalsLocked={goalsLocked}
+                showGoals={!fromChat || goals.length > 0}
+                onGoalsChange={updateGoals}
               />
             )}
 
@@ -594,7 +636,7 @@ export function ProfileFlowWizard() {
                 onEditStep={handleSelectStep}
                 onPrev={handlePrev}
                 onSubmit={handleSubmitCommit}
-                backToChat={fromChat}
+                backToChat={backToChat}
                 isSubmitting={isSubmitting}
                 submitError={errorMessage}
               />
