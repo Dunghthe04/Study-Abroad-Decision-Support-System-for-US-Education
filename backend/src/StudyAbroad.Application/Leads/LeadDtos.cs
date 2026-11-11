@@ -1,11 +1,21 @@
 namespace StudyAbroad.Application.Leads;
 
+/// <summary>
+/// UC-42. <paramref name="StudentUserId"/>: bắt buộc khi phụ huynh gửi thay con, học sinh tự gửi thì bỏ qua.
+/// <paramref name="SharedFields"/>: key trong LeadSharedFields, bắt buộc có "contact".
+/// <paramref name="AcknowledgedCenterContact"/>: học sinh 16–17 tuổi phải tích.
+/// <paramref name="SharedProfile"/>: giữ cho client cũ, server tự tính lại từ SharedFields.
+/// </summary>
 public record CreateLeadRequest(
     Guid StudyCenterId,
     string? StudyLevel = null,
     string? ContactPhone = null,
     string? Message = null,
-    bool SharedProfile = false);
+    bool SharedProfile = false,
+    Guid? StudentUserId = null,
+    IReadOnlyList<string>? SharedFields = null,
+    bool ConsentAccepted = false,
+    bool AcknowledgedCenterContact = false);
 
 public record LeadDto(
     Guid Id,
@@ -18,7 +28,13 @@ public record LeadDto(
     string? Message,
     bool SharedProfile,
     string Status,
-    DateTime CreatedAt);
+    DateTime CreatedAt)
+{
+    // UC-42. Để dạng init (không phải tham số có mặc định) vì LeadRepository dựng LeadDto trong truy vấn EF,
+    // mà cây biểu thức không cho dùng tham số tùy chọn.
+    public Guid? SubmittedByUserId { get; init; }
+    public IReadOnlyList<string> SharedFields { get; init; } = [];
+}
 
 /// <summary>
 /// [UC-73] Tóm tắt hồ sơ học sinh được chia sẻ cho trung tâm (chỉ khi SharedProfile = true).
