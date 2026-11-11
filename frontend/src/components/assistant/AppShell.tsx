@@ -30,7 +30,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         } as React.CSSProperties
       }
     >
-      <div className={cn("flex flex-1 flex-col transition-[padding] duration-200", pushed && "min-[900px]:pr-(--assistant-w)")}>
+      <div className={cn("flex flex-1 flex-col transition-[padding] duration-200", pushed && "min-[900px]:pr-[calc(var(--assistant-w)+0.75rem)]")}>
         {!adminRoute && <SiteHeader />}
         <main
           className={cn(
