@@ -31,5 +31,21 @@ public interface ILeadService
         Guid leadId,
         string newStatus,
         CancellationToken ct = default);
+
+    // [USAS-2053 / UC-74] Đọc và gửi tin nhắn trả lời trong yêu cầu liên hệ phía Trung tâm
+    Task<LeadMessagesThreadDto> GetReceivedLeadMessagesForCenterUserAsync(
+        Guid userId,
+        string? userEmail,
+        string userRole,
+        Guid leadId,
+        CancellationToken ct = default);
+
+    Task<SendLeadMessageResultDto> SendLeadMessageForCenterUserAsync(
+        Guid userId,
+        string? userEmail,
+        string userRole,
+        Guid leadId,
+        string content,
+        CancellationToken ct = default);
 }
 
