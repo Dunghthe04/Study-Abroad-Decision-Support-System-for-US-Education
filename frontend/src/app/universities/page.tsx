@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { connection } from "next/server";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { ErrorFallback } from "@/components/ui/error-fallback";
 import { UniversityListView } from "@/components/universities/UniversityListView";
 import { getUniversityFilterOptions, searchUniversities } from "@/lib/university-api";
 import type { UniversityFilterOptions, UniversityListItem, UniversitySearchParams } from "@/types/university";
@@ -66,14 +66,10 @@ export default async function UniversitiesPage({ searchParams }: UniversitiesPag
 
   if (!data || !options) {
     return (
-      <section className="py-10 space-y-4">
-        <Alert variant="destructive">
-          <AlertTitle className="font-bold">Không thể tải dữ liệu trường học</AlertTitle>
-          <AlertDescription>
-            Đã xảy ra lỗi khi kết nối với máy chủ API. Vui lòng kiểm tra lại kết nối mạng hoặc thử lại sau.
-          </AlertDescription>
-        </Alert>
-      </section>
+      <ErrorFallback
+        title="Không thể tải dữ liệu trường học"
+        description="Đã xảy ra lỗi khi kết nối với máy chủ API. Vui lòng kiểm tra lại kết nối mạng hoặc thử lại sau."
+      />
     );
   }
 
