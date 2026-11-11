@@ -22,6 +22,7 @@ import {
 import { targetSchoolsApi } from "@/lib/api";
 import type { TargetSchoolDto, TargetSchoolSummaryDto } from "@/types/api";
 import { Button } from "@/components/ui/button";
+import { ErrorFallback } from "@/components/ui/error-fallback";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -168,12 +169,13 @@ export function TargetSchoolListView() {
 
   if (error) {
     return (
-      <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-8 text-center">
-        <p className="text-sm font-medium text-destructive">{error}</p>
-        <Button onClick={fetchData} variant="outline" size="sm" className="mt-4 gap-2">
-          Thử lại
-        </Button>
-      </div>
+      <ErrorFallback
+        description={error}
+        action={{
+          label: "Thử lại",
+          onClick: fetchData,
+        }}
+      />
     );
   }
 
