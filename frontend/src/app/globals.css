@@ -244,3 +244,9 @@
 [class*="[scrollbar-width:none]"]::-webkit-scrollbar {
   display: none !important;
 }
+
+/* Dải logo trường ở trang chủ: chạy nửa chiều rộng (một bản sao) rồi lặp lại */
+@keyframes usas-logo-strip {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
