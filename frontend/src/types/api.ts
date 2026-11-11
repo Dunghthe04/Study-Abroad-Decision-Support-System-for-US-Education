@@ -445,3 +445,34 @@ export interface UpdateLeadStatusRequest {
   status: string;
 }
 
+// [USAS-2053 / UC-74] Tin nhắn trao đổi trong yêu cầu liên hệ
+export interface LeadMessageDto {
+  id: string;
+  leadId: string;
+  senderUserId: string;
+  senderName: string;
+  senderRole: string;
+  isFromCenter: boolean;
+  content: string;
+  isFlagged: boolean;
+  flagReason?: string | null;
+  status: "visible" | "removed" | string;
+  createdAt: string;
+}
+
+export interface LeadMessagesThreadDto {
+  leadId: string;
+  leadStatus: string;
+  messages: LeadMessageDto[];
+  flaggedCount: number;
+}
+
+export interface SendLeadMessageRequest {
+  content: string;
+}
+
+export interface SendLeadMessageResultDto {
+  message: LeadMessageDto;
+  leadStatus: string;
+}
+
