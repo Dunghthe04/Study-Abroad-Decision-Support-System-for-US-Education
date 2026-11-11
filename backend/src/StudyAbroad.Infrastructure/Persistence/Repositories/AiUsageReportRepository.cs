@@ -6,9 +6,28 @@ namespace StudyAbroad.Infrastructure.Persistence.Repositories;
 /// <summary>Gộp ở database (GROUP BY), chỉ đọc nên không theo dõi thay đổi (AsNoTracking).</summary>
 public class AiUsageReportRepository(AppDbContext db) : IAiUsageReportRepository
 {
-    public async Task<IReadOnlyList<AiUsageGroupRow>> ByKindAndPurposeAsync(DateTime fromUtc, DateTime toUtcExclusive, CancellationToken ct = default) =>
-        await AiUsageAggregator.ByKindAndPurpose(db.AiCalls.AsNoTracking(), fromUtc, toUtcExclusive).ToListAsync(ct);
+    public async Task<IReadOnlyList<AiUsageGroupRow>> ByKindAndPurposeAsync(
+        DateTime fromUtc, DateTime toUtcExclusive, Guid? userId = null, CancellationToken ct = default) =>
+        await AiUsageAggregator.ByKindAndPurpose(db.AiCalls.AsNoTracking(), fromUtc, toUtcExclusive, userId).ToListAsync(ct);
 
-    public async Task<IReadOnlyList<AiUsageGroupRow>> ByDayAndKindAsync(DateTime fromUtc, DateTime toUtcExclusive, CancellationToken ct = default) =>
-        await AiUsageAggregator.ByDayAndKind(db.AiCalls.AsNoTracking(), fromUtc, toUtcExclusive).ToListAsync(ct);
+    public async Task<IReadOnlyList<AiUsageGroupRow>> ByDayAndKindAsync(
+        DateTime fromUtc, DateTime toUtcExclusive, Guid? userId = null, CancellationToken ct = default) =>
+        await AiUsageAggregator.ByDayAndKind(db.AiCalls.AsNoTracking(), fromUtc, toUtcExclusive, userId).ToListAsync(ct);
+
+    public async Task<(IReadOnlyList<AiUsageUserRow> Rows, int TotalUsers)> ByUserPageAsync(
+        DateTime fromUtc, DateTime toUtcExclusive, int skip, int take, CancellationToken ct = default)
+    {
+        var calls = db.AiCalls.AsNoTracking();
+        var total = await AiUsageAggregator.UsersInWindow(calls, fromUtc, toUtcExclusive).CountAsync(ct);
+        var rows = await AiUsageAggregator.ByUserPage(calls, fromUtc, toUtcExclusive, skip, take).ToListAsync(ct);
+        return (rows, total);
+    }
+
+    public async Task<IReadOnlyList<AiUsageUserInfo>> UsersByIdAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default) =>
+        ids.Count == 0
+            ? []
+            : await db.Users.AsNoTracking()
+                .Where(u => ids.Contains(u.Id))
+                .Select(u => new AiUsageUserInfo(u.Id, u.FullName, u.Email))
+                .ToListAsync(ct);
 }

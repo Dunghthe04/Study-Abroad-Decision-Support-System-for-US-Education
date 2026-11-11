@@ -24,6 +24,25 @@ public record AiUsageOverviewDto(
     IReadOnlyList<AiUsageByPurpose> ByPurpose,
     IReadOnlyList<AiUsageByDay> ByDay);
 
+/// <summary>Một người trong bảng xếp hạng token. FullName và Email trống nếu tài khoản đã bị xóa (dòng nhật ký vẫn còn).</summary>
+public record AiUsageUserRankDto(Guid UserId, string? FullName, string? Email, AiUsageMetrics Metrics);
+
+/// <summary>Tổng quan token riêng của một người: cùng cấu trúc với tổng thể nhưng chỉ tính các lần gọi của người đó.</summary>
+public record AiUsageUserOverviewDto(Guid UserId, string FullName, string Email, AiUsageOverviewDto Overview);
+
+/// <summary>Họ tên và email của người dùng, lấy từ bảng users để gắn vào số liệu.</summary>
+public record AiUsageUserInfo(Guid Id, string FullName, string Email);
+
+/// <summary>Dòng thô theo người do truy vấn gộp trả về (chưa tính trung bình), cùng ý nghĩa với AiUsageGroupRow.</summary>
+public record AiUsageUserRow(
+    Guid UserId,
+    int Calls,
+    int FailedCalls,
+    long InputTokens,
+    long OutputTokens,
+    long CachedTokens,
+    long LatencySumMs);
+
 /// <summary>
 /// Một dòng thô do truy vấn gộp trả về (chưa tính trung bình): Purpose có khi gộp theo tính năng, Day có khi gộp theo ngày.
 /// LatencySumMs là tổng thời gian để cộng dồn các nhóm rồi mới chia cho số lần gọi, tránh trung bình của trung bình.

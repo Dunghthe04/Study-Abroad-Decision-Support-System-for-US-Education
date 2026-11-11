@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using StudyAbroad.Api.Controllers;
 using StudyAbroad.Application.Admin.AiUsage;
+using StudyAbroad.Application.Common;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
 using StudyAbroad.Infrastructure.Persistence;
@@ -17,9 +18,12 @@ public class AiUsageReportTests
     private static readonly DateTime ToExclusive = new(2026, 11, 8, 0, 0, 0, DateTimeKind.Utc);
 
     private static AiCall Call(string kind, string? purpose, DateTime at, int? input = 100, int? output = 10, int? cached = 0,
-        int? latency = 1000, bool success = true) =>
+        int? latency = 1000, bool success = true, Guid? user = null) =>
         new() { Kind = kind, Purpose = purpose, CreatedAt = at, PromptTokens = input, CompletionTokens = output, CachedTokens = cached,
-            LatencyMs = latency, Success = success };
+            LatencyMs = latency, Success = success, UserId = user };
+
+    // Mã cố định theo thứ tự tăng dần để kiểm thứ tự khi bằng nhau
+    private static Guid Id(int n) => Guid.Parse($"00000000-0000-0000-0000-{n:D12}");
 
     private static DateTime Day(int day, int hour = 12) => new(2026, 11, day, hour, 0, 0, DateTimeKind.Utc);
 
@@ -91,6 +95,104 @@ public class AiUsageReportTests
             rows.Select(r => (r.Kind, r.Day!.Value.Date, r.Calls)));
     }
 
+    // ---- lọc theo người và xếp hạng người dùng
+
+    [Fact]
+    public void UserFilter_CountsOnlyThatUsersCalls_InBothGroupings()
+    {
+        var calls = new[]
+        {
+            Call("claude", "x", Day(2), user: Id(1)),
+            Call("claude", "x", Day(2), user: Id(1)),
+            Call("ollama", "y", Day(3), user: Id(1)),
+            Call("claude", "x", Day(2), user: Id(2)),
+            Call("claude", "x", Day(2)),   // không có người dùng
+        }.AsQueryable();
+
+        var byPurpose = AiUsageAggregator.ByKindAndPurpose(calls, From, ToExclusive, Id(1)).ToList();
+        var byDay = AiUsageAggregator.ByDayAndKind(calls, From, ToExclusive, Id(1)).ToList();
+
+        Assert.Equal(3, byPurpose.Sum(r => r.Calls));
+        Assert.Equal(3, byDay.Sum(r => r.Calls));
+        Assert.Equal(5, AiUsageAggregator.ByKindAndPurpose(calls, From, ToExclusive).ToList().Sum(r => r.Calls));   // không lọc thì tính tất cả
+    }
+
+    [Fact]
+    public void ByUserPage_RanksByTotalTokensDescending_AndTiesFallBackToTheUserId()
+    {
+        var calls = new[]
+        {
+            Call("claude", "x", Day(2), input: 10, output: 1, user: Id(1)),     // 11
+            Call("claude", "x", Day(2), input: 500, output: 50, user: Id(3)),   // 550
+            Call("claude", "x", Day(2), input: 500, output: 50, user: Id(2)),   // 550, bằng Id(3) nên Id(2) đứng trước
+            Call("claude", "x", Day(2), input: 100, output: 20, user: Id(4)),   // 120
+            Call("claude", "x", Day(3), input: 100, output: 20, user: Id(4)),   // cộng dồn cùng người: 240
+        }.AsQueryable();
+
+        var rows = AiUsageAggregator.ByUserPage(calls, From, ToExclusive, 0, 10).ToList();
+
+        Assert.Equal([Id(2), Id(3), Id(4), Id(1)], rows.Select(r => r.UserId));
+        Assert.Equal((2, 200L, 40L), (rows[2].Calls, rows[2].InputTokens, rows[2].OutputTokens));
+    }
+
+    [Fact]
+    public void ByUserPage_SkipAndTake_GiveConsecutivePagesWithoutOverlap()
+    {
+        var calls = Enumerable.Range(1, 5).Select(n => Call("claude", "x", Day(2), input: n * 100, user: Id(n))).AsQueryable();
+
+        var page1 = AiUsageAggregator.ByUserPage(calls, From, ToExclusive, 0, 2).Select(r => r.UserId).ToList();
+        var page2 = AiUsageAggregator.ByUserPage(calls, From, ToExclusive, 2, 2).Select(r => r.UserId).ToList();
+        var page3 = AiUsageAggregator.ByUserPage(calls, From, ToExclusive, 4, 2).Select(r => r.UserId).ToList();
+
+        Assert.Equal([Id(5), Id(4)], page1);
+        Assert.Equal([Id(3), Id(2)], page2);
+        Assert.Equal([Id(1)], page3);
+    }
+
+    [Fact]
+    public void CallsWithoutAUser_AreLeftOutOfTheRanking_AndOutOfTheUserCount()
+    {
+        var calls = new[]
+        {
+            Call("claude", "x", Day(2), input: 999999),   // ngoài phiên đăng nhập: không xếp hạng
+            Call("claude", "x", Day(2), user: Id(1)),
+            Call("claude", "x", Day(3), user: Id(1)),
+            Call("claude", "x", Day(2), user: Id(2)),
+        }.AsQueryable();
+
+        Assert.Equal([Id(1), Id(2)], AiUsageAggregator.ByUserPage(calls, From, ToExclusive, 0, 10).Select(r => r.UserId).OrderBy(i => i));
+        Assert.Equal(2, AiUsageAggregator.UsersInWindow(calls, From, ToExclusive).Count());   // mỗi người một lần dù gọi nhiều lần
+    }
+
+    [Fact]
+    public void TheUserCountAndRankingRespectTheWindow()
+    {
+        var calls = new[] { Call("claude", "x", From.AddTicks(-1), user: Id(1)), Call("claude", "x", Day(2), user: Id(2)) }.AsQueryable();
+
+        Assert.Equal([Id(2)], AiUsageAggregator.UsersInWindow(calls, From, ToExclusive).ToList());
+    }
+
+    [Fact]
+    public void TheUserQueries_TranslateToSqlToo()
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseNpgsql("Host=localhost;Database=usas_schema_check")
+            .UseSnakeCaseNamingConvention()
+            .Options;
+        using var db = new AppDbContext(options);
+
+        var page = AiUsageAggregator.ByUserPage(db.AiCalls, From, ToExclusive, 20, 10).ToQueryString();
+        var count = AiUsageAggregator.UsersInWindow(db.AiCalls, From, ToExclusive).ToQueryString();
+        var filtered = AiUsageAggregator.ByKindAndPurpose(db.AiCalls, From, ToExclusive, Id(1)).ToQueryString();
+
+        Assert.Contains("GROUP BY", page);
+        Assert.Contains("ORDER BY", page);
+        Assert.Contains("LIMIT", page);      // phân trang ở database, không kéo cả danh sách người dùng về
+        Assert.Contains("OFFSET", page);
+        Assert.Contains("DISTINCT", count);
+        Assert.Contains("user_id", filtered);
+    }
+
     // Kiểm tra EF dịch được ra SQL: nếu biểu thức không dịch được thì ToQueryString ném lỗi (không cần kết nối database)
     [Fact]
     public void TheAggregations_TranslateToSqlWithGroupBy_SoTheDatabaseDoesTheWork()
@@ -115,16 +217,35 @@ public class AiUsageReportTests
     {
         public List<AiUsageGroupRow> KindPurpose { get; init; } = [];
         public List<AiUsageGroupRow> DayKind { get; init; } = [];
+        public List<AiUsageUserRow> UserRows { get; init; } = [];
+        public int TotalUsers { get; init; }
+        public List<AiUsageUserInfo> Users { get; init; } = [];
         public (DateTime From, DateTime ToExclusive)? Asked { get; private set; }
+        public Guid? AskedUser { get; private set; }
+        public (int Skip, int Take)? AskedPage { get; private set; }
 
-        public Task<IReadOnlyList<AiUsageGroupRow>> ByKindAndPurposeAsync(DateTime fromUtc, DateTime toUtcExclusive, CancellationToken ct = default)
+        public Task<IReadOnlyList<AiUsageGroupRow>> ByKindAndPurposeAsync(
+            DateTime fromUtc, DateTime toUtcExclusive, Guid? userId = null, CancellationToken ct = default)
         {
             Asked = (fromUtc, toUtcExclusive);
+            AskedUser = userId;
             return Task.FromResult<IReadOnlyList<AiUsageGroupRow>>(KindPurpose);
         }
 
-        public Task<IReadOnlyList<AiUsageGroupRow>> ByDayAndKindAsync(DateTime fromUtc, DateTime toUtcExclusive, CancellationToken ct = default) =>
+        public Task<IReadOnlyList<AiUsageGroupRow>> ByDayAndKindAsync(
+            DateTime fromUtc, DateTime toUtcExclusive, Guid? userId = null, CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<AiUsageGroupRow>>(DayKind);
+
+        public Task<(IReadOnlyList<AiUsageUserRow> Rows, int TotalUsers)> ByUserPageAsync(
+            DateTime fromUtc, DateTime toUtcExclusive, int skip, int take, CancellationToken ct = default)
+        {
+            Asked = (fromUtc, toUtcExclusive);
+            AskedPage = (skip, take);
+            return Task.FromResult<(IReadOnlyList<AiUsageUserRow>, int)>((UserRows, TotalUsers));
+        }
+
+        public Task<IReadOnlyList<AiUsageUserInfo>> UsersByIdAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<AiUsageUserInfo>>(Users.Where(u => ids.Contains(u.Id)).ToList());
     }
 
     private sealed class FixedClock(DateTimeOffset now) : TimeProvider
@@ -264,11 +385,143 @@ public class AiUsageReportTests
         await Assert.ThrowsAsync<ArgumentException>(() => Service(new FakeRepo()).GetOverviewAsync(end.AddDays(-366), end));
     }
 
+    // ---- dịch vụ: theo người
+
+    private static AiUsageUserRow UserRow(int n, int calls, long input, long output, long latencySum, int failed = 0) =>
+        new(Id(n), calls, failed, input, output, 0, latencySum);
+
+    [Fact]
+    public async Task Users_AreJoinedWithTheirNameAndEmail_AndKeepTheirRankOrder()
+    {
+        var repo = new FakeRepo
+        {
+            UserRows = [UserRow(2, 3, 9000, 900, 30000, failed: 1), UserRow(1, 1, 100, 10, 500)],
+            TotalUsers = 2,
+            Users = [new AiUsageUserInfo(Id(1), "Lan", "lan@x.vn"), new AiUsageUserInfo(Id(2), "Nam", "nam@x.vn")],
+        };
+
+        var page = await Service(repo).GetUsersAsync(null, null, 1, 20);
+
+        Assert.Equal([Id(2), Id(1)], page.Items.Select(i => i.UserId));
+        Assert.Equal(("Nam", "nam@x.vn"), (page.Items[0].FullName, page.Items[0].Email));
+        Assert.Equal((3, 1, 9000L, 900L, 10000d), (page.Items[0].Metrics.Calls, page.Items[0].Metrics.FailedCalls,
+            page.Items[0].Metrics.InputTokens, page.Items[0].Metrics.OutputTokens, page.Items[0].Metrics.AvgLatencyMs));
+    }
+
+    [Fact]
+    public async Task ADeletedAccount_StillAppearsInTheRanking_WithoutNameOrEmail()
+    {
+        // Dòng nhật ký còn nhưng tài khoản đã bị xóa: token đã tiêu thật nên vẫn phải thấy
+        var repo = new FakeRepo { UserRows = [UserRow(9, 1, 500, 50, 800)], TotalUsers = 1 };
+
+        var item = Assert.Single((await Service(repo).GetUsersAsync(null, null, 1, 20)).Items);
+
+        Assert.Equal(Id(9), item.UserId);
+        Assert.Null(item.FullName);
+        Assert.Null(item.Email);
+        Assert.Equal(500, item.Metrics.InputTokens);
+    }
+
+    [Theory]
+    [InlineData(1, 20, 0, 20)]
+    [InlineData(3, 10, 20, 10)]
+    [InlineData(0, 10, 0, 10)]        // trang nhỏ hơn 1 thì về trang 1
+    [InlineData(-5, 10, 0, 10)]
+    [InlineData(2, 0, 1, 1)]          // cỡ trang nhỏ hơn 1 thì là 1
+    [InlineData(2, 500, 100, 100)]    // cỡ trang bị giới hạn 100
+    public async Task Paging_IsClampedAndTurnedIntoSkipAndTake(int page, int pageSize, int expectedSkip, int expectedTake)
+    {
+        var repo = new FakeRepo();
+
+        await Service(repo).GetUsersAsync(null, null, page, pageSize);
+
+        Assert.Equal((expectedSkip, expectedTake), repo.AskedPage);
+    }
+
+    [Fact]
+    public async Task Users_ReportsPageAndTotals_ForThePager()
+    {
+        var repo = new FakeRepo { TotalUsers = 45 };
+
+        var page = await Service(repo).GetUsersAsync(null, null, 3, 20);
+
+        Assert.Equal((3, 20, 45, 3), (page.Page, page.PageSize, page.TotalCount, page.TotalPages));
+    }
+
+    [Fact]
+    public async Task Users_UseTheSameDateRangeRules_AsTheOverview()
+    {
+        var repo = new FakeRepo();
+
+        await Service(repo).GetUsersAsync(new DateOnly(2026, 11, 1), new DateOnly(2026, 11, 7), 1, 20);
+        Assert.Equal((From, ToExclusive), repo.Asked);
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            Service(repo).GetUsersAsync(new DateOnly(2026, 11, 10), new DateOnly(2026, 11, 1), 1, 20));
+    }
+
+    [Fact]
+    public async Task UserOverview_IsFilteredToThatUser_AndCarriesTheirName()
+    {
+        var repo = new FakeRepo
+        {
+            Users = [new AiUsageUserInfo(Id(1), "Lan", "lan@x.vn")],
+            KindPurpose = [Row("claude", "skill_kich_ban", 2, 4800, 1000, 6000)],
+        };
+
+        var result = await Service(repo).GetUserOverviewAsync(Id(1), null, null);
+
+        Assert.Equal(Id(1), repo.AskedUser);   // truy vấn được lọc đúng người
+        Assert.Equal(("Lan", "lan@x.vn"), (result!.FullName, result.Email));
+        Assert.Equal((2, 4800L), (result.Overview.Total.Calls, result.Overview.Total.InputTokens));
+        Assert.Equal("claude", Assert.Single(result.Overview.ByKind).Kind);
+    }
+
+    [Fact]
+    public async Task UserOverview_OfAnUnknownUser_IsNull_WithoutQueryingTheCalls()
+    {
+        var repo = new FakeRepo();
+
+        Assert.Null(await Service(repo).GetUserOverviewAsync(Id(77), null, null));
+        Assert.Null(repo.Asked);   // không có người đó thì khỏi gộp số liệu
+    }
+
+    [Fact]
+    public async Task UserOverview_OfAUserWhoNeverCalledTheAi_IsZerosNotAnError()
+    {
+        var repo = new FakeRepo { Users = [new AiUsageUserInfo(Id(1), "Lan", "lan@x.vn")] };
+
+        var result = await Service(repo).GetUserOverviewAsync(Id(1), null, null);
+
+        Assert.Equal(new AiUsageMetrics(0, 0, 0, 0, 0, 0), result!.Overview.Total);
+    }
+
+    [Fact]
+    public async Task UserOverview_WithABadRange_ThrowsEvenWhenTheUserDoesNotExist()
+    {
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            Service(new FakeRepo()).GetUserOverviewAsync(Id(77), new DateOnly(2026, 11, 10), new DateOnly(2026, 11, 1)));
+    }
+
+    [Fact]
+    public async Task TheSystemOverview_IsNotFilteredByUser()
+    {
+        var repo = new FakeRepo();
+
+        await Service(repo).GetOverviewAsync(null, null);
+
+        Assert.Null(repo.AskedUser);
+    }
+
     // ---- controller
 
-    private sealed class FakeService(AiUsageOverviewDto? overview = null, Exception? error = null) : IAiUsageReportService
+    private sealed class FakeService(
+        AiUsageOverviewDto? overview = null, Exception? error = null,
+        PagedResult<AiUsageUserRankDto>? users = null, AiUsageUserOverviewDto? userOverview = null) : IAiUsageReportService
     {
         public (DateOnly? From, DateOnly? To)? Asked { get; private set; }
+        public (int Page, int PageSize)? AskedPage { get; private set; }
+        public Guid? AskedUser { get; private set; }
 
         public Task<AiUsageOverviewDto> GetOverviewAsync(DateOnly? from, DateOnly? to, CancellationToken ct = default)
         {
@@ -276,6 +529,24 @@ public class AiUsageReportTests
             if (error is not null)
                 throw error;
             return Task.FromResult(overview!);
+        }
+
+        public Task<PagedResult<AiUsageUserRankDto>> GetUsersAsync(DateOnly? from, DateOnly? to, int page, int pageSize, CancellationToken ct = default)
+        {
+            Asked = (from, to);
+            AskedPage = (page, pageSize);
+            if (error is not null)
+                throw error;
+            return Task.FromResult(users!);
+        }
+
+        public Task<AiUsageUserOverviewDto?> GetUserOverviewAsync(Guid userId, DateOnly? from, DateOnly? to, CancellationToken ct = default)
+        {
+            Asked = (from, to);
+            AskedUser = userId;
+            if (error is not null)
+                throw error;
+            return Task.FromResult(userOverview);
         }
     }
 
@@ -310,5 +581,69 @@ public class AiUsageReportTests
 
         Assert.Equal(UserRoles.Admin, authorize!.Roles);   // token và chi phí là việc giám sát, Moderator không xem
         Assert.Equal("api/v1/admin/ai-usage", typeof(AdminAiUsageController).GetCustomAttribute<RouteAttribute>()!.Template);
+    }
+
+    // ---- controller: theo người
+
+    private static readonly PagedResult<AiUsageUserRankDto> SampleUsers = new(
+        [new AiUsageUserRankDto(Id(1), "Lan", "lan@x.vn", new AiUsageMetrics(1, 0, 10, 1, 0, 5))], 1, 20, 1);
+
+    [Fact]
+    public async Task Controller_Users_ReturnsThePage_AndPassesTheArguments()
+    {
+        var service = new FakeService(users: SampleUsers);
+
+        var result = await new AdminAiUsageController(service).GetUsers(new DateOnly(2026, 11, 1), new DateOnly(2026, 11, 7), 2, 50, default);
+
+        Assert.Same(SampleUsers, Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal((2, 50), service.AskedPage);
+        Assert.Equal((new DateOnly(2026, 11, 1), new DateOnly(2026, 11, 7)), service.Asked);
+    }
+
+    [Fact]
+    public async Task Controller_Users_ABadRangeIs400()
+    {
+        var result = await new AdminAiUsageController(new FakeService(error: new ArgumentException("Khoảng sai")))
+            .GetUsers(null, null, 1, 20, default);
+
+        Assert.Contains("Khoảng sai", Assert.IsType<BadRequestObjectResult>(result.Result).Value!.ToString());
+    }
+
+    [Fact]
+    public async Task Controller_UserOverview_ReturnsTheOverviewOfThatUser()
+    {
+        var overview = new AiUsageUserOverviewDto(Id(1), "Lan", "lan@x.vn", Sample);
+        var service = new FakeService(userOverview: overview);
+
+        var result = await new AdminAiUsageController(service).GetUserOverview(Id(1), null, null, default);
+
+        Assert.Same(overview, Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(Id(1), service.AskedUser);
+    }
+
+    [Fact]
+    public async Task Controller_UserOverview_OfAnUnknownUserIs404()
+    {
+        var result = await new AdminAiUsageController(new FakeService(userOverview: null)).GetUserOverview(Id(77), null, null, default);
+
+        Assert.IsType<NotFoundResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task Controller_UserOverview_ABadRangeIs400()
+    {
+        var result = await new AdminAiUsageController(new FakeService(error: new ArgumentException("Khoảng sai")))
+            .GetUserOverview(Id(1), null, null, default);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public void Controller_UserRoutes_AreDeclaredAsExpected()
+    {
+        var type = typeof(AdminAiUsageController);
+
+        Assert.Equal("users", type.GetMethod(nameof(AdminAiUsageController.GetUsers))!.GetCustomAttribute<HttpGetAttribute>()!.Template);
+        Assert.Equal("users/{userId:guid}", type.GetMethod(nameof(AdminAiUsageController.GetUserOverview))!.GetCustomAttribute<HttpGetAttribute>()!.Template);
     }
 }
