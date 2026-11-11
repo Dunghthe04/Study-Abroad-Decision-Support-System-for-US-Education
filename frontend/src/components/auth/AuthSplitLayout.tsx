@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
 import { LANDING_SCHOOLS } from "@/lib/landing-schools";
 import { SchoolPhotoBackdrop, useSchoolPhotoCycle } from "@/components/landing/SchoolPhotoBackdrop";
 import { cn } from "@/lib/utils";
@@ -21,18 +22,28 @@ export function AuthSplitLayout({ children, containerClassName }: AuthSplitLayou
   const currentSchool = LANDING_SCHOOLS[index];
 
   return (
-    <div className="flex min-h-screen min-h-svh w-full flex-col min-[900px]:flex-row bg-surface">
+    // Desktop: khung cao đúng một màn hình, trang không cuộn; form dài (đăng ký) chỉ cuộn bên trong cột phải
+    <div className="flex min-h-svh w-full flex-col bg-surface min-[900px]:h-svh min-[900px]:flex-row min-[900px]:overflow-hidden">
       {/* Cột trái (hoặc băng ngang 160px trên điện thoại/màn hình <900px) */}
-      <div className="relative isolate flex h-40 shrink-0 flex-col justify-end overflow-hidden bg-brand-ink text-white p-5 sm:p-6 min-[900px]:h-auto min-[900px]:min-h-screen min-[900px]:w-[62%] min-[900px]:flex-1 min-[900px]:justify-center min-[900px]:px-12 lg:min-[900px]:px-16 xl:min-[900px]:px-20">
+      <div className="relative isolate flex h-40 shrink-0 flex-col justify-end overflow-hidden bg-brand-ink p-5 text-white sm:p-6 min-[900px]:h-full min-[900px]:w-[62%] min-[900px]:flex-1 min-[900px]:justify-center min-[900px]:px-12 lg:min-[900px]:px-16 xl:min-[900px]:px-20">
         <SchoolPhotoBackdrop
           schools={LANDING_SCHOOLS}
           activeIndex={index}
-          overlayClassName="min-[900px]:bg-[linear-gradient(135deg,rgb(10_66_86/0.92)_0%,rgb(10_66_86/0.75)_50%,rgb(10_66_86/0.45)_100%)]"
+          overlayClassName="min-[900px]:bg-linear-135"
         />
+
+        {/* Chữ USAS về trang chủ, góc trên bên trái */}
+        <Link
+          href="/"
+          className="absolute top-4 left-5 z-10 flex items-center gap-2 rounded-md font-heading text-lg font-bold tracking-tight text-white outline-none focus-visible:ring-3 focus-visible:ring-white/60 sm:left-6 min-[900px]:top-8 min-[900px]:left-12 lg:min-[900px]:left-16 xl:min-[900px]:left-20"
+        >
+          <span className="flex size-[30px] items-center justify-center rounded-lg bg-white font-sans text-xs font-black text-brand-ink">US</span>
+          USAS
+        </Link>
 
         <div className="relative z-10 max-w-xl">
           <h1 className="font-heading font-semibold text-white text-xl leading-tight sm:text-2xl min-[900px]:text-4xl lg:min-[900px]:text-5xl min-[900px]:leading-[1.15] text-balance">
-            Chọn trường Mỹ hợp với điểm số và ngân sách của bạn
+            Lưu hồ sơ và danh sách trường của bạn ở một nơi
           </h1>
         </div>
 
@@ -41,12 +52,13 @@ export function AuthSplitLayout({ children, containerClassName }: AuthSplitLayou
         </p>
       </div>
 
-      {/* Cột phải: form bắt đầu ở 33svh trên desktop.
-          Tailwind v4 xếp min-[900px]: trước sm: trong CSS, nên khoảng đệm trên của màn nhỏ phải giới hạn bằng max-[899px]: để không đè pt-[33svh] */}
-      <div className="flex flex-1 flex-col justify-start overflow-y-auto bg-surface px-5 pb-6 max-[639px]:pt-6 sm:px-6 sm:pb-8 min-[640px]:max-[899px]:pt-8 min-[900px]:w-[38%] min-[900px]:min-w-[420px] min-[900px]:px-10 min-[900px]:pt-[33svh] min-[900px]:pb-16 lg:min-[900px]:px-12 xl:min-[900px]:px-16">
+      {/* Cột phải: form nằm giữa theo cả chiều dọc và ngang.
+          Dùng my-auto trong khung cuộn (không dùng justify-center) để form dài vẫn cuộn được từ đầu, không bị cắt mất phần trên */}
+      <div className="flex flex-1 flex-col overflow-y-auto bg-surface px-5 py-8 sm:px-6 min-[900px]:h-full min-[900px]:w-[38%] min-[900px]:min-w-[420px] min-[900px]:px-10 min-[900px]:py-12 lg:min-[900px]:px-12 xl:min-[900px]:px-16">
+        {/* Form rộng hơn, ô nhập cao 44px chữ 16px cho mọi form xác thực, không viền khung */}
         <div
           className={cn(
-            "w-full max-w-[420px] mx-auto motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 motion-safe:duration-300",
+            "mx-auto w-full max-w-[480px] min-[900px]:my-auto [&_[data-slot=input]]:h-11 [&_[data-slot=input]]:px-3.5 [&_[data-slot=input]]:text-base [&_[data-slot=field-label]]:text-[15px] motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 motion-safe:duration-300",
             containerClassName,
           )}
         >
