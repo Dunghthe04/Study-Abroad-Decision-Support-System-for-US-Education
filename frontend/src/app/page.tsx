@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowRightIcon,
+  ArrowUpIcon,
   AwardIcon,
   BookOpenCheckIcon,
   ExternalLinkIcon,
@@ -13,18 +14,20 @@ import {
   HeartHandshakeIcon,
   LayoutGridIcon,
   MapPinIcon,
+  Maximize2Icon,
   MessageSquareTextIcon,
   PenLineIcon,
   PlaneIcon,
+  PlusIcon,
   ShieldAlertIcon,
   SlidersHorizontalIcon,
   UsersIcon,
   WalletIcon,
+  XIcon,
 } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Spinner } from "@/components/ui/spinner";
@@ -262,50 +265,82 @@ function HomeView() {
       <section className="grid gap-10 lg:grid-cols-12 lg:items-center lg:gap-16">
         <div className="space-y-6 lg:col-span-5">
           <SectionHead
-            title="Hỏi bằng tiếng Việt, nhiều ý trong một câu"
-            desc="So sánh hai trường, hỏi học phí và học bổng cùng lúc. Trợ lý trả lời từ số liệu trong hệ thống và gợi ý bước tiếp theo."
+            title="USAS Advisor"
+            desc="Trợ lý đắc lực của bạn"
           />
           <div className="flex flex-col items-start gap-2">
             {ASK_EXAMPLES.map((q) => (
-              <Button key={q} variant="outline" className="h-auto min-h-9 max-w-full py-2 text-left whitespace-normal" onClick={() => openPanel(q)}>
-                <MessageSquareTextIcon className="text-brand" />
-                {q}
+              <Button
+                key={q}
+                variant="outline"
+                className="h-auto min-h-10 max-w-full justify-start border-line bg-surface px-3.5 py-2.5 text-left text-sm text-ink whitespace-normal transition-colors hover:border-brand/40 hover:bg-brand-wash"
+                onClick={() => openPanel(q)}
+              >
+                <MessageSquareTextIcon className="size-4 shrink-0 text-brand" />
+                <span>{q}</span>
               </Button>
             ))}
           </div>
         </div>
 
-        <Card className="gap-0 py-0 lg:col-span-7" aria-label="Ví dụ hội thoại với trợ lý">
-          <div className="flex items-center justify-between border-b px-4 py-3">
-            <span className="text-sm font-semibold text-ink">Trợ lý USAS</span>
+        <Card className="gap-0 overflow-hidden rounded-2xl border-line bg-surface py-0 lg:col-span-7" aria-label="Ví dụ hội thoại với trợ lý">
+          <div aria-hidden className="flex items-center gap-2 border-b border-line px-4 py-3 select-none">
+            <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-line text-ink-2">
+              <PlusIcon className="size-4" />
+            </span>
+            <span className="min-w-0 flex-1 truncate font-heading text-base font-semibold text-ink">
+              USAS Advisor
+            </span>
             <Badge variant="neutral">Minh họa</Badge>
+            <div className="flex shrink-0 items-center rounded-lg border border-line p-0.5">
+              <span className="inline-flex size-7 items-center justify-center text-ink-2">
+                <Maximize2Icon className="size-3.5" />
+              </span>
+              <span className="inline-flex size-7 items-center justify-center text-ink-2">
+                <XIcon className="size-4" />
+              </span>
+            </div>
           </div>
-          <div className="flex flex-col gap-4 bg-ground p-4 sm:p-5">
-            <Bubble align="end">
-              <BubbleContent>So sánh giúp em University of Washington và Purdue, em muốn học Khoa học Máy tính</BubbleContent>
-            </Bubble>
-            <Bubble variant="outline" className="max-w-[90%]">
-              <BubbleContent className="space-y-2 bg-surface">
-                <p>Hai trường khác nhau rõ nhất ở môi trường học:</p>
-                <ul className="list-disc space-y-1 pl-4 marker:text-brand">
-                  <li><b>University of Washington</b> ở Seattle, gần các công ty công nghệ, thuận lợi cho thực tập.</li>
-                  <li><b>Purdue</b> có khuôn viên rộng, thiên về kỹ thuật, chi phí thấp hơn trường tư.</li>
-                </ul>
-                <p className="text-body-s">Nguồn: dữ liệu trường trong hệ thống</p>
-              </BubbleContent>
-            </Bubble>
-            <Bubble align="end">
-              <BubbleContent>Em muốn xin học bổng thì sao?</BubbleContent>
-            </Bubble>
-            <Bubble variant="outline" className="max-w-[90%]">
-              <BubbleContent className="space-y-3 bg-surface">
-                <p>Cả hai trường có học bổng theo thành tích cho sinh viên quốc tế. Mức hỗ trợ phụ thuộc vào hồ sơ, nên bước tiếp theo là xem hồ sơ của em thuộc nhóm nào.</p>
-                <div className="flex flex-wrap gap-1.5">
-                  <Badge variant="brand">Phân tích hồ sơ</Badge>
-                  <Badge variant="brand">Nhập ngân sách</Badge>
-                </div>
-              </BubbleContent>
-            </Bubble>
+          <div className="flex flex-col gap-4 bg-surface p-4 sm:p-5 text-[14.5px] leading-relaxed">
+            <div className="rounded-xl bg-brand-wash px-4 py-3 text-ink">
+              So sánh giúp em University of Washington và Purdue, em muốn học Khoa học Máy tính
+            </div>
+            <div className="w-full px-1 space-y-2 text-ink">
+              <p>Hai trường khác nhau rõ nhất ở môi trường học:</p>
+              <ul className="list-disc space-y-1 pl-4 marker:text-brand">
+                <li>
+                  <b>University of Washington</b> ở Seattle, gần các công ty công nghệ, thuận lợi cho thực tập.
+                </li>
+                <li>
+                  <b>Purdue</b> có khuôn viên rộng, thiên về kỹ thuật, chi phí thấp hơn trường tư.
+                </li>
+              </ul>
+              <p className="text-body-s text-ink-2">Nguồn: dữ liệu trường trong hệ thống</p>
+            </div>
+            <div className="rounded-xl bg-brand-wash px-4 py-3 text-ink">
+              Em muốn xin học bổng thì sao?
+            </div>
+            <div className="w-full px-1 space-y-3 text-ink">
+              <p>
+                Cả hai trường có học bổng theo thành tích cho sinh viên quốc tế. Mức hỗ trợ phụ thuộc vào hồ sơ, nên bước tiếp theo là xem hồ sơ của em thuộc nhóm nào.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <span className="inline-flex items-center gap-1 rounded-lg border border-line bg-surface px-3 py-1.5 text-[13px] font-medium text-ink">
+                  Phân tích hồ sơ
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-lg border border-line bg-surface px-3 py-1.5 text-[13px] font-medium text-ink">
+                  Nhập ngân sách
+                </span>
+              </div>
+            </div>
+          </div>
+          <div aria-hidden className="border-t border-line/60 p-3 pt-1 select-none">
+            <div className="flex flex-col gap-2 rounded-2xl border border-line bg-surface px-3.5 pt-3 pb-2.5">
+              <div className="min-h-11 w-full text-sm text-ink-3">Hỏi USAS Advisor</div>
+              <div className="flex size-9 shrink-0 items-center justify-center self-end rounded-lg bg-brand text-brand-foreground">
+                <ArrowUpIcon className="size-4.5" />
+              </div>
+            </div>
           </div>
         </Card>
       </section>
