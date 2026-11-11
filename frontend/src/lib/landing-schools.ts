@@ -19,7 +19,11 @@ export interface LandingSchool {
   inHero?: boolean; // có xuất hiện ở ảnh nền đầu trang không
 }
 
-export const SAMPLE_PROFILE = "GPA 3,6 · SAT 1380 · Ngân sách 40.000 USD/năm";
+export const SAMPLE_PROFILE = {
+  gpa: 3.6,
+  sat: 1380,
+  budgetUsd: 40000,
+};
 
 export const LANDING_SCHOOLS: LandingSchool[] = [
   {

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ArrowRightIcon, MapPinIcon, PauseIcon, PlayIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
-import { GROUP_LABELS, formatPct, groupVariant } from "@/lib/recommendation-labels";
+import { GROUP_LABELS, formatGpa, formatPct, groupVariant } from "@/lib/recommendation-labels";
 import { HERO_SCHOOLS, SAMPLE_PROFILE } from "@/lib/landing-schools";
 import { cn } from "@/lib/utils";
 
@@ -85,13 +85,29 @@ export function LandingHero() {
         {/* Thẻ đi cùng ảnh nền: đổi theo trường đang hiện */}
         <div className="lg:col-span-4 lg:justify-self-end">
           <div className="w-full max-w-md rounded-xl bg-surface p-5 text-ink">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-sm font-semibold">Ví dụ với hồ sơ mẫu</p>
-              <Badge variant="neutral">Minh họa</Badge>
+            {/* Hàng 3 chỉ số hồ sơ mẫu */}
+            <div className="grid grid-cols-3 gap-3 pb-4">
+              <div>
+                <p className="text-xs text-ink-2">GPA</p>
+                <p className="text-numeric text-2xl font-semibold text-ink">
+                  {formatGpa(SAMPLE_PROFILE.gpa, 1)}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-ink-2">SAT</p>
+                <p className="text-numeric text-2xl font-semibold text-ink">
+                  {SAMPLE_PROFILE.sat}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-ink-2">Ngân sách</p>
+                <p className="text-numeric text-2xl font-semibold text-ink whitespace-nowrap">
+                  {`> $${SAMPLE_PROFILE.budgetUsd.toLocaleString("vi-VN")}`}
+                </p>
+              </div>
             </div>
-            <p className="mt-1 text-body-s text-ink-2">{SAMPLE_PROFILE}</p>
 
-            <ul className="mt-4 divide-y divide-line border-t border-line">
+            <ul className="divide-y divide-line border-t border-line">
               {HERO_SCHOOLS.map((s, i) => (
                 <li key={s.name}>
                   <button
@@ -112,7 +128,7 @@ export function LandingHero() {
                         {s.name}
                       </span>
                       <span className="block pl-3.5 text-xs text-ink-2">
-                        Trường nhận chung <span className="text-numeric">{formatPct(s.acceptRate)}</span>
+                        Tỉ lệ đỗ <span className="text-numeric">{formatPct(s.acceptRate)}</span>
                       </span>
                     </span>
                     <Badge variant={groupVariant(s.group)}>{GROUP_LABELS[s.group]}</Badge>
