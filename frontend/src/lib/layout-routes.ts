@@ -10,5 +10,6 @@ export function isWideRoute(pathname: string) {
 const FULL_PREFIXES = ["/recommendations", "/university/"];
 
 export function isFullRoute(pathname: string) {
+  if (pathname === "/") return true; // trang chủ: ảnh đầu trang tràn mép
   return FULL_PREFIXES.some((p) => pathname.startsWith(p));
 }
