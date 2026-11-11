@@ -95,6 +95,12 @@ def keep_verbatim(raw: dict[str, Any], message: str, context_names: set[str] | N
             )
 
         thuc_the = {key: value for key, value in entities.items() if keep(key, value)}
+        if item.get("type") == "ngoai_pham_vi" and not thuc_the.get("loai_con"):
+            thuc_the["loai_con"] = "mo_ho"
+        if item.get("type") == "ho_so" and "nhiem_vu" in thuc_the:
+            task = thuc_the.pop("nhiem_vu")
+            if task and "cac_nhiem_vu" not in thuc_the:
+                thuc_the["cac_nhiem_vu"] = [task] if isinstance(task, str) else list(task)
         doan = item.get("doan")
         if not isinstance(doan, str) or not doan.strip() or words(doan) - spoken:
             doan = message
