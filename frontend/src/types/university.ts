@@ -111,7 +111,7 @@ export interface UniversityListItem {
   minToefl: number | null;
   minDuolingo: number | null;
   bestRank: number | null;
-  bestRankPublisher: string | null;
+  bestRankList: string | null;
   satPolicy: string | null;
   intlAidPolicy: string | null;
   majors: string[];
