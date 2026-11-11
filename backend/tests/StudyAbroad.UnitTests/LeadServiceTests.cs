@@ -75,6 +75,14 @@ public class LeadServiceTests
             return Task.FromResult(lead);
         }
 
+        public Task<int> CountBySubmitterSinceAsync(Guid submitterId, DateTime sinceUtc, CancellationToken ct = default) =>
+            Task.FromResult(Leads.Count(l => l.SubmittedByUserId == submitterId && l.CreatedAt >= sinceUtc));
+
+        public Task<DateTime?> GetLastToCenterAsync(Guid submitterId, Guid centerId, DateTime sinceUtc, CancellationToken ct = default) =>
+            Task.FromResult(Leads
+                .Where(l => l.SubmittedByUserId == submitterId && l.StudyCenterId == centerId && l.CreatedAt >= sinceUtc)
+                .Max(l => (DateTime?)l.CreatedAt));
+
         public Task<CenterLeadsSummaryDto> GetReceivedLeadsAsync(
             Guid? centerId,
             string? status,

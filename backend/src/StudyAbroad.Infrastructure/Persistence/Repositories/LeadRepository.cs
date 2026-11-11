@@ -29,8 +29,21 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
                     l.Message,
                     l.SharedProfile,
                     l.Status,
-                    l.CreatedAt))
+                    l.CreatedAt)
+                {
+                    SubmittedByUserId = l.SubmittedByUserId,
+                    SharedFields = l.SharedFields,
+                })
             .FirstOrDefaultAsync(ct);
+
+    public Task<int> CountBySubmitterSinceAsync(Guid submitterId, DateTime sinceUtc, CancellationToken ct = default) =>
+        db.Leads.AsNoTracking()
+            .CountAsync(l => l.SubmittedByUserId == submitterId && l.CreatedAt >= sinceUtc, ct);
+
+    public Task<DateTime?> GetLastToCenterAsync(Guid submitterId, Guid centerId, DateTime sinceUtc, CancellationToken ct = default) =>
+        db.Leads.AsNoTracking()
+            .Where(l => l.SubmittedByUserId == submitterId && l.StudyCenterId == centerId && l.CreatedAt >= sinceUtc)
+            .MaxAsync(l => (DateTime?)l.CreatedAt, ct);
 
     public async Task<Lead> CreateLeadAsync(Lead lead, Consent? consent = null, CancellationToken ct = default)
     {
