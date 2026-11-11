@@ -48,31 +48,37 @@ const STEPS: {
   title: string;
   desc: string;
   icon: IconType;
+  color: string;
 }[] = [
   {
     title: "Khai báo hồ sơ",
     desc: "Nhập điểm hoặc tải bảng điểm để quy đổi GPA sang thang 4.0 và lưu hồ sơ.",
     icon: FileTextIcon,
+    color: "text-brand",
   },
   {
     title: "Xem trường theo nhóm",
     desc: `Xếp vào các nhóm ${GROUP_LABELS.R}, ${GROUP_LABELS.M}, ${GROUP_LABELS.S} kèm lý do rõ ràng.`,
     icon: LayoutGridIcon,
+    color: "text-reach",
   },
   {
     title: "Thử kịch bản “nếu như”",
     desc: "Tăng điểm SAT hay đổi ngân sách để xem danh sách trường thay đổi ngay lập tức.",
     icon: SlidersHorizontalIcon,
+    color: "text-warn",
   },
   {
     title: "Hỏi USAS Advisor",
     desc: "Hỏi so sánh trường, điều kiện tuyển sinh và chính sách học bổng bằng tiếng Việt.",
     icon: MessageSquareTextIcon,
+    color: "text-ok",
   },
   {
     title: "Gặp trung tâm tư vấn",
     desc: "Kết nối trung tâm hỗ trợ bài luận, hoàn thiện hồ sơ và luyện phỏng vấn visa.",
     icon: UsersIcon,
+    color: "text-brand-ink",
   },
 ];
 
@@ -242,9 +248,7 @@ function HomeView() {
                     <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand-wash font-heading text-lg font-bold text-brand">
                       0{i + 1}
                     </span>
-                    <div className="flex size-9 items-center justify-center rounded-lg bg-ground text-brand">
-                      <s.icon className="size-5" />
-                    </div>
+                    <s.icon className={cn("size-7.5 shrink-0", s.color)} />
                   </div>
                   <h3 className="font-heading text-base font-semibold text-ink">{s.title}</h3>
                   <p className="text-sm leading-relaxed text-ink-2">{s.desc}</p>
