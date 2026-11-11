@@ -18,9 +18,9 @@ public class AiUsageReportTests
     private static readonly DateTime ToExclusive = new(2026, 11, 8, 0, 0, 0, DateTimeKind.Utc);
 
     private static AiCall Call(string kind, string? purpose, DateTime at, int? input = 100, int? output = 10, int? cached = 0,
-        int? latency = 1000, bool success = true, Guid? user = null, Guid? message = null) =>
+        int? latency = 1000, bool success = true, Guid? user = null, Guid? message = null, decimal? cost = null) =>
         new() { Kind = kind, Purpose = purpose, CreatedAt = at, PromptTokens = input, CompletionTokens = output, CachedTokens = cached,
-            LatencyMs = latency, Success = success, UserId = user, ChatMessageId = message };
+            LatencyMs = latency, Success = success, UserId = user, ChatMessageId = message, CostUsd = cost };
 
     // Phiên chat và tin nhắn: mã phiên bắt đầu từ 100, mã tin nhắn từ 200, mã người dùng là 1, 2, ...
     private static ChatSession Session(int n, Guid user) => new() { Id = Id(100 + n), UserId = user };
@@ -52,6 +52,45 @@ public class AiUsageReportTests
             (claude.Purpose, claude.Calls, claude.FailedCalls, claude.InputTokens, claude.OutputTokens, claude.CachedTokens, claude.LatencySumMs));
         var local = Assert.Single(rows, r => r.Kind == "ollama");
         Assert.Equal(("slm_intents", 1, 0, 1700L), (local.Purpose, local.Calls, local.FailedCalls, local.InputTokens));
+    }
+
+    [Fact]
+    public void ByKindAndPurpose_SumsCost_AndCountsClaudeCallsWithoutAPrice()
+    {
+        var calls = new[]
+        {
+            Call("claude", "skill_tra_loi", Day(2), cost: 0.0003m),
+            Call("claude", "skill_tra_loi", Day(3), cost: 0.0002m),
+            Call("claude", "skill_tra_loi", Day(3), cost: null),   // model Claude chưa có trong bảng giá: chưa biết giá
+            Call("ollama", "slm_intents", Day(2), cost: 0m),
+            Call("ollama", "slm_intents", Day(2), cost: null),     // dòng cũ của AI local chưa có tiền: không phải "thiếu giá"
+        }.AsQueryable();
+
+        var rows = AiUsageAggregator.ByKindAndPurpose(calls, From, ToExclusive).ToList();
+
+        var claude = Assert.Single(rows, r => r.Kind == "claude");
+        Assert.Equal((0.0005m, 1), (claude.CostUsd, claude.UnpricedCalls));
+        var local = Assert.Single(rows, r => r.Kind == "ollama");
+        Assert.Equal((0m, 0), (local.CostUsd, local.UnpricedCalls));
+    }
+
+    [Fact]
+    public void CostColumns_TranslateToSql()
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseNpgsql("Host=localhost;Database=usas_schema_check")
+            .UseSnakeCaseNamingConvention()
+            .Options;
+        using var db = new AppDbContext(options);
+
+        var byPurpose = AiUsageAggregator.ByKindAndPurpose(db.AiCalls, From, ToExclusive).ToQueryString();
+        var byDay = AiUsageAggregator.ByDayAndKind(db.AiCalls, From, ToExclusive).ToQueryString();
+        var byUser = AiUsageAggregator.ByUserPage(db.AiCalls, From, ToExclusive, 0, 10).ToQueryString();
+        var turns = AiUsageAggregator.TurnsPage(db.ChatMessages, db.ChatSessions, db.AiCalls, Id(1), From, ToExclusive, 0, 10).ToQueryString();
+        var calls = AiUsageAggregator.CallsOfTurn(db.AiCalls, Id(201)).ToQueryString();
+
+        foreach (var sql in new[] { byPurpose, byDay, byUser, turns, calls })
+            Assert.Contains("cost_usd", sql);
     }
 
     [Fact]
@@ -403,8 +442,8 @@ public class AiUsageReportTests
         public override DateTimeOffset GetUtcNow() => now;
     }
 
-    private static AiUsageGroupRow Row(string kind, string? purpose, int calls, long input, long output, long latencySum, int failed = 0, DateTime? day = null) =>
-        new(kind, purpose, day, calls, failed, input, output, 0, latencySum);
+    private static AiUsageGroupRow Row(string kind, string? purpose, int calls, long input, long output, long latencySum, int failed = 0, DateTime? day = null, decimal cost = 0m, int unpriced = 0) =>
+        new(kind, purpose, day, calls, failed, input, output, 0, latencySum, cost, unpriced);
 
     private static AiUsageReportService Service(FakeRepo repo) =>
         new(repo, new FixedClock(new DateTimeOffset(2026, 11, 11, 15, 30, 0, TimeSpan.Zero)));
@@ -459,6 +498,43 @@ public class AiUsageReportTests
         Assert.Equal((3, 1, 5400L, 1300L), (claude.Calls, claude.FailedCalls, claude.InputTokens, claude.OutputTokens));
         var local = overview.ByKind.Single(k => k.Kind == "ollama").Metrics;
         Assert.Equal((3, 5100L), (local.Calls, local.InputTokens));
+    }
+
+    [Fact]
+    public async Task CostAndUnpricedCalls_RollUpFromGroupsToKindsAndTotal()
+    {
+        var repo = new FakeRepo
+        {
+            KindPurpose =
+            [
+                Row("claude", "skill_tra_loi", calls: 3, input: 3000, output: 800, latencySum: 6000, cost: 0.0007m, unpriced: 1),
+                Row("claude", "skill_kich_ban", calls: 1, input: 2400, output: 500, latencySum: 3000, cost: 0.0004m),
+                Row("ollama", "slm_intents", calls: 3, input: 5100, output: 540, latencySum: 63000),
+            ],
+        };
+
+        var overview = await Service(repo).GetOverviewAsync(null, null);
+
+        Assert.Equal((0.0011m, 1), (overview.Total.CostUsd, overview.Total.UnpricedCalls));
+        var claude = overview.ByKind.Single(k => k.Kind == "claude").Metrics;
+        Assert.Equal((0.0011m, 1), (claude.CostUsd, claude.UnpricedCalls));
+        var local = overview.ByKind.Single(k => k.Kind == "ollama").Metrics;
+        Assert.Equal((0m, 0), (local.CostUsd, local.UnpricedCalls));
+        Assert.Equal(0.0007m, overview.ByPurpose.Single(p => p.Purpose == "skill_tra_loi").Metrics.CostUsd);
+    }
+
+    [Fact]
+    public async Task TurnDetail_TotalsTheCostOfItsCalls_AndFlagsAClaudeCallWithoutAPrice()
+    {
+        var repo = new FakeRepo
+        {
+            Header = new AiUsageTurnHeader(Id(201), Id(101), Id(1), Day(2), "assistant", "answered"),
+            TurnCalls = [CallDetail("claude", "skill_tra_loi", 2000, 500, 800, cost: 0.00045m), CallDetail("claude", "skill_kich_ban", 100, 10, 90, cost: null)],
+        };
+
+        var turn = await Service(repo).GetTurnAsync(Id(201));
+
+        Assert.Equal((0.00045m, 1), (turn!.Total.CostUsd, turn.Total.UnpricedCalls));
     }
 
     [Fact]
@@ -537,8 +613,8 @@ public class AiUsageReportTests
 
     // ---- dịch vụ: theo người
 
-    private static AiUsageUserRow UserRow(int n, int calls, long input, long output, long latencySum, int failed = 0) =>
-        new(Id(n), calls, failed, input, output, 0, latencySum);
+    private static AiUsageUserRow UserRow(int n, int calls, long input, long output, long latencySum, int failed = 0, decimal cost = 0m, int unpriced = 0) =>
+        new(Id(n), calls, failed, input, output, 0, latencySum, cost, unpriced);
 
     [Fact]
     public async Task Users_AreJoinedWithTheirNameAndEmail_AndKeepTheirRankOrder()
@@ -665,8 +741,8 @@ public class AiUsageReportTests
 
     // ---- dịch vụ: theo lượt chat
 
-    private static AiUsageTurnRow TurnRow(int n, string role = "assistant", string? outcome = "answered", int calls = 2, long input = 4100, long output = 680, long latency = 24000, int failed = 0) =>
-        new(Id(200 + n), Id(101), Day(2), role, outcome, calls, failed, input, output, 0, latency);
+    private static AiUsageTurnRow TurnRow(int n, string role = "assistant", string? outcome = "answered", int calls = 2, long input = 4100, long output = 680, long latency = 24000, int failed = 0, decimal cost = 0m, int unpriced = 0) =>
+        new(Id(200 + n), Id(101), Day(2), role, outcome, calls, failed, input, output, 0, latency, cost, unpriced);
 
     private static FakeRepo WithUser(FakeRepo? repo = null) => repo ?? new FakeRepo { Users = [new AiUsageUserInfo(Id(1), "Lan", "lan@x.vn")] };
 
@@ -737,8 +813,8 @@ public class AiUsageReportTests
         Assert.Equal((3, 20, 45, 3), (page.Page, page.PageSize, page.TotalCount, page.TotalPages));
     }
 
-    private static AiUsageCallDetailDto CallDetail(string kind, string purpose, int input, int output, int latency, bool ok = true, string? error = null) =>
-        new(Guid.NewGuid(), Day(2), kind, purpose, "1.0", "model", input, output, 0, latency, ok, error);
+    private static AiUsageCallDetailDto CallDetail(string kind, string purpose, int input, int output, int latency, bool ok = true, string? error = null, decimal? cost = 0m) =>
+        new(Guid.NewGuid(), Day(2), kind, purpose, "1.0", "model", input, output, 0, latency, ok, error, cost);
 
     [Fact]
     public async Task TurnDetail_TotalsTheCalls_AndKeepsThemInOrder()

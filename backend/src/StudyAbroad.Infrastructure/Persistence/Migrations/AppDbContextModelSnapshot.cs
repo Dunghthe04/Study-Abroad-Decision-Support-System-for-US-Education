@@ -49,7 +49,7 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.Property<decimal?>("CostUsd")
                         .HasColumnType("numeric")
                         .HasColumnName("cost_usd")
-                        .HasComment("Chi phí tính bằng USD. Chỉ Claude có tiền; Ollama chạy local nên để trống hoặc 0. Chưa được tính ở giai đoạn hiện tại.");
+                        .HasComment("Chi phí tính bằng USD, tính và lưu lúc gọi. Ollama chạy local nên 0. Claude tính theo bảng giá; model Claude chưa có trong bảng giá thì để trống (chưa biết giá, không phải miễn phí).");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")

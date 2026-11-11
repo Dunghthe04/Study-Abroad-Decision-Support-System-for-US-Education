@@ -3,8 +3,12 @@ namespace StudyAbroad.Application.Admin.AiUsage;
 /// <summary>
 /// Số đo của một nhóm lần gọi AI. InputTokens chưa gồm token Claude đọc từ cache (CachedTokens tính riêng, tính tiền khác).
 /// AvgLatencyMs là thời gian trung bình của MỘT lần gọi (mili giây), làm tròn một chữ số thập phân.
+/// CostUsd là tổng tiền (USD) của các lần gọi ĐÃ có giá; UnpricedCalls là số lần gọi Claude chưa có giá (model chưa nằm trong bảng giá),
+/// khác 0 nghĩa là CostUsd đang thiếu phần đó.
 /// </summary>
-public record AiUsageMetrics(int Calls, int FailedCalls, long InputTokens, long OutputTokens, long CachedTokens, double AvgLatencyMs);
+public record AiUsageMetrics(
+    int Calls, int FailedCalls, long InputTokens, long OutputTokens, long CachedTokens, double AvgLatencyMs,
+    decimal CostUsd = 0m, int UnpricedCalls = 0);
 
 /// <summary>Theo nguồn: ollama (AI local, không tốn tiền) hoặc claude (AI cloud, trả phí theo token).</summary>
 public record AiUsageByKind(string Kind, AiUsageMetrics Metrics);
@@ -50,7 +54,8 @@ public record AiUsageCallDetailDto(
     int CachedTokens,
     int LatencyMs,
     bool Success,
-    string? Error);
+    string? Error,
+    decimal? CostUsd);
 
 /// <summary>Chi tiết một lượt chat: tổng và từng lần gọi AI theo thứ tự thời gian. Không có nội dung chat.</summary>
 public record AiUsageTurnDetailDto(
@@ -75,7 +80,9 @@ public record AiUsageTurnRow(
     long InputTokens,
     long OutputTokens,
     long CachedTokens,
-    long LatencySumMs);
+    long LatencySumMs,
+    decimal CostUsd,
+    int UnpricedCalls);
 
 /// <summary>Thông tin chung của một lượt chat (tin nhắn và phiên chứa nó), để dựng chi tiết một lượt.</summary>
 public record AiUsageTurnHeader(Guid MessageId, Guid SessionId, Guid UserId, DateTime CreatedAt, string Role, string? Outcome);
@@ -91,7 +98,9 @@ public record AiUsageUserRow(
     long InputTokens,
     long OutputTokens,
     long CachedTokens,
-    long LatencySumMs);
+    long LatencySumMs,
+    decimal CostUsd,
+    int UnpricedCalls);
 
 /// <summary>
 /// Một dòng thô do truy vấn gộp trả về (chưa tính trung bình): Purpose có khi gộp theo tính năng, Day có khi gộp theo ngày.
@@ -106,4 +115,6 @@ public record AiUsageGroupRow(
     long InputTokens,
     long OutputTokens,
     long CachedTokens,
-    long LatencySumMs);
+    long LatencySumMs,
+    decimal CostUsd,
+    int UnpricedCalls);

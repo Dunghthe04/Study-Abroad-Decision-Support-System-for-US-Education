@@ -10,6 +10,9 @@ namespace StudyAbroad.Application.Admin.AiUsage;
 /// </summary>
 public static class AiUsageAggregator
 {
+    // Cùng giá trị với AiCall.Kind của lần gọi Claude; hằng số để EF dịch thành tham số SQL
+    private const string ClaudeKind = "claude";
+
     /// <summary>Các lần gọi trong khoảng [fromUtc, toUtcExclusive), của một người nếu có userId.</summary>
     public static IQueryable<AiCall> InWindow(IQueryable<AiCall> calls, DateTime fromUtc, DateTime toUtcExclusive, Guid? userId = null)
     {
@@ -31,7 +34,9 @@ public static class AiUsageAggregator
                 g.Sum(c => (long)(c.PromptTokens ?? 0)),
                 g.Sum(c => (long)(c.CompletionTokens ?? 0)),
                 g.Sum(c => (long)(c.CachedTokens ?? 0)),
-                g.Sum(c => (long)(c.LatencyMs ?? 0))));
+                g.Sum(c => (long)(c.LatencyMs ?? 0)),
+                g.Sum(c => c.CostUsd ?? 0m),
+                g.Count(c => c.Kind == ClaudeKind && c.CostUsd == null)));
 
     /// <summary>Gộp theo (ngày UTC, nguồn): để vẽ biểu đồ theo ngày.</summary>
     public static IQueryable<AiUsageGroupRow> ByDayAndKind(
@@ -47,7 +52,9 @@ public static class AiUsageAggregator
                 g.Sum(c => (long)(c.PromptTokens ?? 0)),
                 g.Sum(c => (long)(c.CompletionTokens ?? 0)),
                 g.Sum(c => (long)(c.CachedTokens ?? 0)),
-                g.Sum(c => (long)(c.LatencyMs ?? 0))));
+                g.Sum(c => (long)(c.LatencyMs ?? 0)),
+                g.Sum(c => c.CostUsd ?? 0m),
+                g.Count(c => c.Kind == ClaudeKind && c.CostUsd == null)));
 
     /// <summary>
     /// Một trang xếp hạng người dùng theo tổng token (vào + ra) giảm dần; bằng nhau thì theo mã người dùng để các trang không lặp hay sót.
@@ -71,7 +78,9 @@ public static class AiUsageAggregator
                 g.Sum(c => (long)(c.PromptTokens ?? 0)),
                 g.Sum(c => (long)(c.CompletionTokens ?? 0)),
                 g.Sum(c => (long)(c.CachedTokens ?? 0)),
-                g.Sum(c => (long)(c.LatencyMs ?? 0))));
+                g.Sum(c => (long)(c.LatencyMs ?? 0)),
+                g.Sum(c => c.CostUsd ?? 0m),
+                g.Count(c => c.Kind == ClaudeKind && c.CostUsd == null)));
 
     // Tin nhắn không phải của học sinh (trợ lý hoặc dòng lỗi hệ thống) thuộc về người dùng, trong khoảng thời gian
     private static IQueryable<ChatMessage> TurnsOf(
@@ -105,7 +114,9 @@ public static class AiUsageAggregator
                 calls.Where(a => a.ChatMessageId == m.Id).Sum(a => (long)(a.PromptTokens ?? 0)),
                 calls.Where(a => a.ChatMessageId == m.Id).Sum(a => (long)(a.CompletionTokens ?? 0)),
                 calls.Where(a => a.ChatMessageId == m.Id).Sum(a => (long)(a.CachedTokens ?? 0)),
-                calls.Where(a => a.ChatMessageId == m.Id).Sum(a => (long)(a.LatencyMs ?? 0))));
+                calls.Where(a => a.ChatMessageId == m.Id).Sum(a => (long)(a.LatencyMs ?? 0)),
+                calls.Where(a => a.ChatMessageId == m.Id).Sum(a => a.CostUsd ?? 0m),
+                calls.Count(a => a.ChatMessageId == m.Id && a.Kind == ClaudeKind && a.CostUsd == null)));
 
     /// <summary>Mã các lượt chat của người trong khoảng, để đếm tổng số lượt cho phân trang.</summary>
     public static IQueryable<Guid> TurnIds(
@@ -137,7 +148,8 @@ public static class AiUsageAggregator
                 a.CachedTokens ?? 0,
                 a.LatencyMs ?? 0,
                 a.Success,
-                a.Error));
+                a.Error,
+                a.CostUsd));
 
     /// <summary>Các người dùng có ít nhất một lần gọi trong khoảng (mỗi người một lần), để đếm tổng số người cho phân trang.</summary>
     public static IQueryable<Guid> UsersInWindow(IQueryable<AiCall> calls, DateTime fromUtc, DateTime toUtcExclusive) =>

@@ -28,7 +28,11 @@ public static class AiCallMapper
         LatencyMs = usage.LatencyMs,
         Success = usage.Ok,
         Error = Cut(usage.Error, ErrorMax),
-        // CostUsd để trống: cần bảng giá của từng model, làm ở giai đoạn sau
+        // Tiền tính và lưu ngay lúc gọi: đổi giá sau này không làm lệch dòng cũ. Model Claude lạ thì null (chưa biết giá).
+        // Lần gọi lỗi chưa tiêu token nên tiền là 0, không phải "chưa biết giá"
+        CostUsd = usage.Ok
+            ? AiPricing.Cost(usage.Source, usage.Model, usage.InputTokens, usage.OutputTokens, usage.CachedTokens)
+            : 0m,
     };
 
     private static string? Blank(string? text) => string.IsNullOrWhiteSpace(text) ? null : text;

@@ -147,14 +147,17 @@ public class AiUsageReportService(IAiUsageReportRepository repository, TimeProvi
 
     // Dòng theo người có cùng các số đo với dòng theo nhóm, đổi sang một kiểu để dùng chung hàm cộng dồn
     private static AiUsageGroupRow Row(AiUsageUserRow row) =>
-        new("", null, null, row.Calls, row.FailedCalls, row.InputTokens, row.OutputTokens, row.CachedTokens, row.LatencySumMs);
+        new("", null, null, row.Calls, row.FailedCalls, row.InputTokens, row.OutputTokens, row.CachedTokens, row.LatencySumMs,
+            row.CostUsd, row.UnpricedCalls);
 
     // Dòng của một lượt và một lần gọi AI cũng đổi sang cùng kiểu dòng thô để dùng chung hàm cộng dồn
     private static AiUsageGroupRow Row(AiUsageTurnRow row) =>
-        new("", null, null, row.Calls, row.FailedCalls, row.InputTokens, row.OutputTokens, row.CachedTokens, row.LatencySumMs);
+        new("", null, null, row.Calls, row.FailedCalls, row.InputTokens, row.OutputTokens, row.CachedTokens, row.LatencySumMs,
+            row.CostUsd, row.UnpricedCalls);
 
     private static AiUsageGroupRow Row(AiUsageCallDetailDto call) =>
-        new(call.Kind, call.Purpose, null, 1, call.Success ? 0 : 1, call.InputTokens, call.OutputTokens, call.CachedTokens, call.LatencyMs);
+        new(call.Kind, call.Purpose, null, 1, call.Success ? 0 : 1, call.InputTokens, call.OutputTokens, call.CachedTokens, call.LatencyMs,
+            call.CostUsd ?? 0m, call.CostUsd is null && call.Kind == "claude" ? 1 : 0);
 
     // Cộng các dòng thô rồi mới chia: trung bình thời gian của cả nhóm = tổng thời gian chia tổng số lần gọi
     private static AiUsageMetrics Metrics(IEnumerable<AiUsageGroupRow> rows)
@@ -167,6 +170,8 @@ public class AiUsageReportService(IAiUsageReportRepository repository, TimeProvi
             list.Sum(row => row.InputTokens),
             list.Sum(row => row.OutputTokens),
             list.Sum(row => row.CachedTokens),
-            calls == 0 ? 0 : Math.Round((double)list.Sum(row => row.LatencySumMs) / calls, 1));
+            calls == 0 ? 0 : Math.Round((double)list.Sum(row => row.LatencySumMs) / calls, 1),
+            list.Sum(row => row.CostUsd),
+            list.Sum(row => row.UnpricedCalls));
     }
 }

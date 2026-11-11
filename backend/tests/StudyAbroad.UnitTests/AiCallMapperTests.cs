@@ -41,12 +41,40 @@ public class AiCallMapperTests
     }
 
     [Fact]
-    public void CallWithoutAMessage_HasNoLink_AndTheCostIsLeftEmpty()
+    public void CallWithoutAMessage_HasNoLink()
     {
         var call = AiCallMapper.ToEntity(new AiUsageDto("ollama", "m"), User, null);
 
         Assert.Null(call.ChatMessageId);
-        Assert.Null(call.CostUsd);   // chưa có bảng giá nên không tính
+    }
+
+    [Fact]
+    public void ClaudeCall_StoresItsCost_AtTheTimeOfTheCall()
+    {
+        // 2000 vào x 0,10 + 500 ra x 0,50 (USD mỗi triệu token) = 0,00045
+        var call = AiCallMapper.ToEntity(new AiUsageDto("claude", "claude-haiku-5-5", "skill_tra_loi", "1.1", 2000, 500, 0, true, null, 800), User, null);
+
+        Assert.Equal(0.00045m, call.CostUsd);
+    }
+
+    [Fact]
+    public void OllamaCall_CostsNothing_AndAFailedCallCostsNothing()
+    {
+        var local = AiCallMapper.ToEntity(new AiUsageDto("ollama", "usas-slm-v4", "slm_intents", "3.0", 1700, 180, 0, true, null, 900), User, null);
+        var failed = AiCallMapper.ToEntity(new AiUsageDto("claude", "claude-haiku-5-5", "skill_tra_loi", "1.1", 0, 0, 0, false, "timeout", 30000), User, null);
+        var failedUnknownModel = AiCallMapper.ToEntity(new AiUsageDto("claude", "", "skill_tra_loi", "1.1", 0, 0, 0, false, "timeout", 30000), User, null);
+
+        Assert.Equal(0m, local.CostUsd);
+        Assert.Equal(0m, failed.CostUsd);
+        Assert.Equal(0m, failedUnknownModel.CostUsd);   // lỗi thì chưa tiêu token: 0, không phải "chưa biết giá"
+    }
+
+    [Fact]
+    public void ClaudeCallWithAnUnknownModel_LeavesTheCostEmpty_NotZero()
+    {
+        var call = AiCallMapper.ToEntity(new AiUsageDto("claude", "claude-model-moi", "skill_tra_loi", "1.1", 1000, 100, 0, true, null, 500), User, null);
+
+        Assert.Null(call.CostUsd);
     }
 
     [Fact]

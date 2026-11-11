@@ -25,7 +25,7 @@ public class AiCallConfiguration : IEntityTypeConfiguration<AiCall>
         b.Property(x => x.Model).HasMaxLength(64)
             .HasComment("Tên model đã gọi, ví dụ claude-haiku-5-5 hoặc usas-slm-v4.");
         b.Property(x => x.CostUsd)
-            .HasComment("Chi phí tính bằng USD. Chỉ Claude có tiền; Ollama chạy local nên để trống hoặc 0. Chưa được tính ở giai đoạn hiện tại.");
+            .HasComment("Chi phí tính bằng USD, tính và lưu lúc gọi. Ollama chạy local nên 0. Claude tính theo bảng giá; model Claude chưa có trong bảng giá thì để trống (chưa biết giá, không phải miễn phí).");
         b.Property(x => x.PromptTokens)
             .HasComment("Token VÀO: phần gửi lên AI. Với Claude, chưa gồm phần đọc từ cache (xem cached_tokens).");
         b.Property(x => x.CompletionTokens).HasComment("Token RA: phần AI viết trả về.");
