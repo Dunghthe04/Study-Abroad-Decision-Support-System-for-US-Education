@@ -1,12 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { ArrowLeftIcon, ArrowUpRightIcon, Building2Icon, GlobeIcon, GraduationCapIcon, MapPinIcon, PercentIcon, UsersIcon } from "lucide-react";
+import { ArrowUpRightIcon, Building2Icon, GlobeIcon, GraduationCapIcon, MapPinIcon, PercentIcon, UsersIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
-import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
@@ -36,13 +34,7 @@ function getRankColorClass(rank: number): string {
   return "text-muted-foreground font-semibold text-lg";
 }
 
-export function UniversityDetailView({
-  university,
-  back = { href: "/", label: "Trang chủ" },
-}: {
-  university: UniversityDetail;
-  back?: { href: string; label: string };
-}) {
+export function UniversityDetailView({ university }: { university: UniversityDetail }) {
   const [selectedLevel, setSelectedLevel] = useState(university.offerings[0]?.studyLevel ?? "");
   const [activeSection, setActiveSection] = useState("overview");
   const offering = university.offerings.find((item) => item.studyLevel === selectedLevel) ?? university.offerings[0];
@@ -95,57 +87,50 @@ export function UniversityDetailView({
 
   return (
     <article className="space-y-6 pb-12">
-      {/* Phần đầu trang: ảnh bìa, tên trường và các nút chính */}
-      <div className="relative w-full overflow-hidden border-b border-border/60 bg-muted/20">
+      {/* Ảnh bìa lớn tràn mép, nằm dưới thanh đầu trong suốt giống trang chủ */}
+      <header className="relative isolate -mt-(--header-h) flex min-h-[min(72svh,640px)] items-end overflow-hidden bg-brand-ink text-white">
+        <div className="absolute inset-0 -z-10">
+          <SchoolImage url={university.coverUrl} alt={`Khuôn viên ${university.name}`} className="size-full" priority />
+          <div className="absolute inset-0 bg-linear-to-t from-brand-ink/90 via-brand-ink/45 via-50% to-brand-ink/60" />
+        </div>
 
-        <div className="mx-auto max-w-[1320px] px-4 pt-4 pb-6 sm:px-6 space-y-5">
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem>
-                <BreadcrumbLink render={<Link href={back.href} />}>
-                  <ArrowLeftIcon className="size-3.5" />
-                  {back.label}
-                </BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-              <BreadcrumbItem>
-                <BreadcrumbPage>Thông tin trường · Mã {university.code}</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-
-          <header>
-            <SchoolImage
-              url={university.coverUrl}
-              alt={`Khuôn viên ${university.name}`}
-              className="h-48 w-full rounded-xl bg-brand-wash ring-1 ring-border/50 sm:h-64 lg:h-80"
-              priority
-            />
-            <div className="flex flex-wrap items-end justify-between gap-5 pt-5">
-              <div className="flex w-full min-w-0 flex-none items-center gap-4 sm:w-auto sm:flex-1">
-                <SchoolImage url={university.logoUrl} alt={`Logo ${university.name}`} className="size-16 shrink-0 bg-white sm:size-20 " contain />
-                <div className="min-w-0">
-                  <h1 className="text-2xl font-semibold leading-tight tracking-tight text-foreground sm:text-3xl">{university.name}</h1>
-                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-                    {location && <span className="inline-flex items-center gap-1"><MapPinIcon className="size-3.5" />{location}</span>}
-                    {university.control && <span>{schoolControlLabel(university.control)}</span>}
-                    {university.isIvy && <Badge variant="secondary">Ivy League</Badge>}
-                  </div>
-                </div>
-              </div>
-              <div className="flex flex-wrap items-center gap-3">
-                <AddTargetSchoolButton
-                  universityCode={university.code}
-                  universityName={university.name}
-                  universityCity={university.city}
-                  universityState={university.state}
-                />
-                {website && <Button variant="outline" nativeButton={false} role="link" render={<a href={website} target="_blank" rel="noopener noreferrer" />}><GlobeIcon />Website trường<ArrowUpRightIcon /></Button>}
+        {/* Tên trường bên trái, các nút bên phải, cùng canh giữa theo khối tên và vị trí */}
+        <div className="mx-auto flex w-full max-w-[1320px] flex-wrap items-center justify-between gap-5 px-4 pt-[calc(var(--header-h)+3rem)] pb-8 sm:px-6 sm:pb-10">
+          <div className="flex min-w-0 items-center gap-4">
+            <SchoolImage url={university.logoUrl} alt={`Logo ${university.name}`} className="size-16 shrink-0 rounded-lg bg-white sm:size-20" contain />
+            <div className="min-w-0">
+              <h1 className="text-3xl leading-tight font-semibold tracking-tight text-balance text-white sm:text-4xl lg:text-5xl">{university.name}</h1>
+              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-white/85 sm:text-base">
+                {location && <span className="inline-flex items-center gap-1"><MapPinIcon className="size-4" />{location}</span>}
+                {university.control && <span>{schoolControlLabel(university.control)}</span>}
+                {university.isIvy && <Badge variant="secondary">Ivy League</Badge>}
               </div>
             </div>
-          </header>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <AddTargetSchoolButton
+              universityCode={university.code}
+              universityName={university.name}
+              universityCity={university.city}
+              universityState={university.state}
+              size="lg"
+              className="!border-transparent !bg-white !text-brand-ink hover:!bg-white/90"
+            />
+            {website && (
+              <Button
+                variant="outline"
+                size="lg"
+                nativeButton={false}
+                role="link"
+                render={<a href={website} target="_blank" rel="noopener noreferrer" />}
+                className="!border-white/30 !bg-brand !text-white hover:!bg-brand-ink"
+              >
+                <GlobeIcon />Website trường<ArrowUpRightIcon />
+              </Button>
+            )}
+          </div>
         </div>
-      </div>
+      </header>
 
       <div className="mx-auto max-w-[1320px] px-4 sm:px-6 space-y-6">
         <nav aria-label="Các mục thông tin trường" className="sticky top-(--header-h) z-20 border-b border-border bg-background/95 ">
