@@ -1,0 +1,314 @@
+using System.Reflection;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using StudyAbroad.Api.Controllers;
+using StudyAbroad.Application.Admin.AiUsage;
+using StudyAbroad.Domain.Constants;
+using StudyAbroad.Domain.Entities;
+using StudyAbroad.Infrastructure.Persistence;
+
+namespace StudyAbroad.UnitTests;
+
+// API token tổng thể cho admin: truy vấn gộp (số liệu đúng, EF dịch ra SQL được), dịch vụ (khoảng ngày, cộng dồn) và controller (chỉ Admin).
+public class AiUsageReportTests
+{
+    private static readonly DateTime From = new(2026, 11, 1, 0, 0, 0, DateTimeKind.Utc);
+    private static readonly DateTime ToExclusive = new(2026, 11, 8, 0, 0, 0, DateTimeKind.Utc);
+
+    private static AiCall Call(string kind, string? purpose, DateTime at, int? input = 100, int? output = 10, int? cached = 0,
+        int? latency = 1000, bool success = true) =>
+        new() { Kind = kind, Purpose = purpose, CreatedAt = at, PromptTokens = input, CompletionTokens = output, CachedTokens = cached,
+            LatencyMs = latency, Success = success };
+
+    private static DateTime Day(int day, int hour = 12) => new(2026, 11, day, hour, 0, 0, DateTimeKind.Utc);
+
+    // ---- truy vấn gộp
+
+    [Fact]
+    public void ByKindAndPurpose_SumsTokensCallsAndFailuresPerGroup()
+    {
+        var calls = new[]
+        {
+            Call("claude", "skill_tra_loi", Day(2), input: 2000, output: 500, cached: 50, latency: 2000),
+            Call("claude", "skill_tra_loi", Day(3), input: 1000, output: 300, cached: 0, latency: 4000, success: false),
+            Call("ollama", "slm_intents", Day(2), input: 1700, output: 180, latency: 21000),
+        }.AsQueryable();
+
+        var rows = AiUsageAggregator.ByKindAndPurpose(calls, From, ToExclusive).ToList();
+
+        var claude = Assert.Single(rows, r => r.Kind == "claude");
+        Assert.Equal(("skill_tra_loi", 2, 1, 3000L, 800L, 50L, 6000L),
+            (claude.Purpose, claude.Calls, claude.FailedCalls, claude.InputTokens, claude.OutputTokens, claude.CachedTokens, claude.LatencySumMs));
+        var local = Assert.Single(rows, r => r.Kind == "ollama");
+        Assert.Equal(("slm_intents", 1, 0, 1700L), (local.Purpose, local.Calls, local.FailedCalls, local.InputTokens));
+    }
+
+    [Fact]
+    public void MissingTokensAndLatency_CountAsZero_NotAsAnError()
+    {
+        // Dòng cũ hoặc lần gọi lỗi có thể thiếu token, thời gian
+        var calls = new[] { Call("ollama", null, Day(2), input: null, output: null, cached: null, latency: null) }.AsQueryable();
+
+        var row = Assert.Single(AiUsageAggregator.ByKindAndPurpose(calls, From, ToExclusive).ToList());
+
+        Assert.Equal((1, 0L, 0L, 0L, 0L), (row.Calls, row.InputTokens, row.OutputTokens, row.CachedTokens, row.LatencySumMs));
+        Assert.Null(row.Purpose);
+    }
+
+    [Fact]
+    public void TheWindowIncludesTheFirstInstant_AndExcludesTheEndInstant()
+    {
+        var calls = new[]
+        {
+            Call("claude", "a", From.AddTicks(-1)),   // trước khoảng
+            Call("claude", "b", From),                // đúng đầu khoảng: tính
+            Call("claude", "c", ToExclusive.AddTicks(-1)),   // sát cuối khoảng: tính
+            Call("claude", "d", ToExclusive),         // đúng cuối khoảng: không tính
+        }.AsQueryable();
+
+        var purposes = AiUsageAggregator.ByKindAndPurpose(calls, From, ToExclusive).Select(r => r.Purpose).OrderBy(p => p).ToList();
+
+        Assert.Equal(["b", "c"], purposes);
+    }
+
+    [Fact]
+    public void ByDayAndKind_GroupsByTheUtcDay_AndSplitsLocalFromCloud()
+    {
+        var calls = new[]
+        {
+            Call("claude", "x", Day(2, 1)),
+            Call("claude", "x", Day(2, 23)),
+            Call("ollama", "y", Day(2, 12)),
+            Call("claude", "x", Day(3, 0)),
+        }.AsQueryable();
+
+        var rows = AiUsageAggregator.ByDayAndKind(calls, From, ToExclusive).ToList()
+            .OrderBy(r => r.Day).ThenBy(r => r.Kind).ToList();
+
+        Assert.Equal(
+            [("claude", Day(2).Date, 2), ("ollama", Day(2).Date, 1), ("claude", Day(3).Date, 1)],
+            rows.Select(r => (r.Kind, r.Day!.Value.Date, r.Calls)));
+    }
+
+    // Kiểm tra EF dịch được ra SQL: nếu biểu thức không dịch được thì ToQueryString ném lỗi (không cần kết nối database)
+    [Fact]
+    public void TheAggregations_TranslateToSqlWithGroupBy_SoTheDatabaseDoesTheWork()
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseNpgsql("Host=localhost;Database=usas_schema_check")
+            .UseSnakeCaseNamingConvention()
+            .Options;
+        using var db = new AppDbContext(options);
+
+        var byPurpose = AiUsageAggregator.ByKindAndPurpose(db.AiCalls, From, ToExclusive).ToQueryString();
+        var byDay = AiUsageAggregator.ByDayAndKind(db.AiCalls, From, ToExclusive).ToQueryString();
+
+        Assert.Contains("GROUP BY", byPurpose);
+        Assert.Contains("GROUP BY", byDay);
+        Assert.Contains("ai_calls", byPurpose);
+    }
+
+    // ---- dịch vụ
+
+    private sealed class FakeRepo : IAiUsageReportRepository
+    {
+        public List<AiUsageGroupRow> KindPurpose { get; init; } = [];
+        public List<AiUsageGroupRow> DayKind { get; init; } = [];
+        public (DateTime From, DateTime ToExclusive)? Asked { get; private set; }
+
+        public Task<IReadOnlyList<AiUsageGroupRow>> ByKindAndPurposeAsync(DateTime fromUtc, DateTime toUtcExclusive, CancellationToken ct = default)
+        {
+            Asked = (fromUtc, toUtcExclusive);
+            return Task.FromResult<IReadOnlyList<AiUsageGroupRow>>(KindPurpose);
+        }
+
+        public Task<IReadOnlyList<AiUsageGroupRow>> ByDayAndKindAsync(DateTime fromUtc, DateTime toUtcExclusive, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<AiUsageGroupRow>>(DayKind);
+    }
+
+    private sealed class FixedClock(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
+    }
+
+    private static AiUsageGroupRow Row(string kind, string? purpose, int calls, long input, long output, long latencySum, int failed = 0, DateTime? day = null) =>
+        new(kind, purpose, day, calls, failed, input, output, 0, latencySum);
+
+    private static AiUsageReportService Service(FakeRepo repo) =>
+        new(repo, new FixedClock(new DateTimeOffset(2026, 11, 11, 15, 30, 0, TimeSpan.Zero)));
+
+    [Fact]
+    public async Task WithoutDates_ItCoversTheLast30DaysEndingToday_Inclusive()
+    {
+        var repo = new FakeRepo();
+
+        var overview = await Service(repo).GetOverviewAsync(null, null);
+
+        Assert.Equal((new DateOnly(2026, 10, 13), new DateOnly(2026, 11, 11)), (overview.From, overview.To));   // 30 ngày kể cả hôm nay
+        Assert.Equal(new DateTime(2026, 10, 13, 0, 0, 0, DateTimeKind.Utc), repo.Asked!.Value.From);
+        Assert.Equal(new DateTime(2026, 11, 12, 0, 0, 0, DateTimeKind.Utc), repo.Asked.Value.ToExclusive);   // hết ngày 11 = đầu ngày 12
+    }
+
+    [Fact]
+    public async Task ExplicitDates_BecomeUtcDayBounds_BothEndsIncluded()
+    {
+        var repo = new FakeRepo();
+
+        await Service(repo).GetOverviewAsync(new DateOnly(2026, 11, 1), new DateOnly(2026, 11, 7));
+
+        Assert.Equal((From, ToExclusive), repo.Asked);
+    }
+
+    [Fact]
+    public async Task OnlyFromGiven_EndsToday()
+    {
+        var overview = await Service(new FakeRepo()).GetOverviewAsync(new DateOnly(2026, 11, 1), null);
+
+        Assert.Equal(new DateOnly(2026, 11, 11), overview.To);
+    }
+
+    [Fact]
+    public async Task TotalsAndKindRollUp_AddUpTheGroups()
+    {
+        var repo = new FakeRepo
+        {
+            KindPurpose =
+            [
+                Row("claude", "skill_tra_loi", calls: 2, input: 3000, output: 800, latencySum: 6000, failed: 1),
+                Row("claude", "skill_kich_ban", calls: 1, input: 2400, output: 500, latencySum: 3000),
+                Row("ollama", "slm_intents", calls: 3, input: 5100, output: 540, latencySum: 63000),
+            ],
+        };
+
+        var overview = await Service(repo).GetOverviewAsync(null, null);
+
+        Assert.Equal((6, 1, 10500L, 1840L), (overview.Total.Calls, overview.Total.FailedCalls, overview.Total.InputTokens, overview.Total.OutputTokens));
+        var claude = overview.ByKind.Single(k => k.Kind == "claude").Metrics;
+        Assert.Equal((3, 1, 5400L, 1300L), (claude.Calls, claude.FailedCalls, claude.InputTokens, claude.OutputTokens));
+        var local = overview.ByKind.Single(k => k.Kind == "ollama").Metrics;
+        Assert.Equal((3, 5100L), (local.Calls, local.InputTokens));
+    }
+
+    [Fact]
+    public async Task AverageLatency_IsTotalTimeDividedByTotalCalls_NotAnAverageOfAverages()
+    {
+        // 1 lần 1000 ms và 9 lần 100 ms: trung bình đúng là 190 ms, trung bình của hai trung bình sẽ là 550 ms
+        var repo = new FakeRepo { KindPurpose = [Row("claude", "a", 1, 0, 0, 1000), Row("claude", "b", 9, 0, 0, 900)] };
+
+        var overview = await Service(repo).GetOverviewAsync(null, null);
+
+        Assert.Equal(190, overview.Total.AvgLatencyMs);
+        Assert.Equal(1000, overview.ByPurpose.Single(p => p.Purpose == "a").Metrics.AvgLatencyMs);
+        Assert.Equal(100, overview.ByPurpose.Single(p => p.Purpose == "b").Metrics.AvgLatencyMs);
+    }
+
+    [Fact]
+    public async Task ByPurpose_ListsTheBiggestTokenUsersFirst()
+    {
+        var repo = new FakeRepo
+        {
+            KindPurpose = [Row("claude", "nhỏ", 1, 100, 10, 0), Row("claude", "lớn", 1, 9000, 900, 0), Row("ollama", "vừa", 1, 2000, 200, 0)],
+        };
+
+        var overview = await Service(repo).GetOverviewAsync(null, null);
+
+        Assert.Equal(["lớn", "vừa", "nhỏ"], overview.ByPurpose.Select(p => p.Purpose));
+    }
+
+    [Fact]
+    public async Task ByDay_IsInDateOrder_WithTheDateAsADateOnly()
+    {
+        var repo = new FakeRepo
+        {
+            DayKind =
+            [
+                Row("claude", null, 1, 10, 1, 0, day: Day(3, 0)),
+                Row("ollama", null, 1, 10, 1, 0, day: Day(2, 0)),
+                Row("claude", null, 1, 10, 1, 0, day: Day(2, 0)),
+            ],
+        };
+
+        var overview = await Service(repo).GetOverviewAsync(null, null);
+
+        Assert.Equal(
+            [(new DateOnly(2026, 11, 2), "claude"), (new DateOnly(2026, 11, 2), "ollama"), (new DateOnly(2026, 11, 3), "claude")],
+            overview.ByDay.Select(d => (d.Date, d.Kind)));
+    }
+
+    [Fact]
+    public async Task NoData_GivesZerosAndEmptyLists_NotAnError()
+    {
+        var overview = await Service(new FakeRepo()).GetOverviewAsync(null, null);
+
+        Assert.Equal(new AiUsageMetrics(0, 0, 0, 0, 0, 0), overview.Total);
+        Assert.Empty(overview.ByKind);
+        Assert.Empty(overview.ByPurpose);
+        Assert.Empty(overview.ByDay);
+    }
+
+    [Fact]
+    public async Task StartAfterEnd_IsRejected()
+    {
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            Service(new FakeRepo()).GetOverviewAsync(new DateOnly(2026, 11, 10), new DateOnly(2026, 11, 1)));
+    }
+
+    [Fact]
+    public async Task ARangeOf366Days_IsAllowed_And367IsRejected()
+    {
+        var end = new DateOnly(2026, 11, 11);
+
+        await Service(new FakeRepo()).GetOverviewAsync(end.AddDays(-365), end);   // đúng 366 ngày kể cả hai đầu
+
+        await Assert.ThrowsAsync<ArgumentException>(() => Service(new FakeRepo()).GetOverviewAsync(end.AddDays(-366), end));
+    }
+
+    // ---- controller
+
+    private sealed class FakeService(AiUsageOverviewDto? overview = null, Exception? error = null) : IAiUsageReportService
+    {
+        public (DateOnly? From, DateOnly? To)? Asked { get; private set; }
+
+        public Task<AiUsageOverviewDto> GetOverviewAsync(DateOnly? from, DateOnly? to, CancellationToken ct = default)
+        {
+            Asked = (from, to);
+            if (error is not null)
+                throw error;
+            return Task.FromResult(overview!);
+        }
+    }
+
+    private static readonly AiUsageOverviewDto Sample = new(
+        new DateOnly(2026, 11, 1), new DateOnly(2026, 11, 7), new AiUsageMetrics(1, 0, 10, 1, 0, 5), [], [], []);
+
+    [Fact]
+    public async Task Controller_ReturnsTheOverview_AndPassesTheDatesThrough()
+    {
+        var service = new FakeService(Sample);
+
+        var result = await new AdminAiUsageController(service).GetOverview(new DateOnly(2026, 11, 1), new DateOnly(2026, 11, 7), default);
+
+        Assert.Same(Sample, Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal((new DateOnly(2026, 11, 1), new DateOnly(2026, 11, 7)), service.Asked);
+    }
+
+    [Fact]
+    public async Task Controller_AnInvalidRange_Is400WithTheReason()
+    {
+        var result = await new AdminAiUsageController(new FakeService(error: new ArgumentException("Khoảng sai")))
+            .GetOverview(null, null, default);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Contains("Khoảng sai", bad.Value!.ToString());
+    }
+
+    [Fact]
+    public void Controller_IsForAdminsOnly_NotModerators()
+    {
+        var authorize = typeof(AdminAiUsageController).GetCustomAttribute<AuthorizeAttribute>();
+
+        Assert.Equal(UserRoles.Admin, authorize!.Roles);   // token và chi phí là việc giám sát, Moderator không xem
+        Assert.Equal("api/v1/admin/ai-usage", typeof(AdminAiUsageController).GetCustomAttribute<RouteAttribute>()!.Template);
+    }
+}
