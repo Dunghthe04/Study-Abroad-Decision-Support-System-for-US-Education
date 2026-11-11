@@ -198,22 +198,32 @@ namespace StudyAbroad.Application.Advisor
                 return null;
             try
             {
+                // Mỗi thông tin nằm ở tin nó mô tả: nhãn model gán thuộc về câu hỏi (tin học sinh), kết quả và số đo thuộc về câu trả lời (tin trợ lý)
                 var rows = new List<StudyAbroad.Domain.Entities.ChatMessage>();
+                StudyAbroad.Domain.Entities.ChatMessage? question = null;
                 if (request.Messages.LastOrDefault(m => m.Role == "user")?.Content is { Length: > 0 } asked)
-                    rows.Add(new() { ChatSessionId = session.Id, Role = "user", Content = asked, CreatedAt = signals.AskedAt });
+                {
+                    question = new()
+                    {
+                        ChatSessionId = session.Id, Role = "user", Content = asked, CreatedAt = signals.AskedAt,
+                        MetaJson = ChatTurn.UserMeta(signals.Slm),
+                    };
+                    rows.Add(question);
+                }
 
                 var outcome = ChatTurn.Outcome(signals.Slm, signals.Usage);
                 var reply = new StudyAbroad.Domain.Entities.ChatMessage
                 {
                     ChatSessionId = session.Id,
                     Role = "assistant",
+                    ReplyToMessageId = question?.Id,
                     Content = response.Answer,
                     SourcesJson = response.Citations is { Count: > 0 } cites
                         ? JsonSerializer.Serialize(cites.Select(c => new { title = c.Title, url = c.Url }))
                         : null,
                     Outcome = outcome,
                     ReviewStatus = ChatTurn.ReviewStatus(outcome),
-                    MetaJson = ChatTurn.Meta(signals.Slm, signals.Usage, signals.Action, signals.Skills, turnMs),
+                    MetaJson = ChatTurn.ReplyMeta(signals.Usage, signals.Action, signals.Skills, turnMs),
                 };
                 rows.Add(reply);
 

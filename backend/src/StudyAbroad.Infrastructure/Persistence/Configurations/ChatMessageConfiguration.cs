@@ -30,8 +30,13 @@ public class ChatMessageConfiguration : IEntityTypeConfiguration<ChatMessage>
                 "no_answer (không hiểu hoặc không có dữ liệu), failed (bước AI bị lỗi). Chỉ ở tin trả lời của trợ lý, tin của học sinh để null.");
         b.Property(x => x.MetaJson).HasColumnType("jsonb")
             .HasComment(
-                "Tóm tắt lượt cho admin (JSON): intents (các ý SLM tách), actions, slmFallback, confidence, totalLatencyMs, totalTokens. " +
-                "Chỉ ở tin trả lời của trợ lý. Lọc được vào từng khóa, ví dụ meta_json ->> 'slmFallback' = 'true'.");
+                "Tóm tắt lượt (JSON), mỗi thông tin ở tin nó mô tả. Tin của HỌC SINH: slm = nhãn model gán cho câu hỏi (modelIntents, intents, confidence, fallback). " +
+                "Tin TRỢ LÝ: local và cloud (số lần gọi, token, thời gian của AI local và AI cloud), turnMs, action, skills, failedSteps. " +
+                "Lọc được vào từng khóa, ví dụ meta_json -> 'slm' ->> 'fallback' = 'true'.");
+        b.Property(x => x.ReplyToMessageId)
+            .HasComment("Tin của học sinh mà tin trợ lý này trả lời, nối chính xác một câu hỏi với một câu trả lời. Chỉ có ở tin trợ lý.");
+        b.HasOne<ChatMessage>().WithMany().HasForeignKey(x => x.ReplyToMessageId).OnDelete(DeleteBehavior.SetNull);
+        b.HasIndex(x => x.ReplyToMessageId);
         b.HasIndex(x => new { x.ChatSessionId, x.CreatedAt });
         b.HasIndex(x => x.ReviewStatus);
     }

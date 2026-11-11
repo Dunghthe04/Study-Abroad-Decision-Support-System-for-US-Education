@@ -92,6 +92,8 @@ public class DbContextSchemaTests
         AssertForeignKey<FieldEvidence>(db, nameof(FieldEvidence.UniversityId), "universities", DeleteBehavior.Cascade);
         // Nhật ký AI nối với tin trả lời của trợ lý; xóa tin thì giữ dòng nhật ký (token đã tiêu thật), chỉ bỏ liên kết
         AssertForeignKey<AiCall>(db, nameof(AiCall.ChatMessageId), "chat_messages", DeleteBehavior.SetNull);
+        // Tin trợ lý trỏ tới tin hỏi nó trả lời; xóa tin hỏi thì giữ tin trả lời
+        AssertForeignKey<ChatMessage>(db, nameof(ChatMessage.ReplyToMessageId), "chat_messages", DeleteBehavior.SetNull);
 
         Assert.Equal("jsonb", ColumnType<ChatMessage>(db, nameof(ChatMessage.MetaJson)));
         Assert.Equal("jsonb", ColumnType<ExpertRule>(db, nameof(ExpertRule.ConditionJson)));

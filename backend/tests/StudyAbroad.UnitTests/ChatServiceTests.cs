@@ -131,11 +131,58 @@ public class ChatServiceTests
         await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), messages: saved)
             .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest([new Application.Advisor.ChatMessage("user", "asdfgh")]));
 
-        var reply = saved.Rows[1];
+        var (student, reply) = (saved.Rows[0], saved.Rows[1]);
         Assert.Equal("no_answer", reply.Outcome);
         Assert.Equal("open", reply.ReviewStatus);
-        var label = JsonDocument.Parse(reply.MetaJson!).RootElement.GetProperty("slm").GetProperty("modelIntents")[0];
-        Assert.Equal("asdfgh", label.GetProperty("span").GetString());   // admin thấy model đã gán nhãn gì cho đoạn chữ nào
+        // Nhãn model gán thuộc về CÂU HỎI nên nằm ở tin của học sinh, không phải tin trả lời
+        var label = JsonDocument.Parse(student.MetaJson!).RootElement.GetProperty("slm").GetProperty("modelIntents")[0];
+        Assert.Equal("asdfgh", label.GetProperty("span").GetString());
+        Assert.False(JsonDocument.Parse(reply.MetaJson!).RootElement.TryGetProperty("slm", out _));
+    }
+
+    [Fact]
+    public async Task TheReplyPointsExactlyAtTheQuestionItAnswers()
+    {
+        var saved = new FakeMessages();
+
+        await new ChatService(new FakeAdvisor("B0"), new FakeSessions(), new FakeProfileFlow(), messages: saved)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        var (student, reply) = (saved.Rows[0], saved.Rows[1]);
+        Assert.Equal(student.Id, reply.ReplyToMessageId);
+        Assert.Null(student.ReplyToMessageId);
+    }
+
+    [Fact]
+    public async Task ReplyMeta_SplitsLocalAndCloudTokensOfTheTurn()
+    {
+        var saved = new FakeMessages();
+        var advisor = new FakeAdvisor("B0")
+        {
+            AiUsage =
+            [
+                new AiUsageDto("ollama", "usas-slm-v4", "slm_intents", "3.0", 1700, 180, 0, true, null, 21000),
+                new AiUsageDto("claude", "claude-haiku-5-5", "skill_tra_loi", "1.0", 2400, 500, 0, true, null, 3000),
+            ],
+        };
+
+        await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), messages: saved)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        var meta = JsonDocument.Parse(saved.Rows[1].MetaJson!).RootElement;
+        Assert.Equal(1700, meta.GetProperty("local").GetProperty("inputTokens").GetInt32());
+        Assert.Equal(2400, meta.GetProperty("cloud").GetProperty("inputTokens").GetInt32());
+    }
+
+    [Fact]
+    public async Task ReplyWithoutAQuestion_PointsAtNothing()
+    {
+        var saved = new FakeMessages();
+
+        await new ChatService(new FakeAdvisor("B0"), new FakeSessions(), new FakeProfileFlow(), messages: saved)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest([]));
+
+        Assert.Null(saved.Rows.Single().ReplyToMessageId);
     }
 
     [Fact]

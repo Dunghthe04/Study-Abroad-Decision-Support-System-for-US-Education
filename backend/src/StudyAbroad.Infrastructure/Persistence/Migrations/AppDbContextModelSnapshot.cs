@@ -378,13 +378,18 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.Property<string>("MetaJson")
                         .HasColumnType("jsonb")
                         .HasColumnName("meta_json")
-                        .HasComment("Tóm tắt lượt cho admin (JSON): intents (các ý SLM tách), actions, slmFallback, confidence, totalLatencyMs, totalTokens. Chỉ ở tin trả lời của trợ lý. Lọc được vào từng khóa, ví dụ meta_json ->> 'slmFallback' = 'true'.");
+                        .HasComment("Tóm tắt lượt (JSON), mỗi thông tin ở tin nó mô tả. Tin của HỌC SINH: slm = nhãn model gán cho câu hỏi (modelIntents, intents, confidence, fallback). Tin TRỢ LÝ: local và cloud (số lần gọi, token, thời gian của AI local và AI cloud), turnMs, action, skills, failedSteps. Lọc được vào từng khóa, ví dụ meta_json -> 'slm' ->> 'fallback' = 'true'.");
 
                     b.Property<string>("Outcome")
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")
                         .HasColumnName("outcome")
                         .HasComment("Kết quả lượt chat, hệ thống tự ghi và KHÔNG đổi sau đó: answered (trả lời được), no_answer (không hiểu hoặc không có dữ liệu), failed (bước AI bị lỗi). Chỉ ở tin trả lời của trợ lý, tin của học sinh để null.");
+
+                    b.Property<Guid?>("ReplyToMessageId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reply_to_message_id")
+                        .HasComment("Tin của học sinh mà tin trợ lý này trả lời, nối chính xác một câu hỏi với một câu trả lời. Chỉ có ở tin trợ lý.");
 
                     b.Property<string>("ReviewStatus")
                         .HasMaxLength(16)
@@ -419,6 +424,9 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_chat_messages");
+
+                    b.HasIndex("ReplyToMessageId")
+                        .HasDatabaseName("ix_chat_messages_reply_to_message_id");
 
                     b.HasIndex("ReviewStatus")
                         .HasDatabaseName("ix_chat_messages_review_status");
@@ -3821,6 +3829,12 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_chat_messages_chat_sessions_chat_session_id");
+
+                    b.HasOne("StudyAbroad.Domain.Entities.ChatMessage", null)
+                        .WithMany()
+                        .HasForeignKey("ReplyToMessageId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_chat_messages_chat_messages_reply_to_message_id");
                 });
 
             modelBuilder.Entity("StudyAbroad.Domain.Entities.ChatSession", b =>

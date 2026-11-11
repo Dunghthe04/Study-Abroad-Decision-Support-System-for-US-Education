@@ -95,34 +95,73 @@ public class ChatTurnTests
     // ---- meta_json
 
     [Fact]
-    public void Meta_HoldsModelLabelAndTotals()
+    public void UserMeta_HoldsTheLabelTheModelGaveToTheQuestion()
     {
         var entities = JsonDocument.Parse("{\"subtype\":\"ambiguous\"}").RootElement;
         var slm = new AdvisorSlmDto(
             [new AdvisorSlmIntentDto("out_of_scope", "asdfgh", entities)], ["out_of_scope"], "ambiguous", 0.2, false);
-        var usage = new[] { Call("ollama", "slm_intents", latency: 21000), Call("claude", "skill_tra_loi", latency: 2000) };
 
-        var meta = JsonDocument.Parse(ChatTurn.Meta(slm, usage, "recommend", ["skill_tra_loi"], 23500)).RootElement;
+        var meta = JsonDocument.Parse(ChatTurn.UserMeta(slm)!).RootElement;
 
         Assert.Equal(ChatTurn.MetaVersion, meta.GetProperty("v").GetInt32());
-        Assert.Equal(23500, meta.GetProperty("turnMs").GetInt64());
-        Assert.Equal(23000, meta.GetProperty("aiLatencyMs").GetInt32());
-        Assert.Equal(2, meta.GetProperty("aiCalls").GetInt32());
-        Assert.Equal(200, meta.GetProperty("inputTokens").GetInt32());
-        Assert.Equal(20, meta.GetProperty("outputTokens").GetInt32());
-        Assert.Equal("recommend", meta.GetProperty("action").GetString());
         var label = meta.GetProperty("slm").GetProperty("modelIntents")[0];
         Assert.Equal("out_of_scope", label.GetProperty("type").GetString());
         Assert.Equal("asdfgh", label.GetProperty("span").GetString());
         Assert.Equal("ambiguous", label.GetProperty("entities").GetProperty("subtype").GetString());
+        Assert.False(meta.TryGetProperty("local", out _));   // số đo của AI thuộc về tin trả lời, không phải câu hỏi
     }
 
     [Fact]
-    public void Meta_CanBeFilteredByFallbackInSql_SoTheKeyIsCamelCase()
+    public void UserMeta_IsNullWhenTheTurnDidNotGoThroughTheSlm() => Assert.Null(ChatTurn.UserMeta(null));
+
+    [Fact]
+    public void UserMeta_CanBeFilteredByFallbackInSql_SoTheKeyIsCamelCase()
     {
-        var meta = JsonDocument.Parse(ChatTurn.Meta(new AdvisorSlmDto(Fallback: true), null, null, null, 10)).RootElement;
+        var meta = JsonDocument.Parse(ChatTurn.UserMeta(new AdvisorSlmDto(Fallback: true))!).RootElement;
 
         Assert.True(meta.GetProperty("slm").GetProperty("fallback").GetBoolean());
+    }
+
+    [Fact]
+    public void ReplyMeta_SplitsLocalAiFromCloudAi()
+    {
+        var usage = new[]
+        {
+            Call("ollama", "slm_intents", latency: 21000),
+            Call("claude", "skill_tra_loi", latency: 2000),
+            Call("claude", "skill_explain", latency: 1000),
+        };
+
+        var meta = JsonDocument.Parse(ChatTurn.ReplyMeta(usage, "recommend", ["skill_tra_loi"], 23500)).RootElement;
+
+        Assert.Equal(23500, meta.GetProperty("turnMs").GetInt64());
+        Assert.Equal("recommend", meta.GetProperty("action").GetString());
+        var local = meta.GetProperty("local");
+        Assert.Equal((1, 100, 10, 21000), (local.GetProperty("calls").GetInt32(), local.GetProperty("inputTokens").GetInt32(),
+            local.GetProperty("outputTokens").GetInt32(), local.GetProperty("latencyMs").GetInt32()));
+        var cloud = meta.GetProperty("cloud");
+        Assert.Equal((2, 200, 20, 3000), (cloud.GetProperty("calls").GetInt32(), cloud.GetProperty("inputTokens").GetInt32(),
+            cloud.GetProperty("outputTokens").GetInt32(), cloud.GetProperty("latencyMs").GetInt32()));
+        Assert.False(meta.TryGetProperty("other", out _));
+        Assert.False(meta.TryGetProperty("slm", out _));      // nhãn thuộc về tin hỏi
+    }
+
+    [Fact]
+    public void ReplyMeta_KeepsAnUnknownSourceInOther_SoNoDataIsLost()
+    {
+        var meta = JsonDocument.Parse(ChatTurn.ReplyMeta([Call("gemini", "x")], null, null, 5)).RootElement;
+
+        Assert.Equal(1, meta.GetProperty("other").GetProperty("calls").GetInt32());
+        Assert.Equal(0, meta.GetProperty("local").GetProperty("calls").GetInt32());
+    }
+
+    [Fact]
+    public void ReplyMeta_WithoutUsage_HasEmptyBuckets()
+    {
+        var meta = JsonDocument.Parse(ChatTurn.ReplyMeta(null, null, null, 5)).RootElement;
+
+        Assert.Equal(0, meta.GetProperty("local").GetProperty("calls").GetInt32());
+        Assert.Equal(0, meta.GetProperty("cloud").GetProperty("inputTokens").GetInt32());
         Assert.False(meta.TryGetProperty("action", out _));   // khóa null không ghi, tránh nhiễu
     }
 
