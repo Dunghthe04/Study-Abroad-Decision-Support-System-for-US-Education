@@ -10,7 +10,12 @@ import { Spinner } from "@/components/ui/spinner";
 import { useAssistant, useAssistantPageContext } from "@/components/assistant/AssistantProvider";
 import { recommendationApi } from "@/lib/recommendation-api";
 import { whyText } from "@/lib/recommendation-labels";
-import { RESET_SIMULATION_EVENT, SIMULATE_EVENT, describeSimulation } from "@/lib/simulation-link";
+import {
+  PROFILE_SAVED_EVENT,
+  RESET_SIMULATION_EVENT,
+  SIMULATE_EVENT,
+  describeSimulation,
+} from "@/lib/simulation-link";
 import { useProfileSimulation, type ProfileSimulation } from "@/lib/use-profile-simulation";
 import type {
   PickBlockName,
@@ -108,6 +113,15 @@ export function RecommendationView({ autoRun, initialOverrides }: Recommendation
     };
   }, [replaceSimulation, resetSimulation]);
 
+  // Chat vừa lưu hồ sơ chính thức: danh sách đang xem tính theo hồ sơ cũ, hiện thanh báo để học sinh tự bấm cập nhật
+  // (không tự chạy, tránh thêm lượt vào lịch sử gợi ý khi học sinh chưa muốn)
+  const [profileSaved, setProfileSaved] = useState(false);
+  useEffect(() => {
+    const onSaved = () => setProfileSaved(true);
+    window.addEventListener(PROFILE_SAVED_EVENT, onSaved);
+    return () => window.removeEventListener(PROFILE_SAVED_EVENT, onSaved);
+  }, []);
+
   // Có kết quả thì mở trợ lý bên phải một lần như bản demo (màn hẹp thì khung phủ kín nên không tự mở)
   const autoOpened = useRef(false);
   useEffect(() => {
@@ -118,6 +132,7 @@ export function RecommendationView({ autoRun, initialOverrides }: Recommendation
 
   // Chạy cả quy trình (lọc cứng, đọc ngoại khóa, chấm nhóm bằng code, lưu)
   const runNew = async () => {
+    setProfileSaved(false);
     setPhase("running");
     setError(null);
     sim.resetAll();
@@ -177,6 +192,19 @@ export function RecommendationView({ autoRun, initialOverrides }: Recommendation
           <AlertCircleIcon className="size-4" />
           <AlertTitle>Có lỗi</AlertTitle>
           <AlertDescription className="text-xs">{error}</AlertDescription>
+        </Alert>
+      )}
+
+      {profileSaved && rec && (
+        <Alert>
+          <RefreshCwIcon className="size-4" />
+          <AlertTitle>Hồ sơ vừa được cập nhật</AlertTitle>
+          <AlertDescription className="flex flex-wrap items-center justify-between gap-2 text-xs">
+            <span>Danh sách bên dưới vẫn tính theo hồ sơ cũ.</span>
+            <Button size="sm" onClick={runNew}>
+              Cập nhật danh sách
+            </Button>
+          </AlertDescription>
         </Alert>
       )}
 
