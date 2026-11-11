@@ -363,7 +363,10 @@ class GeneratedAdviceBranch:
         # phần của Dũng. Câu chỉ có việc của Dũng thì giao code có sẵn (xem others_only_output)
         tasks = (y.entities.get("tasks") or None) if y.type == "profile_review" else None
         others_only = tasks is not None and not any(t in TEMPLATE_TASKS for t in tasks)
-        school_list = y.type == "profile_review" and (asks_for_school_list(question) or others_only)
+        # Xin trường: câu có chữ xin trường, hoặc SLM tách ra việc chọn trường (câu gõ sai, nói kiểu khác vẫn nhận)
+        school_list = y.type == "profile_review" and (
+            asks_for_school_list(question) or others_only or "school_list" in (tasks or [])
+        )
         if others_only and "school_list" not in tasks:
             out = others_only_output(y, tasks, asks_for_school_list(question))
             if out is not None:

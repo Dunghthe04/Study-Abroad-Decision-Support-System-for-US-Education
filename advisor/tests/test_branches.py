@@ -651,8 +651,9 @@ async def test_only_the_template_tasks_go_to_the_skill_and_the_writer(tasks, exp
         entities["schools"] = ["Iowa", "Purdue"]  # schema: compare luôn kèm từ hai trường
     question = "đánh giá hồ sơ và cho em biết nên làm gì"
 
+    # Đủ B4: có school_list là chạy gợi ý trường, cần ngành
     await new_advice([], writer=writer).run(
-        ChatState(profile=filled(REQUIRED_B3)), question, tin(("profile_review", entities, question))
+        ChatState(profile=filled(REQUIRED_B4)), question, tin(("profile_review", entities, question))
     )
 
     assert writer.tasks == [expected]
@@ -677,6 +678,8 @@ async def test_only_choosing_schools_runs_the_recommendation_even_without_the_sc
     [
         ("đề xuất trường và lên lộ trình cho em", ["school_list", "roadmap"]),
         ("đánh giá hồ sơ và đề xuất trường cho em", ["assessment", "school_list"]),
+        # Gõ sai, không khớp chữ xin trường: vẫn chạy gợi ý vì SLM đã tách ra việc chọn trường
+        ("đánh giá hồ sơ và đề xuấ trường cho tôi", ["assessment", "school_list"]),
     ],
 )
 async def test_a_school_list_with_template_tasks_writes_them_then_runs_the_recommendation(question, tasks):
