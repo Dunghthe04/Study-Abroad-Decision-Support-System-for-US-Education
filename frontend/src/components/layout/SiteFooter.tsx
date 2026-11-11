@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { GraduationCapIcon } from "lucide-react";
+import { PHOTO_CREDITS } from "@/lib/landing-schools";
 
 const COLUMNS: { title: string; links: { href: string; label: string }[] }[] = [
   {
@@ -70,6 +71,7 @@ export function SiteFooter() {
             Thông tin chỉ mang tính tham khảo, không cam kết kết quả trúng tuyển hay học bổng. Hãy kiểm tra trang chính thức của trường trước khi quyết định.
           </span>
         </div>
+        <p className="mx-auto max-w-6xl px-6 pb-6 text-xs text-ink-3 sm:px-8">Ảnh khuôn viên từ Wikimedia Commons: {PHOTO_CREDITS}.</p>
       </div>
     </footer>
   );

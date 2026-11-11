@@ -27,22 +27,16 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Spinner } from "@/components/ui/spinner";
 import { OpenAssistantButton } from "@/components/assistant/OpenAssistantButton";
 import { useAssistant } from "@/components/assistant/AssistantProvider";
+import { LandingHero } from "@/components/landing/LandingHero";
 import { LayerStack } from "@/components/landing/LayerStack";
+import { LANDING_SCHOOLS, type SchoolType } from "@/lib/landing-schools";
 import { useAuth } from "@/contexts/AuthContext";
-import { GROUP_LABELS, formatPct, groupVariant } from "@/lib/recommendation-labels";
+import { GROUP_LABELS } from "@/lib/recommendation-labels";
 import { cn } from "@/lib/utils";
 
 type IconType = ComponentType<{ className?: string }>;
 
 /* ----------------------------- Dữ liệu trang ----------------------------- */
-
-// Tên nhóm lấy từ GROUP_LABELS để trang chủ nói cùng ngôn ngữ với màn kết quả
-// Tỷ lệ nhận lấy từ số liệu công bố gần nhất, chỉ để minh họa cách đặt nhóm cạnh tỷ lệ chung
-const SAMPLE_RESULT = [
-  { name: "Carnegie Mellon University", group: "R", rate: 0.11 },
-  { name: "University of Washington", group: "M", rate: 0.43 },
-  { name: "Arizona State University", group: "S", rate: 0.9 },
-];
 
 const STEPS = [
   {
@@ -63,65 +57,6 @@ const ASK_EXAMPLES = [
   "GPA 3.5, SAT 1350 thì nên nộp trường nào?",
   "So sánh University of Washington và Purdue ngành Khoa học Máy tính",
   "Trường nào có học bổng cho sinh viên quốc tế?",
-];
-
-type SchoolType = "private" | "public" | "liberal";
-
-const SCHOOLS: { name: string; city: string; type: SchoolType; typeLabel: string; image: string; highlight: string; majors: string[] }[] = [
-  {
-    name: "Harvard University",
-    city: "Cambridge, MA",
-    type: "private",
-    typeLabel: "Ivy League",
-    image: "https://images.unsplash.com/photo-1583373834259-46cc92173cb7?auto=format&fit=crop&w=800&q=80",
-    highlight: "Xét hồ sơ need-blind cả với sinh viên quốc tế và đáp ứng toàn bộ nhu cầu tài chính được duyệt.",
-    majors: ["Computer Science", "Economics", "Applied Math"],
-  },
-  {
-    name: "Stanford University",
-    city: "Stanford, CA",
-    type: "private",
-    typeLabel: "Tư thục",
-    image: "https://images.unsplash.com/photo-1541339907198-e08756dedf3f?auto=format&fit=crop&w=800&q=80",
-    highlight: "Nằm giữa Thung lũng Silicon, gần các công ty công nghệ lớn.",
-    majors: ["AI & Data Science", "Management", "Bioengineering"],
-  },
-  {
-    name: "University of Washington",
-    city: "Seattle, WA",
-    type: "public",
-    typeLabel: "Công lập",
-    image: "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?auto=format&fit=crop&w=800&q=80",
-    highlight: "Mạnh về Khoa học Máy tính, ở ngay Seattle nên dễ tìm chỗ thực tập.",
-    majors: ["Computer Science", "Bioengineering", "Information Systems"],
-  },
-  {
-    name: "Purdue University",
-    city: "West Lafayette, IN",
-    type: "public",
-    typeLabel: "Công lập",
-    image: "https://images.unsplash.com/photo-1564981797816-1043664bf78d?auto=format&fit=crop&w=800&q=80",
-    highlight: "Nổi tiếng về Kỹ thuật và Hàng không vũ trụ, học phí thấp hơn trường tư.",
-    majors: ["Aerospace Eng", "Mechanical Eng", "Cybersecurity"],
-  },
-  {
-    name: "Arizona State University",
-    city: "Tempe, AZ",
-    type: "public",
-    typeLabel: "Công lập",
-    image: "https://images.unsplash.com/photo-1562774053-701939374585?auto=format&fit=crop&w=800&q=80",
-    highlight: "Nhiều ngành, có học bổng theo thành tích cho sinh viên quốc tế.",
-    majors: ["Software Engineering", "Business", "Data Science"],
-  },
-  {
-    name: "Williams College",
-    city: "Williamstown, MA",
-    type: "liberal",
-    typeLabel: "Liberal Arts",
-    image: "https://images.unsplash.com/photo-1607237138185-eedd9c632b0b?auto=format&fit=crop&w=800&q=80",
-    highlight: "Lớp nhỏ, giảng viên theo sát từng sinh viên, mạnh về nghiên cứu bậc cử nhân.",
-    majors: ["Economics", "Mathematics", "Political Science"],
-  },
 ];
 
 const SCHOOL_FILTERS: { key: "all" | SchoolType; label: string }[] = [
@@ -203,8 +138,10 @@ function SchoolImage({ src, alt }: { src: string; alt: string }) {
   const [broken, setBroken] = useState(false);
   if (broken) return <div aria-hidden className="aspect-[16/10] w-full bg-brand-wash" />;
   return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img src={src} alt={alt} loading="lazy" onError={() => setBroken(true)} className="aspect-[16/10] w-full object-cover" />
+    <div className="overflow-hidden">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} alt={alt} loading="lazy" onError={() => setBroken(true)} className="aspect-[16/10] w-full object-cover transition-transform duration-500 ease-out group-hover/card:scale-[1.03] motion-reduce:transition-none" />
+    </div>
   );
 }
 
@@ -236,10 +173,12 @@ function HomeView() {
     );
   }
 
-  const schools = schoolFilter === "all" ? SCHOOLS : SCHOOLS.filter((s) => s.type === schoolFilter);
+  const schools = schoolFilter === "all" ? LANDING_SCHOOLS : LANDING_SCHOOLS.filter((s) => s.type === schoolFilter);
 
   return (
-    <div className="space-y-20 pb-20 sm:space-y-28">
+    <>
+    <LandingHero />
+    <div className="mx-auto max-w-[1560px] space-y-20 px-4 pt-12 pb-20 sm:space-y-28 sm:px-8 sm:pt-16 lg:px-12">
       {isStaff && isPublicPreview && (
         <Alert variant="warning">
           <ShieldAlertIcon />
@@ -254,53 +193,9 @@ function HomeView() {
         </Alert>
       )}
 
-      {/* HERO */}
-      <section className="grid gap-10 pt-6 sm:pt-12 lg:grid-cols-12 lg:items-center lg:gap-16">
-        <div className="space-y-6 lg:col-span-7">
-          <h1 className="text-4xl leading-[1.12] font-semibold tracking-[-0.02em] text-balance text-ink sm:text-5xl">
-            Chọn trường Mỹ hợp với điểm số và ngân sách của bạn
-          </h1>
-          <p className="max-w-[58ch] text-base leading-relaxed text-pretty text-ink-2 sm:text-lg">
-            Nhập GPA, điểm thi và ngân sách. USAS so hồ sơ với số liệu tuyển sinh của từng trường, xếp vào bốn nhóm và giải thích lý do cho từng trường.
-          </p>
-          <div className="flex flex-wrap gap-3">
-            <Link href="/analysis" className={buttonVariants({ size: "xl" })}>
-              Phân tích hồ sơ
-              <ArrowRightIcon />
-            </Link>
-            <Link href="/methodology" className={buttonVariants({ variant: "outline", size: "xl" })}>
-              Cách hệ thống xếp trường
-            </Link>
-          </div>
-        </div>
-
-        <Card className="lg:col-span-5">
-          <CardHeader className="border-b">
-            <div className="flex items-center justify-between gap-2">
-              <CardTitle className="font-sans text-base">Ví dụ kết quả</CardTitle>
-              <Badge variant="neutral">Minh họa</Badge>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <ul className="divide-y divide-line">
-              {SAMPLE_RESULT.map((r) => (
-                <li key={r.name} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium text-ink">{r.name}</div>
-                    <div className="text-xs text-ink-2">Trường nhận chung <span className="text-numeric">{formatPct(r.rate)}</span></div>
-                  </div>
-                  <Badge variant={groupVariant(r.group)}>{GROUP_LABELS[r.group as "R" | "M" | "S"]}</Badge>
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-          <CardFooter className="text-body-s">GPA 3.6 · SAT 1380 · Ngân sách 40.000 USD/năm</CardFooter>
-        </Card>
-      </section>
-
       {/* KHÔNG GIAN CÁ NHÂN (đã đăng nhập) */}
       {isStudentOrParent && (
-        <section className="-mt-8 flex flex-col gap-4 rounded-xl border border-line bg-surface p-5 sm:-mt-16 sm:flex-row sm:items-center sm:justify-between">
+        <section className="flex flex-col gap-4 rounded-xl border border-line bg-surface p-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="font-sans text-h3 text-ink">Chào {user?.fullName || "bạn"}</h2>
             <p className="text-sm text-ink-2">Tiếp tục từ chỗ bạn dừng lại.</p>
@@ -407,7 +302,7 @@ function HomeView() {
 
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {schools.map((s) => (
-            <Card key={s.name}>
+            <Card key={s.name} className="!pt-0">
               <SchoolImage src={s.image} alt={s.name} />
               <CardHeader>
                 <div className="flex items-start justify-between gap-2">
@@ -523,6 +418,7 @@ function HomeView() {
         </div>
       </section>
     </div>
+    </>
   );
 }
 
