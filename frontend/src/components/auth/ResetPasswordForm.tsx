@@ -3,12 +3,10 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeftIcon } from "lucide-react";
 import { authApi, ApiError } from "@/lib/api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { Button, buttonVariants } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
@@ -121,127 +119,125 @@ export function ResetPasswordForm() {
   };
 
   return (
-    <Card className="mx-auto w-full max-w-md">
-      <CardHeader className="text-center">
-        <CardTitle>
-          <h1>Thiết lập mật khẩu mới</h1>
-        </CardTitle>
-        <CardDescription>
+    <div className="space-y-6">
+      <div className="space-y-1">
+        <h1 className="font-heading text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
+          Thiết lập mật khẩu mới
+        </h1>
+        <p className="text-sm text-ink-2">
           Nhập mã OTP nhận được qua email cùng mật khẩu mới của bạn.
-        </CardDescription>
-      </CardHeader>
+        </p>
+      </div>
 
-      <CardContent className="space-y-6">
-        {error && (
-          <Alert variant="destructive">
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
+      {error && (
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
 
-        {successMessage && (
-          <Alert variant="success" role="status">
-            <AlertDescription>{successMessage}</AlertDescription>
-          </Alert>
-        )}
+      {successMessage && (
+        <Alert variant="success" role="status">
+          <AlertDescription>{successMessage}</AlertDescription>
+        </Alert>
+      )}
 
-        <form onSubmit={handleSubmit}>
-          <FieldGroup>
-            {/* Email */}
-            <Field>
-              <FieldLabel htmlFor="reset-email-input">Địa chỉ Email</FieldLabel>
-              <Input
-                id="reset-email-input"
-                type="email"
-                required
-                maxLength={100}
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="example@gmail.com"
-              />
-            </Field>
+      <form onSubmit={handleSubmit}>
+        <FieldGroup>
+          {/* Email */}
+          <Field>
+            <FieldLabel htmlFor="reset-email-input">Địa chỉ Email</FieldLabel>
+            <Input
+              id="reset-email-input"
+              type="email"
+              required
+              maxLength={100}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="example@gmail.com"
+            />
+          </Field>
 
-            {/* Mã OTP */}
-            <Field>
-              <div className="flex items-center justify-between">
-                <FieldLabel htmlFor="reset-otp-input">Mã xác thực OTP (6 chữ số)</FieldLabel>
-                <Badge variant="warn">Hiệu lực trong 5 phút</Badge>
-              </div>
-              <Input
-                id="reset-otp-input"
-                type="text"
-                required
-                maxLength={6}
-                pattern="[0-9]*"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                value={otpCode}
-                onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                placeholder="123456"
-                className="text-center font-mono tracking-widest"
-              />
-              <FieldDescription>
-                Mã sẽ tự hủy sau 5 lần nhập sai. Tối đa 5 lần gửi mã mỗi giờ.
-              </FieldDescription>
-            </Field>
+          {/* Mã OTP */}
+          <Field>
+            <div className="flex items-center justify-between">
+              <FieldLabel htmlFor="reset-otp-input">Mã xác thực OTP (6 chữ số)</FieldLabel>
+              <Badge variant="warn">Hiệu lực trong 5 phút</Badge>
+            </div>
+            <Input
+              id="reset-otp-input"
+              type="text"
+              required
+              maxLength={6}
+              pattern="[0-9]*"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              value={otpCode}
+              onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              placeholder="123456"
+              className="text-center font-mono tracking-widest"
+            />
+            <FieldDescription>
+              Mã sẽ tự hủy sau 5 lần nhập sai. Tối đa 5 lần gửi mã mỗi giờ.
+            </FieldDescription>
+          </Field>
 
-            {/* Mật khẩu mới */}
-            <Field>
-              <FieldLabel htmlFor="new-password">Mật khẩu mới</FieldLabel>
-              <Input
-                id="new-password"
-                type="password"
-                required
-                maxLength={100}
-                autoComplete="new-password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="Tối thiểu 8 ký tự"
-              />
-            </Field>
+          {/* Mật khẩu mới */}
+          <Field>
+            <FieldLabel htmlFor="new-password">Mật khẩu mới</FieldLabel>
+            <Input
+              id="new-password"
+              type="password"
+              required
+              maxLength={100}
+              autoComplete="new-password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="Tối thiểu 8 ký tự"
+            />
+          </Field>
 
-            {/* Xác nhận mật khẩu mới */}
-            <Field>
-              <FieldLabel htmlFor="confirm-new-password">Xác nhận mật khẩu mới</FieldLabel>
-              <Input
-                id="confirm-new-password"
-                type="password"
-                required
-                maxLength={100}
-                autoComplete="new-password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Nhập lại mật khẩu mới"
-              />
-            </Field>
+          {/* Xác nhận mật khẩu mới */}
+          <Field>
+            <FieldLabel htmlFor="confirm-new-password">Xác nhận mật khẩu mới</FieldLabel>
+            <Input
+              id="confirm-new-password"
+              type="password"
+              required
+              maxLength={100}
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Nhập lại mật khẩu mới"
+            />
+          </Field>
 
-            <Button type="submit" size="lg" disabled={isSubmitting || otpCode.length !== 6} className="w-full">
-              {isSubmitting && <Spinner data-icon="inline-start" />}
-              {isSubmitting ? "Đang xử lý..." : "Cập nhật mật khẩu"}
-            </Button>
-          </FieldGroup>
-        </form>
+          <Button type="submit" size="xl" disabled={isSubmitting || otpCode.length !== 6} className="w-full">
+            {isSubmitting && <Spinner data-icon="inline-start" />}
+            {isSubmitting ? "Đang xử lý..." : "Cập nhật mật khẩu"}
+          </Button>
+        </FieldGroup>
+      </form>
 
-        {/* Gửi lại OTP */}
-        <div className="flex flex-col items-center gap-2 text-muted-foreground">
-          <div>
-            Chưa nhận được mã?{" "}
-            <Button
-              type="button"
-              variant="link"
-              onClick={handleResendOtp}
-              disabled={cooldown > 0 || isResending}
-            >
-              {cooldown > 0 ? `Gửi lại sau (${cooldown}s)` : isResending ? "Đang gửi..." : "Gửi lại mã OTP"}
-            </Button>
-          </div>
-          <div>
-            <Link href="/login" className={buttonVariants({ variant: "ghost", size: "sm" })}>
-              <ArrowLeftIcon aria-hidden="true" />
-              Quay lại đăng nhập
-            </Link>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+      {/* Gửi lại OTP và Đăng nhập */}
+      <div className="space-y-2 pt-2 text-center text-sm text-ink-2">
+        <p>
+          Chưa nhận được mã?{" "}
+          <button
+            type="button"
+            onClick={handleResendOtp}
+            disabled={cooldown > 0 || isResending}
+            className="font-semibold text-brand hover:underline disabled:opacity-50 disabled:no-underline disabled:cursor-not-allowed"
+          >
+            {cooldown > 0 ? `Gửi lại sau (${cooldown}s)` : isResending ? "Đang gửi..." : "Gửi lại mã"}
+          </button>
+        </p>
+        <p>
+          Đã nhớ mật khẩu?{" "}
+          <Link href="/login" className="font-semibold text-brand hover:underline">
+            Đăng nhập
+          </Link>
+        </p>
+      </div>
+    </div>
   );
 }
