@@ -4,7 +4,10 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using StudyAbroad.Api.Controllers;
+using System.Security.Claims;
+using Microsoft.AspNetCore.Http;
 using StudyAbroad.Application.Admin.ChatReview;
+using StudyAbroad.Application.Audit;
 using StudyAbroad.Application.Common;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
@@ -248,6 +251,143 @@ public class ChatReviewTests
         Assert.Contains("GROUP BY", counts);
     }
 
+    // ---- bộ đọc nhãn đầy đủ (chỉ dùng cho chi tiết)
+
+    [Fact]
+    public void ReadModelDetail_KeepsTheStudentsWordsAndEntities_ForTheDetailView()
+    {
+        var model = ChatReviewMetaReader.ReadModelDetail(QuestionMeta)!;
+
+        Assert.Equal((0.41, false), (model.Confidence, model.Fallback));
+        var intent = Assert.Single(model.ModelIntents);
+        Assert.Equal(("knowledge", SecretSpan), (intent.Type, intent.Span));
+        Assert.Equal("em GPA 3.6", intent.Entities!.Value.GetProperty("gpa").GetString());
+        Assert.Equal(["knowledge"], model.IntentTypes);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("hỏng")]
+    [InlineData("{\"v\":1}")]
+    public void ReadModelDetail_WithMissingOrBrokenMeta_IsNull(string? meta) => Assert.Null(ChatReviewMetaReader.ReadModelDetail(meta));
+
+    [Fact]
+    public void ReadModelDetail_SkipsMalformedIntents_AndToleratesMissingParts()
+    {
+        const string meta = "{\"slm\":{\"modelIntents\":[1,{\"span\":\"thiếu type\"},{\"type\":\"scenario\"}],\"fallback\":true}}";
+
+        var model = ChatReviewMetaReader.ReadModelDetail(meta)!;
+
+        var intent = Assert.Single(model.ModelIntents);
+        Assert.Equal(("scenario", ""), (intent.Type, intent.Span));   // thiếu span thì để trống
+        Assert.Null(intent.Entities);
+        Assert.True(model.Fallback);
+    }
+
+    // ---- truy vấn chi tiết
+
+    [Fact]
+    public void ReplyDetail_OnlyReturnsMessagesOfTheQueue_SoItCannotReadArbitraryChats()
+    {
+        var sessions = new[] { Session(1, Id(7)) }.AsQueryable();
+        var messages = new[]
+        {
+            Msg(1, 1, "user", Day(2), outcome: null, review: null),                       // tin của học sinh
+            Msg(2, 1, "assistant", Day(2), outcome: "answered", review: null),             // đã trả lời được
+            Msg(3, 1, "assistant", Day(2), outcome: "no_answer", review: "open"),          // thuộc hàng đợi
+            Msg(4, 1, "system", Day(2), outcome: "failed", review: "open"),
+        }.AsQueryable();
+
+        Assert.Empty(ChatReviewAggregator.ReplyDetail(messages, sessions, Id(201)).ToList());
+        Assert.Empty(ChatReviewAggregator.ReplyDetail(messages, sessions, Id(202)).ToList());
+        Assert.Single(ChatReviewAggregator.ReplyDetail(messages, sessions, Id(203)).ToList());
+        Assert.Single(ChatReviewAggregator.ReplyDetail(messages, sessions, Id(204)).ToList());
+        Assert.Empty(ChatReviewAggregator.ReplyDetail(messages, sessions, Id(999)).ToList());
+    }
+
+    [Fact]
+    public void ReplyDetail_CarriesTheContentOwnerAndTheQuestionLink()
+    {
+        var sessions = new[] { Session(1, Id(7)) }.AsQueryable();
+        var messages = new[] { Msg(2, 1, "assistant", Day(2), replyTo: 1, meta: ReplyMeta) }.AsQueryable();
+
+        var row = Assert.Single(ChatReviewAggregator.ReplyDetail(messages, sessions, Id(202)).ToList());
+
+        Assert.Equal((Id(7), Id(101), Id(201), "nội dung riêng tư"), (row.UserId, row.SessionId, row.QuestionMessageId, row.Content));
+        Assert.Equal(ReplyMeta, row.MetaJson);
+    }
+
+    [Fact]
+    public void QuestionDetail_FindsTheQuestionWithItsMeta()
+    {
+        var messages = new[] { Msg(1, 1, "user", Day(2), outcome: null, review: null, meta: QuestionMeta) }.AsQueryable();
+
+        var row = Assert.Single(ChatReviewAggregator.QuestionDetail(messages, Id(201)).ToList());
+
+        Assert.Equal((Id(201), QuestionMeta), (row.MessageId, row.MetaJson));
+    }
+
+    [Fact]
+    public void ContextBefore_IsThePreviousUserAndAssistantMessagesOfTheSameSession_NearestFirst_Limited()
+    {
+        var messages = new[]
+        {
+            Msg(1, 1, "user", Day(2, 8), outcome: null, review: null),
+            Msg(2, 1, "assistant", Day(2, 9), outcome: "answered", review: null),
+            Msg(3, 1, "system", Day(2, 10), outcome: "failed"),                             // dòng lỗi: không tính là ngữ cảnh
+            Msg(4, 1, "user", Day(2, 11), outcome: null, review: null),
+            Msg(5, 2, "user", Day(2, 11), outcome: null, review: null),                     // phiên khác
+            Msg(6, 1, "user", Day(2, 13), outcome: null, review: null),                     // sau câu hỏi
+            Msg(7, 1, "user", Day(2, 12), outcome: null, review: null),                     // chính câu hỏi: loại ra
+        }.AsQueryable();
+
+        var all = ChatReviewAggregator.ContextBefore(messages, Id(101), Day(2, 12), Id(207), 10).ToList();
+        var limited = ChatReviewAggregator.ContextBefore(messages, Id(101), Day(2, 12), Id(207), 2).ToList();
+
+        Assert.Equal([Id(204), Id(202), Id(201)], all.Select(r => r.MessageId));
+        Assert.Equal([Id(204), Id(202)], limited.Select(r => r.MessageId));
+    }
+
+    [Fact]
+    public void TheDetailQueries_TranslateToSql()
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseNpgsql("Host=localhost;Database=usas_schema_check")
+            .UseSnakeCaseNamingConvention()
+            .Options;
+        using var db = new AppDbContext(options);
+
+        var reply = ChatReviewAggregator.ReplyDetail(db.ChatMessages, db.ChatSessions, Id(203)).ToQueryString();
+        var question = ChatReviewAggregator.QuestionDetail(db.ChatMessages, Id(201)).ToQueryString();
+        var context = ChatReviewAggregator.ContextBefore(db.ChatMessages, Id(101), Day(2), Id(207), 6).ToQueryString();
+
+        Assert.Contains("review_status", reply);   // chỉ tin thuộc hàng đợi
+        Assert.Contains("JOIN", reply);
+        Assert.Contains("content", question);
+        Assert.Contains("LIMIT", context);
+        Assert.Contains("ORDER BY", context);
+    }
+
+    // ---- bản giả của kho nhật ký và hàm dựng dịch vụ
+
+    private sealed class FakeAudit : IAuditLogRepository
+    {
+        public List<AuditLog> Entries { get; } = [];
+        public bool Fail { get; init; }
+
+        public Task AddAsync(AuditLog entry, CancellationToken cancellationToken = default)
+        {
+            if (Fail)
+                throw new InvalidOperationException("Không ghi được nhật ký");
+            Entries.Add(entry);
+            return Task.CompletedTask;
+        }
+
+        public Task<string?> GetLatestLockReasonAsync(Guid userId, CancellationToken cancellationToken = default) => Task.FromResult<string?>(null);
+    }
+
+    private static ChatReviewService Svc(FakeRepo repo, FakeAudit? audit = null) => new(repo, audit ?? new FakeAudit());
+
     // ---- dịch vụ
 
     private sealed class FakeRepo : IChatReviewRepository
@@ -257,6 +397,16 @@ public class ChatReviewTests
         public List<ChatReviewCountRow> CountRows { get; init; } = [];
         public (string? Status, string? Outcome, DateTime? From, DateTime? To, int Skip, int Take)? Asked { get; private set; }
         public (DateTime? From, DateTime? To)? AskedCounts { get; private set; }
+        public ChatReviewDetailRows? Detail { get; init; }
+        public int DetailQueries { get; private set; }
+        public (Guid MessageId, int ContextCount)? AskedDetail { get; private set; }
+
+        public Task<ChatReviewDetailRows?> FindDetailAsync(Guid messageId, int contextCount, CancellationToken ct = default)
+        {
+            DetailQueries++;
+            AskedDetail = (messageId, contextCount);
+            return Task.FromResult(Detail is not null && Detail.Reply.MessageId == messageId ? Detail : null);
+        }
 
         public Task<(IReadOnlyList<ChatReviewRow> Rows, int Total)> QueuePageAsync(
             string? status, string? outcome, DateTime? fromUtc, DateTime? toUtcExclusive, int skip, int take, CancellationToken ct = default)
@@ -280,7 +430,7 @@ public class ChatReviewTests
     {
         var repo = new FakeRepo();
 
-        await new ChatReviewService(repo).GetQueueAsync(null, null, null, null, 1, 20);
+        await Svc(repo).GetQueueAsync(null, null, null, null, 1, 20);
 
         Assert.Equal(("open", null, null, null, 0, 20), repo.Asked);
     }
@@ -290,7 +440,7 @@ public class ChatReviewTests
     {
         var repo = new FakeRepo();
 
-        await new ChatReviewService(repo).GetQueueAsync("resolved", "failed", new DateOnly(2026, 11, 1), new DateOnly(2026, 11, 7), 1, 20);
+        await Svc(repo).GetQueueAsync("resolved", "failed", new DateOnly(2026, 11, 1), new DateOnly(2026, 11, 7), 1, 20);
 
         Assert.Equal("resolved", repo.Asked!.Value.Status);
         Assert.Equal("failed", repo.Asked.Value.Outcome);
@@ -303,7 +453,7 @@ public class ChatReviewTests
     {
         var repo = new FakeRepo();
 
-        await new ChatReviewService(repo).GetQueueAsync(null, null, new DateOnly(2026, 11, 1), null, 1, 20);
+        await Svc(repo).GetQueueAsync(null, null, new DateOnly(2026, 11, 1), null, 1, 20);
 
         Assert.NotNull(repo.Asked!.Value.From);
         Assert.Null(repo.Asked.Value.To);
@@ -316,14 +466,14 @@ public class ChatReviewTests
     [InlineData(null, "lạ")]
     public async Task Queue_RejectsUnknownStatusOrOutcome(string? status, string? outcome)
     {
-        await Assert.ThrowsAsync<ArgumentException>(() => new ChatReviewService(new FakeRepo()).GetQueueAsync(status, outcome, null, null, 1, 20));
+        await Assert.ThrowsAsync<ArgumentException>(() => Svc(new FakeRepo()).GetQueueAsync(status, outcome, null, null, 1, 20));
     }
 
     [Fact]
     public async Task Queue_RejectsAReversedDateRange()
     {
         await Assert.ThrowsAsync<ArgumentException>(() =>
-            new ChatReviewService(new FakeRepo()).GetQueueAsync(null, null, new DateOnly(2026, 11, 10), new DateOnly(2026, 11, 1), 1, 20));
+            Svc(new FakeRepo()).GetQueueAsync(null, null, new DateOnly(2026, 11, 10), new DateOnly(2026, 11, 1), 1, 20));
     }
 
     [Theory]
@@ -336,7 +486,7 @@ public class ChatReviewTests
     {
         var repo = new FakeRepo();
 
-        await new ChatReviewService(repo).GetQueueAsync(null, null, null, null, page, pageSize);
+        await Svc(repo).GetQueueAsync(null, null, null, null, page, pageSize);
 
         Assert.Equal((skip, take), (repo.Asked!.Value.Skip, repo.Asked.Value.Take));
     }
@@ -350,7 +500,7 @@ public class ChatReviewTests
             Total = 41,
         };
 
-        var page = await new ChatReviewService(repo).GetQueueAsync(null, null, null, null, 2, 20);
+        var page = await Svc(repo).GetQueueAsync(null, null, null, null, 2, 20);
 
         var item = Assert.Single(page.Items);
         Assert.Equal((Id(201), Id(7), Id(251), "no_answer", "open"), (item.MessageId, item.UserId, item.QuestionMessageId, item.Outcome, item.ReviewStatus));
@@ -367,7 +517,7 @@ public class ChatReviewTests
     {
         var repo = new FakeRepo { Rows = [Row(1, question: "hỏng", reply: "cũng hỏng")], Total = 1 };
 
-        var item = Assert.Single((await new ChatReviewService(repo).GetQueueAsync(null, null, null, null, 1, 20)).Items);
+        var item = Assert.Single((await Svc(repo).GetQueueAsync(null, null, null, null, 1, 20)).Items);
 
         Assert.Null(item.Model);
         Assert.Empty(item.FailedSteps);
@@ -385,7 +535,7 @@ public class ChatReviewTests
             ],
         };
 
-        var summary = await new ChatReviewService(repo).GetSummaryAsync(null, null);
+        var summary = await Svc(repo).GetSummaryAsync(null, null);
 
         Assert.Equal((9, 6, 3, 7, 2), (summary.Open, summary.Resolved, summary.Ignored, summary.OpenNoAnswer, summary.OpenFailed));
         Assert.Equal((null, null), (repo.AskedCounts!.Value.From, repo.AskedCounts.Value.To));
@@ -394,17 +544,199 @@ public class ChatReviewTests
     [Fact]
     public async Task Summary_WithNoData_IsAllZeros_AndABadRangeIsRejected()
     {
-        var summary = await new ChatReviewService(new FakeRepo()).GetSummaryAsync(null, null);
+        var summary = await Svc(new FakeRepo()).GetSummaryAsync(null, null);
 
         Assert.Equal((0, 0, 0, 0, 0), (summary.Open, summary.Resolved, summary.Ignored, summary.OpenNoAnswer, summary.OpenFailed));
         await Assert.ThrowsAsync<ArgumentException>(() =>
-            new ChatReviewService(new FakeRepo()).GetSummaryAsync(new DateOnly(2026, 11, 10), new DateOnly(2026, 11, 1)));
+            Svc(new FakeRepo()).GetSummaryAsync(new DateOnly(2026, 11, 10), new DateOnly(2026, 11, 1)));
+    }
+
+    // ---- dịch vụ: chi tiết và nhật ký người xem
+
+    private static ChatReviewDetailRows DetailRows(string role = "assistant") => new(
+        new ChatReviewReplyRow(Id(202), Id(101), Id(7), Day(2, 12), role, "no_answer", "open", "Mình chưa có số liệu ngành này.", ReplyMeta, Id(201)),
+        new ChatReviewQuestionRow(Id(201), Day(2, 11), SecretSpan, QuestionMeta),
+        [
+            new ChatReviewContextRow(Id(204), "assistant", Day(2, 10), "Chào bạn"),
+            new ChatReviewContextRow(Id(203), "user", Day(2, 9), "Chào"),
+        ]);
+
+    [Fact]
+    public async Task Detail_BuildsTheFullPicture_WithContextInTimeOrder()
+    {
+        var repo = new FakeRepo { Detail = DetailRows() };
+
+        var detail = (await Svc(repo).GetDetailAsync(Id(202), Id(1), "10.0.0.5", "Mozilla"))!;
+
+        Assert.Equal((Id(202), Id(7), "no_answer", "open"), (detail.MessageId, detail.UserId, detail.Outcome, detail.ReviewStatus));
+        Assert.Equal(SecretSpan, detail.Question!.Content);
+        Assert.Equal(SecretSpan, detail.Question.Model!.ModelIntents[0].Span);      // nhãn model gán đầy đủ, có đoạn chữ
+        Assert.Equal("Mình chưa có số liệu ngành này.", detail.Reply.Content);
+        Assert.Equal(["Chào", "Chào bạn"], detail.Context.Select(c => c.Content));  // đảo lại theo thứ tự thời gian
+        Assert.Equal(["skill_tra_loi"], detail.FailedSteps);
+        Assert.Equal(24500L, detail.TurnMs);
+        Assert.Equal((Id(202), ChatReviewService.ContextMessages), repo.AskedDetail);
+    }
+
+    [Fact]
+    public async Task Detail_WritesTheAuditEntry_WithWhoWhereAndWhat_ButNoChatContent()
+    {
+        var audit = new FakeAudit();
+
+        await Svc(new FakeRepo { Detail = DetailRows() }, audit).GetDetailAsync(Id(202), Id(1), "10.0.0.5", "Mozilla/5.0");
+
+        var entry = Assert.Single(audit.Entries);
+        Assert.Equal((Id(1), "chat_review.view", "chat_message", Id(202).ToString()),
+            (entry.ActorUserId, entry.Action, entry.EntityType, entry.EntityId));
+        Assert.Equal(("10.0.0.5", "Mozilla/5.0"), (entry.IpAddress, entry.UserAgent));
+        var detailJson = entry.DetailJson!;
+        Assert.Contains(Id(7).ToString(), detailJson);                  // ghi chủ cuộc chat
+        Assert.Contains("no_answer", detailJson);
+        Assert.DoesNotContain("Hawaii", detailJson);                    // KHÔNG nhân bản nội dung chat sang bảng nhật ký
+        Assert.DoesNotContain("Mình chưa có số liệu", detailJson);
+    }
+
+    [Fact]
+    public async Task Detail_IfTheAuditCannotBeWritten_TheContentIsNotReturned()
+    {
+        // Không có dấu vết thì không được đọc: lỗi ghi nhật ký phải ném lên, không âm thầm trả nội dung
+        var service = Svc(new FakeRepo { Detail = DetailRows() }, new FakeAudit { Fail = true });
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.GetDetailAsync(Id(202), Id(1), null, null));
+    }
+
+    [Fact]
+    public async Task Detail_OfAMessageNotInTheQueue_IsNull_AndWritesNoAudit()
+    {
+        var audit = new FakeAudit();
+
+        var detail = await Svc(new FakeRepo { Detail = DetailRows() }, audit).GetDetailAsync(Id(999), Id(1), null, null);
+
+        Assert.Null(detail);
+        Assert.Empty(audit.Entries);   // không có gì được xem nên không có gì để ghi
+    }
+
+    [Fact]
+    public async Task Detail_WithoutAnActor_IsRejectedBeforeReadingAnything()
+    {
+        var repo = new FakeRepo { Detail = DetailRows() };
+        var audit = new FakeAudit();
+
+        await Assert.ThrowsAsync<ArgumentException>(() => Svc(repo, audit).GetDetailAsync(Id(202), Guid.Empty, null, null));
+
+        Assert.Equal(0, repo.DetailQueries);
+        Assert.Empty(audit.Entries);
+    }
+
+    [Fact]
+    public async Task Detail_ClipsAVeryLongUserAgentAndAddress_SoTheAuditStillWrites()
+    {
+        var audit = new FakeAudit();
+
+        await Svc(new FakeRepo { Detail = DetailRows() }, audit)
+            .GetDetailAsync(Id(202), Id(1), new string('1', 200), new string('a', 2000));
+
+        var entry = Assert.Single(audit.Entries);
+        Assert.Equal((64, 512), (entry.IpAddress!.Length, entry.UserAgent!.Length));   // khớp độ rộng cột audit_logs
+    }
+
+    [Fact]
+    public async Task Detail_OfAFailureRowWithoutAQuestion_HasNoQuestion_ButStillTheReply()
+    {
+        var rows = new ChatReviewDetailRows(
+            new ChatReviewReplyRow(Id(202), Id(101), Id(7), Day(2), "system", "failed", "open", "Advisor không phản hồi (HttpRequestException).", null, null),
+            null, []);
+
+        var detail = (await Svc(new FakeRepo { Detail = rows }).GetDetailAsync(Id(202), Id(1), null, null))!;
+
+        Assert.Null(detail.Question);
+        Assert.Equal("system", detail.Reply.Role);
+        Assert.Empty(detail.Context);
+    }
+
+    [Fact]
+    public async Task Detail_ToleratesBrokenMeta()
+    {
+        var rows = new ChatReviewDetailRows(
+            new ChatReviewReplyRow(Id(202), Id(101), Id(7), Day(2), "assistant", "no_answer", "open", "x", "hỏng", Id(201)),
+            new ChatReviewQuestionRow(Id(201), Day(2), "câu hỏi", "cũng hỏng"), []);
+
+        var detail = (await Svc(new FakeRepo { Detail = rows }).GetDetailAsync(Id(202), Id(1), null, null))!;
+
+        Assert.Null(detail.Question!.Model);
+        Assert.Empty(detail.FailedSteps);
+    }
+
+    // ---- controller: chi tiết
+
+    private static ChatReviewDetailDto SampleDetail() => new(
+        Id(202), Id(101), Id(7), Day(2), "assistant", "no_answer", "open", [], null, null, null,
+        new ChatReviewMessageDto(Id(202), "assistant", Day(2), "trả lời"), []);
+
+    private static AdminChatReviewController ControllerFor(FakeService service, Guid? actor, string? ip = "10.0.0.5", string? userAgent = "Mozilla")
+    {
+        var http = new DefaultHttpContext();
+        if (actor is { } id)
+            http.User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, id.ToString())], "test"));
+        if (ip is not null)
+            http.Connection.RemoteIpAddress = System.Net.IPAddress.Parse(ip);
+        if (userAgent is not null)
+            http.Request.Headers.UserAgent = userAgent;
+        return new AdminChatReviewController(service) { ControllerContext = new ControllerContext { HttpContext = http } };
+    }
+
+    [Fact]
+    public async Task Controller_Detail_PassesTheActorAddressAndBrowserToTheAudit()
+    {
+        var service = new FakeService(detail: SampleDetail());
+
+        var result = await ControllerFor(service, Id(1)).GetDetail(Id(202), default);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal((Id(202), Id(1), "10.0.0.5", "Mozilla"), service.AskedDetail);
+    }
+
+    [Fact]
+    public async Task Controller_Detail_WithoutALoggedInUser_Is401_AndNothingIsRead()
+    {
+        var service = new FakeService(detail: SampleDetail());
+
+        var result = await ControllerFor(service, actor: null).GetDetail(Id(202), default);
+
+        Assert.IsType<UnauthorizedResult>(result.Result);
+        Assert.Null(service.AskedDetail);
+    }
+
+    [Fact]
+    public async Task Controller_Detail_OfAMessageNotInTheQueue_Is404()
+    {
+        var result = await ControllerFor(new FakeService(detail: null), Id(1)).GetDetail(Id(999), default);
+
+        Assert.IsType<NotFoundResult>(result.Result);
+    }
+
+    [Fact]
+    public void Controller_DetailRoute_IsDeclared()
+    {
+        var method = typeof(AdminChatReviewController).GetMethod(nameof(AdminChatReviewController.GetDetail))!;
+
+        Assert.Equal("items/{messageId:guid}", method.GetCustomAttribute<HttpGetAttribute>()!.Template);
     }
 
     // ---- controller
 
-    private sealed class FakeService(PagedResult<ChatReviewItemDto>? queue = null, ChatReviewSummaryDto? summary = null, Exception? error = null) : IChatReviewService
+    private sealed class FakeService(
+        PagedResult<ChatReviewItemDto>? queue = null, ChatReviewSummaryDto? summary = null, Exception? error = null,
+        ChatReviewDetailDto? detail = null) : IChatReviewService
     {
+        public (Guid MessageId, Guid Actor, string? Ip, string? UserAgent)? AskedDetail { get; private set; }
+
+        public Task<ChatReviewDetailDto?> GetDetailAsync(Guid messageId, Guid actorUserId, string? ipAddress, string? userAgent, CancellationToken ct = default)
+        {
+            AskedDetail = (messageId, actorUserId, ipAddress, userAgent);
+            return Task.FromResult(detail);
+        }
+
         public (string? Status, string? Outcome, int Page, int PageSize)? Asked { get; private set; }
 
         public Task<PagedResult<ChatReviewItemDto>> GetQueueAsync(

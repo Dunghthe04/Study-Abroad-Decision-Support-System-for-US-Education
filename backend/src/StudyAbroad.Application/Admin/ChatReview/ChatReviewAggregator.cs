@@ -58,6 +58,46 @@ public static class ChatReviewAggregator
                 x.Message.MetaJson,
                 x.question == null ? null : x.question.MetaJson));
 
+    /// <summary>
+    /// Tin trả lời cần xem kèm nội dung và chủ phiên. CHỈ tin thuộc hàng đợi (có trạng thái xử lý, không phải của học sinh):
+    /// mã tin khác (đã trả lời được, tin của học sinh) cho kết quả rỗng, nên không thể dùng nó để đọc tuỳ ý các cuộc chat.
+    /// </summary>
+    public static IQueryable<ChatReviewReplyRow> ReplyDetail(IQueryable<ChatMessage> messages, IQueryable<ChatSession> sessions, Guid messageId) =>
+        messages
+            .Where(m => m.Id == messageId && m.ReviewStatus != null && m.Role != "user")
+            .Join(sessions, m => m.ChatSessionId, s => s.Id, (m, s) => new { Message = m, s.UserId })
+            .Select(x => new ChatReviewReplyRow(
+                x.Message.Id,
+                x.Message.ChatSessionId,
+                x.UserId,
+                x.Message.CreatedAt,
+                x.Message.Role,
+                x.Message.Outcome ?? "",
+                x.Message.ReviewStatus ?? "",
+                x.Message.Content,
+                x.Message.MetaJson,
+                x.Message.ReplyToMessageId));
+
+    /// <summary>Tin hỏi của học sinh (nội dung và meta_json).</summary>
+    public static IQueryable<ChatReviewQuestionRow> QuestionDetail(IQueryable<ChatMessage> messages, Guid questionMessageId) =>
+        messages
+            .Where(m => m.Id == questionMessageId)
+            .Select(m => new ChatReviewQuestionRow(m.Id, m.CreatedAt, m.Content, m.MetaJson));
+
+    /// <summary>
+    /// Các tin trước thời điểm beforeUtc trong cùng phiên, chỉ của học sinh và trợ lý (bỏ dòng báo lỗi hệ thống), gần nhất trước, tối đa take tin.
+    /// Dịch vụ đảo lại theo thứ tự thời gian. excludeMessageId loại chính tin hỏi để không lặp.
+    /// </summary>
+    public static IQueryable<ChatReviewContextRow> ContextBefore(
+        IQueryable<ChatMessage> messages, Guid sessionId, DateTime beforeUtc, Guid excludeMessageId, int take) =>
+        messages
+            .Where(m => m.ChatSessionId == sessionId && m.CreatedAt < beforeUtc && m.Id != excludeMessageId
+                        && (m.Role == "user" || m.Role == "assistant"))
+            .OrderByDescending(m => m.CreatedAt)
+            .ThenBy(m => m.Id)
+            .Take(take)
+            .Select(m => new ChatReviewContextRow(m.Id, m.Role, m.CreatedAt, m.Content));
+
     /// <summary>Mã các tin của hàng đợi sau khi lọc, để đếm tổng số cho phân trang.</summary>
     public static IQueryable<Guid> QueueIds(
         IQueryable<ChatMessage> messages, string? status, string? outcome, DateTime? fromUtc, DateTime? toUtcExclusive) =>

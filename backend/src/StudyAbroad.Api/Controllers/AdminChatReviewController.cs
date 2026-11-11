@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using StudyAbroad.Api.Extensions;
 using StudyAbroad.Application.Admin.ChatReview;
 using StudyAbroad.Application.Common;
 using StudyAbroad.Domain.Constants;
@@ -33,6 +34,21 @@ public class AdminChatReviewController(IChatReviewService review) : ControllerBa
         {
             return BadRequest(new { error = ex.Message });
         }
+    }
+
+    /// <summary>
+    /// Chi tiết một câu: nội dung câu hỏi, nhãn model gán đầy đủ, câu hệ thống đã trả lời, vài tin trước đó. Đây là dữ liệu cá nhân của học sinh:
+    /// mỗi lần xem được ghi vào nhật ký (ai, lúc nào, từ đâu), ghi lỗi thì không trả nội dung. Chỉ xem được tin thuộc hàng đợi, tin khác trả 404.
+    /// </summary>
+    [HttpGet("items/{messageId:guid}")]
+    public async Task<ActionResult<ChatReviewDetailDto>> GetDetail(Guid messageId, CancellationToken ct)
+    {
+        if (User.GetUserId() is not { } actorId)
+            return Unauthorized();
+
+        var detail = await review.GetDetailAsync(
+            messageId, actorId, HttpContext.Connection.RemoteIpAddress?.ToString(), Request.Headers.UserAgent.ToString(), ct);
+        return detail is null ? NotFound() : Ok(detail);
     }
 
     /// <summary>Số câu theo trạng thái xử lý (open, resolved, ignored) và số câu open theo kết quả, cho các tab của hàng đợi.</summary>
