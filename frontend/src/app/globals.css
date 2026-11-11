@@ -112,6 +112,7 @@
   --chart-4: #5b6f86;
   --chart-5: #b98a3e;
   --radius: 0.5rem;
+  --header-h: 6.5rem; /* thanh đầu 2 hàng (56px + 48px + viền), để ảnh đầu trang chủ nằm dưới nó */
   --sidebar: var(--surface);
   --sidebar-foreground: var(--ink);
   --sidebar-primary: var(--brand);

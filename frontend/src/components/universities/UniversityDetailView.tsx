@@ -148,7 +148,7 @@ export function UniversityDetailView({
       </div>
 
       <div className="mx-auto max-w-[1320px] px-4 sm:px-6 space-y-6">
-        <nav aria-label="Các mục thông tin trường" className="sticky top-14 z-20 border-b border-border bg-background/95 ">
+        <nav aria-label="Các mục thông tin trường" className="sticky top-(--header-h) z-20 border-b border-border bg-background/95 ">
           <ScrollArea className="w-full min-w-0">
             <div className="flex w-max gap-1">
               {navigation.map((item) => {

@@ -52,7 +52,7 @@ export function ProfileSimulator({ sim, basePref }: ProfileSimulatorProps) {
   const scholarshipNow = (o.scholarshipNeed ?? profile?.scholarshipNeed ?? null) as ScholarshipNeed | null;
 
   return (
-    <aside className="w-full shrink-0 overflow-hidden border-b border-line bg-surface lg:sticky lg:top-14 lg:h-[calc(100vh-3.5rem)] lg:w-[320px] lg:overflow-y-auto lg:border-r lg:border-b-0">
+    <aside className="w-full shrink-0 overflow-hidden border-b border-line bg-surface lg:sticky lg:top-(--header-h) lg:h-[calc(100vh-var(--header-h))] lg:w-[320px] lg:overflow-y-auto lg:border-r lg:border-b-0">
       <div className="space-y-1 px-4 pt-4 pb-3">
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-base font-bold text-foreground">Mô phỏng hồ sơ</h2>
