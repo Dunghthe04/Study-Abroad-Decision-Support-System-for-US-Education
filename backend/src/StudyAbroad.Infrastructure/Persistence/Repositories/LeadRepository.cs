@@ -190,5 +190,49 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
         db.Leads.Update(lead);
         await db.SaveChangesAsync(ct);
     }
+
+    /// <summary>
+    /// [USAS-2053 / UC-74] Truy vấn toàn bộ tin nhắn trong một yêu cầu liên hệ từ bảng app.lead_messages,
+    /// sắp xếp tăng dần theo thời gian tạo. Tin nhắn bị gỡ được che nội dung; tên người gửi là học sinh/phụ huynh
+    /// được ẩn danh khi SharedProfile = false.
+    /// </summary>
+    public async Task<IReadOnlyList<LeadMessageDto>> GetLeadMessagesAsync(
+        Guid leadId,
+        Guid leadOwnerUserId,
+        bool sharedProfile,
+        string centerName,
+        CancellationToken ct = default)
+    {
+        var rows = await LeadMessageMapper
+            .QueryThreadRows(db.LeadMessages.AsNoTracking(), db.Users.AsNoTracking(), leadId)
+            .ToListAsync(ct);
+
+        return rows
+            .Select(row => LeadMessageMapper.ToDto(row, sharedProfile, centerName))
+            .ToList();
+    }
+
+    /// <summary>
+    /// [USAS-2053 / UC-74] Lưu tin nhắn mới vào bảng app.lead_messages (và cập nhật trạng thái lead nếu cần).
+    /// </summary>
+    public async Task<LeadMessage> AddLeadMessageAsync(
+        LeadMessage message,
+        Lead? leadToUpdate = null,
+        CancellationToken ct = default)
+    {
+        db.LeadMessages.Add(message);
+
+        if (leadToUpdate is not null)
+        {
+            leadToUpdate.UpdatedAt = DateTime.UtcNow;
+            if (db.Entry(leadToUpdate).State == EntityState.Detached)
+            {
+                db.Leads.Update(leadToUpdate);
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
+        return message;
+    }
 }
 
