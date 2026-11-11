@@ -34,6 +34,7 @@ from app.services.skill_template import TEMPLATE_TASKS, build_skill, tasks_of
 from app.services.skills.profile_handler import ChatProfileHandler
 from app.services.skills.skill_danh_gia import gpa_table_of
 from app.services.skills.validators import AskAgain
+from app.services.what_if_writer import WhatIfWriter
 
 
 # Trung tâm: dùng dịch vụ, thành phố, việc (tasks) model đã tách trong ý center_referral; skill chỉ đổi mã dịch vụ sang mã DB,
@@ -176,6 +177,10 @@ def cannot_try_note(what_if: WhatIf) -> str:
 # Kịch bản: what_if thì SLM đã trích và chuẩn hóa giá trị, đây kiểm tra rồi giao .NET chạy simulate (action "simulate");
 # goal_seeking thì giao .NET tìm trường và chạy goal-seek (action "goal_seek")
 class ScenarioBranch:
+    # writer: Claude viết lời khi không có gì thử được; None thì dùng câu cố định
+    def __init__(self, writer: WhatIfWriter | None = None) -> None:
+        self._writer = writer
+
     async def run(self, state: ChatState, message: str, slm: SlmTinResult) -> SkillOutput:
         entities = slm.intents[0].entities
         if entities.get("mode") == "goal_seeking":
@@ -191,7 +196,7 @@ class ScenarioBranch:
         # Ưu tiên: model trả (priority_*) thì tin model, quy tắc từ khóa bổ sung cho yếu tố model chưa nêu
         priorities = {**detect_priorities(message), **priority_from_model(entities.get("changes", []))}
         if not what_if.changes and not priorities:
-            return cannot_try(what_if)
+            return await self._cannot_try(what_if, entities.get("changes", []))
         note = cannot_try_note(what_if)
         tried = ", ".join(
             part for part in (what_if.label(), priority_label(priorities) if priorities else "") if part
@@ -200,6 +205,15 @@ class ScenarioBranch:
         if priorities:
             data["priorities"] = priorities
         return SkillOutput(f"Mình thử kịch bản: {tried}.{note}", action="simulate", action_data=data)
+
+    # Không có gì thử được mà có mục lọc trường hoặc mục không ảnh hưởng: Claude viết lời, nút sửa vẫn do code gắn.
+    # Không có writer hoặc Claude sai cả hai lần thì dùng câu cố định (cannot_try)
+    async def _cannot_try(self, what_if: WhatIf, changes: list[dict]) -> SkillOutput:
+        fallback = cannot_try(what_if)
+        if self._writer is None or not (what_if.filters or what_if.no_effect):
+            return fallback
+        answer = await self._writer.write(what_if, changes)
+        return SkillOutput(answer, quick_replies=fallback.quick_replies) if answer else fallback
 
     # "Cần gì để vào trường X": tên trường còn là chữ, .NET khớp với 249 trường rồi chạy goal-seek.
     # Không cần danh sách gợi ý có sẵn: goal-seek tính từ hồ sơ và dữ liệu trường
@@ -399,14 +413,18 @@ class ProfileBranch:
 # Bảng nhánh theo loại câu hỏi SLM. skills: các skill cũ do skills.build_handlers tạo.
 # main.py luôn truyền writer nên chạy thật dùng nhánh tư vấn mới. Chỉ test cũ (chưa viết lại) không
 # truyền, khi đó tạm dùng LegacyAdviceBranch
-def build_branches(skills: dict[str, SkillHandler], writer: AdviceWriter | None = None) -> dict[str, Branch]:
+def build_branches(
+    skills: dict[str, SkillHandler],
+    writer: AdviceWriter | None = None,
+    what_if_writer: WhatIfWriter | None = None,
+) -> dict[str, Branch]:
     advice: Branch = (
         GeneratedAdviceBranch(skills, writer) if writer is not None else LegacyAdviceBranch(skills)
     )
     return {
         "collect_profile": ProfileBranch(ChatProfileHandler(skills), advice),
         "profile_review": advice,
-        "scenario": ScenarioBranch(),
+        "scenario": ScenarioBranch(what_if_writer),
         "knowledge": KnowledgeBranch(skills["skill_tra_loi"])
         if "skill_tra_loi" in skills
         else NotReadyBranch(),

@@ -22,7 +22,8 @@ from app.services.branches import (
 from app.services.chat_flow import NEED_MAJOR, NEED_PROFILE, QUESTIONS, SkillOutput, ask, go_to
 from app.services.intake import CHAT_BUTTON, FORM_BUTTON, INTAKE_ASK, INTAKE_ID, INTAKE_MORE
 from app.services.skill_rules import REQUIRED_B3, REQUIRED_B4
-from tests.fakes import flow_with, tin
+from app.services.what_if_writer import WhatIfWriter
+from tests.fakes import FakeLLM, flow_with, tin
 
 
 class Recording:
@@ -777,3 +778,43 @@ async def test_confirming_the_profile_without_a_question_waiting_evaluates_the_p
     await branches["collect_profile"].run(state, "Đúng rồi", tin("collect_profile"))
 
     assert writer.questions == [DEFAULT_QUESTION]  # không đem "Đúng rồi" đi dựng skill
+
+
+CLAUDE_FILTER = {"answer": "Ngành là điều kiện lọc trường. Bạn bấm Sửa Mục tiêu rồi nhờ mình gợi ý lại nhé."}
+
+
+async def run_with_writer(llm: FakeLLM, *changes: dict):
+    branch = build_branches(skills([]), None, WhatIfWriter(llm, "claude-test"))["scenario"]
+    return await branch.run(ChatState(has_results=True), "nếu đổi", scenario(**what_if(*changes)))
+
+
+# Có writer: lời do Claude viết, nút sửa vẫn do code gắn
+async def test_what_if_writer_writes_cannot_try_answer():
+    llm = FakeLLM(CLAUDE_FILTER)
+    out = await run_with_writer(llm, {"factor": "major", "value": "CS"})
+
+    assert out.answer == CLAUDE_FILTER["answer"]
+    assert [r.label for r in out.quick_replies] == ["Sửa Mục tiêu"]
+    assert out.action is None and len(llm.calls) == 1
+
+
+# Claude sai cả hai lần (thiếu tên mục): dùng câu cố định, vẫn có nút
+async def test_what_if_writer_failure_keeps_fixed_answer():
+    bad = {"answer": "Mục này mình không thử tạm được đâu bạn nhé."}
+    llm = FakeLLM(bad, bad)
+    out = await run_with_writer(llm, {"factor": "major", "value": "CS"})
+
+    assert out.answer.startswith("Ngành là điều kiện lọc trường")
+    assert [r.label for r in out.quick_replies] == ["Sửa Mục tiêu"]
+    assert len(llm.calls) == 2
+
+
+# Không gọi Claude khi: mục không thuộc hai nhóm, hoặc có thay đổi thử được (đường simulate của GPA, SAT giữ nguyên)
+async def test_what_if_writer_not_called_for_other_factors_or_simulate():
+    llm = FakeLLM()
+    other = await run_with_writer(llm, {"factor": "activities", "value": "x"})
+    sat = await run_with_writer(llm, {"factor": "sat", "value": "1450"}, {"factor": "major", "value": "CS"})
+
+    assert other.answer == NOTHING_TO_TRY
+    assert sat.action == "simulate" and sat.action_data["changes"] == {"sat": 1450}
+    assert llm.calls == []
