@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { isAdminRoute } from "@/lib/admin-nav";
-import { isFullRoute, isWideRoute } from "@/lib/layout-routes";
+import { isAuthRoute, isFullRoute, isWideRoute } from "@/lib/layout-routes";
 import { cn } from "@/lib/utils";
 import { SiteFooter } from "@/components/layout/SiteFooter";
 import { SiteHeader } from "@/components/layout/SiteHeader";
@@ -18,7 +18,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { open, wide } = useAssistant();
   const visible = useAssistantVisible();
   const adminRoute = isAdminRoute(pathname);
-  const showAssistant = !adminRoute;
+  const authRoute = isAuthRoute(pathname);
+  const showAssistant = !adminRoute && !authRoute;
   const pushed = showAssistant && open && visible;
 
   return (
@@ -31,11 +32,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       }
     >
       <div className={cn("flex flex-1 flex-col transition-[padding] duration-200", pushed && "min-[900px]:pr-(--assistant-w)")}>
-        {!adminRoute && <SiteHeader />}
+        {!adminRoute && !authRoute && <SiteHeader />}
         <main
           className={cn(
             "w-full flex-1",
-            adminRoute
+            adminRoute || authRoute
               ? "flex flex-col"
               : isFullRoute(pathname)
                 ? "" // trang tự lo khoảng đệm: thanh bên dính mép, phần chính có lề riêng

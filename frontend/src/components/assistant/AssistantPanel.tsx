@@ -23,6 +23,7 @@ import {
 import { cn } from "@/lib/utils";
 import { describeSimulation, resetSimulation, showSimulation } from "@/lib/simulation-link";
 import { AGE_FEATURES, useAgeBlock } from "@/lib/age-features";
+import { isAuthRoute } from "@/lib/layout-routes";
 import { useAssistant, type AssistantTurn } from "./AssistantProvider";
 import { BudgetWidget } from "./BudgetWidget";
 import { ChatText } from "./ChatText";
@@ -33,11 +34,9 @@ import { SchoolWidget } from "./SchoolWidget";
 import { SelectWidget } from "./SelectWidget";
 
 // Trang đăng nhập / đăng ký không hiện trợ lý
-const HIDDEN_PREFIXES = ["/login", "/register", "/forgot-password", "/reset-password", "/verify-email"];
-
 export function useAssistantVisible() {
   const pathname = usePathname();
-  return !HIDDEN_PREFIXES.some((p) => pathname.startsWith(p));
+  return !isAuthRoute(pathname);
 }
 
 /** Khung "Trợ lý USAS" cố định bên phải; màn hẹp thì phủ kín */
