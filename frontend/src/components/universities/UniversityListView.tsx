@@ -1,10 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import {
   Building2Icon,
-  FilterIcon,
   RotateCcwIcon,
   SearchIcon,
   SlidersHorizontalIcon,
@@ -21,7 +20,6 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { Skeleton } from "@/components/ui/skeleton";
 import { TablePagination } from "@/components/admin/shared/TablePagination";
 import { UniversityCard } from "./UniversityCard";
 import { UniversityFilters } from "./UniversityFilters";
@@ -47,7 +45,6 @@ export function UniversityListView({
   currentParams,
 }: UniversityListViewProps) {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
 
   const [searchInput, setSearchInput] = useState(currentParams.search || "");
@@ -169,58 +166,37 @@ export function UniversityListView({
 
   return (
     <div className="space-y-6">
-      {/* Header bar: Title, description, quick search */}
-      <div className="rounded-xl bg-surface border border-line p-6 md:p-8">
-        <div className="max-w-3xl space-y-3">
-          <div className="flex items-center gap-2">
-            <span className="flex size-8 items-center justify-center rounded-lg bg-brand text-white">
-              <Building2Icon className="size-4" />
-            </span>
-            <span className="text-xs font-bold text-brand">
-              Dữ liệu tuyển sinh đại học Mỹ
-            </span>
-          </div>
-          <h1 className="font-heading text-2xl md:text-3xl font-extrabold text-foreground tracking-tight">
-            Tra cứu và Khám phá Trường Đại học
-          </h1>
-          <p className="text-sm md:text-base text-muted-foreground leading-relaxed">
-            Tra cứu hơn 240 trường đại học tại Mỹ với đầy đủ thông tin chuẩn hóa: học phí,
-            tỷ lệ nhận, điểm sàn IELTS/TOEFL, ngành đào tạo và thứ hạng cập nhật.
-          </p>
-
-          <form onSubmit={handleSearchSubmit} className="pt-2 flex flex-col sm:flex-row gap-2 max-w-xl">
-            <div className="relative flex-1">
-              <SearchIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-              <Input
-                type="text"
-                placeholder="Tìm theo tên trường, mã trường (MIT, Harvard...) hoặc thành phố"
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                className="pl-10 h-11 bg-background text-sm "
-              />
-              {searchInput && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearchInput("");
-                    applyParams({ search: undefined });
-                  }}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                >
-                  <XIcon className="size-4" />
-                </button>
-              )}
-            </div>
-            <Button type="submit" className="h-11 px-6 font-semibold ">
-              Tìm kiếm
-            </Button>
-          </form>
+      <form onSubmit={handleSearchSubmit} className="flex gap-2">
+        <div className="relative flex-1">
+          <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            type="search"
+            placeholder="Tìm theo tên trường, mã trường hoặc thành phố"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            className="h-10 pl-9"
+            aria-label="Tìm trường"
+          />
+          {searchInput && (
+            <button
+              type="button"
+              aria-label="Xóa từ khóa"
+              onClick={() => {
+                setSearchInput("");
+                applyParams({ search: undefined });
+              }}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              <XIcon className="size-4" />
+            </button>
+          )}
         </div>
-      </div>
+        <Button type="submit" className="h-10 px-5">
+          Tìm kiếm
+        </Button>
+      </form>
 
-      {/* Main Grid: Sidebar Filters + University Cards */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 items-start">
-        {/* Desktop Filter Sidebar */}
         <aside className="hidden lg:block lg:col-span-1 sticky top-20">
           <UniversityFilters
             options={options}
@@ -230,12 +206,9 @@ export function UniversityListView({
           />
         </aside>
 
-        {/* Content Section */}
         <div className="lg:col-span-3 space-y-5">
-          {/* Controls Bar: Mobile Filter Button, Result Count, Sort */}
-          <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-line bg-card p-4 ">
+          <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              {/* Mobile Filter Trigger Sheet */}
               <div className="lg:hidden">
                 <Sheet open={mobileFilterOpen} onOpenChange={setMobileFilterOpen}>
                   <SheetTrigger
@@ -263,8 +236,6 @@ export function UniversityListView({
                           handleResetFilters();
                           setMobileFilterOpen(false);
                         }}
-                        isMobileModal
-                        className="border-none shadow-none p-0"
                       />
                     </div>
                   </SheetContent>
@@ -283,7 +254,6 @@ export function UniversityListView({
             />
           </div>
 
-          {/* Active Filter Chips */}
           {activeChips.length > 0 && (
             <div className="flex flex-wrap items-center gap-2 pt-1">
               <span className="text-xs text-muted-foreground">Đang lọc:</span>
@@ -314,7 +284,6 @@ export function UniversityListView({
             </div>
           )}
 
-          {/* Cards Grid */}
           {initialData.items.length === 0 ? (
             <div className="rounded-2xl border border-line bg-card p-12 text-center space-y-4">
               <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-muted text-muted-foreground">
@@ -341,7 +310,6 @@ export function UniversityListView({
             </div>
           )}
 
-          {/* Pagination */}
           {initialData.totalPages > 1 && (
             <div className="pt-6 border-t border-line">
               <TablePagination
