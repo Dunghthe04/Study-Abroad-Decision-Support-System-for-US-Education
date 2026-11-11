@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  ArrowRightIcon,
   BookOpenIcon,
   BookmarkCheckIcon,
   Building2Icon,
@@ -333,13 +332,15 @@ export function SiteHeader() {
             <Link
               href="/analysis"
               className={buttonVariants({
+                variant: clear ? "ghost" : "default",
                 size: "lg",
-                className: "shrink-0 !bg-accent !text-accent-foreground hover:!bg-accent/90 active:translate-y-px",
+                className: cn(
+                  "shrink-0 active:translate-y-px",
+                  clear && "!bg-white !text-brand-ink hover:!bg-white/90",
+                ),
               })}
             >
-              <span className="hidden sm:inline">Phân tích hồ sơ của bạn</span>
-              <span className="sm:hidden">Phân tích</span>
-              <ArrowRightIcon className="transition-transform group-hover/button:translate-x-0.5" />
+              Phân tích hồ sơ của tôi
             </Link>
           )}
         </nav>
