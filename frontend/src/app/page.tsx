@@ -14,7 +14,6 @@ import {
   FileTextIcon,
   HandCoinsIcon,
   HeartHandshakeIcon,
-  LayoutGridIcon,
   MapPinIcon,
   Maximize2Icon,
   MessageSquareTextIcon,
@@ -22,8 +21,6 @@ import {
   PlaneIcon,
   PlusIcon,
   ShieldAlertIcon,
-  SlidersHorizontalIcon,
-  UsersIcon,
   WalletIcon,
   XIcon,
 } from "lucide-react";
@@ -38,56 +35,18 @@ import { OpenAssistantButton } from "@/components/assistant/OpenAssistantButton"
 import { useAssistant } from "@/components/assistant/AssistantProvider";
 import { LandingHero } from "@/components/landing/LandingHero";
 import { LayerStack } from "@/components/landing/LayerStack";
+import { StepsWheel } from "@/components/landing/StepsWheel";
 import { SchoolLogoStrip } from "@/components/landing/SchoolLogoStrip";
 import { UniversityCard } from "@/components/universities/UniversityCard";
 import { LANDING_SCHOOLS, type LandingSchool } from "@/lib/landing-schools";
 import { searchUniversities } from "@/lib/university-api";
 import { useAuth } from "@/contexts/AuthContext";
-import { GROUP_LABELS } from "@/lib/recommendation-labels";
 import type { UniversityListItem } from "@/types/university";
 import { cn } from "@/lib/utils";
 
 type IconType = ComponentType<{ className?: string }>;
 
 /* ----------------------------- Dữ liệu trang ----------------------------- */
-
-const STEPS: {
-  title: string;
-  desc: string;
-  icon: IconType;
-  color: string;
-}[] = [
-  {
-    title: "Khai báo hồ sơ",
-    desc: "Nhập điểm hoặc tải bảng điểm để quy đổi GPA sang thang 4.0 và lưu hồ sơ.",
-    icon: FileTextIcon,
-    color: "text-brand",
-  },
-  {
-    title: "Xem trường theo nhóm",
-    desc: `Xếp vào các nhóm ${GROUP_LABELS.R}, ${GROUP_LABELS.M}, ${GROUP_LABELS.S} kèm lý do rõ ràng.`,
-    icon: LayoutGridIcon,
-    color: "text-reach",
-  },
-  {
-    title: "Thử kịch bản “nếu như”",
-    desc: "Tăng điểm SAT hay đổi ngân sách để xem danh sách trường thay đổi ngay lập tức.",
-    icon: SlidersHorizontalIcon,
-    color: "text-warn",
-  },
-  {
-    title: "Hỏi USAS Advisor",
-    desc: "Hỏi so sánh trường, điều kiện tuyển sinh và chính sách học bổng bằng tiếng Việt.",
-    icon: MessageSquareTextIcon,
-    color: "text-ok",
-  },
-  {
-    title: "Gặp trung tâm tư vấn",
-    desc: "Kết nối trung tâm hỗ trợ bài luận, hoàn thiện hồ sơ và luyện phỏng vấn visa.",
-    icon: UsersIcon,
-    color: "text-brand-ink",
-  },
-];
 
 const ASK_EXAMPLES = [
   "GPA 3.5, SAT 1350 thì nên nộp trường nào?",
@@ -292,30 +251,7 @@ function HomeView() {
       {/* CÁCH HOẠT ĐỘNG */}
       <section className="space-y-8">
         <SectionHead title="Năm bước từ hồ sơ đến quyết định" />
-        <ol className="grid gap-4 sm:grid-cols-2 lg:grid-flow-col lg:auto-cols-fr">
-          {STEPS.map((s, i) => (
-            <li key={s.title} className="relative flex">
-              <Card className="flex flex-1 flex-col justify-between border-line bg-surface p-5">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand-wash font-heading text-lg font-bold text-brand">
-                      0{i + 1}
-                    </span>
-                    <s.icon className={cn("size-7.5 shrink-0", s.color)} />
-                  </div>
-                  <h3 className="font-heading text-base font-semibold text-ink">{s.title}</h3>
-                  <p className="text-sm leading-relaxed text-ink-2">{s.desc}</p>
-                </div>
-              </Card>
-              {i < STEPS.length - 1 && (
-                <div
-                  aria-hidden
-                  className="pointer-events-none absolute top-10 -right-4 z-10 hidden h-0.5 w-4 bg-line lg:block"
-                />
-              )}
-            </li>
-          ))}
-        </ol>
+        <StepsWheel />
       </section>
 
       {/* TRỢ LÝ */}
