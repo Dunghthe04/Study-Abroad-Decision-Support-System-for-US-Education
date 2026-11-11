@@ -272,7 +272,7 @@ public class LeadService(
 
     /// <summary>
     /// [USAS-2053 / UC-74] Đọc luồng tin nhắn trao đổi trong một yêu cầu liên hệ của trung tâm.
-    /// Chặn IDOR theo trung tâm sở hữu và ẩn danh tên người gửi nếu học sinh chưa bật SharedProfile.
+    /// Chặn IDOR theo trung tâm sở hữu và ẩn danh tên người gửi nếu lead không chia sẻ nhóm contact (UC-42).
     /// </summary>
     public async Task<LeadMessagesThreadDto> GetReceivedLeadMessagesForCenterUserAsync(
         Guid userId,
@@ -282,7 +282,9 @@ public class LeadService(
         CancellationToken ct = default)
     {
         var (lead, centerName) = await GetAuthorizedLeadForCenterAsync(userId, userEmail, userRole, leadId, ct);
-        var messages = await leads.GetLeadMessagesAsync(lead.Id, lead.UserId, lead.SharedProfile, centerName, ct);
+        // [UC-42] Hiện tên khi chia sẻ nhóm contact, cùng quy tắc với CenterLeadMapper
+        var showName = lead.SharedFields.Contains(LeadSharedFields.Contact);
+        var messages = await leads.GetLeadMessagesAsync(lead.Id, lead.UserId, showName, centerName, ct);
         var flaggedCount = messages.Count(m => m.IsFlagged && m.Status != "removed");
 
         return new LeadMessagesThreadDto(lead.Id, lead.Status, messages, flaggedCount);
@@ -359,7 +361,7 @@ public class LeadService(
             saved,
             userRole,
             senderFullName: null,
-            sharedProfile: lead.SharedProfile,
+            sharedProfile: lead.SharedFields.Contains(LeadSharedFields.Contact),
             centerName: centerName);
 
         return new SendLeadMessageResultDto(dto, lead.Status);

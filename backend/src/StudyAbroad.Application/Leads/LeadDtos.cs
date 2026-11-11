@@ -55,7 +55,8 @@ public record SharedProfileSummaryDto(
 
 /// <summary>
 /// [UC-73] Chi tiết yêu cầu liên hệ nhận được phía trung tâm tư vấn.
-/// Nếu SharedProfile = false: StudentName, StudentEmail và ProfileSummary hoàn toàn là null.
+/// Chỉ có các trường thuộc nhóm người gửi đã chọn (Lead.SharedFields, xem CenterLeadMapper):
+/// thiếu <c>contact</c> thì StudentName, StudentEmail null; không chọn nhóm hồ sơ nào thì ProfileSummary null.
 /// </summary>
 public record CenterReceivedLeadDto(
     Guid Id,

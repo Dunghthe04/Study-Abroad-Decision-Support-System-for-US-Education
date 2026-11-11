@@ -540,7 +540,7 @@ public class LeadServiceTests
     }
 
     [Fact]
-    public async Task GetReceivedLeadMessages_WhenSharedProfileTrue_ShowsStudentAndParentRealNames()
+    public async Task GetReceivedLeadMessages_WhenContactShared_ShowsStudentAndParentRealNames()
     {
         var centerOwnerId = Guid.NewGuid();
         var centerId = Guid.NewGuid();
@@ -559,7 +559,9 @@ public class LeadServiceTests
             Id = leadId,
             UserId = studentId,
             StudyCenterId = centerId,
-            SharedProfile = true,
+            // [UC-42] Chỉ chia sẻ contact (SharedProfile = false) vẫn hiện tên thật
+            SharedProfile = false,
+            SharedFields = [LeadSharedFields.Contact],
             Status = "new",
         });
 
