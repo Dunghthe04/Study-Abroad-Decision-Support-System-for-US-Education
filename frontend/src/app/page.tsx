@@ -248,9 +248,9 @@ function HomeView() {
       )}
 
 
-      {/* CÁCH HOẠT ĐỘNG */}
-      <section className="space-y-8">
-        <SectionHead title="Năm bước từ hồ sơ đến quyết định" />
+      {/* CÁCH HOẠT ĐỘNG: tiêu đề bên trái dính khi cuộn, danh sách năm bước bên phải */}
+      <section className="grid gap-8 lg:grid-cols-12 lg:gap-16">
+        <SectionHead title="Năm bước từ hồ sơ đến quyết định" className="lg:sticky lg:top-[calc(var(--header-h)+2rem)] lg:col-span-5 lg:self-start" />
         <StepsWheel />
       </section>
 
