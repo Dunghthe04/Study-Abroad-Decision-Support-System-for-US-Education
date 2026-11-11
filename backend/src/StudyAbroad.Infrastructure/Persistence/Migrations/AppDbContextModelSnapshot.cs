@@ -31,6 +31,14 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<int?>("CachedTokens")
+                        .HasColumnType("integer")
+                        .HasColumnName("cached_tokens");
+
+                    b.Property<Guid?>("ChatMessageId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("chat_message_id");
+
                     b.Property<int?>("CompletionTokens")
                         .HasColumnType("integer")
                         .HasColumnName("completion_tokens");
@@ -79,6 +87,11 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("prompt_tokens");
 
+                    b.Property<string>("Purpose")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("purpose");
+
                     b.Property<string>("SkillVersion")
                         .HasColumnType("text")
                         .HasColumnName("skill_version");
@@ -101,6 +114,9 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_ai_calls");
+
+                    b.HasIndex("ChatMessageId")
+                        .HasDatabaseName("ix_ai_calls_chat_message_id");
 
                     b.HasIndex("CreatedAt")
                         .HasDatabaseName("ix_ai_calls_created_at");
@@ -3710,6 +3726,15 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_what_if_simulations_user_id");
 
                     b.ToTable("what_if_simulations", "app");
+                });
+
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.AiCall", b =>
+                {
+                    b.HasOne("StudyAbroad.Domain.Entities.ChatMessage", null)
+                        .WithMany()
+                        .HasForeignKey("ChatMessageId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_ai_calls_chat_messages_chat_message_id");
                 });
 
             modelBuilder.Entity("StudyAbroad.Domain.Entities.AnalysisResult", b =>
