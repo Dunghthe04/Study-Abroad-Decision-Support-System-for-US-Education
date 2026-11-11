@@ -167,6 +167,7 @@ namespace StudyAbroad.Application.Advisor
                 Action = null,
                 ActionData = null,
                 AiUsage = null,   // số token là việc nội bộ, học sinh không thấy
+                Slm = null,       // nhãn model gán chứa chữ của học sinh, chỉ lưu cho admin
             };
         }
 

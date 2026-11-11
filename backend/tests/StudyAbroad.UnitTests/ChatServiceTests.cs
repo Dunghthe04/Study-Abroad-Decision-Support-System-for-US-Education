@@ -68,11 +68,17 @@ public class ChatServiceTests
     public async Task AiUsage_FromAdvisor_IsNotSentToTheBrowser()
     {
         // Số token là việc nội bộ của admin: advisor gửi cho backend, backend không chuyển tiếp cho học sinh
-        var advisor = new FakeAdvisor("B0") { AiUsage = [new AiUsageDto("ollama", "usas-slm-v4", "slm_intents", "3.0", 1700, 180, 0, true, null, 21000)] };
+        var advisor = new FakeAdvisor("B0")
+        {
+            AiUsage = [new AiUsageDto("ollama", "usas-slm-v4", "slm_intents", "3.0", 1700, 180, 0, true, null, 21000)],
+            // Nhãn model gán chứa chữ của học sinh, chỉ lưu cho admin
+            Slm = new AdvisorSlmDto([new AdvisorSlmIntentDto("collect_profile", "em GPA 3.5")], ["collect_profile"], null, 0.9, false),
+        };
 
         var res = await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow()).ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
 
         Assert.Null(res.AiUsage);
+        Assert.Null(res.Slm);
     }
 
     [Fact]
@@ -2204,6 +2210,7 @@ public class ChatServiceTests
         public JsonElement? ActionData { get; init; }
         public string Answer { get; init; } = "ok";
         public IReadOnlyList<AiUsageDto>? AiUsage { get; init; }
+        public AdvisorSlmDto? Slm { get; init; }
 
         public Task<AdvisorChatResponse> ChatAsync(AdvisorChatRequest request, CancellationToken ct = default)
         {
@@ -2212,7 +2219,7 @@ public class ChatServiceTests
             var state = JsonDocument.Parse($"{{\"currentStep\":\"{nextStep}\"{question}}}").RootElement;
             return Task.FromResult(new AdvisorChatResponse(
                 Answer, [], null, state, QuickReplies: replies, Widget: widget, Profile: Profile, ProfileChanged: Changed, Skills: Skills, Action: Action, ActionData: ActionData,
-                AiUsage: AiUsage));
+                AiUsage: AiUsage, Slm: Slm));
         }
 
         // Trả lời theo từng ý: gọi onEvent cho từng tin trong Events rồi trả kết quả như ChatAsync
