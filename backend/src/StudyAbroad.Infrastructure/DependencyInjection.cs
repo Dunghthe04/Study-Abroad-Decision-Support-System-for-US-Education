@@ -54,6 +54,8 @@ public static class DependencyInjection
         // Lưu nội dung chat cho admin xem câu chưa trả lời được. Là dữ liệu cá nhân: đặt Chat:StoreMessages = false để tắt mà không sửa code
         if (configuration.GetValue("Chat:StoreMessages", true))
             services.AddScoped<IChatMessageRepository, ChatMessageRepository>();
+        // Nhật ký các lần gọi AI (token, thời gian, lỗi): chỉ số đo, không có nội dung chat nên luôn bật, không theo Chat:StoreMessages
+        services.AddScoped<IAiCallRepository, AiCallRepository>();
         services.AddScoped<IChatAnalysisRepository, ChatAnalysisRepository>();
         services.AddScoped<IChatBenchmarkRepository, ChatBenchmarkRepository>();
 

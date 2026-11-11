@@ -25,11 +25,13 @@ namespace StudyAbroad.Application.Advisor
     // gradeScale: bảng quy đổi grade_scale.10 trong DB cho what-if GPA thang 10 (null thì bảng mặc định, dùng trong test cũ)
     // messages: lưu tin hỏi và tin trả lời vào chat_messages cho admin xem (null thì không lưu: cấu hình Chat:StoreMessages = false, hoặc test cũ)
     // logger: ghi cảnh báo khi lưu tin lỗi (lưu lỗi không bao giờ làm hỏng lượt chat)
+    // aiCalls: ghi nhật ký token, thời gian, lỗi của từng lần gọi AI vào ai_calls (null thì không ghi, dùng trong test cũ). Độc lập với messages
     public class ChatService(
         IAdvisorClient advisor, IChatSessionRepository sessions, IProfileFlowService profileFlow,
         IChatAnalysisRepository? analyses = null, IRecommendationRunner? recommender = null,
         IChatBenchmarkRepository? benchmarks = null, IGradeScaleProvider? gradeScale = null,
-        IChatMessageRepository? messages = null, ILogger<ChatService>? logger = null)
+        IChatMessageRepository? messages = null, ILogger<ChatService>? logger = null,
+        IAiCallRepository? aiCalls = null)
     {
         //Dữ liệu FE gửi lên
         // onEvent: chỉ truyền khi trả lời theo từng ý (stream); mỗi tin tiến độ / câu một ý của advisor gọi hàm này ngay.
@@ -175,7 +177,9 @@ namespace StudyAbroad.Application.Advisor
                 await sessions.SaveAsync(ct);
 
             // Phiên đã lưu (khóa ngoại của tin nhắn cần phiên có sẵn): ghi tin hỏi và tin trả lời cho admin xem
-            await RecordTurnAsync(session, request, response, advisorSignals, turnClock.ElapsedMilliseconds, ct);
+            var replyId = await RecordTurnAsync(session, request, response, advisorSignals, turnClock.ElapsedMilliseconds, ct);
+            // Token ghi sau tin trả lời để nối được (chat_message_id). Tin không lưu (tắt công tắc hoặc lỗi) thì vẫn ghi token, chỉ không có liên kết
+            await RecordAiCallsAsync(userId, replyId, advisorSignals.Usage, ct);
 
             //Trả về trình duyệt: có mã phiên, ko lộ trạng thái nội bôk.
             // ProfileChanged để form biết mà nạp lại nháp (D2)
@@ -244,6 +248,22 @@ namespace StudyAbroad.Application.Advisor
             {
                 logger?.LogWarning(ex, "Không lưu được tin nhắn của phiên chat {SessionId}; lượt chat vẫn trả lời bình thường", session.Id);
                 return null;
+            }
+        }
+
+        // Ghi mỗi lần gọi AI một dòng ai_calls (nguồn, skill, token, thời gian, lỗi), nối với tin trả lời nếu có.
+        // Lỗi khi ghi chỉ cảnh báo, không bao giờ làm hỏng lượt chat. Không có số đo thì không làm gì
+        private async Task RecordAiCallsAsync(Guid userId, Guid? replyId, IReadOnlyList<AiUsageDto>? usage, CancellationToken ct)
+        {
+            if (aiCalls is null || usage is not { Count: > 0 })
+                return;
+            try
+            {
+                await aiCalls.AddRangeAsync(usage.Select(call => AiCallMapper.ToEntity(call, userId, replyId)).ToList(), ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger?.LogWarning(ex, "Không ghi được nhật ký gọi AI của người dùng {UserId}; lượt chat vẫn trả lời bình thường", userId);
             }
         }
 

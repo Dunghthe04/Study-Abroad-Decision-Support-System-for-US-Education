@@ -248,6 +248,90 @@ public class ChatServiceTests
         Assert.Equal(2, saved.Rows.Count);
     }
 
+    // ---- nhật ký các lần gọi AI (ai_calls)
+
+    private static readonly IReadOnlyList<AiUsageDto> TwoCalls =
+    [
+        new AiUsageDto("ollama", "usas-slm-v4", "slm_intents", "3.0", 1700, 180, 0, true, null, 21000),
+        new AiUsageDto("claude", "claude-haiku-5-5", "skill_tra_loi", "1.0", 2400, 500, 0, true, null, 3000),
+    ];
+
+    [Fact]
+    public async Task EveryAiCallOfTheTurn_IsLoggedOnceAndLinkedToTheReplyAndTheUser()
+    {
+        var saved = new FakeMessages();
+        var calls = new FakeAiCalls();
+        var userId = Guid.NewGuid();
+
+        await new ChatService(new FakeAdvisor("B0") { AiUsage = TwoCalls }, new FakeSessions(), new FakeProfileFlow(), messages: saved, aiCalls: calls)
+            .ChatAsync(userId, new AdvisorChatRequest(Hello));
+
+        Assert.Equal(["ollama", "claude"], calls.Rows.Select(c => c.Kind));
+        Assert.All(calls.Rows, c => Assert.Equal(userId, c.UserId));
+        Assert.All(calls.Rows, c => Assert.Equal(saved.Rows[1].Id, c.ChatMessageId));   // nối với tin TRẢ LỜI, không phải tin hỏi
+        Assert.Equal((1700, 180), (calls.Rows[0].PromptTokens, calls.Rows[0].CompletionTokens));
+    }
+
+    [Fact]
+    public async Task TokensAreStillLogged_WhenStoringMessagesIsSwitchedOff()
+    {
+        // Tắt lưu nội dung chat vì riêng tư thì vẫn theo dõi được token (chỉ là số đo), chỉ không có liên kết tới tin nhắn
+        var calls = new FakeAiCalls();
+
+        await new ChatService(new FakeAdvisor("B0") { AiUsage = TwoCalls }, new FakeSessions(), new FakeProfileFlow(), aiCalls: calls)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Equal(2, calls.Rows.Count);
+        Assert.All(calls.Rows, c => Assert.Null(c.ChatMessageId));
+    }
+
+    [Fact]
+    public async Task TokensAreStillLogged_WhenSavingTheMessagesFailed()
+    {
+        var calls = new FakeAiCalls();
+
+        await new ChatService(new FakeAdvisor("B0") { AiUsage = TwoCalls }, new FakeSessions(), new FakeProfileFlow(),
+                messages: new FakeMessages { Fail = true }, aiCalls: calls)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Equal(2, calls.Rows.Count);
+        Assert.All(calls.Rows, c => Assert.Null(c.ChatMessageId));   // tin không lưu được nên không có gì để nối, không được nối vào mã không tồn tại
+    }
+
+    [Fact]
+    public async Task FailureToLogAiCalls_NeverBreaksTheChat()
+    {
+        var res = await new ChatService(new FakeAdvisor("B0") { AiUsage = TwoCalls }, new FakeSessions(), new FakeProfileFlow(),
+                aiCalls: new FakeAiCalls { Fail = true })
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Equal("ok", res.Answer);
+    }
+
+    [Fact]
+    public async Task NoMeasurements_MeansNothingIsWritten()
+    {
+        var calls = new FakeAiCalls();
+
+        await new ChatService(new FakeAdvisor("B0"), new FakeSessions(), new FakeProfileFlow(), aiCalls: calls)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Equal(0, calls.Writes);   // advisor cũ không gửi aiUsage: không ghi gì, không lỗi
+    }
+
+    [Fact]
+    public async Task FailedAiCall_IsLoggedWithItsError()
+    {
+        var calls = new FakeAiCalls();
+        var usage = new[] { new AiUsageDto("claude", "m", "skill_tra_loi", "1.0", 0, 0, 0, false, "quá tải", 30000) };
+
+        await new ChatService(new FakeAdvisor("B0") { AiUsage = usage }, new FakeSessions(), new FakeProfileFlow(), aiCalls: calls)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        var call = Assert.Single(calls.Rows);
+        Assert.Equal((false, "quá tải"), (call.Success, call.Error));
+    }
+
     // ---- advisor sập hẳn: câu hỏi không được mất
 
     [Fact]
@@ -2579,6 +2663,22 @@ public class ChatServiceTests
             if (NoteError is not null)
                 throw NoteError;
             return Task.FromResult(Note!);
+        }
+    }
+
+    private sealed class FakeAiCalls : IAiCallRepository
+    {
+        public List<AiCall> Rows { get; } = [];
+        public int Writes { get; private set; }
+        public bool Fail { get; init; }
+
+        public Task AddRangeAsync(IReadOnlyList<AiCall> calls, CancellationToken ct = default)
+        {
+            Writes++;
+            if (Fail)
+                throw new InvalidOperationException("Database không ghi được");
+            Rows.AddRange(calls);
+            return Task.CompletedTask;
         }
     }
 
