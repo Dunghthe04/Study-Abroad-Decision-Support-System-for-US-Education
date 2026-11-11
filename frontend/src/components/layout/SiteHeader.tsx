@@ -131,20 +131,13 @@ export function SiteHeader() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Tìm trường theo tên, thành phố, bang…"
-              className={cn(
-                "h-10 w-full rounded-lg border pr-11 pl-3.5 text-sm outline-none transition-colors focus-visible:ring-3",
-                clear
-                  ? "border-white/40 bg-white/10 text-white placeholder:text-white/75 focus-visible:border-white focus-visible:ring-white/30"
-                  : "border-line bg-surface text-ink placeholder:text-ink-3 focus-visible:border-brand focus-visible:ring-ring/30",
-              )}
+              // Ô tìm kiếm luôn nền trắng, kể cả khi thanh đầu trong suốt trên ảnh
+              className="h-10 w-full rounded-lg border border-line bg-surface pr-11 pl-3.5 text-sm text-ink outline-none transition-colors placeholder:text-ink-3 focus-visible:border-brand focus-visible:ring-3 focus-visible:ring-ring/30 group-data-clear/header:border-transparent"
             />
             <button
               type="submit"
               aria-label="Tìm"
-              className={cn(
-                "absolute top-1/2 right-1 flex size-8 -translate-y-1/2 items-center justify-center rounded-md transition-colors",
-                clear ? "text-white/85 hover:bg-white/10 hover:text-white" : "text-ink-2 hover:bg-muted hover:text-ink",
-              )}
+              className="absolute top-1/2 right-1 flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-ink-2 transition-colors hover:bg-muted hover:text-ink"
             >
               <SearchIcon className="size-4" />
             </button>
