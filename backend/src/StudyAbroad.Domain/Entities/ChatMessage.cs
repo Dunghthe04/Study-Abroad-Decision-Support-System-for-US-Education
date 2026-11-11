@@ -16,4 +16,8 @@ public class ChatMessage : BaseEntity
     public string? SuggestedCentersJson { get; set; }
     /// <summary>null nếu AI trả lời được; open | resolved | ignored nếu chưa, để admin bổ sung tài liệu</summary>
     public string? ReviewStatus { get; set; }
+    /// <summary>Kết quả lượt chat (ChatOutcomes), chỉ đặt ở tin trả lời của trợ lý. Null ở tin của học sinh và tin cũ.</summary>
+    public string? Outcome { get; set; }
+    /// <summary>Tóm tắt lượt cho admin: các ý SLM tách, hành động đã gọi, độ tin cậy, tổng thời gian và token. Chỉ ở tin trả lời của trợ lý.</summary>
+    public string? MetaJson { get; set; }
 }

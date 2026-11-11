@@ -356,6 +356,15 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<string>("MetaJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("meta_json");
+
+                    b.Property<string>("Outcome")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("outcome");
+
                     b.Property<string>("ReviewStatus")
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")

@@ -16,6 +16,8 @@ public class ChatMessageConfiguration : IEntityTypeConfiguration<ChatMessage>
         b.Property(x => x.SourcesJson).HasColumnType("jsonb");
         b.Property(x => x.SuggestedCentersJson).HasColumnType("jsonb");
         b.Property(x => x.ReviewStatus).HasMaxLength(16);
+        b.Property(x => x.Outcome).HasMaxLength(16);
+        b.Property(x => x.MetaJson).HasColumnType("jsonb");
         b.HasIndex(x => new { x.ChatSessionId, x.CreatedAt });
         b.HasIndex(x => x.ReviewStatus);
     }
