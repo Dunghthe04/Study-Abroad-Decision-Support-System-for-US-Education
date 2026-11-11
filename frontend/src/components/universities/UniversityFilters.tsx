@@ -1,21 +1,25 @@
 "use client";
 
-import { useId } from "react";
-import { FilterIcon, RotateCcwIcon, SearchIcon, SparklesIcon } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { useId, useState } from "react";
+import { RotateCcwIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
-import type { UniversityFilterOptions, UniversitySearchParams } from "@/types/university";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+} from "@/components/ui/combobox";
+import type {
+  UniversityFilterOptionItem,
+  UniversityFilterOptions,
+  UniversitySearchParams,
+} from "@/types/university";
 import { cn } from "@/lib/utils";
 
 interface UniversityFiltersProps {
@@ -24,279 +28,225 @@ interface UniversityFiltersProps {
   onChange: (newValues: Partial<UniversitySearchParams>) => void;
   onReset: () => void;
   className?: string;
-  isMobileModal?: boolean;
 }
 
-const IELTS_OPTIONS = [
-  { value: "0", label: "Tất cả mức điểm" },
-  { value: "6.0", label: "Tối đa 6.0" },
-  { value: "6.5", label: "Tối đa 6.5" },
-  { value: "7.0", label: "Tối đa 7.0" },
-  { value: "7.5", label: "Tối đa 7.5" },
-  { value: "8.0", label: "Tối đa 8.0" },
+const ALL = "all";
+
+const CONTROL_OPTIONS = [
+  { value: ALL, label: "Tất cả" },
+  { value: "public", label: "Công lập" },
+  { value: "private", label: "Tư thục" },
 ];
 
-const MAX_COST_OPTIONS = [
-  { value: "0", label: "Tất cả mức học phí" },
-  { value: "25000", label: "Dưới $25,000 / năm" },
-  { value: "40000", label: "Dưới $40,000 / năm" },
-  { value: "55000", label: "Dưới $55,000 / năm" },
-  { value: "70000", label: "Dưới $70,000 / năm" },
-  { value: "85000", label: "Dưới $85,000 / năm" },
+const TUITION_OPTIONS = [
+  { value: ALL, label: "Tất cả" },
+  { value: "25000", label: "Dưới $25,000" },
+  { value: "40000", label: "Dưới $40,000" },
+  { value: "55000", label: "Dưới $55,000" },
+  { value: "70000", label: "Dưới $70,000" },
+];
+
+const IELTS_OPTIONS = [
+  { value: ALL, label: "Tất cả" },
+  { value: "6", label: "Tối đa 6.0" },
+  { value: "6.5", label: "Tối đa 6.5" },
+  { value: "7", label: "Tối đa 7.0" },
+  { value: "7.5", label: "Tối đa 7.5" },
 ];
 
 const ACCEPT_RATE_OPTIONS = [
-  { value: "all", label: "Tất cả tỷ lệ" },
-  { value: "very_high", label: "Trên 50% (Dễ trúng tuyển)" },
-  { value: "high", label: "20% - 50% (Trung bình)" },
-  { value: "selective", label: "10% - 20% (Chọn lọc cao)" },
-  { value: "very_selective", label: "Dưới 10% (Cực kỳ cạnh tranh)" },
+  { value: ALL, label: "Tất cả", min: undefined, max: undefined },
+  { value: "very_high", label: "Trên 50%", min: 0.5, max: undefined },
+  { value: "high", label: "20% – 50%", min: 0.2, max: 0.5 },
+  { value: "selective", label: "10% – 20%", min: 0.1, max: 0.2 },
+  { value: "very_selective", label: "Dưới 10%", min: undefined, max: 0.1 },
 ];
 
-export function UniversityFilters({
-  options,
-  values,
-  onChange,
-  onReset,
-  className,
-  isMobileModal = false,
-}: UniversityFiltersProps) {
-  const ivySwitchId = useId();
+function FilterSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <fieldset className="space-y-2.5">
+      <legend className="mb-2.5 text-sm font-semibold text-foreground">{title}</legend>
+      {children}
+    </fieldset>
+  );
+}
 
-  const handleAcceptRateChange = (val: string) => {
-    if (val === "all") {
-      onChange({ minAcceptanceRate: undefined, maxAcceptanceRate: undefined });
-    } else if (val === "very_high") {
-      onChange({ minAcceptanceRate: 0.5, maxAcceptanceRate: undefined });
-    } else if (val === "high") {
-      onChange({ minAcceptanceRate: 0.2, maxAcceptanceRate: 0.5 });
-    } else if (val === "selective") {
-      onChange({ minAcceptanceRate: 0.1, maxAcceptanceRate: 0.2 });
-    } else if (val === "very_selective") {
-      onChange({ minAcceptanceRate: undefined, maxAcceptanceRate: 0.1 });
-    }
-  };
+interface RadioFilterProps {
+  name: string;
+  options: { value: string; label: string }[];
+  value: string;
+  onValueChange: (value: string) => void;
+}
 
-  const getAcceptRateValue = () => {
-    const min = values.minAcceptanceRate;
-    const max = values.maxAcceptanceRate;
-    if (min === 0.5 && max === undefined) return "very_high";
-    if (min === 0.2 && max === 0.5) return "high";
-    if (min === 0.1 && max === 0.2) return "selective";
-    if (min === undefined && max === 0.1) return "very_selective";
-    return "all";
-  };
+function RadioFilter({ name, options, value, onValueChange }: RadioFilterProps) {
+  const baseId = useId();
+  return (
+    <RadioGroup
+      name={name}
+      value={value}
+      onValueChange={(next) => onValueChange(String(next))}
+      className="gap-2"
+    >
+      {options.map((option) => {
+        const id = `${baseId}-${option.value}`;
+        return (
+          <div key={option.value} className="flex items-center gap-2.5">
+            <RadioGroupItem id={id} value={option.value} />
+            <Label htmlFor={id} className="cursor-pointer text-sm font-normal">
+              {option.label}
+            </Label>
+          </div>
+        );
+      })}
+    </RadioGroup>
+  );
+}
 
-  const activeFilterCount = [
-    values.state && values.state !== "all",
-    values.control && values.control !== "all",
-    values.major && values.major !== "all",
-    values.maxTuitionUsd && values.maxTuitionUsd > 0,
-    values.maxMinIelts && values.maxMinIelts > 0,
-    values.isIvy === true,
-    values.minAcceptanceRate !== undefined || values.maxAcceptanceRate !== undefined,
-  ].filter(Boolean).length;
+interface SearchableFilterProps {
+  items: UniversityFilterOptionItem[];
+  value: string | undefined;
+  placeholder: string;
+  onValueChange: (value: string | undefined) => void;
+}
+
+function SearchableFilter({ items, value, placeholder, onValueChange }: SearchableFilterProps) {
+  const selected = items.find((item) => item.value === value) ?? null;
+  const [inputValue, setInputValue] = useState(selected?.label ?? "");
 
   return (
-    <div
-      className={cn(
-        "rounded-2xl border border-line bg-card p-5 space-y-6",
-        className
-      )}
+    <Combobox<UniversityFilterOptionItem>
+      items={items}
+      value={selected}
+      onValueChange={(next) => {
+        onValueChange(next?.value);
+        setInputValue(next?.label ?? "");
+      }}
+      inputValue={inputValue}
+      onInputValueChange={setInputValue}
+      itemToStringLabel={(item) => item.label}
+      isItemEqualToValue={(a, b) => a.value === b.value}
+      autoHighlight
     >
-      <div className="flex items-center justify-between pb-1 border-b border-line">
-        <div className="flex items-center gap-2 font-heading text-base font-bold text-foreground">
-          <FilterIcon className="size-4 text-brand" />
-          <span>Bộ lọc tìm kiếm</span>
-          {activeFilterCount > 0 && (
-            <Badge variant="secondary" className="bg-brand/10 text-brand font-semibold text-xs px-2 py-0.5">
-              {activeFilterCount}
-            </Badge>
+      <ComboboxInput placeholder={placeholder} showClear={selected !== null} className="h-9 w-full" />
+      <ComboboxContent>
+        <ComboboxEmpty>Không tìm thấy</ComboboxEmpty>
+        <ComboboxList>
+          {(item: UniversityFilterOptionItem) => (
+            <ComboboxItem key={item.value} value={item}>
+              {item.label}
+            </ComboboxItem>
           )}
-        </div>
-        {activeFilterCount > 0 && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onReset}
-            className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground gap-1"
-          >
-            <RotateCcwIcon className="size-3" />
-            <span>Đặt lại</span>
+        </ComboboxList>
+      </ComboboxContent>
+    </Combobox>
+  );
+}
+
+function acceptRateValue(values: UniversitySearchParams): string {
+  const match = ACCEPT_RATE_OPTIONS.find(
+    (option) => option.min === values.minAcceptanceRate && option.max === values.maxAcceptanceRate
+  );
+  return match ? match.value : ALL;
+}
+
+export function UniversityFilters({ options, values, onChange, onReset, className }: UniversityFiltersProps) {
+  const ivyId = useId();
+  const majorItems = options.majors.map((major) => ({ value: major, label: major }));
+
+  const hasActiveFilter =
+    Boolean(values.state) ||
+    Boolean(values.control) ||
+    Boolean(values.major) ||
+    Boolean(values.maxTuitionUsd) ||
+    Boolean(values.maxMinIelts) ||
+    values.isIvy === true ||
+    values.minAcceptanceRate !== undefined ||
+    values.maxAcceptanceRate !== undefined;
+
+  return (
+    <div className={cn("space-y-5", className)}>
+      <div className="flex h-8 items-center justify-between">
+        <h2 className="font-heading text-base font-bold text-foreground">Bộ lọc</h2>
+        {hasActiveFilter && (
+          <Button variant="ghost" size="sm" onClick={onReset} className="text-muted-foreground">
+            <RotateCcwIcon />
+            Đặt lại
           </Button>
         )}
       </div>
 
-      <div className="space-y-4 text-sm">
-        <div className="space-y-1.5">
-          <Label className="text-xs font-semibold text-foreground">Bang tại Mỹ (State)</Label>
-          <Select
-            value={values.state || "all"}
-            onValueChange={(val) => {
-              if (val !== null) onChange({ state: val === "all" ? undefined : val });
-            }}
-            items={[{ value: "all", label: "Tất cả các bang" }, ...options.states]}
-          >
-            <SelectTrigger className="w-full text-xs bg-background">
-              <SelectValue placeholder="Tất cả các bang" />
-            </SelectTrigger>
-            <SelectContent className="max-h-[260px]">
-              <SelectItem value="all" className="text-xs">
-                Tất cả các bang
-              </SelectItem>
-              {options.states.map((st) => (
-                <SelectItem key={st.value} value={st.value} className="text-xs">
-                  {st.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+      <FilterSection title="Bang">
+        <SearchableFilter
+          key={values.state ?? ALL}
+          items={options.states}
+          value={values.state}
+          placeholder="Gõ để tìm bang"
+          onValueChange={(state) => onChange({ state })}
+        />
+      </FilterSection>
 
-        <div className="space-y-1.5">
-          <Label className="text-xs font-semibold text-foreground">Loại hình trường</Label>
-          <Select
-            value={values.control || "all"}
-            onValueChange={(val) => {
-              if (val !== null) onChange({ control: val === "all" ? undefined : val });
-            }}
-            items={[{ value: "all", label: "Mọi loại hình" }, ...options.controls]}
-          >
-            <SelectTrigger className="w-full text-xs bg-background">
-              <SelectValue placeholder="Mọi loại hình" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all" className="text-xs">
-                Mọi loại hình
-              </SelectItem>
-              {options.controls.map((ctl) => (
-                <SelectItem key={ctl.value} value={ctl.value} className="text-xs">
-                  {ctl.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+      <FilterSection title="Ngành đào tạo">
+        <SearchableFilter
+          key={values.major ?? ALL}
+          items={majorItems}
+          value={values.major}
+          placeholder="Gõ để tìm ngành"
+          onValueChange={(major) => onChange({ major })}
+        />
+      </FilterSection>
 
-        <div className="space-y-1.5">
-          <Label className="text-xs font-semibold text-foreground">Ngành đào tạo</Label>
-          <Select
-            value={values.major || "all"}
-            onValueChange={(val) => {
-              if (val !== null) onChange({ major: val === "all" ? undefined : val });
-            }}
-            items={[{ value: "all", label: "Tất cả ngành học" }, ...options.majors.map((m) => ({ value: m, label: m }))]}
-          >
-            <SelectTrigger className="w-full text-xs bg-background">
-              <SelectValue placeholder="Tất cả ngành học" />
-            </SelectTrigger>
-            <SelectContent className="max-h-[260px]">
-              <SelectItem value="all" className="text-xs">
-                Tất cả ngành học
-              </SelectItem>
-              {options.majors.map((major) => (
-                <SelectItem key={major} value={major} className="text-xs">
-                  {major}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+      <Separator />
 
-        <Separator className="my-2" />
+      <FilterSection title="Loại trường">
+        <RadioFilter
+          name="control"
+          options={CONTROL_OPTIONS}
+          value={values.control ?? ALL}
+          onValueChange={(next) => onChange({ control: next === ALL ? undefined : next })}
+        />
+      </FilterSection>
 
-        <div className="space-y-1.5">
-          <Label className="text-xs font-semibold text-foreground">Mức học phí tối đa</Label>
-          <Select
-            value={values.maxTuitionUsd ? values.maxTuitionUsd.toString() : "0"}
-            onValueChange={(val) => {
-              if (val !== null) {
-                const num = parseInt(val, 10);
-                onChange({ maxTuitionUsd: num > 0 ? num : undefined });
-              }
-            }}
-            items={MAX_COST_OPTIONS}
-          >
-            <SelectTrigger className="w-full text-xs bg-background">
-              <SelectValue placeholder="Tất cả mức học phí" />
-            </SelectTrigger>
-            <SelectContent>
-              {MAX_COST_OPTIONS.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value} className="text-xs">
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+      <FilterSection title="Học phí tối đa mỗi năm">
+        <RadioFilter
+          name="maxTuitionUsd"
+          options={TUITION_OPTIONS}
+          value={values.maxTuitionUsd ? String(values.maxTuitionUsd) : ALL}
+          onValueChange={(next) => onChange({ maxTuitionUsd: next === ALL ? undefined : Number(next) })}
+        />
+      </FilterSection>
 
-        <div className="space-y-1.5">
-          <Label className="text-xs font-semibold text-foreground">Yêu cầu IELTS trường đòi hỏi</Label>
-          <Select
-            value={values.maxMinIelts ? values.maxMinIelts.toString() : "0"}
-            onValueChange={(val) => {
-              if (val !== null) {
-                const num = parseFloat(val);
-                onChange({ maxMinIelts: num > 0 ? num : undefined });
-              }
-            }}
-            items={IELTS_OPTIONS}
-          >
-            <SelectTrigger className="w-full text-xs bg-background">
-              <SelectValue placeholder="Tất cả mức điểm" />
-            </SelectTrigger>
-            <SelectContent>
-              {IELTS_OPTIONS.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value} className="text-xs">
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <p className="text-xs text-muted-foreground">
-            Lọc các trường có điểm sàn IELTS không vượt quá mức này.
-          </p>
-        </div>
+      <FilterSection title="Yêu cầu IELTS của trường">
+        <RadioFilter
+          name="maxMinIelts"
+          options={IELTS_OPTIONS}
+          value={values.maxMinIelts ? String(values.maxMinIelts) : ALL}
+          onValueChange={(next) => onChange({ maxMinIelts: next === ALL ? undefined : Number(next) })}
+        />
+      </FilterSection>
 
-        <div className="space-y-1.5">
-          <Label className="text-xs font-semibold text-foreground">Tỷ lệ trúng tuyển</Label>
-          <Select
-            value={getAcceptRateValue()}
-            onValueChange={(val) => {
-              if (val !== null) handleAcceptRateChange(val);
-            }}
-            items={ACCEPT_RATE_OPTIONS}
-          >
-            <SelectTrigger className="w-full text-xs bg-background">
-              <SelectValue placeholder="Tất cả tỷ lệ" />
-            </SelectTrigger>
-            <SelectContent>
-              {ACCEPT_RATE_OPTIONS.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value} className="text-xs">
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+      <FilterSection title="Tỷ lệ nhận">
+        <RadioFilter
+          name="acceptanceRate"
+          options={ACCEPT_RATE_OPTIONS}
+          value={acceptRateValue(values)}
+          onValueChange={(next) => {
+            const option = ACCEPT_RATE_OPTIONS.find((item) => item.value === next);
+            onChange({ minAcceptanceRate: option?.min, maxAcceptanceRate: option?.max });
+          }}
+        />
+      </FilterSection>
 
-        <Separator className="my-2" />
+      <Separator />
 
-        <div className="flex items-center justify-between rounded-xl bg-muted/40 p-3">
-          <div className="space-y-0.5">
-            <Label htmlFor={ivySwitchId} className="text-xs font-semibold cursor-pointer">
-              Ivy League
-            </Label>
-            <p className="text-xs text-muted-foreground">
-              Chỉ 8 trường Ivy League danh giá
-            </p>
-          </div>
-          <Switch
-            id={ivySwitchId}
-            checked={values.isIvy === true}
-            onCheckedChange={(checked) => onChange({ isIvy: checked ? true : undefined })}
-          />
-        </div>
+      <div className="flex items-center gap-2.5">
+        <Checkbox
+          id={ivyId}
+          checked={values.isIvy === true}
+          onCheckedChange={(checked) => onChange({ isIvy: checked ? true : undefined })}
+        />
+        <Label htmlFor={ivyId} className="cursor-pointer text-sm font-normal">
+          Chỉ trường Ivy League
+        </Label>
       </div>
     </div>
   );
