@@ -176,7 +176,7 @@ export function RangeTrack({
     <div
       role="img"
       aria-label={ariaLabel}
-      className={cn("relative h-2 w-full min-w-16 rounded-full bg-line", className)}
+      className={cn("relative h-2.5 w-full min-w-16 rounded-full bg-line", className)}
     >
       {hasRange && (
         <div
@@ -186,7 +186,7 @@ export function RangeTrack({
       )}
       {hasPoint && (
         <div
-          className="absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-brand ring-2 ring-surface"
+          className="absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-brand ring-2 ring-surface"
           style={{ left: `${pointPct}%` }}
         />
       )}

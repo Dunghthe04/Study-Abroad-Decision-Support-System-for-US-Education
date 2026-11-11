@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import {
   FileTextIcon,
   GraduationCapIcon,
@@ -240,10 +241,43 @@ export function UniversityAdmissions({ offering }: { offering: UniversityOfferin
   const hasAnyScore = hasSat || hasAct || hasGpa4 || hasGpaWeighted;
 
   const englishRequirements = [
-    { label: "IELTS tối thiểu", value: offering.minIelts },
-    { label: "TOEFL iBT tối thiểu", value: offering.minToefl },
-    { label: "Duolingo tối thiểu", value: offering.minDuolingo },
-  ].filter((item) => item.value != null);
+    {
+      id: "ielts",
+      label: "IELTS tối thiểu",
+      name: "IELTS",
+      value: offering.minIelts,
+      min: 0,
+      max: 9,
+      scaleLabel: "Thang 0–9",
+      logo: "/certs/ielts.png",
+      logoWidth: 440,
+      logoHeight: 142,
+    },
+    {
+      id: "toefl",
+      label: "TOEFL iBT tối thiểu",
+      name: "TOEFL iBT",
+      value: offering.minToefl,
+      min: 0,
+      max: 120,
+      scaleLabel: "Thang 0–120",
+      logo: "/certs/toefl.png",
+      logoWidth: 738,
+      logoHeight: 144,
+    },
+    {
+      id: "duolingo",
+      label: "Duolingo tối thiểu",
+      name: "Duolingo",
+      value: offering.minDuolingo,
+      min: 10,
+      max: 160,
+      scaleLabel: "Thang 10–160",
+      logo: "/certs/duolingo.png",
+      logoWidth: 160,
+      logoHeight: 160,
+    },
+  ].filter((item): item is typeof item & { value: number } => item.value != null);
 
   const importanceFactors = [
     { label: "Điểm trung bình (GPA)", value: offering.c7GpaImportance },
@@ -369,9 +403,39 @@ export function UniversityAdmissions({ offering }: { offering: UniversityOfferin
           <h3 className="text-sm font-semibold text-ink">Yêu cầu chứng chỉ tiếng Anh tối thiểu</h3>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             {englishRequirements.map((item) => (
-              <div key={item.label} className="rounded-lg border border-line bg-surface p-3.5">
-                <p className="text-xs text-ink-3">{item.label}</p>
-                <p className="mt-1 text-lg font-bold text-ink">{universityNumber(item.value)}</p>
+              <div
+                key={item.id}
+                className="flex flex-col justify-between rounded-xl border border-line bg-surface p-4"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-xs text-ink-3">{item.label}</p>
+                    <p className="mt-1 text-2xl font-bold tracking-tight text-ink">
+                      {universityNumber(item.value)}
+                    </p>
+                  </div>
+                  <div className="flex h-10 w-28 shrink-0 items-center justify-end">
+                    <Image
+                      src={item.logo}
+                      alt={item.name}
+                      width={item.logoWidth}
+                      height={item.logoHeight}
+                      className="h-8 sm:h-9 w-auto max-w-full object-contain"
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-3.5 space-y-1.5">
+                  <RangeTrack
+                    min={item.min}
+                    max={item.max}
+                    point={item.value}
+                    ariaLabel={`${item.name} yêu cầu tối thiểu ${universityNumber(item.value)} trên ${item.scaleLabel}`}
+                  />
+                  <div className="flex items-center justify-between text-xs text-ink-3">
+                    <span>{item.scaleLabel}</span>
+                  </div>
+                </div>
               </div>
             ))}
           </div>
