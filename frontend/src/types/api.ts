@@ -149,6 +149,7 @@ export interface AdvisorChatResponse {
   quickReplies?: QuickReply[] | null;
   widget?: ChatWidget | null;
   profileChanged?: string[] | null; // khóa hồ sơ chat vừa đổi; form cần nạp lại khi có giá trị
+  profileSaved?: boolean | null; // lượt này vừa lưu hồ sơ chính thức (bấm "Đúng rồi" ở bảng rà soát)
   formStep?: number | null; // trang form (1–6) của câu chat đang hỏi; form chuyển theo
 }
 

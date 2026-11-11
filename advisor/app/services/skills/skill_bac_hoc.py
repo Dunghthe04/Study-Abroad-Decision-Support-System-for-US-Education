@@ -218,10 +218,20 @@ def can_ask(state: ChatState, question_id: str) -> bool:
     return question_id in REQUIRED_QUESTIONS or state.asked.get(question_id, 0) < MAX_ASK
 
 
-# Câu B1 tiếp theo chưa có câu trả lời và còn hỏi được. Hết thì None
+# Hồ sơ đã có từ trước thì chỉ câu của mục bắt buộc còn thiếu mới cần hỏi; hồ sơ trống thì câu nào cũng cần
+def still_needed(state: ChatState, question_id: str) -> bool:
+    missing = skill_ho_so.required_missing(state)
+    return missing is None or bool(missing & set(QUESTION_FIELDS[question_id]))
+
+
+# Câu B1 tiếp theo chưa có câu trả lời, còn cần hỏi và còn hỏi được. Hết thì None
 def next_question(state: ChatState) -> str | None:
     for question_id in QUESTION_FIELDS:
-        if not answered(state, question_id) and can_ask(state, question_id):
+        if (
+            not answered(state, question_id)
+            and still_needed(state, question_id)
+            and can_ask(state, question_id)
+        ):
             return question_id
     return None
 
@@ -232,6 +242,8 @@ def ask_question(state: ChatState, question_id: str) -> SkillOutput:
 
 # Hỏi câu B1 tiếp theo; hết câu thì sang B2 và hỏi câu đầu của skill_ho_so. skill_nhu_cau gọi hàm này
 def ask_next(state: ChatState) -> SkillOutput:
+    if skill_ho_so.reviewed(state):  # đang sửa hồ sơ: quay về bảng rà soát, không đổi bước
+        return skill_ho_so.review(state)
     question_id = next_question(state)
     if question_id:
         return ask_question(state, question_id)
@@ -272,6 +284,10 @@ class BacHocHandler:
         if miss is not None and question_id == "B1.3" and not answered(state, "B1.3"):
             return ask_major_again(state, miss)
         # Học sinh chưa trả lời câu đang hỏi thì hỏi lại (tối đa 2 lần, ngành thì hỏi tới khi có)
-        if not answered(state, question_id) and can_ask(state, question_id):
+        if (
+            not answered(state, question_id)
+            and still_needed(state, question_id)
+            and can_ask(state, question_id)
+        ):
             return ask_question(state, question_id)
         return ask_next(state)

@@ -4,6 +4,7 @@ Chỉ chứa chữ và hàm thuần (không sửa state), nên không phụ thu�
 """
 
 from app.schemas.chat import ProfileField, QuickReply
+from app.schemas.slm import SlmY
 from app.services.profile_sync import DRAFT_KEYS
 from app.services.skill_rules import REQUIRED_B3, missing_fields
 
@@ -62,3 +63,30 @@ def intake_choice(message: str) -> str | None:
 def next_question(profile: dict[str, ProfileField]) -> tuple[str, str] | None:
     missing = missing_fields(profile, REQUIRED_B3) or missing_fields(profile)
     return FIELD_QUESTION[missing[0]] if missing else None
+
+
+# Mục tiêu tích sẵn trên form khi mở từ chat (link /analysis?from=chat&goal=...).
+# Mã phải khớp FormGoal trong frontend/src/lib/form-goals.ts
+FORM_GOALS = {"assessment": "danh_gia", "roadmap": "lo_trinh", "school_list": "goi_y_truong"}
+
+
+# Câu tư vấn đang chờ hồ sơ cần những việc nào, giống cách GeneratedAdviceBranch chọn việc:
+# - xin trường: câu có chữ xin trường, SLM tách ra school_list, hoặc chỉ có so sánh / giải thích trường
+# - việc của khuôn (đánh giá, lộ trình); không có việc nào thì làm cả hai
+# Không có câu chờ, hay câu chờ không phải profile_review: trả rỗng, form để học sinh tự tích
+def form_goals(pending: SlmY | None) -> list[str]:
+    if pending is None or pending.type != "profile_review":
+        return []
+    # Nhập trong hàm: branches.py nhập chat_flow.py, chat_flow.py lại nhập file này
+    from app.services.branches import asks_for_school_list
+    from app.services.skill_template import TEMPLATE_TASKS, tasks_of
+
+    tasks = pending.entities.get("tasks") or []
+    template = [t for t in tasks if t in TEMPLATE_TASKS]
+    others_only = bool(tasks) and not template and "school_list" not in tasks
+    school_list = asks_for_school_list(pending.span) or "school_list" in tasks or others_only
+    work = tasks_of(template) if template or not school_list else []
+    if school_list:
+        work.append("school_list")
+    order = list(FORM_GOALS)
+    return [FORM_GOALS[t] for t in sorted(work, key=order.index)]

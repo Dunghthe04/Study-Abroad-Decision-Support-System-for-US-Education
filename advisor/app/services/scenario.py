@@ -44,6 +44,26 @@ LABELS = {
     "school_type": "loại trường",
     "visa_refused": "lịch sử visa",
 }
+# Mục lọc trường bên .NET (RecommendationService lọc theo ngành, bậc học, bang, loại trường): đổi là đổi hồ sơ thật,
+# không thử tạm được. Mỗi mục kèm nhóm của ô chọn sửa hồ sơ (skill_ho_so.EDIT_SECTIONS) để gắn nút sửa
+FILTER_FACTORS = {
+    "major": "Mục tiêu",
+    "target_level": "Mục tiêu",
+    "preferred_states": "Nguyện vọng",
+    "school_type": "Nguyện vọng",
+}
+# Mục phần gợi ý trường bên .NET không dùng: đổi cũng không làm đổi danh sách trường
+NO_EFFECT_FACTORS = (
+    "intake",
+    "education_system",
+    "current_grade",
+    "current_level",
+    "english_plan",
+    "standardized_plan",
+    "funding_source",
+    "relatives_state",
+    "visa_refused",
+)
 
 
 @dataclass
@@ -52,6 +72,9 @@ class WhatIf:
     changes: dict[str, Any] = field(default_factory=dict)
     # Yếu tố học sinh muốn đổi nhưng mô phỏng chưa làm được (tên tiếng Việt, không trùng nhau)
     unsupported: list[str] = field(default_factory=list)
+    # Trong số đó: mục lọc trường và mục không làm đổi danh sách trường (mã mục, không trùng nhau)
+    filters: list[str] = field(default_factory=list)
+    no_effect: list[str] = field(default_factory=list)
 
     def label(self) -> str:
         """Nói lại các thay đổi bằng lời, để học sinh biết mình đang thử gì."""
@@ -159,6 +182,15 @@ def parse_what_if(changes: list[dict[str, Any]]) -> WhatIf:
                 label = LABELS.get(key, "yếu tố này")
             if label not in result.unsupported:
                 result.unsupported.append(label)
+            group = (
+                result.filters
+                if key in FILTER_FACTORS
+                else result.no_effect
+                if key in NO_EFFECT_FACTORS
+                else None
+            )
+            if group is not None and key not in group:
+                group.append(key)
             continue
         name, value = checked
         result.changes[name] = value

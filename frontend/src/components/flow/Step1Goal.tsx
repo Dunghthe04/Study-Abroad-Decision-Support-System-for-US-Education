@@ -23,12 +23,19 @@ import {
   getGradeOptionsForLevel,
 } from "@/lib/profile-flow-options";
 import type { CurrentEducationLevel, EducationSystem, GoalDraft, ProfileMetadataResponse } from "@/types/profile-flow";
+import { FORM_GOAL_OPTIONS, goalsNeedMajor, type FormGoal } from "@/lib/form-goals";
 
 interface Step1GoalProps {
   data: GoalDraft;
   metadata: ProfileMetadataResponse | null;
   onUpdate: (updated: Partial<GoalDraft>) => void;
   onNext: () => void;
+  /** Mục tiêu đã tích. Mở từ chat thì lấy theo câu hỏi trong chat và khóa lại */
+  goals: FormGoal[];
+  goalsLocked: boolean;
+  /** Mở từ chat mà chat không gửi mục tiêu: ẩn ô tích, chat tự biết câu đang chờ */
+  showGoals: boolean;
+  onGoalsChange: (goals: FormGoal[]) => void;
 }
 
 // Năm tốt nghiệp dự kiến: năm nay → 6 năm tới
@@ -77,7 +84,16 @@ function parseIntake(intake?: string | null): { term: string; year: string } | n
   return m ? { term: m[1], year: m[2] } : null;
 }
 
-export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) {
+export function Step1Goal({
+  data,
+  metadata,
+  onUpdate,
+  onNext,
+  goals,
+  goalsLocked,
+  showGoals,
+  onGoalsChange,
+}: Step1GoalProps) {
   // Chữ đang gõ để tìm ngành; null = không gõ, ô hiện tên Việt của ngành đã chọn
   const [majorQuery, setMajorQuery] = useState<string | null>(null);
   const [showMajorDropdown, setShowMajorDropdown] = useState(false);
@@ -85,6 +101,15 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
   // Học sinh chọn "Chưa rõ" (ở form hoặc chat): ngành lưu null kèm cờ majorUndecided, vẫn cho qua bước này
   const majorUnknown = !data.targetMajor && data.majorUndecided === true;
   const [levelError, setLevelError] = useState<string | null>(null);
+  const [goalError, setGoalError] = useState<string | null>(null);
+  const goalSectionId = useId();
+  // Lộ trình, gợi ý trường lọc theo ngành nên không cho "Chưa chọn ngành"
+  const needMajor = goalsNeedMajor(goals);
+  const toggleGoal = (goal: FormGoal) => {
+    if (goalsLocked) return;
+    onGoalsChange(goals.includes(goal) ? goals.filter((g) => g !== goal) : [...goals, goal]);
+    setGoalError(null);
+  };
   const [degreeError, setDegreeError] = useState<string | null>(null);
   // Mới chọn kỳ hoặc năm thì giữ tạm ở đây; đủ cả hai mới ghi vào nháp
   const [intakePending, setIntakePending] = useState({ term: "", year: "" });
@@ -215,6 +240,12 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
   };
 
   const handleNextClick = () => {
+    if (showGoals && goals.length === 0) {
+      setGoalError("Vui lòng tích ít nhất một việc bạn muốn hệ thống làm.");
+      document.getElementById(goalSectionId)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+    setGoalError(null);
     if (!data.currentEducationLevel) {
       setLevelError("Vui lòng chọn cấp học hiện tại.");
       if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
@@ -227,11 +258,14 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
       return;
     }
     setDegreeError(null);
-    if (majorNotInList || (!majorUnknown && (!data.targetMajor || !data.targetMajor.trim()))) {
+    const noMajor = !data.targetMajor || !data.targetMajor.trim();
+    if (majorNotInList || (noMajor && (needMajor || !majorUnknown))) {
       setMajorError(
         majorNotInList
           ? "Ngành đã lưu không còn trong danh sách, vui lòng chọn lại."
-          : "Vui lòng chọn một ngành trong danh sách, hoặc bấm \"Chưa chọn ngành\" nếu bạn chưa quyết định."
+          : needMajor
+            ? "Lộ trình và gợi ý trường cần biết ngành, vui lòng chọn một ngành trong danh sách."
+            : "Vui lòng chọn một ngành trong danh sách, hoặc bấm \"Chưa chọn ngành\" nếu bạn chưa quyết định."
       );
       setShowMajorDropdown(true);
       const el = document.getElementById(majorInputId);
@@ -291,6 +325,56 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
           Vài câu hỏi nhanh để chúng tôi gợi ý trường phù hợp nhất với mục tiêu học tập của bạn.
         </p>
       </div>
+
+      {/* Mục tiêu: quyết định ô nào bắt buộc và nút cuối đi đâu */}
+      {showGoals && (
+        <section id={goalSectionId} className="space-y-4">
+          <div>
+            <Label className="text-sm font-semibold text-foreground">
+              Bạn muốn hệ thống làm gì? <RequiredMark />
+            </Label>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {goalsLocked
+                ? "Theo câu bạn hỏi trong chat. Lưu hồ sơ xong chat sẽ trả lời tiếp."
+                : "Tích một hoặc nhiều việc."}
+            </p>
+          </div>
+          <div className="grid gap-2.5 sm:grid-cols-3">
+            {FORM_GOAL_OPTIONS.map((opt) => {
+              const isSelected = goals.includes(opt.value);
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  role="checkbox"
+                  aria-checked={isSelected}
+                  disabled={goalsLocked}
+                  onClick={() => toggleGoal(opt.value)}
+                  className={cn(
+                    "flex items-start gap-2.5 rounded-lg border p-3 text-left transition-all",
+                    isSelected ? "border-foreground bg-foreground/5" : "border-line bg-surface",
+                    goalsLocked ? "cursor-not-allowed opacity-80" : "cursor-pointer hover:border-foreground/40"
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border",
+                      isSelected ? "border-foreground bg-foreground text-background" : "border-line"
+                    )}
+                  >
+                    {isSelected && <CheckIcon className="size-3" />}
+                  </span>
+                  <span>
+                    <span className="block text-sm font-medium text-foreground">{opt.label}</span>
+                    <span className="block text-xs text-muted-foreground">{opt.description}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          {goalError && <p className="text-xs font-medium text-destructive">{goalError}</p>}
+        </section>
+      )}
 
       {/* Question 1: Current Education */}
       <section className="space-y-4">
@@ -557,7 +641,7 @@ export function Step1Goal({ data, metadata, onUpdate, onNext }: Step1GoalProps) 
               <span className="text-xs text-brand font-medium">
                 Đã chọn: <strong className="text-foreground">Chưa chọn ngành</strong>
               </span>
-            ) : (
+            ) : needMajor ? null : (
               <Button
                 type="button"
                 size="sm"

@@ -75,4 +75,7 @@ public record AdvisorChatResponse(
     // Việc .NET cần làm sau lượt này: "recommend" = chạy gợi ý trường (ChatRecommendation),
     // "explain" = viết lời tư vấn một trường (ChatExplanation, mã trường nằm ở ActionData.code). Không trả cho trình duyệt
     string? Action = null,
-    JsonElement? ActionData = null);
+    JsonElement? ActionData = null,
+    // Lượt này vừa lưu hồ sơ chính thức (bấm "Đúng rồi" ở bảng rà soát): trang Gợi ý trường hiện nút cập nhật danh sách.
+    // Chỉ .NET đặt, advisor không gửi
+    bool? ProfileSaved = null);

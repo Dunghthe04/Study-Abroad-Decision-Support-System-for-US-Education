@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { usePathname, useRouter } from "next/navigation";
 import { ApiError } from "@/lib/api";
 import { streamAdvisorChat } from "@/lib/advisor-stream";
-import { onRecommendationsPage, showSimulation } from "@/lib/simulation-link";
+import { PROFILE_SAVED_EVENT, onRecommendationsPage, showSimulation } from "@/lib/simulation-link";
 import type { AssistantAction, ChatMessage, ChatWidget, Citation, QuickReply } from "@/types/api";
 import type { SimulationOverrides } from "@/types/recommendation";
 
@@ -225,6 +225,8 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
         // D2: báo trang biết chat vừa đổi hồ sơ nháp, hoặc đang hỏi sang trang form khác (mục 7)
         if (res.profileChanged?.length || res.formStep != null)
           onProfileChangedRef.current?.(res.profileChanged ?? [], res.formStep ?? null);
+        // Vừa lưu hồ sơ chính thức: trang Gợi ý trường (nếu đang mở) hiện nút cập nhật danh sách
+        if (res.profileSaved) window.dispatchEvent(new Event(PROFILE_SAVED_EVENT));
       } catch (err) {
         setError(toAssistantError(err));
       } finally {
