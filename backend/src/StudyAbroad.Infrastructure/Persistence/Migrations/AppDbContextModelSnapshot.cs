@@ -1195,6 +1195,10 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<bool>("AcknowledgedCenterContact")
+                        .HasColumnType("boolean")
+                        .HasColumnName("acknowledged_center_contact");
+
                     b.Property<Guid?>("ConsentId")
                         .HasColumnType("uuid")
                         .HasColumnName("consent_id");
@@ -1212,6 +1216,11 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)")
                         .HasColumnName("message");
+
+                    b.Property<List<string>>("SharedFields")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("shared_fields");
 
                     b.Property<bool>("SharedProfile")
                         .HasColumnType("boolean")
@@ -1232,6 +1241,10 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(32)")
                         .HasColumnName("study_level");
 
+                    b.Property<Guid?>("SubmittedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("submitted_by_user_id");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
@@ -1246,11 +1259,14 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.HasIndex("ConsentId")
                         .HasDatabaseName("ix_leads_consent_id");
 
-                    b.HasIndex("UserId")
-                        .HasDatabaseName("ix_leads_user_id");
-
                     b.HasIndex("StudyCenterId", "Status")
                         .HasDatabaseName("ix_leads_study_center_id_status");
+
+                    b.HasIndex("SubmittedByUserId", "CreatedAt")
+                        .HasDatabaseName("ix_leads_submitted_by_user_id_created_at");
+
+                    b.HasIndex("UserId", "CreatedAt")
+                        .HasDatabaseName("ix_leads_user_id_created_at");
 
                     b.ToTable("leads", "app");
                 });
@@ -3943,6 +3959,12 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_leads_study_centers_study_center_id");
+
+                    b.HasOne("StudyAbroad.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("SubmittedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_leads_users_submitted_by_user_id");
 
                     b.HasOne("StudyAbroad.Domain.Entities.User", null)
                         .WithMany()
