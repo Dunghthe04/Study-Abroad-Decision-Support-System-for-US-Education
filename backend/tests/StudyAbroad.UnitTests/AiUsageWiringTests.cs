@@ -83,6 +83,50 @@ public class AiUsageWiringTests
     }
 
     [Fact]
+    public async Task TheEcClientOfTheApp_PutsItsUsageIntoTheBasketOfTheSameRequest()
+    {
+        using var provider = Build();
+        using var scope = provider.CreateScope();
+
+        // JSON mẫu có aiUsage nhưng không có bậc hợp lệ: client trả null, số đo vẫn phải vào giỏ
+        await scope.ServiceProvider.GetRequiredService<IEcTierClient>().ReadTierAsync(new EcTierRequest([], []));
+
+        Assert.Single(scope.ServiceProvider.GetRequiredService<IAiUsageCollector>().Snapshot());
+    }
+
+    [Fact]
+    public async Task TheOcrClientOfTheApp_PutsItsUsageIntoTheBasketOfTheSameRequest()
+    {
+        using var provider = Build();
+        using var scope = provider.CreateScope();
+
+        await scope.ServiceProvider.GetRequiredService<ITranscriptOcrClient>().OcrTranscriptAsync(new TranscriptOcrRequest());
+
+        Assert.Single(scope.ServiceProvider.GetRequiredService<IAiUsageCollector>().Snapshot());
+    }
+
+    [Fact]
+    public async Task ClientsOfDifferentRequests_DoNotShareABasket()
+    {
+        using var provider = Build();
+        using var first = provider.CreateScope();
+        using var second = provider.CreateScope();
+
+        await first.ServiceProvider.GetRequiredService<IEcTierClient>().ReadTierAsync(new EcTierRequest([], []));
+
+        Assert.Empty(second.ServiceProvider.GetRequiredService<IAiUsageCollector>().Snapshot());
+    }
+
+    [Fact]
+    public void TheProfileFlowServiceCanBeBuiltWithTheRealWiring()
+    {
+        using var provider = Build();
+        using var scope = provider.CreateScope();
+
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<StudyAbroad.Application.Profile.Flow.IProfileFlowService>());
+    }
+
+    [Fact]
     public void TheChatServiceCanBeBuiltWithTheRealWiring()
     {
         using var provider = Build();

@@ -263,19 +263,8 @@ namespace StudyAbroad.Application.Advisor
 
         // Ghi mỗi lần gọi AI một dòng ai_calls (nguồn, skill, token, thời gian, lỗi), nối với tin trả lời nếu có.
         // Lỗi khi ghi chỉ cảnh báo, không bao giờ làm hỏng lượt chat. Không có số đo thì không làm gì
-        private async Task RecordAiCallsAsync(Guid userId, Guid? replyId, IReadOnlyList<AiUsageDto>? usage, CancellationToken ct)
-        {
-            if (aiCalls is null || usage is not { Count: > 0 })
-                return;
-            try
-            {
-                await aiCalls.AddRangeAsync(usage.Select(call => AiCallMapper.ToEntity(call, userId, replyId)).ToList(), ct);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                logger?.LogWarning(ex, "Không ghi được nhật ký gọi AI của người dùng {UserId}; lượt chat vẫn trả lời bình thường", userId);
-            }
-        }
+        private Task RecordAiCallsAsync(Guid userId, Guid? replyId, IReadOnlyList<AiUsageDto>? usage, CancellationToken ct) =>
+            aiCalls is null ? Task.CompletedTask : new AiCallRecorder(aiCalls, logger).RecordAsync(userId, replyId, usage, ct);
 
         // Advisor lỗi hẳn nên không có câu trả lời. Lưu câu hỏi và một dòng vai trò system ghi lỗi (outcome failed, review_status open)
         // để câu không biến mất khỏi hàng đợi của admin. Không dùng vai trò assistant vì trợ lý chưa hề trả lời.
