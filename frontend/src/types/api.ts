@@ -126,7 +126,7 @@ export interface ChatWidget {
 }
 
 /**
- * Hành động có cấu trúc từ nút trên giao diện ("Cần gì để vào?", "Xem tư vấn" ở thẻ trường): gửi mã trường thẳng cho backend,
+ * Hành động có cấu trúc từ nút trên giao diện ("Cần gì để vào?", "Vì sao nhóm này?" ở thẻ trường): gửi mã trường thẳng cho backend,
  * không qua SLM hiểu câu nên nhanh và không nhầm tên trường. target chỉ dùng cho goal_seek (bỏ trống thì hệ thống chọn nhóm cao hơn một bậc).
  */
 export interface AssistantAction {
@@ -136,6 +136,7 @@ export interface AssistantAction {
   schoolCode?: string | null; // goal_seek không kèm trường: hỏi lại bằng ô chọn trường
   question?: string | null; // school_info: câu hỏi gốc, để biết hỏi mục nào (học phí, học bổng...); trống thì tóm tắt về trường
   target?: "match" | "safety" | null;
+  suggested?: string[] | null; // ô chọn trường: các trường nên hiện sẵn dạng nút (backend điền, giao diện gửi lại nguyên)
   /** "real": giải thích theo hồ sơ thật dù trang đang xem giả định (nút "Xem theo hồ sơ thật"); bỏ trống: theo cái đang xem */
   basis?: "real" | null;
 }

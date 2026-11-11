@@ -2,13 +2,23 @@
 
 import pytest
 
-from app.schemas.chat import ChatMessage, ChatRequest, ChatState, ProfileField, QuickReply, Widget
+from app.schemas.chat import (
+    ChatMessage,
+    ChatRequest,
+    ChatState,
+    ProfileField,
+    QuickReply,
+    ResultSchool,
+    Widget,
+)
 from app.schemas.slm import INTENTS
 from app.services.branches import (
     ASK_AGAIN_LABEL,
     ASK_SCHOOL,
     ASK_WHICH_SCHOOLS,
     CANNOT_ANSWER,
+    GREETING_BUTTONS,
+    GREETING_REPLY,
     LOOKING_UP,
     NEED_RESULTS,
     NEXT_AFTER_SAVE,
@@ -387,6 +397,27 @@ async def test_out_of_scope_answers_with_the_fixed_sentence_of_its_kind(kind):
     assert out.answer == OUT_OF_SCOPE[kind]  # câu đang chờ do ChatFlow nhắc lại, nhánh không tự nhắc
 
 
+@pytest.mark.parametrize(
+    "message", ["Hello", "hi", "xin chào", "Chào bạn!", "alo", "chào buổi sáng", "Good morning"]
+)
+async def test_a_message_with_only_a_greeting_gets_a_greeting_back_with_things_to_do(message):
+    slm = tin(("out_of_scope", {"subtype": "ambiguous"}))  # model chưa có nhãn lời chào nên trả ambiguous
+
+    out = await build_branches({})["out_of_scope"].run(ChatState(), message, slm)
+
+    assert out.answer == GREETING_REPLY
+    assert [b.label for b in out.quick_replies] == [b.label for b in GREETING_BUTTONS]
+
+
+@pytest.mark.parametrize("message", ["em cần giúp đỡ để đi du học", "hello em muốn hỏi học phí", "ơ", "abc"])
+async def test_anything_more_than_a_greeting_keeps_the_ambiguous_answer(message):
+    slm = tin(("out_of_scope", {"subtype": "ambiguous"}))
+
+    out = await build_branches({})["out_of_scope"].run(ChatState(), message, slm)
+
+    assert out.answer == OUT_OF_SCOPE["ambiguous"] and not out.quick_replies
+
+
 def test_the_greeting_thanks_goodbye_sentence_does_not_sound_like_a_goodbye():
     assert OUT_OF_SCOPE["farewell"].endswith("?")  # học sinh mở đầu bằng "chào" vẫn hợp
 
@@ -746,7 +777,21 @@ async def test_explaining_a_school_without_its_name_asks_which_school():
     )
 
     assert out.answer == ASK_WHICH_SCHOOLS and out.action is None
+    assert out.widget.type == "school" and out.widget.data["kind"] == "explain"
+    assert out.widget.data["suggested"] is None  # chưa có danh sách gợi ý nào
     assert writer.skills == []
+
+
+async def test_the_explain_picker_suggests_the_first_schools_of_the_list():
+    state = ChatState(profile=filled(REQUIRED_B4))
+    state.schools = [ResultSchool(code=f"s{i}", name=f"School {i}") for i in range(9)]
+    question = "giải thích vì sao"
+
+    out = await new_advice([], writer=FakeWriter()).run(
+        state, question, tin(("profile_review", {"tasks": ["explain_school"]}, question))
+    )
+
+    assert out.widget.data["suggested"] == ["s0", "s1", "s2", "s3", "s4", "s5"]
 
 
 async def test_explaining_a_named_school_before_any_recommendation_runs_the_recommendation():

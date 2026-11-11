@@ -791,7 +791,7 @@ public class ChatServiceTests
 
         Assert.Equal("goal_seek", res.Widget!.Type);
         Assert.DoesNotContain("chưa giải thích được", res.Answer);
-        Assert.Equal("Sửa hồ sơ", res.QuickReplies!.Single().Label);
+        Assert.Equal(["Sửa hồ sơ", ChatNextSteps.CenterLabel], res.QuickReplies!.Select(q => q.Label));
     }
 
     [Fact]
@@ -896,10 +896,12 @@ public class ChatServiceTests
 
         var res = await SimulateChat(advisor, runner);
 
-        Assert.Equal(2, res.QuickReplies!.Count);
+        Assert.Equal(3, res.QuickReplies!.Count);
+        Assert.Equal(ChatNextSteps.CenterLabel, res.QuickReplies[2].Label);      // nút gặp tư vấn viên luôn ở cuối
         var why = res.QuickReplies[0];
-        Assert.Equal("Vì sao Boston University lên Vừa sức?", why.Label);      // trường bị loại (Gone) không được đưa ra
-        Assert.Equal(new ChatAction("explain", "bu"), why.Action);
+        Assert.Equal("Vì sao các trường đổi nhóm?", why.Label);      // không nêu tên trường; trường bị loại (Gone) không có trong danh sách chọn
+        Assert.Null(why.Action!.SchoolCode);
+        Assert.Equal(["bu"], why.Action.SchoolCodes);
         var need = res.QuickReplies[1];
         Assert.Equal("Cần gì để vào trường em muốn?", need.Label);               // không chọn sẵn trường: học sinh chưa nói quan tâm trường nào
         Assert.Equal(new ChatAction("goal_seek"), need.Action);
@@ -916,9 +918,11 @@ public class ChatServiceTests
 
         var res = await SimulateChat(advisor, runner);
 
-        var why = res.QuickReplies!.Single();
-        Assert.Equal("Vì sao Northeastern University lên vị trí 1?", why.Label);
-        Assert.Equal(new ChatAction("explain", "ne"), why.Action);
+        Assert.Equal(2, res.QuickReplies!.Count);
+        var why = res.QuickReplies[0];
+        Assert.Equal("Vì sao các trường đổi vị trí?", why.Label);
+        Assert.Null(why.Action!.SchoolCode);
+        Assert.Contains("ne", why.Action.SchoolCodes!);
     }
 
     [Fact]
@@ -1060,7 +1064,9 @@ public class ChatServiceTests
         Assert.Equal(("188429", "match"), runner.GoalCalledWith);
         Assert.StartsWith("Mình hiểu bạn hỏi về Boston University, nhóm muốn đạt: Vừa sức.", res.Answer);
         Assert.Equal("goal_seek", res.Widget!.Type);
-        Assert.Null(res.QuickReplies);
+        // trường đang trong danh sách: giải thích trường này, rồi gặp tư vấn viên
+        Assert.Equal(new ChatAction("explain", "188429"), res.QuickReplies![0].Action);
+        Assert.Equal(ChatNextSteps.CenterLabel, res.QuickReplies[1].Label);
         Assert.Null(res.Action);     // việc nội bộ, không trả cho trình duyệt
     }
 
@@ -1806,6 +1812,21 @@ public class ChatServiceTests
         Assert.Equal("school", res.Widget!.Type);
     }
 
+    [Fact]
+    public async Task ChatAction_ExplainWithoutASchool_OpensTheExplainPickerWithTheSuggestedSchools_WithoutTheAdvisor()
+    {
+        var runner = new FakeRunner();
+
+        var (res, advisor) = await ActionChat(new ChatAction("explain", Suggested: ["bu", "ne"]), runner);
+
+        Assert.Null(advisor.LastRequest);   // không qua SLM: nếu qua, advisor sẽ hỏi lại bằng nút tên trường thay vì ô chọn
+        Assert.Equal(ChatGoalSeek.AskExplainSchool, res.Answer);
+        Assert.Equal("school", res.Widget!.Type);
+        var data = res.Widget.Data!.Value;
+        Assert.Equal("explain", data.GetProperty("kind").GetString());
+        Assert.Equal(["bu", "ne"], data.GetProperty("suggested").EnumerateArray().Select(c => c.GetString()));
+    }
+
     // Thẻ kết quả do code dựng được gửi TRƯỚC khi Gemini được gọi (Gemini chậm), rồi lời mới tới sau trong dòng final
     [Fact]
     public async Task GoalSeek_SendsTheCardBeforeAskingGemini()
@@ -1851,12 +1872,10 @@ public class ChatServiceTests
         Assert.StartsWith("University of Iowa: ", res.Answer);
     }
 
-    // Hành động sai (loại lạ, giải thích thiếu mã, goal_seek có nhóm đích mà thiếu mã, nhóm đích không hợp lệ, mã quá dài): bỏ qua, chat chạy như thường qua advisor.
-    // goal_seek không có mã và không có nhóm đích là hợp lệ: mở ô chọn trường (test riêng)
+    // Hành động sai (loại lạ, goal_seek có nhóm đích mà thiếu mã, nhóm đích không hợp lệ, mã quá dài): bỏ qua, chat chạy như thường qua advisor.
+    // goal_seek và explain không có mã (goal_seek cũng không có nhóm đích) là hợp lệ: mở ô chọn trường (test riêng)
     [Theory]
     [InlineData("unknown", "188429", null)]
-    [InlineData("explain", "", null)]
-    [InlineData("explain", null, null)]
     [InlineData("goal_seek", "", "match")]
     [InlineData("goal_seek", "188429", "reach")]
     [InlineData("goal_seek", "188429", "xyz")]

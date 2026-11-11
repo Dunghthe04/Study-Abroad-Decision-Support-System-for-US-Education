@@ -4,6 +4,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { recommendationApi } from "@/lib/recommendation-api";
+import { overridesFromValues } from "@/lib/simulation-link";
 import type { Pref, SimulationOverrides, SimulationResponse } from "@/types/recommendation";
 
 const DEBOUNCE_MS = 300;
@@ -20,14 +21,53 @@ export interface ProfileSimulation {
   replace: (next: SimulationOverrides) => void; // thay toàn bộ giá trị giả định (chat vừa thử một kịch bản mới)
 }
 
+// Giá trị giả định đang xem được nhớ trong tab (sessionStorage) để tải lại trang không bị mất.
+// Khóa gồm học sinh và lần gợi ý đã lưu: gợi ý lại hoặc đổi hồ sơ thì khóa đổi, giả định cũ tự bỏ. Lỗi bộ nhớ thì bỏ qua.
+function readStored(key: string): SimulationOverrides {
+  try {
+    const raw = window.sessionStorage.getItem(key);
+    return raw ? overridesFromValues(JSON.parse(raw) as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeStored(key: string, overrides: SimulationOverrides): void {
+  try {
+    const has = Object.values(overrides).some((v) => v !== undefined && v !== null);
+    if (has) window.sessionStorage.setItem(key, JSON.stringify(overrides));
+    else window.sessionStorage.removeItem(key);
+  } catch {
+    // bộ nhớ đầy hoặc bị chặn: vẫn dùng được, chỉ không nhớ qua lần tải lại
+  }
+}
+
 // basePref: ưu tiên của lần gợi ý đã lưu, dùng làm mặc định để mô phỏng không đổi thứ tự khi người dùng chưa đụng tới thanh ưu tiên.
-// initial: giá trị giả định có sẵn từ đầu (chat vừa thử một kịch bản); chỉ đọc lúc dựng lần đầu.
+// initial: giá trị giả định có sẵn từ đầu (chat vừa thử một kịch bản); chỉ đọc lúc dựng lần đầu, và được ưu tiên hơn giá trị đã nhớ.
+// storageKey: nơi nhớ giả định (null cho tới khi biết lần gợi ý đang xem).
 export function useProfileSimulation(
-  enabled: boolean,
+  enabledNow: boolean,
   basePref: Pref | null,
   initial?: SimulationOverrides,
+  storageKey?: string | null,
 ): ProfileSimulation {
+  const hasInitial = initial !== undefined && Object.keys(initial).length > 0;
   const [overrides, setOverrides] = useState<SimulationOverrides>(initial ?? {});
+  // Chỉ mô phỏng sau khi đã khôi phục giá trị nhớ, để không gọi API hai lần (rỗng rồi mới tới giá trị nhớ)
+  const [restored, setRestored] = useState(!storageKey || hasInitial);
+  const enabled = enabledNow && restored;
+
+  // Khôi phục ngay khi biết khóa (chỉ một lần): chỉnh state trong lúc dựng, cách React khuyên thay cho setState trong effect
+  if (storageKey && !restored) {
+    const stored = readStored(storageKey);
+    if (Object.keys(stored).length > 0) setOverrides(stored);
+    setRestored(true);
+  }
+
+  useEffect(() => {
+    if (storageKey && restored) writeStored(storageKey, overrides);
+  }, [storageKey, restored, overrides]);
+
   const [result, setResult] = useState<SimulationResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

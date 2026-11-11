@@ -10,6 +10,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { useAssistant, useAssistantPageContext } from "@/components/assistant/AssistantProvider";
 import { recommendationApi } from "@/lib/recommendation-api";
 import { whyText } from "@/lib/recommendation-labels";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   PROFILE_SAVED_EVENT,
   RESET_SIMULATION_EVENT,
@@ -68,7 +69,10 @@ export function RecommendationView({ autoRun, initialOverrides }: Recommendation
 
   // Trình mô phỏng chỉ chạy khi đã có lần gợi ý (cần hồ sơ đã gửi)
   const basePref = rec?.criteria.pref ?? BALANCED_PREF;
-  const sim = useProfileSimulation(phase === "ready" && rec !== null, basePref, initialOverrides);
+  // Giả định đang xem được nhớ theo học sinh và lần gợi ý: tải lại trang không mất, gợi ý lại thì bỏ
+  const { user } = useAuth();
+  const simKey = user?.id && rec ? `usas:what-if:${user.id}:${rec.id}` : null;
+  const sim = useProfileSimulation(phase === "ready" && rec !== null, basePref, initialOverrides, simKey);
 
   // Đang kéo thanh thì danh sách hiện kết quả mô phỏng, không kéo thì hiện lần gợi ý đã lưu
   const view = useMemo<Recommendation | null>(() => {
