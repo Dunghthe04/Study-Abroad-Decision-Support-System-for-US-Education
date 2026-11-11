@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -85,8 +85,8 @@ export function AssistantPanel() {
       aria-label="USAS Advisor"
       className={cn(
         "fixed inset-0 z-50 flex flex-col overflow-hidden bg-surface",
-        // Màn rộng: khung nổi, cách mép trên, dưới và phải; mép trái sát nội dung trang
-        "min-[900px]:inset-y-3 min-[900px]:right-3 min-[900px]:left-auto min-[900px]:w-(--assistant-w) min-[900px]:rounded-2xl min-[900px]:border min-[900px]:border-line",
+        // Màn rộng: khung dính mép phải, cao hết màn hình, đẩy trang sang trái
+        "min-[900px]:left-auto min-[900px]:w-(--assistant-w) min-[900px]:border-l min-[900px]:border-line",
         "motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-right-4 motion-safe:duration-300",
       )}
     >
@@ -433,19 +433,105 @@ function IconButton({
   );
 }
 
-/** Nút nổi "Hỏi trợ lý" ở góc dưới phải, chỉ hiện khi khung đang đóng */
+// Thẻ chào nhỏ hiện khi mới vào trang; bấm X thì thu về nút tròn, lựa chọn nhớ trong phiên (sessionStorage)
+const PEEK_KEY = "usas.advisor.peek-dismissed";
+const peekListeners = new Set<() => void>();
+function readPeekDismissed() {
+  try {
+    return sessionStorage.getItem(PEEK_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+function subscribePeek(fn: () => void) {
+  peekListeners.add(fn);
+  return () => peekListeners.delete(fn);
+}
+
+/**
+ * Lối vào trợ lý ở góc dưới phải khi khung lớn đang đóng.
+ * Lần đầu vào: thẻ nhỏ "USAS Advisor · Tôi có thể giúp gì cho bạn?" có sẵn ô hỏi; gửi câu thì mở khung lớn và hỏi luôn.
+ * Bấm X: thẻ thu thành nút tròn chỉ có icon, bấm nút để mở lại khung lớn.
+ */
 export function AssistantLauncher() {
   const { open, openPanel } = useAssistant();
   const visible = useAssistantVisible();
+  // Server và lần render đầu coi như đã thu gọn để HTML khớp nhau, sau đó đọc sessionStorage
+  const dismissed = useSyncExternalStore(subscribePeek, readPeekDismissed, () => true);
+  const [text, setText] = useState("");
+
   if (!visible || open) return null;
+
+  const dismiss = () => {
+    try {
+      sessionStorage.setItem(PEEK_KEY, "1");
+    } catch {
+      // trình duyệt chặn lưu trữ: thẻ sẽ hiện lại ở lần tải sau
+    }
+    peekListeners.forEach((fn) => fn());
+  };
+
+  if (dismissed) {
+    return (
+      <button
+        type="button"
+        onClick={() => openPanel()}
+        aria-label="Mở USAS Advisor"
+        title="USAS Advisor"
+        className="fixed right-5 bottom-5 z-30 flex size-14 cursor-pointer items-center justify-center rounded-2xl bg-brand text-brand-foreground transition-transform hover:-translate-y-0.5 active:scale-95 motion-safe:animate-in motion-safe:zoom-in-90 motion-safe:duration-200 print:hidden"
+      >
+        <MessageCircleIcon className="size-6" />
+      </button>
+    );
+  }
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const q = text.trim();
+    openPanel(q || undefined);
+    setText("");
+  };
+
   return (
-    <button
-      type="button"
-      onClick={() => openPanel()}
-      className="fixed right-5 bottom-5 z-30 inline-flex min-h-[50px] cursor-pointer items-center gap-2 rounded-full bg-brand px-5 text-sm font-semibold text-white transition-transform hover:-translate-y-0.5 print:hidden"
+    <div
+      role="dialog"
+      aria-labelledby="advisor-peek-title"
+      className="fixed right-5 bottom-5 z-30 w-[min(22rem,calc(100vw-2.5rem))] rounded-2xl border border-line bg-surface p-4 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 motion-safe:duration-300 print:hidden"
     >
-      <MessageCircleIcon className="size-5" />
-      Hỏi trợ lý
-    </button>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p id="advisor-peek-title" className="font-heading text-base font-semibold text-ink">
+            USAS Advisor
+          </p>
+          <p className="mt-1 text-sm text-ink-2">Tôi có thể giúp gì cho bạn?</p>
+        </div>
+        <IconButton label="Thu gọn" onClick={dismiss} className="-mt-1 -mr-1">
+          <XIcon className="size-4.5" />
+        </IconButton>
+      </div>
+      <form
+        onSubmit={submit}
+        className="mt-3 flex items-center gap-2 rounded-xl border border-line py-1.5 pr-1.5 pl-3.5 transition-colors focus-within:border-brand focus-within:ring-3 focus-within:ring-ring/20"
+      >
+        <label htmlFor="advisor-peek-input" className="sr-only">
+          Câu hỏi cho USAS Advisor
+        </label>
+        <input
+          id="advisor-peek-input"
+          value={text}
+          maxLength={1000}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="Aa"
+          className="min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-ink-3"
+        />
+        <button
+          type="submit"
+          aria-label="Gửi"
+          className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg bg-brand text-brand-foreground transition-[opacity,transform] hover:opacity-90 active:scale-95"
+        >
+          <ArrowUpIcon className="size-4" />
+        </button>
+      </form>
+    </div>
   );
 }
