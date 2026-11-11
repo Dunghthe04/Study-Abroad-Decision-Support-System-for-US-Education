@@ -57,7 +57,7 @@ export function LandingHero() {
       </div>
 
       <div className="mx-auto grid w-full max-w-[1560px] gap-10 px-4 pt-[calc(var(--header-h)+4rem)] pb-12 sm:px-8 sm:pb-16 lg:grid-cols-12 lg:items-end lg:px-12 lg:pb-20">
-        <div className="space-y-6 lg:col-span-7 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-3 motion-safe:duration-700">
+        <div className="space-y-6 lg:col-span-8 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-3 motion-safe:duration-700">
           <h1 className="text-4xl leading-[1.1] font-semibold tracking-[-0.02em] text-balance sm:text-6xl">
             Chọn trường Mỹ hợp với điểm số và ngân sách của bạn
           </h1>
@@ -65,7 +65,7 @@ export function LandingHero() {
             Nhập GPA, điểm thi và ngân sách. USAS so hồ sơ với số liệu tuyển sinh của từng trường, xếp vào bốn nhóm và giải thích lý do cho từng trường.
           </p>
           <div className="flex flex-wrap gap-3">
-            <Link href="/analysis" className={buttonVariants({ variant: "ghost", size: "xl", className: "!bg-white !text-brand-ink hover:!bg-white/90 active:translate-y-px" })}>
+            <Link href="/analysis" className={buttonVariants({ size: "xl", className: "!bg-accent !text-accent-foreground hover:!bg-accent/90 active:translate-y-px" })}>
               Phân tích hồ sơ
               <ArrowRightIcon className="transition-transform group-hover/button:translate-x-0.5" />
             </Link>
@@ -83,7 +83,7 @@ export function LandingHero() {
         </div>
 
         {/* Thẻ đi cùng ảnh nền: đổi theo trường đang hiện */}
-        <div className="lg:col-span-5 lg:justify-self-end">
+        <div className="lg:col-span-4 lg:justify-self-end">
           <div className="w-full max-w-md rounded-xl bg-surface p-5 text-ink">
             <div className="flex items-center justify-between gap-3">
               <p className="text-sm font-semibold">Ví dụ với hồ sơ mẫu</p>
