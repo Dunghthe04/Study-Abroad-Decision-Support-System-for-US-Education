@@ -3,6 +3,7 @@
 import pytest
 
 from app.schemas.chat import ChatMessage, ChatRequest, ChatState, ProfileField
+from app.services.branches import NEXT_AFTER_SAVE
 from app.services.chat_flow import QUESTIONS
 from app.services.intake import CHAT_BUTTON, FORM_BUTTON, INTAKE_ASK, INTAKE_ID
 from app.services.ollama import OllamaError
@@ -309,17 +310,17 @@ async def test_all_questions_done_shows_review_with_buttons():
     assert [r.label for r in res.quick_replies] == ["Đúng rồi", "Cần sửa"]
 
 
-async def test_confirm_at_review_confirms_said_info_and_assesses_right_away():
-    llm = FakeLLM(OllamaError("tắt máy"), OllamaError("tắt máy"))  # đánh giá dùng câu mẫu
+async def test_confirm_at_review_confirms_said_info_and_asks_what_next():
+    llm = FakeLLM()
     profile = {**full_profile(), "budget": field("tier_35k_50k")}
     res = await turn(llm, "Đúng rồi", current_step="B2", question_id="X1", profile=profile)
 
     assert all(f.status == "confirmed" for f in res.state.profile.values())
-    # Xác nhận xong thì nhánh hồ sơ đánh giá luôn trong lượt này rồi hỏi X2, không hỏi lại "có muốn xem không"
+    # Xác nhận xong chỉ lưu rồi hỏi muốn làm gì tiếp, không tự đánh giá hay lên lộ trình
     assert res.skills == ["collect_profile"]
-    assert (res.state.current_step, res.state.question_id) == ("B4", "X2")
-    assert res.answer.startswith(SAVED)
-    assert res.answer.endswith(QUESTIONS["X2"])
+    assert res.state.current_step == "B3"
+    assert res.answer == f"{SAVED}\n\n{NEXT_AFTER_SAVE}"
+    assert [r.label for r in res.quick_replies] == ["Gợi ý trường", "Đánh giá hồ sơ", "Lên lộ trình"]
     assert "gpa" in res.profile_changed
 
 

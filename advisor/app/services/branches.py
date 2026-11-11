@@ -387,9 +387,19 @@ class GeneratedAdviceBranch:
         return SkillOutput(answer)
 
 
-# Trả lời câu hồ sơ đang chờ hoặc cập nhật hồ sơ. Hồ sơ vừa đủ trong lượt này (học sinh bấm "Đúng rồi" ở X1)
-# thì tư vấn luôn, không bắt học sinh nhắn thêm một lần nữa mới thấy kết quả.
-# Có câu tư vấn bị hoãn (pending_advice) thì trả lời đúng câu đó, không phải tin "Đúng rồi" của lượt này.
+# Hồ sơ vừa lưu mà không có câu tư vấn bị hoãn: hỏi học sinh muốn làm gì tiếp. Nút gửi câu như học sinh tự gõ,
+# đi qua SLM nên chỉ chạy đúng việc được chọn
+NEXT_AFTER_SAVE = "Bạn muốn mình làm gì tiếp?"
+NEXT_AFTER_SAVE_REPLIES = [
+    QuickReply(label="Gợi ý trường", value="Gợi ý trường cho em"),
+    QuickReply(label="Đánh giá hồ sơ", value="Đánh giá hồ sơ của em"),
+    QuickReply(label="Lên lộ trình", value="Lên lộ trình cho em"),
+]
+
+
+# Trả lời câu hồ sơ đang chờ hoặc cập nhật hồ sơ. Hồ sơ vừa đủ trong lượt này (học sinh bấm "Đúng rồi" ở X1):
+# có câu tư vấn bị hoãn (pending_advice) thì trả lời luôn đúng câu đó, không bắt học sinh nhắn lại;
+# không có thì chỉ lưu rồi hỏi muốn làm gì tiếp, không tự đánh giá hay lên lộ trình.
 # Tin đã có ý profile_review thì thôi: ChatFlow sẽ chạy nhánh tư vấn cho ý đó ngay sau, tư vấn ở đây nữa là trả lời hai lần
 class ProfileBranch:
     def __init__(self, handler: ChatProfileHandler, advice: Branch) -> None:
@@ -406,7 +416,7 @@ class ProfileBranch:
                 return combine(
                     output, await self._advice.run(state, original.span, SlmTinResult(intents=[original]))
                 )
-            return combine(output, await self._advice.run(state, message, slm))
+            return combine(output, SkillOutput(NEXT_AFTER_SAVE, quick_replies=list(NEXT_AFTER_SAVE_REPLIES)))
         return output
 
 

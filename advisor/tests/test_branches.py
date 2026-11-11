@@ -9,9 +9,10 @@ from app.services.branches import (
     ASK_SCHOOL,
     ASK_WHICH_SCHOOLS,
     CANNOT_ANSWER,
-    DEFAULT_QUESTION,
     LOOKING_UP,
     NEED_RESULTS,
+    NEXT_AFTER_SAVE,
+    NEXT_AFTER_SAVE_REPLIES,
     NOTHING_TO_TRY,
     OUT_OF_SCOPE,
     RECOMMENDING,
@@ -484,7 +485,7 @@ async def test_profile_answer_goes_to_the_skill_owning_the_pending_question(ques
     assert ran == [expected]
 
 
-async def test_the_last_profile_answer_is_followed_by_the_advice_in_the_same_turn():
+async def test_the_last_profile_answer_asks_what_next_without_advising():
     ran: list[str] = []
     branches = build_branches(skills(ran, skill_ho_so=Recording("skill_ho_so", ran, moves_to="B3")))
     state = ChatState(current_step="B2", profile=filled(REQUIRED_B3))
@@ -492,8 +493,10 @@ async def test_the_last_profile_answer_is_followed_by_the_advice_in_the_same_tur
 
     out = await branches["collect_profile"].run(state, "8.5", tin("collect_profile"))
 
-    assert ran == ["skill_ho_so", "skill_danh_gia"]
-    assert out.answer == "trả lời của skill_ho_so\n\ntrả lời của skill_danh_gia"
+    # Lưu xong chỉ hỏi muốn làm gì tiếp, không tự đánh giá hay lên lộ trình
+    assert ran == ["skill_ho_so"]
+    assert out.answer == f"trả lời của skill_ho_so\n\n{NEXT_AFTER_SAVE}"
+    assert out.quick_replies == NEXT_AFTER_SAVE_REPLIES
 
 
 async def test_advice_without_a_profile_remembers_the_question():
@@ -768,16 +771,18 @@ async def test_claude_failing_offers_to_ask_again_instead_of_a_static_skill():
     assert out.quick_replies == [QuickReply(label=ASK_AGAIN_LABEL, value="đánh giá hồ sơ giúp em")]
 
 
-async def test_confirming_the_profile_without_a_question_waiting_evaluates_the_profile():
+async def test_confirming_the_profile_without_a_question_waiting_does_not_advise():
     ran: list[str] = []
     writer = FakeWriter()
     branches = build_branches(skills(ran, skill_ho_so=Recording("skill_ho_so", ran, moves_to="B3")), writer)
     state = ChatState(current_step="B2", profile=filled(REQUIRED_B3))
     ask(state, "X1")
 
-    await branches["collect_profile"].run(state, "Đúng rồi", tin("collect_profile"))
+    out = await branches["collect_profile"].run(state, "Đúng rồi", tin("collect_profile"))
 
-    assert writer.questions == [DEFAULT_QUESTION]  # không đem "Đúng rồi" đi dựng skill
+    assert writer.questions == []  # không dựng skill tư vấn nào
+    assert out.answer.endswith(NEXT_AFTER_SAVE)
+    assert out.quick_replies == NEXT_AFTER_SAVE_REPLIES
 
 
 CLAUDE_FILTER = {"answer": "Ngành là điều kiện lọc trường. Bạn bấm Sửa Mục tiêu rồi nhờ mình gợi ý lại nhé."}
