@@ -13,8 +13,10 @@ import {
   CopyIcon,
   GraduationCapIcon,
   InfoIcon,
+  MessageSquareIcon,
 } from "lucide-react";
 import { centerLeadsApi, ApiError } from "@/lib/api";
+import { LeadConversationPanel } from "./LeadConversationPanel";
 import type {
   CenterReceivedLeadDto,
   CenterLeadsSummaryDto,
@@ -40,10 +42,15 @@ type StatusFilter = "all" | "new" | "contacted" | "closed";
 function formatStudyLevel(level?: string | null): string {
   if (!level) return "Chưa xác định";
   const map: Record<string, string> = {
-    bachelor: "Đại học (Bachelor)",
+    bachelor: "Đại học (Cử nhân)",
+    undergraduate: "Đại học (Cử nhân)",
+    community_college: "Cao đẳng cộng đồng (2+2)",
     master: "Thạc sĩ (Master)",
     phd: "Tiến sĩ (PhD)",
     high_school: "Trung học (High School)",
+    highschool: "Trung học phổ thông",
+    secondary: "Trung học (THCS/THPT)",
+    test_prep: "Luyện thi SAT / IELTS",
     exchange: "Giao lưu văn hóa",
     transfer: "Chuyển tiếp (Transfer)",
   };
@@ -130,6 +137,42 @@ export function CenterLeadsListView() {
     fetchLeads();
   };
 
+  const applyLeadStatusUpdate = useCallback(
+    (leadId: string, newStatus: string, updatedLead?: CenterReceivedLeadDto) => {
+      setData((prev) => {
+        if (!prev) return null;
+        const previousStatus = prev.items.find((i) => i.id === leadId)?.status;
+        if (!previousStatus || previousStatus === newStatus) {
+          return updatedLead
+            ? {
+                ...prev,
+                items: prev.items.map((item) => (item.id === leadId ? updatedLead : item)),
+              }
+            : prev;
+        }
+
+        const delta = (target: string) =>
+          newStatus === target ? 1 : previousStatus === target ? -1 : 0;
+
+        return {
+          ...prev,
+          items: prev.items.map((item) =>
+            item.id === leadId ? (updatedLead ?? { ...item, status: newStatus }) : item
+          ),
+          newCount: prev.newCount + delta("new"),
+          contactedCount: prev.contactedCount + delta("contacted"),
+          closedCount: prev.closedCount + delta("closed"),
+        };
+      });
+
+      setSelectedLead((prev) => {
+        if (!prev || prev.id !== leadId) return prev;
+        return updatedLead ?? { ...prev, status: newStatus };
+      });
+    },
+    []
+  );
+
   const handleStatusChange = async (leadId: string, newStatus: string) => {
     setIsUpdatingStatus(true);
     try {
@@ -142,36 +185,7 @@ export function CenterLeadsListView() {
         }".`,
       });
 
-      // Update in local list
-      setData((prev) => {
-        if (!prev) return null;
-        return {
-          ...prev,
-          items: prev.items.map((item) => (item.id === leadId ? updated : item)),
-          newCount:
-            newStatus === "new"
-              ? prev.newCount + 1
-              : prev.items.find((i) => i.id === leadId)?.status === "new"
-                ? prev.newCount - 1
-                : prev.newCount,
-          contactedCount:
-            newStatus === "contacted"
-              ? prev.contactedCount + 1
-              : prev.items.find((i) => i.id === leadId)?.status === "contacted"
-                ? prev.contactedCount - 1
-                : prev.contactedCount,
-          closedCount:
-            newStatus === "closed"
-              ? prev.closedCount + 1
-              : prev.items.find((i) => i.id === leadId)?.status === "closed"
-                ? prev.closedCount - 1
-                : prev.closedCount,
-        };
-      });
-
-      if (selectedLead?.id === leadId) {
-        setSelectedLead(updated);
-      }
+      applyLeadStatusUpdate(leadId, updated.status, updated);
     } catch {
       toast.add({
         type: "error",
@@ -199,7 +213,7 @@ export function CenterLeadsListView() {
   const items = data?.items ?? [];
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto px-4 py-6">
+    <div className="space-y-6 max-w-7xl mx-auto px-4 py-6">
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-5">
         <div>
@@ -439,14 +453,14 @@ export function CenterLeadsListView() {
             <table className="w-full text-left border-collapse text-xs">
               <thead>
                 <tr className="border-b bg-muted/40 text-muted-foreground">
-                  <th className="py-3 px-4 font-semibold">Thời gian</th>
-                  <th className="py-3 px-4 font-semibold">Người gửi</th>
-                  <th className="py-3 px-4 font-semibold">Số điện thoại</th>
-                  <th className="py-3 px-4 font-semibold">Bậc học</th>
-                  <th className="py-3 px-4 font-semibold max-w-[240px]">Lời nhắn</th>
-                  <th className="py-3 px-4 font-semibold">Hồ sơ</th>
-                  <th className="py-3 px-4 font-semibold">Trạng thái</th>
-                  <th className="py-3 px-4 font-semibold text-right">Thao tác</th>
+                  <th className="py-3 px-3 font-semibold whitespace-nowrap">Thời gian</th>
+                  <th className="py-3 px-3 font-semibold">Người gửi</th>
+                  <th className="py-3 px-3 font-semibold whitespace-nowrap">Số điện thoại</th>
+                  <th className="py-3 px-3 font-semibold whitespace-nowrap">Bậc học</th>
+                  <th className="py-3 px-3 font-semibold max-w-[180px]">Lời nhắn</th>
+                  <th className="py-3 px-3 font-semibold whitespace-nowrap">Hồ sơ</th>
+                  <th className="py-3 px-3 font-semibold whitespace-nowrap">Trạng thái</th>
+                  <th className="py-3 px-3 font-semibold text-right whitespace-nowrap">Thao tác</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -465,7 +479,7 @@ export function CenterLeadsListView() {
                       onClick={() => setSelectedLead(lead)}
                     >
                       {/* Date */}
-                      <td className="py-3.5 px-4 whitespace-nowrap text-muted-foreground">
+                      <td className="py-3.5 px-3 whitespace-nowrap text-muted-foreground">
                         <div>{new Date(lead.createdAt).toLocaleDateString("vi-VN")}</div>
                         <div className="text-xs text-muted-foreground/70">
                           {new Date(lead.createdAt).toLocaleTimeString("vi-VN", {
@@ -476,16 +490,20 @@ export function CenterLeadsListView() {
                       </td>
 
                       {/* Student info */}
-                      <td className="py-3.5 px-4 whitespace-nowrap">
+                      <td className="py-3.5 px-3 max-w-[185px]">
                         {lead.sharedProfile && lead.studentName ? (
-                          <div>
-                            <span className="font-semibold text-foreground">{lead.studentName}</span>
+                          <div className="min-w-0">
+                            <div className="font-semibold text-foreground truncate" title={lead.studentName}>
+                              {lead.studentName}
+                            </div>
                             {lead.studentEmail && (
-                              <div className="text-xs text-muted-foreground">{lead.studentEmail}</div>
+                              <div className="text-xs text-muted-foreground truncate" title={lead.studentEmail}>
+                                {lead.studentEmail}
+                              </div>
                             )}
                           </div>
                         ) : (
-                          <span className="text-muted-foreground italic flex items-center gap-1">
+                          <span className="text-muted-foreground italic flex items-center gap-1 whitespace-nowrap">
                             <LockIcon className="size-3 shrink-0" />
                             Học sinh ẩn danh
                           </span>
@@ -493,7 +511,7 @@ export function CenterLeadsListView() {
                       </td>
 
                       {/* Phone */}
-                      <td className="py-3.5 px-4 whitespace-nowrap">
+                      <td className="py-3.5 px-3 whitespace-nowrap">
                         {lead.contactPhone ? (
                           <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                             <a
@@ -519,21 +537,21 @@ export function CenterLeadsListView() {
                       </td>
 
                       {/* Study level */}
-                      <td className="py-3.5 px-4 whitespace-nowrap">
+                      <td className="py-3.5 px-3 whitespace-nowrap">
                         <Badge variant="secondary" className="font-normal text-xs">
                           {formatStudyLevel(lead.studyLevel)}
                         </Badge>
                       </td>
 
                       {/* Message preview */}
-                      <td className="py-3.5 px-4 max-w-[240px]">
+                      <td className="py-3.5 px-3 max-w-[180px]">
                         <p className="truncate text-foreground" title={lead.message ?? ""}>
                           {lead.message || <span className="text-muted-foreground italic">Không có lời nhắn</span>}
                         </p>
                       </td>
 
                       {/* Shared Profile Badge */}
-                      <td className="py-3.5 px-4 whitespace-nowrap">
+                      <td className="py-3.5 px-3 whitespace-nowrap">
                         {lead.sharedProfile ? (
                           <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-300 gap-1 text-xs">
                             <ShieldCheckIcon className="size-3" />
@@ -548,7 +566,7 @@ export function CenterLeadsListView() {
                       </td>
 
                       {/* Status */}
-                      <td className="py-3.5 px-4 whitespace-nowrap">
+                      <td className="py-3.5 px-3 whitespace-nowrap">
                         {isNew && (
                           <Badge className="bg-blue-600 text-white font-medium text-xs px-2 py-0.5">
                             Mới nhận
@@ -567,14 +585,15 @@ export function CenterLeadsListView() {
                       </td>
 
                       {/* Action */}
-                      <td className="py-3.5 px-4 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                      <td className="py-3.5 px-3 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => setSelectedLead(lead)}
-                          className="h-7 text-xs px-2.5"
+                          className="h-7 text-xs px-2.5 gap-1.5"
                         >
-                          Chi tiết
+                          <MessageSquareIcon className="size-3" />
+                          Chi tiết & Trả lời
                         </Button>
                       </td>
                     </tr>
@@ -588,13 +607,13 @@ export function CenterLeadsListView() {
 
       {/* Detail Dialog */}
       <Dialog open={selectedLead !== null} onOpenChange={(open) => !open && setSelectedLead(null)}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-full sm:max-w-3xl max-h-[90vh] overflow-y-auto p-6">
           {selectedLead && (
             <>
               <DialogHeader>
-                <div className="flex items-center justify-between gap-2 mr-6">
+                <div className="flex flex-wrap items-center justify-between gap-2 pr-8">
                   <DialogTitle className="text-xl font-bold flex items-center gap-2">
-                    <InboxIcon className="size-5 text-brand" />
+                    <InboxIcon className="size-5 text-brand shrink-0" />
                     Chi tiết yêu cầu liên hệ
                   </DialogTitle>
                   {selectedLead.status === "new" && (
@@ -612,7 +631,7 @@ export function CenterLeadsListView() {
                 </DialogDescription>
               </DialogHeader>
 
-              <div className="space-y-5 my-2">
+              <div className="space-y-5 my-2 min-w-0">
                 {/* Contact Card */}
                 <Card size="sm" className="bg-muted/30">
                   <CardContent className="pt-4 space-y-3">
@@ -620,9 +639,9 @@ export function CenterLeadsListView() {
                       Thông tin liên hệ
                     </h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                      <div>
+                      <div className="min-w-0">
                         <span className="text-xs text-muted-foreground block">Người gửi:</span>
-                        <span className="font-semibold text-foreground">
+                        <span className="font-semibold text-foreground break-words">
                           {selectedLead.sharedProfile && selectedLead.studentName ? (
                             selectedLead.studentName
                           ) : (
@@ -634,11 +653,14 @@ export function CenterLeadsListView() {
                         </span>
                       </div>
 
-                      <div>
+                      <div className="min-w-0">
                         <span className="text-xs text-muted-foreground block">Email:</span>
-                        <span className="font-medium text-foreground">
+                        <span className="font-medium text-foreground block min-w-0">
                           {selectedLead.sharedProfile && selectedLead.studentEmail ? (
-                            <a href={`mailto:${selectedLead.studentEmail}`} className="text-brand hover:underline">
+                            <a
+                              href={`mailto:${selectedLead.studentEmail}`}
+                              className="text-brand hover:underline break-all inline-block max-w-full focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring rounded-xs"
+                            >
                               {selectedLead.studentEmail}
                             </a>
                           ) : (
@@ -696,10 +718,10 @@ export function CenterLeadsListView() {
                 </div>
 
                 {/* Shared Profile Section */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
+                <div className="space-y-2 min-w-0">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <h4 className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
-                      <GraduationCapIcon className="size-4 text-brand" />
+                      <GraduationCapIcon className="size-4 text-brand shrink-0" />
                       Hồ sơ học sinh được chia sẻ
                     </h4>
                     {selectedLead.sharedProfile ? (
@@ -719,7 +741,7 @@ export function CenterLeadsListView() {
                     <Card size="sm" className="border-emerald-200 bg-emerald-50/20 dark:bg-emerald-950/20">
                       <CardContent className="pt-4 grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
                         {/* GPA */}
-                        <div className="p-2.5 rounded-lg bg-card border">
+                        <div className="p-2.5 rounded-lg bg-card border min-w-0">
                           <span className="text-muted-foreground block">GPA tích lũy:</span>
                           <span className="text-base font-bold text-emerald-600">
                             {selectedLead.profileSummary.overallGpa != null
@@ -729,25 +751,25 @@ export function CenterLeadsListView() {
                         </div>
 
                         {/* Major */}
-                        <div className="p-2.5 rounded-lg bg-card border">
+                        <div className="p-2.5 rounded-lg bg-card border min-w-0">
                           <span className="text-muted-foreground block">Ngành dự kiến:</span>
-                          <span className="font-semibold text-foreground">
+                          <span className="font-semibold text-foreground break-words">
                             {selectedLead.profileSummary.intendedMajor || "Chưa chọn ngành"}
                           </span>
                         </div>
 
                         {/* Grade / Level */}
-                        <div className="p-2.5 rounded-lg bg-card border">
+                        <div className="p-2.5 rounded-lg bg-card border min-w-0">
                           <span className="text-muted-foreground block">Khối lớp hiện tại:</span>
-                          <span className="font-semibold text-foreground">
+                          <span className="font-semibold text-foreground break-words">
                             {selectedLead.profileSummary.currentGrade || "Chưa cập nhật"}
                           </span>
                         </div>
 
                         {/* English Test */}
-                        <div className="p-2.5 rounded-lg bg-card border">
+                        <div className="p-2.5 rounded-lg bg-card border min-w-0">
                           <span className="text-muted-foreground block">Chứng chỉ tiếng Anh:</span>
-                          <span className="font-semibold text-foreground">
+                          <span className="font-semibold text-foreground break-words">
                             {selectedLead.profileSummary.englishTestType
                               ? `${selectedLead.profileSummary.englishTestType.toUpperCase()}: ${
                                   selectedLead.profileSummary.englishScore ?? "Chưa có điểm"
@@ -757,9 +779,9 @@ export function CenterLeadsListView() {
                         </div>
 
                         {/* Standardized Test */}
-                        <div className="p-2.5 rounded-lg bg-card border">
+                        <div className="p-2.5 rounded-lg bg-card border min-w-0">
                           <span className="text-muted-foreground block">SAT / ACT:</span>
-                          <span className="font-semibold text-foreground">
+                          <span className="font-semibold text-foreground break-words">
                             {selectedLead.profileSummary.satScore
                               ? `SAT: ${selectedLead.profileSummary.satScore}`
                               : selectedLead.profileSummary.actScore
@@ -769,9 +791,9 @@ export function CenterLeadsListView() {
                         </div>
 
                         {/* EC Tier */}
-                        <div className="p-2.5 rounded-lg bg-card border">
+                        <div className="p-2.5 rounded-lg bg-card border min-w-0">
                           <span className="text-muted-foreground block">Bậc ngoại khóa:</span>
-                          <span className="font-semibold text-foreground">
+                          <span className="font-semibold text-foreground break-words">
                             {selectedLead.profileSummary.extracurricularTier
                               ? `Bậc ${selectedLead.profileSummary.extracurricularTier}`
                               : "Chưa phân tích"}
@@ -779,9 +801,9 @@ export function CenterLeadsListView() {
                         </div>
 
                         {/* Budget */}
-                        <div className="p-2.5 rounded-lg bg-card border col-span-2 sm:col-span-3">
+                        <div className="p-2.5 rounded-lg bg-card border col-span-2 sm:col-span-3 min-w-0">
                           <span className="text-muted-foreground block">Khoảng ngân sách dự kiến:</span>
-                          <span className="font-semibold text-brand">
+                          <span className="font-semibold text-brand break-words">
                             {formatBudgetTier(selectedLead.profileSummary.budgetTier)}
                           </span>
                         </div>
@@ -797,6 +819,16 @@ export function CenterLeadsListView() {
                     </div>
                   )}
                 </div>
+
+                {/* [UC-74] Lead Conversation & Reply Panel */}
+                <LeadConversationPanel
+                  key={selectedLead.id}
+                  leadId={selectedLead.id}
+                  leadStatus={selectedLead.status}
+                  onLeadStatusChange={(newStatus) =>
+                    applyLeadStatusUpdate(selectedLead.id, newStatus)
+                  }
+                />
 
                 {/* Status Transition Control */}
                 <div className="space-y-2 pt-2 border-t">

@@ -106,6 +106,80 @@ public class LeadsControllerTests
             ReceivedLeads[idx] = updated;
             return Task.FromResult(updated);
         }
+
+        public Dictionary<Guid, List<LeadMessageDto>> MessagesByLead { get; } = [];
+        public Guid? ForbiddenLeadId { get; set; }
+
+        public Task<LeadMessagesThreadDto> GetReceivedLeadMessagesForCenterUserAsync(
+            Guid userId,
+            string? userEmail,
+            string userRole,
+            Guid leadId,
+            CancellationToken ct = default)
+        {
+            if (ForbiddenLeadId == leadId)
+                throw new UnauthorizedAccessException("Forbidden");
+
+            var lead = ReceivedLeads.FirstOrDefault(l => l.Id == leadId)
+                ?? throw new KeyNotFoundException("Không tìm thấy yêu cầu liên hệ.");
+
+            var list = MessagesByLead.TryGetValue(leadId, out var msgs) ? msgs : [];
+            return Task.FromResult(new LeadMessagesThreadDto(
+                leadId,
+                lead.Status,
+                list,
+                list.Count(m => m.IsFlagged && m.Status != "removed")));
+        }
+
+        public Task<SendLeadMessageResultDto> SendLeadMessageForCenterUserAsync(
+            Guid userId,
+            string? userEmail,
+            string userRole,
+            Guid leadId,
+            string content,
+            CancellationToken ct = default)
+        {
+            if (leadId == Guid.Empty)
+                throw new ArgumentException("Mã yêu cầu liên hệ không hợp lệ.");
+            if (string.IsNullOrWhiteSpace(content))
+                throw new ArgumentException("Nội dung tin nhắn không được để trống.");
+            if (content.Trim().Length > 4000)
+                throw new ArgumentException("Nội dung tin nhắn tối đa 4000 ký tự.");
+            if (ForbiddenLeadId == leadId)
+                throw new UnauthorizedAccessException("Forbidden");
+
+            var idx = ReceivedLeads.FindIndex(l => l.Id == leadId);
+            if (idx < 0)
+                throw new KeyNotFoundException("Không tìm thấy yêu cầu liên hệ.");
+
+            var lead = ReceivedLeads[idx];
+            var nextStatus = lead.Status == "new" ? "contacted" : lead.Status;
+            ReceivedLeads[idx] = lead with { Status = nextStatus };
+
+            var filter = LeadMessageContentFilter.Inspect(content);
+            var senderName = LeadMessageMapper.ResolveSenderDisplayName(userRole, null, lead.SharedProfile, lead.StudyCenterName);
+            var msg = new LeadMessageDto(
+                Guid.NewGuid(),
+                leadId,
+                userId,
+                senderName,
+                userRole,
+                true,
+                content.Trim(),
+                filter.IsFlagged,
+                filter.FlagReason,
+                "visible",
+                DateTime.UtcNow);
+
+            if (!MessagesByLead.TryGetValue(leadId, out var list))
+            {
+                list = [];
+                MessagesByLead[leadId] = list;
+            }
+            list.Add(msg);
+
+            return Task.FromResult(new SendLeadMessageResultDto(msg, nextStatus));
+        }
     }
 
     private sealed class FakeAuthService(bool allowShare) : IAuthorizationService
@@ -383,6 +457,253 @@ public class LeadsControllerTests
         var result = await controller.UpdateLeadStatus(leadId, request, CancellationToken.None);
 
         Assert.IsType<ObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task GetReceivedLeadMessages_ValidLead_ReturnsOkWithThread()
+    {
+        var centerUserId = Guid.NewGuid();
+        var centerId = Guid.NewGuid();
+        var leadId = Guid.NewGuid();
+        var (controller, service) = CreateCenterController(centerUserId);
+
+        service.ReceivedLeads.Add(new CenterReceivedLeadDto(
+            leadId,
+            centerId,
+            "Du Học Á Âu",
+            "bachelor",
+            "0912345678",
+            "Xin tư vấn",
+            false,
+            "contacted",
+            DateTime.UtcNow,
+            null,
+            null,
+            null));
+
+        service.MessagesByLead[leadId] =
+        [
+            new LeadMessageDto(
+                Guid.NewGuid(),
+                leadId,
+                centerUserId,
+                "Du Học Á Âu",
+                UserRoles.Center,
+                true,
+                "Chào em, trung tâm đã xem hồ sơ.",
+                false,
+                null,
+                "visible",
+                DateTime.UtcNow)
+        ];
+
+        var result = await controller.GetReceivedLeadMessages(leadId, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var thread = Assert.IsType<LeadMessagesThreadDto>(ok.Value);
+        Assert.Equal(leadId, thread.LeadId);
+        Assert.Single(thread.Messages);
+    }
+
+    [Fact]
+    public async Task SendReceivedLeadMessage_ValidReply_ReturnsCreatedAndUpdatesLeadStatus()
+    {
+        var centerUserId = Guid.NewGuid();
+        var centerId = Guid.NewGuid();
+        var leadId = Guid.NewGuid();
+        var (controller, service) = CreateCenterController(centerUserId);
+
+        service.ReceivedLeads.Add(new CenterReceivedLeadDto(
+            leadId,
+            centerId,
+            "Du Học Á Âu",
+            "bachelor",
+            null,
+            "Tư vấn giúp em",
+            true,
+            "new",
+            DateTime.UtcNow,
+            "Nguyen Van A",
+            "a@example.com",
+            null));
+
+        var result = await controller.SendReceivedLeadMessage(
+            leadId,
+            new SendLeadMessageRequest("Trung tâm gửi em lộ trình chi tiết."),
+            CancellationToken.None);
+
+        var created = Assert.IsType<CreatedAtActionResult>(result);
+        var payload = Assert.IsType<SendLeadMessageResultDto>(created.Value);
+        Assert.Equal("contacted", payload.LeadStatus);
+        Assert.False(payload.Message.IsFlagged);
+        Assert.Equal("Trung tâm gửi em lộ trình chi tiết.", payload.Message.Content);
+    }
+
+    [Fact]
+    public async Task SendReceivedLeadMessage_EmptyContent_ReturnsValidationProblem()
+    {
+        var centerUserId = Guid.NewGuid();
+        var leadId = Guid.NewGuid();
+        var (controller, _) = CreateCenterController(centerUserId);
+
+        var result = await controller.SendReceivedLeadMessage(
+            leadId,
+            new SendLeadMessageRequest("   "),
+            CancellationToken.None);
+
+        Assert.IsType<ObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task GetAndSendLeadMessage_ForbiddenCenter_ReturnsForbid()
+    {
+        var centerUserId = Guid.NewGuid();
+        var leadId = Guid.NewGuid();
+        var (controller, service) = CreateCenterController(centerUserId);
+        service.ForbiddenLeadId = leadId;
+
+        var getResult = await controller.GetReceivedLeadMessages(leadId, CancellationToken.None);
+        var postResult = await controller.SendReceivedLeadMessage(
+            leadId,
+            new SendLeadMessageRequest("Hello"),
+            CancellationToken.None);
+
+        Assert.IsType<ForbidResult>(getResult);
+        Assert.IsType<ForbidResult>(postResult);
+    }
+
+    [Fact]
+    public async Task GetReceivedLeadMessages_NotFound_ReturnsNotFound()
+    {
+        var centerUserId = Guid.NewGuid();
+        var (controller, _) = CreateCenterController(centerUserId);
+
+        var result = await controller.GetReceivedLeadMessages(Guid.NewGuid(), CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result);
+    }
+
+    [Fact]
+    public void MessageEndpoints_AuthorizeCenterModeratorAndAdminRoles()
+    {
+        var getAttr = typeof(LeadsController)
+            .GetMethod(nameof(LeadsController.GetReceivedLeadMessages))!
+            .GetCustomAttributes(typeof(AuthorizeAttribute), false)
+            .Cast<AuthorizeAttribute>()
+            .Single();
+
+        var postAttr = typeof(LeadsController)
+            .GetMethod(nameof(LeadsController.SendReceivedLeadMessage))!
+            .GetCustomAttributes(typeof(AuthorizeAttribute), false)
+            .Cast<AuthorizeAttribute>()
+            .Single();
+
+        var expectedRoles = $"{UserRoles.Center},{UserRoles.Moderator},{UserRoles.Admin}";
+        Assert.Equal(expectedRoles, getAttr.Roles);
+        Assert.Equal(expectedRoles, postAttr.Roles);
+    }
+
+    [Fact]
+    public async Task GetAndSendLeadMessages_Unauthenticated_ReturnsUnauthorized()
+    {
+        var controller = new LeadsController(new FakeLeadService(), new FakeAuthService(true))
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
+        };
+
+        var leadId = Guid.NewGuid();
+        var getResult = await controller.GetReceivedLeadMessages(leadId, CancellationToken.None);
+        var postResult = await controller.SendReceivedLeadMessage(leadId, new SendLeadMessageRequest("Xin chào"), CancellationToken.None);
+
+        Assert.IsType<UnauthorizedObjectResult>(getResult);
+        Assert.IsType<UnauthorizedObjectResult>(postResult);
+    }
+
+    [Fact]
+    public async Task SendReceivedLeadMessage_WithPhoneAndPromo_ReturnsCreatedWithFlaggedPayload()
+    {
+        var centerUserId = Guid.NewGuid();
+        var centerId = Guid.NewGuid();
+        var leadId = Guid.NewGuid();
+        var (controller, service) = CreateCenterController(centerUserId);
+
+        service.ReceivedLeads.Add(new CenterReceivedLeadDto(
+            leadId,
+            centerId,
+            "Du Học Á Âu",
+            "bachelor",
+            null,
+            "Em hỏi về học bổng",
+            true,
+            "new",
+            DateTime.UtcNow,
+            "Nguyen Van A",
+            "a@example.com",
+            null));
+
+        var result = await controller.SendReceivedLeadMessage(
+            leadId,
+            new SendLeadMessageRequest("Nhắn qua zalo 0912 345 678 để nhận khuyến mãi nhé"),
+            CancellationToken.None);
+
+        var created = Assert.IsType<CreatedAtActionResult>(result);
+        var payload = Assert.IsType<SendLeadMessageResultDto>(created.Value);
+        Assert.True(payload.Message.IsFlagged);
+        Assert.NotNull(payload.Message.FlagReason);
+        Assert.Equal("contacted", payload.LeadStatus);
+    }
+
+    [Fact]
+    public async Task SendReceivedLeadMessage_EmptyGuid_ReturnsValidationProblem()
+    {
+        var centerUserId = Guid.NewGuid();
+        var (controller, _) = CreateCenterController(centerUserId);
+
+        var result = await controller.SendReceivedLeadMessage(
+            Guid.Empty,
+            new SendLeadMessageRequest("Nội dung hợp lệ"),
+            CancellationToken.None);
+
+        Assert.IsType<ObjectResult>(result);
+    }
+
+    [Theory]
+    [InlineData(UserRoles.Moderator, "Kiểm duyệt viên")]
+    [InlineData(UserRoles.Admin, "Quản trị viên")]
+    public async Task SendAndGetLeadMessages_AsModeratorOrAdmin_SucceedsWithStaffName(string role, string expectedSenderName)
+    {
+        var staffUserId = Guid.NewGuid();
+        var centerId = Guid.NewGuid();
+        var leadId = Guid.NewGuid();
+        var (controller, service) = CreateCenterController(staffUserId, role: role, email: "staff@usas.vn");
+
+        service.ReceivedLeads.Add(new CenterReceivedLeadDto(
+            leadId,
+            centerId,
+            "Du Học Test",
+            "bachelor",
+            null,
+            "Kiểm tra yêu cầu",
+            false,
+            "new",
+            DateTime.UtcNow,
+            null,
+            null,
+            null));
+
+        var postResult = await controller.SendReceivedLeadMessage(
+            leadId,
+            new SendLeadMessageRequest("Tin nhắn hỗ trợ từ hệ thống."),
+            CancellationToken.None);
+
+        var created = Assert.IsType<CreatedAtActionResult>(postResult);
+        var payload = Assert.IsType<SendLeadMessageResultDto>(created.Value);
+        Assert.Equal(expectedSenderName, payload.Message.SenderName);
+
+        var getResult = await controller.GetReceivedLeadMessages(leadId, CancellationToken.None);
+        var ok = Assert.IsType<OkObjectResult>(getResult);
+        var thread = Assert.IsType<LeadMessagesThreadDto>(ok.Value);
+        Assert.Single(thread.Messages);
     }
 }
 

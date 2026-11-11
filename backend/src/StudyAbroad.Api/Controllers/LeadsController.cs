@@ -85,23 +85,8 @@ public class LeadsController(
         return lead is null ? NotFound() : Ok(lead);
     }
 
-    /// <summary>
-    /// [UC-73] Lấy danh sách yêu cầu tư vấn / liên hệ nhận được của trung tâm tư vấn.
-    /// Cho phép lọc theo trạng thái (new | contacted | closed), tìm kiếm từ khóa, và phân trang.
-    /// Dành cho Trung tâm tư vấn (chỉ xem được yêu cầu gửi đến trung tâm mình), Moderator và Admin.
-    /// </summary>
-    [HttpGet("received")]
-    [Authorize(Roles = $"{UserRoles.Center},{UserRoles.Moderator},{UserRoles.Admin}")]
-    [ProducesResponseType(typeof(CenterLeadsSummaryDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<IActionResult> GetReceivedLeads(
-        [FromQuery] Guid? studyCenterId = null,
-        [FromQuery] string? status = null,
-        [FromQuery] string? search = null,
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 10,
-        CancellationToken ct = default)
+    private async Task<IActionResult> ExecuteCenterLeadActionAsync(
+        Func<Guid, string?, string, Task<IActionResult>> action)
     {
         var userId = User.GetUserId();
         if (userId is null)
@@ -112,104 +97,7 @@ public class LeadsController(
 
         try
         {
-            var result = await leadService.GetReceivedLeadsForCenterUserAsync(
-                userId.Value,
-                userEmail,
-                userRole,
-                studyCenterId,
-                status,
-                search,
-                page,
-                pageSize,
-                ct);
-
-            return Ok(result);
-        }
-        catch (KeyNotFoundException ex)
-        {
-            return NotFound(new ProblemDetails { Title = "Không tìm thấy", Detail = ex.Message, Status = StatusCodes.Status404NotFound });
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return Forbid();
-        }
-    }
-
-    /// <summary>
-    /// [UC-73] Xem chi tiết một yêu cầu liên hệ nhận được.
-    /// Áp dụng bảo vệ dữ liệu: Chỉ trả về thông tin cá nhân và học thuật nếu học sinh chọn SharedProfile = true.
-    /// </summary>
-    [HttpGet("received/{id:guid}")]
-    [Authorize(Roles = $"{UserRoles.Center},{UserRoles.Moderator},{UserRoles.Admin}")]
-    [ProducesResponseType(typeof(CenterReceivedLeadDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetReceivedLeadDetail(Guid id, CancellationToken ct)
-    {
-        var userId = User.GetUserId();
-        if (userId is null)
-            return Unauthorized(new { message = "Vui lòng đăng nhập." });
-
-        var userEmail = User.GetEmail();
-        var userRole = User.GetRole() ?? UserRoles.Center;
-
-        try
-        {
-            var lead = await leadService.GetReceivedLeadDetailForCenterUserAsync(
-                userId.Value,
-                userEmail,
-                userRole,
-                id,
-                ct);
-
-            return lead is null
-                ? NotFound(new ProblemDetails { Title = "Không tìm thấy", Detail = "Yêu cầu liên hệ không tồn tại hoặc bạn không có quyền xem.", Status = StatusCodes.Status404NotFound })
-                : Ok(lead);
-        }
-        catch (KeyNotFoundException ex)
-        {
-            return NotFound(new ProblemDetails { Title = "Không tìm thấy", Detail = ex.Message, Status = StatusCodes.Status404NotFound });
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return Forbid();
-        }
-    }
-
-    /// <summary>
-    /// [UC-73] Cập nhật trạng thái yêu cầu liên hệ (new | contacted | closed).
-    /// </summary>
-    [HttpPatch("received/{id:guid}/status")]
-    [Authorize(Roles = $"{UserRoles.Center},{UserRoles.Moderator},{UserRoles.Admin}")]
-    [ProducesResponseType(typeof(CenterReceivedLeadDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> UpdateLeadStatus(
-        Guid id,
-        [FromBody] UpdateLeadStatusRequest request,
-        CancellationToken ct)
-    {
-        var userId = User.GetUserId();
-        if (userId is null)
-            return Unauthorized(new { message = "Vui lòng đăng nhập." });
-
-        var userEmail = User.GetEmail();
-        var userRole = User.GetRole() ?? UserRoles.Center;
-
-        try
-        {
-            var result = await leadService.UpdateReceivedLeadStatusAsync(
-                userId.Value,
-                userEmail,
-                userRole,
-                id,
-                request.Status,
-                ct);
-
-            return Ok(result);
+            return await action(userId.Value, userEmail, userRole);
         }
         catch (ArgumentException ex)
         {
@@ -224,5 +112,142 @@ public class LeadsController(
             return Forbid();
         }
     }
+
+    /// <summary>
+    /// [UC-73] Lấy danh sách yêu cầu tư vấn / liên hệ nhận được của trung tâm tư vấn.
+    /// Cho phép lọc theo trạng thái (new | contacted | closed), tìm kiếm từ khóa, và phân trang.
+    /// Dành cho Trung tâm tư vấn (chỉ xem được yêu cầu gửi đến trung tâm mình), Moderator và Admin.
+    /// </summary>
+    [HttpGet("received")]
+    [Authorize(Roles = $"{UserRoles.Center},{UserRoles.Moderator},{UserRoles.Admin}")]
+    [ProducesResponseType(typeof(CenterLeadsSummaryDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public Task<IActionResult> GetReceivedLeads(
+        [FromQuery] Guid? studyCenterId = null,
+        [FromQuery] string? status = null,
+        [FromQuery] string? search = null,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        CancellationToken ct = default) =>
+        ExecuteCenterLeadActionAsync(async (userId, userEmail, userRole) =>
+        {
+            var result = await leadService.GetReceivedLeadsForCenterUserAsync(
+                userId,
+                userEmail,
+                userRole,
+                studyCenterId,
+                status,
+                search,
+                page,
+                pageSize,
+                ct);
+
+            return Ok(result);
+        });
+
+    /// <summary>
+    /// [UC-73] Xem chi tiết một yêu cầu liên hệ nhận được.
+    /// Áp dụng bảo vệ dữ liệu: Chỉ trả về thông tin cá nhân và học thuật nếu học sinh chọn SharedProfile = true.
+    /// </summary>
+    [HttpGet("received/{id:guid}")]
+    [Authorize(Roles = $"{UserRoles.Center},{UserRoles.Moderator},{UserRoles.Admin}")]
+    [ProducesResponseType(typeof(CenterReceivedLeadDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public Task<IActionResult> GetReceivedLeadDetail(Guid id, CancellationToken ct) =>
+        ExecuteCenterLeadActionAsync(async (userId, userEmail, userRole) =>
+        {
+            var lead = await leadService.GetReceivedLeadDetailForCenterUserAsync(
+                userId,
+                userEmail,
+                userRole,
+                id,
+                ct);
+
+            return lead is null
+                ? NotFound(new ProblemDetails { Title = "Không tìm thấy", Detail = "Yêu cầu liên hệ không tồn tại hoặc bạn không có quyền xem.", Status = StatusCodes.Status404NotFound })
+                : Ok(lead);
+        });
+
+    /// <summary>
+    /// [UC-73] Cập nhật trạng thái yêu cầu liên hệ (new | contacted | closed).
+    /// </summary>
+    [HttpPatch("received/{id:guid}/status")]
+    [Authorize(Roles = $"{UserRoles.Center},{UserRoles.Moderator},{UserRoles.Admin}")]
+    [ProducesResponseType(typeof(CenterReceivedLeadDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public Task<IActionResult> UpdateLeadStatus(
+        Guid id,
+        [FromBody] UpdateLeadStatusRequest request,
+        CancellationToken ct) =>
+        ExecuteCenterLeadActionAsync(async (userId, userEmail, userRole) =>
+        {
+            var result = await leadService.UpdateReceivedLeadStatusAsync(
+                userId,
+                userEmail,
+                userRole,
+                id,
+                request.Status,
+                ct);
+
+            return Ok(result);
+        });
+
+    /// <summary>
+    /// [USAS-2053 / UC-74] Đọc luồng tin nhắn trao đổi với học sinh/phụ huynh trong một yêu cầu liên hệ.
+    /// Trung tâm chỉ xem được yêu cầu gửi đến đúng trung tâm mình (Anti-IDOR).
+    /// </summary>
+    [HttpGet("received/{id:guid}/messages")]
+    [Authorize(Roles = $"{UserRoles.Center},{UserRoles.Moderator},{UserRoles.Admin}")]
+    [ProducesResponseType(typeof(LeadMessagesThreadDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public Task<IActionResult> GetReceivedLeadMessages(Guid id, CancellationToken ct) =>
+        ExecuteCenterLeadActionAsync(async (userId, userEmail, userRole) =>
+        {
+            var thread = await leadService.GetReceivedLeadMessagesForCenterUserAsync(
+                userId,
+                userEmail,
+                userRole,
+                id,
+                ct);
+
+            return Ok(thread);
+        });
+
+    /// <summary>
+    /// [USAS-2053 / UC-74] Trung tâm gửi tin nhắn trả lời trong một yêu cầu liên hệ.
+    /// Áp dụng bộ lọc nội dung (tự gắn cờ nếu chứa số điện thoại hoặc quảng cáo) và lưu vào bảng lead_messages.
+    /// </summary>
+    [HttpPost("received/{id:guid}/messages")]
+    [Authorize(Roles = $"{UserRoles.Center},{UserRoles.Moderator},{UserRoles.Admin}")]
+    [ProducesResponseType(typeof(SendLeadMessageResultDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public Task<IActionResult> SendReceivedLeadMessage(
+        Guid id,
+        [FromBody] SendLeadMessageRequest request,
+        CancellationToken ct) =>
+        ExecuteCenterLeadActionAsync(async (userId, userEmail, userRole) =>
+        {
+            var result = await leadService.SendLeadMessageForCenterUserAsync(
+                userId,
+                userEmail,
+                userRole,
+                id,
+                request?.Content ?? string.Empty,
+                ct);
+
+            return CreatedAtAction(nameof(GetReceivedLeadMessages), new { id }, result);
+        });
 }
 

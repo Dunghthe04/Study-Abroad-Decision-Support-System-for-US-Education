@@ -28,6 +28,9 @@ import type {
   SetStudyCenterActiveRequest,
   CenterReceivedLeadDto,
   CenterLeadsSummaryDto,
+  LeadMessagesThreadDto,
+  SendLeadMessageRequest,
+  SendLeadMessageResultDto,
 } from "@/types/api";
 
 // Browser code calls same-origin /api (Nginx in prod, Next rewrite in dev).
@@ -320,6 +323,19 @@ export const centerLeadsApi = {
       method: "PATCH",
       body: JSON.stringify({ status }),
     }),
+
+  /** [USAS-2053 / UC-74] Đọc luồng tin nhắn trao đổi của một yêu cầu liên hệ */
+  getMessages: (id: string) =>
+    apiFetch<LeadMessagesThreadDto>(`/api/v1/leads/received/${encodeURIComponent(id)}/messages`),
+
+  /** [USAS-2053 / UC-74] Trung tâm gửi tin nhắn trả lời trong yêu cầu liên hệ */
+  sendMessage: (id: string, content: string) => {
+    const payload: SendLeadMessageRequest = { content };
+    return apiFetch<SendLeadMessageResultDto>(`/api/v1/leads/received/${encodeURIComponent(id)}/messages`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
 };
 
 // [UC-30, UC-31, UC-33] API Quản lý trường mục tiêu (Student / Parent)
