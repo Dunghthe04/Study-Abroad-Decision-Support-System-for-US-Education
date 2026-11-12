@@ -618,30 +618,33 @@ export function AdminUsersView() {
                 <EyeIcon className="size-3.5" />
                 Chi tiết
               </Button>
-              {canLock && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="xs"
-                  className="text-risk hover:text-risk hover:bg-risk-wash"
-                  onClick={() => openLockDialog(u)}
-                >
-                  <BanIcon className="size-3.5" />
-                  Khóa
-                </Button>
-              )}
-              {canUnlock && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="xs"
-                  className="text-ok hover:text-ok hover:bg-ok-wash"
-                  onClick={() => openUnlockDialog(u)}
-                >
-                  <KeyRoundIcon className="size-3.5" />
-                  Mở khóa
-                </Button>
-              )}
+              <div className="w-[88px] shrink-0 flex items-center justify-end">
+                {canUnlock ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="xs"
+                    className="w-full justify-center text-ok hover:text-ok hover:bg-ok-wash"
+                    onClick={() => openUnlockDialog(u)}
+                  >
+                    <KeyRoundIcon className="size-3.5" />
+                    Mở khóa
+                  </Button>
+                ) : canLock ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="xs"
+                    className="w-full justify-center text-risk hover:text-risk hover:bg-risk-wash"
+                    onClick={() => openLockDialog(u)}
+                  >
+                    <BanIcon className="size-3.5" />
+                    Khóa
+                  </Button>
+                ) : (
+                  <span className="w-full text-center text-xs text-ink-3 select-none">—</span>
+                )}
+              </div>
             </div>
           );
         },
