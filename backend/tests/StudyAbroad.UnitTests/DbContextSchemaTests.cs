@@ -109,6 +109,16 @@ public class DbContextSchemaTests
         Assert.True(HasUniqueIndex<DataImportBatch>(db, nameof(DataImportBatch.BatchCode)));
         Assert.True(HasUniqueIndex<UserDailyUsage>(db, nameof(UserDailyUsage.UserId), nameof(UserDailyUsage.UsageDate)));
         Assert.Equal("state_code", db.Model.FindEntityType(typeof(StateLivingCost))!.FindPrimaryKey()!.Properties.Single().GetColumnName());
+
+        var studyCenterEntity = db.Model.FindEntityType(typeof(StudyCenter))!;
+        Assert.Equal(32, studyCenterEntity.FindProperty(nameof(StudyCenter.TaxCode))!.GetMaxLength());
+        Assert.Equal(150, studyCenterEntity.FindProperty(nameof(StudyCenter.LegalRepresentative))!.GetMaxLength());
+        Assert.Equal(256, studyCenterEntity.FindProperty(nameof(StudyCenter.LicenseIssuedBy))!.GetMaxLength());
+        Assert.Equal(32, studyCenterEntity.FindProperty(nameof(StudyCenter.LegalComplianceMode))!.GetMaxLength());
+        Assert.Equal("licensed", studyCenterEntity.FindProperty(nameof(StudyCenter.LegalComplianceMode))!.GetDefaultValue());
+        Assert.Equal(128, studyCenterEntity.FindProperty(nameof(StudyCenter.TrainingLicenseNumber))!.GetMaxLength());
+        Assert.Equal("text[]", ColumnType<StudyCenter>(db, nameof(StudyCenter.LegalDocumentUrls)));
+        Assert.Equal(1000, studyCenterEntity.FindProperty(nameof(StudyCenter.VerificationNote))!.GetMaxLength());
     }
 
     private static string TableName<T>(AppDbContext db) where T : class
