@@ -19,6 +19,8 @@ interface OptionSelectProps {
   invalid?: boolean;
   size?: "sm" | "default";
   className?: string;
+  /** Cách hiển thị một lựa chọn (cả trong danh sách lẫn trên ô chọn), ví dụ nhãn màu theo trạng thái. */
+  renderOption?: (option: LabeledOption) => React.ReactNode;
   "aria-label"?: string;
 }
 
@@ -32,6 +34,7 @@ export function OptionSelect({
   invalid,
   size = "default",
   className,
+  renderOption,
   "aria-label": ariaLabel,
 }: OptionSelectProps) {
   const handleValueChange = (next: string | null) => {
@@ -47,12 +50,19 @@ export function OptionSelect({
         aria-invalid={invalid || undefined}
         className={cn("w-full", className)}
       >
-        <SelectValue />
+        <SelectValue>
+          {renderOption
+            ? (selected: string) => {
+                const option = options.find((item) => item.value === selected);
+                return option ? renderOption(option) : null;
+              }
+            : undefined}
+        </SelectValue>
       </SelectTrigger>
       <SelectContent>
         {options.map((option) => (
           <SelectItem key={option.value} value={option.value}>
-            {option.label}
+            {renderOption ? renderOption(option) : option.label}
           </SelectItem>
         ))}
       </SelectContent>

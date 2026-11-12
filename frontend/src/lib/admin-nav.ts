@@ -55,7 +55,7 @@ export const ADMIN_NAV: AdminNavItem[] = [
   {
     href: "/admin/knowledge",
     label: "Tri thức",
-    description: "Duyệt hoặc từ chối dòng tri thức và xem câu hỏi chưa trả lời",
+    description: "Quản lý dữ liệu huấn luyện SLM: duyệt, sửa, nhập từ Excel và xuất JSONL",
     icon: BookOpenIcon,
     roles: ["admin", "moderator"],
     useCases: ["UC-51", "UC-52", "UC-53"],
