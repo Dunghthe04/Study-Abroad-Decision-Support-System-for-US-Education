@@ -113,6 +113,21 @@ Lý do:
    - phụ huynh thấy lead gửi thay s15;
    - nhắn 1 tin từ tài khoản trung tâm, rồi kiểm tra số tin tăng.
 
+### Kết quả kiểm tra API (12/11, API chạy code mới ở cổng 5080)
+
+| Tài khoản | Kết quả `GET /leads/sent` |
+|---|---|
+| s15 | 403 `age_restricted` |
+| s16 | 200, 1 yêu cầu (Demo Center Hà Nội) |
+| s18 | 200, 5 yêu cầu, mới nhất trước; `pageSize=2` thì `totalPages=3`, trang 3 có 1 yêu cầu |
+| phụ huynh | 200, 1 yêu cầu gửi thay s15, `submittedByParent=true` |
+| trung tâm | 403 (sai role) |
+| chưa đăng nhập | 401 |
+
+Trung tâm nhắn 1 tin vào yêu cầu của s18 tại Demo Center Hà Nội: số tin lên 1 và trạng thái tự đổi sang `contacted` (do UC-74 của Đức tự đổi khi trung tâm nhắn tin đầu tiên).
+
+Giao diện: tài khoản học sinh chưa gửi yêu cầu nào thấy câu "Bạn chưa gửi yêu cầu liên hệ nào." và nút sang `/centers`.
+
 ## Ghi lại để báo nhóm
 
 - Chưa có chức năng nhắn tin phía học sinh và phụ huynh (đọc và trả lời tin trung tâm).
