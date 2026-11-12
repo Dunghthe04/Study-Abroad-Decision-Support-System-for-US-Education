@@ -47,6 +47,14 @@ export interface EnrichedCenterProfile {
   staffCount: number;
   licenseNumber: string;
   licenseIssuedBy: string;
+  taxCode?: string | null;
+  legalRepresentative?: string | null;
+  licenseIssuedDate?: string | null;
+  legalComplianceMode: "licensed" | "notified";
+  trainingLicenseNumber?: string | null;
+  certifiedCounselorCount?: number | null;
+  legalDocumentUrls: string[];
+  verificationNote?: string | null;
   accreditations: string[];
   visaSuccessRate: number;
   totalScholarshipsWon: string;
@@ -740,7 +748,15 @@ export function getEnrichedCenterProfile(center: StudyCenter): EnrichedCenterPro
       establishedYear: center.establishedYear ?? 2012,
       staffCount: center.staffCount ?? 35,
       licenseNumber: center.licenseNumber ?? `Số 2049/QĐ-SGDĐT`,
-      licenseIssuedBy: `Sở Giáo dục và Đào tạo ${center.city ?? "Hà Nội"}`,
+      licenseIssuedBy: center.licenseIssuedBy ?? `Sở Giáo dục và Đào tạo ${center.city ?? "Hà Nội"}`,
+      taxCode: center.taxCode ?? null,
+      legalRepresentative: center.legalRepresentative ?? null,
+      licenseIssuedDate: center.licenseIssuedDate ?? null,
+      legalComplianceMode: center.legalComplianceMode === "notified" ? "notified" : "licensed",
+      trainingLicenseNumber: center.trainingLicenseNumber ?? null,
+      certifiedCounselorCount: center.certifiedCounselorCount ?? null,
+      legalDocumentUrls: center.legalDocumentUrls ?? [],
+      verificationNote: center.verificationNote ?? null,
       accreditations:
         center.accreditations && center.accreditations.length > 0
           ? center.accreditations
@@ -844,7 +860,15 @@ export function getEnrichedCenterProfile(center: StudyCenter): EnrichedCenterPro
     establishedYear: center.establishedYear ?? 2015 + (hash % 6),
     staffCount: center.staffCount ?? 20 + (hash % 30),
     licenseNumber: center.licenseNumber ?? `Số ${1000 + (hash % 8000)}/QĐ-SGDĐT`,
-    licenseIssuedBy: `Sở Giáo dục và Đào tạo ${center.city ?? "Hà Nội"}`,
+    licenseIssuedBy: center.licenseIssuedBy ?? `Sở Giáo dục và Đào tạo ${center.city ?? "Hà Nội"}`,
+    taxCode: center.taxCode ?? null,
+    legalRepresentative: center.legalRepresentative ?? null,
+    licenseIssuedDate: center.licenseIssuedDate ?? null,
+    legalComplianceMode: center.legalComplianceMode === "notified" ? "notified" : "licensed",
+    trainingLicenseNumber: center.trainingLicenseNumber ?? null,
+    certifiedCounselorCount: center.certifiedCounselorCount ?? null,
+    legalDocumentUrls: center.legalDocumentUrls ?? [],
+    verificationNote: center.verificationNote ?? null,
     accreditations:
       center.accreditations && center.accreditations.length > 0
         ? center.accreditations

@@ -39,10 +39,20 @@ export interface StudyCenter {
   reviewCount?: number;
   verifiedAt?: string | null;
   verifiedByUserId?: string | null;
+  taxCode?: string | null;
+  legalRepresentative?: string | null;
+  licenseIssuedBy?: string | null;
+  licenseIssuedDate?: string | null;
+  legalComplianceMode?: string;
+  trainingLicenseNumber?: string | null;
+  certifiedCounselorCount?: number | null;
+  legalDocumentUrls?: string[];
+  verificationNote?: string | null;
 }
 
 export interface VerifyStudyCenterRequest {
   isVerified: boolean;
+  verificationNote?: string | null;
 }
 
 export interface CreateStudyCenterRequest {
@@ -69,6 +79,15 @@ export interface CreateStudyCenterRequest {
   licenseNumber?: string | null;
   accreditations?: string[];
   visaSuccessRate?: number | null;
+  taxCode?: string | null;
+  legalRepresentative?: string | null;
+  licenseIssuedBy?: string | null;
+  licenseIssuedDate?: string | null;
+  legalComplianceMode?: string | null;
+  trainingLicenseNumber?: string | null;
+  certifiedCounselorCount?: number | null;
+  legalDocumentUrls?: string[];
+  verificationNote?: string | null;
 }
 
 export interface UpdateStudyCenterRequest {
@@ -93,6 +112,15 @@ export interface UpdateStudyCenterRequest {
   licenseNumber?: string | null;
   accreditations?: string[];
   visaSuccessRate?: number | null;
+  taxCode?: string | null;
+  legalRepresentative?: string | null;
+  licenseIssuedBy?: string | null;
+  licenseIssuedDate?: string | null;
+  legalComplianceMode?: string | null;
+  trainingLicenseNumber?: string | null;
+  certifiedCounselorCount?: number | null;
+  legalDocumentUrls?: string[];
+  verificationNote?: string | null;
 }
 
 export interface SetStudyCenterActiveRequest {

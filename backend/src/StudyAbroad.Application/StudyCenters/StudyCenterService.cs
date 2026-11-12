@@ -21,7 +21,7 @@ public interface IStudyCenterService
     /// <summary>[UC-71] Thêm một trung tâm tư vấn vào danh bạ (kèm ghi audit).</summary>
     Task<CreateStudyCenterResult> CreateAsync(CreateStudyCenterRequest request, Guid actorUserId, CancellationToken ct = default);
     /// <summary>[UC-59] Moderator / Admin xác minh hoặc hủy xác minh một trung tâm tư vấn.</summary>
-    Task<VerifyStudyCenterResult> VerifyCenterAsync(Guid id, bool isVerified, Guid actorUserId, CancellationToken ct = default);
+    Task<VerifyStudyCenterResult> VerifyCenterAsync(Guid id, bool isVerified, Guid actorUserId, string? verificationNote = null, CancellationToken ct = default);
     /// <summary>[UC-72] Moderator / Admin sửa thông tin một trung tâm tư vấn trong danh bạ.</summary>
     Task<UpdateStudyCenterResult> UpdateCenterAsync(Guid id, UpdateStudyCenterRequest request, Guid actorUserId, CancellationToken ct = default);
     /// <summary>[UC-72] Moderator / Admin thay đổi trạng thái hoạt động (ẩn hoặc hiện khỏi gợi ý).</summary>
@@ -35,6 +35,27 @@ public class StudyCenterService(
     private const int MaxPageSize = 100;
     public const int MaxNameLength = 200;
     public const int MaxCodeLength = 50;
+    public const int MaxTaxCodeLength = 32;
+    public const int MaxLegalRepresentativeLength = 150;
+    public const int MaxLicenseNumberLength = 128;
+    public const int MaxLicenseIssuedByLength = 256;
+    public const int MaxVerificationNoteLength = 1000;
+    public const int MaxLegalDocumentUrlLength = 1024;
+    public const string ComplianceModeLicensed = "licensed";
+    public const string ComplianceModeNotified = "notified";
+
+    private sealed record NormalizedLegalFields(
+        string? LicenseNumber,
+        string? TaxCode,
+        string? LegalRepresentative,
+        string? LicenseIssuedBy,
+        DateOnly? LicenseIssuedDate,
+        string LegalComplianceMode,
+        string? TrainingLicenseNumber,
+        int? CertifiedCounselorCount,
+        List<string>? LegalDocumentUrls,
+        string? VerificationNote,
+        bool HasVerificationNote);
 
     public async Task<CreateStudyCenterResult> CreateAsync(CreateStudyCenterRequest request, Guid actorUserId, CancellationToken ct = default)
     {
@@ -53,6 +74,24 @@ public class StudyCenterService(
 
         if (await repository.ExistsByCodeAsync(code, ct))
             return CreateStudyCenterResult.Fail($"Mã trung tâm '{code}' đã tồn tại trong hệ thống.");
+
+        var (legal, legalError) = ValidateLegalFields(
+            staffCount: request.StaffCount,
+            licenseNumber: request.LicenseNumber,
+            taxCode: request.TaxCode,
+            legalRepresentative: request.LegalRepresentative,
+            licenseIssuedBy: request.LicenseIssuedBy,
+            licenseIssuedDate: request.LicenseIssuedDate,
+            legalComplianceMode: request.LegalComplianceMode,
+            fallbackComplianceMode: ComplianceModeLicensed,
+            trainingLicenseNumber: request.TrainingLicenseNumber,
+            certifiedCounselorCount: request.CertifiedCounselorCount,
+            legalDocumentUrls: request.LegalDocumentUrls,
+            verificationNote: request.VerificationNote,
+            defaultEmptyDocs: true);
+
+        if (legalError is not null || legal is null)
+            return CreateStudyCenterResult.Fail(legalError ?? "Thông tin pháp lý không hợp lệ.");
 
         var center = new StudyCenter
         {
@@ -78,10 +117,11 @@ public class StudyCenterService(
             Longitude = request.Longitude,
             StaffCount = request.StaffCount,
             EstablishedYear = request.EstablishedYear,
-            LicenseNumber = request.LicenseNumber,
             Accreditations = request.Accreditations ?? [],
             VisaSuccessRate = request.VisaSuccessRate,
         };
+
+        ApplyLegalFields(center, legal);
 
         await repository.AddAsync(center, ct);
 
@@ -90,6 +130,8 @@ public class StudyCenterService(
             code = center.Code,
             name = center.Name,
             city = center.City,
+            taxCode = center.TaxCode,
+            legalComplianceMode = center.LegalComplianceMode,
         });
 
         await auditLogs.AddAsync(new AuditLog
@@ -132,8 +174,12 @@ public class StudyCenterService(
         return CenterReferral.Pick(centers, query.Service, query.StudyLevel, query.City).Select(ToDto).ToList();
     }
 
-    public async Task<VerifyStudyCenterResult> VerifyCenterAsync(Guid id, bool isVerified, Guid actorUserId, CancellationToken ct = default)
+    public async Task<VerifyStudyCenterResult> VerifyCenterAsync(Guid id, bool isVerified, Guid actorUserId, string? verificationNote = null, CancellationToken ct = default)
     {
+        var trimmedNote = TrimOrNull(verificationNote);
+        if (trimmedNote is { Length: > MaxVerificationNoteLength })
+            return VerifyStudyCenterResult.Fail($"Ghi chú xác minh tối đa {MaxVerificationNoteLength} ký tự.");
+
         var center = await repository.GetByIdForUpdateAsync(id, ct);
         if (center is null)
             return VerifyStudyCenterResult.Fail("Không tìm thấy trung tâm tư vấn trong hệ thống.");
@@ -144,6 +190,8 @@ public class StudyCenterService(
         center.VerificationStatus = newStatus;
         center.VerifiedAt = isVerified ? DateTime.UtcNow : null;
         center.VerifiedByUserId = isVerified ? actorUserId : null;
+        if (verificationNote is not null)
+            center.VerificationNote = trimmedNote;
 
         await repository.UpdateAsync(center, ct);
 
@@ -156,6 +204,7 @@ public class StudyCenterService(
             previousStatus,
             newStatus,
             verifiedAt = center.VerifiedAt,
+            verificationNote = center.VerificationNote,
             actorUserId
         });
 
@@ -184,21 +233,25 @@ public class StudyCenterService(
         if (center is null)
             return UpdateStudyCenterResult.Fail("Không tìm thấy trung tâm tư vấn trong hệ thống.");
 
-        var oldSnapshot = new
-        {
-            center.Name,
-            center.City,
-            center.District,
-            center.Address,
-            center.Phone,
-            center.Email,
-            center.Website,
-            center.CenterType,
-            center.LicenseNumber,
-            center.StaffCount,
-            center.EstablishedYear,
-            center.VisaSuccessRate
-        };
+        var (legal, legalError) = ValidateLegalFields(
+            staffCount: request.StaffCount,
+            licenseNumber: request.LicenseNumber,
+            taxCode: request.TaxCode,
+            legalRepresentative: request.LegalRepresentative,
+            licenseIssuedBy: request.LicenseIssuedBy,
+            licenseIssuedDate: request.LicenseIssuedDate,
+            legalComplianceMode: request.LegalComplianceMode,
+            fallbackComplianceMode: string.IsNullOrWhiteSpace(center.LegalComplianceMode) ? ComplianceModeLicensed : center.LegalComplianceMode,
+            trainingLicenseNumber: request.TrainingLicenseNumber,
+            certifiedCounselorCount: request.CertifiedCounselorCount,
+            legalDocumentUrls: request.LegalDocumentUrls,
+            verificationNote: request.VerificationNote,
+            defaultEmptyDocs: false);
+
+        if (legalError is not null || legal is null)
+            return UpdateStudyCenterResult.Fail(legalError ?? "Thông tin pháp lý không hợp lệ.");
+
+        var oldSnapshot = BuildAuditSnapshot(center);
 
         center.Name = name;
         center.Website = string.IsNullOrWhiteSpace(request.Website) ? null : request.Website.Trim();
@@ -211,7 +264,6 @@ public class StudyCenterService(
         center.CenterType = string.IsNullOrWhiteSpace(request.CenterType) ? center.CenterType : request.CenterType.Trim();
         center.LogoUrl = string.IsNullOrWhiteSpace(request.LogoUrl) ? null : request.LogoUrl.Trim();
         center.CoverImageUrl = string.IsNullOrWhiteSpace(request.CoverImageUrl) ? null : request.CoverImageUrl.Trim();
-        center.LicenseNumber = string.IsNullOrWhiteSpace(request.LicenseNumber) ? null : request.LicenseNumber.Trim();
         center.StaffCount = request.StaffCount;
         center.EstablishedYear = request.EstablishedYear;
         center.VisaSuccessRate = request.VisaSuccessRate;
@@ -230,6 +282,8 @@ public class StudyCenterService(
         if (request.Accreditations is not null)
             center.Accreditations = request.Accreditations;
 
+        ApplyLegalFields(center, legal);
+
         await repository.UpdateAsync(center, ct);
 
         var detailJson = JsonSerializer.Serialize(new
@@ -238,21 +292,7 @@ public class StudyCenterService(
             centerCode = center.Code,
             actorUserId,
             old = oldSnapshot,
-            updated = new
-            {
-                center.Name,
-                center.City,
-                center.District,
-                center.Address,
-                center.Phone,
-                center.Email,
-                center.Website,
-                center.CenterType,
-                center.LicenseNumber,
-                center.StaffCount,
-                center.EstablishedYear,
-                center.VisaSuccessRate
-            }
+            updated = BuildAuditSnapshot(center)
         });
 
         await auditLogs.AddAsync(new AuditLog
@@ -310,5 +350,143 @@ public class StudyCenterService(
             c.CenterType, c.LogoUrl, c.CoverImageUrl, c.GalleryImages, c.District,
             c.Latitude, c.Longitude, c.StaffCount, c.EstablishedYear, c.LicenseNumber,
             c.Accreditations, c.VisaSuccessRate, c.AverageRating, c.ReviewCount,
-            c.VerifiedAt, c.VerifiedByUserId);
+            c.VerifiedAt, c.VerifiedByUserId,
+            c.TaxCode, c.LegalRepresentative, c.LicenseIssuedBy, c.LicenseIssuedDate,
+            c.LegalComplianceMode, c.TrainingLicenseNumber, c.CertifiedCounselorCount,
+            c.LegalDocumentUrls, c.VerificationNote);
+
+    private static string? TrimOrNull(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static (NormalizedLegalFields? Result, string? Error) ValidateLegalFields(
+        int? staffCount,
+        string? licenseNumber,
+        string? taxCode,
+        string? legalRepresentative,
+        string? licenseIssuedBy,
+        DateOnly? licenseIssuedDate,
+        string? legalComplianceMode,
+        string fallbackComplianceMode,
+        string? trainingLicenseNumber,
+        int? certifiedCounselorCount,
+        List<string>? legalDocumentUrls,
+        string? verificationNote,
+        bool defaultEmptyDocs)
+    {
+        var trimmedLicense = TrimOrNull(licenseNumber);
+        if (trimmedLicense is { Length: > MaxLicenseNumberLength })
+            return (null, $"Số giấy phép tư vấn du học tối đa {MaxLicenseNumberLength} ký tự.");
+
+        var trimmedTaxCode = TrimOrNull(taxCode);
+        if (trimmedTaxCode is { Length: > MaxTaxCodeLength })
+            return (null, $"Mã số thuế tối đa {MaxTaxCodeLength} ký tự.");
+
+        var trimmedRep = TrimOrNull(legalRepresentative);
+        if (trimmedRep is { Length: > MaxLegalRepresentativeLength })
+            return (null, $"Người đại diện pháp luật tối đa {MaxLegalRepresentativeLength} ký tự.");
+
+        var trimmedIssuedBy = TrimOrNull(licenseIssuedBy);
+        if (trimmedIssuedBy is { Length: > MaxLicenseIssuedByLength })
+            return (null, $"Cơ quan cấp phép tối đa {MaxLicenseIssuedByLength} ký tự.");
+
+        var trimmedTrainingLicense = TrimOrNull(trainingLicenseNumber);
+        if (trimmedTrainingLicense is { Length: > MaxLicenseNumberLength })
+            return (null, $"Số giấy phép đào tạo tối đa {MaxLicenseNumberLength} ký tự.");
+
+        if (licenseIssuedDate.HasValue && licenseIssuedDate.Value > DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1)))
+            return (null, "Ngày cấp giấy phép không được lớn hơn ngày hiện tại.");
+
+        var normalizedMode = string.IsNullOrWhiteSpace(legalComplianceMode)
+            ? fallbackComplianceMode
+            : legalComplianceMode.Trim().ToLowerInvariant();
+
+        if (normalizedMode is not (ComplianceModeLicensed or ComplianceModeNotified))
+            return (null, $"Hình thức tuân thủ pháp lý chỉ chấp nhận '{ComplianceModeLicensed}' hoặc '{ComplianceModeNotified}'.");
+
+        if (certifiedCounselorCount is < 0)
+            return (null, "Số tư vấn viên có chứng chỉ không được âm.");
+
+        if (staffCount.HasValue && certifiedCounselorCount.HasValue && certifiedCounselorCount.Value > staffCount.Value)
+            return (null, "Số tư vấn viên có chứng chỉ không được vượt quá tổng nhân sự.");
+
+        List<string>? sanitizedDocs = defaultEmptyDocs ? [] : null;
+        if (legalDocumentUrls is not null)
+        {
+            sanitizedDocs = [];
+            foreach (var raw in legalDocumentUrls)
+            {
+                if (string.IsNullOrWhiteSpace(raw)) continue;
+                var url = raw.Trim();
+                if (url.Length > MaxLegalDocumentUrlLength)
+                    return (null, $"Đường dẫn tài liệu pháp lý tối đa {MaxLegalDocumentUrlLength} ký tự.");
+
+                var isRelative = url.StartsWith('/');
+                var isHttp = Uri.TryCreate(url, UriKind.Absolute, out var parsed)
+                    && (parsed.Scheme == Uri.UriSchemeHttp || parsed.Scheme == Uri.UriSchemeHttps);
+                if (!isRelative && !isHttp)
+                    return (null, $"Đường dẫn tài liệu pháp lý không hợp lệ: '{url}'.");
+
+                if (!sanitizedDocs.Contains(url, StringComparer.Ordinal))
+                    sanitizedDocs.Add(url);
+            }
+        }
+
+        var trimmedNote = TrimOrNull(verificationNote);
+        if (trimmedNote is { Length: > MaxVerificationNoteLength })
+            return (null, $"Ghi chú kiểm duyệt tối đa {MaxVerificationNoteLength} ký tự.");
+
+        return (new NormalizedLegalFields(
+            trimmedLicense,
+            trimmedTaxCode,
+            trimmedRep,
+            trimmedIssuedBy,
+            licenseIssuedDate,
+            normalizedMode,
+            trimmedTrainingLicense,
+            certifiedCounselorCount,
+            sanitizedDocs,
+            trimmedNote,
+            verificationNote is not null), null);
+    }
+
+    private static void ApplyLegalFields(StudyCenter center, NormalizedLegalFields legal)
+    {
+        center.LicenseNumber = legal.LicenseNumber;
+        center.TaxCode = legal.TaxCode;
+        center.LegalRepresentative = legal.LegalRepresentative;
+        center.LicenseIssuedBy = legal.LicenseIssuedBy;
+        center.LicenseIssuedDate = legal.LicenseIssuedDate;
+        center.LegalComplianceMode = legal.LegalComplianceMode;
+        center.TrainingLicenseNumber = legal.TrainingLicenseNumber;
+        center.CertifiedCounselorCount = legal.CertifiedCounselorCount;
+        if (legal.LegalDocumentUrls is not null)
+            center.LegalDocumentUrls = legal.LegalDocumentUrls;
+        if (legal.HasVerificationNote)
+            center.VerificationNote = legal.VerificationNote;
+    }
+
+    private static object BuildAuditSnapshot(StudyCenter center) => new
+    {
+        center.Name,
+        center.City,
+        center.District,
+        center.Address,
+        center.Phone,
+        center.Email,
+        center.Website,
+        center.CenterType,
+        center.LicenseNumber,
+        center.TaxCode,
+        center.LegalRepresentative,
+        center.LicenseIssuedBy,
+        center.LicenseIssuedDate,
+        center.LegalComplianceMode,
+        center.TrainingLicenseNumber,
+        center.CertifiedCounselorCount,
+        center.LegalDocumentUrls,
+        center.VerificationNote,
+        center.StaffCount,
+        center.EstablishedYear,
+        center.VisaSuccessRate
+    };
 }

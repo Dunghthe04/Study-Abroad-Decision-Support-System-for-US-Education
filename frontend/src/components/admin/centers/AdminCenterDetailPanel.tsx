@@ -124,6 +124,21 @@ export function AdminCenterDetailPanel({ center, onClose }: AdminCenterDetailPan
             <div className="font-bold text-foreground text-sm truncate" title={profile.licenseNumber}>
               {profile.licenseNumber}
             </div>
+            {profile.taxCode && (
+              <div className="text-xs text-muted-foreground mt-0.5 font-mono truncate">
+                MST: {profile.taxCode}
+              </div>
+            )}
+            {profile.legalRepresentative && (
+              <div className="text-xs text-muted-foreground mt-0.5 truncate">
+                Đại diện: {profile.legalRepresentative}
+              </div>
+            )}
+            {profile.trainingLicenseNumber && (
+              <div className="text-xs text-muted-foreground mt-0.5 font-mono truncate">
+                GP đào tạo: {profile.trainingLicenseNumber}
+              </div>
+            )}
           </div>
         </div>
 

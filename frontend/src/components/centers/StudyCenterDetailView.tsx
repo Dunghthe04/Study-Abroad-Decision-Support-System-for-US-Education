@@ -12,7 +12,6 @@ import {
   UsersIcon,
   GraduationCapIcon,
   BookOpenIcon,
-  ExternalLinkIcon,
   Building2Icon,
   FlameIcon,
 } from "lucide-react";
@@ -21,11 +20,10 @@ import { getEnrichedCenterProfile } from "@/lib/center-details";
 import { centerServiceLabel } from "@/lib/center-services";
 import { studyLevelLabel } from "@/lib/study-levels";
 import { Badge } from "@/components/ui/badge";
-import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CenterLegalInfoCard } from "./CenterLegalInfoCard";
 import { ContactRequestDialog } from "./ContactRequestDialog";
-import { cn } from "cn";
 
 interface StudyCenterDetailViewProps {
   center: StudyCenter;
@@ -218,7 +216,7 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
               {profile.licenseNumber}
             </div>
             <div className="text-xs text-muted-foreground truncate mt-0.5" title={profile.licenseIssuedBy}>
-              {profile.licenseIssuedBy}
+              {profile.taxCode ? `MST: ${profile.taxCode} · ${profile.licenseIssuedBy}` : profile.licenseIssuedBy}
             </div>
           </div>
         </Card>
@@ -294,52 +292,7 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
 
           {/* Vị trí & Liên hệ */}
           <div className="grid sm:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <MapPinIcon className="w-4 h-4 text-brand" />
-                  Địa chỉ & Vị trí văn phòng
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 text-xs sm:text-sm">
-                <div>
-                  <span className="font-medium text-foreground">Địa chỉ:</span>{" "}
-                  <span className="text-muted-foreground">{center.address ?? "Đang cập nhật địa chỉ"}</span>
-                </div>
-                <div>
-                  <span className="font-medium text-foreground">Khu vực:</span>{" "}
-                  <span className="text-muted-foreground">
-                    {center.district ? `${center.district}, ${center.city ?? "Việt Nam"}` : (center.city ?? "Toàn quốc")}
-                  </span>
-                </div>
-                <div>
-                  <span className="font-medium text-foreground">Năm thành lập:</span>{" "}
-                  <span className="text-muted-foreground">{profile.establishedYear}</span>
-                </div>
-                <div>
-                  <span className="font-medium text-foreground">Giấy phép cơ sở:</span>{" "}
-                  <span className="text-muted-foreground">{profile.licenseIssuedBy}</span>
-                </div>
-                {(center.address || (center.latitude && center.longitude)) && (
-                  <div className="pt-2">
-                    <a
-                      href={
-                        center.latitude && center.longitude
-                          ? `https://www.google.com/maps/search/?api=1&query=${center.latitude},${center.longitude}`
-                          : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${center.name} ${center.address}`)}`
-                      }
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "gap-1.5 text-xs inline-flex items-center")}
-                    >
-                      <MapPinIcon className="w-3.5 h-3.5 text-brand" />
-                      Mở Google Maps chỉ đường
-                      <ExternalLinkIcon className="w-3 h-3 ml-1" />
-                    </a>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            <CenterLegalInfoCard profile={profile} mode="public" showMapsLink />
 
             <Card>
               <CardHeader className="pb-3">

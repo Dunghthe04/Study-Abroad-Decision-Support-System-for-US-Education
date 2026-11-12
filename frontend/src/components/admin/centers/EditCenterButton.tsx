@@ -20,6 +20,12 @@ import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
+import { CenterLegalFieldsSection } from "@/components/admin/centers/CenterLegalFieldsSection";
+import {
+  createInitialLegalFormValues,
+  parseAndValidateLegalFormValues,
+  type LegalFormValues,
+} from "@/lib/center-legal";
 import { cn } from "@/lib/utils";
 
 const COMMON_SERVICES = [
@@ -59,20 +65,10 @@ export function EditCenterButton({
   const [phone, setPhone] = useState(center.phone || "");
   const [email, setEmail] = useState(center.email || "");
   const [centerType, setCenterType] = useState(center.centerType || "study_abroad");
-  const [licenseNumber, setLicenseNumber] = useState(center.licenseNumber || "");
-  const [establishedYear, setEstablishedYear] = useState(
-    center.establishedYear ? String(center.establishedYear) : ""
-  );
-  const [staffCount, setStaffCount] = useState(
-    center.staffCount ? String(center.staffCount) : ""
-  );
-  const [visaSuccessRate, setVisaSuccessRate] = useState(
-    center.visaSuccessRate ? String(center.visaSuccessRate) : ""
-  );
   const [logoUrl, setLogoUrl] = useState(center.logoUrl || "");
   const [coverImageUrl, setCoverImageUrl] = useState(center.coverImageUrl || "");
-  const [accreditationsInput, setAccreditationsInput] = useState(
-    center.accreditations?.join(", ") || ""
+  const [legalValues, setLegalValues] = useState<LegalFormValues>(() =>
+    createInitialLegalFormValues(center)
   );
   const [description, setDescription] = useState(center.description || "");
   const [selectedLevels, setSelectedLevels] = useState<string[]>(center.studyLevels || []);
@@ -94,13 +90,9 @@ export function EditCenterButton({
     setPhone(center.phone || "");
     setEmail(center.email || "");
     setCenterType(center.centerType || "study_abroad");
-    setLicenseNumber(center.licenseNumber || "");
-    setEstablishedYear(center.establishedYear ? String(center.establishedYear) : "");
-    setStaffCount(center.staffCount ? String(center.staffCount) : "");
-    setVisaSuccessRate(center.visaSuccessRate ? String(center.visaSuccessRate) : "");
     setLogoUrl(center.logoUrl || "");
     setCoverImageUrl(center.coverImageUrl || "");
-    setAccreditationsInput(center.accreditations?.join(", ") || "");
+    setLegalValues(createInitialLegalFormValues(center));
     setDescription(center.description || "");
     setSelectedLevels(center.studyLevels || []);
     setSelectedServices(center.services || []);
@@ -128,20 +120,17 @@ export function EditCenterButton({
       return;
     }
 
+    const { payload: legalPayload, error: legalError } =
+      parseAndValidateLegalFormValues(legalValues);
+    if (legalError || !legalPayload) {
+      setError(legalError || "Thông tin pháp lý không hợp lệ.");
+      return;
+    }
+
     setError(null);
     setIsSubmitting(true);
 
     try {
-      const parsedEstYear = establishedYear ? parseInt(establishedYear, 10) : undefined;
-      const parsedStaff = staffCount ? parseInt(staffCount, 10) : undefined;
-      const parsedVisaRate = visaSuccessRate ? parseFloat(visaSuccessRate) : undefined;
-      const parsedAccreditations = accreditationsInput
-        ? accreditationsInput
-            .split(/[,;\n]/)
-            .map((s) => s.trim())
-            .filter(Boolean)
-        : undefined;
-
       const updated = await studyCentersApi.update(center.id, {
         name: trimmedName,
         city: city.trim() || null,
@@ -151,13 +140,9 @@ export function EditCenterButton({
         phone: phone.trim() || null,
         email: email.trim() || null,
         centerType: centerType.trim() || "study_abroad",
-        licenseNumber: licenseNumber.trim() || null,
-        establishedYear: isNaN(parsedEstYear as number) ? null : parsedEstYear,
-        staffCount: isNaN(parsedStaff as number) ? null : parsedStaff,
-        visaSuccessRate: isNaN(parsedVisaRate as number) ? null : parsedVisaRate,
         logoUrl: logoUrl.trim() || null,
         coverImageUrl: coverImageUrl.trim() || null,
-        accreditations: parsedAccreditations,
+        ...legalPayload,
         description: description.trim() || null,
         studyLevels: selectedLevels,
         services: selectedServices,
@@ -338,73 +323,13 @@ export function EditCenterButton({
             </div>
 
             {/* Khối Pháp lý & Năng lực */}
-            <div className="rounded-lg border bg-muted/20 p-3.5 space-y-3">
-              <div className="text-xs font-semibold text-foreground">
-                Hồ sơ pháp lý & Năng lực đối soát (Xác minh)
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Field>
-                  <FieldLabel htmlFor="edit-center-license">Số giấy phép Sở GD&ĐT</FieldLabel>
-                  <Input
-                    id="edit-center-license"
-                    placeholder="Ví dụ: GPHĐ-GD-2010/HN-088"
-                    value={licenseNumber}
-                    onChange={(e) => setLicenseNumber(e.target.value)}
-                    disabled={isSubmitting}
-                  />
-                </Field>
-
-                <Field>
-                  <FieldLabel htmlFor="edit-center-year">Năm thành lập</FieldLabel>
-                  <Input
-                    id="edit-center-year"
-                    type="number"
-                    placeholder="Ví dụ: 2010"
-                    value={establishedYear}
-                    onChange={(e) => setEstablishedYear(e.target.value)}
-                    disabled={isSubmitting}
-                  />
-                </Field>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Field>
-                  <FieldLabel htmlFor="edit-center-staff">Quy mô nhân sự (cố vấn)</FieldLabel>
-                  <Input
-                    id="edit-center-staff"
-                    type="number"
-                    placeholder="Ví dụ: 35"
-                    value={staffCount}
-                    onChange={(e) => setStaffCount(e.target.value)}
-                    disabled={isSubmitting}
-                  />
-                </Field>
-
-                <Field>
-                  <FieldLabel htmlFor="edit-center-visa">Tỷ lệ đỗ Visa Mỹ (%)</FieldLabel>
-                  <Input
-                    id="edit-center-visa"
-                    type="number"
-                    step="0.1"
-                    placeholder="Ví dụ: 98.5"
-                    value={visaSuccessRate}
-                    onChange={(e) => setVisaSuccessRate(e.target.value)}
-                    disabled={isSubmitting}
-                  />
-                </Field>
-              </div>
-
-              <Field>
-                <FieldLabel htmlFor="edit-center-accreditations">Chứng nhận / Kiểm định quốc tế (ngăn cách bằng dấu phẩy)</FieldLabel>
-                <Input
-                  id="edit-center-accreditations"
-                  placeholder="Ví dụ: AIRC, ICEF, PIER, British Council"
-                  value={accreditationsInput}
-                  onChange={(e) => setAccreditationsInput(e.target.value)}
-                  disabled={isSubmitting}
-                />
-              </Field>
-            </div>
+            <CenterLegalFieldsSection
+              idPrefix="edit-center"
+              centerType={centerType}
+              values={legalValues}
+              onChange={(patch) => setLegalValues((prev) => ({ ...prev, ...patch }))}
+              disabled={isSubmitting}
+            />
 
             <Field>
               <FieldLabel>Bậc học tư vấn</FieldLabel>

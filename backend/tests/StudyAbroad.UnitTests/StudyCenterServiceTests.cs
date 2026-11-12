@@ -438,4 +438,151 @@ public class StudyCenterServiceTests
         Assert.Contains("Không tìm thấy", result.ErrorMessage);
         Assert.Empty(_auditLogs.Entries);
     }
+
+    [Fact]
+    public async Task CreateAsync_WithLegalFields_TrimsValidatesAndMapsToDto()
+    {
+        var repo = new FakeRepository();
+        var service = new StudyCenterService(repo, _auditLogs);
+        var actorId = Guid.NewGuid();
+        var issuedDate = new DateOnly(2024, 5, 10);
+
+        var request = new CreateStudyCenterRequest(
+            Code: "CTY_LEGAL",
+            Name: "Trung tâm Pháp lý Đầy đủ",
+            CenterType: "hybrid",
+            StaffCount: 20,
+            LicenseNumber: "  GPHĐ-2024/HN  ",
+            TaxCode: "  0109876543 ",
+            LegalRepresentative: "  Nguyễn Minh Quân  ",
+            LicenseIssuedBy: "  Sở GD&ĐT Hà Nội ",
+            LicenseIssuedDate: issuedDate,
+            LegalComplianceMode: " NOTIFIED ",
+            TrainingLicenseNumber: " GPĐT-NN-88 ",
+            CertifiedCounselorCount: 12,
+            LegalDocumentUrls: [" https://example.com/dkkd.pdf ", "/uploads/gp.pdf", "https://example.com/dkkd.pdf", ""],
+            VerificationNote: "  Đã nộp thông báo hoạt động  ");
+
+        var result = await service.CreateAsync(request, actorId);
+
+        Assert.True(result.Success);
+        var dto = result.Center!;
+        Assert.Equal("GPHĐ-2024/HN", dto.LicenseNumber);
+        Assert.Equal("0109876543", dto.TaxCode);
+        Assert.Equal("Nguyễn Minh Quân", dto.LegalRepresentative);
+        Assert.Equal("Sở GD&ĐT Hà Nội", dto.LicenseIssuedBy);
+        Assert.Equal(issuedDate, dto.LicenseIssuedDate);
+        Assert.Equal("notified", dto.LegalComplianceMode);
+        Assert.Equal("GPĐT-NN-88", dto.TrainingLicenseNumber);
+        Assert.Equal(12, dto.CertifiedCounselorCount);
+        Assert.Equal(["https://example.com/dkkd.pdf", "/uploads/gp.pdf"], dto.LegalDocumentUrls);
+        Assert.Equal("Đã nộp thông báo hoạt động", dto.VerificationNote);
+    }
+
+    [Fact]
+    public async Task CreateAsync_InvalidComplianceMode_ReturnsFail()
+    {
+        var repo = new FakeRepository();
+        var service = new StudyCenterService(repo, _auditLogs);
+
+        var result = await service.CreateAsync(
+            new CreateStudyCenterRequest(Code: "CTY_BAD_MODE", Name: "Bad Mode", LegalComplianceMode: "self_declared"),
+            Guid.NewGuid());
+
+        Assert.False(result.Success);
+        Assert.Contains("licensed", result.ErrorMessage);
+        Assert.Empty(repo.Centers);
+    }
+
+    [Fact]
+    public async Task CreateAsync_CertifiedCounselorsExceedStaff_OrNegative_ReturnsFail()
+    {
+        var repo = new FakeRepository();
+        var service = new StudyCenterService(repo, _auditLogs);
+
+        var negativeResult = await service.CreateAsync(
+            new CreateStudyCenterRequest(Code: "CTY_NEG", Name: "Negative", CertifiedCounselorCount: -1),
+            Guid.NewGuid());
+        Assert.False(negativeResult.Success);
+        Assert.Contains("không được âm", negativeResult.ErrorMessage);
+
+        var exceedResult = await service.CreateAsync(
+            new CreateStudyCenterRequest(Code: "CTY_EXC", Name: "Exceed", StaffCount: 5, CertifiedCounselorCount: 6),
+            Guid.NewGuid());
+        Assert.False(exceedResult.Success);
+        Assert.Contains("tổng nhân sự", exceedResult.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task CreateAsync_InvalidLegalDocumentUrl_ReturnsFail()
+    {
+        var repo = new FakeRepository();
+        var service = new StudyCenterService(repo, _auditLogs);
+
+        var result = await service.CreateAsync(
+            new CreateStudyCenterRequest(Code: "CTY_BAD_URL", Name: "Bad URL", LegalDocumentUrls: ["javascript:alert(1)"]),
+            Guid.NewGuid());
+
+        Assert.False(result.Success);
+        Assert.Contains("không hợp lệ", result.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task UpdateCenterAsync_UpdatesLegalFields_AndPreservesNoteWhenNull()
+    {
+        var center = new StudyCenter
+        {
+            Code = "CTY_UPD_LEGAL",
+            Name = "Trung tâm Cũ",
+            LegalComplianceMode = "licensed",
+            LegalDocumentUrls = ["/uploads/existing.pdf"],
+            VerificationNote = "Ghi chú kiểm duyệt cũ"
+        };
+        var repo = new FakeRepository(center);
+        var service = new StudyCenterService(repo, _auditLogs);
+
+        var request = new UpdateStudyCenterRequest(
+            Name: "Trung tâm Mới",
+            StaffCount: 30,
+            TaxCode: "0312345678",
+            LegalRepresentative: "Lê Thị Hồng",
+            LicenseIssuedBy: "Sở GD&ĐT TP.HCM",
+            LicenseIssuedDate: new DateOnly(2025, 2, 1),
+            LegalComplianceMode: "notified",
+            TrainingLicenseNumber: "GPĐT-HCM-99",
+            CertifiedCounselorCount: 15);
+
+        var result = await service.UpdateCenterAsync(center.Id, request, Guid.NewGuid());
+
+        Assert.True(result.Success);
+        var dto = result.Center!;
+        Assert.Equal("0312345678", dto.TaxCode);
+        Assert.Equal("Lê Thị Hồng", dto.LegalRepresentative);
+        Assert.Equal("Sở GD&ĐT TP.HCM", dto.LicenseIssuedBy);
+        Assert.Equal(new DateOnly(2025, 2, 1), dto.LicenseIssuedDate);
+        Assert.Equal("notified", dto.LegalComplianceMode);
+        Assert.Equal("GPĐT-HCM-99", dto.TrainingLicenseNumber);
+        Assert.Equal(15, dto.CertifiedCounselorCount);
+        Assert.Equal(["/uploads/existing.pdf"], dto.LegalDocumentUrls);
+        Assert.Equal("Ghi chú kiểm duyệt cũ", dto.VerificationNote);
+    }
+
+    [Fact]
+    public async Task VerifyCenterAsync_WithVerificationNote_UpdatesNoteAndLogsAudit()
+    {
+        var center = new StudyCenter { Code = "CTY_NOTE", Name = "Trung tâm Xác minh" };
+        var repo = new FakeRepository(center);
+        var service = new StudyCenterService(repo, _auditLogs);
+        var actorId = Guid.NewGuid();
+
+        var verifyRes = await service.VerifyCenterAsync(center.Id, true, actorId, "  Đã kiểm tra GCN ĐKDN và GP Sở GD&ĐT  ");
+        Assert.True(verifyRes.Success);
+        Assert.Equal("Đã kiểm tra GCN ĐKDN và GP Sở GD&ĐT", verifyRes.Center!.VerificationNote);
+        using var doc = System.Text.Json.JsonDocument.Parse(_auditLogs.Entries.Single().DetailJson!);
+        Assert.Equal("Đã kiểm tra GCN ĐKDN và GP Sở GD&ĐT", doc.RootElement.GetProperty("verificationNote").GetString());
+
+        var tooLongRes = await service.VerifyCenterAsync(center.Id, false, actorId, new string('x', 1001));
+        Assert.False(tooLongRes.Success);
+        Assert.Contains("tối đa", tooLongRes.ErrorMessage);
+    }
 }
