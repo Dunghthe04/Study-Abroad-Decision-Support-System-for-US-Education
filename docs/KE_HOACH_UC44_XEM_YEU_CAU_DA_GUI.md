@@ -2,7 +2,7 @@
 
 Sprint v0.5 (20/11 – 26/11/2026) · Người làm: Việt · Ước tính 3.5 giờ · Actor: Student (từ 16 tuổi); Parent
 
-> Việt đã duyệt đề xuất câu 3 và câu 8 (12/11). Đã xong phần 1 đến 4.
+> Việt đã duyệt đề xuất câu 3 và câu 8 (12/11). Đã xong phần 1 đến 5.
 
 ## Mục tiêu
 
@@ -91,6 +91,7 @@ Lý do:
    - Theo cách làm của Đức ở UC-73 (`centerLeadsApi.list`): tham số dạng object, dựng query bằng `URLSearchParams`; `status` để kiểu `LeadStatus | string`, hiện nhãn bằng `leadStatusLabel`.
    - Nhãn giống badge của Đức: "Đang trao đổi" (contacted), "Đã hoàn tất" (closed). Riêng "new" phía người gửi là "Mới gửi" (trung tâm thấy "Mới nhận"). Việt chốt 12/11.
 5. **Thẻ trong `/account`**: component mới `components/account/SentLeadsCard.tsx`, gắn vào `AccountView.tsx` cho role student và parent.
+   - Làm thành một mục riêng ở thanh bên, mở bằng `/account#sent-leads`. Mỗi trang 10 yêu cầu.
    - Mỗi dòng gồm:
      - tên trung tâm (link `/centers/{id}`);
      - ngày gửi;
