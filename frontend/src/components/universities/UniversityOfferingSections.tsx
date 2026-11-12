@@ -3,6 +3,7 @@
 import { useSyncExternalStore } from "react";
 import Image from "next/image";
 import {
+  BuildingIcon,
   FileTextIcon,
   GraduationCapIcon,
   HandCoinsIcon,
@@ -11,6 +12,7 @@ import {
   UsersIcon,
   WalletIcon,
 } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { UniversityOffering, UniversitySource } from "@/types/university";
@@ -553,15 +555,23 @@ export function UniversityCampusLife({ offering, sources }: { offering: Universi
   if (!hasAnyData) return null;
 
   return (
-    <DetailSection
-      id="campus"
-      title="Khuôn viên & nhà ở sinh viên"
-      description="Thông tin chỗ ở tại ký túc xá và hoạt động ngoại khóa dành cho sinh viên."
-    >
+    <DetailSection id="campus" title="Khuôn viên & nhà ở sinh viên">
       <div className="space-y-6">
-        {(hasOnCampus || hasHousingCost) && (
+        {offering.intlHousing != null && (
+          <Alert variant={offering.intlHousing ? "success" : "info"}>
+            <BuildingIcon />
+            <AlertTitle>Khu nhà ở cho sinh viên quốc tế</AlertTitle>
+            <AlertDescription>
+              {offering.intlHousing
+                ? "Trường có ký túc xá hoặc khu nhà ở được bố trí riêng/ưu tiên cho sinh viên quốc tế."
+                : "Trường không có khu ký túc xá riêng cho sinh viên quốc tế (sinh viên quốc tế ở chung khu KTX thông thường)."}
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {hasOnCampus && (
           <div className="rounded-xl border border-line bg-surface p-5 sm:p-6">
-            <div className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2">
               {offering.fyOnCampusPct != null && (
                 <GaugeDataItem
                   label="SV năm nhất ở KTX"
@@ -578,40 +588,31 @@ export function UniversityCampusLife({ offering, sources }: { offering: Universi
                   subtitle="Toàn bộ sinh viên đại học"
                 />
               )}
-              {offering.housingOnlyUsd != null && (
-                <GridDataItem
-                  icon={HomeIcon}
-                  label="Tiền phòng ở KTX"
-                  value={<SourceTooltip source={findFieldSource(sources, "housing_only_usd")}>{`${universityMoney(offering.housingOnlyUsd)} / năm`}</SourceTooltip>}
-                />
-              )}
-              {offering.housingDepositUsd != null && (
-                <GridDataItem
-                  icon={WalletIcon}
-                  label="Tiền đặt cọc phòng"
-                  value={<SourceTooltip source={findFieldSource(sources, "housing_deposit_usd")}>{universityMoney(offering.housingDepositUsd)}</SourceTooltip>}
-                />
-              )}
             </div>
           </div>
         )}
 
-        {offering.intlHousing != null && (
-          <div className="rounded-xl border border-line bg-surface p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold text-ink">Khu nhà ở cho sinh viên quốc tế</p>
-              <p className="text-xs text-ink-2 mt-0.5">
-                {offering.intlHousing
-                  ? "Trường có ký túc xá hoặc khu nhà ở được bố trí riêng/ưu tiên cho sinh viên quốc tế."
-                  : "Trường không có khu ký túc xá riêng cho sinh viên quốc tế (sinh viên quốc tế ở chung khu KTX thông thường)."}
-              </p>
+        {hasHousingCost && (
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-ink">Chi phí nhà ở</h3>
+            <div className="rounded-xl border border-line bg-surface p-5 sm:p-6">
+              <div className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2">
+                {offering.housingOnlyUsd != null && (
+                  <GridDataItem
+                    icon={HomeIcon}
+                    label="Tiền phòng ở KTX"
+                    value={<SourceTooltip source={findFieldSource(sources, "housing_only_usd")}>{`${universityMoney(offering.housingOnlyUsd)} / năm`}</SourceTooltip>}
+                  />
+                )}
+                {offering.housingDepositUsd != null && (
+                  <GridDataItem
+                    icon={WalletIcon}
+                    label="Tiền đặt cọc phòng"
+                    value={<SourceTooltip source={findFieldSource(sources, "housing_deposit_usd")}>{universityMoney(offering.housingDepositUsd)}</SourceTooltip>}
+                  />
+                )}
+              </div>
             </div>
-            <Badge
-              variant={offering.intlHousing ? "default" : "secondary"}
-              className={offering.intlHousing ? "!bg-ok !text-white shrink-0" : "shrink-0"}
-            >
-              {offering.intlHousing ? "Có hỗ trợ riêng" : "Khu ở chung"}
-            </Badge>
           </div>
         )}
 
@@ -619,16 +620,13 @@ export function UniversityCampusLife({ offering, sources }: { offering: Universi
           <div className="space-y-3">
             <h3 className="text-sm font-semibold text-ink">Các loại hình nhà ở có sẵn ({housingList.length})</h3>
             <div className="rounded-xl border border-line bg-surface p-5 sm:p-6">
-              <div className="flex flex-wrap gap-2">
+              <ul className="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-x-8 gap-y-3">
                 {housingList.map((item) => (
-                  <span
-                    key={item}
-                    className="inline-flex items-center rounded-md border border-line bg-surface px-2.5 py-1 text-xs font-medium text-ink"
-                  >
+                  <li key={item} className="text-sm text-ink">
                     {housingTypeLabel(item)}
-                  </span>
+                  </li>
                 ))}
-              </div>
+              </ul>
             </div>
           </div>
         )}
@@ -637,16 +635,13 @@ export function UniversityCampusLife({ offering, sources }: { offering: Universi
           <div className="space-y-3">
             <h3 className="text-sm font-semibold text-ink">Câu lạc bộ & hoạt động sinh viên ({activitiesList.length})</h3>
             <div className="rounded-xl border border-line bg-surface p-5 sm:p-6">
-              <div className="flex flex-wrap gap-2">
+              <ul className="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-x-8 gap-y-3">
                 {activitiesList.map((item) => (
-                  <span
-                    key={item}
-                    className="inline-flex items-center rounded-md bg-brand-wash px-2.5 py-1 text-xs font-medium text-brand-ink"
-                  >
+                  <li key={item} className="text-sm text-ink">
                     {activityLabel(item)}
-                  </span>
+                  </li>
                 ))}
-              </div>
+              </ul>
             </div>
           </div>
         )}
