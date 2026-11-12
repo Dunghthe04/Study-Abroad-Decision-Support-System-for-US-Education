@@ -11,6 +11,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/auth/PasswordInput";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 
@@ -285,9 +286,8 @@ export function RegisterForm() {
             <FieldLabel htmlFor="password">
               Mật khẩu <span className="text-destructive">*</span>
             </FieldLabel>
-            <Input
+            <PasswordInput
               id="password"
-              type="password"
               required
               minLength={8}
               maxLength={100}
@@ -302,9 +302,8 @@ export function RegisterForm() {
             <FieldLabel htmlFor="confirmPassword">
               Xác nhận mật khẩu <span className="text-destructive">*</span>
             </FieldLabel>
-            <Input
+            <PasswordInput
               id="confirmPassword"
-              type="password"
               required
               maxLength={100}
               value={confirmPassword}

@@ -9,7 +9,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/auth/PasswordInput";
 import { Spinner } from "@/components/ui/spinner";
 
 // [UC-06] Đổi mật khẩu khi đã đăng nhập: bắt buộc nhập mật khẩu hiện tại.
@@ -104,9 +104,8 @@ export function ChangePasswordCard() {
           <FieldGroup>
             <Field>
               <FieldLabel htmlFor="current-password">Mật khẩu hiện tại</FieldLabel>
-              <Input
+              <PasswordInput
                 id="current-password"
-                type="password"
                 required
                 maxLength={100}
                 autoComplete="current-password"
@@ -117,9 +116,8 @@ export function ChangePasswordCard() {
 
             <Field>
               <FieldLabel htmlFor="change-new-password">Mật khẩu mới</FieldLabel>
-              <Input
+              <PasswordInput
                 id="change-new-password"
-                type="password"
                 required
                 maxLength={100}
                 autoComplete="new-password"
@@ -132,9 +130,8 @@ export function ChangePasswordCard() {
 
             <Field>
               <FieldLabel htmlFor="change-confirm-password">Xác nhận mật khẩu mới</FieldLabel>
-              <Input
+              <PasswordInput
                 id="change-confirm-password"
-                type="password"
                 required
                 maxLength={100}
                 autoComplete="new-password"

@@ -72,7 +72,7 @@ public class AgeFeaturesTests
     public void Rules_MatchAgreedPolicy()
     {
         Assert.Equal(new AgeRule(16, ParentConsentUnlocks: true), AgeFeatures.Rules[AgeFeatures.ProcessStudentData]);
-        Assert.Equal(new AgeRule(18, ParentConsentUnlocks: false), AgeFeatures.Rules[AgeFeatures.ShareWithCenter]);
+        Assert.Equal(new AgeRule(16, ParentConsentUnlocks: false), AgeFeatures.Rules[AgeFeatures.ShareWithCenter]);
     }
 
     [Theory]
@@ -90,9 +90,9 @@ public class AgeFeaturesTests
 
     [Theory]
     [InlineData(10, false, new[] { AgeFeatures.ProcessStudentData, AgeFeatures.ShareWithCenter })]
-    [InlineData(15, true, new[] { AgeFeatures.ShareWithCenter })]
-    [InlineData(16, false, new[] { AgeFeatures.ShareWithCenter })]
-    [InlineData(17, false, new[] { AgeFeatures.ShareWithCenter })]
+    [InlineData(15, true, new[] { AgeFeatures.ShareWithCenter })]   // phụ huynh đồng ý vẫn không mở ShareWithCenter
+    [InlineData(16, false, new string[0])]
+    [InlineData(17, false, new string[0])]
     [InlineData(18, false, new string[0])]
     public void GetBlocked_ConcreteCases(int age, bool consent, string[] expected)
     {
@@ -121,6 +121,14 @@ public class AgeFeaturesTests
     public void Check_UnknownFeature_Throws()
     {
         Assert.Throws<ArgumentException>(() => AgeFeatures.Check("khong_co", UserRoles.Student, null, Today, false));
+    }
+
+    [Fact]
+    public void ShareWithCenter_SixteenthBirthdayToday_Allowed()
+    {
+        var dob = Today.AddYears(-16);
+        Assert.Null(AgeFeatures.Check(AgeFeatures.ShareWithCenter, UserRoles.Student, dob, Today, false));
+        Assert.NotNull(AgeFeatures.Check(AgeFeatures.ShareWithCenter, UserRoles.Student, dob.AddDays(1), Today, true));
     }
 
     [Fact]

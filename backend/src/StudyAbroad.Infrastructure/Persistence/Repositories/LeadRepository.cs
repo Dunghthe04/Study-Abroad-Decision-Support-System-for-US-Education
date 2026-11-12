@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using StudyAbroad.Application.Common;
 using StudyAbroad.Application.Leads;
+using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
 
 namespace StudyAbroad.Infrastructure.Persistence.Repositories;
@@ -29,8 +31,21 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
                     l.Message,
                     l.SharedProfile,
                     l.Status,
-                    l.CreatedAt))
+                    l.CreatedAt)
+                {
+                    SubmittedByUserId = l.SubmittedByUserId,
+                    SharedFields = l.SharedFields,
+                })
             .FirstOrDefaultAsync(ct);
+
+    public Task<int> CountBySubmitterSinceAsync(Guid submitterId, DateTime sinceUtc, CancellationToken ct = default) =>
+        db.Leads.AsNoTracking()
+            .CountAsync(l => l.SubmittedByUserId == submitterId && l.CreatedAt >= sinceUtc, ct);
+
+    public Task<DateTime?> GetLastToCenterAsync(Guid submitterId, Guid centerId, DateTime sinceUtc, CancellationToken ct = default) =>
+        db.Leads.AsNoTracking()
+            .Where(l => l.SubmittedByUserId == submitterId && l.StudyCenterId == centerId && l.CreatedAt >= sinceUtc)
+            .MaxAsync(l => (DateTime?)l.CreatedAt, ct);
 
     public async Task<Lead> CreateLeadAsync(Lead lead, Consent? consent = null, CancellationToken ct = default)
     {
@@ -43,6 +58,58 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
         db.Leads.Add(lead);
         await db.SaveChangesAsync(ct);
         return lead;
+    }
+
+    /// <summary>
+    /// [UC-44] Yêu cầu liên hệ đã gửi của học sinh / phụ huynh, mới nhất trước.
+    /// Đếm tin nhắn phía trung tâm = tin đang hiện mà người gửi không phải học sinh của lead
+    /// và không phải người đã bấm gửi lead.
+    /// </summary>
+    public async Task<PagedResult<SentLeadDto>> GetSentLeadsAsync(
+        IReadOnlyCollection<Guid> studentIds,
+        Guid? submitterId,
+        int page,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        var safePage = page < 1 ? 1 : page;
+        var safePageSize = pageSize < 1 ? 10 : (pageSize > 50 ? 50 : pageSize);
+
+        var ids = studentIds.ToList();
+        var leads = db.Leads.AsNoTracking();
+        leads = submitterId is { } sid
+            ? leads.Where(l => ids.Contains(l.UserId) || l.SubmittedByUserId == sid)
+            : leads.Where(l => ids.Contains(l.UserId));
+
+        var total = await leads.CountAsync(ct);
+
+        var items = await (
+                from l in leads
+                join c in db.StudyCenters.AsNoTracking() on l.StudyCenterId equals c.Id
+                join u in db.Users.AsNoTracking() on l.UserId equals u.Id
+                orderby l.CreatedAt descending
+                select new SentLeadDto(
+                    l.Id,
+                    l.StudyCenterId,
+                    c.Name,
+                    l.Status,
+                    l.CreatedAt,
+                    l.SharedFields,
+                    l.StudyLevel,
+                    l.ContactPhone,
+                    l.Message,
+                    l.UserId,
+                    u.FullName,
+                    l.SubmittedByUserId != null && l.SubmittedByUserId != l.UserId,
+                    db.LeadMessages.Count(m => m.LeadId == l.Id
+                                            && m.Status == "visible"
+                                            && m.SenderUserId != l.UserId
+                                            && m.SenderUserId != l.SubmittedByUserId)))
+            .Skip((safePage - 1) * safePageSize)
+            .Take(safePageSize)
+            .ToListAsync(ct);
+
+        return new PagedResult<SentLeadDto>(items, safePage, safePageSize, total);
     }
 
     public async Task<CenterLeadsSummaryDto> GetReceivedLeadsAsync(
@@ -81,45 +148,24 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
             var term = search.Trim();
             query = query.Where(x => (x.Lead.ContactPhone != null && EF.Functions.ILike(x.Lead.ContactPhone, $"%{term}%"))
                                   || (x.Lead.Message != null && EF.Functions.ILike(x.Lead.Message, $"%{term}%"))
-                                  || (x.Lead.SharedProfile && EF.Functions.ILike(x.User.FullName, $"%{term}%")));
+                                  || (x.Lead.SharedFields.Contains(LeadSharedFields.Contact) && EF.Functions.ILike(x.User.FullName, $"%{term}%")));
         }
 
         var filteredTotal = await query.CountAsync(ct);
         var safePage = page < 1 ? 1 : page;
         var safePageSize = pageSize < 1 ? 10 : (pageSize > 50 ? 50 : pageSize);
 
-        var items = await query
+        // [UC-42] Lấy dữ liệu thô rồi lọc theo nhóm đã chia sẻ trong CenterLeadMapper
+        var rows = await query
             .OrderByDescending(x => x.Lead.CreatedAt)
             .Skip((safePage - 1) * safePageSize)
             .Take(safePageSize)
-            .Select(x => new CenterReceivedLeadDto(
-                x.Lead.Id,
-                x.Lead.StudyCenterId,
-                x.CenterName,
-                x.Lead.StudyLevel,
-                x.Lead.ContactPhone,
-                x.Lead.Message,
-                x.Lead.SharedProfile,
-                x.Lead.Status,
-                x.Lead.CreatedAt,
-                x.Lead.SharedProfile ? x.User.FullName : null,
-                x.Lead.SharedProfile ? x.User.Email : null,
-                x.Lead.SharedProfile && x.Profile != null
-                    ? new SharedProfileSummaryDto(
-                        x.Profile.OverallGpa,
-                        x.Profile.TargetLevel,
-                        x.Profile.IntendedMajor,
-                        x.Profile.EducationSystem,
-                        x.Profile.CurrentGrade,
-                        x.Profile.Ielts ?? x.Profile.Toefl ?? x.Profile.Duolingo,
-                        x.Profile.EnglishTestType,
-                        x.Profile.Sat,
-                        x.Profile.Act,
-                        x.Profile.ExtracurricularTier,
-                        x.Profile.BudgetTier)
-                    : null
-            ))
+            .Select(x => new { x.Lead, x.CenterName, x.User.FullName, x.User.Email, x.Profile })
             .ToListAsync(ct);
+
+        var items = rows
+            .Select(r => CenterLeadMapper.ToCenterDto(r.Lead, r.CenterName, r.FullName, r.Email, r.Profile))
+            .ToList();
 
         return new CenterLeadsSummaryDto(
             items,
@@ -152,33 +198,7 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
         var lead = await query.FirstOrDefaultAsync(ct);
         if (lead is null) return null;
 
-        return new CenterReceivedLeadDto(
-            lead.Lead.Id,
-            lead.Lead.StudyCenterId,
-            lead.CenterName,
-            lead.Lead.StudyLevel,
-            lead.Lead.ContactPhone,
-            lead.Lead.Message,
-            lead.Lead.SharedProfile,
-            lead.Lead.Status,
-            lead.Lead.CreatedAt,
-            lead.Lead.SharedProfile ? lead.User.FullName : null,
-            lead.Lead.SharedProfile ? lead.User.Email : null,
-            lead.Lead.SharedProfile && lead.Profile != null
-                ? new SharedProfileSummaryDto(
-                    lead.Profile.OverallGpa,
-                    lead.Profile.TargetLevel,
-                    lead.Profile.IntendedMajor,
-                    lead.Profile.EducationSystem,
-                    lead.Profile.CurrentGrade,
-                    lead.Profile.Ielts ?? lead.Profile.Toefl ?? lead.Profile.Duolingo,
-                    lead.Profile.EnglishTestType,
-                    lead.Profile.Sat,
-                    lead.Profile.Act,
-                    lead.Profile.ExtracurricularTier,
-                    lead.Profile.BudgetTier)
-                : null
-        );
+        return CenterLeadMapper.ToCenterDto(lead.Lead, lead.CenterName, lead.User.FullName, lead.User.Email, lead.Profile);
     }
 
     public Task<Lead?> GetLeadForUpdateAsync(Guid leadId, CancellationToken ct = default) =>
@@ -194,7 +214,7 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
     /// <summary>
     /// [USAS-2053 / UC-74] Truy vấn toàn bộ tin nhắn trong một yêu cầu liên hệ từ bảng app.lead_messages,
     /// sắp xếp tăng dần theo thời gian tạo. Tin nhắn bị gỡ được che nội dung; tên người gửi là học sinh/phụ huynh
-    /// được ẩn danh khi SharedProfile = false.
+    /// được ẩn danh khi <paramref name="sharedProfile"/> = false (service truyền: lead có chia sẻ nhóm contact không).
     /// </summary>
     public async Task<IReadOnlyList<LeadMessageDto>> GetLeadMessagesAsync(
         Guid leadId,

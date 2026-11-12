@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { describeSimulation, resetSimulation, showSimulation } from "@/lib/simulation-link";
+import { useAuth } from "@/contexts/AuthContext";
 import { AGE_FEATURES, useAgeBlock } from "@/lib/age-features";
 import { isAuthRoute } from "@/lib/layout-routes";
 import { useAssistant, type AssistantTurn } from "./AssistantProvider";
@@ -47,6 +48,11 @@ export function AssistantPanel() {
   const pathname = usePathname();
   const [input, setInput] = useState("");
   const ageBlock = useAgeBlock(AGE_FEATURES.processStudentData);
+  const { user, isLoading: authLoading } = useAuth();
+  // Chưa đăng nhập thì không chat được: thay ô nhập bằng lời mời đăng nhập (đang tải trạng thái thì chưa hiện, tránh nháy)
+  const needLogin = !authLoading && !user;
+  // Được gửi tin: đã đăng nhập và không bị chặn tuổi
+  const canSend = !!user && !ageBlock;
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -72,7 +78,7 @@ export function AssistantPanel() {
   if (!visible || !open) return null;
 
   const submit = () => {
-    if (!input.trim() || loading) return;
+    if (!input.trim() || loading || !canSend) return;
     send(input);
     setInput("");
   };
@@ -159,7 +165,7 @@ export function AssistantPanel() {
             <p className="mt-1.5 max-w-[34ch] text-sm leading-relaxed text-ink-2">
               {page.greeting ?? "Tôi có thể giúp gì cho bạn?"}
             </p>
-            {!ageBlock && page.suggestions.length > 0 && (
+            {canSend && page.suggestions.length > 0 && (
               <div className="mt-6 flex w-full min-w-0 max-w-xs flex-col gap-2">
                 {page.suggestions.map((s) => (
                   <button
@@ -180,8 +186,8 @@ export function AssistantPanel() {
               <Turn
                 key={i}
                 turn={t}
-                // D3: nút trả lời nhanh chỉ bấm được ở lượt cuối, khi không chờ trả lời và không bị chặn tuổi
-                onReply={i === turns.length - 1 && !loading && !ageBlock ? send : undefined}
+                // D3: nút trả lời nhanh chỉ bấm được ở lượt cuối, khi không chờ trả lời, đã đăng nhập và không bị chặn tuổi
+                onReply={i === turns.length - 1 && !loading && canSend ? send : undefined}
               />
             ))}
 
@@ -236,7 +242,17 @@ export function AssistantPanel() {
 
       {/* Ô nhập */}
       <div className="px-3 pt-1 pb-3">
-        {ageBlock ? (
+        {needLogin ? (
+          <p className="rounded-xl border border-line px-3.5 py-3 text-sm text-ink-2">
+            Bạn cần đăng nhập để hỏi trợ lý.{" "}
+            <Link
+              href={`/login?redirect=${encodeURIComponent(pathname)}`}
+              className="font-medium text-brand underline"
+            >
+              Đăng nhập
+            </Link>
+          </p>
+        ) : ageBlock ? (
           // [Q11] Chat gửi dữ liệu cá nhân cho AI: học sinh dưới 16 cần phụ huynh đồng ý
           <p className="rounded-xl border border-line px-3.5 py-3 text-sm text-ink-2">
             {ageBlock.message}{" "}
@@ -271,7 +287,7 @@ export function AssistantPanel() {
             <button
               type="submit"
               aria-label="Gửi"
-              disabled={loading || !input.trim()}
+              disabled={loading || !canSend || !input.trim()}
               className="flex size-9 shrink-0 cursor-pointer items-center justify-center self-end rounded-lg bg-brand text-brand-foreground transition-[opacity,transform] hover:opacity-90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
             >
               <ArrowUpIcon className="size-4.5" />

@@ -15,6 +15,7 @@ import { AcademicSummaryCard, hasCompleteAcademicProfile } from "@/components/ac
 import { ChangePasswordCard } from "@/components/account/ChangePasswordCard";
 import { ParentLinksCard } from "@/components/account/ParentLinksCard";
 import { PersonalInfoCard } from "@/components/account/PersonalInfoCard";
+import { SentLeadsCard } from "@/components/account/SentLeadsCard";
 import {
   ArrowRightIcon,
   BookmarkCheckIcon,
@@ -23,6 +24,7 @@ import {
   GraduationCapIcon,
   KeyRoundIcon,
   LogOutIcon,
+  SendIcon,
   ShieldIcon,
   TriangleAlertIcon,
   UserIcon,
@@ -31,7 +33,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-type SectionId = "personal" | "academic" | "parent-links" | "password";
+type SectionId = "personal" | "academic" | "parent-links" | "sent-leads" | "password";
 
 interface SectionItem {
   id: SectionId;
@@ -62,6 +64,8 @@ export function AccountView() {
             label: user?.role === "student" ? "Liên kết phụ huynh" : "Con đã liên kết",
             icon: UsersIcon,
           },
+          // [UC-44] Yêu cầu liên hệ đã gửi
+          { id: "sent-leads" as const, label: "Yêu cầu liên hệ đã gửi", icon: SendIcon },
         ]
       : []),
     { id: "password", label: "Bảo mật tài khoản", icon: KeyRoundIcon },
@@ -255,6 +259,7 @@ export function AccountView() {
             {activeSection === "personal" && <PersonalInfoCard />}
             {activeSection === "academic" && <AcademicSummaryCard profile={profile} isLoading={isLoadingProfile} />}
             {activeSection === "parent-links" && <ParentLinksCard />}
+            {activeSection === "sent-leads" && <SentLeadsCard />}
             {activeSection === "password" && <ChangePasswordCard />}
           </section>
         </div>

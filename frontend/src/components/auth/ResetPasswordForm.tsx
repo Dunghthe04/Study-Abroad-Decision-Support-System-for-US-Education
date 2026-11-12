@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/auth/PasswordInput";
 import { Spinner } from "@/components/ui/spinner";
 import { clearPendingEmail, usePendingEmail } from "@/lib/pending-email";
 
@@ -184,9 +185,8 @@ export function ResetPasswordForm() {
           {/* Mật khẩu mới */}
           <Field>
             <FieldLabel htmlFor="new-password">Mật khẩu mới</FieldLabel>
-            <Input
+            <PasswordInput
               id="new-password"
-              type="password"
               required
               maxLength={100}
               autoComplete="new-password"
@@ -199,9 +199,8 @@ export function ResetPasswordForm() {
           {/* Xác nhận mật khẩu mới */}
           <Field>
             <FieldLabel htmlFor="confirm-new-password">Xác nhận mật khẩu mới</FieldLabel>
-            <Input
+            <PasswordInput
               id="confirm-new-password"
-              type="password"
               required
               maxLength={100}
               autoComplete="new-password"

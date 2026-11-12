@@ -1,11 +1,21 @@
 namespace StudyAbroad.Application.Leads;
 
+/// <summary>
+/// UC-42. <paramref name="StudentUserId"/>: bắt buộc khi phụ huynh gửi thay con, học sinh tự gửi thì bỏ qua.
+/// <paramref name="SharedFields"/>: key trong LeadSharedFields, bắt buộc có "contact".
+/// <paramref name="AcknowledgedCenterContact"/>: học sinh 16–17 tuổi phải tích.
+/// <paramref name="SharedProfile"/>: giữ cho client cũ, server tự tính lại từ SharedFields.
+/// </summary>
 public record CreateLeadRequest(
     Guid StudyCenterId,
     string? StudyLevel = null,
     string? ContactPhone = null,
     string? Message = null,
-    bool SharedProfile = false);
+    bool SharedProfile = false,
+    Guid? StudentUserId = null,
+    IReadOnlyList<string>? SharedFields = null,
+    bool ConsentAccepted = false,
+    bool AcknowledgedCenterContact = false);
 
 public record LeadDto(
     Guid Id,
@@ -18,7 +28,34 @@ public record LeadDto(
     string? Message,
     bool SharedProfile,
     string Status,
-    DateTime CreatedAt);
+    DateTime CreatedAt)
+{
+    // UC-42. Để dạng init (không phải tham số có mặc định) vì LeadRepository dựng LeadDto trong truy vấn EF,
+    // mà cây biểu thức không cho dùng tham số tùy chọn.
+    public Guid? SubmittedByUserId { get; init; }
+    public IReadOnlyList<string> SharedFields { get; init; } = [];
+}
+
+/// <summary>
+/// [UC-44] Một yêu cầu liên hệ đã gửi, hiện ở thẻ "Yêu cầu liên hệ đã gửi" của học sinh / phụ huynh.
+/// <paramref name="StudentUserId"/>, <paramref name="StudentName"/>: học sinh có hồ sơ (phụ huynh cần biết lead của con nào).
+/// <paramref name="SubmittedByParent"/>: true khi người bấm gửi khác học sinh (phụ huynh gửi thay).
+/// <paramref name="CenterMessageCount"/>: số tin nhắn đang hiện do phía trung tâm gửi.
+/// </summary>
+public record SentLeadDto(
+    Guid Id,
+    Guid StudyCenterId,
+    string StudyCenterName,
+    string Status,
+    DateTime CreatedAt,
+    IReadOnlyList<string> SharedFields,
+    string? StudyLevel,
+    string? ContactPhone,
+    string? Message,
+    Guid StudentUserId,
+    string StudentName,
+    bool SubmittedByParent,
+    int CenterMessageCount);
 
 /// <summary>
 /// [UC-73] Tóm tắt hồ sơ học sinh được chia sẻ cho trung tâm (chỉ khi SharedProfile = true).
@@ -39,7 +76,8 @@ public record SharedProfileSummaryDto(
 
 /// <summary>
 /// [UC-73] Chi tiết yêu cầu liên hệ nhận được phía trung tâm tư vấn.
-/// Nếu SharedProfile = false: StudentName, StudentEmail và ProfileSummary hoàn toàn là null.
+/// Chỉ có các trường thuộc nhóm người gửi đã chọn (Lead.SharedFields, xem CenterLeadMapper):
+/// thiếu <c>contact</c> thì StudentName, StudentEmail null; không chọn nhóm hồ sơ nào thì ProfileSummary null.
 /// </summary>
 public record CenterReceivedLeadDto(
     Guid Id,

@@ -14,6 +14,8 @@ public record ParentLinkDto(
     string? ParentName,
     string StudentName,
     int? StudentAge,
+    // [UC-42] Phụ huynh chọn con này khi gửi yêu cầu liên hệ trung tâm thay con
+    Guid StudentUserId,
     DateTime? AcceptedAt,
     DateTime? LastInviteSentAt,
     DateTime? TokenExpiresAt,
