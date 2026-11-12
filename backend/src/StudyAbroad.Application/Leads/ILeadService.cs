@@ -52,5 +52,10 @@ public interface ILeadService
         Guid leadId,
         string content,
         CancellationToken ct = default);
+
+    // [Nhắn tin phía người gửi] Học sinh (từ 16 tuổi) / phụ huynh đọc và gửi tin trong yêu cầu liên hệ của mình
+    Task<LeadMessagesThreadDto> GetSentLeadMessagesAsync(Guid userId, Guid leadId, CancellationToken ct = default);
+
+    Task<SendLeadMessageResultDto> SendSentLeadMessageAsync(Guid userId, Guid leadId, string content, CancellationToken ct = default);
 }
 

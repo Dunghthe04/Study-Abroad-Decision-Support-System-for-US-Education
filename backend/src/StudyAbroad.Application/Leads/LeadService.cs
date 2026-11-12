@@ -233,12 +233,7 @@ public class LeadService(
 
         if (user.Role == UserRoles.Student)
         {
-            // Theo tài liệu tuổi: dưới 16 không tự xem, giống luật tự gửi
-            var today = AgePolicy.TodayInVietnam(DateTime.UtcNow);
-            if (AgeFeatures.Check(AgeFeatures.ShareWithCenter, user.Role, user.DateOfBirth, today, hasParentConsent: false) is not null)
-                throw new LeadRuleException("age_restricted", 403,
-                    "Học sinh dưới 16 tuổi chưa xem được yêu cầu liên hệ. Phụ huynh có thể xem từ tài khoản của mình.");
-
+            EnsureStudentCanViewSentLeads(user);
             return await leads.GetSentLeadsAsync([user.Id], submitterId: null, page, pageSize, ct);
         }
 
@@ -249,7 +244,133 @@ public class LeadService(
             return await leads.GetSentLeadsAsync(childIds, submitterId: user.Id, page, pageSize, ct);
         }
 
-        throw new LeadRuleException("role_not_allowed", 403, "Chỉ học sinh hoặc phụ huynh xem được yêu cầu liên hệ đã gửi.");
+        throw SentLeadsRoleNotAllowed();
+    }
+
+    /// <summary>[UC-44] Theo tài liệu tuổi: học sinh dưới 16 không tự xem yêu cầu liên hệ, cùng mốc với tự gửi.</summary>
+    private static void EnsureStudentCanViewSentLeads(User student)
+    {
+        var today = AgePolicy.TodayInVietnam(DateTime.UtcNow);
+        if (AgeFeatures.Check(AgeFeatures.ShareWithCenter, student.Role, student.DateOfBirth, today, hasParentConsent: false) is not null)
+            throw new LeadRuleException("age_restricted", 403,
+                "Học sinh dưới 16 tuổi chưa xem được yêu cầu liên hệ. Phụ huynh có thể xem từ tài khoản của mình.");
+    }
+
+    private static LeadRuleException SentLeadsRoleNotAllowed() =>
+        new("role_not_allowed", 403, "Chỉ học sinh hoặc phụ huynh xem được yêu cầu liên hệ đã gửi.");
+
+    /// <summary>
+    /// [Nhắn tin phía người gửi] Lấy một lead mà học sinh / phụ huynh được xem, cùng luật với GetSentLeadsAsync:
+    /// học sinh từ 16 tuổi là chủ lead; phụ huynh là người bấm gửi hoặc đang liên kết với học sinh của lead.
+    /// Không có quyền thì báo "không tìm thấy" như lead không tồn tại, để không lộ lead của người khác.
+    /// </summary>
+    private async Task<(User User, Lead Lead, string CenterName)> GetAuthorizedSentLeadAsync(
+        Guid userId,
+        Guid leadId,
+        CancellationToken ct)
+    {
+        if (leadId == Guid.Empty)
+            throw new ArgumentException("Mã yêu cầu liên hệ không hợp lệ.");
+
+        var user = await users.GetUserById(userId, ct)
+            ?? throw new KeyNotFoundException("Không tìm thấy tài khoản.");
+
+        if (user.Role == UserRoles.Student)
+            EnsureStudentCanViewSentLeads(user);
+        else if (user.Role != UserRoles.Parent)
+            throw SentLeadsRoleNotAllowed();
+
+        var lead = await leads.GetByIdAsync(leadId, ct);
+        var canView = lead is not null && user.Role switch
+        {
+            UserRoles.Student => lead.UserId == user.Id,
+            // Phụ huynh: lead mình bấm gửi (kể cả khi liên kết đã hủy), hoặc lead của con đang liên kết
+            _ => lead.SubmittedByUserId == user.Id
+                 || (await parentLinks.GetActiveByParentAsync(user.Id, ct)).Any(l => l.StudentUserId == lead.UserId),
+        };
+        if (!canView)
+            throw new KeyNotFoundException("Không tìm thấy yêu cầu liên hệ.");
+
+        var center = await studyCenters.GetByIdAsync(lead!.StudyCenterId, ct);
+        return (user, lead, center?.Name ?? "Trung tâm tư vấn");
+    }
+
+    /// <summary>
+    /// [Nhắn tin phía người gửi] Học sinh / phụ huynh đọc luồng tin nhắn với trung tâm trong yêu cầu của mình.
+    /// Người xem là học sinh hoặc phụ huynh của chính lead nên luôn hiện tên thật (sharedProfile: true);
+    /// luật ẩn danh chỉ áp dụng cho phía trung tâm.
+    /// </summary>
+    public async Task<LeadMessagesThreadDto> GetSentLeadMessagesAsync(
+        Guid userId,
+        Guid leadId,
+        CancellationToken ct = default)
+    {
+        var (_, lead, centerName) = await GetAuthorizedSentLeadAsync(userId, leadId, ct);
+        var messages = await leads.GetLeadMessagesAsync(lead.Id, lead.UserId, sharedProfile: true, centerName, ct);
+        var flaggedCount = messages.Count(m => m.IsFlagged && m.Status != "removed");
+
+        return new LeadMessagesThreadDto(lead.Id, lead.Status, messages, flaggedCount);
+    }
+
+    /// <summary>
+    /// [Nhắn tin phía người gửi] Học sinh / phụ huynh gửi tin cho trung tâm trong yêu cầu của mình.
+    /// Cùng bộ lọc gắn cờ và audit log như phía trung tâm (UC-74).
+    /// Khác phía trung tâm: không đổi trạng thái lead, và lead đã hoàn tất (closed) thì không gửi được.
+    /// </summary>
+    public async Task<SendLeadMessageResultDto> SendSentLeadMessageAsync(
+        Guid userId,
+        Guid leadId,
+        string content,
+        CancellationToken ct = default)
+    {
+        var trimmedContent = content?.Trim() ?? string.Empty;
+        if (string.IsNullOrEmpty(trimmedContent))
+            throw new ArgumentException("Nội dung tin nhắn không được để trống.");
+
+        if (trimmedContent.Length > MaxReplyMessageLength)
+            throw new ArgumentException($"Nội dung tin nhắn tối đa {MaxReplyMessageLength} ký tự.");
+
+        var (user, lead, centerName) = await GetAuthorizedSentLeadAsync(userId, leadId, ct);
+
+        if (string.Equals(lead.Status, "closed", StringComparison.OrdinalIgnoreCase))
+            throw new LeadRuleException("lead_closed", 400, "Yêu cầu đã hoàn tất, không gửi thêm tin nhắn được.");
+
+        // Tin vẫn được lưu và hiện; chỉ gắn cờ để kiểm duyệt viên xem lại
+        var filterResult = LeadMessageContentFilter.Inspect(trimmedContent);
+
+        var saved = await leads.AddLeadMessageAsync(new LeadMessage
+        {
+            LeadId = lead.Id,
+            SenderUserId = user.Id,
+            Content = trimmedContent,
+            IsFlagged = filterResult.IsFlagged,
+            FlagReason = filterResult.FlagReason,
+            Status = "visible",
+        }, leadToUpdate: null, ct);
+
+        if (auditLogs is not null)
+        {
+            await auditLogs.AddAsync(new AuditLog
+            {
+                ActorUserId = user.Id,
+                Action = saved.IsFlagged ? "lead_message.send_flagged" : "lead_message.send",
+                EntityType = "lead_message",
+                EntityId = saved.Id.ToString(),
+                DetailJson = JsonSerializer.Serialize(new
+                {
+                    leadId = lead.Id,
+                    studyCenterId = lead.StudyCenterId,
+                    senderRole = user.Role,
+                    isFlagged = saved.IsFlagged,
+                    flagReason = saved.FlagReason,
+                    contentLength = saved.Content.Length,
+                    leadStatus = lead.Status,
+                }),
+            }, ct);
+        }
+
+        var dto = LeadMessageMapper.ToDto(saved, user.Role, user.FullName, sharedProfile: true, centerName);
+        return new SendLeadMessageResultDto(dto, lead.Status);
     }
 
     public async Task<CenterLeadsSummaryDto> GetReceivedLeadsForCenterUserAsync(

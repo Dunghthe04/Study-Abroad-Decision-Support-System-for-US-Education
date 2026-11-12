@@ -2,7 +2,7 @@
 
 Phạm vi: **Optional**, không nằm trong sprint nào · Mã UC: **chưa rõ** · Người làm: **chưa giao** · Actor: Student (từ 16 tuổi); Parent
 
-> Bản nháp ngày 12/11. Chưa sửa code. Chờ Việt trả lời các câu hỏi ở mục "Câu hỏi còn mở".
+> Ngày 12/11 Việt đã duyệt các đề xuất câu 2–10. Câu 1 (mã UC, người làm) chờ nhóm. Việt cho phép sửa file lead của Đức cho UC này. Đã xong phần 1 (lỗi lead đã hoàn tất: `lead_closed`, 400).
 
 ## Mục tiêu
 
@@ -33,9 +33,11 @@ Cách phía trung tâm đang làm (`LeadService.SendLeadMessageForCenterUserAsyn
 4. Nếu lead đang `new` thì tự đổi sang `contacted`.
 5. Ghi audit log `lead_message.send` hoặc `lead_message.send_flagged`.
 
-## Câu hỏi còn mở
+## Câu hỏi và chốt
 
-| # | Câu hỏi | Đề xuất của mình |
+Câu 2–10: Việt duyệt theo đề xuất (12/11). Câu 1 còn mở.
+
+| # | Câu hỏi | Chốt |
 |---|---|---|
 | 1 | Mã UC là gì? Ai làm? | Hỏi nhóm / thầy |
 | 2 | Học sinh hoặc phụ huynh nhắn thì **có đổi trạng thái lead** không? | **Không đổi.** Trạng thái là việc của trung tâm. `new` → `contacted` chỉ khi trung tâm nhắn |

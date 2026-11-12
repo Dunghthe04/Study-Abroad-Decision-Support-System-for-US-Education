@@ -1086,4 +1086,168 @@ public class LeadServiceTests
 
         await AssertRule(() => s.Service.GetSentLeadsAsync(centerUser.Id, 1, 10), "role_not_allowed", 403);
     }
+
+    // ===== Nhắn tin phía người gửi: học sinh / phụ huynh đọc và gửi tin trong yêu cầu của mình =====
+
+    /// <summary>Setup UC-44 có thêm audit log để kiểm tra tin gửi đi được ghi lại.</summary>
+    private static (CreateLeadSetup S, FakeAuditRepo Audit, LeadService Service) MessageSetup()
+    {
+        var s = new CreateLeadSetup();
+        var audit = new FakeAuditRepo();
+        return (s, audit, new LeadService(s.LeadRepo, s.CenterRepo, s.UserRepo, s.LinkRepo, audit));
+    }
+
+    [Fact]
+    public async Task SentLeadMessages_Student18_ReadsThreadAndSends_WithoutChangingStatus()
+    {
+        var (s, audit, service) = MessageSetup();
+        var student = s.AddStudent(18);
+        var lead = AddLead(s, student.Id, student.Id);
+        var centerUser = Guid.NewGuid();
+        s.LeadRepo.Users[centerUser] = ("Tư vấn viên", UserRoles.Center);
+        s.LeadRepo.Messages.Add(new LeadMessage
+        {
+            LeadId = lead.Id, SenderUserId = centerUser, Content = "Chào em", Status = "visible",
+        });
+
+        var result = await service.SendSentLeadMessageAsync(student.Id, lead.Id, "  Em cảm ơn trung tâm  ");
+
+        Assert.Equal("Em cảm ơn trung tâm", result.Message.Content);
+        Assert.Equal(student.Id, result.Message.SenderUserId);
+        Assert.False(result.Message.IsFromCenter);
+        Assert.False(result.Message.IsFlagged);
+        Assert.Equal("new", result.LeadStatus); // người gửi nhắn không đổi trạng thái
+        Assert.Equal("new", lead.Status);
+        Assert.Equal("lead_message.send", Assert.Single(audit.Logs).Action);
+
+        var thread = await service.GetSentLeadMessagesAsync(student.Id, lead.Id);
+        Assert.Equal(2, thread.Messages.Count);
+        Assert.Equal("Trung Tâm Xác Minh", thread.Messages[0].SenderName);
+        Assert.True(thread.Messages[0].IsFromCenter);
+    }
+
+    [Fact]
+    public async Task SendSentLeadMessage_WithPhone_FlagsAndLogsFlaggedAudit()
+    {
+        var (s, audit, service) = MessageSetup();
+        var student = s.AddStudent(18);
+        var lead = AddLead(s, student.Id, student.Id);
+
+        var result = await service.SendSentLeadMessageAsync(student.Id, lead.Id, "Trung tâm gọi em số 0912345678 nhé");
+
+        Assert.True(result.Message.IsFlagged);
+        Assert.False(string.IsNullOrEmpty(result.Message.FlagReason));
+        Assert.Equal("visible", result.Message.Status); // vẫn hiện, chỉ gắn cờ
+        Assert.Equal("lead_message.send_flagged", Assert.Single(audit.Logs).Action);
+    }
+
+    [Fact]
+    public async Task SentLeadMessages_Student15_AgeRestricted()
+    {
+        var (s, _, service) = MessageSetup();
+        var student = s.AddStudent(15);
+        var parent = s.AddParent(student);
+        var lead = AddLead(s, student.Id, parent.Id);
+
+        await AssertRule(() => service.GetSentLeadMessagesAsync(student.Id, lead.Id), "age_restricted", 403);
+        await AssertRule(() => service.SendSentLeadMessageAsync(student.Id, lead.Id, "Xin chào"), "age_restricted", 403);
+        Assert.Empty(s.LeadRepo.Messages);
+    }
+
+    [Fact]
+    public async Task SentLeadMessages_Parent_CanUseSubmittedLeadAndLinkedChildOwnLead()
+    {
+        var (s, _, service) = MessageSetup();
+        var child14 = s.AddStudent(14);
+        var child17 = s.AddStudent(17);
+        var parent = s.AddParent(child14, child17);
+        var forChild14 = AddLead(s, child14.Id, parent.Id);
+        var child17Self = AddLead(s, child17.Id, child17.Id);
+
+        await service.SendSentLeadMessageAsync(parent.Id, forChild14.Id, "Phụ huynh hỏi lịch tư vấn");
+        await service.SendSentLeadMessageAsync(parent.Id, child17Self.Id, "Phụ huynh hỏi thêm");
+
+        Assert.Single((await service.GetSentLeadMessagesAsync(parent.Id, forChild14.Id)).Messages);
+        Assert.Single((await service.GetSentLeadMessagesAsync(parent.Id, child17Self.Id)).Messages);
+    }
+
+    [Fact]
+    public async Task SentLeadMessages_RevokedLink_KeepsParentSubmitted_HidesChildOwnLead()
+    {
+        var (s, _, service) = MessageSetup();
+        var child = s.AddStudent(17);
+        var parent = s.AddParent(child);
+        var byParent = AddLead(s, child.Id, parent.Id);
+        var childSelf = AddLead(s, child.Id, child.Id);
+        s.LinkRepo.Links[0].Status = ParentLinkStatuses.Revoked;
+
+        await service.GetSentLeadMessagesAsync(parent.Id, byParent.Id);
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => service.GetSentLeadMessagesAsync(parent.Id, childSelf.Id));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => service.SendSentLeadMessageAsync(parent.Id, childSelf.Id, "Xin chào"));
+    }
+
+    [Fact]
+    public async Task SentLeadMessages_OtherStudentOrUnlinkedParent_NotFound()
+    {
+        var (s, _, service) = MessageSetup();
+        var owner = s.AddStudent(18);
+        var otherStudent = s.AddStudent(18);
+        var unlinkedParent = s.AddParent();
+        var lead = AddLead(s, owner.Id, owner.Id);
+
+        // Báo "không tìm thấy" như lead không tồn tại, không lộ lead của người khác
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => service.GetSentLeadMessagesAsync(otherStudent.Id, lead.Id));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => service.SendSentLeadMessageAsync(otherStudent.Id, lead.Id, "Xin chào"));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => service.GetSentLeadMessagesAsync(unlinkedParent.Id, lead.Id));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => service.GetSentLeadMessagesAsync(owner.Id, Guid.NewGuid()));
+        Assert.Empty(s.LeadRepo.Messages);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task SendSentLeadMessage_EmptyContent_ThrowsArgumentException(string content)
+    {
+        var (s, _, service) = MessageSetup();
+        var student = s.AddStudent(18);
+        var lead = AddLead(s, student.Id, student.Id);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => service.SendSentLeadMessageAsync(student.Id, lead.Id, content));
+    }
+
+    [Fact]
+    public async Task SendSentLeadMessage_ExceedsMaxLength_ThrowsArgumentException()
+    {
+        var (s, _, service) = MessageSetup();
+        var student = s.AddStudent(18);
+        var lead = AddLead(s, student.Id, student.Id);
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            service.SendSentLeadMessageAsync(student.Id, lead.Id, new string('a', LeadService.MaxReplyMessageLength + 1)));
+    }
+
+    [Fact]
+    public async Task SendSentLeadMessage_ClosedLead_ReadOnly()
+    {
+        var (s, _, service) = MessageSetup();
+        var student = s.AddStudent(18);
+        var lead = AddLead(s, student.Id, student.Id);
+        lead.Status = "closed";
+
+        await AssertRule(() => service.SendSentLeadMessageAsync(student.Id, lead.Id, "Xin chào"), "lead_closed", 400);
+        Assert.Empty(s.LeadRepo.Messages);
+        Assert.Equal("closed", (await service.GetSentLeadMessagesAsync(student.Id, lead.Id)).LeadStatus); // vẫn đọc được
+    }
+
+    [Fact]
+    public async Task SentLeadMessages_CenterRole_NotAllowed()
+    {
+        var (s, _, service) = MessageSetup();
+        var student = s.AddStudent(18);
+        var lead = AddLead(s, student.Id, student.Id);
+        var centerUser = new User { Role = UserRoles.Center };
+        s.UserRepo.Users.Add(centerUser);
+
+        await AssertRule(() => service.GetSentLeadMessagesAsync(centerUser.Id, lead.Id), "role_not_allowed", 403);
+    }
 }

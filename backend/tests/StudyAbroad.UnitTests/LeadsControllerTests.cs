@@ -195,6 +195,25 @@ public class LeadsControllerTests
 
             return Task.FromResult(new SendLeadMessageResultDto(msg, nextStatus));
         }
+
+        // [Nhắn tin phía người gửi] Bản giả tối thiểu; test controller dùng ở phần 2.
+        public Task<LeadMessagesThreadDto> GetSentLeadMessagesAsync(Guid userId, Guid leadId, CancellationToken ct = default)
+        {
+            if (RuleToThrow is not null)
+                throw RuleToThrow;
+            var messages = MessagesByLead.TryGetValue(leadId, out var list) ? list : [];
+            return Task.FromResult(new LeadMessagesThreadDto(leadId, "contacted", messages, 0));
+        }
+
+        public Task<SendLeadMessageResultDto> SendSentLeadMessageAsync(Guid userId, Guid leadId, string content, CancellationToken ct = default)
+        {
+            if (RuleToThrow is not null)
+                throw RuleToThrow;
+            var msg = new LeadMessageDto(
+                Guid.NewGuid(), leadId, userId, "Bạn", UserRoles.Student, false,
+                content.Trim(), false, null, "visible", DateTime.UtcNow);
+            return Task.FromResult(new SendLeadMessageResultDto(msg, "contacted"));
+        }
     }
 
     private static (LeadsController Controller, FakeLeadService Service) CreateController(Guid userId)
