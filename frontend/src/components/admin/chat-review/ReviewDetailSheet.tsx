@@ -117,7 +117,7 @@ function Content({ data, onChanged }: { data: ChatReviewDetail; onChanged: () =>
   );
 }
 
-function Block({ title, children }: { title: string; children: ReactNode }) {
+export function Block({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="flex flex-col gap-1.5">
       <h3 className="text-sm font-semibold text-ink">{title}</h3>
@@ -127,11 +127,11 @@ function Block({ title, children }: { title: string; children: ReactNode }) {
 }
 
 /** Nội dung chat hiện dạng chữ thường (React tự thoát ký tự), giữ xuống dòng của người viết. */
-function Text({ children }: { children: string }) {
+export function Text({ children }: { children: string }) {
   return <p className="whitespace-pre-wrap break-words text-sm text-ink">{children}</p>;
 }
 
-function ModelLabels({ model }: { model: ChatReviewModelDetail }) {
+export function ModelLabels({ model }: { model: ChatReviewModelDetail }) {
   const confidence = formatConfidence(model.confidence);
   return (
     <div className="mt-1 flex flex-col gap-1.5 border-t border-line pt-2">
