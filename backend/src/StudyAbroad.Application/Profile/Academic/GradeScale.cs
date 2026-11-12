@@ -3,11 +3,15 @@ using System.Text.Json;
 namespace StudyAbroad.Application.Profile.Academic;
 
 /// <summary>
-/// Kiểm tra, đọc và tra bảng quy đổi điểm thang 10 sang thang 4 (app_settings key grade_scale.10).
-/// Một chỗ duy nhất cho luật tra cận dưới, để AcademicAnalysisService, TranscriptGpa, chat và giả lập cùng ra một số.
+/// Kiểm tra, đọc và quy đổi điểm thang 10 sang thang 4 theo bảng mốc (app_settings key grade_scale.10).
+/// Một chỗ duy nhất cho luật nội suy, để AcademicAnalysisService, TranscriptGpa, chat và giả lập cùng ra một số.
 /// </summary>
 public static class GradeScale
 {
+    /// <summary>Method của bảng mốc nội suy. Bảng cũ lưu "table" là bảng tra bậc thang (chỉ còn dùng khi tính lại hồ sơ cũ).</summary>
+    public const string LinearMethod = "linear";
+    public const string LegacyTableMethod = "table";
+
     private static readonly JsonSerializerOptions ReadOptions = new() { PropertyNameCaseInsensitive = true };
     private static readonly JsonSerializerOptions WriteOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
@@ -70,7 +74,10 @@ public static class GradeScale
         }
     }
 
-    /// <summary>Tra cận dưới: lấy khoảng có MinScore lớn nhất mà điểm vẫn ≥ MinScore; không khớp khoảng nào thì 0.</summary>
+    /// <summary>
+    /// Tra bậc thang kiểu cũ (bảng WES, Method "table"): lấy khoảng có MinScore lớn nhất mà điểm vẫn ≥ MinScore.
+    /// Chỉ còn dùng để nhận ra hồ sơ đã tính bằng bảng cũ khi mod lưu bảng mới; quy đổi mới luôn dùng Interpolate.
+    /// </summary>
     public static decimal Lookup(decimal score, GradeScaleConfigDto config) =>
         config.Rules
             .OrderByDescending(rule => rule.MinScore)
@@ -99,5 +106,5 @@ public static class GradeScale
 
     /// <summary>JSON của bảng mặc định, dùng để seed grade_scale.10 khi DB chưa có.</summary>
     public static string DefaultJson() =>
-        JsonSerializer.Serialize(AcademicAnalysisService.GetDefaultWesScaleConfig(), WriteOptions);
+        JsonSerializer.Serialize(AcademicAnalysisService.GetDefaultScaleConfig(), WriteOptions);
 }

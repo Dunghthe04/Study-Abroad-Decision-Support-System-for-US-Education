@@ -62,7 +62,7 @@ public class GradeScaleTests
     [Fact]
     public void Validate_DefaultTable_IsValid()
     {
-        Assert.Empty(GradeScale.Validate(AcademicAnalysisService.GetDefaultWesScaleConfig()));
+        Assert.Empty(GradeScale.Validate(AcademicAnalysisService.GetDefaultScaleConfig()));
     }
 
     [Fact]
@@ -117,7 +117,7 @@ public class GradeScaleTests
         var parsed = GradeScale.Parse(GradeScale.DefaultJson());
 
         Assert.NotNull(parsed);
-        Assert.Equal(AcademicAnalysisService.GetDefaultWesScaleConfig().Rules, parsed!.Rules);
+        Assert.Equal(AcademicAnalysisService.GetDefaultScaleConfig().Rules, parsed!.Rules);
     }
 
     [Fact]
@@ -125,9 +125,9 @@ public class GradeScaleTests
     {
         var step2 = new FlowTranscriptDraftDto(ManualGpa10Scale: 8.2m, GpaMode: ProfileConstants.GpaModes.Overall);
 
-        Assert.Equal(3.5m, TranscriptGpa.Gpa4(step2)); // bảng mặc định: 8.0 → 3.5
-        Assert.Equal(4.0m, TranscriptGpa.Gpa4(step2, CustomScale()));
-        Assert.Equal(2.0m, TranscriptGpa.To4(7.9m, CustomScale()));
+        Assert.Equal(3.55m, TranscriptGpa.Gpa4(step2)); // bảng mặc định: đúng mốc VEF 8.2 → 3.55
+        Assert.Equal(4.0m, TranscriptGpa.Gpa4(step2, CustomScale())); // trên mốc cuối 8.0 → 4.0
+        Assert.Equal(3.975m, TranscriptGpa.To4(7.9m, CustomScale())); // nội suy giữa 0 → 2.0 và 8.0 → 4.0
     }
 
     [Fact]
@@ -147,11 +147,11 @@ public class GradeScaleTests
     {
         var repo = new FakeAcademicAnalysisRepository();
         var provider = new GradeScaleProvider(repo, new MemoryCache(new MemoryCacheOptions()));
-        Assert.Equal(AcademicAnalysisService.GetDefaultWesScaleConfig().Rules, (await provider.GetAsync()).Rules);
+        Assert.Equal(AcademicAnalysisService.GetDefaultScaleConfig().Rules, (await provider.GetAsync()).Rules);
 
         repo.SetSetting(AcademicConstants.GradeScale10AppSettingKey, "{\"rules\":[{\"minScore\":5,\"maxScore\":10,\"gpa4\":3,\"letterGrade\":\"B\"}]}");
         provider.Invalidate();
-        Assert.Equal(AcademicAnalysisService.GetDefaultWesScaleConfig().Rules, (await provider.GetAsync()).Rules);
+        Assert.Equal(AcademicAnalysisService.GetDefaultScaleConfig().Rules, (await provider.GetAsync()).Rules);
     }
 
     [Fact]
@@ -162,7 +162,7 @@ public class GradeScaleTests
         await provider.GetAsync(); // cache bảng mặc định
 
         repo.SetSetting(AcademicConstants.GradeScale10AppSettingKey, JsonSerializer.Serialize(CustomScale()));
-        Assert.Equal(AcademicAnalysisService.GetDefaultWesScaleConfig().Rules, (await provider.GetAsync()).Rules);
+        Assert.Equal(AcademicAnalysisService.GetDefaultScaleConfig().Rules, (await provider.GetAsync()).Rules);
 
         provider.Invalidate();
         Assert.Equal(CustomScale().Rules, (await provider.GetAsync()).Rules);
@@ -176,6 +176,6 @@ public class GradeScaleTests
 
         var config = await new AcademicAnalysisService(repo).GetGradeScaleConfigAsync();
 
-        Assert.Equal(AcademicAnalysisService.GetDefaultWesScaleConfig().Rules, config.Rules);
+        Assert.Equal(AcademicAnalysisService.GetDefaultScaleConfig().Rules, config.Rules);
     }
 }

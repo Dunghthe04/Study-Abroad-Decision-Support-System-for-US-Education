@@ -1,11 +1,15 @@
 import { apiFetch, ApiError } from "@/lib/api";
 import type { GradeScaleConfig } from "@/types/academic";
 
-/** Bảng đang dùng. version gửi lại khi lưu để biết có ai sửa trước không; isDefault: DB chưa có bảng, đang dùng WES. */
+/**
+ * Bảng đang dùng. version gửi lại khi lưu để biết có ai sửa trước không; isDefault: DB chưa có bảng, đang dùng bảng
+ * mặc định. defaultConfig: bảng mặc định (mốc VEF) cho nút "Dùng bảng mặc định".
+ */
 export interface GradeScaleSetting {
   config: GradeScaleConfig;
   version: string | null;
   isDefault: boolean;
+  defaultConfig: GradeScaleConfig;
 }
 
 /** Một khoảng moderator nhập; maxScore server tự tính từ mốc kế tiếp. */

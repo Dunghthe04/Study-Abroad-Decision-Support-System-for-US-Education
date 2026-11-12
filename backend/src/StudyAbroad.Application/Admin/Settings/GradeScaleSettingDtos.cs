@@ -5,8 +5,9 @@ namespace StudyAbroad.Application.Admin.Settings;
 /// <summary>
 /// Bảng quy đổi đang dùng. Version là mốc sửa gần nhất (UpdatedAt, chưa sửa lần nào thì CreatedAt);
 /// gửi lại khi lưu để biết có ai sửa trước không. IsDefault: DB chưa có bảng hoặc bảng sai luật, đang dùng bảng mặc định.
+/// DefaultConfig: bảng mặc định (mốc VEF) cho nút "Dùng bảng mặc định" bên trang quản trị, để FE không phải chép mốc.
 /// </summary>
-public record GradeScaleSettingDto(GradeScaleConfigDto Config, DateTime? Version, bool IsDefault);
+public record GradeScaleSettingDto(GradeScaleConfigDto Config, DateTime? Version, bool IsDefault, GradeScaleConfigDto DefaultConfig);
 
 /// <summary>Một khoảng do moderator nhập. MaxScore server tự tính từ mốc kế tiếp nên không cần gửi.</summary>
 public record GradeScaleRuleInput(decimal MinScore, decimal Gpa4, string? LetterGrade);

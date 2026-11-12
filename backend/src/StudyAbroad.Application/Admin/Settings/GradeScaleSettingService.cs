@@ -46,12 +46,12 @@ public class GradeScaleSettingService(
             return GradeScaleUpdateResult.Conflict(ToDto(setting));
 
         var oldConfig = GradeScale.Parse(setting?.ValueJson);
-        var recomputed = await RecomputeTranscriptGpasAsync(oldConfig ?? AcademicAnalysisService.GetDefaultWesScaleConfig(), config, ct);
+        var recomputed = await RecomputeTranscriptGpasAsync(oldConfig ?? AcademicAnalysisService.GetDefaultScaleConfig(), config, ct);
         var isNew = setting is null;
         setting ??= new AppSetting
         {
             Key = AcademicConstants.GradeScale10AppSettingKey,
-            Description = "Bảng quy đổi điểm thang 10 sang GPA thang 4 (tra cận dưới MinScore), moderator sửa trên trang quản trị.",
+            Description = "Bảng quy đổi điểm thang 10 sang GPA thang 4 (nội suy tuyến tính giữa các mốc MinScore), moderator sửa trên trang quản trị.",
         };
         setting.ValueJson = JsonSerializer.Serialize(config, JsonOptions);
 
@@ -80,17 +80,22 @@ public class GradeScaleSettingService(
     }
 
     // Hồ sơ không lưu cách nhập GPA (học bạ hay tự nhập) và không lưu GPA thang 10 tự nhập, nên chỉ tính lại hồ sơ mà
-    // overall_gpa đúng bằng số tra TB học bạ theo bảng cũ, tức là GPA lấy từ học bạ. Hồ sơ tự nhập GPA giữ nguyên.
+    // overall_gpa đúng bằng số quy đổi TB học bạ theo bảng cũ, tức là GPA lấy từ học bạ. Hồ sơ tự nhập GPA giữ nguyên.
+    // Bảng cũ kiểu "table" (WES trước khi đổi sang nội suy): hồ sơ có thể đã tính bằng tra bậc thang (trước khi đổi code)
+    // hoặc bằng nội suy trên chính bảng đó (sau khi đổi code, trước khi mod lưu bảng mới), nên nhận cả hai.
     // Trả số hồ sơ đổi GPA; các hồ sơ được theo dõi nên SaveAsync lưu luôn
     private async Task<int> RecomputeTranscriptGpasAsync(GradeScaleConfigDto oldConfig, GradeScaleConfigDto newConfig, CancellationToken ct)
     {
+        var oldIsTable = oldConfig.Method != GradeScale.LinearMethod;
         var count = 0;
         foreach (var (profile, scores) in await repository.GetTranscriptGpaProfilesAsync(ct))
         {
             if (TranscriptGpa.SubjectAverage10(scores) is not { } average10) continue;
-            if (profile.OverallGpa != GradeScale.Lookup(average10, oldConfig)) continue;
+            var fromTranscript = profile.OverallGpa == ToStored(GradeScale.Interpolate(average10, oldConfig))
+                || (oldIsTable && profile.OverallGpa == GradeScale.Lookup(average10, oldConfig));
+            if (!fromTranscript) continue;
 
-            var newGpa = GradeScale.Lookup(average10, newConfig);
+            var newGpa = ToStored(GradeScale.Interpolate(average10, newConfig));
             if (newGpa == profile.OverallGpa) continue;
             profile.OverallGpa = newGpa;
             count++;
@@ -98,7 +103,11 @@ public class GradeScaleSettingService(
         return count;
     }
 
-    // Sắp theo mốc tăng dần, MaxScore = mốc kế tiếp − 0.01 (khoảng cao nhất tới 10), chỉ để hiển thị: tra GPA chỉ dùng MinScore
+    // overall_gpa là numeric(5,2): Postgres làm tròn 2 số lẻ, nửa lên (3.625 → 3.63), nên so và lưu theo đúng cách đó
+    private static decimal ToStored(decimal gpa4) => Math.Round(gpa4, 2, MidpointRounding.AwayFromZero);
+
+    // Sắp theo mốc tăng dần, MaxScore = mốc kế tiếp − 0.01 (khoảng cao nhất tới 10), chỉ để hiển thị: nội suy chỉ dùng MinScore
+    // Điểm chữ không bắt buộc (mốc VEF không có điểm chữ), có thì tối đa MaxLetterGradeLength ký tự
     private static GradeScaleConfigDto BuildConfig(UpdateGradeScaleRequest request, out List<string> errors)
     {
         errors = [];
@@ -107,23 +116,24 @@ public class GradeScaleSettingService(
         for (var i = 0; i < inputs.Count; i++)
         {
             var letter = inputs[i].LetterGrade?.Trim() ?? string.Empty;
-            if (letter.Length == 0 || letter.Length > MaxLetterGradeLength)
-                errors.Add($"Điểm chữ của mốc {inputs[i].MinScore} phải có 1–{MaxLetterGradeLength} ký tự.");
+            if (letter.Length > MaxLetterGradeLength)
+                errors.Add($"Điểm chữ của mốc {inputs[i].MinScore} tối đa {MaxLetterGradeLength} ký tự.");
             var max = i + 1 < inputs.Count ? inputs[i + 1].MinScore - 0.01m : 10m;
             rules.Add(new GradeScaleRuleDto(inputs[i].MinScore, Math.Max(max, inputs[i].MinScore), inputs[i].Gpa4, letter));
         }
 
         var sourceName = string.IsNullOrWhiteSpace(request.SourceName)
-            ? AcademicAnalysisService.GetDefaultWesScaleConfig().SourceName
+            ? AcademicAnalysisService.GetDefaultScaleConfig().SourceName
             : request.SourceName.Trim();
-        return new GradeScaleConfigDto(AcademicConstants.GradeScale10AppSettingKey, sourceName, "table", rules);
+        return new GradeScaleConfigDto(AcademicConstants.GradeScale10AppSettingKey, sourceName, GradeScale.LinearMethod, rules);
     }
 
     private static GradeScaleSettingDto ToDto(AppSetting? setting)
     {
         var parsed = GradeScale.Parse(setting?.ValueJson);
         return new GradeScaleSettingDto(
-            parsed ?? AcademicAnalysisService.GetDefaultWesScaleConfig(), VersionOf(setting), parsed is null);
+            parsed ?? AcademicAnalysisService.GetDefaultScaleConfig(), VersionOf(setting), parsed is null,
+            AcademicAnalysisService.GetDefaultScaleConfig());
     }
 
     private static DateTime? VersionOf(AppSetting? setting) => setting is null ? null : setting.UpdatedAt ?? setting.CreatedAt;

@@ -73,9 +73,8 @@ public static class TranscriptGpa
 
     /// <summary>
     /// Quy đổi thang 10 sang thang 4 theo bảng scale (bảng trong DB, grade_scale.10); null thì bảng mặc định
-    /// AcademicAnalysisService.GetDefaultWesScaleConfig. Giống toGpa4 bên FE và gpa10_to_4 bên advisor. Chỉ xét cận
-    /// dưới (MinScore) để số như 8.995 không rơi vào khe giữa hai khoảng: 8.99 vẫn là 3.7
+    /// AcademicAnalysisService.GetDefaultScaleConfig (mốc VEF). Nội suy tuyến tính giữa hai mốc kề nhau: 8.5 → 3.625
     /// </summary>
     public static decimal To4(decimal gpa10, GradeScaleConfigDto? scale = null) =>
-        GradeScale.Lookup(gpa10, scale ?? AcademicAnalysisService.GetDefaultWesScaleConfig());
+        GradeScale.Interpolate(gpa10, scale ?? AcademicAnalysisService.GetDefaultScaleConfig());
 }

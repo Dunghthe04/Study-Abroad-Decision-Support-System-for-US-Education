@@ -632,11 +632,11 @@ public class ChatServiceTests
         await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), gradeScale: new FakeGradeScale())
             .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello, GradeScale: fromBrowser));
 
-        Assert.Equal(AcademicAnalysisService.GetDefaultWesScaleConfig().Rules, advisor.LastRequest!.GradeScale);
+        Assert.Equal(AcademicAnalysisService.GetDefaultScaleConfig().Rules, advisor.LastRequest!.GradeScale);
         var json = JsonSerializer.SerializeToElement(advisor.LastRequest, new JsonSerializerOptions(JsonSerializerDefaults.Web));
-        var first = json.GetProperty("gradeScale")[0];
-        Assert.Equal(9.0m, first.GetProperty("minScore").GetDecimal());
-        Assert.Equal(4.0m, first.GetProperty("gpa4").GetDecimal());
+        var top = json.GetProperty("gradeScale").EnumerateArray().Last(); // mốc VEF cao nhất 10 → 4.0
+        Assert.Equal(10m, top.GetProperty("minScore").GetDecimal());
+        Assert.Equal(4.0m, top.GetProperty("gpa4").GetDecimal());
     }
 
     [Fact]
@@ -653,7 +653,7 @@ public class ChatServiceTests
     private sealed class FakeGradeScale : IGradeScaleProvider
     {
         public Task<GradeScaleConfigDto> GetAsync(CancellationToken ct = default) =>
-            Task.FromResult(AcademicAnalysisService.GetDefaultWesScaleConfig());
+            Task.FromResult(AcademicAnalysisService.GetDefaultScaleConfig());
         public void Invalidate() { }
     }
 

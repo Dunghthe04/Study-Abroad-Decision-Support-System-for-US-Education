@@ -69,7 +69,7 @@ public class ChatSimulationTests
 
     [Theory]
     [InlineData("""{"changes":{"gpa":{"value":3.8,"scale":4}}}""", 3.8)]
-    [InlineData("""{"changes":{"gpa":{"value":9.0,"scale":10}}}""", 4.0)]   // thang 10 đổi sang thang 4 theo bảng WES như hồ sơ
+    [InlineData("""{"changes":{"gpa":{"value":9.0,"scale":10}}}""", 3.75)]  // thang 10 đổi sang thang 4 theo mốc VEF như hồ sơ
     [InlineData("""{"changes":{"gpa":{"value":3.8}}}""", 3.8)]              // không nói thang: thang 4
     public void Parse_ConvertsGpaToTheFourPointScale(string json, double expected)
     {

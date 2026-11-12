@@ -23,55 +23,54 @@ public class AcademicAnalysisServiceTests
     }
 
     [Theory]
-    [InlineData(9.5, 4.0)]
-    [InlineData(9.0, 4.0)]
-    [InlineData(8.6, 3.7)]
-    [InlineData(8.5, 3.7)]
-    [InlineData(8.2, 3.5)]
-    [InlineData(8.0, 3.5)]
-    [InlineData(7.5, 3.0)]
-    [InlineData(7.0, 3.0)]
-    [InlineData(6.8, 2.5)]
-    [InlineData(6.0, 2.0)]
-    [InlineData(5.2, 1.5)]
-    [InlineData(4.5, 1.0)]
-    [InlineData(3.0, 0.0)]
+    [InlineData(10.0, 4.00)]
+    [InlineData(9.5, 3.85)]   // đúng mốc VEF
+    [InlineData(9.0, 3.75)]
+    [InlineData(8.6, 3.65)]
+    [InlineData(8.5, 3.625)]  // giữa 8.4 → 3.60 và 8.6 → 3.65
+    [InlineData(8.2, 3.55)]
+    [InlineData(8.0, 3.50)]
+    [InlineData(7.5, 3.25)]   // giữa 7.4 → 3.20 và 7.6 → 3.30
+    [InlineData(7.0, 3.00)]
+    [InlineData(6.8, 2.90)]   // giữa 5 → 2.0 và 7 → 3.0
+    [InlineData(6.0, 2.50)]
+    [InlineData(5.2, 2.10)]
+    [InlineData(4.5, 1.80)]   // giữa 0 → 0 và 5 → 2.0
+    [InlineData(3.0, 1.20)]
     [InlineData(0.0, 0.0)]
-    public void ConvertScoreToGpa4_StandardWes_ReturnsExpectedGpa(decimal rawScore, decimal expectedGpa)
+    public void ConvertScoreToGpa4_DefaultVef_InterpolatesBetweenAnchors(decimal rawScore, decimal expectedGpa)
     {
-        // [USAS-365] Kiểm thử chuẩn quy đổi WES Standard Scale
-        var wesConfig = AcademicAnalysisService.GetDefaultWesScaleConfig();
-        var result = AcademicAnalysisService.ConvertScoreToGpa4(rawScore, wesConfig);
+        // [USAS-365] Bảng mặc định: mốc VEF + nội suy tuyến tính (kế hoạch GPA weighted, mục 4)
+        var vefConfig = AcademicAnalysisService.GetDefaultScaleConfig();
+        var result = AcademicAnalysisService.ConvertScoreToGpa4(rawScore, vefConfig);
         Assert.Equal(expectedGpa, result);
     }
 
     [Theory]
-    [InlineData(8.995, 3.7)]   // giữa 8.99 và 9.0: chưa chạm mốc 9.0 nên vẫn 3.7, không rơi xuống ×0.4
-    [InlineData(8.49, 3.5)]
-    [InlineData(4.995, 1.0)]
-    [InlineData(3.995, 0.0)]
-    public void ConvertScoreToGpa4_BetweenBands_UsesLowerBoundOnly(decimal rawScore, decimal expectedGpa)
+    [InlineData(8.995, 3.74875)] // sát mốc 9.0 thì sát 3.75, không còn nhảy bậc như bảng tra cũ
+    [InlineData(4.995, 1.998)]   // sát mốc 5.0 thì sát 2.0
+    public void ConvertScoreToGpa4_NearAnchor_NoStepJump(decimal rawScore, decimal expectedGpa)
     {
-        var wesConfig = AcademicAnalysisService.GetDefaultWesScaleConfig();
-        Assert.Equal(expectedGpa, AcademicAnalysisService.ConvertScoreToGpa4(rawScore, wesConfig));
+        var vefConfig = AcademicAnalysisService.GetDefaultScaleConfig();
+        Assert.Equal(expectedGpa, AcademicAnalysisService.ConvertScoreToGpa4(rawScore, vefConfig));
     }
 
     [Fact]
     public void ConvertScoreToGpa4_SameAsTranscriptGpaTo4()
     {
         // Trang phân tích học bạ và GPA lưu trong hồ sơ dùng cùng một cách đổi
-        var wesConfig = AcademicAnalysisService.GetDefaultWesScaleConfig();
+        var vefConfig = AcademicAnalysisService.GetDefaultScaleConfig();
         for (var score = 0m; score <= 10m; score += 0.005m)
-            Assert.Equal(TranscriptGpa.To4(score), AcademicAnalysisService.ConvertScoreToGpa4(score, wesConfig));
+            Assert.Equal(TranscriptGpa.To4(score), AcademicAnalysisService.ConvertScoreToGpa4(score, vefConfig));
     }
 
     [Fact]
     public void ConvertScoreToGpa4_OutOfRange_ThrowsArgumentOutOfRangeException()
     {
-        var wesConfig = AcademicAnalysisService.GetDefaultWesScaleConfig();
+        var vefConfig = AcademicAnalysisService.GetDefaultScaleConfig();
 
-        Assert.Throws<ArgumentOutOfRangeException>(() => AcademicAnalysisService.ConvertScoreToGpa4(-0.5m, wesConfig));
-        Assert.Throws<ArgumentOutOfRangeException>(() => AcademicAnalysisService.ConvertScoreToGpa4(10.5m, wesConfig));
+        Assert.Throws<ArgumentOutOfRangeException>(() => AcademicAnalysisService.ConvertScoreToGpa4(-0.5m, vefConfig));
+        Assert.Throws<ArgumentOutOfRangeException>(() => AcademicAnalysisService.ConvertScoreToGpa4(10.5m, vefConfig));
     }
 
     [Theory]

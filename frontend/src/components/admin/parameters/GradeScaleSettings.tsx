@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { HistoryIcon, PlusIcon, RotateCcwIcon, SaveIcon, Trash2Icon } from "lucide-react";
+import { HistoryIcon, ListRestartIcon, PlusIcon, RotateCcwIcon, SaveIcon, Trash2Icon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   getAdminGradeScale,
@@ -44,7 +44,7 @@ let nextKey = 0;
 function toRows(config: GradeScaleConfig): RowDraft[] {
   return [...config.rules]
     .sort((a, b) => b.minScore - a.minScore)
-    .map((r) => ({ key: nextKey++, minScore: String(r.minScore), gpa4: String(r.gpa4), letterGrade: r.letterGrade }));
+    .map((r) => ({ key: nextKey++, minScore: String(r.minScore), gpa4: String(r.gpa4), letterGrade: r.letterGrade ?? "" }));
 }
 
 function parseNumber(text: string): number | null {
@@ -71,20 +71,26 @@ function formatTime(iso: string): string {
   return Number.isNaN(date.getTime()) ? iso : date.toLocaleString("vi-VN");
 }
 
+// Điểm chữ không bắt buộc (mốc VEF không có): có thì ghi kèm sau GPA, không có thì bỏ qua
+function withLetter(letter: string | undefined): string {
+  return letter ? `, ${letter}` : "";
+}
+
 // Tóm tắt một lần sửa theo mốc điểm: mốc thêm, mốc bỏ, mốc đổi GPA hoặc điểm chữ
 function describeChange(item: GradeScaleHistoryItem): string[] {
   const oldRules = new Map((item.old?.rules ?? []).map((r) => [r.minScore, r]));
   const newRules = new Map((item.new?.rules ?? []).map((r) => [r.minScore, r]));
   const lines: string[] = [];
-  if (!item.old) lines.push("Lưu bảng lần đầu (trước đó dùng bảng mặc định WES).");
+  if (!item.old) lines.push("Lưu bảng lần đầu (trước đó dùng bảng mặc định).");
   const mins = [...new Set([...oldRules.keys(), ...newRules.keys()])].sort((a, b) => b - a);
   for (const min of mins) {
     const before = oldRules.get(min);
     const after = newRules.get(min);
-    if (before && !after) lines.push(`Bỏ mốc ${min} (GPA ${before.gpa4}, ${before.letterGrade}).`);
-    else if (!before && after && item.old) lines.push(`Thêm mốc ${min}: GPA ${after.gpa4}, ${after.letterGrade}.`);
-    else if (before && after && (before.gpa4 !== after.gpa4 || before.letterGrade !== after.letterGrade))
-      lines.push(`Mốc ${min}: GPA ${before.gpa4} → ${after.gpa4}, ${before.letterGrade} → ${after.letterGrade}.`);
+    if (before && !after) lines.push(`Bỏ mốc ${min} (GPA ${before.gpa4}${withLetter(before.letterGrade)}).`);
+    else if (!before && after && item.old) lines.push(`Thêm mốc ${min}: GPA ${after.gpa4}${withLetter(after.letterGrade)}.`);
+    else if (before && after && before.gpa4 !== after.gpa4) lines.push(`Mốc ${min}: GPA ${before.gpa4} → ${after.gpa4}.`);
+    else if (before && after && (before.letterGrade ?? "") !== (after.letterGrade ?? ""))
+      lines.push(`Mốc ${min}: điểm chữ "${before.letterGrade ?? ""}" → "${after.letterGrade ?? ""}".`);
   }
   if (item.old && item.new && item.old.sourceName !== item.new.sourceName)
     lines.push(`Nguồn: "${item.old.sourceName}" → "${item.new.sourceName}".`);
@@ -151,6 +157,15 @@ export function GradeScaleSettings() {
   const addRow = () => setRows((prev) => [...prev, { key: nextKey++, minScore: "", gpa4: "", letterGrade: "" }]);
 
   const removeRow = (key: number) => setRows((prev) => prev.filter((r) => r.key !== key));
+
+  // Điền mốc VEF (server gửi kèm) vào bảng đang sửa; chưa lưu, mod vẫn bấm "Lưu bảng" để đi đường lưu thường
+  // (tính lại GPA hồ sơ học bạ + ghi lịch sử)
+  const applyDefault = () => {
+    if (!setting) return;
+    setRows(toRows(setting.defaultConfig));
+    setSourceName(setting.defaultConfig.sourceName);
+    setErrors([]);
+  };
 
   // Chỉ kiểm ô bỏ trống / không phải số; các luật còn lại (0–10, 0–4, trùng mốc, GPA giảm dần) server kiểm và trả lỗi
   const checkInput = (): string[] => {
@@ -233,8 +248,8 @@ export function GradeScaleSettings() {
             <h2 className="text-h3">Bảng quy đổi điểm thang 10 sang GPA thang 4</h2>
           </CardTitle>
           <CardDescription>
-            Chỉ điểm trung bình tổng mới quy sang thang 4; điểm từng môn giữ nguyên thang 10. Tra theo cận dưới: điểm
-            từ mốc nào trở lên thì lấy GPA của mốc đó (8.99 vẫn tính theo mốc 8.5).
+            Chỉ điểm trung bình tổng mới quy sang thang 4; điểm từng môn giữ nguyên thang 10. Điểm nằm giữa hai mốc thì
+            nội suy tuyến tính (mốc 8.4 → 3.60 và 8.6 → 3.65 thì 8.5 → 3.625). Điểm chữ không bắt buộc.
             {canEdit
               ? " Lưu bảng mới sẽ tính lại GPA của các hồ sơ lấy GPA từ học bạ; hồ sơ tự nhập GPA giữ nguyên."
               : " Quản trị viên chỉ xem, Moderator là người sửa bảng."}
@@ -357,6 +372,9 @@ export function GradeScaleSettings() {
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" onClick={addRow}>
                 <PlusIcon /> Thêm mốc
+              </Button>
+              <Button variant="outline" onClick={applyDefault} disabled={saving}>
+                <ListRestartIcon /> Dùng bảng mặc định (VEF)
               </Button>
               <Button variant="ghost" onClick={() => showSetting(setting)} disabled={saving}>
                 <RotateCcwIcon /> Bỏ thay đổi
