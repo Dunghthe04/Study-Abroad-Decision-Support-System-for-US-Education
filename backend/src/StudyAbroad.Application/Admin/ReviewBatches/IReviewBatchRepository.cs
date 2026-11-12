@@ -18,4 +18,27 @@ public interface IReviewBatchRepository
     Task AddAsync(
         ReviewBatch batch, IReadOnlyList<ReviewBatchItem> items, IReadOnlyList<ReviewBatchReviewer> reviewers, AuditLog audit,
         CancellationToken ct = default);
+
+    /// <summary>Các đợt mà người dùng đã tạo hoặc được giao duyệt, mới nhất trước, kèm số câu và tiến độ từng người duyệt. Không có nội dung chat.</summary>
+    Task<IReadOnlyList<ReviewBatchListRow>> ListForUserAsync(Guid userId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Các câu của một đợt cho người duyệt (theo thứ tự đọc). Null nếu đợt không có HOẶC người này không được giao duyệt đợt đó:
+    /// hai trường hợp không phân biệt để không lộ đợt nào tồn tại. Chưa có nội dung chat.
+    /// </summary>
+    Task<ReviewItemsRows?> ListItemsAsync(Guid batchId, Guid reviewerUserId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Một câu của đợt CÓ NỘI DUNG chat (câu hỏi, câu trả lời, vài tin trước) kèm kết luận của CHÍNH người này (nếu có). Null nếu người này không được
+    /// giao đợt, câu không thuộc đợt, hoặc tin gốc đã bị xóa. Bên gọi phải ghi nhật ký người xem trước khi trả nội dung cho ai.
+    /// </summary>
+    Task<ReviewItemDetailRows?> FindItemDetailAsync(Guid batchId, Guid itemId, Guid reviewerUserId, int contextCount, CancellationToken ct = default);
+
+    /// <summary>
+    /// Lưu (thêm hoặc ghi đè) kết luận của người duyệt cho một câu. Trả kết luận đã lưu; null nếu người này không được giao đợt
+    /// hoặc câu không thuộc đợt.
+    /// </summary>
+    Task<ReviewVerdict?> UpsertVerdictAsync(
+        Guid batchId, Guid itemId, Guid reviewerUserId, string labelVerdict, string? correctIntent, string answerVerdict, string? cause,
+        CancellationToken ct = default);
 }

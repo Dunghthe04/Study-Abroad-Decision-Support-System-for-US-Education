@@ -1,5 +1,8 @@
 using System.Security.Cryptography;
 using System.Text.Json;
+using StudyAbroad.Application.Admin.ChatReview;
+using StudyAbroad.Application.Audit;
+using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
 
 namespace StudyAbroad.Application.Admin.ReviewBatches;
@@ -13,15 +16,38 @@ public interface IReviewBatchService
     /// </summary>
     Task<ReviewBatchCreatedDto> CreateAsync(
         CreateReviewBatchRequest request, Guid actorUserId, string? ipAddress, string? userAgent, CancellationToken ct = default);
+
+    /// <summary>Các đợt người dùng đã tạo hoặc được giao duyệt, mới nhất trước. Chỉ số đo, không có nội dung chat.</summary>
+    Task<IReadOnlyList<ReviewBatchListItemDto>> ListAsync(Guid actorUserId, CancellationToken ct = default);
+
+    /// <summary>Các câu của một đợt (chưa có nội dung). Null nếu đợt không có hoặc người này không được giao duyệt (không phân biệt hai trường hợp).</summary>
+    Task<ReviewItemListDto?> GetItemsAsync(Guid batchId, Guid actorUserId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Một câu của đợt CÓ NỘI DUNG chat, kèm kết luận của chính người xem. Chỉ người được giao duyệt đợt mới xem được (người khác nhận null).
+    /// Ghi nhật ký người xem (audit_logs) TRƯỚC khi trả nội dung; nếu ghi nhật ký lỗi thì ném lỗi chứ không trả nội dung.
+    /// Nhật ký không chứa nội dung chat.
+    /// </summary>
+    Task<ReviewItemDetailDto?> GetItemDetailAsync(
+        Guid batchId, Guid itemId, Guid actorUserId, string? ipAddress, string? userAgent, CancellationToken ct = default);
+
+    /// <summary>
+    /// Lưu kết luận của người duyệt cho một câu (ghi đè nếu đã chấm). Null nếu người này không được giao đợt hoặc câu không thuộc đợt.
+    /// Kết luận sai quy tắc thì ném ArgumentException và không lưu gì.
+    /// </summary>
+    Task<ReviewVerdictDto?> SaveVerdictAsync(
+        Guid batchId, Guid itemId, SaveReviewVerdictRequest request, Guid actorUserId, CancellationToken ct = default);
 }
 
-public class ReviewBatchService(IReviewBatchRepository repository) : IReviewBatchService
+public class ReviewBatchService(IReviewBatchRepository repository, IAuditLogRepository auditLogs) : IReviewBatchService
 {
     public const int MaxNameLength = 120;
     public const int MaxSizePerStratum = 100;
     public const int MaxReviewers = 5;
     public const int MaxSeedLength = 64;
+    public const int ContextMessages = 6;
     public const string CreateAction = "review_batch.create";
+    public const string ViewItemAction = "review_batch.view_item";
 
     public async Task<ReviewBatchCreatedDto> CreateAsync(
         CreateReviewBatchRequest request, Guid actorUserId, string? ipAddress, string? userAgent, CancellationToken ct = default)
@@ -41,7 +67,7 @@ public class ReviewBatchService(IReviewBatchRepository repository) : IReviewBatc
             seed = RandomNumberGenerator.GetHexString(12, lowercase: true);   // tự sinh và lưu lại, nên vẫn lặp lại được sau này
 
         var (fromUtc, toUtcExclusive) = Range(request.From, request.To);
-        var reviewerIds = await ValidReviewersAsync(request.ReviewerIds, ct);
+        var reviewerIds = await ValidReviewersAsync(request.ReviewerIds, actorUserId, ct);
 
         var candidates = await repository.ListCandidatesAsync(fromUtc, toUtcExclusive, ct);
         var sample = ReviewSampler.Draw(
@@ -85,12 +111,116 @@ public class ReviewBatchService(IReviewBatchRepository repository) : IReviewBatc
             batch.CreatedAt);
     }
 
-    // Phải có từ 1 đến MaxReviewers người, không trùng, và tất cả là Admin đang hoạt động
-    private async Task<IReadOnlyList<Guid>> ValidReviewersAsync(IReadOnlyList<Guid>? requested, CancellationToken ct)
+    public async Task<IReadOnlyList<ReviewBatchListItemDto>> ListAsync(Guid actorUserId, CancellationToken ct = default)
+    {
+        var rows = await repository.ListForUserAsync(actorUserId, ct);
+        return rows.Select(r => new ReviewBatchListItemDto(
+                r.Id, r.Name, r.Seed, r.CreatedAt, r.SizePerStratum, r.SampledFromUtc, r.SampledToUtcExclusive, r.TotalItems,
+                ReviewSampler.ReadStrata(r.StrataJson), r.IsCreator, r.IsReviewer,
+                r.Reviewers.FirstOrDefault(p => p.UserId == actorUserId)?.Graded ?? 0,
+                r.Reviewers.Select(p => new ReviewerProgressDto(p.UserId, p.FullName, p.Graded)).ToList()))
+            .ToList();
+    }
+
+    public async Task<ReviewItemListDto?> GetItemsAsync(Guid batchId, Guid actorUserId, CancellationToken ct = default)
+    {
+        var rows = await repository.ListItemsAsync(batchId, actorUserId, ct);
+        if (rows is null)
+            return null;
+
+        var items = rows.Items.Select(i => new ReviewItemRowDto(i.ItemId, i.Position, i.Stratum, i.GradedByMe)).ToList();
+        return new ReviewItemListDto(rows.BatchId, rows.BatchName, items.Count, items.Count(i => i.GradedByMe), items);
+    }
+
+    public async Task<ReviewItemDetailDto?> GetItemDetailAsync(
+        Guid batchId, Guid itemId, Guid actorUserId, string? ipAddress, string? userAgent, CancellationToken ct = default)
+    {
+        if (actorUserId == Guid.Empty)
+            throw new ArgumentException("Thiếu người xem: không ghi được nhật ký nên không trả nội dung.");
+
+        var rows = await repository.FindItemDetailAsync(batchId, itemId, actorUserId, ContextMessages, ct);
+        if (rows is null)
+            return null;   // không được giao, không thuộc đợt hoặc tin gốc đã mất: không có gì để xem và cũng không ghi nhật ký
+
+        // Ghi nhật ký TRƯỚC khi trả nội dung. Không bắt lỗi: ghi lỗi thì ném lên, nội dung không rời khỏi hàm này
+        await auditLogs.AddAsync(new AuditLog
+        {
+            ActorUserId = actorUserId,
+            Action = ViewItemAction,
+            EntityType = "chat_message",
+            EntityId = rows.Reply.MessageId.ToString(),
+            // Chỉ mã, tuyệt đối không có nội dung chat (không nhân bản dữ liệu cá nhân sang bảng nhật ký)
+            DetailJson = JsonSerializer.Serialize(new { batchId, itemId }),
+            IpAddress = Clip(ipAddress, 64),
+            UserAgent = Clip(userAgent, 512),
+        }, ct);
+
+        return new ReviewItemDetailDto(
+            rows.ItemId, rows.Position, rows.Stratum,
+            rows.Question is { } question
+                ? new ChatReviewQuestionDto(question.MessageId, question.CreatedAt, question.Content, ChatReviewMetaReader.ReadModelDetail(question.MetaJson))
+                : null,
+            new ChatReviewMessageDto(rows.Reply.MessageId, rows.Reply.Role, rows.Reply.CreatedAt, rows.Reply.Content),
+            rows.Context
+                .OrderBy(c => c.CreatedAt)
+                .ThenBy(c => c.MessageId)
+                .Select(c => new ChatReviewMessageDto(c.MessageId, c.Role, c.CreatedAt, c.Content))
+                .ToList(),
+            rows.MyVerdict is { } verdict ? ToDto(verdict) : null);
+    }
+
+    public async Task<ReviewVerdictDto?> SaveVerdictAsync(
+        Guid batchId, Guid itemId, SaveReviewVerdictRequest request, Guid actorUserId, CancellationToken ct = default)
+    {
+        if (actorUserId == Guid.Empty)
+            throw new ArgumentException("Thiếu người chấm.");
+
+        var label = request.LabelVerdict?.Trim();
+        var answer = request.AnswerVerdict?.Trim();
+        var correctIntent = string.IsNullOrWhiteSpace(request.CorrectIntent) ? null : request.CorrectIntent.Trim();
+        var cause = string.IsNullOrWhiteSpace(request.Cause) ? null : request.Cause.Trim();
+
+        if (label is null || !ReviewLabelVerdicts.All.Contains(label))
+            throw new ArgumentException($"Nhãn phải là một trong: {string.Join(", ", ReviewLabelVerdicts.All)}.");
+        if (answer is null || !ReviewAnswerVerdicts.All.Contains(answer))
+            throw new ArgumentException($"Câu trả lời phải là một trong: {string.Join(", ", ReviewAnswerVerdicts.All)}.");
+
+        // Nhãn đúng chỉ có nghĩa khi nhãn SLM gán là sai
+        if (correctIntent is not null)
+        {
+            if (label != ReviewLabelVerdicts.Wrong)
+                throw new ArgumentException("Chỉ chọn nhãn đúng khi nhãn SLM gán là sai.");
+            if (!SlmIntentTypes.All.Contains(correctIntent))
+                throw new ArgumentException($"Nhãn đúng phải là một trong: {string.Join(", ", SlmIntentTypes.All)}.");
+        }
+
+        // Nguyên nhân bắt buộc khi câu trả lời sai (để thống kê được vì sao sai) và không có nghĩa trong các trường hợp khác
+        if (answer == ReviewAnswerVerdicts.Wrong)
+        {
+            if (cause is null || !ReviewCauses.All.Contains(cause))
+                throw new ArgumentException($"Chọn nguyên nhân khi câu trả lời sai: {string.Join(", ", ReviewCauses.All)}.");
+        }
+        else if (cause is not null)
+        {
+            throw new ArgumentException("Chỉ chọn nguyên nhân khi câu trả lời sai.");
+        }
+
+        var saved = await repository.UpsertVerdictAsync(batchId, itemId, actorUserId, label, correctIntent, answer, cause, ct);
+        return saved is null ? null : ToDto(saved);
+    }
+
+    private static ReviewVerdictDto ToDto(ReviewVerdict v) =>
+        new(v.LabelVerdict, v.CorrectIntent, v.AnswerVerdict, v.Cause, v.UpdatedAt ?? v.CreatedAt);
+
+    // Không chọn ai thì người tạo đợt tự duyệt (trường hợp thường gặp: một người làm hết). Có chọn thì không quá MaxReviewers người, không trùng.
+    // Mọi người duyệt (kể cả người tạo) phải là Admin đang hoạt động
+    private async Task<IReadOnlyList<Guid>> ValidReviewersAsync(IReadOnlyList<Guid>? requested, Guid actorUserId, CancellationToken ct)
     {
         var ids = (requested ?? []).Where(id => id != Guid.Empty).Distinct().ToList();
-        if (ids.Count == 0 || ids.Count > MaxReviewers)
-            throw new ArgumentException($"Cần chọn từ 1 đến {MaxReviewers} người duyệt.");
+        if (ids.Count == 0)
+            ids = [actorUserId];
+        if (ids.Count > MaxReviewers)
+            throw new ArgumentException($"Tối đa {MaxReviewers} người duyệt.");
 
         var admins = (await repository.FindActiveAdminIdsAsync(ids, ct)).ToHashSet();
         if (ids.Any(id => !admins.Contains(id)))

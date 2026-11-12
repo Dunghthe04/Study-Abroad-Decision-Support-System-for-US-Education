@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using StudyAbroad.Application.Admin.ReviewBatches;
+using StudyAbroad.Application.Audit;
 using StudyAbroad.Domain.Entities;
 using StudyAbroad.Infrastructure.Persistence;
 
@@ -285,6 +286,18 @@ public class ReviewBatchTests
         public Task<IReadOnlyList<Guid>> FindActiveAdminIdsAsync(IReadOnlyCollection<Guid> userIds, CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<Guid>>(userIds.Where(Admins.Contains).ToList());
 
+        // Các thao tác đọc và chấm không thuộc nhóm test tạo đợt; test của chúng có bản giả riêng ở ReviewBatchReviewTests
+        public Task<IReadOnlyList<ReviewBatchListRow>> ListForUserAsync(Guid userId, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+        public Task<ReviewItemsRows?> ListItemsAsync(Guid batchId, Guid reviewerUserId, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+        public Task<ReviewItemDetailRows?> FindItemDetailAsync(Guid batchId, Guid itemId, Guid reviewerUserId, int contextCount, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+        public Task<ReviewVerdict?> UpsertVerdictAsync(
+            Guid batchId, Guid itemId, Guid reviewerUserId, string labelVerdict, string? correctIntent, string answerVerdict, string? cause,
+            CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
         public Task AddAsync(
             ReviewBatch batch, IReadOnlyList<ReviewBatchItem> items, IReadOnlyList<ReviewBatchReviewer> reviewers, AuditLog audit,
             CancellationToken ct = default)
@@ -311,7 +324,13 @@ public class ReviewBatchTests
         string? name = "Đợt 1", int size = 10, DateOnly? from = null, DateOnly? to = null, Guid[]? reviewers = null, string? seed = "abc123") =>
         new(name, size, from, to, reviewers ?? [Admin1], seed);
 
-    private static ReviewBatchService Svc(FakeRepo repo) => new(repo);
+    private sealed class NoAudit : IAuditLogRepository
+    {
+        public Task AddAsync(AuditLog entry, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<string?> GetLatestLockReasonAsync(Guid userId, CancellationToken cancellationToken = default) => Task.FromResult<string?>(null);
+    }
+
+    private static ReviewBatchService Svc(FakeRepo repo) => new(repo, new NoAudit());
 
     [Fact]
     public async Task Create_DrawsTheSample_AndSavesTheBatchItemsReviewersAndAuditTogether()
@@ -479,15 +498,40 @@ public class ReviewBatchTests
         Assert.Equal(0, repo.Saves);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Create_WithoutReviewers_AssignsTheCreator(bool emptyList)
+    {
+        var repo = Repo();
+        var request = new CreateReviewBatchRequest("Đợt 1", 10, null, null, emptyList ? [] : null, "abc123");
+
+        var dto = await Svc(repo).CreateAsync(request, Admin2, null, null);
+
+        Assert.Equal([Admin2], dto.ReviewerIds);
+        Assert.Equal([Admin2], repo.Reviewers.Select(r => r.UserId));
+    }
+
     [Fact]
-    public async Task Create_WithNoReviewers_OrTooMany_Throws()
+    public async Task Create_WithoutReviewers_WhenTheCreatorIsNotAnActiveAdmin_Throws_AndSavesNothing()
+    {
+        var repo = Repo();
+        var request = new CreateReviewBatchRequest("Đợt 1", 10, null, null, null, "abc123");
+
+        await Assert.ThrowsAsync<ArgumentException>(() => Svc(repo).CreateAsync(request, Id(999), null, null));
+
+        Assert.Equal(0, repo.Saves);
+    }
+
+    [Fact]
+    public async Task Create_WithTooManyReviewers_Throws()
     {
         var repo = Repo();
         var tooMany = Enumerable.Range(0, ReviewBatchService.MaxReviewers + 1).Select(n => Id(810 + n)).ToArray();
         repo.Admins.UnionWith(tooMany);
 
-        await Assert.ThrowsAsync<ArgumentException>(() => Svc(repo).CreateAsync(Request(reviewers: []), Admin1, null, null));
         await Assert.ThrowsAsync<ArgumentException>(() => Svc(repo).CreateAsync(Request(reviewers: tooMany), Admin1, null, null));
+
         Assert.Equal(0, repo.Saves);
     }
 
