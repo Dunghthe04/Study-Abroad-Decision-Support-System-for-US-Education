@@ -24,7 +24,7 @@ import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ConsultationBookingModal } from "./ConsultationBookingModal";
+import { ContactRequestDialog } from "./ContactRequestDialog";
 import { cn } from "cn";
 
 interface StudyCenterDetailViewProps {
@@ -97,7 +97,8 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
 
             {/* CTA Buttons */}
             <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto shrink-0 pb-1">
-              <ConsultationBookingModal centerName={center.name} />
+              {/* [UC-42] Gửi yêu cầu liên hệ thật (thay form đặt lịch giả ConsultationBookingModal) */}
+              <ContactRequestDialog centerId={center.id} centerName={center.name} isVerified={isVerified} />
             </div>
           </div>
 
