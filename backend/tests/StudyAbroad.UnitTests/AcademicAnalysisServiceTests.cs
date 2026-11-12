@@ -1,4 +1,4 @@
-using StudyAbroad.Application.Profile.Academic;
+﻿using StudyAbroad.Application.Profile.Academic;
 using StudyAbroad.Application.Profile.Flow;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
@@ -179,14 +179,14 @@ public class AcademicAnalysisServiceTests
         // 1. Tạo bảng điểm cho học sinh
         var request = new BatchTranscriptScoresRequest(new List<UpsertTranscriptScoreItem>
         {
-            new(null, "Lớp 10 HK1", 1, "Toán", 9.0m, 2m),       // GPA 4.0, STEM
-            new(null, "Lớp 10 HK1", 1, "Vật lý", 8.5m, 2m),     // GPA 3.7, STEM
-            new(null, "Lớp 10 HK1", 1, "Ngữ văn", 8.0m, 2m),    // GPA 3.5, Xã hội
-            new(null, "Lớp 10 HK1", 1, "Tiếng Anh", 9.5m, 3m),  // GPA 4.0, Ngoại ngữ
-            new(null, "Lớp 10 HK2", 2, "Toán", 9.5m, 2m),       // GPA 4.0, STEM
-            new(null, "Lớp 10 HK2", 2, "Vật lý", 9.0m, 2m),     // GPA 4.0, STEM
-            new(null, "Lớp 10 HK2", 2, "Ngữ văn", 8.5m, 2m),    // GPA 3.7, Xã hội
-            new(null, "Lớp 10 HK2", 2, "Tiếng Anh", 9.0m, 3m),  // GPA 4.0, Ngoại ngữ
+            new(null, "Lớp 10 HK1", 1, "Toán", 9.0m, 2m),       // STEM
+            new(null, "Lớp 10 HK1", 1, "Vật lý", 8.5m, 2m),     // STEM
+            new(null, "Lớp 10 HK1", 1, "Ngữ văn", 8.0m, 2m),    // Xã hội
+            new(null, "Lớp 10 HK1", 1, "Tiếng Anh", 9.5m, 3m),  // Ngoại ngữ
+            new(null, "Lớp 10 HK2", 2, "Toán", 9.5m, 2m),       // STEM
+            new(null, "Lớp 10 HK2", 2, "Vật lý", 9.0m, 2m),     // STEM
+            new(null, "Lớp 10 HK2", 2, "Ngữ văn", 8.5m, 2m),    // Xã hội
+            new(null, "Lớp 10 HK2", 2, "Tiếng Anh", 9.0m, 3m),  // Ngoại ngữ
         });
 
         await _service.SaveScoresAsync(_testUserId, request);
@@ -196,7 +196,7 @@ public class AcademicAnalysisServiceTests
 
         // 3. Kiểm chứng
         Assert.NotNull(result);
-        Assert.True(result.UnweightedGpa >= 3.5m && result.UnweightedGpa <= 4.0m);
+        Assert.Equal(3.72m, result.UnweightedGpa); // TB hệ 10 là 8.875 → 3.71875 → 3.72
         Assert.True(result.WeightedGpa >= result.UnweightedGpa);
         Assert.Equal(8, result.TotalSubjects);
         Assert.Equal(2, result.TotalTerms);
@@ -207,6 +207,47 @@ public class AcademicAnalysisServiceTests
         var latest = await _service.GetLatestAnalysisAsync(_testUserId);
         Assert.NotNull(latest);
         Assert.Equal(result.UnweightedGpa, latest.UnweightedGpa);
+    }
+
+    // Toán 7.0, Tiếng Anh 10: TB hệ 10 là 8.5 → 3.625 → 3.63. Đổi từng môn rồi lấy TB (3.0 và 4.0) sẽ ra 3.50, sai
+    [Fact]
+    public async Task AnalyzeAcademicProfileAsync_ConvertsAverageOnce_NotEachSubject()
+    {
+        await _service.SaveScoresAsync(_testUserId, new BatchTranscriptScoresRequest(new List<UpsertTranscriptScoreItem>
+        {
+            new(null, "Lớp 10 HK1", 1, "Toán", 7.0m, null),
+            new(null, "Lớp 10 HK1", 1, "Tiếng Anh", 10m, null),
+        }));
+
+        var result = await _service.AnalyzeAcademicProfileAsync(_testUserId);
+
+        Assert.Equal(8.5m, result.RawAverage);
+        Assert.Equal(3.63m, result.UnweightedGpa);
+        Assert.Equal(3.63m, Assert.Single(result.TermAverages).Gpa4);
+        var profile = await _repository.GetProfileByUserIdAsync(_testUserId);
+        Assert.Equal(3.63m, profile!.OverallGpa); // overall_gpa trong hồ sơ cũng là số đổi một lần
+    }
+
+    // Nhóm môn và học kỳ cũng lấy TB hệ 10 của nhóm/kỳ rồi đổi một lần
+    [Fact]
+    public async Task AnalyzeAcademicProfileAsync_GroupsAndTerms_ConvertAverageOnce()
+    {
+        await _service.SaveScoresAsync(_testUserId, new BatchTranscriptScoresRequest(new List<UpsertTranscriptScoreItem>
+        {
+            new(null, "Lớp 10 HK1", 1, "Toán", 7.0m, null),     // STEM
+            new(null, "Lớp 10 HK1", 1, "Vật lý", 10m, null),    // STEM
+            new(null, "Lớp 10 HK2", 2, "Ngữ văn", 6.0m, null),  // Xã hội
+            new(null, "Lớp 10 HK2", 2, "Lịch sử", 8.0m, null),  // Xã hội
+        }));
+
+        var result = await _service.AnalyzeAcademicProfileAsync(_testUserId);
+
+        var stem = result.SubjectGroups.Single(g => g.GroupKey == AcademicConstants.GroupNaturalSciences);
+        var social = result.SubjectGroups.Single(g => g.GroupKey == AcademicConstants.GroupSocialSciences);
+        Assert.Equal(3.63m, stem.Gpa4);   // TB 8.5 → 3.625
+        Assert.Equal(3.00m, social.Gpa4); // TB 7.0 → 3.00 (đổi từng môn: 2.5 và 3.5 → 3.00, trùng vì đoạn này thẳng)
+        Assert.Equal([3.63m, 3.00m], result.TermAverages.OrderBy(t => t.TermOrder).Select(t => t.Gpa4));
+        Assert.Equal(3.38m, result.UnweightedGpa); // TB 7.75 → 3.375 → 3.38
     }
 
     [Fact]

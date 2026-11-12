@@ -152,7 +152,7 @@ public class AcademicAnalysisService : IAcademicAnalysisService
 
         var scaleConfig = await GetGradeScaleConfigAsync(ct);
 
-        // 1. Quy đổi điểm từng môn sang thang 4.0
+        // 1. Quy đổi điểm từng môn sang thang 4.0 (chỉ dùng cho GPA weighted, chưa đổi theo kế hoạch GPA weighted mục 5)
         var scoreDetails = scores.Select(s => new
         {
             Score = s,
@@ -160,9 +160,9 @@ public class AcademicAnalysisService : IAcademicAnalysisService
             GroupKey = ClassifySubjectGroup(s.Subject)
         }).ToList();
 
-        // 2. Tính điểm trung bình hệ 10 và Unweighted GPA 4.0
+        // 2. Tính điểm trung bình hệ 10 và Unweighted GPA 4.0: lấy TB hệ 10 rồi đổi một lần (kế hoạch GPA weighted, mục 4)
         var rawAverage = Math.Round(scores.Average(s => s.Score), 2);
-        var unweightedGpa = Math.Round(scoreDetails.Average(s => s.Gpa4), 2);
+        var unweightedGpa = AverageToGpa4(scores.Select(s => s.Score), scaleConfig);
 
         // 3. Tính Weighted GPA
         // Nếu có credits thì tính theo tín chỉ, nếu không có credits thì thưởng 0.5 điểm cho môn chuyên/nâng cao
@@ -199,7 +199,7 @@ public class AcademicAnalysisService : IAcademicAnalysisService
                 var gKey = g.Key;
                 var gName = GetSubjectGroupName(gKey);
                 var avgRaw = Math.Round(g.Average(x => x.Score.Score), 2);
-                var avgGpa = Math.Round(g.Average(x => x.Gpa4), 2);
+                var avgGpa = AverageToGpa4(g.Select(x => x.Score.Score), scaleConfig);
                 var distinctSubjects = g.Select(x => x.Score.Subject).Distinct().OrderBy(x => x).ToList();
                 return new SubjectGroupScoreDto(gKey, gName, avgRaw, avgGpa, g.Count(), distinctSubjects);
             })
@@ -214,7 +214,7 @@ public class AcademicAnalysisService : IAcademicAnalysisService
                 TermOrder: g.Key.TermOrder,
                 TermName: g.Key.TermName,
                 RawAverage: Math.Round(g.Average(x => x.Score.Score), 2),
-                Gpa4: Math.Round(g.Average(x => x.Gpa4), 2),
+                Gpa4: AverageToGpa4(g.Select(x => x.Score.Score), scaleConfig),
                 SubjectCount: g.Count()
             ))
             .ToList();
@@ -334,6 +334,13 @@ public class AcademicAnalysisService : IAcademicAnalysisService
 
         return GradeScale.Interpolate(rawScore, config);
     }
+
+    /// <summary>
+    /// GPA thang 4 của một nhóm điểm hệ 10 (cả bảng điểm, một nhóm môn, một học kỳ): lấy TB hệ 10 chưa làm tròn rồi đổi
+    /// một lần, không đổi từng môn rồi mới lấy TB (kế hoạch GPA weighted, mục 4). Ví dụ 7.0 và 10 → TB 8.5 → 3.63, không phải 3.50
+    /// </summary>
+    public static decimal AverageToGpa4(IEnumerable<decimal> scores10, GradeScaleConfigDto config) =>
+        Math.Round(ConvertScoreToGpa4(scores10.Average(), config), 2, MidpointRounding.AwayFromZero);
 
     /// <summary>
     /// [USAS-365] Bảng quy đổi mặc định: mốc VEF (Vietnam Education Foundation, cơ quan liên bang Hoa Kỳ), lấy cận dưới mỗi
