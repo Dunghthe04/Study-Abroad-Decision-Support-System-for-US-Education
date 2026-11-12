@@ -598,13 +598,14 @@ export function AdminUsersView() {
         id: "actions",
         label: "Thao tác",
         required: true,
-        cellClassName: "whitespace-nowrap",
+        headerClassName: "w-px whitespace-nowrap text-right",
+        cellClassName: "w-px text-right whitespace-nowrap",
         render: (u) => {
           const canLock = canAdminLock(u, currentUser?.role, currentUser?.id);
           const canUnlock = canAdminUnlock(u, currentUser?.role);
           return (
             <div
-              className="inline-flex items-center gap-1"
+              className="inline-flex items-center justify-end gap-1"
               onClick={(e) => e.stopPropagation()}
             >
               <Button
@@ -617,7 +618,7 @@ export function AdminUsersView() {
                 <EyeIcon className="size-3.5" />
                 Chi tiết
               </Button>
-              <div className="w-[88px] shrink-0 flex items-center justify-center">
+              <div className="w-[88px] shrink-0 flex items-center justify-end">
                 {canUnlock ? (
                   <Button
                     type="button"
