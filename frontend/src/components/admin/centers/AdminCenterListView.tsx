@@ -382,12 +382,13 @@ export function AdminCenterListView() {
         id: "actions",
         label: "Thao tác",
         required: true,
-        cellClassName: "whitespace-nowrap",
+        headerClassName: "w-px whitespace-nowrap text-right",
+        cellClassName: "w-px text-right whitespace-nowrap",
         render: (c) => {
           const isVerified = c.verificationStatus === "verified";
           return (
             <div
-              className="inline-flex items-center gap-1"
+              className="inline-flex items-center justify-end gap-1"
               onClick={(e) => e.stopPropagation()}
             >
               <EditCenterButton
