@@ -2,7 +2,7 @@
 
 Phạm vi: **Optional**, không nằm trong sprint nào · Mã UC: **chưa rõ** · Người làm: **chưa giao** · Actor: Student (từ 16 tuổi); Parent
 
-> Ngày 12/11 Việt đã duyệt các đề xuất câu 2–10. Câu 1 (mã UC, người làm) chờ nhóm. Việt cho phép sửa file lead của Đức cho UC này. Đã xong phần 1 (lỗi lead đã hoàn tất: `lead_closed`, 400) và phần 2 (lỗi trả `{ code, message }`: `not_found` 404, `invalid_content` 400; đã thử bằng curl trên API 5080) và phần 3 (kiểu tin nhắn import lại từ `types/api.ts` của Đức vì đã khớp backend; `types/lead.ts` chỉ thêm 3 mã lỗi) và phần 4 (`SentLeadMessagesDialog` mở từ nút "Tin nhắn" trên thẻ UC-44; tsc, eslint sạch; chưa mở được khung trên trình duyệt vì tài khoản đang đăng nhập chưa có yêu cầu nào — để phần 5 kiểm tra bằng tài khoản test).
+> Ngày 12/11 Việt đã duyệt các đề xuất câu 2–10. Câu 1 (mã UC, người làm) chờ nhóm. Việt cho phép sửa file lead của Đức cho UC này. Đã xong phần 1 (lỗi lead đã hoàn tất: `lead_closed`, 400) và phần 2 (lỗi trả `{ code, message }`: `not_found` 404, `invalid_content` 400; đã thử bằng curl trên API 5080) và phần 3 (kiểu tin nhắn import lại từ `types/api.ts` của Đức vì đã khớp backend; `types/lead.ts` chỉ thêm 3 mã lỗi) và phần 4 (`SentLeadMessagesDialog` mở từ nút "Tin nhắn" trên thẻ UC-44; tsc, eslint sạch) và phần 5 (kiểm tra tay ngày 12/11, kết quả ở cuối file).
 
 ## Mục tiêu
 
@@ -91,3 +91,18 @@ Phần 1 và 2 sửa file của Đức (`LeadService`, `ILeadService`, `LeadsCon
 ## Ước tính
 
 Khoảng 5–6 giờ: service và test 2 giờ, controller và test 1 giờ, frontend 2–3 giờ, kiểm tra tay 0.5 giờ.
+
+## Kết quả kiểm tra tay (phần 5, ngày 12/11)
+
+Frontend localhost:3000, API 5080, tài khoản test UC-42.
+
+| # | Bước | Kết quả |
+|---|---|---|
+| 1 | s18 mở "Tin nhắn" lead Demo Center Hà Nội | Đạt. Thấy tin trung tâm (bên trái) và tin của mình hiện "Bạn" (bên phải); tin có SĐT có nhãn "Đã gắn cờ: Chứa số điện thoại liên hệ" |
+| 2 | s18 gõ tin có link | Đạt. Hiện cảnh báo vàng trước khi gửi (không gửi tin này) |
+| 3 | s18 gửi tin thường bằng Ctrl+Enter | Đạt. Tin thêm vào cuối khung, ô nhập được xóa |
+| 4 | Trung tâm đọc luồng tin (curl `/leads/received/{id}/messages`) | Đạt. Thấy tin mới của s18, tin có SĐT `isFlagged = true` |
+| 5 | Phụ huynh mở và gửi tin trong lead gửi thay s15 | Đạt. Gửi được; thẻ vẫn "Mới gửi", "Trung tâm chưa nhắn tin" (câu 2) |
+| 6 | s15 mở tab "Yêu cầu liên hệ đã gửi" | Đạt. Hiện thông báo dưới 16 tuổi, không có nút "Tin nhắn" |
+| 7 | s16 mở lead của s18 | Đạt (curl ở phần 2): 404 |
+| 8 | Lead `closed` | Chưa thử tay: DB chưa có lead đã hoàn tất. Đã có unit test |
