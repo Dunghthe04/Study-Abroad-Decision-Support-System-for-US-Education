@@ -62,16 +62,16 @@ export function AdminCenterDetailPanel({ center, onClose }: AdminCenterDetailPan
         </div>
 
         {/* Verification Status & Quick Actions */}
-        <div className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-lg border bg-muted/40">
+        <div className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-lg border border-line bg-ground">
           <div className="space-y-0.5">
-            <div className="text-xs text-muted-foreground font-medium">Trạng thái xác thực</div>
+            <div className="text-xs text-ink-3 font-medium">Trạng thái xác thực</div>
             {isVerified ? (
-              <Badge className="bg-emerald-600 text-white gap-1 text-xs">
+              <Badge variant="ok" className="gap-1 text-xs">
                 <CheckCircle2Icon className="w-3 h-3" />
-                Đã xác minh Sở GD&ĐT
+                Đã xác minh Sở GD&amp;ĐT
               </Badge>
             ) : (
-              <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-950/40 text-xs">
+              <Badge variant="warn" className="text-xs">
                 Chờ kiểm duyệt hồ sơ
               </Badge>
             )}
@@ -90,52 +90,52 @@ export function AdminCenterDetailPanel({ center, onClose }: AdminCenterDetailPan
 
         {/* Quick KPI stats */}
         <div className="grid grid-cols-2 gap-2 text-xs">
-          <div className="p-2.5 rounded-lg border bg-card space-y-1">
-            <div className="text-muted-foreground flex items-center gap-1">
-              <FlameIcon className="w-3.5 h-3.5 text-emerald-600" />
+          <div className="p-2.5 rounded-lg border border-line bg-surface space-y-1">
+            <div className="text-ink-2 flex items-center gap-1">
+              <FlameIcon className="w-3.5 h-3.5 text-ok" />
               Tỷ lệ Visa
             </div>
-            <div className="font-bold text-foreground text-sm">{profile.visaSuccessRate}%</div>
+            <div className="font-bold text-ink text-sm tabular-nums">{profile.visaSuccessRate}%</div>
           </div>
 
-          <div className="p-2.5 rounded-lg border bg-card space-y-1">
-            <div className="text-muted-foreground flex items-center gap-1">
-              <AwardIcon className="w-3.5 h-3.5 text-amber-600" />
+          <div className="p-2.5 rounded-lg border border-line bg-surface space-y-1">
+            <div className="text-ink-2 flex items-center gap-1">
+              <AwardIcon className="w-3.5 h-3.5 text-gold" />
               Tổng học bổng
             </div>
-            <div className="font-bold text-foreground text-sm truncate" title={profile.totalScholarshipsWon}>
+            <div className="font-bold text-ink text-sm truncate" title={profile.totalScholarshipsWon}>
               {profile.totalScholarshipsWon.split("(")[0].trim()}
             </div>
           </div>
 
-          <div className="p-2.5 rounded-lg border bg-card space-y-1">
-            <div className="text-muted-foreground flex items-center gap-1">
-              <UsersIcon className="w-3.5 h-3.5 text-blue-600" />
+          <div className="p-2.5 rounded-lg border border-line bg-surface space-y-1">
+            <div className="text-ink-2 flex items-center gap-1">
+              <UsersIcon className="w-3.5 h-3.5 text-brand" />
               Nhân sự
             </div>
-            <div className="font-bold text-foreground text-sm">{profile.staffCount} chuyên viên</div>
+            <div className="font-bold text-ink text-sm tabular-nums">{profile.staffCount} chuyên viên</div>
           </div>
 
-          <div className="p-2.5 rounded-lg border bg-card space-y-1">
-            <div className="text-muted-foreground flex items-center gap-1">
-              <ShieldCheckIcon className="w-3.5 h-3.5 text-purple-600" />
+          <div className="p-2.5 rounded-lg border border-line bg-surface space-y-1">
+            <div className="text-ink-2 flex items-center gap-1">
+              <ShieldCheckIcon className="w-3.5 h-3.5 text-reach" />
               Pháp lý
             </div>
-            <div className="font-bold text-foreground text-sm truncate" title={profile.licenseNumber}>
+            <div className="font-bold text-ink text-sm truncate" title={profile.licenseNumber}>
               {profile.licenseNumber}
             </div>
             {profile.taxCode && (
-              <div className="text-xs text-muted-foreground mt-0.5 font-mono truncate">
+              <div className="text-xs text-ink-3 mt-0.5 font-mono truncate">
                 MST: {profile.taxCode}
               </div>
             )}
             {profile.legalRepresentative && (
-              <div className="text-xs text-muted-foreground mt-0.5 truncate">
+              <div className="text-xs text-ink-3 mt-0.5 truncate">
                 Đại diện: {profile.legalRepresentative}
               </div>
             )}
             {profile.trainingLicenseNumber && (
-              <div className="text-xs text-muted-foreground mt-0.5 font-mono truncate">
+              <div className="text-xs text-ink-3 mt-0.5 font-mono truncate">
                 GP đào tạo: {profile.trainingLicenseNumber}
               </div>
             )}
@@ -144,20 +144,20 @@ export function AdminCenterDetailPanel({ center, onClose }: AdminCenterDetailPan
 
         {/* Contact details */}
         <div className="space-y-2 text-xs">
-          <div className="font-semibold text-foreground text-xs text-muted-foreground">
-            Thông tin liên hệ & Địa điểm
+          <div className="font-semibold text-xs text-ink-2">
+            Thông tin liên hệ &amp; Địa điểm
           </div>
-          <div className="space-y-1.5 p-3 rounded-lg border bg-card text-muted-foreground">
-            <div className="flex items-start gap-2 text-foreground">
+          <div className="space-y-1.5 p-3 rounded-lg border border-line bg-surface text-ink-2">
+            <div className="flex items-start gap-2 text-ink">
               <MapPinIcon className="w-3.5 h-3.5 text-brand shrink-0 mt-0.5" />
               <span>{center.address ?? "Chưa cập nhật địa chỉ"}</span>
             </div>
-            <div className="pl-5.5 text-xs text-muted-foreground">
+            <div className="pl-5.5 text-xs text-ink-3">
               Khu vực: {center.district ? `${center.district}, ${center.city ?? "Việt Nam"}` : (center.city ?? "Toàn quốc")}
             </div>
 
-            <div className="flex items-center gap-2 pt-1 border-t text-xs">
-              <ClockIcon className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+            <div className="flex items-center gap-2 pt-1 border-t border-line text-xs">
+              <ClockIcon className="w-3.5 h-3.5 text-gold shrink-0" />
               <span>{profile.operatingHours}</span>
             </div>
           </div>

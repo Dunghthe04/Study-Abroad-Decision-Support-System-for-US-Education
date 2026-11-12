@@ -180,12 +180,12 @@ export function AdminCenterListView() {
   const getTypeBadge = (type?: string) => {
     switch (type) {
       case "hybrid":
-        return <Badge variant="secondary" className="bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 border-purple-200">Toàn diện (Du học & Luyện thi)</Badge>;
+        return <Badge variant="reach">Toàn diện (Du học &amp; Luyện thi)</Badge>;
       case "english_training":
       case "test_prep":
-        return <Badge variant="secondary" className="bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border-amber-200">Luyện thi Chứng chỉ</Badge>;
+        return <Badge variant="warn">Luyện thi Chứng chỉ</Badge>;
       default:
-        return <Badge variant="secondary" className="bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border-blue-200">Tư vấn Du học</Badge>;
+        return <Badge variant="brand">Tư vấn Du học</Badge>;
     }
   };
 
@@ -194,10 +194,10 @@ export function AdminCenterListView() {
       {/* Header bar */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
+          <h1 className="text-h1 text-ink">
             Trung tâm tư vấn
           </h1>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-body-s text-ink-2">
             Danh sách đơn vị tư vấn du học, hồ sơ pháp lý và kiểm duyệt
           </p>
         </div>
@@ -366,7 +366,7 @@ export function AdminCenterListView() {
                         </div>
                         {c.licenseNumber && (
                           <div className="text-muted-foreground flex items-center gap-1 truncate max-w-[200px]">
-                            <ShieldCheckIcon className="w-3 h-3 text-purple-600 shrink-0" />
+                            <ShieldCheckIcon className="w-3 h-3 text-reach shrink-0" />
                             {c.licenseNumber}
                           </div>
                         )}
@@ -384,11 +384,11 @@ export function AdminCenterListView() {
 
                       {/* Visa Rate & Rating */}
                       <td className="py-3.5 px-4 text-xs space-y-1">
-                        <div className="flex items-center gap-1 text-emerald-600 font-semibold">
+                        <div className="flex items-center gap-1 text-ok font-semibold tabular-nums">
                           <FlameIcon className="w-3.5 h-3.5" />
                           <span>Đỗ Visa: {c.visaSuccessRate ? `${c.visaSuccessRate}%` : "98.5%"}</span>
                         </div>
-                        <div className="flex items-center gap-1 text-amber-500 font-medium">
+                        <div className="flex items-center gap-1 text-gold font-medium tabular-nums">
                           <StarIcon className="w-3 h-3 fill-current" />
                           <span>{Number(c.averageRating ?? 4.9).toFixed(1)}</span>
                           <span className="text-muted-foreground">({c.reviewCount ?? 0} đánh giá)</span>
@@ -400,7 +400,7 @@ export function AdminCenterListView() {
                         <div className="flex flex-col gap-1 items-start">
                           {isVerified ? (
                             <div className="flex flex-col gap-0.5 items-start">
-                              <Badge className="bg-emerald-600 text-white gap-1 text-xs px-2 py-0.5">
+                              <Badge variant="ok" className="gap-1 text-xs px-2 py-0.5">
                                 <CheckCircle2Icon className="w-3 h-3" />
                                 Đã xác minh
                               </Badge>
@@ -411,12 +411,12 @@ export function AdminCenterListView() {
                               )}
                             </div>
                           ) : (
-                            <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-950/40 text-xs px-2 py-0.5">
+                            <Badge variant="warn" className="text-xs px-2 py-0.5">
                               Chờ duyệt
                             </Badge>
                           )}
                           {c.isActive === false && (
-                            <Badge variant="outline" className="text-rose-600 border-rose-300 bg-rose-50 dark:bg-rose-950/40 text-xs px-1.5 py-0">
+                            <Badge variant="risk" className="text-xs px-1.5 py-0">
                               Đã ẩn
                             </Badge>
                           )}
@@ -449,7 +449,7 @@ export function AdminCenterListView() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="gap-1 text-xs h-8 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 px-2"
+                              className="gap-1 text-xs h-8 text-ok hover:text-ok hover:bg-ok-wash px-2"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setConfirmTarget({ center: c, action: "show" });
@@ -463,7 +463,7 @@ export function AdminCenterListView() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="gap-1 text-xs h-8 text-muted-foreground hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 px-2"
+                              className="gap-1 text-xs h-8 text-ink-2 hover:text-risk hover:bg-risk-wash px-2"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setConfirmTarget({ center: c, action: "hide" });
@@ -480,7 +480,7 @@ export function AdminCenterListView() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="gap-1 text-xs h-8 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 px-2"
+                              className="gap-1 text-xs h-8 text-risk hover:text-risk hover:bg-risk-wash px-2"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setConfirmTarget({ center: c, action: "unverify" });
@@ -494,7 +494,7 @@ export function AdminCenterListView() {
                             <Button
                               variant="outline"
                               size="sm"
-                              className="gap-1 text-xs h-8 text-emerald-600 border-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 px-2"
+                              className="gap-1 text-xs h-8 text-ok border-ok/30 hover:bg-ok-wash px-2"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setConfirmTarget({ center: c, action: "verify" });

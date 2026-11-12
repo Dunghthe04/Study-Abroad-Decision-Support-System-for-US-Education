@@ -141,11 +141,11 @@ function removeLockReasonCache(userId: string): void {
   }
 }
 
-function statusBadgeVariant(status: string): "default" | "secondary" | "destructive" | "outline" {
-  if (status === "active") return "default";
-  if (status === "unverified" || status === "pending") return "secondary";
-  if (status === "locked" || status === "temp_locked") return "destructive";
-  return "outline";
+function statusBadgeVariant(status: string): "ok" | "warn" | "risk" | "neutral" {
+  if (status === "active") return "ok";
+  if (status === "unverified" || status === "pending") return "warn";
+  if (status === "locked" || status === "temp_locked") return "risk";
+  return "neutral";
 }
 
 function formatStatusLabel(status: string): string {
@@ -475,10 +475,10 @@ export function AdminUsersView() {
       {/* Header bar */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
+          <h1 className="text-h1 text-ink">
             Quản trị người dùng
           </h1>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-body-s text-ink-2">
             Quản lý danh sách tài khoản, trạng thái hoạt động và phân quyền đặc thù
           </p>
         </div>
@@ -498,7 +498,7 @@ export function AdminUsersView() {
             type="button"
             size="sm"
             onClick={handleOpenCreateModal}
-            className="gap-1.5 bg-brand text-white hover:bg-brand/90"
+            className="gap-1.5"
           >
             <UserPlusIcon className="size-4" />
             {isModerator ? "Cấp tài khoản trung tâm" : "Cấp tài khoản mới"}
@@ -508,50 +508,50 @@ export function AdminUsersView() {
 
       {/* KPI Cards */}
       <div className="grid gap-3 grid-cols-2 sm:grid-cols-4">
-        <Card className="border border-border/70 ">
+        <Card className="border-line">
           <CardContent className="flex items-center gap-3 p-4">
-            <div className="rounded-lg bg-brand/10 p-2 text-brand">
+            <div className="rounded-lg bg-brand-wash p-2 text-brand-ink">
               <UsersIcon className="size-5" />
             </div>
             <div>
-              <p className="text-xs font-medium text-muted-foreground">Tổng tài khoản</p>
-              <p className="text-xl font-bold text-foreground">{totalCount}</p>
+              <p className="text-xs font-medium text-ink-2">Tổng tài khoản</p>
+              <p className="font-heading text-xl font-bold text-ink tabular-nums">{totalCount}</p>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="border border-border/70 ">
+        <Card className="border-line">
           <CardContent className="flex items-center gap-3 p-4">
-            <div className="rounded-lg bg-emerald-500/10 p-2 text-emerald-600">
+            <div className="rounded-lg bg-ok-wash p-2 text-ok">
               <CheckCircle2Icon className="size-5" />
             </div>
             <div>
-              <p className="text-xs font-medium text-muted-foreground">Trang này hoạt động</p>
-              <p className="text-xl font-bold text-foreground">{activeCount}</p>
+              <p className="text-xs font-medium text-ink-2">Trang này hoạt động</p>
+              <p className="font-heading text-xl font-bold text-ink tabular-nums">{activeCount}</p>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="border border-border/70 ">
+        <Card className="border-line">
           <CardContent className="flex items-center gap-3 p-4">
-            <div className="rounded-lg bg-rose-500/10 p-2 text-rose-600">
+            <div className="rounded-lg bg-risk-wash p-2 text-risk">
               <ShieldAlertIcon className="size-5" />
             </div>
             <div>
-              <p className="text-xs font-medium text-muted-foreground">Bị khóa / Tạm khóa</p>
-              <p className="text-xl font-bold text-foreground">{lockedCount}</p>
+              <p className="text-xs font-medium text-ink-2">Bị khóa / Tạm khóa</p>
+              <p className="font-heading text-xl font-bold text-ink tabular-nums">{lockedCount}</p>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="border border-border/70 ">
+        <Card className="border-line">
           <CardContent className="flex items-center gap-3 p-4">
-            <div className="rounded-lg bg-amber-500/10 p-2 text-amber-600">
+            <div className="rounded-lg bg-warn-wash p-2 text-warn">
               <ClockIcon className="size-5" />
             </div>
             <div>
-              <p className="text-xs font-medium text-muted-foreground">Chờ xác thực</p>
-              <p className="text-xl font-bold text-foreground">{pendingCount}</p>
+              <p className="text-xs font-medium text-ink-2">Chờ xác thực</p>
+              <p className="font-heading text-xl font-bold text-ink tabular-nums">{pendingCount}</p>
             </div>
           </CardContent>
         </Card>
@@ -744,7 +744,7 @@ export function AdminUsersView() {
                                     type="button"
                                     variant="outline"
                                     size="sm"
-                                    className="h-8 w-full gap-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950 border-emerald-200"
+                                    className="h-8 w-full gap-1 text-ok hover:text-ok hover:bg-ok-wash border-ok/30"
                                     onClick={() => openUnlockDialog(u)}
                                   >
                                     <KeyRoundIcon className="size-3.5" aria-hidden />
@@ -755,7 +755,7 @@ export function AdminUsersView() {
                                     type="button"
                                     variant="outline"
                                     size="sm"
-                                    className="h-8 w-full gap-1 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950 border-rose-200"
+                                    className="h-8 w-full gap-1 text-risk hover:text-risk hover:bg-risk-wash border-risk/30"
                                     onClick={() => openLockDialog(u)}
                                   >
                                     <BanIcon className="size-3.5" aria-hidden />
@@ -1022,7 +1022,7 @@ export function AdminUsersView() {
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="gap-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                      className="gap-1 text-ok hover:text-ok hover:bg-ok-wash border-ok/30"
                       onClick={() => {
                         const t = detailTarget;
                         openUnlockDialog(t);
@@ -1036,7 +1036,7 @@ export function AdminUsersView() {
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="gap-1 text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+                      className="gap-1 text-risk hover:text-risk hover:bg-risk-wash border-risk/30"
                       onClick={() => {
                         const t = detailTarget;
                         openLockDialog(t);
@@ -1061,7 +1061,7 @@ export function AdminUsersView() {
       <Dialog open={lockTarget !== null} onOpenChange={(open) => !open && closeLockDialog()}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-rose-600">
+            <DialogTitle className="flex items-center gap-2 text-risk">
               <BanIcon className="size-5" />
               Khóa tài khoản người dùng
             </DialogTitle>
@@ -1112,7 +1112,7 @@ export function AdminUsersView() {
       <Dialog open={unlockTarget !== null} onOpenChange={(open) => !open && closeUnlockDialog()}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-emerald-600">
+            <DialogTitle className="flex items-center gap-2 text-ok">
               <KeyRoundIcon className="size-5" />
               Mở khóa tài khoản
             </DialogTitle>
@@ -1147,7 +1147,7 @@ export function AdminUsersView() {
             </Button>
             <Button
               type="button"
-              className="bg-emerald-600 text-white hover:bg-emerald-700 gap-1.5"
+              className="bg-ok text-white hover:bg-ok/90 gap-1.5"
               onClick={() => void handleConfirmUnlock()}
               disabled={unlockSubmitting}
             >
