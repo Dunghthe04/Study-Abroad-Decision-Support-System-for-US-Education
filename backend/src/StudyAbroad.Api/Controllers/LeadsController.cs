@@ -109,6 +109,66 @@ public class LeadsController(ILeadService leadService) : ControllerBase
         }
     }
 
+    /// <summary>
+    /// [Nhắn tin phía người gửi] Đọc tin nhắn trong một yêu cầu liên hệ đã gửi.
+    /// Quyền xem giống UC-44. Lead không có quyền trả 404 (chống IDOR). Học sinh dưới 16 tuổi trả 403 <c>age_restricted</c>.
+    /// </summary>
+    [HttpGet("sent/{id:guid}/messages")]
+    [Authorize(Roles = $"{UserRoles.Student},{UserRoles.Parent}")]
+    [ProducesResponseType(typeof(LeadMessagesThreadDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public Task<IActionResult> GetSentLeadMessages(Guid id, CancellationToken ct) =>
+        ExecuteSentLeadActionAsync(async userId =>
+            Ok(await leadService.GetSentLeadMessagesAsync(userId, id, ct)));
+
+    /// <summary>
+    /// [Nhắn tin phía người gửi] Học sinh / phụ huynh gửi tin trong yêu cầu liên hệ đã gửi.
+    /// Tin có số điện thoại hoặc link ngoài vẫn lưu nhưng bị gắn cờ. Lead đã hoàn tất trả 400 <c>lead_closed</c>.
+    /// </summary>
+    [HttpPost("sent/{id:guid}/messages")]
+    [Authorize(Roles = $"{UserRoles.Student},{UserRoles.Parent}")]
+    [ProducesResponseType(typeof(SendLeadMessageResultDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public Task<IActionResult> SendSentLeadMessage(
+        Guid id,
+        [FromBody] SendLeadMessageRequest request,
+        CancellationToken ct) =>
+        ExecuteSentLeadActionAsync(async userId =>
+        {
+            var result = await leadService.SendSentLeadMessageAsync(userId, id, request?.Content ?? string.Empty, ct);
+            return CreatedAtAction(nameof(GetSentLeadMessages), new { id }, result);
+        });
+
+    // Lỗi trả { code, message } giống GET /leads/sent để frontend đọc một kiểu
+    private async Task<IActionResult> ExecuteSentLeadActionAsync(Func<Guid, Task<IActionResult>> action)
+    {
+        var userId = User.GetUserId();
+        if (userId is null)
+            return Unauthorized(new { message = "Vui lòng đăng nhập." });
+
+        try
+        {
+            return await action(userId.Value);
+        }
+        catch (LeadRuleException ex)
+        {
+            return StatusCode(ex.Status, new { code = ex.Code, message = ex.Message });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { code = "not_found", message = ex.Message });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { code = "invalid_content", message = ex.Message });
+        }
+    }
+
     private async Task<IActionResult> ExecuteCenterLeadActionAsync(
         Func<Guid, string?, string, Task<IActionResult>> action)
     {

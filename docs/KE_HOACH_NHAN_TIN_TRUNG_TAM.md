@@ -2,7 +2,7 @@
 
 Phạm vi: **Optional**, không nằm trong sprint nào · Mã UC: **chưa rõ** · Người làm: **chưa giao** · Actor: Student (từ 16 tuổi); Parent
 
-> Ngày 12/11 Việt đã duyệt các đề xuất câu 2–10. Câu 1 (mã UC, người làm) chờ nhóm. Việt cho phép sửa file lead của Đức cho UC này. Đã xong phần 1 (lỗi lead đã hoàn tất: `lead_closed`, 400).
+> Ngày 12/11 Việt đã duyệt các đề xuất câu 2–10. Câu 1 (mã UC, người làm) chờ nhóm. Việt cho phép sửa file lead của Đức cho UC này. Đã xong phần 1 (lỗi lead đã hoàn tất: `lead_closed`, 400) và phần 2 (lỗi trả `{ code, message }`: `not_found` 404, `invalid_content` 400; đã thử bằng curl trên API 5080).
 
 ## Mục tiêu
 

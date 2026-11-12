@@ -196,11 +196,15 @@ public class LeadsControllerTests
             return Task.FromResult(new SendLeadMessageResultDto(msg, nextStatus));
         }
 
-        // [Nhắn tin phía người gửi] Bản giả tối thiểu; test controller dùng ở phần 2.
+        // [Nhắn tin phía người gửi] Lead không có quyền / không tồn tại → service ném KeyNotFoundException
+        public Guid? MissingSentLeadId { get; set; }
+
         public Task<LeadMessagesThreadDto> GetSentLeadMessagesAsync(Guid userId, Guid leadId, CancellationToken ct = default)
         {
             if (RuleToThrow is not null)
                 throw RuleToThrow;
+            if (MissingSentLeadId == leadId)
+                throw new KeyNotFoundException("Không tìm thấy yêu cầu liên hệ.");
             var messages = MessagesByLead.TryGetValue(leadId, out var list) ? list : [];
             return Task.FromResult(new LeadMessagesThreadDto(leadId, "contacted", messages, 0));
         }
@@ -209,6 +213,10 @@ public class LeadsControllerTests
         {
             if (RuleToThrow is not null)
                 throw RuleToThrow;
+            if (MissingSentLeadId == leadId)
+                throw new KeyNotFoundException("Không tìm thấy yêu cầu liên hệ.");
+            if (string.IsNullOrWhiteSpace(content))
+                throw new ArgumentException("Nội dung tin nhắn không được để trống.");
             var msg = new LeadMessageDto(
                 Guid.NewGuid(), leadId, userId, "Bạn", UserRoles.Student, false,
                 content.Trim(), false, null, "visible", DateTime.UtcNow);
@@ -361,6 +369,129 @@ public class LeadsControllerTests
     {
         var attr = typeof(LeadsController)
             .GetMethod(nameof(LeadsController.GetSentLeads))!
+            .GetCustomAttributes(typeof(AuthorizeAttribute), false)
+            .Cast<AuthorizeAttribute>()
+            .Single();
+
+        Assert.Equal($"{UserRoles.Student},{UserRoles.Parent}", attr.Roles);
+    }
+
+    // ===== Nhắn tin phía người gửi: GET/POST /leads/sent/{id}/messages =====
+
+    [Fact]
+    public async Task GetSentLeadMessages_ReturnsOkWithThread()
+    {
+        var leadId = Guid.NewGuid();
+        var (controller, service) = CreateController(Guid.NewGuid());
+        service.MessagesByLead[leadId] =
+        [
+            new LeadMessageDto(Guid.NewGuid(), leadId, Guid.NewGuid(), "Trung Tâm Test", UserRoles.Center, true,
+                "Chào em", false, null, "visible", DateTime.UtcNow),
+        ];
+
+        var result = await controller.GetSentLeadMessages(leadId, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var thread = Assert.IsType<LeadMessagesThreadDto>(ok.Value);
+        Assert.Equal(leadId, thread.LeadId);
+        Assert.Equal("Chào em", Assert.Single(thread.Messages).Content);
+    }
+
+    [Fact]
+    public async Task SendSentLeadMessage_ReturnsCreatedWithMessage()
+    {
+        var userId = Guid.NewGuid();
+        var leadId = Guid.NewGuid();
+        var (controller, _) = CreateController(userId);
+
+        var result = await controller.SendSentLeadMessage(leadId, new SendLeadMessageRequest("  Em cảm ơn  "), CancellationToken.None);
+
+        var created = Assert.IsType<CreatedAtActionResult>(result);
+        Assert.Equal(nameof(LeadsController.GetSentLeadMessages), created.ActionName);
+        var dto = Assert.IsType<SendLeadMessageResultDto>(created.Value);
+        Assert.Equal("Em cảm ơn", dto.Message.Content);
+        Assert.Equal(userId, dto.Message.SenderUserId);
+        Assert.False(dto.Message.IsFromCenter);
+    }
+
+    [Theory]
+    [InlineData("age_restricted")]
+    [InlineData("role_not_allowed")]
+    public async Task SentLeadMessages_ServiceRejects_Returns403WithCode(string code)
+    {
+        var (controller, service) = CreateController(Guid.NewGuid());
+        service.RuleToThrow = new LeadRuleException(code, StatusCodes.Status403Forbidden, "Không xem được.");
+
+        var get = Assert.IsType<ObjectResult>(await controller.GetSentLeadMessages(Guid.NewGuid(), CancellationToken.None));
+        var post = Assert.IsType<ObjectResult>(await controller.SendSentLeadMessage(
+            Guid.NewGuid(), new SendLeadMessageRequest("Chào"), CancellationToken.None));
+
+        foreach (var obj in new[] { get, post })
+        {
+            Assert.Equal(StatusCodes.Status403Forbidden, obj.StatusCode);
+            Assert.Equal(code, BodyValue(obj, "code"));
+        }
+    }
+
+    [Fact]
+    public async Task SendSentLeadMessage_ClosedLead_Returns400LeadClosed()
+    {
+        var (controller, service) = CreateController(Guid.NewGuid());
+        service.RuleToThrow = new LeadRuleException("lead_closed", StatusCodes.Status400BadRequest, "Yêu cầu đã hoàn tất.");
+
+        var result = await controller.SendSentLeadMessage(Guid.NewGuid(), new SendLeadMessageRequest("Chào"), CancellationToken.None);
+
+        var obj = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status400BadRequest, obj.StatusCode);
+        Assert.Equal("lead_closed", BodyValue(obj, "code"));
+    }
+
+    [Fact]
+    public async Task SentLeadMessages_LeadNotFoundOrNotOwned_Returns404()
+    {
+        var leadId = Guid.NewGuid();
+        var (controller, service) = CreateController(Guid.NewGuid());
+        service.MissingSentLeadId = leadId;
+
+        var get = Assert.IsType<NotFoundObjectResult>(await controller.GetSentLeadMessages(leadId, CancellationToken.None));
+        var post = Assert.IsType<NotFoundObjectResult>(await controller.SendSentLeadMessage(
+            leadId, new SendLeadMessageRequest("Chào"), CancellationToken.None));
+
+        Assert.Equal("not_found", BodyValue(get, "code"));
+        Assert.Equal("not_found", BodyValue(post, "code"));
+    }
+
+    [Fact]
+    public async Task SendSentLeadMessage_EmptyContent_Returns400()
+    {
+        var (controller, _) = CreateController(Guid.NewGuid());
+
+        var result = await controller.SendSentLeadMessage(Guid.NewGuid(), new SendLeadMessageRequest("   "), CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal("invalid_content", BodyValue(bad, "code"));
+    }
+
+    [Fact]
+    public async Task SentLeadMessages_Unauthenticated_ReturnsUnauthorized()
+    {
+        var controller = new LeadsController(new FakeLeadService())
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
+        };
+
+        Assert.IsType<UnauthorizedObjectResult>(await controller.GetSentLeadMessages(Guid.NewGuid(), CancellationToken.None));
+        Assert.IsType<UnauthorizedObjectResult>(await controller.SendSentLeadMessage(
+            Guid.NewGuid(), new SendLeadMessageRequest("Chào"), CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData(nameof(LeadsController.GetSentLeadMessages))]
+    [InlineData(nameof(LeadsController.SendSentLeadMessage))]
+    public void SentLeadMessages_AuthorizesStudentAndParentOnly(string method)
+    {
+        var attr = typeof(LeadsController)
+            .GetMethod(method)!
             .GetCustomAttributes(typeof(AuthorizeAttribute), false)
             .Cast<AuthorizeAttribute>()
             .Single();
