@@ -19,6 +19,7 @@ import {
 } from "@/components/admin/shared/EditableTable";
 import { InlineSelectCell } from "@/components/admin/shared/InlineSelectCell";
 import { OptionSelect } from "@/components/admin/universities/OptionSelect";
+import { renderStatusOption } from "@/components/admin/knowledge/SlmStatusBadge";
 import { adminSlmSampleApi } from "@/lib/slm-sample-api";
 import {
   formatDateTime,
@@ -295,7 +296,7 @@ function SlmSampleForm({ sample, onClose, onChanged }: Props) {
       label: "Trạng thái",
       value: (
         <div className="flex justify-end">
-          <InlineSelectCell value={sample.reviewStatus} options={REVIEW_STATUS_OPTIONS} label="Đổi trạng thái duyệt" onChange={changeStatus} />
+          <InlineSelectCell value={sample.reviewStatus} options={REVIEW_STATUS_OPTIONS} label="Đổi trạng thái duyệt" renderOption={renderStatusOption} onChange={changeStatus} />
         </div>
       ),
     },
