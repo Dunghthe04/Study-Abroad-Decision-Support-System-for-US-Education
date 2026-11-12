@@ -18,10 +18,10 @@ export interface SlmSample {
   id: string;
   sampleType: SlmSampleType;
   question: string;
-  profile: string;
+  profile: string | null;
   pendingQuestion: string | null;
   intents: string;
-  context: string;
+  context: string | null;
   split: SlmSplit;
   sourceReview: string | null;
   reviewStatus: SlmReviewStatus;
@@ -35,10 +35,10 @@ export interface SlmSample {
 export interface SaveSlmSampleRequest {
   sampleType: SlmSampleType;
   question: string;
-  profile: string;
+  profile: string | null;
   pendingQuestion: string | null;
   intents: string;
-  context: string;
+  context: string | null;
   split: SlmSplit;
   sourceReview: string | null;
 }
