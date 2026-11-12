@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using StudyAbroad.Application.Common;
 using StudyAbroad.Application.Leads;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
@@ -57,6 +58,58 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
         db.Leads.Add(lead);
         await db.SaveChangesAsync(ct);
         return lead;
+    }
+
+    /// <summary>
+    /// [UC-44] Yêu cầu liên hệ đã gửi của học sinh / phụ huynh, mới nhất trước.
+    /// Đếm tin nhắn phía trung tâm = tin đang hiện mà người gửi không phải học sinh của lead
+    /// và không phải người đã bấm gửi lead.
+    /// </summary>
+    public async Task<PagedResult<SentLeadDto>> GetSentLeadsAsync(
+        IReadOnlyCollection<Guid> studentIds,
+        Guid? submitterId,
+        int page,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        var safePage = page < 1 ? 1 : page;
+        var safePageSize = pageSize < 1 ? 10 : (pageSize > 50 ? 50 : pageSize);
+
+        var ids = studentIds.ToList();
+        var leads = db.Leads.AsNoTracking();
+        leads = submitterId is { } sid
+            ? leads.Where(l => ids.Contains(l.UserId) || l.SubmittedByUserId == sid)
+            : leads.Where(l => ids.Contains(l.UserId));
+
+        var total = await leads.CountAsync(ct);
+
+        var items = await (
+                from l in leads
+                join c in db.StudyCenters.AsNoTracking() on l.StudyCenterId equals c.Id
+                join u in db.Users.AsNoTracking() on l.UserId equals u.Id
+                orderby l.CreatedAt descending
+                select new SentLeadDto(
+                    l.Id,
+                    l.StudyCenterId,
+                    c.Name,
+                    l.Status,
+                    l.CreatedAt,
+                    l.SharedFields,
+                    l.StudyLevel,
+                    l.ContactPhone,
+                    l.Message,
+                    l.UserId,
+                    u.FullName,
+                    l.SubmittedByUserId != null && l.SubmittedByUserId != l.UserId,
+                    db.LeadMessages.Count(m => m.LeadId == l.Id
+                                            && m.Status == "visible"
+                                            && m.SenderUserId != l.UserId
+                                            && m.SenderUserId != l.SubmittedByUserId)))
+            .Skip((safePage - 1) * safePageSize)
+            .Take(safePageSize)
+            .ToListAsync(ct);
+
+        return new PagedResult<SentLeadDto>(items, safePage, safePageSize, total);
     }
 
     public async Task<CenterLeadsSummaryDto> GetReceivedLeadsAsync(

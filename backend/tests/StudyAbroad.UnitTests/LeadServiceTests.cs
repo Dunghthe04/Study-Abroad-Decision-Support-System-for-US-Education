@@ -96,6 +96,34 @@ public class LeadServiceTests
                 .Where(l => l.SubmittedByUserId == submitterId && l.StudyCenterId == centerId && l.CreatedAt >= sinceUtc)
                 .Max(l => (DateTime?)l.CreatedAt));
 
+        // [UC-44] Giống LeadRepository.GetSentLeadsAsync nhưng chạy trên danh sách trong bộ nhớ
+        public Task<PagedResult<SentLeadDto>> GetSentLeadsAsync(
+            IReadOnlyCollection<Guid> studentIds,
+            Guid? submitterId,
+            int page,
+            int pageSize,
+            CancellationToken ct = default)
+        {
+            var q = Leads
+                .Where(l => studentIds.Contains(l.UserId) || (submitterId != null && l.SubmittedByUserId == submitterId))
+                .OrderByDescending(l => l.CreatedAt)
+                .ToList();
+
+            var items = q
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Select(l => new SentLeadDto(
+                    l.Id, l.StudyCenterId, "Test Center", l.Status, l.CreatedAt, l.SharedFields,
+                    l.StudyLevel, l.ContactPhone, l.Message, l.UserId,
+                    Users.TryGetValue(l.UserId, out var u) ? u.FullName : "Student",
+                    l.SubmittedByUserId != null && l.SubmittedByUserId != l.UserId,
+                    Messages.Count(m => m.LeadId == l.Id && m.Status == "visible"
+                                     && m.SenderUserId != l.UserId && m.SenderUserId != l.SubmittedByUserId)))
+                .ToList();
+
+            return Task.FromResult(new PagedResult<SentLeadDto>(items, page, pageSize, q.Count));
+        }
+
         public Task<CenterLeadsSummaryDto> GetReceivedLeadsAsync(
             Guid? centerId,
             string? status,

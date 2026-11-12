@@ -37,6 +37,27 @@ public record LeadDto(
 }
 
 /// <summary>
+/// [UC-44] Một yêu cầu liên hệ đã gửi, hiện ở thẻ "Yêu cầu liên hệ đã gửi" của học sinh / phụ huynh.
+/// <paramref name="StudentUserId"/>, <paramref name="StudentName"/>: học sinh có hồ sơ (phụ huynh cần biết lead của con nào).
+/// <paramref name="SubmittedByParent"/>: true khi người bấm gửi khác học sinh (phụ huynh gửi thay).
+/// <paramref name="CenterMessageCount"/>: số tin nhắn đang hiện do phía trung tâm gửi.
+/// </summary>
+public record SentLeadDto(
+    Guid Id,
+    Guid StudyCenterId,
+    string StudyCenterName,
+    string Status,
+    DateTime CreatedAt,
+    IReadOnlyList<string> SharedFields,
+    string? StudyLevel,
+    string? ContactPhone,
+    string? Message,
+    Guid StudentUserId,
+    string StudentName,
+    bool SubmittedByParent,
+    int CenterMessageCount);
+
+/// <summary>
 /// [UC-73] Tóm tắt hồ sơ học sinh được chia sẻ cho trung tâm (chỉ khi SharedProfile = true).
 /// Tuân thủ quy định bảo vệ dữ liệu trẻ em và quyền riêng tư (Nghị định 356/2025/NĐ-CP).
 /// </summary>
