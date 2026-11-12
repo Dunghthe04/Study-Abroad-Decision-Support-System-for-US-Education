@@ -2,6 +2,7 @@ import { Trash2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { DataTableColumn } from "@/components/admin/shared/DataTable";
+import { renderStatusOption } from "@/components/admin/knowledge/SlmStatusBadge";
 import { InlineSelectCell } from "@/components/admin/shared/InlineSelectCell";
 import { REVIEW_STATUS_OPTIONS, SAMPLE_TYPE_OPTIONS, SPLIT_OPTIONS } from "@/lib/slm-sample-format";
 import type { SaveSlmSampleRequest, SlmReviewStatus, SlmSample, SlmSampleType, SlmSplit } from "@/types/slm-sample";
@@ -92,6 +93,7 @@ export function slmSampleColumns({ selectedIds, onToggle, onEdit, onDelete, onCh
           value={sample.reviewStatus}
           options={REVIEW_STATUS_OPTIONS}
           label="Đổi trạng thái duyệt"
+          renderOption={renderStatusOption}
           onChange={(value) => onChangeStatus(sample, value as SlmReviewStatus)}
         />
       ),
@@ -100,19 +102,22 @@ export function slmSampleColumns({ selectedIds, onToggle, onEdit, onDelete, onCh
       id: "actions",
       label: "Thao tác",
       required: true,
-      headerClassName: "w-28",
+      headerClassName: "w-20 text-center",
+      cellClassName: "w-20 text-center",
       render: (sample) => (
         <Button
           type="button"
-          variant="destructive"
-          size="sm"
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Xóa mẫu"
+          title="Xóa mẫu"
+          className="bg-transparent text-destructive hover:bg-destructive/10 hover:text-destructive"
           onClick={(event) => {
             event.stopPropagation();
             onDelete(sample);
           }}
         >
           <Trash2Icon />
-          Xóa
         </Button>
       ),
     },
