@@ -48,6 +48,15 @@ export class ApiError extends Error {
   }
 }
 
+// Câu báo lỗi dự phòng khi server không kèm lời giải thích riêng (server đã điền sẵn, đây chỉ là lưới an toàn)
+const DEFAULT_ERROR_MESSAGES: Record<number, string> = {
+  400: "Thông tin gửi lên chưa hợp lệ. Bạn kiểm tra lại rồi thử lại nhé.",
+  401: "Phiên đăng nhập đã hết hạn. Bạn đăng nhập lại rồi thử lại nhé.",
+  403: "Tài khoản của bạn không được dùng chức năng này. Nếu vừa đổi tài khoản, hãy đăng xuất rồi đăng nhập lại.",
+  404: "Không tìm thấy dữ liệu bạn yêu cầu.",
+  429: "Bạn thao tác hơi nhanh. Đợi một chút rồi thử lại nhé.",
+};
+
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${baseUrl}${path}`, {
     ...init,
@@ -59,7 +68,12 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
 
   if (!res.ok) {
     const body = await res.json().catch(() => null);
-    let message = body?.detail ?? body?.title ?? body?.error ?? body?.message ?? res.statusText;
+    const fallback =
+      DEFAULT_ERROR_MESSAGES[res.status] ??
+      (res.status >= 500 ? "Máy chủ đang gặp sự cố. Bạn thử lại sau ít phút nhé." : "Đã có lỗi xảy ra. Bạn thử lại nhé.");
+    // title mặc định của ASP.NET ("Forbidden", "Not Found"...) luôn có type trỏ về RFC → không hiện cho người dùng
+    const isDefaultTitle = typeof body?.type === "string" && body.type.includes("rfc");
+    let message = body?.detail ?? (isDefaultTitle ? null : body?.title) ?? body?.error ?? body?.message ?? fallback;
     if (body?.errors && typeof body.errors === "object") {
       const errorList = Object.entries(body.errors)
         .map(([field, msgs]) => `${field}: ${Array.isArray(msgs) ? msgs.join("; ") : msgs}`)

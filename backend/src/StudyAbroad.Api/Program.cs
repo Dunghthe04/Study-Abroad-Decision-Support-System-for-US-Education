@@ -139,7 +139,8 @@ builder.Services.AddAuthRateLimiter();
 builder.Services.AddMediaUploadRateLimiter();
 
 builder.Services.AddControllers();
-builder.Services.AddProblemDetails();
+// Lỗi trả về không kèm lý do (Forbid(), NotFound() trần, lỗi 500...) được điền câu tiếng Việt theo mã lỗi
+builder.Services.AddProblemDetails(options => options.CustomizeProblemDetails = DefaultErrorMessages.FillMissingDetail);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {

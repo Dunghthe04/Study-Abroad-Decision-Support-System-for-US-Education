@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization.Infrastructure;
 using Microsoft.AspNetCore.Authorization.Policy;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -45,6 +46,7 @@ public sealed class AgeFeatureHandler(IUserRepository users, IParentLinkReposito
 }
 
 /// <summary>Bị chặn theo tuổi → 403 problem+json { code: "age_restricted", feature, needParentConsent }.
+/// Sai vai trò → 403 kèm câu nói rõ chức năng dành cho loại tài khoản nào.
 /// Các trường hợp khác giữ nguyên hành vi mặc định.</summary>
 public sealed class AgeRestrictionResultHandler : IAuthorizationMiddlewareResultHandler
 {
@@ -59,19 +61,39 @@ public sealed class AgeRestrictionResultHandler : IAuthorizationMiddlewareResult
             : null;
         if (reason is null)
         {
+            // Sai vai trò (vd. tài khoản trung tâm mở form hồ sơ học sinh): nói rõ chức năng dành cho ai.
+            // Mặc định ASP.NET chỉ trả 403 "Forbidden", người dùng không hiểu vì sao bị chặn.
+            var wrongRole = authorizeResult.Forbidden
+                ? authorizeResult.AuthorizationFailure?.FailedRequirements.OfType<RolesAuthorizationRequirement>().FirstOrDefault()
+                : null;
+            if (wrongRole is not null)
+            {
+                await WriteForbiddenAsync(context, "Không đúng loại tài khoản", DefaultErrorMessages.WrongRole(wrongRole.AllowedRoles));
+                return;
+            }
+
             await _default.HandleAsync(next, context, policy, authorizeResult);
             return;
         }
 
+        await WriteForbiddenAsync(context, "Chức năng bị giới hạn theo độ tuổi", reason.Message, new Dictionary<string, object?>
+        {
+            ["code"] = ErrorCode,
+            ["feature"] = reason.Block.Feature,
+            ["needParentConsent"] = reason.Block.NeedParentConsent,
+        });
+    }
+
+    private static async Task WriteForbiddenAsync(HttpContext context, string title, string detail, Dictionary<string, object?>? extensions = null)
+    {
         var problem = new ProblemDetails
         {
             Status = StatusCodes.Status403Forbidden,
-            Title = "Chức năng bị giới hạn theo độ tuổi",
-            Detail = reason.Message,
+            Title = title,
+            Detail = detail,
         };
-        problem.Extensions["code"] = ErrorCode;
-        problem.Extensions["feature"] = reason.Block.Feature;
-        problem.Extensions["needParentConsent"] = reason.Block.NeedParentConsent;
+        foreach (var (key, value) in extensions ?? [])
+            problem.Extensions[key] = value;
 
         context.Response.StatusCode = StatusCodes.Status403Forbidden;
         await context.Response.WriteAsJsonAsync(problem, options: null, contentType: "application/problem+json");
