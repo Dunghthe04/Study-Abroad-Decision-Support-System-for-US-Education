@@ -269,20 +269,19 @@ export function CenterLeadsListView() {
       required: true,
       render: (lead) =>
         lead.sharedProfile && lead.studentName ? (
-          <div className="min-w-0 max-w-[190px]">
+          <div>
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
                 setSelectedLead(lead);
               }}
-              className="font-medium text-brand hover:underline text-left truncate block max-w-full"
-              title={lead.studentName}
+              className="font-medium text-brand underline-offset-2 hover:underline text-left block"
             >
               {lead.studentName}
             </button>
             {lead.studentEmail && (
-              <div className="text-xs text-ink-2 truncate" title={lead.studentEmail}>
+              <div className="text-xs text-ink-2">
                 {lead.studentEmail}
               </div>
             )}
@@ -335,7 +334,7 @@ export function CenterLeadsListView() {
       id: "message",
       label: "Lời nhắn",
       render: (lead) => (
-        <p className="truncate max-w-[190px] text-xs text-ink" title={lead.message ?? ""}>
+        <p className="max-w-xs line-clamp-2 text-xs text-ink" title={lead.message ?? ""}>
           {lead.message || <span className="text-ink-3 italic">Không có lời nhắn</span>}
         </p>
       ),

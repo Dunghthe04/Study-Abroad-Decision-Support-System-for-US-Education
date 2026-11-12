@@ -295,7 +295,7 @@ export function AdminCenterListView() {
                   e.stopPropagation();
                   setSelectedCenter((prev) => (prev?.id === c.id ? null : c));
                 }}
-                className="font-medium text-brand hover:underline text-left truncate block max-w-[230px]"
+                className="font-medium text-brand underline-offset-2 hover:underline text-left block"
               >
                 {c.name}
               </button>
@@ -313,17 +313,17 @@ export function AdminCenterListView() {
         id: "location",
         label: "Địa điểm & Pháp lý",
         render: (c) => (
-          <div className="space-y-1 text-xs min-w-[180px]">
+          <div className="space-y-1 text-xs">
             <div className="flex items-center gap-1 font-medium text-ink">
               <MapPinIcon className="size-3.5 text-brand shrink-0" />
-              <span className="truncate max-w-[200px]">
+              <span>
                 {c.district ? `${c.district}, ${c.city ?? ""}` : (c.city ?? "Toàn quốc")}
               </span>
             </div>
             {c.licenseNumber && (
-              <div className="text-ink-2 flex items-center gap-1 truncate max-w-[200px]">
+              <div className="text-ink-2 flex items-center gap-1">
                 <ShieldCheckIcon className="size-3 text-ok shrink-0" />
-                {c.licenseNumber}
+                <span>{c.licenseNumber}</span>
               </div>
             )}
             {(c.taxCode || c.legalComplianceMode) && (
