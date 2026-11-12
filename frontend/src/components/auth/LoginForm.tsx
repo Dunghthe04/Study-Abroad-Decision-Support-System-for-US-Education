@@ -11,6 +11,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/auth/PasswordInput";
 import { Spinner } from "@/components/ui/spinner";
 
 export function LoginForm() {
@@ -138,9 +139,8 @@ export function LoginForm() {
           {/* Mật khẩu */}
           <Field>
             <FieldLabel htmlFor="password">Mật khẩu</FieldLabel>
-            <Input
+            <PasswordInput
               id="password"
-              type="password"
               required
               maxLength={100}
               autoComplete="current-password"

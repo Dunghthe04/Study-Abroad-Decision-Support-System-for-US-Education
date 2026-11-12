@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { useAuth } from "@/contexts/AuthContext";
 import { ApiError } from "@/lib/api";
 import { streamAdvisorChat } from "@/lib/advisor-stream";
 import { PROFILE_SAVED_EVENT, onRecommendationsPage, showSimulation } from "@/lib/simulation-link";
@@ -71,8 +72,11 @@ export type BeforeSend = () => Promise<void>
 /** Chat vừa ghi các ô này vào nháp hồ sơ (vd để form nạp lại); formStep: trang form của câu chat đang hỏi */
 export type ProfileChanged = (keys: string[], formStep: number | null) => void
 
+// Lịch sử chat lưu theo từng người dùng: khóa có thêm ":<userId>", để người đăng nhập sau trên cùng tab không thấy chat của người trước
 const STORAGE_KEY = "usas_assistant_chat";
 const SESSION_KEY = "usas_assistant_session";
+const chatKey = (userId: string) => `${STORAGE_KEY}:${userId}`;
+const sessionKey = (userId: string) => `${SESSION_KEY}:${userId}`;
 
 
 const GENERAL_SUGGESTIONS = [
@@ -112,6 +116,8 @@ const AssistantContext = createContext<AssistantContextValue | null>(null);
 export function AssistantProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const { user, isLoading: authLoading } = useAuth();
+  const userId = user?.id ?? null;
   const [open, setOpen] = useState(false);
   const [wide, setWide] = useState(false);
   const [turns, setTurns] = useState<AssistantTurn[]>([]);
@@ -125,6 +131,51 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
   const lastActionRef = useRef<AssistantAction | null>(null); // hành động của lượt gần nhất, để "Thử lại" gửi lại đúng như cũ
   const restoredRef = useRef(false);
   const sessionIdRef = useRef<string | null>(null);
+  // Người dùng đang đăng nhập (null: chưa đăng nhập) — chưa đăng nhập thì không gửi chat, không đọc ghi lịch sử
+  const userIdRef = useRef<string | null>(null);
+  // Chủ của cuộc trò chuyện đang hiện, để biết khi nào đổi người dùng
+  const ownerRef = useRef<string | null>(null);
+
+  // Đổi người dùng (đăng xuất hoặc đăng nhập người khác): xóa cuộc trò chuyện đang hiện.
+  // Đặt lại state ngay lúc render (cách React khuyên khi state phụ thuộc giá trị khác), ref và storage làm trong effect bên dưới
+  const [shownUserId, setShownUserId] = useState<string | null>(null);
+  if (!authLoading && shownUserId !== userId) {
+    setShownUserId(userId);
+    setTurns([]);
+    setError(null);
+    setStreaming(null);
+  }
+
+  // Dọn khóa cũ không có userId (cách lưu trước đây), để không ai đọc lại được
+  useEffect(() => {
+    try {
+      sessionStorage.removeItem(STORAGE_KEY);
+      sessionStorage.removeItem(SESSION_KEY);
+    } catch {
+      // trình duyệt chặn storage → bỏ qua
+    }
+  }, []);
+
+  useEffect(() => {
+    if (authLoading) return;
+    userIdRef.current = userId;
+    const prev = ownerRef.current;
+    if (prev === userId) return;
+    ownerRef.current = userId;
+    turnsRef.current = [];
+    sessionIdRef.current = null;
+    lastActionRef.current = null;
+    restoredRef.current = false; // lần mở sau khôi phục đúng lịch sử của người mới
+    try {
+      // Đăng xuất: xóa hẳn lịch sử của người vừa thoát trong tab này (máy dùng chung)
+      if (prev && !userId) {
+        sessionStorage.removeItem(chatKey(prev));
+        sessionStorage.removeItem(sessionKey(prev));
+      }
+    } catch {
+      // trình duyệt chặn storage → bỏ qua
+    }
+  }, [userId, authLoading]);
   const beforeSendRef = useRef<BeforeSend | null>(null);
   const setBeforeSend = useCallback((fn: BeforeSend | null) => {
     beforeSendRef.current = fn;
@@ -143,21 +194,26 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
   const commitTurns = useCallback((next: AssistantTurn[]) => {
     turnsRef.current = next;
     setTurns(next);
+    const uid = userIdRef.current;
+    if (!uid) return;
     try {
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-      sessionIdRef.current = sessionStorage.getItem(SESSION_KEY);
+      sessionStorage.setItem(chatKey(uid), JSON.stringify(next));
+      sessionIdRef.current = sessionStorage.getItem(sessionKey(uid));
     } catch {
       // trình duyệt chặn storage → chỉ giữ trong bộ nhớ
     }
   }, []);
 
   // Khôi phục cuộc trò chuyện của phiên (sau khi tải lại trang) ở lần mở đầu tiên
+  // Chỉ khôi phục lịch sử của người đang đăng nhập; chưa đăng nhập thì để lần sau
   const restore = useCallback(() => {
-    if (restoredRef.current) return;
+    const uid = userIdRef.current;
+    if (!uid || restoredRef.current) return;
     restoredRef.current = true;
     if (turnsRef.current.length > 0) return;
     try {
-      const saved = JSON.parse(sessionStorage.getItem(STORAGE_KEY) ?? "null");
+      sessionIdRef.current = sessionStorage.getItem(sessionKey(uid));
+      const saved = JSON.parse(sessionStorage.getItem(chatKey(uid)) ?? "null");
       if (Array.isArray(saved) && saved.length > 0) {
         turnsRef.current = saved;
         setTurns(saved);
@@ -169,6 +225,9 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
 
   const request = useCallback(
     async (history: AssistantTurn[], action?: AssistantAction) => {
+      // Người gửi câu này: nếu đổi người dùng trong lúc chờ thì bỏ câu trả lời, không hiện cho người mới
+      const owner = userIdRef.current;
+      const stillOwner = () => userIdRef.current === owner;
       lastActionRef.current = action ?? null;
       loadingRef.current = true;
       setLoading(true);
@@ -187,6 +246,7 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
             action: action ?? undefined,
           },
           (event) => {
+            if (!stillOwner()) return;
             if (event.type === "progress") setStreaming({ answers: event.answers, done: 0, text: "" });
             else if (event.type === "card")
               setStreaming((cur) => ({ answers: cur?.answers ?? 0, done: cur?.done ?? 0, text: cur?.text ?? "", widget: event.widget }));
@@ -198,10 +258,11 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
               }));
           },
         );
+        if (!stillOwner() || !owner) return;
         if (res.sessionId) {
           sessionIdRef.current = res.sessionId;
           try {
-            sessionStorage.setItem(SESSION_KEY, res.sessionId);
+            sessionStorage.setItem(sessionKey(owner), res.sessionId);
           } catch {
             // trình duyệt chặn storage → chỉ giữ trong bộ nhớ
           }
@@ -228,7 +289,7 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
         // Vừa lưu hồ sơ chính thức: trang Gợi ý trường (nếu đang mở) hiện nút cập nhật danh sách
         if (res.profileSaved) window.dispatchEvent(new Event(PROFILE_SAVED_EVENT));
       } catch (err) {
-        setError(toAssistantError(err));
+        if (stillOwner()) setError(toAssistantError(err));
       } finally {
         loadingRef.current = false;
         setLoading(false);
@@ -241,7 +302,8 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
   const send = useCallback(
     (text: string) => {
       const content = text.trim().slice(0, 1000);
-      if (!content || loadingRef.current) return;
+      // Chưa đăng nhập thì không gửi (khung chat hiện lời mời đăng nhập)
+      if (!content || loadingRef.current || !userIdRef.current) return;
       const history: AssistantTurn[] = [...turnsRef.current, { role: "user", content }];
       commitTurns(history);
       void request(history);
@@ -256,6 +318,8 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
       // Bấm nút trên trang: mở khung chat (nếu đang đóng) rồi hiện câu hỏi và gửi hành động
       restore();
       setOpen(true);
+      // Chưa đăng nhập: chỉ mở khung (thấy lời mời đăng nhập), không gửi
+      if (!userIdRef.current) return;
       const history: AssistantTurn[] = [...turnsRef.current, { role: "user", content }];
       commitTurns(history);
       void request(history, action);
@@ -281,8 +345,9 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
   const newChat = useCallback(() => {
     // Cuộc trò chuyện mới: quên phiên cũ để backend tạo phiên mới (bắt đầu lại từ B0)
     sessionIdRef.current = null;
+    const uid = userIdRef.current;
     try {
-      sessionStorage.removeItem(SESSION_KEY);
+      if (uid) sessionStorage.removeItem(sessionKey(uid));
     } catch {
       // trình duyệt chặn storage → bỏ qua
     }
