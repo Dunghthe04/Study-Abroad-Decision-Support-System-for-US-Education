@@ -1,7 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import {
+  Building2Icon,
   MapPinIcon,
   CheckCircle2Icon,
   ShieldCheckIcon,
@@ -26,8 +28,16 @@ interface AdminCenterDetailPanelProps {
 }
 
 export function AdminCenterDetailPanel({ center, onClose }: AdminCenterDetailPanelProps) {
+  const [failedUrls, setFailedUrls] = useState<Record<string, true>>({});
+  const markImageFailed = (url?: string | null) => {
+    if (!url) return;
+    setFailedUrls((prev) => (prev[url] ? prev : { ...prev, [url]: true }));
+  };
+
   const profile = getEnrichedCenterProfile(center);
   const isVerified = center.verificationStatus === "verified" || profile.center.verificationStatus === "verified";
+  const showCover = Boolean(profile.coverImage && !failedUrls[profile.coverImage]);
+  const showLogo = Boolean(profile.logoImage && !failedUrls[profile.logoImage]);
 
   return (
     <DetailPanel
@@ -37,22 +47,28 @@ export function AdminCenterDetailPanel({ center, onClose }: AdminCenterDetailPan
     >
       <div className="space-y-5">
         {/* Banner & Logo Preview */}
-        <div className="relative rounded-lg overflow-hidden border bg-muted aspect-[3/1]">
-          {profile.coverImage && (
+        <div className="relative rounded-lg overflow-hidden border border-line bg-gradient-to-br from-brand via-brand/85 to-brand-ink aspect-[3/1]">
+          {showCover && (
             <img
               src={profile.coverImage}
               alt=""
+              onError={() => markImageFailed(profile.coverImage)}
               className="w-full h-full object-cover"
             />
           )}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-          <div className="absolute bottom-2.5 left-3 flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-lg overflow-hidden border-2 border-background bg-card shrink-0 flex items-center justify-center">
-              <img
-                src={profile.logoImage}
-                alt={center.name}
-                className="w-full h-full object-cover"
-              />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/15 to-transparent" />
+          <div className="absolute bottom-2.5 left-3 right-3 flex items-center gap-2.5">
+            <div className="w-10 h-10 rounded-lg overflow-hidden border-2 border-surface bg-surface shrink-0 flex items-center justify-center">
+              {showLogo ? (
+                <img
+                  src={profile.logoImage}
+                  alt={center.name}
+                  onError={() => markImageFailed(profile.logoImage)}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <Building2Icon className="w-5 h-5 text-ink-3" />
+              )}
             </div>
             <div className="text-white min-w-0">
               <div className="text-xs font-semibold truncate leading-tight ">{center.name}</div>
