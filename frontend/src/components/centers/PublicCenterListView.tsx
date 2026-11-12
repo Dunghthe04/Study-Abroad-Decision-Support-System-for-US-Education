@@ -32,6 +32,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { TablePagination } from "@/components/admin/shared/TablePagination";
+import { OptionSelect } from "@/components/admin/universities/OptionSelect";
 import {
   CenterLegalModeBadge,
   CenterTypeBadge,
@@ -605,24 +606,22 @@ export function PublicCenterListView({ initialCenters }: PublicCenterListViewPro
               </div>
             </div>
 
-            <label className="flex items-center gap-2 text-sm text-ink-2">
-              <span className="shrink-0">Sắp xếp:</span>
-              <select
+            <div className="flex items-center gap-2 text-sm text-ink-2">
+              <Label htmlFor="public-centers-sort" className="shrink-0 font-normal text-ink-2">
+                Sắp xếp:
+              </Label>
+              <OptionSelect
+                id="public-centers-sort"
                 value={sortBy}
-                onChange={(e) => {
-                  setSortBy(e.target.value as SortKey);
+                options={SORT_OPTIONS}
+                onChange={(val) => {
+                  setSortBy(val as SortKey);
                   setPage(1);
                 }}
-                aria-label="Sắp xếp danh sách trung tâm"
-                className="h-9 rounded-md border border-line bg-surface px-3 text-sm font-medium text-ink focus:outline-none focus:ring-1 focus:ring-brand"
-              >
-                {SORT_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+                size="sm"
+                className="w-[12.5rem] bg-surface font-medium text-ink"
+              />
+            </div>
           </div>
 
           {activeChips.length > 0 && (
