@@ -7,7 +7,7 @@ import {
   ShieldCheckIcon,
   LockIcon,
   SearchIcon,
-  RefreshCwIcon,
+  RotateCcwIcon,
   ClockIcon,
   CheckCheckIcon,
   CopyIcon,
@@ -33,9 +33,22 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
+import {
+  DataTable,
+  type DataTableColumn,
+  type DataTableToolbarSlots,
+} from "@/components/admin/shared/DataTable";
+import { TablePagination } from "@/components/admin/shared/TablePagination";
+import { OptionSelect } from "@/components/admin/universities/OptionSelect";
 import { cn } from "@/lib/utils";
+
+const LEAD_STATUS_FILTER_OPTIONS: { value: string; label: string }[] = [
+  { value: "all", label: "Tất cả trạng thái" },
+  { value: "new", label: "Mới nhận" },
+  { value: "contacted", label: "Đã liên hệ" },
+  { value: "closed", label: "Đã đóng" },
+];
 
 type StatusFilter = "all" | "new" | "contacted" | "closed";
 
@@ -83,6 +96,7 @@ export function CenterLeadsListView() {
 
   // Filters
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const pageSize = 10;
@@ -140,8 +154,15 @@ export function CenterLeadsListView() {
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setSearch(searchInput.trim());
     setPage(1);
-    fetchLeads();
+  };
+
+  const handleResetFilters = () => {
+    setStatusFilter("all");
+    setSearchInput("");
+    setSearch("");
+    setPage(1);
   };
 
   const applyLeadStatusUpdate = useCallback(
@@ -218,35 +239,223 @@ export function CenterLeadsListView() {
   const contactedCount = data?.contactedCount ?? 0;
   const closedCount = data?.closedCount ?? 0;
   const items = data?.items ?? [];
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const hasActiveFilter = statusFilter !== "all" || search.length > 0;
+
+  const leadColumns: DataTableColumn<CenterReceivedLeadDto>[] = [
+    {
+      id: "createdAt",
+      label: "Thời gian",
+      render: (lead) => (
+        <div className="whitespace-nowrap text-xs text-ink-2">
+          <div className="flex items-center gap-1.5 font-medium text-ink">
+            {lead.status === "new" && (
+              <span className="size-1.5 rounded-full bg-brand shrink-0" aria-hidden />
+            )}
+            {new Date(lead.createdAt).toLocaleDateString("vi-VN")}
+          </div>
+          <div className="text-ink-3">
+            {new Date(lead.createdAt).toLocaleTimeString("vi-VN", {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </div>
+        </div>
+      ),
+    },
+    {
+      id: "student",
+      label: "Người gửi",
+      required: true,
+      render: (lead) =>
+        lead.sharedProfile && lead.studentName ? (
+          <div className="min-w-0 max-w-[190px]">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedLead(lead);
+              }}
+              className="font-medium text-brand hover:underline text-left truncate block max-w-full"
+              title={lead.studentName}
+            >
+              {lead.studentName}
+            </button>
+            {lead.studentEmail && (
+              <div className="text-xs text-ink-2 truncate" title={lead.studentEmail}>
+                {lead.studentEmail}
+              </div>
+            )}
+          </div>
+        ) : (
+          <span className="text-ink-3 italic flex items-center gap-1 whitespace-nowrap text-xs">
+            <LockIcon className="size-3 shrink-0" />
+            Học sinh ẩn danh
+          </span>
+        ),
+    },
+    {
+      id: "phone",
+      label: "Số điện thoại",
+      render: (lead) =>
+        lead.contactPhone ? (
+          <div className="flex items-center gap-1.5 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+            <a
+              href={`tel:${lead.contactPhone}`}
+              className="font-mono text-brand font-medium hover:underline inline-flex items-center gap-1 text-xs"
+            >
+              <PhoneIcon className="size-3 shrink-0" />
+              {lead.contactPhone}
+            </a>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              onClick={() => copyToClipboard(lead.contactPhone!, "Số điện thoại")}
+              title="Sao chép số điện thoại"
+              className="size-6 text-ink-3 hover:text-ink"
+            >
+              <CopyIcon className="size-3" />
+            </Button>
+          </div>
+        ) : (
+          <span className="text-xs text-ink-3">Chưa có</span>
+        ),
+    },
+    {
+      id: "studyLevel",
+      label: "Bậc học",
+      render: (lead) => (
+        <Badge variant="secondary" className="font-normal text-xs whitespace-nowrap">
+          {formatStudyLevel(lead.studyLevel)}
+        </Badge>
+      ),
+    },
+    {
+      id: "message",
+      label: "Lời nhắn",
+      render: (lead) => (
+        <p className="truncate max-w-[190px] text-xs text-ink" title={lead.message ?? ""}>
+          {lead.message || <span className="text-ink-3 italic">Không có lời nhắn</span>}
+        </p>
+      ),
+    },
+    {
+      id: "sharedProfile",
+      label: "Hồ sơ",
+      render: (lead) =>
+        lead.sharedProfile ? (
+          <Badge variant="ok" className="gap-1 text-xs whitespace-nowrap">
+            <ShieldCheckIcon className="size-3" />
+            Đã chia sẻ
+          </Badge>
+        ) : (
+          <Badge variant="neutral" className="gap-1 text-xs whitespace-nowrap">
+            <LockIcon className="size-3" />
+            Chỉ liên hệ
+          </Badge>
+        ),
+    },
+    {
+      id: "status",
+      label: "Trạng thái",
+      render: (lead) => <LeadStatusBadge status={lead.status} />,
+    },
+    {
+      id: "actions",
+      label: "Thao tác",
+      required: true,
+      headerClassName: "text-right",
+      cellClassName: "text-right whitespace-nowrap",
+      render: (lead) => (
+        <div onClick={(e) => e.stopPropagation()} className="inline-flex justify-end">
+          <Button
+            type="button"
+            variant="outline"
+            size="xs"
+            onClick={() => setSelectedLead(lead)}
+            className="gap-1"
+          >
+            <MessageSquareIcon className="size-3" />
+            Chi tiết &amp; Trả lời
+          </Button>
+        </div>
+      ),
+    },
+  ];
+
+  const leadToolbar: DataTableToolbarSlots = {
+    filters: (
+      <OptionSelect
+        id="lead-status-filter"
+        value={statusFilter}
+        options={LEAD_STATUS_FILTER_OPTIONS}
+        onChange={(val) => {
+          setStatusFilter(val as StatusFilter);
+          setPage(1);
+        }}
+        size="sm"
+        className="w-[11.5rem] bg-surface"
+      />
+    ),
+    search: (
+      <form onSubmit={handleSearchSubmit} role="search" className="relative">
+        <Input
+          id="center-leads-search"
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          placeholder="Tìm theo SĐT, tên, lời nhắn..."
+          aria-label="Tìm kiếm yêu cầu tư vấn"
+          className="pr-10 bg-surface"
+        />
+        <Button
+          type="submit"
+          variant="ghost"
+          size="icon-sm"
+          className="absolute top-1/2 right-1 -translate-y-1/2"
+          aria-label="Tìm kiếm"
+        >
+          <SearchIcon className="size-4" />
+        </Button>
+      </form>
+    ),
+    actions: (
+      <>
+        {hasActiveFilter && (
+          <Button type="button" variant="outline" size="sm" onClick={handleResetFilters}>
+            Xóa lọc
+          </Button>
+        )}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => void fetchLeads()}
+          disabled={isLoading}
+          className="gap-1.5"
+        >
+          <RotateCcwIcon className={cn("size-3.5", isLoading && "animate-spin")} />
+          Làm mới
+        </Button>
+      </>
+    ),
+  };
 
   return (
     <div className="space-y-6 py-6 pb-14">
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-line pb-5">
-        <div>
-          <div className="flex flex-wrap items-center gap-2.5">
-            <h1 className="text-h1 text-ink">
-              Yêu cầu liên hệ &amp; tư vấn nhận được
-            </h1>
-            <Badge variant="brand" className="text-xs">
-              Cổng đối tác
-            </Badge>
-          </div>
-          <p className="text-body-s text-ink-2 mt-1">
-            Xem và xử lý các yêu cầu liên hệ từ học sinh và phụ huynh. Tuân thủ quyền riêng tư dữ liệu theo Nghị định 356/2025/NĐ-CP.
-          </p>
+      <div className="border-b border-line pb-5">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <h1 className="text-h2">
+            Yêu cầu liên hệ &amp; tư vấn nhận được
+          </h1>
+          <Badge variant="brand" className="text-xs">
+            Cổng đối tác
+          </Badge>
         </div>
-
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={fetchLeads}
-          disabled={isLoading}
-          className="gap-2 shrink-0 self-start sm:self-auto"
-        >
-          <RefreshCwIcon className={cn("size-3.5", isLoading && "animate-spin")} />
-          Làm mới
-        </Button>
+        <p className="text-sm text-ink-2 mt-1">
+          Xem và xử lý các yêu cầu liên hệ từ học sinh và phụ huynh. Tuân thủ quyền riêng tư dữ liệu theo Nghị định 356/2025/NĐ-CP.
+        </p>
       </div>
 
       {/* KPI Summary Cards */}
@@ -344,257 +553,33 @@ export function CenterLeadsListView() {
         </Card>
       </div>
 
-      {/* Filter and Search Bar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-        {/* Status Pills */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 [scrollbar-width:none]">
-          <Button
-            variant={statusFilter === "all" ? "default" : "outline"}
-            size="sm"
-            onClick={() => {
-              setStatusFilter("all");
-              setPage(1);
-            }}
-            className="rounded-full text-xs h-8"
-          >
-            Tất cả ({totalCount})
-          </Button>
-          <Button
-            variant={statusFilter === "new" ? "default" : "outline"}
-            size="sm"
-            onClick={() => {
-              setStatusFilter("new");
-              setPage(1);
-            }}
-            className={cn(
-              "rounded-full text-xs h-8",
-              statusFilter === "new" && "bg-brand hover:bg-brand/90 text-white"
-            )}
-          >
-            Chờ xử lý ({newCount})
-          </Button>
-          <Button
-            variant={statusFilter === "contacted" ? "default" : "outline"}
-            size="sm"
-            onClick={() => {
-              setStatusFilter("contacted");
-              setPage(1);
-            }}
-            className={cn(
-              "rounded-full text-xs h-8",
-              statusFilter === "contacted" && "bg-warn hover:bg-warn/90 text-white"
-            )}
-          >
-            Đang trao đổi ({contactedCount})
-          </Button>
-          <Button
-            variant={statusFilter === "closed" ? "default" : "outline"}
-            size="sm"
-            onClick={() => {
-              setStatusFilter("closed");
-              setPage(1);
-            }}
-            className={cn(
-              "rounded-full text-xs h-8",
-              statusFilter === "closed" && "bg-ok hover:bg-ok/90 text-white"
-            )}
-          >
-            Đã hoàn tất ({closedCount})
-          </Button>
-        </div>
-
-        {/* Search Input */}
-        <form onSubmit={handleSearchSubmit} className="relative sm:w-72">
-          <SearchIcon className="absolute left-2.5 top-2.5 size-3.5 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Tìm theo SĐT, tên, lời nhắn..."
-            className="pl-8 text-xs h-8"
+      {/* Main DataTable */}
+      <DataTable
+        columns={leadColumns}
+        items={items}
+        getRowId={(lead) => lead.id}
+        selectedRowId={selectedLead?.id}
+        onRowSelect={(lead) => setSelectedLead(lead)}
+        isLoading={isLoading}
+        error={error ?? undefined}
+        emptyMessage={
+          hasActiveFilter
+            ? "Không tìm thấy yêu cầu liên hệ nào khớp với bộ lọc hiện tại."
+            : "Trung tâm của bạn hiện chưa nhận được yêu cầu liên hệ mới nào từ học sinh hoặc phụ huynh."
+        }
+        label="Danh sách yêu cầu tư vấn"
+        toolbar={leadToolbar}
+        footer={
+          <TablePagination
+            page={page}
+            totalPages={totalPages}
+            totalCount={totalCount}
+            itemLabel="yêu cầu"
+            disabled={isLoading}
+            onPageChange={setPage}
           />
-        </form>
-      </div>
-
-      {/* Main Content Area */}
-      {isLoading ? (
-        <div className="flex flex-col items-center justify-center py-16 gap-3">
-          <Spinner className="size-8" />
-          <p className="text-sm text-muted-foreground">Đang tải danh sách yêu cầu liên hệ...</p>
-        </div>
-      ) : error ? (
-        <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-8 text-center">
-          <p className="text-sm font-medium text-destructive">{error}</p>
-          <Button onClick={fetchLeads} variant="outline" size="sm" className="mt-4 gap-2">
-            Thử lại
-          </Button>
-        </div>
-      ) : items.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border p-12 text-center bg-card">
-          <div className="mx-auto size-12 rounded-full bg-muted flex items-center justify-center text-muted-foreground mb-3">
-            <InboxIcon className="size-6" />
-          </div>
-          <h3 className="text-base font-semibold text-foreground">Không có yêu cầu liên hệ nào</h3>
-          <p className="text-xs text-muted-foreground max-w-md mx-auto mt-1">
-            {statusFilter !== "all" || search
-              ? "Không tìm thấy yêu cầu liên hệ nào khớp với bộ lọc hiện tại. Thử xóa tìm kiếm hoặc chuyển sang bộ lọc khác."
-              : "Trung tâm của bạn hiện chưa nhận được yêu cầu liên hệ mới nào từ học sinh hoặc phụ huynh."}
-          </p>
-          {(statusFilter !== "all" || search) && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setStatusFilter("all");
-                setSearch("");
-                setPage(1);
-              }}
-              className="mt-4 text-xs"
-            >
-              Đặt lại bộ lọc
-            </Button>
-          )}
-        </div>
-      ) : (
-        <div className="rounded-xl border border-border overflow-hidden bg-card ">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="border-b bg-muted/40 text-muted-foreground">
-                  <th className="py-3 px-3 font-semibold whitespace-nowrap">Thời gian</th>
-                  <th className="py-3 px-3 font-semibold">Người gửi</th>
-                  <th className="py-3 px-3 font-semibold whitespace-nowrap">Số điện thoại</th>
-                  <th className="py-3 px-3 font-semibold whitespace-nowrap">Bậc học</th>
-                  <th className="py-3 px-3 font-semibold max-w-[180px]">Lời nhắn</th>
-                  <th className="py-3 px-3 font-semibold whitespace-nowrap">Hồ sơ</th>
-                  <th className="py-3 px-3 font-semibold whitespace-nowrap">Trạng thái</th>
-                  <th className="py-3 px-3 font-semibold text-right whitespace-nowrap">Thao tác</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {items.map((lead) => {
-                  const isNew = lead.status === "new";
-
-                  return (
-                    <tr
-                      key={lead.id}
-                      className={cn(
-                        "hover:bg-ground transition-colors cursor-pointer",
-                        isNew && "bg-brand-wash/35"
-                      )}
-                      onClick={() => setSelectedLead(lead)}
-                    >
-                      {/* Date */}
-                      <td className="py-3.5 px-3 whitespace-nowrap text-muted-foreground">
-                        <div>{new Date(lead.createdAt).toLocaleDateString("vi-VN")}</div>
-                        <div className="text-xs text-muted-foreground/70">
-                          {new Date(lead.createdAt).toLocaleTimeString("vi-VN", {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </div>
-                      </td>
-
-                      {/* Student info */}
-                      <td className="py-3.5 px-3 max-w-[185px]">
-                        {lead.sharedProfile && lead.studentName ? (
-                          <div className="min-w-0">
-                            <div className="font-semibold text-foreground truncate" title={lead.studentName}>
-                              {lead.studentName}
-                            </div>
-                            {lead.studentEmail && (
-                              <div className="text-xs text-muted-foreground truncate" title={lead.studentEmail}>
-                                {lead.studentEmail}
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground italic flex items-center gap-1 whitespace-nowrap">
-                            <LockIcon className="size-3 shrink-0" />
-                            Học sinh ẩn danh
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Phone */}
-                      <td className="py-3.5 px-3 whitespace-nowrap">
-                        {lead.contactPhone ? (
-                          <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                            <a
-                              href={`tel:${lead.contactPhone}`}
-                              className="font-mono text-brand font-medium hover:underline inline-flex items-center gap-1"
-                            >
-                              <PhoneIcon className="size-3 shrink-0" />
-                              {lead.contactPhone}
-                            </a>
-                            <Button
-                              variant="ghost"
-                              size="icon-xs"
-                              onClick={() => copyToClipboard(lead.contactPhone!, "Số điện thoại")}
-                              title="Sao chép số điện thoại"
-                              className="size-6 text-muted-foreground hover:text-foreground"
-                            >
-                              <CopyIcon className="size-3" />
-                            </Button>
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground">Chưa có</span>
-                        )}
-                      </td>
-
-                      {/* Study level */}
-                      <td className="py-3.5 px-3 whitespace-nowrap">
-                        <Badge variant="secondary" className="font-normal text-xs">
-                          {formatStudyLevel(lead.studyLevel)}
-                        </Badge>
-                      </td>
-
-                      {/* Message preview */}
-                      <td className="py-3.5 px-3 max-w-[180px]">
-                        <p className="truncate text-foreground" title={lead.message ?? ""}>
-                          {lead.message || <span className="text-muted-foreground italic">Không có lời nhắn</span>}
-                        </p>
-                      </td>
-
-                      {/* Shared Profile Badge */}
-                      <td className="py-3.5 px-3 whitespace-nowrap">
-                        {lead.sharedProfile ? (
-                          <Badge variant="ok" className="gap-1 text-xs">
-                            <ShieldCheckIcon className="size-3" />
-                            Đã chia sẻ
-                          </Badge>
-                        ) : (
-                          <Badge variant="neutral" className="gap-1 text-xs">
-                            <LockIcon className="size-3" />
-                            Chỉ liên hệ
-                          </Badge>
-                        )}
-                      </td>
-
-                      {/* Status */}
-                      <td className="py-3.5 px-3 whitespace-nowrap">
-                        <LeadStatusBadge status={lead.status} />
-                      </td>
-
-                      {/* Action */}
-                      <td className="py-3.5 px-3 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setSelectedLead(lead)}
-                          className="h-7 text-xs px-2.5 gap-1.5"
-                        >
-                          <MessageSquareIcon className="size-3" />
-                          Chi tiết & Trả lời
-                        </Button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+        }
+      />
 
       {/* Detail Dialog */}
       <Dialog open={selectedLead !== null} onOpenChange={(open) => !open && setSelectedLead(null)}>
