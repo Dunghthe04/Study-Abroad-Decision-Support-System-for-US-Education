@@ -17,6 +17,11 @@ public class ReviewBatch : BaseEntity
     /// <summary>Khoảng thời gian của các câu được xét, [từ, đến). Null là không giới hạn đầu đó.</summary>
     public DateTime? SampledFromUtc { get; set; }
     public DateTime? SampledToUtcExclusive { get; set; }
+    /// <summary>
+    /// Mỗi nhóm lúc bốc (JSON): tên nhóm, số câu CÓ trong nhóm (population) và số câu ĐƯỢC CHỌN. Cần lưu vì bốc đều mỗi nhóm không đại diện
+    /// đúng cho thực tế: muốn tính tỷ lệ đúng chung phải nhân trọng số theo population của từng nhóm, mà số này đổi theo thời gian nếu tính lại.
+    /// </summary>
+    public string StrataJson { get; set; } = "[]";
 }
 
 /// <summary>Người được giao duyệt một đợt. Chỉ người trong danh sách này mới xem được nội dung các câu của đợt.</summary>

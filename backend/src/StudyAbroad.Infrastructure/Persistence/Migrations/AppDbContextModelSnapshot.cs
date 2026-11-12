@@ -2158,6 +2158,14 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnName("size_per_stratum")
                         .HasComment("Số câu muốn bốc cho mỗi nhóm skill (số thực tế có thể ít hơn nếu nhóm không đủ câu).");
 
+                    b.Property<string>("StrataJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasDefaultValue("[]")
+                        .HasColumnName("strata_json")
+                        .HasComment("Mỗi nhóm lúc bốc: tên nhóm, số câu CÓ trong nhóm (population) và số câu ĐƯỢC CHỌN (picked). Cần lưu vì bốc đều mỗi nhóm không đại diện đúng cho thực tế: tỷ lệ đúng chung phải nhân trọng số theo population.");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");

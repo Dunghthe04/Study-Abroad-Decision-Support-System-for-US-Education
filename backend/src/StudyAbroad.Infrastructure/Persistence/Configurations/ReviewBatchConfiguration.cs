@@ -22,6 +22,10 @@ public class ReviewBatchConfiguration : IEntityTypeConfiguration<ReviewBatch>
         b.Property(x => x.SizePerStratum).HasComment("Số câu muốn bốc cho mỗi nhóm skill (số thực tế có thể ít hơn nếu nhóm không đủ câu).");
         b.Property(x => x.SampledFromUtc).HasComment("Đầu khoảng thời gian của các câu được xét (tính cả đầu này). Trống là không giới hạn.");
         b.Property(x => x.SampledToUtcExclusive).HasComment("Cuối khoảng thời gian của các câu được xét (không tính đầu này). Trống là không giới hạn.");
+        b.Property(x => x.StrataJson).HasColumnType("jsonb").IsRequired().HasDefaultValue("[]")
+            .HasComment(
+                "Mỗi nhóm lúc bốc: tên nhóm, số câu CÓ trong nhóm (population) và số câu ĐƯỢC CHỌN (picked). " +
+                "Cần lưu vì bốc đều mỗi nhóm không đại diện đúng cho thực tế: tỷ lệ đúng chung phải nhân trọng số theo population.");
         b.HasIndex(x => x.CreatedAt);
     }
 }
