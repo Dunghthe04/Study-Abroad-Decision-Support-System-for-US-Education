@@ -1,8 +1,10 @@
 // [UC-42] API gửi yêu cầu liên hệ trung tâm (học sinh tự gửi hoặc phụ huynh gửi thay con).
+// [UC-44] listSent: yêu cầu liên hệ đã gửi.
 // Danh sách con đã liên kết của phụ huynh dùng lại parentLinksApi.getMine() trong lib/api.ts.
 
 import { apiFetch, ApiError } from "@/lib/api";
-import type { CreateLeadRequest, LeadDto, LeadRuleCode, LeadRuleError } from "@/types/lead";
+import type { PagedResult } from "@/types/api";
+import type { CreateLeadRequest, LeadDto, LeadRuleCode, LeadRuleError, SentLeadDto } from "@/types/lead";
 
 export const leadApi = {
   create: (request: CreateLeadRequest) =>
@@ -12,6 +14,16 @@ export const leadApi = {
     }),
 
   getById: (id: string) => apiFetch<LeadDto>(`/api/v1/leads/${encodeURIComponent(id)}`),
+
+  /** [UC-44] Yêu cầu đã gửi, mới nhất trước. Học sinh dưới 16 nhận 403 age_restricted (đọc bằng getLeadRuleError). */
+  // Dựng query giống centerLeadsApi.list (UC-73): chỉ gửi tham số có giá trị, backend mặc định trang 1, 10 dòng.
+  listSent: (params?: { page?: number; pageSize?: number }) => {
+    const sp = new URLSearchParams();
+    if (params?.page) sp.set("page", String(params.page));
+    if (params?.pageSize) sp.set("pageSize", String(params.pageSize));
+    const qs = sp.toString();
+    return apiFetch<PagedResult<SentLeadDto>>(`/api/v1/leads/sent${qs ? `?${qs}` : ""}`);
+  },
 };
 
 /**

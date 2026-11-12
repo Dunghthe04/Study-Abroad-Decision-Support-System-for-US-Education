@@ -2,7 +2,7 @@
 
 Sprint v0.5 (20/11 – 26/11/2026) · Người làm: Việt · Ước tính 3.5 giờ · Actor: Student (từ 16 tuổi); Parent
 
-> Việt đã duyệt đề xuất câu 3 và câu 8 (12/11). Đã xong phần 1, 2 và 3.
+> Việt đã duyệt đề xuất câu 3 và câu 8 (12/11). Đã xong phần 1 đến 4.
 
 ## Mục tiêu
 
@@ -87,12 +87,14 @@ Lý do:
    - Thêm `GET /api/v1/leads/sent?page=&pageSize=` với `[Authorize(Roles = Student, Parent)]`.
    - Đổi `LeadRuleException` thành `{ code, message }` như POST.
    - Thêm test 200 và 403 trong `LeadsControllerTests`.
-4. **Frontend kiểu và API**: thêm `SentLeadDto` vào `types/lead.ts`, thêm `leadApi.listSent(page)` vào `lib/lead-api.ts`.
+4. **Frontend kiểu và API**: thêm `SentLeadDto` vào `types/lead.ts`, thêm `leadApi.listSent({ page, pageSize })` vào `lib/lead-api.ts`.
+   - Theo cách làm của Đức ở UC-73 (`centerLeadsApi.list`): tham số dạng object, dựng query bằng `URLSearchParams`; `status` để kiểu `LeadStatus | string`, hiện nhãn bằng `leadStatusLabel`.
+   - Nhãn giống badge của Đức: "Đang trao đổi" (contacted), "Đã hoàn tất" (closed). Riêng "new" phía người gửi là "Mới gửi" (trung tâm thấy "Mới nhận"). Việt chốt 12/11.
 5. **Thẻ trong `/account`**: component mới `components/account/SentLeadsCard.tsx`, gắn vào `AccountView.tsx` cho role student và parent.
    - Mỗi dòng gồm:
      - tên trung tâm (link `/centers/{id}`);
      - ngày gửi;
-     - nhãn trạng thái (Mới gửi / Đã liên hệ / Đã đóng);
+     - nhãn trạng thái (Mới gửi / Đang trao đổi / Đã hoàn tất), màu như badge trong bảng của Đức (xanh dương / hổ phách / viền emerald);
      - với phụ huynh: tên con, và "Phụ huynh gửi thay" hoặc "Con tự gửi";
      - nhóm đã chia sẻ, số điện thoại, bậc học, lời nhắn rút gọn;
      - "Trung tâm đã nhắn N tin".

@@ -50,6 +50,43 @@ export interface LeadDto {
   sharedFields: LeadSharedField[];
 }
 
+/** Trạng thái lead (backend: new | contacted | closed). */
+export type LeadStatus = "new" | "contacted" | "closed";
+
+/**
+ * [UC-44] Nhãn trạng thái hiện cho học sinh / phụ huynh.
+ * Giống badge phía trung tâm (UC-73, CenterLeadsListView) trừ "new": trung tâm thấy "Mới nhận", người gửi thấy "Mới gửi".
+ */
+export const LEAD_STATUS_LABEL: Record<LeadStatus, string> = {
+  new: "Mới gửi",
+  contacted: "Đang trao đổi",
+  closed: "Đã hoàn tất",
+};
+
+/** Nhãn trạng thái; giá trị backend chưa biết thì hiện nguyên giá trị đó. */
+export const leadStatusLabel = (status: string) => LEAD_STATUS_LABEL[status as LeadStatus] ?? status;
+
+/** [UC-44] Một yêu cầu liên hệ đã gửi — khớp SentLeadDto ở backend (GET /api/v1/leads/sent). */
+export interface SentLeadDto {
+  id: string;
+  studyCenterId: string;
+  studyCenterName: string;
+  /** Để lỏng như CenterReceivedLeadDto (UC-73); hiện nhãn bằng leadStatusLabel. */
+  status: LeadStatus | string;
+  createdAt: string;
+  sharedFields: LeadSharedField[];
+  studyLevel: string | null;
+  contactPhone: string | null;
+  message: string | null;
+  /** Học sinh có hồ sơ được chia sẻ (phụ huynh dùng để biết lead của con nào). */
+  studentUserId: string;
+  studentName: string;
+  /** true khi phụ huynh bấm gửi thay con. */
+  submittedByParent: boolean;
+  /** Số tin nhắn đang hiện do phía trung tâm gửi. */
+  centerMessageCount: number;
+}
+
 /** Mã lỗi quy tắc backend trả trong body { code, message, retryAt? }. */
 export type LeadRuleCode =
   | "center_not_verified"
