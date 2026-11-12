@@ -48,133 +48,123 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
   const scholarshipStat = parseScholarshipStat(profile.totalScholarshipsWon);
 
   return (
-    <div className="space-y-6 pb-12">
-      {/* Back button & Breadcrumb */}
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Link
-          href="/centers"
-          className="inline-flex items-center gap-1.5 hover:text-foreground transition-colors font-medium"
-        >
-          <ArrowLeftIcon className="w-4 h-4" />
-          Quay lại Danh bạ trung tâm
-        </Link>
-        <span>/</span>
-        <span className="text-foreground truncate font-medium">{center.name}</span>
+    <article className="py-6 pb-16 space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-ink-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <Link
+            href="/centers"
+            className="inline-flex items-center gap-1.5 font-medium transition-colors hover:text-brand"
+          >
+            <ArrowLeftIcon className="size-3.5" />
+            Danh bạ trung tâm
+          </Link>
+          <span>/</span>
+          <span className="truncate font-medium text-ink">{center.name}</span>
+        </div>
+        <Badge variant="neutral" className="font-mono text-xs">
+          Mã: {center.code}
+        </Badge>
       </div>
 
-      {/* Hero Banner Section */}
-      <div className="relative rounded-xl overflow-hidden border border-border bg-card ">
-        {/* Cover Background */}
-        <div
-          className="h-44 sm:h-52 w-full bg-cover bg-center relative bg-brand-ink"
-          style={{ backgroundImage: `url(${profile.coverImage})` }}
-        >
-          <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
-          <div className="absolute top-4 right-4 flex gap-2">
-            <Badge
-              variant="secondary"
-              className="bg-background/90 text-foreground font-medium text-xs px-2.5 py-1 "
-            >
-              Mã: {center.code}
-            </Badge>
-          </div>
+      {/* Hero Banner Card matching USAS design tokens */}
+      <div className="overflow-hidden rounded-xl border border-line bg-surface">
+        <div className="relative h-48 sm:h-56 w-full overflow-hidden bg-brand-ink">
+          <div
+            className="h-full w-full bg-cover bg-center"
+            style={{ backgroundImage: `url(${profile.coverImage})` }}
+          />
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/55 via-black/15 to-transparent" />
         </div>
 
-        {/* Header Content Area */}
-        <div className="px-6 pb-6 pt-0 relative">
-          {/* Top row: Avatar & Action Buttons */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4 -mt-12 sm:-mt-14">
-            {/* Logo / Avatar */}
-            <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl overflow-hidden border-4 border-background bg-card shrink-0 flex items-center justify-center">
-              <img
-                src={profile.logoImage}
-                alt={center.name}
-                className="w-full h-full object-cover"
-              />
-            </div>
-
-            {/* CTA Buttons */}
-            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto shrink-0 pb-1">
-              {/* [UC-42] Gửi yêu cầu liên hệ thật (thay form đặt lịch giả ConsultationBookingModal) */}
-              <ContactRequestDialog centerId={center.id} centerName={center.name} isVerified={isVerified} />
-            </div>
-          </div>
-
-          {/* Title & Info Block - Cleanly placed on card background */}
-          <div className="mt-4 space-y-2">
-            <div className="flex flex-wrap items-center gap-2.5">
-              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
-                {center.name}
-              </h1>
-              {isVerified ? (
-                <Badge className="bg-emerald-600 hover:bg-emerald-600/90 text-white gap-1 text-xs px-2.5 py-0.5">
-                  <CheckCircle2Icon className="w-3.5 h-3.5" />
-                  Đã xác minh Sở GD&ĐT
-                </Badge>
-              ) : (
-                <Badge variant="outline" className="text-muted-foreground text-xs px-2.5 py-0.5">
-                  Chờ xác minh
-                </Badge>
-              )}
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm text-muted-foreground">
-              <Badge variant="secondary" className="font-medium bg-brand/10 text-brand border-brand/20">
-                {profile.typeLabel}
-              </Badge>
-              {center.city && (
-                <span className="inline-flex items-center gap-1 font-medium text-foreground">
-                  <MapPinIcon className="w-3.5 h-3.5 text-brand" />
-                  {center.city}
-                </span>
-              )}
-              <span>•</span>
-              <div className="inline-flex items-center gap-1 text-amber-500 font-semibold">
-                <StarIcon className="w-3.5 h-3.5 fill-current" />
-                <span>{profile.rating.toFixed(1)}</span>
-                <span className="text-muted-foreground font-normal">({profile.reviewCount} đánh giá)</span>
+        <div className="px-6 pb-6 pt-3">
+          <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-end min-w-0">
+              <div className="relative -mt-12 sm:-mt-16 flex size-20 sm:size-24 shrink-0 items-center justify-center overflow-hidden rounded-xl border-4 border-surface bg-surface">
+                <img
+                  src={profile.logoImage}
+                  alt={center.name}
+                  className="h-full w-full object-cover"
+                />
               </div>
+
+              <div className="min-w-0 space-y-2 pb-0.5">
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <h1 className="font-heading text-2xl font-bold tracking-tight text-ink sm:text-3xl">
+                    {center.name}
+                  </h1>
+                  {isVerified ? (
+                    <Badge variant="ok" className="gap-1 px-2.5 py-0.5 text-xs">
+                      <CheckCircle2Icon className="size-3.5" />
+                      Đã xác minh Sở GD&amp;ĐT
+                    </Badge>
+                  ) : (
+                    <Badge variant="warn" className="px-2.5 py-0.5 text-xs">
+                      Chờ xác minh
+                    </Badge>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-ink-2 sm:text-sm">
+                  <Badge variant="brand">{profile.typeLabel}</Badge>
+                  {center.city && (
+                    <span className="inline-flex items-center gap-1 font-medium text-ink">
+                      <MapPinIcon className="size-3.5 text-brand" />
+                      {center.city}
+                    </span>
+                  )}
+                  <span aria-hidden="true">·</span>
+                  <div className="inline-flex items-center gap-1 font-semibold text-gold tabular-nums">
+                    <StarIcon className="size-3.5 fill-current" />
+                    <span>{profile.rating.toFixed(1)}</span>
+                    <span className="font-normal text-ink-2">({profile.reviewCount} đánh giá)</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex shrink-0 flex-wrap items-center gap-2 pb-1">
+              <ContactRequestDialog centerId={center.id} centerName={center.name} isVerified={isVerified} />
             </div>
           </div>
         </div>
       </div>
 
       {/* 4 Key Highlight Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-3.5">
-        <Card className="p-3.5 sm:p-4 flex flex-col justify-between gap-3 min-w-0">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="p-3.5 sm:p-4 flex flex-col justify-between gap-3 min-w-0 border-line">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-xs text-muted-foreground font-medium truncate">
+            <span className="text-xs text-ink-2 font-medium truncate">
               Tỷ lệ đỗ Visa Mỹ
             </span>
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-lg bg-ok-wash text-ok flex items-center justify-center shrink-0">
               <FlameIcon className="w-4 h-4" />
             </div>
           </div>
           <div className="min-w-0">
-            <div className="text-lg sm:text-2xl font-bold tracking-tight text-foreground truncate">
+            <div className="font-heading text-xl sm:text-2xl font-bold tracking-tight text-ink tabular-nums truncate">
               {profile.visaSuccessRate}%
             </div>
-            <div className="text-xs text-muted-foreground truncate mt-0.5">
+            <div className="text-xs text-ink-3 truncate mt-0.5">
               Hồ sơ phỏng vấn ĐSQ
             </div>
           </div>
         </Card>
 
-        <Card className="p-3.5 sm:p-4 flex flex-col justify-between gap-3 min-w-0">
+        <Card className="p-3.5 sm:p-4 flex flex-col justify-between gap-3 min-w-0 border-line">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-xs text-muted-foreground font-medium truncate">
+            <span className="text-xs text-ink-2 font-medium truncate">
               Học bổng đạt được
             </span>
-            <div className="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-lg bg-gold-wash text-gold flex items-center justify-center shrink-0">
               <AwardIcon className="w-4 h-4" />
             </div>
           </div>
           <div className="min-w-0">
-            <div className="text-lg sm:text-2xl font-bold tracking-tight text-foreground truncate" title={scholarshipStat.amount}>
+            <div className="font-heading text-xl sm:text-2xl font-bold tracking-tight text-ink tabular-nums truncate" title={scholarshipStat.amount}>
               {scholarshipStat.amount}
             </div>
             <div
-              className="text-xs text-muted-foreground truncate mt-0.5"
+              className="text-xs text-ink-3 truncate mt-0.5"
               title={scholarshipStat.note || "Kỳ tuyển sinh gần nhất"}
             >
               {scholarshipStat.note || "Kỳ tuyển sinh gần nhất"}
@@ -182,32 +172,32 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
           </div>
         </Card>
 
-        <Card className="p-3.5 sm:p-4 flex flex-col justify-between gap-3 min-w-0">
+        <Card className="p-3.5 sm:p-4 flex flex-col justify-between gap-3 min-w-0 border-line">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-xs text-muted-foreground font-medium truncate">
+            <span className="text-xs text-ink-2 font-medium truncate">
               Quy mô nhân sự
             </span>
-            <div className="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-600 flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-lg bg-brand-wash text-brand-ink flex items-center justify-center shrink-0">
               <UsersIcon className="w-4 h-4" />
             </div>
           </div>
           <div className="min-w-0">
-            <div className="text-lg sm:text-2xl font-bold tracking-tight text-foreground truncate">
+            <div className="font-heading text-xl sm:text-2xl font-bold tracking-tight text-ink tabular-nums truncate">
               {profile.staffCount}{" "}
-              <span className="text-xs sm:text-sm font-normal text-muted-foreground">chuyên viên</span>
+              <span className="font-sans text-xs sm:text-sm font-normal text-ink-2">chuyên viên</span>
             </div>
-            <div className="text-xs text-muted-foreground truncate mt-0.5">
+            <div className="text-xs text-ink-3 truncate mt-0.5">
               Cố vấn & Giảng viên
             </div>
           </div>
         </Card>
 
-        <Card className="p-3.5 sm:p-4 flex flex-col justify-between gap-3 min-w-0">
+        <Card className="p-3.5 sm:p-4 flex flex-col justify-between gap-3 min-w-0 border-line">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-xs text-muted-foreground font-medium truncate">
+            <span className="text-xs text-ink-2 font-medium truncate">
               Pháp lý cơ sở
             </span>
-            <div className="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-600 flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-lg bg-reach-wash text-reach flex items-center justify-center shrink-0">
               <ShieldCheckIcon className="w-4 h-4" />
             </div>
           </div>
@@ -382,7 +372,7 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
                     Chương trình học tập trung mục tiêu đầu ra cho lộ trình du học
                   </CardDescription>
                 </div>
-                <Badge variant="outline" className="border-brand/40 text-brand">
+                <Badge variant="brand">
                   Cam kết đầu ra
                 </Badge>
               </div>
@@ -392,16 +382,16 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
                 {profile.courses.map((course, idx) => (
                   <div
                     key={idx}
-                    className="p-4 rounded-lg border bg-card flex flex-col justify-between"
+                    className="p-4 rounded-lg border border-line bg-surface flex flex-col justify-between"
                   >
                     <div className="space-y-2">
-                      <div className="font-semibold text-foreground text-sm leading-snug">{course.name}</div>
-                      <div className="text-xs text-muted-foreground">{course.target}</div>
-                      <div className="text-xs text-brand font-medium bg-brand/5 p-2 rounded border border-brand/15">
+                      <div className="font-semibold text-ink text-sm leading-snug">{course.name}</div>
+                      <div className="text-xs text-ink-2">{course.target}</div>
+                      <div className="text-xs text-brand-ink font-medium bg-brand-wash/70 p-2 rounded border border-brand/20">
                         ⭐ {course.highlight}
                       </div>
                     </div>
-                    <div className="pt-3 mt-3 border-t text-xs text-muted-foreground space-y-1">
+                    <div className="pt-3 mt-3 border-t border-line text-xs text-ink-2 space-y-1">
                       <div>
                         <strong>Thời lượng:</strong> {course.duration}
                       </div>
@@ -421,7 +411,7 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-lg flex items-center gap-2">
-                <AwardIcon className="w-5 h-5 text-amber-500" />
+                <AwardIcon className="w-5 h-5 text-gold" />
                 Gương mặt trúng tuyển tiêu biểu năm 2025 - 2026
               </CardTitle>
               <CardDescription className="text-xs">
@@ -431,18 +421,18 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
             <CardContent>
               <div className="grid sm:grid-cols-3 gap-3.5">
                 {profile.successStories.map((story, i) => (
-                  <div key={i} className="p-4 rounded-lg border bg-card space-y-2">
+                  <div key={i} className="p-4 rounded-lg border border-line bg-surface space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="font-semibold text-foreground text-sm">{story.studentName}</span>
-                      <Badge variant="secondary" className="text-xs">
+                      <span className="font-semibold text-ink text-sm">{story.studentName}</span>
+                      <Badge variant="neutral" className="text-xs">
                         {story.year}
                       </Badge>
                     </div>
-                    <div className="text-xs text-muted-foreground">{story.highSchool}</div>
-                    <div className="pt-2 border-t">
+                    <div className="text-xs text-ink-2">{story.highSchool}</div>
+                    <div className="pt-2 border-t border-line">
                       <div className="text-xs text-brand font-bold">{story.university}</div>
-                      <div className="text-xs text-muted-foreground">Ngành: {story.major}</div>
-                      <div className="text-xs font-semibold text-emerald-600 mt-1">
+                      <div className="text-xs text-ink-2">Ngành: {story.major}</div>
+                      <div className="text-xs font-semibold text-ok mt-1">
                         Học bổng: {story.scholarship}
                       </div>
                     </div>
@@ -466,8 +456,8 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
                   </CardDescription>
                 </div>
                 <div className="text-right">
-                  <div className="text-2xl font-black text-foreground flex items-center gap-1">
-                    <StarIcon className="w-5 h-5 text-amber-500 fill-current" />
+                  <div className="font-heading text-2xl font-bold text-ink flex items-center gap-1 tabular-nums">
+                    <StarIcon className="w-5 h-5 text-gold fill-current" />
                     {profile.rating.toFixed(1)} / 5.0
                   </div>
                 </div>
@@ -475,21 +465,21 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
-                <div className="p-3 rounded-lg border bg-muted/30">
-                  <div className="text-xs text-muted-foreground">Chất lượng tư vấn</div>
-                  <div className="text-lg font-bold text-foreground mt-0.5">5.0 ⭐</div>
+                <div className="p-3 rounded-lg border border-line bg-ground">
+                  <div className="text-xs text-ink-2">Chất lượng tư vấn</div>
+                  <div className="text-lg font-bold text-ink tabular-nums mt-0.5">5.0 ⭐</div>
                 </div>
-                <div className="p-3 rounded-lg border bg-muted/30">
-                  <div className="text-xs text-muted-foreground">Độ tận tâm & tốc độ</div>
-                  <div className="text-lg font-bold text-foreground mt-0.5">4.9 ⭐</div>
+                <div className="p-3 rounded-lg border border-line bg-ground">
+                  <div className="text-xs text-ink-2">Độ tận tâm & tốc độ</div>
+                  <div className="text-lg font-bold text-ink tabular-nums mt-0.5">4.9 ⭐</div>
                 </div>
-                <div className="p-3 rounded-lg border bg-muted/30">
-                  <div className="text-xs text-muted-foreground">Minh bạch chi phí</div>
-                  <div className="text-lg font-bold text-foreground mt-0.5">4.8 ⭐</div>
+                <div className="p-3 rounded-lg border border-line bg-ground">
+                  <div className="text-xs text-ink-2">Minh bạch chi phí</div>
+                  <div className="text-lg font-bold text-ink tabular-nums mt-0.5">4.8 ⭐</div>
                 </div>
-                <div className="p-3 rounded-lg border bg-muted/30">
-                  <div className="text-xs text-muted-foreground">Kết quả Visa & Học bổng</div>
-                  <div className="text-lg font-bold text-foreground mt-0.5">5.0 ⭐</div>
+                <div className="p-3 rounded-lg border border-line bg-ground">
+                  <div className="text-xs text-ink-2">Kết quả Visa & Học bổng</div>
+                  <div className="text-lg font-bold text-ink tabular-nums mt-0.5">5.0 ⭐</div>
                 </div>
               </div>
             </CardContent>
@@ -497,33 +487,33 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
 
           {/* Danh sách bình luận */}
           <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-foreground">Nhận xét từ học viên đã xác thực</h3>
+            <h3 className="text-sm font-semibold text-ink">Nhận xét từ học viên đã xác thực</h3>
             {profile.reviews.map((rev) => (
               <Card key={rev.id}>
                 <CardHeader className="pb-2 pt-4 px-4 sm:px-6">
                   <div className="flex items-start justify-between">
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="font-semibold text-sm text-foreground">{rev.reviewerName}</span>
+                        <span className="font-semibold text-sm text-ink">{rev.reviewerName}</span>
                         {rev.verified && (
-                          <Badge variant="outline" className="text-emerald-600 border-emerald-300 text-xs py-0">
+                          <Badge variant="ok" className="text-xs py-0">
                             ✓ Học viên xác thực
                           </Badge>
                         )}
-                        <span className="text-xs text-muted-foreground">({rev.date})</span>
+                        <span className="text-xs text-ink-3">({rev.date})</span>
                       </div>
                       {rev.targetSchool && (
                         <div className="text-xs text-brand font-medium mt-0.5">{rev.targetSchool}</div>
                       )}
                     </div>
-                    <div className="flex text-amber-500">
+                    <div className="flex text-gold">
                       {[...Array(rev.rating)].map((_, i) => (
                         <StarIcon key={i} className="w-3.5 h-3.5 fill-current" />
                       ))}
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent className="px-4 sm:px-6 pb-4 text-xs sm:text-sm text-muted-foreground leading-relaxed">
+                <CardContent className="px-4 sm:px-6 pb-4 text-xs sm:text-sm text-ink-2 leading-relaxed">
                   {rev.comment}
                 </CardContent>
               </Card>
@@ -531,6 +521,6 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
           </div>
         </TabsContent>
       </Tabs>
-    </div>
+    </article>
   );
 }
