@@ -31,10 +31,19 @@ public record StudyCenterDto(
     decimal AverageRating = 5.0m,
     int ReviewCount = 0,
     DateTime? VerifiedAt = null,
-    Guid? VerifiedByUserId = null);
+    Guid? VerifiedByUserId = null,
+    string? TaxCode = null,
+    string? LegalRepresentative = null,
+    string? LicenseIssuedBy = null,
+    DateOnly? LicenseIssuedDate = null,
+    string LegalComplianceMode = "licensed",
+    string? TrainingLicenseNumber = null,
+    int? CertifiedCounselorCount = null,
+    IReadOnlyList<string>? LegalDocumentUrls = null,
+    string? VerificationNote = null);
 
 /// <summary>[UC-59] Moderator / Admin gửi yêu cầu xác minh hoặc hủy xác minh trung tâm tư vấn.</summary>
-public record VerifyStudyCenterRequest(bool IsVerified);
+public record VerifyStudyCenterRequest(bool IsVerified, string? VerificationNote = null);
 
 /// <summary>[UC-59] Kết quả thực hiện xác minh trung tâm tư vấn.</summary>
 public record VerifyStudyCenterResult(StudyCenterDto? Center, string? ErrorMessage = null)
@@ -66,7 +75,16 @@ public record UpdateStudyCenterRequest(
     int? EstablishedYear = null,
     string? LicenseNumber = null,
     List<string>? Accreditations = null,
-    double? VisaSuccessRate = null);
+    double? VisaSuccessRate = null,
+    string? TaxCode = null,
+    string? LegalRepresentative = null,
+    string? LicenseIssuedBy = null,
+    DateOnly? LicenseIssuedDate = null,
+    string? LegalComplianceMode = null,
+    string? TrainingLicenseNumber = null,
+    int? CertifiedCounselorCount = null,
+    List<string>? LegalDocumentUrls = null,
+    string? VerificationNote = null);
 
 /// <summary>[UC-72] Kết quả sửa thông tin trung tâm tư vấn.</summary>
 public record UpdateStudyCenterResult(StudyCenterDto? Center, string? ErrorMessage = null)
@@ -111,7 +129,16 @@ public record CreateStudyCenterRequest(
     int? EstablishedYear = null,
     string? LicenseNumber = null,
     List<string>? Accreditations = null,
-    double? VisaSuccessRate = null);
+    double? VisaSuccessRate = null,
+    string? TaxCode = null,
+    string? LegalRepresentative = null,
+    string? LicenseIssuedBy = null,
+    DateOnly? LicenseIssuedDate = null,
+    string LegalComplianceMode = "licensed",
+    string? TrainingLicenseNumber = null,
+    int? CertifiedCounselorCount = null,
+    List<string>? LegalDocumentUrls = null,
+    string? VerificationNote = null);
 
 public record StudyCenterQuery(
     string? Search = null,
