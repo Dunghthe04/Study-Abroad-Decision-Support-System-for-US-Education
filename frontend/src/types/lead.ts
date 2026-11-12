@@ -99,7 +99,11 @@ export type LeadRuleCode =
   | "contact_required"
   | "consent_required"
   | "center_cooldown"
-  | "daily_limit";
+  | "daily_limit"
+  // [Nhắn tin phía người gửi] GET/POST /leads/sent/{id}/messages
+  | "lead_closed"
+  | "not_found"
+  | "invalid_content";
 
 export interface LeadRuleError {
   status: number;
