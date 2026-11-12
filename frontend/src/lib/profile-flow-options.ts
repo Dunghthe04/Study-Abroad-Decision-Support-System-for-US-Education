@@ -283,25 +283,34 @@ export function calculateTranscriptGpa(years: AcademicYearDraft[]): { gpa10: num
 }
 
 /**
- * Bảng WES mặc định quy đổi điểm thang 10 sang GPA thang 4: [điểm từ, GPA 4], khớp AcademicAnalysisService.
- * GetDefaultWesScaleConfig (BE). Chỉ dùng khi chưa tải được bảng grade_scale.10 từ API (moderator sửa trên trang
- * quản trị), xem setGradeScaleRules / useGradeScale. Chỉ xét cận dưới: 8.99 vẫn là 3.7
+ * Mốc VEF quy đổi điểm thang 10 sang GPA thang 4: [điểm, GPA 4], xếp tăng dần. Bản sao của
+ * AcademicAnalysisService.GetDefaultScaleConfig (BE), sửa thì sửa cả hai bên. Chỉ dùng khi chưa tải được bảng
+ * grade_scale.10 từ API (moderator sửa trên trang quản trị), xem setGradeScaleRules / useGradeScale
  */
-export const WES_GPA10_TO_4: readonly (readonly [number, number])[] = [
-  [9.0, 4.0],
-  [8.5, 3.7],
-  [8.0, 3.5],
+export const VEF_GPA10_TO_4: readonly (readonly [number, number])[] = [
+  [0, 0],
+  [5.0, 2.0],
   [7.0, 3.0],
-  [6.5, 2.5],
-  [5.5, 2.0],
-  [5.0, 1.5],
-  [4.0, 1.0],
+  [7.2, 3.1],
+  [7.4, 3.2],
+  [7.6, 3.3],
+  [7.8, 3.4],
+  [8.0, 3.5],
+  [8.2, 3.55],
+  [8.4, 3.6],
+  [8.6, 3.65],
+  [8.8, 3.7],
+  [9.0, 3.75],
+  [9.2, 3.8],
+  [9.5, 3.85],
+  [9.75, 3.9],
+  [10, 4.0],
 ];
 
 type Gpa10To4Table = readonly (readonly [number, number])[];
 
-// Bảng đang dùng: WES mặc định cho tới khi useGradeScale tải xong bảng từ API
-let activeGpa10To4: Gpa10To4Table = WES_GPA10_TO_4;
+// Bảng đang dùng: mốc VEF cho tới khi useGradeScale tải xong bảng từ API
+let activeGpa10To4: Gpa10To4Table = VEF_GPA10_TO_4;
 const gradeScaleListeners = new Set<() => void>();
 
 /**
@@ -311,7 +320,7 @@ const gradeScaleListeners = new Set<() => void>();
 export function setGradeScaleRules(rules: readonly { minScore: number; gpa4: number }[]): void {
   const valid = rules.length > 0 && rules.every((r) => Number.isFinite(r.minScore) && Number.isFinite(r.gpa4));
   if (!valid) return;
-  activeGpa10To4 = [...rules].sort((a, b) => b.minScore - a.minScore).map((r) => [r.minScore, r.gpa4] as const);
+  activeGpa10To4 = [...rules].sort((a, b) => a.minScore - b.minScore).map((r) => [r.minScore, r.gpa4] as const);
   gradeScaleListeners.forEach((listener) => listener());
 }
 
@@ -325,11 +334,22 @@ export function subscribeGradeScale(listener: () => void): () => void {
   return () => gradeScaleListeners.delete(listener);
 }
 
+/**
+ * Đổi TB thang 10 sang GPA thang 4: nội suy đường thẳng giữa hai mốc kề nhau, ngoài hai đầu lấy GPA mốc đầu/cuối
+ * (giống GradeScale.Interpolate bên BE). Làm tròn 2 chữ số, nửa lên như BE lưu (8.5 → 3.63)
+ */
 export function toGpa4(gpa10: number): number {
-  for (const [cut, gpa4] of activeGpa10To4) {
-    if (gpa10 >= cut) return gpa4;
-  }
-  return 0;
+  const table = activeGpa10To4;
+  const [firstScore, firstGpa] = table[0];
+  const [lastScore, lastGpa] = table[table.length - 1];
+  if (gpa10 <= firstScore) return firstGpa;
+  if (gpa10 >= lastScore) return lastGpa;
+  const upper = table.findIndex(([score]) => score >= gpa10);
+  const [x0, y0] = table[upper - 1];
+  const [x1, y1] = table[upper];
+  const gpa4 = y0 + ((gpa10 - x0) * (y1 - y0)) / (x1 - x0);
+  // 1e-9: bù sai số số thực để 3.625 không thành 3.6249999 rồi làm tròn xuống
+  return Math.round(gpa4 * 100 + 1e-9) / 100;
 }
 
 /** Cách nhập GPA của nháp; nháp cũ chưa có gpaMode thì có điểm môn là học bạ (giống TranscriptGpa.Mode phía BE) */

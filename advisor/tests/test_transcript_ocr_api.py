@@ -160,9 +160,9 @@ def test_high_school_layout_reads_each_semester_and_skips_whole_year_and_pe():
         "Lớp 10 HK1": {"Toán": 7.2, "Vật lý": 4.2, "Ngữ văn": 6.7},
         "Lớp 10 HK2": {"Toán": 7.5, "Vật lý": 7.8, "Ngữ văn": 7.1},
     }
-    # TB = (7.2+4.2+6.7+7.5+7.8+7.1)/6 = 6.75 -> bảng WES (từ 6.5) = 2.5
+    # TB = (7.2+4.2+6.7+7.5+7.8+7.1)/6 = 6.75. Advisor không đổi sang thang 4: .NET đổi bằng mốc trong DB
     assert body["averageScoreScale10"] == 6.75
-    assert body["calculatedGpa4"] == 2.5
+    assert body["calculatedGpa4"] is None
     assert body["modelUsed"] == "glm-ocr:latest + qwen3:4b"
 
 
