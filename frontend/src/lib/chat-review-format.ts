@@ -3,7 +3,12 @@
 // nên không cần mở nội dung chat để biết.
 
 import { purposeLabel } from "@/lib/ai-usage-format";
-import type { ChatReviewItem, ChatReviewOutcome, ChatReviewStatus } from "@/types/chat-review";
+import type { ChatReviewItem, ChatReviewModelInfo, ChatReviewOutcome, ChatReviewStatus } from "@/types/chat-review";
+
+/** Phần của nhãn model cần để suy ra lý do: dùng được cho cả dòng danh sách lẫn chi tiết một câu. */
+export type ReasonModel = Pick<ChatReviewModelInfo, "confidence" | "fallback" | "outOfScope">;
+
+type ReasonInput = Pick<ChatReviewItem, "role" | "outcome" | "failedSteps" | "error"> & { model: ReasonModel | null };
 
 export const STATUS_LABELS: Record<ChatReviewStatus, string> = {
   open: "Đang mở",
@@ -66,7 +71,7 @@ export function formatConfidence(confidence: number | null | undefined): string 
  * advisor sập → bước AI lỗi → SLM hỏng (dự phòng) → loại ngoài phạm vi → không rõ.
  * SLM hỏng phải xét trước loại ngoài phạm vi vì kết quả dự phòng luôn mang loại "ambiguous"; hiện "câu mơ hồ" sẽ sai nguyên nhân.
  */
-export function queueReason(item: Pick<ChatReviewItem, "role" | "outcome" | "model" | "failedSteps" | "error">): QueueReason {
+export function queueReason(item: ReasonInput): QueueReason {
   if (item.role === "system") {
     return { label: "Advisor không phản hồi", detail: item.error };
   }
@@ -93,7 +98,7 @@ export function queueReason(item: Pick<ChatReviewItem, "role" | "outcome" | "mod
 /** Tên cho bộ lọc theo lý do: cùng cách gom với queueReason, để đếm và lọc không lệch nhau. */
 export type ReasonKey = "advisor_down" | "step_failed" | "fallback" | "ambiguous" | "exception" | "unknown";
 
-export function reasonKey(item: Pick<ChatReviewItem, "role" | "outcome" | "model">): ReasonKey {
+export function reasonKey(item: Pick<ReasonInput, "role" | "outcome" | "model">): ReasonKey {
   if (item.role === "system") return "advisor_down";
   if (item.outcome === "failed") return "step_failed";
   if (item.model?.fallback) return "fallback";
