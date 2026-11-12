@@ -365,10 +365,9 @@ export function CenterLeadsListView() {
       id: "actions",
       label: "Thao tác",
       required: true,
-      headerClassName: "text-right",
-      cellClassName: "text-right whitespace-nowrap",
+      cellClassName: "whitespace-nowrap",
       render: (lead) => (
-        <div onClick={(e) => e.stopPropagation()} className="inline-flex justify-end">
+        <div onClick={(e) => e.stopPropagation()} className="inline-flex items-center">
           <Button
             type="button"
             variant="outline"
