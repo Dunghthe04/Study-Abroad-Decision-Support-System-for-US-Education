@@ -343,6 +343,8 @@ export interface ParentLinkDto {
   parentName: string | null;
   studentName: string;
   studentAge: number | null;
+  /** [UC-42] Phụ huynh gửi id này khi gửi yêu cầu liên hệ trung tâm thay con */
+  studentUserId: string;
   acceptedAt: string | null;
   lastInviteSentAt: string | null;
   tokenExpiresAt: string | null;
