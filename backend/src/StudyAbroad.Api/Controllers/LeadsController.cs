@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using StudyAbroad.Api.Extensions;
+using StudyAbroad.Application.Common;
 using StudyAbroad.Application.Leads;
 using StudyAbroad.Domain.Constants;
 
@@ -73,6 +74,39 @@ public class LeadsController(ILeadService leadService) : ControllerBase
 
         var lead = await leadService.GetLeadByIdAsync(userId.Value, id, ct);
         return lead is null ? NotFound() : Ok(lead);
+    }
+
+    /// <summary>
+    /// [UC-44] Danh sách yêu cầu liên hệ đã gửi, mới nhất trước.
+    /// Học sinh từ 16 tuổi: lead của mình (kể cả phụ huynh gửi thay). Phụ huynh: lead mình gửi và lead của con đang liên kết.
+    /// Học sinh dưới 16 tuổi trả 403 <c>{ code: "age_restricted", message }</c>.
+    /// </summary>
+    [HttpGet("sent")]
+    [Authorize(Roles = $"{UserRoles.Student},{UserRoles.Parent}")]
+    [ProducesResponseType(typeof(PagedResult<SentLeadDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetSentLeads(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        CancellationToken ct = default)
+    {
+        var userId = User.GetUserId();
+        if (userId is null)
+            return Unauthorized(new { message = "Vui lòng đăng nhập." });
+
+        try
+        {
+            return Ok(await leadService.GetSentLeadsAsync(userId.Value, page, pageSize, ct));
+        }
+        catch (LeadRuleException ex)
+        {
+            return StatusCode(ex.Status, new { code = ex.Code, message = ex.Message });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new ProblemDetails { Title = "Không tìm thấy", Detail = ex.Message, Status = StatusCodes.Status404NotFound });
+        }
     }
 
     private async Task<IActionResult> ExecuteCenterLeadActionAsync(

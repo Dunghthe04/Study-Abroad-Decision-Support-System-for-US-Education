@@ -48,7 +48,7 @@ public class LeadsControllerTests
             return Task.FromResult(lead);
         }
 
-        // [UC-44] Phần 3 (controller) sẽ dùng để viết test; RuleToThrow giả lập service từ chối
+        // [UC-44] RuleToThrow giả lập service từ chối (vd. học sinh dưới 16)
         public List<SentLeadDto> SentLeads { get; } = [];
 
         public Task<PagedResult<SentLeadDto>> GetSentLeadsAsync(Guid userId, int page, int pageSize, CancellationToken ct = default)
@@ -289,6 +289,64 @@ public class LeadsControllerTests
         var dto = Assert.IsType<LeadDto>(created.Value);
         Assert.True(dto.SharedProfile);
         Assert.NotNull(dto.ConsentId);
+    }
+
+    // ===== UC-44: xem yêu cầu liên hệ đã gửi =====
+
+    [Fact]
+    public async Task GetSentLeads_ReturnsOkWithPagedLeads()
+    {
+        var (controller, service) = CreateController(Guid.NewGuid());
+        service.SentLeads.Add(new SentLeadDto(
+            Guid.NewGuid(), Guid.NewGuid(), "Trung Tâm Test", "new", DateTime.UtcNow, [LeadSharedFields.Contact],
+            "bachelor", "0912345678", null, Guid.NewGuid(), "Học Sinh", SubmittedByParent: false, CenterMessageCount: 2));
+
+        var result = await controller.GetSentLeads(page: 2, pageSize: 5);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var paged = Assert.IsType<PagedResult<SentLeadDto>>(ok.Value);
+        Assert.Equal(2, paged.Page);
+        Assert.Equal(5, paged.PageSize);
+        Assert.Equal(2, Assert.Single(paged.Items).CenterMessageCount);
+    }
+
+    [Theory]
+    [InlineData("age_restricted")]
+    [InlineData("role_not_allowed")]
+    public async Task GetSentLeads_ServiceRejects_Returns403WithCode(string code)
+    {
+        var (controller, service) = CreateController(Guid.NewGuid());
+        service.RuleToThrow = new LeadRuleException(code, StatusCodes.Status403Forbidden, "Không xem được.");
+
+        var result = await controller.GetSentLeads();
+
+        var obj = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status403Forbidden, obj.StatusCode);
+        Assert.Equal(code, BodyValue(obj, "code"));
+        Assert.Equal("Không xem được.", BodyValue(obj, "message"));
+    }
+
+    [Fact]
+    public async Task GetSentLeads_Unauthenticated_ReturnsUnauthorized()
+    {
+        var controller = new LeadsController(new FakeLeadService())
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
+        };
+
+        Assert.IsType<UnauthorizedObjectResult>(await controller.GetSentLeads());
+    }
+
+    [Fact]
+    public void GetSentLeads_AuthorizesStudentAndParentOnly()
+    {
+        var attr = typeof(LeadsController)
+            .GetMethod(nameof(LeadsController.GetSentLeads))!
+            .GetCustomAttributes(typeof(AuthorizeAttribute), false)
+            .Cast<AuthorizeAttribute>()
+            .Single();
+
+        Assert.Equal($"{UserRoles.Student},{UserRoles.Parent}", attr.Roles);
     }
 
     private static (LeadsController Controller, FakeLeadService Service) CreateCenterController(

@@ -2,7 +2,7 @@
 
 Sprint v0.5 (20/11 – 26/11/2026) · Người làm: Việt · Ước tính 3.5 giờ · Actor: Student (từ 16 tuổi); Parent
 
-> Việt đã duyệt đề xuất câu 3 và câu 8 (12/11). Đã xong phần 1 và 2.
+> Việt đã duyệt đề xuất câu 3 và câu 8 (12/11). Đã xong phần 1, 2 và 3.
 
 ## Mục tiêu
 
