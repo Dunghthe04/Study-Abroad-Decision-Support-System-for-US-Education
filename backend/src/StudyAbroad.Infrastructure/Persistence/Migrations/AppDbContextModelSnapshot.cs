@@ -2129,6 +2129,249 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.ToTable("recommendation_items", "app");
                 });
 
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.ReviewBatch", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_user_id")
+                        .HasComment("Admin tạo đợt. Xóa tài khoản thì để trống, đợt vẫn giữ.");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("name")
+                        .HasComment("Tên đợt do người tạo đặt.");
+
+                    b.Property<DateTime?>("SampledFromUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sampled_from_utc")
+                        .HasComment("Đầu khoảng thời gian của các câu được xét (tính cả đầu này). Trống là không giới hạn.");
+
+                    b.Property<DateTime?>("SampledToUtcExclusive")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sampled_to_utc_exclusive")
+                        .HasComment("Cuối khoảng thời gian của các câu được xét (không tính đầu này). Trống là không giới hạn.");
+
+                    b.Property<string>("Seed")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("seed")
+                        .HasComment("Hạt giống của phép bốc ngẫu nhiên: cùng seed, cùng khoảng ngày và cùng dữ liệu thì ra đúng mẫu đó.");
+
+                    b.Property<int>("SizePerStratum")
+                        .HasColumnType("integer")
+                        .HasColumnName("size_per_stratum")
+                        .HasComment("Số câu muốn bốc cho mỗi nhóm skill (số thực tế có thể ít hơn nếu nhóm không đủ câu).");
+
+                    b.Property<string>("StrataJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasDefaultValue("[]")
+                        .HasColumnName("strata_json")
+                        .HasComment("Mỗi nhóm lúc bốc: tên nhóm, số câu CÓ trong nhóm (population) và số câu ĐƯỢC CHỌN (picked). Cần lưu vì bốc đều mỗi nhóm không đại diện đúng cho thực tế: tỷ lệ đúng chung phải nhân trọng số theo population.");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_review_batches");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("ix_review_batches_created_at");
+
+                    b.HasIndex("CreatedByUserId")
+                        .HasDatabaseName("ix_review_batches_created_by_user_id");
+
+                    b.ToTable("review_batches", "app", t =>
+                        {
+                            t.HasComment("Đợt duyệt mẫu: một mẫu ngẫu nhiên các câu trả lời của hệ thống để người duyệt chấm đúng sai (đo tỷ lệ lỗi mà hàng đợi không thấy). Không chứa nội dung chat; danh sách câu nằm ở review_batch_items.");
+                        });
+                });
+
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.ReviewBatchItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ChatMessageId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("chat_message_id")
+                        .HasComment("Tin trả lời của hệ thống được duyệt (bảng chat_messages).");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer")
+                        .HasColumnName("position")
+                        .HasComment("Thứ tự trong đợt, theo thứ tự bốc.");
+
+                    b.Property<Guid>("ReviewBatchId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("review_batch_id");
+
+                    b.Property<string>("Stratum")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("stratum")
+                        .HasComment("Nhóm dùng để chia tầng khi bốc mẫu (ví dụ skill của lượt), để nhóm ít gặp vẫn có mặt trong mẫu.");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_review_batch_items");
+
+                    b.HasIndex("ChatMessageId")
+                        .HasDatabaseName("ix_review_batch_items_chat_message_id");
+
+                    b.HasIndex("ReviewBatchId", "ChatMessageId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_review_batch_items_review_batch_id_chat_message_id");
+
+                    b.HasIndex("ReviewBatchId", "Position")
+                        .HasDatabaseName("ix_review_batch_items_review_batch_id_position");
+
+                    b.ToTable("review_batch_items", "app", t =>
+                        {
+                            t.HasComment("Một câu trả lời nằm trong mẫu của một đợt. Danh sách được lưu cố định để mẫu không bị bốc lại. Xóa tin nhắn gốc (ví dụ học sinh xóa tài khoản) thì dòng này và các kết luận của nó cũng mất.");
+                        });
+                });
+
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.ReviewBatchReviewer", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("ReviewBatchId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("review_batch_id");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_review_batch_reviewers");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_review_batch_reviewers_user_id");
+
+                    b.HasIndex("ReviewBatchId", "UserId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_review_batch_reviewers_review_batch_id_user_id");
+
+                    b.ToTable("review_batch_reviewers", "app", t =>
+                        {
+                            t.HasComment("Người được giao duyệt một đợt. Chỉ người trong danh sách mới xem được nội dung các câu của đợt (mỗi lần xem vẫn ghi nhật ký).");
+                        });
+                });
+
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.ReviewVerdict", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AnswerVerdict")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("answer_verdict")
+                        .HasComment("Câu trả lời của hệ thống: correct, wrong, missing_data (thiếu dữ liệu) hoặc out_of_scope (ngoài phạm vi).");
+
+                    b.Property<string>("Cause")
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)")
+                        .HasColumnName("cause")
+                        .HasComment("Vì sao sai, chỉ khi answer_verdict là wrong: misread_intent, missing_knowledge, hallucination hoặc technical.");
+
+                    b.Property<string>("CorrectIntent")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("correct_intent")
+                        .HasComment("Nhãn đúng khi label_verdict là wrong (một trong sáu loại ý của SLM); trống nếu người duyệt không chắc.");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("LabelVerdict")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("label_verdict")
+                        .HasComment("Nhãn ý SLM gán có đúng không: correct hoặc wrong.");
+
+                    b.Property<Guid>("ReviewBatchItemId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("review_batch_item_id")
+                        .HasComment("Câu được chấm (bảng review_batch_items).");
+
+                    b.Property<Guid>("ReviewerUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reviewer_user_id")
+                        .HasComment("Người chấm. Xóa tài khoản người chấm thì mất các kết luận của người đó.");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_review_verdicts");
+
+                    b.HasIndex("ReviewerUserId")
+                        .HasDatabaseName("ix_review_verdicts_reviewer_user_id");
+
+                    b.HasIndex("ReviewBatchItemId", "ReviewerUserId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_review_verdicts_review_batch_item_id_reviewer_user_id");
+
+                    b.ToTable("review_verdicts", "app", t =>
+                        {
+                            t.HasComment("Kết luận của MỘT người duyệt về MỘT câu trong đợt: nhãn ý của SLM đúng không và câu trả lời đúng không. Mỗi câu có thể có nhiều người chấm độc lập (một dòng mỗi người). Không chứa nội dung chat.");
+
+                            t.HasCheckConstraint("ck_review_verdicts_answer_verdict", "answer_verdict IN ('correct', 'wrong', 'missing_data', 'out_of_scope')");
+
+                            t.HasCheckConstraint("ck_review_verdicts_cause", "cause IS NULL OR cause IN ('misread_intent', 'missing_knowledge', 'hallucination', 'technical')");
+
+                            t.HasCheckConstraint("ck_review_verdicts_cause_needs_wrong", "cause IS NULL OR answer_verdict = 'wrong'");
+
+                            t.HasCheckConstraint("ck_review_verdicts_correct_intent", "correct_intent IS NULL OR label_verdict = 'wrong'");
+
+                            t.HasCheckConstraint("ck_review_verdicts_label_verdict", "label_verdict IN ('correct', 'wrong')");
+                        });
+                });
+
             modelBuilder.Entity("StudyAbroad.Domain.Entities.RoadmapStep", b =>
                 {
                     b.Property<Guid>("Id")
@@ -4112,6 +4355,66 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_recommendation_items_universities_university_id");
+                });
+
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.ReviewBatch", b =>
+                {
+                    b.HasOne("StudyAbroad.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_review_batches_users_created_by_user_id");
+                });
+
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.ReviewBatchItem", b =>
+                {
+                    b.HasOne("StudyAbroad.Domain.Entities.ChatMessage", null)
+                        .WithMany()
+                        .HasForeignKey("ChatMessageId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_review_batch_items_chat_messages_chat_message_id");
+
+                    b.HasOne("StudyAbroad.Domain.Entities.ReviewBatch", null)
+                        .WithMany()
+                        .HasForeignKey("ReviewBatchId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_review_batch_items_review_batches_review_batch_id");
+                });
+
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.ReviewBatchReviewer", b =>
+                {
+                    b.HasOne("StudyAbroad.Domain.Entities.ReviewBatch", null)
+                        .WithMany()
+                        .HasForeignKey("ReviewBatchId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_review_batch_reviewers_review_batches_review_batch_id");
+
+                    b.HasOne("StudyAbroad.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_review_batch_reviewers_users_user_id");
+                });
+
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.ReviewVerdict", b =>
+                {
+                    b.HasOne("StudyAbroad.Domain.Entities.ReviewBatchItem", null)
+                        .WithMany()
+                        .HasForeignKey("ReviewBatchItemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_review_verdicts_review_batch_items_review_batch_item_id");
+
+                    b.HasOne("StudyAbroad.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("ReviewerUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_review_verdicts_users_reviewer_user_id");
                 });
 
             modelBuilder.Entity("StudyAbroad.Domain.Entities.Scholarship", b =>

@@ -32,6 +32,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Skill> Skills => Set<Skill>();
     public DbSet<ChatSession> ChatSessions => Set<ChatSession>();
     public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
+    public DbSet<ReviewBatch> ReviewBatches => Set<ReviewBatch>();
+    public DbSet<ReviewBatchReviewer> ReviewBatchReviewers => Set<ReviewBatchReviewer>();
+    public DbSet<ReviewBatchItem> ReviewBatchItems => Set<ReviewBatchItem>();
+    public DbSet<ReviewVerdict> ReviewVerdicts => Set<ReviewVerdict>();
     public DbSet<KnowledgeDocument> KnowledgeDocuments => Set<KnowledgeDocument>();
     public DbSet<AiCall> AiCalls => Set<AiCall>();
     public DbSet<EvalCase> EvalCases => Set<EvalCase>();

@@ -2,8 +2,10 @@ import {
   BarChart3Icon,
   BookOpenIcon,
   BuildingIcon,
+  ClipboardCheckIcon,
   CreditCardIcon,
   LayoutDashboardIcon,
+  MessageSquareWarningIcon,
   MessagesSquareIcon,
   SchoolIcon,
   SlidersHorizontalIcon,
@@ -98,6 +100,22 @@ export const ADMIN_NAV: AdminNavItem[] = [
     icon: BarChart3Icon,
     roles: ["admin"],
     useCases: ["UC-83", "UC-90"],
+  },
+  {
+    href: "/admin/chat-review",
+    label: "Câu cần xem",
+    description: "Câu hệ thống không trả lời được hoặc bị lỗi, để xem và đánh dấu đã xử lý",
+    icon: MessageSquareWarningIcon,
+    roles: ["admin"],
+    useCases: [],
+  },
+  {
+    href: "/admin/review-batches",
+    label: "Duyệt mẫu",
+    description: "Bốc ngẫu nhiên các câu hệ thống đã trả lời để đọc và chấm đúng sai, đo tỷ lệ lỗi",
+    icon: ClipboardCheckIcon,
+    roles: ["admin"],
+    useCases: [],
   },
 ];
 

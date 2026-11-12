@@ -59,6 +59,13 @@ public static class ChatReviewAggregator
                 x.question == null ? null : x.question.MetaJson));
 
     /// <summary>
+    /// Tin của hàng đợi theo mã (có trạng thái xử lý, không phải của học sinh). Chỗ duy nhất chọn tin được phép đổi review_status:
+    /// mã của tin đã trả lời được hoặc của học sinh cho kết quả rỗng nên không đổi được.
+    /// </summary>
+    public static IQueryable<ChatMessage> QueueMessage(IQueryable<ChatMessage> messages, Guid messageId) =>
+        messages.Where(m => m.Id == messageId && m.ReviewStatus != null && m.Role != "user");
+
+    /// <summary>
     /// Tin trả lời cần xem kèm nội dung và chủ phiên. CHỈ tin thuộc hàng đợi (có trạng thái xử lý, không phải của học sinh):
     /// mã tin khác (đã trả lời được, tin của học sinh) cho kết quả rỗng, nên không thể dùng nó để đọc tuỳ ý các cuộc chat.
     /// </summary>

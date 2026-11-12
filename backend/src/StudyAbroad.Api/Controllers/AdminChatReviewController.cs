@@ -51,6 +51,29 @@ public class AdminChatReviewController(IChatReviewService review) : ControllerBa
         return detail is null ? NotFound() : Ok(detail);
     }
 
+    /// <summary>
+    /// Đổi trạng thái xử lý của một câu: open, resolved hoặc ignored. Chỉ câu thuộc hàng đợi (tin khác trả 404). Trạng thái lạ trả 400.
+    /// Mỗi lần đổi thật được ghi nhật ký (ai, lúc nào, từ đâu, từ trạng thái nào sang trạng thái nào), không có nội dung chat.
+    /// </summary>
+    [HttpPatch("items/{messageId:guid}/status")]
+    public async Task<ActionResult<ChatReviewStatusDto>> SetStatus(
+        Guid messageId, [FromBody] ChatReviewStatusRequest request, CancellationToken ct)
+    {
+        if (User.GetUserId() is not { } actorId)
+            return Unauthorized();
+
+        try
+        {
+            var result = await review.SetStatusAsync(
+                messageId, request?.Status, actorId, HttpContext.Connection.RemoteIpAddress?.ToString(), Request.Headers.UserAgent.ToString(), ct);
+            return result is null ? NotFound() : Ok(result);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
     /// <summary>Số câu theo trạng thái xử lý (open, resolved, ignored) và số câu open theo kết quả, cho các tab của hàng đợi.</summary>
     [HttpGet("summary")]
     public async Task<ActionResult<ChatReviewSummaryDto>> GetSummary(

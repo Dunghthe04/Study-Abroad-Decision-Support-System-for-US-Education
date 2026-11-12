@@ -114,5 +114,11 @@ public record ChatReviewRow(
     string? ReplyMetaJson,
     string? QuestionMetaJson);
 
+/// <summary>Nội dung yêu cầu đổi trạng thái xử lý của một câu: open, resolved hoặc ignored.</summary>
+public record ChatReviewStatusRequest(string? Status);
+
+/// <summary>Kết quả đổi trạng thái: trạng thái mới và trạng thái trước đó (bằng nhau nghĩa là không có gì đổi).</summary>
+public record ChatReviewStatusDto(Guid MessageId, string ReviewStatus, string PreviousStatus);
+
 /// <summary>Số câu của một (trạng thái, kết quả), từ truy vấn gộp.</summary>
 public record ChatReviewCountRow(string ReviewStatus, string Outcome, int Count);
