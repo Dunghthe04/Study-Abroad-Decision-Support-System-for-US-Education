@@ -91,7 +91,7 @@ function defaultContext(pathname: string): AssistantPageContext {
   if (pathname.startsWith("/methodology")) {
     return {
       label: "Giới thiệu phương pháp",
-      suggestions: ["Vì sao chia trường thành 4 nhóm?", "AHP và SAW là gì?", ...GENERAL_SUGGESTIONS.slice(0, 1)],
+      suggestions: ["Vì sao chia trường thành 3 nhóm?", "Điểm phù hợp được tính như thế nào?", ...GENERAL_SUGGESTIONS.slice(0, 1)],
     };
   }
   if (pathname.startsWith("/recommendations")) return { label: "Trang đề xuất", suggestions: GENERAL_SUGGESTIONS };
