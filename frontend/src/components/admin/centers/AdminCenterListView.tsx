@@ -1,10 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import Link from "next/link";
 import {
   Building2Icon,
-  ChevronRightIcon,
   EyeIcon,
   EyeOffIcon,
   FilterIcon,
@@ -19,7 +17,7 @@ import {
 } from "lucide-react";
 import { studyCentersApi, ApiError } from "@/lib/api";
 import type { StudyCenter, PagedResult } from "@/types/api";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -98,6 +96,12 @@ export function AdminCenterListView() {
     action: CenterConfirmAction;
   } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [failedLogos, setFailedLogos] = useState<Record<string, true>>({});
+
+  const markLogoFailed = (url?: string | null) => {
+    if (!url) return;
+    setFailedLogos((prev) => (prev[url] ? prev : { ...prev, [url]: true }));
+  };
 
   const fetchCenters = useCallback(
     async (activePage: number, signal?: { cancelled: boolean }) => {
@@ -273,8 +277,13 @@ export function AdminCenterListView() {
         render: (c) => (
           <div className="flex items-center gap-3 min-w-[220px]">
             <div className="size-9 rounded-lg overflow-hidden border border-line bg-ground shrink-0 flex items-center justify-center">
-              {c.logoUrl ? (
-                <img src={c.logoUrl} alt={c.name} className="size-full object-cover" />
+              {c.logoUrl && !failedLogos[c.logoUrl] ? (
+                <img
+                  src={c.logoUrl}
+                  alt={c.name}
+                  onError={() => markLogoFailed(c.logoUrl)}
+                  className="size-full object-cover"
+                />
               ) : (
                 <Building2Icon className="size-4 text-ink-3" />
               )}
@@ -444,20 +453,12 @@ export function AdminCenterListView() {
                   <span className="hidden xl:inline">Xác minh</span>
                 </Button>
               )}
-
-              <Link
-                href={`/admin/centers/${c.id}`}
-                className={cn(buttonVariants({ variant: "outline", size: "xs" }), "gap-1")}
-              >
-                Chi tiết
-                <ChevronRightIcon className="size-3" />
-              </Link>
             </div>
           );
         },
       },
     ],
-    [updateCenterInState]
+    [failedLogos, updateCenterInState]
   );
 
   const toolbar: DataTableToolbarSlots = {
