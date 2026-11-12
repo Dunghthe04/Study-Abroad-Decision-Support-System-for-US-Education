@@ -2636,6 +2636,10 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasDefaultValue("study_abroad")
                         .HasColumnName("center_type");
 
+                    b.Property<int?>("CertifiedCounselorCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("certified_counselor_count");
+
                     b.Property<string>("City")
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)")
@@ -2690,6 +2694,35 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("double precision")
                         .HasColumnName("latitude");
 
+                    b.Property<string>("LegalComplianceMode")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("licensed")
+                        .HasColumnName("legal_compliance_mode");
+
+                    b.Property<List<string>>("LegalDocumentUrls")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasColumnName("legal_document_urls")
+                        .HasDefaultValueSql("'{}'");
+
+                    b.Property<string>("LegalRepresentative")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("legal_representative");
+
+                    b.Property<string>("LicenseIssuedBy")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("license_issued_by");
+
+                    b.Property<DateOnly?>("LicenseIssuedDate")
+                        .HasColumnType("date")
+                        .HasColumnName("license_issued_date");
+
                     b.Property<string>("LicenseNumber")
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)")
@@ -2743,9 +2776,24 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("date")
                         .HasColumnName("surveyed_at");
 
+                    b.Property<string>("TaxCode")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("tax_code");
+
+                    b.Property<string>("TrainingLicenseNumber")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("training_license_number");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
+
+                    b.Property<string>("VerificationNote")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("verification_note");
 
                     b.Property<string>("VerificationStatus")
                         .IsRequired()

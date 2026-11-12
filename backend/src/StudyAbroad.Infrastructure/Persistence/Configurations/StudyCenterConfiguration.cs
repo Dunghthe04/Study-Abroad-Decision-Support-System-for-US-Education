@@ -20,6 +20,7 @@ public class StudyCenterConfiguration : IEntityTypeConfiguration<StudyCenter>
         builder.Property(x => x.Description).HasMaxLength(4000);
         builder.HasOne<User>().WithMany().HasForeignKey(x => x.VerifiedByUserId).OnDelete(DeleteBehavior.SetNull);
         builder.Property(x => x.VerificationStatus).HasMaxLength(16).IsRequired().HasDefaultValue("unverified");
+        builder.Property(x => x.VerificationNote).HasMaxLength(1000);
         builder.HasOne<User>().WithMany().HasForeignKey(x => x.OwnerUserId).OnDelete(DeleteBehavior.SetNull);
         // List<string> maps to PostgreSQL text[] with Npgsql.
         builder.Property(x => x.StudyLevels).HasColumnType("text[]");
@@ -30,6 +31,12 @@ public class StudyCenterConfiguration : IEntityTypeConfiguration<StudyCenter>
         builder.Property(x => x.GalleryImages).HasColumnType("text[]").HasDefaultValueSql("'{}'");
         builder.Property(x => x.District).HasMaxLength(128);
         builder.Property(x => x.LicenseNumber).HasMaxLength(128);
+        builder.Property(x => x.TaxCode).HasMaxLength(32);
+        builder.Property(x => x.LegalRepresentative).HasMaxLength(150);
+        builder.Property(x => x.LicenseIssuedBy).HasMaxLength(256);
+        builder.Property(x => x.LegalComplianceMode).HasMaxLength(32).IsRequired().HasDefaultValue("licensed");
+        builder.Property(x => x.TrainingLicenseNumber).HasMaxLength(128);
+        builder.Property(x => x.LegalDocumentUrls).HasColumnType("text[]").HasDefaultValueSql("'{}'");
         builder.Property(x => x.Accreditations).HasColumnType("text[]").HasDefaultValueSql("'{}'");
         builder.Property(x => x.AverageRating).HasPrecision(3, 2).HasDefaultValue(5.0m);
         builder.Property(x => x.ReviewCount).HasDefaultValue(0);

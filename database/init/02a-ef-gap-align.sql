@@ -30,6 +30,15 @@ ALTER TABLE app.study_centers ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISIO
 ALTER TABLE app.study_centers ADD COLUMN IF NOT EXISTS staff_count INT;
 ALTER TABLE app.study_centers ADD COLUMN IF NOT EXISTS established_year INT;
 ALTER TABLE app.study_centers ADD COLUMN IF NOT EXISTS license_number VARCHAR(128);
+ALTER TABLE app.study_centers ADD COLUMN IF NOT EXISTS tax_code VARCHAR(32);
+ALTER TABLE app.study_centers ADD COLUMN IF NOT EXISTS legal_representative VARCHAR(150);
+ALTER TABLE app.study_centers ADD COLUMN IF NOT EXISTS license_issued_by VARCHAR(256);
+ALTER TABLE app.study_centers ADD COLUMN IF NOT EXISTS license_issued_date DATE;
+ALTER TABLE app.study_centers ADD COLUMN IF NOT EXISTS legal_compliance_mode VARCHAR(32) NOT NULL DEFAULT 'licensed';
+ALTER TABLE app.study_centers ADD COLUMN IF NOT EXISTS training_license_number VARCHAR(128);
+ALTER TABLE app.study_centers ADD COLUMN IF NOT EXISTS certified_counselor_count INT;
+ALTER TABLE app.study_centers ADD COLUMN IF NOT EXISTS legal_document_urls TEXT[] NOT NULL DEFAULT '{}'::text[];
+ALTER TABLE app.study_centers ADD COLUMN IF NOT EXISTS verification_note VARCHAR(1000);
 ALTER TABLE app.study_centers ADD COLUMN IF NOT EXISTS accreditations TEXT[] DEFAULT '{}'::text[];
 ALTER TABLE app.study_centers ADD COLUMN IF NOT EXISTS visa_success_rate DOUBLE PRECISION;
 ALTER TABLE app.study_centers ADD COLUMN IF NOT EXISTS average_rating NUMERIC(3,2) DEFAULT 5.0;
