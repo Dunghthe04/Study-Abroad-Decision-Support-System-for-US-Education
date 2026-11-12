@@ -3,8 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { DataTableColumn } from "@/components/admin/shared/DataTable";
 import { InlineSelectCell } from "@/components/admin/shared/InlineSelectCell";
-import { SAMPLE_TYPE_OPTIONS, SPLIT_OPTIONS } from "@/lib/slm-sample-format";
-import type { SaveSlmSampleRequest, SlmSample, SlmSampleType, SlmSplit } from "@/types/slm-sample";
+import { REVIEW_STATUS_OPTIONS, SAMPLE_TYPE_OPTIONS, SPLIT_OPTIONS } from "@/lib/slm-sample-format";
+import type { SaveSlmSampleRequest, SlmReviewStatus, SlmSample, SlmSampleType, SlmSplit } from "@/types/slm-sample";
 
 interface ColumnHandlers {
   selectedIds: Set<string>;
@@ -12,9 +12,10 @@ interface ColumnHandlers {
   onEdit: (sample: SlmSample) => void;
   onDelete: (sample: SlmSample) => void;
   onChangeField: (sample: SlmSample, change: Partial<SaveSlmSampleRequest>) => Promise<void>;
+  onChangeStatus: (sample: SlmSample, status: SlmReviewStatus) => Promise<void>;
 }
 
-export function slmSampleColumns({ selectedIds, onToggle, onEdit, onDelete, onChangeField }: ColumnHandlers): DataTableColumn<SlmSample>[] {
+export function slmSampleColumns({ selectedIds, onToggle, onEdit, onDelete, onChangeField, onChangeStatus }: ColumnHandlers): DataTableColumn<SlmSample>[] {
   return [
     {
       id: "select",
@@ -78,6 +79,20 @@ export function slmSampleColumns({ selectedIds, onToggle, onEdit, onDelete, onCh
           options={SPLIT_OPTIONS}
           label="Đổi tập dữ liệu"
           onChange={(value) => onChangeField(sample, { split: value as SlmSplit })}
+        />
+      ),
+    },
+    {
+      id: "reviewStatus",
+      label: "Trạng thái",
+      headerClassName: "w-36",
+      cellClassName: "w-36",
+      render: (sample) => (
+        <InlineSelectCell
+          value={sample.reviewStatus}
+          options={REVIEW_STATUS_OPTIONS}
+          label="Đổi trạng thái duyệt"
+          onChange={(value) => onChangeStatus(sample, value as SlmReviewStatus)}
         />
       ),
     },

@@ -31,7 +31,7 @@ import { useFetched } from "@/lib/use-fetched";
 import type { SaveSlmSampleRequest, SlmImportResult, SlmReviewStatus, SlmSample, SlmSampleType, SlmSplit } from "@/types/slm-sample";
 
 const FILTER_FIELD_BG = "bg-card dark:bg-input/30";
-const TOOLBAR_BUTTON_BG = "border-border bg-muted/60 text-foreground hover:bg-muted";
+const TOOLBAR_BUTTON_BG = "border-border bg-card text-foreground shadow-xs hover:bg-muted dark:bg-input/30 dark:hover:bg-input/50";
 const PAGE_SIZE = 20;
 
 const TYPE_FILTER_OPTIONS = [{ value: "", label: "Mọi loại mẫu" }, ...SAMPLE_TYPE_OPTIONS];
@@ -158,6 +158,17 @@ export function KnowledgeListView() {
     }
   };
 
+  const handleChangeStatus = async (sample: SlmSample, status: SlmReviewStatus) => {
+    try {
+      await adminSlmSampleApi.review([sample.id], status);
+      toast.add({ type: "success", title: "Đã đổi trạng thái duyệt" });
+      if (formState?.sample?.id === sample.id) setFormState({ sample: await adminSlmSampleApi.get(sample.id) });
+      reload();
+    } catch (error) {
+      toast.add({ type: "error", title: "Không đổi được trạng thái", description: errorText(error, "Vui lòng thử lại sau.") });
+    }
+  };
+
   const handleReviewed = (message: string) => {
     setReviewStatus(null);
     setSelectedIds(new Set());
@@ -222,6 +233,7 @@ export function KnowledgeListView() {
     onEdit: (sample) => setFormState({ sample }),
     onDelete: setDeleting,
     onChangeField: handleChangeField,
+    onChangeStatus: handleChangeStatus,
   });
 
   const activeFilterCount = [applied.sampleType !== "", applied.split !== ""].filter(Boolean).length;
