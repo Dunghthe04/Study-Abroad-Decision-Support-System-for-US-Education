@@ -551,19 +551,16 @@ export function AdminUsersView() {
         label: "Email",
         required: true,
         render: (u) => (
-          <div className="flex flex-col">
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleDetailTarget(u);
-              }}
-              className="text-left font-medium text-brand underline-offset-2 hover:underline"
-            >
-              {u.email}
-            </button>
-            <span className="text-xs text-ink-3 font-mono">{u.id.slice(0, 8)}</span>
-          </div>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleDetailTarget(u);
+            }}
+            className="text-left font-medium text-brand underline-offset-2 hover:underline"
+          >
+            {u.email}
+          </button>
         ),
       },
       {
