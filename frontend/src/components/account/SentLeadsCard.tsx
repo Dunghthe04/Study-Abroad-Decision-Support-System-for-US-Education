@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
+import { SentLeadMessagesDialog, type SentLeadThreadChange } from "@/components/account/SentLeadMessagesDialog";
 
 const PAGE_SIZE = 10;
 
@@ -78,6 +79,17 @@ export function SentLeadsCard() {
     }
   };
 
+  // [Nhắn tin phía người gửi] Khung tin nhắn trả về trạng thái và số tin trung tâm mới nhất
+  const updateLead = useCallback((leadId: string, change: SentLeadThreadChange) => {
+    setLeads((prev) =>
+      prev.map((l) =>
+        l.id === leadId && (l.status !== change.status || l.centerMessageCount !== change.centerMessageCount)
+          ? { ...l, status: change.status, centerMessageCount: change.centerMessageCount }
+          : l,
+      ),
+    );
+  }, []);
+
   if (!user || (user.role !== "student" && user.role !== "parent")) return null;
 
   return (
@@ -131,7 +143,7 @@ export function SentLeadsCard() {
                 <ul className="space-y-3">
                   {leads.map((lead) => (
                     <li key={lead.id}>
-                      <SentLeadItem lead={lead} isParent={isParent} />
+                      <SentLeadItem lead={lead} isParent={isParent} onThreadChange={updateLead} />
                     </li>
                   ))}
                 </ul>
@@ -151,7 +163,20 @@ export function SentLeadsCard() {
   );
 }
 
-function SentLeadItem({ lead, isParent }: { lead: SentLeadDto; isParent: boolean }) {
+function SentLeadItem({
+  lead,
+  isParent,
+  onThreadChange,
+}: {
+  lead: SentLeadDto;
+  isParent: boolean;
+  onThreadChange: (leadId: string, change: SentLeadThreadChange) => void;
+}) {
+  const [messagesOpen, setMessagesOpen] = useState(false);
+  const handleThreadChange = useCallback(
+    (change: SentLeadThreadChange) => onThreadChange(lead.id, change),
+    [lead.id, onThreadChange],
+  );
   const statusClass = STATUS_BADGE_CLASS[lead.status];
   const sentBy = isParent
     ? lead.submittedByParent
@@ -210,13 +235,26 @@ function SentLeadItem({ lead, isParent }: { lead: SentLeadDto; isParent: boolean
           </p>
         )}
 
-        <div className="flex items-center gap-1.5 text-body-s">
-          <MessageSquareIcon className="size-3.5" aria-hidden />
-          {lead.centerMessageCount > 0
-            ? `Trung tâm đã nhắn ${lead.centerMessageCount} tin`
-            : "Trung tâm chưa nhắn tin"}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 text-body-s">
+            <MessageSquareIcon className="size-3.5" aria-hidden />
+            {lead.centerMessageCount > 0
+              ? `Trung tâm đã nhắn ${lead.centerMessageCount} tin`
+              : "Trung tâm chưa nhắn tin"}
+          </div>
+          <Button type="button" variant="outline" size="sm" onClick={() => setMessagesOpen(true)}>
+            <MessageSquareIcon data-icon="inline-start" aria-hidden />
+            Tin nhắn
+          </Button>
         </div>
       </CardContent>
+
+      <SentLeadMessagesDialog
+        lead={lead}
+        open={messagesOpen}
+        onOpenChange={setMessagesOpen}
+        onThreadChange={handleThreadChange}
+      />
     </Card>
   );
 }
