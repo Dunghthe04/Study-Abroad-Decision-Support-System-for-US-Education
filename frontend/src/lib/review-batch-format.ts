@@ -2,10 +2,13 @@
 // Quy tắc của biểu mẫu lặp lại quy tắc của backend (ReviewBatchService.SaveVerdictAsync) để báo lỗi ngay trên màn hình;
 // backend vẫn là nơi quyết định cuối cùng.
 
+import { formatPct } from "@/lib/ai-usage-format";
 import { intentLabel } from "@/lib/chat-review-format";
 import type {
+  RateEstimate,
   ReviewAnswerVerdict,
   ReviewBatchListItem,
+  ReviewBatchReport,
   ReviewCause,
   ReviewLabelVerdict,
   ReviewVerdict,
@@ -128,4 +131,41 @@ export function toRequest(form: VerdictForm): SaveReviewVerdictRequest | null {
     answerVerdict: form.answer,
     cause: needsCause(form) ? form.cause : null,
   };
+}
+
+// ------------------------------------------------------------------ báo cáo
+/** Tỷ lệ một con số: 0.2333 → "23,3%". */
+export const rateText = (estimate: RateEstimate): string => formatPct(estimate.rate);
+
+/**
+ * Khoảng tin cậy dưới dạng chữ: "khoảng 15% đến 50%". Nhóm đã chấm hết (low = high) không phải ước lượng nên ghi "chính xác".
+ * Làm tròn ra phía ngoài (thấp xuống, cao lên) để khoảng không bao giờ hẹp hơn thực tế.
+ */
+export function intervalText(estimate: RateEstimate): string {
+  if (estimate.low === estimate.high) return "chính xác, đã chấm hết";
+  const low = Math.floor(estimate.low * 100);
+  const high = Math.ceil(estimate.high * 100);
+  return `khoảng ${low}% đến ${high}%`;
+}
+
+/** Số đếm thô kèm mẫu số: "6 / 20 câu". */
+export const countText = (estimate: RateEstimate): string => `${estimate.count} / ${estimate.total} câu`;
+
+export const intentOrUnknownLabel = (intent: string): string => (intent === "unknown" ? "Không chắc" : intentLabel(intent));
+
+/** Cảnh báo cần đọc trước khi tin số liệu: chưa chấm hết hoặc tỷ lệ chung chưa phủ hết các nhóm. Rỗng là không có gì đáng lo. */
+export function reportNotices(report: ReviewBatchReport): string[] {
+  if (report.itemsGraded === 0) return ["Chưa chấm câu nào nên chưa có số liệu."];
+
+  const notices: string[] = [];
+  if (report.itemsGraded < report.totalItems) {
+    notices.push(`Mới chấm ${report.itemsGraded} / ${report.totalItems} câu của đợt, số liệu sẽ đổi khi chấm tiếp.`);
+  }
+  const uncovered = report.report.strata.filter((s) => s.graded === 0).map((s) => stratumLabel(s.stratum));
+  if (uncovered.length > 0) {
+    notices.push(
+      `Tỷ lệ chung chỉ nói về ${report.report.coveredPopulation} / ${report.report.population} câu. Nhóm chưa chấm câu nào: ${uncovered.join(", ")}.`,
+    );
+  }
+  return notices;
 }

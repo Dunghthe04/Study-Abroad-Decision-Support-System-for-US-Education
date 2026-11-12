@@ -129,3 +129,75 @@ export interface SaveReviewVerdictRequest {
   /** Bắt buộc khi answerVerdict là "wrong", và chỉ khi đó. */
   cause?: ReviewCause | null;
 }
+
+// ------------------------------------------------------------------ báo cáo một đợt (backend: ReviewReportDto, ReviewReportCalculator)
+// Chỉ là số tổng hợp: không có nội dung chat, không nêu ai chấm thế nào.
+
+/**
+ * Một tỷ lệ kèm khoảng tin cậy 95%. count/total là số đếm thô trong mẫu đã chấm; rate, low, high nằm trong [0, 1].
+ * Nhóm đã chấm hết thì không còn ngẫu nhiên nên low = high = rate.
+ */
+export interface RateEstimate {
+  count: number;
+  total: number;
+  rate: number;
+  low: number;
+  high: number;
+}
+
+export interface AnswerCounts {
+  correct: number;
+  wrong: number;
+  missingData: number;
+  outOfScope: number;
+}
+
+export interface StratumReport {
+  stratum: string;
+  /** Số câu CÓ trong nhóm lúc bốc. */
+  population: number;
+  picked: number;
+  graded: number;
+  /** true khi đã chấm hết các câu của nhóm: số là chính xác, không phải ước lượng. */
+  isCensus: boolean;
+  answers: AnswerCounts;
+  /** null khi nhóm chưa có câu nào được chấm. */
+  answerWrongRate: RateEstimate | null;
+  labelWrongRate: RateEstimate | null;
+}
+
+export interface CauseCount {
+  cause: ReviewCause;
+  count: number;
+}
+
+/** Nhãn đúng người chấm chọn khi SLM gán sai. "unknown" là người chấm chọn "Không chắc". */
+export interface CorrectIntentCount {
+  intent: SlmIntentType | "unknown";
+  count: number;
+}
+
+export interface ReviewReport {
+  graded: number;
+  /** Số câu của mọi nhóm lúc bốc. */
+  population: number;
+  /** Số câu của các nhóm đã có câu chấm; khác population nghĩa là còn nhóm chưa chấm và tỷ lệ chung chưa nói gì về nhóm đó. */
+  coveredPopulation: number;
+  /** Tỷ lệ chung có trọng số theo số câu mỗi nhóm; null khi chưa chấm câu nào. */
+  answerWrong: RateEstimate | null;
+  labelWrong: RateEstimate | null;
+  strata: StratumReport[];
+  causes: CauseCount[];
+  correctIntents: CorrectIntentCount[];
+}
+
+export interface ReviewBatchReport {
+  batchId: string;
+  batchName: string;
+  seed: string;
+  totalItems: number;
+  /** Số câu có ít nhất một kết luận. Mỗi câu chỉ tính một kết luận (chấm sớm nhất). */
+  itemsGraded: number;
+  reviewerCount: number;
+  report: ReviewReport;
+}

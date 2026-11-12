@@ -3,6 +3,7 @@ import type {
   CreateReviewBatchRequest,
   ReviewBatchCreated,
   ReviewBatchListItem,
+  ReviewBatchReport,
   ReviewItemDetail,
   ReviewItemList,
   ReviewVerdict,
@@ -36,4 +37,7 @@ export const adminReviewBatchApi = {
       method: "PUT",
       body: JSON.stringify(request),
     }),
+
+  /** Báo cáo của đợt: số tổng hợp, không có nội dung chat. 404 nếu đợt không có hoặc tôi không phải người tạo cũng không được giao duyệt. */
+  report: (batchId: string) => apiFetch<ReviewBatchReport>(`${base}/${encodeURIComponent(batchId)}/report`),
 };

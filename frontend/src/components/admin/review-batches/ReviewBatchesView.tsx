@@ -120,6 +120,9 @@ function BatchCard({ batch }: { batch: ReviewBatchListItem }) {
               {progress.done ? "Xem lại" : progress.graded > 0 ? "Chấm tiếp" : "Bắt đầu chấm"}
             </Link>
           ) : null}
+          <Link href={`/admin/review-batches/${batch.id}/report`} className={cn(buttonVariants({ variant: "outline" }))}>
+            Xem báo cáo
+          </Link>
           {batch.isReviewer && progress.done ? <Badge variant="ok">Đã chấm hết</Badge> : null}
           {batch.isCreator ? <Badge variant="neutral">Bạn tạo</Badge> : null}
         </div>
