@@ -102,7 +102,9 @@ def check_answer(raw: dict[str, Any], question: str, hit: KnowledgeHit) -> Compo
 # lấy thông tin của một đoạn kiến thức và chuyển nó thành một đối tượng trích dẫn (Citation) để đính kèm vào câu trả lời cho người dùng.
 def citation_of(hit: KnowledgeHit) -> Citation:
     title = hit.quote or hit.source_note or "Kho kiến thức tư vấn du học"
-    return Citation(title=title, url=hit.source_url, snippet=hit.answer[:SNIPPET_CHARS], retrieved_at=hit.retrieved_at)
+    return Citation(
+        title=title, url=hit.source_url, snippet=hit.answer[:SNIPPET_CHARS], retrieved_at=hit.retrieved_at
+    )
 
 
 class TraLoiHandler:

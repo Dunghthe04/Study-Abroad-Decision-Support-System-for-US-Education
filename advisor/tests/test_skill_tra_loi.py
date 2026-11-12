@@ -24,7 +24,9 @@ FINANCE = (
 )
 
 
-def hit(code="KB-001", content=SEVIS, score=0.9, quote="8 CFR 214.13", url=None, note="Nguồn A", retrieved=None):
+def hit(
+    code="KB-001", content=SEVIS, score=0.9, quote="8 CFR 214.13", url=None, note="Nguồn A", retrieved=None
+):
     return KnowledgeHit(code, "câu hỏi mẫu", content, quote, url, note, retrieved, score)
 
 
