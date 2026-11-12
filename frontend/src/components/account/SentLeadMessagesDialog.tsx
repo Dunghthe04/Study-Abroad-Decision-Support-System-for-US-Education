@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
+import { toast } from "@/components/ui/toast";
 
 /** Thông tin thẻ UC-44 cần cập nhật sau khi tải / gửi tin. */
 export interface SentLeadThreadChange {
@@ -72,6 +73,8 @@ function ThreadBody({
   const [leadStatus, setLeadStatus] = useState(initialStatus);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // Giống Đức: hiện "Cập nhật HH:mm" vì khung không tự làm mới
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
 
   const [draft, setDraft] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
@@ -87,6 +90,7 @@ function ThreadBody({
   const applyThread = useCallback((thread: LeadMessagesThreadDto) => {
     setMessages(thread.messages);
     setLeadStatus(thread.leadStatus);
+    setLastSyncedAt(new Date());
     onChangeRef.current?.({ status: thread.leadStatus, centerMessageCount: countCenterMessages(thread.messages) });
   }, []);
 
@@ -147,12 +151,28 @@ function ThreadBody({
       const result = await leadApi.sendSentMessage(leadId, trimmedDraft);
       setMessages((prev) => [...prev, result.message]);
       setLeadStatus(result.leadStatus);
+      setLastSyncedAt(new Date());
       setDraft("");
+
+      // Toast giống LeadConversationPanel của Đức, câu chữ cho người gửi
+      if (result.message.isFlagged) {
+        toast.add({
+          type: "warning",
+          title: "Đã gửi, nhưng tin bị gắn cờ",
+          description:
+            result.message.flagReason ??
+            "Tin có dấu hiệu chứa số điện thoại hoặc quảng cáo nên đã được gắn cờ để kiểm duyệt.",
+        });
+      } else {
+        toast.add({ type: "success", title: "Đã gửi tin cho trung tâm" });
+      }
     } catch (err) {
       const rule = getLeadRuleError(err);
       // Trung tâm vừa đóng yêu cầu trong lúc khung đang mở → chuyển sang chỉ đọc
       if (rule?.code === "lead_closed") setLeadStatus("closed");
-      setFormError(rule?.message ?? "Không gửi được tin nhắn. Vui lòng thử lại.");
+      const msg = rule?.message ?? "Không gửi được tin nhắn. Vui lòng thử lại.";
+      setFormError(msg);
+      toast.add({ type: "error", title: "Gửi tin nhắn thất bại", description: msg });
     } finally {
       setIsSending(false);
     }
@@ -160,7 +180,12 @@ function ThreadBody({
 
   return (
     <div className="space-y-3">
-      <div className="flex justify-end">
+      <div className="flex items-center justify-end gap-2">
+        {lastSyncedAt && !isLoading && (
+          <span className="text-[11px] text-muted-foreground">
+            Cập nhật {lastSyncedAt.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}
+          </span>
+        )}
         <Button type="button" variant="ghost" size="sm" disabled={isLoading} onClick={() => void load()}>
           <RefreshCwIcon className={cn(isLoading && "animate-spin")} data-icon="inline-start" aria-hidden />
           Tải lại
@@ -174,7 +199,12 @@ function ThreadBody({
             Đang tải tin nhắn...
           </div>
         ) : loadError ? (
-          <p className="py-6 text-center text-sm text-destructive">{loadError}</p>
+          <div className="space-y-2 py-6 text-center">
+            <p className="text-sm text-destructive">{loadError}</p>
+            <Button type="button" variant="outline" size="sm" disabled={isLoading} onClick={() => void load()}>
+              Thử lại
+            </Button>
+          </div>
         ) : messages.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted-foreground">
             Chưa có tin nhắn nào. Bạn có thể nhắn trước cho trung tâm.
@@ -235,7 +265,7 @@ function ThreadBody({
             </span>
             <Button type="submit" size="sm" disabled={isSending || !trimmedDraft}>
               {isSending ? <Spinner data-icon="inline-start" /> : <SendIcon data-icon="inline-start" aria-hidden />}
-              Gửi
+              {isSending ? "Đang gửi..." : "Gửi"}
             </Button>
           </div>
         </form>
@@ -274,10 +304,13 @@ function MessageBubble({ msg, isMine }: { msg: LeadMessageDto; isMine: boolean }
       </div>
       <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{msg.content}</p>
       {msg.isFlagged && (
-        <p className="mt-1.5 flex items-center gap-1 text-[11px] text-amber-800 dark:text-amber-300">
-          <ShieldAlertIcon className="size-3" aria-hidden />
-          Đã gắn cờ: {msg.flagReason || "vi phạm quy định chia sẻ liên hệ"}
-        </p>
+        // Ô vàng giống nhãn gắn cờ của Đức (LeadConversationPanel)
+        <div className="mt-1.5 flex items-start gap-1.5 rounded border border-amber-300 bg-amber-100/80 px-2 py-1 text-[11px] text-amber-900 dark:border-amber-700 dark:bg-amber-950/60 dark:text-amber-200">
+          <ShieldAlertIcon className="mt-0.5 size-3.5 shrink-0 text-amber-700 dark:text-amber-300" aria-hidden />
+          <span>
+            <strong>Đã gắn cờ:</strong> {msg.flagReason || "vi phạm quy định chia sẻ thông tin liên hệ / quảng cáo"}
+          </span>
+        </div>
       )}
     </div>
   );
