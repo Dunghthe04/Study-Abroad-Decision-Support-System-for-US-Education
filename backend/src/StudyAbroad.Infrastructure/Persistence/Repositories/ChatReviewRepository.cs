@@ -1,9 +1,10 @@
 using Microsoft.EntityFrameworkCore;
 using StudyAbroad.Application.Admin.ChatReview;
+using StudyAbroad.Domain.Entities;
 
 namespace StudyAbroad.Infrastructure.Persistence.Repositories;
 
-/// <summary>Lọc, sắp xếp, phân trang ở database; chỉ đọc nên không theo dõi thay đổi (AsNoTracking).</summary>
+/// <summary>Lọc, sắp xếp, phân trang ở database; các truy vấn đọc không theo dõi thay đổi (AsNoTracking), chỉ đổi trạng thái mới ghi.</summary>
 public class ChatReviewRepository(AppDbContext db) : IChatReviewRepository
 {
     public async Task<(IReadOnlyList<ChatReviewRow> Rows, int Total)> QueuePageAsync(
@@ -35,4 +36,21 @@ public class ChatReviewRepository(AppDbContext db) : IChatReviewRepository
 
     public async Task<IReadOnlyList<ChatReviewCountRow>> CountsAsync(DateTime? fromUtc, DateTime? toUtcExclusive, CancellationToken ct = default) =>
         await ChatReviewAggregator.Counts(db.ChatMessages.AsNoTracking(), fromUtc, toUtcExclusive).ToListAsync(ct);
+
+    public async Task<string?> SetStatusAsync(Guid messageId, string status, Func<string, AuditLog> audit, CancellationToken ct = default)
+    {
+        // Có theo dõi thay đổi (khác các truy vấn đọc) vì đây là chỗ ghi
+        var message = await ChatReviewAggregator.QueueMessage(db.ChatMessages, messageId).FirstOrDefaultAsync(ct);
+        if (message is null)
+            return null;
+
+        var previous = message.ReviewStatus!;   // QueueMessage chỉ trả tin có trạng thái
+        if (previous == status)
+            return previous;
+
+        message.ReviewStatus = status;
+        db.AuditLogs.Add(audit(previous));
+        await db.SaveChangesAsync(ct);   // một lần lưu cho cả hai: đổi trạng thái và dấu vết
+        return previous;
+    }
 }

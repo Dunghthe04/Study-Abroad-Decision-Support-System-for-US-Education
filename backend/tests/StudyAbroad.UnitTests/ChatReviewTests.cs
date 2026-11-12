@@ -401,6 +401,24 @@ public class ChatReviewTests
         public int DetailQueries { get; private set; }
         public (Guid MessageId, int ContextCount)? AskedDetail { get; private set; }
 
+        // Trạng thái xử lý hiện có của các tin thuộc hàng đợi; mã không có ở đây là tin ngoài hàng đợi
+        public Dictionary<Guid, string> Statuses { get; init; } = [];
+        public AuditLog? StatusAudit { get; private set; }
+        public int StatusCalls { get; private set; }
+
+        public Task<string?> SetStatusAsync(Guid messageId, string status, Func<string, AuditLog> audit, CancellationToken ct = default)
+        {
+            StatusCalls++;
+            if (!Statuses.TryGetValue(messageId, out var previous))
+                return Task.FromResult<string?>(null);
+            if (previous != status)   // giống kho thật: trùng thì không đổi, không ghi nhật ký
+            {
+                Statuses[messageId] = status;
+                StatusAudit = audit(previous);
+            }
+            return Task.FromResult<string?>(previous);
+        }
+
         public Task<ChatReviewDetailRows?> FindDetailAsync(Guid messageId, int contextCount, CancellationToken ct = default)
         {
             DetailQueries++;
@@ -727,9 +745,19 @@ public class ChatReviewTests
 
     private sealed class FakeService(
         PagedResult<ChatReviewItemDto>? queue = null, ChatReviewSummaryDto? summary = null, Exception? error = null,
-        ChatReviewDetailDto? detail = null) : IChatReviewService
+        ChatReviewDetailDto? detail = null, ChatReviewStatusDto? statusResult = null) : IChatReviewService
     {
         public (Guid MessageId, Guid Actor, string? Ip, string? UserAgent)? AskedDetail { get; private set; }
+        public (Guid MessageId, string? Status, Guid Actor, string? Ip, string? UserAgent)? AskedStatus { get; private set; }
+
+        public Task<ChatReviewStatusDto?> SetStatusAsync(
+            Guid messageId, string? status, Guid actorUserId, string? ipAddress, string? userAgent, CancellationToken ct = default)
+        {
+            AskedStatus = (messageId, status, actorUserId, ipAddress, userAgent);
+            if (error is not null)
+                throw error;
+            return Task.FromResult(statusResult);
+        }
 
         public Task<ChatReviewDetailDto?> GetDetailAsync(Guid messageId, Guid actorUserId, string? ipAddress, string? userAgent, CancellationToken ct = default)
         {
@@ -799,6 +827,181 @@ public class ChatReviewTests
         Assert.Equal("api/v1/admin/chat-review", type.GetCustomAttribute<RouteAttribute>()!.Template);
         Assert.Equal("queue", type.GetMethod(nameof(AdminChatReviewController.GetQueue))!.GetCustomAttribute<HttpGetAttribute>()!.Template);
         Assert.Equal("summary", type.GetMethod(nameof(AdminChatReviewController.GetSummary))!.GetCustomAttribute<HttpGetAttribute>()!.Template);
+    }
+
+    // ---- đổi trạng thái xử lý
+
+    [Fact]
+    public void QueueMessage_SelectsOnlyAReviewableAssistantOrSystemMessage()
+    {
+        var messages = new[]
+        {
+            Msg(1, 1, "assistant", Day(2)),                                              // trong hàng đợi
+            Msg(2, 1, "system", Day(2), outcome: "failed"),                              // dòng lỗi: cũng trong hàng đợi
+            Msg(3, 1, "assistant", Day(2), outcome: "answered", review: null),           // trả lời được: không có trạng thái
+            Msg(4, 1, "user", Day(2), outcome: null, review: "open"),                    // của học sinh: không bao giờ
+        }.AsQueryable();
+
+        Assert.Single(ChatReviewAggregator.QueueMessage(messages, Id(201)));
+        Assert.Single(ChatReviewAggregator.QueueMessage(messages, Id(202)));
+        Assert.Empty(ChatReviewAggregator.QueueMessage(messages, Id(203)));
+        Assert.Empty(ChatReviewAggregator.QueueMessage(messages, Id(204)));
+        Assert.Empty(ChatReviewAggregator.QueueMessage(messages, Id(999)));
+    }
+
+    [Theory]
+    [InlineData("resolved")]
+    [InlineData("ignored")]
+    public async Task SetStatus_ChangesTheStatus_AndAuditsFromAndTo_WithoutAnyChatContent(string target)
+    {
+        var repo = new FakeRepo { Statuses = { [Id(201)] = "open" } };
+
+        var result = await Svc(repo).SetStatusAsync(Id(201), target, Id(1), "10.0.0.5", "Mozilla");
+
+        Assert.Equal(new ChatReviewStatusDto(Id(201), target, "open"), result);
+        Assert.Equal(target, repo.Statuses[Id(201)]);
+        var entry = repo.StatusAudit!;
+        Assert.Equal((Id(1), ChatReviewService.StatusAction, "chat_message", Id(201).ToString()), (entry.ActorUserId, entry.Action, entry.EntityType, entry.EntityId));
+        Assert.Equal(("10.0.0.5", "Mozilla"), (entry.IpAddress, entry.UserAgent));
+        using var detail = JsonDocument.Parse(entry.DetailJson!);
+        Assert.Equal("open", detail.RootElement.GetProperty("from").GetString());
+        Assert.Equal(target, detail.RootElement.GetProperty("to").GetString());
+        Assert.DoesNotContain("nội dung", entry.DetailJson!);   // chỉ trạng thái, không có chữ của cuộc chat
+    }
+
+    [Fact]
+    public async Task SetStatus_CanReopenAHandledQuestion()
+    {
+        var repo = new FakeRepo { Statuses = { [Id(201)] = "ignored" } };
+
+        var result = await Svc(repo).SetStatusAsync(Id(201), "open", Id(1), null, null);
+
+        Assert.Equal(("open", "ignored"), (result!.ReviewStatus, result.PreviousStatus));
+    }
+
+    [Fact]
+    public async Task SetStatus_ToTheSameStatus_Succeeds_ButWritesNoAudit()
+    {
+        var repo = new FakeRepo { Statuses = { [Id(201)] = "resolved" } };
+
+        var result = await Svc(repo).SetStatusAsync(Id(201), "resolved", Id(1), null, null);
+
+        Assert.Equal(("resolved", "resolved"), (result!.ReviewStatus, result.PreviousStatus));
+        Assert.Null(repo.StatusAudit);
+    }
+
+    [Fact]
+    public async Task SetStatus_OfAMessageNotInTheQueue_IsNull()
+    {
+        var repo = new FakeRepo { Statuses = { [Id(201)] = "open" } };
+
+        Assert.Null(await Svc(repo).SetStatusAsync(Id(999), "resolved", Id(1), null, null));
+        Assert.Null(repo.StatusAudit);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("lạ")]
+    [InlineData("answered")]   // kết quả, không phải trạng thái xử lý
+    public async Task SetStatus_WithAnUnknownStatus_Throws_AndTouchesNothing(string? status)
+    {
+        var repo = new FakeRepo { Statuses = { [Id(201)] = "open" } };
+
+        await Assert.ThrowsAsync<ArgumentException>(() => Svc(repo).SetStatusAsync(Id(201), status, Id(1), null, null));
+
+        Assert.Equal(0, repo.StatusCalls);
+        Assert.Equal("open", repo.Statuses[Id(201)]);
+    }
+
+    [Fact]
+    public async Task SetStatus_WithoutAnActor_Throws_AndTouchesNothing()
+    {
+        var repo = new FakeRepo { Statuses = { [Id(201)] = "open" } };
+
+        await Assert.ThrowsAsync<ArgumentException>(() => Svc(repo).SetStatusAsync(Id(201), "resolved", Guid.Empty, null, null));
+
+        Assert.Equal(0, repo.StatusCalls);
+    }
+
+    [Fact]
+    public async Task SetStatus_TrimsTheStatus()
+    {
+        var repo = new FakeRepo { Statuses = { [Id(201)] = "open" } };
+
+        var result = await Svc(repo).SetStatusAsync(Id(201), "  resolved ", Id(1), null, null);
+
+        Assert.Equal("resolved", result!.ReviewStatus);
+    }
+
+    [Fact]
+    public async Task Controller_SetStatus_ReturnsTheResult_AndPassesTheActorAddressAndBrowser()
+    {
+        var dto = new ChatReviewStatusDto(Id(202), "resolved", "open");
+        var service = new FakeService(statusResult: dto);
+
+        var result = await ControllerFor(service, Id(1)).SetStatus(Id(202), new ChatReviewStatusRequest("resolved"), default);
+
+        Assert.Same(dto, Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal((Id(202), "resolved", Id(1), "10.0.0.5", "Mozilla"), service.AskedStatus);
+    }
+
+    [Fact]
+    public async Task Controller_SetStatus_WithoutALoggedInUser_Is401_AndNothingChanges()
+    {
+        var service = new FakeService(statusResult: new ChatReviewStatusDto(Id(202), "resolved", "open"));
+
+        var result = await ControllerFor(service, actor: null).SetStatus(Id(202), new ChatReviewStatusRequest("resolved"), default);
+
+        Assert.IsType<UnauthorizedResult>(result.Result);
+        Assert.Null(service.AskedStatus);
+    }
+
+    [Fact]
+    public async Task Controller_SetStatus_OfAMessageNotInTheQueue_Is404()
+    {
+        var result = await ControllerFor(new FakeService(), Id(1)).SetStatus(Id(999), new ChatReviewStatusRequest("resolved"), default);
+
+        Assert.IsType<NotFoundResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task Controller_SetStatus_WithABadStatus_Is400WithTheReason()
+    {
+        var controller = ControllerFor(new FakeService(error: new ArgumentException("Trạng thái sai")), Id(1));
+
+        var result = await controller.SetStatus(Id(202), new ChatReviewStatusRequest("lạ"), default);
+
+        Assert.Contains("Trạng thái sai", Assert.IsType<BadRequestObjectResult>(result.Result).Value!.ToString());
+    }
+
+    [Fact]
+    public async Task Controller_SetStatus_WithAnEmptyBody_PassesNullStatus_AndIs400()
+    {
+        var service = new FakeService(error: new ArgumentException("Trạng thái sai"));
+
+        var result = await ControllerFor(service, Id(1)).SetStatus(Id(202), null!, default);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Null(service.AskedStatus!.Value.Status);
+    }
+
+    [Fact]
+    public void Controller_SetStatusRoute_IsAPatchOfTheItemStatus_UnderTheAdminOnlyController()
+    {
+        var method = typeof(AdminChatReviewController).GetMethod(nameof(AdminChatReviewController.SetStatus))!;
+
+        Assert.Equal("items/{messageId:guid}/status", method.GetCustomAttribute<HttpPatchAttribute>()!.Template);
+        Assert.Equal(UserRoles.Admin, typeof(AdminChatReviewController).GetCustomAttribute<AuthorizeAttribute>()!.Roles);
+    }
+
+    [Fact]
+    public void TheStatusDtos_CarryNoChatContent()
+    {
+        var names = new[] { typeof(ChatReviewStatusRequest), typeof(ChatReviewStatusDto) }.SelectMany(t => t.GetProperties().Select(p => p.Name));
+
+        Assert.DoesNotContain(names, n => n is "Content" or "Text" or "Span" or "Entities" or "Answer" or "QuestionText");
     }
 
     [Fact]

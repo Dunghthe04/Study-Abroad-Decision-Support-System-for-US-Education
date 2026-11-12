@@ -25,6 +25,15 @@ public interface IChatReviewService
     /// </summary>
     Task<ChatReviewDetailDto?> GetDetailAsync(
         Guid messageId, Guid actorUserId, string? ipAddress, string? userAgent, CancellationToken ct = default);
+
+    /// <summary>
+    /// Đổi trạng thái xử lý của một câu trong hàng đợi (open, resolved hoặc ignored; đổi qua lại thoải mái, ví dụ mở lại khi lỡ tay).
+    /// Trả null nếu mã không phải tin của hàng đợi. Trạng thái mới trùng trạng thái cũ thì thành công mà không ghi gì. Mỗi lần đổi thật
+    /// được ghi nhật ký (audit_logs, chỉ mã và trạng thái, không có nội dung chat) cùng lúc với thay đổi. Trạng thái lạ hoặc thiếu người
+    /// thực hiện thì ném ArgumentException.
+    /// </summary>
+    Task<ChatReviewStatusDto?> SetStatusAsync(
+        Guid messageId, string? status, Guid actorUserId, string? ipAddress, string? userAgent, CancellationToken ct = default);
 }
 
 public class ChatReviewService(IChatReviewRepository repository, IAuditLogRepository auditLogs) : IChatReviewService
@@ -32,6 +41,7 @@ public class ChatReviewService(IChatReviewRepository repository, IAuditLogReposi
     public const int MaxPageSize = 100;
     public const int ContextMessages = 6;
     public const string ViewAction = "chat_review.view";   // hành động ghi vào audit_logs.action khi một người xem nội dung chat
+    public const string StatusAction = "chat_review.status";   // hành động ghi vào audit_logs.action khi một người đổi trạng thái xử lý
 
     // Chỉ hai kết quả đáng đưa vào hàng đợi: câu trả lời được (answered) không có trạng thái xử lý
     private static readonly string[] QueueOutcomes = [ChatOutcomes.NoAnswer, ChatOutcomes.Failed];
@@ -115,6 +125,31 @@ public class ChatReviewService(IChatReviewRepository repository, IAuditLogReposi
                 .ThenBy(c => c.MessageId)
                 .Select(c => new ChatReviewMessageDto(c.MessageId, c.Role, c.CreatedAt, c.Content))
                 .ToList());
+    }
+
+    public async Task<ChatReviewStatusDto?> SetStatusAsync(
+        Guid messageId, string? status, Guid actorUserId, string? ipAddress, string? userAgent, CancellationToken ct = default)
+    {
+        status = string.IsNullOrWhiteSpace(status) ? null : status.Trim();
+        if (status is null || !Statuses.Contains(status))
+            throw new ArgumentException($"Trạng thái phải là một trong: {string.Join(", ", Statuses)}.");
+        if (actorUserId == Guid.Empty)
+            throw new ArgumentException("Thiếu người thực hiện: không ghi được nhật ký nên không đổi trạng thái.");
+
+        var newStatus = status;
+        var previous = await repository.SetStatusAsync(messageId, newStatus, from => new AuditLog
+        {
+            ActorUserId = actorUserId,
+            Action = StatusAction,
+            EntityType = "chat_message",
+            EntityId = messageId.ToString(),
+            // Chỉ trạng thái trước và sau, không có nội dung chat
+            DetailJson = JsonSerializer.Serialize(new { from, to = newStatus }),
+            IpAddress = Clip(ipAddress, 64),
+            UserAgent = Clip(userAgent, 512),
+        }, ct);
+
+        return previous is null ? null : new ChatReviewStatusDto(messageId, newStatus, previous);
     }
 
     // Cắt theo độ rộng cột để một giá trị dài bất thường (trình duyệt lạ) không làm hỏng việc ghi nhật ký
