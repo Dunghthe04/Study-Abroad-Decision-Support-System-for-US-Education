@@ -15,10 +15,11 @@ interface InlineSelectCellProps {
   label: string;
   onChange: (value: string) => Promise<void>;
   className?: string;
+  renderOption?: (option: LabeledOption) => React.ReactNode;
 }
 
 /** Ô bảng mở dropdown ngay tại dòng; bấm vào ô không làm chọn dòng. Lỗi do `onChange` tự xử lý. */
-export function InlineSelectCell({ value, options, label, onChange, className }: InlineSelectCellProps) {
+export function InlineSelectCell({ value, options, label, onChange, className, renderOption }: InlineSelectCellProps) {
   const [isPending, setIsPending] = useState(false);
 
   const handleChange = async (next: string) => {
@@ -47,6 +48,7 @@ export function InlineSelectCell({ value, options, label, onChange, className }:
         disabled={isPending}
         aria-label={label}
         className={cn(BORDERLESS, className)}
+        renderOption={renderOption}
       />
       {isPending && <Spinner />}
     </div>
