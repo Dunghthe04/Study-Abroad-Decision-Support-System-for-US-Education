@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import type { UniversityOffering } from "@/types/university";
+import type { UniversityOffering, UniversitySource } from "@/types/university";
 import {
   activityLabel,
   annualPublishedCost,
@@ -25,7 +25,6 @@ import {
   schoolImportanceClass,
   schoolImportanceLabel,
   scoreRange,
-  universityDate,
   universityDeadlines,
   universityMoney,
   universityNumber,
@@ -36,10 +35,16 @@ import {
   GaugeDataItem,
   GridDataItem,
   RangeTrack,
-  SourceLink,
 } from "./UniversityDetailParts";
+import { findFieldSource, SourceTooltip } from "./UniversitySourceTooltip";
 
-export function UniversityCosts({ offering }: { offering: UniversityOffering }) {
+export function UniversityCosts({ offering, sources }: { offering: UniversityOffering; sources: UniversitySource[] }) {
+  const costSourceByKey: Record<string, UniversitySource | undefined> = {
+    tuition: findFieldSource(sources, "tuition_usd"),
+    living: findFieldSource(sources, "living_usd"),
+    fees: findFieldSource(sources, "fees_usd"),
+    other: findFieldSource(sources, "other_expenses_usd"),
+  };
   const total = annualPublishedCost(offering);
   const tuition = offering.tuitionUsd;
   const living = offering.livingUsd;
@@ -118,7 +123,9 @@ export function UniversityCosts({ offering }: { offering: UniversityOffering }) 
                 </p>
                 <div className="mt-1.5 flex items-baseline gap-2">
                   <span className="text-3xl sm:text-4xl font-extrabold tracking-tight text-brand">
-                    {universityMoney(displayTotal)}
+                    <SourceTooltip source={findFieldSource(sources, "coa_total_usd", "tuition_usd")}>
+                      {universityMoney(displayTotal)}
+                    </SourceTooltip>
                   </span>
                   <span className="text-sm font-medium text-ink-2">/ năm học</span>
                 </div>
@@ -168,7 +175,9 @@ export function UniversityCosts({ offering }: { offering: UniversityOffering }) 
                           </div>
                         </div>
                         <div className="text-right shrink-0">
-                          <span className="text-sm font-bold text-ink">{universityMoney(item.amount)}</span>
+                          <span className="text-sm font-bold text-ink">
+                            <SourceTooltip source={costSourceByKey[item.key]}>{universityMoney(item.amount)}</SourceTooltip>
+                          </span>
                           <span className="ml-2 text-xs text-ink-3">({pct.toFixed(0)}%)</span>
                         </div>
                       </div>
@@ -181,10 +190,10 @@ export function UniversityCosts({ offering }: { offering: UniversityOffering }) 
         ) : (
           <div className="rounded-xl border border-line bg-surface p-5 sm:p-6">
             <div className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
-              <GridDataItem icon={GraduationCapIcon} label="Học phí" value={universityMoney(offering.tuitionUsd)} />
-              <GridDataItem icon={HomeIcon} label="Sinh hoạt phí" value={universityMoney(offering.livingUsd)} />
-              <GridDataItem icon={FileTextIcon} label="Phí bắt buộc" value={universityMoney(offering.feesUsd)} />
-              <GridDataItem icon={WalletIcon} label="Chi phí khác" value={universityMoney(offering.otherExpensesUsd)} />
+              <GridDataItem icon={GraduationCapIcon} label="Học phí" value={<SourceTooltip source={costSourceByKey.tuition}>{universityMoney(offering.tuitionUsd)}</SourceTooltip>} />
+              <GridDataItem icon={HomeIcon} label="Sinh hoạt phí" value={<SourceTooltip source={costSourceByKey.living}>{universityMoney(offering.livingUsd)}</SourceTooltip>} />
+              <GridDataItem icon={FileTextIcon} label="Phí bắt buộc" value={<SourceTooltip source={costSourceByKey.fees}>{universityMoney(offering.feesUsd)}</SourceTooltip>} />
+              <GridDataItem icon={WalletIcon} label="Chi phí khác" value={<SourceTooltip source={costSourceByKey.other}>{universityMoney(offering.otherExpensesUsd)}</SourceTooltip>} />
             </div>
           </div>
         )}
@@ -199,21 +208,21 @@ export function UniversityCosts({ offering }: { offering: UniversityOffering }) 
                     <GridDataItem
                       icon={HeartHandshakeIcon}
                       label="Chính sách hỗ trợ"
-                      value={schoolAidPolicy(offering.intlAidPolicy)}
+                      value={<SourceTooltip source={findFieldSource(sources, "intl_aid_policy")}>{schoolAidPolicy(offering.intlAidPolicy)}</SourceTooltip>}
                     />
                   )}
                   {offering.intlAidAvgUsd != null && (
                     <GridDataItem
                       icon={HandCoinsIcon}
                       label="Mức hỗ trợ trung bình"
-                      value={universityMoney(offering.intlAidAvgUsd)}
+                      value={<SourceTooltip source={findFieldSource(sources, "intl_aid_avg_usd")}>{universityMoney(offering.intlAidAvgUsd)}</SourceTooltip>}
                     />
                   )}
                   {offering.intlAidRecipients != null && (
                     <GridDataItem
                       icon={UsersIcon}
                       label="Số sinh viên nhận hỗ trợ"
-                      value={universityNumber(offering.intlAidRecipients)}
+                      value={<SourceTooltip source={findFieldSource(sources, "intl_aid_recipients")}>{universityNumber(offering.intlAidRecipients)}</SourceTooltip>}
                     />
                   )}
                 </div>
@@ -242,7 +251,7 @@ export function UniversityCosts({ offering }: { offering: UniversityOffering }) 
   );
 }
 
-export function UniversityAdmissions({ offering }: { offering: UniversityOffering }) {
+export function UniversityAdmissions({ offering, sources }: { offering: UniversityOffering; sources: UniversitySource[] }) {
   const clientMounted = useSyncExternalStore(
     () => () => {},
     () => true,
@@ -262,6 +271,7 @@ export function UniversityAdmissions({ offering }: { offering: UniversityOfferin
   const englishRequirements = [
     {
       id: "ielts",
+      sourceField: "min_ielts",
       label: "IELTS tối thiểu",
       name: "IELTS",
       value: offering.minIelts,
@@ -274,6 +284,7 @@ export function UniversityAdmissions({ offering }: { offering: UniversityOfferin
     },
     {
       id: "toefl",
+      sourceField: "min_toefl",
       label: "TOEFL iBT tối thiểu",
       name: "TOEFL iBT",
       value: offering.minToefl,
@@ -286,6 +297,7 @@ export function UniversityAdmissions({ offering }: { offering: UniversityOfferin
     },
     {
       id: "duolingo",
+      sourceField: "min_duolingo",
       label: "Duolingo tối thiểu",
       name: "Duolingo",
       value: offering.minDuolingo,
@@ -326,7 +338,9 @@ export function UniversityAdmissions({ offering }: { offering: UniversityOfferin
                   </div>
                   <div className="flex items-baseline justify-between">
                     <span className="text-lg font-bold text-ink">
-                      {scoreRange(offering.sat25, offering.sat75)}
+                      <SourceTooltip source={findFieldSource(sources, "sat25", "sat75")}>
+                        {scoreRange(offering.sat25, offering.sat75)}
+                      </SourceTooltip>
                     </span>
                   </div>
                   <RangeTrack
@@ -351,7 +365,9 @@ export function UniversityAdmissions({ offering }: { offering: UniversityOfferin
                   </div>
                   <div className="flex items-baseline justify-between">
                     <span className="text-lg font-bold text-ink">
-                      {scoreRange(offering.act25, offering.act75)}
+                      <SourceTooltip source={findFieldSource(sources, "act25", "act75")}>
+                        {scoreRange(offering.act25, offering.act75)}
+                      </SourceTooltip>
                     </span>
                   </div>
                   <RangeTrack
@@ -373,7 +389,9 @@ export function UniversityAdmissions({ offering }: { offering: UniversityOfferin
                     <div className="flex flex-wrap items-baseline gap-2">
                       {offering.avgGpa4 != null && (
                         <span className="text-lg font-bold text-ink">
-                          TB: {universityNumber(offering.avgGpa4)}
+                          <SourceTooltip source={findFieldSource(sources, "avg_gpa4")}>
+                            TB: {universityNumber(offering.avgGpa4)}
+                          </SourceTooltip>
                         </span>
                       )}
                       {offering.minGpa4 != null && (
@@ -402,7 +420,9 @@ export function UniversityAdmissions({ offering }: { offering: UniversityOfferin
                   </div>
                   <div className="flex items-baseline justify-between">
                     <span className="text-lg font-bold text-ink">
-                      {universityNumber(offering.avgGpaWeighted)}
+                      <SourceTooltip source={findFieldSource(sources, "avg_gpa_weighted")}>
+                        {universityNumber(offering.avgGpaWeighted)}
+                      </SourceTooltip>
                     </span>
                     <span className="text-xs text-ink-3">Thang điểm có tính điểm thưởng AP/IB</span>
                   </div>
@@ -431,7 +451,9 @@ export function UniversityAdmissions({ offering }: { offering: UniversityOfferin
                     <div className="min-w-0">
                       <p className="text-xs text-ink-3">{item.label}</p>
                       <p className="mt-1 text-2xl font-bold tracking-tight text-ink">
-                        {universityNumber(item.value)}
+                        <SourceTooltip source={findFieldSource(sources, item.sourceField)}>
+                          {universityNumber(item.value)}
+                        </SourceTooltip>
                       </p>
                     </div>
                     <div className="flex h-10 w-28 shrink-0 items-center justify-end">
@@ -511,7 +533,7 @@ export function UniversityAdmissions({ offering }: { offering: UniversityOfferin
   );
 }
 
-export function UniversityCampusLife({ offering }: { offering: UniversityOffering }) {
+export function UniversityCampusLife({ offering, sources }: { offering: UniversityOffering; sources: UniversitySource[] }) {
   const hasOnCampus = offering.fyOnCampusPct != null || offering.ugOnCampusPct != null;
   const hasHousingCost = offering.housingOnlyUsd != null || offering.housingDepositUsd != null;
   const housingList = offering.housingTypes
@@ -544,6 +566,7 @@ export function UniversityCampusLife({ offering }: { offering: UniversityOfferin
                 <GaugeDataItem
                   label="SV năm nhất ở KTX"
                   value={offering.fyOnCampusPct}
+                  wrapValue={(value) => <SourceTooltip source={findFieldSource(sources, "fy_on_campus_pct")}>{value}</SourceTooltip>}
                   subtitle="Sinh viên năm 1 nội trú"
                 />
               )}
@@ -551,6 +574,7 @@ export function UniversityCampusLife({ offering }: { offering: UniversityOfferin
                 <GaugeDataItem
                   label="SV đại học ở KTX"
                   value={offering.ugOnCampusPct}
+                  wrapValue={(value) => <SourceTooltip source={findFieldSource(sources, "ug_on_campus_pct")}>{value}</SourceTooltip>}
                   subtitle="Toàn bộ sinh viên đại học"
                 />
               )}
@@ -558,14 +582,14 @@ export function UniversityCampusLife({ offering }: { offering: UniversityOfferin
                 <GridDataItem
                   icon={HomeIcon}
                   label="Tiền phòng ở KTX"
-                  value={`${universityMoney(offering.housingOnlyUsd)} / năm`}
+                  value={<SourceTooltip source={findFieldSource(sources, "housing_only_usd")}>{`${universityMoney(offering.housingOnlyUsd)} / năm`}</SourceTooltip>}
                 />
               )}
               {offering.housingDepositUsd != null && (
                 <GridDataItem
                   icon={WalletIcon}
                   label="Tiền đặt cọc phòng"
-                  value={universityMoney(offering.housingDepositUsd)}
+                  value={<SourceTooltip source={findFieldSource(sources, "housing_deposit_usd")}>{universityMoney(offering.housingDepositUsd)}</SourceTooltip>}
                 />
               )}
             </div>
@@ -634,56 +658,63 @@ export function UniversityCampusLife({ offering }: { offering: UniversityOfferin
 export function UniversityStatistics({
   offering,
   internationalStudentCount,
+  sources,
 }: {
   offering: UniversityOffering;
   internationalStudentCount: number | null;
+  sources: UniversitySource[];
 }) {
   const percentageStats = [
     {
       key: "retention",
+      sourceField: "retention_rate_1yr",
       label: "Tỷ lệ tiếp tục học năm hai",
       value: offering.retentionRate1Yr,
       subtitle: "SV năm 1 quay lại học tiếp",
     },
     {
       key: "graduation",
+      sourceField: "grad_rate_6yr",
       label: "Tỷ lệ tốt nghiệp trong 6 năm",
       value: offering.gradRate6Yr,
       subtitle: "Chuẩn CDS B / College Scorecard",
     },
     {
       key: "intlAcceptance",
+      sourceField: "intl_acceptance_rate",
       label: "Tỷ lệ nhận hồ sơ quốc tế",
       value: offering.intlAcceptanceRate,
       subtitle: "Chấp thuận sinh viên quốc tế",
     },
     {
       key: "satSubmit",
+      sourceField: "sat_submit_pct",
       label: "Tỷ lệ nộp điểm SAT",
       value: offering.satSubmitPct,
       subtitle: "Tân sinh viên nộp SAT",
     },
     {
       key: "gpaSubmit",
+      sourceField: "gpa_submit_pct",
       label: "Tỷ lệ nộp GPA cấp 3",
       value: offering.gpaSubmitPct,
       subtitle: "Tân sinh viên có điểm GPA",
     },
   ].filter((item): item is typeof item & { value: number } => item.value != null);
 
-  const countRows = [
-    { label: "Tổng hồ sơ nộp", value: universityNumber(offering.applicantsTotal) },
-    { label: "Tổng hồ sơ được nhận", value: universityNumber(offering.admittedTotal) },
-    { label: "Hồ sơ quốc tế nộp", value: universityNumber(offering.intlApplicants) },
-    { label: "Hồ sơ quốc tế được nhận", value: universityNumber(offering.intlAdmitted) },
-    { label: "Số sinh viên quốc tế đang theo học", value: universityNumber(internationalStudentCount) },
+  const countRows: { label: string; value: string; sourceField?: string }[] = [
+    { label: "Tổng hồ sơ nộp", value: universityNumber(offering.applicantsTotal), sourceField: "applicants_total" },
+    { label: "Tổng hồ sơ được nhận", value: universityNumber(offering.admittedTotal), sourceField: "admitted_total" },
+    { label: "Hồ sơ quốc tế nộp", value: universityNumber(offering.intlApplicants), sourceField: "intl_applicants" },
+    { label: "Hồ sơ quốc tế được nhận", value: universityNumber(offering.intlAdmitted), sourceField: "intl_admitted" },
+    { label: "Số sinh viên quốc tế đang theo học", value: universityNumber(internationalStudentCount), sourceField: "international_student_count" },
+    { label: "Tỷ lệ SV / giảng viên", value: offering.studentFacultyRatio != null ? `${offering.studentFacultyRatio} : 1` : MISSING_UNIVERSITY_DATA },
   ].filter((r) => r.value !== MISSING_UNIVERSITY_DATA);
 
   return (
     <DetailSection
       id="statistics"
       title="Thống kê sinh viên & tuyển sinh"
-      description="Các chỉ số có thể thuộc những kỳ dữ liệu khác nhau. Xem nguồn bên dưới để đối chiếu năm."
     >
       <div className="space-y-6">
         {percentageStats.length > 0 && (
@@ -695,6 +726,7 @@ export function UniversityStatistics({
                   label={item.label}
                   value={item.value}
                   subtitle={item.subtitle}
+                  wrapValue={(value) => <SourceTooltip source={findFieldSource(sources, item.sourceField)}>{value}</SourceTooltip>}
                 />
               ))}
             </div>
@@ -705,7 +737,7 @@ export function UniversityStatistics({
           <div className="space-y-3">
             <h3 className="text-sm font-semibold text-ink">Số lượng hồ sơ & tuyển sinh</h3>
             <div className="rounded-xl border border-line bg-surface p-5 sm:p-6">
-              <DetailRows rows={countRows} />
+              <DetailRows rows={countRows.map((row) => ({ label: row.label, value: row.sourceField ? <SourceTooltip source={findFieldSource(sources, row.sourceField)}>{row.value}</SourceTooltip> : row.value }))} />
             </div>
           </div>
         )}
@@ -714,7 +746,21 @@ export function UniversityStatistics({
   );
 }
 
-export function UniversityMajors({ offering }: { offering: UniversityOffering }) {
+export function UniversityMajors({ offering, sources }: { offering: UniversityOffering; sources: UniversitySource[] }) {
+  const majorsFieldSource = findFieldSource(sources, "majors");
+  const majorsSource: UniversitySource | undefined = majorsFieldSource ?? (offering.sourceUrl
+    ? {
+        fieldName: "majors",
+        fieldValue: null,
+        sourceUrl: offering.sourceUrl,
+        sourceSection: null,
+        status: "unverified",
+        retrievedAt: offering.retrievedAt,
+        dataYear: offering.academicYear,
+        appliedToSnapshot: true,
+        normalization: null,
+      }
+    : undefined);
   return (
     <DetailSection
       id="majors"
@@ -742,10 +788,9 @@ export function UniversityMajors({ offering }: { offering: UniversityOffering })
             <p className="text-sm text-ink-3">{MISSING_UNIVERSITY_DATA}</p>
           )}
         </div>
-        {offering.sourceUrl && (
+        {majorsSource && (
           <p className="text-xs text-ink-3">
-            Nguồn tổng quan của bậc học: <SourceLink url={offering.sourceUrl} /> · Ngày lấy:{" "}
-            {universityDate(offering.retrievedAt)}
+            <SourceTooltip source={majorsSource}>Nguồn dữ liệu ngành học</SourceTooltip>
           </p>
         )}
       </div>
