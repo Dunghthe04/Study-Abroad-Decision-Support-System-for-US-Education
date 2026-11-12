@@ -1,9 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { cn } from "cn";
 import { Spinner } from "@/components/ui/spinner";
 import type { LabeledOption } from "@/lib/admin-university-display";
 import { OptionSelect } from "../universities/OptionSelect";
+
+const BORDERLESS =
+  "border-transparent bg-transparent shadow-none hover:border-border hover:bg-card focus-visible:bg-card aria-expanded:border-border aria-expanded:bg-card dark:bg-transparent dark:hover:bg-input/30";
 
 interface InlineSelectCellProps {
   value: string;
@@ -42,7 +46,7 @@ export function InlineSelectCell({ value, options, label, onChange, className }:
         onChange={(next) => void handleChange(next)}
         disabled={isPending}
         aria-label={label}
-        className={className}
+        className={cn(BORDERLESS, className)}
       />
       {isPending && <Spinner />}
     </div>
