@@ -44,7 +44,10 @@ export function DetailSection({
   return (
     <section id={id} aria-label={title} className={cn("scroll-mt-32 space-y-4", className)}>
       <div className="space-y-1">
-        <h2 className="font-sans text-xl font-semibold tracking-tight text-ink">{title}</h2>
+        <div className="flex items-center gap-4">
+          <h2 className="font-sans text-xl font-semibold tracking-tight text-ink">{title}</h2>
+          <div className="h-px flex-1 bg-line" aria-hidden="true" />
+        </div>
         {description && <p className="text-sm leading-relaxed text-ink-2">{description}</p>}
       </div>
       {children}
@@ -282,6 +285,7 @@ export function GaugeDataItem({
   subtitle,
   gaugeClassName,
   className,
+  wrapValue,
 }: {
   icon?: React.ComponentType<{ className?: string }>;
   label: string;
@@ -292,6 +296,7 @@ export function GaugeDataItem({
   subtitle?: string;
   gaugeClassName?: string;
   className?: string;
+  wrapValue?: (value: ReactNode) => ReactNode;
 }) {
   const display = formattedValue ?? universityPercent(value);
   return (
@@ -300,7 +305,7 @@ export function GaugeDataItem({
         {Icon && <Icon className="size-6 shrink-0 text-muted-foreground/80" />}
         <div className="min-w-0 space-y-0.5">
           <p className="text-xs text-ink-3">{label}</p>
-          <p className="text-base font-semibold tracking-tight text-ink">{display}</p>
+          <p className="text-base font-semibold tracking-tight text-ink">{wrapValue ? wrapValue(display) : display}</p>
           {subtitle && <p className="text-xs text-ink-3">{subtitle}</p>}
         </div>
       </div>
