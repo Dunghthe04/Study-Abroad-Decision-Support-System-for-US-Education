@@ -76,6 +76,27 @@ public static class GradeScale
             .OrderByDescending(rule => rule.MinScore)
             .FirstOrDefault(rule => score >= rule.MinScore)?.Gpa4 ?? 0m;
 
+    /// <summary>
+    /// Nội suy tuyến tính giữa các mốc (MinScore → Gpa4), cách UC Irvine dùng cho điểm Việt Nam (kế hoạch GPA weighted,
+    /// mục 4). Dưới mốc đầu lấy GPA mốc đầu, trên mốc cuối lấy GPA mốc cuối. Không làm tròn: chỉ làm tròn khi hiển thị.
+    /// </summary>
+    public static decimal Interpolate(decimal score, GradeScaleConfigDto config)
+    {
+        var anchors = config.Rules.OrderBy(rule => rule.MinScore).ToList();
+
+        if (score <= anchors[0].MinScore)
+            return anchors[0].Gpa4;
+        if (score >= anchors[^1].MinScore)
+            return anchors[^1].Gpa4;
+
+        // Hai mốc kề nhau bao quanh điểm: low.MinScore ≤ score < high.MinScore
+        var high = anchors.First(rule => rule.MinScore > score);
+        var low = anchors[anchors.IndexOf(high) - 1];
+
+        // Nhân trước rồi chia để số decimal giữ đúng (8.5 → 3.625)
+        return low.Gpa4 + (score - low.MinScore) * (high.Gpa4 - low.Gpa4) / (high.MinScore - low.MinScore);
+    }
+
     /// <summary>JSON của bảng mặc định, dùng để seed grade_scale.10 khi DB chưa có.</summary>
     public static string DefaultJson() =>
         JsonSerializer.Serialize(AcademicAnalysisService.GetDefaultWesScaleConfig(), WriteOptions);
