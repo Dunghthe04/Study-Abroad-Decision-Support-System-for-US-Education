@@ -41,4 +41,10 @@ public interface IReviewBatchRepository
     Task<ReviewVerdict?> UpsertVerdictAsync(
         Guid batchId, Guid itemId, Guid reviewerUserId, string labelVerdict, string? correctIntent, string answerVerdict, string? cause,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Mọi kết luận của một đợt (của tất cả người duyệt) kèm số liệu nhóm lúc bốc, để tính báo cáo. Null nếu đợt không có HOẶC người gọi
+    /// không phải người tạo cũng không được giao duyệt đợt đó (không phân biệt hai trường hợp). Không đọc nội dung chat.
+    /// </summary>
+    Task<ReviewReportRows?> GetReportRowsAsync(Guid batchId, Guid userId, CancellationToken ct = default);
 }

@@ -37,6 +37,12 @@ public interface IReviewBatchService
     /// </summary>
     Task<ReviewVerdictDto?> SaveVerdictAsync(
         Guid batchId, Guid itemId, SaveReviewVerdictRequest request, Guid actorUserId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Báo cáo của một đợt: tỷ lệ sai từng nhóm và chung (có trọng số), nguyên nhân, nhãn đúng. Chỉ là số tổng hợp, không có nội dung chat.
+    /// Null nếu đợt không có hoặc người gọi không phải người tạo cũng không được giao duyệt (không phân biệt hai trường hợp).
+    /// </summary>
+    Task<ReviewReportDto?> GetReportAsync(Guid batchId, Guid actorUserId, CancellationToken ct = default);
 }
 
 public class ReviewBatchService(IReviewBatchRepository repository, IAuditLogRepository auditLogs) : IReviewBatchService
@@ -207,6 +213,23 @@ public class ReviewBatchService(IReviewBatchRepository repository, IAuditLogRepo
 
         var saved = await repository.UpsertVerdictAsync(batchId, itemId, actorUserId, label, correctIntent, answer, cause, ct);
         return saved is null ? null : ToDto(saved);
+    }
+
+    public async Task<ReviewReportDto?> GetReportAsync(Guid batchId, Guid actorUserId, CancellationToken ct = default)
+    {
+        var rows = await repository.GetReportRowsAsync(batchId, actorUserId, ct);
+        if (rows is null)
+            return null;
+
+        // Mỗi câu một kết luận: kết luận chấm sớm nhất (hòa thì theo mã người chấm cho ổn định), để câu nhiều người chấm không bị đếm hai lần
+        var graded = rows.Verdicts
+            .GroupBy(v => v.ItemId)
+            .Select(g => g.OrderBy(v => v.CreatedAt).ThenBy(v => v.ReviewerUserId).First())
+            .Select(v => new ReviewGradedItem(v.Stratum, v.LabelVerdict, v.CorrectIntent, v.AnswerVerdict, v.Cause))
+            .ToList();
+
+        var report = ReviewReportCalculator.Compute(ReviewSampler.ReadStrata(rows.StrataJson), graded);
+        return new ReviewReportDto(rows.BatchId, rows.BatchName, rows.Seed, rows.TotalItems, graded.Count, rows.ReviewerCount, report);
     }
 
     private static ReviewVerdictDto ToDto(ReviewVerdict v) =>

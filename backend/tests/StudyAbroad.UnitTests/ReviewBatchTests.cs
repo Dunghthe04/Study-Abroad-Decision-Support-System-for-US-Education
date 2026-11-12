@@ -297,6 +297,8 @@ public class ReviewBatchTests
             Guid batchId, Guid itemId, Guid reviewerUserId, string labelVerdict, string? correctIntent, string answerVerdict, string? cause,
             CancellationToken ct = default) =>
             throw new NotSupportedException();
+        public Task<ReviewReportRows?> GetReportRowsAsync(Guid batchId, Guid userId, CancellationToken ct = default) =>
+            throw new NotSupportedException();
 
         public Task AddAsync(
             ReviewBatch batch, IReadOnlyList<ReviewBatchItem> items, IReadOnlyList<ReviewBatchReviewer> reviewers, AuditLog audit,

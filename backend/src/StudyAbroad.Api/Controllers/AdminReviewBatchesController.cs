@@ -76,6 +76,21 @@ public class AdminReviewBatchesController(IReviewBatchService batches) : Control
     }
 
     /// <summary>
+    /// Báo cáo của đợt: tỷ lệ trả lời sai và nhãn SLM sai (từng nhóm và chung, có trọng số và khoảng tin cậy), nguyên nhân, nhãn đúng.
+    /// Chỉ là số tổng hợp, không có nội dung chat nên không ghi nhật ký xem nội dung. 404 nếu đợt không có hoặc người gọi không phải người tạo
+    /// cũng không được giao duyệt.
+    /// </summary>
+    [HttpGet("{batchId:guid}/report")]
+    public async Task<ActionResult<ReviewReportDto>> GetReport(Guid batchId, CancellationToken ct)
+    {
+        if (User.GetUserId() is not { } actorId)
+            return Unauthorized();
+
+        var report = await batches.GetReportAsync(batchId, actorId, ct);
+        return report is null ? NotFound() : Ok(report);
+    }
+
+    /// <summary>
     /// Lưu kết luận của người gọi cho một câu (ghi đè nếu đã chấm). Nhãn đúng chỉ khi nhãn SLM sai; nguyên nhân bắt buộc khi câu trả lời sai
     /// và chỉ khi đó. Sai quy tắc trả 400; không được giao đợt hoặc câu không thuộc đợt trả 404.
     /// </summary>

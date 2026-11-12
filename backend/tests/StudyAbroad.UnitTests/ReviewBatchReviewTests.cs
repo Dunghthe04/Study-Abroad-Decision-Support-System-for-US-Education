@@ -85,6 +85,8 @@ public class ReviewBatchReviewTests
             throw new NotSupportedException();
         public Task AddAsync(ReviewBatch batch, IReadOnlyList<ReviewBatchItem> items, IReadOnlyList<ReviewBatchReviewer> reviewers, AuditLog audit, CancellationToken ct = default) =>
             throw new NotSupportedException();
+        public Task<ReviewReportRows?> GetReportRowsAsync(Guid batchId, Guid userId, CancellationToken ct = default) =>
+            throw new NotSupportedException();
     }
 
     private static ReviewBatchService Svc(FakeRepo repo, FakeAudit? audit = null) => new(repo, audit ?? new FakeAudit());
@@ -505,6 +507,7 @@ public class ReviewBatchReviewTests
         public ReviewItemListDto? Items { get; init; }
         public ReviewItemDetailDto? Detail { get; init; }
         public ReviewVerdictDto? Verdict { get; init; }
+        public ReviewReportDto? Report { get; init; }
         public Guid? AskedActor { get; private set; }
         public (Guid Batch, Guid Item, Guid Actor, string? Ip, string? Ua)? AskedDetail { get; private set; }
 
@@ -540,6 +543,12 @@ public class ReviewBatchReviewTests
             if (Error is not null)
                 throw Error;
             return Task.FromResult(Verdict);
+        }
+
+        public Task<ReviewReportDto?> GetReportAsync(Guid batchId, Guid actorUserId, CancellationToken ct = default)
+        {
+            AskedActor = actorUserId;
+            return Task.FromResult(Report);
         }
     }
 
@@ -579,6 +588,7 @@ public class ReviewBatchReviewTests
         Assert.IsType<UnauthorizedResult>((await controller.GetItems(Batch, default)).Result);
         Assert.IsType<UnauthorizedResult>((await controller.GetItem(Batch, Item, default)).Result);
         Assert.IsType<UnauthorizedResult>((await controller.SaveVerdict(Batch, Item, new SaveReviewVerdictRequest("correct", null, "correct", null), default)).Result);
+        Assert.IsType<UnauthorizedResult>((await controller.GetReport(Batch, default)).Result);
         Assert.Null(service.AskedActor);
         Assert.Null(service.AskedDetail);
     }
@@ -633,6 +643,20 @@ public class ReviewBatchReviewTests
     }
 
     [Fact]
+    public async Task Controller_Report_Is200WithTheReport_AndPassesTheActor_And404WhenHidden()
+    {
+        var report = new ReviewReportDto(Batch, "Đợt 1", "abc", 5, 0, 1, ReviewReportCalculator.Compute([], []));
+        var service = new FakeService { Report = report };
+
+        var ok = await ControllerFor(service, Me).GetReport(Batch, default);
+        var hidden = await ControllerFor(new FakeService(), Me).GetReport(Batch, default);
+
+        Assert.Same(report, Assert.IsType<OkObjectResult>(ok.Result).Value);
+        Assert.Equal(Me, service.AskedActor);
+        Assert.IsType<NotFoundResult>(hidden.Result);
+    }
+
+    [Fact]
     public void Controller_IsForAdminsOnly_WithTheExpectedRoutes()
     {
         var type = typeof(AdminReviewBatchesController);
@@ -644,5 +668,6 @@ public class ReviewBatchReviewTests
         Assert.Equal("{batchId:guid}/items", type.GetMethod(nameof(AdminReviewBatchesController.GetItems))!.GetCustomAttribute<HttpGetAttribute>()!.Template);
         Assert.Equal("{batchId:guid}/items/{itemId:guid}", type.GetMethod(nameof(AdminReviewBatchesController.GetItem))!.GetCustomAttribute<HttpGetAttribute>()!.Template);
         Assert.Equal("{batchId:guid}/items/{itemId:guid}/verdict", type.GetMethod(nameof(AdminReviewBatchesController.SaveVerdict))!.GetCustomAttribute<HttpPutAttribute>()!.Template);
+        Assert.Equal("{batchId:guid}/report", type.GetMethod(nameof(AdminReviewBatchesController.GetReport))!.GetCustomAttribute<HttpGetAttribute>()!.Template);
     }
 }

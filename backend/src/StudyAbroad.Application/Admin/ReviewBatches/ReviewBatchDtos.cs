@@ -106,3 +106,20 @@ public record ReviewItemDetailRows(
     ChatReviewQuestionRow? Question,
     IReadOnlyList<ChatReviewContextRow> Context,
     ReviewVerdict? MyVerdict);
+
+// ===== Báo cáo của một đợt: chỉ số tổng hợp, KHÔNG có nội dung chat, không nêu ai chấm thế nào =====
+
+/// <summary>Một kết luận thô của một người cho một câu (kèm nhóm của câu), đủ để tính báo cáo. Không có nội dung chat.</summary>
+public record ReviewVerdictRow(
+    Guid ItemId, string Stratum, Guid ReviewerUserId, string LabelVerdict, string? CorrectIntent, string AnswerVerdict, string? Cause,
+    DateTime CreatedAt);
+
+public record ReviewReportRows(
+    Guid BatchId, string BatchName, string Seed, string StrataJson, int TotalItems, int ReviewerCount, IReadOnlyList<ReviewVerdictRow> Verdicts);
+
+/// <summary>
+/// Báo cáo một đợt. ItemsGraded là số câu đã có ít nhất một kết luận (TotalItems là số câu của đợt). Mỗi câu chỉ tính một kết luận:
+/// kết luận chấm sớm nhất, để câu nhiều người chấm không bị đếm hai lần.
+/// </summary>
+public record ReviewReportDto(
+    Guid BatchId, string BatchName, string Seed, int TotalItems, int ItemsGraded, int ReviewerCount, ReviewReport Report);

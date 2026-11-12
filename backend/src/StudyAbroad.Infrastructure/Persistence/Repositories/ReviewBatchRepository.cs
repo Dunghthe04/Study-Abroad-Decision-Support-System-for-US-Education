@@ -121,6 +121,30 @@ public class ReviewBatchRepository(AppDbContext db) : IReviewBatchRepository
         return new ReviewItemDetailRows(item.Id, item.Position, item.Stratum, reply, question, context, mine);
     }
 
+    public async Task<ReviewReportRows?> GetReportRowsAsync(Guid batchId, Guid userId, CancellationToken ct = default)
+    {
+        var batch = await db.ReviewBatches.AsNoTracking()
+            .Where(b => b.Id == batchId
+                        && (b.CreatedByUserId == userId
+                            || db.ReviewBatchReviewers.Any(r => r.ReviewBatchId == b.Id && r.UserId == userId)))
+            .Select(b => new { b.Id, b.Name, b.Seed, b.StrataJson })
+            .FirstOrDefaultAsync(ct);
+        if (batch is null)
+            return null;
+
+        var totalItems = await db.ReviewBatchItems.AsNoTracking().CountAsync(i => i.ReviewBatchId == batchId, ct);
+        var reviewerCount = await db.ReviewBatchReviewers.AsNoTracking().CountAsync(r => r.ReviewBatchId == batchId, ct);
+        // Chỉ cột mã và nhãn: không có nội dung chat
+        var verdicts = await (
+                from v in db.ReviewVerdicts.AsNoTracking()
+                join i in db.ReviewBatchItems.AsNoTracking() on v.ReviewBatchItemId equals i.Id
+                where i.ReviewBatchId == batchId
+                select new ReviewVerdictRow(
+                    i.Id, i.Stratum, v.ReviewerUserId, v.LabelVerdict, v.CorrectIntent, v.AnswerVerdict, v.Cause, v.CreatedAt))
+            .ToListAsync(ct);
+        return new ReviewReportRows(batch.Id, batch.Name, batch.Seed, batch.StrataJson, totalItems, reviewerCount, verdicts);
+    }
+
     public async Task<ReviewVerdict?> UpsertVerdictAsync(
         Guid batchId, Guid itemId, Guid reviewerUserId, string labelVerdict, string? correctIntent, string answerVerdict, string? cause,
         CancellationToken ct = default)
