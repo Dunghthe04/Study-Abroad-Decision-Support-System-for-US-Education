@@ -21,6 +21,12 @@ import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
+import { CenterLegalFieldsSection } from "@/components/admin/centers/CenterLegalFieldsSection";
+import {
+  createInitialLegalFormValues,
+  parseAndValidateLegalFormValues,
+  type LegalFormValues,
+} from "@/lib/center-legal";
 import { cn } from "@/lib/utils";
 
 const COMMON_SERVICES = [
@@ -51,12 +57,10 @@ export function AddCenterButton({ className, size = "sm" }: AddCenterButtonProps
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [centerType, setCenterType] = useState("study_abroad");
-  const [licenseNumber, setLicenseNumber] = useState("");
-  const [establishedYear, setEstablishedYear] = useState<string>("");
-  const [staffCount, setStaffCount] = useState<string>("");
-  const [visaSuccessRate, setVisaSuccessRate] = useState<string>("");
   const [logoUrl, setLogoUrl] = useState("");
-  const [accreditationsInput, setAccreditationsInput] = useState("");
+  const [legalValues, setLegalValues] = useState<LegalFormValues>(() =>
+    createInitialLegalFormValues()
+  );
   const [description, setDescription] = useState("");
   const [selectedLevels, setSelectedLevels] = useState<string[]>([]);
   const [selectedServices, setSelectedServices] = useState<string[]>([]);
@@ -91,12 +95,8 @@ export function AddCenterButton({ className, size = "sm" }: AddCenterButtonProps
     setPhone("");
     setEmail("");
     setCenterType("study_abroad");
-    setLicenseNumber("");
-    setEstablishedYear("");
-    setStaffCount("");
-    setVisaSuccessRate("");
     setLogoUrl("");
-    setAccreditationsInput("");
+    setLegalValues(createInitialLegalFormValues());
     setDescription("");
     setSelectedLevels([]);
     setSelectedServices([]);
@@ -127,15 +127,13 @@ export function AddCenterButton({ className, size = "sm" }: AddCenterButtonProps
     setIsSubmitting(true);
 
     try {
-      const parsedEstYear = establishedYear ? parseInt(establishedYear, 10) : undefined;
-      const parsedStaff = staffCount ? parseInt(staffCount, 10) : undefined;
-      const parsedVisaRate = visaSuccessRate ? parseFloat(visaSuccessRate) : undefined;
-      const parsedAccreditations = accreditationsInput
-        ? accreditationsInput
-            .split(/[,;\n]/)
-            .map((s) => s.trim())
-            .filter(Boolean)
-        : undefined;
+      const { payload: legalPayload, error: legalError } =
+        parseAndValidateLegalFormValues(legalValues);
+      if (legalError || !legalPayload) {
+        setError(legalError || "Thông tin pháp lý không hợp lệ.");
+        setIsSubmitting(false);
+        return;
+      }
 
       await studyCentersApi.create({
         code: trimmedCode,
@@ -147,12 +145,8 @@ export function AddCenterButton({ className, size = "sm" }: AddCenterButtonProps
         phone: phone.trim() || null,
         email: email.trim() || null,
         centerType: centerType.trim() || "study_abroad",
-        licenseNumber: licenseNumber.trim() || null,
-        establishedYear: isNaN(parsedEstYear as number) ? null : parsedEstYear,
-        staffCount: isNaN(parsedStaff as number) ? null : parsedStaff,
-        visaSuccessRate: isNaN(parsedVisaRate as number) ? null : parsedVisaRate,
         logoUrl: logoUrl.trim() || null,
-        accreditations: parsedAccreditations,
+        ...legalPayload,
         description: description.trim() || null,
         studyLevels: selectedLevels,
         services: selectedServices,
@@ -330,73 +324,13 @@ export function AddCenterButton({ className, size = "sm" }: AddCenterButtonProps
             </div>
 
             {/* Khối Pháp lý & Năng lực */}
-            <div className="rounded-lg border bg-muted/20 p-3.5 space-y-3">
-              <div className="text-xs font-semibold text-foreground">
-                Hồ sơ pháp lý & Năng lực đối soát (Xác minh)
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Field>
-                  <FieldLabel htmlFor="center-license">Số giấy phép Sở GD&ĐT</FieldLabel>
-                  <Input
-                    id="center-license"
-                    placeholder="Ví dụ: GPHĐ-GD-2010/HN-088"
-                    value={licenseNumber}
-                    onChange={(e) => setLicenseNumber(e.target.value)}
-                    disabled={isSubmitting}
-                  />
-                </Field>
-
-                <Field>
-                  <FieldLabel htmlFor="center-year">Năm thành lập</FieldLabel>
-                  <Input
-                    id="center-year"
-                    type="number"
-                    placeholder="Ví dụ: 2010"
-                    value={establishedYear}
-                    onChange={(e) => setEstablishedYear(e.target.value)}
-                    disabled={isSubmitting}
-                  />
-                </Field>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Field>
-                  <FieldLabel htmlFor="center-staff">Quy mô nhân sự (cố vấn)</FieldLabel>
-                  <Input
-                    id="center-staff"
-                    type="number"
-                    placeholder="Ví dụ: 35"
-                    value={staffCount}
-                    onChange={(e) => setStaffCount(e.target.value)}
-                    disabled={isSubmitting}
-                  />
-                </Field>
-
-                <Field>
-                  <FieldLabel htmlFor="center-visa">Tỷ lệ đỗ Visa Mỹ (%)</FieldLabel>
-                  <Input
-                    id="center-visa"
-                    type="number"
-                    step="0.1"
-                    placeholder="Ví dụ: 98.5"
-                    value={visaSuccessRate}
-                    onChange={(e) => setVisaSuccessRate(e.target.value)}
-                    disabled={isSubmitting}
-                  />
-                </Field>
-              </div>
-
-              <Field>
-                <FieldLabel htmlFor="center-accreditations">Chứng nhận / Kiểm định quốc tế (ngăn cách bằng dấu phẩy)</FieldLabel>
-                <Input
-                  id="center-accreditations"
-                  placeholder="Ví dụ: AIRC, ICEF, PIER, British Council"
-                  value={accreditationsInput}
-                  onChange={(e) => setAccreditationsInput(e.target.value)}
-                  disabled={isSubmitting}
-                />
-              </Field>
-            </div>
+            <CenterLegalFieldsSection
+              idPrefix="center"
+              centerType={centerType}
+              values={legalValues}
+              onChange={(patch) => setLegalValues((prev) => ({ ...prev, ...patch }))}
+              disabled={isSubmitting}
+            />
 
             <Field>
               <FieldLabel>Bậc học tư vấn</FieldLabel>

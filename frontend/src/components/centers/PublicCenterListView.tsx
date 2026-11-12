@@ -343,6 +343,11 @@ export function PublicCenterListView({ initialCenters }: PublicCenterListViewPro
                             {c.licenseNumber}
                           </div>
                         )}
+                        {c.taxCode && (
+                          <div className="text-[11px] text-muted-foreground font-mono truncate max-w-[200px]">
+                            MST: {c.taxCode}
+                          </div>
+                        )}
                       </td>
 
                       {/* Visa Rate & Rating */}

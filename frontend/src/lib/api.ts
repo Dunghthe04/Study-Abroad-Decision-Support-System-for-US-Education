@@ -275,10 +275,14 @@ export const studyCentersApi = {
   },
   getById: (id: string) => apiFetch<StudyCenter>(`/api/v1/study-centers/${id}`),
   /** [UC-59] Xác minh hoặc hủy xác minh trung tâm tư vấn (vai trò: Moderator / Admin) */
-  verify: (id: string, isVerified: boolean) =>
+  verify: (id: string, isVerified: boolean, verificationNote?: string | null) =>
     apiFetch<StudyCenter>(`/api/v1/study-centers/${encodeURIComponent(id)}/verify`, {
       method: "PUT",
-      body: JSON.stringify({ isVerified }),
+      body: JSON.stringify(
+        verificationNote !== undefined
+          ? { isVerified, verificationNote }
+          : { isVerified }
+      ),
     }),
   /** [UC-72] Sửa thông tin trung tâm tư vấn (vai trò: Moderator / Admin) */
   update: (id: string, data: UpdateStudyCenterRequest) =>

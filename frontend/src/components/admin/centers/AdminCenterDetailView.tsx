@@ -27,19 +27,15 @@ import { studyLevelLabel } from "@/lib/study-levels";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/components/ui/toast";
+import {
+  CenterActionConfirmDialog,
+  type CenterConfirmAction,
+} from "@/components/admin/centers/CenterActionConfirmDialog";
 import { CreateCenterAccountButton } from "@/components/admin/centers/CreateCenterAccountButton";
 import { EditCenterButton } from "@/components/admin/centers/EditCenterButton";
+import { CenterLegalInfoCard } from "@/components/centers/CenterLegalInfoCard";
 
 interface AdminCenterDetailViewProps {
   center: StudyCenter;
@@ -60,7 +56,7 @@ function parseScholarshipStat(raw?: string): { amount: string; note?: string } {
 
 export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDetailViewProps) {
   const [updatedCenter, setUpdatedCenter] = useState<StudyCenter | null>(null);
-  const [confirmAction, setConfirmAction] = useState<"verify" | "unverify" | "hide" | "show" | null>(null);
+  const [confirmAction, setConfirmAction] = useState<CenterConfirmAction | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const center = updatedCenter ?? initialCenter;
@@ -69,14 +65,14 @@ export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDeta
   const isActive = center.isActive !== false;
   const scholarshipStat = parseScholarshipStat(profile.totalScholarshipsWon);
 
-  const handleConfirmAction = async () => {
+  const handleConfirmAction = async (verificationNote?: string) => {
     if (!confirmAction) return;
     setIsSubmitting(true);
 
     try {
       if (confirmAction === "verify" || confirmAction === "unverify") {
         const targetVerified = confirmAction === "verify";
-        const updated = await studyCentersApi.verify(center.id, targetVerified);
+        const updated = await studyCentersApi.verify(center.id, targetVerified, verificationNote);
         setUpdatedCenter({
           ...center,
           ...updated,
@@ -376,7 +372,7 @@ export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDeta
               {profile.licenseNumber}
             </div>
             <div className="text-xs text-muted-foreground truncate mt-0.5" title={profile.licenseIssuedBy}>
-              {profile.licenseIssuedBy}
+              {profile.taxCode ? `MST: ${profile.taxCode} · ${profile.licenseIssuedBy}` : profile.licenseIssuedBy}
             </div>
           </div>
         </Card>
@@ -426,34 +422,7 @@ export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDeta
 
           {/* Vị trí & Liên hệ */}
           <div className="grid sm:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <MapPinIcon className="w-4 h-4 text-brand" />
-                  Địa chỉ & Pháp lý cơ sở
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 text-xs sm:text-sm">
-                <div>
-                  <span className="font-medium text-foreground">Địa chỉ:</span>{" "}
-                  <span className="text-muted-foreground">{center.address ?? "Đang cập nhật địa chỉ"}</span>
-                </div>
-                <div>
-                  <span className="font-medium text-foreground">Khu vực:</span>{" "}
-                  <span className="text-muted-foreground">
-                    {center.district ? `${center.district}, ${center.city ?? "Việt Nam"}` : (center.city ?? "Toàn quốc")}
-                  </span>
-                </div>
-                <div>
-                  <span className="font-medium text-foreground">Số giấy phép:</span>{" "}
-                  <span className="text-muted-foreground font-mono">{profile.licenseNumber}</span>
-                </div>
-                <div>
-                  <span className="font-medium text-foreground">Cơ quan cấp phép:</span>{" "}
-                  <span className="text-muted-foreground">{profile.licenseIssuedBy}</span>
-                </div>
-              </CardContent>
-            </Card>
+            <CenterLegalInfoCard profile={profile} mode="admin" />
 
             <Card>
               <CardHeader className="pb-3">
@@ -636,121 +605,13 @@ export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDeta
       </Tabs>
 
       {/* Confirmation Dialog for Verify / Unverify / Hide / Show */}
-      <Dialog
-        open={confirmAction !== null}
-        onOpenChange={(open) => {
-          if (!open && !isSubmitting) setConfirmAction(null);
-        }}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              {confirmAction === "verify" ? (
-                <>
-                  <ShieldCheckIcon className="w-5 h-5 text-emerald-600" />
-                  <span>Xác minh trung tâm tư vấn</span>
-                </>
-              ) : confirmAction === "unverify" ? (
-                <>
-                  <ShieldAlertIcon className="w-5 h-5 text-rose-600" />
-                  <span>Hủy xác minh trung tâm tư vấn</span>
-                </>
-              ) : confirmAction === "hide" ? (
-                <>
-                  <EyeOffIcon className="w-5 h-5 text-rose-600" />
-                  <span>Ẩn trung tâm tư vấn</span>
-                </>
-              ) : (
-                <>
-                  <EyeIcon className="w-5 h-5 text-emerald-600" />
-                  <span>Hiện lại trung tâm tư vấn</span>
-                </>
-              )}
-            </DialogTitle>
-            <DialogDescription className="pt-2 text-sm leading-relaxed">
-              {confirmAction === "verify" ? (
-                <>
-                  Bạn có chắc chắn muốn xác minh trung tâm{" "}
-                  <strong className="text-foreground">{center.name}</strong>?
-                  <br />
-                  Sau khi xác minh, trung tâm sẽ được gắn huy hiệu &quot;Đã xác minh&quot; và đủ điều kiện xuất hiện trong danh bạ đề xuất cho học sinh, phụ huynh.
-                </>
-              ) : confirmAction === "unverify" ? (
-                <>
-                  Bạn có chắc chắn muốn hủy trạng thái xác minh của trung tâm{" "}
-                  <strong className="text-foreground">{center.name}</strong>?
-                  <br />
-                  Trung tâm sẽ chuyển về trạng thái Chưa xác minh (&quot;unverified&quot;) và không còn được hiển thị huy hiệu xác minh trên toàn hệ thống.
-                </>
-              ) : confirmAction === "hide" ? (
-                <>
-                  Bạn có chắc chắn muốn ẩn trung tâm{" "}
-                  <strong className="text-foreground">{center.name}</strong>?
-                  <br />
-                  Trung tâm sẽ bị ẩn khỏi danh bạ công khai và thuật toán gợi ý của AI sẽ không đề xuất trung tâm này cho học sinh.
-                </>
-              ) : (
-                <>
-                  Bạn có chắc chắn muốn kích hoạt và hiển thị lại trung tâm{" "}
-                  <strong className="text-foreground">{center.name}</strong>?
-                  <br />
-                  Trung tâm sẽ xuất hiện trở lại trên danh bạ công khai và đủ điều kiện để AI gợi ý.
-                </>
-              )}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="mt-4 gap-2 sm:gap-0">
-            <Button
-              variant="outline"
-              onClick={() => setConfirmAction(null)}
-              disabled={isSubmitting}
-            >
-              Hủy bỏ
-            </Button>
-            <Button
-              variant={
-                confirmAction === "verify" || confirmAction === "show"
-                  ? "default"
-                  : "destructive"
-              }
-              onClick={handleConfirmAction}
-              disabled={isSubmitting}
-              className={
-                confirmAction === "verify" || confirmAction === "show"
-                  ? "bg-emerald-600 hover:bg-emerald-700 text-white"
-                  : undefined
-              }
-            >
-              {isSubmitting ? (
-                <>
-                  <Spinner className="w-4 h-4 mr-1.5" />
-                  Đang xử lý...
-                </>
-              ) : confirmAction === "verify" ? (
-                <>
-                  <CheckCircle2Icon className="w-4 h-4 mr-1.5" />
-                  Xác nhận xác minh
-                </>
-              ) : confirmAction === "unverify" ? (
-                <>
-                  <ShieldAlertIcon className="w-4 h-4 mr-1.5" />
-                  Xác nhận hủy xác minh
-                </>
-              ) : confirmAction === "hide" ? (
-                <>
-                  <EyeOffIcon className="w-4 h-4 mr-1.5" />
-                  Xác nhận ẩn
-                </>
-              ) : (
-                <>
-                  <EyeIcon className="w-4 h-4 mr-1.5" />
-                  Xác nhận hiện
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <CenterActionConfirmDialog
+        center={center}
+        action={confirmAction}
+        isSubmitting={isSubmitting}
+        onClose={() => setConfirmAction(null)}
+        onConfirm={handleConfirmAction}
+      />
     </div>
   );
 }

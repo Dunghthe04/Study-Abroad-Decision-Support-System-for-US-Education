@@ -22,20 +22,16 @@ import { studyCentersApi, ApiError } from "@/lib/api";
 import type { StudyCenter, PagedResult } from "@/types/api";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
 import { AddCenterButton } from "@/components/admin/AddCenterButton";
 import { TablePagination } from "@/components/admin/shared/TablePagination";
+import {
+  CenterActionConfirmDialog,
+  type CenterConfirmAction,
+} from "@/components/admin/centers/CenterActionConfirmDialog";
 import { EditCenterButton } from "@/components/admin/centers/EditCenterButton";
+import { LEGAL_COMPLIANCE_MODE_LABELS, normalizeComplianceMode } from "@/lib/center-legal";
 import { cn } from "cn";
 
 export function AdminCenterListView() {
@@ -51,7 +47,7 @@ export function AdminCenterListView() {
   const [isLoading, setIsLoading] = useState(true);
   const [confirmTarget, setConfirmTarget] = useState<{
     center: StudyCenter;
-    action: "verify" | "unverify" | "hide" | "show";
+    action: CenterConfirmAction;
   } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -113,7 +109,7 @@ export function AdminCenterListView() {
     setPage(1);
   };
 
-  const handleConfirmTarget = async () => {
+  const handleConfirmTarget = async (verificationNote?: string) => {
     if (!confirmTarget) return;
     setIsSubmitting(true);
     const targetCenter = confirmTarget.center;
@@ -122,7 +118,7 @@ export function AdminCenterListView() {
     try {
       if (action === "verify" || action === "unverify") {
         const targetVerified = action === "verify";
-        const updated = await studyCentersApi.verify(targetCenter.id, targetVerified);
+        const updated = await studyCentersApi.verify(targetCenter.id, targetVerified, verificationNote);
         setCenters((prev) =>
           prev.map((c) =>
             c.id === targetCenter.id
@@ -374,6 +370,16 @@ export function AdminCenterListView() {
                             {c.licenseNumber}
                           </div>
                         )}
+                        {(c.taxCode || c.legalComplianceMode) && (
+                          <div className="text-[11px] text-muted-foreground flex items-center gap-1.5 flex-wrap">
+                            {c.taxCode && <span className="font-mono">MST: {c.taxCode}</span>}
+                            {c.legalComplianceMode && (
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal">
+                                {LEGAL_COMPLIANCE_MODE_LABELS[normalizeComplianceMode(c.legalComplianceMode)]}
+                              </Badge>
+                            )}
+                          </div>
+                        )}
                       </td>
 
                       {/* Visa Rate & Rating */}
@@ -535,121 +541,13 @@ export function AdminCenterListView() {
       </div>
 
       {/* Quick Confirmation Dialog for Verify / Unverify / Hide / Show */}
-      <Dialog
-        open={confirmTarget !== null}
-        onOpenChange={(open) => {
-          if (!open && !isSubmitting) setConfirmTarget(null);
-        }}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              {confirmTarget?.action === "verify" ? (
-                <>
-                  <ShieldCheckIcon className="w-5 h-5 text-emerald-600" />
-                  <span>Xác minh trung tâm tư vấn</span>
-                </>
-              ) : confirmTarget?.action === "unverify" ? (
-                <>
-                  <ShieldAlertIcon className="w-5 h-5 text-rose-600" />
-                  <span>Hủy xác minh trung tâm tư vấn</span>
-                </>
-              ) : confirmTarget?.action === "hide" ? (
-                <>
-                  <EyeOffIcon className="w-5 h-5 text-rose-600" />
-                  <span>Ẩn trung tâm tư vấn</span>
-                </>
-              ) : (
-                <>
-                  <EyeIcon className="w-5 h-5 text-emerald-600" />
-                  <span>Hiện lại trung tâm tư vấn</span>
-                </>
-              )}
-            </DialogTitle>
-            <DialogDescription className="pt-2 text-sm leading-relaxed">
-              {confirmTarget?.action === "verify" ? (
-                <>
-                  Bạn có chắc chắn muốn xác minh trung tâm{" "}
-                  <strong className="text-foreground">{confirmTarget?.center.name}</strong>?
-                  <br />
-                  Sau khi xác minh, trung tâm sẽ được gắn huy hiệu &quot;Đã xác minh&quot; và ưu tiên xuất hiện trong danh bạ đề xuất cho học sinh, phụ huynh.
-                </>
-              ) : confirmTarget?.action === "unverify" ? (
-                <>
-                  Bạn có chắc chắn muốn hủy trạng thái xác minh của trung tâm{" "}
-                  <strong className="text-foreground">{confirmTarget?.center.name}</strong>?
-                  <br />
-                  Trung tâm sẽ chuyển về trạng thái Chưa xác minh (&quot;unverified&quot;) và không còn hiển thị huy hiệu xác minh trên toàn hệ thống.
-                </>
-              ) : confirmTarget?.action === "hide" ? (
-                <>
-                  Bạn có chắc chắn muốn ẩn trung tâm{" "}
-                  <strong className="text-foreground">{confirmTarget?.center.name}</strong>?
-                  <br />
-                  Trung tâm sẽ bị ẩn khỏi danh bạ công khai và thuật toán gợi ý của AI sẽ không đề xuất trung tâm này cho học sinh.
-                </>
-              ) : (
-                <>
-                  Bạn có chắc chắn muốn kích hoạt và hiển thị lại trung tâm{" "}
-                  <strong className="text-foreground">{confirmTarget?.center.name}</strong>?
-                  <br />
-                  Trung tâm sẽ xuất hiện trở lại trên danh bạ công khai và đủ điều kiện để AI gợi ý.
-                </>
-              )}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="mt-4 gap-2 sm:gap-0">
-            <Button
-              variant="outline"
-              onClick={() => setConfirmTarget(null)}
-              disabled={isSubmitting}
-            >
-              Hủy bỏ
-            </Button>
-            <Button
-              variant={
-                confirmTarget?.action === "verify" || confirmTarget?.action === "show"
-                  ? "default"
-                  : "destructive"
-              }
-              onClick={handleConfirmTarget}
-              disabled={isSubmitting}
-              className={
-                confirmTarget?.action === "verify" || confirmTarget?.action === "show"
-                  ? "bg-emerald-600 hover:bg-emerald-700 text-white"
-                  : undefined
-              }
-            >
-              {isSubmitting ? (
-                <>
-                  <Spinner className="w-4 h-4 mr-1.5" />
-                  Đang xử lý...
-                </>
-              ) : confirmTarget?.action === "verify" ? (
-                <>
-                  <CheckCircle2Icon className="w-4 h-4 mr-1.5" />
-                  Xác nhận xác minh
-                </>
-              ) : confirmTarget?.action === "unverify" ? (
-                <>
-                  <ShieldAlertIcon className="w-4 h-4 mr-1.5" />
-                  Xác nhận hủy xác minh
-                </>
-              ) : confirmTarget?.action === "hide" ? (
-                <>
-                  <EyeOffIcon className="w-4 h-4 mr-1.5" />
-                  Xác nhận ẩn
-                </>
-              ) : (
-                <>
-                  <EyeIcon className="w-4 h-4 mr-1.5" />
-                  Xác nhận hiện
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <CenterActionConfirmDialog
+        center={confirmTarget?.center ?? null}
+        action={confirmTarget?.action ?? null}
+        isSubmitting={isSubmitting}
+        onClose={() => setConfirmTarget(null)}
+        onConfirm={handleConfirmTarget}
+      />
     </div>
   );
 }
