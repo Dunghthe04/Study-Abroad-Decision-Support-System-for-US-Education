@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using StudyAbroad.Api.Controllers;
+using StudyAbroad.Application.Common;
 using StudyAbroad.Application.Leads;
 using StudyAbroad.Domain.Constants;
 using Xunit;
@@ -45,6 +46,16 @@ public class LeadsControllerTests
         {
             var lead = Leads.FirstOrDefault(l => l.Id == leadId && l.UserId == userId);
             return Task.FromResult(lead);
+        }
+
+        // [UC-44] Phần 3 (controller) sẽ dùng để viết test; RuleToThrow giả lập service từ chối
+        public List<SentLeadDto> SentLeads { get; } = [];
+
+        public Task<PagedResult<SentLeadDto>> GetSentLeadsAsync(Guid userId, int page, int pageSize, CancellationToken ct = default)
+        {
+            if (RuleToThrow is not null)
+                throw RuleToThrow;
+            return Task.FromResult(new PagedResult<SentLeadDto>(SentLeads, page, pageSize, SentLeads.Count));
         }
 
         public List<CenterReceivedLeadDto> ReceivedLeads { get; } = [];

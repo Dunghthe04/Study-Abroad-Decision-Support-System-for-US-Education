@@ -984,4 +984,106 @@ public class LeadServiceTests
         Assert.NotNull(await s.Service.GetLeadByIdAsync(child.Id, created.Id));
         Assert.Null(await s.Service.GetLeadByIdAsync(stranger.Id, created.Id));
     }
+
+    // ===== UC-44: xem yêu cầu liên hệ đã gửi =====
+
+    private static Lead AddLead(CreateLeadSetup s, Guid studentId, Guid submitterId, int daysAgo = 0)
+    {
+        var lead = new Lead
+        {
+            UserId = studentId, SubmittedByUserId = submitterId, StudyCenterId = s.CenterId,
+            CreatedAt = DateTime.UtcNow.AddDays(-daysAgo),
+        };
+        s.LeadRepo.Leads.Add(lead);
+        return lead;
+    }
+
+    [Fact]
+    public async Task GetSentLeads_Student18_SeesOwnLeadsAndParentLeadsForThem()
+    {
+        var s = new CreateLeadSetup();
+        var student = s.AddStudent(18);
+        var parent = s.AddParent(student);
+        var other = s.AddStudent(18);
+        var own = AddLead(s, student.Id, student.Id, daysAgo: 2);
+        var byParent = AddLead(s, student.Id, parent.Id, daysAgo: 1);
+        AddLead(s, other.Id, other.Id);
+
+        var result = await s.Service.GetSentLeadsAsync(student.Id, 1, 10);
+
+        Assert.Equal(2, result.TotalCount);
+        Assert.Equal([byParent.Id, own.Id], result.Items.Select(i => i.Id)); // mới nhất trước
+        Assert.True(result.Items[0].SubmittedByParent);
+        Assert.False(result.Items[1].SubmittedByParent);
+    }
+
+    [Fact]
+    public async Task GetSentLeads_Student15_AgeRestricted()
+    {
+        var s = new CreateLeadSetup();
+        var student = s.AddStudent(15);
+        AddLead(s, student.Id, student.Id);
+
+        await AssertRule(() => s.Service.GetSentLeadsAsync(student.Id, 1, 10), "age_restricted", 403);
+    }
+
+    [Fact]
+    public async Task GetSentLeads_Parent_SeesOwnAndLinkedChildLeads_NotStrangers()
+    {
+        var s = new CreateLeadSetup();
+        var child14 = s.AddStudent(14);
+        var child17 = s.AddStudent(17);
+        var parent = s.AddParent(child14, child17);
+        var stranger = s.AddStudent(18);
+        var forChild14 = AddLead(s, child14.Id, parent.Id);
+        var child17Self = AddLead(s, child17.Id, child17.Id);
+        AddLead(s, stranger.Id, stranger.Id);
+
+        var result = await s.Service.GetSentLeadsAsync(parent.Id, 1, 10);
+
+        Assert.Equal(
+            new[] { forChild14.Id, child17Self.Id }.OrderBy(x => x),
+            result.Items.Select(i => i.Id).OrderBy(x => x));
+    }
+
+    [Fact]
+    public async Task GetSentLeads_RevokedLink_HidesChildOwnLeads_KeepsParentSubmitted()
+    {
+        var s = new CreateLeadSetup();
+        var child = s.AddStudent(17);
+        var parent = s.AddParent(child);
+        var byParent = AddLead(s, child.Id, parent.Id);
+        AddLead(s, child.Id, child.Id);
+        s.LinkRepo.Links[0].Status = ParentLinkStatuses.Revoked;
+
+        var result = await s.Service.GetSentLeadsAsync(parent.Id, 1, 10);
+
+        Assert.Equal(byParent.Id, Assert.Single(result.Items).Id);
+    }
+
+    [Fact]
+    public async Task GetSentLeads_CountsOnlyVisibleCenterMessages()
+    {
+        var s = new CreateLeadSetup();
+        var student = s.AddStudent(18);
+        var lead = AddLead(s, student.Id, student.Id);
+        var centerUser = Guid.NewGuid();
+        s.LeadRepo.Messages.Add(new LeadMessage { LeadId = lead.Id, SenderUserId = centerUser, Status = "visible" });
+        s.LeadRepo.Messages.Add(new LeadMessage { LeadId = lead.Id, SenderUserId = centerUser, Status = "removed" });
+        s.LeadRepo.Messages.Add(new LeadMessage { LeadId = lead.Id, SenderUserId = student.Id, Status = "visible" });
+
+        var result = await s.Service.GetSentLeadsAsync(student.Id, 1, 10);
+
+        Assert.Equal(1, Assert.Single(result.Items).CenterMessageCount);
+    }
+
+    [Fact]
+    public async Task GetSentLeads_CenterRole_NotAllowed()
+    {
+        var s = new CreateLeadSetup();
+        var centerUser = new User { Role = UserRoles.Center };
+        s.UserRepo.Users.Add(centerUser);
+
+        await AssertRule(() => s.Service.GetSentLeadsAsync(centerUser.Id, 1, 10), "role_not_allowed", 403);
+    }
 }

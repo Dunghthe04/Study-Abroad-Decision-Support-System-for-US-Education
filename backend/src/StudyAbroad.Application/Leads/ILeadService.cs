@@ -1,9 +1,14 @@
+using StudyAbroad.Application.Common;
+
 namespace StudyAbroad.Application.Leads;
 
 public interface ILeadService
 {
     Task<LeadDto> CreateLeadAsync(Guid userId, CreateLeadRequest request, string? clientIp = null, CancellationToken ct = default);
     Task<LeadDto?> GetLeadByIdAsync(Guid userId, Guid leadId, CancellationToken ct = default);
+
+    // [UC-44] Xem yêu cầu liên hệ đã gửi (học sinh từ 16 tuổi, phụ huynh)
+    Task<PagedResult<SentLeadDto>> GetSentLeadsAsync(Guid userId, int page, int pageSize, CancellationToken ct = default);
 
     // [UC-73] Quản lý và xem yêu cầu liên hệ nhận được của trung tâm
     Task<CenterLeadsSummaryDto> GetReceivedLeadsForCenterUserAsync(

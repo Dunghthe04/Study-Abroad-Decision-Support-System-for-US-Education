@@ -1,6 +1,7 @@
 using System.Text.Json;
 using StudyAbroad.Application.Audit;
 using StudyAbroad.Application.Auth;
+using StudyAbroad.Application.Common;
 using StudyAbroad.Application.ParentLinks;
 using StudyAbroad.Application.StudyCenters;
 using StudyAbroad.Domain.Constants;
@@ -214,6 +215,41 @@ public class LeadService(
             return null;
 
         return await leads.GetDtoByIdAsync(leadId, ct);
+    }
+
+    /// <summary>
+    /// [UC-44] Danh sách yêu cầu liên hệ đã gửi.
+    /// Học sinh (từ 16 tuổi): lead có hồ sơ của mình, kể cả lead phụ huynh gửi thay.
+    /// Phụ huynh: lead mình bấm gửi, cộng lead của các con đang liên kết.
+    /// </summary>
+    public async Task<PagedResult<SentLeadDto>> GetSentLeadsAsync(
+        Guid userId,
+        int page,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        var user = await users.GetUserById(userId, ct)
+            ?? throw new KeyNotFoundException("Không tìm thấy tài khoản.");
+
+        if (user.Role == UserRoles.Student)
+        {
+            // Theo tài liệu tuổi: dưới 16 không tự xem, giống luật tự gửi
+            var today = AgePolicy.TodayInVietnam(DateTime.UtcNow);
+            if (AgeFeatures.Check(AgeFeatures.ShareWithCenter, user.Role, user.DateOfBirth, today, hasParentConsent: false) is not null)
+                throw new LeadRuleException("age_restricted", 403,
+                    "Học sinh dưới 16 tuổi chưa xem được yêu cầu liên hệ. Phụ huynh có thể xem từ tài khoản của mình.");
+
+            return await leads.GetSentLeadsAsync([user.Id], submitterId: null, page, pageSize, ct);
+        }
+
+        if (user.Role == UserRoles.Parent)
+        {
+            var linked = await parentLinks.GetActiveByParentAsync(user.Id, ct);
+            var childIds = linked.Select(l => l.StudentUserId).Distinct().ToList();
+            return await leads.GetSentLeadsAsync(childIds, submitterId: user.Id, page, pageSize, ct);
+        }
+
+        throw new LeadRuleException("role_not_allowed", 403, "Chỉ học sinh hoặc phụ huynh xem được yêu cầu liên hệ đã gửi.");
     }
 
     public async Task<CenterLeadsSummaryDto> GetReceivedLeadsForCenterUserAsync(
