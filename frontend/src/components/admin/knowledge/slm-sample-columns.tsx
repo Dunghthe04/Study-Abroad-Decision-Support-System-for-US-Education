@@ -1,18 +1,20 @@
-import { Badge } from "@/components/ui/badge";
+import { Trash2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { DataTableColumn } from "@/components/admin/shared/DataTable";
-import { sampleTypeLabel, statusBadgeVariant, statusLabel } from "@/lib/slm-sample-format";
-import type { SlmSample } from "@/types/slm-sample";
+import { InlineSelectCell } from "@/components/admin/shared/InlineSelectCell";
+import { SAMPLE_TYPE_OPTIONS, SPLIT_OPTIONS } from "@/lib/slm-sample-format";
+import type { SaveSlmSampleRequest, SlmSample, SlmSampleType, SlmSplit } from "@/types/slm-sample";
 
 interface ColumnHandlers {
   selectedIds: Set<string>;
   onToggle: (id: string, checked: boolean) => void;
   onEdit: (sample: SlmSample) => void;
   onDelete: (sample: SlmSample) => void;
+  onChangeField: (sample: SlmSample, change: Partial<SaveSlmSampleRequest>) => Promise<void>;
 }
 
-export function slmSampleColumns({ selectedIds, onToggle, onEdit, onDelete }: ColumnHandlers): DataTableColumn<SlmSample>[] {
+export function slmSampleColumns({ selectedIds, onToggle, onEdit, onDelete, onChangeField }: ColumnHandlers): DataTableColumn<SlmSample>[] {
   return [
     {
       id: "select",
@@ -54,34 +56,47 @@ export function slmSampleColumns({ selectedIds, onToggle, onEdit, onDelete }: Co
     {
       id: "sampleType",
       label: "Loại mẫu",
-      cellClassName: "whitespace-nowrap",
-      render: (sample) => sampleTypeLabel(sample.sampleType),
+      headerClassName: "w-48",
+      cellClassName: "w-48",
+      render: (sample) => (
+        <InlineSelectCell
+          value={sample.sampleType}
+          options={SAMPLE_TYPE_OPTIONS}
+          label="Đổi loại mẫu"
+          onChange={(value) => onChangeField(sample, { sampleType: value as SlmSampleType })}
+        />
+      ),
     },
     {
       id: "split",
       label: "Tập",
-      render: (sample) => <Badge variant="outline">{sample.split}</Badge>,
-    },
-    {
-      id: "reviewStatus",
-      label: "Trạng thái",
-      render: (sample) => <Badge variant={statusBadgeVariant(sample.reviewStatus)}>{statusLabel(sample.reviewStatus)}</Badge>,
+      headerClassName: "w-32",
+      cellClassName: "w-32",
+      render: (sample) => (
+        <InlineSelectCell
+          value={sample.split}
+          options={SPLIT_OPTIONS}
+          label="Đổi tập dữ liệu"
+          onChange={(value) => onChangeField(sample, { split: value as SlmSplit })}
+        />
+      ),
     },
     {
       id: "actions",
       label: "Thao tác",
       required: true,
-      headerClassName: "w-32",
+      headerClassName: "w-28",
       render: (sample) => (
         <Button
           type="button"
-          variant="outline"
+          variant="destructive"
           size="sm"
           onClick={(event) => {
             event.stopPropagation();
             onDelete(sample);
           }}
         >
+          <Trash2Icon />
           Xóa
         </Button>
       ),

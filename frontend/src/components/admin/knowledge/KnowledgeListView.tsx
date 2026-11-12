@@ -1,8 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { DownloadIcon, FilterIcon, PlusIcon, RotateCcwIcon, SearchIcon, UploadIcon } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { CheckIcon, DownloadIcon, FilterIcon, PlusIcon, RotateCcwIcon, SearchIcon, UploadIcon, WrenchIcon, XIcon } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { toast } from "@/components/ui/toast";
 import { DataTable, type DataTableToolbarSlots } from "@/components/admin/shared/DataTable";
 import { TablePagination } from "@/components/admin/shared/TablePagination";
 import { OptionSelect } from "@/components/admin/universities/OptionSelect";
@@ -26,20 +26,24 @@ import { SlmReviewDialog } from "@/components/admin/knowledge/SlmReviewDialog";
 import { SlmSampleFormPanel } from "@/components/admin/knowledge/SlmSampleFormPanel";
 import { slmSampleColumns } from "@/components/admin/knowledge/slm-sample-columns";
 import { adminSlmSampleApi } from "@/lib/slm-sample-api";
-import { REVIEW_STATUSES, SAMPLE_TYPES, SPLITS } from "@/lib/slm-sample-format";
+import { REVIEW_STATUSES, SAMPLE_TYPE_OPTIONS, SPLIT_OPTIONS, sampleToRequest } from "@/lib/slm-sample-format";
 import { useFetched } from "@/lib/use-fetched";
-import type { SlmImportResult, SlmReviewStatus, SlmSample } from "@/types/slm-sample";
+import type { SaveSlmSampleRequest, SlmImportResult, SlmReviewStatus, SlmSample, SlmSampleType, SlmSplit } from "@/types/slm-sample";
 
 const FILTER_FIELD_BG = "bg-card dark:bg-input/30";
+const TOOLBAR_BUTTON_BG = "border-border bg-muted/60 text-foreground hover:bg-muted";
 const PAGE_SIZE = 20;
 
-const TYPE_OPTIONS = [{ value: "", label: "Mọi loại mẫu" }, ...SAMPLE_TYPES.map((item) => ({ value: item.id, label: item.label }))];
-const SPLIT_OPTIONS = [{ value: "", label: "Mọi tập" }, ...SPLITS.map((item) => ({ value: item.id, label: item.label }))];
+const TYPE_FILTER_OPTIONS = [{ value: "", label: "Mọi loại mẫu" }, ...SAMPLE_TYPE_OPTIONS];
+const SPLIT_FILTER_OPTIONS = [{ value: "", label: "Mọi tập" }, ...SPLIT_OPTIONS];
 
-const BULK_ACTIONS: { status: SlmReviewStatus; label: string }[] = [
-  { status: "approved", label: "Duyệt" },
-  { status: "rejected", label: "Từ chối" },
-  { status: "needs_fix", label: "Cần sửa" },
+const TAB_TRIGGER_CLASS =
+  "flex-none rounded-none border-0 border-b-2 border-transparent px-3 data-active:border-b-brand data-active:bg-transparent data-active:text-foreground data-active:shadow-none dark:data-active:border-transparent dark:data-active:border-b-brand dark:data-active:bg-transparent after:hidden";
+
+const BULK_ACTIONS: { status: SlmReviewStatus; label: string; icon: typeof CheckIcon; className: string }[] = [
+  { status: "approved", label: "Duyệt", icon: CheckIcon, className: "border-ok/20 bg-ok-wash text-ok hover:bg-ok-wash/70" },
+  { status: "rejected", label: "Từ chối", icon: XIcon, className: "border-risk/20 bg-risk-wash text-risk hover:bg-risk-wash/70" },
+  { status: "needs_fix", label: "Cần sửa", icon: WrenchIcon, className: "border-warn/20 bg-warn-wash text-warn hover:bg-warn-wash/70" },
 ];
 
 interface Filters {
@@ -70,15 +74,13 @@ export function KnowledgeListView() {
   const [importResult, setImportResult] = useState<SlmImportResult | null>(null);
   const [importBusy, setImportBusy] = useState(false);
   const [exportBusy, setExportBusy] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const list = useFetched(`list|${JSON.stringify(applied)}|${reloadCounter}`, () =>
     adminSlmSampleApi.list({
       reviewStatus: applied.status === "" ? undefined : (applied.status as SlmReviewStatus),
-      sampleType: applied.sampleType === "" ? undefined : (applied.sampleType as never),
-      split: applied.split === "" ? undefined : (applied.split as never),
+      sampleType: applied.sampleType === "" ? undefined : (applied.sampleType as SlmSampleType),
+      split: applied.split === "" ? undefined : (applied.split as SlmSplit),
       search: applied.search || undefined,
       page: applied.page,
       pageSize: PAGE_SIZE,
@@ -135,18 +137,31 @@ export function KnowledgeListView() {
     setIsFilterOpen(open);
   };
 
-  const handleSaved = (isNew: boolean) => {
-    setFormState(null);
-    setNotice(isNew ? "Đã thêm mẫu." : "Đã lưu mẫu.");
-    setActionError(null);
+  const handlePanelChanged = (sample: SlmSample, isNew: boolean) => {
+    setFormState(isNew ? null : { sample });
     reload();
+  };
+
+  const handleChangeField = async (sample: SlmSample, change: Partial<SaveSlmSampleRequest>) => {
+    try {
+      const saved = await adminSlmSampleApi.update(sample.id, { ...sampleToRequest(sample), ...change });
+      const resetToDraft = saved.reviewStatus !== sample.reviewStatus;
+      toast.add({
+        type: "success",
+        title: "Đã lưu thay đổi",
+        description: resetToDraft ? "Nhãn đã đổi nên mẫu quay về Nháp, cần duyệt lại." : undefined,
+      });
+      if (formState?.sample?.id === sample.id) setFormState({ sample: saved });
+      reload();
+    } catch (error) {
+      toast.add({ type: "error", title: "Không lưu được thay đổi", description: errorText(error, "Vui lòng thử lại sau.") });
+    }
   };
 
   const handleReviewed = (message: string) => {
     setReviewStatus(null);
     setSelectedIds(new Set());
-    setNotice(message);
-    setActionError(null);
+    toast.add({ type: "success", title: message });
     reload();
   };
 
@@ -161,12 +176,11 @@ export function KnowledgeListView() {
       if (formState?.sample?.id === deleting.id) setFormState(null);
       if (items.length === 1 && applied.page > 1) setApplied({ ...applied, page: applied.page - 1 });
       setDeleting(null);
-      setNotice("Đã xóa mẫu.");
-      setActionError(null);
+      toast.add({ type: "success", title: "Đã xóa mẫu" });
       reload();
     } catch (error) {
       setDeleting(null);
-      setActionError(errorText(error, "Không xóa được mẫu."));
+      toast.add({ type: "error", title: "Không xóa được mẫu", description: errorText(error, "Vui lòng thử lại sau.") });
     } finally {
       setDeleteBusy(false);
     }
@@ -177,16 +191,15 @@ export function KnowledgeListView() {
     event.target.value = "";
     if (!file) return;
     if (!file.name.toLowerCase().endsWith(".xlsx")) {
-      setActionError("Chỉ nhận file .xlsx.");
+      toast.add({ type: "error", title: "Chỉ nhận file .xlsx" });
       return;
     }
     setImportBusy(true);
-    setActionError(null);
     try {
       setImportResult(await adminSlmSampleApi.importXlsx(file));
       reload();
     } catch (error) {
-      setActionError(errorText(error, "Không nhập được file."));
+      toast.add({ type: "error", title: "Không nhập được file", description: errorText(error, "Vui lòng thử lại sau.") });
     } finally {
       setImportBusy(false);
     }
@@ -194,11 +207,10 @@ export function KnowledgeListView() {
 
   const handleExport = async () => {
     setExportBusy(true);
-    setActionError(null);
     try {
-      await adminSlmSampleApi.exportJsonl(applied.split === "" ? undefined : (applied.split as never));
+      await adminSlmSampleApi.exportJsonl(applied.split === "" ? undefined : (applied.split as SlmSplit));
     } catch (error) {
-      setActionError(errorText(error, "Không xuất được file."));
+      toast.add({ type: "error", title: "Không xuất được file", description: errorText(error, "Vui lòng thử lại sau.") });
     } finally {
       setExportBusy(false);
     }
@@ -209,6 +221,7 @@ export function KnowledgeListView() {
     onToggle: toggleOne,
     onEdit: (sample) => setFormState({ sample }),
     onDelete: setDeleting,
+    onChangeField: handleChangeField,
   });
 
   const activeFilterCount = [applied.sampleType !== "", applied.split !== ""].filter(Boolean).length;
@@ -216,7 +229,7 @@ export function KnowledgeListView() {
   const toolbar: DataTableToolbarSlots = {
     filters: (
       <Popover open={isFilterOpen} onOpenChange={handleFilterOpenChange}>
-        <PopoverTrigger render={<Button variant="outline" size="sm" className="border-border bg-muted/60 text-foreground hover:bg-muted" />}>
+        <PopoverTrigger render={<Button variant="outline" size="sm" className={TOOLBAR_BUTTON_BG} />}>
           <FilterIcon />
           Bộ lọc{activeFilterCount > 0 && ` (${activeFilterCount})`}
         </PopoverTrigger>
@@ -225,11 +238,11 @@ export function KnowledgeListView() {
           <form onSubmit={handleFilterSubmit} className="flex flex-col gap-4">
             <div className="space-y-1.5">
               <label htmlFor="slm-type-filter" className="text-sm font-medium">Loại mẫu</label>
-              <OptionSelect id="slm-type-filter" value={draft.sampleType} options={TYPE_OPTIONS} onChange={(value) => setDraft({ ...draft, sampleType: value })} className={FILTER_FIELD_BG} />
+              <OptionSelect id="slm-type-filter" value={draft.sampleType} options={TYPE_FILTER_OPTIONS} onChange={(value) => setDraft({ ...draft, sampleType: value })} className={FILTER_FIELD_BG} />
             </div>
             <div className="space-y-1.5">
               <label htmlFor="slm-split-filter" className="text-sm font-medium">Tập dữ liệu</label>
-              <OptionSelect id="slm-split-filter" value={draft.split} options={SPLIT_OPTIONS} onChange={(value) => setDraft({ ...draft, split: value })} className={FILTER_FIELD_BG} />
+              <OptionSelect id="slm-split-filter" value={draft.split} options={SPLIT_FILTER_OPTIONS} onChange={(value) => setDraft({ ...draft, split: value })} className={FILTER_FIELD_BG} />
             </div>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" size="sm" onClick={handleResetFilters}>Xóa lọc</Button>
@@ -256,16 +269,16 @@ export function KnowledgeListView() {
     actions: (
       <div className="flex flex-wrap items-center gap-2">
         {(draft.search || activeFilterCount > 0) && (
-          <Button type="button" variant="outline" size="sm" onClick={handleReset} className="border-border bg-muted/60 text-foreground hover:bg-muted">
+          <Button type="button" variant="outline" size="sm" onClick={handleReset} className={TOOLBAR_BUTTON_BG}>
             <RotateCcwIcon />
             Xóa lọc
           </Button>
         )}
         <input ref={fileInput} type="file" accept=".xlsx" className="hidden" onChange={(event) => void handleFile(event)} />
-        <Button type="button" variant="outline" size="sm" disabled={importBusy} onClick={() => fileInput.current?.click()}>
+        <Button type="button" variant="outline" size="sm" className={TOOLBAR_BUTTON_BG} disabled={importBusy} onClick={() => fileInput.current?.click()}>
           {importBusy ? <Spinner /> : <UploadIcon />} Nhập Excel
         </Button>
-        <Button type="button" variant="outline" size="sm" disabled={exportBusy} onClick={() => void handleExport()}>
+        <Button type="button" variant="outline" size="sm" className={TOOLBAR_BUTTON_BG} disabled={exportBusy} onClick={() => void handleExport()}>
           {exportBusy ? <Spinner /> : <DownloadIcon />} Xuất JSONL
         </Button>
         <Button type="button" size="sm" onClick={() => setFormState({ sample: null })}>
@@ -280,29 +293,22 @@ export function KnowledgeListView() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6 lg:flex-row">
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
-        <header className="flex flex-col gap-1">
-          <h1 className="text-h2">Quản lý tri thức</h1>
-          <p className="text-sm text-muted-foreground">Dữ liệu huấn luyện SLM: duyệt, sửa, nhập từ Excel và xuất JSONL theo tập dữ liệu.</p>
-        </header>
-
-        {notice && <Alert><AlertDescription>{notice}</AlertDescription></Alert>}
-        {actionError && <Alert variant="destructive"><AlertDescription>{actionError}</AlertDescription></Alert>}
-
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
         <Tabs value={applied.status === "" ? "all" : applied.status} onValueChange={(value) => apply({ ...applied, status: value === "all" ? "" : String(value), page: 1 })}>
-          <TabsList>
-            <TabsTrigger value="all">Tất cả{countOf("")}</TabsTrigger>
+          <TabsList variant="line" className="h-auto w-full justify-start gap-0 border-b border-border p-0">
+            <TabsTrigger value="all" className={TAB_TRIGGER_CLASS}>Tất cả{countOf("")}</TabsTrigger>
             {REVIEW_STATUSES.map((item) => (
-              <TabsTrigger key={item.id} value={item.id}>{item.label}{countOf(item.id)}</TabsTrigger>
+              <TabsTrigger key={item.id} value={item.id} className={TAB_TRIGGER_CLASS}>{item.label}{countOf(item.id)}</TabsTrigger>
             ))}
           </TabsList>
         </Tabs>
 
         {selectedIds.size > 0 && (
-          <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
-            <span>Đã chọn {selectedIds.size} mẫu</span>
+          <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/60 px-3 py-2 text-sm">
+            <span className="font-medium">Đã chọn {selectedIds.size} mẫu</span>
             {BULK_ACTIONS.map((action) => (
-              <Button key={action.status} type="button" size="sm" variant="outline" onClick={() => setReviewStatus(action.status)}>
+              <Button key={action.status} type="button" size="sm" variant="outline" className={action.className} onClick={() => setReviewStatus(action.status)}>
+                <action.icon />
                 {action.label}
               </Button>
             ))}
@@ -334,9 +340,7 @@ export function KnowledgeListView() {
         />
       </div>
 
-      {formState && (
-        <SlmSampleFormPanel sample={formState.sample} onClose={() => setFormState(null)} onSaved={handleSaved} />
-      )}
+      {formState && <SlmSampleFormPanel sample={formState.sample} onClose={() => setFormState(null)} onChanged={handlePanelChanged} />}
 
       <SlmReviewDialog status={reviewStatus} ids={Array.from(selectedIds)} onClose={() => setReviewStatus(null)} onDone={handleReviewed} />
       <SlmImportResultDialog result={importResult} onClose={() => setImportResult(null)} />
