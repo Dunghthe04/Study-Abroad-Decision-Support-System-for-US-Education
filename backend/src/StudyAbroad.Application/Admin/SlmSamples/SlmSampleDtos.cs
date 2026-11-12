@@ -71,12 +71,3 @@ public record SlmImportResultDto(
     int Inserted,
     int Duplicates,
     IReadOnlyList<SlmImportErrorDto> Errors);
-
-/// <summary>Một dòng của file JSONL xuất ra: đầu vào và đầu ra cho model.</summary>
-public record SlmExportLine(
-    string Type,
-    string Question,
-    string? Profile,
-    string? PendingQuestion,
-    string? Context,
-    string Intents);
