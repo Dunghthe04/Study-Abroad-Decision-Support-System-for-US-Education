@@ -69,6 +69,13 @@ function formatBudgetTier(tier?: string | null): string {
   return map[tier] ?? tier;
 }
 
+function LeadStatusBadge({ status }: { status: string }) {
+  if (status === "new") return <Badge variant="brand">Mới nhận</Badge>;
+  if (status === "contacted") return <Badge variant="warn">Đang trao đổi</Badge>;
+  if (status === "closed") return <Badge variant="ok">Đã hoàn tất</Badge>;
+  return null;
+}
+
 export function CenterLeadsListView() {
   const [data, setData] = useState<CenterLeadsSummaryDto | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -213,19 +220,19 @@ export function CenterLeadsListView() {
   const items = data?.items ?? [];
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto px-4 py-6">
+    <div className="space-y-6 py-6 pb-14">
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-line pb-5">
         <div>
-          <div className="flex items-center gap-2.5">
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">
-              Yêu cầu liên hệ & tư vấn nhận được
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h1 className="text-h1 text-ink">
+              Yêu cầu liên hệ &amp; tư vấn nhận được
             </h1>
-            <Badge variant="outline" className="bg-brand/5 border-brand/20 text-brand text-xs">
+            <Badge variant="brand" className="text-xs">
               Cổng đối tác
             </Badge>
           </div>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className="text-body-s text-ink-2 mt-1">
             Xem và xử lý các yêu cầu liên hệ từ học sinh và phụ huynh. Tuân thủ quyền riêng tư dữ liệu theo Nghị định 356/2025/NĐ-CP.
           </p>
         </div>
@@ -249,7 +256,7 @@ export function CenterLeadsListView() {
           size="sm"
           className={cn(
             "cursor-pointer transition-all hover:border-brand/40",
-            statusFilter === "all" ? "ring-2 ring-brand border-brand" : "border-border"
+            statusFilter === "all" ? "ring-2 ring-brand border-brand" : "border-line"
           )}
           onClick={() => {
             setStatusFilter("all");
@@ -258,10 +265,10 @@ export function CenterLeadsListView() {
         >
           <CardContent className="pt-4 flex items-center justify-between">
             <div>
-              <p className="text-xs font-medium text-muted-foreground">Tổng yêu cầu</p>
-              <p className="text-2xl font-bold text-foreground mt-0.5">{totalCount}</p>
+              <p className="text-xs font-medium text-ink-2">Tổng yêu cầu</p>
+              <p className="font-heading text-2xl font-bold text-ink tabular-nums mt-0.5">{totalCount}</p>
             </div>
-            <div className="size-9 rounded-lg bg-muted flex items-center justify-center text-muted-foreground">
+            <div className="size-9 rounded-lg bg-ground flex items-center justify-center text-ink-2">
               <InboxIcon className="size-4" />
             </div>
           </CardContent>
@@ -271,8 +278,8 @@ export function CenterLeadsListView() {
         <Card
           size="sm"
           className={cn(
-            "cursor-pointer transition-all hover:border-blue-400",
-            statusFilter === "new" ? "ring-2 ring-blue-500 border-blue-500 bg-blue-50/20" : "border-border"
+            "cursor-pointer transition-all hover:border-brand/40",
+            statusFilter === "new" ? "ring-2 ring-brand border-brand bg-brand-wash/35" : "border-line"
           )}
           onClick={() => {
             setStatusFilter("new");
@@ -281,10 +288,10 @@ export function CenterLeadsListView() {
         >
           <CardContent className="pt-4 flex items-center justify-between">
             <div>
-              <p className="text-xs font-medium text-blue-600 dark:text-blue-400">Chờ xử lý (Mới)</p>
-              <p className="text-2xl font-bold text-blue-700 dark:text-blue-300 mt-0.5">{newCount}</p>
+              <p className="text-xs font-medium text-brand">Chờ xử lý (Mới)</p>
+              <p className="font-heading text-2xl font-bold text-brand-ink tabular-nums mt-0.5">{newCount}</p>
             </div>
-            <div className="size-9 rounded-lg bg-blue-100 dark:bg-blue-950/60 flex items-center justify-center text-blue-600 dark:text-blue-400">
+            <div className="size-9 rounded-lg bg-brand-wash flex items-center justify-center text-brand">
               <ClockIcon className="size-4" />
             </div>
           </CardContent>
@@ -294,8 +301,8 @@ export function CenterLeadsListView() {
         <Card
           size="sm"
           className={cn(
-            "cursor-pointer transition-all hover:border-amber-400",
-            statusFilter === "contacted" ? "ring-2 ring-amber-500 border-amber-500 bg-amber-50/20" : "border-border"
+            "cursor-pointer transition-all hover:border-warn/40",
+            statusFilter === "contacted" ? "ring-2 ring-warn border-warn bg-warn-wash/40" : "border-line"
           )}
           onClick={() => {
             setStatusFilter("contacted");
@@ -304,10 +311,10 @@ export function CenterLeadsListView() {
         >
           <CardContent className="pt-4 flex items-center justify-between">
             <div>
-              <p className="text-xs font-medium text-amber-600 dark:text-amber-400">Đang trao đổi</p>
-              <p className="text-2xl font-bold text-amber-700 dark:text-amber-300 mt-0.5">{contactedCount}</p>
+              <p className="text-xs font-medium text-warn">Đang trao đổi</p>
+              <p className="font-heading text-2xl font-bold text-warn tabular-nums mt-0.5">{contactedCount}</p>
             </div>
-            <div className="size-9 rounded-lg bg-amber-100 dark:bg-amber-950/60 flex items-center justify-center text-amber-600 dark:text-amber-400">
+            <div className="size-9 rounded-lg bg-warn-wash flex items-center justify-center text-warn">
               <PhoneIcon className="size-4" />
             </div>
           </CardContent>
@@ -317,8 +324,8 @@ export function CenterLeadsListView() {
         <Card
           size="sm"
           className={cn(
-            "cursor-pointer transition-all hover:border-emerald-400",
-            statusFilter === "closed" ? "ring-2 ring-emerald-500 border-emerald-500 bg-emerald-50/20" : "border-border"
+            "cursor-pointer transition-all hover:border-ok/40",
+            statusFilter === "closed" ? "ring-2 ring-ok border-ok bg-ok-wash/40" : "border-line"
           )}
           onClick={() => {
             setStatusFilter("closed");
@@ -327,10 +334,10 @@ export function CenterLeadsListView() {
         >
           <CardContent className="pt-4 flex items-center justify-between">
             <div>
-              <p className="text-xs font-medium text-emerald-600 dark:text-emerald-400">Đã hoàn tất</p>
-              <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-300 mt-0.5">{closedCount}</p>
+              <p className="text-xs font-medium text-ok">Đã hoàn tất</p>
+              <p className="font-heading text-2xl font-bold text-ok tabular-nums mt-0.5">{closedCount}</p>
             </div>
-            <div className="size-9 rounded-lg bg-emerald-100 dark:bg-emerald-950/60 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+            <div className="size-9 rounded-lg bg-ok-wash flex items-center justify-center text-ok">
               <CheckCheckIcon className="size-4" />
             </div>
           </CardContent>
@@ -361,7 +368,7 @@ export function CenterLeadsListView() {
             }}
             className={cn(
               "rounded-full text-xs h-8",
-              statusFilter === "new" && "bg-blue-600 hover:bg-blue-700 text-white"
+              statusFilter === "new" && "bg-brand hover:bg-brand/90 text-white"
             )}
           >
             Chờ xử lý ({newCount})
@@ -375,7 +382,7 @@ export function CenterLeadsListView() {
             }}
             className={cn(
               "rounded-full text-xs h-8",
-              statusFilter === "contacted" && "bg-amber-600 hover:bg-amber-700 text-white"
+              statusFilter === "contacted" && "bg-warn hover:bg-warn/90 text-white"
             )}
           >
             Đang trao đổi ({contactedCount})
@@ -389,7 +396,7 @@ export function CenterLeadsListView() {
             }}
             className={cn(
               "rounded-full text-xs h-8",
-              statusFilter === "closed" && "bg-emerald-600 hover:bg-emerald-700 text-white"
+              statusFilter === "closed" && "bg-ok hover:bg-ok/90 text-white"
             )}
           >
             Đã hoàn tất ({closedCount})
@@ -466,15 +473,13 @@ export function CenterLeadsListView() {
               <tbody className="divide-y divide-border">
                 {items.map((lead) => {
                   const isNew = lead.status === "new";
-                  const isContacted = lead.status === "contacted";
-                  const isClosed = lead.status === "closed";
 
                   return (
                     <tr
                       key={lead.id}
                       className={cn(
-                        "hover:bg-muted/30 transition-colors cursor-pointer",
-                        isNew && "bg-blue-50/15 dark:bg-blue-950/10"
+                        "hover:bg-ground transition-colors cursor-pointer",
+                        isNew && "bg-brand-wash/35"
                       )}
                       onClick={() => setSelectedLead(lead)}
                     >
@@ -553,12 +558,12 @@ export function CenterLeadsListView() {
                       {/* Shared Profile Badge */}
                       <td className="py-3.5 px-3 whitespace-nowrap">
                         {lead.sharedProfile ? (
-                          <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-300 gap-1 text-xs">
+                          <Badge variant="ok" className="gap-1 text-xs">
                             <ShieldCheckIcon className="size-3" />
                             Đã chia sẻ
                           </Badge>
                         ) : (
-                          <Badge variant="outline" className="text-muted-foreground gap-1 text-xs">
+                          <Badge variant="neutral" className="gap-1 text-xs">
                             <LockIcon className="size-3" />
                             Chỉ liên hệ
                           </Badge>
@@ -567,21 +572,7 @@ export function CenterLeadsListView() {
 
                       {/* Status */}
                       <td className="py-3.5 px-3 whitespace-nowrap">
-                        {isNew && (
-                          <Badge className="bg-blue-600 text-white font-medium text-xs px-2 py-0.5">
-                            Mới nhận
-                          </Badge>
-                        )}
-                        {isContacted && (
-                          <Badge className="bg-amber-600 text-white font-medium text-xs px-2 py-0.5">
-                            Đang trao đổi
-                          </Badge>
-                        )}
-                        {isClosed && (
-                          <Badge variant="outline" className="text-emerald-700 border-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 font-medium text-xs px-2 py-0.5">
-                            Đã hoàn tất
-                          </Badge>
-                        )}
+                        <LeadStatusBadge status={lead.status} />
                       </td>
 
                       {/* Action */}
@@ -616,15 +607,7 @@ export function CenterLeadsListView() {
                     <InboxIcon className="size-5 text-brand shrink-0" />
                     Chi tiết yêu cầu liên hệ
                   </DialogTitle>
-                  {selectedLead.status === "new" && (
-                    <Badge className="bg-blue-600 text-white">Mới nhận</Badge>
-                  )}
-                  {selectedLead.status === "contacted" && (
-                    <Badge className="bg-amber-600 text-white">Đang trao đổi</Badge>
-                  )}
-                  {selectedLead.status === "closed" && (
-                    <Badge className="bg-emerald-600 text-white">Đã hoàn tất</Badge>
-                  )}
+                  <LeadStatusBadge status={selectedLead.status} />
                 </div>
                 <DialogDescription>
                   Gửi lúc {new Date(selectedLead.createdAt).toLocaleString("vi-VN")} tới trung tâm {selectedLead.studyCenterName}.
@@ -725,12 +708,12 @@ export function CenterLeadsListView() {
                       Hồ sơ học sinh được chia sẻ
                     </h4>
                     {selectedLead.sharedProfile ? (
-                      <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 text-xs gap-1">
+                      <Badge variant="ok" className="text-xs gap-1">
                         <ShieldCheckIcon className="size-3" />
                         Đã cấp quyền chia sẻ (Nghị định 356)
                       </Badge>
                     ) : (
-                      <Badge variant="outline" className="text-xs text-muted-foreground gap-1">
+                      <Badge variant="neutral" className="text-xs gap-1">
                         <LockIcon className="size-3" />
                         Chưa cấp quyền chia sẻ
                       </Badge>
@@ -738,12 +721,12 @@ export function CenterLeadsListView() {
                   </div>
 
                   {selectedLead.sharedProfile && selectedLead.profileSummary ? (
-                    <Card size="sm" className="border-emerald-200 bg-emerald-50/20 dark:bg-emerald-950/20">
+                    <Card size="sm" className="border-ok/30 bg-ok-wash/25">
                       <CardContent className="pt-4 grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
                         {/* GPA */}
-                        <div className="p-2.5 rounded-lg bg-card border min-w-0">
-                          <span className="text-muted-foreground block">GPA tích lũy:</span>
-                          <span className="text-base font-bold text-emerald-600">
+                        <div className="p-2.5 rounded-lg bg-surface border border-line min-w-0">
+                          <span className="text-ink-3 block">GPA tích lũy:</span>
+                          <span className="font-heading text-base font-bold text-ok tabular-nums">
                             {selectedLead.profileSummary.overallGpa != null
                               ? `${selectedLead.profileSummary.overallGpa} / 4.0`
                               : "Chưa cập nhật"}
@@ -844,7 +827,7 @@ export function CenterLeadsListView() {
                         onClick={() => handleStatusChange(selectedLead.id, "new")}
                         className="text-xs gap-1.5"
                       >
-                        <ClockIcon className="size-3.5 text-blue-600" />
+                        <ClockIcon className="size-3.5 text-brand" />
                         Chuyển về Mới nhận
                       </Button>
                     )}
@@ -855,7 +838,7 @@ export function CenterLeadsListView() {
                         size="sm"
                         disabled={isUpdatingStatus}
                         onClick={() => handleStatusChange(selectedLead.id, "contacted")}
-                        className="text-xs gap-1.5 text-amber-700 border-amber-300 bg-amber-50 hover:bg-amber-100"
+                        className="text-xs gap-1.5 text-warn border-warn/30 bg-warn-wash/60 hover:bg-warn-wash"
                       >
                         <PhoneIcon className="size-3.5" />
                         Đã liên hệ với học sinh
@@ -868,7 +851,7 @@ export function CenterLeadsListView() {
                         size="sm"
                         disabled={isUpdatingStatus}
                         onClick={() => handleStatusChange(selectedLead.id, "closed")}
-                        className="text-xs gap-1.5 text-emerald-700 border-emerald-300 bg-emerald-50 hover:bg-emerald-100"
+                        className="text-xs gap-1.5 text-ok border-ok/30 bg-ok-wash/60 hover:bg-ok-wash"
                       >
                         <CheckCheckIcon className="size-3.5" />
                         Đóng yêu cầu (Hoàn tất)

@@ -211,8 +211,8 @@ export function LeadConversationPanel({
                 className={cn(
                   "text-[11px] gap-1 cursor-pointer transition-colors",
                   showFlaggedOnly
-                    ? "bg-amber-600 text-white border-amber-600"
-                    : "bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100"
+                    ? "bg-warn text-white border-warn"
+                    : "bg-warn-wash text-warn border-warn/30 hover:bg-warn-wash/80"
                 )}
               >
                 <AlertTriangleIcon className="size-3" />
@@ -284,8 +284,8 @@ export function LeadConversationPanel({
                   isRemoved
                     ? "mx-auto max-w-full bg-muted/50 border-dashed text-muted-foreground italic"
                     : msg.isFromCenter
-                      ? "ml-auto bg-blue-50/80 dark:bg-blue-950/40 border-blue-200 dark:border-blue-800"
-                      : "mr-auto bg-card border-border"
+                      ? "ml-auto bg-brand-wash/75 border-brand/25"
+                      : "mr-auto bg-surface border-line"
                 )}
               >
                 {!isRemoved && (
@@ -309,8 +309,8 @@ export function LeadConversationPanel({
                 </p>
 
                 {!isRemoved && msg.isFlagged && (
-                  <div className="mt-1.5 flex items-start gap-1.5 rounded bg-amber-100/80 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-700 px-2 py-1 text-[11px] text-amber-900 dark:text-amber-200">
-                    <ShieldAlertIcon className="size-3.5 shrink-0 mt-0.5 text-amber-700 dark:text-amber-300" />
+                  <div className="mt-1.5 flex items-start gap-1.5 rounded bg-warn-wash border border-warn/30 px-2 py-1 text-[11px] text-warn">
+                    <ShieldAlertIcon className="size-3.5 shrink-0 mt-0.5 text-warn" />
                     <span>
                       <strong>Bộ lọc gắn cờ:</strong>{" "}
                       {msg.flagReason || "Vi phạm quy định chia sẻ thông tin liên hệ / quảng cáo"}
@@ -329,8 +329,8 @@ export function LeadConversationPanel({
         {leadStatus === "new" && (
           <p className="text-[11px] text-muted-foreground">
             Gửi phản hồi đầu tiên sẽ tự động chuyển trạng thái yêu cầu từ{" "}
-            <span className="font-medium text-foreground">Mới nhận</span> sang{" "}
-            <span className="font-medium text-amber-700">Đang trao đổi</span>.
+            <span className="font-medium text-ink">Mới nhận</span> sang{" "}
+            <span className="font-medium text-warn">Đang trao đổi</span>.
           </p>
         )}
 
@@ -351,8 +351,8 @@ export function LeadConversationPanel({
         />
 
         {draftInspection.isFlagged && (
-          <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50/70 dark:bg-amber-950/30 px-2.5 py-1.5 text-xs text-amber-900 dark:text-amber-200">
-            <AlertTriangleIcon className="size-3.5 shrink-0 mt-0.5 text-amber-600" />
+          <div className="flex items-start gap-2 rounded-md border border-warn/30 bg-warn-wash px-2.5 py-1.5 text-xs text-warn">
+            <AlertTriangleIcon className="size-3.5 shrink-0 mt-0.5 text-warn" />
             <span>
               <strong>Lưu ý bộ lọc:</strong> Tin nhắn có dấu hiệu vi phạm (
               {draftInspection.reasons.join("; ")}) nên sẽ được gắn cờ để kiểm duyệt sau khi gửi.

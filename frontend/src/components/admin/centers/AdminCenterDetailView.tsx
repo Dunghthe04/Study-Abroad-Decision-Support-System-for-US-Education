@@ -139,7 +139,7 @@ export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDeta
             {center.code}
           </Badge>
           {!isActive && (
-            <Badge variant="outline" className="text-rose-600 border-rose-300 bg-rose-50 dark:bg-rose-950/40 text-xs px-2 py-0.5 ml-1">
+            <Badge variant="risk" className="text-xs px-2 py-0.5 ml-1">
               Đã ẩn khỏi gợi ý
             </Badge>
           )}
@@ -159,7 +159,7 @@ export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDeta
               variant="outline"
               size="sm"
               onClick={() => setConfirmAction("hide")}
-              className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+              className="h-8 gap-1.5 text-xs text-ink-2 hover:text-risk hover:border-risk/30 hover:bg-risk-wash"
               title="Ẩn trung tâm khỏi luồng gợi ý và danh bạ"
             >
               <EyeOffIcon className="w-3.5 h-3.5" />
@@ -170,7 +170,7 @@ export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDeta
               variant="outline"
               size="sm"
               onClick={() => setConfirmAction("show")}
-              className="h-8 gap-1.5 text-xs text-emerald-700 border-emerald-300 bg-emerald-50/50 hover:bg-emerald-100/60 dark:bg-emerald-950/30 dark:hover:bg-emerald-950/60"
+              className="h-8 gap-1.5 text-xs text-ok border-ok/30 bg-ok-wash/60 hover:bg-ok-wash"
               title="Hiện lại trung tâm trên danh bạ và luồng gợi ý"
             >
               <EyeIcon className="w-3.5 h-3.5" />
@@ -181,7 +181,7 @@ export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDeta
           {/* Trạng thái xác minh và Nút Xác minh / Hủy xác minh (UC-59) */}
           {isVerified ? (
             <div className="flex items-center gap-2">
-              <Badge className="bg-emerald-600 text-white gap-1 text-xs px-2.5 py-1">
+              <Badge variant="ok" className="gap-1 text-xs px-2.5 py-1">
                 <CheckCircle2Icon className="w-3.5 h-3.5" />
                 Đã xác minh Sở GD&ĐT
               </Badge>
@@ -195,7 +195,7 @@ export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDeta
                 variant="outline"
                 size="sm"
                 onClick={() => setConfirmAction("unverify")}
-                className="h-8 gap-1.5 text-xs text-rose-600 border-rose-200 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                className="h-8 gap-1.5 text-xs text-risk border-risk/30 hover:bg-risk-wash"
               >
                 <ShieldAlertIcon className="w-3.5 h-3.5" />
                 Hủy xác minh
@@ -203,13 +203,13 @@ export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDeta
             </div>
           ) : (
             <div className="flex items-center gap-2">
-              <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-950/40 text-xs px-2.5 py-1">
+              <Badge variant="warn" className="text-xs px-2.5 py-1">
                 Chờ duyệt hồ sơ
               </Badge>
               <Button
                 size="sm"
                 onClick={() => setConfirmAction("verify")}
-                className="h-8 gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white "
+                className="h-8 gap-1.5 text-xs bg-ok hover:bg-ok/90 text-white"
               >
                 <ShieldCheckIcon className="w-3.5 h-3.5" />
                 Xác minh trung tâm
@@ -257,7 +257,7 @@ export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDeta
 
             {/* Kênh tư vấn USAS (Ẩn hotline & website để tránh liên hệ trực tiếp ngoài hệ thống) */}
             <div className="flex flex-wrap items-center gap-2 shrink-0 pb-1">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-brand/20 bg-brand/5 text-xs font-medium text-brand">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-brand/20 bg-brand-wash text-xs font-medium text-brand-ink">
                 <ShieldCheckIcon className="w-3.5 h-3.5 text-brand shrink-0" />
                 <span>Tư vấn qua hệ thống USAS</span>
               </div>
@@ -267,29 +267,29 @@ export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDeta
           {/* Title & Info Block */}
           <div className="mt-4 space-y-2">
             <div className="flex flex-wrap items-center gap-2.5">
-              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+              <h1 className="font-heading text-2xl sm:text-3xl font-bold tracking-tight text-ink">
                 {center.name}
               </h1>
-              <Badge variant="secondary" className="font-medium bg-brand/10 text-brand border-brand/20">
+              <Badge variant="brand">
                 {profile.typeLabel}
               </Badge>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm text-ink-2">
               {center.city && (
-                <span className="inline-flex items-center gap-1 font-medium text-foreground">
+                <span className="inline-flex items-center gap-1 font-medium text-ink">
                   <MapPinIcon className="w-3.5 h-3.5 text-brand" />
                   {center.district ? `${center.district}, ${center.city}` : center.city}
                 </span>
               )}
-              <span>•</span>
-              <div className="inline-flex items-center gap-1 text-amber-500 font-semibold">
+              <span>·</span>
+              <div className="inline-flex items-center gap-1 text-gold font-semibold tabular-nums">
                 <StarIcon className="w-3.5 h-3.5 fill-current" />
                 <span>{profile.rating.toFixed(1)}</span>
-                <span className="text-muted-foreground font-normal">({profile.reviewCount} đánh giá)</span>
+                <span className="text-ink-2 font-normal">({profile.reviewCount} đánh giá)</span>
               </div>
-              <span>•</span>
-              <span>Năm thành lập: <strong className="text-foreground">{profile.establishedYear}</strong></span>
+              <span>·</span>
+              <span>Năm thành lập: <strong className="text-ink">{profile.establishedYear}</strong></span>
             </div>
           </div>
         </div>
@@ -297,40 +297,40 @@ export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDeta
 
       {/* 4 Key Highlight Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-3.5">
-        <Card className="p-3.5 sm:p-4 flex flex-col justify-between gap-3 min-w-0">
+        <Card className="p-3.5 sm:p-4 flex flex-col justify-between gap-3 min-w-0 border-line">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-xs text-muted-foreground font-medium truncate">
+            <span className="text-xs text-ink-2 font-medium truncate">
               Tỷ lệ đỗ Visa Mỹ
             </span>
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-lg bg-ok-wash text-ok flex items-center justify-center shrink-0">
               <FlameIcon className="w-4 h-4" />
             </div>
           </div>
           <div className="min-w-0">
-            <div className="text-lg sm:text-2xl font-bold tracking-tight text-foreground truncate">
+            <div className="font-heading text-xl sm:text-2xl font-bold tracking-tight text-ink tabular-nums truncate">
               {profile.visaSuccessRate}%
             </div>
-            <div className="text-xs text-muted-foreground truncate mt-0.5">
+            <div className="text-xs text-ink-3 truncate mt-0.5">
               Hồ sơ phỏng vấn ĐSQ
             </div>
           </div>
         </Card>
 
-        <Card className="p-3.5 sm:p-4 flex flex-col justify-between gap-3 min-w-0">
+        <Card className="p-3.5 sm:p-4 flex flex-col justify-between gap-3 min-w-0 border-line">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-xs text-muted-foreground font-medium truncate">
+            <span className="text-xs text-ink-2 font-medium truncate">
               Học bổng đạt được
             </span>
-            <div className="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-lg bg-gold-wash text-gold flex items-center justify-center shrink-0">
               <AwardIcon className="w-4 h-4" />
             </div>
           </div>
           <div className="min-w-0">
-            <div className="text-lg sm:text-2xl font-bold tracking-tight text-foreground truncate" title={scholarshipStat.amount}>
+            <div className="font-heading text-xl sm:text-2xl font-bold tracking-tight text-ink tabular-nums truncate" title={scholarshipStat.amount}>
               {scholarshipStat.amount}
             </div>
             <div
-              className="text-xs text-muted-foreground truncate mt-0.5"
+              className="text-xs text-ink-3 truncate mt-0.5"
               title={scholarshipStat.note || "Kỳ tuyển sinh gần nhất"}
             >
               {scholarshipStat.note || "Kỳ tuyển sinh gần nhất"}
@@ -338,40 +338,40 @@ export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDeta
           </div>
         </Card>
 
-        <Card className="p-3.5 sm:p-4 flex flex-col justify-between gap-3 min-w-0">
+        <Card className="p-3.5 sm:p-4 flex flex-col justify-between gap-3 min-w-0 border-line">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-xs text-muted-foreground font-medium truncate">
+            <span className="text-xs text-ink-2 font-medium truncate">
               Quy mô nhân sự
             </span>
-            <div className="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-600 flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-lg bg-brand-wash text-brand-ink flex items-center justify-center shrink-0">
               <UsersIcon className="w-4 h-4" />
             </div>
           </div>
           <div className="min-w-0">
-            <div className="text-lg sm:text-2xl font-bold tracking-tight text-foreground truncate">
+            <div className="font-heading text-xl sm:text-2xl font-bold tracking-tight text-ink tabular-nums truncate">
               {profile.staffCount}{" "}
-              <span className="text-xs sm:text-sm font-normal text-muted-foreground">chuyên viên</span>
+              <span className="font-sans text-xs sm:text-sm font-normal text-ink-2">chuyên viên</span>
             </div>
-            <div className="text-xs text-muted-foreground truncate mt-0.5">
-              Cố vấn & Giảng viên
+            <div className="text-xs text-ink-3 truncate mt-0.5">
+              Cố vấn &amp; Giảng viên
             </div>
           </div>
         </Card>
 
-        <Card className="p-3.5 sm:p-4 flex flex-col justify-between gap-3 min-w-0">
+        <Card className="p-3.5 sm:p-4 flex flex-col justify-between gap-3 min-w-0 border-line">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-xs text-muted-foreground font-medium truncate">
+            <span className="text-xs text-ink-2 font-medium truncate">
               Pháp lý cơ sở
             </span>
-            <div className="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-600 flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-lg bg-reach-wash text-reach flex items-center justify-center shrink-0">
               <ShieldCheckIcon className="w-4 h-4" />
             </div>
           </div>
           <div className="min-w-0">
-            <div className="text-base sm:text-lg font-bold tracking-tight text-foreground truncate" title={profile.licenseNumber}>
+            <div className="text-base sm:text-lg font-bold tracking-tight text-ink truncate" title={profile.licenseNumber}>
               {profile.licenseNumber}
             </div>
-            <div className="text-xs text-muted-foreground truncate mt-0.5" title={profile.licenseIssuedBy}>
+            <div className="text-xs text-ink-3 truncate mt-0.5" title={profile.licenseIssuedBy}>
               {profile.taxCode ? `MST: ${profile.taxCode} · ${profile.licenseIssuedBy}` : profile.licenseIssuedBy}
             </div>
           </div>
@@ -515,11 +515,11 @@ export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDeta
                     <div className="space-y-1.5">
                       <div className="font-semibold text-foreground text-sm">{course.name}</div>
                       <div className="text-xs text-muted-foreground">{course.target}</div>
-                      <div className="text-xs text-brand font-medium bg-brand/5 p-2 rounded border border-brand/15">
+                      <div className="text-xs text-brand-ink font-medium bg-brand-wash/70 p-2 rounded border border-brand/20">
                         ⭐ {course.highlight}
                       </div>
                     </div>
-                    <div className="pt-2 border-t text-xs text-muted-foreground space-y-0.5">
+                    <div className="pt-2 border-t border-line text-xs text-ink-2 space-y-0.5">
                       <div>Thời lượng: <strong>{course.duration}</strong></div>
                       <div>Hình thức: <strong>{course.format}</strong></div>
                     </div>
@@ -535,25 +535,25 @@ export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDeta
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-lg flex items-center gap-2">
-                <AwardIcon className="w-5 h-5 text-amber-500" />
+                <AwardIcon className="w-5 h-5 text-gold" />
                 Học sinh trúng tuyển tiêu biểu năm 2025 - 2026
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid sm:grid-cols-3 gap-3.5">
                 {profile.successStories.map((story, i) => (
-                  <div key={i} className="p-4 rounded-lg border bg-card space-y-2">
+                  <div key={i} className="p-4 rounded-lg border border-line bg-surface space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="font-semibold text-foreground text-sm">{story.studentName}</span>
-                      <Badge variant="secondary" className="text-xs">
+                      <span className="font-semibold text-ink text-sm">{story.studentName}</span>
+                      <Badge variant="neutral" className="text-xs">
                         {story.year}
                       </Badge>
                     </div>
-                    <div className="text-xs text-muted-foreground">{story.highSchool}</div>
-                    <div className="pt-2 border-t">
+                    <div className="text-xs text-ink-2">{story.highSchool}</div>
+                    <div className="pt-2 border-t border-line">
                       <div className="text-xs text-brand font-bold">{story.university}</div>
-                      <div className="text-xs text-muted-foreground">Ngành: {story.major}</div>
-                      <div className="text-xs font-semibold text-emerald-600 mt-1">
+                      <div className="text-xs text-ink-2">Ngành: {story.major}</div>
+                      <div className="text-xs font-semibold text-ok mt-1">
                         Học bổng: {story.scholarship}
                       </div>
                     </div>
@@ -567,8 +567,8 @@ export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDeta
         {/* TAB 4: ĐÁNH GIÁ & NHẬN XÉT */}
         <TabsContent value="danh-gia" className="space-y-6 pt-2">
           <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-foreground">
-              Đánh giá từ phụ huynh & học sinh ({profile.reviews.length} nhận xét)
+            <h3 className="text-sm font-semibold text-ink">
+              Đánh giá từ phụ huynh &amp; học sinh ({profile.reviews.length} nhận xét)
             </h3>
             {profile.reviews.map((rev) => (
               <Card key={rev.id}>
@@ -576,19 +576,19 @@ export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDeta
                   <div className="flex items-start justify-between">
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="font-semibold text-sm text-foreground">{rev.reviewerName}</span>
+                        <span className="font-semibold text-sm text-ink">{rev.reviewerName}</span>
                         {rev.verified && (
-                          <Badge variant="outline" className="text-emerald-600 border-emerald-300 text-xs py-0">
+                          <Badge variant="ok" className="text-xs py-0">
                             ✓ Xác thực
                           </Badge>
                         )}
-                        <span className="text-xs text-muted-foreground">({rev.date})</span>
+                        <span className="text-xs text-ink-3">({rev.date})</span>
                       </div>
                       {rev.targetSchool && (
                         <div className="text-xs text-brand font-medium mt-0.5">{rev.targetSchool}</div>
                       )}
                     </div>
-                    <div className="flex text-amber-500">
+                    <div className="flex text-gold">
                       {[...Array(rev.rating)].map((_, i) => (
                         <StarIcon key={i} className="w-3.5 h-3.5 fill-current" />
                       ))}
