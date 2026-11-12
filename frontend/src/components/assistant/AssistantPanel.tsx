@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { describeSimulation, resetSimulation, showSimulation } from "@/lib/simulation-link";
+import { sourceDateText } from "@/lib/source-date";
 import { useAuth } from "@/contexts/AuthContext";
 import { AGE_FEATURES, useAgeBlock } from "@/lib/age-features";
 import { isAuthRoute } from "@/lib/layout-routes";
@@ -357,6 +358,7 @@ function Turn({ turn, onReply }: { turn: AssistantTurn; onReply?: (value: string
               ) : (
                 c.title
               )}
+              <span className="text-ink-3"> · {sourceDateText(c.retrievedAt)}</span>
             </li>
           ))}
         </ol>

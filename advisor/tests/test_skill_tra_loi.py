@@ -24,8 +24,8 @@ FINANCE = (
 )
 
 
-def hit(code="KB-001", content=SEVIS, score=0.9, quote="8 CFR 214.13", url=None, note="Nguồn A"):
-    return KnowledgeHit(code, "câu hỏi mẫu", content, quote, url, note, None, score)
+def hit(code="KB-001", content=SEVIS, score=0.9, quote="8 CFR 214.13", url=None, note="Nguồn A", retrieved=None):
+    return KnowledgeHit(code, "câu hỏi mẫu", content, quote, url, note, retrieved, score)
 
 
 class FakeLLMWithEmbed(FakeLLM):
@@ -159,6 +159,23 @@ def test_citation_prefers_the_quote_then_the_note_then_a_generic_title():
     assert citation_of(hit(quote="8 CFR 214.13")).title == "8 CFR 214.13"
     assert citation_of(hit(quote=None, note="Nguồn A")).title == "Nguồn A"
     assert citation_of(hit(quote=None, note=None)).title == "Kho kiến thức tư vấn du học"
+
+
+def test_citation_carries_the_date_the_source_was_collected():
+    from datetime import date
+
+    cited = citation_of(hit(retrieved=date(2026, 10, 5)))
+
+    assert cited.retrieved_at == date(2026, 10, 5)
+    # JSON gửi cho .NET dùng camelCase, ngày dạng ISO
+    assert cited.model_dump(by_alias=True, mode="json")["retrievedAt"] == "2026-10-05"
+
+
+def test_citation_without_a_stored_date_has_no_date_instead_of_a_guess():
+    cited = citation_of(hit(retrieved=None))
+
+    assert cited.retrieved_at is None
+    assert cited.model_dump(by_alias=True, mode="json")["retrievedAt"] is None
 
 
 def test_citation_snippet_is_cut_short():
