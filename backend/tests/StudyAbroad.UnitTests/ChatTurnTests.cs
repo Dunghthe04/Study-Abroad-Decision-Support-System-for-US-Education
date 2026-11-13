@@ -32,6 +32,7 @@ public class ChatTurnTests
 
     [Theory]
     [InlineData("sensitive")]      // bị chặn có chủ ý, hệ thống đã làm đúng việc của nó
+    [InlineData("greeting")]
     [InlineData("farewell")]
     [InlineData("about_system")]
     [InlineData("human_handoff")]

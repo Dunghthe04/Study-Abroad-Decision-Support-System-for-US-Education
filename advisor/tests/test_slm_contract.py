@@ -170,6 +170,7 @@ def test_each_branch_of_the_json_schema_lists_the_tasks_of_its_own_type():
     assert props["center_referral"]["centers"]["minItems"] == 2
     assert props["knowledge"]["schools"]["minItems"] == 1
     assert "about_system" in props["out_of_scope"]["subtype"]["enum"]
+    assert {"greeting", "farewell"} <= set(props["out_of_scope"]["subtype"]["enum"])
 
 
 def test_merging_two_profile_review_intents_does_not_repeat_a_task():

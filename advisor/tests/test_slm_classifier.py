@@ -165,6 +165,15 @@ async def test_two_failures_fall_back_to_an_ambiguous_message_with_zero_confiden
     assert result.intents[0].entities == {"subtype": "ambiguous"} and result.confidence == 0.0
 
 
+async def test_the_fallback_keeps_the_students_own_words_as_its_span():
+    slm = FakeSlm(OllamaError("down"), OllamaError("down"))
+
+    result = await OllamaSlm(slm).read("Hello", None, "")
+
+    assert result.fallback is True
+    assert result.intents[0].span == "Hello"
+
+
 # ---- bỏ giá trị và đoạn không có trong tin ----
 async def test_values_not_written_in_the_message_are_dropped_per_intent():
     answer = {

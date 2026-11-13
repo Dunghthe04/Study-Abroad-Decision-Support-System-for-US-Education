@@ -166,7 +166,7 @@ class SlmSummary(CamelModel):
         str
     ] = []  # loại các ý hệ thống THỰC SỰ đã chạy, sau khi luật code hậu xử lý (collect_profile, knowledge, out_of_scope...)
     out_of_scope: str | None = (
-        None  # loại con nếu có ý out_of_scope: exception | sensitive | farewell | ambiguous | about_system | human_handoff
+        None  # loại con nếu có ý out_of_scope: exception | sensitive | greeting | farewell | ambiguous | about_system | human_handoff
     )
     confidence: float | None = (
         None  # độ tin cậy 0 đến 1 của SLM; None khi không gọi SLM (bấm nút trả lời câu hồ sơ)

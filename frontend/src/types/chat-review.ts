@@ -24,7 +24,7 @@ export interface ChatReviewModelInfo {
   fallback: boolean;
   modelIntentTypes: string[];
   intentTypes: string[];
-  /** Loại con của ý ngoài phạm vi: exception, sensitive, farewell, ambiguous, about_system, human_handoff. */
+  /** Loại con của ý ngoài phạm vi: exception, sensitive, greeting, farewell, ambiguous, about_system, human_handoff. */
   outOfScope: string | null;
 }
 

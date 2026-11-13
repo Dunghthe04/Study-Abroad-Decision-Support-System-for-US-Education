@@ -235,7 +235,7 @@ def apply_to_excel(path: Path, items: list[Item], splits: list[str]) -> None:
     new_split = {(it.sheet, it.row): s for it, s in zip(items, splits, strict=True)}
     workbook = load_workbook(path)
     for sheet in workbook.worksheets:
-        if sheet.title in ("README", "summary"):
+        if sheet.title in ("README", "summary", "model_errors"):
             continue
         header = [c.value for c in sheet[1]]
         split_col = header.index("split")

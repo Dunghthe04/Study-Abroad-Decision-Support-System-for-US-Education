@@ -231,17 +231,17 @@ class ScenarioBranch:
         )
 
 
-# Câu trả lời cố định theo subtype, không gọi model.
-# farewell gồm cả chào, cảm ơn, tạm biệt nên dùng một câu hợp với cả ba
+# Câu trả lời cố định theo subtype, không gọi model. greeting trả lời riêng ở GREETING_REPLY (kèm nút gợi ý).
+# farewell gồm cảm ơn và tạm biệt nên dùng một câu hợp với cả hai
 OUT_OF_SCOPE = {
     "exception": "Mình chỉ hỗ trợ tư vấn du học Mỹ thôi nhé.",
     "sensitive": "Mình không hỗ trợ việc này. Hồ sơ du học cần trung thực, mình giúp bạn chuẩn bị đúng cách nhé.",
-    "farewell": "Rất vui được trò chuyện với bạn! Bạn cần mình giúp gì về du học Mỹ không?",
+    "farewell": "Rất vui được hỗ trợ bạn! Khi cần cứ quay lại hỏi mình nhé.",
     "ambiguous": "Mình chưa rõ ý bạn lắm. Bạn nói cụ thể hơn giúp mình nhé.",
 }
 
 
-# Lời chào: model chưa có nhãn riêng nên thường trả ambiguous. Tin chỉ có lời chào (luật ở small_talk) thì chào lại và gợi ý việc làm được
+# Lời chào: model có nhãn riêng greeting nên chào lại và gợi ý việc làm được
 GREETING_REPLY = (
     "Xin chào! Mình là trợ lý tư vấn du học Mỹ. Mình có thể gợi ý trường hợp với hồ sơ của bạn, "
     "thử các kịch bản (nếu điểm SAT, GPA thay đổi), giải đáp về visa, học phí, học bổng, hoặc giới thiệu trung tâm tư vấn. "
@@ -258,7 +258,10 @@ GREETING_BUTTONS = [
 class OutOfScopeBranch:
     async def run(self, state: ChatState, message: str, slm: SlmTinResult) -> SkillOutput:
         kind = slm.intents[0].entities.get("subtype", "ambiguous")
-        if kind in ("ambiguous", "farewell") and small_talk.classify(message) == "greeting":
+        # Luật small_talk là lưới an toàn cho model chưa học nhãn greeting (bản cũ hay trả ambiguous hoặc farewell cho lời chào)
+        if kind == "greeting" or (
+            kind in ("ambiguous", "farewell") and small_talk.classify(message) == "greeting"
+        ):
             return SkillOutput(GREETING_REPLY, quick_replies=list(GREETING_BUTTONS))
         return SkillOutput(OUT_OF_SCOPE.get(kind, OUT_OF_SCOPE["ambiguous"]))
 
