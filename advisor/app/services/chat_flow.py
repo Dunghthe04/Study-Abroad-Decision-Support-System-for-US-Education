@@ -37,6 +37,7 @@ from app.services.intake import (
     INTAKE_FORM,
     INTAKE_ID,
     INTAKE_MORE,
+    form_goals,
     intake_ask,
     intake_choice,
 )
@@ -543,7 +544,9 @@ def ask_major(state: ChatState) -> SkillOutput:
 def begin_intake(state: ChatState, choice: str) -> SkillOutput:
     if choice == "form":
         state.intake_mode = "form"
-        return SkillOutput(INTAKE_FORM, widget=Widget(type="form"))
+        # gửi kèm việc học sinh đã hỏi để form tích sẵn ô nhiệm vụ (?goal=)
+        goals = form_goals(state.pending_advice)
+        return SkillOutput(INTAKE_FORM, widget=Widget(type="form", data={"goals": goals}))
     return ask_next_missing(state)
 
 

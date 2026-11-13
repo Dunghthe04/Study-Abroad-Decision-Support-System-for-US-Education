@@ -361,8 +361,18 @@ async def test_choosing_form_opens_the_form_widget():
 
     res = await flow.reply(request(FORM_BUTTON.value, current_step="B3", question_id=INTAKE_ID))
 
-    assert res.answer == INTAKE_FORM and res.widget == Widget(type="form")
+    assert res.answer == INTAKE_FORM and res.widget == Widget(type="form", data={"goals": []})
     assert res.state.intake_mode == "form" and res.state.question_id is None
+
+
+async def test_choosing_form_sends_the_waiting_tasks_so_the_form_ticks_them():
+    flow, _ = make_flow(tin("knowledge"))
+    roadmap = tin(("profile_review", {"tasks": ["roadmap"]}, "em cần lên lộ trình")).intents[0]
+    req = request(FORM_BUTTON.value, current_step="B3", question_id=INTAKE_ID, pending_advice=roadmap)
+
+    res = await flow.reply(req)
+
+    assert res.widget == Widget(type="form", data={"goals": ["lo_trinh"]})
 
 
 async def test_continue_in_chat_button_from_the_form_asks_the_missing_items():
