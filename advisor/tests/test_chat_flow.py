@@ -20,7 +20,7 @@ from app.services.chat_flow import (
     go_to,
     last_user_message,
 )
-from app.services.intake import CHAT_BUTTON, CONTINUE_CHAT, FORM_BUTTON, INTAKE_FORM, INTAKE_ID
+from app.services.intake import CHAT_BUTTON, CONTINUE_CHAT, FORM_BUTTON, FORM_DONE, INTAKE_FORM, INTAKE_ID
 from app.services.skill_rules import REQUIRED_B3
 from tests.fakes import tin
 
@@ -410,6 +410,46 @@ async def test_back_from_an_unfinished_form_keeps_asking_and_keeps_the_question(
 
     assert ran == [] and res.answer == QUESTIONS["B1.1"]
     assert res.state.pending_advice.span == "em cần lên lộ trình"
+
+
+async def test_back_from_the_form_values_said_at_first_count_as_confirmed_and_the_question_is_answered():
+    ran: list[str] = []
+    flow, _ = make_flow(tin("knowledge"), ran)
+    # Câu đầu nói GPA, form lưu cùng giá trị nên vẫn mang trạng thái said_in_B0
+    profile = confirmed(*REQUIRED_B3) | {"gpa": ProfileField(value="x", status="said_in_B0")}
+    req = request(CONTINUE_CHAT, current_step="B3", profile=profile, pending_advice=waiting_advice())
+
+    res = await flow.reply(req)
+
+    assert ran == ["profile_review"] and res.state.profile["gpa"].status == "confirmed"
+
+
+async def test_back_from_a_finished_form_with_nothing_waiting_asks_nothing():
+    flow, counting = make_flow(tin("knowledge"))
+
+    res = await flow.reply(request(CONTINUE_CHAT, current_step="B3", profile=confirmed(*REQUIRED_B3)))
+
+    assert res.answer == FORM_DONE and res.quick_replies == [] and counting.calls == []
+
+
+async def test_back_from_a_half_filled_form_asks_only_the_missing_required_items():
+    flow, _ = make_flow(tin("knowledge"))
+    profile = confirmed("current_level", *[k for k in REQUIRED_B3 if k != "target_level"])
+
+    res = await flow.reply(request(CONTINUE_CHAT, current_step="B3", profile=profile))
+
+    # thiếu bậc học muốn theo: hỏi B1.2, không hỏi các câu tùy chọn như kỳ nhập học (B1.4)
+    assert res.answer == QUESTIONS["B1.2"]
+    assert res.state.required_only == ["current_level", *REQUIRED_B3]
+
+
+async def test_back_from_the_form_for_a_roadmap_also_requires_the_major():
+    flow, _ = make_flow(tin("knowledge"))
+    advice = tin(("profile_review", {"tasks": ["roadmap"]}, "em cần lên lộ trình")).intents[0]
+
+    res = await flow.reply(request(CONTINUE_CHAT, current_step="B3", pending_advice=advice))
+
+    assert "major" in res.state.required_only
 
 
 async def test_another_message_while_choosing_goes_through_the_slm():

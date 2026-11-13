@@ -34,6 +34,7 @@ from app.services.intake import (
     CHAT_BUTTON,
     CONTINUE_CHAT,
     FORM_BUTTON,
+    FORM_DONE,
     INTAKE_FORM,
     INTAKE_ID,
     INTAKE_MORE,
@@ -43,8 +44,8 @@ from app.services.intake import (
 )
 from app.services.pii_mask import mask_personal_info
 from app.services.priority import PRIORITY_KEY, detect_priorities, unaccent
-from app.services.profile_sync import changed_keys, merge_profile
-from app.services.skill_rules import REQUIRED_B3, missing_fields
+from app.services.profile_sync import DRAFT_KEYS, changed_keys, merge_profile
+from app.services.skill_rules import REQUIRED_B3, REQUIRED_B4, missing_fields
 from app.services.slm_contract import SlmClassifier
 
 # Tạo 1 logger
@@ -322,8 +323,14 @@ class ChatFlow:
             if state.question_id == INTAKE_ID:
                 state.question_id = None
             choice = "chat" if continue_chat else intake_choice(message)
+            if continue_chat:
+                back_from_form(state)
             # Điền xong form rồi quay về chat: form đã là bước rà soát nên không hỏi X1 nữa,
-            # trả lời luôn câu tư vấn bị hoãn. Hồ sơ còn thiếu thì begin_intake hỏi tiếp trong chat như cũ
+            # trả lời luôn câu tư vấn bị hoãn. Hồ sơ còn thiếu thì begin_intake chỉ hỏi mục bắt buộc còn thiếu
+            if continue_chat and state.pending_advice is None and profile_ready(state):
+                state.intake_mode = "chat"
+                log_turn(state, message, None, [], (time.perf_counter() - started) * 1000, req.session_id)
+                return self._response(state, SkillOutput(FORM_DONE), [], profile_before)
             if continue_chat and state.pending_advice is not None and profile_ready(state):
                 original = state.pending_advice
                 state.pending_advice = None
@@ -498,6 +505,21 @@ def profile_ready(state: ChatState) -> bool:
     if missing_fields(state.profile, REQUIRED_B3):
         return False
     return all(field.status != "said_in_B0" for field in state.profile.values())
+
+
+# Học sinh bấm "Tiếp tục bằng chat" trên form:
+# - giá trị nói ở câu đầu (said_in_B0) thuộc nháp đã hiện trên form và học sinh đã xem, nên coi là đã xác nhận, không hỏi lại ở X1;
+# - còn thiếu thì chỉ hỏi mục bắt buộc còn thiếu, không hỏi đủ như hồ sơ điền lần đầu trong chat
+def back_from_form(state: ChatState) -> None:
+    for key, value in state.profile.items():
+        if key in DRAFT_KEYS and value.status == "said_in_B0":
+            state.profile[key] = value.model_copy(update={"status": "confirmed"})
+    state.intake_mode = "form"  # đến từ form, để limit_to_required không coi là đang hỏi đủ trong chat
+    # Bắt buộc như form: cấp học hiện tại (B1.1, cần để lưu hồ sơ) + mục B3; lộ trình / gợi ý trường cần thêm ngành
+    goals = form_goals(state.pending_advice)
+    needs_major = "lo_trinh" in goals or "goi_y_truong" in goals
+    required = ["current_level", *(REQUIRED_B4 if needs_major else REQUIRED_B3)]
+    state.required_only = list(dict.fromkeys([*(state.required_only or []), *required]))
 
 
 # Hồ sơ có giá trị không phải chỉ nói ở câu đầu (said_in_B0): giá trị từ DB, form hoặc lần trước
