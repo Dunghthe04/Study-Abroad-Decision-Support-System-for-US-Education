@@ -677,3 +677,21 @@ async def test_without_a_listener_the_reply_is_the_same():
     res = await flow.reply(request("chậm, nhanh"))
 
     assert res.answer == "đáp chậm\n\nđáp nhanh"
+
+
+async def test_log_item_shows_the_city_the_model_returned_but_still_hides_other_written_values(caplog):
+    slm = tin(("center_referral", {"service": "ESSAY_EDITING", "city": "hà nội", "follow_up": False}))
+    flow, _ = make_flow(slm)
+
+    with caplog.at_level(logging.INFO, logger="advisor.chat"):
+        await flow.reply(request("Ai sửa bài luận ở hà nội"))
+
+    assert last_log_record(caplog)["slm_intents"] == [
+        {
+            "type": "center_referral",
+            "service": "ESSAY_EDITING",
+            "city": "hà nội",
+            "follow_up": False,
+            "other_keys": [],
+        }
+    ]
