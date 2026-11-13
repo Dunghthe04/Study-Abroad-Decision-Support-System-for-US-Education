@@ -499,7 +499,7 @@ export function AddTargetSchoolButton({
                         size="xs"
                         onClick={() => handleUpdateRound(selectedEditRound)}
                         disabled={isUpdatingRound || !selectedEditRound}
-                        className="h-6 text-xs bg-brand text-white hover:bg-brand/90 gap-1"
+                        className="h-6 gap-1 text-xs"
                       >
                         {isUpdatingRound && <Loader2 className="size-3 animate-spin" />}
                         Lưu vòng nộp
