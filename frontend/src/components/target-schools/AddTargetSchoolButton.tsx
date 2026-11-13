@@ -330,7 +330,7 @@ export function AddTargetSchoolButton({
             </DialogHeader>
 
             {error && (
-              <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+              <div className="rounded-md border border-risk/25 bg-risk-wash p-3 text-sm text-risk">
                 {error}
               </div>
             )}
@@ -417,7 +417,7 @@ export function AddTargetSchoolButton({
           <div className="space-y-4">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-lg">
-                <BookmarkCheckIcon className="size-5 text-emerald-600" />
+                <BookmarkCheckIcon className="size-5 text-ok" />
                 Thông tin trường mục tiêu
               </DialogTitle>
               <DialogDescription>
@@ -426,7 +426,7 @@ export function AddTargetSchoolButton({
             </DialogHeader>
 
             {error && (
-              <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+              <div className="rounded-md border border-risk/25 bg-risk-wash p-3 text-sm text-risk">
                 {error}
               </div>
             )}
