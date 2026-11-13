@@ -12,8 +12,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from app.schemas.chat import ChatState, QuickReply
-from app.services.centers import SERVICES, CenterFinder, CenterHit, db_service, match_city
+from app.schemas.chat import ChatState, QuickReply, Widget
+from app.services.centers import SERVICES, CenterFinder, CenterHit, CityCount, db_service, match_city
 from app.services.chat_flow import SkillOutput
 from app.services.skill_call import SKILLS_DIR, SkillCall
 from app.services.small_talk import plain
@@ -45,6 +45,10 @@ NO_CENTER = (
     "Bạn có thể xem danh sách trung tâm đầy đủ ở trang Trung tâm."
 )
 UNAVAILABLE = "Phần gợi ý trung tâm đang tạm gián đoạn, bạn thử lại sau ít phút nhé."
+# Học sinh nêu thành phố chưa có trung tâm nào hỗ trợ dịch vụ này: không đưa trung tâm ở nơi khác cho đủ, mà cho chọn nơi đang có
+NO_CENTER_IN_CITY = (
+    "Hiện chưa có trung tâm đã xác minh ở {city} hỗ trợ {label}. Bạn chọn thành phố khác đang có nhé:"
+)
 # Việc model tách ra (tasks) mà hệ thống chưa làm được: nói rõ rồi vẫn gợi ý trung tâm theo dịch vụ
 TASK_NOTES = {
     "booking": "Mình chưa đặt lịch hẹn thay bạn được, nhưng mình gợi ý các trung tâm để bạn tự tìm hiểu nhé.",
@@ -98,6 +102,8 @@ BANNED = (
     "đảm bảo",
 )
 MAX_REASON_WORDS = 40
+# Trang đầu: số trung tâm hiện ngay (có AI viết lời giải thích). Còn lại hiện sau khi bấm Xem thêm, lời giải thích dựng bằng code từ dữ liệu
+FIRST_PAGE = 3
 MAX_OPENING_WORDS = 45
 _DIGIT_RE = re.compile(r"\d")
 
@@ -215,6 +221,24 @@ def template_reason(center: CenterHit, service: str, level: str | None, city: st
     return ", ".join(parts) + "."
 
 
+# Thẻ trung tâm cho giao diện: mỗi trung tâm có mã (để mở trang chi tiết và form liên hệ), tên, thành phố, website, một câu "vì sao hợp".
+# Giao diện hiện firstPage trung tâm đầu, nút Xem thêm mở phần còn lại, và thanh gõ thành phố (cities: thành phố đang có trung tâm cho
+# dịch vụ này, kèm số trung tâm và câu gửi lại khi chọn). answer vẫn có danh sách chữ của trang đầu (nhật ký, kiểm tra mẫu)
+def centers_widget(
+    centers: list[CenterHit], reasons: dict[int, str], cities: list[CityCount], service: str
+) -> Widget:
+    items = [
+        {"id": c.id, "name": c.name, "city": c.city, "website": c.website, "reason": reasons[i]}
+        for i, c in enumerate(centers, start=1)
+    ]
+    label = SERVICES[service]
+    options = [
+        {"city": c.city, "count": c.count, "ask": f"Cho mình xem trung tâm {label} ở {c.city}"}
+        for c in cities
+    ]
+    return Widget(type="centers", data={"centers": items, "firstPage": FIRST_PAGE, "cities": options})
+
+
 def service_buttons() -> list[QuickReply]:
     return [
         QuickReply(label=label[:1].upper() + label[1:], value=f"Mình cần hỗ trợ {label}")
@@ -245,6 +269,9 @@ class ChuyenTrungTamHandler:
             return SkillOutput(UNAVAILABLE)
 
         need = read_need(entities, state.context, cities)
+        # Nhớ thành phố ngay khi học sinh nói, kể cả khi chưa rõ dịch vụ: bấm nút dịch vụ ở câu sau vẫn giữ thành phố
+        if need.city:
+            state.context.city = need.city
         notes = [TASK_NOTES[task] for task in entities.get("tasks") or [] if task in TASK_NOTES]
         # Chưa rõ dịch vụ: hỏi lại bằng nút, học sinh bấm là gửi lại một câu rõ dịch vụ
         if need.service is None:
@@ -254,25 +281,60 @@ class ChuyenTrungTamHandler:
         state.context.service, state.context.city = need.model_service, need.city
         level = state.study_level
         try:
-            centers = await self._finder.find(need.service, level, need.city)
+            # Học sinh nêu một thành phố không có trung tâm nào (không khớp thành phố trong DB): không tìm, vì không có gì ở đó
+            centers = (
+                []
+                if need.asked_city and not need.city
+                else await self._finder.find(need.service, level, need.city)
+            )
         except Exception:
             logger.exception("Lấy trung tâm thất bại")
             return SkillOutput(UNAVAILABLE)
-
+        counts = await self._city_counts(need.service, level)
         label = SERVICES[need.service]
         parts = list(notes)
-        if not centers:  # TH-63: không có trung tâm đã xác minh cho dịch vụ này
+        if (
+            not centers
+        ):  # TH-63: không có trung tâm đã xác minh cho dịch vụ này (hoặc ở thành phố học sinh nêu)
+            if need.asked_city and counts:
+                parts.append(NO_CENTER_IN_CITY.format(city=need.asked_city, label=label))
+                return SkillOutput("\n\n".join(parts), widget=centers_widget([], {}, counts, need.service))
             parts.append(NO_CENTER.format(label=label))
             return SkillOutput("\n\n".join(parts))
 
-        explained = await self._explain_centers(centers, need, level)
+        # AI viết lời giải thích cho trang đầu; các trung tâm còn lại dùng câu dựng bằng code từ cùng dữ liệu (nhanh, rẻ, vẫn đúng)
+        first = centers[:FIRST_PAGE]
+        explained = await self._explain_centers(first, need, level)
+        reasons = dict(explained.reasons)
+        for i in range(len(first) + 1, len(centers) + 1):
+            reasons[i] = template_reason(centers[i - 1], need.service, level, need.city)
         lines = [explained.opening]
-        for i, center in enumerate(centers, start=1):
+        for i, center in enumerate(first, start=1):
             where = f" ({center.city})" if center.city else ""
             site = f" Website: {center.website}" if center.website else ""
-            lines.append(f"- {center.name}{where}: {explained.reasons[i]}{site}")
+            lines.append(f"- {center.name}{where}: {reasons[i]}{site}")
         parts.append("\n".join(lines))
-        return SkillOutput("\n\n".join(parts), disclaimer=DISCLAIMER)
+        if len(centers) > len(first):
+            parts.append(f"Còn {len(centers) - len(first)} trung tâm khác, bạn bấm Xem thêm để xem hết.")
+        # Thanh thành phố khác: khi đã có thành phố thì các nơi còn lại, khi chưa nêu thì mọi nơi (nếu có từ hai nơi trở lên)
+        others = (
+            [c for c in counts if not same_city(c.city, need.city)]
+            if need.city
+            else (counts if len(counts) > 1 else [])
+        )
+        return SkillOutput(
+            "\n\n".join(parts),
+            widget=centers_widget(centers, reasons, others, need.service),
+            disclaimer=DISCLAIMER,
+        )
+
+    # Số trung tâm theo thành phố cho dịch vụ này; lỗi thì không có nút thành phố, danh sách chính vẫn hiện
+    async def _city_counts(self, service: str, level: str | None) -> list[CityCount]:
+        try:
+            return await self._finder.city_counts(service, level)
+        except Exception:
+            logger.exception("Lấy số trung tâm theo thành phố thất bại")
+            return []
 
     # Claude viết đoạn mở đầu và mỗi trung tâm một câu "vì sao hợp". AI không thấy tên trung tâm; code tự so thành phố, bậc học
     # rồi đưa kết quả đúng/sai cho AI (AI so chữ hay nhầm, ví dụ nói "cùng thành phố" khi không phải)

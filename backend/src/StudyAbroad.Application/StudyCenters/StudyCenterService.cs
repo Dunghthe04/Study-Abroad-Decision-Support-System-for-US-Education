@@ -21,6 +21,8 @@ public interface IStudyCenterService
     Task<StudyCenterDto?> GetByUserIdAsync(Guid userId, CancellationToken ct = default);
     Task<IReadOnlyList<StudyCenterDto>> ReferAsync(CenterReferralQuery query, CancellationToken ct = default);
     Task<IReadOnlyList<string>> GetReferralCitiesAsync(CancellationToken ct = default);
+    /// <summary>Thành phố có trung tâm gợi ý được cho một dịch vụ (và bậc học), kèm số trung tâm: chat cho học sinh chọn nơi đang có.</summary>
+    Task<IReadOnlyList<CityCount>> GetReferralCityCountsAsync(CenterReferralQuery query, CancellationToken ct = default);
     /// <summary>[UC-71] Thêm một trung tâm tư vấn vào danh bạ (kèm ghi audit).</summary>
     Task<CreateStudyCenterResult> CreateAsync(CreateStudyCenterRequest request, Guid actorUserId, CancellationToken ct = default);
     /// <summary>[UC-59] Moderator / Admin xác minh hoặc hủy xác minh một trung tâm tư vấn.</summary>
@@ -178,7 +180,7 @@ public class StudyCenterService(
         return center is null ? null : ToDto(center);
     }
 
-    // Tối đa 3 trung tâm cho chat gợi ý (B6); luật chọn nằm ở CenterReferral
+    // Các trung tâm cho chat gợi ý (B6), tối đa 20; luật chọn nằm ở CenterReferral
     public async Task<IReadOnlyList<StudyCenterDto>> ReferAsync(CenterReferralQuery query, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(query.Service))
@@ -356,6 +358,13 @@ public class StudyCenterService(
 
     public async Task<IReadOnlyList<string>> GetReferralCitiesAsync(CancellationToken ct = default) =>
         CenterReferral.Cities(await repository.ListReferableAsync(ct));
+
+    public async Task<IReadOnlyList<CityCount>> GetReferralCityCountsAsync(CenterReferralQuery query, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(query.Service))
+            throw new ArgumentException("Service is required.", nameof(query));
+        return CenterReferral.CityCounts(await repository.ListReferableAsync(ct), query.Service, query.StudyLevel);
+    }
 
     internal static StudyCenterDto ToDto(StudyCenter c) =>
         new(c.Id, c.Code, c.Name, c.Website, c.Address, c.City, c.StudyLevels, c.Services, c.SurveyedAt,

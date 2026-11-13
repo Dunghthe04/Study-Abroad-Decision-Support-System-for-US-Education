@@ -32,6 +32,8 @@ interface ContactRequestDialogProps {
   centerId: string;
   centerName: string;
   isVerified: boolean;
+  /** Nút nhỏ (viền) dùng dưới thẻ trung tâm trong chat; mặc định là nút lớn ở trang chi tiết trung tâm. */
+  compact?: boolean;
 }
 
 const SELECT_CLASS =
@@ -56,7 +58,7 @@ function toErrorMessage(error: unknown): string {
   return "Không gửi được yêu cầu. Vui lòng thử lại.";
 }
 
-export function ContactRequestDialog({ centerId, centerName, isVerified }: ContactRequestDialogProps) {
+export function ContactRequestDialog({ centerId, centerName, isVerified, compact = false }: ContactRequestDialogProps) {
   const { user, isLoading } = useAuth();
   const ageBlock = useAgeBlock(AGE_FEATURES.shareWithCenter);
 
@@ -84,9 +86,16 @@ export function ContactRequestDialog({ centerId, centerName, isVerified }: Conta
   // Chưa đăng nhập: dẫn đi đăng nhập
   if (!user) {
     return (
-      <Link href="/login" className={buttonVariants({ size: "lg", className: "gap-2 bg-brand text-white hover:bg-brand/90 font-medium" })}>
-        <MessageSquareIcon className="w-4 h-4 text-white" />
-        Đăng nhập để gửi yêu cầu liên hệ
+      <Link
+        href="/login"
+        className={
+          compact
+            ? buttonVariants({ variant: "outline", size: "sm" })
+            : buttonVariants({ size: "lg", className: "gap-2 bg-brand text-white hover:bg-brand/90 font-medium" })
+        }
+      >
+        {!compact && <MessageSquareIcon className="w-4 h-4 text-white" />}
+        {compact ? "Đăng nhập để liên hệ" : "Đăng nhập để gửi yêu cầu liên hệ"}
       </Link>
     );
   }
@@ -363,10 +372,16 @@ export function ContactRequestDialog({ centerId, centerName, isVerified }: Conta
 
   return (
     <>
-      <Button size="lg" onClick={handleOpen} className="gap-2 bg-brand text-white hover:bg-brand/90 font-medium ">
-        <MessageSquareIcon className="w-4 h-4 text-white" />
-        Gửi yêu cầu liên hệ
-      </Button>
+      {compact ? (
+        <Button type="button" variant="outline" size="sm" onClick={handleOpen}>
+          Liên hệ
+        </Button>
+      ) : (
+        <Button size="lg" onClick={handleOpen} className="gap-2 bg-brand text-white hover:bg-brand/90 font-medium ">
+          <MessageSquareIcon className="w-4 h-4 text-white" />
+          Gửi yêu cầu liên hệ
+        </Button>
+      )}
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-lg">

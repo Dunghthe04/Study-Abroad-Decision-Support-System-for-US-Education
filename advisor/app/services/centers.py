@@ -5,6 +5,7 @@ cùng thành phố xếp trước, tối đa 3. Advisor chỉ gọi API, không 
 giống phần gợi ý trường: lọc theo luật ở backend, advisor chỉ làm phần AI.
 """
 
+import difflib
 import re
 from dataclasses import dataclass
 from typing import Any
@@ -57,7 +58,13 @@ _CITY_ALIASES = {
 def _city_key(text: str) -> str:
     folded = re.sub(r"[^a-z0-9]+", " ", unaccent(text)).strip()
     folded = re.sub(r"^(?:thanh pho|tp) ", "", folded)
+    folded = re.sub(r" city$", "", folded)  # "Ho Chi Minh city"
     return _CITY_ALIASES.get(folded, folded)
+
+
+# Giống nhau từ mức này trở lên thì coi là gõ sai chính tả của một thành phố trong DB. Mức 0,82 nằm giữa "ha noy" / "ha noi" (0,83)
+# và hai tỉnh khác nhau như "hai duong" / "hai phong" (0,78): nhầm sang thành phố khác tệ hơn là không khớp
+CITY_SIMILARITY = 0.82
 
 
 def match_city(text: str | None, cities: list[str]) -> str | None:
@@ -65,11 +72,18 @@ def match_city(text: str | None, cities: list[str]) -> str | None:
     if not text or not text.strip():
         return None
     key = _city_key(text)
-    return next((city for city in cities if _city_key(city) == key), None)
+    by_key = {_city_key(city): city for city in cities}
+    if key in by_key:
+        return by_key[key]
+    close = difflib.get_close_matches(
+        key, list(by_key), n=1, cutoff=CITY_SIMILARITY
+    )  # gõ sai nhẹ: "ho chinh minh"
+    return by_key[close[0]] if close else None
 
 
 REFERRALS_PATH = "api/v1/study-centers/referrals"
 CITIES_PATH = "api/v1/study-centers/referral-cities"
+CITY_COUNTS_PATH = "api/v1/study-centers/referral-city-counts"
 
 
 @dataclass(frozen=True)
@@ -79,6 +93,9 @@ class CenterHit:
     website: str | None
     services: list[str]  # mã dịch vụ trung tâm có: AI dựa vào đây để giải thích vì sao trung tâm hợp
     study_levels: list[str]  # bậc học trung tâm nhận
+    id: str | None = (
+        None  # mã trung tâm (Guid) để giao diện mở /centers/{id}; None thì không có nút chuyển trang
+    )
 
     # Một phần tử JSON của API referrals (StudyCenterDto bên .NET, camelCase)
     @classmethod
@@ -89,7 +106,15 @@ class CenterHit:
             website=data.get("website"),
             services=list(data.get("services") or []),
             study_levels=list(data.get("studyLevels") or []),
+            id=str(data["id"]) if data.get("id") else None,
         )
+
+
+# Một thành phố và số trung tâm đã xác minh ở đó có đúng dịch vụ (và bậc học) học sinh cần
+@dataclass(frozen=True)
+class CityCount:
+    city: str
+    count: int
 
 
 class CenterFinder:
@@ -109,6 +134,15 @@ class CenterFinder:
         res = await self._http.get(REFERRALS_PATH, params=params)
         res.raise_for_status()
         return [CenterHit.from_json(item) for item in res.json()]
+
+    # Thành phố có trung tâm cho một dịch vụ, kèm số trung tâm: để học sinh chọn nơi đang có, không bao giờ dẫn tới danh sách trống
+    async def city_counts(self, service: str, study_level: str | None = None) -> list[CityCount]:
+        params = {"service": service}
+        if study_level:
+            params["studyLevel"] = study_level
+        res = await self._http.get(CITY_COUNTS_PATH, params=params)
+        res.raise_for_status()
+        return [CityCount(city=str(item["city"]), count=int(item["count"])) for item in res.json()]
 
     # Các thành phố đang có trung tâm: AI chọn thành phố của học sinh trong danh sách này, để so khớp đúng chữ
     async def cities(self) -> list[str]:

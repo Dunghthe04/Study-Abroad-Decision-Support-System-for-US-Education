@@ -552,13 +552,15 @@ def ask_next_missing(state: ChatState, prefix: str = "") -> SkillOutput:
     return output
 
 
-# Khóa ghi cả giá trị: mã cố định của hợp đồng (nhiệm vụ, chế độ, loại con, dịch vụ, mục, cách xếp, tiếp nối) và tên
-# trường, trung tâm (tên công khai, có trong danh sách của hệ thống; không phải thông tin cá nhân của học sinh)
+# Khóa ghi cả giá trị: mã cố định của hợp đồng (nhiệm vụ, chế độ, loại con, dịch vụ, mục, cách xếp, tiếp nối), tên
+# trường, trung tâm (tên công khai, có trong danh sách của hệ thống) và thành phố (chữ học sinh gõ, đã nằm trong tin nhắn ở cùng dòng
+# log nên không thêm thông tin cá nhân; ghi riêng để thấy model trả thành phố nào)
 LOGGED_VALUE_KEYS = (
     "tasks",
     "mode",
     "subtype",
     "service",
+    "city",
     "fields",
     "sort",
     "follow_up",
@@ -569,7 +571,7 @@ LOGGED_VALUE_KEYS = (
 
 
 # Từng ý SLM đọc ra: loại, các giá trị ở trên, và tên các khóa còn lại. Giá trị còn lại là chữ học sinh viết
-# (số điểm, thành phố, điều kiện lọc) nên chỉ ghi tên khóa
+# (số điểm, điều kiện lọc) nên chỉ ghi tên khóa
 def log_item(y: Any) -> dict[str, Any]:
     values = {key: y.entities[key] for key in LOGGED_VALUE_KEYS if key in y.entities}
     return {"type": y.type, **values, "other_keys": sorted(key for key in y.entities if key not in values)}
