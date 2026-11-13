@@ -92,7 +92,7 @@ export function CenterLegalInfoCard({
               ? "Mã hồ sơ thông báo:"
               : "Số GP tư vấn du học:"}
           </span>{" "}
-          <span className="text-muted-foreground font-mono">{profile.licenseNumber}</span>
+          <span className="text-muted-foreground font-mono">{profile.licenseNumber || "Chưa cập nhật"}</span>
         </div>
         {(profile.trainingLicenseNumber || needsTrainingLicense) && (
           <div>
@@ -104,7 +104,7 @@ export function CenterLegalInfoCard({
         )}
         <div>
           <span className="font-medium text-foreground">Cơ quan cấp / tiếp nhận:</span>{" "}
-          <span className="text-muted-foreground">{profile.licenseIssuedBy}</span>
+          <span className="text-muted-foreground">{profile.licenseIssuedBy || "Chưa cập nhật"}</span>
           {formattedIssuedDate && (
             <span className="text-muted-foreground"> (ngày {formattedIssuedDate})</span>
           )}
