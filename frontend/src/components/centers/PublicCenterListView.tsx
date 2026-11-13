@@ -56,7 +56,7 @@ const CITY_OPTIONS = [
 const TYPE_OPTIONS = [
   { value: "all", label: "Mọi loại hình" },
   { value: "study_abroad", label: "Tư vấn Du học" },
-  { value: "english_training", label: "Luyện thi Chứng chỉ" },
+  { value: "test_prep", label: "Luyện thi Chứng chỉ" },
   { value: "hybrid", label: "Toàn diện (Du học & Luyện thi)" },
 ];
 
@@ -314,26 +314,27 @@ function CenterCard({ center, isAdmin }: { center: StudyCenter; isAdmin: boolean
         </div>
 
         <dl className="grid grid-cols-2 gap-x-4 gap-y-2">
-          <StatItem
-            label="Tỷ lệ đỗ Visa"
-            value={`${profile.visaSuccessRate}%`}
-            valueClassName="text-ok"
-          />
-          <StatItem
-            label="Đánh giá"
-            value={
-              <span className="inline-flex items-center gap-1">
-                <StarIcon className="size-3.5 fill-current text-gold" />
-                <span>{profile.rating.toFixed(1)}</span>
-                <span className="text-xs font-normal text-ink-3">({profile.reviewCount})</span>
-              </span>
-            }
-          />
-          <StatItem label="Nhân sự" value={`${profile.staffCount} chuyên viên`} />
-          <StatItem
-            label="Giấy phép / MST"
-            value={center.licenseNumber || center.taxCode || `Từ ${profile.establishedYear}`}
-          />
+          {center.visaSuccessRate != null && (
+            <StatItem label="Tỷ lệ đỗ Visa" value={`${center.visaSuccessRate}%`} valueClassName="text-ok" />
+          )}
+          {(center.reviewCount ?? 0) > 0 && (
+            <StatItem
+              label="Đánh giá"
+              value={
+                <span className="inline-flex items-center gap-1">
+                  <StarIcon className="size-3.5 fill-current text-gold" />
+                  <span>{Number(center.averageRating).toFixed(1)}</span>
+                  <span className="text-xs font-normal text-ink-3">({center.reviewCount})</span>
+                </span>
+              }
+            />
+          )}
+          {center.staffCount != null && (
+            <StatItem label="Nhân sự" value={`${center.staffCount} chuyên viên`} />
+          )}
+          {(center.licenseNumber || center.taxCode) && (
+            <StatItem label="Giấy phép / MST" value={center.licenseNumber || center.taxCode} />
+          )}
         </dl>
       </CardContent>
 
@@ -386,7 +387,8 @@ export function PublicCenterListView({ initialCenters }: PublicCenterListViewPro
       }
 
       if (typeFilter !== "all") {
-        const centerType = c.centerType || "study_abroad";
+        const rawType = c.centerType || "study_abroad";
+        const centerType = rawType === "english_training" ? "test_prep" : rawType;
         if (centerType !== typeFilter) {
           return false;
         }
@@ -420,10 +422,13 @@ export function PublicCenterListView({ initialCenters }: PublicCenterListViewPro
 
     return [...filtered].sort((a, b) => {
       if (sortBy === "name_asc") return a.name.localeCompare(b.name, "vi");
-      const pa = getEnrichedCenterProfile(a);
-      const pb = getEnrichedCenterProfile(b);
-      if (sortBy === "visa_desc") return pb.visaSuccessRate - pa.visaSuccessRate;
-      if (sortBy === "rating_desc") return pb.rating - pa.rating;
+      // Sắp xếp theo số liệu thật; trung tâm chưa có số liệu xếp cuối
+      if (sortBy === "visa_desc") return (b.visaSuccessRate ?? -1) - (a.visaSuccessRate ?? -1);
+      if (sortBy === "rating_desc") {
+        const ra = (a.reviewCount ?? 0) > 0 ? Number(a.averageRating) : -1;
+        const rb = (b.reviewCount ?? 0) > 0 ? Number(b.averageRating) : -1;
+        return rb - ra;
+      }
       return 0;
     });
   }, [initialCenters, search, cityFilter, typeFilter, selectedServices, licensedOnly, statusFilter, isAdmin, sortBy]);
