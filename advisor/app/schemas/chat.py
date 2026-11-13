@@ -133,6 +133,9 @@ class ChatRequest(CamelModel):
     grade_scale: list[GradeScaleRule] | None = None
     # Học sinh đã từng lưu hồ sơ chính thức chưa (.NET gửi mỗi lượt); None = không gửi (giữ giá trị cũ trong state)
     has_committed_profile: bool | None = None
+    # Tin này do form gửi ngay sau khi lưu hồ sơ chính thức (câu gộp việc đã tích, hoặc "Tiếp tục bằng chat"):
+    # form đã là bước rà soát nên không hỏi lại bảng xác nhận X1 trong chat
+    from_form: bool = False
 
 
 # Token của MỘT lần gọi AI (Claude hoặc Ollama), số do nhà cung cấp trả về. Một lượt chat có thể gồm nhiều lần gọi

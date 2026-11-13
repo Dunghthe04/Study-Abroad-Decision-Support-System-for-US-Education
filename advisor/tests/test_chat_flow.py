@@ -452,6 +452,43 @@ async def test_back_from_the_form_for_a_roadmap_also_requires_the_major():
     assert "major" in res.state.required_only
 
 
+# Chat đang treo bảng X1 (hồ sơ đủ) rồi học sinh vào form bằng "Sửa hồ sơ", lưu, form gửi câu gộp việc đã tích
+def saved_from_form(message: str, from_form: bool = True, **state_fields) -> ChatRequest:
+    profile = confirmed(*REQUIRED_B3) | {"gpa": ProfileField(value="x", status="said_in_B0")}
+    req = request(message, pending="X1", current_step="B3", profile=profile, **state_fields)
+    req.from_form = from_form
+    return req
+
+
+async def test_question_sent_by_the_form_after_saving_is_answered_without_the_review_table():
+    ran: list[str] = []
+    flow, counting = make_flow(tin(("profile_review", {}, "Lập lộ trình cho em")), ran)
+
+    res = await flow.reply(saved_from_form("Lập lộ trình cho em", pending_advice=waiting_advice()))
+
+    assert ran == ["profile_review"] and counting.calls == ["Lập lộ trình cho em"]
+    assert res.answer == "trả lời của profile_review"  # không nhắc lại bảng X1
+    assert res.widget is None and res.state.question_id is None
+    assert res.state.profile["gpa"].status == "confirmed"  # form đã là bước rà soát
+    assert res.state.pending_advice is None  # câu từ form thay câu cũ đang chờ
+
+
+async def test_the_same_question_typed_in_chat_still_reminds_the_review_table():
+    flow, _ = make_flow(tin(("profile_review", {}, "Lập lộ trình cho em")))
+
+    res = await flow.reply(saved_from_form("Lập lộ trình cho em", from_form=False))
+
+    assert BACK_TO_QUESTION in res.answer and res.state.question_id == "X1"
+
+
+async def test_continue_in_chat_after_saving_drops_the_review_table_too():
+    flow, _ = make_flow(tin("knowledge"))
+
+    res = await flow.reply(saved_from_form(CONTINUE_CHAT))
+
+    assert res.answer == FORM_DONE and res.state.question_id is None
+
+
 async def test_another_message_while_choosing_goes_through_the_slm():
     ran: list[str] = []
     flow, _ = make_flow(tin("knowledge"), ran)

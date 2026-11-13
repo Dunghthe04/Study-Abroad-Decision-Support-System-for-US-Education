@@ -319,6 +319,12 @@ class ChatFlow:
         # Đang chờ học sinh chọn cách điền hồ sơ: nhận lựa chọn bằng chữ trên nút, không cần SLM.
         # Nút "Tiếp tục bằng chat" trên form thì hỏi tiếp trong chat dù chat không đang chờ chọn
         continue_chat = message.strip() == CONTINUE_CHAT
+        # Lưu form xong, form gửi câu gộp các việc đã tích (vào form bằng "Sửa hồ sơ", không mở từ chat):
+        # form đã là bước rà soát, bỏ câu hồ sơ đang treo (vd bảng X1) rồi trả lời câu này như học sinh tự gõ.
+        # Câu tư vấn cũ đang chờ hồ sơ thì câu mới từ form thay nó
+        if req.from_form and not continue_chat:
+            back_from_form(state)
+            state.pending_advice = None
         if state.question_id == INTAKE_ID or continue_chat:
             if state.question_id == INTAKE_ID:
                 state.question_id = None
@@ -509,11 +515,17 @@ def profile_ready(state: ChatState) -> bool:
 
 # Học sinh bấm "Tiếp tục bằng chat" trên form:
 # - giá trị nói ở câu đầu (said_in_B0) thuộc nháp đã hiện trên form và học sinh đã xem, nên coi là đã xác nhận, không hỏi lại ở X1;
-# - còn thiếu thì chỉ hỏi mục bắt buộc còn thiếu, không hỏi đủ như hồ sơ điền lần đầu trong chat
+# - còn thiếu thì chỉ hỏi mục bắt buộc còn thiếu, không hỏi đủ như hồ sơ điền lần đầu trong chat;
+# - câu hồ sơ đang treo trong chat (bảng X1, câu hỏi dở, mục chờ sửa) đã được form thay, bỏ đi để không nhắc lại.
+#   Bấm "Đúng rồi" ở X1 cũ còn lỗi vì form lưu xong đã xóa nháp
 def back_from_form(state: ChatState) -> None:
     for key, value in state.profile.items():
         if key in DRAFT_KEYS and value.status == "said_in_B0":
             state.profile[key] = value.model_copy(update={"status": "confirmed"})
+    if state.question_id is not None and state.question_id not in OPENING_QUESTIONS:
+        state.question_id = None
+        state.last_question = ""
+    state.edit_queue = None
     state.intake_mode = "form"  # đến từ form, để limit_to_required không coi là đang hỏi đủ trong chat
     # Bắt buộc như form: cấp học hiện tại (B1.1, cần để lưu hồ sơ) + mục B3; lộ trình / gợi ý trường cần thêm ngành
     goals = form_goals(state.pending_advice)
