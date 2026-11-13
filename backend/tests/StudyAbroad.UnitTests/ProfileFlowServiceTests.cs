@@ -600,6 +600,119 @@ public class ProfileFlowServiceTests
     }
 
     [Fact]
+    public async Task CommitFlowAsync_StandardizedPlanned_IsStored_AndRestoredWhenReopened()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var service = new ProfileFlowService(repo, new FakeFileStorageService());
+        var userId = Guid.NewGuid();
+        var draft = FullDraft() with
+        {
+            Step3 = new FlowCertificationDraftDto(
+                Certifications: [new(Category: "english", Type: "ielts", Overall: 7m, TestDate: "2026-05")],
+                StandardizedPlanned: true,
+                StandardizedPlannedDate: "2099-10",
+                StandardizedPlannedTestType: "sat",
+                StandardizedPlannedTargetScore: 1450m),
+        };
+
+        await service.CommitFlowAsync(userId, new CommitProfileFlowRequest(draft));
+
+        var p = (await repo.GetProfileByUserIdAsync(userId))!;
+        Assert.True(p.StandardizedTestPlanned);
+        Assert.Equal(new DateOnly(2099, 10, 1), p.StandardizedPlannedDate);
+        Assert.Equal("sat", p.StandardizedPlannedTestType);
+        Assert.Equal(1450m, p.StandardizedPlannedTargetScore);
+
+        // Mở lại "Sửa hồ sơ": bản nháp dựng từ hồ sơ vẫn còn tick "chưa thi chuẩn hóa"
+        var step3 = (await service.GetFlowStateAsync(userId)).Draft.Step3!;
+        Assert.True(step3.StandardizedPlanned);
+        Assert.Equal("2099-10", step3.StandardizedPlannedDate);
+        Assert.Equal("sat", step3.StandardizedPlannedTestType);
+        Assert.Equal(1450m, step3.StandardizedPlannedTargetScore);
+    }
+
+    [Fact]
+    public async Task CommitFlowAsync_OnlyPlansWithTargets_ReopenKeepsTargetsAsPlans_NotAsTakenCertificates()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var service = new ProfileFlowService(repo, new FakeFileStorageService());
+        var userId = Guid.NewGuid();
+        var draft = FullDraft() with
+        {
+            Step3 = new FlowCertificationDraftDto(
+                Certifications: [],
+                EnglishPlanned: true,
+                EnglishPlannedDate: "2099-08",
+                EnglishPlannedTestType: "ielts",
+                EnglishPlannedTargetScore: 7m,
+                StandardizedPlanned: true,
+                StandardizedPlannedTestType: "sat",
+                StandardizedPlannedTargetScore: 1450m),
+        };
+
+        await service.CommitFlowAsync(userId, new CommitProfileFlowRequest(draft));
+
+        // Gợi ý trường vẫn tính theo điểm kỳ vọng
+        var p = (await repo.GetProfileByUserIdAsync(userId))!;
+        Assert.Equal(7m, p.Ielts);
+        Assert.Equal(1450m, p.Sat);
+
+        // Mở lại form: điểm kỳ vọng nằm ở kế hoạch, không thành thẻ chứng chỉ "đã thi"
+        var step3 = (await service.GetFlowStateAsync(userId)).Draft.Step3!;
+        Assert.Empty(step3.Certifications!);
+        Assert.True(step3.EnglishPlanned);
+        Assert.Equal("2099-08", step3.EnglishPlannedDate);
+        Assert.Equal("ielts", step3.EnglishPlannedTestType);
+        Assert.Equal(7m, step3.EnglishPlannedTargetScore);
+        Assert.True(step3.StandardizedPlanned);
+        Assert.Equal("sat", step3.StandardizedPlannedTestType);
+        Assert.Equal(1450m, step3.StandardizedPlannedTargetScore);
+    }
+
+    [Fact]
+    public async Task GetFlowStateAsync_LegacyProfileWithoutPlans_StillRebuildsTakenCertificatesFromColumns()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var service = new ProfileFlowService(repo, new FakeFileStorageService());
+        var userId = Guid.NewGuid();
+        await service.CommitFlowAsync(userId, new CommitProfileFlowRequest(FullDraft()));
+        var p = (await repo.GetProfileByUserIdAsync(userId))!;
+        // Hồ sơ kiểu cũ: chưa có dòng chứng chỉ, điểm chỉ nằm ở cột, không tick "chưa thi" → là điểm thật
+        repo.Certifications[p.Id].Clear();
+        p.Ielts = 6.5m;
+        p.EnglishTestType = "ielts";
+        p.Sat = 1300m;
+
+        var step3 = (await service.GetFlowStateAsync(userId)).Draft.Step3!;
+        var types = step3.Certifications!.Select(c => c.Type).ToList();
+        Assert.Contains("ielts", types);
+        Assert.Contains("sat", types);
+        Assert.All(step3.Certifications!, c => Assert.False(c.IsTarget));
+        Assert.Null(step3.EnglishPlannedTestType);
+    }
+
+    [Fact]
+    public async Task CommitFlowAsync_StandardizedPlannedWithoutType_IsRestoredWhenReopened()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var service = new ProfileFlowService(repo, new FakeFileStorageService());
+        var userId = Guid.NewGuid();
+        var draft = FullDraft() with
+        {
+            Step3 = new FlowCertificationDraftDto(
+                Certifications: [new(Category: "english", Type: "ielts", Overall: 7m, TestDate: "2026-05")],
+                StandardizedPlanned: true),
+        };
+
+        await service.CommitFlowAsync(userId, new CommitProfileFlowRequest(draft));
+
+        var step3 = (await service.GetFlowStateAsync(userId)).Draft.Step3!;
+        Assert.True(step3.StandardizedPlanned);
+        Assert.Null(step3.StandardizedPlannedTestType);
+        Assert.Null(step3.StandardizedPlannedTargetScore);
+    }
+
+    [Fact]
     public async Task CommitFlowAsync_NoCertifications_IsAllowed_AndClearsLegacyColumns()
     {
         var repo = new InMemoryProfileFlowRepository();
