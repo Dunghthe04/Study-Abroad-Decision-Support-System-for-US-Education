@@ -74,13 +74,14 @@ CAN_BE_NONE = ("sat", "act", "english", "activities", "awards", "relatives_state
 
 # Mỗi câu hỏi tối đa 2 lần (framework); câu tùy chọn chỉ hỏi 1 lần
 MAX_ASK = 2
-# Câu bắt buộc cho B3, theo thứ tự hỏi
-REQUIRED_QUESTIONS = ("D2", "E1", "F1")
-# Câu tùy chọn: F2 (học bổng) hỏi sớm vì B4 cần; E2 chỉ hỏi khi học sinh chưa có chứng chỉ tiếng Anh;
+# Câu bắt buộc cho B3, theo thứ tự hỏi (REQUIRED_B3 bên skill_rules). Câu bắt buộc không có nút "Bỏ qua":
+# chưa có SAT/ACT thì bấm "Em chưa thi SAT/ACT", không cần học bổng thì chọn "Không cần"
+REQUIRED_QUESTIONS = ("D2", "E1", "D3", "F1", "F2")
+# Câu tùy chọn (có nút "Bỏ qua"): E2 chỉ hỏi khi học sinh chưa có chứng chỉ tiếng Anh;
 # E3 chỉ hỏi khi học sinh chưa có bài thi chuẩn hóa (bấm "Chưa thi SAT/ACT" ở D3);
 # D1 chỉ hỏi học sinh cấp 3; N1 chỉ hỏi khi chưa có bang muốn học (gợi ý bang theo người thân).
 # N4 (visa) không hỏi ở B2: chỉ hỏi khi học sinh hỏi về visa / lộ trình. N1, N4 không lưu vào form
-OPTIONAL_QUESTIONS = ("F2", "E2", "E3", "D1", "D3", "D4", "D5", "F3", "N1", "N2", "N3")
+OPTIONAL_QUESTIONS = ("E2", "E3", "D1", "D4", "D5", "F3", "N1", "N2", "N3")
 # Thứ tự hỏi theo trang form: hỏi xong các câu của một trang mới sang trang sau, không quay lại trang trước.
 # Trang 1 mục tiêu (D1, N2, N3), 2 học bạ (D2), 3 tiếng Anh, SAT (E1, E2, D3, E3), 4 tài chính (F1-F3),
 # 5 hoạt động, giải thưởng (D4, D5). Hết form mới hỏi thông tin thêm không có trong form (N1 người thân)

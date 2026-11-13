@@ -128,7 +128,17 @@ async def test_collect_confirm_review_makes_profile_ready():
 
 
 def full_profile() -> dict[str, ProfileField]:
-    names = ["current_level", "target_level", "major", "intake", "gpa", "english", "sat", "budget", "scholarship"]
+    names = [
+        "current_level",
+        "target_level",
+        "major",
+        "intake",
+        "gpa",
+        "english",
+        "sat",
+        "budget",
+        "scholarship",
+    ]
     profile = {name: ProfileField(value="x", status="confirmed") for name in names}
     profile["activities"] = ProfileField(value=[{"name": "a"}], status="confirmed")
     return profile
@@ -348,7 +358,7 @@ async def test_edit_sat_and_act_asks_once():
 async def test_skip_moves_to_next_item_in_queue():
     state = ChatState(current_step="B2", profile=full_profile(), intake_mode="chat", asked={"X1": 1})
     state.edit_queue = ["F1"]
-    ask(state, "D3")
+    ask(state, "E3")  # câu tùy chọn; câu bắt buộc như D3 không có nút Bỏ qua
     await make_handler(FakeLLM()).collect(state, "Bỏ qua", MAC_DINH)
     assert (state.question_id, state.edit_queue) == ("F1", [])
 
