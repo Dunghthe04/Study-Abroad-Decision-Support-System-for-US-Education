@@ -241,7 +241,7 @@ namespace StudyAbroad.Application.Advisor
                     ReplyToMessageId = question?.Id,
                     Content = response.Answer,
                     SourcesJson = response.Citations is { Count: > 0 } cites
-                        ? JsonSerializer.Serialize(cites.Select(c => new { title = c.Title, url = c.Url }))
+                        ? JsonSerializer.Serialize(cites.Select(c => new { title = c.Title, url = c.Url, retrievedAt = c.RetrievedAt }))
                         : null,
                     Outcome = outcome,
                     ReviewStatus = ChatTurn.ReviewStatus(outcome),

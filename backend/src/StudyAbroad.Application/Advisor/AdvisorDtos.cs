@@ -45,7 +45,7 @@ public record ChatAction(
 
 /// <summary>Một trường trong danh sách gợi ý. Group là mã nhóm đã chấm (R, RF, M, S, NA, O), advisor đổi sang chữ.</summary>
 public record ChatSchool(string Code, string Name, string? Group);
-public record Citation(string Title, string? Url, string? Snippet);
+public record Citation(string Title, string? Url, string? Snippet, DateOnly? RetrievedAt = null);
 
 /// <summary>
 /// Nút gợi ý: Label là chữ trên nút, Value là chữ gửi đi như tin nhắn của học sinh khi bấm.

@@ -138,6 +138,8 @@ export interface Citation {
   title: string;
   url: string | null;
   snippet: string | null;
+  /** Ngày thu thập thông tin của nguồn, dạng yyyy-MM-dd. Null là kho chưa ghi ngày. */
+  retrievedAt?: string | null;
 }
 // Nút gợi ý: bấm thì gửi `value` như tin nhắn của học sinh
 export interface QuickReply {

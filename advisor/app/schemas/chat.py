@@ -1,5 +1,6 @@
 """Khuôn dữ liệu vào/ra của luồng chat (framework v5, Phần 4). .NET gửi trạng thái, advisor trả trạng thái mới."""
 
+from datetime import date
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -96,6 +97,7 @@ class Citation(CamelModel):
     title: str
     url: str | None = None
     snippet: str | None = None
+    retrieved_at: date | None = None  # ngày thu thập thông tin của nguồn (UC-37); None là kho chưa ghi ngày
 
 
 # Nút gợi ý: label là chữ trên nút, value là chữ gửi đi như tin nhắn của học sinh khi bấm

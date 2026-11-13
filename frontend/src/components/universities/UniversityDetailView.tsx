@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { ArrowUpRightIcon, GlobeIcon } from "lucide-react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { ArrowUpRightIcon, Building2Icon, GlobeIcon, HomeIcon, MapPinIcon, TreesIcon, WarehouseIcon, type LucideIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
@@ -14,7 +14,7 @@ import { campusSettingLabel, schoolControlLabel, universityNumber, universityUrl
 import type { UniversityDetail } from "@/types/university";
 import { acceptanceRateTone, DetailSection, Gauge, SchoolImage } from "./UniversityDetailParts";
 import { UniversityAdmissions, UniversityCampusLife, UniversityCosts, UniversityMajors, UniversityStatistics } from "./UniversityOfferingSections";
-import { UniversitySources } from "./UniversitySources";
+import { findFieldSource, SourceTooltip } from "./UniversitySourceTooltip";
 import { AddTargetSchoolButton } from "@/components/target-schools/AddTargetSchoolButton";
 
 function cleanRankNumber(display: string | null | undefined, rank: number): string {
@@ -37,6 +37,14 @@ function rankTextSize(rankStr: string): string {
   if (digits >= 4) return "text-2xl";
   if (digits === 3) return "text-3xl";
   return "text-4xl";
+}
+
+function campusSettingIcon(value: string): LucideIcon {
+  if (value.startsWith("City")) return Building2Icon;
+  if (value.startsWith("Suburban")) return HomeIcon;
+  if (value.startsWith("Town")) return WarehouseIcon;
+  if (value.startsWith("Rural")) return TreesIcon;
+  return MapPinIcon;
 }
 
 export function UniversityDetailView({ university }: { university: UniversityDetail }) {
@@ -68,7 +76,6 @@ export function UniversityDetailView({ university }: { university: UniversityDet
             { id: "majors", label: "Ngành học" },
           ]
         : []),
-      { id: "sources", label: "Nguồn dữ liệu" },
     ],
     [offering, hasCampusData],
   );
@@ -90,10 +97,9 @@ export function UniversityDetailView({ university }: { university: UniversityDet
     return () => window.removeEventListener("scroll", handleScroll);
   }, [navigation]);
 
-  const overviewRows = [
-    offering?.campusSetting ? { label: "Bối cảnh khuôn viên", value: campusSettingLabel(offering.campusSetting) } : null,
-    offering?.studentFacultyRatio != null ? { label: "Tỷ lệ SV / giảng viên", value: `${offering.studentFacultyRatio} : 1` } : null,
-    university.internationalStudentCount != null ? { label: "Sinh viên quốc tế", value: universityNumber(university.internationalStudentCount) } : null,
+  const overviewRows: { label: string; value: ReactNode; icon?: LucideIcon }[] = [
+    offering?.campusSetting ? { label: "Bối cảnh khuôn viên", value: campusSettingLabel(offering.campusSetting), icon: campusSettingIcon(offering.campusSetting) } : null,
+    university.internationalStudentCount != null ? { label: "Sinh viên quốc tế", value: <SourceTooltip source={findFieldSource(university.sources, "international_student_count")}>{universityNumber(university.internationalStudentCount)}</SourceTooltip> } : null,
   ].filter((item): item is NonNullable<typeof item> => Boolean(item));
 
   const acceptanceTone = university.acceptanceRate != null ? acceptanceRateTone(university.acceptanceRate) : "brand";
@@ -198,7 +204,7 @@ export function UniversityDetailView({ university }: { university: UniversityDet
       )}
 
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_280px] xl:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="min-w-0 space-y-8">
+        <div className="min-w-0 space-y-12">
           <DetailSection id="overview" title="Tổng quan">
             <div className="overflow-hidden rounded-xl border border-line bg-surface">
               {university.acceptanceRate != null && (
@@ -208,7 +214,9 @@ export function UniversityDetailView({ university }: { university: UniversityDet
                     <p className="text-sm text-ink-2">Tỷ lệ trúng tuyển toàn trường</p>
                     <div className="pt-2 flex items-baseline gap-1">
                       <span className={cn("text-5xl sm:text-6xl font-semibold tracking-tight tabular-nums", acceptanceToneClass)}>
-                        {acceptanceDisplayNumber}
+                        <SourceTooltip source={findFieldSource(university.sources, "acceptance_rate")}>
+                          {acceptanceDisplayNumber}
+                        </SourceTooltip>
                       </span>
                       <span className={cn("text-2xl font-semibold", acceptanceToneClass)}>%</span>
                     </div>
@@ -229,7 +237,10 @@ export function UniversityDetailView({ university }: { university: UniversityDet
                   {overviewRows.map((row) => (
                     <div key={row.label} className="flex items-center justify-between px-5 py-3.5 sm:px-6">
                       <span className="text-sm text-ink-2">{row.label}</span>
-                      <span className="text-sm font-semibold text-ink tabular-nums">{row.value}</span>
+                      <span className="inline-flex items-center gap-2 text-sm font-semibold text-ink tabular-nums">
+                        {row.icon && <row.icon className="size-4 text-ink-2" aria-hidden="true" />}
+                        {row.value}
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -238,12 +249,12 @@ export function UniversityDetailView({ university }: { university: UniversityDet
           </DetailSection>
 
           {offering ? (
-            <div key={offering.studyLevel} className="space-y-8">
-              <UniversityCosts offering={offering} />
-              <UniversityAdmissions offering={offering} />
-              <UniversityCampusLife offering={offering} />
-              <UniversityStatistics offering={offering} internationalStudentCount={university.internationalStudentCount} />
-              <UniversityMajors offering={offering} />
+            <div key={offering.studyLevel} className="space-y-12">
+              <UniversityCosts offering={offering} sources={university.sources} />
+              <UniversityAdmissions offering={offering} sources={university.sources} />
+              <UniversityCampusLife offering={offering} sources={university.sources} />
+              <UniversityStatistics offering={offering} internationalStudentCount={university.internationalStudentCount} sources={university.sources} />
+              <UniversityMajors offering={offering} sources={university.sources} />
             </div>
           ) : (
             <DetailSection title="Thông tin tuyển sinh & chi phí">
@@ -270,7 +281,6 @@ export function UniversityDetailView({ university }: { university: UniversityDet
               </div>
             </DetailSection>
           )}
-          <UniversitySources sources={university.sources} />
         </div>
 
         <aside aria-label="Thông tin bổ sung" className="space-y-5 lg:sticky lg:top-[calc(var(--header-h)+4.5rem)]">
