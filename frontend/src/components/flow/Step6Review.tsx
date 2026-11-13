@@ -162,13 +162,11 @@ export function Step6Review({
 
   // Cùng cách tính với BE (TranscriptGpa): GPA tổng hoặc tính từ điểm môn
   const { gpa10, gpa4 } = draftGpa(step2);
-  // Thẻ chỉ chốt GPA tổng, viết giống thanh bước bên phải; nhập GPA tổng hay học bạ từng môn đều vậy
+  const gpa = gpa4 != null ? gpa4.toFixed(2) : "–";
+  const gpa10Text = gpa10 != null ? gpa10.toFixed(1) : "–";
+  // Thẻ chỉ chốt GPA tổng, nhập GPA tổng hay học bạ từng môn đều vậy
   const gpaSummary =
-    gpa10 != null
-      ? `GPA ${gpa10.toFixed(1)} / thang 10`
-      : gpa4 != null
-        ? `GPA ${gpa4.toFixed(2)} / thang 4`
-        : "Chưa nhập điểm";
+    gpa10 != null ? `GPA tổng: ${gpa10Text}/10` : gpa4 != null ? `GPA tổng: ${gpa}/4` : "Chưa nhập điểm";
 
   // Activities & Awards count
   const activitiesCount = step5.activities.filter((a) => a.category === "activity").length;
@@ -222,13 +220,24 @@ export function Step6Review({
         </ReviewCard>
 
         <ReviewCard icon={FileTextIcon} eyebrow="Bảng điểm" onEdit={() => onEditStep(2)} errors={stepErrors.byStep[2]}>
-          <div className="text-sm font-semibold text-foreground">{gpaSummary}</div>
-          {draftTranscript && (
-            <div className="flex items-center gap-1 text-xs text-ok">
-              <CheckCircle2Icon className="size-3" />
-              Đã tải tệp: {draftTranscript.originalFileName}
+          <div className="flex items-start justify-between gap-3">
+            <div className="space-y-1">
+              <div className="text-sm font-semibold text-foreground">
+                {gpaSummary}
+              </div>
+              {draftTranscript && (
+                <div className="flex items-center gap-1 text-xs text-ok">
+                  <CheckCircle2Icon className="size-3" />
+                  Đã tải tệp: {draftTranscript.originalFileName}
+                </div>
+              )}
             </div>
-          )}
+            <div className="shrink-0 rounded-xl bg-brand-wash px-3 py-1.5 text-center">
+              <div className="text-xs font-semibold text-brand-ink">Điểm TB tự tính</div>
+              <div className="text-numeric text-base font-bold text-brand">{gpa10Text}</div>
+              <div className="text-xs text-brand-ink">thang 4 (tham khảo): {gpa}</div>
+            </div>
+          </div>
         </ReviewCard>
 
         <ReviewCard icon={BookOpenIcon} eyebrow="Chứng chỉ" onEdit={() => onEditStep(3)} errors={stepErrors.byStep[3]}>
