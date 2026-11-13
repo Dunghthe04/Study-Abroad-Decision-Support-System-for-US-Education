@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using StudyAbroad.Api.Extensions;
 using StudyAbroad.Application.Admin.Settings;
+using StudyAbroad.Application.Common;
 using StudyAbroad.Domain.Constants;
 
 namespace StudyAbroad.Api.Controllers;
@@ -18,9 +19,11 @@ public class AdminSettingsController(IGradeScaleSettingService gradeScale) : Con
     [HttpGet("grade-scale")]
     public Task<GradeScaleSettingDto> GetGradeScale(CancellationToken ct) => gradeScale.GetAsync(ct);
 
+    /// <summary>Lịch sử sửa bảng theo trang, mới nhất ở trên.</summary>
     [HttpGet("grade-scale/history")]
-    public Task<IReadOnlyList<GradeScaleHistoryItemDto>> GetGradeScaleHistory([FromQuery] int limit = 20, CancellationToken ct = default) =>
-        gradeScale.GetHistoryAsync(limit, ct);
+    public Task<PagedResult<GradeScaleHistoryItemDto>> GetGradeScaleHistory(
+        [FromQuery] int page = 1, [FromQuery] int pageSize = 10, CancellationToken ct = default) =>
+        gradeScale.GetHistoryAsync(page, pageSize, ct);
 
     /// <summary>Chỉ moderator (hai Authorize cộng lại: thuộc admin/moderator VÀ là moderator).</summary>
     [HttpPut("grade-scale")]

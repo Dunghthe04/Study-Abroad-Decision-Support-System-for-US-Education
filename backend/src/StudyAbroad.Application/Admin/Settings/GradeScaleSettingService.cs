@@ -1,4 +1,5 @@
 using System.Text.Json;
+using StudyAbroad.Application.Common;
 using StudyAbroad.Application.Profile.Academic;
 using StudyAbroad.Application.Profile.Flow;
 using StudyAbroad.Domain.Constants;
@@ -10,7 +11,7 @@ public interface IGradeScaleSettingService
 {
     Task<GradeScaleSettingDto> GetAsync(CancellationToken ct = default);
     Task<GradeScaleUpdateResult> UpdateAsync(UpdateGradeScaleRequest request, Guid actorUserId, CancellationToken ct = default);
-    Task<IReadOnlyList<GradeScaleHistoryItemDto>> GetHistoryAsync(int limit, CancellationToken ct = default);
+    Task<PagedResult<GradeScaleHistoryItemDto>> GetHistoryAsync(int page, int pageSize, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -25,6 +26,7 @@ public class GradeScaleSettingService(
 {
     public const string AuditAction = "grade_scale.update";
     public const int MaxLetterGradeLength = 4;
+    public const int MaxHistoryPageSize = 50;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -69,14 +71,18 @@ public class GradeScaleSettingService(
         return GradeScaleUpdateResult.Ok(ToDto(setting), recomputed);
     }
 
-    public async Task<IReadOnlyList<GradeScaleHistoryItemDto>> GetHistoryAsync(int limit, CancellationToken ct = default)
+    // Trang nhỏ hơn 1 thì về trang 1; mỗi trang 1–MaxHistoryPageSize lần sửa
+    public async Task<PagedResult<GradeScaleHistoryItemDto>> GetHistoryAsync(int page, int pageSize, CancellationToken ct = default)
     {
-        var rows = await repository.GetHistoryAsync(Math.Clamp(limit, 1, 100), ct);
-        return rows.Select(r =>
+        page = Math.Max(page, 1);
+        pageSize = Math.Clamp(pageSize, 1, MaxHistoryPageSize);
+        var (rows, total) = await repository.GetHistoryAsync(page, pageSize, ct);
+        var items = rows.Select(r =>
         {
             var (oldConfig, newConfig) = ReadDetail(r.Log.DetailJson);
             return new GradeScaleHistoryItemDto(r.Log.CreatedAt, r.Log.ActorUserId, r.ActorName, oldConfig, newConfig);
         }).ToList();
+        return new PagedResult<GradeScaleHistoryItemDto>(items, page, pageSize, total);
     }
 
     // Hồ sơ không lưu cách nhập GPA (học bạ hay tự nhập) và không lưu GPA thang 10 tự nhập, nên chỉ tính lại hồ sơ mà

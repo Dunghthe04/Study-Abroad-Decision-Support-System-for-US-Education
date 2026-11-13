@@ -185,11 +185,31 @@ public class GradeScaleSettingServiceTests
         var (service, repo, _) = Create(Seeded());
         await service.UpdateAsync(new UpdateGradeScaleRequest(ValidRules(), null, Seeded().CreatedAt), ModeratorId);
 
-        var item = Assert.Single(await service.GetHistoryAsync(20));
+        var item = Assert.Single((await service.GetHistoryAsync(1, 10)).Items);
 
         Assert.Equal(ModeratorId, item.ActorUserId);
         Assert.Equal(6, item.Old!.Rules.Count);
         Assert.Equal(3, item.New!.Rules.Count);
+    }
+
+    // 12 lần sửa, mỗi trang 5: trang 3 còn 2 lần cũ nhất; trang 0 về trang 1; pageSize quá lớn bị chặn ở 50
+    [Fact]
+    public async Task History_PagesNewestFirst()
+    {
+        var (service, repo, _) = Create(Seeded());
+        var start = new DateTime(2026, 11, 1, 0, 0, 0, DateTimeKind.Utc);
+        for (var i = 0; i < 12; i++)
+            repo.Audits.Add(new AuditLog { Action = GradeScaleSettingService.AuditAction, CreatedAt = start.AddMinutes(i) });
+
+        var last = await service.GetHistoryAsync(3, 5);
+        Assert.Equal(12, last.TotalCount);
+        Assert.Equal(3, last.TotalPages);
+        Assert.Equal([start.AddMinutes(1), start], last.Items.Select(x => x.ChangedAt));
+
+        var first = await service.GetHistoryAsync(0, 500);
+        Assert.Equal(1, first.Page);
+        Assert.Equal(GradeScaleSettingService.MaxHistoryPageSize, first.PageSize);
+        Assert.Equal(start.AddMinutes(11), first.Items[0].ChangedAt);
     }
 
     // TB học bạ 8.22: bảng mặc định ra 3.573, DB lưu numeric(5,2) nên là 3.57; bảng mới (0 → 0, 5 → 2, 8 → 4) ra 4.0.
@@ -297,9 +317,13 @@ public class GradeScaleSettingServiceTests
             return Task.CompletedTask;
         }
 
-        public Task<IReadOnlyList<(AuditLog Log, string? ActorName)>> GetHistoryAsync(int limit, CancellationToken ct = default) =>
-            Task.FromResult<IReadOnlyList<(AuditLog, string?)>>(
-                Audits.OrderByDescending(a => a.CreatedAt).Take(limit).Select(a => (a, (string?)"Mod")).ToList());
+        public Task<(IReadOnlyList<(AuditLog Log, string? ActorName)> Rows, int TotalCount)> GetHistoryAsync(
+            int page, int pageSize, CancellationToken ct = default)
+        {
+            IReadOnlyList<(AuditLog, string?)> rows = Audits.OrderByDescending(a => a.CreatedAt)
+                .Skip((page - 1) * pageSize).Take(pageSize).Select(a => (a, (string?)"Mod")).ToList();
+            return Task.FromResult((rows, Audits.Count));
+        }
     }
 
     private sealed class FakeProvider : IGradeScaleProvider
