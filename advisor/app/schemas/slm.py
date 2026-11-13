@@ -132,9 +132,9 @@ SORTS = ("ranking", "lowest_cost", "easiest_admission", "most_selective")
 SCENARIO_MODES = ("what_if", "goal_seeking")
 # Nhóm đích của goal_seeking: khó vào, vừa sức, an toàn
 TARGET_GROUPS = ("reach", "target", "safety")
-# Giá trị của subtype trong ngoài phạm vi. about_system: hỏi về chính hệ thống ("bạn là ai", "bạn làm được gì");
-# human_handoff: muốn nói chuyện với người thật
-SUBTYPES = ("exception", "sensitive", "farewell", "ambiguous", "about_system", "human_handoff")
+# Giá trị của subtype trong ngoài phạm vi. greeting: lời chào mở đầu ("hello", "xin chào"); farewell: cảm ơn, tạm biệt, kết thúc;
+# about_system: hỏi về chính hệ thống ("bạn là ai", "bạn làm được gì"); human_handoff: muốn nói chuyện với người thật
+SUBTYPES = ("exception", "sensitive", "greeting", "farewell", "ambiguous", "about_system", "human_handoff")
 # Mã dịch vụ của trung tâm tư vấn trong dữ liệu huấn luyện. Chưa nhánh nào dùng giá trị này
 SERVICE_CODES = (
     "SCHOOL_SELECTION",

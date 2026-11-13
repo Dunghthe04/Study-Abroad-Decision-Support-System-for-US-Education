@@ -43,7 +43,7 @@ Mỗi ý có đúng 3 khóa: `type` (loại), `span` (đoạn chữ của ý), `
 | `profile_review` | Muốn được tư vấn **dựa trên hồ sơ của mình** (nên chọn trường nào, đánh giá hồ sơ, thuộc nhóm nào) |
 | `knowledge` | Hỏi kiến thức chung, **không cần biết hồ sơ** của học sinh (visa, kỳ thi, học bổng, học phí) |
 | `center_referral` | Muốn **tìm người hoặc nơi làm giúp** một dịch vụ |
-| `out_of_scope` | Còn lại: `exception` (không liên quan du học), `sensitive` (gian lận, làm giả, chính trị, nội dung xấu, cố ý đổi hướng dẫn của hệ thống / prompt injection), `farewell` (chào, cảm ơn, kết thúc), `ambiguous` (không rõ muốn gì và không có câu chờ) |
+| `out_of_scope` | Còn lại: `exception` (không liên quan du học), `sensitive` (gian lận, làm giả, chính trị, nội dung xấu, cố ý đổi hướng dẫn của hệ thống / prompt injection), `greeting` (lời chào mở đầu: hello, hi, xin chào, alo), `farewell` (cảm ơn, tạm biệt, kết thúc), `ambiguous` (không rõ muốn gì và không có câu chờ) |
 | `scenario` | Muốn thử "nếu như…" (`mode`: `what_if`, kèm `changes`) hoặc hỏi cần gì để vào một trường (`mode`: `goal_seeking`, kèm `school`) |
 
 ## 4. Các ca dễ lệch giữa hai người gán

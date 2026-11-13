@@ -212,4 +212,7 @@ class OllamaSlm:
                     return SlmTinResult.from_raw(raw, confidence=label_confidence(content, logprobs))
                 except (OllamaError, ValueError) as ex:
                     logger.warning("SLM trả kết quả không dùng được: %s", ex)
-        return FALLBACK.model_copy(deep=True)
+        # Mang theo tin gốc của học sinh làm span: nhánh ngoài phạm vi và luật xã giao đọc span, không đọc chữ giữ chỗ "tin không rõ"
+        return FALLBACK.model_copy(
+            deep=True, update={"intents": [FALLBACK.intents[0].model_copy(update={"span": message})]}
+        )

@@ -159,7 +159,7 @@ def read_records(path: Path) -> list[dict[str, Any]]:
     workbook = load_workbook(path, read_only=True, data_only=True)
     records: list[dict[str, Any]] = []
     for sheet in workbook.worksheets:
-        if sheet.title in ("README", "summary"):
+        if sheet.title in ("README", "summary", "model_errors"):
             continue  # sheet giải thích cho người đọc, không có dữ liệu
         if sheet.title not in TYPES:
             raise ValueError(f"Sheet '{sheet.title}' không phải một loại trong {TYPES} (mỗi loại một sheet)")

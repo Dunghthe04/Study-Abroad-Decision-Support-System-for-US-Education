@@ -397,11 +397,23 @@ async def test_out_of_scope_answers_with_the_fixed_sentence_of_its_kind(kind):
     assert out.answer == OUT_OF_SCOPE[kind]  # câu đang chờ do ChatFlow nhắc lại, nhánh không tự nhắc
 
 
+async def test_the_greeting_label_gets_a_greeting_back_with_things_to_do_whatever_the_words():
+    slm = tin(("out_of_scope", {"subtype": "greeting"}))  # model nhận ra lời chào, không cần luật từ khóa
+
+    out = await build_branches({})["out_of_scope"].run(ChatState(), "hê lô cả nhà", slm)
+
+    assert out.answer == GREETING_REPLY
+    assert [b.label for b in out.quick_replies] == [b.label for b in GREETING_BUTTONS]
+
+
 @pytest.mark.parametrize(
     "message", ["Hello", "hi", "xin chào", "Chào bạn!", "alo", "chào buổi sáng", "Good morning"]
 )
-async def test_a_message_with_only_a_greeting_gets_a_greeting_back_with_things_to_do(message):
-    slm = tin(("out_of_scope", {"subtype": "ambiguous"}))  # model chưa có nhãn lời chào nên trả ambiguous
+@pytest.mark.parametrize("kind", ["ambiguous", "farewell"])
+async def test_a_message_with_only_a_greeting_still_gets_a_greeting_back_when_an_old_model_does_not_know_the_label(
+    message, kind
+):
+    slm = tin(("out_of_scope", {"subtype": kind}))  # model cũ trả ambiguous hoặc farewell cho lời chào
 
     out = await build_branches({})["out_of_scope"].run(ChatState(), message, slm)
 
@@ -418,8 +430,9 @@ async def test_anything_more_than_a_greeting_keeps_the_ambiguous_answer(message)
     assert out.answer == OUT_OF_SCOPE["ambiguous"] and not out.quick_replies
 
 
-def test_the_greeting_thanks_goodbye_sentence_does_not_sound_like_a_goodbye():
-    assert OUT_OF_SCOPE["farewell"].endswith("?")  # học sinh mở đầu bằng "chào" vẫn hợp
+def test_the_thanks_and_goodbye_sentence_does_not_ask_what_to_help_with():
+    assert not OUT_OF_SCOPE["farewell"].endswith("?")  # học sinh đã kết thúc, không hỏi tiếp
+    assert "greeting" not in OUT_OF_SCOPE  # lời chào có câu riêng (GREETING_REPLY) kèm nút gợi ý
 
 
 # ---- tư vấn theo hồ sơ (tạm dùng skill cũ) ----

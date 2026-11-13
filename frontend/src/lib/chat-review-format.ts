@@ -29,7 +29,8 @@ const OUT_OF_SCOPE_LABELS: Record<string, string> = {
   ambiguous: "Câu mơ hồ",
   exception: "Ngoại lệ",
   sensitive: "Nội dung nhạy cảm",
-  farewell: "Chào tạm biệt",
+  greeting: "Lời chào",
+  farewell: "Cảm ơn, tạm biệt",
   about_system: "Hỏi về hệ thống",
   human_handoff: "Muốn gặp người thật",
 };

@@ -12,7 +12,7 @@ public record AdvisorSlmIntentDto(string Type, string Span = "", JsonElement? En
 /// SLM đã hiểu tin nhắn ra sao ở lượt này (advisor/app/schemas/chat.py: SlmSummary).
 /// ModelIntents: đầu ra nguyên văn của model, trước các luật code đổi ý (rỗng khi bấm nút hoặc model hỏng).
 /// Intents: loại các ý hệ thống thực sự đã chạy, sau khi luật code hậu xử lý.
-/// OutOfScope: loại con của ý ngoài phạm vi (exception | sensitive | farewell | ambiguous | about_system | human_handoff).
+/// OutOfScope: loại con của ý ngoài phạm vi (exception | sensitive | greeting | farewell | ambiguous | about_system | human_handoff).
 /// Confidence: 0 đến 1, null khi không gọi SLM. Fallback: SLM hai lần đều sai, phải dùng kết quả dự phòng.
 /// </summary>
 public record AdvisorSlmDto(

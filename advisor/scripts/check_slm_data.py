@@ -74,7 +74,7 @@ def read_items(path: Path) -> tuple[list[Item], list[Issue]]:
     items: list[Item] = []
     issues: list[Issue] = []
     for sheet in workbook.worksheets:
-        if sheet.title in ("README", "summary"):
+        if sheet.title in ("README", "summary", "model_errors"):
             continue
         intent = sheet.title
         if intent not in TYPES:

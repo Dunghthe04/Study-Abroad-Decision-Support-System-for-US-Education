@@ -81,6 +81,45 @@ async def test_the_real_classifier_marks_fallback_after_two_bad_answers():
     assert result.types() == ["out_of_scope"]
 
 
+async def test_a_greeting_still_gets_a_greeting_back_when_the_model_names_it_with_an_unknown_subtype():
+    # Ca thật 13/11: model trả subtype ngoài hợp đồng hai lần (lúc đó là "greeting", nay đã là nhãn hợp lệ), hệ thống lùi về
+    # kết quả dự phòng và học sinh bị đáp "Mình chưa rõ ý bạn lắm" thay vì lời chào
+    from app.services.branches import GREETING_REPLY
+
+    greeting = {"intents": [{"type": "out_of_scope", "span": "Hello", "entities": {"subtype": "salutation"}}]}
+
+    class GreetingSlm:
+        async def chat_json_scored(self, messages, output):
+            return greeting, "", []
+
+    flow = flow_with({}, FALLBACK)
+    flow._slm = OllamaSlm(GreetingSlm(), prompt="slm_intents")
+
+    res = await flow.reply(ask("Hello"))
+
+    assert res.slm.fallback is True
+    assert res.answer == GREETING_REPLY
+
+
+async def test_the_greeting_label_is_valid_and_answered_without_falling_back():
+    from app.services.branches import GREETING_REPLY
+
+    greeting = {"intents": [{"type": "out_of_scope", "span": "Hello", "entities": {"subtype": "greeting"}}]}
+
+    class GreetingSlm:
+        async def chat_json_scored(self, messages, output):
+            return greeting, "", []
+
+    flow = flow_with({}, FALLBACK)
+    flow._slm = OllamaSlm(GreetingSlm(), prompt="slm_intents")
+
+    res = await flow.reply(ask("Hello"))
+
+    assert res.slm.fallback is False
+    assert res.slm.out_of_scope == "greeting"
+    assert res.answer == GREETING_REPLY
+
+
 async def test_a_normal_classifier_result_is_not_marked_fallback():
     assert tin("knowledge").fallback is False
 
