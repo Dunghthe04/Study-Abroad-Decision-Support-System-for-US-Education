@@ -73,6 +73,8 @@ class ChatState(CamelModel):
     # Hồ sơ đã có từ trước (DB, form, lần trước): chỉ hỏi mục bắt buộc còn thiếu của việc học sinh đang muốn làm,
     # không hỏi câu tùy chọn, xong thì hiện bảng rà soát. None = hồ sơ trống lúc bắt đầu hỏi, hỏi đủ các câu
     required_only: list[str] | None = None
+    # Học sinh đã từng lưu hồ sơ chính thức (.NET gửi mỗi lượt). None = .NET chưa gửi, đoán theo các ô hồ sơ
+    has_committed_profile: bool | None = None
     has_results: bool = False  # đã có danh sách trường gợi ý chưa (skill_explain, skill_kich_ban cần)
     schools: list[ResultSchool] = []  # danh sách trường gợi ý gần nhất, .NET làm mới mỗi lượt khi has_results
     # Các trường đã chấm nhưng không nằm trong khối nào đang hiện: chỉ để khớp tên khi học sinh hỏi một trường cụ thể
@@ -129,6 +131,8 @@ class ChatRequest(CamelModel):
     benchmarks: dict[str, Any] | None = None
     # Bảng quy đổi điểm trong DB do .NET gửi mỗi lượt; None = không gửi (giữ bảng cũ trong state)
     grade_scale: list[GradeScaleRule] | None = None
+    # Học sinh đã từng lưu hồ sơ chính thức chưa (.NET gửi mỗi lượt); None = không gửi (giữ giá trị cũ trong state)
+    has_committed_profile: bool | None = None
 
 
 # Token của MỘT lần gọi AI (Claude hoặc Ollama), số do nhà cung cấp trả về. Một lượt chat có thể gồm nhiều lần gọi

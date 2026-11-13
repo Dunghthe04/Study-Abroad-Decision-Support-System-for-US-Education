@@ -299,6 +299,9 @@ class ChatFlow:
         # Bảng quy đổi điểm do moderator sửa; không gửi thì giữ bảng đã nhớ (chưa từng gửi thì dùng bảng WES)
         if req.grade_scale:
             state.grade_scale = req.grade_scale
+        # Đã lưu hồ sơ chưa: quyết định hỏi đủ hay chỉ hỏi mục bắt buộc còn thiếu; không gửi thì giữ giá trị cũ
+        if req.has_committed_profile is not None:
+            state.has_committed_profile = req.has_committed_profile
         # Danh sách trường gợi ý do .NET gửi mỗi lượt (lấy từ lần gợi ý đã lưu); không gửi thì giữ như cũ.
         # Có danh sách nghĩa là học sinh đã có kết quả, dù gợi ý ở trang Gợi ý trường chứ không phải trong chat
         if req.schools is not None:
@@ -497,7 +500,12 @@ def profile_ready(state: ChatState) -> bool:
 
 
 # Hồ sơ có giá trị không phải chỉ nói ở câu đầu (said_in_B0): giá trị từ DB, form hoặc lần trước
+# Hồ sơ đã có từ trước chưa. .NET gửi cờ đã lưu hồ sơ thì tin cờ đó: nháp mặc định của hồ sơ trống vẫn có
+# vài ô (loại trường "all") nên đoán theo các ô sẽ nhầm hồ sơ trống thành hồ sơ đã có và hỏi thiếu.
+# Không có cờ (gọi thẳng advisor, test) thì đoán như cũ: có ô nào không phải học sinh nói lúc đầu
 def has_saved_profile(state: ChatState) -> bool:
+    if state.has_committed_profile is not None:
+        return state.has_committed_profile
     return any(field.status != "said_in_B0" for field in state.profile.values())
 
 

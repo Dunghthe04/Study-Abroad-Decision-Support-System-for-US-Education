@@ -778,3 +778,33 @@ async def test_empty_profile_keeps_asking_every_question():
     res = await turn(FakeLLM(), "Em muốn tìm trường ở Mỹ")
 
     assert res.state.required_only is None
+
+
+# Nháp mặc định của hồ sơ trống vẫn có loại trường "all" (đã xác nhận). .NET báo chưa lưu hồ sơ thì vẫn hỏi đủ như form
+async def test_not_committed_profile_asks_every_question_despite_default_draft():
+    flow = flow_with(build_handlers(FakeLLM(), "qwen3:8b"))
+    req = ChatRequest(
+        messages=[ChatMessage(role="user", content="Em muốn tìm trường ở Mỹ")],
+        state=ChatState(profile={"school_type": field("all")}),
+        has_committed_profile=False,
+    )
+    res = await flow.reply(req)
+
+    assert res.state.has_committed_profile is False
+    assert res.state.required_only is None
+
+
+# Đã lưu hồ sơ chính thức: chỉ hỏi mục bắt buộc còn thiếu, cờ nhớ trong state cho các lượt sau
+async def test_committed_profile_asks_only_required():
+    flow = flow_with(build_handlers(FakeLLM(), "qwen3:8b"))
+    req = ChatRequest(
+        messages=[ChatMessage(role="user", content="Em muốn tìm trường ở Mỹ")],
+        state=ChatState(profile={"school_type": field("all")}),
+        has_committed_profile=True,
+    )
+    res = await flow.reply(req)
+
+    assert res.state.required_only == REQUIRED_B3
+    req = ChatRequest(messages=[ChatMessage(role="user", content=CHAT_BUTTON.value)], state=res.state)
+    res = await flow.reply(req)
+    assert res.state.has_committed_profile is True  # lượt không gửi cờ thì giữ cờ cũ
