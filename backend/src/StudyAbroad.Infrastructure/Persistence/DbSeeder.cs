@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using StudyAbroad.Application.Profile.Academic;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
@@ -58,7 +58,7 @@ public static class DbSeeder
             {
                 Key = AcademicConstants.GradeScale10AppSettingKey,
                 ValueJson = GradeScale.DefaultJson(),
-                Description = "Bảng quy đổi điểm thang 10 sang GPA thang 4 (tra cận dưới MinScore), moderator sửa trên trang quản trị."
+                Description = "Bảng quy đổi điểm thang 10 sang GPA thang 4 (nội suy tuyến tính giữa các mốc MinScore), moderator sửa trên trang quản trị."
             });
             await db.SaveChangesAsync(ct);
         }

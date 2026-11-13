@@ -35,7 +35,6 @@ from app.schemas.transcript_ocr import (
 from app.services import usage_meter
 from app.services.ollama import OllamaError
 from app.services.pii_mask import mask_personal_info
-from app.services.skills.skill_danh_gia import gpa10_to_4
 from app.services.transcript_text import read_term_tables, tidy_transcription
 
 logger = logging.getLogger(__name__)
@@ -379,16 +378,14 @@ class TranscriptReader:
                 )
             final_terms.append(TranscriptTerm(term_order=order, term_name=term_name, scores=score_items))
 
-        # Quy đổi GPA: trung bình tất cả các điểm môn, tra bảng WES sang thang 4 (cùng bảng với chat)
+        # Chỉ trả TB thang 10; .NET đổi sang GPA thang 4 bằng mốc trong DB (moderator sửa) nên không quy đổi ở đây
         avg_score_10 = round(sum(all_scores) / len(all_scores), 2)
-        gpa4 = gpa10_to_4(avg_score_10)
 
         return TranscriptOcrResponse(
             success=True,
             model_used=model_used,
             terms=final_terms,
             average_score_scale10=avg_score_10,
-            calculated_gpa4=gpa4,
             message=(
                 f"Đã đọc {len(final_terms)} học kỳ với {len(all_scores)} điểm môn "
                 f"từ {processed_files_count}/{len(files_to_process)} tệp. Bạn kiểm tra lại bảng trước khi đi tiếp."

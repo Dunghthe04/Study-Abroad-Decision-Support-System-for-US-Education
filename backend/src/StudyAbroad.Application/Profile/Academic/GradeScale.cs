@@ -3,11 +3,15 @@ using System.Text.Json;
 namespace StudyAbroad.Application.Profile.Academic;
 
 /// <summary>
-/// Kiểm tra, đọc và tra bảng quy đổi điểm thang 10 sang thang 4 (app_settings key grade_scale.10).
-/// Một chỗ duy nhất cho luật tra cận dưới, để AcademicAnalysisService, TranscriptGpa, chat và giả lập cùng ra một số.
+/// Kiểm tra, đọc và quy đổi điểm thang 10 sang thang 4 theo bảng mốc (app_settings key grade_scale.10).
+/// Một chỗ duy nhất cho luật nội suy, để AcademicAnalysisService, TranscriptGpa, chat và giả lập cùng ra một số.
 /// </summary>
 public static class GradeScale
 {
+    /// <summary>Method của bảng mốc nội suy. Bảng cũ lưu "table" là bảng tra bậc thang (chỉ còn dùng khi tính lại hồ sơ cũ).</summary>
+    public const string LinearMethod = "linear";
+    public const string LegacyTableMethod = "table";
+
     private static readonly JsonSerializerOptions ReadOptions = new() { PropertyNameCaseInsensitive = true };
     private static readonly JsonSerializerOptions WriteOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
@@ -70,13 +74,37 @@ public static class GradeScale
         }
     }
 
-    /// <summary>Tra cận dưới: lấy khoảng có MinScore lớn nhất mà điểm vẫn ≥ MinScore; không khớp khoảng nào thì 0.</summary>
+    /// <summary>
+    /// Tra bậc thang kiểu cũ (bảng WES, Method "table"): lấy khoảng có MinScore lớn nhất mà điểm vẫn ≥ MinScore.
+    /// Chỉ còn dùng để nhận ra hồ sơ đã tính bằng bảng cũ khi mod lưu bảng mới; quy đổi mới luôn dùng Interpolate.
+    /// </summary>
     public static decimal Lookup(decimal score, GradeScaleConfigDto config) =>
         config.Rules
             .OrderByDescending(rule => rule.MinScore)
             .FirstOrDefault(rule => score >= rule.MinScore)?.Gpa4 ?? 0m;
 
+    /// <summary>
+    /// Nội suy tuyến tính giữa các mốc (MinScore → Gpa4), cách UC Irvine dùng cho điểm Việt Nam (kế hoạch GPA weighted,
+    /// mục 4). Dưới mốc đầu lấy GPA mốc đầu, trên mốc cuối lấy GPA mốc cuối. Không làm tròn: chỉ làm tròn khi hiển thị.
+    /// </summary>
+    public static decimal Interpolate(decimal score, GradeScaleConfigDto config)
+    {
+        var anchors = config.Rules.OrderBy(rule => rule.MinScore).ToList();
+
+        if (score <= anchors[0].MinScore)
+            return anchors[0].Gpa4;
+        if (score >= anchors[^1].MinScore)
+            return anchors[^1].Gpa4;
+
+        // Hai mốc kề nhau bao quanh điểm: low.MinScore ≤ score < high.MinScore
+        var high = anchors.First(rule => rule.MinScore > score);
+        var low = anchors[anchors.IndexOf(high) - 1];
+
+        // Nhân trước rồi chia để số decimal giữ đúng (8.5 → 3.625)
+        return low.Gpa4 + (score - low.MinScore) * (high.Gpa4 - low.Gpa4) / (high.MinScore - low.MinScore);
+    }
+
     /// <summary>JSON của bảng mặc định, dùng để seed grade_scale.10 khi DB chưa có.</summary>
     public static string DefaultJson() =>
-        JsonSerializer.Serialize(AcademicAnalysisService.GetDefaultWesScaleConfig(), WriteOptions);
+        JsonSerializer.Serialize(AcademicAnalysisService.GetDefaultScaleConfig(), WriteOptions);
 }

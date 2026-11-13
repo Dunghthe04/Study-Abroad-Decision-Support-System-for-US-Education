@@ -9,7 +9,7 @@ namespace StudyAbroad.Application.Profile.Academic;
 /// <summary>
 /// [USAS-365] Service xử lý thuật toán phân tích điểm học thuật:
 /// - Quy đổi GPA thang 4.0 theo chuẩn WES hoặc AppSetting
-/// - Tính Unweighted GPA & Weighted GPA (theo tín chỉ / môn chuyên)
+/// - Tính GPA unweighted (không tính weighted, kế hoạch GPA weighted mục 5)
 /// - Phân nhóm môn học (STEM, Xã hội, Ngoại ngữ)
 /// - Phân tích xu hướng 3 năm qua các kỳ học
 /// </summary>
@@ -120,7 +120,7 @@ public class AcademicAnalysisService : IAcademicAnalysisService
     /// <summary>
     /// [USAS-365] Thực hiện thuật toán phân tích học thuật:
     /// 1. Quy đổi GPA 4.0 theo cấu hình
-    /// 2. Tính Unweighted & Weighted GPA
+    /// 2. Tính GPA unweighted
     /// 3. Phân nhóm môn (STEM, Xã hội, Ngoại ngữ)
     /// 4. Đánh giá xu hướng 3 năm
     /// 5. Lưu vào analysis_results (kind = 'gpa') và cập nhật overall_gpa trong student_profiles
@@ -136,7 +136,6 @@ public class AcademicAnalysisService : IAcademicAnalysisService
                 AnalysisId: Guid.NewGuid(),
                 StudentProfileId: profile.Id,
                 UnweightedGpa: 0m,
-                WeightedGpa: 0m,
                 RawAverage: 0m,
                 TotalSubjects: 0,
                 TotalTerms: 0,
@@ -152,46 +151,21 @@ public class AcademicAnalysisService : IAcademicAnalysisService
 
         var scaleConfig = await GetGradeScaleConfigAsync(ct);
 
-        // 1. Quy đổi điểm từng môn sang thang 4.0
+        // 1. Gắn nhóm môn cho từng điểm
         var scoreDetails = scores.Select(s => new
         {
             Score = s,
-            Gpa4 = ConvertScoreToGpa4(s.Score, scaleConfig),
             GroupKey = ClassifySubjectGroup(s.Subject)
         }).ToList();
 
-        // 2. Tính điểm trung bình hệ 10 và Unweighted GPA 4.0
+        // 2. Tính điểm trung bình hệ 10 và Unweighted GPA 4.0: lấy TB hệ 10 rồi đổi một lần (kế hoạch GPA weighted, mục 4)
         var rawAverage = Math.Round(scores.Average(s => s.Score), 2);
-        var unweightedGpa = Math.Round(scoreDetails.Average(s => s.Gpa4), 2);
+        var unweightedGpa = AverageToGpa4(scores.Select(s => s.Score), scaleConfig);
 
-        // 3. Tính Weighted GPA
-        // Nếu có credits thì tính theo tín chỉ, nếu không có credits thì thưởng 0.5 điểm cho môn chuyên/nâng cao
-        decimal weightedGpa;
-        var hasCredits = scores.Any(s => s.Credits.HasValue && s.Credits.Value > 0);
-        if (hasCredits)
-        {
-            decimal totalWeightedPoints = 0m;
-            decimal totalCredits = 0m;
-            foreach (var item in scoreDetails)
-            {
-                var credit = item.Score.Credits.GetValueOrDefault(1m);
-                totalWeightedPoints += item.Gpa4 * credit;
-                totalCredits += credit;
-            }
-            weightedGpa = totalCredits > 0 ? Math.Round(totalWeightedPoints / totalCredits, 2) : unweightedGpa;
-        }
-        else
-        {
-            // Kiểm tra môn nâng cao/chuyên/AP/Honors (+0.5 điểm quy đổi, tối đa 4.5)
-            var weightedScores = scoreDetails.Select(s =>
-            {
-                var isAdvanced = IsAdvancedSubject(s.Score.Subject);
-                return isAdvanced ? Math.Min(4.5m, s.Gpa4 + 0.5m) : s.Gpa4;
-            });
-            weightedGpa = Math.Round(weightedScores.Average(), 2);
-        }
+        // Không tính GPA weighted: học bạ Việt Nam không có AP/Honors, trường Mỹ đọc điểm quốc tế dạng unweighted
+        // (kế hoạch GPA weighted, mục 5)
 
-        // 4. Thống kê theo nhóm môn học
+        // 3. Thống kê theo nhóm môn học
         var subjectGroups = scoreDetails
             .GroupBy(s => s.GroupKey)
             .Select(g =>
@@ -199,14 +173,14 @@ public class AcademicAnalysisService : IAcademicAnalysisService
                 var gKey = g.Key;
                 var gName = GetSubjectGroupName(gKey);
                 var avgRaw = Math.Round(g.Average(x => x.Score.Score), 2);
-                var avgGpa = Math.Round(g.Average(x => x.Gpa4), 2);
+                var avgGpa = AverageToGpa4(g.Select(x => x.Score.Score), scaleConfig);
                 var distinctSubjects = g.Select(x => x.Score.Subject).Distinct().OrderBy(x => x).ToList();
                 return new SubjectGroupScoreDto(gKey, gName, avgRaw, avgGpa, g.Count(), distinctSubjects);
             })
             .OrderBy(g => GetGroupDisplayOrder(g.GroupKey))
             .ToList();
 
-        // 5. Thống kê theo từng học kỳ và đánh giá xu hướng 3 năm
+        // 4. Thống kê theo từng học kỳ và đánh giá xu hướng 3 năm
         var termAverages = scoreDetails
             .GroupBy(s => new { s.Score.TermOrder, s.Score.TermName })
             .OrderBy(g => g.Key.TermOrder)
@@ -214,14 +188,14 @@ public class AcademicAnalysisService : IAcademicAnalysisService
                 TermOrder: g.Key.TermOrder,
                 TermName: g.Key.TermName,
                 RawAverage: Math.Round(g.Average(x => x.Score.Score), 2),
-                Gpa4: Math.Round(g.Average(x => x.Gpa4), 2),
+                Gpa4: AverageToGpa4(g.Select(x => x.Score.Score), scaleConfig),
                 SubjectCount: g.Count()
             ))
             .ToList();
 
         var (trend, trendDesc) = EvaluateTrend(termAverages);
 
-        // 6. Đóng gói kết quả & lưu trữ vào analysis_results
+        // 5. Đóng gói kết quả & lưu trữ vào analysis_results
         var analysisId = Guid.NewGuid();
         var analysisResult = new AnalysisResult
         {
@@ -234,7 +208,6 @@ public class AcademicAnalysisService : IAcademicAnalysisService
                 analysisId,
                 studentProfileId = profile.Id,
                 unweightedGpa,
-                weightedGpa,
                 rawAverage,
                 totalSubjects = scores.Count,
                 totalTerms = termAverages.Count,
@@ -254,7 +227,6 @@ public class AcademicAnalysisService : IAcademicAnalysisService
             AnalysisId: analysisId,
             StudentProfileId: profile.Id,
             UnweightedGpa: unweightedGpa,
-            WeightedGpa: weightedGpa,
             RawAverage: rawAverage,
             TotalSubjects: scores.Count,
             TotalTerms: termAverages.Count,
@@ -290,7 +262,6 @@ public class AcademicAnalysisService : IAcademicAnalysisService
                 AnalysisId: latest.Id,
                 StudentProfileId: profile.Id,
                 UnweightedGpa: root.GetProperty("unweightedGpa").GetDecimal(),
-                WeightedGpa: root.GetProperty("weightedGpa").GetDecimal(),
                 RawAverage: root.GetProperty("rawAverage").GetDecimal(),
                 TotalSubjects: root.GetProperty("totalSubjects").GetInt32(),
                 TotalTerms: root.GetProperty("totalTerms").GetInt32(),
@@ -320,44 +291,48 @@ public class AcademicAnalysisService : IAcademicAnalysisService
 
         // Không có provider (test cũ): đọc thẳng DB, bảng sai luật thì về bảng mặc định
         var setting = await _repository.GetAppSettingByKeyAsync(AcademicConstants.GradeScale10AppSettingKey, ct);
-        return GradeScale.Parse(setting?.ValueJson) ?? GetDefaultWesScaleConfig();
+        return GradeScale.Parse(setting?.ValueJson) ?? GetDefaultScaleConfig();
     }
 
     /// <summary>
-    /// [USAS-365] Quy đổi một điểm hệ 10 sang thang 4.0 theo bảng khoảng điểm (mặc định bảng WES), giống
-    /// TranscriptGpa.To4, toGpa4 bên FE và gpa10_to_4 bên advisor. Chỉ xét cận dưới (MinScore) để số như 8.995 không
-    /// rơi vào khe giữa hai khoảng (8.99 và 9.0): 8.995 vẫn là 3.7. Không còn quy đổi tuyến tính ×0.4
+    /// [USAS-365] Quy đổi một điểm hệ 10 sang thang 4.0 bằng nội suy giữa các mốc của bảng (mặc định mốc THPT EducationUSA), giống
+    /// TranscriptGpa.To4, toGpa4 bên FE và gpa10_to_4 bên advisor. Không còn tra bậc thang, không còn ×0.4
     /// </summary>
     public static decimal ConvertScoreToGpa4(decimal rawScore, GradeScaleConfigDto config)
     {
         if (rawScore < 0m || rawScore > 10m)
             throw new ArgumentOutOfRangeException(nameof(rawScore), "Điểm số phải nằm trong khoảng từ 0.0 đến 10.0.");
 
-        // Bảng thiếu khoảng thấp nhất thì điểm dưới mọi mốc là 0, giống TranscriptGpa.To4
-        return GradeScale.Lookup(rawScore, config);
+        return GradeScale.Interpolate(rawScore, config);
     }
 
     /// <summary>
-    /// [USAS-365] Bảng quy đổi mặc định chuẩn WES (World Education Services) cho hệ THPT/ĐH Việt Nam.
+    /// GPA thang 4 của một nhóm điểm hệ 10 (cả bảng điểm, một nhóm môn, một học kỳ): lấy TB hệ 10 chưa làm tròn rồi đổi
+    /// một lần, không đổi từng môn rồi mới lấy TB (kế hoạch GPA weighted, mục 4). Ví dụ 7.0 và 10 → TB 8.5 → 3.63, không phải 3.50
     /// </summary>
-    public static GradeScaleConfigDto GetDefaultWesScaleConfig()
+    public static decimal AverageToGpa4(IEnumerable<decimal> scores10, GradeScaleConfigDto config) =>
+        Math.Round(ConvertScoreToGpa4(scores10.Average(), config), 2, MidpointRounding.AwayFromZero);
+
+    /// <summary>
+    /// [USAS-365] Bảng quy đổi mặc định: bảng bậc THPT của EducationUSA Vietnam 2025 (Đại sứ quán Hoa Kỳ), lấy cận dưới mỗi
+    /// khoảng làm mốc: 5 → 2.0 (C), 6 → 3.0 (B), 8 → 3.5 (A), 9.5 → 4.0 (A+). Thêm 0 → 0 làm sàn (bảng gốc cho F = 1.0,
+    /// hệ thống theo cách Mỹ để F = 0). Giữa hai mốc thì nội suy tuyến tính cho thoải, không nhảy bậc: 7.0 → 3.25.
+    /// MaxScore = mốc kế tiếp − 0.01, chỉ để hiển thị
+    /// </summary>
+    public static GradeScaleConfigDto GetDefaultScaleConfig()
     {
+        (decimal Min, decimal Gpa4, string Letter)[] anchors =
+        [
+            (0m, 0m, "F"), (5.0m, 2.0m, "C"), (6.0m, 3.0m, "B"), (8.0m, 3.5m, "A"), (9.5m, 4.0m, "A+"), (10m, 4.0m, "A+"),
+        ];
+
         return new GradeScaleConfigDto(
             ScaleKey: AcademicConstants.GradeScale10AppSettingKey,
-            SourceName: "Chuẩn thẩm định WES (World Education Services - Hoa Kỳ)",
-            Method: "table",
-            Rules: new List<GradeScaleRuleDto>
-            {
-                new(9.0m, 10.0m, 4.0m, "A"),
-                new(8.5m, 8.99m, 3.7m, "A-"),
-                new(8.0m, 8.49m, 3.5m, "B+"),
-                new(7.0m, 7.99m, 3.0m, "B"),
-                new(6.5m, 6.99m, 2.5m, "C+"),
-                new(5.5m, 6.49m, 2.0m, "C"),
-                new(5.0m, 5.49m, 1.5m, "D+"),
-                new(4.0m, 4.99m, 1.0m, "D"),
-                new(0.0m, 3.99m, 0.0m, "F")
-            }
+            SourceName: "EducationUSA Vietnam 2025 (bậc THPT), nội suy tuyến tính: https://vn.usembassy.gov/wp-content/uploads/sites/124/2023/01/Basic-Information-on-Grading-in-Vietnam-2025.pdf",
+            Method: GradeScale.LinearMethod,
+            Rules: anchors
+                .Select((a, i) => new GradeScaleRuleDto(a.Min, i + 1 < anchors.Length ? anchors[i + 1].Min - 0.01m : 10m, a.Gpa4, a.Letter))
+                .ToList()
         );
     }
 
@@ -424,12 +399,6 @@ public class AcademicAnalysisService : IAcademicAnalysisService
         AcademicConstants.GroupSocialSciences => 3,
         _ => 4
     };
-
-    private static bool IsAdvancedSubject(string subject)
-    {
-        var norm = RemoveDiacritics(subject.ToLowerInvariant());
-        return norm.Contains("chuyen") || norm.Contains("nang cao") || norm.Contains("ap") || norm.Contains("honors") || norm.Contains("ib");
-    }
 
     /// <summary>
     /// [USAS-365] Thuật toán đánh giá xu hướng học tập dựa trên biến động điểm các kỳ.

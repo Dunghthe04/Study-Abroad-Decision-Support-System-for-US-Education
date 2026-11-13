@@ -11,6 +11,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 from datetime import date
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -92,34 +93,32 @@ def from_table(score: float, table: list[tuple[float, float]]) -> float:
     return BELOW_TABLE_IELTS
 
 
-# Quy đổi điểm thang 10 sang GPA thang 4 theo bảng WES (điểm từ, GPA 4). Phải khớp bảng mặc định của backend
-# (AcademicAnalysisService.GetDefaultWesScaleConfig), sửa thì sửa cả hai bên. Chỉ xét cận dưới: 8.99 vẫn là 3.7
-WES_GPA10_TO_4 = [
-    (9.0, 4.0),
-    (8.5, 3.7),
-    (8.0, 3.5),
-    (7.0, 3.0),
-    (6.5, 2.5),
-    (5.5, 2.0),
-    (5.0, 1.5),
-    (4.0, 1.0),
-]
-BELOW_WES_GPA4 = 0.0
-
-
-# Bảng (điểm từ, GPA 4) lấy từ grade_scale trong state (.NET gửi bảng moderator sửa); None hoặc rỗng = bảng WES
+# Mốc (điểm thang 10, GPA 4) xếp tăng dần, lấy từ grade_scale trong state (.NET gửi mốc moderator sửa mỗi lượt).
+# Không giữ bản sao mốc ở advisor: None hoặc rỗng = không có bảng, không quy đổi
 def gpa_table_of(rules: list[GradeScaleRule] | None) -> list[tuple[float, float]] | None:
     if not rules:
         return None
-    return sorted(((float(r.min_score), float(r.gpa4)) for r in rules), reverse=True)
+    return sorted((float(r.min_score), float(r.gpa4)) for r in rules)
 
 
-# Chỉ điểm tổng (TB thang 10) mới quy sang thang 4; điểm từng môn giữ nguyên thang 10
-def gpa10_to_4(score: float, table: list[tuple[float, float]] | None = None) -> float:
-    for cut, gpa4 in table or WES_GPA10_TO_4:
-        if score >= cut:
-            return gpa4
-    return BELOW_WES_GPA4
+# Chỉ điểm tổng (TB thang 10) mới quy sang thang 4; điểm từng môn giữ nguyên thang 10.
+# Nội suy đường thẳng giữa hai mốc kề nhau, ngoài hai đầu lấy GPA mốc đầu/cuối (giống GradeScale.Interpolate bên
+# .NET). Tính bằng Decimal và làm tròn 2 chữ số nửa lên như .NET lưu: 8.5 → 3.63 (round() của Python ra 3.62).
+# Không có bảng thì trả None: không đoán GPA, mức học lực là "none"
+def gpa10_to_4(score: float, table: list[tuple[float, float]] | None) -> float | None:
+    if not table:
+        return None
+    x = Decimal(str(score))
+    points = [(Decimal(str(s)), Decimal(str(g))) for s, g in table]
+    if x <= points[0][0]:
+        gpa4 = points[0][1]
+    elif x >= points[-1][0]:
+        gpa4 = points[-1][1]
+    else:
+        upper = next(i for i, (s, _) in enumerate(points) if s >= x)
+        (x0, y0), (x1, y1) = points[upper - 1], points[upper]
+        gpa4 = y0 + (x - x0) * (y1 - y0) / (x1 - x0)
+    return float(gpa4.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 
 # Các con số đã đọc từ hồ sơ chat, đủ để tính mức

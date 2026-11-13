@@ -14,20 +14,16 @@ export function RedirectToAnalysis({ sourceTitle }: RedirectToAnalysisProps) {
   const router = useRouter();
   const [seconds, setSeconds] = useState(3);
 
+  // Đếm ngược: hàm trong setSeconds chỉ giảm số, không gọi router (gọi router lúc đang render là lỗi React)
   useEffect(() => {
-    const timer = setInterval(() => {
-      setSeconds((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          router.replace("/analysis");
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
+    const timer = setInterval(() => setSeconds((prev) => Math.max(prev - 1, 0)), 1000);
     return () => clearInterval(timer);
-  }, [router]);
+  }, []);
+
+  // Hết giờ thì chuyển trang trong effect riêng
+  useEffect(() => {
+    if (seconds === 0) router.replace("/analysis");
+  }, [seconds, router]);
 
   return (
     <div className="mx-auto max-w-xl py-16 text-center space-y-6">

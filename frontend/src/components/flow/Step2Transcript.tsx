@@ -26,6 +26,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RequiredMark } from "./RequiredMark";
 import { cn } from "@/lib/utils";
+import { GpaConversionNote } from "./GpaConversionNote";
 import { useGradeScale } from "@/hooks/use-grade-scale";
 import { profileFlowApi } from "@/lib/profile-flow-api";
 import {
@@ -887,6 +888,8 @@ export function Step2Transcript({
               </div>
             )}
           </div>
+          {/* Hiện ngay khi chọn thang 10 (cùng lúc với dòng "Quy đổi thang 4"), không đợi gõ số */}
+          {overallScale === "10" && <GpaConversionNote />}
 
           {/* Nút bật/tắt bảng ước tính GPA ("Tôi chưa rõ GPA") */}
           <div className="pt-2 border-t border-line/60">
@@ -1027,7 +1030,7 @@ export function Step2Transcript({
                   <div className="font-semibold text-sm text-foreground flex items-center gap-1.5">
                     <span>GPA mục tiêu tổng 4 năm</span>
                     <Badge variant="outline" className="text-xs border-brand/40 text-brand">
-                      Quy đổi thang 4: bảng WES
+                      Quy đổi tham khảo
                     </Badge>
                   </div>
                   <div className="text-xs text-muted-foreground mt-0.5">
@@ -1051,6 +1054,7 @@ export function Step2Transcript({
                   </div>
                 </div>
               </div>
+              {gpa4 !== null && <GpaConversionNote className="mt-3" />}
             </div>
 
             {/* Grade Trend Card */}
@@ -1562,7 +1566,7 @@ export function Step2Transcript({
                   <div className="font-semibold text-sm text-foreground flex items-center gap-1.5">
                     <span>Điểm TB tự tính</span>
                     <Badge variant="outline" className="text-xs border-brand/40 text-brand">
-                      Quy đổi thang 4: bảng WES
+                      Quy đổi tham khảo
                     </Badge>
                   </div>
                   <div className="text-xs text-muted-foreground mt-0.5">
@@ -1586,6 +1590,7 @@ export function Step2Transcript({
                   </div>
                 </div>
               </div>
+              {gpa4 !== null && <GpaConversionNote className="mt-3" />}
             </div>
 
             {/* Grade Trend Card khi có dữ liệu từ 2 năm trở lên */}

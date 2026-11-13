@@ -52,7 +52,7 @@ export function TermTrendChart({ terms }: TermTrendChartProps) {
             </CardDescription>
           </div>
           <span className="shrink-0 text-label">
-            Thang 4.0 WES
+            Thang 4.0 (quy đổi tham khảo)
           </span>
         </div>
       </CardHeader>

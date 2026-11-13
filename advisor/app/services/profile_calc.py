@@ -70,6 +70,8 @@ def gpa_level(facts: Facts, benchmarks: dict | None, middle_school: bool) -> str
     if facts.gpa4 is None:
         return None
     text = f"{'mục tiêu ' if middle_school else ''}{num(facts.gpa4)} thang 4"
+    if facts.gpa_scale == 10:
+        text += " (quy đổi tham khảo)"  # GPA thang 10 đổi theo mốc tham khảo, trường Mỹ tự đánh giá lại
     mark = (benchmarks or {}).get("gpa4")
     if mark is None:
         return text  # chưa có dữ liệu trường thì chỉ ghi điểm

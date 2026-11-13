@@ -35,6 +35,20 @@ public class GradeScaleSettingServiceTests
         CreatedAt = new DateTime(2026, 11, 1, 0, 0, 0, DateTimeKind.Utc),
     };
 
+    // Bảng WES kiểu cũ (Method "table") mà DB đã seed trước khi đổi sang bảng nội suy
+    private static AppSetting LegacyWes() => new()
+    {
+        Key = AcademicConstants.GradeScale10AppSettingKey,
+        ValueJson = JsonSerializer.Serialize(new GradeScaleConfigDto(
+            AcademicConstants.GradeScale10AppSettingKey, "WES", GradeScale.LegacyTableMethod,
+            [
+                new(9.0m, 10.0m, 4.0m, "A"), new(8.5m, 8.99m, 3.7m, "A-"), new(8.0m, 8.49m, 3.5m, "B+"),
+                new(7.0m, 7.99m, 3.0m, "B"), new(6.5m, 6.99m, 2.5m, "C+"), new(5.5m, 6.49m, 2.0m, "C"),
+                new(5.0m, 5.49m, 1.5m, "D+"), new(4.0m, 4.99m, 1.0m, "D"), new(0.0m, 3.99m, 0.0m, "F"),
+            ])),
+        CreatedAt = new DateTime(2026, 11, 1, 0, 0, 0, DateTimeKind.Utc),
+    };
+
     [Fact]
     public async Task Get_SeededTable_ReturnsItWithVersion()
     {
@@ -44,7 +58,20 @@ public class GradeScaleSettingServiceTests
 
         Assert.False(dto.IsDefault);
         Assert.Equal(new DateTime(2026, 11, 1, 0, 0, 0, DateTimeKind.Utc), dto.Version);
+        Assert.Equal(6, dto.Config.Rules.Count); // 6 mốc THPT EducationUSA
+    }
+
+    // Nút "Dùng bảng mặc định" lấy mốc từ DefaultConfig, kể cả khi DB đang lưu bảng khác
+    [Fact]
+    public async Task Get_AlwaysSendsDefaultForTheResetButton()
+    {
+        var (service, _, _) = Create(LegacyWes());
+
+        var dto = await service.GetAsync();
+
         Assert.Equal(9, dto.Config.Rules.Count);
+        Assert.Equal(AcademicAnalysisService.GetDefaultScaleConfig().Rules, dto.DefaultConfig.Rules);
+        Assert.Equal(GradeScale.LinearMethod, dto.DefaultConfig.Method);
     }
 
     [Fact]
@@ -72,6 +99,7 @@ public class GradeScaleSettingServiceTests
             [new GradeScaleRuleDto(0m, 4.99m, 0m, "F"), new GradeScaleRuleDto(5m, 7.99m, 2m, "C"), new GradeScaleRuleDto(8m, 10m, 4m, "A")],
             saved.Rules);
         Assert.Equal("Bảng thử", saved.SourceName);
+        Assert.Equal(GradeScale.LinearMethod, saved.Method);
         Assert.False(repo.SavedAsNew);
         Assert.Equal(1, provider.InvalidateCount);
 
@@ -79,7 +107,7 @@ public class GradeScaleSettingServiceTests
         Assert.Equal(GradeScaleSettingService.AuditAction, audit.Action);
         Assert.Equal(ModeratorId, audit.ActorUserId);
         using var detail = JsonDocument.Parse(audit.DetailJson!);
-        Assert.Equal(9, detail.RootElement.GetProperty("old").GetProperty("rules").GetArrayLength());
+        Assert.Equal(6, detail.RootElement.GetProperty("old").GetProperty("rules").GetArrayLength());
         Assert.Equal(3, detail.RootElement.GetProperty("new").GetProperty("rules").GetArrayLength());
     }
 
@@ -128,13 +156,27 @@ public class GradeScaleSettingServiceTests
     {
         var seeded = Seeded();
         var (service, repo, _) = Create(seeded);
-        var rules = new List<GradeScaleRuleInput> { new(0m, 3m, "B"), new(8m, 2m, ""), new(9m, 5m, "A+") };
+        var rules = new List<GradeScaleRuleInput> { new(0m, 3m, "B"), new(8m, 2m, "ABCDE"), new(9m, 5m, "A+") };
 
         var result = await service.UpdateAsync(new UpdateGradeScaleRequest(rules, null, seeded.CreatedAt), ModeratorId);
 
         Assert.Equal(GradeScaleUpdateStatus.Invalid, result.Status);
-        Assert.True(result.Errors.Count >= 3); // điểm chữ rỗng, GPA giảm, GPA > 4
+        Assert.True(result.Errors.Count >= 3); // điểm chữ quá 4 ký tự, GPA giảm, GPA > 4
         Assert.Empty(repo.Audits);
+    }
+
+    // Bảng mod tự nhập có thể không có điểm chữ: bỏ trống vẫn lưu được
+    [Fact]
+    public async Task Update_NoLetterGrades_IsValid()
+    {
+        var seeded = Seeded();
+        var (service, repo, _) = Create(seeded);
+        var rules = new List<GradeScaleRuleInput> { new(0m, 0m, null), new(5m, 2m, ""), new(10m, 4m, "  ") };
+
+        var result = await service.UpdateAsync(new UpdateGradeScaleRequest(rules, null, seeded.CreatedAt), ModeratorId);
+
+        Assert.Equal(GradeScaleUpdateStatus.Ok, result.Status);
+        Assert.All(GradeScale.Parse(repo.Setting!.ValueJson)!.Rules, r => Assert.Equal("", r.LetterGrade));
     }
 
     [Fact]
@@ -143,21 +185,41 @@ public class GradeScaleSettingServiceTests
         var (service, repo, _) = Create(Seeded());
         await service.UpdateAsync(new UpdateGradeScaleRequest(ValidRules(), null, Seeded().CreatedAt), ModeratorId);
 
-        var item = Assert.Single(await service.GetHistoryAsync(20));
+        var item = Assert.Single((await service.GetHistoryAsync(1, 10)).Items);
 
         Assert.Equal(ModeratorId, item.ActorUserId);
-        Assert.Equal(9, item.Old!.Rules.Count);
+        Assert.Equal(6, item.Old!.Rules.Count);
         Assert.Equal(3, item.New!.Rules.Count);
     }
 
-    // TB học bạ 8.22: bảng WES cũ ra 3.5, bảng mới (từ 8 là 4.0) ra 4.0.
-    // Hồ sơ GPA 3.5 khớp bảng cũ → GPA lấy từ học bạ → đổi thành 4.0; hồ sơ GPA 3.2 là tự nhập → giữ nguyên
+    // 12 lần sửa, mỗi trang 5: trang 3 còn 2 lần cũ nhất; trang 0 về trang 1; pageSize quá lớn bị chặn ở 50
+    [Fact]
+    public async Task History_PagesNewestFirst()
+    {
+        var (service, repo, _) = Create(Seeded());
+        var start = new DateTime(2026, 11, 1, 0, 0, 0, DateTimeKind.Utc);
+        for (var i = 0; i < 12; i++)
+            repo.Audits.Add(new AuditLog { Action = GradeScaleSettingService.AuditAction, CreatedAt = start.AddMinutes(i) });
+
+        var last = await service.GetHistoryAsync(3, 5);
+        Assert.Equal(12, last.TotalCount);
+        Assert.Equal(3, last.TotalPages);
+        Assert.Equal([start.AddMinutes(1), start], last.Items.Select(x => x.ChangedAt));
+
+        var first = await service.GetHistoryAsync(0, 500);
+        Assert.Equal(1, first.Page);
+        Assert.Equal(GradeScaleSettingService.MaxHistoryPageSize, first.PageSize);
+        Assert.Equal(start.AddMinutes(11), first.Items[0].ChangedAt);
+    }
+
+    // TB học bạ 8.22: bảng mặc định ra 3.573, DB lưu numeric(5,2) nên là 3.57; bảng mới (0 → 0, 5 → 2, 8 → 4) ra 4.0.
+    // Hồ sơ GPA 3.57 khớp bảng cũ → GPA lấy từ học bạ → đổi thành 4.0; hồ sơ GPA 3.2 là tự nhập → giữ nguyên
     [Fact]
     public async Task Update_RecomputesOnlyProfilesWhoseGpaCameFromTranscript()
     {
         var seeded = Seeded();
         var (service, repo, _) = Create(seeded);
-        var fromTranscript = new StudentProfile { OverallGpa = 3.5m, GradeScale = GradeScales.Scale10 };
+        var fromTranscript = new StudentProfile { OverallGpa = 3.57m, GradeScale = GradeScales.Scale10 };
         var typedByStudent = new StudentProfile { OverallGpa = 3.2m, GradeScale = GradeScales.Scale10 };
         repo.TranscriptProfiles.Add((fromTranscript, Scores822()));
         repo.TranscriptProfiles.Add((typedByStudent, Scores822()));
@@ -170,6 +232,33 @@ public class GradeScaleSettingServiceTests
         Assert.Equal(3.2m, typedByStudent.OverallGpa);
         using var detail = JsonDocument.Parse(Assert.Single(repo.Audits).DetailJson!);
         Assert.Equal(1, detail.RootElement.GetProperty("recomputedProfiles").GetInt32());
+    }
+
+    // DB còn bảng WES kiểu "table", mod bấm "Dùng bảng mặc định" rồi lưu. TB học bạ 8.22:
+    // - hồ sơ tính trước khi đổi code (tra bậc thang WES) là 3.5
+    // - hồ sơ tính sau khi đổi code nhưng trước khi mod lưu (nội suy trên mốc WES 8.0 → 3.5, 8.5 → 3.7) là 3.588 → 3.59
+    // Cả hai đều từ học bạ → đổi thành 3.57 (bảng mặc định); hồ sơ tự nhập 3.2 giữ nguyên
+    [Fact]
+    public async Task Update_LegacyWesTableToDefault_RecomputesStepAndInterpolatedProfiles()
+    {
+        var legacy = LegacyWes();
+        var (service, repo, _) = Create(legacy);
+        var steppedBefore = new StudentProfile { OverallGpa = 3.5m, GradeScale = GradeScales.Scale10 };
+        var interpolatedBefore = new StudentProfile { OverallGpa = 3.59m, GradeScale = GradeScales.Scale10 };
+        var typedByStudent = new StudentProfile { OverallGpa = 3.2m, GradeScale = GradeScales.Scale10 };
+        repo.TranscriptProfiles.Add((steppedBefore, Scores822()));
+        repo.TranscriptProfiles.Add((interpolatedBefore, Scores822()));
+        repo.TranscriptProfiles.Add((typedByStudent, Scores822()));
+        var defaults = AcademicAnalysisService.GetDefaultScaleConfig().Rules
+            .Select(r => new GradeScaleRuleInput(r.MinScore, r.Gpa4, r.LetterGrade)).ToList();
+
+        var result = await service.UpdateAsync(new UpdateGradeScaleRequest(defaults, null, legacy.CreatedAt), ModeratorId);
+
+        Assert.Equal(GradeScaleUpdateStatus.Ok, result.Status);
+        Assert.Equal(2, result.RecomputedProfiles);
+        Assert.Equal(3.57m, steppedBefore.OverallGpa);
+        Assert.Equal(3.57m, interpolatedBefore.OverallGpa);
+        Assert.Equal(3.2m, typedByStudent.OverallGpa);
     }
 
     [Fact]
@@ -228,16 +317,20 @@ public class GradeScaleSettingServiceTests
             return Task.CompletedTask;
         }
 
-        public Task<IReadOnlyList<(AuditLog Log, string? ActorName)>> GetHistoryAsync(int limit, CancellationToken ct = default) =>
-            Task.FromResult<IReadOnlyList<(AuditLog, string?)>>(
-                Audits.OrderByDescending(a => a.CreatedAt).Take(limit).Select(a => (a, (string?)"Mod")).ToList());
+        public Task<(IReadOnlyList<(AuditLog Log, string? ActorName)> Rows, int TotalCount)> GetHistoryAsync(
+            int page, int pageSize, CancellationToken ct = default)
+        {
+            IReadOnlyList<(AuditLog, string?)> rows = Audits.OrderByDescending(a => a.CreatedAt)
+                .Skip((page - 1) * pageSize).Take(pageSize).Select(a => (a, (string?)"Mod")).ToList();
+            return Task.FromResult((rows, Audits.Count));
+        }
     }
 
     private sealed class FakeProvider : IGradeScaleProvider
     {
         public int InvalidateCount { get; private set; }
         public Task<GradeScaleConfigDto> GetAsync(CancellationToken ct = default) =>
-            Task.FromResult(AcademicAnalysisService.GetDefaultWesScaleConfig());
+            Task.FromResult(AcademicAnalysisService.GetDefaultScaleConfig());
         public void Invalidate() => InvalidateCount++;
     }
 }

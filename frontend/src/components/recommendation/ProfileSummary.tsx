@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { RefreshCwIcon } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { useAssistant } from "@/components/assistant/AssistantProvider";
+import { useGradeScale } from "@/hooks/use-grade-scale";
 import { profileFlowApi } from "@/lib/profile-flow-api";
 import { draftGpa } from "@/lib/profile-flow-options";
 import { formatGpa, formatScore, formatUsd } from "@/lib/recommendation-labels";
@@ -117,20 +118,29 @@ interface ProfileSummaryProps {
 // Việc thử đổi GPA, SAT, ngân sách... nằm ở panel "Mô phỏng hồ sơ" (ProfileSimulator).
 export function ProfileSummary({ rec, onRerun }: ProfileSummaryProps) {
   const { openPanel } = useAssistant();
-  const [flowProfile, setFlowProfile] = useState<FlowProfile | null>(null);
+  const [flowData, setFlowData] = useState<{ draft: ProfileFlowDraft; meta: ProfileMetadataResponse } | null>(null);
+  const gradeScale = useGradeScale(); // GPA thang 4 quy đổi theo bảng moderator sửa, tính lại khi bảng tải xong
 
   // Đọc nháp 6 bước một lần; lỗi thì ẩn khối đánh giá
   useEffect(() => {
     let cancelled = false;
     Promise.all([profileFlowApi.getFlowState(), profileFlowApi.getMetadata()])
       .then(([state, meta]) => {
-        if (!cancelled && state?.draft) setFlowProfile(profileFromDraft(state.draft, meta));
+        if (!cancelled && state?.draft) setFlowData({ draft: state.draft, meta });
       })
       .catch(() => {});
     return () => {
       cancelled = true;
     };
   }, []);
+
+  // gradeScale đổi (bảng trong DB tải xong) thì dựng lại để GPA đúng bảng
+  const flowProfile = useMemo(
+    () => (flowData ? profileFromDraft(flowData.draft, flowData.meta) : null),
+    // draftGpa đọc bảng qua biến chung, nên phải tự thêm gradeScale để tính lại khi bảng đổi
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [flowData, gradeScale],
+  );
 
   const realStudent = flowProfile?.student ?? null;
   const student = realStudent;

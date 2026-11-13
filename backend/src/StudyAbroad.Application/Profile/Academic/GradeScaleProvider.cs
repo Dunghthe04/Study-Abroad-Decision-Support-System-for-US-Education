@@ -28,7 +28,7 @@ public class GradeScaleProvider(IAcademicAnalysisRepository repository, IMemoryC
             return cached;
 
         var setting = await repository.GetAppSettingByKeyAsync(AcademicConstants.GradeScale10AppSettingKey, ct);
-        var config = GradeScale.Parse(setting?.ValueJson) ?? AcademicAnalysisService.GetDefaultWesScaleConfig();
+        var config = GradeScale.Parse(setting?.ValueJson) ?? AcademicAnalysisService.GetDefaultScaleConfig();
 
         cache.Set(CacheKey, config, CacheDuration);
         return config;

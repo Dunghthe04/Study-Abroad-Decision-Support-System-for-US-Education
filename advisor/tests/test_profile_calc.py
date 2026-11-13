@@ -4,6 +4,7 @@ from datetime import date
 
 from app.schemas.chat import ProfileField
 from app.services.profile_calc import calc_profile
+from tests.vef import VEF
 
 TODAY = date(2026, 11, 5)
 MARKS = {"gpa4": 3.6, "english": {"ielts": 6.5, "toefl": 80, "duolingo": 110}}
@@ -36,12 +37,13 @@ def test_levels_text():
         None,
         TODAY,
         benchmarks=MARKS,
+        gpa_table=VEF,
     )
-    assert out["gpa_level"] == "3.5 thang 4, trung bình (TB các trường 3.6)"
+    assert out["gpa_level"] == "3.5 thang 4 (quy đổi tham khảo), trung bình (TB các trường 3.6)"
     assert out["english_level"] == "IELTS 6.5, trung bình (mốc phổ biến 6.5)"
     assert out["sat_level"] == "1250, mức trung bình"
     assert out["budget_level"] == "35.000 – 50.000 USD mỗi năm, mức sát"
-    assert out["scholarship_chance"] == "cao"  # 8/10 → 3.5 theo WES là học lực mạnh
+    assert out["scholarship_chance"] == "cao"  # 8/10 → 3.5 theo mốc VEF là học lực mạnh
 
 
 def english(kind: str, score: float, marks: dict | None = MARKS) -> str:
@@ -84,9 +86,13 @@ def test_activities_give_ec_tier():
 
 def test_middle_school_gpa_is_target():
     out = calc_profile(
-        prof(current_level="middle_school", gpa={"value": 9, "scale": 10}), None, TODAY, benchmarks=MARKS
+        prof(current_level="middle_school", gpa={"value": 9, "scale": 10}),
+        None,
+        TODAY,
+        benchmarks=MARKS,
+        gpa_table=VEF,
     )
-    assert out["gpa_level"] == "mục tiêu 4 thang 4, cao (TB các trường 3.6)"
+    assert out["gpa_level"] == "mục tiêu 3.75 thang 4 (quy đổi tham khảo), cao (TB các trường 3.6)"
 
 
 def test_grade_by_year_lists_scores_without_judging():

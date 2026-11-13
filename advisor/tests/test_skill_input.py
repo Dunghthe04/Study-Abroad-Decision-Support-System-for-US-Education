@@ -6,6 +6,7 @@ from app.schemas.chat import ChatState, ProfileField
 from app.schemas.slm import CALC_KEYS, PROFILE_KEYS, SkillRequest
 from app.services.skill_input import NONE_TEXT, profile_to_skill_input, skill_request_of
 from app.services.skills.buttons import NONE, UNKNOWN
+from tests.vef import VEF_RULES
 
 
 def field(value, status="confirmed") -> ProfileField:
@@ -162,32 +163,36 @@ def ask(state: ChatState) -> SkillRequest:
 
 
 def test_calculated_lines_go_to_tinh_san_not_into_ho_so():
-    req = ask(ChatState(profile=FULL, transcript=TRANSCRIPT))
+    req = ask(ChatState(grade_scale=VEF_RULES, profile=FULL, transcript=TRANSCRIPT))
 
     assert req.loai == "ho_so"
     assert req.ho_so == profile_to_skill_input(FULL)  # hồ sơ giữ nguyên, không lẫn dòng tính sẵn
     assert set(req.tinh_san) <= set(CALC_KEYS)
     assert req.tinh_san["grade_by_year"] == "Lớp 10: 7.5; Lớp 11: 7.8"
-    assert req.tinh_san["gpa_level"] == "3.5 thang 4"  # chưa có mốc trường thì chỉ ghi điểm
+    assert (
+        req.tinh_san["gpa_level"] == "3.5 thang 4 (quy đổi tham khảo)"
+    )  # chưa có mốc trường thì chỉ ghi điểm
     assert req.tinh_san["english_level"] == "IELTS 6.5"
     assert req.tinh_san["timeline"] == "hôm nay 11/2026, nhập học kỳ Fall 08/2027, còn 9 tháng"
 
 
 def test_calculated_lines_compare_with_school_benchmarks():
-    req = ask(ChatState(profile=FULL, benchmarks={"gpa4": 3.6, "english": {"ielts": 6.5}}))
+    req = ask(
+        ChatState(grade_scale=VEF_RULES, profile=FULL, benchmarks={"gpa4": 3.6, "english": {"ielts": 6.5}})
+    )
 
-    assert req.tinh_san["gpa_level"] == "3.5 thang 4, trung bình (TB các trường 3.6)"
+    assert req.tinh_san["gpa_level"] == "3.5 thang 4 (quy đổi tham khảo), trung bình (TB các trường 3.6)"
     assert req.tinh_san["english_level"] == "IELTS 6.5, trung bình (mốc phổ biến 6.5)"
 
 
 def test_the_whole_transcript_is_never_sent():
-    req = ask(ChatState(profile=FULL, transcript=TRANSCRIPT))
+    req = ask(ChatState(grade_scale=VEF_RULES, profile=FULL, transcript=TRANSCRIPT))
 
     assert "Hóa học" not in " ".join([*req.ho_so.values(), *req.tinh_san.values()])
 
 
 def test_overall_gpa_has_no_grade_by_year():
-    req = ask(ChatState(profile=FULL))
+    req = ask(ChatState(grade_scale=VEF_RULES, profile=FULL))
 
     assert "grade_by_year" not in req.tinh_san
     assert "gpa_level" in req.tinh_san

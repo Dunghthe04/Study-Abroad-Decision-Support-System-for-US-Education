@@ -47,7 +47,8 @@ class ChatContext(CamelModel):
     city: str | None = None
 
 
-# Một dòng bảng quy đổi grade_scale.10, khớp record GradeScaleRuleDto bên .NET. Tra GPA chỉ dùng min_score (cận dưới)
+# Một dòng bảng quy đổi grade_scale.10, khớp record GradeScaleRuleDto bên .NET. min_score là mốc điểm, GPA nội suy giữa
+# hai mốc kề nhau (gpa10_to_4); max_score, letter_grade không dùng
 class GradeScaleRule(CamelModel):
     min_score: float
     max_score: float | None = None
@@ -82,7 +83,7 @@ class ChatState(CamelModel):
     # Mốc từ dữ liệu trường cùng bậc học ({"gpa4": 3.6, "english": {"ielts": 6.5, ...}}), .NET tính và gửi mỗi lượt;
     # chỉ dùng để ghi mức GPA / tiếng Anh cho skill ho_so. None = chưa có dữ liệu trường thì chỉ ghi điểm
     benchmarks: dict[str, Any] | None = None
-    # Bảng quy đổi điểm thang 10 sang GPA 4 (grade_scale.10 moderator sửa), .NET gửi mỗi lượt; None = dùng bảng WES mặc định
+    # Bảng quy đổi điểm thang 10 sang GPA 4 (grade_scale.10 moderator sửa), .NET gửi mỗi lượt; None = không quy đổi GPA
     grade_scale: list[GradeScaleRule] | None = None
     study_level: StudyLevel | None = None  # bậc học học sinh quan tâm (từ .NET), dùng để lọc kiến thức
     # Câu tư vấn bị hoãn vì thiếu hồ sơ (giữ nguyên ý SLM đã tách: loại, đoạn chữ, thực thể).

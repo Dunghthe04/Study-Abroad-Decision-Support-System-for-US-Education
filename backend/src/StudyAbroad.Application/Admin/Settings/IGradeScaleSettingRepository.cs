@@ -17,6 +17,7 @@ public interface IGradeScaleSettingRepository
     /// <summary>Lưu bảng (thêm nếu mới), GPA hồ sơ đã sửa và audit trong cùng một lần SaveChanges.</summary>
     Task SaveAsync(AppSetting setting, bool isNew, AuditLog audit, CancellationToken ct = default);
 
-    /// <summary>Các lần sửa gần nhất, mới trước, kèm tên người sửa.</summary>
-    Task<IReadOnlyList<(AuditLog Log, string? ActorName)>> GetHistoryAsync(int limit, CancellationToken ct = default);
+    /// <summary>Một trang lịch sử sửa (mới trước, kèm tên người sửa) và tổng số lần sửa.</summary>
+    Task<(IReadOnlyList<(AuditLog Log, string? ActorName)> Rows, int TotalCount)> GetHistoryAsync(
+        int page, int pageSize, CancellationToken ct = default);
 }

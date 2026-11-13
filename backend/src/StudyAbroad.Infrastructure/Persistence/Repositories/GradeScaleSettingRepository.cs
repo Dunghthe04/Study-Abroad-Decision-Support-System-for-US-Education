@@ -32,18 +32,21 @@ public class GradeScaleSettingRepository(AppDbContext db) : IGradeScaleSettingRe
         await db.SaveChangesAsync(ct); // bảng, GPA hồ sơ và lịch sử cùng lưu hoặc cùng không
     }
 
-    public async Task<IReadOnlyList<(AuditLog Log, string? ActorName)>> GetHistoryAsync(int limit, CancellationToken ct = default)
+    public async Task<(IReadOnlyList<(AuditLog Log, string? ActorName)> Rows, int TotalCount)> GetHistoryAsync(
+        int page, int pageSize, CancellationToken ct = default)
     {
-        var rows = await db.AuditLogs.AsNoTracking()
-            .Where(a => a.Action == GradeScaleSettingService.AuditAction)
+        var logs = db.AuditLogs.AsNoTracking().Where(a => a.Action == GradeScaleSettingService.AuditAction);
+        var total = await logs.CountAsync(ct);
+        var rows = await logs
             .OrderByDescending(a => a.CreatedAt)
-            .Take(limit)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .Select(a => new
             {
                 Log = a,
                 ActorName = db.Users.Where(u => u.Id == a.ActorUserId).Select(u => u.FullName).FirstOrDefault(),
             })
             .ToListAsync(ct);
-        return rows.Select(r => (r.Log, r.ActorName)).ToList();
+        return (rows.Select(r => (r.Log, r.ActorName)).ToList(), total);
     }
 }

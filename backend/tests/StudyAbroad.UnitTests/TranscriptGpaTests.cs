@@ -39,7 +39,7 @@ public class TranscriptGpaTests
         ]);
 
         Assert.Equal(8.22m, TranscriptGpa.SubjectAverage10(step2));
-        Assert.Equal(3.5m, TranscriptGpa.Gpa4(step2)); // 8.22 theo bảng WES (từ 8.0) là 3.5
+        Assert.Equal(3.57m, Math.Round(TranscriptGpa.Gpa4(step2)!.Value, 2)); // 8.22 nội suy giữa 8 → 3.5 và 9.5 → 4.0 ≈ 3.573
     }
 
     [Fact]
@@ -65,18 +65,18 @@ public class TranscriptGpaTests
         Assert.Null(TranscriptGpa.SubjectAverage10(Array.Empty<TranscriptScore>()));
     }
 
-    // Bảng WES, chỉ xét cận dưới: 8.995 không rơi vào khe 8.99–9.0 của bảng
+    // Bảng mặc định mốc THPT EducationUSA, nội suy giữa hai mốc kề nhau: không còn nhảy bậc ở sát mốc
     [Theory]
     [InlineData(10, 4.0)]
-    [InlineData(9.0, 4.0)]
-    [InlineData(8.995, 3.7)]
-    [InlineData(8.5, 3.7)]
+    [InlineData(9.5, 4.0)]
+    [InlineData(8.9, 3.8)]
     [InlineData(8.0, 3.5)]
-    [InlineData(7.99, 3.0)]
-    [InlineData(4.0, 1.0)]
-    [InlineData(3.99, 0)]
+    [InlineData(7.995, 3.49875)]
+    [InlineData(7.0, 3.25)]
+    [InlineData(4.0, 1.6)]
+    [InlineData(3.99, 1.596)]
     [InlineData(0, 0)]
-    public void To4_FollowsWesTableLowerBounds(double gpa10, double expected)
+    public void To4_InterpolatesDefaultAnchors(double gpa10, double expected)
     {
         Assert.Equal((decimal)expected, TranscriptGpa.To4((decimal)gpa10));
     }

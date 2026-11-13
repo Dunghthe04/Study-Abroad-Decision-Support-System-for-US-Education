@@ -24,6 +24,7 @@ Hồ sơ của học sinh này:
 ## 4. CÁCH HIỂU DỮ LIỆU
 - Cột "Mức" do code so với dữ liệu các trường trong hệ thống: chép nguyên chữ (thấp / trung bình / cao, mốc so sánh), không tự xếp lại.
 - GPA ở cột Mức đã đổi sang thang 4 theo bảng quy đổi của hệ thống. Nói GPA thì nói cả điểm học sinh nhập và số thang 4 này.
+- GPA có ghi "(quy đổi tham khảo)": nhắc nhẹ một lần, ngay chỗ nói GPA, rằng số thang 4 chỉ là quy đổi tham khảo, mỗi trường Mỹ tự đánh giá học bạ nên có thể chênh một chút. Không lặp lại, không làm học sinh lo.
 - "Chưa có dữ liệu trường để so": có điểm nhưng hệ thống chưa có mốc. Chỉ nêu điểm, không nói cao hay thấp.
 - "Không có": học sinh nói là không có. "Chưa rõ": học sinh chưa biết. Mục không có trong bảng là học sinh chưa nói, không nhắc tới.
 - Bang có người thân, bang muốn học, loại trường: chỉ ghi nhận, không dùng để chọn hay loại trường.

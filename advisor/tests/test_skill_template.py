@@ -12,6 +12,7 @@ from app.services.skill_input import skill_request_of
 from app.services.skill_template import build_skill, fill_du_lieu, fill_noi_dung, tasks_of
 from app.services.skills.skill_danh_gia import NUMBER, allowed_numbers, gpa_table_of, read_facts, readings
 from app.services.skills.skill_lo_trinh import choose_route, timeline_numbers
+from tests.vef import VEF, VEF_RULES
 
 TODAY = date(2026, 11, 5)
 SECTIONS = (
@@ -77,6 +78,7 @@ def fields(values: dict) -> dict[str, ProfileField]:
 
 
 def state_of(values: dict, benchmarks: dict | None = BENCHMARKS, **extra) -> ChatState:
+    extra.setdefault("grade_scale", VEF_RULES)  # .NET luôn gửi mốc quy đổi
     return ChatState(profile=fields(values), transcript=TRANSCRIPT, benchmarks=benchmarks, **extra)
 
 
@@ -154,7 +156,10 @@ def test_none_and_unknown_values():
 def test_without_benchmarks_says_no_mark():
     skill = skill_of(state_of(FULL, benchmarks=None))
 
-    assert "Chưa có dữ liệu trường để so: GPA 3.7 thang 4; Tiếng Anh IELTS 6.5; ACT 29." in skill
+    assert (
+        "Chưa có dữ liệu trường để so: GPA 3.68 thang 4 (quy đổi tham khảo); Tiếng Anh IELTS 6.5; ACT 29."
+        in skill
+    )
 
 
 def test_low_gpa_and_refused_visa_are_attention():
@@ -162,7 +167,10 @@ def test_low_gpa_and_refused_visa_are_attention():
 
     skill = skill_of(state_of(values))
 
-    assert "Cần lưu ý nhất: GPA 3 thang 4, thấp (TB các trường 3.73); Visa: đã từng bị từ chối visa." in skill
+    assert (
+        "Cần lưu ý nhất: GPA 3.1 thang 4 (quy đổi tham khảo), thấp (TB các trường 3.73); Visa: đã từng bị từ chối visa."
+        in skill
+    )
     assert "- Visa: chuẩn bị giải thích rõ lần bị từ chối trước." in skill
 
 
@@ -197,13 +205,13 @@ def test_gpa_uses_grade_scale_table():
 def test_no_number_outside_data(values):
     state = state_of(values)
     req = skill_request_of(state, "x", TODAY)
-    route, facts, intake = choose_route(state.profile, TODAY)
-    allowed = allowed_numbers(read_facts(state.profile, TODAY)) | timeline_numbers(intake, route)
+    route, facts, intake = choose_route(state.profile, TODAY, VEF)
+    allowed = allowed_numbers(read_facts(state.profile, TODAY, VEF)) | timeline_numbers(intake, route)
     for text in (*req.ho_so.values(), *req.tinh_san.values()):
         for token in NUMBER.findall(text):
             allowed |= readings(token)
 
-    filled = fill_du_lieu(req) + fill_noi_dung(req, ["assessment", "roadmap"], state.profile, TODAY)
+    filled = fill_du_lieu(req) + fill_noi_dung(req, ["assessment", "roadmap"], state.profile, TODAY, VEF)
 
     for token in NUMBER.findall(filled):
         assert any(abs(r - a) < 0.005 for r in readings(token) for a in allowed), token
