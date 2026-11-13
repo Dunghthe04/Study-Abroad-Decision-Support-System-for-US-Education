@@ -272,13 +272,13 @@ export function AddTargetSchoolButton({
   const getCategoryLabel = (cat?: string | null) => {
     switch (cat?.toLowerCase()) {
       case "reach":
-        return { label: groupLabel("R"), color: "destructive" as const };
+        return { label: groupLabel("R"), color: "reach" as const };
       case "match":
         return { label: groupLabel("M"), color: "brand" as const };
       case "safety":
-        return { label: groupLabel("S"), color: "default" as const };
+        return { label: groupLabel("S"), color: "ok" as const };
       default:
-        return { label: "Chưa phân loại", color: "outline" as const };
+        return { label: "Chưa phân loại", color: "neutral" as const };
     }
   };
 
@@ -293,7 +293,7 @@ export function AddTargetSchoolButton({
         disabled={isChecking}
         className={cn(
           "gap-2 hover:bg-brand-wash hover:text-brand-ink hover:border-brand/40 transition-colors",
-          isSaved && "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300",
+          isSaved && "border-ok/25 bg-ok-wash text-ok hover:bg-ok-wash/80 hover:text-ok",
           className
         )}
       >
@@ -304,7 +304,7 @@ export function AddTargetSchoolButton({
           </>
         ) : isSaved ? (
           <>
-            <BookmarkCheckIcon className="size-4 text-emerald-600 dark:text-emerald-400" />
+            <BookmarkCheckIcon className="size-4 text-ok" />
             <span>Đã trong mục tiêu</span>
           </>
         ) : (
@@ -330,7 +330,7 @@ export function AddTargetSchoolButton({
             </DialogHeader>
 
             {error && (
-              <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+              <div className="rounded-md border border-risk/25 bg-risk-wash p-3 text-sm text-risk">
                 {error}
               </div>
             )}
@@ -417,7 +417,7 @@ export function AddTargetSchoolButton({
           <div className="space-y-4">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-lg">
-                <BookmarkCheckIcon className="size-5 text-emerald-600" />
+                <BookmarkCheckIcon className="size-5 text-ok" />
                 Thông tin trường mục tiêu
               </DialogTitle>
               <DialogDescription>
@@ -426,7 +426,7 @@ export function AddTargetSchoolButton({
             </DialogHeader>
 
             {error && (
-              <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+              <div className="rounded-md border border-risk/25 bg-risk-wash p-3 text-sm text-risk">
                 {error}
               </div>
             )}
@@ -466,10 +466,10 @@ export function AddTargetSchoolButton({
                 {isEditingRound && (
                   <div className="rounded-md border border-brand/30 bg-brand/5 p-2.5 space-y-2 mt-1">
                     <span className="text-xs font-semibold text-foreground block">
-                      [UC-32] Chọn vòng nộp hồ sơ:
+                      Chọn vòng nộp hồ sơ
                     </span>
                     <div className="grid grid-cols-2 gap-1.5">
-                      {APPLICATION_ROUNDS.map((r) => (
+                      {APPLICATION_ROUNDS.filter((r) => r.value !== "none").map((r) => (
                         <Button
                           key={r.value}
                           type="button"
@@ -499,7 +499,7 @@ export function AddTargetSchoolButton({
                         size="xs"
                         onClick={() => handleUpdateRound(selectedEditRound)}
                         disabled={isUpdatingRound || !selectedEditRound}
-                        className="h-6 text-xs bg-brand text-white hover:bg-brand/90 gap-1"
+                        className="h-6 gap-1 text-xs"
                       >
                         {isUpdatingRound && <Loader2 className="size-3 animate-spin" />}
                         Lưu vòng nộp
