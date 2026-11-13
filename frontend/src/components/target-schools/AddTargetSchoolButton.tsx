@@ -272,13 +272,13 @@ export function AddTargetSchoolButton({
   const getCategoryLabel = (cat?: string | null) => {
     switch (cat?.toLowerCase()) {
       case "reach":
-        return { label: groupLabel("R"), color: "destructive" as const };
+        return { label: groupLabel("R"), color: "reach" as const };
       case "match":
         return { label: groupLabel("M"), color: "brand" as const };
       case "safety":
-        return { label: groupLabel("S"), color: "default" as const };
+        return { label: groupLabel("S"), color: "ok" as const };
       default:
-        return { label: "Chưa phân loại", color: "outline" as const };
+        return { label: "Chưa phân loại", color: "neutral" as const };
     }
   };
 
