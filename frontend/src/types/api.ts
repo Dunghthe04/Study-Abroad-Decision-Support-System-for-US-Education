@@ -48,6 +48,136 @@ export interface StudyCenter {
   certifiedCounselorCount?: number | null;
   legalDocumentUrls?: string[];
   verificationNote?: string | null;
+  emailVerifiedAt?: string | null;
+  phoneVerifiedAt?: string | null;
+  feeMin?: number | null;
+  feeMax?: number | null;
+  feeDescription?: string | null;
+  registrantName?: string | null;
+  registrantPosition?: string | null;
+}
+
+export interface RegisterCenterRequest {
+  email: string;
+  password: string;
+  confirmPassword: string;
+  centerName: string;
+  phone: string;
+  registrantName: string;
+  registrantPosition?: string;
+  agreeTerms: boolean;
+  agreeTruthfulnessCommitment: boolean;
+}
+
+export interface VerifyCenterEmailRequest {
+  email: string;
+  code: string;
+}
+
+export interface VerifyPhoneOtpRequest {
+  code: string;
+}
+
+export interface VerificationDocumentUploadDto {
+  documentType: string;
+  fileUrl: string;
+  fileName: string;
+  fileSize: number;
+  contentType: string;
+}
+
+export interface CenterVerificationDocumentDto {
+  id: string;
+  requestId: string;
+  documentType: string;
+  fileUrl: string;
+  fileName: string;
+  fileSize: number;
+  contentType: string;
+  uploadedAt: string;
+}
+
+export interface SubmitVerificationDto {
+  legalName: string;
+  taxCode: string;
+  address: string;
+  legalRepresentative: string;
+  website?: string | null;
+  documents?: VerificationDocumentUploadDto[];
+}
+
+export interface CenterVerificationDto {
+  id: string;
+  centerId: string;
+  requestedByUserId: string;
+  legalName: string;
+  taxCode: string;
+  address: string;
+  legalRepresentative: string;
+  website?: string | null;
+  status: string;
+  submittedAt: string;
+  reviewedByUserId?: string | null;
+  reviewedAt?: string | null;
+  rejectionReason?: string | null;
+  reviewNotes?: string | null;
+  isNationalRegistryMatched: boolean;
+  isBusinessOperating: boolean;
+  isRepresentativeValid: boolean;
+  documents: CenterVerificationDocumentDto[];
+  centerName?: string | null;
+  centerCode?: string | null;
+  centerEmail?: string | null;
+  centerPhone?: string | null;
+  emailVerifiedAt?: string | null;
+  phoneVerifiedAt?: string | null;
+}
+
+export interface CenterVerificationStatusDto {
+  verificationStatus: string;
+  isEmailVerified: boolean;
+  emailVerifiedAt?: string | null;
+  isPhoneVerified: boolean;
+  phoneVerifiedAt?: string | null;
+  currentRequest?: CenterVerificationDto | null;
+  rejectionReason?: string | null;
+}
+
+export interface ReviewCenterVerificationRequest {
+  action: "approve" | "reject" | "changes_requested" | "revoke";
+  isNationalRegistryMatched?: boolean;
+  isBusinessOperating?: boolean;
+  isRepresentativeValid?: boolean;
+  reviewNotes?: string | null;
+  rejectionReason?: string | null;
+}
+
+export interface UpdateCenterProfileRequest {
+  name?: string;
+  description?: string | null;
+  website?: string | null;
+  address?: string | null;
+  city?: string | null;
+  district?: string | null;
+  services?: string[];
+  studyLevels?: string[];
+  centerType?: string;
+  establishedYear?: number | null;
+  staffCount?: number | null;
+  feeMin?: number | null;
+  feeMax?: number | null;
+  feeDescription?: string | null;
+  logoUrl?: string | null;
+  coverImageUrl?: string | null;
+  /** Thông tin pháp lý: chỉ gửi khi trung tâm chưa được xác minh. */
+  taxCode?: string | null;
+  legalRepresentative?: string | null;
+  licenseNumber?: string | null;
+  licenseIssuedBy?: string | null;
+  licenseIssuedDate?: string | null;
+  legalComplianceMode?: string | null;
+  trainingLicenseNumber?: string | null;
+  certifiedCounselorCount?: number | null;
 }
 
 export interface VerifyStudyCenterRequest {
@@ -508,3 +638,21 @@ export interface SendLeadMessageResultDto {
   leadStatus: string;
 }
 
+
+/** Đánh giá công khai của trung tâm (tên người đánh giá đã được rút gọn ở backend). */
+export interface CenterReviewDto {
+  id: string;
+  reviewerName: string;
+  reviewerRole: "student" | "parent";
+  isVerified: boolean;
+  createdAt: string;
+  rating: number;
+  comment?: string | null;
+}
+
+/** Đánh giá hiển thị + số liệu tổng hợp tính từ chính các đánh giá đó. */
+export interface CenterReviewsDto {
+  totalCount: number;
+  averageRating: number | null;
+  items: CenterReviewDto[];
+}
