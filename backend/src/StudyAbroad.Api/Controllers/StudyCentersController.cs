@@ -109,7 +109,7 @@ public class StudyCentersController(IStudyCenterService service) : ControllerBas
         return Ok(result.Center);
     }
 
-    /// <summary>Chat (B6) lấy tối đa 3 trung tâm đã xác minh cho một dịch vụ; cùng thành phố xếp trước.</summary>
+    /// <summary>Chat (B6) lấy các trung tâm đã xác minh cho một dịch vụ (tối đa 20); nêu thành phố thì chỉ lấy ở thành phố đó.</summary>
     [HttpGet("referrals")]
     public async Task<ActionResult<IReadOnlyList<StudyCenterDto>>> Refer(
         [FromQuery] CenterReferralQuery query, CancellationToken ct)
@@ -122,5 +122,15 @@ public class StudyCentersController(IStudyCenterService service) : ControllerBas
     /// <summary>Các thành phố đang có trung tâm gợi ý được (chat đưa cho AI chọn thành phố của học sinh).</summary>
     [HttpGet("referral-cities")]
     public Task<IReadOnlyList<string>> ReferralCities(CancellationToken ct) => service.GetReferralCitiesAsync(ct);
+
+    /// <summary>Thành phố có trung tâm đúng dịch vụ kèm số trung tâm (chat đưa nút chọn thành phố cho học sinh).</summary>
+    [HttpGet("referral-city-counts")]
+    public async Task<ActionResult<IReadOnlyList<CityCount>>> ReferralCityCounts(
+        [FromQuery] CenterReferralQuery query, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(query.Service))
+            return BadRequest("service is required");
+        return Ok(await service.GetReferralCityCountsAsync(query, ct));
+    }
 
 }
