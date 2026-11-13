@@ -20,6 +20,8 @@ public record AdvisorStreamEvent(string Type, int? Answers = null, string? Text 
 /// <param name="Benchmarks">Mốc GPA / tiếng Anh từ dữ liệu trường (ChatBenchmarks) cho skill ho_so; null = chưa có dữ liệu.</param>
 /// <param name="HasCommittedProfile">Học sinh đã từng lưu hồ sơ chính thức (ProfileFlowState.HasCommittedProfile): advisor chỉ hỏi
 /// mục bắt buộc còn thiếu; false thì hỏi đủ như form; null = advisor tự đoán theo các ô hồ sơ như cũ.</param>
+/// <param name="FromForm">Tin do form gửi ngay sau khi lưu hồ sơ chính thức (frontend đặt, .NET chuyển nguyên sang advisor):
+/// form đã là bước rà soát nên advisor bỏ bảng xác nhận X1 đang treo và trả lời luôn câu học sinh hỏi.</param>
 public record AdvisorChatRequest(
     IReadOnlyList<ChatMessage> Messages,
     string? SessionId = null,
@@ -33,7 +35,8 @@ public record AdvisorChatRequest(
     IReadOnlyList<ChatSchool>? OtherSchools = null,
     SimulationOverrides? Simulation = null,
     IReadOnlyList<GradeScaleRuleDto>? GradeScale = null,
-    bool? HasCommittedProfile = null);
+    bool? HasCommittedProfile = null,
+    bool FromForm = false);
 
 /// <summary>
 /// Hành động có cấu trúc từ một nút trên giao diện (không qua SLM hiểu câu): Type là goal_seek hoặc explain,

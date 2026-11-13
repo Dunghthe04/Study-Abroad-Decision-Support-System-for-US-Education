@@ -638,6 +638,21 @@ public class ChatServiceTests
         Assert.Equal(committed, json.GetProperty("hasCommittedProfile").GetBoolean());
     }
 
+    // Form vừa lưu hồ sơ rồi gửi câu sang chat: cờ FromForm của trình duyệt chuyển nguyên sang advisor để bỏ bảng X1 đang treo
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PassesFromFormToAdvisor(bool fromForm)
+    {
+        var advisor = new FakeAdvisor("B3");
+
+        await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow { HasCommittedProfile = true })
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello, FromForm: fromForm));
+
+        var json = JsonSerializer.SerializeToElement(advisor.LastRequest, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        Assert.Equal(fromForm, json.GetProperty("fromForm").GetBoolean());
+    }
+
     // Bảng quy đổi gửi advisor lấy từ DB (provider), bảng trình duyệt gửi bị bỏ
     [Fact]
     public async Task SendsGradeScaleFromServer_IgnoresBrowserTable()
