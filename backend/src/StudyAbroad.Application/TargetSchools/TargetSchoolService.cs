@@ -296,16 +296,14 @@ public class TargetSchoolService(
         {
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
-            var normalizedRound = round.ToUpperInvariant();
+            var roundKey = CanonicalRound(round);
             string? dateStr = null;
 
             foreach (var prop in root.EnumerateObject())
             {
-                var nameUpper = prop.Name.ToUpperInvariant();
-                if (nameUpper == normalizedRound ||
-                    (normalizedRound.Contains("EARLY DECISION") && nameUpper.Contains("ED")) ||
-                    (normalizedRound.Contains("EARLY ACTION") && nameUpper.Contains("EA")) ||
-                    (normalizedRound.Contains("REGULAR") && nameUpper.Contains("RD")))
+                if (prop.Value.ValueKind != JsonValueKind.String) continue;
+                if (string.Equals(prop.Name, round, StringComparison.OrdinalIgnoreCase) ||
+                    (roundKey != null && CanonicalRound(prop.Name) == roundKey))
                 {
                     dateStr = prop.Value.GetString();
                     break;
@@ -322,6 +320,24 @@ public class TargetSchoolService(
             // Bỏ qua lỗi cú pháp JSON nếu chuỗi deadlines không đúng định dạng
         }
 
+        return null;
+    }
+
+    /// <summary>
+    /// Chuẩn hóa tên vòng nộp (ED/EA/RD/Rolling) theo từng từ, tránh khớp nhầm chuỗi con
+    /// (vd. "REGULAR_DEADLINE" chứa "EA").
+    /// </summary>
+    private static string? CanonicalRound(string name)
+    {
+        var tokens = System.Text.RegularExpressions.Regex
+            .Split(name.ToUpperInvariant(), "[^A-Z0-9]+")
+            .Where(t => t.Length > 0)
+            .ToHashSet();
+
+        if (tokens.Contains("ED") || (tokens.Contains("EARLY") && tokens.Contains("DECISION"))) return "ED";
+        if (tokens.Contains("EA") || (tokens.Contains("EARLY") && tokens.Contains("ACTION"))) return "EA";
+        if (tokens.Contains("RD") || tokens.Contains("REGULAR")) return "RD";
+        if (tokens.Contains("ROLLING")) return "ROLLING";
         return null;
     }
 
