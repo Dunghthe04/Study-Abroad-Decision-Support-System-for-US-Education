@@ -3113,6 +3113,26 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(16)")
                         .HasColumnName("scholarship_need");
 
+                    b.Property<DateOnly?>("StandardizedPlannedDate")
+                        .HasColumnType("date")
+                        .HasColumnName("standardized_planned_date");
+
+                    b.Property<decimal?>("StandardizedPlannedTargetScore")
+                        .HasPrecision(7, 2)
+                        .HasColumnType("numeric(7,2)")
+                        .HasColumnName("standardized_planned_target_score");
+
+                    b.Property<string>("StandardizedPlannedTestType")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("standardized_planned_test_type");
+
+                    b.Property<bool>("StandardizedTestPlanned")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("standardized_test_planned");
+
                     b.Property<string>("TargetIntake")
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")

@@ -43,6 +43,15 @@ public class StudentProfile : BaseEntity
     public bool EnglishTestPlanned { get; set; }
     /// <summary>[USAS-640] tháng dự kiến thi tiếng Anh (ngày 1 của tháng)</summary>
     public DateOnly? EnglishPlannedDate { get; set; }
+    /// <summary>học sinh chưa thi bài thi chuẩn hóa học thuật (SAT/ACT/AP...), sẽ thi sau (bước 3); là cờ chung của cả mục
+    /// nên lưu ở đây, không thành một dòng profile_certifications vì có thể chưa chọn loại bài</summary>
+    public bool StandardizedTestPlanned { get; set; }
+    /// <summary>tháng dự kiến thi chuẩn hóa (ngày 1 của tháng)</summary>
+    public DateOnly? StandardizedPlannedDate { get; set; }
+    /// <summary>loại bài chuẩn hóa dự kiến (id metadata certifications: sat, act...); null = chưa chọn</summary>
+    public string? StandardizedPlannedTestType { get; set; }
+    /// <summary>điểm mục tiêu bài chuẩn hóa dự kiến</summary>
+    public decimal? StandardizedPlannedTargetScore { get; set; }
     /// <summary>kỳ thi khác ngoài cột riêng, dạng {"ap": 4}</summary>
     public string? OtherTestsJson { get; set; }
     /// <summary>bậc ngoại khóa 1–5: SLM xác nhận vai trò, phạm vi từng hoạt động rồi code tính theo công thức q, m; null nếu chưa tính</summary>

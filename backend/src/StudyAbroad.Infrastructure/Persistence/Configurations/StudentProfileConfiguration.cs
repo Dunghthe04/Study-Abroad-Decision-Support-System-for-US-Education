@@ -33,6 +33,10 @@ public class StudentProfileConfiguration : IEntityTypeConfiguration<StudentProfi
         b.Property(x => x.EnglishTestDate);
         b.Property(x => x.EnglishTestPlanned).HasDefaultValue(false);
         b.Property(x => x.EnglishPlannedDate);
+        b.Property(x => x.StandardizedTestPlanned).HasDefaultValue(false);
+        b.Property(x => x.StandardizedPlannedDate);
+        b.Property(x => x.StandardizedPlannedTestType).HasMaxLength(32);
+        b.Property(x => x.StandardizedPlannedTargetScore).HasPrecision(7, 2);
         b.Property(x => x.OtherTestsJson).HasColumnType("jsonb");
         b.Property(x => x.ExtracurricularTier);
         b.ToTable(t => t.HasCheckConstraint("ck_student_profiles_extracurricular_tier",
