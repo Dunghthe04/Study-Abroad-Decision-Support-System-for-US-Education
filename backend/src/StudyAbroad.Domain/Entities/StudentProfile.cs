@@ -21,6 +21,10 @@ public class StudentProfile : BaseEntity
     public string GradeScale { get; set; } = "10";
     /// <summary>GPA luôn ở thang 4 (nhóm đã chốt), quy đổi từ bảng điểm; form không cho nhập tay; null nếu chưa phân tích</summary>
     public decimal? OverallGpa { get; set; }
+    /// <summary>cách nhập GPA ở bước 2: overall | transcript (ProfileConstants.GpaModes); null với hồ sơ lưu trước khi có cột này</summary>
+    public string? GpaMode { get; set; }
+    /// <summary>GPA tổng thang 10 học sinh tự nhập (GpaMode = overall); OverallGpa là số quy đổi sang thang 4 từ số này</summary>
+    public decimal? OverallGpa10 { get; set; }
     public string? IntendedMajor { get; set; }
     /// <summary>kỳ muốn nhập học, dạng "Fall 2027" (Fall | Spring | Summer + năm); form bước 1 và câu B1.4 bên chat</summary>
     public string? TargetIntake { get; set; }

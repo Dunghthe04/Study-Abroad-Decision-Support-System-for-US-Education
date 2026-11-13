@@ -112,10 +112,11 @@ public class ProfileFlowService(
             var activities = await repository.GetProfileActivitiesAsync(profile.Id, ct);
             var certifications = await repository.GetProfileCertificationsAsync(profile.Id, ct);
             var certificationTypes = await LoadCertificationTypesAsync(ct);
+            var scale = await GetGradeScaleAsync(ct);
             return new ProfileFlowStateDto(
                 CurrentStep: 6,
                 CompletedSteps: [1, 2, 3, 4, 5],
-                Draft: BuildDraftFromProfile(profile, scores, activities, certifications, certificationTypes),
+                Draft: BuildDraftFromProfile(profile, scores, activities, certifications, certificationTypes, scale),
                 DraftTranscript: DraftTranscriptFileDto.FromOrNull(stored?.DraftTranscript),
                 LastUpdatedAt: profile.UpdatedAt ?? profile.CreatedAt,
                 HasCommittedProfile: true,
@@ -456,6 +457,20 @@ public class ProfileFlowService(
         var trimmed = value.Trim();
         return EducationLevelLabels.TryGetValue(trimmed, out var code) ? code : trimmed;
     }
+
+    // GPA thang 10 học sinh tự nhập lúc lưu hồ sơ. Chỉ dùng khi quy đổi theo bảng hiện tại vẫn ra đúng overall_gpa:
+    // OCR bảng điểm hay mod đổi bảng quy đổi có thể đã sửa overall_gpa, lúc đó chỉ còn số thang 4.
+    // Không đổi ngược thang 4 sang thang 10: bảng quy đổi không tuyến tính nên đổi ngược ra số học sinh không nhập
+    private static decimal? SavedGpa10(StudentProfile profile, GradeScaleConfigDto? scale) =>
+        profile.GpaMode == ProfileConstants.GpaModes.Overall
+        && profile.OverallGpa10 is { } gpa10
+        && profile.OverallGpa is { } gpa4
+        && Round2(TranscriptGpa.To4(gpa10, scale)) == Round2(gpa4)
+            ? gpa10
+            : null;
+
+    // overall_gpa là numeric(5,2): Postgres làm tròn 2 số lẻ, nửa lên
+    private static decimal Round2(decimal value) => Math.Round(value, 2, MidpointRounding.AwayFromZero);
 
     // ───────────────────────────── Commit: validate + ánh xạ ─────────────────────────────
 
@@ -917,6 +932,9 @@ public class ProfileFlowService(
         }
         // GPA chỉ tính trên server từ điểm các môn, không nhận số GPA client gửi lên
         profile.OverallGpa = TranscriptGpa.Gpa4(draft.Step2, scale);
+        // Giữ cách nhập và số thang 10 tự nhập để mở lại hồ sơ hiện đúng số học sinh đã nhập
+        profile.GpaMode = TranscriptGpa.Mode(draft.Step2);
+        profile.OverallGpa10 = profile.GpaMode == ProfileConstants.GpaModes.Overall ? draft.Step2?.ManualGpa10Scale : null;
 
         // Bước 3
         var certifications = BuildCertifications(draft.Step3, certificationTypes);
@@ -1118,7 +1136,8 @@ public class ProfileFlowService(
         IReadOnlyList<TranscriptScore> scores,
         IReadOnlyList<ProfileActivity> activities,
         IReadOnlyList<ProfileCertification> certifications,
-        IReadOnlyDictionary<string, CertificationMetadataItem> certificationTypes)
+        IReadOnlyDictionary<string, CertificationMetadataItem> certificationTypes,
+        GradeScaleConfigDto? scale)
     {
         var step1 = new FlowGoalDraftDto(
             CurrentEducationLevel: profile.CurrentEducationLevel ?? NormalizeEducationLevel(profile.EducationSystem) switch
@@ -1156,7 +1175,7 @@ public class ProfileFlowService(
             if (index >= 0) year.Subjects[index] = subject;
             else year.Subjects.Add(subject);
         }
-        var step2 = new FlowTranscriptDraftDto(years, profile.OverallGpa, profile.OverallGpa is { } g ? Math.Round(g / 4m * 10m, 2) : null);
+        var step2 = new FlowTranscriptDraftDto(years, profile.OverallGpa, SavedGpa10(profile, scale), profile.GpaMode);
         var step3 = new FlowCertificationDraftDto(
             Certifications: certifications.Count > 0
                 ? certifications.OrderBy(c => c.SortOrder).Select(ToCertificationDraft).ToList()

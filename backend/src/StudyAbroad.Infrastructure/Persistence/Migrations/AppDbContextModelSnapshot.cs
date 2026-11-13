@@ -3041,6 +3041,11 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("numeric(5,1)")
                         .HasColumnName("gmat");
 
+                    b.Property<string>("GpaMode")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("gpa_mode");
+
                     b.Property<string>("GradeScale")
                         .IsRequired()
                         .HasMaxLength(8)
@@ -3083,6 +3088,11 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasPrecision(5, 2)
                         .HasColumnType("numeric(5,2)")
                         .HasColumnName("overall_gpa");
+
+                    b.Property<decimal?>("OverallGpa10")
+                        .HasPrecision(4, 2)
+                        .HasColumnType("numeric(4,2)")
+                        .HasColumnName("overall_gpa10");
 
                     b.Property<List<string>>("PreferredStates")
                         .IsRequired()

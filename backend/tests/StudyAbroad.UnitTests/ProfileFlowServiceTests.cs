@@ -1012,6 +1012,42 @@ public class ProfileFlowServiceTests
         Assert.Equal(3.5m,repo.Profiles.Values.Single(p => p.UserId == userId).OverallGpa);
     }
 
+    // Lưu GPA tổng 8.5 thang 10 rồi mở lại: nháp dựng từ hồ sơ trả lại đúng 8.5, không đổi ngược 3.67 ra 9.18
+    [Fact]
+    public async Task GetFlowState_AfterCommitOverallGpa10_ReturnsEnteredGpa()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var service = new ProfileFlowService(repo, new FakeFileStorageService());
+        var userId = Guid.NewGuid();
+        var draft = FullDraft() with { Step2 = new FlowTranscriptDraftDto([], 3.67m, 8.5m, GpaMode: "overall") };
+
+        await service.CommitFlowAsync(userId, new CommitProfileFlowRequest(draft));
+        var step2 = (await service.GetFlowStateAsync(userId)).Draft.Step2!;
+
+        Assert.Equal(8.5m, step2.ManualGpa10Scale);
+        Assert.Equal("overall", step2.GpaMode);
+    }
+
+    // overall_gpa bị sửa sau khi lưu (OCR, mod đổi bảng) hoặc hồ sơ cũ không có cách nhập: chỉ trả số thang 4
+    [Theory]
+    [InlineData("overall", 8.5, 3.9)]
+    [InlineData(null, null, 3.67)]
+    public async Task GetFlowState_WhenGpa10NotMatching_ReturnsGpa4Only(string? mode, double? gpa10, double gpa4)
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var service = new ProfileFlowService(repo, new FakeFileStorageService());
+        var userId = Guid.NewGuid();
+        var profile = await repo.EnsureProfileExistsAsync(userId);
+        profile.GpaMode = mode;
+        profile.OverallGpa10 = (decimal?)gpa10;
+        profile.OverallGpa = (decimal)gpa4;
+
+        var step2 = (await service.GetFlowStateAsync(userId)).Draft.Step2!;
+
+        Assert.Null(step2.ManualGpa10Scale);
+        Assert.Equal((decimal)gpa4, step2.CalculatedGpa4Scale);
+    }
+
     [Theory]
     [InlineData(null, null, null, "Bước 2: chưa nhập GPA")]
     [InlineData("overall", 10.5, null, "Bước 2: GPA thang 10 phải từ 0 đến 10")]
