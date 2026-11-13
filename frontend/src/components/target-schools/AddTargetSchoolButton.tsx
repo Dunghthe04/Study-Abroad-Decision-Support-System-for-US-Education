@@ -293,7 +293,7 @@ export function AddTargetSchoolButton({
         disabled={isChecking}
         className={cn(
           "gap-2 hover:bg-brand-wash hover:text-brand-ink hover:border-brand/40 transition-colors",
-          isSaved && "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300",
+          isSaved && "border-ok/25 bg-ok-wash text-ok hover:bg-ok-wash/80 hover:text-ok",
           className
         )}
       >
@@ -304,7 +304,7 @@ export function AddTargetSchoolButton({
           </>
         ) : isSaved ? (
           <>
-            <BookmarkCheckIcon className="size-4 text-emerald-600 dark:text-emerald-400" />
+            <BookmarkCheckIcon className="size-4 text-ok" />
             <span>Đã trong mục tiêu</span>
           </>
         ) : (
