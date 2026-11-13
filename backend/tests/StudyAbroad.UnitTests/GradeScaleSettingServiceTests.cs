@@ -35,7 +35,7 @@ public class GradeScaleSettingServiceTests
         CreatedAt = new DateTime(2026, 11, 1, 0, 0, 0, DateTimeKind.Utc),
     };
 
-    // Bảng WES kiểu cũ (Method "table") mà DB đã seed trước khi đổi sang mốc VEF
+    // Bảng WES kiểu cũ (Method "table") mà DB đã seed trước khi đổi sang bảng nội suy
     private static AppSetting LegacyWes() => new()
     {
         Key = AcademicConstants.GradeScale10AppSettingKey,
@@ -58,12 +58,12 @@ public class GradeScaleSettingServiceTests
 
         Assert.False(dto.IsDefault);
         Assert.Equal(new DateTime(2026, 11, 1, 0, 0, 0, DateTimeKind.Utc), dto.Version);
-        Assert.Equal(17, dto.Config.Rules.Count); // 17 mốc VEF
+        Assert.Equal(6, dto.Config.Rules.Count); // 6 mốc THPT EducationUSA
     }
 
-    // Nút "Dùng bảng mặc định (VEF)" lấy mốc từ DefaultConfig, kể cả khi DB đang lưu bảng khác
+    // Nút "Dùng bảng mặc định" lấy mốc từ DefaultConfig, kể cả khi DB đang lưu bảng khác
     [Fact]
-    public async Task Get_AlwaysSendsVefDefaultForTheResetButton()
+    public async Task Get_AlwaysSendsDefaultForTheResetButton()
     {
         var (service, _, _) = Create(LegacyWes());
 
@@ -107,7 +107,7 @@ public class GradeScaleSettingServiceTests
         Assert.Equal(GradeScaleSettingService.AuditAction, audit.Action);
         Assert.Equal(ModeratorId, audit.ActorUserId);
         using var detail = JsonDocument.Parse(audit.DetailJson!);
-        Assert.Equal(17, detail.RootElement.GetProperty("old").GetProperty("rules").GetArrayLength());
+        Assert.Equal(6, detail.RootElement.GetProperty("old").GetProperty("rules").GetArrayLength());
         Assert.Equal(3, detail.RootElement.GetProperty("new").GetProperty("rules").GetArrayLength());
     }
 
@@ -165,7 +165,7 @@ public class GradeScaleSettingServiceTests
         Assert.Empty(repo.Audits);
     }
 
-    // Mốc VEF không có điểm chữ: bỏ trống vẫn lưu được
+    // Bảng mod tự nhập có thể không có điểm chữ: bỏ trống vẫn lưu được
     [Fact]
     public async Task Update_NoLetterGrades_IsValid()
     {
@@ -188,18 +188,18 @@ public class GradeScaleSettingServiceTests
         var item = Assert.Single(await service.GetHistoryAsync(20));
 
         Assert.Equal(ModeratorId, item.ActorUserId);
-        Assert.Equal(17, item.Old!.Rules.Count);
+        Assert.Equal(6, item.Old!.Rules.Count);
         Assert.Equal(3, item.New!.Rules.Count);
     }
 
-    // TB học bạ 8.22: bảng VEF ra 3.555, DB lưu numeric(5,2) nên là 3.56; bảng mới (0 → 0, 5 → 2, 8 → 4) ra 4.0.
-    // Hồ sơ GPA 3.56 khớp bảng cũ → GPA lấy từ học bạ → đổi thành 4.0; hồ sơ GPA 3.2 là tự nhập → giữ nguyên
+    // TB học bạ 8.22: bảng mặc định ra 3.573, DB lưu numeric(5,2) nên là 3.57; bảng mới (0 → 0, 5 → 2, 8 → 4) ra 4.0.
+    // Hồ sơ GPA 3.57 khớp bảng cũ → GPA lấy từ học bạ → đổi thành 4.0; hồ sơ GPA 3.2 là tự nhập → giữ nguyên
     [Fact]
     public async Task Update_RecomputesOnlyProfilesWhoseGpaCameFromTranscript()
     {
         var seeded = Seeded();
         var (service, repo, _) = Create(seeded);
-        var fromTranscript = new StudentProfile { OverallGpa = 3.56m, GradeScale = GradeScales.Scale10 };
+        var fromTranscript = new StudentProfile { OverallGpa = 3.57m, GradeScale = GradeScales.Scale10 };
         var typedByStudent = new StudentProfile { OverallGpa = 3.2m, GradeScale = GradeScales.Scale10 };
         repo.TranscriptProfiles.Add((fromTranscript, Scores822()));
         repo.TranscriptProfiles.Add((typedByStudent, Scores822()));
@@ -214,12 +214,12 @@ public class GradeScaleSettingServiceTests
         Assert.Equal(1, detail.RootElement.GetProperty("recomputedProfiles").GetInt32());
     }
 
-    // DB còn bảng WES kiểu "table", mod bấm "Dùng bảng mặc định (VEF)" rồi lưu. TB học bạ 8.22:
+    // DB còn bảng WES kiểu "table", mod bấm "Dùng bảng mặc định" rồi lưu. TB học bạ 8.22:
     // - hồ sơ tính trước khi đổi code (tra bậc thang WES) là 3.5
     // - hồ sơ tính sau khi đổi code nhưng trước khi mod lưu (nội suy trên mốc WES 8.0 → 3.5, 8.5 → 3.7) là 3.588 → 3.59
-    // Cả hai đều từ học bạ → đổi thành 3.56 (VEF); hồ sơ tự nhập 3.2 giữ nguyên
+    // Cả hai đều từ học bạ → đổi thành 3.57 (bảng mặc định); hồ sơ tự nhập 3.2 giữ nguyên
     [Fact]
-    public async Task Update_LegacyWesTableToVef_RecomputesStepAndInterpolatedProfiles()
+    public async Task Update_LegacyWesTableToDefault_RecomputesStepAndInterpolatedProfiles()
     {
         var legacy = LegacyWes();
         var (service, repo, _) = Create(legacy);
@@ -229,15 +229,15 @@ public class GradeScaleSettingServiceTests
         repo.TranscriptProfiles.Add((steppedBefore, Scores822()));
         repo.TranscriptProfiles.Add((interpolatedBefore, Scores822()));
         repo.TranscriptProfiles.Add((typedByStudent, Scores822()));
-        var vef = AcademicAnalysisService.GetDefaultScaleConfig().Rules
+        var defaults = AcademicAnalysisService.GetDefaultScaleConfig().Rules
             .Select(r => new GradeScaleRuleInput(r.MinScore, r.Gpa4, r.LetterGrade)).ToList();
 
-        var result = await service.UpdateAsync(new UpdateGradeScaleRequest(vef, null, legacy.CreatedAt), ModeratorId);
+        var result = await service.UpdateAsync(new UpdateGradeScaleRequest(defaults, null, legacy.CreatedAt), ModeratorId);
 
         Assert.Equal(GradeScaleUpdateStatus.Ok, result.Status);
         Assert.Equal(2, result.RecomputedProfiles);
-        Assert.Equal(3.56m, steppedBefore.OverallGpa);
-        Assert.Equal(3.56m, interpolatedBefore.OverallGpa);
+        Assert.Equal(3.57m, steppedBefore.OverallGpa);
+        Assert.Equal(3.57m, interpolatedBefore.OverallGpa);
         Assert.Equal(3.2m, typedByStudent.OverallGpa);
     }
 

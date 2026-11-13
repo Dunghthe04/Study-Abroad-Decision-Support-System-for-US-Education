@@ -107,7 +107,7 @@ public class GradeScaleSettingService(
     private static decimal ToStored(decimal gpa4) => Math.Round(gpa4, 2, MidpointRounding.AwayFromZero);
 
     // Sắp theo mốc tăng dần, MaxScore = mốc kế tiếp − 0.01 (khoảng cao nhất tới 10), chỉ để hiển thị: nội suy chỉ dùng MinScore
-    // Điểm chữ không bắt buộc (mốc VEF không có điểm chữ), có thì tối đa MaxLetterGradeLength ký tự
+    // Điểm chữ không bắt buộc (bảng mod tự nhập có thể không có điểm chữ), có thì tối đa MaxLetterGradeLength ký tự
     private static GradeScaleConfigDto BuildConfig(UpdateGradeScaleRequest request, out List<string> errors)
     {
         errors = [];

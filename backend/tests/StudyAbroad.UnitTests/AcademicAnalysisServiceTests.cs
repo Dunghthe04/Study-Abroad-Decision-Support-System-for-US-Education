@@ -24,30 +24,29 @@ public class AcademicAnalysisServiceTests
 
     [Theory]
     [InlineData(10.0, 4.00)]
-    [InlineData(9.5, 3.85)]   // đúng mốc VEF
-    [InlineData(9.0, 3.75)]
-    [InlineData(8.6, 3.65)]
-    [InlineData(8.5, 3.625)]  // giữa 8.4 → 3.60 và 8.6 → 3.65
-    [InlineData(8.2, 3.55)]
-    [InlineData(8.0, 3.50)]
-    [InlineData(7.5, 3.25)]   // giữa 7.4 → 3.20 và 7.6 → 3.30
-    [InlineData(7.0, 3.00)]
-    [InlineData(6.8, 2.90)]   // giữa 5 → 2.0 và 7 → 3.0
-    [InlineData(6.0, 2.50)]
-    [InlineData(5.2, 2.10)]
+    [InlineData(9.5, 4.00)]   // đúng mốc A+
+    [InlineData(8.9, 3.80)]   // giữa 8 → 3.5 và 9.5 → 4.0
+    [InlineData(8.6, 3.70)]
+    [InlineData(8.3, 3.60)]
+    [InlineData(8.0, 3.50)]   // đúng mốc A
+    [InlineData(7.0, 3.25)]   // giữa 6 → 3.0 và 8 → 3.5
+    [InlineData(6.8, 3.20)]
+    [InlineData(6.0, 3.00)]   // đúng mốc B
+    [InlineData(5.5, 2.50)]   // giữa 5 → 2.0 và 6 → 3.0
+    [InlineData(5.2, 2.20)]
     [InlineData(4.5, 1.80)]   // giữa 0 → 0 và 5 → 2.0
     [InlineData(3.0, 1.20)]
     [InlineData(0.0, 0.0)]
-    public void ConvertScoreToGpa4_DefaultVef_InterpolatesBetweenAnchors(decimal rawScore, decimal expectedGpa)
+    public void ConvertScoreToGpa4_DefaultAnchors_InterpolatesBetweenAnchors(decimal rawScore, decimal expectedGpa)
     {
-        // [USAS-365] Bảng mặc định: mốc VEF + nội suy tuyến tính (kế hoạch GPA weighted, mục 4)
+        // [USAS-365] Bảng mặc định: mốc THPT EducationUSA + nội suy tuyến tính (kế hoạch GPA weighted, mục 4)
         var vefConfig = AcademicAnalysisService.GetDefaultScaleConfig();
         var result = AcademicAnalysisService.ConvertScoreToGpa4(rawScore, vefConfig);
         Assert.Equal(expectedGpa, result);
     }
 
     [Theory]
-    [InlineData(8.995, 3.74875)] // sát mốc 9.0 thì sát 3.75, không còn nhảy bậc như bảng tra cũ
+    [InlineData(7.995, 3.49875)] // sát mốc 8.0 thì sát 3.5, không còn nhảy bậc như bảng tra cũ
     [InlineData(4.995, 1.998)]   // sát mốc 5.0 thì sát 2.0
     public void ConvertScoreToGpa4_NearAnchor_NoStepJump(decimal rawScore, decimal expectedGpa)
     {
@@ -196,7 +195,7 @@ public class AcademicAnalysisServiceTests
 
         // 3. Kiểm chứng
         Assert.NotNull(result);
-        Assert.Equal(3.72m, result.UnweightedGpa); // TB hệ 10 là 8.875 → 3.71875 → 3.72
+        Assert.Equal(3.79m, result.UnweightedGpa); // TB hệ 10 là 8.875 → 3.7917 → 3.79
         Assert.Equal(8, result.TotalSubjects);
         Assert.Equal(2, result.TotalTerms);
         Assert.Equal(3, result.SubjectGroups.Count); // STEM, Xã hội, Ngoại ngữ
@@ -208,7 +207,7 @@ public class AcademicAnalysisServiceTests
         Assert.Equal(result.UnweightedGpa, latest.UnweightedGpa);
     }
 
-    // Toán 7.0, Tiếng Anh 10: TB hệ 10 là 8.5 → 3.625 → 3.63. Đổi từng môn rồi lấy TB (3.0 và 4.0) sẽ ra 3.50, sai
+    // Toán 7.0, Tiếng Anh 10: TB hệ 10 là 8.5 → 3.667 → 3.67. Đổi từng môn rồi lấy TB (3.25 và 4.0) sẽ ra 3.63, sai
     [Fact]
     public async Task AnalyzeAcademicProfileAsync_ConvertsAverageOnce_NotEachSubject()
     {
@@ -221,10 +220,10 @@ public class AcademicAnalysisServiceTests
         var result = await _service.AnalyzeAcademicProfileAsync(_testUserId);
 
         Assert.Equal(8.5m, result.RawAverage);
-        Assert.Equal(3.63m, result.UnweightedGpa);
-        Assert.Equal(3.63m, Assert.Single(result.TermAverages).Gpa4);
+        Assert.Equal(3.67m, result.UnweightedGpa);
+        Assert.Equal(3.67m, Assert.Single(result.TermAverages).Gpa4);
         var profile = await _repository.GetProfileByUserIdAsync(_testUserId);
-        Assert.Equal(3.63m, profile!.OverallGpa); // overall_gpa trong hồ sơ cũng là số đổi một lần
+        Assert.Equal(3.67m, profile!.OverallGpa); // overall_gpa trong hồ sơ cũng là số đổi một lần
     }
 
     // Nhóm môn và học kỳ cũng lấy TB hệ 10 của nhóm/kỳ rồi đổi một lần
@@ -243,10 +242,10 @@ public class AcademicAnalysisServiceTests
 
         var stem = result.SubjectGroups.Single(g => g.GroupKey == AcademicConstants.GroupNaturalSciences);
         var social = result.SubjectGroups.Single(g => g.GroupKey == AcademicConstants.GroupSocialSciences);
-        Assert.Equal(3.63m, stem.Gpa4);   // TB 8.5 → 3.625
-        Assert.Equal(3.00m, social.Gpa4); // TB 7.0 → 3.00 (đổi từng môn: 2.5 và 3.5 → 3.00, trùng vì đoạn này thẳng)
-        Assert.Equal([3.63m, 3.00m], result.TermAverages.OrderBy(t => t.TermOrder).Select(t => t.Gpa4));
-        Assert.Equal(3.38m, result.UnweightedGpa); // TB 7.75 → 3.375 → 3.38
+        Assert.Equal(3.67m, stem.Gpa4);   // TB 8.5 → 3.667
+        Assert.Equal(3.25m, social.Gpa4); // TB 7.0 → 3.25 (đổi từng môn: 3.0 và 3.5 → 3.25, trùng vì đoạn này thẳng)
+        Assert.Equal([3.67m, 3.25m], result.TermAverages.OrderBy(t => t.TermOrder).Select(t => t.Gpa4));
+        Assert.Equal(3.44m, result.UnweightedGpa); // TB 7.75 → 3.4375 → 3.44
     }
 
     [Fact]

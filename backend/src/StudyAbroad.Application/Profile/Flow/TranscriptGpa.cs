@@ -73,7 +73,7 @@ public static class TranscriptGpa
 
     /// <summary>
     /// Quy đổi thang 10 sang thang 4 theo bảng scale (bảng trong DB, grade_scale.10); null thì bảng mặc định
-    /// AcademicAnalysisService.GetDefaultScaleConfig (mốc VEF). Nội suy tuyến tính giữa hai mốc kề nhau: 8.5 → 3.625
+    /// AcademicAnalysisService.GetDefaultScaleConfig (mốc THPT EducationUSA). Nội suy tuyến tính giữa hai mốc kề nhau: 7.0 → 3.25
     /// </summary>
     public static decimal To4(decimal gpa10, GradeScaleConfigDto? scale = null) =>
         GradeScale.Interpolate(gpa10, scale ?? AcademicAnalysisService.GetDefaultScaleConfig());

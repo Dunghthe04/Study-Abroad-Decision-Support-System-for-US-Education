@@ -265,9 +265,9 @@ public class ChatProfileMapperTests
     [Fact]
     public void Gpa10_WritesBothScales()
     {
-        var step2 = ToDraft(Confirmed("gpa", """{"value":8.5,"scale":10,"source":"overall"}""")).Step2!;
+        var step2 = ToDraft(Confirmed("gpa", """{"value":8.6,"scale":10,"source":"overall"}""")).Step2!;
 
-        Assert.Equal((8.5m, 3.625m, "overall"),(step2.ManualGpa10Scale!.Value, step2.CalculatedGpa4Scale!.Value, step2.GpaMode));
+        Assert.Equal((8.6m, 3.7m, "overall"),(step2.ManualGpa10Scale!.Value, step2.CalculatedGpa4Scale!.Value, step2.GpaMode));
     }
 
     // GPA tính từ học bạ: chat đọc ra source = transcript và không được ghi đè

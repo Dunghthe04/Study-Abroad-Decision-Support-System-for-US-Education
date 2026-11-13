@@ -71,7 +71,7 @@ function formatTime(iso: string): string {
   return Number.isNaN(date.getTime()) ? iso : date.toLocaleString("vi-VN");
 }
 
-// Điểm chữ không bắt buộc (mốc VEF không có): có thì ghi kèm sau GPA, không có thì bỏ qua
+// Điểm chữ không bắt buộc (bảng mod tự nhập có thể không có): có thì ghi kèm sau GPA, không có thì bỏ qua
 function withLetter(letter: string | undefined): string {
   return letter ? `, ${letter}` : "";
 }
@@ -158,7 +158,7 @@ export function GradeScaleSettings() {
 
   const removeRow = (key: number) => setRows((prev) => prev.filter((r) => r.key !== key));
 
-  // Điền mốc VEF (server gửi kèm) vào bảng đang sửa; chưa lưu, mod vẫn bấm "Lưu bảng" để đi đường lưu thường
+  // Điền mốc mặc định (server gửi kèm) vào bảng đang sửa; chưa lưu, mod vẫn bấm "Lưu bảng" để đi đường lưu thường
   // (tính lại GPA hồ sơ học bạ + ghi lịch sử)
   const applyDefault = () => {
     if (!setting) return;
@@ -249,7 +249,7 @@ export function GradeScaleSettings() {
           </CardTitle>
           <CardDescription>
             Chỉ điểm trung bình tổng mới quy sang thang 4; điểm từng môn giữ nguyên thang 10. Điểm nằm giữa hai mốc thì
-            nội suy tuyến tính (mốc 8.4 → 3.60 và 8.6 → 3.65 thì 8.5 → 3.625). Điểm chữ không bắt buộc.
+            nội suy tuyến tính (mốc 6 → 3.0 và 8 → 3.5 thì 7 → 3.25). Điểm chữ không bắt buộc.
             {canEdit
               ? " Lưu bảng mới sẽ tính lại GPA của các hồ sơ lấy GPA từ học bạ; hồ sơ tự nhập GPA giữ nguyên."
               : " Quản trị viên chỉ xem, Moderator là người sửa bảng."}
@@ -374,7 +374,7 @@ export function GradeScaleSettings() {
                 <PlusIcon /> Thêm mốc
               </Button>
               <Button variant="outline" onClick={applyDefault} disabled={saving}>
-                <ListRestartIcon /> Dùng bảng mặc định (VEF)
+                <ListRestartIcon /> Dùng bảng mặc định (EducationUSA THPT)
               </Button>
               <Button variant="ghost" onClick={() => showSetting(setting)} disabled={saving}>
                 <RotateCcwIcon /> Bỏ thay đổi

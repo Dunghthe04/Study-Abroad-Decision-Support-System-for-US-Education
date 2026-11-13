@@ -3,7 +3,7 @@ import type { GradeScaleConfig } from "@/types/academic";
 
 /**
  * Bảng đang dùng. version gửi lại khi lưu để biết có ai sửa trước không; isDefault: DB chưa có bảng, đang dùng bảng
- * mặc định. defaultConfig: bảng mặc định (mốc VEF) cho nút "Dùng bảng mặc định".
+ * mặc định. defaultConfig: bảng mặc định (mốc THPT EducationUSA) cho nút "Dùng bảng mặc định".
  */
 export interface GradeScaleSetting {
   config: GradeScaleConfig;

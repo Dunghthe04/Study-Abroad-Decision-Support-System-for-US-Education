@@ -295,7 +295,7 @@ public class AcademicAnalysisService : IAcademicAnalysisService
     }
 
     /// <summary>
-    /// [USAS-365] Quy đổi một điểm hệ 10 sang thang 4.0 bằng nội suy giữa các mốc của bảng (mặc định mốc VEF), giống
+    /// [USAS-365] Quy đổi một điểm hệ 10 sang thang 4.0 bằng nội suy giữa các mốc của bảng (mặc định mốc THPT EducationUSA), giống
     /// TranscriptGpa.To4, toGpa4 bên FE và gpa10_to_4 bên advisor. Không còn tra bậc thang, không còn ×0.4
     /// </summary>
     public static decimal ConvertScoreToGpa4(decimal rawScore, GradeScaleConfigDto config)
@@ -314,25 +314,24 @@ public class AcademicAnalysisService : IAcademicAnalysisService
         Math.Round(ConvertScoreToGpa4(scores10.Average(), config), 2, MidpointRounding.AwayFromZero);
 
     /// <summary>
-    /// [USAS-365] Bảng quy đổi mặc định: mốc VEF (Vietnam Education Foundation, cơ quan liên bang Hoa Kỳ), lấy cận dưới mỗi
-    /// khoảng, thêm hai mốc hệ thống 5.0 → 2.0 (EducationUSA, điểm C bậc THPT) và 0 → 0 (kế hoạch GPA weighted, mục 4).
-    /// Giữa hai mốc thì nội suy tuyến tính. VEF không có điểm chữ nên để trống. MaxScore = mốc kế tiếp − 0.01, chỉ để hiển thị
+    /// [USAS-365] Bảng quy đổi mặc định: bảng bậc THPT của EducationUSA Vietnam 2025 (Đại sứ quán Hoa Kỳ), lấy cận dưới mỗi
+    /// khoảng làm mốc: 5 → 2.0 (C), 6 → 3.0 (B), 8 → 3.5 (A), 9.5 → 4.0 (A+). Thêm 0 → 0 làm sàn (bảng gốc cho F = 1.0,
+    /// hệ thống theo cách Mỹ để F = 0). Giữa hai mốc thì nội suy tuyến tính cho thoải, không nhảy bậc: 7.0 → 3.25.
+    /// MaxScore = mốc kế tiếp − 0.01, chỉ để hiển thị
     /// </summary>
     public static GradeScaleConfigDto GetDefaultScaleConfig()
     {
-        (decimal Min, decimal Gpa4)[] anchors =
+        (decimal Min, decimal Gpa4, string Letter)[] anchors =
         [
-            (0m, 0m), (5.0m, 2.0m), (7.0m, 3.00m), (7.2m, 3.10m), (7.4m, 3.20m), (7.6m, 3.30m), (7.8m, 3.40m),
-            (8.0m, 3.50m), (8.2m, 3.55m), (8.4m, 3.60m), (8.6m, 3.65m), (8.8m, 3.70m), (9.0m, 3.75m), (9.2m, 3.80m),
-            (9.5m, 3.85m), (9.75m, 3.90m), (10m, 4.00m),
+            (0m, 0m, "F"), (5.0m, 2.0m, "C"), (6.0m, 3.0m, "B"), (8.0m, 3.5m, "A"), (9.5m, 4.0m, "A+"), (10m, 4.0m, "A+"),
         ];
 
         return new GradeScaleConfigDto(
             ScaleKey: AcademicConstants.GradeScale10AppSettingKey,
-            SourceName: "Mốc VEF (Vietnam Education Foundation - Hoa Kỳ), nội suy tuyến tính",
+            SourceName: "EducationUSA Vietnam 2025 (bậc THPT), nội suy tuyến tính",
             Method: GradeScale.LinearMethod,
             Rules: anchors
-                .Select((a, i) => new GradeScaleRuleDto(a.Min, i + 1 < anchors.Length ? anchors[i + 1].Min - 0.01m : 10m, a.Gpa4, ""))
+                .Select((a, i) => new GradeScaleRuleDto(a.Min, i + 1 < anchors.Length ? anchors[i + 1].Min - 0.01m : 10m, a.Gpa4, a.Letter))
                 .ToList()
         );
     }

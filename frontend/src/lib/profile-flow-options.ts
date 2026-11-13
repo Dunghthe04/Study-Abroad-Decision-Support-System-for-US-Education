@@ -283,34 +283,24 @@ export function calculateTranscriptGpa(years: AcademicYearDraft[]): { gpa10: num
 }
 
 /**
- * Mốc VEF quy đổi điểm thang 10 sang GPA thang 4: [điểm, GPA 4], xếp tăng dần. Bản sao của
- * AcademicAnalysisService.GetDefaultScaleConfig (BE), sửa thì sửa cả hai bên. Chỉ dùng khi chưa tải được bảng
- * grade_scale.10 từ API (moderator sửa trên trang quản trị), xem setGradeScaleRules / useGradeScale
+ * Mốc quy đổi mặc định điểm thang 10 sang GPA thang 4: [điểm, GPA 4], xếp tăng dần. Lấy cận dưới mỗi khoảng trong bảng
+ * bậc THPT của EducationUSA Vietnam 2025, nội suy giữa hai mốc. Bản sao của AcademicAnalysisService.GetDefaultScaleConfig
+ * (BE), sửa thì sửa cả hai bên. Chỉ dùng khi chưa tải được bảng grade_scale.10 từ API (moderator sửa trên trang quản trị),
+ * xem setGradeScaleRules / useGradeScale
  */
-export const VEF_GPA10_TO_4: readonly (readonly [number, number])[] = [
+export const DEFAULT_GPA10_TO_4: readonly (readonly [number, number])[] = [
   [0, 0],
   [5.0, 2.0],
-  [7.0, 3.0],
-  [7.2, 3.1],
-  [7.4, 3.2],
-  [7.6, 3.3],
-  [7.8, 3.4],
+  [6.0, 3.0],
   [8.0, 3.5],
-  [8.2, 3.55],
-  [8.4, 3.6],
-  [8.6, 3.65],
-  [8.8, 3.7],
-  [9.0, 3.75],
-  [9.2, 3.8],
-  [9.5, 3.85],
-  [9.75, 3.9],
+  [9.5, 4.0],
   [10, 4.0],
 ];
 
 type Gpa10To4Table = readonly (readonly [number, number])[];
 
-// Bảng đang dùng: mốc VEF cho tới khi useGradeScale tải xong bảng từ API
-let activeGpa10To4: Gpa10To4Table = VEF_GPA10_TO_4;
+// Bảng đang dùng: mốc mặc định cho tới khi useGradeScale tải xong bảng từ API
+let activeGpa10To4: Gpa10To4Table = DEFAULT_GPA10_TO_4;
 const gradeScaleListeners = new Set<() => void>();
 
 /**
@@ -336,7 +326,7 @@ export function subscribeGradeScale(listener: () => void): () => void {
 
 /**
  * Đổi TB thang 10 sang GPA thang 4: nội suy đường thẳng giữa hai mốc kề nhau, ngoài hai đầu lấy GPA mốc đầu/cuối
- * (giống GradeScale.Interpolate bên BE). Làm tròn 2 chữ số, nửa lên như BE lưu (8.5 → 3.63)
+ * (giống GradeScale.Interpolate bên BE). Làm tròn 2 chữ số, nửa lên như BE lưu (8.5 → 3.67)
  */
 export function toGpa4(gpa10: number): number {
   const table = activeGpa10To4;

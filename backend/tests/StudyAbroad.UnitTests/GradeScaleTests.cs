@@ -123,9 +123,9 @@ public class GradeScaleTests
     [Fact]
     public void TranscriptGpa_UsesGivenScale_OtherwiseDefault()
     {
-        var step2 = new FlowTranscriptDraftDto(ManualGpa10Scale: 8.2m, GpaMode: ProfileConstants.GpaModes.Overall);
+        var step2 = new FlowTranscriptDraftDto(ManualGpa10Scale: 8.3m, GpaMode: ProfileConstants.GpaModes.Overall);
 
-        Assert.Equal(3.55m, TranscriptGpa.Gpa4(step2)); // bảng mặc định: đúng mốc VEF 8.2 → 3.55
+        Assert.Equal(3.6m, TranscriptGpa.Gpa4(step2)); // bảng mặc định: 8.3 nằm giữa 8 → 3.5 và 9.5 → 4.0
         Assert.Equal(4.0m, TranscriptGpa.Gpa4(step2, CustomScale())); // trên mốc cuối 8.0 → 4.0
         Assert.Equal(3.975m, TranscriptGpa.To4(7.9m, CustomScale())); // nội suy giữa 0 → 2.0 và 8.0 → 4.0
     }
