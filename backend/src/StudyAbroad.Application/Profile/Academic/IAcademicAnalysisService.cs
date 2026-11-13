@@ -21,7 +21,7 @@ public interface IAcademicAnalysisService
     Task DeleteScoreAsync(Guid userId, Guid scoreId, CancellationToken ct = default);
 
     /// <summary>
-    /// [USAS-365] Thực hiện thuật toán phân tích học thuật: quy đổi GPA 4.0, tính Weighted GPA, phân nhóm STEM/Xã hội/Ngoại ngữ, đánh giá xu hướng 3 năm.
+    /// [USAS-365] Thực hiện thuật toán phân tích học thuật: quy đổi GPA 4.0 (unweighted), phân nhóm STEM/Xã hội/Ngoại ngữ, đánh giá xu hướng 3 năm.
     /// </summary>
     Task<AcademicAnalysisResponseDto> AnalyzeAcademicProfileAsync(Guid userId, CancellationToken ct = default);
 

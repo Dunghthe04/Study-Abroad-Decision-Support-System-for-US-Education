@@ -7,9 +7,9 @@ interface GpaSummaryCardProps {
 }
 
 /**
- * [USAS-365] Executive Summary: Tổng quan năng lực học thuật và GPA quy đổi chuẩn WES.
+ * [USAS-365] Executive Summary: Tổng quan năng lực học thuật và GPA quy đổi theo mốc VEF.
  * - Fix C365-04: Xử lý đúng khi totalTerms < 2 (không gán nhãn Phong độ ổn định khi thiếu dữ liệu).
- * - Fix C365-05: Bỏ mẫu số / 4.0 cố định cho Weighted GPA (hỗ trợ thang nâng cao tới 4.5).
+ * - Chỉ hiện GPA unweighted, không tính weighted (kế hoạch GPA weighted, mục 5).
  * - Cải thiện độ tương phản disclaimer và câu từ quy đổi tham khảo.
  */
 export function GpaSummaryCard({ analysis }: GpaSummaryCardProps) {
@@ -66,7 +66,7 @@ export function GpaSummaryCard({ analysis }: GpaSummaryCardProps) {
         <div className="flex items-baseline gap-4 md:col-span-5">
           <div>
             <span className="block text-label">
-              GPA Thang 4.0 (WES Standard)
+              GPA thang 4.0 (quy đổi theo mốc VEF)
             </span>
             <div className="mt-1 flex items-baseline gap-1.5">
               <span className="text-numeric text-4xl">
@@ -80,15 +80,6 @@ export function GpaSummaryCard({ analysis }: GpaSummaryCardProps) {
           </div>
 
           <div className="space-y-2">
-            <div>
-              <span className="block text-xs text-muted-foreground">Weighted GPA</span>
-              <span className="text-numeric text-base">
-                {analysis.weightedGpa.toFixed(2)}
-              </span>
-              <span className="block text-xs text-muted-foreground">
-                (Tín chỉ / môn nâng cao)
-              </span>
-            </div>
             <div>
               <span className="block text-xs text-muted-foreground">Điểm TB hệ 10</span>
               <span className="text-numeric">

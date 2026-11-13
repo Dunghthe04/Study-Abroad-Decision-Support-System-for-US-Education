@@ -8,7 +8,7 @@ namespace StudyAbroad.UnitTests;
 
 /// <summary>
 /// [USAS-365] Bộ Unit Test kiểm thử toàn diện thuật toán quy đổi GPA thang 4.0,
-/// tính Weighted GPA, phân nhóm môn học, phân tích xu hướng học tập và bảo mật Anti-IDOR.
+/// phân nhóm môn học, phân tích xu hướng học tập và bảo mật Anti-IDOR.
 /// </summary>
 public class AcademicAnalysisServiceTests
 {
@@ -197,7 +197,6 @@ public class AcademicAnalysisServiceTests
         // 3. Kiểm chứng
         Assert.NotNull(result);
         Assert.Equal(3.72m, result.UnweightedGpa); // TB hệ 10 là 8.875 → 3.71875 → 3.72
-        Assert.True(result.WeightedGpa >= result.UnweightedGpa);
         Assert.Equal(8, result.TotalSubjects);
         Assert.Equal(2, result.TotalTerms);
         Assert.Equal(3, result.SubjectGroups.Count); // STEM, Xã hội, Ngoại ngữ

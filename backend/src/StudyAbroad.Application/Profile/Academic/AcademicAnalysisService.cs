@@ -9,7 +9,7 @@ namespace StudyAbroad.Application.Profile.Academic;
 /// <summary>
 /// [USAS-365] Service xử lý thuật toán phân tích điểm học thuật:
 /// - Quy đổi GPA thang 4.0 theo chuẩn WES hoặc AppSetting
-/// - Tính Unweighted GPA & Weighted GPA (theo tín chỉ / môn chuyên)
+/// - Tính GPA unweighted (không tính weighted, kế hoạch GPA weighted mục 5)
 /// - Phân nhóm môn học (STEM, Xã hội, Ngoại ngữ)
 /// - Phân tích xu hướng 3 năm qua các kỳ học
 /// </summary>
@@ -120,7 +120,7 @@ public class AcademicAnalysisService : IAcademicAnalysisService
     /// <summary>
     /// [USAS-365] Thực hiện thuật toán phân tích học thuật:
     /// 1. Quy đổi GPA 4.0 theo cấu hình
-    /// 2. Tính Unweighted & Weighted GPA
+    /// 2. Tính GPA unweighted
     /// 3. Phân nhóm môn (STEM, Xã hội, Ngoại ngữ)
     /// 4. Đánh giá xu hướng 3 năm
     /// 5. Lưu vào analysis_results (kind = 'gpa') và cập nhật overall_gpa trong student_profiles
@@ -136,7 +136,6 @@ public class AcademicAnalysisService : IAcademicAnalysisService
                 AnalysisId: Guid.NewGuid(),
                 StudentProfileId: profile.Id,
                 UnweightedGpa: 0m,
-                WeightedGpa: 0m,
                 RawAverage: 0m,
                 TotalSubjects: 0,
                 TotalTerms: 0,
@@ -152,11 +151,10 @@ public class AcademicAnalysisService : IAcademicAnalysisService
 
         var scaleConfig = await GetGradeScaleConfigAsync(ct);
 
-        // 1. Quy đổi điểm từng môn sang thang 4.0 (chỉ dùng cho GPA weighted, chưa đổi theo kế hoạch GPA weighted mục 5)
+        // 1. Gắn nhóm môn cho từng điểm
         var scoreDetails = scores.Select(s => new
         {
             Score = s,
-            Gpa4 = ConvertScoreToGpa4(s.Score, scaleConfig),
             GroupKey = ClassifySubjectGroup(s.Subject)
         }).ToList();
 
@@ -164,34 +162,10 @@ public class AcademicAnalysisService : IAcademicAnalysisService
         var rawAverage = Math.Round(scores.Average(s => s.Score), 2);
         var unweightedGpa = AverageToGpa4(scores.Select(s => s.Score), scaleConfig);
 
-        // 3. Tính Weighted GPA
-        // Nếu có credits thì tính theo tín chỉ, nếu không có credits thì thưởng 0.5 điểm cho môn chuyên/nâng cao
-        decimal weightedGpa;
-        var hasCredits = scores.Any(s => s.Credits.HasValue && s.Credits.Value > 0);
-        if (hasCredits)
-        {
-            decimal totalWeightedPoints = 0m;
-            decimal totalCredits = 0m;
-            foreach (var item in scoreDetails)
-            {
-                var credit = item.Score.Credits.GetValueOrDefault(1m);
-                totalWeightedPoints += item.Gpa4 * credit;
-                totalCredits += credit;
-            }
-            weightedGpa = totalCredits > 0 ? Math.Round(totalWeightedPoints / totalCredits, 2) : unweightedGpa;
-        }
-        else
-        {
-            // Kiểm tra môn nâng cao/chuyên/AP/Honors (+0.5 điểm quy đổi, tối đa 4.5)
-            var weightedScores = scoreDetails.Select(s =>
-            {
-                var isAdvanced = IsAdvancedSubject(s.Score.Subject);
-                return isAdvanced ? Math.Min(4.5m, s.Gpa4 + 0.5m) : s.Gpa4;
-            });
-            weightedGpa = Math.Round(weightedScores.Average(), 2);
-        }
+        // Không tính GPA weighted: học bạ Việt Nam không có AP/Honors, trường Mỹ đọc điểm quốc tế dạng unweighted
+        // (kế hoạch GPA weighted, mục 5)
 
-        // 4. Thống kê theo nhóm môn học
+        // 3. Thống kê theo nhóm môn học
         var subjectGroups = scoreDetails
             .GroupBy(s => s.GroupKey)
             .Select(g =>
@@ -206,7 +180,7 @@ public class AcademicAnalysisService : IAcademicAnalysisService
             .OrderBy(g => GetGroupDisplayOrder(g.GroupKey))
             .ToList();
 
-        // 5. Thống kê theo từng học kỳ và đánh giá xu hướng 3 năm
+        // 4. Thống kê theo từng học kỳ và đánh giá xu hướng 3 năm
         var termAverages = scoreDetails
             .GroupBy(s => new { s.Score.TermOrder, s.Score.TermName })
             .OrderBy(g => g.Key.TermOrder)
@@ -221,7 +195,7 @@ public class AcademicAnalysisService : IAcademicAnalysisService
 
         var (trend, trendDesc) = EvaluateTrend(termAverages);
 
-        // 6. Đóng gói kết quả & lưu trữ vào analysis_results
+        // 5. Đóng gói kết quả & lưu trữ vào analysis_results
         var analysisId = Guid.NewGuid();
         var analysisResult = new AnalysisResult
         {
@@ -234,7 +208,6 @@ public class AcademicAnalysisService : IAcademicAnalysisService
                 analysisId,
                 studentProfileId = profile.Id,
                 unweightedGpa,
-                weightedGpa,
                 rawAverage,
                 totalSubjects = scores.Count,
                 totalTerms = termAverages.Count,
@@ -254,7 +227,6 @@ public class AcademicAnalysisService : IAcademicAnalysisService
             AnalysisId: analysisId,
             StudentProfileId: profile.Id,
             UnweightedGpa: unweightedGpa,
-            WeightedGpa: weightedGpa,
             RawAverage: rawAverage,
             TotalSubjects: scores.Count,
             TotalTerms: termAverages.Count,
@@ -290,7 +262,6 @@ public class AcademicAnalysisService : IAcademicAnalysisService
                 AnalysisId: latest.Id,
                 StudentProfileId: profile.Id,
                 UnweightedGpa: root.GetProperty("unweightedGpa").GetDecimal(),
-                WeightedGpa: root.GetProperty("weightedGpa").GetDecimal(),
                 RawAverage: root.GetProperty("rawAverage").GetDecimal(),
                 TotalSubjects: root.GetProperty("totalSubjects").GetInt32(),
                 TotalTerms: root.GetProperty("totalTerms").GetInt32(),
@@ -429,12 +400,6 @@ public class AcademicAnalysisService : IAcademicAnalysisService
         AcademicConstants.GroupSocialSciences => 3,
         _ => 4
     };
-
-    private static bool IsAdvancedSubject(string subject)
-    {
-        var norm = RemoveDiacritics(subject.ToLowerInvariant());
-        return norm.Contains("chuyen") || norm.Contains("nang cao") || norm.Contains("ap") || norm.Contains("honors") || norm.Contains("ib");
-    }
 
     /// <summary>
     /// [USAS-365] Thuật toán đánh giá xu hướng học tập dựa trên biến động điểm các kỳ.
