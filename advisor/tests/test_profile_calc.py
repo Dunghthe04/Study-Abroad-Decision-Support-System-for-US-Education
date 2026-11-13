@@ -39,7 +39,7 @@ def test_levels_text():
         benchmarks=MARKS,
         gpa_table=VEF,
     )
-    assert out["gpa_level"] == "3.5 thang 4, trung bình (TB các trường 3.6)"
+    assert out["gpa_level"] == "3.5 thang 4 (quy đổi tham khảo), trung bình (TB các trường 3.6)"
     assert out["english_level"] == "IELTS 6.5, trung bình (mốc phổ biến 6.5)"
     assert out["sat_level"] == "1250, mức trung bình"
     assert out["budget_level"] == "35.000 – 50.000 USD mỗi năm, mức sát"
@@ -92,7 +92,7 @@ def test_middle_school_gpa_is_target():
         benchmarks=MARKS,
         gpa_table=VEF,
     )
-    assert out["gpa_level"] == "mục tiêu 3.75 thang 4, cao (TB các trường 3.6)"
+    assert out["gpa_level"] == "mục tiêu 3.75 thang 4 (quy đổi tham khảo), cao (TB các trường 3.6)"
 
 
 def test_grade_by_year_lists_scores_without_judging():

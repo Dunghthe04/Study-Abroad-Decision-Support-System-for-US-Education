@@ -78,7 +78,7 @@ def test_only_overall_gpa_scale_10_is_converted():
 def test_profile_lines_and_route_use_the_table():
     assert (
         calc_profile(profile({"value": 8.0, "scale": 10}), None, TODAY, gpa_table=TABLE)["gpa_level"]
-        == "3.3 thang 4"
+        == "3.3 thang 4 (quy đổi tham khảo)"
     )
     _, facts, _ = choose_route(profile({"value": 8.0, "scale": 10}), TODAY, TABLE)
     assert facts.gpa4 == 3.3
@@ -89,4 +89,4 @@ def test_skill_request_reads_table_from_state():
 
     req = skill_request_of(state, "Hồ sơ em thế nào?", TODAY)
 
-    assert req.tinh_san["gpa_level"] == "3.3 thang 4"
+    assert req.tinh_san["gpa_level"] == "3.3 thang 4 (quy đổi tham khảo)"

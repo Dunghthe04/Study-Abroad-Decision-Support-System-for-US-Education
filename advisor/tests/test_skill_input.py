@@ -169,7 +169,7 @@ def test_calculated_lines_go_to_tinh_san_not_into_ho_so():
     assert req.ho_so == profile_to_skill_input(FULL)  # hồ sơ giữ nguyên, không lẫn dòng tính sẵn
     assert set(req.tinh_san) <= set(CALC_KEYS)
     assert req.tinh_san["grade_by_year"] == "Lớp 10: 7.5; Lớp 11: 7.8"
-    assert req.tinh_san["gpa_level"] == "3.5 thang 4"  # chưa có mốc trường thì chỉ ghi điểm
+    assert req.tinh_san["gpa_level"] == "3.5 thang 4 (quy đổi tham khảo)"  # chưa có mốc trường thì chỉ ghi điểm
     assert req.tinh_san["english_level"] == "IELTS 6.5"
     assert req.tinh_san["timeline"] == "hôm nay 11/2026, nhập học kỳ Fall 08/2027, còn 9 tháng"
 
@@ -179,7 +179,7 @@ def test_calculated_lines_compare_with_school_benchmarks():
         ChatState(grade_scale=VEF_RULES, profile=FULL, benchmarks={"gpa4": 3.6, "english": {"ielts": 6.5}})
     )
 
-    assert req.tinh_san["gpa_level"] == "3.5 thang 4, trung bình (TB các trường 3.6)"
+    assert req.tinh_san["gpa_level"] == "3.5 thang 4 (quy đổi tham khảo), trung bình (TB các trường 3.6)"
     assert req.tinh_san["english_level"] == "IELTS 6.5, trung bình (mốc phổ biến 6.5)"
 
 
