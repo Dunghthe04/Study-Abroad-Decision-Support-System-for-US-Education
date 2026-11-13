@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { useCenterReviews } from "@/hooks/use-center-reviews";
+import { CenterReviewList } from "@/components/centers/CenterReviewList";
 import Link from "next/link";
 import {
   ArrowLeftIcon,
@@ -9,11 +11,8 @@ import {
   ClockIcon,
   StarIcon,
   ShieldCheckIcon,
-  ShieldAlertIcon,
-  AwardIcon,
   UsersIcon,
   GraduationCapIcon,
-  BookOpenIcon,
   Building2Icon,
   FlameIcon,
   EyeIcon,
@@ -33,25 +32,12 @@ import {
   CenterActionConfirmDialog,
   type CenterConfirmAction,
 } from "@/components/admin/centers/CenterActionConfirmDialog";
-import { CreateCenterAccountButton } from "@/components/admin/centers/CreateCenterAccountButton";
+import { CenterStatusBadge } from "@/components/centers/CenterBadges";
 import { EditCenterButton } from "@/components/admin/centers/EditCenterButton";
 import { CenterLegalInfoCard } from "@/components/centers/CenterLegalInfoCard";
 
 interface AdminCenterDetailViewProps {
   center: StudyCenter;
-}
-
-function parseScholarshipStat(raw?: string): { amount: string; note?: string } {
-  if (!raw) return { amount: "—" };
-  const trimmed = raw.trim();
-  const match = trimmed.match(/^(.*?)\s*\((.*?)\)$/);
-  if (match) {
-    return {
-      amount: match[1].trim(),
-      note: match[2].trim(),
-    };
-  }
-  return { amount: trimmed };
 }
 
 export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDetailViewProps) {
@@ -61,9 +47,10 @@ export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDeta
 
   const center = updatedCenter ?? initialCenter;
   const profile = getEnrichedCenterProfile(center);
+  // Đánh giá thật từ backend (không dùng dữ liệu mẫu)
+  const { reviews, error: reviewsError, total: reviewTotal, average: reviewAverage } = useCenterReviews(center.id);
   const isVerified = center.verificationStatus === "verified" || profile.center.verificationStatus === "verified";
   const isActive = center.isActive !== false;
-  const scholarshipStat = parseScholarshipStat(profile.totalScholarshipsWon);
 
   const handleConfirmAction = async (verificationNote?: string) => {
     if (!confirmAction) return;
@@ -139,7 +126,7 @@ export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDeta
             {center.code}
           </Badge>
           {!isActive && (
-            <Badge variant="outline" className="text-rose-600 border-rose-300 bg-rose-50 dark:bg-rose-950/40 text-xs px-2 py-0.5 ml-1">
+            <Badge variant="risk" className="text-xs px-2 py-0.5 ml-1">
               Đã ẩn khỏi gợi ý
             </Badge>
           )}
@@ -159,7 +146,7 @@ export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDeta
               variant="outline"
               size="sm"
               onClick={() => setConfirmAction("hide")}
-              className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+              className="h-8 gap-1.5 text-xs text-ink-2 hover:text-risk hover:border-risk/30 hover:bg-risk-wash"
               title="Ẩn trung tâm khỏi luồng gợi ý và danh bạ"
             >
               <EyeOffIcon className="w-3.5 h-3.5" />
@@ -170,7 +157,7 @@ export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDeta
               variant="outline"
               size="sm"
               onClick={() => setConfirmAction("show")}
-              className="h-8 gap-1.5 text-xs text-emerald-700 border-emerald-300 bg-emerald-50/50 hover:bg-emerald-100/60 dark:bg-emerald-950/30 dark:hover:bg-emerald-950/60"
+              className="h-8 gap-1.5 text-xs text-ok border-ok/30 bg-ok-wash/60 hover:bg-ok-wash"
               title="Hiện lại trung tâm trên danh bạ và luồng gợi ý"
             >
               <EyeIcon className="w-3.5 h-3.5" />
@@ -178,50 +165,16 @@ export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDeta
             </Button>
           )}
 
-          {/* Trạng thái xác minh và Nút Xác minh / Hủy xác minh (UC-59) */}
-          {isVerified ? (
-            <div className="flex items-center gap-2">
-              <Badge className="bg-emerald-600 text-white gap-1 text-xs px-2.5 py-1">
-                <CheckCircle2Icon className="w-3.5 h-3.5" />
-                Đã xác minh Sở GD&ĐT
-              </Badge>
-              {center.verifiedAt && (
-                <span className="hidden sm:inline-flex items-center gap-1 text-xs text-muted-foreground">
-                  <ClockIcon className="w-3 h-3" />
-                  {new Date(center.verifiedAt).toLocaleDateString("vi-VN")}
-                </span>
-              )}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setConfirmAction("unverify")}
-                className="h-8 gap-1.5 text-xs text-rose-600 border-rose-200 hover:bg-rose-50 dark:hover:bg-rose-950/30"
-              >
-                <ShieldAlertIcon className="w-3.5 h-3.5" />
-                Hủy xác minh
-              </Button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-950/40 text-xs px-2.5 py-1">
-                Chờ duyệt hồ sơ
-              </Badge>
-              <Button
-                size="sm"
-                onClick={() => setConfirmAction("verify")}
-                className="h-8 gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white "
-              >
-                <ShieldCheckIcon className="w-3.5 h-3.5" />
-                Xác minh trung tâm
-              </Button>
-            </div>
-          )}
-
-          <CreateCenterAccountButton
-            initialName={center.name}
-            initialEmail={center.email || ""}
-            initialPhone={center.phone || ""}
-          />
+          {/* Trạng thái xác minh (UC-59): chỉ duyệt qua hàng đợi hồ sơ ở danh sách trung tâm */}
+          <div className="flex items-center gap-2">
+            <CenterStatusBadge status={center.verificationStatus} />
+            {isVerified && center.verifiedAt && (
+              <span className="hidden sm:inline-flex items-center gap-1 text-xs text-muted-foreground">
+                <ClockIcon className="w-3 h-3" />
+                {new Date(center.verifiedAt).toLocaleDateString("vi-VN")}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -230,7 +183,7 @@ export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDeta
         {/* Cover Background */}
         <div
           className="h-44 sm:h-52 w-full bg-cover bg-center relative bg-brand-ink"
-          style={{ backgroundImage: `url(${profile.coverImage})` }}
+          style={profile.coverImage ? { backgroundImage: `url(${profile.coverImage})` } : undefined}
         >
           <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
           <div className="absolute top-4 right-4 flex gap-2">
@@ -248,16 +201,20 @@ export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDeta
           <div className="flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4 -mt-12 sm:-mt-14">
             {/* Logo / Avatar */}
             <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl overflow-hidden border-4 border-background bg-card shrink-0 flex items-center justify-center">
-              <img
-                src={profile.logoImage}
-                alt={center.name}
-                className="w-full h-full object-cover"
-              />
+              {profile.logoImage ? (
+                <img
+                  src={profile.logoImage}
+                  alt={center.name}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <Building2Icon className="w-10 h-10 text-brand/40" />
+              )}
             </div>
 
             {/* Kênh tư vấn USAS (Ẩn hotline & website để tránh liên hệ trực tiếp ngoài hệ thống) */}
             <div className="flex flex-wrap items-center gap-2 shrink-0 pb-1">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-brand/20 bg-brand/5 text-xs font-medium text-brand">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-brand/20 bg-brand-wash text-xs font-medium text-brand-ink">
                 <ShieldCheckIcon className="w-3.5 h-3.5 text-brand shrink-0" />
                 <span>Tư vấn qua hệ thống USAS</span>
               </div>
@@ -267,124 +224,121 @@ export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDeta
           {/* Title & Info Block */}
           <div className="mt-4 space-y-2">
             <div className="flex flex-wrap items-center gap-2.5">
-              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+              <h1 className="font-heading text-2xl sm:text-3xl font-bold tracking-tight text-ink">
                 {center.name}
               </h1>
-              <Badge variant="secondary" className="font-medium bg-brand/10 text-brand border-brand/20">
+              <Badge variant="brand">
                 {profile.typeLabel}
               </Badge>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm text-ink-2">
               {center.city && (
-                <span className="inline-flex items-center gap-1 font-medium text-foreground">
+                <span className="inline-flex items-center gap-1 font-medium text-ink">
                   <MapPinIcon className="w-3.5 h-3.5 text-brand" />
                   {center.district ? `${center.district}, ${center.city}` : center.city}
                 </span>
               )}
-              <span>•</span>
-              <div className="inline-flex items-center gap-1 text-amber-500 font-semibold">
-                <StarIcon className="w-3.5 h-3.5 fill-current" />
-                <span>{profile.rating.toFixed(1)}</span>
-                <span className="text-muted-foreground font-normal">({profile.reviewCount} đánh giá)</span>
-              </div>
-              <span>•</span>
-              <span>Năm thành lập: <strong className="text-foreground">{profile.establishedYear}</strong></span>
+              <span>·</span>
+              {reviewTotal > 0 && reviewAverage !== null ? (
+                <div className="inline-flex items-center gap-1 text-gold font-semibold tabular-nums">
+                  <StarIcon className="w-3.5 h-3.5 fill-current" />
+                  <span>{reviewAverage.toFixed(1)}</span>
+                  <span className="text-ink-2 font-normal">({reviewTotal} đánh giá)</span>
+                </div>
+              ) : (
+                <span className="text-ink-3">Chưa có đánh giá</span>
+              )}
+              {profile.establishedYear != null && (
+                <>
+                  <span>·</span>
+                  <span>Năm thành lập: <strong className="text-ink">{profile.establishedYear}</strong></span>
+                </>
+              )}
             </div>
           </div>
         </div>
       </div>
 
       {/* 4 Key Highlight Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-3.5">
-        <Card className="p-3.5 sm:p-4 flex flex-col justify-between gap-3 min-w-0">
+      {(profile.visaSuccessRate != null || profile.staffCount != null || profile.licenseNumber || profile.taxCode) && (
+      <div className="grid grid-cols-1 sm:grid-cols-[repeat(auto-fit,minmax(14rem,1fr))] gap-3 sm:gap-3.5">
+        {profile.visaSuccessRate != null && (
+        <Card className="p-3.5 sm:p-4 flex flex-col justify-between gap-3 min-w-0 border-line">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-xs text-muted-foreground font-medium truncate">
+            <span className="text-xs text-ink-2 font-medium truncate">
               Tỷ lệ đỗ Visa Mỹ
             </span>
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-lg bg-ok-wash text-ok flex items-center justify-center shrink-0">
               <FlameIcon className="w-4 h-4" />
             </div>
           </div>
           <div className="min-w-0">
-            <div className="text-lg sm:text-2xl font-bold tracking-tight text-foreground truncate">
+            <div className="font-heading text-xl sm:text-2xl font-bold tracking-tight text-ink tabular-nums truncate">
               {profile.visaSuccessRate}%
             </div>
-            <div className="text-xs text-muted-foreground truncate mt-0.5">
-              Hồ sơ phỏng vấn ĐSQ
+            <div className="text-xs text-ink-3 truncate mt-0.5">
+              Do trung tâm công bố
             </div>
           </div>
         </Card>
+        )}
 
-        <Card className="p-3.5 sm:p-4 flex flex-col justify-between gap-3 min-w-0">
+        {profile.staffCount != null && (
+        <Card className="p-3.5 sm:p-4 flex flex-col justify-between gap-3 min-w-0 border-line">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-xs text-muted-foreground font-medium truncate">
-              Học bổng đạt được
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0">
-              <AwardIcon className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="min-w-0">
-            <div className="text-lg sm:text-2xl font-bold tracking-tight text-foreground truncate" title={scholarshipStat.amount}>
-              {scholarshipStat.amount}
-            </div>
-            <div
-              className="text-xs text-muted-foreground truncate mt-0.5"
-              title={scholarshipStat.note || "Kỳ tuyển sinh gần nhất"}
-            >
-              {scholarshipStat.note || "Kỳ tuyển sinh gần nhất"}
-            </div>
-          </div>
-        </Card>
-
-        <Card className="p-3.5 sm:p-4 flex flex-col justify-between gap-3 min-w-0">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-xs text-muted-foreground font-medium truncate">
+            <span className="text-xs text-ink-2 font-medium truncate">
               Quy mô nhân sự
             </span>
-            <div className="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-600 flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-lg bg-brand-wash text-brand-ink flex items-center justify-center shrink-0">
               <UsersIcon className="w-4 h-4" />
             </div>
           </div>
           <div className="min-w-0">
-            <div className="text-lg sm:text-2xl font-bold tracking-tight text-foreground truncate">
+            <div className="font-heading text-xl sm:text-2xl font-bold tracking-tight text-ink tabular-nums truncate">
               {profile.staffCount}{" "}
-              <span className="text-xs sm:text-sm font-normal text-muted-foreground">chuyên viên</span>
+              <span className="font-sans text-xs sm:text-sm font-normal text-ink-2">chuyên viên</span>
             </div>
-            <div className="text-xs text-muted-foreground truncate mt-0.5">
-              Cố vấn & Giảng viên
+            <div className="text-xs text-ink-3 truncate mt-0.5">
+              Do trung tâm công bố
             </div>
           </div>
         </Card>
+        )}
 
-        <Card className="p-3.5 sm:p-4 flex flex-col justify-between gap-3 min-w-0">
+        {(profile.licenseNumber || profile.taxCode) && (
+        <Card className="p-3.5 sm:p-4 flex flex-col justify-between gap-3 min-w-0 border-line">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-xs text-muted-foreground font-medium truncate">
+            <span className="text-xs text-ink-2 font-medium truncate">
               Pháp lý cơ sở
             </span>
-            <div className="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-600 flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-lg bg-reach-wash text-reach flex items-center justify-center shrink-0">
               <ShieldCheckIcon className="w-4 h-4" />
             </div>
           </div>
           <div className="min-w-0">
-            <div className="text-base sm:text-lg font-bold tracking-tight text-foreground truncate" title={profile.licenseNumber}>
-              {profile.licenseNumber}
+            <div className="text-base sm:text-lg font-bold tracking-tight text-ink truncate" title={profile.licenseNumber ?? undefined}>
+              {profile.licenseNumber ?? `MST: ${profile.taxCode}`}
             </div>
-            <div className="text-xs text-muted-foreground truncate mt-0.5" title={profile.licenseIssuedBy}>
-              {profile.taxCode ? `MST: ${profile.taxCode} · ${profile.licenseIssuedBy}` : profile.licenseIssuedBy}
-            </div>
+            {[profile.licenseNumber && profile.taxCode ? `MST: ${profile.taxCode}` : null, profile.licenseIssuedBy].some(Boolean) && (
+              <div className="text-xs text-ink-3 truncate mt-0.5" title={profile.licenseIssuedBy ?? undefined}>
+                {[profile.licenseNumber && profile.taxCode ? `MST: ${profile.taxCode}` : null, profile.licenseIssuedBy]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </div>
+            )}
           </div>
         </Card>
+        )}
       </div>
+      )}
 
       {/* Main Tabs Navigation */}
       <Tabs defaultValue="tong-quan" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 max-w-2xl h-11 p-1 rounded-xl border-2 border-border/90 bg-muted/90 ">
+        <TabsList className="grid w-full grid-cols-3 max-w-xl h-11 p-1 rounded-xl border-2 border-border/90 bg-muted/90 ">
           <TabsTrigger value="tong-quan" className="text-xs sm:text-sm font-medium">Tổng quan & Cơ sở</TabsTrigger>
-          <TabsTrigger value="dich-vu" className="text-xs sm:text-sm font-medium">Dịch vụ & Khóa học</TabsTrigger>
-          <TabsTrigger value="thanh-tich" className="text-xs sm:text-sm font-medium">Thành tích đỗ đạt</TabsTrigger>
-          <TabsTrigger value="danh-gia" className="text-xs sm:text-sm font-medium">Đánh giá ({profile.reviewCount})</TabsTrigger>
+          <TabsTrigger value="dich-vu" className="text-xs sm:text-sm font-medium">Dịch vụ</TabsTrigger>
+          <TabsTrigger value="danh-gia" className="text-xs sm:text-sm font-medium">Đánh giá ({reviewTotal})</TabsTrigger>
         </TabsList>
 
         {/* TAB 1: TỔNG QUAN & CƠ SỞ VẬT CHẤT */}
@@ -398,25 +352,24 @@ export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDeta
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4 text-sm leading-relaxed text-muted-foreground">
-              <p>
-                {center.description ??
-                  `${center.name} là tổ chức giáo dục chuyên sâu về định hướng lộ trình du học Hoa Kỳ, luyện thi chuẩn hóa và đào tạo kỹ năng học thuật cho học sinh Việt Nam. Với hơn 14 năm kinh nghiệm đồng hành, trung tâm đã hỗ trợ hàng ngàn học sinh trúng tuyển thành công vào các trường Đại học danh tiếng tại Mỹ.`}
-              </p>
+              {center.description && <p>{center.description}</p>}
 
               {/* Chứng nhận quốc tế */}
-              <div className="pt-2 border-t">
-                <div className="text-xs font-semibold text-foreground mb-2">
-                  Chứng nhận kiểm định & Đối tác quốc tế:
+              {profile.accreditations.length > 0 && (
+                <div className="pt-2 border-t">
+                  <div className="text-xs font-semibold text-foreground mb-2">
+                    Chứng nhận kiểm định & Đối tác quốc tế:
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {profile.accreditations.map((acc) => (
+                      <Badge key={acc} variant="outline" className="bg-muted/40 font-normal text-xs py-1">
+                        <ShieldCheckIcon className="w-3.5 h-3.5 text-brand mr-1" />
+                        {acc}
+                      </Badge>
+                    ))}
+                  </div>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  {profile.accreditations.map((acc) => (
-                    <Badge key={acc} variant="outline" className="bg-muted/40 font-normal text-xs py-1">
-                      <ShieldCheckIcon className="w-3.5 h-3.5 text-brand mr-1" />
-                      {acc}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
+              )}
             </CardContent>
           </Card>
 
@@ -428,15 +381,11 @@ export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDeta
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
                   <ClockIcon className="w-4 h-4 text-brand" />
-                  Thời gian làm việc & Kênh tiếp nhận
+                  Kênh tiếp nhận
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 text-xs sm:text-sm">
-                <div>
-                  <span className="font-semibold text-foreground">Giờ hoạt động:</span>{" "}
-                  <span className="text-muted-foreground">{profile.operatingHours}</span>
-                </div>
-                <div className="pt-2 border-t text-xs text-muted-foreground flex items-start gap-2 bg-muted/40 p-2.5 rounded-lg">
+                <div className="text-xs text-muted-foreground flex items-start gap-2 bg-muted/40 p-2.5 rounded-lg">
                   <ShieldCheckIcon className="w-4 h-4 text-brand shrink-0 mt-0.5" />
                   <span>
                     Toàn bộ quy trình tiếp nhận tư vấn, đánh giá hồ sơ và đối soát dịch vụ được thực hiện tập trung qua hệ thống USAS để bảo đảm quyền lợi và bảo mật thông tin.
@@ -498,109 +447,11 @@ export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDeta
           </Card>
 
           {/* Khóa đào tạo */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <BookOpenIcon className="w-5 h-5 text-brand" />
-                Khóa đào tạo Tiếng Anh & Luyện thi Chuẩn hóa
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-3 sm:grid-cols-3">
-                {profile.courses.map((course, idx) => (
-                  <div
-                    key={idx}
-                    className="p-4 rounded-lg border bg-card flex flex-col justify-between space-y-3"
-                  >
-                    <div className="space-y-1.5">
-                      <div className="font-semibold text-foreground text-sm">{course.name}</div>
-                      <div className="text-xs text-muted-foreground">{course.target}</div>
-                      <div className="text-xs text-brand font-medium bg-brand/5 p-2 rounded border border-brand/15">
-                        ⭐ {course.highlight}
-                      </div>
-                    </div>
-                    <div className="pt-2 border-t text-xs text-muted-foreground space-y-0.5">
-                      <div>Thời lượng: <strong>{course.duration}</strong></div>
-                      <div>Hình thức: <strong>{course.format}</strong></div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
         </TabsContent>
 
-        {/* TAB 3: THÀNH TÍCH ĐỖ ĐẠT */}
-        <TabsContent value="thanh-tich" className="space-y-6 pt-2">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <AwardIcon className="w-5 h-5 text-amber-500" />
-                Học sinh trúng tuyển tiêu biểu năm 2025 - 2026
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid sm:grid-cols-3 gap-3.5">
-                {profile.successStories.map((story, i) => (
-                  <div key={i} className="p-4 rounded-lg border bg-card space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-foreground text-sm">{story.studentName}</span>
-                      <Badge variant="secondary" className="text-xs">
-                        {story.year}
-                      </Badge>
-                    </div>
-                    <div className="text-xs text-muted-foreground">{story.highSchool}</div>
-                    <div className="pt-2 border-t">
-                      <div className="text-xs text-brand font-bold">{story.university}</div>
-                      <div className="text-xs text-muted-foreground">Ngành: {story.major}</div>
-                      <div className="text-xs font-semibold text-emerald-600 mt-1">
-                        Học bổng: {story.scholarship}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* TAB 4: ĐÁNH GIÁ & NHẬN XÉT */}
+        {/* TAB 3: ĐÁNH GIÁ & NHẬN XÉT (dữ liệu thật) */}
         <TabsContent value="danh-gia" className="space-y-6 pt-2">
-          <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-foreground">
-              Đánh giá từ phụ huynh & học sinh ({profile.reviews.length} nhận xét)
-            </h3>
-            {profile.reviews.map((rev) => (
-              <Card key={rev.id}>
-                <CardHeader className="pb-2 pt-4 px-4 sm:px-6">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-sm text-foreground">{rev.reviewerName}</span>
-                        {rev.verified && (
-                          <Badge variant="outline" className="text-emerald-600 border-emerald-300 text-xs py-0">
-                            ✓ Xác thực
-                          </Badge>
-                        )}
-                        <span className="text-xs text-muted-foreground">({rev.date})</span>
-                      </div>
-                      {rev.targetSchool && (
-                        <div className="text-xs text-brand font-medium mt-0.5">{rev.targetSchool}</div>
-                      )}
-                    </div>
-                    <div className="flex text-amber-500">
-                      {[...Array(rev.rating)].map((_, i) => (
-                        <StarIcon key={i} className="w-3.5 h-3.5 fill-current" />
-                      ))}
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="px-4 sm:px-6 pb-4 text-xs sm:text-sm text-muted-foreground leading-relaxed">
-                  {rev.comment}
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+          <CenterReviewList reviews={reviews} error={reviewsError} />
         </TabsContent>
       </Tabs>
 

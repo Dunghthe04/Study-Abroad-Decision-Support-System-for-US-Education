@@ -1,90 +1,152 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Building2Icon,
-  SearchIcon,
-  MapPinIcon,
-  CheckCircle2Icon,
-  StarIcon,
-  ShieldCheckIcon,
-  ShieldAlertIcon,
-  RotateCcwIcon,
-  FlameIcon,
-  ChevronRightIcon,
   EyeIcon,
   EyeOffIcon,
+  FilterIcon,
+  MapPinIcon,
   PencilIcon,
+  RotateCcwIcon,
+  SearchIcon,
+  ShieldCheckIcon,
+  StarIcon,
+  TrendingUpIcon,
 } from "lucide-react";
 import { studyCentersApi, ApiError } from "@/lib/api";
 import type { StudyCenter, PagedResult } from "@/types/api";
-import { Badge } from "@/components/ui/badge";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "@/components/ui/toast";
-import { AddCenterButton } from "@/components/admin/AddCenterButton";
+import {
+  DataTable,
+  type DataTableColumn,
+  type DataTableToolbarSlots,
+} from "@/components/admin/shared/DataTable";
 import { TablePagination } from "@/components/admin/shared/TablePagination";
+import { OptionSelect } from "@/components/admin/universities/OptionSelect";
+import { normalizeComplianceMode } from "@/lib/center-legal";
+import { AdminVerificationQueueModal } from "@/components/admin/centers/AdminVerificationQueueModal";
+import { AdminCenterDetailPanel } from "@/components/admin/centers/AdminCenterDetailPanel";
 import {
   CenterActionConfirmDialog,
   type CenterConfirmAction,
 } from "@/components/admin/centers/CenterActionConfirmDialog";
+import { usePendingCenterCount } from "@/hooks/use-pending-center-count";
 import { EditCenterButton } from "@/components/admin/centers/EditCenterButton";
-import { LEGAL_COMPLIANCE_MODE_LABELS, normalizeComplianceMode } from "@/lib/center-legal";
+import {
+  CenterLegalModeBadge,
+  CenterTypeBadge,
+  CenterStatusBadge,
+  CenterVisibilityBadge,
+} from "@/components/centers/CenterBadges";
 import { cn } from "cn";
 
+const PAGE_SIZE = 10;
+const FILTER_FIELD_BG = "bg-surface";
+
+type FilterOption = { value: string; label: string };
+
+const CITY_OPTIONS: FilterOption[] = [
+  { value: "all", label: "Tất cả địa điểm" },
+  { value: "Hà Nội", label: "Hà Nội" },
+  { value: "TP.HCM", label: "TP. Hồ Chí Minh" },
+  { value: "Hải Phòng", label: "Hải Phòng" },
+];
+
+const TYPE_OPTIONS: FilterOption[] = [
+  { value: "all", label: "Mọi loại hình" },
+  { value: "study_abroad", label: "Tư vấn Du học" },
+  { value: "test_prep", label: "Luyện thi Chứng chỉ" },
+  { value: "hybrid", label: "Toàn diện (Du học & Luyện thi)" },
+];
+
+const STATUS_OPTIONS: FilterOption[] = [
+  { value: "all", label: "Mọi trạng thái" },
+  { value: "verified", label: "Đã xác minh" },
+  { value: "pending_review", label: "Chờ duyệt hồ sơ" },
+  { value: "unverified", label: "Chưa xác minh" },
+  { value: "rejected", label: "Bị từ chối" },
+  { value: "suspended", label: "Tạm ngưng" },
+  { value: "hidden", label: "Đã ẩn khỏi gợi ý" },
+];
+
 export function AdminCenterListView() {
-  const router = useRouter();
   const [centers, setCenters] = useState<StudyCenter[]>([]);
   const [totalCount, setTotalCount] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const [page, setPage] = useState(1);
-  const pageSize = 10;
+
+  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [cityFilter, setCityFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+
+  const [filterMenuOpen, setFilterMenuOpen] = useState(false);
+  const [draftCity, setDraftCity] = useState("all");
+  const [draftType, setDraftType] = useState("all");
+  const [draftStatus, setDraftStatus] = useState("all");
+
   const [isLoading, setIsLoading] = useState(true);
+  const [listError, setListError] = useState<string | null>(null);
+  const [selectedCenter, setSelectedCenter] = useState<StudyCenter | null>(null);
   const [confirmTarget, setConfirmTarget] = useState<{
     center: StudyCenter;
     action: CenterConfirmAction;
   } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [failedLogos, setFailedLogos] = useState<Record<string, true>>({});
+  const [queueOpen, setQueueOpen] = useState(false);
+  const { count: pendingCount, refresh: refreshPending } = usePendingCenterCount(true);
 
-  const fetchCenters = useCallback(async (activePage: number, signal?: { cancelled: boolean }) => {
-    setIsLoading(true);
-    try {
-      const res: PagedResult<StudyCenter> = await studyCentersApi.search({
-        search: search.trim() || undefined,
-        city: cityFilter !== "all" ? cityFilter : undefined,
-        page: activePage,
-        pageSize,
-      });
+  const markLogoFailed = (url?: string | null) => {
+    if (!url) return;
+    setFailedLogos((prev) => (prev[url] ? prev : { ...prev, [url]: true }));
+  };
 
-      if (signal?.cancelled) return;
+  const fetchCenters = useCallback(
+    async (activePage: number, signal?: { cancelled: boolean }) => {
+      setIsLoading(true);
+      setListError(null);
+      try {
+        const res: PagedResult<StudyCenter> = await studyCentersApi.search({
+          search: search.trim() || undefined,
+          city: cityFilter !== "all" ? cityFilter : undefined,
+          centerType: typeFilter !== "all" ? typeFilter : undefined,
+          verificationStatus:
+            statusFilter !== "all" && statusFilter !== "hidden" ? statusFilter : undefined,
+          includeInactive: statusFilter !== "hidden",
+          onlyInactive: statusFilter === "hidden",
+          page: activePage,
+          pageSize: PAGE_SIZE,
+        });
 
-      let items = res.items || [];
+        if (signal?.cancelled) return;
 
-      // Lọc client-side cho typeFilter và statusFilter nếu cần
-      if (typeFilter !== "all") {
-        items = items.filter((c) => (c.centerType || "study_abroad") === typeFilter);
+        const items = res.items || [];
+        const total = res.totalCount ?? items.length;
+
+        setCenters(items);
+        setTotalCount(total);
+        setTotalPages(Math.max(1, res.totalPages ?? Math.ceil(total / PAGE_SIZE)));
+      } catch (err) {
+        if (!signal?.cancelled) {
+          setListError(
+            err instanceof ApiError ? err.message : "Không tải được danh sách trung tâm tư vấn."
+          );
+        }
+      } finally {
+        if (!signal?.cancelled) {
+          setIsLoading(false);
+        }
       }
-      if (statusFilter !== "all") {
-        items = items.filter((c) => (c.verificationStatus || "unverified") === statusFilter);
-      }
-
-      setCenters(items);
-      setTotalCount(res.totalCount || items.length);
-    } catch (err) {
-      if (!signal?.cancelled) {
-        console.error("Lỗi tải danh sách trung tâm:", err);
-      }
-    } finally {
-      if (!signal?.cancelled) {
-        setIsLoading(false);
-      }
-    }
-  }, [cityFilter, search, statusFilter, typeFilter]);
+    },
+    [cityFilter, search, statusFilter, typeFilter]
+  );
 
   useEffect(() => {
     const signal = { cancelled: false };
@@ -96,64 +158,71 @@ export function AdminCenterListView() {
     };
   }, [fetchCenters, page]);
 
-  const handleSearchSubmit = (e: React.FormEvent) => {
+  const activeFilterCount =
+    (cityFilter !== "all" ? 1 : 0) +
+    (typeFilter !== "all" ? 1 : 0) +
+    (statusFilter !== "all" ? 1 : 0);
+
+  const hasActiveSearchOrFilter = activeFilterCount > 0 || search.length > 0;
+
+  const handleFilterMenuOpenChange = (open: boolean) => {
+    if (open) {
+      setDraftCity(cityFilter);
+      setDraftType(typeFilter);
+      setDraftStatus(statusFilter);
+    }
+    setFilterMenuOpen(open);
+  };
+
+  const handleApplyFilters = (e: React.FormEvent) => {
     e.preventDefault();
+    setCityFilter(draftCity);
+    setTypeFilter(draftType);
+    setStatusFilter(draftStatus);
     setPage(1);
+    setFilterMenuOpen(false);
   };
 
   const handleResetFilters = () => {
+    setSearchInput("");
     setSearch("");
     setCityFilter("all");
     setTypeFilter("all");
     setStatusFilter("all");
+    setDraftCity("all");
+    setDraftType("all");
+    setDraftStatus("all");
+    setPage(1);
+    setFilterMenuOpen(false);
+  };
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setSearch(searchInput.trim());
     setPage(1);
   };
 
-  const handleConfirmTarget = async (verificationNote?: string) => {
+  const updateCenterInState = useCallback((updated: StudyCenter) => {
+    setCenters((prev) => prev.map((c) => (c.id === updated.id ? { ...c, ...updated } : c)));
+    setSelectedCenter((prev) => (prev?.id === updated.id ? { ...prev, ...updated } : prev));
+  }, []);
+
+  // Xác minh chỉ thực hiện trong hàng đợi hồ sơ (UC-59); ở đây chỉ còn ẩn/hiện (UC-72).
+  const handleConfirmTarget = async () => {
     if (!confirmTarget) return;
     setIsSubmitting(true);
     const targetCenter = confirmTarget.center;
     const action = confirmTarget.action;
 
     try {
-      if (action === "verify" || action === "unverify") {
-        const targetVerified = action === "verify";
-        const updated = await studyCentersApi.verify(targetCenter.id, targetVerified, verificationNote);
-        setCenters((prev) =>
-          prev.map((c) =>
-            c.id === targetCenter.id
-              ? {
-                  ...c,
-                  ...updated,
-                  verificationStatus: targetVerified ? "verified" : "unverified",
-                  verifiedAt: targetVerified ? (updated.verifiedAt ?? new Date().toISOString()) : null,
-                  verifiedByUserId: targetVerified ? updated.verifiedByUserId : null,
-                }
-              : c
-          )
-        );
-
-        toast.add({
-          type: "success",
-          title: targetVerified ? "Đã xác minh trung tâm" : "Đã hủy xác minh trung tâm",
-          description: targetVerified
-            ? `Trung tâm ${targetCenter.name} đã được xác minh thành công.`
-            : `Đã hủy trạng thái xác minh của ${targetCenter.name}.`,
-        });
-      } else if (action === "hide" || action === "show") {
+      if (action === "hide" || action === "show") {
         const targetActive = action === "show";
         const updated = await studyCentersApi.setActiveStatus(targetCenter.id, targetActive);
-        setCenters((prev) =>
-          prev.map((c) =>
-            c.id === targetCenter.id
-              ? {
-                  ...c,
-                  ...updated,
-                  isActive: targetActive,
-                }
-              : c
-          )
-        );
+        updateCenterInState({
+          ...targetCenter,
+          ...updated,
+          isActive: targetActive,
+        });
 
         toast.add({
           type: "success",
@@ -169,7 +238,7 @@ export function AdminCenterListView() {
       const msg = err instanceof ApiError ? err.message : "Thao tác không thành công.";
       toast.add({
         type: "error",
-        title: "Thao tác thất bại",
+        title: "Lỗi thao tác",
         description: msg,
       });
     } finally {
@@ -177,376 +246,356 @@ export function AdminCenterListView() {
     }
   };
 
-  const getTypeBadge = (type?: string) => {
-    switch (type) {
-      case "hybrid":
-        return <Badge variant="secondary" className="bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 border-purple-200">Toàn diện (Du học & Luyện thi)</Badge>;
-      case "english_training":
-      case "test_prep":
-        return <Badge variant="secondary" className="bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border-amber-200">Luyện thi Chứng chỉ</Badge>;
-      default:
-        return <Badge variant="secondary" className="bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border-blue-200">Tư vấn Du học</Badge>;
-    }
+  const columns = useMemo<DataTableColumn<StudyCenter>[]>(
+    () => [
+      {
+        id: "name",
+        label: "Trung tâm & Mã",
+        required: true,
+        render: (c) => (
+          <div className="flex items-center gap-3 min-w-[220px]">
+            <div className="size-9 rounded-lg overflow-hidden border border-line bg-ground shrink-0 flex items-center justify-center">
+              {c.logoUrl && !failedLogos[c.logoUrl] ? (
+                <img
+                  src={c.logoUrl}
+                  alt={c.name}
+                  onError={() => markLogoFailed(c.logoUrl)}
+                  className="size-full object-cover"
+                />
+              ) : (
+                <Building2Icon className="size-4 text-ink-3" />
+              )}
+            </div>
+            <div className="min-w-0">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedCenter((prev) => (prev?.id === c.id ? null : c));
+                }}
+                className="font-medium text-brand underline-offset-2 hover:underline text-left block"
+              >
+                {c.name}
+              </button>
+              <span className="font-mono text-xs text-ink-3">{c.code}</span>
+            </div>
+          </div>
+        ),
+      },
+      {
+        id: "type",
+        label: "Mô hình",
+        render: (c) => <CenterTypeBadge centerType={c.centerType} compact />,
+      },
+      {
+        id: "location",
+        label: "Địa điểm & Pháp lý",
+        render: (c) => (
+          <div className="space-y-1 text-xs">
+            <div className="flex items-center gap-1 font-medium text-ink">
+              <MapPinIcon className="size-3.5 text-brand shrink-0" />
+              <span>
+                {c.district ? `${c.district}, ${c.city ?? ""}` : (c.city ?? "Toàn quốc")}
+              </span>
+            </div>
+            {c.licenseNumber && (
+              <div className="text-ink-2 flex items-center gap-1">
+                <ShieldCheckIcon className="size-3 text-ok shrink-0" />
+                <span>{c.licenseNumber}</span>
+              </div>
+            )}
+            {(c.taxCode || c.legalComplianceMode) && (
+              <div className="flex items-center gap-1.5 flex-wrap text-xs text-ink-3">
+                {c.taxCode && <span className="font-mono">MST: {c.taxCode}</span>}
+                {c.legalComplianceMode && (
+                  <CenterLegalModeBadge mode={normalizeComplianceMode(c.legalComplianceMode)} />
+                )}
+              </div>
+            )}
+          </div>
+        ),
+      },
+      {
+        id: "metrics",
+        label: "Visa & Đánh giá",
+        render: (c) => (
+          <div className="space-y-1 text-xs whitespace-nowrap">
+            {c.visaSuccessRate != null ? (
+              <div className="flex items-center gap-1 font-medium text-ok">
+                <TrendingUpIcon className="size-3.5" />
+                Đỗ Visa: {c.visaSuccessRate}%
+              </div>
+            ) : (
+              <div className="text-ink-3 italic">Chưa rõ tỷ lệ Visa</div>
+            )}
+            {(c.reviewCount ?? 0) > 0 && c.averageRating != null && (
+              <div className="flex items-center gap-1 text-ink-2">
+                <StarIcon className="size-3 fill-warn text-warn" />
+                <span className="font-medium text-ink">{c.averageRating}</span>
+                <span>({c.reviewCount ?? 0})</span>
+              </div>
+            )}
+          </div>
+        ),
+      },
+      {
+        id: "status",
+        label: "Trạng thái",
+        render: (c) => {
+          const isVerified = c.verificationStatus === "verified";
+          return (
+            <div className="flex flex-col gap-1 items-start whitespace-nowrap">
+              <CenterStatusBadge status={c.verificationStatus} />
+              {isVerified && c.verifiedAt && (
+                <span className="text-xs text-ink-3">
+                  {new Date(c.verifiedAt).toLocaleDateString("vi-VN")}
+                </span>
+              )}
+              {c.isActive === false && <CenterVisibilityBadge active={false} />}
+            </div>
+          );
+        },
+      },
+      {
+        id: "actions",
+        label: "Thao tác",
+        required: true,
+        headerClassName: "w-px whitespace-nowrap text-right",
+        cellClassName: "w-px text-right whitespace-nowrap",
+        render: (c) => {
+          return (
+            <div
+              className="inline-flex items-center justify-end gap-1"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <EditCenterButton
+                center={c}
+                size="xs"
+                variant="ghost"
+                className="text-ink-2 hover:text-ink"
+                onSuccess={updateCenterInState}
+              >
+                <PencilIcon className="size-3.5" />
+                <span className="hidden xl:inline">Sửa</span>
+              </EditCenterButton>
+
+              {c.isActive === false ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  className="text-ok hover:text-ok hover:bg-ok-wash"
+                  onClick={() => setConfirmTarget({ center: c, action: "show" })}
+                  title="Hiện lại trung tâm"
+                >
+                  <EyeIcon className="size-3.5" />
+                  <span className="hidden xl:inline">Hiện</span>
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  className="text-ink-2 hover:text-ink"
+                  onClick={() => setConfirmTarget({ center: c, action: "hide" })}
+                  title="Ẩn trung tâm"
+                >
+                  <EyeOffIcon className="size-3.5" />
+                  <span className="hidden xl:inline">Ẩn</span>
+                </Button>
+              )}
+            </div>
+          );
+        },
+      },
+    ],
+    [failedLogos, updateCenterInState]
+  );
+
+  const toolbar: DataTableToolbarSlots = {
+    filters: (
+      <Popover open={filterMenuOpen} onOpenChange={handleFilterMenuOpenChange}>
+        <PopoverTrigger
+          render={
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="border-border bg-muted/60 text-foreground hover:bg-muted"
+            />
+          }
+        >
+          <FilterIcon className="size-4" />
+          Bộ lọc
+          {activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
+        </PopoverTrigger>
+        <PopoverContent align="start" className="w-80 max-w-[calc(100vw-2rem)] p-4">
+          <form onSubmit={handleApplyFilters} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="center-filter-city">Địa điểm</Label>
+              <OptionSelect
+                id="center-filter-city"
+                value={draftCity}
+                options={CITY_OPTIONS}
+                onChange={setDraftCity}
+                size="sm"
+                className={FILTER_FIELD_BG}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="center-filter-type">Loại hình trung tâm</Label>
+              <OptionSelect
+                id="center-filter-type"
+                value={draftType}
+                options={TYPE_OPTIONS}
+                onChange={setDraftType}
+                size="sm"
+                className={FILTER_FIELD_BG}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="center-filter-status">Trạng thái duyệt</Label>
+              <OptionSelect
+                id="center-filter-status"
+                value={draftStatus}
+                options={STATUS_OPTIONS}
+                onChange={setDraftStatus}
+                size="sm"
+                className={FILTER_FIELD_BG}
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <Button type="button" variant="outline" size="sm" onClick={handleResetFilters}>
+                Xóa lọc
+              </Button>
+              <Button type="submit" size="sm">
+                Áp dụng
+              </Button>
+            </div>
+          </form>
+        </PopoverContent>
+      </Popover>
+    ),
+    search: (
+      <form onSubmit={handleSearchSubmit} role="search" className="relative">
+        <Input
+          id="admin-centers-search"
+          type="text"
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          placeholder="Tìm theo tên, mã (CTY_...), địa chỉ..."
+          aria-label="Tìm kiếm trung tâm tư vấn"
+          className={cn("pr-10", FILTER_FIELD_BG)}
+        />
+        <Button
+          type="submit"
+          variant="ghost"
+          size="icon-sm"
+          className="absolute top-1/2 right-1 -translate-y-1/2"
+          aria-label="Tìm kiếm"
+        >
+          <SearchIcon className="size-4" />
+        </Button>
+      </form>
+    ),
+    actions: (
+      <>
+        {hasActiveSearchOrFilter && (
+          <Button type="button" variant="outline" size="sm" onClick={handleResetFilters}>
+            Xóa lọc
+          </Button>
+        )}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => void fetchCenters(page)}
+          disabled={isLoading}
+          className="gap-1.5"
+        >
+          <RotateCcwIcon className={cn("size-3.5", isLoading && "animate-spin")} />
+          Làm mới
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setQueueOpen(true)}
+          className="gap-1.5"
+        >
+          <ShieldCheckIcon className="size-4" />
+          Hồ sơ xác minh
+          {pendingCount > 0 && (
+            <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-risk px-1.5 text-[11px] font-semibold leading-5 text-white">
+              {pendingCount}
+            </span>
+          )}
+        </Button>
+      </>
+    ),
   };
 
   return (
-    <div className="flex-1 min-h-0 w-full overflow-y-auto space-y-6 pr-1 pb-10">
-      {/* Header bar */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
-            Trung tâm tư vấn
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Danh sách đơn vị tư vấn du học, hồ sơ pháp lý và kiểm duyệt
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => void fetchCenters(page)}
-            disabled={isLoading}
-            className="gap-1.5"
-          >
-            <RotateCcwIcon className="size-3.5" />
-            Làm mới
-          </Button>
-          <AddCenterButton size="sm" />
-        </div>
-      </div>
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
+      <header className="shrink-0">
+        <h1 className="text-h2">Trung tâm tư vấn</h1>
+        <p className="text-sm text-ink-2 mt-1">
+          Danh sách đơn vị tư vấn du học, hồ sơ pháp lý và kiểm duyệt
+        </p>
+      </header>
 
-      {/* Filter toolbar */}
-      <div className="bg-card border rounded-xl p-4 space-y-3 ">
-        <form onSubmit={handleSearchSubmit} className="flex flex-col md:flex-row gap-3">
-          <div className="relative flex-1">
-            <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Tìm theo tên trung tâm, mã (CTY_013, Summit...), địa chỉ..."
-              className="pl-9"
-            />
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <select
-              value={cityFilter}
-              onChange={(e) => {
-                setCityFilter(e.target.value);
-                setPage(1);
-              }}
-              className="h-9 px-3 rounded-md border border-input bg-background text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-            >
-              <option value="all">Tất cả địa điểm</option>
-              <option value="Hà Nội">Hà Nội</option>
-              <option value="TP.HCM">TP. Hồ Chí Minh</option>
-              <option value="Hải Phòng">Hải Phòng</option>
-            </select>
-
-            <select
-              value={typeFilter}
-              onChange={(e) => {
-                setTypeFilter(e.target.value);
-                setPage(1);
-              }}
-              className="h-9 px-3 rounded-md border border-input bg-background text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-            >
-              <option value="all">Mọi loại hình</option>
-              <option value="study_abroad">Tư vấn Du học</option>
-              <option value="english_training">Luyện thi Chứng chỉ</option>
-              <option value="hybrid">Toàn diện (Du học & Luyện thi)</option>
-            </select>
-
-            <select
-              value={statusFilter}
-              onChange={(e) => {
-                setStatusFilter(e.target.value);
-                setPage(1);
-              }}
-              className="h-9 px-3 rounded-md border border-input bg-background text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-            >
-              <option value="all">Mọi trạng thái</option>
-              <option value="verified">Đã xác minh</option>
-              <option value="unverified">Chờ xác minh</option>
-              <option value="hidden">Đã ẩn khỏi gợi ý</option>
-            </select>
-
-            <Button type="submit" variant="secondary" size="sm" className="h-9 gap-1.5">
-              <SearchIcon className="w-3.5 h-3.5" />
-              Tìm kiếm
-            </Button>
-
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={handleResetFilters}
-              className="h-9 gap-1 text-muted-foreground hover:text-foreground"
-            >
-              <RotateCcwIcon className="w-3.5 h-3.5" />
-              Đặt lại
-            </Button>
-          </div>
-        </form>
-      </div>
-
-      {/* Centers Table */}
-      <div className="bg-card border rounded-xl overflow-hidden w-full">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-muted/50 border-b text-xs font-semibold text-muted-foreground">
-              <tr>
-                <th className="py-3 px-4">Trung tâm & Mã</th>
-                <th className="py-3 px-4">Mô hình hoạt động</th>
-                <th className="py-3 px-4">Địa điểm & Pháp lý</th>
-                <th className="py-3 px-4">Tỷ lệ Visa & Đánh giá</th>
-                <th className="py-3 px-4">Trạng thái</th>
-                <th className="py-3 px-4 text-right">Thao tác</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {isLoading ? (
-                <tr>
-                  <td colSpan={6} className="py-12 text-center text-muted-foreground">
-                    Đang tải danh sách trung tâm...
-                  </td>
-                </tr>
-              ) : centers.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="py-12 text-center text-muted-foreground">
-                    Không tìm thấy trung tâm nào khớp với bộ lọc tìm kiếm.
-                  </td>
-                </tr>
-              ) : (
-                centers.map((c) => {
-                  const isVerified = c.verificationStatus === "verified";
-                  return (
-                    <tr
-                      key={c.id}
-                      onClick={() => router.push(`/admin/centers/${c.id}`)}
-                      className="cursor-pointer transition-colors hover:bg-muted/40"
-                    >
-                      {/* Name & Logo */}
-                      <td className="py-3.5 px-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-lg overflow-hidden border bg-muted shrink-0 flex items-center justify-center">
-                            {c.logoUrl ? (
-                              <img src={c.logoUrl} alt={c.name} className="w-full h-full object-cover" />
-                            ) : (
-                              <Building2Icon className="w-5 h-5 text-muted-foreground" />
-                            )}
-                          </div>
-                          <div className="min-w-0">
-                            <div className="font-semibold text-foreground truncate max-w-[240px]">
-                              {c.name}
-                            </div>
-                            <div className="flex items-center gap-2 mt-0.5">
-                              <Badge variant="outline" className="text-xs font-mono px-1.5 py-0">
-                                {c.code}
-                              </Badge>
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* Center Type */}
-                      <td className="py-3.5 px-4">
-                        {getTypeBadge(c.centerType)}
-                      </td>
-
-                      {/* Location & License */}
-                      <td className="py-3.5 px-4 text-xs space-y-1">
-                        <div className="flex items-center gap-1 font-medium text-foreground">
-                          <MapPinIcon className="w-3.5 h-3.5 text-brand shrink-0" />
-                          <span className="truncate max-w-[200px]">
-                            {c.district ? `${c.district}, ${c.city ?? ""}` : (c.city ?? "Toàn quốc")}
-                          </span>
-                        </div>
-                        {c.licenseNumber && (
-                          <div className="text-muted-foreground flex items-center gap-1 truncate max-w-[200px]">
-                            <ShieldCheckIcon className="w-3 h-3 text-purple-600 shrink-0" />
-                            {c.licenseNumber}
-                          </div>
-                        )}
-                        {(c.taxCode || c.legalComplianceMode) && (
-                          <div className="text-[11px] text-muted-foreground flex items-center gap-1.5 flex-wrap">
-                            {c.taxCode && <span className="font-mono">MST: {c.taxCode}</span>}
-                            {c.legalComplianceMode && (
-                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal">
-                                {LEGAL_COMPLIANCE_MODE_LABELS[normalizeComplianceMode(c.legalComplianceMode)]}
-                              </Badge>
-                            )}
-                          </div>
-                        )}
-                      </td>
-
-                      {/* Visa Rate & Rating */}
-                      <td className="py-3.5 px-4 text-xs space-y-1">
-                        <div className="flex items-center gap-1 text-emerald-600 font-semibold">
-                          <FlameIcon className="w-3.5 h-3.5" />
-                          <span>Đỗ Visa: {c.visaSuccessRate ? `${c.visaSuccessRate}%` : "98.5%"}</span>
-                        </div>
-                        <div className="flex items-center gap-1 text-amber-500 font-medium">
-                          <StarIcon className="w-3 h-3 fill-current" />
-                          <span>{Number(c.averageRating ?? 4.9).toFixed(1)}</span>
-                          <span className="text-muted-foreground">({c.reviewCount ?? 0} đánh giá)</span>
-                        </div>
-                      </td>
-
-                      {/* Verification & Active Status */}
-                      <td className="py-3.5 px-4">
-                        <div className="flex flex-col gap-1 items-start">
-                          {isVerified ? (
-                            <div className="flex flex-col gap-0.5 items-start">
-                              <Badge className="bg-emerald-600 text-white gap-1 text-xs px-2 py-0.5">
-                                <CheckCircle2Icon className="w-3 h-3" />
-                                Đã xác minh
-                              </Badge>
-                              {c.verifiedAt && (
-                                <span className="text-xs text-muted-foreground">
-                                  {new Date(c.verifiedAt).toLocaleDateString("vi-VN")}
-                                </span>
-                              )}
-                            </div>
-                          ) : (
-                            <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-950/40 text-xs px-2 py-0.5">
-                              Chờ duyệt
-                            </Badge>
-                          )}
-                          {c.isActive === false && (
-                            <Badge variant="outline" className="text-rose-600 border-rose-300 bg-rose-50 dark:bg-rose-950/40 text-xs px-1.5 py-0">
-                              Đã ẩn
-                            </Badge>
-                          )}
-                        </div>
-                      </td>
-
-                      {/* Actions */}
-                      <td className="py-3.5 px-4 text-right">
-                        <div className="inline-flex items-center justify-end gap-1.5">
-                          {/* Sửa thông tin trung tâm (UC-72) */}
-                          <div onClick={(e) => e.stopPropagation()}>
-                            <EditCenterButton
-                              center={c}
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
-                              onSuccess={(updated) => {
-                                setCenters((prev) =>
-                                  prev.map((item) => (item.id === updated.id ? { ...item, ...updated } : item))
-                                );
-                              }}
-                            >
-                              <PencilIcon className="w-3.5 h-3.5 mr-1" />
-                              <span className="hidden lg:inline">Sửa</span>
-                            </EditCenterButton>
-                          </div>
-
-                          {/* Ẩn / Hiện trung tâm (UC-72) */}
-                          {c.isActive === false ? (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="gap-1 text-xs h-8 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 px-2"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setConfirmTarget({ center: c, action: "show" });
-                              }}
-                              title="Hiện lại trung tâm"
-                            >
-                              <EyeIcon className="w-3.5 h-3.5" />
-                              <span className="hidden xl:inline">Hiện</span>
-                            </Button>
-                          ) : (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="gap-1 text-xs h-8 text-muted-foreground hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 px-2"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setConfirmTarget({ center: c, action: "hide" });
-                              }}
-                              title="Ẩn trung tâm khỏi gợi ý"
-                            >
-                              <EyeOffIcon className="w-3.5 h-3.5" />
-                              <span className="hidden xl:inline">Ẩn</span>
-                            </Button>
-                          )}
-
-                          {/* Xác minh / Hủy duyệt (UC-59) */}
-                          {isVerified ? (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="gap-1 text-xs h-8 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 px-2"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setConfirmTarget({ center: c, action: "unverify" });
-                              }}
-                              title="Hủy xác minh trung tâm"
-                            >
-                              <ShieldAlertIcon className="w-3.5 h-3.5" />
-                              <span className="hidden sm:inline">Hủy duyệt</span>
-                            </Button>
-                          ) : (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="gap-1 text-xs h-8 text-emerald-600 border-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 px-2"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setConfirmTarget({ center: c, action: "verify" });
-                              }}
-                              title="Xác minh trung tâm"
-                            >
-                              <ShieldCheckIcon className="w-3.5 h-3.5" />
-                              <span className="hidden sm:inline">Xác minh</span>
-                            </Button>
-                          )}
-                          <Link
-                            href={`/admin/centers/${c.id}`}
-                            className={cn(
-                              buttonVariants({ variant: "outline", size: "sm" }),
-                              "gap-1.5 text-xs h-8 hover:bg-muted text-foreground border-border"
-                            )}
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <EyeIcon className="w-3.5 h-3.5 text-muted-foreground" />
-                            <span className="hidden md:inline">Xem chi tiết</span>
-                            <ChevronRightIcon className="w-3 h-3 text-muted-foreground" />
-                          </Link>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Pagination */}
-        <div className="p-4 border-t">
-          <TablePagination
-            page={page}
-            totalPages={Math.max(1, Math.ceil(totalCount / pageSize))}
-            totalCount={totalCount}
-            itemLabel="trung tâm tư vấn"
-            disabled={isLoading}
-            onPageChange={setPage}
+      <div className="flex min-h-0 flex-1 flex-col gap-6 lg:flex-row">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <DataTable
+            columns={columns}
+            items={centers}
+            getRowId={(c) => c.id}
+            selectedRowId={selectedCenter?.id}
+            onRowSelect={(c) => setSelectedCenter((prev) => (prev?.id === c.id ? null : c))}
+            isLoading={isLoading}
+            error={listError ?? undefined}
+            emptyMessage="Không tìm thấy trung tâm tư vấn nào phù hợp."
+            label="Danh sách trung tâm tư vấn"
+            toolbar={toolbar}
+            footer={
+              <TablePagination
+                page={page}
+                totalPages={totalPages}
+                totalCount={totalCount}
+                itemLabel="trung tâm"
+                disabled={isLoading}
+                onPageChange={setPage}
+              />
+            }
           />
         </div>
+
+        {selectedCenter && (
+          <AdminCenterDetailPanel
+            center={selectedCenter}
+            onClose={() => setSelectedCenter(null)}
+          />
+        )}
       </div>
 
-      {/* Quick Confirmation Dialog for Verify / Unverify / Hide / Show */}
       <CenterActionConfirmDialog
         center={confirmTarget?.center ?? null}
         action={confirmTarget?.action ?? null}
         isSubmitting={isSubmitting}
         onClose={() => setConfirmTarget(null)}
         onConfirm={handleConfirmTarget}
+      />
+
+      <AdminVerificationQueueModal
+        isOpen={queueOpen}
+        onClose={() => {
+          setQueueOpen(false);
+          void refreshPending();
+        }}
+        onRefreshCenters={() => void fetchCenters(page)}
       />
     </div>
   );

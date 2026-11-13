@@ -54,7 +54,7 @@ export function SiteHeader() {
   const navLinks = [
     { href: canOpenAdmin ? "/admin" : "/", label: isModerator ? "Kiểm duyệt" : isAdmin ? "Quản trị" : "Trang chủ" },
     { href: "/universities", label: "Tìm trường" },
-    { href: canOpenAdmin ? "/admin/centers" : "/centers", label: "Trung tâm" },
+    { href: isModerator ? "/admin/centers" : "/centers", label: "Trung tâm" },
     { href: "/methodology", label: "Phương pháp của chúng tôi" },
     ...(isStudentOrParent ? [{ href: "/target-schools", label: "Trường mục tiêu" }] : []),
     ...(user?.role === "center" ? [{ href: "/center/leads", label: "Yêu cầu liên hệ" }] : []),
@@ -222,7 +222,7 @@ export function SiteHeader() {
                         <InboxIcon />
                         Yêu cầu liên hệ nhận được
                       </DropdownMenuItem>
-                      {canOpenAdmin && (
+                      {isModerator && (
                         <DropdownMenuItem render={<Link href="/admin/centers" />}>
                           <Building2Icon />
                           Quản lý trung tâm

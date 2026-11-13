@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { connection } from "next/server";
+import { cookies } from "next/headers";
 import { apiFetch } from "@/lib/api";
 import type { StudyCenter } from "@/types/api";
 import { AdminSection } from "@/components/admin/AdminSection";
@@ -35,7 +36,12 @@ export default async function AdminCenterDetailPage({ params }: AdminCenterDetai
   let fetchError = false;
 
   try {
-    center = await apiFetch<StudyCenter>(`/api/v1/study-centers/${id}`);
+    // Trang render trên server nên phải chuyển tiếp cookie đăng nhập, nếu không backend coi là khách
+    // và trả 404 cho trung tâm chưa xác minh hoặc đang ẩn.
+    const cookie = (await cookies()).toString();
+    center = await apiFetch<StudyCenter>(`/api/v1/study-centers/${id}`, {
+      headers: cookie ? { Cookie: cookie } : undefined,
+    });
   } catch {
     fetchError = true;
   }

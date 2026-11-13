@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   BanIcon,
   CheckCircle2Icon,
@@ -12,22 +12,31 @@ import {
   SearchIcon,
   ShieldAlertIcon,
   ShieldCheckIcon,
-  UserCheckIcon,
   UserPlusIcon,
   UsersIcon,
 } from "lucide-react";
 import { adminUsersApi, ApiError } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { formatUserRole, USER_ROLE_LABELS } from "@/lib/user-role-labels";
-import type { CreateCenterAccountRequest, CreateModeratorAccountRequest, UserDto, UserRole } from "@/types/api";
+import type { CreateModeratorAccountRequest, UserDto, UserRole } from "@/types/api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
+import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  DataTable,
+  type DataTableColumn,
+  type DataTableToolbarSlots,
+} from "@/components/admin/shared/DataTable";
+import { DetailPanel } from "@/components/admin/shared/DetailPanel";
+import { TablePagination } from "@/components/admin/shared/TablePagination";
+import { OptionSelect } from "@/components/admin/universities/OptionSelect";
+import { cn } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
@@ -36,14 +45,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 
 /** Chuẩn hóa SĐT VN (khớp quy tắc backend). */
 function normalizeVietnamesePhone(raw: string): { ok: true; value: string } | { ok: false } {
@@ -65,9 +66,6 @@ const ACCOUNT_STATUS_OPTIONS = [
   { value: "temp_locked", label: "Tạm khóa" },
   { value: "locked", label: "Đã khóa" },
 ] as const;
-
-const filterSelectClass =
-  "h-9 w-full min-w-[10rem] rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50";
 
 /** [UC-61] Khóa tài khoản: Admin khóa được moderator, center, users. Moderator chỉ khóa được cấp dưới (center, student, parent). */
 function canAdminLock(target: UserDto, currentUserRole?: string, currentUserId?: string): boolean {
@@ -141,11 +139,11 @@ function removeLockReasonCache(userId: string): void {
   }
 }
 
-function statusBadgeVariant(status: string): "default" | "secondary" | "destructive" | "outline" {
-  if (status === "active") return "default";
-  if (status === "unverified" || status === "pending") return "secondary";
-  if (status === "locked" || status === "temp_locked") return "destructive";
-  return "outline";
+function statusBadgeVariant(status: string): "ok" | "warn" | "risk" | "neutral" {
+  if (status === "active") return "ok";
+  if (status === "unverified" || status === "pending") return "warn";
+  if (status === "locked" || status === "temp_locked") return "risk";
+  return "neutral";
 }
 
 function formatStatusLabel(status: string): string {
@@ -183,7 +181,6 @@ export function AdminUsersView() {
 
   // Form tạo tài khoản (Moderator hoặc Center)
   const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [createRole, setCreateRole] = useState<"moderator" | "center">("moderator");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
@@ -269,12 +266,15 @@ export function AdminUsersView() {
     setPage(1);
   };
 
-  const openLockDialog = (user: UserDto) => {
-    if (!canAdminLock(user, currentUser?.role, currentUser?.id)) return;
-    setLockTarget(user);
-    setLockReason("");
-    setLockDialogError(null);
-  };
+  const openLockDialog = useCallback(
+    (user: UserDto) => {
+      if (!canAdminLock(user, currentUser?.role, currentUser?.id)) return;
+      setLockTarget(user);
+      setLockReason("");
+      setLockDialogError(null);
+    },
+    [currentUser?.id, currentUser?.role]
+  );
 
   const closeLockDialog = () => {
     if (lockSubmitting) return;
@@ -319,12 +319,15 @@ export function AdminUsersView() {
     }
   };
 
-  const openUnlockDialog = (user: UserDto) => {
-    if (!canAdminUnlock(user, currentUser?.role)) return;
-    setUnlockTarget(user);
-    setUnlockReason("");
-    setUnlockDialogError(null);
-  };
+  const openUnlockDialog = useCallback(
+    (user: UserDto) => {
+      if (!canAdminUnlock(user, currentUser?.role)) return;
+      setUnlockTarget(user);
+      setUnlockReason("");
+      setUnlockDialogError(null);
+    },
+    [currentUser?.role]
+  );
 
   const closeUnlockDialog = () => {
     if (unlockSubmitting) return;
@@ -375,11 +378,6 @@ export function AdminUsersView() {
     setFullName("");
     setPhone("");
     setFormError(null);
-    if (isModerator) {
-      setCreateRole("center");
-    } else {
-      setCreateRole("moderator");
-    }
     setIsCreateOpen(true);
   };
 
@@ -387,8 +385,8 @@ export function AdminUsersView() {
     e.preventDefault();
     setFormError(null);
 
-    if (isModerator && createRole !== "center") {
-      setFormError("Kiểm duyệt viên chỉ có quyền cấp tài khoản cho trung tâm tư vấn.");
+    if (isModerator) {
+      setFormError("Chỉ quản trị viên mới được cấp tài khoản kiểm duyệt viên.");
       return;
     }
 
@@ -424,24 +422,13 @@ export function AdminUsersView() {
 
     setIsSubmitting(true);
     try {
-      let created: UserDto;
-      if (createRole === "center") {
-        const payload: CreateCenterAccountRequest = {
-          email: trimmedEmail,
-          password,
-          fullName: trimmedName,
-          phone: phonePayload,
-        };
-        created = await adminUsersApi.createCenter(payload);
-      } else {
-        const payload: CreateModeratorAccountRequest = {
-          email: trimmedEmail,
-          password,
-          fullName: trimmedName,
-          phone: phonePayload,
-        };
-        created = await adminUsersApi.createModerator(payload);
-      }
+      const payload: CreateModeratorAccountRequest = {
+        email: trimmedEmail,
+        password,
+        fullName: trimmedName,
+        phone: phonePayload,
+      };
+      const created: UserDto = await adminUsersApi.createModerator(payload);
 
       setIsCreateOpen(false);
       setEmail("");
@@ -455,7 +442,7 @@ export function AdminUsersView() {
         type: "success",
         priority: "high",
         timeout: 6000,
-        title: createRole === "center" ? "Đã tạo tài khoản trung tâm" : "Đã tạo tài khoản moderator",
+        title: "Đã tạo tài khoản moderator",
         description: created.email,
       });
     } catch (err) {
@@ -470,356 +457,496 @@ export function AdminUsersView() {
   const lockedCount = users.filter((u) => u.status === "locked" || u.status === "temp_locked").length;
   const pendingCount = users.filter((u) => u.status === "unverified" || u.status === "pending").length;
 
-  return (
-    <div className="flex h-full min-h-0 flex-1 flex-col overflow-y-auto space-y-6 pr-1 pb-8">
-      {/* Header bar */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
-            Quản trị người dùng
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Quản lý danh sách tài khoản, trạng thái hoạt động và phân quyền đặc thù
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
+  const [filterMenuOpen, setFilterMenuOpen] = useState(false);
+  const [draftRole, setDraftRole] = useState<string>("all");
+  const [draftStatus, setDraftStatus] = useState<string>("all");
+
+  const activeFilterCount = (roleFilter ? 1 : 0) + (statusFilter ? 1 : 0);
+  const hasActiveSearchOrFilter = activeFilterCount > 0 || searchQuery.length > 0;
+
+  const roleFilterOptions = useMemo<{ value: string; label: string }[]>(
+    () => [
+      { value: "all", label: "Tất cả vai trò" },
+      ...(Object.keys(USER_ROLE_LABELS) as UserRole[]).map((role) => ({
+        value: role,
+        label: USER_ROLE_LABELS[role],
+      })),
+    ],
+    []
+  );
+
+  const statusFilterOptions = useMemo<{ value: string; label: string }[]>(
+    () =>
+      ACCOUNT_STATUS_OPTIONS.map((opt) => ({
+        value: opt.value || "all",
+        label: opt.label,
+      })),
+    []
+  );
+
+  const toggleDetailTarget = useCallback((u: UserDto) => {
+    const cached = getLockReasonCache(u.id);
+    setDetailTarget((prev) =>
+      prev?.id === u.id
+        ? null
+        : {
+            ...u,
+            lockReason: u.lockReason || cached || null,
+          }
+    );
+  }, []);
+
+  const handleFilterMenuOpenChange = (open: boolean) => {
+    if (open) {
+      setDraftRole(roleFilter || "all");
+      setDraftStatus(statusFilter || "all");
+    }
+    setFilterMenuOpen(open);
+  };
+
+  const handleApplyFilters = (e: React.FormEvent) => {
+    e.preventDefault();
+    setRoleFilter(draftRole === "all" ? "" : (draftRole as UserRole));
+    setStatusFilter(draftStatus === "all" ? "" : draftStatus);
+    setPage(1);
+    setFilterMenuOpen(false);
+  };
+
+  const handleClearAllFilters = () => {
+    handleResetFilters();
+    setDraftRole("all");
+    setDraftStatus("all");
+    setFilterMenuOpen(false);
+  };
+
+  const userColumns = useMemo<DataTableColumn<UserDto>[]>(
+    () => [
+      {
+        id: "email",
+        label: "Email",
+        required: true,
+        render: (u) => (
+          <button
             type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => void loadUsers()}
-            disabled={listLoading}
-            className="gap-1.5"
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleDetailTarget(u);
+            }}
+            className="text-left font-medium text-brand underline-offset-2 hover:underline"
           >
-            <RotateCcwIcon className="size-3.5" />
-            Làm mới
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            onClick={handleOpenCreateModal}
-            className="gap-1.5 bg-brand text-white hover:bg-brand/90"
-          >
-            <UserPlusIcon className="size-4" />
-            {isModerator ? "Cấp tài khoản trung tâm" : "Cấp tài khoản mới"}
-          </Button>
-        </div>
-      </div>
-
-      {/* KPI Cards */}
-      <div className="grid gap-3 grid-cols-2 sm:grid-cols-4">
-        <Card className="border border-border/70 ">
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="rounded-lg bg-brand/10 p-2 text-brand">
-              <UsersIcon className="size-5" />
-            </div>
-            <div>
-              <p className="text-xs font-medium text-muted-foreground">Tổng tài khoản</p>
-              <p className="text-xl font-bold text-foreground">{totalCount}</p>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border border-border/70 ">
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="rounded-lg bg-emerald-500/10 p-2 text-emerald-600">
-              <CheckCircle2Icon className="size-5" />
-            </div>
-            <div>
-              <p className="text-xs font-medium text-muted-foreground">Trang này hoạt động</p>
-              <p className="text-xl font-bold text-foreground">{activeCount}</p>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border border-border/70 ">
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="rounded-lg bg-rose-500/10 p-2 text-rose-600">
-              <ShieldAlertIcon className="size-5" />
-            </div>
-            <div>
-              <p className="text-xs font-medium text-muted-foreground">Bị khóa / Tạm khóa</p>
-              <p className="text-xl font-bold text-foreground">{lockedCount}</p>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border border-border/70 ">
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="rounded-lg bg-amber-500/10 p-2 text-amber-600">
-              <ClockIcon className="size-5" />
-            </div>
-            <div>
-              <p className="text-xs font-medium text-muted-foreground">Chờ xác thực</p>
-              <p className="text-xl font-bold text-foreground">{pendingCount}</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* [UC-60] Tìm, lọc, phân trang danh sách tài khoản */}
-      <Card className="border border-border/80 ">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-lg flex items-center justify-between">
-            <span>Danh sách tài khoản</span>
-            {(searchQuery || roleFilter || statusFilter) && (
+            {u.email}
+          </button>
+        ),
+      },
+      {
+        id: "fullName",
+        label: "Họ tên",
+        render: (u) => <span className="text-ink font-medium">{u.fullName || "—"}</span>,
+      },
+      {
+        id: "role",
+        label: "Vai trò",
+        render: (u) => (
+          <Badge variant="outline" className="text-xs font-normal whitespace-nowrap">
+            {formatUserRole(u.role)}
+          </Badge>
+        ),
+      },
+      {
+        id: "status",
+        label: "Trạng thái",
+        render: (u) => (
+          <Badge variant={statusBadgeVariant(u.status)} className="text-xs font-normal whitespace-nowrap">
+            {formatStatusLabel(u.status)}
+          </Badge>
+        ),
+      },
+      {
+        id: "phone",
+        label: "Số điện thoại",
+        render: (u) => <span className="text-xs text-ink-2 font-mono">{u.phone || "—"}</span>,
+      },
+      {
+        id: "actions",
+        label: "Thao tác",
+        required: true,
+        headerClassName: "w-px whitespace-nowrap text-right",
+        cellClassName: "w-px text-right whitespace-nowrap",
+        render: (u) => {
+          const canLock = canAdminLock(u, currentUser?.role, currentUser?.id);
+          const canUnlock = canAdminUnlock(u, currentUser?.role);
+          return (
+            <div
+              className="inline-flex items-center justify-end gap-1"
+              onClick={(e) => e.stopPropagation()}
+            >
               <Button
                 type="button"
                 variant="ghost"
                 size="xs"
-                onClick={handleResetFilters}
-                className="text-xs text-muted-foreground hover:text-foreground gap-1"
+                className="text-ink-2 hover:text-ink"
+                onClick={() => toggleDetailTarget(u)}
               >
-                <RotateCcwIcon className="size-3" />
-                Xóa bộ lọc
+                <EyeIcon className="size-3.5" />
+                Chi tiết
               </Button>
-            )}
-          </CardTitle>
-          <CardDescription>
-            Tìm kiếm theo email, họ tên; phân loại theo vai trò và tình trạng tài khoản.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Thanh công cụ lọc */}
-          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
-            <Field className="min-w-[14rem] flex-1">
-              <FieldLabel htmlFor="user-search" className="text-xs">
-                Tìm email hoặc họ tên
-              </FieldLabel>
-              <div className="relative">
-                <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-                <Input
-                  id="user-search"
-                  value={searchInput}
-                  onChange={(e) => setSearchInput(e.target.value)}
-                  placeholder="vd: nguyen@example.com hoặc Nguyễn Văn A..."
-                  className="pl-9"
-                  autoComplete="off"
-                />
+              <div className="w-[88px] shrink-0 flex items-center justify-end">
+                {canUnlock ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="xs"
+                    className="w-full justify-center text-ok hover:text-ok hover:bg-ok-wash"
+                    onClick={() => openUnlockDialog(u)}
+                  >
+                    <KeyRoundIcon className="size-3.5" />
+                    Mở khóa
+                  </Button>
+                ) : canLock ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="xs"
+                    className="w-full justify-center text-risk hover:text-risk hover:bg-risk-wash"
+                    onClick={() => openLockDialog(u)}
+                  >
+                    <BanIcon className="size-3.5" />
+                    Khóa
+                  </Button>
+                ) : (
+                  <span className="w-full text-center text-xs text-ink-3 select-none">—</span>
+                )}
               </div>
-            </Field>
-
-            <Field className="w-full sm:w-auto">
-              <FieldLabel htmlFor="user-role-filter" className="text-xs flex items-center gap-1">
-                <FilterIcon className="size-3 text-muted-foreground" />
-                Vai trò
-              </FieldLabel>
-              <select
-                id="user-role-filter"
-                className={filterSelectClass}
-                value={roleFilter}
-                onChange={(e) => {
-                  setRoleFilter(e.target.value as UserRole | "");
-                  setPage(1);
-                }}
-              >
-                <option value="">Tất cả vai trò</option>
-                {(Object.keys(USER_ROLE_LABELS) as UserRole[]).map((role) => (
-                  <option key={role} value={role}>
-                    {USER_ROLE_LABELS[role]}
-                  </option>
-                ))}
-              </select>
-            </Field>
-
-            <Field className="w-full sm:w-auto">
-              <FieldLabel htmlFor="user-status-filter" className="text-xs flex items-center gap-1">
-                <FilterIcon className="size-3 text-muted-foreground" />
-                Trạng thái
-              </FieldLabel>
-              <select
-                id="user-status-filter"
-                className={filterSelectClass}
-                value={statusFilter}
-                onChange={(e) => {
-                  setStatusFilter(e.target.value);
-                  setPage(1);
-                }}
-              >
-                {ACCOUNT_STATUS_OPTIONS.map((opt) => (
-                  <option key={opt.label} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          </div>
-
-          {/* Nội dung danh sách */}
-          {listLoading ? (
-            <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
-              <Spinner className="size-5" />
-              Đang tải danh sách người dùng...
             </div>
-          ) : listError ? (
-            <Alert variant="destructive">
-              <AlertDescription className="flex flex-wrap items-center gap-3">
-                <span>{listError}</span>
-                <Button type="button" variant="outline" size="sm" onClick={() => void loadUsers()}>
-                  Thử lại
-                </Button>
-              </AlertDescription>
-            </Alert>
-          ) : (
-            <>
-              <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <span>
-                  {totalCount === 0
-                    ? "Không có tài khoản nào khớp bộ lọc."
-                    : `Hiển thị ${(page - 1) * ACCOUNT_LIST_PAGE_SIZE + 1}–${Math.min(
-                      page * ACCOUNT_LIST_PAGE_SIZE,
-                      totalCount,
-                    )} trên tổng số ${totalCount} tài khoản`}
-                </span>
+          );
+        },
+      },
+    ],
+    [currentUser?.id, currentUser?.role, openLockDialog, openUnlockDialog, toggleDetailTarget]
+  );
+
+  const userToolbar: DataTableToolbarSlots = {
+    filters: (
+      <Popover open={filterMenuOpen} onOpenChange={handleFilterMenuOpenChange}>
+        <PopoverTrigger
+          render={
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="border-border bg-muted/60 text-foreground hover:bg-muted"
+            />
+          }
+        >
+          <FilterIcon className="size-4" />
+          Bộ lọc
+          {activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
+        </PopoverTrigger>
+        <PopoverContent align="start" className="w-80 max-w-[calc(100vw-2rem)] p-4">
+          <form onSubmit={handleApplyFilters} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="admin-users-role-filter">Vai trò</Label>
+              <OptionSelect
+                id="admin-users-role-filter"
+                value={draftRole}
+                options={roleFilterOptions}
+                onChange={setDraftRole}
+                size="sm"
+                className="bg-surface"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="admin-users-status-filter">Trạng thái</Label>
+              <OptionSelect
+                id="admin-users-status-filter"
+                value={draftStatus}
+                options={statusFilterOptions}
+                onChange={setDraftStatus}
+                size="sm"
+                className="bg-surface"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <Button type="button" variant="outline" size="sm" onClick={handleClearAllFilters}>
+                Xóa lọc
+              </Button>
+              <Button type="submit" size="sm">
+                Áp dụng
+              </Button>
+            </div>
+          </form>
+        </PopoverContent>
+      </Popover>
+    ),
+    search: (
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          setSearchQuery(searchInput.trim());
+          setPage(1);
+        }}
+        role="search"
+        className="relative"
+      >
+        <Input
+          id="admin-users-search"
+          type="text"
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          placeholder="Tìm theo email hoặc họ tên..."
+          aria-label="Tìm kiếm tài khoản"
+          className="pr-10 bg-surface"
+        />
+        <Button
+          type="submit"
+          variant="ghost"
+          size="icon-sm"
+          className="absolute top-1/2 right-1 -translate-y-1/2"
+          aria-label="Tìm kiếm"
+        >
+          <SearchIcon className="size-4" />
+        </Button>
+      </form>
+    ),
+    actions: (
+      <>
+        {hasActiveSearchOrFilter && (
+          <Button type="button" variant="outline" size="sm" onClick={handleClearAllFilters}>
+            Xóa lọc
+          </Button>
+        )}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => void loadUsers()}
+          disabled={listLoading}
+          className="gap-1.5"
+        >
+          <RotateCcwIcon className={cn("size-3.5", listLoading && "animate-spin")} />
+          Làm mới
+        </Button>
+        {/* Chỉ admin cấp tài khoản moderator; trung tâm tự đăng ký và chờ duyệt hồ sơ */}
+        {!isModerator && (
+          <Button type="button" size="sm" onClick={handleOpenCreateModal} className="gap-1.5">
+            <UserPlusIcon className="size-4" />
+            Cấp tài khoản
+          </Button>
+        )}
+      </>
+    ),
+  };
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
+      <header className="shrink-0">
+        <h1 className="text-h2">Quản trị người dùng</h1>
+        <p className="text-sm text-ink-2 mt-1">
+          {isModerator
+            ? "Xem danh sách tài khoản hệ thống."
+            : "Quản lý toàn bộ tài khoản người dùng và cấp tài khoản kiểm duyệt viên."}
+        </p>
+      </header>
+
+      {/* Compact KPI summary tiles */}
+      <div className="shrink-0 grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="rounded-xl border border-line bg-surface px-4 py-3 flex items-center gap-3">
+          <div className="size-9 rounded-lg bg-brand-wash text-brand flex items-center justify-center shrink-0">
+            <UsersIcon className="size-4" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs text-ink-2 truncate">Tổng kết quả</p>
+            <p className="font-heading text-lg font-bold tabular-nums text-ink">{totalCount}</p>
+          </div>
+        </div>
+        <div className="rounded-xl border border-line bg-surface px-4 py-3 flex items-center gap-3">
+          <div className="size-9 rounded-lg bg-ok-wash text-ok flex items-center justify-center shrink-0">
+            <CheckCircle2Icon className="size-4" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs text-ink-2 truncate">Hoạt động (trang)</p>
+            <p className="font-heading text-lg font-bold tabular-nums text-ink">{activeCount}</p>
+          </div>
+        </div>
+        <div className="rounded-xl border border-line bg-surface px-4 py-3 flex items-center gap-3">
+          <div className="size-9 rounded-lg bg-risk-wash text-risk flex items-center justify-center shrink-0">
+            <ShieldAlertIcon className="size-4" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs text-ink-2 truncate">Bị khóa / Tạm khóa</p>
+            <p className="font-heading text-lg font-bold tabular-nums text-ink">{lockedCount}</p>
+          </div>
+        </div>
+        <div className="rounded-xl border border-line bg-surface px-4 py-3 flex items-center gap-3">
+          <div className="size-9 rounded-lg bg-warn-wash text-warn flex items-center justify-center shrink-0">
+            <ClockIcon className="size-4" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs text-ink-2 truncate">Chờ xác thực</p>
+            <p className="font-heading text-lg font-bold tabular-nums text-ink">{pendingCount}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Master-detail table & side panel */}
+      <div className="flex min-h-0 flex-1 flex-col gap-6 lg:flex-row">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <DataTable
+            columns={userColumns}
+            items={users}
+            getRowId={(u) => u.id}
+            selectedRowId={detailTarget?.id}
+            onRowSelect={toggleDetailTarget}
+            isLoading={listLoading}
+            error={listError ?? undefined}
+            emptyMessage="Không tìm thấy tài khoản nào phù hợp."
+            label="Danh sách tài khoản người dùng"
+            toolbar={userToolbar}
+            footer={
+              <TablePagination
+                page={page}
+                totalPages={Math.max(1, totalPages)}
+                totalCount={totalCount}
+                itemLabel="tài khoản"
+                disabled={listLoading}
+                onPageChange={setPage}
+              />
+            }
+          />
+        </div>
+
+        {detailTarget && (
+          <DetailPanel
+            title={detailTarget.fullName || detailTarget.email}
+            description={formatUserRole(detailTarget.role)}
+            onClose={() => setDetailTarget(null)}
+          >
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant={statusBadgeVariant(detailTarget.status)} className="text-xs">
+                  {formatStatusLabel(detailTarget.status)}
+                </Badge>
+                <Badge variant="outline" className="text-xs">
+                  {formatUserRole(detailTarget.role)}
+                </Badge>
               </div>
 
-              <div className="rounded-md border border-border/80 overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/40">
-                      <TableHead>Email</TableHead>
-                      <TableHead>Họ tên</TableHead>
-                      <TableHead>Vai trò</TableHead>
-                      <TableHead>Trạng thái</TableHead>
-                      <TableHead>Số điện thoại</TableHead>
-                      <TableHead className="text-right">Thao tác</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {users.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={6} className="h-28 text-center text-muted-foreground">
-                          Không tìm thấy người dùng phù hợp.
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      users.map((u) => (
-                        <TableRow key={u.id} className="hover:bg-muted/30">
-                          <TableCell className="font-medium">
-                            <span className="block max-w-[15rem] truncate" title={u.email}>
-                              {u.email}
-                            </span>
-                          </TableCell>
-                          <TableCell>
-                            <span className="block max-w-[12rem] truncate" title={u.fullName}>
-                              {u.fullName}
-                            </span>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className="font-normal text-xs">
-                              {formatUserRole(u.role)}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant={statusBadgeVariant(u.status)} className="capitalize text-xs font-normal">
-                              {formatStatusLabel(u.status)}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-muted-foreground text-sm">
-                            {u.phone ?? "—"}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-1.5">
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                className="size-8 p-0 text-muted-foreground hover:text-foreground shrink-0 flex items-center justify-center"
-                                onClick={() => {
-                                  const cached = getLockReasonCache(u.id);
-                                  setDetailTarget({
-                                    ...u,
-                                    lockReason: u.lockReason || cached || null,
-                                  });
-                                }}
-                                title="Xem chi tiết"
-                              >
-                                <EyeIcon className="size-4" />
-                                <span className="sr-only">Chi tiết</span>
-                              </Button>
-
-                              <div className="w-[88px] shrink-0 flex items-center justify-end">
-                                {canAdminUnlock(u, currentUser?.role) ? (
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-8 w-full gap-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950 border-emerald-200"
-                                    onClick={() => openUnlockDialog(u)}
-                                  >
-                                    <KeyRoundIcon className="size-3.5" aria-hidden />
-                                    Mở khóa
-                                  </Button>
-                                ) : canAdminLock(u, currentUser?.role, currentUser?.id) ? (
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-8 w-full gap-1 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950 border-rose-200"
-                                    onClick={() => openLockDialog(u)}
-                                  >
-                                    <BanIcon className="size-3.5" aria-hidden />
-                                    Khóa
-                                  </Button>
-                                ) : (
-                                  <div className="w-full text-center text-xs text-muted-foreground">
-                                    —
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-
-              {totalPages > 1 && (
-                <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
-                  <span className="text-xs text-muted-foreground">
-                    Trang {page} / {totalPages}
+              <div className="rounded-lg border border-line bg-ground p-3.5 text-sm space-y-2.5">
+                <div className="flex items-start justify-between gap-3">
+                  <span className="text-ink-2 shrink-0">Email</span>
+                  <span className="font-medium text-ink text-right break-all">
+                    {detailTarget.email}
                   </span>
-                  <div className="flex items-center gap-1.5">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={page <= 1 || listLoading}
-                      onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    >
-                      Trang trước
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={page >= totalPages || listLoading}
-                      onClick={() => setPage((p) => p + 1)}
-                    >
-                      Trang sau
-                    </Button>
+                </div>
+                <div className="flex items-start justify-between gap-3">
+                  <span className="text-ink-2 shrink-0">Họ và tên</span>
+                  <span className="font-medium text-ink text-right">
+                    {detailTarget.fullName || "Chưa cập nhật"}
+                  </span>
+                </div>
+                <div className="flex items-start justify-between gap-3">
+                  <span className="text-ink-2 shrink-0">Số điện thoại</span>
+                  <span className="font-mono text-ink text-right">
+                    {detailTarget.phone ?? "Chưa cung cấp"}
+                  </span>
+                </div>
+                {detailTarget.ageGroup && (
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="text-ink-2 shrink-0">Nhóm độ tuổi</span>
+                    <span className="capitalize text-ink text-right">{detailTarget.ageGroup}</span>
+                  </div>
+                )}
+                {detailTarget.parentConsentStatus && (
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="text-ink-2 shrink-0">Đồng thuận PH</span>
+                    <span className="capitalize text-ink text-right">
+                      {detailTarget.parentConsentStatus}
+                    </span>
+                  </div>
+                )}
+                <div className="flex items-start justify-between gap-3 pt-1 border-t border-line">
+                  <span className="text-ink-2 shrink-0">ID tài khoản</span>
+                  <span className="font-mono text-xs text-ink-3 text-right break-all">
+                    {detailTarget.id}
+                  </span>
+                </div>
+              </div>
+
+              {(detailTarget.status === "locked" || detailTarget.status === "temp_locked") && (
+                <div className="rounded-lg border border-risk/30 bg-risk-wash p-3 text-xs text-risk space-y-1">
+                  <div className="flex items-center gap-1.5 font-semibold">
+                    <BanIcon className="size-3.5 shrink-0" />
+                    <span>Lý do khóa tài khoản</span>
+                  </div>
+                  <p className="leading-relaxed">
+                    {detailTarget.lockReason ||
+                      getLockReasonCache(detailTarget.id) ||
+                      (detailTarget.status === "temp_locked"
+                        ? "Tài khoản bị tạm khóa do nhập sai mật khẩu 5 lần liên tiếp (chờ Quản trị viên mở khóa)."
+                        : "Vi phạm quy chế sử dụng và chính sách của hệ thống.")}
+                  </p>
+                </div>
+              )}
+
+              {detailTarget.blockedFeatures && detailTarget.blockedFeatures.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-xs font-medium text-ink-2">Tính năng đang bị chặn</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {detailTarget.blockedFeatures.map((f) => (
+                      <Badge key={f} variant="destructive" className="text-xs font-normal">
+                        {f}
+                      </Badge>
+                    ))}
                   </div>
                 </div>
               )}
-            </>
-          )}
-        </CardContent>
-      </Card>
 
-      {/* [UC-63 & UC-71] Dialog Cấp tài khoản mới (Moderator tạo Center, Admin tạo Moderator hoặc Center) */}
+              {(canAdminLock(detailTarget, currentUser?.role, currentUser?.id) ||
+                canAdminUnlock(detailTarget, currentUser?.role)) && (
+                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-line">
+                  {canAdminLock(detailTarget, currentUser?.role, currentUser?.id) && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openLockDialog(detailTarget)}
+                      className="gap-1.5 text-risk border-risk/30 hover:bg-risk-wash hover:text-risk"
+                    >
+                      <BanIcon className="size-3.5" />
+                      Khóa tài khoản
+                    </Button>
+                  )}
+                  {canAdminUnlock(detailTarget, currentUser?.role) && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openUnlockDialog(detailTarget)}
+                      className="gap-1.5 text-ok border-ok/30 hover:bg-ok-wash hover:text-ok"
+                    >
+                      <KeyRoundIcon className="size-3.5" />
+                      Mở khóa tài khoản
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
+          </DetailPanel>
+        )}
+      </div>
+
+      {/* [UC-63] Dialog Cấp tài khoản mới: chỉ Admin tạo Moderator */}
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <UserPlusIcon className="size-5 text-brand" />
-              {isModerator ? "Cấp tài khoản Trung tâm tư vấn" : "Cấp tài khoản mới"}
+              Cấp tài khoản mới
             </DialogTitle>
             <DialogDescription>
-              {isModerator
-                ? "Tạo tài khoản đại diện cho Trung tâm tư vấn (tài khoản vai trò center được kích hoạt ngay)."
-                : "Tạo tài khoản Kiểm duyệt viên hoặc Trung tâm tư vấn (tài khoản được kích hoạt ngay)."}
+              Tạo tài khoản Kiểm duyệt viên (tài khoản được kích hoạt ngay).
             </DialogDescription>
           </DialogHeader>
 
@@ -833,25 +960,14 @@ export function AdminUsersView() {
 
               <Field>
                 <FieldLabel htmlFor="create-role">Loại tài khoản</FieldLabel>
-                {isModerator ? (
-                  <div className="h-9 px-3 flex items-center rounded-md border border-input bg-muted/40 text-sm font-medium">
-                    Trung tâm tư vấn (Center)
-                  </div>
-                ) : (
-                  <select
-                    id="create-role"
-                    className={filterSelectClass}
-                    value={createRole}
-                    onChange={(e) => setCreateRole(e.target.value as "moderator" | "center")}
-                  >
-                    <option value="moderator">Kiểm duyệt viên (Moderator - UC-63)</option>
-                    <option value="center">Trung tâm tư vấn (Center - UC-64)</option>
-                  </select>
-                )}
+                <div
+                  id="create-role"
+                  className="h-9 px-3 flex items-center rounded-md border border-input bg-muted/40 text-sm font-medium"
+                >
+                  Kiểm duyệt viên (Moderator)
+                </div>
                 <FieldDescription>
-                  {createRole === "moderator"
-                    ? "Tài khoản có quyền kiểm duyệt nội dung, quản lý trung tâm và người dùng cấp dưới."
-                    : "Tài khoản đại diện quản lý thông tin và chương trình của trung tâm du học."}
+                  Tài khoản có quyền kiểm duyệt nội dung, duyệt hồ sơ trung tâm và quản lý người dùng cấp dưới.
                 </FieldDescription>
               </Field>
 
@@ -926,142 +1042,11 @@ export function AdminUsersView() {
         </DialogContent>
       </Dialog>
 
-      {/* Dialog xem chi tiết tài khoản */}
-      <Dialog open={detailTarget !== null} onOpenChange={(open) => !open && setDetailTarget(null)}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <UserCheckIcon className="size-5 text-brand" />
-              Chi tiết tài khoản
-            </DialogTitle>
-            <DialogDescription>
-              Thông tin chi tiết và phân quyền của tài khoản người dùng.
-            </DialogDescription>
-          </DialogHeader>
-
-          {detailTarget && (
-            <div className="space-y-4 py-2 text-sm">
-              <div className="grid grid-cols-3 gap-2 border-b pb-2">
-                <span className="text-muted-foreground font-medium">Họ tên:</span>
-                <span className="col-span-2 font-semibold text-foreground">{detailTarget.fullName}</span>
-              </div>
-              <div className="grid grid-cols-3 gap-2 border-b pb-2">
-                <span className="text-muted-foreground font-medium">Email:</span>
-                <span className="col-span-2 text-foreground font-mono text-xs break-all">{detailTarget.email}</span>
-              </div>
-              <div className="grid grid-cols-3 gap-2 border-b pb-2">
-                <span className="text-muted-foreground font-medium">Vai trò:</span>
-                <span className="col-span-2">
-                  <Badge variant="outline">{formatUserRole(detailTarget.role)}</Badge>
-                </span>
-              </div>
-              <div className="grid grid-cols-3 gap-2 border-b pb-2">
-                <span className="text-muted-foreground font-medium">Trạng thái:</span>
-                <span className="col-span-2">
-                  <Badge variant={statusBadgeVariant(detailTarget.status)}>
-                    {formatStatusLabel(detailTarget.status)}
-                  </Badge>
-                </span>
-              </div>
-
-              {(detailTarget.status === "locked" || detailTarget.status === "temp_locked") && (
-                <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 space-y-1.5">
-                  <div className="flex items-center gap-1.5 text-xs font-semibold text-destructive">
-                    <BanIcon className="size-4 shrink-0" />
-                    <span>Lý do khóa tài khoản:</span>
-                  </div>
-                  <div className="text-xs text-foreground leading-relaxed font-medium">
-                    {detailTarget.lockReason || getLockReasonCache(detailTarget.id) || (
-                      detailTarget.status === "temp_locked"
-                        ? "Tài khoản bị tạm khóa do nhập sai mật khẩu 5 lần liên tiếp (chờ Quản trị viên mở khóa)."
-                        : "Vi phạm quy chế sử dụng và chính sách của hệ thống."
-                    )}
-                  </div>
-                </div>
-              )}
-              <div className="grid grid-cols-3 gap-2 border-b pb-2">
-                <span className="text-muted-foreground font-medium">Số điện thoại:</span>
-                <span className="col-span-2 text-foreground">{detailTarget.phone ?? "Chưa cung cấp"}</span>
-              </div>
-              <div className="grid grid-cols-3 gap-2 border-b pb-2">
-                <span className="text-muted-foreground font-medium">Mã ID:</span>
-                <span className="col-span-2 text-xs font-mono text-muted-foreground break-all">{detailTarget.id}</span>
-              </div>
-
-              {detailTarget.ageGroup && (
-                <div className="grid grid-cols-3 gap-2 border-b pb-2">
-                  <span className="text-muted-foreground font-medium">Nhóm độ tuổi:</span>
-                  <span className="col-span-2 capitalize text-foreground">{detailTarget.ageGroup}</span>
-                </div>
-              )}
-
-              {detailTarget.parentConsentStatus && (
-                <div className="grid grid-cols-3 gap-2 border-b pb-2">
-                  <span className="text-muted-foreground font-medium">Đồng thuận PH:</span>
-                  <span className="col-span-2 capitalize text-foreground">{detailTarget.parentConsentStatus}</span>
-                </div>
-              )}
-
-              {detailTarget.blockedFeatures && detailTarget.blockedFeatures.length > 0 && (
-                <div className="space-y-1 pt-1">
-                  <span className="text-muted-foreground font-medium block">Tính năng đang bị chặn:</span>
-                  <div className="flex flex-wrap gap-1">
-                    {detailTarget.blockedFeatures.map((f) => (
-                      <Badge key={f} variant="destructive" className="text-2xs font-normal">
-                        {f}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <DialogFooter className="pt-4 flex items-center justify-between sm:justify-between w-full">
-                <div>
-                  {canAdminUnlock(detailTarget, currentUser?.role) ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="gap-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
-                      onClick={() => {
-                        const t = detailTarget;
-                        openUnlockDialog(t);
-                      }}
-                    >
-                      <KeyRoundIcon className="size-3.5" />
-                      Mở khóa
-                    </Button>
-                  ) : canAdminLock(detailTarget, currentUser?.role, currentUser?.id) ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="gap-1 text-rose-600 hover:text-rose-700 hover:bg-rose-50"
-                      onClick={() => {
-                        const t = detailTarget;
-                        openLockDialog(t);
-                      }}
-                    >
-                      <BanIcon className="size-3.5" />
-                      Khóa tài khoản
-                    </Button>
-                  ) : null}
-                </div>
-
-                <Button type="button" variant="outline" size="sm" onClick={() => setDetailTarget(null)}>
-                  Đóng
-                </Button>
-              </DialogFooter>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
       {/* [UC-61] Xác nhận khóa tài khoản */}
       <Dialog open={lockTarget !== null} onOpenChange={(open) => !open && closeLockDialog()}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-rose-600">
+            <DialogTitle className="flex items-center gap-2 text-risk">
               <BanIcon className="size-5" />
               Khóa tài khoản người dùng
             </DialogTitle>
@@ -1112,7 +1097,7 @@ export function AdminUsersView() {
       <Dialog open={unlockTarget !== null} onOpenChange={(open) => !open && closeUnlockDialog()}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-emerald-600">
+            <DialogTitle className="flex items-center gap-2 text-ok">
               <KeyRoundIcon className="size-5" />
               Mở khóa tài khoản
             </DialogTitle>
@@ -1147,7 +1132,7 @@ export function AdminUsersView() {
             </Button>
             <Button
               type="button"
-              className="bg-emerald-600 text-white hover:bg-emerald-700 gap-1.5"
+              className="bg-ok text-white hover:bg-ok/90 gap-1.5"
               onClick={() => void handleConfirmUnlock()}
               disabled={unlockSubmitting}
             >

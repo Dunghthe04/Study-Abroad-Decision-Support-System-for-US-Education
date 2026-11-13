@@ -13,51 +13,59 @@ namespace StudyAbroad.Api.Controllers;
 public class StudyCentersController(IStudyCenterService service) : ControllerBase
 {
     [HttpGet]
-    public Task<PagedResult<StudyCenterDto>> Search([FromQuery] StudyCenterQuery query, CancellationToken ct) =>
-        service.SearchAsync(query, ct);
+    public Task<PagedResult<StudyCenterDto>> Search([FromQuery] StudyCenterQuery query, CancellationToken ct)
+    {
+        // BR-C1: Chỉ trung tâm ở trạng thái "Đã xác minh" mới hiển thị trong danh bạ công khai
+        var isAdminOrMod = User.IsInRole(UserRoles.Moderator);
+        if (!isAdminOrMod)
+        {
+            // Người dùng thường không được xem trung tâm đã ẩn.
+            query = query with { VerifiedOnly = true, IncludeInactive = false, OnlyInactive = false };
+        }
+        return service.SearchAsync(query, ct);
+    }
 
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<StudyCenterDto>> GetById(Guid id, CancellationToken ct)
     {
         var center = await service.GetByIdAsync(id, ct);
-        return center is null ? NotFound() : Ok(center);
+        if (center is null) return NotFound();
+
+        var isAdminOrMod = User.IsInRole(UserRoles.Moderator);
+        if (!isAdminOrMod && (center.VerificationStatus != CenterReferral.Verified || !center.IsActive))
+        {
+            return NotFound();
+        }
+
+        return Ok(center);
     }
 
-    /// <summary>[UC-71] Thêm một trung tâm tư vấn vào danh bạ (Moderator).</summary>
-    [HttpPost]
-    [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Moderator}")]
-    public async Task<ActionResult<StudyCenterDto>> Create(
-        [FromBody] CreateStudyCenterRequest request,
+    /// <summary>
+    /// Đánh giá công khai của trung tâm (UC-41): lấy từ dữ liệu thật, chỉ gồm đánh giá đang hiển thị.
+    /// Điểm trung bình và số lượng tính từ chính các đánh giá đó.
+    /// </summary>
+    [HttpGet("{id:guid}/reviews")]
+    public async Task<ActionResult<CenterReviewsDto>> GetReviews(
+        Guid id,
+        [FromServices] ICenterReviewRepository reviews,
         CancellationToken ct)
     {
-        if (User.GetUserId() is not { } actorId)
-            return Unauthorized();
+        var center = await service.GetByIdAsync(id, ct);
+        if (center is null) return NotFound();
 
-        var result = await service.CreateAsync(request, actorId, ct);
-        if (!result.Success || result.Center is null)
-            return ValidationProblem(result.ErrorMessage);
+        var isModerator = User.IsInRole(UserRoles.Moderator);
+        if (!isModerator && (center.VerificationStatus != CenterReferral.Verified || !center.IsActive))
+            return NotFound();
 
-        return CreatedAtAction(nameof(GetById), new { id = result.Center.Id }, result.Center);
+        return Ok(await reviews.GetVisibleAsync(id, 50, ct));
     }
 
-    /// <summary>[Q11 / UC-71 Phụ trợ / UC-64] Moderator hoặc Admin tạo tài khoản người dùng cho Trung tâm tư vấn (role center).</summary>
-    [HttpPost("accounts")]
-    [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Moderator}")]
-    public async Task<ActionResult<UserDto>> CreateCenterAccount(
-        [FromBody] CreateCenterAccountRequest request,
-        [FromServices] IAuthService auth,
-        CancellationToken ct)
-    {
-        var result = await auth.CreateCenterAccountAsync(request, ct);
-        if (result.Error != AuthError.None || result.User is null)
-            return ValidationProblem(result.Message);
+    // Trung tâm tự đăng ký (/register/center) và chờ moderator duyệt hồ sơ (UC-59);
+    // moderator không còn thêm trung tâm hay cấp tài khoản trung tâm.
 
-        return Ok(result.User);
-    }
-
-    /// <summary>[UC-59] Xác minh hoặc hủy xác minh một trung tâm tư vấn (Moderator hoặc Admin).</summary>
+    /// <summary>[UC-59] Xác minh hoặc hủy xác minh một trung tâm tư vấn (chỉ Moderator).</summary>
     [HttpPut("{id:guid}/verify")]
-    [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Moderator}")]
+    [Authorize(Roles = UserRoles.Moderator)]
     public async Task<ActionResult<StudyCenterDto>> VerifyCenter(
         Guid id,
         [FromBody] VerifyStudyCenterRequest request,
@@ -73,9 +81,9 @@ public class StudyCentersController(IStudyCenterService service) : ControllerBas
         return Ok(result.Center);
     }
 
-    /// <summary>[UC-72] Sửa thông tin một trung tâm tư vấn trong danh bạ (Moderator hoặc Admin).</summary>
+    /// <summary>[UC-72] Sửa thông tin một trung tâm tư vấn trong danh bạ (chỉ Moderator).</summary>
     [HttpPut("{id:guid}")]
-    [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Moderator}")]
+    [Authorize(Roles = UserRoles.Moderator)]
     public async Task<ActionResult<StudyCenterDto>> Update(
         Guid id,
         [FromBody] UpdateStudyCenterRequest request,
@@ -91,9 +99,9 @@ public class StudyCentersController(IStudyCenterService service) : ControllerBas
         return Ok(result.Center);
     }
 
-    /// <summary>[UC-72] Thay đổi trạng thái hoạt động (ẩn/hiện khỏi danh bạ và gợi ý) của trung tâm (Moderator hoặc Admin).</summary>
+    /// <summary>[UC-72] Thay đổi trạng thái hoạt động (ẩn/hiện khỏi danh bạ và gợi ý) của trung tâm (chỉ Moderator).</summary>
     [HttpPut("{id:guid}/status")]
-    [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Moderator}")]
+    [Authorize(Roles = UserRoles.Moderator)]
     public async Task<ActionResult<StudyCenterDto>> SetActiveStatus(
         Guid id,
         [FromBody] SetStudyCenterActiveRequest request,

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { adminNavForRole } from "@/lib/admin-nav";
+import { usePendingCenterCount } from "@/hooks/use-pending-center-count";
 import { cn } from "@/lib/utils";
 import { AdminUserMenu } from "./AdminUserMenu";
 
@@ -11,6 +12,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const pathname = usePathname();
   const items = adminNavForRole(user?.role);
+  // Moderator thấy số hồ sơ trung tâm đang chờ duyệt ngay trên menu
+  const { count: pendingCenters } = usePendingCenterCount(user?.role === "moderator");
 
   const isActive = (href: string) => {
     if (href === "/admin") {
@@ -53,6 +56,15 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                   >
                     <Icon className="size-4 shrink-0" />
                     {item.label}
+                    {item.href === "/admin/centers" && pendingCenters > 0 && (
+                      <span
+                        className="ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-risk px-1.5 text-[11px] font-semibold leading-5 text-white"
+                        aria-label={`${pendingCenters} hồ sơ trung tâm đang chờ duyệt`}
+                        title={`${pendingCenters} hồ sơ trung tâm đang chờ duyệt`}
+                      >
+                        {pendingCenters > 99 ? "99+" : pendingCenters}
+                      </span>
+                    )}
                   </Link>
                 </li>
               );

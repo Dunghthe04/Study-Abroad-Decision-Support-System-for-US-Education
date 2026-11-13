@@ -66,7 +66,7 @@ export function ConsultationBookingModal({ centerName }: ConsultationBookingModa
         <DialogContent className="sm:max-w-lg">
           {isSubmitted ? (
             <div className="py-6 text-center space-y-4">
-              <div className="w-14 h-14 bg-emerald-500/10 text-emerald-600 rounded-full flex items-center justify-center mx-auto">
+              <div className="w-14 h-14 bg-ok-wash text-ok rounded-full flex items-center justify-center mx-auto">
                 <CheckCircle2Icon className="w-8 h-8" />
               </div>
               <DialogHeader>

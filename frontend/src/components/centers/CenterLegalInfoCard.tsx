@@ -92,7 +92,7 @@ export function CenterLegalInfoCard({
               ? "Mã hồ sơ thông báo:"
               : "Số GP tư vấn du học:"}
           </span>{" "}
-          <span className="text-muted-foreground font-mono">{profile.licenseNumber}</span>
+          <span className="text-muted-foreground font-mono">{profile.licenseNumber || "Chưa cập nhật"}</span>
         </div>
         {(profile.trainingLicenseNumber || needsTrainingLicense) && (
           <div>
@@ -104,7 +104,7 @@ export function CenterLegalInfoCard({
         )}
         <div>
           <span className="font-medium text-foreground">Cơ quan cấp / tiếp nhận:</span>{" "}
-          <span className="text-muted-foreground">{profile.licenseIssuedBy}</span>
+          <span className="text-muted-foreground">{profile.licenseIssuedBy || "Chưa cập nhật"}</span>
           {formattedIssuedDate && (
             <span className="text-muted-foreground"> (ngày {formattedIssuedDate})</span>
           )}
@@ -152,7 +152,7 @@ export function CenterLegalInfoCard({
 
         {mode === "admin" && missingItems.length > 0 && (
           <div className="pt-2 border-t">
-            <div className="rounded-lg border border-amber-300 bg-amber-50/70 dark:bg-amber-950/30 p-2.5 text-xs text-amber-800 dark:text-amber-200 space-y-1">
+            <div className="rounded-lg border border-warn/30 bg-warn-wash p-2.5 text-xs text-warn space-y-1">
               <div className="font-semibold flex items-center gap-1.5">
                 <AlertTriangleIcon className="w-3.5 h-3.5 shrink-0" />
                 Hồ sơ còn thiếu {missingItems.length} hạng mục thực tế:

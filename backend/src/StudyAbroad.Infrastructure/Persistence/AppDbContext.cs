@@ -7,6 +7,8 @@ namespace StudyAbroad.Infrastructure.Persistence;
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
     public DbSet<StudyCenter> StudyCenters => Set<StudyCenter>();
+    public DbSet<CenterVerificationRequest> CenterVerificationRequests => Set<CenterVerificationRequest>();
+    public DbSet<CenterVerificationDocument> CenterVerificationDocuments => Set<CenterVerificationDocument>();
     public DbSet<User> Users => Set<User>();
     public DbSet<UserSession> UserSessions => Set<UserSession>();
 
