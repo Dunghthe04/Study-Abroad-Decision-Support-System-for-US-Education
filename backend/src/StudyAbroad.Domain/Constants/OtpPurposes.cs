@@ -7,5 +7,8 @@ namespace StudyAbroad.Domain.Constants
 
         /// <summary>Đặt lại mật khẩu khi người dùng quên mật khẩu.</summary>
         public const string ResetPassword = "reset_password";
+
+        /// <summary>Xác thực email liên lạc MỚI khi trung tâm đổi email.</summary>
+        public const string ChangeEmail = "change_email";
     }
 }
