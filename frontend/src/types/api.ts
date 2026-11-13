@@ -151,7 +151,7 @@ export interface QuickReply {
 
 // Công cụ nhập ngay trong chat; frontend vẽ theo `type`
 export interface ChatWidget {
-  type: "major" | "review" | "budget" | "scholarship" | "form" | "select" | "recommend" | "simulate" | "goal_seek" | "explain" | "school_info" | "school_compare" | "school_search" | "school";
+  type: "major" | "review" | "budget" | "scholarship" | "form" | "select" | "recommend" | "simulate" | "goal_seek" | "explain" | "school_info" | "school_compare" | "school_search" | "school" | "centers";
   data?: Record<string, unknown> | null;
 }
 

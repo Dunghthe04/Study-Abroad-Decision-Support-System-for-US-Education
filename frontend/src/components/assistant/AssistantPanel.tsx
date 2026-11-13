@@ -28,6 +28,7 @@ import { AGE_FEATURES, useAgeBlock } from "@/lib/age-features";
 import { isAuthRoute } from "@/lib/layout-routes";
 import { useAssistant, type AssistantTurn } from "./AssistantProvider";
 import { BudgetWidget } from "./BudgetWidget";
+import { CenterCardsWidget } from "./CenterCardsWidget";
 import { ChatText } from "./ChatText";
 import { MajorWidget } from "./MajorWidget";
 import { ReviewWidget } from "./ReviewWidget";
@@ -346,7 +347,11 @@ function Turn({ turn, onReply }: { turn: AssistantTurn; onReply?: (value: string
   // Mọi câu trả lời là chữ do AI viết đầy đủ (không còn thẻ số liệu đi kèm); các nút và widget chọn bên dưới vẫn giữ
   return (
     <div className="w-full px-1 text-foreground">
-      {turn.content && <ChatText text={turn.content} />}
+      {/* Có thẻ trung tâm thì danh sách chữ (các dòng bắt đầu bằng "- ") đã nằm trong thẻ: chỉ hiện phần mở đầu */}
+      {turn.content && (
+        <ChatText text={turn.widget?.type === "centers" ? turn.content.split("\n- ")[0] : turn.content} />
+      )}
+      {turn.widget?.type === "centers" && <CenterCardsWidget data={turn.widget.data} onPick={onReply} />}
       {turn.citations && turn.citations.length > 0 && (
         <ol className="mt-2 list-decimal space-y-0.5 pl-5 text-xs text-muted-foreground">
           {turn.citations.map((c, j) => (
