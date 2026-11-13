@@ -94,6 +94,12 @@ export function TargetSchoolListView() {
   // Lọc và tìm kiếm danh sách trường
   const filteredItems = useMemo(() => {
     if (!items) return [];
+    const byDeadline = [...items].sort((a, b) => {
+      if (!a.deadline && !b.deadline) return 0;
+      if (!a.deadline) return 1;
+      if (!b.deadline) return -1;
+      return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
+    });
     return items.filter((item) => {
       // Lọc theo Category
       if (selectedCategory !== "all") {
