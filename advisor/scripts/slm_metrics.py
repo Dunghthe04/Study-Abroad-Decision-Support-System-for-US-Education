@@ -272,6 +272,14 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
         }
 
     seconds = [r["giay"] for r in rows if r.get("giay") is not None]
+    # Thời gian theo số ý trong tin (1, 2, 3+): tin nhiều ý thì JSON trả về dài hơn nên lâu hơn
+    times_by_count: dict[str, list[float]] = {}
+    for r in rows:
+        if r.get("giay") is not None:
+            n_intents = len(r["nhan"]["intents"])
+            times_by_count.setdefault(str(min(n_intents, 3)) + ("+" if n_intents >= 3 else ""), []).append(
+                r["giay"]
+            )
     return {
         "so_tin": len(rows),
         "muc_dung": levels,
@@ -287,17 +295,16 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
             lambda r: str(min(len(r["nhan"]["intents"]), 3)) + ("+" if len(r["nhan"]["intents"]) >= 3 else "")
         ),
         "theo_ngu_canh": group(lambda r: "co_ngu_canh" if r.get("context") else "khong_ngu_canh"),
-        "theo_loai_chinh": group(
-            lambda r: next(
-                (y["type"] for y in r["nhan"]["intents"] if y["type"] != "collect_profile"), "collect_profile"
-            )
-        ),
         "thoi_gian": {
             "trung_binh": statistics.mean(seconds),
             "p50": percentile(seconds, 0.5),
             "p90": percentile(seconds, 0.9),
             "p95": percentile(seconds, 0.95),
             "mau": seconds,
+            "theo_so_y": {
+                k: {"so_tin": len(v), "trung_binh": statistics.mean(v)}
+                for k, v in sorted(times_by_count.items())
+            },
         }
         if seconds
         else None,

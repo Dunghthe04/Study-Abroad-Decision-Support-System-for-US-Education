@@ -37,6 +37,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<ReviewBatchItem> ReviewBatchItems => Set<ReviewBatchItem>();
     public DbSet<ReviewVerdict> ReviewVerdicts => Set<ReviewVerdict>();
     public DbSet<KnowledgeDocument> KnowledgeDocuments => Set<KnowledgeDocument>();
+    public DbSet<SlmTrainingSample> SlmTrainingSamples => Set<SlmTrainingSample>();
     public DbSet<AiCall> AiCalls => Set<AiCall>();
     public DbSet<EvalCase> EvalCases => Set<EvalCase>();
     public DbSet<EvalRun> EvalRuns => Set<EvalRun>();

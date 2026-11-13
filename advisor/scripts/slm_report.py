@@ -382,6 +382,7 @@ def main() -> None:
     # biểu đồ
     note(charts.chart_compare(summaries, out / "01_so_sanh.png", split))
     note(charts.chart_f1_per_type(summaries, out / "02_f1_theo_loai.png"))
+    note(charts.chart_precision_recall(summaries, out / "02b_precision_recall.png"))
     note(charts.chart_f1_per_label(summaries, out / "03_f1_theo_nhan.png"))
     note(charts.chart_confusion(summaries, out / "04_nham_lan.png"))
     note(charts.chart_errors(summaries, out / "05_phan_loai_ket_qua.png"))

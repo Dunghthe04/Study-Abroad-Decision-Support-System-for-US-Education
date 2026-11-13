@@ -91,7 +91,7 @@ export function DataTable<T>({
               <Button
                 variant="outline"
                 size="sm"
-                className="border-border bg-muted/60 text-foreground hover:bg-muted"
+                className="border-border bg-card text-foreground shadow-xs hover:bg-muted dark:bg-input/30 dark:hover:bg-input/50"
               />
             }
           >
