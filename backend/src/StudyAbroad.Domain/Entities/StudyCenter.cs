@@ -24,7 +24,34 @@ public class StudyCenter : BaseEntity
     public string? Email { get; set; }
     public string? Description { get; set; }
 
-    /// <summary>unverified | verified | rejected | suspended. Admin xác minh ở backlog #25.</summary>
+    /// <summary>Thời điểm email liên hệ/đăng nhập của trung tâm được xác thực qua OTP (UC-91).</summary>
+    public DateTime? EmailVerifiedAt { get; set; }
+
+    /// <summary>Thời điểm số điện thoại của trung tâm được xác thực qua SMS OTP (UC-91, BR-C3).</summary>
+    public DateTime? PhoneVerifiedAt { get; set; }
+
+    /// <summary>Thời điểm trung tâm đồng ý Điều khoản &amp; Quyền riêng tư (UC-64).</summary>
+    public DateTime? TermsAgreedAt { get; set; }
+
+    /// <summary>Thời điểm trung tâm đồng ý cam kết trung thực về thông tin &amp; phí (UC-64).</summary>
+    public DateTime? CommitmentAgreedAt { get; set; }
+
+    /// <summary>Họ tên người đăng ký tài khoản trung tâm (UC-64).</summary>
+    public string? RegistrantName { get; set; }
+
+    /// <summary>Chức vụ người đăng ký tài khoản trung tâm (UC-64).</summary>
+    public string? RegistrantPosition { get; set; }
+
+    /// <summary>Mức phí tối thiểu công bố (VNĐ) - do trung tâm công bố (BR-C9, UC-92).</summary>
+    public decimal? FeeMin { get; set; }
+
+    /// <summary>Mức phí tối đa công bố (VNĐ) - do trung tâm công bố (BR-C9, UC-92).</summary>
+    public decimal? FeeMax { get; set; }
+
+    /// <summary>Mô tả chi tiết gói phí hoặc dịch vụ đi kèm - do trung tâm công bố.</summary>
+    public string? FeeDescription { get; set; }
+
+    /// <summary>unverified | pending_review | verified | rejected | suspended. (UC-64, UC-71, UC-59).</summary>
     public string VerificationStatus { get; set; } = "unverified";
     public DateTime? VerifiedAt { get; set; }
     public Guid? VerifiedByUserId { get; set; }

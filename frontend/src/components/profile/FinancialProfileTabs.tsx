@@ -28,7 +28,7 @@ export function FinancialProfileTabs() {
   return (
     <div>
       {/* Tab Bar */}
-      <div className="flex gap-1 rounded-xl bg-slate-100 p-1 mb-6">
+      <div className="flex gap-1 rounded-xl border border-line bg-ground p-1 mb-6">
         {TABS.map((tab) => {
           const isActive = activeTab === tab.key;
           return (
@@ -37,8 +37,8 @@ export function FinancialProfileTabs() {
               onClick={() => setActiveTab(tab.key)}
               className={`flex-1 flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
                 isActive
-                  ? "bg-white text-slate-900 ring-1 ring-slate-200"
-                  : "text-slate-500 hover:text-slate-700 hover:bg-slate-50"
+                  ? "bg-surface text-ink ring-1 ring-line"
+                  : "text-ink-2 hover:text-ink hover:bg-surface/60"
               }`}
             >
               <span className="text-base">{tab.icon}</span>

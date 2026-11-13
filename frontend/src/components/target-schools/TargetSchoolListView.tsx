@@ -94,7 +94,13 @@ export function TargetSchoolListView() {
   // Lọc và tìm kiếm danh sách trường
   const filteredItems = useMemo(() => {
     if (!items) return [];
-    return items.filter((item) => {
+    const byDeadline = [...items].sort((a, b) => {
+      if (!a.deadline && !b.deadline) return 0;
+      if (!a.deadline) return 1;
+      if (!b.deadline) return -1;
+      return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
+    });
+    return (viewMode === "timeline" ? byDeadline : items).filter((item) => {
       // Lọc theo Category
       if (selectedCategory !== "all") {
         if ((item.category || "").toLowerCase() !== selectedCategory) {
@@ -113,7 +119,7 @@ export function TargetSchoolListView() {
       }
       return true;
     });
-  }, [items, selectedCategory, search]);
+  }, [items, selectedCategory, search, viewMode]);
 
   // Tính số ngày còn lại đến hạn nộp
   const getDaysRemaining = (deadlineStr?: string | null) => {

@@ -7,7 +7,7 @@ export const MAX_LEAD_MESSAGE_LENGTH = 4000;
 const INVISIBLE_FORMAT_REGEX = /[\u200B-\u200D\u2060\uFEFF\u00AD]/g;
 
 const VIETNAM_PHONE_REGEX =
-  /(?<!\d)(?:\(?(?:\+|00)?84\)?[\s.\-]*|\(?0)(?:2\d|[35789]\d)\)?(?:[\s.\-]*\d){7,8}(?!\d)/;
+  /(?<!\d)(?:\(?(?:\+|00)?84\)?[\s.\-_*]*|\(?0[\s.\-_*]*)(?:2|[35789])[\s.\-_*]*\d\)?(?:[\s.\-_*]*\d){7,8}(?!\d)/;
 
 const HOTLINE_PHONE_REGEX = /(?<!\d)(?:1800|1900)[\s.\-]?\d{4,6}(?!\d)/;
 
@@ -16,6 +16,33 @@ const INTERNATIONAL_PHONE_REGEX =
 
 const KEYWORD_PHONE_REGEX =
   /\b(?:sdt|so dien thoai|dien\s*thoai|tel|hotline|zalo|whatsapp|viber|telegram|phone|call)\b\s*[:\-]?\s*(?:\+?\d[\d\s.\-*]{7,15}\d)/gi;
+
+const DIGIT_WORD_PATTERN =
+  "khong|linh|mot|hai|ba|bon|nam|lam|sau|bay|tam|chin|zero|one|two|three|four|five|six|seven|eight|nine";
+const DIGIT_TOKEN = `(?:\\d|(?<!\\p{L})(?:${DIGIT_WORD_PATTERN})(?!\\p{L}))`;
+const SPELLED_DIGIT_RUN_REGEX = new RegExp(
+  `${DIGIT_TOKEN}(?:[\\s.\\-_*,;|]*${DIGIT_TOKEN}){8,}`,
+  "gu"
+);
+
+const DIGIT_WORDS: Record<string, string> = {
+  khong: "0", linh: "0", zero: "0",
+  mot: "1", one: "1",
+  hai: "2", two: "2",
+  ba: "3", three: "3",
+  bon: "4", four: "4",
+  nam: "5", lam: "5", five: "5",
+  sau: "6", six: "6",
+  bay: "7", seven: "7",
+  tam: "8", eight: "8",
+  chin: "9", nine: "9",
+};
+
+function collapseSpelledDigits(run: string): string {
+  return (run.match(/\d|\p{L}+/gu) ?? [])
+    .map((tok) => (/^\d$/.test(tok) ? tok : (DIGIT_WORDS[tok] ?? "")))
+    .join("");
+}
 
 const EXTERNAL_URL_REGEX =
   /(?:https?:\/\/\S+|www\.\S+|\b(?:bit\.ly|tinyurl\.com|goo\.gl|linktr\.ee|forms\.gle|zalo\.me|zaloapp\.com|t\.me|wa\.me|m\.me|fb\.com|facebook\.com|instagram\.com|tiktok\.com|youtube\.com|youtu\.be|shopee\.vn|lazada\.vn)\/\S*|\bdocs\.google\.com\/forms\S*)/i;
@@ -114,6 +141,11 @@ function containsPhoneNumber(cleanText: string, normalizedText: string): boolean
     INTERNATIONAL_PHONE_REGEX.test(cleanText)
   ) {
     return true;
+  }
+
+  for (const run of normalizedText.matchAll(SPELLED_DIGIT_RUN_REGEX)) {
+    const digits = collapseSpelledDigits(run[0]);
+    if (VIETNAM_PHONE_REGEX.test(digits) || HOTLINE_PHONE_REGEX.test(digits)) return true;
   }
 
   KEYWORD_PHONE_REGEX.lastIndex = 0;

@@ -89,22 +89,21 @@ function CenterActionConfirmContent({
         <DialogTitle className="flex items-center gap-2">
           {action === "verify" ? (
             <>
-              <ShieldCheckIcon className="w-5 h-5 text-emerald-600" />
-              <span>Xác minh trung tâm tư vấn</span>
+              <ShieldCheckIcon className="w-5 h-5 text-ok" />
             </>
           ) : action === "unverify" ? (
             <>
-              <ShieldAlertIcon className="w-5 h-5 text-rose-600" />
+              <ShieldAlertIcon className="w-5 h-5 text-risk" />
               <span>Hủy xác minh trung tâm tư vấn</span>
             </>
           ) : action === "hide" ? (
             <>
-              <EyeOffIcon className="w-5 h-5 text-rose-600" />
+              <EyeOffIcon className="w-5 h-5 text-risk" />
               <span>Ẩn trung tâm tư vấn</span>
             </>
           ) : (
             <>
-              <EyeIcon className="w-5 h-5 text-emerald-600" />
+              <EyeIcon className="w-5 h-5 text-ok" />
               <span>Hiện lại trung tâm tư vấn</span>
             </>
           )}
@@ -143,7 +142,7 @@ function CenterActionConfirmContent({
       </DialogHeader>
 
       {missingChecklist.length > 0 && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50/70 dark:bg-amber-950/30 p-3 text-xs text-amber-800 dark:text-amber-200 space-y-1">
+        <div className="rounded-lg border border-warn/30 bg-warn-wash p-3 text-xs text-warn space-y-1">
           <div className="font-semibold flex items-center gap-1.5">
             <AlertTriangleIcon className="w-4 h-4 shrink-0" />
             Lưu ý hồ sơ pháp lý còn thiếu ({missingChecklist.length}):
@@ -186,7 +185,7 @@ function CenterActionConfirmContent({
           disabled={isSubmitting}
           className={
             action === "verify" || action === "show"
-              ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+              ? "bg-ok hover:bg-ok/90 text-white"
               : undefined
           }
         >

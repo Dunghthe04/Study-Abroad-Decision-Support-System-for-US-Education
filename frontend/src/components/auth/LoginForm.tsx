@@ -170,6 +170,14 @@ export function LoginForm() {
             Khôi phục tài khoản
           </Link>
         </p>
+        <div className="pt-3 border-t border-line">
+          <p className="text-xs text-ink-3">
+            Bạn là đơn vị tư vấn du học?{" "}
+            <Link href="/register/center" className="font-semibold text-brand hover:underline">
+              Đăng ký dành cho trung tâm
+            </Link>
+          </p>
+        </div>
       </div>
     </div>
   );

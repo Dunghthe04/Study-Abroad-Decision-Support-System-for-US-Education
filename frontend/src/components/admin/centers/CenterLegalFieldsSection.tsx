@@ -151,10 +151,7 @@ export function CenterLegalFieldsSection({
             Số quyết định / giấy phép đào tạo ngoại ngữ
           </FieldLabel>
           {needsTrainingLicense && (
-            <Badge
-              variant="outline"
-              className="text-[11px] text-amber-700 border-amber-300 bg-amber-50 dark:bg-amber-950/30"
-            >
+            <Badge variant="warn" className="text-[11px]">
               Khuyến nghị bắt buộc cho mô hình Luyện thi / Toàn diện
             </Badge>
           )}

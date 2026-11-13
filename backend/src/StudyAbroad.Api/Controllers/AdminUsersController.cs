@@ -49,17 +49,6 @@ public class AdminUsersController(IAuthService auth) : ControllerBase
         return CreatedAtAction(nameof(GetUserById), new { id = result.User.Id }, result.User);
     }
 
-    /// <summary>[Q11 / UC-71 Phụ trợ / UC-64] Tạo tài khoản người dùng cho Trung tâm tư vấn (role center - Admin hoặc Moderator).</summary>
-    [HttpPost("centers")]
-    [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Moderator}")]
-    public async Task<ActionResult<UserDto>> CreateCenter(CreateCenterAccountRequest request, CancellationToken ct)
-    {
-        var result = await auth.CreateCenterAccountAsync(request, ct);
-        if (result.Error != AuthError.None || result.User is null)
-            return ValidationProblem(result.Message);
-
-        return CreatedAtAction(nameof(GetUserById), new { id = result.User.Id }, result.User);
-    }
 
     /// <summary>[UC-61] Khóa tài khoản kèm lý do (ghi audit - Admin hoặc Moderator khóa tài khoản cấp dưới).</summary>
     [HttpPost("{id:guid}/lock")]

@@ -1,4 +1,5 @@
 import type {
+  CenterReviewsDto,
   AuthResponse,
   ChangePasswordRequest,
   ForgotPasswordRequest,
@@ -31,6 +32,14 @@ import type {
   LeadMessagesThreadDto,
   SendLeadMessageRequest,
   SendLeadMessageResultDto,
+  RegisterCenterRequest,
+  VerifyCenterEmailRequest,
+  VerificationDocumentUploadDto,
+  SubmitVerificationDto,
+  CenterVerificationDto,
+  CenterVerificationStatusDto,
+  ReviewCenterVerificationRequest,
+  UpdateCenterProfileRequest,
 } from "@/types/api";
 
 // Browser code calls same-origin /api (Nginx in prod, Next rewrite in dev).
@@ -103,6 +112,20 @@ export const authApi = {
   // [AC-1] Đăng ký tài khoản (học sinh hoặc phụ huynh, email/SĐT, mật khẩu)
   register: (data: RegisterRequest) =>
     apiFetch<{ message: string }>("/api/v1/auth/register", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  // [UC-64] Trung tâm tự đăng ký tài khoản
+  registerCenter: (data: RegisterCenterRequest) =>
+    apiFetch<{ message: string; email: string }>("/api/v1/auth/register-center", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  // [UC-91] Xác thực email trung tâm qua mã OTP 6 số
+  verifyCenterEmail: (data: VerifyCenterEmailRequest) =>
+    apiFetch<AuthResponse>("/api/v1/auth/verify-center-email", {
       method: "POST",
       body: JSON.stringify(data),
     }),
@@ -276,8 +299,25 @@ export const studyCentersApi = {
       method: "POST",
       body: JSON.stringify(data),
     }),
-  search: (params?: { search?: string; city?: string; service?: string; studyLevel?: string; page?: number; pageSize?: number }) => {
+  search: (params?: {
+    search?: string;
+    city?: string;
+    service?: string;
+    studyLevel?: string;
+    verificationStatus?: string;
+    centerType?: string;
+    /** Chỉ Admin/Moderator: gồm cả trung tâm đã ẩn */
+    includeInactive?: boolean;
+    /** Chỉ Admin/Moderator: chỉ trung tâm đã ẩn */
+    onlyInactive?: boolean;
+    page?: number;
+    pageSize?: number;
+  }) => {
     const sp = new URLSearchParams();
+    if (params?.verificationStatus) sp.set("verificationStatus", params.verificationStatus);
+    if (params?.centerType) sp.set("centerType", params.centerType);
+    if (params?.includeInactive) sp.set("includeInactive", "true");
+    if (params?.onlyInactive) sp.set("onlyInactive", "true");
     if (params?.search) sp.set("search", params.search);
     if (params?.city) sp.set("city", params.city);
     if (params?.service) sp.set("service", params.service);
@@ -288,6 +328,9 @@ export const studyCentersApi = {
     return apiFetch<PagedResult<StudyCenter>>(`/api/v1/study-centers${qs ? `?${qs}` : ""}`);
   },
   getById: (id: string) => apiFetch<StudyCenter>(`/api/v1/study-centers/${id}`),
+  /** Đánh giá thật của trung tâm (UC-41): danh sách + điểm trung bình + số lượng. */
+  getReviews: (id: string) =>
+    apiFetch<CenterReviewsDto>(`/api/v1/study-centers/${encodeURIComponent(id)}/reviews`),
   /** [UC-59] Xác minh hoặc hủy xác minh trung tâm tư vấn (vai trò: Moderator / Admin) */
   verify: (id: string, isVerified: boolean, verificationNote?: string | null) =>
     apiFetch<StudyCenter>(`/api/v1/study-centers/${encodeURIComponent(id)}/verify`, {
@@ -398,4 +441,74 @@ export const targetSchoolsApi = {
     if (params.universityId) q.set("universityId", params.universityId);
     return apiFetch<TargetSchoolDto | null>(`/api/v1/target-schools/check?${q.toString()}`);
   },
+};
+
+// [UC-71, UC-91, UC-92] Cổng Trung tâm tư vấn
+export const centerPortalApi = {
+  getProfile: () => apiFetch<StudyCenter>("/api/v1/center/profile"),
+  updateProfile: (data: UpdateCenterProfileRequest) =>
+    apiFetch<StudyCenter>("/api/v1/center/profile", {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  getVerificationStatus: () =>
+    apiFetch<CenterVerificationStatusDto>("/api/v1/center/verification/status"),
+  /** Đổi số điện thoại liên lạc (không cần OTP). */
+  changePhone: (newValue: string) =>
+    apiFetch<{ message: string }>("/api/v1/center/contact/phone", {
+      method: "PUT",
+      body: JSON.stringify({ newValue }),
+    }),
+  /** Đổi email liên lạc: gửi OTP tới email mới rồi xác nhận bằng mã. */
+  requestEmailChange: (newValue: string) =>
+    apiFetch<{ message: string }>("/api/v1/center/contact/email/request", {
+      method: "POST",
+      body: JSON.stringify({ newValue }),
+    }),
+  confirmEmailChange: (newValue: string, code: string) =>
+    apiFetch<{ message: string }>("/api/v1/center/contact/email/confirm", {
+      method: "POST",
+      body: JSON.stringify({ newValue, code }),
+    }),
+  uploadDocument: async (file: File, documentType: string): Promise<VerificationDocumentUploadDto> => {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("documentType", documentType);
+
+    const res = await fetch(`${baseUrl}/api/v1/center/verification/upload-document`, {
+      method: "POST",
+      credentials: "include",
+      body: formData,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      throw new ApiError(res.status, err?.detail || err?.title || "Tải tài liệu thất bại", err);
+    }
+    return res.json();
+  },
+  submitVerification: (data: SubmitVerificationDto) =>
+    apiFetch<StudyCenter>("/api/v1/center/verification", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+};
+
+// [UC-59] Moderator duyệt yêu cầu xác minh pháp lý của trung tâm
+export const adminCenterVerificationsApi = {
+  list: (params?: { status?: string; search?: string; page?: number; pageSize?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.status) qs.set("status", params.status);
+    if (params?.search?.trim()) qs.set("search", params.search.trim());
+    if (params?.page) qs.set("page", String(params.page));
+    if (params?.pageSize) qs.set("pageSize", String(params.pageSize));
+    const queryStr = qs.toString();
+    return apiFetch<PagedResult<CenterVerificationDto>>(`/api/v1/admin/center-verifications${queryStr ? `?${queryStr}` : ""}`);
+  },
+  getById: (id: string) =>
+    apiFetch<CenterVerificationDto>(`/api/v1/admin/center-verifications/${encodeURIComponent(id)}`),
+  review: (id: string, data: ReviewCenterVerificationRequest) =>
+    apiFetch<StudyCenter>(`/api/v1/admin/center-verifications/${encodeURIComponent(id)}/review`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
 };

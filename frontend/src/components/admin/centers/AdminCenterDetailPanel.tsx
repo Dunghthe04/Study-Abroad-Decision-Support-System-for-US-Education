@@ -1,14 +1,14 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import {
+  Building2Icon,
   MapPinIcon,
   CheckCircle2Icon,
   ShieldCheckIcon,
-  AwardIcon,
   FlameIcon,
   UsersIcon,
-  ClockIcon,
   ChevronRightIcon,
 } from "lucide-react";
 import type { StudyCenter } from "@/types/api";
@@ -26,8 +26,16 @@ interface AdminCenterDetailPanelProps {
 }
 
 export function AdminCenterDetailPanel({ center, onClose }: AdminCenterDetailPanelProps) {
+  const [failedUrls, setFailedUrls] = useState<Record<string, true>>({});
+  const markImageFailed = (url?: string | null) => {
+    if (!url) return;
+    setFailedUrls((prev) => (prev[url] ? prev : { ...prev, [url]: true }));
+  };
+
   const profile = getEnrichedCenterProfile(center);
   const isVerified = center.verificationStatus === "verified" || profile.center.verificationStatus === "verified";
+  const showCover = Boolean(profile.coverImage && !failedUrls[profile.coverImage]);
+  const showLogo = Boolean(profile.logoImage && !failedUrls[profile.logoImage]);
 
   return (
     <DetailPanel
@@ -37,22 +45,28 @@ export function AdminCenterDetailPanel({ center, onClose }: AdminCenterDetailPan
     >
       <div className="space-y-5">
         {/* Banner & Logo Preview */}
-        <div className="relative rounded-lg overflow-hidden border bg-muted aspect-[3/1]">
-          {profile.coverImage && (
+        <div className="relative rounded-lg overflow-hidden border border-line bg-gradient-to-br from-brand via-brand/85 to-brand-ink aspect-[3/1]">
+          {showCover && (
             <img
-              src={profile.coverImage}
+              src={profile.coverImage ?? undefined}
               alt=""
+              onError={() => markImageFailed(profile.coverImage)}
               className="w-full h-full object-cover"
             />
           )}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-          <div className="absolute bottom-2.5 left-3 flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-lg overflow-hidden border-2 border-background bg-card shrink-0 flex items-center justify-center">
-              <img
-                src={profile.logoImage}
-                alt={center.name}
-                className="w-full h-full object-cover"
-              />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/15 to-transparent" />
+          <div className="absolute bottom-2.5 left-3 right-3 flex items-center gap-2.5">
+            <div className="w-10 h-10 rounded-lg overflow-hidden border-2 border-surface bg-surface shrink-0 flex items-center justify-center">
+              {showLogo ? (
+                <img
+                  src={profile.logoImage ?? undefined}
+                  alt={center.name}
+                  onError={() => markImageFailed(profile.logoImage)}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <Building2Icon className="w-5 h-5 text-ink-3" />
+              )}
             </div>
             <div className="text-white min-w-0">
               <div className="text-xs font-semibold truncate leading-tight ">{center.name}</div>
@@ -62,16 +76,16 @@ export function AdminCenterDetailPanel({ center, onClose }: AdminCenterDetailPan
         </div>
 
         {/* Verification Status & Quick Actions */}
-        <div className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-lg border bg-muted/40">
+        <div className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-lg border border-line bg-ground">
           <div className="space-y-0.5">
-            <div className="text-xs text-muted-foreground font-medium">Trạng thái xác thực</div>
+            <div className="text-xs text-ink-3 font-medium">Trạng thái xác thực</div>
             {isVerified ? (
-              <Badge className="bg-emerald-600 text-white gap-1 text-xs">
+              <Badge variant="ok" className="gap-1 text-xs">
                 <CheckCircle2Icon className="w-3 h-3" />
-                Đã xác minh Sở GD&ĐT
+                Đã xác minh Sở GD&amp;ĐT
               </Badge>
             ) : (
-              <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-950/40 text-xs">
+              <Badge variant="warn" className="text-xs">
                 Chờ kiểm duyệt hồ sơ
               </Badge>
             )}
@@ -90,75 +104,70 @@ export function AdminCenterDetailPanel({ center, onClose }: AdminCenterDetailPan
 
         {/* Quick KPI stats */}
         <div className="grid grid-cols-2 gap-2 text-xs">
-          <div className="p-2.5 rounded-lg border bg-card space-y-1">
-            <div className="text-muted-foreground flex items-center gap-1">
-              <FlameIcon className="w-3.5 h-3.5 text-emerald-600" />
+          {profile.visaSuccessRate != null && (
+          <div className="p-2.5 rounded-lg border border-line bg-surface space-y-1">
+            <div className="text-ink-2 flex items-center gap-1">
+              <FlameIcon className="w-3.5 h-3.5 text-ok" />
               Tỷ lệ Visa
             </div>
-            <div className="font-bold text-foreground text-sm">{profile.visaSuccessRate}%</div>
+            <div className="font-bold text-ink text-sm tabular-nums">{profile.visaSuccessRate}%</div>
           </div>
+          )}
 
-          <div className="p-2.5 rounded-lg border bg-card space-y-1">
-            <div className="text-muted-foreground flex items-center gap-1">
-              <AwardIcon className="w-3.5 h-3.5 text-amber-600" />
-              Tổng học bổng
-            </div>
-            <div className="font-bold text-foreground text-sm truncate" title={profile.totalScholarshipsWon}>
-              {profile.totalScholarshipsWon.split("(")[0].trim()}
-            </div>
-          </div>
-
-          <div className="p-2.5 rounded-lg border bg-card space-y-1">
-            <div className="text-muted-foreground flex items-center gap-1">
-              <UsersIcon className="w-3.5 h-3.5 text-blue-600" />
+          {profile.staffCount != null && (
+          <div className="p-2.5 rounded-lg border border-line bg-surface space-y-1">
+            <div className="text-ink-2 flex items-center gap-1">
+              <UsersIcon className="w-3.5 h-3.5 text-brand" />
               Nhân sự
             </div>
-            <div className="font-bold text-foreground text-sm">{profile.staffCount} chuyên viên</div>
+            <div className="font-bold text-ink text-sm tabular-nums">{profile.staffCount} chuyên viên</div>
           </div>
+          )}
 
-          <div className="p-2.5 rounded-lg border bg-card space-y-1">
-            <div className="text-muted-foreground flex items-center gap-1">
-              <ShieldCheckIcon className="w-3.5 h-3.5 text-purple-600" />
+          {(profile.licenseNumber || profile.taxCode || profile.legalRepresentative || profile.trainingLicenseNumber) && (
+          <div className="col-span-2 p-2.5 rounded-lg border border-line bg-surface space-y-1">
+            <div className="text-ink-2 flex items-center gap-1">
+              <ShieldCheckIcon className="w-3.5 h-3.5 text-reach" />
               Pháp lý
             </div>
-            <div className="font-bold text-foreground text-sm truncate" title={profile.licenseNumber}>
+            {profile.licenseNumber && (
+            <div className="font-bold text-ink text-sm truncate" title={profile.licenseNumber}>
               {profile.licenseNumber}
             </div>
+            )}
             {profile.taxCode && (
-              <div className="text-xs text-muted-foreground mt-0.5 font-mono truncate">
+              <div className="text-xs text-ink-3 mt-0.5 font-mono truncate">
                 MST: {profile.taxCode}
               </div>
             )}
             {profile.legalRepresentative && (
-              <div className="text-xs text-muted-foreground mt-0.5 truncate">
+              <div className="text-xs text-ink-3 mt-0.5 truncate">
                 Đại diện: {profile.legalRepresentative}
               </div>
             )}
             {profile.trainingLicenseNumber && (
-              <div className="text-xs text-muted-foreground mt-0.5 font-mono truncate">
+              <div className="text-xs text-ink-3 mt-0.5 font-mono truncate">
                 GP đào tạo: {profile.trainingLicenseNumber}
               </div>
             )}
           </div>
+          )}
         </div>
 
         {/* Contact details */}
         <div className="space-y-2 text-xs">
-          <div className="font-semibold text-foreground text-xs text-muted-foreground">
-            Thông tin liên hệ & Địa điểm
+          <div className="font-semibold text-xs text-ink-2">
+            Thông tin liên hệ &amp; Địa điểm
           </div>
-          <div className="space-y-1.5 p-3 rounded-lg border bg-card text-muted-foreground">
-            <div className="flex items-start gap-2 text-foreground">
-              <MapPinIcon className="w-3.5 h-3.5 text-brand shrink-0 mt-0.5" />
-              <span>{center.address ?? "Chưa cập nhật địa chỉ"}</span>
-            </div>
-            <div className="pl-5.5 text-xs text-muted-foreground">
+          <div className="space-y-1.5 p-3 rounded-lg border border-line bg-surface text-ink-2">
+            {center.address && (
+              <div className="flex items-start gap-2 text-ink">
+                <MapPinIcon className="w-3.5 h-3.5 text-brand shrink-0 mt-0.5" />
+                <span>{center.address}</span>
+              </div>
+            )}
+            <div className="pl-5.5 text-xs text-ink-3">
               Khu vực: {center.district ? `${center.district}, ${center.city ?? "Việt Nam"}` : (center.city ?? "Toàn quốc")}
-            </div>
-
-            <div className="flex items-center gap-2 pt-1 border-t text-xs">
-              <ClockIcon className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-              <span>{profile.operatingHours}</span>
             </div>
           </div>
         </div>

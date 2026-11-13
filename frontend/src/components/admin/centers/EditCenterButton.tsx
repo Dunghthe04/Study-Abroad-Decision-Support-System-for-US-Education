@@ -78,7 +78,7 @@ export function EditCenterButton({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Chỉ Moderator hoặc Admin mới được sửa trung tâm
-  const canEdit = user?.role === "admin" || user?.role === "moderator";
+  const canEdit = user?.role === "moderator";
   if (!canEdit) return null;
 
   const handleOpen = () => {
