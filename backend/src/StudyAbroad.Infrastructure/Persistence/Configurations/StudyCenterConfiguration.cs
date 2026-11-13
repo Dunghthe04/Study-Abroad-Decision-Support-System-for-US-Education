@@ -19,8 +19,13 @@ public class StudyCenterConfiguration : IEntityTypeConfiguration<StudyCenter>
         builder.Property(x => x.Email).HasMaxLength(256);
         builder.Property(x => x.Description).HasMaxLength(4000);
         builder.HasOne<User>().WithMany().HasForeignKey(x => x.VerifiedByUserId).OnDelete(DeleteBehavior.SetNull);
-        builder.Property(x => x.VerificationStatus).HasMaxLength(16).IsRequired().HasDefaultValue("unverified");
+        builder.Property(x => x.VerificationStatus).HasMaxLength(32).IsRequired().HasDefaultValue("unverified");
         builder.Property(x => x.VerificationNote).HasMaxLength(1000);
+        builder.Property(x => x.RegistrantName).HasMaxLength(100);
+        builder.Property(x => x.RegistrantPosition).HasMaxLength(100);
+        builder.Property(x => x.FeeMin).HasPrecision(14, 2);
+        builder.Property(x => x.FeeMax).HasPrecision(14, 2);
+        builder.Property(x => x.FeeDescription).HasMaxLength(1000);
         builder.HasOne<User>().WithMany().HasForeignKey(x => x.OwnerUserId).OnDelete(DeleteBehavior.SetNull);
         // List<string> maps to PostgreSQL text[] with Npgsql.
         builder.Property(x => x.StudyLevels).HasColumnType("text[]");
