@@ -33,7 +33,7 @@ export function SourceTooltip({ source, children, className }: {
           delay={150}
           closeDelay={150}
           render={<span tabIndex={0} />}
-          className={cn("cursor-help rounded-sm underline decoration-dotted decoration-ink-3/60 underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-ring", className)}
+          className={cn("cursor-help rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring", className)}
         >
           {children}
         </TooltipTrigger>
