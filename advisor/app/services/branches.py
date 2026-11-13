@@ -313,7 +313,8 @@ def ask_missing_profile(state: ChatState, y: SlmY, required: list[str]) -> Skill
     # Nhớ câu tư vấn để trả lời ngay khi học sinh xác nhận hồ sơ (ProfileBranch). Chỉ giữ câu đầu tiên
     if state.pending_advice is None:
         state.pending_advice = y
-    if state.question_id and state.question_id not in OPENING_QUESTIONS:
+    # Đang chờ ở bảng rà soát X1 mà hồ sơ thiếu (hồ sơ bị xóa sau khi rà soát) thì không nhắc lại bảng trống, hỏi lại từ đầu
+    if state.question_id and state.question_id not in OPENING_QUESTIONS and state.question_id != "X1":
         return SkillOutput(NEED_PROFILE)
     return ask_major(state) if missing[0] == "major" else start_intake(state, required)
 

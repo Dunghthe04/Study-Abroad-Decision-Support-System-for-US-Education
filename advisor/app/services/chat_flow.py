@@ -554,6 +554,11 @@ def ask_next_missing(state: ChatState, prefix: str = "") -> SkillOutput:
     from app.services.skills import skill_bac_hoc
 
     state.intake_mode = "chat"
+    # Hồ sơ lại thiếu mục bắt buộc sau khi đã qua bảng rà soát (hồ sơ bị xóa, form xóa trống ô): bỏ dấu "đã rà soát"
+    # để hỏi lại các mục còn thiếu, không nhảy thẳng về bảng X1 trống. Hỏi đủ thì X1 hiện lại như thường
+    if missing_fields(state.profile, REQUIRED_B3):
+        state.asked.pop("X1", None)
+        state.edit_queue = None
     go_to(state, "B1")  # skill_bac_hoc hết câu B1 thì tự sang B2
     output = skill_bac_hoc.ask_next(state)
     output.answer = prefix + output.answer

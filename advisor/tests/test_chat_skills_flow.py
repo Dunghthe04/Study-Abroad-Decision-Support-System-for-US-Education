@@ -832,3 +832,30 @@ async def test_committed_profile_asks_only_required():
     req = ChatRequest(messages=[ChatMessage(role="user", content=CHAT_BUTTON.value)], state=res.state)
     res = await flow.reply(req)
     assert res.state.has_committed_profile is True  # lượt không gửi cờ thì giữ cờ cũ
+
+
+# Đã xác nhận hồ sơ ở X1 rồi hồ sơ bị xóa: hỏi tư vấn tiếp thì hỏi lại từ B1.1, không hiện lại bảng X1 trống.
+# Phiên đang kẹt ở X1 (question_id = X1 từ lượt trước) cũng thoát ra hỏi lại
+@pytest.mark.parametrize("question_id", [None, "X1"])
+async def test_profile_deleted_after_review_asks_again_instead_of_empty_review(question_id):
+    flow = flow_with(
+        build_handlers(FakeLLM(), "qwen3:8b"), tin(("profile_review", {"tasks": ["school_list"]}))
+    )
+    state = ChatState(
+        current_step="B3",
+        profile={"school_type": field("all")},
+        intake_mode="chat",
+        asked={"X1": 1, "B1.1": 1, "D2": 1},
+        question_id=question_id,
+        last_question=QUESTIONS["X1"] if question_id else "",
+    )
+    req = ChatRequest(
+        messages=[ChatMessage(role="user", content="đề xuất trường")],
+        state=state,
+        has_committed_profile=False,
+    )
+    res = await flow.reply(req)
+
+    assert res.state.question_id == "B1.1"
+    assert res.widget is None or res.widget.type != "review"
+    assert QUESTIONS["X1"] not in res.answer
