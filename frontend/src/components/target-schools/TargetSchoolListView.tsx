@@ -119,7 +119,7 @@ export function TargetSchoolListView() {
       }
       return true;
     });
-  }, [items, selectedCategory, search]);
+  }, [items, selectedCategory, search, viewMode]);
 
   // Tính số ngày còn lại đến hạn nộp
   const getDaysRemaining = (deadlineStr?: string | null) => {
