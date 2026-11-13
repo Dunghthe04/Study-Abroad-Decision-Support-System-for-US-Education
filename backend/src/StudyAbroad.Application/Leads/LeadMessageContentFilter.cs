@@ -22,7 +22,7 @@ public static partial class LeadMessageContentFilter
     // Số điện thoại Việt Nam (02x/03x/05x/07x/08x/09x, 10–11 số, hỗ trợ dấu cách/chấm/gạch ngang/+84/84/ngoặc đơn)
     // Tránh bắt nhầm học phí (500.000.000), điểm GPA/SAT/IELTS hoặc ngày tháng (09/11/2026).
     [GeneratedRegex(
-        @"(?<!\d)(?:\(?(?:\+|00)?84\)?[\s.\-]*|\(?0)(?:2\d|[35789]\d)\)?(?:[\s.\-]*\d){7,8}(?!\d)",
+        @"(?<!\d)(?:\(?(?:\+|00)?84\)?[\s.\-_*]*|\(?0[\s.\-_*]*)(?:2|[35789])[\s.\-_*]*\d\)?(?:[\s.\-_*]*\d){7,8}(?!\d)",
         RegexOptions.Compiled)]
     private static partial Regex VietnamPhoneRegex();
 
@@ -43,6 +43,27 @@ public static partial class LeadMessageContentFilter
         @"(?i)\b(?:sdt|sđt|so dien thoai|dien\s*thoai|tel|hotline|zalo|whatsapp|viber|telegram|phone|call)\b\s*[:\-]?\s*(?:\+?\d[\d\s.\-*]{7,15}\d)",
         RegexOptions.Compiled)]
     private static partial Regex KeywordPhoneRegex();
+
+    // Chuỗi chữ số xen kẽ chữ số viết bằng chữ (không, tám, ba, one...) ngăn cách bởi khoảng trắng/dấu câu.
+    // Chạy trên văn bản đã bỏ dấu tiếng Việt. Ví dụ: "không 9 tám 7.4 9 ba không 8,6 0".
+    [GeneratedRegex(
+        @"(?:\d|(?<!\p{L})(?:khong|linh|mot|hai|ba|bon|nam|lam|sau|bay|tam|chin|zero|one|two|three|four|five|six|seven|eight|nine)(?!\p{L}))(?:[\s.\-_*,;|]*(?:\d|(?<!\p{L})(?:khong|linh|mot|hai|ba|bon|nam|lam|sau|bay|tam|chin|zero|one|two|three|four|five|six|seven|eight|nine)(?!\p{L}))){8,}",
+        RegexOptions.Compiled)]
+    private static partial Regex SpelledDigitRunRegex();
+
+    private static readonly Dictionary<string, char> DigitWords = new(StringComparer.Ordinal)
+    {
+        ["khong"] = '0', ["linh"] = '0', ["zero"] = '0',
+        ["mot"] = '1', ["one"] = '1',
+        ["hai"] = '2', ["two"] = '2',
+        ["ba"] = '3', ["three"] = '3',
+        ["bon"] = '4', ["four"] = '4',
+        ["nam"] = '5', ["lam"] = '5', ["five"] = '5',
+        ["sau"] = '6', ["six"] = '6',
+        ["bay"] = '7', ["seven"] = '7',
+        ["tam"] = '8', ["eight"] = '8',
+        ["chin"] = '9', ["nine"] = '9',
+    };
 
     // Liên kết ngoài / tên miền mạng xã hội / biểu mẫu / rút gọn link
     [GeneratedRegex(
@@ -141,6 +162,14 @@ public static partial class LeadMessageContentFilter
         }
 
         var normalized = NormalizeForKeywordMatch(text);
+
+        foreach (Match run in SpelledDigitRunRegex().Matches(normalized))
+        {
+            var digits = CollapseSpelledDigits(run.Value);
+            if (VietnamPhoneRegex().IsMatch(digits) || HotlinePhoneRegex().IsMatch(digits))
+                return true;
+        }
+
         foreach (Match match in KeywordPhoneRegex().Matches(normalized))
         {
             // Yêu cầu ít nhất 9 chữ số để tránh bắt nhầm ngày tháng (DD-MM-YYYY chỉ có 8 chữ số)
@@ -149,6 +178,35 @@ public static partial class LeadMessageContentFilter
         }
 
         return false;
+    }
+
+    private static string CollapseSpelledDigits(string run)
+    {
+        var sb = new StringBuilder(run.Length);
+        var word = new StringBuilder();
+
+        void FlushWord()
+        {
+            if (word.Length > 0 && DigitWords.TryGetValue(word.ToString(), out var d))
+                sb.Append(d);
+            word.Clear();
+        }
+
+        foreach (var ch in run)
+        {
+            if (char.IsLetter(ch))
+            {
+                word.Append(ch);
+                continue;
+            }
+
+            FlushWord();
+            if (char.IsDigit(ch))
+                sb.Append(ch);
+        }
+
+        FlushWord();
+        return sb.ToString();
     }
 
     private static int CountDigits(string value)
