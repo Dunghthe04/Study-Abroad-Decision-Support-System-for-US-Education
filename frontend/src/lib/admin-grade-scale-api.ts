@@ -1,5 +1,6 @@
 import { apiFetch, ApiError } from "@/lib/api";
 import type { GradeScaleConfig } from "@/types/academic";
+import type { PagedResult } from "@/types/api";
 
 /**
  * Bảng đang dùng. version gửi lại khi lưu để biết có ai sửa trước không; isDefault: DB chưa có bảng, đang dùng bảng
@@ -38,8 +39,9 @@ export function getAdminGradeScale(): Promise<GradeScaleSetting> {
   return apiFetch<GradeScaleSetting>(BASE);
 }
 
-export function getGradeScaleHistory(limit = 20): Promise<GradeScaleHistoryItem[]> {
-  return apiFetch<GradeScaleHistoryItem[]>(`${BASE}/history?limit=${limit}`);
+/** Một trang lịch sử sửa bảng, mới nhất ở trên. */
+export function getGradeScaleHistory(page = 1, pageSize = 10): Promise<PagedResult<GradeScaleHistoryItem>> {
+  return apiFetch<PagedResult<GradeScaleHistoryItem>>(`${BASE}/history?page=${page}&pageSize=${pageSize}`);
 }
 
 /** Chỉ moderator lưu được. 400 (sai luật) và 409 (người khác vừa sửa) trả về kết quả để màn hình hiện, lỗi khác ném ra. */

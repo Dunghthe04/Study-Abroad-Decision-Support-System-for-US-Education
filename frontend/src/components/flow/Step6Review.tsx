@@ -236,7 +236,7 @@ export function Step6Review({
             <div className="shrink-0 rounded-xl bg-brand-wash px-3 py-1.5 text-center">
               <div className="text-xs font-semibold text-brand-ink">Điểm TB tự tính</div>
               <div className="text-numeric text-base font-bold text-brand">{gpa10Text}</div>
-              <div className="text-xs text-brand-ink">thang 4: {gpa}</div>
+              <div className="text-xs text-brand-ink">thang 4 (tham khảo): {gpa}</div>
             </div>
           </div>
         </ReviewCard>
