@@ -51,15 +51,16 @@ def test_next_question_asks_what_b3_needs_first_in_asking_order():
     assert next_question({}) == ("B1", "B1.2")  # bậc học trước
     assert next_question(profile("target_level")) == ("B2", "D2")
     assert next_question(profile("target_level", "gpa")) == ("B2", "E1")
-    assert next_question(profile("target_level", "gpa", "english")) == ("B2", "F1")
+    assert next_question(profile("target_level", "gpa", "english")) == ("B2", "D3")  # SAT/ACT
+    assert next_question(profile("target_level", "gpa", "english", "sat")) == ("B2", "F1")
+    assert next_question(profile("target_level", "gpa", "english", "sat", "budget")) == ("B2", "F2")  # học bổng
 
 
 def test_next_question_moves_to_b4_fields_once_b3_is_complete():
-    b3 = ("target_level", "gpa", "english", "budget")
+    b3 = ("target_level", "gpa", "english", "sat", "budget", "scholarship")
 
     assert next_question(profile(*b3)) == ("B1", "B1.3")  # ngành
-    assert next_question(profile(*b3, "major")) == ("B2", "F2")  # học bổng
-    assert next_question(profile(*b3, "major", "scholarship")) is None
+    assert next_question(profile(*b3, "major")) is None
 
 
 def test_every_required_field_has_a_question_that_exists():

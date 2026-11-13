@@ -26,6 +26,7 @@ FIELD_QUESTION = {
     "major": ("B1", "B1.3"),
     "gpa": ("B2", "D2"),
     "english": ("B2", "E1"),
+    "sat": ("B2", "D3"),
     "budget": ("B2", "F1"),
     "scholarship": ("B2", "F2"),
 }

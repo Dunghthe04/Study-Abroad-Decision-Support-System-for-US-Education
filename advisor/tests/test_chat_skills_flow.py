@@ -296,6 +296,11 @@ def full_profile() -> dict:
     }
 
 
+# Đủ mục bắt buộc cho B3, trừ hai mục said_in_B0 chưa xác nhận
+def b3_profile() -> dict:
+    return {**full_profile(), "sat": field(1400), "budget": field("tier_35k_50k"), "scholarship": field("partial")}
+
+
 async def test_all_questions_done_shows_review_with_buttons():
     asked = {q: 1 for q in OPTIONAL_QUESTIONS}
     llm = FakeLLM(ho_so({"budget": {"amount": None, "currency": None, "tier": "tier_35k_50k"}}))
@@ -306,14 +311,14 @@ async def test_all_questions_done_shows_review_with_buttons():
     assert res.state.question_id == "X1"
     assert res.widget.type == "review"
     assert res.widget.data["profile"]["budget"] == {"value": "tier_35k_50k", "status": "confirmed"}
-    assert res.widget.data["missing"] == ["target_level", "gpa"]  # said_in_B0 chưa xác nhận
+    # said_in_B0 chưa xác nhận; D3, F2 tính là đã hỏi nhưng chưa có câu trả lời
+    assert res.widget.data["missing"] == ["target_level", "gpa", "sat", "scholarship"]
     assert [r.label for r in res.quick_replies] == ["Đúng rồi", "Cần sửa"]
 
 
 async def test_confirm_at_review_confirms_said_info_and_asks_what_next():
     llm = FakeLLM()
-    profile = {**full_profile(), "budget": field("tier_35k_50k")}
-    res = await turn(llm, "Đúng rồi", current_step="B2", question_id="X1", profile=profile)
+    res = await turn(llm, "Đúng rồi", current_step="B2", question_id="X1", profile=b3_profile())
 
     assert all(f.status == "confirmed" for f in res.state.profile.values())
     # Xác nhận xong chỉ lưu rồi hỏi muốn làm gì tiếp, không tự đánh giá hay lên lộ trình
@@ -329,8 +334,7 @@ async def test_confirm_at_review_confirms_said_info_and_asks_what_next():
 async def test_confirm_at_review_skips_slm(message):
     llm = FakeLLM(OllamaError("tắt máy"), OllamaError("tắt máy"))  # đánh giá dùng câu mẫu
     flow = flow_with(build_handlers(llm, "qwen3:8b"), tin(("profile_review", {"tasks": ["assessment"]})))
-    profile = {**full_profile(), "budget": field("tier_35k_50k")}
-    state = ChatState(current_step="B2", question_id="X1", last_question=QUESTIONS["X1"], profile=profile)
+    state = ChatState(current_step="B2", question_id="X1", last_question=QUESTIONS["X1"], profile=b3_profile())
     res = await flow.reply(ChatRequest(messages=[ChatMessage(role="user", content=message)], state=state))
 
     assert res.skills == ["collect_profile"]
@@ -340,7 +344,9 @@ async def test_confirm_at_review_skips_slm(message):
 
 
 async def test_confirm_with_missing_budget_asks_budget():
-    res = await turn(FakeLLM(), "Đúng", current_step="B2", question_id="X1", profile=full_profile())
+    profile = b3_profile()
+    del profile["budget"]
+    res = await turn(FakeLLM(), "Đúng", current_step="B2", question_id="X1", profile=profile)
 
     assert (res.state.current_step, res.state.question_id) == ("B2", "F1")
 
@@ -727,6 +733,8 @@ def saved_profile() -> dict:
     profile["gpa"] = field({"value": 8.5, "scale": 10})
     profile["english"] = field({"type": "ielts", "value": 6.5, "date": None})
     profile["budget"] = field("tier_35k_50k")
+    profile["sat"] = field(1350)
+    profile["scholarship"] = field("partial")
     return profile
 
 

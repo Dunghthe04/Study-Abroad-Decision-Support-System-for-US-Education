@@ -86,7 +86,7 @@ OPTIONAL_QUESTIONS = ("F2", "E2", "E3", "D1", "D3", "D4", "D5", "F3", "N1", "N2"
 # 5 hoạt động, giải thưởng (D4, D5). Hết form mới hỏi thông tin thêm không có trong form (N1 người thân)
 QUESTION_ORDER = ("D1", "N2", "N3", "D2", "E1", "E2", "D3", "E3", "F1", "F2", "F3", "D4", "D5", "N1")
 # Thông tin bắt buộc → câu hỏi để hỏi lại khi học sinh xác nhận mà vẫn còn thiếu
-FIELD_QUESTION = {"gpa": "D2", "english": "E1", "budget": "F1"}
+FIELD_QUESTION = {"gpa": "D2", "english": "E1", "sat": "D3", "budget": "F1", "scholarship": "F2"}
 # Những câu học sinh gõ (hoặc nút bấm gửi) để xác nhận hồ sơ ở X1
 CONFIRM_WORDS = {
     "đúng",

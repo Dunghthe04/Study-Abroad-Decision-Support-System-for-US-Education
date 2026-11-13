@@ -128,7 +128,7 @@ async def test_collect_confirm_review_makes_profile_ready():
 
 
 def full_profile() -> dict[str, ProfileField]:
-    names = ["current_level", "target_level", "major", "intake", "gpa", "english", "budget"]
+    names = ["current_level", "target_level", "major", "intake", "gpa", "english", "sat", "budget", "scholarship"]
     profile = {name: ProfileField(value="x", status="confirmed") for name in names}
     profile["activities"] = ProfileField(value=[{"name": "a"}], status="confirmed")
     return profile
@@ -428,7 +428,7 @@ async def test_pick_sections_asks_each_question_then_review():
     assert llm.calls == []
     output = await chat.collect(state, "GPA 3.8 thang 4", MAC_DINH)
     assert (state.question_id, state.edit_queue) == ("D3", ["E3"])
-    assert KEEP not in labels(output)  # chưa có SAT/ACT thì không có gì để giữ
+    assert KEEP in labels(output)  # SAT/ACT đã có giá trị
     await chat.collect(state, "Em chưa thi SAT/ACT", MAC_DINH)
     assert (state.question_id, state.edit_queue) == ("E3", [])  # chưa thi thì hỏi kế hoạch thi
     output = await chat.collect(state, "Bỏ qua", MAC_DINH)
