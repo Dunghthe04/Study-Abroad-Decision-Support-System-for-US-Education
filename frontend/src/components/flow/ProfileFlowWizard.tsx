@@ -155,6 +155,13 @@ export function ProfileFlowWizard() {
     currentStepRef.current = currentStep;
   }, [currentStep]);
   const lastCompletedStep = completedSteps.length ? Math.max(...completedSteps) : 0;
+  // Trang 1 có ô mục tiêu thì phải tích ít nhất 1 (mở từ chat không có goal= thì ẩn ô này)
+  const showGoals = !fromChat || goals.length > 0;
+  // Bước đầu tiên còn thiếu mục bắt buộc (6 = đủ hết). Quay lại xoá một mục bắt buộc thì
+  // các bước sau khoá ngay, dù trước đó đã đi qua
+  const firstNotReady =
+    [1, 2, 3, 4, 5].find((s) => !stepReady(s, draft, goals) || (s === 1 && showGoals && goals.length === 0)) ?? 6;
+  const unlockedThrough = Math.min(lastCompletedStep, firstNotReady - 1);
 
   const stepTitle = FLOW_STEPS.find((s) => s.step === currentStep)?.title ?? "";
   useAssistantPageContext({
@@ -410,6 +417,7 @@ export function ProfileFlowWizard() {
 
   // Điều hướng tới bước tiếp theo
   const handleNext = () => {
+    setErrorMessage(null);
     const nextStep = Math.min(6, currentStep + 1);
     const nextCompleted = completedSteps.includes(currentStep)
       ? completedSteps
@@ -442,7 +450,8 @@ export function ProfileFlowWizard() {
 
   // Nhảy tới bước cụ thể từ stepper hoặc nút Sửa
   const handleSelectStep = (stepNumber: number) => {
-    setCurrentStep(stepNumber);
+    // Không cho nhảy qua bước còn thiếu: dừng ở bước đó để điền trước
+    setCurrentStep(stepNumber > firstNotReady ? firstNotReady : stepNumber);
     if (typeof window !== "undefined") {
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
@@ -457,8 +466,14 @@ export function ProfileFlowWizard() {
   // Chỉ tích "Gợi ý trường" (hoặc chưa tích gì, như form cũ) thì sang trang gợi ý trường; còn lại về chat
   const backToChat = fromChat || (goals.length > 0 && !onlySchoolList(goals));
   const handleSubmitCommit = async () => {
-    setIsSubmitting(true);
     setErrorMessage(null);
+    // Còn bước thiếu mục bắt buộc (vd. quay lại xoá rồi nhảy thẳng tới đây): đưa về bước đó
+    if (firstNotReady < 6) {
+      setErrorMessage(`Bước ${firstNotReady} còn thiếu mục bắt buộc, bạn điền nốt rồi tiếp tục nhé.`);
+      handleSelectStep(firstNotReady);
+      return;
+    }
+    setIsSubmitting(true);
 
     try {
       if (!user) {
@@ -533,7 +548,7 @@ export function ProfileFlowWizard() {
       draft={draft}
       metadata={metadata}
       currentStep={currentStep}
-      lastCompletedStep={lastCompletedStep}
+      lastCompletedStep={unlockedThrough}
       onSelectStep={handleSelectStep}
     />
   );
@@ -589,7 +604,7 @@ export function ProfileFlowWizard() {
                 onNext={handleNext}
                 goals={goals}
                 goalsLocked={goalsLocked}
-                showGoals={!fromChat || goals.length > 0}
+                showGoals={showGoals}
                 onGoalsChange={updateGoals}
               />
             )}
