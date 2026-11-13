@@ -238,7 +238,15 @@ OUT_OF_SCOPE = {
     "sensitive": "Mình không hỗ trợ việc này. Hồ sơ du học cần trung thực, mình giúp bạn chuẩn bị đúng cách nhé.",
     "farewell": "Rất vui được hỗ trợ bạn! Khi cần cứ quay lại hỏi mình nhé.",
     "ambiguous": "Mình chưa rõ ý bạn lắm. Bạn nói cụ thể hơn giúp mình nhé.",
+    # Chỉ dùng khi chưa có skill trung tâm; bình thường human_handoff đi vào luồng trung tâm (HANDOFF_INTRO)
+    "human_handoff": "Mình là trợ lý AI nên không thay được tư vấn viên. Bạn xem danh sách trung tâm tư vấn đã xác minh ở trang Trung tâm nhé.",
 }
+
+# Muốn gặp người thật: trong hệ thống "người thật" là tư vấn viên của trung tâm, nên đi vào luồng trung tâm với dịch vụ để trống
+# (hỏi dịch vụ bằng nút), kèm một câu nói rõ trợ lý là AI
+HANDOFF_INTRO = (
+    "Mình là trợ lý AI nên không thay được tư vấn viên. Mình gợi ý các trung tâm tư vấn đã xác minh."
+)
 
 
 # Lời chào: model có nhãn riêng greeting nên chào lại và gợi ý việc làm được
@@ -256,8 +264,17 @@ GREETING_BUTTONS = [
 
 # Ngoài phạm vi: trả câu cố định. Câu hồ sơ đang chờ (nếu có) do ChatFlow nhắc lại như mọi câu hỏi xen ngang
 class OutOfScopeBranch:
+    # center: skill trung tâm (cùng skill của CenterBranch) để human_handoff đi vào luồng trung tâm; None thì trả câu cố định
+    def __init__(self, center: Any | None = None) -> None:
+        self._center = center
+
     async def run(self, state: ChatState, message: str, slm: SlmTinResult) -> SkillOutput:
         kind = slm.intents[0].entities.get("subtype", "ambiguous")
+        if kind == "human_handoff" and self._center is not None:
+            # follow_up: dịch vụ và thành phố đã nhớ ở lượt trước được dùng luôn; chưa có thì luồng trung tâm hỏi bằng nút
+            output = await self._center.run(state, message, {"follow_up": True})
+            output.answer = f"{HANDOFF_INTRO}\n\n{output.answer}"
+            return output
         # Luật small_talk là lưới an toàn cho model chưa học nhãn greeting (bản cũ hay trả ambiguous hoặc farewell cho lời chào)
         if kind == "greeting" or (
             kind in ("ambiguous", "farewell") and small_talk.classify(message) == "greeting"
@@ -478,5 +495,5 @@ def build_branches(
             if "skill_chuyen_trung_tam" in skills
             else NotReadyBranch()
         ),
-        "out_of_scope": OutOfScopeBranch(),
+        "out_of_scope": OutOfScopeBranch(skills.get("skill_chuyen_trung_tam")),
     }

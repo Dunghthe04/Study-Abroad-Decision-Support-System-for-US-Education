@@ -1,4 +1,4 @@
-# SKILL B6 GIẢI THÍCH TRUNG TÂM (skill_giai_thich_trung_tam) - skill_version 1.3
+# SKILL B6 GIẢI THÍCH TRUNG TÂM (skill_giai_thich_trung_tam) - skill_version 1.4
 
 ## NGUYÊN TẮC DỮ LIỆU (BẮT BUỘC)
 - Chỉ viết dựa trên số liệu và dữ kiện CÓ TRONG dữ liệu hệ thống gửi lên (đầu vào JSON). Mọi con số, tên trường, tên trung tâm, ngày tháng, nhóm xếp loại phải có trong dữ liệu đó và chép đúng, không làm tròn lại, không tự tính thêm.
@@ -19,7 +19,7 @@ Hệ thống đã tự so sánh: "same_city" = trung tâm cùng thành phố v�
 ## ĐOẠN MỞ ĐẦU ("opening")
 - Một đến hai câu, thân thiện, nói lại đúng điều học sinh cần ("bạn cần {need}") và thành phố nếu có.
 - Nếu "student_city" có giá trị và "city_has_centers" là false: BẮT BUỘC nói thẳng rằng hiện chưa có trung tâm đã xác minh ở thành phố đó (chép đúng tên thành phố trong "student_city") và các trung tâm bên dưới ở nơi khác. Không được nói như thể các trung tâm đó ở gần học sinh.
-- Nếu "city_has_centers" là true: nói đã ưu tiên trung tâm cùng thành phố.
+- Nếu "city_has_centers" là true: các trung tâm bên dưới đều ở thành phố học sinh nói, chỉ cần nói đây là các trung tâm đã xác minh ở đó. KHÔNG viết "ưu tiên", vì hệ thống không lấy thêm trung tâm ở nơi khác.
 - Kết thúc bằng lời dẫn vào danh sách bên dưới (ví dụ "Dưới đây là các trung tâm đã xác minh:").
 - Tối đa 45 từ. KHÔNG nêu tên trung tâm, KHÔNG khen chê, KHÔNG nhắc giá, ưu đãi, số điện thoại, email, Zalo. KHÔNG có con số.
 
@@ -37,7 +37,7 @@ Phải có đủ một câu cho mỗi id trong "centers".
 
 ## VÍ DỤ
 Vào: {"need":"luyện phỏng vấn visa","student_level":"đại học","student_city":"TP.HCM","city_has_centers":true,"centers":[{"id":1,"same_city":true,"accepts_level":true,"other_services":["chọn trường"]},{"id":2,"same_city":false,"accepts_level":true,"other_services":[]}]}
-Ra:  {"opening":"Bạn cần luyện phỏng vấn visa ở TP.HCM, mình ưu tiên trung tâm cùng thành phố. Dưới đây là các trung tâm đã xác minh:","reasons":[{"id":1,"reason":"Có luyện phỏng vấn visa, nhận học sinh bậc đại học, cùng thành phố với bạn, ngoài ra có hỗ trợ chọn trường."},{"id":2,"reason":"Có luyện phỏng vấn visa, nhận học sinh bậc đại học."}]}
+Ra:  {"opening":"Bạn cần luyện phỏng vấn visa ở TP.HCM. Dưới đây là các trung tâm đã xác minh ở đó:","reasons":[{"id":1,"reason":"Có luyện phỏng vấn visa, nhận học sinh bậc đại học, cùng thành phố với bạn, ngoài ra có hỗ trợ chọn trường."},{"id":2,"reason":"Có luyện phỏng vấn visa, nhận học sinh bậc đại học."}]}
 
 Vào: {"need":"sửa bài luận","student_level":null,"student_city":"Huế","city_has_centers":false,"centers":[{"id":1,"same_city":false,"accepts_level":false,"other_services":[]}]}
 Ra:  {"opening":"Bạn cần sửa bài luận ở Huế. Hiện chưa có trung tâm đã xác minh ở Huế, các trung tâm dưới đây ở nơi khác:","reasons":[{"id":1,"reason":"Có sửa bài luận."}]}

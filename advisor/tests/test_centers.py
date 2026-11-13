@@ -11,6 +11,7 @@ from app.services.centers import (
     SERVICES,
     CenterFinder,
     CenterHit,
+    CityCount,
     db_service,
     match_city,
 )
@@ -89,6 +90,12 @@ DB_CITIES = ["Hà Nội", "TP.HCM", "Hải Phòng", "Đà Nẵng"]
         ("da nang", "Đà Nẵng"),
         ("Huế", None),  # không có trung tâm ở đó
         ("", None),
+        ("TP Hồ chính minh", "TP.HCM"),  # gõ sai chữ Chí
+        ("Ho Chi Minh city", "TP.HCM"),
+        ("Hải phòng ạ", "Hải Phòng"),
+        ("Ha Noy", "Hà Nội"),
+        ("Hải Dương", None),  # tỉnh khác, không được nhầm sang Hải Phòng
+        ("Hà Nam", None),
         (None, None),
     ],
 )
@@ -118,8 +125,20 @@ async def test_find_calls_the_referrals_api_with_the_filters():
             website="https://demo.vn",
             services=["CHON_TRUONG", "SUA_BAI_LUAN"],
             study_levels=["undergraduate", "master"],
+            id=CENTER_HCM["id"],
         )
     ]
+
+
+async def test_city_counts_calls_the_city_counts_api_with_the_service_and_level():
+    body = [{"city": "Hà Nội", "count": 6}, {"city": "TP.HCM", "count": 1}]
+    finder, sent = finder_with(lambda request: httpx.Response(200, json=body))
+
+    counts = await finder.city_counts("SUA_BAI_LUAN", "undergraduate")
+
+    assert sent[0].url.path == "/api/v1/study-centers/referral-city-counts"
+    assert dict(sent[0].url.params) == {"service": "SUA_BAI_LUAN", "studyLevel": "undergraduate"}
+    assert counts == [CityCount("Hà Nội", 6), CityCount("TP.HCM", 1)]
 
 
 async def test_find_leaves_out_the_filters_that_are_not_known():

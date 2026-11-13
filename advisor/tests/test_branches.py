@@ -19,6 +19,7 @@ from app.services.branches import (
     CANNOT_ANSWER,
     GREETING_BUTTONS,
     GREETING_REPLY,
+    HANDOFF_INTRO,
     LOOKING_UP,
     NEED_RESULTS,
     NEXT_AFTER_SAVE,
@@ -428,6 +429,37 @@ async def test_anything_more_than_a_greeting_keeps_the_ambiguous_answer(message)
     out = await build_branches({})["out_of_scope"].run(ChatState(), message, slm)
 
     assert out.answer == OUT_OF_SCOPE["ambiguous"] and not out.quick_replies
+
+
+async def test_a_request_for_a_human_goes_into_the_center_flow_with_no_service_chosen_yet():
+    seen: list[dict] = []
+    buttons = [QuickReply(label="Sửa bài luận", value="Mình cần hỗ trợ sửa bài luận")]
+
+    class CenterSkill:
+        async def run(self, state, message, entities=None):
+            seen.append(entities)
+            return SkillOutput("Bạn cần hỗ trợ phần nào? Bạn chọn giúp mình nhé.", quick_replies=buttons)
+
+    branch = build_branches({"skill_chuyen_trung_tam": CenterSkill()})["out_of_scope"]
+
+    out = await branch.run(
+        ChatState(), "Em cần tư vấn viên", tin(("out_of_scope", {"subtype": "human_handoff"}))
+    )
+
+    assert seen == [{"follow_up": True}]  # dùng ngữ cảnh đã nhớ; chưa có thì luồng trung tâm tự hỏi bằng nút
+    assert out.answer.startswith(HANDOFF_INTRO)
+    assert out.answer.endswith("Bạn cần hỗ trợ phần nào? Bạn chọn giúp mình nhé.")
+    assert out.quick_replies == buttons
+
+
+async def test_a_request_for_a_human_without_the_center_skill_gets_its_own_sentence_not_the_unclear_one():
+    branch = build_branches({})["out_of_scope"]
+
+    out = await branch.run(
+        ChatState(), "Em cần tư vấn viên", tin(("out_of_scope", {"subtype": "human_handoff"}))
+    )
+
+    assert out.answer == OUT_OF_SCOPE["human_handoff"] != OUT_OF_SCOPE["ambiguous"]
 
 
 def test_the_thanks_and_goodbye_sentence_does_not_ask_what_to_help_with():

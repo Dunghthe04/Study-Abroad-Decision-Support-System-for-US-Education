@@ -5,16 +5,18 @@ import json
 import pytest
 
 from app.schemas.chat import ChatContext, ChatState
-from app.services.centers import SERVICES, CenterHit
+from app.services.centers import SERVICES, CenterHit, CityCount
 from app.services.skills.skill_chuyen_trung_tam import (
     ASK_SERVICE,
     DISCLAIMER,
     NO_CENTER,
+    NO_CENTER_IN_CITY,
     NOT_PROVIDED,
     TASK_NOTES,
     UNAVAILABLE,
     ChuyenTrungTamHandler,
     Need,
+    centers_widget,
     check_grounded,
     check_opening,
     check_reasons,
@@ -47,15 +49,31 @@ def reasons(*texts, opening=OPENING):
 
 
 class FakeFinder:
-    def __init__(self, centers=(), cities=CITIES, error: Exception | None = None, find_error=None) -> None:
+    def __init__(
+        self,
+        centers=(),
+        cities=CITIES,
+        error: Exception | None = None,
+        find_error=None,
+        counts=(),
+        counts_error=None,
+    ) -> None:
         self._centers, self._cities = list(centers), cities
         self._error, self._find_error = error, find_error
+        self._counts, self._counts_error = list(counts), counts_error
         self.find_calls: list[tuple] = []
+        self.count_calls: list[tuple] = []
 
     async def cities(self):
         if self._error:
             raise self._error
         return self._cities
+
+    async def city_counts(self, service, study_level=None):
+        self.count_calls.append((service, study_level))
+        if self._counts_error:
+            raise self._counts_error
+        return self._counts
 
     async def find(self, service, study_level=None, city=None):
         self.find_calls.append((service, study_level, city))
@@ -250,6 +268,102 @@ async def test_a_follow_up_without_service_and_city_searches_with_the_remembered
     assert finder.find_calls == [("SUA_BAI_LUAN", None, "Hà Nội")]
 
 
+async def test_the_city_is_remembered_even_when_the_service_is_still_unclear():
+    state = ChatState()
+
+    await handler(FakeLLM(), FakeFinder([HCM])).run(
+        state, "tìm trung tâm ở Hà Nội", need(service=None, city="Hà Nội")
+    )
+
+    assert state.context.city == "Hà Nội"
+    assert state.context.service is None  # chưa rõ dịch vụ nên chưa nhớ dịch vụ
+
+
+async def test_a_handoff_request_with_a_remembered_service_and_city_lists_centers_without_asking():
+    state = ChatState(context=ChatContext(service="ESSAY_EDITING", city="Hà Nội"))
+    essay_center = CenterHit("Trung tâm C", "Hà Nội", None, ["SUA_BAI_LUAN"], ["undergraduate"])
+    finder = FakeFinder([essay_center])
+
+    out = await handler(FakeLLM(reasons("Có sửa bài luận, cùng thành phố với bạn.")), finder).run(
+        state, "cho em gặp tư vấn viên", {"follow_up": True}
+    )
+
+    assert finder.find_calls == [("SUA_BAI_LUAN", None, "Hà Nội")]
+    assert ASK_SERVICE not in out.answer
+
+
+async def test_a_handoff_request_with_nothing_remembered_still_asks_for_the_service():
+    out = await handler(FakeLLM(), FakeFinder([HCM])).run(
+        ChatState(), "cho em gặp tư vấn viên", {"follow_up": True}
+    )
+
+    assert out.answer == ASK_SERVICE
+    assert out.quick_replies
+
+
+def test_center_hit_reads_the_center_id_when_the_backend_sends_it():
+    hit = CenterHit.from_json({"id": "4b1f", "name": "Trung tâm A", "services": [], "studyLevels": []})
+
+    assert hit.id == "4b1f"
+    assert CenterHit.from_json({"name": "Trung tâm B"}).id is None
+
+
+def test_the_widget_carries_one_card_per_center_and_the_city_options():
+    summit = CenterHit("Summit Education Services", "Hà Nội", "https://s.vn", [], [], id="c1")
+    no_id = CenterHit("Trung tâm không mã", "TP.HCM", None, [], [])
+
+    widget = centers_widget(
+        [summit, no_id],
+        {1: "Có luyện thi SAT.", 2: "Có chọn trường."},
+        [CityCount("Hải Phòng", 2)],
+        "LUYEN_THI",
+    )
+
+    assert widget.type == "centers"
+    assert widget.data["firstPage"] == 3
+    assert widget.data["centers"] == [
+        {
+            "id": "c1",
+            "name": "Summit Education Services",
+            "city": "Hà Nội",
+            "website": "https://s.vn",
+            "reason": "Có luyện thi SAT.",
+        },
+        {
+            "id": None,
+            "name": "Trung tâm không mã",
+            "city": "TP.HCM",
+            "website": None,
+            "reason": "Có chọn trường.",
+        },
+    ]
+    assert widget.data["cities"] == [
+        {"city": "Hải Phòng", "count": 2, "ask": "Cho mình xem trung tâm luyện thi IELTS, SAT ở Hải Phòng"}
+    ]
+
+
+async def test_the_list_answer_carries_the_cards_in_the_order_of_the_text_list():
+    centers = [
+        CenterHit("Trung tâm A", "TP.HCM", None, ["LUYEN_PHONG_VAN"], ["undergraduate"], id="a1"),
+        CenterHit("Trung tâm B", "Hà Nội", None, ["LUYEN_PHONG_VAN"], ["undergraduate"], id="b2"),
+    ]
+    llm = FakeLLM(reasons("Có luyện phỏng vấn visa.", "Có luyện phỏng vấn visa."))
+
+    out = await handler(llm, FakeFinder(centers)).run(ChatState(), "cần luyện phỏng vấn", need())
+
+    assert out.widget is not None and out.widget.type == "centers"
+    assert [c["id"] for c in out.widget.data["centers"]] == ["a1", "b2"]
+    assert "- Trung tâm A" in out.answer and "- Trung tâm B" in out.answer  # danh sách chữ vẫn đủ
+    assert not out.quick_replies
+
+
+async def test_no_card_when_there_is_no_center_or_the_service_is_unclear():
+    none_found = await handler(FakeLLM(), FakeFinder([])).run(ChatState(), "q", need())
+    asking = await handler(FakeLLM(), FakeFinder([HCM])).run(ChatState(), "q", need(service=None, city=None))
+
+    assert none_found.widget is None and asking.widget is None
+
+
 async def test_asks_which_service_with_buttons_when_unclear():
     finder = FakeFinder([HCM])
     llm = FakeLLM()
@@ -365,29 +479,108 @@ def test_the_fallback_opening_says_there_is_no_center_in_the_city_or_names_the_s
     assert fallback_opening("sửa bài luận", None, None).endswith("hỗ trợ sửa bài luận:")
 
 
-async def test_a_student_in_a_city_without_centers_is_told_so_before_the_list():
-    llm = FakeLLM(reasons("Có sửa bài luận.", opening=HUE_OPENING))
+def city_options(out):
+    return [(c["city"], c["count"]) for c in out.widget.data["cities"]]
 
-    out = await handler(llm, FakeFinder([ESSAY_CENTER])).run(
+
+async def test_a_city_with_no_center_gets_no_list_but_the_cities_that_have_some():
+    llm = FakeLLM()
+    finder = FakeFinder([ESSAY_CENTER], counts=[CityCount("Hà Nội", 6), CityCount("TP.HCM", 1)])
+
+    out = await handler(llm, finder).run(
         ChatState(), "em ở Huế sửa bài luận", need(service="ESSAY_EDITING", city="Huế")
     )
 
-    assert out.answer.startswith(HUE_OPENING + "\n- Trung tâm C (Hà Nội)")
+    assert out.answer == NO_CENTER_IN_CITY.format(city="Huế", label="sửa bài luận")
+    assert (
+        out.widget.data["centers"] == [] and out.disclaimer is None
+    )  # không có trung tâm để liệt kê, không lấp nơi khác
+    assert (
+        finder.find_calls == [] and llm.calls == []
+    )  # thành phố không khớp thành phố nào trong DB: không tìm, không gọi AI
+    assert city_options(out) == [("Hà Nội", 6), ("TP.HCM", 1)]
+    assert out.widget.data["cities"][0]["ask"] == "Cho mình xem trung tâm sửa bài luận ở Hà Nội"
+
+
+async def test_a_known_city_with_no_center_for_the_service_lists_only_the_other_cities():
+    finder = FakeFinder([], counts=[CityCount("Hà Nội", 6)])
+
+    out = await handler(FakeLLM(), finder).run(
+        ChatState(), "q", need(service="ESSAY_EDITING", city="Sài Gòn")
+    )
+
+    assert out.answer == NO_CENTER_IN_CITY.format(city="Sài Gòn", label="sửa bài luận")
+    assert city_options(out) == [
+        ("Hà Nội", 6)
+    ]  # TP.HCM không có trung tâm cho dịch vụ này nên không có trong thanh
+
+
+async def test_no_center_anywhere_for_the_service_keeps_the_plain_notice():
+    out = await handler(FakeLLM(), FakeFinder([], counts=[])).run(ChatState(), "q", need(city="Huế"))
+
+    assert out.answer == NO_CENTER.format(label="luyện phỏng vấn visa")
+    assert out.widget is None
+
+
+async def test_a_city_with_centers_lists_only_them_and_offers_the_other_cities():
+    llm = FakeLLM(reasons("Có luyện phỏng vấn visa, cùng thành phố với bạn."))
+    finder = FakeFinder([HN], counts=[CityCount("Hà Nội", 1), CityCount("TP.HCM", 2)])
+
+    out = await handler(llm, finder).run(ChatState(), "q", need(city="Hà Nội"))
+
+    assert [c["city"] for c in out.widget.data["centers"]] == ["Hà Nội"]  # đúng số trung tâm có ở Hà Nội
+    assert city_options(out) == [("TP.HCM", 2)]  # chỉ nơi khác, không lặp lại Hà Nội
+    assert finder.count_calls == [("LUYEN_PHONG_VAN", None)]
+
+
+async def test_without_a_city_the_widget_offers_every_city_when_there_are_two_or_more():
+    llm = FakeLLM(reasons("Có luyện phỏng vấn visa.", "Có luyện phỏng vấn visa."))
+    finder = FakeFinder([HCM, HN], counts=[CityCount("Hà Nội", 1), CityCount("TP.HCM", 1)])
+
+    out = await handler(llm, finder).run(ChatState(), "q", need(city=None))
+
+    assert city_options(out) == [("Hà Nội", 1), ("TP.HCM", 1)]
+
+
+async def test_without_a_city_and_with_a_single_city_there_is_nothing_to_choose():
+    llm = FakeLLM(reasons("Có luyện phỏng vấn visa."))
+
+    out = await handler(llm, FakeFinder([HN], counts=[CityCount("Hà Nội", 1)])).run(
+        ChatState(), "q", need(city=None)
+    )
+
+    assert city_options(out) == []
+
+
+async def test_the_list_still_shows_when_the_city_counts_cannot_be_loaded():
+    llm = FakeLLM(reasons("Có luyện phỏng vấn visa."))
+    finder = FakeFinder([HN], counts_error=RuntimeError("down"))
+
+    out = await handler(llm, finder).run(ChatState(), "q", need(city="Hà Nội"))
+
+    assert "- Trung tâm B (Hà Nội)" in out.answer and city_options(out) == []
+
+
+async def test_more_than_three_centers_are_all_in_the_widget_but_only_the_first_page_goes_to_the_ai():
+    many = [
+        CenterHit(f"Trung tâm {n}", "Hà Nội", None, ["LUYEN_PHONG_VAN"], ["undergraduate"], id=f"id{n}")
+        for n in "ABCDE"
+    ]
+    llm = FakeLLM(reasons("Có luyện phỏng vấn visa.", "Có luyện phỏng vấn visa.", "Có luyện phỏng vấn visa."))
+
+    out = await handler(llm, FakeFinder(many)).run(ChatState(), "q", need(city="Hà Nội"))
+
     sent = json.loads(llm.calls[0]["messages"][1]["content"])
-    assert sent["student_city"] == "Huế" and sent["city_has_centers"] is False
-
-
-async def test_the_same_notice_is_built_by_code_when_claude_forgets_to_say_it_twice():
-    forgetful = reasons("Có sửa bài luận.", opening="Bạn cần sửa bài luận. Dưới đây là các trung tâm:")
-    llm = FakeLLM(forgetful, forgetful)
-
-    out = await handler(llm, FakeFinder([ESSAY_CENTER])).run(
-        ChatState(), "em ở Huế sửa bài luận", need(service="ESSAY_EDITING", city="Huế")
-    )
-
-    assert out.answer.startswith(
-        "Hiện chưa có trung tâm đã xác minh ở Huế, các trung tâm dưới đây ở nơi khác:\n"
-    )
+    assert len(sent["centers"]) == 3 and len(llm.calls) == 1  # AI chỉ viết cho trang đầu
+    cards = out.widget.data["centers"]
+    assert [c["name"] for c in cards] == [f"Trung tâm {n}" for n in "ABCDE"]
+    assert (
+        cards[3]["reason"] == "Có luyện phỏng vấn visa, cùng thành phố với bạn."
+    )  # trung tâm sau trang đầu: câu dựng bằng code
+    assert (
+        "- Trung tâm C" in out.answer and "- Trung tâm D" not in out.answer
+    )  # danh sách chữ chỉ có trang đầu
+    assert "Còn 2 trung tâm khác" in out.answer
 
 
 async def test_a_known_city_whose_centers_are_all_elsewhere_is_also_told():
