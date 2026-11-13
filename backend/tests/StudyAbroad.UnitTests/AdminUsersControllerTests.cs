@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using StudyAbroad.Api.Controllers;
 using StudyAbroad.Application.Auth;
 using StudyAbroad.Application.Common;
+using StudyAbroad.Application.StudyCenters;
 using StudyAbroad.Domain.Constants;
 using Xunit;
 
@@ -117,6 +118,21 @@ public class AdminUsersControllerTests
             Users.Add(updated);
             return Task.FromResult(AuthResult.Ok(updated, "Đã khóa tài khoản."));
         }
+
+        public Task<AuthResult> RegisterCenterAsync(RegisterCenterRequest request, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+
+        public Task<AuthResult> VerifyCenterEmailAsync(VerifyCenterEmailRequest request, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+
+        public Task<AuthResult> ChangeCenterPhoneAsync(Guid userId, string newPhone, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+
+        public Task<AuthResult> RequestCenterEmailChangeAsync(Guid userId, RequestContactChangeDto request, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+
+        public Task<AuthResult> ConfirmCenterEmailChangeAsync(Guid userId, ConfirmContactChangeDto request, CancellationToken ct = default) =>
+            throw new NotImplementedException();
 
         public (Guid TargetId, UnlockUserAccountRequest Request, Guid ActorId)? LastUnlockCall { get; private set; }
 
