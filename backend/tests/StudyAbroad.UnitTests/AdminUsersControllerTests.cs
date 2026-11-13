@@ -148,25 +148,6 @@ public class AdminUsersControllerTests
             Users.Add(updated);
             return Task.FromResult(AuthResult.Ok("Đã xóa tài khoản."));
         }
-
-        public Task<AuthResult> RegisterCenterAsync(StudyAbroad.Application.StudyCenters.RegisterCenterRequest request, CancellationToken ct = default) =>
-            throw new NotImplementedException();
-
-        public Task<AuthResult> VerifyCenterEmailAsync(StudyAbroad.Application.StudyCenters.VerifyCenterEmailRequest request, CancellationToken ct = default) =>
-            throw new NotImplementedException();
-
-
-
-
-
-        public Task<AuthResult> ChangeCenterPhoneAsync(Guid userId, string newPhone, CancellationToken ct = default) =>
-            throw new NotImplementedException();
-
-        public Task<AuthResult> RequestCenterEmailChangeAsync(Guid userId, StudyAbroad.Application.StudyCenters.RequestContactChangeDto request, CancellationToken ct = default) =>
-            throw new NotImplementedException();
-
-        public Task<AuthResult> ConfirmCenterEmailChangeAsync(Guid userId, StudyAbroad.Application.StudyCenters.ConfirmContactChangeDto request, CancellationToken ct = default) =>
-            throw new NotImplementedException();
     }
 
     [Fact]
