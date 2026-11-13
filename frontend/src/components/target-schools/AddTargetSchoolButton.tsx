@@ -466,10 +466,10 @@ export function AddTargetSchoolButton({
                 {isEditingRound && (
                   <div className="rounded-md border border-brand/30 bg-brand/5 p-2.5 space-y-2 mt-1">
                     <span className="text-xs font-semibold text-foreground block">
-                      [UC-32] Chọn vòng nộp hồ sơ:
+                      Chọn vòng nộp hồ sơ
                     </span>
                     <div className="grid grid-cols-2 gap-1.5">
-                      {APPLICATION_ROUNDS.map((r) => (
+                      {APPLICATION_ROUNDS.filter((r) => r.value !== "none").map((r) => (
                         <Button
                           key={r.value}
                           type="button"
