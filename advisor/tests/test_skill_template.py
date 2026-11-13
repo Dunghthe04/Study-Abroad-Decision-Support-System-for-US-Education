@@ -156,7 +156,10 @@ def test_none_and_unknown_values():
 def test_without_benchmarks_says_no_mark():
     skill = skill_of(state_of(FULL, benchmarks=None))
 
-    assert "Chưa có dữ liệu trường để so: GPA 3.68 thang 4 (quy đổi tham khảo); Tiếng Anh IELTS 6.5; ACT 29." in skill
+    assert (
+        "Chưa có dữ liệu trường để so: GPA 3.68 thang 4 (quy đổi tham khảo); Tiếng Anh IELTS 6.5; ACT 29."
+        in skill
+    )
 
 
 def test_low_gpa_and_refused_visa_are_attention():
@@ -165,7 +168,8 @@ def test_low_gpa_and_refused_visa_are_attention():
     skill = skill_of(state_of(values))
 
     assert (
-        "Cần lưu ý nhất: GPA 3.1 thang 4 (quy đổi tham khảo), thấp (TB các trường 3.73); Visa: đã từng bị từ chối visa." in skill
+        "Cần lưu ý nhất: GPA 3.1 thang 4 (quy đổi tham khảo), thấp (TB các trường 3.73); Visa: đã từng bị từ chối visa."
+        in skill
     )
     assert "- Visa: chuẩn bị giải thích rõ lần bị từ chối trước." in skill
 
