@@ -7,7 +7,7 @@ interface GpaSummaryCardProps {
 }
 
 /**
- * [USAS-365] Executive Summary: Tổng quan năng lực học thuật và GPA quy đổi theo mốc VEF.
+ * [USAS-365] Executive Summary: Tổng quan năng lực học thuật và GPA quy đổi tham khảo theo bảng quy đổi của hệ thống.
  * - Fix C365-04: Xử lý đúng khi totalTerms < 2 (không gán nhãn Phong độ ổn định khi thiếu dữ liệu).
  * - Chỉ hiện GPA unweighted, không tính weighted (kế hoạch GPA weighted, mục 5).
  * - Cải thiện độ tương phản disclaimer và câu từ quy đổi tham khảo.
@@ -66,7 +66,7 @@ export function GpaSummaryCard({ analysis }: GpaSummaryCardProps) {
         <div className="flex items-baseline gap-4 md:col-span-5">
           <div>
             <span className="block text-label">
-              GPA thang 4.0 (quy đổi theo mốc VEF)
+              GPA thang 4.0 (quy đổi tham khảo)
             </span>
             <div className="mt-1 flex items-baseline gap-1.5">
               <span className="text-numeric text-4xl">

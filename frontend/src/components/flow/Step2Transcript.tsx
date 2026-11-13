@@ -888,7 +888,8 @@ export function Step2Transcript({
               </div>
             )}
           </div>
-          {overallScale === "10" && data.manualGpa10Scale != null && <GpaConversionNote />}
+          {/* Hiện ngay khi chọn thang 10 (cùng lúc với dòng "Quy đổi thang 4"), không đợi gõ số */}
+          {overallScale === "10" && <GpaConversionNote />}
 
           {/* Nút bật/tắt bảng ước tính GPA ("Tôi chưa rõ GPA") */}
           <div className="pt-2 border-t border-line/60">
