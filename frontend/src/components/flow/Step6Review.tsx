@@ -160,14 +160,13 @@ export function Step6Review({
   const need = SCHOLARSHIP_NEED_OPTIONS.find((o) => o.value === step4.needFinancialAid);
   const financialNeedLabel = need ? `${need.label} (${need.description.toLowerCase()})` : "Chưa chọn";
 
-  // Transcript stats
-  const totalSubjects = step2.academicYears?.reduce((sum, y) => sum + y.subjects.length, 0) ?? 0;
-  const totalYears = step2.academicYears?.length ?? 0;
   // Cùng cách tính với BE (TranscriptGpa): GPA tổng hoặc tính từ điểm môn
   const { gpa10, gpa4 } = draftGpa(step2);
   const gpa = gpa4 != null ? gpa4.toFixed(2) : "–";
   const gpa10Text = gpa10 != null ? gpa10.toFixed(1) : "–";
-  const gradeNames = (step2.academicYears ?? []).map((y) => y.gradeName).join(", ");
+  // Thẻ chỉ chốt GPA tổng, nhập GPA tổng hay học bạ từng môn đều vậy
+  const gpaSummary =
+    gpa10 != null ? `GPA tổng: ${gpa10Text}/10` : gpa4 != null ? `GPA tổng: ${gpa}/4` : "Chưa nhập điểm";
 
   // Activities & Awards count
   const activitiesCount = step5.activities.filter((a) => a.category === "activity").length;
@@ -224,7 +223,7 @@ export function Step6Review({
           <div className="flex items-start justify-between gap-3">
             <div className="space-y-1">
               <div className="text-sm font-semibold text-foreground">
-                {totalYears > 0 ? `${totalSubjects} môn · ${gradeNames}` : "Chưa nhập điểm"}
+                {gpaSummary}
               </div>
               {draftTranscript && (
                 <div className="flex items-center gap-1 text-xs text-ok">
