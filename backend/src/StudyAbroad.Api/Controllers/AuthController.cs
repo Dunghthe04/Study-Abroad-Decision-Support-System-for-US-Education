@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using StudyAbroad.Api.Extensions;
 using StudyAbroad.Api.RateLimiting;
 using StudyAbroad.Application.Auth;
+using StudyAbroad.Application.StudyCenters;
 
 namespace StudyAbroad.Api.Controllers
 {
@@ -36,6 +37,37 @@ namespace StudyAbroad.Api.Controllers
             if (result.Error == AuthError.None && result.Response != null)
             {
                 // Tự động đăng nhập qua HttpOnly Cookie sau khi xác thực thành công
+                return SetSessionCookie(result.Response);
+            }
+
+            return result.Error switch
+            {
+                AuthError.OtpInvalid => Problem(result.Message, statusCode: StatusCodes.Status400BadRequest, title: "Mã OTP không hợp lệ"),
+                _ => Problem(result.Message, statusCode: StatusCodes.Status400BadRequest)
+            };
+        }
+
+        // [UC-64] Trung tâm tự đăng ký tài khoản
+        [HttpPost("register-center")]
+        [EnableRateLimiting(AuthRateLimit.PolicyName)]
+        public async Task<IActionResult> RegisterCenter(RegisterCenterRequest request, CancellationToken ct)
+        {
+            var result = await auth.RegisterCenterAsync(request, ct);
+            return result.Error switch
+            {
+                AuthError.None => StatusCode(StatusCodes.Status201Created, new { message = result.Message, email = request.Email }),
+                _ => ValidationProblem(result.Message),
+            };
+        }
+
+        // [UC-91] Xác thực email trung tâm qua mã OTP 6 số
+        [HttpPost("verify-center-email")]
+        [EnableRateLimiting(AuthRateLimit.PolicyName)]
+        public async Task<IActionResult> VerifyCenterEmail(VerifyCenterEmailRequest request, CancellationToken ct)
+        {
+            var result = await auth.VerifyCenterEmailAsync(request, ct);
+            if (result.Error == AuthError.None && result.Response != null)
+            {
                 return SetSessionCookie(result.Response);
             }
 
