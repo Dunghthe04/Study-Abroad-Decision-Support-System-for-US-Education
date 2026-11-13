@@ -622,6 +622,22 @@ public class ChatServiceTests
         Assert.Null(advisor.LastRequest!.Benchmarks);
     }
 
+    // Advisor biết học sinh đã từng lưu hồ sơ chưa (lấy từ server, không tin trình duyệt): chưa lưu thì hỏi đủ như form
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SendsHasCommittedProfileFromServer(bool committed)
+    {
+        var advisor = new FakeAdvisor("B2");
+
+        await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow { HasCommittedProfile = committed })
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello, HasCommittedProfile: !committed));
+
+        Assert.Equal(committed, advisor.LastRequest!.HasCommittedProfile);
+        var json = JsonSerializer.SerializeToElement(advisor.LastRequest, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        Assert.Equal(committed, json.GetProperty("hasCommittedProfile").GetBoolean());
+    }
+
     // Bảng quy đổi gửi advisor lấy từ DB (provider), bảng trình duyệt gửi bị bỏ
     [Fact]
     public async Task SendsGradeScaleFromServer_IgnoresBrowserTable()
@@ -2807,6 +2823,7 @@ public class ChatServiceTests
     private sealed class FakeProfileFlow : IProfileFlowService
     {
         public ProfileFlowDraftDto Draft { get; init; } = new();
+        public bool HasCommittedProfile { get; init; }
         public Exception? PatchError { get; init; }
         public Exception? CommitError { get; init; }
         public int Commits { get; private set; }
@@ -2814,7 +2831,7 @@ public class ChatServiceTests
         public IReadOnlyCollection<string>? PatchedKeys { get; private set; }
 
         public Task<ProfileFlowStateDto> GetFlowStateAsync(Guid userId, CancellationToken ct = default) =>
-            Task.FromResult(new ProfileFlowStateDto(1, [], Draft, null, null));
+            Task.FromResult(new ProfileFlowStateDto(1, [], Draft, null, null, HasCommittedProfile: HasCommittedProfile));
 
         public Task<ProfileFlowStateDto> PatchDraftAsync(
             Guid userId, JsonObject chatProfile, IReadOnlyCollection<string> changedKeys, CancellationToken ct = default)
