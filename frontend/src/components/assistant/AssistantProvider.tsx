@@ -53,17 +53,22 @@ interface AssistantContextValue {
   streaming: AssistantStreaming | null;
   error: AssistantError | null;
   page: AssistantPageContext;
-  openPanel: (question?: string) => void;
+  openPanel: (question?: string, options?: SendOptions) => void;
   closePanel: () => void;
   toggleWide: () => void;
   newChat: () => void;
-  send: (text: string) => void;
+  send: (text: string, options?: SendOptions) => void;
   /** Gửi một câu kèm hành động có cấu trúc (mã trường): hiện câu trong khung chat, backend chạy thẳng không qua SLM */
   sendAction: (text: string, action: AssistantAction) => void;
   retry: () => void;
   setPageContext: (ctx: AssistantPageContext | null) => void;
   setBeforeSend: (fn: BeforeSend | null) => void;
   setOnProfileChanged: (fn: ProfileChanged | null) => void;
+}
+
+/** fromForm: câu do form gửi ngay sau khi lưu hồ sơ chính thức, advisor bỏ bảng xác nhận đang treo và trả lời luôn */
+export interface SendOptions {
+  fromForm?: boolean;
 }
 
 /** Việc trang cần làm xong trước khi gửi tin nhắn chat (vd lưu nháp form đang chờ) */
@@ -129,6 +134,7 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
   const turnsRef = useRef<AssistantTurn[]>([]);
   const loadingRef = useRef(false);
   const lastActionRef = useRef<AssistantAction | null>(null); // hành động của lượt gần nhất, để "Thử lại" gửi lại đúng như cũ
+  const lastFromFormRef = useRef(false); // lượt gần nhất do form gửi sau khi lưu, "Thử lại" gửi lại kèm cờ này
   const restoredRef = useRef(false);
   const sessionIdRef = useRef<string | null>(null);
   // Người dùng đang đăng nhập (null: chưa đăng nhập) — chưa đăng nhập thì không gửi chat, không đọc ghi lịch sử
@@ -165,6 +171,7 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
     turnsRef.current = [];
     sessionIdRef.current = null;
     lastActionRef.current = null;
+    lastFromFormRef.current = false;
     restoredRef.current = false; // lần mở sau khôi phục đúng lịch sử của người mới
     try {
       // Đăng xuất: xóa hẳn lịch sử của người vừa thoát trong tab này (máy dùng chung)
@@ -224,11 +231,12 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const request = useCallback(
-    async (history: AssistantTurn[], action?: AssistantAction) => {
+    async (history: AssistantTurn[], action?: AssistantAction, fromForm = false) => {
       // Người gửi câu này: nếu đổi người dùng trong lúc chờ thì bỏ câu trả lời, không hiện cho người mới
       const owner = userIdRef.current;
       const stillOwner = () => userIdRef.current === owner;
       lastActionRef.current = action ?? null;
+      lastFromFormRef.current = fromForm;
       loadingRef.current = true;
       setLoading(true);
       setError(null);
@@ -244,6 +252,7 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
             studyLevel: pageRef.current.studyLevel || null,
             simulation: pageRef.current.simulation ?? undefined,
             action: action ?? undefined,
+            fromForm: fromForm || undefined,
           },
           (event) => {
             if (!stillOwner()) return;
@@ -300,13 +309,13 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
   );
 
   const send = useCallback(
-    (text: string) => {
+    (text: string, options?: SendOptions) => {
       const content = text.trim().slice(0, 1000);
       // Chưa đăng nhập thì không gửi (khung chat hiện lời mời đăng nhập)
       if (!content || loadingRef.current || !userIdRef.current) return;
       const history: AssistantTurn[] = [...turnsRef.current, { role: "user", content }];
       commitTurns(history);
-      void request(history);
+      void request(history, undefined, options?.fromForm ?? false);
     },
     [commitTurns, request]
   );
@@ -330,14 +339,14 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
   const retry = useCallback(() => {
     const history = turnsRef.current;
     if (loadingRef.current || history.length === 0 || history[history.length - 1].role !== "user") return;
-    void request(history, lastActionRef.current ?? undefined);
+    void request(history, lastActionRef.current ?? undefined, lastFromFormRef.current);
   }, [request]);
 
   const openPanel = useCallback(
-    (question?: string) => {
+    (question?: string, options?: SendOptions) => {
       restore();
       setOpen(true);
-      if (question) send(question);
+      if (question) send(question, options);
     },
     [restore, send]
   );

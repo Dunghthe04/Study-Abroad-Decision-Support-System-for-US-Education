@@ -510,14 +510,15 @@ export function ProfileFlowWizard() {
         } catch {
           // bỏ qua
         }
-        // Mở từ chat: mở khung chat, advisor thấy hồ sơ đủ thì trả lời luôn câu học sinh đã hỏi
+        // Mở từ chat: mở khung chat, advisor thấy hồ sơ đủ thì trả lời luôn câu học sinh đã hỏi.
+        // fromForm: form đã là bước rà soát, advisor bỏ bảng xác nhận đang treo trong chat
         if (fromChat) {
-          openAssistant(CONTINUE_CHAT);
+          openAssistant(CONTINUE_CHAT, { fromForm: true });
           return;
         }
-        // Vào form trực tiếp mà tích cả đánh giá hay lộ trình: gửi một câu gộp các việc đã tích, chat trả lời đủ
+        // Vào form trực tiếp mà tích cả đánh giá hay lộ trình: gửi một câu gộp các việc đã tích, chat trả lời luôn
         if (backToChat) {
-          openAssistant(goalsQuestion(goals));
+          openAssistant(goalsQuestion(goals), { fromForm: true });
           return;
         }
         router.push("/recommendations?run=1");
