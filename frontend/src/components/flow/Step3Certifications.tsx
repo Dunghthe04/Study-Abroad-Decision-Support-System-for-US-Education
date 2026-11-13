@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MonthPicker } from "@/components/ui/month-picker";
 import { findCertType, newCertId, parseYearMonth, toYearMonth } from "@/lib/certification-utils";
+import { cn } from "@/lib/utils";
 import type {
   CertificationCategory,
   CertificationDraft,
@@ -16,6 +17,7 @@ import type {
 } from "@/types/profile-flow";
 import { CertificationCard } from "./certifications/CertificationCard";
 import { CertificationForm } from "./certifications/CertificationForm";
+import { RequiredMark } from "./RequiredMark";
 
 interface Step3CertificationsProps {
   data: CertificationDraft;
@@ -47,7 +49,7 @@ const SECTIONS: SectionConfig[] = [
   {
     key: "tests",
     title: "Bài thi chuẩn hóa và học thuật",
-    hint: "SAT, ACT, AP, IB, A-Level... · Không bắt buộc",
+    hint: "SAT, ACT, AP, IB, A-Level...",
     addLabel: "Thêm bài thi",
     formTitle: "Thêm bài thi",
     categories: ["standardized", "graduate"],
@@ -62,6 +64,11 @@ export function Step3Certifications({ data, certificationTypes, onUpdate, onPrev
   const [editing, setEditing] = useState<EditingState | null>(null);
   const hasEnglish = certifications.some((c) => c.category === "english");
   const hasStandardized = certifications.some((c) => ["standardized", "graduate"].includes(c.category));
+  // Mỗi mục phải có 1 trong 2: chứng chỉ đã thi (có điểm) hoặc tích "chưa thi, sẽ thi sau".
+  // Chỉ báo đỏ sau khi đã bấm Tiếp tục; điền xong mục nào thì mục đó tự hết đỏ
+  const [triedNext, setTriedNext] = useState(false);
+  const englishMissing = triedNext && !hasEnglish && !data.englishPlanned;
+  const testsMissing = triedNext && !hasStandardized && !data.standardizedPlanned;
 
   const englishTypes = certificationTypes.filter((t) => t.category === "english");
   const standardizedTypes = certificationTypes.filter((t) => ["standardized", "graduate"].includes(t.category));
@@ -113,6 +120,14 @@ export function Step3Certifications({ data, certificationTypes, onUpdate, onPrev
     if (editing?.mode === "edit" && editing.id === id) setEditing(null);
   };
 
+  const handleNextClick = () => {
+    if ((!hasEnglish && !data.englishPlanned) || (!hasStandardized && !data.standardizedPlanned)) {
+      setTriedNext(true);
+      return;
+    }
+    onNext();
+  };
+
   const renderSection = (section: SectionConfig) => {
     const items = certifications.filter((c) => section.categories.includes(c.category));
     const isAddingHere = editing?.mode === "add" && editing.section === section.key;
@@ -120,7 +135,9 @@ export function Step3Certifications({ data, certificationTypes, onUpdate, onPrev
     return (
       <section className="space-y-3">
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-          <h2 className="text-sm font-semibold text-foreground">{section.title}</h2>
+          <h2 className="text-sm font-semibold text-foreground">
+            {section.title} <RequiredMark />
+          </h2>
           <span className="text-xs text-muted-foreground">{section.hint}</span>
         </div>
 
@@ -181,11 +198,11 @@ export function Step3Certifications({ data, certificationTypes, onUpdate, onPrev
         <div className="text-xs font-semibold text-brand">Bước 3/6 · khoảng 1 phút</div>
         <h1 className="text-h1 text-foreground">Chứng chỉ của bạn</h1>
         <p className="text-body text-muted-foreground">
-          Thêm từng chứng chỉ bạn đã có. Chưa có cũng không sao, bạn có thể bổ sung sau.
+          Mỗi mục thêm chứng chỉ bạn đã thi, hoặc tích “chưa thi, sẽ thi sau” nếu chưa có.
         </p>
       </div>
 
-      <div className="space-y-4">
+      <div className={cn("space-y-4", englishMissing && "rounded-xl border border-destructive p-4")}>
         {renderSection(SECTIONS[0])}
 
         {/* Kế hoạch thi tiếng Anh — chỉ hỏi khi chưa có chứng chỉ tiếng Anh nào */}
@@ -263,9 +280,19 @@ export function Step3Certifications({ data, certificationTypes, onUpdate, onPrev
             )}
           </div>
         )}
+        {englishMissing && (
+          <p className="text-xs font-medium text-destructive">
+            Thêm chứng chỉ tiếng Anh đã thi hoặc tích “chưa có, sẽ thi sau”.
+          </p>
+        )}
       </div>
 
-      <div className="space-y-4 border-t border-line pt-6">
+      <div
+        className={cn(
+          "space-y-4",
+          testsMissing ? "rounded-xl border border-destructive p-4" : "border-t border-line pt-6"
+        )}
+      >
         {renderSection(SECTIONS[1])}
 
         {/* Kế hoạch thi bài thi chuẩn hóa — chỉ hỏi khi chưa có bài thi chuẩn hóa nào */}
@@ -343,15 +370,20 @@ export function Step3Certifications({ data, certificationTypes, onUpdate, onPrev
             )}
           </div>
         )}
+        {testsMissing && (
+          <p className="text-xs font-medium text-destructive">
+            Thêm bài thi đã có điểm hoặc tích “chưa thi, sẽ thi sau”.
+          </p>
+        )}
       </div>
 
-      {/* Bottom Actions — bước không bắt buộc, luôn đi tiếp được */}
+      {/* Bottom Actions — mỗi mục phải có điểm hoặc tích chưa thi mới đi tiếp được */}
       <div className="flex justify-between pt-4 border-t border-line">
         <Button variant="outline" onClick={onPrev} size="lg" className="gap-1.5">
           <ArrowLeftIcon className="size-4" />
           Quay lại
         </Button>
-        <Button onClick={onNext} size="lg" className="gap-1.5">
+        <Button onClick={handleNextClick} size="lg" className="gap-1.5">
           Tiếp tục
           <ArrowRightIcon className="size-4" />
         </Button>

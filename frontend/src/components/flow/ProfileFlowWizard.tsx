@@ -87,6 +87,14 @@ function stepReady(step: number, draft: ProfileFlowDraft, goals: FormGoal[]): bo
       );
     case 2:
       return draft.step2.calculatedGpa4Scale != null || draft.step2.manualGpa10Scale != null;
+    case 3: {
+      // tiếng Anh và bài thi học thuật: mỗi mục có điểm hoặc tích "chưa thi" (giống nút Tiếp tục của bước 3)
+      const certs = draft.step3.certifications ?? [];
+      const english = certs.some((c) => c.category === "english") || draft.step3.englishPlanned;
+      const tests =
+        certs.some((c) => ["standardized", "graduate"].includes(c.category)) || draft.step3.standardizedPlanned;
+      return Boolean(english && tests);
+    }
     case 4:
       return Boolean(draft.step4.annualBudgetTier && draft.step4.needFinancialAid);
     case 5:
