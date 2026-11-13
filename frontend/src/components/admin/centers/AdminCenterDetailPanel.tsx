@@ -7,10 +7,8 @@ import {
   MapPinIcon,
   CheckCircle2Icon,
   ShieldCheckIcon,
-  AwardIcon,
   FlameIcon,
   UsersIcon,
-  ClockIcon,
   ChevronRightIcon,
 } from "lucide-react";
 import type { StudyCenter } from "@/types/api";
@@ -50,7 +48,7 @@ export function AdminCenterDetailPanel({ center, onClose }: AdminCenterDetailPan
         <div className="relative rounded-lg overflow-hidden border border-line bg-gradient-to-br from-brand via-brand/85 to-brand-ink aspect-[3/1]">
           {showCover && (
             <img
-              src={profile.coverImage}
+              src={profile.coverImage ?? undefined}
               alt=""
               onError={() => markImageFailed(profile.coverImage)}
               className="w-full h-full object-cover"
@@ -61,7 +59,7 @@ export function AdminCenterDetailPanel({ center, onClose }: AdminCenterDetailPan
             <div className="w-10 h-10 rounded-lg overflow-hidden border-2 border-surface bg-surface shrink-0 flex items-center justify-center">
               {showLogo ? (
                 <img
-                  src={profile.logoImage}
+                  src={profile.logoImage ?? undefined}
                   alt={center.name}
                   onError={() => markImageFailed(profile.logoImage)}
                   className="w-full h-full object-cover"
@@ -106,6 +104,7 @@ export function AdminCenterDetailPanel({ center, onClose }: AdminCenterDetailPan
 
         {/* Quick KPI stats */}
         <div className="grid grid-cols-2 gap-2 text-xs">
+          {profile.visaSuccessRate != null && (
           <div className="p-2.5 rounded-lg border border-line bg-surface space-y-1">
             <div className="text-ink-2 flex items-center gap-1">
               <FlameIcon className="w-3.5 h-3.5 text-ok" />
@@ -113,17 +112,9 @@ export function AdminCenterDetailPanel({ center, onClose }: AdminCenterDetailPan
             </div>
             <div className="font-bold text-ink text-sm tabular-nums">{profile.visaSuccessRate}%</div>
           </div>
+          )}
 
-          <div className="p-2.5 rounded-lg border border-line bg-surface space-y-1">
-            <div className="text-ink-2 flex items-center gap-1">
-              <AwardIcon className="w-3.5 h-3.5 text-gold" />
-              Tổng học bổng
-            </div>
-            <div className="font-bold text-ink text-sm truncate" title={profile.totalScholarshipsWon}>
-              {profile.totalScholarshipsWon.split("(")[0].trim()}
-            </div>
-          </div>
-
+          {profile.staffCount != null && (
           <div className="p-2.5 rounded-lg border border-line bg-surface space-y-1">
             <div className="text-ink-2 flex items-center gap-1">
               <UsersIcon className="w-3.5 h-3.5 text-brand" />
@@ -131,15 +122,19 @@ export function AdminCenterDetailPanel({ center, onClose }: AdminCenterDetailPan
             </div>
             <div className="font-bold text-ink text-sm tabular-nums">{profile.staffCount} chuyên viên</div>
           </div>
+          )}
 
-          <div className="p-2.5 rounded-lg border border-line bg-surface space-y-1">
+          {(profile.licenseNumber || profile.taxCode || profile.legalRepresentative || profile.trainingLicenseNumber) && (
+          <div className="col-span-2 p-2.5 rounded-lg border border-line bg-surface space-y-1">
             <div className="text-ink-2 flex items-center gap-1">
               <ShieldCheckIcon className="w-3.5 h-3.5 text-reach" />
               Pháp lý
             </div>
+            {profile.licenseNumber && (
             <div className="font-bold text-ink text-sm truncate" title={profile.licenseNumber}>
               {profile.licenseNumber}
             </div>
+            )}
             {profile.taxCode && (
               <div className="text-xs text-ink-3 mt-0.5 font-mono truncate">
                 MST: {profile.taxCode}
@@ -156,6 +151,7 @@ export function AdminCenterDetailPanel({ center, onClose }: AdminCenterDetailPan
               </div>
             )}
           </div>
+          )}
         </div>
 
         {/* Contact details */}
@@ -164,17 +160,14 @@ export function AdminCenterDetailPanel({ center, onClose }: AdminCenterDetailPan
             Thông tin liên hệ &amp; Địa điểm
           </div>
           <div className="space-y-1.5 p-3 rounded-lg border border-line bg-surface text-ink-2">
-            <div className="flex items-start gap-2 text-ink">
-              <MapPinIcon className="w-3.5 h-3.5 text-brand shrink-0 mt-0.5" />
-              <span>{center.address ?? "Chưa cập nhật địa chỉ"}</span>
-            </div>
+            {center.address && (
+              <div className="flex items-start gap-2 text-ink">
+                <MapPinIcon className="w-3.5 h-3.5 text-brand shrink-0 mt-0.5" />
+                <span>{center.address}</span>
+              </div>
+            )}
             <div className="pl-5.5 text-xs text-ink-3">
               Khu vực: {center.district ? `${center.district}, ${center.city ?? "Việt Nam"}` : (center.city ?? "Toàn quốc")}
-            </div>
-
-            <div className="flex items-center gap-2 pt-1 border-t border-line text-xs">
-              <ClockIcon className="w-3.5 h-3.5 text-gold shrink-0" />
-              <span>{profile.operatingHours}</span>
             </div>
           </div>
         </div>
