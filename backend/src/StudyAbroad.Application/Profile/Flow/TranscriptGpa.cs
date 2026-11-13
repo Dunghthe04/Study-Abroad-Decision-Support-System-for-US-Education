@@ -31,7 +31,10 @@ public static class TranscriptGpa
         _ => null,
     };
 
-    /// <summary>Giống FE: trung bình TB cả năm (YearAverage) của các môn, thang 10; null nếu chưa có điểm</summary>
+    /// <summary>
+    /// Giống FE: trung bình TB cả năm (YearAverage) của các môn, thang 10; null nếu chưa có điểm.
+    /// Làm tròn 2 số, .5 làm tròn lên như Math.round bên FE (8.125 → 8.13), không dùng mặc định làm tròn về số chẵn của C#
+    /// </summary>
     public static decimal? SubjectAverage10(FlowTranscriptDraftDto? step2)
     {
         var averages = (step2?.AcademicYears ?? [])
@@ -39,7 +42,7 @@ public static class TranscriptGpa
             .Select(s => YearAverage(s.Semester1Score, s.Semester2Score))
             .OfType<decimal>()
             .ToList();
-        return averages.Count > 0 ? Math.Round(averages.Average(), 2) : null;
+        return averages.Count > 0 ? Math.Round(averages.Average(), 2, MidpointRounding.AwayFromZero) : null;
     }
 
     /// <summary>
@@ -57,7 +60,7 @@ public static class TranscriptGpa
                 g.FirstOrDefault(s => s.Semester == 2)?.Score))
             .OfType<decimal>()
             .ToList();
-        return averages.Count > 0 ? Math.Round(averages.Average(), 2) : null;
+        return averages.Count > 0 ? Math.Round(averages.Average(), 2, MidpointRounding.AwayFromZero) : null;
     }
 
     /// <summary>
