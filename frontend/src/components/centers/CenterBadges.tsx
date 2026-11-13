@@ -1,4 +1,11 @@
-import { CheckCircle2Icon, ClockIcon, EyeOffIcon, ShieldCheckIcon } from "lucide-react";
+import {
+  CheckCircle2Icon,
+  ClockIcon,
+  EyeOffIcon,
+  PauseCircleIcon,
+  ShieldCheckIcon,
+  XCircleIcon,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 export function CenterTypeBadge({
@@ -44,6 +51,47 @@ export function CenterVerificationBadge({
       {label ?? "Chờ xác minh"}
     </Badge>
   );
+}
+
+/** Trạng thái xác minh theo quy trình hồ sơ (UC-59). */
+export function CenterStatusBadge({ status }: { status?: string | null }) {
+  switch (status) {
+    case "verified":
+      return (
+        <Badge variant="ok" className="gap-1">
+          <CheckCircle2Icon className="size-3" />
+          Đã xác minh
+        </Badge>
+      );
+    case "pending_review":
+      return (
+        <Badge variant="brand" className="gap-1">
+          <ClockIcon className="size-3" />
+          Chờ duyệt hồ sơ
+        </Badge>
+      );
+    case "rejected":
+      return (
+        <Badge variant="risk" className="gap-1">
+          <XCircleIcon className="size-3" />
+          Bị từ chối
+        </Badge>
+      );
+    case "suspended":
+      return (
+        <Badge variant="risk" className="gap-1">
+          <PauseCircleIcon className="size-3" />
+          Tạm ngưng
+        </Badge>
+      );
+    default:
+      return (
+        <Badge variant="warn" className="gap-1">
+          <ClockIcon className="size-3" />
+          Chưa xác minh
+        </Badge>
+      );
+  }
 }
 
 export function CenterVisibilityBadge({ active }: { active: boolean }) {
