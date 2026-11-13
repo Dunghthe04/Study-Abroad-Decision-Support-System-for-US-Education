@@ -941,6 +941,12 @@ public class ProfileFlowService(
         ApplyLegacyCertificationColumns(profile, certifications, certificationTypes, draft.Step3);
         profile.EnglishTestPlanned = draft.Step3?.EnglishPlanned ?? false;
         profile.EnglishPlannedDate = profile.EnglishTestPlanned ? ParseDateOnly(draft.Step3?.EnglishPlannedDate) : null;
+        // Tick "chưa thi chuẩn hóa, sẽ thi sau": lưu cả loại bài và điểm mục tiêu để mở lại form vẫn còn
+        var standardizedPlanned = draft.Step3?.StandardizedPlanned ?? false;
+        profile.StandardizedTestPlanned = standardizedPlanned;
+        profile.StandardizedPlannedDate = standardizedPlanned ? ParseDateOnly(draft.Step3?.StandardizedPlannedDate) : null;
+        profile.StandardizedPlannedTestType = standardizedPlanned ? NullIfBlank(draft.Step3?.StandardizedPlannedTestType) : null;
+        profile.StandardizedPlannedTargetScore = standardizedPlanned ? draft.Step3?.StandardizedPlannedTargetScore : null;
 
         // Bước 4
         var tier = budgetTiers[draft.Step4!.AnnualBudgetTier!];
@@ -1176,12 +1182,19 @@ public class ProfileFlowService(
             else year.Subjects.Add(subject);
         }
         var step2 = new FlowTranscriptDraftDto(years, profile.OverallGpa, SavedGpa10(profile, scale), profile.GpaMode);
+        var plannedEnglish = PlannedEnglishFromColumns(profile, certificationTypes);
         var step3 = new FlowCertificationDraftDto(
             Certifications: certifications.Count > 0
                 ? certifications.OrderBy(c => c.SortOrder).Select(ToCertificationDraft).ToList()
                 : BuildCertificationsFromLegacyColumns(profile, certificationTypes),
             EnglishPlanned: profile.EnglishTestPlanned,
-            EnglishPlannedDate: profile.EnglishPlannedDate?.ToString("yyyy-MM", CultureInfo.InvariantCulture));
+            EnglishPlannedDate: profile.EnglishPlannedDate?.ToString("yyyy-MM", CultureInfo.InvariantCulture),
+            EnglishPlannedTestType: plannedEnglish.TestType,
+            EnglishPlannedTargetScore: plannedEnglish.TargetScore,
+            StandardizedPlanned: profile.StandardizedTestPlanned,
+            StandardizedPlannedDate: profile.StandardizedPlannedDate?.ToString("yyyy-MM", CultureInfo.InvariantCulture),
+            StandardizedPlannedTestType: profile.StandardizedPlannedTestType,
+            StandardizedPlannedTargetScore: profile.StandardizedPlannedTargetScore);
 
         // Hồ sơ cũ có thể lưu mã nguồn tài chính khác (family, loan) thì để trống cho học sinh chọn lại
         var funding = profile.FundingSource is { } f && ProfileConstants.FundingSources.All.Contains(f) ? f : null;
@@ -1230,6 +1243,9 @@ public class ProfileFlowService(
         foreach (var type in certificationTypes.Values.Where(t => t.ProfileField is not null).OrderBy(t => t.Category).ThenBy(t => t.Order))
         {
             if (GetProfileField(profile, type.ProfileField!) is not { } score) continue;
+            // Đang tick "chưa thi, sẽ thi sau" thì điểm trong cột là điểm kỳ vọng (lúc lưu ghi vào để gợi ý trường có điểm mà tính),
+            // không phải chứng chỉ đã thi nên không dựng thành thẻ. Form tự bỏ tick khi thêm chứng chỉ thật cùng mục
+            if (IsPlannedScore(profile, type.Category)) continue;
             var testDate = string.Equals(profile.EnglishTestType, type.ProfileField, StringComparison.OrdinalIgnoreCase)
                 ? profile.EnglishTestDate
                 : null;
@@ -1241,6 +1257,26 @@ public class ProfileFlowService(
                 TestDate: testDate?.ToString("yyyy-MM", CultureInfo.InvariantCulture)));
         }
         return items;
+    }
+
+    /// <summary>Điểm của mục này (english | standardized | graduate) trên cột hồ sơ là điểm kỳ vọng vì học sinh đang tick "chưa thi"</summary>
+    private static bool IsPlannedScore(StudentProfile profile, string category) => category == "english"
+        ? profile.EnglishTestPlanned
+        : profile.StandardizedTestPlanned;
+
+    /// <summary>
+    /// Bài tiếng Anh dự định và điểm mục tiêu khi mở lại form: lúc lưu, chưa có chứng chỉ tiếng Anh thật mà có kế hoạch
+    /// thì loại bài dự định ghi vào EnglishTestType và điểm mục tiêu ghi vào cột điểm của bài đó, nên đọc ngược lại từ đây
+    /// </summary>
+    private static (string? TestType, decimal? TargetScore) PlannedEnglishFromColumns(
+        StudentProfile profile, IReadOnlyDictionary<string, CertificationMetadataItem> certificationTypes)
+    {
+        if (!profile.EnglishTestPlanned || string.IsNullOrWhiteSpace(profile.EnglishTestType)
+            || profile.EnglishTestType == ProfileConstants.EnglishTestTypes.None)
+            return (null, null);
+        var type = certificationTypes.Values.FirstOrDefault(t => t.Category == "english"
+            && string.Equals(t.ProfileField, profile.EnglishTestType, StringComparison.OrdinalIgnoreCase));
+        return type is null ? (null, null) : (type.Id, GetProfileField(profile, type.ProfileField!));
     }
 
     private static Dictionary<string, decimal?>? ReadSectionScores(string? json)
