@@ -148,6 +148,25 @@ public class AdminUsersControllerTests
             Users.Add(updated);
             return Task.FromResult(AuthResult.Ok("Đã xóa tài khoản."));
         }
+
+        public Task<AuthResult> RegisterCenterAsync(StudyAbroad.Application.StudyCenters.RegisterCenterRequest request, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+
+        public Task<AuthResult> VerifyCenterEmailAsync(StudyAbroad.Application.StudyCenters.VerifyCenterEmailRequest request, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+
+
+
+
+
+        public Task<AuthResult> ChangeCenterPhoneAsync(Guid userId, string newPhone, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+
+        public Task<AuthResult> RequestCenterEmailChangeAsync(Guid userId, StudyAbroad.Application.StudyCenters.RequestContactChangeDto request, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+
+        public Task<AuthResult> ConfirmCenterEmailChangeAsync(Guid userId, StudyAbroad.Application.StudyCenters.ConfirmContactChangeDto request, CancellationToken ct = default) =>
+            throw new NotImplementedException();
     }
 
     [Fact]
@@ -177,10 +196,8 @@ public class AdminUsersControllerTests
         Assert.NotNull(createModAttr);
         Assert.Equal(UserRoles.Admin, createModAttr.Roles);
 
-        // Tạo center: Cả Admin và Moderator được phép
-        var createCenterAttr = typeof(AdminUsersController).GetMethod(nameof(AdminUsersController.CreateCenter))?.GetCustomAttribute<AuthorizeAttribute>();
-        Assert.NotNull(createCenterAttr);
-        Assert.Equal($"{UserRoles.Admin},{UserRoles.Moderator}", createCenterAttr.Roles);
+        // Không ai cấp tài khoản center nữa: trung tâm tự đăng ký và chờ duyệt hồ sơ
+        Assert.Null(typeof(AdminUsersController).GetMethod("CreateCenter"));
     }
 
     [Fact]
@@ -249,22 +266,6 @@ public class AdminUsersControllerTests
         var user = Assert.IsType<UserDto>(created.Value);
         Assert.Equal(UserRoles.Moderator, user.Role);
         Assert.Equal("mod@test.com", user.Email);
-    }
-
-    [Fact]
-    public async Task CreateCenter_WhenValid_ReturnsCreatedAtRoute()
-    {
-        var fakeAuth = new FakeAuthService();
-        var controller = new AdminUsersController(fakeAuth);
-        var request = new CreateCenterAccountRequest("center@test.com", "Password1!", "Trung Tâm Du Học Á Âu", "0912345678");
-
-        var result = await controller.CreateCenter(request, CancellationToken.None);
-
-        var created = Assert.IsType<CreatedAtActionResult>(result.Result);
-        var user = Assert.IsType<UserDto>(created.Value);
-        Assert.Equal(UserRoles.Center, user.Role);
-        Assert.Equal("center@test.com", user.Email);
-        Assert.Equal("Trung Tâm Du Học Á Âu", user.FullName);
     }
 
     [Fact]
