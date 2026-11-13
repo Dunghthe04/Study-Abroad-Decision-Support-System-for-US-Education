@@ -11,7 +11,6 @@ import {
   RotateCcwIcon,
   SearchIcon,
   ShieldCheckIcon,
-  ShieldXIcon,
   StarIcon,
   TrendingUpIcon,
 } from "lucide-react";
@@ -30,17 +29,18 @@ import {
 import { TablePagination } from "@/components/admin/shared/TablePagination";
 import { OptionSelect } from "@/components/admin/universities/OptionSelect";
 import { normalizeComplianceMode } from "@/lib/center-legal";
-import { AddCenterButton } from "@/components/admin/AddCenterButton";
+import { AdminVerificationQueueModal } from "@/components/admin/centers/AdminVerificationQueueModal";
 import { AdminCenterDetailPanel } from "@/components/admin/centers/AdminCenterDetailPanel";
 import {
   CenterActionConfirmDialog,
   type CenterConfirmAction,
 } from "@/components/admin/centers/CenterActionConfirmDialog";
+import { usePendingCenterCount } from "@/hooks/use-pending-center-count";
 import { EditCenterButton } from "@/components/admin/centers/EditCenterButton";
 import {
   CenterLegalModeBadge,
   CenterTypeBadge,
-  CenterVerificationBadge,
+  CenterStatusBadge,
   CenterVisibilityBadge,
 } from "@/components/centers/CenterBadges";
 import { cn } from "cn";
@@ -60,14 +60,17 @@ const CITY_OPTIONS: FilterOption[] = [
 const TYPE_OPTIONS: FilterOption[] = [
   { value: "all", label: "Mọi loại hình" },
   { value: "study_abroad", label: "Tư vấn Du học" },
-  { value: "english_training", label: "Luyện thi Chứng chỉ" },
+  { value: "test_prep", label: "Luyện thi Chứng chỉ" },
   { value: "hybrid", label: "Toàn diện (Du học & Luyện thi)" },
 ];
 
 const STATUS_OPTIONS: FilterOption[] = [
   { value: "all", label: "Mọi trạng thái" },
   { value: "verified", label: "Đã xác minh" },
-  { value: "unverified", label: "Chờ duyệt" },
+  { value: "pending_review", label: "Chờ duyệt hồ sơ" },
+  { value: "unverified", label: "Chưa xác minh" },
+  { value: "rejected", label: "Bị từ chối" },
+  { value: "suspended", label: "Tạm ngưng" },
   { value: "hidden", label: "Đã ẩn khỏi gợi ý" },
 ];
 
@@ -97,6 +100,8 @@ export function AdminCenterListView() {
   } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [failedLogos, setFailedLogos] = useState<Record<string, true>>({});
+  const [queueOpen, setQueueOpen] = useState(false);
+  const { count: pendingCount, refresh: refreshPending } = usePendingCenterCount(true);
 
   const markLogoFailed = (url?: string | null) => {
     if (!url) return;
@@ -111,25 +116,19 @@ export function AdminCenterListView() {
         const res: PagedResult<StudyCenter> = await studyCentersApi.search({
           search: search.trim() || undefined,
           city: cityFilter !== "all" ? cityFilter : undefined,
+          centerType: typeFilter !== "all" ? typeFilter : undefined,
+          verificationStatus:
+            statusFilter !== "all" && statusFilter !== "hidden" ? statusFilter : undefined,
+          includeInactive: statusFilter !== "hidden",
+          onlyInactive: statusFilter === "hidden",
           page: activePage,
           pageSize: PAGE_SIZE,
         });
 
         if (signal?.cancelled) return;
 
-        let items = res.items || [];
-
-        if (typeFilter !== "all") {
-          items = items.filter((c) => (c.centerType || "study_abroad") === typeFilter);
-        }
-        if (statusFilter === "hidden") {
-          items = items.filter((c) => c.isActive === false);
-        } else if (statusFilter !== "all") {
-          items = items.filter((c) => (c.verificationStatus || "unverified") === statusFilter);
-        }
-
-        const total =
-          typeFilter !== "all" || statusFilter !== "all" ? items.length : res.totalCount || items.length;
+        const items = res.items || [];
+        const total = res.totalCount ?? items.length;
 
         setCenters(items);
         setTotalCount(total);
@@ -208,36 +207,15 @@ export function AdminCenterListView() {
     setSelectedCenter((prev) => (prev?.id === updated.id ? { ...prev, ...updated } : prev));
   }, []);
 
-  const handleConfirmTarget = async (verificationNote?: string) => {
+  // Xác minh chỉ thực hiện trong hàng đợi hồ sơ (UC-59); ở đây chỉ còn ẩn/hiện (UC-72).
+  const handleConfirmTarget = async () => {
     if (!confirmTarget) return;
     setIsSubmitting(true);
     const targetCenter = confirmTarget.center;
     const action = confirmTarget.action;
 
     try {
-      if (action === "verify" || action === "unverify") {
-        const targetVerified = action === "verify";
-        const updated = await studyCentersApi.verify(
-          targetCenter.id,
-          targetVerified,
-          verificationNote
-        );
-        updateCenterInState({
-          ...targetCenter,
-          ...updated,
-          verificationStatus: targetVerified ? "verified" : "unverified",
-          verifiedAt: targetVerified ? (updated.verifiedAt ?? new Date().toISOString()) : null,
-          verifiedByUserId: targetVerified ? updated.verifiedByUserId : null,
-        });
-
-        toast.add({
-          type: "success",
-          title: targetVerified ? "Đã xác minh trung tâm" : "Đã hủy xác minh trung tâm",
-          description: targetVerified
-            ? `Trung tâm ${targetCenter.name} đã được xác minh thành công.`
-            : `Đã hủy trạng thái xác minh của ${targetCenter.name}.`,
-        });
-      } else if (action === "hide" || action === "show") {
+      if (action === "hide" || action === "show") {
         const targetActive = action === "show";
         const updated = await studyCentersApi.setActiveStatus(targetCenter.id, targetActive);
         updateCenterInState({
@@ -350,7 +328,7 @@ export function AdminCenterListView() {
             ) : (
               <div className="text-ink-3 italic">Chưa rõ tỷ lệ Visa</div>
             )}
-            {c.averageRating != null && (
+            {(c.reviewCount ?? 0) > 0 && c.averageRating != null && (
               <div className="flex items-center gap-1 text-ink-2">
                 <StarIcon className="size-3 fill-warn text-warn" />
                 <span className="font-medium text-ink">{c.averageRating}</span>
@@ -367,7 +345,7 @@ export function AdminCenterListView() {
           const isVerified = c.verificationStatus === "verified";
           return (
             <div className="flex flex-col gap-1 items-start whitespace-nowrap">
-              <CenterVerificationBadge verified={isVerified} />
+              <CenterStatusBadge status={c.verificationStatus} />
               {isVerified && c.verifiedAt && (
                 <span className="text-xs text-ink-3">
                   {new Date(c.verifiedAt).toLocaleDateString("vi-VN")}
@@ -385,7 +363,6 @@ export function AdminCenterListView() {
         headerClassName: "w-px whitespace-nowrap text-right",
         cellClassName: "w-px text-right whitespace-nowrap",
         render: (c) => {
-          const isVerified = c.verificationStatus === "verified";
           return (
             <div
               className="inline-flex items-center justify-end gap-1"
@@ -425,32 +402,6 @@ export function AdminCenterListView() {
                 >
                   <EyeOffIcon className="size-3.5" />
                   <span className="hidden xl:inline">Ẩn</span>
-                </Button>
-              )}
-
-              {isVerified ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="xs"
-                  className="text-risk hover:text-risk hover:bg-risk-wash"
-                  onClick={() => setConfirmTarget({ center: c, action: "unverify" })}
-                  title="Hủy xác minh"
-                >
-                  <ShieldXIcon className="size-3.5" />
-                  <span className="hidden xl:inline">Hủy duyệt</span>
-                </Button>
-              ) : (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="xs"
-                  className="text-ok hover:text-ok hover:bg-ok-wash"
-                  onClick={() => setConfirmTarget({ center: c, action: "verify" })}
-                  title="Xác minh trung tâm"
-                >
-                  <ShieldCheckIcon className="size-3.5" />
-                  <span className="hidden xl:inline">Xác minh</span>
                 </Button>
               )}
             </div>
@@ -568,7 +519,21 @@ export function AdminCenterListView() {
           <RotateCcwIcon className={cn("size-3.5", isLoading && "animate-spin")} />
           Làm mới
         </Button>
-        <AddCenterButton size="sm" />
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setQueueOpen(true)}
+          className="gap-1.5"
+        >
+          <ShieldCheckIcon className="size-4" />
+          Hồ sơ xác minh
+          {pendingCount > 0 && (
+            <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-risk px-1.5 text-[11px] font-semibold leading-5 text-white">
+              {pendingCount}
+            </span>
+          )}
+        </Button>
       </>
     ),
   };
@@ -622,6 +587,15 @@ export function AdminCenterListView() {
         isSubmitting={isSubmitting}
         onClose={() => setConfirmTarget(null)}
         onConfirm={handleConfirmTarget}
+      />
+
+      <AdminVerificationQueueModal
+        isOpen={queueOpen}
+        onClose={() => {
+          setQueueOpen(false);
+          void refreshPending();
+        }}
+        onRefreshCenters={() => void fetchCenters(page)}
       />
     </div>
   );
