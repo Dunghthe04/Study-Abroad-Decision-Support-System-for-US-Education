@@ -100,7 +100,7 @@ export function TargetSchoolListView() {
       if (!b.deadline) return -1;
       return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
     });
-    return items.filter((item) => {
+    return (viewMode === "timeline" ? byDeadline : items).filter((item) => {
       // Lọc theo Category
       if (selectedCategory !== "all") {
         if ((item.category || "").toLowerCase() !== selectedCategory) {
