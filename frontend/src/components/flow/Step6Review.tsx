@@ -225,7 +225,7 @@ export function Step6Review({
                 Đã tải tệp: {draftTranscript.originalFileName}
               </div>
             )}
-            <div className="w-fit rounded-xl bg-brand-wash px-3 py-1.5 text-center">
+            <div className="mx-auto w-fit rounded-xl bg-brand-wash px-3 py-1.5 text-center">
               <div className="text-xs font-semibold text-brand-ink">Điểm TB tự tính</div>
               <div className="text-numeric text-base font-bold text-brand">{gpa10Text}</div>
               <div className="text-xs text-brand-ink">thang 4 (tham khảo): {gpa}</div>
