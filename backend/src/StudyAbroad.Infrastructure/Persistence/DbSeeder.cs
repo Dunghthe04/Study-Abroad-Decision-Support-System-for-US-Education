@@ -15,6 +15,9 @@ public static class DbSeeder
         // 1. Seed danh sách trung tâm du học từ khảo sát thực tế và dữ liệu chuẩn hoá
         await SeedStudyCentersAsync(db, ct);
 
+        // 1b. Seed tài khoản người dùng trung tâm và hồ sơ kiểm duyệt mẫu
+        await SeedCenterUsersAndVerificationRequestsAsync(db, ct);
+
         // 2. [USAS-362] Seed tài khoản Quản trị viên (Admin) mặc định, chỉ khi có mật khẩu từ env (không fix cứng trong code)
         if (!string.IsNullOrWhiteSpace(adminPassword) && !await db.Users.AnyAsync(u => u.Role == UserRoles.Admin, ct))
         {
@@ -945,6 +948,101 @@ public static class DbSeeder
                 existing.GalleryImages = center.GalleryImages;
                 existing.VerificationStatus = center.VerificationStatus;
                 existing.IsActive = center.IsActive;
+
+                // Các trường pháp lý và biểu phí mới bổ sung
+                existing.FeeMin = center.FeeMin;
+                existing.FeeMax = center.FeeMax;
+                existing.FeeDescription = center.FeeDescription;
+                existing.RegistrantName = center.RegistrantName;
+                existing.RegistrantPosition = center.RegistrantPosition;
+                existing.EmailVerifiedAt = center.EmailVerifiedAt;
+                existing.PhoneVerifiedAt = center.PhoneVerifiedAt;
+                existing.TermsAgreedAt = center.TermsAgreedAt;
+                existing.CommitmentAgreedAt = center.CommitmentAgreedAt;
+            }
+        }
+        await db.SaveChangesAsync(ct);
+    }
+
+    private static async Task SeedCenterUsersAndVerificationRequestsAsync(AppDbContext db, CancellationToken ct)
+    {
+        var hasher = new PasswordHasher();
+        var defaultPasswordHash = hasher.Hash("Center@123456");
+
+        var centers = await db.StudyCenters.ToListAsync(ct);
+        foreach (var center in centers)
+        {
+            if (string.IsNullOrWhiteSpace(center.Email)) continue;
+
+            var existingUser = await db.Users.FirstOrDefaultAsync(u => u.Email == center.Email, ct);
+            if (existingUser is null)
+            {
+                existingUser = new User
+                {
+                    Email = center.Email,
+                    PasswordHash = defaultPasswordHash,
+                    FullName = center.RegistrantName ?? center.LegalRepresentative ?? center.Name,
+                    Role = UserRoles.Center,
+                    Status = UserStatuses.Active,
+                    Phone = center.Phone
+                };
+                db.Users.Add(existingUser);
+                await db.SaveChangesAsync(ct);
+            }
+
+            if (center.OwnerUserId != existingUser.Id)
+            {
+                center.OwnerUserId = existingUser.Id;
+            }
+
+            // Seed verification request cho trung tâm nếu chưa có
+            var hasRequest = await db.Set<CenterVerificationRequest>().AnyAsync(r => r.CenterId == center.Id, ct);
+            if (!hasRequest)
+            {
+                var isPending = center.VerificationStatus == "pending_review";
+                var req = new CenterVerificationRequest
+                {
+                    CenterId = center.Id,
+                    RequestedByUserId = existingUser.Id,
+                    LegalName = center.Name,
+                    TaxCode = center.TaxCode ?? "0108789221",
+                    Address = center.Address ?? "Hà Nội",
+                    LegalRepresentative = center.LegalRepresentative ?? "Người đại diện pháp luật",
+                    Website = center.Website ?? "https://usas.edu.vn",
+                    Status = isPending ? CenterVerificationStatuses.PendingReview : CenterVerificationStatuses.Verified,
+                    IsNationalRegistryMatched = !isPending,
+                    IsBusinessOperating = !isPending,
+                    IsRepresentativeValid = !isPending,
+                    ReviewNotes = isPending ? null : "Hồ sơ đối chiếu hợp lệ với Cổng ĐKDN Quốc gia.",
+                    ReviewedAt = isPending ? null : DateTime.UtcNow.AddDays(-15),
+                    SubmittedAt = DateTime.UtcNow.AddHours(-3),
+                    CreatedAt = DateTime.UtcNow.AddHours(-3),
+                    UpdatedAt = DateTime.UtcNow.AddHours(-3),
+                    Documents =
+                    [
+                        new CenterVerificationDocument
+                        {
+                            CenterId = center.Id,
+                            DocumentType = CenterDocumentTypes.BusinessRegistration,
+                            FileName = $"GCN_DKDN_{center.Code}.pdf",
+                            FileUrl = "uploads/verifications/sample_gcn_dkdn.pdf",
+                            ContentType = "application/pdf",
+                            FileSize = 1024 * 350,
+                            UploadedAt = DateTime.UtcNow.AddHours(-3)
+                        },
+                        new CenterVerificationDocument
+                        {
+                            CenterId = center.Id,
+                            DocumentType = CenterDocumentTypes.ConsultingLicense,
+                            FileName = $"Giay_Phep_Du_Hoc_{center.Code}.pdf",
+                            FileUrl = "uploads/verifications/sample_giay_phep_du_hoc.pdf",
+                            ContentType = "application/pdf",
+                            FileSize = 1024 * 512,
+                            UploadedAt = DateTime.UtcNow.AddHours(-3)
+                        }
+                    ]
+                };
+                db.Add(req);
             }
         }
         await db.SaveChangesAsync(ct);
@@ -972,6 +1070,8 @@ public static class DbSeeder
                 LicenseNumber = "GPHĐ-GD-2010/HN-088",
                 TaxCode = "0104671982",
                 LegalRepresentative = "Lê Minh Hoàng",
+                RegistrantName = "Trần Phương Hoa",
+                RegistrantPosition = "Giám đốc điều hành & Học thuật",
                 LicenseIssuedBy = "Sở GD&ĐT Hà Nội",
                 LicenseIssuedDate = new DateOnly(2010, 6, 15),
                 LegalComplianceMode = "licensed",
@@ -983,8 +1083,15 @@ public static class DbSeeder
                 AverageRating = 4.90m,
                 ReviewCount = 186,
                 VerificationStatus = "verified",
+                EmailVerifiedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                PhoneVerifiedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                TermsAgreedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                CommitmentAgreedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                FeeMin = 50_000_000m,
+                FeeMax = 550_000_000m,
+                FeeDescription = "Gói tư vấn du học & đào tạo học thuật: 50.000.000đ - 550.000.000đ (do trung tâm công bố). Bao gồm: Khóa luyện thi SAT Digital 60 giờ cam kết 1450+, Khóa học thuật IELTS Academic 1-1 chuyên sâu, Khóa phát triển dự án ngoại khóa theo ngành, Cố vấn bài luận chính Common App 650 từ & luận phụ theo trường, Luyện phản xạ phỏng vấn visa F-1.",
                 StudyLevels = [StudyLevels.Secondary, StudyLevels.Undergraduate, StudyLevels.Master],
-                Services = ["CHON_TRUONG", "SAN_HOC_BONG", "LUYEN_THI_SAT", "LUYEN_THI_IELTS", "HOAT_DONG_NGOAI_KHOA", "SUA_BAI_LUAN", "LUYEN_PHONG_VAN", "XIN_VISA"],
+                Services = ["CHON_TRUONG", "SAN_HOC_BONG", "LUYEN_THI", "LUYEN_THI_SAT", "LUYEN_THI_IELTS", "HOAT_DONG_NGOAI_KHOA", "SUA_BAI_LUAN", "LUYEN_PHONG_VAN", "HO_SO_VISA"],
                 Description = "Summit Education Services là tổ chức tư vấn du học và đào tạo học thuật uy tín hàng đầu, chuyên sâu chiến lược săn học bổng vào các trường Đại học Top đầu Mỹ và Ivy League. Cung cấp chẩn đoán SAT miễn phí, lộ trình 1-1 cá nhân hóa, đồng hành xây dựng hoạt động ngoại khóa theo chiều sâu ngành học và cố vấn các vòng nộp đơn Early/Regular.",
                 LogoUrl = "https://images.unsplash.com/photo-1546410531-bb4caa6b424d?auto=format&fit=crop&w=400&q=80",
                 CoverImageUrl = "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?auto=format&fit=crop&w=1600&q=80",
@@ -1013,6 +1120,8 @@ public static class DbSeeder
                 LicenseNumber = "ĐKKD-0102381920/Sở GD&ĐT Hà Nội",
                 TaxCode = "0102381920",
                 LegalRepresentative = "Nguyễn Thị Lan Phương",
+                RegistrantName = "Nguyễn Thị Lan Phương",
+                RegistrantPosition = "Giám đốc tư vấn",
                 LicenseIssuedBy = "Sở GD&ĐT Hà Nội",
                 LicenseIssuedDate = new DateOnly(2007, 9, 20),
                 LegalComplianceMode = "licensed",
@@ -1023,8 +1132,15 @@ public static class DbSeeder
                 AverageRating = 4.80m,
                 ReviewCount = 142,
                 VerificationStatus = "verified",
+                EmailVerifiedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                PhoneVerifiedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                TermsAgreedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                CommitmentAgreedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                FeeMin = 20_000_000m,
+                FeeMax = 90_000_000m,
+                FeeDescription = "Chi phí dịch vụ trọn gói nộp hồ sơ & di trú: 20.000.000đ - 90.000.000đ (do trung tâm công bố). Đã bao gồm: Khóa đào tạo IELTS 1-1 (1-3 giờ/buổi nâng band cấp tốc), Khóa hướng dẫn chuyển tiếp CĐCĐ 2+2 tiết kiệm 50% chi phí, Khóa chuẩn bị hồ sơ Thạc sĩ STEM (OPT 36 tháng), Dịch vụ thẩm định nguồn tài chính và luyện phỏng vấn visa di trú INA 214(b).",
                 StudyLevels = [StudyLevels.CommunityCollege, StudyLevels.Undergraduate, StudyLevels.Master, StudyLevels.Phd],
-                Services = ["CHON_TRUONG", "CHUYEN_TIEP_2_CONG_2", "THAC_SI_STEM", "CHUNG_MINH_TAI_CHINH", "LUYEN_PHONG_VAN", "XIN_VISA"],
+                Services = ["CHON_TRUONG", "CHUYEN_TIEP_2_CONG_2", "LUYEN_THI", "LUYEN_THI_IELTS", "THAC_SI_STEM", "CHUNG_MINH_TAI_CHINH", "LUYEN_PHONG_VAN", "HO_SO_VISA"],
                 Description = "Với gần 20 năm kinh nghiệm tư vấn du học và di trú Hoa Kỳ, New Ocean chuyên sâu xử lý các bộ hồ sơ chứng minh tài chính phức tạp, giải trình nguồn tiền an toàn, chuyển tiếp CĐCĐ 2+2 tối ưu chi phí và lộ trình Thạc sĩ khối STEM ở lại làm việc 3 năm (OPT 36 tháng).",
                 LogoUrl = "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=400&q=80",
                 CoverImageUrl = "https://images.unsplash.com/photo-1498243691581-b145c3f54a5a?auto=format&fit=crop&w=1600&q=80",
@@ -1052,6 +1168,8 @@ public static class DbSeeder
                 LicenseNumber = "GP-2819/QĐ-SGDĐT-HN",
                 TaxCode = "0106549321",
                 LegalRepresentative = "Trần Quốc Bảo",
+                RegistrantName = "Trần Quốc Bảo",
+                RegistrantPosition = "Chủ tịch Hội đồng học thuật",
                 LicenseIssuedBy = "Sở GD&ĐT Hà Nội",
                 LicenseIssuedDate = new DateOnly(2014, 4, 10),
                 LegalComplianceMode = "licensed",
@@ -1063,8 +1181,15 @@ public static class DbSeeder
                 AverageRating = 4.95m,
                 ReviewCount = 215,
                 VerificationStatus = "verified",
+                EmailVerifiedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                PhoneVerifiedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                TermsAgreedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                CommitmentAgreedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                FeeMin = 70_000_000m,
+                FeeMax = 450_000_000m,
+                FeeDescription = "Gói chiến lược săn học bổng Top 30 Hoa Kỳ: 70.000.000đ - 450.000.000đ (do trung tâm công bố). Đã bao gồm: Khóa luyện thi SAT/ACT/AP chuyên sâu cùng giáo viên Mỹ, Khóa hướng dẫn viết luận cá nhân hóa (Personal Statement), Trại hè ngoại khóa quốc tế và công bố bài báo khoa học, Luyện phỏng vấn nhập học và phỏng vấn Đại sứ quán Mỹ.",
                 StudyLevels = [StudyLevels.Secondary, StudyLevels.Undergraduate, StudyLevels.Master],
-                Services = ["LUYEN_THI_SAT", "LUYEN_THI_ACT", "SAN_HOC_BONG", "HOAT_DONG_NGOAI_KHOA", "SUA_BAI_LUAN", "LUYEN_PHONG_VAN", "XIN_VISA"],
+                Services = ["CHON_TRUONG", "LUYEN_THI", "LUYEN_THI_SAT", "LUYEN_THI_ACT", "SAN_HOC_BONG", "HOAT_DONG_NGOAI_KHOA", "SUA_BAI_LUAN", "LUYEN_PHONG_VAN", "HO_SO_VISA"],
                 Description = "American Study là học viện hàng đầu chuyên luyện thi SAT/ACT/AP và tư vấn chiến lược du học Mỹ vào các trường Top 10 - Top 50. Hỗ trợ học sinh xây dựng bài luận mang đậm dấu ấn cá nhân và dự án ngoại khóa quốc tế giúp chinh phục học bổng lên tới 100% học phí.",
                 LogoUrl = "https://images.unsplash.com/photo-1594608661623-aa0bd3a69d98?auto=format&fit=crop&w=400&q=80",
                 CoverImageUrl = "https://images.unsplash.com/photo-1541339907198-e08756dedf3f?auto=format&fit=crop&w=1600&q=80",
@@ -1092,6 +1217,8 @@ public static class DbSeeder
                 LicenseNumber = "0311749202/Sở GD&ĐT TP.HCM",
                 TaxCode = "0311749202",
                 LegalRepresentative = "Trần Thị Minh Nguyệt",
+                RegistrantName = "Trần Thị Minh Nguyệt",
+                RegistrantPosition = "Giám đốc điều hành",
                 LicenseIssuedBy = "Sở GD&ĐT TP.HCM",
                 LicenseIssuedDate = new DateOnly(2012, 5, 18),
                 LegalComplianceMode = "licensed",
@@ -1102,8 +1229,15 @@ public static class DbSeeder
                 AverageRating = 4.85m,
                 ReviewCount = 168,
                 VerificationStatus = "verified",
+                EmailVerifiedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                PhoneVerifiedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                TermsAgreedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                CommitmentAgreedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                FeeMin = 15_000_000m,
+                FeeMax = 45_000_000m,
+                FeeDescription = "Gói dịch vụ nộp hồ sơ đại học và cao đẳng: 15.000.000đ/hồ sơ (tối đa 3 trường) - 45.000.000đ trọn gói (do trung tâm công bố). Đã bao gồm: Khóa định hướng lộ trình Hoàn tất trung học kép (High School Completion từ 16 tuổi), Khóa săn học bổng tự động theo GPA (Merit-based $2.000 - $19.000/năm), Luyện phỏng vấn visa F-1 1-1.",
                 StudyLevels = [StudyLevels.Secondary, StudyLevels.CommunityCollege, StudyLevels.Undergraduate, StudyLevels.Master],
-                Services = ["CHON_TRUONG", "CHUYEN_TIEP_2_CONG_2", "SAN_HOC_BONG", "LUYEN_PHONG_VAN", "XIN_VISA"],
+                Services = ["CHON_TRUONG", "CHUYEN_TIEP_2_CONG_2", "SAN_HOC_BONG", "LUYEN_PHONG_VAN", "HO_SO_VISA"],
                 Description = "Đại diện tuyển sinh chính thức của hơn 300 trường đại học và cao đẳng danh tiếng tại Mỹ. Nổi bật với chương trình Hoàn tất trung học kép (High School Completion) từ 16 tuổi, chuyển tiếp CĐCĐ bang Washington và săn học bổng Merit tự động theo GPA.",
                 LogoUrl = "https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&w=400&q=80",
                 CoverImageUrl = "https://images.unsplash.com/photo-1562774053-701939374585?auto=format&fit=crop&w=1600&q=80",
@@ -1131,6 +1265,8 @@ public static class DbSeeder
                 LicenseNumber = "GPHĐ-02013894/Sở GD&ĐT Hải Phòng",
                 TaxCode = "0200638491",
                 LegalRepresentative = "Phạm Văn Hùng",
+                RegistrantName = "Phạm Văn Hùng",
+                RegistrantPosition = "Tổng Giám đốc",
                 LicenseIssuedBy = "Sở GD&ĐT Hải Phòng",
                 LicenseIssuedDate = new DateOnly(2005, 8, 12),
                 LegalComplianceMode = "licensed",
@@ -1142,8 +1278,15 @@ public static class DbSeeder
                 AverageRating = 4.75m,
                 ReviewCount = 110,
                 VerificationStatus = "verified",
+                EmailVerifiedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                PhoneVerifiedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                TermsAgreedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                CommitmentAgreedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                FeeMin = 25_000_000m,
+                FeeMax = 120_000_000m,
+                FeeDescription = "Combo đào tạo chứng chỉ & tư vấn du học Mỹ: 25.000.000đ - 120.000.000đ (do trung tâm công bố). Đã bao gồm: Khóa luyện thi IELTS Academic cam kết đầu ra 6.5 - 7.5, Khóa luyện thi SAT Foundation & Advanced, Gói xử lý hồ sơ xin thư mời I-20, Khóa luyện phỏng vấn visa Mỹ cùng chuyên gia bản xứ.",
                 StudyLevels = [StudyLevels.Secondary, StudyLevels.CommunityCollege, StudyLevels.Undergraduate, StudyLevels.Master],
-                Services = ["LUYEN_THI_IELTS", "LUYEN_THI_SAT", "CHON_TRUONG", "SAN_HOC_BONG", "LUYEN_PHONG_VAN", "XIN_VISA"],
+                Services = ["LUYEN_THI", "LUYEN_THI_IELTS", "LUYEN_THI_SAT", "CHON_TRUONG", "SAN_HOC_BONG", "LUYEN_PHONG_VAN", "HO_SO_VISA"],
                 Description = "Hệ thống Anh ngữ và Tư vấn Du học Quốc tế uy tín bậc nhất tại Hải Phòng và khu vực Duyên hải phía Bắc. Cung cấp quy trình khép kín từ đào tạo IELTS/SAT cam kết đầu ra đến nộp hồ sơ xin I-20 và luyện phỏng vấn visa cùng cố vấn nước ngoài.",
                 LogoUrl = "https://images.unsplash.com/photo-1577495508048-b635879837f1?auto=format&fit=crop&w=400&q=80",
                 CoverImageUrl = "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=1600&q=80",
@@ -1170,6 +1313,8 @@ public static class DbSeeder
                 LicenseNumber = "1204/QĐ-SGDĐT Hà Nội",
                 TaxCode = "0107428156",
                 LegalRepresentative = "Nguyễn Hoàng Nam",
+                RegistrantName = "Nguyễn Hoàng Nam",
+                RegistrantPosition = "Giám đốc tuyển sinh",
                 LicenseIssuedBy = "Sở GD&ĐT Hà Nội",
                 LicenseIssuedDate = new DateOnly(2016, 11, 8),
                 LegalComplianceMode = "licensed",
@@ -1180,8 +1325,15 @@ public static class DbSeeder
                 AverageRating = 4.80m,
                 ReviewCount = 95,
                 VerificationStatus = "verified",
+                EmailVerifiedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                PhoneVerifiedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                TermsAgreedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                CommitmentAgreedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                FeeMin = 25_000_000m,
+                FeeMax = 80_000_000m,
+                FeeDescription = "Chi phí tư vấn & cố vấn hồ sơ học bổng: 25.000.000đ - 80.000.000đ (do trung tâm công bố). Đã bao gồm: Khóa cố vấn bài luận cá nhân chạm cảm xúc, Khóa bù đắp điểm GPA bằng hoạt động ngoại khóa thực chiến, Săn học bổng Merit 30% - 70% học phí, Khóa luyện phản xạ phỏng vấn visa F-1 bám sát luật di trú.",
                 StudyLevels = [StudyLevels.Undergraduate, StudyLevels.Master],
-                Services = ["CHON_TRUONG", "SAN_HOC_BONG", "SUA_BAI_LUAN", "LUYEN_PHONG_VAN", "XIN_VISA"],
+                Services = ["CHON_TRUONG", "SAN_HOC_BONG", "SUA_BAI_LUAN", "LUYEN_PHONG_VAN", "HO_SO_VISA"],
                 Description = "Tư vấn du học dựa trên phương pháp 3 phễu lọc và đối soát ngân sách thực tế. Chuyên gia đồng hành hỗ trợ học sinh xây dựng bài luận giàu cảm xúc, khắc phục điểm GPA khiêm tốn bằng hoạt động ngoại khóa có chiều sâu và luyện phỏng vấn visa di trú INA 214(b).",
                 LogoUrl = "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=400&q=80",
                 CoverImageUrl = "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?auto=format&fit=crop&w=1600&q=80",
@@ -1208,6 +1360,8 @@ public static class DbSeeder
                 LicenseNumber = "GP-031589123/TP.HCM",
                 TaxCode = "0315891234",
                 LegalRepresentative = "Võ Thanh Tùng",
+                RegistrantName = "Võ Thanh Tùng",
+                RegistrantPosition = "Giám đốc vận hành",
                 LicenseIssuedBy = "Sở GD&ĐT TP.HCM",
                 LicenseIssuedDate = new DateOnly(2018, 7, 22),
                 LegalComplianceMode = "licensed",
@@ -1218,8 +1372,15 @@ public static class DbSeeder
                 AverageRating = 4.85m,
                 ReviewCount = 124,
                 VerificationStatus = "verified",
+                EmailVerifiedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                PhoneVerifiedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                TermsAgreedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                CommitmentAgreedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                FeeMin = 15_000_000m,
+                FeeMax = 60_000_000m,
+                FeeDescription = "Phí xử lý hồ sơ & phỏng vấn visa: Miễn phí dịch vụ với mạng lưới trường đối tác; 15.000.000đ - 60.000.000đ với trường ngoài liên kết (do trung tâm công bố). Đã bao gồm: Khóa định hướng chuyển tiếp CĐCĐ 2+2, Khóa chuẩn bị hồ sơ tài chính gia đình minh bạch, Luyện phỏng vấn visa F-1 cấp tốc 1-1.",
                 StudyLevels = [StudyLevels.CommunityCollege, StudyLevels.Undergraduate, StudyLevels.Master],
-                Services = ["CHON_TRUONG", "CHUYEN_TIEP_2_CONG_2", "LUYEN_PHONG_VAN", "XIN_VISA"],
+                Services = ["CHON_TRUONG", "CHUYEN_TIEP_2_CONG_2", "LUYEN_PHONG_VAN", "HO_SO_VISA"],
                 Description = "Nền tảng tư vấn du học số hóa giúp rút ngắn quy trình nộp đơn. Chuyên gia hướng dẫn khai đơn DS-160 chuẩn xác, giải trình sổ tiết kiệm và dòng tiền gia đình minh bạch, đảm bảo tối đa tỷ lệ cấp visa F-1.",
                 LogoUrl = "https://images.unsplash.com/photo-1498243691581-b145c3f54a5a?auto=format&fit=crop&w=400&q=80",
                 CoverImageUrl = "https://images.unsplash.com/photo-1492538368677-f6e0afe31dcc?auto=format&fit=crop&w=1600&q=80",
@@ -1246,6 +1407,8 @@ public static class DbSeeder
                 LicenseNumber = "892/QĐ-GDĐT Hà Nội",
                 TaxCode = "0107913405",
                 LegalRepresentative = "Đặng Thu Hà",
+                RegistrantName = "Đặng Thu Hà",
+                RegistrantPosition = "Trưởng phòng tư vấn du học",
                 LicenseIssuedBy = "Sở GD&ĐT Hà Nội",
                 LicenseIssuedDate = new DateOnly(2017, 10, 5),
                 LegalComplianceMode = "licensed",
@@ -1256,8 +1419,15 @@ public static class DbSeeder
                 AverageRating = 4.78m,
                 ReviewCount = 88,
                 VerificationStatus = "verified",
+                EmailVerifiedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                PhoneVerifiedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                TermsAgreedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                CommitmentAgreedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                FeeMin = 20_000_000m,
+                FeeMax = 85_000_000m,
+                FeeDescription = "Gói trọn gói hướng nghiệp & hồ sơ du học Mỹ ($3.500 tương đương 85 triệu, cam kết hoàn phí nếu trượt visa do trung tâm công bố). Đã bao gồm: Khóa định hướng ngành học STEM và nghề nghiệp tương lai, Khóa cá nhân hóa lộ trình bài luận 650 từ, Xử lý hồ sơ tài chính và luyện phỏng vấn visa F-1.",
                 StudyLevels = [StudyLevels.Secondary, StudyLevels.Undergraduate],
-                Services = ["CHON_TRUONG", "SAN_HOC_BONG", "SUA_BAI_LUAN", "LUYEN_PHONG_VAN", "XIN_VISA"],
+                Services = ["CHON_TRUONG", "SAN_HOC_BONG", "SUA_BAI_LUAN", "LUYEN_PHONG_VAN", "HO_SO_VISA", "DINH_CU_VIEC_LAM"],
                 Description = "Đơn vị chuyên tư vấn định hướng du học sớm bậc THPT và Đại học tại Mỹ. Hỗ trợ phụ huynh quản lý ngân sách vừa vặn ($25k - $35k/năm) và cá nhân hóa lộ trình chuẩn bị bài luận 650 từ.",
                 LogoUrl = "https://images.unsplash.com/photo-1577896851231-70ef18881754?auto=format&fit=crop&w=400&q=80",
                 CoverImageUrl = "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?auto=format&fit=crop&w=1600&q=80",
@@ -1284,6 +1454,8 @@ public static class DbSeeder
                 LicenseNumber = "GP-4521/Sở GD&ĐT Hà Nội",
                 TaxCode = "0106984521",
                 LegalRepresentative = "Phạm Đức Anh",
+                RegistrantName = "Phạm Đức Anh",
+                RegistrantPosition = "Giám đốc học thuật",
                 LicenseIssuedBy = "Sở GD&ĐT Hà Nội",
                 LicenseIssuedDate = new DateOnly(2015, 3, 19),
                 LegalComplianceMode = "licensed",
@@ -1294,8 +1466,15 @@ public static class DbSeeder
                 AverageRating = 4.88m,
                 ReviewCount = 76,
                 VerificationStatus = "verified",
+                EmailVerifiedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                PhoneVerifiedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                TermsAgreedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                CommitmentAgreedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                FeeMin = 35_000_000m,
+                FeeMax = 150_000_000m,
+                FeeDescription = "Gói tư vấn Thạc sĩ & Tiến sĩ Mỹ (CS, AI, Data Science, STEM MBA): 35.000.000đ - 150.000.000đ (do trung tâm công bố). Đã bao gồm: Khóa cố vấn viết SOP học thuật & CV nghiên cứu, Hướng dẫn bổ sung môn học tiên quyết (Prerequisites), Kết nối cơ hội trợ giảng TA/RA miễn học phí, Định hướng CPT/OPT làm việc tại Mỹ.",
                 StudyLevels = [StudyLevels.Undergraduate, StudyLevels.Master, StudyLevels.Phd],
-                Services = ["CHON_TRUONG", "SAN_HOC_BONG", "SUA_BAI_LUAN", "LUYEN_PHONG_VAN", "XIN_VISA"],
+                Services = ["CHON_TRUONG", "SAN_HOC_BONG", "SUA_BAI_LUAN", "LUYEN_PHONG_VAN", "HO_SO_VISA", "DINH_CU_VIEC_LAM"],
                 Description = "Đơn vị tư vấn hàng đầu về các chương trình Thạc sĩ, Tiến sĩ và nghiên cứu chuyên sâu tại Mỹ (AI, Data Science, Kỹ thuật phần mềm, MBA). Hướng dẫn sinh viên trái ngành bổ sung môn tiên quyết, tối ưu SOP và chuẩn bị thực tập CPT/OPT.",
                 LogoUrl = "https://images.unsplash.com/photo-1531482615713-2afd69097998?auto=format&fit=crop&w=400&q=80",
                 CoverImageUrl = "https://images.unsplash.com/photo-1562774053-701939374585?auto=format&fit=crop&w=1600&q=80",
@@ -1322,18 +1501,27 @@ public static class DbSeeder
                 LicenseNumber = "010789221/Sở GD&ĐT Hà Nội",
                 TaxCode = "0108789221",
                 LegalRepresentative = "Bùi Thảo Vân",
+                RegistrantName = "Bùi Thảo Vân",
+                RegistrantPosition = "Người sáng lập & Giám đốc",
                 LicenseIssuedBy = "Sở GD&ĐT Hà Nội",
                 LicenseIssuedDate = new DateOnly(2019, 6, 14),
                 LegalComplianceMode = "notified",
                 CertifiedCounselorCount = 9,
-                VerificationNote = "Đã cập nhật hồ sơ thông báo hoạt động tư vấn du học tới Sở GD&ĐT Hà Nội.",
+                VerificationNote = "Đang chờ đối chiếu hồ sơ xác minh trên Cổng ĐKDN Quốc gia (UC-59).",
                 Accreditations = ["ICEF Screened", "VIECA Member"],
                 VisaSuccessRate = 97.5,
                 AverageRating = 4.70m,
                 ReviewCount = 62,
-                VerificationStatus = "verified",
+                VerificationStatus = "pending_review",
+                EmailVerifiedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                PhoneVerifiedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                TermsAgreedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                CommitmentAgreedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                FeeMin = 20_000_000m,
+                FeeMax = 70_000_000m,
+                FeeDescription = "Gói tư vấn đồng hành khai phá bản thân & du học Mỹ: 20.000.000đ - 70.000.000đ (do trung tâm công bố). Đã bao gồm: Khóa khai vấn tư duy phản biện và viết luận sáng tạo, Khóa đồng hành xây dựng năng lực tự chủ học thuật, Luyện phỏng vấn visa di trú F-1.",
                 StudyLevels = [StudyLevels.Secondary, StudyLevels.Undergraduate],
-                Services = ["CHON_TRUONG", "SUA_BAI_LUAN", "LUYEN_PHONG_VAN", "XIN_VISA"],
+                Services = ["CHON_TRUONG", "SUA_BAI_LUAN", "LUYEN_PHONG_VAN", "HO_SO_VISA"],
                 Description = "Đồng hành xây dựng năng lực tự chủ cho học sinh, khai phá tiềm năng cá nhân và thiết kế hồ sơ du học Mỹ sáng tạo, thực chất.",
                 LogoUrl = "https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=400&q=80",
                 CoverImageUrl = "https://images.unsplash.com/photo-1498243691581-b145c3f54a5a?auto=format&fit=crop&w=1600&q=80",
@@ -1360,6 +1548,8 @@ public static class DbSeeder
                 LicenseNumber = "DEMO-HN-2018",
                 TaxCode = "0109998801",
                 LegalRepresentative = "Nguyễn Văn An",
+                RegistrantName = "Nguyễn Văn An",
+                RegistrantPosition = "Giám đốc Trung tâm",
                 LicenseIssuedBy = "Sở GD&ĐT Hà Nội",
                 LicenseIssuedDate = new DateOnly(2018, 1, 15),
                 LegalComplianceMode = "licensed",
@@ -1370,8 +1560,15 @@ public static class DbSeeder
                 AverageRating = 4.80m,
                 ReviewCount = 45,
                 VerificationStatus = "verified",
+                EmailVerifiedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                PhoneVerifiedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                TermsAgreedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                CommitmentAgreedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                FeeMin = 10_000_000m,
+                FeeMax = 50_000_000m,
+                FeeDescription = "Gói đào tạo khảo nghiệm & tư vấn hồ sơ cơ bản: 10.000.000đ - 50.000.000đ (do trung tâm công bố).",
                 StudyLevels = [StudyLevels.Secondary, StudyLevels.Undergraduate, StudyLevels.Master],
-                Services = ["CHON_TRUONG", "SAN_HOC_BONG", "LUYEN_PHONG_VAN"],
+                Services = ["CHON_TRUONG", "SAN_HOC_BONG", "LUYEN_THI", "LUYEN_PHONG_VAN", "HO_SO_VISA"],
                 Description = "Trung tâm khảo nghiệm mẫu phục vụ đào tạo và kiểm thử hệ thống tại Hà Nội.",
                 LogoUrl = "https://images.unsplash.com/photo-1546410531-bb4caa6b424d?auto=format&fit=crop&w=400&q=80",
                 CoverImageUrl = "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?auto=format&fit=crop&w=1600&q=80",
@@ -1395,6 +1592,8 @@ public static class DbSeeder
                 LicenseNumber = "DEMO-HCM-2019",
                 TaxCode = "0319998802",
                 LegalRepresentative = "Trần Thị Bình",
+                RegistrantName = "Trần Thị Bình",
+                RegistrantPosition = "Quản lý cơ sở",
                 LicenseIssuedBy = "Sở GD&ĐT TP.HCM",
                 LicenseIssuedDate = new DateOnly(2019, 2, 20),
                 LegalComplianceMode = "licensed",
@@ -1406,10 +1605,96 @@ public static class DbSeeder
                 AverageRating = 4.85m,
                 ReviewCount = 58,
                 VerificationStatus = "verified",
+                EmailVerifiedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                PhoneVerifiedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                TermsAgreedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                CommitmentAgreedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                FeeMin = 15_000_000m,
+                FeeMax = 60_000_000m,
+                FeeDescription = "Gói luyện thi cấp tốc & hoàn thiện hồ sơ du học: 15.000.000đ - 60.000.000đ (do trung tâm công bố).",
                 StudyLevels = [StudyLevels.CommunityCollege, StudyLevels.Undergraduate, StudyLevels.Master, StudyLevels.Phd],
-                Services = ["CHON_TRUONG", "LUYEN_THI", "SUA_BAI_LUAN"],
+                Services = ["CHON_TRUONG", "LUYEN_THI", "SUA_BAI_LUAN", "HO_SO_VISA"],
                 Description = "Trung tâm khảo nghiệm mẫu phục vụ đào tạo và kiểm thử hệ thống tại TP. Hồ Chí Minh.",
                 LogoUrl = "https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&w=400&q=80",
+                CoverImageUrl = "https://images.unsplash.com/photo-1562774053-701939374585?auto=format&fit=crop&w=1600&q=80",
+                GalleryImages = ["https://images.unsplash.com/photo-1517486808906-6ca8b3f04846?auto=format&fit=crop&w=800&q=80"]
+            },
+            // Dữ liệu mẫu dev/test: trung tâm thuần luyện thi chứng chỉ (test_prep), không tư vấn du học/visa.
+            new StudyCenter
+            {
+                Code = "TP_001",
+                Name = "Demo Luyện thi IELTS & TOEFL Hà Nội",
+                CenterType = "test_prep",
+                City = "Hà Nội",
+                District = "Thanh Xuân",
+                Address = "Số 82 Nguyễn Tuân, Thanh Xuân, Hà Nội",
+                Latitude = 21.0021,
+                Longitude = 105.8084,
+                Phone = "0988 888 011",
+                Email = "ielts.hn@democenter.edu.vn",
+                Website = "https://ielts.democenter.edu.vn",
+                StaffCount = 18,
+                EstablishedYear = 2016,
+                LicenseNumber = "DEMO-TP-HN-2016",
+                TaxCode = "0108880011",
+                LegalRepresentative = "Nguyễn Thu Trang",
+                RegistrantName = "Nguyễn Thu Trang",
+                RegistrantPosition = "Giám đốc đào tạo",
+                LicenseIssuedBy = "Sở GD&ĐT Hà Nội",
+                LicenseIssuedDate = new DateOnly(2016, 3, 8),
+                LegalComplianceMode = "licensed",
+                TrainingLicenseNumber = "DEMO-GPDT-NN-HN-2016",
+                VerificationNote = "Hồ sơ mẫu kiểm thử: trung tâm đào tạo tiếng Anh & luyện thi chứng chỉ.",
+                VerificationStatus = "verified",
+                EmailVerifiedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                TermsAgreedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                CommitmentAgreedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                FeeMin = 6_000_000m,
+                FeeMax = 24_000_000m,
+                FeeDescription = "Khóa luyện thi IELTS và TOEFL iBT: 6.000.000đ - 24.000.000đ tùy lộ trình (do trung tâm công bố).",
+                StudyLevels = [StudyLevels.Secondary, StudyLevels.Undergraduate],
+                Services = ["LUYEN_THI", "LUYEN_THI_IELTS"],
+                Description = "Trung tâm mẫu chuyên đào tạo và luyện thi IELTS, TOEFL iBT theo lộ trình cá nhân hóa, thi thử định kỳ trên máy. Không cung cấp dịch vụ tư vấn du học hay xin visa.",
+                LogoUrl = "https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&w=400&q=80",
+                CoverImageUrl = "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=1600&q=80",
+                GalleryImages = ["https://images.unsplash.com/photo-1577896851231-70ef18881754?auto=format&fit=crop&w=800&q=80"]
+            },
+            new StudyCenter
+            {
+                Code = "TP_002",
+                Name = "Demo Luyện thi SAT & ACT TP.HCM",
+                CenterType = "test_prep",
+                City = "TP.HCM",
+                District = "Quận 3",
+                Address = "Số 45 Võ Văn Tần, Phường 6, Quận 3, TP. Hồ Chí Minh",
+                Latitude = 10.7769,
+                Longitude = 106.6890,
+                Phone = "0988 888 012",
+                Email = "sat.hcm@democenter.edu.vn",
+                Website = "https://sat.democenter.edu.vn",
+                StaffCount = 12,
+                EstablishedYear = 2018,
+                LicenseNumber = "DEMO-TP-HCM-2018",
+                TaxCode = "0319990012",
+                LegalRepresentative = "Lê Quang Huy",
+                RegistrantName = "Lê Quang Huy",
+                RegistrantPosition = "Giám đốc học thuật",
+                LicenseIssuedBy = "Sở GD&ĐT TP.HCM",
+                LicenseIssuedDate = new DateOnly(2018, 7, 2),
+                LegalComplianceMode = "licensed",
+                TrainingLicenseNumber = "DEMO-GPDT-NN-HCM-2018",
+                VerificationNote = "Hồ sơ mẫu kiểm thử: trung tâm luyện thi SAT/ACT.",
+                VerificationStatus = "verified",
+                EmailVerifiedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                TermsAgreedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                CommitmentAgreedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc),
+                FeeMin = 8_000_000m,
+                FeeMax = 30_000_000m,
+                FeeDescription = "Khóa luyện thi SAT và ACT theo nhóm nhỏ hoặc 1-1: 8.000.000đ - 30.000.000đ (do trung tâm công bố).",
+                StudyLevels = [StudyLevels.Secondary, StudyLevels.Undergraduate],
+                Services = ["LUYEN_THI", "LUYEN_THI_SAT", "LUYEN_THI_ACT"],
+                Description = "Trung tâm mẫu chuyên luyện thi SAT, ACT với lớp nhóm nhỏ, bài thi thử chuẩn Digital SAT và báo cáo tiến bộ theo từng tuần. Không cung cấp dịch vụ tư vấn du học hay xin visa.",
+                LogoUrl = "https://images.unsplash.com/photo-1546410531-bb4caa6b424d?auto=format&fit=crop&w=400&q=80",
                 CoverImageUrl = "https://images.unsplash.com/photo-1562774053-701939374585?auto=format&fit=crop&w=1600&q=80",
                 GalleryImages = ["https://images.unsplash.com/photo-1517486808906-6ca8b3f04846?auto=format&fit=crop&w=800&q=80"]
             }
