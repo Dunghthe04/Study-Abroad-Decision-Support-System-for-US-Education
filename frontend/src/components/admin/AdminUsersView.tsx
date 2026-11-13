@@ -18,7 +18,7 @@ import {
 import { adminUsersApi, ApiError } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { formatUserRole, USER_ROLE_LABELS } from "@/lib/user-role-labels";
-import type { CreateCenterAccountRequest, CreateModeratorAccountRequest, UserDto, UserRole } from "@/types/api";
+import type { CreateModeratorAccountRequest, UserDto, UserRole } from "@/types/api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -181,7 +181,6 @@ export function AdminUsersView() {
 
   // Form tạo tài khoản (Moderator hoặc Center)
   const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [createRole, setCreateRole] = useState<"moderator" | "center">("moderator");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
@@ -379,11 +378,6 @@ export function AdminUsersView() {
     setFullName("");
     setPhone("");
     setFormError(null);
-    if (isModerator) {
-      setCreateRole("center");
-    } else {
-      setCreateRole("moderator");
-    }
     setIsCreateOpen(true);
   };
 
@@ -391,8 +385,8 @@ export function AdminUsersView() {
     e.preventDefault();
     setFormError(null);
 
-    if (isModerator && createRole !== "center") {
-      setFormError("Kiểm duyệt viên chỉ có quyền cấp tài khoản cho trung tâm tư vấn.");
+    if (isModerator) {
+      setFormError("Chỉ quản trị viên mới được cấp tài khoản kiểm duyệt viên.");
       return;
     }
 
@@ -428,24 +422,13 @@ export function AdminUsersView() {
 
     setIsSubmitting(true);
     try {
-      let created: UserDto;
-      if (createRole === "center") {
-        const payload: CreateCenterAccountRequest = {
-          email: trimmedEmail,
-          password,
-          fullName: trimmedName,
-          phone: phonePayload,
-        };
-        created = await adminUsersApi.createCenter(payload);
-      } else {
-        const payload: CreateModeratorAccountRequest = {
-          email: trimmedEmail,
-          password,
-          fullName: trimmedName,
-          phone: phonePayload,
-        };
-        created = await adminUsersApi.createModerator(payload);
-      }
+      const payload: CreateModeratorAccountRequest = {
+        email: trimmedEmail,
+        password,
+        fullName: trimmedName,
+        phone: phonePayload,
+      };
+      const created: UserDto = await adminUsersApi.createModerator(payload);
 
       setIsCreateOpen(false);
       setEmail("");
@@ -459,7 +442,7 @@ export function AdminUsersView() {
         type: "success",
         priority: "high",
         timeout: 6000,
-        title: createRole === "center" ? "Đã tạo tài khoản trung tâm" : "Đã tạo tài khoản moderator",
+        title: "Đã tạo tài khoản moderator",
         description: created.email,
       });
     } catch (err) {
@@ -498,14 +481,6 @@ export function AdminUsersView() {
         value: opt.value || "all",
         label: opt.label,
       })),
-    []
-  );
-
-  const createRoleOptions = useMemo<{ value: string; label: string }[]>(
-    () => [
-      { value: "moderator", label: "Kiểm duyệt viên (Moderator - UC-63)" },
-      { value: "center", label: "Trung tâm tư vấn (Center - UC-64)" },
-    ],
     []
   );
 
@@ -753,10 +728,13 @@ export function AdminUsersView() {
           <RotateCcwIcon className={cn("size-3.5", listLoading && "animate-spin")} />
           Làm mới
         </Button>
-        <Button type="button" size="sm" onClick={handleOpenCreateModal} className="gap-1.5">
-          <UserPlusIcon className="size-4" />
-          Cấp tài khoản
-        </Button>
+        {/* Chỉ admin cấp tài khoản moderator; trung tâm tự đăng ký và chờ duyệt hồ sơ */}
+        {!isModerator && (
+          <Button type="button" size="sm" onClick={handleOpenCreateModal} className="gap-1.5">
+            <UserPlusIcon className="size-4" />
+            Cấp tài khoản
+          </Button>
+        )}
       </>
     ),
   };
@@ -767,8 +745,8 @@ export function AdminUsersView() {
         <h1 className="text-h2">Quản trị người dùng</h1>
         <p className="text-sm text-ink-2 mt-1">
           {isModerator
-            ? "Xem danh sách tài khoản hệ thống và cấp tài khoản cho các trung tâm tư vấn đối tác."
-            : "Quản lý toàn bộ tài khoản học sinh, trung tâm tư vấn và cấp tài khoản kiểm duyệt viên / trung tâm."}
+            ? "Xem danh sách tài khoản hệ thống."
+            : "Quản lý toàn bộ tài khoản người dùng và cấp tài khoản kiểm duyệt viên."}
         </p>
       </header>
 
@@ -959,18 +937,16 @@ export function AdminUsersView() {
         )}
       </div>
 
-      {/* [UC-63 & UC-71] Dialog Cấp tài khoản mới (Moderator tạo Center, Admin tạo Moderator hoặc Center) */}
+      {/* [UC-63] Dialog Cấp tài khoản mới: chỉ Admin tạo Moderator */}
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <UserPlusIcon className="size-5 text-brand" />
-              {isModerator ? "Cấp tài khoản Trung tâm tư vấn" : "Cấp tài khoản mới"}
+              Cấp tài khoản mới
             </DialogTitle>
             <DialogDescription>
-              {isModerator
-                ? "Tạo tài khoản đại diện cho Trung tâm tư vấn (tài khoản vai trò center được kích hoạt ngay)."
-                : "Tạo tài khoản Kiểm duyệt viên hoặc Trung tâm tư vấn (tài khoản được kích hoạt ngay)."}
+              Tạo tài khoản Kiểm duyệt viên (tài khoản được kích hoạt ngay).
             </DialogDescription>
           </DialogHeader>
 
@@ -984,23 +960,14 @@ export function AdminUsersView() {
 
               <Field>
                 <FieldLabel htmlFor="create-role">Loại tài khoản</FieldLabel>
-                {isModerator ? (
-                  <div className="h-9 px-3 flex items-center rounded-md border border-input bg-muted/40 text-sm font-medium">
-                    Trung tâm tư vấn (Center)
-                  </div>
-                ) : (
-                  <OptionSelect
-                    id="create-role"
-                    value={createRole}
-                    options={createRoleOptions}
-                    onChange={(val) => setCreateRole(val as "moderator" | "center")}
-                    className="bg-surface"
-                  />
-                )}
+                <div
+                  id="create-role"
+                  className="h-9 px-3 flex items-center rounded-md border border-input bg-muted/40 text-sm font-medium"
+                >
+                  Kiểm duyệt viên (Moderator)
+                </div>
                 <FieldDescription>
-                  {createRole === "moderator"
-                    ? "Tài khoản có quyền kiểm duyệt nội dung, quản lý trung tâm và người dùng cấp dưới."
-                    : "Tài khoản đại diện quản lý thông tin và chương trình của trung tâm du học."}
+                  Tài khoản có quyền kiểm duyệt nội dung, duyệt hồ sơ trung tâm và quản lý người dùng cấp dưới.
                 </FieldDescription>
               </Field>
 
