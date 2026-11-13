@@ -164,9 +164,6 @@ export function Step6Review({
   const { gpa10, gpa4 } = draftGpa(step2);
   const gpa = gpa4 != null ? gpa4.toFixed(2) : "–";
   const gpa10Text = gpa10 != null ? gpa10.toFixed(1) : "–";
-  // Thẻ chỉ chốt GPA tổng, nhập GPA tổng hay học bạ từng môn đều vậy
-  const gpaSummary =
-    gpa10 != null ? `GPA tổng: ${gpa10Text}/10` : gpa4 != null ? `GPA tổng: ${gpa}/4` : "Chưa nhập điểm";
 
   // Activities & Awards count
   const activitiesCount = step5.activities.filter((a) => a.category === "activity").length;
@@ -220,19 +217,15 @@ export function Step6Review({
         </ReviewCard>
 
         <ReviewCard icon={FileTextIcon} eyebrow="Bảng điểm" onEdit={() => onEditStep(2)} errors={stepErrors.byStep[2]}>
-          <div className="flex items-start justify-between gap-3">
-            <div className="space-y-1">
-              <div className="text-sm font-semibold text-foreground">
-                {gpaSummary}
+          {/* Thẻ chỉ hiện ô điểm tự tính, nhập GPA tổng hay học bạ từng môn đều vậy */}
+          <div className="space-y-2">
+            {draftTranscript && (
+              <div className="flex items-center gap-1 text-xs text-ok">
+                <CheckCircle2Icon className="size-3" />
+                Đã tải tệp: {draftTranscript.originalFileName}
               </div>
-              {draftTranscript && (
-                <div className="flex items-center gap-1 text-xs text-ok">
-                  <CheckCircle2Icon className="size-3" />
-                  Đã tải tệp: {draftTranscript.originalFileName}
-                </div>
-              )}
-            </div>
-            <div className="shrink-0 rounded-xl bg-brand-wash px-3 py-1.5 text-center">
+            )}
+            <div className="w-fit rounded-xl bg-brand-wash px-3 py-1.5 text-center">
               <div className="text-xs font-semibold text-brand-ink">Điểm TB tự tính</div>
               <div className="text-numeric text-base font-bold text-brand">{gpa10Text}</div>
               <div className="text-xs text-brand-ink">thang 4 (tham khảo): {gpa}</div>
