@@ -40,7 +40,14 @@ public record StudyCenterDto(
     string? TrainingLicenseNumber = null,
     int? CertifiedCounselorCount = null,
     IReadOnlyList<string>? LegalDocumentUrls = null,
-    string? VerificationNote = null);
+    string? VerificationNote = null,
+    DateTime? EmailVerifiedAt = null,
+    DateTime? PhoneVerifiedAt = null,
+    decimal? FeeMin = null,
+    decimal? FeeMax = null,
+    string? FeeDescription = null,
+    string? RegistrantName = null,
+    string? RegistrantPosition = null);
 
 /// <summary>[UC-59] Moderator / Admin gửi yêu cầu xác minh hoặc hủy xác minh trung tâm tư vấn.</summary>
 public record VerifyStudyCenterRequest(bool IsVerified, string? VerificationNote = null);
@@ -145,5 +152,10 @@ public record StudyCenterQuery(
     string? City = null,
     string? Service = null,
     string? StudyLevel = null,
+    string? VerificationStatus = null,
+    bool? VerifiedOnly = null,
     int Page = 1,
-    int PageSize = 20);
+    int PageSize = 20,
+    bool IncludeInactive = false,
+    bool OnlyInactive = false,
+    string? CenterType = null);
