@@ -328,7 +328,7 @@ public class AcademicAnalysisService : IAcademicAnalysisService
 
         return new GradeScaleConfigDto(
             ScaleKey: AcademicConstants.GradeScale10AppSettingKey,
-            SourceName: "EducationUSA Vietnam 2025 (bậc THPT), nội suy tuyến tính",
+            SourceName: "EducationUSA Vietnam 2025 (bậc THPT), nội suy tuyến tính: https://vn.usembassy.gov/wp-content/uploads/sites/124/2023/01/Basic-Information-on-Grading-in-Vietnam-2025.pdf",
             Method: GradeScale.LinearMethod,
             Rules: anchors
                 .Select((a, i) => new GradeScaleRuleDto(a.Min, i + 1 < anchors.Length ? anchors[i + 1].Min - 0.01m : 10m, a.Gpa4, a.Letter))
