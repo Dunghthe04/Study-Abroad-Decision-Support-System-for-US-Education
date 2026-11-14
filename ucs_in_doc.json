@@ -635,5 +635,12 @@
     "role": "Học sinh, Phụ huynh",
     "status": "Đã có",
     "dev_todo": "Giữ nguyên"
+  },
+  {
+    "uc": "UC-89",
+    "name": "Xem căn cứ tham số",
+    "role": "Dùng chung",
+    "status": "Chưa có",
+    "dev_todo": "Mục 5.5"
   }
 ]
