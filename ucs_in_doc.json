@@ -495,5 +495,12 @@
     "role": "Administrator",
     "status": "Chưa có",
     "dev_todo": "Hạ thành chỉ xem, gộp vào UC-89 (mục 3.2)"
+  },
+  {
+    "uc": "UC-70",
+    "name": "Nhập tỷ giá",
+    "role": "Administrator",
+    "status": "Chưa có",
+    "dev_todo": "Làm màn hình nhập tỷ giá, lưu lịch sử"
   }
 ]
