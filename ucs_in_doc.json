@@ -278,5 +278,12 @@
     "role": "Dùng chung",
     "status": "Đã có",
     "dev_todo": "Hiện nhãn trạng thái xác minh"
+  },
+  {
+    "uc": "UC-41",
+    "name": "Xem đánh giá trung tâm",
+    "role": "Dùng chung",
+    "status": "Chỉ có bảng",
+    "dev_todo": "Phụ thuộc quyết định diễn đàn và đánh giá"
   }
 ]
