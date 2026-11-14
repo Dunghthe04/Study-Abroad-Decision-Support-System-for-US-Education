@@ -100,6 +100,94 @@ public class ChatProfileMapperTests
         Assert.Equal("none", act["status"]!.GetValue<string>());
     }
 
+    // Dự định thi là thẻ mục tiêu: english / sat chỉ lấy điểm thật, english_plan / standardized_plan lấy dự định đầu
+    [Fact]
+    public void TargetCards_GoToPlans_NotToScores()
+    {
+        var draft = new ProfileFlowDraftDto(Step3: new FlowCertificationDraftDto(
+        [
+            Cert("english", "ielts", 6m, "2026-05"),
+            Cert("english", "ielts", 7m, "2027-08") with { IsTarget = true },
+            new(Guid.NewGuid().ToString(), "standardized", "sat", TestDate: "2027-10", IsTarget: true),
+        ]));
+
+        var profile = ChatProfileMapper.ToChatProfile(draft);
+
+        Assert.Equal(6m, profile["english"]!["value"]!["value"]!.GetValue<decimal>());
+        Assert.Equal("""{"planned":true,"date":"2027-08","test_type":"ielts","target_score":7}""", profile["english_plan"]!["value"]!.ToJsonString());
+        Assert.Equal("none", profile["sat"]!["status"]!.GetValue<string>());
+        Assert.Equal("""{"planned":true,"date":"2027-10","test_type":"sat"}""", profile["standardized_plan"]!["value"]!.ToJsonString());
+    }
+
+    [Fact]
+    public void NoPlanTick_IsPlannedFalse()
+    {
+        var draft = new ProfileFlowDraftDto { Step3 = new FlowCertificationDraftDto { EnglishPlanned = true } };
+
+        Assert.Equal("""{"planned":false,"date":null}""", ChatProfileMapper.ToChatProfile(draft)["english_plan"]!["value"]!.ToJsonString());
+    }
+
+    // Chat thêm dự định: thay dự định cùng bài, giữ thẻ đã thi và dự định bài khác
+    [Fact]
+    public void ChatPlan_UpsertsTargetOfSameType_KeepsOthers()
+    {
+        var old = new ProfileFlowDraftDto(Step3: new FlowCertificationDraftDto(
+        [
+            Cert("english", "ielts", 6m, "2026-05"),
+            Cert("english", "ielts", 6.5m, "2027-01") with { IsTarget = true },
+            Cert("english", "toefl", 100m, "2027-03") with { IsTarget = true },
+        ], EnglishPlanned: true));
+        var oldId = old.Step3!.Certifications![1].Id;
+
+        var draft = ToDraft(Confirmed("english_plan", """{"planned":true,"date":"2027-08","test_type":"ielts","target_score":7.5}"""), old);
+
+        var certs = draft.Step3!.Certifications!;
+        Assert.Equal(3, certs.Count);
+        var ielts = certs.Single(c => c.Type == "ielts" && c.IsTarget);
+        Assert.Equal(oldId, ielts.Id);
+        Assert.Equal(7.5m, ielts.Overall);
+        Assert.Equal("2027-08", ielts.TestDate);
+        Assert.False(draft.Step3.EnglishPlanned);
+    }
+
+    [Fact]
+    public void ChatNoPlan_RemovesTargets_TicksWhenSectionEmpty()
+    {
+        var old = new ProfileFlowDraftDto(Step3: new FlowCertificationDraftDto(
+        [
+            Cert("english", "ielts", 7m, "2027-08") with { IsTarget = true },
+            Cert("standardized", "sat", 1400m, "2026-05"),
+            Cert("standardized", "sat", 1500m, "2027-10") with { IsTarget = true },
+        ]));
+
+        var draft = ToDraft(Profile("""
+        {
+          "english_plan":{"value":{"planned":false,"date":null},"status":"confirmed"},
+          "standardized_plan":{"value":{"planned":false,"date":null},"status":"confirmed"}
+        }
+        """), old);
+
+        var cert = Assert.Single(draft.Step3!.Certifications!);
+        Assert.False(cert.IsTarget);
+        Assert.True(draft.Step3.EnglishPlanned);
+        Assert.False(draft.Step3.StandardizedPlanned);
+    }
+
+    // "Không có chứng chỉ tiếng Anh" chỉ bỏ thẻ đã thi, dự định thi vẫn còn
+    [Fact]
+    public void ChatNoEnglish_KeepsTargets()
+    {
+        var old = new ProfileFlowDraftDto(Step3: new FlowCertificationDraftDto(
+        [
+            Cert("english", "ielts", 6m, "2026-05"),
+            Cert("english", "ielts", 7m, "2027-08") with { IsTarget = true },
+        ]));
+
+        var draft = ToDraft(Profile("""{"english":{"value":null,"status":"none"}}"""), old);
+
+        Assert.True(Assert.Single(draft.Step3!.Certifications!).IsTarget);
+    }
+
     [Fact]
     public void RoundTrip_FullProfile()
     {

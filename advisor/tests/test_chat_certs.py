@@ -3,7 +3,13 @@ from datetime import date
 import pytest
 
 from app.services.skills import buttons
-from app.services.skills.skill_ho_so import NO_MORE_CERT
+from app.services.skills.skill_ho_so import (
+    NO_MORE_CERT,
+    NO_MORE_PLAN,
+    OVERDUE_DROP,
+    OVERDUE_MOVE,
+    OVERDUE_TAKEN,
+)
 from app.services.skills.validators import AskAgain, check_certification
 from tests.fakes import FakeLLM
 from tests.test_chat_skills_flow import PAGE1_ASKED, field, turn
@@ -260,7 +266,24 @@ async def test_e3_standardized_plan_from_d3_button_and_widget_save():
     assert res2.state.profile["standardized_plan"] == field(
         {"planned": True, "date": "2027-12", "test_type": "sat", "target_score": 1450.0}
     )
-    assert res2.state.question_id != "E3"
+    # Dự định là thẻ mục tiêu như form; hỏi còn dự định nào nữa không
+    [card] = [c for c in res2.state.profile["certifications"].value if c["isTarget"]]
+    assert (card["type"], card["overall"], card["testDate"], card["category"]) == (
+        "sat",
+        1450.0,
+        "2027-12",
+        "standardized",
+    )
+    assert res2.state.question_id == "E3"
+    assert [r.label for r in res2.quick_replies] == [NO_MORE_PLAN]
+
+    res3 = await turn(
+        FakeLLM(),
+        NO_MORE_PLAN,
+        **res2.state.model_dump(exclude={"profile"}),
+        profile=res2.state.profile,
+    )
+    assert res3.state.question_id != "E3"
 
 
 async def test_e3_skip_keeps_standardized_plan_tick():
@@ -354,3 +377,160 @@ async def test_cert_pending_skip_saves_without_date():
         None,
     )
     assert "cert_pending" not in res2.state.profile
+
+
+# --- Dự định thi là thẻ isTarget như form ---
+
+TAKEN_IELTS = {
+    "id": "t1",
+    "category": "english",
+    "type": "ielts",
+    "overall": 6.5,
+    "testDate": "2025-05",
+    "isTarget": False,
+}
+TAKEN_SAT = {
+    "id": "t2",
+    "category": "standardized",
+    "type": "sat",
+    "overall": 1400,
+    "testDate": "2025-06",
+    "isTarget": False,
+}
+OVERDUE_IELTS = {
+    "id": "p1",
+    "category": "english",
+    "type": "ielts",
+    "overall": 7.5,
+    "testDate": "2025-01",
+    "isTarget": True,
+}
+
+
+def plan_profile(*cards):
+    return {
+        **GPA,
+        "english": field({"type": "ielts", "value": 6.5, "date": "2025-05"}),
+        "sat": field(1400),
+        "certifications": field([dict(c) for c in cards]),
+    }
+
+
+async def test_e2_no_plan_button_drops_plan_cards_and_ticks():
+    plan = {
+        "id": "p2",
+        "category": "english",
+        "type": "toefl",
+        "overall": 100,
+        "testDate": "2099-05",
+        "isTarget": True,
+    }
+    res = await turn(
+        FakeLLM(),
+        "Em chưa có dự định thi",
+        current_step="B2",
+        question_id="E2",
+        asked={**PAGE1_ASKED, "D2": 1, "E1": 1, "E2": 1},
+        profile=plan_profile(TAKEN_IELTS, TAKEN_SAT, plan),
+    )
+
+    assert [c["id"] for c in certs_of(res)] == ["t1", "t2"]
+    assert res.state.profile["english_plan"] == field({"planned": False, "date": None})
+    assert res.state.question_id != "E2"
+
+
+async def test_e2_target_must_beat_taken_score():
+    llm = FakeLLM()
+    res = await turn(
+        llm,
+        "Em dự kiến thi IELTS, mục tiêu 6.0, tháng 5/2099",
+        current_step="B2",
+        question_id="E2",
+        profile=plan_profile(TAKEN_IELTS),
+    )
+
+    assert llm.calls == []
+    assert res.state.question_id == "E2"
+    assert "cao hơn" in res.answer
+    assert [c["id"] for c in certs_of(res)] == ["t1"]
+
+
+async def test_e2_several_plans_and_same_test_updates_card():
+    res = await turn(
+        FakeLLM(),
+        "Em dự kiến thi IELTS, mục tiêu 7.5, tháng 5/2099",
+        current_step="B2",
+        question_id="E2",
+        profile=plan_profile(TAKEN_IELTS),
+    )
+    res = await turn(FakeLLM(), "Em dự kiến thi TOEFL iBT, tháng 6/2099", **res.state.model_dump())
+    # Cùng bài: sửa thẻ cũ (giữ id, giữ điểm mục tiêu khi không nói lại)
+    first_id = next(c["id"] for c in certs_of(res) if c["isTarget"] and c["type"] == "ielts")
+    res = await turn(FakeLLM(), "Em dự kiến thi IELTS, tháng 8/2099", **res.state.model_dump())
+
+    plans = [(c["type"], c["overall"], c["testDate"]) for c in certs_of(res) if c["isTarget"]]
+    assert plans == [("ielts", 7.5, "2099-08"), ("toefl", None, "2099-06")]
+    assert next(c["id"] for c in certs_of(res) if c["isTarget"] and c["type"] == "ielts") == first_id
+    # english_plan là tóm tắt dự định đầu tiên
+    assert res.state.profile["english_plan"] == field(
+        {"planned": True, "date": "2099-08", "test_type": "ielts", "target_score": 7.5}
+    )
+
+
+async def overdue_turn():
+    return await turn(
+        FakeLLM(),
+        NO_MORE_CERT,
+        current_step="B2",
+        question_id="E1",
+        asked={**PAGE1_ASKED, "D2": 1, "E1": 1, "D3": 1},
+        profile=plan_profile(TAKEN_IELTS, TAKEN_SAT, OVERDUE_IELTS),
+    )
+
+
+async def test_overdue_plan_is_asked_with_three_buttons():
+    res = await overdue_turn()
+
+    assert res.state.question_id == "E2"
+    assert "IELTS" in res.answer and "01/2025" in res.answer
+    assert [r.label for r in res.quick_replies] == [OVERDUE_TAKEN, OVERDUE_MOVE, OVERDUE_DROP]
+    assert res.state.profile["plan_overdue"].value == {"id": "p1"}
+
+
+async def test_overdue_drop_removes_card():
+    res = await overdue_turn()
+    llm = FakeLLM()
+    res = await turn(llm, OVERDUE_DROP, **res.state.model_dump())
+
+    assert llm.calls == []
+    assert [c["id"] for c in certs_of(res)] == ["t1", "t2"]
+    assert "plan_overdue" not in res.state.profile
+    assert "english_plan" not in res.state.profile
+
+
+async def test_overdue_move_month_keeps_card_and_target():
+    res = await overdue_turn()
+    res = await turn(FakeLLM(), OVERDUE_MOVE, **res.state.model_dump())
+    assert res.state.question_id == "E2"
+    assert res.widget is not None
+
+    res = await turn(FakeLLM(), "Em dự kiến thi IELTS, tháng 3/2099", **res.state.model_dump())
+    [card] = [c for c in certs_of(res) if c["isTarget"]]
+    assert (card["id"], card["overall"], card["testDate"]) == ("p1", 7.5, "2099-03")
+    assert "plan_overdue" not in res.state.profile
+    assert res.state.question_id != "E2"
+
+
+async def test_overdue_taken_turns_card_into_real_score():
+    res = await overdue_turn()
+    res = await turn(FakeLLM(), OVERDUE_TAKEN, **res.state.model_dump())
+    assert res.state.question_id == "E1"
+
+    res = await turn(
+        FakeLLM(), "Chứng chỉ IELTS Academic, điểm 7.0, thi tháng 1/2025", **res.state.model_dump()
+    )
+    card = next(c for c in certs_of(res) if c["id"] == "p1")
+    assert (card["isTarget"], card["overall"], card["testDate"]) == (False, 7.0, "2025-01")
+    assert not any(c["isTarget"] for c in certs_of(res))
+    assert "plan_overdue" not in res.state.profile
+    assert "english_plan" not in res.state.profile

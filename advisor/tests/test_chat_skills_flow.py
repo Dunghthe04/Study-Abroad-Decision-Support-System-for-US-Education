@@ -236,8 +236,17 @@ async def test_e2_month_picker_saves_without_qwen():
     profile = {"english": field(None, "none"), "english_plan": field({"planned": True, "date": None})}
     res = await turn(llm, "Em dự kiến thi tháng 5/2099", current_step="B2", question_id="E2", profile=profile)
 
+    # Dự định phải có bài thi (thành thẻ như form): thiếu thì hỏi lại, chưa ghi gì
     assert llm.calls == []
-    assert res.state.profile["english_plan"] == field({"planned": True, "date": "2099-05"})
+    assert res.state.question_id == "E2"
+    assert "bài nào" in res.answer
+    assert res.state.profile["english_plan"] == field({"planned": True, "date": None})
+
+    res = await turn(llm, "Em dự kiến thi IELTS, tháng 5/2099", **res.state.model_dump())
+    assert llm.calls == []
+    assert res.state.profile["english_plan"] == field(
+        {"planned": True, "date": "2099-05", "test_type": "ielts"}
+    )
 
 
 async def test_right_answer_moves_to_next_required_question():

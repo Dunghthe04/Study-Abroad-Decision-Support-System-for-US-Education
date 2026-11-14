@@ -102,6 +102,11 @@ BUTTONS = {
             {"english": NONE, "english_plan": confirmed({"planned": True, "date": None})},
         ),
     ),
+    # Chưa thi và chưa có dự định thi: tích ô cuối mục của form, bỏ các thẻ dự định của mục đó
+    "E2": (Button("Em chưa có dự định thi", {"english_plan": confirmed({"planned": False, "date": None})}),),
+    "E3": (
+        Button("Em chưa có dự định thi", {"standardized_plan": confirmed({"planned": False, "date": None})}),
+    ),
     "F1": tuple(Button(label, {"budget": confirmed(tier)}) for tier, label in BUDGET_LABELS.items()),
     "F2": (),
     "D4": (Button("Em chưa có hoạt động", {"activities": NONE}),),
@@ -461,18 +466,18 @@ def select_fields(question_id: str) -> dict | None:
         },
         "D3": cert_fields(("standardized", "graduate"), "VD: 1350", allowed_codes=POPULAR_STANDARDIZED_CERTS),
         "E1": cert_fields(("english",), "VD: 6.5", allowed_codes=POPULAR_ENGLISH_CERTS),
-        # E2: hỏi kế hoạch thi tiếng Anh — bài thi, điểm mục tiêu và tháng tất cả đều tùy chọn
+        # E2: hỏi một dự định thi tiếng Anh — bài thi bắt buộc (thành thẻ dự định như form), điểm mục tiêu
+        # và tháng tùy chọn
         "E2": {
             "fields": [
                 {
                     "name": "type",
-                    "label": "Bài thi dự kiến (tùy chọn)",
+                    "label": "Bài thi dự kiến",
                     "placeholder": "Chọn bài thi",
                     "options": same_options(
                         [spec.name for code, spec in CERT_TYPES.items() if code in POPULAR_ENGLISH_CERTS]
                     ),
                     "prefix": " ",
-                    "optional": True,
                 },
                 {
                     "name": "score",
@@ -539,18 +544,17 @@ def select_fields(question_id: str) -> dict | None:
             ],
             "format": "Em dự kiến thi{type}{score}{month}{year}",
         },
-        # E3: hỏi kế hoạch thi chuẩn hóa — bài thi, điểm mục tiêu và tháng tất cả đều tùy chọn
+        # E3: hỏi một dự định thi chuẩn hóa — bài thi bắt buộc, điểm mục tiêu và tháng tùy chọn
         "E3": {
             "fields": [
                 {
                     "name": "type",
-                    "label": "Bài thi dự kiến (tùy chọn)",
+                    "label": "Bài thi dự kiến",
                     "placeholder": "Chọn bài thi",
                     "options": same_options(
                         [spec.name for code, spec in CERT_TYPES.items() if code in POPULAR_STANDARDIZED_CERTS]
                     ),
                     "prefix": " ",
-                    "optional": True,
                 },
                 {
                     "name": "score",

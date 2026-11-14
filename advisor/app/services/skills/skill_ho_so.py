@@ -216,7 +216,8 @@ LIST_FIELDS = {
     "activities": ListField("D4", "activity_pending", check_activity, check_activities, MAX_ACTIVITIES),
     "awards": ListField("D5", "award_pending", check_award, check_awards, MAX_AWARDS),
 }
-PENDING_KEYS = tuple(spec.pending_key for spec in LIST_FIELDS.values()) + ("cert_pending",)
+# plan_overdue: thẻ dự định thi quá tháng dự kiến đang được hỏi "đã thi chưa", giá trị {"id": ...}
+PENDING_KEYS = tuple(spec.pending_key for spec in LIST_FIELDS.values()) + ("cert_pending", "plan_overdue")
 # Một câu D4/D5 được hỏi tiếp tối đa ngần này lần (mỗi lần thường một ý: vai trò, phạm vi, tháng...)
 MAX_FOLLOW_UPS = 4
 # Ghi xong một hoạt động / giải thưởng thì hỏi còn mục nào nữa không, kèm nút để sang câu sau
@@ -240,6 +241,20 @@ NO_MORE_CERT = "Không còn chứng chỉ"
 MAX_CERTS = 10
 # Thông tin rút ra từ danh sách chứng chỉ (skill_rules, đánh giá dùng). Qwen / nút đổi chúng thì sửa danh sách
 CERT_FIELDS = ("english", "sat", "act")
+# Dự định thi: mỗi dự định là một thẻ isTarget trong certifications như form. english_plan / standardized_plan
+# chỉ là bản tóm tắt dự định đầu tiên của mục (giống ChatProfileMapper.PlanSummary); planned False là
+# "chưa thi và chưa có dự định thi" (ô tích của form)
+PLAN_QUESTIONS = {
+    "E2": ("english_plan", ("english",)),
+    "E3": ("standardized_plan", ("standardized", "graduate")),
+}
+PLAN_MORE = "Mình đã ghi dự định thi {name}. Bạn còn dự định thi nào nữa không? Có thì chọn tiếp nhé."
+NO_MORE_PLAN = "Không còn dự định"
+# Dự định đã quá tháng dự kiến: hỏi đã thi chưa, kèm 3 nút
+OVERDUE_TAKEN = "Đã thi rồi"
+OVERDUE_MOVE = "Chưa, đổi tháng"
+OVERDUE_DROP = "Bỏ dự định"
+OVERDUE_REPLIES = (OVERDUE_TAKEN, OVERDUE_MOVE, OVERDUE_DROP)
 
 # Mã giống form và DB (EducationSystems, ProfileConstants.FundingSources) để lưu được vào hồ sơ
 EDUCATION_SYSTEMS = ("standard", "specialized", "dual_degree", "international", "private", "other")
@@ -522,6 +537,7 @@ def save_read(
     sat_act_date = parse_month_year_text(message)
     sat_act_dates = {"sat": sat_act_date, "act": sat_act_date} if sat_act_date else None
     certs_from_fields(state, written, status, sat_act_dates)
+    certs_from_plans(state, written, status)
     for name in LIST_FIELDS:
         if not (keep_existing and name in state.profile):
             save_items(state, name, read.values.get(name, []), read.pending.get(name, []), status)
@@ -609,11 +625,11 @@ def answered(state: ChatState, question_id: str) -> bool:
     if question_id == "E2":
         # Ô "sẽ thi sau" đã tích nhưng chưa có bài thi / tháng dự kiến thì vẫn hỏi để bổ sung
         plan = state.profile.get("english_plan")
-        return plan is not None and plan.value != PLANNED_NO_DATE
+        return plan_cards(state, "E2") != [] or (plan is not None and plan.value != PLANNED_NO_DATE)
     if question_id == "E3":
         # Tương tự: ô thi chuẩn hóa đã tích nhưng chưa có bài thi / tháng dự kiến
         plan = state.profile.get("standardized_plan")
-        return plan is not None and plan.value != PLANNED_NO_DATE
+        return plan_cards(state, "E3") != [] or (plan is not None and plan.value != PLANNED_NO_DATE)
     return any(name in state.profile for name in QUESTION_FIELDS[question_id])
 
 
@@ -746,6 +762,9 @@ def plan_standardized(state: ChatState) -> None:
 def ask_next(state: ChatState) -> SkillOutput:
     plan_english(state)
     plan_standardized(state)
+    overdue = overdue_card(state)
+    if overdue is not None:
+        return ask_overdue(state, overdue)
     if reviewed(state):
         return review(state)
     question_id = next_question(state)
@@ -875,11 +894,14 @@ def save_budget(state: ChatState, amount: float, currency: str | None) -> SkillO
     return ask_next(state)
 
 
-# Ghi kế hoạch thi tiếng Anh / chuẩn hóa (bài thi, điểm mục tiêu, tháng/năm) học sinh chọn ở ô chọn E2 / E3, không gọi Qwen
+# Ghi một dự định thi học sinh chọn ở ô chọn E2 / E3 (bài thi, điểm mục tiêu, tháng), không gọi Qwen.
+# Dự định thành thẻ mục tiêu như form: cùng bài thì sửa thẻ dự định cũ, không thì thêm thẻ. Ghi xong hỏi còn
+# dự định nào nữa không, nút "Không còn dự định" để sang câu sau
 def save_plan(state: ChatState, question_id: str, plan_data: dict) -> SkillOutput:
-    categories = ("english",) if question_id == "E2" else ("standardized", "graduate")
-    key = "english_plan" if question_id == "E2" else "standardized_plan"
+    categories = PLAN_QUESTIONS[question_id][1]
     try:
+        if not plan_data.get("test_type"):
+            raise AskAgain("Bạn định thi bài nào? Bạn chọn bài thi trong ô giúp mình nhé.")
         plan = check_exam_plan(
             True,
             plan_data.get("date"),
@@ -887,18 +909,180 @@ def save_plan(state: ChatState, question_id: str, plan_data: dict) -> SkillOutpu
             plan_data.get("target_score"),
             allowed_categories=categories,
         )
+        check_target_above_taken(state, plan)
     except AskAgain as err:
         return ask_question(state, question_id, err.question)
-    state.profile[key] = ProfileField(value=plan, status="confirmed")
-    return review(state) if state.question_id == "X1" else ask_next(state)
+    moved = state.profile.pop("plan_overdue", None) is not None
+    put_plan(state, plan, "confirmed")
+    name = CERT_NAMES.get(plan["test_type"], plan["test_type"].upper())
+    if moved:
+        out = ask_next(state)
+        out.answer = f"Mình đã đổi tháng dự kiến thi {name}.\n\n{out.answer}"
+        return out
+    if state.question_id == "X1":
+        return review(state)
+    output = ask_question(state, question_id, PLAN_MORE.format(name=name))
+    output.quick_replies = [QuickReply(label=NO_MORE_PLAN, value=NO_MORE_PLAN)]
+    return output
 
 
-def save_english_plan(state: ChatState, month: int, year: int) -> SkillOutput:
-    return save_plan(state, "E2", {"date": f"{year}-{month:02d}"})
+def save_english_plan(state: ChatState, month: int, year: int, test_type: str = "ielts") -> SkillOutput:
+    return save_plan(state, "E2", {"date": f"{year}-{month:02d}", "test_type": test_type})
 
 
-def save_standardized_plan(state: ChatState, month: int, year: int) -> SkillOutput:
-    return save_plan(state, "E3", {"date": f"{year}-{month:02d}"})
+def save_standardized_plan(state: ChatState, month: int, year: int, test_type: str = "sat") -> SkillOutput:
+    return save_plan(state, "E3", {"date": f"{year}-{month:02d}", "test_type": test_type})
+
+
+# Câu dự định của một thẻ: E2 (tiếng Anh) hoặc E3 (chuẩn hóa)
+def plan_question(cert: dict) -> str:
+    return "E2" if cert.get("category") == "english" else "E3"
+
+
+# Thẻ dự định thi của mục E2 hoặc E3
+def plan_cards(state: ChatState, question_id: str) -> list[dict]:
+    return [c for c in saved_certs(state) if c.get("isTarget") and plan_question(c) == question_id]
+
+
+# Điểm mục tiêu phải cao hơn điểm thật cao nhất của cùng bài (giống validatePlanConflicts của form)
+def check_target_above_taken(state: ChatState, plan: dict) -> None:
+    target = plan.get("target_score")
+    if target is None:
+        return
+    taken = [
+        c["overall"]
+        for c in saved_certs(state)
+        if not c.get("isTarget") and c.get("type") == plan["test_type"] and c.get("overall") is not None
+    ]
+    if taken and target <= max(taken):
+        name = CERT_NAMES.get(plan["test_type"], plan["test_type"].upper())
+        raise AskAgain(
+            f"Điểm mục tiêu phải cao hơn điểm {name} bạn đã có ({max(taken):g}). Bạn nhập lại điểm mục tiêu nhé?"
+        )
+
+
+# Tóm tắt dự định đầu tiên của mục vào english_plan / standardized_plan (giống ChatProfileMapper.PlanSummary).
+# Mục không còn thẻ dự định thì bỏ khóa, trừ khi học sinh đã nói "chưa có dự định thi" (planned False)
+def sync_plan_key(state: ChatState, question_id: str, status: str = "confirmed") -> None:
+    key = PLAN_QUESTIONS[question_id][0]
+    card = next((c for c in plan_cards(state, question_id) if c.get("type")), None)
+    if card is None:
+        old = state.profile.get(key)
+        if old is not None and not (isinstance(old.value, dict) and old.value.get("planned") is False):
+            state.profile.pop(key)
+        return
+    summary = {"planned": True, "date": card.get("testDate"), "test_type": card["type"]}
+    if card.get("overall") is not None:
+        summary["target_score"] = card["overall"]
+    state.profile[key] = ProfileField(value=summary, status=status)
+
+
+# Thêm hoặc sửa thẻ dự định của cùng bài (giữ id). Đổi tháng mà không nói điểm mục tiêu thì giữ điểm cũ
+def put_plan(state: ChatState, plan: dict, status: str) -> None:
+    test_type = plan["test_type"]
+    certs = saved_certs(state)
+    old = next((c for c in certs if c.get("isTarget") and c.get("type") == test_type), None)
+    target = plan.get("target_score")
+    if target is None and old is not None:
+        target = old.get("overall")
+    cert = {
+        "category": CERT_TYPES[test_type].category,
+        "type": test_type,
+        "subject": None,
+        "overall": target,
+        "scaleText": None,
+        "testDate": plan.get("date"),
+        "isTarget": True,
+    }
+    write_certs(state, put_cert(certs, cert), status)
+    sync_plan_key(state, plan_question(cert), status)
+
+
+# Qwen / nút vừa ghi english_plan, standardized_plan: planned False thì bỏ thẻ dự định của mục;
+# có bài thi thì thêm / sửa thẻ dự định (không có bài thi thì chỉ là dấu chưa thi, không thành thẻ)
+def certs_from_plans(state: ChatState, names: list[str], status: str) -> None:
+    for question_id, (key, _) in PLAN_QUESTIONS.items():
+        if key not in names or key not in state.profile:
+            continue
+        value = state.profile[key].value
+        if not isinstance(value, dict):
+            continue
+        if value.get("planned") is False:
+            certs = [
+                c for c in saved_certs(state) if not (c.get("isTarget") and plan_question(c) == question_id)
+            ]
+            write_certs(state, certs, status)
+        elif value.get("test_type") in CERT_TYPES:
+            try:
+                check_target_above_taken(state, value)
+            except AskAgain:
+                # điểm mục tiêu không cao hơn điểm đã có thì vẫn ghi dự định, bỏ điểm mục tiêu
+                value = {k: v for k, v in value.items() if k != "target_score"}
+            put_plan(state, value, status)
+
+
+# Thẻ dự định thi đã quá tháng dự kiến (tháng dự kiến trước tháng này). Không có thì None
+def overdue_card(state: ChatState, today: date | None = None) -> dict | None:
+    this_month = (today or date.today()).strftime("%Y-%m")
+    return next(
+        (
+            c
+            for c in saved_certs(state)
+            if c.get("isTarget") and c.get("testDate") and c["testDate"] < this_month
+        ),
+        None,
+    )
+
+
+def plan_label(cert: dict) -> str:
+    year, month = cert["testDate"].split("-")
+    return f"{CERT_NAMES.get(cert['type'], cert['type'].upper())} (dự kiến {month}/{year})"
+
+
+# Hỏi dự định đã quá hạn: đã thi chưa, kèm 3 nút Đã thi rồi / Chưa, đổi tháng / Bỏ dự định
+def ask_overdue(state: ChatState, cert: dict) -> SkillOutput:
+    state.profile["plan_overdue"] = ProfileField(value={"id": cert["id"]}, status="unknown")
+    ask(state, plan_question(cert))
+    text = f"Bạn đã thi {plan_label(cert)} chưa?"
+    state.last_question = text
+    return SkillOutput(
+        text, quick_replies=[QuickReply(label=label, value=label) for label in OVERDUE_REPLIES]
+    )
+
+
+# Thẻ dự định quá hạn đang hỏi. Thẻ không còn (đã sửa ở form) thì bỏ khóa, trả None
+def overdue_pending(state: ChatState) -> dict | None:
+    pending = state.profile.get("plan_overdue")
+    if pending is None or not isinstance(pending.value, dict):
+        return None
+    card = next((c for c in saved_certs(state) if c.get("id") == pending.value.get("id")), None)
+    if card is None or not card.get("isTarget"):
+        state.profile.pop("plan_overdue", None)
+        return None
+    return card
+
+
+# Học sinh trả lời câu dự định quá hạn bằng 1 trong 3 nút. Câu khác thì None (đi luồng thường)
+def answer_overdue(state: ChatState, message: str) -> SkillOutput | None:
+    card = overdue_pending(state)
+    if card is None:
+        return None
+    name = CERT_NAMES.get(card["type"], card["type"].upper())
+    if buttons.same_text(message, OVERDUE_TAKEN):
+        # Ô nhập chứng chỉ của E1 / D3; ghi cùng bài thì thẻ thật thay thẻ dự định (save_cert_text)
+        question_id = "E1" if plan_question(card) == "E2" else "D3"
+        return ask_question(state, question_id, f"Bạn nhập điểm {name} đã thi và tháng thi nhé.")
+    if buttons.same_text(message, OVERDUE_MOVE):
+        # Ô chọn dự định của E2 / E3; chọn cùng bài thì sửa thẻ dự định này (save_plan)
+        return ask_question(state, plan_question(card), f"Bạn định thi {name} vào tháng nào?")
+    if buttons.same_text(message, OVERDUE_DROP):
+        state.profile.pop("plan_overdue", None)
+        write_certs(state, [c for c in saved_certs(state) if c.get("id") != card["id"]], "confirmed")
+        sync_plan_key(state, plan_question(card))
+        out = ask_next(state)
+        out.answer = f"Mình đã bỏ dự định thi {plan_label(card)}.\n\n{out.answer}"
+        return out
+    return None
 
 
 # D4 / D5: ghi xong một mục mà chưa tới số mục tối đa thì hỏi còn mục nữa không (ô nhập vẫn hiện),
@@ -968,6 +1152,7 @@ def same_cert(a: dict, b: dict) -> bool:
     return (
         a.get("type") == b.get("type")
         and (a.get("subject") or "").lower() == (b.get("subject") or "").lower()
+        and bool(a.get("isTarget")) == bool(b.get("isTarget"))
     )
 
 
@@ -1001,7 +1186,12 @@ def certs_from_fields(
         value = state.profile[name].value
         if value is None:
             group = "english" if name == "english" else None
-            certs = [c for c in certs if (c.get("category") != group if group else c.get("type") != name)]
+            # Chỉ bỏ thẻ đã thi; thẻ dự định (isTarget) giữ nguyên
+            certs = [
+                c
+                for c in certs
+                if c.get("isTarget") or (c.get("category") != group if group else c.get("type") != name)
+            ]
             continue
         english = name == "english"
         test_date = value.get("date") if english else (sat_act_dates or {}).get(name)
@@ -1012,6 +1202,7 @@ def certs_from_fields(
             "overall": value["value"] if english else value,
             "scaleText": None,
             "testDate": test_date,
+            "isTarget": False,
         }
         certs = put_cert(certs, cert)
     write_certs(state, certs, status)
@@ -1020,7 +1211,8 @@ def certs_from_fields(
 # Thêm thẻ ở ô nhập thì tính lại english, sat, act như ChatProfileMapper: tiếng Anh chính là thẻ thi mới
 # nhất rồi điểm cao nhất; SAT / ACT lấy điểm cao nhất
 def fields_from_certs(state: ChatState, status: str) -> None:
-    certs = saved_certs(state)
+    # Điểm mục tiêu của thẻ dự định không phải điểm thật
+    certs = [c for c in saved_certs(state) if not c.get("isTarget")]
     english = [c for c in certs if c.get("category") == "english" and c.get("overall") is not None]
     if english:
         main = max(english, key=lambda c: (c.get("testDate") or "", c["overall"]))
@@ -1066,9 +1258,20 @@ def save_cert_text(state: ChatState, item: dict) -> SkillOutput:
         cert = check_certification(**item)
     except AskAgain as err:
         return ask_question(state, question_id, err.question)
-    certs = put_cert(saved_certs(state), cert)
+    certs = saved_certs(state)
+    overdue = overdue_pending(state)
+    if overdue is not None and overdue["type"] == cert["type"]:
+        # Dự định quá hạn học sinh đã thi: thẻ thật thay thẻ dự định, giữ id (như nút "Đã thi rồi" của form)
+        state.profile.pop("plan_overdue", None)
+        certs = [c for c in certs if c["id"] != overdue["id"]]
+        certs = [*certs, {"id": overdue["id"], "customName": None, "sections": None, **cert}]
+    else:
+        overdue = None
+        certs = put_cert(certs, cert)
     write_certs(state, certs, "confirmed")
     fields_from_certs(state, "confirmed")
+    if overdue is not None:
+        sync_plan_key(state, plan_question(overdue))
     if len(certs) >= MAX_CERTS:
         return ask_next(state)
     name = " ".join(filter(None, [CERT_NAMES[cert["type"]], cert["subject"]]))
@@ -1090,6 +1293,9 @@ def is_form_text(question_id: str | None, message: str) -> bool:
         or buttons.same_text(message, KEEP_REPLY.value)
         or (question_id in NO_MORE and buttons.same_text(message, NO_MORE[question_id]))
         or (question_id in CERT_QUESTIONS and buttons.same_text(message, NO_MORE_CERT))
+        or (question_id in PLAN_QUESTIONS and buttons.same_text(message, NO_MORE_PLAN))
+        or (question_id in PLAN_QUESTIONS and any(buttons.same_text(message, r) for r in OVERDUE_REPLIES))
+        or read_plan_text(question_id, message) is not None
         or read_item_text(question_id, message) is not None
         or read_cert_text(question_id, message) is not None
     )
@@ -1098,6 +1304,7 @@ def is_form_text(question_id: str | None, message: str) -> bool:
 def press_button(state: ChatState, button: buttons.Button) -> SkillOutput:
     buttons.press(state, button)
     certs_from_fields(state, list(button.values), "confirmed")
+    certs_from_plans(state, list(button.values), "confirmed")
     state.profile.pop("cert_pending", None)
     for spec in LIST_FIELDS.values():
         if spec.question == state.question_id:
@@ -1134,6 +1341,11 @@ class HoSoHandler:
             return ask_next(state)
         if question_id in CERT_QUESTIONS and buttons.same_text(message, NO_MORE_CERT):
             return ask_next(state)
+        if question_id in PLAN_QUESTIONS and buttons.same_text(message, NO_MORE_PLAN):
+            return ask_next(state)
+        overdue = answer_overdue(state, message)
+        if overdue is not None:
+            return overdue
         cert_text = read_cert_text(question_id, message)
         if cert_text is not None:
             return save_cert_text(state, cert_text)
