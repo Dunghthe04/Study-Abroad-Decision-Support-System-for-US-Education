@@ -355,5 +355,12 @@
     "role": "Moderator",
     "status": "Đã có",
     "dev_todo": "Giữ nguyên (đang là trang \"Tri thức\" quản lý mẫu huấn luyện SLM, xem mục 5.4)"
+  },
+  {
+    "uc": "UC-52",
+    "name": "Từ chối dòng tri thức",
+    "role": "Moderator",
+    "status": "Đã có",
+    "dev_todo": "Như trên"
   }
 ]
