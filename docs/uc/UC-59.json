@@ -1,0 +1,7 @@
+{
+  "uc": "UC-59",
+  "name": "Duyệt hồ sơ xác minh trung tâm",
+  "role": "Moderator",
+  "status": "Một phần",
+  "dev_todo": "Mới có xác minh thủ công; làm hàng đợi hồ sơ và checklist điều kiện (mục 5.1)"
+}
