@@ -299,5 +299,12 @@
     "role": "Học sinh, Phụ huynh",
     "status": "Đã có",
     "dev_todo": "Phụ huynh đã liên kết xem được yêu cầu của học sinh (mục 5.2)"
+  },
+  {
+    "uc": "UC-44",
+    "name": "Nhắn tin với trung tâm",
+    "role": "Học sinh, Phụ huynh",
+    "status": "Đã có",
+    "dev_todo": "Phụ huynh đọc được khi học sinh dưới 18 tuổi, không nhắn vào cuộc trò chuyện (mục 5.2)"
   }
 ]
