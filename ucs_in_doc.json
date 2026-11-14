@@ -565,5 +565,12 @@
     "role": "Trung tâm",
     "status": "Mới",
     "dev_todo": "Mục 5.1"
+  },
+  {
+    "uc": "UC-75",
+    "name": "Liên kết tài khoản học sinh và phụ huynh",
+    "role": "Học sinh, Phụ huynh",
+    "status": "Đã có",
+    "dev_todo": "Bổ sung theo mục 2 và 5.2 (nhiều học sinh, thu hồi, ngày tròn 18 tuổi)"
   }
 ]
