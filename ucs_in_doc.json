@@ -54,5 +54,12 @@
     "role": "Học sinh, Phụ huynh",
     "status": "Đã có",
     "dev_todo": "Giữ nguyên"
+  },
+  {
+    "uc": "UC-09",
+    "name": "Thêm điểm bảng điểm",
+    "role": "Học sinh, Phụ huynh",
+    "status": "Đã có",
+    "dev_todo": "Giữ nguyên"
   }
 ]
