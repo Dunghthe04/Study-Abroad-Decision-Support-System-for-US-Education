@@ -26,5 +26,12 @@
     "role": "Mọi vai trò",
     "status": "Đã có",
     "dev_todo": "Giữ nguyên"
+  },
+  {
+    "uc": "UC-05",
+    "name": "Quên mật khẩu",
+    "role": "Khách",
+    "status": "Đã có",
+    "dev_todo": "Giữ nguyên"
   }
 ]
