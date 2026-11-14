@@ -229,5 +229,12 @@
     "role": "Học sinh, Phụ huynh",
     "status": "Đã có",
     "dev_todo": "Nhóm hiển thị đang do người dùng tự chọn, nên lấy từ kết quả gợi ý"
+  },
+  {
+    "uc": "UC-34",
+    "name": "Mở chat tư vấn",
+    "role": "Học sinh, Phụ huynh",
+    "status": "Đã có",
+    "dev_todo": "Giữ nguyên"
   }
 ]
