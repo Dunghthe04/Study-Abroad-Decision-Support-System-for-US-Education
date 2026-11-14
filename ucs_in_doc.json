@@ -264,5 +264,12 @@
     "role": "Học sinh, Phụ huynh",
     "status": "Một phần",
     "dev_todo": "Thêm trả lời cho câu \"cho gặp người thật\"; đặt lịch và so sánh trung tâm trong chat"
+  },
+  {
+    "uc": "UC-39",
+    "name": "Nhận gợi ý trung tâm",
+    "role": "Dùng chung",
+    "status": "Đã có",
+    "dev_todo": "Chỉ hiện trung tâm đã xác minh trước (mục 5.1)"
   }
 ]
