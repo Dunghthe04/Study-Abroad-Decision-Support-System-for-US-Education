@@ -621,5 +621,12 @@
     "role": "Học sinh, Phụ huynh",
     "status": "Chưa có",
     "dev_todo": "Mục 5.5"
+  },
+  {
+    "uc": "UC-86",
+    "name": "Lưu và mở lại kịch bản",
+    "role": "Học sinh, Phụ huynh",
+    "status": "Đã có",
+    "dev_todo": "Giữ nguyên"
   }
 ]
