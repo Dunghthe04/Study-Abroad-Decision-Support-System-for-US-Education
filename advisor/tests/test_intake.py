@@ -53,7 +53,10 @@ def test_next_question_asks_what_b3_needs_first_in_asking_order():
     assert next_question(profile("target_level", "gpa")) == ("B2", "E1")
     assert next_question(profile("target_level", "gpa", "english")) == ("B2", "D3")  # SAT/ACT
     assert next_question(profile("target_level", "gpa", "english", "sat")) == ("B2", "F1")
-    assert next_question(profile("target_level", "gpa", "english", "sat", "budget")) == ("B2", "F2")  # học bổng
+    assert next_question(profile("target_level", "gpa", "english", "sat", "budget")) == (
+        "B2",
+        "F2",
+    )  # học bổng
 
 
 def test_next_question_moves_to_b4_fields_once_b3_is_complete():

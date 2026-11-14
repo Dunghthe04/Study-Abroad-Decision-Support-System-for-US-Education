@@ -14,7 +14,12 @@ def state(step: str = "B2", **fields: str) -> ChatState:
 
 
 B3_PROFILE = dict(
-    target_level="confirmed", gpa="confirmed", english="confirmed", sat="confirmed", budget="confirmed", scholarship="confirmed"
+    target_level="confirmed",
+    gpa="confirmed",
+    english="confirmed",
+    sat="confirmed",
+    budget="confirmed",
+    scholarship="confirmed",
 )
 FULL_PROFILE = dict(B3_PROFILE, major="confirmed")  # đủ cho cả B4
 
@@ -75,7 +80,13 @@ def test_assessment_is_blocked_until_profile_is_complete():
 
     assert plan.skills == []
     assert plan.blocked == [Blocked("skill_danh_gia", "thieu_ho_so")]
-    assert plan.missing == ["target_level", "english", "sat", "budget", "scholarship"]  # đúng thứ tự hỏi, chưa đòi ngành
+    assert plan.missing == [
+        "target_level",
+        "english",
+        "sat",
+        "budget",
+        "scholarship",
+    ]  # đúng thứ tự hỏi, chưa đòi ngành
 
 
 def test_assessment_runs_without_major():
@@ -103,11 +114,15 @@ def test_sat_question_is_answered_by_act_none_or_other_standardized_cert():
     assert missing_fields(state(**base, sat="none").profile) == []
 
     with_ap = state(**base).profile
-    with_ap["certifications"] = ProfileField(value=[{"category": "standardized", "type": "ap"}], status="confirmed")
+    with_ap["certifications"] = ProfileField(
+        value=[{"category": "standardized", "type": "ap"}], status="confirmed"
+    )
     assert missing_fields(with_ap) == []
 
     english_only = state(**base).profile
-    english_only["certifications"] = ProfileField(value=[{"category": "english", "type": "ielts"}], status="confirmed")
+    english_only["certifications"] = ProfileField(
+        value=[{"category": "english", "type": "ielts"}], status="confirmed"
+    )
     assert missing_fields(english_only) == ["sat"]
 
 
