@@ -356,6 +356,29 @@ async def test_choosing_chat_asks_the_first_missing_question_without_the_slm():
     assert counting.calls == []
 
 
+# Chọn điền trong chat: vẫn gửi việc đã hỏi để frontend nhớ, mở form từ menu vẫn tích sẵn ô nhiệm vụ
+async def test_choosing_chat_sends_the_waiting_tasks_for_the_form():
+    flow, _ = make_flow(tin("knowledge"))
+    school_list = tin(("profile_review", {"tasks": ["school_list"]}, "gợi ý trường cho em")).intents[0]
+    req = request(CHAT_BUTTON.value, current_step="B3", question_id=INTAKE_ID, pending_advice=school_list)
+
+    res = await flow.reply(req)
+
+    assert res.state.intake_mode == "chat"
+    assert res.form_goals == ["goi_y_truong"]
+
+
+# Chưa chọn cách điền (hoặc chọn form): không gửi, form tự lấy theo link ?goal=
+async def test_form_goals_empty_outside_chat_intake():
+    flow, _ = make_flow(tin("knowledge"))
+    school_list = tin(("profile_review", {"tasks": ["school_list"]}, "gợi ý trường cho em")).intents[0]
+    req = request(FORM_BUTTON.value, current_step="B3", question_id=INTAKE_ID, pending_advice=school_list)
+
+    res = await flow.reply(req)
+
+    assert res.form_goals == []
+
+
 async def test_choosing_form_opens_the_form_widget():
     flow, _ = make_flow(tin("knowledge"))
 

@@ -780,6 +780,18 @@ public class ChatServiceTests
         Assert.Equal(expected, res.FormStep);
     }
 
+    // Học sinh chọn điền hồ sơ trong chat: việc đã hỏi (vd gợi ý trường) tới được trình duyệt để form tích sẵn
+    [Fact]
+    public async Task Response_KeepsFormGoals()
+    {
+        var advisor = new FakeAdvisor("B2") { FormGoals = ["goi_y_truong"] };
+
+        var res = await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow())
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Equal(["goi_y_truong"], res.FormGoals);
+    }
+
     // C5: học sinh xác nhận ở X1 (chat sang B3) thì lưu hồ sơ chính thức
     private static ChatSession AtReview(Guid userId, string step = "B2") =>
         new() { UserId = userId, StateJson = $"{{\"currentStep\":\"{step}\",\"questionId\":\"X1\"}}", CurrentStep = step };
@@ -2704,6 +2716,7 @@ public class ChatServiceTests
         public string Answer { get; init; } = "ok";
         public IReadOnlyList<AiUsageDto>? AiUsage { get; init; }
         public AdvisorSlmDto? Slm { get; init; }
+        public IReadOnlyList<string>? FormGoals { get; init; }
 
         public Exception? ChatError { get; init; }   // advisor sập hẳn: ChatAsync ném lỗi này
 
@@ -2716,7 +2729,7 @@ public class ChatServiceTests
             var state = JsonDocument.Parse($"{{\"currentStep\":\"{nextStep}\"{question}}}").RootElement;
             return Task.FromResult(new AdvisorChatResponse(
                 Answer, [], null, state, QuickReplies: replies, Widget: widget, Profile: Profile, ProfileChanged: Changed, Skills: Skills, Action: Action, ActionData: ActionData,
-                AiUsage: AiUsage, Slm: Slm));
+                AiUsage: AiUsage, Slm: Slm, FormGoals: FormGoals));
         }
 
         // Trả lời theo từng ý: gọi onEvent cho từng tin trong Events rồi trả kết quả như ChatAsync

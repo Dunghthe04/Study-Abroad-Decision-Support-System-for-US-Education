@@ -479,6 +479,7 @@ class ChatFlow:
             disclaimer=output.disclaimer,
             profile=state.profile,
             profile_changed=changed_keys(profile_before, state.profile),
+            form_goals=form_goals(state.pending_advice) if state.intake_mode == "chat" else [],
             action=output.action,
             action_data=output.action_data,
         )

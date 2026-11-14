@@ -199,6 +199,9 @@ class ChatResponse(CamelModel):
     widget: Widget | None = None  # công cụ nhập cần hiện trong chat
     profile: dict[str, ProfileField] = {}  # hồ sơ sau lượt này (điền ở việc 1.5)
     profile_changed: list[str] = []  # khóa hồ sơ đổi trong lượt này (điền ở việc 1.5)
+    # Việc học sinh đã hỏi khi đang điền hồ sơ trong chat (danh_gia, lo_trinh, goi_y_truong):
+    # frontend nhớ lại để mở form từ menu vẫn tích sẵn ô "Bạn muốn hệ thống làm gì?". Rỗng = không đổi
+    form_goals: list[str] = []
     # Việc .NET cần làm sau lượt này. "recommend" = chạy gợi ý trường (pipeline ở .NET),
     # "explain" = viết lời tư vấn một trường (action_data["code"]),
     # "goal_seek" = tìm mức cần đạt để vào một trường (action_data["school"]: tên trường học sinh nói, ["target"]: reach | match | safety | None),

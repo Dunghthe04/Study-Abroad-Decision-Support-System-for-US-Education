@@ -21,7 +21,15 @@ import { Step6Review } from "./Step6Review";
 import { profileFlowApi } from "@/lib/profile-flow-api";
 import { migrateLegacyStep3 } from "@/lib/certification-utils";
 import { recommendationApi } from "@/lib/recommendation-api";
-import { goalsNeedMajor, goalsQuestion, onlySchoolList, parseGoals, type FormGoal } from "@/lib/form-goals";
+import {
+  GOALS_CHANGED_EVENT,
+  GOALS_KEY,
+  goalsNeedMajor,
+  goalsQuestion,
+  onlySchoolList,
+  parseGoals,
+  type FormGoal,
+} from "@/lib/form-goals";
 import type {
   GoalDraft,
   TranscriptDraft,
@@ -106,8 +114,6 @@ function stepReady(step: number, draft: ProfileFlowDraft, goals: FormGoal[]): bo
 
 // Phải khớp CONTINUE_CHAT trong advisor/app/services/intake.py
 const CONTINUE_CHAT = "Tiếp tục bằng chat";
-// Mục tiêu đã tích khi vào form trực tiếp; không lưu vào nháp hồ sơ vì đây là việc muốn làm, không phải thông tin hồ sơ
-const GOALS_KEY = "usas_flow_goals";
 
 export function ProfileFlowWizard() {
   const router = useRouter();
@@ -320,6 +326,20 @@ export function ProfileFlowWizard() {
       .catch(() => setSaveStatus("error"));
   }, [user, persistDraft]);
   useAssistantProfileChanged(reloadFromChat);
+
+  // Form mở trực tiếp (không khóa mục tiêu) mà chat vừa gửi thêm việc học sinh hỏi: tích theo mục tiêu đã lưu
+  useEffect(() => {
+    if (goalsLocked) return;
+    const onGoals = () => {
+      try {
+        setGoals(parseGoals(sessionStorage.getItem(GOALS_KEY)));
+      } catch {
+        // bỏ qua
+      }
+    };
+    window.addEventListener(GOALS_CHANGED_EVENT, onGoals);
+    return () => window.removeEventListener(GOALS_CHANGED_EVENT, onGoals);
+  }, [goalsLocked]);
 
   // Rời khỏi ô đang gõ thì nạp phần chat đã đổi (đợi focus chuyển xong mới xét)
   useEffect(() => {

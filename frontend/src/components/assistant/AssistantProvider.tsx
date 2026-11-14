@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { ApiError } from "@/lib/api";
 import { streamAdvisorChat } from "@/lib/advisor-stream";
+import { rememberChatGoals } from "@/lib/form-goals";
 import { PROFILE_SAVED_EVENT, onRecommendationsPage, showSimulation } from "@/lib/simulation-link";
 import type { AssistantAction, ChatMessage, ChatWidget, Citation, QuickReply } from "@/types/api";
 import type { SimulationOverrides } from "@/types/recommendation";
@@ -297,6 +298,8 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
           onProfileChangedRef.current?.(res.profileChanged ?? [], res.formStep ?? null);
         // Vừa lưu hồ sơ chính thức: trang Gợi ý trường (nếu đang mở) hiện nút cập nhật danh sách
         if (res.profileSaved) window.dispatchEvent(new Event(PROFILE_SAVED_EVENT));
+        // Điền hồ sơ trong chat: nhớ việc học sinh đã hỏi để mở form từ menu vẫn tích sẵn ô "Bạn muốn hệ thống làm gì?"
+        if (res.formGoals?.length) rememberChatGoals(res.formGoals);
       } catch (err) {
         if (stillOwner()) setError(toAssistantError(err));
       } finally {

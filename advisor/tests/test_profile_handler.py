@@ -497,6 +497,17 @@ async def test_edit_on_form_shows_form_link():
     assert state.edit_queue is None
 
 
+# Điền trong chat rồi bấm "Sửa trên form": form vẫn tích sẵn việc học sinh đã hỏi, như khi chọn điền bằng form
+async def test_edit_on_form_sends_the_waiting_tasks():
+    state = at_review()
+    school_list = tin(("profile_review", {"tasks": ["school_list"]}, "gợi ý trường cho em"))
+    state.pending_advice = school_list.intents[0]
+
+    output = await make_handler(FakeLLM()).collect(state, "Sửa trên form", MAC_DINH)
+
+    assert output.widget.data == {"goals": ["goi_y_truong"]}
+
+
 # Điền lại từ đầu: hỏi lại mọi câu theo thứ tự form, bắt đầu từ B1.1; không hỏi visa (N4)
 async def test_restart_asks_every_question_from_start():
     state = at_review()

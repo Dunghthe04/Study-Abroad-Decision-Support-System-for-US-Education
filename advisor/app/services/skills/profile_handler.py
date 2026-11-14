@@ -11,6 +11,7 @@ from app.services.chat_flow import (
     limit_to_required,
     start_intake,
 )
+from app.services.intake import form_goals
 from app.services.skill_rules import REQUIRED_B3, missing_fields
 from app.services.skills import buttons, skill_bac_hoc, skill_ho_so
 
@@ -182,7 +183,9 @@ def edit_choice(state: ChatState, message: str) -> SkillOutput | None:
         return skill_ho_so.edit_menu(state)
     if buttons.same_text(message, skill_ho_so.FORM_REPLY.value):
         state.edit_queue = None
-        return SkillOutput(skill_ho_so.EDIT_ON_FORM, widget=Widget(type="form"))
+        # Gửi kèm việc học sinh đã hỏi (vd gợi ý trường) để form tích sẵn ô nhiệm vụ, như khi chọn điền bằng form
+        goals = form_goals(state.pending_advice)
+        return SkillOutput(skill_ho_so.EDIT_ON_FORM, widget=Widget(type="form", data={"goals": goals}))
     if buttons.same_text(message, skill_ho_so.RESTART_REPLY.value):
         state.edit_queue = list(skill_ho_so.EDIT_ORDER)
         return next_edit_question(state)
