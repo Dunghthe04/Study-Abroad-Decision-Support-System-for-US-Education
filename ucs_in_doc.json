@@ -551,5 +551,12 @@
     "role": "Trung tâm",
     "status": "Đã có",
     "dev_todo": "Giữ nguyên"
+  },
+  {
+    "uc": "UC-91",
+    "name": "Xác thực email và số điện thoại trung tâm",
+    "role": "Trung tâm",
+    "status": "Mới",
+    "dev_todo": "Mục 5.1"
   }
 ]
