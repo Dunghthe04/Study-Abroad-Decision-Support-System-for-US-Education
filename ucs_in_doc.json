@@ -362,5 +362,12 @@
     "role": "Moderator",
     "status": "Đã có",
     "dev_todo": "Như trên"
+  },
+  {
+    "uc": "UC-53",
+    "name": "Xem câu hỏi chưa trả lời",
+    "role": "Moderator",
+    "status": "Đã có",
+    "dev_todo": "Chuyển hàng đợi \"Câu cần xem\" từ Admin sang Moderator"
   }
 ]
