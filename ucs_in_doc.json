@@ -439,5 +439,12 @@
     "role": "Moderator",
     "status": "Đã có",
     "dev_todo": "Giữ nguyên; xem câu hỏi mở về sửa so với ẩn (mục 7)"
+  },
+  {
+    "uc": "UC-84",
+    "name": "Xem báo cáo độ mới của dữ liệu",
+    "role": "Moderator",
+    "status": "Chưa có",
+    "dev_todo": "Mục 5.5"
   }
 ]
