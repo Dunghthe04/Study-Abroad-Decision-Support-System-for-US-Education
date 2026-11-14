@@ -418,5 +418,12 @@
     "role": "Moderator",
     "status": "Một phần",
     "dev_todo": "Menu chỉ hiện cho Admin: chuyển sang Moderator"
+  },
+  {
+    "uc": "UC-66",
+    "name": "Sửa thông tin trường",
+    "role": "Moderator",
+    "status": "Một phần",
+    "dev_todo": "Như trên"
   }
 ]
