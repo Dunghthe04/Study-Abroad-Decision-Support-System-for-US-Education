@@ -313,5 +313,12 @@
     "role": "Học sinh, Phụ huynh",
     "status": "Chỉ có bảng",
     "dev_todo": "Phụ thuộc quyết định diễn đàn và đánh giá"
+  },
+  {
+    "uc": "UC-46",
+    "name": "Xem danh sách bài đăng",
+    "role": "Dùng chung",
+    "status": "Chỉ có bảng",
+    "dev_todo": "Chờ quyết định phạm vi diễn đàn"
   }
 ]
