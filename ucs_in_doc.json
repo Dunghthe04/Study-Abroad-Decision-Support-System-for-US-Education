@@ -117,5 +117,12 @@
     "role": "Học sinh, Phụ huynh",
     "status": "Đã có",
     "dev_todo": "Giữ nguyên"
+  },
+  {
+    "uc": "UC-18",
+    "name": "Xem phân tích học thuật",
+    "role": "Học sinh, Phụ huynh",
+    "status": "Một phần",
+    "dev_todo": "Mới có bảng quy đổi thang 10; thêm bảng cho điểm đại học Việt Nam, thang 4, IB, A-level, AP"
   }
 ]
