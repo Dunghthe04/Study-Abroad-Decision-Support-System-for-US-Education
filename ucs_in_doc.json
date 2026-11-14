@@ -334,5 +334,12 @@
     "role": "Học sinh, Phụ huynh",
     "status": "Chỉ có bảng",
     "dev_todo": "Như trên"
+  },
+  {
+    "uc": "UC-49",
+    "name": "Bình luận bài đăng",
+    "role": "Học sinh, Phụ huynh",
+    "status": "Chỉ có bảng",
+    "dev_todo": "Như trên"
   }
 ]
