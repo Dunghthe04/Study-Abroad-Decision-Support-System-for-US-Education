@@ -1,0 +1,7 @@
+{
+  "uc": "UC-65",
+  "name": "Nhập dữ liệu trường",
+  "role": "Moderator",
+  "status": "Một phần",
+  "dev_todo": "Menu chỉ hiện cho Admin: chuyển sang Moderator"
+}
