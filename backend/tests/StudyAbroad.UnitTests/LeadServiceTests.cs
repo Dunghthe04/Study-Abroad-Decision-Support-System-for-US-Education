@@ -476,7 +476,7 @@ public class LeadServiceTests
     }
 
     [Fact]
-    public async Task GetAndSendLeadMessage_AnotherCenterLead_ThrowsUnauthorizedAccessException()
+    public async Task GetAndSendLeadMessage_AnotherCenterLead_ThrowsKeyNotFoundException()
     {
         var centerOwnerId = Guid.NewGuid();
         var myCenterId = Guid.NewGuid();
@@ -491,10 +491,10 @@ public class LeadServiceTests
 
         var service = new LeadService(leadRepo, centerRepo, new FakeUserRepository(), new FakeParentLinkRepository());
 
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+        await Assert.ThrowsAsync<KeyNotFoundException>(() =>
             service.GetReceivedLeadMessagesForCenterUserAsync(centerOwnerId, "a@center.com", UserRoles.Center, leadId));
 
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+        await Assert.ThrowsAsync<KeyNotFoundException>(() =>
             service.SendLeadMessageForCenterUserAsync(centerOwnerId, "a@center.com", UserRoles.Center, leadId, "Xin chào"));
     }
 
