@@ -425,5 +425,12 @@
     "role": "Moderator",
     "status": "Một phần",
     "dev_todo": "Như trên"
+  },
+  {
+    "uc": "UC-67",
+    "name": "Ẩn hoặc hiện trường",
+    "role": "Moderator",
+    "status": "Một phần",
+    "dev_todo": "Như trên"
   }
 ]
