@@ -222,5 +222,12 @@
     "role": "Học sinh, Phụ huynh",
     "status": "Đã có",
     "dev_todo": "Giữ nguyên"
+  },
+  {
+    "uc": "UC-33",
+    "name": "Xem danh sách trường mục tiêu",
+    "role": "Học sinh, Phụ huynh",
+    "status": "Đã có",
+    "dev_todo": "Nhóm hiển thị đang do người dùng tự chọn, nên lấy từ kết quả gợi ý"
   }
 ]
