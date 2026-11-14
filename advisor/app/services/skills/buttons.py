@@ -89,20 +89,11 @@ BUTTONS = {
         Button("Tiến sĩ", {"target_level": confirmed("phd")}),
     ),
     "B1.3": (Button("Em chưa rõ ngành", {"major": UNKNOWN}),),
-    "D3": (
-        Button(
-            "Em chưa thi SAT/ACT",
-            {"sat": NONE, "act": NONE, "standardized_plan": confirmed({"planned": True, "date": None})},
-        ),
-    ),
-    # Chưa thi thì tích luôn ô "sẽ thi sau" của form; E2 hỏi tiếp tháng dự kiến (bỏ qua thì ô vẫn tích)
-    "E1": (
-        Button(
-            "Em chưa thi tiếng Anh",
-            {"english": NONE, "english_plan": confirmed({"planned": True, "date": None})},
-        ),
-    ),
-    # Chưa thi và chưa có dự định thi: tích ô cuối mục của form, bỏ các thẻ dự định của mục đó
+    # Chưa thi bài nào thì chỉ ghi chưa có chứng chỉ; dự định thi hỏi tiếp ở E2 / E3 như mục của form
+    "D3": (Button("Em chưa thi bài nào", {"sat": NONE, "act": NONE}),),
+    "E1": (Button("Em chưa thi tiếng Anh", {"english": NONE}),),
+    # Chưa có dự định thi (lần đầu hay thi lại): bỏ các thẻ dự định của mục; mục không còn thẻ nào thì
+    # thành ô tích "chưa thi và chưa có dự định thi" của form (ChatProfileMapper.ApplyPlan)
     "E2": (Button("Em chưa có dự định thi", {"english_plan": confirmed({"planned": False, "date": None})}),),
     "E3": (
         Button("Em chưa có dự định thi", {"standardized_plan": confirmed({"planned": False, "date": None})}),

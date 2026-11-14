@@ -141,6 +141,8 @@ def full_profile() -> dict[str, ProfileField]:
     ]
     profile = {name: ProfileField(value="x", status="confirmed") for name in names}
     profile["activities"] = ProfileField(value=[{"name": "a"}], status="confirmed")
+    for name in ("english_plan", "standardized_plan"):
+        profile[name] = ProfileField(value={"planned": False, "date": None}, status="confirmed")
     return profile
 
 
@@ -314,7 +316,7 @@ async def test_edit_many_items_asks_each_in_turn_then_review():
     assert (state.question_id, state.edit_queue) == ("D2", ["D3"])
     await chat.collect(state, "GPA 3.8 thang 4", MAC_DINH)
     assert (state.question_id, state.edit_queue) == ("D3", [])
-    output = await chat.collect(state, "Em chưa thi SAT/ACT", MAC_DINH)
+    output = await chat.collect(state, "Em chưa thi bài nào", MAC_DINH)
     assert (state.question_id, state.edit_queue) == ("X1", None)  # hết mục: về bảng, thôi đánh dấu đang sửa
     assert output.widget.type == "review"
 
@@ -358,7 +360,7 @@ async def test_edit_sat_and_act_asks_once():
 async def test_skip_moves_to_next_item_in_queue():
     state = ChatState(current_step="B2", profile=full_profile(), intake_mode="chat", asked={"X1": 1})
     state.edit_queue = ["F1"]
-    ask(state, "E3")  # câu tùy chọn; câu bắt buộc như D3 không có nút Bỏ qua
+    ask(state, "F3")  # câu tùy chọn; câu bắt buộc như D3, E3 không có nút Bỏ qua
     await make_handler(FakeLLM()).collect(state, "Bỏ qua", MAC_DINH)
     assert (state.question_id, state.edit_queue) == ("F1", [])
 
@@ -439,9 +441,9 @@ async def test_pick_sections_asks_each_question_then_review():
     output = await chat.collect(state, "GPA 3.8 thang 4", MAC_DINH)
     assert (state.question_id, state.edit_queue) == ("D3", ["E3"])
     assert KEEP in labels(output)  # SAT/ACT đã có giá trị
-    await chat.collect(state, "Em chưa thi SAT/ACT", MAC_DINH)
-    assert (state.question_id, state.edit_queue) == ("E3", [])  # chưa thi thì hỏi kế hoạch thi
-    output = await chat.collect(state, "Bỏ qua", MAC_DINH)
+    await chat.collect(state, "Em chưa thi bài nào", MAC_DINH)
+    assert (state.question_id, state.edit_queue) == ("E3", [])  # hỏi tiếp dự định thi
+    output = await chat.collect(state, "Em chưa có dự định thi", MAC_DINH)
     assert (state.question_id, state.edit_queue) == ("X1", None)
     assert output.widget.type == "review"
 
@@ -453,9 +455,9 @@ async def test_pick_goal_and_finance_crosses_steps():
     assert (state.question_id, state.edit_queue) == ("B1.1", ["B1.2", "B1.3", "B1.4", "F1", "F2", "F3"])
 
 
-# Câu chỉ hỏi khi cần được xét lúc tới lượt: đã có chứng chỉ tiếng Anh thì không hỏi kế hoạch thi
-@pytest.mark.parametrize(("status", "next_id"), [("confirmed", "X1"), ("none", "E2")])
-async def test_english_plan_asked_only_when_needed(status, next_id):
+# Sửa Tiếng Anh hỏi cả dự định thi E2, kể cả khi đã có chứng chỉ (dự định thi lại để nâng điểm) như form
+@pytest.mark.parametrize(("status", "next_id"), [("confirmed", "E2"), ("none", "E2")])
+async def test_english_plan_asked_with_or_without_certificate(status, next_id):
     english = ProfileField(value=None if status == "none" else "x", status=status)
     state = at_review({**full_profile(), "english": english})
     chat = make_handler(FakeLLM())

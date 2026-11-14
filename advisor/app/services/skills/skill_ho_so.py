@@ -74,14 +74,15 @@ CAN_BE_NONE = ("sat", "act", "english", "activities", "awards", "relatives_state
 
 # Mỗi câu hỏi tối đa 2 lần (framework); câu tùy chọn chỉ hỏi 1 lần
 MAX_ASK = 2
-# Câu bắt buộc cho B3, theo thứ tự hỏi (REQUIRED_B3 bên skill_rules). Câu bắt buộc không có nút "Bỏ qua":
-# chưa có SAT/ACT thì bấm "Em chưa thi SAT/ACT", không cần học bổng thì chọn "Không cần"
-REQUIRED_QUESTIONS = ("D2", "E1", "D3", "F1", "F2")
-# Câu tùy chọn (có nút "Bỏ qua"): E2 chỉ hỏi khi học sinh chưa có chứng chỉ tiếng Anh;
-# E3 chỉ hỏi khi học sinh chưa có bài thi chuẩn hóa (bấm "Chưa thi SAT/ACT" ở D3);
-# D1 chỉ hỏi học sinh cấp 3; N1 chỉ hỏi khi chưa có bang muốn học (gợi ý bang theo người thân).
-# N4 (visa) không hỏi ở B2: chỉ hỏi khi học sinh hỏi về visa / lộ trình. N1, N4 không lưu vào form
-OPTIONAL_QUESTIONS = ("E2", "E3", "D1", "D4", "D5", "F3", "N1", "N2", "N3")
+# Câu bắt buộc, theo thứ tự hỏi (REQUIRED_B3 bên skill_rules và hai mục bước 3 form). Câu bắt buộc không có
+# nút "Bỏ qua": chưa thi bài nào thì bấm "Em chưa thi bài nào", không cần học bổng thì chọn "Không cần".
+# E2 / E3 (dự định thi tiếng Anh / chuẩn hóa) bắt buộc như form: mỗi mục cần thẻ dự định hoặc
+# "chưa có dự định thi"; hỏi cả khi đã có chứng chỉ (dự định thi lại để nâng điểm)
+REQUIRED_QUESTIONS = ("D2", "E1", "E2", "D3", "E3", "F1", "F2")
+# Câu tùy chọn (có nút "Bỏ qua"): D1 chỉ hỏi học sinh cấp 3; N1 chỉ hỏi khi chưa có bang muốn học
+# (gợi ý bang theo người thân). N4 (visa) không hỏi ở B2: chỉ hỏi khi học sinh hỏi về visa / lộ trình.
+# N1, N4 không lưu vào form
+OPTIONAL_QUESTIONS = ("D1", "D4", "D5", "F3", "N1", "N2", "N3")
 # Thứ tự hỏi theo trang form: hỏi xong các câu của một trang mới sang trang sau, không quay lại trang trước.
 # Trang 1 mục tiêu (D1, N2, N3), 2 học bạ (D2), 3 tiếng Anh, SAT (E1, E2, D3, E3), 4 tài chính (F1-F3),
 # 5 hoạt động, giải thưởng (D4, D5). Hết form mới hỏi thông tin thêm không có trong form (N1 người thân)
@@ -184,7 +185,8 @@ def read_plan_text(question_id: str | None, message: str) -> dict | None:
     }
 
 
-# english_plan / standardized_plan khi học sinh chưa thi và chưa nói tháng dự kiến (tích ô form nhưng chưa điền gì)
+# english_plan / standardized_plan kiểu cũ ("sẽ thi sau" chưa có bài thi). Form không còn ô này: phiên chat cũ
+# còn giá trị này thì coi như chưa trả lời E2 / E3 để hỏi lại
 PLANNED_NO_DATE = {"planned": True, "date": None}
 # Câu nút xác nhận thang GPA gửi (và ô chọn D2 ghép): "GPA 8.5 thang 10". Khớp thì ghi thẳng, không gọi Qwen
 GPA_TEXT = re.compile(r"gpa\s+(\d+(?:[.,]\d+)?)\s+thang\s+(4|10)", re.IGNORECASE)
@@ -622,27 +624,15 @@ def pending_question(state: ChatState, question_id: str) -> str | None:
 def answered(state: ChatState, question_id: str) -> bool:
     if question_id == "D3" and any(c.get("category") != "english" for c in saved_certs(state)):
         return True  # đã có AP, IB, GRE... dù chưa có SAT / ACT
-    if question_id == "E2":
-        # Ô "sẽ thi sau" đã tích nhưng chưa có bài thi / tháng dự kiến thì vẫn hỏi để bổ sung
-        plan = state.profile.get("english_plan")
-        return plan_cards(state, "E2") != [] or (plan is not None and plan.value != PLANNED_NO_DATE)
-    if question_id == "E3":
-        # Tương tự: ô thi chuẩn hóa đã tích nhưng chưa có bài thi / tháng dự kiến
-        plan = state.profile.get("standardized_plan")
-        return plan_cards(state, "E3") != [] or (plan is not None and plan.value != PLANNED_NO_DATE)
+    if question_id in PLAN_QUESTIONS:
+        # Có thẻ dự định, hoặc đã nói "chưa có dự định thi" (planned False)
+        plan = state.profile.get(PLAN_QUESTIONS[question_id][0])
+        return plan_cards(state, question_id) != [] or (plan is not None and plan.value != PLANNED_NO_DATE)
     return any(name in state.profile for name in QUESTION_FIELDS[question_id])
 
 
-# Câu tùy chọn này có cần hỏi học sinh này không (E2, D1, N1 chỉ hỏi khi cần)
+# Câu tùy chọn này có cần hỏi học sinh này không (D1, N1 chỉ hỏi khi cần)
 def needed(state: ChatState, question_id: str) -> bool:
-    if question_id == "E2":
-        english = state.profile.get("english")
-        return english is not None and english.status == "none"
-    if question_id == "E3":
-        # Hỏi khi học sinh đã tích ô "Chưa thi SAT/ACT" (sat và act đều none)
-        sat = state.profile.get("sat")
-        act = state.profile.get("act")
-        return sat is not None and sat.status == "none" and act is not None and act.status == "none"
     if question_id == "D1":
         level = state.profile.get("current_level")
         return level is not None and level.value == "high_school"
@@ -731,37 +721,27 @@ def edit_menu(state: ChatState) -> SkillOutput:
     return SkillOutput(EDIT_MENU, quick_replies=[FORM_REPLY, RESTART_REPLY, CONFIRM_REPLY], widget=widget)
 
 
+# Câu hiện cho học sinh ở bước 3, theo hai mục của form. chat_flow.QUESTIONS giữ câu cũ vì SLM học đúng câu đó
+# (state.last_question) và dữ liệu SLM kiểm tra khớp từng chữ
+STEP3_TEXT = {
+    "E2": "Bạn có dự định thi tiếng Anh không (thi lần đầu hoặc thi lại để nâng điểm)? "
+    "Nếu có thì thi bài nào, khi nào, mục tiêu bao nhiêu điểm?",
+    "D3": "Bạn đã thi bài chuẩn hóa hoặc học thuật nào chưa (SAT, ACT, AP, IB, A-Level, GRE...)? "
+    "Nếu rồi thì được bao nhiêu điểm?",
+    "E3": "Bạn có dự định thi bài chuẩn hóa hoặc học thuật nào không (thi lần đầu hoặc thi lại để nâng điểm)? "
+    "Nếu có thì thi bài nào, khi nào, mục tiêu bao nhiêu điểm?",
+}
+
+
 # Hỏi một câu B2 kèm nút; câu tùy chọn có thêm nút "Bỏ qua". text: câu khác câu chuẩn (câu hỏi lại)
 def ask_question(state: ChatState, question_id: str, text: str | None = None) -> SkillOutput:
+    text = text or STEP3_TEXT.get(question_id)
     return buttons.ask_with_buttons(state, question_id, text, can_skip=question_id in OPTIONAL_QUESTIONS)
-
-
-# Học sinh nói chưa thi tiếng Anh thì tích ô "sẽ thi sau" giống form (chưa có tháng dự kiến)
-def plan_english(state: ChatState) -> None:
-    english = state.profile.get("english")
-    if english is not None and english.status == "none" and "english_plan" not in state.profile:
-        state.profile["english_plan"] = ProfileField(value=PLANNED_NO_DATE, status="confirmed")
-
-
-# Học sinh bấm "Chưa thi SAT/ACT" thì tích ô "sẽ thi sau" chuẩn hóa giống form
-def plan_standardized(state: ChatState) -> None:
-    sat = state.profile.get("sat")
-    act = state.profile.get("act")
-    if (
-        sat is not None
-        and sat.status == "none"
-        and act is not None
-        and act.status == "none"
-        and "standardized_plan" not in state.profile
-    ):
-        state.profile["standardized_plan"] = ProfileField(value=PLANNED_NO_DATE, status="confirmed")
 
 
 # Hỏi câu tiếp theo của B2, hết câu thì sang rà soát. skill_bac_hoc gọi hàm này khi chuyển sang B2.
 # D4/D5 mà đang có mục dở (nói ở B0) thì hỏi luôn ý còn thiếu thay cho câu chung
 def ask_next(state: ChatState) -> SkillOutput:
-    plan_english(state)
-    plan_standardized(state)
     overdue = overdue_card(state)
     if overdue is not None:
         return ask_overdue(state, overdue)

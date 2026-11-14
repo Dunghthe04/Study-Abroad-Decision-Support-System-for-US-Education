@@ -241,11 +241,15 @@ async def test_e2_custom_test_type_and_score_saved_without_qwen():
 
 async def test_e3_standardized_plan_from_d3_button_and_widget_save():
     llm = FakeLLM()
-    # Ở câu D3, bấm nút "Em chưa thi SAT/ACT"
-    profile = {**GPA, "english": field({"type": "ielts", "value": 7.0, "date": "2025-05"})}
+    # Ở câu D3, bấm nút "Em chưa thi bài nào"
+    profile = {
+        **GPA,
+        "english": field({"type": "ielts", "value": 7.0, "date": "2025-05"}),
+        "english_plan": field({"planned": False, "date": None}),
+    }
     res = await turn(
         llm,
-        "Em chưa thi SAT/ACT",
+        "Em chưa thi bài nào",
         current_step="B2",
         question_id="D3",
         asked={**PAGE1_ASKED, "D2": 1, "E1": 1, "D3": 1},
@@ -254,7 +258,7 @@ async def test_e3_standardized_plan_from_d3_button_and_widget_save():
 
     assert res.state.profile["sat"].status == "none"
     assert res.state.profile["act"].status == "none"
-    assert res.state.profile["standardized_plan"] == field({"planned": True, "date": None})
+    assert "standardized_plan" not in res.state.profile  # chưa thi không còn là "sẽ thi sau"
     assert res.state.question_id == "E3"
     assert res.widget is not None and res.widget.type == "select"
 
@@ -289,7 +293,7 @@ async def test_e3_standardized_plan_from_d3_button_and_widget_save():
     assert res3.state.question_id != "E3"
 
 
-async def test_e3_skip_keeps_standardized_plan_tick():
+async def test_e3_no_plan_button_ticks_no_plan():
     profile = {
         **GPA,
         "english": field({"type": "ielts", "value": 7.0, "date": "2025-05"}),
@@ -299,14 +303,14 @@ async def test_e3_skip_keeps_standardized_plan_tick():
     }
     res = await turn(
         FakeLLM(),
-        "Bỏ qua",
+        "Em chưa có dự định thi",
         current_step="B2",
         question_id="E3",
         asked={**PAGE1_ASKED, "D2": 1, "E1": 1, "D3": 1, "E3": 1},
         profile=profile,
     )
 
-    assert res.state.profile["standardized_plan"] == field({"planned": True, "date": None})
+    assert res.state.profile["standardized_plan"] == field({"planned": False, "date": None})
     assert res.state.question_id != "E3"
 
 
