@@ -1,0 +1,7 @@
+{
+  "uc": "UC-60",
+  "name": "Xem danh sách tài khoản",
+  "role": "Administrator",
+  "status": "Đã có",
+  "dev_todo": "Bỏ quyền của Moderator (develop đang cho cả hai)"
+}
