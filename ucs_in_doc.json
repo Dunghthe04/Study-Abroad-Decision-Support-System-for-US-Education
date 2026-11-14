@@ -607,5 +607,12 @@
     "role": "Học sinh, Phụ huynh",
     "status": "Một phần",
     "dev_todo": "Mới dùng qua chat; thêm vào trang trường mục tiêu (mục 5.5)"
+  },
+  {
+    "uc": "UC-82",
+    "name": "Mô phỏng thay đổi hồ sơ",
+    "role": "Học sinh, Phụ huynh",
+    "status": "Đã có",
+    "dev_todo": "Giữ nguyên"
   }
 ]
