@@ -467,5 +467,12 @@
     "role": "Administrator",
     "status": "Đã có",
     "dev_todo": "Như trên"
+  },
+  {
+    "uc": "UC-62",
+    "name": "Mở khóa tài khoản",
+    "role": "Administrator",
+    "status": "Đã có",
+    "dev_todo": "Như trên"
   }
 ]
