@@ -89,5 +89,12 @@
     "role": "Học sinh, Phụ huynh",
     "status": "Đã có",
     "dev_todo": "Giữ nguyên"
+  },
+  {
+    "uc": "UC-14",
+    "name": "Sửa hoặc xóa điểm thi",
+    "role": "Học sinh, Phụ huynh",
+    "status": "Đã có",
+    "dev_todo": "Giữ nguyên"
   }
 ]
