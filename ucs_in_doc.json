@@ -201,5 +201,12 @@
     "role": "Khách",
     "status": "Một phần",
     "dev_todo": "Bảng học bổng 0 dòng; mới có học bổng trung bình trong dữ liệu trường"
+  },
+  {
+    "uc": "UC-30",
+    "name": "Thêm trường vào danh sách mục tiêu",
+    "role": "Học sinh, Phụ huynh",
+    "status": "Đã có",
+    "dev_todo": "Giữ nguyên"
   }
 ]
