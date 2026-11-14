@@ -580,8 +580,7 @@ public class ProfileFlowServiceTests
                     new(Category: "english", Type: "ielts", Overall: 7m, TestDate: "2025-01"),
                     new(Category: "english", Type: "pte", Overall: 70m, TestDate: "2026-06"),
                 ],
-                EnglishPlanned: true,
-                EnglishPlannedDate: "2099-12"),
+                EnglishPlanned: true),
         };
 
         await service.CommitFlowAsync(userId, new CommitProfileFlowRequest(draft));
@@ -599,7 +598,7 @@ public class ProfileFlowServiceTests
     }
 
     [Fact]
-    public async Task CommitFlowAsync_StandardizedPlanned_IsStored_AndRestoredWhenReopened()
+    public async Task CommitFlowAsync_StandardizedPlanCard_IsStored_AndRestoredWhenReopened()
     {
         var repo = new InMemoryProfileFlowRepository();
         var service = new ProfileFlowService(repo, new FakeFileStorageService());
@@ -607,16 +606,16 @@ public class ProfileFlowServiceTests
         var draft = FullDraft() with
         {
             Step3 = new FlowCertificationDraftDto(
-                Certifications: [new(Category: "english", Type: "ielts", Overall: 7m, TestDate: "2026-05")],
-                StandardizedPlanned: true,
-                StandardizedPlannedDate: "2099-10",
-                StandardizedPlannedTestType: "sat",
-                StandardizedPlannedTargetScore: 1450m),
+                Certifications:
+                [
+                    new(Category: "english", Type: "ielts", Overall: 7m, TestDate: "2026-05"),
+                    new(Category: "standardized", Type: "sat", Overall: 1450m, TestDate: "2099-10", IsTarget: true),
+                ]),
         };
 
         await service.CommitFlowAsync(userId, new CommitProfileFlowRequest(draft));
 
-        // Dự định kiểu cũ lưu thành dòng mục tiêu, không còn là tick
+        // Dự định là dòng mục tiêu, không phải tick
         var p = (await repo.GetProfileByUserIdAsync(userId))!;
         Assert.False(p.StandardizedTestPlanned);
         var plan = Assert.Single(repo.Certifications[p.Id], c => c.IsTarget);
@@ -626,12 +625,13 @@ public class ProfileFlowServiceTests
         Assert.Equal(new DateOnly(2099, 10, 1), plan.TestDate);
         Assert.Equal(1450m, p.Sat);
 
-        // Mở lại "Sửa hồ sơ": bản nháp dựng từ hồ sơ vẫn còn tick "chưa thi chuẩn hóa"
+        // Mở lại "Sửa hồ sơ": dự định hiện lại thành thẻ mục tiêu, không có tick
         var step3 = (await service.GetFlowStateAsync(userId)).Draft.Step3!;
-        Assert.True(step3.StandardizedPlanned);
-        Assert.Equal("2099-10", step3.StandardizedPlannedDate);
-        Assert.Equal("sat", step3.StandardizedPlannedTestType);
-        Assert.Equal(1450m, step3.StandardizedPlannedTargetScore);
+        Assert.False(step3.StandardizedPlanned);
+        var card = Assert.Single(step3.Certifications!, c => c.IsTarget);
+        Assert.Equal("sat", card.Type);
+        Assert.Equal("2099-10", card.TestDate);
+        Assert.Equal(1450m, card.Overall);
     }
 
     [Fact]
@@ -643,14 +643,11 @@ public class ProfileFlowServiceTests
         var draft = FullDraft() with
         {
             Step3 = new FlowCertificationDraftDto(
-                Certifications: [],
-                EnglishPlanned: true,
-                EnglishPlannedDate: "2099-08",
-                EnglishPlannedTestType: "ielts",
-                EnglishPlannedTargetScore: 7m,
-                StandardizedPlanned: true,
-                StandardizedPlannedTestType: "sat",
-                StandardizedPlannedTargetScore: 1450m),
+                Certifications:
+                [
+                    new(Category: "english", Type: "ielts", Overall: 7m, TestDate: "2099-08", IsTarget: true),
+                    new(Category: "standardized", Type: "sat", Overall: 1450m, TestDate: "2099-10", IsTarget: true),
+                ]),
         };
 
         await service.CommitFlowAsync(userId, new CommitProfileFlowRequest(draft));
@@ -660,16 +657,14 @@ public class ProfileFlowServiceTests
         Assert.Equal(7m, p.Ielts);
         Assert.Equal(1450m, p.Sat);
 
-        // Mở lại form: điểm kỳ vọng nằm ở kế hoạch, không thành thẻ chứng chỉ "đã thi"
+        // Mở lại form: điểm kỳ vọng vẫn là thẻ dự định, không thành thẻ chứng chỉ "đã thi"
         var step3 = (await service.GetFlowStateAsync(userId)).Draft.Step3!;
-        Assert.Empty(step3.Certifications!);
-        Assert.True(step3.EnglishPlanned);
-        Assert.Equal("2099-08", step3.EnglishPlannedDate);
-        Assert.Equal("ielts", step3.EnglishPlannedTestType);
-        Assert.Equal(7m, step3.EnglishPlannedTargetScore);
-        Assert.True(step3.StandardizedPlanned);
-        Assert.Equal("sat", step3.StandardizedPlannedTestType);
-        Assert.Equal(1450m, step3.StandardizedPlannedTargetScore);
+        Assert.Equal(2, step3.Certifications!.Count);
+        Assert.All(step3.Certifications!, c => Assert.True(c.IsTarget));
+        Assert.Contains(step3.Certifications!, c => c.Type == "ielts" && c.Overall == 7m && c.TestDate == "2099-08");
+        Assert.Contains(step3.Certifications!, c => c.Type == "sat" && c.Overall == 1450m);
+        Assert.False(step3.EnglishPlanned);
+        Assert.False(step3.StandardizedPlanned);
     }
 
     [Fact]
@@ -681,11 +676,11 @@ public class ProfileFlowServiceTests
         var draft = FullDraft() with
         {
             Step3 = new FlowCertificationDraftDto(
-                Certifications: [new(Category: "standardized", Type: "sat", Overall: 1400m, TestDate: "2026-05")],
-                EnglishPlanned: true,
-                EnglishPlannedDate: "2099-08",
-                EnglishPlannedTestType: "pte",
-                EnglishPlannedTargetScore: 65m),
+                Certifications:
+                [
+                    new(Category: "standardized", Type: "sat", Overall: 1400m, TestDate: "2026-05"),
+                    new(Category: "english", Type: "pte", Overall: 65m, TestDate: "2099-08", IsTarget: true),
+                ]),
         };
 
         await service.CommitFlowAsync(userId, new CommitProfileFlowRequest(draft));
@@ -697,9 +692,7 @@ public class ProfileFlowServiceTests
 
         // PTE không có cột điểm riêng trên hồ sơ nhưng mở lại form vẫn còn loại bài và điểm mục tiêu
         var step3 = (await service.GetFlowStateAsync(userId)).Draft.Step3!;
-        Assert.True(step3.EnglishPlanned);
-        Assert.Equal("pte", step3.EnglishPlannedTestType);
-        Assert.Equal(65m, step3.EnglishPlannedTargetScore);
+        Assert.Contains(step3.Certifications!, c => c.IsTarget && c.Type == "pte" && c.Overall == 65m && c.TestDate == "2099-08");
     }
 
     [Fact]
@@ -740,7 +733,7 @@ public class ProfileFlowServiceTests
         Assert.Contains("ielts", types);
         Assert.Contains("sat", types);
         Assert.All(step3.Certifications!, c => Assert.False(c.IsTarget));
-        Assert.Null(step3.EnglishPlannedTestType);
+        Assert.False(step3.EnglishPlanned);
     }
 
     [Fact]
@@ -775,14 +768,13 @@ public class ProfileFlowServiceTests
         Assert.False(p.EnglishTestPlanned);
         Assert.False(p.StandardizedTestPlanned);
 
-        // Mở lại form (còn 1 ô dự định mỗi mục): dự định đầu mỗi mục vào ô dự định, còn lại là thẻ mục tiêu
+        // Mở lại form: đủ 4 thẻ theo thứ tự đã lưu, 3 thẻ dự định
         var step3 = (await service.GetFlowStateAsync(userId)).Draft.Step3!;
-        Assert.Equal("ielts", step3.EnglishPlannedTestType);
-        Assert.Equal(7m, step3.EnglishPlannedTargetScore);
-        Assert.Equal("sat", step3.StandardizedPlannedTestType);
+        Assert.Equal(["ielts", "ielts", "sat", "ap"], step3.Certifications!.Select(c => c.Type));
         Assert.Contains(step3.Certifications!, c => c.Type == "ielts" && !c.IsTarget && c.Overall == 6m);
-        Assert.Contains(step3.Certifications!, c => c.Type == "ap" && c.IsTarget);
-        Assert.Equal(2, step3.Certifications!.Count);
+        Assert.Contains(step3.Certifications!, c => c.Type == "ielts" && c.IsTarget && c.Overall == 7m);
+        Assert.Contains(step3.Certifications!, c => c.Type == "ap" && c.IsTarget && c.Subject == "Physics C");
+        Assert.Equal(3, step3.Certifications!.Count(c => c.IsTarget));
 
         // Lưu lại bản mở ra vẫn đủ 4 dòng, không nhân đôi dự định
         await service.CommitFlowAsync(userId, new CommitProfileFlowRequest(draft with { Step3 = step3 }));
@@ -857,45 +849,7 @@ public class ProfileFlowServiceTests
     }
 
     [Fact]
-    public async Task CommitFlowAsync_OldPlanFieldWithSameTargetRow_DoesNotDuplicate()
-    {
-        var repo = new InMemoryProfileFlowRepository();
-        var service = new ProfileFlowService(repo, new FakeFileStorageService());
-        var userId = Guid.NewGuid();
-        var draft = FullDraft() with
-        {
-            Step3 = new FlowCertificationDraftDto(
-                Certifications: [new(Category: "english", Type: "toefl", Overall: 100m, TestDate: "2099-08", IsTarget: true)],
-                EnglishPlanned: true,
-                EnglishPlannedTestType: "toefl",
-                EnglishPlannedTargetScore: 105m),
-        };
-
-        await service.CommitFlowAsync(userId, new CommitProfileFlowRequest(draft));
-
-        var p = (await repo.GetProfileByUserIdAsync(userId))!;
-        var plan = Assert.Single(repo.Certifications[p.Id]);
-        Assert.Equal(100m, plan.OverallScore);
-        Assert.False(p.EnglishTestPlanned);
-    }
-
-    [Fact]
-    public async Task CommitFlowAsync_OldPlanFieldWithUnknownType_IsRejected()
-    {
-        var service = new ProfileFlowService(new InMemoryProfileFlowRepository(), new FakeFileStorageService());
-        var draft = FullDraft() with
-        {
-            Step3 = new FlowCertificationDraftDto(Certifications: [], StandardizedPlanned: true, StandardizedPlannedTestType: "ielts"),
-        };
-
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            service.CommitFlowAsync(Guid.NewGuid(), new CommitProfileFlowRequest(draft)));
-
-        Assert.Contains("bài thi chuẩn hóa dự kiến 'ielts' không có trong danh mục", ex.Message);
-    }
-
-    [Fact]
-    public async Task CommitFlowAsync_StandardizedPlannedWithoutType_IsRestoredWhenReopened()
+    public async Task CommitFlowAsync_StandardizedNoPlanTick_IsRestoredWhenReopened()
     {
         var repo = new InMemoryProfileFlowRepository();
         var service = new ProfileFlowService(repo, new FakeFileStorageService());
@@ -911,8 +865,7 @@ public class ProfileFlowServiceTests
 
         var step3 = (await service.GetFlowStateAsync(userId)).Draft.Step3!;
         Assert.True(step3.StandardizedPlanned);
-        Assert.Null(step3.StandardizedPlannedTestType);
-        Assert.Null(step3.StandardizedPlannedTargetScore);
+        Assert.DoesNotContain(step3.Certifications!, c => c.IsTarget);
     }
 
     [Fact]
@@ -1010,16 +963,15 @@ public class ProfileFlowServiceTests
     }
 
     [Theory]
-    [InlineData(true, "ielts", "dự định thi IELTS Academic tháng 03/2021 đã qua")]
-    [InlineData(true, null, "dự định thi tiếng Anh tháng 03/2021 đã qua")]
-    [InlineData(false, "sat", "dự định thi SAT tháng 03/2021 đã qua")]
-    public async Task CommitFlowAsync_OldPlanFieldInPast_SaysHowToFix(bool english, string? type, string expected)
+    [InlineData("english", "toefl", 100.0, "dự định thi TOEFL iBT tháng 03/2021 đã qua")]
+    [InlineData("standardized", "sat", 1450.0, "dự định thi SAT tháng 03/2021 đã qua")]
+    public async Task CommitFlowAsync_PlanCardInPast_SaysHowToFix(string category, string type, double target, string expected)
     {
         var service = new ProfileFlowService(new InMemoryProfileFlowRepository(), new FakeFileStorageService());
-        var step3 = english
-            ? new FlowCertificationDraftDto(Certifications: [], EnglishPlanned: true, EnglishPlannedDate: "2021-03", EnglishPlannedTestType: type)
-            : new FlowCertificationDraftDto(Certifications: [], StandardizedPlanned: true, StandardizedPlannedDate: "2021-03", StandardizedPlannedTestType: type);
-        var draft = FullDraft() with { Step3 = step3 };
+        var draft = FullDraft(certifications:
+        [
+            new(Category: category, Type: type, Overall: (decimal)target, TestDate: "2021-03", IsTarget: true),
+        ]);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             service.CommitFlowAsync(Guid.NewGuid(), new CommitProfileFlowRequest(draft)));
@@ -1232,20 +1184,18 @@ public class ProfileFlowServiceTests
     }
 
     [Fact]
-    public async Task SaveDraftAsync_PreservesStandardizedAndEnglishPlan()
+    public async Task SaveDraftAsync_PreservesPlanCardsAndNoPlanTick()
     {
         var repo = new InMemoryProfileFlowRepository();
         var service = new ProfileFlowService(repo, new FakeFileStorageService());
         var userId = Guid.NewGuid();
         var step3 = new FlowCertificationDraftDto(
-            EnglishPlanned: true,
-            EnglishPlannedDate: "2027-10",
-            EnglishPlannedTestType: "ielts",
-            EnglishPlannedTargetScore: 7.5m,
-            StandardizedPlanned: true,
-            StandardizedPlannedDate: "2027-12",
-            StandardizedPlannedTestType: "sat",
-            StandardizedPlannedTargetScore: 1450m);
+            Certifications:
+            [
+                new(Id: "p1", Category: "english", Type: "ielts", Overall: 7.5m, TestDate: "2027-10", IsTarget: true),
+                new(Id: "p2", Category: "english", Type: "toefl", Overall: 100m, TestDate: "2027-11", IsTarget: true),
+            ],
+            StandardizedPlanned: true);
         var draft = new ProfileFlowDraftDto { Step3 = step3 };
 
         await service.SaveDraftAsync(userId, new SaveProfileDraftRequest(3, [1, 2], draft));
@@ -1253,27 +1203,24 @@ public class ProfileFlowServiceTests
 
         Assert.NotNull(state.Draft?.Step3);
         Assert.True(state.Draft.Step3.StandardizedPlanned);
-        Assert.Equal("2027-12", state.Draft.Step3.StandardizedPlannedDate);
-        Assert.Equal("sat", state.Draft.Step3.StandardizedPlannedTestType);
-        Assert.Equal(1450m, state.Draft.Step3.StandardizedPlannedTargetScore);
-        Assert.True(state.Draft.Step3.EnglishPlanned);
-        Assert.Equal("2027-10", state.Draft.Step3.EnglishPlannedDate);
-        Assert.Equal("ielts", state.Draft.Step3.EnglishPlannedTestType);
-        Assert.Equal(7.5m, state.Draft.Step3.EnglishPlannedTargetScore);
+        Assert.False(state.Draft.Step3.EnglishPlanned);
+        Assert.Equal(2, state.Draft.Step3.Certifications!.Count(c => c.IsTarget));
+        Assert.Contains(state.Draft.Step3.Certifications!, c => c.Type == "ielts" && c.Overall == 7.5m && c.TestDate == "2027-10");
+        Assert.Contains(state.Draft.Step3.Certifications!, c => c.Type == "toefl" && c.Overall == 100m && c.TestDate == "2027-11");
     }
 
     [Fact]
-    public async Task PatchDraftAsync_StandardizedPlanFromChat_TicksCheckboxInDraft()
+    public async Task PatchDraftAsync_StandardizedNoPlanFromChat_TicksCheckboxInDraft()
     {
         var repo = new InMemoryProfileFlowRepository();
         var service = new ProfileFlowService(repo, new FakeFileStorageService());
         var userId = Guid.NewGuid();
 
-        // Chat đổi standardized_plan (học sinh bấm nút "Em chưa thi SAT/ACT")
+        // Chat bấm "Em chưa có dự định thi" ở câu E3
         var chat = ChatProfile("""
         {
           "standardized_plan": {
-            "value": { "planned": true, "date": null },
+            "value": { "planned": false, "date": null },
             "status": "confirmed"
           }
         }
@@ -1283,7 +1230,34 @@ public class ProfileFlowServiceTests
 
         Assert.NotNull(state.Draft?.Step3);
         Assert.True(state.Draft.Step3.StandardizedPlanned);
-        Assert.Null(state.Draft.Step3.StandardizedPlannedDate);
+        Assert.DoesNotContain(state.Draft.Step3.Certifications ?? [], c => c.IsTarget);
+    }
+
+    [Fact]
+    public async Task PatchDraftAsync_StandardizedPlanFromChat_AddsPlanCardInDraft()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var service = new ProfileFlowService(repo, new FakeFileStorageService());
+        var userId = Guid.NewGuid();
+
+        var chat = ChatProfile("""
+        {
+          "standardized_plan": {
+            "value": { "planned": true, "date": "2099-10", "test_type": "sat", "target_score": 1450 },
+            "status": "confirmed"
+          }
+        }
+        """);
+        await service.PatchDraftAsync(userId, chat, ["standardized_plan"]);
+        var state = await service.GetFlowStateAsync(userId);
+
+        Assert.NotNull(state.Draft?.Step3);
+        Assert.False(state.Draft.Step3.StandardizedPlanned);
+        var card = Assert.Single(state.Draft.Step3.Certifications!);
+        Assert.True(card.IsTarget);
+        Assert.Equal("sat", card.Type);
+        Assert.Equal("2099-10", card.TestDate);
+        Assert.Equal(1450m, card.Overall);
     }
 
     // C6: chat xác nhận hồ sơ khi chưa hỏi học bổng; chọn trường mới bắt buộc (C7)
