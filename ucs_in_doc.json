@@ -593,5 +593,12 @@
     "role": "Học sinh, Phụ huynh",
     "status": "Chưa có",
     "dev_todo": "Mục 5.3"
+  },
+  {
+    "uc": "UC-80",
+    "name": "Xóa tài khoản và dữ liệu",
+    "role": "Học sinh, Phụ huynh",
+    "status": "Đã có",
+    "dev_todo": "Thêm xử lý dữ liệu đã chia sẻ cho trung tâm khi xóa (mục 5.2)"
   }
 ]
