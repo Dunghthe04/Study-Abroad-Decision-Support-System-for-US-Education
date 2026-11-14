@@ -46,10 +46,11 @@ ORDER = [
 
 MAX_SKILLS = 2
 # Thông tin bắt buộc theo mốc, theo thứ tự hỏi (framework mục 4.1)
-# B3 (đánh giá hồ sơ): bậc học muốn theo, GPA, tiếng Anh, ngân sách. Chưa cần ngành.
-REQUIRED_B3 = ["target_level", "gpa", "english", "budget"]
-# B4 (lộ trình, gợi ý trường): thêm ngành (để lọc trường) và học bổng
-REQUIRED_B4 = [*REQUIRED_B3, "major", "scholarship"]
+# B3 (đánh giá hồ sơ): bậc học muốn theo, GPA, tiếng Anh, SAT/ACT, ngân sách, học bổng. Chưa cần ngành.
+# sat đại diện cả câu SAT/ACT: có ACT hoặc chứng chỉ chuẩn hóa khác cũng tính là đã trả lời (xem missing_fields)
+REQUIRED_B3 = ["target_level", "gpa", "english", "sat", "budget", "scholarship"]
+# B4 (lộ trình, gợi ý trường): thêm ngành (để lọc trường)
+REQUIRED_B4 = [*REQUIRED_B3, "major"]
 # Phải có giá trị đã xác nhận, không được bỏ qua hay "chưa rõ".
 # major: B3 không đòi ngành nên "chưa rõ" vẫn qua B3, nhưng B4 đòi ngành thật.
 MUST_HAVE_VALUE = {"target_level", "gpa", "budget", "major"}
@@ -90,7 +91,21 @@ def is_answered(name: str, field_value: ProfileField | None) -> bool:
 
 # Danh sách thông tin bắt buộc còn thiếu, theo thứ tự hỏi (mặc định tính theo mốc B4, mốc đầy đủ nhất)
 def missing_fields(profile: dict[str, ProfileField], required: list[str] = REQUIRED_B4) -> list[str]:
-    return [name for name in required if not is_answered(name, profile.get(name))]
+    return [
+        name
+        for name in required
+        if not (standardized_answered(profile) if name == "sat" else is_answered(name, profile.get(name)))
+    ]
+
+
+# Câu SAT/ACT đã trả lời: có SAT, ACT (kể cả bấm "Em chưa thi") hoặc chứng chỉ không phải tiếng Anh (AP, IB, GRE...)
+def standardized_answered(profile: dict[str, ProfileField]) -> bool:
+    if is_answered("sat", profile.get("sat")) or is_answered("act", profile.get("act")):
+        return True
+    certs = profile.get("certifications")
+    if certs is None or not isinstance(certs.value, list):
+        return False
+    return any(isinstance(c, dict) and c.get("category") != "english" for c in certs.value)
 
 
 # Predicted: nhãn model chọn,Đã xếp xác suất cao trước

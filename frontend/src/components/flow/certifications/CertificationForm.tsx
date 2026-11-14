@@ -35,6 +35,8 @@ interface CertificationFormProps {
   otherCategory: CertificationCategory;
   onSave: (cert: CertificationItem) => void;
   onCancel: () => void;
+  /** lỗi so với các thẻ khác (trùng dự định, điểm mục tiêu không cao hơn điểm đã thi); null = không lỗi */
+  checkConflict?: (cert: CertificationItem) => string | null;
 }
 
 const numText = (v: number | null | undefined) => (v == null ? "" : String(v));
@@ -49,6 +51,7 @@ export function CertificationForm({
   otherCategory,
   onSave,
   onCancel,
+  checkConflict,
 }: CertificationFormProps) {
   const [cert, setCert] = useState<CertificationItem>(initial);
   const [overallText, setOverallText] = useState(numText(initial.overall));
@@ -56,11 +59,13 @@ export function CertificationForm({
     Object.fromEntries(Object.entries(initial.sections ?? {}).map(([k, v]) => [k, numText(v)]))
   );
   const [errors, setErrors] = useState<CertFormErrors>({});
+  const [conflict, setConflict] = useState<string | null>(null);
 
   const type = findCertType(types, cert.type);
   const isOther = isOtherCert(cert);
   const hasNumericScale = type?.min != null && type?.max != null;
-  const expiry = getExpiry(cert.testDate, type);
+  const isTarget = Boolean(cert.isTarget);
+  const expiry = isTarget ? null : getExpiry(cert.testDate, type);
   const now = new Date();
   const thisMonth = { year: now.getFullYear(), month: now.getMonth() + 1 };
 
@@ -75,15 +80,28 @@ export function CertificationForm({
       type: typeId,
       category: typeId === OTHER_CERT_TYPE ? otherCategory : (next?.category ?? otherCategory),
       testDate: cert.testDate ?? null,
+      isTarget: cert.isTarget,
     });
     setOverallText("");
     setSectionTexts({});
     setErrors({});
+    setConflict(null);
+  };
+
+  // Đổi giữa "Đã có điểm" và "Dự định thi": tháng thi đã qua / tháng dự kiến không dùng chung được nên xóa;
+  // điểm cũng xóa vì điểm đã thi khác điểm mục tiêu
+  const handleModeChange = (target: boolean) => {
+    if (target === isTarget) return;
+    patch({ isTarget: target, testDate: null, overall: null, scaleText: isOther ? cert.scaleText : null });
+    setOverallText("");
+    setSectionTexts({});
+    setErrors({});
+    setConflict(null);
   };
 
   const buildCert = (): CertificationItem => {
     const sections: Record<string, number | null> = {};
-    for (const s of type?.sections ?? []) {
+    for (const s of isTarget ? [] : (type?.sections ?? [])) {
       const v = parseNum(sectionTexts[s.id] ?? "");
       if (v != null) sections[s.id] = v;
     }
@@ -101,7 +119,9 @@ export function CertificationForm({
     const result = buildCert();
     const nextErrors = validateCertification(result, type);
     setErrors(nextErrors);
-    if (Object.keys(nextErrors).length === 0) onSave(result);
+    const nextConflict = Object.keys(nextErrors).length === 0 ? (checkConflict?.(result) ?? null) : null;
+    setConflict(nextConflict);
+    if (Object.keys(nextErrors).length === 0 && !nextConflict) onSave(result);
   };
 
   const scoreHint =
@@ -119,7 +139,7 @@ export function CertificationForm({
       id={`${cert.id}-date`}
       placeholder="Tháng / năm"
       value={parseYearMonth(cert.testDate)}
-      max={thisMonth}
+      {...(isTarget ? { min: thisMonth } : { max: thisMonth })}
       onChange={(m) => patch({ testDate: toYearMonth(m) })}
     />
   );
@@ -136,6 +156,27 @@ export function CertificationForm({
         >
           <XIcon className="size-4" />
         </button>
+      </div>
+
+      <div role="radiogroup" aria-label="Đã thi hay dự định thi" className="inline-flex rounded-lg border border-line p-0.5">
+        {[
+          { target: false, label: "Đã có điểm" },
+          { target: true, label: "Dự định thi" },
+        ].map((opt) => (
+          <button
+            key={opt.label}
+            type="button"
+            role="radio"
+            aria-checked={isTarget === opt.target}
+            onClick={() => handleModeChange(opt.target)}
+            className={cn(
+              "cursor-pointer rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+              isTarget === opt.target ? "bg-brand text-white" : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            {opt.label}
+          </button>
+        ))}
       </div>
 
       <div className="space-y-1.5">
@@ -172,7 +213,7 @@ export function CertificationForm({
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="space-y-1.5">
               <Label htmlFor={`${cert.id}-overall`} className="text-xs font-medium">
-                Điểm tổng <RequiredMark />
+                {isTarget ? "Điểm mục tiêu (tùy chọn)" : "Điểm tổng"}
               </Label>
               <Input
                 id={`${cert.id}-overall`}
@@ -199,7 +240,7 @@ export function CertificationForm({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor={`${cert.id}-date`} className="text-xs font-medium">
-                Ngày thi
+                {isTarget ? "Dự kiến thi (tùy chọn)" : "Ngày thi"}
               </Label>
               {datePicker}
               <FieldError message={errors.testDate} />
@@ -221,7 +262,7 @@ export function CertificationForm({
           {type.requiresSubject && (
             <div className="space-y-1.5">
               <Label htmlFor={`${cert.id}-subject`} className="text-xs font-medium">
-                {type.subjectLabel ?? "Tên môn"} <RequiredMark />
+                {type.subjectLabel ?? "Tên môn"} {isTarget ? "(tùy chọn)" : <RequiredMark />}
               </Label>
               <Input
                 id={`${cert.id}-subject`}
@@ -238,7 +279,7 @@ export function CertificationForm({
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor={`${cert.id}-overall`} className="text-xs font-medium">
-                {type.sections.length > 0 ? "Điểm tổng" : "Điểm"}
+                {isTarget ? "Điểm mục tiêu (tùy chọn)" : type.sections.length > 0 ? "Điểm tổng" : "Điểm"}
               </Label>
               {hasNumericScale ? (
                 <Input
@@ -270,7 +311,7 @@ export function CertificationForm({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor={`${cert.id}-date`} className="text-xs font-medium">
-                Ngày thi
+                {isTarget ? "Dự kiến thi (tùy chọn)" : "Ngày thi"}
               </Label>
               {datePicker}
               {errors.testDate ? (
@@ -283,7 +324,7 @@ export function CertificationForm({
             </div>
           </div>
 
-          {type.sections.length > 0 && (
+          {!isTarget && type.sections.length > 0 && (
             <div className="space-y-3 rounded-lg border border-line bg-ground/50 p-4">
               <div>
                 <p className="text-sm font-medium text-foreground">Điểm từng kỹ năng</p>
@@ -318,12 +359,19 @@ export function CertificationForm({
         </>
       )}
 
+      {conflict && (
+        <p className="flex items-center gap-1.5 text-sm text-risk">
+          <AlertTriangleIcon className="size-4 shrink-0" />
+          {conflict}
+        </p>
+      )}
+
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={onCancel}>
           Hủy
         </Button>
         <Button type="button" onClick={handleSave} disabled={!cert.type}>
-          Lưu chứng chỉ
+          {isTarget ? "Lưu dự định" : "Lưu chứng chỉ"}
         </Button>
       </div>
     </div>

@@ -13,6 +13,12 @@ const NEEDS_MAJOR: FormGoal[] = ["lo_trinh", "goi_y_truong"];
 
 const ALL_GOALS = FORM_GOAL_OPTIONS.map((o) => o.value);
 
+// Mục tiêu đã tích ở form, hoặc việc học sinh đã hỏi khi điền hồ sơ trong chat (sessionStorage).
+// Không lưu vào nháp hồ sơ vì đây là việc muốn làm, không phải thông tin hồ sơ
+export const GOALS_KEY = "usas_flow_goals";
+// Báo form đang mở biết mục tiêu đã lưu vừa đổi (chat gửi thêm việc học sinh hỏi)
+export const GOALS_CHANGED_EVENT = "usas:form-goals-changed";
+
 // "danh_gia,lo_trinh" → ["danh_gia", "lo_trinh"]; mã lạ bỏ qua, giữ thứ tự của FORM_GOAL_OPTIONS
 export function parseGoals(text: string | null | undefined): FormGoal[] {
   const picked = new Set((text ?? "").split(",").map((s) => s.trim()));
@@ -34,4 +40,17 @@ export function goalsQuestion(goals: FormGoal[]): string {
   );
   const joined = labels.length > 1 ? `${labels.slice(0, -1).join(", ")} và ${labels.at(-1)}` : (labels[0] ?? "");
   return `${joined} cho em`;
+}
+
+// Chat gửi việc học sinh đã hỏi khi điền hồ sơ trong chat: gộp với mục tiêu đã lưu để mở form từ menu vẫn tích sẵn
+export function rememberChatGoals(codes: string[]): void {
+  try {
+    const saved = parseGoals(sessionStorage.getItem(GOALS_KEY));
+    const next = parseGoals([...saved, ...codes].join(","));
+    if (next.length === saved.length) return; // không có mục mới
+    sessionStorage.setItem(GOALS_KEY, next.join(","));
+  } catch {
+    return; // trình duyệt chặn storage → bỏ qua
+  }
+  window.dispatchEvent(new Event(GOALS_CHANGED_EVENT));
 }

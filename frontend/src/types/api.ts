@@ -311,6 +311,7 @@ export interface AdvisorChatResponse {
   profileChanged?: string[] | null; // khóa hồ sơ chat vừa đổi; form cần nạp lại khi có giá trị
   profileSaved?: boolean | null; // lượt này vừa lưu hồ sơ chính thức (bấm "Đúng rồi" ở bảng rà soát)
   formStep?: number | null; // trang form (1–6) của câu chat đang hỏi; form chuyển theo
+  formGoals?: string[] | null; // việc học sinh đã hỏi khi điền hồ sơ trong chat (danh_gia, lo_trinh, goi_y_truong); form tích sẵn
 }
 
 /** Một dòng của POST /api/v1/advisor/chat/stream (mỗi dòng một JSON): trả lời theo từng ý khi xong. */

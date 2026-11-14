@@ -13,8 +13,15 @@ def state(step: str = "B2", **fields: str) -> ChatState:
     )
 
 
-B3_PROFILE = dict(target_level="confirmed", gpa="confirmed", english="confirmed", budget="confirmed")
-FULL_PROFILE = dict(B3_PROFILE, major="confirmed", scholarship="confirmed")  # đủ cho cả B4
+B3_PROFILE = dict(
+    target_level="confirmed",
+    gpa="confirmed",
+    english="confirmed",
+    sat="confirmed",
+    budget="confirmed",
+    scholarship="confirmed",
+)
+FULL_PROFILE = dict(B3_PROFILE, major="confirmed")  # đủ cho cả B4
 
 
 def test_unsure_model_falls_back_to_current_step_skill():
@@ -73,15 +80,50 @@ def test_assessment_is_blocked_until_profile_is_complete():
 
     assert plan.skills == []
     assert plan.blocked == [Blocked("skill_danh_gia", "thieu_ho_so")]
-    assert plan.missing == ["target_level", "english", "budget"]  # đúng thứ tự hỏi, chưa đòi ngành
+    assert plan.missing == [
+        "target_level",
+        "english",
+        "sat",
+        "budget",
+        "scholarship",
+    ]  # đúng thứ tự hỏi, chưa đòi ngành
 
 
-def test_assessment_runs_without_major_or_scholarship():
+def test_assessment_runs_without_major():
     plan = plan_skills(state("B3", **B3_PROFILE), ["skill_danh_gia"])
 
     assert plan.skills == ["skill_danh_gia"]
     assert not plan.blocked
     assert plan.missing == []
+
+
+# Đánh giá hồ sơ cũng cần học bổng và câu SAT/ACT
+def test_assessment_is_blocked_without_scholarship_or_sat():
+    profile = {k: v for k, v in B3_PROFILE.items() if k not in ("sat", "scholarship")}
+    plan = plan_skills(state("B3", **profile), ["skill_danh_gia"])
+
+    assert plan.blocked == [Blocked("skill_danh_gia", "thieu_ho_so")]
+    assert plan.missing == ["sat", "scholarship"]
+
+
+# Câu SAT/ACT: có ACT, bấm "Em chưa thi" (none) hoặc có chứng chỉ khác không phải tiếng Anh đều tính là đã trả lời
+def test_sat_question_is_answered_by_act_none_or_other_standardized_cert():
+    base = {k: v for k, v in FULL_PROFILE.items() if k != "sat"}
+    assert missing_fields(state(**base).profile) == ["sat"]
+    assert missing_fields(state(**base, act="confirmed").profile) == []
+    assert missing_fields(state(**base, sat="none").profile) == []
+
+    with_ap = state(**base).profile
+    with_ap["certifications"] = ProfileField(
+        value=[{"category": "standardized", "type": "ap"}], status="confirmed"
+    )
+    assert missing_fields(with_ap) == []
+
+    english_only = state(**base).profile
+    english_only["certifications"] = ProfileField(
+        value=[{"category": "english", "type": "ielts"}], status="confirmed"
+    )
+    assert missing_fields(english_only) == ["sat"]
 
 
 def test_assessment_still_runs_when_major_is_unknown():
@@ -136,7 +178,7 @@ def test_missing_fields_can_be_counted_for_the_b3_milestone_only():
     profile = dict(B3_PROFILE, major="unknown")
 
     assert missing_fields(state(**profile).profile, REQUIRED_B3) == []
-    assert missing_fields(state(**profile).profile) == ["major", "scholarship"]  # mặc định tính theo B4
+    assert missing_fields(state(**profile).profile) == ["major"]  # mặc định tính theo B4
 
 
 def test_explain_and_what_if_need_a_school_list():

@@ -83,12 +83,13 @@ function stepSummary(step: number, draft: ProfileFlowDraft, metadata: ProfileMet
     }
     case 3: {
       const certs = draft.step3.certifications ?? [];
-      if (certs.length === 0) return draft.step3.englishPlanned ? "Chưa có, sẽ thi tiếng Anh sau" : null;
+      if (certs.length === 0) return draft.step3.englishPlanned ? "Chưa thi, chưa có dự định thi" : null;
       const types = metadata?.certificationTypes ?? [];
       return certs
         .map((c) => {
           const name = getCertDisplayName(c, findCertType(types, c.type));
-          return c.overall != null ? `${name} ${c.overall}` : name;
+          const label = c.overall != null ? `${name} ${c.overall}` : name;
+          return c.isTarget ? `${label} (dự định)` : label;
         })
         .join(" · ");
     }

@@ -31,6 +31,7 @@ from app.services.scenario import FILTER_FACTORS, LABELS, SUPPORTED_TEXT, WhatIf
 from app.services.skill_input import skill_request_of
 from app.services.skill_rules import REQUIRED_B3, REQUIRED_B4, REQUIRED_BY_SKILL, missing_fields
 from app.services.skill_template import TEMPLATE_TASKS, build_skill, tasks_of
+from app.services.skills import skill_ho_so
 from app.services.skills.profile_handler import ChatProfileHandler
 from app.services.skills.skill_danh_gia import gpa_table_of
 from app.services.skills.validators import AskAgain
@@ -308,13 +309,18 @@ class LegacyAdviceBranch:
 # Đủ hồ sơ thì trả None để nhánh tư vấn làm tiếp
 def ask_missing_profile(state: ChatState, y: SlmY, required: list[str]) -> SkillOutput | None:
     missing = missing_fields(state.profile, required)
-    if not missing:
+    # Đủ hồ sơ mà còn dự định thi quá hạn thì cũng hỏi trước khi tư vấn (dự định cũ làm lệch đánh giá)
+    overdue = skill_ho_so.overdue_card(state) is not None
+    if not missing and not overdue:
         return None
     # Nhớ câu tư vấn để trả lời ngay khi học sinh xác nhận hồ sơ (ProfileBranch). Chỉ giữ câu đầu tiên
     if state.pending_advice is None:
         state.pending_advice = y
-    if state.question_id and state.question_id not in OPENING_QUESTIONS:
+    # Đang chờ ở bảng rà soát X1 mà hồ sơ thiếu (hồ sơ bị xóa sau khi rà soát) thì không nhắc lại bảng trống, hỏi lại từ đầu
+    if state.question_id and state.question_id not in OPENING_QUESTIONS and state.question_id != "X1":
         return SkillOutput(NEED_PROFILE)
+    if not missing:
+        return skill_ho_so.ask_overdue_first(state)
     return ask_major(state) if missing[0] == "major" else start_intake(state, required)
 
 

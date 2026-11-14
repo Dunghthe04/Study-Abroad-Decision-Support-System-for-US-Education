@@ -86,6 +86,43 @@ public class CenterLeadMapperTests
     }
 
     [Fact]
+    public void Tests_TargetScoresGoToPlannedTests_NotToScores()
+    {
+        // Chưa thi tiếng Anh, đã thi SAT 1400 và dự định thi lại 1500, dự định IELTS 7.0. Cột cache Sat/Ielts đang giữ điểm mục tiêu
+        var profile = new StudentProfile { Ielts = 7m, EnglishTestType = "none", Sat = 1400m };
+        IReadOnlyList<ProfileCertification> certs =
+        [
+            new() { Category = "standardized", TestType = "sat", OverallScore = 1400m, TestDate = new DateOnly(2026, 3, 1), SortOrder = 0 },
+            new() { Category = "standardized", TestType = "sat", OverallScore = 1500m, TestDate = new DateOnly(2027, 3, 1), IsTarget = true, SortOrder = 1 },
+            new() { Category = "english", TestType = "ielts", OverallScore = 7m, TestDate = new DateOnly(2027, 1, 1), IsTarget = true, SortOrder = 2 },
+        ];
+
+        var dto = CenterLeadMapper.ToCenterDto(
+            new Lead { SharedFields = [LeadSharedFields.Tests] }, "Trung Tâm Test", "Nguyen Van A", "a@example.com", profile, certs);
+
+        var p = Assert.IsType<SharedProfileSummaryDto>(dto.ProfileSummary);
+        Assert.Null(p.EnglishScore);
+        Assert.Null(p.EnglishTestType);
+        Assert.Equal(1400m, p.SatScore);
+        Assert.Null(p.ActScore);
+        Assert.Collection(p.PlannedTests!,
+            sat => { Assert.Equal("sat", sat.TestType); Assert.Equal(1500m, sat.TargetScore); Assert.Equal(new DateOnly(2027, 3, 1), sat.PlannedDate); },
+            ielts => { Assert.Equal("ielts", ielts.TestType); Assert.Equal(7m, ielts.TargetScore); });
+    }
+
+    [Fact]
+    public void TestsNotShared_NoPlannedTests()
+    {
+        IReadOnlyList<ProfileCertification> certs = [new() { TestType = "sat", OverallScore = 1500m, IsTarget = true }];
+
+        var dto = CenterLeadMapper.ToCenterDto(
+            new Lead { SharedFields = [LeadSharedFields.Goals] }, "Trung Tâm Test", null, null, Profile, certs);
+
+        Assert.Null(dto.ProfileSummary!.PlannedTests);
+        Assert.Null(dto.ProfileSummary.SatScore);
+    }
+
+    [Fact]
     public void GroupsChosenButNoProfile_ProfileSummaryNull()
     {
         var dto = CenterLeadMapper.ToCenterDto(

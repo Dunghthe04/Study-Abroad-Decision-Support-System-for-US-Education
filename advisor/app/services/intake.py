@@ -16,6 +16,8 @@ INTAKE_FORM = "Bạn điền hồ sơ ở form nhé, điền xong quay lại đ�
 INTAKE_MORE = "Hồ sơ của bạn còn thiếu một vài thông tin. "
 # Nút "Tiếp tục bằng chat" trên form gửi câu này: hỏi tiếp trong chat các mục còn thiếu
 CONTINUE_CHAT = "Tiếp tục bằng chat"
+# Quay về từ form mà hồ sơ đã đủ, không có câu tư vấn nào đang chờ: không hỏi gì thêm
+FORM_DONE = "Hồ sơ của bạn đã đủ thông tin. Bạn muốn mình tư vấn gì tiếp?"
 
 CHAT_BUTTON = QuickReply(label="Trả lời trong chat", value="Trả lời trong chat")
 FORM_BUTTON = QuickReply(label="Điền bằng form", value="Điền bằng form")
@@ -26,6 +28,7 @@ FIELD_QUESTION = {
     "major": ("B1", "B1.3"),
     "gpa": ("B2", "D2"),
     "english": ("B2", "E1"),
+    "sat": ("B2", "D3"),
     "budget": ("B2", "F1"),
     "scholarship": ("B2", "F2"),
 }

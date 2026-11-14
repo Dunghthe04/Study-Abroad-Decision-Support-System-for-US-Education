@@ -30,7 +30,7 @@ import {
   draftGpa,
   labelOf,
 } from "@/lib/profile-flow-options";
-import { findCertType, formatCertSummary, formatYearMonth } from "@/lib/certification-utils";
+import { findCertType, formatCertSummary } from "@/lib/certification-utils";
 import type { DraftTranscriptFile, ProfileFlowDraft, ProfileMetadataResponse } from "@/types/profile-flow";
 
 // BE trả lỗi khi gửi hồ sơ thành một chuỗi "Bước 1: ... Bước 3: ..." → tách theo bước để hiện ở thẻ của bước đó
@@ -160,14 +160,10 @@ export function Step6Review({
   const need = SCHOLARSHIP_NEED_OPTIONS.find((o) => o.value === step4.needFinancialAid);
   const financialNeedLabel = need ? `${need.label} (${need.description.toLowerCase()})` : "Chưa chọn";
 
-  // Transcript stats
-  const totalSubjects = step2.academicYears?.reduce((sum, y) => sum + y.subjects.length, 0) ?? 0;
-  const totalYears = step2.academicYears?.length ?? 0;
   // Cùng cách tính với BE (TranscriptGpa): GPA tổng hoặc tính từ điểm môn
   const { gpa10, gpa4 } = draftGpa(step2);
   const gpa = gpa4 != null ? gpa4.toFixed(2) : "–";
   const gpa10Text = gpa10 != null ? gpa10.toFixed(1) : "–";
-  const gradeNames = (step2.academicYears ?? []).map((y) => y.gradeName).join(", ");
 
   // Activities & Awards count
   const activitiesCount = step5.activities.filter((a) => a.category === "activity").length;
@@ -221,19 +217,15 @@ export function Step6Review({
         </ReviewCard>
 
         <ReviewCard icon={FileTextIcon} eyebrow="Bảng điểm" onEdit={() => onEditStep(2)} errors={stepErrors.byStep[2]}>
-          <div className="flex items-start justify-between gap-3">
-            <div className="space-y-1">
-              <div className="text-sm font-semibold text-foreground">
-                {totalYears > 0 ? `${totalSubjects} môn · ${gradeNames}` : "Chưa nhập điểm"}
+          {/* Thẻ chỉ hiện ô điểm tự tính, nhập GPA tổng hay học bạ từng môn đều vậy */}
+          <div className="space-y-2">
+            {draftTranscript && (
+              <div className="flex items-center gap-1 text-xs text-ok">
+                <CheckCircle2Icon className="size-3" />
+                Đã tải tệp: {draftTranscript.originalFileName}
               </div>
-              {draftTranscript && (
-                <div className="flex items-center gap-1 text-xs text-ok">
-                  <CheckCircle2Icon className="size-3" />
-                  Đã tải tệp: {draftTranscript.originalFileName}
-                </div>
-              )}
-            </div>
-            <div className="shrink-0 rounded-xl bg-brand-wash px-3 py-1.5 text-center">
+            )}
+            <div className="mx-auto w-fit rounded-xl bg-brand-wash px-3 py-1.5 text-center">
               <div className="text-xs font-semibold text-brand-ink">Điểm TB tự tính</div>
               <div className="text-numeric text-base font-bold text-brand">{gpa10Text}</div>
               <div className="text-xs text-brand-ink">thang 4 (tham khảo): {gpa}</div>
@@ -251,30 +243,8 @@ export function Step6Review({
           ) : (
             <div>Chưa có chứng chỉ</div>
           )}
-          {step3.englishPlanned && (
-            <div>
-              <strong className="text-foreground">Dự kiến thi tiếng Anh: </strong>
-              {[
-                step3.englishPlannedTestType?.toUpperCase(),
-                step3.englishPlannedTargetScore != null ? `mục tiêu ${step3.englishPlannedTargetScore}` : null,
-                formatYearMonth(step3.englishPlannedDate) ? `thi ${formatYearMonth(step3.englishPlannedDate)}` : null,
-              ]
-                .filter(Boolean)
-                .join(" · ") || "chưa chọn thời gian"}
-            </div>
-          )}
-          {step3.standardizedPlanned && (
-            <div>
-              <strong className="text-foreground">Dự kiến thi chuẩn hóa: </strong>
-              {[
-                step3.standardizedPlannedTestType?.toUpperCase(),
-                step3.standardizedPlannedTargetScore != null ? `mục tiêu ${step3.standardizedPlannedTargetScore}` : null,
-                formatYearMonth(step3.standardizedPlannedDate) ? `thi ${formatYearMonth(step3.standardizedPlannedDate)}` : null,
-              ]
-                .filter(Boolean)
-                .join(" · ") || "chưa chọn thời gian"}
-            </div>
-          )}
+          {step3.englishPlanned && <div>Tiếng Anh: chưa thi và chưa có dự định thi</div>}
+          {step3.standardizedPlanned && <div>Bài thi chuẩn hóa: chưa thi và chưa có dự định thi</div>}
         </ReviewCard>
 
         <ReviewCard icon={DollarSignIcon} eyebrow="Tài chính" onEdit={() => onEditStep(4)} errors={stepErrors.byStep[4]}>

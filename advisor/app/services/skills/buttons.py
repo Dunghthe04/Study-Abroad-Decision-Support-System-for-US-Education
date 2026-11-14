@@ -89,18 +89,14 @@ BUTTONS = {
         Button("Tiến sĩ", {"target_level": confirmed("phd")}),
     ),
     "B1.3": (Button("Em chưa rõ ngành", {"major": UNKNOWN}),),
-    "D3": (
-        Button(
-            "Em chưa thi SAT/ACT",
-            {"sat": NONE, "act": NONE, "standardized_plan": confirmed({"planned": True, "date": None})},
-        ),
-    ),
-    # Chưa thi thì tích luôn ô "sẽ thi sau" của form; E2 hỏi tiếp tháng dự kiến (bỏ qua thì ô vẫn tích)
-    "E1": (
-        Button(
-            "Em chưa thi tiếng Anh",
-            {"english": NONE, "english_plan": confirmed({"planned": True, "date": None})},
-        ),
+    # Chưa thi bài nào thì chỉ ghi chưa có chứng chỉ; dự định thi hỏi tiếp ở E2 / E3 như mục của form
+    "D3": (Button("Em chưa thi bài nào", {"sat": NONE, "act": NONE}),),
+    "E1": (Button("Em chưa thi tiếng Anh", {"english": NONE}),),
+    # Chưa có dự định thi (lần đầu hay thi lại): bỏ các thẻ dự định của mục; mục không còn thẻ nào thì
+    # thành ô tích "chưa thi và chưa có dự định thi" của form (ChatProfileMapper.ApplyPlan)
+    "E2": (Button("Em chưa có dự định thi", {"english_plan": confirmed({"planned": False, "date": None})}),),
+    "E3": (
+        Button("Em chưa có dự định thi", {"standardized_plan": confirmed({"planned": False, "date": None})}),
     ),
     "F1": tuple(Button(label, {"budget": confirmed(tier)}) for tier, label in BUDGET_LABELS.items()),
     "F2": (),
@@ -461,18 +457,18 @@ def select_fields(question_id: str) -> dict | None:
         },
         "D3": cert_fields(("standardized", "graduate"), "VD: 1350", allowed_codes=POPULAR_STANDARDIZED_CERTS),
         "E1": cert_fields(("english",), "VD: 6.5", allowed_codes=POPULAR_ENGLISH_CERTS),
-        # E2: hỏi kế hoạch thi tiếng Anh — bài thi, điểm mục tiêu và tháng tất cả đều tùy chọn
+        # E2: hỏi một dự định thi tiếng Anh — bài thi bắt buộc (thành thẻ dự định như form), điểm mục tiêu
+        # và tháng tùy chọn
         "E2": {
             "fields": [
                 {
                     "name": "type",
-                    "label": "Bài thi dự kiến (tùy chọn)",
+                    "label": "Bài thi dự kiến",
                     "placeholder": "Chọn bài thi",
                     "options": same_options(
                         [spec.name for code, spec in CERT_TYPES.items() if code in POPULAR_ENGLISH_CERTS]
                     ),
                     "prefix": " ",
-                    "optional": True,
                 },
                 {
                     "name": "score",
@@ -539,18 +535,17 @@ def select_fields(question_id: str) -> dict | None:
             ],
             "format": "Em dự kiến thi{type}{score}{month}{year}",
         },
-        # E3: hỏi kế hoạch thi chuẩn hóa — bài thi, điểm mục tiêu và tháng tất cả đều tùy chọn
+        # E3: hỏi một dự định thi chuẩn hóa — bài thi bắt buộc, điểm mục tiêu và tháng tùy chọn
         "E3": {
             "fields": [
                 {
                     "name": "type",
-                    "label": "Bài thi dự kiến (tùy chọn)",
+                    "label": "Bài thi dự kiến",
                     "placeholder": "Chọn bài thi",
                     "options": same_options(
                         [spec.name for code, spec in CERT_TYPES.items() if code in POPULAR_STANDARDIZED_CERTS]
                     ),
                     "prefix": " ",
-                    "optional": True,
                 },
                 {
                     "name": "score",

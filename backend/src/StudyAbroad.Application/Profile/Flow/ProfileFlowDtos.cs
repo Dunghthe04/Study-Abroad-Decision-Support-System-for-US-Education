@@ -68,19 +68,14 @@ public record FlowSubjectDraftDto(
 );
 
 /// <summary>
-/// Bước 3 – danh sách chứng chỉ (certifications), kế hoạch thi tiếng Anh (englishPlanned, englishPlannedDate: yyyy-MM).
+/// Bước 3 – danh sách chứng chỉ (certifications), gồm cả dự định thi (isTarget = true).
+/// englishPlanned / standardizedPlanned: tick "chưa thi và chưa có dự định thi" của từng mục.
 /// englishTestType / englishOverallScore / englishTestDate / otherTests là dạng nháp cũ, chỉ đọc để chuyển sang danh sách
 /// </summary>
 public record FlowCertificationDraftDto(
     [property: JsonPropertyName("certifications")] List<FlowCertificationItemDto>? Certifications = null,
     [property: JsonPropertyName("englishPlanned")] bool EnglishPlanned = false,
-    [property: JsonPropertyName("englishPlannedDate")] string? EnglishPlannedDate = null,
-    [property: JsonPropertyName("englishPlannedTestType")] string? EnglishPlannedTestType = null,
-    [property: JsonPropertyName("englishPlannedTargetScore")] decimal? EnglishPlannedTargetScore = null,
     [property: JsonPropertyName("standardizedPlanned")] bool StandardizedPlanned = false,
-    [property: JsonPropertyName("standardizedPlannedDate")] string? StandardizedPlannedDate = null,
-    [property: JsonPropertyName("standardizedPlannedTestType")] string? StandardizedPlannedTestType = null,
-    [property: JsonPropertyName("standardizedPlannedTargetScore")] decimal? StandardizedPlannedTargetScore = null,
     [property: JsonPropertyName("englishTestType")] string? EnglishTestType = null,
     [property: JsonPropertyName("englishOverallScore")] decimal? EnglishOverallScore = null,
     [property: JsonPropertyName("englishTestDate")] string? EnglishTestDate = null,

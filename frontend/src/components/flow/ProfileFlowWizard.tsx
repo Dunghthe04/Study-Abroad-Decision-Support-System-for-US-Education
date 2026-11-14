@@ -21,7 +21,15 @@ import { Step6Review } from "./Step6Review";
 import { profileFlowApi } from "@/lib/profile-flow-api";
 import { migrateLegacyStep3 } from "@/lib/certification-utils";
 import { recommendationApi } from "@/lib/recommendation-api";
-import { goalsNeedMajor, goalsQuestion, onlySchoolList, parseGoals, type FormGoal } from "@/lib/form-goals";
+import {
+  GOALS_CHANGED_EVENT,
+  GOALS_KEY,
+  goalsNeedMajor,
+  goalsQuestion,
+  onlySchoolList,
+  parseGoals,
+  type FormGoal,
+} from "@/lib/form-goals";
 import type {
   GoalDraft,
   TranscriptDraft,
@@ -51,7 +59,7 @@ const INITIAL_DRAFT: ProfileFlowDraft = {
   step3: {
     certifications: [],
     englishPlanned: false,
-    englishPlannedDate: null,
+    standardizedPlanned: false,
   },
   step4: {
     annualBudgetTier: null,
@@ -87,6 +95,14 @@ function stepReady(step: number, draft: ProfileFlowDraft, goals: FormGoal[]): bo
       );
     case 2:
       return draft.step2.calculatedGpa4Scale != null || draft.step2.manualGpa10Scale != null;
+    case 3: {
+      // tiếng Anh và bài thi học thuật: mỗi mục có điểm hoặc tích "chưa thi" (giống nút Tiếp tục của bước 3)
+      const certs = draft.step3.certifications ?? [];
+      const english = certs.some((c) => c.category === "english") || draft.step3.englishPlanned;
+      const tests =
+        certs.some((c) => ["standardized", "graduate"].includes(c.category)) || draft.step3.standardizedPlanned;
+      return Boolean(english && tests);
+    }
     case 4:
       return Boolean(draft.step4.annualBudgetTier && draft.step4.needFinancialAid);
     case 5:
@@ -98,8 +114,6 @@ function stepReady(step: number, draft: ProfileFlowDraft, goals: FormGoal[]): bo
 
 // Phải khớp CONTINUE_CHAT trong advisor/app/services/intake.py
 const CONTINUE_CHAT = "Tiếp tục bằng chat";
-// Mục tiêu đã tích khi vào form trực tiếp; không lưu vào nháp hồ sơ vì đây là việc muốn làm, không phải thông tin hồ sơ
-const GOALS_KEY = "usas_flow_goals";
 
 export function ProfileFlowWizard() {
   const router = useRouter();
@@ -147,6 +161,13 @@ export function ProfileFlowWizard() {
     currentStepRef.current = currentStep;
   }, [currentStep]);
   const lastCompletedStep = completedSteps.length ? Math.max(...completedSteps) : 0;
+  // Trang 1 có ô mục tiêu thì phải tích ít nhất 1 (mở từ chat không có goal= thì ẩn ô này)
+  const showGoals = !fromChat || goals.length > 0;
+  // Bước đầu tiên còn thiếu mục bắt buộc (6 = đủ hết). Quay lại xoá một mục bắt buộc thì
+  // các bước sau khoá ngay, dù trước đó đã đi qua
+  const firstNotReady =
+    [1, 2, 3, 4, 5].find((s) => !stepReady(s, draft, goals) || (s === 1 && showGoals && goals.length === 0)) ?? 6;
+  const unlockedThrough = Math.min(lastCompletedStep, firstNotReady - 1);
 
   const stepTitle = FLOW_STEPS.find((s) => s.step === currentStep)?.title ?? "";
   useAssistantPageContext({
@@ -306,6 +327,20 @@ export function ProfileFlowWizard() {
   }, [user, persistDraft]);
   useAssistantProfileChanged(reloadFromChat);
 
+  // Form mở trực tiếp (không khóa mục tiêu) mà chat vừa gửi thêm việc học sinh hỏi: tích theo mục tiêu đã lưu
+  useEffect(() => {
+    if (goalsLocked) return;
+    const onGoals = () => {
+      try {
+        setGoals(parseGoals(sessionStorage.getItem(GOALS_KEY)));
+      } catch {
+        // bỏ qua
+      }
+    };
+    window.addEventListener(GOALS_CHANGED_EVENT, onGoals);
+    return () => window.removeEventListener(GOALS_CHANGED_EVENT, onGoals);
+  }, [goalsLocked]);
+
   // Rời khỏi ô đang gõ thì nạp phần chat đã đổi (đợi focus chuyển xong mới xét)
   useEffect(() => {
     const onFocusOut = () => {
@@ -402,6 +437,7 @@ export function ProfileFlowWizard() {
 
   // Điều hướng tới bước tiếp theo
   const handleNext = () => {
+    setErrorMessage(null);
     const nextStep = Math.min(6, currentStep + 1);
     const nextCompleted = completedSteps.includes(currentStep)
       ? completedSteps
@@ -434,7 +470,8 @@ export function ProfileFlowWizard() {
 
   // Nhảy tới bước cụ thể từ stepper hoặc nút Sửa
   const handleSelectStep = (stepNumber: number) => {
-    setCurrentStep(stepNumber);
+    // Không cho nhảy qua bước còn thiếu: dừng ở bước đó để điền trước
+    setCurrentStep(stepNumber > firstNotReady ? firstNotReady : stepNumber);
     if (typeof window !== "undefined") {
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
@@ -449,8 +486,14 @@ export function ProfileFlowWizard() {
   // Chỉ tích "Gợi ý trường" (hoặc chưa tích gì, như form cũ) thì sang trang gợi ý trường; còn lại về chat
   const backToChat = fromChat || (goals.length > 0 && !onlySchoolList(goals));
   const handleSubmitCommit = async () => {
-    setIsSubmitting(true);
     setErrorMessage(null);
+    // Còn bước thiếu mục bắt buộc (vd. quay lại xoá rồi nhảy thẳng tới đây): đưa về bước đó
+    if (firstNotReady < 6) {
+      setErrorMessage(`Bước ${firstNotReady} còn thiếu mục bắt buộc, bạn điền nốt rồi tiếp tục nhé.`);
+      handleSelectStep(firstNotReady);
+      return;
+    }
+    setIsSubmitting(true);
 
     try {
       if (!user) {
@@ -487,14 +530,15 @@ export function ProfileFlowWizard() {
         } catch {
           // bỏ qua
         }
-        // Mở từ chat: mở khung chat, advisor thấy hồ sơ đủ thì trả lời luôn câu học sinh đã hỏi
+        // Mở từ chat: mở khung chat, advisor thấy hồ sơ đủ thì trả lời luôn câu học sinh đã hỏi.
+        // fromForm: form đã là bước rà soát, advisor bỏ bảng xác nhận đang treo trong chat
         if (fromChat) {
-          openAssistant(CONTINUE_CHAT);
+          openAssistant(CONTINUE_CHAT, { fromForm: true });
           return;
         }
-        // Vào form trực tiếp mà tích cả đánh giá hay lộ trình: gửi một câu gộp các việc đã tích, chat trả lời đủ
+        // Vào form trực tiếp mà tích cả đánh giá hay lộ trình: gửi một câu gộp các việc đã tích, chat trả lời luôn
         if (backToChat) {
-          openAssistant(goalsQuestion(goals));
+          openAssistant(goalsQuestion(goals), { fromForm: true });
           return;
         }
         router.push("/recommendations?run=1");
@@ -525,7 +569,7 @@ export function ProfileFlowWizard() {
       draft={draft}
       metadata={metadata}
       currentStep={currentStep}
-      lastCompletedStep={lastCompletedStep}
+      lastCompletedStep={unlockedThrough}
       onSelectStep={handleSelectStep}
     />
   );
@@ -581,7 +625,7 @@ export function ProfileFlowWizard() {
                 onNext={handleNext}
                 goals={goals}
                 goalsLocked={goalsLocked}
-                showGoals={!fromChat || goals.length > 0}
+                showGoals={showGoals}
                 onGoalsChange={updateGoals}
               />
             )}

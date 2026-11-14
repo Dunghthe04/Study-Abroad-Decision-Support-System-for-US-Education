@@ -2999,10 +2999,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(64)")
                         .HasColumnName("education_system");
 
-                    b.Property<DateOnly?>("EnglishPlannedDate")
-                        .HasColumnType("date")
-                        .HasColumnName("english_planned_date");
-
                     b.Property<DateOnly?>("EnglishTestDate")
                         .HasColumnType("date")
                         .HasColumnName("english_test_date");
@@ -3040,6 +3036,11 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasPrecision(5, 1)
                         .HasColumnType("numeric(5,1)")
                         .HasColumnName("gmat");
+
+                    b.Property<string>("GpaMode")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("gpa_mode");
 
                     b.Property<string>("GradeScale")
                         .IsRequired()
@@ -3084,6 +3085,11 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("numeric(5,2)")
                         .HasColumnName("overall_gpa");
 
+                    b.Property<decimal?>("OverallGpa10")
+                        .HasPrecision(4, 2)
+                        .HasColumnType("numeric(4,2)")
+                        .HasColumnName("overall_gpa10");
+
                     b.Property<List<string>>("PreferredStates")
                         .IsRequired()
                         .HasColumnType("text[]")
@@ -3102,6 +3108,12 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")
                         .HasColumnName("scholarship_need");
+
+                    b.Property<bool>("StandardizedTestPlanned")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("standardized_test_planned");
 
                     b.Property<string>("TargetIntake")
                         .HasMaxLength(16)

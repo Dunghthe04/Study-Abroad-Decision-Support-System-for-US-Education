@@ -18,6 +18,8 @@ public class StudentProfileConfiguration : IEntityTypeConfiguration<StudentProfi
         b.Property(x => x.CurrentGrade).HasMaxLength(64);
         b.Property(x => x.GradeScale).HasMaxLength(8).IsRequired();
         b.Property(x => x.OverallGpa).HasPrecision(5, 2);
+        b.Property(x => x.GpaMode).HasMaxLength(16);
+        b.Property(x => x.OverallGpa10).HasPrecision(4, 2);
         b.Property(x => x.IntendedMajor).HasMaxLength(128);
         b.Property(x => x.TargetIntake).HasMaxLength(16);
         b.Property(x => x.Ielts).HasPrecision(3, 1);
@@ -30,7 +32,7 @@ public class StudentProfileConfiguration : IEntityTypeConfiguration<StudentProfi
         b.Property(x => x.EnglishTestType).HasMaxLength(16);
         b.Property(x => x.EnglishTestDate);
         b.Property(x => x.EnglishTestPlanned).HasDefaultValue(false);
-        b.Property(x => x.EnglishPlannedDate);
+        b.Property(x => x.StandardizedTestPlanned).HasDefaultValue(false);
         b.Property(x => x.OtherTestsJson).HasColumnType("jsonb");
         b.Property(x => x.ExtracurricularTier);
         b.ToTable(t => t.HasCheckConstraint("ck_student_profiles_extracurricular_tier",

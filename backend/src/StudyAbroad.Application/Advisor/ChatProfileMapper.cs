@@ -53,12 +53,10 @@ public static class ChatProfileMapper
             ["sat"] = TestScore(certs, "sat"),
             ["act"] = TestScore(certs, "act"),
             ["english"] = MainEnglish(certs),
-            ["english_plan"] = draft.Step3?.EnglishPlanned == true
-                ? PlanNode(draft.Step3.EnglishPlannedDate, draft.Step3.EnglishPlannedTestType, draft.Step3.EnglishPlannedTargetScore)
-                : null,
-            ["standardized_plan"] = draft.Step3?.StandardizedPlanned == true
-                ? PlanNode(draft.Step3.StandardizedPlannedDate, draft.Step3.StandardizedPlannedTestType, draft.Step3.StandardizedPlannedTargetScore)
-                : null,
+            // Dự định thi là thẻ mục tiêu (isTarget) trong certifications; english_plan / standardized_plan là
+            // tóm tắt dự định đầu tiên của mục, hoặc planned false khi tích "chưa thi và chưa có dự định thi"
+            ["english_plan"] = PlanSummary(certs, english: true, draft.Step3?.EnglishPlanned == true),
+            ["standardized_plan"] = PlanSummary(certs, english: false, draft.Step3?.StandardizedPlanned == true),
             // Cả danh sách thẻ chứng chỉ như form, để chat thêm được nhiều chứng chỉ
             ["certifications"] = ListOrNull(certs.Select(c => JsonSerializer.SerializeToNode(c)!)),
             ["budget"] = Text(draft.Step4?.AnnualBudgetTier),
@@ -83,10 +81,12 @@ public static class ChatProfileMapper
                 if (undecided)
                     profile[key] = new JsonObject { ["value"] = Unknown, ["status"] = Unknown };
             }
-            // Form tích "sẽ thi sau" là đã trả lời chưa có chứng chỉ tiếng Anh / chuẩn hóa, chat không đòi hỏi lại
-            else if (key == "english" && draft.Step3?.EnglishPlanned == true)
+            // Form tích "chưa thi và chưa có dự định thi", hoặc mới có dự định thi: đã trả lời chưa có điểm thật,
+            // chat không đòi hỏi lại
+            else if (key == "english" && (draft.Step3?.EnglishPlanned == true || certs.Any(c => c.IsTarget && IsEnglish(c))))
                 profile[key] = new JsonObject { ["value"] = null, ["status"] = "none" };
-            else if ((key == "sat" || key == "act") && draft.Step3?.StandardizedPlanned == true)
+            else if ((key == "sat" || key == "act")
+                     && (draft.Step3?.StandardizedPlanned == true || certs.Any(c => c.IsTarget && !IsEnglish(c))))
                 profile[key] = new JsonObject { ["value"] = null, ["status"] = "none" };
             else if (KeepFromPrevious(key, previous?[key]))
                 profile[key] = previous![key]!.DeepClone();
@@ -134,26 +134,8 @@ public static class ChatProfileMapper
                 "sat" or "act" => draft with { Step3 = step3 with { Certifications = PutCert(step3.Certifications, Standardized, key, value is null ? null : (value.GetValue<decimal>(), null)) } },
                 "english" => draft with { Step3 = step3 with { Certifications = PutEnglish(step3.Certifications, value) } },
                 "certifications" => draft with { Step3 = step3 with { Certifications = CertsFromChat(value) } },
-                "english_plan" => draft with
-                {
-                    Step3 = step3 with
-                    {
-                        EnglishPlanned = value?["planned"]?.GetValue<bool>() ?? false,
-                        EnglishPlannedDate = Str(value?["date"]),
-                        EnglishPlannedTestType = Str(value?["test_type"]),
-                        EnglishPlannedTargetScore = value?["target_score"]?.GetValue<decimal>(),
-                    },
-                },
-                "standardized_plan" => draft with
-                {
-                    Step3 = step3 with
-                    {
-                        StandardizedPlanned = value?["planned"]?.GetValue<bool>() ?? false,
-                        StandardizedPlannedDate = Str(value?["date"]),
-                        StandardizedPlannedTestType = Str(value?["test_type"]),
-                        StandardizedPlannedTargetScore = value?["target_score"]?.GetValue<decimal>(),
-                    },
-                },
+                "english_plan" => draft with { Step3 = ApplyPlan(step3, english: true, value) },
+                "standardized_plan" => draft with { Step3 = ApplyPlan(step3, english: false, value) },
                 "budget" => draft with { Step4 = step4 with { AnnualBudgetTier = Str(value) } },
                 "scholarship" => draft with { Step4 = step4 with { NeedFinancialAid = Str(value) } },
                 "activities" => draft with { Step5 = new FlowActivitiesDraftDto(PutItems(draft.Step5?.Activities, award: false, value)) },
@@ -225,24 +207,16 @@ public static class ChatProfileMapper
             : step2 with { ManualGpa10Scale = null, CalculatedGpa4Scale = gpa };
     }
 
-    // SAT / ACT: ưu tiên điểm thi thật, nếu chưa có thì lấy điểm mục tiêu; lấy điểm cao nhất (ApplyLegacyCertificationColumns)
-    private static JsonNode? TestScore(List<FlowCertificationItemDto> certs, string type)
-    {
-        var matches = certs.Where(c => c.Type == type && c.Overall is not null).ToList();
-        var actual = matches.Where(c => !c.IsTarget).ToList();
-        var candidates = actual.Count > 0 ? actual : matches;
-        return candidates.Max(c => c.Overall) is { } best ? JsonValue.Create((int)best) : null;
-    }
+    // SAT / ACT: điểm thi thật cao nhất. Điểm mục tiêu không tính, dự định nằm ở standardized_plan
+    private static JsonNode? TestScore(List<FlowCertificationItemDto> certs, string type) =>
+        certs.Where(c => c.Type == type && !c.IsTarget).Max(c => c.Overall) is { } best ? JsonValue.Create((int)best) : null;
 
-    // Chứng chỉ tiếng Anh chính: ưu tiên thi thật; ngày thi mới nhất, rồi điểm cao nhất (ApplyLegacyCertificationColumns)
+    // Chứng chỉ tiếng Anh chính (chỉ thi thật): ngày thi mới nhất, rồi điểm cao nhất (ApplyLegacyCertificationColumns)
     private static JsonObject? MainEnglish(List<FlowCertificationItemDto> certs)
     {
-        var matches = certs
-            .Where(c => c.Category == English && c.Overall is not null && !string.IsNullOrEmpty(c.Type) && c.Type != OtherType)
-            .ToList();
-        var actual = matches.Where(c => !c.IsTarget).ToList();
-        var candidates = actual.Count > 0 ? actual : matches;
-        var main = candidates
+        var main = certs
+            .Where(c => c.Category == English && !c.IsTarget && c.Overall is not null
+                        && !string.IsNullOrEmpty(c.Type) && c.Type != OtherType)
             .OrderByDescending(c => c.TestDate ?? "", StringComparer.Ordinal) // yyyy-MM so được bằng chuỗi
             .ThenByDescending(c => c.Overall)
             .FirstOrDefault();
@@ -251,23 +225,78 @@ public static class ChatProfileMapper
             : new JsonObject { ["type"] = main.Type, ["value"] = main.Overall, ["date"] = Text(main.TestDate) };
     }
 
+    private static bool IsEnglish(FlowCertificationItemDto c) => c.Category == English;
+
+    // Tóm tắt dự định thi của mục cho chat: thẻ mục tiêu đầu tiên; không có thẻ mà tích ô thì planned false
+    private static JsonObject? PlanSummary(List<FlowCertificationItemDto> certs, bool english, bool noPlanTicked)
+    {
+        var first = certs.FirstOrDefault(c => c.IsTarget && IsEnglish(c) == english && !string.IsNullOrEmpty(c.Type));
+        if (first is not null)
+        {
+            var node = new JsonObject { ["planned"] = true, ["date"] = Text(first.TestDate), ["test_type"] = first.Type };
+            if (first.Overall is { } target) node["target_score"] = target;
+            return node;
+        }
+        return noPlanTicked ? new JsonObject { ["planned"] = false, ["date"] = null } : null;
+    }
+
+    // Chat ghi english_plan / standardized_plan:
+    // - planned false: bỏ thẻ dự định của mục, mục không còn thẻ nào thì tích "chưa thi và chưa có dự định thi"
+    // - planned true có bài thi: thay thẻ dự định cùng bài (giữ id), chưa có thì thêm, các dự định khác giữ nguyên
+    // - planned true chưa có bài thi, hoặc xóa: chưa có gì để ghi thành thẻ, bỏ tích
+    private static FlowCertificationDraftDto ApplyPlan(FlowCertificationDraftDto step3, bool english, JsonNode? value)
+    {
+        var certs = (step3.Certifications ?? []).ToList();
+        var planned = value?["planned"]?.GetValue<bool>();
+        var type = Str(value?["test_type"]);
+        if (planned == false)
+        {
+            certs.RemoveAll(c => c.IsTarget && IsEnglish(c) == english);
+            var noCards = !certs.Any(c => IsEnglish(c) == english);
+            return english
+                ? step3 with { Certifications = certs, EnglishPlanned = noCards }
+                : step3 with { Certifications = certs, StandardizedPlanned = noCards };
+        }
+
+        if (planned == true && !string.IsNullOrWhiteSpace(type))
+        {
+            var target = value?["target_score"]?.GetValue<decimal>();
+            var date = Str(value?["date"]);
+            var index = certs.FindIndex(c => c.IsTarget && c.Type == type);
+            if (index >= 0)
+                certs[index] = certs[index] with { Overall = target, TestDate = date, Sections = null };
+            else
+                certs.Add(new FlowCertificationItemDto(
+                    Guid.NewGuid().ToString(), english ? English : CategoryOf(type), type,
+                    Overall: target, TestDate: date, IsTarget: true));
+        }
+        return english
+            ? step3 with { Certifications = certs, EnglishPlanned = false }
+            : step3 with { Certifications = certs, StandardizedPlanned = false };
+    }
+
+    // Bài thi sau đại học (nhóm graduate, như CERT_TYPES của advisor); còn lại là chuẩn hóa
+    private static readonly string[] GraduateTypes = ["gre", "gmat"];
+
+    private static string CategoryOf(string type) => GraduateTypes.Contains(type) ? "graduate" : Standardized;
+
     private static List<FlowCertificationItemDto> PutEnglish(List<FlowCertificationItemDto>? certs, JsonNode? value)
     {
-        // Học sinh nói không có chứng chỉ tiếng Anh thì bỏ hết chứng chỉ tiếng Anh
-        if (value is null) return (certs ?? []).Where(c => c.Category != English).ToList();
+        // Học sinh nói không có chứng chỉ tiếng Anh thì bỏ chứng chỉ tiếng Anh đã thi, dự định thi giữ nguyên
+        if (value is null) return (certs ?? []).Where(c => c.Category != English || c.IsTarget).ToList();
         var type = value["type"]!.GetValue<string>();
         return PutCert(certs, English, type, (value["value"]!.GetValue<decimal>(), Str(value["date"])));
     }
 
-    // Thay chứng chỉ cùng loại, giữ các chứng chỉ khác; score null thì bỏ chứng chỉ loại đó
+    // Thay chứng chỉ đã thi cùng loại, giữ các chứng chỉ khác và thẻ dự định; score null thì bỏ chứng chỉ đã thi loại đó
     private static List<FlowCertificationItemDto> PutCert(
         List<FlowCertificationItemDto>? certs, string category, string type, (decimal Overall, string? Date)? score)
     {
         var list = (certs ?? []).ToList();
-        var index = list.FindIndex(c => c.Type == type);
+        var index = list.FindIndex(c => c.Type == type && !c.IsTarget);
         if (score is not { } s)
         {
-            list.RemoveAll(c => c.Type == type);
+            list.RemoveAll(c => c.Type == type && !c.IsTarget);
             return list;
         }
 
@@ -372,8 +401,12 @@ public static class ChatProfileMapper
         if (previous is not JsonObject field) return false;
         var status = field["status"]?.GetValue<string>();
         if (!ValueStatuses.Contains(status)) return true;
-        // Nháp chỉ có englishPlanned / standardizedPlanned = false, không phân biệt "chưa hỏi" với "chưa có kế hoạch"
-        return (key == "english_plan" || key == "standardized_plan") && field["value"]?["planned"]?.GetValue<bool>() == false;
+        if (key != "english_plan" && key != "standardized_plan") return false;
+        // Nháp không lưu được "chưa có dự định" khi mục còn thẻ đã thi, cũng không lưu "định thi nhưng chưa nói bài
+        // nào" (chat đang chờ hỏi E2 / E3): giữ lại. Dự định có bài thi mà nháp không còn thẻ thì đã bị xóa ở form
+        var plan = field["value"];
+        return plan?["planned"]?.GetValue<bool>() == false
+               || (plan?["planned"]?.GetValue<bool>() == true && plan["test_type"] is null);
     }
 
     private static string? StatusOf(JsonNode? field) => (field as JsonObject)?["status"]?.GetValue<string>();
@@ -384,14 +417,6 @@ public static class ChatProfileMapper
     private static bool IsAward(FlowActivityDraftDto item) =>
         string.Equals(item.Category, "achievement", StringComparison.OrdinalIgnoreCase)
         || string.Equals(item.Category, "award", StringComparison.OrdinalIgnoreCase);
-
-    private static JsonObject PlanNode(string? date, string? testType, decimal? targetScore)
-    {
-        var node = new JsonObject { ["planned"] = true, ["date"] = Text(date) };
-        if (!string.IsNullOrWhiteSpace(testType)) node["test_type"] = testType;
-        if (targetScore.HasValue) node["target_score"] = targetScore.Value;
-        return node;
-    }
 
     private static JsonNode? Text(string? value) => string.IsNullOrWhiteSpace(value) ? null : JsonValue.Create(value);
 

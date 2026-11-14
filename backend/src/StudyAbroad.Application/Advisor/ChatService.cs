@@ -86,6 +86,8 @@ namespace StudyAbroad.Application.Advisor
                 State = state, Profile = JsonSerializer.SerializeToElement(profile), Schools = schools, Transcript = transcript,
                 Benchmarks = marks, OtherSchools = otherSchools, Simulation = null,   // giá trị giả định chỉ .NET dùng, không gửi advisor
                 GradeScale = scaleRules,
+                // Hồ sơ trống lúc đầu (nháp mặc định vẫn có loại trường "all") thì advisor hỏi đủ như form; luôn lấy từ server
+                HasCommittedProfile = flow.HasCommittedProfile,
             };
             // Nút trên giao diện gửi hành động có cấu trúc (mã trường): bỏ qua advisor, dựng sẵn lượt như thể advisor đã hiểu
             AdvisorChatResponse response;

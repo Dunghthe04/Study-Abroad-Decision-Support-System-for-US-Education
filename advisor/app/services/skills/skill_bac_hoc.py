@@ -48,8 +48,9 @@ QUESTION_FIELDS = {
     "B1.4": ["intake"],
 }
 READ_FIELDS = ("current_level", "current_grade", "target_level", "major", "intake")
-# Ngành bắt buộc giống form: hỏi tới khi học sinh chọn ngành hoặc bấm "Em chưa rõ ngành" (nút "Chưa rõ" của form)
-REQUIRED_QUESTIONS = ("B1.3",)
+# Câu bắt buộc giống form, hỏi tới khi học sinh trả lời: cấp học hiện tại, bậc học muốn theo (lưu hồ sơ cần hai mục này),
+# ngành (hoặc bấm "Em chưa rõ ngành", nút "Chưa rõ" của form)
+REQUIRED_QUESTIONS = ("B1.1", "B1.2", "B1.3")
 # Ô form không bắt buộc: có nút "Bỏ qua", bấm thì không hỏi lại
 SKIPPABLE_QUESTIONS = ("B1.4",)
 

@@ -336,6 +336,12 @@ function TypingIndicator({ recommending, progress }: { recommending?: boolean; p
   );
 }
 
+// Link mở form từ chat; data.goals là mã việc advisor gửi (danh_gia, lo_trinh, goi_y_truong)
+function formLink(data: Record<string, unknown> | null | undefined): string {
+  const goals = Array.isArray(data?.goals) ? data.goals.filter((g) => typeof g === "string") : [];
+  return goals.length > 0 ? `/analysis?from=chat&goal=${goals.join(",")}` : "/analysis?from=chat";
+}
+
 function Turn({ turn, onReply }: { turn: AssistantTurn; onReply?: (value: string) => void }) {
   const router = useRouter();
   const { sendAction } = useAssistant();
@@ -388,10 +394,11 @@ function Turn({ turn, onReply }: { turn: AssistantTurn; onReply?: (value: string
       )}
       {turn.widget?.type === "budget" && <BudgetWidget data={turn.widget.data} onPick={onReply} />}
       {turn.widget?.type === "scholarship" && <ScholarshipWidget data={turn.widget.data} onPick={onReply} />}
-      {/* Mục 1: học sinh chọn điền bằng form. from=chat: điền xong form thì quay về chat trả lời câu đã hỏi */}
+      {/* Mục 1: học sinh chọn điền bằng form. from=chat: điền xong form thì quay về chat trả lời câu đã hỏi.
+          goal=: việc học sinh đã hỏi trong chat, form tích sẵn và khóa các ô nhiệm vụ này */}
       {turn.widget?.type === "form" && (
         <Link
-          href="/analysis?from=chat"
+          href={formLink(turn.widget.data)}
           className="mt-2.5 inline-flex h-8 items-center gap-1.5 rounded-full bg-brand px-3.5 text-[13px] font-semibold text-white transition-colors hover:bg-brand-ink"
         >
           <FileTextIcon className="size-4" />

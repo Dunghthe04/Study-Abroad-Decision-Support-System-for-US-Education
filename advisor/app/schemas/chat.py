@@ -73,6 +73,8 @@ class ChatState(CamelModel):
     # Hồ sơ đã có từ trước (DB, form, lần trước): chỉ hỏi mục bắt buộc còn thiếu của việc học sinh đang muốn làm,
     # không hỏi câu tùy chọn, xong thì hiện bảng rà soát. None = hồ sơ trống lúc bắt đầu hỏi, hỏi đủ các câu
     required_only: list[str] | None = None
+    # Học sinh đã từng lưu hồ sơ chính thức (.NET gửi mỗi lượt). None = .NET chưa gửi, đoán theo các ô hồ sơ
+    has_committed_profile: bool | None = None
     has_results: bool = False  # đã có danh sách trường gợi ý chưa (skill_explain, skill_kich_ban cần)
     schools: list[ResultSchool] = []  # danh sách trường gợi ý gần nhất, .NET làm mới mỗi lượt khi has_results
     # Các trường đã chấm nhưng không nằm trong khối nào đang hiện: chỉ để khớp tên khi học sinh hỏi một trường cụ thể
@@ -129,6 +131,11 @@ class ChatRequest(CamelModel):
     benchmarks: dict[str, Any] | None = None
     # Bảng quy đổi điểm trong DB do .NET gửi mỗi lượt; None = không gửi (giữ bảng cũ trong state)
     grade_scale: list[GradeScaleRule] | None = None
+    # Học sinh đã từng lưu hồ sơ chính thức chưa (.NET gửi mỗi lượt); None = không gửi (giữ giá trị cũ trong state)
+    has_committed_profile: bool | None = None
+    # Tin này do form gửi ngay sau khi lưu hồ sơ chính thức (câu gộp việc đã tích, hoặc "Tiếp tục bằng chat"):
+    # form đã là bước rà soát nên không hỏi lại bảng xác nhận X1 trong chat
+    from_form: bool = False
 
 
 # Token của MỘT lần gọi AI (Claude hoặc Ollama), số do nhà cung cấp trả về. Một lượt chat có thể gồm nhiều lần gọi
@@ -192,6 +199,9 @@ class ChatResponse(CamelModel):
     widget: Widget | None = None  # công cụ nhập cần hiện trong chat
     profile: dict[str, ProfileField] = {}  # hồ sơ sau lượt này (điền ở việc 1.5)
     profile_changed: list[str] = []  # khóa hồ sơ đổi trong lượt này (điền ở việc 1.5)
+    # Việc học sinh đã hỏi khi đang điền hồ sơ trong chat (danh_gia, lo_trinh, goi_y_truong):
+    # frontend nhớ lại để mở form từ menu vẫn tích sẵn ô "Bạn muốn hệ thống làm gì?". Rỗng = không đổi
+    form_goals: list[str] = []
     # Việc .NET cần làm sau lượt này. "recommend" = chạy gợi ý trường (pipeline ở .NET),
     # "explain" = viết lời tư vấn một trường (action_data["code"]),
     # "goal_seek" = tìm mức cần đạt để vào một trường (action_data["school"]: tên trường học sinh nói, ["target"]: reach | match | safety | None),

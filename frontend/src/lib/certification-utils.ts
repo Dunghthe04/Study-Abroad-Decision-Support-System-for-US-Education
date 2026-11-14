@@ -194,11 +194,13 @@ export function validateCertification(
   } else if (!type) {
     errors.type = "Loại chứng chỉ này không còn trong danh sách, hãy chọn lại";
   } else {
+    // Dự định thi được để trống điểm mục tiêu và tên môn (giống BE)
     if (type.min != null && type.max != null) {
-      if (cert.overall == null) errors.overall = "Nhập điểm";
-      else if (!isOnScale(cert.overall, type.min, type.max, type.step))
+      if (cert.overall == null) {
+        if (!cert.isTarget) errors.overall = "Nhập điểm";
+      } else if (!isOnScale(cert.overall, type.min, type.max, type.step))
         errors.overall = `Điểm phải ${scaleText(type.min, type.max, type.step)}`;
-    } else if (!cert.scaleText?.trim()) {
+    } else if (!cert.scaleText?.trim() && !cert.isTarget) {
       errors.overall = "Nhập điểm";
     }
 
@@ -208,17 +210,60 @@ export function validateCertification(
         errors[`section.${section.id}`] = `Phải ${scaleText(section.min, section.max, section.step)}`;
     }
 
-    if (type.requiresSubject && !cert.subject?.trim())
+    if (type.requiresSubject && !cert.isTarget && !cert.subject?.trim())
       errors.subject = `Nhập ${lowerFirst(type.subjectLabel ?? "tên môn")}`;
   }
 
   const ym = parseYearMonth(cert.testDate);
   if (!cert.isTarget && ym && ym.year * 12 + ym.month > now.getFullYear() * 12 + now.getMonth() + 1)
     errors.testDate = "Ngày thi không được ở tương lai";
-  if (cert.isTarget && ym && ym.year * 12 + ym.month < now.getFullYear() * 12 + now.getMonth() + 1)
-    errors.testDate = "Ngày dự kiến thi không được ở quá khứ";
+  if (isPlanOverdue(cert, now)) errors.testDate = overduePlanMessage(cert, type);
 
   return errors;
+}
+
+/** Dự định thi đã qua tháng dự kiến (tháng dự kiến trước tháng này) */
+export function isPlanOverdue(cert: CertificationItem, now: Date = new Date()): boolean {
+  const ym = parseYearMonth(cert.testDate);
+  return Boolean(cert.isTarget && ym && ym.year * 12 + ym.month < now.getFullYear() * 12 + now.getMonth() + 1);
+}
+
+/** Cùng câu với OverduePlanError bên BE (ProfileFlowService), bỏ tiền tố "Bước 3:" */
+export function overduePlanMessage(cert: CertificationItem, type: CertificationTypeOption | undefined): string {
+  const name = isOtherCert(cert) ? cert.customName?.trim() || "Khác" : (type?.name ?? cert.type.toUpperCase());
+  return `Dự định thi ${name} tháng ${formatYearMonth(cert.testDate)} đã qua. Nếu đã thi, hãy nhập điểm thật; nếu chưa, đổi tháng dự kiến hoặc xóa dự định.`;
+}
+
+// Cùng bài thi: cùng loại, cùng tên tự nhập (loại "Khác"), cùng môn (AP / A-Level) — như SameTestKey bên BE
+function sameTestKey(cert: CertificationItem): string {
+  const type = cert.type.trim().toLowerCase();
+  const name = type === OTHER_CERT_TYPE ? (cert.customName?.trim().toLowerCase() ?? "") : "";
+  return `${type}|${name}|${cert.subject?.trim().toLowerCase() ?? ""}`;
+}
+
+/**
+ * Kiểm tra một thẻ so với các thẻ còn lại (giống ValidateTargets bên BE):
+ * mỗi bài chỉ 1 dự định; điểm mục tiêu phải cao hơn điểm cao nhất đã thi của cùng bài
+ */
+export function validatePlanConflicts(
+  cert: CertificationItem,
+  others: CertificationItem[],
+  type: CertificationTypeOption | undefined
+): string | null {
+  const key = sameTestKey(cert);
+  const same = others.filter((c) => c.id !== cert.id && c.type && sameTestKey(c) === key);
+  const name = getCertDisplayName(cert, type);
+  if (cert.isTarget) {
+    if (same.some((c) => c.isTarget)) return `${name} đã có 1 dự định thi, hãy sửa dự định đó thay vì thêm mới`;
+    const best = Math.max(...same.filter((c) => !c.isTarget && c.overall != null).map((c) => c.overall as number));
+    if (cert.overall != null && Number.isFinite(best) && cert.overall <= best)
+      return `Điểm mục tiêu ${name} phải cao hơn điểm đã thi (${formatScore(best, type?.step)})`;
+  } else if (cert.overall != null) {
+    const plan = same.find((c) => c.isTarget && c.overall != null);
+    if (plan && plan.overall! <= cert.overall)
+      return `Điểm đã thi ${name} đã bằng hoặc cao hơn điểm mục tiêu (${formatScore(plan.overall!, type?.step)}), hãy sửa hoặc xóa dự định`;
+  }
+  return null;
 }
 
 export function newCertId(): string {
@@ -235,30 +280,19 @@ const LEGACY_STANDARDIZED = new Set(["SAT", "ACT", "AP"]);
 export function migrateLegacyStep3(
   raw: (Partial<CertificationDraft> & LegacyCertificationDraft) | null | undefined
 ): CertificationDraft {
-  if (!raw)
-    return {
-      certifications: [],
-      englishPlanned: false,
-      englishPlannedDate: null,
-      englishPlannedTestType: null,
-      englishPlannedTargetScore: null,
-      standardizedPlanned: false,
-      standardizedPlannedDate: null,
-      standardizedPlannedTestType: null,
-      standardizedPlannedTargetScore: null,
-    };
+  if (!raw) return { certifications: [], englishPlanned: false, standardizedPlanned: false };
 
   if (Array.isArray(raw.certifications)) {
+    const certifications = raw.certifications.map((c) => ({ ...c, id: c.id || newCertId() }));
+    // Nháp cũ có 1 ô dự định mỗi mục → thành thẻ dự định; chưa chọn bài thì vẫn là tick "chưa thi, chưa có dự định"
+    const englishPlan = legacyPlan(raw.englishPlannedTestType, raw.englishPlannedTargetScore, raw.englishPlannedDate, "english", certifications);
+    const standardizedPlan = legacyPlan(raw.standardizedPlannedTestType, raw.standardizedPlannedTargetScore, raw.standardizedPlannedDate, "standardized", certifications);
+    if (englishPlan) certifications.push(englishPlan);
+    if (standardizedPlan) certifications.push(standardizedPlan);
     return {
-      certifications: raw.certifications.map((c) => ({ ...c, id: c.id || newCertId() })),
-      englishPlanned: Boolean(raw.englishPlanned),
-      englishPlannedDate: raw.englishPlannedDate ?? null,
-      englishPlannedTestType: raw.englishPlannedTestType ?? null,
-      englishPlannedTargetScore: raw.englishPlannedTargetScore != null ? Number(raw.englishPlannedTargetScore) : null,
-      standardizedPlanned: Boolean(raw.standardizedPlanned),
-      standardizedPlannedDate: raw.standardizedPlannedDate ?? null,
-      standardizedPlannedTestType: raw.standardizedPlannedTestType ?? null,
-      standardizedPlannedTargetScore: raw.standardizedPlannedTargetScore != null ? Number(raw.standardizedPlannedTargetScore) : null,
+      certifications,
+      englishPlanned: Boolean(raw.englishPlanned) && !englishPlan,
+      standardizedPlanned: Boolean(raw.standardizedPlanned) && !standardizedPlan,
     };
   }
 
@@ -283,5 +317,24 @@ export function migrateLegacyStep3(
     });
   }
 
-  return { certifications, englishPlanned: false, englishPlannedDate: null };
+  return { certifications, englishPlanned: false, standardizedPlanned: false };
+}
+
+function legacyPlan(
+  typeId: string | null | undefined,
+  target: number | null | undefined,
+  date: string | null | undefined,
+  category: CertificationCategory,
+  existing: CertificationItem[]
+): CertificationItem | null {
+  const type = typeId?.trim().toLowerCase();
+  if (!type || existing.some((c) => c.isTarget && c.type.toLowerCase() === type)) return null;
+  return {
+    id: newCertId(),
+    category,
+    type,
+    overall: target != null ? Number(target) : null,
+    testDate: date ?? null,
+    isTarget: true,
+  };
 }

@@ -513,7 +513,7 @@ async def test_advice_with_a_partial_profile_says_how_many_items_are_missing():
     out = await build_branches(skills([]))["profile_review"].run(ChatState(profile=filled(["target_level"])), "x",
                                                          tin("profile_review"))  # fmt: skip
 
-    assert "còn thiếu 3 mục" in out.answer
+    assert "còn thiếu 5 mục" in out.answer  # GPA, tiếng Anh, SAT/ACT, ngân sách, học bổng
 
 
 async def test_advice_while_answering_in_chat_keeps_asking_the_missing_items():

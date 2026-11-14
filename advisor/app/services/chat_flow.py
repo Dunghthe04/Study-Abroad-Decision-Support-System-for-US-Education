@@ -34,16 +34,18 @@ from app.services.intake import (
     CHAT_BUTTON,
     CONTINUE_CHAT,
     FORM_BUTTON,
+    FORM_DONE,
     INTAKE_FORM,
     INTAKE_ID,
     INTAKE_MORE,
+    form_goals,
     intake_ask,
     intake_choice,
 )
 from app.services.pii_mask import mask_personal_info
 from app.services.priority import PRIORITY_KEY, detect_priorities, unaccent
-from app.services.profile_sync import changed_keys, merge_profile
-from app.services.skill_rules import REQUIRED_B3, missing_fields
+from app.services.profile_sync import DRAFT_KEYS, changed_keys, merge_profile
+from app.services.skill_rules import REQUIRED_B3, REQUIRED_B4, missing_fields
 from app.services.slm_contract import SlmClassifier
 
 # Tạo 1 logger
@@ -299,6 +301,9 @@ class ChatFlow:
         # Bảng quy đổi điểm do moderator sửa; không gửi thì giữ bảng đã nhớ (chưa từng gửi thì dùng bảng WES)
         if req.grade_scale:
             state.grade_scale = req.grade_scale
+        # Đã lưu hồ sơ chưa: quyết định hỏi đủ hay chỉ hỏi mục bắt buộc còn thiếu; không gửi thì giữ giá trị cũ
+        if req.has_committed_profile is not None:
+            state.has_committed_profile = req.has_committed_profile
         # Danh sách trường gợi ý do .NET gửi mỗi lượt (lấy từ lần gợi ý đã lưu); không gửi thì giữ như cũ.
         # Có danh sách nghĩa là học sinh đã có kết quả, dù gợi ý ở trang Gợi ý trường chứ không phải trong chat
         if req.schools is not None:
@@ -314,12 +319,28 @@ class ChatFlow:
         # Đang chờ học sinh chọn cách điền hồ sơ: nhận lựa chọn bằng chữ trên nút, không cần SLM.
         # Nút "Tiếp tục bằng chat" trên form thì hỏi tiếp trong chat dù chat không đang chờ chọn
         continue_chat = message.strip() == CONTINUE_CHAT
+        # Lưu form xong, form gửi câu gộp các việc đã tích (vào form bằng "Sửa hồ sơ", không mở từ chat):
+        # form đã là bước rà soát, bỏ câu hồ sơ đang treo (vd bảng X1) rồi trả lời câu này như học sinh tự gõ.
+        # Câu tư vấn cũ đang chờ hồ sơ thì câu mới từ form thay nó
+        if req.from_form and not continue_chat:
+            back_from_form(state)
+            state.pending_advice = None
         if state.question_id == INTAKE_ID or continue_chat:
             if state.question_id == INTAKE_ID:
                 state.question_id = None
             choice = "chat" if continue_chat else intake_choice(message)
+            if continue_chat:
+                back_from_form(state)
             # Điền xong form rồi quay về chat: form đã là bước rà soát nên không hỏi X1 nữa,
-            # trả lời luôn câu tư vấn bị hoãn. Hồ sơ còn thiếu thì begin_intake hỏi tiếp trong chat như cũ
+            # trả lời luôn câu tư vấn bị hoãn. Hồ sơ còn thiếu thì begin_intake chỉ hỏi mục bắt buộc còn thiếu
+            if continue_chat and state.pending_advice is None and profile_ready(state):
+                from app.services.skills import skill_ho_so
+
+                state.intake_mode = "chat"
+                # Còn dự định thi quá hạn thì hỏi dự định đó trước khi báo hồ sơ đã đủ
+                output = skill_ho_so.ask_overdue_first(state) or SkillOutput(FORM_DONE)
+                log_turn(state, message, None, [], (time.perf_counter() - started) * 1000, req.session_id)
+                return self._response(state, output, [], profile_before)
             if continue_chat and state.pending_advice is not None and profile_ready(state):
                 original = state.pending_advice
                 state.pending_advice = None
@@ -458,6 +479,7 @@ class ChatFlow:
             disclaimer=output.disclaimer,
             profile=state.profile,
             profile_changed=changed_keys(profile_before, state.profile),
+            form_goals=form_goals(state.pending_advice) if state.intake_mode == "chat" else [],
             action=output.action,
             action_data=output.action_data,
         )
@@ -496,8 +518,34 @@ def profile_ready(state: ChatState) -> bool:
     return all(field.status != "said_in_B0" for field in state.profile.values())
 
 
+# Học sinh bấm "Tiếp tục bằng chat" trên form:
+# - giá trị nói ở câu đầu (said_in_B0) thuộc nháp đã hiện trên form và học sinh đã xem, nên coi là đã xác nhận, không hỏi lại ở X1;
+# - còn thiếu thì chỉ hỏi mục bắt buộc còn thiếu, không hỏi đủ như hồ sơ điền lần đầu trong chat;
+# - câu hồ sơ đang treo trong chat (bảng X1, câu hỏi dở, mục chờ sửa) đã được form thay, bỏ đi để không nhắc lại.
+#   Bấm "Đúng rồi" ở X1 cũ còn lỗi vì form lưu xong đã xóa nháp
+def back_from_form(state: ChatState) -> None:
+    for key, value in state.profile.items():
+        if key in DRAFT_KEYS and value.status == "said_in_B0":
+            state.profile[key] = value.model_copy(update={"status": "confirmed"})
+    if state.question_id is not None and state.question_id not in OPENING_QUESTIONS:
+        state.question_id = None
+        state.last_question = ""
+    state.edit_queue = None
+    state.intake_mode = "form"  # đến từ form, để limit_to_required không coi là đang hỏi đủ trong chat
+    # Bắt buộc như form: cấp học hiện tại (B1.1, cần để lưu hồ sơ) + mục B3; lộ trình / gợi ý trường cần thêm ngành
+    goals = form_goals(state.pending_advice)
+    needs_major = "lo_trinh" in goals or "goi_y_truong" in goals
+    required = ["current_level", *(REQUIRED_B4 if needs_major else REQUIRED_B3)]
+    state.required_only = list(dict.fromkeys([*(state.required_only or []), *required]))
+
+
 # Hồ sơ có giá trị không phải chỉ nói ở câu đầu (said_in_B0): giá trị từ DB, form hoặc lần trước
+# Hồ sơ đã có từ trước chưa. .NET gửi cờ đã lưu hồ sơ thì tin cờ đó: nháp mặc định của hồ sơ trống vẫn có
+# vài ô (loại trường "all") nên đoán theo các ô sẽ nhầm hồ sơ trống thành hồ sơ đã có và hỏi thiếu.
+# Không có cờ (gọi thẳng advisor, test) thì đoán như cũ: có ô nào không phải học sinh nói lúc đầu
 def has_saved_profile(state: ChatState) -> bool:
+    if state.has_committed_profile is not None:
+        return state.has_committed_profile
     return any(field.status != "said_in_B0" for field in state.profile.values())
 
 
@@ -535,7 +583,9 @@ def ask_major(state: ChatState) -> SkillOutput:
 def begin_intake(state: ChatState, choice: str) -> SkillOutput:
     if choice == "form":
         state.intake_mode = "form"
-        return SkillOutput(INTAKE_FORM, widget=Widget(type="form"))
+        # gửi kèm việc học sinh đã hỏi để form tích sẵn ô nhiệm vụ (?goal=)
+        goals = form_goals(state.pending_advice)
+        return SkillOutput(INTAKE_FORM, widget=Widget(type="form", data={"goals": goals}))
     return ask_next_missing(state)
 
 
@@ -546,6 +596,11 @@ def ask_next_missing(state: ChatState, prefix: str = "") -> SkillOutput:
     from app.services.skills import skill_bac_hoc
 
     state.intake_mode = "chat"
+    # Hồ sơ lại thiếu mục bắt buộc sau khi đã qua bảng rà soát (hồ sơ bị xóa, form xóa trống ô): bỏ dấu "đã rà soát"
+    # để hỏi lại các mục còn thiếu, không nhảy thẳng về bảng X1 trống. Hỏi đủ thì X1 hiện lại như thường
+    if missing_fields(state.profile, REQUIRED_B3):
+        state.asked.pop("X1", None)
+        state.edit_queue = None
     go_to(state, "B1")  # skill_bac_hoc hết câu B1 thì tự sang B2
     output = skill_bac_hoc.ask_next(state)
     output.answer = prefix + output.answer
