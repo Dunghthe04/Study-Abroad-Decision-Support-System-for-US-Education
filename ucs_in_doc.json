@@ -390,5 +390,12 @@
     "role": "Moderator",
     "status": "Chưa có",
     "dev_todo": "Như trên"
+  },
+  {
+    "uc": "UC-57",
+    "name": "Gỡ đánh giá trung tâm",
+    "role": "Moderator",
+    "status": "Chưa có",
+    "dev_todo": "Như trên"
   }
 ]
