@@ -992,6 +992,9 @@ public class ProfileFlowServiceTests
         Assert.Equal(7.5m, cert.OverallScore);
         Assert.Equal(new DateOnly(2029, 6, 1), cert.TestDate);
         Assert.Equal(7.5m, p.Ielts);
+        // Chỉ có dự định: cột điểm vẫn có điểm mục tiêu để gợi ý trường, nhưng không ghi là đã thi IELTS vào tháng dự kiến
+        Assert.Equal("none", p.EnglishTestType);
+        Assert.Null(p.EnglishTestDate);
     }
 
     [Fact]
@@ -1003,7 +1006,25 @@ public class ProfileFlowServiceTests
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             service.CommitFlowAsync(Guid.NewGuid(), new CommitProfileFlowRequest(draft)));
 
-        Assert.Contains("không được ở quá khứ", ex.Message);
+        Assert.Contains("dự định thi IELTS Academic tháng 01/2020 đã qua. Nếu đã thi, hãy nhập điểm thật; nếu chưa, đổi tháng dự kiến hoặc xóa dự định.", ex.Message);
+    }
+
+    [Theory]
+    [InlineData(true, "ielts", "dự định thi IELTS Academic tháng 03/2021 đã qua")]
+    [InlineData(true, null, "dự định thi tiếng Anh tháng 03/2021 đã qua")]
+    [InlineData(false, "sat", "dự định thi SAT tháng 03/2021 đã qua")]
+    public async Task CommitFlowAsync_OldPlanFieldInPast_SaysHowToFix(bool english, string? type, string expected)
+    {
+        var service = new ProfileFlowService(new InMemoryProfileFlowRepository(), new FakeFileStorageService());
+        var step3 = english
+            ? new FlowCertificationDraftDto(Certifications: [], EnglishPlanned: true, EnglishPlannedDate: "2021-03", EnglishPlannedTestType: type)
+            : new FlowCertificationDraftDto(Certifications: [], StandardizedPlanned: true, StandardizedPlannedDate: "2021-03", StandardizedPlannedTestType: type);
+        var draft = FullDraft() with { Step3 = step3 };
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.CommitFlowAsync(Guid.NewGuid(), new CommitProfileFlowRequest(draft)));
+
+        Assert.Contains(expected, ex.Message);
     }
 
     [Fact]

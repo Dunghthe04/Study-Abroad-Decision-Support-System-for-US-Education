@@ -163,8 +163,10 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
             .Select(x => new { x.Lead, x.CenterName, x.User.FullName, x.User.Email, x.Profile })
             .ToListAsync(ct);
 
+        var certifications = await CertificationsByProfileAsync(rows.Where(r => r.Profile != null).Select(r => r.Profile!.Id), ct);
         var items = rows
-            .Select(r => CenterLeadMapper.ToCenterDto(r.Lead, r.CenterName, r.FullName, r.Email, r.Profile))
+            .Select(r => CenterLeadMapper.ToCenterDto(r.Lead, r.CenterName, r.FullName, r.Email, r.Profile,
+                r.Profile is null ? null : certifications.GetValueOrDefault(r.Profile.Id, [])))
             .ToList();
 
         return new CenterLeadsSummaryDto(
@@ -198,7 +200,23 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
         var lead = await query.FirstOrDefaultAsync(ct);
         if (lead is null) return null;
 
-        return CenterLeadMapper.ToCenterDto(lead.Lead, lead.CenterName, lead.User.FullName, lead.User.Email, lead.Profile);
+        var certifications = lead.Profile is null
+            ? null
+            : (await CertificationsByProfileAsync([lead.Profile.Id], ct)).GetValueOrDefault(lead.Profile.Id, []);
+        return CenterLeadMapper.ToCenterDto(lead.Lead, lead.CenterName, lead.User.FullName, lead.User.Email, lead.Profile, certifications);
+    }
+
+    // Chứng chỉ và dự định thi của các hồ sơ, để trung tâm tách điểm đã thi với điểm mục tiêu
+    private async Task<Dictionary<Guid, IReadOnlyList<ProfileCertification>>> CertificationsByProfileAsync(
+        IEnumerable<Guid> profileIds, CancellationToken ct)
+    {
+        var ids = profileIds.Distinct().ToList();
+        if (ids.Count == 0) return [];
+        var rows = await db.ProfileCertifications.AsNoTracking()
+            .Where(c => ids.Contains(c.StudentProfileId))
+            .ToListAsync(ct);
+        return rows.GroupBy(c => c.StudentProfileId)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<ProfileCertification>)g.OrderBy(c => c.SortOrder).ToList());
     }
 
     public Task<Lead?> GetLeadForUpdateAsync(Guid leadId, CancellationToken ct = default) =>

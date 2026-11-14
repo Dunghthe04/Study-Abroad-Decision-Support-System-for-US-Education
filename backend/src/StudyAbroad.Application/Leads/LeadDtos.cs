@@ -72,7 +72,20 @@ public record SharedProfileSummaryDto(
     decimal? SatScore,
     decimal? ActScore,
     int? ExtracurricularTier,
-    string? BudgetTier);
+    string? BudgetTier,
+    IReadOnlyList<SharedPlannedTestDto>? PlannedTests = null);
+
+/// <summary>
+/// Một dự định thi của học sinh (dòng IsTarget trong profile_certifications): điểm là mục tiêu, ngày là tháng dự kiến.
+/// Tách khỏi điểm đã thi để trung tâm không đọc nhầm điểm mục tiêu thành điểm thật.
+/// </summary>
+public record SharedPlannedTestDto(
+    string TestType,
+    string? CustomName,
+    string? Subject,
+    decimal? TargetScore,
+    string? TargetScaleText,
+    DateOnly? PlannedDate);
 
 /// <summary>
 /// [UC-73] Chi tiết yêu cầu liên hệ nhận được phía trung tâm tư vấn.

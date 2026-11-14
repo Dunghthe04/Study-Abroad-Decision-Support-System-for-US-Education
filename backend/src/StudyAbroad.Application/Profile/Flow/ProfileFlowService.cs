@@ -764,7 +764,7 @@ public class ProfileFlowService(
                 else if (!item.IsTarget && date > thisMonth)
                     errors.Add($"Bước 3: ngày thi {label} không được ở tương lai.");
                 else if (item.IsTarget && date < thisMonth)
-                    errors.Add($"Bước 3: ngày dự kiến thi {label} không được ở quá khứ.");
+                    errors.Add(OverduePlanError(label, date.Value));
             }
         }
 
@@ -776,7 +776,7 @@ public class ProfileFlowService(
                 if (planned is null)
                     errors.Add("Bước 3: tháng dự kiến thi tiếng Anh không hợp lệ.");
                 else if (planned < thisMonth)
-                    errors.Add("Bước 3: tháng dự kiến thi tiếng Anh không được ở quá khứ.");
+                    errors.Add(OverduePlanError(PlanLabel(step3.EnglishPlannedTestType, certificationTypes, "tiếng Anh"), planned.Value));
             }
 
             if (!string.IsNullOrWhiteSpace(step3.EnglishPlannedTestType)
@@ -802,7 +802,7 @@ public class ProfileFlowService(
                 if (planned is null)
                     errors.Add("Bước 3: tháng dự kiến thi bài thi chuẩn hóa không hợp lệ.");
                 else if (planned < thisMonth)
-                    errors.Add("Bước 3: tháng dự kiến thi bài thi chuẩn hóa không được ở quá khứ.");
+                    errors.Add(OverduePlanError(PlanLabel(step3.StandardizedPlannedTestType, certificationTypes, "bài thi chuẩn hóa"), planned.Value));
             }
 
             if (!string.IsNullOrWhiteSpace(step3.StandardizedPlannedTestType)
@@ -1145,10 +1145,9 @@ public class ProfileFlowService(
         var englishMatches = withField
             .Where(x => x.Cert.Category == "english")
             .ToList();
-        var actualEnglish = englishMatches.Where(x => !x.Cert.IsTarget).ToList();
-        var englishCandidates = actualEnglish.Count > 0 ? actualEnglish : englishMatches;
-
-        var mainEnglish = englishCandidates
+        // Loại và ngày thi tiếng Anh chính chỉ lấy bài đã thi: chỉ có dự định thì để "none", không ghi ngày dự kiến (ở tương lai) như ngày đã thi
+        var mainEnglish = englishMatches
+            .Where(x => !x.Cert.IsTarget)
             .OrderByDescending(x => x.Cert.TestDate ?? DateOnly.MinValue)
             .ThenByDescending(x => x.Cert.OverallScore)
             .Select(x => x.Cert)
@@ -1158,6 +1157,13 @@ public class ProfileFlowService(
             : certificationTypes[mainEnglish.TestType].ProfileField;
         profile.EnglishTestDate = mainEnglish?.TestDate;
     }
+
+    /// <summary>Dự định đã qua tháng dự kiến: hệ thống không biết học sinh đã thi chưa nên chỉ cách sửa, không tự đổi</summary>
+    private static string OverduePlanError(string label, DateOnly planned) =>
+        $"Bước 3: dự định thi {label} tháng {planned:MM/yyyy} đã qua. Nếu đã thi, hãy nhập điểm thật; nếu chưa, đổi tháng dự kiến hoặc xóa dự định.";
+
+    private static string PlanLabel(string? typeId, IReadOnlyDictionary<string, CertificationMetadataItem> certificationTypes, string fallback) =>
+        !string.IsNullOrWhiteSpace(typeId) && certificationTypes.TryGetValue(typeId.Trim(), out var type) ? type.Name : fallback;
 
     /// <summary>Tên profileField trong metadata ↔ cột trên student_profiles</summary>
     private static void SetProfileField(StudentProfile profile, string field, decimal? value)
