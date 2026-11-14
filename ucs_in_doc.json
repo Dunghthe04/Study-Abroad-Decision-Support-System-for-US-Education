@@ -586,5 +586,12 @@
     "role": "Học sinh, Phụ huynh",
     "status": "Chưa có",
     "dev_todo": "Mục 5.3"
+  },
+  {
+    "uc": "UC-78",
+    "name": "Mua, gia hạn, hủy gia hạn gói",
+    "role": "Học sinh, Phụ huynh",
+    "status": "Chưa có",
+    "dev_todo": "Mục 5.3"
   }
 ]
