@@ -68,5 +68,12 @@
     "role": "Học sinh, Phụ huynh",
     "status": "Đã có",
     "dev_todo": "Giữ nguyên"
+  },
+  {
+    "uc": "UC-11",
+    "name": "Tải lên bảng điểm ảnh hoặc PDF",
+    "role": "Học sinh, Phụ huynh",
+    "status": "Đã có",
+    "dev_todo": "Giữ nguyên"
   }
 ]
