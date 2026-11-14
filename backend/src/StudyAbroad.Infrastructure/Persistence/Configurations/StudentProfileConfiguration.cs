@@ -33,6 +33,8 @@ public class StudentProfileConfiguration : IEntityTypeConfiguration<StudentProfi
         b.Property(x => x.EnglishTestDate);
         b.Property(x => x.EnglishTestPlanned).HasDefaultValue(false);
         b.Property(x => x.EnglishPlannedDate);
+        b.Property(x => x.EnglishPlannedTestType).HasMaxLength(32);
+        b.Property(x => x.EnglishPlannedTargetScore).HasPrecision(7, 2);
         b.Property(x => x.StandardizedTestPlanned).HasDefaultValue(false);
         b.Property(x => x.StandardizedPlannedDate);
         b.Property(x => x.StandardizedPlannedTestType).HasMaxLength(32);

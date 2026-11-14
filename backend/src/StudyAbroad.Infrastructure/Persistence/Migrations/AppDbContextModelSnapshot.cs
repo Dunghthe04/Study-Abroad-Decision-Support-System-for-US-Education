@@ -3003,6 +3003,16 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("date")
                         .HasColumnName("english_planned_date");
 
+                    b.Property<decimal?>("EnglishPlannedTargetScore")
+                        .HasPrecision(7, 2)
+                        .HasColumnType("numeric(7,2)")
+                        .HasColumnName("english_planned_target_score");
+
+                    b.Property<string>("EnglishPlannedTestType")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("english_planned_test_type");
+
                     b.Property<DateOnly?>("EnglishTestDate")
                         .HasColumnType("date")
                         .HasColumnName("english_test_date");

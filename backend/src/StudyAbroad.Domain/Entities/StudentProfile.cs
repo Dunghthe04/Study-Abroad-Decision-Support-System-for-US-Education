@@ -43,6 +43,11 @@ public class StudentProfile : BaseEntity
     public bool EnglishTestPlanned { get; set; }
     /// <summary>[USAS-640] tháng dự kiến thi tiếng Anh (ngày 1 của tháng)</summary>
     public DateOnly? EnglishPlannedDate { get; set; }
+    /// <summary>loại bài tiếng Anh dự kiến (id metadata certifications: ielts, pte...); lưu riêng vì bài như PTE không có cột điểm
+    /// trên hồ sơ nên không đọc ngược được từ EnglishTestType; null = chưa chọn</summary>
+    public string? EnglishPlannedTestType { get; set; }
+    /// <summary>điểm mục tiêu bài tiếng Anh dự kiến</summary>
+    public decimal? EnglishPlannedTargetScore { get; set; }
     /// <summary>học sinh chưa thi bài thi chuẩn hóa học thuật (SAT/ACT/AP...), sẽ thi sau (bước 3); là cờ chung của cả mục
     /// nên lưu ở đây, không thành một dòng profile_certifications vì có thể chưa chọn loại bài</summary>
     public bool StandardizedTestPlanned { get; set; }
