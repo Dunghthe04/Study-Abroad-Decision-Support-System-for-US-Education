@@ -509,5 +509,12 @@
     "role": "Administrator",
     "status": "Chưa có",
     "dev_todo": "Mục 5.3"
+  },
+  {
+    "uc": "UC-83",
+    "name": "Xem mức dùng AI và chi phí",
+    "role": "Administrator",
+    "status": "Một phần",
+    "dev_todo": "Tách theo gói; thêm doanh thu và tỷ lệ dùng phương án dự phòng"
   }
 ]
