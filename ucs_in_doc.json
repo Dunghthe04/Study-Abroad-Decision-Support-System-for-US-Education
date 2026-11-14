@@ -180,5 +180,12 @@
     "role": "Học sinh, Phụ huynh",
     "status": "Một phần",
     "dev_todo": "Thêm biểu đồ chi phí so với ngân sách"
+  },
+  {
+    "uc": "UC-27",
+    "name": "So sánh chi phí trường",
+    "role": "Học sinh, Phụ huynh",
+    "status": "Một phần",
+    "dev_todo": "Mới so sánh được qua chat; làm màn hình so sánh"
   }
 ]
