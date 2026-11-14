@@ -1050,6 +1050,17 @@ def ask_overdue(state: ChatState, cert: dict) -> SkillOutput:
     )
 
 
+# Hồ sơ đã đủ (về từ form, hoặc hỏi tư vấn thẳng) mà còn dự định quá hạn thì hỏi dự định đó trước,
+# chuyển sang hỏi bằng chat ở B2 để trả lời xong thì hiện lại bảng rà soát X1. Không có thì None
+def ask_overdue_first(state: ChatState) -> SkillOutput | None:
+    cert = overdue_card(state)
+    if cert is None:
+        return None
+    state.intake_mode = "chat"
+    go_to(state, "B2")
+    return ask_overdue(state, cert)
+
+
 # Thẻ dự định quá hạn đang hỏi. Thẻ không còn (đã sửa ở form) thì bỏ khóa, trả None
 def overdue_pending(state: ChatState) -> dict | None:
     pending = state.profile.get("plan_overdue")

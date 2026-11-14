@@ -334,9 +334,13 @@ class ChatFlow:
             # Điền xong form rồi quay về chat: form đã là bước rà soát nên không hỏi X1 nữa,
             # trả lời luôn câu tư vấn bị hoãn. Hồ sơ còn thiếu thì begin_intake chỉ hỏi mục bắt buộc còn thiếu
             if continue_chat and state.pending_advice is None and profile_ready(state):
+                from app.services.skills import skill_ho_so
+
                 state.intake_mode = "chat"
+                # Còn dự định thi quá hạn thì hỏi dự định đó trước khi báo hồ sơ đã đủ
+                output = skill_ho_so.ask_overdue_first(state) or SkillOutput(FORM_DONE)
                 log_turn(state, message, None, [], (time.perf_counter() - started) * 1000, req.session_id)
-                return self._response(state, SkillOutput(FORM_DONE), [], profile_before)
+                return self._response(state, output, [], profile_before)
             if continue_chat and state.pending_advice is not None and profile_ready(state):
                 original = state.pending_advice
                 state.pending_advice = None

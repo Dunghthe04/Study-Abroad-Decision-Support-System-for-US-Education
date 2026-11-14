@@ -2,7 +2,10 @@ from datetime import date
 
 import pytest
 
-from app.services.skills import buttons
+from app.schemas.chat import ChatMessage, ChatRequest, ChatState
+from app.services.chat_flow import SkillOutput
+from app.services.intake import CONTINUE_CHAT, FORM_DONE
+from app.services.skills import build_handlers, buttons
 from app.services.skills.skill_ho_so import (
     NO_MORE_CERT,
     NO_MORE_PLAN,
@@ -11,7 +14,7 @@ from app.services.skills.skill_ho_so import (
     OVERDUE_TAKEN,
 )
 from app.services.skills.validators import AskAgain, check_certification
-from tests.fakes import FakeLLM
+from tests.fakes import FakeLLM, flow_with, tin
 from tests.test_chat_skills_flow import PAGE1_ASKED, field, turn
 
 # Ô nhập chứng chỉ ở E1 / D3: giống thẻ chứng chỉ ở bước 3 form, nhập được nhiều chứng chỉ
@@ -534,3 +537,112 @@ async def test_overdue_taken_turns_card_into_real_score():
     assert not any(c["isTarget"] for c in certs_of(res))
     assert "plan_overdue" not in res.state.profile
     assert "english_plan" not in res.state.profile
+
+
+# --- Hồ sơ đã đủ mà còn dự định quá hạn: về từ form hoặc hỏi tư vấn thẳng vẫn hỏi dự định trước ---
+
+
+class AdviceSkill:
+    """Skill tư vấn giả: ghi lại câu hỏi được trả lời."""
+
+    def __init__(self) -> None:
+        self.questions: list[str] = []
+
+    async def run(self, state, message, entities=None):
+        self.questions.append(message)
+        return SkillOutput("lời tư vấn")
+
+
+def ready_profile(*cards):
+    return {
+        **plan_profile(*cards),
+        "current_level": field("high_school"),
+        "target_level": field("undergraduate"),
+        "budget": field("tier_35k_50k"),
+        "scholarship": field("preferred"),
+    }
+
+
+def advice_flow(slm=None):
+    advice = AdviceSkill()
+    handlers = build_handlers(FakeLLM(), "qwen3:8b") | {"skill_danh_gia": advice}
+    return flow_with(handlers, slm), advice
+
+
+async def say(flow, message, state, from_form=False):
+    req = ChatRequest(messages=[ChatMessage(role="user", content=message)], state=state, from_form=from_form)
+    return await flow.reply(req)
+
+
+def waiting_advice():
+    return tin(("profile_review", {}, "đánh giá hồ sơ giúp em")).intents[0]
+
+
+async def test_back_from_form_with_overdue_plan_asks_it_instead_of_done():
+    flow, advice = advice_flow()
+    state = ChatState(current_step="B3", profile=ready_profile(TAKEN_IELTS, TAKEN_SAT, OVERDUE_IELTS))
+
+    res = await say(flow, CONTINUE_CHAT, state, from_form=True)
+
+    assert res.answer != FORM_DONE and "IELTS" in res.answer
+    assert [r.label for r in res.quick_replies] == [OVERDUE_TAKEN, OVERDUE_MOVE, OVERDUE_DROP]
+    assert res.state.question_id == "E2" and res.state.intake_mode == "chat"
+    assert advice.questions == []
+
+
+async def test_back_from_form_with_overdue_plan_and_waiting_advice_answers_after_review():
+    flow, advice = advice_flow()
+    state = ChatState(
+        current_step="B3",
+        profile=ready_profile(TAKEN_IELTS, TAKEN_SAT, OVERDUE_IELTS),
+        pending_advice=waiting_advice(),
+    )
+
+    res = await say(flow, CONTINUE_CHAT, state, from_form=True)
+    assert [r.label for r in res.quick_replies] == [OVERDUE_TAKEN, OVERDUE_MOVE, OVERDUE_DROP]
+    assert res.state.pending_advice.span == "đánh giá hồ sơ giúp em"
+
+    res = await say(flow, OVERDUE_DROP, res.state)
+    assert res.state.question_id == "X1" and res.widget.type == "review"
+    assert [c["id"] for c in certs_of(res)] == ["t1", "t2"]
+
+    res = await say(flow, "Đúng rồi", res.state)
+    assert advice.questions == ["đánh giá hồ sơ giúp em"]
+    assert res.state.pending_advice is None
+
+
+async def test_direct_advice_with_overdue_plan_asks_it_first():
+    flow, advice = advice_flow(tin(("profile_review", {}, "đánh giá hồ sơ giúp em")))
+    state = ChatState(current_step="B3", profile=ready_profile(TAKEN_IELTS, TAKEN_SAT, OVERDUE_IELTS))
+
+    res = await say(flow, "đánh giá hồ sơ giúp em", state)
+    assert advice.questions == []
+    assert [r.label for r in res.quick_replies] == [OVERDUE_TAKEN, OVERDUE_MOVE, OVERDUE_DROP]
+    assert res.state.pending_advice.span == "đánh giá hồ sơ giúp em"
+
+    res = await say(flow, OVERDUE_TAKEN, res.state)
+    assert res.state.question_id == "E1"
+    res = await say(flow, "Chứng chỉ IELTS Academic, điểm 7.0, thi tháng 1/2025", res.state)
+    assert not any(c["isTarget"] for c in certs_of(res))
+
+
+@pytest.mark.parametrize("plan_month", [None, "this_month"])
+async def test_advice_without_overdue_plan_runs_as_before(plan_month):
+    flow, advice = advice_flow(tin(("profile_review", {}, "đánh giá hồ sơ giúp em")))
+    cards = [TAKEN_IELTS, TAKEN_SAT]
+    if plan_month:
+        cards.append({**OVERDUE_IELTS, "testDate": date.today().strftime("%Y-%m")})
+    state = ChatState(current_step="B3", profile=ready_profile(*cards))
+
+    res = await say(flow, "đánh giá hồ sơ giúp em", state)
+
+    assert advice.questions == ["đánh giá hồ sơ giúp em"] and res.answer == "lời tư vấn"
+
+
+async def test_back_from_form_without_overdue_plan_still_says_done():
+    flow, _ = advice_flow()
+    state = ChatState(current_step="B3", profile=ready_profile(TAKEN_IELTS, TAKEN_SAT))
+
+    res = await say(flow, CONTINUE_CHAT, state, from_form=True)
+
+    assert res.answer == FORM_DONE
