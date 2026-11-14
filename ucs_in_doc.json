@@ -187,5 +187,12 @@
     "role": "Học sinh, Phụ huynh",
     "status": "Một phần",
     "dev_todo": "Mới so sánh được qua chat; làm màn hình so sánh"
+  },
+  {
+    "uc": "UC-28",
+    "name": "So sánh chi phí sinh hoạt theo bang",
+    "role": "Học sinh, Phụ huynh",
+    "status": "Chỉ có bảng",
+    "dev_todo": "Bảng 0 dòng: nhập dữ liệu, làm API và giao diện"
   }
 ]
