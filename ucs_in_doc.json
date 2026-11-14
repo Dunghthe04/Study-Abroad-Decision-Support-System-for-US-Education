@@ -271,5 +271,12 @@
     "role": "Dùng chung",
     "status": "Đã có",
     "dev_todo": "Chỉ hiện trung tâm đã xác minh trước (mục 5.1)"
+  },
+  {
+    "uc": "UC-40",
+    "name": "Xem chi tiết trung tâm",
+    "role": "Dùng chung",
+    "status": "Đã có",
+    "dev_todo": "Hiện nhãn trạng thái xác minh"
   }
 ]
