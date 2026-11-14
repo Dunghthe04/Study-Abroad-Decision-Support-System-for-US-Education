@@ -1,0 +1,7 @@
+{
+  "uc": "UC-45",
+  "name": "Đánh giá trung tâm",
+  "role": "Học sinh, Phụ huynh",
+  "status": "Chỉ có bảng",
+  "dev_todo": "Phụ thuộc quyết định diễn đàn và đánh giá"
+}
