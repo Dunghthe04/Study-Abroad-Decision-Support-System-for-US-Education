@@ -341,5 +341,12 @@
     "role": "Học sinh, Phụ huynh",
     "status": "Chỉ có bảng",
     "dev_todo": "Như trên"
+  },
+  {
+    "uc": "UC-50",
+    "name": "Báo cáo vi phạm diễn đàn",
+    "role": "Học sinh, Phụ huynh",
+    "status": "Chỉ có bảng",
+    "dev_todo": "Như trên"
   }
 ]
