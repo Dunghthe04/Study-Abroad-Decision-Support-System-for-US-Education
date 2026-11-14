@@ -460,5 +460,12 @@
     "role": "Administrator",
     "status": "Đã có",
     "dev_todo": "Bỏ quyền của Moderator (develop đang cho cả hai)"
+  },
+  {
+    "uc": "UC-61",
+    "name": "Khóa tài khoản",
+    "role": "Administrator",
+    "status": "Đã có",
+    "dev_todo": "Như trên"
   }
 ]
