@@ -327,5 +327,12 @@
     "role": "Dùng chung",
     "status": "Chỉ có bảng",
     "dev_todo": "Như trên"
+  },
+  {
+    "uc": "UC-48",
+    "name": "Đăng bài diễn đàn",
+    "role": "Học sinh, Phụ huynh",
+    "status": "Chỉ có bảng",
+    "dev_todo": "Như trên"
   }
 ]
