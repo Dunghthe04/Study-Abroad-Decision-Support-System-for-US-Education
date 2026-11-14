@@ -96,5 +96,12 @@
     "role": "Học sinh, Phụ huynh",
     "status": "Đã có",
     "dev_todo": "Giữ nguyên"
+  },
+  {
+    "uc": "UC-15",
+    "name": "Chọn mức tài chính",
+    "role": "Học sinh, Phụ huynh",
+    "status": "Đã có",
+    "dev_todo": "Develop dùng 4 mức, Report 3 ghi 5 mức: xem mục 7"
   }
 ]
