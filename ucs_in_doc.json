@@ -397,5 +397,12 @@
     "role": "Moderator",
     "status": "Chưa có",
     "dev_todo": "Như trên"
+  },
+  {
+    "uc": "UC-58",
+    "name": "Gỡ tin nhắn trong yêu cầu liên hệ",
+    "role": "Moderator",
+    "status": "Chưa có",
+    "dev_todo": "Mới có gắn cờ tự động; thêm gỡ tin (mục 5.4)"
   }
 ]
