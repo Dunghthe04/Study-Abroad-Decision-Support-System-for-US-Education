@@ -614,5 +614,12 @@
     "role": "Học sinh, Phụ huynh",
     "status": "Đã có",
     "dev_todo": "Giữ nguyên"
+  },
+  {
+    "uc": "UC-85",
+    "name": "Phân tích độ nhạy",
+    "role": "Học sinh, Phụ huynh",
+    "status": "Chưa có",
+    "dev_todo": "Mục 5.5"
   }
 ]
