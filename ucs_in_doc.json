@@ -257,5 +257,12 @@
     "role": "Học sinh, Phụ huynh",
     "status": "Một phần",
     "dev_todo": "443 tài liệu chưa có đường link nguồn: bổ sung"
+  },
+  {
+    "uc": "UC-38",
+    "name": "Được chuyển sang trung tâm tư vấn",
+    "role": "Học sinh, Phụ huynh",
+    "status": "Một phần",
+    "dev_todo": "Thêm trả lời cho câu \"cho gặp người thật\"; đặt lịch và so sánh trung tâm trong chat"
   }
 ]
