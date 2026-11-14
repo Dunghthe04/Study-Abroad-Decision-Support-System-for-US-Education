@@ -103,5 +103,12 @@
     "role": "Học sinh, Phụ huynh",
     "status": "Đã có",
     "dev_todo": "Develop dùng 4 mức, Report 3 ghi 5 mức: xem mục 7"
+  },
+  {
+    "uc": "UC-16",
+    "name": "Thêm hoạt động ngoại khóa",
+    "role": "Học sinh, Phụ huynh",
+    "status": "Đã có",
+    "dev_todo": "Xác nhận phần lưu gợi ý AI về vai trò, phạm vi đã xong chưa"
   }
 ]
