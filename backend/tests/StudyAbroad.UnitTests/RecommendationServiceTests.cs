@@ -26,12 +26,22 @@ public class RecommendationServiceTests
     };
 
     private static (RecommendationService Service, FakeAdvisor Advisor, FakeRecommendationRepository Store) Setup(
-        StudentProfile? profile = null, IReadOnlyList<RecommendSchoolInput>? schools = null, IReadOnlyList<ProfileActivity>? activities = null)
+        StudentProfile? profile = null, IReadOnlyList<RecommendSchoolInput>? schools = null, IReadOnlyList<ProfileActivity>? activities = null,
+        IReadOnlyList<ProfileCertification>? certifications = null)
     {
         var advisor = new FakeAdvisor();
         var store = new FakeRecommendationRepository(schools ?? []);
-        return (new RecommendationService(advisor, store, new FakeProfileFlow(profile, activities)), advisor, store);
+        return (new RecommendationService(advisor, store, new FakeProfileFlow(profile, activities, certifications)), advisor, store);
     }
+
+    // certifications bỏ trống: các cột Sat/Act/Ielts/Toefl/Duolingo của profile (đọc lúc gọi, test có thể sửa sau Setup) được coi là điểm
+    // đã thi và đổi thành dòng chứng chỉ, vì gợi ý trường đọc điểm từ bảng profile_certifications chứ không đọc cột trên profile
+    private static IReadOnlyList<ProfileCertification> TakenCertificationsOf(StudentProfile p) =>
+        new (string Type, decimal? Score)[]
+            { ("sat", p.Sat), ("act", p.Act), ("ielts", p.Ielts), ("toefl", p.Toefl), ("duolingo", p.Duolingo) }
+            .Where(x => x.Score is not null)
+            .Select(x => new ProfileCertification { TestType = x.Type, OverallScore = x.Score, Category = "x" })
+            .ToList();
 
     // ---------------------------------------------------------------- luồng chính
 
@@ -497,6 +507,25 @@ public class RecommendationServiceTests
         var list = schools ?? [School("S", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m)];
         var (service, advisor, store) = Setup(profile, list, activities);
         return (service, advisor, store, profile);
+    }
+
+    [Fact]
+    public async Task Simulate_ScoresComeFromTheCertificationsTable_NotFromTheProfileColumns()
+    {
+        var (_, _, _, profile) = SimSetup();
+        profile.Sat = 1500m;       // cột cũ: không được đọc
+        var certs = new[]
+        {
+            new ProfileCertification { TestType = "sat", OverallScore = 1100m, Category = "standardized" },
+            new ProfileCertification { TestType = "sat", OverallScore = 1250m, Category = "standardized" },
+            new ProfileCertification { TestType = "ielts", OverallScore = 8m, IsTarget = true, Category = "english" }
+        };
+        var (service, _, _) = Setup(profile, [School("S", 38_000m, "none", Major, sat: (1200, 1380))], certifications: certs);
+
+        var result = await service.SimulateAsync(profile.UserId, NoChange, null, default);
+
+        Assert.Equal(1250, result.Profile.Sat);     // thi nhiều lần: lấy cao nhất
+        Assert.Null(result.Profile.Ielts);          // chỉ có điểm mục tiêu: chưa có điểm
     }
 
     [Fact]
@@ -1610,7 +1639,9 @@ public class RecommendationServiceTests
             Task.FromResult<RecommendSchoolInput?>(schools.FirstOrDefault(s => s.University.Code == code));
     }
 
-    private sealed class FakeProfileFlow(StudentProfile? profile, IReadOnlyList<ProfileActivity>? activities = null) : IProfileFlowRepository
+    private sealed class FakeProfileFlow(
+        StudentProfile? profile, IReadOnlyList<ProfileActivity>? activities = null, IReadOnlyList<ProfileCertification>? certifications = null)
+        : IProfileFlowRepository
     {
         public Task<string?> GetAppSettingValueAsync(string key, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<StudentProfile?> GetProfileByUserIdAsync(Guid userId, CancellationToken ct = default) =>
@@ -1624,6 +1655,7 @@ public class RecommendationServiceTests
         public Task<IReadOnlyList<TranscriptScore>> GetTranscriptScoresAsync(Guid profileId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<IReadOnlyList<ProfileActivity>> GetProfileActivitiesAsync(Guid profileId, CancellationToken ct = default) =>
             Task.FromResult(activities ?? []);
-        public Task<IReadOnlyList<ProfileCertification>> GetProfileCertificationsAsync(Guid profileId, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<IReadOnlyList<ProfileCertification>> GetProfileCertificationsAsync(Guid profileId, CancellationToken ct = default) =>
+            Task.FromResult(certifications ?? (profile is null ? [] : TakenCertificationsOf(profile)));
     }
 }
