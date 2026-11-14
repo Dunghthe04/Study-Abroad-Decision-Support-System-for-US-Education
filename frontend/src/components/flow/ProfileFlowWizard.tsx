@@ -51,7 +51,7 @@ const INITIAL_DRAFT: ProfileFlowDraft = {
   step3: {
     certifications: [],
     englishPlanned: false,
-    englishPlannedDate: null,
+    standardizedPlanned: false,
   },
   step4: {
     annualBudgetTier: null,

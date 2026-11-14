@@ -30,7 +30,7 @@ import {
   draftGpa,
   labelOf,
 } from "@/lib/profile-flow-options";
-import { findCertType, formatCertSummary, formatYearMonth } from "@/lib/certification-utils";
+import { findCertType, formatCertSummary } from "@/lib/certification-utils";
 import type { DraftTranscriptFile, ProfileFlowDraft, ProfileMetadataResponse } from "@/types/profile-flow";
 
 // BE trả lỗi khi gửi hồ sơ thành một chuỗi "Bước 1: ... Bước 3: ..." → tách theo bước để hiện ở thẻ của bước đó
@@ -243,30 +243,8 @@ export function Step6Review({
           ) : (
             <div>Chưa có chứng chỉ</div>
           )}
-          {step3.englishPlanned && (
-            <div>
-              <strong className="text-foreground">Dự kiến thi tiếng Anh: </strong>
-              {[
-                step3.englishPlannedTestType?.toUpperCase(),
-                step3.englishPlannedTargetScore != null ? `mục tiêu ${step3.englishPlannedTargetScore}` : null,
-                formatYearMonth(step3.englishPlannedDate) ? `thi ${formatYearMonth(step3.englishPlannedDate)}` : null,
-              ]
-                .filter(Boolean)
-                .join(" · ") || "chưa chọn thời gian"}
-            </div>
-          )}
-          {step3.standardizedPlanned && (
-            <div>
-              <strong className="text-foreground">Dự kiến thi chuẩn hóa: </strong>
-              {[
-                step3.standardizedPlannedTestType?.toUpperCase(),
-                step3.standardizedPlannedTargetScore != null ? `mục tiêu ${step3.standardizedPlannedTargetScore}` : null,
-                formatYearMonth(step3.standardizedPlannedDate) ? `thi ${formatYearMonth(step3.standardizedPlannedDate)}` : null,
-              ]
-                .filter(Boolean)
-                .join(" · ") || "chưa chọn thời gian"}
-            </div>
-          )}
+          {step3.englishPlanned && <div>Tiếng Anh: chưa thi và chưa có dự định thi</div>}
+          {step3.standardizedPlanned && <div>Bài thi chuẩn hóa: chưa thi và chưa có dự định thi</div>}
         </ReviewCard>
 
         <ReviewCard icon={DollarSignIcon} eyebrow="Tài chính" onEdit={() => onEditStep(4)} errors={stepErrors.byStep[4]}>

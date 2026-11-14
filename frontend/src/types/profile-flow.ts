@@ -185,16 +185,14 @@ export interface LegacyOtherTestDraft {
   score?: number | null;
 }
 
+/**
+ * Chứng chỉ đã thi và dự định thi cùng nằm trong certifications (dự định: isTarget = true).
+ * englishPlanned / standardizedPlanned: tick "chưa thi và chưa có dự định thi" của từng mục
+ */
 export interface CertificationDraft {
   certifications: CertificationItem[];
   englishPlanned: boolean;
-  englishPlannedDate?: string | null; // "yyyy-MM"
-  englishPlannedTestType?: string | null; // loại bài thi dự kiến (ielts, toefl...)
-  englishPlannedTargetScore?: number | null; // điểm mục tiêu dự kiến
   standardizedPlanned?: boolean;
-  standardizedPlannedDate?: string | null; // "yyyy-MM"
-  standardizedPlannedTestType?: string | null; // loại bài thi dự kiến (sat, act...)
-  standardizedPlannedTargetScore?: number | null; // điểm mục tiêu dự kiến
 }
 
 /** Bước 3 kiểu cũ còn nằm trong nháp đã lưu (server hoặc localStorage) */
@@ -203,6 +201,13 @@ export interface LegacyCertificationDraft {
   englishOverallScore?: number | null;
   englishTestDate?: string | null;
   otherTests?: LegacyOtherTestDraft[] | null;
+  /** 1 ô dự định mỗi mục (trước khi dự định thành thẻ) */
+  englishPlannedDate?: string | null;
+  englishPlannedTestType?: string | null;
+  englishPlannedTargetScore?: number | null;
+  standardizedPlannedDate?: string | null;
+  standardizedPlannedTestType?: string | null;
+  standardizedPlannedTargetScore?: number | null;
 }
 
 export interface FinancialDraft {
