@@ -502,5 +502,12 @@
     "role": "Administrator",
     "status": "Chưa có",
     "dev_todo": "Làm màn hình nhập tỷ giá, lưu lịch sử"
+  },
+  {
+    "uc": "UC-79",
+    "name": "Quản lý gói, giá và xem giao dịch",
+    "role": "Administrator",
+    "status": "Chưa có",
+    "dev_todo": "Mục 5.3"
   }
 ]
