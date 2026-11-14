@@ -124,5 +124,12 @@
     "role": "Học sinh, Phụ huynh",
     "status": "Một phần",
     "dev_todo": "Mới có bảng quy đổi thang 10; thêm bảng cho điểm đại học Việt Nam, thang 4, IB, A-level, AP"
+  },
+  {
+    "uc": "UC-19",
+    "name": "Yêu cầu AI nhận xét hồ sơ",
+    "role": "Học sinh, Phụ huynh",
+    "status": "Đã có",
+    "dev_todo": "Giữ nguyên"
   }
 ]
