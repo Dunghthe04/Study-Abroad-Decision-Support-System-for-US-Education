@@ -530,5 +530,12 @@
     "role": "Trung tâm",
     "status": "Mới",
     "dev_todo": "Hiện do Moderator tạo: đổi thành trung tâm tự đăng ký (mục 5.1)"
+  },
+  {
+    "uc": "UC-71",
+    "name": "Nộp hồ sơ xác minh",
+    "role": "Trung tâm",
+    "status": "Mới",
+    "dev_todo": "Mục 5.1"
   }
 ]
