@@ -572,5 +572,12 @@
     "role": "Học sinh, Phụ huynh",
     "status": "Đã có",
     "dev_todo": "Bổ sung theo mục 2 và 5.2 (nhiều học sinh, thu hồi, ngày tròn 18 tuổi)"
+  },
+  {
+    "uc": "UC-76",
+    "name": "So sánh ưu tiên của học sinh và phụ huynh",
+    "role": "Học sinh, Phụ huynh",
+    "status": "Chưa có",
+    "dev_todo": "Làm theo mô tả Report 3 hoặc bỏ khỏi đợt này (mục 7)"
   }
 ]
