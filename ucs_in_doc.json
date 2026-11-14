@@ -488,5 +488,12 @@
     "role": "Administrator",
     "status": "Đã có",
     "dev_todo": "Develop cho Moderator sửa, Admin xem; Report 3 ghi Admin: xem mục 7"
+  },
+  {
+    "uc": "UC-69",
+    "name": "Sửa ngưỡng gợi ý",
+    "role": "Administrator",
+    "status": "Chưa có",
+    "dev_todo": "Hạ thành chỉ xem, gộp vào UC-89 (mục 3.2)"
   }
 ]
