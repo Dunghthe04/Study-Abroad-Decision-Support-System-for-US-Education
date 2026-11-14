@@ -516,5 +516,12 @@
     "role": "Administrator",
     "status": "Một phần",
     "dev_todo": "Tách theo gói; thêm doanh thu và tỷ lệ dùng phương án dự phòng"
+  },
+  {
+    "uc": "UC-90",
+    "name": "Xem báo cáo chất lượng AI",
+    "role": "Administrator",
+    "status": "Đã có",
+    "dev_todo": "Giữ nguyên"
   }
 ]
