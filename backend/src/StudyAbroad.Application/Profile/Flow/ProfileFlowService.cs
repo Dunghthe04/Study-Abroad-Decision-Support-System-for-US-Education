@@ -941,6 +941,8 @@ public class ProfileFlowService(
         ApplyLegacyCertificationColumns(profile, certifications, certificationTypes, draft.Step3);
         profile.EnglishTestPlanned = draft.Step3?.EnglishPlanned ?? false;
         profile.EnglishPlannedDate = profile.EnglishTestPlanned ? ParseDateOnly(draft.Step3?.EnglishPlannedDate) : null;
+        profile.EnglishPlannedTestType = profile.EnglishTestPlanned ? NullIfBlank(draft.Step3?.EnglishPlannedTestType) : null;
+        profile.EnglishPlannedTargetScore = profile.EnglishTestPlanned ? draft.Step3?.EnglishPlannedTargetScore : null;
         // Tick "chưa thi chuẩn hóa, sẽ thi sau": lưu cả loại bài và điểm mục tiêu để mở lại form vẫn còn
         var standardizedPlanned = draft.Step3?.StandardizedPlanned ?? false;
         profile.StandardizedTestPlanned = standardizedPlanned;
@@ -1265,13 +1267,17 @@ public class ProfileFlowService(
         : profile.StandardizedTestPlanned;
 
     /// <summary>
-    /// Bài tiếng Anh dự định và điểm mục tiêu khi mở lại form: lúc lưu, chưa có chứng chỉ tiếng Anh thật mà có kế hoạch
-    /// thì loại bài dự định ghi vào EnglishTestType và điểm mục tiêu ghi vào cột điểm của bài đó, nên đọc ngược lại từ đây
+    /// Bài tiếng Anh dự định và điểm mục tiêu khi mở lại form: đọc từ cột kế hoạch riêng (đủ cả bài không có cột điểm như PTE).
+    /// Hồ sơ lưu trước khi có cột đó thì đọc ngược: lúc lưu, chưa có chứng chỉ tiếng Anh thật mà có kế hoạch thì loại bài
+    /// dự định ghi vào EnglishTestType và điểm mục tiêu ghi vào cột điểm của bài đó
     /// </summary>
     private static (string? TestType, decimal? TargetScore) PlannedEnglishFromColumns(
         StudentProfile profile, IReadOnlyDictionary<string, CertificationMetadataItem> certificationTypes)
     {
-        if (!profile.EnglishTestPlanned || string.IsNullOrWhiteSpace(profile.EnglishTestType)
+        if (!profile.EnglishTestPlanned) return (null, null);
+        if (profile.EnglishPlannedTestType is not null || profile.EnglishPlannedTargetScore is not null)
+            return (profile.EnglishPlannedTestType, profile.EnglishPlannedTargetScore);
+        if (string.IsNullOrWhiteSpace(profile.EnglishTestType)
             || profile.EnglishTestType == ProfileConstants.EnglishTestTypes.None)
             return (null, null);
         var type = certificationTypes.Values.FirstOrDefault(t => t.Category == "english"
