@@ -670,6 +670,57 @@ public class ProfileFlowServiceTests
     }
 
     [Fact]
+    public async Task CommitFlowAsync_EnglishPlannedPte_WithoutProfileColumn_IsRestoredWhenReopened()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var service = new ProfileFlowService(repo, new FakeFileStorageService());
+        var userId = Guid.NewGuid();
+        var draft = FullDraft() with
+        {
+            Step3 = new FlowCertificationDraftDto(
+                Certifications: [new(Category: "standardized", Type: "sat", Overall: 1400m, TestDate: "2026-05")],
+                EnglishPlanned: true,
+                EnglishPlannedDate: "2099-08",
+                EnglishPlannedTestType: "pte",
+                EnglishPlannedTargetScore: 65m),
+        };
+
+        await service.CommitFlowAsync(userId, new CommitProfileFlowRequest(draft));
+
+        var p = (await repo.GetProfileByUserIdAsync(userId))!;
+        Assert.Equal("pte", p.EnglishPlannedTestType);
+        Assert.Equal(65m, p.EnglishPlannedTargetScore);
+
+        // PTE không có cột điểm riêng trên hồ sơ nhưng mở lại form vẫn còn loại bài và điểm mục tiêu
+        var step3 = (await service.GetFlowStateAsync(userId)).Draft.Step3!;
+        Assert.True(step3.EnglishPlanned);
+        Assert.Equal("pte", step3.EnglishPlannedTestType);
+        Assert.Equal(65m, step3.EnglishPlannedTargetScore);
+    }
+
+    [Fact]
+    public async Task GetFlowStateAsync_EnglishPlanSavedBeforePlanColumns_StillReadsBackFromScoreColumn()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var service = new ProfileFlowService(repo, new FakeFileStorageService());
+        var userId = Guid.NewGuid();
+        await service.CommitFlowAsync(userId, new CommitProfileFlowRequest(FullDraft()));
+        var p = (await repo.GetProfileByUserIdAsync(userId))!;
+        // Hồ sơ lưu trước khi có cột kế hoạch: chỉ có tick, loại bài trong EnglishTestType và điểm mục tiêu trong cột Ielts
+        repo.Certifications[p.Id].Clear();
+        p.EnglishTestPlanned = true;
+        p.EnglishPlannedTestType = null;
+        p.EnglishPlannedTargetScore = null;
+        p.EnglishTestType = "ielts";
+        p.Ielts = 7m;
+
+        var step3 = (await service.GetFlowStateAsync(userId)).Draft.Step3!;
+        Assert.Equal("ielts", step3.EnglishPlannedTestType);
+        Assert.Equal(7m, step3.EnglishPlannedTargetScore);
+        Assert.DoesNotContain(step3.Certifications!, c => c.Type == "ielts");
+    }
+
+    [Fact]
     public async Task GetFlowStateAsync_LegacyProfileWithoutPlans_StillRebuildsTakenCertificatesFromColumns()
     {
         var repo = new InMemoryProfileFlowRepository();
