@@ -432,5 +432,12 @@
     "role": "Moderator",
     "status": "Một phần",
     "dev_todo": "Như trên"
+  },
+  {
+    "uc": "UC-72",
+    "name": "Ẩn hoặc hiện trung tâm",
+    "role": "Moderator",
+    "status": "Đã có",
+    "dev_todo": "Giữ nguyên; xem câu hỏi mở về sửa so với ẩn (mục 7)"
   }
 ]
