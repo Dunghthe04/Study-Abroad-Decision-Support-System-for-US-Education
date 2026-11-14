@@ -1,5 +1,6 @@
 "use client";
 
+import { formatRating } from "@/lib/rating";
 import { useState } from "react";
 import { useCenterReviews } from "@/hooks/use-center-reviews";
 import { CenterReviewList } from "@/components/centers/CenterReviewList";
@@ -48,7 +49,17 @@ export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDeta
   const center = updatedCenter ?? initialCenter;
   const profile = getEnrichedCenterProfile(center);
   // Đánh giá thật từ backend (không dùng dữ liệu mẫu)
-  const { reviews, error: reviewsError, total: reviewTotal, average: reviewAverage } = useCenterReviews(center.id);
+  const {
+    reviews,
+    loading: reviewsLoading,
+    error: reviewsError,
+    loadingMore: reviewsLoadingMore,
+    loadMoreError: reviewsLoadMoreError,
+    hasMore: reviewsHasMore,
+    loadMore: loadMoreReviews,
+    total: reviewTotal,
+    average: reviewAverage,
+  } = useCenterReviews(center.id);
   const isVerified = center.verificationStatus === "verified" || profile.center.verificationStatus === "verified";
   const isActive = center.isActive !== false;
 
@@ -243,7 +254,7 @@ export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDeta
               {reviewTotal > 0 && reviewAverage !== null ? (
                 <div className="inline-flex items-center gap-1 text-gold font-semibold tabular-nums">
                   <StarIcon className="w-3.5 h-3.5 fill-current" />
-                  <span>{reviewAverage.toFixed(1)}</span>
+                  <span>{formatRating(reviewAverage)}</span>
                   <span className="text-ink-2 font-normal">({reviewTotal} đánh giá)</span>
                 </div>
               ) : (
@@ -451,7 +462,15 @@ export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDeta
 
         {/* TAB 3: ĐÁNH GIÁ & NHẬN XÉT (dữ liệu thật) */}
         <TabsContent value="danh-gia" className="space-y-6 pt-2">
-          <CenterReviewList reviews={reviews} error={reviewsError} />
+          <CenterReviewList
+            reviews={reviews}
+            error={reviewsError}
+            loading={reviewsLoading}
+            hasMore={reviewsHasMore}
+            loadingMore={reviewsLoadingMore}
+            loadMoreError={reviewsLoadMoreError}
+            onLoadMore={loadMoreReviews}
+          />
         </TabsContent>
       </Tabs>
 

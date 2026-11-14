@@ -89,7 +89,7 @@ public class StudyCenterRepository(AppDbContext db) : IStudyCenterRepository
             if (byCenter.TryGetValue(center.Id, out var s))
             {
                 center.ReviewCount = s.Count;
-                center.AverageRating = Math.Round((decimal)s.Average, 2);
+                center.AverageRating = (decimal)CenterRatingMath.Round(s.Average);
             }
             else
             {

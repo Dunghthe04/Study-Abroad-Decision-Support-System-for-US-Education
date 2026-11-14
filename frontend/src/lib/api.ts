@@ -328,9 +328,11 @@ export const studyCentersApi = {
     return apiFetch<PagedResult<StudyCenter>>(`/api/v1/study-centers${qs ? `?${qs}` : ""}`);
   },
   getById: (id: string) => apiFetch<StudyCenter>(`/api/v1/study-centers/${id}`),
-  /** Đánh giá thật của trung tâm (UC-41): danh sách + điểm trung bình + số lượng. */
-  getReviews: (id: string) =>
-    apiFetch<CenterReviewsDto>(`/api/v1/study-centers/${encodeURIComponent(id)}/reviews`),
+  /** Đánh giá thật của trung tâm (UC-41): một trang danh sách + điểm trung bình + tổng số lượng. */
+  getReviews: (id: string, page = 1, pageSize = 20) =>
+    apiFetch<CenterReviewsDto>(
+      `/api/v1/study-centers/${encodeURIComponent(id)}/reviews?page=${page}&pageSize=${pageSize}`,
+    ),
   /** [UC-59] Xác minh hoặc hủy xác minh trung tâm tư vấn (vai trò: Moderator / Admin) */
   verify: (id: string, isVerified: boolean, verificationNote?: string | null) =>
     apiFetch<StudyCenter>(`/api/v1/study-centers/${encodeURIComponent(id)}/verify`, {

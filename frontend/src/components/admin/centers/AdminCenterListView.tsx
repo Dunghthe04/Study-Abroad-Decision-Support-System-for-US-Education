@@ -1,5 +1,6 @@
 "use client";
 
+import { formatRating } from "@/lib/rating";
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Building2Icon,
@@ -331,7 +332,7 @@ export function AdminCenterListView() {
             {(c.reviewCount ?? 0) > 0 && c.averageRating != null && (
               <div className="flex items-center gap-1 text-ink-2">
                 <StarIcon className="size-3 fill-warn text-warn" />
-                <span className="font-medium text-ink">{c.averageRating}</span>
+                <span className="font-medium text-ink">{formatRating(c.averageRating)}</span>
                 <span>({c.reviewCount ?? 0})</span>
               </div>
             )}

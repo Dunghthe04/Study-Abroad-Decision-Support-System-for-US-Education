@@ -1,15 +1,48 @@
 import { StarIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import type { CenterReviewsDto } from "@/types/api";
+
+const MAX_STARS = 5;
 
 interface CenterReviewListProps {
   reviews: CenterReviewsDto | null;
   error: boolean;
+  /** Đang tải trang đầu tiên. */
+  loading?: boolean;
+  /** Còn đánh giá chưa tải thì hiện nút "Xem thêm". */
+  hasMore?: boolean;
+  loadingMore?: boolean;
+  loadMoreError?: boolean;
+  onLoadMore?: () => void;
+}
+
+/** Một hàng đủ 5 sao: sao đầy theo điểm, phần còn lại là sao rỗng màu xám. */
+function StarRating({ rating }: { rating: number }) {
+  return (
+    <div className="flex shrink-0" role="img" aria-label={`${rating} trên ${MAX_STARS} sao`}>
+      {Array.from({ length: MAX_STARS }, (_, i) => (
+        <StarIcon
+          key={i}
+          aria-hidden="true"
+          className={i < rating ? "w-3.5 h-3.5 fill-current text-gold" : "w-3.5 h-3.5 text-ink-3 opacity-40"}
+        />
+      ))}
+    </div>
+  );
 }
 
 /** Danh sách đánh giá thật của trung tâm; dùng chung cho trang công khai và trang quản trị. */
-export function CenterReviewList({ reviews, error }: CenterReviewListProps) {
+export function CenterReviewList({
+  reviews,
+  error,
+  loading = false,
+  hasMore = false,
+  loadingMore = false,
+  loadMoreError = false,
+  onLoadMore,
+}: CenterReviewListProps) {
   const total = reviews?.totalCount ?? 0;
 
   return (
@@ -18,9 +51,11 @@ export function CenterReviewList({ reviews, error }: CenterReviewListProps) {
         Nhận xét từ học sinh &amp; phụ huynh{total > 0 ? ` (${total})` : ""}
       </h3>
 
+      {loading && !error && <p className="text-sm text-ink-2">Đang tải đánh giá…</p>}
+
       {error && <p className="text-sm text-ink-2">Không tải được đánh giá. Vui lòng thử lại sau.</p>}
 
-      {!error && reviews && reviews.items.length === 0 && (
+      {!loading && !error && reviews && reviews.items.length === 0 && (
         <p className="text-sm text-ink-2">Chưa có nhận xét nào.</p>
       )}
 
@@ -41,11 +76,7 @@ export function CenterReviewList({ reviews, error }: CenterReviewListProps) {
                   ({new Date(rev.createdAt).toLocaleDateString("vi-VN")})
                 </span>
               </div>
-              <div className="flex shrink-0 text-gold" aria-label={`${rev.rating} trên 5 sao`}>
-                {Array.from({ length: rev.rating }, (_, i) => (
-                  <StarIcon key={i} className="w-3.5 h-3.5 fill-current" />
-                ))}
-              </div>
+              <StarRating rating={rev.rating} />
             </div>
           </CardHeader>
           {rev.comment && (
@@ -55,6 +86,17 @@ export function CenterReviewList({ reviews, error }: CenterReviewListProps) {
           )}
         </Card>
       ))}
+
+      {hasMore && onLoadMore && (
+        <div className="flex flex-col items-center gap-2 pt-1">
+          {loadMoreError && (
+            <p className="text-sm text-ink-2">Không tải thêm được đánh giá. Vui lòng thử lại.</p>
+          )}
+          <Button type="button" variant="outline" size="sm" onClick={onLoadMore} disabled={loadingMore}>
+            {loadingMore ? "Đang tải…" : `Xem thêm (${total - (reviews?.items.length ?? 0)})`}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

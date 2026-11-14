@@ -42,13 +42,15 @@ public class StudyCentersController(IStudyCenterService service) : ControllerBas
 
     /// <summary>
     /// Đánh giá công khai của trung tâm (UC-41): lấy từ dữ liệu thật, chỉ gồm đánh giá đang hiển thị.
-    /// Điểm trung bình và số lượng tính từ chính các đánh giá đó.
+    /// Điểm trung bình và số lượng tính từ toàn bộ đánh giá hiển thị; danh sách được phân trang (mới nhất trước).
     /// </summary>
     [HttpGet("{id:guid}/reviews")]
     public async Task<ActionResult<CenterReviewsDto>> GetReviews(
         Guid id,
         [FromServices] ICenterReviewRepository reviews,
-        CancellationToken ct)
+        CancellationToken ct,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = CenterReviewPaging.DefaultPageSize)
     {
         var center = await service.GetByIdAsync(id, ct);
         if (center is null) return NotFound();
@@ -57,7 +59,7 @@ public class StudyCentersController(IStudyCenterService service) : ControllerBas
         if (!isModerator && (center.VerificationStatus != CenterReferral.Verified || !center.IsActive))
             return NotFound();
 
-        return Ok(await reviews.GetVisibleAsync(id, 50, ct));
+        return Ok(await reviews.GetVisibleAsync(id, page, pageSize, ct));
     }
 
     // Trung tâm tự đăng ký (/register/center) và chờ moderator duyệt hồ sơ (UC-59);
