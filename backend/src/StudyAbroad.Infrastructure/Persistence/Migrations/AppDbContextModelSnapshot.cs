@@ -2999,20 +2999,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(64)")
                         .HasColumnName("education_system");
 
-                    b.Property<DateOnly?>("EnglishPlannedDate")
-                        .HasColumnType("date")
-                        .HasColumnName("english_planned_date");
-
-                    b.Property<decimal?>("EnglishPlannedTargetScore")
-                        .HasPrecision(7, 2)
-                        .HasColumnType("numeric(7,2)")
-                        .HasColumnName("english_planned_target_score");
-
-                    b.Property<string>("EnglishPlannedTestType")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("english_planned_test_type");
-
                     b.Property<DateOnly?>("EnglishTestDate")
                         .HasColumnType("date")
                         .HasColumnName("english_test_date");
@@ -3122,20 +3108,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")
                         .HasColumnName("scholarship_need");
-
-                    b.Property<DateOnly?>("StandardizedPlannedDate")
-                        .HasColumnType("date")
-                        .HasColumnName("standardized_planned_date");
-
-                    b.Property<decimal?>("StandardizedPlannedTargetScore")
-                        .HasPrecision(7, 2)
-                        .HasColumnType("numeric(7,2)")
-                        .HasColumnName("standardized_planned_target_score");
-
-                    b.Property<string>("StandardizedPlannedTestType")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("standardized_planned_test_type");
 
                     b.Property<bool>("StandardizedTestPlanned")
                         .ValueGeneratedOnAdd()

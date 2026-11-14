@@ -723,14 +723,17 @@ public class ProfileFlowService(
                 label = type.Name;
                 if (type.Min is { } min && type.Max is { } max)
                 {
+                    // Dự định thi được để trống điểm mục tiêu
                     if (item.Overall is not { } overall)
-                        errors.Add($"Bước 3: {label} chưa nhập điểm.");
+                    {
+                        if (!item.IsTarget) errors.Add($"Bước 3: {label} chưa nhập điểm.");
+                    }
                     else if (!IsOnScale(overall, min, max, type.Step))
                         errors.Add($"Bước 3: điểm {label} phải từ {Fmt(min)} đến {Fmt(max)}{StepText(type.Step)}.");
                 }
                 else if (string.IsNullOrWhiteSpace(item.ScaleText))
                 {
-                    errors.Add($"Bước 3: {label} chưa nhập điểm.");
+                    if (!item.IsTarget) errors.Add($"Bước 3: {label} chưa nhập điểm.");
                 }
                 else if (item.ScaleText.Trim().Length > 32)
                 {
@@ -747,7 +750,7 @@ public class ProfileFlowService(
                         errors.Add($"Bước 3: điểm {section.Label} của {label} phải từ {Fmt(section.Min)} đến {Fmt(section.Max)}{StepText(section.Step)}.");
                 }
 
-                if (type.RequiresSubject && string.IsNullOrWhiteSpace(item.Subject))
+                if (type.RequiresSubject && !item.IsTarget && string.IsNullOrWhiteSpace(item.Subject))
                     errors.Add($"Bước 3: {label} chưa nhập {(type.SubjectLabel ?? "tên môn").ToLowerInvariant()}.");
                 else if (item.Subject?.Trim().Length > 128)
                     errors.Add($"Bước 3: tên môn {label} tối đa 128 ký tự.");
@@ -776,6 +779,11 @@ public class ProfileFlowService(
                     errors.Add("Bước 3: tháng dự kiến thi tiếng Anh không được ở quá khứ.");
             }
 
+            if (!string.IsNullOrWhiteSpace(step3.EnglishPlannedTestType)
+                && (!certificationTypes.TryGetValue(step3.EnglishPlannedTestType.Trim(), out var plannedEnglishType)
+                    || !IsEnglishCategory(plannedEnglishType.Category)))
+                errors.Add($"Bước 3: bài tiếng Anh dự kiến '{step3.EnglishPlannedTestType}' không có trong danh mục.");
+
             if (step3.EnglishPlannedTargetScore is { } engScore && !string.IsNullOrWhiteSpace(step3.EnglishPlannedTestType))
             {
                 if (certificationTypes.TryGetValue(step3.EnglishPlannedTestType, out var engType) && engType.Min is { } min && engType.Max is { } max)
@@ -797,6 +805,11 @@ public class ProfileFlowService(
                     errors.Add("Bước 3: tháng dự kiến thi bài thi chuẩn hóa không được ở quá khứ.");
             }
 
+            if (!string.IsNullOrWhiteSpace(step3.StandardizedPlannedTestType)
+                && (!certificationTypes.TryGetValue(step3.StandardizedPlannedTestType.Trim(), out var plannedStandardizedType)
+                    || IsEnglishCategory(plannedStandardizedType.Category)))
+                errors.Add($"Bước 3: bài thi chuẩn hóa dự kiến '{step3.StandardizedPlannedTestType}' không có trong danh mục.");
+
             if (step3.StandardizedPlannedTargetScore is { } stdScore && !string.IsNullOrWhiteSpace(step3.StandardizedPlannedTestType))
             {
                 if (certificationTypes.TryGetValue(step3.StandardizedPlannedTestType, out var stdType) && stdType.Min is { } min && stdType.Max is { } max)
@@ -807,12 +820,56 @@ public class ProfileFlowService(
             }
         }
 
+        ValidateTargets(CertificationsWithLegacyPlans(step3, certificationTypes), certificationTypes, errors);
+
         static bool IsOnScale(decimal value, decimal min, decimal max, decimal? step) =>
             value >= min && value <= max && (step is not > 0 || (value - min) % step.Value == 0);
 
         static string StepText(decimal? step) => step is > 0 and not 1 ? $", bước {Fmt(step.Value)}" : "";
 
         static string Fmt(decimal value) => value.ToString("0.##", CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>
+    /// Dự định thi: mỗi loại (mỗi môn với AP / A-Level) chỉ 1 dòng mục tiêu; đã có điểm thật cùng loại thì điểm mục tiêu
+    /// phải cao hơn điểm thật cao nhất (thi lại để nâng điểm)
+    /// </summary>
+    private static void ValidateTargets(
+        IReadOnlyList<FlowCertificationItemDto> items,
+        IReadOnlyDictionary<string, CertificationMetadataItem> certificationTypes,
+        List<string> errors)
+    {
+        var valid = items.Where(x => !string.IsNullOrWhiteSpace(x.Type)).ToList();
+        foreach (var group in valid.Where(x => x.IsTarget).GroupBy(SameTestKey))
+        {
+            var first = group.First();
+            var label = Label(first);
+            if (group.Count() > 1)
+                errors.Add($"Bước 3: {label} chỉ được có 1 dự định thi.");
+
+            if (first.Overall is not { } target) continue;
+            var bestActual = valid
+                .Where(x => !x.IsTarget && x.Overall is not null && SameTestKey(x) == group.Key)
+                .Max(x => x.Overall);
+            if (bestActual is { } best && target <= best)
+                errors.Add($"Bước 3: điểm mục tiêu {label} phải cao hơn điểm đã thi ({best.ToString("0.##", CultureInfo.InvariantCulture)}).");
+        }
+
+        string Label(FlowCertificationItemDto x)
+        {
+            var type = x.Type!.Trim();
+            var name = string.Equals(type, OtherCertificationType, StringComparison.OrdinalIgnoreCase)
+                ? NullIfBlank(x.CustomName) ?? "Khác"
+                : certificationTypes.TryGetValue(type, out var t) ? t.Name : type;
+            return string.IsNullOrWhiteSpace(x.Subject) ? name : $"{name} {x.Subject.Trim()}";
+        }
+
+        static string SameTestKey(FlowCertificationItemDto x)
+        {
+            var type = x.Type!.Trim().ToLowerInvariant();
+            var name = type == OtherCertificationType ? x.CustomName?.Trim().ToLowerInvariant() : null;
+            return $"{type}|{name}|{x.Subject?.Trim().ToLowerInvariant()}";
+        }
     }
 
     private const int MaxEcItems = 10;          // advisor nhận tối đa 10 hoạt động và 10 giải thưởng
@@ -938,17 +995,12 @@ public class ProfileFlowService(
 
         // Bước 3
         var certifications = BuildCertifications(draft.Step3, certificationTypes);
-        ApplyLegacyCertificationColumns(profile, certifications, certificationTypes, draft.Step3);
-        profile.EnglishTestPlanned = draft.Step3?.EnglishPlanned ?? false;
-        profile.EnglishPlannedDate = profile.EnglishTestPlanned ? ParseDateOnly(draft.Step3?.EnglishPlannedDate) : null;
-        profile.EnglishPlannedTestType = profile.EnglishTestPlanned ? NullIfBlank(draft.Step3?.EnglishPlannedTestType) : null;
-        profile.EnglishPlannedTargetScore = profile.EnglishTestPlanned ? draft.Step3?.EnglishPlannedTargetScore : null;
-        // Tick "chưa thi chuẩn hóa, sẽ thi sau": lưu cả loại bài và điểm mục tiêu để mở lại form vẫn còn
-        var standardizedPlanned = draft.Step3?.StandardizedPlanned ?? false;
-        profile.StandardizedTestPlanned = standardizedPlanned;
-        profile.StandardizedPlannedDate = standardizedPlanned ? ParseDateOnly(draft.Step3?.StandardizedPlannedDate) : null;
-        profile.StandardizedPlannedTestType = standardizedPlanned ? NullIfBlank(draft.Step3?.StandardizedPlannedTestType) : null;
-        profile.StandardizedPlannedTargetScore = standardizedPlanned ? draft.Step3?.StandardizedPlannedTargetScore : null;
+        ApplyLegacyCertificationColumns(profile, certifications, certificationTypes);
+        // Tick nghĩa là "chưa thi và chưa có dự định thi": mục đã có chứng chỉ hoặc dự định thi (dòng mục tiêu) thì không còn tick
+        profile.EnglishTestPlanned = (draft.Step3?.EnglishPlanned ?? false)
+            && !certifications.Any(c => IsEnglishCategory(c.Category));
+        profile.StandardizedTestPlanned = (draft.Step3?.StandardizedPlanned ?? false)
+            && !certifications.Any(c => !IsEnglishCategory(c.Category));
 
         // Bước 4
         var tier = budgetTiers[draft.Step4!.AnnualBudgetTier!];
@@ -1004,7 +1056,8 @@ public class ProfileFlowService(
         FlowCertificationDraftDto? step3, IReadOnlyDictionary<string, CertificationMetadataItem> certificationTypes)
     {
         var result = new List<ProfileCertification>();
-        foreach (var item in step3?.Certifications ?? [])
+        if (step3 is null) return result;
+        foreach (var item in CertificationsWithLegacyPlans(step3, certificationTypes))
         {
             var typeId = item.Type!.Trim();
             var isOther = string.Equals(typeId, OtherCertificationType, StringComparison.OrdinalIgnoreCase);
@@ -1032,6 +1085,40 @@ public class ProfileFlowService(
         return result;
     }
 
+    /// <summary>english là mục tiếng Anh; standardized và graduate chung mục bài thi chuẩn hóa (như form bước 3)</summary>
+    private static bool IsEnglishCategory(string? category) => category == "english";
+
+    /// <summary>
+    /// Danh sách chứng chỉ kèm dự định thi kiểu cũ: form và chat cũ gửi 1 dự định mỗi mục (englishPlanned* / standardizedPlanned*)
+    /// → đổi thành 1 dòng mục tiêu (IsTarget) để lưu chung bảng. Danh sách đã có dòng mục tiêu cùng loại thì bỏ qua.
+    /// Bỏ hàm này khi form và chat gửi thẳng danh sách dự định
+    /// </summary>
+    private static List<FlowCertificationItemDto> CertificationsWithLegacyPlans(
+        FlowCertificationDraftDto step3, IReadOnlyDictionary<string, CertificationMetadataItem> certificationTypes)
+    {
+        var items = new List<FlowCertificationItemDto>(step3.Certifications ?? []);
+        if (step3.EnglishPlanned)
+            AddPlan(step3.EnglishPlannedTestType, step3.EnglishPlannedTargetScore, step3.EnglishPlannedDate, english: true);
+        if (step3.StandardizedPlanned)
+            AddPlan(step3.StandardizedPlannedTestType, step3.StandardizedPlannedTargetScore, step3.StandardizedPlannedDate, english: false);
+        return items;
+
+        void AddPlan(string? typeId, decimal? target, string? date, bool english)
+        {
+            typeId = typeId?.Trim();
+            if (string.IsNullOrEmpty(typeId) || !certificationTypes.TryGetValue(typeId, out var type)) return;
+            if (IsEnglishCategory(type.Category) != english) return;
+            if (items.Any(x => x.IsTarget && string.Equals(x.Type?.Trim(), type.Id, StringComparison.OrdinalIgnoreCase))) return;
+            items.Add(new FlowCertificationItemDto(
+                Id: $"plan_{type.Id}",
+                Category: type.Category,
+                Type: type.Id,
+                Overall: type.Min is not null && type.Max is not null ? target : null,
+                TestDate: NullIfBlank(date),
+                IsTarget: true));
+        }
+    }
+
     /// <summary>
     /// Gợi ý trường vẫn đọc các cột cũ (ielts, toefl, sat...). Mỗi loại có profileField trong metadata → ghi điểm cao nhất
     /// của loại đó; tiếng Anh chính là chứng chỉ có cột riêng và ngày thi gần nhất; AP ghi vào other_tests_json {"ap": điểm cao nhất}
@@ -1039,8 +1126,7 @@ public class ProfileFlowService(
     private static void ApplyLegacyCertificationColumns(
         StudentProfile profile,
         IReadOnlyList<ProfileCertification> certifications,
-        IReadOnlyDictionary<string, CertificationMetadataItem> certificationTypes,
-        FlowCertificationDraftDto? step3 = null)
+        IReadOnlyDictionary<string, CertificationMetadataItem> certificationTypes)
     {
         var withField = certifications
             .Where(c => c.OverallScore is not null && certificationTypes.TryGetValue(c.TestType, out var t) && t.ProfileField is not null)
@@ -1071,33 +1157,6 @@ public class ProfileFlowService(
             ? ProfileConstants.EnglishTestTypes.None
             : certificationTypes[mainEnglish.TestType].ProfileField;
         profile.EnglishTestDate = mainEnglish?.TestDate;
-
-        // Nếu chưa có chứng chỉ tiếng Anh chính nhưng có dự kiến thi và điểm mục tiêu
-        if (profile.EnglishTestType == ProfileConstants.EnglishTestTypes.None
-            && step3?.EnglishPlanned == true
-            && !string.IsNullOrWhiteSpace(step3.EnglishPlannedTestType)
-            && certificationTypes.TryGetValue(step3.EnglishPlannedTestType, out var plannedEng)
-            && plannedEng.ProfileField is not null)
-        {
-            profile.EnglishTestType = plannedEng.ProfileField;
-            if (step3.EnglishPlannedTargetScore is not null)
-            {
-                SetProfileField(profile, plannedEng.ProfileField, step3.EnglishPlannedTargetScore);
-            }
-        }
-
-        // Nếu chưa có bài thi chuẩn hóa tương ứng nhưng có dự kiến thi và điểm mục tiêu
-        if (step3?.StandardizedPlanned == true
-            && !string.IsNullOrWhiteSpace(step3.StandardizedPlannedTestType)
-            && step3.StandardizedPlannedTargetScore is not null
-            && certificationTypes.TryGetValue(step3.StandardizedPlannedTestType, out var plannedStd)
-            && plannedStd.ProfileField is not null)
-        {
-            if (GetProfileField(profile, plannedStd.ProfileField) is null)
-            {
-                SetProfileField(profile, plannedStd.ProfileField, step3.StandardizedPlannedTargetScore);
-            }
-        }
     }
 
     /// <summary>Tên profileField trong metadata ↔ cột trên student_profiles</summary>
@@ -1184,19 +1243,24 @@ public class ProfileFlowService(
             else year.Subjects.Add(subject);
         }
         var step2 = new FlowTranscriptDraftDto(years, profile.OverallGpa, SavedGpa10(profile, scale), profile.GpaMode);
-        var plannedEnglish = PlannedEnglishFromColumns(profile, certificationTypes);
+        // Form và chat hiện còn 1 ô dự định mỗi mục: dòng mục tiêu đầu tiên của mục đó điền vào ô dự định, các dòng còn lại hiện thành thẻ.
+        // Lưu lại thì ô dự định đổi ngược thành dòng mục tiêu (CertificationsWithLegacyPlans). Bỏ khi form và chat dùng danh sách dự định
+        var ordered = certifications.OrderBy(c => c.SortOrder).ToList();
+        var englishPlan = ordered.FirstOrDefault(c => c.IsTarget && IsEnglishCategory(c.Category) && c.TestType != OtherCertificationType);
+        var standardizedPlan = ordered.FirstOrDefault(c => c.IsTarget && !IsEnglishCategory(c.Category)
+            && c.TestType != OtherCertificationType && c.Subject is null);
         var step3 = new FlowCertificationDraftDto(
             Certifications: certifications.Count > 0
-                ? certifications.OrderBy(c => c.SortOrder).Select(ToCertificationDraft).ToList()
+                ? ordered.Where(c => c != englishPlan && c != standardizedPlan).Select(ToCertificationDraft).ToList()
                 : BuildCertificationsFromLegacyColumns(profile, certificationTypes),
-            EnglishPlanned: profile.EnglishTestPlanned,
-            EnglishPlannedDate: profile.EnglishPlannedDate?.ToString("yyyy-MM", CultureInfo.InvariantCulture),
-            EnglishPlannedTestType: plannedEnglish.TestType,
-            EnglishPlannedTargetScore: plannedEnglish.TargetScore,
-            StandardizedPlanned: profile.StandardizedTestPlanned,
-            StandardizedPlannedDate: profile.StandardizedPlannedDate?.ToString("yyyy-MM", CultureInfo.InvariantCulture),
-            StandardizedPlannedTestType: profile.StandardizedPlannedTestType,
-            StandardizedPlannedTargetScore: profile.StandardizedPlannedTargetScore);
+            EnglishPlanned: profile.EnglishTestPlanned || englishPlan is not null,
+            EnglishPlannedDate: englishPlan?.TestDate?.ToString("yyyy-MM", CultureInfo.InvariantCulture),
+            EnglishPlannedTestType: englishPlan?.TestType,
+            EnglishPlannedTargetScore: englishPlan?.OverallScore,
+            StandardizedPlanned: profile.StandardizedTestPlanned || standardizedPlan is not null,
+            StandardizedPlannedDate: standardizedPlan?.TestDate?.ToString("yyyy-MM", CultureInfo.InvariantCulture),
+            StandardizedPlannedTestType: standardizedPlan?.TestType,
+            StandardizedPlannedTargetScore: standardizedPlan?.OverallScore);
 
         // Hồ sơ cũ có thể lưu mã nguồn tài chính khác (family, loan) thì để trống cho học sinh chọn lại
         var funding = profile.FundingSource is { } f && ProfileConstants.FundingSources.All.Contains(f) ? f : null;
@@ -1265,25 +1329,6 @@ public class ProfileFlowService(
     private static bool IsPlannedScore(StudentProfile profile, string category) => category == "english"
         ? profile.EnglishTestPlanned
         : profile.StandardizedTestPlanned;
-
-    /// <summary>
-    /// Bài tiếng Anh dự định và điểm mục tiêu khi mở lại form: đọc từ cột kế hoạch riêng (đủ cả bài không có cột điểm như PTE).
-    /// Hồ sơ lưu trước khi có cột đó thì đọc ngược: lúc lưu, chưa có chứng chỉ tiếng Anh thật mà có kế hoạch thì loại bài
-    /// dự định ghi vào EnglishTestType và điểm mục tiêu ghi vào cột điểm của bài đó
-    /// </summary>
-    private static (string? TestType, decimal? TargetScore) PlannedEnglishFromColumns(
-        StudentProfile profile, IReadOnlyDictionary<string, CertificationMetadataItem> certificationTypes)
-    {
-        if (!profile.EnglishTestPlanned) return (null, null);
-        if (profile.EnglishPlannedTestType is not null || profile.EnglishPlannedTargetScore is not null)
-            return (profile.EnglishPlannedTestType, profile.EnglishPlannedTargetScore);
-        if (string.IsNullOrWhiteSpace(profile.EnglishTestType)
-            || profile.EnglishTestType == ProfileConstants.EnglishTestTypes.None)
-            return (null, null);
-        var type = certificationTypes.Values.FirstOrDefault(t => t.Category == "english"
-            && string.Equals(t.ProfileField, profile.EnglishTestType, StringComparison.OrdinalIgnoreCase));
-        return type is null ? (null, null) : (type.Id, GetProfileField(profile, type.ProfileField!));
-    }
 
     private static Dictionary<string, decimal?>? ReadSectionScores(string? json)
     {

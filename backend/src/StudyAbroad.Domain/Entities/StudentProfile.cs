@@ -39,24 +39,11 @@ public class StudentProfile : BaseEntity
     public string? EnglishTestType { get; set; }
     /// <summary>[USAS-640] ngày thi chứng chỉ tiếng Anh</summary>
     public DateOnly? EnglishTestDate { get; set; }
-    /// <summary>[USAS-640] học sinh chưa có chứng chỉ tiếng Anh, sẽ thi sau (bước 3)</summary>
+    /// <summary>[USAS-640] tick "chưa thi và chưa có dự định thi" mục tiếng Anh (bước 3). Dự định thi là dòng IsTarget
+    /// trong profile_certifications; mục có chứng chỉ hoặc dự định thì cờ này false</summary>
     public bool EnglishTestPlanned { get; set; }
-    /// <summary>[USAS-640] tháng dự kiến thi tiếng Anh (ngày 1 của tháng)</summary>
-    public DateOnly? EnglishPlannedDate { get; set; }
-    /// <summary>loại bài tiếng Anh dự kiến (id metadata certifications: ielts, pte...); lưu riêng vì bài như PTE không có cột điểm
-    /// trên hồ sơ nên không đọc ngược được từ EnglishTestType; null = chưa chọn</summary>
-    public string? EnglishPlannedTestType { get; set; }
-    /// <summary>điểm mục tiêu bài tiếng Anh dự kiến</summary>
-    public decimal? EnglishPlannedTargetScore { get; set; }
-    /// <summary>học sinh chưa thi bài thi chuẩn hóa học thuật (SAT/ACT/AP...), sẽ thi sau (bước 3); là cờ chung của cả mục
-    /// nên lưu ở đây, không thành một dòng profile_certifications vì có thể chưa chọn loại bài</summary>
+    /// <summary>tick "chưa thi và chưa có dự định thi" mục bài thi chuẩn hóa (SAT/ACT/AP/GRE...), như EnglishTestPlanned</summary>
     public bool StandardizedTestPlanned { get; set; }
-    /// <summary>tháng dự kiến thi chuẩn hóa (ngày 1 của tháng)</summary>
-    public DateOnly? StandardizedPlannedDate { get; set; }
-    /// <summary>loại bài chuẩn hóa dự kiến (id metadata certifications: sat, act...); null = chưa chọn</summary>
-    public string? StandardizedPlannedTestType { get; set; }
-    /// <summary>điểm mục tiêu bài chuẩn hóa dự kiến</summary>
-    public decimal? StandardizedPlannedTargetScore { get; set; }
     /// <summary>kỳ thi khác ngoài cột riêng, dạng {"ap": 4}</summary>
     public string? OtherTestsJson { get; set; }
     /// <summary>bậc ngoại khóa 1–5: SLM xác nhận vai trò, phạm vi từng hoạt động rồi code tính theo công thức q, m; null nếu chưa tính</summary>
