@@ -417,8 +417,9 @@ public class LeadService(
         if (lead is null)
             throw new KeyNotFoundException("Không tìm thấy yêu cầu liên hệ.");
 
+        // [Chống IDOR] Lead của trung tâm khác báo "không tìm thấy" như lead không tồn tại, để không lộ lead có thật
         if (centerId.HasValue && lead.StudyCenterId != centerId.Value)
-            throw new UnauthorizedAccessException("Bạn không có quyền cập nhật yêu cầu liên hệ của trung tâm khác.");
+            throw new KeyNotFoundException("Không tìm thấy yêu cầu liên hệ.");
 
         lead.Status = normalizedStatus;
         await leads.UpdateAsync(lead, ct);
