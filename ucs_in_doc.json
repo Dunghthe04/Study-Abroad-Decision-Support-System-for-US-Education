@@ -453,5 +453,12 @@
     "role": "Moderator",
     "status": "Chưa có",
     "dev_todo": "Mục 5.5"
+  },
+  {
+    "uc": "UC-60",
+    "name": "Xem danh sách tài khoản",
+    "role": "Administrator",
+    "status": "Đã có",
+    "dev_todo": "Bỏ quyền của Moderator (develop đang cho cả hai)"
   }
 ]
