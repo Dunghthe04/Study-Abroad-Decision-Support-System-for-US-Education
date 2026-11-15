@@ -179,11 +179,12 @@ public class AdminUsersControllerTests
     [Fact]
     public void AdminUsersController_ActionAttributes_MatchRbacPolicy()
     {
-        // Mở khóa: chỉ Admin (quyết định D2 bản 14/11)
+        // Khóa và Mở khóa: Cả Admin và Moderator (Moderator chỉ thao tác cấp dưới tại logic tầng Service)
         var lockAttr = typeof(AdminUsersController).GetMethod(nameof(AdminUsersController.LockUser))?.GetCustomAttribute<AuthorizeAttribute>();
         Assert.NotNull(lockAttr);
         Assert.Equal($"{UserRoles.Admin},{UserRoles.Moderator}", lockAttr.Roles);
 
+        // Mở khóa: chỉ Admin (quyết định D2 bản 14/11)
         var unlockAttr = typeof(AdminUsersController).GetMethod(nameof(AdminUsersController.UnlockUser))?.GetCustomAttribute<AuthorizeAttribute>();
         Assert.NotNull(unlockAttr);
         Assert.Equal(UserRoles.Admin, unlockAttr.Roles);
