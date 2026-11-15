@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
+import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/components/ui/toast";
 import { AdminFormError, setAdminUniversityVisibility } from "@/lib/admin-university-api";
 import type { AdminUniversityDetail } from "@/types/admin-university";
@@ -15,6 +16,9 @@ interface UniversityVisibilitySwitchProps {
 
 /** [UC-67] Tắt (ẩn trường) cần xác nhận ngay bên dưới; bật lại thì làm ngay. */
 export function UniversityVisibilitySwitch({ university, onChanged }: UniversityVisibilitySwitchProps) {
+  // [UC-67] Chỉ Moderator ẩn hoặc hiện trường; Admin chỉ xem trạng thái
+  const { user } = useAuth();
+  const canChange = user?.role === "moderator";
   const [confirmingHide, setConfirmingHide] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -59,6 +63,7 @@ export function UniversityVisibilitySwitch({ university, onChanged }: University
             {university.isActive
               ? "Trường đang xuất hiện trong tìm kiếm và gợi ý."
               : "Trường đang bị ẩn khỏi tìm kiếm và gợi ý."}
+            {!canChange && " Chỉ Moderator đổi được trạng thái này."}
           </span>
         </span>
         <span className="flex items-center gap-2">
@@ -66,7 +71,7 @@ export function UniversityVisibilitySwitch({ university, onChanged }: University
           <Switch
             checked={switchChecked}
             onCheckedChange={handleCheckedChange}
-            disabled={isSaving || confirmingHide}
+            disabled={!canChange || isSaving || confirmingHide}
             aria-label="Hiển thị trường với học sinh"
           />
         </span>
