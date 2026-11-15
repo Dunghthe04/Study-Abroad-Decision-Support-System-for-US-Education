@@ -67,21 +67,13 @@ const ACCOUNT_STATUS_OPTIONS = [
   { value: "locked", label: "Đã khóa" },
 ] as const;
 
-/** [UC-61] Khóa tài khoản: Admin khóa được moderator, center, users. Moderator chỉ khóa được cấp dưới (center, student, parent). */
+/** [UC-61] Khóa tài khoản: chỉ Admin (quyết định D2 bản 14/11), khóa được moderator, center, student, parent. */
 function canAdminLock(target: UserDto, currentUserRole?: string, currentUserId?: string): boolean {
   if (currentUserId && target.id === currentUserId) return false;
   if (target.status === "locked") return false;
   if (target.role === "admin") return false;
 
-  if (currentUserRole === "admin") {
-    return true;
-  }
-
-  if (currentUserRole === "moderator") {
-    return target.role !== "moderator";
-  }
-
-  return false;
+  return currentUserRole === "admin";
 }
 
 /** [UC-62] Mở khóa tài khoản: Admin mở khóa được moderator, center, users. Moderator chỉ mở khóa được cấp dưới (center, student, parent). */
