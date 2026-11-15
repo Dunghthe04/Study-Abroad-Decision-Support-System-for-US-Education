@@ -52,7 +52,7 @@ public class AdminUsersController(IAuthService auth) : ControllerBase
 
     /// <summary>[UC-61] Khóa tài khoản kèm lý do (ghi audit - Admin hoặc Moderator khóa tài khoản cấp dưới).</summary>
     [HttpPost("{id:guid}/lock")]
-    [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Moderator}")]
+    [Authorize(Roles = UserRoles.Admin)]
     public async Task<ActionResult<UserDto>> LockUser(Guid id, LockUserAccountRequest request, CancellationToken ct)
     {
         if (User.GetUserId() is not { } actorId)
