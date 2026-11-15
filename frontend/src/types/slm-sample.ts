@@ -60,6 +60,24 @@ export interface SlmImportError {
   message: string;
 }
 
+export interface SlmImportRow {
+  sheetName: string;
+  rowNumber: number;
+  question: string | null;
+  profile: string | null;
+  pendingQuestion: string | null;
+  intents: string | null;
+  context: string | null;
+  split: string | null;
+  sourceReview: string | null;
+}
+
+export interface SlmImportPreview {
+  totalRows: number;
+  rows: SlmImportRow[];
+  errors: SlmImportError[];
+}
+
 export interface SlmImportResult {
   totalRows: number;
   inserted: number;
