@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using StudyAbroad.Application.Audit;
 using StudyAbroad.Application.Auth;
 using StudyAbroad.Application.Common;
@@ -388,6 +389,316 @@ public class CenterRegistrationAndVerificationTests
         Assert.True(marketing.Success);
         Assert.Equal("Mô tả mới", center.Description);
         Assert.Equal("0312345678", center.TaxCode);
+    }
+
+    // ===== [UC-59] Email kết quả xét duyệt cho trung tâm, thứ tự hàng đợi =====
+
+    private static (StudyCenterService Service, FakeEmailSender Email, CenterVerificationRequest Req, StudyCenter Center) NotificationSetup(
+        string? centerEmail = "trungtam@example.com", bool emailVerified = true)
+    {
+        var centers = new FakeStudyCenterRepo();
+        var verifications = new FakeVerificationRepo();
+        var email = new FakeEmailSender();
+        var service = new StudyCenterService(centers, new FakeAuditLogs(), verifications, email);
+        var center = new StudyCenter
+        {
+            Id = Guid.NewGuid(),
+            Name = "Trung tâm ABC",
+            Email = centerEmail,
+            EmailVerifiedAt = emailVerified ? DateTime.UtcNow : null,
+            VerificationStatus = CenterVerificationStatuses.PendingReview,
+        };
+        centers.AddAsync(center).GetAwaiter().GetResult();
+        var req = new CenterVerificationRequest { Id = Guid.NewGuid(), CenterId = center.Id, Status = CenterVerificationStatuses.PendingReview };
+        verifications.AddRequestAsync(req).GetAwaiter().GetResult();
+        return (service, email, req, center);
+    }
+
+    [Fact]
+    public async Task Review_Reject_EmailsTheCenterTheReasonAndTheUnmetConditions()
+    {
+        var (service, email, req, _) = NotificationSetup();
+
+        var result = await service.ReviewVerificationAsync(req.Id, new ReviewCenterVerificationRequest(
+            Action: "reject", IsNationalRegistryMatched: false, IsBusinessOperating: true, IsRepresentativeValid: false,
+            RejectionReason: "  Ảnh ĐKKD bị mờ  "), Guid.NewGuid());
+
+        Assert.True(result.Success);
+        var sent = Assert.Single(email.CenterVerificationEmails);
+        Assert.Equal("trungtam@example.com", sent.To);
+        Assert.Equal("Trung tâm ABC", sent.CenterName);
+        Assert.Equal("reject", sent.Outcome);
+        Assert.Equal("Ảnh ĐKKD bị mờ", sent.Reason);
+        Assert.Equal(2, sent.Unmet!.Count);
+        Assert.Contains(sent.Unmet, c => c.Contains("mã số thuế"));
+        Assert.Contains(sent.Unmet, c => c.Contains("đại diện theo pháp luật"));
+        Assert.DoesNotContain(sent.Unmet, c => c.Contains("hoạt động"));
+    }
+
+    [Fact]
+    public async Task Review_ChangesRequested_ListsAnUnverifiedEmailAsUnmet()
+    {
+        var (service, email, req, _) = NotificationSetup(emailVerified: false);
+
+        await service.ReviewVerificationAsync(req.Id, new ReviewCenterVerificationRequest(
+            Action: "changes_requested", IsNationalRegistryMatched: true, IsBusinessOperating: true, IsRepresentativeValid: true,
+            RejectionReason: "Bổ sung giấy ủy quyền"), Guid.NewGuid());
+
+        var sent = Assert.Single(email.CenterVerificationEmails);
+        Assert.Equal("changes_requested", sent.Outcome);
+        Assert.Contains("Email trung tâm", Assert.Single(sent.Unmet!));
+    }
+
+    [Fact]
+    public async Task Review_Approve_EmailsVerifiedWithoutUnmetConditions()
+    {
+        var (service, email, req, _) = NotificationSetup();
+
+        await service.ReviewVerificationAsync(req.Id, new ReviewCenterVerificationRequest(
+            Action: "approve", IsNationalRegistryMatched: true, IsBusinessOperating: true, IsRepresentativeValid: true,
+            ReviewNotes: "Khớp hoàn toàn"), Guid.NewGuid());
+
+        var sent = Assert.Single(email.CenterVerificationEmails);
+        Assert.Equal("verified", sent.Outcome);
+        Assert.Null(sent.Unmet);
+    }
+
+    [Fact]
+    public async Task Review_ApproveBlockedByRules_SendsNoEmail()
+    {
+        var (service, email, req, center) = NotificationSetup();
+
+        var result = await service.ReviewVerificationAsync(req.Id, new ReviewCenterVerificationRequest(
+            Action: "approve", IsNationalRegistryMatched: false, IsBusinessOperating: true, IsRepresentativeValid: true), Guid.NewGuid());
+
+        Assert.False(result.Success);
+        Assert.Empty(email.CenterVerificationEmails);
+        Assert.Equal(CenterVerificationStatuses.PendingReview, center.VerificationStatus);
+    }
+
+    [Fact]
+    public async Task Review_CenterWithoutEmail_StillSavesTheDecisionAndSendsNothing()
+    {
+        var (service, email, req, center) = NotificationSetup(centerEmail: null);
+
+        var result = await service.ReviewVerificationAsync(req.Id, new ReviewCenterVerificationRequest(Action: "reject", RejectionReason: "Thiếu hồ sơ"), Guid.NewGuid());
+
+        Assert.True(result.Success);
+        Assert.Equal(CenterVerificationStatuses.Rejected, center.VerificationStatus);
+        Assert.Empty(email.CenterVerificationEmails);
+    }
+
+    [Fact]
+    public async Task Review_WhenTheEmailSenderFails_TheDecisionIsStillSaved()
+    {
+        var (service, email, req, center) = NotificationSetup();
+        email.ThrowOnCenterVerificationEmail = true;
+
+        var result = await service.ReviewVerificationAsync(req.Id, new ReviewCenterVerificationRequest(Action: "reject", RejectionReason: "Thiếu hồ sơ"), Guid.NewGuid());
+
+        Assert.True(result.Success);
+        Assert.Equal(CenterVerificationStatuses.Rejected, center.VerificationStatus);
+    }
+
+    [Fact]
+    public void VerificationQueue_PendingFirstOldestFirst_ThenProcessedNewestFirst()
+    {
+        var now = DateTime.UtcNow;
+        CenterVerificationRequest R(string name, string status, int daysAgo) =>
+            new() { Id = Guid.NewGuid(), LegalName = name, Status = status, SubmittedAt = now.AddDays(-daysAgo) };
+        var requests = new[]
+        {
+            R("pending-new", CenterVerificationStatuses.PendingReview, 1),
+            R("verified-newest", CenterVerificationStatuses.Verified, 0),
+            R("pending-old", CenterVerificationStatuses.PendingReview, 5),
+            R("rejected-older", CenterVerificationStatuses.Rejected, 3),
+            R("pending-mid", CenterVerificationStatuses.PendingReview, 3),
+        };
+
+        var ordered = StudyAbroad.Infrastructure.Persistence.Repositories.CenterVerificationRepository
+            .OrderQueue(requests.AsQueryable()).Select(r => r.LegalName).ToList();
+
+        Assert.Equal(["pending-old", "pending-mid", "pending-new", "verified-newest", "rejected-older"], ordered);
+    }
+
+    [Fact]
+    public void VerificationQueue_OrderingTranslatesToSql()
+    {
+        var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<StudyAbroad.Infrastructure.Persistence.AppDbContext>()
+            .UseNpgsql("Host=localhost;Database=usas_schema_check")
+            .UseSnakeCaseNamingConvention()
+            .Options;
+        using var db = new StudyAbroad.Infrastructure.Persistence.AppDbContext(options);
+
+        var sql = StudyAbroad.Infrastructure.Persistence.Repositories.CenterVerificationRepository
+            .OrderQueue(db.CenterVerificationRequests).ToQueryString();
+
+        Assert.Contains("ORDER BY", sql);
+        Assert.Contains("CASE", sql);
+    }
+
+    // ===== [UC-71] Nộp hồ sơ xác minh: giới hạn tệp, email xác nhận, khóa sửa khi chờ duyệt =====
+
+    private static (StudyCenterService Service, FakeEmailSender Email, FakeVerificationRepo Verifications, StudyCenter Center) SubmitSetup(string? centerEmail = "trungtam@example.com")
+    {
+        var centers = new FakeStudyCenterRepo();
+        var verifications = new FakeVerificationRepo();
+        var email = new FakeEmailSender();
+        var service = new StudyCenterService(centers, new FakeAuditLogs(), verifications, email);
+        var center = new StudyCenter
+        {
+            Id = Guid.NewGuid(),
+            Name = "Trung tâm ABC",
+            Email = centerEmail,
+            OwnerUserId = Guid.NewGuid(),
+            EmailVerifiedAt = DateTime.UtcNow,
+            VerificationStatus = CenterVerificationStatuses.Unverified,
+        };
+        centers.AddAsync(center).GetAwaiter().GetResult();
+        return (service, email, verifications, center);
+    }
+
+    private static SubmitVerificationDto SubmitRequest(int documentCount) => new(
+        LegalName: "Công ty TNHH Tư vấn Du học ABC",
+        TaxCode: "0101234567",
+        Address: "Hà Nội",
+        LegalRepresentative: "Nguyễn Văn A",
+        Documents: Enumerable.Range(0, documentCount)
+            .Select(i => new VerificationDocumentUploadDto(i == 0 ? "business_registration" : "power_of_attorney", $"/uploads/f{i}.pdf", $"f{i}.pdf", 1000, "application/pdf"))
+            .ToList());
+
+    [Fact]
+    public async Task Submit_FiveDocuments_IsAcceptedAndSixIsRejected()
+    {
+        var (service, _, verifications, center) = SubmitSetup();
+
+        var tooMany = await service.SubmitVerificationAsync(center.OwnerUserId!.Value, SubmitRequest(StudyCenterService.MaxVerificationDocuments + 1));
+        Assert.False(tooMany.Success);
+        Assert.Contains("tối đa 5 tệp", tooMany.ErrorMessage);
+        Assert.Equal(CenterVerificationStatuses.Unverified, center.VerificationStatus);
+
+        var ok = await service.SubmitVerificationAsync(center.OwnerUserId!.Value, SubmitRequest(StudyCenterService.MaxVerificationDocuments));
+        Assert.True(ok.Success);
+        Assert.Equal(CenterVerificationStatuses.PendingReview, center.VerificationStatus);
+    }
+
+    [Fact]
+    public async Task Submit_Success_EmailsAnAcknowledgementToTheCenter()
+    {
+        var (service, email, _, center) = SubmitSetup();
+
+        var result = await service.SubmitVerificationAsync(center.OwnerUserId!.Value, SubmitRequest(1));
+
+        Assert.True(result.Success);
+        var sent = Assert.Single(email.CenterVerificationEmails);
+        Assert.Equal("trungtam@example.com", sent.To);
+        Assert.Equal("submitted", sent.Outcome);
+        Assert.Null(sent.Reason);
+    }
+
+    [Fact]
+    public async Task Submit_RejectedByRules_SendsNoEmail()
+    {
+        var (service, email, _, center) = SubmitSetup();
+
+        var result = await service.SubmitVerificationAsync(center.OwnerUserId!.Value, SubmitRequest(0));
+
+        Assert.False(result.Success);
+        Assert.Empty(email.CenterVerificationEmails);
+    }
+
+    [Fact]
+    public async Task UpdateCenterProfile_WhilePendingReview_LocksLegalFieldsButAllowsMarketingFields()
+    {
+        var centerRepo = new FakeStudyCenterRepo();
+        var service = new StudyCenterService(centerRepo, new FakeAuditLogs());
+        var center = new StudyCenter
+        {
+            Id = Guid.NewGuid(),
+            Name = "Trung tâm ABC",
+            OwnerUserId = Guid.NewGuid(),
+            VerificationStatus = CenterVerificationStatuses.PendingReview,
+            TaxCode = "0312345678",
+        };
+        await centerRepo.AddAsync(center);
+
+        var legal = await service.UpdateCenterProfileAsync(center.OwnerUserId!.Value, new UpdateCenterProfileRequest(TaxCode: "0999999999"));
+        Assert.False(legal.Success);
+        Assert.Contains("chờ duyệt", legal.ErrorMessage);
+        Assert.Equal("0312345678", center.TaxCode);
+
+        var rename = await service.UpdateCenterProfileAsync(center.OwnerUserId!.Value, new UpdateCenterProfileRequest(Name: "Tên khác"));
+        Assert.False(rename.Success);
+        Assert.Equal("Trung tâm ABC", center.Name);
+
+        var marketing = await service.UpdateCenterProfileAsync(center.OwnerUserId!.Value, new UpdateCenterProfileRequest(Description: "Mô tả mới"));
+        Assert.True(marketing.Success);
+        Assert.Equal("Mô tả mới", center.Description);
+    }
+
+    [Fact]
+    public async Task UpdateCenterProfile_Unverified_StillAllowsLegalFieldChanges()
+    {
+        var centerRepo = new FakeStudyCenterRepo();
+        var service = new StudyCenterService(centerRepo, new FakeAuditLogs());
+        var center = new StudyCenter
+        {
+            Id = Guid.NewGuid(),
+            Name = "Trung tâm ABC",
+            OwnerUserId = Guid.NewGuid(),
+            VerificationStatus = CenterVerificationStatuses.Unverified,
+        };
+        await centerRepo.AddAsync(center);
+
+        var result = await service.UpdateCenterProfileAsync(center.OwnerUserId!.Value, new UpdateCenterProfileRequest(Name: "Tên pháp lý mới"));
+
+        Assert.True(result.Success);
+        Assert.Equal("Tên pháp lý mới", center.Name);
+    }
+
+    // ===== [UC-71] Giấy ủy quyền bắt buộc khi người đăng ký khác người đại diện pháp luật =====
+
+    [Theory]
+    [InlineData("Nguyễn Văn A", "Nguyễn Văn A", false)]
+    [InlineData("  nguyen van a ", "Nguyễn Văn A", false)]
+    [InlineData("Đỗ Văn B", "do  van b", false)]
+    [InlineData("Trần Thị C", "Nguyễn Văn A", true)]
+    [InlineData(null, "Nguyễn Văn A", false)]
+    [InlineData("", "Nguyễn Văn A", false)]
+    public void RegistrantNeedsPowerOfAttorney_ComparesNamesIgnoringCaseAccentsAndSpaces(string? registrant, string rep, bool expected)
+    {
+        Assert.Equal(expected, StudyCenterService.RegistrantNeedsPowerOfAttorney(registrant, rep));
+    }
+
+    [Fact]
+    public async Task Submit_RegistrantIsNotTheLegalRepresentative_RequiresPowerOfAttorney()
+    {
+        var (service, email, _, center) = SubmitSetup();
+        center.RegistrantName = "Trần Thị C";
+
+        var without = await service.SubmitVerificationAsync(center.OwnerUserId!.Value, new SubmitVerificationDto(
+            "Công ty ABC", "0101234567", "Hà Nội", "Nguyễn Văn A",
+            Documents: [new VerificationDocumentUploadDto("business_registration", "/uploads/a.pdf", "a.pdf", 1000, "application/pdf")]));
+        Assert.False(without.Success);
+        Assert.Contains("Giấy ủy quyền", without.ErrorMessage);
+        Assert.Equal(CenterVerificationStatuses.Unverified, center.VerificationStatus);
+        Assert.Empty(email.CenterVerificationEmails);
+
+        var with = await service.SubmitVerificationAsync(center.OwnerUserId!.Value, SubmitRequest(2));
+        Assert.True(with.Success);
+    }
+
+    [Fact]
+    public async Task Submit_RegistrantIsTheLegalRepresentative_DoesNotNeedPowerOfAttorney()
+    {
+        var (service, _, _, center) = SubmitSetup();
+        center.RegistrantName = "nguyen van a";
+
+        var result = await service.SubmitVerificationAsync(center.OwnerUserId!.Value, new SubmitVerificationDto(
+            "Công ty ABC", "0101234567", "Hà Nội", "Nguyễn Văn A",
+            Documents: [new VerificationDocumentUploadDto("business_registration", "/uploads/a.pdf", "a.pdf", 1000, "application/pdf")]));
+
+        Assert.True(result.Success);
     }
 }
 

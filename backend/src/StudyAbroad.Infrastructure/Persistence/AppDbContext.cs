@@ -57,6 +57,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<ExpertRule> ExpertRules => Set<ExpertRule>();
     public DbSet<WhatIfSimulation> WhatIfSimulations => Set<WhatIfSimulation>();
     public DbSet<LeadMessage> LeadMessages => Set<LeadMessage>();
+    public DbSet<CenterSuspensionProposal> CenterSuspensionProposals => Set<CenterSuspensionProposal>();
     public DbSet<CenterReview> CenterReviews => Set<CenterReview>();
     public DbSet<SubscriptionPlan> SubscriptionPlans => Set<SubscriptionPlan>();
     public DbSet<UserSubscription> UserSubscriptions => Set<UserSubscription>();

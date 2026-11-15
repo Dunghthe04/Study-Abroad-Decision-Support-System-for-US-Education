@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/components/ui/toast";
 import { findNotNumbers, numberOrNull, textOrNull } from "@/lib/admin-form";
 import { AdminFormError, updateAdminUniversity } from "@/lib/admin-university-api";
@@ -63,6 +64,9 @@ export function UniversityInfoSection({
   onStopEdit,
   onSaved,
 }: UniversityInfoSectionProps) {
+  // [UC-66] Chỉ Moderator sửa dữ liệu trường; Admin chỉ xem
+  const { user } = useAuth();
+  const readOnly = user?.role !== "moderator";
   const [form, setForm] = useState<UniversityFormState>(() => universityToFormState(university));
   const [fieldErrors, setFieldErrors] = useState<AdminFieldErrors>({});
   const [error, setError] = useState<string | null>(null);
@@ -136,6 +140,7 @@ export function UniversityInfoSection({
   const edit = {
     isEditing,
     canEdit,
+    readOnly,
     isSaving,
     hasChanges,
     error,

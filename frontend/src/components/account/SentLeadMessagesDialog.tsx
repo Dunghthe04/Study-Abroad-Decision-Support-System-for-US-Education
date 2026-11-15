@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangleIcon, RefreshCwIcon, SendIcon, ShieldAlertIcon } from "lucide-react";
+import { AlertTriangleIcon, FlagIcon, RefreshCwIcon, SendIcon, ShieldAlertIcon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { ApiError } from "@/lib/api";
 import { getLeadRuleError, leadApi } from "@/lib/lead-api";
 import {
   MAX_LEAD_MESSAGE_LENGTH,
@@ -79,6 +80,28 @@ function ThreadBody({
   const [draft, setDraft] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
+
+  // [UC-58] Tin của trung tâm đã báo cáo trong lần mở khung này (backend không trả cờ báo cáo)
+  const [reportedIds, setReportedIds] = useState<Set<string>>(() => new Set());
+
+  const reportMessage = async (messageId: string, reason: string) => {
+    try {
+      await leadApi.reportSentMessage(leadId, messageId, reason);
+      setReportedIds((prev) => new Set(prev).add(messageId));
+      toast.add({
+        type: "success",
+        title: "Đã gửi báo cáo",
+        description: "Kiểm duyệt viên sẽ xem lại tin nhắn này.",
+      });
+    } catch (err) {
+      toast.add({
+        type: "error",
+        title: "Báo cáo thất bại",
+        description: err instanceof ApiError ? err.message : "Không thể gửi báo cáo. Vui lòng thử lại.",
+      });
+      throw err;
+    }
+  };
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
   // Giữ callback mới nhất mà không làm load() chạy lại mỗi lần cha render
@@ -210,7 +233,15 @@ function ThreadBody({
             Chưa có tin nhắn nào. Bạn có thể nhắn trước cho trung tâm.
           </p>
         ) : (
-          messages.map((msg) => <MessageBubble key={msg.id} msg={msg} isMine={msg.senderUserId === user?.id} />)
+          messages.map((msg) => (
+            <MessageBubble
+              key={msg.id}
+              msg={msg}
+              isMine={msg.senderUserId === user?.id}
+              isReported={reportedIds.has(msg.id)}
+              onReport={reportMessage}
+            />
+          ))
         )}
         <div ref={bottomRef} />
       </div>
@@ -274,7 +305,34 @@ function ThreadBody({
   );
 }
 
-function MessageBubble({ msg, isMine }: { msg: LeadMessageDto; isMine: boolean }) {
+function MessageBubble({
+  msg,
+  isMine,
+  isReported,
+  onReport,
+}: {
+  msg: LeadMessageDto;
+  isMine: boolean;
+  isReported: boolean;
+  onReport: (messageId: string, reason: string) => Promise<void>;
+}) {
+  const [isReporting, setIsReporting] = useState(false);
+  const [reason, setReason] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const submitReport = async () => {
+    setIsSubmitting(true);
+    try {
+      await onReport(msg.id, reason);
+      setIsReporting(false);
+      setReason("");
+    } catch {
+      // thông báo lỗi đã hiện ở toast; giữ form để thử lại
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   // Backend đã thay nội dung tin bị gỡ bằng câu thông báo
   if (msg.status === "removed") {
     return (
@@ -310,6 +368,46 @@ function MessageBubble({ msg, isMine }: { msg: LeadMessageDto; isMine: boolean }
           <span>
             <strong>Đã gắn cờ:</strong> {msg.flagReason || "vi phạm quy định chia sẻ thông tin liên hệ / quảng cáo"}
           </span>
+        </div>
+      )}
+
+      {/* [UC-58] Học sinh / phụ huynh báo cáo tin của trung tâm vi phạm quy tắc */}
+      {msg.isFromCenter && !isMine && (
+        <div className="mt-1.5">
+          {isReported ? (
+            <p className="text-[11px] text-muted-foreground">Đã báo cáo, kiểm duyệt viên sẽ xem lại.</p>
+          ) : isReporting ? (
+            <div className="space-y-1.5">
+              <Textarea
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                maxLength={500}
+                rows={2}
+                disabled={isSubmitting}
+                placeholder="Vì sao tin này vi phạm? (không bắt buộc)"
+                aria-label="Lý do báo cáo tin nhắn"
+                className="text-xs"
+              />
+              <div className="flex justify-end gap-1.5">
+                <Button type="button" variant="ghost" size="xs" disabled={isSubmitting} onClick={() => setIsReporting(false)}>
+                  Hủy
+                </Button>
+                <Button type="button" size="xs" disabled={isSubmitting} onClick={() => void submitReport()}>
+                  {isSubmitting ? <Spinner className="size-3" /> : null}
+                  Gửi báo cáo
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setIsReporting(true)}
+              className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-destructive"
+            >
+              <FlagIcon className="size-3" aria-hidden />
+              Báo cáo tin nhắn
+            </button>
+          )}
         </div>
       )}
     </div>

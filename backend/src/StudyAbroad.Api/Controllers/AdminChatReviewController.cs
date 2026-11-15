@@ -9,11 +9,11 @@ namespace StudyAbroad.Api.Controllers;
 
 /// <summary>
 /// Hàng đợi câu cần xem: các lượt chat hệ thống không trả lời được (no_answer) hoặc bị lỗi (failed), để biết hệ thống đang không làm được gì.
-/// Hiện CHỈ Admin (quyết định tạm thời của nhóm); sau này muốn mở cho Moderator thì đổi phân quyền ở đây.
+/// [UC-53] Chỉ Moderator (đặc tả 14/11, quyết định D2: đây là việc nội dung, chuyển từ Admin sang Moderator; Admin không thấy).
 /// Danh sách KHÔNG có nội dung chat (chỉ mã và số đo); nội dung xem ở chi tiết, có ghi lại người xem.
 /// </summary>
 [ApiController]
-[Authorize(Roles = UserRoles.Admin)]
+[Authorize(Roles = UserRoles.Moderator)]
 [Route("api/v1/admin/chat-review")]
 public class AdminChatReviewController(IChatReviewService review) : ControllerBase
 {
