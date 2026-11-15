@@ -617,8 +617,8 @@ export interface LeadMessageDto {
   senderRole: string;
   isFromCenter: boolean;
   content: string;
-  isFlagged: boolean;
-  flagReason?: string | null;
+  /** Ảnh đính kèm (URL an toàn), null nếu tin chỉ có chữ. */
+  attachmentUrl?: string | null;
   status: "visible" | "removed" | string;
   createdAt: string;
 }
@@ -627,7 +627,6 @@ export interface LeadMessagesThreadDto {
   leadId: string;
   leadStatus: string;
   messages: LeadMessageDto[];
-  flaggedCount: number;
 }
 
 export interface SendLeadMessageRequest {
@@ -639,55 +638,29 @@ export interface SendLeadMessageResultDto {
   leadStatus: string;
 }
 
-/** [USAS-2080 / UC-58] Tin nhắn trong hàng đợi kiểm duyệt; `content` luôn là bản gốc (chỉ Moderator và Admin thấy). */
-export interface ModerationLeadMessageDto {
+export type LeadMessageReportFilter = "pending" | "resolved" | "all";
+
+/** [UC-58] Tin nhắn bị báo cáo (học sinh / phụ huynh hoặc trung tâm báo cáo), chỉ Admin thấy. `content` là bản gốc. */
+export interface AdminLeadMessageReportDto {
   id: string;
   leadId: string;
   studyCenterId: string;
   studyCenterName: string;
   senderUserId: string;
+  senderName: string;
+  senderEmail?: string | null;
   senderRole: string;
+  /** Trạng thái tài khoản người gửi (active, locked...). */
+  senderStatus: string;
   isFromCenter: boolean;
   content: string;
-  isFlagged: boolean;
-  flagReason?: string | null;
+  attachmentUrl?: string | null;
   status: "visible" | "removed" | string;
-  removedByUserId?: string | null;
-  createdAt: string;
-  /** Tin bị học sinh / phụ huynh báo cáo (null nếu chưa ai báo cáo). */
+  reportedByUserId?: string | null;
   reportedAt?: string | null;
   reportReason?: string | null;
-}
-
-/** pending = gắn cờ tự động hoặc bị báo cáo, chờ Moderator xem. */
-export type ModerationMessageFilter = "pending" | "flagged" | "reported" | "removed" | "all";
-
-/** [USAS-2080 / UC-58] Trung tâm có từ 3 tin bị gỡ trở lên, đủ điều kiện để Moderator đề nghị tạm ngừng. */
-export interface RepeatRemovalCenterDto {
-  studyCenterId: string;
-  studyCenterName: string;
-  verificationStatus: string;
-  removedMessageCount: number;
-  hasPendingProposal: boolean;
-}
-
-export type SuspensionProposalStatus = "pending" | "approved" | "rejected";
-
-/** [USAS-2080 / UC-58] Đề nghị tạm ngừng trung tâm do Moderator gửi lên Admin. */
-export interface CenterSuspensionProposalDto {
-  id: string;
-  studyCenterId: string;
-  studyCenterName: string;
-  proposedByUserId: string;
-  reason: string;
-  status: SuspensionProposalStatus | string;
-  removedMessageCount: number;
   createdAt: string;
-  decidedByUserId?: string | null;
-  decidedAt?: string | null;
-  decisionNote?: string | null;
 }
-
 
 /** Đánh giá công khai của trung tâm (tên người đánh giá đã được rút gọn ở backend). */
 export interface CenterReviewDto {

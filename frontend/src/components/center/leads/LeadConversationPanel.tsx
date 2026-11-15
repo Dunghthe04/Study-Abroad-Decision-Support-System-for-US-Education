@@ -1,32 +1,11 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  AlertTriangleIcon,
-  MessageSquareIcon,
-  RefreshCwIcon,
-  SendIcon,
-  ShieldAlertIcon,
-  Trash2Icon,
-} from "lucide-react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { MessageSquareIcon, RefreshCwIcon, SendIcon } from "lucide-react";
 import { ApiError, centerLeadsApi } from "@/lib/api";
-import {
-  MAX_LEAD_MESSAGE_LENGTH,
-  formatLeadMessageRoleLabel,
-  inspectLeadMessageDraft,
-} from "@/lib/lead-message-filter";
+import { MAX_LEAD_MESSAGE_LENGTH, formatLeadMessageRoleLabel } from "@/lib/lead-message";
+import { ImageAttachPicker, LeadMessageAttachment, ReportMessageControl } from "@/components/lead/LeadMessageParts";
 import type { LeadMessageDto, LeadMessagesThreadDto } from "@/types/api";
-import { useAuth } from "@/contexts/AuthContext";
-import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
@@ -47,7 +26,7 @@ function getLoadThreadErrorMessage(err: unknown): string {
 
 /**
  * [USAS-2053 / UC-74] Khu vực đọc và trả lời tin nhắn trao đổi giữa Trung tâm tư vấn và Học sinh/Phụ huynh.
- * Áp dụng kiểm tra đầu vào hai lớp (client + server) và hiển thị cảnh báo nếu bộ lọc gắn cờ số điện thoại/quảng cáo.
+ * Trung tâm nhắn thoải mái (chữ và ảnh), có thể báo cáo tin của học sinh / phụ huynh để Admin xem xét.
  */
 export function LeadConversationPanel({
   leadId,
@@ -55,8 +34,6 @@ export function LeadConversationPanel({
   onLeadStatusChange,
 }: LeadConversationPanelProps) {
   const [messages, setMessages] = useState<LeadMessageDto[]>([]);
-  const [flaggedCount, setFlaggedCount] = useState(0);
-  const [showFlaggedOnly, setShowFlaggedOnly] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -64,12 +41,14 @@ export function LeadConversationPanel({
   const [draft, setDraft] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  // [UC-58] Tin đã báo cáo trong phiên này (backend không trả cờ báo cáo cho trung tâm)
+  const [reportedIds, setReportedIds] = useState<Set<string>>(() => new Set());
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   const applyThreadResult = useCallback((thread: LeadMessagesThreadDto) => {
     setMessages(thread.messages);
-    setFlaggedCount(thread.flaggedCount);
     setLastSyncedAt(new Date());
     setLoadError(null);
     setIsLoading(false);
@@ -111,25 +90,9 @@ export function LeadConversationPanel({
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  }, [messages.length, showFlaggedOnly]);
+  }, [messages.length]);
 
   const trimmedDraft = draft.trim();
-
-  // [USAS-2080 / UC-58] Chỉ Moderator được gỡ tin nhắn vi phạm
-  const { user: currentUser } = useAuth();
-  const canRemoveMessages = currentUser?.role === "moderator";
-  const [removeTarget, setRemoveTarget] = useState<LeadMessageDto | null>(null);
-  const [removeReason, setRemoveReason] = useState("");
-  const [isRemoving, setIsRemoving] = useState(false);
-  const draftInspection = useMemo(
-    () => inspectLeadMessageDraft(trimmedDraft),
-    [trimmedDraft]
-  );
-
-  const visibleMessages = useMemo(() => {
-    if (!showFlaggedOnly) return messages;
-    return messages.filter((m) => m.isFlagged && m.status !== "removed");
-  }, [messages, showFlaggedOnly]);
 
   /**
    * [USAS-2053 / UC-74] Kiểm tra hợp lệ phía client trước khi gọi API gửi phản hồi.
@@ -137,8 +100,8 @@ export function LeadConversationPanel({
   const submitMessage = async () => {
     if (isSending) return;
 
-    if (!trimmedDraft) {
-      setFormError("Vui lòng nhập nội dung tin nhắn trước khi gửi.");
+    if (!trimmedDraft && !imageFile) {
+      setFormError("Vui lòng nhập nội dung tin nhắn hoặc chọn ảnh trước khi gửi.");
       return;
     }
 
@@ -150,36 +113,23 @@ export function LeadConversationPanel({
     setFormError(null);
     setIsSending(true);
     try {
-      const result = await centerLeadsApi.sendMessage(leadId, trimmedDraft);
+      const result = imageFile
+        ? await centerLeadsApi.sendImageMessage(leadId, imageFile, trimmedDraft)
+        : await centerLeadsApi.sendMessage(leadId, trimmedDraft);
       setMessages((prev) => [...prev, result.message]);
-      if (result.message.isFlagged) {
-        setFlaggedCount((c) => c + 1);
-      }
       setLastSyncedAt(new Date());
       setDraft("");
-      if (showFlaggedOnly && !result.message.isFlagged) {
-        setShowFlaggedOnly(false);
-      }
+      setImageFile(null);
 
       if (result.leadStatus && result.leadStatus !== leadStatus) {
         onLeadStatusChange?.(result.leadStatus);
       }
 
-      if (result.message.isFlagged) {
-        toast.add({
-          type: "warning",
-          title: "Tin nhắn đã gửi (có gắn cờ bộ lọc)",
-          description:
-            result.message.flagReason ??
-            "Tin nhắn có dấu hiệu chứa số điện thoại hoặc quảng cáo nên đã được gắn cờ để kiểm duyệt.",
-        });
-      } else {
-        toast.add({
-          type: "success",
-          title: "Đã gửi phản hồi",
-          description: "Tin nhắn đã được lưu và gửi tới học sinh / phụ huynh.",
-        });
-      }
+      toast.add({
+        type: "success",
+        title: "Đã gửi phản hồi",
+        description: "Tin nhắn đã được lưu và gửi tới học sinh / phụ huynh.",
+      });
     } catch (err: unknown) {
       const msg =
         err instanceof ApiError
@@ -196,37 +146,22 @@ export function LeadConversationPanel({
     }
   };
 
-  const closeRemoveDialog = () => {
-    if (isRemoving) return;
-    setRemoveTarget(null);
-    setRemoveReason("");
-  };
-
-  const confirmRemoveMessage = async () => {
-    if (!removeTarget || isRemoving) return;
-    const target = removeTarget;
-    setIsRemoving(true);
+  const reportMessage = async (messageId: string, reason: string) => {
     try {
-      const updated = await centerLeadsApi.removeMessage(leadId, target.id, removeReason);
-      setMessages((prev) => prev.map((m) => (m.id === updated.id ? updated : m)));
-      if (target.isFlagged) {
-        setFlaggedCount((c) => Math.max(0, c - 1));
-      }
+      await centerLeadsApi.reportMessage(leadId, messageId, reason);
+      setReportedIds((prev) => new Set(prev).add(messageId));
       toast.add({
         type: "success",
-        title: "Đã gỡ tin nhắn",
-        description: "Tin nhắn hiển thị là đã bị gỡ ở cả hai phía và đã được ghi nhật ký.",
+        title: "Đã gửi báo cáo",
+        description: "Quản trị viên sẽ xem xét tin nhắn này.",
       });
-      setRemoveTarget(null);
-      setRemoveReason("");
     } catch (err: unknown) {
       toast.add({
         type: "error",
-        title: "Gỡ tin nhắn thất bại",
-        description: err instanceof ApiError ? err.message : "Không thể gỡ tin nhắn. Vui lòng thử lại.",
+        title: "Báo cáo thất bại",
+        description: err instanceof ApiError ? err.message : "Không thể gửi báo cáo. Vui lòng thử lại.",
       });
-    } finally {
-      setIsRemoving(false);
+      throw err;
     }
   };
 
@@ -250,29 +185,6 @@ export function LeadConversationPanel({
             <MessageSquareIcon className="size-4 text-brand" />
             Trao đổi & Trả lời tin nhắn ({messages.length})
           </h4>
-          {flaggedCount > 0 && (
-            <button
-              type="button"
-              onClick={() => setShowFlaggedOnly((prev) => !prev)}
-              aria-pressed={showFlaggedOnly}
-              title="Lọc chỉ xem các tin nhắn bị bộ lọc gắn cờ"
-              className="inline-flex items-center"
-            >
-              <Badge
-                variant={showFlaggedOnly ? "default" : "outline"}
-                className={cn(
-                  "text-[11px] gap-1 cursor-pointer transition-colors",
-                  showFlaggedOnly
-                    ? "bg-warn text-white border-warn"
-                    : "bg-warn-wash text-warn border-warn/30 hover:bg-warn-wash/80"
-                )}
-              >
-                <AlertTriangleIcon className="size-3" />
-                {flaggedCount} tin nhắn bị gắn cờ
-                {showFlaggedOnly ? " (Đang lọc)" : ""}
-              </Badge>
-            </button>
-          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -319,14 +231,12 @@ export function LeadConversationPanel({
               Thử lại
             </Button>
           </div>
-        ) : visibleMessages.length === 0 ? (
+        ) : messages.length === 0 ? (
           <div className="py-6 text-center text-xs text-muted-foreground">
-            {showFlaggedOnly
-              ? "Không có tin nhắn bị gắn cờ đang hiển thị."
-              : "Chưa có tin nhắn trao đổi nào. Hãy gửi phản hồi đầu tiên tới học sinh / phụ huynh."}
+            Chưa có tin nhắn trao đổi nào. Hãy gửi phản hồi đầu tiên tới học sinh / phụ huynh.
           </div>
         ) : (
-          visibleMessages.map((msg) => {
+          messages.map((msg) => {
             const isRemoved = msg.status === "removed";
             return (
               <div
@@ -356,32 +266,20 @@ export function LeadConversationPanel({
                   </div>
                 )}
 
-                <p className="text-sm text-foreground whitespace-pre-wrap break-words leading-relaxed">
-                  {msg.content}
-                </p>
-
-                {!isRemoved && msg.isFlagged && (
-                  <div className="mt-1.5 flex items-start gap-1.5 rounded bg-warn-wash border border-warn/30 px-2 py-1 text-[11px] text-warn">
-                    <ShieldAlertIcon className="size-3.5 shrink-0 mt-0.5 text-warn" />
-                    <span>
-                      <strong>Bộ lọc gắn cờ:</strong>{" "}
-                      {msg.flagReason || "Vi phạm quy định chia sẻ thông tin liên hệ / quảng cáo"}
-                    </span>
-                  </div>
+                {msg.content && (
+                  <p className="text-sm text-foreground whitespace-pre-wrap break-words leading-relaxed">
+                    {msg.content}
+                  </p>
                 )}
+                {!isRemoved && <LeadMessageAttachment url={msg.attachmentUrl} />}
 
-                {canRemoveMessages && !isRemoved && (
-                  <div className="mt-1.5 flex justify-end">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="xs"
-                      onClick={() => setRemoveTarget(msg)}
-                      className="h-6 gap-1 px-1.5 text-[11px] text-risk hover:text-risk hover:bg-risk-wash"
-                    >
-                      <Trash2Icon className="size-3" />
-                      Gỡ tin
-                    </Button>
+                {/* [UC-58] Trung tâm báo cáo tin của học sinh / phụ huynh */}
+                {!isRemoved && !msg.isFromCenter && (
+                  <div className="mt-1.5">
+                    <ReportMessageControl
+                      isReported={reportedIds.has(msg.id)}
+                      onReport={(reason) => reportMessage(msg.id, reason)}
+                    />
                   </div>
                 )}
               </div>
@@ -390,46 +288,6 @@ export function LeadConversationPanel({
         )}
         <div ref={bottomRef} />
       </div>
-
-      <AlertDialog open={removeTarget !== null} onOpenChange={(open) => !open && closeRemoveDialog()}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Gỡ tin nhắn này?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Tin nhắn sẽ hiển thị &quot;Tin nhắn đã bị gỡ do vi phạm quy tắc&quot; với cả trung tâm và học sinh /
-              phụ huynh. Hành động được ghi vào nhật ký và không khôi phục được.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          {removeTarget && (
-            <p className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground whitespace-pre-wrap break-words max-h-32 overflow-y-auto">
-              {removeTarget.content}
-            </p>
-          )}
-          <Textarea
-            value={removeReason}
-            onChange={(e) => setRemoveReason(e.target.value)}
-            maxLength={500}
-            rows={2}
-            disabled={isRemoving}
-            placeholder="Lý do gỡ (không bắt buộc, tối đa 500 ký tự)"
-            aria-label="Lý do gỡ tin nhắn"
-            className="text-sm resize-y"
-          />
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isRemoving}>Hủy</AlertDialogCancel>
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={() => void confirmRemoveMessage()}
-              disabled={isRemoving}
-              className="gap-1.5"
-            >
-              {isRemoving ? <Spinner className="size-3.5" /> : <Trash2Icon className="size-3.5" />}
-              Gỡ tin nhắn
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       {/* Reply Composer */}
       <form onSubmit={handleFormSubmit} className="space-y-2">
@@ -457,15 +315,7 @@ export function LeadConversationPanel({
           className="text-sm resize-y"
         />
 
-        {draftInspection.isFlagged && (
-          <div className="flex items-start gap-2 rounded-md border border-warn/30 bg-warn-wash px-2.5 py-1.5 text-xs text-warn">
-            <AlertTriangleIcon className="size-3.5 shrink-0 mt-0.5 text-warn" />
-            <span>
-              <strong>Lưu ý bộ lọc:</strong> Tin nhắn có dấu hiệu vi phạm (
-              {draftInspection.reasons.join("; ")}) nên sẽ được gắn cờ để kiểm duyệt sau khi gửi.
-            </span>
-          </div>
-        )}
+        <ImageAttachPicker file={imageFile} onChange={setImageFile} onError={setFormError} disabled={isSending} />
 
         {formError && (
           <p className="text-xs text-destructive font-medium">{formError}</p>
@@ -486,7 +336,7 @@ export function LeadConversationPanel({
           <Button
             type="submit"
             size="sm"
-            disabled={isSending || !trimmedDraft || trimmedDraft.length > MAX_LEAD_MESSAGE_LENGTH}
+            disabled={isSending || (!trimmedDraft && !imageFile) || trimmedDraft.length > MAX_LEAD_MESSAGE_LENGTH}
             className="gap-1.5 text-xs"
           >
             {isSending ? (

@@ -3,7 +3,7 @@
 // [Nhắn tin phía người gửi] listSentMessages / sendSentMessage: tin nhắn với trung tâm trong yêu cầu đã gửi.
 // Danh sách con đã liên kết của phụ huynh dùng lại parentLinksApi.getMine() trong lib/api.ts.
 
-import { apiFetch, ApiError } from "@/lib/api";
+import { apiFetch, ApiError, buildImageForm } from "@/lib/api";
 // Kiểu tin nhắn dùng lại của Đức (UC-74) — cùng DTO với phía trung tâm, không khai báo trùng
 import type {
   LeadMessageDto,
@@ -41,7 +41,7 @@ export const leadApi = {
     apiFetch<LeadMessagesThreadDto>(`/api/v1/leads/sent/${encodeURIComponent(leadId)}/messages`),
 
   /**
-   * [Nhắn tin phía người gửi] Gửi tin. Tin có số điện thoại / link ngoài vẫn lưu nhưng isFlagged = true.
+   * [Nhắn tin phía người gửi] Gửi tin.
    * Lỗi thêm: 400 lead_closed (lead đã hoàn tất), 400 invalid_content (rỗng hoặc quá 4000 ký tự).
    */
   sendSentMessage: (leadId: string, content: string) => {
@@ -51,6 +51,13 @@ export const leadApi = {
       body: JSON.stringify(payload),
     });
   },
+
+  /** Gửi tin kèm ảnh (jpg/png/webp, tối đa 5MB), `content` không bắt buộc. */
+  sendSentImageMessage: (leadId: string, file: File, content?: string) =>
+    apiFetch<SendLeadMessageResultDto>(`/api/v1/leads/sent/${encodeURIComponent(leadId)}/messages/image`, {
+      method: "POST",
+      body: buildImageForm(file, content),
+    }),
 
   /**
    * [USAS-2080 / UC-58] Báo cáo một tin của trung tâm vi phạm quy tắc; tin vào hàng đợi của Moderator.

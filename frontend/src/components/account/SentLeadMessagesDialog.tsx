@@ -1,15 +1,12 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangleIcon, FlagIcon, RefreshCwIcon, SendIcon, ShieldAlertIcon } from "lucide-react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { RefreshCwIcon, SendIcon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { ApiError } from "@/lib/api";
 import { getLeadRuleError, leadApi } from "@/lib/lead-api";
-import {
-  MAX_LEAD_MESSAGE_LENGTH,
-  formatLeadMessageRoleLabel,
-  inspectLeadMessageDraft,
-} from "@/lib/lead-message-filter";
+import { MAX_LEAD_MESSAGE_LENGTH, formatLeadMessageRoleLabel } from "@/lib/lead-message";
+import { ImageAttachPicker, LeadMessageAttachment, ReportMessageControl } from "@/components/lead/LeadMessageParts";
 import { cn } from "@/lib/utils";
 import type { LeadMessageDto, LeadMessagesThreadDto } from "@/types/api";
 import type { SentLeadDto } from "@/types/lead";
@@ -80,6 +77,7 @@ function ThreadBody({
   const [draft, setDraft] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
+  const [imageFile, setImageFile] = useState<File | null>(null);
 
   // [UC-58] Tin của trung tâm đã báo cáo trong lần mở khung này (backend không trả cờ báo cáo)
   const [reportedIds, setReportedIds] = useState<Set<string>>(() => new Set());
@@ -91,7 +89,7 @@ function ThreadBody({
       toast.add({
         type: "success",
         title: "Đã gửi báo cáo",
-        description: "Kiểm duyệt viên sẽ xem lại tin nhắn này.",
+        description: "Quản trị viên sẽ xem xét tin nhắn này.",
       });
     } catch (err) {
       toast.add({
@@ -155,12 +153,11 @@ function ThreadBody({
 
   const isClosed = leadStatus === "closed";
   const trimmedDraft = draft.trim();
-  const draftInspection = useMemo(() => inspectLeadMessageDraft(trimmedDraft), [trimmedDraft]);
 
   const submit = async () => {
     if (isSending || isClosed) return;
-    if (!trimmedDraft) {
-      setFormError("Vui lòng nhập nội dung tin nhắn.");
+    if (!trimmedDraft && !imageFile) {
+      setFormError("Vui lòng nhập nội dung tin nhắn hoặc chọn ảnh.");
       return;
     }
     if (trimmedDraft.length > MAX_LEAD_MESSAGE_LENGTH) {
@@ -171,24 +168,16 @@ function ThreadBody({
     setFormError(null);
     setIsSending(true);
     try {
-      const result = await leadApi.sendSentMessage(leadId, trimmedDraft);
+      const result = imageFile
+        ? await leadApi.sendSentImageMessage(leadId, imageFile, trimmedDraft)
+        : await leadApi.sendSentMessage(leadId, trimmedDraft);
       setMessages((prev) => [...prev, result.message]);
       setLeadStatus(result.leadStatus);
       setLastSyncedAt(new Date());
       setDraft("");
 
-      // Toast giống LeadConversationPanel của Đức, câu chữ cho người gửi
-      if (result.message.isFlagged) {
-        toast.add({
-          type: "warning",
-          title: "Đã gửi, nhưng tin bị gắn cờ",
-          description:
-            result.message.flagReason ??
-            "Tin có dấu hiệu chứa số điện thoại hoặc quảng cáo nên đã được gắn cờ để kiểm duyệt.",
-        });
-      } else {
-        toast.add({ type: "success", title: "Đã gửi tin cho trung tâm" });
-      }
+      setImageFile(null);
+      toast.add({ type: "success", title: "Đã gửi tin cho trung tâm" });
     } catch (err) {
       const rule = getLeadRuleError(err);
       // Trung tâm vừa đóng yêu cầu trong lúc khung đang mở → chuyển sang chỉ đọc
@@ -278,15 +267,7 @@ function ThreadBody({
             aria-invalid={Boolean(formError)}
           />
 
-          {draftInspection.isFlagged && (
-            <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50/70 px-2.5 py-1.5 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
-              <AlertTriangleIcon className="mt-0.5 size-3.5 shrink-0 text-amber-600" aria-hidden />
-              <span>
-                Tin này sẽ bị gắn cờ ({draftInspection.reasons.join("; ")}). Không nên gửi số điện thoại hoặc link ngoài
-                trong tin nhắn.
-              </span>
-            </div>
-          )}
+          <ImageAttachPicker file={imageFile} onChange={setImageFile} onError={setFormError} disabled={isSending} />
 
           {formError && <p className="text-xs font-medium text-destructive">{formError}</p>}
 
@@ -294,7 +275,7 @@ function ThreadBody({
             <span className="text-xs text-muted-foreground">
               {trimmedDraft.length} / {MAX_LEAD_MESSAGE_LENGTH} ký tự
             </span>
-            <Button type="submit" size="sm" disabled={isSending || !trimmedDraft}>
+            <Button type="submit" size="sm" disabled={isSending || (!trimmedDraft && !imageFile)}>
               {isSending ? <Spinner data-icon="inline-start" /> : <SendIcon data-icon="inline-start" aria-hidden />}
               {isSending ? "Đang gửi..." : "Gửi"}
             </Button>
@@ -316,23 +297,6 @@ function MessageBubble({
   isReported: boolean;
   onReport: (messageId: string, reason: string) => Promise<void>;
 }) {
-  const [isReporting, setIsReporting] = useState(false);
-  const [reason, setReason] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const submitReport = async () => {
-    setIsSubmitting(true);
-    try {
-      await onReport(msg.id, reason);
-      setIsReporting(false);
-      setReason("");
-    } catch {
-      // thông báo lỗi đã hiện ở toast; giữ form để thử lại
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
   // Backend đã thay nội dung tin bị gỡ bằng câu thông báo
   if (msg.status === "removed") {
     return (
@@ -360,54 +324,13 @@ function MessageBubble({
         </span>
         <span className="text-[10px] text-muted-foreground">{new Date(msg.createdAt).toLocaleString("vi-VN")}</span>
       </div>
-      <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{msg.content}</p>
-      {msg.isFlagged && (
-        // Ô vàng giống nhãn gắn cờ của Đức (LeadConversationPanel)
-        <div className="mt-1.5 flex items-start gap-1.5 rounded border border-amber-300 bg-amber-100/80 px-2 py-1 text-[11px] text-amber-900 dark:border-amber-700 dark:bg-amber-950/60 dark:text-amber-200">
-          <ShieldAlertIcon className="mt-0.5 size-3.5 shrink-0 text-amber-700 dark:text-amber-300" aria-hidden />
-          <span>
-            <strong>Đã gắn cờ:</strong> {msg.flagReason || "vi phạm quy định chia sẻ thông tin liên hệ / quảng cáo"}
-          </span>
-        </div>
-      )}
+      {msg.content && <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{msg.content}</p>}
+      <LeadMessageAttachment url={msg.attachmentUrl} />
 
-      {/* [UC-58] Học sinh / phụ huynh báo cáo tin của trung tâm vi phạm quy tắc */}
+      {/* [UC-58] Học sinh / phụ huynh báo cáo tin của trung tâm (lời lẽ thô tục, quấy rối...) */}
       {msg.isFromCenter && !isMine && (
         <div className="mt-1.5">
-          {isReported ? (
-            <p className="text-[11px] text-muted-foreground">Đã báo cáo, kiểm duyệt viên sẽ xem lại.</p>
-          ) : isReporting ? (
-            <div className="space-y-1.5">
-              <Textarea
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                maxLength={500}
-                rows={2}
-                disabled={isSubmitting}
-                placeholder="Vì sao tin này vi phạm? (không bắt buộc)"
-                aria-label="Lý do báo cáo tin nhắn"
-                className="text-xs"
-              />
-              <div className="flex justify-end gap-1.5">
-                <Button type="button" variant="ghost" size="xs" disabled={isSubmitting} onClick={() => setIsReporting(false)}>
-                  Hủy
-                </Button>
-                <Button type="button" size="xs" disabled={isSubmitting} onClick={() => void submitReport()}>
-                  {isSubmitting ? <Spinner className="size-3" /> : null}
-                  Gửi báo cáo
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setIsReporting(true)}
-              className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-destructive"
-            >
-              <FlagIcon className="size-3" aria-hidden />
-              Báo cáo tin nhắn
-            </button>
-          )}
+          <ReportMessageControl isReported={isReported} onReport={(reason) => onReport(msg.id, reason)} />
         </div>
       )}
     </div>

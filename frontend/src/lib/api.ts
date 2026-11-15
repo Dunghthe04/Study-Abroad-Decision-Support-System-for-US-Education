@@ -30,11 +30,8 @@ import type {
   CenterLeadsSummaryDto,
   LeadMessageDto,
   LeadMessagesThreadDto,
-  ModerationLeadMessageDto,
-  ModerationMessageFilter,
-  RepeatRemovalCenterDto,
-  CenterSuspensionProposalDto,
-  SuspensionProposalStatus,
+  AdminLeadMessageReportDto,
+  LeadMessageReportFilter,
   SendLeadMessageRequest,
   SendLeadMessageResultDto,
   RegisterCenterRequest,
@@ -71,12 +68,21 @@ const DEFAULT_ERROR_MESSAGES: Record<number, string> = {
   429: "Bạn thao tác hơi nhanh. Đợi một chút rồi thử lại nhé.",
 };
 
+/** Form multipart cho tin nhắn kèm ảnh: field `file` và `content` (tùy chọn). */
+export function buildImageForm(file: File, content?: string): FormData {
+  const form = new FormData();
+  form.append("file", file);
+  if (content?.trim()) form.append("content", content.trim());
+  return form;
+}
+
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${baseUrl}${path}`, {
     ...init,
     // [Bảo mật HttpOnly Cookie]: credentials: "include" tự động gửi và nhận cookie an toàn
     credentials: "include",
-    headers: { "Content-Type": "application/json", ...init?.headers },
+    // FormData: để trình duyệt tự đặt Content-Type kèm boundary
+    headers: init?.body instanceof FormData ? { ...init?.headers } : { "Content-Type": "application/json", ...init?.headers },
     cache: "no-store",
   });
 
@@ -358,36 +364,31 @@ export const studyCentersApi = {
   },
 };
 
-/** [UC-73] Quản lý và xử lý yêu cầu liên hệ nhận được phía trung tâm tư vấn (Leads) */
-/** [USAS-2080 / UC-58] Đề nghị tạm ngừng trung tâm bị gỡ tin lặp lại: Moderator gửi, Admin quyết định. */
-export const centerSuspensionApi = {
-  repeatRemovalCenters: () =>
-    apiFetch<RepeatRemovalCenterDto[]>("/api/v1/admin/center-suspension-proposals/repeat-removal-centers"),
-
-  list: (params?: { status?: SuspensionProposalStatus | "all"; page?: number; pageSize?: number }) => {
+/** [UC-58] Admin xử lý tin nhắn bị báo cáo: bỏ qua báo cáo hoặc khóa tài khoản người gửi (gỡ luôn tin của họ). */
+export const leadMessageReportsApi = {
+  list: (params?: { status?: LeadMessageReportFilter; page?: number; pageSize?: number }) => {
     const sp = new URLSearchParams();
     if (params?.status) sp.set("status", params.status);
     if (params?.page) sp.set("page", String(params.page));
     if (params?.pageSize) sp.set("pageSize", String(params.pageSize));
     const qs = sp.toString();
-    return apiFetch<PagedResult<CenterSuspensionProposalDto>>(
-      `/api/v1/admin/center-suspension-proposals${qs ? `?${qs}` : ""}`
-    );
+    return apiFetch<PagedResult<AdminLeadMessageReportDto>>(`/api/v1/admin/lead-message-reports${qs ? `?${qs}` : ""}`);
   },
 
-  propose: (studyCenterId: string, reason: string) =>
-    apiFetch<CenterSuspensionProposalDto>("/api/v1/admin/center-suspension-proposals", {
-      method: "POST",
-      body: JSON.stringify({ studyCenterId, reason }),
-    }),
+  dismiss: (leadId: string, messageId: string) =>
+    apiFetch<{ message: string }>(
+      `/api/v1/admin/lead-message-reports/${encodeURIComponent(leadId)}/${encodeURIComponent(messageId)}/dismiss`,
+      { method: "POST" }
+    ),
 
-  decide: (id: string, approve: boolean, note?: string) =>
-    apiFetch<CenterSuspensionProposalDto>(
-      `/api/v1/admin/center-suspension-proposals/${encodeURIComponent(id)}/decide`,
-      { method: "POST", body: JSON.stringify({ approve, note: note?.trim() || null }) }
+  lockSender: (leadId: string, messageId: string, reason: string) =>
+    apiFetch<{ message: string }>(
+      `/api/v1/admin/lead-message-reports/${encodeURIComponent(leadId)}/${encodeURIComponent(messageId)}/lock-sender`,
+      { method: "POST", body: JSON.stringify({ reason: reason.trim() }) }
     ),
 };
 
+/** [UC-73] Quản lý và xử lý yêu cầu liên hệ nhận được phía trung tâm tư vấn (Leads) */
 export const centerLeadsApi = {
   list: (params?: {
     page?: number;
@@ -428,32 +429,19 @@ export const centerLeadsApi = {
     });
   },
 
-  /** [USAS-2080 / UC-58] Hàng đợi tin nhắn bị gắn cờ hoặc đã gỡ, kèm nội dung gốc (Moderator, Admin) */
-  moderationMessages: (params?: { status?: ModerationMessageFilter; page?: number; pageSize?: number }) => {
-    const sp = new URLSearchParams();
-    if (params?.status) sp.set("status", params.status);
-    if (params?.page) sp.set("page", String(params.page));
-    if (params?.pageSize) sp.set("pageSize", String(params.pageSize));
-    const qs = sp.toString();
-    return apiFetch<PagedResult<ModerationLeadMessageDto>>(`/api/v1/leads/moderation/messages${qs ? `?${qs}` : ""}`);
-  },
-
-  /** [USAS-2080 / UC-58] Moderator chọn Giữ một tin bị gắn cờ: tin vẫn hiện, bỏ cờ */
-  keepMessage: (id: string, messageId: string) =>
+  /** [UC-58] Trung tâm báo cáo một tin của học sinh / phụ huynh; Admin sẽ nhận thông báo và xem xét. */
+  reportMessage: (id: string, messageId: string, reason?: string) =>
     apiFetch<LeadMessageDto>(
-      `/api/v1/leads/received/${encodeURIComponent(id)}/messages/${encodeURIComponent(messageId)}/keep`,
-      { method: "POST" }
+      `/api/v1/leads/received/${encodeURIComponent(id)}/messages/${encodeURIComponent(messageId)}/report`,
+      { method: "POST", body: JSON.stringify({ reason: reason?.trim() || null }) }
     ),
 
-  /** [USAS-2080 / UC-58] Moderator gỡ một tin nhắn vi phạm trong yêu cầu liên hệ (kèm lý do, tối đa 500 ký tự) */
-  removeMessage: (id: string, messageId: string, reason?: string) =>
-    apiFetch<LeadMessageDto>(
-      `/api/v1/leads/received/${encodeURIComponent(id)}/messages/${encodeURIComponent(messageId)}/remove`,
-      {
-        method: "POST",
-        body: JSON.stringify({ reason: reason?.trim() || null }),
-      }
-    ),
+  /** Gửi tin kèm ảnh (jpg/png/webp, tối đa 5MB), `content` không bắt buộc. */
+  sendImageMessage: (id: string, file: File, content?: string) =>
+    apiFetch<SendLeadMessageResultDto>(`/api/v1/leads/received/${encodeURIComponent(id)}/messages/image`, {
+      method: "POST",
+      body: buildImageForm(file, content),
+    }),
 };
 
 // [UC-30, UC-31, UC-33] API Quản lý trường mục tiêu (Student / Parent)
