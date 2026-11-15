@@ -58,6 +58,8 @@ public class StudyCenterService(
     public const int MaxLicenseIssuedByLength = 256;
     public const int MaxVerificationNoteLength = 1000;
     public const int MaxLegalDocumentUrlLength = 1024;
+    /// <summary>[UC-71] Đặc tả 6.1: tối đa 5 tệp cho một lần nộp hồ sơ xác minh.</summary>
+    public const int MaxVerificationDocuments = 5;
     public const string ComplianceModeLicensed = "licensed";
     public const string ComplianceModeNotified = "notified";
 
@@ -614,6 +616,8 @@ public class StudyCenterService(
             return CreateStudyCenterResult.Fail("Mã số doanh nghiệp này đã thuộc về một trung tâm đã được xác minh. Nếu bạn cho rằng có sự nhầm lẫn, vui lòng liên hệ bộ phận hỗ trợ.");
 
         var docs = request.Documents ?? [];
+        if (docs.Count > MaxVerificationDocuments)
+            return CreateStudyCenterResult.Fail($"Mỗi lần nộp hồ sơ tối đa {MaxVerificationDocuments} tệp. Vui lòng bỏ bớt tệp không cần thiết.");
         var hasBizReg = docs.Any(d => d.DocumentType == CenterDocumentTypes.BusinessRegistration && !string.IsNullOrWhiteSpace(d.FileUrl));
         if (!hasBizReg)
             return CreateStudyCenterResult.Fail("Bản scan hoặc ảnh Giấy chứng nhận đăng ký doanh nghiệp là tài liệu bắt buộc.");
@@ -661,6 +665,7 @@ public class StudyCenterService(
             DetailJson = JsonSerializer.Serialize(new { centerId = center.Id, taxCode, legalName, documentCount = docs.Count })
         }, ct);
 
+        await NotifyCenterAsync(center, "submitted", null, null, ct);
         return CreateStudyCenterResult.Ok(ToDto(center));
     }
 
@@ -855,12 +860,14 @@ public class StudyCenterService(
         if (center is null)
             return UpdateStudyCenterResult.Fail("Không tìm thấy thông tin trung tâm cho tài khoản này.");
 
-        // Đã xác minh: khóa thông tin pháp lý (tên, loại hình, MST, đại diện, giấy phép...).
-        // Muốn đổi phải nộp lại hồ sơ xác minh.
-        var legalLocked = center.VerificationStatus == CenterVerificationStatuses.Verified;
+        // Đã xác minh hoặc đang chờ duyệt: khóa thông tin pháp lý (tên, loại hình, MST, đại diện, giấy phép...).
+        // Đã xác minh thì muốn đổi phải nộp lại hồ sơ; đang chờ duyệt thì chờ kết quả (đặc tả 5.1, UC-71).
+        var pendingReview = center.VerificationStatus == CenterVerificationStatuses.PendingReview;
+        var legalLocked = center.VerificationStatus == CenterVerificationStatuses.Verified || pendingReview;
         if (legalLocked && TouchesLegalFields(center, request))
-            return UpdateStudyCenterResult.Fail(
-                "Trung tâm đã được xác minh nên không thể sửa thông tin pháp lý. Vui lòng nộp lại hồ sơ xác minh nếu có thay đổi đăng ký kinh doanh.");
+            return UpdateStudyCenterResult.Fail(pendingReview
+                ? "Hồ sơ xác minh đang chờ duyệt nên chưa thể sửa thông tin pháp lý (tên, mã số thuế, giấy phép...). Vui lòng chờ kết quả xét duyệt."
+                : "Trung tâm đã được xác minh nên không thể sửa thông tin pháp lý. Vui lòng nộp lại hồ sơ xác minh nếu có thay đổi đăng ký kinh doanh.");
 
         if (!legalLocked)
         {

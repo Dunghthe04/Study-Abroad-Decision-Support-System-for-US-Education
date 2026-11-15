@@ -157,6 +157,8 @@ namespace StudyAbroad.Infrastructure.Auth
             {
                 "verified" => ("[USAS] Trung tâm đã được xác minh", "Trung tâm đã được xác minh",
                     $"Hồ sơ xác minh của <strong>{center}</strong> đã được duyệt. Trung tâm nay có dấu xác minh, xuất hiện ở đầu danh bạ và nhận được yêu cầu liên hệ từ học sinh, phụ huynh."),
+                "submitted" => ("[USAS] Đã nhận hồ sơ xác minh", "Đã nhận hồ sơ xác minh",
+                    $"USAS đã nhận hồ sơ xác minh của <strong>{center}</strong>. Kiểm duyệt viên sẽ xem xét và báo kết quả qua email này. Trong lúc chờ duyệt, bạn xem được hồ sơ nhưng chưa sửa được tên pháp lý và mã số thuế."),
                 "changes_requested" => ("[USAS] Hồ sơ xác minh cần bổ sung", "Hồ sơ xác minh cần bổ sung",
                     $"Hồ sơ xác minh của <strong>{center}</strong> chưa đủ để duyệt. Vui lòng bổ sung theo góp ý bên dưới rồi nộp lại."),
                 "revoked" => ("[USAS] Dấu xác minh của trung tâm đã bị thu hồi", "Dấu xác minh đã bị thu hồi",
