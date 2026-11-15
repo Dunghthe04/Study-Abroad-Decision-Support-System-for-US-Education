@@ -236,6 +236,17 @@ public class LeadsControllerTests
                 "Tin nhắn đã bị gỡ do vi phạm quy tắc.", true, null, "removed", DateTime.UtcNow));
         }
 
+        public (Guid UserId, Guid LeadId, Guid MessageId, string? Reason)? LastReport { get; private set; }
+
+        public Task<LeadMessageDto> ReportSentLeadMessageAsync(Guid userId, Guid leadId, Guid messageId, string? reason, CancellationToken ct = default)
+        {
+            if (MissingSentLeadId == leadId)
+                throw new KeyNotFoundException("Không tìm thấy yêu cầu liên hệ.");
+            LastReport = (userId, leadId, messageId, reason);
+            return Task.FromResult(new LeadMessageDto(
+                messageId, leadId, Guid.NewGuid(), "Trung tâm", UserRoles.Center, true, "Nội dung", false, null, "visible", DateTime.UtcNow));
+        }
+
         public string? LastModerationStatus { get; private set; }
         public (Guid ModeratorId, Guid LeadId, Guid MessageId)? LastKeep { get; private set; }
 
@@ -818,6 +829,43 @@ public class LeadsControllerTests
             CancellationToken.None);
 
         Assert.IsType<ObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task ReportSentLeadMessage_AsStudent_ReturnsOkAndPassesArguments()
+    {
+        var studentId = Guid.NewGuid();
+        var leadId = Guid.NewGuid();
+        var messageId = Guid.NewGuid();
+        var (controller, service) = CreateController(studentId);
+
+        var result = await controller.ReportSentLeadMessage(leadId, messageId, new ReportLeadMessageRequest("Xin số điện thoại"), CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result);
+        Assert.Equal((studentId, leadId, messageId, "Xin số điện thoại"), service.LastReport);
+    }
+
+    [Fact]
+    public async Task ReportSentLeadMessage_LeadNotFound_Returns404WithCode()
+    {
+        var leadId = Guid.NewGuid();
+        var (controller, service) = CreateController(Guid.NewGuid());
+        service.MissingSentLeadId = leadId;
+
+        var result = await controller.ReportSentLeadMessage(leadId, Guid.NewGuid(), null, CancellationToken.None);
+
+        var obj = Assert.IsType<NotFoundObjectResult>(result);
+        Assert.Equal("not_found", BodyValue(obj, "code"));
+    }
+
+    [Fact]
+    public void ReportSentLeadMessage_IsRestrictedToStudentAndParent()
+    {
+        var roles = typeof(LeadsController).GetMethod(nameof(LeadsController.ReportSentLeadMessage))
+            ?.GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute), false)
+            .Cast<Microsoft.AspNetCore.Authorization.AuthorizeAttribute>().Single().Roles;
+
+        Assert.Equal($"{UserRoles.Student},{UserRoles.Parent}", roles);
     }
 
     [Fact]
