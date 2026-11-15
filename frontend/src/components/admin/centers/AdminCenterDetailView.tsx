@@ -33,7 +33,6 @@ import {
   type CenterConfirmAction,
 } from "@/components/admin/centers/CenterActionConfirmDialog";
 import { CenterStatusBadge } from "@/components/centers/CenterBadges";
-import { EditCenterButton } from "@/components/admin/centers/EditCenterButton";
 import { CenterLegalInfoCard } from "@/components/centers/CenterLegalInfoCard";
 
 interface AdminCenterDetailViewProps {
@@ -133,13 +132,6 @@ export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDeta
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* Nút Sửa thông tin trung tâm (UC-72) */}
-          <EditCenterButton
-            center={center}
-            onSuccess={(updated) => setUpdatedCenter(updated)}
-            className="h-8 gap-1.5 text-xs"
-          />
-
           {/* Nút Ẩn / Hiện trung tâm (UC-72) */}
           {isActive ? (
             <Button
