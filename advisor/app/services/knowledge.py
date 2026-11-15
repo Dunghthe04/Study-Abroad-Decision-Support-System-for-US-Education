@@ -12,7 +12,7 @@ from typing import Any
 from pgvector import Vector
 
 SEARCH_SQL = """
-SELECT code, question, content, quote, source_url, source_note, retrieved_at,
+SELECT code, question, answer, quote, source_url, source_note, retrieved_at,
        1 - (embedding <=> %(vector)s) AS score
 FROM app.knowledge_documents
 WHERE status = ANY(%(statuses)s)
@@ -30,7 +30,7 @@ LIMIT %(top_k)s
 class KnowledgeHit:
     code: str
     question: str  # câu hỏi mẫu trong kho
-    content: str  # câu trả lời chuẩn
+    answer: str  # câu trả lời chuẩn
     quote: str | None  # nguồn kiểm chứng gốc
     source_url: str | None
     source_note: str | None
@@ -60,7 +60,7 @@ class KnowledgeRetriever:
             hit = KnowledgeHit(
                 code=row[0],
                 question=row[1],
-                content=row[2],
+                answer=row[2],
                 quote=row[3],
                 source_url=row[4],
                 source_note=row[5],

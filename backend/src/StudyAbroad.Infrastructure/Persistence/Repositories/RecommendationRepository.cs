@@ -32,7 +32,21 @@ namespace StudyAbroad.Infrastructure.Persistence.Repositories
                     university => university.Id,
                     (offering, university) => new { university, offering })
                 .ToListAsync(ct);
-            return rows.Select(row => new RecommendSchoolInput(row.university, row.offering)).ToList();
+            var offeringIds = rows.Select(row => row.offering.Id).ToList();
+            var majorsByOffering = await LoadMajorNamesAsync(offeringIds, ct);
+            var universityIds = rows.Select(row => row.university.Id).ToList();
+            var rankings = await LoadRankingsAsync(universityIds, ct);
+            var images = await LoadImagesAsync(universityIds, ct);
+
+            var schools = new List<RecommendSchoolInput>();
+            foreach (var row in rows)
+            {
+                var majors = majorsByOffering.GetValueOrDefault(row.offering.Id) ?? [];
+                schools.Add(new RecommendSchoolInput(
+                    row.university, row.offering, majors, rankings.GetValueOrDefault(row.university.Id),
+                    images.GetValueOrDefault(row.university.Id)));
+            }
+            return schools;
         }
 
         public async Task<RecommendSchoolInput?> FindSchoolAsync(string code, string studyLevel, CancellationToken ct = default)
@@ -45,7 +59,104 @@ namespace StudyAbroad.Infrastructure.Persistence.Repositories
                     university => university.Id,
                     (offering, university) => new { university, offering })
                 .FirstOrDefaultAsync(ct);
-            return row is null ? null : new RecommendSchoolInput(row.university, row.offering);
+            if (row is null) return null;
+
+            var majorsByOffering = await LoadMajorNamesAsync([row.offering.Id], ct);
+            var majors = majorsByOffering.GetValueOrDefault(row.offering.Id) ?? [];
+            var rankings = await LoadRankingsAsync([row.university.Id], ct);
+            var images = await LoadImagesAsync([row.university.Id], ct);
+            return new RecommendSchoolInput(
+                row.university, row.offering, majors, rankings.GetValueOrDefault(row.university.Id),
+                images.GetValueOrDefault(row.university.Id));
+        }
+
+        // Logo và ảnh bìa của các trường (bảng media). Một truy vấn cho cả danh sách, không truy vấn từng trường.
+        // Một trường có nhiều dòng cùng loại thì lấy dòng đứng đầu theo display_order.
+        private async Task<Dictionary<Guid, SchoolImages>> LoadImagesAsync(List<Guid> universityIds, CancellationToken ct)
+        {
+            var media = await db.Media
+                .Where(m => m.EntityType == "University" && universityIds.Contains(m.EntityId)
+                            && (m.Type == "logo" || m.Type == "cover"))
+                .Select(m => new { m.EntityId, m.Type, m.Url, m.DisplayOrder })
+                .ToListAsync(ct);
+
+            return media
+                .GroupBy(m => m.EntityId)
+                .ToDictionary(
+                    g => g.Key,
+                    g => new SchoolImages(
+                        g.Where(m => m.Type == "logo").OrderBy(m => m.DisplayOrder).Select(m => m.Url).FirstOrDefault(),
+                        g.Where(m => m.Type == "cover").OrderBy(m => m.DisplayOrder).Select(m => m.Url).FirstOrDefault()));
+        }
+
+        // Nhóm bảng xếp hạng dùng cho chất lượng: các bảng chung (National Universities, Liberal Arts Colleges).
+        // Bảng theo ngành, theo khu vực, "giá trị" không dùng vì chỉ có vài trường hoặc đo thứ khác.
+        public const string GeneralRankingGroup = "Tổng quát";
+
+        // Thứ tự nhóm bảng khi nói với học sinh: bảng chung trước, rồi nhóm con, theo ngành, khu vực, giá trị
+        private static readonly string[] RankingGroupOrder = [GeneralRankingGroup, "Nhóm con", "Theo ngành", "Khu vực", "Giá trị"];
+
+        public async Task<IReadOnlyList<SchoolRanking>> ListSchoolRankingsAsync(Guid universityId, CancellationToken ct = default)
+        {
+            var rows = await db.UniversityRankings
+                .Where(r => r.UniversityId == universityId)
+                .Join(db.RankingLists, r => r.ListId, l => l.Id, (r, l) => new { l.Name, l.ListGroup, l.EditionYear, r.Rank, r.RankDisplay, r.IsTie })
+                .ToListAsync(ct);
+            return rows
+                .OrderBy(x => Array.IndexOf(RankingGroupOrder, x.ListGroup) is var i and >= 0 ? i : RankingGroupOrder.Length)
+                .ThenBy(x => x.Rank)
+                .Select(x => new SchoolRanking(x.Name, x.ListGroup, x.EditionYear, x.Rank, x.RankDisplay, x.IsTie))
+                .ToList();
+        }
+
+        // Hạng của từng trường trong các bảng chung. Tổng số trường của bảng lấy bằng hạng lớn nhất của bảng đó.
+        private async Task<Dictionary<Guid, IReadOnlyList<RankPosition>>> LoadRankingsAsync(
+            List<Guid> universityIds, CancellationToken ct)
+        {
+            var listIds = await db.RankingLists
+                .Where(l => l.ListGroup == GeneralRankingGroup)
+                .Select(l => l.Id)
+                .ToListAsync(ct);
+
+            var totals = await db.UniversityRankings
+                .Where(r => listIds.Contains(r.ListId))
+                .GroupBy(r => r.ListId)
+                .Select(g => new { ListId = g.Key, Total = g.Max(r => r.Rank) })
+                .ToDictionaryAsync(x => x.ListId, x => x.Total, ct);
+
+            var ranks = await db.UniversityRankings
+                .Where(r => listIds.Contains(r.ListId) && universityIds.Contains(r.UniversityId))
+                .ToListAsync(ct);
+
+            return ranks
+                .GroupBy(r => r.UniversityId)
+                .ToDictionary(
+                    g => g.Key,
+                    g => (IReadOnlyList<RankPosition>)g.Select(r => new RankPosition(r.Rank, totals[r.ListId])).ToList());
+        }
+
+        private async Task<Dictionary<Guid, List<string>>> LoadMajorNamesAsync(List<Guid> offeringIds, CancellationToken ct)
+        {
+            var links = await db.UniversityOfferingMajors
+                .Where(link => offeringIds.Contains(link.UniversityOfferingId))
+                .Join(
+                    db.Majors,
+                    link => link.MajorId,
+                    major => major.Id,
+                    (link, major) => new { link.UniversityOfferingId, major.Name })
+                .ToListAsync(ct);
+
+            var majorsByOffering = new Dictionary<Guid, List<string>>();
+            foreach (var link in links)
+            {
+                if (!majorsByOffering.TryGetValue(link.UniversityOfferingId, out var names))
+                {
+                    names = [];
+                    majorsByOffering[link.UniversityOfferingId] = names;
+                }
+                names.Add(link.Name);
+            }
+            return majorsByOffering;
         }
 
     }

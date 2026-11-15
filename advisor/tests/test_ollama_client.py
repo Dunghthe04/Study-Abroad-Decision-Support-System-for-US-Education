@@ -124,3 +124,25 @@ async def test_embed_raises_when_the_response_has_no_embeddings():
 
     with pytest.raises(OllamaError):
         await make_client(handler).embed(["a"])
+
+
+async def test_chat_text_sends_no_format_and_returns_plain_text():
+    sent = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"message": {"content": "# Mốc: ...\n## 0. Câu hỏi kích hoạt"}})
+
+    text = await make_client(handler).chat_text(MESSAGES)
+
+    assert text == "# Mốc: ...\n## 0. Câu hỏi kích hoạt"
+    assert "format" not in sent["body"]  # SLM sinh skill trả Markdown, không ép JSON
+    assert sent["body"]["think"] is False
+
+
+async def test_chat_text_raises_when_content_is_empty():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"message": {"content": "  "}})
+
+    with pytest.raises(OllamaError):
+        await make_client(handler).chat_text(MESSAGES)

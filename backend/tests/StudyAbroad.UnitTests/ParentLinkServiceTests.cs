@@ -445,6 +445,7 @@ public class ParentLinkServiceTests
         var child = Assert.Single(result.Value!);
         Assert.Equal(student.FullName, child.StudentName);
         Assert.Equal(14, child.StudentAge);
+        Assert.Equal(student.Id, child.StudentUserId);
         Assert.True(child.CanRevoke);
     }
 }

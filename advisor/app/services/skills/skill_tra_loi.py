@@ -14,6 +14,7 @@ from typing import Any
 from app.schemas.chat import ChatState, Citation, QuickReply
 from app.services.chat_flow import SkillOutput
 from app.services.knowledge import KnowledgeHit, KnowledgeRetriever
+from app.services.pii_mask import mask_personal_info
 from app.services.skill_call import SKILLS_DIR, SkillCall
 
 logger = logging.getLogger("advisor.knowledge")
@@ -86,14 +87,14 @@ def check_answer(raw: dict[str, Any], question: str, hit: KnowledgeHit) -> Compo
     for word in FORBIDDEN:
         if word in lowered:
             raise ValueError(f"dùng từ hứa kết quả: {word}")
-    extra = numbers_in(answer) - numbers_in(question) - numbers_in(hit.content)
+    extra = numbers_in(answer) - numbers_in(question) - numbers_in(hit.answer)
     if extra:
         raise ValueError(f"số không có trong nội dung tham khảo: {sorted(extra)}")
     # Giữ đủ ý: mọi con số của câu chuẩn phải còn, và câu viết lại không được ngắn đi quá nhiều
-    dropped = numbers_in(_ENUM_RE.sub("", hit.content)) - numbers_in(answer)
+    dropped = numbers_in(_ENUM_RE.sub("", hit.answer)) - numbers_in(answer)
     if dropped:
         raise ValueError(f"bỏ mất số của câu chuẩn: {sorted(dropped)}")
-    if len(answer) < MIN_KEEP_RATIO * len(hit.content):
+    if len(answer) < MIN_KEEP_RATIO * len(hit.answer):
         raise ValueError("câu viết lại ngắn hơn nhiều so với câu chuẩn, có thể đã bỏ ý")
     return Composed(True, answer)
 
@@ -101,12 +102,21 @@ def check_answer(raw: dict[str, Any], question: str, hit: KnowledgeHit) -> Compo
 # lấy thông tin của một đoạn kiến thức và chuyển nó thành một đối tượng trích dẫn (Citation) để đính kèm vào câu trả lời cho người dùng.
 def citation_of(hit: KnowledgeHit) -> Citation:
     title = hit.quote or hit.source_note or "Kho kiến thức tư vấn du học"
-    return Citation(title=title, url=hit.source_url, snippet=hit.content[:SNIPPET_CHARS])
+    return Citation(
+        title=title, url=hit.source_url, snippet=hit.answer[:SNIPPET_CHARS], retrieved_at=hit.retrieved_at
+    )
 
 
 class TraLoiHandler:
-    def __init__(self, llm: Any, model: str, retriever: KnowledgeRetriever, min_score: float = 0.72) -> None:
-        self._llm = llm
+    def __init__(
+        self,
+        llm: Any,
+        model: str,
+        retriever: KnowledgeRetriever,
+        min_score: float = 0.72,
+        embedder: Any = None,
+    ) -> None:
+        self._embedder = embedder or llm  # embedding chạy trên Ollama (bge-m3), khác với LLM viết câu trả lời
         self._retriever = retriever
         self._min_score = min_score
         self._call = SkillCall(llm, model, SKILL_PATH)
@@ -114,7 +124,7 @@ class TraLoiHandler:
     async def run(self, state: ChatState, message: str) -> SkillOutput:
         try:
             # Biến câu hỏi thành vector
-            [vector] = await self._llm.embed([message])
+            [vector] = await self._embedder.embed([message])
             # Lấy ra các dòng kiến thức gần nhất (đã xếp điểm cao trước)
             hits = await self._retriever.search(vector, state.study_level)
         except Exception:  # Ollama tắt hoặc DB lỗi: nói thật là đang gián đoạn, không bịa
@@ -122,12 +132,19 @@ class TraLoiHandler:
             return SkillOutput(UNAVAILABLE)
         # Chỉ lấy dòng tốt nhất, và phải đạt ngưỡng
         if not hits or hits[0].score < self._min_score:
+            # Ghi lại câu kho chưa trả lời được (đã che thông tin cá nhân) để biết cần bổ sung kiến thức gì
+            logger.info(
+                "knowledge_miss score=%s nearest=%s question=%r",
+                f"{hits[0].score:.3f}" if hits else "none",
+                hits[0].code if hits else "none",
+                mask_personal_info(message),
+            )
             return SkillOutput(NO_BASIS, quick_replies=[CENTER_BUTTON])
         best = hits[0]
 
         # Gọi ollama chạy skill
         composed = await self._call.run(
-            {"question": message, "passage": best.content},
+            {"question": message, "passage": best.answer},
             SCHEMA,
             lambda raw: check_answer(raw, message, best),
         )
@@ -135,7 +152,7 @@ class TraLoiHandler:
             return SkillOutput(NO_BASIS, quick_replies=[CENTER_BUTTON])
         if composed is None:  # Qwen sai hai lần: dùng câu trả lời chuẩn của dòng đó
             logger.warning("Qwen không trả được câu hợp lệ sau 2 lần, dùng câu chuẩn của %s", best.code)
-            answer = best.content
+            answer = best.answer
         else:
             answer = composed.answer
         return SkillOutput(answer, citations=[citation_of(best)], disclaimer=DISCLAIMER)

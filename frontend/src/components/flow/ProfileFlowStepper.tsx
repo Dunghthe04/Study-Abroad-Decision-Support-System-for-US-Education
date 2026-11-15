@@ -1,6 +1,7 @@
 "use client";
 
 import { CheckIcon } from "lucide-react";
+import { useGradeScale } from "@/hooks/use-grade-scale";
 import { cn } from "@/lib/utils";
 import { findCertType, getCertDisplayName } from "@/lib/certification-utils";
 import { DEFAULT_BUDGET_TIERS, draftGpa, gpaModeOf } from "@/lib/profile-flow-options";
@@ -82,12 +83,13 @@ function stepSummary(step: number, draft: ProfileFlowDraft, metadata: ProfileMet
     }
     case 3: {
       const certs = draft.step3.certifications ?? [];
-      if (certs.length === 0) return draft.step3.englishPlanned ? "Chưa có, sẽ thi tiếng Anh sau" : null;
+      if (certs.length === 0) return draft.step3.englishPlanned ? "Chưa thi, chưa có dự định thi" : null;
       const types = metadata?.certificationTypes ?? [];
       return certs
         .map((c) => {
           const name = getCertDisplayName(c, findCertType(types, c.type));
-          return c.overall != null ? `${name} ${c.overall}` : name;
+          const label = c.overall != null ? `${name} ${c.overall}` : name;
+          return c.isTarget ? `${label} (dự định)` : label;
         })
         .join(" · ");
     }
@@ -129,6 +131,7 @@ export function ProfileFlowStepper({
   lastCompletedStep,
   onSelectStep,
 }: ProfileFlowStepperProps) {
+  useGradeScale(); // GPA thang 4 quy đổi theo bảng moderator sửa, vẽ lại khi bảng tải xong
   const stateOf = (step: number) => ({
     isCompleted: step < currentStep || step <= lastCompletedStep,
     isCurrent: step === currentStep,
@@ -137,7 +140,7 @@ export function ProfileFlowStepper({
 
   if (variant === "strip") {
     return (
-      <nav aria-label="Tiến trình hoàn thiện hồ sơ" className="overflow-x-auto rounded-xl border border-line bg-surface px-3 py-3.5 shadow-xs">
+      <nav aria-label="Tiến trình hoàn thiện hồ sơ" className="overflow-x-auto rounded-xl border border-line bg-surface px-3 py-3.5 ">
         {/* 6 cột đều nhau, chấm nằm giữa cột, đường nối chạy từ chấm trước tới chấm này */}
         <ol className="grid min-w-[456px] grid-cols-6">
           {FLOW_STEPS.map((s, i) => {
@@ -176,7 +179,7 @@ export function ProfileFlowStepper({
                   </span>
                   <span
                     className={cn(
-                      "text-[11.5px] leading-tight",
+                      "text-xs leading-tight",
                       isCurrent ? "font-semibold text-brand" : "text-muted-foreground"
                     )}
                   >
@@ -192,7 +195,7 @@ export function ProfileFlowStepper({
   }
 
   return (
-    <aside className="rounded-xl border border-line bg-surface p-6 shadow-xs">
+    <aside className="rounded-xl border border-line bg-surface p-6 ">
       <div className="space-y-6">
         <div>
           <h2 className="text-label text-xs tracking-wider text-muted-foreground font-semibold">
@@ -222,7 +225,7 @@ export function ProfileFlowStepper({
                 <div
                   className={cn(
                     "flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold transition-colors mt-0.5",
-                    isCurrent && "bg-brand text-white shadow-xs",
+                    isCurrent && "bg-brand text-white",
                     !isCurrent && isCompleted && "bg-ok text-white",
                     !isCurrent && !isCompleted && "bg-muted text-muted-foreground border border-line"
                   )}

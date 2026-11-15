@@ -7,6 +7,8 @@ namespace StudyAbroad.Infrastructure.Persistence;
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
     public DbSet<StudyCenter> StudyCenters => Set<StudyCenter>();
+    public DbSet<CenterVerificationRequest> CenterVerificationRequests => Set<CenterVerificationRequest>();
+    public DbSet<CenterVerificationDocument> CenterVerificationDocuments => Set<CenterVerificationDocument>();
     public DbSet<User> Users => Set<User>();
     public DbSet<UserSession> UserSessions => Set<UserSession>();
 
@@ -20,6 +22,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<ProfileCertification> ProfileCertifications => Set<ProfileCertification>();
     public DbSet<University> Universities => Set<University>();
     public DbSet<UniversityOffering> UniversityOfferings => Set<UniversityOffering>();
+    public DbSet<Major> Majors => Set<Major>();
+    public DbSet<UniversityOfferingMajor> UniversityOfferingMajors => Set<UniversityOfferingMajor>();
+    public DbSet<UsState> UsStates => Set<UsState>();
+    public DbSet<RankingList> RankingLists => Set<RankingList>();
+    public DbSet<UniversityRanking> UniversityRankings => Set<UniversityRanking>();
     public DbSet<Scholarship> Scholarships => Set<Scholarship>();
     public DbSet<TargetSchool> TargetSchools => Set<TargetSchool>();
     public DbSet<Recommendation> Recommendations => Set<Recommendation>();
@@ -27,7 +34,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Skill> Skills => Set<Skill>();
     public DbSet<ChatSession> ChatSessions => Set<ChatSession>();
     public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
+    public DbSet<ReviewBatch> ReviewBatches => Set<ReviewBatch>();
+    public DbSet<ReviewBatchReviewer> ReviewBatchReviewers => Set<ReviewBatchReviewer>();
+    public DbSet<ReviewBatchItem> ReviewBatchItems => Set<ReviewBatchItem>();
+    public DbSet<ReviewVerdict> ReviewVerdicts => Set<ReviewVerdict>();
     public DbSet<KnowledgeDocument> KnowledgeDocuments => Set<KnowledgeDocument>();
+    public DbSet<SlmTrainingSample> SlmTrainingSamples => Set<SlmTrainingSample>();
     public DbSet<AiCall> AiCalls => Set<AiCall>();
     public DbSet<EvalCase> EvalCases => Set<EvalCase>();
     public DbSet<EvalRun> EvalRuns => Set<EvalRun>();
@@ -37,6 +49,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<ForumReport> ForumReports => Set<ForumReport>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<AppSetting> AppSettings => Set<AppSetting>();
+    public DbSet<Media> Media => Set<Media>();
 
     // 13 thực thể bổ sung chuẩn hóa toàn diện 42 bảng DB First
     public DbSet<StateLivingCost> StateLivingCosts => Set<StateLivingCost>();

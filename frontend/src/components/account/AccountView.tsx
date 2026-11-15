@@ -15,13 +15,16 @@ import { AcademicSummaryCard, hasCompleteAcademicProfile } from "@/components/ac
 import { ChangePasswordCard } from "@/components/account/ChangePasswordCard";
 import { ParentLinksCard } from "@/components/account/ParentLinksCard";
 import { PersonalInfoCard } from "@/components/account/PersonalInfoCard";
+import { SentLeadsCard } from "@/components/account/SentLeadsCard";
 import {
   ArrowRightIcon,
+  BookmarkCheckIcon,
   BookOpenIcon,
   Building2Icon,
   GraduationCapIcon,
   KeyRoundIcon,
   LogOutIcon,
+  SendIcon,
   ShieldIcon,
   TriangleAlertIcon,
   UserIcon,
@@ -30,7 +33,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-type SectionId = "personal" | "academic" | "parent-links" | "password";
+type SectionId = "personal" | "academic" | "parent-links" | "sent-leads" | "password";
 
 interface SectionItem {
   id: SectionId;
@@ -61,12 +64,25 @@ export function AccountView() {
             label: user?.role === "student" ? "Liên kết phụ huynh" : "Con đã liên kết",
             icon: UsersIcon,
           },
+          // [UC-44] Yêu cầu liên hệ đã gửi
+          { id: "sent-leads" as const, label: "Yêu cầu liên hệ đã gửi", icon: SendIcon },
         ]
       : []),
-    { id: "password", label: "Đổi mật khẩu", icon: KeyRoundIcon },
+    { id: "password", label: "Bảo mật tài khoản", icon: KeyRoundIcon },
   ];
 
   const [activeSection, setActiveSection] = useState<SectionId>(() => readSectionFromHash(sections));
+
+  // Menu tài khoản ở thanh đầu trang trỏ tới /account#academic, #password...: đang ở trang này thì chỉ đổi hash, không tải lại
+  const sectionIds = sections.map((s) => s.id).join(",");
+  useEffect(() => {
+    const onHash = () => {
+      const id = window.location.hash.slice(1);
+      if (sectionIds.split(",").includes(id)) setActiveSection(id as SectionId);
+    };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, [sectionIds]);
 
   // Trạng thái Hồ sơ học thuật
   const [profile, setProfile] = useState<AcademicProfileResponse | null>(null);
@@ -209,6 +225,19 @@ export function AccountView() {
                 </button>
               ))}
 
+              {isStudentOrParent && (
+                <Link
+                  href="/target-schools"
+                  className={cn(
+                    "flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-left text-sm whitespace-nowrap transition-colors",
+                    "text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                  )}
+                >
+                  <BookmarkCheckIcon className="size-4" aria-hidden />
+                  Trường mục tiêu
+                </Link>
+              )}
+
               <button
                 type="button"
                 onClick={handleLogout}
@@ -230,6 +259,7 @@ export function AccountView() {
             {activeSection === "personal" && <PersonalInfoCard />}
             {activeSection === "academic" && <AcademicSummaryCard profile={profile} isLoading={isLoadingProfile} />}
             {activeSection === "parent-links" && <ParentLinksCard />}
+            {activeSection === "sent-leads" && <SentLeadsCard />}
             {activeSection === "password" && <ChangePasswordCard />}
           </section>
         </div>

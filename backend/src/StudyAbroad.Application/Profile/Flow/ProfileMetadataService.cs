@@ -43,28 +43,25 @@ public class ProfileMetadataService(
         var metadata = JsonSerializer.Deserialize<ProfileMetadataResponse>(json, options)
             ?? throw new InvalidOperationException("Không thể phân tích dữ liệu cấu hình metadata hồ sơ.");
 
-        // Nạp và hợp nhất toàn bộ 366+ ngành học thực tế từ các trường trong CSDL (đảm bảo không bao giờ thiếu ngành)
-        var offeringMajors = await repository.GetOfferingMajorsAsync(ct);
-        if (offeringMajors.Count > 0)
+        // Ngành chỉ lấy từ bảng majors (ngành có trường đào tạo), không gộp usMajors trong JSON:
+        // hồ sơ lưu đúng EnglishName thì HardFilter mới khớp với ngành của trường; Name là tên Việt để hiện
+        var majorOptions = await repository.GetMajorOptionsAsync(ct);
+        metadata = metadata with
         {
-            var existingEnglishNames = new HashSet<string>(metadata.UsMajors.Select(m => m.EnglishName.Trim()), StringComparer.OrdinalIgnoreCase);
-            var mergedMajors = new List<UsMajorMetadataItem>(metadata.UsMajors);
+            UsMajors = majorOptions
+                .Select(m => new UsMajorMetadataItem(Slugify(m.Name), m.NameVi ?? m.Name, m.Name, null, m.Aliases, m.IsPopular))
+                .ToList()
+        };
 
-            foreach (var major in offeringMajors)
-            {
-                if (!existingEnglishNames.Contains(major))
-                {
-                    var id = Slugify(major);
-                    mergedMajors.Add(new UsMajorMetadataItem(id, major, major, "Chuyên ngành đại học"));
-                    existingEnglishNames.Add(major);
-                }
-            }
-
-            metadata = metadata with
-            {
-                UsMajors = mergedMajors.OrderBy(m => m.EnglishName).ToList()
-            };
-        }
+        // Bang chỉ lấy từ bảng us_states (có vùng), JSON không còn usStates / popularStateCodes
+        var stateOptions = await repository.GetUsStateOptionsAsync(ct);
+        metadata = metadata with
+        {
+            UsStates = stateOptions
+                .Select(s => new UsStateMetadataItem(s.Code, s.Name, s.IsPopular, s.Region))
+                .ToList(),
+            PopularStateCodes = stateOptions.Where(s => s.IsPopular).Select(s => s.Code).ToList()
+        };
 
         cache.Set(CacheKey, metadata, CacheDuration);
         // Tỷ giá có bộ nhớ riêng (1 ngày) nên gắn sau khi lấy từ cache

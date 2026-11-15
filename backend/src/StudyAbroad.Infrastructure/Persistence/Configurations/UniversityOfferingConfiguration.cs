@@ -11,8 +11,6 @@ public class UniversityOfferingConfiguration : IEntityTypeConfiguration<Universi
         b.HasKey(x => x.Id);
         b.HasOne<University>().WithMany().HasForeignKey(x => x.UniversityId).OnDelete(DeleteBehavior.Cascade);
         b.Property(x => x.StudyLevel).HasMaxLength(32).IsRequired();
-        b.Property(x => x.Majors).HasColumnType("text[]");
-        b.Property(x => x.StemMajors).HasColumnType("text[]");
         b.Property(x => x.AcademicYear).HasMaxLength(16);
         b.Property(x => x.TuitionUsd).HasPrecision(12, 2);
         b.Property(x => x.LivingUsd).HasPrecision(12, 2);
@@ -29,6 +27,9 @@ public class UniversityOfferingConfiguration : IEntityTypeConfiguration<Universi
             t.HasCheckConstraint("ck_university_offerings_sat_range",
                 "(sat25 IS NULL OR sat25 BETWEEN 400 AND 1600) AND (sat75 IS NULL OR sat75 BETWEEN 400 AND 1600) "
                 + "AND (sat25 IS NULL OR sat75 IS NULL OR sat25 <= sat75)");
+            t.HasCheckConstraint("ck_university_offerings_act_range",
+                "(act25 IS NULL OR act25 BETWEEN 1 AND 36) AND (act75 IS NULL OR act75 BETWEEN 1 AND 36) "
+                + "AND (act25 IS NULL OR act75 IS NULL OR act25 <= act75)");
         });
         b.Property(x => x.SatPolicy).HasMaxLength(16);
 
@@ -38,6 +39,7 @@ public class UniversityOfferingConfiguration : IEntityTypeConfiguration<Universi
         b.Property(x => x.C7TestImportance).HasMaxLength(16).HasColumnName("c7_test_importance");
         b.Property(x => x.C7EcImportance).HasMaxLength(16).HasColumnName("c7_ec_importance");
         b.Property(x => x.SatSubmitPct).HasPrecision(5, 4);
+        b.Property(x => x.GpaSubmitPct).HasPrecision(5, 4);
         b.Property(x => x.GpaPct40).HasPrecision(5, 4).HasColumnName("gpa_pct_4_0");
         b.Property(x => x.GpaPct375To399).HasPrecision(5, 4).HasColumnName("gpa_pct_375_399");
         b.Property(x => x.GpaPct350To374).HasPrecision(5, 4).HasColumnName("gpa_pct_350_374");
@@ -49,9 +51,31 @@ public class UniversityOfferingConfiguration : IEntityTypeConfiguration<Universi
         b.Property(x => x.IntlAidAvgUsd).HasPrecision(12, 2);
         b.Property(x => x.RetentionRate1Yr).HasPrecision(5, 4).HasColumnName("retention_rate_1yr");
         b.Property(x => x.GradRate6Yr).HasPrecision(5, 4).HasColumnName("grad_rate_6yr");
+        b.Property(x => x.AvgGpaWeighted).HasPrecision(3, 2).HasColumnName("avg_gpa_weighted");
+        b.Property(x => x.GpaScaleType).HasMaxLength(16).HasColumnName("gpa_scale_type");
+        b.Property(x => x.FyOnCampusPct).HasPrecision(5, 4).HasColumnName("fy_on_campus_pct");
+        b.Property(x => x.UgOnCampusPct).HasPrecision(5, 4).HasColumnName("ug_on_campus_pct");
+        b.Property(x => x.HousingTypes).HasMaxLength(1000).HasColumnName("housing_types");
+        b.Property(x => x.IntlHousing).HasColumnName("intl_housing");
+        b.Property(x => x.HousingOnlyUsd).HasPrecision(12, 2).HasColumnName("housing_only_usd");
+        b.Property(x => x.HousingDepositUsd).HasPrecision(12, 2).HasColumnName("housing_deposit_usd");
+        b.Property(x => x.StudentFacultyRatio).HasColumnName("student_faculty_ratio");
+        b.Property(x => x.Activities).HasMaxLength(2000).HasColumnName("activities");
+        b.Property(x => x.CampusSetting).HasMaxLength(64).HasColumnName("campus_setting");
         b.Property(x => x.DeadlinesJson).HasColumnType("jsonb");
         b.Property(x => x.Notes).HasMaxLength(2000);
         b.Property(x => x.SourceUrl).HasMaxLength(512);
+        b.Property(x => x.SourceReliability).HasMaxLength(16);
+        b.ToTable(t =>
+        {
+            t.HasCheckConstraint("ck_university_offerings_source_reliability",
+                "source_reliability IS NULL OR source_reliability IN ('official', 'aggregated', 'self_reported')");
+            t.HasCheckConstraint("ck_university_offerings_gpa_scale_type",
+                "gpa_scale_type IS NULL OR gpa_scale_type IN ('weighted', 'unweighted', 'both')");
+            t.HasCheckConstraint("ck_university_offerings_avg_gpa_weighted",
+                "avg_gpa_weighted IS NULL OR avg_gpa_weighted >= 0");
+        });
+        b.HasOne<User>().WithMany().HasForeignKey(x => x.LastEditedByUserId).OnDelete(DeleteBehavior.SetNull);
         b.HasIndex(x => new { x.UniversityId, x.StudyLevel }).IsUnique();
     }
 }

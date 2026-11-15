@@ -10,6 +10,7 @@ using StudyAbroad.Application.Recommendations;
 using StudyAbroad.Application.StudyCenters;
 using StudyAbroad.Infrastructure.Advisor;
 using StudyAbroad.Infrastructure.Auth;
+using StudyAbroad.Infrastructure.MediaUploads;
 using StudyAbroad.Infrastructure.Persistence;
 using StudyAbroad.Infrastructure.Persistence.Repositories;
 
@@ -27,13 +28,27 @@ public static class DependencyInjection
                 npgsql.MigrationsHistoryTable("__ef_migrations_history", "app"))
             .UseSnakeCaseNamingConvention());
 
+        services.AddScoped<StudyAbroad.Application.Universities.IUniversityDetailRepository, UniversityDetailRepository>();
+        services.AddScoped<StudyAbroad.Application.TargetSchools.ITargetSchoolRepository, TargetSchoolRepository>();
         services.AddScoped<IStudyCenterRepository, StudyCenterRepository>();
+        services.AddScoped<ICenterVerificationRepository, CenterVerificationRepository>();
+        services.AddScoped<ICenterReviewRepository, CenterReviewRepository>();
+        services.AddScoped<StudyAbroad.Application.Admin.Universities.IAdminUniversityRepository, AdminUniversityRepository>();
+        services.AddScoped<StudyAbroad.Application.Admin.Settings.IGradeScaleSettingRepository, GradeScaleSettingRepository>();
+        services.AddScoped<StudyAbroad.Application.Admin.AiUsage.IAiUsageReportRepository, AiUsageReportRepository>();
+        services.AddScoped<StudyAbroad.Application.Admin.ChatReview.IChatReviewRepository, ChatReviewRepository>();
+        services.AddScoped<StudyAbroad.Application.Admin.SlmSamples.ISlmSampleRepository, SlmSampleRepository>();
+        services.AddScoped<StudyAbroad.Application.Admin.ReviewBatches.IReviewBatchRepository, ReviewBatchRepository>();
+        services.AddScoped<StudyAbroad.Application.Leads.ILeadRepository, LeadRepository>();
+        services.AddSingleton<StudyAbroad.Application.Admin.SlmSamples.ISlmWorkbookReader, StudyAbroad.Infrastructure.Import.SlmWorkbookReader>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IAuditLogRepository, AuditLogRepository>();
         services.AddScoped<StudyAbroad.Application.ParentLinks.IParentLinkRepository, ParentLinkRepository>();
+        services.AddScoped<IScenarioRepository, ScenarioRepository>();   // [UC-86] kịch bản what-if đã lưu
         services.AddScoped<IFinancialProfileRepository, FinancialProfileRepository>();
         services.AddScoped<StudyAbroad.Application.AcademicProfiles.IAcademicProfileRepository, AcademicProfileRepository>();
         services.AddSingleton<IPasswordHasher, PasswordHasher>();
+        services.AddCloudinaryMedia(configuration);
         // [USAS-365] Đăng ký repository phân tích điểm học thuật
         services.AddScoped<StudyAbroad.Application.Profile.Academic.IAcademicAnalysisRepository, AcademicAnalysisRepository>();
         // [USAS-640] Đăng ký repository luồng hồ sơ và metadata
@@ -41,8 +56,15 @@ public static class DependencyInjection
         // [USAS-640] Đăng ký service lưu trữ tệp bảng điểm nháp
         services.AddScoped<StudyAbroad.Application.Profile.Flow.IProfileFileStorageService, StudyAbroad.Infrastructure.Services.ProfileFileStorageService>();
         services.AddScoped<IRecommendationRepository, RecommendationRepository>();
+        services.AddScoped<IRecommendationHistoryRepository, RecommendationHistoryRepository>();   // [UC-87] đọc lịch sử gợi ý
         services.AddScoped<IChatSessionRepository, ChatSessionRepository>();
+        // Lưu nội dung chat cho admin xem câu chưa trả lời được. Là dữ liệu cá nhân: đặt Chat:StoreMessages = false để tắt mà không sửa code
+        if (configuration.GetValue("Chat:StoreMessages", true))
+            services.AddScoped<IChatMessageRepository, ChatMessageRepository>();
+        // Nhật ký các lần gọi AI (token, thời gian, lỗi): chỉ số đo, không có nội dung chat nên luôn bật, không theo Chat:StoreMessages
+        services.AddScoped<IAiCallRepository, AiCallRepository>();
         services.AddScoped<IChatAnalysisRepository, ChatAnalysisRepository>();
+        services.AddScoped<IChatBenchmarkRepository, ChatBenchmarkRepository>();
 
 
         // [USAS-362] Đăng ký JWT Token Service (Ưu tiên nạp key từ biến môi trường JWT_SECRET_KEY).
@@ -75,7 +97,16 @@ public static class DependencyInjection
         services.AddHostedService<EmailDispatchBackgroundService>();
 
         services.Configure<AdvisorOptions>(configuration.GetSection(AdvisorOptions.SectionName));
-        services.AddHttpClient<IAdvisorClient, AdvisorClient>(ConfigureAdvisorClient);
+        // Giá token để tính tiền mỗi lần gọi AI: đọc từ cấu hình (appsettings "AiPricing" hoặc biến môi trường AiPricing__...)
+        services.Configure<AiPricingOptions>(configuration.GetSection(AiPricingOptions.SectionName));
+        services.AddSingleton(sp => new AiPricing(sp.GetRequiredService<IOptions<AiPricingOptions>>().Value));
+        // Mọi lần gọi advisor đi qua lớp bọc để gom số đo token vào "giỏ chung" của yêu cầu (một lượt chat gọi advisor nhiều lần)
+        services.AddHttpClient<AdvisorClient>(ConfigureAdvisorClient);
+        services.AddScoped<IAiUsageCollector, AiUsageCollector>();
+        services.AddScoped<IAdvisorClient>(sp => new UsageCollectingAdvisorClient(
+            sp.GetRequiredService<AdvisorClient>(), sp.GetRequiredService<IAiUsageCollector>()));
+        // Bậc ngoại khóa: SLM xác nhận vai trò, phạm vi rồi advisor tính bậc, gọi lúc lưu hồ sơ
+        services.AddHttpClient<IEcTierClient, EcTierClient>(ConfigureAdvisorClient);
         services.AddHttpClient<ITranscriptOcrClient, TranscriptOcrClient>((sp, client) =>
         {
             ConfigureAdvisorClient(sp, client);

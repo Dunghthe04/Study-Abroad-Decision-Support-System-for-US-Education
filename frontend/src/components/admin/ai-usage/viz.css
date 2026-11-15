@@ -1,0 +1,40 @@
+/* Màu và nét vẽ của các biểu đồ trang Token và chi phí AI.
+   Ba màu phân loại đã chạy qua validate_palette (dataviz) ở cả nền sáng và nền tối: lệch CVD >= 17, lệch thường >= 27.
+   Khai báo theo vai trò để đổi sáng/tối ở một chỗ. Chữ luôn dùng màu chữ của trang, không dùng màu dữ liệu. */
+.ai-viz {
+  --viz-1: #0a73a6;            /* cloud, token vào, mọi biểu đồ một chuỗi */
+  --viz-2: #eb6834;            /* local, token ra */
+  --viz-3: #6250d6;            /* nhóm "khác" khi có nguồn lạ */
+  --viz-surface: var(--surface);
+  --viz-grid: #e1e6ea;         /* đường lưới: một bước lệch khỏi nền */
+  --viz-axis: #c3ccd4;
+  --viz-muted: #7c8d9d;
+  --viz-track: #e9eef2;        /* ô trống của lịch và nền thanh đo */
+}
+
+.dark .ai-viz {
+  --viz-1: #3398c2;
+  --viz-2: #d95926;
+  --viz-3: #9085e9;
+  --viz-grid: #2c2c2a;
+  --viz-axis: #383835;
+  --viz-muted: #898781;
+  --viz-track: #26262a;
+}
+
+/* Biểu đồ đang tải lại: giữ khung và nét vẽ cũ, chỉ mờ đi (không skeleton, không nhảy bố cục) */
+.ai-viz [data-loading="true"] {
+  opacity: 0.55;
+  transition: opacity 0.15s;
+}
+
+/* Số trong cột cần thẳng hàng */
+.ai-viz .tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Recharts vẽ vòng focus xanh quanh khung; bỏ để dùng crosshair + tooltip riêng */
+.ai-viz .recharts-wrapper,
+.ai-viz .recharts-surface {
+  outline: none;
+}

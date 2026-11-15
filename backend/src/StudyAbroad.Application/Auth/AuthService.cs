@@ -1,6 +1,7 @@
 using StudyAbroad.Application.Audit;
 using StudyAbroad.Application.Common;
 using StudyAbroad.Application.ParentLinks;
+using StudyAbroad.Application.StudyCenters;
 using System.Text.Json;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
@@ -30,10 +31,26 @@ namespace StudyAbroad.Application.Auth
         Task<UserDto?> GetMeAsync(Guid userId, CancellationToken ct = default);
         Task<List<UserDto>> GetAllUsersAsync(CancellationToken ct = default);
         Task<AuthResult> CreateModeratorAccountAsync(CreateModeratorAccountRequest request, CancellationToken ct = default);
+        /// <summary>[Q11 / UC-71 Phụ trợ] Tạo tài khoản người dùng cho Trung tâm tư vấn (role center) — active ngay.</summary>
+        Task<AuthResult> CreateCenterAccountAsync(CreateCenterAccountRequest request, CancellationToken ct = default);
         /// <summary>[UC-60] Xem danh sách tài khoản — tìm, lọc, phân trang.</summary>
         Task<PagedResult<UserDto>> GetAdminUserAccountListAsync(AdminUserAccountListQuery query, CancellationToken ct = default);
         /// <summary>[UC-61] Admin khóa tài khoản (student/parent/moderator/center) kèm lý do và audit.</summary>
         Task<AuthResult> LockUserAccountAsync(Guid targetUserId, LockUserAccountRequest request, Guid actorAdminId, CancellationToken ct = default);
+        /// <summary>[UC-62] Admin mở khóa tài khoản (status locked hoặc temp_locked) kèm lý do và audit.</summary>
+        Task<AuthResult> UnlockUserAccountAsync(Guid targetUserId, UnlockUserAccountRequest request, Guid actorAdminId, CancellationToken ct = default);
+        /// <summary>[UC-80] Xóa tài khoản và ẩn danh hóa dữ liệu cá nhân theo luật PDPA 2025.</summary>
+        Task<AuthResult> AnonymizeUserAccountAsync(Guid userId, string? ipAddress = null, string? userAgent = null, CancellationToken ct = default);
+        /// <summary>[UC-64] Trung tâm tự đăng ký tài khoản (User role center status unverified + StudyCenter status unverified).</summary>
+        Task<AuthResult> RegisterCenterAsync(RegisterCenterRequest request, CancellationToken ct = default);
+        /// <summary>[UC-91] Xác thực email trung tâm qua OTP 6 số.</summary>
+        Task<AuthResult> VerifyCenterEmailAsync(VerifyCenterEmailRequest request, CancellationToken ct = default);
+        /// <summary>Đổi số điện thoại liên lạc của trung tâm (không còn xác thực SMS).</summary>
+        Task<AuthResult> ChangeCenterPhoneAsync(Guid userId, string newPhone, CancellationToken ct = default);
+        /// <summary>Gửi OTP tới email MỚI để trung tâm đổi email liên lạc.</summary>
+        Task<AuthResult> RequestCenterEmailChangeAsync(Guid userId, RequestContactChangeDto request, CancellationToken ct = default);
+        /// <summary>Xác nhận OTP và đổi email liên lạc của trung tâm (email đăng nhập giữ nguyên).</summary>
+        Task<AuthResult> ConfirmCenterEmailChangeAsync(Guid userId, ConfirmContactChangeDto request, CancellationToken ct = default);
     }
 
     public class AuthService(
@@ -42,7 +59,8 @@ namespace StudyAbroad.Application.Auth
         ITokenService tokens,
         IEmailSender emailSender,
         IParentLinkRepository parentLinks,
-        IAuditLogRepository auditLogs) : IAuthService
+        IAuditLogRepository auditLogs,
+        IStudyCenterRepository? studyCenters = null) : IAuthService
     {
         public const int MinPasswordLength = 8;
         public const int MaxPasswordLength = 100;
@@ -292,25 +310,10 @@ namespace StudyAbroad.Application.Auth
             }
 
             // 1. Tạm khóa do sai 5 lần: kiểm TRƯỚC mật khẩu để tài khoản đang khóa không thành nơi dò mật khẩu.
-            //    Tự động mở khóa sau 15 phút.
+            //    Yêu cầu Quản trị viên mở khóa (không tự động mở khóa).
             if (user.Status == UserStatuses.TempLocked)
             {
-                if (user.LockoutEnd.HasValue && user.LockoutEnd.Value <= DateTime.UtcNow)
-                {
-                    user.Status = user.Role == UserRoles.Center ? UserStatuses.Pending : UserStatuses.Active;
-                    user.FailedLoginAttempts = 0;
-                    user.LockoutEnd = null;
-                    if (!await TryUpdateUserAsync(user, ct))
-                        return AuthResult.Fail(AuthError.InvalidCredentials, InvalidCredentialsMessage);
-                }
-                else
-                {
-                    var remainingMinutes = user.LockoutEnd.HasValue
-                        ? Math.Max(1, (int)Math.Ceiling((user.LockoutEnd.Value - DateTime.UtcNow).TotalMinutes))
-                        : TempLockoutMinutes;
-
-                    return AuthResult.Fail(AuthError.TempLocked, $"Tài khoản tạm thời bị khóa do nhập sai mật khẩu {MaxFailedLoginAttempts} lần liên tiếp. Hệ thống sẽ tự động mở khóa sau {remainingMinutes} phút.");
-                }
+                return AuthResult.Fail(AuthError.TempLocked, $"Tài khoản đã bị khóa do nhập sai mật khẩu {MaxFailedLoginAttempts} lần liên tiếp. Vui lòng liên hệ Quản trị viên để được mở khóa tài khoản.");
             }
 
             // 2. Bị Admin khóa / chưa kích hoạt email: chỉ báo trạng thái khi mật khẩu đúng (chống dò tài khoản).
@@ -335,13 +338,13 @@ namespace StudyAbroad.Application.Auth
             {
                 if (user.FailedLoginAttempts >= MaxFailedLoginAttempts)
                 {
-                    // Đạt 5 lần sai -> Tạm khóa 15 phút và gửi email thông báo (email chỉ để thông báo)
+                    // Đạt 5 lần sai -> Khóa tài khoản và gửi email thông báo (cần Admin mở khóa)
                     user.Status = UserStatuses.TempLocked;
-                    user.LockoutEnd = DateTime.UtcNow.AddMinutes(TempLockoutMinutes);
+                    user.LockoutEnd = null;
                     if (await TryUpdateUserAsync(user, ct))
-                        await emailSender.SendAccountTempLockedNotificationAsync(user.Email, user.FullName, TempLockoutMinutes, ct);
+                        await emailSender.SendAccountTempLockedNotificationAsync(user.Email, user.FullName, 0, ct);
 
-                    return AuthResult.Fail(AuthError.TempLocked, $"Tài khoản đã bị tạm khóa do nhập sai mật khẩu {MaxFailedLoginAttempts} lần liên tiếp. Hệ thống sẽ tự động mở khóa sau {TempLockoutMinutes} phút.");
+                    return AuthResult.Fail(AuthError.TempLocked, $"Tài khoản đã bị khóa do nhập sai mật khẩu {MaxFailedLoginAttempts} lần liên tiếp. Vui lòng liên hệ Quản trị viên để được mở khóa tài khoản.");
                 }
 
                 return AuthResult.Fail(AuthError.InvalidCredentials, InvalidCredentialsMessage);
@@ -378,7 +381,7 @@ namespace StudyAbroad.Application.Auth
 
             // Anti-enumeration: Luôn trả về thông báo thành công dù email có tồn tại hay không.
             // Mail đi qua hàng đợi nền nên thời gian phản hồi cũng như nhau.
-            if (user != null && user.Status != UserStatuses.Locked &&
+            if (user != null && user.Status != UserStatuses.Locked && user.Status != UserStatuses.TempLocked &&
                 await CanSendOtpAsync(user.Id, OtpPurposes.ResetPassword, ct))
             {
                 var otpCode = await IssueOtpAsync(user.Id, OtpPurposes.ResetPassword, ct);
@@ -396,7 +399,7 @@ namespace StudyAbroad.Application.Auth
 
             var email = NormalizeEmail(request.Email);
             var user = await users.GetUserByEmail(email, ct);
-            if (user == null || user.Status == UserStatuses.Locked)
+            if (user == null || user.Status == UserStatuses.Locked || user.Status == UserStatuses.TempLocked)
                 return AuthResult.Fail(AuthError.OtpInvalid, OtpFailedMessage);
 
             if (!await TryConsumeOtpAsync(user.Id, OtpPurposes.ResetPassword, request.OtpCode, ct))
@@ -404,11 +407,6 @@ namespace StudyAbroad.Application.Auth
 
             user.PasswordHash = hasher.Hash(request.NewPassword);
             user.FailedLoginAttempts = 0;
-            if (user.Status == UserStatuses.TempLocked)
-            {
-                user.Status = user.Role == UserRoles.Center ? UserStatuses.Pending : UserStatuses.Active;
-                user.LockoutEnd = null;
-            }
 
             await users.UpdateUserAsync(user, ct);
 
@@ -449,14 +447,14 @@ namespace StudyAbroad.Application.Auth
                 if (user.FailedLoginAttempts >= MaxFailedLoginAttempts)
                 {
                     user.Status = UserStatuses.TempLocked;
-                    user.LockoutEnd = DateTime.UtcNow.AddMinutes(TempLockoutMinutes);
+                    user.LockoutEnd = null;
                     if (await TryUpdateUserAsync(user, ct))
                     {
                         await users.RevokeAllSessionsAsync(user.Id, ct);
-                        await emailSender.SendAccountTempLockedNotificationAsync(user.Email, user.FullName, TempLockoutMinutes, ct);
+                        await emailSender.SendAccountTempLockedNotificationAsync(user.Email, user.FullName, 0, ct);
                     }
 
-                    return AuthResult.Fail(AuthError.TempLocked, $"Tài khoản đã bị tạm khóa do nhập sai mật khẩu {MaxFailedLoginAttempts} lần liên tiếp. Hệ thống sẽ tự động mở khóa sau {TempLockoutMinutes} phút.");
+                    return AuthResult.Fail(AuthError.TempLocked, $"Tài khoản đã bị khóa do nhập sai mật khẩu hiện tại {MaxFailedLoginAttempts} lần liên tiếp. Vui lòng liên hệ Quản trị viên để được mở khóa tài khoản.");
                 }
 
                 return AuthResult.Fail(AuthError.InvalidCredentials, WrongCurrentPasswordMessage);
@@ -683,11 +681,23 @@ namespace StudyAbroad.Application.Auth
         private async Task<UserDto> ToDtoAsync(User user, CancellationToken ct)
         {
             var access = await AgeAccess.EvaluateAsync(user, parentLinks, DateTime.UtcNow, ct);
+            string? lockReason = null;
+            if (user.Status == UserStatuses.Locked)
+            {
+                lockReason = await auditLogs.GetLatestLockReasonAsync(user.Id, ct) ?? "Tài khoản bị khóa bởi quản trị viên do vi phạm quy định sử dụng.";
+            }
+            else if (user.Status == UserStatuses.TempLocked)
+            {
+                lockReason = "Nhập sai mật khẩu 5 lần liên tiếp. Tài khoản bị tạm khóa bảo vệ trong 15 phút.";
+            }
+
             return ToDto(user) with
             {
                 AgeGroup = access.AgeGroup,
                 ParentConsentStatus = access.ParentConsentStatus,
                 BlockedFeatures = access.BlockedFeatures,
+                LockReason = lockReason,
+                LockoutEnd = user.LockoutEnd,
             };
         }
 
@@ -726,8 +736,23 @@ namespace StudyAbroad.Application.Auth
             };
 
             var page = await users.GetAdminUserAccountListAsync(normalized, ct);
+            var dtos = new List<UserDto>(page.Items.Count);
+            foreach (var item in page.Items)
+            {
+                string? lockReason = null;
+                if (item.Status == UserStatuses.Locked)
+                {
+                    lockReason = await auditLogs.GetLatestLockReasonAsync(item.Id, ct) ?? "Tài khoản bị khóa bởi quản trị viên do vi phạm quy định sử dụng.";
+                }
+                else if (item.Status == UserStatuses.TempLocked)
+                {
+                    lockReason = "Nhập sai mật khẩu 5 lần liên tiếp. Tài khoản bị tạm khóa bảo vệ trong 15 phút.";
+                }
+                dtos.Add(ToDto(item) with { LockReason = lockReason, LockoutEnd = item.LockoutEnd });
+            }
+
             return new PagedResult<UserDto>(
-                page.Items.Select(ToDto).ToList(),
+                dtos,
                 page.Page,
                 page.PageSize,
                 page.TotalCount);
@@ -784,6 +809,59 @@ namespace StudyAbroad.Application.Auth
             return AuthResult.Ok(ToDto(user), "Đã tạo tài khoản moderator.");
         }
 
+        /// <summary>[Q11 / UC-71 Phụ trợ] Tạo tài khoản người dùng cho Trung tâm tư vấn (role center) — trạng thái active, không qua OTP đăng ký công khai.</summary>
+        public async Task<AuthResult> CreateCenterAccountAsync(CreateCenterAccountRequest request, CancellationToken ct = default)
+        {
+            var email = NormalizeEmail(request.Email);
+            var fullName = string.IsNullOrWhiteSpace(request.FullName)
+                ? (email.Contains('@') ? email.Split('@')[0] : "Người dùng trung tâm")
+                : request.FullName.Trim();
+            var rawPhone = request.Phone?.Trim();
+            string? normalizedPhone = null;
+
+            if (string.IsNullOrEmpty(email) || email.Length > MaxEmailLength || !IsValidEmail(email))
+                return AuthResult.Fail(AuthError.Validation, $"Email không hợp lệ hoặc vượt quá {MaxEmailLength} ký tự.");
+
+            var passwordError = ValidatePassword(request.Password, "Mật khẩu");
+            if (passwordError != null)
+                return AuthResult.Fail(AuthError.Validation, passwordError);
+
+            if (fullName.Length > MaxFullNameLength)
+                return AuthResult.Fail(AuthError.Validation, $"Họ và tên không được vượt quá {MaxFullNameLength} ký tự.");
+
+            if (!string.IsNullOrEmpty(rawPhone))
+            {
+                if (rawPhone.Length > MaxRawPhoneLength)
+                    return AuthResult.Fail(AuthError.Validation, $"Số điện thoại không được vượt quá {MaxRawPhoneLength} ký tự.");
+
+                if (!TryValidateAndNormalizeVietnamesePhone(rawPhone, out var cleanPhone))
+                    return AuthResult.Fail(AuthError.Validation, "Số điện thoại không đúng định dạng Việt Nam (ví dụ: 0912345678 hoặc +84912345678).");
+
+                normalizedPhone = cleanPhone;
+            }
+
+            if (await users.EmailExistAsync(email, ct))
+                return AuthResult.Fail(AuthError.Validation, "Email đã được sử dụng.");
+
+            if (!string.IsNullOrEmpty(normalizedPhone) && await users.PhoneExistAsync(normalizedPhone, ct))
+                return AuthResult.Fail(AuthError.Validation, "Số điện thoại đã được sử dụng.");
+
+            var user = new User
+            {
+                Email = email,
+                PasswordHash = hasher.Hash(request.Password),
+                FullName = fullName,
+                Role = UserRoles.Center,
+                Status = UserStatuses.Active,
+                Phone = normalizedPhone,
+                FailedLoginAttempts = 0,
+                LockoutEnd = null,
+            };
+            await users.AddAsync(user, ct);
+
+            return AuthResult.Ok(ToDto(user), "Đã tạo tài khoản trung tâm tư vấn.");
+        }
+
         /// <summary>[UC-61] Khóa vĩnh viễn tài khoản (không áp dụng admin).</summary>
         public async Task<AuthResult> LockUserAccountAsync(
             Guid targetUserId,
@@ -806,6 +884,16 @@ namespace StudyAbroad.Application.Auth
 
             if (user.Role == UserRoles.Admin)
                 return AuthResult.Fail(AuthError.Validation, "Không thể khóa tài khoản quản trị viên.");
+
+            var actor = await users.GetUserById(actorAdminId, ct);
+            if (actor is not null && actor.Role == UserRoles.Moderator)
+            {
+                if (user.Role == UserRoles.Moderator)
+                    return AuthResult.Fail(AuthError.Validation, "Kiểm duyệt viên không có quyền khóa tài khoản Kiểm duyệt viên khác.");
+
+                if (user.Role != UserRoles.Center && user.Role != UserRoles.Student && user.Role != UserRoles.Parent)
+                    return AuthResult.Fail(AuthError.Validation, "Kiểm duyệt viên chỉ có quyền khóa tài khoản người dùng và trung tâm.");
+            }
 
             if (!AdminLockableRoles.Contains(user.Role))
                 return AuthResult.Fail(AuthError.Validation, "Vai trò này không được khóa qua chức năng này.");
@@ -835,7 +923,410 @@ namespace StudyAbroad.Application.Auth
                 DetailJson = detailJson,
             }, ct);
 
-            return AuthResult.Ok(ToDto(user), "Đã khóa tài khoản.");
+            // [USAS-362] Gửi email thông báo tài khoản bị khóa kèm lý do
+            _ = emailSender.SendAccountLockedEmailAsync(user.Email, user.FullName, reason, ct);
+
+            return AuthResult.Ok(ToDto(user) with { LockReason = reason }, "Đã khóa tài khoản.");
+        }
+
+        /// <summary>[UC-62] Mở khóa tài khoản kèm lý do (chỉ tài khoản đang bị locked hoặc temp_locked).</summary>
+        public async Task<AuthResult> UnlockUserAccountAsync(
+            Guid targetUserId,
+            UnlockUserAccountRequest request,
+            Guid actorAdminId,
+            CancellationToken ct = default)
+        {
+            var reason = request.Reason?.Trim() ?? string.Empty;
+            if (reason.Length == 0)
+                return AuthResult.Fail(AuthError.Validation, "Lý do mở khóa không được để trống.");
+            if (reason.Length > MaxLockReasonLength)
+                return AuthResult.Fail(AuthError.Validation, $"Lý do mở khóa tối đa {MaxLockReasonLength} ký tự.");
+
+            var user = await users.GetUserById(targetUserId, ct);
+            if (user is null)
+                return AuthResult.Fail(AuthError.Validation, "Không tìm thấy tài khoản.");
+
+            if (user.Role == UserRoles.Admin)
+                return AuthResult.Fail(AuthError.Validation, "Không thể thao tác trên tài khoản quản trị viên.");
+
+            var actor = await users.GetUserById(actorAdminId, ct);
+            if (actor is not null && actor.Role == UserRoles.Moderator)
+            {
+                if (user.Role == UserRoles.Moderator)
+                    return AuthResult.Fail(AuthError.Validation, "Kiểm duyệt viên không có quyền mở khóa tài khoản Kiểm duyệt viên khác.");
+
+                if (user.Role != UserRoles.Center && user.Role != UserRoles.Student && user.Role != UserRoles.Parent)
+                    return AuthResult.Fail(AuthError.Validation, "Kiểm duyệt viên chỉ có quyền mở khóa tài khoản người dùng và trung tâm.");
+            }
+
+            if (user.Status != UserStatuses.Locked && user.Status != UserStatuses.TempLocked)
+                return AuthResult.Fail(AuthError.Validation, "Tài khoản không ở trạng thái bị khóa.");
+
+            var previousStatus = user.Status;
+            user.Status = UserStatuses.Active;
+            user.LockoutEnd = null;
+            user.FailedLoginAttempts = 0;
+            await users.UpdateUserAsync(user, ct);
+
+            var detailJson = JsonSerializer.Serialize(new
+            {
+                reason,
+                previousStatus,
+                targetEmail = user.Email,
+            });
+            await auditLogs.AddAsync(new AuditLog
+            {
+                ActorUserId = actorAdminId,
+                Action = "user.unlock",
+                EntityType = "user",
+                EntityId = user.Id.ToString(),
+                DetailJson = detailJson,
+            }, ct);
+
+            // [USAS-362] Gửi email thông báo tài khoản đã được mở khóa kèm ghi chú
+            _ = emailSender.SendAccountUnlockedEmailAsync(user.Email, user.FullName, reason, ct);
+
+            return AuthResult.Ok(ToDto(user), "Đã mở khóa tài khoản.");
+        }
+
+        /// <summary>
+        /// [UC-80] Xóa tài khoản và ẩn danh hóa dữ liệu (Right to be Forgotten - PDPA 2025).
+        /// Áp dụng cơ chế Anonymization thay vì Hard Delete để bảo toàn tính toàn vẹn CSDL và khóa ngoại.
+        /// </summary>
+        public async Task<AuthResult> AnonymizeUserAccountAsync(
+            Guid userId,
+            string? ipAddress = null,
+            string? userAgent = null,
+            CancellationToken ct = default)
+        {
+            var user = await users.GetUserById(userId, ct);
+            if (user is null)
+                return AuthResult.Fail(AuthError.Validation, "Không tìm thấy tài khoản người dùng.");
+
+            if (user.Status == UserStatuses.Deleted)
+                return AuthResult.Fail(AuthError.Validation, "Tài khoản đã được xóa trước đó.");
+
+            var originalEmail = user.Email;
+            var shortId = user.Id.ToString("N")[..8];
+
+            // 1. Ẩn danh hóa thông tin định danh cá nhân (PII)
+            user.Email = $"deleted_{shortId}_{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}@anonymized.studyabroad";
+            user.FullName = "Người dùng đã xóa";
+            user.Phone = null;
+            user.PasswordHash = string.Empty;
+            user.Status = UserStatuses.Deleted;
+            user.FailedLoginAttempts = 0;
+            user.LockoutEnd = null;
+
+            await users.UpdateUserAsync(user, ct);
+
+            // 2. Thu hồi toàn bộ phiên đăng nhập đang hoạt động
+            await users.RevokeAllSessionsAsync(user.Id, ct);
+
+            // 3. Vô hiệu hóa toàn bộ mã OTP liên quan
+            await users.InvalidateOtpsAsync(user.Id, "verify_email", ct);
+            await users.InvalidateOtpsAsync(user.Id, "reset_password", ct);
+
+            // 4. Ghi vết kiểm toán (Audit Trail) bất biến
+            var detailJson = JsonSerializer.Serialize(new
+            {
+                action = "anonymize_account",
+                userId = user.Id,
+                anonymizedAt = DateTime.UtcNow,
+                previousEmailDomain = originalEmail.Contains('@') ? originalEmail.Split('@')[1] : null
+            });
+
+            await auditLogs.AddAsync(new AuditLog
+            {
+                ActorUserId = user.Id,
+                Action = "user.delete_account",
+                EntityType = "user",
+                EntityId = user.Id.ToString(),
+                DetailJson = detailJson,
+                IpAddress = ipAddress,
+                UserAgent = userAgent
+            }, ct);
+
+            return AuthResult.Ok("Tài khoản của bạn đã được xóa và ẩn danh hóa thành công theo quy định bảo vệ dữ liệu.");
+        }
+
+        public async Task<AuthResult> RegisterCenterAsync(RegisterCenterRequest request, CancellationToken ct = default)
+        {
+            if (studyCenters is null)
+                return AuthResult.Fail(AuthError.Validation, "Dịch vụ đăng ký trung tâm tạm thời chưa sẵn sàng.");
+
+            if (!request.AgreeTerms || !request.AgreeTruthfulnessCommitment)
+                return AuthResult.Fail(AuthError.Validation, "Bạn cần đồng ý với Điều khoản sử dụng và cam kết tính trung thực của thông tin.");
+
+            if (string.IsNullOrWhiteSpace(request.Password) || request.Password != request.ConfirmPassword)
+                return AuthResult.Fail(AuthError.Validation, "Mật khẩu xác nhận không khớp.");
+
+            var email = NormalizeEmail(request.Email);
+            if (string.IsNullOrEmpty(email) || email.Length > MaxEmailLength || !IsValidEmail(email))
+                return AuthResult.Fail(AuthError.Validation, $"Email không hợp lệ hoặc vượt quá {MaxEmailLength} ký tự.");
+
+            var passwordError = ValidatePassword(request.Password, "Mật khẩu");
+            if (passwordError != null)
+                return AuthResult.Fail(AuthError.Validation, passwordError);
+
+            var centerName = request.CenterName?.Trim() ?? string.Empty;
+            if (string.IsNullOrEmpty(centerName) || centerName.Length > 200)
+                return AuthResult.Fail(AuthError.Validation, "Tên trung tâm không được để trống và tối đa 200 ký tự.");
+
+            var registrantName = request.RegistrantName?.Trim() ?? string.Empty;
+            if (string.IsNullOrEmpty(registrantName) || registrantName.Length > MaxFullNameLength)
+                return AuthResult.Fail(AuthError.Validation, $"Họ tên người đăng ký không được để trống và tối đa {MaxFullNameLength} ký tự.");
+
+            var rawPhone = request.Phone?.Trim();
+            if (string.IsNullOrEmpty(rawPhone))
+                return AuthResult.Fail(AuthError.Validation, "Số điện thoại không được để trống.");
+
+            if (!TryValidateAndNormalizeVietnamesePhone(rawPhone, out var normalizedPhone))
+                return AuthResult.Fail(AuthError.Validation, "Số điện thoại không đúng định dạng Việt Nam (ví dụ: 0912345678 hoặc +84912345678).");
+
+            var existing = await users.GetUserByEmail(email, ct);
+            if (existing != null)
+            {
+                if (existing.Status == UserStatuses.Unverified)
+                    return AuthResult.Fail(AuthError.Validation, "Email này đã được đăng ký nhưng chưa xác thực. Vui lòng kiểm tra hộp thư hoặc yêu cầu gửi lại mã OTP.");
+                return AuthResult.Fail(AuthError.Validation, "Email này đã được sử dụng.");
+            }
+
+            if (await users.PhoneExistAsync(normalizedPhone, ct))
+                return AuthResult.Fail(AuthError.Validation, "Số điện thoại này đã được sử dụng.");
+
+            string code;
+            do
+            {
+                code = $"CTR_{Guid.NewGuid().ToString("N")[..6].ToUpperInvariant()}";
+            } while (await studyCenters.ExistsByCodeAsync(code, ct));
+
+            var user = new User
+            {
+                Email = email,
+                PasswordHash = hasher.Hash(request.Password),
+                FullName = registrantName,
+                Role = UserRoles.Center,
+                Status = UserStatuses.Unverified,
+                Phone = normalizedPhone,
+                FailedLoginAttempts = 0,
+                LockoutEnd = null
+            };
+            await users.AddAsync(user, ct);
+
+            var center = new StudyCenter
+            {
+                Code = code,
+                Name = centerName,
+                Email = email,
+                Phone = normalizedPhone,
+                OwnerUserId = user.Id,
+                VerificationStatus = CenterVerificationStatuses.Unverified,
+                TermsAgreedAt = DateTime.UtcNow,
+                CommitmentAgreedAt = DateTime.UtcNow,
+                RegistrantName = registrantName,
+                RegistrantPosition = string.IsNullOrWhiteSpace(request.RegistrantPosition) ? null : request.RegistrantPosition.Trim(),
+                IsActive = true
+            };
+            await studyCenters.AddAsync(center, ct);
+
+            var otpCode = GenerateOtpCode();
+            var otp = new OtpToken
+            {
+                UserId = user.Id,
+                Purpose = OtpPurposes.VerifyEmail,
+                CodeHash = HashOtp(otpCode),
+                ExpiresAt = DateTime.UtcNow.AddMinutes(OtpExpiryMinutes),
+                Attempts = 0
+            };
+            await users.SaveOtpAsync(otp, ct);
+
+            await emailSender.SendVerificationEmailAsync(user.Email, user.FullName, otpCode, OtpExpiryMinutes, ct);
+
+            await auditLogs.AddAsync(new AuditLog
+            {
+                ActorUserId = user.Id,
+                Action = "center.register",
+                EntityType = "StudyCenter",
+                EntityId = center.Id.ToString(),
+                DetailJson = JsonSerializer.Serialize(new { email, centerName, registrantName, code })
+            }, ct);
+
+            return AuthResult.Ok($"Đăng ký thành công. Mã xác thực OTP đã được gửi đến email {email} (hiệu lực {OtpExpiryMinutes} phút).");
+        }
+
+        public async Task<AuthResult> VerifyCenterEmailAsync(VerifyCenterEmailRequest request, CancellationToken ct = default)
+        {
+            var email = NormalizeEmail(request.Email);
+            var user = await users.GetUserByEmail(email, ct);
+            if (user == null || user.Status != UserStatuses.Unverified)
+                return AuthResult.Fail(AuthError.OtpInvalid, OtpFailedMessage);
+
+            if (!await TryConsumeOtpAsync(user.Id, OtpPurposes.VerifyEmail, request.Code, ct))
+                return AuthResult.Fail(AuthError.OtpInvalid, OtpFailedMessage);
+
+            user.Status = UserStatuses.Active;
+            user.FailedLoginAttempts = 0;
+            user.LockoutEnd = null;
+            await users.UpdateUserAsync(user, ct);
+
+            if (studyCenters != null)
+            {
+                var center = await studyCenters.GetByOwnerOrEmailAsync(user.Id, user.Email, ct);
+                if (center != null)
+                {
+                    center.EmailVerifiedAt = DateTime.UtcNow;
+                    await studyCenters.UpdateAsync(center, ct);
+                }
+            }
+
+            await auditLogs.AddAsync(new AuditLog
+            {
+                ActorUserId = user.Id,
+                Action = "center.email_verified",
+                EntityType = "User",
+                EntityId = user.Id.ToString(),
+                DetailJson = JsonSerializer.Serialize(new { email = user.Email })
+            }, ct);
+
+            var (token, expiresAt) = tokens.GenerateToken(user);
+            var tokenHash = tokens.HashToken(token);
+            await users.CreateSessionAsync(new UserSession
+            {
+                UserId = user.Id,
+                TokenHash = tokenHash,
+                ExpiresAt = expiresAt,
+                IsRevoked = false
+            }, ct);
+
+            return AuthResult.Ok(new AuthResponse(token, expiresAt, await ToDtoAsync(user, ct)));
+        }
+
+        // ----- Đổi số điện thoại / email liên lạc của trung tâm (xác thực OTP tại giá trị mới) -----
+
+        /// <summary>Gắn mã OTP với giá trị mới: mã gửi tới số A không dùng được để xác nhận số B.</summary>
+        private static string BindOtp(string code, string target) => $"{code.Trim()}|{target}";
+
+        public async Task<AuthResult> ChangeCenterPhoneAsync(Guid userId, string newPhone, CancellationToken ct = default)
+        {
+            if (studyCenters is null)
+                return AuthResult.Fail(AuthError.Validation, "Dịch vụ trung tâm tạm thời chưa sẵn sàng.");
+
+            if (!TryValidateAndNormalizeVietnamesePhone(newPhone, out var normalized))
+                return AuthResult.Fail(AuthError.Validation, "Số điện thoại không đúng định dạng Việt Nam (ví dụ: 0912345678 hoặc +84912345678).");
+
+            var center = await studyCenters.GetByOwnerOrEmailAsync(userId, null, ct);
+            var user = await users.GetUserById(userId, ct);
+            if (center is null || user is null)
+                return AuthResult.Fail(AuthError.Validation, "Không tìm thấy thông tin trung tâm cho tài khoản này.");
+
+            if (normalized == center.Phone)
+                return AuthResult.Fail(AuthError.Validation, "Đây là số điện thoại hiện tại của trung tâm.");
+
+            if (await users.PhoneExistAsync(normalized, ct))
+                return AuthResult.Fail(AuthError.Validation, "Số điện thoại này đã được sử dụng.");
+
+            var oldPhone = center.Phone;
+            center.Phone = normalized;
+            user.Phone = normalized;
+            await studyCenters.UpdateAsync(center, ct);
+            await users.UpdateUserAsync(user, ct);
+
+            await auditLogs.AddAsync(new AuditLog
+            {
+                ActorUserId = userId,
+                Action = "center.phone_changed",
+                EntityType = "StudyCenter",
+                EntityId = center.Id.ToString(),
+                DetailJson = JsonSerializer.Serialize(new { oldPhone, newPhone = normalized })
+            }, ct);
+
+            return AuthResult.Ok("Đã cập nhật số điện thoại liên lạc.");
+        }
+
+        public async Task<AuthResult> RequestCenterEmailChangeAsync(Guid userId, RequestContactChangeDto request, CancellationToken ct = default)
+        {
+            if (studyCenters is null)
+                return AuthResult.Fail(AuthError.Validation, "Dịch vụ trung tâm tạm thời chưa sẵn sàng.");
+
+            var newEmail = NormalizeEmail(request.NewValue);
+            if (string.IsNullOrWhiteSpace(newEmail) || !new System.ComponentModel.DataAnnotations.EmailAddressAttribute().IsValid(newEmail))
+                return AuthResult.Fail(AuthError.Validation, "Email không hợp lệ.");
+
+            var center = await studyCenters.GetByOwnerOrEmailAsync(userId, null, ct);
+            var user = await users.GetUserById(userId, ct);
+            if (center is null || user is null)
+                return AuthResult.Fail(AuthError.Validation, "Không tìm thấy thông tin trung tâm cho tài khoản này.");
+
+            if (string.Equals(newEmail, center.Email, StringComparison.OrdinalIgnoreCase))
+                return AuthResult.Fail(AuthError.Validation, "Đây là email liên lạc hiện tại của trung tâm.");
+
+            var other = await users.GetUserByEmail(newEmail, ct);
+            if (other is not null && other.Id != userId)
+                return AuthResult.Fail(AuthError.Validation, "Email này đã được sử dụng bởi tài khoản khác.");
+
+            if (!await CanSendOtpAsync(userId, OtpPurposes.ChangeEmail, ct))
+                return AuthResult.Fail(AuthError.Validation, "Bạn yêu cầu mã quá nhanh hoặc quá nhiều lần. Vui lòng thử lại sau.");
+
+            await users.InvalidateOtpsAsync(userId, OtpPurposes.ChangeEmail, ct);
+            var otpCode = GenerateOtpCode();
+            await users.SaveOtpAsync(new OtpToken
+            {
+                UserId = userId,
+                Purpose = OtpPurposes.ChangeEmail,
+                CodeHash = HashOtp(BindOtp(otpCode, newEmail)),
+                ExpiresAt = DateTime.UtcNow.AddMinutes(OtpExpiryMinutes),
+                Attempts = 0
+            }, ct);
+
+            await emailSender.SendVerificationEmailAsync(newEmail, user.FullName, otpCode, OtpExpiryMinutes, ct);
+
+            await auditLogs.AddAsync(new AuditLog
+            {
+                ActorUserId = userId,
+                Action = "center.email_change_requested",
+                EntityType = "StudyCenter",
+                EntityId = center.Id.ToString(),
+                DetailJson = JsonSerializer.Serialize(new { newEmail })
+            }, ct);
+
+            return AuthResult.Ok($"Mã OTP đã được gửi đến {newEmail} (hiệu lực {OtpExpiryMinutes} phút).");
+        }
+
+        public async Task<AuthResult> ConfirmCenterEmailChangeAsync(Guid userId, ConfirmContactChangeDto request, CancellationToken ct = default)
+        {
+            if (studyCenters is null)
+                return AuthResult.Fail(AuthError.Validation, "Dịch vụ trung tâm tạm thời chưa sẵn sàng.");
+
+            var newEmail = NormalizeEmail(request.NewValue);
+            if (string.IsNullOrWhiteSpace(newEmail))
+                return AuthResult.Fail(AuthError.Validation, "Email không hợp lệ.");
+
+            if (string.IsNullOrWhiteSpace(request.Code))
+                return AuthResult.Fail(AuthError.Validation, "Vui lòng nhập mã OTP.");
+
+            if (!await TryConsumeOtpAsync(userId, OtpPurposes.ChangeEmail, BindOtp(request.Code, newEmail), ct))
+                return AuthResult.Fail(AuthError.OtpInvalid, "Mã OTP không đúng hoặc đã hết hạn.");
+
+            var center = await studyCenters.GetByOwnerOrEmailAsync(userId, null, ct);
+            if (center is null)
+                return AuthResult.Fail(AuthError.Validation, "Không tìm thấy thông tin trung tâm cho tài khoản này.");
+
+            var oldEmail = center.Email;
+            center.Email = newEmail;
+            center.EmailVerifiedAt = DateTime.UtcNow;
+            await studyCenters.UpdateAsync(center, ct);
+
+            await auditLogs.AddAsync(new AuditLog
+            {
+                ActorUserId = userId,
+                Action = "center.email_changed",
+                EntityType = "StudyCenter",
+                EntityId = center.Id.ToString(),
+                DetailJson = JsonSerializer.Serialize(new { oldEmail, newEmail })
+            }, ct);
+
+            return AuthResult.Ok("Đã đổi và xác thực email liên lạc mới. Email đăng nhập của bạn không thay đổi.");
         }
     }
 }

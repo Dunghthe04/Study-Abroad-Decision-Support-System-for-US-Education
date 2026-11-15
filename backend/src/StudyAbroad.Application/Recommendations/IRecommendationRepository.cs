@@ -17,5 +17,8 @@ namespace StudyAbroad.Application.Recommendations
         //Tìm trường theo code, cấp độ
         Task<RecommendSchoolInput?> FindSchoolAsync(string code, string studyLevel, CancellationToken ct = default);
 
+        // Hạng của một trường trong mọi bảng xếp hạng (không chỉ các bảng chung dùng cho điểm chất lượng), bảng chung đứng trước
+        Task<IReadOnlyList<SchoolRanking>> ListSchoolRankingsAsync(Guid universityId, CancellationToken ct = default);
+
     }
 }

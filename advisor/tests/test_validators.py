@@ -181,6 +181,7 @@ def test_plan_month_in_past_ask_again():
         (35_000, "tier_35k_50k"),
         (69_999, "tier_50k_70k"),
         (70_000, "tier_above_70k"),
+        (500_000, "tier_above_70k"),
     ],
 )
 def test_budget_tier_edges(usd, tier):

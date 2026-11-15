@@ -292,7 +292,7 @@ public class ParentLinkService(IParentLinkRepository links, IUserRepository user
 
     private static ParentLinkDto ToDto(ParentStudentLink link, User? parent, User? student, bool canRevoke) =>
         new(link.Id, link.Status, link.ParentEmail, parent?.FullName, student?.FullName ?? string.Empty,
-            student == null ? null : AgeOf(student), link.AcceptedAt, link.LastInviteSentAt, link.TokenExpiresAt, canRevoke);
+            student == null ? null : AgeOf(student), link.StudentUserId, link.AcceptedAt, link.LastInviteSentAt, link.TokenExpiresAt, canRevoke);
 
     private static ParentLinkResult<ParentLinkDto> Fail(ParentLinkError error, string message) =>
         ParentLinkResult<ParentLinkDto>.Fail(error, message);

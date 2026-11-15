@@ -78,6 +78,30 @@ def test_optional_columns_are_found_wherever_they_are_added():
     assert columns["question"] == 6  # vị trí các cột cũ lệch theo nhưng vẫn đúng tên
 
 
+def test_english_headers_of_the_slim_workbook_are_recognised():
+    header = ("id", "label", "level", "question", "answer", "source")
+
+    columns = find_columns(header)
+
+    assert columns == {"stt": 0, "label": 1, "level": 2, "question": 3, "result": 4, "source": 5}
+
+
+def test_english_optional_columns_are_recognised():
+    columns = find_columns(
+        ("id", "code", "label", "level", "question", "answer", "source", "scope", "status")
+    )
+
+    assert columns["code"] == 1 and columns["scope"] == 7 and columns["status"] == 8
+
+
+def test_english_and_vietnamese_headers_give_the_same_record():
+    english = ("id", "label", "level", "question", "answer", "source")
+    row_vi = sheet_row(5)
+    row_en = (row_vi[0], row_vi[1], row_vi[2], row_vi[4], row_vi[7], row_vi[8])
+
+    assert to_record(row_en, find_columns(english)) == to_record(row_vi, find_columns(HEADER))
+
+
 def test_missing_required_column_is_reported_by_name():
     header = tuple(h for h in HEADER if "Kết quả" not in h)
 
@@ -171,7 +195,7 @@ def test_to_record_builds_a_complete_record_and_flags_time_sensitive_money():
 
     assert record["code"] == "KB-026"  # chưa có cột Mã thì sinh từ STT
     assert record["question"] == "Phí SEVIS bao nhiêu?"  # khoảng trắng thừa được gọn lại
-    assert record["content"] == "Phí SEVIS là $350."
+    assert record["answer"] == "Phí SEVIS là $350."
     assert record["quote"] == "travel.state.gov"
     assert record["scope"] == "system_advisory" and record["status"] == "draft"
     assert record["review_due_at"] == "2027-03-26"  # 180 ngày sau ngày thu vì có số tiền
@@ -259,17 +283,16 @@ def test_there_are_443_records_with_unique_codes_and_questions(records):
 def test_every_record_has_the_text_needed_to_search_and_answer(records):
     for r in records:
         assert r["question"].strip(), r["code"]
-        assert r["content"].strip(), r["code"]
+        assert r["answer"].strip(), r["code"]
         assert r["quote"], f"{r['code']} thiếu nguồn kiểm chứng"
-        assert "Nguồn kiểm chứng" not in r["content"], r[
+        assert "Nguồn kiểm chứng" not in r["answer"], r[
             "code"
         ]  # nguồn đã tách ra, không lặp trong câu trả lời
-        assert len(r["title"]) <= 300, r["code"]
 
 
 def test_no_stray_quote_marks_around_the_text(records):
     for r in records:
-        for field in ("question", "content"):
+        for field in ("question", "answer"):
             assert r[field][0] not in '"“' and r[field][-1] not in '"”', (r["code"], field)
 
 
@@ -297,7 +320,7 @@ def test_dates_are_valid_and_review_dates_come_after_collection(records):
 
 def test_answers_with_money_have_a_review_date_and_others_do_not(records):
     for r in records:
-        has_money = "$" in r["content"] or "USD" in r["content"]
+        has_money = "$" in r["answer"] or "USD" in r["answer"]
         assert bool(r["review_due_at"]) == has_money, r["code"]
 
 

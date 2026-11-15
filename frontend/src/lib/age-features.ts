@@ -30,7 +30,7 @@ export function useAgeBlock(feature: AgeFeature): AgeBlockInfo | null {
 
   const needParentConsent = PARENT_CONSENT_UNLOCKS[feature];
   const message = !needParentConsent
-    ? "Chức năng này chỉ dành cho người từ 18 tuổi."
+    ? "Chức năng này dành cho học sinh từ 16 tuổi. Phụ huynh có thể gửi thay bằng tài khoản phụ huynh."
     : user.parentConsentStatus === "pending"
       ? "Đang chờ phụ huynh xác nhận đồng ý qua email. Học sinh dưới 16 tuổi cần phụ huynh đồng ý trước khi hệ thống lưu và phân tích hồ sơ."
       : "Học sinh dưới 16 tuổi cần phụ huynh xác nhận đồng ý trước khi hệ thống lưu và phân tích hồ sơ (Luật BVDLCN 91/2025, Điều 24).";

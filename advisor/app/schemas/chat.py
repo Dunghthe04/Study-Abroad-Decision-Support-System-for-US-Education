@@ -1,11 +1,13 @@
 """Khuôn dữ liệu vào/ra của luồng chat (framework v5, Phần 4). .NET gửi trạng thái, advisor trả trạng thái mới."""
 
+from datetime import date
 from typing import Any, Literal
 
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from app.core.study_levels import StudyLevel
 from app.schemas.common import CamelModel
+from app.schemas.slm import SlmY
 
 Step = Literal["B0", "B1", "B2", "B3", "B4", "B5", "B6", "END"]
 FieldStatus = Literal["confirmed", "said_in_B0", "none", "unknown", "declined"]
@@ -32,6 +34,28 @@ class ResultSchool(CamelModel):
 
 # Trạng thái code giữ giữa các lượt (fw 4.3)
 # Hệ thống lưu lại thông tin về tiến trình hội thoại để khi người dùng nhắn tin tiếp theo, AI biết mình đang làm đến đâu.
+# Ngữ cảnh hội thoại để hiểu câu hỏi tiếp (conversation_context.py). Chỉ thực thể có cấu trúc, mất khi cuộc trò chuyện mới.
+# schools: tên trường đang nói tới (như model trả; .NET khớp lại với danh sách trường); fields: mã mục vừa hỏi;
+# filters, sort: điều kiện tìm trường gần nhất (dạng model trả), để câu tiếp nối thêm điều kiện mới vào;
+# service, city: dịch vụ (mã model trả) và thành phố (tên trong DB) của lần gợi ý trung tâm gần nhất, cho câu nối tiếp về trung tâm
+class ChatContext(CamelModel):
+    schools: list[str] = []
+    fields: list[str] = []
+    filters: dict[str, Any] | None = None
+    sort: str | None = None
+    service: str | None = None
+    city: str | None = None
+
+
+# Một dòng bảng quy đổi grade_scale.10, khớp record GradeScaleRuleDto bên .NET. min_score là mốc điểm, GPA nội suy giữa
+# hai mốc kề nhau (gpa10_to_4); max_score, letter_grade không dùng
+class GradeScaleRule(CamelModel):
+    min_score: float
+    max_score: float | None = None
+    gpa4: float
+    letter_grade: str | None = None
+
+
 class ChatState(CamelModel):
     current_step: Step = "B0"
     need: str | None = None
@@ -41,11 +65,33 @@ class ChatState(CamelModel):
     # mã câu đang chờ học sinh trả lời, ví dụ "B2.D2"; None = không có câu nào chờ
     question_id: str | None = None
     asked: dict[str, int] = {}  # mã câu hỏi → số lần đã hỏi (tối đa 2) ví dụ câu hỏi B0 hỏi tối đa 2
+    # Đang sửa hồ sơ trong chat: mã câu các mục học sinh muốn sửa còn chờ hỏi (vd ["D3", "F1"]), hỏi lần lượt,
+    # hết thì về bảng rà soát X1. [] = đang hỏi mục cuối; None = không sửa gì
+    edit_queue: list[str] | None = None
     return_to: Step | None = None  # bước dở cần quay lại sau B5, B6
     intake_mode: Literal["chat", "form"] | None = None  # học sinh chọn điền hồ sơ bằng chat hay form
+    # Hồ sơ đã có từ trước (DB, form, lần trước): chỉ hỏi mục bắt buộc còn thiếu của việc học sinh đang muốn làm,
+    # không hỏi câu tùy chọn, xong thì hiện bảng rà soát. None = hồ sơ trống lúc bắt đầu hỏi, hỏi đủ các câu
+    required_only: list[str] | None = None
+    # Học sinh đã từng lưu hồ sơ chính thức (.NET gửi mỗi lượt). None = .NET chưa gửi, đoán theo các ô hồ sơ
+    has_committed_profile: bool | None = None
     has_results: bool = False  # đã có danh sách trường gợi ý chưa (skill_explain, skill_kich_ban cần)
     schools: list[ResultSchool] = []  # danh sách trường gợi ý gần nhất, .NET làm mới mỗi lượt khi has_results
+    # Các trường đã chấm nhưng không nằm trong khối nào đang hiện: chỉ để khớp tên khi học sinh hỏi một trường cụ thể
+    other_schools: list[ResultSchool] = []
+    # Học bạ theo năm do .NET gửi mỗi lượt cùng hồ sơ; None = nhập GPA tổng. Không nằm trong profile vì chat chỉ đọc
+    # (học bạ từng lớp chỉ nhập hoặc OCR ở form), SLM chọn skill và Qwen đọc tin không cần thấy
+    transcript: dict[str, Any] | None = None
+    # Mốc từ dữ liệu trường cùng bậc học ({"gpa4": 3.6, "english": {"ielts": 6.5, ...}}), .NET tính và gửi mỗi lượt;
+    # chỉ dùng để ghi mức GPA / tiếng Anh cho skill ho_so. None = chưa có dữ liệu trường thì chỉ ghi điểm
+    benchmarks: dict[str, Any] | None = None
+    # Bảng quy đổi điểm thang 10 sang GPA 4 (grade_scale.10 moderator sửa), .NET gửi mỗi lượt; None = không quy đổi GPA
+    grade_scale: list[GradeScaleRule] | None = None
     study_level: StudyLevel | None = None  # bậc học học sinh quan tâm (từ .NET), dùng để lọc kiến thức
+    # Câu tư vấn bị hoãn vì thiếu hồ sơ (giữ nguyên ý SLM đã tách: loại, đoạn chữ, thực thể).
+    # Học sinh xác nhận hồ sơ ở X1 thì nhánh hồ sơ lấy ra trả lời rồi xóa. Chỉ giữ câu đầu tiên
+    pending_advice: SlmY | None = None
+    context: ChatContext = ChatContext()  # trường, mục, điều kiện vừa nói: hiểu câu hỏi tiếp
 
 
 # Nguồn trích dẫn, khớp record Citation bên .NET
@@ -53,6 +99,7 @@ class Citation(CamelModel):
     title: str
     url: str | None = None
     snippet: str | None = None
+    retrieved_at: date | None = None  # ngày thu thập thông tin của nguồn (UC-37); None là kho chưa ghi ngày
 
 
 # Nút gợi ý: label là chữ trên nút, value là chữ gửi đi như tin nhắn của học sinh khi bấm
@@ -63,7 +110,7 @@ class QuickReply(CamelModel):
 
 # Công cụ nhập ngay trong chat (ô chọn ngành, bảng rà soát...); frontend vẽ theo type
 class Widget(CamelModel):
-    type: Literal["major", "review", "budget", "scholarship", "form", "select"]
+    type: Literal["major", "review", "budget", "scholarship", "form", "select", "school", "centers"]
     data: dict[str, Any] = {}
 
 
@@ -76,6 +123,70 @@ class ChatRequest(CamelModel):
     profile: dict[str, ProfileField] | None = None
     # Danh sách trường của lần gợi ý gần nhất do .NET gửi mỗi lượt; None = không gửi
     schools: list[ResultSchool] | None = None
+    # Các trường đã chấm còn lại (không hiện trong khối nào), chỉ để khớp tên; None = không gửi
+    other_schools: list[ResultSchool] | None = None
+    # Học bạ theo năm ({"years": [...]}) do .NET gửi cùng hồ sơ; None = không có (nhập GPA tổng)
+    transcript: dict[str, Any] | None = None
+    # Mốc GPA / tiếng Anh từ dữ liệu trường do .NET gửi mỗi lượt; None = không gửi (giữ mốc cũ trong state)
+    benchmarks: dict[str, Any] | None = None
+    # Bảng quy đổi điểm trong DB do .NET gửi mỗi lượt; None = không gửi (giữ bảng cũ trong state)
+    grade_scale: list[GradeScaleRule] | None = None
+    # Học sinh đã từng lưu hồ sơ chính thức chưa (.NET gửi mỗi lượt); None = không gửi (giữ giá trị cũ trong state)
+    has_committed_profile: bool | None = None
+    # Tin này do form gửi ngay sau khi lưu hồ sơ chính thức (câu gộp việc đã tích, hoặc "Tiếp tục bằng chat"):
+    # form đã là bước rà soát nên không hỏi lại bảng xác nhận X1 trong chat
+    from_form: bool = False
+
+
+# Token của MỘT lần gọi AI (Claude hoặc Ollama), số do nhà cung cấp trả về. Một lượt chat có thể gồm nhiều lần gọi
+# (nhiều ý, gọi lại khi lỗi, model dự phòng), .NET cộng lại theo lượt. Xem services/usage_meter.py
+class AiUsageCall(CamelModel):
+    source: str  # claude | ollama
+    model: str
+    purpose: str = ""  # công việc (tên skill), để báo cáo theo tính năng
+    skill_version: str = (
+        ""  # phiên bản của skill đó (dòng đầu file skill), để biết câu trả lời do bản nào tạo ra
+    )
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cached_tokens: int = 0
+    ok: bool = True
+    error: str | None = None
+    latency_ms: int = 0
+
+
+# Một ý do model đọc ra: loại, đoạn chữ học sinh viết (nguyên văn) và thực thể. Admin xem để biết model đã gán nhãn gì rồi sửa nhãn.
+# Có chữ của học sinh nên .NET chỉ lưu vào chat_messages.meta_json (bảng dữ liệu cá nhân, chỉ admin và moderator xem), không trả cho trình duyệt
+class SlmSummaryIntent(CamelModel):
+    type: str
+    span: str = ""
+    entities: dict[str, Any] = {}
+
+
+# SLM đã hiểu tin nhắn ra sao ở lượt này, để .NET đánh dấu câu chưa trả lời được (chat_messages.outcome) và admin xem chất lượng SLM.
+# Chỉ có khi lượt đi qua nhánh đọc tin (không có ở lượt nút chuyển thẳng)
+class SlmSummary(CamelModel):
+    # Kết quả NGUYÊN VĂN của model, lấy ngay sau khi model trả lời, trước các luật code đổi ý. Đây là "nhãn model gán" để admin đối chiếu và sửa.
+    # Rỗng khi bấm nút (không gọi SLM) hoặc khi model hỏng và phải dùng kết quả dự phòng (không có đầu ra thật của model)
+    model_intents: list[SlmSummaryIntent] = []
+    intents: list[
+        str
+    ] = []  # loại các ý hệ thống THỰC SỰ đã chạy, sau khi luật code hậu xử lý (collect_profile, knowledge, out_of_scope...)
+    out_of_scope: str | None = (
+        None  # loại con nếu có ý out_of_scope: exception | sensitive | greeting | farewell | ambiguous | about_system | human_handoff
+    )
+    confidence: float | None = (
+        None  # độ tin cậy 0 đến 1 của SLM; None khi không gọi SLM (bấm nút trả lời câu hồ sơ)
+    )
+    fallback: bool = (
+        False  # SLM hai lần đều sai, phải dùng kết quả dự phòng (ngay cả khi luật code sau đó cứu được câu)
+    )
+
+
+class AiUsageMixin(BaseModel):
+    """Thêm khóa aiUsage (camelCase) vào các phản hồi của /recommend, những khóa khác của chúng giữ nguyên."""
+
+    ai_usage: list[AiUsageCall] = Field(default_factory=list, alias="aiUsage")
 
 
 class ChatResponse(CamelModel):
@@ -88,7 +199,26 @@ class ChatResponse(CamelModel):
     widget: Widget | None = None  # công cụ nhập cần hiện trong chat
     profile: dict[str, ProfileField] = {}  # hồ sơ sau lượt này (điền ở việc 1.5)
     profile_changed: list[str] = []  # khóa hồ sơ đổi trong lượt này (điền ở việc 1.5)
+    # Việc học sinh đã hỏi khi đang điền hồ sơ trong chat (danh_gia, lo_trinh, goi_y_truong):
+    # frontend nhớ lại để mở form từ menu vẫn tích sẵn ô "Bạn muốn hệ thống làm gì?". Rỗng = không đổi
+    form_goals: list[str] = []
     # Việc .NET cần làm sau lượt này. "recommend" = chạy gợi ý trường (pipeline ở .NET),
-    # "explain" = viết lời tư vấn một trường (action_data["code"]), None = không có
-    action: Literal["recommend", "explain"] | None = None
+    # "explain" = viết lời tư vấn một trường (action_data["code"]),
+    # "goal_seek" = tìm mức cần đạt để vào một trường (action_data["school"]: tên trường học sinh nói, ["target"]: reach | match | safety | None),
+    # "simulate" = chạy what-if (action_data["changes"]: giá trị đã kiểm tra, ["unsupported"]: yếu tố chưa thử được),
+    # "school_info" = câu kiến thức có thể hỏi số liệu một trường: .NET thử lấy số từ cơ sở dữ liệu, không có thì giữ câu trả lời của kho kiến thức
+    #   (action_data["question"]: câu hỏi, ["school"]: tên trường SLM trích hoặc None, ["kb_answer"]: câu trả lời của kho, ["kb_found"]: kho có nguồn thật),
+    # "school_compare" = so sánh sự thật của từ hai trường (action_data["schools"]: tên như học sinh gõ, ["fields"]: mã mục, ["question"]),
+    # "school_search" = tìm trường theo điều kiện (action_data["filters"]: bộ lọc đã chuẩn hóa camelCase, ["sort"]: cách xếp, ["unresolved"]: điều chưa đọc được),
+    # None = không có
+    action: (
+        Literal[
+            "recommend", "explain", "simulate", "goal_seek", "school_info", "school_compare", "school_search"
+        ]
+        | None
+    ) = None
     action_data: dict[str, Any] = {}  # dữ liệu kèm action, ví dụ {"code": "ucla"} cho explain
+    ai_usage: list[
+        AiUsageCall
+    ] = []  # token từng lần gọi AI trong lượt này, để .NET ghi nhật ký và tính chi phí
+    slm: SlmSummary | None = None  # SLM hiểu tin nhắn ra sao; None nếu lượt không qua bước đọc tin

@@ -4,6 +4,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from app.schemas.chat import AiUsageMixin
+
 MAX_ACTIVITIES = 10
 MAX_AWARD = 10
 ROLES = [1.0, 0.8, 0.6, 0.3]
@@ -46,7 +48,7 @@ class EcActivityResult(EcActivityRead):
     q: float
 
 
-class EcResponse(BaseModel):
+class EcResponse(AiUsageMixin):
     # mảng activity AI đã đọc (role,scope,q)
     act: list[EcActivityResult]
     # tổng điểm hoạt động

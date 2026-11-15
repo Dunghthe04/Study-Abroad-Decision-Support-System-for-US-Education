@@ -593,7 +593,7 @@ export function TranscriptScoreTable({
               <TableHead>Phân nhóm</TableHead>
               <TableHead className="text-center">Điểm 10</TableHead>
               <TableHead className="text-center">Tín chỉ</TableHead>
-              <TableHead className="text-center">GPA 4.0 (WES)</TableHead>
+              <TableHead className="text-center">GPA 4.0 (tham khảo)</TableHead>
               <TableHead className="text-right">Thao tác</TableHead>
             </TableRow>
           </TableHeader>

@@ -20,13 +20,16 @@ public static class AgeFeatures
     /// <summary>Lưu hồ sơ (wizard), upload bảng điểm, gợi ý trường, chat AI (gửi dữ liệu cá nhân cho AI).</summary>
     public const string ProcessStudentData = "process_student_data";
 
-    /// <summary>Chia sẻ hồ sơ cho trung tâm (bảng leads). Chưa có API; API tạo lead phải gắn policy này.</summary>
+    /// <summary>
+    /// Gửi yêu cầu liên hệ và chia sẻ dữ liệu cho trung tâm (UC-42 đến 45).
+    /// Học sinh từ 16 tuổi; 16–17 phải tích xác nhận, phần này kiểm tra ở LeadService.
+    /// </summary>
     public const string ShareWithCenter = "share_with_center";
 
     public static readonly IReadOnlyDictionary<string, AgeRule> Rules = new Dictionary<string, AgeRule>
     {
         [ProcessStudentData] = new(MinAge: AgeGroups.ChildMaxAgeExclusive, ParentConsentUnlocks: true), // dưới 16 cần phụ huynh đồng ý
-        [ShareWithCenter] = new(MinAge: AgeGroups.AdultAge, ParentConsentUnlocks: false),                 // dưới 18 chặn hẳn
+        [ShareWithCenter] = new(MinAge: AgeGroups.ChildMaxAgeExclusive, ParentConsentUnlocks: false),     // dưới 16 chặn hẳn; phụ huynh gửi thay bằng tài khoản của mình
     };
 
     /// <summary>

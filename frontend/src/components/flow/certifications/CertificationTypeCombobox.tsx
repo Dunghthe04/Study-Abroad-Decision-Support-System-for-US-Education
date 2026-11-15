@@ -118,7 +118,7 @@ export function CertificationTypeCombobox({
                 {group.value === "custom" ? (
                   <ComboboxSeparator />
                 ) : (
-                  <ComboboxLabel className="font-semibold tracking-wide uppercase">{group.label}</ComboboxLabel>
+                  <ComboboxLabel className="font-semibold">{group.label}</ComboboxLabel>
                 )}
                 <ComboboxCollection>
                   {(item: TypeChoice) => (

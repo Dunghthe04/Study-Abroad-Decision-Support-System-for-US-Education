@@ -22,17 +22,59 @@ public class AdvisorClient(HttpClient http) : IAdvisorClient
                ?? throw new InvalidOperationException("Advisor service returned an empty response.");
     }
 
-    public Task<EcResponseDto> ReadEcAsync(EcRequestDto request, CancellationToken ct = default) =>
-        PostAsync<EcRequestDto, EcResponseDto>("api/v1/recommend/ec", request, ct);
+    // ChatAsync gửi và nhận bằng cấu hình mặc định này (camelCase, không phân biệt hoa thường); stream dùng giống hệt
+    private static readonly JsonSerializerOptions StreamJson = new(JsonSerializerDefaults.Web);
 
-    public Task<ScoreResponseDto> ScoreAsync(ScoreRequestDto request, CancellationToken ct = default) =>
-        PostAsync<ScoreRequestDto, ScoreResponseDto>("api/v1/recommend/score", request, ct);
+    public async Task<AdvisorChatResponse> ChatStreamAsync(
+        AdvisorChatRequest request, Func<AdvisorStreamEvent, Task> onEvent, CancellationToken ct = default)
+    {
+        using var message = new HttpRequestMessage(HttpMethod.Post, "api/v1/chat/stream")
+        {
+            Content = JsonContent.Create(request),
+        };
+        // ResponseHeadersRead: có dòng nào là đọc dòng đó ngay, không chờ advisor trả xong cả thân
+        using var response = await http.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, ct);
+        response.EnsureSuccessStatusCode();
 
-    public Task<PickResponseDto> PickAsync(PickRequestDto request, CancellationToken ct = default) =>
-        PostAsync<PickRequestDto, PickResponseDto>("api/v1/recommend/pick", request, ct);
+        await using var body = await response.Content.ReadAsStreamAsync(ct);
+        using var reader = new StreamReader(body);
+        AdvisorChatResponse? result = null;
+        // Mỗi dòng một JSON: progress, partial, final (đúng JSON của ChatAsync), hoặc error
+        while (await reader.ReadLineAsync(ct) is { } line)
+        {
+            if (string.IsNullOrWhiteSpace(line))
+                continue;
+            using var doc = JsonDocument.Parse(line);
+            var root = doc.RootElement;
+            switch (root.GetProperty("type").GetString())
+            {
+                case "progress":
+                    await onEvent(new AdvisorStreamEvent("progress", Answers: root.GetProperty("answers").GetInt32()));
+                    break;
+                case "partial":
+                    await onEvent(new AdvisorStreamEvent("partial", Text: root.GetProperty("text").GetString()));
+                    break;
+                case "final":
+                    result = root.GetProperty("response").Deserialize<AdvisorChatResponse>(StreamJson);
+                    break;
+                case "error":
+                    throw new HttpRequestException("Advisor báo lỗi giữa chừng khi trả lời.");
+            }
+        }
+        return result ?? throw new InvalidOperationException("Advisor stream kết thúc mà không có kết quả cuối.");
+    }
 
     public Task<ExplainResponseDto> ExplainAsync(ExplainRequestDto request, CancellationToken ct = default) =>
         PostAsync<ExplainRequestDto, ExplainResponseDto>("api/v1/recommend/explain", request, ct);
+
+    public Task<GoalNoteResponseDto> WriteGoalNoteAsync(GoalNoteRequestDto request, CancellationToken ct = default) =>
+        PostAsync<GoalNoteRequestDto, GoalNoteResponseDto>("api/v1/recommend/goal-seek", request, ct);
+
+    public Task<CompareNoteResponseDto> WriteCompareNoteAsync(CompareNoteRequestDto request, CancellationToken ct = default) =>
+        PostAsync<CompareNoteRequestDto, CompareNoteResponseDto>("api/v1/recommend/compare", request, ct);
+
+    public Task<ScenarioNoteResponseDto> WriteScenarioNoteAsync(ScenarioNoteRequestDto request, CancellationToken ct = default) =>
+        PostAsync<ScenarioNoteRequestDto, ScenarioNoteResponseDto>("api/v1/recommend/what-if", request, ct);
 
     private async Task<TResponse> PostAsync<TRequest, TResponse>(string url, TRequest request, CancellationToken ct)
     {

@@ -4,6 +4,7 @@ from app.schemas.chat import ChatState, ProfileField
 from app.services.ollama import OllamaError
 from app.services.skills.skill_lo_trinh import LoTrinhHandler, RoutePlanner, choose_route
 from tests.fakes import FakeLLM
+from tests.vef import VEF, VEF_RULES
 
 TODAY = date(2026, 10, 28)
 
@@ -25,7 +26,7 @@ def good(**changes):
 
 
 def route_of(p):
-    route, _, _ = choose_route(p, TODAY)
+    route, _, _ = choose_route(p, TODAY, VEF)
     return route.route, route.alt_routes
 
 
@@ -54,7 +55,7 @@ def test_th34_finance_or_academic_cc():
 
 # TH-35: sát hạn nộp → dời kỳ
 def test_th35_deadline_soon_postpone():
-    route, _, _ = choose_route(good(intake="Fall 2026"), TODAY)
+    route, _, _ = choose_route(good(intake="Fall 2026"), TODAY, VEF)
     assert (route.route, route.codes[0]) == ("postpone", "DEADLINE_SOON")
     assert route.months_to_deadline < 1
 
@@ -65,7 +66,7 @@ def ai_answer(route, alt=(), reasons=("Hồ sơ của bạn đủ điều kiện
 
 async def test_ai_reasons_used_when_route_matches():
     llm = FakeLLM(ai_answer("direct"))
-    route, _ = await RoutePlanner(llm, "qwen3:8b").plan(good(), TODAY)
+    route, _ = await RoutePlanner(llm, "qwen3:8b").plan(good(), TODAY, VEF)
 
     assert route.ai_used is True
     assert route.reasons == ["Hồ sơ của bạn đủ điều kiện nộp thẳng vào đại học."]
@@ -74,7 +75,7 @@ async def test_ai_reasons_used_when_route_matches():
 # TH-36: Qwen đổi lộ trình hoặc bịa số → gọi lại, vẫn sai thì lộ trình của code và câu mẫu
 async def test_th36_wrong_route_or_made_up_number_falls_back(caplog):
     llm = FakeLLM(ai_answer("pathway"), ai_answer("direct", reasons=["Tỉ lệ đỗ của bạn khoảng 90%."]))
-    route, _ = await RoutePlanner(llm, "qwen3:8b").plan(good(), TODAY)
+    route, _ = await RoutePlanner(llm, "qwen3:8b").plan(good(), TODAY, VEF)
 
     assert len(llm.calls) == 2
     assert (route.route, route.ai_used) == ("direct", False)
@@ -84,14 +85,14 @@ async def test_th36_wrong_route_or_made_up_number_falls_back(caplog):
 
 async def test_ollama_down_uses_template():
     p = good(budget="tier_under_20k")
-    route, _ = await RoutePlanner(FakeLLM(OllamaError("x"), OllamaError("x")), "qwen3:8b").plan(p, TODAY)
+    route, _ = await RoutePlanner(FakeLLM(OllamaError("x"), OllamaError("x")), "qwen3:8b").plan(p, TODAY, VEF)
 
     assert route.route == "cc_2plus2"
     assert route.reasons[0].startswith("Ngân sách còn hẹp")
 
 
 async def test_handler_direct_has_timeline_and_deadline_note():
-    state = ChatState(current_step="B4", profile=good())
+    state = ChatState(current_step="B4", grade_scale=VEF_RULES, profile=good())
     out = await LoTrinhHandler(FakeLLM(ai_answer("direct")), "qwen3:8b").run(state, "Có")
 
     assert "Lộ trình phù hợp với bạn: Đại học thẳng." in out.answer
@@ -103,7 +104,7 @@ async def test_handler_direct_has_timeline_and_deadline_note():
 
 
 async def test_handler_other_route_says_no_list_and_gives_criteria():
-    state = ChatState(current_step="B4", profile=good(budget="tier_under_20k"))
+    state = ChatState(current_step="B4", grade_scale=VEF_RULES, profile=good(budget="tier_under_20k"))
     reasons = ["Ngân sách còn hẹp, 2+2 tiết kiệm hơn."]
     out = await LoTrinhHandler(FakeLLM(ai_answer("cc_2plus2", reasons=reasons)), "qwen3:8b").run(state, "Có")
 

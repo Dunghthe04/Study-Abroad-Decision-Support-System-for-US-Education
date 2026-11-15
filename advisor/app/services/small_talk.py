@@ -12,13 +12,14 @@ from typing import Literal
 SmallTalk = Literal["greeting", "thanks", "goodbye"]
 
 MAX_WORDS = 6  # dài hơn thì học sinh đang hỏi điều gì đó, không phải xã giao thuần
-GREETING_WORDS = {"chao", "hello", "hi", "hey", "alo", "helo"}
+GREETING_WORDS = {"chao", "hello", "hi", "hey", "alo", "helo", "morning", "afternoon", "evening"}
 THANKS_WORDS = {"cam", "thanks", "thank", "thankyou"}
 GOODBYE_WORDS = {"tam", "biet", "bye", "goodbye", "hen", "gap", "lai"}
 # Chữ đi kèm lời xã giao mà không thêm nội dung hỏi
 FILLER = {
     "xin", "on", "ban", "bot", "ad", "admin", "anh", "chi", "em", "minh", "a", "nhe", "nha", "nhen", "ha",
     "you", "nhieu", "rat", "da", "vang", "oi", "tu", "van", "vien", "tro", "ly",
+    "buoi", "sang", "trua", "chieu", "toi", "good",
 }  # fmt: skip
 
 

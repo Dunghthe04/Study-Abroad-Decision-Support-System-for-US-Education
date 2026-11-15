@@ -21,6 +21,15 @@ import { Step6Review } from "./Step6Review";
 import { profileFlowApi } from "@/lib/profile-flow-api";
 import { migrateLegacyStep3 } from "@/lib/certification-utils";
 import { recommendationApi } from "@/lib/recommendation-api";
+import {
+  GOALS_CHANGED_EVENT,
+  GOALS_KEY,
+  goalsNeedMajor,
+  goalsQuestion,
+  onlySchoolList,
+  parseGoals,
+  type FormGoal,
+} from "@/lib/form-goals";
 import type {
   GoalDraft,
   TranscriptDraft,
@@ -50,7 +59,7 @@ const INITIAL_DRAFT: ProfileFlowDraft = {
   step3: {
     certifications: [],
     englishPlanned: false,
-    englishPlannedDate: null,
+    standardizedPlanned: false,
   },
   step4: {
     annualBudgetTier: null,
@@ -76,12 +85,24 @@ const STEP_SUGGESTIONS: Record<number, string> = {
 
 // Mục 7: trang đã đủ ô bắt buộc chưa (giống nút "Tiếp tục" của từng trang) để chat được chuyển form qua.
 // Trang 1 không xét ngành: chat tự bắt buộc ngành (hoặc "Chưa rõ"). Trang 2 chỉ cần đã có GPA
-function stepReady(step: number, draft: ProfileFlowDraft): boolean {
+function stepReady(step: number, draft: ProfileFlowDraft, goals: FormGoal[]): boolean {
   switch (step) {
     case 1:
-      return Boolean(draft.step1.currentEducationLevel && draft.step1.targetDegreeLevel);
+      return Boolean(
+        draft.step1.currentEducationLevel &&
+          draft.step1.targetDegreeLevel &&
+          (!goalsNeedMajor(goals) || draft.step1.targetMajor)
+      );
     case 2:
       return draft.step2.calculatedGpa4Scale != null || draft.step2.manualGpa10Scale != null;
+    case 3: {
+      // tiếng Anh và bài thi học thuật: mỗi mục có điểm hoặc tích "chưa thi" (giống nút Tiếp tục của bước 3)
+      const certs = draft.step3.certifications ?? [];
+      const english = certs.some((c) => c.category === "english") || draft.step3.englishPlanned;
+      const tests =
+        certs.some((c) => ["standardized", "graduate"].includes(c.category)) || draft.step3.standardizedPlanned;
+      return Boolean(english && tests);
+    }
     case 4:
       return Boolean(draft.step4.annualBudgetTier && draft.step4.needFinancialAid);
     case 5:
@@ -109,6 +130,23 @@ export function ProfileFlowWizard() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "error" | "idle">("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // Mở form từ chat (?from=chat): bước 6 lưu hồ sơ rồi quay về chat trả lời câu học sinh đã hỏi, không gợi ý trường
+  const [fromChat, setFromChat] = useState(false);
+  // Mục tiêu ở trang 1. Mở từ chat có ?goal= thì lấy theo câu hỏi trong chat và khóa lại
+  const [goals, setGoals] = useState<FormGoal[]>([]);
+  const goalsLocked = fromChat && goals.length > 0;
+  const goalsRef = useRef<FormGoal[]>([]);
+  useEffect(() => {
+    goalsRef.current = goals;
+  }, [goals]);
+  const updateGoals = (next: FormGoal[]) => {
+    setGoals(next);
+    try {
+      sessionStorage.setItem(GOALS_KEY, next.join(","));
+    } catch {
+      // trình duyệt chặn storage → chỉ giữ trong trang
+    }
+  };
 
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isInitialMount = useRef(true);
@@ -123,6 +161,13 @@ export function ProfileFlowWizard() {
     currentStepRef.current = currentStep;
   }, [currentStep]);
   const lastCompletedStep = completedSteps.length ? Math.max(...completedSteps) : 0;
+  // Trang 1 có ô mục tiêu thì phải tích ít nhất 1 (mở từ chat không có goal= thì ẩn ô này)
+  const showGoals = !fromChat || goals.length > 0;
+  // Bước đầu tiên còn thiếu mục bắt buộc (6 = đủ hết). Quay lại xoá một mục bắt buộc thì
+  // các bước sau khoá ngay, dù trước đó đã đi qua
+  const firstNotReady =
+    [1, 2, 3, 4, 5].find((s) => !stepReady(s, draft, goals) || (s === 1 && showGoals && goals.length === 0)) ?? 6;
+  const unlockedThrough = Math.min(lastCompletedStep, firstNotReady - 1);
 
   const stepTitle = FLOW_STEPS.find((s) => s.step === currentStep)?.title ?? "";
   useAssistantPageContext({
@@ -138,7 +183,23 @@ export function ProfileFlowWizard() {
     async function loadInitialData() {
       try {
         // Đã có kết quả gợi ý thì vào thẳng trang kết quả (khỏi gửi AI lại); "Sửa hồ sơ" mở ?edit=1 để vào form
-        const editing = new URLSearchParams(window.location.search).get("edit") === "1";
+        // Mở từ chat cũng vào form, không chuyển sang trang kết quả
+        const params = new URLSearchParams(window.location.search);
+        const openedFromChat = params.get("from") === "chat";
+        setFromChat(openedFromChat);
+        let savedGoals: string | null = null;
+        if (!openedFromChat) {
+          try {
+            savedGoals = sessionStorage.getItem(GOALS_KEY);
+          } catch {
+            // bỏ qua
+          }
+        }
+        const startGoals = parseGoals(openedFromChat ? params.get("goal") : savedGoals);
+        setGoals(startGoals);
+        // Vào form trực tiếp mà chưa tích mục tiêu (nháp cũ đang ở bước sau): mở trang 1 để chọn trước
+        const startStep = (saved: number) => (!openedFromChat && startGoals.length === 0 ? 1 : saved);
+        const editing = params.get("edit") === "1" || openedFromChat;
         // Tải metadata động song song với trạng thái nháp
         const [metaData, stateData, latest] = await Promise.all([
           profileFlowApi.getMetadata().catch(() => null),
@@ -156,7 +217,7 @@ export function ProfileFlowWizard() {
         if (metaData) setMetadata(metaData);
 
         if (stateData) {
-          setCurrentStep(stateData.currentStep || 1);
+          setCurrentStep(startStep(stateData.currentStep || 1));
           setCompletedSteps(stateData.completedSteps ?? []);
           setDraftTranscript(stateData.draftTranscript ?? null);
           const incomingDraft = stateData.draft;
@@ -170,7 +231,7 @@ export function ProfileFlowWizard() {
             try {
               const parsed = JSON.parse(localDraftStr);
               if (parsed?.draft) setDraft(mergeDraft(INITIAL_DRAFT, parsed.draft));
-              if (parsed?.currentStep) setCurrentStep(parsed.currentStep);
+              if (parsed?.currentStep) setCurrentStep(startStep(parsed.currentStep));
               if (Array.isArray(parsed?.completedSteps)) setCompletedSteps(parsed.completedSteps);
             } catch {
               // ignore
@@ -249,13 +310,13 @@ export function ProfileFlowWizard() {
     if (formStep == null || formStep === from) return;
     let to = formStep;
     for (let s = from; s < formStep; s++) {
-      if (!stepReady(s, nextDraft)) {
+      if (!stepReady(s, nextDraft, goalsRef.current)) {
         to = s;
         break;
       }
     }
     if (to === from) return;
-    const ready = [1, 2, 3, 4, 5].filter((s) => s < to && stepReady(s, nextDraft));
+    const ready = [1, 2, 3, 4, 5].filter((s) => s < to && stepReady(s, nextDraft, goalsRef.current));
     const nextCompleted = [...new Set([...completedStepsRef.current, ...ready])].sort((a, b) => a - b);
     setCompletedSteps(nextCompleted);
     setCurrentStep(to);
@@ -265,6 +326,20 @@ export function ProfileFlowWizard() {
       .catch(() => setSaveStatus("error"));
   }, [user, persistDraft]);
   useAssistantProfileChanged(reloadFromChat);
+
+  // Form mở trực tiếp (không khóa mục tiêu) mà chat vừa gửi thêm việc học sinh hỏi: tích theo mục tiêu đã lưu
+  useEffect(() => {
+    if (goalsLocked) return;
+    const onGoals = () => {
+      try {
+        setGoals(parseGoals(sessionStorage.getItem(GOALS_KEY)));
+      } catch {
+        // bỏ qua
+      }
+    };
+    window.addEventListener(GOALS_CHANGED_EVENT, onGoals);
+    return () => window.removeEventListener(GOALS_CHANGED_EVENT, onGoals);
+  }, [goalsLocked]);
 
   // Rời khỏi ô đang gõ thì nạp phần chat đã đổi (đợi focus chuyển xong mới xét)
   useEffect(() => {
@@ -362,6 +437,7 @@ export function ProfileFlowWizard() {
 
   // Điều hướng tới bước tiếp theo
   const handleNext = () => {
+    setErrorMessage(null);
     const nextStep = Math.min(6, currentStep + 1);
     const nextCompleted = completedSteps.includes(currentStep)
       ? completedSteps
@@ -394,7 +470,8 @@ export function ProfileFlowWizard() {
 
   // Nhảy tới bước cụ thể từ stepper hoặc nút Sửa
   const handleSelectStep = (stepNumber: number) => {
-    setCurrentStep(stepNumber);
+    // Không cho nhảy qua bước còn thiếu: dừng ở bước đó để điền trước
+    setCurrentStep(stepNumber > firstNotReady ? firstNotReady : stepNumber);
     if (typeof window !== "undefined") {
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
@@ -406,9 +483,17 @@ export function ProfileFlowWizard() {
   };
 
   // Xác nhận commit ở bước 6
+  // Chỉ tích "Gợi ý trường" (hoặc chưa tích gì, như form cũ) thì sang trang gợi ý trường; còn lại về chat
+  const backToChat = fromChat || (goals.length > 0 && !onlySchoolList(goals));
   const handleSubmitCommit = async () => {
-    setIsSubmitting(true);
     setErrorMessage(null);
+    // Còn bước thiếu mục bắt buộc (vd. quay lại xoá rồi nhảy thẳng tới đây): đưa về bước đó
+    if (firstNotReady < 6) {
+      setErrorMessage(`Bước ${firstNotReady} còn thiếu mục bắt buộc, bạn điền nốt rồi tiếp tục nhé.`);
+      handleSelectStep(firstNotReady);
+      return;
+    }
+    setIsSubmitting(true);
 
     try {
       if (!user) {
@@ -431,7 +516,7 @@ export function ProfileFlowWizard() {
       } catch {
         // trình duyệt chặn storage → coi như hồ sơ mới
       }
-      if (lastCommitted === draftJson && (await recommendationApi.getLatest().catch(() => null))) {
+      if (!backToChat && lastCommitted === draftJson && (await recommendationApi.getLatest().catch(() => null))) {
         router.push("/recommendations");
         return;
       }
@@ -444,6 +529,17 @@ export function ProfileFlowWizard() {
           localStorage.setItem(LAST_COMMITTED_KEY, draftJson);
         } catch {
           // bỏ qua
+        }
+        // Mở từ chat: mở khung chat, advisor thấy hồ sơ đủ thì trả lời luôn câu học sinh đã hỏi.
+        // fromForm: form đã là bước rà soát, advisor bỏ bảng xác nhận đang treo trong chat
+        if (fromChat) {
+          openAssistant(CONTINUE_CHAT, { fromForm: true });
+          return;
+        }
+        // Vào form trực tiếp mà tích cả đánh giá hay lộ trình: gửi một câu gộp các việc đã tích, chat trả lời luôn
+        if (backToChat) {
+          openAssistant(goalsQuestion(goals), { fromForm: true });
+          return;
         }
         router.push("/recommendations?run=1");
       } else {
@@ -473,7 +569,7 @@ export function ProfileFlowWizard() {
       draft={draft}
       metadata={metadata}
       currentStep={currentStep}
-      lastCompletedStep={lastCompletedStep}
+      lastCompletedStep={unlockedThrough}
       onSelectStep={handleSelectStep}
     />
   );
@@ -482,7 +578,7 @@ export function ProfileFlowWizard() {
     <div className="pb-16">
       {/* Trạng thái lưu nháp + Thoát */}
       <div className="mb-4 flex items-center justify-between gap-4">
-        <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Hồ sơ chọn trường</span>
+        <span className="text-xs font-semibold text-muted-foreground">Hồ sơ chọn trường</span>
         <div className="flex items-center gap-3 text-xs">
           <SaveStatus status={saveStatus} />
           {/* Mục 1: chuyển sang trả lời trong chat, chat hỏi tiếp các mục còn thiếu */}
@@ -507,7 +603,8 @@ export function ProfileFlowWizard() {
         </div>
       </div>
 
-      {errorMessage && (
+      {/* Lỗi khi gửi hồ sơ hiện ở bước 6, cạnh thẻ của từng bước */}
+      {errorMessage && currentStep !== 6 && (
         <Alert variant="destructive" className="mb-6">
           <AlertCircleIcon className="size-4" />
           <AlertTitle>Không thể lưu hồ sơ</AlertTitle>
@@ -519,13 +616,17 @@ export function ProfileFlowWizard() {
       <div className="flex flex-wrap items-start gap-6">
         <div className="min-w-0 flex-[999_1_560px] space-y-5">
           {assistantOpen && stepper("strip")}
-          <div ref={formRef} className="rounded-xl border border-line bg-surface p-[18px] shadow-xs sm:p-7">
+          <div ref={formRef} className="rounded-xl border border-line bg-surface p-[18px] sm:p-7">
             {currentStep === 1 && (
               <Step1Goal
                 data={draft.step1}
                 metadata={metadata}
                 onUpdate={updateStep1}
                 onNext={handleNext}
+                goals={goals}
+                goalsLocked={goalsLocked}
+                showGoals={showGoals}
+                onGoalsChange={updateGoals}
               />
             )}
 
@@ -582,7 +683,9 @@ export function ProfileFlowWizard() {
                 onEditStep={handleSelectStep}
                 onPrev={handlePrev}
                 onSubmit={handleSubmitCommit}
+                backToChat={backToChat}
                 isSubmitting={isSubmitting}
+                submitError={errorMessage}
               />
             )}
           </div>

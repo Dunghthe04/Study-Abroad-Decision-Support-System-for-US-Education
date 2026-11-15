@@ -16,6 +16,11 @@ public class LeadConfiguration : IEntityTypeConfiguration<Lead>
         b.Property(x => x.ContactPhone).HasMaxLength(32);
         b.Property(x => x.Message).HasMaxLength(2000);
         b.Property(x => x.Status).HasMaxLength(16).IsRequired();
+        b.HasOne<User>().WithMany().HasForeignKey(x => x.SubmittedByUserId).OnDelete(DeleteBehavior.SetNull);
+        b.Property(x => x.SharedFields).HasColumnType("text[]");
         b.HasIndex(x => new { x.StudyCenterId, x.Status });
+        // UC-42: đếm số lần gửi trong 7 ngày / trong ngày
+        b.HasIndex(x => new { x.SubmittedByUserId, x.CreatedAt });
+        b.HasIndex(x => new { x.UserId, x.CreatedAt });
     }
 }

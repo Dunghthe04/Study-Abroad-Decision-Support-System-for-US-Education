@@ -51,12 +51,53 @@ public class CenterReferralTests
     }
 
     [Fact]
-    public void Pick_PutsTheStudentsCityFirst_ThenSortsByName()
+    public void Pick_WithACity_ReturnsOnlyCentersInThatCity_WithoutFillingFromOtherCities()
     {
         var centers = new[] { Center("A", city: "Hà Nội"), Center("B", city: "TP.HCM"), Center("C", city: null) };
 
-        Assert.Equal(["B", "A", "C"], Names(CenterReferral.Pick(centers, "LUYEN_PHONG_VAN", null, "TP.HCM")));
-        Assert.Equal(["B", "A", "C"], Names(CenterReferral.Pick(centers, "LUYEN_PHONG_VAN", null, "tp.hcm")));
+        Assert.Equal(["B"], Names(CenterReferral.Pick(centers, "LUYEN_PHONG_VAN", null, "TP.HCM")));
+        Assert.Equal(["B"], Names(CenterReferral.Pick(centers, "LUYEN_PHONG_VAN", null, "tp.hcm")));
+    }
+
+    [Fact]
+    public void Pick_WithACityThatHasNoCenter_ReturnsEmpty()
+    {
+        var centers = new[] { Center("A", city: "Hà Nội"), Center("B", city: "TP.HCM") };
+
+        Assert.Empty(CenterReferral.Pick(centers, "LUYEN_PHONG_VAN", null, "Đà Nẵng"));
+    }
+
+    [Fact]
+    public void Pick_WithACity_ReturnsAllCentersOfThatCity_SortedByName()
+    {
+        var centers = new[] { Center("D"), Center("B"), Center("A"), Center("C"), Center("X", city: "TP.HCM") };
+
+        Assert.Equal(["A", "B", "C", "D"], Names(CenterReferral.Pick(centers, "LUYEN_PHONG_VAN", null, "Hà Nội")));
+    }
+
+    [Fact]
+    public void CityCounts_CountsOnlyReferableCentersWithTheServiceAndLevel_MostCentersFirst()
+    {
+        var centers = new[]
+        {
+            Center("A", city: "Hà Nội"),
+            Center("B", city: "Hà Nội"),
+            Center("C", city: "TP.HCM"),
+            Center("D", city: "Hải Phòng", services: ["SUA_BAI_LUAN"]),
+            Center("E", city: "Đà Nẵng", status: "unverified"),
+            Center("F", city: "Cần Thơ", levels: ["master"]),
+            Center("G", city: null),
+        };
+
+        var counts = CenterReferral.CityCounts(centers, "LUYEN_PHONG_VAN", "undergraduate");
+
+        Assert.Equal([("Hà Nội", 2), ("TP.HCM", 1)], counts.Select(c => (c.City, c.Count)).ToArray());
+    }
+
+    [Fact]
+    public void CityCounts_IsEmpty_WhenNoCenterHasTheService()
+    {
+        Assert.Empty(CenterReferral.CityCounts([Center("A")], "NOP_HO_SO", null));
     }
 
     [Fact]
@@ -68,11 +109,13 @@ public class CenterReferralTests
     }
 
     [Fact]
-    public void Pick_ReturnsAtMostThreeCenters()
+    public void Pick_ReturnsEveryMatchingCenter_UpToTheMaximum()
     {
-        var centers = new[] { Center("A"), Center("B"), Center("C"), Center("D") };
+        var few = new[] { Center("A"), Center("B"), Center("C"), Center("D"), Center("E"), Center("F"), Center("G") };
+        var many = Enumerable.Range(0, CenterReferral.MaxCenters + 5).Select(i => Center($"C{i:00}")).ToArray();
 
-        Assert.Equal(CenterReferral.MaxCenters, CenterReferral.Pick(centers, "LUYEN_PHONG_VAN", null, null).Count);
+        Assert.Equal(7, CenterReferral.Pick(few, "LUYEN_PHONG_VAN", null, null).Count); // 7 trung tâm khớp thì trả 7, không cắt còn 3
+        Assert.Equal(CenterReferral.MaxCenters, CenterReferral.Pick(many, "LUYEN_PHONG_VAN", null, null).Count);
     }
 
     [Fact]
@@ -104,27 +147,63 @@ public class CenterReferralTests
         public Task<StudyCenter?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
             throw new NotSupportedException();
 
+        public Task<StudyCenter?> GetByIdForUpdateAsync(Guid id, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
         public Task<IReadOnlyList<StudyCenter>> ListReferableAsync(CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<StudyCenter>>(centers);
+
+        public Task<bool> ExistsByCodeAsync(string code, CancellationToken ct = default) =>
+            Task.FromResult(centers.Any(c => c.Code.Equals(code, StringComparison.OrdinalIgnoreCase)));
+
+        public Task AddAsync(StudyCenter center, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task UpdateAsync(StudyCenter center, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task<StudyCenter?> GetByOwnerOrEmailAsync(Guid ownerUserId, string? email, CancellationToken ct = default) =>
+            Task.FromResult(centers.FirstOrDefault(c => c.OwnerUserId == ownerUserId || (email != null && string.Equals(c.Email, email, StringComparison.OrdinalIgnoreCase))));
     }
+
+    private readonly FakeAuditLogRepository _auditLogs = new();
 
     [Fact]
     public async Task ReferAsync_AppliesTheRuleAndMapsToDtos()
     {
         var service = new StudyCenterService(new ReferableRepository(
             Center("A", city: "Hà Nội", services: ["LUYEN_PHONG_VAN", "CHON_TRUONG"]),
-            Center("B", city: "TP.HCM")));
+            Center("B", city: "TP.HCM")), _auditLogs);
 
-        var result = await service.ReferAsync(new CenterReferralQuery("LUYEN_PHONG_VAN", "undergraduate", "TP.HCM"));
+        var result = await service.ReferAsync(new CenterReferralQuery("LUYEN_PHONG_VAN", "undergraduate", "Hà Nội"));
 
-        Assert.Equal(["B", "A"], result.Select(c => c.Name).ToArray());
-        Assert.Contains("CHON_TRUONG", result[1].Services); // chat dùng dịch vụ, bậc học để AI giải thích vì sao hợp
+        Assert.Equal(["A"], result.Select(c => c.Name).ToArray()); // chỉ trung tâm ở Hà Nội, không lấp thêm B của TP.HCM
+        Assert.Contains("CHON_TRUONG", result[0].Services); // chat dùng dịch vụ, bậc học để AI giải thích vì sao hợp
+    }
+
+    [Fact]
+    public async Task GetReferralCityCountsAsync_CountsCentersPerCityForTheService()
+    {
+        var service = new StudyCenterService(new ReferableRepository(
+            Center("A", city: "Hà Nội"), Center("B", city: "Hà Nội"), Center("C", city: "TP.HCM")), _auditLogs);
+
+        var counts = await service.GetReferralCityCountsAsync(new CenterReferralQuery("LUYEN_PHONG_VAN", "undergraduate"));
+
+        Assert.Equal([("Hà Nội", 2), ("TP.HCM", 1)], counts.Select(c => (c.City, c.Count)).ToArray());
+    }
+
+    [Fact]
+    public async Task GetReferralCityCountsAsync_RequiresAService()
+    {
+        var service = new StudyCenterService(new ReferableRepository(), _auditLogs);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => service.GetReferralCityCountsAsync(new CenterReferralQuery()));
     }
 
     [Fact]
     public async Task ReferAsync_RequiresAService()
     {
-        var service = new StudyCenterService(new ReferableRepository());
+        var service = new StudyCenterService(new ReferableRepository(), _auditLogs);
 
         await Assert.ThrowsAsync<ArgumentException>(() => service.ReferAsync(new CenterReferralQuery()));
     }
@@ -132,7 +211,7 @@ public class CenterReferralTests
     [Fact]
     public async Task GetReferralCitiesAsync_ReturnsTheCitiesOfReferableCenters()
     {
-        var service = new StudyCenterService(new ReferableRepository(Center("A", city: "TP.HCM"), Center("B")));
+        var service = new StudyCenterService(new ReferableRepository(Center("A", city: "TP.HCM"), Center("B")), _auditLogs);
 
         Assert.Equal(["Hà Nội", "TP.HCM"], await service.GetReferralCitiesAsync());
     }

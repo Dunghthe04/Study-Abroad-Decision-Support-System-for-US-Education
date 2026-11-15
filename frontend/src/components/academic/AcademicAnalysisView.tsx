@@ -150,7 +150,7 @@ export function AcademicAnalysisView() {
       setScores(refreshedScores);
       setMessage({
         type: "success",
-        text: "Phân tích điểm học thuật hoàn tất. Chỉ số GPA WES 4.0 và xu hướng đã được cập nhật thành công.",
+        text: "Phân tích điểm học thuật hoàn tất. Chỉ số GPA thang 4 và xu hướng đã được cập nhật thành công.",
       });
       setTimeout(() => setMessage(null), 4000);
     } catch (err) {
@@ -180,11 +180,11 @@ export function AcademicAnalysisView() {
               Đánh Giá Năng Lực Học Thuật & GPA
             </h1>
             <Badge variant="brand">
-              Quy đổi WES 4.0
+              Quy đổi tham khảo
             </Badge>
           </div>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Quy đổi bảng điểm theo tiêu chuẩn giáo dục Hoa Kỳ (WES 4.0 tham khảo), phân tích điểm theo nhóm môn và nhận diện đà tăng trưởng học thuật (Growth Mindset).
+            Quy đổi tham khảo bảng điểm sang thang 4 (mỗi trường Mỹ tự đánh giá học bạ nên có thể chênh một chút), phân tích điểm theo nhóm môn và nhận diện đà tăng trưởng học thuật (Growth Mindset).
           </p>
         </div>
 

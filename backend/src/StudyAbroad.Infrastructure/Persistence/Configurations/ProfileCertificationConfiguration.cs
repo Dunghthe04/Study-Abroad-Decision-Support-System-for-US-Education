@@ -18,6 +18,7 @@ public class ProfileCertificationConfiguration : IEntityTypeConfiguration<Profil
         b.Property(x => x.ScaleText).HasMaxLength(32);
         b.Property(x => x.SectionScoresJson).HasColumnType("jsonb");
         b.Property(x => x.TestDate);
+        b.Property(x => x.IsTarget);
         b.Property(x => x.SortOrder);
         b.ToTable(t => t.HasCheckConstraint("ck_profile_certifications_other_name",
             "test_type <> 'other' OR custom_name IS NOT NULL"));

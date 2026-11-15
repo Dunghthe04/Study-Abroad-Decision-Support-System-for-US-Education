@@ -68,13 +68,14 @@ public record FlowSubjectDraftDto(
 );
 
 /// <summary>
-/// Bước 3 – danh sách chứng chỉ (certifications), kế hoạch thi tiếng Anh (englishPlanned, englishPlannedDate: yyyy-MM).
+/// Bước 3 – danh sách chứng chỉ (certifications), gồm cả dự định thi (isTarget = true).
+/// englishPlanned / standardizedPlanned: tick "chưa thi và chưa có dự định thi" của từng mục.
 /// englishTestType / englishOverallScore / englishTestDate / otherTests là dạng nháp cũ, chỉ đọc để chuyển sang danh sách
 /// </summary>
 public record FlowCertificationDraftDto(
     [property: JsonPropertyName("certifications")] List<FlowCertificationItemDto>? Certifications = null,
     [property: JsonPropertyName("englishPlanned")] bool EnglishPlanned = false,
-    [property: JsonPropertyName("englishPlannedDate")] string? EnglishPlannedDate = null,
+    [property: JsonPropertyName("standardizedPlanned")] bool StandardizedPlanned = false,
     [property: JsonPropertyName("englishTestType")] string? EnglishTestType = null,
     [property: JsonPropertyName("englishOverallScore")] decimal? EnglishOverallScore = null,
     [property: JsonPropertyName("englishTestDate")] string? EnglishTestDate = null,
@@ -94,7 +95,9 @@ public record FlowCertificationItemDto(
     [property: JsonPropertyName("overall")] decimal? Overall = null,
     [property: JsonPropertyName("scaleText")] string? ScaleText = null,
     [property: JsonPropertyName("sections")] Dictionary<string, decimal?>? Sections = null,
-    [property: JsonPropertyName("testDate")] string? TestDate = null
+    [property: JsonPropertyName("testDate")] string? TestDate = null,
+    /// <summary>true = chưa thi chính thức: điểm là mục tiêu, ngày thi là dự kiến (có thể ở tương lai)</summary>
+    [property: JsonPropertyName("isTarget")] bool IsTarget = false
 );
 
 /// <summary>Nháp cũ – testType: SAT | ACT | AP</summary>
@@ -131,7 +134,8 @@ public record FlowActivityDraftDto(
     [property: JsonPropertyName("endDate")] string? EndDate = null,
     [property: JsonPropertyName("isOngoing")] bool IsOngoing = false,
     [property: JsonPropertyName("durationMonths")] int? DurationMonths = null,
-    [property: JsonPropertyName("year")] int? Year = null
+    [property: JsonPropertyName("year")] int? Year = null,
+    [property: JsonPropertyName("description")] string? Description = null
 );
 
 /// <summary>Kết quả OCR (giữ dạng kỳ/môn); FE tự ghép vào draft.step2 rồi lưu nháp</summary>
@@ -201,7 +205,7 @@ public record CommitProfileFlowResponse(
     [property: JsonPropertyName("targetLevel")] string TargetLevel,
     [property: JsonPropertyName("intendedMajor")] string? IntendedMajor,
     [property: JsonPropertyName("overallGpa")] decimal? OverallGpa,
-    [property: JsonPropertyName("extracurricularScore")] decimal? ExtracurricularScore,
+    [property: JsonPropertyName("extracurricularTier")] int? ExtracurricularTier,
     [property: JsonPropertyName("budgetMinUsd")] decimal? BudgetMinUsd,
     [property: JsonPropertyName("budgetMaxUsd")] decimal? BudgetMaxUsd,
     [property: JsonPropertyName("targetSchoolType")] string? TargetSchoolType = "all",

@@ -51,6 +51,20 @@ def test_full_profile_can_commit():
     assert commit_blockers(profile, today=TODAY) == []
 
 
+def test_target_english_future_date_can_commit():
+    profile = minimal(
+        english=confirmed({"type": "ielts", "value": 7.5, "date": "2028-10", "isTarget": True}),
+    )
+    assert commit_blockers(profile, today=TODAY) == []
+
+
+def test_target_english_past_date_blocks():
+    profile = minimal(
+        english=confirmed({"type": "ielts", "value": 7.5, "date": "2024-10", "isTarget": True}),
+    )
+    assert commit_blockers(profile, today=TODAY) == ["english"]
+
+
 def test_empty_profile_lists_required_in_ask_order():
     assert commit_blockers({}, today=TODAY) == [
         "current_level",

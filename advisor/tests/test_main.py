@@ -1,8 +1,11 @@
 from fastapi.testclient import TestClient
 
 from app.main import create_app
+from app.schemas.slm import INTENTS
 from app.services.centers import CenterFinder
+from app.services.claude import ClaudeClient
 from app.services.ollama import OllamaClient
+from app.services.slm_classifier import OllamaSlm
 
 
 def test_startup_creates_llm_client():
@@ -11,30 +14,29 @@ def test_startup_creates_llm_client():
         assert isinstance(client.app.state.llm, OllamaClient)
 
 
-def test_startup_registers_skills_from_build_handlers(monkeypatch):
+def test_startup_builds_the_chat_flow_from_the_slm_and_the_branches(monkeypatch):
     class FakeSkill:
         async def run(self, state, message):
             raise NotImplementedError
 
     seen = {}
 
-    def fake_build_handlers(llm, model, knowledge=None, min_score=0.72, centers=None):
+    def fake_build_handlers(llm, model, knowledge=None, min_score=0.72, centers=None, embedder=None):
         seen["llm"], seen["model"], seen["knowledge"], seen["centers"] = llm, model, knowledge, centers
+        seen["embedder"] = embedder
         return {"skill_ho_so": FakeSkill()}
 
     monkeypatch.setattr("app.main.build_handlers", fake_build_handlers)
 
     with TestClient(create_app()) as client:
-        handlers = (
-            client.app.state.chat_flow._handlers
-        )  # kiểm tra nội bộ để chắc main.py đã nối danh sách đăng ký
-        assert "skill_ho_so" in handlers  # skill đăng ký được gắn vào ChatFlow
-        assert {"ngoai_le", "ket_thuc"} <= set(handlers)  # skill tạm vẫn còn
-        assert seen["llm"] is client.app.state.llm  # skill nhận đúng llm dùng chung lúc khởi động
+        flow = client.app.state.chat_flow  # kiểm tra nội bộ để chắc main.py đã nối SLM, nhánh và skill
+        assert set(flow._branches) == set(INTENTS)  # đủ 6 nhánh theo loại câu hỏi SLM
+        assert isinstance(flow._slm, OllamaSlm)
+        assert isinstance(seen["llm"], ClaudeClient)  # Claude viết câu trả lời, không còn Qwen
+        assert seen["embedder"] is client.app.state.llm  # embedding vẫn chạy trên Ollama
         assert seen["knowledge"] is None  # không có DATABASE_URL thì không có bộ tìm kiến thức
-        assert isinstance(
-            seen["centers"], CenterFinder
-        )  # BACKEND_BASE_URL mặc định có nên bật gợi ý trung tâm (B6)
+        # BACKEND_BASE_URL mặc định có nên bật gợi ý trung tâm
+        assert isinstance(seen["centers"], CenterFinder)
 
 
 def test_startup_has_no_db_pool_when_no_database_is_configured():

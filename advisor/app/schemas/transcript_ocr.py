@@ -2,6 +2,7 @@
 
 from pydantic import Field
 
+from app.schemas.chat import AiUsageMixin
 from app.schemas.common import CamelModel
 
 
@@ -42,7 +43,8 @@ class TranscriptOcrRequest(CamelModel):
     content_type: str | None = Field(default=None, max_length=100)
 
 
-class TranscriptOcrResponse(CamelModel):
+# AiUsageMixin thêm khóa aiUsage: token của các lần gọi Ollama vision và Claude khi đọc học bạ, để .NET ghi nhật ký ai_calls
+class TranscriptOcrResponse(AiUsageMixin, CamelModel):
     success: bool
     model_used: str | None = None
     terms: list[TranscriptTerm] = Field(default_factory=list)

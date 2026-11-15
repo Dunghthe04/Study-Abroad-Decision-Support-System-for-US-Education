@@ -27,6 +27,7 @@ PROFILE_KEYS = (
     "act",
     "english",
     "english_plan",
+    "standardized_plan",
     "budget",
     "scholarship",
     "funding_source",

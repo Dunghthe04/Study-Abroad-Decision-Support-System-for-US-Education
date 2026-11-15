@@ -17,6 +17,7 @@ public class UniversityConfiguration : IEntityTypeConfiguration<University>
         b.Property(x => x.Control).HasMaxLength(16);
         b.Property(x => x.AcceptanceRate).HasPrecision(5, 4);
         b.HasIndex(x => x.Code).IsUnique();
+        b.HasOne<User>().WithMany().HasForeignKey(x => x.LastEditedByUserId).OnDelete(DeleteBehavior.SetNull);
         b.HasIndex(x => x.State);
     }
 }

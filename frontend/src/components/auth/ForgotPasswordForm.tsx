@@ -7,7 +7,6 @@ import { authApi, ApiError } from "@/lib/api";
 import { setPendingEmail } from "@/lib/pending-email";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
@@ -49,59 +48,65 @@ export function ForgotPasswordForm() {
   };
 
   return (
-    <Card className="mx-auto w-full max-w-md">
-      <CardHeader className="text-center">
-        <CardTitle>
-          <h1>Quên mật khẩu?</h1>
-        </CardTitle>
-        <CardDescription>
+    <div className="space-y-6">
+      <div className="space-y-1">
+        <h1 className="font-heading text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
+          Quên mật khẩu?
+        </h1>
+        <p className="text-sm text-ink-2">
           Nhập địa chỉ email đã đăng ký. Hệ thống sẽ gửi mã OTP gồm 6 chữ số để bạn thiết lập mật khẩu mới.
-        </CardDescription>
-      </CardHeader>
+        </p>
+      </div>
 
-      <CardContent className="space-y-6">
-        {error && (
-          <Alert variant="destructive">
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
+      {error && (
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
 
-        {successMessage && (
-          <Alert variant="success" role="status">
-            <AlertDescription>{successMessage}</AlertDescription>
-          </Alert>
-        )}
+      {successMessage && (
+        <Alert variant="success" role="status">
+          <AlertDescription>{successMessage}</AlertDescription>
+        </Alert>
+      )}
 
-        <form onSubmit={handleSubmit}>
-          <FieldGroup>
-            <Field>
-              <FieldLabel htmlFor="forgot-email-input">Địa chỉ Email</FieldLabel>
-              <Input
-                id="forgot-email-input"
-                type="email"
-                required
-                maxLength={100}
-                autoComplete="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="example@gmail.com"
-              />
-            </Field>
+      <form onSubmit={handleSubmit}>
+        <FieldGroup>
+          <Field>
+            <FieldLabel htmlFor="forgot-email-input">Địa chỉ Email</FieldLabel>
+            <Input
+              id="forgot-email-input"
+              type="email"
+              required
+              maxLength={100}
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="example@gmail.com"
+            />
+          </Field>
 
-            <Button type="submit" size="lg" disabled={isSubmitting} className="w-full">
-              {isSubmitting && <Spinner data-icon="inline-start" />}
-              {isSubmitting ? "Đang gửi mã..." : "Gửi mã OTP xác nhận"}
-            </Button>
-          </FieldGroup>
-        </form>
+          <Button type="submit" size="xl" disabled={isSubmitting} className="w-full">
+            {isSubmitting && <Spinner data-icon="inline-start" />}
+            {isSubmitting ? "Đang gửi mã..." : "Gửi mã OTP xác nhận"}
+          </Button>
+        </FieldGroup>
+      </form>
 
-        <p className="text-center text-muted-foreground">
-          Đã nhớ lại mật khẩu?{" "}
-          <Link href="/login" className="text-primary hover:underline">
-            Đăng nhập ngay
+      <div className="space-y-2 pt-2 text-center text-sm text-ink-2">
+        <p>
+          Đã nhớ mật khẩu?{" "}
+          <Link href="/login" className="font-semibold text-brand hover:underline">
+            Đăng nhập
           </Link>
         </p>
-      </CardContent>
-    </Card>
+        <p>
+          Chưa có tài khoản?{" "}
+          <Link href="/register" className="font-semibold text-brand hover:underline">
+            Đăng ký ngay
+          </Link>
+        </p>
+      </div>
+    </div>
   );
 }

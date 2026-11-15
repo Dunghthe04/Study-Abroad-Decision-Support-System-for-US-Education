@@ -1,4 +1,5 @@
 import type {
+  CenterReviewsDto,
   AuthResponse,
   ChangePasswordRequest,
   ForgotPasswordRequest,
@@ -11,12 +12,34 @@ import type {
   AdminUserAccountListQuery,
   PagedResult,
   CreateModeratorAccountRequest,
+  CreateCenterAccountRequest,
   LockUserAccountRequest,
+  UnlockUserAccountRequest,
   VerifyEmailRequest,
   AcademicProfileResponse,
   ParentInviteInfo,
   ParentLinkDto,
   ParentLinkResponse,
+  StudyCenter,
+  CreateStudyCenterRequest,
+  AddTargetSchoolRequest,
+  TargetSchoolDto,
+  TargetSchoolSummaryDto,
+  UpdateStudyCenterRequest,
+  SetStudyCenterActiveRequest,
+  CenterReceivedLeadDto,
+  CenterLeadsSummaryDto,
+  LeadMessagesThreadDto,
+  SendLeadMessageRequest,
+  SendLeadMessageResultDto,
+  RegisterCenterRequest,
+  VerifyCenterEmailRequest,
+  VerificationDocumentUploadDto,
+  SubmitVerificationDto,
+  CenterVerificationDto,
+  CenterVerificationStatusDto,
+  ReviewCenterVerificationRequest,
+  UpdateCenterProfileRequest,
 } from "@/types/api";
 
 // Browser code calls same-origin /api (Nginx in prod, Next rewrite in dev).
@@ -27,11 +50,21 @@ export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    public body: unknown = null,
   ) {
     super(message);
     this.name = "ApiError";
   }
 }
+
+// Câu báo lỗi dự phòng khi server không kèm lời giải thích riêng (server đã điền sẵn, đây chỉ là lưới an toàn)
+const DEFAULT_ERROR_MESSAGES: Record<number, string> = {
+  400: "Thông tin gửi lên chưa hợp lệ. Bạn kiểm tra lại rồi thử lại nhé.",
+  401: "Phiên đăng nhập đã hết hạn. Bạn đăng nhập lại rồi thử lại nhé.",
+  403: "Tài khoản của bạn không được dùng chức năng này. Nếu vừa đổi tài khoản, hãy đăng xuất rồi đăng nhập lại.",
+  404: "Không tìm thấy dữ liệu bạn yêu cầu.",
+  429: "Bạn thao tác hơi nhanh. Đợi một chút rồi thử lại nhé.",
+};
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${baseUrl}${path}`, {
@@ -44,7 +77,12 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
 
   if (!res.ok) {
     const body = await res.json().catch(() => null);
-    let message = body?.detail ?? body?.title ?? body?.error ?? body?.message ?? res.statusText;
+    const fallback =
+      DEFAULT_ERROR_MESSAGES[res.status] ??
+      (res.status >= 500 ? "Máy chủ đang gặp sự cố. Bạn thử lại sau ít phút nhé." : "Đã có lỗi xảy ra. Bạn thử lại nhé.");
+    // title mặc định của ASP.NET ("Forbidden", "Not Found"...) luôn có type trỏ về RFC → không hiện cho người dùng
+    const isDefaultTitle = typeof body?.type === "string" && body.type.includes("rfc");
+    let message = body?.detail ?? (isDefaultTitle ? null : body?.title) ?? body?.error ?? body?.message ?? fallback;
     if (body?.errors && typeof body.errors === "object") {
       const errorList = Object.entries(body.errors)
         .map(([field, msgs]) => `${field}: ${Array.isArray(msgs) ? msgs.join("; ") : msgs}`)
@@ -53,15 +91,20 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
         message = `${message} (${errorList})`;
       }
     }
-    throw new ApiError(res.status, message);
+    throw new ApiError(res.status, message, body);
   }
 
   // Handle empty responses (e.g. 204 No Content)
   if (res.status === 204) {
-    return {} as T;
+    return null as unknown as T;
   }
 
-  return res.json() as Promise<T>;
+  const text = await res.text();
+  if (!text || text.trim() === "") {
+    return null as unknown as T;
+  }
+
+  return JSON.parse(text) as T;
 }
 
 // [USAS-362] Bộ API Xác thực & Người dùng (Khách: Học sinh / Phụ huynh)
@@ -69,6 +112,20 @@ export const authApi = {
   // [AC-1] Đăng ký tài khoản (học sinh hoặc phụ huynh, email/SĐT, mật khẩu)
   register: (data: RegisterRequest) =>
     apiFetch<{ message: string }>("/api/v1/auth/register", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  // [UC-64] Trung tâm tự đăng ký tài khoản
+  registerCenter: (data: RegisterCenterRequest) =>
+    apiFetch<{ message: string; email: string }>("/api/v1/auth/register-center", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  // [UC-91] Xác thực email trung tâm qua mã OTP 6 số
+  verifyCenterEmail: (data: VerifyCenterEmailRequest) =>
+    apiFetch<AuthResponse>("/api/v1/auth/verify-center-email", {
       method: "POST",
       body: JSON.stringify(data),
     }),
@@ -207,9 +264,250 @@ export const adminUsersApi = {
       body: JSON.stringify(data),
     }),
 
+  /** [Q11 / UC-71 Phụ trợ / UC-64] Moderator/Admin tạo tài khoản người dùng cho Trung tâm tư vấn. */
+  createCenter: (data: CreateCenterAccountRequest) =>
+    apiFetch<UserDto>("/api/v1/study-centers/accounts", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
   /** [UC-61] Khóa tài khoản (admin). */
   lock: (id: string, data: LockUserAccountRequest) =>
     apiFetch<UserDto>(`/api/v1/admin/users/${encodeURIComponent(id)}/lock`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  /** [UC-62] Mở khóa tài khoản (admin). */
+  unlock: (id: string, data: UnlockUserAccountRequest) =>
+    apiFetch<UserDto>(`/api/v1/admin/users/${encodeURIComponent(id)}/unlock`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+};
+
+// [UC-71] API Quản trị danh bạ trung tâm tư vấn (Moderator / Admin)
+export const studyCentersApi = {
+  create: (data: CreateStudyCenterRequest) =>
+    apiFetch<StudyCenter>("/api/v1/study-centers", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  /** [UC-64] Tạo tài khoản trung tâm tư vấn (vai trò role: center) */
+  createAccount: (data: CreateCenterAccountRequest) =>
+    apiFetch<UserDto>("/api/v1/study-centers/accounts", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  search: (params?: {
+    search?: string;
+    city?: string;
+    service?: string;
+    studyLevel?: string;
+    verificationStatus?: string;
+    centerType?: string;
+    /** Chỉ Admin/Moderator: gồm cả trung tâm đã ẩn */
+    includeInactive?: boolean;
+    /** Chỉ Admin/Moderator: chỉ trung tâm đã ẩn */
+    onlyInactive?: boolean;
+    page?: number;
+    pageSize?: number;
+  }) => {
+    const sp = new URLSearchParams();
+    if (params?.verificationStatus) sp.set("verificationStatus", params.verificationStatus);
+    if (params?.centerType) sp.set("centerType", params.centerType);
+    if (params?.includeInactive) sp.set("includeInactive", "true");
+    if (params?.onlyInactive) sp.set("onlyInactive", "true");
+    if (params?.search) sp.set("search", params.search);
+    if (params?.city) sp.set("city", params.city);
+    if (params?.service) sp.set("service", params.service);
+    if (params?.studyLevel) sp.set("studyLevel", params.studyLevel);
+    if (params?.page) sp.set("page", String(params.page));
+    if (params?.pageSize) sp.set("pageSize", String(params.pageSize));
+    const qs = sp.toString();
+    return apiFetch<PagedResult<StudyCenter>>(`/api/v1/study-centers${qs ? `?${qs}` : ""}`);
+  },
+  getById: (id: string) => apiFetch<StudyCenter>(`/api/v1/study-centers/${id}`),
+  /** Đánh giá thật của trung tâm (UC-41): danh sách + điểm trung bình + số lượng. */
+  getReviews: (id: string) =>
+    apiFetch<CenterReviewsDto>(`/api/v1/study-centers/${encodeURIComponent(id)}/reviews`),
+  /** [UC-59] Xác minh hoặc hủy xác minh trung tâm tư vấn (vai trò: Moderator / Admin) */
+  verify: (id: string, isVerified: boolean, verificationNote?: string | null) =>
+    apiFetch<StudyCenter>(`/api/v1/study-centers/${encodeURIComponent(id)}/verify`, {
+      method: "PUT",
+      body: JSON.stringify(
+        verificationNote !== undefined
+          ? { isVerified, verificationNote }
+          : { isVerified }
+      ),
+    }),
+  /** [UC-72] Sửa thông tin trung tâm tư vấn (vai trò: Moderator / Admin) */
+  update: (id: string, data: UpdateStudyCenterRequest) =>
+    apiFetch<StudyCenter>(`/api/v1/study-centers/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  /** [UC-72] Ẩn hoặc hiện trung tâm tư vấn khỏi danh bạ và luồng gợi ý (vai trò: Moderator / Admin) */
+  setActiveStatus: (id: string, isActive: boolean) => {
+    const payload: SetStudyCenterActiveRequest = { isActive };
+    return apiFetch<StudyCenter>(`/api/v1/study-centers/${encodeURIComponent(id)}/status`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+  },
+};
+
+/** [UC-73] Quản lý và xử lý yêu cầu liên hệ nhận được phía trung tâm tư vấn (Leads) */
+export const centerLeadsApi = {
+  list: (params?: {
+    page?: number;
+    pageSize?: number;
+    status?: string;
+    search?: string;
+    studyCenterId?: string;
+  }) => {
+    const sp = new URLSearchParams();
+    if (params?.page) sp.set("page", String(params.page));
+    if (params?.pageSize) sp.set("pageSize", String(params.pageSize));
+    if (params?.status && params.status !== "all") sp.set("status", params.status);
+    if (params?.search) sp.set("search", params.search);
+    if (params?.studyCenterId) sp.set("studyCenterId", params.studyCenterId);
+    const qs = sp.toString();
+    return apiFetch<CenterLeadsSummaryDto>(`/api/v1/leads/received${qs ? `?${qs}` : ""}`);
+  },
+
+  getById: (id: string) =>
+    apiFetch<CenterReceivedLeadDto>(`/api/v1/leads/received/${encodeURIComponent(id)}`),
+
+  updateStatus: (id: string, status: string) =>
+    apiFetch<CenterReceivedLeadDto>(`/api/v1/leads/received/${encodeURIComponent(id)}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    }),
+
+  /** [USAS-2053 / UC-74] Đọc luồng tin nhắn trao đổi của một yêu cầu liên hệ */
+  getMessages: (id: string) =>
+    apiFetch<LeadMessagesThreadDto>(`/api/v1/leads/received/${encodeURIComponent(id)}/messages`),
+
+  /** [USAS-2053 / UC-74] Trung tâm gửi tin nhắn trả lời trong yêu cầu liên hệ */
+  sendMessage: (id: string, content: string) => {
+    const payload: SendLeadMessageRequest = { content };
+    return apiFetch<SendLeadMessageResultDto>(`/api/v1/leads/received/${encodeURIComponent(id)}/messages`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+};
+
+// [UC-30, UC-31, UC-33] API Quản lý trường mục tiêu (Student / Parent)
+export const targetSchoolsApi = {
+  /** [UC-33] Xem danh sách các trường mục tiêu kèm tóm tắt phân nhóm và hạn nộp */
+  list: (params?: { category?: string; status?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.category) q.set("category", params.category);
+    if (params?.status) q.set("status", params.status);
+    const qs = q.toString();
+    return apiFetch<TargetSchoolSummaryDto>(`/api/v1/target-schools${qs ? `?${qs}` : ""}`);
+  },
+  /** [UC-30] Thêm một trường vào danh sách mục tiêu */
+  add: (data: AddTargetSchoolRequest) =>
+    apiFetch<TargetSchoolDto>("/api/v1/target-schools", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  /** Lấy chi tiết một trường mục tiêu theo ID */
+  getById: (id: string) =>
+    apiFetch<TargetSchoolDto>(`/api/v1/target-schools/${encodeURIComponent(id)}`),
+  /** [UC-32] Chọn hoặc cập nhật vòng nộp hồ sơ và hạn nộp */
+  updateRound: (id: string, data: { applicationRound: string; deadline?: string | null; autoResolveDeadline?: boolean }) =>
+    apiFetch<TargetSchoolDto>(`/api/v1/target-schools/${encodeURIComponent(id)}/round`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  /** [UC-31] Xóa một trường khỏi danh sách mục tiêu theo ID mục tiêu */
+  remove: (id: string) =>
+    apiFetch<void>(`/api/v1/target-schools/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }),
+  /** [UC-31] Xóa một trường khỏi danh sách mục tiêu theo Mã trường hoặc University ID */
+  removeByUniversity: (universityIdentifier: string) =>
+    apiFetch<void>(`/api/v1/target-schools/by-university/${encodeURIComponent(universityIdentifier)}`, {
+      method: "DELETE",
+    }),
+  /** Kiểm tra trạng thái trường mục tiêu của học sinh */
+  check: (params: { universityCode?: string; universityId?: string }) => {
+    const q = new URLSearchParams();
+    if (params.universityCode) q.set("universityCode", params.universityCode);
+    if (params.universityId) q.set("universityId", params.universityId);
+    return apiFetch<TargetSchoolDto | null>(`/api/v1/target-schools/check?${q.toString()}`);
+  },
+};
+
+// [UC-71, UC-91, UC-92] Cổng Trung tâm tư vấn
+export const centerPortalApi = {
+  getProfile: () => apiFetch<StudyCenter>("/api/v1/center/profile"),
+  updateProfile: (data: UpdateCenterProfileRequest) =>
+    apiFetch<StudyCenter>("/api/v1/center/profile", {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  getVerificationStatus: () =>
+    apiFetch<CenterVerificationStatusDto>("/api/v1/center/verification/status"),
+  /** Đổi số điện thoại liên lạc (không cần OTP). */
+  changePhone: (newValue: string) =>
+    apiFetch<{ message: string }>("/api/v1/center/contact/phone", {
+      method: "PUT",
+      body: JSON.stringify({ newValue }),
+    }),
+  /** Đổi email liên lạc: gửi OTP tới email mới rồi xác nhận bằng mã. */
+  requestEmailChange: (newValue: string) =>
+    apiFetch<{ message: string }>("/api/v1/center/contact/email/request", {
+      method: "POST",
+      body: JSON.stringify({ newValue }),
+    }),
+  confirmEmailChange: (newValue: string, code: string) =>
+    apiFetch<{ message: string }>("/api/v1/center/contact/email/confirm", {
+      method: "POST",
+      body: JSON.stringify({ newValue, code }),
+    }),
+  uploadDocument: async (file: File, documentType: string): Promise<VerificationDocumentUploadDto> => {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("documentType", documentType);
+
+    const res = await fetch(`${baseUrl}/api/v1/center/verification/upload-document`, {
+      method: "POST",
+      credentials: "include",
+      body: formData,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      throw new ApiError(res.status, err?.detail || err?.title || "Tải tài liệu thất bại", err);
+    }
+    return res.json();
+  },
+  submitVerification: (data: SubmitVerificationDto) =>
+    apiFetch<StudyCenter>("/api/v1/center/verification", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+};
+
+// [UC-59] Moderator duyệt yêu cầu xác minh pháp lý của trung tâm
+export const adminCenterVerificationsApi = {
+  list: (params?: { status?: string; search?: string; page?: number; pageSize?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.status) qs.set("status", params.status);
+    if (params?.search?.trim()) qs.set("search", params.search.trim());
+    if (params?.page) qs.set("page", String(params.page));
+    if (params?.pageSize) qs.set("pageSize", String(params.pageSize));
+    const queryStr = qs.toString();
+    return apiFetch<PagedResult<CenterVerificationDto>>(`/api/v1/admin/center-verifications${queryStr ? `?${queryStr}` : ""}`);
+  },
+  getById: (id: string) =>
+    apiFetch<CenterVerificationDto>(`/api/v1/admin/center-verifications/${encodeURIComponent(id)}`),
+  review: (id: string, data: ReviewCenterVerificationRequest) =>
+    apiFetch<StudyCenter>(`/api/v1/admin/center-verifications/${encodeURIComponent(id)}/review`, {
       method: "POST",
       body: JSON.stringify(data),
     }),

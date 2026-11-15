@@ -22,9 +22,8 @@ LOCAL_DB = "postgresql://studyabroad:studyabroad@localhost:5432/studyabroad"
 def make_record(n: int, **changes) -> dict:
     record = {
         "code": f"KB-9{n:03d}",  # dải 9xxx để không đụng 88 dòng thật
-        "title": f"Câu hỏi {n}?",
         "question": f"Câu hỏi {n}?",
-        "content": f"Câu trả lời {n}.",
+        "answer": f"Câu trả lời {n}.",
         "quote": "EducationUSA",
         "topic": "LABEL_X",
         "study_level": "general",
@@ -56,8 +55,8 @@ def db_row(code: str, **want) -> dict:
 
 def existing_row(**changes) -> dict:
     row = {
-        "code": "KB-9001", "status": "draft", "question": "Câu hỏi 1?", "content": "Câu trả lời 1.",
-        "quote": "EducationUSA", "title": "Câu hỏi 1?", "topic": "LABEL_X", "study_level": "general",
+        "code": "KB-9001", "status": "draft", "question": "Câu hỏi 1?", "answer": "Câu trả lời 1.",
+        "quote": "EducationUSA", "topic": "LABEL_X", "study_level": "general",
         "scope": "system_advisory", "doc_type": "faq", "source_type": "official",
         "source_note": "Edu4life, RAW-ON-003", "source_url": None,
         "retrieved_at": datetime(2026, 9, 27).date(), "review_due_at": None,
@@ -78,7 +77,7 @@ def test_an_identical_row_is_left_alone_and_needs_no_vector():
 
 
 def test_changed_answer_is_a_content_change_but_does_not_need_a_new_vector():
-    action, needs_vector = decide(make_record(1, content="Câu trả lời mới."), existing_row())
+    action, needs_vector = decide(make_record(1, answer="Câu trả lời mới."), existing_row())
 
     assert action == "content"
     assert needs_vector is False  # vector chỉ phụ thuộc vào câu hỏi
@@ -131,7 +130,7 @@ def test_the_real_data_file_loads_cleanly():
 def test_load_records_reports_every_bad_line_and_duplicate_codes(tmp_path):
     path = tmp_path / "bad.jsonl"
     good = make_record(1)
-    bad = {k: v for k, v in make_record(2).items() if k != "content"}
+    bad = {k: v for k, v in make_record(2).items() if k != "answer"}
     path.write_text(
         "\n".join([json.dumps(good), json.dumps(bad), "không phải json", json.dumps(good)]) + "\n",
         encoding="utf-8",
@@ -141,7 +140,7 @@ def test_load_records_reports_every_bad_line_and_duplicate_codes(tmp_path):
         load_records(path)
 
     message = str(excinfo.value)
-    assert "dòng 2: thiếu content" in message
+    assert "dòng 2: thiếu answer" in message
     assert "dòng 3: không phải JSON" in message
     assert "dòng 4: mã KB-9001 trùng với dòng 1" in message
 
@@ -188,13 +187,13 @@ def conn():
 def fetch(conn, code: str) -> dict:
     cur = conn.execute(
         "SELECT status, version, topic, source_note, embedding_hash, (embedding IS NOT NULL), verified_at, "
-        "verified_by_user_id, ingested_at, content, question, study_level, doc_type, title "
+        "verified_by_user_id, ingested_at, answer, question, study_level, doc_type "
         "FROM app.knowledge_documents WHERE code = %s",
         (code,),
     )
     row = cur.fetchone()
     names = ["status", "version", "topic", "source_note", "hash", "has_vector", "verified_at", "verified_by",
-             "ingested_at", "content", "question", "study_level", "doc_type", "title"]  # fmt: skip
+             "ingested_at", "answer", "question", "study_level", "doc_type"]  # fmt: skip
     return dict(zip(names, row, strict=True)) if row else {}
 
 
@@ -233,11 +232,11 @@ def test_changing_the_answer_bumps_the_version_and_sends_a_verified_row_back_to_
     ingest(conn, [make_record(1, status="verified")], embed)
     asked.clear()
 
-    summary = ingest(conn, [make_record(1, status="verified", content="Câu trả lời đã sửa.")], embed)
+    summary = ingest(conn, [make_record(1, status="verified", answer="Câu trả lời đã sửa.")], embed)
 
     row = fetch(conn, "KB-9001")
     assert summary.content_changed == 1 and summary.reset_to_draft == 1
-    assert row["content"] == "Câu trả lời đã sửa." and row["version"] == 2
+    assert row["answer"] == "Câu trả lời đã sửa." and row["version"] == 2
     assert row["status"] == "draft" and row["verified_at"] is None and row["verified_by"] is None
     assert asked == []  # chỉ sửa câu trả lời nên không tạo lại vector
 

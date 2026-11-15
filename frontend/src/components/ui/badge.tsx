@@ -22,6 +22,7 @@ const badgeVariants = cva(
         ok: "border-ok/20 bg-ok-wash text-ok",
         warn: "border-warn/20 bg-warn-wash text-warn",
         risk: "border-risk/20 bg-risk-wash text-risk",
+        reach: "border-reach/20 bg-reach-wash text-reach",
         neutral: "border-line bg-ground text-ink-2",
       },
     },

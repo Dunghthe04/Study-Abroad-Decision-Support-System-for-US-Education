@@ -21,5 +21,7 @@ public class ProfileCertification : BaseEntity
     public string? SectionScoresJson { get; set; }
     /// <summary>ngày 1 của tháng thi; hạn dùng tính từ đây + validityYears trong metadata, không lưu</summary>
     public DateOnly? TestDate { get; set; }
+    /// <summary>true nếu học sinh chưa thi chính thức: điểm là mục tiêu đặt ra, ngày thi là ngày dự kiến (có thể ở tương lai)</summary>
+    public bool IsTarget { get; set; }
     public int SortOrder { get; set; }
 }

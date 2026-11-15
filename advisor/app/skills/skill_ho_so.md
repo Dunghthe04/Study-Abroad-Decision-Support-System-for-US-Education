@@ -40,7 +40,7 @@ Bạn đọc câu trả lời của học sinh cho một câu hỏi hồ sơ du 
                     known.activity_pending / known.award_pending: mục học sinh kể dở, hệ thống đang hỏi tiếp một ý.
                     Học sinh trả lời ý đó thì trả lại mục đó (cùng name) chỉ với ý vừa nói, ý khác để null.
   relatives_state   bang có người thân ở Mỹ
-  preferred_states  danh sách bang muốn học
+  preferred_states  danh sách bang muốn học, viết tên tiếng Anh của bang ("Cali" → "California")
   school_type       all (sao cũng được) | public (công lập) | private (tư thục)
   visa_refused      true nếu từng bị từ chối visa Mỹ, false nếu chưa
 

@@ -10,12 +10,10 @@ public class KnowledgeDocumentConfiguration : IEntityTypeConfiguration<Knowledge
     {
         b.HasKey(x => x.Id);
         b.HasOne<User>().WithMany().HasForeignKey(x => x.VerifiedByUserId).OnDelete(DeleteBehavior.SetNull);
-        b.Property(x => x.Title).HasMaxLength(300).IsRequired();
         b.Property(x => x.Question);
-        b.Property(x => x.Content).IsRequired();
+        b.Property(x => x.Answer).IsRequired();
         b.Property(x => x.Topic).HasMaxLength(128);
         b.Property(x => x.StudyLevel).HasMaxLength(32).IsRequired().HasDefaultValue("general");
-        b.Property(x => x.Stage).HasMaxLength(64);
         b.Property(x => x.DocType).HasMaxLength(32).IsRequired().HasDefaultValue("faq");
         b.Property(x => x.Scope).HasMaxLength(64).IsRequired().HasDefaultValue("system_advisory");
         b.Property(x => x.Status).HasMaxLength(16).IsRequired().HasDefaultValue("draft");

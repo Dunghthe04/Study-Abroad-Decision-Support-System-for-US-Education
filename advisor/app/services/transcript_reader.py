@@ -2,7 +2,8 @@
 
 Quy trình 2 bước, vì model nhỏ vừa đọc ảnh vừa suy luận ra JSON thì rất dễ sai khi đổi bố cục:
 - Bước A "chép": model đọc ảnh (vision_model) chép nguyên văn ảnh thành Markdown. PDF có chữ thì bỏ qua bước này.
-- Bước B "hiểu": LLM chữ (transcript_parse_model, để trống thì dùng llm_model) đọc Markdown, trả JSON theo schema (structured output).
+- Bước B "hiểu": LLM chữ đọc Markdown, trả JSON theo schema (structured output). Có `parser` (Claude) thì dùng Claude,
+  không có thì dùng model Ollama (transcript_parse_model, để trống thì dùng llm_model).
 Sau đó code hậu kiểm: điểm phải có thật trong văn bản bước A và nằm trong 0–10, rồi chuẩn hoá tên môn / tên kỳ.
 """
 
@@ -14,6 +15,7 @@ import json
 import logging
 import math
 import re
+import time
 import unicodedata
 from dataclasses import dataclass, field
 from typing import Any
@@ -30,10 +32,28 @@ from app.schemas.transcript_ocr import (
     TranscriptSubjectScore,
     TranscriptTerm,
 )
+from app.services import usage_meter
+from app.services.ollama import OllamaError
 from app.services.pii_mask import mask_personal_info
 from app.services.transcript_text import read_term_tables, tidy_transcription
 
 logger = logging.getLogger(__name__)
+
+# Nhãn trong báo cáo token (ai_calls.purpose): bước A đọc ảnh bằng AI vision, bước B bóc tách văn bản thành môn và điểm
+PURPOSE_READ = "transcript_ocr_read"
+PURPOSE_PARSE = "transcript_ocr_parse"
+
+
+def _elapsed_ms(started: float) -> int:
+    return int((time.perf_counter() - started) * 1000)
+
+
+# Lý do lỗi ngắn cho báo cáo token: mã HTTP hoặc tên loại lỗi, không ghi địa chỉ máy chủ có trong thông báo lỗi đầy đủ
+def _error_label(ex: Exception) -> str:
+    if isinstance(ex, httpx.HTTPStatusError):
+        return f"HTTP {ex.response.status_code}"
+    return type(ex).__name__
+
 
 # Model đọc ảnh dự phòng khi chưa tải đúng vision_model, ưu tiên từ trái sang phải
 VISION_MODEL_PRIORITY = ("glm-ocr", "qwen3-vl", "qwen2.5vl", "minicpm-v", "llava")
@@ -271,9 +291,14 @@ class _FileResult:
 
 
 class TranscriptReader:
-    def __init__(self, http: httpx.AsyncClient, settings: Settings) -> None:
+    # parser: client LLM có chat_json (Claude) cho bước B; None thì bước B chạy trên Ollama
+    def __init__(
+        self, http: httpx.AsyncClient, settings: Settings, parser: Any = None, parser_model: str = ""
+    ) -> None:
         self._http = http
         self._settings = settings
+        self._parser = parser
+        self._parser_model = parser_model
 
     async def read_transcript(self, request: TranscriptOcrRequest) -> TranscriptOcrResponse:
         """Đọc và bóc tách bảng điểm từ danh sách nhiều ảnh hoặc nhiều tệp PDF."""
@@ -353,16 +378,14 @@ class TranscriptReader:
                 )
             final_terms.append(TranscriptTerm(term_order=order, term_name=term_name, scores=score_items))
 
-        # Quy đổi GPA: trung bình tất cả các điểm môn / 10 * 4
+        # Chỉ trả TB thang 10; .NET đổi sang GPA thang 4 bằng mốc trong DB (moderator sửa) nên không quy đổi ở đây
         avg_score_10 = round(sum(all_scores) / len(all_scores), 2)
-        gpa4 = round((avg_score_10 / 10.0) * 4.0, 2)
 
         return TranscriptOcrResponse(
             success=True,
             model_used=model_used,
             terms=final_terms,
             average_score_scale10=avg_score_10,
-            calculated_gpa4=gpa4,
             message=(
                 f"Đã đọc {len(final_terms)} học kỳ với {len(all_scores)} điểm môn "
                 f"từ {processed_files_count}/{len(files_to_process)} tệp. Bạn kiểm tra lại bảng trước khi đi tiếp."
@@ -560,7 +583,8 @@ class TranscriptReader:
         if model.startswith("qwen3"):
             # qwen3-vl mặc định "suy nghĩ" trước, tiêu hết num_predict nên content rỗng
             payload["think"] = False
-        content = await self._chat(payload, self._settings.vision_timeout_seconds)
+        with usage_meter.purpose(PURPOSE_READ):
+            content = await self._chat(payload, self._settings.vision_timeout_seconds)
         return re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
 
     async def _parse_source(self, source: str, file_name: str, model_used: str | None) -> _FileResult:
@@ -576,6 +600,8 @@ class TranscriptReader:
             if direct.terms:
                 direct.model = model_used
                 return direct
+        if self._parser is not None:
+            return await self._parse_with_parser(source, file_name, model_used)
         parse_model = self._settings.transcript_parse_model or self._settings.llm_model
         payload: dict[str, Any] = {
             "model": parse_model,
@@ -587,7 +613,8 @@ class TranscriptReader:
         }
         used = " + ".join(m for m in (model_used, parse_model) if m)
         try:
-            content = await self._chat(payload, self._settings.transcript_parse_timeout_seconds)
+            with usage_meter.purpose(PURPOSE_PARSE):
+                content = await self._chat(payload, self._settings.transcript_parse_timeout_seconds)
             data = json.loads(content)
         except OllamaUnavailableError as ex:
             logger.warning("Bước B lỗi (%s, %s): %s", parse_model, file_name, ex)
@@ -599,6 +626,20 @@ class TranscriptReader:
                 warnings=[f"Tệp '{file_name}': AI trả kết quả không hợp lệ, bạn thử lại giúp nhé."],
             )
 
+        result = self._check_parsed(data, source, file_name)
+        result.model = used
+        return result
+
+    async def _parse_with_parser(self, source: str, file_name: str, model_used: str | None) -> _FileResult:
+        """Bước B trên Claude: văn bản đã che họ tên, ngày sinh, mã số trước khi tới đây."""
+        used = " + ".join(m for m in (model_used, self._parser_model) if m)
+        messages = [{"role": "user", "content": PARSE_PROMPT + source}]
+        try:
+            with usage_meter.purpose(PURPOSE_PARSE):
+                data = await self._parser.chat_json(messages, PARSE_SCHEMA, temperature=0.0)
+        except OllamaError as ex:  # ClaudeError kế thừa OllamaError: hết hạn mức, quá tải, JSON hỏng
+            logger.warning("Bước B lỗi (%s, %s): %s", self._parser_model, file_name, ex)
+            return _FileResult(model=used, warnings=[f"Tệp '{file_name}': {FRIENDLY_AI_BUSY}"])
         result = self._check_parsed(data, source, file_name)
         result.model = used
         return result
@@ -635,28 +676,50 @@ class TranscriptReader:
     async def _post_chat(self, payload: dict[str, Any], timeout: float) -> str:
         if payload.get("stream"):
             return await self._post_chat_stream(payload, timeout)
-        resp = await self._http.post("/api/chat", json=payload, timeout=timeout)
-        resp.raise_for_status()
-        return resp.json().get("message", {}).get("content", "") or ""
+        started = time.perf_counter()
+        try:
+            resp = await self._http.post("/api/chat", json=payload, timeout=timeout)
+            resp.raise_for_status()
+            body = resp.json()
+        except Exception as ex:
+            # Lần gọi lỗi vẫn ghi để biết có bao nhiêu lần hỏng; lỗi được ném tiếp như cũ
+            usage_meter.failed("ollama", payload["model"], _error_label(ex), _elapsed_ms(started))
+            raise
+        # Ollama trả số token trong chính phản hồi (prompt_eval_count, eval_count)
+        usage_meter.ollama_ok(payload["model"], body, _elapsed_ms(started))
+        return body.get("message", {}).get("content", "") or ""
 
     async def _post_chat_stream(self, payload: dict[str, Any], timeout: float) -> str:
         """Nhận chữ dần dần. Model đọc ảnh hay chép xong bảng rồi mới lặp chữ ở phần chữ ký/con dấu,
         Ollama dừng giữa chừng với lỗi "repeat limit": giữ lại phần đã chép thay vì bỏ hết."""
         parts: list[str] = []
-        async with self._http.stream("POST", "/api/chat", json=payload, timeout=timeout) as resp:
-            if resp.status_code >= 400:
-                await resp.aread()
-                resp.raise_for_status()
-            async for line in resp.aiter_lines():
-                if not line.strip():
-                    continue
-                chunk = json.loads(line)
-                if error := chunk.get("error"):
-                    if parts and "repeat limit" in error:
-                        logger.info("%s lặp chữ sau %d đoạn, giữ phần đã chép", payload["model"], len(parts))
-                        break
-                    raise OllamaUnavailableError(error)
-                parts.append(chunk.get("message", {}).get("content", ""))
+        final: dict[
+            str, Any
+        ] = {}  # dòng cuối (done = true) mang số token; thiếu khi dừng giữa chừng vì lặp chữ
+        started = time.perf_counter()
+        try:
+            async with self._http.stream("POST", "/api/chat", json=payload, timeout=timeout) as resp:
+                if resp.status_code >= 400:
+                    await resp.aread()
+                    resp.raise_for_status()
+                async for line in resp.aiter_lines():
+                    if not line.strip():
+                        continue
+                    chunk = json.loads(line)
+                    if error := chunk.get("error"):
+                        if parts and "repeat limit" in error:
+                            logger.info(
+                                "%s lặp chữ sau %d đoạn, giữ phần đã chép", payload["model"], len(parts)
+                            )
+                            break
+                        raise OllamaUnavailableError(error)
+                    if chunk.get("done"):
+                        final = chunk
+                    parts.append(chunk.get("message", {}).get("content", ""))
+        except Exception as ex:
+            usage_meter.failed("ollama", payload["model"], _error_label(ex), _elapsed_ms(started))
+            raise
+        usage_meter.ollama_ok(payload["model"], final, _elapsed_ms(started))
         return "".join(parts)
 
     async def _get_available_ollama_models(self) -> list[str]:
@@ -781,7 +844,7 @@ class TranscriptReader:
         elif season:
             raw.semester = 1 if season in ("fall", "autumn") else 2
 
-        school = _SCHOOL_GRADE_RE.search(both) or re.search(r"^(10|11|12)$", cls._plain(grade))
+        school = _SCHOOL_GRADE_RE.search(both) or re.search(r"^(6|7|8|9|10|11|12)$", cls._plain(grade))
         uni = _UNI_YEAR_RE.search(both)
         academic = _ACADEMIC_YEAR_RE.search(both)
 

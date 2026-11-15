@@ -84,7 +84,6 @@ public record AcademicAnalysisResponseDto(
     Guid AnalysisId,
     Guid StudentProfileId,
     decimal UnweightedGpa,
-    decimal WeightedGpa,
     decimal RawAverage,
     int TotalSubjects,
     int TotalTerms,

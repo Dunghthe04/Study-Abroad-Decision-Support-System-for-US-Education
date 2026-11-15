@@ -10,8 +10,9 @@ namespace StudyAbroad.Infrastructure.Advisor;
 
 /// <summary>
 /// [USAS-640] Gọi advisor (Python FastAPI) để OCR ảnh học bạ thành danh sách môn học và điểm số.
+/// collector: số đo token của các lần gọi AI (đọc ảnh, bóc tách) được bỏ vào giỏ chung của yêu cầu, ProfileFlowService đổ xuống ai_calls
 /// </summary>
-public class TranscriptOcrClient(HttpClient http, ILogger<TranscriptOcrClient> logger) : ITranscriptOcrClient
+public class TranscriptOcrClient(HttpClient http, ILogger<TranscriptOcrClient> logger, IAiUsageCollector? collector = null) : ITranscriptOcrClient
 {
     public async Task<TranscriptOcrResponse> OcrTranscriptAsync(TranscriptOcrRequest request, CancellationToken ct = default)
     {
@@ -23,6 +24,7 @@ public class TranscriptOcrClient(HttpClient http, ILogger<TranscriptOcrClient> l
                 var result = await response.Content.ReadFromJsonAsync<TranscriptOcrResponse>(cancellationToken: ct);
                 if (result != null)
                 {
+                    collector?.Add(result.AiUsage);
                     return result;
                 }
             }

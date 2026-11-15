@@ -60,7 +60,6 @@ export interface AcademicAnalysisResponse {
   analysisId: string;
   studentProfileId: string;
   unweightedGpa: number;
-  weightedGpa: number;
   rawAverage: number;
   totalSubjects: number;
   totalTerms: number;

@@ -26,6 +26,7 @@ Bạn đọc câu trả lời của học sinh cho một câu hỏi ở bước 
   unknown     học sinh nói chưa biết, chưa quyết định
 
 ## major: ngành muốn học, viết tên ngành ngắn gọn
+  Học sinh nói tên ngành thì chép đúng chữ học sinh dùng, không dịch ("em muốn học luật" → "luật").
   Học sinh nói chưa rõ, chưa biết, chưa chọn ngành thì ghi "unknown".
   Học sinh chỉ kể môn thích (ví dụ "em thích Toán và Tin") thì ghi tên ngành gần nhất ("Computer Science").
 

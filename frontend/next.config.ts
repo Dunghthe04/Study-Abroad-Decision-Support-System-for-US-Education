@@ -7,11 +7,21 @@ const devApiTarget = process.env.API_PROXY_TARGET;
 const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
+  // Cho phép mở dev server từ máy khác trong mạng LAN (chỉ có tác dụng khi chạy next dev)
+  allowedDevOrigins: ["192.168.*.*"],
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "res.cloudinary.com",
+      },
+    ],
+  },
   async rewrites() {
     return devApiTarget ? [{ source: "/api/:path*", destination: `${devApiTarget}/api/:path*` }] : [];
   },
   // Dev proxy mặc định cắt request sau 30 giây; gợi ý trường chờ AI viết giải thích, máy chỉ có CPU mất tới khoảng 9 phút
-  experimental: { proxyTimeout: 600_000 },
+  experimental: { proxyTimeout: 600_000, proxyClientMaxBodySize: "21mb" },
 };
 
 export default nextConfig;

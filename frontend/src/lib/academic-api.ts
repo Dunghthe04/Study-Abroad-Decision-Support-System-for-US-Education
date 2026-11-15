@@ -52,8 +52,7 @@ export async function deleteTranscriptScore(scoreId: string): Promise<void> {
 
 /**
  * [USAS-365] Chạy thuật toán phân tích điểm học thuật:
- * - Quy đổi GPA 4.0 chuẩn WES
- * - Tính Unweighted & Weighted GPA
+ * - Quy đổi GPA 4.0 theo bảng quy đổi của hệ thống (chỉ unweighted, không tính weighted)
  * - Gom nhóm STEM, Xã hội, Ngoại ngữ
  * - Phân tích xu hướng 3 năm
  */

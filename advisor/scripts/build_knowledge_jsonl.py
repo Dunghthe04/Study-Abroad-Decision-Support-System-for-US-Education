@@ -3,11 +3,13 @@
 Mỗi dòng JSONL là một cặp hỏi đáp, khớp các cột của bảng:
   code          mã cố định của mẩu kiến thức (KB-001...), khóa để cập nhật khi nạp lại
   question      câu hỏi mẫu (chữ được embedding để tìm kiếm)
-  content       câu trả lời chuẩn (đã bỏ phần "(Nguồn kiểm chứng: ...)" ở cuối)
+  answer        câu trả lời chuẩn (đã bỏ phần "(Nguồn kiểm chứng: ...)" ở cuối)
   quote         nguồn kiểm chứng gốc, tách từ cuối câu trả lời
-  title, topic, study_level, scope, doc_type, status, source_type, source_note, retrieved_at, review_due_at
+  topic, study_level, scope, doc_type, status, source_type, source_note, retrieved_at, review_due_at
 
-Script đọc cột theo TÊN (không theo vị trí). Ba cột tùy chọn Đức có thể thêm vào sheet:
+Script đọc cột theo TÊN (không theo vị trí), nhận cả tên tiếng Việt của file gốc lẫn tên tiếng Anh của file đã gọn
+(sheet "knowledge_base": id, label, level, question, answer, source, và tùy chọn code, scope, status).
+Ba cột tùy chọn Đức có thể thêm vào sheet:
   "Mã kiến thức"          KB-089, KB-090... mỗi dòng một mã không trùng (không có cột này thì tự sinh KB-<STT>)
   "Phạm vi"               system_advisory | center_info (không có cột này thì dùng danh sách cũ theo STT)
   "Trạng thái kiểm chứng" draft | verified | rejected, hoặc "Đã kiểm chứng", "Chưa kiểm chứng" (mặc định draft)
@@ -26,7 +28,20 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-SHEET = "2_Kho_Tri_Thuc_74_Cau"
+# Tên sheet cũ (file gốc của Đức) và tên sheet trong file đã gọn (tiêu đề tiếng Anh)
+SHEETS = ("2_Kho_Tri_Thuc_74_Cau", "knowledge_base")
+# Tên cột tiếng Anh của file đã gọn, khớp nguyên tên (cột tiếng Việt cũ vẫn khớp theo từ khóa bên dưới)
+ENGLISH_NAMES = {
+    "stt": "id",
+    "label": "label",
+    "level": "level",
+    "question": "question",
+    "result": "answer",
+    "source": "source",
+    "code": "code",
+    "scope": "scope",
+    "status": "status",
+}
 OUT_PATH = Path(__file__).resolve().parents[1] / "data" / "processed" / "knowledge_faq.jsonl"
 
 # Từ khóa nhận ra cột theo tên (không phân biệt hoa thường); cột bắt buộc
@@ -84,7 +99,9 @@ def find_columns(header: tuple[Any, ...]) -> dict[str, int]:
     columns: dict[str, int] = {}
     missing = []
     for key, keyword in {**REQUIRED_COLUMNS, **OPTIONAL_COLUMNS}.items():
-        index = next((i for i, name in enumerate(names) if keyword in name), None)
+        index = next(
+            (i for i, name in enumerate(names) if keyword in name or name == ENGLISH_NAMES[key]), None
+        )
         if index is not None:
             columns[key] = index
         elif key in REQUIRED_COLUMNS:
@@ -177,9 +194,8 @@ def to_record(row: tuple[Any, ...], columns: dict[str, int]) -> dict[str, Any]:
     return {
         "code": code,
         "stt": stt,
-        "title": question[:300],
         "question": question,
-        "content": content,
+        "answer": content,
         "quote": quote,
         "topic": cell("label"),
         "study_level": map_level(cell("level")),
@@ -225,8 +241,14 @@ def _duplicates(records: list[dict[str, Any]], field: str, name: str) -> list[st
 def read_sheet(xlsx_path: str) -> tuple[tuple[Any, ...], list[tuple[Any, ...]]]:
     import openpyxl  # chỉ cần khi chạy script này, không cần khi test
 
-    all_rows = list(openpyxl.load_workbook(xlsx_path, read_only=True)[SHEET].iter_rows(values_only=True))
-    header_index = next(i for i, r in enumerate(all_rows) if r and _norm(r[0]) == "stt")
+    workbook = openpyxl.load_workbook(xlsx_path, read_only=True)
+    sheet = next((workbook[name] for name in SHEETS if name in workbook.sheetnames), None)
+    if sheet is None:
+        raise SystemExit(f"Không thấy sheet {' hoặc '.join(SHEETS)} trong file")
+    all_rows = list(sheet.iter_rows(values_only=True))
+    header_index = next(
+        i for i, r in enumerate(all_rows) if r and _norm(r[0]) in ("stt", ENGLISH_NAMES["stt"])
+    )
     rows = [r for r in all_rows[header_index + 1 :] if r and r[0]]
     return all_rows[header_index], rows
 

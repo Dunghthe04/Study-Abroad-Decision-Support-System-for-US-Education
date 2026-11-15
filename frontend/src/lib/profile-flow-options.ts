@@ -96,6 +96,121 @@ export const IMPACT_LEVEL_OPTIONS: { value: ImpactLevel; label: string }[] = [
   { value: "international", label: "Quốc tế" },
 ];
 
+export interface ImpactTierDetail {
+  value: ImpactLevel;
+  tierNumber: number; // 1 (đáy) -> 5 (đỉnh)
+  label: string;
+  shortLabel: string;
+  badge: string;
+  icon: string;
+  summary: string;
+  activityCriteria: string[];
+  awardCriteria: string[];
+}
+
+export const IMPACT_TIER_DETAILS: Record<ImpactLevel, ImpactTierDetail> = {
+  international: {
+    value: "international",
+    tierNumber: 5,
+    label: "Cấp Quốc tế",
+    shortLabel: "Quốc tế",
+    badge: "Xuất sắc / Đỉnh cao",
+    icon: "🌍",
+    summary: "Quy mô toàn cầu, các cuộc thi, kỳ thi Olympic hoặc diễn đàn quốc tế lớn.",
+    activityCriteria: [
+      "Đại diện quốc gia tham gia các diễn đàn, hội nghị quốc tế (Model UN thế giới, thanh niên ASEAN...).",
+      "Sáng lập hoặc điều hành dự án quốc tế, sản phẩm công nghệ có người dùng đa quốc gia.",
+    ],
+    awardCriteria: [
+      "Huy chương Olympic quốc tế (IMO, IOI, IPhO, IChO, IBO...).",
+      "Giải thưởng nghiên cứu khoa học quốc tế (ISEF, Genius Olympiad...).",
+      "Giải thưởng cuộc thi nghệ thuật, thể thao toàn cầu uy tín.",
+    ],
+  },
+  national: {
+    value: "national",
+    tierNumber: 4,
+    label: "Cấp Quốc gia",
+    shortLabel: "Quốc gia",
+    badge: "Rất mạnh / Toàn quốc",
+    icon: "🇻🇳",
+    summary: "Quy mô cấp quốc gia do các Bộ, Ban, Ngành hoặc tổ chức toàn quốc chủ trì.",
+    activityCriteria: [
+      "Lãnh đạo dự án hoặc tổ chức phi lợi nhuận hoạt động trên 3 tỉnh/thành phố.",
+      "Thực tập sinh hoặc tham gia nghiên cứu cấp viện nghiên cứu, tập đoàn lớn.",
+      "Đại biểu thanh niên, tình nguyện viên tiêu biểu cấp toàn quốc.",
+    ],
+    awardCriteria: [
+      "Giải Học sinh Giỏi Quốc gia (HSGQG do Bộ GD&ĐT tổ chức).",
+      "Giải Cuộc thi Khoa học Kỹ thuật cấp Quốc gia (ViSEF).",
+      "Huy chương giải vô địch thể thao, văn nghệ toàn quốc.",
+    ],
+  },
+  province: {
+    value: "province",
+    tierNumber: 3,
+    label: "Cấp Tỉnh / Thành phố",
+    shortLabel: "Tỉnh / TP",
+    badge: "Mạnh / Địa phương",
+    icon: "🏙️",
+    summary: "Quy mô cấp tỉnh hoặc thành phố trực thuộc Trung ương (Hà Nội, TP.HCM, Đà Nẵng...).",
+    activityCriteria: [
+      "Sáng lập hoặc chủ nhiệm CLB, dự án thiện nguyện quy mô toàn tỉnh/thành phố.",
+      "Tổ chức sự kiện lớn thu hút từ 100 người tham gia trở lên ngoài phạm vi trường.",
+    ],
+    awardCriteria: [
+      "Giải Học sinh Giỏi cấp Tỉnh / Thành phố trực thuộc Trung ương.",
+      "Giải thưởng thi đấu thể thao, giải nghệ thuật cấp Tỉnh / Thành phố.",
+      "Giải thưởng sáng tạo khoa học kỹ thuật cấp Tỉnh / Thành phố.",
+    ],
+  },
+  district: {
+    value: "district",
+    tierNumber: 2,
+    label: "Cấp Quận / Huyện",
+    shortLabel: "Quận / Huyện",
+    badge: "Khá / Cụm trường",
+    icon: "🏘️",
+    summary: "Quy mô giao lưu, thi đấu giữa các trường trong quận/huyện hoặc cụm trường.",
+    activityCriteria: [
+      "Lãnh đạo hoặc điều phối dự án liên trường trong địa bàn quận/huyện.",
+      "Thành viên ban tổ chức chiến dịch tình nguyện, dự án cộng đồng địa phương.",
+    ],
+    awardCriteria: [
+      "Giải Học sinh Giỏi cấp Quận / Huyện / Cụm trường.",
+      "Giải thi đấu phong trào thể thao, hội thi văn nghệ cấp Quận / Huyện.",
+    ],
+  },
+  school: {
+    value: "school",
+    tierNumber: 1,
+    label: "Cấp Trường",
+    shortLabel: "Trường",
+    badge: "Tiêu chuẩn / Cơ bản",
+    icon: "🏫",
+    summary: "Các hoạt động, câu lạc bộ và giải thưởng nội bộ trong trường học.",
+    activityCriteria: [
+      "Ban chủ nhiệm, trưởng ban hoặc thành viên tích cực của câu lạc bộ trường.",
+      "Tham gia ban tổ chức các sự kiện trường (Prom, Lễ hội, Ngày hội thông tin...).",
+      "Hoạt động tình nguyện hoặc trách nhiệm nội bộ trường học.",
+    ],
+    awardCriteria: [
+      "Giải Học sinh Giỏi cấp trường / giải Olympic cấp trường.",
+      "Giải thi đấu phong trào thể thao, văn nghệ, giải học thuật cấp trường.",
+      "Học bổng khuyến khích hoặc danh hiệu học sinh tiêu biểu của trường.",
+    ],
+  },
+};
+
+/** Mảng 5 cấp xếp theo thứ tự Kim tự tháp từ Đỉnh (Quốc tế) xuống Đáy (Trường) */
+export const IMPACT_PYRAMID_LEVELS: ImpactLevel[] = [
+  "international",
+  "national",
+  "province",
+  "district",
+  "school",
+];
+
 export const ACTIVITY_ROLE_OPTIONS: { value: ActivityRole; label: string }[] = [
   { value: "founder", label: "Sáng lập" },
   { value: "leader", label: "Trưởng / Chủ nhiệm" },
@@ -132,8 +247,17 @@ export function parseTermName(termName: string): { gradeName: string; semester: 
   return { gradeName: m[1].trim(), semester: m[2] === "2" ? 2 : 1 };
 }
 
-// Helper tính GPA thang 4 từ thang 10 theo công thức tuyến tính: GPA 4.0 = GPA 10 / 10 * 4.0
-export function calculateLinearGpa(years: AcademicYearDraft[]): { gpa10: number | null; gpa4: number | null } {
+/**
+ * TB cả năm một môn theo cách tính Việt Nam: HK2 hệ số 2 → (HK1 + 2×HK2) / 3. Chỉ có một kỳ thì lấy kỳ đó,
+ * không có kỳ nào thì null. Không làm tròn ở đây (giống TranscriptGpa.YearAverage phía BE)
+ */
+export function yearAverage(s1: number | null, s2: number | null): number | null {
+  if (s1 !== null && s2 !== null) return (s1 + 2 * s2) / 3;
+  return s1 ?? s2;
+}
+
+// TB thang 10 của các môn (TB cả năm từng môn) và GPA thang 4 quy đổi theo bảng đang dùng (toGpa4)
+export function calculateTranscriptGpa(years: AcademicYearDraft[]): { gpa10: number | null; gpa4: number | null } {
   let totalScore10 = 0;
   let count = 0;
 
@@ -141,15 +265,7 @@ export function calculateLinearGpa(years: AcademicYearDraft[]): { gpa10: number 
     for (const sub of yr.subjects) {
       const s1 = typeof sub.semester1Score === "number" ? sub.semester1Score : null;
       const s2 = typeof sub.semester2Score === "number" ? sub.semester2Score : null;
-
-      let subAvg: number | null = null;
-      if (s1 !== null && s2 !== null) {
-        subAvg = (s1 + s2) / 2;
-      } else if (s1 !== null) {
-        subAvg = s1;
-      } else if (s2 !== null) {
-        subAvg = s2;
-      }
+      const subAvg = yearAverage(s1, s2);
 
       if (subAvg !== null && subAvg >= 0 && subAvg <= 10) {
         totalScore10 += subAvg;
@@ -166,20 +282,154 @@ export function calculateLinearGpa(years: AcademicYearDraft[]): { gpa10: number 
   return { gpa10, gpa4 };
 }
 
+/**
+ * Mốc quy đổi mặc định điểm thang 10 sang GPA thang 4: [điểm, GPA 4], xếp tăng dần. Lấy cận dưới mỗi khoảng trong bảng
+ * bậc THPT của EducationUSA Vietnam 2025, nội suy giữa hai mốc. Bản sao của AcademicAnalysisService.GetDefaultScaleConfig
+ * (BE), sửa thì sửa cả hai bên. Chỉ dùng khi chưa tải được bảng grade_scale.10 từ API (moderator sửa trên trang quản trị),
+ * xem setGradeScaleRules / useGradeScale
+ */
+export const DEFAULT_GPA10_TO_4: readonly (readonly [number, number])[] = [
+  [0, 0],
+  [5.0, 2.0],
+  [6.0, 3.0],
+  [8.0, 3.5],
+  [9.5, 4.0],
+  [10, 4.0],
+];
+
+type Gpa10To4Table = readonly (readonly [number, number])[];
+
+// Bảng đang dùng: mốc mặc định cho tới khi useGradeScale tải xong bảng từ API
+let activeGpa10To4: Gpa10To4Table = DEFAULT_GPA10_TO_4;
+const gradeScaleListeners = new Set<() => void>();
+
+/**
+ * Thay bảng quy đổi bằng bảng lấy từ API (rules: minScore, gpa4). Bỏ qua bảng rỗng hoặc có số không hợp lệ,
+ * khi đó giữ bảng đang dùng. Báo cho các component đang dùng useGradeScale vẽ lại
+ */
+export function setGradeScaleRules(rules: readonly { minScore: number; gpa4: number }[]): void {
+  const valid = rules.length > 0 && rules.every((r) => Number.isFinite(r.minScore) && Number.isFinite(r.gpa4));
+  if (!valid) return;
+  activeGpa10To4 = [...rules].sort((a, b) => a.minScore - b.minScore).map((r) => [r.minScore, r.gpa4] as const);
+  gradeScaleListeners.forEach((listener) => listener());
+}
+
+/** Bảng đang dùng (để useGradeScale biết khi nào bảng đổi) */
+export function getGradeScaleTable(): Gpa10To4Table {
+  return activeGpa10To4;
+}
+
+export function subscribeGradeScale(listener: () => void): () => void {
+  gradeScaleListeners.add(listener);
+  return () => gradeScaleListeners.delete(listener);
+}
+
+/**
+ * Đổi TB thang 10 sang GPA thang 4: nội suy đường thẳng giữa hai mốc kề nhau, ngoài hai đầu lấy GPA mốc đầu/cuối
+ * (giống GradeScale.Interpolate bên BE). Làm tròn 2 chữ số, nửa lên như BE lưu (8.5 → 3.67)
+ */
 export function toGpa4(gpa10: number): number {
-  return Math.round(((gpa10 / 10) * 4.0) * 100) / 100;
+  const table = activeGpa10To4;
+  const [firstScore, firstGpa] = table[0];
+  const [lastScore, lastGpa] = table[table.length - 1];
+  if (gpa10 <= firstScore) return firstGpa;
+  if (gpa10 >= lastScore) return lastGpa;
+  const upper = table.findIndex(([score]) => score >= gpa10);
+  const [x0, y0] = table[upper - 1];
+  const [x1, y1] = table[upper];
+  const gpa4 = y0 + ((gpa10 - x0) * (y1 - y0)) / (x1 - x0);
+  // 1e-9: bù sai số số thực để 3.625 không thành 3.6249999 rồi làm tròn xuống
+  return Math.round(gpa4 * 100 + 1e-9) / 100;
 }
 
 /** Cách nhập GPA của nháp; nháp cũ chưa có gpaMode thì có điểm môn là học bạ (giống TranscriptGpa.Mode phía BE) */
 export function gpaModeOf(step2: TranscriptDraft | undefined): GpaMode {
   if (step2?.gpaMode === "overall" || step2?.gpaMode === "transcript") return step2.gpaMode;
-  return calculateLinearGpa(step2?.academicYears ?? []).gpa10 === null ? "overall" : "transcript";
+  return calculateTranscriptGpa(step2?.academicYears ?? []).gpa10 === null ? "overall" : "transcript";
 }
 
 /** GPA của nháp theo cách nhập (giống TranscriptGpa.Gpa4 phía BE); GPA tổng nhập thang 4 thì gpa10 là null */
 export function draftGpa(step2: TranscriptDraft | undefined): { gpa10: number | null; gpa4: number | null } {
-  if (gpaModeOf(step2) === "transcript") return calculateLinearGpa(step2?.academicYears ?? []);
+  if (gpaModeOf(step2) === "transcript") return calculateTranscriptGpa(step2?.academicYears ?? []);
   const manual10 = step2?.manualGpa10Scale ?? null;
   if (manual10 !== null) return { gpa10: manual10, gpa4: toGpa4(manual10) };
   return { gpa10: null, gpa4: step2?.calculatedGpa4Scale ?? null };
 }
+
+export type GradeTrendType = "strong_upward" | "slight_upward" | "stable" | "downward";
+
+export interface GradeTrendInfo {
+  hasEnoughData: boolean;
+  trend: GradeTrendType | null;
+  changeGpa10: number;
+  yearlyAverages: { gradeName: string; gpa10: number; gpa4: number }[];
+  summaryMessage: string;
+}
+
+/** Đánh giá xu hướng tiến bộ học tập (Grade Trend / Upward Trend) theo chuẩn tuyển sinh Mỹ */
+export function calculateGradeTrend(years: AcademicYearDraft[]): GradeTrendInfo {
+  const yearlyAverages: { gradeName: string; gpa10: number; gpa4: number }[] = [];
+
+  for (const yr of years) {
+    let sum = 0;
+    let count = 0;
+    for (const sub of yr.subjects) {
+      const s1 = typeof sub.semester1Score === "number" ? sub.semester1Score : null;
+      const s2 = typeof sub.semester2Score === "number" ? sub.semester2Score : null;
+      const avg = yearAverage(s1, s2);
+
+      if (avg !== null && avg >= 0 && avg <= 10) {
+        sum += avg;
+        count++;
+      }
+    }
+    if (count > 0) {
+      const gpa10 = Math.round((sum / count) * 100) / 100;
+      yearlyAverages.push({
+        gradeName: yr.gradeName,
+        gpa10,
+        gpa4: toGpa4(gpa10),
+      });
+    }
+  }
+
+  if (yearlyAverages.length < 2) {
+    return {
+      hasEnoughData: false,
+      trend: null,
+      changeGpa10: 0,
+      yearlyAverages,
+      summaryMessage: "",
+    };
+  }
+
+  const firstGpa = yearlyAverages[0].gpa10;
+  const latestGpa = yearlyAverages[yearlyAverages.length - 1].gpa10;
+  const changeGpa10 = Math.round((latestGpa - firstGpa) * 100) / 100;
+
+  let trend: GradeTrendType = "stable";
+  let summaryMessage = "Thành tích học tập duy trì ổn định qua các năm học.";
+
+  if (changeGpa10 >= 0.3) {
+    trend = "strong_upward";
+    summaryMessage = `Điểm số tăng mạnh (+${changeGpa10}) qua các năm — Điểm cộng lớn trong mắt hội đồng tuyển sinh Mỹ!`;
+  } else if (changeGpa10 >= 0.1) {
+    trend = "slight_upward";
+    summaryMessage = `Điểm số có xu hướng tiến bộ (+${changeGpa10}) — Cho thấy đà phát triển và nỗ lực học tập tốt.`;
+  } else if (changeGpa10 <= -0.3) {
+    trend = "downward";
+    summaryMessage = `Điểm số có xu hướng giảm (${changeGpa10}) — Bạn nên chú ý cải thiện điểm số ở các kỳ tới.`;
+  } else if (changeGpa10 <= -0.1) {
+    trend = "downward";
+    summaryMessage = `Điểm số giảm nhẹ (${changeGpa10}) — Hãy duy trì sự tập trung để phục hồi phong độ.`;
+  }
+
+  return {
+    hasEnoughData: true,
+    trend,
+    changeGpa10,
+    yearlyAverages,
+    summaryMessage,
+  };
+}
+

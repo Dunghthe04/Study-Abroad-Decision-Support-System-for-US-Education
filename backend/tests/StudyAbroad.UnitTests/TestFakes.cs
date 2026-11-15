@@ -2,6 +2,7 @@ using StudyAbroad.Application.Audit;
 using StudyAbroad.Application.Auth;
 using StudyAbroad.Application.Common;
 using StudyAbroad.Application.ParentLinks;
+using StudyAbroad.Application.Recommendations;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
 
@@ -182,6 +183,30 @@ internal sealed class FakeAuditLogRepository : IAuditLogRepository
         Entries.Add(entry);
         return Task.CompletedTask;
     }
+
+    public Task<string?> GetLatestLockReasonAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        var idStr = userId.ToString();
+        var last = Entries
+            .Where(x => x.Action == "user.lock" && x.EntityId == idStr)
+            .OrderByDescending(x => x.CreatedAt)
+            .FirstOrDefault();
+
+        if (last == null || string.IsNullOrEmpty(last.DetailJson)) return Task.FromResult<string?>(null);
+
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(last.DetailJson);
+            if (doc.RootElement.TryGetProperty("reason", out var r))
+            {
+                return Task.FromResult<string?>(r.GetString());
+            }
+        }
+        catch
+        {
+        }
+        return Task.FromResult<string?>(null);
+    }
 }
 
 internal sealed class FakeEmailSender : IEmailSender
@@ -200,7 +225,7 @@ internal sealed class FakeEmailSender : IEmailSender
         return Task.CompletedTask;
     }
 
-    public Task SendAccountTempLockedNotificationAsync(string toEmail, string fullName, int lockoutMinutes = 15, CancellationToken ct = default)
+    public Task SendAccountTempLockedNotificationAsync(string toEmail, string fullName, int lockoutMinutes = 0, CancellationToken ct = default)
     {
         SentEmails.Add((toEmail, "temp_locked_notice", $"lockout:{lockoutMinutes}m"));
         return Task.CompletedTask;
@@ -233,6 +258,18 @@ internal sealed class FakeEmailSender : IEmailSender
     public Task SendParentLinkChangedEmailAsync(string toEmail, string studentName, string parentLabel, bool linked, CancellationToken ct = default)
     {
         SentEmails.Add((toEmail, linked ? "parent_linked" : "parent_unlinked", parentLabel));
+        return Task.CompletedTask;
+    }
+
+    public Task SendAccountLockedEmailAsync(string toEmail, string fullName, string reason, CancellationToken ct = default)
+    {
+        SentEmails.Add((toEmail, "account_locked_notice", reason));
+        return Task.CompletedTask;
+    }
+
+    public Task SendAccountUnlockedEmailAsync(string toEmail, string fullName, string reason, CancellationToken ct = default)
+    {
+        SentEmails.Add((toEmail, "account_unlocked_notice", reason));
         return Task.CompletedTask;
     }
 }
@@ -321,5 +358,46 @@ internal sealed class FakeParentLinkRepository : IParentLinkRepository
         ParentUserId = l.ParentUserId, Status = l.Status, TokenHash = l.TokenHash, TokenExpiresAt = l.TokenExpiresAt,
         InviteSentCount = l.InviteSentCount, LastInviteSentAt = l.LastInviteSentAt, AcceptedAt = l.AcceptedAt,
         ConsentId = l.ConsentId, RevokedAt = l.RevokedAt, RevokedByUserId = l.RevokedByUserId, Version = l.Version,
+    };
+}
+
+/// <summary>Giả lập ScenarioRepository (UC-86): giữ kịch bản trong bộ nhớ, trả bản sao như AsNoTracking.</summary>
+internal sealed class FakeScenarioRepository : IScenarioRepository
+{
+    public List<WhatIfSimulation> Rows { get; } = [];
+
+    public Task<int> CountByUserAsync(Guid userId, CancellationToken ct = default) =>
+        Task.FromResult(Rows.Count(r => r.UserId == userId));
+
+    public Task<List<WhatIfSimulation>> ListByUserAsync(Guid userId, CancellationToken ct = default) =>
+        Task.FromResult(Rows.Where(r => r.UserId == userId).OrderByDescending(r => r.CreatedAt).Select(Clone).ToList());
+
+    public Task<WhatIfSimulation?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
+        Task.FromResult(Rows.Where(r => r.Id == id).Select(Clone).FirstOrDefault());
+
+    public Task AddAsync(WhatIfSimulation row, CancellationToken ct = default)
+    {
+        Rows.Add(Clone(row));
+        return Task.CompletedTask;
+    }
+
+    public Task UpdateAsync(WhatIfSimulation row, CancellationToken ct = default)
+    {
+        var idx = Rows.FindIndex(r => r.Id == row.Id);
+        if (idx >= 0) Rows[idx] = Clone(row);
+        return Task.CompletedTask;
+    }
+
+    public Task DeleteAsync(WhatIfSimulation row, CancellationToken ct = default)
+    {
+        Rows.RemoveAll(r => r.Id == row.Id);
+        return Task.CompletedTask;
+    }
+
+    private static WhatIfSimulation Clone(WhatIfSimulation r) => new()
+    {
+        Id = r.Id, CreatedAt = r.CreatedAt, UpdatedAt = r.UpdatedAt, UserId = r.UserId, StudentProfileId = r.StudentProfileId,
+        Title = r.Title, SimulatedProfileJson = r.SimulatedProfileJson, SimulatedRecommendationsJson = r.SimulatedRecommendationsJson,
+        Notes = r.Notes,
     };
 }

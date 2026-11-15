@@ -3,13 +3,19 @@ from datetime import date
 from app.schemas.chat import ChatState, ProfileField
 from app.services.ollama import OllamaError
 from app.services.skills.skill_danh_gia import (
+    FREE_NUMBERS,
+    TIER_FINANCE,
     Assessor,
     DanhGiaHandler,
+    allowed_numbers,
     assess_levels,
     ec_tier_of,
+    gpa10_to_4,
     read_facts,
 )
+from app.services.skills.validators import BUDGET_RANGES
 from tests.fakes import FakeLLM
+from tests.vef import VEF, VEF_RULES
 
 TODAY = date(2026, 10, 28)
 
@@ -35,19 +41,53 @@ GOOD_LEVELS = {
 
 
 def levels_of(**values):
-    return assess_levels(read_facts(profile(**values), TODAY))
+    return assess_levels(read_facts(profile(**values), TODAY, VEF))
 
 
 # F1: ngưỡng giống assessProfile bên frontend
 def test_levels_good_profile():
-    assert assess_levels(read_facts(GOOD, TODAY)) == GOOD_LEVELS
+    assert assess_levels(read_facts(GOOD, TODAY, VEF)) == GOOD_LEVELS
 
 
 def test_gpa_10_converted_to_4_scale():
-    # 8.5/10 → 3.4/4: trung bình (ngưỡng mạnh là 3.5)
-    assert levels_of(gpa={"value": 8.5, "scale": 10})["academic"] == "medium"
+    # Mốc VEF: 8.5/10 → 3.63/4 là mạnh (ngưỡng mạnh 3.5), 7.0/10 → 3.0/4 là trung bình, 6.9/10 → 2.95 là yếu
+    assert levels_of(gpa={"value": 8.5, "scale": 10})["academic"] == "strong"
     assert levels_of(gpa={"value": 3.5, "scale": 4})["academic"] == "strong"
-    assert levels_of(gpa={"value": 7.0, "scale": 10})["academic"] == "weak"
+    assert levels_of(gpa={"value": 7.0, "scale": 10})["academic"] == "medium"
+    assert levels_of(gpa={"value": 6.9, "scale": 10})["academic"] == "weak"
+
+
+def test_gpa10_to_4_interpolates_between_vef_points():
+    # Đúng mốc thì lấy GPA mốc; giữa hai mốc thì nội suy, không nhảy bậc (8.99 sát 9.0 nên gần 3.75)
+    cases = {10: 4.0, 9.0: 3.75, 8.99: 3.75, 8.0: 3.5, 6.0: 2.5, 4.0: 1.6, 0: 0.0}
+    assert {score: gpa10_to_4(score, VEF) for score in cases} == cases
+
+
+def test_gpa10_to_4_rounds_half_up_like_dotnet():
+    # 8.5 → 3.625 và 7.99 → 3.495: làm tròn nửa lên như .NET lưu (round() của Python ra 3.62 / 3.49)
+    assert gpa10_to_4(8.5, VEF) == 3.63
+    assert gpa10_to_4(7.99, VEF) == 3.5
+
+
+def test_gpa10_to_4_clamps_outside_points():
+    table = [(5.0, 2.0), (9.0, 4.0)]
+    assert gpa10_to_4(3.0, table) == 2.0
+    assert gpa10_to_4(9.5, table) == 4.0
+    assert gpa10_to_4(7.0, table) == 3.0
+
+
+def test_no_grade_scale_means_no_gpa4():
+    # Advisor không giữ bản sao mốc: lượt không có bảng thì không đoán GPA thang 4
+    assert gpa10_to_4(8.5, None) is None
+    facts = read_facts(profile(gpa={"value": 8.5, "scale": 10}), TODAY)
+    assert facts.gpa4 is None
+    assert assess_levels(facts)["academic"] == "none"
+
+
+def test_gpa_scale_4_kept_as_is():
+    assert read_facts(profile(gpa={"value": 3.62, "scale": 4}), TODAY).gpa4 == 3.62
+    assert read_facts(profile(gpa={"value": 3.62, "scale": 4}), TODAY, VEF).gpa4 == 3.62
+    assert read_facts(profile(gpa={"value": 9.0, "scale": 10}), TODAY, VEF).gpa4 == 3.75
 
 
 def test_missing_data_is_none_not_guessed():
@@ -73,11 +113,27 @@ def test_pte_not_converted_like_frontend():
     assert levels_of(english={"type": "pte", "value": 65})["english"] == "none"
 
 
-def test_budget_tier_thresholds_unchanged():
+def test_budget_tier_to_finance_level():
+    # Giữ kết quả ngưỡng cũ (≥ 60k ok, ≥ 35k tight); mức trên 70k không có trần nhưng vẫn là ok
     assert levels_of(budget="tier_under_20k")["finance"] == "short"
     assert levels_of(budget="tier_20k_35k")["finance"] == "tight"
     assert levels_of(budget="tier_35k_50k")["finance"] == "tight"
     assert levels_of(budget="tier_50k_70k")["finance"] == "ok"
+    assert levels_of(budget="tier_above_70k")["finance"] == "ok"
+
+
+def test_every_budget_tier_has_finance_level():
+    assert set(TIER_FINANCE) == set(BUDGET_RANGES)
+
+
+def test_budget_numbers_allowed_are_tier_bounds():
+    def budget_numbers(tier):
+        # Bỏ các số luôn được phép (mốc ngưỡng như 1400, 35.000) và số nhỏ như thang điểm
+        return {n for n in allowed_numbers(read_facts(profile(budget=tier), TODAY)) - FREE_NUMBERS if n >= 20}
+
+    assert budget_numbers("tier_50k_70k") == {50.0, 70.0, 50_000.0, 70_000.0}
+    # Mức trên 70k chỉ có sàn: không có số trần nào được phép
+    assert budget_numbers("tier_above_70k") == {70.0, 70_000.0}
 
 
 def test_scholarship_chance():
@@ -115,7 +171,7 @@ def ai_answer(levels, **text):
 # TH-29: Qwen chép đúng mức → dùng lời của Qwen
 async def test_th29_ai_text_used_when_levels_match():
     llm = FakeLLM(ai_answer(GOOD_LEVELS))
-    res = await Assessor(llm, "qwen3:8b").assess(GOOD, TODAY)
+    res = await Assessor(llm, "qwen3:8b").assess(GOOD, TODAY, VEF)
 
     assert res.ai_used is True
     assert res.levels == GOOD_LEVELS
@@ -127,7 +183,7 @@ async def test_th29_ai_text_used_when_levels_match():
 async def test_th30_changed_level_retried_then_code_levels(caplog):
     wrong = {**GOOD_LEVELS, "finance": "short"}
     llm = FakeLLM(ai_answer(wrong), ai_answer({**GOOD_LEVELS, "academic": "excellent"}))
-    res = await Assessor(llm, "qwen3:8b").assess(GOOD, TODAY)
+    res = await Assessor(llm, "qwen3:8b").assess(GOOD, TODAY, VEF)
 
     assert len(llm.calls) == 2
     assert res.ai_used is False
@@ -137,7 +193,7 @@ async def test_th30_changed_level_retried_then_code_levels(caplog):
 
 async def test_th30_retry_succeeds_on_second_try():
     llm = FakeLLM(ai_answer({**GOOD_LEVELS, "sat": "medium"}), ai_answer(GOOD_LEVELS))
-    res = await Assessor(llm, "qwen3:8b").assess(GOOD, TODAY)
+    res = await Assessor(llm, "qwen3:8b").assess(GOOD, TODAY, VEF)
 
     assert res.ai_used is True
 
@@ -148,7 +204,7 @@ async def test_th31_made_up_number_or_promise_falls_back_to_template():
         ai_answer(GOOD_LEVELS, summary="Tỉ lệ đỗ của bạn khoảng 85%."),
         ai_answer(GOOD_LEVELS, summary="Bạn chắc chắn đỗ trường top."),
     )
-    res = await Assessor(llm, "qwen3:8b").assess(GOOD, TODAY)
+    res = await Assessor(llm, "qwen3:8b").assess(GOOD, TODAY, VEF)
 
     assert res.ai_used is False
     assert "GPA 9 (thang 10) ở mức mạnh." in res.strengths
@@ -157,14 +213,14 @@ async def test_th31_made_up_number_or_promise_falls_back_to_template():
 
 async def test_number_formats_from_profile_allowed():
     tight = profile(gpa={"value": 8.5, "scale": 10}, budget="tier_20k_35k")
-    levels = assess_levels(read_facts(tight, TODAY))
+    levels = assess_levels(read_facts(tight, TODAY, VEF))
     text = ai_answer(
         levels,
-        summary="GPA 8,5 tương đương 3.4 thang 4; ngân sách khoảng 35.000 USD.",
+        summary="GPA 8,5 tương đương 3.63 thang 4; ngân sách khoảng 35.000 USD.",
         strengths=["GPA 8.5 ổn định."],
         weaknesses=["Chưa có SAT."],
     )
-    res = await Assessor(FakeLLM(text), "qwen3:8b").assess(tight, TODAY)
+    res = await Assessor(FakeLLM(text), "qwen3:8b").assess(tight, TODAY, VEF)
 
     assert res.ai_used is True
 
@@ -179,7 +235,7 @@ async def test_ollama_down_uses_template():
 
 
 async def test_handler_moves_to_b4_and_asks_x2():
-    state = ChatState(current_step="B3", profile=GOOD)
+    state = ChatState(current_step="B3", profile=GOOD, grade_scale=VEF_RULES)
     out = await DanhGiaHandler(FakeLLM(ai_answer(GOOD_LEVELS)), "qwen3:8b").run(state, "hồ sơ em thế nào")
 
     assert state.current_step == "B4"

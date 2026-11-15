@@ -1,26 +1,18 @@
-// API client cho gợi ý trường: tạo, đọc lần gần nhất, đổi nút ưu tiên, tư vấn từng trường.
+// API client cho gợi ý trường: tạo, đọc lần gần nhất, mô phỏng hồ sơ, tư vấn từng trường.
 
 import { apiFetch, ApiError } from "@/lib/api";
-import type { Pref, Recommendation, SchoolExplanation } from "@/types/recommendation";
-
-export interface PrefPreset {
-  key: "balanced" | "cost" | "aid" | "prestige";
-  label: string;
-  pref: Pref;
-}
-
-// Bốn nút ưu tiên, giá trị lấy từ skill_pick.md
-export const PREF_PRESETS: PrefPreset[] = [
-  { key: "balanced", label: "Cân bằng", pref: [2, 2, 2] },
-  { key: "cost", label: "Chi phí thấp", pref: [3, 1, 1] },
-  { key: "aid", label: "Học bổng nhiều", pref: [1, 3, 1] },
-  { key: "prestige", label: "Danh tiếng", pref: [1, 1, 3] },
-];
+import type {
+  Pref,
+  Recommendation,
+  SchoolOption,
+  SimulationOverrides,
+  SimulationResponse,
+} from "@/types/recommendation";
 
 const BASE = "/api/v1/recommendations";
 
 export const recommendationApi = {
-  // Chạy cả quy trình: lọc → Qwen → Gemini chấm → Gemini chọn → lưu. Mất khoảng nửa phút, chỉ gọi khi cần.
+  // Chạy cả quy trình: lọc cứng → đọc ngoại khóa → code chấm nhóm và fit score → lưu.
   create: (pref?: Pref) =>
     apiFetch<Recommendation>(BASE, {
       method: "POST",
@@ -39,16 +31,13 @@ export const recommendationApi = {
     }
   },
 
-  // Đổi nút ưu tiên: chỉ gọi lại lượt chọn trên số đã lưu, không lọc lại, không gọi Qwen.
-  repick: (pref: Pref) =>
-    apiFetch<Recommendation>(`${BASE}/repick`, {
+  // Trình mô phỏng: tính lại với GPA, SAT, ngân sách... giả định. Không lưu, không gọi AI.
+  simulate: (overrides: SimulationOverrides) =>
+    apiFetch<SimulationResponse>(`${BASE}/simulate`, {
       method: "POST",
-      body: JSON.stringify({ pref }),
+      body: JSON.stringify(overrides),
     }),
 
-  // Mở chi tiết một trường: Qwen viết lời tư vấn từ số đã lưu.
-  explain: (code: string) =>
-    apiFetch<SchoolExplanation>(`${BASE}/schools/${encodeURIComponent(code)}/explain`, {
-      method: "POST",
-    }),
+  // Danh sách trường cho ô chọn có gợi ý trong chat. Tải một lần, lọc ngay trên máy khi học sinh gõ.
+  schoolOptions: () => apiFetch<SchoolOption[]>(`${BASE}/schools/names`, { method: "GET" }),
 };

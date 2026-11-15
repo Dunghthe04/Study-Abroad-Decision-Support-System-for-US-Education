@@ -85,14 +85,15 @@ export function ReadOnlyTranscriptTable({
           <div>
             <div className="flex items-center gap-2">
               <CardTitle>
-                Bảng Điểm Học Tập & Quy Đổi WES 4.0
+                Bảng Điểm Học Tập & Quy Đổi Thang 4.0
               </CardTitle>
               <Badge variant="brand">
                 {scores.length} đầu điểm
               </Badge>
             </div>
             <CardDescription>
-              Dữ liệu trích xuất từ hồ sơ học bạ học sinh đã khai báo, được quy đổi theo thang điểm chuẩn WES của Mỹ.
+              Dữ liệu trích xuất từ hồ sơ học bạ học sinh đã khai báo, quy đổi tham khảo sang thang 4 theo bảng quy đổi của
+              hệ thống. Mỗi trường Mỹ tự đánh giá học bạ theo cách riêng, nên con số thực tế có thể chênh một chút.
             </CardDescription>
           </div>
 
@@ -174,7 +175,7 @@ export function ReadOnlyTranscriptTable({
               <TableHead>Phân nhóm</TableHead>
               <TableHead className="text-center">Điểm hệ 10</TableHead>
               <TableHead className="text-center">Tín chỉ / Hệ số</TableHead>
-              <TableHead className="text-center">Điểm GPA 4.0 (WES)</TableHead>
+              <TableHead className="text-center">Điểm GPA 4.0 (tham khảo)</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -226,7 +227,7 @@ export function ReadOnlyTranscriptTable({
                   {stats.totalCredits} TC
                 </TableCell>
                 <TableCell className="text-center text-muted-foreground">
-                  * Thang chuẩn WES
+                  * Quy đổi tham khảo
                 </TableCell>
               </TableRow>
             </TableFooter>

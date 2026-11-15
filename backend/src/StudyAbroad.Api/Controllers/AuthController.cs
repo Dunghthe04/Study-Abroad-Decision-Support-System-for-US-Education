@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using StudyAbroad.Api.Extensions;
 using StudyAbroad.Api.RateLimiting;
 using StudyAbroad.Application.Auth;
+using StudyAbroad.Application.StudyCenters;
 
 namespace StudyAbroad.Api.Controllers
 {
@@ -36,6 +37,37 @@ namespace StudyAbroad.Api.Controllers
             if (result.Error == AuthError.None && result.Response != null)
             {
                 // Tự động đăng nhập qua HttpOnly Cookie sau khi xác thực thành công
+                return SetSessionCookie(result.Response);
+            }
+
+            return result.Error switch
+            {
+                AuthError.OtpInvalid => Problem(result.Message, statusCode: StatusCodes.Status400BadRequest, title: "Mã OTP không hợp lệ"),
+                _ => Problem(result.Message, statusCode: StatusCodes.Status400BadRequest)
+            };
+        }
+
+        // [UC-64] Trung tâm tự đăng ký tài khoản
+        [HttpPost("register-center")]
+        [EnableRateLimiting(AuthRateLimit.PolicyName)]
+        public async Task<IActionResult> RegisterCenter(RegisterCenterRequest request, CancellationToken ct)
+        {
+            var result = await auth.RegisterCenterAsync(request, ct);
+            return result.Error switch
+            {
+                AuthError.None => StatusCode(StatusCodes.Status201Created, new { message = result.Message, email = request.Email }),
+                _ => ValidationProblem(result.Message),
+            };
+        }
+
+        // [UC-91] Xác thực email trung tâm qua mã OTP 6 số
+        [HttpPost("verify-center-email")]
+        [EnableRateLimiting(AuthRateLimit.PolicyName)]
+        public async Task<IActionResult> VerifyCenterEmail(VerifyCenterEmailRequest request, CancellationToken ct)
+        {
+            var result = await auth.VerifyCenterEmailAsync(request, ct);
+            if (result.Error == AuthError.None && result.Response != null)
+            {
                 return SetSessionCookie(result.Response);
             }
 
@@ -181,6 +213,32 @@ namespace StudyAbroad.Api.Controllers
             return result.Error == AuthError.None
                 ? Ok(new { message = result.Message, user = result.User })
                 : Problem(result.Message, statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        // [UC-80] Người dùng yêu cầu xóa tài khoản: Ẩn danh hóa PII, thu hồi phiên và dọn dẹp cookie
+        [Authorize]
+        [HttpDelete("me")]
+        public async Task<IActionResult> DeleteMe(CancellationToken ct)
+        {
+            var userId = User.GetUserId();
+            if (userId is null)
+            {
+                return Unauthorized(new { message = "Vui lòng đăng nhập." });
+            }
+
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+            var userAgent = Request.Headers.UserAgent.ToString();
+
+            var result = await auth.AnonymizeUserAccountAsync(userId.Value, ip, userAgent, ct);
+            if (result.Error != AuthError.None)
+            {
+                return Problem(result.Message, statusCode: StatusCodes.Status400BadRequest);
+            }
+
+            // Xóa cookie phiên làm việc
+            Response.Cookies.Delete(AccessTokenCookie, CreateCookieOptions(expires: null));
+
+            return Ok(new { message = result.Message });
         }
 
         // Token của phiên hiện tại: lấy từ HttpOnly Cookie, không có thì từ header Authorization

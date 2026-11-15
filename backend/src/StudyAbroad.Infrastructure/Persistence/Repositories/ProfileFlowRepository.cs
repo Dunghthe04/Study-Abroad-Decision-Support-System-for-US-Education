@@ -55,20 +55,23 @@ public class ProfileFlowRepository(AppDbContext context) : IProfileFlowRepositor
         return profile;
     }
 
-    public async Task<IReadOnlyList<string>> GetOfferingMajorsAsync(CancellationToken ct = default)
+    public async Task<IReadOnlyList<MajorOption>> GetMajorOptionsAsync(CancellationToken ct = default)
     {
-        var offerings = await context.UniversityOfferings
+        return await context.Majors
             .AsNoTracking()
-            .Select(o => o.Majors)
+            .Where(m => context.UniversityOfferingMajors.Any(link => link.MajorId == m.Id))
+            .OrderBy(m => m.NameVi ?? m.Name)
+            .Select(m => new MajorOption(m.Name, m.NameVi, m.Aliases, m.IsPopular))
             .ToListAsync(ct);
+    }
 
-        return offerings
-            .SelectMany(m => m)
-            .Where(m => !string.IsNullOrWhiteSpace(m))
-            .Select(m => m.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(m => m)
-            .ToList();
+    public async Task<IReadOnlyList<UsStateOption>> GetUsStateOptionsAsync(CancellationToken ct = default)
+    {
+        return await context.UsStates
+            .AsNoTracking()
+            .OrderBy(s => s.Name)
+            .Select(s => new UsStateOption(s.Code, s.Name, s.Region, s.IsPopular))
+            .ToListAsync(ct);
     }
 
     public async Task CommitProfileFlowAsync(

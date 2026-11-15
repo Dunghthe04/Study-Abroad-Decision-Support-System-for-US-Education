@@ -1,7 +1,8 @@
 import pytest
 
+from app.schemas.chat import ChatState
 from app.services.ollama import OllamaError
-from app.services.skills.skill_bac_hoc import UNKNOWN, BacHocRead, BacHocReader, check_read
+from app.services.skills.skill_bac_hoc import UNKNOWN, BacHocRead, BacHocReader, can_ask, check_read
 from tests.fakes import FakeLLM
 
 TRONG = {"current_level": None, "current_grade": None, "target_level": None, "major": None, "intake": None}
@@ -97,3 +98,11 @@ async def test_sends_question_id_and_message():
 
     assert res.intake == "Fall 2027"
     assert '"question_id":"B1.4"' in llm.calls[0]["messages"][1]["content"]
+
+
+# Cấp học, bậc học, ngành bắt buộc (lưu hồ sơ cần): hỏi tới khi trả lời. Kỳ nhập học chỉ hỏi tối đa 2 lần
+def test_required_bac_hoc_questions_are_always_asked():
+    state = ChatState(current_step="B1", asked={"B1.1": 5, "B1.2": 5, "B1.3": 5, "B1.4": 2})
+
+    assert can_ask(state, "B1.1") and can_ask(state, "B1.2") and can_ask(state, "B1.3")
+    assert not can_ask(state, "B1.4")

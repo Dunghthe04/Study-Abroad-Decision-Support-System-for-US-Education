@@ -3,7 +3,6 @@
 import pytest
 
 from app.schemas.chat import ChatMessage, ChatRequest, ChatState
-from app.services.chat_flow import ChatFlow
 from app.services.knowledge import KnowledgeHit
 from app.services.ollama import OllamaError
 from app.services.skill_rules import ORDER
@@ -17,7 +16,7 @@ from app.services.skills.skill_tra_loi import (
     citation_of,
     numbers_in,
 )
-from tests.fakes import FakeLLM
+from tests.fakes import FakeLLM, flow_with, tin
 
 SEVIS = "Phí SEVIS I-901 là 350 USD cho diện F-1, nộp một lần trước khi phỏng vấn visa."
 FINANCE = (
@@ -25,8 +24,10 @@ FINANCE = (
 )
 
 
-def hit(code="KB-001", content=SEVIS, score=0.9, quote="8 CFR 214.13", url=None, note="Nguồn A"):
-    return KnowledgeHit(code, "câu hỏi mẫu", content, quote, url, note, None, score)
+def hit(
+    code="KB-001", content=SEVIS, score=0.9, quote="8 CFR 214.13", url=None, note="Nguồn A", retrieved=None
+):
+    return KnowledgeHit(code, "câu hỏi mẫu", content, quote, url, note, retrieved, score)
 
 
 class FakeLLMWithEmbed(FakeLLM):
@@ -162,6 +163,23 @@ def test_citation_prefers_the_quote_then_the_note_then_a_generic_title():
     assert citation_of(hit(quote=None, note=None)).title == "Kho kiến thức tư vấn du học"
 
 
+def test_citation_carries_the_date_the_source_was_collected():
+    from datetime import date
+
+    cited = citation_of(hit(retrieved=date(2026, 10, 5)))
+
+    assert cited.retrieved_at == date(2026, 10, 5)
+    # JSON gửi cho .NET dùng camelCase, ngày dạng ISO
+    assert cited.model_dump(by_alias=True, mode="json")["retrievedAt"] == "2026-10-05"
+
+
+def test_citation_without_a_stored_date_has_no_date_instead_of_a_guess():
+    cited = citation_of(hit(retrieved=None))
+
+    assert cited.retrieved_at is None
+    assert cited.model_dump(by_alias=True, mode="json")["retrievedAt"] is None
+
+
 def test_citation_snippet_is_cut_short():
     assert len(citation_of(hit(content="x" * 500)).snippet) == 200
 
@@ -289,23 +307,14 @@ def test_skill_tra_loi_is_registered_only_when_the_knowledge_store_exists():
     assert "skill_tra_loi" in handlers and "skill_tra_loi" in ORDER
 
 
-class PickerOf:
-    def __init__(self, *skills: str) -> None:
-        self._skills = list(skills)
-
-    async def predict(self, step, last_question, message, missing):
-        class Result:
-            skills = self._skills
-            probs = {s: 0.9 for s in self._skills}
-
-        return Result()
+# SLM đọc là câu hỏi kiến thức: nhánh kiến thức gọi skill_tra_loi
+KNOWLEDGE = tin("knowledge")
 
 
 async def test_chat_returns_the_citations_and_disclaimer_to_the_client():
     llm = FakeLLMWithEmbed(good())
-    flow = ChatFlow(
-        PickerOf("skill_tra_loi"),
-        build_handlers(llm, "m", knowledge=FakeRetriever([hit(url="https://example.org/sevis")])),
+    flow = flow_with(
+        build_handlers(llm, "m", knowledge=FakeRetriever([hit(url="https://example.org/sevis")])), KNOWLEDGE
     )
     req = ChatRequest(
         messages=[ChatMessage(role="user", content="Phí SEVIS bao nhiêu?")],
@@ -321,7 +330,7 @@ async def test_chat_returns_the_citations_and_disclaimer_to_the_client():
 
 async def test_chat_remembers_the_study_level_sent_by_the_client():
     retriever = FakeRetriever([])
-    flow = ChatFlow(PickerOf("skill_tra_loi"), build_handlers(FakeLLMWithEmbed(), "m", knowledge=retriever))
+    flow = flow_with(build_handlers(FakeLLMWithEmbed(), "m", knowledge=retriever), KNOWLEDGE)
     first = ChatRequest(
         messages=[ChatMessage(role="user", content="Phí SEVIS bao nhiêu?")],
         state=ChatState(current_step="B5"),

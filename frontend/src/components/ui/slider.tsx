@@ -1,14 +1,21 @@
 import { Slider as SliderPrimitive } from "@base-ui/react/slider"
 import { cn } from "cn"
 
+type SliderProps = SliderPrimitive.Root.Props & {
+  /** Đọc giá trị hiện tại thành chữ cho trình đọc màn hình (ví dụ tên mức thay vì số thô). */
+  getAriaValueText?: (formattedValue: string, value: number, index: number) => string
+}
+
 function Slider({
   className,
   defaultValue,
   value,
   min = 0,
   max = 100,
+  "aria-label": ariaLabel,
+  getAriaValueText,
   ...props
-}: SliderPrimitive.Root.Props) {
+}: SliderProps) {
   const _values = Array.isArray(value)
     ? value
     : Array.isArray(defaultValue)
@@ -40,6 +47,16 @@ function Slider({
           <SliderPrimitive.Thumb
             data-slot="slider-thumb"
             key={index}
+            // Núm kéo mới là phần tử nhận bàn phím nên nhãn phải nằm ở đây, không phải ở khung ngoài
+            getAriaLabel={
+              ariaLabel
+                ? () =>
+                    _values.length > 1
+                      ? `${ariaLabel} (${index === 0 ? "nhỏ nhất" : "lớn nhất"})`
+                      : ariaLabel
+                : undefined
+            }
+            getAriaValueText={getAriaValueText}
             className="relative block size-3 shrink-0 rounded-full border border-ring bg-white ring-ring/50 transition-[color,box-shadow] select-none after:absolute after:-inset-2 hover:ring-3 focus-visible:ring-3 focus-visible:outline-hidden active:ring-3 disabled:pointer-events-none disabled:opacity-50"
           />
         ))}

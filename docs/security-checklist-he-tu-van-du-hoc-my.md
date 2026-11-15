@@ -82,7 +82,7 @@ Bảng này liệt kê chi tiết từng biện pháp kỹ thuật, hiểm họa
 - [x] **Chặn trùng lặp môn học**: Bắt lỗi nếu cùng một học kỳ có 2 môn cùng tên (case-insensitive & trimmed).
 - [x] **Ràng buộc điểm chứng chỉ quốc tế**: IELTS (0.0-9.0, bước 0.5), TOEFL (0-120), Duolingo (10-160), SAT (400-1600), ACT (1-36).
 - [x] **Chống SQL Injection**: 100% Entity Framework Core LINQ Parameterized Queries.
-- [x] **GPA chỉ tính phía server**: Khi commit hồ sơ, GPA tính tuyến tính (/10 × 4) từ điểm các môn, bỏ qua giá trị client gửi lên.
+- [x] **GPA chỉ tính phía server**: Khi commit hồ sơ, GPA tính từ điểm các môn rồi đổi sang thang 4 theo bảng WES, bỏ qua giá trị client gửi lên.
 - [x] **Giới hạn nháp & độ dài trường**: Nháp tối đa 256K ký tự, 8 năm học, 40 môn/năm, 30 chứng chỉ, 50 hoạt động; độ dài tên trường/môn/khối/hoạt động theo cột DB, năm tốt nghiệp hợp lệ → trả 400 thay vì lỗi DB 500.
 - [x] **Không lộ đường dẫn lưu file**: Thông tin file bảng điểm nháp trả về chỉ có tên gốc, kích thước, loại, thời điểm tải.
 - [x] **Xác nhận bảng điểm trích xuất (UC-12)**: Ô điểm đọc từ ảnh, điểm bất thường, ô bị ghi đè / trùng môn được tô cam; còn ô chưa xác nhận thì frontend không cho sang bước 3 và backend từ chối commit. Test: `CommitFlowAsync_WhenTranscriptCellsStillFlagged_Throws_ThenSucceedsAfterConfirm`, `advisor/tests/test_transcript_ocr_api.py`.

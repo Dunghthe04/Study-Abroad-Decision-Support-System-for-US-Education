@@ -13,6 +13,9 @@ namespace StudyAbroad.Application.Auth
     // [UC-63] Admin tạo tài khoản moderator (khách không tự đăng ký role này).
     public record CreateModeratorAccountRequest(string Email, string Password, string FullName, string? Phone = null);
 
+    // [Q11 / UC-71 Phụ trợ] Admin/Moderator tạo tài khoản người dùng cho Trung tâm tư vấn (role center).
+    public record CreateCenterAccountRequest(string Email, string Password, string? FullName = null, string? Phone = null);
+
     /// <summary>[UC-60] Tìm, lọc và phân trang danh sách tài khoản (admin).</summary>
     public record AdminUserAccountListQuery(
         string? Search = null,
@@ -24,11 +27,15 @@ namespace StudyAbroad.Application.Auth
     /// <summary>[UC-61] Admin khóa tài khoản kèm lý do.</summary>
     public record LockUserAccountRequest(string Reason);
 
+    /// <summary>[UC-62] Admin mở khóa tài khoản kèm lý do.</summary>
+    public record UnlockUserAccountRequest(string Reason);
+
     // [USAS-362] Thông tin người dùng trả về cho client (không chứa password_hash)
     // [Q11] AgeGroup (child/minor/adult, null nếu không áp), ParentConsentStatus (granted/pending/none/not_required),
     // BlockedFeatures: các chức năng trong AgeFeatures.Rules đang bị chặn (server tính, frontend chỉ dùng để ẩn nút).
     public record UserDto(Guid Id, string Email, string FullName, string Role, string Status, string? Phone = null,
-        string? AgeGroup = null, string? ParentConsentStatus = null, List<string>? BlockedFeatures = null);
+        string? AgeGroup = null, string? ParentConsentStatus = null, List<string>? BlockedFeatures = null,
+        string? LockReason = null, DateTime? LockoutEnd = null);
 
     // [USAS-362] Kết quả đăng nhập thành công. AccessToken chỉ dùng để đặt HttpOnly cookie, controller không trả nó trong body
     public record AuthResponse(string AccessToken, DateTime ExpiresAt, UserDto User);

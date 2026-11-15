@@ -1,16 +1,24 @@
-"""B1 đến B3: skill_nhu_cau, skill_bac_hoc, skill_ho_so chạy trong ChatFlow (chưa có model: dùng skill của bước)."""
+"""Hỏi hồ sơ trong chat: skill_bac_hoc, skill_ho_so chạy qua nhánh hồ sơ (SLM đọc tin là collect_profile)."""
+
+import pytest
 
 from app.schemas.chat import ChatMessage, ChatRequest, ChatState, ProfileField
-from app.services.chat_flow import NOT_READY, QUESTIONS, ChatFlow
+from app.services.branches import NEXT_AFTER_SAVE
+from app.services.chat_flow import QUESTIONS
 from app.services.intake import CHAT_BUTTON, FORM_BUTTON, INTAKE_ASK, INTAKE_ID
 from app.services.ollama import OllamaError
+from app.services.skill_rules import REQUIRED_B3
 from app.services.skills import build_handlers
-from app.services.skills.skill_ho_so import OPTIONAL_QUESTIONS, SAVED, next_question
-from tests.fakes import FakeLLM
+from app.services.skills.skill_ho_so import EDIT_MENU, OPTIONAL_QUESTIONS, SAVED, next_question
+from tests.fakes import FakeLLM, flow_with, tin
 
 
 async def turn(llm: FakeLLM, message: str, **state_fields):
-    flow = ChatFlow(handlers=build_handlers(llm, "qwen3:8b"))
+    # Đang ở bước hỏi hồ sơ thì luôn có câu đang chờ, vì ask ghi cả mã câu lẫn chữ câu hỏi
+    if state_fields.get("current_step") in ("B1", "B2"):
+        state_fields.setdefault("last_question", "câu đang hỏi")
+        state_fields.setdefault("question_id", "B1.1" if state_fields["current_step"] == "B1" else "CHO")
+    flow = flow_with(build_handlers(llm, "qwen3:8b"))
     req = ChatRequest(messages=[ChatMessage(role="user", content=message)], state=ChatState(**state_fields))
     return await flow.reply(req)
 
@@ -31,52 +39,7 @@ def ho_so(values: dict | None = None, none_fields: list | None = None) -> dict:
 PAGE1_ASKED = {"D1": 1, "N1": 1, "N2": 1, "N3": 1}
 
 
-# B1: skill_nhu_cau
-
-
-async def test_first_message_saves_said_info_and_skips_known_questions():
-    llm = FakeLLM(
-        {
-            "need": "profile_advice",
-            "branch": "DH",
-            "info_given": {
-                "current_level": "lớp 12",
-                "target_level": "đại học",
-                "gpa_text": "8.5",
-                "english_text": "IELTS 6.5",
-            },
-        },
-        {
-            **nothing_bac_hoc(),
-            "current_level": "high_school",
-            "current_grade": "Lớp 12",
-            "target_level": "bachelor",
-        },
-        ho_so(
-            {"gpa": {"value": 8.5, "scale": None}, "english": {"type": "ielts", "score": 6.5, "date": None}}
-        ),
-    )
-    res = await turn(llm, "Em lớp 12, muốn học đại học ở Mỹ, GPA 8.5, IELTS 6.5", intake_mode="chat")
-
-    assert (res.state.need, res.state.branch, res.state.current_step) == ("profile_advice", "DH", "B1")
-    # B1.1 và B1.2 đã nói nên hỏi thẳng B1.3
-    assert res.state.question_id == "B1.3"
-    assert res.answer == QUESTIONS["B1.3"]
-    profile = res.state.profile
-    assert profile["gpa"] == field({"value": 8.5, "scale": 10}, "said_in_B0")
-    assert profile["english"] == field({"type": "ielts", "value": 6.5, "date": None}, "said_in_B0")
-    assert profile["target_level"] == field("undergraduate", "said_in_B0")
-    assert profile["current_grade"] == field("Lớp 12", "said_in_B0")
-    assert {"gpa", "english", "target_level", "current_level"} <= set(res.profile_changed)
-
-
-async def test_first_message_without_info_only_calls_qwen_once():
-    llm = FakeLLM({"need": "profile_advice", "branch": "DH", "info_given": {}})
-    res = await turn(llm, "Em muốn tìm trường ở Mỹ", intake_mode="chat")
-
-    assert len(llm.calls) == 1
-    assert res.state.question_id == "B1.1"
-    assert res.state.profile == {}
+# Tin đầu tiên, chưa có câu đang chờ
 
 
 async def test_profile_advice_with_missing_items_offers_chat_or_form_first():
@@ -86,39 +49,6 @@ async def test_profile_advice_with_missing_items_offers_chat_or_form_first():
     assert res.state.question_id == INTAKE_ID
     assert res.answer == INTAKE_ASK
     assert [r.label for r in res.quick_replies] == [CHAT_BUTTON.label, FORM_BUTTON.label]
-
-
-async def test_said_info_does_not_overwrite_the_draft():
-    llm = FakeLLM(
-        {"need": "profile_advice", "branch": "DH", "info_given": {"gpa_text": "8.5"}},
-        ho_so({"gpa": {"value": 8.5, "scale": None}}),
-    )
-    res = await turn(llm, "GPA em 8.5", profile={"gpa": field({"value": 3.6, "scale": 4})})
-
-    assert res.state.profile["gpa"] == field({"value": 3.6, "scale": 4})
-
-
-async def test_unclear_asks_b0_2_with_buttons_then_goes_on_after_two_tries():
-    res = await turn(FakeLLM({"need": "unclear", "branch": None, "info_given": {}}), "chào bạn")
-
-    assert (res.state.current_step, res.state.question_id) == ("B0", "B0.2")
-    assert [r.label for r in res.quick_replies] == ["Tìm trường theo hồ sơ", "Em có câu hỏi"]
-
-    res = await turn(
-        FakeLLM({"need": "unclear", "branch": None, "info_given": {}}),
-        "ừm",
-        asked={"B0.1": 1, "B0.2": 2},
-        question_id="B0.2",
-        intake_mode="chat",
-    )
-    assert (res.state.current_step, res.state.question_id) == ("B1", "B1.1")
-
-
-async def test_knowledge_question_moves_to_b5_and_remembers_to_come_back():
-    res = await turn(FakeLLM({"need": "knowledge", "branch": None, "info_given": {}}), "Visa cần gì ạ?")
-
-    assert (res.state.current_step, res.state.return_to) == ("B5", "B1")
-    assert res.answer == NOT_READY
 
 
 # B2: skill_bac_hoc
@@ -232,7 +162,7 @@ async def test_gpa_said_with_scale_is_saved_directly():
     assert res.state.question_id == "E1"
 
 
-async def test_not_tested_english_ticks_plan_and_asks_month():
+async def test_not_tested_english_saves_none_and_asks_plan():
     llm = FakeLLM()
     profile = {"gpa": field({"value": 8.5, "scale": 10})}
     res = await turn(
@@ -240,26 +170,37 @@ async def test_not_tested_english_ticks_plan_and_asks_month():
         "Em chưa thi tiếng Anh",
         current_step="B2",
         question_id="E1",
-        asked={"D2": 1, "E1": 1},
+        asked={**PAGE1_ASKED, "D2": 1, "E1": 1},
         profile=profile,
     )
 
     assert llm.calls == []
     assert res.state.profile["english"].status == "none"
-    assert res.state.profile["english_plan"] == field({"planned": True, "date": None})
+    # Chưa thi chỉ là chưa có chứng chỉ; dự định thi hỏi ở E2 (bắt buộc như mục của form)
+    assert "english_plan" not in res.state.profile
+    assert res.state.question_id == "E2"
+    assert [r.label for r in res.quick_replies] == ["Em chưa có dự định thi"]
+    assert "thi lại để nâng điểm" in res.answer
 
 
-async def test_not_tested_english_read_by_qwen_also_ticks_plan():
+async def test_not_tested_english_read_by_qwen_asks_plan():
     llm = FakeLLM(ho_so(none_fields=["english"]))
     profile = {"gpa": field({"value": 8.5, "scale": 10})}
     res = await turn(
-        llm, "em chưa thi", current_step="B2", question_id="E1", asked={"D2": 1, "E1": 1}, profile=profile
+        llm,
+        "em chưa thi",
+        current_step="B2",
+        question_id="E1",
+        asked={**PAGE1_ASKED, "D2": 1, "E1": 1},
+        profile=profile,
     )
 
-    assert res.state.profile["english_plan"] == field({"planned": True, "date": None})
+    assert "english_plan" not in res.state.profile
+    assert res.state.question_id == "E2"
 
 
-async def test_planned_without_month_asks_e2_and_skip_keeps_tick():
+# Phiên chat cũ còn english_plan "sẽ thi sau" chưa có bài thi: hỏi lại E2, không có nút Bỏ qua
+async def test_old_planned_without_test_asks_e2_again():
     base = {
         "gpa": field({"value": 8.5, "scale": 10}),
         "english": field(None, "none"),
@@ -271,14 +212,19 @@ async def test_planned_without_month_asks_e2_and_skip_keeps_tick():
     assert next_question(state) == "E2"
 
     res = await turn(
-        FakeLLM(), "Bỏ qua", current_step="B2", question_id="E2", asked={**asked, "E2": 1}, profile=base
+        FakeLLM(),
+        "Em chưa có dự định thi",
+        current_step="B2",
+        question_id="E2",
+        asked={**asked, "E2": 1},
+        profile=base,
     )
-    assert res.state.profile["english_plan"] == field({"planned": True, "date": None})
+    assert res.state.profile["english_plan"] == field({"planned": False, "date": None})
     assert res.state.question_id != "E2"
 
 
 async def test_no_english_asks_test_month_before_moving_to_budget():
-    # Hỏi hết trang tiếng Anh (E1, E2, D3) rồi mới sang trang tài chính, không quay lại hỏi E2 sau F1, F2
+    # Hỏi hết trang tiếng Anh (E1, E2, D3, E3) rồi mới sang trang tài chính. E2, E3 bắt buộc như mục của form
     llm = FakeLLM(ho_so(none_fields=["english"]))
     res = await turn(
         llm,
@@ -289,11 +235,21 @@ async def test_no_english_asks_test_month_before_moving_to_budget():
         profile={"gpa": field({"value": 8.5, "scale": 10})},
     )
     assert res.state.question_id == "E2"
+    assert "Bỏ qua" not in [r.label for r in res.quick_replies]
 
-    res = await turn(FakeLLM(), "Bỏ qua", **res.state.model_dump())
+    res = await turn(FakeLLM(), "Em chưa có dự định thi", **res.state.model_dump())
+    assert res.state.profile["english_plan"] == field({"planned": False, "date": None})
     assert res.state.question_id == "D3"
+    assert "Bỏ qua" not in [r.label for r in res.quick_replies]  # D3 bắt buộc
+    assert "AP, IB, A-Level" in res.answer
 
-    res = await turn(FakeLLM(), "Bỏ qua", **res.state.model_dump())
+    res = await turn(FakeLLM(), "Em chưa thi bài nào", **res.state.model_dump())
+    assert res.state.question_id == "E3"
+    assert "standardized_plan" not in res.state.profile
+    assert "Bỏ qua" not in [r.label for r in res.quick_replies]
+
+    res = await turn(FakeLLM(), "Em chưa có dự định thi", **res.state.model_dump())
+    assert res.state.profile["standardized_plan"] == field({"planned": False, "date": None})
     assert res.state.question_id == "F1"
 
 
@@ -302,8 +258,17 @@ async def test_e2_month_picker_saves_without_qwen():
     profile = {"english": field(None, "none"), "english_plan": field({"planned": True, "date": None})}
     res = await turn(llm, "Em dự kiến thi tháng 5/2099", current_step="B2", question_id="E2", profile=profile)
 
+    # Dự định phải có bài thi (thành thẻ như form): thiếu thì hỏi lại, chưa ghi gì
     assert llm.calls == []
-    assert res.state.profile["english_plan"] == field({"planned": True, "date": "2099-05"})
+    assert res.state.question_id == "E2"
+    assert "bài nào" in res.answer
+    assert res.state.profile["english_plan"] == field({"planned": True, "date": None})
+
+    res = await turn(llm, "Em dự kiến thi IELTS, tháng 5/2099", **res.state.model_dump())
+    assert llm.calls == []
+    assert res.state.profile["english_plan"] == field(
+        {"planned": True, "date": "2099-05", "test_type": "ielts"}
+    )
 
 
 async def test_right_answer_moves_to_next_required_question():
@@ -314,11 +279,11 @@ async def test_right_answer_moves_to_next_required_question():
         current_step="B2",
         question_id="E1",
         asked={**PAGE1_ASKED, "E1": 1, "D3": 1},
-        profile={"gpa": field({"value": 8.5, "scale": 10})},
+        profile={"gpa": field({"value": 8.5, "scale": 10}), "sat": field(1400)},
     )
 
     assert res.state.profile["english"] == field({"type": "ielts", "value": 6.5, "date": "2026-05"})
-    assert res.state.question_id == "F1"
+    assert res.state.question_id == "E2"  # đã có IELTS vẫn hỏi dự định thi lại để nâng điểm
 
 
 async def test_budget_in_vnd_is_saved_as_tier():
@@ -348,13 +313,15 @@ async def test_skipped_optional_question_is_not_asked_again():
         "current_level": field("high_school"),
         "gpa": field({"value": 8.5, "scale": 10}),
         "english": field({"type": "ielts", "value": 6.5, "date": None}),
+        "sat": field(1400),
         "budget": field("tier_20k_35k"),
+        "scholarship": field("preferred"),
     }
     res = await turn(
-        FakeLLM(ho_so()), "để sau ạ", current_step="B2", question_id="F2", asked={"F2": 1}, profile=profile
+        FakeLLM(ho_so()), "để sau ạ", current_step="B2", question_id="F3", asked={"F3": 1}, profile=profile
     )
 
-    assert "scholarship" not in res.state.profile
+    assert "funding_source" not in res.state.profile
     assert res.state.question_id == "D1"  # E2 bỏ qua vì đã có chứng chỉ
 
 
@@ -363,15 +330,26 @@ def full_profile() -> dict:
         "target_level": field("undergraduate", "said_in_B0"),
         "gpa": field({"value": 8.5, "scale": 10}, "said_in_B0"),
         "english": field({"type": "ielts", "value": 6.5, "date": None}),
+        "english_plan": field({"planned": False, "date": None}),
+        "standardized_plan": field({"planned": False, "date": None}),
+    }
+
+
+# Đủ mục bắt buộc cho B3, trừ hai mục said_in_B0 chưa xác nhận
+def b3_profile() -> dict:
+    return {
+        **full_profile(),
+        "sat": field(1400),
+        "budget": field("tier_35k_50k"),
+        "scholarship": field("preferred"),
     }
 
 
 async def test_all_questions_done_shows_review_with_buttons():
     asked = {q: 1 for q in OPTIONAL_QUESTIONS}
     llm = FakeLLM(ho_so({"budget": {"amount": None, "currency": None, "tier": "tier_35k_50k"}}))
-    res = await turn(
-        llm, "tier_35k_50k", current_step="B2", question_id="F1", asked=asked, profile=full_profile()
-    )
+    profile = {**full_profile(), "sat": field(1400), "scholarship": field("preferred")}
+    res = await turn(llm, "tier_35k_50k", current_step="B2", question_id="F1", asked=asked, profile=profile)
 
     assert res.state.question_id == "X1"
     assert res.widget.type == "review"
@@ -380,22 +358,39 @@ async def test_all_questions_done_shows_review_with_buttons():
     assert [r.label for r in res.quick_replies] == ["Đúng rồi", "Cần sửa"]
 
 
-async def test_confirm_at_review_confirms_said_info_and_assesses_right_away():
-    llm = FakeLLM(OllamaError("tắt máy"), OllamaError("tắt máy"))  # đánh giá dùng câu mẫu
-    profile = {**full_profile(), "budget": field("tier_35k_50k")}
-    res = await turn(llm, "Đúng rồi", current_step="B2", question_id="X1", profile=profile)
+async def test_confirm_at_review_confirms_said_info_and_asks_what_next():
+    llm = FakeLLM()
+    res = await turn(llm, "Đúng rồi", current_step="B2", question_id="X1", profile=b3_profile())
 
     assert all(f.status == "confirmed" for f in res.state.profile.values())
-    # Xác nhận xong thì đánh giá hồ sơ luôn trong lượt này rồi hỏi X2, không hỏi lại "có muốn xem không"
-    assert res.skills == ["skill_ho_so", "skill_danh_gia"]
-    assert (res.state.current_step, res.state.question_id) == ("B4", "X2")
+    # Xác nhận xong chỉ lưu rồi hỏi muốn làm gì tiếp, không tự đánh giá hay lên lộ trình
+    assert res.skills == ["collect_profile"]
+    assert res.state.current_step == "B3"
+    assert res.answer == f"{SAVED}\n\n{NEXT_AFTER_SAVE}"
+    assert [r.label for r in res.quick_replies] == ["Gợi ý trường", "Đánh giá hồ sơ", "Lên lộ trình"]
+    assert "gpa" in res.profile_changed
+
+
+# Bấm nút Đúng rồi hay gõ câu xác nhận ở X1 đều lưu hồ sơ, không nhờ SLM (SLM có thể đoán nhầm là profile_review)
+@pytest.mark.parametrize("message", ["Đúng rồi", "đúng", "Vâng."])
+async def test_confirm_at_review_skips_slm(message):
+    llm = FakeLLM(OllamaError("tắt máy"), OllamaError("tắt máy"))  # đánh giá dùng câu mẫu
+    flow = flow_with(build_handlers(llm, "qwen3:8b"), tin(("profile_review", {"tasks": ["assessment"]})))
+    state = ChatState(
+        current_step="B2", question_id="X1", last_question=QUESTIONS["X1"], profile=b3_profile()
+    )
+    res = await flow.reply(ChatRequest(messages=[ChatMessage(role="user", content=message)], state=state))
+
+    assert res.skills == ["collect_profile"]
+    assert all(f.status == "confirmed" for f in res.state.profile.values())
     assert res.answer.startswith(SAVED)
-    assert res.answer.endswith(QUESTIONS["X2"])
     assert "gpa" in res.profile_changed
 
 
 async def test_confirm_with_missing_budget_asks_budget():
-    res = await turn(FakeLLM(), "Đúng", current_step="B2", question_id="X1", profile=full_profile())
+    profile = b3_profile()
+    del profile["budget"]
+    res = await turn(FakeLLM(), "Đúng", current_step="B2", question_id="X1", profile=profile)
 
     assert (res.state.current_step, res.state.question_id) == ("B2", "F1")
 
@@ -410,18 +405,46 @@ async def test_fix_at_review_overwrites_and_shows_review_again():
     assert res.widget.type == "review"
 
 
+async def test_fix_button_shows_edit_menu():
+    # Bấm "Cần sửa": hiện ô chọn các nhóm cần sửa, hồ sơ không đổi
+    profile = {**full_profile(), "budget": field("tier_35k_50k")}
+    res = await turn(
+        FakeLLM(ho_so()), "Em cần sửa thông tin", current_step="B2", question_id="X1", profile=profile
+    )
+
+    assert res.answer == EDIT_MENU
+    assert res.state.question_id == "X1"
+    assert res.widget.type == "select"
+    assert res.state.profile == {name: f for name, f in profile.items()}
+
+
+async def test_after_asking_what_to_fix_new_value_shows_review_again():
+    llm = FakeLLM(ho_so({"sat": 1450}))
+    profile = {**full_profile(), "budget": field("tier_35k_50k")}
+    res = await turn(llm, "sửa SAT thành 1450", current_step="B2", question_id="X1", profile=profile)
+
+    assert res.state.profile["sat"].value == 1450
+    assert res.state.question_id == "X1"
+    assert res.widget.type == "review"
+
+
 # B5: nút gợi ý và widget
 
 
 async def test_budget_question_comes_with_budget_widget():
-    llm = FakeLLM(ho_so({"english": {"type": "ielts", "score": 6.5, "date": None}}))
+    llm = FakeLLM(ho_so({"english": {"type": "ielts", "score": 6.5, "date": "2024-05"}}))
     res = await turn(
         llm,
-        "IELTS 6.5",
+        "IELTS 6.5 thi tháng 5/2024",
         current_step="B2",
         question_id="E1",
         asked={**PAGE1_ASKED, "D3": 1},
-        profile={"gpa": field({"value": 8.5, "scale": 10})},
+        profile={
+            "gpa": field({"value": 8.5, "scale": 10}),
+            "sat": field(1400),
+            "english_plan": field({"planned": False, "date": None}),
+            "standardized_plan": field({"planned": False, "date": None}),
+        },
     )
 
     assert res.state.question_id == "F1"
@@ -438,24 +461,36 @@ async def test_pressing_budget_button_saves_tier_without_qwen():
         current_step="B2",
         question_id="F1",
         asked={**PAGE1_ASKED, "D3": 1},
-        profile=full_profile(),
+        profile={**full_profile(), "sat": field(1400)},
     )
 
     assert llm.calls == []
     assert res.state.profile["budget"] == field("tier_under_20k")
     assert res.state.question_id == "F2"
     assert res.widget.type == "scholarship"
-    assert [r.label for r in res.quick_replies][-1] == "Bỏ qua"
+    assert "Bỏ qua" not in [r.label for r in res.quick_replies]  # F2 bắt buộc, không cần thì chọn "Không cần"
 
 
 async def test_skip_button_moves_on_without_saving():
     llm = FakeLLM()
-    profile = {**full_profile(), "current_level": field("high_school"), "budget": field("tier_35k_50k")}
-    res = await turn(llm, "Bỏ qua", current_step="B2", question_id="F2", asked={"F2": 1}, profile=profile)
+    profile = {**b3_profile(), "current_level": field("high_school")}
+    res = await turn(llm, "Bỏ qua", current_step="B2", question_id="F3", asked={"F3": 1}, profile=profile)
 
     assert llm.calls == []
-    assert "scholarship" not in res.state.profile
+    assert "funding_source" not in res.state.profile
     assert res.state.question_id == "D1"
+
+
+# Câu bắt buộc (F2 học bổng) không có nút Bỏ qua: gõ "Bỏ qua" cũng không bỏ được, hỏi lại
+async def test_required_question_cannot_be_skipped():
+    profile = {**full_profile(), "sat": field(1400), "budget": field("tier_35k_50k")}
+    res = await turn(
+        FakeLLM(ho_so()), "Bỏ qua", current_step="B2", question_id="F2", asked={"F2": 1}, profile=profile
+    )
+
+    assert "scholarship" not in res.state.profile
+    assert res.state.question_id == "F2"
+    assert "Bỏ qua" not in [r.label for r in res.quick_replies]
 
 
 async def test_target_level_button_in_b1():
@@ -543,9 +578,8 @@ async def test_skipping_intake_moves_on_without_asking_again():
 
 
 def at_d4() -> dict:
-    asked = {**PAGE1_ASKED, "F2": 1, "F3": 1, "D3": 1, "D4": 1}
-    profile = {**full_profile(), "budget": field("tier_35k_50k")}
-    return {"current_step": "B2", "question_id": "D4", "asked": asked, "profile": profile}
+    asked = {**PAGE1_ASKED, "F2": 1, "F3": 1, "D3": 1, "E3": 1, "D4": 1}
+    return {"current_step": "B2", "question_id": "D4", "asked": asked, "profile": b3_profile()}
 
 
 ENGLISH_CLUB = {
@@ -693,7 +727,11 @@ def required_done(**extra) -> ChatState:
     profile = {
         "gpa": field({"value": 8.5, "scale": 10}),
         "english": field({"type": "ielts", "value": 6.5, "date": None}),
+        "sat": field(1400),
         "budget": field("tier_20k_35k"),
+        "scholarship": field("preferred"),
+        "english_plan": field({"planned": False, "date": None}),
+        "standardized_plan": field({"planned": False, "date": None}),
         **extra,
     }
     return ChatState(current_step="B2", profile=profile, asked={"F2": 1, "D3": 1, "D4": 1, "D5": 1, "F3": 1})
@@ -734,3 +772,165 @@ async def test_funding_button_saves_db_code():
     )
 
     assert res.state.profile["funding_source"].value == "bank_loan"
+
+
+# Nút sửa của câu trả lời kịch bản lúc không có câu đang hỏi: đi thẳng vào luồng sửa, không qua SLM
+# (SLM giả trả out_of_scope, nếu bị gọi thì sẽ không hỏi câu B1.1)
+async def test_edit_button_after_results_skips_slm():
+    flow = flow_with(build_handlers(FakeLLM(), "qwen3:8b"), tin(("out_of_scope", {"subtype": "ambiguous"})))
+    state = ChatState(
+        current_step="B3", profile=full_profile(), intake_mode="chat", asked={"X1": 1}, has_results=True
+    )
+    req = ChatRequest(messages=[ChatMessage(role="user", content="Em muốn sửa Mục tiêu")], state=state)
+    res = await flow.reply(req)
+
+    assert res.state.question_id == "B1.1"
+    assert res.state.edit_queue == ["B1.2", "B1.3", "B1.4"]
+
+
+# Hồ sơ đã có từ trước (DB / form): chỉ hỏi mục bắt buộc còn thiếu, không hỏi câu tùy chọn
+
+
+def saved_profile() -> dict:
+    names = {"current_level": "high_school", "target_level": "undergraduate", "major": "CS"}
+    profile = {name: field(value) for name, value in names.items()}
+    profile["gpa"] = field({"value": 8.5, "scale": 10})
+    profile["english"] = field({"type": "ielts", "value": 6.5, "date": None})
+    profile["budget"] = field("tier_35k_50k")
+    profile["sat"] = field(1350)
+    profile["scholarship"] = field("preferred")
+    return profile
+
+
+# Đủ mục bắt buộc, câu đầu nói thêm SAT: hiện ngay bảng rà soát, không hỏi kỳ nhập học hay câu tùy chọn nào
+async def test_saved_profile_goes_straight_to_review():
+    llm = FakeLLM(ho_so({"sat": 1400}))
+    flow = flow_with(build_handlers(llm, "qwen3:8b"), tin(("collect_profile", {"sat": "SAT 1400"})))
+    req = ChatRequest(
+        messages=[ChatMessage(role="user", content="Em muốn tìm trường, SAT 1400")],
+        state=ChatState(profile=saved_profile()),
+    )
+    res = await flow.reply(req)
+
+    assert res.state.required_only == REQUIRED_B3
+    assert res.state.profile["sat"].value == 1400
+    assert res.state.question_id == "X1"
+    assert res.widget.type == "review"
+    assert set(res.state.asked) == {"X1"}
+
+
+# Thiếu ngân sách: chọn trả lời trong chat thì chỉ hỏi ngân sách, trả lời xong là bảng rà soát
+async def test_saved_profile_missing_budget_asks_only_budget():
+    profile = saved_profile()
+    del profile["budget"]
+    llm = FakeLLM(ho_so({"budget": {"amount": None, "currency": None, "tier": "tier_35k_50k"}}))
+    flow = flow_with(build_handlers(llm, "qwen3:8b"))
+    state = ChatState(profile=profile)
+    for message in ("Em muốn tìm trường ở Mỹ", CHAT_BUTTON.value, "tier_35k_50k"):
+        res = await flow.reply(ChatRequest(messages=[ChatMessage(role="user", content=message)], state=state))
+        state = res.state
+        if message == CHAT_BUTTON.value:
+            assert state.question_id == "F1"
+
+    assert state.question_id == "X1"
+    assert res.widget.type == "review"
+    assert set(state.asked) == {"F1", "X1"}  # không hỏi câu nào khác
+
+
+# Hồ sơ trống lúc bắt đầu: vẫn hỏi đủ như cũ
+async def test_empty_profile_keeps_asking_every_question():
+    res = await turn(FakeLLM(), "Em muốn tìm trường ở Mỹ")
+
+    assert res.state.required_only is None
+
+
+# Nháp mặc định của hồ sơ trống vẫn có loại trường "all" (đã xác nhận). .NET báo chưa lưu hồ sơ thì vẫn hỏi đủ như form
+async def test_not_committed_profile_asks_every_question_despite_default_draft():
+    flow = flow_with(build_handlers(FakeLLM(), "qwen3:8b"))
+    req = ChatRequest(
+        messages=[ChatMessage(role="user", content="Em muốn tìm trường ở Mỹ")],
+        state=ChatState(profile={"school_type": field("all")}),
+        has_committed_profile=False,
+    )
+    res = await flow.reply(req)
+
+    assert res.state.has_committed_profile is False
+    assert res.state.required_only is None
+
+
+# Đã lưu hồ sơ chính thức: chỉ hỏi mục bắt buộc còn thiếu, cờ nhớ trong state cho các lượt sau
+async def test_committed_profile_asks_only_required():
+    flow = flow_with(build_handlers(FakeLLM(), "qwen3:8b"))
+    req = ChatRequest(
+        messages=[ChatMessage(role="user", content="Em muốn tìm trường ở Mỹ")],
+        state=ChatState(profile={"school_type": field("all")}),
+        has_committed_profile=True,
+    )
+    res = await flow.reply(req)
+
+    assert res.state.required_only == REQUIRED_B3
+    req = ChatRequest(messages=[ChatMessage(role="user", content=CHAT_BUTTON.value)], state=res.state)
+    res = await flow.reply(req)
+    assert res.state.has_committed_profile is True  # lượt không gửi cờ thì giữ cờ cũ
+
+
+# Đã xác nhận hồ sơ ở X1 rồi hồ sơ bị xóa: hỏi tư vấn tiếp thì hỏi lại từ B1.1, không hiện lại bảng X1 trống.
+# Phiên đang kẹt ở X1 (question_id = X1 từ lượt trước) cũng thoát ra hỏi lại
+@pytest.mark.parametrize("question_id", [None, "X1"])
+async def test_profile_deleted_after_review_asks_again_instead_of_empty_review(question_id):
+    flow = flow_with(
+        build_handlers(FakeLLM(), "qwen3:8b"), tin(("profile_review", {"tasks": ["school_list"]}))
+    )
+    state = ChatState(
+        current_step="B3",
+        profile={"school_type": field("all")},
+        intake_mode="chat",
+        asked={"X1": 1, "B1.1": 1, "D2": 1},
+        question_id=question_id,
+        last_question=QUESTIONS["X1"] if question_id else "",
+    )
+    req = ChatRequest(
+        messages=[ChatMessage(role="user", content="đề xuất trường")],
+        state=state,
+        has_committed_profile=False,
+    )
+    res = await flow.reply(req)
+
+    assert res.state.question_id == "B1.1"
+    assert res.widget is None or res.widget.type != "review"
+    assert QUESTIONS["X1"] not in res.answer
+
+
+# Đã có IELTS vẫn hỏi E2 (dự định thi lại để nâng điểm) như thẻ isTarget của form; câu bắt buộc nên không có Bỏ qua
+async def test_with_ielts_e2_asks_retake_plan_and_no_plan_button_moves_on():
+    profile = {
+        "gpa": field({"value": 8.5, "scale": 10}),
+        "english": field({"type": "ielts", "value": 6.5, "date": "2026-05"}),
+    }
+    state = ChatState(current_step="B2", asked={**PAGE1_ASKED, "D2": 1, "E1": 1}, profile=profile)
+    assert next_question(state) == "E2"
+
+    res = await turn(
+        FakeLLM(),
+        "Em chưa có dự định thi",
+        current_step="B2",
+        question_id="E2",
+        asked={**PAGE1_ASKED, "D2": 1, "E1": 1, "E2": 1},
+        profile=profile,
+    )
+    assert res.state.profile["english_plan"] == field({"planned": False, "date": None})
+    assert res.state.profile["english"] == profile["english"]
+    assert res.state.question_id == "D3"
+
+
+# Học sinh thấy câu theo bước 3 của form, còn SLM vẫn nhận câu cũ khớp dữ liệu huấn luyện
+@pytest.mark.parametrize("question_id", ["E2", "D3", "E3"])
+def test_step3_text_shown_while_slm_keeps_old_question(question_id):
+    from app.services.skills import skill_ho_so
+
+    state = ChatState(current_step="B2")
+    output = skill_ho_so.ask_question(state, question_id)
+
+    assert output.answer.startswith(skill_ho_so.STEP3_TEXT[question_id])
+    assert state.last_question == QUESTIONS[question_id]
+    assert "Bỏ qua" not in [r.label for r in output.quick_replies]

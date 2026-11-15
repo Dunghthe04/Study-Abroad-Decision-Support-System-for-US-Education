@@ -21,6 +21,10 @@ public class StudentProfile : BaseEntity
     public string GradeScale { get; set; } = "10";
     /// <summary>GPA luôn ở thang 4 (nhóm đã chốt), quy đổi từ bảng điểm; form không cho nhập tay; null nếu chưa phân tích</summary>
     public decimal? OverallGpa { get; set; }
+    /// <summary>cách nhập GPA ở bước 2: overall | transcript (ProfileConstants.GpaModes); null với hồ sơ lưu trước khi có cột này</summary>
+    public string? GpaMode { get; set; }
+    /// <summary>GPA tổng thang 10 học sinh tự nhập (GpaMode = overall); OverallGpa là số quy đổi sang thang 4 từ số này</summary>
+    public decimal? OverallGpa10 { get; set; }
     public string? IntendedMajor { get; set; }
     /// <summary>kỳ muốn nhập học, dạng "Fall 2027" (Fall | Spring | Summer + năm); form bước 1 và câu B1.4 bên chat</summary>
     public string? TargetIntake { get; set; }
@@ -35,14 +39,15 @@ public class StudentProfile : BaseEntity
     public string? EnglishTestType { get; set; }
     /// <summary>[USAS-640] ngày thi chứng chỉ tiếng Anh</summary>
     public DateOnly? EnglishTestDate { get; set; }
-    /// <summary>[USAS-640] học sinh chưa có chứng chỉ tiếng Anh, sẽ thi sau (bước 3)</summary>
+    /// <summary>[USAS-640] tick "chưa thi và chưa có dự định thi" mục tiếng Anh (bước 3). Dự định thi là dòng IsTarget
+    /// trong profile_certifications; mục có chứng chỉ hoặc dự định thì cờ này false</summary>
     public bool EnglishTestPlanned { get; set; }
-    /// <summary>[USAS-640] tháng dự kiến thi tiếng Anh (ngày 1 của tháng)</summary>
-    public DateOnly? EnglishPlannedDate { get; set; }
+    /// <summary>tick "chưa thi và chưa có dự định thi" mục bài thi chuẩn hóa (SAT/ACT/AP/GRE...), như EnglishTestPlanned</summary>
+    public bool StandardizedTestPlanned { get; set; }
     /// <summary>kỳ thi khác ngoài cột riêng, dạng {"ap": 4}</summary>
     public string? OtherTestsJson { get; set; }
-    /// <summary>điểm ngoại khóa 0–4 (thang của thầy): LLM đọc hoạt động thành thuộc tính, công thức của nhóm tính điểm; null nếu chưa phân tích</summary>
-    public decimal? ExtracurricularScore { get; set; }
+    /// <summary>bậc ngoại khóa 1–5: SLM xác nhận vai trò, phạm vi từng hoạt động rồi code tính theo công thức q, m; null nếu chưa tính</summary>
+    public int? ExtracurricularTier { get; set; }
     /// <summary>[USAS-640] mức ngân sách (mã metadata budgetTiers): tier_under_20k | tier_20k_35k | tier_35k_50k | tier_50k_70k | tier_above_70k</summary>
     public string? BudgetTier { get; set; }
     /// <summary>Khoảng ngân sách tối thiểu (USD/năm)</summary>
@@ -70,4 +75,7 @@ public class StudentProfile : BaseEntity
     public string? DraftFlowStateJson { get; set; }
     /// <summary>[USAS-640] thời điểm học sinh gửi hồ sơ ở bước 6; null nếu chưa gửi lần nào</summary>
     public DateTimeOffset? FlowSubmittedAt { get; set; }
+
+    /// <summary>bản sao nông (không được EF theo dõi) để tính toán trên hồ sơ với vài giá trị thay thế mà không sửa bản gốc</summary>
+    public StudentProfile ShallowCopy() => (StudentProfile)MemberwiseClone();
 }

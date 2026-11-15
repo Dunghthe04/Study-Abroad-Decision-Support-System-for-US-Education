@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using StudyAbroad.Api.Controllers;
 using StudyAbroad.Application.Auth;
 using StudyAbroad.Application.Common;
+using StudyAbroad.Application.StudyCenters;
 using StudyAbroad.Domain.Constants;
 using Xunit;
 
@@ -86,6 +87,16 @@ public class AdminUsersControllerTests
             return Task.FromResult(AuthResult.Ok(user, "Đã tạo tài khoản moderator."));
         }
 
+        public CreateCenterAccountRequest? LastCreateCenterRequest { get; private set; }
+
+        public Task<AuthResult> CreateCenterAccountAsync(CreateCenterAccountRequest request, CancellationToken ct = default)
+        {
+            LastCreateCenterRequest = request;
+            var user = new UserDto(Guid.NewGuid(), request.Email, request.FullName, UserRoles.Center, UserStatuses.Active, request.Phone);
+            Users.Add(user);
+            return Task.FromResult(AuthResult.Ok(user, "Đã tạo tài khoản trung tâm tư vấn."));
+        }
+
         public (Guid TargetId, LockUserAccountRequest Request, Guid ActorId)? LastLockCall { get; private set; }
 
         public Task<AuthResult> LockUserAccountAsync(
@@ -107,16 +118,83 @@ public class AdminUsersControllerTests
             Users.Add(updated);
             return Task.FromResult(AuthResult.Ok(updated, "Đã khóa tài khoản."));
         }
+
+        public Task<AuthResult> RegisterCenterAsync(RegisterCenterRequest request, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+
+        public Task<AuthResult> VerifyCenterEmailAsync(VerifyCenterEmailRequest request, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+
+        public Task<AuthResult> ChangeCenterPhoneAsync(Guid userId, string newPhone, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+
+        public Task<AuthResult> RequestCenterEmailChangeAsync(Guid userId, RequestContactChangeDto request, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+
+        public Task<AuthResult> ConfirmCenterEmailChangeAsync(Guid userId, ConfirmContactChangeDto request, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+
+        public (Guid TargetId, UnlockUserAccountRequest Request, Guid ActorId)? LastUnlockCall { get; private set; }
+
+        public Task<AuthResult> UnlockUserAccountAsync(
+            Guid targetUserId,
+            UnlockUserAccountRequest request,
+            Guid actorAdminId,
+            CancellationToken ct = default)
+        {
+            LastUnlockCall = (targetUserId, request, actorAdminId);
+            var user = Users.FirstOrDefault(u => u.Id == targetUserId);
+            if (user is null)
+                return Task.FromResult(AuthResult.Fail(AuthError.Validation, "Không tìm thấy tài khoản."));
+
+            var updated = user with { Status = UserStatuses.Active };
+            Users.Remove(user);
+            Users.Add(updated);
+            return Task.FromResult(AuthResult.Ok(updated, "Đã mở khóa tài khoản."));
+        }
+
+        public Task<AuthResult> AnonymizeUserAccountAsync(Guid userId, string? ipAddress = null, string? userAgent = null, CancellationToken ct = default)
+        {
+            var user = Users.FirstOrDefault(u => u.Id == userId);
+            if (user is null)
+                return Task.FromResult(AuthResult.Fail(AuthError.Validation, "Không tìm thấy tài khoản người dùng."));
+
+            var updated = user with { Status = UserStatuses.Deleted, FullName = "Người dùng đã xóa", Phone = null };
+            Users.Remove(user);
+            Users.Add(updated);
+            return Task.FromResult(AuthResult.Ok("Đã xóa tài khoản."));
+        }
     }
 
     [Fact]
     public void AdminUsersController_HasAdminAuthorizeAttribute()
     {
-        // [AC-4] Đảm bảo controller được bảo vệ bởi [Authorize(Roles = "admin")]
+        // [AC-4] Đảm bảo controller được bảo vệ bởi [Authorize(Roles = "admin,moderator")]
         var authAttr = typeof(AdminUsersController).GetCustomAttribute<AuthorizeAttribute>();
 
         Assert.NotNull(authAttr);
-        Assert.Equal(UserRoles.Admin, authAttr.Roles);
+        Assert.Equal($"{UserRoles.Admin},{UserRoles.Moderator}", authAttr.Roles);
+    }
+
+    [Fact]
+    public void AdminUsersController_ActionAttributes_MatchRbacPolicy()
+    {
+        // Khóa và Mở khóa: Cả Admin và Moderator (Moderator chỉ thao tác cấp dưới tại logic tầng Service)
+        var lockAttr = typeof(AdminUsersController).GetMethod(nameof(AdminUsersController.LockUser))?.GetCustomAttribute<AuthorizeAttribute>();
+        Assert.NotNull(lockAttr);
+        Assert.Equal($"{UserRoles.Admin},{UserRoles.Moderator}", lockAttr.Roles);
+
+        var unlockAttr = typeof(AdminUsersController).GetMethod(nameof(AdminUsersController.UnlockUser))?.GetCustomAttribute<AuthorizeAttribute>();
+        Assert.NotNull(unlockAttr);
+        Assert.Equal($"{UserRoles.Admin},{UserRoles.Moderator}", unlockAttr.Roles);
+
+        // Tạo moderator: Chỉ Admin được phép
+        var createModAttr = typeof(AdminUsersController).GetMethod(nameof(AdminUsersController.CreateModerator))?.GetCustomAttribute<AuthorizeAttribute>();
+        Assert.NotNull(createModAttr);
+        Assert.Equal(UserRoles.Admin, createModAttr.Roles);
+
+        // Không ai cấp tài khoản center nữa: trung tâm tự đăng ký và chờ duyệt hồ sơ
+        Assert.Null(typeof(AdminUsersController).GetMethod("CreateCenter"));
     }
 
     [Fact]
@@ -220,5 +298,40 @@ public class AdminUsersControllerTests
         Assert.Equal(UserStatuses.Locked, user.Status);
         Assert.NotNull(fakeAuth.LastLockCall);
         Assert.Equal(adminId, fakeAuth.LastLockCall.Value.ActorId);
+    }
+
+    [Fact]
+    public async Task UnlockUser_WhenValid_ReturnsOk()
+    {
+        var adminId = Guid.NewGuid();
+        var studentId = Guid.NewGuid();
+        var fakeAuth = new FakeAuthService
+        {
+            Users =
+            [
+                new UserDto(studentId, "student@test.com", "Student", UserRoles.Student, UserStatuses.Locked, null),
+            ],
+        };
+        var controller = new AdminUsersController(fakeAuth)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = new ClaimsPrincipal(new ClaimsIdentity(
+                    [
+                        new Claim(ClaimTypes.NameIdentifier, adminId.ToString()),
+                    ], authenticationType: "test")),
+                },
+            },
+        };
+
+        var result = await controller.UnlockUser(studentId, new UnlockUserAccountRequest("Lý do mở khóa hợp lệ"), CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var user = Assert.IsType<UserDto>(ok.Value);
+        Assert.Equal(UserStatuses.Active, user.Status);
+        Assert.NotNull(fakeAuth.LastUnlockCall);
+        Assert.Equal(adminId, fakeAuth.LastUnlockCall.Value.ActorId);
     }
 }

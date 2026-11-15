@@ -119,7 +119,13 @@ class ExplainHandler:
         if not schools:
             return SkillOutput(NO_LIST)
 
-        chosen = match_by_name(message, schools) or match_by_position(message, schools)
+        # Tên đầy đủ trong danh sách đang hiện, rồi vị trí (chỉ đếm trong danh sách đang hiện), rồi tên trong các trường còn lại
+        # (trường đã chấm nhưng không nằm trong khối nào, ví dụ vì mỗi nhóm chỉ hiện vài trường)
+        chosen = (
+            match_by_name(message, schools)
+            or match_by_position(message, schools)
+            or match_by_name(message, state.other_schools)
+        )
         if chosen is None:
             payload = {
                 "message": message,

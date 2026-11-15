@@ -21,6 +21,18 @@ public static class ChatExplanation
             ? code.GetString()
             : null;
 
+    public const string WidgetType = "explain";
+    private static readonly JsonSerializerOptions WebJson = new(JsonSerializerDefaults.Web);
+
+    /// <summary>
+    /// Thẻ giải thích do code dựng (nhóm, lý do, số liệu) cho khung chat; lời tư vấn do AI viết hiện sau, bên dưới thẻ.
+    /// card là số đã lưu của trường (camelCase): g2, blk, why, acc, sat25, sat75, pg, ps, cost, gap.
+    /// </summary>
+    // basis: gốc của lời giải thích. Mô tả giả định ("GPA 3.6, SAT 1500") nếu học sinh đang xem giả định, null nếu là hồ sơ thật
+    public static Widget WidgetOf(string code, ExplainSchoolDto card, string? basis = null) =>
+        new(WidgetType, JsonSerializer.SerializeToElement(
+            new { code, card, basis = new { kind = basis is null ? "real" : "simulated", label = basis } }, WebJson));
+
     public static string Format(SchoolExplanation explanation)
     {
         var lines = new List<string> { $"{explanation.Name}: {explanation.Summary}" };

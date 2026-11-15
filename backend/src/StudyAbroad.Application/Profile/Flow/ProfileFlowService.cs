@@ -1,4 +1,6 @@
+using Microsoft.Extensions.Logging;
 using StudyAbroad.Application.Advisor;
+using StudyAbroad.Application.Profile.Academic;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
 using System;
@@ -22,11 +24,20 @@ namespace StudyAbroad.Application.Profile.Flow;
 /// - Commit: validate rồi ánh xạ draft vào student_profiles / transcript_scores / profile_activities / profile_certifications
 ///   trong 1 transaction. Danh mục loại chứng chỉ lấy từ app_settings profile.metadata, không viết cứng trong code
 /// - Mở lại hồ sơ đã gửi: dựng draft từ DB bằng BuildDraftFromProfile
+/// aiCalls, usageCollector, logger: ghi token của các lần gọi advisor ngoài chat (OCR bảng điểm, bậc ngoại khóa) vào ai_calls.
+///   Các client OCR và ngoại khóa bỏ số đo vào giỏ chung (usageCollector), service này đổ giỏ xuống ai_calls kèm user_id
+///   (không có chat_message_id vì nằm ngoài chat). Null thì không ghi, dùng trong test cũ
 /// </summary>
 public class ProfileFlowService(
     IProfileFlowRepository repository,
     IProfileFileStorageService fileStorageService,
-    ITranscriptOcrClient? ocrClient = null) : IProfileFlowService
+    ITranscriptOcrClient? ocrClient = null,
+    IEcTierClient? ecTierClient = null,
+    IGradeScaleProvider? gradeScale = null,
+    IAiCallRepository? aiCalls = null,
+    IAiUsageCollector? usageCollector = null,
+    ILogger<ProfileFlowService>? logger = null,
+    AiPricing? pricing = null) : IProfileFlowService
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -101,10 +112,11 @@ public class ProfileFlowService(
             var activities = await repository.GetProfileActivitiesAsync(profile.Id, ct);
             var certifications = await repository.GetProfileCertificationsAsync(profile.Id, ct);
             var certificationTypes = await LoadCertificationTypesAsync(ct);
+            var scale = await GetGradeScaleAsync(ct);
             return new ProfileFlowStateDto(
                 CurrentStep: 6,
                 CompletedSteps: [1, 2, 3, 4, 5],
-                Draft: BuildDraftFromProfile(profile, scores, activities, certifications, certificationTypes),
+                Draft: BuildDraftFromProfile(profile, scores, activities, certifications, certificationTypes, scale),
                 DraftTranscript: DraftTranscriptFileDto.FromOrNull(stored?.DraftTranscript),
                 LastUpdatedAt: profile.UpdatedAt ?? profile.CreatedAt,
                 HasCommittedProfile: true,
@@ -151,7 +163,7 @@ public class ProfileFlowService(
         var stored = new StoredFlowState(
             CurrentStep: current.CurrentStep,
             CompletedSteps: current.CompletedSteps.ToList(),
-            Draft: NormalizeDraft(ChatProfileMapper.ApplyChatProfile(current.Draft, chatProfile, changedKeys)),
+            Draft: NormalizeDraft(ChatProfileMapper.ApplyChatProfile(current.Draft, chatProfile, changedKeys, await GetGradeScaleAsync(ct))),
             DraftTranscript: ReadStoredState(profile.DraftFlowStateJson)?.DraftTranscript,
             LastUpdatedAt: DateTime.UtcNow);
 
@@ -192,6 +204,8 @@ public class ProfileFlowService(
             {
                 // OCR lỗi (client OCR đã ghi log) thì không chặn luồng upload; FE báo người dùng tự nhập điểm
             }
+            // Token của OCR (AI local đọc ảnh, Claude bóc tách) ghi ngay, tới đây profile chưa bị sửa nên an toàn
+            await RecordAiCallsAsync(userId, ct);
         }
 
         // 3. Chỉ ghi thông tin file vào nháp; điểm OCR do FE ghép vào draft.step2 rồi tự lưu nháp
@@ -213,7 +227,7 @@ public class ProfileFlowService(
         return new UploadDraftTranscriptResultDto(
             DraftTranscript: publicInfo,
             ExtractedTerms: ocrResponse?.Terms ?? [],
-            CalculatedGpa4: ocrResponse?.CalculatedGpa4,
+            CalculatedGpa4: await OcrGpa4Async(ocrResponse, ct),
             OcrMessage: ocrResponse?.Message,
             Warnings: ocrResponse?.Warnings,
             DraftFile: publicInfo
@@ -232,10 +246,12 @@ public class ProfileFlowService(
 
         var budgetTiers = await LoadBudgetTiersAsync(ct);
         var certificationTypes = await LoadCertificationTypesAsync(ct);
+        var majorNames = (await repository.GetMajorOptionsAsync(ct)).Select(m => m.Name).ToList();
         var now = DateTime.UtcNow;
-        ValidateForCommit(draft, budgetTiers, certificationTypes, now);
+        ValidateForCommit(draft, budgetTiers, certificationTypes, majorNames, now);
 
-        var (scores, activities, certifications) = ApplyDraftToProfile(profile, draft, budgetTiers, certificationTypes, now);
+        var scale = await GetGradeScaleAsync(ct);
+        var (scores, activities, certifications) = ApplyDraftToProfile(profile, draft, budgetTiers, certificationTypes, scale, now);
 
         // Chuyển file bảng điểm nháp (theo trạng thái trên server) sang thư mục chính thức
         var previousOfficialUrl = profile.TranscriptFileUrl;
@@ -251,8 +267,14 @@ public class ProfileFlowService(
 
         profile.FlowSubmittedAt = DateTimeOffset.UtcNow;
         profile.DraftFlowStateJson = null;
+        // Tính bậc ngoại khóa trước khi lưu để bậc vào cùng transaction với hoạt động mới
+        profile.ExtracurricularTier = await ComputeEcTierAsync(activities, ct);
 
         await repository.CommitProfileFlowAsync(profile, scores, activities, certifications, ct);
+
+        // Token của lần gọi advisor đọc bậc ngoại khóa. Phải ghi SAU khi commit: ghi sớm thì SaveChanges của ai_calls sẽ lưu luôn
+        // các sửa đổi dở của profile ra ngoài transaction của CommitProfileFlowAsync
+        await RecordAiCallsAsync(userId, ct);
 
         // Đã lưu xong hồ sơ mới thì xoá file bảng điểm chính thức cũ, không giữ dữ liệu cá nhân thừa
         if (!string.IsNullOrWhiteSpace(previousOfficialUrl) && previousOfficialUrl != profile.TranscriptFileUrl)
@@ -266,7 +288,7 @@ public class ProfileFlowService(
             TargetLevel: profile.TargetLevel,
             IntendedMajor: profile.IntendedMajor,
             OverallGpa: profile.OverallGpa,
-            ExtracurricularScore: profile.ExtracurricularScore,
+            ExtracurricularTier: profile.ExtracurricularTier,
             BudgetMinUsd: profile.BudgetMinUsd,
             BudgetMaxUsd: profile.BudgetMaxUsd,
             TargetSchoolType: profile.TargetSchoolType,
@@ -420,7 +442,7 @@ public class ProfileFlowService(
         return new FlowCertificationDraftDto(
             Certifications: items,
             EnglishPlanned: step3.EnglishPlanned,
-            EnglishPlannedDate: step3.EnglishPlanned ? NullIfBlank(step3.EnglishPlannedDate) : null);
+            StandardizedPlanned: step3.StandardizedPlanned);
     }
 
     private static string? NormalizeEducationLevel(string? value)
@@ -430,7 +452,30 @@ public class ProfileFlowService(
         return EducationLevelLabels.TryGetValue(trimmed, out var code) ? code : trimmed;
     }
 
+    // GPA thang 10 học sinh tự nhập lúc lưu hồ sơ. Chỉ dùng khi quy đổi theo bảng hiện tại vẫn ra đúng overall_gpa:
+    // OCR bảng điểm hay mod đổi bảng quy đổi có thể đã sửa overall_gpa, lúc đó chỉ còn số thang 4.
+    // Không đổi ngược thang 4 sang thang 10: bảng quy đổi không tuyến tính nên đổi ngược ra số học sinh không nhập
+    private static decimal? SavedGpa10(StudentProfile profile, GradeScaleConfigDto? scale) =>
+        profile.GpaMode == ProfileConstants.GpaModes.Overall
+        && profile.OverallGpa10 is { } gpa10
+        && profile.OverallGpa is { } gpa4
+        && Round2(TranscriptGpa.To4(gpa10, scale)) == Round2(gpa4)
+            ? gpa10
+            : null;
+
+    // overall_gpa là numeric(5,2): Postgres làm tròn 2 số lẻ, nửa lên
+    private static decimal Round2(decimal value) => Math.Round(value, 2, MidpointRounding.AwayFromZero);
+
     // ───────────────────────────── Commit: validate + ánh xạ ─────────────────────────────
+
+    /// <summary>Bảng quy đổi grade_scale.10 trong DB; không có provider (test cũ) thì null = bảng mặc định</summary>
+    private async Task<GradeScaleConfigDto?> GetGradeScaleAsync(CancellationToken ct) =>
+        gradeScale is null ? null : await gradeScale.GetAsync(ct);
+
+    // GPA thang 4 của bảng điểm OCR: advisor tra bảng mặc định, nên .NET tra lại TB thang 10 theo bảng trong DB
+    // (moderator sửa). Advisor không trả TB thang 10 thì giữ số advisor tính
+    private async Task<decimal?> OcrGpa4Async(TranscriptOcrResponse? ocr, CancellationToken ct) =>
+        ocr?.AverageScoreScale10 is { } average10 ? TranscriptGpa.To4(average10, await GetGradeScaleAsync(ct)) : ocr?.CalculatedGpa4;
 
     private async Task<Dictionary<string, BudgetTier>> LoadBudgetTiersAsync(CancellationToken ct)
     {
@@ -477,6 +522,7 @@ public class ProfileFlowService(
         ProfileFlowDraftDto draft,
         IReadOnlyDictionary<string, BudgetTier> budgetTiers,
         IReadOnlyDictionary<string, CertificationMetadataItem> certificationTypes,
+        IReadOnlyList<string> majorNames,
         DateTime now)
     {
         var errors = new List<string>();
@@ -496,6 +542,10 @@ public class ProfileFlowService(
             errors.Add("Bước 1: lớp / năm học hiện tại tối đa 64 ký tự.");
         if (step1?.TargetMajor?.Trim().Length > 128)
             errors.Add("Bước 1: ngành dự định tối đa 128 ký tự.");
+        // Ngành phải đúng tên trong bảng majors thì mới lọc được trường; để trống là "Chưa chọn ngành"
+        if (NullIfBlank(step1?.TargetMajor) is { } major
+            && !majorNames.Contains(major, StringComparer.OrdinalIgnoreCase))
+            errors.Add($"Bước 1: ngành '{major}' không có trong danh sách.");
         if (NullIfBlank(step1?.TargetIntake) is { } intake && !IntakeRegex.IsMatch(intake))
             errors.Add($"Bước 1: kỳ nhập học '{intake}' không hợp lệ (dạng Fall 2027).");
         if (step1?.ExpectedGraduationYear is { } gradYear
@@ -574,6 +624,8 @@ public class ProfileFlowService(
                 errors.Add("Bước 5: tên hoạt động / giải thưởng tối đa 256 ký tự.");
                 continue;
             }
+            if (item.Description?.Trim().Length > 1000)
+                errors.Add($"Bước 5: mô tả cho '{name}' tối đa 1000 ký tự.");
             if (item.ImpactLevel is null || !ProfileConstants.ImpactLevelCodes.ToLevel.ContainsKey(item.ImpactLevel))
                 errors.Add($"Bước 5: '{name}' chưa chọn phạm vi.");
 
@@ -665,14 +717,17 @@ public class ProfileFlowService(
                 label = type.Name;
                 if (type.Min is { } min && type.Max is { } max)
                 {
+                    // Dự định thi được để trống điểm mục tiêu
                     if (item.Overall is not { } overall)
-                        errors.Add($"Bước 3: {label} chưa nhập điểm.");
+                    {
+                        if (!item.IsTarget) errors.Add($"Bước 3: {label} chưa nhập điểm.");
+                    }
                     else if (!IsOnScale(overall, min, max, type.Step))
                         errors.Add($"Bước 3: điểm {label} phải từ {Fmt(min)} đến {Fmt(max)}{StepText(type.Step)}.");
                 }
                 else if (string.IsNullOrWhiteSpace(item.ScaleText))
                 {
-                    errors.Add($"Bước 3: {label} chưa nhập điểm.");
+                    if (!item.IsTarget) errors.Add($"Bước 3: {label} chưa nhập điểm.");
                 }
                 else if (item.ScaleText.Trim().Length > 32)
                 {
@@ -689,7 +744,7 @@ public class ProfileFlowService(
                         errors.Add($"Bước 3: điểm {section.Label} của {label} phải từ {Fmt(section.Min)} đến {Fmt(section.Max)}{StepText(section.Step)}.");
                 }
 
-                if (type.RequiresSubject && string.IsNullOrWhiteSpace(item.Subject))
+                if (type.RequiresSubject && !item.IsTarget && string.IsNullOrWhiteSpace(item.Subject))
                     errors.Add($"Bước 3: {label} chưa nhập {(type.SubjectLabel ?? "tên môn").ToLowerInvariant()}.");
                 else if (item.Subject?.Trim().Length > 128)
                     errors.Add($"Bước 3: tên môn {label} tối đa 128 ký tự.");
@@ -699,20 +754,15 @@ public class ProfileFlowService(
             {
                 var date = ParseDateOnly(item.TestDate);
                 if (date is null)
-                    errors.Add($"Bước 3: ngày thi {label} không hợp lệ.");
-                else if (date > thisMonth)
+                    errors.Add($"Bước 3: {(item.IsTarget ? "ngày dự kiến thi" : "ngày thi")} {label} không hợp lệ.");
+                else if (!item.IsTarget && date > thisMonth)
                     errors.Add($"Bước 3: ngày thi {label} không được ở tương lai.");
+                else if (item.IsTarget && date < thisMonth)
+                    errors.Add(OverduePlanError(label, date.Value));
             }
         }
 
-        if (step3.EnglishPlanned && !string.IsNullOrWhiteSpace(step3.EnglishPlannedDate))
-        {
-            var planned = ParseDateOnly(step3.EnglishPlannedDate);
-            if (planned is null)
-                errors.Add("Bước 3: tháng dự kiến thi tiếng Anh không hợp lệ.");
-            else if (planned < thisMonth)
-                errors.Add("Bước 3: tháng dự kiến thi tiếng Anh không được ở quá khứ.");
-        }
+        ValidateTargets(step3.Certifications ?? [], certificationTypes, errors);
 
         static bool IsOnScale(decimal value, decimal min, decimal max, decimal? step) =>
             value >= min && value <= max && (step is not > 0 || (value - min) % step.Value == 0);
@@ -721,6 +771,103 @@ public class ProfileFlowService(
 
         static string Fmt(decimal value) => value.ToString("0.##", CultureInfo.InvariantCulture);
     }
+
+    /// <summary>
+    /// Dự định thi: mỗi loại (mỗi môn với AP / A-Level) chỉ 1 dòng mục tiêu; đã có điểm thật cùng loại thì điểm mục tiêu
+    /// phải cao hơn điểm thật cao nhất (thi lại để nâng điểm)
+    /// </summary>
+    private static void ValidateTargets(
+        IReadOnlyList<FlowCertificationItemDto> items,
+        IReadOnlyDictionary<string, CertificationMetadataItem> certificationTypes,
+        List<string> errors)
+    {
+        var valid = items.Where(x => !string.IsNullOrWhiteSpace(x.Type)).ToList();
+        foreach (var group in valid.Where(x => x.IsTarget).GroupBy(SameTestKey))
+        {
+            var first = group.First();
+            var label = Label(first);
+            if (group.Count() > 1)
+                errors.Add($"Bước 3: {label} chỉ được có 1 dự định thi.");
+
+            if (first.Overall is not { } target) continue;
+            var bestActual = valid
+                .Where(x => !x.IsTarget && x.Overall is not null && SameTestKey(x) == group.Key)
+                .Max(x => x.Overall);
+            if (bestActual is { } best && target <= best)
+                errors.Add($"Bước 3: điểm mục tiêu {label} phải cao hơn điểm đã thi ({best.ToString("0.##", CultureInfo.InvariantCulture)}).");
+        }
+
+        string Label(FlowCertificationItemDto x)
+        {
+            var type = x.Type!.Trim();
+            var name = string.Equals(type, OtherCertificationType, StringComparison.OrdinalIgnoreCase)
+                ? NullIfBlank(x.CustomName) ?? "Khác"
+                : certificationTypes.TryGetValue(type, out var t) ? t.Name : type;
+            return string.IsNullOrWhiteSpace(x.Subject) ? name : $"{name} {x.Subject.Trim()}";
+        }
+
+        static string SameTestKey(FlowCertificationItemDto x)
+        {
+            var type = x.Type!.Trim().ToLowerInvariant();
+            var name = type == OtherCertificationType ? x.CustomName?.Trim().ToLowerInvariant() : null;
+            return $"{type}|{name}|{x.Subject?.Trim().ToLowerInvariant()}";
+        }
+    }
+
+    private const int MaxEcItems = 10;          // advisor nhận tối đa 10 hoạt động và 10 giải thưởng
+    private const int MaxEcActivityText = 500;  // giới hạn độ dài text bên EcActivity (Python)
+    private const int MaxEcAwardText = 300;     // giới hạn độ dài text bên EcAward (Python)
+    private static readonly HashSet<string> EcRoleCodes = ["founder", "leader", "vice_leader", "member"];
+
+    /// <summary>
+    /// Bậc ngoại khóa 1–5. Không có hoạt động lẫn giải thưởng: bậc 1, không gọi SLM.
+    /// Có thì gửi advisor để SLM xác nhận vai trò, phạm vi; advisor tắt hoặc lỗi thì tính bằng công thức với vai trò, phạm vi học sinh chọn.
+    /// </summary>
+    private async Task<int> ComputeEcTierAsync(IReadOnlyList<ProfileActivity> items, CancellationToken ct)
+    {
+        var valid = items.Where(a => a.ImpactLevel is >= 1 and <= 5 && !string.IsNullOrWhiteSpace(a.Title)).ToList();
+        var act = valid
+            .Where(a => !IsAwardKind(a))
+            .Take(MaxEcItems)
+            .Select(a => new EcActivityDto(
+                Clip(EcText(a), MaxEcActivityText),
+                a.ImpactLevel!.Value,
+                Math.Clamp(a.DurationMonths ?? 0, 0, 120),
+                a.Role is not null && EcRoleCodes.Contains(a.Role) ? a.Role : null))
+            .ToList();
+        var awards = valid
+            .Where(IsAwardKind)
+            .Take(MaxEcItems)
+            .Select(a => new EcAwardDto(Clip(EcText(a), MaxEcAwardText), a.ImpactLevel!.Value))
+            .ToList();
+
+        if (act.Count == 0 && awards.Count == 0)
+            return 1;
+
+        var tier = ecTierClient is null
+            ? null
+            : await ecTierClient.ReadTierAsync(new EcTierRequest(act, awards), ct);
+        return tier ?? StudyAbroad.Application.Recommendations.ActivityTier.FromProfile(valid).Tier;
+    }
+
+    // Đổ giỏ số đo (do các client OCR, ngoại khóa bỏ vào) xuống ai_calls kèm user_id; chat_message_id trống vì nằm ngoài chat.
+    // Đổ giỏ sau khi lấy để lần ghi sau trong cùng yêu cầu không ghi trùng. Lỗi ghi chỉ cảnh báo (AiCallRecorder)
+    private async Task RecordAiCallsAsync(Guid userId, CancellationToken ct)
+    {
+        if (aiCalls is null || usageCollector is null)
+            return;
+        var usage = usageCollector.Snapshot();
+        usageCollector.Clear();
+        await new AiCallRecorder(aiCalls, pricing, logger).RecordAsync(userId, null, usage, ct);
+    }
+
+    private static bool IsAwardKind(ProfileActivity a) => string.Equals(a.Kind, "award", StringComparison.OrdinalIgnoreCase);
+
+    // SLM đọc tên kèm mô tả để xác nhận vai trò, phạm vi
+    private static string EcText(ProfileActivity a) =>
+        string.IsNullOrWhiteSpace(a.Description) ? a.Title.Trim() : $"{a.Title.Trim()}: {a.Description.Trim()}";
+
+    private static string Clip(string text, int max) => text.Length <= max ? text : text[..max];
 
     private static bool IsAward(FlowActivityDraftDto item) =>
         string.Equals(item.Category, "achievement", StringComparison.OrdinalIgnoreCase)
@@ -732,6 +879,7 @@ public class ProfileFlowService(
         ProfileFlowDraftDto draft,
         IReadOnlyDictionary<string, BudgetTier> budgetTiers,
         IReadOnlyDictionary<string, CertificationMetadataItem> certificationTypes,
+        GradeScaleConfigDto? scale,
         DateTime now)
     {
         // Bước 1
@@ -782,13 +930,19 @@ public class ProfileFlowService(
             }
         }
         // GPA chỉ tính trên server từ điểm các môn, không nhận số GPA client gửi lên
-        profile.OverallGpa = TranscriptGpa.Gpa4(draft.Step2);
+        profile.OverallGpa = TranscriptGpa.Gpa4(draft.Step2, scale);
+        // Giữ cách nhập và số thang 10 tự nhập để mở lại hồ sơ hiện đúng số học sinh đã nhập
+        profile.GpaMode = TranscriptGpa.Mode(draft.Step2);
+        profile.OverallGpa10 = profile.GpaMode == ProfileConstants.GpaModes.Overall ? draft.Step2?.ManualGpa10Scale : null;
 
         // Bước 3
         var certifications = BuildCertifications(draft.Step3, certificationTypes);
         ApplyLegacyCertificationColumns(profile, certifications, certificationTypes);
-        profile.EnglishTestPlanned = draft.Step3?.EnglishPlanned ?? false;
-        profile.EnglishPlannedDate = profile.EnglishTestPlanned ? ParseDateOnly(draft.Step3?.EnglishPlannedDate) : null;
+        // Tick nghĩa là "chưa thi và chưa có dự định thi": mục đã có chứng chỉ hoặc dự định thi (dòng mục tiêu) thì không còn tick
+        profile.EnglishTestPlanned = (draft.Step3?.EnglishPlanned ?? false)
+            && !certifications.Any(c => IsEnglishCategory(c.Category));
+        profile.StandardizedTestPlanned = (draft.Step3?.StandardizedPlanned ?? false)
+            && !certifications.Any(c => !IsEnglishCategory(c.Category));
 
         // Bước 4
         var tier = budgetTiers[draft.Step4!.AnnualBudgetTier!];
@@ -799,8 +953,8 @@ public class ProfileFlowService(
         profile.NeedsScholarship = ProfileConstants.ScholarshipNeeds.NeedsScholarship(profile.ScholarshipNeed);
         profile.FundingSource = NullIfBlank(draft.Step4.FundingSource);
 
-        // Điểm ngoại khóa cũ không còn đúng với dữ liệu mới; để bộ tính điểm tính lại
-        profile.ExtracurricularScore = null;
+        // Bậc ngoại khóa cũ không còn đúng với hoạt động mới; để SLM xác nhận và tính lại
+        profile.ExtracurricularTier = null;
 
         // Bước 5
         var today = DateOnly.FromDateTime(now);
@@ -816,6 +970,7 @@ public class ProfileFlowService(
                     Title = item.Name!.Trim(),
                     ImpactLevel = impact,
                     AwardYear = item.Year,
+                    Description = NullIfBlank(item.Description),
                 });
                 continue;
             }
@@ -832,6 +987,7 @@ public class ProfileFlowService(
                 EndDate = end,
                 IsOngoing = item.IsOngoing,
                 DurationMonths = CountMonths(start, end ?? today),
+                Description = NullIfBlank(item.Description),
             });
         }
 
@@ -842,7 +998,8 @@ public class ProfileFlowService(
         FlowCertificationDraftDto? step3, IReadOnlyDictionary<string, CertificationMetadataItem> certificationTypes)
     {
         var result = new List<ProfileCertification>();
-        foreach (var item in step3?.Certifications ?? [])
+        if (step3 is null) return result;
+        foreach (var item in step3.Certifications ?? [])
         {
             var typeId = item.Type!.Trim();
             var isOther = string.Equals(typeId, OtherCertificationType, StringComparison.OrdinalIgnoreCase);
@@ -863,11 +1020,15 @@ public class ProfileFlowService(
                 ScaleText = isOther || !hasNumericScale ? NullIfBlank(item.ScaleText) : null,
                 SectionScoresJson = sections.Count > 0 ? JsonSerializer.Serialize(sections, JsonOptions) : null,
                 TestDate = ParseDateOnly(item.TestDate),
+                IsTarget = item.IsTarget,
                 SortOrder = result.Count,
             });
         }
         return result;
     }
+
+    /// <summary>english là mục tiếng Anh; standardized và graduate chung mục bài thi chuẩn hóa (như form bước 3)</summary>
+    private static bool IsEnglishCategory(string? category) => category == "english";
 
     /// <summary>
     /// Gợi ý trường vẫn đọc các cột cũ (ielts, toefl, sat...). Mỗi loại có profileField trong metadata → ghi điểm cao nhất
@@ -885,12 +1046,19 @@ public class ProfileFlowService(
 
         foreach (var field in certificationTypes.Values.Select(t => t.ProfileField).OfType<string>().Distinct())
         {
-            var best = withField.Where(x => x.Field == field).Max(x => x.Cert.OverallScore);
+            var matches = withField.Where(x => x.Field == field).ToList();
+            var actual = matches.Where(x => !x.Cert.IsTarget).ToList();
+            var candidates = actual.Count > 0 ? actual : matches;
+            var best = candidates.Max(x => x.Cert.OverallScore);
             SetProfileField(profile, field, best);
         }
 
-        var mainEnglish = withField
+        var englishMatches = withField
             .Where(x => x.Cert.Category == "english")
+            .ToList();
+        // Loại và ngày thi tiếng Anh chính chỉ lấy bài đã thi: chỉ có dự định thì để "none", không ghi ngày dự kiến (ở tương lai) như ngày đã thi
+        var mainEnglish = englishMatches
+            .Where(x => !x.Cert.IsTarget)
             .OrderByDescending(x => x.Cert.TestDate ?? DateOnly.MinValue)
             .ThenByDescending(x => x.Cert.OverallScore)
             .Select(x => x.Cert)
@@ -900,6 +1068,10 @@ public class ProfileFlowService(
             : certificationTypes[mainEnglish.TestType].ProfileField;
         profile.EnglishTestDate = mainEnglish?.TestDate;
     }
+
+    /// <summary>Dự định đã qua tháng dự kiến: hệ thống không biết học sinh đã thi chưa nên chỉ cách sửa, không tự đổi</summary>
+    private static string OverduePlanError(string label, DateOnly planned) =>
+        $"Bước 3: dự định thi {label} tháng {planned:MM/yyyy} đã qua. Nếu đã thi, hãy nhập điểm thật; nếu chưa, đổi tháng dự kiến hoặc xóa dự định.";
 
     /// <summary>Tên profileField trong metadata ↔ cột trên student_profiles</summary>
     private static void SetProfileField(StudentProfile profile, string field, decimal? value)
@@ -945,7 +1117,8 @@ public class ProfileFlowService(
         IReadOnlyList<TranscriptScore> scores,
         IReadOnlyList<ProfileActivity> activities,
         IReadOnlyList<ProfileCertification> certifications,
-        IReadOnlyDictionary<string, CertificationMetadataItem> certificationTypes)
+        IReadOnlyDictionary<string, CertificationMetadataItem> certificationTypes,
+        GradeScaleConfigDto? scale)
     {
         var step1 = new FlowGoalDraftDto(
             CurrentEducationLevel: profile.CurrentEducationLevel ?? NormalizeEducationLevel(profile.EducationSystem) switch
@@ -983,13 +1156,15 @@ public class ProfileFlowService(
             if (index >= 0) year.Subjects[index] = subject;
             else year.Subjects.Add(subject);
         }
-        var step2 = new FlowTranscriptDraftDto(years, profile.OverallGpa, profile.OverallGpa is { } g ? Math.Round(g / 4m * 10m, 2) : null);
+        var step2 = new FlowTranscriptDraftDto(years, profile.OverallGpa, SavedGpa10(profile, scale), profile.GpaMode);
+        // Chứng chỉ đã thi và dự định thi (dòng mục tiêu) đều hiện thành thẻ, giữ thứ tự đã lưu.
+        // Cờ planned: tick "chưa thi và chưa có dự định thi" của từng mục
         var step3 = new FlowCertificationDraftDto(
             Certifications: certifications.Count > 0
                 ? certifications.OrderBy(c => c.SortOrder).Select(ToCertificationDraft).ToList()
                 : BuildCertificationsFromLegacyColumns(profile, certificationTypes),
             EnglishPlanned: profile.EnglishTestPlanned,
-            EnglishPlannedDate: profile.EnglishPlannedDate?.ToString("yyyy-MM", CultureInfo.InvariantCulture));
+            StandardizedPlanned: profile.StandardizedTestPlanned);
 
         // Hồ sơ cũ có thể lưu mã nguồn tài chính khác (family, loan) thì để trống cho học sinh chọn lại
         var funding = profile.FundingSource is { } f && ProfileConstants.FundingSources.All.Contains(f) ? f : null;
@@ -1001,7 +1176,8 @@ public class ProfileFlowService(
                 Name: a.Title,
                 Category: "achievement",
                 ImpactLevel: ProfileConstants.ImpactLevelCodes.FromLevel(a.ImpactLevel),
-                Year: a.AwardYear ?? a.StartDate?.Year)
+                Year: a.AwardYear ?? a.StartDate?.Year,
+                Description: a.Description)
             : new FlowActivityDraftDto(
                 Id: a.Id.ToString(),
                 Name: a.Title,
@@ -1011,7 +1187,8 @@ public class ProfileFlowService(
                 StartDate: a.StartDate?.ToString("MM/yyyy", CultureInfo.InvariantCulture),
                 EndDate: a.EndDate?.ToString("MM/yyyy", CultureInfo.InvariantCulture),
                 IsOngoing: a.IsOngoing,
-                DurationMonths: a.DurationMonths)).ToList());
+                DurationMonths: a.DurationMonths,
+                Description: a.Description)).ToList());
 
         return new ProfileFlowDraftDto(step1, step2, step3, step4, step5);
     }
@@ -1025,7 +1202,8 @@ public class ProfileFlowService(
         Overall: c.OverallScore,
         ScaleText: c.ScaleText,
         Sections: ReadSectionScores(c.SectionScoresJson),
-        TestDate: c.TestDate?.ToString("yyyy-MM", CultureInfo.InvariantCulture));
+        TestDate: c.TestDate?.ToString("yyyy-MM", CultureInfo.InvariantCulture),
+        IsTarget: c.IsTarget);
 
     /// <summary>Hồ sơ cũ chưa có dòng profile_certifications: dựng từ các cột cũ theo profileField trong metadata</summary>
     private static List<FlowCertificationItemDto> BuildCertificationsFromLegacyColumns(
@@ -1035,6 +1213,9 @@ public class ProfileFlowService(
         foreach (var type in certificationTypes.Values.Where(t => t.ProfileField is not null).OrderBy(t => t.Category).ThenBy(t => t.Order))
         {
             if (GetProfileField(profile, type.ProfileField!) is not { } score) continue;
+            // Đang tick "chưa thi, sẽ thi sau" thì điểm trong cột là điểm kỳ vọng (lúc lưu ghi vào để gợi ý trường có điểm mà tính),
+            // không phải chứng chỉ đã thi nên không dựng thành thẻ. Form tự bỏ tick khi thêm chứng chỉ thật cùng mục
+            if (IsPlannedScore(profile, type.Category)) continue;
             var testDate = string.Equals(profile.EnglishTestType, type.ProfileField, StringComparison.OrdinalIgnoreCase)
                 ? profile.EnglishTestDate
                 : null;
@@ -1047,6 +1228,11 @@ public class ProfileFlowService(
         }
         return items;
     }
+
+    /// <summary>Điểm của mục này (english | standardized | graduate) trên cột hồ sơ là điểm kỳ vọng vì học sinh đang tick "chưa thi"</summary>
+    private static bool IsPlannedScore(StudentProfile profile, string category) => category == "english"
+        ? profile.EnglishTestPlanned
+        : profile.StandardizedTestPlanned;
 
     private static Dictionary<string, decimal?>? ReadSectionScores(string? json)
     {

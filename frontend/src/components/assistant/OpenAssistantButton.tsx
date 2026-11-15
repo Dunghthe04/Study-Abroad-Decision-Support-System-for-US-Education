@@ -14,7 +14,7 @@ export function OpenAssistantButton({
 }: {
   question?: string;
   variant?: "default" | "outline" | "secondary" | "ghost";
-  size?: "default" | "sm" | "lg";
+  size?: "default" | "sm" | "lg" | "xl";
   className?: string;
   children?: React.ReactNode;
 }) {
