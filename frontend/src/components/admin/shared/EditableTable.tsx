@@ -17,6 +17,8 @@ export interface TableRow {
 export interface TableEditState {
   isEditing: boolean;
   canEdit: boolean;
+  /** Người xem không có quyền sửa (vd. Admin chỉ xem dữ liệu trường): ẩn hẳn nút Sửa thay vì chỉ khóa. */
+  readOnly?: boolean;
   isSaving: boolean;
   hasChanges: boolean;
   error: string | null;
@@ -35,6 +37,7 @@ const EDIT_VALUE_CELL = "border-t border-border px-2 py-1 text-left text-sm";
 
 function HeaderActions({ edit }: { edit: TableEditState }) {
   if (!edit.isEditing) {
+    if (edit.readOnly) return null;
     return (
       <Button
         type="button"
