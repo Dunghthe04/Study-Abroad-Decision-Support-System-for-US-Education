@@ -6,6 +6,7 @@ using StudyAbroad.Application.Admin.SlmSamples;
 using StudyAbroad.Application.Common;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
+using StudyAbroad.Infrastructure.Import;
 using Xunit;
 
 namespace StudyAbroad.UnitTests;
@@ -20,7 +21,7 @@ public class AdminSlmSamplesControllerTests
 
     private static AdminSlmSamplesController CreateController(FakeSlmSampleService service, bool withUser = true)
     {
-        var controller = new AdminSlmSamplesController(service)
+        var controller = new AdminSlmSamplesController(service, new SlmTemplateWriter())
         {
             ControllerContext = new ControllerContext
             {
@@ -200,29 +201,121 @@ public class AdminSlmSamplesControllerTests
     }
 
     [Fact]
-    public async Task Export_NoSplit_ReturnsFileNamedSlmTrainingJsonlWithNdjsonContentType()
+    public async Task Import_FileOverTenMegabytes_Returns400()
+    {
+        var controller = CreateController(new FakeSlmSampleService());
+        var file = MakeFormFile("data.xlsx", new byte[10 * 1024 * 1024 + 1]);
+
+        var result = await controller.Import(file, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task Preview_ValidFile_Returns200WithPreviewAndDoesNotNeedUser()
+    {
+        var service = new FakeSlmSampleService();
+        var controller = CreateController(service, withUser: false);
+        var file = MakeFormFile("data.xlsx", new byte[] { 1, 2, 3 });
+
+        var result = await controller.Preview(file, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var preview = Assert.IsType<SlmImportPreviewDto>(ok.Value);
+        Assert.Equal(1, preview.TotalRows);
+        Assert.Equal(1, service.PreviewCalls);
+    }
+
+    [Fact]
+    public async Task Preview_NullFile_Returns400WithoutCallingService()
     {
         var service = new FakeSlmSampleService();
         var controller = CreateController(service);
 
-        var result = await controller.Export(null, CancellationToken.None);
+        var result = await controller.Preview(null, CancellationToken.None);
 
-        var file = Assert.IsType<FileContentResult>(result);
-        Assert.Equal("slm_training.jsonl", file.FileDownloadName);
-        Assert.Equal("application/x-ndjson", file.ContentType);
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Contains("error", System.Text.Json.JsonSerializer.Serialize(bad.Value));
+        Assert.Equal(0, service.PreviewCalls);
     }
 
     [Fact]
-    public async Task Export_BadSplit_Returns400()
+    public async Task Preview_EmptyFile_Returns400WithoutCallingService()
     {
-        var service = new FakeSlmSampleService { ThrowArgument = true };
+        var service = new FakeSlmSampleService();
         var controller = CreateController(service);
+        var file = MakeFormFile("data.xlsx", Array.Empty<byte>());
 
-        var result = await controller.Export("notavalidsplit", CancellationToken.None);
+        var result = await controller.Preview(file, CancellationToken.None);
 
-        var bad = Assert.IsType<BadRequestObjectResult>(result);
-        var json = System.Text.Json.JsonSerializer.Serialize(bad.Value);
-        Assert.Contains("error", json);
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Equal(0, service.PreviewCalls);
+    }
+
+    [Theory]
+    [InlineData("data.xls")]
+    [InlineData("data.csv")]
+    [InlineData("data.xlsx.exe")]
+    public async Task Preview_NonXlsxName_Returns400WithoutCallingService(string fileName)
+    {
+        var service = new FakeSlmSampleService();
+        var controller = CreateController(service);
+        var file = MakeFormFile(fileName, new byte[] { 1, 2, 3 });
+
+        var result = await controller.Preview(file, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Equal(0, service.PreviewCalls);
+    }
+
+    [Fact]
+    public async Task Preview_FileOverTenMegabytes_Returns400WithoutCallingService()
+    {
+        var service = new FakeSlmSampleService();
+        var controller = CreateController(service);
+        var file = MakeFormFile("data.xlsx", new byte[10 * 1024 * 1024 + 1]);
+
+        var result = await controller.Preview(file, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Equal(0, service.PreviewCalls);
+    }
+
+    [Fact]
+    public async Task Preview_ServiceThrowsInvalidDataException_Returns400WithMessage()
+    {
+        var service = new FakeSlmSampleService { ThrowInvalidData = true };
+        var controller = CreateController(service);
+        var file = MakeFormFile("data.xlsx", new byte[] { 1, 2, 3 });
+
+        var result = await controller.Preview(file, CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Contains("corrupt file", System.Text.Json.JsonSerializer.Serialize(bad.Value));
+    }
+
+    [Fact]
+    public void Template_ReturnsXlsxFileWithExpectedNameAndContentType()
+    {
+        var controller = CreateController(new FakeSlmSampleService());
+
+        var result = controller.Template();
+
+        var file = Assert.IsType<FileContentResult>(result);
+        Assert.Equal("slm-training-template.xlsx", file.FileDownloadName);
+        Assert.Equal("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", file.ContentType);
+        Assert.NotEmpty(file.FileContents);
+    }
+
+    [Fact]
+    public void PreviewAndTemplate_RoutesAreDeclared()
+    {
+        var preview = typeof(AdminSlmSamplesController).GetMethod(nameof(AdminSlmSamplesController.Preview))!;
+        var template = typeof(AdminSlmSamplesController).GetMethod(nameof(AdminSlmSamplesController.Template))!;
+
+        Assert.Equal("preview", ((HttpPostAttribute)Attribute.GetCustomAttribute(preview, typeof(HttpPostAttribute))!).Template);
+        Assert.Equal("template", ((HttpGetAttribute)Attribute.GetCustomAttribute(template, typeof(HttpGetAttribute))!).Template);
+        Assert.NotNull(Attribute.GetCustomAttribute(preview, typeof(RequestSizeLimitAttribute)));
     }
 
     private static IFormFile MakeFormFile(string fileName, byte[] content)
@@ -236,6 +329,7 @@ public class AdminSlmSamplesControllerTests
         public bool ThrowArgument { get; init; }
         public bool ThrowInvalidData { get; init; }
         public bool DeleteResult { get; init; } = true;
+        public int PreviewCalls { get; private set; }
 
         private static SlmSampleDto MakeDto() => new(
             Guid.NewGuid(), SlmSampleTypes.Knowledge, "OPT", null, null, ValidIntents,
@@ -283,10 +377,11 @@ public class AdminSlmSamplesControllerTests
             return Task.FromResult(new SlmImportResultDto(1, 1, 0, []));
         }
 
-        public Task<string> ExportJsonlAsync(string? split, CancellationToken ct = default)
+        public Task<SlmImportPreviewDto> PreviewAsync(Stream workbook, CancellationToken ct = default)
         {
-            if (ThrowArgument) throw new ArgumentException("bad split");
-            return Task.FromResult("{\"type\":\"knowledge\"}\n");
+            PreviewCalls++;
+            if (ThrowInvalidData) throw new InvalidDataException("corrupt file");
+            return Task.FromResult(new SlmImportPreviewDto(1, [], []));
         }
     }
 }
