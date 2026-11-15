@@ -57,6 +57,7 @@ export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDeta
     loadMoreError: reviewsLoadMoreError,
     hasMore: reviewsHasMore,
     loadMore: loadMoreReviews,
+    refresh: refreshReviews,
     total: reviewTotal,
     average: reviewAverage,
   } = useCenterReviews(center.id);
@@ -470,6 +471,8 @@ export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDeta
             loadingMore={reviewsLoadingMore}
             loadMoreError={reviewsLoadMoreError}
             onLoadMore={loadMoreReviews}
+            centerId={center.id}
+            onReviewRemoved={refreshReviews}
           />
         </TabsContent>
       </Tabs>

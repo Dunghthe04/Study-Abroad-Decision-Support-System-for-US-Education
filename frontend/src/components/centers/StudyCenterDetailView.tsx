@@ -391,6 +391,8 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
             loadingMore={reviewsLoadingMore}
             loadMoreError={reviewsLoadMoreError}
             onLoadMore={loadMoreReviews}
+            centerId={center.id}
+            onReviewRemoved={refreshReviews}
           />
         </TabsContent>
       </Tabs>
