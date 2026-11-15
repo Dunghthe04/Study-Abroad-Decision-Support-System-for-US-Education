@@ -13,4 +13,9 @@ public class LeadMessage : BaseEntity
     /// <summary>visible | removed</summary>
     public string Status { get; set; } = "visible";
     public Guid? RemovedByUserId { get; set; }
+
+    /// <summary>[UC-58] Người báo cáo tin vi phạm (học sinh / phụ huynh của lead). Báo lần đầu được giữ, báo lại không ghi đè.</summary>
+    public Guid? ReportedByUserId { get; set; }
+    public DateTime? ReportedAt { get; set; }
+    public string? ReportReason { get; set; }
 }

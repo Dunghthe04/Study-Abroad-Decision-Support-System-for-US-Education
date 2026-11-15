@@ -29,7 +29,13 @@ import type {
   SetStudyCenterActiveRequest,
   CenterReceivedLeadDto,
   CenterLeadsSummaryDto,
+  LeadMessageDto,
   LeadMessagesThreadDto,
+  ModerationLeadMessageDto,
+  ModerationMessageFilter,
+  RepeatRemovalCenterDto,
+  CenterSuspensionProposalDto,
+  SuspensionProposalStatus,
   SendLeadMessageRequest,
   SendLeadMessageResultDto,
   RegisterCenterRequest,
@@ -358,6 +364,35 @@ export const studyCentersApi = {
 };
 
 /** [UC-73] Quản lý và xử lý yêu cầu liên hệ nhận được phía trung tâm tư vấn (Leads) */
+/** [USAS-2080 / UC-58] Đề nghị tạm ngừng trung tâm bị gỡ tin lặp lại: Moderator gửi, Admin quyết định. */
+export const centerSuspensionApi = {
+  repeatRemovalCenters: () =>
+    apiFetch<RepeatRemovalCenterDto[]>("/api/v1/admin/center-suspension-proposals/repeat-removal-centers"),
+
+  list: (params?: { status?: SuspensionProposalStatus | "all"; page?: number; pageSize?: number }) => {
+    const sp = new URLSearchParams();
+    if (params?.status) sp.set("status", params.status);
+    if (params?.page) sp.set("page", String(params.page));
+    if (params?.pageSize) sp.set("pageSize", String(params.pageSize));
+    const qs = sp.toString();
+    return apiFetch<PagedResult<CenterSuspensionProposalDto>>(
+      `/api/v1/admin/center-suspension-proposals${qs ? `?${qs}` : ""}`
+    );
+  },
+
+  propose: (studyCenterId: string, reason: string) =>
+    apiFetch<CenterSuspensionProposalDto>("/api/v1/admin/center-suspension-proposals", {
+      method: "POST",
+      body: JSON.stringify({ studyCenterId, reason }),
+    }),
+
+  decide: (id: string, approve: boolean, note?: string) =>
+    apiFetch<CenterSuspensionProposalDto>(
+      `/api/v1/admin/center-suspension-proposals/${encodeURIComponent(id)}/decide`,
+      { method: "POST", body: JSON.stringify({ approve, note: note?.trim() || null }) }
+    ),
+};
+
 export const centerLeadsApi = {
   list: (params?: {
     page?: number;
@@ -397,6 +432,33 @@ export const centerLeadsApi = {
       body: JSON.stringify(payload),
     });
   },
+
+  /** [USAS-2080 / UC-58] Hàng đợi tin nhắn bị gắn cờ hoặc đã gỡ, kèm nội dung gốc (Moderator, Admin) */
+  moderationMessages: (params?: { status?: ModerationMessageFilter; page?: number; pageSize?: number }) => {
+    const sp = new URLSearchParams();
+    if (params?.status) sp.set("status", params.status);
+    if (params?.page) sp.set("page", String(params.page));
+    if (params?.pageSize) sp.set("pageSize", String(params.pageSize));
+    const qs = sp.toString();
+    return apiFetch<PagedResult<ModerationLeadMessageDto>>(`/api/v1/leads/moderation/messages${qs ? `?${qs}` : ""}`);
+  },
+
+  /** [USAS-2080 / UC-58] Moderator chọn Giữ một tin bị gắn cờ: tin vẫn hiện, bỏ cờ */
+  keepMessage: (id: string, messageId: string) =>
+    apiFetch<LeadMessageDto>(
+      `/api/v1/leads/received/${encodeURIComponent(id)}/messages/${encodeURIComponent(messageId)}/keep`,
+      { method: "POST" }
+    ),
+
+  /** [USAS-2080 / UC-58] Moderator gỡ một tin nhắn vi phạm trong yêu cầu liên hệ (kèm lý do, tối đa 500 ký tự) */
+  removeMessage: (id: string, messageId: string, reason?: string) =>
+    apiFetch<LeadMessageDto>(
+      `/api/v1/leads/received/${encodeURIComponent(id)}/messages/${encodeURIComponent(messageId)}/remove`,
+      {
+        method: "POST",
+        body: JSON.stringify({ reason: reason?.trim() || null }),
+      }
+    ),
 };
 
 // [UC-30, UC-31, UC-33] API Quản lý trường mục tiêu (Student / Parent)
