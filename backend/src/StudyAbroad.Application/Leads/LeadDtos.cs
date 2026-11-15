@@ -156,6 +156,26 @@ public record LeadMessagesThreadDto(
 public record SendLeadMessageRequest(string Content);
 
 /// <summary>
+/// [USAS-2080 / UC-58] Một tin nhắn trong hàng đợi kiểm duyệt của Moderator / Admin.
+/// <paramref name="Content"/> luôn là bản gốc kể cả tin đã gỡ (đặc tả 5.4: giữ bản gốc trong nhật ký cho Moderator và Admin);
+/// bản gốc không bao giờ trả ra phía học sinh, phụ huynh hay trung tâm.
+/// </summary>
+public record ModerationLeadMessageDto(
+    Guid Id,
+    Guid LeadId,
+    Guid StudyCenterId,
+    string StudyCenterName,
+    Guid SenderUserId,
+    string SenderRole,
+    bool IsFromCenter,
+    string Content,
+    bool IsFlagged,
+    string? FlagReason,
+    string Status,
+    Guid? RemovedByUserId,
+    DateTime CreatedAt);
+
+/// <summary>
 /// [USAS-2080 / UC-58] Yêu cầu gỡ một tin nhắn vi phạm trong yêu cầu liên hệ. <paramref name="Reason"/> tối đa 500 ký tự, lưu vào nhật ký.
 /// </summary>
 public record RemoveLeadMessageRequest(string? Reason = null);

@@ -526,6 +526,78 @@ public class LeadService(
 
     public const int MaxRemoveReasonLength = 500;
 
+    private static readonly HashSet<string> ModerationFilters = new(StringComparer.OrdinalIgnoreCase) { "flagged", "removed", "all" };
+
+    /// <summary>[USAS-2080 / UC-58] Hàng đợi tin bị gắn cờ / đã gỡ cho Moderator và Admin (quyền do controller kiểm tra).</summary>
+    public Task<PagedResult<ModerationLeadMessageDto>> GetModerationMessagesAsync(
+        string? filter,
+        int page,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        var normalized = filter?.Trim().ToLowerInvariant();
+        if (!string.IsNullOrEmpty(normalized) && !ModerationFilters.Contains(normalized))
+            throw new ArgumentException("Bộ lọc không hợp lệ. Chỉ nhận 'flagged', 'removed' hoặc 'all'.");
+
+        return leads.GetModerationMessagesAsync(string.IsNullOrEmpty(normalized) ? "flagged" : normalized, page, pageSize, ct);
+    }
+
+    /// <summary>
+    /// [USAS-2080 / UC-58] Moderator chọn Giữ: tin vẫn hiện, bỏ cờ khỏi hàng đợi và ghi nhật ký.
+    /// Tin chưa gắn cờ thì không đổi gì, không ghi nhật ký. Tin đã gỡ không giữ lại được.
+    /// </summary>
+    public async Task<LeadMessageDto> KeepLeadMessageAsync(
+        Guid moderatorUserId,
+        Guid leadId,
+        Guid messageId,
+        CancellationToken ct = default)
+    {
+        if (leadId == Guid.Empty || messageId == Guid.Empty)
+            throw new ArgumentException("Mã yêu cầu liên hệ hoặc mã tin nhắn không hợp lệ.");
+
+        var lead = await leads.GetByIdAsync(leadId, ct)
+            ?? throw new KeyNotFoundException("Không tìm thấy yêu cầu liên hệ.");
+        var message = await leads.GetLeadMessageForUpdateAsync(leadId, messageId, ct)
+            ?? throw new KeyNotFoundException("Không tìm thấy tin nhắn trong yêu cầu liên hệ này.");
+
+        if (string.Equals(message.Status, "removed", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("Tin nhắn đã bị gỡ, không thể giữ lại.");
+
+        if (message.IsFlagged)
+        {
+            var flagReason = message.FlagReason;
+            message.IsFlagged = false;
+            await leads.SaveLeadMessageAsync(message, ct);
+
+            if (auditLogs is not null)
+            {
+                await auditLogs.AddAsync(new AuditLog
+                {
+                    ActorUserId = moderatorUserId,
+                    Action = "lead_message.keep",
+                    EntityType = "lead_message",
+                    EntityId = message.Id.ToString(),
+                    DetailJson = JsonSerializer.Serialize(new
+                    {
+                        leadId = lead.Id,
+                        studyCenterId = lead.StudyCenterId,
+                        senderUserId = message.SenderUserId,
+                        flagReason,
+                    }),
+                }, ct);
+            }
+        }
+
+        var sender = await users.GetUserById(message.SenderUserId, ct);
+        var center = await studyCenters.GetByIdAsync(lead.StudyCenterId, ct);
+        return LeadMessageMapper.ToDto(
+            message,
+            sender?.Role ?? UserRoles.Student,
+            sender?.FullName,
+            sharedProfile: lead.SharedFields.Contains(LeadSharedFields.Contact),
+            centerName: center?.Name);
+    }
+
     /// <summary>
     /// [USAS-2080 / UC-58] Moderator gỡ một tin nhắn vi phạm trong yêu cầu liên hệ.
     /// Tin chuyển sang Status "removed" (nội dung hiển thị "Tin nhắn đã bị gỡ do vi phạm quy tắc"), ghi người gỡ và nhật ký.

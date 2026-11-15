@@ -277,6 +277,59 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
     public Task<LeadMessage?> GetLeadMessageForUpdateAsync(Guid leadId, Guid messageId, CancellationToken ct = default) =>
         db.LeadMessages.FirstOrDefaultAsync(m => m.Id == messageId && m.LeadId == leadId, ct);
 
+    /// <summary>[USAS-2080 / UC-58] Hàng đợi kiểm duyệt: tin gắn cờ đang hiện, tin đã gỡ, hoặc cả hai.</summary>
+    public async Task<PagedResult<ModerationLeadMessageDto>> GetModerationMessagesAsync(
+        string filter,
+        int page,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        var safePage = page < 1 ? 1 : page;
+        var safePageSize = pageSize < 1 ? 20 : (pageSize > 50 ? 50 : pageSize);
+
+        var query = from m in db.LeadMessages.AsNoTracking()
+                    join l in db.Leads.AsNoTracking() on m.LeadId equals l.Id
+                    join c in db.StudyCenters.AsNoTracking() on l.StudyCenterId equals c.Id
+                    join u in db.Users.AsNoTracking() on m.SenderUserId equals u.Id into senders
+                    from u in senders.DefaultIfEmpty()
+                    select new { Message = m, l.StudyCenterId, CenterName = c.Name, SenderRole = u != null ? u.Role : null };
+
+        query = filter switch
+        {
+            "removed" => query.Where(x => x.Message.Status == "removed"),
+            "all" => query.Where(x => x.Message.Status == "removed" || x.Message.IsFlagged),
+            _ => query.Where(x => x.Message.IsFlagged && x.Message.Status != "removed"),
+        };
+
+        var total = await query.CountAsync(ct);
+        var rows = await query
+            .OrderByDescending(x => x.Message.CreatedAt)
+            .Skip((safePage - 1) * safePageSize)
+            .Take(safePageSize)
+            .ToListAsync(ct);
+
+        var items = rows.Select(x =>
+        {
+            var role = x.SenderRole ?? UserRoles.Student;
+            return new ModerationLeadMessageDto(
+                x.Message.Id,
+                x.Message.LeadId,
+                x.StudyCenterId,
+                x.CenterName,
+                x.Message.SenderUserId,
+                role,
+                LeadMessageMapper.IsStaffOrCenterRole(role),
+                x.Message.Content,
+                x.Message.IsFlagged,
+                x.Message.FlagReason,
+                x.Message.Status,
+                x.Message.RemovedByUserId,
+                x.Message.CreatedAt);
+        }).ToList();
+
+        return new PagedResult<ModerationLeadMessageDto>(items, safePage, safePageSize, total);
+    }
+
     public async Task SaveLeadMessageAsync(LeadMessage message, CancellationToken ct = default)
     {
         db.LeadMessages.Update(message);

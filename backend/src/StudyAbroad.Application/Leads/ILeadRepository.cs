@@ -62,5 +62,15 @@ public interface ILeadRepository
     Task<LeadMessage?> GetLeadMessageForUpdateAsync(Guid leadId, Guid messageId, CancellationToken ct = default);
 
     Task SaveLeadMessageAsync(LeadMessage message, CancellationToken ct = default);
+
+    /// <summary>
+    /// [USAS-2080 / UC-58] Hàng đợi kiểm duyệt tin nhắn, mới nhất trước. filter: "flagged" (tin đang hiện bị gắn cờ),
+    /// "removed" (tin đã gỡ) hoặc "all" (cả hai).
+    /// </summary>
+    Task<PagedResult<ModerationLeadMessageDto>> GetModerationMessagesAsync(
+        string filter,
+        int page,
+        int pageSize,
+        CancellationToken ct = default);
 }
 

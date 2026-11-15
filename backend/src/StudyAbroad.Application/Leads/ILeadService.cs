@@ -59,6 +59,11 @@ public interface ILeadService
     Task<SendLeadMessageResultDto> SendSentLeadMessageAsync(Guid userId, Guid leadId, string content, CancellationToken ct = default);
 
     // [USAS-2080 / UC-58] Moderator gỡ tin nhắn vi phạm, tin hiển thị "Tin nhắn đã bị gỡ" và có nhật ký
+    // [USAS-2080 / UC-58] Hàng đợi tin bị gắn cờ / đã gỡ và thao tác Giữ (bỏ cờ) của Moderator
+    Task<PagedResult<ModerationLeadMessageDto>> GetModerationMessagesAsync(string? filter, int page, int pageSize, CancellationToken ct = default);
+
+    Task<LeadMessageDto> KeepLeadMessageAsync(Guid moderatorUserId, Guid leadId, Guid messageId, CancellationToken ct = default);
+
     Task<LeadMessageDto> RemoveLeadMessageAsync(Guid moderatorUserId, Guid leadId, Guid messageId, string? reason, CancellationToken ct = default);
 }
 
