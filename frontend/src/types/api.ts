@@ -639,6 +639,25 @@ export interface SendLeadMessageResultDto {
   leadStatus: string;
 }
 
+/** [USAS-2080 / UC-58] Tin nhắn trong hàng đợi kiểm duyệt; `content` luôn là bản gốc (chỉ Moderator và Admin thấy). */
+export interface ModerationLeadMessageDto {
+  id: string;
+  leadId: string;
+  studyCenterId: string;
+  studyCenterName: string;
+  senderUserId: string;
+  senderRole: string;
+  isFromCenter: boolean;
+  content: string;
+  isFlagged: boolean;
+  flagReason?: string | null;
+  status: "visible" | "removed" | string;
+  removedByUserId?: string | null;
+  createdAt: string;
+}
+
+export type ModerationMessageFilter = "flagged" | "removed" | "all";
+
 
 /** Đánh giá công khai của trung tâm (tên người đánh giá đã được rút gọn ở backend). */
 export interface CenterReviewDto {

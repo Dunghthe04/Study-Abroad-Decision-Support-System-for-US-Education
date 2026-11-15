@@ -5,6 +5,7 @@ import {
   ClipboardCheckIcon,
   CreditCardIcon,
   LayoutDashboardIcon,
+  MailWarningIcon,
   MessageSquareWarningIcon,
   MessagesSquareIcon,
   SchoolIcon,
@@ -89,10 +90,18 @@ export const ADMIN_NAV: AdminNavItem[] = [
   {
     href: "/admin/forum",
     label: "Kiểm duyệt diễn đàn",
-    description: "Nội dung bị báo cáo, gỡ bài, hạn chế người dùng, gỡ đánh giá và tin nhắn",
+    description: "Nội dung bị báo cáo, gỡ bài, hạn chế người dùng và gỡ đánh giá",
     icon: MessagesSquareIcon,
     roles: ["admin", "moderator"],
-    useCases: ["UC-54", "UC-55", "UC-56", "UC-57", "UC-58"],
+    useCases: ["UC-54", "UC-55", "UC-56", "UC-57"],
+  },
+  {
+    href: "/admin/lead-messages",
+    label: "Tin nhắn liên hệ",
+    description: "Tin nhắn trong yêu cầu liên hệ bị gắn cờ tự động: Moderator chọn giữ hoặc gỡ, Admin chỉ xem",
+    icon: MailWarningIcon,
+    roles: ["admin", "moderator"],
+    useCases: ["UC-58"],
   },
   {
     href: "/admin/ai-usage",

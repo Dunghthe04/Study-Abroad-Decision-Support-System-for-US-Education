@@ -31,6 +31,8 @@ import type {
   CenterLeadsSummaryDto,
   LeadMessageDto,
   LeadMessagesThreadDto,
+  ModerationLeadMessageDto,
+  ModerationMessageFilter,
   SendLeadMessageRequest,
   SendLeadMessageResultDto,
   RegisterCenterRequest,
@@ -398,6 +400,23 @@ export const centerLeadsApi = {
       body: JSON.stringify(payload),
     });
   },
+
+  /** [USAS-2080 / UC-58] Hàng đợi tin nhắn bị gắn cờ hoặc đã gỡ, kèm nội dung gốc (Moderator, Admin) */
+  moderationMessages: (params?: { status?: ModerationMessageFilter; page?: number; pageSize?: number }) => {
+    const sp = new URLSearchParams();
+    if (params?.status) sp.set("status", params.status);
+    if (params?.page) sp.set("page", String(params.page));
+    if (params?.pageSize) sp.set("pageSize", String(params.pageSize));
+    const qs = sp.toString();
+    return apiFetch<PagedResult<ModerationLeadMessageDto>>(`/api/v1/leads/moderation/messages${qs ? `?${qs}` : ""}`);
+  },
+
+  /** [USAS-2080 / UC-58] Moderator chọn Giữ một tin bị gắn cờ: tin vẫn hiện, bỏ cờ */
+  keepMessage: (id: string, messageId: string) =>
+    apiFetch<LeadMessageDto>(
+      `/api/v1/leads/received/${encodeURIComponent(id)}/messages/${encodeURIComponent(messageId)}/keep`,
+      { method: "POST" }
+    ),
 
   /** [USAS-2080 / UC-58] Moderator gỡ một tin nhắn vi phạm trong yêu cầu liên hệ (kèm lý do, tối đa 500 ký tự) */
   removeMessage: (id: string, messageId: string, reason?: string) =>
