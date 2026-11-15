@@ -46,7 +46,9 @@ public class AdminUniversitiesController(IAdminUniversityService service) : Cont
         return offerings is null ? NotFound() : Ok(offerings);
     }
 
+    /// <summary>[UC-66] Sửa thông tin trường (chỉ Moderator).</summary>
     [HttpPut("{id:guid}")]
+    [Authorize(Roles = UserRoles.Moderator)]
     public async Task<ActionResult<AdminUniversityDetailDto>> Update(Guid id, [FromBody] UpdateUniversityRequest request, CancellationToken ct)
     {
         if (User.GetUserId() is not { } actorId) return Unauthorized();
@@ -57,7 +59,9 @@ public class AdminUniversitiesController(IAdminUniversityService service) : Cont
         return Ok(result.Value);
     }
 
+    /// <summary>[UC-66] Sửa một bậc học (offering) của trường: học phí, hạn nộp, điều kiện... (chỉ Moderator).</summary>
     [HttpPut("{id:guid}/offerings/{offeringId:guid}")]
+    [Authorize(Roles = UserRoles.Moderator)]
     public async Task<ActionResult<AdminUniversityOfferingDto>> UpdateOffering(
         Guid id, Guid offeringId, [FromBody] UpdateOfferingRequest request, CancellationToken ct)
     {
