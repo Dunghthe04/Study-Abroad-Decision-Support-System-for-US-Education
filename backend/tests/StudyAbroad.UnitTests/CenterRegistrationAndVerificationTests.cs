@@ -536,5 +536,124 @@ public class CenterRegistrationAndVerificationTests
         Assert.Contains("ORDER BY", sql);
         Assert.Contains("CASE", sql);
     }
+
+    // ===== [UC-71] Nộp hồ sơ xác minh: giới hạn tệp, email xác nhận, khóa sửa khi chờ duyệt =====
+
+    private static (StudyCenterService Service, FakeEmailSender Email, FakeVerificationRepo Verifications, StudyCenter Center) SubmitSetup(string? centerEmail = "trungtam@example.com")
+    {
+        var centers = new FakeStudyCenterRepo();
+        var verifications = new FakeVerificationRepo();
+        var email = new FakeEmailSender();
+        var service = new StudyCenterService(centers, new FakeAuditLogs(), verifications, email);
+        var center = new StudyCenter
+        {
+            Id = Guid.NewGuid(),
+            Name = "Trung tâm ABC",
+            Email = centerEmail,
+            OwnerUserId = Guid.NewGuid(),
+            EmailVerifiedAt = DateTime.UtcNow,
+            VerificationStatus = CenterVerificationStatuses.Unverified,
+        };
+        centers.AddAsync(center).GetAwaiter().GetResult();
+        return (service, email, verifications, center);
+    }
+
+    private static SubmitVerificationDto SubmitRequest(int documentCount) => new(
+        LegalName: "Công ty TNHH Tư vấn Du học ABC",
+        TaxCode: "0101234567",
+        Address: "Hà Nội",
+        LegalRepresentative: "Nguyễn Văn A",
+        Documents: Enumerable.Range(0, documentCount)
+            .Select(i => new VerificationDocumentUploadDto(i == 0 ? "business_registration" : "power_of_attorney", $"/uploads/f{i}.pdf", $"f{i}.pdf", 1000, "application/pdf"))
+            .ToList());
+
+    [Fact]
+    public async Task Submit_FiveDocuments_IsAcceptedAndSixIsRejected()
+    {
+        var (service, _, verifications, center) = SubmitSetup();
+
+        var tooMany = await service.SubmitVerificationAsync(center.OwnerUserId!.Value, SubmitRequest(StudyCenterService.MaxVerificationDocuments + 1));
+        Assert.False(tooMany.Success);
+        Assert.Contains("tối đa 5 tệp", tooMany.ErrorMessage);
+        Assert.Equal(CenterVerificationStatuses.Unverified, center.VerificationStatus);
+
+        var ok = await service.SubmitVerificationAsync(center.OwnerUserId!.Value, SubmitRequest(StudyCenterService.MaxVerificationDocuments));
+        Assert.True(ok.Success);
+        Assert.Equal(CenterVerificationStatuses.PendingReview, center.VerificationStatus);
+    }
+
+    [Fact]
+    public async Task Submit_Success_EmailsAnAcknowledgementToTheCenter()
+    {
+        var (service, email, _, center) = SubmitSetup();
+
+        var result = await service.SubmitVerificationAsync(center.OwnerUserId!.Value, SubmitRequest(1));
+
+        Assert.True(result.Success);
+        var sent = Assert.Single(email.CenterVerificationEmails);
+        Assert.Equal("trungtam@example.com", sent.To);
+        Assert.Equal("submitted", sent.Outcome);
+        Assert.Null(sent.Reason);
+    }
+
+    [Fact]
+    public async Task Submit_RejectedByRules_SendsNoEmail()
+    {
+        var (service, email, _, center) = SubmitSetup();
+
+        var result = await service.SubmitVerificationAsync(center.OwnerUserId!.Value, SubmitRequest(0));
+
+        Assert.False(result.Success);
+        Assert.Empty(email.CenterVerificationEmails);
+    }
+
+    [Fact]
+    public async Task UpdateCenterProfile_WhilePendingReview_LocksLegalFieldsButAllowsMarketingFields()
+    {
+        var centerRepo = new FakeStudyCenterRepo();
+        var service = new StudyCenterService(centerRepo, new FakeAuditLogs());
+        var center = new StudyCenter
+        {
+            Id = Guid.NewGuid(),
+            Name = "Trung tâm ABC",
+            OwnerUserId = Guid.NewGuid(),
+            VerificationStatus = CenterVerificationStatuses.PendingReview,
+            TaxCode = "0312345678",
+        };
+        await centerRepo.AddAsync(center);
+
+        var legal = await service.UpdateCenterProfileAsync(center.OwnerUserId!.Value, new UpdateCenterProfileRequest(TaxCode: "0999999999"));
+        Assert.False(legal.Success);
+        Assert.Contains("chờ duyệt", legal.ErrorMessage);
+        Assert.Equal("0312345678", center.TaxCode);
+
+        var rename = await service.UpdateCenterProfileAsync(center.OwnerUserId!.Value, new UpdateCenterProfileRequest(Name: "Tên khác"));
+        Assert.False(rename.Success);
+        Assert.Equal("Trung tâm ABC", center.Name);
+
+        var marketing = await service.UpdateCenterProfileAsync(center.OwnerUserId!.Value, new UpdateCenterProfileRequest(Description: "Mô tả mới"));
+        Assert.True(marketing.Success);
+        Assert.Equal("Mô tả mới", center.Description);
+    }
+
+    [Fact]
+    public async Task UpdateCenterProfile_Unverified_StillAllowsLegalFieldChanges()
+    {
+        var centerRepo = new FakeStudyCenterRepo();
+        var service = new StudyCenterService(centerRepo, new FakeAuditLogs());
+        var center = new StudyCenter
+        {
+            Id = Guid.NewGuid(),
+            Name = "Trung tâm ABC",
+            OwnerUserId = Guid.NewGuid(),
+            VerificationStatus = CenterVerificationStatuses.Unverified,
+        };
+        await centerRepo.AddAsync(center);
+
+        var result = await service.UpdateCenterProfileAsync(center.OwnerUserId!.Value, new UpdateCenterProfileRequest(Name: "Tên pháp lý mới"));
+
+        Assert.True(result.Success);
+        Assert.Equal("Tên pháp lý mới", center.Name);
+    }
 }
 
