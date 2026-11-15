@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text;
 using System.Text.RegularExpressions;
 using StudyAbroad.Application.Audit;
 using StudyAbroad.Application.Auth;
@@ -579,6 +581,25 @@ public class StudyCenterService(
             rejectionReason);
     }
 
+    /// <summary>
+    /// [UC-71] Cần giấy ủy quyền khi họ tên người đăng ký khác người đại diện theo pháp luật (không phân biệt hoa thường, dấu, khoảng trắng).
+    /// Chưa có tên người đăng ký (tài khoản cũ) thì không chặn.
+    /// </summary>
+    public static bool RegistrantNeedsPowerOfAttorney(string? registrantName, string? legalRepresentative)
+    {
+        if (string.IsNullOrWhiteSpace(registrantName)) return false;
+        return NormalizePersonName(registrantName) != NormalizePersonName(legalRepresentative);
+    }
+
+    private static string NormalizePersonName(string? name)
+    {
+        var d = (name ?? string.Empty).Trim().ToLowerInvariant().Replace('đ', 'd').Normalize(NormalizationForm.FormD);
+        var sb = new StringBuilder();
+        foreach (var ch in d)
+            if (CharUnicodeInfo.GetUnicodeCategory(ch) != UnicodeCategory.NonSpacingMark) sb.Append(ch);
+        return Regex.Replace(sb.ToString(), @"\s+", " ");
+    }
+
     public async Task<CreateStudyCenterResult> SubmitVerificationAsync(Guid userId, SubmitVerificationDto request, CancellationToken ct = default)
     {
         if (verificationRepository is null)
@@ -621,6 +642,11 @@ public class StudyCenterService(
         var hasBizReg = docs.Any(d => d.DocumentType == CenterDocumentTypes.BusinessRegistration && !string.IsNullOrWhiteSpace(d.FileUrl));
         if (!hasBizReg)
             return CreateStudyCenterResult.Fail("Bản scan hoặc ảnh Giấy chứng nhận đăng ký doanh nghiệp là tài liệu bắt buộc.");
+
+        // [UC-71] Đặc tả 5.1: người đăng ký không phải người đại diện theo pháp luật thì phải nộp giấy ủy quyền
+        if (RegistrantNeedsPowerOfAttorney(center.RegistrantName, legalRep)
+            && !docs.Any(d => d.DocumentType == CenterDocumentTypes.PowerOfAttorney && !string.IsNullOrWhiteSpace(d.FileUrl)))
+            return CreateStudyCenterResult.Fail("Người đăng ký không phải người đại diện theo pháp luật nên bắt buộc nộp Giấy ủy quyền người thực hiện thủ tục.");
 
         var verificationReq = new CenterVerificationRequest
         {
