@@ -29,6 +29,7 @@ import type {
   SetStudyCenterActiveRequest,
   CenterReceivedLeadDto,
   CenterLeadsSummaryDto,
+  LeadMessageDto,
   LeadMessagesThreadDto,
   SendLeadMessageRequest,
   SendLeadMessageResultDto,
@@ -397,6 +398,16 @@ export const centerLeadsApi = {
       body: JSON.stringify(payload),
     });
   },
+
+  /** [USAS-2080 / UC-58] Moderator gỡ một tin nhắn vi phạm trong yêu cầu liên hệ (kèm lý do, tối đa 500 ký tự) */
+  removeMessage: (id: string, messageId: string, reason?: string) =>
+    apiFetch<LeadMessageDto>(
+      `/api/v1/leads/received/${encodeURIComponent(id)}/messages/${encodeURIComponent(messageId)}/remove`,
+      {
+        method: "POST",
+        body: JSON.stringify({ reason: reason?.trim() || null }),
+      }
+    ),
 };
 
 // [UC-30, UC-31, UC-33] API Quản lý trường mục tiêu (Student / Parent)
