@@ -39,9 +39,9 @@ export const ADMIN_NAV: AdminNavItem[] = [
   {
     href: "/admin/users",
     label: "Quản trị người dùng",
-    description: "Danh sách, khóa, mở khóa tài khoản và cấp tài khoản (admin cấp moderator, moderator cấp trung tâm)",
+    description: "Danh sách, khóa, mở khóa tài khoản và cấp tài khoản moderator (chỉ quản trị viên)",
     icon: UsersIcon,
-    roles: ["admin", "moderator"],
+    roles: ["admin"],
     useCases: ["UC-60", "UC-61", "UC-62", "UC-63"],
   },
   {
