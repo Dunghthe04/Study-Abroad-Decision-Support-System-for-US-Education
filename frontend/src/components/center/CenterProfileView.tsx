@@ -208,8 +208,9 @@ export function CenterProfileView() {
     }
   };
 
-  // Đã xác minh: chỉ sửa được thông tin hiển thị, không sửa được thông tin pháp lý
-  const legalLocked = center?.verificationStatus === "verified";
+  // Đã xác minh hoặc đang chờ duyệt: chỉ sửa được thông tin hiển thị, không sửa được thông tin pháp lý (đặc tả 5.1, UC-71)
+  const isPendingReview = center?.verificationStatus === "pending_review";
+  const legalLocked = center?.verificationStatus === "verified" || isPendingReview;
 
   if (loading) {
     return (
@@ -276,7 +277,9 @@ export function CenterProfileView() {
               />
               {legalLocked && (
                 <p className="text-xs text-ink-3">
-                  Tên trung tâm đã khớp với đăng ký kinh doanh nên không thể sửa sau khi xác minh.
+                  {isPendingReview
+                    ? "Hồ sơ đang chờ duyệt nên chưa sửa được tên pháp lý. Vui lòng chờ kết quả xét duyệt."
+                    : "Tên trung tâm đã khớp với đăng ký kinh doanh nên không thể sửa sau khi xác minh."}
                 </p>
               )}
             </Field>
@@ -298,7 +301,9 @@ export function CenterProfileView() {
               </div>
               {legalLocked && (
                 <p className="text-xs text-ink-3">
-                  Trung tâm đã được xác minh: thông tin pháp lý được khóa để đảm bảo tính xác thực. Bạn vẫn sửa được các thông tin hiển thị bên dưới.
+                  {isPendingReview
+                    ? "Hồ sơ đang chờ duyệt: thông tin pháp lý (tên, mã số thuế...) tạm khóa cho tới khi có kết quả. Bạn vẫn sửa được các thông tin hiển thị bên dưới."
+                    : "Trung tâm đã được xác minh: thông tin pháp lý được khóa để đảm bảo tính xác thực. Bạn vẫn sửa được các thông tin hiển thị bên dưới."}
                 </p>
               )}
 

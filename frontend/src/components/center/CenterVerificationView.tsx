@@ -25,7 +25,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
 
 export function CenterVerificationView() {
-  const [, setCenter] = useState<StudyCenter | null>(null);
+  const [center, setCenter] = useState<StudyCenter | null>(null);
   const [status, setStatus] = useState<CenterVerificationStatusDto | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -110,6 +110,12 @@ export function CenterVerificationView() {
     }
   };
 
+  // [UC-71] Người đăng ký khác người đại diện pháp luật thì bắt buộc giấy ủy quyền
+  const normName = (v?: string | null) =>
+    (v ?? "").trim().toLowerCase().replace(/đ/g, "d").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ");
+  const needsPowerOfAttorney =
+    !!center?.registrantName?.trim() && normName(center.registrantName) !== normName(legalRepresentative);
+
   const handleRemoveDoc = (docType: string) => {
     setUploadedDocs((prev) => prev.filter((d) => d.documentType !== docType));
   };
@@ -127,6 +133,11 @@ export function CenterVerificationView() {
     const hasBizReg = uploadedDocs.some((d) => d.documentType === "business_registration");
     if (!hasBizReg) {
       setFormError("Bản scan hoặc ảnh Giấy chứng nhận đăng ký doanh nghiệp là tài liệu bắt buộc.");
+      return;
+    }
+
+    if (needsPowerOfAttorney && !uploadedDocs.some((d) => d.documentType === "power_of_attorney")) {
+      setFormError("Người đăng ký không phải người đại diện theo pháp luật nên bắt buộc nộp Giấy ủy quyền người thực hiện thủ tục.");
       return;
     }
 
@@ -385,7 +396,7 @@ export function CenterVerificationView() {
                     <span className="text-sm font-medium text-ink">
                       Giấy ủy quyền người thực hiện thủ tục
                     </span>
-                    <span className="text-[10px] text-ink-3">(Tùy chọn)</span>
+                    <span className="text-[10px] text-ink-3">{needsPowerOfAttorney ? "(Bắt buộc)" : "(Tùy chọn)"}</span>
                   </div>
                   <p className="text-xs text-ink-3">
                     Nộp nếu người đăng ký tài khoản không phải người đại diện theo pháp luật trên ĐKKD.
