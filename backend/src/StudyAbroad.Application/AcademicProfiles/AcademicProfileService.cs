@@ -3,6 +3,7 @@ using StudyAbroad.Domain.Entities;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -53,11 +54,13 @@ public class AcademicProfileService(
             ))
             .ToList();
 
-        var response = MapToResponse(profile, terms);
+        var certifications = await repository.GetCertificationsAsync(profile.Id, ct);
+        var response = MapToResponse(profile, terms, certifications);
         return AcademicProfileResult.Ok(response);
     }
 
-    private static AcademicProfileResponse MapToResponse(StudentProfile p, List<TranscriptTermDto> terms)
+    private static AcademicProfileResponse MapToResponse(
+        StudentProfile p, List<TranscriptTermDto> terms, IReadOnlyList<ProfileCertification> certifications)
     {
         return new AcademicProfileResponse(
             p.Id,
@@ -70,17 +73,23 @@ public class AcademicProfileService(
             p.GradeScale,
             p.OverallGpa,
             p.IntendedMajor,
-            p.Ielts,
-            p.Toefl,
-            p.Duolingo,
-            p.Sat,
-            p.Act,
-            p.Gre,
-            p.Gmat,
-            p.OtherTestsJson,
+            BestTaken(certifications, "ielts"),
+            BestTaken(certifications, "toefl"),
+            BestTaken(certifications, "duolingo"),
+            BestTaken(certifications, "sat"),
+            BestTaken(certifications, "act"),
+            BestTaken(certifications, "gre"),
+            BestTaken(certifications, "gmat"),
+            BestTaken(certifications, "ap") is { } ap
+                ? JsonSerializer.Serialize(new Dictionary<string, decimal> { ["ap"] = ap })
+                : null,
             terms,
             p.CreatedAt,
             p.UpdatedAt
         );
     }
+
+    // Điểm thi đọc từ profile_certifications: điểm cao nhất của loại đó trong các bài đã thi (bỏ dòng mục tiêu)
+    private static decimal? BestTaken(IReadOnlyList<ProfileCertification> certifications, string testType) =>
+        certifications.Where(c => !c.IsTarget && c.TestType == testType).Max(c => c.OverallScore);
 }

@@ -13,15 +13,18 @@ public class CenterLeadMapperTests
         OverallGpa = 3.8m,
         EducationSystem = "specialized",
         CurrentGrade = "Lớp 12",
-        Ielts = 7.5m,
-        EnglishTestType = "ielts",
-        Sat = 1480m,
-        Act = 32m,
         TargetLevel = "bachelor",
         IntendedMajor = "Computer Science",
         ExtracurricularTier = 2,
         BudgetTier = "tier_35k_50k",
     };
+
+    private static readonly IReadOnlyList<ProfileCertification> Certifications =
+    [
+        new() { Category = "english", TestType = "ielts", OverallScore = 7.5m, TestDate = new DateOnly(2026, 3, 1) },
+        new() { Category = "standardized", TestType = "sat", OverallScore = 1480m },
+        new() { Category = "standardized", TestType = "act", OverallScore = 32m },
+    ];
 
     private static CenterReceivedLeadDto Map(params string[] fields) =>
         CenterLeadMapper.ToCenterDto(
@@ -29,7 +32,8 @@ public class CenterLeadMapperTests
             "Trung Tâm Test",
             "Nguyen Van A",
             "a@example.com",
-            Profile);
+            Profile,
+            Certifications);
 
     [Fact]
     public void ContactAndGoals_CenterSeesNameAndGoalsButNoGpa()
@@ -88,8 +92,8 @@ public class CenterLeadMapperTests
     [Fact]
     public void Tests_TargetScoresGoToPlannedTests_NotToScores()
     {
-        // Chưa thi tiếng Anh, đã thi SAT 1400 và dự định thi lại 1500, dự định IELTS 7.0. Cột cache Sat/Ielts đang giữ điểm mục tiêu
-        var profile = new StudentProfile { Ielts = 7m, EnglishTestType = "none", Sat = 1400m };
+        // Chưa thi tiếng Anh, đã thi SAT 1400 và dự định thi lại 1500, dự định IELTS 7.0
+        var profile = new StudentProfile();
         IReadOnlyList<ProfileCertification> certs =
         [
             new() { Category = "standardized", TestType = "sat", OverallScore = 1400m, TestDate = new DateOnly(2026, 3, 1), SortOrder = 0 },
@@ -120,6 +124,26 @@ public class CenterLeadMapperTests
 
         Assert.Null(dto.ProfileSummary!.PlannedTests);
         Assert.Null(dto.ProfileSummary.SatScore);
+    }
+
+    [Fact]
+    public void Tests_MainEnglishIsLatestTakenTest_WithItsBestScore()
+    {
+        IReadOnlyList<ProfileCertification> certs =
+        [
+            new() { Category = "english", TestType = "ielts", OverallScore = 7m, TestDate = new DateOnly(2025, 6, 1) },
+            new() { Category = "english", TestType = "toefl", OverallScore = 95m, TestDate = new DateOnly(2026, 1, 1) },
+            new() { Category = "english", TestType = "toefl", OverallScore = 100m, TestDate = new DateOnly(2025, 9, 1) },
+            // dự định thi sau không tính là bài chính
+            new() { Category = "english", TestType = "ielts", OverallScore = 8m, TestDate = new DateOnly(2027, 1, 1), IsTarget = true },
+        ];
+
+        var dto = CenterLeadMapper.ToCenterDto(
+            new Lead { SharedFields = [LeadSharedFields.Tests] }, "Trung Tâm Test", null, null, Profile, certs);
+
+        var p = Assert.IsType<SharedProfileSummaryDto>(dto.ProfileSummary);
+        Assert.Equal("toefl", p.EnglishTestType);
+        Assert.Equal(100m, p.EnglishScore);
     }
 
     [Fact]

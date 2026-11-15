@@ -2946,11 +2946,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<decimal?>("Act")
-                        .HasPrecision(4, 1)
-                        .HasColumnType("numeric(4,1)")
-                        .HasColumnName("act");
-
                     b.Property<decimal?>("BudgetMaxUsd")
                         .HasPrecision(12, 2)
                         .HasColumnType("numeric(12,2)")
@@ -2989,30 +2984,16 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("draft_flow_state_json");
 
-                    b.Property<decimal?>("Duolingo")
-                        .HasPrecision(5, 1)
-                        .HasColumnType("numeric(5,1)")
-                        .HasColumnName("duolingo");
-
                     b.Property<string>("EducationSystem")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
                         .HasColumnName("education_system");
-
-                    b.Property<DateOnly?>("EnglishTestDate")
-                        .HasColumnType("date")
-                        .HasColumnName("english_test_date");
 
                     b.Property<bool>("EnglishTestPlanned")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(false)
                         .HasColumnName("english_test_planned");
-
-                    b.Property<string>("EnglishTestType")
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)")
-                        .HasColumnName("english_test_type");
 
                     b.Property<int?>("ExtracurricularTier")
                         .HasColumnType("integer")
@@ -3032,11 +3013,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(32)")
                         .HasColumnName("funding_source");
 
-                    b.Property<decimal?>("Gmat")
-                        .HasPrecision(5, 1)
-                        .HasColumnType("numeric(5,1)")
-                        .HasColumnName("gmat");
-
                     b.Property<string>("GpaMode")
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")
@@ -3052,16 +3028,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("graduation_year");
 
-                    b.Property<decimal?>("Gre")
-                        .HasPrecision(5, 1)
-                        .HasColumnType("numeric(5,1)")
-                        .HasColumnName("gre");
-
-                    b.Property<decimal?>("Ielts")
-                        .HasPrecision(3, 1)
-                        .HasColumnType("numeric(3,1)")
-                        .HasColumnName("ielts");
-
                     b.Property<string>("IntendedMajor")
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)")
@@ -3075,10 +3041,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.Property<bool>("NeedsScholarship")
                         .HasColumnType("boolean")
                         .HasColumnName("needs_scholarship");
-
-                    b.Property<string>("OtherTestsJson")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("other_tests_json");
 
                     b.Property<decimal?>("OverallGpa")
                         .HasPrecision(5, 2)
@@ -3094,15 +3056,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text[]")
                         .HasColumnName("preferred_states");
-
-                    b.Property<string>("RoadmapProgressJson")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("roadmap_progress_json");
-
-                    b.Property<decimal?>("Sat")
-                        .HasPrecision(5, 1)
-                        .HasColumnType("numeric(5,1)")
-                        .HasColumnName("sat");
 
                     b.Property<string>("ScholarshipNeed")
                         .HasMaxLength(16)
@@ -3133,11 +3086,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(32)")
                         .HasDefaultValue("all")
                         .HasColumnName("target_school_type");
-
-                    b.Property<decimal?>("Toefl")
-                        .HasPrecision(5, 1)
-                        .HasColumnType("numeric(5,1)")
-                        .HasColumnName("toefl");
 
                     b.Property<string>("TranscriptFileUrl")
                         .HasMaxLength(512)
