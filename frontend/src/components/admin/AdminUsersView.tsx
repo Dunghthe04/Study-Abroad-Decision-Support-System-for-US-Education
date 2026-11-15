@@ -76,7 +76,7 @@ function canAdminLock(target: UserDto, currentUserRole?: string, currentUserId?:
   return currentUserRole === "admin";
 }
 
-/** [UC-62] Mở khóa tài khoản: Admin mở khóa được moderator, center, users. Moderator chỉ mở khóa được cấp dưới (center, student, parent). */
+/** [UC-62] Mở khóa tài khoản: chỉ Admin (quyết định D2 bản 14/11), mở khóa được moderator, center, student, parent. */
 function canAdminUnlock(target: UserDto, currentUserRole?: string): boolean {
   if (target.role === "admin") return false;
   if (target.status !== "locked" && target.status !== "temp_locked") return false;

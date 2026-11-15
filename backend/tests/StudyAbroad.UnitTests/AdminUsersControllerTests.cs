@@ -184,9 +184,10 @@ public class AdminUsersControllerTests
         Assert.NotNull(lockAttr);
         Assert.Equal(UserRoles.Admin, lockAttr.Roles);
 
+        // Mở khóa: chỉ Admin (quyết định D2 bản 14/11)
         var unlockAttr = typeof(AdminUsersController).GetMethod(nameof(AdminUsersController.UnlockUser))?.GetCustomAttribute<AuthorizeAttribute>();
         Assert.NotNull(unlockAttr);
-        Assert.Equal($"{UserRoles.Admin},{UserRoles.Moderator}", unlockAttr.Roles);
+        Assert.Equal(UserRoles.Admin, unlockAttr.Roles);
 
         // Tạo moderator: Chỉ Admin được phép
         var createModAttr = typeof(AdminUsersController).GetMethod(nameof(AdminUsersController.CreateModerator))?.GetCustomAttribute<AuthorizeAttribute>();
