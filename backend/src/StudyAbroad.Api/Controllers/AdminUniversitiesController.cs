@@ -69,7 +69,9 @@ public class AdminUniversitiesController(IAdminUniversityService service) : Cont
         return Ok(result.Value);
     }
 
+    /// <summary>[UC-67] Ẩn hoặc hiện trường khỏi tìm kiếm và gợi ý (chỉ Moderator).</summary>
     [HttpPatch("{id:guid}/visibility")]
+    [Authorize(Roles = UserRoles.Moderator)]
     public async Task<ActionResult<AdminUniversityDetailDto>> SetVisibility(
         Guid id, [FromBody] SetUniversityVisibilityRequest request, CancellationToken ct)
     {
