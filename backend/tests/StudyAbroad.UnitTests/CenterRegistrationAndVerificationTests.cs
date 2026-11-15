@@ -655,5 +655,50 @@ public class CenterRegistrationAndVerificationTests
         Assert.True(result.Success);
         Assert.Equal("Tên pháp lý mới", center.Name);
     }
+
+    // ===== [UC-71] Giấy ủy quyền bắt buộc khi người đăng ký khác người đại diện pháp luật =====
+
+    [Theory]
+    [InlineData("Nguyễn Văn A", "Nguyễn Văn A", false)]
+    [InlineData("  nguyen van a ", "Nguyễn Văn A", false)]
+    [InlineData("Đỗ Văn B", "do  van b", false)]
+    [InlineData("Trần Thị C", "Nguyễn Văn A", true)]
+    [InlineData(null, "Nguyễn Văn A", false)]
+    [InlineData("", "Nguyễn Văn A", false)]
+    public void RegistrantNeedsPowerOfAttorney_ComparesNamesIgnoringCaseAccentsAndSpaces(string? registrant, string rep, bool expected)
+    {
+        Assert.Equal(expected, StudyCenterService.RegistrantNeedsPowerOfAttorney(registrant, rep));
+    }
+
+    [Fact]
+    public async Task Submit_RegistrantIsNotTheLegalRepresentative_RequiresPowerOfAttorney()
+    {
+        var (service, email, _, center) = SubmitSetup();
+        center.RegistrantName = "Trần Thị C";
+
+        var without = await service.SubmitVerificationAsync(center.OwnerUserId!.Value, new SubmitVerificationDto(
+            "Công ty ABC", "0101234567", "Hà Nội", "Nguyễn Văn A",
+            Documents: [new VerificationDocumentUploadDto("business_registration", "/uploads/a.pdf", "a.pdf", 1000, "application/pdf")]));
+        Assert.False(without.Success);
+        Assert.Contains("Giấy ủy quyền", without.ErrorMessage);
+        Assert.Equal(CenterVerificationStatuses.Unverified, center.VerificationStatus);
+        Assert.Empty(email.CenterVerificationEmails);
+
+        var with = await service.SubmitVerificationAsync(center.OwnerUserId!.Value, SubmitRequest(2));
+        Assert.True(with.Success);
+    }
+
+    [Fact]
+    public async Task Submit_RegistrantIsTheLegalRepresentative_DoesNotNeedPowerOfAttorney()
+    {
+        var (service, _, _, center) = SubmitSetup();
+        center.RegistrantName = "nguyen van a";
+
+        var result = await service.SubmitVerificationAsync(center.OwnerUserId!.Value, new SubmitVerificationDto(
+            "Công ty ABC", "0101234567", "Hà Nội", "Nguyễn Văn A",
+            Documents: [new VerificationDocumentUploadDto("business_registration", "/uploads/a.pdf", "a.pdf", 1000, "application/pdf")]));
+
+        Assert.True(result.Success);
+    }
 }
 
