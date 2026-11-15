@@ -1,5 +1,6 @@
 "use client";
 
+import { formatRating } from "@/lib/rating";
 import Link from "next/link";
 import {
   ArrowLeftIcon,
@@ -33,7 +34,17 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
   const profile = getEnrichedCenterProfile(center);
 
   // Đánh giá lấy từ dữ liệu thật (không dùng số liệu mẫu)
-  const { reviews, error: reviewsError, total: reviewTotal, average: reviewAverage } = useCenterReviews(center.id);
+  const {
+    reviews,
+    loading: reviewsLoading,
+    error: reviewsError,
+    loadingMore: reviewsLoadingMore,
+    loadMoreError: reviewsLoadMoreError,
+    hasMore: reviewsHasMore,
+    loadMore: loadMoreReviews,
+    total: reviewTotal,
+    average: reviewAverage,
+  } = useCenterReviews(center.id);
   const isVerified = center.verificationStatus === "verified" || profile.center.verificationStatus === "verified";
 
   return (
@@ -111,7 +122,7 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
                   {reviewTotal > 0 && reviewAverage !== null ? (
                     <div className="inline-flex items-center gap-1 font-semibold text-gold tabular-nums">
                       <StarIcon className="size-3.5 fill-current" />
-                      <span>{reviewAverage.toFixed(1)}</span>
+                      <span>{formatRating(reviewAverage)}</span>
                       <span className="font-normal text-ink-2">({reviewTotal} đánh giá)</span>
                     </div>
                   ) : (
@@ -360,7 +371,7 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
                   <div className="text-right">
                     <div className="font-heading text-2xl font-bold text-ink flex items-center gap-1 tabular-nums">
                       <StarIcon className="w-5 h-5 text-gold fill-current" />
-                      {reviewAverage.toFixed(1)} / 5.0
+                      {formatRating(reviewAverage)} / 5.0
                     </div>
                   </div>
                 )}
@@ -368,7 +379,15 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
             </CardHeader>
           </Card>
 
-          <CenterReviewList reviews={reviews} error={reviewsError} />
+          <CenterReviewList
+            reviews={reviews}
+            error={reviewsError}
+            loading={reviewsLoading}
+            hasMore={reviewsHasMore}
+            loadingMore={reviewsLoadingMore}
+            loadMoreError={reviewsLoadMoreError}
+            onLoadMore={loadMoreReviews}
+          />
         </TabsContent>
       </Tabs>
     </article>
