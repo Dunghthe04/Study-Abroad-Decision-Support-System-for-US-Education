@@ -245,6 +245,107 @@ public class LeadServiceTests
             Task.FromResult(Messages.FirstOrDefault(m => m.Id == messageId && m.LeadId == leadId));
 
         public Task SaveLeadMessageAsync(LeadMessage message, CancellationToken ct = default) => Task.CompletedTask;
+
+        public string? LastModerationFilter { get; private set; }
+
+        public Task<PagedResult<ModerationLeadMessageDto>> GetModerationMessagesAsync(
+            string filter, int page, int pageSize, CancellationToken ct = default)
+        {
+            LastModerationFilter = filter;
+            var rows = Messages
+                .Where(m => filter switch
+                {
+                    "removed" => m.Status == "removed",
+                    "all" => m.Status == "removed" || m.IsFlagged,
+                    _ => m.IsFlagged && m.Status != "removed",
+                })
+                .Select(m => new ModerationLeadMessageDto(
+                    m.Id, m.LeadId, Guid.Empty, "Test Center", m.SenderUserId, UserRoles.Student, false,
+                    m.Content, m.IsFlagged, m.FlagReason, m.Status, m.RemovedByUserId, m.CreatedAt))
+                .ToList();
+            return Task.FromResult(new PagedResult<ModerationLeadMessageDto>(rows, page, pageSize, rows.Count));
+        }
+    }
+
+    [Fact]
+    public async Task GetModerationMessages_DefaultsToFlaggedAndKeepsOriginalContentOfRemoved()
+    {
+        var leadRepo = new FakeLeadRepo();
+        var leadId = Guid.NewGuid();
+        leadRepo.Messages.Add(new LeadMessage { LeadId = leadId, Content = "Gọi 0912345678", IsFlagged = true, Status = "visible" });
+        leadRepo.Messages.Add(new LeadMessage { LeadId = leadId, Content = "Tin bình thường", IsFlagged = false, Status = "visible" });
+        leadRepo.Messages.Add(new LeadMessage { LeadId = leadId, Content = "Nội dung gốc đã gỡ", IsFlagged = true, Status = "removed" });
+        var service = new LeadService(leadRepo, new FakeStudyCenterRepo(), new FakeUserRepository(), new FakeParentLinkRepository());
+
+        var flagged = await service.GetModerationMessagesAsync(null, 1, 20);
+        var removed = await service.GetModerationMessagesAsync("REMOVED", 1, 20);
+
+        Assert.Equal("removed", leadRepo.LastModerationFilter);
+        Assert.Equal("Gọi 0912345678", Assert.Single(flagged.Items).Content);
+        Assert.Equal("Nội dung gốc đã gỡ", Assert.Single(removed.Items).Content);
+    }
+
+    [Fact]
+    public async Task GetModerationMessages_UnknownFilter_ThrowsArgumentException()
+    {
+        var service = new LeadService(new FakeLeadRepo(), new FakeStudyCenterRepo(), new FakeUserRepository(), new FakeParentLinkRepository());
+
+        await Assert.ThrowsAsync<ArgumentException>(() => service.GetModerationMessagesAsync("pending", 1, 20));
+    }
+
+    [Fact]
+    public async Task KeepLeadMessage_FlaggedMessage_ClearsFlagKeepsVisibleAndLogsAudit()
+    {
+        var moderatorId = Guid.NewGuid();
+        var leadId = Guid.NewGuid();
+        var message = new LeadMessage { LeadId = leadId, SenderUserId = Guid.NewGuid(), Content = "Link tài liệu", IsFlagged = true, FlagReason = "Chứa liên kết ngoài", Status = "visible" };
+        var leadRepo = new FakeLeadRepo();
+        leadRepo.Leads.Add(new Lead { Id = leadId, UserId = Guid.NewGuid(), StudyCenterId = Guid.NewGuid() });
+        leadRepo.Messages.Add(message);
+        var audit = new FakeAuditRepo();
+        var service = new LeadService(leadRepo, new FakeStudyCenterRepo(), new FakeUserRepository(), new FakeParentLinkRepository(), audit);
+
+        var dto = await service.KeepLeadMessageAsync(moderatorId, leadId, message.Id);
+
+        Assert.False(message.IsFlagged);
+        Assert.Equal("visible", message.Status);
+        Assert.Equal("Link tài liệu", dto.Content);
+        var log = Assert.Single(audit.Logs);
+        Assert.Equal("lead_message.keep", log.Action);
+        Assert.Equal(moderatorId, log.ActorUserId);
+    }
+
+    [Fact]
+    public async Task KeepLeadMessage_NotFlagged_ChangesNothingAndDoesNotLog()
+    {
+        var leadId = Guid.NewGuid();
+        var message = new LeadMessage { LeadId = leadId, SenderUserId = Guid.NewGuid(), Content = "ok", IsFlagged = false, Status = "visible" };
+        var leadRepo = new FakeLeadRepo();
+        leadRepo.Leads.Add(new Lead { Id = leadId, UserId = Guid.NewGuid(), StudyCenterId = Guid.NewGuid() });
+        leadRepo.Messages.Add(message);
+        var audit = new FakeAuditRepo();
+        var service = new LeadService(leadRepo, new FakeStudyCenterRepo(), new FakeUserRepository(), new FakeParentLinkRepository(), audit);
+
+        await service.KeepLeadMessageAsync(Guid.NewGuid(), leadId, message.Id);
+
+        Assert.Empty(audit.Logs);
+    }
+
+    [Fact]
+    public async Task KeepLeadMessage_RemovedMessageOrWrongLead_IsRejected()
+    {
+        var leadId = Guid.NewGuid();
+        var removed = new LeadMessage { LeadId = leadId, SenderUserId = Guid.NewGuid(), Content = "x", IsFlagged = true, Status = "removed" };
+        var otherLeadMessage = new LeadMessage { LeadId = Guid.NewGuid(), SenderUserId = Guid.NewGuid(), Content = "y", IsFlagged = true, Status = "visible" };
+        var leadRepo = new FakeLeadRepo();
+        leadRepo.Leads.Add(new Lead { Id = leadId, UserId = Guid.NewGuid(), StudyCenterId = Guid.NewGuid() });
+        leadRepo.Messages.Add(removed);
+        leadRepo.Messages.Add(otherLeadMessage);
+        var service = new LeadService(leadRepo, new FakeStudyCenterRepo(), new FakeUserRepository(), new FakeParentLinkRepository());
+
+        await Assert.ThrowsAsync<ArgumentException>(() => service.KeepLeadMessageAsync(Guid.NewGuid(), leadId, removed.Id));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => service.KeepLeadMessageAsync(Guid.NewGuid(), leadId, otherLeadMessage.Id));
+        Assert.True(otherLeadMessage.IsFlagged);
     }
 
     [Fact]
