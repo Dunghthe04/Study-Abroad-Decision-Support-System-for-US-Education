@@ -333,5 +333,24 @@ public class LeadsController(ILeadService leadService) : ControllerBase
 
             return CreatedAtAction(nameof(GetReceivedLeadMessages), new { id }, result);
         });
+
+    /// <summary>
+    /// [USAS-2080 / UC-58] Moderator gỡ một tin nhắn vi phạm trong yêu cầu liên hệ.
+    /// Tin hiển thị "Tin nhắn đã bị gỡ do vi phạm quy tắc" ở cả hai phía, có ghi nhật ký. Chỉ Moderator.
+    /// </summary>
+    [HttpPost("received/{id:guid}/messages/{messageId:guid}/remove")]
+    [Authorize(Roles = UserRoles.Moderator)]
+    [ProducesResponseType(typeof(LeadMessageDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public Task<IActionResult> RemoveLeadMessage(
+        Guid id,
+        Guid messageId,
+        [FromBody] RemoveLeadMessageRequest? request,
+        CancellationToken ct) =>
+        ExecuteCenterLeadActionAsync(async (userId, _, _) =>
+            Ok(await leadService.RemoveLeadMessageAsync(userId, id, messageId, request?.Reason, ct)));
 }
 

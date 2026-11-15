@@ -523,5 +523,68 @@ public class LeadService(
 
         return new SendLeadMessageResultDto(dto, lead.Status);
     }
+
+    public const int MaxRemoveReasonLength = 500;
+
+    /// <summary>
+    /// [USAS-2080 / UC-58] Moderator gỡ một tin nhắn vi phạm trong yêu cầu liên hệ.
+    /// Tin chuyển sang Status "removed" (nội dung hiển thị "Tin nhắn đã bị gỡ do vi phạm quy tắc"), ghi người gỡ và nhật ký.
+    /// Gỡ lại tin đã gỡ không làm gì thêm, không ghi nhật ký lần hai. Quyền Moderator do controller kiểm tra.
+    /// </summary>
+    public async Task<LeadMessageDto> RemoveLeadMessageAsync(
+        Guid moderatorUserId,
+        Guid leadId,
+        Guid messageId,
+        string? reason,
+        CancellationToken ct = default)
+    {
+        if (leadId == Guid.Empty || messageId == Guid.Empty)
+            throw new ArgumentException("Mã yêu cầu liên hệ hoặc mã tin nhắn không hợp lệ.");
+
+        var trimmedReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
+        if (trimmedReason is { Length: > MaxRemoveReasonLength })
+            throw new ArgumentException($"Lý do gỡ tối đa {MaxRemoveReasonLength} ký tự.");
+
+        var lead = await leads.GetByIdAsync(leadId, ct)
+            ?? throw new KeyNotFoundException("Không tìm thấy yêu cầu liên hệ.");
+        var message = await leads.GetLeadMessageForUpdateAsync(leadId, messageId, ct)
+            ?? throw new KeyNotFoundException("Không tìm thấy tin nhắn trong yêu cầu liên hệ này.");
+
+        if (!string.Equals(message.Status, "removed", StringComparison.OrdinalIgnoreCase))
+        {
+            message.Status = "removed";
+            message.RemovedByUserId = moderatorUserId;
+            await leads.SaveLeadMessageAsync(message, ct);
+
+            if (auditLogs is not null)
+            {
+                await auditLogs.AddAsync(new AuditLog
+                {
+                    ActorUserId = moderatorUserId,
+                    Action = "lead_message.remove",
+                    EntityType = "lead_message",
+                    EntityId = message.Id.ToString(),
+                    DetailJson = JsonSerializer.Serialize(new
+                    {
+                        leadId = lead.Id,
+                        studyCenterId = lead.StudyCenterId,
+                        senderUserId = message.SenderUserId,
+                        wasFlagged = message.IsFlagged,
+                        flagReason = message.FlagReason,
+                        reason = trimmedReason,
+                    }),
+                }, ct);
+            }
+        }
+
+        var sender = await users.GetUserById(message.SenderUserId, ct);
+        var center = await studyCenters.GetByIdAsync(lead.StudyCenterId, ct);
+        return LeadMessageMapper.ToDto(
+            message,
+            sender?.Role ?? UserRoles.Student,
+            sender?.FullName,
+            sharedProfile: lead.SharedFields.Contains(LeadSharedFields.Contact),
+            centerName: center?.Name);
+    }
 }
 

@@ -57,5 +57,10 @@ public interface ILeadRepository
         LeadMessage message,
         Lead? leadToUpdate = null,
         CancellationToken ct = default);
+
+    // [USAS-2080 / UC-58] Moderator gỡ tin nhắn vi phạm: lấy tin (đúng lead) để sửa rồi lưu
+    Task<LeadMessage?> GetLeadMessageForUpdateAsync(Guid leadId, Guid messageId, CancellationToken ct = default);
+
+    Task SaveLeadMessageAsync(LeadMessage message, CancellationToken ct = default);
 }
 

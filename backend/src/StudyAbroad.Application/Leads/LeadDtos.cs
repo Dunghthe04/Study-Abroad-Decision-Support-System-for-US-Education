@@ -156,6 +156,11 @@ public record LeadMessagesThreadDto(
 public record SendLeadMessageRequest(string Content);
 
 /// <summary>
+/// [USAS-2080 / UC-58] Yêu cầu gỡ một tin nhắn vi phạm trong yêu cầu liên hệ. <paramref name="Reason"/> tối đa 500 ký tự, lưu vào nhật ký.
+/// </summary>
+public record RemoveLeadMessageRequest(string? Reason = null);
+
+/// <summary>
 /// [USAS-2053 / UC-74] Kết quả sau khi gửi tin nhắn thành công, kèm trạng thái mới nhất của yêu cầu liên hệ.
 /// </summary>
 public record SendLeadMessageResultDto(

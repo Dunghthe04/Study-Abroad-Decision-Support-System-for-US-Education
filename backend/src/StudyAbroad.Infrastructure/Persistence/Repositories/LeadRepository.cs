@@ -272,5 +272,15 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
         await db.SaveChangesAsync(ct);
         return message;
     }
+
+    /// <summary>[USAS-2080 / UC-58] Lấy tin nhắn theo đúng lead (tin của lead khác coi như không có) để gỡ.</summary>
+    public Task<LeadMessage?> GetLeadMessageForUpdateAsync(Guid leadId, Guid messageId, CancellationToken ct = default) =>
+        db.LeadMessages.FirstOrDefaultAsync(m => m.Id == messageId && m.LeadId == leadId, ct);
+
+    public async Task SaveLeadMessageAsync(LeadMessage message, CancellationToken ct = default)
+    {
+        db.LeadMessages.Update(message);
+        await db.SaveChangesAsync(ct);
+    }
 }
 
