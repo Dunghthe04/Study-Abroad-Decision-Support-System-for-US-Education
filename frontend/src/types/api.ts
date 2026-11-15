@@ -654,9 +654,39 @@ export interface ModerationLeadMessageDto {
   status: "visible" | "removed" | string;
   removedByUserId?: string | null;
   createdAt: string;
+  /** Tin bị học sinh / phụ huynh báo cáo (null nếu chưa ai báo cáo). */
+  reportedAt?: string | null;
+  reportReason?: string | null;
 }
 
-export type ModerationMessageFilter = "flagged" | "removed" | "all";
+/** pending = gắn cờ tự động hoặc bị báo cáo, chờ Moderator xem. */
+export type ModerationMessageFilter = "pending" | "flagged" | "reported" | "removed" | "all";
+
+/** [USAS-2080 / UC-58] Trung tâm có từ 3 tin bị gỡ trở lên, đủ điều kiện để Moderator đề nghị tạm ngừng. */
+export interface RepeatRemovalCenterDto {
+  studyCenterId: string;
+  studyCenterName: string;
+  verificationStatus: string;
+  removedMessageCount: number;
+  hasPendingProposal: boolean;
+}
+
+export type SuspensionProposalStatus = "pending" | "approved" | "rejected";
+
+/** [USAS-2080 / UC-58] Đề nghị tạm ngừng trung tâm do Moderator gửi lên Admin. */
+export interface CenterSuspensionProposalDto {
+  id: string;
+  studyCenterId: string;
+  studyCenterName: string;
+  proposedByUserId: string;
+  reason: string;
+  status: SuspensionProposalStatus | string;
+  removedMessageCount: number;
+  createdAt: string;
+  decidedByUserId?: string | null;
+  decidedAt?: string | null;
+  decisionNote?: string | null;
+}
 
 
 /** Đánh giá công khai của trung tâm (tên người đánh giá đã được rút gọn ở backend). */

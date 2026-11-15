@@ -33,6 +33,9 @@ import type {
   LeadMessagesThreadDto,
   ModerationLeadMessageDto,
   ModerationMessageFilter,
+  RepeatRemovalCenterDto,
+  CenterSuspensionProposalDto,
+  SuspensionProposalStatus,
   SendLeadMessageRequest,
   SendLeadMessageResultDto,
   RegisterCenterRequest,
@@ -361,6 +364,35 @@ export const studyCentersApi = {
 };
 
 /** [UC-73] Quản lý và xử lý yêu cầu liên hệ nhận được phía trung tâm tư vấn (Leads) */
+/** [USAS-2080 / UC-58] Đề nghị tạm ngừng trung tâm bị gỡ tin lặp lại: Moderator gửi, Admin quyết định. */
+export const centerSuspensionApi = {
+  repeatRemovalCenters: () =>
+    apiFetch<RepeatRemovalCenterDto[]>("/api/v1/admin/center-suspension-proposals/repeat-removal-centers"),
+
+  list: (params?: { status?: SuspensionProposalStatus | "all"; page?: number; pageSize?: number }) => {
+    const sp = new URLSearchParams();
+    if (params?.status) sp.set("status", params.status);
+    if (params?.page) sp.set("page", String(params.page));
+    if (params?.pageSize) sp.set("pageSize", String(params.pageSize));
+    const qs = sp.toString();
+    return apiFetch<PagedResult<CenterSuspensionProposalDto>>(
+      `/api/v1/admin/center-suspension-proposals${qs ? `?${qs}` : ""}`
+    );
+  },
+
+  propose: (studyCenterId: string, reason: string) =>
+    apiFetch<CenterSuspensionProposalDto>("/api/v1/admin/center-suspension-proposals", {
+      method: "POST",
+      body: JSON.stringify({ studyCenterId, reason }),
+    }),
+
+  decide: (id: string, approve: boolean, note?: string) =>
+    apiFetch<CenterSuspensionProposalDto>(
+      `/api/v1/admin/center-suspension-proposals/${encodeURIComponent(id)}/decide`,
+      { method: "POST", body: JSON.stringify({ approve, note: note?.trim() || null }) }
+    ),
+};
+
 export const centerLeadsApi = {
   list: (params?: {
     page?: number;

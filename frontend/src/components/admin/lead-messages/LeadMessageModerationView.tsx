@@ -21,6 +21,7 @@ import { toast } from "@/components/ui/toast";
 import { Segmented } from "@/components/admin/ai-usage/parts";
 import { TablePagination } from "@/components/admin/shared/TablePagination";
 import { useAuth } from "@/contexts/AuthContext";
+import { RepeatRemovalCenters } from "@/components/admin/lead-messages/RepeatRemovalCenters";
 import { ApiError, centerLeadsApi } from "@/lib/api";
 import { formatDateTime } from "@/lib/ai-usage-format";
 import { formatLeadMessageRoleLabel } from "@/lib/lead-message-filter";
@@ -30,10 +31,20 @@ import type { ModerationLeadMessageDto, ModerationMessageFilter } from "@/types/
 const PAGE_SIZE = 20;
 
 const FILTER_OPTIONS: { id: ModerationMessageFilter; label: string }[] = [
+  { id: "pending", label: "Chờ xem" },
   { id: "flagged", label: "Bị gắn cờ" },
+  { id: "reported", label: "Bị báo cáo" },
   { id: "removed", label: "Đã gỡ" },
   { id: "all", label: "Tất cả" },
 ];
+
+const EMPTY_TEXT: Record<ModerationMessageFilter, string> = {
+  pending: "Không còn tin nhắn nào chờ xem.",
+  flagged: "Không còn tin nhắn nào bị gắn cờ.",
+  reported: "Không còn tin nhắn nào bị báo cáo.",
+  removed: "Chưa có tin nhắn nào bị gỡ.",
+  all: "Không có tin nhắn nào cần xem.",
+};
 
 /**
  * [USAS-2080 / UC-58] Hàng đợi tin nhắn yêu cầu liên hệ bị gắn cờ tự động (số điện thoại, liên kết ngoài, quảng cáo).
@@ -44,7 +55,7 @@ export function LeadMessageModerationView() {
   const { user } = useAuth();
   const canAct = user?.role === "moderator";
 
-  const [filter, setFilter] = useState<ModerationMessageFilter>("flagged");
+  const [filter, setFilter] = useState<ModerationMessageFilter>("pending");
   const [page, setPage] = useState(1);
   const [version, setVersion] = useState(0);
   const [removeTarget, setRemoveTarget] = useState<ModerationLeadMessageDto | null>(null);
@@ -111,12 +122,14 @@ export function LeadMessageModerationView() {
       <header className="flex flex-col gap-1">
         <h1 className="text-h2">Tin nhắn liên hệ</h1>
         <p className="text-sm text-ink-2">
-          Tin nhắn trong yêu cầu liên hệ bị bộ lọc gắn cờ vì có số điện thoại, liên kết ngoài hoặc quảng cáo.
+          Tin nhắn trong yêu cầu liên hệ bị bộ lọc gắn cờ (số điện thoại, liên kết ngoài, quảng cáo) hoặc bị học sinh / phụ huynh báo cáo.
           {canAct
             ? " Chọn Giữ nếu tin hợp lệ, hoặc Gỡ để tin hiển thị là đã bị gỡ ở cả hai phía."
             : " Bạn chỉ xem, thao tác giữ hoặc gỡ do Moderator thực hiện."}
         </p>
       </header>
+
+      <RepeatRemovalCenters canAct={canAct} />
 
       <Segmented label="Lọc tin nhắn" value={filter} options={FILTER_OPTIONS} onChange={changeFilter} />
 
@@ -146,11 +159,21 @@ export function LeadMessageModerationView() {
                 <TableCell>{item.studyCenterName}</TableCell>
                 <TableCell className="whitespace-nowrap">{formatLeadMessageRoleLabel(item.senderRole)}</TableCell>
                 <TableCell className="max-w-md whitespace-pre-wrap break-words">{item.content}</TableCell>
-                <TableCell className="text-xs text-ink-2">{item.flagReason ?? "—"}</TableCell>
+                <TableCell className="text-xs text-ink-2">
+                  {item.flagReason ? <span className="block">{item.flagReason}</span> : null}
+                  {item.reportedAt ? (
+                    <span className="block">
+                      Báo cáo: {item.reportReason || "không nêu lý do"} ({formatDateTime(item.reportedAt)})
+                    </span>
+                  ) : null}
+                  {!item.flagReason && !item.reportedAt ? "—" : null}
+                </TableCell>
                 <TableCell>
-                  <Badge variant={item.status === "removed" ? "neutral" : "warn"}>
-                    {item.status === "removed" ? "Đã gỡ" : "Bị gắn cờ"}
-                  </Badge>
+                  <div className="flex flex-col items-start gap-1">
+                    {item.status === "removed" ? <Badge variant="neutral">Đã gỡ</Badge> : null}
+                    {item.status !== "removed" && item.isFlagged ? <Badge variant="warn">Bị gắn cờ</Badge> : null}
+                    {item.status !== "removed" && item.reportedAt ? <Badge variant="risk">Bị báo cáo</Badge> : null}
+                  </div>
                 </TableCell>
                 {canAct ? (
                   <TableCell className="text-right">
@@ -173,7 +196,7 @@ export function LeadMessageModerationView() {
             {list && list.items.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={canAct ? 7 : 6} className="py-8 text-center text-ink-2">
-                  {filter === "flagged" ? "Không còn tin nhắn nào bị gắn cờ." : filter === "removed" ? "Chưa có tin nhắn nào bị gỡ." : "Không có tin nhắn nào cần xem."}
+                  {EMPTY_TEXT[filter]}
                 </TableCell>
               </TableRow>
             ) : null}
