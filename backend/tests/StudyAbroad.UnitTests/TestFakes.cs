@@ -272,6 +272,19 @@ internal sealed class FakeEmailSender : IEmailSender
         SentEmails.Add((toEmail, "account_unlocked_notice", reason));
         return Task.CompletedTask;
     }
+
+    /// <summary>[UC-59] Email kết quả xét duyệt hồ sơ xác minh gửi cho trung tâm.</summary>
+    public List<(string To, string CenterName, string Outcome, string? Reason, IReadOnlyList<string>? Unmet)> CenterVerificationEmails { get; } = [];
+
+    /// <summary>Đặt true để giả lập gửi mail lỗi.</summary>
+    public bool ThrowOnCenterVerificationEmail { get; set; }
+
+    public Task SendCenterVerificationOutcomeEmailAsync(string toEmail, string centerName, string outcome, string? reason, IReadOnlyList<string>? unmetConditions, CancellationToken ct = default)
+    {
+        if (ThrowOnCenterVerificationEmail) throw new InvalidOperationException("SMTP down");
+        CenterVerificationEmails.Add((toEmail, centerName, outcome, reason, unmetConditions));
+        return Task.CompletedTask;
+    }
 }
 
 /// <summary>Giả lập ParentLinkRepository: trả bản sao như AsNoTracking, lưu thay bản cũ; có thể ép ném conflict (xmin).</summary>

@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using StudyAbroad.Application.Audit;
 using StudyAbroad.Application.Auth;
 using StudyAbroad.Application.Common;
@@ -388,6 +389,152 @@ public class CenterRegistrationAndVerificationTests
         Assert.True(marketing.Success);
         Assert.Equal("Mô tả mới", center.Description);
         Assert.Equal("0312345678", center.TaxCode);
+    }
+
+    // ===== [UC-59] Email kết quả xét duyệt cho trung tâm, thứ tự hàng đợi =====
+
+    private static (StudyCenterService Service, FakeEmailSender Email, CenterVerificationRequest Req, StudyCenter Center) NotificationSetup(
+        string? centerEmail = "trungtam@example.com", bool emailVerified = true)
+    {
+        var centers = new FakeStudyCenterRepo();
+        var verifications = new FakeVerificationRepo();
+        var email = new FakeEmailSender();
+        var service = new StudyCenterService(centers, new FakeAuditLogs(), verifications, email);
+        var center = new StudyCenter
+        {
+            Id = Guid.NewGuid(),
+            Name = "Trung tâm ABC",
+            Email = centerEmail,
+            EmailVerifiedAt = emailVerified ? DateTime.UtcNow : null,
+            VerificationStatus = CenterVerificationStatuses.PendingReview,
+        };
+        centers.AddAsync(center).GetAwaiter().GetResult();
+        var req = new CenterVerificationRequest { Id = Guid.NewGuid(), CenterId = center.Id, Status = CenterVerificationStatuses.PendingReview };
+        verifications.AddRequestAsync(req).GetAwaiter().GetResult();
+        return (service, email, req, center);
+    }
+
+    [Fact]
+    public async Task Review_Reject_EmailsTheCenterTheReasonAndTheUnmetConditions()
+    {
+        var (service, email, req, _) = NotificationSetup();
+
+        var result = await service.ReviewVerificationAsync(req.Id, new ReviewCenterVerificationRequest(
+            Action: "reject", IsNationalRegistryMatched: false, IsBusinessOperating: true, IsRepresentativeValid: false,
+            RejectionReason: "  Ảnh ĐKKD bị mờ  "), Guid.NewGuid());
+
+        Assert.True(result.Success);
+        var sent = Assert.Single(email.CenterVerificationEmails);
+        Assert.Equal("trungtam@example.com", sent.To);
+        Assert.Equal("Trung tâm ABC", sent.CenterName);
+        Assert.Equal("reject", sent.Outcome);
+        Assert.Equal("Ảnh ĐKKD bị mờ", sent.Reason);
+        Assert.Equal(2, sent.Unmet!.Count);
+        Assert.Contains(sent.Unmet, c => c.Contains("mã số thuế"));
+        Assert.Contains(sent.Unmet, c => c.Contains("đại diện theo pháp luật"));
+        Assert.DoesNotContain(sent.Unmet, c => c.Contains("hoạt động"));
+    }
+
+    [Fact]
+    public async Task Review_ChangesRequested_ListsAnUnverifiedEmailAsUnmet()
+    {
+        var (service, email, req, _) = NotificationSetup(emailVerified: false);
+
+        await service.ReviewVerificationAsync(req.Id, new ReviewCenterVerificationRequest(
+            Action: "changes_requested", IsNationalRegistryMatched: true, IsBusinessOperating: true, IsRepresentativeValid: true,
+            RejectionReason: "Bổ sung giấy ủy quyền"), Guid.NewGuid());
+
+        var sent = Assert.Single(email.CenterVerificationEmails);
+        Assert.Equal("changes_requested", sent.Outcome);
+        Assert.Contains("Email trung tâm", Assert.Single(sent.Unmet!));
+    }
+
+    [Fact]
+    public async Task Review_Approve_EmailsVerifiedWithoutUnmetConditions()
+    {
+        var (service, email, req, _) = NotificationSetup();
+
+        await service.ReviewVerificationAsync(req.Id, new ReviewCenterVerificationRequest(
+            Action: "approve", IsNationalRegistryMatched: true, IsBusinessOperating: true, IsRepresentativeValid: true,
+            ReviewNotes: "Khớp hoàn toàn"), Guid.NewGuid());
+
+        var sent = Assert.Single(email.CenterVerificationEmails);
+        Assert.Equal("verified", sent.Outcome);
+        Assert.Null(sent.Unmet);
+    }
+
+    [Fact]
+    public async Task Review_ApproveBlockedByRules_SendsNoEmail()
+    {
+        var (service, email, req, center) = NotificationSetup();
+
+        var result = await service.ReviewVerificationAsync(req.Id, new ReviewCenterVerificationRequest(
+            Action: "approve", IsNationalRegistryMatched: false, IsBusinessOperating: true, IsRepresentativeValid: true), Guid.NewGuid());
+
+        Assert.False(result.Success);
+        Assert.Empty(email.CenterVerificationEmails);
+        Assert.Equal(CenterVerificationStatuses.PendingReview, center.VerificationStatus);
+    }
+
+    [Fact]
+    public async Task Review_CenterWithoutEmail_StillSavesTheDecisionAndSendsNothing()
+    {
+        var (service, email, req, center) = NotificationSetup(centerEmail: null);
+
+        var result = await service.ReviewVerificationAsync(req.Id, new ReviewCenterVerificationRequest(Action: "reject", RejectionReason: "Thiếu hồ sơ"), Guid.NewGuid());
+
+        Assert.True(result.Success);
+        Assert.Equal(CenterVerificationStatuses.Rejected, center.VerificationStatus);
+        Assert.Empty(email.CenterVerificationEmails);
+    }
+
+    [Fact]
+    public async Task Review_WhenTheEmailSenderFails_TheDecisionIsStillSaved()
+    {
+        var (service, email, req, center) = NotificationSetup();
+        email.ThrowOnCenterVerificationEmail = true;
+
+        var result = await service.ReviewVerificationAsync(req.Id, new ReviewCenterVerificationRequest(Action: "reject", RejectionReason: "Thiếu hồ sơ"), Guid.NewGuid());
+
+        Assert.True(result.Success);
+        Assert.Equal(CenterVerificationStatuses.Rejected, center.VerificationStatus);
+    }
+
+    [Fact]
+    public void VerificationQueue_PendingFirstOldestFirst_ThenProcessedNewestFirst()
+    {
+        var now = DateTime.UtcNow;
+        CenterVerificationRequest R(string name, string status, int daysAgo) =>
+            new() { Id = Guid.NewGuid(), LegalName = name, Status = status, SubmittedAt = now.AddDays(-daysAgo) };
+        var requests = new[]
+        {
+            R("pending-new", CenterVerificationStatuses.PendingReview, 1),
+            R("verified-newest", CenterVerificationStatuses.Verified, 0),
+            R("pending-old", CenterVerificationStatuses.PendingReview, 5),
+            R("rejected-older", CenterVerificationStatuses.Rejected, 3),
+            R("pending-mid", CenterVerificationStatuses.PendingReview, 3),
+        };
+
+        var ordered = StudyAbroad.Infrastructure.Persistence.Repositories.CenterVerificationRepository
+            .OrderQueue(requests.AsQueryable()).Select(r => r.LegalName).ToList();
+
+        Assert.Equal(["pending-old", "pending-mid", "pending-new", "verified-newest", "rejected-older"], ordered);
+    }
+
+    [Fact]
+    public void VerificationQueue_OrderingTranslatesToSql()
+    {
+        var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<StudyAbroad.Infrastructure.Persistence.AppDbContext>()
+            .UseNpgsql("Host=localhost;Database=usas_schema_check")
+            .UseSnakeCaseNamingConvention()
+            .Options;
+        using var db = new StudyAbroad.Infrastructure.Persistence.AppDbContext(options);
+
+        var sql = StudyAbroad.Infrastructure.Persistence.Repositories.CenterVerificationRepository
+            .OrderQueue(db.CenterVerificationRequests).ToQueryString();
+
+        Assert.Contains("ORDER BY", sql);
+        Assert.Contains("CASE", sql);
     }
 }
 
