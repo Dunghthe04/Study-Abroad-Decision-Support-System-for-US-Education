@@ -18,4 +18,8 @@ public class LeadMessage : BaseEntity
     public Guid? ReportedByUserId { get; set; }
     public DateTime? ReportedAt { get; set; }
     public string? ReportReason { get; set; }
+
+    /// <summary>Ảnh đính kèm (URL https của nhà cung cấp lưu trữ). Có thể kèm hoặc không kèm văn bản.</summary>
+    public string? AttachmentUrl { get; set; }
+    public string? AttachmentPublicId { get; set; }
 }

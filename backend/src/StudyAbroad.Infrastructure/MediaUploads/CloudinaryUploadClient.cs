@@ -7,13 +7,20 @@ namespace StudyAbroad.Infrastructure.MediaUploads;
 
 public interface ICloudinaryUploadClient
 {
-    Task<MediaUploadResult> UploadAsync(Stream content, string safeFileName, string contentType, CancellationToken cancellationToken);
+    Task<MediaUploadResult> UploadAsync(
+        Stream content,
+        string safeFileName,
+        string contentType,
+        string? folderSuffix,
+        bool moderateContent,
+        CancellationToken cancellationToken);
 }
 
 public sealed class CloudinaryUploadClient : ICloudinaryUploadClient
 {
     private readonly Cloudinary _cloudinary;
     private readonly string _folder;
+    private readonly string _chatModeration;
 
     public CloudinaryUploadClient(IOptions<CloudinaryOptions> options)
     {
@@ -21,15 +28,24 @@ public sealed class CloudinaryUploadClient : ICloudinaryUploadClient
         _cloudinary = new Cloudinary(new Account(settings.CloudName, settings.ApiKey, settings.ApiSecret));
         _cloudinary.Api.Secure = true;
         _folder = settings.Folder;
+        _chatModeration = settings.ChatModeration;
     }
 
     public async Task<MediaUploadResult> UploadAsync(
-        Stream content, string safeFileName, string contentType, CancellationToken cancellationToken)
+        Stream content,
+        string safeFileName,
+        string contentType,
+        string? folderSuffix,
+        bool moderateContent,
+        CancellationToken cancellationToken)
     {
+        var folder = string.IsNullOrWhiteSpace(folderSuffix) ? _folder : $"{_folder}/{folderSuffix.Trim('/')}";
+        var moderation = moderateContent && !string.IsNullOrWhiteSpace(_chatModeration) ? _chatModeration : null;
         var parameters = new ImageUploadParams
         {
             File = new FileDescription(safeFileName, content),
-            Folder = _folder,
+            Folder = folder,
+            Moderation = moderation,
             PublicId = Guid.NewGuid().ToString("N"),
             UseFilename = false,
             Overwrite = false,
@@ -47,6 +63,12 @@ public sealed class CloudinaryUploadClient : ICloudinaryUploadClient
         catch (Exception)
         {
             throw new InvalidOperationException("The media provider could not complete the upload.");
+        }
+
+        if (moderation is not null && result.Moderation?.Any(m => m.Status == ModerationStatus.Rejected) == true)
+        {
+            try { await _cloudinary.DestroyAsync(new DeletionParams(result.PublicId)); } catch (Exception) { /* ảnh bị từ chối, dọn dẹp best-effort */ }
+            throw new MediaContentRejectedException();
         }
 
         if (result.Error is not null || (int)result.StatusCode is < 200 or >= 300 ||

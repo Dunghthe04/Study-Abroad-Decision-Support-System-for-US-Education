@@ -136,8 +136,7 @@ public record LeadMessageDto(
     string SenderRole,
     bool IsFromCenter,
     string Content,
-    bool IsFlagged,
-    string? FlagReason,
+    string? AttachmentUrl,
     string Status,
     DateTime CreatedAt);
 
@@ -147,8 +146,7 @@ public record LeadMessageDto(
 public record LeadMessagesThreadDto(
     Guid LeadId,
     string LeadStatus,
-    IReadOnlyList<LeadMessageDto> Messages,
-    int FlaggedCount);
+    IReadOnlyList<LeadMessageDto> Messages);
 
 /// <summary>
 /// [USAS-2053 / UC-74] Yêu cầu gửi tin nhắn trả lời từ phía Trung tâm tư vấn.
@@ -156,37 +154,33 @@ public record LeadMessagesThreadDto(
 public record SendLeadMessageRequest(string Content);
 
 /// <summary>
-/// [USAS-2080 / UC-58] Một tin nhắn trong hàng đợi kiểm duyệt của Moderator / Admin.
-/// <paramref name="Content"/> luôn là bản gốc kể cả tin đã gỡ (đặc tả 5.4: giữ bản gốc trong nhật ký cho Moderator và Admin);
-/// bản gốc không bao giờ trả ra phía học sinh, phụ huynh hay trung tâm.
+/// [UC-58] Một tin nhắn bị báo cáo trong hàng đợi của Admin. <paramref name="Content"/> luôn là bản gốc kể cả tin đã gỡ
+/// (chỉ Admin thấy); bản gốc không bao giờ trả ra phía học sinh, phụ huynh hay trung tâm.
 /// </summary>
-public record ModerationLeadMessageDto(
+public record AdminLeadMessageReportDto(
     Guid Id,
     Guid LeadId,
     Guid StudyCenterId,
     string StudyCenterName,
     Guid SenderUserId,
+    string SenderName,
+    string? SenderEmail,
     string SenderRole,
+    string SenderStatus,
     bool IsFromCenter,
     string Content,
-    bool IsFlagged,
-    string? FlagReason,
+    string? AttachmentUrl,
     string Status,
-    Guid? RemovedByUserId,
-    DateTime CreatedAt)
-{
-    // [UC-58] Tin bị học sinh / phụ huynh báo cáo. Để dạng init để các nơi dựng DTO cũ không phải đổi.
-    public DateTime? ReportedAt { get; init; }
-    public string? ReportReason { get; init; }
-}
+    Guid? ReportedByUserId,
+    DateTime? ReportedAt,
+    string? ReportReason,
+    DateTime CreatedAt);
 
-/// <summary>[USAS-2080 / UC-58] Học sinh / phụ huynh báo cáo một tin nhắn của trung tâm vi phạm quy tắc. Lý do tối đa 500 ký tự.</summary>
+/// <summary>[UC-58] Học sinh / phụ huynh / trung tâm báo cáo một tin nhắn (thô tục, quấy rối...). Lý do tối đa 500 ký tự.</summary>
 public record ReportLeadMessageRequest(string? Reason = null);
 
-/// <summary>
-/// [USAS-2080 / UC-58] Yêu cầu gỡ một tin nhắn vi phạm trong yêu cầu liên hệ. <paramref name="Reason"/> tối đa 500 ký tự, lưu vào nhật ký.
-/// </summary>
-public record RemoveLeadMessageRequest(string? Reason = null);
+/// <summary>[UC-58] Admin khóa tài khoản người gửi tin bị báo cáo. Lý do bắt buộc, tối đa 500 ký tự.</summary>
+public record LockReportedSenderRequest(string? Reason = null);
 
 /// <summary>
 /// [USAS-2053 / UC-74] Kết quả sau khi gửi tin nhắn thành công, kèm trạng thái mới nhất của yêu cầu liên hệ.
@@ -197,3 +191,6 @@ public record SendLeadMessageResultDto(
 
 
 
+
+/// <summary>Ảnh đính kèm tin nhắn sau khi đã tải lên nhà cung cấp lưu trữ.</summary>
+public record LeadMessageAttachment(string Url, string PublicId);

@@ -63,20 +63,19 @@ public interface ILeadRepository
 
     Task SaveLeadMessageAsync(LeadMessage message, CancellationToken ct = default);
 
-    /// <summary>
-    /// [USAS-2080 / UC-58] Hàng đợi kiểm duyệt tin nhắn, mới nhất trước. filter: "flagged" (tin đang hiện bị gắn cờ),
-    /// "removed" (tin đã gỡ) hoặc "all" (cả hai).
-    /// </summary>
-    /// <summary>[UC-58] Số tin do phía trung tâm gửi đã bị gỡ trong các yêu cầu gửi tới trung tâm này.</summary>
-    Task<int> CountRemovedCenterMessagesAsync(Guid centerId, CancellationToken ct = default);
-
-    /// <summary>[UC-58] Các trung tâm có từ <paramref name="minRemoved"/> tin bị gỡ trở lên, nhiều nhất trước.</summary>
-    Task<IReadOnlyList<RepeatRemovalCenterDto>> GetRepeatRemovalCentersAsync(int minRemoved, CancellationToken ct = default);
-
-    Task<PagedResult<ModerationLeadMessageDto>> GetModerationMessagesAsync(
+    /// <summary>[UC-58] Hàng đợi báo cáo cho Admin, mới báo trước. filter: "pending" (chưa xử lý), "resolved" (đã gỡ) hoặc "all".</summary>
+    Task<PagedResult<AdminLeadMessageReportDto>> GetReportedMessagesAsync(
         string filter,
         int page,
         int pageSize,
         CancellationToken ct = default);
+
+    /// <summary>[UC-58] Gỡ toàn bộ tin nhắn đang hiện của một người dùng (khi tài khoản bị khóa). Trả về số tin đã gỡ.</summary>
+    Task<int> RemoveAllMessagesOfUserAsync(Guid senderUserId, Guid removedByUserId, CancellationToken ct = default);
+
+    /// <summary>[UC-58] Id các tài khoản Admin đang hoạt động, để gửi thông báo báo cáo.</summary>
+    Task<IReadOnlyList<Guid>> GetActiveAdminUserIdsAsync(CancellationToken ct = default);
+
+    Task AddNotificationsAsync(IEnumerable<Notification> notifications, CancellationToken ct = default);
 }
 
