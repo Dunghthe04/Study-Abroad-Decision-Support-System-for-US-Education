@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using StudyAbroad.Application.Audit;
+using StudyAbroad.Application.Auth;
 using StudyAbroad.Application.Common;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
@@ -45,7 +46,8 @@ public interface IStudyCenterService
 public class StudyCenterService(
     IStudyCenterRepository repository,
     IAuditLogRepository auditLogs,
-    ICenterVerificationRepository? verificationRepository = null) : IStudyCenterService
+    ICenterVerificationRepository? verificationRepository = null,
+    IEmailSender? emailSender = null) : IStudyCenterService
 {
     private const int MaxPageSize = 100;
     public const int MaxNameLength = 200;
@@ -694,6 +696,34 @@ public class StudyCenterService(
         return await verificationRepository.GetDocumentByIdAsync(documentId, ct);
     }
 
+    /// <summary>
+    /// [UC-59] Báo kết quả xét duyệt cho trung tâm qua email (đặc tả 5.1: email lý do gửi cho trung tâm).
+    /// Trung tâm không có email, hoặc gửi lỗi, thì bỏ qua: kết quả duyệt đã lưu, không được làm hỏng thao tác của Moderator.
+    /// </summary>
+    private async Task NotifyCenterAsync(StudyCenter center, string outcome, string? reason, IReadOnlyList<string>? unmet, CancellationToken ct)
+    {
+        if (emailSender is null || string.IsNullOrWhiteSpace(center.Email)) return;
+        try
+        {
+            await emailSender.SendCenterVerificationOutcomeEmailAsync(center.Email, center.Name, outcome, reason, unmet, ct);
+        }
+        catch (Exception)
+        {
+            // đã lưu kết quả duyệt; email là thông báo phụ
+        }
+    }
+
+    /// <summary>Những điều kiện xác minh chưa đạt (đặc tả 5.1: điều kiện 1 email do hệ thống kiểm, 3 đến 5 do Moderator kiểm).</summary>
+    private static List<string> UnmetConditions(StudyCenter center, ReviewCenterVerificationRequest request)
+    {
+        var unmet = new List<string>();
+        if (!center.EmailVerifiedAt.HasValue) unmet.Add("Email trung tâm chưa được xác thực");
+        if (!request.IsNationalRegistryMatched) unmet.Add("Tên pháp lý và mã số thuế chưa khớp Cổng đăng ký doanh nghiệp quốc gia");
+        if (!request.IsBusinessOperating) unmet.Add("Doanh nghiệp chưa được xác nhận là đang hoạt động");
+        if (!request.IsRepresentativeValid) unmet.Add("Người đăng ký chưa được xác nhận là người đại diện theo pháp luật hoặc có giấy ủy quyền hợp lệ");
+        return unmet;
+    }
+
     public async Task<VerifyStudyCenterResult> ReviewVerificationAsync(Guid requestId, ReviewCenterVerificationRequest request, Guid reviewerUserId, CancellationToken ct = default)
     {
         if (verificationRepository is null)
@@ -749,6 +779,7 @@ public class StudyCenterService(
                 DetailJson = JsonSerializer.Serialize(new { requestId, notes = request.ReviewNotes })
             }, ct);
 
+            await NotifyCenterAsync(center, "verified", request.ReviewNotes?.Trim(), null, ct);
             return VerifyStudyCenterResult.Ok(ToDto(center));
         }
         else if (action == "reject" || action == "changes_requested")
@@ -782,6 +813,7 @@ public class StudyCenterService(
                 DetailJson = JsonSerializer.Serialize(new { requestId, reason, notes = request.ReviewNotes })
             }, ct);
 
+            await NotifyCenterAsync(center, action, reason, UnmetConditions(center, request), ct);
             return VerifyStudyCenterResult.Ok(ToDto(center));
         }
         else if (action == "revoke")
@@ -810,6 +842,7 @@ public class StudyCenterService(
                 DetailJson = JsonSerializer.Serialize(new { requestId, reason })
             }, ct);
 
+            await NotifyCenterAsync(center, "revoked", reason, null, ct);
             return VerifyStudyCenterResult.Ok(ToDto(center));
         }
 
