@@ -81,23 +81,7 @@ public class StudyCentersController(IStudyCenterService service) : ControllerBas
         return Ok(result.Center);
     }
 
-    /// <summary>[UC-72] Sửa thông tin một trung tâm tư vấn trong danh bạ (chỉ Moderator).</summary>
-    [HttpPut("{id:guid}")]
-    [Authorize(Roles = UserRoles.Moderator)]
-    public async Task<ActionResult<StudyCenterDto>> Update(
-        Guid id,
-        [FromBody] UpdateStudyCenterRequest request,
-        CancellationToken ct)
-    {
-        if (User.GetUserId() is not { } actorId)
-            return Unauthorized();
-
-        var result = await service.UpdateCenterAsync(id, request, actorId, ct);
-        if (!result.Success || result.Center is null)
-            return ValidationProblem(result.ErrorMessage);
-
-        return Ok(result.Center);
-    }
+    // [UC-72] Moderator chỉ ẩn/hiện trung tâm (quyết định bản 14/11). Sửa nội dung do trung tâm tự làm qua PUT /center/profile (UC-92).
 
     /// <summary>[UC-72] Thay đổi trạng thái hoạt động (ẩn/hiện khỏi danh bạ và gợi ý) của trung tâm (chỉ Moderator).</summary>
     [HttpPut("{id:guid}/status")]
