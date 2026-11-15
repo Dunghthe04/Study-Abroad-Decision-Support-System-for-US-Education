@@ -67,6 +67,12 @@ public interface ILeadRepository
     /// [USAS-2080 / UC-58] Hàng đợi kiểm duyệt tin nhắn, mới nhất trước. filter: "flagged" (tin đang hiện bị gắn cờ),
     /// "removed" (tin đã gỡ) hoặc "all" (cả hai).
     /// </summary>
+    /// <summary>[UC-58] Số tin do phía trung tâm gửi đã bị gỡ trong các yêu cầu gửi tới trung tâm này.</summary>
+    Task<int> CountRemovedCenterMessagesAsync(Guid centerId, CancellationToken ct = default);
+
+    /// <summary>[UC-58] Các trung tâm có từ <paramref name="minRemoved"/> tin bị gỡ trở lên, nhiều nhất trước.</summary>
+    Task<IReadOnlyList<RepeatRemovalCenterDto>> GetRepeatRemovalCentersAsync(int minRemoved, CancellationToken ct = default);
+
     Task<PagedResult<ModerationLeadMessageDto>> GetModerationMessagesAsync(
         string filter,
         int page,

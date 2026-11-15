@@ -173,7 +173,15 @@ public record ModerationLeadMessageDto(
     string? FlagReason,
     string Status,
     Guid? RemovedByUserId,
-    DateTime CreatedAt);
+    DateTime CreatedAt)
+{
+    // [UC-58] Tin bị học sinh / phụ huynh báo cáo. Để dạng init để các nơi dựng DTO cũ không phải đổi.
+    public DateTime? ReportedAt { get; init; }
+    public string? ReportReason { get; init; }
+}
+
+/// <summary>[USAS-2080 / UC-58] Học sinh / phụ huynh báo cáo một tin nhắn của trung tâm vi phạm quy tắc. Lý do tối đa 500 ký tự.</summary>
+public record ReportLeadMessageRequest(string? Reason = null);
 
 /// <summary>
 /// [USAS-2080 / UC-58] Yêu cầu gỡ một tin nhắn vi phạm trong yêu cầu liên hệ. <paramref name="Reason"/> tối đa 500 ký tự, lưu vào nhật ký.
