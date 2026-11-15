@@ -651,6 +651,19 @@ export interface CenterReviewDto {
   comment?: string | null;
 }
 
+/** [USAS-2070 / UC-45] Gửi đánh giá trung tâm: số sao 1 đến 5, nhận xét tùy chọn (tối đa 2000 ký tự). */
+export interface CreateCenterReviewRequest {
+  rating: number;
+  comment?: string | null;
+}
+
+/** [UC-45] Người dùng hiện tại có được đánh giá trung tâm không; `reason` giải thích khi không được. */
+export interface CenterReviewEligibilityDto {
+  canReview: boolean;
+  hasReviewed: boolean;
+  reason?: string | null;
+}
+
 /** Đánh giá hiển thị + số liệu tổng hợp tính từ chính các đánh giá đó. */
 export interface CenterReviewsDto {
   totalCount: number;
