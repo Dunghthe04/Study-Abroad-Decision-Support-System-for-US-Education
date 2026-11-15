@@ -25,7 +25,6 @@ import type {
   AddTargetSchoolRequest,
   TargetSchoolDto,
   TargetSchoolSummaryDto,
-  UpdateStudyCenterRequest,
   SetStudyCenterActiveRequest,
   CenterReceivedLeadDto,
   CenterLeadsSummaryDto,
@@ -348,12 +347,6 @@ export const studyCentersApi = {
           ? { isVerified, verificationNote }
           : { isVerified }
       ),
-    }),
-  /** [UC-72] Sửa thông tin trung tâm tư vấn (vai trò: Moderator / Admin) */
-  update: (id: string, data: UpdateStudyCenterRequest) =>
-    apiFetch<StudyCenter>(`/api/v1/study-centers/${encodeURIComponent(id)}`, {
-      method: "PUT",
-      body: JSON.stringify(data),
     }),
   /** [UC-72] Ẩn hoặc hiện trung tâm tư vấn khỏi danh bạ và luồng gợi ý (vai trò: Moderator / Admin) */
   setActiveStatus: (id: string, isActive: boolean) => {
