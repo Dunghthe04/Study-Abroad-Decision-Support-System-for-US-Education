@@ -107,8 +107,9 @@ export const ADMIN_NAV: AdminNavItem[] = [
     label: "Câu cần xem",
     description: "Câu hệ thống không trả lời được hoặc bị lỗi, để xem và đánh dấu đã xử lý",
     icon: MessageSquareWarningIcon,
-    roles: ["admin"],
-    useCases: [],
+    // Quyết định D2 bản 14/11: hàng đợi này là việc nội dung của Moderator, Admin không thấy
+    roles: ["moderator"],
+    useCases: ["UC-53"],
   },
   {
     href: "/admin/review-batches",
