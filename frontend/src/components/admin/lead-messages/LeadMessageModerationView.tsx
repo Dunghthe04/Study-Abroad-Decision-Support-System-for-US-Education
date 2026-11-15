@@ -129,7 +129,7 @@ export function LeadMessageModerationView() {
         </p>
       </header>
 
-      <RepeatRemovalCenters canAct={canAct} />
+      <RepeatRemovalCenters canAct={canAct} refreshKey={version} />
 
       <Segmented label="Lọc tin nhắn" value={filter} options={FILTER_OPTIONS} onChange={changeFilter} />
 

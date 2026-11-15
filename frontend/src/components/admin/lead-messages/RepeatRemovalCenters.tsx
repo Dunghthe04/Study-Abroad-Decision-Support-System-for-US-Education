@@ -26,9 +26,10 @@ import type { RepeatRemovalCenterDto } from "@/types/api";
  * [USAS-2080 / UC-58] Trung tâm bị gỡ tin lặp lại (từ 3 tin): Moderator gửi đề nghị tạm ngừng lên Admin.
  * Chỉ hiện khi có trung tâm đủ điều kiện. Admin xem được nhưng không gửi đề nghị.
  */
-export function RepeatRemovalCenters({ canAct }: { canAct: boolean }) {
+export function RepeatRemovalCenters({ canAct, refreshKey = 0 }: { canAct: boolean; refreshKey?: number }) {
   const [version, setVersion] = useState(0);
-  const centers = useFetched(`repeat-removal|${version}`, () => centerSuspensionApi.repeatRemovalCenters());
+  // refreshKey đổi (Moderator vừa giữ hoặc gỡ tin) thì tải lại, để trung tâm đủ 3 tin bị gỡ hiện ra ngay
+  const centers = useFetched(`repeat-removal|${refreshKey}|${version}`, () => centerSuspensionApi.repeatRemovalCenters());
   const [target, setTarget] = useState<RepeatRemovalCenterDto | null>(null);
   const [reason, setReason] = useState("");
   const [isSending, setIsSending] = useState(false);
