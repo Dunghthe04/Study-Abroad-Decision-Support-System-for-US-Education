@@ -240,6 +240,98 @@ public class LeadServiceTests
             }
             return Task.FromResult(message);
         }
+
+        public Task<LeadMessage?> GetLeadMessageForUpdateAsync(Guid leadId, Guid messageId, CancellationToken ct = default) =>
+            Task.FromResult(Messages.FirstOrDefault(m => m.Id == messageId && m.LeadId == leadId));
+
+        public Task SaveLeadMessageAsync(LeadMessage message, CancellationToken ct = default) => Task.CompletedTask;
+    }
+
+    [Fact]
+    public async Task RemoveLeadMessage_FlaggedMessage_MarksRemovedMasksContentAndLogsAudit()
+    {
+        var moderatorId = Guid.NewGuid();
+        var centerId = Guid.NewGuid();
+        var leadId = Guid.NewGuid();
+        var senderId = Guid.NewGuid();
+        var message = new LeadMessage
+        {
+            LeadId = leadId, SenderUserId = senderId, Content = "Gọi 0912345678 nhé",
+            IsFlagged = true, FlagReason = "Chứa số điện thoại liên hệ", Status = "visible",
+        };
+
+        var centerRepo = new FakeStudyCenterRepo();
+        centerRepo.Centers.Add(new StudyCenter { Id = centerId, Name = "Trung Tâm A" });
+        var leadRepo = new FakeLeadRepo();
+        leadRepo.Leads.Add(new Lead { Id = leadId, UserId = Guid.NewGuid(), StudyCenterId = centerId, Status = "new" });
+        leadRepo.Messages.Add(message);
+        var userRepo = new FakeUserRepository();
+        userRepo.Users.Add(new User { Id = senderId, FullName = "Phụ huynh A", Role = UserRoles.Parent });
+        var audit = new FakeAuditRepo();
+        var service = new LeadService(leadRepo, centerRepo, userRepo, new FakeParentLinkRepository(), audit);
+
+        var dto = await service.RemoveLeadMessageAsync(moderatorId, leadId, message.Id, "  Chia sẻ số điện thoại  ");
+
+        Assert.Equal("removed", message.Status);
+        Assert.Equal(moderatorId, message.RemovedByUserId);
+        Assert.Equal(LeadMessageMapper.RemovedContentPlaceholder, dto.Content);
+        Assert.Null(dto.FlagReason);
+        var log = Assert.Single(audit.Logs);
+        Assert.Equal("lead_message.remove", log.Action);
+        Assert.Equal(moderatorId, log.ActorUserId);
+        Assert.Equal(message.Id.ToString(), log.EntityId);
+        using var detail = System.Text.Json.JsonDocument.Parse(log.DetailJson!);
+        Assert.Equal("Chia sẻ số điện thoại", detail.RootElement.GetProperty("reason").GetString());
+        Assert.True(detail.RootElement.GetProperty("wasFlagged").GetBoolean());
+    }
+
+    [Fact]
+    public async Task RemoveLeadMessage_AlreadyRemoved_DoesNotLogAgainAndKeepsFirstRemover()
+    {
+        var firstModeratorId = Guid.NewGuid();
+        var leadId = Guid.NewGuid();
+        var message = new LeadMessage { LeadId = leadId, SenderUserId = Guid.NewGuid(), Content = "x", Status = "removed", RemovedByUserId = firstModeratorId };
+
+        var leadRepo = new FakeLeadRepo();
+        leadRepo.Leads.Add(new Lead { Id = leadId, UserId = Guid.NewGuid(), StudyCenterId = Guid.NewGuid() });
+        leadRepo.Messages.Add(message);
+        var audit = new FakeAuditRepo();
+        var service = new LeadService(leadRepo, new FakeStudyCenterRepo(), new FakeUserRepository(), new FakeParentLinkRepository(), audit);
+
+        var dto = await service.RemoveLeadMessageAsync(Guid.NewGuid(), leadId, message.Id, null);
+
+        Assert.Equal(firstModeratorId, message.RemovedByUserId);
+        Assert.Empty(audit.Logs);
+        Assert.Equal(LeadMessageMapper.RemovedContentPlaceholder, dto.Content);
+    }
+
+    [Fact]
+    public async Task RemoveLeadMessage_MessageOfAnotherLead_ThrowsKeyNotFoundAndKeepsMessageVisible()
+    {
+        var leadId = Guid.NewGuid();
+        var otherLeadId = Guid.NewGuid();
+        var message = new LeadMessage { LeadId = otherLeadId, SenderUserId = Guid.NewGuid(), Content = "x", Status = "visible" };
+
+        var leadRepo = new FakeLeadRepo();
+        leadRepo.Leads.Add(new Lead { Id = leadId, UserId = Guid.NewGuid(), StudyCenterId = Guid.NewGuid() });
+        leadRepo.Leads.Add(new Lead { Id = otherLeadId, UserId = Guid.NewGuid(), StudyCenterId = Guid.NewGuid() });
+        leadRepo.Messages.Add(message);
+        var service = new LeadService(leadRepo, new FakeStudyCenterRepo(), new FakeUserRepository(), new FakeParentLinkRepository());
+
+        await Assert.ThrowsAsync<KeyNotFoundException>(() =>
+            service.RemoveLeadMessageAsync(Guid.NewGuid(), leadId, message.Id, null));
+        Assert.Equal("visible", message.Status);
+    }
+
+    [Fact]
+    public async Task RemoveLeadMessage_InvalidIdsOrTooLongReason_ThrowsArgumentException()
+    {
+        var service = new LeadService(new FakeLeadRepo(), new FakeStudyCenterRepo(), new FakeUserRepository(), new FakeParentLinkRepository());
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            service.RemoveLeadMessageAsync(Guid.NewGuid(), Guid.Empty, Guid.NewGuid(), null));
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            service.RemoveLeadMessageAsync(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), new string('a', LeadService.MaxRemoveReasonLength + 1)));
     }
 
     [Fact]

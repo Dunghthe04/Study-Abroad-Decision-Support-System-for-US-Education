@@ -222,6 +222,19 @@ public class LeadsControllerTests
                 content.Trim(), false, null, "visible", DateTime.UtcNow);
             return Task.FromResult(new SendLeadMessageResultDto(msg, "contacted"));
         }
+
+        // [USAS-2080 / UC-58] Gỡ tin nhắn: ghi lại tham số để test kiểm tra controller truyền đúng
+        public (Guid ModeratorId, Guid LeadId, Guid MessageId, string? Reason)? LastRemove { get; private set; }
+
+        public Task<LeadMessageDto> RemoveLeadMessageAsync(Guid moderatorUserId, Guid leadId, Guid messageId, string? reason, CancellationToken ct = default)
+        {
+            if (MissingSentLeadId == leadId)
+                throw new KeyNotFoundException("Không tìm thấy yêu cầu liên hệ.");
+            LastRemove = (moderatorUserId, leadId, messageId, reason);
+            return Task.FromResult(new LeadMessageDto(
+                messageId, leadId, Guid.NewGuid(), "Học sinh / Phụ huynh (Ẩn danh)", UserRoles.Student, false,
+                "Tin nhắn đã bị gỡ do vi phạm quy tắc.", true, null, "removed", DateTime.UtcNow));
+        }
     }
 
     private static (LeadsController Controller, FakeLeadService Service) CreateController(Guid userId)
@@ -787,6 +800,54 @@ public class LeadsControllerTests
             CancellationToken.None);
 
         Assert.IsType<ObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task RemoveLeadMessage_AsModerator_ReturnsOkAndPassesArguments()
+    {
+        var moderatorId = Guid.NewGuid();
+        var leadId = Guid.NewGuid();
+        var messageId = Guid.NewGuid();
+        var (controller, service) = CreateCenterController(moderatorId, UserRoles.Moderator);
+
+        var result = await controller.RemoveLeadMessage(leadId, messageId, new RemoveLeadMessageRequest("Chứa số điện thoại"), CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var dto = Assert.IsType<LeadMessageDto>(ok.Value);
+        Assert.Equal("removed", dto.Status);
+        Assert.Equal((moderatorId, leadId, messageId, "Chứa số điện thoại"), service.LastRemove);
+    }
+
+    [Fact]
+    public async Task RemoveLeadMessage_WithoutBody_PassesNullReason()
+    {
+        var (controller, service) = CreateCenterController(Guid.NewGuid(), UserRoles.Moderator);
+
+        await controller.RemoveLeadMessage(Guid.NewGuid(), Guid.NewGuid(), null, CancellationToken.None);
+
+        Assert.Null(service.LastRemove!.Value.Reason);
+    }
+
+    [Fact]
+    public async Task RemoveLeadMessage_LeadNotFound_Returns404()
+    {
+        var leadId = Guid.NewGuid();
+        var (controller, service) = CreateCenterController(Guid.NewGuid(), UserRoles.Moderator);
+        service.MissingSentLeadId = leadId;
+
+        var result = await controller.RemoveLeadMessage(leadId, Guid.NewGuid(), null, CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result);
+    }
+
+    [Fact]
+    public void RemoveLeadMessage_IsRestrictedToModeratorOnly()
+    {
+        var attr = typeof(LeadsController).GetMethod(nameof(LeadsController.RemoveLeadMessage))
+            ?.GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute), false)
+            .Cast<Microsoft.AspNetCore.Authorization.AuthorizeAttribute>().Single();
+
+        Assert.Equal(UserRoles.Moderator, attr!.Roles);
     }
 
     [Fact]
