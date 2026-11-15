@@ -33,9 +33,6 @@ public interface ISlmSampleRepository
 
     /// <summary>Khóa để nhận ra dòng trùng khi import: loại mẫu, câu hỏi, câu hệ thống hỏi, hồ sơ, ngữ cảnh, intents.</summary>
     Task<IReadOnlyList<SlmSampleKeyRow>> ExistingKeysAsync(CancellationToken ct = default);
-
-    /// <summary>Các dòng đã duyệt (approved) để xuất JSONL. split null là mọi tập.</summary>
-    Task<IReadOnlyList<SlmTrainingSample>> ApprovedAsync(string? split, CancellationToken ct = default);
 }
 
 public record SlmSampleKeyRow(
