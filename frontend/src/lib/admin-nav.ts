@@ -49,9 +49,10 @@ export const ADMIN_NAV: AdminNavItem[] = [
   {
     href: "/admin/universities",
     label: "Dữ liệu trường",
-    description: "Nhập, sửa, ẩn hoặc hiện trường và xem độ mới của dữ liệu",
+    description: "Moderator nhập, sửa, ẩn hoặc hiện trường; Admin chỉ xem danh sách và chi tiết",
     icon: SchoolIcon,
-    roles: ["admin"],
+    // Quyết định D2 bản 14/11: dữ liệu trường do Moderator quản lý, Admin chỉ xem
+    roles: ["admin", "moderator"],
     useCases: ["UC-65", "UC-66", "UC-67", "UC-84"],
   },
   {
