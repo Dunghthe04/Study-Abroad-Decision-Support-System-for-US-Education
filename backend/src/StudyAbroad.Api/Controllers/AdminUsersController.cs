@@ -9,11 +9,11 @@ namespace StudyAbroad.Api.Controllers;
 
 /// <summary>
 /// [USAS-362] [AC-4] API Quản trị tài khoản người dùng (RBAC).
-/// Cho phép các tài khoản có vai trò 'admin' hoặc 'moderator' truy cập phục vụ quản lý và kiểm duyệt tài khoản (UC-60..63).
+/// Chỉ tài khoản có vai trò 'admin' truy cập (UC-60..63, quyết định D2 bản 14/11: Moderator không quản lý tài khoản).
 /// Nếu học sinh, phụ huynh hoặc trung tâm gọi endpoint này, middleware sẽ chặn và trả về HTTP 403 Forbidden.
 /// </summary>
 [ApiController]
-[Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Moderator}")]
+[Authorize(Roles = UserRoles.Admin)]
 [Route("api/v1/admin/users")]
 public class AdminUsersController(IAuthService auth) : ControllerBase
 {

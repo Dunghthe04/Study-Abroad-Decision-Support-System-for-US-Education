@@ -169,11 +169,11 @@ public class AdminUsersControllerTests
     [Fact]
     public void AdminUsersController_HasAdminAuthorizeAttribute()
     {
-        // [AC-4] Đảm bảo controller được bảo vệ bởi [Authorize(Roles = "admin,moderator")]
+        // [UC-60] Controller chỉ cho Admin (quyết định D2 bản 14/11), Moderator bị chặn
         var authAttr = typeof(AdminUsersController).GetCustomAttribute<AuthorizeAttribute>();
 
         Assert.NotNull(authAttr);
-        Assert.Equal($"{UserRoles.Admin},{UserRoles.Moderator}", authAttr.Roles);
+        Assert.Equal(UserRoles.Admin, authAttr.Roles);
     }
 
     [Fact]
