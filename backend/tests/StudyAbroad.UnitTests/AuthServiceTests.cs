@@ -31,9 +31,10 @@ public class AuthServiceTests
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly FakeLeadWithdrawalRepository _leadWithdrawals = new();
 
-    private AuthService CreateService() => new(
+    private AuthService CreateService(AccountDeletionOptions? accountDeletion = null) => new(
         _repo, new FakeHasher(), _tokens, _emailSender, _links, _auditLogs,
-        new ParentLinkService(_links, _repo, _emailSender), _unitOfWork, _leadWithdrawals);
+        new ParentLinkService(_links, _repo, _emailSender), _unitOfWork, _leadWithdrawals,
+        accountDeletion: accountDeletion);
 
     // Ngày sinh ứng với tuổi tròn (sinh nhật cách hôm nay ở VN 10 ngày về trước)
     private static DateOnly BornYearsAgo(int years) =>
@@ -632,6 +633,148 @@ public class AuthServiceTests
 
         Assert.Equal(AuthError.Validation, result.Error);
         Assert.Contains("đang chờ xóa", result.Message);
+        Assert.Empty(_auditLogs.Entries);
+    }
+
+    // [UC-80] Tạo tài khoản đang chờ xóa, đã xóa mềm cách đây deletedAgo
+    private async Task<(AuthService Service, User User)> PendingDeletionSetup(TimeSpan deletedAgo)
+    {
+        var service = CreateService(new AccountDeletionOptions { RetentionPeriod = TimeSpan.FromDays(30) });
+        await service.RegisterAsync(Request());
+        var user = _repo.Users[0];
+        user.Status = UserStatuses.Deleted;
+        user.DeletedAt = DateTime.UtcNow - deletedAgo;
+        return (service, user);
+    }
+
+    [Fact]
+    public async Task Login_PendingDeletion_CorrectPassword_ReturnsRestoreToken_NoSession()
+    {
+        var (service, user) = await PendingDeletionSetup(TimeSpan.FromDays(1));
+
+        var result = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
+
+        Assert.Equal(AuthError.PendingDeletion, result.Error);
+        Assert.Null(result.Response);
+        Assert.NotNull(result.PendingDeletion);
+        Assert.False(string.IsNullOrEmpty(result.PendingDeletion!.RestoreToken));
+        Assert.Equal(user.DeletedAt!.Value.AddDays(30), result.PendingDeletion.DeletionDate);
+        Assert.Empty(_repo.Sessions);
+        Assert.Equal(UserStatuses.Deleted, user.Status);
+        // Mã khôi phục chỉ lưu dạng băm
+        var otp = Assert.Single(_repo.Otps, o => o.Purpose == OtpPurposes.RestoreAccount);
+        Assert.NotEqual(result.PendingDeletion.RestoreToken, otp.CodeHash);
+    }
+
+    [Fact]
+    public async Task Login_PendingDeletion_WrongPassword_InvalidCredentials()
+    {
+        var (service, _) = await PendingDeletionSetup(TimeSpan.FromDays(1));
+
+        var result = await service.LoginAsync(new LoginRequest("a@test.com", "wrong-password"));
+
+        Assert.Equal(AuthError.InvalidCredentials, result.Error);
+        Assert.Null(result.PendingDeletion);
+        Assert.Empty(_repo.Otps.Where(o => o.Purpose == OtpPurposes.RestoreAccount));
+    }
+
+    [Fact]
+    public async Task Login_PendingDeletion_PastRetention_InvalidCredentials()
+    {
+        var (service, _) = await PendingDeletionSetup(TimeSpan.FromDays(31));
+
+        var result = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
+
+        Assert.Equal(AuthError.InvalidCredentials, result.Error);
+        Assert.Null(result.PendingDeletion);
+        Assert.Empty(_repo.Sessions);
+    }
+
+    [Fact]
+    public async Task RestoreAccount_ValidToken_ActivatesCreatesSessionAndAudits()
+    {
+        var (service, user) = await PendingDeletionSetup(TimeSpan.FromDays(1));
+        var login = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
+
+        var result = await service.RestoreAccountAsync(
+            new RestoreAccountRequest("a@test.com", login.PendingDeletion!.RestoreToken));
+
+        Assert.Equal(AuthError.None, result.Error);
+        Assert.NotNull(result.Response);
+        Assert.Equal(UserStatuses.Active, user.Status);
+        Assert.Null(user.DeletedAt);
+        Assert.Single(_repo.Sessions);
+        var log = Assert.Single(_auditLogs.Entries);
+        Assert.Equal("user.restore_account", log.Action);
+        Assert.Equal(user.Id, log.ActorUserId);
+    }
+
+    [Fact]
+    public async Task RestoreAccount_WrongToken_Fails()
+    {
+        var (service, user) = await PendingDeletionSetup(TimeSpan.FromDays(1));
+        await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
+
+        var result = await service.RestoreAccountAsync(new RestoreAccountRequest("a@test.com", "sai-ma"));
+
+        Assert.Equal(AuthError.OtpInvalid, result.Error);
+        Assert.Equal(UserStatuses.Deleted, user.Status);
+        Assert.Empty(_repo.Sessions);
+    }
+
+    [Fact]
+    public async Task RestoreAccount_TokenUsedTwice_SecondFails()
+    {
+        var (service, user) = await PendingDeletionSetup(TimeSpan.FromDays(1));
+        var login = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
+        var request = new RestoreAccountRequest("a@test.com", login.PendingDeletion!.RestoreToken);
+        await service.RestoreAccountAsync(request);
+        user.Status = UserStatuses.Deleted;
+        user.DeletedAt = DateTime.UtcNow;
+
+        var second = await service.RestoreAccountAsync(request);
+
+        Assert.Equal(AuthError.OtpInvalid, second.Error);
+    }
+
+    [Fact]
+    public async Task RestoreAccount_ExpiredToken_Fails()
+    {
+        var (service, user) = await PendingDeletionSetup(TimeSpan.FromDays(1));
+        var login = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
+        _repo.Otps.Single(o => o.Purpose == OtpPurposes.RestoreAccount).ExpiresAt = DateTime.UtcNow.AddMinutes(-1);
+
+        var result = await service.RestoreAccountAsync(
+            new RestoreAccountRequest("a@test.com", login.PendingDeletion!.RestoreToken));
+
+        Assert.Equal(AuthError.OtpInvalid, result.Error);
+        Assert.Equal(UserStatuses.Deleted, user.Status);
+    }
+
+    [Fact]
+    public async Task RestoreAccount_PastRetention_Fails()
+    {
+        var (service, user) = await PendingDeletionSetup(TimeSpan.FromDays(1));
+        var login = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
+        user.DeletedAt = DateTime.UtcNow.AddDays(-31);
+
+        var result = await service.RestoreAccountAsync(
+            new RestoreAccountRequest("a@test.com", login.PendingDeletion!.RestoreToken));
+
+        Assert.Equal(AuthError.OtpInvalid, result.Error);
+        Assert.Equal(UserStatuses.Deleted, user.Status);
+    }
+
+    [Fact]
+    public async Task RestoreAccount_ActiveAccount_Fails()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        _repo.Users[0].Status = UserStatuses.Active;
+
+        var result = await service.RestoreAccountAsync(new RestoreAccountRequest("a@test.com", "bat-ky"));
+
+        Assert.Equal(AuthError.OtpInvalid, result.Error);
         Assert.Empty(_auditLogs.Entries);
     }
 

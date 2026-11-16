@@ -99,6 +99,11 @@ public static class DependencyInjection
         services.AddSingleton<IEmailSender, QueuedEmailSender>();
         services.AddHostedService<EmailDispatchBackgroundService>();
 
+        // [UC-80] Thời hạn chờ xóa tài khoản và chu kỳ job xóa hẳn (appsettings "AccountDeletion")
+        services.Configure<StudyAbroad.Application.Auth.AccountDeletionOptions>(
+            configuration.GetSection(StudyAbroad.Application.Auth.AccountDeletionOptions.SectionName));
+        services.AddSingleton(sp => sp.GetRequiredService<IOptions<StudyAbroad.Application.Auth.AccountDeletionOptions>>().Value);
+
         services.Configure<AdvisorOptions>(configuration.GetSection(AdvisorOptions.SectionName));
         // Giá token để tính tiền mỗi lần gọi AI: đọc từ cấu hình (appsettings "AiPricing" hoặc biến môi trường AiPricing__...)
         services.Configure<AiPricingOptions>(configuration.GetSection(AiPricingOptions.SectionName));

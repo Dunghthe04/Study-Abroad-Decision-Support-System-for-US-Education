@@ -117,7 +117,7 @@ builder.Services.AddAuthentication(options =>
                 // [Q6] Tài khoản bị Admin khóa (hoặc đã bị xóa) thì mất quyền ngay, không đợi token hết hạn.
                 // Tạm khóa do người khác nhập sai mật khẩu (temp_locked) KHÔNG đăng xuất người đang dùng.
                 var user = await userRepo.GetUserById(session.UserId);
-                if (user == null || user.Status == UserStatuses.Locked)
+                if (user == null || user.Status == UserStatuses.Locked || user.Status == UserStatuses.Deleted)
                 {
                     context.Fail("Tài khoản không còn quyền truy cập.");
                 }
