@@ -24,6 +24,7 @@ public static class DependencyInjection
         services.AddScoped<StudyAbroad.Application.Admin.SlmSamples.ISlmSampleService, StudyAbroad.Application.Admin.SlmSamples.SlmSampleService>();
         services.AddScoped<StudyAbroad.Application.Admin.ReviewBatches.IReviewBatchService, StudyAbroad.Application.Admin.ReviewBatches.ReviewBatchService>();   // đợt duyệt mẫu
         services.AddScoped<StudyAbroad.Application.Leads.ILeadService, StudyAbroad.Application.Leads.LeadService>();
+        services.AddScoped<StudyAbroad.Application.StudyCenters.ICenterReviewService, StudyAbroad.Application.StudyCenters.CenterReviewService>();
         services.AddScoped<StudyAbroad.Application.Leads.ICenterSuspensionProposalService, StudyAbroad.Application.Leads.CenterSuspensionProposalService>();
         services.AddScoped<IAuthService, AuthService>();
         // [Q11] Liên kết phụ huynh–học sinh và sự đồng ý xử lý dữ liệu trẻ em

@@ -342,7 +342,9 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasName("pk_center_reviews");
 
                     b.HasIndex("LeadId")
-                        .HasDatabaseName("ix_center_reviews_lead_id");
+                        .IsUnique()
+                        .HasDatabaseName("ix_center_reviews_lead_id")
+                        .HasFilter("lead_id IS NOT NULL");
 
                     b.HasIndex("StudyCenterId")
                         .HasDatabaseName("ix_center_reviews_study_center_id");
