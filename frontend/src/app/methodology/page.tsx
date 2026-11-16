@@ -18,9 +18,12 @@ import { buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { groupLabel, groupVariant, statusLabel } from "@/lib/recommendation-labels";
 import { OpenAssistantButton } from "@/components/assistant/OpenAssistantButton";
+import { GradeScaleTable } from "@/components/methodology/GradeScaleTable";
 import { ParameterTable } from "@/components/methodology/ParameterTable";
+import { getGradeScaleConfig } from "@/lib/academic-api";
 import { getMethodologyParameters } from "@/lib/methodology-api";
 import { cn } from "@/lib/utils";
+import type { GradeScaleConfig } from "@/types/academic";
 import type { MethodologyParameters } from "@/types/methodology";
 
 export const metadata: Metadata = {
@@ -135,13 +138,12 @@ function PositionScale() {
 export default async function MethodologyPage() {
   await connection();
 
-  // Bảng tham số lấy từ backend (UC-89). Lỗi thì chỉ phần bảng báo chưa tải được, các phần giải thích khác vẫn hiện.
-  let parameters: MethodologyParameters | null = null;
-  try {
-    parameters = await getMethodologyParameters();
-  } catch {
-    parameters = null;
-  }
+  // Bảng tham số và bảng quy đổi điểm lấy từ backend (UC-89). Lỗi thì chỉ phần bảng đó báo chưa tải được,
+  // các phần giải thích khác vẫn hiện.
+  const [parameters, gradeScale]: [MethodologyParameters | null, GradeScaleConfig | null] = await Promise.all([
+    getMethodologyParameters().catch(() => null),
+    getGradeScaleConfig().catch(() => null),
+  ]);
 
   return (
     <div className="mx-auto max-w-[900px] space-y-6 pb-16">
@@ -370,6 +372,15 @@ export default async function MethodologyPage() {
         </summary>
         <div className="border-t border-line p-5 sm:p-6">
           <ParameterTable data={parameters} />
+        </div>
+      </details>
+
+      <details className="rounded-xl border border-line bg-surface">
+        <summary className="cursor-pointer px-5 py-4 font-sans text-lg font-semibold text-foreground sm:px-6">
+          Bảng quy đổi điểm thang 10 sang thang 4
+        </summary>
+        <div className="border-t border-line p-5 sm:p-6">
+          <GradeScaleTable config={gradeScale} />
         </div>
       </details>
 

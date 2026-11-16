@@ -83,11 +83,11 @@ export const ADMIN_NAV: AdminNavItem[] = [
   {
     href: "/admin/parameters",
     label: "Tham số hệ thống",
-    description: "Bảng quy đổi điểm, ngưỡng gợi ý, tỷ giá và luật tư vấn",
+    description: "Bảng quy đổi điểm, tỷ giá và căn cứ tham số thuật toán gợi ý",
     icon: SlidersHorizontalIcon,
-    // Moderator vào để sửa bảng quy đổi điểm (UC-68); admin chỉ xem bảng này
+    // Moderator vào để sửa bảng quy đổi điểm (UC-68); admin chỉ xem bảng này. Tham số thuật toán (UC-89, gộp UC-69) chỉ xem.
     roles: ["admin", "moderator"],
-    useCases: ["UC-68", "UC-69", "UC-70", "UC-88"],
+    useCases: ["UC-68", "UC-70", "UC-89"],
   },
   {
     href: "/admin/forum",
