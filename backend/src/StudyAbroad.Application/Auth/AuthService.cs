@@ -1121,6 +1121,16 @@ namespace StudyAbroad.Application.Auth
             if (user.Status == UserStatuses.Deleted)
                 return AuthResult.Fail(AuthError.Validation, "Tài khoản đang chờ xóa.");
 
+            // Đặc tả UC-80 chỉ cho học sinh và phụ huynh tự xóa. Trung tâm đổi người phụ trách bằng cách đổi email, số điện thoại;
+            // ngừng hoạt động trung tâm và tài khoản quản trị do quản trị viên xử lý
+            if (!UserRoles.SelfDelete.Contains(user.Role))
+            {
+                var message = user.Role == UserRoles.Center
+                    ? "Tài khoản trung tâm không tự xóa được. Muốn đổi người phụ trách, hãy đổi email và số điện thoại trong trang trung tâm; muốn ngừng hoạt động, hãy liên hệ quản trị viên."
+                    : "Tài khoản quản trị không tự xóa được. Hãy liên hệ quản trị viên.";
+                return AuthResult.Fail(AuthError.RoleNotAllowed, message);
+            }
+
             var now = DateTime.UtcNow;
             List<ParentLinkRevokeNotice> notices = [];
 

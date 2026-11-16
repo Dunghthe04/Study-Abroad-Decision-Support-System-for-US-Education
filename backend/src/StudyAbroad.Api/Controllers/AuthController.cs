@@ -257,6 +257,10 @@ namespace StudyAbroad.Api.Controllers
             var userAgent = Request.Headers.UserAgent.ToString();
 
             var result = await auth.AnonymizeUserAccountAsync(userId.Value, ip, userAgent, ct);
+            if (result.Error == AuthError.RoleNotAllowed)
+            {
+                return Problem(result.Message, statusCode: StatusCodes.Status403Forbidden);
+            }
             if (result.Error != AuthError.None)
             {
                 return Problem(result.Message, statusCode: StatusCodes.Status400BadRequest);

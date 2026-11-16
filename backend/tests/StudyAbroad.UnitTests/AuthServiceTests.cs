@@ -636,6 +636,45 @@ public class AuthServiceTests
         Assert.Empty(_auditLogs.Entries);
     }
 
+    // [UC-80] Chỉ học sinh và phụ huynh tự xóa được; trung tâm, admin, mod bị từ chối và tài khoản không đổi
+    [Theory]
+    [InlineData(UserRoles.Center)]
+    [InlineData(UserRoles.Admin)]
+    [InlineData(UserRoles.Moderator)]
+    public async Task AnonymizeUserAccount_RoleNotAllowed_RejectsAndKeepsAccount(string role)
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        var user = _repo.Users[0];
+        user.Status = UserStatuses.Active;
+        user.Role = role;
+
+        var result = await service.AnonymizeUserAccountAsync(user.Id);
+
+        Assert.Equal(AuthError.RoleNotAllowed, result.Error);
+        Assert.Equal(UserStatuses.Active, user.Status);
+        Assert.Null(user.DeletedAt);
+        Assert.Equal(0, _unitOfWork.Calls);
+        Assert.Empty(_auditLogs.Entries);
+    }
+
+    [Theory]
+    [InlineData(UserRoles.Student)]
+    [InlineData(UserRoles.Parent)]
+    public async Task AnonymizeUserAccount_StudentOrParent_Allowed(string role)
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        var user = _repo.Users[0];
+        user.Status = UserStatuses.Active;
+        user.Role = role;
+
+        var result = await service.AnonymizeUserAccountAsync(user.Id);
+
+        Assert.Equal(AuthError.None, result.Error);
+        Assert.Equal(UserStatuses.Deleted, user.Status);
+    }
+
     // [UC-80] Tạo tài khoản đang chờ xóa, đã xóa mềm cách đây deletedAgo
     private async Task<(AuthService Service, User User)> PendingDeletionSetup(TimeSpan deletedAgo)
     {

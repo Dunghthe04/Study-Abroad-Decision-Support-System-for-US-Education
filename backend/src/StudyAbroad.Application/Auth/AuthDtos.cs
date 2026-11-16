@@ -63,6 +63,7 @@ namespace StudyAbroad.Application.Auth
         Unverified,           // tài khoản chưa kích hoạt email OTP → 403
         OtpInvalid,           // mã OTP sai / hết hạn / đã dùng / đã vô hiệu hóa (gộp một thông báo, chống dò) → 400
         PendingDeletion,      // [UC-80] tài khoản đang chờ xóa, đúng mật khẩu → 403 kèm mã khôi phục
+        RoleNotAllowed,       // [UC-80] vai trò không được tự làm thao tác này (trung tâm, admin, mod tự xóa tài khoản) → 403
     };
 
     // [UC-80] Khôi phục tài khoản đang chờ xóa bằng mã khôi phục nhận khi đăng nhập
