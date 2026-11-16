@@ -1,7 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { CheckIcon, DownloadIcon, FilterIcon, PlusIcon, RotateCcwIcon, SearchIcon, UploadIcon, WrenchIcon, XIcon } from "lucide-react";
+import { useState } from "react";
+import { CheckIcon, FileInputIcon, FilterIcon, PlusIcon, RotateCcwIcon, SearchIcon, WrenchIcon, XIcon } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,6 +21,7 @@ import { toast } from "@/components/ui/toast";
 import { DataTable, type DataTableToolbarSlots } from "@/components/admin/shared/DataTable";
 import { TablePagination } from "@/components/admin/shared/TablePagination";
 import { OptionSelect } from "@/components/admin/universities/OptionSelect";
+import { SlmImportDialog } from "@/components/admin/knowledge/SlmImportDialog";
 import { SlmImportResultDialog } from "@/components/admin/knowledge/SlmImportResultDialog";
 import { SlmReviewDialog } from "@/components/admin/knowledge/SlmReviewDialog";
 import { SlmSampleFormPanel } from "@/components/admin/knowledge/SlmSampleFormPanel";
@@ -72,9 +73,8 @@ export function KnowledgeListView() {
   const [deleting, setDeleting] = useState<SlmSample | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [importResult, setImportResult] = useState<SlmImportResult | null>(null);
-  const [importBusy, setImportBusy] = useState(false);
-  const [exportBusy, setExportBusy] = useState(false);
-  const fileInput = useRef<HTMLInputElement>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importSession, setImportSession] = useState(0);
 
   const list = useFetched(`list|${JSON.stringify(applied)}|${reloadCounter}`, () =>
     adminSlmSampleApi.list({
@@ -197,34 +197,15 @@ export function KnowledgeListView() {
     }
   };
 
-  const handleFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-    if (!file.name.toLowerCase().endsWith(".xlsx")) {
-      toast.add({ type: "error", title: "Chỉ nhận file .xlsx" });
-      return;
-    }
-    setImportBusy(true);
-    try {
-      setImportResult(await adminSlmSampleApi.importXlsx(file));
-      reload();
-    } catch (error) {
-      toast.add({ type: "error", title: "Không nhập được file", description: errorText(error, "Vui lòng thử lại sau.") });
-    } finally {
-      setImportBusy(false);
-    }
+  const openImport = () => {
+    setImportSession((current) => current + 1);
+    setImportOpen(true);
   };
 
-  const handleExport = async () => {
-    setExportBusy(true);
-    try {
-      await adminSlmSampleApi.exportJsonl(applied.split === "" ? undefined : (applied.split as SlmSplit));
-    } catch (error) {
-      toast.add({ type: "error", title: "Không xuất được file", description: errorText(error, "Vui lòng thử lại sau.") });
-    } finally {
-      setExportBusy(false);
-    }
+  const handleImported = (result: SlmImportResult) => {
+    setImportOpen(false);
+    setImportResult(result);
+    reload();
   };
 
   const columns = slmSampleColumns({
@@ -286,12 +267,9 @@ export function KnowledgeListView() {
             Xóa lọc
           </Button>
         )}
-        <input ref={fileInput} type="file" accept=".xlsx" className="hidden" onChange={(event) => void handleFile(event)} />
-        <Button type="button" variant="outline" size="sm" className={TOOLBAR_BUTTON_BG} disabled={importBusy} onClick={() => fileInput.current?.click()}>
-          {importBusy ? <Spinner /> : <UploadIcon />} Nhập Excel
-        </Button>
-        <Button type="button" variant="outline" size="sm" className={TOOLBAR_BUTTON_BG} disabled={exportBusy} onClick={() => void handleExport()}>
-          {exportBusy ? <Spinner /> : <DownloadIcon />} Xuất JSONL
+        <Button type="button" variant="outline" size="sm" className={TOOLBAR_BUTTON_BG} onClick={openImport}>
+          <FileInputIcon />
+          Nhập Excel
         </Button>
         <Button type="button" size="sm" onClick={() => setFormState({ sample: null })}>
           <PlusIcon />
@@ -355,13 +333,14 @@ export function KnowledgeListView() {
       {formState && <SlmSampleFormPanel sample={formState.sample} onClose={() => setFormState(null)} onChanged={handlePanelChanged} />}
 
       <SlmReviewDialog status={reviewStatus} ids={Array.from(selectedIds)} onClose={() => setReviewStatus(null)} onDone={handleReviewed} />
+      <SlmImportDialog key={importSession} open={importOpen} onOpenChange={setImportOpen} onImported={handleImported} />
       <SlmImportResultDialog result={importResult} onClose={() => setImportResult(null)} />
 
       <AlertDialog open={deleting !== null} onOpenChange={(open) => !open && !deleteBusy && setDeleting(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Xóa mẫu này?</AlertDialogTitle>
-            <AlertDialogDescription>Mẫu bị xóa không khôi phục được và sẽ không còn trong file xuất.</AlertDialogDescription>
+            <AlertDialogDescription>Mẫu sẽ bị xóa khỏi danh sách dữ liệu huấn luyện. Thao tác này không thể khôi phục.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleteBusy}>Hủy</AlertDialogCancel>

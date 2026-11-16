@@ -31,8 +31,12 @@ public interface ISlmSampleService
     /// </summary>
     Task<SlmImportResultDto> ImportAsync(Stream workbook, Guid actorUserId, CancellationToken ct = default);
 
-    /// <summary>Xuất các dòng approved thành nội dung JSONL, mỗi dòng là một SlmExportLine. split null là mọi tập.</summary>
-    Task<string> ExportJsonlAsync(string? split, CancellationToken ct = default);
+    Task<SlmImportPreviewDto> PreviewAsync(Stream workbook, CancellationToken ct = default);
+}
+
+public interface ISlmTemplateWriter
+{
+    byte[] Build();
 }
 
 /// <summary>Đọc file xlsx dữ liệu huấn luyện thành các dòng thô, chưa kiểm tra nội dung.</summary>
@@ -42,5 +46,5 @@ public interface ISlmWorkbookReader
     /// Mỗi sheet có tên trùng một loại mẫu được đọc; sheet khác (README, summary) bị bỏ qua. Cột được nhận theo tên ở dòng tiêu đề
     /// (thứ tự cột có thể khác giữa các sheet). File hỏng hoặc không phải xlsx thì ném InvalidDataException.
     /// </summary>
-    IReadOnlyList<SlmImportRow> Read(Stream workbook);
+    IReadOnlyList<SlmImportRow> Read(Stream workbook, CancellationToken ct = default);
 }
