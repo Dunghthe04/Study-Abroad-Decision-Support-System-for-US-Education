@@ -4,7 +4,7 @@ import pytest
 
 from app.schemas.chat import ChatMessage, ChatRequest, ChatState
 from app.services.chat_flow import SkillOutput
-from app.services.intake import CONTINUE_CHAT, FORM_DONE
+from app.services.replies import CONTINUE_CHAT, FORM_DONE
 from app.services.skills import build_handlers, buttons
 from app.services.skills.skill_ho_so import (
     NO_MORE_CERT,

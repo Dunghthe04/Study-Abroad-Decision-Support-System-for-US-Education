@@ -6,7 +6,9 @@ from pathlib import Path
 from typing import Any
 
 import httpx  # gửi request đến ollama
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 
 from app.api.deps import require_api_key
 from app.api.routes import chat, health, profile, recommend
@@ -171,6 +173,18 @@ def create_app() -> FastAPI:
     app.include_router(profile.router, dependencies=[Depends(require_api_key)])
     app.include_router(recommend.router, dependencies=[Depends(require_api_key)])
     app.include_router(chat.router, dependencies=[Depends(require_api_key)])  # thêm
+
+    # Mặc định uvicorn chỉ ghi "422 Unprocessable Content", không nói trường nào sai. Ghi vị trí và lý do, KHÔNG ghi giá trị
+    # (giá trị có thể là chữ của học sinh), rồi trả đúng câu trả lời 422 mặc định
+    @app.exception_handler(RequestValidationError)
+    async def log_validation_error(request: Request, exc: RequestValidationError):
+        problems = [
+            f"{'.'.join(str(part) for part in error['loc'])}: {error['type']} {error.get('ctx', {})}".strip()
+            for error in exc.errors()
+        ]
+        logging.getLogger("advisor.api").warning("422 %s %s", request.url.path, "; ".join(problems[:5]))
+        return await request_validation_exception_handler(request, exc)
+
     return app
 
 

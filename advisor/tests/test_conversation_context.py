@@ -282,7 +282,7 @@ def test_a_follow_up_search_may_only_change_the_sort_order():
         check_entities(
             "knowledge", {"tasks": ["search"], "follow_up": True}
         )  # không điều kiện mới cũng không đổi cách xếp
+    # "trường nào rẻ nhất": tự đứng được chỉ với cách xếp, không cần điều kiện lọc
+    check_entities("knowledge", {"tasks": ["search"], "sort": "lowest_cost"})
     with pytest.raises(ValueError):
-        check_entities(
-            "knowledge", {"tasks": ["search"], "sort": "lowest_cost"}
-        )  # tự đứng được thì phải có điều kiện
+        check_entities("knowledge", {"tasks": ["search"]})  # không điều kiện cũng không cách xếp

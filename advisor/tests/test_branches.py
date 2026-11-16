@@ -17,7 +17,6 @@ from app.services.branches import (
     ASK_SCHOOL,
     ASK_WHICH_SCHOOLS,
     CANNOT_ANSWER,
-    GREETING_BUTTONS,
     GREETING_REPLY,
     HANDOFF_INTRO,
     LOOKING_UP,
@@ -31,8 +30,19 @@ from app.services.branches import (
     NotReadyBranch,
     build_branches,
 )
-from app.services.chat_flow import NEED_MAJOR, NEED_PROFILE, QUESTIONS, SkillOutput, ask, go_to
-from app.services.intake import CHAT_BUTTON, FORM_BUTTON, INTAKE_ASK, INTAKE_ID, INTAKE_MORE
+from app.services.chat_flow import QUESTIONS, SkillOutput, ask, go_to
+from app.services.intake import INTAKE_ID
+from app.services.replies import (
+    CHAT_BUTTON,
+    FORM_BUTTON,
+    GROUP_NEED_RESULTS,
+    INTAKE_ASK,
+    INTAKE_MORE,
+    NEED_MAJOR,
+    NEED_PROFILE,
+    menu_buttons,
+)
+from app.services.scenario import SUPPORTED_TEXT
 from app.services.skill_rules import REQUIRED_B3, REQUIRED_B4
 from app.services.what_if_writer import WhatIfWriter
 from tests.fakes import FakeLLM, flow_with, tin
@@ -156,7 +166,7 @@ async def test_what_if_no_effect_factors_say_list_unchanged(factor, name):
 async def test_what_if_other_factors_keep_the_general_answer():
     out = await run_scenario(ChatState(has_results=True), **what_if({"factor": "activities", "value": "x"}))
 
-    assert out.answer == NOTHING_TO_TRY
+    assert out.answer == NOTHING_TO_TRY.format(supported=SUPPORTED_TEXT)
 
 
 # Thử được kèm mục không thử được: câu ghi chú nói rõ từng loại
@@ -175,9 +185,10 @@ async def test_what_if_note_explains_each_group():
     assert "Lịch sử visa không làm thay đổi danh sách trường gợi ý." in out.answer
 
 
-async def test_what_if_hands_priorities_to_dotnet_even_without_profile_values():
+async def test_what_if_hands_the_priorities_the_model_returned_to_dotnet():
     state = ChatState(has_results=True)
-    entities = what_if({"factor": "priority", "value": "priority"})
+    # ưu tiên do MODEL trả (priority_*), không có quy tắc từ khóa đọc thêm từ câu chữ
+    entities = what_if({"factor": "priority_aid", "value": "4"}, {"factor": "priority_cost", "value": "1"})
 
     out = await build_branches(skills([]))["scenario"].run(
         state, "em ưu tiên học bổng nhất, chi phí thì ít quan tâm", scenario(**entities)
@@ -338,6 +349,77 @@ async def test_a_search_the_model_read_is_normalized_and_goes_to_dotnet_without_
     }
 
 
+@pytest.mark.parametrize(
+    ("model_sort", "dotnet_sort"),
+    [
+        ("lowest_cost", "lowestCost"),
+        ("highest_cost", "highestCost"),
+        ("most_aid", "mostAid"),
+        ("easiest_admission", "easiestAdmission"),
+        ("most_selective", "mostSelective"),
+        ("ranking", "quality"),
+    ],
+)
+async def test_a_search_with_only_a_sort_goes_to_dotnet_without_any_filter(model_sort, dotnet_sort):
+    # "trường nào học phí rẻ nhất": không có điều kiện lọc, chỉ có cách xếp
+    ran: list[str] = []
+    entities = {"tasks": ["search"], "sort": model_sort}
+
+    out = await build_branches(skills(ran))["knowledge"].run(
+        ChatState(), "x", tin(("knowledge", entities, "trường nào học phí rẻ nhất"))
+    )
+
+    assert ran == []
+    assert out.action == "school_search"
+    assert out.action_data["filters"] == {} and out.action_data["sort"] == dotnet_sort
+
+
+def result_schools():
+    return [
+        ResultSchool(code="A", name="Alpha University", group="R"),
+        ResultSchool(code="B", name="Beta College", group="R"),
+        ResultSchool(code="C", name="Gamma State", group="M"),
+        ResultSchool(code="D", name="Delta University", group="S"),
+        ResultSchool(code="E", name="Epsilon College", group="S"),
+    ]
+
+
+async def test_comparing_a_group_of_the_students_results_uses_the_schools_of_that_group():
+    entities = {"tasks": ["compare_facts"], "group": "reach", "fields": ["cost"]}
+    state = ChatState(has_results=True, schools=result_schools())
+
+    out = await build_branches(skills([]))["knowledge"].run(
+        state, "x", tin(("knowledge", entities, "so sánh chi phí các trường nhóm khó vào"))
+    )
+
+    assert out.action == "school_compare"
+    assert out.action_data["schools"] == ["Alpha University", "Beta College"]
+    assert out.action_data["fields"] == ["cost"]
+
+
+async def test_comparing_a_group_needs_a_recommendation_list_first():
+    entities = {"tasks": ["compare_facts"], "group": "safety"}
+
+    out = await build_branches(skills([]))["knowledge"].run(
+        ChatState(), "x", tin(("knowledge", entities, "so sánh các trường an toàn"))
+    )
+
+    assert out.action is None and out.answer == GROUP_NEED_RESULTS
+    assert out.quick_replies
+
+
+async def test_a_group_with_fewer_than_two_schools_cannot_be_compared():
+    entities = {"tasks": ["compare_facts"], "group": "target"}
+    state = ChatState(has_results=True, schools=result_schools())
+
+    out = await build_branches(skills([]))["knowledge"].run(
+        state, "x", tin(("knowledge", entities, "so sánh các trường vừa sức"))
+    )
+
+    assert out.action is None
+    assert "Vừa sức" in out.answer and "1 trường" in out.answer
+
+
 async def test_when_the_model_returns_the_school_and_the_fields_the_knowledge_base_is_skipped():
     ran: list[str] = []
     branches = build_branches(skills(ran))
@@ -404,7 +486,7 @@ async def test_the_greeting_label_gets_a_greeting_back_with_things_to_do_whateve
     out = await build_branches({})["out_of_scope"].run(ChatState(), "hê lô cả nhà", slm)
 
     assert out.answer == GREETING_REPLY
-    assert [b.label for b in out.quick_replies] == [b.label for b in GREETING_BUTTONS]
+    assert [b.label for b in out.quick_replies] == [b.label for b in menu_buttons()]
 
 
 @pytest.mark.parametrize(
@@ -419,7 +501,7 @@ async def test_a_message_with_only_a_greeting_still_gets_a_greeting_back_when_an
     out = await build_branches({})["out_of_scope"].run(ChatState(), message, slm)
 
     assert out.answer == GREETING_REPLY
-    assert [b.label for b in out.quick_replies] == [b.label for b in GREETING_BUTTONS]
+    assert [b.label for b in out.quick_replies] == [b.label for b in menu_buttons()]
 
 
 @pytest.mark.parametrize("message", ["em cần giúp đỡ để đi du học", "hello em muốn hỏi học phí", "ơ", "abc"])
@@ -428,7 +510,8 @@ async def test_anything_more_than_a_greeting_keeps_the_ambiguous_answer(message)
 
     out = await build_branches({})["out_of_scope"].run(ChatState(), message, slm)
 
-    assert out.answer == OUT_OF_SCOPE["ambiguous"] and not out.quick_replies
+    assert out.answer == OUT_OF_SCOPE["ambiguous"]
+    assert [b.label for b in out.quick_replies] == [b.label for b in menu_buttons()]
 
 
 async def test_a_request_for_a_human_goes_into_the_center_flow_with_no_service_chosen_yet():
@@ -958,6 +1041,6 @@ async def test_what_if_writer_not_called_for_other_factors_or_simulate():
     other = await run_with_writer(llm, {"factor": "activities", "value": "x"})
     sat = await run_with_writer(llm, {"factor": "sat", "value": "1450"}, {"factor": "major", "value": "CS"})
 
-    assert other.answer == NOTHING_TO_TRY
+    assert other.answer == NOTHING_TO_TRY.format(supported=SUPPORTED_TEXT)
     assert sat.action == "simulate" and sat.action_data["changes"] == {"sat": 1450}
     assert llm.calls == []

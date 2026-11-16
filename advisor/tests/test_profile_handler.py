@@ -427,6 +427,12 @@ async def test_fix_button_shows_edit_menu():
 
 
 # Chọn hai nhóm: hỏi lần lượt theo thứ tự form, bỏ câu không cần hỏi (D1 chỉ hỏi học sinh cấp 3), hết thì về bảng
+def test_the_edit_menu_accepts_toi_and_the_older_em_wording():
+    assert skill_ho_so.read_edit_menu("Tôi muốn sửa Mục tiêu") is not None
+    assert skill_ho_so.read_edit_menu("Em muốn sửa Mục tiêu") is not None
+    assert skill_ho_so.read_edit_menu("Tôi muốn sửa Abc") is None
+
+
 async def test_pick_sections_asks_each_question_then_review():
     llm = FakeLLM()
     chat = make_handler(llm)
