@@ -18,8 +18,11 @@ public interface ICenterReviewSubmissionRepository
     /// <summary>Yêu cầu liên hệ gần nhất mà người này gửi tới trung tâm, hoặc yêu cầu của chính học sinh này (phụ huynh gửi thay).</summary>
     Task<Lead?> FindLatestLeadAsync(Guid userId, Guid centerId, CancellationToken ct = default);
 
-    /// <summary>Đã có đánh giá của người này cho trung tâm (mọi trạng thái, kể cả đã gỡ).</summary>
-    Task<bool> HasReviewedAsync(Guid userId, Guid centerId, CancellationToken ct = default);
+    /// <summary>
+    /// Yêu cầu liên hệ gần nhất của người này tới trung tâm mà CHƯA có đánh giá nào (mọi trạng thái, kể cả đã gỡ).
+    /// Mỗi yêu cầu chỉ được một đánh giá, dù do học sinh hay phụ huynh gửi.
+    /// </summary>
+    Task<Lead?> FindLatestUnreviewedLeadAsync(Guid userId, Guid centerId, CancellationToken ct = default);
 
     Task AddAsync(CenterReview review, CancellationToken ct = default);
 
@@ -35,7 +38,7 @@ public interface ICenterReviewService
 
 /// <summary>
 /// [USAS-2070 / UC-45] Học sinh / phụ huynh đã gửi yêu cầu liên hệ tới trung tâm thì được đánh giá 1 đến 5 sao.
-/// Mỗi người một đánh giá cho mỗi trung tâm; đánh giá gắn dấu "đã xác thực" vì người đánh giá đã thật sự liên hệ trung tâm.
+/// Mỗi yêu cầu liên hệ chỉ được một đánh giá (đặc tả UC-45); đánh giá gắn dấu "đã xác thực" vì người đánh giá đã thật sự liên hệ trung tâm.
 /// </summary>
 public class CenterReviewService(
     ICenterReviewSubmissionRepository reviews,
@@ -107,13 +110,14 @@ public class CenterReviewService(
         if (user.Role is not (UserRoles.Student or UserRoles.Parent))
             return (new CenterReviewEligibilityDto(false, false, "Chỉ học sinh hoặc phụ huynh được đánh giá trung tâm."), null);
 
-        if (await reviews.HasReviewedAsync(userId, centerId, ct))
-            return (new CenterReviewEligibilityDto(false, true, "Bạn đã đánh giá trung tâm này."), null);
+        // Mỗi yêu cầu liên hệ một đánh giá: gửi yêu cầu mới tới trung tâm thì được đánh giá thêm một lần
+        var lead = await reviews.FindLatestUnreviewedLeadAsync(userId, centerId, ct);
+        if (lead is not null)
+            return (new CenterReviewEligibilityDto(true, false, null), lead);
 
-        var lead = await reviews.FindLatestLeadAsync(userId, centerId, ct);
-        if (lead is null)
-            return (new CenterReviewEligibilityDto(false, false, "Bạn cần gửi yêu cầu liên hệ tới trung tâm trước khi đánh giá."), null);
+        if (await reviews.FindLatestLeadAsync(userId, centerId, ct) is not null)
+            return (new CenterReviewEligibilityDto(false, true, "Yêu cầu liên hệ này đã được đánh giá."), null);
 
-        return (new CenterReviewEligibilityDto(true, false, null), lead);
+        return (new CenterReviewEligibilityDto(false, false, "Bạn cần gửi yêu cầu liên hệ tới trung tâm trước khi đánh giá."), null);
     }
 }
