@@ -116,7 +116,7 @@ public partial class RecommendationService
     // Tính từ hồ sơ thật, giữ các yếu tố khác nguyên. Không lưu, không gọi advisor.
     public async Task<SchoolGoalResult> GoalSeekAsync(Guid userId, string code, string? target, CancellationToken ct)
     {
-        var profile = await profiles.GetProfileByUserIdAsync(userId, ct)
+        var profile = await LoadScoredProfileAsync(userId, ct)
             ?? throw new InvalidOperationException("Chưa có hồ sơ.");
         if (string.IsNullOrWhiteSpace(profile.TargetLevel))
             throw new InvalidOperationException("Hồ sơ chưa có bậc học muốn theo.");

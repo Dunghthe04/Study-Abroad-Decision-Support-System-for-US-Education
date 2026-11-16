@@ -14,7 +14,9 @@ public class LeadMessageConfiguration : IEntityTypeConfiguration<LeadMessage>
         b.HasOne<User>().WithMany().HasForeignKey(x => x.SenderUserId).OnDelete(DeleteBehavior.Cascade);
         b.HasOne<User>().WithMany().HasForeignKey(x => x.RemovedByUserId).OnDelete(DeleteBehavior.SetNull);
         b.Property(x => x.Content).HasMaxLength(4000).IsRequired();
+        b.HasOne<User>().WithMany().HasForeignKey(x => x.ReportedByUserId).OnDelete(DeleteBehavior.SetNull);
         b.Property(x => x.FlagReason).HasMaxLength(500);
+        b.Property(x => x.ReportReason).HasMaxLength(500);
         b.Property(x => x.Status).HasMaxLength(32).IsRequired().HasDefaultValue("visible");
         b.HasIndex(x => x.LeadId);
     }

@@ -202,12 +202,13 @@ public class StudyCenterServiceTests
     [Fact]
     public void StudyCentersController_ActionAttributes_MatchRbacPolicy()
     {
-        // Moderator không còn thêm trung tâm hay cấp tài khoản trung tâm
+        // Moderator không còn thêm trung tâm, cấp tài khoản hay sửa nội dung trung tâm (UC-72 / D1)
         Assert.Null(typeof(StudyCentersController).GetMethod("Create"));
         Assert.Null(typeof(StudyCentersController).GetMethod("CreateCenterAccount"));
+        Assert.Null(typeof(StudyCentersController).GetMethod("Update"));
 
-        // UC-59 / UC-72: duyệt, sửa, ẩn/hiện - chỉ Moderator
-        foreach (var name in new[] { nameof(StudyCentersController.VerifyCenter), nameof(StudyCentersController.Update), nameof(StudyCentersController.SetActiveStatus) })
+        // UC-59 / UC-72: duyệt, ẩn/hiện - chỉ Moderator
+        foreach (var name in new[] { nameof(StudyCentersController.VerifyCenter), nameof(StudyCentersController.SetActiveStatus) })
         {
             var attr = typeof(StudyCentersController).GetMethod(name)?.GetCustomAttribute<AuthorizeAttribute>();
             Assert.NotNull(attr);

@@ -7,6 +7,7 @@ import {
   RefreshCwIcon,
   SendIcon,
   ShieldAlertIcon,
+  Trash2Icon,
 } from "lucide-react";
 import { ApiError, centerLeadsApi } from "@/lib/api";
 import {
@@ -15,6 +16,16 @@ import {
   inspectLeadMessageDraft,
 } from "@/lib/lead-message-filter";
 import type { LeadMessageDto, LeadMessagesThreadDto } from "@/types/api";
+import { useAuth } from "@/contexts/AuthContext";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -103,6 +114,13 @@ export function LeadConversationPanel({
   }, [messages.length, showFlaggedOnly]);
 
   const trimmedDraft = draft.trim();
+
+  // [USAS-2080 / UC-58] Chỉ Moderator được gỡ tin nhắn vi phạm
+  const { user: currentUser } = useAuth();
+  const canRemoveMessages = currentUser?.role === "moderator";
+  const [removeTarget, setRemoveTarget] = useState<LeadMessageDto | null>(null);
+  const [removeReason, setRemoveReason] = useState("");
+  const [isRemoving, setIsRemoving] = useState(false);
   const draftInspection = useMemo(
     () => inspectLeadMessageDraft(trimmedDraft),
     [trimmedDraft]
@@ -175,6 +193,40 @@ export function LeadConversationPanel({
       });
     } finally {
       setIsSending(false);
+    }
+  };
+
+  const closeRemoveDialog = () => {
+    if (isRemoving) return;
+    setRemoveTarget(null);
+    setRemoveReason("");
+  };
+
+  const confirmRemoveMessage = async () => {
+    if (!removeTarget || isRemoving) return;
+    const target = removeTarget;
+    setIsRemoving(true);
+    try {
+      const updated = await centerLeadsApi.removeMessage(leadId, target.id, removeReason);
+      setMessages((prev) => prev.map((m) => (m.id === updated.id ? updated : m)));
+      if (target.isFlagged) {
+        setFlaggedCount((c) => Math.max(0, c - 1));
+      }
+      toast.add({
+        type: "success",
+        title: "Đã gỡ tin nhắn",
+        description: "Tin nhắn hiển thị là đã bị gỡ ở cả hai phía và đã được ghi nhật ký.",
+      });
+      setRemoveTarget(null);
+      setRemoveReason("");
+    } catch (err: unknown) {
+      toast.add({
+        type: "error",
+        title: "Gỡ tin nhắn thất bại",
+        description: err instanceof ApiError ? err.message : "Không thể gỡ tin nhắn. Vui lòng thử lại.",
+      });
+    } finally {
+      setIsRemoving(false);
     }
   };
 
@@ -317,12 +369,67 @@ export function LeadConversationPanel({
                     </span>
                   </div>
                 )}
+
+                {canRemoveMessages && !isRemoved && (
+                  <div className="mt-1.5 flex justify-end">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="xs"
+                      onClick={() => setRemoveTarget(msg)}
+                      className="h-6 gap-1 px-1.5 text-[11px] text-risk hover:text-risk hover:bg-risk-wash"
+                    >
+                      <Trash2Icon className="size-3" />
+                      Gỡ tin
+                    </Button>
+                  </div>
+                )}
               </div>
             );
           })
         )}
         <div ref={bottomRef} />
       </div>
+
+      <AlertDialog open={removeTarget !== null} onOpenChange={(open) => !open && closeRemoveDialog()}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Gỡ tin nhắn này?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tin nhắn sẽ hiển thị &quot;Tin nhắn đã bị gỡ do vi phạm quy tắc&quot; với cả trung tâm và học sinh /
+              phụ huynh. Hành động được ghi vào nhật ký và không khôi phục được.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {removeTarget && (
+            <p className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground whitespace-pre-wrap break-words max-h-32 overflow-y-auto">
+              {removeTarget.content}
+            </p>
+          )}
+          <Textarea
+            value={removeReason}
+            onChange={(e) => setRemoveReason(e.target.value)}
+            maxLength={500}
+            rows={2}
+            disabled={isRemoving}
+            placeholder="Lý do gỡ (không bắt buộc, tối đa 500 ký tự)"
+            aria-label="Lý do gỡ tin nhắn"
+            className="text-sm resize-y"
+          />
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isRemoving}>Hủy</AlertDialogCancel>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => void confirmRemoveMessage()}
+              disabled={isRemoving}
+              className="gap-1.5"
+            >
+              {isRemoving ? <Spinner className="size-3.5" /> : <Trash2Icon className="size-3.5" />}
+              Gỡ tin nhắn
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Reply Composer */}
       <form onSubmit={handleFormSubmit} className="space-y-2">
