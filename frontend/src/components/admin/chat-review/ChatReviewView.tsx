@@ -39,8 +39,8 @@ interface DateFilter {
 const NO_DATES: DateFilter = { from: "", to: "" };
 
 /**
- * Trang admin: hàng đợi câu hệ thống không trả lời được hoặc bị lỗi. Danh sách chỉ có mã và số đo, không có nội dung chat;
- * nội dung chỉ mở khi admin bấm vào một câu (mỗi lần mở được ghi nhật ký). Chỉ Admin.
+ * Trang quản trị: hàng đợi câu hệ thống không trả lời được hoặc bị lỗi. Danh sách chỉ có mã và số đo, không có nội dung chat;
+ * nội dung chỉ mở khi Moderator bấm vào một câu (mỗi lần mở được ghi nhật ký). Chỉ Moderator (UC-53).
  */
 export function ChatReviewView() {
   const [status, setStatus] = useState<ChatReviewStatus>("open");

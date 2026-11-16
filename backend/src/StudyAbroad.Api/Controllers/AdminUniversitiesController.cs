@@ -7,7 +7,10 @@ using StudyAbroad.Domain.Constants;
 
 namespace StudyAbroad.Api.Controllers;
 
-/// <summary>[UC-65, UC-66, UC-67] Quản trị dữ liệu trường cho admin và moderator.</summary>
+/// <summary>
+/// [UC-65, UC-66, UC-67] Dữ liệu trường. Quyết định D2 bản 14/11: Moderator thêm, sửa, ẩn; Admin chỉ xem.
+/// Cả hai role đọc được (GET); từng thao tác ghi do Moderator giữ.
+/// </summary>
 [ApiController]
 [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Moderator}")]
 [Route("api/v1/admin/universities")]
@@ -29,7 +32,9 @@ public class AdminUniversitiesController(IAdminUniversityService service) : Cont
         return university is null ? NotFound() : Ok(university);
     }
 
+    /// <summary>[UC-65] Nhập thêm một trường (chỉ Moderator).</summary>
     [HttpPost]
+    [Authorize(Roles = UserRoles.Moderator)]
     public async Task<ActionResult<AdminUniversityDetailDto>> Create([FromBody] CreateUniversityRequest request, CancellationToken ct)
     {
         if (User.GetUserId() is not { } actorId) return Unauthorized();
@@ -46,7 +51,9 @@ public class AdminUniversitiesController(IAdminUniversityService service) : Cont
         return offerings is null ? NotFound() : Ok(offerings);
     }
 
+    /// <summary>[UC-66] Sửa thông tin trường (chỉ Moderator).</summary>
     [HttpPut("{id:guid}")]
+    [Authorize(Roles = UserRoles.Moderator)]
     public async Task<ActionResult<AdminUniversityDetailDto>> Update(Guid id, [FromBody] UpdateUniversityRequest request, CancellationToken ct)
     {
         if (User.GetUserId() is not { } actorId) return Unauthorized();
@@ -57,7 +64,9 @@ public class AdminUniversitiesController(IAdminUniversityService service) : Cont
         return Ok(result.Value);
     }
 
+    /// <summary>[UC-66] Sửa một bậc học (offering) của trường: học phí, hạn nộp, điều kiện... (chỉ Moderator).</summary>
     [HttpPut("{id:guid}/offerings/{offeringId:guid}")]
+    [Authorize(Roles = UserRoles.Moderator)]
     public async Task<ActionResult<AdminUniversityOfferingDto>> UpdateOffering(
         Guid id, Guid offeringId, [FromBody] UpdateOfferingRequest request, CancellationToken ct)
     {
@@ -69,7 +78,9 @@ public class AdminUniversitiesController(IAdminUniversityService service) : Cont
         return Ok(result.Value);
     }
 
+    /// <summary>[UC-67] Ẩn hoặc hiện trường khỏi tìm kiếm và gợi ý (chỉ Moderator).</summary>
     [HttpPatch("{id:guid}/visibility")]
+    [Authorize(Roles = UserRoles.Moderator)]
     public async Task<ActionResult<AdminUniversityDetailDto>> SetVisibility(
         Guid id, [FromBody] SetUniversityVisibilityRequest request, CancellationToken ct)
     {

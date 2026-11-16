@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -128,6 +129,9 @@ export function OfferingSection({
   onStopEdit,
   onSaved,
 }: OfferingSectionProps) {
+  // [UC-66] Chỉ Moderator sửa dữ liệu trường; Admin chỉ xem
+  const { user } = useAuth();
+  const readOnly = user?.role !== "moderator";
   const [form, setForm] = useState<FormState>(() => toFormState(offering));
   const [fieldErrors, setFieldErrors] = useState<AdminFieldErrors>({});
   const [error, setError] = useState<string | null>(null);
@@ -237,6 +241,7 @@ export function OfferingSection({
   const editStateFor = (table: OfferingTable): TableEditState => ({
     isEditing: editingTable === table,
     canEdit,
+    readOnly,
     isSaving,
     hasChanges,
     error: editingTable === table ? error : null,

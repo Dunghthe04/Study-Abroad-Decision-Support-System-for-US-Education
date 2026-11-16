@@ -240,6 +240,443 @@ public class LeadServiceTests
             }
             return Task.FromResult(message);
         }
+
+        public Task<LeadMessage?> GetLeadMessageForUpdateAsync(Guid leadId, Guid messageId, CancellationToken ct = default) =>
+            Task.FromResult(Messages.FirstOrDefault(m => m.Id == messageId && m.LeadId == leadId));
+
+        public Task SaveLeadMessageAsync(LeadMessage message, CancellationToken ct = default) => Task.CompletedTask;
+
+        public string? LastModerationFilter { get; private set; }
+
+        public Task<int> CountRemovedCenterMessagesAsync(Guid centerId, CancellationToken ct = default) =>
+            Task.FromResult(Messages.Count(m =>
+                m.Status == "removed"
+                && Leads.Any(l => l.Id == m.LeadId && l.StudyCenterId == centerId)
+                && Users.TryGetValue(m.SenderUserId, out var u) && u.Role == UserRoles.Center));
+
+        public Task<IReadOnlyList<RepeatRemovalCenterDto>> GetRepeatRemovalCentersAsync(int minRemoved, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<RepeatRemovalCenterDto>>([]);
+
+        public Task<PagedResult<ModerationLeadMessageDto>> GetModerationMessagesAsync(
+            string filter, int page, int pageSize, CancellationToken ct = default)
+        {
+            LastModerationFilter = filter;
+            var rows = Messages
+                .Where(m => filter switch
+                {
+                    "removed" => m.Status == "removed",
+                    "flagged" => m.IsFlagged && m.Status != "removed",
+                    "reported" => m.ReportedAt != null && m.Status != "removed",
+                    "all" => m.Status == "removed" || m.IsFlagged || m.ReportedAt != null,
+                    _ => (m.IsFlagged || m.ReportedAt != null) && m.Status != "removed",
+                })
+                .Select(m => new ModerationLeadMessageDto(
+                    m.Id, m.LeadId, Guid.Empty, "Test Center", m.SenderUserId, UserRoles.Student, false,
+                    m.Content, m.IsFlagged, m.FlagReason, m.Status, m.RemovedByUserId, m.CreatedAt))
+                .ToList();
+            return Task.FromResult(new PagedResult<ModerationLeadMessageDto>(rows, page, pageSize, rows.Count));
+        }
+    }
+
+    private sealed class FakeProposalRepo : ICenterSuspensionProposalRepository
+    {
+        public List<CenterSuspensionProposal> Items { get; } = [];
+
+        public Task<bool> HasPendingAsync(Guid centerId, CancellationToken ct = default) =>
+            Task.FromResult(Items.Any(p => p.StudyCenterId == centerId && p.Status == CenterSuspensionProposalStatuses.Pending));
+
+        public Task AddAsync(CenterSuspensionProposal proposal, CancellationToken ct = default)
+        {
+            Items.Add(proposal);
+            return Task.CompletedTask;
+        }
+
+        public Task<CenterSuspensionProposal?> GetByIdForUpdateAsync(Guid id, CancellationToken ct = default) =>
+            Task.FromResult(Items.FirstOrDefault(p => p.Id == id));
+
+        public Task SaveAsync(CenterSuspensionProposal proposal, CancellationToken ct = default) => Task.CompletedTask;
+
+        public Task<PagedResult<CenterSuspensionProposalDto>> ListAsync(string? status, int page, int pageSize, CancellationToken ct = default) =>
+            Task.FromResult(new PagedResult<CenterSuspensionProposalDto>([], page, pageSize, 0));
+    }
+
+    private static User AddCenterUser(CreateLeadSetup s)
+    {
+        var user = new User { Id = Guid.NewGuid(), FullName = "Tư vấn viên", Role = UserRoles.Center };
+        s.UserRepo.Users.Add(user);
+        return user;
+    }
+
+    [Fact]
+    public async Task ReportSentLeadMessage_CenterMessage_StoresReporterAndLogsAudit()
+    {
+        var (s, audit, service) = MessageSetup();
+        var student = s.AddStudent(18);
+        var lead = AddLead(s, student.Id, student.Id);
+        var centerUser = AddCenterUser(s);
+        var message = new LeadMessage { LeadId = lead.Id, SenderUserId = centerUser.Id, Content = "Gọi 0912345678", Status = "visible" };
+        s.LeadRepo.Messages.Add(message);
+
+        var dto = await service.ReportSentLeadMessageAsync(student.Id, lead.Id, message.Id, "  Trung tâm xin số điện thoại  ");
+
+        Assert.Equal(student.Id, message.ReportedByUserId);
+        Assert.NotNull(message.ReportedAt);
+        Assert.Equal("Trung tâm xin số điện thoại", message.ReportReason);
+        Assert.Equal("visible", message.Status);
+        Assert.True(dto.IsFromCenter);
+        Assert.Equal("lead_message.report", Assert.Single(audit.Logs).Action);
+    }
+
+    [Fact]
+    public async Task ReportSentLeadMessage_ReportedAgain_KeepsFirstReportAndDoesNotLogAgain()
+    {
+        var (s, audit, service) = MessageSetup();
+        var student = s.AddStudent(18);
+        var lead = AddLead(s, student.Id, student.Id);
+        var centerUser = AddCenterUser(s);
+        var message = new LeadMessage { LeadId = lead.Id, SenderUserId = centerUser.Id, Content = "x", Status = "visible" };
+        s.LeadRepo.Messages.Add(message);
+
+        await service.ReportSentLeadMessageAsync(student.Id, lead.Id, message.Id, "Lần một");
+        var firstAt = message.ReportedAt;
+        await service.ReportSentLeadMessageAsync(student.Id, lead.Id, message.Id, "Lần hai");
+
+        Assert.Equal("Lần một", message.ReportReason);
+        Assert.Equal(firstAt, message.ReportedAt);
+        Assert.Single(audit.Logs);
+    }
+
+    [Fact]
+    public async Task ReportSentLeadMessage_OwnMessageRemovedMessageOrUnknown_IsRejected()
+    {
+        var (s, _, service) = MessageSetup();
+        var student = s.AddStudent(18);
+        var lead = AddLead(s, student.Id, student.Id);
+        var centerUser = AddCenterUser(s);
+        var own = new LeadMessage { LeadId = lead.Id, SenderUserId = student.Id, Content = "em", Status = "visible" };
+        var removed = new LeadMessage { LeadId = lead.Id, SenderUserId = centerUser.Id, Content = "x", Status = "removed" };
+        s.LeadRepo.Messages.Add(own);
+        s.LeadRepo.Messages.Add(removed);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => service.ReportSentLeadMessageAsync(student.Id, lead.Id, own.Id, null));
+        await Assert.ThrowsAsync<ArgumentException>(() => service.ReportSentLeadMessageAsync(student.Id, lead.Id, removed.Id, null));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => service.ReportSentLeadMessageAsync(student.Id, lead.Id, Guid.NewGuid(), null));
+        Assert.Null(own.ReportedAt);
+    }
+
+    [Fact]
+    public async Task ReportSentLeadMessage_LeadOfAnotherStudent_ThrowsKeyNotFound()
+    {
+        var (s, _, service) = MessageSetup();
+        var student = s.AddStudent(18);
+        var other = s.AddStudent(18);
+        var lead = AddLead(s, other.Id, other.Id);
+        var centerUser = AddCenterUser(s);
+        var message = new LeadMessage { LeadId = lead.Id, SenderUserId = centerUser.Id, Content = "x", Status = "visible" };
+        s.LeadRepo.Messages.Add(message);
+
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => service.ReportSentLeadMessageAsync(student.Id, lead.Id, message.Id, null));
+        Assert.Null(message.ReportedAt);
+    }
+
+    [Fact]
+    public async Task GetModerationMessages_PendingIncludesReportedAndKeepClearsTheReport()
+    {
+        var (s, audit, service) = MessageSetup();
+        var student = s.AddStudent(18);
+        var lead = AddLead(s, student.Id, student.Id);
+        var centerUser = AddCenterUser(s);
+        var reported = new LeadMessage { LeadId = lead.Id, SenderUserId = centerUser.Id, Content = "Báo cáo", Status = "visible" };
+        s.LeadRepo.Messages.Add(reported);
+        await service.ReportSentLeadMessageAsync(student.Id, lead.Id, reported.Id, "Vi phạm");
+        audit.Logs.Clear();
+
+        var pending = await service.GetModerationMessagesAsync(null, 1, 20);
+        Assert.Equal(reported.Id, Assert.Single(pending.Items).Id);
+
+        await service.KeepLeadMessageAsync(Guid.NewGuid(), lead.Id, reported.Id);
+
+        Assert.Null(reported.ReportedAt);
+        Assert.Null(reported.ReportReason);
+        Assert.Equal("lead_message.keep", Assert.Single(audit.Logs).Action);
+        Assert.Empty((await service.GetModerationMessagesAsync(null, 1, 20)).Items);
+    }
+
+    private static (CenterSuspensionProposalService Service, CreateLeadSetup S, FakeProposalRepo Proposals, FakeAuditRepo Audit) ProposalSetup()
+    {
+        var s = new CreateLeadSetup();
+        var proposals = new FakeProposalRepo();
+        var audit = new FakeAuditRepo();
+        return (new CenterSuspensionProposalService(s.LeadRepo, s.CenterRepo, proposals, audit), s, proposals, audit);
+    }
+
+    private static void AddRemovedCenterMessages(CreateLeadSetup s, int count)
+    {
+        var lead = new Lead { UserId = Guid.NewGuid(), StudyCenterId = s.CenterId };
+        s.LeadRepo.Leads.Add(lead);
+        var centerUserId = Guid.NewGuid();
+        s.LeadRepo.Users[centerUserId] = ("Tư vấn viên", UserRoles.Center);
+        for (var i = 0; i < count; i++)
+            s.LeadRepo.Messages.Add(new LeadMessage { LeadId = lead.Id, SenderUserId = centerUserId, Content = "x", Status = "removed" });
+    }
+
+    [Fact]
+    public async Task ProposeSuspension_BelowThreshold_IsRejected()
+    {
+        var (service, s, proposals, _) = ProposalSetup();
+        AddRemovedCenterMessages(s, CenterSuspensionProposalService.MinRemovedMessages - 1);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => service.ProposeAsync(Guid.NewGuid(), s.CenterId, "Gỡ nhiều lần"));
+        Assert.Empty(proposals.Items);
+    }
+
+    [Fact]
+    public async Task ProposeSuspension_AtThreshold_CreatesPendingProposalWithCountAndAudit()
+    {
+        var (service, s, proposals, audit) = ProposalSetup();
+        AddRemovedCenterMessages(s, CenterSuspensionProposalService.MinRemovedMessages);
+        var moderatorId = Guid.NewGuid();
+
+        var dto = await service.ProposeAsync(moderatorId, s.CenterId, "  Chia sẻ số điện thoại nhiều lần  ");
+
+        var saved = Assert.Single(proposals.Items);
+        Assert.Equal("pending", saved.Status);
+        Assert.Equal(CenterSuspensionProposalService.MinRemovedMessages, saved.RemovedMessageCount);
+        Assert.Equal("Chia sẻ số điện thoại nhiều lần", saved.Reason);
+        Assert.Equal(moderatorId, dto.ProposedByUserId);
+        Assert.Equal("Trung Tâm Xác Minh", dto.StudyCenterName);
+        Assert.Equal("center.suspension_proposed", Assert.Single(audit.Logs).Action);
+    }
+
+    [Fact]
+    public async Task ProposeSuspension_DuplicatePendingSuspendedCenterOrEmptyReason_IsRejected()
+    {
+        var (service, s, _, _) = ProposalSetup();
+        AddRemovedCenterMessages(s, 5);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => service.ProposeAsync(Guid.NewGuid(), s.CenterId, "  "));
+        await service.ProposeAsync(Guid.NewGuid(), s.CenterId, "Lần một");
+        await Assert.ThrowsAsync<ArgumentException>(() => service.ProposeAsync(Guid.NewGuid(), s.CenterId, "Lần hai"));
+
+        s.CenterRepo.Centers[0].VerificationStatus = CenterVerificationStatuses.Suspended;
+        await Assert.ThrowsAsync<ArgumentException>(() => service.ProposeAsync(Guid.NewGuid(), s.CenterId, "Lần ba"));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => service.ProposeAsync(Guid.NewGuid(), Guid.NewGuid(), "Không có"));
+    }
+
+    [Fact]
+    public async Task DecideSuspension_Approve_SuspendsCenterAndLogsAudit()
+    {
+        var (service, s, proposals, audit) = ProposalSetup();
+        AddRemovedCenterMessages(s, 4);
+        var proposal = await service.ProposeAsync(Guid.NewGuid(), s.CenterId, "Vi phạm lặp lại");
+        audit.Logs.Clear();
+        var adminId = Guid.NewGuid();
+
+        var dto = await service.DecideAsync(adminId, proposal.Id, approve: true, note: "  Đồng ý  ");
+
+        Assert.Equal("approved", dto.Status);
+        Assert.Equal(CenterVerificationStatuses.Suspended, s.CenterRepo.Centers[0].VerificationStatus);
+        Assert.Equal("Đồng ý", s.CenterRepo.Centers[0].VerificationNote);
+        Assert.Equal(adminId, proposals.Items[0].DecidedByUserId);
+        Assert.NotNull(proposals.Items[0].DecidedAt);
+        Assert.Equal("center.suspended", Assert.Single(audit.Logs).Action);
+    }
+
+    [Fact]
+    public async Task DecideSuspension_Reject_LeavesCenterUntouched()
+    {
+        var (service, s, proposals, audit) = ProposalSetup();
+        AddRemovedCenterMessages(s, 4);
+        var proposal = await service.ProposeAsync(Guid.NewGuid(), s.CenterId, "Vi phạm lặp lại");
+        audit.Logs.Clear();
+
+        var dto = await service.DecideAsync(Guid.NewGuid(), proposal.Id, approve: false, note: null);
+
+        Assert.Equal("rejected", dto.Status);
+        Assert.Equal(CenterReferral.Verified, s.CenterRepo.Centers[0].VerificationStatus);
+        Assert.Equal("center.suspension_rejected", Assert.Single(audit.Logs).Action);
+        Assert.Equal("rejected", proposals.Items[0].Status);
+    }
+
+    [Fact]
+    public async Task DecideSuspension_AlreadyDecidedOrUnknown_IsRejected()
+    {
+        var (service, s, _, _) = ProposalSetup();
+        AddRemovedCenterMessages(s, 4);
+        var proposal = await service.ProposeAsync(Guid.NewGuid(), s.CenterId, "Vi phạm lặp lại");
+        await service.DecideAsync(Guid.NewGuid(), proposal.Id, approve: false, note: null);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => service.DecideAsync(Guid.NewGuid(), proposal.Id, approve: true, note: null));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => service.DecideAsync(Guid.NewGuid(), Guid.NewGuid(), approve: true, note: null));
+        await Assert.ThrowsAsync<ArgumentException>(() => service.ListAsync("nonsense", 1, 20));
+    }
+
+    [Fact]
+    public async Task GetModerationMessages_DefaultsToFlaggedAndKeepsOriginalContentOfRemoved()
+    {
+        var leadRepo = new FakeLeadRepo();
+        var leadId = Guid.NewGuid();
+        leadRepo.Messages.Add(new LeadMessage { LeadId = leadId, Content = "Gọi 0912345678", IsFlagged = true, Status = "visible" });
+        leadRepo.Messages.Add(new LeadMessage { LeadId = leadId, Content = "Tin bình thường", IsFlagged = false, Status = "visible" });
+        leadRepo.Messages.Add(new LeadMessage { LeadId = leadId, Content = "Nội dung gốc đã gỡ", IsFlagged = true, Status = "removed" });
+        var service = new LeadService(leadRepo, new FakeStudyCenterRepo(), new FakeUserRepository(), new FakeParentLinkRepository());
+
+        var flagged = await service.GetModerationMessagesAsync(null, 1, 20);
+        var removed = await service.GetModerationMessagesAsync("REMOVED", 1, 20);
+
+        Assert.Equal("removed", leadRepo.LastModerationFilter);
+        Assert.Equal("Gọi 0912345678", Assert.Single(flagged.Items).Content);
+        Assert.Equal("Nội dung gốc đã gỡ", Assert.Single(removed.Items).Content);
+    }
+
+    [Fact]
+    public async Task GetModerationMessages_UnknownFilter_ThrowsArgumentException()
+    {
+        var service = new LeadService(new FakeLeadRepo(), new FakeStudyCenterRepo(), new FakeUserRepository(), new FakeParentLinkRepository());
+
+        await Assert.ThrowsAsync<ArgumentException>(() => service.GetModerationMessagesAsync("unknown", 1, 20));
+    }
+
+    [Fact]
+    public async Task KeepLeadMessage_FlaggedMessage_ClearsFlagKeepsVisibleAndLogsAudit()
+    {
+        var moderatorId = Guid.NewGuid();
+        var leadId = Guid.NewGuid();
+        var message = new LeadMessage { LeadId = leadId, SenderUserId = Guid.NewGuid(), Content = "Link tài liệu", IsFlagged = true, FlagReason = "Chứa liên kết ngoài", Status = "visible" };
+        var leadRepo = new FakeLeadRepo();
+        leadRepo.Leads.Add(new Lead { Id = leadId, UserId = Guid.NewGuid(), StudyCenterId = Guid.NewGuid() });
+        leadRepo.Messages.Add(message);
+        var audit = new FakeAuditRepo();
+        var service = new LeadService(leadRepo, new FakeStudyCenterRepo(), new FakeUserRepository(), new FakeParentLinkRepository(), audit);
+
+        var dto = await service.KeepLeadMessageAsync(moderatorId, leadId, message.Id);
+
+        Assert.False(message.IsFlagged);
+        Assert.Equal("visible", message.Status);
+        Assert.Equal("Link tài liệu", dto.Content);
+        var log = Assert.Single(audit.Logs);
+        Assert.Equal("lead_message.keep", log.Action);
+        Assert.Equal(moderatorId, log.ActorUserId);
+    }
+
+    [Fact]
+    public async Task KeepLeadMessage_NotFlagged_ChangesNothingAndDoesNotLog()
+    {
+        var leadId = Guid.NewGuid();
+        var message = new LeadMessage { LeadId = leadId, SenderUserId = Guid.NewGuid(), Content = "ok", IsFlagged = false, Status = "visible" };
+        var leadRepo = new FakeLeadRepo();
+        leadRepo.Leads.Add(new Lead { Id = leadId, UserId = Guid.NewGuid(), StudyCenterId = Guid.NewGuid() });
+        leadRepo.Messages.Add(message);
+        var audit = new FakeAuditRepo();
+        var service = new LeadService(leadRepo, new FakeStudyCenterRepo(), new FakeUserRepository(), new FakeParentLinkRepository(), audit);
+
+        await service.KeepLeadMessageAsync(Guid.NewGuid(), leadId, message.Id);
+
+        Assert.Empty(audit.Logs);
+    }
+
+    [Fact]
+    public async Task KeepLeadMessage_RemovedMessageOrWrongLead_IsRejected()
+    {
+        var leadId = Guid.NewGuid();
+        var removed = new LeadMessage { LeadId = leadId, SenderUserId = Guid.NewGuid(), Content = "x", IsFlagged = true, Status = "removed" };
+        var otherLeadMessage = new LeadMessage { LeadId = Guid.NewGuid(), SenderUserId = Guid.NewGuid(), Content = "y", IsFlagged = true, Status = "visible" };
+        var leadRepo = new FakeLeadRepo();
+        leadRepo.Leads.Add(new Lead { Id = leadId, UserId = Guid.NewGuid(), StudyCenterId = Guid.NewGuid() });
+        leadRepo.Messages.Add(removed);
+        leadRepo.Messages.Add(otherLeadMessage);
+        var service = new LeadService(leadRepo, new FakeStudyCenterRepo(), new FakeUserRepository(), new FakeParentLinkRepository());
+
+        await Assert.ThrowsAsync<ArgumentException>(() => service.KeepLeadMessageAsync(Guid.NewGuid(), leadId, removed.Id));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => service.KeepLeadMessageAsync(Guid.NewGuid(), leadId, otherLeadMessage.Id));
+        Assert.True(otherLeadMessage.IsFlagged);
+    }
+
+    [Fact]
+    public async Task RemoveLeadMessage_FlaggedMessage_MarksRemovedMasksContentAndLogsAudit()
+    {
+        var moderatorId = Guid.NewGuid();
+        var centerId = Guid.NewGuid();
+        var leadId = Guid.NewGuid();
+        var senderId = Guid.NewGuid();
+        var message = new LeadMessage
+        {
+            LeadId = leadId, SenderUserId = senderId, Content = "Gọi 0912345678 nhé",
+            IsFlagged = true, FlagReason = "Chứa số điện thoại liên hệ", Status = "visible",
+        };
+
+        var centerRepo = new FakeStudyCenterRepo();
+        centerRepo.Centers.Add(new StudyCenter { Id = centerId, Name = "Trung Tâm A" });
+        var leadRepo = new FakeLeadRepo();
+        leadRepo.Leads.Add(new Lead { Id = leadId, UserId = Guid.NewGuid(), StudyCenterId = centerId, Status = "new" });
+        leadRepo.Messages.Add(message);
+        var userRepo = new FakeUserRepository();
+        userRepo.Users.Add(new User { Id = senderId, FullName = "Phụ huynh A", Role = UserRoles.Parent });
+        var audit = new FakeAuditRepo();
+        var service = new LeadService(leadRepo, centerRepo, userRepo, new FakeParentLinkRepository(), audit);
+
+        var dto = await service.RemoveLeadMessageAsync(moderatorId, leadId, message.Id, "  Chia sẻ số điện thoại  ");
+
+        Assert.Equal("removed", message.Status);
+        Assert.Equal(moderatorId, message.RemovedByUserId);
+        Assert.Equal(LeadMessageMapper.RemovedContentPlaceholder, dto.Content);
+        Assert.Null(dto.FlagReason);
+        var log = Assert.Single(audit.Logs);
+        Assert.Equal("lead_message.remove", log.Action);
+        Assert.Equal(moderatorId, log.ActorUserId);
+        Assert.Equal(message.Id.ToString(), log.EntityId);
+        using var detail = System.Text.Json.JsonDocument.Parse(log.DetailJson!);
+        Assert.Equal("Chia sẻ số điện thoại", detail.RootElement.GetProperty("reason").GetString());
+        Assert.True(detail.RootElement.GetProperty("wasFlagged").GetBoolean());
+    }
+
+    [Fact]
+    public async Task RemoveLeadMessage_AlreadyRemoved_DoesNotLogAgainAndKeepsFirstRemover()
+    {
+        var firstModeratorId = Guid.NewGuid();
+        var leadId = Guid.NewGuid();
+        var message = new LeadMessage { LeadId = leadId, SenderUserId = Guid.NewGuid(), Content = "x", Status = "removed", RemovedByUserId = firstModeratorId };
+
+        var leadRepo = new FakeLeadRepo();
+        leadRepo.Leads.Add(new Lead { Id = leadId, UserId = Guid.NewGuid(), StudyCenterId = Guid.NewGuid() });
+        leadRepo.Messages.Add(message);
+        var audit = new FakeAuditRepo();
+        var service = new LeadService(leadRepo, new FakeStudyCenterRepo(), new FakeUserRepository(), new FakeParentLinkRepository(), audit);
+
+        var dto = await service.RemoveLeadMessageAsync(Guid.NewGuid(), leadId, message.Id, null);
+
+        Assert.Equal(firstModeratorId, message.RemovedByUserId);
+        Assert.Empty(audit.Logs);
+        Assert.Equal(LeadMessageMapper.RemovedContentPlaceholder, dto.Content);
+    }
+
+    [Fact]
+    public async Task RemoveLeadMessage_MessageOfAnotherLead_ThrowsKeyNotFoundAndKeepsMessageVisible()
+    {
+        var leadId = Guid.NewGuid();
+        var otherLeadId = Guid.NewGuid();
+        var message = new LeadMessage { LeadId = otherLeadId, SenderUserId = Guid.NewGuid(), Content = "x", Status = "visible" };
+
+        var leadRepo = new FakeLeadRepo();
+        leadRepo.Leads.Add(new Lead { Id = leadId, UserId = Guid.NewGuid(), StudyCenterId = Guid.NewGuid() });
+        leadRepo.Leads.Add(new Lead { Id = otherLeadId, UserId = Guid.NewGuid(), StudyCenterId = Guid.NewGuid() });
+        leadRepo.Messages.Add(message);
+        var service = new LeadService(leadRepo, new FakeStudyCenterRepo(), new FakeUserRepository(), new FakeParentLinkRepository());
+
+        await Assert.ThrowsAsync<KeyNotFoundException>(() =>
+            service.RemoveLeadMessageAsync(Guid.NewGuid(), leadId, message.Id, null));
+        Assert.Equal("visible", message.Status);
+    }
+
+    [Fact]
+    public async Task RemoveLeadMessage_InvalidIdsOrTooLongReason_ThrowsArgumentException()
+    {
+        var service = new LeadService(new FakeLeadRepo(), new FakeStudyCenterRepo(), new FakeUserRepository(), new FakeParentLinkRepository());
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            service.RemoveLeadMessageAsync(Guid.NewGuid(), Guid.Empty, Guid.NewGuid(), null));
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            service.RemoveLeadMessageAsync(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), new string('a', LeadService.MaxRemoveReasonLength + 1)));
     }
 
     [Fact]
@@ -341,7 +778,7 @@ public class LeadServiceTests
     }
 
     [Fact]
-    public async Task UpdateReceivedLeadStatus_AnotherCenterLead_ThrowsUnauthorizedAccessException()
+    public async Task UpdateReceivedLeadStatus_AnotherCenterLead_ThrowsKeyNotFoundException()
     {
         var centerOwnerId = Guid.NewGuid();
         var myCenterId = Guid.NewGuid();
@@ -356,7 +793,7 @@ public class LeadServiceTests
 
         var service = new LeadService(leadRepo, centerRepo, new FakeUserRepository(), new FakeParentLinkRepository());
 
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+        await Assert.ThrowsAsync<KeyNotFoundException>(() =>
             service.UpdateReceivedLeadStatusAsync(
                 centerOwnerId,
                 "owner@center.com",
@@ -476,7 +913,7 @@ public class LeadServiceTests
     }
 
     [Fact]
-    public async Task GetAndSendLeadMessage_AnotherCenterLead_ThrowsUnauthorizedAccessException()
+    public async Task GetAndSendLeadMessage_AnotherCenterLead_ThrowsKeyNotFoundException()
     {
         var centerOwnerId = Guid.NewGuid();
         var myCenterId = Guid.NewGuid();
@@ -491,10 +928,10 @@ public class LeadServiceTests
 
         var service = new LeadService(leadRepo, centerRepo, new FakeUserRepository(), new FakeParentLinkRepository());
 
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+        await Assert.ThrowsAsync<KeyNotFoundException>(() =>
             service.GetReceivedLeadMessagesForCenterUserAsync(centerOwnerId, "a@center.com", UserRoles.Center, leadId));
 
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+        await Assert.ThrowsAsync<KeyNotFoundException>(() =>
             service.SendLeadMessageForCenterUserAsync(centerOwnerId, "a@center.com", UserRoles.Center, leadId, "Xin chào"));
     }
 

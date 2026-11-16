@@ -204,10 +204,20 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
     }
 
 
+    // Hồ sơ của người dùng kèm điểm thi đọc từ bảng chứng chỉ (xem ProfileScores): chỉ bài đã thi, điểm mục tiêu không tính.
+    // Trả về bản sao, các cột Ielts/Sat... của bản sao là điểm đó; bản gốc đang được EF theo dõi nên không sửa để khỏi bị lưu nhầm.
+    private async Task<StudentProfile?> LoadScoredProfileAsync(Guid userId, CancellationToken ct)
+    {
+        var profile = await profiles.GetProfileByUserIdAsync(userId, ct);
+        if (profile is null) return null;
+        var certifications = await profiles.GetProfileCertificationsAsync(profile.Id, ct);
+        return ProfileScores.From(certifications).ApplyTo(profile);
+    }
+
     public async Task<Recommendation> CreateAsync(Guid userId, IReadOnlyList<int>? pref, CancellationToken ct)
     {
         //Lấy hồ sơ sinh viên
-        var profile = await profiles.GetProfileByUserIdAsync(userId, ct)
+        var profile = await LoadScoredProfileAsync(userId, ct)
             ?? throw new InvalidOperationException("Chưa có hồ sơ.");
         // Đã submit hồ sơ bước 6 chưa?
         if (profile.FlowSubmittedAt is null)
@@ -230,7 +240,7 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
         // Lấy lượt gợi ý gần nhất
         var latest = await recommendations.GetLatestAsync(userId, ct)
             ?? throw new InvalidOperationException("Chưa có lượt gợi ý nào.");
-        var profile = await profiles.GetProfileByUserIdAsync(userId, ct)
+        var profile = await LoadScoredProfileAsync(userId, ct)
             ?? throw new InvalidOperationException("Chưa có hồ sơ.");
 
         var schools = await recommendations.ListSchoolsAsync(latest.StudyLevel, ct);
@@ -245,7 +255,7 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
     public async Task<SimulationResult> SimulateAsync(
         Guid userId, SimulationOverrides overrides, IReadOnlyList<int>? pref, CancellationToken ct)
     {
-        var profile = await profiles.GetProfileByUserIdAsync(userId, ct)
+        var profile = await LoadScoredProfileAsync(userId, ct)
             ?? throw new InvalidOperationException("Chưa có hồ sơ.");
         if (string.IsNullOrWhiteSpace(profile.TargetLevel))
             throw new InvalidOperationException("Hồ sơ chưa có bậc học muốn theo.");
@@ -363,7 +373,7 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
     private async Task<(ExplainStudentDto Student, ExplainSchoolDto Target, string Code, string Name)> LoadExplainAsync(
         Guid userId, string code, SimulationOverrides? overrides, CancellationToken ct)
     {
-        var profile = await profiles.GetProfileByUserIdAsync(userId, ct)
+        var profile = await LoadScoredProfileAsync(userId, ct)
             ?? throw new InvalidOperationException("Chưa có hồ sơ.");
 
         StudentProfile who = profile;          // hồ sơ dùng để lấy GPA, SAT, ngân sách của học sinh

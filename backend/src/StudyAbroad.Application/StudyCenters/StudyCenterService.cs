@@ -1,5 +1,8 @@
+using System.Globalization;
+using System.Text;
 using System.Text.RegularExpressions;
 using StudyAbroad.Application.Audit;
+using StudyAbroad.Application.Auth;
 using StudyAbroad.Application.Common;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
@@ -45,7 +48,8 @@ public interface IStudyCenterService
 public class StudyCenterService(
     IStudyCenterRepository repository,
     IAuditLogRepository auditLogs,
-    ICenterVerificationRepository? verificationRepository = null) : IStudyCenterService
+    ICenterVerificationRepository? verificationRepository = null,
+    IEmailSender? emailSender = null) : IStudyCenterService
 {
     private const int MaxPageSize = 100;
     public const int MaxNameLength = 200;
@@ -56,6 +60,8 @@ public class StudyCenterService(
     public const int MaxLicenseIssuedByLength = 256;
     public const int MaxVerificationNoteLength = 1000;
     public const int MaxLegalDocumentUrlLength = 1024;
+    /// <summary>[UC-71] Đặc tả 6.1: tối đa 5 tệp cho một lần nộp hồ sơ xác minh.</summary>
+    public const int MaxVerificationDocuments = 5;
     public const string ComplianceModeLicensed = "licensed";
     public const string ComplianceModeNotified = "notified";
 
@@ -575,6 +581,25 @@ public class StudyCenterService(
             rejectionReason);
     }
 
+    /// <summary>
+    /// [UC-71] Cần giấy ủy quyền khi họ tên người đăng ký khác người đại diện theo pháp luật (không phân biệt hoa thường, dấu, khoảng trắng).
+    /// Chưa có tên người đăng ký (tài khoản cũ) thì không chặn.
+    /// </summary>
+    public static bool RegistrantNeedsPowerOfAttorney(string? registrantName, string? legalRepresentative)
+    {
+        if (string.IsNullOrWhiteSpace(registrantName)) return false;
+        return NormalizePersonName(registrantName) != NormalizePersonName(legalRepresentative);
+    }
+
+    private static string NormalizePersonName(string? name)
+    {
+        var d = (name ?? string.Empty).Trim().ToLowerInvariant().Replace('đ', 'd').Normalize(NormalizationForm.FormD);
+        var sb = new StringBuilder();
+        foreach (var ch in d)
+            if (CharUnicodeInfo.GetUnicodeCategory(ch) != UnicodeCategory.NonSpacingMark) sb.Append(ch);
+        return Regex.Replace(sb.ToString(), @"\s+", " ");
+    }
+
     public async Task<CreateStudyCenterResult> SubmitVerificationAsync(Guid userId, SubmitVerificationDto request, CancellationToken ct = default)
     {
         if (verificationRepository is null)
@@ -612,9 +637,16 @@ public class StudyCenterService(
             return CreateStudyCenterResult.Fail("Mã số doanh nghiệp này đã thuộc về một trung tâm đã được xác minh. Nếu bạn cho rằng có sự nhầm lẫn, vui lòng liên hệ bộ phận hỗ trợ.");
 
         var docs = request.Documents ?? [];
+        if (docs.Count > MaxVerificationDocuments)
+            return CreateStudyCenterResult.Fail($"Mỗi lần nộp hồ sơ tối đa {MaxVerificationDocuments} tệp. Vui lòng bỏ bớt tệp không cần thiết.");
         var hasBizReg = docs.Any(d => d.DocumentType == CenterDocumentTypes.BusinessRegistration && !string.IsNullOrWhiteSpace(d.FileUrl));
         if (!hasBizReg)
             return CreateStudyCenterResult.Fail("Bản scan hoặc ảnh Giấy chứng nhận đăng ký doanh nghiệp là tài liệu bắt buộc.");
+
+        // [UC-71] Đặc tả 5.1: người đăng ký không phải người đại diện theo pháp luật thì phải nộp giấy ủy quyền
+        if (RegistrantNeedsPowerOfAttorney(center.RegistrantName, legalRep)
+            && !docs.Any(d => d.DocumentType == CenterDocumentTypes.PowerOfAttorney && !string.IsNullOrWhiteSpace(d.FileUrl)))
+            return CreateStudyCenterResult.Fail("Người đăng ký không phải người đại diện theo pháp luật nên bắt buộc nộp Giấy ủy quyền người thực hiện thủ tục.");
 
         var verificationReq = new CenterVerificationRequest
         {
@@ -659,6 +691,7 @@ public class StudyCenterService(
             DetailJson = JsonSerializer.Serialize(new { centerId = center.Id, taxCode, legalName, documentCount = docs.Count })
         }, ct);
 
+        await NotifyCenterAsync(center, "submitted", null, null, ct);
         return CreateStudyCenterResult.Ok(ToDto(center));
     }
 
@@ -692,6 +725,34 @@ public class StudyCenterService(
     {
         if (verificationRepository is null) return null;
         return await verificationRepository.GetDocumentByIdAsync(documentId, ct);
+    }
+
+    /// <summary>
+    /// [UC-59] Báo kết quả xét duyệt cho trung tâm qua email (đặc tả 5.1: email lý do gửi cho trung tâm).
+    /// Trung tâm không có email, hoặc gửi lỗi, thì bỏ qua: kết quả duyệt đã lưu, không được làm hỏng thao tác của Moderator.
+    /// </summary>
+    private async Task NotifyCenterAsync(StudyCenter center, string outcome, string? reason, IReadOnlyList<string>? unmet, CancellationToken ct)
+    {
+        if (emailSender is null || string.IsNullOrWhiteSpace(center.Email)) return;
+        try
+        {
+            await emailSender.SendCenterVerificationOutcomeEmailAsync(center.Email, center.Name, outcome, reason, unmet, ct);
+        }
+        catch (Exception)
+        {
+            // đã lưu kết quả duyệt; email là thông báo phụ
+        }
+    }
+
+    /// <summary>Những điều kiện xác minh chưa đạt (đặc tả 5.1: điều kiện 1 email do hệ thống kiểm, 3 đến 5 do Moderator kiểm).</summary>
+    private static List<string> UnmetConditions(StudyCenter center, ReviewCenterVerificationRequest request)
+    {
+        var unmet = new List<string>();
+        if (!center.EmailVerifiedAt.HasValue) unmet.Add("Email trung tâm chưa được xác thực");
+        if (!request.IsNationalRegistryMatched) unmet.Add("Tên pháp lý và mã số thuế chưa khớp Cổng đăng ký doanh nghiệp quốc gia");
+        if (!request.IsBusinessOperating) unmet.Add("Doanh nghiệp chưa được xác nhận là đang hoạt động");
+        if (!request.IsRepresentativeValid) unmet.Add("Người đăng ký chưa được xác nhận là người đại diện theo pháp luật hoặc có giấy ủy quyền hợp lệ");
+        return unmet;
     }
 
     public async Task<VerifyStudyCenterResult> ReviewVerificationAsync(Guid requestId, ReviewCenterVerificationRequest request, Guid reviewerUserId, CancellationToken ct = default)
@@ -749,6 +810,7 @@ public class StudyCenterService(
                 DetailJson = JsonSerializer.Serialize(new { requestId, notes = request.ReviewNotes })
             }, ct);
 
+            await NotifyCenterAsync(center, "verified", request.ReviewNotes?.Trim(), null, ct);
             return VerifyStudyCenterResult.Ok(ToDto(center));
         }
         else if (action == "reject" || action == "changes_requested")
@@ -782,6 +844,7 @@ public class StudyCenterService(
                 DetailJson = JsonSerializer.Serialize(new { requestId, reason, notes = request.ReviewNotes })
             }, ct);
 
+            await NotifyCenterAsync(center, action, reason, UnmetConditions(center, request), ct);
             return VerifyStudyCenterResult.Ok(ToDto(center));
         }
         else if (action == "revoke")
@@ -810,6 +873,7 @@ public class StudyCenterService(
                 DetailJson = JsonSerializer.Serialize(new { requestId, reason })
             }, ct);
 
+            await NotifyCenterAsync(center, "revoked", reason, null, ct);
             return VerifyStudyCenterResult.Ok(ToDto(center));
         }
 
@@ -822,12 +886,14 @@ public class StudyCenterService(
         if (center is null)
             return UpdateStudyCenterResult.Fail("Không tìm thấy thông tin trung tâm cho tài khoản này.");
 
-        // Đã xác minh: khóa thông tin pháp lý (tên, loại hình, MST, đại diện, giấy phép...).
-        // Muốn đổi phải nộp lại hồ sơ xác minh.
-        var legalLocked = center.VerificationStatus == CenterVerificationStatuses.Verified;
+        // Đã xác minh hoặc đang chờ duyệt: khóa thông tin pháp lý (tên, loại hình, MST, đại diện, giấy phép...).
+        // Đã xác minh thì muốn đổi phải nộp lại hồ sơ; đang chờ duyệt thì chờ kết quả (đặc tả 5.1, UC-71).
+        var pendingReview = center.VerificationStatus == CenterVerificationStatuses.PendingReview;
+        var legalLocked = center.VerificationStatus == CenterVerificationStatuses.Verified || pendingReview;
         if (legalLocked && TouchesLegalFields(center, request))
-            return UpdateStudyCenterResult.Fail(
-                "Trung tâm đã được xác minh nên không thể sửa thông tin pháp lý. Vui lòng nộp lại hồ sơ xác minh nếu có thay đổi đăng ký kinh doanh.");
+            return UpdateStudyCenterResult.Fail(pendingReview
+                ? "Hồ sơ xác minh đang chờ duyệt nên chưa thể sửa thông tin pháp lý (tên, mã số thuế, giấy phép...). Vui lòng chờ kết quả xét duyệt."
+                : "Trung tâm đã được xác minh nên không thể sửa thông tin pháp lý. Vui lòng nộp lại hồ sơ xác minh nếu có thay đổi đăng ký kinh doanh.");
 
         if (!legalLocked)
         {

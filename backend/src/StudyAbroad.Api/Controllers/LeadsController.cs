@@ -144,6 +144,24 @@ public class LeadsController(ILeadService leadService) : ControllerBase
             return CreatedAtAction(nameof(GetSentLeadMessages), new { id }, result);
         });
 
+    /// <summary>
+    /// [USAS-2080 / UC-58] Học sinh / phụ huynh báo cáo một tin của trung tâm trong yêu cầu của mình. Tin vào hàng đợi của Moderator.
+    /// </summary>
+    [HttpPost("sent/{id:guid}/messages/{messageId:guid}/report")]
+    [Authorize(Roles = $"{UserRoles.Student},{UserRoles.Parent}")]
+    [ProducesResponseType(typeof(LeadMessageDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public Task<IActionResult> ReportSentLeadMessage(
+        Guid id,
+        Guid messageId,
+        [FromBody] ReportLeadMessageRequest? request,
+        CancellationToken ct) =>
+        ExecuteSentLeadActionAsync(async userId =>
+            Ok(await leadService.ReportSentLeadMessageAsync(userId, id, messageId, request?.Reason, ct)));
+
     // Lỗi trả { code, message } giống GET /leads/sent để frontend đọc một kiểu
     private async Task<IActionResult> ExecuteSentLeadActionAsync(Func<Guid, Task<IActionResult>> action)
     {
@@ -333,5 +351,56 @@ public class LeadsController(ILeadService leadService) : ControllerBase
 
             return CreatedAtAction(nameof(GetReceivedLeadMessages), new { id }, result);
         });
+
+    /// <summary>
+    /// [USAS-2080 / UC-58] Hàng đợi tin nhắn bị gắn cờ tự động, bị báo cáo hoặc đã gỡ, kèm nội dung gốc. Moderator và Admin xem.
+    /// <c>status</c>: pending (mặc định: gắn cờ hoặc bị báo cáo) | flagged | reported | removed | all.
+    /// </summary>
+    [HttpGet("moderation/messages")]
+    [Authorize(Roles = $"{UserRoles.Moderator},{UserRoles.Admin}")]
+    [ProducesResponseType(typeof(PagedResult<ModerationLeadMessageDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public Task<IActionResult> GetModerationMessages(
+        [FromQuery] string? status = null,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken ct = default) =>
+        ExecuteCenterLeadActionAsync(async (_, _, _) =>
+            Ok(await leadService.GetModerationMessagesAsync(status, page, pageSize, ct)));
+
+    /// <summary>
+    /// [USAS-2080 / UC-58] Moderator chọn Giữ một tin bị gắn cờ: tin vẫn hiện, bỏ cờ, có nhật ký. Chỉ Moderator.
+    /// </summary>
+    [HttpPost("received/{id:guid}/messages/{messageId:guid}/keep")]
+    [Authorize(Roles = UserRoles.Moderator)]
+    [ProducesResponseType(typeof(LeadMessageDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public Task<IActionResult> KeepLeadMessage(Guid id, Guid messageId, CancellationToken ct) =>
+        ExecuteCenterLeadActionAsync(async (userId, _, _) =>
+            Ok(await leadService.KeepLeadMessageAsync(userId, id, messageId, ct)));
+
+    /// <summary>
+    /// [USAS-2080 / UC-58] Moderator gỡ một tin nhắn vi phạm trong yêu cầu liên hệ.
+    /// Tin hiển thị "Tin nhắn đã bị gỡ do vi phạm quy tắc" ở cả hai phía, có ghi nhật ký. Chỉ Moderator.
+    /// </summary>
+    [HttpPost("received/{id:guid}/messages/{messageId:guid}/remove")]
+    [Authorize(Roles = UserRoles.Moderator)]
+    [ProducesResponseType(typeof(LeadMessageDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public Task<IActionResult> RemoveLeadMessage(
+        Guid id,
+        Guid messageId,
+        [FromBody] RemoveLeadMessageRequest? request,
+        CancellationToken ct) =>
+        ExecuteCenterLeadActionAsync(async (userId, _, _) =>
+            Ok(await leadService.RemoveLeadMessageAsync(userId, id, messageId, request?.Reason, ct)));
 }
 

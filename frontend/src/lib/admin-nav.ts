@@ -5,6 +5,8 @@ import {
   ClipboardCheckIcon,
   CreditCardIcon,
   LayoutDashboardIcon,
+  BanIcon,
+  MailWarningIcon,
   MessageSquareWarningIcon,
   MessagesSquareIcon,
   SchoolIcon,
@@ -39,17 +41,18 @@ export const ADMIN_NAV: AdminNavItem[] = [
   {
     href: "/admin/users",
     label: "Quản trị người dùng",
-    description: "Danh sách, khóa, mở khóa tài khoản và cấp tài khoản (admin cấp moderator, moderator cấp trung tâm)",
+    description: "Danh sách, khóa, mở khóa tài khoản và cấp tài khoản moderator (chỉ quản trị viên)",
     icon: UsersIcon,
-    roles: ["admin", "moderator"],
+    roles: ["admin"],
     useCases: ["UC-60", "UC-61", "UC-62", "UC-63"],
   },
   {
     href: "/admin/universities",
     label: "Dữ liệu trường",
-    description: "Nhập, sửa, ẩn hoặc hiện trường và xem độ mới của dữ liệu",
+    description: "Moderator nhập, sửa, ẩn hoặc hiện trường; Admin chỉ xem danh sách và chi tiết",
     icon: SchoolIcon,
-    roles: ["admin"],
+    // Quyết định D2 bản 14/11: dữ liệu trường do Moderator quản lý, Admin chỉ xem
+    roles: ["admin", "moderator"],
     useCases: ["UC-65", "UC-66", "UC-67", "UC-84"],
   },
   {
@@ -89,10 +92,26 @@ export const ADMIN_NAV: AdminNavItem[] = [
   {
     href: "/admin/forum",
     label: "Kiểm duyệt diễn đàn",
-    description: "Nội dung bị báo cáo, gỡ bài, hạn chế người dùng, gỡ đánh giá và tin nhắn",
+    description: "Nội dung bị báo cáo, gỡ bài, hạn chế người dùng và gỡ đánh giá",
     icon: MessagesSquareIcon,
     roles: ["admin", "moderator"],
-    useCases: ["UC-54", "UC-55", "UC-56", "UC-57", "UC-58"],
+    useCases: ["UC-54", "UC-55", "UC-56", "UC-57"],
+  },
+  {
+    href: "/admin/lead-messages",
+    label: "Tin nhắn liên hệ",
+    description: "Tin nhắn trong yêu cầu liên hệ bị gắn cờ tự động: Moderator chọn giữ hoặc gỡ, Admin chỉ xem",
+    icon: MailWarningIcon,
+    roles: ["admin", "moderator"],
+    useCases: ["UC-58"],
+  },
+  {
+    href: "/admin/suspension-proposals",
+    label: "Đề nghị tạm ngừng",
+    description: "Trung tâm bị gỡ tin lặp lại: Moderator đề nghị, Admin quyết định tạm ngừng hoặc từ chối",
+    icon: BanIcon,
+    roles: ["admin", "moderator"],
+    useCases: ["UC-58"],
   },
   {
     href: "/admin/ai-usage",
@@ -107,8 +126,9 @@ export const ADMIN_NAV: AdminNavItem[] = [
     label: "Câu cần xem",
     description: "Câu hệ thống không trả lời được hoặc bị lỗi, để xem và đánh dấu đã xử lý",
     icon: MessageSquareWarningIcon,
-    roles: ["admin"],
-    useCases: [],
+    // Quyết định D2 bản 14/11: hàng đợi này là việc nội dung của Moderator, Admin không thấy
+    roles: ["moderator"],
+    useCases: ["UC-53"],
   },
   {
     href: "/admin/review-batches",

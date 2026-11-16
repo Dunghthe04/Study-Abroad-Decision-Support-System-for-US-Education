@@ -8,7 +8,6 @@ import {
   EyeOffIcon,
   FilterIcon,
   MapPinIcon,
-  PencilIcon,
   RotateCcwIcon,
   SearchIcon,
   ShieldCheckIcon,
@@ -37,7 +36,6 @@ import {
   type CenterConfirmAction,
 } from "@/components/admin/centers/CenterActionConfirmDialog";
 import { usePendingCenterCount } from "@/hooks/use-pending-center-count";
-import { EditCenterButton } from "@/components/admin/centers/EditCenterButton";
 import {
   CenterLegalModeBadge,
   CenterTypeBadge,
@@ -369,17 +367,6 @@ export function AdminCenterListView() {
               className="inline-flex items-center justify-end gap-1"
               onClick={(e) => e.stopPropagation()}
             >
-              <EditCenterButton
-                center={c}
-                size="xs"
-                variant="ghost"
-                className="text-ink-2 hover:text-ink"
-                onSuccess={updateCenterInState}
-              >
-                <PencilIcon className="size-3.5" />
-                <span className="hidden xl:inline">Sửa</span>
-              </EditCenterButton>
-
               {c.isActive === false ? (
                 <Button
                   type="button"
@@ -410,7 +397,7 @@ export function AdminCenterListView() {
         },
       },
     ],
-    [failedLogos, updateCenterInState]
+    [failedLogos]
   );
 
   const toolbar: DataTableToolbarSlots = {

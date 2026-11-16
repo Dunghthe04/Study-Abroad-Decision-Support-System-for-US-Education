@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import { ExternalLinkIcon } from "lucide-react";
 import { ImageUploadField } from "../shared/ImageUploadField";
 import { toast } from "@/components/ui/toast";
@@ -34,6 +35,9 @@ function MediaLink({ url }: { url?: string | null }) {
 }
 
 export function UniversityMediaSection({ university, isEditing, canEdit, onStartEdit, onStopEdit, onSaved }: UniversityMediaSectionProps) {
+  // [UC-66] Chỉ Moderator sửa dữ liệu trường; Admin chỉ xem
+  const { user } = useAuth();
+  const readOnly = user?.role !== "moderator";
   const [form, setForm] = useState(() => mediaForm(university));
   const [fieldErrors, setFieldErrors] = useState<AdminFieldErrors>({});
   const [error, setError] = useState<string | null>(null);
@@ -102,7 +106,7 @@ export function UniversityMediaSection({ university, isEditing, canEdit, onStart
   ];
 
   return (
-    <TableFrame title="Media" edit={{ isEditing, canEdit, isSaving: isSaving || isUploading, hasChanges, error, onEdit: handleEdit, onCancel: onStopEdit, onSave: handleSave }}>
+    <TableFrame title="Media" edit={{ isEditing, canEdit, readOnly, isSaving: isSaving || isUploading, hasChanges, error, onEdit: handleEdit, onCancel: onStopEdit, onSave: handleSave }}>
       <UniversityMediaPreview name={university.name} logoUrl={isEditing ? form.logoUrl.trim() : university.logoUrl} coverUrl={isEditing ? form.coverUrl.trim() : university.coverUrl} />
       <RowsTable rows={rows} isEditing={isEditing} />
     </TableFrame>

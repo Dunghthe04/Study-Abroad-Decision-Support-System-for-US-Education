@@ -6,6 +6,7 @@
 import { apiFetch, ApiError } from "@/lib/api";
 // Kiểu tin nhắn dùng lại của Đức (UC-74) — cùng DTO với phía trung tâm, không khai báo trùng
 import type {
+  LeadMessageDto,
   LeadMessagesThreadDto,
   PagedResult,
   SendLeadMessageRequest,
@@ -50,6 +51,16 @@ export const leadApi = {
       body: JSON.stringify(payload),
     });
   },
+
+  /**
+   * [USAS-2080 / UC-58] Báo cáo một tin của trung tâm vi phạm quy tắc; tin vào hàng đợi của Moderator.
+   * Báo lại tin đã báo không đổi gì. Lỗi: 400 (tin không phải của trung tâm hoặc đã gỡ), 404 not_found.
+   */
+  reportSentMessage: (leadId: string, messageId: string, reason?: string) =>
+    apiFetch<LeadMessageDto>(
+      `/api/v1/leads/sent/${encodeURIComponent(leadId)}/messages/${encodeURIComponent(messageId)}/report`,
+      { method: "POST", body: JSON.stringify({ reason: reason?.trim() || null }) }
+    ),
 };
 
 /**
