@@ -99,11 +99,14 @@ public class CenterPortalController(
     /// <summary>[UC-71] Tải lên tài liệu minh chứng (GCN ĐKDN, ủy quyền, hợp đồng đối tác, giấy phép).</summary>
     [HttpPost("verification/upload-document")]
     [RequestSizeLimit(12 * 1024 * 1024)]
+    [Consumes("multipart/form-data")]
     public async Task<ActionResult<VerificationDocumentUploadDto>> UploadDocument(
-        [FromForm] IFormFile file,
-        [FromForm] string documentType,
+        [FromForm] UploadVerificationDocumentForm form,
         CancellationToken ct)
     {
+        var file = form.File!;
+        var documentType = form.DocumentType;
+
         if (User.GetUserId() is not { } userId)
             return Unauthorized();
 
@@ -164,3 +167,10 @@ public class CenterPortalController(
     }
 }
 
+
+/// <summary>Form multipart cho tải tài liệu xác minh (wrapper để Swagger sinh được schema).</summary>
+public sealed class UploadVerificationDocumentForm
+{
+    public IFormFile? File { get; set; }
+    public string? DocumentType { get; set; }
+}

@@ -819,11 +819,12 @@ public class ChatReviewTests
     }
 
     [Fact]
-    public void Controller_IsForAdminsOnly_WithTheExpectedRoutes()
+    public void Controller_IsForModeratorsOnly_WithTheExpectedRoutes()
     {
         var type = typeof(AdminChatReviewController);
 
-        Assert.Equal(UserRoles.Admin, type.GetCustomAttribute<AuthorizeAttribute>()!.Roles);
+        // UC-53 (đặc tả 14/11, quyết định D2): hàng đợi "Câu cần xem" chuyển từ Admin sang Moderator, Admin không thấy
+        Assert.Equal(UserRoles.Moderator, type.GetCustomAttribute<AuthorizeAttribute>()!.Roles);
         Assert.Equal("api/v1/admin/chat-review", type.GetCustomAttribute<RouteAttribute>()!.Template);
         Assert.Equal("queue", type.GetMethod(nameof(AdminChatReviewController.GetQueue))!.GetCustomAttribute<HttpGetAttribute>()!.Template);
         Assert.Equal("summary", type.GetMethod(nameof(AdminChatReviewController.GetSummary))!.GetCustomAttribute<HttpGetAttribute>()!.Template);
@@ -988,12 +989,12 @@ public class ChatReviewTests
     }
 
     [Fact]
-    public void Controller_SetStatusRoute_IsAPatchOfTheItemStatus_UnderTheAdminOnlyController()
+    public void Controller_SetStatusRoute_IsAPatchOfTheItemStatus_UnderTheModeratorOnlyController()
     {
         var method = typeof(AdminChatReviewController).GetMethod(nameof(AdminChatReviewController.SetStatus))!;
 
         Assert.Equal("items/{messageId:guid}/status", method.GetCustomAttribute<HttpPatchAttribute>()!.Template);
-        Assert.Equal(UserRoles.Admin, typeof(AdminChatReviewController).GetCustomAttribute<AuthorizeAttribute>()!.Roles);
+        Assert.Equal(UserRoles.Moderator, typeof(AdminChatReviewController).GetCustomAttribute<AuthorizeAttribute>()!.Roles);
     }
 
     [Fact]

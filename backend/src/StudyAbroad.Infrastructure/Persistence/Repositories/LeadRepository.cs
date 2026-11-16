@@ -272,5 +272,116 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
         await db.SaveChangesAsync(ct);
         return message;
     }
+
+    /// <summary>[USAS-2080 / UC-58] Lấy tin nhắn theo đúng lead (tin của lead khác coi như không có) để gỡ.</summary>
+    public Task<LeadMessage?> GetLeadMessageForUpdateAsync(Guid leadId, Guid messageId, CancellationToken ct = default) =>
+        db.LeadMessages.FirstOrDefaultAsync(m => m.Id == messageId && m.LeadId == leadId, ct);
+
+    /// <summary>[USAS-2080 / UC-58] Hàng đợi kiểm duyệt: tin gắn cờ đang hiện, tin đã gỡ, hoặc cả hai.</summary>
+    public async Task<PagedResult<ModerationLeadMessageDto>> GetModerationMessagesAsync(
+        string filter,
+        int page,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        var safePage = page < 1 ? 1 : page;
+        var safePageSize = pageSize < 1 ? 20 : (pageSize > 50 ? 50 : pageSize);
+
+        var query = from m in db.LeadMessages.AsNoTracking()
+                    join l in db.Leads.AsNoTracking() on m.LeadId equals l.Id
+                    join c in db.StudyCenters.AsNoTracking() on l.StudyCenterId equals c.Id
+                    join u in db.Users.AsNoTracking() on m.SenderUserId equals u.Id into senders
+                    from u in senders.DefaultIfEmpty()
+                    select new { Message = m, l.StudyCenterId, CenterName = c.Name, SenderRole = u != null ? u.Role : null };
+
+        query = filter switch
+        {
+            "removed" => query.Where(x => x.Message.Status == "removed"),
+            "flagged" => query.Where(x => x.Message.IsFlagged && x.Message.Status != "removed"),
+            "reported" => query.Where(x => x.Message.ReportedAt != null && x.Message.Status != "removed"),
+            "all" => query.Where(x => x.Message.Status == "removed" || x.Message.IsFlagged || x.Message.ReportedAt != null),
+            // pending: tin đang hiện bị gắn cờ tự động hoặc bị báo cáo, chờ Moderator xem
+            _ => query.Where(x => (x.Message.IsFlagged || x.Message.ReportedAt != null) && x.Message.Status != "removed"),
+        };
+
+        var total = await query.CountAsync(ct);
+        var rows = await query
+            .OrderByDescending(x => x.Message.CreatedAt)
+            .Skip((safePage - 1) * safePageSize)
+            .Take(safePageSize)
+            .ToListAsync(ct);
+
+        var items = rows.Select(x =>
+        {
+            var role = x.SenderRole ?? UserRoles.Student;
+            return new ModerationLeadMessageDto(
+                x.Message.Id,
+                x.Message.LeadId,
+                x.StudyCenterId,
+                x.CenterName,
+                x.Message.SenderUserId,
+                role,
+                LeadMessageMapper.IsStaffOrCenterRole(role),
+                x.Message.Content,
+                x.Message.IsFlagged,
+                x.Message.FlagReason,
+                x.Message.Status,
+                x.Message.RemovedByUserId,
+                x.Message.CreatedAt)
+            {
+                ReportedAt = x.Message.ReportedAt,
+                ReportReason = x.Message.ReportReason,
+            };
+        }).ToList();
+
+        return new PagedResult<ModerationLeadMessageDto>(items, safePage, safePageSize, total);
+    }
+
+    /// <summary>[UC-58] Tin do phía trung tâm gửi (người gửi có vai trò trung tâm) đã bị gỡ, tính theo trung tâm nhận yêu cầu.</summary>
+    public Task<int> CountRemovedCenterMessagesAsync(Guid centerId, CancellationToken ct = default) =>
+        (from m in db.LeadMessages.AsNoTracking()
+         where m.Status == "removed"
+         join l in db.Leads.AsNoTracking() on m.LeadId equals l.Id
+         where l.StudyCenterId == centerId
+         join u in db.Users.AsNoTracking() on m.SenderUserId equals u.Id
+         where u.Role == UserRoles.Center
+         select m.Id).CountAsync(ct);
+
+    public async Task<IReadOnlyList<RepeatRemovalCenterDto>> GetRepeatRemovalCentersAsync(int minRemoved, CancellationToken ct = default)
+    {
+        var counts = await (from m in db.LeadMessages.AsNoTracking()
+                            where m.Status == "removed"
+                            join l in db.Leads.AsNoTracking() on m.LeadId equals l.Id
+                            join u in db.Users.AsNoTracking() on m.SenderUserId equals u.Id
+                            where u.Role == UserRoles.Center
+                            group m by l.StudyCenterId into g
+                            select new { CenterId = g.Key, Count = g.Count() })
+            .Where(x => x.Count >= minRemoved)
+            .ToListAsync(ct);
+        if (counts.Count == 0) return [];
+
+        var ids = counts.Select(x => x.CenterId).ToList();
+        var centers = await db.StudyCenters.AsNoTracking()
+            .Where(c => ids.Contains(c.Id))
+            .Select(c => new { c.Id, c.Name, c.VerificationStatus })
+            .ToListAsync(ct);
+        var pending = (await db.CenterSuspensionProposals.AsNoTracking()
+                .Where(p => p.Status == CenterSuspensionProposalStatuses.Pending && ids.Contains(p.StudyCenterId))
+                .Select(p => p.StudyCenterId)
+                .ToListAsync(ct))
+            .ToHashSet();
+
+        return counts
+            .Join(centers, x => x.CenterId, c => c.Id,
+                (x, c) => new RepeatRemovalCenterDto(c.Id, c.Name, c.VerificationStatus, x.Count, pending.Contains(c.Id)))
+            .OrderByDescending(x => x.RemovedMessageCount)
+            .ToList();
+    }
+
+    public async Task SaveLeadMessageAsync(LeadMessage message, CancellationToken ct = default)
+    {
+        db.LeadMessages.Update(message);
+        await db.SaveChangesAsync(ct);
+    }
 }
 

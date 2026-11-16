@@ -150,6 +150,43 @@ namespace StudyAbroad.Infrastructure.Auth
             await SendEmailAsync(toEmail, subject, body, ct);
         }
 
+        public async Task SendCenterVerificationOutcomeEmailAsync(string toEmail, string centerName, string outcome, string? reason, IReadOnlyList<string>? unmetConditions, CancellationToken ct = default)
+        {
+            var center = WebUtility.HtmlEncode(centerName);
+            var (subject, title, content) = outcome switch
+            {
+                "verified" => ("[USAS] Trung tâm đã được xác minh", "Trung tâm đã được xác minh",
+                    $"Hồ sơ xác minh của <strong>{center}</strong> đã được duyệt. Trung tâm nay có dấu xác minh, xuất hiện ở đầu danh bạ và nhận được yêu cầu liên hệ từ học sinh, phụ huynh."),
+                "submitted" => ("[USAS] Đã nhận hồ sơ xác minh", "Đã nhận hồ sơ xác minh",
+                    $"USAS đã nhận hồ sơ xác minh của <strong>{center}</strong>. Kiểm duyệt viên sẽ xem xét và báo kết quả qua email này. Trong lúc chờ duyệt, bạn xem được hồ sơ nhưng chưa sửa được tên pháp lý và mã số thuế."),
+                "changes_requested" => ("[USAS] Hồ sơ xác minh cần bổ sung", "Hồ sơ xác minh cần bổ sung",
+                    $"Hồ sơ xác minh của <strong>{center}</strong> chưa đủ để duyệt. Vui lòng bổ sung theo góp ý bên dưới rồi nộp lại."),
+                "revoked" => ("[USAS] Dấu xác minh của trung tâm đã bị thu hồi", "Dấu xác minh đã bị thu hồi",
+                    $"Dấu xác minh của <strong>{center}</strong> đã bị thu hồi; trung tâm tạm ngừng nhận yêu cầu liên hệ mới."),
+                _ => ("[USAS] Hồ sơ xác minh chưa được duyệt", "Hồ sơ xác minh chưa được duyệt",
+                    $"Hồ sơ xác minh của <strong>{center}</strong> chưa được duyệt. Bạn có thể sửa hồ sơ và nộp lại."),
+            };
+
+            var detail = string.Empty;
+            if (unmetConditions is { Count: > 0 })
+                detail += "<p style=\"font-size: 14px; color: #475569; margin-bottom: 4px;\"><strong>Điều kiện chưa đạt:</strong></p><ul style=\"font-size: 14px; color: #475569; line-height: 1.6;\">"
+                          + string.Concat(unmetConditions.Select(c => $"<li>{WebUtility.HtmlEncode(c)}</li>")) + "</ul>";
+            if (!string.IsNullOrWhiteSpace(reason))
+                detail += $"<p style=\"font-size: 14px; color: #475569; line-height: 1.6;\"><strong>Lý do:</strong> {WebUtility.HtmlEncode(reason)}</p>";
+
+            var body = $"""
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
+                    <h2 style="color: #2563eb; margin-bottom: 16px;">{title}</h2>
+                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">{content}</p>
+                    {detail}
+                    <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+                    <p style="font-size: 12px; color: #94a3b8; text-align: center;">USAS - Hệ thống hỗ trợ ra quyết định du học Mỹ</p>
+                </div>
+                """;
+
+            await SendEmailAsync(toEmail, subject, body, ct);
+        }
+
         public async Task SendParentLinkChangedEmailAsync(string toEmail, string studentName, string parentLabel, bool linked, CancellationToken ct = default)
         {
             var student = WebUtility.HtmlEncode(studentName);

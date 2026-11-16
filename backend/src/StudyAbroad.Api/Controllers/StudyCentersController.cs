@@ -42,13 +42,15 @@ public class StudyCentersController(IStudyCenterService service) : ControllerBas
 
     /// <summary>
     /// Đánh giá công khai của trung tâm (UC-41): lấy từ dữ liệu thật, chỉ gồm đánh giá đang hiển thị.
-    /// Điểm trung bình và số lượng tính từ chính các đánh giá đó.
+    /// Điểm trung bình và số lượng tính từ toàn bộ đánh giá hiển thị; danh sách được phân trang (mới nhất trước).
     /// </summary>
     [HttpGet("{id:guid}/reviews")]
     public async Task<ActionResult<CenterReviewsDto>> GetReviews(
         Guid id,
         [FromServices] ICenterReviewRepository reviews,
-        CancellationToken ct)
+        CancellationToken ct,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = CenterReviewPaging.DefaultPageSize)
     {
         var center = await service.GetByIdAsync(id, ct);
         if (center is null) return NotFound();
@@ -57,7 +59,7 @@ public class StudyCentersController(IStudyCenterService service) : ControllerBas
         if (!isModerator && (center.VerificationStatus != CenterReferral.Verified || !center.IsActive))
             return NotFound();
 
-        return Ok(await reviews.GetVisibleAsync(id, 50, ct));
+        return Ok(await reviews.GetVisibleAsync(id, page, pageSize, ct));
     }
 
     // Trung tâm tự đăng ký (/register/center) và chờ moderator duyệt hồ sơ (UC-59);
@@ -81,23 +83,7 @@ public class StudyCentersController(IStudyCenterService service) : ControllerBas
         return Ok(result.Center);
     }
 
-    /// <summary>[UC-72] Sửa thông tin một trung tâm tư vấn trong danh bạ (chỉ Moderator).</summary>
-    [HttpPut("{id:guid}")]
-    [Authorize(Roles = UserRoles.Moderator)]
-    public async Task<ActionResult<StudyCenterDto>> Update(
-        Guid id,
-        [FromBody] UpdateStudyCenterRequest request,
-        CancellationToken ct)
-    {
-        if (User.GetUserId() is not { } actorId)
-            return Unauthorized();
-
-        var result = await service.UpdateCenterAsync(id, request, actorId, ct);
-        if (!result.Success || result.Center is null)
-            return ValidationProblem(result.ErrorMessage);
-
-        return Ok(result.Center);
-    }
+    // [UC-72] Moderator chỉ ẩn/hiện trung tâm (quyết định bản 14/11). Sửa nội dung do trung tâm tự làm qua PUT /center/profile (UC-92).
 
     /// <summary>[UC-72] Thay đổi trạng thái hoạt động (ẩn/hiện khỏi danh bạ và gợi ý) của trung tâm (chỉ Moderator).</summary>
     [HttpPut("{id:guid}/status")]

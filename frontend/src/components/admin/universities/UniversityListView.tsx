@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { FilterIcon, PlusIcon, RotateCcwIcon, SearchIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useAuth } from "@/contexts/AuthContext";
 import { DataTable, type DataTableToolbarSlots } from "@/components/admin/shared/DataTable";
 import {
   Popover,
@@ -55,6 +56,9 @@ interface LoadResult {
 }
 
 export function UniversityListView() {
+  // [UC-65] Chỉ Moderator nhập thêm trường; Admin chỉ xem
+  const { user } = useAuth();
+  const canCreate = user?.role === "moderator";
   const [draft, setDraft] = useState<AdminUniversityFilters>(EMPTY_FILTERS);
   const [applied, setApplied] = useState<AdminUniversityFilters>(EMPTY_FILTERS);
   const [result, setResult] = useState<LoadResult | null>(null);
@@ -299,14 +303,16 @@ export function UniversityListView() {
             Xóa lọc
           </Button>
         )}
-        <Button
-          type="button"
-          size="sm"
-          onClick={() => setIsCreating(true)}
-        >
-          <PlusIcon />
-          Thêm trường
-        </Button>
+        {canCreate && (
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => setIsCreating(true)}
+          >
+            <PlusIcon />
+            Thêm trường
+          </Button>
+        )}
       </div>
     ),
   };

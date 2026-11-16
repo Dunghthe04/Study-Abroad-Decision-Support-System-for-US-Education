@@ -1,5 +1,6 @@
 "use client";
 
+import { formatRating } from "@/lib/rating";
 import { useId, useMemo, useState } from "react";
 import Link from "next/link";
 import {
@@ -323,7 +324,7 @@ function CenterCard({ center, isAdmin }: { center: StudyCenter; isAdmin: boolean
               value={
                 <span className="inline-flex items-center gap-1">
                   <StarIcon className="size-3.5 fill-current text-gold" />
-                  <span>{Number(center.averageRating).toFixed(1)}</span>
+                  <span>{formatRating(center.averageRating)}</span>
                   <span className="text-xs font-normal text-ink-3">({center.reviewCount})</span>
                 </span>
               }

@@ -23,6 +23,14 @@ public class CenterVerificationRepository(AppDbContext db) : ICenterVerification
             .FirstOrDefaultAsync(x => x.Id == id, ct);
     }
 
+    /// <summary>
+    /// [UC-59] Thứ tự hàng đợi (đặc tả 5.1): hồ sơ chờ duyệt lên trước và xếp cũ nhất trước; các hồ sơ đã xử lý nằm sau, mới nhất trước.
+    /// </summary>
+    public static IOrderedQueryable<CenterVerificationRequest> OrderQueue(IQueryable<CenterVerificationRequest> q) =>
+        q.OrderBy(x => x.Status == CenterVerificationStatuses.PendingReview ? 0 : 1)
+            .ThenBy(x => x.Status == CenterVerificationStatuses.PendingReview ? x.SubmittedAt : DateTime.MinValue)
+            .ThenByDescending(x => x.SubmittedAt);
+
     public async Task<PagedResult<CenterVerificationRequest>> SearchAsync(CenterVerificationQuery query, CancellationToken ct = default)
     {
         var q = db.CenterVerificationRequests
@@ -45,8 +53,7 @@ public class CenterVerificationRepository(AppDbContext db) : ICenterVerification
         }
 
         var total = await q.CountAsync(ct);
-        var items = await q.OrderBy(x => x.Status == CenterVerificationStatuses.PendingReview ? 0 : 1)
-            .ThenByDescending(x => x.SubmittedAt)
+        var items = await OrderQueue(q)
             .Skip((query.Page - 1) * query.PageSize)
             .Take(query.PageSize)
             .ToListAsync(ct);

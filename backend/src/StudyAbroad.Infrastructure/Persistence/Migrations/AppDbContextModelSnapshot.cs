@@ -356,6 +356,80 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.CenterSuspensionProposal", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("DecidedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("decided_at");
+
+                    b.Property<Guid?>("DecidedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("decided_by_user_id");
+
+                    b.Property<string>("DecisionNote")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("decision_note");
+
+                    b.Property<Guid>("ProposedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("proposed_by_user_id");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("reason");
+
+                    b.Property<int>("RemovedMessageCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("removed_message_count");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("pending")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("StudyCenterId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("study_center_id");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_center_suspension_proposals");
+
+                    b.HasIndex("DecidedByUserId")
+                        .HasDatabaseName("ix_center_suspension_proposals_decided_by_user_id");
+
+                    b.HasIndex("ProposedByUserId")
+                        .HasDatabaseName("ix_center_suspension_proposals_proposed_by_user_id");
+
+                    b.HasIndex("StudyCenterId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_center_suspension_proposals_study_center_id")
+                        .HasFilter("status = 'pending'");
+
+                    b.HasIndex("Status", "CreatedAt")
+                        .HasDatabaseName("ix_center_suspension_proposals_status_created_at");
+
+                    b.ToTable("center_suspension_proposals", "app");
+                });
+
             modelBuilder.Entity("StudyAbroad.Domain.Entities.CenterVerificationDocument", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1487,6 +1561,19 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("removed_by_user_id");
 
+                    b.Property<string>("ReportReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("report_reason");
+
+                    b.Property<DateTime?>("ReportedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("reported_at");
+
+                    b.Property<Guid?>("ReportedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reported_by_user_id");
+
                     b.Property<Guid>("SenderUserId")
                         .HasColumnType("uuid")
                         .HasColumnName("sender_user_id");
@@ -1511,6 +1598,9 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("RemovedByUserId")
                         .HasDatabaseName("ix_lead_messages_removed_by_user_id");
+
+                    b.HasIndex("ReportedByUserId")
+                        .HasDatabaseName("ix_lead_messages_reported_by_user_id");
 
                     b.HasIndex("SenderUserId")
                         .HasDatabaseName("ix_lead_messages_sender_user_id");
@@ -4440,6 +4530,29 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasConstraintName("fk_center_reviews_users_user_id");
                 });
 
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.CenterSuspensionProposal", b =>
+                {
+                    b.HasOne("StudyAbroad.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("DecidedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_center_suspension_proposals_users_decided_by_user_id");
+
+                    b.HasOne("StudyAbroad.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("ProposedByUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_center_suspension_proposals_users_proposed_by_user_id");
+
+                    b.HasOne("StudyAbroad.Domain.Entities.StudyCenter", null)
+                        .WithMany()
+                        .HasForeignKey("StudyCenterId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_center_suspension_proposals_study_centers_study_center_id");
+                });
+
             modelBuilder.Entity("StudyAbroad.Domain.Entities.CenterVerificationDocument", b =>
                 {
                     b.HasOne("StudyAbroad.Domain.Entities.StudyCenter", null)
@@ -4628,6 +4741,12 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasForeignKey("RemovedByUserId")
                         .OnDelete(DeleteBehavior.SetNull)
                         .HasConstraintName("fk_lead_messages_users_removed_by_user_id");
+
+                    b.HasOne("StudyAbroad.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("ReportedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_lead_messages_users_reported_by_user_id");
 
                     b.HasOne("StudyAbroad.Domain.Entities.User", null)
                         .WithMany()
