@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { connection } from "next/server";
 import {
   ArrowDownIcon,
   ArrowRightIcon,
@@ -17,7 +18,10 @@ import { buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { groupLabel, groupVariant, statusLabel } from "@/lib/recommendation-labels";
 import { OpenAssistantButton } from "@/components/assistant/OpenAssistantButton";
+import { ParameterTable } from "@/components/methodology/ParameterTable";
+import { getMethodologyParameters } from "@/lib/methodology-api";
 import { cn } from "@/lib/utils";
+import type { MethodologyParameters } from "@/types/methodology";
 
 export const metadata: Metadata = {
   title: "Cách hệ thống xếp trường – USAS",
@@ -128,7 +132,17 @@ function PositionScale() {
   );
 }
 
-export default function MethodologyPage() {
+export default async function MethodologyPage() {
+  await connection();
+
+  // Bảng tham số lấy từ backend (UC-89). Lỗi thì chỉ phần bảng báo chưa tải được, các phần giải thích khác vẫn hiện.
+  let parameters: MethodologyParameters | null = null;
+  try {
+    parameters = await getMethodologyParameters();
+  } catch {
+    parameters = null;
+  }
+
   return (
     <div className="mx-auto max-w-[900px] space-y-6 pb-16">
       <div className="space-y-2 pt-5">
@@ -347,6 +361,15 @@ export default function MethodologyPage() {
               Mỗi thành phần có giá trị từ 0 đến 1, nhân với trọng số rồi cộng lại. Thành phần nào thiếu số liệu thì bị bỏ ra và trọng số được chia lại cho các thành phần còn lại. Ba thanh ưu tiên, mỗi thanh từ 0 đến 4 với 2 là cân bằng, nhân trọng số của ngân sách, học bổng và chất lượng với mức chọn chia 2.
             </p>
           </div>
+        </div>
+      </details>
+
+      <details className="rounded-xl border border-line bg-surface">
+        <summary className="cursor-pointer px-5 py-4 font-sans text-lg font-semibold text-foreground sm:px-6">
+          Các tham số đang chạy
+        </summary>
+        <div className="border-t border-line p-5 sm:p-6">
+          <ParameterTable data={parameters} />
         </div>
       </details>
 
