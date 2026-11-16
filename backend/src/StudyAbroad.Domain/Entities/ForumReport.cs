@@ -6,7 +6,8 @@ namespace StudyAbroad.Domain.Entities;
 public class ForumReport : BaseEntity
 {
     public Guid ForumPostId { get; set; }
-    public Guid ReporterUserId { get; set; }
+    /// <summary>[UC-80] Null khi người báo cáo đã xóa tài khoản: báo cáo vẫn còn để mod xử lý.</summary>
+    public Guid? ReporterUserId { get; set; }
     public string Reason { get; set; } = string.Empty;
     public string? Detail { get; set; }
     /// <summary>open | actioned | dismissed</summary>

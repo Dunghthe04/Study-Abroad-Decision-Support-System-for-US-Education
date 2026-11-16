@@ -10,7 +10,7 @@ public class PaymentTransactionConfiguration : IEntityTypeConfiguration<PaymentT
     {
         b.ToTable("payment_transactions");
         b.HasKey(x => x.Id);
-        b.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        b.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.SetNull);   // [UC-80] xóa user thì giữ giao dịch, bỏ liên kết
         b.HasOne<UserSubscription>().WithMany().HasForeignKey(x => x.UserSubscriptionId).OnDelete(DeleteBehavior.SetNull);
         b.Property(x => x.AmountVnd).HasPrecision(12, 2);
         b.Property(x => x.Gateway).HasMaxLength(64).IsRequired();
