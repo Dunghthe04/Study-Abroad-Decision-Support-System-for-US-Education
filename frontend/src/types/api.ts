@@ -373,6 +373,8 @@ export interface UserDto {
   blockedFeatures?: string[] | null;
   lockReason?: string | null;
   lockoutEnd?: string | null;
+  /** [UC-111] Ngày sinh (yyyy-MM-dd), chỉ trả về cho chính chủ hoặc Admin */
+  dateOfBirth?: string | null;
 }
 
 // Token chỉ nằm trong HttpOnly cookie, body không chứa token
