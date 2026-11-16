@@ -62,6 +62,7 @@ namespace StudyAbroad.Application.Auth
         IAuditLogRepository auditLogs,
         IParentLinkService parentLinkService,
         IUnitOfWork unitOfWork,
+        StudyAbroad.Application.Leads.ILeadWithdrawalRepository leadWithdrawals,
         IStudyCenterRepository? studyCenters = null) : IAuthService
     {
         public const int MinPasswordLength = 8;
@@ -1033,13 +1034,17 @@ namespace StudyAbroad.Application.Auth
                 // 4. Hủy liên kết phụ huynh (cả 2 phía) và rút consent
                 notices = await parentLinkService.RevokeAllForAccountDeletionAsync(user.Id, txCt);
 
-                // 5. Ghi vết kiểm toán, không lưu email hay tên
+                // 5. Thu hồi yêu cầu liên hệ còn mở (new/contacted); lead đã hoàn tất giữ nguyên
+                var withdrawnLeads = await leadWithdrawals.WithdrawOpenLeadsAsync(user.Id, now, txCt);
+
+                // 6. Ghi vết kiểm toán, không lưu email hay tên
                 var detailJson = JsonSerializer.Serialize(new
                 {
                     action = "request_account_deletion",
                     userId = user.Id,
                     deletedAt = now,
-                    revokedParentLinks = notices.Count
+                    revokedParentLinks = notices.Count,
+                    withdrawnLeads
                 });
 
                 await auditLogs.AddAsync(new AuditLog

@@ -55,6 +55,31 @@ public class CenterLeadMapperTests
     }
 
     [Fact]
+    public void Withdrawn_HidesAllStudentData()
+    {
+        var dto = CenterLeadMapper.ToCenterDto(
+            new Lead
+            {
+                SharedFields = [LeadSharedFields.Contact, LeadSharedFields.Academic, LeadSharedFields.Goals],
+                SharedProfile = true,
+                ContactPhone = "0912345678",
+                Message = "Em muốn tư vấn",
+                StudyLevel = "bachelor",
+                Status = LeadStatuses.Withdrawn,
+            },
+            "Trung Tâm Test", "Nguyen Van A", "a@example.com", Profile, Certifications);
+
+        Assert.Equal(LeadStatuses.Withdrawn, dto.Status);
+        Assert.Null(dto.StudentName);
+        Assert.Null(dto.StudentEmail);
+        Assert.Null(dto.ContactPhone);
+        Assert.Null(dto.Message);
+        Assert.Null(dto.StudyLevel);
+        Assert.Null(dto.ProfileSummary);
+        Assert.False(dto.SharedProfile);
+    }
+
+    [Fact]
     public void ContactOnly_NoProfileSummary()
     {
         var dto = Map(LeadSharedFields.Contact);

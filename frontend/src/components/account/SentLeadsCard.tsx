@@ -23,6 +23,7 @@ const STATUS_BADGE_CLASS: Record<string, string> = {
   new: "bg-blue-600 text-white",
   contacted: "bg-amber-600 text-white",
   closed: "text-emerald-700 border-emerald-300 bg-emerald-50 dark:bg-emerald-950/40",
+  withdrawn: "text-muted-foreground border-border bg-muted", // [UC-80]
 };
 
 function errorMessage(err: unknown) {

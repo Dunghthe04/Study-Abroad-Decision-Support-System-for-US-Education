@@ -420,6 +420,19 @@ internal sealed class FakeScenarioRepository : IScenarioRepository
 }
 
 // UC-80: fake transaction, chạy thẳng công việc (fake repo không có rollback; rollback thật kiểm tra tay trên PG)
+/// <summary>[UC-80] Ghi lại người dùng bị thu hồi lead, trả về số lead giả định đã thu hồi.</summary>
+internal sealed class FakeLeadWithdrawalRepository : StudyAbroad.Application.Leads.ILeadWithdrawalRepository
+{
+    public List<Guid> UserIds { get; } = [];
+    public int CountToReturn { get; set; }
+
+    public Task<int> WithdrawOpenLeadsAsync(Guid userId, DateTime now, CancellationToken ct = default)
+    {
+        UserIds.Add(userId);
+        return Task.FromResult(CountToReturn);
+    }
+}
+
 internal sealed class FakeUnitOfWork : IUnitOfWork
 {
     public int Calls { get; private set; }

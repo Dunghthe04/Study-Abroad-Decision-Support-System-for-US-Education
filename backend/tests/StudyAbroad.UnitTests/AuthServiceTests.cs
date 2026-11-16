@@ -29,10 +29,11 @@ public class AuthServiceTests
     private readonly FakeParentLinkRepository _links = new();
     private readonly FakeAuditLogRepository _auditLogs = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
+    private readonly FakeLeadWithdrawalRepository _leadWithdrawals = new();
 
     private AuthService CreateService() => new(
         _repo, new FakeHasher(), _tokens, _emailSender, _links, _auditLogs,
-        new ParentLinkService(_links, _repo, _emailSender), _unitOfWork);
+        new ParentLinkService(_links, _repo, _emailSender), _unitOfWork, _leadWithdrawals);
 
     // Ngày sinh ứng với tuổi tròn (sinh nhật cách hôm nay ở VN 10 ngày về trước)
     private static DateOnly BornYearsAgo(int years) =>
@@ -600,6 +601,23 @@ public class AuthServiceTests
         Assert.Equal(userId, log.ActorUserId);
         Assert.Equal("127.0.0.1", log.IpAddress);
         Assert.Equal("TestAgent/1.0", log.UserAgent);
+    }
+
+    [Fact]
+    public async Task AnonymizeUserAccount_WithdrawsOpenLeads_AndLogsCount()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        var user = _repo.Users[0];
+        user.Status = UserStatuses.Active;
+        _leadWithdrawals.CountToReturn = 2;
+
+        var result = await service.AnonymizeUserAccountAsync(user.Id);
+
+        Assert.Equal(AuthError.None, result.Error);
+        Assert.Equal(user.Id, Assert.Single(_leadWithdrawals.UserIds));
+        var log = Assert.Single(_auditLogs.Entries);
+        Assert.Contains("\"withdrawnLeads\":2", log.DetailJson);
     }
 
     [Fact]

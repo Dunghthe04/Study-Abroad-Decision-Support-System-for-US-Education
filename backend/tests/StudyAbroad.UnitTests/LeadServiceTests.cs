@@ -1677,6 +1677,66 @@ public class LeadServiceTests
     }
 
     [Fact]
+    public async Task SendSentLeadMessage_WithdrawnLead_Blocked()
+    {
+        var (s, _, service) = MessageSetup();
+        var student = s.AddStudent(18);
+        var lead = AddLead(s, student.Id, student.Id);
+        lead.Status = LeadStatuses.Withdrawn;
+
+        await AssertRule(() => service.SendSentLeadMessageAsync(student.Id, lead.Id, "Xin chào"), "lead_withdrawn", 400);
+        Assert.Empty(s.LeadRepo.Messages);
+    }
+
+    // [UC-80] Trung tâm còn thấy dòng "Đã thu hồi" nhưng không đổi trạng thái, không đọc/gửi tin được
+    private static (FakeLeadRepo Repo, LeadService Service, Guid OwnerId, Guid LeadId) WithdrawnCenterSetup()
+    {
+        var ownerId = Guid.NewGuid();
+        var centerId = Guid.NewGuid();
+        var leadId = Guid.NewGuid();
+        var centerRepo = new FakeStudyCenterRepo();
+        centerRepo.Centers.Add(new StudyCenter { Id = centerId, Name = "Trung Tâm Thu Hồi", OwnerUserId = ownerId });
+        var leadRepo = new FakeLeadRepo();
+        leadRepo.Leads.Add(new Lead { Id = leadId, UserId = Guid.NewGuid(), StudyCenterId = centerId, Status = LeadStatuses.Withdrawn });
+        var service = new LeadService(leadRepo, centerRepo, new FakeUserRepository(), new FakeParentLinkRepository(), new FakeAuditRepo());
+        return (leadRepo, service, ownerId, leadId);
+    }
+
+    [Fact]
+    public async Task UpdateReceivedLeadStatus_WithdrawnLead_Blocked()
+    {
+        var (repo, service, ownerId, leadId) = WithdrawnCenterSetup();
+
+        await AssertRule(() => service.UpdateReceivedLeadStatusAsync(ownerId, "owner@center.com", UserRoles.Center, leadId, "contacted"),
+            "lead_withdrawn", 400);
+        Assert.Equal(LeadStatuses.Withdrawn, repo.Leads[0].Status);
+    }
+
+    [Fact]
+    public async Task SendLeadMessageForCenter_WithdrawnLead_Blocked()
+    {
+        var (repo, service, ownerId, leadId) = WithdrawnCenterSetup();
+
+        await AssertRule(() => service.SendLeadMessageForCenterUserAsync(ownerId, "owner@center.com", UserRoles.Center, leadId, "Xin chào"),
+            "lead_withdrawn", 400);
+        Assert.Empty(repo.Messages);
+        Assert.Equal(LeadStatuses.Withdrawn, repo.Leads[0].Status);
+    }
+
+    [Fact]
+    public async Task GetReceivedLeadMessagesForCenter_WithdrawnLead_ReturnsEmptyThread()
+    {
+        var (repo, service, ownerId, leadId) = WithdrawnCenterSetup();
+        repo.Messages.Add(new LeadMessage { LeadId = leadId, SenderUserId = repo.Leads[0].UserId, Content = "Tin cũ", Status = "visible" });
+
+        var thread = await service.GetReceivedLeadMessagesForCenterUserAsync(ownerId, "owner@center.com", UserRoles.Center, leadId);
+
+        Assert.Equal(LeadStatuses.Withdrawn, thread.LeadStatus);
+        Assert.Empty(thread.Messages);
+        Assert.Equal(0, thread.FlaggedCount);
+    }
+
+    [Fact]
     public async Task SentLeadMessages_CenterRole_NotAllowed()
     {
         var (s, _, service) = MessageSetup();

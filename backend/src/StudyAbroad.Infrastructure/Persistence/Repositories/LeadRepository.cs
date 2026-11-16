@@ -146,6 +146,8 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
         if (!string.IsNullOrWhiteSpace(search))
         {
             var term = search.Trim();
+            // [UC-80] Lead đã thu hồi không khớp tìm kiếm, để không lộ tên/SĐT/lời nhắn của người đã xóa tài khoản
+            query = query.Where(x => x.Lead.Status != LeadStatuses.Withdrawn);
             query = query.Where(x => (x.Lead.ContactPhone != null && EF.Functions.ILike(x.Lead.ContactPhone, $"%{term}%"))
                                   || (x.Lead.Message != null && EF.Functions.ILike(x.Lead.Message, $"%{term}%"))
                                   || (x.Lead.SharedFields.Contains(LeadSharedFields.Contact) && EF.Functions.ILike(x.User.FullName, $"%{term}%")));

@@ -51,7 +51,7 @@ export interface LeadDto {
 }
 
 /** Trạng thái lead (backend: new | contacted | closed). */
-export type LeadStatus = "new" | "contacted" | "closed";
+export type LeadStatus = "new" | "contacted" | "closed" | "withdrawn";
 
 /**
  * [UC-44] Nhãn trạng thái hiện cho học sinh / phụ huynh.
@@ -61,6 +61,7 @@ export const LEAD_STATUS_LABEL: Record<LeadStatus, string> = {
   new: "Mới gửi",
   contacted: "Đang trao đổi",
   closed: "Đã hoàn tất",
+  withdrawn: "Đã thu hồi", // [UC-80] người gửi đã xóa tài khoản
 };
 
 /** Nhãn trạng thái; giá trị backend chưa biết thì hiện nguyên giá trị đó. */
@@ -102,6 +103,7 @@ export type LeadRuleCode =
   | "daily_limit"
   // [Nhắn tin phía người gửi] GET/POST /leads/sent/{id}/messages
   | "lead_closed"
+  | "lead_withdrawn" // [UC-80] người gửi đã xóa tài khoản
   | "not_found"
   | "invalid_content";
 

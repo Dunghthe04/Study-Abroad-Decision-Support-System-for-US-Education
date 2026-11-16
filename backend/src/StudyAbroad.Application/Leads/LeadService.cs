@@ -33,6 +33,13 @@ public class LeadService(
         "new", "contacted", "closed"
     };
 
+    /// <summary>[UC-80] Người gửi đã xóa tài khoản: lead bị thu hồi, không ai trao đổi hay đổi trạng thái được nữa.</summary>
+    private static void EnsureNotWithdrawn(Lead lead)
+    {
+        if (string.Equals(lead.Status, LeadStatuses.Withdrawn, StringComparison.OrdinalIgnoreCase))
+            throw new LeadRuleException("lead_withdrawn", 400, "Yêu cầu đã được người gửi thu hồi, không thể tiếp tục trao đổi.");
+    }
+
     private async Task<(Guid? CenterId, string? CenterName)> ResolveCenterScopeAsync(
         Guid userId,
         string? userEmail,
@@ -335,6 +342,7 @@ public class LeadService(
 
         if (string.Equals(lead.Status, "closed", StringComparison.OrdinalIgnoreCase))
             throw new LeadRuleException("lead_closed", 400, "Yêu cầu đã hoàn tất, không gửi thêm tin nhắn được.");
+        EnsureNotWithdrawn(lead);
 
         // Tin vẫn được lưu và hiện; chỉ gắn cờ để kiểm duyệt viên xem lại
         var filterResult = LeadMessageContentFilter.Inspect(trimmedContent);
@@ -422,6 +430,8 @@ public class LeadService(
         if (centerId.HasValue && lead.StudyCenterId != centerId.Value)
             throw new KeyNotFoundException("Không tìm thấy yêu cầu liên hệ.");
 
+        EnsureNotWithdrawn(lead);
+
         lead.Status = normalizedStatus;
         await leads.UpdateAsync(lead, ct);
 
@@ -441,6 +451,11 @@ public class LeadService(
         CancellationToken ct = default)
     {
         var (lead, centerName) = await GetAuthorizedLeadForCenterAsync(userId, userEmail, userRole, leadId, ct);
+
+        // [UC-80] Lead đã thu hồi: trung tâm không xem lại nội dung trao đổi
+        if (string.Equals(lead.Status, LeadStatuses.Withdrawn, StringComparison.OrdinalIgnoreCase))
+            return new LeadMessagesThreadDto(lead.Id, lead.Status, [], 0);
+
         // [UC-42] Hiện tên khi chia sẻ nhóm contact, cùng quy tắc với CenterLeadMapper
         var showName = lead.SharedFields.Contains(LeadSharedFields.Contact);
         var messages = await leads.GetLeadMessagesAsync(lead.Id, lead.UserId, showName, centerName, ct);
@@ -469,6 +484,7 @@ public class LeadService(
             throw new ArgumentException($"Nội dung tin nhắn tối đa {MaxReplyMessageLength} ký tự.");
 
         var (lead, centerName) = await GetAuthorizedLeadForCenterAsync(userId, userEmail, userRole, leadId, ct);
+        EnsureNotWithdrawn(lead);
 
         // [UC-74 / UC-44] Áp dụng cùng bộ lọc: phát hiện số điện thoại và quảng cáo để gắn cờ kiểm duyệt
         var filterResult = LeadMessageContentFilter.Inspect(trimmedContent);

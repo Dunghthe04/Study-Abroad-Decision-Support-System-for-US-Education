@@ -201,6 +201,11 @@ public class LeadsController(ILeadService leadService) : ControllerBase
         {
             return await action(userId.Value, userEmail, userRole);
         }
+        catch (LeadRuleException ex)
+        {
+            // [UC-80] vd. lead_withdrawn: người gửi đã xóa tài khoản
+            return StatusCode(ex.Status, new { code = ex.Code, message = ex.Message });
+        }
         catch (ArgumentException ex)
         {
             return ValidationProblem(ex.Message);

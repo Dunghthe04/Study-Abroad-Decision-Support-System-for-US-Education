@@ -17,6 +17,14 @@ public static class CenterLeadMapper
         StudentProfile? profile,
         IReadOnlyList<ProfileCertification>? certifications = null)
     {
+        // [UC-80] Người gửi đã xóa tài khoản: chỉ giữ mã, trung tâm, trạng thái, ngày gửi; ẩn mọi dữ liệu của người gửi
+        if (string.Equals(lead.Status, LeadStatuses.Withdrawn, StringComparison.OrdinalIgnoreCase))
+            return new CenterReceivedLeadDto(
+                lead.Id, lead.StudyCenterId, centerName,
+                null, null, null, false,
+                lead.Status, lead.CreatedAt,
+                null, null, null);
+
         var fields = lead.SharedFields ?? [];
         bool Has(string group) => fields.Contains(group);
 
