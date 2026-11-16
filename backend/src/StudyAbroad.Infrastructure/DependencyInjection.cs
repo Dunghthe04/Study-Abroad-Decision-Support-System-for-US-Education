@@ -44,6 +44,7 @@ public static class DependencyInjection
         services.AddSingleton<StudyAbroad.Application.Admin.SlmSamples.ISlmWorkbookReader, StudyAbroad.Infrastructure.Import.SlmWorkbookReader>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IAuditLogRepository, AuditLogRepository>();
+        services.AddScoped<StudyAbroad.Application.Common.IUnitOfWork, EfUnitOfWork>();   // [UC-80] gom nhiều bước ghi vào một transaction
         services.AddScoped<StudyAbroad.Application.ParentLinks.IParentLinkRepository, ParentLinkRepository>();
         services.AddScoped<IScenarioRepository, ScenarioRepository>();   // [UC-86] kịch bản what-if đã lưu
         services.AddScoped<IFinancialProfileRepository, FinancialProfileRepository>();

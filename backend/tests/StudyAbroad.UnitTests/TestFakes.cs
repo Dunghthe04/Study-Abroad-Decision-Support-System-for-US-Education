@@ -178,8 +178,12 @@ internal sealed class FakeAuditLogRepository : IAuditLogRepository
 {
     public List<AuditLog> Entries { get; } = [];
 
+    /// <summary>Đặt khác null để AddAsync ném lỗi (giả lập một bước hỏng trong transaction).</summary>
+    public Exception? ThrowOnAdd { get; set; }
+
     public Task AddAsync(AuditLog entry, CancellationToken cancellationToken = default)
     {
+        if (ThrowOnAdd != null) throw ThrowOnAdd;
         Entries.Add(entry);
         return Task.CompletedTask;
     }
@@ -413,4 +417,16 @@ internal sealed class FakeScenarioRepository : IScenarioRepository
         Title = r.Title, SimulatedProfileJson = r.SimulatedProfileJson, SimulatedRecommendationsJson = r.SimulatedRecommendationsJson,
         Notes = r.Notes,
     };
+}
+
+// UC-80: fake transaction, chạy thẳng công việc (fake repo không có rollback; rollback thật kiểm tra tay trên PG)
+internal sealed class FakeUnitOfWork : IUnitOfWork
+{
+    public int Calls { get; private set; }
+
+    public Task ExecuteInTransactionAsync(Func<CancellationToken, Task> work, CancellationToken ct = default)
+    {
+        Calls++;
+        return work(ct);
+    }
 }

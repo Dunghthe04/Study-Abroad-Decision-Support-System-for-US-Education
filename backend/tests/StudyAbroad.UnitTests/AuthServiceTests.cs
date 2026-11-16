@@ -28,8 +28,11 @@ public class AuthServiceTests
     private readonly FakeEmailSender _emailSender = new();
     private readonly FakeParentLinkRepository _links = new();
     private readonly FakeAuditLogRepository _auditLogs = new();
+    private readonly FakeUnitOfWork _unitOfWork = new();
 
-    private AuthService CreateService() => new(_repo, new FakeHasher(), _tokens, _emailSender, _links, _auditLogs);
+    private AuthService CreateService() => new(
+        _repo, new FakeHasher(), _tokens, _emailSender, _links, _auditLogs,
+        new ParentLinkService(_links, _repo, _emailSender), _unitOfWork);
 
     // Ngày sinh ứng với tuổi tròn (sinh nhật cách hôm nay ở VN 10 ngày về trước)
     private static DateOnly BornYearsAgo(int years) =>
@@ -558,7 +561,7 @@ public class AuthServiceTests
     }
 
     [Fact]
-    public async Task AnonymizeUserAccount_Success_AnonymizesPiiAndRevokesSessionsAndLogsAudit()
+    public async Task AnonymizeUserAccount_Success_SoftDeletesAndRevokesSessionsAndLogsAudit()
     {
         var service = CreateService();
         await service.RegisterAsync(Request());
@@ -566,6 +569,8 @@ public class AuthServiceTests
         user.Status = UserStatuses.Active;
         var userId = user.Id;
         var originalEmail = user.Email;
+        var originalName = user.FullName;
+        var originalHash = user.PasswordHash;
 
         await _repo.CreateSessionAsync(new UserSession
         {
@@ -582,13 +587,13 @@ public class AuthServiceTests
 
         Assert.Equal(AuthError.None, result.Error);
         Assert.Equal(UserStatuses.Deleted, user.Status);
-        Assert.NotEqual(originalEmail, user.Email);
-        Assert.StartsWith("deleted_", user.Email);
-        Assert.EndsWith("@anonymized.studyabroad", user.Email);
-        Assert.Equal("Người dùng đã xóa", user.FullName);
-        Assert.Null(user.Phone);
-        Assert.Equal(string.Empty, user.PasswordHash);
+        Assert.NotNull(user.DeletedAt);
+        // UC-80 xóa mềm: giữ nguyên email, tên, mật khẩu để khôi phục trong 30 ngày
+        Assert.Equal(originalEmail, user.Email);
+        Assert.Equal(originalName, user.FullName);
+        Assert.Equal(originalHash, user.PasswordHash);
         Assert.True(_repo.Sessions[0].IsRevoked);
+        Assert.Equal(1, _unitOfWork.Calls);
 
         var log = Assert.Single(_auditLogs.Entries);
         Assert.Equal("user.delete_account", log.Action);
@@ -608,7 +613,7 @@ public class AuthServiceTests
         var result = await service.AnonymizeUserAccountAsync(user.Id);
 
         Assert.Equal(AuthError.Validation, result.Error);
-        Assert.Contains("đã được xóa", result.Message);
+        Assert.Contains("đang chờ xóa", result.Message);
         Assert.Empty(_auditLogs.Entries);
     }
 
@@ -622,6 +627,67 @@ public class AuthServiceTests
         Assert.Equal(AuthError.Validation, result.Error);
         Assert.Contains("Không tìm thấy", result.Message);
         Assert.Empty(_auditLogs.Entries);
+    }
+
+    // UC-80: liên kết phụ huynh đang hiệu lực của học sinh (kèm consent đã cấp)
+    private (User Student, User Parent, ParentStudentLink Link) AddActiveParentLink(int studentAge)
+    {
+        var student = new User { Email = "kid@test.com", FullName = "Con", Role = UserRoles.Student, Status = UserStatuses.Active, DateOfBirth = BornYearsAgo(studentAge) };
+        var parent = new User { Email = "me@test.com", FullName = "Bố", Role = UserRoles.Parent, Status = UserStatuses.Active, DateOfBirth = BornYearsAgo(40) };
+        _repo.Users.Add(student);
+        _repo.Users.Add(parent);
+        var consent = new Consent { UserId = student.Id, Purpose = ConsentPurposes.ChildDataProcessing, Granted = true, GrantedByUserId = parent.Id };
+        _links.Consents.Add(consent);
+        var link = new ParentStudentLink
+        {
+            StudentUserId = student.Id,
+            ParentEmail = parent.Email,
+            ParentUserId = parent.Id,
+            Status = ParentLinkStatuses.Active,
+            AcceptedAt = DateTime.UtcNow.AddDays(-1),
+            ConsentId = consent.Id,
+        };
+        _links.Links.Add(link);
+        return (student, parent, link);
+    }
+
+    [Fact]
+    public async Task AnonymizeUserAccount_StudentWithActiveLink_RevokesLinkAndConsent_AndNotifiesParent()
+    {
+        var (student, parent, link) = AddActiveParentLink(studentAge: 17);
+
+        var result = await CreateService().AnonymizeUserAccountAsync(student.Id);
+
+        Assert.Equal(AuthError.None, result.Error);
+        var stored = _links.Links.Single(l => l.Id == link.Id);
+        Assert.Equal(ParentLinkStatuses.Revoked, stored.Status);
+        Assert.Equal(student.Id, stored.RevokedByUserId);
+        Assert.False(Assert.Single(_links.Consents).Granted);
+        Assert.Contains(_emailSender.SentEmails, e => e.To == parent.Email && e.Purpose == "parent_unlinked");
+    }
+
+    [Fact]
+    public async Task AnonymizeUserAccount_StudentUnder16_StillRevokesActiveLink()
+    {
+        // Đặc tả UC-80 cho học sinh dưới 16 tự xóa tài khoản, nên không áp quy tắc chặn của RevokeAsync
+        var (student, _, link) = AddActiveParentLink(studentAge: 14);
+
+        var result = await CreateService().AnonymizeUserAccountAsync(student.Id);
+
+        Assert.Equal(AuthError.None, result.Error);
+        Assert.Equal(ParentLinkStatuses.Revoked, _links.Links.Single(l => l.Id == link.Id).Status);
+    }
+
+    [Fact]
+    public async Task AnonymizeUserAccount_StepFailsInsideTransaction_SendsNoEmail()
+    {
+        var (student, _, _) = AddActiveParentLink(studentAge: 17);
+        _auditLogs.ThrowOnAdd = new InvalidOperationException("db down");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => CreateService().AnonymizeUserAccountAsync(student.Id));
+
+        // Email chỉ gửi sau khi transaction commit; lỗi giữa chừng thì phụ huynh không nhận mail sai
+        Assert.DoesNotContain(_emailSender.SentEmails, e => e.Purpose == "parent_unlinked");
     }
 
     [Fact]

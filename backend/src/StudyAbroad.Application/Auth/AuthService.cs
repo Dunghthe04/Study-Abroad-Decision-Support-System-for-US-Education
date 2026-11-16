@@ -39,7 +39,7 @@ namespace StudyAbroad.Application.Auth
         Task<AuthResult> LockUserAccountAsync(Guid targetUserId, LockUserAccountRequest request, Guid actorAdminId, CancellationToken ct = default);
         /// <summary>[UC-62] Admin mở khóa tài khoản (status locked hoặc temp_locked) kèm lý do và audit.</summary>
         Task<AuthResult> UnlockUserAccountAsync(Guid targetUserId, UnlockUserAccountRequest request, Guid actorAdminId, CancellationToken ct = default);
-        /// <summary>[UC-80] Xóa tài khoản và ẩn danh hóa dữ liệu cá nhân theo luật PDPA 2025.</summary>
+        /// <summary>[UC-80] Yêu cầu xóa tài khoản: xóa mềm, khôi phục được trong thời hạn, hết hạn thì job xóa hẳn.</summary>
         Task<AuthResult> AnonymizeUserAccountAsync(Guid userId, string? ipAddress = null, string? userAgent = null, CancellationToken ct = default);
         /// <summary>[UC-64] Trung tâm tự đăng ký tài khoản (User role center status unverified + StudyCenter status unverified).</summary>
         Task<AuthResult> RegisterCenterAsync(RegisterCenterRequest request, CancellationToken ct = default);
@@ -60,6 +60,8 @@ namespace StudyAbroad.Application.Auth
         IEmailSender emailSender,
         IParentLinkRepository parentLinks,
         IAuditLogRepository auditLogs,
+        IParentLinkService parentLinkService,
+        IUnitOfWork unitOfWork,
         IStudyCenterRepository? studyCenters = null) : IAuthService
     {
         public const int MinPasswordLength = 8;
@@ -990,8 +992,11 @@ namespace StudyAbroad.Application.Auth
         }
 
         /// <summary>
-        /// [UC-80] Xóa tài khoản và ẩn danh hóa dữ liệu (Right to be Forgotten - PDPA 2025).
-        /// Áp dụng cơ chế Anonymization thay vì Hard Delete để bảo toàn tính toàn vẹn CSDL và khóa ngoại.
+        /// [UC-80] Bước 1 của xóa tài khoản: xóa mềm (status deleted + DeletedAt), thu hồi phiên và OTP,
+        /// hủy liên kết phụ huynh và rút consent, ghi audit. Tất cả trong một transaction.
+        /// Email, tên, mật khẩu giữ nguyên để người dùng khôi phục trong thời hạn xóa mềm;
+        /// hết hạn thì job AccountPurgeBackgroundService xóa hẳn dòng user (cascade phần còn lại).
+        /// Email báo bên phụ huynh/học sinh chỉ gửi sau khi commit.
         /// </summary>
         public async Task<AuthResult> AnonymizeUserAccountAsync(
             Guid userId,
@@ -1004,50 +1009,56 @@ namespace StudyAbroad.Application.Auth
                 return AuthResult.Fail(AuthError.Validation, "Không tìm thấy tài khoản người dùng.");
 
             if (user.Status == UserStatuses.Deleted)
-                return AuthResult.Fail(AuthError.Validation, "Tài khoản đã được xóa trước đó.");
+                return AuthResult.Fail(AuthError.Validation, "Tài khoản đang chờ xóa.");
 
-            var originalEmail = user.Email;
-            var shortId = user.Id.ToString("N")[..8];
+            var now = DateTime.UtcNow;
+            List<ParentLinkRevokeNotice> notices = [];
 
-            // 1. Ẩn danh hóa thông tin định danh cá nhân (PII)
-            user.Email = $"deleted_{shortId}_{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}@anonymized.studyabroad";
-            user.FullName = "Người dùng đã xóa";
-            user.Phone = null;
-            user.PasswordHash = string.Empty;
-            user.Status = UserStatuses.Deleted;
-            user.FailedLoginAttempts = 0;
-            user.LockoutEnd = null;
-
-            await users.UpdateUserAsync(user, ct);
-
-            // 2. Thu hồi toàn bộ phiên đăng nhập đang hoạt động
-            await users.RevokeAllSessionsAsync(user.Id, ct);
-
-            // 3. Vô hiệu hóa toàn bộ mã OTP liên quan
-            await users.InvalidateOtpsAsync(user.Id, "verify_email", ct);
-            await users.InvalidateOtpsAsync(user.Id, "reset_password", ct);
-
-            // 4. Ghi vết kiểm toán (Audit Trail) bất biến
-            var detailJson = JsonSerializer.Serialize(new
+            await unitOfWork.ExecuteInTransactionAsync(async txCt =>
             {
-                action = "anonymize_account",
-                userId = user.Id,
-                anonymizedAt = DateTime.UtcNow,
-                previousEmailDomain = originalEmail.Contains('@') ? originalEmail.Split('@')[1] : null
-            });
+                // 1. Xóa mềm: chặn đăng nhập thường, giữ dữ liệu để khôi phục
+                user.Status = UserStatuses.Deleted;
+                user.DeletedAt = now;
+                user.FailedLoginAttempts = 0;
+                user.LockoutEnd = null;
+                await users.UpdateUserAsync(user, txCt);
 
-            await auditLogs.AddAsync(new AuditLog
-            {
-                ActorUserId = user.Id,
-                Action = "user.delete_account",
-                EntityType = "user",
-                EntityId = user.Id.ToString(),
-                DetailJson = detailJson,
-                IpAddress = ipAddress,
-                UserAgent = userAgent
+                // 2. Thu hồi toàn bộ phiên đăng nhập đang hoạt động
+                await users.RevokeAllSessionsAsync(user.Id, txCt);
+
+                // 3. Vô hiệu hóa toàn bộ mã OTP liên quan
+                await users.InvalidateOtpsAsync(user.Id, "verify_email", txCt);
+                await users.InvalidateOtpsAsync(user.Id, "reset_password", txCt);
+
+                // 4. Hủy liên kết phụ huynh (cả 2 phía) và rút consent
+                notices = await parentLinkService.RevokeAllForAccountDeletionAsync(user.Id, txCt);
+
+                // 5. Ghi vết kiểm toán, không lưu email hay tên
+                var detailJson = JsonSerializer.Serialize(new
+                {
+                    action = "request_account_deletion",
+                    userId = user.Id,
+                    deletedAt = now,
+                    revokedParentLinks = notices.Count
+                });
+
+                await auditLogs.AddAsync(new AuditLog
+                {
+                    ActorUserId = user.Id,
+                    Action = "user.delete_account",
+                    EntityType = "user",
+                    EntityId = user.Id.ToString(),
+                    DetailJson = detailJson,
+                    IpAddress = ipAddress,
+                    UserAgent = userAgent
+                }, txCt);
             }, ct);
 
-            return AuthResult.Ok("Tài khoản của bạn đã được xóa và ẩn danh hóa thành công theo quy định bảo vệ dữ liệu.");
+            // Sau commit mới báo bên còn lại, để lỗi giữa chừng không gửi mail sai
+            foreach (var notice in notices)
+                await emailSender.SendParentLinkChangedEmailAsync(notice.ToEmail, notice.StudentName, notice.ParentName, linked: false, ct);
+
+            return AuthResult.Ok("Tài khoản đã chuyển sang chờ xóa. Trong 30 ngày bạn có thể đăng nhập để khôi phục.");
         }
 
         public async Task<AuthResult> RegisterCenterAsync(RegisterCenterRequest request, CancellationToken ct = default)

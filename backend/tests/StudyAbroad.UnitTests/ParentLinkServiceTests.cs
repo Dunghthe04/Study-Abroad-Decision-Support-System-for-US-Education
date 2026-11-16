@@ -257,6 +257,37 @@ public class ParentLinkServiceTests
     }
 
     [Fact]
+    public async Task RevokeAllForAccountDeletion_ParentSide_RevokesActiveLink_AndReturnsNoticeForStudent()
+    {
+        var (student, parent, link) = await AcceptedLinkAsync(studentAge: 14);
+
+        var notices = await CreateService().RevokeAllForAccountDeletionAsync(parent.Id);
+
+        var stored = Stored(link.Id);
+        Assert.Equal(ParentLinkStatuses.Revoked, stored.Status);
+        Assert.Equal(parent.Id, stored.RevokedByUserId);
+        Assert.False(Assert.Single(_links.Consents).Granted);
+        var notice = Assert.Single(notices);
+        Assert.Equal(student.Email, notice.ToEmail);
+        Assert.Equal(student.FullName, notice.StudentName);
+        Assert.Equal(parent.FullName, notice.ParentName);
+        // Không tự gửi mail: người gọi gửi sau khi transaction commit
+        Assert.Empty(_emails.SentEmails);
+    }
+
+    [Fact]
+    public async Task RevokeAllForAccountDeletion_StudentPendingInvite_RevokedWithoutNotice()
+    {
+        var student = AddUser("kid@test.com", UserRoles.Student, 14);
+        var (link, _) = AddPendingLink(student);
+
+        var notices = await CreateService().RevokeAllForAccountDeletionAsync(student.Id);
+
+        Assert.Equal(ParentLinkStatuses.Revoked, Stored(link.Id).Status);
+        Assert.Empty(notices);
+    }
+
+    [Fact]
     public async Task Revoke_OtherUser_NotFound()
     {
         var (_, _, link) = await AcceptedLinkAsync(studentAge: 14);

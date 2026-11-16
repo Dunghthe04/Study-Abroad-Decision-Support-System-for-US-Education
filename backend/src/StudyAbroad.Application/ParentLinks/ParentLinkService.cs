@@ -13,7 +13,17 @@ public interface IParentLinkService
     Task<ParentLinkResult<ParentLinkDto>> ChangeParentEmailAsync(Guid studentUserId, string parentEmail, CancellationToken ct = default);
     Task<ParentLinkResult<ParentLinkDto>> RevokeAsync(Guid userId, Guid linkId, CancellationToken ct = default);
     Task<ParentLinkResult<List<ParentLinkDto>>> GetMineAsync(Guid userId, CancellationToken ct = default);
+
+    /// <summary>
+    /// UC-80: hủy mọi liên kết đang chờ/đang hiệu lực của tài khoản sắp xóa (cả phía con lẫn phía phụ huynh) và rút consent.
+    /// Không chặn học sinh dưới 16 tuổi vì đặc tả cho phép tự xóa tài khoản.
+    /// Không gửi email: trả danh sách thông báo để người gọi gửi sau khi transaction commit.
+    /// </summary>
+    Task<List<ParentLinkRevokeNotice>> RevokeAllForAccountDeletionAsync(Guid userId, CancellationToken ct = default);
 }
+
+/// <summary>UC-80: thư báo hủy liên kết gửi cho bên còn lại (gửi sau commit).</summary>
+public record ParentLinkRevokeNotice(string ToEmail, string StudentName, string ParentName);
 
 /// <summary>
 /// [Q11] Luồng phụ huynh đồng ý cho hệ thống xử lý dữ liệu của học sinh (Luật BVDLCN 91/2025 Điều 24, NĐ 356/2025 Điều 6):
@@ -223,6 +233,59 @@ public class ParentLinkService(IParentLinkRepository links, IUserRepository user
         return ParentLinkResult<ParentLinkDto>.Ok(
             ToDto(link, parent, student, canRevoke: false),
             wasActive ? "Đã hủy liên kết và rút lại sự đồng ý." : "Đã hủy lời mời.");
+    }
+
+    public async Task<List<ParentLinkRevokeNotice>> RevokeAllForAccountDeletionAsync(Guid userId, CancellationToken ct = default)
+    {
+        var notices = new List<ParentLinkRevokeNotice>();
+        var user = await users.GetUserById(userId, ct);
+        if (user == null)
+            return notices;
+
+        var asStudent = await links.GetByStudentAsync(userId, ct);
+        var asParent = await links.GetActiveByParentAsync(userId, ct);
+        var open = asStudent.Concat(asParent)
+            .Where(l => l.Status == ParentLinkStatuses.Pending || l.Status == ParentLinkStatuses.Active)
+            .ToList();
+
+        var now = DateTime.UtcNow;
+        foreach (var link in open)
+        {
+            var wasActive = link.Status == ParentLinkStatuses.Active;
+            Consent? consent = null;
+            if (link.ConsentId is { } consentId)
+            {
+                consent = await links.GetConsentAsync(consentId, ct);
+                if (consent != null)
+                    consent.Granted = false;
+            }
+            MarkRevoked(link, userId, now);
+
+            try
+            {
+                await links.SaveRevokeAsync(link, consent, ct);
+            }
+            catch (ConcurrencyConflictException)
+            {
+                // Liên kết vừa bị thao tác khác đổi (thường là bên kia vừa hủy): bỏ qua, không báo
+                continue;
+            }
+
+            if (!wasActive)
+                continue;
+
+            var isStudentSide = link.StudentUserId == userId;
+            var otherId = isStudentSide ? link.ParentUserId : link.StudentUserId;
+            var other = otherId is { } oid ? await users.GetUserById(oid, ct) : null;
+            if (other == null)
+                continue;
+
+            var student = isStudentSide ? user : other;
+            var parent = isStudentSide ? other : user;
+            notices.Add(new ParentLinkRevokeNotice(other.Email, student.FullName, parent.FullName));
+        }
+
+        return notices;
     }
 
     public async Task<ParentLinkResult<List<ParentLinkDto>>> GetMineAsync(Guid userId, CancellationToken ct = default)
