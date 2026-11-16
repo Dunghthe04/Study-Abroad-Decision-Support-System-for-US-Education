@@ -19,7 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { groupLabel, groupVariant, statusLabel } from "@/lib/recommendation-labels";
 import { OpenAssistantButton } from "@/components/assistant/OpenAssistantButton";
 import { GradeScaleTable } from "@/components/methodology/GradeScaleTable";
-import { ParameterTable } from "@/components/methodology/ParameterTable";
+import { ParameterList } from "@/components/methodology/ParameterList";
 import { getGradeScaleConfig } from "@/lib/academic-api";
 import { getMethodologyParameters } from "@/lib/methodology-api";
 import { cn } from "@/lib/utils";
@@ -371,7 +371,7 @@ export default async function MethodologyPage() {
           Các tham số đang chạy
         </summary>
         <div className="border-t border-line p-5 sm:p-6">
-          <ParameterTable data={parameters} />
+          <ParameterList data={parameters} />
         </div>
       </details>
 

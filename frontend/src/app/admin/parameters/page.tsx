@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { connection } from "next/server";
 import { AdminSection } from "@/components/admin/AdminSection";
 import { GradeScaleSettings } from "@/components/admin/parameters/GradeScaleSettings";
-import { ParameterTable } from "@/components/methodology/ParameterTable";
+import { ParameterList } from "@/components/methodology/ParameterList";
 import { getMethodologyParameters } from "@/lib/methodology-api";
 
 export const metadata: Metadata = {
@@ -29,7 +29,7 @@ export default async function AdminParametersPage() {
             Chỉ xem, không sửa tại đây. Muốn đổi một tham số, gửi yêu cầu kèm lý do cho nhóm phát triển để sửa trong mã nguồn, kiểm thử và tăng phiên bản thuật toán.
           </p>
           <div className="mt-5">
-            <ParameterTable data={parameters} />
+            <ParameterList data={parameters} />
           </div>
         </section>
       </div>

@@ -43,10 +43,10 @@ public static class AlgorithmParameters
             "Thiếu từ mức này trở lên thì trường bị loại khỏi danh sách; thiếu ít hơn thì giữ kèm cảnh báo.");
 
         // B6: vị trí học thuật
-        Add("gpa_sigma", "B6", "Độ lệch chuẩn GPA", N(AcademicPosition.DefaultGpaSigma),
-            "Giả định khi trường chỉ công bố GPA trung bình.");
-        Add("gpa_bins", "B6", "Mốc các khoảng GPA", string.Join("; ", AcademicPosition.GpaEdges.Select(x => N(x))),
-            "Bảy khoảng GPA của trường dùng để tính vị trí học thuật.");
+        Add("gpa_sigma", "B6", "Mức dao động GPA giả định", N(AcademicPosition.DefaultGpaSigma),
+            "Khi trường chỉ công bố GPA trung bình, hệ thống giả định GPA của sinh viên dao động quanh mức đó chừng này (độ lệch chuẩn) để ước tính vị trí của bạn.");
+        Add("gpa_bins", "B6", "Các khoảng GPA của trường", string.Join("; ", AcademicPosition.GpaEdges.Select(x => N(x))),
+            "Trường công bố tỉ lệ sinh viên theo bảy khoảng GPA. Các mốc này giúp biết bao nhiêu phần trăm sinh viên có GPA thấp hơn bạn.");
         Add("sat_min_p75", "B6", "Mốc SAT 75% tối thiểu của SAT tổng", SatScale.MinTotalP75.ToString(),
             "Mốc 75% từ mức này trở xuống bị coi là nhập sai thang và bỏ, không đoán.");
 
@@ -82,9 +82,11 @@ public static class AlgorithmParameters
                  $"{N(ActivityTier.AwardPoint)} điểm mỗi cấp giải", $"thưởng tối đa {N(ActivityTier.MaxBonus)}",
                  $"chỉ xét {ActivityTier.MaxActivities} mục mỗi loại"),
             "Giới hạn khi cộng điểm hoạt động và giải thưởng.");
+        var cuts = ActivityTier.TierCuts;
         Add("ec_tier_cuts", "Bậc ngoại khóa", "Mốc chia bậc ngoại khóa",
-            $"m = (tổng hoạt động + thưởng) / {N(ActivityTier.MaxEcPoints)}; mốc {string.Join("; ", ActivityTier.TierCuts.Select(x => N(x)))}",
-            "Điểm gộp m dưới mốc đầu là bậc 1, mỗi mốc vượt qua tăng một bậc, tối đa bậc 5.");
+            Join(cuts.Select((c, i) => $"dưới {N(c)}: bậc {i + 1}")
+                .Append($"từ {N(cuts[^1])}: bậc {cuts.Length + 1}").ToArray()),
+            $"Điểm gộp m = (tổng điểm hoạt động + thưởng giải) / {N(ActivityTier.MaxEcPoints)}, tối đa 1. Bậc 3 là trung bình, không làm đổi vị trí học thuật.");
 
         // B9: xếp nhóm
         Add("lower_cut", "B9", "Ngưỡng Khó vào / Vừa sức", N(g.LowerCut), "Vị trí học thuật dưới mức này là Khó vào.");
