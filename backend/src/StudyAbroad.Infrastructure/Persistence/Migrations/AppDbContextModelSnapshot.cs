@@ -4203,6 +4203,10 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("date")
                         .HasColumnName("date_of_birth");
 
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
                     b.Property<string>("Email")
                         .IsRequired()
                         .HasMaxLength(256)
