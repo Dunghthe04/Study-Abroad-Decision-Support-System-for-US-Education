@@ -9,10 +9,15 @@ public interface IAdminUniversityRepository
 
     Task<bool> ExistsCodeAsync(string code, CancellationToken ct = default);
 
+    /// <summary>So tên không phân biệt hoa thường.</summary>
+    Task<bool> ExistsNameAsync(string name, Guid? excludeUniversityId = null, CancellationToken ct = default);
+
     void AddUniversity(University university);
 
     /// <summary>Trường có tracking để sửa; null nếu không có.</summary>
     Task<University?> GetUniversityAsync(Guid universityId, CancellationToken ct = default);
+
+    void AddOffering(UniversityOffering offering);
 
     Task<IReadOnlyList<UniversityOffering>> ListOfferingsAsync(Guid universityId, CancellationToken ct = default);
 
@@ -33,7 +38,13 @@ public interface IAdminUniversityRepository
 
     void RemoveMajorLink(UniversityOfferingMajor link);
 
+    /// <summary>Thêm dòng audit vào cùng lần SaveChangesAsync với thay đổi dữ liệu.</summary>
+    void AddAudit(AuditLog entry);
+
     Task SaveChangesAsync(CancellationToken ct = default);
+
+    /// <summary>Như SaveChangesAsync nhưng trả false (không ném lỗi) khi vi phạm ràng buộc unique.</summary>
+    Task<bool> TrySaveAsync(CancellationToken ct = default);
 
     Task<IReadOnlyList<Media>> GetUniversityMediaAsync(Guid universityId, CancellationToken ct = default);
     Task SaveUniversityMediaAsync(Guid universityId, string? logoUrl, string? coverUrl, CancellationToken ct = default);

@@ -4,6 +4,7 @@ import {
   BuildingIcon,
   ClipboardCheckIcon,
   CreditCardIcon,
+  GraduationCapIcon,
   LayoutDashboardIcon,
   BanIcon,
   MailWarningIcon,
@@ -53,6 +54,14 @@ export const ADMIN_NAV: AdminNavItem[] = [
     // Quyết định D2 bản 14/11: dữ liệu trường do Moderator quản lý, Admin chỉ xem
     roles: ["admin", "moderator"],
     useCases: ["UC-65", "UC-66", "UC-67", "UC-84"],
+  },
+  {
+    href: "/admin/scholarships",
+    label: "Học bổng",
+    description: "Moderator nhập, sửa, ẩn hoặc hiện học bổng; Admin chỉ xem danh sách và chi tiết",
+    icon: GraduationCapIcon,
+    roles: ["admin", "moderator"],
+    useCases: ["UC-109"],
   },
   {
     href: "/admin/knowledge",
