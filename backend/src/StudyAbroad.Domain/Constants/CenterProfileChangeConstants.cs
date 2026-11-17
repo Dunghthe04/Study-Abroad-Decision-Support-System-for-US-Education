@@ -17,6 +17,8 @@ public static class CenterProfileChangeStatuses
 public static class CenterDeletionRequestStatuses
 {
     public const string Pending = "pending";
+    /// <summary>[UC-93] Admin đã duyệt: tài khoản bị khóa, trung tâm bị ẩn, chờ tới hạn để xóa hẳn.</summary>
+    public const string Approved = "approved";
     public const string Completed = "completed";
     public const string Rejected = "rejected";
 }

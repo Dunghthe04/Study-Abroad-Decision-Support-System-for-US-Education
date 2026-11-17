@@ -80,6 +80,9 @@ namespace StudyAbroad.Infrastructure.Auth
         public Task SendAccountUnlockedEmailAsync(string toEmail, string fullName, string reason, CancellationToken ct = default) =>
             Enqueue(toEmail, (s, t) => s.SendAccountUnlockedEmailAsync(toEmail, fullName, reason, t));
 
+        public Task SendCenterDeletionOutcomeEmailAsync(string toEmail, string centerName, string outcome, string? note, DateTime? purgeAt, CancellationToken ct = default) =>
+            Enqueue(toEmail, (s, t) => s.SendCenterDeletionOutcomeEmailAsync(toEmail, centerName, outcome, note, purgeAt, t));
+
         private Task Enqueue(string toEmail, Func<IEmailSender, CancellationToken, Task> send)
         {
             if (!queue.TryEnqueue(send))
