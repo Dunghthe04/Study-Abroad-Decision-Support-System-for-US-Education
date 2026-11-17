@@ -595,7 +595,7 @@ namespace StudyAbroad.Application.Advisor
                 return merged with
                 {
                     Widget = ChatSchoolInfo.WidgetOfSearch(result, query.Filters, query.Sort, text),
-                    QuickReplies = ChatSchoolInfo.SearchNextSteps(result),
+                    QuickReplies = ChatSchoolInfo.SearchNextSteps(result, query.Sort),
                 };
             }
             catch (InvalidOperationException)
