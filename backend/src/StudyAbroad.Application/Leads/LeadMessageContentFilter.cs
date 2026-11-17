@@ -44,6 +44,12 @@ public static partial class LeadMessageContentFilter
         RegexOptions.Compiled)]
     private static partial Regex KeywordPhoneRegex();
 
+    // Số tài khoản ngân hàng đi kèm từ khóa hoặc tên ngân hàng phổ biến (VCB, Techcombank, MB, ACB, Vietinbank, BIDV, VPBank, TPBank...)
+    [GeneratedRegex(
+        @"(?i)\b(?:stk|so tai khoan|tai khoan|so tk|ngan hang|bank|vcb|tcb|mbb|bidv|ctg|vietcombank|techcombank|vietinbank|agribank|mbbank|acb|vpbank|tpbank|sacombank|hdbank|shb|msb|vib|ocb|seabank|bvb|vietbank|kienlongbank|pgbank|pvcombank|namabank|shinhan|woori)\b\s*[:\-]?\s*(?:[a-z]{0,5}\s*[:\-]?\s*)?(?<!\d)\d{8,16}(?!\d)",
+        RegexOptions.Compiled)]
+    private static partial Regex BankAccountRegex();
+
     // Chuỗi chữ số xen kẽ chữ số viết bằng chữ (không, tám, ba, one...) ngăn cách bởi khoảng trắng/dấu câu.
     // Chạy trên văn bản đã bỏ dấu tiếng Việt. Ví dụ: "không 9 tám 7.4 9 ba không 8,6 0".
     [GeneratedRegex(
@@ -139,6 +145,9 @@ public static partial class LeadMessageContentFilter
         if (ContainsPhoneNumber(sanitized))
             reasons.Add("Chứa số điện thoại liên hệ");
 
+        if (ContainsBankAccount(sanitized))
+            reasons.Add("Chứa thông tin số tài khoản ngân hàng hoặc yêu cầu thanh toán");
+
         if (ContainsAdvertisement(sanitized))
             reasons.Add("Chứa nội dung quảng cáo hoặc liên kết ngoài");
 
@@ -178,6 +187,12 @@ public static partial class LeadMessageContentFilter
         }
 
         return false;
+    }
+
+    public static bool ContainsBankAccount(string text)
+    {
+        var normalized = NormalizeForKeywordMatch(text);
+        return BankAccountRegex().IsMatch(normalized);
     }
 
     private static string CollapseSpelledDigits(string run)

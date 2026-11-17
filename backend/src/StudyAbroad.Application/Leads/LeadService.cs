@@ -397,6 +397,8 @@ public class LeadService(
 
         var attachment = attachmentFactory is null ? null : await attachmentFactory(ct);
 
+        var inspection = LeadMessageContentFilter.Inspect(trimmedContent);
+
         var saved = await leads.AddLeadMessageAsync(new LeadMessage
         {
             LeadId = lead.Id,
@@ -405,6 +407,8 @@ public class LeadService(
             AttachmentUrl = attachment?.Url,
             AttachmentPublicId = attachment?.PublicId,
             Status = "visible",
+            IsFlagged = inspection.IsFlagged,
+            FlagReason = inspection.FlagReason,
         }, leadToUpdate: null, ct);
 
         await AuditMessageSentAsync(user.Id, user.Role, lead, saved, ct);
@@ -618,6 +622,9 @@ public class LeadService(
 
         var attachment = attachmentFactory is null ? null : await attachmentFactory(ct);
 
+        // [UC-74 / Phòng chống lừa đảo] Kiểm tra và gắn cờ nếu tin nhắn chứa STK ngân hàng, SĐT hoặc chào mời giao dịch ngoài
+        var inspection = LeadMessageContentFilter.Inspect(trimmedContent);
+
         var entity = new LeadMessage
         {
             LeadId = lead.Id,
@@ -627,6 +634,8 @@ public class LeadService(
             AttachmentPublicId = attachment?.PublicId,
             Status = "visible",
             RemovedByUserId = null,
+            IsFlagged = inspection.IsFlagged,
+            FlagReason = inspection.FlagReason,
         };
 
         // [UC-74] Không tự chuyển trạng thái nữa: chấp nhận yêu cầu là thao tác riêng ở UC-73

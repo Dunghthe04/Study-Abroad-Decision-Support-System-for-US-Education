@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { RefreshCwIcon, SendIcon } from "lucide-react";
+import { AlertTriangleIcon, RefreshCwIcon, SendIcon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { ApiError } from "@/lib/api";
 import { getLeadRuleError, leadApi } from "@/lib/lead-api";
@@ -209,6 +209,14 @@ function ThreadBody({
           <RefreshCwIcon className={cn(isLoading && "animate-spin")} data-icon="inline-start" aria-hidden />
           Tải lại
         </Button>
+      </div>
+
+      {/* Security Warning Banner */}
+      <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200 flex items-start gap-2">
+        <AlertTriangleIcon className="size-4 text-amber-600 shrink-0 mt-0.5" />
+        <span>
+          <strong>Cảnh báo an toàn:</strong> Tuyệt đối không chuyển tiền cọc hoặc thanh toán chi phí qua tài khoản cá nhân được cung cấp trong khung chat khi chưa có hợp đồng pháp lý rõ ràng. USAS không chịu trách nhiệm đối với các giao dịch chuyển khoản cá nhân bên ngoài hệ thống.
+        </span>
       </div>
 
       <div className="max-h-80 space-y-2.5 overflow-y-auto rounded-lg border bg-muted/20 p-3" aria-live="polite">

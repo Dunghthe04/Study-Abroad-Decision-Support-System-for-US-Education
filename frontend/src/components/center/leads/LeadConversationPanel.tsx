@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { MessageSquareIcon, RefreshCwIcon, SendIcon } from "lucide-react";
+import { AlertTriangleIcon, MessageSquareIcon, RefreshCwIcon, SendIcon } from "lucide-react";
 import { ApiError, centerLeadsApi } from "@/lib/api";
 import { MAX_LEAD_MESSAGE_LENGTH, formatLeadMessageRoleLabel } from "@/lib/lead-message";
 import { getLeadRuleError } from "@/lib/lead-api";
@@ -222,6 +222,14 @@ export function LeadConversationPanel({
             Tải lại
           </Button>
         </div>
+      </div>
+
+      {/* Security Warning Banner */}
+      <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200 flex items-start gap-2">
+        <AlertTriangleIcon className="size-4 text-amber-600 shrink-0 mt-0.5" />
+        <span>
+          <strong>Lưu ý bảo mật:</strong> USAS không thu phí dịch vụ qua tin nhắn. Tuyệt đối không yêu cầu hoặc thực hiện chuyển khoản tiền cọc qua tài khoản cá nhân. Mọi hành vi yêu cầu giao dịch ngoài nền tảng sẽ bị gắn cờ và xử lý theo quy định.
+        </span>
       </div>
 
       {/* Message List */}

@@ -2230,4 +2230,20 @@ public class LeadServiceTests
             service.SendLeadMessageForCenterUserAsync(ownerId, "o@c.com", UserRoles.Center, hidden.Id, "Chào em"));
         Assert.Equal(status, hidden.Status);
     }
+
+    [Theory]
+    [InlineData("Em chuyển cọc qua stk 1903657891234 Techcombank nhé", true)]
+    [InlineData("So tai khoan VCB: 0011004567891 Nguyen Van A", true)]
+    [InlineData("Ngan hang MB bank stk: 098765432100", true)]
+    [InlineData("Chào em, trung tâm tư vấn chương trình du học Mỹ", false)]
+    [InlineData("Học phí dự kiến khoảng 500.000.000 VND / năm", false)]
+    public void LeadMessageContentFilter_FlagsBankAccountInformation(string content, bool expectedFlagged)
+    {
+        var result = LeadMessageContentFilter.Inspect(content);
+        Assert.Equal(expectedFlagged, result.IsFlagged);
+        if (expectedFlagged)
+        {
+            Assert.Contains("tài khoản ngân hàng", result.FlagReason);
+        }
+    }
 }
