@@ -1,3 +1,4 @@
+using StudyAbroad.Application.Audit;
 using StudyAbroad.Application.Auth;
 using StudyAbroad.Application.Common;
 using StudyAbroad.Domain.Constants;
@@ -13,6 +14,12 @@ public interface IParentLinkService
     Task<ParentLinkResult<ParentLinkDto>> ChangeParentEmailAsync(Guid studentUserId, string parentEmail, CancellationToken ct = default);
     Task<ParentLinkResult<ParentLinkDto>> RevokeAsync(Guid userId, Guid linkId, CancellationToken ct = default);
     Task<ParentLinkResult<List<ParentLinkDto>>> GetMineAsync(Guid userId, CancellationToken ct = default);
+
+    /// <summary>[UC-117] Trang rút đồng ý đọc tên học sinh và ngày đồng ý từ token trong mail gửi phụ huynh.</summary>
+    Task<ParentLinkResult<ParentRevokeInfo>> GetRevokeInfoAsync(string token, CancellationToken ct = default);
+
+    /// <summary>[UC-117] Phụ huynh rút đồng ý bằng link trong mail, không cần đăng nhập. Token dùng một lần, chết khi học sinh đủ 16 tuổi.</summary>
+    Task<ParentLinkResult<ParentRevokeInfo>> RevokeByTokenAsync(string token, string? ipAddress, CancellationToken ct = default);
 
     /// <summary>
     /// UC-80: hủy mọi liên kết đang chờ/đang hiệu lực của tài khoản sắp xóa (cả phía con lẫn phía phụ huynh) và rút consent.
@@ -30,8 +37,11 @@ public record ParentLinkRevokeNotice(string ToEmail, string StudentName, string 
 /// mời qua email → phụ huynh đăng nhập và đồng ý (lưu consent: ai, lúc nào, phiên bản nội dung, IP) → có thể rút lại.
 /// Lịch sử link và consent không bao giờ bị xóa.
 /// </summary>
-public class ParentLinkService(IParentLinkRepository links, IUserRepository users, IEmailSender emailSender) : IParentLinkService
+public class ParentLinkService(IParentLinkRepository links, IUserRepository users, IEmailSender emailSender, IAuditLogRepository auditLogs) : IParentLinkService
 {
+    /// <summary>[UC-117] Action ghi audit khi phụ huynh rút đồng ý qua link trong mail.</summary>
+    public const string RevokeByEmailAuditAction = "parent_link.revoke_by_email";
+
     /// <summary>Tối đa số email phụ huynh mới học sinh được khai trong 24 giờ (chống dùng hệ thống gửi mail rác).</summary>
     public const int MaxNewLinksPerDay = 5;
 
@@ -39,6 +49,8 @@ public class ParentLinkService(IParentLinkRepository links, IUserRepository user
     private const string ExpiredInviteMessage = "Lời mời đã hết hạn. Vui lòng nhờ học sinh gửi lại lời mời từ trang Tài khoản.";
     private const string ConflictMessage = "Liên kết vừa được cập nhật bởi một thao tác khác. Vui lòng tải lại trang.";
     private const string NotFoundMessage = "Không tìm thấy liên kết.";
+    private const string InvalidRevokeLinkMessage = "Link rút đồng ý không hợp lệ hoặc đã được sử dụng.";
+    private const string RevokeLinkAgeMessage = "Học sinh đã đủ 16 tuổi nên link này không còn dùng được. Từ 16 tuổi, học sinh tự quyết định việc đồng ý xử lý dữ liệu của mình.";
 
     public async Task<ParentLinkResult<ParentInviteInfo>> GetInviteAsync(string token, CancellationToken ct = default)
     {
@@ -91,6 +103,9 @@ public class ParentLinkService(IParentLinkRepository links, IUserRepository user
         link.ConsentId = consent.Id;
         link.TokenHash = null;
         link.TokenExpiresAt = null;
+        // [UC-117] Link rút đồng ý gửi phụ huynh: DB chỉ giữ hash
+        var revokeToken = ParentInvite.GenerateToken();
+        link.RevokeTokenHash = ParentInvite.HashToken(revokeToken);
 
         try
         {
@@ -102,6 +117,7 @@ public class ParentLinkService(IParentLinkRepository links, IUserRepository user
         }
 
         await emailSender.SendParentLinkChangedEmailAsync(student.Email, student.FullName, parent.FullName, linked: true, ct);
+        await emailSender.SendParentConsentConfirmedEmailAsync(parent.Email, student.FullName, revokeToken, ct);
 
         return ParentLinkResult<ParentLinkDto>.Ok(ToDto(link, parent, student, canRevoke: true), "Đã xác nhận đồng ý và liên kết với tài khoản học sinh.");
     }
@@ -202,23 +218,8 @@ public class ParentLinkService(IParentLinkRepository links, IUserRepository user
             return Fail(ParentLinkError.Forbidden, $"Học sinh dưới {AgeGroups.ChildMaxAgeExclusive} tuổi không thể tự rút sự đồng ý của phụ huynh. Phụ huynh có thể rút trong trang Tài khoản của mình.");
 
         var wasActive = link.Status == ParentLinkStatuses.Active;
-        Consent? consent = null;
-        if (link.ConsentId is { } consentId)
-        {
-            consent = await links.GetConsentAsync(consentId, ct);
-            if (consent != null)
-                consent.Granted = false;
-        }
-        MarkRevoked(link, userId, DateTime.UtcNow);
-
-        try
-        {
-            await links.SaveRevokeAsync(link, consent, ct);
-        }
-        catch (ConcurrencyConflictException)
-        {
+        if (!await RevokeAndSaveAsync(link, userId, ct))
             return Fail(ParentLinkError.Conflict, ConflictMessage);
-        }
 
         var student = isStudentSide ? user : await users.GetUserById(link.StudentUserId, ct);
         var parent = isParentSide ? user : link.ParentUserId is { } pid ? await users.GetUserById(pid, ct) : null;
@@ -288,6 +289,91 @@ public class ParentLinkService(IParentLinkRepository links, IUserRepository user
         return notices;
     }
 
+    public async Task<ParentLinkResult<ParentRevokeInfo>> GetRevokeInfoAsync(string token, CancellationToken ct = default)
+    {
+        var (link, student, error) = await FindRevocableByTokenAsync(token, ct);
+        if (link == null || student == null)
+            return RevokeFail(error);
+
+        return ParentLinkResult<ParentRevokeInfo>.Ok(new ParentRevokeInfo(student.FullName, link.AcceptedAt));
+    }
+
+    public async Task<ParentLinkResult<ParentRevokeInfo>> RevokeByTokenAsync(string token, string? ipAddress, CancellationToken ct = default)
+    {
+        var (link, student, error) = await FindRevocableByTokenAsync(token, ct);
+        if (link == null || student == null)
+            return RevokeFail(error);
+
+        // Người rút là phụ huynh của liên kết (đã đăng nhập lúc đồng ý), dù lần này không đăng nhập
+        var parentId = link.ParentUserId!.Value;
+        if (!await RevokeAndSaveAsync(link, parentId, ct))
+            return ParentLinkResult<ParentRevokeInfo>.Fail(ParentLinkError.Conflict, ConflictMessage);
+
+        // Chỉ ghi id liên kết và IP, không ghi email
+        await auditLogs.AddAsync(new AuditLog
+        {
+            ActorUserId = parentId,
+            Action = RevokeByEmailAuditAction,
+            EntityType = "parent_student_link",
+            EntityId = link.Id.ToString(),
+            IpAddress = Truncate(ipAddress, 45),
+        }, ct);
+
+        var parent = await users.GetUserById(parentId, ct);
+        await emailSender.SendParentLinkChangedEmailAsync(student.Email, student.FullName, parent?.FullName ?? "Phụ huynh", linked: false, ct);
+
+        return ParentLinkResult<ParentRevokeInfo>.Ok(new ParentRevokeInfo(student.FullName, link.AcceptedAt), "Đã rút lại sự đồng ý.");
+    }
+
+    /// <summary>
+    /// [UC-117] Token sai / đã dùng / liên kết không còn hiệu lực → NotFound (một câu chung, không lộ thông tin học sinh);
+    /// học sinh đã đủ 16 tuổi → Forbidden.
+    /// </summary>
+    private async Task<(ParentStudentLink? Link, User? Student, ParentLinkError Error)> FindRevocableByTokenAsync(string token, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(token) || token.Length > 128)
+            return (null, null, ParentLinkError.NotFound);
+
+        var link = await links.GetByRevokeTokenHashAsync(ParentInvite.HashToken(token), ct);
+        if (link == null || link.Status != ParentLinkStatuses.Active || link.ParentUserId == null)
+            return (null, null, ParentLinkError.NotFound);
+
+        var student = await users.GetUserById(link.StudentUserId, ct);
+        if (student == null)
+            return (null, null, ParentLinkError.NotFound);
+
+        if (AgeOf(student) is { } age && age >= AgeGroups.ChildMaxAgeExclusive)
+            return (null, null, ParentLinkError.Forbidden);
+
+        return (link, student, ParentLinkError.None);
+    }
+
+    private static ParentLinkResult<ParentRevokeInfo> RevokeFail(ParentLinkError error) =>
+        ParentLinkResult<ParentRevokeInfo>.Fail(error, error == ParentLinkError.Forbidden ? RevokeLinkAgeMessage : InvalidRevokeLinkMessage);
+
+    /// <summary>Rút consent (Granted = false), đánh dấu liên kết đã hủy rồi lưu. Trả false khi bị request khác ghi trước.</summary>
+    private async Task<bool> RevokeAndSaveAsync(ParentStudentLink link, Guid byUserId, CancellationToken ct)
+    {
+        Consent? consent = null;
+        if (link.ConsentId is { } consentId)
+        {
+            consent = await links.GetConsentAsync(consentId, ct);
+            if (consent != null)
+                consent.Granted = false;
+        }
+        MarkRevoked(link, byUserId, DateTime.UtcNow);
+
+        try
+        {
+            await links.SaveRevokeAsync(link, consent, ct);
+            return true;
+        }
+        catch (ConcurrencyConflictException)
+        {
+            return false;
+        }
+    }
+
     public async Task<ParentLinkResult<List<ParentLinkDto>>> GetMineAsync(Guid userId, CancellationToken ct = default)
     {
         var user = await users.GetUserById(userId, ct);
@@ -345,6 +431,7 @@ public class ParentLinkService(IParentLinkRepository links, IUserRepository user
         link.RevokedByUserId = byUserId;
         link.TokenHash = null;
         link.TokenExpiresAt = null;
+        link.RevokeTokenHash = null;
     }
 
     private static int? AgeOf(User user) =>

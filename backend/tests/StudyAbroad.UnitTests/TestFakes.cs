@@ -265,6 +265,12 @@ internal sealed class FakeEmailSender : IEmailSender
         return Task.CompletedTask;
     }
 
+    public Task SendParentConsentConfirmedEmailAsync(string toEmail, string studentName, string revokeToken, CancellationToken ct = default)
+    {
+        SentEmails.Add((toEmail, "parent_consent_confirmed", revokeToken));
+        return Task.CompletedTask;
+    }
+
     public Task SendAccountLockedEmailAsync(string toEmail, string fullName, string reason, CancellationToken ct = default)
     {
         SentEmails.Add((toEmail, "account_locked_notice", reason));
@@ -318,6 +324,9 @@ internal sealed class FakeParentLinkRepository : IParentLinkRepository
 
     public Task<ParentStudentLink?> GetByTokenHashAsync(string tokenHash, CancellationToken ct = default) =>
         Task.FromResult(Links.Where(l => l.TokenHash == tokenHash).Select(Clone).FirstOrDefault());
+
+    public Task<ParentStudentLink?> GetByRevokeTokenHashAsync(string revokeTokenHash, CancellationToken ct = default) =>
+        Task.FromResult(Links.Where(l => l.RevokeTokenHash == revokeTokenHash).Select(Clone).FirstOrDefault());
 
     public Task<List<ParentStudentLink>> GetByStudentAsync(Guid studentUserId, CancellationToken ct = default) =>
         Task.FromResult(Links.Where(l => l.StudentUserId == studentUserId).OrderByDescending(l => l.CreatedAt).Select(Clone).ToList());
@@ -374,7 +383,8 @@ internal sealed class FakeParentLinkRepository : IParentLinkRepository
         Id = l.Id, CreatedAt = l.CreatedAt, UpdatedAt = l.UpdatedAt, StudentUserId = l.StudentUserId, ParentEmail = l.ParentEmail,
         ParentUserId = l.ParentUserId, Status = l.Status, TokenHash = l.TokenHash, TokenExpiresAt = l.TokenExpiresAt,
         InviteSentCount = l.InviteSentCount, LastInviteSentAt = l.LastInviteSentAt, AcceptedAt = l.AcceptedAt,
-        ConsentId = l.ConsentId, RevokedAt = l.RevokedAt, RevokedByUserId = l.RevokedByUserId, Version = l.Version,
+        ConsentId = l.ConsentId, RevokedAt = l.RevokedAt, RevokedByUserId = l.RevokedByUserId, RevokeTokenHash = l.RevokeTokenHash,
+        Version = l.Version,
     };
 }
 

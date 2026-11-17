@@ -32,6 +32,22 @@ namespace StudyAbroad.Api.Controllers
             return ToResult(await parentLinks.AcceptAsync(userId, request.Token, ip, ct));
         }
 
+        // [UC-117] Trang rút đồng ý từ link trong mail gửi phụ huynh, không cần đăng nhập. Token trong body để không nằm trong log URL.
+        [AllowAnonymous]
+        [HttpPost("revoke/lookup")]
+        [EnableRateLimiting(AuthRateLimit.PolicyName)]
+        public async Task<IActionResult> LookupRevoke(InviteTokenRequest request, CancellationToken ct) =>
+            ToResult(await parentLinks.GetRevokeInfoAsync(request.Token, ct));
+
+        [AllowAnonymous]
+        [HttpPost("revoke")]
+        [EnableRateLimiting(AuthRateLimit.PolicyName)]
+        public async Task<IActionResult> RevokeByToken(InviteTokenRequest request, CancellationToken ct)
+        {
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+            return ToResult(await parentLinks.RevokeByTokenAsync(request.Token, ip, ct));
+        }
+
         [Authorize(Roles = UserRoles.Student)]
         [HttpPost("resend")]
         [EnableRateLimiting(AuthRateLimit.PolicyName)]

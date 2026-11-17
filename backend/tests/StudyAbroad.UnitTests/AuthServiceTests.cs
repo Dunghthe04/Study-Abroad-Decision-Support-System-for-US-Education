@@ -33,7 +33,7 @@ public class AuthServiceTests
 
     private AuthService CreateService(AccountDeletionOptions? accountDeletion = null) => new(
         _repo, new FakeHasher(), _tokens, _emailSender, _links, _auditLogs,
-        new ParentLinkService(_links, _repo, _emailSender), _unitOfWork, _leadWithdrawals,
+        new ParentLinkService(_links, _repo, _emailSender, _auditLogs), _unitOfWork, _leadWithdrawals,
         accountDeletion: accountDeletion);
 
     // Ngày sinh ứng với tuổi tròn (sinh nhật cách hôm nay ở VN 10 ngày về trước)

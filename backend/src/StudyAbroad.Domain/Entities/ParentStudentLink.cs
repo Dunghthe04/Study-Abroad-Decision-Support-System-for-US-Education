@@ -22,6 +22,8 @@ public class ParentStudentLink : BaseEntity
     public Guid? ConsentId { get; set; }
     public DateTime? RevokedAt { get; set; }
     public Guid? RevokedByUserId { get; set; }
+    /// <summary>[UC-117] SHA-256 (hex) của token trong link rút đồng ý gửi phụ huynh lúc chấp nhận. Không hết hạn theo giờ; về null khi đã dùng hoặc liên kết bị hủy.</summary>
+    public string? RevokeTokenHash { get; set; }
     /// <summary>Concurrency token (cột hệ thống xmin của Postgres): chặn 2 request chấp nhận / rút cùng lúc.</summary>
     public uint Version { get; set; }
 }

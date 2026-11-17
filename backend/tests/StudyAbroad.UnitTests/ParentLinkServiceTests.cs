@@ -9,8 +9,12 @@ public class ParentLinkServiceTests
     private readonly FakeUserRepository _users = new();
     private readonly FakeEmailSender _emails = new();
     private readonly FakeParentLinkRepository _links = new();
+    private readonly FakeAuditLogRepository _audit = new();
 
-    private ParentLinkService CreateService() => new(_links, _users, _emails);
+    /// <summary>Token thu hồi gốc lấy từ mail xác nhận gửi phụ huynh trong AcceptedLinkAsync (UC-117).</summary>
+    private string _revokeToken = "";
+
+    private ParentLinkService CreateService() => new(_links, _users, _emails, _audit);
 
     private static DateOnly BornYearsAgo(int years) =>
         AgePolicy.TodayInVietnam(DateTime.UtcNow).AddDays(-10).AddYears(-years);
@@ -39,6 +43,8 @@ public class ParentLinkServiceTests
         return (link, token);
     }
 
+    private const string ParentConsentConfirmedPurpose = "parent_consent_confirmed";
+
     private ParentStudentLink Stored(Guid id) => _links.Links.Single(l => l.Id == id);
 
     private async Task<(User Student, User Parent, ParentStudentLink Link)> AcceptedLinkAsync(int studentAge)
@@ -48,6 +54,7 @@ public class ParentLinkServiceTests
         var (link, token) = AddPendingLink(student);
         var result = await CreateService().AcceptAsync(parent.Id, token, "1.2.3.4");
         Assert.Equal(ParentLinkError.None, result.Error);
+        _revokeToken = _emails.SentEmails.Single(e => e.Purpose == ParentConsentConfirmedPurpose).Code;
         _emails.SentEmails.Clear();
         return (student, parent, Stored(link.Id));
     }
@@ -478,5 +485,180 @@ public class ParentLinkServiceTests
         Assert.Equal(14, child.StudentAge);
         Assert.Equal(student.Id, child.StudentUserId);
         Assert.True(child.CanRevoke);
+    }
+
+    // ===== [UC-117] Phụ huynh rút đồng ý qua link trong mail, không cần đăng nhập =====
+
+    [Fact]
+    public async Task Accept_StoresRevokeTokenHash_AndEmailsParentWithRevokeLink()
+    {
+        var student = AddUser("kid@test.com", UserRoles.Student, 14);
+        var parent = AddUser("me@test.com", UserRoles.Parent, 40);
+        var (link, token) = AddPendingLink(student);
+
+        await CreateService().AcceptAsync(parent.Id, token, "1.2.3.4");
+
+        var mail = Assert.Single(_emails.SentEmails, e => e.Purpose == ParentConsentConfirmedPurpose);
+        Assert.Equal(parent.Email, mail.To);
+        Assert.False(string.IsNullOrEmpty(mail.Code));
+        // DB chỉ giữ hash, không giữ token gốc
+        var stored = Stored(link.Id);
+        Assert.Equal(ParentInvite.HashToken(mail.Code), stored.RevokeTokenHash);
+        Assert.NotEqual(mail.Code, stored.RevokeTokenHash);
+        // Mail báo học sinh vẫn gửi như cũ
+        Assert.Contains(_emails.SentEmails, e => e.To == student.Email && e.Purpose == "parent_linked");
+    }
+
+    [Fact]
+    public async Task GetRevokeInfo_ValidToken_ReturnsStudentNameAndAcceptedDate()
+    {
+        var (student, _, link) = await AcceptedLinkAsync(studentAge: 14);
+
+        var result = await CreateService().GetRevokeInfoAsync(_revokeToken);
+
+        Assert.Equal(ParentLinkError.None, result.Error);
+        Assert.Equal(student.FullName, result.Value!.StudentName);
+        Assert.Equal(link.AcceptedAt, result.Value.AcceptedAt);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("wrong-token")]
+    public async Task GetRevokeInfo_InvalidToken_NotFoundWithoutInfo(string token)
+    {
+        await AcceptedLinkAsync(studentAge: 14);
+
+        var result = await CreateService().GetRevokeInfoAsync(token);
+
+        Assert.Equal(ParentLinkError.NotFound, result.Error);
+        Assert.Null(result.Value);
+    }
+
+    [Fact]
+    public async Task GetRevokeInfo_TooLongToken_NotFound()
+    {
+        await AcceptedLinkAsync(studentAge: 14);
+
+        var result = await CreateService().GetRevokeInfoAsync(new string('a', 129));
+
+        Assert.Equal(ParentLinkError.NotFound, result.Error);
+    }
+
+    [Fact]
+    public async Task GetRevokeInfo_StudentNow16_Forbidden()
+    {
+        var (student, _, _) = await AcceptedLinkAsync(studentAge: 14);
+        student.DateOfBirth = BornYearsAgo(16);
+
+        var result = await CreateService().GetRevokeInfoAsync(_revokeToken);
+
+        Assert.Equal(ParentLinkError.Forbidden, result.Error);
+        Assert.Null(result.Value);
+    }
+
+    [Fact]
+    public async Task RevokeByToken_RevokesLink_SetsConsentFalse_NotifiesStudent_AndAudits()
+    {
+        var (student, parent, link) = await AcceptedLinkAsync(studentAge: 14);
+
+        var result = await CreateService().RevokeByTokenAsync(_revokeToken, "5.6.7.8");
+
+        Assert.Equal(ParentLinkError.None, result.Error);
+        Assert.Equal(student.FullName, result.Value!.StudentName);
+        var stored = Stored(link.Id);
+        Assert.Equal(ParentLinkStatuses.Revoked, stored.Status);
+        Assert.Equal(parent.Id, stored.RevokedByUserId);
+        Assert.NotNull(stored.RevokedAt);
+        Assert.Null(stored.RevokeTokenHash);
+        Assert.False(Assert.Single(_links.Consents).Granted);
+        Assert.False(await _links.HasGrantedConsentAsync(student.Id));
+        Assert.Contains(_emails.SentEmails, e => e.To == student.Email && e.Purpose == "parent_unlinked");
+
+        var entry = Assert.Single(_audit.Entries);
+        Assert.Equal(ParentLinkService.RevokeByEmailAuditAction, entry.Action);
+        Assert.Equal(parent.Id, entry.ActorUserId);
+        Assert.Equal(link.Id.ToString(), entry.EntityId);
+        Assert.Equal("5.6.7.8", entry.IpAddress);
+        // Không ghi email phụ huynh vào audit
+        Assert.DoesNotContain(parent.Email, entry.DetailJson ?? "");
+    }
+
+    [Fact]
+    public async Task RevokeByToken_UsedTwice_SecondTimeNotFound()
+    {
+        await AcceptedLinkAsync(studentAge: 14);
+        await CreateService().RevokeByTokenAsync(_revokeToken, null);
+        _emails.SentEmails.Clear();
+
+        var result = await CreateService().RevokeByTokenAsync(_revokeToken, null);
+
+        Assert.Equal(ParentLinkError.NotFound, result.Error);
+        Assert.Empty(_emails.SentEmails);
+        Assert.Single(_audit.Entries);
+    }
+
+    [Fact]
+    public async Task RevokeByToken_AfterInAppRevoke_TokenDead()
+    {
+        var (_, parent, link) = await AcceptedLinkAsync(studentAge: 14);
+        await CreateService().RevokeAsync(parent.Id, link.Id);
+
+        Assert.Null(Stored(link.Id).RevokeTokenHash);
+        var result = await CreateService().RevokeByTokenAsync(_revokeToken, null);
+
+        Assert.Equal(ParentLinkError.NotFound, result.Error);
+    }
+
+    [Fact]
+    public async Task RevokeByToken_AfterAccountDeletion_TokenDead()
+    {
+        var (student, _, link) = await AcceptedLinkAsync(studentAge: 14);
+        await CreateService().RevokeAllForAccountDeletionAsync(student.Id);
+
+        Assert.Null(Stored(link.Id).RevokeTokenHash);
+        var result = await CreateService().RevokeByTokenAsync(_revokeToken, null);
+
+        Assert.Equal(ParentLinkError.NotFound, result.Error);
+    }
+
+    [Fact]
+    public async Task RevokeByToken_StudentNow16_ForbiddenAndLinkUntouched()
+    {
+        var (student, _, link) = await AcceptedLinkAsync(studentAge: 14);
+        student.DateOfBirth = BornYearsAgo(16);
+
+        var result = await CreateService().RevokeByTokenAsync(_revokeToken, null);
+
+        Assert.Equal(ParentLinkError.Forbidden, result.Error);
+        Assert.Equal(ParentLinkStatuses.Active, Stored(link.Id).Status);
+        Assert.True(Assert.Single(_links.Consents).Granted);
+        Assert.Empty(_audit.Entries);
+    }
+
+    [Fact]
+    public async Task RevokeByToken_ConcurrentWrite_Conflict()
+    {
+        var (_, _, link) = await AcceptedLinkAsync(studentAge: 14);
+        _links.ConflictsToThrow = 1;
+
+        var result = await CreateService().RevokeByTokenAsync(_revokeToken, null);
+
+        Assert.Equal(ParentLinkError.Conflict, result.Error);
+        Assert.Equal(ParentLinkStatuses.Active, Stored(link.Id).Status);
+        Assert.Empty(_emails.SentEmails);
+        Assert.Empty(_audit.Entries);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("wrong-token")]
+    public async Task RevokeByToken_InvalidToken_NotFound(string token)
+    {
+        var (_, _, link) = await AcceptedLinkAsync(studentAge: 14);
+
+        var result = await CreateService().RevokeByTokenAsync(token, null);
+
+        Assert.Equal(ParentLinkError.NotFound, result.Error);
+        Assert.Equal(ParentLinkStatuses.Active, Stored(link.Id).Status);
     }
 }

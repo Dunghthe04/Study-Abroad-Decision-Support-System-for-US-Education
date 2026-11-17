@@ -1872,6 +1872,11 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("parent_user_id");
 
+                    b.Property<string>("RevokeTokenHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("revoke_token_hash");
+
                     b.Property<DateTime?>("RevokedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("revoked_at");
@@ -1916,6 +1921,11 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ConsentId")
                         .HasDatabaseName("ix_parent_student_links_consent_id");
+
+                    b.HasIndex("RevokeTokenHash")
+                        .IsUnique()
+                        .HasDatabaseName("ix_parent_student_links_revoke_token_hash")
+                        .HasFilter("revoke_token_hash IS NOT NULL");
 
                     b.HasIndex("RevokedByUserId")
                         .HasDatabaseName("ix_parent_student_links_revoked_by_user_id");

@@ -1,6 +1,9 @@
 namespace StudyAbroad.Application.ParentLinks;
 
 /// <summary>Nội dung trang xác nhận của phụ huynh (tra theo token trong link mời, không cần đăng nhập).</summary>
+/// <summary>[UC-117] Thông tin hiện trên trang rút đồng ý qua link trong mail.</summary>
+public record ParentRevokeInfo(string StudentName, DateTime? AcceptedAt);
+
 public record ParentInviteInfo(string StudentName, int? StudentAge, string ParentEmail, DateTime ExpiresAt, string PolicyVersion);
 
 /// <summary>

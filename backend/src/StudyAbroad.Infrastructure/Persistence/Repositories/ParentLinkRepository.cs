@@ -26,6 +26,9 @@ public class ParentLinkRepository(AppDbContext db) : IParentLinkRepository
     public Task<ParentStudentLink?> GetByTokenHashAsync(string tokenHash, CancellationToken ct = default) =>
         db.ParentStudentLinks.AsNoTracking().FirstOrDefaultAsync(l => l.TokenHash == tokenHash, ct);
 
+    public Task<ParentStudentLink?> GetByRevokeTokenHashAsync(string revokeTokenHash, CancellationToken ct = default) =>
+        db.ParentStudentLinks.AsNoTracking().FirstOrDefaultAsync(l => l.RevokeTokenHash == revokeTokenHash, ct);
+
     public Task<List<ParentStudentLink>> GetByStudentAsync(Guid studentUserId, CancellationToken ct = default) =>
         db.ParentStudentLinks.AsNoTracking()
             .Where(l => l.StudentUserId == studentUserId)

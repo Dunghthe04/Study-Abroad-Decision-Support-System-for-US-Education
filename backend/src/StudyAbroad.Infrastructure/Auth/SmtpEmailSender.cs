@@ -211,6 +211,30 @@ namespace StudyAbroad.Infrastructure.Auth
             await SendEmailAsync(toEmail, subject, body, ct);
         }
 
+        public async Task SendParentConsentConfirmedEmailAsync(string toEmail, string studentName, string revokeToken, CancellationToken ct = default)
+        {
+            var baseUrl = _options.AppBaseUrl.TrimEnd('/');
+            var link = $"{baseUrl}/parent-consent/revoke?token={Uri.EscapeDataString(revokeToken)}";
+            var student = WebUtility.HtmlEncode(studentName);
+            var subject = "[USAS] Xác nhận bạn đã đồng ý cho học sinh sử dụng hệ thống";
+            var body = $"""
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
+                    <h2 style="color: #2563eb; margin-bottom: 16px;">Bạn đã đồng ý cho học sinh sử dụng hệ thống</h2>
+                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">Bạn đã đồng ý cho Hệ thống Hỗ trợ Ra quyết định Du học Mỹ (USAS) lưu và phân tích hồ sơ học tập của học sinh <strong>{student}</strong>. Hãy giữ lại email này.</p>
+                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">Nếu muốn rút lại sự đồng ý, bấm nút bên dưới, không cần đăng nhập. Sau khi rút, học sinh sẽ tạm không dùng được các chức năng cần hồ sơ cho đến khi có phụ huynh đồng ý lại.</p>
+                    <div style="text-align: center; margin: 24px 0;">
+                        <a href="{WebUtility.HtmlEncode(link)}" style="display: inline-block; background-color: #dc2626; color: #ffffff; text-decoration: none; font-weight: 600; padding: 12px 24px; border-radius: 8px;">Rút đồng ý</a>
+                        <p style="margin: 8px 0 0; font-size: 13px; color: #64748b;">Link dùng được một lần và hết tác dụng khi học sinh đủ 16 tuổi.</p>
+                    </div>
+                    <p style="font-size: 13px; color: #94a3b8; line-height: 1.5;">Bạn cũng có thể rút đồng ý bất cứ lúc nào bằng cách đăng nhập vào <a href="{WebUtility.HtmlEncode(baseUrl)}" style="color: #2563eb;">USAS</a> và mở trang Tài khoản.</p>
+                    <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+                    <p style="font-size: 12px; color: #94a3b8; text-align: center;">USAS - Hệ thống hỗ trợ ra quyết định du học Mỹ</p>
+                </div>
+                """;
+
+            await SendEmailAsync(toEmail, subject, body, ct);
+        }
+
         public async Task SendAccountLockedEmailAsync(string toEmail, string fullName, string reason, CancellationToken ct = default)
         {
             var subject = "[USAS] Thông báo: Tài khoản của bạn đã bị khóa";
