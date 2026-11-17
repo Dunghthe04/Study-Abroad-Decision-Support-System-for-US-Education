@@ -125,7 +125,7 @@ namespace StudyAbroad.Application.Advisor
                     {
                         Answer = $"Hồ sơ chưa lưu được: {commitError} Bạn sửa lại giúp mình rồi xác nhận lại nhé.",
                         State = state,
-                        QuickReplies = null,
+                        QuickReplies = [ChatNextSteps.EditProfile],
                         Widget = null,
                     };
                     nextStep = session.CurrentStep;
@@ -423,13 +423,12 @@ namespace StudyAbroad.Application.Advisor
                 if (onEvent is not null)
                     await onEvent(new AdvisorStreamEvent("card", Widget: widget));
                 var result = await recommender.ExplainAsync(userId, code, ct, overrides, basis);
+                var suggested = Suggested((await LatestSchoolsAsync(userId, ct)).Shown, code);
                 return response with
                 {
                     Answer = result.Status == "OK" ? ChatExplanation.Format(result) : ChatExplanation.Failed,
                     Widget = widget,
-                    QuickReplies = result.Status == "OK"
-                        ? ChatNextSteps.AfterExplain(code, Suggested((await LatestSchoolsAsync(userId, ct)).Shown, code))
-                        : null,
+                    QuickReplies = result.Status == "OK" ? ChatNextSteps.AfterExplain(code, suggested) : ChatNextSteps.AfterExplainFailed(suggested),
                 };
             }
             catch (InvalidOperationException ex)
@@ -544,7 +543,7 @@ namespace StudyAbroad.Application.Advisor
                 // Model đã trả trường và mục (không chạy kho kiến thức) mà không khớp được trường nào trong hệ thống: nói rõ, không để câu tạm
                 if (code is null && query.KbSkipped && query.School is { } unknown
                     && (await recommender!.FindMentionedSchoolsAsync(userId, query.Question, ct)).Count != 1)
-                    return MergeSchoolInfo(response, query, ChatSchoolInfo.SchoolNotFound(unknown), clearKb: true);
+                    return MergeSchoolInfo(response, query, ChatSchoolInfo.SchoolNotFound(unknown), clearKb: true) with { QuickReplies = ChatNextSteps.NoSchoolData() };
                 if (code is null)
                 {
                     // SLM không trích được tên: quét câu, chỉ nhận khi đúng một trường chắc chắn (nhiều trường là so sánh, làm sau)
@@ -562,19 +561,26 @@ namespace StudyAbroad.Application.Advisor
                 if (!answer.Complete)
                 {
                     // Chỉ hỏi điều cơ sở dữ liệu không có: kho kiến thức có nguồn thật thì giữ, không thì nói chưa có và chỉ website
-                    return query.KbFound ? response : MergeSchoolInfo(response, query, answer.Text, clearKb: true);
+                    return query.KbFound
+                        ? response
+                        : MergeSchoolInfo(response, query, answer.Text, clearKb: true) with { QuickReplies = ChatNextSteps.AfterSchoolInfo(info.Code, info.Name, fields) };
                 }
                 // Thẻ nói đủ số liệu nên giao diện bỏ đoạn chữ này cho gọn; còn lời về điều hệ thống không lưu thì thẻ không nói, giữ chữ
                 var merged = MergeSchoolInfo(response, query, answer.Text, clearKb: true)
                     with { Widget = ChatSchoolInfo.WidgetOf(info, fields, unstored ? null : answer.Text) };
-                return fields.Count == 0 && !unstored
-                    ? merged with { QuickReplies = ChatNextSteps.AfterSchoolOverview(info.Name) }
-                    : merged;
+                return merged with
+                {
+                    QuickReplies = fields.Count == 0 && !unstored
+                        ? ChatNextSteps.AfterSchoolOverview(info.Name)
+                        : ChatNextSteps.AfterSchoolInfo(info.Code, info.Name, fields),
+                };
             }
             catch (InvalidOperationException)
             {
                 // Có kho kiến thức làm dự phòng thì giữ câu của kho; model đã bỏ qua kho thì báo chưa tra được thay vì để câu tạm
-                return query.KbSkipped ? MergeSchoolInfo(response, query, ChatSchoolInfo.Unavailable, clearKb: true) : response;
+                return query.KbSkipped
+                    ? MergeSchoolInfo(response, query, ChatSchoolInfo.Unavailable, clearKb: true) with { QuickReplies = ChatNextSteps.NoSchoolData() }
+                    : response;
             }
         }
 
@@ -603,16 +609,16 @@ namespace StudyAbroad.Application.Advisor
                 return response;
             var asQuery = new ChatSchoolInfo.Query(query.Question, null, null, query.KbAnswer, false, [], true);
             if (query.Unresolved.Count > 0)
-                return MergeSchoolInfo(response, asQuery, ChatSchoolInfo.SearchUnresolved(query.Unresolved), clearKb: true);
+                return MergeSchoolInfo(response, asQuery, ChatSchoolInfo.SearchUnresolved(query.Unresolved), clearKb: true) with { QuickReplies = ChatNextSteps.SearchHelp() };
             if (!ChatSchoolInfo.HasAnyFilter(query.Filters) && !query.SortGiven)
-                return MergeSchoolInfo(response, asQuery, ChatSchoolInfo.SearchNoFilter, clearKb: true);
+                return MergeSchoolInfo(response, asQuery, ChatSchoolInfo.SearchNoFilter, clearKb: true) with { QuickReplies = ChatNextSteps.SearchHelp() };
             try
             {
                 var result = await recommender!.SearchSchoolsAsync(userId, query.Filters, query.Sort, ct);
                 var text = ChatSchoolInfo.SearchText(result, query.Filters, query.Sort);
                 var merged = MergeSchoolInfo(response, asQuery, text, clearKb: true);
                 if (result.Total == 0)
-                    return merged;
+                    return merged with { QuickReplies = ChatNextSteps.SearchHelp() };
                 // Thẻ nói đủ (5 trường đầu và "Xem thêm"), nên giao diện bỏ đoạn chữ này; kèm nút bước tiếp theo
                 return merged with
                 {
@@ -622,7 +628,7 @@ namespace StudyAbroad.Application.Advisor
             }
             catch (InvalidOperationException)
             {
-                return MergeSchoolInfo(response, asQuery, ChatSchoolInfo.Unavailable, clearKb: true);
+                return MergeSchoolInfo(response, asQuery, ChatSchoolInfo.Unavailable, clearKb: true) with { QuickReplies = ChatNextSteps.NoSchoolData() };
             }
         }
 
@@ -663,7 +669,7 @@ namespace StudyAbroad.Application.Advisor
                 var codes = matches.Select(m => m.Schools[0].Code).ToList();
                 codes = codes.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
                 if (codes.Count < 2)
-                    return MergeSchoolInfo(response, asQuery, ChatSchoolInfo.CompareNeedsTwo, clearKb: true);
+                    return MergeSchoolInfo(response, asQuery, ChatSchoolInfo.CompareNeedsTwo, clearKb: true) with { QuickReplies = ChatNextSteps.NoSchoolData() };
 
                 var infos = new List<SchoolInfoDto>();
                 foreach (var code in codes)
@@ -677,11 +683,12 @@ namespace StudyAbroad.Application.Advisor
                 // Có lời AI thì chỉ hiện lời AI (đã nêu đủ số liệu); bảng code dựng chỉ làm câu thay thế khi AI lỗi
                 var text = note is null ? table : ChatSchoolInfo.CompareAnswerFromNote(infos, fields, note);
                 // Thẻ so sánh nói đủ bảng lẫn nhận xét (tách riêng khối "AI nhận xét"), nên giao diện bỏ đoạn chữ này, chỉ hiện thẻ
-                return MergeSchoolInfo(response, asQuery, text, clearKb: true) with { Widget = ChatSchoolInfo.WidgetOfCompare(infos, fields, note, text) };
+                return MergeSchoolInfo(response, asQuery, text, clearKb: true)
+                    with { Widget = ChatSchoolInfo.WidgetOfCompare(infos, fields, note, text), QuickReplies = ChatNextSteps.AfterCompare(infos.Select(i => (i.Code, i.Name))) };
             }
             catch (InvalidOperationException)
             {
-                return MergeSchoolInfo(response, asQuery, ChatSchoolInfo.Unavailable, clearKb: true);
+                return MergeSchoolInfo(response, asQuery, ChatSchoolInfo.Unavailable, clearKb: true) with { QuickReplies = ChatNextSteps.NoSchoolData() };
             }
         }
 

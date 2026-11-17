@@ -15,6 +15,14 @@ namespace StudyAbroad.Application.Advisor;
 ///   AfterGoalSeek        sau "cần gì để vào trường này"
 ///   AfterSearch          sau tìm trường theo điều kiện
 ///   AfterSchoolOverview  sau bản tóm tắt một trường (học sinh chưa hỏi mục cụ thể)
+///   AfterSchoolInfo      sau khi trả lời một mục cụ thể của một trường ("học phí Purdue")
+///   AfterCompare         sau bảng so sánh các trường
+///   AfterExplainFailed   giải thích một trường không được
+///   SearchHelp           tìm trường chưa chạy được (chưa có điều kiện, điều kiện không đọc ra, 0 trường)
+///   NoSchoolData         không lấy được số liệu trường, không nhận ra trường, so sánh thiếu trường
+///   EditProfile          hồ sơ chưa lưu được
+/// Quy tắc: câu trả lời nào đi qua đây cũng có ít nhất một nút. Nút gửi câu (send) phải là câu SLM đã đọc đúng
+/// (đã thử bằng model), nút chạy hành động (ChatAction) thì không qua SLM.
 /// Nút chọn đáp án khi tên trường mơ hồ (ChatGoalSeek.Choices) là ô chọn đáp án, không phải bước tiếp theo, nên không ở đây.
 /// Nút của câu hỏi hồ sơ nằm ở advisor (buttons.py).
 /// </summary>
@@ -28,6 +36,18 @@ public static class ChatNextSteps
     public const string CenterText = "Em muốn gặp tư vấn viên";
 
     public static QuickReply Center { get; } = new(CenterLabel, CenterText);
+
+    public static QuickReply Recommend { get; } = new("Gợi ý trường theo hồ sơ của em", "Gợi ý trường phù hợp với hồ sơ của em");
+
+    // Mở form sửa hồ sơ (link, không qua chat)
+    public static QuickReply EditProfile { get; } = new("Sửa hồ sơ", "Sửa hồ sơ", Href: ChatGoalSeek.EditProfileHref);
+
+    // Mở ô chọn trường rồi tính cần gì để vào trường đó, hoặc chạy thẳng khi đã biết trường
+    public static QuickReply GoalFor(string schoolCode, string schoolName)
+    {
+        var label = $"Cần gì để vào {schoolName}?";
+        return new(label, label, new ChatAction(ChatGoalSeek.Action, schoolCode));
+    }
 
     // Mở ô chọn trường, chọn xong thì giải thích trường đó
     public static QuickReply ExplainPicker(string label = ExplainPickLabel, IReadOnlyList<string>? suggested = null) =>
@@ -62,15 +82,22 @@ public static class ChatNextSteps
         Center,
     ];
 
+    /// <summary>Giải thích không được: chọn trường khác để giải thích, hoặc gặp tư vấn viên.</summary>
+    public static IReadOnlyList<QuickReply> AfterExplainFailed(IReadOnlyList<string>? suggested = null) =>
+        [ExplainPicker(AnotherExplainLabel, suggested), Center];
+
     // ----------------------------------------------------------------------------------------------------------------
     // Sau thử kịch bản what-if
     // ----------------------------------------------------------------------------------------------------------------
 
-    /// <summary>Nút sau what-if, kèm nút trung tâm. Không có bước nào thì không có nút nào (null).</summary>
-    public static IReadOnlyList<QuickReply>? AfterSimulate(SimulationResult result, string? beforeItemsJson = null)
+    /// <summary>
+    /// Nút sau what-if, kèm nút trung tâm. Kết quả không có gì để giải thích thì vẫn cho xem cần gì để vào một trường
+    /// (mở ô chọn trường), không để học sinh hết đường đi.
+    /// </summary>
+    public static IReadOnlyList<QuickReply> AfterSimulate(SimulationResult result, string? beforeItemsJson = null)
     {
         var steps = SimulationSteps(result, beforeItemsJson);
-        return steps.Count == 0 ? null : WithCenter(steps);
+        return WithCenter(steps.Count == 0 ? [GoalPicker()] : steps);
     }
 
     /// <summary>
@@ -142,7 +169,7 @@ public static class ChatNextSteps
         switch (position.ExcludeReason)
         {
             case "MAJOR" or "STATE" or "CONTROL":
-                return [new QuickReply("Sửa hồ sơ", "Sửa hồ sơ", Href: ChatGoalSeek.EditProfileHref)];
+                return [EditProfile];
             case "ENGLISH" or "ENGLISH_NO_CERT":
                 {
                     var (test, min) = r.English switch
@@ -197,7 +224,7 @@ public static class ChatNextSteps
                 "So sánh hai trường đầu", $"So sánh {a.Name} và {b.Name}",
                 new ChatAction(ChatSchoolInfo.CompareAction, SchoolCodes: [a.Code, b.Code], Question: $"So sánh {a.Name} và {b.Name}")));
         }
-        steps.Add(new QuickReply("Gợi ý trường theo hồ sơ của em", "Gợi ý trường phù hợp với hồ sơ của em"));
+        steps.Add(Recommend);
         return steps;
     }
 
@@ -205,14 +232,54 @@ public static class ChatNextSteps
     // Sau bản tóm tắt một trường
     // ----------------------------------------------------------------------------------------------------------------
 
+    // Mục của một trường mà học sinh hay hỏi tiếp, theo thứ tự hiện trên nút: mỗi nút gửi một câu hỏi đầy đủ về đúng trường đó
+    private static readonly (InfoField Field, string Label, Func<string, string> Ask)[] FollowUpFields =
+    [
+        (InfoField.Cost, "Học phí", name => $"Học phí {name} bao nhiêu?"),
+        (InfoField.Aid, "Học bổng", name => $"{name} có học bổng cho du học sinh không?"),
+        (InfoField.English, "Tiếng Anh cần", name => $"{name} cần IELTS bao nhiêu?"),
+        (InfoField.Deadline, "Hạn nộp", name => $"Hạn nộp hồ sơ của {name} là khi nào?"),
+        (InfoField.Gpa, "GPA", name => $"GPA của sinh viên trúng tuyển {name} là bao nhiêu?"),
+        (InfoField.Ranking, "Xếp hạng", name => $"{name} xếp hạng bao nhiêu?"),
+    ];
+
     /// <summary>Nút hỏi tiếp sau bản tóm tắt: mỗi nút gửi một câu hỏi đầy đủ về đúng trường đó.</summary>
     public static IReadOnlyList<QuickReply> AfterSchoolOverview(string schoolName) =>
+        FollowUpFields.Select(f => new QuickReply(f.Label, f.Ask(schoolName))).ToList();
+
+    /// <summary>
+    /// Sau khi trả lời một mục của một trường ("học phí Purdue"): cần gì để vào trường này, rồi tối đa 3 mục chưa hỏi.
+    /// </summary>
+    public static IReadOnlyList<QuickReply> AfterSchoolInfo(string schoolCode, string schoolName, IReadOnlyList<InfoField> asked) =>
     [
-        new("Học phí", $"Học phí {schoolName} bao nhiêu?"),
-        new("Học bổng", $"{schoolName} có học bổng cho du học sinh không?"),
-        new("Tiếng Anh cần", $"{schoolName} cần IELTS bao nhiêu?"),
-        new("Hạn nộp", $"Hạn nộp hồ sơ của {schoolName} là khi nào?"),
-        new("GPA", $"GPA của sinh viên trúng tuyển {schoolName} là bao nhiêu?"),
-        new("Xếp hạng", $"{schoolName} xếp hạng bao nhiêu?"),
+        GoalFor(schoolCode, schoolName),
+        .. FollowUpFields.Where(f => !asked.Contains(f.Field)).Take(3).Select(f => new QuickReply(f.Label, f.Ask(schoolName))),
     ];
+
+    // ----------------------------------------------------------------------------------------------------------------
+    // Sau so sánh trường
+    // ----------------------------------------------------------------------------------------------------------------
+
+    /// <summary>Sau bảng so sánh: cần gì để vào từng trường (hai trường đầu), rồi gặp tư vấn viên.</summary>
+    public static IReadOnlyList<QuickReply> AfterCompare(IEnumerable<(string Code, string Name)> schools) =>
+        [.. schools.Take(2).Select(s => GoalFor(s.Code, s.Name)), Center];
+
+    // ----------------------------------------------------------------------------------------------------------------
+    // Không chạy được việc tìm, tra trường
+    // ----------------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Tìm trường chưa chạy được (chưa có điều kiện, điều kiện không đọc ra, không có trường nào): đưa vài câu tìm mẫu
+    /// để học sinh bấm hoặc gõ theo. Các câu này đã thử bằng model, đọc đúng thành tìm trường với điều kiện tương ứng.
+    /// </summary>
+    public static IReadOnlyList<QuickReply> SearchHelp() =>
+    [
+        new("Trường có học bổng", "Tìm trường có học bổng cho du học sinh"),
+        new("Trường không cần SAT", "Tìm trường không cần SAT"),
+        new("Trường công lập", "Tìm trường công lập"),
+        Recommend,
+    ];
+
+    /// <summary>Không lấy được số liệu, không nhận ra trường, hoặc so sánh thiếu trường: quay về gợi ý theo hồ sơ.</summary>
+    public static IReadOnlyList<QuickReply> NoSchoolData() => [Recommend, Center];
 }

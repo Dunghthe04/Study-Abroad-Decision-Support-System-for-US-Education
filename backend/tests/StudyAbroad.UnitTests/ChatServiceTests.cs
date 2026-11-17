@@ -920,7 +920,9 @@ public class ChatServiceTests
 
         Assert.Contains("Hồ sơ chưa lưu được", res.Answer);
         Assert.Contains("Vui lòng nhập GPA hợp lệ.", res.Answer);
-        Assert.Null(res.QuickReplies);           // không mời sang bước sau khi chưa lưu được
+        // Không mời sang bước sau khi chưa lưu được, chỉ có nút mở form sửa hồ sơ
+        Assert.Equal(["Sửa hồ sơ"], res.QuickReplies!.Select(q => q.Label));
+        Assert.Equal(ChatGoalSeek.EditProfileHref, res.QuickReplies![0].Href);
         Assert.Equal(oldState, session.StateJson); // vẫn ở bảng rà soát, xác nhận lại được
         Assert.Equal("B2", session.CurrentStep);
         Assert.Equal(["budget"], flow.PatchedKeys); // nháp vẫn giữ những gì vừa nói
@@ -1494,14 +1496,14 @@ public class ChatServiceTests
     }
 
     [Fact]
-    public async Task SimulateAction_WhenNothingChanged_OffersNoButtons()
+    public async Task SimulateAction_WhenNothingChanged_StillOffersTheGoalPickerAndTheCenter()
     {
         var advisor = new FakeAdvisor("B4") { Action = "simulate", ActionData = Sat1500, Note = Written() };
         var runner = new FakeRunner { Simulation = OrderedSimulation("bu", "ne") };   // không đổi nhóm, không có trường Khó vào
 
         var res = await SimulateChat(advisor, runner);
 
-        Assert.Null(res.QuickReplies);
+        Assert.Equal([ChatNextSteps.GoalPickLabel, ChatNextSteps.CenterLabel], res.QuickReplies!.Select(q => q.Label));
     }
 
     [Fact]
@@ -1873,12 +1875,12 @@ public class ChatServiceTests
     }
 
     [Fact]
-    public async Task SchoolSearch_NoResult_HasNoCardAndNoButtons()
+    public async Task SchoolSearch_NoResult_HasNoCard_AndOffersSampleSearches()
     {
         var (res, _) = await SearchChat(SearchAction(new { states = new[] { "CA" } }), new FakeRunner());
 
         Assert.Null(res.Widget);
-        Assert.Null(res.QuickReplies);
+        Assert.Equal(ChatNextSteps.SearchHelp().Select(q => q.Label), res.QuickReplies!.Select(q => q.Label));
     }
 
     // Nút "So sánh hai trường đầu": chạy thẳng theo mã trường, không qua advisor, ra bảng so sánh

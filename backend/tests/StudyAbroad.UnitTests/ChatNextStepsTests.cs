@@ -105,4 +105,46 @@ public class ChatNextStepsTests
         Assert.Equal("match", data.GetProperty("target").GetString());
         Assert.Equal(JsonValueKind.Null, data.GetProperty("kind").ValueKind);
     }
+
+    [Fact]
+    public void AfterSchoolInfo_OffersTheGoalForThisSchool_ThenUpToThreeFieldsNotAskedYet()
+    {
+        var steps = ChatNextSteps.AfterSchoolInfo("PU", "Purdue", [InfoField.Cost]);
+
+        Assert.Equal(["Cần gì để vào Purdue?", "Học bổng", "Tiếng Anh cần", "Hạn nộp"], steps.Select(s => s.Label));
+        Assert.Equal(ChatGoalSeek.Action, steps[0].Action?.Type);
+        Assert.Equal("PU", steps[0].Action?.SchoolCode);
+        Assert.Equal("Purdue có học bổng cho du học sinh không?", steps[1].Value);
+    }
+
+    [Fact]
+    public void AfterSchoolOverview_KeepsTheSixFieldsInOrder()
+    {
+        Assert.Equal(["Học phí", "Học bổng", "Tiếng Anh cần", "Hạn nộp", "GPA", "Xếp hạng"],
+            ChatNextSteps.AfterSchoolOverview("UCLA").Select(s => s.Label));
+    }
+
+    [Fact]
+    public void AfterCompare_OffersTheGoalForTheFirstTwoSchools_ThenTheCenter()
+    {
+        var steps = ChatNextSteps.AfterCompare([("PU", "Purdue"), ("DU", "Duke"), ("YU", "Yale")]);
+
+        Assert.Equal(["Cần gì để vào Purdue?", "Cần gì để vào Duke?", ChatNextSteps.CenterLabel], steps.Select(s => s.Label));
+        Assert.Equal("DU", steps[1].Action?.SchoolCode);
+    }
+
+    [Fact]
+    public void AfterExplainFailed_OffersAnotherSchoolAndTheCenter()
+    {
+        Assert.Equal([ChatNextSteps.AnotherExplainLabel, ChatNextSteps.CenterLabel],
+            ChatNextSteps.AfterExplainFailed().Select(s => s.Label));
+    }
+
+    [Fact]
+    public void SearchHelp_AndNoSchoolData_AlwaysGiveAWayForward()
+    {
+        Assert.NotEmpty(ChatNextSteps.SearchHelp());
+        Assert.Contains(ChatNextSteps.SearchHelp(), s => s.Label == ChatNextSteps.Recommend.Label);
+        Assert.Equal([ChatNextSteps.Recommend.Label, ChatNextSteps.CenterLabel], ChatNextSteps.NoSchoolData().Select(s => s.Label));
+    }
 }
