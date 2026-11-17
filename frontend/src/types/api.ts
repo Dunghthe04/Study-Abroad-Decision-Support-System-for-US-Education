@@ -358,6 +358,12 @@ export interface LockUserAccountRequest {
 }
 
 /** [UC-62] Admin mở khóa tài khoản kèm lý do. */
+/** [UC-113] Admin sửa ngày sinh Học sinh / Phụ huynh theo yêu cầu hỗ trợ. birthDate dạng yyyy-MM-dd, lý do bắt buộc. */
+export interface UpdateUserBirthDateRequest {
+  birthDate: string;
+  reason: string;
+}
+
 export interface UnlockUserAccountRequest {
   reason: string;
 }
@@ -377,6 +383,8 @@ export interface UserDto {
   lockoutEnd?: string | null;
   /** [UC-111] Ngày sinh (yyyy-MM-dd), chỉ trả về cho chính chủ hoặc Admin */
   dateOfBirth?: string | null;
+  /** [UC-113] Tuổi tròn theo giờ VN, tính từ ngày sinh (có khi xem chi tiết hoặc sau khi Admin sửa ngày sinh) */
+  age?: number | null;
 }
 
 // Token chỉ nằm trong HttpOnly cookie, body không chứa token
