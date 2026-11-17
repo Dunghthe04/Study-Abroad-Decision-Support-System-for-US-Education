@@ -38,6 +38,12 @@ namespace StudyAbroad.Application.Auth
         /// <summary>[UC-117] Gửi phụ huynh ngay sau khi đồng ý: xác nhận đã đồng ý, kèm link rút đồng ý không cần đăng nhập.</summary>
         Task SendParentConsentConfirmedEmailAsync(string toEmail, string studentName, string revokeToken, CancellationToken ct = default);
 
+        /// <summary>[UC-115] Báo học sinh: phụ huynh bấm Từ chối trong link mời. Học sinh gửi lại hoặc đổi email phụ huynh trong trang Tài khoản.</summary>
+        Task SendParentConsentRejectedEmailAsync(string toEmail, string studentName, string parentLabel, CancellationToken ct = default);
+
+        /// <summary>[UC-115] Báo học sinh: phụ huynh đã đồng ý qua mail nay đăng ký tài khoản Phụ huynh, hệ thống tự liên kết.</summary>
+        Task SendParentAccountLinkedEmailAsync(string toEmail, string studentName, string parentName, CancellationToken ct = default);
+
         /// <summary>Gửi email thông báo tài khoản bị khóa bởi quản trị viên kèm lý do khóa.</summary>
         Task SendAccountLockedEmailAsync(string toEmail, string fullName, string reason, CancellationToken ct = default);
 

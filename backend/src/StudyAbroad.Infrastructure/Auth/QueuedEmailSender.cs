@@ -62,6 +62,12 @@ namespace StudyAbroad.Infrastructure.Auth
         public Task SendParentConsentConfirmedEmailAsync(string toEmail, string studentName, string revokeToken, CancellationToken ct = default) =>
             Enqueue(toEmail, (s, t) => s.SendParentConsentConfirmedEmailAsync(toEmail, studentName, revokeToken, t));
 
+        public Task SendParentConsentRejectedEmailAsync(string toEmail, string studentName, string parentLabel, CancellationToken ct = default) =>
+            Enqueue(toEmail, (s, t) => s.SendParentConsentRejectedEmailAsync(toEmail, studentName, parentLabel, t));
+
+        public Task SendParentAccountLinkedEmailAsync(string toEmail, string studentName, string parentName, CancellationToken ct = default) =>
+            Enqueue(toEmail, (s, t) => s.SendParentAccountLinkedEmailAsync(toEmail, studentName, parentName, t));
+
         public Task SendAccountLockedEmailAsync(string toEmail, string fullName, string reason, CancellationToken ct = default) =>
             Enqueue(toEmail, (s, t) => s.SendAccountLockedEmailAsync(toEmail, fullName, reason, t));
 

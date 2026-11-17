@@ -41,6 +41,11 @@ public class ParentLinkRepository(AppDbContext db) : IParentLinkRepository
             .OrderBy(l => l.AcceptedAt)
             .ToListAsync(ct);
 
+    public Task<List<ParentStudentLink>> GetActiveWithoutParentAccountAsync(string parentEmail, CancellationToken ct = default) =>
+        db.ParentStudentLinks.AsNoTracking()
+            .Where(l => l.ParentEmail == parentEmail && l.ParentUserId == null && l.Status == ParentLinkStatuses.Active)
+            .ToListAsync(ct);
+
     public Task<Consent?> GetConsentAsync(Guid consentId, CancellationToken ct = default) =>
         db.Consents.AsNoTracking().FirstOrDefaultAsync(c => c.Id == consentId, ct);
 

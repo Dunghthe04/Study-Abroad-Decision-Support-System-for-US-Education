@@ -22,6 +22,9 @@ public interface IParentLinkRepository
     /// <summary>Các link đang hiệu lực của phụ huynh (con đã liên kết).</summary>
     Task<List<ParentStudentLink>> GetActiveByParentAsync(Guid parentUserId, CancellationToken ct = default);
 
+    /// <summary>[UC-115] Liên kết đã đồng ý qua link mail nhưng chưa gắn tài khoản phụ huynh, theo email nhận thư mời.</summary>
+    Task<List<ParentStudentLink>> GetActiveWithoutParentAccountAsync(string parentEmail, CancellationToken ct = default);
+
     Task<Consent?> GetConsentAsync(Guid consentId, CancellationToken ct = default);
 
     /// <summary>Học sinh có ít nhất một link active mà consent đi kèm còn granted (dùng cho chặn theo tuổi).</summary>

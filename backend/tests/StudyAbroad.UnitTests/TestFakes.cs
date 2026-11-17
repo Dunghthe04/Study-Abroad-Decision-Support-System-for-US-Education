@@ -271,6 +271,18 @@ internal sealed class FakeEmailSender : IEmailSender
         return Task.CompletedTask;
     }
 
+    public Task SendParentConsentRejectedEmailAsync(string toEmail, string studentName, string parentLabel, CancellationToken ct = default)
+    {
+        SentEmails.Add((toEmail, "parent_rejected", parentLabel));
+        return Task.CompletedTask;
+    }
+
+    public Task SendParentAccountLinkedEmailAsync(string toEmail, string studentName, string parentName, CancellationToken ct = default)
+    {
+        SentEmails.Add((toEmail, "parent_account_linked", parentName));
+        return Task.CompletedTask;
+    }
+
     public Task SendAccountLockedEmailAsync(string toEmail, string fullName, string reason, CancellationToken ct = default)
     {
         SentEmails.Add((toEmail, "account_locked_notice", reason));
@@ -334,6 +346,10 @@ internal sealed class FakeParentLinkRepository : IParentLinkRepository
     public Task<List<ParentStudentLink>> GetActiveByParentAsync(Guid parentUserId, CancellationToken ct = default) =>
         Task.FromResult(Links.Where(l => l.ParentUserId == parentUserId && l.Status == ParentLinkStatuses.Active).Select(Clone).ToList());
 
+    public Task<List<ParentStudentLink>> GetActiveWithoutParentAccountAsync(string parentEmail, CancellationToken ct = default) =>
+        Task.FromResult(Links.Where(l => l.ParentEmail == parentEmail && l.ParentUserId == null && l.Status == ParentLinkStatuses.Active)
+            .Select(Clone).ToList());
+
     public Task<bool> HasGrantedConsentAsync(Guid studentUserId, CancellationToken ct = default) =>
         Task.FromResult(Links.Any(l => l.StudentUserId == studentUserId && l.Status == ParentLinkStatuses.Active
             && Consents.Any(c => c.Id == l.ConsentId && c.Granted)));
@@ -342,7 +358,7 @@ internal sealed class FakeParentLinkRepository : IParentLinkRepository
         Task.FromResult(Consents.Where(c => c.Id == consentId).Select(c => new Consent
         {
             Id = c.Id, CreatedAt = c.CreatedAt, UserId = c.UserId, Purpose = c.Purpose, Granted = c.Granted,
-            PolicyVersion = c.PolicyVersion, GrantedByUserId = c.GrantedByUserId, GrantedIp = c.GrantedIp,
+            PolicyVersion = c.PolicyVersion, GrantedByUserId = c.GrantedByUserId, GrantedByEmail = c.GrantedByEmail, GrantedIp = c.GrantedIp,
         }).FirstOrDefault());
 
     public Task SaveAcceptAsync(ParentStudentLink link, Consent consent, CancellationToken ct = default)

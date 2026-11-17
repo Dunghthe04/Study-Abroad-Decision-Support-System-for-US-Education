@@ -82,6 +82,26 @@ public class AuthServiceTests
         Assert.Equal(UserStatuses.Active, _repo.Users[0].Status);
     }
 
+    // [UC-75 / UC-115] Phụ huynh đã đồng ý qua link mail, sau đó đăng ký bằng đúng email: xác thực OTP xong là thấy con
+    [Fact]
+    public async Task VerifyEmail_Parent_LinksConsentGivenByEmail()
+    {
+        var kid = new User { Email = "kid@test.com", FullName = "Kid", Role = UserRoles.Student, Status = UserStatuses.Active, PasswordHash = "x" };
+        _repo.Users.Add(kid);
+        var link = new ParentStudentLink { StudentUserId = kid.Id, ParentEmail = "a@test.com", Status = ParentLinkStatuses.Active };
+        _links.Links.Add(link);
+        var service = CreateService();
+        await service.RegisterAsync(Request(email: "A@test.com"));
+        var otpCode = _emailSender.SentEmails[0].Code;
+
+        var result = await service.VerifyEmailAsync(new VerifyEmailRequest("a@test.com", otpCode));
+
+        Assert.Equal(AuthError.None, result.Error);
+        var parent = _repo.Users.Single(u => u.Role == UserRoles.Parent);
+        Assert.Equal(parent.Id, _links.Links.Single().ParentUserId);
+        Assert.Contains(_emailSender.SentEmails, e => e.To == kid.Email && e.Purpose == "parent_account_linked");
+    }
+
     [Fact]
     public async Task VerifyEmail_ExpiredOtp_ReturnsGenericOtpInvalid()
     {

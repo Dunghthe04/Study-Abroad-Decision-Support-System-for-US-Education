@@ -268,6 +268,24 @@ namespace StudyAbroad.Infrastructure.Auth
             await SendEmailAsync(toEmail, subject, body, ct);
         }
 
+        public async Task SendParentAccountLinkedEmailAsync(string toEmail, string studentName, string parentName, CancellationToken ct = default)
+        {
+            var student = WebUtility.HtmlEncode(studentName);
+            var parent = WebUtility.HtmlEncode(parentName);
+            var subject = "[USAS] Phụ huynh đã liên kết tài khoản";
+            var body = $"""
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
+                    <h2 style="color: #2563eb; margin-bottom: 16px;">Phụ huynh đã liên kết tài khoản</h2>
+                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">Chào <strong>{student}</strong>, phụ huynh <strong>{parent}</strong> (người đã đồng ý qua email) vừa tạo tài khoản Phụ huynh trên USAS. Hệ thống đã liên kết tài khoản này với bạn.</p>
+                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">Sự đồng ý xử lý dữ liệu giữ nguyên. Phụ huynh có thể xem liên kết và rút đồng ý trong trang Tài khoản.</p>
+                    <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+                    <p style="font-size: 12px; color: #94a3b8; text-align: center;">USAS - Hệ thống hỗ trợ ra quyết định du học Mỹ</p>
+                </div>
+                """;
+
+            await SendEmailAsync(toEmail, subject, body, ct);
+        }
+
         public async Task SendAccountLockedEmailAsync(string toEmail, string fullName, string reason, CancellationToken ct = default)
         {
             var subject = "[USAS] Thông báo: Tài khoản của bạn đã bị khóa";

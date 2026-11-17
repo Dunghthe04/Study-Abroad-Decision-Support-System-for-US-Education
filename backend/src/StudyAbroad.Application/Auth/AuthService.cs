@@ -258,6 +258,8 @@ namespace StudyAbroad.Application.Auth
 
             if (user.Role == UserRoles.Student)
                 await SendFirstParentInvitesAsync(user, ct);
+            else if (user.Role == UserRoles.Parent)
+                await parentLinkService.LinkParentAccountAsync(user, ct);
 
             // Tự động đăng nhập
             var (token, expiresAt) = tokens.GenerateToken(user);
