@@ -2,10 +2,11 @@ import { Trash2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { DataTableColumn } from "@/components/admin/shared/DataTable";
-import { renderStatusOption } from "@/components/admin/knowledge/SlmStatusBadge";
+import { Badge } from "@/components/ui/badge";
+import { SlmStatusBadge } from "@/components/admin/knowledge/SlmStatusBadge";
 import { InlineSelectCell } from "@/components/admin/shared/InlineSelectCell";
-import { REVIEW_STATUS_OPTIONS, SAMPLE_TYPE_OPTIONS, SPLIT_OPTIONS } from "@/lib/slm-sample-format";
-import type { SaveSlmSampleRequest, SlmReviewStatus, SlmSample, SlmSampleType, SlmSplit } from "@/types/slm-sample";
+import { formatDateTime, isFromChat, SAMPLE_TYPE_OPTIONS, SPLIT_OPTIONS } from "@/lib/slm-sample-format";
+import type { SaveSlmSampleRequest, SlmSample, SlmSampleType, SlmSplit } from "@/types/slm-sample";
 
 interface ColumnHandlers {
   selectedIds: Set<string>;
@@ -13,10 +14,9 @@ interface ColumnHandlers {
   onEdit: (sample: SlmSample) => void;
   onDelete: (sample: SlmSample) => void;
   onChangeField: (sample: SlmSample, change: Partial<SaveSlmSampleRequest>) => Promise<void>;
-  onChangeStatus: (sample: SlmSample, status: SlmReviewStatus) => Promise<void>;
 }
 
-export function slmSampleColumns({ selectedIds, onToggle, onEdit, onDelete, onChangeField, onChangeStatus }: ColumnHandlers): DataTableColumn<SlmSample>[] {
+export function slmSampleColumns({ selectedIds, onToggle, onEdit, onDelete, onChangeField }: ColumnHandlers): DataTableColumn<SlmSample>[] {
   return [
     {
       id: "select",
@@ -51,7 +51,12 @@ export function slmSampleColumns({ selectedIds, onToggle, onEdit, onDelete, onCh
           >
             {sample.question}
           </button>
-          {sample.reviewNote && <div className="text-xs text-muted-foreground">Ghi chú: {sample.reviewNote}</div>}
+          {isFromChat(sample) && (
+            <Badge variant="reach" className="mt-1" title="Câu hỏi chưa trả lời lấy từ chat, cần bổ sung câu trả lời">Từ chat chưa trả lời</Badge>
+          )}
+          {sample.reviewNote && (
+            <div className="text-xs text-muted-foreground">{sample.reviewStatus === "approved" ? "Ghi chú" : "Lý do"}: {sample.reviewNote}</div>
+          )}
         </>
       ),
     },
@@ -84,19 +89,25 @@ export function slmSampleColumns({ selectedIds, onToggle, onEdit, onDelete, onCh
       ),
     },
     {
+      id: "creator",
+      label: "Người tạo",
+      headerClassName: "w-36",
+      cellClassName: "w-36 whitespace-normal",
+      render: (sample) => sample.createdByName ?? (isFromChat(sample) ? "Hệ thống" : "—"),
+    },
+    {
+      id: "createdAt",
+      label: "Ngày tạo",
+      headerClassName: "w-40",
+      cellClassName: "w-40",
+      render: (sample) => formatDateTime(sample.createdAt),
+    },
+    {
       id: "reviewStatus",
       label: "Trạng thái",
-      headerClassName: "w-36",
-      cellClassName: "w-36",
-      render: (sample) => (
-        <InlineSelectCell
-          value={sample.reviewStatus}
-          options={REVIEW_STATUS_OPTIONS}
-          label="Đổi trạng thái duyệt"
-          renderOption={renderStatusOption}
-          onChange={(value) => onChangeStatus(sample, value as SlmReviewStatus)}
-        />
-      ),
+      headerClassName: "w-32",
+      cellClassName: "w-32",
+      render: (sample) => <SlmStatusBadge status={sample.reviewStatus} />,
     },
     {
       id: "actions",

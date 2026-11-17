@@ -324,12 +324,74 @@ public class AdminSlmSamplesControllerTests
         return new FormFile(stream, 0, content.Length, "file", fileName);
     }
 
+    private static readonly Guid DuplicateId = Guid.NewGuid();
+
+    [Fact]
+    public async Task Create_Duplicate_Returns409WithExistingId()
+    {
+        var controller = CreateController(new FakeSlmSampleService { ThrowDuplicate = true });
+
+        var result = await controller.Create(ValidRequest(), CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Contains(DuplicateId.ToString(), System.Text.Json.JsonSerializer.Serialize(conflict.Value));
+    }
+
+    [Fact]
+    public async Task Delete_PassesTheActor()
+    {
+        var service = new FakeSlmSampleService();
+
+        await CreateController(service).Delete(Guid.NewGuid(), CancellationToken.None);
+
+        Assert.Equal(ActorId, service.DeletedBy);
+    }
+
+    [Fact]
+    public void Export_IsAdminOnly_WhileTheControllerAllowsModerators()
+    {
+        var method = typeof(AdminSlmSamplesController).GetMethod(nameof(AdminSlmSamplesController.Export))!;
+        var classRoles = typeof(AdminSlmSamplesController)
+            .GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute), false)
+            .Cast<Microsoft.AspNetCore.Authorization.AuthorizeAttribute>().Single().Roles;
+        var actionRoles = method
+            .GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute), false)
+            .Cast<Microsoft.AspNetCore.Authorization.AuthorizeAttribute>().Single().Roles;
+
+        Assert.Contains(UserRoles.Moderator, classRoles);
+        Assert.Equal(UserRoles.Admin, actionRoles);
+        Assert.Equal("export", method.GetCustomAttributes(typeof(HttpGetAttribute), false).Cast<HttpGetAttribute>().Single().Template);
+    }
+
+    [Fact]
+    public async Task GetPage_DateFilter_UsesVietnamDayBoundaries()
+    {
+        var service = new FakeSlmSampleService();
+
+        await CreateController(service).GetPage(
+            null, null, null, null, from: new DateOnly(2026, 11, 17), to: new DateOnly(2026, 11, 17));
+
+        Assert.Equal(new DateTime(2026, 11, 16, 17, 0, 0, DateTimeKind.Utc), service.LastFilter!.From);
+        Assert.Equal(new DateTime(2026, 11, 17, 17, 0, 0, DateTimeKind.Utc), service.LastFilter.To);
+    }
+
+    [Fact]
+    public async Task Export_ReturnsFile_AndBadFormatIs400()
+    {
+        var ok = await CreateController(new FakeSlmSampleService()).Export("jsonl", CancellationToken.None);
+        var bad = await CreateController(new FakeSlmSampleService { ThrowArgument = true }).Export("csv", CancellationToken.None);
+
+        Assert.Equal("x.jsonl", Assert.IsType<FileContentResult>(ok).FileDownloadName);
+        Assert.IsType<BadRequestObjectResult>(bad);
+    }
+
     private class FakeSlmSampleService : ISlmSampleService
     {
         public bool ThrowArgument { get; init; }
         public bool ThrowInvalidData { get; init; }
         public bool DeleteResult { get; init; } = true;
         public int PreviewCalls { get; private set; }
+        public SlmSampleFilter? LastFilter { get; private set; }
 
         private static SlmSampleDto MakeDto() => new(
             Guid.NewGuid(), SlmSampleTypes.Knowledge, "OPT", null, null, ValidIntents,
@@ -340,6 +402,7 @@ public class AdminSlmSamplesControllerTests
             SlmSampleFilter filter, int page, int pageSize, CancellationToken ct = default)
         {
             if (ThrowArgument) throw new ArgumentException("bad filter");
+            LastFilter = filter;
             return Task.FromResult(new PagedResult<SlmSampleDto>([], page, pageSize, 0));
         }
 
@@ -353,6 +416,7 @@ public class AdminSlmSamplesControllerTests
         public Task<SlmSampleDto> CreateAsync(SaveSlmSampleRequest request, Guid actorUserId, CancellationToken ct = default)
         {
             if (ThrowArgument) throw new ArgumentException("bad request");
+            if (ThrowDuplicate) throw new SlmDuplicateSampleException(DuplicateId);
             return Task.FromResult(MakeDto());
         }
 
@@ -362,8 +426,31 @@ public class AdminSlmSamplesControllerTests
             return Task.FromResult<SlmSampleDto?>(MakeDto());
         }
 
-        public Task<bool> DeleteAsync(Guid id, CancellationToken ct = default) =>
-            Task.FromResult(DeleteResult);
+        public Guid? DeletedBy { get; private set; }
+        public bool ThrowDuplicate { get; init; }
+        public string? ExportedFormat { get; private set; }
+
+        public Task<bool> DeleteAsync(Guid id, Guid actorUserId, CancellationToken ct = default)
+        {
+            DeletedBy = actorUserId;
+            return Task.FromResult(DeleteResult);
+        }
+
+        public Task<SlmSampleDetailDto?> GetDetailAsync(Guid id, CancellationToken ct = default) =>
+            Task.FromResult<SlmSampleDetailDto?>(null);
+
+        public Task<IReadOnlyList<SlmSampleCreatorDto>> GetCreatorsAsync(CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<SlmSampleCreatorDto>>([]);
+
+        public Task<bool> CaptureUnansweredAsync(string? question, CancellationToken ct = default) => Task.FromResult(false);
+
+        public Task<SlmExportFile> ExportAsync(
+            string? format, Guid actorUserId, string? ipAddress, string? userAgent, CancellationToken ct = default)
+        {
+            if (ThrowArgument) throw new ArgumentException("bad format");
+            ExportedFormat = format;
+            return Task.FromResult(new SlmExportFile([1], "application/x-ndjson", "x.jsonl"));
+        }
 
         public Task<ReviewSlmSamplesResultDto> ReviewAsync(ReviewSlmSamplesRequest request, Guid actorUserId, CancellationToken ct = default)
         {

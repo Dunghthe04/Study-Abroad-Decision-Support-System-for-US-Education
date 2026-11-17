@@ -2852,12 +2852,81 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.ToTable("skills", "app");
                 });
 
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.SlmSampleHistory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("action");
+
+                    b.Property<Guid?>("ActorUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("actor_user_id");
+
+                    b.Property<string>("ChangedFields")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("changed_fields");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("FromStatus")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("from_status");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("note");
+
+                    b.Property<Guid>("SampleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("sample_id");
+
+                    b.Property<string>("ToStatus")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("to_status");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_slm_sample_history");
+
+                    b.HasIndex("ActorUserId")
+                        .HasDatabaseName("ix_slm_sample_history_actor_user_id");
+
+                    b.HasIndex("SampleId", "CreatedAt")
+                        .HasDatabaseName("ix_slm_sample_history_sample_id_created_at");
+
+                    b.ToTable("slm_sample_history", "app", t =>
+                        {
+                            t.HasComment("Lịch sử sửa và duyệt của mẫu SLM.");
+                        });
+                });
+
             modelBuilder.Entity("StudyAbroad.Domain.Entities.SlmTrainingSample", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
+
+                    b.Property<string>("Answer")
+                        .HasColumnType("text")
+                        .HasColumnName("answer")
+                        .HasComment("Câu trả lời mẫu. Dòng cũ chỉ có intents thì để trống.");
 
                     b.Property<string>("Context")
                         .HasColumnType("jsonb")
@@ -2872,6 +2941,21 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("created_by_user_id")
                         .HasComment("Người tạo hoặc import dòng này. Xóa tài khoản thì để trống.");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at")
+                        .HasComment("Xóa mềm: khác null thì không hiện, không xuất.");
+
+                    b.Property<Guid?>("DeletedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("deleted_by_user_id")
+                        .HasComment("Người xóa.");
+
+                    b.Property<DateTime?>("ExportedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("exported_at")
+                        .HasComment("Lần xuất gần nhất.");
 
                     b.Property<string>("Intents")
                         .IsRequired()
@@ -2910,7 +2994,7 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(16)")
                         .HasDefaultValue("draft")
                         .HasColumnName("review_status")
-                        .HasComment("Trạng thái duyệt: draft, approved, rejected hoặc needs_fix.");
+                        .HasComment("Trạng thái duyệt: draft, pending, approved, rejected hoặc needs_fix.");
 
                     b.Property<DateTime?>("ReviewedAt")
                         .HasColumnType("timestamp with time zone")
@@ -2929,6 +3013,15 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnName("sample_type")
                         .HasComment("Loại mẫu, tương ứng một sheet của file nguồn.");
 
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasDefaultValue("manual")
+                        .HasColumnName("source")
+                        .HasComment("Nguồn: manual, excel, chat-unanswered hoặc nguồn tham khảo.");
+
                     b.Property<string>("SourceReview")
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")
@@ -2944,6 +3037,12 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnName("split")
                         .HasComment("Tập dùng cho model: train, val hoặc test.");
 
+                    b.Property<string>("Topic")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("topic")
+                        .HasComment("Chủ đề.");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
@@ -2956,6 +3055,9 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("CreatedByUserId")
                         .HasDatabaseName("ix_slm_training_samples_created_by_user_id");
+
+                    b.HasIndex("DeletedByUserId")
+                        .HasDatabaseName("ix_slm_training_samples_deleted_by_user_id");
 
                     b.HasIndex("ReviewedByUserId")
                         .HasDatabaseName("ix_slm_training_samples_reviewed_by_user_id");
@@ -2970,7 +3072,7 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         {
                             t.HasComment("Dữ liệu huấn luyện SLM: mỗi dòng là một tin nhắn của học sinh và nhãn intents mà model phải trả về. Chỉ dòng approved được xuất ra JSONL để train.");
 
-                            t.HasCheckConstraint("ck_slm_training_samples_review_status", "review_status IN ('draft','approved','rejected','needs_fix')");
+                            t.HasCheckConstraint("ck_slm_training_samples_review_status", "review_status IN ('draft','pending','approved','rejected','needs_fix')");
 
                             t.HasCheckConstraint("ck_slm_training_samples_split", "split IN ('train','val','test')");
 
@@ -4996,6 +5098,22 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasConstraintName("fk_scholarships_universities_university_id");
                 });
 
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.SlmSampleHistory", b =>
+                {
+                    b.HasOne("StudyAbroad.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("ActorUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_slm_sample_history_users_actor_user_id");
+
+                    b.HasOne("StudyAbroad.Domain.Entities.SlmTrainingSample", null)
+                        .WithMany()
+                        .HasForeignKey("SampleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_slm_sample_history_slm_training_samples_sample_id");
+                });
+
             modelBuilder.Entity("StudyAbroad.Domain.Entities.SlmTrainingSample", b =>
                 {
                     b.HasOne("StudyAbroad.Domain.Entities.User", null)
@@ -5003,6 +5121,12 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasForeignKey("CreatedByUserId")
                         .OnDelete(DeleteBehavior.SetNull)
                         .HasConstraintName("fk_slm_training_samples_users_created_by_user_id");
+
+                    b.HasOne("StudyAbroad.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("DeletedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_slm_training_samples_users_deleted_by_user_id");
 
                     b.HasOne("StudyAbroad.Domain.Entities.User", null)
                         .WithMany()

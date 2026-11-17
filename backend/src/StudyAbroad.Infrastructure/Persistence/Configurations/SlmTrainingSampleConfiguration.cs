@@ -18,7 +18,7 @@ public class SlmTrainingSampleConfiguration : IEntityTypeConfiguration<SlmTraini
                 "sample_type IN ('collect_profile','profile_review','scenario','knowledge','center_referral','out_of_scope')");
             t.HasCheckConstraint("ck_slm_training_samples_split", "split IN ('train','val','test')");
             t.HasCheckConstraint("ck_slm_training_samples_review_status",
-                "review_status IN ('draft','approved','rejected','needs_fix')");
+                "review_status IN ('draft','pending','approved','rejected','needs_fix')");
         });
 
         b.HasKey(x => x.Id);
@@ -42,14 +42,24 @@ public class SlmTrainingSampleConfiguration : IEntityTypeConfiguration<SlmTraini
         b.Property(x => x.SourceReview).HasMaxLength(16)
             .HasComment("Nhãn phiên bản rà soát trong file nguồn. Chỉ để tham khảo.");
         b.Property(x => x.ReviewStatus).HasMaxLength(16).IsRequired().HasDefaultValue(SlmReviewStatuses.Draft)
-            .HasComment("Trạng thái duyệt: draft, approved, rejected hoặc needs_fix.");
+            .HasComment("Trạng thái duyệt: draft, pending, approved, rejected hoặc needs_fix.");
         b.Property(x => x.ReviewNote).HasMaxLength(1000)
             .HasComment("Ghi chú của người duyệt.");
         b.Property(x => x.ReviewedByUserId).HasComment("Người duyệt gần nhất. Xóa tài khoản thì để trống.");
         b.Property(x => x.ReviewedAt).HasComment("Thời điểm duyệt gần nhất.");
         b.Property(x => x.CreatedByUserId).HasComment("Người tạo hoặc import dòng này. Xóa tài khoản thì để trống.");
 
+        b.HasOne<User>().WithMany().HasForeignKey(x => x.DeletedByUserId).OnDelete(DeleteBehavior.SetNull);
+        b.Property(x => x.Answer).HasComment("Câu trả lời mẫu. Dòng cũ chỉ có intents thì để trống.");
+        b.Property(x => x.Topic).HasMaxLength(128).HasComment("Chủ đề.");
+        b.Property(x => x.Source).HasMaxLength(256).IsRequired().HasDefaultValue(SlmSampleSources.Manual)
+            .HasComment("Nguồn: manual, excel, chat-unanswered hoặc nguồn tham khảo.");
+        b.Property(x => x.DeletedAt).HasComment("Xóa mềm: khác null thì không hiện, không xuất.");
+        b.Property(x => x.DeletedByUserId).HasComment("Người xóa.");
+        b.Property(x => x.ExportedAt).HasComment("Lần xuất gần nhất.");
+
         b.HasIndex(x => new { x.ReviewStatus, x.SampleType });
+        b.HasIndex(x => x.CreatedByUserId);
         b.HasIndex(x => x.Split);
         b.HasIndex(x => x.CreatedAt);
     }

@@ -29,7 +29,7 @@ public class SlmTrainingSample : BaseEntity
     /// <summary>Nhãn phiên bản rà soát ghi trong file nguồn (v9, v10, v11...). Chỉ để tham khảo, không điều khiển luồng duyệt.</summary>
     public string? SourceReview { get; set; }
 
-    /// <summary>Trạng thái duyệt: draft | approved | rejected | needs_fix. Chỉ dòng approved được xuất ra JSONL.</summary>
+    /// <summary>Trạng thái duyệt: draft | pending | approved | rejected | needs_fix. Chỉ dòng approved được xuất.</summary>
     public string ReviewStatus { get; set; } = "draft";
 
     /// <summary>Ghi chú của người duyệt, ví dụ lý do từ chối hoặc chỗ nhãn cần sửa.</summary>
@@ -41,6 +41,21 @@ public class SlmTrainingSample : BaseEntity
     /// <summary>Thời điểm duyệt gần nhất.</summary>
     public DateTime? ReviewedAt { get; set; }
 
-    /// <summary>Người tạo hoặc import dòng này.</summary>
+    /// <summary>Người tạo hoặc import dòng này. Null với câu lấy tự động từ chat.</summary>
     public Guid? CreatedByUserId { get; set; }
+
+    /// <summary>Câu trả lời mẫu (văn bản tự do). Dòng cũ chỉ có intents thì để trống.</summary>
+    public string? Answer { get; set; }
+
+    public string? Topic { get; set; }
+
+    /// <summary>Nguồn của mẫu: manual, excel, chat-unanswered hoặc nguồn tham khảo do người tạo ghi.</summary>
+    public string Source { get; set; } = "manual";
+
+    public DateTime? DeletedAt { get; set; }
+
+    public Guid? DeletedByUserId { get; set; }
+
+    /// <summary>Lần xuất gần nhất (UC-102).</summary>
+    public DateTime? ExportedAt { get; set; }
 }
