@@ -55,6 +55,11 @@ export interface StudyCenter {
   feeDescription?: string | null;
   registrantName?: string | null;
   registrantPosition?: string | null;
+  /** [UC-92] Fanpage chính thức; đổi thì Moderator kiểm tra (UC-114). */
+  fanpage?: string | null;
+  /** [UC-92] Khu vực phục vụ và chi nhánh do trung tâm công bố. */
+  serviceAreas?: string[] | null;
+  branches?: string[] | null;
 }
 
 export interface RegisterCenterRequest {
@@ -178,6 +183,38 @@ export interface UpdateCenterProfileRequest {
   legalComplianceMode?: string | null;
   trainingLicenseNumber?: string | null;
   certifiedCounselorCount?: number | null;
+  /** [UC-92] Lưu ngay nhưng Moderator kiểm tra (UC-114). */
+  fanpage?: string | null;
+  serviceAreas?: string[];
+  branches?: string[];
+}
+
+/** [UC-92] Phân loại thay đổi sau khi trung tâm tự sửa hồ sơ. */
+export interface CenterProfileUpdateOutcome {
+  /** Lưu và hiển thị ngay. */
+  savedFields: string[];
+  /** Lưu ngay nhưng chờ Moderator kiểm tra (website, fanpage). */
+  reviewFields: string[];
+  /** Thông tin pháp lý đã đổi. */
+  legalFields: string[];
+  /** Trung tâm đã xác minh đổi thông tin pháp lý: hồ sơ về Chờ duyệt, tạm ẩn dấu xác minh. */
+  verificationReset: boolean;
+  message: string;
+}
+
+export interface CenterProfileUpdateResponse {
+  center: StudyCenter;
+  outcome: CenterProfileUpdateOutcome;
+}
+
+/** [UC-92 / UC-93] Yêu cầu xóa tài khoản trung tâm. status: pending | completed | rejected. */
+export interface CenterDeletionRequestDto {
+  id: string;
+  studyCenterId: string;
+  reason: string;
+  status: string;
+  createdAt: string;
+  handledAt: string | null;
 }
 
 export interface VerifyStudyCenterRequest {
