@@ -22,6 +22,9 @@ import type {
   ParentRevokeInfo,
   ParentLinkDto,
   ParentLinkResponse,
+  ParentProfileOverviewDto,
+  ShareParentProfileResult,
+  ParentProfileOfferDto,
   StudyCenter,
   CreateStudyCenterRequest,
   AddTargetSchoolRequest,
@@ -219,6 +222,31 @@ export const profileApi = {
     apiFetch<AcademicProfileResponse>("/api/v1/profile/academic", {
       method: "GET",
     }),
+
+  // Phụ huynh: hồ sơ các con đã liên kết (chỉ đọc) + hồ sơ mình nhập còn chờ chọn con nhận
+  getChildrenProfiles: () =>
+    apiFetch<ParentLinkResponse<ParentProfileOverviewDto>>("/api/v1/profile/academic/children", {
+      method: "GET",
+    }),
+
+  // linkId null = không chuyển cho con nào
+  shareToChild: (linkId: string | null) =>
+    apiFetch<ParentLinkResponse<ShareParentProfileResult>>("/api/v1/profile/academic/share", {
+      method: "POST",
+      body: JSON.stringify({ linkId }),
+    }),
+
+  // Học sinh: đề nghị dùng hồ sơ phụ huynh khi mình đã có hồ sơ
+  getParentOffers: () =>
+    apiFetch<ParentLinkResponse<ParentProfileOfferDto[]>>("/api/v1/profile/academic/parent-offers", {
+      method: "GET",
+    }),
+
+  decideParentOffer: (linkId: string, accept: boolean) =>
+    apiFetch<ParentLinkResponse<ShareParentProfileResult>>(
+      `/api/v1/profile/academic/parent-offers/${encodeURIComponent(linkId)}/${accept ? "accept" : "decline"}`,
+      { method: "POST" },
+    ),
 };
 
 // [Q11] Liên kết phụ huynh – học sinh. Token lời mời đi trong body để không nằm trong log URL của API.

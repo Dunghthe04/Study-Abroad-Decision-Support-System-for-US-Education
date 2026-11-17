@@ -13,6 +13,9 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
 
+/** Trang đăng ký đọc khóa này để điền sẵn email phụ huynh (không đặt email trên URL) */
+export const REGISTER_PARENT_EMAIL_KEY = "usas.registerParentEmail";
+
 const EXPIRED_MESSAGE = "Lời mời đã hết hạn (quá 7 ngày). Hãy nhờ con gửi lại lời mời từ trang Tài khoản.";
 const INVALID_MESSAGE = "Link xác nhận không hợp lệ.";
 
@@ -118,7 +121,18 @@ export function ParentConsentForm() {
             Muốn xem các con đã liên kết và quản lý đồng ý trên web? Đăng ký tài khoản phụ huynh bằng đúng email {invite.parentEmail},
             hệ thống sẽ tự liên kết.
           </p>
-          <Link href="/register" className={buttonVariants({ size: "xl", variant: "outline", className: "w-full" })}>
+          {/* Trang đăng ký chọn sẵn Phụ huynh; email truyền qua sessionStorage, không đặt trên URL */}
+          <Link
+            href="/register?role=parent"
+            onClick={() => {
+              try {
+                sessionStorage.setItem(REGISTER_PARENT_EMAIL_KEY, invite.parentEmail);
+              } catch {
+                // Trình duyệt chặn lưu trữ: vẫn mở trang đăng ký, phụ huynh tự gõ email
+              }
+            }}
+            className={buttonVariants({ size: "xl", variant: "outline", className: "w-full" })}
+          >
             Đăng ký tài khoản phụ huynh
           </Link>
         </div>
@@ -193,6 +207,13 @@ export function ParentConsentForm() {
             </Alert>
           )}
 
+          {invite.blockedReason && (
+            <Alert variant="destructive">
+              <TriangleAlertIcon aria-hidden />
+              <AlertDescription>{invite.blockedReason}</AlertDescription>
+            </Alert>
+          )}
+
           {choseReject && (
             <p className="text-sm text-ink-2">
               Bạn đã chọn <strong className="text-ink">Từ chối</strong> trong email. Bấm nút Từ chối bên dưới để xác nhận.
@@ -200,13 +221,16 @@ export function ParentConsentForm() {
           )}
 
           <div className="space-y-4">
+            {!invite.blockedReason && (
             <div className="flex items-start gap-2">
               <Checkbox id="parent-consent-guardian" checked={isGuardian} onCheckedChange={(checked) => setIsGuardian(Boolean(checked))} />
               <Label htmlFor="parent-consent-guardian" className="leading-snug text-ink">
                 Tôi là cha, mẹ hoặc người giám hộ hợp pháp của {invite.studentName}, đã đọc nội dung trên.
               </Label>
             </div>
+            )}
             <div className="flex flex-col gap-2 sm:flex-row">
+              {!invite.blockedReason && (
               <Button
                 type="button"
                 size="xl"
@@ -217,6 +241,7 @@ export function ParentConsentForm() {
                 {submitting === "accept" && <Spinner data-icon="inline-start" />}
                 {submitting === "accept" ? "Đang ghi nhận..." : "Đồng ý"}
               </Button>
+              )}
               <Button
                 type="button"
                 size="xl"

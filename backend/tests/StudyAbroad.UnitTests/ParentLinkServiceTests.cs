@@ -146,20 +146,6 @@ public class ParentLinkServiceTests
     }
 
     [Fact]
-    public async Task Accept_EmailIsStudentAccount_NotLinked()
-    {
-        var student = AddUser("kid@test.com", UserRoles.Student, 14);
-        AddUser("me@test.com", UserRoles.Student, 17);
-        var (link, token) = AddPendingLink(student);
-
-        var result = await CreateService().AcceptAsync(token, isGuardian: true, null);
-
-        Assert.Equal(ParentLinkError.None, result.Error);
-        Assert.Equal(ParentLinkStatuses.Active, Stored(link.Id).Status);
-        Assert.Null(Stored(link.Id).ParentUserId);
-    }
-
-    [Fact]
     public async Task Accept_NotGuardian_Validation()
     {
         var student = AddUser("kid@test.com", UserRoles.Student, 14);
@@ -850,5 +836,65 @@ public class ParentLinkServiceTests
 
         Assert.Equal(ParentLinkError.NotFound, result.Error);
         Assert.Equal(ParentLinkStatuses.Active, Stored(link.Id).Status);
+    }
+
+    // ===== Email mời đã là tài khoản học sinh / trung tâm / quản trị: chặn ở trang đồng ý, vẫn cho Từ chối =====
+
+    [Theory]
+    [InlineData(UserRoles.Student)]
+    [InlineData(UserRoles.Center)]
+    [InlineData(UserRoles.Admin)]
+    public async Task GetInvite_EmailBelongsToNonParentAccount_SetsBlockedReason(string role)
+    {
+        var student = AddUser("kid@test.com", UserRoles.Student, 14);
+        AddUser("me@test.com", role, 20);
+        var (_, token) = AddPendingLink(student);
+
+        var result = await CreateService().GetInviteAsync(token);
+
+        Assert.Equal(ParentLinkError.None, result.Error);
+        Assert.False(string.IsNullOrWhiteSpace(result.Value!.BlockedReason));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(UserRoles.Parent)]
+    public async Task GetInvite_NoAccountOrParentAccount_NotBlocked(string? role)
+    {
+        var student = AddUser("kid@test.com", UserRoles.Student, 14);
+        if (role != null) AddUser("me@test.com", role, 40);
+        var (_, token) = AddPendingLink(student);
+
+        var result = await CreateService().GetInviteAsync(token);
+
+        Assert.Null(result.Value!.BlockedReason);
+    }
+
+    [Fact]
+    public async Task Accept_EmailIsStudentAccount_RefusedAndLinkStaysPending()
+    {
+        var student = AddUser("kid@test.com", UserRoles.Student, 14);
+        AddUser("me@test.com", UserRoles.Student, 17);
+        var (link, token) = AddPendingLink(student);
+
+        var result = await CreateService().AcceptAsync(token, isGuardian: true, "1.2.3.4");
+
+        Assert.Equal(ParentLinkError.Validation, result.Error);
+        Assert.Contains("học sinh", result.Message);
+        Assert.Empty(_links.Consents);
+        Assert.Equal(ParentLinkStatuses.Pending, Stored(link.Id).Status);
+    }
+
+    [Fact]
+    public async Task Reject_EmailIsStudentAccount_StillRecorded()
+    {
+        var student = AddUser("kid@test.com", UserRoles.Student, 14);
+        AddUser("me@test.com", UserRoles.Student, 17);
+        var (link, token) = AddPendingLink(student);
+
+        var result = await CreateService().RejectAsync(token, "1.2.3.4");
+
+        Assert.Equal(ParentLinkError.None, result.Error);
+        Assert.Equal(ParentLinkStatuses.Rejected, Stored(link.Id).Status);
     }
 }

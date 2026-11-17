@@ -481,6 +481,8 @@ export interface AcademicProfileResponse {
   terms: TranscriptTerm[];
   createdAt: string;
   updatedAt?: string | null;
+  // Đã gửi hồ sơ 6 bước (hoặc có dữ liệu cũ)
+  isComplete: boolean;
 }
 
 export interface TargetSchoolSummaryDto {
@@ -515,6 +517,8 @@ export interface ParentInviteInfo {
   /** Lúc phụ huynh bấm Đồng ý / Từ chối */
   decidedAt: string | null;
   policyVersion: string;
+  /** Email đã là tài khoản học sinh / trung tâm / quản trị: không đồng ý được, chỉ hiện nút Từ chối */
+  blockedReason?: string | null;
 }
 
 /** [UC-117] Trang rút đồng ý từ link trong mail phụ huynh */
@@ -731,4 +735,34 @@ export interface CenterReviewsDto {
   totalCount: number;
   averageRating: number | null;
   items: CenterReviewDto[];
+}
+
+// Hồ sơ học thuật giữa phụ huynh và con (api/v1/profile/academic/children, parent-offers)
+export type ProfileTransferStatus = "offered" | "copied" | "declined" | "skipped";
+
+export interface ParentChildProfileDto {
+  linkId: string;
+  studentUserId: string;
+  studentName: string;
+  profileTransferStatus: ProfileTransferStatus | null;
+  profile: AcademicProfileResponse;
+}
+
+export interface ParentProfileOverviewDto {
+  hasOwnProfile: boolean;
+  /** Phụ huynh có hồ sơ tự nhập, có từ 2 con và chưa chọn con nào nhận */
+  hasPendingOwnProfile: boolean;
+  children: ParentChildProfileDto[];
+}
+
+export interface ShareParentProfileResult {
+  status: ProfileTransferStatus;
+  studentName: string | null;
+}
+
+export interface ParentProfileOfferDto {
+  linkId: string;
+  parentName: string;
+  offeredAt: string;
+  parentProfile: AcademicProfileResponse;
 }

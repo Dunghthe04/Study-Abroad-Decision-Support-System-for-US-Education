@@ -50,7 +50,13 @@ public record ParentLinkRevokeNotice(string ToEmail, string StudentName, string 
 /// mời qua email → phụ huynh bấm link, đồng ý hoặc từ chối, không cần tài khoản (UC-115; lưu consent: email, lúc nào,
 /// phiên bản nội dung, IP) → có thể rút lại (UC-117). Lịch sử link và consent không bao giờ bị xóa.
 /// </summary>
-public class ParentLinkService(IParentLinkRepository links, IUserRepository users, IEmailSender emailSender, IAuditLogRepository auditLogs) : IParentLinkService
+public class ParentLinkService(
+    IParentLinkRepository links,
+    IUserRepository users,
+    IEmailSender emailSender,
+    IAuditLogRepository auditLogs,
+    // Chuyển hồ sơ phụ huynh đã nhập sang con khi tài khoản phụ huynh được gắn vào liên kết; null trong test cũ
+    IParentProfileShareService? profileShare = null) : IParentLinkService
 {
     /// <summary>[UC-117] Action ghi audit khi phụ huynh rút đồng ý qua link trong mail.</summary>
     public const string RevokeByEmailAuditAction = "parent_link.revoke_by_email";
@@ -65,6 +71,8 @@ public class ParentLinkService(IParentLinkRepository links, IUserRepository user
     private const string ConflictMessage = "Liên kết vừa được cập nhật bởi một thao tác khác. Vui lòng tải lại trang.";
     private const string NotFoundMessage = "Không tìm thấy liên kết.";
     private const string InvalidRevokeLinkMessage = "Link rút đồng ý không hợp lệ hoặc đã được sử dụng.";
+    private const string StudentAccountMessage = "Email này là tài khoản học sinh nên không thể làm phụ huynh. Bạn hãy bấm Từ chối để học sinh đổi sang email khác của phụ huynh.";
+    private const string OtherAccountMessage = "Email này đã dùng cho tài khoản không phải phụ huynh nên không thể làm phụ huynh. Bạn hãy bấm Từ chối để học sinh đổi sang email khác của phụ huynh.";
     private const string RevokeLinkAgeMessage = "Học sinh đã đủ 16 tuổi nên link này không còn dùng được. Từ 16 tuổi, học sinh tự quyết định việc đồng ý xử lý dữ liệu của mình.";
 
     public async Task<ParentLinkResult<ParentInviteInfo>> GetInviteAsync(string token, CancellationToken ct = default)
@@ -82,7 +90,10 @@ public class ParentLinkService(IParentLinkRepository links, IUserRepository user
         if (link.Status == ParentLinkStatuses.Rejected && link.ConsentId is { } consentId)
             decidedAt = (await links.GetConsentAsync(consentId, ct))?.CreatedAt;
 
-        return ParentLinkResult<ParentInviteInfo>.Ok(ToInviteInfo(link, student, decidedAt));
+        var info = ToInviteInfo(link, student, decidedAt);
+        if (info.State == ParentInviteStates.Pending && await NonParentAccountMessageAsync(link.ParentEmail, ct) is { } blocked)
+            info = info with { BlockedReason = blocked };
+        return ParentLinkResult<ParentInviteInfo>.Ok(info);
     }
 
     public Task<ParentLinkResult<ParentInviteInfo>> AcceptAsync(string token, bool isGuardian, string? ipAddress, CancellationToken ct = default)
@@ -111,6 +122,10 @@ public class ParentLinkService(IParentLinkRepository links, IUserRepository user
         var student = await users.GetUserById(link.StudentUserId, ct);
         if (student == null)
             return InviteFail(ParentLinkError.NotFound);
+
+        // Email là tài khoản học sinh / trung tâm / quản trị thì không làm phụ huynh được; từ chối vẫn ghi nhận bình thường
+        if (accept && await NonParentAccountMessageAsync(link.ParentEmail, ct) is { } blockedMessage)
+            return ParentLinkResult<ParentInviteInfo>.Fail(ParentLinkError.Validation, blockedMessage);
 
         // UC-75: email nhận link đã là tài khoản Phụ huynh thì gắn luôn, phụ huynh thấy con trong trang Tài khoản
         var parentAccount = accept ? await FindParentAccountAsync(link.ParentEmail, ct) : null;
@@ -159,6 +174,8 @@ public class ParentLinkService(IParentLinkRepository links, IUserRepository user
         {
             await emailSender.SendParentLinkChangedEmailAsync(student.Email, student.FullName, parentLabel, linked: true, ct);
             await emailSender.SendParentConsentConfirmedEmailAsync(link.ParentEmail, student.FullName, revokeToken!, ct);
+            if (parentAccount != null && profileShare != null)
+                await profileShare.AutoShareAfterLinkAsync(parentAccount.Id, [link], ct);
         }
         else
         {
@@ -175,6 +192,15 @@ public class ParentLinkService(IParentLinkRepository links, IUserRepository user
     {
         var user = await users.GetUserByEmail(parentEmail, ct);
         return user is { Role: UserRoles.Parent, DeletedAt: null } ? user : null;
+    }
+
+    /// <summary>Email đã thuộc một tài khoản còn hoạt động nhưng không phải vai trò Phụ huynh: trả lời báo; không thì null.</summary>
+    private async Task<string?> NonParentAccountMessageAsync(string parentEmail, CancellationToken ct)
+    {
+        var user = await users.GetUserByEmail(parentEmail, ct);
+        if (user is not { DeletedAt: null } || user.Role == UserRoles.Parent)
+            return null;
+        return user.Role == UserRoles.Student ? StudentAccountMessage : OtherAccountMessage;
     }
 
     public async Task<ParentLinkResult<ParentLinkDto>> ResendAsync(Guid studentUserId, CancellationToken ct = default)
@@ -302,6 +328,7 @@ public class ParentLinkService(IParentLinkRepository links, IUserRepository user
             return;
 
         var email = AuthService.NormalizeEmail(parent.Email);
+        var linked = new List<ParentStudentLink>();
         foreach (var link in await links.GetActiveWithoutParentAccountAsync(email, ct))
         {
             link.ParentUserId = parent.Id;
@@ -314,11 +341,15 @@ public class ParentLinkService(IParentLinkRepository links, IUserRepository user
                 // Liên kết vừa bị rút / hủy cùng lúc: bỏ qua, không gắn
                 continue;
             }
+            linked.Add(link);
 
             var student = await users.GetUserById(link.StudentUserId, ct);
             if (student != null)
                 await emailSender.SendParentAccountLinkedEmailAsync(student.Email, student.FullName, parent.FullName, ct);
         }
+
+        if (linked.Count > 0 && profileShare != null)
+            await profileShare.AutoShareAfterLinkAsync(parent.Id, linked, ct);
     }
 
     public async Task<List<ParentLinkRevokeNotice>> RevokeAllForAccountDeletionAsync(Guid userId, CancellationToken ct = default)

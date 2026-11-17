@@ -25,7 +25,10 @@ public record ParentInviteInfo(
     string ParentEmail,
     DateTime? ExpiresAt,
     DateTime? DecidedAt,
-    string PolicyVersion);
+    string PolicyVersion,
+    // Email nhận lời mời đã là tài khoản học sinh / trung tâm / quản trị: không đồng ý được, chỉ từ chối.
+    // Chỉ báo ở trang này (người có link trong hộp thư), không báo lúc học sinh khai email để không lộ email nào có tài khoản.
+    string? BlockedReason = null);
 
 /// <summary>
 /// Một liên kết nhìn từ phía người đang đăng nhập: học sinh thấy lời mời đang chờ và phụ huynh đã liên kết,
