@@ -8,8 +8,15 @@ public class ScholarshipConfiguration : IEntityTypeConfiguration<Scholarship>
 {
     public void Configure(EntityTypeBuilder<Scholarship> b)
     {
+        b.ToTable(t =>
+        {
+            t.HasCheckConstraint("ck_scholarships_owner", "university_id IS NOT NULL OR provider IS NOT NULL");
+            t.HasCheckConstraint("ck_scholarships_source_reliability",
+                "source_reliability IS NULL OR source_reliability IN ('official', 'aggregated', 'self_reported')");
+        });
         b.HasKey(x => x.Id);
         b.HasOne<University>().WithMany().HasForeignKey(x => x.UniversityId).OnDelete(DeleteBehavior.SetNull);
+        b.HasOne<User>().WithMany().HasForeignKey(x => x.LastEditedByUserId).OnDelete(DeleteBehavior.SetNull);
         b.Property(x => x.Name).HasMaxLength(256).IsRequired();
         b.Property(x => x.Provider).HasMaxLength(256);
         b.Property(x => x.StudyLevel).HasMaxLength(32).IsRequired();
@@ -19,6 +26,8 @@ public class ScholarshipConfiguration : IEntityTypeConfiguration<Scholarship>
         b.Property(x => x.MinIelts).HasPrecision(3, 1);
         b.Property(x => x.EligibilityNotes).HasMaxLength(2000);
         b.Property(x => x.SourceUrl).HasMaxLength(512);
+        b.Property(x => x.SourceReliability).HasMaxLength(16);
         b.HasIndex(x => x.StudyLevel);
+        b.HasIndex(x => new { x.UniversityId, x.IsActive });
     }
 }
