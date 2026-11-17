@@ -248,7 +248,10 @@ public class CenterDeletionService(
                     continue;
 
                 var center = await centers.GetByIdAsync(request.StudyCenterId, ct);
-                var centerName = center?.Name ?? "Trung tâm";
+                if (center is null || center.IsLegalHold)
+                    continue;
+
+                var centerName = center.Name;
                 var ownerId = center?.OwnerUserId;
 
                 // Lấy email trước khi xóa tài khoản để còn báo kết quả

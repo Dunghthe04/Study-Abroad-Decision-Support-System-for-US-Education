@@ -97,11 +97,13 @@ public class CenterDeletionWorkRepository(AppDbContext db, IHostEnvironment? env
     }
 
     public Task<List<Guid>> GetDuePurgeRequestIdsAsync(DateTime now, CancellationToken ct = default) =>
-        db.CenterDeletionRequests.AsNoTracking()
-            .Where(r => r.Status == CenterDeletionRequestStatuses.Approved && r.ScheduledPurgeAt != null && r.ScheduledPurgeAt <= now)
-            .OrderBy(r => r.ScheduledPurgeAt)
-            .Select(r => r.Id)
-            .ToListAsync(ct);
+        (from r in db.CenterDeletionRequests.AsNoTracking()
+         join c in db.StudyCenters.AsNoTracking() on r.StudyCenterId equals c.Id
+         where r.Status == CenterDeletionRequestStatuses.Approved
+            && r.ScheduledPurgeAt != null && r.ScheduledPurgeAt <= now
+            && !c.IsLegalHold
+         orderby r.ScheduledPurgeAt
+         select r.Id).ToListAsync(ct);
 
     public async Task PurgeCenterDataAsync(Guid studyCenterId, DateTime now, CancellationToken ct = default)
     {

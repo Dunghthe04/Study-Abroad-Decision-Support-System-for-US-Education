@@ -48,5 +48,7 @@ public class StudyCenterConfiguration : IEntityTypeConfiguration<StudyCenter>
         builder.Property(x => x.Accreditations).HasColumnType("text[]").HasDefaultValueSql("'{}'");
         builder.Property(x => x.AverageRating).HasPrecision(3, 2).HasDefaultValue(5.0m);
         builder.Property(x => x.ReviewCount).HasDefaultValue(0);
+        builder.Property(x => x.IsLegalHold).HasDefaultValue(false).IsRequired();
+        builder.Property(x => x.LegalHoldReason).HasMaxLength(500);
     }
 }
