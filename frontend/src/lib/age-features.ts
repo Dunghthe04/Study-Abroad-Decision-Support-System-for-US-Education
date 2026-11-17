@@ -20,7 +20,12 @@ export interface AgeBlockInfo {
 // Chức năng mở được khi phụ huynh đồng ý (khớp ParentConsentUnlocks ở backend)
 const PARENT_CONSENT_UNLOCKS: Record<AgeFeature, boolean> = {
   process_student_data: true,
-  share_with_center: false,
+  share_with_center: true, // [UC-116] dưới 16 + phụ huynh đã đồng ý: gửi được, phụ huynh xác nhận từng yêu cầu qua mail
+};
+
+const CONSENT_REASON: Record<AgeFeature, string> = {
+  process_student_data: "trước khi hệ thống lưu và phân tích hồ sơ",
+  share_with_center: "trước khi gửi yêu cầu liên hệ trung tâm. Sau đó mỗi yêu cầu, phụ huynh xác nhận thêm qua email",
 };
 
 /** Null nếu được dùng; ngược lại trả lý do bị chặn. */
@@ -32,8 +37,8 @@ export function useAgeBlock(feature: AgeFeature): AgeBlockInfo | null {
   const message = !needParentConsent
     ? "Chức năng này dành cho học sinh từ 16 tuổi. Phụ huynh có thể gửi thay bằng tài khoản phụ huynh."
     : user.parentConsentStatus === "pending"
-      ? "Đang chờ phụ huynh xác nhận đồng ý qua email. Học sinh dưới 16 tuổi cần phụ huynh đồng ý trước khi hệ thống lưu và phân tích hồ sơ."
-      : "Học sinh dưới 16 tuổi cần phụ huynh xác nhận đồng ý trước khi hệ thống lưu và phân tích hồ sơ (Luật BVDLCN 91/2025, Điều 24).";
+      ? `Đang chờ phụ huynh xác nhận đồng ý qua email. Học sinh dưới 16 tuổi cần phụ huynh đồng ý ${CONSENT_REASON[feature]}.`
+      : `Học sinh dưới 16 tuổi cần phụ huynh xác nhận đồng ý ${CONSENT_REASON[feature]} (Luật BVDLCN 91/2025, Điều 24).`;
   return { feature, needParentConsent, message };
 }
 

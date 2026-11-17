@@ -3,9 +3,10 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowRightIcon, ShieldAlertIcon } from "lucide-react";
+import { ArrowRightIcon, RotateCcwIcon, ShieldAlertIcon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { ApiError } from "@/lib/api";
+import { ApiError, authApi } from "@/lib/api";
+import type { PendingDeletionProblem } from "@/types/api";
 import { setPendingEmail } from "@/lib/pending-email";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -23,13 +24,16 @@ export function LoginForm() {
   const redirect =
     redirectParam && /^\/(?![\/\\])/.test(redirectParam) ? redirectParam : "/";
 
-  const { login, user, isLoading } = useAuth();
+  const { login, user, isLoading, refreshUser } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const [lockType, setLockType] = useState<"temp_locked" | "unverified" | null>(null);
+  const [lockType, setLockType] = useState<"temp_locked" | "unverified" | "pending_deletion" | null>(null);
+  // [UC-80] Mã khôi phục server trả kèm khi đăng nhập vào tài khoản đang chờ xóa
+  const [restoreToken, setRestoreToken] = useState<string | null>(null);
+  const [isRestoring, setIsRestoring] = useState(false);
 
   // Nếu người dùng đã đăng nhập sẵn mà truy cập /login:
   // Tài khoản admin/moderator tự động chuyển thẳng vào /admin
@@ -48,6 +52,7 @@ export function LoginForm() {
     e.preventDefault();
     setError(null);
     setLockType(null);
+    setRestoreToken(null);
 
     if (!email.trim() || !password) {
       setError("Vui lòng nhập đầy đủ email và mật khẩu.");
@@ -66,7 +71,12 @@ export function LoginForm() {
       }
     } catch (err) {
       if (err instanceof ApiError) {
-        if (err.status === 423) {
+        const pending = getPendingDeletion(err);
+        if (pending) {
+          setLockType("pending_deletion");
+          setRestoreToken(pending.restoreToken);
+          setError(`Tài khoản đang chờ xóa và sẽ bị xóa hẳn vào ngày ${formatDate(pending.deletionDate)}. Bạn có thể khôi phục để dùng tiếp.`);
+        } else if (err.status === 423) {
           setLockType("temp_locked");
           setError("Tài khoản của bạn đã bị khóa do nhập sai mật khẩu quá 5 lần liên tiếp.");
         } else if (err.status === 403 && (err.message.includes("chưa được kích hoạt") || err.message.toLowerCase().includes("unverified"))) {
@@ -80,6 +90,25 @@ export function LoginForm() {
       }
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  // [UC-80] Khôi phục thành công thì server đăng nhập luôn: tải lại người dùng, effect phía trên tự chuyển trang
+  const handleRestore = async () => {
+    if (!restoreToken) return;
+    setIsRestoring(true);
+    try {
+      await authApi.restore({ email: email.trim(), restoreToken });
+      setError(null);
+      setLockType(null);
+      setRestoreToken(null);
+      await refreshUser();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Có lỗi kết nối máy chủ. Vui lòng thử lại sau.");
+      setLockType(null);
+      setRestoreToken(null);
+    } finally {
+      setIsRestoring(false);
     }
   };
 
@@ -117,6 +146,13 @@ export function LoginForm() {
           Kích hoạt tài khoản bằng mã OTP
           <ArrowRightIcon aria-hidden="true" />
         </Link>
+      )}
+
+      {error && lockType === "pending_deletion" && restoreToken && (
+        <Button type="button" size="sm" onClick={handleRestore} disabled={isRestoring}>
+          {isRestoring ? <Spinner data-icon="inline-start" /> : <RotateCcwIcon aria-hidden="true" />}
+          {isRestoring ? "Đang khôi phục..." : "Khôi phục và đăng nhập"}
+        </Button>
       )}
 
       <form onSubmit={handleSubmit}>
@@ -181,4 +217,16 @@ export function LoginForm() {
       </div>
     </div>
   );
+}
+
+/** [UC-80] Lỗi 403 đăng nhập vào tài khoản đang chờ xóa: lấy ngày xóa và mã khôi phục */
+function getPendingDeletion(err: ApiError): PendingDeletionProblem | null {
+  const body = err.body as Partial<PendingDeletionProblem> | null;
+  if (err.status !== 403 || body?.code !== "account_pending_deletion" || !body.restoreToken) return null;
+  return { code: body.code, deletionDate: body.deletionDate ?? "", restoreToken: body.restoreToken };
+}
+
+function formatDate(iso: string): string {
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? "sắp tới" : date.toLocaleDateString("vi-VN");
 }

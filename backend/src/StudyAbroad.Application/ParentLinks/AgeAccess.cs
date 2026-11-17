@@ -38,7 +38,9 @@ public static class AgeAccess
         if (!granted)
         {
             var links = await parentLinks.GetByStudentAsync(user.Id, ct);
-            status = links.Any(l => l.Status == ParentLinkStatuses.Pending) ? ParentConsentStatuses.Pending : ParentConsentStatuses.None;
+            // Lời mời quá 7 ngày (UC-115: Hết hạn) không còn tính là đang chờ, dù chưa ai mở link
+            status = links.Any(l => l.Status == ParentLinkStatuses.Pending && !(l.TokenExpiresAt <= utcNow))
+                ? ParentConsentStatuses.Pending : ParentConsentStatuses.None;
         }
         return new AgeAccessInfo(ageGroup, status, AgeFeatures.GetBlocked(user.Role, user.DateOfBirth, today, granted));
     }

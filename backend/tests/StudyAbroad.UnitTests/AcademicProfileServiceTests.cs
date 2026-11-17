@@ -16,6 +16,7 @@ public class AcademicProfileServiceTests
     {
         public readonly Dictionary<Guid, StudentProfile> Profiles = new();
         public readonly Dictionary<Guid, List<TranscriptScore>> Scores = new();
+        public readonly Dictionary<Guid, List<ProfileCertification>> Certifications = new();
 
         public Task<StudentProfile?> GetByUserIdAsync(Guid userId, CancellationToken ct = default)
         {
@@ -32,6 +33,9 @@ public class AcademicProfileServiceTests
 
             return Task.FromResult(new List<TranscriptScore>());
         }
+
+        public Task<List<ProfileCertification>> GetCertificationsAsync(Guid profileId, CancellationToken ct = default) =>
+            Task.FromResult(Certifications.TryGetValue(profileId, out var list) ? list.ToList() : new List<ProfileCertification>());
     }
 
     [Fact]
@@ -54,7 +58,6 @@ public class AcademicProfileServiceTests
             GradeScale = GradeScales.Scale4,
             OverallGpa = 3.65m,
             IntendedMajor = "Trí tuệ nhân tạo",
-            Ielts = 8.0m,
             CreatedAt = DateTime.UtcNow
         };
         repo.Profiles[profile.Id] = profile;
@@ -74,6 +77,58 @@ public class AcademicProfileServiceTests
         Assert.Equal(3.65m, result.Data.OverallGpa);
         Assert.Single(result.Data.Terms);
         Assert.Equal(2, result.Data.Terms[0].Scores.Count);
+        Assert.True(result.Data.IsComplete);
+    }
+
+    // Luồng 6 bước chế độ GPA tổng: không có trường, không có điểm theo kỳ vẫn là đã hoàn thành
+    [Fact]
+    public async Task GetAcademicProfileAsync_FlowSubmittedWithOverallGpaOnly_IsComplete()
+    {
+        var repo = new FakeAcademicProfileRepository();
+        var service = new AcademicProfileService(repo);
+        var userId = Guid.NewGuid();
+        var profileId = Guid.NewGuid();
+        repo.Profiles[profileId] = new StudentProfile
+        {
+            Id = profileId,
+            UserId = userId,
+            OverallGpa = 8.2m,
+            FlowSubmittedAt = DateTimeOffset.UtcNow,
+        };
+
+        var result = await service.GetAcademicProfileAsync(userId);
+
+        Assert.True(result.Data!.IsComplete);
+        Assert.Null(result.Data.CurrentSchool);
+        Assert.Empty(result.Data.Terms);
+    }
+
+    [Fact]
+    public async Task GetAcademicProfileAsync_TestScores_ReadFromCertificationsTakenOnly()
+    {
+        var repo = new FakeAcademicProfileRepository();
+        var service = new AcademicProfileService(repo);
+        var userId = Guid.NewGuid();
+        var profileId = Guid.NewGuid();
+        repo.Profiles[profileId] = new StudentProfile { Id = profileId, UserId = userId };
+        repo.Certifications[profileId] =
+        [
+            new() { StudentProfileId = profileId, Category = "english", TestType = "ielts", OverallScore = 6.5m },
+            new() { StudentProfileId = profileId, Category = "english", TestType = "ielts", OverallScore = 7.0m },
+            // dòng mục tiêu (chưa thi) không tính là điểm
+            new() { StudentProfileId = profileId, Category = "english", TestType = "ielts", OverallScore = 8.0m, IsTarget = true },
+            new() { StudentProfileId = profileId, Category = "standardized", TestType = "sat", OverallScore = 1400m, IsTarget = true },
+            new() { StudentProfileId = profileId, Category = "standardized", TestType = "ap", Subject = "Calculus BC", OverallScore = 5m },
+        ];
+
+        var result = await service.GetAcademicProfileAsync(userId);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(7.0m, result.Data!.Ielts);
+        Assert.Null(result.Data.Sat);
+        Assert.Null(result.Data.Toefl);
+        Assert.Equal("{\"ap\":5}", result.Data.OtherTestsJson);
+        Assert.False(result.Data.IsComplete);
     }
 
     [Fact]
@@ -91,5 +146,6 @@ public class AcademicProfileServiceTests
         Assert.Equal(StudyLevels.Undergraduate, result.Data.TargetLevel);
         Assert.Equal(GradeScales.Scale10, result.Data.GradeScale);
         Assert.Empty(result.Data.Terms);
+        Assert.False(result.Data.IsComplete);
     }
 }

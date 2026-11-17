@@ -35,6 +35,21 @@ namespace StudyAbroad.Application.Auth
         /// <summary>Báo cho một bên khi liên kết phụ huynh–học sinh được xác nhận (<paramref name="linked"/> = true) hoặc bị hủy / rút đồng ý.</summary>
         Task SendParentLinkChangedEmailAsync(string toEmail, string studentName, string parentLabel, bool linked, CancellationToken ct = default);
 
+        /// <summary>[UC-117] Gửi phụ huynh ngay sau khi đồng ý: xác nhận đã đồng ý, kèm link rút đồng ý không cần đăng nhập.</summary>
+        Task SendParentConsentConfirmedEmailAsync(string toEmail, string studentName, string revokeToken, CancellationToken ct = default);
+
+        /// <summary>[UC-115] Báo học sinh: phụ huynh bấm Từ chối trong link mời. Học sinh gửi lại hoặc đổi email phụ huynh trong trang Tài khoản.</summary>
+        Task SendParentConsentRejectedEmailAsync(string toEmail, string studentName, string parentLabel, CancellationToken ct = default);
+
+        /// <summary>[UC-115] Báo học sinh: phụ huynh đã đồng ý qua mail nay đăng ký tài khoản Phụ huynh, hệ thống tự liên kết.</summary>
+        Task SendParentAccountLinkedEmailAsync(string toEmail, string studentName, string parentName, CancellationToken ct = default);
+
+        /// <summary>[UC-116] Học sinh dưới 16 gửi yêu cầu liên hệ: hỏi phụ huynh đồng ý chia sẻ cho trung tâm. Mỗi phụ huynh một link.</summary>
+        Task SendLeadParentConfirmEmailAsync(string toEmail, string studentName, string centerName, IReadOnlyList<string> sharedFields, string confirmToken, int expiryDays, CancellationToken ct = default);
+
+        /// <summary>[UC-116] Báo học sinh kết quả. outcome: "new" phụ huynh đồng ý (đã gửi trung tâm), "cancelled" từ chối, "expired" hết hạn.</summary>
+        Task SendLeadParentDecisionEmailAsync(string toEmail, string studentName, string centerName, string outcome, CancellationToken ct = default);
+
         /// <summary>Gửi email thông báo tài khoản bị khóa bởi quản trị viên kèm lý do khóa.</summary>
         Task SendAccountLockedEmailAsync(string toEmail, string fullName, string reason, CancellationToken ct = default);
 

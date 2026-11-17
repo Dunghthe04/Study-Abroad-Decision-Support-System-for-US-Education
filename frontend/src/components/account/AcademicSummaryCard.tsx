@@ -19,23 +19,21 @@ const targetLevelLabels: Record<string, string> = {
   phd: "Tiến sĩ (PhD)",
 };
 
+// Backend tính isComplete giống luồng 6 bước: trường học không bắt buộc, chế độ GPA tổng không có bảng điểm theo kỳ
 export function hasCompleteAcademicProfile(profile: AcademicProfileResponse | null): boolean {
-  return Boolean(
-    profile &&
-      profile.currentSchool &&
-      profile.currentSchool.trim() !== "" &&
-      profile.terms &&
-      profile.terms.length > 0
-  );
+  return Boolean(profile?.isComplete);
 }
 
 interface AcademicSummaryCardProps {
   profile: AcademicProfileResponse | null;
   isLoading: boolean;
+  /** Phụ huynh xem hồ sơ con: ẩn nút sửa/phân tích, đổi tiêu đề sang tên con */
+  readOnly?: boolean;
+  title?: string;
 }
 
 // Tóm tắt bảng điểm & hồ sơ học thuật cho học sinh / phụ huynh
-export function AcademicSummaryCard({ profile, isLoading }: AcademicSummaryCardProps) {
+export function AcademicSummaryCard({ profile, isLoading, readOnly = false, title }: AcademicSummaryCardProps) {
   if (isLoading) {
     return (
       <Card>
@@ -43,6 +41,20 @@ export function AcademicSummaryCard({ profile, isLoading }: AcademicSummaryCardP
           <Spinner />
           Đang tải thông tin học thuật...
         </CardContent>
+      </Card>
+    );
+  }
+
+  if (readOnly && !hasCompleteAcademicProfile(profile)) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <BookOpenIcon className="size-5" aria-hidden />
+            <h2>{title ?? "Hồ sơ học thuật"}</h2>
+          </CardTitle>
+          <CardDescription>Con chưa hoàn thành hồ sơ 6 bước.</CardDescription>
+        </CardHeader>
       </Card>
     );
   }
@@ -65,10 +77,10 @@ export function AcademicSummaryCard({ profile, isLoading }: AcademicSummaryCardP
               <Badge variant="warn">Yêu cầu nhập</Badge>
             </AlertTitle>
             <AlertDescription>
-              Bạn chưa nhập bảng điểm môn học theo từng học kỳ. Vui lòng hoàn thành để hệ thống lưu trữ và hỗ trợ tư vấn học thuật.
+              Bạn chưa hoàn thành hồ sơ 6 bước (GPA, chứng chỉ, ngành dự định...). Vui lòng hoàn thành để hệ thống lưu trữ và hỗ trợ tư vấn học thuật.
             </AlertDescription>
           </Alert>
-          <Link href="/profile/academic" className={buttonVariants({ size: "lg" })}>
+          <Link href="/analysis" className={buttonVariants({ size: "lg" })}>
             <span>Điền bảng điểm ngay</span>
             <ArrowRightIcon aria-hidden />
           </Link>
@@ -93,7 +105,7 @@ export function AcademicSummaryCard({ profile, isLoading }: AcademicSummaryCardP
       <CardHeader className="border-b">
         <CardTitle className="flex flex-wrap items-center gap-2">
           <BookOpenIcon className="size-5" aria-hidden />
-          <h2>Bảng điểm & Hồ sơ học thuật</h2>
+          <h2>{title ?? "Bảng điểm & Hồ sơ học thuật"}</h2>
           <Badge variant="ok">
             <CheckIcon aria-hidden />
             Đã cập nhật
@@ -102,16 +114,18 @@ export function AcademicSummaryCard({ profile, isLoading }: AcademicSummaryCardP
         <CardDescription>
           {profile?.targetLevel ? targetLevelLabels[profile.targetLevel] || profile.targetLevel : "Đại học"} • {profile?.currentGrade || "Lớp 11"}
         </CardDescription>
+        {!readOnly && (
         <div className="flex flex-wrap items-center gap-2">
-          <Link href="/profile/academic" className={buttonVariants({ variant: "outline" })}>
+          <Link href="/analysis" className={buttonVariants({ variant: "outline" })}>
             <PencilIcon aria-hidden />
             Sửa bảng điểm
           </Link>
-          <Link href="/profile/academic/analysis" className={buttonVariants()}>
+          <Link href="/analysis" className={buttonVariants()}>
             <RocketIcon aria-hidden />
             <span>Phân tích năng lực</span>
           </Link>
         </div>
+        )}
       </CardHeader>
 
       <CardContent className="space-y-4">
@@ -120,7 +134,7 @@ export function AcademicSummaryCard({ profile, isLoading }: AcademicSummaryCardP
           <Card size="sm">
             <CardContent>
               <span className="block text-label">Trường học</span>
-              <span className="mt-0.5 block truncate font-semibold">{profile?.currentSchool}</span>
+              <span className="mt-0.5 block truncate font-semibold">{profile?.currentSchool?.trim() || "Chưa nhập"}</span>
               <span className="text-body-s">TN: {profile?.graduationYear || "Chưa rõ"}</span>
             </CardContent>
           </Card>
@@ -139,26 +153,39 @@ export function AcademicSummaryCard({ profile, isLoading }: AcademicSummaryCardP
             <CardContent>
               <span className="block text-label">Điểm trung bình (GPA)</span>
               <span className="mt-0.5 block text-lg text-numeric">
-                {profile?.overallGpa?.toFixed(2) || "0.00"}{" "}
-                <span className="text-xs font-normal text-muted-foreground">(Thang {profile?.gradeScale})</span>
+                {profile?.overallGpa != null ? profile.overallGpa.toFixed(2) : "Chưa nhập"}{" "}
+                {/* overallGpa luôn là GPA thang 4 server đã quy đổi; gradeScale là thang học sinh nhập */}
+                <span className="text-xs font-normal text-muted-foreground">(Thang 4.0)</span>
               </span>
+              {profile?.overallGpa != null && profile.gradeScale !== "4" && (
+                <span className="text-body-s">
+                  Quy đổi từ {profile.gradeScale === "letter" ? "thang chữ" : `thang ${profile.gradeScale}`}
+                </span>
+              )}
             </CardContent>
           </Card>
         </div>
 
-        {/* Tiến độ các học kỳ */}
+        {/* Tiến độ các học kỳ: chế độ GPA tổng thì không có bảng điểm theo kỳ */}
         <div>
-          <span className="mb-2 block text-label">
-            Tiến độ bảng điểm ({profile?.terms?.length || 0} kỳ đã nhập):
-          </span>
-          <div className="flex flex-wrap gap-2">
-            {profile?.terms?.map((term, idx) => (
-              <Badge key={idx} variant="secondary">
-                <span>{term.termName}</span>
-                <span>({term.scores.length} môn)</span>
-              </Badge>
-            ))}
-          </div>
+          {profile?.terms && profile.terms.length > 0 ? (
+            <>
+              <span className="mb-2 block text-label">Tiến độ bảng điểm ({profile.terms.length} kỳ đã nhập):</span>
+              <div className="flex flex-wrap gap-2">
+                {profile.terms.map((term, idx) => (
+                  <Badge key={idx} variant="secondary">
+                    <span>{term.termName}</span>
+                    <span>({term.scores.length} môn)</span>
+                  </Badge>
+                ))}
+              </div>
+            </>
+          ) : (
+            <>
+              <span className="mb-2 block text-label">Bảng điểm:</span>
+              <p className="text-xs italic text-muted-foreground">Đã nhập GPA tổng, không nhập điểm theo từng học kỳ.</p>
+            </>
+          )}
         </div>
 
         {/* Danh sách chứng chỉ đã thi */}

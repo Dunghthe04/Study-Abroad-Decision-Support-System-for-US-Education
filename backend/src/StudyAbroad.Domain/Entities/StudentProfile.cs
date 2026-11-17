@@ -28,24 +28,18 @@ public class StudentProfile : BaseEntity
     public string? IntendedMajor { get; set; }
     /// <summary>kỳ muốn nhập học, dạng "Fall 2027" (Fall | Spring | Summer + năm); form bước 1 và câu B1.4 bên chat</summary>
     public string? TargetIntake { get; set; }
+    // Năm điểm thi dưới đây không lưu vào bảng student_profiles (EF bỏ qua). Điểm thật nằm ở profile_certifications;
+    // ProfileScores.ApplyTo gán điểm đã thi cao nhất vào bản sao hồ sơ để phần gợi ý trường đọc
     public decimal? Ielts { get; set; }
     public decimal? Toefl { get; set; }
     public decimal? Duolingo { get; set; }
     public decimal? Sat { get; set; }
     public decimal? Act { get; set; }
-    public decimal? Gre { get; set; }
-    public decimal? Gmat { get; set; }
-    /// <summary>[USAS-640] chứng chỉ tiếng Anh học sinh chọn ở bước 3: ielts | toefl | duolingo | none</summary>
-    public string? EnglishTestType { get; set; }
-    /// <summary>[USAS-640] ngày thi chứng chỉ tiếng Anh</summary>
-    public DateOnly? EnglishTestDate { get; set; }
     /// <summary>[USAS-640] tick "chưa thi và chưa có dự định thi" mục tiếng Anh (bước 3). Dự định thi là dòng IsTarget
     /// trong profile_certifications; mục có chứng chỉ hoặc dự định thì cờ này false</summary>
     public bool EnglishTestPlanned { get; set; }
     /// <summary>tick "chưa thi và chưa có dự định thi" mục bài thi chuẩn hóa (SAT/ACT/AP/GRE...), như EnglishTestPlanned</summary>
     public bool StandardizedTestPlanned { get; set; }
-    /// <summary>kỳ thi khác ngoài cột riêng, dạng {"ap": 4}</summary>
-    public string? OtherTestsJson { get; set; }
     /// <summary>bậc ngoại khóa 1–5: SLM xác nhận vai trò, phạm vi từng hoạt động rồi code tính theo công thức q, m; null nếu chưa tính</summary>
     public int? ExtracurricularTier { get; set; }
     /// <summary>[USAS-640] mức ngân sách (mã metadata budgetTiers): tier_under_20k | tier_20k_35k | tier_35k_50k | tier_50k_70k | tier_above_70k</summary>
@@ -67,8 +61,6 @@ public class StudentProfile : BaseEntity
     public List<string> PreferredStates { get; set; } = [];
     /// <summary>Loại hình trường mong muốn: all (Không lọc) | public (Công lập) | private (Tư thục)</summary>
     public string TargetSchoolType { get; set; } = "all";
-    /// <summary>tiến độ lộ trình theo StepKey, ví dụ B1: done</summary>
-    public string? RoadmapProgressJson { get; set; }
     /// <summary>Đường dẫn tệp bảng điểm đã tải lên (USAS-363)</summary>
     public string? TranscriptFileUrl { get; set; }
     /// <summary>[USAS-640] Trạng thái bản nháp của luồng nhập hồ sơ đa bước (step hiện tại và dữ liệu nháp)</summary>

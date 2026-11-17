@@ -93,8 +93,42 @@ public class LeadServiceTests
 
         public Task<DateTime?> GetLastToCenterAsync(Guid submitterId, Guid centerId, DateTime sinceUtc, CancellationToken ct = default) =>
             Task.FromResult(Leads
-                .Where(l => l.SubmittedByUserId == submitterId && l.StudyCenterId == centerId && l.CreatedAt >= sinceUtc)
+                .Where(l => l.SubmittedByUserId == submitterId && l.StudyCenterId == centerId && l.CreatedAt >= sinceUtc
+                    && l.Status != LeadStatuses.Cancelled && l.Status != LeadStatuses.Expired
+                    && !(l.Status == LeadStatuses.PendingParent && l.ParentTokenExpiresAt <= DateTime.UtcNow))
                 .Max(l => (DateTime?)l.CreatedAt));
+
+        // [UC-116] Trả bản sao như AsNoTracking
+        public Task<Lead?> GetByParentTokenHashAsync(string tokenHash, CancellationToken ct = default) =>
+            Task.FromResult(Leads.Where(l => l.ParentTokenHash == tokenHash).Select(CloneLead).FirstOrDefault());
+
+        public Task<bool> TryCompleteParentConfirmAsync(Guid leadId, LeadParentDecision decision, Consent? consent, CancellationToken ct = default)
+        {
+            var lead = Leads.FirstOrDefault(l => l.Id == leadId);
+            if (lead is null || lead.Status != LeadStatuses.PendingParent)
+                return Task.FromResult(false);
+
+            if (consent != null)
+            {
+                Consents.Add(consent);
+                lead.ConsentId = consent.Id;
+            }
+            lead.Status = decision.Status;
+            lead.ParentEmail = decision.ParentEmail;
+            lead.ParentDecidedAt = decision.DecidedAt;
+            lead.ParentDecisionIp = decision.DecisionIp;
+            lead.UpdatedAt = decision.UpdatedAt;
+            return Task.FromResult(true);
+        }
+
+        private static Lead CloneLead(Lead l) => new()
+        {
+            Id = l.Id, UserId = l.UserId, StudyCenterId = l.StudyCenterId, ConsentId = l.ConsentId, StudyLevel = l.StudyLevel,
+            ContactPhone = l.ContactPhone, Message = l.Message, SharedProfile = l.SharedProfile, SubmittedByUserId = l.SubmittedByUserId,
+            SharedFields = [.. l.SharedFields], AcknowledgedCenterContact = l.AcknowledgedCenterContact, Status = l.Status,
+            ParentTokenHash = l.ParentTokenHash, ParentTokenExpiresAt = l.ParentTokenExpiresAt, ParentEmail = l.ParentEmail,
+            ParentDecidedAt = l.ParentDecidedAt, ParentDecisionIp = l.ParentDecisionIp, CreatedAt = l.CreatedAt, UpdatedAt = l.UpdatedAt,
+        };
 
         // [UC-44] Giống LeadRepository.GetSentLeadsAsync nhưng chạy trên danh sách trong bộ nhớ
         public Task<PagedResult<SentLeadDto>> GetSentLeadsAsync(
@@ -113,7 +147,9 @@ public class LeadServiceTests
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
                 .Select(l => new SentLeadDto(
-                    l.Id, l.StudyCenterId, "Test Center", l.Status, l.CreatedAt, l.SharedFields,
+                    l.Id, l.StudyCenterId, "Test Center",
+                    l.Status == LeadStatuses.PendingParent && l.ParentTokenExpiresAt <= DateTime.UtcNow ? LeadStatuses.Expired : l.Status,
+                    l.CreatedAt, l.SharedFields,
                     l.StudyLevel, l.ContactPhone, l.Message, l.UserId,
                     Users.TryGetValue(l.UserId, out var u) ? u.FullName : "Student",
                     l.SubmittedByUserId != null && l.SubmittedByUserId != l.UserId,
@@ -132,7 +168,7 @@ public class LeadServiceTests
             int pageSize,
             CancellationToken ct = default)
         {
-            var q = Leads.AsEnumerable();
+            var q = Leads.Where(l => !LeadStatuses.IsHiddenFromCenter(l.Status));
             if (centerId.HasValue && centerId.Value != Guid.Empty)
                 q = q.Where(l => l.StudyCenterId == centerId.Value);
 
@@ -173,7 +209,7 @@ public class LeadServiceTests
             Guid? restrictToCenterId,
             CancellationToken ct = default)
         {
-            var lead = Leads.FirstOrDefault(l => l.Id == leadId);
+            var lead = Leads.FirstOrDefault(l => l.Id == leadId && !LeadStatuses.IsHiddenFromCenter(l.Status));
             if (lead == null) return Task.FromResult<CenterReceivedLeadDto?>(null);
 
             if (restrictToCenterId.HasValue && lead.StudyCenterId != restrictToCenterId.Value)
@@ -1677,6 +1713,66 @@ public class LeadServiceTests
     }
 
     [Fact]
+    public async Task SendSentLeadMessage_WithdrawnLead_Blocked()
+    {
+        var (s, _, service) = MessageSetup();
+        var student = s.AddStudent(18);
+        var lead = AddLead(s, student.Id, student.Id);
+        lead.Status = LeadStatuses.Withdrawn;
+
+        await AssertRule(() => service.SendSentLeadMessageAsync(student.Id, lead.Id, "Xin chào"), "lead_withdrawn", 400);
+        Assert.Empty(s.LeadRepo.Messages);
+    }
+
+    // [UC-80] Trung tâm còn thấy dòng "Đã thu hồi" nhưng không đổi trạng thái, không đọc/gửi tin được
+    private static (FakeLeadRepo Repo, LeadService Service, Guid OwnerId, Guid LeadId) WithdrawnCenterSetup()
+    {
+        var ownerId = Guid.NewGuid();
+        var centerId = Guid.NewGuid();
+        var leadId = Guid.NewGuid();
+        var centerRepo = new FakeStudyCenterRepo();
+        centerRepo.Centers.Add(new StudyCenter { Id = centerId, Name = "Trung Tâm Thu Hồi", OwnerUserId = ownerId });
+        var leadRepo = new FakeLeadRepo();
+        leadRepo.Leads.Add(new Lead { Id = leadId, UserId = Guid.NewGuid(), StudyCenterId = centerId, Status = LeadStatuses.Withdrawn });
+        var service = new LeadService(leadRepo, centerRepo, new FakeUserRepository(), new FakeParentLinkRepository(), new FakeAuditRepo());
+        return (leadRepo, service, ownerId, leadId);
+    }
+
+    [Fact]
+    public async Task UpdateReceivedLeadStatus_WithdrawnLead_Blocked()
+    {
+        var (repo, service, ownerId, leadId) = WithdrawnCenterSetup();
+
+        await AssertRule(() => service.UpdateReceivedLeadStatusAsync(ownerId, "owner@center.com", UserRoles.Center, leadId, "contacted"),
+            "lead_withdrawn", 400);
+        Assert.Equal(LeadStatuses.Withdrawn, repo.Leads[0].Status);
+    }
+
+    [Fact]
+    public async Task SendLeadMessageForCenter_WithdrawnLead_Blocked()
+    {
+        var (repo, service, ownerId, leadId) = WithdrawnCenterSetup();
+
+        await AssertRule(() => service.SendLeadMessageForCenterUserAsync(ownerId, "owner@center.com", UserRoles.Center, leadId, "Xin chào"),
+            "lead_withdrawn", 400);
+        Assert.Empty(repo.Messages);
+        Assert.Equal(LeadStatuses.Withdrawn, repo.Leads[0].Status);
+    }
+
+    [Fact]
+    public async Task GetReceivedLeadMessagesForCenter_WithdrawnLead_ReturnsEmptyThread()
+    {
+        var (repo, service, ownerId, leadId) = WithdrawnCenterSetup();
+        repo.Messages.Add(new LeadMessage { LeadId = leadId, SenderUserId = repo.Leads[0].UserId, Content = "Tin cũ", Status = "visible" });
+
+        var thread = await service.GetReceivedLeadMessagesForCenterUserAsync(ownerId, "owner@center.com", UserRoles.Center, leadId);
+
+        Assert.Equal(LeadStatuses.Withdrawn, thread.LeadStatus);
+        Assert.Empty(thread.Messages);
+        Assert.Equal(0, thread.FlaggedCount);
+    }
+
+    [Fact]
     public async Task SentLeadMessages_CenterRole_NotAllowed()
     {
         var (s, _, service) = MessageSetup();
@@ -1686,5 +1782,290 @@ public class LeadServiceTests
         s.UserRepo.Users.Add(centerUser);
 
         await AssertRule(() => service.GetSentLeadMessagesAsync(centerUser.Id, lead.Id), "role_not_allowed", 403);
+    }
+
+    // ===== [UC-116] Học sinh dưới 16 gửi yêu cầu liên hệ: phụ huynh xác nhận qua link mail =====
+
+    private sealed class ParentConfirmSetup
+    {
+        public CreateLeadSetup S { get; } = new();
+        public FakeEmailSender Emails { get; } = new();
+        public LeadService Leads { get; }
+        public LeadParentConfirmService Confirm { get; }
+        public User Student { get; }
+        public ParentStudentLink Mom { get; }
+        public ParentStudentLink Dad { get; }
+
+        public ParentConfirmSetup()
+        {
+            Leads = new LeadService(S.LeadRepo, S.CenterRepo, S.UserRepo, S.LinkRepo, null, Emails);
+            Confirm = new LeadParentConfirmService(S.LeadRepo, S.LinkRepo, S.UserRepo, S.CenterRepo, Emails);
+            Student = S.AddStudent(14);
+            Student.Email = "kid@test.com";
+            Student.FullName = "Con";
+            Mom = AddConsentedParent("mom@test.com");
+            Dad = AddConsentedParent("dad@test.com");
+        }
+
+        public ParentStudentLink AddConsentedParent(string email)
+        {
+            var consent = new Consent { UserId = Student.Id, Purpose = "process_student_data", Granted = true, PolicyVersion = "v1.0" };
+            S.LinkRepo.Consents.Add(consent);
+            var link = new ParentStudentLink { StudentUserId = Student.Id, ParentEmail = email, Status = ParentLinkStatuses.Active, ConsentId = consent.Id };
+            S.LinkRepo.Links.Add(link);
+            return link;
+        }
+
+        public Task<LeadDto> Send() => Leads.CreateLeadAsync(Student.Id, S.Request(fields: [LeadSharedFields.Contact, LeadSharedFields.Academic], ack: true));
+
+        public string TokenFor(ParentStudentLink link) =>
+            Emails.SentEmails.Last(e => e.Purpose == "lead_parent_confirm" && e.To == link.ParentEmail).Code;
+
+        public Lead Stored => S.LeadRepo.Leads.Single();
+    }
+
+    [Fact]
+    public async Task ParentConfirm_Student14WithConsent_PendingNoConsent_MailsEveryActiveParent()
+    {
+        var p = new ParentConfirmSetup();
+        p.S.LinkRepo.Links.Add(new ParentStudentLink { StudentUserId = p.Student.Id, ParentEmail = "old@test.com", Status = ParentLinkStatuses.Revoked });
+
+        await p.Send();
+
+        Assert.Equal(LeadStatuses.PendingParent, p.Stored.Status);
+        Assert.Null(p.Stored.ConsentId);
+        Assert.Empty(p.S.LeadRepo.Consents);
+        Assert.NotNull(p.Stored.ParentTokenHash);
+        Assert.True(p.Stored.ParentTokenExpiresAt > DateTime.UtcNow.AddDays(6));
+        var mails = p.Emails.SentEmails.Where(e => e.Purpose == "lead_parent_confirm").ToList();
+        Assert.Equal(["dad@test.com", "mom@test.com"], mails.Select(m => m.To).Order());
+        Assert.NotEqual(mails[0].Code, mails[1].Code);
+        Assert.DoesNotContain(mails, m => m.Code.Contains(p.Stored.ParentTokenHash!));
+    }
+
+    [Fact]
+    public async Task ParentConfirm_Student16_NoParentStep()
+    {
+        var p = new ParentConfirmSetup();
+        var older = p.S.AddStudent(16);
+
+        await p.Leads.CreateLeadAsync(older.Id, p.S.Request(ack: true));
+
+        Assert.Equal(LeadStatuses.New, p.Stored.Status);
+        Assert.Null(p.Stored.ParentTokenHash);
+        Assert.Empty(p.Emails.SentEmails);
+    }
+
+    [Fact]
+    public async Task ParentConfirm_Lookup_ShowsPendingInfo()
+    {
+        var p = new ParentConfirmSetup();
+        await p.Send();
+
+        var info = await p.Confirm.LookupAsync(p.TokenFor(p.Mom));
+
+        Assert.Equal(LeadParentConfirmStates.Pending, info.State);
+        Assert.Equal("Con", info.StudentName);
+        Assert.Equal(14, info.StudentAge);
+        Assert.Equal("Trung Tâm Xác Minh", info.CenterName);
+        Assert.Equal("mom@test.com", info.ParentEmail);
+        Assert.Equal([LeadSharedFields.Contact, LeadSharedFields.Academic], info.SharedFields);
+        Assert.NotNull(info.ExpiresAt);
+        Assert.False(info.DecidedByYou);
+    }
+
+    [Fact]
+    public async Task ParentConfirm_Accept_LeadNew_ConsentByEmail_StudentMailed()
+    {
+        var p = new ParentConfirmSetup();
+        await p.Send();
+
+        var info = await p.Confirm.AcceptAsync(p.TokenFor(p.Mom), "1.2.3.4");
+
+        Assert.Equal(LeadParentConfirmStates.Accepted, info.State);
+        Assert.True(info.DecidedByYou);
+        Assert.Equal(LeadStatuses.New, p.Stored.Status);
+        Assert.Equal("mom@test.com", p.Stored.ParentEmail);
+        Assert.Equal("1.2.3.4", p.Stored.ParentDecisionIp);
+        var consent = Assert.Single(p.S.LeadRepo.Consents);
+        Assert.Equal(p.Stored.ConsentId, consent.Id);
+        Assert.Equal(AgeFeatures.ShareWithCenter, consent.Purpose);
+        Assert.Equal("mom@test.com", consent.GrantedByEmail);
+        Assert.Equal(p.Student.Id, consent.UserId);
+        Assert.Contains(p.Emails.SentEmails, e => e.To == "kid@test.com" && e.Purpose == "lead_parent_decision" && e.Code == LeadStatuses.New);
+    }
+
+    [Fact]
+    public async Task ParentConfirm_Reject_LeadCancelled_NoConsent_StudentMailed()
+    {
+        var p = new ParentConfirmSetup();
+        await p.Send();
+
+        var info = await p.Confirm.RejectAsync(p.TokenFor(p.Dad), null);
+
+        Assert.Equal(LeadParentConfirmStates.Rejected, info.State);
+        Assert.Equal(LeadStatuses.Cancelled, p.Stored.Status);
+        Assert.Null(p.Stored.ConsentId);
+        Assert.Empty(p.S.LeadRepo.Consents);
+        Assert.Contains(p.Emails.SentEmails, e => e.To == "kid@test.com" && e.Code == LeadStatuses.Cancelled);
+    }
+
+    [Fact]
+    public async Task ParentConfirm_SecondParent_SeesResult_CannotDecideAgain()
+    {
+        var p = new ParentConfirmSetup();
+        await p.Send();
+        await p.Confirm.AcceptAsync(p.TokenFor(p.Mom), null);
+
+        var info = await p.Confirm.LookupAsync(p.TokenFor(p.Dad));
+        Assert.Equal(LeadParentConfirmStates.Accepted, info.State);
+        Assert.False(info.DecidedByYou);
+
+        await AssertRule(() => p.Confirm.RejectAsync(p.TokenFor(p.Dad), null), "parent_confirm_answered", 409);
+        await AssertRule(() => p.Confirm.AcceptAsync(p.TokenFor(p.Mom), null), "parent_confirm_answered", 409);
+        Assert.Equal(LeadStatuses.New, p.Stored.Status);
+        Assert.Single(p.S.LeadRepo.Consents);
+    }
+
+    [Fact]
+    public async Task ParentConfirm_PastDeadline_Expired410_StudentMailedOnce()
+    {
+        var p = new ParentConfirmSetup();
+        await p.Send();
+        p.Stored.ParentTokenExpiresAt = DateTime.UtcNow.AddMinutes(-1);
+
+        await AssertRule(() => p.Confirm.LookupAsync(p.TokenFor(p.Mom)), "parent_confirm_expired", 410);
+        await AssertRule(() => p.Confirm.AcceptAsync(p.TokenFor(p.Dad), null), "parent_confirm_expired", 410);
+
+        Assert.Equal(LeadStatuses.Expired, p.Stored.Status);
+        Assert.Single(p.Emails.SentEmails, e => e.Purpose == "lead_parent_decision" && e.Code == LeadStatuses.Expired);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("abc")]
+    [InlineData("abc.not-a-guid")]
+    public async Task ParentConfirm_BadToken_404(string? token)
+    {
+        var p = new ParentConfirmSetup();
+        await p.Send();
+
+        await AssertRule(() => p.Confirm.LookupAsync(token), "parent_confirm_invalid", 404);
+    }
+
+    [Fact]
+    public async Task ParentConfirm_WrongSecretOrOtherStudentsLink_404()
+    {
+        var p = new ParentConfirmSetup();
+        await p.Send();
+        var token = p.TokenFor(p.Mom);
+        var other = new ParentStudentLink { StudentUserId = Guid.NewGuid(), ParentEmail = "x@test.com", Status = ParentLinkStatuses.Active };
+        p.S.LinkRepo.Links.Add(other);
+
+        await AssertRule(() => p.Confirm.LookupAsync("x" + token), "parent_confirm_invalid", 404);
+        await AssertRule(() => p.Confirm.LookupAsync(LeadParentConfirm.ComposeToken(token.Split('.')[0], other.Id)), "parent_confirm_invalid", 404);
+    }
+
+    [Fact]
+    public async Task ParentConfirm_ParentRevokedAfterMail_CannotDecide()
+    {
+        var p = new ParentConfirmSetup();
+        await p.Send();
+        p.S.LinkRepo.Links.Single(l => l.Id == p.Mom.Id).Status = ParentLinkStatuses.Revoked;
+
+        await AssertRule(() => p.Confirm.AcceptAsync(p.TokenFor(p.Mom), null), "parent_confirm_invalid", 404);
+        Assert.Equal(LeadStatuses.PendingParent, p.Stored.Status);
+    }
+
+    [Fact]
+    public async Task ParentConfirm_Student14WithoutConsent_StillAgeRestricted()
+    {
+        var p = new ParentConfirmSetup();
+        foreach (var l in p.S.LinkRepo.Links) l.Status = ParentLinkStatuses.Revoked;
+
+        await AssertRule(() => p.Send(), "age_restricted", 403);
+        Assert.Empty(p.S.LeadRepo.Leads);
+    }
+
+    [Fact]
+    public async Task ParentConfirm_CancelledOrExpired_DoesNotBlockResend()
+    {
+        var p = new ParentConfirmSetup();
+        await p.Send();
+        await p.Confirm.RejectAsync(p.TokenFor(p.Mom), null);
+
+        await p.Send();   // phụ huynh từ chối: gửi lại ngay, không bị chờ 7 ngày
+        var second = p.S.LeadRepo.Leads.Last();
+        second.ParentTokenExpiresAt = DateTime.UtcNow.AddMinutes(-1);
+
+        await p.Send();   // lead trước quá hạn (chưa ai mở link) cũng không tính
+        Assert.Equal(3, p.S.LeadRepo.Leads.Count);
+
+        await AssertRule(() => p.Send(), "center_cooldown", 429);   // lead còn chờ thì vẫn tính
+    }
+
+    [Fact]
+    public async Task ParentConfirm_Student14WithConsent_SeesSentLeads_ExpiredShownAsExpired()
+    {
+        var p = new ParentConfirmSetup();
+        await p.Send();
+        p.Stored.ParentTokenExpiresAt = DateTime.UtcNow.AddMinutes(-1);
+
+        var page = await p.Leads.GetSentLeadsAsync(p.Student.Id, 1, 10);
+
+        Assert.Equal(LeadStatuses.Expired, Assert.Single(page.Items).Status);
+    }
+
+    [Fact]
+    public async Task ParentConfirm_PendingLead_StudentCannotMessage()
+    {
+        var p = new ParentConfirmSetup();
+        var lead = await p.Send();
+
+        await AssertRule(() => p.Leads.SendSentLeadMessageAsync(p.Student.Id, lead.Id, "Xin chào"), "lead_not_open", 400);
+    }
+
+    [Fact]
+    public void ParentConfirm_Token_RoundTrip()
+    {
+        var linkId = Guid.NewGuid();
+        var token = LeadParentConfirm.ComposeToken("secret", linkId);
+
+        Assert.True(LeadParentConfirm.TryParseToken(token, out var hash, out var parsed));
+        Assert.Equal(linkId, parsed);
+        Assert.Equal(StudyAbroad.Application.ParentLinks.ParentInvite.HashToken("secret"), hash);
+        Assert.False(LeadParentConfirm.TryParseToken("a.b.c", out _, out _));
+        Assert.False(LeadParentConfirm.TryParseToken(new string('a', 129), out _, out _));
+    }
+
+    [Theory]
+    [InlineData(LeadStatuses.PendingParent)]
+    [InlineData(LeadStatuses.Cancelled)]
+    [InlineData(LeadStatuses.Expired)]
+    public async Task ParentConfirm_CenterCannotSeeOrTouchUnconfirmedLead(string status)
+    {
+        var ownerId = Guid.NewGuid();
+        var centerId = Guid.NewGuid();
+        var centerRepo = new FakeStudyCenterRepo();
+        centerRepo.Centers.Add(new StudyCenter { Id = centerId, Name = "TT", OwnerUserId = ownerId });
+        var leadRepo = new FakeLeadRepo();
+        var hidden = new Lead { StudyCenterId = centerId, Status = status };
+        leadRepo.Leads.Add(hidden);
+        leadRepo.Leads.Add(new Lead { StudyCenterId = centerId, Status = LeadStatuses.New });
+        var service = new LeadService(leadRepo, centerRepo, new FakeUserRepository(), new FakeParentLinkRepository());
+
+        var list = await service.GetReceivedLeadsForCenterUserAsync(ownerId, "o@c.com", UserRoles.Center, null, "all", null, 1, 10);
+        Assert.Equal(1, list.TotalCount);
+        Assert.DoesNotContain(list.Items, i => i.Id == hidden.Id);
+
+        Assert.Null(await service.GetReceivedLeadDetailForCenterUserAsync(ownerId, "o@c.com", UserRoles.Center, hidden.Id));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() =>
+            service.UpdateReceivedLeadStatusAsync(ownerId, "o@c.com", UserRoles.Center, hidden.Id, "contacted"));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() =>
+            service.GetReceivedLeadMessagesForCenterUserAsync(ownerId, "o@c.com", UserRoles.Center, hidden.Id));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() =>
+            service.SendLeadMessageForCenterUserAsync(ownerId, "o@c.com", UserRoles.Center, hidden.Id, "Chào em"));
+        Assert.Equal(status, hidden.Status);
     }
 }

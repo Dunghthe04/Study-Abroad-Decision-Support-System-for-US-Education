@@ -64,6 +64,8 @@ export function ContactRequestDialog({ centerId, centerName, isVerified, compact
 
   const [open, setOpen] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  // [UC-116] Học sinh dưới 16 tự gửi: lead chờ phụ huynh xác nhận qua mail
+  const [waitingParent, setWaitingParent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -104,7 +106,8 @@ export function ContactRequestDialog({ centerId, centerName, isVerified, compact
   if (user.role !== "student" && user.role !== "parent") return null;
 
   const isParent = user.role === "parent";
-  const isMinorStudent = !isParent && user.ageGroup === "minor";
+  // Dưới 18 (cả "child" dưới 16, nay gửi được khi phụ huynh đã đồng ý [UC-116]) phải tick xác nhận hiểu trung tâm sẽ liên hệ
+  const isMinorStudent = !isParent && (user.ageGroup === "minor" || user.ageGroup === "child");
   const activeChildren = (children ?? []).filter((c) => c.status === "active");
 
   const loadChildren = async () => {
@@ -137,7 +140,7 @@ export function ContactRequestDialog({ centerId, centerName, isVerified, compact
     setLoading(true);
     setError(null);
     try {
-      await leadApi.create({
+      const created = await leadApi.create({
         studyCenterId: centerId,
         studyLevel: studyLevel || null,
         contactPhone: phone.trim() || null,
@@ -147,6 +150,7 @@ export function ContactRequestDialog({ centerId, centerName, isVerified, compact
         consentAccepted,
         acknowledgedCenterContact: isMinorStudent ? acknowledged : false,
       });
+      setWaitingParent(created.status === "pending_parent");
       setIsSubmitted(true);
     } catch (err) {
       setError(toErrorMessage(err));
@@ -157,6 +161,7 @@ export function ContactRequestDialog({ centerId, centerName, isVerified, compact
 
   const handleReset = () => {
     setIsSubmitted(false);
+    setWaitingParent(false);
     setOpen(false);
     setError(null);
     setSharedFields(DEFAULT_SHARED_FIELDS);
@@ -173,7 +178,7 @@ export function ContactRequestDialog({ centerId, centerName, isVerified, compact
     (!isParent || studentUserId !== "");
 
   const renderBody = () => {
-    // Học sinh dưới 16: không tự gửi được (server trả age_restricted)
+    // [UC-116] Học sinh dưới 16 chưa có phụ huynh đồng ý: server trả age_restricted
     if (ageBlock) {
       return (
         <div className="py-4 text-center space-y-3">
@@ -181,15 +186,18 @@ export function ContactRequestDialog({ centerId, centerName, isVerified, compact
             <ShieldAlertIcon className="w-6 h-6" />
           </div>
           <DialogHeader>
-            <DialogTitle className="text-lg text-center">Chức năng dành cho học sinh từ 16 tuổi</DialogTitle>
+            <DialogTitle className="text-lg text-center">Cần phụ huynh đồng ý trước</DialogTitle>
             <DialogDescription className="text-center text-sm pt-1">
-              Nhờ phụ huynh gửi bằng tài khoản phụ huynh. Phụ huynh đã liên kết với bạn có thể chọn bạn và gửi yêu cầu cho <strong>{centerName}</strong>.
+              {ageBlock.message} Hoặc phụ huynh đã liên kết có thể gửi thay bạn cho <strong>{centerName}</strong> bằng tài khoản phụ huynh.
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter>
-            <Button type="button" variant="outline" className="w-full" onClick={() => setOpen(false)}>
+          <DialogFooter className="gap-2">
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Đóng
             </Button>
+            <Link href="/account" className={buttonVariants()}>
+              Mời phụ huynh
+            </Link>
           </DialogFooter>
         </div>
       );
@@ -391,9 +399,21 @@ export function ContactRequestDialog({ centerId, centerName, isVerified, compact
                 <CheckCircle2Icon className="w-8 h-8" />
               </div>
               <DialogHeader>
-                <DialogTitle className="text-xl text-center">Gửi yêu cầu thành công!</DialogTitle>
+                <DialogTitle className="text-xl text-center">
+                  {waitingParent ? "Đã gửi, chờ phụ huynh xác nhận" : "Gửi yêu cầu thành công!"}
+                </DialogTitle>
                 <DialogDescription className="text-center text-sm pt-2">
-                  Hệ thống đã chuyển thông tin đã chọn tới <strong>{centerName}</strong>. Trung tâm sẽ gọi điện thoại hoặc gửi email để liên hệ lại.
+                  {waitingParent ? (
+                    <>
+                      Hệ thống đã gửi email cho phụ huynh của bạn. <strong>{centerName}</strong> chỉ nhận thông tin sau khi phụ huynh bấm
+                      Đồng ý (trong 7 ngày). Theo dõi trạng thái ở mục Yêu cầu liên hệ đã gửi trong trang Tài khoản.
+                    </>
+                  ) : (
+                    <>
+                      Hệ thống đã chuyển thông tin đã chọn tới <strong>{centerName}</strong>. Trung tâm sẽ gọi điện thoại hoặc gửi email để liên
+                      hệ lại.
+                    </>
+                  )}
                 </DialogDescription>
               </DialogHeader>
               <div className="pt-4">

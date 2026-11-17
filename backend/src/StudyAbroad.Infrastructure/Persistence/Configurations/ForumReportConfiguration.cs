@@ -10,7 +10,7 @@ public class ForumReportConfiguration : IEntityTypeConfiguration<ForumReport>
     {
         b.HasKey(x => x.Id);
         b.HasOne<ForumPost>().WithMany().HasForeignKey(x => x.ForumPostId).OnDelete(DeleteBehavior.Cascade);
-        b.HasOne<User>().WithMany().HasForeignKey(x => x.ReporterUserId).OnDelete(DeleteBehavior.Cascade);
+        b.HasOne<User>().WithMany().HasForeignKey(x => x.ReporterUserId).OnDelete(DeleteBehavior.SetNull);   // [UC-80] xóa user thì báo cáo còn, mất tên người báo
         b.HasOne<User>().WithMany().HasForeignKey(x => x.HandledByUserId).OnDelete(DeleteBehavior.SetNull);
         b.Property(x => x.Reason).HasMaxLength(64).IsRequired();
         b.Property(x => x.Detail).HasMaxLength(1000);

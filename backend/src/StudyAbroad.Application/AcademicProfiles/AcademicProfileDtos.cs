@@ -37,5 +37,7 @@ public record AcademicProfileResponse(
     string? OtherTestsJson,
     List<TranscriptTermDto> Terms,
     DateTime CreatedAt,
-    DateTime? UpdatedAt
+    DateTime? UpdatedAt,
+    // Đã gửi qua luồng 6 bước hoặc có dữ liệu cũ: tài khoản không báo "chưa điền" nữa
+    bool IsComplete = false
 );

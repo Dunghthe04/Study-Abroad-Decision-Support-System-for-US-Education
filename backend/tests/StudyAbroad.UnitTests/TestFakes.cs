@@ -178,8 +178,12 @@ internal sealed class FakeAuditLogRepository : IAuditLogRepository
 {
     public List<AuditLog> Entries { get; } = [];
 
+    /// <summary>Đặt khác null để AddAsync ném lỗi (giả lập một bước hỏng trong transaction).</summary>
+    public Exception? ThrowOnAdd { get; set; }
+
     public Task AddAsync(AuditLog entry, CancellationToken cancellationToken = default)
     {
+        if (ThrowOnAdd != null) throw ThrowOnAdd;
         Entries.Add(entry);
         return Task.CompletedTask;
     }
@@ -261,6 +265,36 @@ internal sealed class FakeEmailSender : IEmailSender
         return Task.CompletedTask;
     }
 
+    public Task SendParentConsentConfirmedEmailAsync(string toEmail, string studentName, string revokeToken, CancellationToken ct = default)
+    {
+        SentEmails.Add((toEmail, "parent_consent_confirmed", revokeToken));
+        return Task.CompletedTask;
+    }
+
+    public Task SendParentConsentRejectedEmailAsync(string toEmail, string studentName, string parentLabel, CancellationToken ct = default)
+    {
+        SentEmails.Add((toEmail, "parent_rejected", parentLabel));
+        return Task.CompletedTask;
+    }
+
+    public Task SendLeadParentConfirmEmailAsync(string toEmail, string studentName, string centerName, IReadOnlyList<string> sharedFields, string confirmToken, int expiryDays, CancellationToken ct = default)
+    {
+        SentEmails.Add((toEmail, "lead_parent_confirm", confirmToken));
+        return Task.CompletedTask;
+    }
+
+    public Task SendLeadParentDecisionEmailAsync(string toEmail, string studentName, string centerName, string outcome, CancellationToken ct = default)
+    {
+        SentEmails.Add((toEmail, "lead_parent_decision", outcome));
+        return Task.CompletedTask;
+    }
+
+    public Task SendParentAccountLinkedEmailAsync(string toEmail, string studentName, string parentName, CancellationToken ct = default)
+    {
+        SentEmails.Add((toEmail, "parent_account_linked", parentName));
+        return Task.CompletedTask;
+    }
+
     public Task SendAccountLockedEmailAsync(string toEmail, string fullName, string reason, CancellationToken ct = default)
     {
         SentEmails.Add((toEmail, "account_locked_notice", reason));
@@ -315,11 +349,18 @@ internal sealed class FakeParentLinkRepository : IParentLinkRepository
     public Task<ParentStudentLink?> GetByTokenHashAsync(string tokenHash, CancellationToken ct = default) =>
         Task.FromResult(Links.Where(l => l.TokenHash == tokenHash).Select(Clone).FirstOrDefault());
 
+    public Task<ParentStudentLink?> GetByRevokeTokenHashAsync(string revokeTokenHash, CancellationToken ct = default) =>
+        Task.FromResult(Links.Where(l => l.RevokeTokenHash == revokeTokenHash).Select(Clone).FirstOrDefault());
+
     public Task<List<ParentStudentLink>> GetByStudentAsync(Guid studentUserId, CancellationToken ct = default) =>
         Task.FromResult(Links.Where(l => l.StudentUserId == studentUserId).OrderByDescending(l => l.CreatedAt).Select(Clone).ToList());
 
     public Task<List<ParentStudentLink>> GetActiveByParentAsync(Guid parentUserId, CancellationToken ct = default) =>
         Task.FromResult(Links.Where(l => l.ParentUserId == parentUserId && l.Status == ParentLinkStatuses.Active).Select(Clone).ToList());
+
+    public Task<List<ParentStudentLink>> GetActiveWithoutParentAccountAsync(string parentEmail, CancellationToken ct = default) =>
+        Task.FromResult(Links.Where(l => l.ParentEmail == parentEmail && l.ParentUserId == null && l.Status == ParentLinkStatuses.Active)
+            .Select(Clone).ToList());
 
     public Task<bool> HasGrantedConsentAsync(Guid studentUserId, CancellationToken ct = default) =>
         Task.FromResult(Links.Any(l => l.StudentUserId == studentUserId && l.Status == ParentLinkStatuses.Active
@@ -329,7 +370,7 @@ internal sealed class FakeParentLinkRepository : IParentLinkRepository
         Task.FromResult(Consents.Where(c => c.Id == consentId).Select(c => new Consent
         {
             Id = c.Id, CreatedAt = c.CreatedAt, UserId = c.UserId, Purpose = c.Purpose, Granted = c.Granted,
-            PolicyVersion = c.PolicyVersion, GrantedByUserId = c.GrantedByUserId, GrantedIp = c.GrantedIp,
+            PolicyVersion = c.PolicyVersion, GrantedByUserId = c.GrantedByUserId, GrantedByEmail = c.GrantedByEmail, GrantedIp = c.GrantedIp,
         }).FirstOrDefault());
 
     public Task SaveAcceptAsync(ParentStudentLink link, Consent consent, CancellationToken ct = default)
@@ -370,7 +411,8 @@ internal sealed class FakeParentLinkRepository : IParentLinkRepository
         Id = l.Id, CreatedAt = l.CreatedAt, UpdatedAt = l.UpdatedAt, StudentUserId = l.StudentUserId, ParentEmail = l.ParentEmail,
         ParentUserId = l.ParentUserId, Status = l.Status, TokenHash = l.TokenHash, TokenExpiresAt = l.TokenExpiresAt,
         InviteSentCount = l.InviteSentCount, LastInviteSentAt = l.LastInviteSentAt, AcceptedAt = l.AcceptedAt,
-        ConsentId = l.ConsentId, RevokedAt = l.RevokedAt, RevokedByUserId = l.RevokedByUserId, Version = l.Version,
+        ConsentId = l.ConsentId, RevokedAt = l.RevokedAt, RevokedByUserId = l.RevokedByUserId, RevokeTokenHash = l.RevokeTokenHash,
+        Version = l.Version, ProfileTransferStatus = l.ProfileTransferStatus, ProfileTransferAt = l.ProfileTransferAt,
     };
 }
 
@@ -413,4 +455,29 @@ internal sealed class FakeScenarioRepository : IScenarioRepository
         Title = r.Title, SimulatedProfileJson = r.SimulatedProfileJson, SimulatedRecommendationsJson = r.SimulatedRecommendationsJson,
         Notes = r.Notes,
     };
+}
+
+// UC-80: fake transaction, chạy thẳng công việc (fake repo không có rollback; rollback thật kiểm tra tay trên PG)
+/// <summary>[UC-80] Ghi lại người dùng bị thu hồi lead, trả về số lead giả định đã thu hồi.</summary>
+internal sealed class FakeLeadWithdrawalRepository : StudyAbroad.Application.Leads.ILeadWithdrawalRepository
+{
+    public List<Guid> UserIds { get; } = [];
+    public int CountToReturn { get; set; }
+
+    public Task<int> WithdrawOpenLeadsAsync(Guid userId, DateTime now, CancellationToken ct = default)
+    {
+        UserIds.Add(userId);
+        return Task.FromResult(CountToReturn);
+    }
+}
+
+internal sealed class FakeUnitOfWork : IUnitOfWork
+{
+    public int Calls { get; private set; }
+
+    public Task ExecuteInTransactionAsync(Func<CancellationToken, Task> work, CancellationToken ct = default)
+    {
+        Calls++;
+        return work(ct);
+    }
 }

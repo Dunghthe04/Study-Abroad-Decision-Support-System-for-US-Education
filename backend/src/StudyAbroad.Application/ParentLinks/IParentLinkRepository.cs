@@ -12,6 +12,8 @@ public interface IParentLinkRepository
 
     Task<ParentStudentLink?> GetByIdAsync(Guid id, CancellationToken ct = default);
 
+    /// <summary>[UC-117] Tìm theo hash của token rút đồng ý trong mail gửi phụ huynh.</summary>
+    Task<ParentStudentLink?> GetByRevokeTokenHashAsync(string revokeTokenHash, CancellationToken ct = default);
     Task<ParentStudentLink?> GetByTokenHashAsync(string tokenHash, CancellationToken ct = default);
 
     /// <summary>Mọi link của học sinh, mới nhất trước.</summary>
@@ -19,6 +21,9 @@ public interface IParentLinkRepository
 
     /// <summary>Các link đang hiệu lực của phụ huynh (con đã liên kết).</summary>
     Task<List<ParentStudentLink>> GetActiveByParentAsync(Guid parentUserId, CancellationToken ct = default);
+
+    /// <summary>[UC-115] Liên kết đã đồng ý qua link mail nhưng chưa gắn tài khoản phụ huynh, theo email nhận thư mời.</summary>
+    Task<List<ParentStudentLink>> GetActiveWithoutParentAccountAsync(string parentEmail, CancellationToken ct = default);
 
     Task<Consent?> GetConsentAsync(Guid consentId, CancellationToken ct = default);
 

@@ -10,4 +10,5 @@ public interface IAcademicProfileRepository
 {
     Task<StudentProfile?> GetByUserIdAsync(Guid userId, CancellationToken ct = default);
     Task<List<TranscriptScore>> GetTranscriptScoresAsync(Guid studentProfileId, CancellationToken ct = default);
+    Task<List<ProfileCertification>> GetCertificationsAsync(Guid studentProfileId, CancellationToken ct = default);
 }

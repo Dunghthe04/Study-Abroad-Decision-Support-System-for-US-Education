@@ -26,6 +26,8 @@ namespace StudyAbroad.Infrastructure.Persistence.Configurations
             // [USAS-362] Số lần đăng nhập sai mật khẩu liên tiếp, mặc định 0
             builder.Property(x => x.FailedLoginAttempts).HasDefaultValue(0).IsRequired();
             builder.Property(x => x.LockoutEnd);
+            // UC-80: thời điểm yêu cầu xóa tài khoản, null = chưa yêu cầu
+            builder.Property(x => x.DeletedAt);
             // Ngày sinh (kiểu date), null với tài khoản cũ / center / admin
             builder.Property(x => x.DateOfBirth);
             // Npgsql ánh xạ uint IsRowVersion vào cột hệ thống xmin (không tạo cột mới)

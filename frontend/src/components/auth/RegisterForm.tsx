@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { GraduationCapIcon, InfoIcon, UsersIcon } from "lucide-react";
@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/auth/PasswordInput";
+import { REGISTER_PARENT_EMAIL_KEY } from "@/components/auth/ParentConsentForm";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 
@@ -36,14 +37,43 @@ function ageFrom(dob: string): number | null {
   return age;
 }
 
+// sessionStorage / URL không đổi trong cùng tab nên không cần subscribe; server render trả ""
+const noopSubscribe = () => () => {};
+
+function readUrlRole(): string {
+  return new URLSearchParams(window.location.search).get("role") ?? "";
+}
+
+function readPrefillParentEmail(): string {
+  try {
+    return sessionStorage.getItem(REGISTER_PARENT_EMAIL_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function clearPrefillParentEmail() {
+  try {
+    sessionStorage.removeItem(REGISTER_PARENT_EMAIL_KEY);
+  } catch {
+    // bỏ qua
+  }
+}
+
 export function RegisterForm() {
   const router = useRouter();
   const { register } = useAuth();
 
   const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
+  // Mở từ trang phụ huynh đồng ý: ?role=parent chọn sẵn Phụ huynh, email lấy từ sessionStorage (không có trên URL).
+  // Người dùng bấm chọn / sửa ô thì dùng giá trị đã chọn.
+  const urlRole = useSyncExternalStore(noopSubscribe, readUrlRole, () => "");
+  const prefillEmail = useSyncExternalStore(noopSubscribe, readPrefillParentEmail, () => "");
+  const [typedEmail, setEmail] = useState<string | null>(null);
+  const email = typedEmail ?? (urlRole === "parent" ? prefillEmail : "");
   const [phone, setPhone] = useState("");
-  const [role, setRole] = useState<"student" | "parent">("student");
+  const [chosenRole, setRole] = useState<"student" | "parent" | null>(null);
+  const role = chosenRole ?? (urlRole === "parent" ? "parent" : "student");
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [parentEmail, setParentEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -51,6 +81,7 @@ export function RegisterForm() {
 
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
 
   const age = ageFrom(dateOfBirth);
   const isMinorStudent = role === "student" && age !== null && age >= 0 && age < ADULT_AGE;
@@ -161,6 +192,7 @@ export function RegisterForm() {
 
       // 4. Đăng ký thành công -> Chuyển sang màn hình xác thực mã OTP gửi về email
       setPendingEmail(email.trim());
+      clearPrefillParentEmail();
       router.push("/verify-email");
     } catch (err) {
       if (err instanceof ApiError) {

@@ -2,7 +2,7 @@ using StudyAbroad.Domain.Common;
 
 namespace StudyAbroad.Domain.Entities;
 
-/// <summary>Bước trong lộ trình du học theo bậc học (backlog #21). Tiến độ từng người lưu ở StudentProfile.RoadmapProgressJson.</summary>
+/// <summary>Bước trong lộ trình du học theo bậc học (backlog #21). Chưa lưu tiến độ từng người.</summary>
 public class RoadmapStep : BaseEntity
 {
     public string StudyLevel { get; set; } = string.Empty;
