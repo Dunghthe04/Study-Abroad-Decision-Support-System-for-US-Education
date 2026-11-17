@@ -205,3 +205,48 @@ async def test_real_cost_limit_is_kept_when_the_student_also_sorts_by_cost():
     plan = await search_filters.normalize({"max_cost": "30 nghìn đô"}, "lowest_tuition")
     assert plan.filters == {"maxCostUsd": 30000}
     assert plan.sort == "lowestTuition"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("filters", "sort", "ignored"),
+    [
+        ({"max_rank": "top"}, "ranking", {"key": "max_rank", "text": "top"}),  # "trường nào uy tín nhất"
+        (
+            {"max_cost": "rẻ nhất"},
+            "lowest_tuition",
+            {"key": "max_cost", "text": "rẻ nhất"},
+        ),  # "trường nào rẻ nhất"
+        ({"min_acceptance_rate": "cao"}, "easiest_admission", {"key": "min_acceptance_rate", "text": "cao"}),
+    ],
+)
+async def test_unreadable_number_is_ignored_and_reported_when_the_question_already_has_a_sort(
+    filters, sort, ignored
+):
+    plan = await search_filters.normalize(filters, sort)
+    assert plan.filters == {}
+    assert plan.unresolved == []
+    assert plan.ignored == [ignored]
+
+
+@pytest.mark.asyncio
+async def test_unreadable_number_is_asked_again_when_there_is_no_sort():
+    plan = await search_filters.normalize({"max_rank": "top"})
+    assert plan.filters == {}
+    assert plan.unresolved == ["thứ hạng “top”"]
+    assert plan.ignored == []
+
+
+@pytest.mark.asyncio
+async def test_unreadable_state_is_asked_again_even_when_the_question_has_a_sort():
+    plan = await search_filters.normalize({"state": ["Narnia"]}, "ranking")
+    assert plan.unresolved == ["bang “Narnia”"]
+    assert plan.ignored == []
+
+
+@pytest.mark.asyncio
+async def test_readable_number_is_applied_not_ignored_when_the_question_has_a_sort():
+    plan = await search_filters.normalize({"max_rank": "top 50"}, "ranking")
+    assert plan.filters == {"maxRank": 50}
+    assert plan.ignored == []
+    assert plan.unresolved == []
