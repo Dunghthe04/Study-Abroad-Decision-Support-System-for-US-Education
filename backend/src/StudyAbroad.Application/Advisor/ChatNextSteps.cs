@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using StudyAbroad.Application.Recommendations;
 
@@ -13,7 +14,8 @@ namespace StudyAbroad.Application.Advisor;
 ///   AfterExplain         sau giải thích một trường
 ///   AfterSimulate        sau thử kịch bản what-if
 ///   AfterGoalSeek        sau "cần gì để vào trường này"
-///   AfterSearch          sau tìm trường theo điều kiện
+///   AfterSearch          sau tìm trường theo điều kiện (kèm nút lọc lại: top 20, top 50, mức chi phí)
+///   AfterNoResult        tìm trường ra 0 trường (nút bỏ từng điều kiện, kèm số trường sẽ có)
 ///   AfterSchoolOverview  sau bản tóm tắt một trường (học sinh chưa hỏi mục cụ thể)
 ///   AfterSchoolInfo      sau khi trả lời một mục cụ thể của một trường ("học phí Purdue")
 ///   AfterCompare         sau bảng so sánh các trường
@@ -203,9 +205,13 @@ public static class ChatNextSteps
     /// Nút bước tiếp theo sau danh sách: so sánh hai trường đầu (chạy theo mã, không qua model), rồi gợi ý trường theo hồ sơ riêng.
     /// Danh sách ngắn hơn hai trường thì không có nút so sánh.
     /// </summary>
-    public static IReadOnlyList<QuickReply> AfterSearch(SchoolSearchResult result, SchoolSort sort = SchoolSort.Quality)
+    public static IReadOnlyList<QuickReply> AfterSearch(
+        SchoolSearchResult result, SchoolSort sort = SchoolSort.Quality, SchoolSearchFilters? filters = null,
+        IReadOnlyList<ChatSchoolInfo.IgnoredFilter>? ignored = null)
     {
         var steps = new List<QuickReply>();
+        if (filters is not null)
+            steps.AddRange(Refinements(result, sort, filters, ignored).Take(MaxRefinements));
         // Đang xếp theo tiền: cho học sinh đổi cách tính giữa "chỉ học phí" và "tổng chi phí cả ăn ở, sinh hoạt" (cùng chiều cao/thấp)
         if (sort is SchoolSort.LowestTuition or SchoolSort.HighestTuition)
         {
@@ -225,8 +231,89 @@ public static class ChatNextSteps
                 new ChatAction(ChatSchoolInfo.CompareAction, SchoolCodes: [a.Code, b.Code], Question: $"So sánh {a.Name} và {b.Name}")));
         }
         steps.Add(Recommend);
-        return steps;
+        return steps.Take(MaxSteps).ToList();
     }
+
+    public const int MaxSteps = 5;
+    private const int MaxRefinements = 2;
+    private static readonly JsonSerializerOptions WebJson = new(JsonSerializerDefaults.Web);
+
+    // Nút lọc lại: chưa giới hạn hạng mà danh sách dài (hoặc advisor vừa bỏ điều kiện hạng không đọc ra) thì gợi ý top 20, 50;
+    // advisor vừa bỏ mức chi phí không đọc ra thì gợi ý vài mức chi phí
+    private static IEnumerable<QuickReply> Refinements(
+        SchoolSearchResult result, SchoolSort sort, SchoolSearchFilters f, IReadOnlyList<ChatSchoolInfo.IgnoredFilter>? ignored)
+    {
+        var dropped = (ignored ?? []).Select(i => i.Key).ToHashSet();
+        if (f.MaxRank is null && (sort == SchoolSort.Quality || dropped.Contains("max_rank")))
+        {
+            foreach (var top in new[] { 20, 50 }.Where(top => result.Total > top))
+                yield return SearchAgain($"Chỉ top {top}", $"Các trường trong top {top}", f with { MaxRank = top }, sort);
+        }
+        if (f.MaxCostUsd is null && dropped.Contains("max_cost"))
+        {
+            foreach (var cost in new[] { 30_000m, 40_000m })
+            {
+                var shown = cost.ToString("N0", CultureInfo.InvariantCulture).Replace(",", ".");
+                yield return SearchAgain($"Dưới {shown} USD", $"Các trường có chi phí dưới {shown} USD mỗi năm", f with { MaxCostUsd = cost }, sort);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Tìm ra 0 trường: mỗi điều kiện bỏ đi mà có trường thì thành một nút (kèm số trường sẽ có), nhiều trường nhất trước.
+    /// Không bỏ được điều kiện nào ra kết quả thì đưa câu tìm mẫu.
+    /// </summary>
+    public static IReadOnlyList<QuickReply> AfterNoResult(SchoolSearchResult result, SchoolSort sort, SchoolSearchFilters filters)
+    {
+        var relax = result.Relaxed
+            .Where(r => r.Total > 0)
+            .OrderByDescending(r => r.Total)
+            .Take(MaxRefinements)
+            .Select(r =>
+            {
+                var name = ChatSchoolInfo.FilterName(r.Filter);
+                return SearchAgain($"Bỏ điều kiện {name} (có {r.Total} trường)", $"Bỏ điều kiện {name}", Without(filters, r.Filter), sort);
+            })
+            .ToList();
+        return relax.Count == 0 ? SearchHelp() : [.. relax, Recommend];
+    }
+
+    // Nút tìm lại với bộ điều kiện mới: chạy thẳng không qua SLM. Chữ gửi đi là câu đầy đủ (hiện trong lịch sử chat, và nếu
+    // dữ liệu nút không hợp lệ thì câu này đi qua advisor như học sinh tự gõ)
+    public static QuickReply SearchAgain(string label, string sentence, SchoolSearchFilters filters, SchoolSort sort)
+    {
+        var sortCode = char.ToLowerInvariant(sort.ToString()[0]) + sort.ToString()[1..];
+        var data = new JsonObject
+        {
+            ["question"] = sentence,
+            ["filters"] = JsonSerializer.SerializeToNode(filters, WebJson),
+            ["sort"] = sortCode,
+            // giữ cách xếp đã chọn, và cho tìm được cả khi bỏ hết điều kiện lọc
+            ["model_sort"] = sortCode,
+        };
+        return new QuickReply(label, sentence, new ChatAction(ChatSchoolInfo.SearchAction, Question: sentence, Search: JsonSerializer.SerializeToElement(data)));
+    }
+
+    // Bỏ một điều kiện theo mã điều kiện của bộ tìm (RecommendationService.SearchTests)
+    public static SchoolSearchFilters Without(SchoolSearchFilters f, string key) => key switch
+    {
+        "bang" => f with { States = null },
+        "thanh_pho" => f with { City = null },
+        "nganh" => f with { Major = null },
+        "loai_truong" => f with { Control = null },
+        "hoc_bong" => f with { Aid = null },
+        "chinh_sach_thi" => f with { TestPolicy = null },
+        "chi_phi_toi_da" => f with { MaxCostUsd = null },
+        "ielts_toi_da" => f with { MaxIelts = null },
+        "toefl_toi_da" => f with { MaxToefl = null },
+        "duolingo_toi_da" => f with { MaxDuolingo = null },
+        "ty_le_nhan_toi_thieu" => f with { MinAcceptRate = null },
+        "ty_le_nhan_toi_da" => f with { MaxAcceptRate = null },
+        "xep_hang_toi_da" => f with { MaxRank = null },
+        "ty_le_tot_nghiep_toi_thieu" => f with { MinGradRate = null },
+        "ivy" => f with { Ivy = false },
+        _ => f,
+    };
 
     // ----------------------------------------------------------------------------------------------------------------
     // Sau bản tóm tắt một trường

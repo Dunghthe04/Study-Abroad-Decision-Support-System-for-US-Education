@@ -75,6 +75,7 @@ export function SchoolSearchCard({ data }: { data: SchoolSearchData }) {
           Có {data.total} trường {data.summary}
         </p>
         <p className="text-xs text-ink-3">Xếp theo {data.sortLabel}</p>
+        {data.note && <p className="text-xs text-ink-2">{data.note}</p>}
         {(data.sort === "lowestCost" || data.sort === "highestCost" || data.sort === "lowestTuition" || data.sort === "highestTuition") && (
           <p className="text-xs text-ink-3">Tổng chi phí = học phí + ăn ở + sinh hoạt + phí khác (ước tính của từng trường).</p>
         )}

@@ -131,7 +131,10 @@ public static class ChatSchoolInfo
     /// <summary>Dữ liệu tìm trường: Question là câu hỏi, Filters là bộ lọc advisor đã chuẩn hóa, Sort là cách xếp, Unresolved là điều chưa đọc được, KbAnswer là câu tạm.</summary>
     public record SearchQuery(
         string Question, SchoolSearchFilters Filters, SchoolSort Sort, IReadOnlyList<string> Unresolved, string? KbAnswer,
-        bool SortGiven = false);
+        bool SortGiven = false, IReadOnlyList<IgnoredFilter>? Ignored = null);
+
+    /// <summary>Điều kiện số advisor đã bỏ vì không đọc ra (câu đã có cách xếp): Key là khóa của SLM, Label tên tiếng Việt, Text chữ gốc.</summary>
+    public record IgnoredFilter(string Key, string Label, string Text);
 
     public static SearchQuery? ParseSearch(System.Text.Json.JsonElement? data)
     {
@@ -166,7 +169,26 @@ public static class ChatSchoolInfo
         };
         // model_sort có mặt = học sinh nói rõ muốn xếp theo gì ("trường nào rẻ nhất"): tìm được dù không có điều kiện lọc
         var sortGiven = d.TryGetProperty("model_sort", out var ms) && ms.ValueKind == System.Text.Json.JsonValueKind.String;
-        return new SearchQuery(Str("question") ?? "", filters, sort, unresolved, Str("kb_answer"), sortGiven);
+        var ignored = d.TryGetProperty("ignored", out var ig) && ig.ValueKind == System.Text.Json.JsonValueKind.Array
+            ? ig.EnumerateArray()
+                .Where(e => e.ValueKind == System.Text.Json.JsonValueKind.Object)
+                .Select(e => new IgnoredFilter(Field(e, "key"), Field(e, "label"), Field(e, "text")))
+                .Where(i => i.Label.Length > 0 && i.Text.Length > 0)
+                .ToList()
+            : [];
+        return new SearchQuery(Str("question") ?? "", filters, sort, unresolved, Str("kb_answer"), sortGiven, ignored);
+    }
+
+    private static string Field(System.Text.Json.JsonElement e, string name) =>
+        e.TryGetProperty(name, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.String ? v.GetString()!.Trim() : "";
+
+    /// <summary>Câu nói rõ điều kiện đã bỏ ("Mình bỏ qua điều kiện thứ hạng “top” vì chưa rõ mức cụ thể."); không bỏ gì thì null.</summary>
+    public static string? IgnoredNote(IReadOnlyList<IgnoredFilter>? ignored)
+    {
+        if (ignored is not { Count: > 0 })
+            return null;
+        var parts = ignored.Select(i => $"{i.Label} “{i.Text}”").Distinct().ToList();
+        return $"Mình bỏ qua điều kiện {string.Join(", ", parts)} vì chưa rõ mức cụ thể.";
     }
 
     /// <summary>Có ít nhất một điều kiện lọc không (nếu không thì không có gì để tìm).</summary>
@@ -206,7 +228,8 @@ public static class ChatSchoolInfo
     /// Thẻ danh sách tìm trường: toàn bộ kết quả (tối đa 100) để giao diện hiện 5 trường đầu và mở phần còn lại bằng "Xem thêm", không gửi thêm tin.
     /// coveredText là đoạn chữ trả lời mà thẻ đã nói đủ.
     /// </summary>
-    public static Widget WidgetOfSearch(SchoolSearchResult result, SchoolSearchFilters filters, SchoolSort sort, string coveredText)
+    public static Widget WidgetOfSearch(
+        SchoolSearchResult result, SchoolSearchFilters filters, SchoolSort sort, string coveredText, string? note = null)
     {
         var data = new System.Text.Json.Nodes.JsonObject
         {
@@ -219,6 +242,8 @@ public static class ChatSchoolInfo
             ["filters"] = System.Text.Json.JsonSerializer.SerializeToNode(filters, WebJson),
             ["sort"] = char.ToLowerInvariant(sort.ToString()[0]) + sort.ToString()[1..],
             ["coveredText"] = coveredText,
+            // Điều kiện đã bỏ vì không đọc ra: thẻ hiện để học sinh biết danh sách không lọc theo điều đó
+            ["note"] = note,
         };
         return new Widget(SearchWidgetType, System.Text.Json.JsonSerializer.SerializeToElement(data));
     }
@@ -236,7 +261,7 @@ public static class ChatSchoolInfo
     };
 
     // Tên điều kiện nói với học sinh khi gợi ý nới (khóa của hợp đồng với model)
-    private static string FilterName(string key) => key switch
+    internal static string FilterName(string key) => key switch
     {
         "bang" => "bang",
         "thanh_pho" => "thành phố",

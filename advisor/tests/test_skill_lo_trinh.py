@@ -111,4 +111,8 @@ async def test_handler_other_route_says_no_list_and_gives_criteria():
     assert "Hệ thống chưa có danh sách trường cho lộ trình này" in out.answer
     assert "Có ngành bạn muốn học (Computer Science)" in out.answer
     # Lộ trình không đi thẳng sang gợi ý trường: vẫn có nút đi tiếp (gợi ý trường, đánh giá hồ sơ, trung tâm)
-    assert [r.label for r in out.quick_replies] == ["Gợi ý trường từ hồ sơ", "Đánh giá hồ sơ", "Tìm trung tâm tư vấn"]
+    assert [r.label for r in out.quick_replies] == [
+        "Gợi ý trường từ hồ sơ",
+        "Đánh giá hồ sơ",
+        "Tìm trung tâm tư vấn",
+    ]

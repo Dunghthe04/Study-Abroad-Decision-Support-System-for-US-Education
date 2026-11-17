@@ -290,7 +290,7 @@ export interface ChatWidget {
  * không qua SLM hiểu câu nên nhanh và không nhầm tên trường. target chỉ dùng cho goal_seek (bỏ trống thì hệ thống chọn nhóm cao hơn một bậc).
  */
 export interface AssistantAction {
-  type: "goal_seek" | "explain" | "school_info" | "school_compare";
+  type: "goal_seek" | "explain" | "school_info" | "school_compare" | "school_search";
   schoolCodes?: string[] | null; // school_compare: mã từ hai đến bốn trường (hoặc tên chưa được chọn)
   fields?: string[] | null; // school_compare: mã mục so sánh, giữ nguyên khi chọn lại trường mơ hồ
   schoolCode?: string | null; // goal_seek không kèm trường: hỏi lại bằng ô chọn trường
@@ -299,6 +299,8 @@ export interface AssistantAction {
   suggested?: string[] | null; // ô chọn trường: các trường nên hiện sẵn dạng nút (backend điền, giao diện gửi lại nguyên)
   /** "real": giải thích theo hồ sơ thật dù trang đang xem giả định (nút "Xem theo hồ sơ thật"); bỏ trống: theo cái đang xem */
   basis?: "real" | null;
+  /** school_search: bộ điều kiện tìm dựng sẵn (nút "Chỉ top 20", "Bỏ điều kiện bang"...), backend điền, giao diện gửi lại nguyên */
+  search?: Record<string, unknown> | null;
 }
 
 export interface AdvisorChatResponse {

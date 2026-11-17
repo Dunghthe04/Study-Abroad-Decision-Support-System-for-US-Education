@@ -615,15 +615,18 @@ namespace StudyAbroad.Application.Advisor
             try
             {
                 var result = await recommender!.SearchSchoolsAsync(userId, query.Filters, query.Sort, ct);
+                var note = ChatSchoolInfo.IgnoredNote(query.Ignored);
                 var text = ChatSchoolInfo.SearchText(result, query.Filters, query.Sort);
+                if (note is not null)
+                    text = $"{note}\n{text}";
                 var merged = MergeSchoolInfo(response, asQuery, text, clearKb: true);
                 if (result.Total == 0)
-                    return merged with { QuickReplies = ChatNextSteps.SearchHelp() };
+                    return merged with { QuickReplies = ChatNextSteps.AfterNoResult(result, query.Sort, query.Filters) };
                 // Thẻ nói đủ (5 trường đầu và "Xem thêm"), nên giao diện bỏ đoạn chữ này; kèm nút bước tiếp theo
                 return merged with
                 {
-                    Widget = ChatSchoolInfo.WidgetOfSearch(result, query.Filters, query.Sort, text),
-                    QuickReplies = ChatNextSteps.AfterSearch(result, query.Sort),
+                    Widget = ChatSchoolInfo.WidgetOfSearch(result, query.Filters, query.Sort, text, note),
+                    QuickReplies = ChatNextSteps.AfterSearch(result, query.Sort, query.Filters, query.Ignored),
                 };
             }
             catch (InvalidOperationException)

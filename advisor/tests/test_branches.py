@@ -343,6 +343,7 @@ async def test_a_search_the_model_read_is_normalized_and_goes_to_dotnet_without_
         "filters": {"states": ["TX"], "maxCostUsd": 30000, "aid": "any"},
         "sort": "lowestCost",
         "unresolved": [],
+        "ignored": [],
         "model_filters": {"state": ["texas"], "max_cost": "30 nghìn đô", "aid": "yes"},
         "model_sort": "lowest_cost",
         "kb_answer": LOOKING_UP,
@@ -372,6 +373,19 @@ async def test_a_search_with_only_a_sort_goes_to_dotnet_without_any_filter(model
     assert ran == []
     assert out.action == "school_search"
     assert out.action_data["filters"] == {} and out.action_data["sort"] == dotnet_sort
+
+
+# "trường nào uy tín nhất" bị thêm max_rank "top": vẫn tìm theo thứ hạng, và báo .NET điều kiện đã bỏ (kèm tên tiếng Việt)
+async def test_a_search_reports_the_ignored_condition_to_dotnet():
+    entities = {"tasks": ["search"], "sort": "ranking", "filters": {"max_rank": "top"}}
+
+    out = await build_branches(skills([]))["knowledge"].run(
+        ChatState(), "x", tin(("knowledge", entities, "trường nào uy tín nhất"))
+    )
+
+    assert out.action == "school_search"
+    assert out.action_data["filters"] == {} and out.action_data["unresolved"] == []
+    assert out.action_data["ignored"] == [{"key": "max_rank", "text": "top", "label": "thứ hạng"}]
 
 
 def result_schools():

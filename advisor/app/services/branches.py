@@ -126,6 +126,11 @@ class KnowledgeBranch:
                     "filters": plan.filters,
                     "sort": plan.sort,
                     "unresolved": plan.unresolved,
+                    # Điều kiện số đã bỏ vì không đọc ra (câu đã có cách xếp): .NET ghi rõ trên thẻ kết quả và gợi ý mức để lọc lại
+                    "ignored": [
+                        {**item, "label": search_filters.LABELS.get(item["key"], item["key"])}
+                        for item in plan.ignored
+                    ],
                     "model_filters": filters,  # dạng model trả, để câu tiếp nối thêm điều kiện vào
                     "model_sort": y.entities.get("sort"),
                     "kb_answer": LOOKING_UP,

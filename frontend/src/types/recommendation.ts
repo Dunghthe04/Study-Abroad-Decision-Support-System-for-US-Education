@@ -440,4 +440,6 @@ export interface SchoolSearchData {
   } | null;
   sort?: string | null;
   coveredText: string | null;
+  // Điều kiện đã bỏ vì không đọc ra (vd "top" không có số), để học sinh biết danh sách không lọc theo điều đó
+  note?: string | null;
 }

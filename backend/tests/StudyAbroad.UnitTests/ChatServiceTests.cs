@@ -1898,6 +1898,69 @@ public class ChatServiceTests
         Assert.Equal("school_compare", res.Widget!.Type);
     }
 
+    // Nút lọc lại sau tìm trường ("Chỉ top 20"): bộ điều kiện dựng sẵn trên nút, tìm thẳng không qua advisor
+    [Fact]
+    public async Task ChatAction_SearchAgain_RunsTheSearchWithTheButtonFiltersWithoutTheAdvisor()
+    {
+        var runner = new FakeRunner { SearchResult = new SchoolSearchResult(1, [SearchItem("UCLA")], []) };
+        var button = ChatNextSteps.SearchAgain("Chỉ top 20", "Các trường trong top 20", new SchoolSearchFilters(MaxRank: 20), SchoolSort.Quality);
+
+        var (res, advisor) = await ActionChat(button.Action, runner);
+
+        Assert.Null(advisor.LastRequest);
+        Assert.Equal(20, runner.SearchedWith!.Value.Filters.MaxRank);
+        Assert.Equal(SchoolSort.Quality, runner.SearchedWith!.Value.Sort);
+        Assert.Equal("school_search", res.Widget!.Type);
+    }
+
+    [Fact]
+    public async Task ChatAction_SearchAgain_WithBrokenData_GoesThroughTheAdvisor()
+    {
+        var broken = JsonDocument.Parse("""{"filters": {"maxRank": "nhiều"}}""").RootElement;
+
+        var (_, advisor) = await ActionChat(new ChatAction("school_search", Search: broken), new FakeRunner { Explanation = Explanation() });
+
+        Assert.NotNull(advisor.LastRequest);
+    }
+
+    // Advisor bỏ điều kiện số không đọc ra ("uy tín nhất" kèm max_rank "top"): thẻ và câu trả lời nói rõ đã bỏ gì
+    [Fact]
+    public async Task SchoolSearch_WithAnIgnoredCondition_SaysWhatWasIgnored_OnTheCardAndInTheText()
+    {
+        var items = Enumerable.Range(1, 8).Select(i => SearchItem($"S{i}")).ToList();
+        var runner = new FakeRunner { SearchResult = new SchoolSearchResult(60, items, []) };
+        var data = JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, object?>
+        {
+            ["question"] = "trường nào uy tín nhất", ["filters"] = new { }, ["sort"] = "quality", ["model_sort"] = "ranking",
+            ["ignored"] = new[] { new { key = "max_rank", label = "thứ hạng", text = "top" } },
+        })).RootElement;
+
+        var (res, _) = await SearchChat(data, runner);
+
+        const string note = "Mình bỏ qua điều kiện thứ hạng “top” vì chưa rõ mức cụ thể.";
+        Assert.Contains(note, res.Answer);
+        Assert.Equal(note, res.Widget!.Data!.Value.GetProperty("note").GetString());
+        Assert.Equal(["Chỉ top 20", "Chỉ top 50"], res.QuickReplies!.Take(2).Select(q => q.Label));
+    }
+
+    [Fact]
+    public async Task SchoolSearch_NoResult_OffersToDropEachConditionThatWouldGiveSchools()
+    {
+        var runner = new FakeRunner
+        {
+            SearchResult = new SchoolSearchResult(0, [], [new RelaxedFilter("loai_truong", 12), new RelaxedFilter("hoc_bong", 3), new RelaxedFilter("bang", 0)]),
+        };
+
+        var (res, _) = await SearchChat(SearchAction(new { states = new[] { "AK" }, control = "public", aid = "any" }), runner);
+
+        Assert.Equal(
+            ["Bỏ điều kiện loại trường (có 12 trường)", "Bỏ điều kiện học bổng (có 3 trường)", ChatNextSteps.Recommend.Label],
+            res.QuickReplies!.Select(q => q.Label));
+        var filters = res.QuickReplies![0].Action!.Search!.Value.GetProperty("filters");
+        Assert.Equal(JsonValueKind.Null, filters.GetProperty("control").ValueKind);   // bỏ đúng điều kiện loại trường
+        Assert.Equal("any", filters.GetProperty("aid").GetString());                  // các điều kiện khác giữ nguyên
+    }
+
     [Theory]
     [InlineData(0)]
     [InlineData(1)]

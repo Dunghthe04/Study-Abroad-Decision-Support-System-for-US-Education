@@ -1,5 +1,6 @@
 using System.Text.Json;
 using StudyAbroad.Application.Advisor;
+using StudyAbroad.Application.Recommendations;
 using Xunit;
 
 namespace StudyAbroad.UnitTests;
@@ -147,4 +148,44 @@ public class ChatNextStepsTests
         Assert.Contains(ChatNextSteps.SearchHelp(), s => s.Label == ChatNextSteps.Recommend.Label);
         Assert.Equal([ChatNextSteps.Recommend.Label, ChatNextSteps.CenterLabel], ChatNextSteps.NoSchoolData().Select(s => s.Label));
     }
+
+    [Fact]
+    public void AfterSearch_ByRanking_OffersTopTwentyAndFifty_ThenTheUsualSteps_AtMostFive()
+    {
+        var items = Enumerable.Range(1, 5).Select(i => new SchoolSearchItem($"s{i}", $"S{i}", null, null, null, null, null, null, null, null, i)).ToList();
+
+        var steps = ChatNextSteps.AfterSearch(new SchoolSearchResult(100, items, []), SchoolSort.Quality, new SchoolSearchFilters());
+
+        Assert.Equal(["Chỉ top 20", "Chỉ top 50", "So sánh hai trường đầu", ChatNextSteps.Recommend.Label], steps.Select(s => s.Label));
+        Assert.True(steps.Count <= ChatNextSteps.MaxSteps);
+        Assert.Equal(ChatSchoolInfo.SearchAction, steps[0].Action?.Type);
+        Assert.Equal(20, steps[0].Action!.Search!.Value.GetProperty("filters").GetProperty("maxRank").GetInt32());
+    }
+
+    [Fact]
+    public void AfterSearch_WhenTheCostConditionWasIgnored_OffersCostLevels()
+    {
+        var ignored = new[] { new ChatSchoolInfo.IgnoredFilter("max_cost", "mức chi phí", "rẻ nhất") };
+
+        var steps = ChatNextSteps.AfterSearch(new SchoolSearchResult(10, [], []), SchoolSort.LowestTuition, new SchoolSearchFilters(), ignored);
+
+        Assert.Equal(["Dưới 30.000 USD", "Dưới 40.000 USD"], steps.Take(2).Select(s => s.Label));
+    }
+
+    [Fact]
+    public void AfterSearch_AlreadyLimitedByRank_DoesNotOfferTopAgain()
+    {
+        var steps = ChatNextSteps.AfterSearch(new SchoolSearchResult(100, [], []), SchoolSort.Quality, new SchoolSearchFilters(MaxRank: 20));
+
+        Assert.DoesNotContain(steps, s => s.Label.StartsWith("Chỉ top"));
+    }
+
+    [Fact]
+    public void AfterNoResult_WithNothingToDrop_GivesSampleSearches()
+    {
+        var steps = ChatNextSteps.AfterNoResult(new SchoolSearchResult(0, [], [new RelaxedFilter("bang", 0)]), SchoolSort.Quality, new SchoolSearchFilters());
+
+        Assert.Equal(ChatNextSteps.SearchHelp().Select(s => s.Label), steps.Select(s => s.Label));
+    }
 }
+
