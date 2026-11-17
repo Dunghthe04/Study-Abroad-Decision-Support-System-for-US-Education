@@ -2741,6 +2741,10 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_active");
 
+                    b.Property<Guid?>("LastEditedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("last_edited_by_user_id");
+
                     b.Property<decimal?>("MinGpa4")
                         .HasPrecision(3, 2)
                         .HasColumnType("numeric(3,2)")
@@ -2766,6 +2770,11 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("date")
                         .HasColumnName("retrieved_at");
 
+                    b.Property<string>("SourceReliability")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("source_reliability");
+
                     b.Property<string>("SourceUrl")
                         .HasMaxLength(512)
                         .HasColumnType("character varying(512)")
@@ -2788,13 +2797,21 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.HasKey("Id")
                         .HasName("pk_scholarships");
 
+                    b.HasIndex("LastEditedByUserId")
+                        .HasDatabaseName("ix_scholarships_last_edited_by_user_id");
+
                     b.HasIndex("StudyLevel")
                         .HasDatabaseName("ix_scholarships_study_level");
 
-                    b.HasIndex("UniversityId")
-                        .HasDatabaseName("ix_scholarships_university_id");
+                    b.HasIndex("UniversityId", "IsActive")
+                        .HasDatabaseName("ix_scholarships_university_id_is_active");
 
-                    b.ToTable("scholarships", "app");
+                    b.ToTable("scholarships", "app", t =>
+                        {
+                            t.HasCheckConstraint("ck_scholarships_owner", "university_id IS NOT NULL OR provider IS NOT NULL");
+
+                            t.HasCheckConstraint("ck_scholarships_source_reliability", "source_reliability IS NULL OR source_reliability IN ('official', 'aggregated', 'self_reported')");
+                        });
                 });
 
             modelBuilder.Entity("StudyAbroad.Domain.Entities.Skill", b =>
@@ -5091,6 +5108,12 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("StudyAbroad.Domain.Entities.Scholarship", b =>
                 {
+                    b.HasOne("StudyAbroad.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("LastEditedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_scholarships_users_last_edited_by_user_id");
+
                     b.HasOne("StudyAbroad.Domain.Entities.University", null)
                         .WithMany()
                         .HasForeignKey("UniversityId")
