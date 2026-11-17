@@ -7,6 +7,7 @@ import type {
   RegisterRequest,
   ResendOtpRequest,
   ResetPasswordRequest,
+  RestoreAccountRequest,
   UpdateProfileRequest,
   UserDto,
   AdminUserAccountListQuery,
@@ -181,6 +182,19 @@ export const authApi = {
   updateMe: (data: UpdateProfileRequest) =>
     apiFetch<{ message: string; user: UserDto }>("/api/v1/auth/me", {
       method: "PUT",
+      body: JSON.stringify(data),
+    }),
+
+  // [UC-80] Tự xóa tài khoản (học sinh, phụ huynh): khóa ngay, xóa hẳn sau 30 ngày; server xóa luôn cookie phiên
+  deleteMe: () =>
+    apiFetch<{ message: string }>("/api/v1/auth/me", {
+      method: "DELETE",
+    }),
+
+  // [UC-80] Khôi phục tài khoản đang chờ xóa bằng mã nhận lúc đăng nhập; thành công thì server đăng nhập luôn
+  restore: (data: RestoreAccountRequest) =>
+    apiFetch<AuthResponse>("/api/v1/auth/restore", {
+      method: "POST",
       body: JSON.stringify(data),
     }),
 

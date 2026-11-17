@@ -13,6 +13,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AcademicSummaryCard, hasCompleteAcademicProfile } from "@/components/account/AcademicSummaryCard";
 import { ChangePasswordCard } from "@/components/account/ChangePasswordCard";
+import { DeleteAccountCard } from "@/components/account/DeleteAccountCard";
 import { ParentLinksCard } from "@/components/account/ParentLinksCard";
 import { PersonalInfoCard } from "@/components/account/PersonalInfoCard";
 import { SentLeadsCard } from "@/components/account/SentLeadsCard";
@@ -260,7 +261,13 @@ export function AccountView() {
             {activeSection === "academic" && <AcademicSummaryCard profile={profile} isLoading={isLoadingProfile} />}
             {activeSection === "parent-links" && <ParentLinksCard />}
             {activeSection === "sent-leads" && <SentLeadsCard />}
-            {activeSection === "password" && <ChangePasswordCard />}
+            {activeSection === "password" && (
+              <div className="space-y-6">
+                <ChangePasswordCard />
+                {/* [UC-80] Chỉ học sinh, phụ huynh được tự xóa tài khoản */}
+                {isStudentOrParent && <DeleteAccountCard />}
+              </div>
+            )}
           </section>
         </div>
       </div>

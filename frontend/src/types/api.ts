@@ -381,6 +381,19 @@ export interface AuthResponse {
   user: UserDto;
 }
 
+// [UC-80] Khôi phục tài khoản đang chờ xóa
+export interface RestoreAccountRequest {
+  email: string;
+  restoreToken: string;
+}
+
+/** [UC-80] Phần mở rộng của lỗi 403 khi đăng nhập vào tài khoản đang chờ xóa */
+export interface PendingDeletionProblem {
+  code: "account_pending_deletion";
+  deletionDate: string;
+  restoreToken: string;
+}
+
 export interface RegisterRequest {
   email: string;
   password: string;
