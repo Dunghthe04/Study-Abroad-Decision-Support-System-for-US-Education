@@ -32,7 +32,7 @@ public class ChatGoalSeekTests
     [InlineData("CONTROL")]
     public void NextSteps_ForAProfileFilter_SendsTheStudentToEditTheProfile(string reason)
     {
-        var step = Assert.Single(ChatGoalSeek.NextSteps(Excluded(reason)));
+        var step = Assert.Single(ChatNextSteps.GoalSeekFixes(Excluded(reason)));
 
         Assert.Equal("Sửa hồ sơ", step.Label);
         Assert.Equal("/analysis?edit=1", step.Href);
@@ -48,7 +48,7 @@ public class ChatGoalSeekTests
     {
         var english = new GoalEnglishDto((decimal?)ielts, toefl, duolingo, 1m);
 
-        var step = Assert.Single(ChatGoalSeek.NextSteps(Excluded("ENGLISH", english)));
+        var step = Assert.Single(ChatNextSteps.GoalSeekFixes(Excluded("ENGLISH", english)));
 
         Assert.Equal((label, value), (step.Label, step.Value));
         Assert.Null(step.Href);
@@ -57,8 +57,8 @@ public class ChatGoalSeekTests
     [Fact]
     public void NextSteps_ForEnglishWithoutAPublishedMinimum_OffersNothing()
     {
-        Assert.Empty(ChatGoalSeek.NextSteps(Excluded("ENGLISH_NO_CERT", new GoalEnglishDto(null, null, null, null))));
-        Assert.Empty(ChatGoalSeek.NextSteps(Excluded("ENGLISH")));
+        Assert.Empty(ChatNextSteps.GoalSeekFixes(Excluded("ENGLISH_NO_CERT", new GoalEnglishDto(null, null, null, null))));
+        Assert.Empty(ChatNextSteps.GoalSeekFixes(Excluded("ENGLISH")));
     }
 
     [Fact]
@@ -66,7 +66,7 @@ public class ChatGoalSeekTests
     {
         var budget = new GoalBudgetDto("over_budget", 62_000m, 40_000m, 56_364.5m, 22_000m, null);
 
-        var step = Assert.Single(ChatGoalSeek.NextSteps(Excluded("BUDGET", budget: budget)));
+        var step = Assert.Single(ChatNextSteps.GoalSeekFixes(Excluded("BUDGET", budget: budget)));
 
         Assert.Equal("Thử ngân sách 56.365 USD", step.Label);
         Assert.Equal("Nếu ngân sách của em là 56365 USD mỗi năm thì sao?", step.Value);
@@ -75,7 +75,25 @@ public class ChatGoalSeekTests
     [Fact]
     public void NextSteps_ForASchoolThatIsInTheList_OffersNothing()
     {
-        Assert.Empty(ChatGoalSeek.NextSteps(Result()));
+        Assert.Empty(ChatNextSteps.GoalSeekFixes(Result()));
+    }
+
+    [Fact]
+    public void AfterGoalSeek_ForASchoolThatIsInTheList_OffersToExplainIt_ThenTheCenter()
+    {
+        var steps = ChatNextSteps.AfterGoalSeek(Result());
+
+        Assert.Equal(["Giải thích trường này", ChatNextSteps.CenterLabel], steps.Select(s => s.Label));
+        Assert.Equal(ChatExplanation.Action, steps[0].Action?.Type);
+        Assert.Equal("188429", steps[0].Action?.SchoolCode);
+    }
+
+    [Fact]
+    public void AfterGoalSeek_ForAnExcludedSchool_OffersTheFix_ThenTheCenter()
+    {
+        var steps = ChatNextSteps.AfterGoalSeek(Excluded("MAJOR"));
+
+        Assert.Equal(["Sửa hồ sơ", ChatNextSteps.CenterLabel], steps.Select(s => s.Label));
     }
 
     // ---------------------------------------------------------------- đọc câu hỏi

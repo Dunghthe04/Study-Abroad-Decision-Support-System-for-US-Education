@@ -223,35 +223,6 @@ public static class ChatSchoolInfo
         return new Widget(SearchWidgetType, System.Text.Json.JsonSerializer.SerializeToElement(data));
     }
 
-    /// <summary>
-    /// Nút bước tiếp theo sau danh sách: so sánh hai trường đầu (chạy theo mã, không qua model), rồi gợi ý trường theo hồ sơ riêng.
-    /// Danh sách ngắn hơn hai trường thì không có nút so sánh.
-    /// </summary>
-    public static IReadOnlyList<QuickReply> SearchNextSteps(SchoolSearchResult result, SchoolSort sort = SchoolSort.Quality)
-    {
-        var steps = new List<QuickReply>();
-        // Đang xếp theo tiền: cho học sinh đổi cách tính giữa "chỉ học phí" và "tổng chi phí cả ăn ở, sinh hoạt" (cùng chiều cao/thấp)
-        if (sort is SchoolSort.LowestTuition or SchoolSort.HighestTuition)
-        {
-            var dir = sort == SchoolSort.HighestTuition ? "cao đến thấp" : "thấp đến cao";
-            steps.Add(new QuickReply("Tính cả ăn ở, sinh hoạt", $"Xếp theo tổng chi phí cả ăn ở, sinh hoạt {dir}"));
-        }
-        else if (sort is SchoolSort.LowestCost or SchoolSort.HighestCost)
-        {
-            var dir = sort == SchoolSort.HighestCost ? "cao đến thấp" : "thấp đến cao";
-            steps.Add(new QuickReply("Chỉ tính học phí", $"Xếp theo học phí {dir}"));
-        }
-        if (result.Items.Count >= 2)
-        {
-            var (a, b) = (result.Items[0], result.Items[1]);
-            steps.Add(new QuickReply(
-                "So sánh hai trường đầu", $"So sánh {a.Name} và {b.Name}",
-                new ChatAction(CompareAction, SchoolCodes: [a.Code, b.Code], Question: $"So sánh {a.Name} và {b.Name}")));
-        }
-        steps.Add(new QuickReply("Gợi ý trường theo hồ sơ của em", "Gợi ý trường phù hợp với hồ sơ của em"));
-        return steps;
-    }
-
     private static string SortLabel(SchoolSort sort) => sort switch
     {
         SchoolSort.LowestCost => "tổng chi phí (gồm ăn ở, sinh hoạt) thấp đến cao",
@@ -823,17 +794,6 @@ public static class ChatSchoolInfo
             data["coveredText"] = coveredText;
         return new Widget(WidgetType, System.Text.Json.JsonSerializer.SerializeToElement(data));
     }
-
-    /// <summary>Nút hỏi tiếp sau bản tóm tắt: mỗi nút gửi một câu hỏi đầy đủ về đúng trường đó.</summary>
-    public static IReadOnlyList<QuickReply> FieldButtons(string schoolName) =>
-    [
-        new("Học phí", $"Học phí {schoolName} bao nhiêu?"),
-        new("Học bổng", $"{schoolName} có học bổng cho du học sinh không?"),
-        new("Tiếng Anh cần", $"{schoolName} cần IELTS bao nhiêu?"),
-        new("Hạn nộp", $"Hạn nộp hồ sơ của {schoolName} là khi nào?"),
-        new("GPA", $"GPA của sinh viên trúng tuyển {schoolName} là bao nhiêu?"),
-        new("Xếp hạng", $"{schoolName} xếp hạng bao nhiêu?"),
-    ];
 
     /// <summary>Câu mở khi đã biết trường nhưng không rõ học sinh muốn biết mục nào: tóm tắt rồi để học sinh chọn mục.</summary>
     public static string NoTopicLead(string schoolName) =>
