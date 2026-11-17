@@ -4,7 +4,7 @@ using StudyAbroad.Domain.Entities;
 
 namespace StudyAbroad.Application.StudyCenters;
 
-/// <summary>[UC-57] Lý do gỡ đánh giá (không bắt buộc, tối đa 500 ký tự), lưu vào nhật ký.</summary>
+/// <summary>[UC-57] Lý do gỡ đánh giá (bắt buộc, tối đa 500 ký tự), lưu vào nhật ký.</summary>
 public record RemoveCenterReviewRequest(string? Reason = null);
 
 /// <summary>[UC-57] Kết quả gỡ: đánh giá và trạng thái mới (<c>removed</c>).</summary>
@@ -46,8 +46,11 @@ public class CenterReviewModerationService(
         if (centerId == Guid.Empty || reviewId == Guid.Empty)
             throw new ArgumentException("Mã trung tâm hoặc mã đánh giá không hợp lệ.");
 
-        var trimmedReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
-        if (trimmedReason is { Length: > MaxReasonLength })
+        // Jira UC-57: gỡ đánh giá phải kèm lý do
+        var trimmedReason = reason?.Trim();
+        if (string.IsNullOrEmpty(trimmedReason))
+            throw new ArgumentException("Vui lòng nhập lý do gỡ đánh giá.");
+        if (trimmedReason.Length > MaxReasonLength)
             throw new ArgumentException($"Lý do gỡ tối đa {MaxReasonLength} ký tự.");
 
         var review = await reviews.GetForUpdateAsync(centerId, reviewId, ct)

@@ -82,7 +82,7 @@ export function CenterReviewList({
   };
 
   const confirmRemove = async () => {
-    if (!removeTarget || !centerId || isRemoving) return;
+    if (!removeTarget || !centerId || isRemoving || removeReason.trim().length === 0) return;
     setIsRemoving(true);
     try {
       await studyCentersApi.removeReview(centerId, removeTarget.id, removeReason);
@@ -162,7 +162,7 @@ export function CenterReviewList({
           <AlertDialogHeader>
             <AlertDialogTitle>Gỡ đánh giá này?</AlertDialogTitle>
             <AlertDialogDescription>
-              Đánh giá sẽ biến khỏi danh sách công khai và không còn tính vào điểm trung bình. Việc gỡ được ghi nhật ký.
+              Đánh giá sẽ biến khỏi danh sách công khai và không còn tính vào điểm trung bình. Việc gỡ được ghi nhật ký kèm lý do.
             </AlertDialogDescription>
           </AlertDialogHeader>
           {removeTarget && (
@@ -176,13 +176,14 @@ export function CenterReviewList({
             maxLength={500}
             rows={2}
             disabled={isRemoving}
-            placeholder="Lý do gỡ (không bắt buộc, tối đa 500 ký tự)"
+            placeholder="Lý do gỡ (bắt buộc, tối đa 500 ký tự)"
+            required
             aria-label="Lý do gỡ đánh giá"
             className="text-sm resize-y"
           />
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isRemoving}>Hủy</AlertDialogCancel>
-            <Button type="button" variant="destructive" onClick={() => void confirmRemove()} disabled={isRemoving} className="gap-1.5">
+            <Button type="button" variant="destructive" onClick={() => void confirmRemove()} disabled={isRemoving || removeReason.trim().length === 0} className="gap-1.5">
               {isRemoving ? <Spinner className="size-3.5" /> : <Trash2Icon className="size-3.5" />}
               Gỡ đánh giá
             </Button>

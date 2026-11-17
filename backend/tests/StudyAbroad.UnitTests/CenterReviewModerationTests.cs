@@ -90,7 +90,7 @@ public class CenterReviewModerationTests
         var review = NewReview(centerId, "hidden");
         repo.Reviews.Add(review);
 
-        await service.RemoveAsync(Guid.NewGuid(), centerId, review.Id, null);
+        await service.RemoveAsync(Guid.NewGuid(), centerId, review.Id, "Vi phạm quy tắc");
 
         Assert.Equal("removed", review.Status);
     }
@@ -103,7 +103,7 @@ public class CenterReviewModerationTests
         var review = NewReview(centerId, "removed");
         repo.Reviews.Add(review);
 
-        var result = await service.RemoveAsync(Guid.NewGuid(), centerId, review.Id, null);
+        var result = await service.RemoveAsync(Guid.NewGuid(), centerId, review.Id, "Vi phạm quy tắc");
 
         Assert.Equal("removed", result.Status);
         Assert.Empty(audit.Logs);
@@ -117,7 +117,7 @@ public class CenterReviewModerationTests
         var review = NewReview(Guid.NewGuid());
         repo.Reviews.Add(review);
 
-        await Assert.ThrowsAsync<KeyNotFoundException>(() => service.RemoveAsync(Guid.NewGuid(), Guid.NewGuid(), review.Id, null));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => service.RemoveAsync(Guid.NewGuid(), Guid.NewGuid(), review.Id, "Vi phạm quy tắc"));
 
         Assert.Equal("visible", review.Status);
         Assert.Empty(audit.Logs);
@@ -128,7 +128,7 @@ public class CenterReviewModerationTests
     {
         var (service, _, _) = Create();
 
-        await Assert.ThrowsAsync<KeyNotFoundException>(() => service.RemoveAsync(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), null));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => service.RemoveAsync(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "Vi phạm quy tắc"));
     }
 
     [Fact]
@@ -139,25 +139,29 @@ public class CenterReviewModerationTests
         var review = NewReview(centerId);
         repo.Reviews.Add(review);
 
-        await Assert.ThrowsAsync<ArgumentException>(() => service.RemoveAsync(Guid.NewGuid(), Guid.Empty, review.Id, null));
-        await Assert.ThrowsAsync<ArgumentException>(() => service.RemoveAsync(Guid.NewGuid(), centerId, Guid.Empty, null));
+        await Assert.ThrowsAsync<ArgumentException>(() => service.RemoveAsync(Guid.NewGuid(), Guid.Empty, review.Id, "Vi phạm quy tắc"));
+        await Assert.ThrowsAsync<ArgumentException>(() => service.RemoveAsync(Guid.NewGuid(), centerId, Guid.Empty, "Vi phạm quy tắc"));
         await Assert.ThrowsAsync<ArgumentException>(() =>
             service.RemoveAsync(Guid.NewGuid(), centerId, review.Id, new string('a', CenterReviewModerationService.MaxReasonLength + 1)));
         Assert.Equal("visible", review.Status);
     }
 
     [Fact]
-    public async Task Remove_BlankReason_IsStoredAsNull()
+    public async Task Remove_MissingOrBlankReason_IsRejectedAndChangesNothing()
     {
         var (service, repo, audit) = Create();
         var centerId = Guid.NewGuid();
         var review = NewReview(centerId);
         repo.Reviews.Add(review);
 
-        await service.RemoveAsync(Guid.NewGuid(), centerId, review.Id, "   ");
+        foreach (var reason in new string?[] { null, "", "   " })
+        {
+            var ex = await Assert.ThrowsAsync<ArgumentException>(() => service.RemoveAsync(Guid.NewGuid(), centerId, review.Id, reason));
+            Assert.Contains("lý do", ex.Message);
+        }
 
-        using var detail = JsonDocument.Parse(Assert.Single(audit.Logs).DetailJson!);
-        Assert.Equal(JsonValueKind.Null, detail.RootElement.GetProperty("reason").ValueKind);
+        Assert.Equal("visible", review.Status);
+        Assert.Empty(audit.Logs);
     }
 
     // ---- controller

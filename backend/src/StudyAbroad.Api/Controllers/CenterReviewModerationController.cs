@@ -13,7 +13,7 @@ namespace StudyAbroad.Api.Controllers;
 public class CenterReviewModerationController(ICenterReviewModerationService service) : ControllerBase
 {
     /// <summary>
-    /// Gỡ một đánh giá (kèm lý do tùy chọn tối đa 500 ký tự). Đánh giá biến khỏi danh sách công khai và điểm trung bình, có nhật ký.
+    /// Gỡ một đánh giá kèm lý do bắt buộc (tối đa 500 ký tự). Đánh giá biến khỏi danh sách công khai và điểm trung bình, có nhật ký.
     /// Đánh giá của trung tâm khác trả 404; gỡ lặp lại không đổi gì.
     /// </summary>
     [HttpPost("remove")]
