@@ -4,9 +4,9 @@ import {
   BuildingIcon,
   ClipboardCheckIcon,
   CreditCardIcon,
+  GraduationCapIcon,
   LayoutDashboardIcon,
   MailWarningIcon,
-  MessageSquareWarningIcon,
   MessagesSquareIcon,
   SchoolIcon,
   SlidersHorizontalIcon,
@@ -55,9 +55,17 @@ export const ADMIN_NAV: AdminNavItem[] = [
     useCases: ["UC-65", "UC-66", "UC-67", "UC-84"],
   },
   {
+    href: "/admin/scholarships",
+    label: "Học bổng",
+    description: "Moderator nhập, sửa, ẩn hoặc hiện học bổng; Admin chỉ xem danh sách và chi tiết",
+    icon: GraduationCapIcon,
+    roles: ["admin", "moderator"],
+    useCases: ["UC-109"],
+  },
+  {
     href: "/admin/knowledge",
     label: "Tri thức",
-    description: "Quản lý dữ liệu huấn luyện SLM: duyệt, sửa, nhập từ Excel và xuất JSONL",
+    description: "Quản lý dữ liệu huấn luyện SLM: duyệt, sửa và nhập từ Excel có xem trước",
     icon: BookOpenIcon,
     roles: ["admin", "moderator"],
     useCases: ["UC-51", "UC-52", "UC-53"],
@@ -82,11 +90,11 @@ export const ADMIN_NAV: AdminNavItem[] = [
   {
     href: "/admin/parameters",
     label: "Tham số hệ thống",
-    description: "Bảng quy đổi điểm, ngưỡng gợi ý, tỷ giá và luật tư vấn",
+    description: "Bảng quy đổi điểm, tỷ giá và căn cứ tham số thuật toán gợi ý",
     icon: SlidersHorizontalIcon,
-    // Moderator vào để sửa bảng quy đổi điểm (UC-68); admin chỉ xem bảng này
+    // Moderator vào để sửa bảng quy đổi điểm (UC-68); admin chỉ xem bảng này. Tham số thuật toán (UC-89, gộp UC-69) chỉ xem.
     roles: ["admin", "moderator"],
-    useCases: ["UC-68", "UC-69", "UC-70", "UC-88"],
+    useCases: ["UC-68", "UC-70", "UC-89"],
   },
   {
     href: "/admin/forum",
@@ -111,15 +119,6 @@ export const ADMIN_NAV: AdminNavItem[] = [
     icon: BarChart3Icon,
     roles: ["admin"],
     useCases: ["UC-83", "UC-90"],
-  },
-  {
-    href: "/admin/chat-review",
-    label: "Câu cần xem",
-    description: "Câu hệ thống không trả lời được hoặc bị lỗi, để xem và đánh dấu đã xử lý",
-    icon: MessageSquareWarningIcon,
-    // Quyết định D2 bản 14/11: hàng đợi này là việc nội dung của Moderator, Admin không thấy
-    roles: ["moderator"],
-    useCases: ["UC-53"],
   },
   {
     href: "/admin/review-batches",

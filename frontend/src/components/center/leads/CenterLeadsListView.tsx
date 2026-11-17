@@ -86,6 +86,8 @@ function LeadStatusBadge({ status }: { status: string }) {
   if (status === "new") return <Badge variant="brand">Mới nhận</Badge>;
   if (status === "contacted") return <Badge variant="warn">Đang trao đổi</Badge>;
   if (status === "closed") return <Badge variant="ok">Đã hoàn tất</Badge>;
+  // [UC-80] Người gửi đã xóa tài khoản
+  if (status === "withdrawn") return <Badge variant="neutral">Đã thu hồi</Badge>;
   return null;
 }
 
@@ -268,7 +270,12 @@ export function CenterLeadsListView() {
       label: "Người gửi",
       required: true,
       render: (lead) =>
-        lead.sharedProfile && lead.studentName ? (
+        lead.status === "withdrawn" ? (
+          <span className="text-ink-3 italic flex items-center gap-1 whitespace-nowrap text-xs">
+            <LockIcon className="size-3 shrink-0" />
+            Người dùng đã thu hồi
+          </span>
+        ) : lead.sharedProfile && lead.studentName ? (
           <div>
             <button
               type="button"
@@ -318,7 +325,7 @@ export function CenterLeadsListView() {
             </Button>
           </div>
         ) : (
-          <span className="text-xs text-ink-3">Chưa có</span>
+          <span className="text-xs text-ink-3">{lead.status === "withdrawn" ? "—" : "Chưa có"}</span>
         ),
     },
     {
@@ -598,6 +605,15 @@ export function CenterLeadsListView() {
                 </DialogDescription>
               </DialogHeader>
 
+              {selectedLead.status === "withdrawn" ? (
+                // [UC-80] Người gửi đã xóa tài khoản: ẩn mọi dữ liệu, không trao đổi, không đổi trạng thái
+                <div className="my-2 rounded-lg border border-dashed p-4 text-center bg-muted/20">
+                  <LockIcon className="size-5 text-muted-foreground mx-auto mb-1" />
+                  <p className="text-sm text-muted-foreground leading-relaxed max-w-md mx-auto">
+                    Người dùng đã thu hồi yêu cầu này. Thông tin liên hệ, hồ sơ và tin nhắn không còn hiển thị.
+                  </p>
+                </div>
+              ) : (
               <div className="space-y-5 my-2 min-w-0">
                 {/* Contact Card */}
                 <Card size="sm" className="bg-muted/30">
@@ -844,6 +860,7 @@ export function CenterLeadsListView() {
                   </div>
                 </div>
               </div>
+              )}
 
               <DialogFooter>
                 <Button variant="outline" onClick={() => setSelectedLead(null)}>

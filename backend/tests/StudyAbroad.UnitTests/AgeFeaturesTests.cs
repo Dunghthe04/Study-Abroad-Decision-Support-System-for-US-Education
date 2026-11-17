@@ -72,7 +72,7 @@ public class AgeFeaturesTests
     public void Rules_MatchAgreedPolicy()
     {
         Assert.Equal(new AgeRule(16, ParentConsentUnlocks: true), AgeFeatures.Rules[AgeFeatures.ProcessStudentData]);
-        Assert.Equal(new AgeRule(16, ParentConsentUnlocks: false), AgeFeatures.Rules[AgeFeatures.ShareWithCenter]);
+        Assert.Equal(new AgeRule(16, ParentConsentUnlocks: true), AgeFeatures.Rules[AgeFeatures.ShareWithCenter]);   // [UC-116]
     }
 
     [Theory]
@@ -90,7 +90,7 @@ public class AgeFeaturesTests
 
     [Theory]
     [InlineData(10, false, new[] { AgeFeatures.ProcessStudentData, AgeFeatures.ShareWithCenter })]
-    [InlineData(15, true, new[] { AgeFeatures.ShareWithCenter })]   // phụ huynh đồng ý vẫn không mở ShareWithCenter
+    [InlineData(15, true, new string[0])]   // [UC-116] phụ huynh đồng ý mở cả ShareWithCenter (mỗi lead còn chờ phụ huynh xác nhận)
     [InlineData(16, false, new string[0])]
     [InlineData(17, false, new string[0])]
     [InlineData(18, false, new string[0])]
@@ -128,7 +128,7 @@ public class AgeFeaturesTests
     {
         var dob = Today.AddYears(-16);
         Assert.Null(AgeFeatures.Check(AgeFeatures.ShareWithCenter, UserRoles.Student, dob, Today, false));
-        Assert.NotNull(AgeFeatures.Check(AgeFeatures.ShareWithCenter, UserRoles.Student, dob.AddDays(1), Today, true));
+        Assert.NotNull(AgeFeatures.Check(AgeFeatures.ShareWithCenter, UserRoles.Student, dob.AddDays(1), Today, false));
     }
 
     [Fact]
@@ -197,6 +197,21 @@ public class AgeFeaturesTests
 
         Assert.Equal(expectedStatus, access.ParentConsentStatus);
         Assert.Equal(expectedGroup, access.AgeGroup);
+    }
+
+    // [UC-115] Lời mời quá 7 ngày chưa ai mở: hết hạn, không còn là "đang chờ"
+    [Fact]
+    public async Task Evaluate_ExpiredPendingInvite_NotPending()
+    {
+        var student = AddUser(UserRoles.Student, 14);
+        _links.Links.Add(new ParentStudentLink
+        {
+            StudentUserId = student.Id, ParentEmail = "me@test.com", TokenExpiresAt = DateTime.UtcNow.AddMinutes(-1),
+        });
+
+        var access = await AgeAccess.EvaluateAsync(student, _links, DateTime.UtcNow);
+
+        Assert.Equal(ParentConsentStatuses.None, access.ParentConsentStatus);
     }
 
     [Fact]

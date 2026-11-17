@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using StudyAbroad.Application.Admin.Universities;
 using StudyAbroad.Application.Common;
 using StudyAbroad.Domain.Entities;
@@ -53,10 +54,18 @@ public class AdminUniversityRepository(AppDbContext db) : IAdminUniversityReposi
     public Task<bool> ExistsCodeAsync(string code, CancellationToken ct = default) =>
         db.Universities.AnyAsync(u => u.Code == code, ct);
 
+    public Task<bool> ExistsNameAsync(string name, Guid? excludeUniversityId = null, CancellationToken ct = default)
+    {
+        var lowered = name.ToLower();
+        return db.Universities.AnyAsync(u => u.Name.ToLower() == lowered && u.Id != excludeUniversityId, ct);
+    }
+
     public void AddUniversity(University university) => db.Universities.Add(university);
 
     public Task<University?> GetUniversityAsync(Guid universityId, CancellationToken ct = default) =>
         db.Universities.FirstOrDefaultAsync(u => u.Id == universityId, ct);
+
+    public void AddOffering(UniversityOffering offering) => db.UniversityOfferings.Add(offering);
 
     public async Task<IReadOnlyList<UniversityOffering>> ListOfferingsAsync(Guid universityId, CancellationToken ct = default) =>
         await db.UniversityOfferings.AsNoTracking()
@@ -97,7 +106,22 @@ public class AdminUniversityRepository(AppDbContext db) : IAdminUniversityReposi
 
     public void RemoveMajorLink(UniversityOfferingMajor link) => db.UniversityOfferingMajors.Remove(link);
 
+    public void AddAudit(AuditLog entry) => db.AuditLogs.Add(entry);
+
     public Task SaveChangesAsync(CancellationToken ct = default) => db.SaveChangesAsync(ct);
+
+    public async Task<bool> TrySaveAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            await db.SaveChangesAsync(ct);
+            return true;
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            return false;
+        }
+    }
 
     public async Task<IReadOnlyList<Media>> GetUniversityMediaAsync(Guid universityId, CancellationToken ct = default) =>
         await db.Media.AsNoTracking()

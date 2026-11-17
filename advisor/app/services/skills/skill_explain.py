@@ -12,6 +12,13 @@ from typing import Any
 from app.schemas.chat import ChatState, QuickReply, ResultSchool
 from app.services.chat_flow import SkillOutput
 from app.services.explainer import GROUP_LABEL
+from app.services.replies import (
+    EXPLAIN_ASK_SCHOOL,
+    EXPLAIN_BUTTON_VALUE,
+    EXPLAIN_NO_LIST,
+    EXPLAIN_WORKING,
+    MENU,
+)
 from app.services.skill_call import SKILLS_DIR, SkillCall
 
 logger = logging.getLogger("advisor.explain")
@@ -25,9 +32,9 @@ PICK_SCHEMA = {
 
 EXPLAIN_ACTION = "explain"
 # .NET thay câu này bằng lời tư vấn thật; giữ lại để lượt chat luôn có câu trả lời nếu .NET không xử lý được
-WORKING = "Mình xem trường {name} giúp bạn nhé."
-ASK_SCHOOL = "Bạn muốn mình giải thích trường nào trong danh sách?"
-NO_LIST = "Mình chưa có danh sách trường gợi ý nào để giải thích. Bạn cho mình gợi ý trường trước nhé."
+WORKING = EXPLAIN_WORKING
+ASK_SCHOOL = EXPLAIN_ASK_SCHOOL
+NO_LIST = EXPLAIN_NO_LIST
 MAX_BUTTONS = 6  # danh sách có thể 20 trường, nút chỉ hiện vài trường đầu
 
 
@@ -106,7 +113,8 @@ def match_by_name(message: str, schools: list[ResultSchool]) -> ResultSchool | N
 
 def school_buttons(schools: list[ResultSchool]) -> list[QuickReply]:
     return [
-        QuickReply(label=s.name, value=f"Giải thích giúp mình trường {s.name}") for s in schools[:MAX_BUTTONS]
+        QuickReply(label=s.name, value=EXPLAIN_BUTTON_VALUE.format(name=s.name))
+        for s in schools[:MAX_BUTTONS]
     ]
 
 
@@ -117,7 +125,9 @@ class ExplainHandler:
     async def run(self, state: ChatState, message: str) -> SkillOutput:
         schools = state.schools
         if not schools:
-            return SkillOutput(NO_LIST)
+            return SkillOutput(
+                NO_LIST, quick_replies=[MENU["schools"].model_copy(), MENU["assess"].model_copy()]
+            )
 
         # Tên đầy đủ trong danh sách đang hiện, rồi vị trí (chỉ đếm trong danh sách đang hiện), rồi tên trong các trường còn lại
         # (trường đã chấm nhưng không nằm trong khối nào, ví dụ vì mỗi nhóm chỉ hiện vài trường)

@@ -18,6 +18,8 @@ public interface IProfileFileStorageService
     /// <summary>Xoá 1 tệp bảng điểm chính thức của user (bản cũ khi xác nhận hồ sơ mới).</summary>
     Task DeleteTranscriptFileAsync(Guid userId, string? transcriptRelativePath, CancellationToken ct = default);
     Task DeleteDraftFilesAsync(Guid userId, CancellationToken ct = default);
+    /// <summary>[UC-80] Xoá toàn bộ tệp của user (nháp và bảng điểm chính thức) khi xóa hẳn tài khoản. Lỗi thì ném ra để nơi gọi ghi log.</summary>
+    Task DeleteAllUserFilesAsync(Guid userId, CancellationToken ct = default);
 }
 
 /// <summary>Giới hạn tệp bảng điểm dùng chung cho controller (chặn sớm) và storage (chặn lần cuối).</summary>

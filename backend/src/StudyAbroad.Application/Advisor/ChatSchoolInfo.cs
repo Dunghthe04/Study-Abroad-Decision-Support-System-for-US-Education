@@ -130,7 +130,8 @@ public static class ChatSchoolInfo
 
     /// <summary>Dữ liệu tìm trường: Question là câu hỏi, Filters là bộ lọc advisor đã chuẩn hóa, Sort là cách xếp, Unresolved là điều chưa đọc được, KbAnswer là câu tạm.</summary>
     public record SearchQuery(
-        string Question, SchoolSearchFilters Filters, SchoolSort Sort, IReadOnlyList<string> Unresolved, string? KbAnswer);
+        string Question, SchoolSearchFilters Filters, SchoolSort Sort, IReadOnlyList<string> Unresolved, string? KbAnswer,
+        bool SortGiven = false);
 
     public static SearchQuery? ParseSearch(System.Text.Json.JsonElement? data)
     {
@@ -155,11 +156,17 @@ public static class ChatSchoolInfo
         var sort = Str("sort")?.ToLowerInvariant() switch
         {
             "lowestcost" => SchoolSort.LowestCost,
+            "highestcost" => SchoolSort.HighestCost,
+            "lowesttuition" => SchoolSort.LowestTuition,
+            "highesttuition" => SchoolSort.HighestTuition,
             "easiestadmission" => SchoolSort.EasiestAdmission,
             "mostselective" => SchoolSort.MostSelective,
+            "mostaid" => SchoolSort.MostAid,
             _ => SchoolSort.Quality,
         };
-        return new SearchQuery(Str("question") ?? "", filters, sort, unresolved, Str("kb_answer"));
+        // model_sort có mặt = học sinh nói rõ muốn xếp theo gì ("trường nào rẻ nhất"): tìm được dù không có điều kiện lọc
+        var sortGiven = d.TryGetProperty("model_sort", out var ms) && ms.ValueKind == System.Text.Json.JsonValueKind.String;
+        return new SearchQuery(Str("question") ?? "", filters, sort, unresolved, Str("kb_answer"), sortGiven);
     }
 
     /// <summary>Có ít nhất một điều kiện lọc không (nếu không thì không có gì để tìm).</summary>
@@ -208,6 +215,9 @@ public static class ChatSchoolInfo
             ["sortLabel"] = SortLabel(sort),
             ["visible"] = SearchTextItems,
             ["items"] = System.Text.Json.JsonSerializer.SerializeToNode(result.Items, WebJson),
+            // Điều kiện và cách xếp đã dùng, để nút "Xem tất cả" mở trang danh sách trường với đúng bộ lọc này
+            ["filters"] = System.Text.Json.JsonSerializer.SerializeToNode(filters, WebJson),
+            ["sort"] = char.ToLowerInvariant(sort.ToString()[0]) + sort.ToString()[1..],
             ["coveredText"] = coveredText,
         };
         return new Widget(SearchWidgetType, System.Text.Json.JsonSerializer.SerializeToElement(data));
@@ -217,9 +227,20 @@ public static class ChatSchoolInfo
     /// Nút bước tiếp theo sau danh sách: so sánh hai trường đầu (chạy theo mã, không qua model), rồi gợi ý trường theo hồ sơ riêng.
     /// Danh sách ngắn hơn hai trường thì không có nút so sánh.
     /// </summary>
-    public static IReadOnlyList<QuickReply> SearchNextSteps(SchoolSearchResult result)
+    public static IReadOnlyList<QuickReply> SearchNextSteps(SchoolSearchResult result, SchoolSort sort = SchoolSort.Quality)
     {
         var steps = new List<QuickReply>();
+        // Đang xếp theo tiền: cho học sinh đổi cách tính giữa "chỉ học phí" và "tổng chi phí cả ăn ở, sinh hoạt" (cùng chiều cao/thấp)
+        if (sort is SchoolSort.LowestTuition or SchoolSort.HighestTuition)
+        {
+            var dir = sort == SchoolSort.HighestTuition ? "cao đến thấp" : "thấp đến cao";
+            steps.Add(new QuickReply("Tính cả ăn ở, sinh hoạt", $"Xếp theo tổng chi phí cả ăn ở, sinh hoạt {dir}"));
+        }
+        else if (sort is SchoolSort.LowestCost or SchoolSort.HighestCost)
+        {
+            var dir = sort == SchoolSort.HighestCost ? "cao đến thấp" : "thấp đến cao";
+            steps.Add(new QuickReply("Chỉ tính học phí", $"Xếp theo học phí {dir}"));
+        }
         if (result.Items.Count >= 2)
         {
             var (a, b) = (result.Items[0], result.Items[1]);
@@ -233,7 +254,11 @@ public static class ChatSchoolInfo
 
     private static string SortLabel(SchoolSort sort) => sort switch
     {
-        SchoolSort.LowestCost => "chi phí thấp đến cao",
+        SchoolSort.LowestCost => "tổng chi phí (gồm ăn ở, sinh hoạt) thấp đến cao",
+        SchoolSort.HighestCost => "tổng chi phí (gồm ăn ở, sinh hoạt) cao đến thấp",
+        SchoolSort.LowestTuition => "học phí thấp đến cao",
+        SchoolSort.HighestTuition => "học phí cao đến thấp",
+        SchoolSort.MostAid => "học bổng trung bình cho du học sinh lớn đến nhỏ",
         SchoolSort.EasiestAdmission => "tỷ lệ nhận cao đến thấp (dễ vào trước)",
         SchoolSort.MostSelective => "tỷ lệ nhận thấp đến cao (chọn lọc trước)",
         _ => "xếp hạng (chất lượng) cao đến thấp",
@@ -280,24 +305,34 @@ public static class ChatSchoolInfo
                 text += " " + string.Join(" ", result.Relaxed.Take(3).Select(r => $"Nếu bỏ điều kiện {FilterName(r.Filter)} thì có {r.Total} trường."));
             return text;
         }
-        var lines = new List<string> { $"Có {result.Total} trường {summary}. Xếp theo {SortLabel(sort)}." };
+        var what = summary.Length > 0 ? $"{result.Total} trường {summary}" : $"{result.Total} trường";
+        var lines = new List<string> { $"Có {what}. Xếp theo {SortLabel(sort)}." };
         var shown = result.Items.Take(SearchTextItems).ToList();
         for (var i = 0; i < shown.Count; i++)
-            lines.Add($"{i + 1}. {SearchLine(shown[i])}");
+            lines.Add($"{i + 1}. {SearchLine(shown[i], sort)}");
         if (result.Total > shown.Count)
             lines.Add($"Và {result.Total - shown.Count} trường khác.");
         return string.Join("\n", lines);
     }
 
-    private static string SearchLine(SchoolSearchItem s)
+    private static string SearchLine(SchoolSearchItem s, SchoolSort sort = SchoolSort.Quality)
     {
         var place = string.Join(", ", new[] { s.City, s.State }.Where(x => !string.IsNullOrWhiteSpace(x)));
         var control = ControlText(s.Control);
         var head = string.Join(", ", new[] { place, control }.Where(x => x.Length > 0));
         var facts = new List<string>();
-        facts.Add(s.CostUsd is { } c ? $"chi phí {Money(c)} USD" : "chưa có chi phí");
+        if (sort is SchoolSort.LowestTuition or SchoolSort.HighestTuition or SchoolSort.LowestCost or SchoolSort.HighestCost)
+        {
+            // Xếp theo tiền: nói cả hai số để không nhầm (học phí chỉ là một phần của tổng chi phí)
+            facts.Add(s.TuitionUsd is { } t ? $"học phí {Money(t)} USD" : "chưa có học phí");
+            facts.Add(s.CostUsd is { } total ? $"tổng chi phí {Money(total)} USD (gồm ăn ở, sinh hoạt)" : "chưa có tổng chi phí");
+        }
+        else
+            facts.Add(s.CostUsd is { } c ? $"chi phí {Money(c)} USD" : "chưa có chi phí");
         if (s.AcceptRate is { } r) facts.Add($"tỷ lệ nhận {Pct(r)}");
         if (s.BestRank is { } rank) facts.Add($"hạng #{rank}");
+        if (sort == SchoolSort.MostAid)
+            facts.Add(s.AidAvgUsd is { } aid ? $"học bổng trung bình {Money(aid)} USD" : "chưa có số liệu học bổng");
         return $"{s.Name}" + (head.Length > 0 ? $" ({head})" : "") + $": {string.Join(" · ", facts)}";
     }
 

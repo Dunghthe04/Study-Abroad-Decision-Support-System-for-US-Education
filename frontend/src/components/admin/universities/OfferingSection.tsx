@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
-import { findNotNumbers, numberOrNull, textOrNull, toInputValue } from "@/lib/admin-form";
+import { findNotNumbers, numberOrNull, textOrNull, toInputValue, todayIso } from "@/lib/admin-form";
 import { AdminFormError, getAdminMajors, updateAdminOffering } from "@/lib/admin-university-api";
 import {
   SAT_POLICY_OPTIONS,
@@ -228,7 +228,8 @@ export function OfferingSection({
       onSaved(saved);
     } catch (err) {
       if (err instanceof AdminFormError) {
-        setError(err.message);
+        const missingSource = editingTable !== "source" && (err.fieldErrors.sourceUrl || err.fieldErrors.retrievedAt);
+        setError(missingSource ? "Bậc học này chưa có nguồn hoặc ngày lấy hợp lệ. Sửa bảng Nguồn dữ liệu trước." : err.message);
         setFieldErrors(err.fieldErrors);
       } else {
         setError("Không thể lưu. Vui lòng thử lại sau.");
@@ -384,7 +385,7 @@ export function OfferingSection({
     const idPrefix = `offering-${offering.id}`;
     return [
       {
-        label: "Liên kết nguồn",
+        label: "Liên kết nguồn *",
         inputId: `${idPrefix}-source`,
         error: fieldErrors.sourceUrl,
         value: (
@@ -400,13 +401,14 @@ export function OfferingSection({
         ),
       },
       {
-        label: "Ngày lấy dữ liệu",
+        label: "Ngày lấy dữ liệu *",
         inputId: `${idPrefix}-retrieved`,
         error: fieldErrors.retrievedAt,
         value: (
           <Input
             id={`${idPrefix}-retrieved`}
             type="date"
+            max={todayIso()}
             value={form.retrievedAt}
             onChange={(e) => setForm({ ...form, retrievedAt: e.target.value })}
             aria-invalid={Boolean(fieldErrors.retrievedAt) || undefined}

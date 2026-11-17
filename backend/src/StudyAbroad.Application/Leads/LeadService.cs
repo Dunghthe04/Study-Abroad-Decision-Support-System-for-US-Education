@@ -17,7 +17,8 @@ public class LeadService(
     IStudyCenterRepository studyCenters,
     IUserRepository users,
     IParentLinkRepository parentLinks,
-    IAuditLogRepository? auditLogs = null) : ILeadService
+    IAuditLogRepository? auditLogs = null,
+    IEmailSender? emailSender = null) : ILeadService
 {
     public const int MaxMessageLength = 2000;
     public const int MaxReplyMessageLength = 4000;
@@ -32,6 +33,13 @@ public class LeadService(
     {
         "new", "contacted", "closed"
     };
+
+    /// <summary>[UC-80] Người gửi đã xóa tài khoản: lead bị thu hồi, không ai trao đổi hay đổi trạng thái được nữa.</summary>
+    private static void EnsureNotWithdrawn(Lead lead)
+    {
+        if (string.Equals(lead.Status, LeadStatuses.Withdrawn, StringComparison.OrdinalIgnoreCase))
+            throw new LeadRuleException("lead_withdrawn", 400, "Yêu cầu đã được người gửi thu hồi, không thể tiếp tục trao đổi.");
+    }
 
     private async Task<(Guid? CenterId, string? CenterName)> ResolveCenterScopeAsync(
         Guid userId,
@@ -69,7 +77,8 @@ public class LeadService(
         var (centerId, centerName) = await ResolveCenterScopeAsync(userId, userEmail, userRole, null, ct);
 
         var lead = await leads.GetLeadForUpdateAsync(leadId, ct);
-        if (lead is null)
+        // [UC-116] Lead chờ phụ huynh / bị từ chối / hết hạn: trung tâm chưa nhận, báo như không tồn tại
+        if (lead is null || LeadStatuses.IsHiddenFromCenter(lead.Status))
             throw new KeyNotFoundException("Không tìm thấy yêu cầu liên hệ.");
 
         // [Chống IDOR] Trung tâm chỉ được đọc/trả lời các yêu cầu gửi tới đúng trung tâm mình
@@ -137,11 +146,17 @@ public class LeadService(
         }
 
         // 3. Kiểm tra tuổi, chỉ khi học sinh tự gửi (phụ huynh gửi thay con dưới 16 vẫn được)
+        var needsParentConfirm = false;
         if (submitter.Role == UserRoles.Student)
         {
             if (AgeFeatures.Check(AgeFeatures.ShareWithCenter, submitter.Role, submitter.DateOfBirth, today, hasParentConsent: false) is not null)
-                throw new LeadRuleException("age_restricted", 403,
-                    "Học sinh dưới 16 tuổi chưa được tự gửi yêu cầu liên hệ. Phụ huynh có thể gửi thay từ tài khoản của mình.");
+            {
+                // [UC-116] Dưới 16: phải có phụ huynh đã đồng ý (UC-115); lead chờ phụ huynh xác nhận qua mail rồi trung tâm mới nhận
+                if (!await parentLinks.HasGrantedConsentAsync(submitter.Id, ct))
+                    throw new LeadRuleException("age_restricted", 403,
+                        "Học sinh dưới 16 tuổi cần phụ huynh đồng ý trước khi gửi yêu cầu liên hệ. Hãy mời phụ huynh xác nhận ở trang Tài khoản.");
+                needsParentConfirm = true;
+            }
 
             var isMinor = submitter.DateOfBirth is { } dob && AgePolicy.GetAge(dob, today) < AgeGroups.AdultAge;
             if (isMinor && !request.AcknowledgedCenterContact)
@@ -180,7 +195,9 @@ public class LeadService(
 
         // 7. Lưu consent và lead trong cùng một lần SaveChanges
         var isParent = submitter.Role == UserRoles.Parent;
-        var consent = new Consent
+        // [UC-116] Học sinh dưới 16: chưa có đồng ý chia sẻ; bản ghi đồng ý tạo khi phụ huynh bấm Đồng ý trong mail
+        var parentSecret = needsParentConfirm ? ParentInvite.GenerateToken() : null;
+        var consent = needsParentConfirm ? null : new Consent
         {
             UserId = studentId,
             Purpose = AgeFeatures.ShareWithCenter,
@@ -201,11 +218,30 @@ public class LeadService(
             SharedFields = sharedFields,
             SharedProfile = sharedFields.Any(f => f != LeadSharedFields.Contact),
             AcknowledgedCenterContact = !isParent && request.AcknowledgedCenterContact,
-            Status = "new",
+            Status = needsParentConfirm ? LeadStatuses.PendingParent : LeadStatuses.New,
+            ParentTokenHash = parentSecret is null ? null : ParentInvite.HashToken(parentSecret),
+            ParentTokenExpiresAt = parentSecret is null ? null : now.AddDays(LeadParentConfirm.ExpiryDays),
         };
 
         var created = await leads.CreateLeadAsync(lead, consent, ct);
+        if (parentSecret != null)
+            await SendParentConfirmEmailsAsync(submitter, center.Name, created, parentSecret, ct);
         return (await leads.GetDtoByIdAsync(created.Id, ct))!;
+    }
+
+    /// <summary>[UC-116] Mail hỏi đồng ý tới mọi phụ huynh đang liên kết; mỗi người một link (bí mật chung + mã liên kết).</summary>
+    private async Task SendParentConfirmEmailsAsync(User student, string centerName, Lead lead, string secret, CancellationToken ct)
+    {
+        if (emailSender is null)
+            return;
+
+        var activeLinks = (await parentLinks.GetByStudentAsync(student.Id, ct))
+            .Where(l => l.Status == ParentLinkStatuses.Active);
+        foreach (var link in activeLinks)
+        {
+            await emailSender.SendLeadParentConfirmEmailAsync(link.ParentEmail, student.FullName, centerName, lead.SharedFields,
+                LeadParentConfirm.ComposeToken(secret, link.Id), LeadParentConfirm.ExpiryDays, ct);
+        }
     }
 
     public async Task<LeadDto?> GetLeadByIdAsync(Guid userId, Guid leadId, CancellationToken ct = default)
@@ -234,7 +270,7 @@ public class LeadService(
 
         if (user.Role == UserRoles.Student)
         {
-            EnsureStudentCanViewSentLeads(user);
+            await EnsureStudentCanViewSentLeadsAsync(user, ct);
             return await leads.GetSentLeadsAsync([user.Id], submitterId: null, page, pageSize, ct);
         }
 
@@ -248,13 +284,15 @@ public class LeadService(
         throw SentLeadsRoleNotAllowed();
     }
 
-    /// <summary>[UC-44] Theo tài liệu tuổi: học sinh dưới 16 không tự xem yêu cầu liên hệ, cùng mốc với tự gửi.</summary>
-    private static void EnsureStudentCanViewSentLeads(User student)
+    /// <summary>
+    /// [UC-44] Theo tài liệu tuổi: học sinh dưới 16 không tự xem yêu cầu liên hệ, cùng mốc với tự gửi.
+    /// [UC-116] Dưới 16 đã có phụ huynh đồng ý thì xem được (để theo dõi lead chờ phụ huynh xác nhận).
+    /// </summary>
+    private async Task EnsureStudentCanViewSentLeadsAsync(User student, CancellationToken ct)
     {
-        var today = AgePolicy.TodayInVietnam(DateTime.UtcNow);
-        if (AgeFeatures.Check(AgeFeatures.ShareWithCenter, student.Role, student.DateOfBirth, today, hasParentConsent: false) is not null)
+        if (await AgeAccess.CheckAsync(AgeFeatures.ShareWithCenter, student, parentLinks, DateTime.UtcNow, ct) is not null)
             throw new LeadRuleException("age_restricted", 403,
-                "Học sinh dưới 16 tuổi chưa xem được yêu cầu liên hệ. Phụ huynh có thể xem từ tài khoản của mình.");
+                "Học sinh dưới 16 tuổi cần phụ huynh đồng ý mới xem được yêu cầu liên hệ. Phụ huynh có thể xem từ tài khoản của mình.");
     }
 
     private static LeadRuleException SentLeadsRoleNotAllowed() =>
@@ -277,7 +315,7 @@ public class LeadService(
             ?? throw new KeyNotFoundException("Không tìm thấy tài khoản.");
 
         if (user.Role == UserRoles.Student)
-            EnsureStudentCanViewSentLeads(user);
+            await EnsureStudentCanViewSentLeadsAsync(user, ct);
         else if (user.Role != UserRoles.Parent)
             throw SentLeadsRoleNotAllowed();
 
@@ -331,6 +369,10 @@ public class LeadService(
 
         if (string.Equals(lead.Status, "closed", StringComparison.OrdinalIgnoreCase))
             throw new LeadRuleException("lead_closed", 400, "Yêu cầu đã hoàn tất, không gửi thêm tin nhắn được.");
+        EnsureNotWithdrawn(lead);
+        // [UC-116] Chờ phụ huynh / phụ huynh từ chối / hết hạn: trung tâm chưa nhận yêu cầu nên chưa trao đổi được
+        if (lead.Status is LeadStatuses.PendingParent or LeadStatuses.Cancelled or LeadStatuses.Expired)
+            throw new LeadRuleException("lead_not_open", 400, "Trung tâm chưa nhận yêu cầu này nên chưa nhắn tin được.");
 
         var attachment = attachmentFactory is null ? null : await attachmentFactory(ct);
 
@@ -422,12 +464,15 @@ public class LeadService(
         var (centerId, _) = await ResolveCenterScopeAsync(userId, userEmail, userRole, null, ct);
 
         var lead = await leads.GetLeadForUpdateAsync(leadId, ct);
-        if (lead is null)
+        // [UC-116] Lead trung tâm chưa nhận: không đổi trạng thái được
+        if (lead is null || LeadStatuses.IsHiddenFromCenter(lead.Status))
             throw new KeyNotFoundException("Không tìm thấy yêu cầu liên hệ.");
 
         // [Chống IDOR] Lead của trung tâm khác báo "không tìm thấy" như lead không tồn tại, để không lộ lead có thật
         if (centerId.HasValue && lead.StudyCenterId != centerId.Value)
             throw new KeyNotFoundException("Không tìm thấy yêu cầu liên hệ.");
+
+        EnsureNotWithdrawn(lead);
 
         lead.Status = normalizedStatus;
         await leads.UpdateAsync(lead, ct);
@@ -448,6 +493,11 @@ public class LeadService(
         CancellationToken ct = default)
     {
         var (lead, centerName) = await GetAuthorizedLeadForCenterAsync(userId, userEmail, userRole, leadId, ct);
+
+        // [UC-80] Lead đã thu hồi: trung tâm không xem lại nội dung trao đổi
+        if (string.Equals(lead.Status, LeadStatuses.Withdrawn, StringComparison.OrdinalIgnoreCase))
+            return new LeadMessagesThreadDto(lead.Id, lead.Status, []);
+
         // [UC-42] Hiện tên khi chia sẻ nhóm contact, cùng quy tắc với CenterLeadMapper
         var showName = lead.SharedFields.Contains(LeadSharedFields.Contact);
         var messages = await leads.GetLeadMessagesAsync(lead.Id, lead.UserId, showName, centerName, ct);
@@ -471,6 +521,7 @@ public class LeadService(
         var trimmedContent = ValidateMessageContent(content, allowEmpty: attachmentFactory is not null);
 
         var (lead, centerName) = await GetAuthorizedLeadForCenterAsync(userId, userEmail, userRole, leadId, ct);
+        EnsureNotWithdrawn(lead);
 
         var attachment = attachmentFactory is null ? null : await attachmentFactory(ct);
 

@@ -24,6 +24,8 @@ interface ReviewsState {
  */
 export function useCenterReviews(centerId: string) {
   const [state, setState] = useState<ReviewsState | null>(null);
+  // Tăng khi cần tải lại trang đầu (vừa gửi đánh giá mới); dữ liệu cũ vẫn hiển thị cho tới khi bản mới về
+  const [version, setVersion] = useState(0);
   const current = state?.centerId === centerId ? state : null;
 
   useEffect(() => {
@@ -41,7 +43,7 @@ export function useCenterReviews(centerId: string) {
     return () => {
       active = false;
     };
-  }, [centerId]);
+  }, [centerId, version]);
 
   const loadMore = useCallback(async () => {
     if (!current?.reviews || current.loadingMore) return;
@@ -68,6 +70,8 @@ export function useCenterReviews(centerId: string) {
     }
   }, [centerId, current]);
 
+  const refresh = useCallback(() => setVersion((v) => v + 1), []);
+
   const reviews = current?.reviews ?? null;
   const hasMore = !!reviews && !current?.exhausted && reviews.items.length < reviews.totalCount;
 
@@ -79,6 +83,7 @@ export function useCenterReviews(centerId: string) {
     loadMoreError: current?.loadMoreError ?? false,
     hasMore,
     loadMore,
+    refresh,
     total: reviews?.totalCount ?? 0,
     average: reviews?.averageRating ?? null,
   };

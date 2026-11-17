@@ -35,7 +35,9 @@ namespace StudyAbroad.Application.Auth
     // BlockedFeatures: các chức năng trong AgeFeatures.Rules đang bị chặn (server tính, frontend chỉ dùng để ẩn nút).
     public record UserDto(Guid Id, string Email, string FullName, string Role, string Status, string? Phone = null,
         string? AgeGroup = null, string? ParentConsentStatus = null, List<string>? BlockedFeatures = null,
-        string? LockReason = null, DateTime? LockoutEnd = null);
+        string? LockReason = null, DateTime? LockoutEnd = null,
+        // [UC-111] Ngày sinh chỉ trả cho chính chủ (xem tài khoản của mình); người dùng không tự sửa được, chỉ Admin sửa (UC-113)
+        DateOnly? DateOfBirth = null);
 
     // [USAS-362] Kết quả đăng nhập thành công. AccessToken chỉ dùng để đặt HttpOnly cookie, controller không trả nó trong body
     public record AuthResponse(string AccessToken, DateTime ExpiresAt, UserDto User);
@@ -51,7 +53,8 @@ namespace StudyAbroad.Application.Auth
     // [UC-06] Đổi mật khẩu khi đã đăng nhập: bắt buộc nhập mật khẩu hiện tại
     public record ChangePasswordRequest(string CurrentPassword, string NewPassword);
 
-    // Sửa thông tin cá nhân: chỉ họ tên và số điện thoại, email đăng nhập không đổi được. Phone rỗng = xóa số
+    // [UC-111] Sửa thông tin cá nhân: chỉ họ tên và số điện thoại. Vai trò, email, ngày sinh không có trong request nên không sửa được.
+    // Phone rỗng = xóa số. Trung tâm đổi số điện thoại qua UC-91, không qua đây.
     public record UpdateProfileRequest(string FullName, string? Phone);
 
     public enum AuthError {
@@ -62,14 +65,25 @@ namespace StudyAbroad.Application.Auth
         TempLocked,           // tài khoản bị tạm khóa sau 5 lần sai mật khẩu → 423
         Unverified,           // tài khoản chưa kích hoạt email OTP → 403
         OtpInvalid,           // mã OTP sai / hết hạn / đã dùng / đã vô hiệu hóa (gộp một thông báo, chống dò) → 400
+        PendingDeletion,      // [UC-80] tài khoản đang chờ xóa, đúng mật khẩu → 403 kèm mã khôi phục
+        RoleNotAllowed,       // [UC-80] vai trò không được tự làm thao tác này (trung tâm, admin, mod tự xóa tài khoản) → 403
     };
 
+    // [UC-80] Khôi phục tài khoản đang chờ xóa bằng mã khôi phục nhận khi đăng nhập
+    public record RestoreAccountRequest(string Email, string RestoreToken);
+
+    // [UC-80] Thông tin trả về khi đăng nhập vào tài khoản đang chờ xóa
+    public record PendingDeletionInfo(DateTime DeletionDate, string RestoreToken);
+
     // [USAS-362] Hộp trả kết quả từ AuthService
-    public record AuthResult(UserDto? User, AuthResponse? Response = null, AuthError Error = AuthError.None, string? Message = null)
+    public record AuthResult(UserDto? User, AuthResponse? Response = null, AuthError Error = AuthError.None, string? Message = null,
+        PendingDeletionInfo? PendingDeletion = null)
     {
         public static AuthResult Ok(UserDto user, string? message = null) => new(user, null, AuthError.None, message);
         public static AuthResult Ok(AuthResponse response) => new(response.User, response);
         public static AuthResult Ok(string message) => new(null, null, AuthError.None, message);
         public static AuthResult Fail(AuthError error, string message) => new(null, null, error, message);
+        public static AuthResult PendingDeletionFail(string message, PendingDeletionInfo info) =>
+            new(null, null, AuthError.PendingDeletion, message, info);
     }
 }

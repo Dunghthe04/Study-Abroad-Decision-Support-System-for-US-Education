@@ -2,10 +2,13 @@ import { ApiError, apiFetch } from "@/lib/api";
 import type {
   PagedResult,
   SaveSlmSampleRequest,
+  SlmImportPreview,
   SlmImportResult,
   SlmReviewResult,
   SlmReviewStatus,
   SlmSample,
+  SlmSampleCreator,
+  SlmSampleDetail,
   SlmSampleSummary,
   SlmSampleType,
   SlmSplit,
@@ -18,6 +21,10 @@ export interface SlmSampleFilters {
   split?: SlmSplit;
   reviewStatus?: SlmReviewStatus;
   search?: string;
+  createdBy?: string;
+  from?: string;
+  to?: string;
+  source?: string;
   page?: number;
   pageSize?: number;
 }
@@ -37,13 +44,31 @@ async function failureOf(res: Response): Promise<ApiError> {
   return new ApiError(res.status, message, body);
 }
 
+const TEMPLATE_FILE_NAME = "slm-training-template.xlsx";
+
+async function postXlsx<T>(action: "preview" | "import", file: File, signal?: AbortSignal): Promise<T> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(`${base}/${action}`, {
+    method: "POST",
+    credentials: "include",
+    body: form,
+    cache: "no-store",
+    signal,
+  });
+  if (!res.ok) throw await failureOf(res);
+  return (await res.json()) as T;
+}
+
 export const adminSlmSampleApi = {
   list: (filters: SlmSampleFilters = {}) =>
     apiFetch<PagedResult<SlmSample>>(`${base}${query({ ...filters })}`),
 
   summary: () => apiFetch<SlmSampleSummary>(`${base}/summary`),
 
-  get: (id: string) => apiFetch<SlmSample>(`${base}/${encodeURIComponent(id)}`),
+  get: (id: string) => apiFetch<SlmSampleDetail>(`${base}/${encodeURIComponent(id)}`),
+
+  creators: () => apiFetch<SlmSampleCreator[]>(`${base}/creators`),
 
   create: (data: SaveSlmSampleRequest) =>
     apiFetch<SlmSample>(base, { method: "POST", body: JSON.stringify(data) }),
@@ -59,33 +84,35 @@ export const adminSlmSampleApi = {
       body: JSON.stringify({ ids, status, note: note || undefined }),
     }),
 
-  importXlsx: async (file: File): Promise<SlmImportResult> => {
-    const form = new FormData();
-    form.append("file", file);
-    const res = await fetch(`${base}/import`, {
-      method: "POST",
-      credentials: "include",
-      body: form,
-      cache: "no-store",
-    });
-    if (!res.ok) throw await failureOf(res);
-    return (await res.json()) as SlmImportResult;
-  },
+  previewXlsx: (file: File, signal?: AbortSignal) => postXlsx<SlmImportPreview>("preview", file, signal),
 
-  exportJsonl: async (split?: SlmSplit): Promise<void> => {
-    const res = await fetch(`${base}/export${query({ split })}`, {
-      credentials: "include",
-      cache: "no-store",
-    });
-    if (!res.ok) throw await failureOf(res);
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = split ? `slm-samples-${split}.jsonl` : "slm-samples.jsonl";
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
-  },
+  importXlsx: (file: File) => postXlsx<SlmImportResult>("import", file),
+
+  downloadTemplate: () => download(`${base}/template`, TEMPLATE_FILE_NAME),
+
+  exportApproved: (format: "jsonl" | "xlsx") =>
+    download(`${base}/export?format=${format}`, `slm-samples-approved.${format}`),
 };
+
+function fileNameOf(res: Response, fallback: string): string {
+  const header = res.headers.get("content-disposition") ?? "";
+  const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(header);
+  return match ? decodeURIComponent(match[1]) : fallback;
+}
+
+async function download(path: string, fallbackName: string): Promise<void> {
+  const res = await fetch(path, {
+    credentials: "include",
+    cache: "no-store",
+  });
+  if (!res.ok) throw await failureOf(res);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileNameOf(res, fallbackName);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}

@@ -25,10 +25,12 @@ export function CreateUniversityPanel({ onClose, onCreated }: CreateUniversityPa
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
   const busy = isSaving || isUploading;
 
   const setField = <K extends keyof UniversityFormState>(key: K, value: UniversityFormState[K]) => {
     setForm((previous) => ({ ...previous, [key]: value }));
+    if (key === "name") setDuplicateWarning(null);
   };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -68,11 +70,14 @@ export function CreateUniversityPanel({ onClose, onCreated }: CreateUniversityPa
         isIvy: form.isIvy,
         logoUrl: textOrNull(form.logoUrl ?? ""),
         coverUrl: textOrNull(form.coverUrl ?? ""),
+        confirmDuplicateName: duplicateWarning !== null,
       });
       toast.add({ type: "success", title: "Đã thêm trường mới", description: created.name });
       onCreated(created);
     } catch (err) {
-      if (err instanceof AdminFormError) {
+      if (err instanceof AdminFormError && err.fieldErrors.duplicateName) {
+        setDuplicateWarning(err.fieldErrors.duplicateName);
+      } else if (err instanceof AdminFormError) {
         setError(err.message);
         setFieldErrors(err.fieldErrors);
       } else {
@@ -91,6 +96,7 @@ export function CreateUniversityPanel({ onClose, onCreated }: CreateUniversityPa
     <DetailPanel title="Thêm trường mới" description="Nhập thông tin trường; mã và tên là bắt buộc." onClose={onClose} closeDisabled={busy}>
       <form onSubmit={handleSubmit} className="space-y-5">
         {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+        {duplicateWarning && <Alert><AlertDescription>{duplicateWarning}</AlertDescription></Alert>}
         <TableFrame title="Media">
           <UniversityMediaPreview logoUrl={form.logoUrl} coverUrl={form.coverUrl} name={form.name || "Trường mới"} />
           <RowsTable rows={mediaRows} isEditing />
@@ -101,7 +107,7 @@ export function CreateUniversityPanel({ onClose, onCreated }: CreateUniversityPa
         <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={onClose} disabled={busy}>Hủy</Button>
           <Button type="submit" disabled={busy}>
-            {isSaving ? <Spinner /> : <PlusIcon />} Tạo trường
+            {isSaving ? <Spinner /> : <PlusIcon />} {duplicateWarning ? "Vẫn tạo trường" : "Tạo trường"}
           </Button>
         </div>
       </form>

@@ -30,21 +30,21 @@ from app.schemas.chat import (
 from app.schemas.slm import SlmTinResult, SlmY
 from app.services import usage_meter
 from app.services.conversation_context import contextualize, update_context
-from app.services.intake import (
+from app.services.intake import INTAKE_ID, form_goals, intake_ask, intake_choice
+from app.services.pii_mask import mask_personal_info
+from app.services.priority import unaccent
+from app.services.profile_sync import DRAFT_KEYS, changed_keys, merge_profile
+from app.services.replies import (
+    BACK_TO_QUESTION,
     CHAT_BUTTON,
     CONTINUE_CHAT,
     FORM_BUTTON,
     FORM_DONE,
     INTAKE_FORM,
-    INTAKE_ID,
     INTAKE_MORE,
-    form_goals,
-    intake_ask,
-    intake_choice,
+    NEED_MAJOR,
+    NOT_READY,
 )
-from app.services.pii_mask import mask_personal_info
-from app.services.priority import PRIORITY_KEY, detect_priorities, unaccent
-from app.services.profile_sync import DRAFT_KEYS, changed_keys, merge_profile
 from app.services.skill_rules import REQUIRED_B3, REQUIRED_B4, missing_fields
 from app.services.slm_contract import SlmClassifier
 
@@ -83,12 +83,7 @@ QUESTIONS = {
 }
 
 
-NOT_READY = "Phần này mình đang hoàn thiện, bạn quay lại sau nhé."
-NEED_PROFILE = (
-    "Mình cần biết thêm về hồ sơ của bạn trước khi làm bước này. Bạn cho mình xin thêm thông tin nhé."
-)
-NEED_MAJOR = "Để gợi ý trường mình cần biết ngành bạn muốn học. Bạn chọn ngành giúp mình nhé."
-BACK_TO_QUESTION = "Quay lại câu mình đang hỏi nhé: "
+# Các câu cố định NOT_READY, NEED_PROFILE, NEED_MAJOR, BACK_TO_QUESTION nằm ở replies.py (import ở đầu file, các module khác vẫn lấy từ đây)
 OPENING_QUESTIONS = {"B0.1", "B0.2"}
 # Loại ý chỉ ĐỌC state (knowledge, center_referral chỉ đọc study_level), nên nhiều ý cùng loại này chạy song song được.
 # Loại khác (collect_profile, profile_review...) ghi state nên vẫn chạy lần lượt. Thêm loại vào đây chỉ khi nhánh đó không ghi state
@@ -164,29 +159,6 @@ def intents_to_run(slm: SlmTinResult) -> list[SlmY]:
     if slm.touches_profile() and "collect_profile" not in slm.types():
         return [PROFILE_ONLY, *slm.intents]
     return list(slm.intents)
-
-
-# Câu nói về ưu tiên (chi phí thấp, học bổng, danh tiếng) SLM chưa được huấn luyện nên có thể xếp nhầm loại.
-# Quy tắc (priority.py) nhận ra thì đổi thành ý what-if (chưa có kết quả gợi ý thì nhánh kịch bản nhắc cần gợi ý trước),
-# trừ khi đang chờ trả lời một câu hồ sơ (để "em cần học bổng" trả lời câu hỏi hồ sơ không bị hiểu nhầm).
-# Câu chào mở đầu (B0.1, B0.2) không phải câu hồ sơ nên không chặn
-def with_priority_intent(state: ChatState, message: str, slm: SlmTinResult) -> SlmTinResult:
-    waiting = state.question_id is not None and state.question_id not in OPENING_QUESTIONS
-    if waiting or not detect_priorities(message):
-        return slm
-    # SLM thật xếp "ưu tiên chi phí thấp" vào goal_seeking không có trường: đó là ưu tiên, đổi thành what-if.
-    # Giữ nguyên khi SLM đã nhận là what-if (nhánh kịch bản tự đọc thêm ưu tiên) hoặc goal-seeking có nêu trường thật
-    scenarios = [y for y in slm.intents if y.type == "scenario"]
-    if any(y.entities.get("mode") == "what_if" or y.entities.get("school") for y in scenarios):
-        return slm
-    scenario = SlmY(
-        type="scenario",
-        span=message,
-        entities={"mode": "what_if", "changes": [{"factor": PRIORITY_KEY, "value": PRIORITY_KEY}]},
-    )
-    # Tin có số liệu thì giữ các ý khác (có thể là hồ sơ); chỉ nói về ưu tiên thì bỏ ý SLM đoán sai
-    keep = [y for y in slm.intents if y.type != "scenario"] if re.search(r"\d", message) else []
-    return slm.model_copy(update={"intents": [scenario, *keep]})
 
 
 # Mục số liệu trường học sinh hay hỏi (khớp bộ từ khóa của .NET ChatSchoolInfo) và dấu hiệu của câu thật sự nhạy cảm (làm giả, khai gian)
@@ -377,7 +349,6 @@ class ChatFlow:
             # Chụp trước khi các luật code bên dưới đổi ý: đây là nhãn model gán. Model hỏng thì không có đầu ra thật để lưu
             fell_back = slm.fallback
             model_intents = [] if fell_back else list(slm.intents)
-            slm = with_priority_intent(state, message, slm)
             slm = with_info_intent(message, slm)
             slm = with_comparison_intent(message, slm)
             slm = contextualize(state, message, slm)

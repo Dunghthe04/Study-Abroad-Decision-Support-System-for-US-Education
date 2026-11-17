@@ -8,7 +8,7 @@ import { AGE_FEATURES, useAgeBlock } from "@/lib/age-features";
 import { getLeadRuleError, leadApi } from "@/lib/lead-api";
 import { studyLevelLabel } from "@/lib/study-levels";
 import { cn } from "@/lib/utils";
-import { LEAD_SHARED_FIELD_INFO, leadStatusLabel, type SentLeadDto } from "@/types/lead";
+import { isLeadAwaitingCenter, LEAD_SHARED_FIELD_INFO, leadStatusLabel, type SentLeadDto } from "@/types/lead";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -23,6 +23,18 @@ const STATUS_BADGE_CLASS: Record<string, string> = {
   new: "bg-blue-600 text-white",
   contacted: "bg-amber-600 text-white",
   closed: "text-emerald-700 border-emerald-300 bg-emerald-50 dark:bg-emerald-950/40",
+  withdrawn: "text-muted-foreground border-border bg-muted", // [UC-80]
+  // [UC-116]
+  pending_parent: "text-amber-700 border-amber-300 bg-amber-50 dark:bg-amber-950/40",
+  cancelled: "text-muted-foreground border-border bg-muted",
+  expired: "text-muted-foreground border-border bg-muted",
+};
+
+// [UC-116] Trung tâm chưa nhận yêu cầu: giải thích thay cho dòng số tin nhắn
+const AWAITING_CENTER_NOTE: Record<string, string> = {
+  pending_parent: "Đã gửi email cho phụ huynh. Trung tâm chỉ nhận thông tin sau khi phụ huynh đồng ý.",
+  cancelled: "Phụ huynh đã từ chối nên trung tâm không nhận thông tin. Bạn có thể gửi lại sau khi trao đổi với phụ huynh.",
+  expired: "Phụ huynh chưa xác nhận trong hạn nên trung tâm không nhận thông tin. Bạn có thể gửi lại.",
 };
 
 function errorMessage(err: unknown) {
@@ -110,7 +122,8 @@ export function SentLeadsCard() {
         {ageBlocked ? (
           <Alert>
             <AlertDescription>
-              Học sinh dưới 16 tuổi không xem được yêu cầu liên hệ với trung tâm. Phụ huynh đã liên kết có thể xem bằng tài khoản phụ huynh.
+              Học sinh dưới 16 tuổi cần phụ huynh đồng ý trước mới xem và gửi được yêu cầu liên hệ với trung tâm. Phụ huynh đã liên kết
+              có thể xem bằng tài khoản phụ huynh.
             </AlertDescription>
           </Alert>
         ) : (
@@ -178,6 +191,7 @@ function SentLeadItem({
     [lead.id, onThreadChange],
   );
   const statusClass = STATUS_BADGE_CLASS[lead.status];
+  const awaitingCenter = isLeadAwaitingCenter(lead.status);
   const sentBy = isParent
     ? lead.submittedByParent
       ? "Phụ huynh gửi thay"
@@ -235,26 +249,32 @@ function SentLeadItem({
           </p>
         )}
 
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5 text-body-s">
-            <MessageSquareIcon className="size-3.5" aria-hidden />
-            {lead.centerMessageCount > 0
-              ? `Trung tâm đã nhắn ${lead.centerMessageCount} tin`
-              : "Trung tâm chưa nhắn tin"}
+        {awaitingCenter ? (
+          <p className="text-body-s">{AWAITING_CENTER_NOTE[lead.status]}</p>
+        ) : (
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 text-body-s">
+              <MessageSquareIcon className="size-3.5" aria-hidden />
+              {lead.centerMessageCount > 0
+                ? `Trung tâm đã nhắn ${lead.centerMessageCount} tin`
+                : "Trung tâm chưa nhắn tin"}
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={() => setMessagesOpen(true)}>
+              <MessageSquareIcon data-icon="inline-start" aria-hidden />
+              Tin nhắn
+            </Button>
           </div>
-          <Button type="button" variant="outline" size="sm" onClick={() => setMessagesOpen(true)}>
-            <MessageSquareIcon data-icon="inline-start" aria-hidden />
-            Tin nhắn
-          </Button>
-        </div>
+        )}
       </CardContent>
 
-      <SentLeadMessagesDialog
-        lead={lead}
-        open={messagesOpen}
-        onOpenChange={setMessagesOpen}
-        onThreadChange={handleThreadChange}
-      />
+      {!awaitingCenter && (
+        <SentLeadMessagesDialog
+          lead={lead}
+          open={messagesOpen}
+          onOpenChange={setMessagesOpen}
+          onThreadChange={handleThreadChange}
+        />
+      )}
     </Card>
   );
 }

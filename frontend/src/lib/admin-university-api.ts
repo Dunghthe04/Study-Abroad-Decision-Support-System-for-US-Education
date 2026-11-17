@@ -35,21 +35,21 @@ function readFieldErrors(body: unknown): AdminFieldErrors {
   }
   const result: AdminFieldErrors = {};
   for (const [field, value] of Object.entries(errors)) {
-    result[field] = Array.isArray(value) ? value.join(" ") : String(value);
+    result[field.replace(/^\$\./, "")] = Array.isArray(value) ? value.join(" ") : String(value);
   }
   return result;
 }
 
-function toSaveError(err: unknown): AdminFormError {
+export function toSaveError(err: unknown): AdminFormError {
   if (err instanceof ApiError) {
     if (err.status === 400) {
       return new AdminFormError("Dữ liệu chưa hợp lệ, xem các ô được đánh dấu.", readFieldErrors(err.body));
     }
     if (err.status === 403) {
-      return new AdminFormError("Bạn không có quyền sửa dữ liệu trường.");
+      return new AdminFormError("Bạn không có quyền sửa dữ liệu này.");
     }
     if (err.status === 404) {
-      return new AdminFormError("Không tìm thấy trường hoặc bậc học này, có thể đã bị xóa.");
+      return new AdminFormError("Không tìm thấy dữ liệu này, có thể đã bị xóa.");
     }
   }
   return new AdminFormError("Không thể lưu. Vui lòng thử lại sau.");
@@ -116,14 +116,29 @@ export async function updateAdminOffering(
   }
 }
 
+export async function createAdminOffering(
+  universityId: string,
+  studyLevel: string,
+): Promise<AdminUniversityOffering> {
+  try {
+    return await apiFetch<AdminUniversityOffering>(`/api/v1/admin/universities/${universityId}/offerings`, {
+      method: "POST",
+      body: JSON.stringify({ studyLevel }),
+    });
+  } catch (err) {
+    throw toSaveError(err);
+  }
+}
+
 export async function setAdminUniversityVisibility(
   universityId: string,
   isActive: boolean,
+  reason: string | null = null,
 ): Promise<AdminUniversityDetail> {
   try {
     return await apiFetch<AdminUniversityDetail>(`/api/v1/admin/universities/${universityId}/visibility`, {
       method: "PATCH",
-      body: JSON.stringify({ isActive }),
+      body: JSON.stringify({ isActive, reason }),
     });
   } catch (err) {
     throw toSaveError(err);

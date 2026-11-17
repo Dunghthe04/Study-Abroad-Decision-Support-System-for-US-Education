@@ -134,7 +134,7 @@ public static class AcademicPosition
 
     // Mốc GPA của 6 khoảng đầu (dưới 2,5 · 2,5–2,99 · 3,0–3,24 · 3,25–3,49 · 3,5–3,74 · 3,75–3,99);
     // khoảng thứ 7 là đúng 4,0.
-    private static readonly double[] GpaEdges = [2.0, 2.5, 3.0, 3.25, 3.5, 3.75, 4.0];
+    internal static readonly double[] GpaEdges = [2.0, 2.5, 3.0, 3.25, 3.5, 3.75, 4.0];
 
     // Độ lệch chuẩn GPA giả định khi trường chỉ công bố GPA trung bình.
     public const double DefaultGpaSigma = 0.3;
@@ -457,11 +457,18 @@ public static class ActivityTier
     public const int MaxActivities = 10;   // chỉ xét tối đa chừng này hoạt động và giải thưởng (theo thứ tự nhập)
     public const int TopActivities = 4;    // tổng điểm lấy 4 hoạt động cao nhất
     public const int TopAwards = 3;        // thưởng lấy 3 giải cao nhất
-    private const decimal AwardPoint = 0.05m;   // mỗi cấp giải thưởng được 0,05
-    private const decimal MaxBonus = 0.5m;
+    internal const decimal AwardPoint = 0.05m;   // mỗi cấp giải thưởng được 0,05
+    internal const decimal MaxBonus = 0.5m;
     private const decimal DefaultRole = 0.3m;   // vai trò không rõ coi là thành viên
+    // Hệ số của điểm một hoạt động q (xem ActivityPoints) và mẫu số của điểm gộp m (xem Compute).
+    // Để internal cho danh mục tham số (AlgorithmParameters, UC-89) đọc đúng giá trị đang chạy.
+    internal const decimal ScopeWeight = 0.4m;          // phần phạm vi (phạm vi / 5)
+    internal const decimal RoleCoefficient = 0.35m;     // phần vai trò
+    internal const decimal DurationWeight = 0.25m;      // phần số tháng
+    internal const decimal FullDurationMonths = 24m;    // đủ chừng này tháng thì phần số tháng đạt tối đa (decimal để không chia nguyên)
+    internal const decimal MaxEcPoints = 4m;            // m = min(1, (tong_hd + bonus) / 4)
     // m dưới 0,10 là bậc 1; dưới 0,25 là bậc 2; dưới 0,45 là bậc 3; dưới 0,65 là bậc 4; còn lại bậc 5
-    private static readonly decimal[] TierCuts = [0.10m, 0.25m, 0.45m, 0.65m];
+    internal static readonly decimal[] TierCuts = [0.10m, 0.25m, 0.45m, 0.65m];
 
     // Mã vai trò trong hồ sơ → hệ số: sáng lập 1,0 · trưởng 0,8 · phó 0,6 · thành viên 0,3; mã lạ thì 0,3.
     public static decimal RoleWeight(string? role) => role switch
@@ -474,7 +481,8 @@ public static class ActivityTier
 
     // q = 0,4 × (phạm vi / 5) + 0,35 × vai trò + 0,25 × min(số tháng / 24, 1), làm tròn 2 chữ số.
     public static decimal ActivityPoints(decimal role, int scope, int months) =>
-        Round2(0.4m * Math.Clamp(scope, 1, 5) / 5 + 0.35m * role + 0.25m * Math.Min(Math.Max(months, 0) / 24m, 1m));
+        Round2(ScopeWeight * Math.Clamp(scope, 1, 5) / 5 + RoleCoefficient * role
+               + DurationWeight * Math.Min(Math.Max(months, 0) / FullDurationMonths, 1m));
 
     // tong_hd = tổng q của 4 hoạt động cao nhất; bonus = min(0,5, tổng 0,05 × cấp của 3 giải cao nhất);
     // m = min(1, (tong_hd + bonus) / 4); k theo m. Chưa có hoạt động nào thì m = 0 và k = 1.
@@ -492,7 +500,7 @@ public static class ActivityTier
             .Take(TopAwards)
             .Sum(level => level * AwardPoint);
         var bonus = Round2(Math.Min(MaxBonus, awardPoints));
-        var m = Round2(Math.Min(1m, (tongHd + bonus) / 4));
+        var m = Round2(Math.Min(1m, (tongHd + bonus) / MaxEcPoints));
         return new EcScore(Round2(tongHd), bonus, m, TierOf(m));
     }
 

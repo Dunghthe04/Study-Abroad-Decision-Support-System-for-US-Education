@@ -45,6 +45,33 @@ public class ProfileTranscriptUploadSecurityTests : IDisposable
     private string FullPath(string relativePath) =>
         Path.Combine(_root, relativePath.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
 
+    // ───────────── [UC-80] Xóa hẳn tài khoản: xóa mọi tệp của user ─────────────
+
+    [Fact]
+    public async Task DeleteAllUserFiles_RemovesDraftsAndTranscripts_KeepsOtherUsers()
+    {
+        var userId = Guid.NewGuid();
+        var otherId = Guid.NewGuid();
+        var draft = await Save(userId, PdfBytes, "nhap.pdf");
+        var official = await Save(userId, PngBytes, "chinh_thuc.png");
+        var officialPath = await _storage.CommitDraftTranscriptAsync(userId, official.RelativePath);
+        var otherDraft = await Save(otherId, PdfBytes, "khac.pdf");
+
+        await _storage.DeleteAllUserFilesAsync(userId);
+
+        Assert.False(Directory.Exists(Path.Combine(_root, "uploads", "drafts", userId.ToString())));
+        Assert.False(Directory.Exists(Path.Combine(_root, "uploads", "transcripts", userId.ToString())));
+        Assert.False(File.Exists(FullPath(draft.RelativePath)));
+        Assert.False(File.Exists(FullPath(officialPath!)));
+        Assert.True(File.Exists(FullPath(otherDraft.RelativePath)));
+    }
+
+    [Fact]
+    public async Task DeleteAllUserFiles_NoFolders_DoesNothing()
+    {
+        await _storage.DeleteAllUserFilesAsync(Guid.NewGuid());
+    }
+
     // ───────────── Storage: kiểm tra nội dung thật ─────────────
 
     [Theory]

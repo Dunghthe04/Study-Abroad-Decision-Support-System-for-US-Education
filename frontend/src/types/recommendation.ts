@@ -414,7 +414,8 @@ export interface SchoolSearchItem {
   city: string | null;
   state: string | null;
   control: string | null;
-  costUsd: number | null;
+  costUsd: number | null; // tổng chi phí một năm (gồm ăn ở, sinh hoạt)
+  tuitionUsd?: number | null; // chỉ học phí
   acceptRate: number | null;
   aidPolicy: string | null;
   aidAvgUsd: number | null;
@@ -428,5 +429,15 @@ export interface SchoolSearchData {
   sortLabel: string;
   visible: number; // số trường hiện sẵn, phần còn lại mở bằng "Xem thêm"
   items: SchoolSearchItem[];
+  // Điều kiện và cách xếp đã dùng (camelCase như bên .NET), để nút "Xem tất cả" mở trang danh sách đúng bộ lọc
+  filters?: {
+    states?: string[] | null;
+    control?: string | null;
+    major?: string | null;
+    maxCostUsd?: number | null;
+    maxIelts?: number | null;
+    ivy?: boolean;
+  } | null;
+  sort?: string | null;
   coveredText: string | null;
 }

@@ -18,5 +18,8 @@ public class Scholarship : BaseEntity
     public string? EligibilityNotes { get; set; }
     public string? SourceUrl { get; set; }
     public DateOnly? RetrievedAt { get; set; }
+    /// <summary>official | aggregated | self_reported</summary>
+    public string? SourceReliability { get; set; }
+    public Guid? LastEditedByUserId { get; set; }
     public bool IsActive { get; set; } = true;
 }

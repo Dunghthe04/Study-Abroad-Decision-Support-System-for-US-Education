@@ -342,7 +342,9 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasName("pk_center_reviews");
 
                     b.HasIndex("LeadId")
-                        .HasDatabaseName("ix_center_reviews_lead_id");
+                        .IsUnique()
+                        .HasDatabaseName("ix_center_reviews_lead_id")
+                        .HasFilter("lead_id IS NOT NULL");
 
                     b.HasIndex("StudyCenterId")
                         .HasDatabaseName("ix_center_reviews_study_center_id");
@@ -774,6 +776,11 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.Property<bool>("Granted")
                         .HasColumnType("boolean")
                         .HasColumnName("granted");
+
+                    b.Property<string>("GrantedByEmail")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("granted_by_email");
 
                     b.Property<Guid?>("GrantedByUserId")
                         .HasColumnType("uuid")
@@ -1270,7 +1277,7 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(64)")
                         .HasColumnName("reason");
 
-                    b.Property<Guid>("ReporterUserId")
+                    b.Property<Guid?>("ReporterUserId")
                         .HasColumnType("uuid")
                         .HasColumnName("reporter_user_id");
 
@@ -1473,6 +1480,29 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(2000)")
                         .HasColumnName("message");
 
+                    b.Property<DateTime?>("ParentDecidedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("parent_decided_at");
+
+                    b.Property<string>("ParentDecisionIp")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("parent_decision_ip");
+
+                    b.Property<string>("ParentEmail")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("parent_email");
+
+                    b.Property<DateTime?>("ParentTokenExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("parent_token_expires_at");
+
+                    b.Property<string>("ParentTokenHash")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("parent_token_hash");
+
                     b.Property<List<string>>("SharedFields")
                         .IsRequired()
                         .HasColumnType("text[]")
@@ -1514,6 +1544,9 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ConsentId")
                         .HasDatabaseName("ix_leads_consent_id");
+
+                    b.HasIndex("ParentTokenHash")
+                        .HasDatabaseName("ix_leads_parent_token_hash");
 
                     b.HasIndex("StudyCenterId", "Status")
                         .HasDatabaseName("ix_leads_study_center_id_status");
@@ -1882,6 +1915,20 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("parent_user_id");
 
+                    b.Property<DateTime?>("ProfileTransferAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("profile_transfer_at");
+
+                    b.Property<string>("ProfileTransferStatus")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("profile_transfer_status");
+
+                    b.Property<string>("RevokeTokenHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("revoke_token_hash");
+
                     b.Property<DateTime?>("RevokedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("revoked_at");
@@ -1926,6 +1973,11 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ConsentId")
                         .HasDatabaseName("ix_parent_student_links_consent_id");
+
+                    b.HasIndex("RevokeTokenHash")
+                        .IsUnique()
+                        .HasDatabaseName("ix_parent_student_links_revoke_token_hash")
+                        .HasFilter("revoke_token_hash IS NOT NULL");
 
                     b.HasIndex("RevokedByUserId")
                         .HasDatabaseName("ix_parent_student_links_revoked_by_user_id");
@@ -1993,7 +2045,7 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
-                    b.Property<Guid>("UserId")
+                    b.Property<Guid?>("UserId")
                         .HasColumnType("uuid")
                         .HasColumnName("user_id");
 
@@ -2749,6 +2801,10 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_active");
 
+                    b.Property<Guid?>("LastEditedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("last_edited_by_user_id");
+
                     b.Property<decimal?>("MinGpa4")
                         .HasPrecision(3, 2)
                         .HasColumnType("numeric(3,2)")
@@ -2774,6 +2830,11 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("date")
                         .HasColumnName("retrieved_at");
 
+                    b.Property<string>("SourceReliability")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("source_reliability");
+
                     b.Property<string>("SourceUrl")
                         .HasMaxLength(512)
                         .HasColumnType("character varying(512)")
@@ -2796,13 +2857,21 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.HasKey("Id")
                         .HasName("pk_scholarships");
 
+                    b.HasIndex("LastEditedByUserId")
+                        .HasDatabaseName("ix_scholarships_last_edited_by_user_id");
+
                     b.HasIndex("StudyLevel")
                         .HasDatabaseName("ix_scholarships_study_level");
 
-                    b.HasIndex("UniversityId")
-                        .HasDatabaseName("ix_scholarships_university_id");
+                    b.HasIndex("UniversityId", "IsActive")
+                        .HasDatabaseName("ix_scholarships_university_id_is_active");
 
-                    b.ToTable("scholarships", "app");
+                    b.ToTable("scholarships", "app", t =>
+                        {
+                            t.HasCheckConstraint("ck_scholarships_owner", "university_id IS NOT NULL OR provider IS NOT NULL");
+
+                            t.HasCheckConstraint("ck_scholarships_source_reliability", "source_reliability IS NULL OR source_reliability IN ('official', 'aggregated', 'self_reported')");
+                        });
                 });
 
             modelBuilder.Entity("StudyAbroad.Domain.Entities.Skill", b =>
@@ -2860,12 +2929,81 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.ToTable("skills", "app");
                 });
 
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.SlmSampleHistory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("action");
+
+                    b.Property<Guid?>("ActorUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("actor_user_id");
+
+                    b.Property<string>("ChangedFields")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("changed_fields");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("FromStatus")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("from_status");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("note");
+
+                    b.Property<Guid>("SampleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("sample_id");
+
+                    b.Property<string>("ToStatus")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("to_status");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_slm_sample_history");
+
+                    b.HasIndex("ActorUserId")
+                        .HasDatabaseName("ix_slm_sample_history_actor_user_id");
+
+                    b.HasIndex("SampleId", "CreatedAt")
+                        .HasDatabaseName("ix_slm_sample_history_sample_id_created_at");
+
+                    b.ToTable("slm_sample_history", "app", t =>
+                        {
+                            t.HasComment("Lịch sử sửa và duyệt của mẫu SLM.");
+                        });
+                });
+
             modelBuilder.Entity("StudyAbroad.Domain.Entities.SlmTrainingSample", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
+
+                    b.Property<string>("Answer")
+                        .HasColumnType("text")
+                        .HasColumnName("answer")
+                        .HasComment("Câu trả lời mẫu. Dòng cũ chỉ có intents thì để trống.");
 
                     b.Property<string>("Context")
                         .HasColumnType("jsonb")
@@ -2880,6 +3018,21 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("created_by_user_id")
                         .HasComment("Người tạo hoặc import dòng này. Xóa tài khoản thì để trống.");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at")
+                        .HasComment("Xóa mềm: khác null thì không hiện, không xuất.");
+
+                    b.Property<Guid?>("DeletedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("deleted_by_user_id")
+                        .HasComment("Người xóa.");
+
+                    b.Property<DateTime?>("ExportedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("exported_at")
+                        .HasComment("Lần xuất gần nhất.");
 
                     b.Property<string>("Intents")
                         .IsRequired()
@@ -2918,7 +3071,7 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(16)")
                         .HasDefaultValue("draft")
                         .HasColumnName("review_status")
-                        .HasComment("Trạng thái duyệt: draft, approved, rejected hoặc needs_fix.");
+                        .HasComment("Trạng thái duyệt: draft, pending, approved, rejected hoặc needs_fix.");
 
                     b.Property<DateTime?>("ReviewedAt")
                         .HasColumnType("timestamp with time zone")
@@ -2937,6 +3090,15 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnName("sample_type")
                         .HasComment("Loại mẫu, tương ứng một sheet của file nguồn.");
 
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasDefaultValue("manual")
+                        .HasColumnName("source")
+                        .HasComment("Nguồn: manual, excel, chat-unanswered hoặc nguồn tham khảo.");
+
                     b.Property<string>("SourceReview")
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")
@@ -2952,6 +3114,12 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnName("split")
                         .HasComment("Tập dùng cho model: train, val hoặc test.");
 
+                    b.Property<string>("Topic")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("topic")
+                        .HasComment("Chủ đề.");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
@@ -2964,6 +3132,9 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("CreatedByUserId")
                         .HasDatabaseName("ix_slm_training_samples_created_by_user_id");
+
+                    b.HasIndex("DeletedByUserId")
+                        .HasDatabaseName("ix_slm_training_samples_deleted_by_user_id");
 
                     b.HasIndex("ReviewedByUserId")
                         .HasDatabaseName("ix_slm_training_samples_reviewed_by_user_id");
@@ -2978,7 +3149,7 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         {
                             t.HasComment("Dữ liệu huấn luyện SLM: mỗi dòng là một tin nhắn của học sinh và nhãn intents mà model phải trả về. Chỉ dòng approved được xuất ra JSONL để train.");
 
-                            t.HasCheckConstraint("ck_slm_training_samples_review_status", "review_status IN ('draft','approved','rejected','needs_fix')");
+                            t.HasCheckConstraint("ck_slm_training_samples_review_status", "review_status IN ('draft','pending','approved','rejected','needs_fix')");
 
                             t.HasCheckConstraint("ck_slm_training_samples_split", "split IN ('train','val','test')");
 
@@ -3046,11 +3217,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<decimal?>("Act")
-                        .HasPrecision(4, 1)
-                        .HasColumnType("numeric(4,1)")
-                        .HasColumnName("act");
-
                     b.Property<decimal?>("BudgetMaxUsd")
                         .HasPrecision(12, 2)
                         .HasColumnType("numeric(12,2)")
@@ -3089,30 +3255,16 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("draft_flow_state_json");
 
-                    b.Property<decimal?>("Duolingo")
-                        .HasPrecision(5, 1)
-                        .HasColumnType("numeric(5,1)")
-                        .HasColumnName("duolingo");
-
                     b.Property<string>("EducationSystem")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
                         .HasColumnName("education_system");
-
-                    b.Property<DateOnly?>("EnglishTestDate")
-                        .HasColumnType("date")
-                        .HasColumnName("english_test_date");
 
                     b.Property<bool>("EnglishTestPlanned")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(false)
                         .HasColumnName("english_test_planned");
-
-                    b.Property<string>("EnglishTestType")
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)")
-                        .HasColumnName("english_test_type");
 
                     b.Property<int?>("ExtracurricularTier")
                         .HasColumnType("integer")
@@ -3132,11 +3284,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(32)")
                         .HasColumnName("funding_source");
 
-                    b.Property<decimal?>("Gmat")
-                        .HasPrecision(5, 1)
-                        .HasColumnType("numeric(5,1)")
-                        .HasColumnName("gmat");
-
                     b.Property<string>("GpaMode")
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")
@@ -3152,16 +3299,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("graduation_year");
 
-                    b.Property<decimal?>("Gre")
-                        .HasPrecision(5, 1)
-                        .HasColumnType("numeric(5,1)")
-                        .HasColumnName("gre");
-
-                    b.Property<decimal?>("Ielts")
-                        .HasPrecision(3, 1)
-                        .HasColumnType("numeric(3,1)")
-                        .HasColumnName("ielts");
-
                     b.Property<string>("IntendedMajor")
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)")
@@ -3175,10 +3312,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.Property<bool>("NeedsScholarship")
                         .HasColumnType("boolean")
                         .HasColumnName("needs_scholarship");
-
-                    b.Property<string>("OtherTestsJson")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("other_tests_json");
 
                     b.Property<decimal?>("OverallGpa")
                         .HasPrecision(5, 2)
@@ -3194,15 +3327,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text[]")
                         .HasColumnName("preferred_states");
-
-                    b.Property<string>("RoadmapProgressJson")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("roadmap_progress_json");
-
-                    b.Property<decimal?>("Sat")
-                        .HasPrecision(5, 1)
-                        .HasColumnType("numeric(5,1)")
-                        .HasColumnName("sat");
 
                     b.Property<string>("ScholarshipNeed")
                         .HasMaxLength(16)
@@ -3233,11 +3357,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(32)")
                         .HasDefaultValue("all")
                         .HasColumnName("target_school_type");
-
-                    b.Property<decimal?>("Toefl")
-                        .HasPrecision(5, 1)
-                        .HasColumnType("numeric(5,1)")
-                        .HasColumnName("toefl");
 
                     b.Property<string>("TranscriptFileUrl")
                         .HasMaxLength(512)
@@ -4265,6 +4384,10 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("date")
                         .HasColumnName("date_of_birth");
 
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
                     b.Property<string>("Email")
                         .IsRequired()
                         .HasMaxLength(256)
@@ -4746,8 +4869,7 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.HasOne("StudyAbroad.Domain.Entities.User", null)
                         .WithMany()
                         .HasForeignKey("ReporterUserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
+                        .OnDelete(DeleteBehavior.SetNull)
                         .HasConstraintName("fk_forum_reports_users_reporter_user_id");
                 });
 
@@ -4871,8 +4993,7 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.HasOne("StudyAbroad.Domain.Entities.User", null)
                         .WithMany()
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
+                        .OnDelete(DeleteBehavior.SetNull)
                         .HasConstraintName("fk_payment_transactions_users_user_id");
 
                     b.HasOne("StudyAbroad.Domain.Entities.UserSubscription", null)
@@ -4997,11 +5118,33 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("StudyAbroad.Domain.Entities.Scholarship", b =>
                 {
+                    b.HasOne("StudyAbroad.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("LastEditedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_scholarships_users_last_edited_by_user_id");
+
                     b.HasOne("StudyAbroad.Domain.Entities.University", null)
                         .WithMany()
                         .HasForeignKey("UniversityId")
                         .OnDelete(DeleteBehavior.SetNull)
                         .HasConstraintName("fk_scholarships_universities_university_id");
+                });
+
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.SlmSampleHistory", b =>
+                {
+                    b.HasOne("StudyAbroad.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("ActorUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_slm_sample_history_users_actor_user_id");
+
+                    b.HasOne("StudyAbroad.Domain.Entities.SlmTrainingSample", null)
+                        .WithMany()
+                        .HasForeignKey("SampleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_slm_sample_history_slm_training_samples_sample_id");
                 });
 
             modelBuilder.Entity("StudyAbroad.Domain.Entities.SlmTrainingSample", b =>
@@ -5011,6 +5154,12 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasForeignKey("CreatedByUserId")
                         .OnDelete(DeleteBehavior.SetNull)
                         .HasConstraintName("fk_slm_training_samples_users_created_by_user_id");
+
+                    b.HasOne("StudyAbroad.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("DeletedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_slm_training_samples_users_deleted_by_user_id");
 
                     b.HasOne("StudyAbroad.Domain.Entities.User", null)
                         .WithMany()

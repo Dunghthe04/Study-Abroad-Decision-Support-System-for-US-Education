@@ -110,8 +110,35 @@ namespace StudyAbroad.Api.Controllers
                 AuthError.Locked => Problem(result.Message, statusCode: StatusCodes.Status423Locked, title: "Tài khoản bị khóa bởi Admin"),
                 AuthError.TempLocked => Problem(result.Message, statusCode: StatusCodes.Status423Locked, title: "Tài khoản bị tạm khóa"),
                 AuthError.Unverified => Problem(result.Message, statusCode: StatusCodes.Status403Forbidden, title: "Email chưa xác thực"),
+                AuthError.PendingDeletion => PendingDeletionProblem(result),
                 _ => Problem(result.Message, statusCode: StatusCodes.Status401Unauthorized),
             };
+        }
+
+        // [UC-80] Đăng nhập vào tài khoản đang chờ xóa: 403 kèm code, ngày xóa vĩnh viễn và mã khôi phục
+        private ObjectResult PendingDeletionProblem(AuthResult result)
+        {
+            var problem = ProblemDetailsFactory.CreateProblemDetails(
+                HttpContext, StatusCodes.Status403Forbidden, title: "Tài khoản đang chờ xóa", detail: result.Message);
+            problem.Extensions["code"] = "account_pending_deletion";
+            problem.Extensions["deletionDate"] = result.PendingDeletion?.DeletionDate;
+            problem.Extensions["restoreToken"] = result.PendingDeletion?.RestoreToken;
+            return new ObjectResult(problem) { StatusCode = StatusCodes.Status403Forbidden };
+        }
+
+        // [UC-80] Khôi phục tài khoản đang chờ xóa bằng mã khôi phục nhận lúc đăng nhập; thành công thì đăng nhập luôn
+        [HttpPost("restore")]
+        [EnableRateLimiting(AuthRateLimit.PolicyName)]
+        public async Task<IActionResult> Restore(RestoreAccountRequest request, CancellationToken ct)
+        {
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+            var userAgent = Request.Headers.UserAgent.ToString();
+
+            var result = await auth.RestoreAccountAsync(request, ip, userAgent, ct);
+            if (result.Error == AuthError.None && result.Response != null)
+                return SetSessionCookie(result.Response);
+
+            return Problem(result.Message, statusCode: StatusCodes.Status400BadRequest, title: "Không khôi phục được tài khoản");
         }
 
         // [USAS-12] Yêu cầu đặt lại mật khẩu (Gửi mã OTP qua Email)
@@ -230,6 +257,10 @@ namespace StudyAbroad.Api.Controllers
             var userAgent = Request.Headers.UserAgent.ToString();
 
             var result = await auth.AnonymizeUserAccountAsync(userId.Value, ip, userAgent, ct);
+            if (result.Error == AuthError.RoleNotAllowed)
+            {
+                return Problem(result.Message, statusCode: StatusCodes.Status403Forbidden);
+            }
             if (result.Error != AuthError.None)
             {
                 return Problem(result.Message, statusCode: StatusCodes.Status400BadRequest);

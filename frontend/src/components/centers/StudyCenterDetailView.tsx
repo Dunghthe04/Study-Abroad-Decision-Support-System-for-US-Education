@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import type { StudyCenter } from "@/types/api";
 import { useCenterReviews } from "@/hooks/use-center-reviews";
+import { CenterReviewForm } from "./CenterReviewForm";
 import { CenterReviewList } from "./CenterReviewList";
 import { getEnrichedCenterProfile } from "@/lib/center-details";
 import { centerServiceLabel } from "@/lib/center-services";
@@ -42,6 +43,7 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
     loadMoreError: reviewsLoadMoreError,
     hasMore: reviewsHasMore,
     loadMore: loadMoreReviews,
+    refresh: refreshReviews,
     total: reviewTotal,
     average: reviewAverage,
   } = useCenterReviews(center.id);
@@ -378,6 +380,8 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
               </div>
             </CardHeader>
           </Card>
+
+          <CenterReviewForm centerId={center.id} onCreated={refreshReviews} />
 
           <CenterReviewList
             reviews={reviews}

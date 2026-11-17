@@ -151,7 +151,8 @@ function ThreadBody({
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [messages.length]);
 
-  const isClosed = leadStatus === "closed";
+  const isWithdrawn = leadStatus === "withdrawn"; // [UC-80]
+  const isClosed = leadStatus === "closed" || isWithdrawn;
   const trimmedDraft = draft.trim();
 
   const submit = async () => {
@@ -182,6 +183,7 @@ function ThreadBody({
       const rule = getLeadRuleError(err);
       // Trung tâm vừa đóng yêu cầu trong lúc khung đang mở → chuyển sang chỉ đọc
       if (rule?.code === "lead_closed") setLeadStatus("closed");
+      if (rule?.code === "lead_withdrawn") setLeadStatus("withdrawn");
       const msg = rule?.message ?? "Không gửi được tin nhắn. Vui lòng thử lại.";
       setFormError(msg);
       toast.add({ type: "error", title: "Gửi tin nhắn thất bại", description: msg });
@@ -237,7 +239,9 @@ function ThreadBody({
 
       {isClosed ? (
         <p className="rounded-md border bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
-          Yêu cầu đã hoàn tất, không gửi thêm tin nhắn được.
+          {isWithdrawn
+            ? "Yêu cầu đã được thu hồi, không gửi thêm tin nhắn được."
+            : "Yêu cầu đã hoàn tất, không gửi thêm tin nhắn được."}
         </p>
       ) : (
         <form

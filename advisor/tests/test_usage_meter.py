@@ -165,7 +165,7 @@ async def test_slm_classifier_calls_are_labelled_with_the_prompt_name_and_versio
     await OllamaSlm(FakeSlm(), prompt="slm_intents").read("em GPA 3.5", None, "")
 
     assert len(calls) == 2  # gọi lại một lần khi kết quả hỏng
-    assert {(c.purpose, c.skill_version) for c in calls} == {("slm_intents", "3.0")}
+    assert {(c.purpose, c.skill_version) for c in calls} == {("slm_intents", "3.1")}
 
 
 async def test_label_does_not_leak_outside_the_block():

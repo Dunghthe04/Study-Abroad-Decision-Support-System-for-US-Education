@@ -33,8 +33,10 @@ import { ChatText } from "./ChatText";
 import { MajorWidget } from "./MajorWidget";
 import { ReviewWidget } from "./ReviewWidget";
 import { ScholarshipWidget } from "./ScholarshipWidget";
+import { SchoolSearchCard } from "./SchoolSearchCard";
 import { SchoolWidget } from "./SchoolWidget";
 import { SelectWidget } from "./SelectWidget";
+import type { SchoolSearchData } from "@/types/recommendation";
 
 // Trang đăng nhập / đăng ký không hiện trợ lý
 export function useAssistantVisible() {
@@ -350,14 +352,20 @@ function Turn({ turn, onReply }: { turn: AssistantTurn; onReply?: (value: string
       <div className="rounded-xl bg-brand-wash px-4 py-3 whitespace-pre-wrap text-ink">{turn.content}</div>
     );
   }
-  // Mọi câu trả lời là chữ do AI viết đầy đủ (không còn thẻ số liệu đi kèm); các nút và widget chọn bên dưới vẫn giữ
+  // Câu trả lời là chữ do AI viết; riêng danh sách tìm trường có thẻ trường (5 trường đầu, nút chi tiết). Các nút và widget chọn bên dưới vẫn giữ
+  const searchData =
+    turn.widget?.type === "school_search" && Array.isArray(turn.widget.data?.items)
+      ? (turn.widget.data as unknown as SchoolSearchData)
+      : null;
+  // Thẻ trường đã nói đủ đoạn chữ này (tổng số, cách xếp, danh sách): bỏ đoạn đó, các đoạn khác của lượt vẫn hiện
+  const content =
+    searchData?.coveredText && turn.content ? turn.content.replace(searchData.coveredText, "").trim() : turn.content;
   return (
     <div className="w-full px-1 text-foreground">
       {/* Có thẻ trung tâm thì danh sách chữ (các dòng bắt đầu bằng "- ") đã nằm trong thẻ: chỉ hiện phần mở đầu */}
-      {turn.content && (
-        <ChatText text={turn.widget?.type === "centers" ? turn.content.split("\n- ")[0] : turn.content} />
-      )}
+      {content && <ChatText text={turn.widget?.type === "centers" ? content.split("\n- ")[0] : content} />}
       {turn.widget?.type === "centers" && <CenterCardsWidget data={turn.widget.data} onPick={onReply} />}
+      {searchData && <SchoolSearchCard data={searchData} />}
       {turn.citations && turn.citations.length > 0 && (
         <ol className="mt-2 list-decimal space-y-0.5 pl-5 text-xs text-muted-foreground">
           {turn.citations.map((c, j) => (

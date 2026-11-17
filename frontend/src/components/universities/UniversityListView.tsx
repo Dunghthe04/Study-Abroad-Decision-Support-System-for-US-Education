@@ -262,7 +262,7 @@ export function UniversityListView({
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
               {initialData.items.map((uni) => (
-                <UniversityCard key={uni.id} university={uni} />
+                <UniversityCard key={uni.id} university={uni} sortBy={currentParams.sortBy} />
               ))}
             </div>
           )}

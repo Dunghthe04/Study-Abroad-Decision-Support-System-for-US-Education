@@ -281,6 +281,7 @@ public class LeadsController(
         }
         catch (LeadRuleException ex)
         {
+            // [UC-80] vd. lead_withdrawn: người gửi đã xóa tài khoản
             return StatusCode(ex.Status, new { code = ex.Code, message = ex.Message });
         }
         catch (ArgumentException ex)

@@ -5,6 +5,7 @@ using StudyAbroad.Application.Profile.Academic;
 using StudyAbroad.Application.Profile.Flow;
 using StudyAbroad.Application.Recommendations;
 using StudyAbroad.Domain.Entities;
+using StudyAbroad.Domain.Constants;
 
 namespace StudyAbroad.UnitTests;
 
@@ -117,6 +118,54 @@ public class ChatServiceTests
         Assert.Equal("answered", reply.Outcome);
         Assert.Null(reply.ReviewStatus);                                  // trả lời được thì admin không phải xem
         Assert.Equal(1, JsonDocument.Parse(reply.MetaJson!).RootElement.GetProperty("v").GetInt32());
+    }
+
+    // ---- UC-53: câu chưa trả lời được thành mẫu SLM nháp
+
+    private static FakeAdvisor Ambiguous() => new("B0")
+    {
+        Slm = new AdvisorSlmDto([new AdvisorSlmIntentDto("out_of_scope", "asdfgh")], ["out_of_scope"], "ambiguous", 0.2, false),
+    };
+
+    private static StudyAbroad.Application.Admin.SlmSamples.SlmSampleService Samples(FakeSlmRepository repo) =>
+        new(repo, new FakeReader(), new StudyAbroad.Infrastructure.Import.SlmTemplateWriter(), new FakeAuditLogs());
+
+    [Fact]
+    public async Task NoAnswerTurn_IsCapturedAsAnonymousSlmDraft()
+    {
+        var repo = new FakeSlmRepository();
+
+        await new ChatService(Ambiguous(), new FakeSessions(), new FakeProfileFlow(), messages: new FakeMessages(), slmSamples: Samples(repo))
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest([new Application.Advisor.ChatMessage("user", "asdfgh")]));
+
+        var sample = Assert.Single(repo.Items);
+        Assert.Equal(("asdfgh", SlmSampleSources.ChatUnanswered, SlmReviewStatuses.Draft), (sample.Question, sample.Source, sample.ReviewStatus));
+        Assert.Null(sample.CreatedByUserId);
+    }
+
+    [Fact]
+    public async Task AnsweredTurn_OrStoreMessagesOff_CapturesNothing()
+    {
+        var repo = new FakeSlmRepository();
+
+        await new ChatService(new FakeAdvisor("B0"), new FakeSessions(), new FakeProfileFlow(), messages: new FakeMessages(), slmSamples: Samples(repo))
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+        await new ChatService(Ambiguous(), new FakeSessions(), new FakeProfileFlow(), slmSamples: Samples(repo))
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest([new Application.Advisor.ChatMessage("user", "asdfgh")]));
+
+        Assert.Empty(repo.Items);
+    }
+
+    [Fact]
+    public async Task CaptureFailure_DoesNotBreakTheChatReply()
+    {
+        var repo = new FakeSlmRepository { Fail = true };
+
+        var res = await new ChatService(Ambiguous(), new FakeSessions(), new FakeProfileFlow(), messages: new FakeMessages(), slmSamples: Samples(repo))
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest([new Application.Advisor.ChatMessage("user", "asdfgh")]));
+
+        Assert.NotNull(res.SessionId);
+        Assert.Empty(repo.Items);
     }
 
     [Fact]
@@ -1741,10 +1790,12 @@ public class ChatServiceTests
 
     // ---- tìm trường theo điều kiện: model trả bo_loc, advisor chuẩn hóa, backend lọc và trả lời bằng số liệu thật (không Gemini)
 
-    private static JsonElement SearchAction(object filters, string sort = "quality", string[]? unresolved = null) =>
+    // modelSort: cách xếp model trả (có mặt = học sinh nói rõ muốn xếp theo gì, tìm được dù không có điều kiện lọc)
+    private static JsonElement SearchAction(object filters, string sort = "quality", string[]? unresolved = null, string? modelSort = null) =>
         JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, object?>
         {
             ["question"] = "tìm trường", ["filters"] = filters, ["sort"] = sort, ["unresolved"] = unresolved ?? [],
+            ["model_sort"] = modelSort,
             ["kb_answer"] = "Mình đang tra số liệu của trường này nhé.",
         })).RootElement;
 
@@ -1891,6 +1942,22 @@ public class ChatServiceTests
 
         Assert.Equal(ChatSchoolInfo.SearchNoFilter, res.Answer);
         Assert.Null(r.SearchedWith);
+    }
+
+    [Theory]
+    [InlineData("highestCost", "highest_cost", SchoolSort.HighestCost)]
+    [InlineData("mostAid", "most_aid", SchoolSort.MostAid)]
+    [InlineData("lowestCost", "lowest_cost", SchoolSort.LowestCost)]
+    public async Task SchoolSearch_OnlyASort_SearchesEverythingInThatOrder(string sort, string modelSort, SchoolSort expected)
+    {
+        // "trường nào học phí đắt nhất / học bổng lớn nhất": không có điều kiện lọc, chỉ có cách xếp
+        var runner = new FakeRunner { SearchResult = new SchoolSearchResult(2, [SearchItem("A"), SearchItem("B")], []) };
+
+        var (res, r) = await SearchChat(SearchAction(new { }, sort, modelSort: modelSort), runner);
+
+        Assert.Equal(expected, r.SearchedWith!.Value.Sort);
+        Assert.StartsWith("Có 2 trường. Xếp theo", res.Answer);
+        Assert.NotEqual(ChatSchoolInfo.SearchNoFilter, res.Answer);
     }
 
     // ---- so sánh từ hai trường: model trả schools, advisor chuyển sang, backend lấy số liệu từng trường và dựng bảng

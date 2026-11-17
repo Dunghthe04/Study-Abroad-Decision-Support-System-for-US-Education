@@ -12,6 +12,8 @@ public class Consent : BaseEntity
     public string? PolicyVersion { get; set; }
     /// <summary>Người bấm đồng ý khi khác chủ thể dữ liệu (phụ huynh đồng ý thay con). Null = chủ thể tự đồng ý.</summary>
     public Guid? GrantedByUserId { get; set; }
+    /// <summary>[UC-115] Email nhận link mời của người bấm Đồng ý / Từ chối (phụ huynh không cần tài khoản). Null = không qua link mời.</summary>
+    public string? GrantedByEmail { get; set; }
     /// <summary>IP lúc đồng ý, để kiểm chứng sự đồng ý (Nghị định 356/2025 Điều 6).</summary>
     public string? GrantedIp { get; set; }
 }

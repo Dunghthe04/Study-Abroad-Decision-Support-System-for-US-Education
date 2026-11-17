@@ -114,6 +114,14 @@ export function PersonalInfoCard() {
               />
             </Field>
 
+            {user.dateOfBirth && (
+              <Field>
+                <FieldLabel htmlFor="account-dob">Ngày sinh</FieldLabel>
+                <Input id="account-dob" type="text" value={user.dateOfBirth} disabled readOnly />
+                <FieldDescription>Ngày sinh chỉ có thể thay đổi bởi Quản trị viên.</FieldDescription>
+              </Field>
+            )}
+
             <Field>
               <FieldLabel htmlFor="account-phone">Số điện thoại</FieldLabel>
               <Input
@@ -125,8 +133,14 @@ export function PersonalInfoCard() {
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 placeholder="Ví dụ: 0912345678"
+                disabled={user.role === "center"}
+                readOnly={user.role === "center"}
               />
-              <FieldDescription>Không bắt buộc. Để trống nếu muốn xóa số điện thoại.</FieldDescription>
+              <FieldDescription>
+                {user.role === "center"
+                  ? "Trung tâm đổi số điện thoại tại mục Hồ sơ trung tâm (cần xác thực)."
+                  : "Không bắt buộc. Để trống nếu muốn xóa số điện thoại."}
+              </FieldDescription>
             </Field>
 
             <Button type="submit" disabled={isSubmitting || !isDirty} className="w-full sm:w-auto">

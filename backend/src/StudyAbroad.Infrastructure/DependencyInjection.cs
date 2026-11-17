@@ -33,16 +33,21 @@ public static class DependencyInjection
         services.AddScoped<IStudyCenterRepository, StudyCenterRepository>();
         services.AddScoped<ICenterVerificationRepository, CenterVerificationRepository>();
         services.AddScoped<ICenterReviewRepository, CenterReviewRepository>();
+        services.AddScoped<ICenterReviewSubmissionRepository, CenterReviewSubmissionRepository>();
         services.AddScoped<StudyAbroad.Application.Admin.Universities.IAdminUniversityRepository, AdminUniversityRepository>();
+        services.AddScoped<StudyAbroad.Application.Admin.Scholarships.IAdminScholarshipRepository, AdminScholarshipRepository>();
         services.AddScoped<StudyAbroad.Application.Admin.Settings.IGradeScaleSettingRepository, GradeScaleSettingRepository>();
         services.AddScoped<StudyAbroad.Application.Admin.AiUsage.IAiUsageReportRepository, AiUsageReportRepository>();
-        services.AddScoped<StudyAbroad.Application.Admin.ChatReview.IChatReviewRepository, ChatReviewRepository>();
         services.AddScoped<StudyAbroad.Application.Admin.SlmSamples.ISlmSampleRepository, SlmSampleRepository>();
         services.AddScoped<StudyAbroad.Application.Admin.ReviewBatches.IReviewBatchRepository, ReviewBatchRepository>();
         services.AddScoped<StudyAbroad.Application.Leads.ILeadRepository, LeadRepository>();
+        services.AddScoped<StudyAbroad.Application.Leads.ILeadWithdrawalRepository, LeadWithdrawalRepository>();   // [UC-80] thu hồi lead khi xóa tài khoản
+        services.AddScoped<StudyAbroad.Application.Auth.IAccountPurgeRepository, AccountPurgeRepository>();   // [UC-80] xóa hẳn tài khoản quá hạn
         services.AddSingleton<StudyAbroad.Application.Admin.SlmSamples.ISlmWorkbookReader, StudyAbroad.Infrastructure.Import.SlmWorkbookReader>();
+        services.AddSingleton<StudyAbroad.Application.Admin.SlmSamples.ISlmTemplateWriter, StudyAbroad.Infrastructure.Import.SlmTemplateWriter>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IAuditLogRepository, AuditLogRepository>();
+        services.AddScoped<StudyAbroad.Application.Common.IUnitOfWork, EfUnitOfWork>();   // [UC-80] gom nhiều bước ghi vào một transaction
         services.AddScoped<StudyAbroad.Application.ParentLinks.IParentLinkRepository, ParentLinkRepository>();
         services.AddScoped<IScenarioRepository, ScenarioRepository>();   // [UC-86] kịch bản what-if đã lưu
         services.AddScoped<IFinancialProfileRepository, FinancialProfileRepository>();
@@ -96,6 +101,11 @@ public static class DependencyInjection
         services.AddSingleton<IEmailSender, QueuedEmailSender>();
         services.AddHostedService<EmailDispatchBackgroundService>();
 
+        // [UC-80] Thời hạn chờ xóa tài khoản và chu kỳ job xóa hẳn (appsettings "AccountDeletion")
+        services.Configure<StudyAbroad.Application.Auth.AccountDeletionOptions>(
+            configuration.GetSection(StudyAbroad.Application.Auth.AccountDeletionOptions.SectionName));
+        services.AddSingleton(sp => sp.GetRequiredService<IOptions<StudyAbroad.Application.Auth.AccountDeletionOptions>>().Value);
+
         services.Configure<AdvisorOptions>(configuration.GetSection(AdvisorOptions.SectionName));
         // Giá token để tính tiền mỗi lần gọi AI: đọc từ cấu hình (appsettings "AiPricing" hoặc biến môi trường AiPricing__...)
         services.Configure<AiPricingOptions>(configuration.GetSection(AiPricingOptions.SectionName));
@@ -120,6 +130,7 @@ public static class DependencyInjection
         // [Scheduled Background Jobs: Unlock expired accounts & Cleanup OTPs]
         services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.AccountUnlockBackgroundService>();
         services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.OtpCleanupBackgroundService>();
+        services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.AccountPurgeBackgroundService>();   // [UC-80]
 
         return services;
     }

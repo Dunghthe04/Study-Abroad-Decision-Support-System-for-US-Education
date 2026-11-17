@@ -5,15 +5,8 @@ import pytest
 from app.schemas.chat import ProfileField
 from app.schemas.slm import SlmY
 from app.services.chat_flow import QUESTIONS
-from app.services.intake import (
-    CHAT_BUTTON,
-    FIELD_QUESTION,
-    FORM_BUTTON,
-    form_goals,
-    has_profile,
-    intake_choice,
-    next_question,
-)
+from app.services.intake import FIELD_QUESTION, form_goals, has_profile, intake_choice, next_question
+from app.services.replies import CHAT_BUTTON, FORM_BUTTON
 from app.services.skill_rules import REQUIRED_B4
 
 

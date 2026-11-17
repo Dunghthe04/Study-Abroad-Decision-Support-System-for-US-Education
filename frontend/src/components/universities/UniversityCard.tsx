@@ -17,6 +17,8 @@ import type { UniversityListItem } from "@/types/university";
 import { cn } from "@/lib/utils";
 
 interface UniversityCardProps {
+  /** Cách xếp đang chọn: xếp theo tổng chi phí thì thẻ hiện tổng chi phí để con số khớp thứ tự (không thì học phí) */
+  sortBy?: string;
   university: UniversityListItem;
 }
 
@@ -34,16 +36,16 @@ function satPolicyLabel(policy: string | null): string | null {
   return null;
 }
 
-function StatItem({ label, value }: { label: string; value: string }) {
+function StatItem({ label, value, emphasize = false }: { label: string; value: string; emphasize?: boolean }) {
   return (
     <div className="min-w-0">
       <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="truncate text-sm font-semibold text-foreground">{value}</dd>
+      <dd className={cn("truncate text-sm font-semibold", emphasize ? "text-brand" : "text-foreground")}>{value}</dd>
     </div>
   );
 }
 
-export function UniversityCard({ university }: UniversityCardProps) {
+export function UniversityCard({ university, sortBy }: UniversityCardProps) {
   const logoUrl = universityUrl(university.logoUrl);
   const coverUrl = universityUrl(university.coverUrl);
   const detailHref = `/university/${encodeURIComponent(university.code)}?from=universities`;
@@ -52,7 +54,10 @@ export function UniversityCard({ university }: UniversityCardProps) {
   const controlLabel = university.control ? schoolControlLabel(university.control) : null;
   const subtitleParts = [location, controlLabel].filter(Boolean);
 
+  const byTotalCost = sortBy === "total_cost_asc" || sortBy === "total_cost_desc";
+  const byTuition = sortBy === "tuition_asc" || sortBy === "tuition_desc";
   const tuition = university.tuitionUsd != null ? universityMoney(university.tuitionUsd) : "Chưa có";
+  const totalCost = university.totalCostUsd != null ? universityMoney(university.totalCostUsd) : "Chưa có";
   const acceptance = university.acceptanceRate != null ? universityPercent(university.acceptanceRate) : "Chưa có";
   const english = englishRequirement(university) ?? "Chưa có";
   const satPolicy = satPolicyLabel(university.satPolicy) ?? "Chưa có";
@@ -114,7 +119,8 @@ export function UniversityCard({ university }: UniversityCardProps) {
         )}
 
         <dl className="grid grid-cols-2 gap-x-4 gap-y-2">
-          <StatItem label="Học phí/năm" value={tuition} />
+          <StatItem label="Học phí/năm" value={tuition} emphasize={!byTotalCost && byTuition} />
+          <StatItem label="Tổng chi phí/năm" value={totalCost} emphasize={byTotalCost} />
           <StatItem label="Tỷ lệ nhận" value={acceptance} />
           <StatItem label="Yêu cầu tiếng Anh" value={english} />
           <StatItem label="SAT/ACT" value={satPolicy} />

@@ -62,8 +62,10 @@ def test_every_sort_order_is_accepted(sort):
 
 def test_a_follow_up_may_only_change_the_sort_because_the_filters_come_from_the_context():
     check_entities("knowledge", {"tasks": SEARCH, "sort": "lowest_cost", "follow_up": True})
-    with pytest.raises(ValueError):
-        check_entities("knowledge", {"tasks": SEARCH, "sort": "lowest_cost"})  # không phải câu tiếp nối
+    # tự đứng được cũng chỉ cần cách xếp ("trường nào rẻ nhất", "trường nào có học bổng lớn nhất")
+    check_entities("knowledge", {"tasks": SEARCH, "sort": "lowest_cost"})
+    check_entities("knowledge", {"tasks": SEARCH, "sort": "most_aid"})
+    check_entities("knowledge", {"tasks": SEARCH, "sort": "highest_cost"})
 
 
 @pytest.mark.parametrize(
@@ -96,3 +98,26 @@ def test_filters_belong_to_knowledge_only():
 
 def test_the_filter_key_list_is_the_one_in_the_contract():
     assert FILTER_KEYS[0] == "state" and len(FILTER_KEYS) == len(set(FILTER_KEYS)) == 15
+
+
+# ---- group: nhóm kết quả của học sinh ("các trường trong nhóm Khó vào của em")
+def test_group_stands_for_the_schools_of_a_result_group_in_a_comparison():
+    check_entities("knowledge", {"tasks": ["compare_facts"], "group": "reach", "fields": ["cost"]})
+
+
+@pytest.mark.parametrize(
+    "entities",
+    [
+        {"tasks": ["compare_facts"], "group": "hardest"},  # nhóm lạ
+        {"tasks": ["school_info"], "group": "reach"},  # group chỉ đi với compare_facts
+        {"group": "reach"},
+        {
+            "tasks": ["compare_facts"],
+            "group": "reach",
+            "schools": ["MIT", "Harvard"],
+        },  # đã chỉ nhóm thì không nêu tên
+    ],
+)
+def test_a_group_is_only_valid_for_compare_facts_without_school_names(entities):
+    with pytest.raises(ValueError):
+        check_entities("knowledge", entities)

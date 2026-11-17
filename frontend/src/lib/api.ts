@@ -1,5 +1,8 @@
 import type {
   CenterReviewsDto,
+  CenterReviewDto,
+  CenterReviewEligibilityDto,
+  CreateCenterReviewRequest,
   AuthResponse,
   ChangePasswordRequest,
   ForgotPasswordRequest,
@@ -7,6 +10,7 @@ import type {
   RegisterRequest,
   ResendOtpRequest,
   ResetPasswordRequest,
+  RestoreAccountRequest,
   UpdateProfileRequest,
   UserDto,
   AdminUserAccountListQuery,
@@ -18,8 +22,12 @@ import type {
   VerifyEmailRequest,
   AcademicProfileResponse,
   ParentInviteInfo,
+  ParentRevokeInfo,
   ParentLinkDto,
   ParentLinkResponse,
+  ParentProfileOverviewDto,
+  ShareParentProfileResult,
+  ParentProfileOfferDto,
   StudyCenter,
   CreateStudyCenterRequest,
   AddTargetSchoolRequest,
@@ -190,6 +198,19 @@ export const authApi = {
       body: JSON.stringify(data),
     }),
 
+  // [UC-80] Tự xóa tài khoản (học sinh, phụ huynh): khóa ngay, xóa hẳn sau 30 ngày; server xóa luôn cookie phiên
+  deleteMe: () =>
+    apiFetch<{ message: string }>("/api/v1/auth/me", {
+      method: "DELETE",
+    }),
+
+  // [UC-80] Khôi phục tài khoản đang chờ xóa bằng mã nhận lúc đăng nhập; thành công thì server đăng nhập luôn
+  restore: (data: RestoreAccountRequest) =>
+    apiFetch<AuthResponse>("/api/v1/auth/restore", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
   // [AC-3] Đăng xuất: Thu hồi phiên trên server và xóa HttpOnly Cookie (không cần truyền token thủ công)
   logout: () =>
     apiFetch<{ message: string }>("/api/v1/auth/logout", {
@@ -210,6 +231,31 @@ export const profileApi = {
     apiFetch<AcademicProfileResponse>("/api/v1/profile/academic", {
       method: "GET",
     }),
+
+  // Phụ huynh: hồ sơ các con đã liên kết (chỉ đọc) + hồ sơ mình nhập còn chờ chọn con nhận
+  getChildrenProfiles: () =>
+    apiFetch<ParentLinkResponse<ParentProfileOverviewDto>>("/api/v1/profile/academic/children", {
+      method: "GET",
+    }),
+
+  // linkId null = không chuyển cho con nào
+  shareToChild: (linkId: string | null) =>
+    apiFetch<ParentLinkResponse<ShareParentProfileResult>>("/api/v1/profile/academic/share", {
+      method: "POST",
+      body: JSON.stringify({ linkId }),
+    }),
+
+  // Học sinh: đề nghị dùng hồ sơ phụ huynh khi mình đã có hồ sơ
+  getParentOffers: () =>
+    apiFetch<ParentLinkResponse<ParentProfileOfferDto[]>>("/api/v1/profile/academic/parent-offers", {
+      method: "GET",
+    }),
+
+  decideParentOffer: (linkId: string, accept: boolean) =>
+    apiFetch<ParentLinkResponse<ShareParentProfileResult>>(
+      `/api/v1/profile/academic/parent-offers/${encodeURIComponent(linkId)}/${accept ? "accept" : "decline"}`,
+      { method: "POST" },
+    ),
 };
 
 // [Q11] Liên kết phụ huynh – học sinh. Token lời mời đi trong body để không nằm trong log URL của API.
@@ -220,8 +266,15 @@ export const parentLinksApi = {
       body: JSON.stringify({ token }),
     }),
 
-  acceptInvite: (token: string) =>
-    apiFetch<ParentLinkResponse<ParentLinkDto>>("/api/v1/parent-links/invite/accept", {
+  // [UC-115] Không cần đăng nhập: link một lần trong mail là xác thực
+  acceptInvite: (token: string, isGuardian: boolean) =>
+    apiFetch<ParentLinkResponse<ParentInviteInfo>>("/api/v1/parent-links/invite/accept", {
+      method: "POST",
+      body: JSON.stringify({ token, isGuardian }),
+    }),
+
+  rejectInvite: (token: string) =>
+    apiFetch<ParentLinkResponse<ParentInviteInfo>>("/api/v1/parent-links/invite/reject", {
       method: "POST",
       body: JSON.stringify({ token }),
     }),
@@ -245,6 +298,19 @@ export const parentLinksApi = {
   getMine: () =>
     apiFetch<ParentLinkResponse<ParentLinkDto[]>>("/api/v1/parent-links/me", {
       method: "GET",
+    }),
+
+  // [UC-117] Phụ huynh rút đồng ý bằng link trong mail, không cần đăng nhập
+  lookupRevoke: (token: string) =>
+    apiFetch<ParentLinkResponse<ParentRevokeInfo>>("/api/v1/parent-links/revoke/lookup", {
+      method: "POST",
+      body: JSON.stringify({ token }),
+    }),
+
+  revokeByToken: (token: string) =>
+    apiFetch<ParentLinkResponse<ParentRevokeInfo>>("/api/v1/parent-links/revoke", {
+      method: "POST",
+      body: JSON.stringify({ token }),
     }),
 };
 
@@ -344,6 +410,17 @@ export const studyCentersApi = {
     apiFetch<CenterReviewsDto>(
       `/api/v1/study-centers/${encodeURIComponent(id)}/reviews?page=${page}&pageSize=${pageSize}`,
     ),
+  /** [UC-45] Người dùng hiện tại (học sinh / phụ huynh) có được đánh giá trung tâm này không. */
+  getReviewEligibility: (id: string) =>
+    apiFetch<CenterReviewEligibilityDto>(`/api/v1/study-centers/${encodeURIComponent(id)}/reviews/eligibility`),
+  /** [UC-45] Gửi đánh giá 1 đến 5 sao. Lỗi 400: chưa gửi yêu cầu liên hệ, đã đánh giá, số sao hoặc nhận xét không hợp lệ. */
+  createReview: (id: string, rating: number, comment?: string) => {
+    const payload: CreateCenterReviewRequest = { rating, comment: comment?.trim() || null };
+    return apiFetch<CenterReviewDto>(`/api/v1/study-centers/${encodeURIComponent(id)}/reviews`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
   /** [UC-59] Xác minh hoặc hủy xác minh trung tâm tư vấn (vai trò: Moderator / Admin) */
   verify: (id: string, isVerified: boolean, verificationNote?: string | null) =>
     apiFetch<StudyCenter>(`/api/v1/study-centers/${encodeURIComponent(id)}/verify`, {

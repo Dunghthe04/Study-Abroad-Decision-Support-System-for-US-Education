@@ -11,18 +11,29 @@ public interface ISlmSampleService
 
     Task<SlmSampleDto?> GetAsync(Guid id, CancellationToken ct = default);
 
-    /// <summary>Tạo một dòng ở trạng thái draft. Dữ liệu sai (loại mẫu, tập, JSON, câu hỏi trống) thì ném ArgumentException.</summary>
+    Task<SlmSampleDetailDto?> GetDetailAsync(Guid id, CancellationToken ct = default);
+
+    Task<IReadOnlyList<SlmSampleCreatorDto>> GetCreatorsAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Tạo một dòng ở trạng thái draft, hoặc pending nếu Submit. Dữ liệu sai hoặc có số điện thoại / e-mail thì ném ArgumentException;
+    /// trùng mẫu đã có thì ném SlmDuplicateSampleException.
+    /// </summary>
     Task<SlmSampleDto> CreateAsync(SaveSlmSampleRequest request, Guid actorUserId, CancellationToken ct = default);
 
     /// <summary>
-    /// Sửa một dòng. Nếu Question, Intents, Profile, PendingQuestion hoặc Context đổi thì dòng quay về draft và xóa thông tin duyệt cũ.
-    /// Null nếu không có dòng. Dữ liệu sai thì ném ArgumentException.
+    /// Sửa một dòng và ghi lịch sử. Dòng approved đổi nội dung thì về pending; Submit đưa draft, rejected, needs_fix sang pending.
+    /// Null nếu không có dòng. Lỗi như CreateAsync.
     /// </summary>
     Task<SlmSampleDto?> UpdateAsync(Guid id, SaveSlmSampleRequest request, Guid actorUserId, CancellationToken ct = default);
 
-    Task<bool> DeleteAsync(Guid id, CancellationToken ct = default);
+    /// <summary>Xóa mềm. False nếu không có hoặc đã xóa.</summary>
+    Task<bool> DeleteAsync(Guid id, Guid actorUserId, CancellationToken ct = default);
 
-    /// <summary>Duyệt một hoặc nhiều dòng cùng lúc. Trạng thái lạ, danh sách mã trống hoặc quá 500 mã thì ném ArgumentException.</summary>
+    /// <summary>
+    /// Duyệt một hoặc nhiều dòng sang approved, rejected hoặc needs_fix. Từ chối và yêu cầu sửa phải có ghi chú.
+    /// Bỏ qua dòng do chính người duyệt tạo, sửa hoặc gửi duyệt, và dòng approved chưa có câu trả lời lẫn intents.
+    /// </summary>
     Task<ReviewSlmSamplesResultDto> ReviewAsync(ReviewSlmSamplesRequest request, Guid actorUserId, CancellationToken ct = default);
 
     /// <summary>
@@ -31,8 +42,25 @@ public interface ISlmSampleService
     /// </summary>
     Task<SlmImportResultDto> ImportAsync(Stream workbook, Guid actorUserId, CancellationToken ct = default);
 
-    /// <summary>Xuất các dòng approved thành nội dung JSONL, mỗi dòng là một SlmExportLine. split null là mọi tập.</summary>
-    Task<string> ExportJsonlAsync(string? split, CancellationToken ct = default);
+    Task<SlmImportPreviewDto> PreviewAsync(Stream workbook, CancellationToken ct = default);
+
+    /// <summary>
+    /// UC-53: lưu câu chat chưa trả lời được thành mẫu draft, chỉ có câu hỏi (không người dùng, không phiên).
+    /// Bỏ qua nếu trống, có thông tin liên hệ hoặc link, hoặc trùng câu đã có (kể cả đã xóa). Trả true nếu đã thêm.
+    /// </summary>
+    Task<bool> CaptureUnansweredAsync(string? question, CancellationToken ct = default);
+
+    /// <summary>UC-102: xuất mẫu approved chưa xóa ra jsonl hoặc xlsx, ghi nhật ký và đánh dấu đã xuất. Định dạng lạ thì ném ArgumentException.</summary>
+    Task<SlmExportFile> ExportAsync(
+        string? format, Guid actorUserId, string? ipAddress, string? userAgent, CancellationToken ct = default);
+}
+
+public interface ISlmTemplateWriter
+{
+    byte[] Build();
+
+    /// <summary>File xlsx các mẫu đã duyệt, mỗi loại mẫu một sheet.</summary>
+    byte[] BuildExport(IReadOnlyList<StudyAbroad.Domain.Entities.SlmTrainingSample> samples);
 }
 
 /// <summary>Đọc file xlsx dữ liệu huấn luyện thành các dòng thô, chưa kiểm tra nội dung.</summary>
@@ -42,5 +70,5 @@ public interface ISlmWorkbookReader
     /// Mỗi sheet có tên trùng một loại mẫu được đọc; sheet khác (README, summary) bị bỏ qua. Cột được nhận theo tên ở dòng tiêu đề
     /// (thứ tự cột có thể khác giữa các sheet). File hỏng hoặc không phải xlsx thì ném InvalidDataException.
     /// </summary>
-    IReadOnlyList<SlmImportRow> Read(Stream workbook);
+    IReadOnlyList<SlmImportRow> Read(Stream workbook, CancellationToken ct = default);
 }

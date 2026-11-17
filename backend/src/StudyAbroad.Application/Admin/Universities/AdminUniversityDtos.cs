@@ -86,7 +86,8 @@ public record CreateUniversityRequest(
     int? InternationalStudentCount = null,
     bool IsIvy = false,
     string? LogoUrl = null,
-    string? CoverUrl = null);
+    string? CoverUrl = null,
+    bool ConfirmDuplicateName = false);
 
 public record UpdateUniversityRequest(
     string? Name,
@@ -98,7 +99,10 @@ public record UpdateUniversityRequest(
     int? InternationalStudentCount,
     bool IsIvy,
     string? LogoUrl = null,
-    string? CoverUrl = null);
+    string? CoverUrl = null,
+    bool ConfirmDuplicateName = false);
+
+public record CreateOfferingRequest(string? StudyLevel);
 
 public record UpdateOfferingMajor(Guid MajorId, bool IsStem);
 
@@ -124,7 +128,7 @@ public record UpdateOfferingRequest(
     string? Notes,
     IReadOnlyList<UpdateOfferingMajor>? Majors);
 
-public record SetUniversityVisibilityRequest(bool IsActive);
+public record SetUniversityVisibilityRequest(bool IsActive, string? Reason = null);
 
 /// <summary>Kết quả của một thao tác sửa: có dữ liệu, không tìm thấy, hoặc lỗi theo từng trường dữ liệu.</summary>
 public record AdminUpdateResult<T>(T? Value, bool NotFound, IReadOnlyDictionary<string, string> Errors)

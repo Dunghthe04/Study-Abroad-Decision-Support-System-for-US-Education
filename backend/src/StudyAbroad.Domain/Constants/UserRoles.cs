@@ -18,5 +18,9 @@ namespace StudyAbroad.Domain.Constants
         /// center do moderator tạo (trung tâm không tự đăng ký).</summary>
         public static readonly IReadOnlySet<string> SelfRegister = new HashSet<string> { Student, Parent };
 
+        /// <summary>[UC-80] Vai trò được tự xóa tài khoản (đặc tả chỉ cho học sinh và phụ huynh).
+        /// Job xóa hẳn cũng chỉ xử lý các vai trò này.</summary>
+        public static readonly IReadOnlySet<string> SelfDelete = new HashSet<string> { Student, Parent };
+
     }
 }

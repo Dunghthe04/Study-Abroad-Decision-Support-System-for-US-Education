@@ -27,4 +27,12 @@ public class AcademicProfileRepository(AppDbContext db) : IAcademicProfileReposi
             .ThenBy(s => s.CreatedAt)
             .ToListAsync(ct);
     }
+
+    public async Task<List<ProfileCertification>> GetCertificationsAsync(Guid studentProfileId, CancellationToken ct = default)
+    {
+        return await db.ProfileCertifications
+            .AsNoTracking()
+            .Where(c => c.StudentProfileId == studentProfileId)
+            .ToListAsync(ct);
+    }
 }

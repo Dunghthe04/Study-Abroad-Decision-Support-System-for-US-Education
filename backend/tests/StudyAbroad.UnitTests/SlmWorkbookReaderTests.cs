@@ -106,6 +106,57 @@ public class SlmWorkbookReaderTests
     }
 
     [Fact]
+    public void Read_WorkbookWithoutAnyRecognizedSheet_ThrowsInvalidDataException()
+    {
+        var stream = new MemoryStream();
+        using (var zip = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            Add(zip, "xl/workbook.xml",
+                $"<workbook xmlns=\"{Ns}\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets>" +
+                "<sheet name=\"README\" sheetId=\"1\" r:id=\"rId1\"/><sheet name=\"Sheet1\" sheetId=\"2\" r:id=\"rId2\"/></sheets></workbook>");
+            Add(zip, "xl/_rels/workbook.xml.rels",
+                "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">" +
+                "<Relationship Id=\"rId1\" Target=\"worksheets/sheet1.xml\"/><Relationship Id=\"rId2\" Target=\"worksheets/sheet2.xml\"/></Relationships>");
+            Add(zip, "xl/worksheets/sheet1.xml", $"<worksheet xmlns=\"{Ns}\"><sheetData/></worksheet>");
+            Add(zip, "xl/worksheets/sheet2.xml", $"<worksheet xmlns=\"{Ns}\"><sheetData/></worksheet>");
+        }
+        stream.Position = 0;
+
+        var error = Assert.Throws<InvalidDataException>(() => new SlmWorkbookReader().Read(stream));
+
+        Assert.Contains("knowledge", error.Message);
+    }
+
+    [Fact]
+    public void Read_RecognizedSheetWithOnlyHeader_ReturnsNoRows()
+    {
+        var stream = new MemoryStream();
+        using (var zip = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            Add(zip, "xl/workbook.xml",
+                $"<workbook xmlns=\"{Ns}\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets>" +
+                "<sheet name=\"knowledge\" sheetId=\"1\" r:id=\"rId1\"/></sheets></workbook>");
+            Add(zip, "xl/_rels/workbook.xml.rels",
+                "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">" +
+                "<Relationship Id=\"rId1\" Target=\"worksheets/sheet1.xml\"/></Relationships>");
+            Add(zip, "xl/worksheets/sheet1.xml",
+                $"<worksheet xmlns=\"{Ns}\"><sheetData><row r=\"1\"><c r=\"A1\" t=\"inlineStr\"><is><t>question</t></is></c></row></sheetData></worksheet>");
+        }
+        stream.Position = 0;
+
+        Assert.Empty(new SlmWorkbookReader().Read(stream));
+    }
+
+    [Fact]
+    public void Read_CancelledToken_ThrowsOperationCanceled()
+    {
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        Assert.ThrowsAny<OperationCanceledException>(() => new SlmWorkbookReader().Read(BuildWorkbook(), cts.Token));
+    }
+
+    [Fact]
     public void Read_RealFile_WhenPresent()
     {
         const string path = "C:/Users/duncuti16/Downloads/du_lieu_slm.xlsx";

@@ -18,15 +18,19 @@ public static class DependencyInjection
         services.AddScoped<StudyAbroad.Application.TargetSchools.ITargetSchoolService, StudyAbroad.Application.TargetSchools.TargetSchoolService>();
         services.AddScoped<IStudyCenterService, StudyCenterService>();
         services.AddScoped<IAdminUniversityService, AdminUniversityService>();
+        services.AddScoped<StudyAbroad.Application.Admin.Scholarships.IAdminScholarshipService, StudyAbroad.Application.Admin.Scholarships.AdminScholarshipService>();
         services.AddScoped<StudyAbroad.Application.Admin.Settings.IGradeScaleSettingService, StudyAbroad.Application.Admin.Settings.GradeScaleSettingService>();
         services.AddScoped<StudyAbroad.Application.Admin.AiUsage.IAiUsageReportService, StudyAbroad.Application.Admin.AiUsage.AiUsageReportService>();   // token của các lần gọi AI cho admin
-        services.AddScoped<StudyAbroad.Application.Admin.ChatReview.IChatReviewService, StudyAbroad.Application.Admin.ChatReview.ChatReviewService>();   // hàng đợi câu cần xem
         services.AddScoped<StudyAbroad.Application.Admin.SlmSamples.ISlmSampleService, StudyAbroad.Application.Admin.SlmSamples.SlmSampleService>();
         services.AddScoped<StudyAbroad.Application.Admin.ReviewBatches.IReviewBatchService, StudyAbroad.Application.Admin.ReviewBatches.ReviewBatchService>();   // đợt duyệt mẫu
         services.AddScoped<StudyAbroad.Application.Leads.ILeadService, StudyAbroad.Application.Leads.LeadService>();
+        services.AddScoped<StudyAbroad.Application.Leads.ILeadParentConfirmService, StudyAbroad.Application.Leads.LeadParentConfirmService>();   // [UC-116] phụ huynh xác nhận lead qua mail
+        services.AddScoped<StudyAbroad.Application.StudyCenters.ICenterReviewService, StudyAbroad.Application.StudyCenters.CenterReviewService>();
         services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IAccountPurgeService, AccountPurgeService>();   // [UC-80] job xóa hẳn tài khoản gọi qua scope
         // [Q11] Liên kết phụ huynh–học sinh và sự đồng ý xử lý dữ liệu trẻ em
         services.AddScoped<IParentLinkService, ParentLinkService>();
+        services.AddScoped<IParentProfileShareService, ParentProfileShareService>();
         services.AddScoped<IFinancialProfileService, FinancialProfileService>();
         // [USAS-365] Đăng ký service phân tích điểm học thuật
         services.AddScoped<StudyAbroad.Application.Profile.Academic.IAcademicAnalysisService, StudyAbroad.Application.Profile.Academic.AcademicAnalysisService>();

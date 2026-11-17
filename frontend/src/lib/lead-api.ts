@@ -12,7 +12,7 @@ import type {
   SendLeadMessageRequest,
   SendLeadMessageResultDto,
 } from "@/types/api";
-import type { CreateLeadRequest, LeadDto, LeadRuleCode, LeadRuleError, SentLeadDto } from "@/types/lead";
+import type { CreateLeadRequest, LeadDto, LeadParentConfirmInfo, LeadRuleCode, LeadRuleError, SentLeadDto } from "@/types/lead";
 
 export const leadApi = {
   create: (request: CreateLeadRequest) =>
@@ -68,6 +68,22 @@ export const leadApi = {
       `/api/v1/leads/sent/${encodeURIComponent(leadId)}/messages/${encodeURIComponent(messageId)}/report`,
       { method: "POST", body: JSON.stringify({ reason: reason?.trim() || null }) }
     ),
+};
+
+// [UC-116] Không cần đăng nhập: token một lần trong mail là xác thực, gửi trong body để không lộ ở log URL.
+// Lỗi: 404 link sai, 410 hết hạn, 409 đã có phụ huynh trả lời.
+type LeadParentConfirmResponse = { message: string | null; data: LeadParentConfirmInfo };
+
+const postLeadParentConfirm = (action: "lookup" | "accept" | "reject", token: string) =>
+  apiFetch<LeadParentConfirmResponse>(`/api/v1/leads/parent-confirm/${action}`, {
+    method: "POST",
+    body: JSON.stringify({ token }),
+  });
+
+export const leadParentConfirmApi = {
+  lookup: (token: string) => postLeadParentConfirm("lookup", token),
+  accept: (token: string) => postLeadParentConfirm("accept", token),
+  reject: (token: string) => postLeadParentConfirm("reject", token),
 };
 
 /**
