@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/components/ui/toast";
 import { AdminFormError, setAdminUniversityVisibility } from "@/lib/admin-university-api";
@@ -21,11 +22,19 @@ export function UniversityVisibilitySwitch({ university, onChanged }: University
   const canChange = user?.role === "moderator";
   const [confirmingHide, setConfirmingHide] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [reason, setReason] = useState("");
+  const [reasonError, setReasonError] = useState<string | null>(null);
 
   const changeVisibility = async (isActive: boolean) => {
+    const trimmed = reason.trim();
+    if (!isActive && !trimmed) {
+      setReasonError("Vui lòng nhập lý do ẩn.");
+      return;
+    }
     setIsSaving(true);
+    setReasonError(null);
     try {
-      const saved = await setAdminUniversityVisibility(university.id, isActive);
+      const saved = await setAdminUniversityVisibility(university.id, isActive, isActive ? null : trimmed);
       toast.add({
         type: "success",
         title: isActive ? "Đã hiện lại trường" : "Đã ẩn trường",
@@ -33,7 +42,12 @@ export function UniversityVisibilitySwitch({ university, onChanged }: University
       });
       onChanged(saved);
       setConfirmingHide(false);
+      setReason("");
     } catch (err) {
+      if (err instanceof AdminFormError && err.fieldErrors.reason) {
+        setReasonError(err.fieldErrors.reason);
+        return;
+      }
       toast.add({
         type: "error",
         title: "Không đổi được trạng thái hiển thị",
@@ -83,12 +97,25 @@ export function UniversityVisibilitySwitch({ university, onChanged }: University
             Ẩn <span className="font-medium">{university.name}</span>? Học sinh sẽ không còn thấy trường này. Bạn có thể
             bật lại bất cứ lúc nào.
           </p>
+          <Textarea
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="Lý do ẩn (bắt buộc, ghi vào nhật ký)"
+            maxLength={500}
+            disabled={isSaving}
+            aria-label="Lý do ẩn trường"
+            aria-invalid={Boolean(reasonError) || undefined}
+          />
+          {reasonError && <p className="text-xs text-destructive">{reasonError}</p>}
           <div className="flex justify-end gap-2">
             <Button
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => setConfirmingHide(false)}
+              onClick={() => {
+                setConfirmingHide(false);
+                setReasonError(null);
+              }}
               disabled={isSaving}
             >
               Hủy
