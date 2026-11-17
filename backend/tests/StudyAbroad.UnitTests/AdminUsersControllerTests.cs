@@ -153,6 +153,9 @@ public class AdminUsersControllerTests
             return Task.FromResult(AuthResult.Ok(updated, "Đã mở khóa tài khoản."));
         }
 
+        public Task<AuthResult> RestoreAccountAsync(RestoreAccountRequest request, string? ipAddress = null, string? userAgent = null, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+
         public Task<AuthResult> AnonymizeUserAccountAsync(Guid userId, string? ipAddress = null, string? userAgent = null, CancellationToken ct = default)
         {
             var user = Users.FirstOrDefault(u => u.Id == userId);

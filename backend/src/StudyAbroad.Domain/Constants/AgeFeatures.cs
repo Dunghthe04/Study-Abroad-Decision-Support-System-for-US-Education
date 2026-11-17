@@ -23,13 +23,14 @@ public static class AgeFeatures
     /// <summary>
     /// Gửi yêu cầu liên hệ và chia sẻ dữ liệu cho trung tâm (UC-42 đến 45).
     /// Học sinh từ 16 tuổi; 16–17 phải tích xác nhận, phần này kiểm tra ở LeadService.
+    /// [UC-116] Dưới 16 đã có phụ huynh đồng ý (UC-115) thì được gửi, mỗi lần gửi phụ huynh xác nhận qua mail.
     /// </summary>
     public const string ShareWithCenter = "share_with_center";
 
     public static readonly IReadOnlyDictionary<string, AgeRule> Rules = new Dictionary<string, AgeRule>
     {
         [ProcessStudentData] = new(MinAge: AgeGroups.ChildMaxAgeExclusive, ParentConsentUnlocks: true), // dưới 16 cần phụ huynh đồng ý
-        [ShareWithCenter] = new(MinAge: AgeGroups.ChildMaxAgeExclusive, ParentConsentUnlocks: false),     // dưới 16 chặn hẳn; phụ huynh gửi thay bằng tài khoản của mình
+        [ShareWithCenter] = new(MinAge: AgeGroups.ChildMaxAgeExclusive, ParentConsentUnlocks: true),      // dưới 16 cần phụ huynh đồng ý; mỗi lead phụ huynh xác nhận qua mail (UC-116)
     };
 
     /// <summary>

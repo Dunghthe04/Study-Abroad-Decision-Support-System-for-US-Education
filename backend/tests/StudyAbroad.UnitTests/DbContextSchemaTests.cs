@@ -87,7 +87,7 @@ public class DbContextSchemaTests
         AssertForeignKey<UserSubscription>(db, nameof(UserSubscription.UserId), "users", DeleteBehavior.Cascade);
         AssertForeignKey<UserSubscription>(db, nameof(UserSubscription.SubscriptionPlanId), "subscription_plans", DeleteBehavior.Cascade);
         AssertForeignKey<UserDailyUsage>(db, nameof(UserDailyUsage.UserId), "users", DeleteBehavior.Cascade);
-        AssertForeignKey<PaymentTransaction>(db, nameof(PaymentTransaction.UserId), "users", DeleteBehavior.Cascade);
+        AssertForeignKey<PaymentTransaction>(db, nameof(PaymentTransaction.UserId), "users", DeleteBehavior.SetNull);   // [UC-80] giữ giao dịch ẩn danh khi xóa hẳn user
         AssertForeignKey<PaymentTransaction>(db, nameof(PaymentTransaction.UserSubscriptionId), "user_subscriptions", DeleteBehavior.SetNull);
         AssertForeignKey<FieldEvidence>(db, nameof(FieldEvidence.UniversityId), "universities", DeleteBehavior.Cascade);
         // Nhật ký AI nối với tin trả lời của trợ lý; xóa tin thì giữ dòng nhật ký (token đã tiêu thật), chỉ bỏ liên kết

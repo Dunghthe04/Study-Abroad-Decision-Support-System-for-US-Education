@@ -111,12 +111,11 @@ public class ProfileFlowService(
             var scores = await repository.GetTranscriptScoresAsync(profile.Id, ct);
             var activities = await repository.GetProfileActivitiesAsync(profile.Id, ct);
             var certifications = await repository.GetProfileCertificationsAsync(profile.Id, ct);
-            var certificationTypes = await LoadCertificationTypesAsync(ct);
             var scale = await GetGradeScaleAsync(ct);
             return new ProfileFlowStateDto(
                 CurrentStep: 6,
                 CompletedSteps: [1, 2, 3, 4, 5],
-                Draft: BuildDraftFromProfile(profile, scores, activities, certifications, certificationTypes, scale),
+                Draft: BuildDraftFromProfile(profile, scores, activities, certifications, scale),
                 DraftTranscript: DraftTranscriptFileDto.FromOrNull(stored?.DraftTranscript),
                 LastUpdatedAt: profile.UpdatedAt ?? profile.CreatedAt,
                 HasCommittedProfile: true,
@@ -313,7 +312,7 @@ public class ProfileFlowService(
     // ───────────────────────────── Trạng thái nháp ─────────────────────────────
 
     /// <summary>Đã gửi qua luồng 6 bước, hoặc có dữ liệu nhập từ màn hình cũ</summary>
-    private static bool HasCommittedProfile(StudentProfile profile) =>
+    internal static bool HasCommittedProfile(StudentProfile profile) =>
         profile.FlowSubmittedAt.HasValue
         || profile.OverallGpa.HasValue
         || profile.BudgetTier is not null
@@ -937,7 +936,6 @@ public class ProfileFlowService(
 
         // Bước 3
         var certifications = BuildCertifications(draft.Step3, certificationTypes);
-        ApplyLegacyCertificationColumns(profile, certifications, certificationTypes);
         // Tick nghĩa là "chưa thi và chưa có dự định thi": mục đã có chứng chỉ hoặc dự định thi (dòng mục tiêu) thì không còn tick
         profile.EnglishTestPlanned = (draft.Step3?.EnglishPlanned ?? false)
             && !certifications.Any(c => IsEnglishCategory(c.Category));
@@ -1030,81 +1028,9 @@ public class ProfileFlowService(
     /// <summary>english là mục tiếng Anh; standardized và graduate chung mục bài thi chuẩn hóa (như form bước 3)</summary>
     private static bool IsEnglishCategory(string? category) => category == "english";
 
-    /// <summary>
-    /// Gợi ý trường vẫn đọc các cột cũ (ielts, toefl, sat...). Mỗi loại có profileField trong metadata → ghi điểm cao nhất
-    /// của loại đó; tiếng Anh chính là chứng chỉ có cột riêng và ngày thi gần nhất; AP ghi vào other_tests_json {"ap": điểm cao nhất}
-    /// </summary>
-    private static void ApplyLegacyCertificationColumns(
-        StudentProfile profile,
-        IReadOnlyList<ProfileCertification> certifications,
-        IReadOnlyDictionary<string, CertificationMetadataItem> certificationTypes)
-    {
-        var withField = certifications
-            .Where(c => c.OverallScore is not null && certificationTypes.TryGetValue(c.TestType, out var t) && t.ProfileField is not null)
-            .Select(c => (Cert: c, Field: certificationTypes[c.TestType].ProfileField!))
-            .ToList();
-
-        foreach (var field in certificationTypes.Values.Select(t => t.ProfileField).OfType<string>().Distinct())
-        {
-            var matches = withField.Where(x => x.Field == field).ToList();
-            var actual = matches.Where(x => !x.Cert.IsTarget).ToList();
-            var candidates = actual.Count > 0 ? actual : matches;
-            var best = candidates.Max(x => x.Cert.OverallScore);
-            SetProfileField(profile, field, best);
-        }
-
-        var englishMatches = withField
-            .Where(x => x.Cert.Category == "english")
-            .ToList();
-        // Loại và ngày thi tiếng Anh chính chỉ lấy bài đã thi: chỉ có dự định thì để "none", không ghi ngày dự kiến (ở tương lai) như ngày đã thi
-        var mainEnglish = englishMatches
-            .Where(x => !x.Cert.IsTarget)
-            .OrderByDescending(x => x.Cert.TestDate ?? DateOnly.MinValue)
-            .ThenByDescending(x => x.Cert.OverallScore)
-            .Select(x => x.Cert)
-            .FirstOrDefault();
-        profile.EnglishTestType = mainEnglish is null
-            ? ProfileConstants.EnglishTestTypes.None
-            : certificationTypes[mainEnglish.TestType].ProfileField;
-        profile.EnglishTestDate = mainEnglish?.TestDate;
-    }
-
     /// <summary>Dự định đã qua tháng dự kiến: hệ thống không biết học sinh đã thi chưa nên chỉ cách sửa, không tự đổi</summary>
     private static string OverduePlanError(string label, DateOnly planned) =>
         $"Bước 3: dự định thi {label} tháng {planned:MM/yyyy} đã qua. Nếu đã thi, hãy nhập điểm thật; nếu chưa, đổi tháng dự kiến hoặc xóa dự định.";
-
-    /// <summary>Tên profileField trong metadata ↔ cột trên student_profiles</summary>
-    private static void SetProfileField(StudentProfile profile, string field, decimal? value)
-    {
-        switch (field)
-        {
-            case "ielts": profile.Ielts = value; break;
-            case "toefl": profile.Toefl = value; break;
-            case "duolingo": profile.Duolingo = value; break;
-            case "sat": profile.Sat = value; break;
-            case "act": profile.Act = value; break;
-            case "gre": profile.Gre = value; break;
-            case "gmat": profile.Gmat = value; break;
-            case "ap":
-                profile.OtherTestsJson = value is null
-                    ? null
-                    : JsonSerializer.Serialize(new Dictionary<string, decimal> { ["ap"] = value.Value });
-                break;
-        }
-    }
-
-    private static decimal? GetProfileField(StudentProfile profile, string field) => field switch
-    {
-        "ielts" => profile.Ielts,
-        "toefl" => profile.Toefl,
-        "duolingo" => profile.Duolingo,
-        "sat" => profile.Sat,
-        "act" => profile.Act,
-        "gre" => profile.Gre,
-        "gmat" => profile.Gmat,
-        "ap" => ReadApScore(profile.OtherTestsJson),
-        _ => null
-    };
 
     /// <summary>Số tháng tính cả tháng đầu và tháng cuối (09/2024 → 05/2025 = 9 tháng)</summary>
     private static int CountMonths(DateOnly start, DateOnly end) =>
@@ -1117,7 +1043,6 @@ public class ProfileFlowService(
         IReadOnlyList<TranscriptScore> scores,
         IReadOnlyList<ProfileActivity> activities,
         IReadOnlyList<ProfileCertification> certifications,
-        IReadOnlyDictionary<string, CertificationMetadataItem> certificationTypes,
         GradeScaleConfigDto? scale)
     {
         var step1 = new FlowGoalDraftDto(
@@ -1160,9 +1085,7 @@ public class ProfileFlowService(
         // Chứng chỉ đã thi và dự định thi (dòng mục tiêu) đều hiện thành thẻ, giữ thứ tự đã lưu.
         // Cờ planned: tick "chưa thi và chưa có dự định thi" của từng mục
         var step3 = new FlowCertificationDraftDto(
-            Certifications: certifications.Count > 0
-                ? certifications.OrderBy(c => c.SortOrder).Select(ToCertificationDraft).ToList()
-                : BuildCertificationsFromLegacyColumns(profile, certificationTypes),
+            Certifications: certifications.OrderBy(c => c.SortOrder).Select(ToCertificationDraft).ToList(),
             EnglishPlanned: profile.EnglishTestPlanned,
             StandardizedPlanned: profile.StandardizedTestPlanned);
 
@@ -1205,35 +1128,6 @@ public class ProfileFlowService(
         TestDate: c.TestDate?.ToString("yyyy-MM", CultureInfo.InvariantCulture),
         IsTarget: c.IsTarget);
 
-    /// <summary>Hồ sơ cũ chưa có dòng profile_certifications: dựng từ các cột cũ theo profileField trong metadata</summary>
-    private static List<FlowCertificationItemDto> BuildCertificationsFromLegacyColumns(
-        StudentProfile profile, IReadOnlyDictionary<string, CertificationMetadataItem> certificationTypes)
-    {
-        var items = new List<FlowCertificationItemDto>();
-        foreach (var type in certificationTypes.Values.Where(t => t.ProfileField is not null).OrderBy(t => t.Category).ThenBy(t => t.Order))
-        {
-            if (GetProfileField(profile, type.ProfileField!) is not { } score) continue;
-            // Đang tick "chưa thi, sẽ thi sau" thì điểm trong cột là điểm kỳ vọng (lúc lưu ghi vào để gợi ý trường có điểm mà tính),
-            // không phải chứng chỉ đã thi nên không dựng thành thẻ. Form tự bỏ tick khi thêm chứng chỉ thật cùng mục
-            if (IsPlannedScore(profile, type.Category)) continue;
-            var testDate = string.Equals(profile.EnglishTestType, type.ProfileField, StringComparison.OrdinalIgnoreCase)
-                ? profile.EnglishTestDate
-                : null;
-            items.Add(new FlowCertificationItemDto(
-                Id: $"legacy_{type.Id}",
-                Category: type.Category,
-                Type: type.Id,
-                Overall: score,
-                TestDate: testDate?.ToString("yyyy-MM", CultureInfo.InvariantCulture)));
-        }
-        return items;
-    }
-
-    /// <summary>Điểm của mục này (english | standardized | graduate) trên cột hồ sơ là điểm kỳ vọng vì học sinh đang tick "chưa thi"</summary>
-    private static bool IsPlannedScore(StudentProfile profile, string category) => category == "english"
-        ? profile.EnglishTestPlanned
-        : profile.StandardizedTestPlanned;
-
     private static Dictionary<string, decimal?>? ReadSectionScores(string? json)
     {
         if (string.IsNullOrWhiteSpace(json)) return null;
@@ -1259,24 +1153,6 @@ public class ProfileFlowService(
             return (grade.Length > 0 ? grade : s.TermName!, int.Parse(match.Groups["sem"].Value));
         }
         return (string.IsNullOrWhiteSpace(s.TermName) ? "Không rõ" : s.TermName, 1);
-    }
-
-    private static decimal? ReadApScore(string? otherTestsJson)
-    {
-        if (string.IsNullOrWhiteSpace(otherTestsJson)) return null;
-        try
-        {
-            using var doc = JsonDocument.Parse(otherTestsJson);
-            return doc.RootElement.ValueKind == JsonValueKind.Object
-                && doc.RootElement.TryGetProperty("ap", out var ap)
-                && ap.ValueKind == JsonValueKind.Number
-                    ? ap.GetDecimal()
-                    : null;
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
     }
 
     // ───────────────────────────── Helpers ─────────────────────────────

@@ -65,14 +65,25 @@ namespace StudyAbroad.Application.Auth
         TempLocked,           // tài khoản bị tạm khóa sau 5 lần sai mật khẩu → 423
         Unverified,           // tài khoản chưa kích hoạt email OTP → 403
         OtpInvalid,           // mã OTP sai / hết hạn / đã dùng / đã vô hiệu hóa (gộp một thông báo, chống dò) → 400
+        PendingDeletion,      // [UC-80] tài khoản đang chờ xóa, đúng mật khẩu → 403 kèm mã khôi phục
+        RoleNotAllowed,       // [UC-80] vai trò không được tự làm thao tác này (trung tâm, admin, mod tự xóa tài khoản) → 403
     };
 
+    // [UC-80] Khôi phục tài khoản đang chờ xóa bằng mã khôi phục nhận khi đăng nhập
+    public record RestoreAccountRequest(string Email, string RestoreToken);
+
+    // [UC-80] Thông tin trả về khi đăng nhập vào tài khoản đang chờ xóa
+    public record PendingDeletionInfo(DateTime DeletionDate, string RestoreToken);
+
     // [USAS-362] Hộp trả kết quả từ AuthService
-    public record AuthResult(UserDto? User, AuthResponse? Response = null, AuthError Error = AuthError.None, string? Message = null)
+    public record AuthResult(UserDto? User, AuthResponse? Response = null, AuthError Error = AuthError.None, string? Message = null,
+        PendingDeletionInfo? PendingDeletion = null)
     {
         public static AuthResult Ok(UserDto user, string? message = null) => new(user, null, AuthError.None, message);
         public static AuthResult Ok(AuthResponse response) => new(response.User, response);
         public static AuthResult Ok(string message) => new(null, null, AuthError.None, message);
         public static AuthResult Fail(AuthError error, string message) => new(null, null, error, message);
+        public static AuthResult PendingDeletionFail(string message, PendingDeletionInfo info) =>
+            new(null, null, AuthError.PendingDeletion, message, info);
     }
 }

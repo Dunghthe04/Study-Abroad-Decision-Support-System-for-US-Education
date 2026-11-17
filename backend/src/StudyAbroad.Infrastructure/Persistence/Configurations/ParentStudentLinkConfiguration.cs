@@ -23,7 +23,10 @@ public class ParentStudentLinkConfiguration : IEntityTypeConfiguration<ParentStu
             .HasFilter("status IN ('pending', 'active')");
         b.HasIndex(x => new { x.ParentUserId, x.Status });
         b.HasIndex(x => x.TokenHash).IsUnique().HasFilter("token_hash IS NOT NULL");
+        b.Property(x => x.RevokeTokenHash).HasMaxLength(64);
+        b.HasIndex(x => x.RevokeTokenHash).IsUnique().HasFilter("revoke_token_hash IS NOT NULL");
         // Npgsql ánh xạ uint IsRowVersion vào cột hệ thống xmin (không tạo cột mới)
         b.Property(x => x.Version).IsRowVersion();
+        b.Property(x => x.ProfileTransferStatus).HasMaxLength(16);
     }
 }

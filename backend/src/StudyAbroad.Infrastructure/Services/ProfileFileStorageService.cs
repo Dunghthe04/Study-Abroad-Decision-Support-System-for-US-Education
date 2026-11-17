@@ -129,6 +129,17 @@ public class ProfileFileStorageService : IProfileFileStorageService
         return Task.CompletedTask;
     }
 
+    public Task DeleteAllUserFilesAsync(Guid userId, CancellationToken ct = default)
+    {
+        foreach (var folder in new[] { "drafts", "transcripts" })
+        {
+            var userDir = Path.Combine(_baseUploadDir, folder, userId.ToString());
+            if (Directory.Exists(userDir))
+                Directory.Delete(userDir, recursive: true);
+        }
+        return Task.CompletedTask;
+    }
+
     /// <summary>Chỉ xoá đúng 1 tệp trong thư mục của chính user đó: tên tệp lấy qua GetFileName nên không đi ra ngoài được</summary>
     private void DeleteOwnFile(Guid userId, string folder, string? relativePath)
     {

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
-import { CheckIcon, HourglassIcon, MailIcon, UsersIcon } from "lucide-react";
+import { CheckIcon, HourglassIcon, MailIcon, UsersIcon, XIcon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { parentLinksApi, ApiError } from "@/lib/api";
 import type { ParentLinkDto } from "@/types/api";
@@ -84,7 +84,9 @@ export function ParentLinksCard() {
 
   if (!user || (user.role !== "student" && user.role !== "parent")) return null;
 
-  const hasPending = links.some((l) => l.status === "pending");
+  // [UC-115] Lời mời chưa thành liên kết: đang chờ, hết hạn hoặc phụ huynh từ chối (gửi lại / đổi email đưa về chờ)
+  const isOpenInvite = (l: ParentLinkDto) => l.status === "pending" || l.status === "expired" || l.status === "rejected";
+  const hasPending = links.some(isOpenInvite);
 
   return (
     <Card>
@@ -144,10 +146,14 @@ export function ParentLinksCard() {
                     <div className="flex flex-wrap items-center gap-2">
                       {link.status === "active" ? (
                         <Badge variant="ok"><CheckIcon aria-hidden />Đã đồng ý</Badge>
+                      ) : link.status === "rejected" ? (
+                        <Badge variant="warn"><XIcon aria-hidden />Phụ huynh đã từ chối</Badge>
+                      ) : link.status === "expired" ? (
+                        <Badge variant="warn"><HourglassIcon aria-hidden />Lời mời hết hạn</Badge>
                       ) : (
                         <Badge variant="warn"><HourglassIcon aria-hidden />Chờ phụ huynh xác nhận</Badge>
                       )}
-                      {isStudent && link.status === "pending" && (
+                      {isStudent && isOpenInvite(link) && (
                         <Button
                           type="button"
                           variant="outline"
@@ -167,7 +173,7 @@ export function ParentLinksCard() {
                           disabled={busy !== null}
                           onClick={() => setRevokeTarget(link)}
                         >
-                          {link.status === "pending" ? "Hủy lời mời" : isStudent ? "Hủy liên kết" : "Rút đồng ý"}
+                          {link.status !== "active" ? "Hủy lời mời" : isStudent ? "Hủy liên kết" : "Rút đồng ý"}
                         </Button>
                       )}
                     </div>
@@ -204,7 +210,7 @@ export function ParentLinksCard() {
                 </div>
                 <FieldDescription>
                   {hasPending
-                    ? "Lời mời đang chờ sẽ bị hủy và gửi lời mời mới tới email này."
+                    ? "Lời mời cũ sẽ bị hủy và gửi lời mời mới tới email này."
                     : "Phụ huynh nhận mail có link xác nhận, hiệu lực 7 ngày."}
                 </FieldDescription>
               </Field>
@@ -217,11 +223,11 @@ export function ParentLinksCard() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {revokeTarget?.status === "pending" ? "Hủy lời mời?" : isStudent ? "Hủy liên kết phụ huynh?" : "Rút lại sự đồng ý?"}
+              {revokeTarget && revokeTarget.status !== "active" ? "Hủy lời mời?" : isStudent ? "Hủy liên kết phụ huynh?" : "Rút lại sự đồng ý?"}
             </DialogTitle>
           </DialogHeader>
           <DialogDescription>
-            {revokeTarget?.status === "pending"
+            {revokeTarget && revokeTarget.status !== "active"
               ? "Link trong mail mời sẽ không dùng được nữa."
               : isStudent
                 ? "Phụ huynh sẽ không còn liên kết với tài khoản của bạn và sẽ nhận email thông báo."
