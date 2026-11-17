@@ -19,6 +19,7 @@ import type {
   VerifyEmailRequest,
   AcademicProfileResponse,
   ParentInviteInfo,
+  ParentRevokeInfo,
   ParentLinkDto,
   ParentLinkResponse,
   StudyCenter,
@@ -253,6 +254,19 @@ export const parentLinksApi = {
   getMine: () =>
     apiFetch<ParentLinkResponse<ParentLinkDto[]>>("/api/v1/parent-links/me", {
       method: "GET",
+    }),
+
+  // [UC-117] Phụ huynh rút đồng ý bằng link trong mail, không cần đăng nhập
+  lookupRevoke: (token: string) =>
+    apiFetch<ParentLinkResponse<ParentRevokeInfo>>("/api/v1/parent-links/revoke/lookup", {
+      method: "POST",
+      body: JSON.stringify({ token }),
+    }),
+
+  revokeByToken: (token: string) =>
+    apiFetch<ParentLinkResponse<ParentRevokeInfo>>("/api/v1/parent-links/revoke", {
+      method: "POST",
+      body: JSON.stringify({ token }),
     }),
 };
 

@@ -510,6 +510,12 @@ export interface ParentInviteInfo {
   policyVersion: string;
 }
 
+/** [UC-117] Trang rút đồng ý từ link trong mail phụ huynh */
+export interface ParentRevokeInfo {
+  studentName: string;
+  acceptedAt: string | null;
+}
+
 export interface ParentLinkDto {
   id: string;
   status: ParentLinkStatus;
