@@ -29,6 +29,13 @@ namespace StudyAbroad.Application.Auth
         /// </summary>
         Task SendCenterVerificationOutcomeEmailAsync(string toEmail, string centerName, string outcome, string? reason, IReadOnlyList<string>? unmetConditions, CancellationToken ct = default);
 
+        /// <summary>
+        /// [UC-93] Báo kết quả xử lý yêu cầu xóa tài khoản và dữ liệu trung tâm. <paramref name="completed"/>: true là đã xóa, false là bị từ chối.
+        /// Có cài đặt mặc định (không gửi gì) để các bộ gửi thử trong test không phải cài đặt.
+        /// </summary>
+        Task SendCenterDeletionResultEmailAsync(string toEmail, string centerName, bool completed, string? note, CancellationToken ct = default) =>
+            Task.CompletedTask;
+
         /// <summary>Mời phụ huynh liên kết và đồng ý cho hệ thống xử lý dữ liệu của học sinh; link chứa token dùng một lần.</summary>
         Task SendParentInviteEmailAsync(string toEmail, string studentName, string inviteToken, int expiryDays, CancellationToken ct = default);
 

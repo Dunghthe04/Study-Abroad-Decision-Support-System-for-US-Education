@@ -84,6 +84,7 @@ public record ReviewCenterVerificationRequest(
 public record UpdateCenterProfileRequest(
     string? Name = null,
     string? Description = null,
+    // Website và FanpageUrl lưu ngay nhưng được đánh dấu để Moderator kiểm tra (UC-114). Null = giữ nguyên; chuỗi rỗng = xóa.
     string? Website = null,
     string? Address = null,
     string? City = null,
@@ -107,7 +108,8 @@ public record UpdateCenterProfileRequest(
     DateOnly? LicenseIssuedDate = null,
     string? LegalComplianceMode = null,
     string? TrainingLicenseNumber = null,
-    int? CertifiedCounselorCount = null);
+    int? CertifiedCounselorCount = null,
+    string? FanpageUrl = null);
 
 public record CenterVerificationStatusDto(
     string VerificationStatus,

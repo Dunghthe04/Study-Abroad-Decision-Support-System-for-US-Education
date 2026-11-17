@@ -13,6 +13,7 @@ public class StudyCenterConfiguration : IEntityTypeConfiguration<StudyCenter>
         builder.HasIndex(x => x.Code).IsUnique();
         builder.Property(x => x.Name).HasMaxLength(256).IsRequired();
         builder.Property(x => x.Website).HasMaxLength(512);
+        builder.Property(x => x.FanpageUrl).HasMaxLength(512);
         builder.Property(x => x.Address).HasMaxLength(512);
         builder.Property(x => x.City).HasMaxLength(128);
         builder.Property(x => x.Phone).HasMaxLength(32);

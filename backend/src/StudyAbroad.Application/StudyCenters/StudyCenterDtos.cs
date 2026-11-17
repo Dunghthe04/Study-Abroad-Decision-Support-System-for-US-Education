@@ -47,7 +47,8 @@ public record StudyCenterDto(
     decimal? FeeMax = null,
     string? FeeDescription = null,
     string? RegistrantName = null,
-    string? RegistrantPosition = null);
+    string? RegistrantPosition = null,
+    string? FanpageUrl = null);
 
 /// <summary>[UC-59] Moderator / Admin gửi yêu cầu xác minh hoặc hủy xác minh trung tâm tư vấn.</summary>
 public record VerifyStudyCenterRequest(bool IsVerified, string? VerificationNote = null);

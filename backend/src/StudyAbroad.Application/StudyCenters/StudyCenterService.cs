@@ -50,7 +50,8 @@ public class StudyCenterService(
     IAuditLogRepository auditLogs,
     ICenterVerificationRepository? verificationRepository = null,
     IEmailSender? emailSender = null,
-    StudyAbroad.Application.Notifications.INotificationService? notifications = null) : IStudyCenterService
+    StudyAbroad.Application.Notifications.INotificationService? notifications = null,
+    ICenterProfileChangeService? profileChanges = null) : IStudyCenterService
 {
     private const int MaxPageSize = 100;
     public const int MaxNameLength = 200;
@@ -384,7 +385,7 @@ public class StudyCenterService(
             c.LegalComplianceMode, c.TrainingLicenseNumber, c.CertifiedCounselorCount,
             c.LegalDocumentUrls, c.VerificationNote,
             c.EmailVerifiedAt, c.PhoneVerifiedAt, c.FeeMin, c.FeeMax, c.FeeDescription,
-            c.RegistrantName, c.RegistrantPosition);
+            c.RegistrantName, c.RegistrantPosition, c.FanpageUrl);
 
     /// <summary>True nếu yêu cầu thay đổi một trường pháp lý so với giá trị hiện tại.</summary>
     private static bool TouchesLegalFields(StudyCenter c, UpdateCenterProfileRequest r)
@@ -963,8 +964,23 @@ public class StudyCenterService(
         if (request.Description != null)
             center.Description = TrimOrNull(request.Description);
 
+        // [UC-92] Website và fanpage: lưu ngay, nhưng ghi lại giá trị cũ / mới để Moderator kiểm tra (UC-114)
+        var oldWebsite = center.Website;
+        var oldFanpage = center.FanpageUrl;
+
         if (request.Website != null)
+        {
+            if (!IsValidPublicUrlOrEmpty(request.Website))
+                return UpdateStudyCenterResult.Fail("Website phải là đường dẫn http hoặc https hợp lệ, tối đa 512 ký tự.");
             center.Website = TrimOrNull(request.Website);
+        }
+
+        if (request.FanpageUrl != null)
+        {
+            if (!IsValidPublicUrlOrEmpty(request.FanpageUrl))
+                return UpdateStudyCenterResult.Fail("Fanpage phải là đường dẫn http hoặc https hợp lệ, tối đa 512 ký tự.");
+            center.FanpageUrl = TrimOrNull(request.FanpageUrl);
+        }
 
         if (request.Address != null)
             center.Address = TrimOrNull(request.Address);
@@ -1011,7 +1027,23 @@ public class StudyCenterService(
             DetailJson = JsonSerializer.Serialize(new { centerId = center.Id, name = center.Name })
         }, ct);
 
+        if (profileChanges is not null)
+        {
+            await profileChanges.RecordAsync(center.Id, userId, CenterProfileChangeService.FieldWebsite, oldWebsite, center.Website, ct);
+            await profileChanges.RecordAsync(center.Id, userId, CenterProfileChangeService.FieldFanpage, oldFanpage, center.FanpageUrl, ct);
+        }
+
         return UpdateStudyCenterResult.Ok(ToDto(center));
+    }
+
+    /// <summary>Rỗng (xóa giá trị) hoặc một đường dẫn tuyệt đối http / https dài tối đa 512 ký tự.</summary>
+    public static bool IsValidPublicUrlOrEmpty(string? value)
+    {
+        var trimmed = value?.Trim();
+        if (string.IsNullOrEmpty(trimmed)) return true;
+        return trimmed.Length <= 512
+            && Uri.TryCreate(trimmed, UriKind.Absolute, out var uri)
+            && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
     }
 
     private static CenterVerificationDto ToVerificationDto(CenterVerificationRequest req, StudyCenter? center) =>

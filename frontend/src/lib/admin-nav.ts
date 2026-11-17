@@ -2,6 +2,8 @@ import {
   BarChart3Icon,
   BookOpenIcon,
   BuildingIcon,
+  FileSearchIcon,
+  Trash2Icon,
   ClipboardCheckIcon,
   CreditCardIcon,
   LayoutDashboardIcon,
@@ -71,6 +73,22 @@ export const ADMIN_NAV: AdminNavItem[] = [
     // Chỉ moderator quản lý trung tâm; admin chỉ cấp tài khoản moderator
     roles: ["moderator"],
     useCases: ["UC-59", "UC-64", "UC-71", "UC-72"],
+  },
+  {
+    href: "/admin/center-changes",
+    label: "Thay đổi của trung tâm",
+    description: "Kiểm tra website và fanpage do trung tâm tự sửa: đối chiếu giá trị cũ và mới, chọn Đạt hoặc Không đạt",
+    icon: FileSearchIcon,
+    roles: ["moderator"],
+    useCases: ["UC-114"],
+  },
+  {
+    href: "/admin/center-deletion-requests",
+    label: "Yêu cầu xóa trung tâm",
+    description: "Yêu cầu xóa tài khoản và dữ liệu do trung tâm gửi: kiểm tra danh tính, thực hiện xóa hoặc từ chối",
+    icon: Trash2Icon,
+    roles: ["admin"],
+    useCases: ["UC-93"],
   },
   {
     href: "/admin/plans",

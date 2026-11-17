@@ -290,6 +290,170 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.ToTable("audit_logs", "app");
                 });
 
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.CenterDeletionRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AdminNote")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("admin_note");
+
+                    b.Property<string>("CenterName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("center_name");
+
+                    b.Property<string>("ContactEmail")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("contact_email");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime>("DueAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("due_at");
+
+                    b.Property<bool>("IdentityVerified")
+                        .HasColumnType("boolean")
+                        .HasColumnName("identity_verified");
+
+                    b.Property<DateTime?>("ProcessedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("processed_at");
+
+                    b.Property<Guid?>("ProcessedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("processed_by_user_id");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("reason");
+
+                    b.Property<Guid?>("RequestedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("requested_by_user_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("pending")
+                        .HasColumnName("status");
+
+                    b.Property<Guid?>("StudyCenterId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("study_center_id");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_center_deletion_requests");
+
+                    b.HasIndex("ProcessedByUserId")
+                        .HasDatabaseName("ix_center_deletion_requests_processed_by_user_id");
+
+                    b.HasIndex("RequestedByUserId")
+                        .HasDatabaseName("ix_center_deletion_requests_requested_by_user_id");
+
+                    b.HasIndex("StudyCenterId")
+                        .HasDatabaseName("ix_center_deletion_requests_study_center_id");
+
+                    b.HasIndex("Status", "CreatedAt")
+                        .HasDatabaseName("ix_center_deletion_requests_status_created_at");
+
+                    b.ToTable("center_deletion_requests", "app");
+                });
+
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.CenterProfileChange", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("ChangedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("changed_by_user_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Field")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("field");
+
+                    b.Property<string>("NewValue")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("new_value");
+
+                    b.Property<string>("OldValue")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("old_value");
+
+                    b.Property<string>("ReviewReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("review_reason");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("reviewed_at");
+
+                    b.Property<Guid?>("ReviewedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reviewed_by_user_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("pending")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("StudyCenterId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("study_center_id");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_center_profile_changes");
+
+                    b.HasIndex("ChangedByUserId")
+                        .HasDatabaseName("ix_center_profile_changes_changed_by_user_id");
+
+                    b.HasIndex("ReviewedByUserId")
+                        .HasDatabaseName("ix_center_profile_changes_reviewed_by_user_id");
+
+                    b.HasIndex("Status", "CreatedAt")
+                        .HasDatabaseName("ix_center_profile_changes_status_created_at");
+
+                    b.HasIndex("StudyCenterId", "Field")
+                        .HasDatabaseName("ix_center_profile_changes_study_center_id_field");
+
+                    b.ToTable("center_profile_changes", "app");
+                });
+
             modelBuilder.Entity("StudyAbroad.Domain.Entities.CenterReview", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3342,6 +3506,11 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("established_year");
 
+                    b.Property<string>("FanpageUrl")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("fanpage_url");
+
                     b.Property<string>("FeeDescription")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)")
@@ -4559,6 +4728,49 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_analysis_results_student_profiles_student_profile_id");
+                });
+
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.CenterDeletionRequest", b =>
+                {
+                    b.HasOne("StudyAbroad.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("ProcessedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_center_deletion_requests_users_processed_by_user_id");
+
+                    b.HasOne("StudyAbroad.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("RequestedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_center_deletion_requests_users_requested_by_user_id");
+
+                    b.HasOne("StudyAbroad.Domain.Entities.StudyCenter", null)
+                        .WithMany()
+                        .HasForeignKey("StudyCenterId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_center_deletion_requests_study_centers_study_center_id");
+                });
+
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.CenterProfileChange", b =>
+                {
+                    b.HasOne("StudyAbroad.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("ChangedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_center_profile_changes_users_changed_by_user_id");
+
+                    b.HasOne("StudyAbroad.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("ReviewedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_center_profile_changes_users_reviewed_by_user_id");
+
+                    b.HasOne("StudyAbroad.Domain.Entities.StudyCenter", null)
+                        .WithMany()
+                        .HasForeignKey("StudyCenterId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_center_profile_changes_study_centers_study_center_id");
                 });
 
             modelBuilder.Entity("StudyAbroad.Domain.Entities.CenterReview", b =>

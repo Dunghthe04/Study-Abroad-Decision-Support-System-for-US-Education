@@ -187,6 +187,32 @@ namespace StudyAbroad.Infrastructure.Auth
             await SendEmailAsync(toEmail, subject, body, ct);
         }
 
+        public async Task SendCenterDeletionResultEmailAsync(string toEmail, string centerName, bool completed, string? note, CancellationToken ct = default)
+        {
+            var center = WebUtility.HtmlEncode(centerName);
+            var (subject, title, content) = completed
+                ? ("[USAS] Tài khoản và dữ liệu trung tâm đã được xóa", "Đã xóa tài khoản và dữ liệu trung tâm",
+                    $"Theo yêu cầu của bạn, tài khoản và dữ liệu của <strong>{center}</strong> đã được xóa khỏi USAS. Trung tâm không còn hiển thị trong danh bạ, các yêu cầu liên hệ đang mở đã được đóng và tài khoản không đăng nhập được nữa.")
+                : ("[USAS] Yêu cầu xóa tài khoản trung tâm chưa được thực hiện", "Yêu cầu xóa tài khoản chưa được thực hiện",
+                    $"Yêu cầu xóa tài khoản và dữ liệu của <strong>{center}</strong> chưa được thực hiện. Tài khoản và dữ liệu của trung tâm vẫn được giữ nguyên.");
+
+            var detail = string.IsNullOrWhiteSpace(note)
+                ? string.Empty
+                : $"<p style=\"font-size: 14px; color: #475569; line-height: 1.6;\"><strong>{(completed ? "Ghi chú" : "Lý do")}:</strong> {WebUtility.HtmlEncode(note)}</p>";
+
+            var body = $"""
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
+                    <h2 style="color: #2563eb; margin-bottom: 16px;">{title}</h2>
+                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">{content}</p>
+                    {detail}
+                    <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+                    <p style="font-size: 12px; color: #94a3b8; text-align: center;">USAS - Hệ thống hỗ trợ ra quyết định du học Mỹ</p>
+                </div>
+                """;
+
+            await SendEmailAsync(toEmail, subject, body, ct);
+        }
+
         public async Task SendParentLinkChangedEmailAsync(string toEmail, string studentName, string parentLabel, bool linked, CancellationToken ct = default)
         {
             var student = WebUtility.HtmlEncode(studentName);

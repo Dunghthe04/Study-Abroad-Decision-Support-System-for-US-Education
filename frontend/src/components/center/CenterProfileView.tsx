@@ -18,6 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
 import { CenterContactCard } from "@/components/center/CenterContactCard";
+import { CenterDeletionRequestCard } from "@/components/center/CenterDeletionRequestCard";
 import {
   centerNeedsTrainingLicense,
   LEGAL_COMPLIANCE_MODE_DESCRIPTIONS,
@@ -50,6 +51,7 @@ export function CenterProfileView() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [website, setWebsite] = useState("");
+  const [fanpageUrl, setFanpageUrl] = useState("");
   const [address, setAddress] = useState("");
   const [city, setCity] = useState("");
   const [district, setDistrict] = useState("");
@@ -88,6 +90,7 @@ export function CenterProfileView() {
           setName(c.name || "");
           setDescription(c.description || "");
           setWebsite(c.website || "");
+          setFanpageUrl(c.fanpageUrl || "");
           setAddress(c.address || "");
           setCity(c.city || "");
           setDistrict(c.district || "");
@@ -180,7 +183,9 @@ export function CenterProfileView() {
       const updated = await centerPortalApi.updateProfile({
         ...legalPayload,
         description: description.trim() || null,
-        website: website.trim() || null,
+        // Chuỗi rỗng là xóa giá trị (backend coi null là giữ nguyên)
+        website: website.trim(),
+        fanpageUrl: fanpageUrl.trim(),
         address: address.trim() || null,
         city: city.trim() || null,
         district: district.trim() || null,
@@ -449,7 +454,7 @@ export function CenterProfileView() {
               </Field>
 
               <Field>
-                <FieldLabel htmlFor="website">Website / Fanpage</FieldLabel>
+                <FieldLabel htmlFor="website">Website</FieldLabel>
                 <Input
                   id="website"
                   type="url"
@@ -459,7 +464,23 @@ export function CenterProfileView() {
                   placeholder="https://center.edu.vn"
                 />
               </Field>
+
+              <Field>
+                <FieldLabel htmlFor="fanpage">Fanpage</FieldLabel>
+                <Input
+                  id="fanpage"
+                  type="url"
+                  maxLength={512}
+                  value={fanpageUrl}
+                  onChange={(e) => setFanpageUrl(e.target.value)}
+                  placeholder="https://www.facebook.com/trungtam"
+                />
+              </Field>
             </div>
+            <p className="text-xs text-ink-2">
+              Website và fanpage được lưu ngay khi bạn bấm lưu, sau đó kiểm duyệt viên sẽ kiểm tra thay đổi. Nếu không đạt, bạn nhận
+              thông báo kèm lý do để sửa lại.
+            </p>
 
             <Field>
               <FieldLabel htmlFor="address">Địa chỉ văn phòng tư vấn</FieldLabel>
@@ -595,6 +616,8 @@ export function CenterProfileView() {
             </Button>
           </FieldGroup>
         </form>
+
+        <CenterDeletionRequestCard />
       </div>
     </div>
   );

@@ -11,6 +11,8 @@ public class StudyCenter : BaseEntity
     public string Code { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string? Website { get; set; }
+    /// <summary>[UC-92] Trang fanpage (mạng xã hội) của trung tâm. Đổi thì được đánh dấu để Moderator kiểm tra (UC-114).</summary>
+    public string? FanpageUrl { get; set; }
     public string? Address { get; set; }
     public string? City { get; set; }
 

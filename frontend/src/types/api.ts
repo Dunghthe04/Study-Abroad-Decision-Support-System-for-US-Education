@@ -13,6 +13,8 @@ export interface StudyCenter {
   code: string;
   name: string;
   website: string | null;
+  /** [UC-92] Trang fanpage của trung tâm. */
+  fanpageUrl?: string | null;
   address: string | null;
   city: string | null;
   studyLevels: string[];
@@ -155,7 +157,9 @@ export interface ReviewCenterVerificationRequest {
 export interface UpdateCenterProfileRequest {
   name?: string;
   description?: string | null;
+  /** Website và fanpage: không gửi là giữ nguyên, chuỗi rỗng là xóa. Đổi thì được Moderator kiểm tra (UC-114). */
   website?: string | null;
+  fanpageUrl?: string | null;
   address?: string | null;
   city?: string | null;
   district?: string | null;

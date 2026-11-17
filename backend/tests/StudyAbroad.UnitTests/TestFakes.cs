@@ -213,6 +213,15 @@ internal sealed class FakeEmailSender : IEmailSender
 {
     public List<(string To, string Purpose, string Code)> SentEmails { get; } = [];
 
+    /// <summary>[UC-93] Email báo kết quả xử lý yêu cầu xóa tài khoản trung tâm.</summary>
+    public List<(string To, string Center, bool Completed, string? Note)> DeletionResults { get; } = [];
+
+    public Task SendCenterDeletionResultEmailAsync(string toEmail, string centerName, bool completed, string? note, CancellationToken ct = default)
+    {
+        DeletionResults.Add((toEmail, centerName, completed, note));
+        return Task.CompletedTask;
+    }
+
     public Task SendVerificationEmailAsync(string toEmail, string fullName, string otpCode, int expiryMinutes = 5, CancellationToken ct = default)
     {
         SentEmails.Add((toEmail, OtpPurposes.VerifyEmail, otpCode));
