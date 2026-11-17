@@ -241,8 +241,38 @@ public class LeadsControllerTests
                 messageId, leadId, Guid.NewGuid(), "Học sinh", UserRoles.Student, false, "Nội dung", null, "visible", DateTime.UtcNow));
         }
 
-        public Task<PagedResult<AdminLeadMessageReportDto>> GetReportedMessagesAsync(string? filter, int page, int pageSize, CancellationToken ct = default) =>
-            Task.FromResult(new PagedResult<AdminLeadMessageReportDto>([], page, pageSize, 0));
+        public Guid? LastQueueViewer { get; private set; }
+        public List<(string Action, Guid AdminId, Guid LeadId, Guid MessageId, string? Reason)> ReportActions { get; } = [];
+
+        public Task<PagedResult<AdminLeadMessageReportDto>> GetReportedMessagesAsync(string? filter, int page, int pageSize, CancellationToken ct = default, Guid? viewerAdminId = null)
+        {
+            LastQueueViewer = viewerAdminId;
+            return Task.FromResult(new PagedResult<AdminLeadMessageReportDto>([], page, pageSize, 0));
+        }
+
+        public Task<AdminLeadMessageReportContextDto> GetReportContextAsync(Guid adminUserId, Guid leadId, Guid messageId, CancellationToken ct = default)
+        {
+            ReportActions.Add(("context", adminUserId, leadId, messageId, null));
+            return Task.FromResult(new AdminLeadMessageReportContextDto(leadId, messageId, 3, []));
+        }
+
+        public Task RemoveReportedMessageAsync(Guid adminUserId, Guid leadId, Guid messageId, string? reason, CancellationToken ct = default)
+        {
+            ReportActions.Add(("remove", adminUserId, leadId, messageId, reason));
+            return Task.CompletedTask;
+        }
+
+        public Task WarnReportedSenderAsync(Guid adminUserId, Guid leadId, Guid messageId, string? reason, CancellationToken ct = default)
+        {
+            ReportActions.Add(("warn", adminUserId, leadId, messageId, reason));
+            return Task.CompletedTask;
+        }
+
+        public Task MarkReportResolvedByLockAsync(Guid adminUserId, Guid leadId, Guid messageId, CancellationToken ct = default)
+        {
+            ReportActions.Add(("lock", adminUserId, leadId, messageId, null));
+            return Task.CompletedTask;
+        }
 
         public Task DismissReportAsync(Guid adminUserId, Guid leadId, Guid messageId, CancellationToken ct = default) => Task.CompletedTask;
 
@@ -934,7 +964,7 @@ public class LeadsControllerTests
     }
 
     [Fact]
-    public void MessageEndpoints_AuthorizeCenterModeratorAndAdminRoles()
+    public void MessageEndpoints_AuthorizeCenterAndModerator_ButNotAdmin()
     {
         var getAttr = typeof(LeadsController)
             .GetMethod(nameof(LeadsController.GetReceivedLeadMessages))!
@@ -948,9 +978,11 @@ public class LeadsControllerTests
             .Cast<AuthorizeAttribute>()
             .Single();
 
-        var expectedRoles = $"{UserRoles.Center},{UserRoles.Moderator},{UserRoles.Admin}";
+        // [UC-58] Admin không đọc toàn bộ cuộc trò chuyện, chỉ xem tin bị báo cáo kèm ngữ cảnh
+        var expectedRoles = $"{UserRoles.Center},{UserRoles.Moderator}";
         Assert.Equal(expectedRoles, getAttr.Roles);
         Assert.Equal(expectedRoles, postAttr.Roles);
+        Assert.DoesNotContain(UserRoles.Admin, getAttr.Roles!.Split(','));
     }
 
     [Fact]
@@ -985,7 +1017,6 @@ public class LeadsControllerTests
 
     [Theory]
     [InlineData(UserRoles.Moderator, "Kiểm duyệt viên")]
-    [InlineData(UserRoles.Admin, "Quản trị viên")]
     public async Task SendAndGetLeadMessages_AsModeratorOrAdmin_SucceedsWithStaffName(string role, string expectedSenderName)
     {
         var staffUserId = Guid.NewGuid();

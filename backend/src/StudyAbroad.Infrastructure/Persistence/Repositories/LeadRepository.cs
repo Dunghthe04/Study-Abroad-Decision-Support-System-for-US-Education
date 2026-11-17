@@ -296,9 +296,9 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
 
         query = filter switch
         {
-            "resolved" => query.Where(x => x.Message.Status == "removed"),
+            "resolved" => query.Where(x => x.Message.Status == "removed" || x.Message.ReportResolution != null),
             "all" => query,
-            _ => query.Where(x => x.Message.Status != "removed"),
+            _ => query.Where(x => x.Message.Status != "removed" && x.Message.ReportResolution == null),
         };
 
         var total = await query.CountAsync(ct);
@@ -325,9 +325,66 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
             x.Message.ReportedByUserId,
             x.Message.ReportedAt,
             x.Message.ReportReason,
-            x.Message.CreatedAt)).ToList();
+            x.Message.CreatedAt,
+            x.Message.ReportResolution,
+            x.Message.ReportResolvedAt)).ToList();
 
         return new PagedResult<AdminLeadMessageReportDto>(items, safePage, safePageSize, total);
+    }
+
+    public async Task<IReadOnlyList<AdminReportContextMessageDto>> GetReportContextMessagesAsync(
+        Guid leadId,
+        Guid messageId,
+        int contextSize,
+        CancellationToken ct = default)
+    {
+        var thread = db.LeadMessages.AsNoTracking().Where(m => m.LeadId == leadId);
+        var target = await thread.FirstOrDefaultAsync(m => m.Id == messageId, ct);
+        if (target is null) return [];
+
+        var size = Math.Max(contextSize, 0);
+        var before = size == 0 ? [] : await thread
+            .Where(m => m.Id != target.Id && m.CreatedAt <= target.CreatedAt)
+            .OrderByDescending(m => m.CreatedAt)
+            .Take(size)
+            .ToListAsync(ct);
+        var beforeIds = before.Select(m => m.Id).ToList();
+        var after = size == 0 ? [] : await thread
+            .Where(m => m.Id != target.Id && !beforeIds.Contains(m.Id) && m.CreatedAt >= target.CreatedAt)
+            .OrderBy(m => m.CreatedAt)
+            .Take(size)
+            .ToListAsync(ct);
+
+        var window = before.OrderBy(m => m.CreatedAt).Append(target).Concat(after).ToList();
+        var senderIds = window.Select(m => m.SenderUserId).Distinct().ToList();
+        var senders = await db.Users.AsNoTracking()
+            .Where(u => senderIds.Contains(u.Id))
+            .Select(u => new { u.Id, u.FullName, u.Role })
+            .ToDictionaryAsync(u => u.Id, ct);
+
+        return window.Select(m =>
+        {
+            senders.TryGetValue(m.SenderUserId, out var sender);
+            return new AdminReportContextMessageDto(
+                m.Id,
+                m.SenderUserId,
+                sender?.FullName ?? "Người dùng",
+                LeadMessageMapper.IsStaffOrCenterRole(sender?.Role),
+                m.Content,
+                m.AttachmentUrl,
+                m.Status,
+                m.CreatedAt,
+                m.Id == target.Id);
+        }).ToList();
+    }
+
+    public async Task<int?> GetReportContextSizeSettingAsync(CancellationToken ct = default)
+    {
+        var json = await db.AppSettings.AsNoTracking()
+            .Where(s => s.Key == LeadService.ReportContextSizeSettingKey)
+            .Select(s => s.ValueJson)
+            .FirstOrDefaultAsync(ct);
+        return LeadService.ParseReportContextSize(json);
     }
 
     public async Task<int> RemoveAllMessagesOfUserAsync(Guid senderUserId, Guid removedByUserId, CancellationToken ct = default)

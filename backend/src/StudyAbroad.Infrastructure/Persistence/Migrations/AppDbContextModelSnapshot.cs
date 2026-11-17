@@ -1578,6 +1578,15 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(500)")
                         .HasColumnName("report_reason");
 
+                    b.Property<string>("ReportResolution")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("report_resolution");
+
+                    b.Property<DateTime?>("ReportResolvedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("report_resolved_at");
+
                     b.Property<DateTime?>("ReportedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("reported_at");

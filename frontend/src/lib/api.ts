@@ -33,6 +33,7 @@ import type {
   CenterLeadsSummaryDto,
   LeadMessageDto,
   LeadMessagesThreadDto,
+  AdminLeadMessageReportContextDto,
   AdminLeadMessageReportDto,
   LeadMessageReportFilter,
   SendLeadMessageRequest,
@@ -393,6 +394,26 @@ export const leadMessageReportsApi = {
     apiFetch<{ message: string }>(
       `/api/v1/admin/lead-message-reports/${encodeURIComponent(leadId)}/${encodeURIComponent(messageId)}/dismiss`,
       { method: "POST" }
+    ),
+
+  /** Tin bị báo cáo kèm vài tin ngữ cảnh liền kề. Mỗi lần gọi được ghi vào nhật ký truy cập. */
+  getContext: (leadId: string, messageId: string) =>
+    apiFetch<AdminLeadMessageReportContextDto>(
+      `/api/v1/admin/lead-message-reports/${encodeURIComponent(leadId)}/${encodeURIComponent(messageId)}/context`,
+    ),
+
+  /** Gỡ riêng tin nhắn vi phạm, không khóa tài khoản. */
+  remove: (leadId: string, messageId: string, reason: string) =>
+    apiFetch<{ message: string }>(
+      `/api/v1/admin/lead-message-reports/${encodeURIComponent(leadId)}/${encodeURIComponent(messageId)}/remove`,
+      { method: "POST", body: JSON.stringify({ reason: reason.trim() }) }
+    ),
+
+  /** Cảnh cáo người gửi, tin vẫn hiển thị. */
+  warn: (leadId: string, messageId: string, reason: string) =>
+    apiFetch<{ message: string }>(
+      `/api/v1/admin/lead-message-reports/${encodeURIComponent(leadId)}/${encodeURIComponent(messageId)}/warn`,
+      { method: "POST", body: JSON.stringify({ reason: reason.trim() }) }
     ),
 
   lockSender: (leadId: string, messageId: string, reason: string) =>

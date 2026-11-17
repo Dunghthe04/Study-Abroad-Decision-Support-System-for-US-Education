@@ -174,7 +174,34 @@ public record AdminLeadMessageReportDto(
     Guid? ReportedByUserId,
     DateTime? ReportedAt,
     string? ReportReason,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    string? ReportResolution = null,
+    DateTime? ReportResolvedAt = null);
+
+/// <summary>[UC-58] Một tin trong phần ngữ cảnh quanh tin bị báo cáo. <paramref name="IsReported"/> đánh dấu chính tin bị báo cáo.</summary>
+public record AdminReportContextMessageDto(
+    Guid Id,
+    Guid SenderUserId,
+    string SenderName,
+    bool IsFromCenter,
+    string Content,
+    string? AttachmentUrl,
+    string Status,
+    DateTime CreatedAt,
+    bool IsReported);
+
+/// <summary>
+/// [UC-58] Tin bị báo cáo kèm tối đa <paramref name="ContextSize"/> tin liền trước và liền sau (theo thứ tự thời gian).
+/// Admin chỉ đọc được phần này, không đọc toàn bộ cuộc trò chuyện.
+/// </summary>
+public record AdminLeadMessageReportContextDto(
+    Guid LeadId,
+    Guid MessageId,
+    int ContextSize,
+    IReadOnlyList<AdminReportContextMessageDto> Messages);
+
+/// <summary>[UC-58] Admin gỡ tin vi phạm hoặc cảnh cáo người gửi. Lý do bắt buộc, tối đa 500 ký tự.</summary>
+public record ResolveReportedMessageRequest(string? Reason = null);
 
 /// <summary>[UC-58] Học sinh / phụ huynh / trung tâm báo cáo một tin nhắn (thô tục, quấy rối...). Lý do tối đa 500 ký tự.</summary>
 public record ReportLeadMessageRequest(string? Reason = null);

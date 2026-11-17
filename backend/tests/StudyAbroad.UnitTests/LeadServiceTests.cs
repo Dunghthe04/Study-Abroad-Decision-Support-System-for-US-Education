@@ -255,9 +255,9 @@ public class LeadServiceTests
             var rows = Messages
                 .Where(m => m.ReportedAt != null && filter switch
                 {
-                    "resolved" => m.Status == "removed",
+                    "resolved" => m.Status == "removed" || m.ReportResolution != null,
                     "all" => true,
-                    _ => m.Status != "removed",
+                    _ => m.Status != "removed" && m.ReportResolution == null,
                 })
                 .Select(m => new AdminLeadMessageReportDto(
                     m.Id, m.LeadId, Guid.Empty, "Test Center", m.SenderUserId, "Người gửi", null, UserRoles.Student, "active", false,
@@ -271,6 +271,26 @@ public class LeadServiceTests
             var mine = Messages.Where(m => m.SenderUserId == senderUserId && m.Status != "removed").ToList();
             foreach (var m in mine) { m.Status = "removed"; m.RemovedByUserId = removedByUserId; }
             return Task.FromResult(mine.Count);
+        }
+
+        public int? ReportContextSizeSetting { get; set; }
+
+        public Task<int?> GetReportContextSizeSettingAsync(CancellationToken ct = default) => Task.FromResult(ReportContextSizeSetting);
+
+        public Task<IReadOnlyList<AdminReportContextMessageDto>> GetReportContextMessagesAsync(
+            Guid leadId, Guid messageId, int contextSize, CancellationToken ct = default)
+        {
+            var thread = Messages.Where(m => m.LeadId == leadId).OrderBy(m => m.CreatedAt).ToList();
+            var index = thread.FindIndex(m => m.Id == messageId);
+            if (index < 0) return Task.FromResult<IReadOnlyList<AdminReportContextMessageDto>>([]);
+
+            var from = Math.Max(index - contextSize, 0);
+            var to = Math.Min(index + contextSize, thread.Count - 1);
+            return Task.FromResult<IReadOnlyList<AdminReportContextMessageDto>>(thread
+                .Skip(from).Take(to - from + 1)
+                .Select(m => new AdminReportContextMessageDto(
+                    m.Id, m.SenderUserId, "Người gửi", false, m.Content, m.AttachmentUrl, m.Status, m.CreatedAt, m.Id == messageId))
+                .ToList());
         }
 
         public Task<IReadOnlyList<Guid>> GetActiveAdminUserIdsAsync(CancellationToken ct = default) =>
@@ -1352,6 +1372,205 @@ public class LeadServiceTests
     // ===== Nhắn tin phía người gửi: học sinh / phụ huynh đọc và gửi tin trong yêu cầu của mình =====
 
     /// <summary>Setup UC-44 có thêm audit log để kiểm tra tin gửi đi được ghi lại.</summary>
+    // ---- [UC-58] Admin xử lý báo cáo: ngữ cảnh, gỡ riêng tin, cảnh cáo, thông báo người báo cáo, nhật ký truy cập
+
+    private static (LeadMessage Reported, Guid LeadId, Guid ReporterId) AddReportedThread(CreateLeadSetup s, int total = 9, int reportedIndex = 4)
+    {
+        var leadId = Guid.NewGuid();
+        var reporterId = Guid.NewGuid();
+        var start = DateTime.UtcNow.AddHours(-1);
+        LeadMessage? reported = null;
+        for (var i = 0; i < total; i++)
+        {
+            var m = new LeadMessage
+            {
+                LeadId = leadId, SenderUserId = Guid.NewGuid(), Content = $"tin {i}", Status = "visible",
+                CreatedAt = start.AddMinutes(i),
+            };
+            if (i == reportedIndex)
+            {
+                m.ReportedAt = DateTime.UtcNow;
+                m.ReportedByUserId = reporterId;
+                m.ReportReason = "thô tục";
+                reported = m;
+            }
+            s.LeadRepo.Messages.Add(m);
+        }
+        return (reported!, leadId, reporterId);
+    }
+
+    [Fact]
+    public async Task GetReportContext_ReturnsOnlyNeighboursUsingDefaultSizeAndLogsAccess()
+    {
+        var (s, audit, service) = MessageSetup();
+        var (reported, leadId, _) = AddReportedThread(s);
+        var adminId = Guid.NewGuid();
+
+        var context = await service.GetReportContextAsync(adminId, leadId, reported.Id);
+
+        Assert.Equal(LeadService.DefaultReportContextSize, context.ContextSize);
+        // 3 tin trước + tin bị báo cáo + 3 tin sau, không phải cả 9 tin của cuộc trò chuyện
+        Assert.Equal(["tin 1", "tin 2", "tin 3", "tin 4", "tin 5", "tin 6", "tin 7"], context.Messages.Select(m => m.Content).ToArray());
+        Assert.Equal("tin 4", Assert.Single(context.Messages, m => m.IsReported).Content);
+        var log = Assert.Single(audit.Logs);
+        Assert.Equal("lead_message.report_view", log.Action);
+        Assert.Equal(adminId, log.ActorUserId);
+        Assert.Equal(reported.Id.ToString(), log.EntityId);
+    }
+
+    [Theory]
+    [InlineData(1, 3)]
+    [InlineData(0, 1)]
+    [InlineData(99, 9)] // vượt trần thì cắt về MaxReportContextSize, ở đây đủ lấy hết 9 tin
+    [InlineData(-4, 1)]
+    public async Task GetReportContext_UsesConfiguredSizeWithinBounds(int configured, int expectedCount)
+    {
+        var (s, _, service) = MessageSetup();
+        var (reported, leadId, _) = AddReportedThread(s);
+        s.LeadRepo.ReportContextSizeSetting = configured;
+
+        var context = await service.GetReportContextAsync(Guid.NewGuid(), leadId, reported.Id);
+
+        Assert.Equal(expectedCount, context.Messages.Count);
+        Assert.InRange(context.ContextSize, 0, LeadService.MaxReportContextSize);
+    }
+
+    [Fact]
+    public async Task GetReportContext_MessageWithoutReport_IsNotFoundAndNotLogged()
+    {
+        var (s, audit, service) = MessageSetup();
+        var leadId = Guid.NewGuid();
+        var plain = new LeadMessage { LeadId = leadId, SenderUserId = Guid.NewGuid(), Content = "bình thường", Status = "visible" };
+        s.LeadRepo.Messages.Add(plain);
+
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => service.GetReportContextAsync(Guid.NewGuid(), leadId, plain.Id));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => service.GetReportContextAsync(Guid.NewGuid(), leadId, Guid.NewGuid()));
+        Assert.Empty(audit.Logs);
+    }
+
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData("", null)]
+    [InlineData("5", 5)]
+    [InlineData("{\"size\": 2}", 2)]
+    [InlineData("{\"other\": 2}", null)]
+    [InlineData("\"ba\"", null)]
+    [InlineData("không phải json", null)]
+    public void ParseReportContextSize_ReadsNumberOrSizeProperty(string? json, int? expected) =>
+        Assert.Equal(expected, LeadService.ParseReportContextSize(json));
+
+    [Fact]
+    public async Task GetReportedMessages_WithViewer_LogsQueueAccess_AndWarnedReportsCountAsResolved()
+    {
+        var (s, audit, service) = MessageSetup();
+        var leadId = Guid.NewGuid();
+        s.LeadRepo.Messages.Add(new LeadMessage { LeadId = leadId, Content = "chờ", ReportedAt = DateTime.UtcNow, Status = "visible" });
+        s.LeadRepo.Messages.Add(new LeadMessage
+        {
+            LeadId = leadId, Content = "đã cảnh cáo", ReportedAt = DateTime.UtcNow, Status = "visible",
+            ReportResolution = LeadService.ReportResolutionWarned,
+        });
+        var adminId = Guid.NewGuid();
+
+        var pending = await service.GetReportedMessagesAsync(null, 1, 20, viewerAdminId: adminId);
+        var resolved = await service.GetReportedMessagesAsync("resolved", 1, 20);
+
+        Assert.Equal("chờ", Assert.Single(pending.Items).Content);
+        Assert.Equal("đã cảnh cáo", Assert.Single(resolved.Items).Content);
+        var log = Assert.Single(audit.Logs); // lần gọi không có viewer không ghi nhật ký
+        Assert.Equal("lead_message.report_queue_view", log.Action);
+        Assert.Equal(adminId, log.ActorUserId);
+    }
+
+    [Fact]
+    public async Task RemoveReportedMessage_RemovesOnlyThatMessageLogsAndNotifiesSenderAndReporter()
+    {
+        var (s, audit, service) = MessageSetup();
+        var (reported, leadId, reporterId) = AddReportedThread(s);
+        var adminId = Guid.NewGuid();
+
+        await service.RemoveReportedMessageAsync(adminId, leadId, reported.Id, "  Ngôn từ thô tục  ");
+
+        Assert.Equal("removed", reported.Status);
+        Assert.Equal(adminId, reported.RemovedByUserId);
+        Assert.Equal(LeadService.ReportResolutionRemoved, reported.ReportResolution);
+        Assert.NotNull(reported.ReportResolvedAt);
+        Assert.Equal("tin 4", reported.Content); // bản gốc vẫn giữ trong DB
+        Assert.All(s.LeadRepo.Messages.Where(m => m.Id != reported.Id), m => Assert.Equal("visible", m.Status));
+
+        var log = Assert.Single(audit.Logs);
+        Assert.Equal("lead_message.remove", log.Action);
+        using var detail = System.Text.Json.JsonDocument.Parse(log.DetailJson!);
+        Assert.Equal("Ngôn từ thô tục", detail.RootElement.GetProperty("reason").GetString());
+
+        Assert.Equal(2, s.LeadRepo.Notifications.Count);
+        Assert.Contains(s.LeadRepo.Notifications, n => n.UserId == reported.SenderUserId && n.Type == "lead_message_removed");
+        Assert.Contains(s.LeadRepo.Notifications, n => n.UserId == reporterId && n.Type == "lead_message_report_result");
+    }
+
+    [Fact]
+    public async Task RemoveReportedMessage_AlreadyRemoved_DoesNothing_AndBlankReasonIsRejected()
+    {
+        var (s, audit, service) = MessageSetup();
+        var (reported, leadId, _) = AddReportedThread(s);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => service.RemoveReportedMessageAsync(Guid.NewGuid(), leadId, reported.Id, "  "));
+        Assert.Equal("visible", reported.Status);
+
+        await service.RemoveReportedMessageAsync(Guid.NewGuid(), leadId, reported.Id, "vi phạm");
+        await service.RemoveReportedMessageAsync(Guid.NewGuid(), leadId, reported.Id, "vi phạm");
+
+        Assert.Single(audit.Logs);
+        Assert.Equal(2, s.LeadRepo.Notifications.Count);
+    }
+
+    [Fact]
+    public async Task WarnReportedSender_KeepsMessageMarksResolvedLogsAndNotifiesBothSides()
+    {
+        var (s, audit, service) = MessageSetup();
+        var (reported, leadId, reporterId) = AddReportedThread(s);
+
+        await service.WarnReportedSenderAsync(Guid.NewGuid(), leadId, reported.Id, "Lời lẽ không phù hợp.");
+
+        Assert.Equal("visible", reported.Status);
+        Assert.Equal(LeadService.ReportResolutionWarned, reported.ReportResolution);
+        Assert.Equal("lead_message.warn", Assert.Single(audit.Logs).Action);
+        Assert.Contains(s.LeadRepo.Notifications, n => n.UserId == reported.SenderUserId && n.Type == "lead_message_warning");
+        Assert.Contains(s.LeadRepo.Notifications, n => n.UserId == reporterId && n.Type == "lead_message_report_result");
+
+        // Báo cáo đã xử lý thì không cảnh cáo lần hai
+        await Assert.ThrowsAsync<ArgumentException>(() => service.WarnReportedSenderAsync(Guid.NewGuid(), leadId, reported.Id, "lần hai"));
+        await Assert.ThrowsAsync<ArgumentException>(() => service.WarnReportedSenderAsync(Guid.NewGuid(), leadId, reported.Id, null));
+        Assert.Single(audit.Logs);
+    }
+
+    [Fact]
+    public async Task DismissReport_NotifiesReporterOfTheOutcome()
+    {
+        var (s, _, service) = MessageSetup();
+        var (reported, leadId, reporterId) = AddReportedThread(s);
+
+        await service.DismissReportAsync(Guid.NewGuid(), leadId, reported.Id);
+
+        var notification = Assert.Single(s.LeadRepo.Notifications);
+        Assert.Equal(reporterId, notification.UserId);
+        Assert.Equal("lead_message_report_result", notification.Type);
+        Assert.Null(reported.ReportedAt);
+    }
+
+    [Fact]
+    public async Task MarkReportResolvedByLock_MarksLockedAndNotifiesReporter()
+    {
+        var (s, _, service) = MessageSetup();
+        var (reported, leadId, reporterId) = AddReportedThread(s);
+
+        await service.MarkReportResolvedByLockAsync(Guid.NewGuid(), leadId, reported.Id);
+        await service.MarkReportResolvedByLockAsync(Guid.NewGuid(), leadId, Guid.NewGuid()); // tin không tồn tại: bỏ qua
+
+        Assert.Equal(LeadService.ReportResolutionLocked, reported.ReportResolution);
+        Assert.Equal(reporterId, Assert.Single(s.LeadRepo.Notifications).UserId);
+    }
+
     private static (CreateLeadSetup S, FakeAuditRepo Audit, LeadService Service) MessageSetup()
     {
         var s = new CreateLeadSetup();

@@ -386,8 +386,9 @@ public class LeadsController(
     /// [USAS-2053 / UC-74] Đọc luồng tin nhắn trao đổi với học sinh/phụ huynh trong một yêu cầu liên hệ.
     /// Trung tâm chỉ xem được yêu cầu gửi đến đúng trung tâm mình (Anti-IDOR).
     /// </summary>
+    // [UC-58] Admin không đọc toàn bộ cuộc trò chuyện: chỉ xem tin bị báo cáo kèm ngữ cảnh qua /admin/lead-message-reports
     [HttpGet("received/{id:guid}/messages")]
-    [Authorize(Roles = $"{UserRoles.Center},{UserRoles.Moderator},{UserRoles.Admin}")]
+    [Authorize(Roles = $"{UserRoles.Center},{UserRoles.Moderator}")]
     [ProducesResponseType(typeof(LeadMessagesThreadDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -411,7 +412,7 @@ public class LeadsController(
     /// Nhắn tự do, không còn bộ lọc nội dung; lưu vào bảng lead_messages.
     /// </summary>
     [HttpPost("received/{id:guid}/messages")]
-    [Authorize(Roles = $"{UserRoles.Center},{UserRoles.Moderator},{UserRoles.Admin}")]
+    [Authorize(Roles = $"{UserRoles.Center},{UserRoles.Moderator}")]
     [ProducesResponseType(typeof(SendLeadMessageResultDto), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]

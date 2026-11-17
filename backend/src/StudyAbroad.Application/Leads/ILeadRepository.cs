@@ -63,7 +63,7 @@ public interface ILeadRepository
 
     Task SaveLeadMessageAsync(LeadMessage message, CancellationToken ct = default);
 
-    /// <summary>[UC-58] Hàng đợi báo cáo cho Admin, mới báo trước. filter: "pending" (chưa xử lý), "resolved" (đã gỡ) hoặc "all".</summary>
+    /// <summary>[UC-58] Hàng đợi báo cáo cho Admin, mới báo trước. filter: "pending" (chưa xử lý), "resolved" (đã gỡ, cảnh cáo hoặc khóa) hoặc "all".</summary>
     Task<PagedResult<AdminLeadMessageReportDto>> GetReportedMessagesAsync(
         string filter,
         int page,
@@ -77,5 +77,18 @@ public interface ILeadRepository
     Task<IReadOnlyList<Guid>> GetActiveAdminUserIdsAsync(CancellationToken ct = default);
 
     Task AddNotificationsAsync(IEnumerable<Notification> notifications, CancellationToken ct = default);
+
+    /// <summary>
+    /// [UC-58] Tin bị báo cáo cùng tối đa <paramref name="contextSize"/> tin liền trước và liền sau trong cùng yêu cầu liên hệ,
+    /// xếp theo thời gian. Trả danh sách rỗng nếu tin không thuộc yêu cầu này.
+    /// </summary>
+    Task<IReadOnlyList<AdminReportContextMessageDto>> GetReportContextMessagesAsync(
+        Guid leadId,
+        Guid messageId,
+        int contextSize,
+        CancellationToken ct = default);
+
+    /// <summary>[UC-58] Số tin ngữ cảnh mỗi phía do Admin cấu hình trong app_settings, null nếu chưa cấu hình hoặc giá trị không đọc được.</summary>
+    Task<int?> GetReportContextSizeSettingAsync(CancellationToken ct = default);
 }
 

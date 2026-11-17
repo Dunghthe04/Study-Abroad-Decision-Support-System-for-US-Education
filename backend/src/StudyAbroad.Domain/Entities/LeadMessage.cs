@@ -19,6 +19,13 @@ public class LeadMessage : BaseEntity
     public DateTime? ReportedAt { get; set; }
     public string? ReportReason { get; set; }
 
+    /// <summary>
+    /// [UC-58] Kết quả Admin xử lý báo cáo: removed (gỡ tin) | warned (cảnh cáo người gửi) | locked (khóa tài khoản người gửi).
+    /// Null là chưa xử lý. Bác bỏ báo cáo thì xóa hẳn thông tin báo cáo nên không có giá trị riêng.
+    /// </summary>
+    public string? ReportResolution { get; set; }
+    public DateTime? ReportResolvedAt { get; set; }
+
     /// <summary>Ảnh đính kèm (URL https của nhà cung cấp lưu trữ). Có thể kèm hoặc không kèm văn bản.</summary>
     public string? AttachmentUrl { get; set; }
     public string? AttachmentPublicId { get; set; }

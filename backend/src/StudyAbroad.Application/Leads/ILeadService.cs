@@ -76,7 +76,20 @@ public interface ILeadService
         string? reason,
         CancellationToken ct = default);
 
-    Task<PagedResult<AdminLeadMessageReportDto>> GetReportedMessagesAsync(string? filter, int page, int pageSize, CancellationToken ct = default);
+    /// <summary><paramref name="viewerAdminId"/> có giá trị thì lần đọc hàng đợi được ghi nhật ký truy cập.</summary>
+    Task<PagedResult<AdminLeadMessageReportDto>> GetReportedMessagesAsync(string? filter, int page, int pageSize, CancellationToken ct = default, Guid? viewerAdminId = null);
+
+    /// <summary>Tin bị báo cáo kèm một số tin ngữ cảnh liền kề (số lượng là tham số hệ thống). Mỗi lần đọc ghi nhật ký truy cập.</summary>
+    Task<AdminLeadMessageReportContextDto> GetReportContextAsync(Guid adminUserId, Guid leadId, Guid messageId, CancellationToken ct = default);
+
+    /// <summary>Gỡ riêng tin nhắn bị báo cáo (không khóa tài khoản). Thông báo cho người gửi và người báo cáo.</summary>
+    Task RemoveReportedMessageAsync(Guid adminUserId, Guid leadId, Guid messageId, string? reason, CancellationToken ct = default);
+
+    /// <summary>Cảnh cáo người gửi tin bị báo cáo, tin vẫn hiện. Thông báo cho người gửi và người báo cáo.</summary>
+    Task WarnReportedSenderAsync(Guid adminUserId, Guid leadId, Guid messageId, string? reason, CancellationToken ct = default);
+
+    /// <summary>Sau khi khóa tài khoản người gửi: đánh dấu báo cáo đã xử lý và thông báo cho người báo cáo.</summary>
+    Task MarkReportResolvedByLockAsync(Guid adminUserId, Guid leadId, Guid messageId, CancellationToken ct = default);
 
     Task DismissReportAsync(Guid adminUserId, Guid leadId, Guid messageId, CancellationToken ct = default);
 
