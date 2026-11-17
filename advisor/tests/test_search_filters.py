@@ -141,3 +141,28 @@ async def test_when_the_state_catalog_is_unavailable_the_states_are_reported():
 
     assert plan.filters == {}
     assert plan.unresolved == ["bang “Texas”"]
+
+
+@pytest.mark.parametrize(
+    ("sort", "text", "expected"),
+    [
+        ("highest_cost", "trường nào có học phí cao nhất", "highest_tuition"),
+        ("lowest_cost", "Xếp theo học phí thấp đến cao", "lowest_tuition"),
+        ("highest_cost", "Xếp theo tổng chi phí cả ăn ở, sinh hoạt cao đến thấp", "highest_cost"),
+        ("lowest_cost", "chi phí rẻ nhất", "lowest_cost"),
+        ("highest_cost", "trường nào đắt nhất", "highest_cost"),  # không nói rõ: tổng chi phí (số tiền phải chuẩn bị)
+        ("highest_cost", "học phí cả ăn ở cao nhất", "highest_cost"),  # nhắc ăn ở: tổng chi phí
+        ("ranking", "xếp hạng cao nhất", "ranking"),  # không phải cách xếp theo tiền: giữ nguyên
+        (None, "trường ở California", None),
+    ],
+)
+def test_resolve_cost_sort_chooses_tuition_or_total(sort, text, expected):
+    assert search_filters.resolve_cost_sort(sort, text) == expected
+
+
+@pytest.mark.asyncio
+async def test_placeholder_max_cost_is_dropped():
+    plan = await search_filters.normalize({"max_cost": "none"}, "highest_tuition")
+    assert plan.filters == {}
+    assert plan.unresolved == []
+    assert plan.sort == "highestTuition"
