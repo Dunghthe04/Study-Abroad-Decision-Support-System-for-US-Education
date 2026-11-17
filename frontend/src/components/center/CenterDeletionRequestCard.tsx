@@ -22,6 +22,7 @@ const MAX_REASON_LENGTH = 1000;
 
 const STATUS_LABELS: Record<string, string> = {
   pending: "Đang chờ Quản trị viên xử lý",
+  approved: "Đã được duyệt, tài khoản sẽ bị xóa hẳn khi hết thời hạn chờ",
   completed: "Đã xử lý xong",
   rejected: "Đã bị từ chối",
 };
@@ -52,7 +53,7 @@ export function CenterDeletionRequestCard() {
     };
   }, []);
 
-  const hasOpenRequest = request?.status === "pending";
+  const hasOpenRequest = request?.status === "pending" || request?.status === "approved";
 
   const submit = async () => {
     const trimmed = reason.trim();
