@@ -8,6 +8,7 @@ import {
   getAdminUniversity,
   getAdminUniversityOfferings,
 } from "@/lib/admin-university-api";
+import { AddOfferingControl } from "./AddOfferingControl";
 import { OfferingSection, type OfferingTable } from "./OfferingSection";
 import { UniversityInfoSection } from "./UniversityInfoSection";
 import { UniversityMediaSection } from "./UniversityMediaSection";
@@ -213,6 +214,17 @@ export function OfferingsPanel({
             onSaved={handleOfferingSaved}
           />
         ))}
+
+        {offerings && (
+          <AddOfferingControl
+            universityId={university.id}
+            existingLevels={offerings.map((o) => o.studyLevel)}
+            disabled={editing !== null}
+            onCreated={(created) => {
+              if (current) setResult({ ...current, offerings: [...offerings, created] });
+            }}
+          />
+        )}
     </DetailPanel>
   );
 }
