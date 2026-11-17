@@ -7,7 +7,6 @@ import {
   LayoutDashboardIcon,
   BanIcon,
   MailWarningIcon,
-  MessageSquareWarningIcon,
   MessagesSquareIcon,
   SchoolIcon,
   SlidersHorizontalIcon,
@@ -120,15 +119,6 @@ export const ADMIN_NAV: AdminNavItem[] = [
     icon: BarChart3Icon,
     roles: ["admin"],
     useCases: ["UC-83", "UC-90"],
-  },
-  {
-    href: "/admin/chat-review",
-    label: "Câu cần xem",
-    description: "Câu hệ thống không trả lời được hoặc bị lỗi, để xem và đánh dấu đã xử lý",
-    icon: MessageSquareWarningIcon,
-    // Quyết định D2 bản 14/11: hàng đợi này là việc nội dung của Moderator, Admin không thấy
-    roles: ["moderator"],
-    useCases: ["UC-53"],
   },
   {
     href: "/admin/review-batches",
