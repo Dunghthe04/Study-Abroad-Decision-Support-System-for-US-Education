@@ -188,7 +188,7 @@ export function ScholarshipTable({
       { label: "Mức tin cậy", value: sourceReliabilityLabel(scholarship.sourceReliability) },
       {
         label: "Hiển thị với học sinh",
-        value: <ScholarshipVisibilityToggle scholarship={scholarship} canChange={isModerator} onChanged={onVisibilityChanged} />,
+        value: <ScholarshipVisibilityToggle scholarship={scholarship} canChange={isModerator && canEdit} onChanged={onVisibilityChanged} />,
       },
     ];
     return <EditableTable title={title} rows={rows} edit={edit} />;
