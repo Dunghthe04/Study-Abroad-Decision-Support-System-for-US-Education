@@ -1,7 +1,7 @@
 """Hợp đồng đầu ra của SLM (Qwen3 4B): tách tin thành danh sách ý, kèm đầu vào dựng skill hồ sơ (SkillRequest).
 
 Đây là chỗ nối giữa hai phần: bộ phân loại (Dũng) tạo ra SlmTinResult; handler hồ sơ (Việt) và các nhánh còn lại đọc nó.
-Tên loại, khóa và mã ở đây trùng từng chữ với dữ liệu huấn luyện (data/slm/du_lieu_slm.jsonl) và prompt app/skills/slm_intents.md:
+Tên loại, khóa và mã ở đây trùng từng chữ với dữ liệu huấn luyện (slm/data/du_lieu_slm.jsonl) và prompt app/skills/slm_intents.md:
 một ý là {"type", "span", "entities"}, cả tin là {"intents": [...]}. Hệ thống đọc đúng thứ model trả, không đổi tên.
 Sửa file này thì báo người kia trước, và sửa dữ liệu, prompt cho khớp (rồi huấn luyện lại).
 """

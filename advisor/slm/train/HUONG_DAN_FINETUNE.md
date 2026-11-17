@@ -38,9 +38,9 @@ Dùng cùng `train_slm.ipynb` trong thư mục này. Notebook chạy trên Googl
 ### Bước 0. Chuẩn bị dữ liệu (ở máy bạn)
 ```
 cd advisor
-.venv\Scripts\python.exe -m scripts.build_slm_jsonl
-.venv\Scripts\python.exe -m scripts.check_slm_data      # phải báo "Tổng số lỗi: 0"
-.venv\Scripts\python.exe -m scripts.export_slm_chat
+.venv\Scripts\python.exe -m slm.prepare.build_slm_jsonl
+.venv\Scripts\python.exe -m slm.prepare.check_slm_data      # phải báo "Tổng số lỗi: 0"
+.venv\Scripts\python.exe -m slm.prepare.export_slm_chat
 ```
 - Lệnh 1 sinh `du_lieu_slm.jsonl` từ Excel. Lệnh 2 kiểm dữ liệu. Lệnh 3 sinh hai file `finetune/train.jsonl` và `finetune/val.jsonl` (mỗi dòng là một hội thoại).
 - Tập **test không được đưa vào** hai file này. Test chỉ để đo sau, nếu cho model thấy trước thì điểm đo vô nghĩa.
@@ -80,7 +80,7 @@ Mỗi ô có tiêu đề giải thích. Tóm tắt:
 ## Phần C. Sau khi train
 
 1. **Tải về máy** `.gguf` và `Modelfile` từ `MyDrive/usas_slm/<VERSION>/` (ví dụ `v5`; cần khoảng 2,5 GB trống; **ổ C: đang gần đầy nên đặt vào ổ D:**).
-2. Đặt vào `advisor/models/usas-slm-v4/`, mở `Modelfile` kiểm dòng `FROM` trỏ đúng tên file `.gguf`, rồi nạp vào Ollama:
+2. Đặt vào `advisor/slm/models/usas-slm-v4/`, mở `Modelfile` kiểm dòng `FROM` trỏ đúng tên file `.gguf`, rồi nạp vào Ollama:
    ```
    ollama create usas-slm-v4 -f Modelfile
    ```

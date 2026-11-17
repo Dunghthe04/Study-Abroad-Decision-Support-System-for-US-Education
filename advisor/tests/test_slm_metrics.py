@@ -5,8 +5,8 @@ import sys
 
 import pytest
 
-from scripts import slm_report
-from scripts.slm_metrics import (
+from slm.eval import slm_report
+from slm.eval.slm_metrics import (
     NONE,
     align,
     bootstrap_ci,

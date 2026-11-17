@@ -15,8 +15,8 @@ Các kiểm tra:
 Ngoài ra in số dòng có câu hệ thống đang hỏi (pending_question) theo loại, chỉ để xem.
 
 Chạy trong thư mục advisor:
-  python -m scripts.check_slm_data
-  python -m scripts.check_slm_data --excel data/slm/du_lieu_slm.xlsx --min-test 10 --show 8
+  python -m slm.prepare.check_slm_data
+  python -m slm.prepare.check_slm_data --excel slm/data/du_lieu_slm.xlsx --min-test 10 --show 8
 """
 
 import argparse
@@ -31,8 +31,8 @@ from typing import Any
 from openpyxl import load_workbook
 
 from app.schemas.slm import INFO_FIELDS, PROFILE_KEYS
-from scripts.build_slm_jsonl import DEFAULT_EXCEL, SPLITS, TYPES, as_text, to_record
-from scripts.slm_metrics import DEFAULT_TASK
+from slm.eval.slm_metrics import DEFAULT_TASK
+from slm.prepare.build_slm_jsonl import DEFAULT_EXCEL, SPLITS, TYPES, as_text, to_record
 
 MIN_TEST = 10  # số dòng test tối thiểu của một nhãn con
 # Khóa trong entities dùng làm nhãn con của từng loại ý

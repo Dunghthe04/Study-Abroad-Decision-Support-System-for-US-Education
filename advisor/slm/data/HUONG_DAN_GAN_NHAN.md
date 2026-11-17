@@ -1,7 +1,7 @@
 # Hướng dẫn gán nhãn dữ liệu SLM
 
 Dành cho người thêm hoặc kiểm dòng trong `du_lieu_slm.xlsx`. Chỉ có **hai file dữ liệu**: `du_lieu_slm.xlsx` là nguồn duy nhất, ghi **toàn bộ bằng tiếng Anh**; `du_lieu_slm.jsonl` (tiếng Anh, đúng tên trong Excel) sinh từ Excel bằng
-`python -m scripts.build_slm_jsonl`, không sửa tay. Tên loại, khóa và mã trong Excel trùng từng chữ với JSONL, prompt (`app/skills/slm_intents.md`) và code (`app/schemas/slm.py`): hệ thống đọc đúng thứ model trả, không đổi tên ở giữa. Script kiểm từng dòng và báo tên sheet, số dòng nếu sai.
+`python -m slm.prepare.build_slm_jsonl`, không sửa tay. Tên loại, khóa và mã trong Excel trùng từng chữ với JSONL, prompt (`app/skills/slm_intents.md`) và code (`app/schemas/slm.py`): hệ thống đọc đúng thứ model trả, không đổi tên ở giữa. Script kiểm từng dòng và báo tên sheet, số dòng nếu sai.
 
 ## 1. Một dòng gồm những gì
 
@@ -83,7 +83,7 @@ Mỗi ý có đúng 3 khóa: `type` (loại), `span` (đoạn chữ của ý), `
 1. Mỗi giá trị trong `entities` phải là đoạn chữ có trong `question`.
 2. `collect_profile` đứng đầu, chỉ một ý, và là nơi duy nhất có khóa hồ sơ.
 3. Không có ý chào, cảm ơn khi tin còn ý khác.
-4. Chạy `python -m scripts.build_slm_jsonl` rồi `python -m pytest tests/test_slm_data.py`. Cả hai phải sạch.
+4. Chạy `python -m slm.prepare.build_slm_jsonl` rồi `python -m pytest tests/test_slm_data.py`. Cả hai phải sạch.
 
 ## 6. Gán chéo (để đo độ đồng thuận)
 

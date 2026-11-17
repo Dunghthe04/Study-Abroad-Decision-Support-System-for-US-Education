@@ -17,8 +17,8 @@ from app.schemas.slm import (
     TASKS_BY_INTENT,
     SlmTinResult,
 )
-from scripts.build_slm_jsonl import DEFAULT_OUT, check_intents
-from scripts.export_slm_chat import (
+from slm.prepare.build_slm_jsonl import DEFAULT_OUT, check_intents
+from slm.prepare.export_slm_chat import (
     ENTITY_ORDER,
     PROMPT_PATH,
     answer_text,

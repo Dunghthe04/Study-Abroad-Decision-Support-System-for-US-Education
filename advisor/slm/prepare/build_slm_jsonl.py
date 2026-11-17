@@ -11,8 +11,8 @@ Cột context (tùy chọn, ở mọi sheet): điều hệ thống đang nói t�
 Dòng không có ngữ cảnh thì bỏ trống.
 
 Chạy trong thư mục advisor:
-  python -m scripts.build_slm_jsonl
-  python -m scripts.build_slm_jsonl --excel data/slm/du_lieu_slm.xlsx --out data/slm/du_lieu_slm.jsonl
+  python -m slm.prepare.build_slm_jsonl
+  python -m slm.prepare.build_slm_jsonl --excel slm/data/du_lieu_slm.xlsx --out slm/data/du_lieu_slm.jsonl
 """
 
 import argparse
@@ -29,7 +29,9 @@ from app.schemas.slm import INTENTS as TYPES
 from app.schemas.slm import MAX_RAW_Y, PROFILE_KEYS, SlmTinResult, SlmY
 from app.services.chat_flow import QUESTIONS
 
-DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "slm"
+SLM_DIR = Path(__file__).resolve().parents[1]  # slm/prepare/build_slm_jsonl.py -> advisor/slm/
+DATA_DIR = SLM_DIR / "data"
+RESULTS_DIR = SLM_DIR / "results"  # ket_qua (dự đoán từng câu) và bao_cao (báo cáo mỗi lần đo)
 DEFAULT_EXCEL = DATA_DIR / "du_lieu_slm.xlsx"
 DEFAULT_OUT = DATA_DIR / "du_lieu_slm.jsonl"
 REVIEW_COLUMN = "review"  # tùy chọn, ở mọi sheet: đánh dấu dòng mới chờ duyệt (v9, v10…); người duyệt ghi ok / sửa / xóa. Không đi vào dữ liệu
