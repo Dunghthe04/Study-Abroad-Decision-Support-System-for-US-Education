@@ -97,6 +97,8 @@ public static class DependencyInjection
         services.AddSingleton<SmtpEmailSender>();
         services.AddSingleton<EmailQueue>();
         services.AddSingleton<IEmailSender, QueuedEmailSender>();
+        // [UC-91] Chưa có nhà cung cấp SMS: bộ gửi tạm chỉ ghi mã ra log ở môi trường phát triển
+        services.AddSingleton<ISmsSender, LoggingSmsSender>();
         services.AddHostedService<EmailDispatchBackgroundService>();
 
         services.Configure<AdvisorOptions>(configuration.GetSection(AdvisorOptions.SectionName));

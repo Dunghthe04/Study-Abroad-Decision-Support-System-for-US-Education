@@ -10,5 +10,7 @@ namespace StudyAbroad.Domain.Constants
 
         /// <summary>Xác thực email liên lạc MỚI khi trung tâm đổi email.</summary>
         public const string ChangeEmail = "change_email";
+        /// <summary>[UC-91] Xác thực số điện thoại trung tâm bằng OTP gửi qua SMS.</summary>
+        public const string VerifyPhone = "verify_phone";
     }
 }

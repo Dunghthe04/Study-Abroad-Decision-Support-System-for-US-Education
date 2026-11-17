@@ -700,5 +700,172 @@ public class CenterRegistrationAndVerificationTests
 
         Assert.True(result.Success);
     }
-}
+    // ---- [USAS-2119 / UC-91] Xác thực số điện thoại trung tâm bằng OTP gửi qua SMS
 
+    private sealed class PhoneFakeHasher : IPasswordHasher
+    {
+        public string Hash(string password) => "hashed:" + password;
+        public bool VerifyPassword(string hash, string password) => hash == "hashed:" + password;
+    }
+
+    private sealed class PhoneFakeTokens : ITokenService
+    {
+        public (string Token, DateTime ExpiresAt) GenerateToken(User user) => ("token:" + user.Email, DateTime.UtcNow.AddDays(7));
+        public string HashToken(string token) => "hash:" + token;
+    }
+
+    private sealed class FakeSms(bool canDeliver = true) : ISmsSender
+    {
+        public bool CanDeliver { get; } = canDeliver;
+        public List<(string Phone, string Code)> Sent { get; } = [];
+
+        public Task SendOtpAsync(string phoneNumber, string otpCode, int expiryMinutes, CancellationToken ct = default)
+        {
+            Sent.Add((phoneNumber, otpCode));
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed record PhoneSetup(
+        AuthService Service, FakeStudyCenterRepo Centers, FakeUserRepository Users, FakeAuditLogRepository Audit, FakeSms Sms, StudyCenter Center, Guid OwnerId);
+
+    private static PhoneSetup CreatePhoneSetup(bool canDeliver = true, string? phone = "0912345678")
+    {
+        var users = new FakeUserRepository();
+        var centers = new FakeStudyCenterRepo();
+        var audit = new FakeAuditLogRepository();
+        var sms = new FakeSms(canDeliver);
+        var owner = new User { Id = Guid.NewGuid(), Email = "chu@trungtam.vn", FullName = "Chủ trung tâm", Role = UserRoles.Center, Status = UserStatuses.Active, Phone = phone };
+        users.Users.Add(owner);
+        var center = new StudyCenter { Id = Guid.NewGuid(), Code = "TT", Name = "Trung tâm ABC", OwnerUserId = owner.Id, Phone = phone, EmailVerifiedAt = DateTime.UtcNow };
+        centers.Centers.Add(center);
+        var service = new AuthService(users, new PhoneFakeHasher(), new PhoneFakeTokens(), new FakeEmailSender(), new FakeParentLinkRepository(), audit, centers, sms);
+        return new PhoneSetup(service, centers, users, audit, sms, center, owner.Id);
+    }
+
+    [Fact]
+    public async Task PhoneVerification_RequestSendsSmsOtp_AndCorrectCodeMarksPhoneVerified()
+    {
+        var s = CreatePhoneSetup();
+
+        var requested = await s.Service.RequestCenterPhoneVerificationAsync(s.OwnerId);
+
+        Assert.Equal(AuthError.None, requested.Error);
+        var (phone, code) = Assert.Single(s.Sms.Sent);
+        Assert.Equal("0912345678", phone);
+        Assert.Matches("^[0-9]{6}$", code);
+        Assert.Null(s.Center.PhoneVerifiedAt);
+
+        var confirmed = await s.Service.ConfirmCenterPhoneVerificationAsync(s.OwnerId, code);
+
+        Assert.Equal(AuthError.None, confirmed.Error);
+        Assert.NotNull(s.Center.PhoneVerifiedAt);
+        // Xác thực số điện thoại không tự động cấp dấu xác minh
+        Assert.NotEqual(CenterVerificationStatuses.Verified, s.Center.VerificationStatus);
+        Assert.Equal(["center.phone_verification_requested", "center.phone_verified"], s.Audit.Entries.Select(e => e.Action).ToArray());
+    }
+
+    [Fact]
+    public async Task PhoneVerification_WrongCodeCanRetry_ButTooManyWrongAttemptsInvalidatesTheCode()
+    {
+        var s = CreatePhoneSetup();
+        await s.Service.RequestCenterPhoneVerificationAsync(s.OwnerId);
+        var code = s.Sms.Sent[0].Code;
+        var wrong = code == "000000" ? "111111" : "000000";
+
+        // Sai một lần rồi nhập đúng: vẫn được
+        Assert.Equal(AuthError.OtpInvalid, (await s.Service.ConfirmCenterPhoneVerificationAsync(s.OwnerId, wrong)).Error);
+        Assert.Null(s.Center.PhoneVerifiedAt);
+
+        // Sai tới hết số lần cho phép: mã bị vô hiệu, nhập đúng cũng không được, phải xin mã mới
+        for (var i = 1; i < AuthService.MaxOtpAttempts; i++)
+            await s.Service.ConfirmCenterPhoneVerificationAsync(s.OwnerId, wrong);
+
+        Assert.Equal(AuthError.OtpInvalid, (await s.Service.ConfirmCenterPhoneVerificationAsync(s.OwnerId, code)).Error);
+        Assert.Null(s.Center.PhoneVerifiedAt);
+    }
+
+    [Fact]
+    public async Task PhoneVerification_ExpiredCodeIsRejected()
+    {
+        var s = CreatePhoneSetup();
+        await s.Service.RequestCenterPhoneVerificationAsync(s.OwnerId);
+        s.Users.Otps.Single(o => o.Purpose == OtpPurposes.VerifyPhone).ExpiresAt = DateTime.UtcNow.AddSeconds(-1);
+
+        var result = await s.Service.ConfirmCenterPhoneVerificationAsync(s.OwnerId, s.Sms.Sent[0].Code);
+
+        Assert.Equal(AuthError.OtpInvalid, result.Error);
+        Assert.Null(s.Center.PhoneVerifiedAt);
+    }
+
+    [Fact]
+    public async Task PhoneVerification_ResendIsRateLimited()
+    {
+        var s = CreatePhoneSetup();
+
+        Assert.Equal(AuthError.None, (await s.Service.RequestCenterPhoneVerificationAsync(s.OwnerId)).Error);
+        // Gửi lại ngay: bị chặn bởi khoảng cách tối thiểu giữa hai lần gửi
+        Assert.Equal(AuthError.Validation, (await s.Service.RequestCenterPhoneVerificationAsync(s.OwnerId)).Error);
+        Assert.Single(s.Sms.Sent);
+    }
+
+    [Fact]
+    public async Task PhoneVerification_UnavailableWithoutSmsDelivery_MissingPhone_OrAlreadyVerified()
+    {
+        var noSms = CreatePhoneSetup(canDeliver: false);
+        Assert.Equal(AuthError.Validation, (await noSms.Service.RequestCenterPhoneVerificationAsync(noSms.OwnerId)).Error);
+        Assert.Empty(noSms.Sms.Sent);
+        Assert.Empty(noSms.Users.Otps);
+
+        var noPhone = CreatePhoneSetup(phone: null);
+        Assert.Equal(AuthError.Validation, (await noPhone.Service.RequestCenterPhoneVerificationAsync(noPhone.OwnerId)).Error);
+
+        var verified = CreatePhoneSetup();
+        verified.Center.PhoneVerifiedAt = DateTime.UtcNow;
+        Assert.Equal(AuthError.Validation, (await verified.Service.RequestCenterPhoneVerificationAsync(verified.OwnerId)).Error);
+        Assert.Equal(AuthError.Validation, (await verified.Service.ConfirmCenterPhoneVerificationAsync(verified.OwnerId, "123456")).Error);
+    }
+
+    [Fact]
+    public async Task ChangePhone_ResetsVerification_AndOldCodeNoLongerWorks()
+    {
+        var s = CreatePhoneSetup();
+        await s.Service.RequestCenterPhoneVerificationAsync(s.OwnerId);
+        var oldCode = s.Sms.Sent[0].Code;
+        s.Center.PhoneVerifiedAt = DateTime.UtcNow;
+
+        var changed = await s.Service.ChangeCenterPhoneAsync(s.OwnerId, "0987654321");
+
+        Assert.Equal(AuthError.None, changed.Error);
+        Assert.Equal("0987654321", s.Center.Phone);
+        Assert.Null(s.Center.PhoneVerifiedAt);
+        Assert.Equal(AuthError.OtpInvalid, (await s.Service.ConfirmCenterPhoneVerificationAsync(s.OwnerId, oldCode)).Error);
+        Assert.Null(s.Center.PhoneVerifiedAt);
+    }
+
+    [Theory]
+    [InlineData(true, false, false)]  // gửi được SMS, số chưa xác thực: chặn nộp hồ sơ
+    [InlineData(true, true, true)]    // gửi được SMS, số đã xác thực: cho nộp
+    [InlineData(false, false, true)]  // chưa gửi được SMS: không áp quy tắc, giữ hành vi cũ
+    public async Task SubmitVerification_RequiresVerifiedPhoneOnlyWhenSmsCanBeDelivered(bool canDeliver, bool phoneVerified, bool expectSuccess)
+    {
+        var centerRepo = new FakeStudyCenterRepo();
+        var verifRepo = new FakeVerificationRepo();
+        var service = new StudyCenterService(centerRepo, new FakeAuditLogs(), verifRepo, smsSender: new FakeSms(canDeliver));
+        var center = new StudyCenter
+        {
+            Id = Guid.NewGuid(), Name = "Trung tâm Du học ABC", OwnerUserId = Guid.NewGuid(),
+            EmailVerifiedAt = DateTime.UtcNow, PhoneVerifiedAt = phoneVerified ? DateTime.UtcNow : null,
+        };
+        await centerRepo.AddAsync(center);
+        var req = new SubmitVerificationDto(
+            LegalName: "Công ty TNHH Tư vấn Du học ABC", TaxCode: "0101234567", Address: "Hà Nội", LegalRepresentative: "Nguyễn Văn A",
+            Documents: [new("business_registration", "/uploads/biz.pdf", "biz.pdf", 1000, "application/pdf")]);
+
+        var result = await service.SubmitVerificationAsync(center.OwnerUserId!.Value, req);
+
+        Assert.Equal(expectSuccess, result.Success);
+        if (!expectSuccess)
+            Assert.Contains("số điện thoại", result.ErrorMessage);
+    }
+}

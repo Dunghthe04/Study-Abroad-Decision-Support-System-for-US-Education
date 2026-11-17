@@ -22,6 +22,9 @@ public record ChangeContactPhoneDto(string NewValue);
 /// <summary>Xác nhận đổi số điện thoại / email liên lạc bằng OTP đã gửi tới giá trị mới.</summary>
 public record ConfirmContactChangeDto(string NewValue, string Code);
 
+/// <summary>[UC-91] Mã OTP nhận qua SMS để xác thực số điện thoại hiện tại của trung tâm.</summary>
+public record ConfirmPhoneVerificationDto(string Code);
+
 public record VerificationDocumentUploadDto(
     string DocumentType,
     string FileUrl,

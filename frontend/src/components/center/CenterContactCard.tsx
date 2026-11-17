@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
+import { PhoneVerificationRow } from "@/components/center/PhoneVerificationRow";
 
 type Kind = "phone" | "email";
 
@@ -219,19 +220,22 @@ interface CardProps {
   phone: string | null | undefined;
   email: string | null | undefined;
   emailVerified: boolean;
+  /** [UC-91] Số điện thoại hiện tại đã được xác thực bằng OTP qua SMS. */
+  phoneVerified?: boolean;
   onChanged: () => void;
 }
 
-export function CenterContactCard({ phone, email, emailVerified, onChanged }: CardProps) {
+export function CenterContactCard({ phone, email, emailVerified, phoneVerified = false, onChanged }: CardProps) {
   return (
     <div className="rounded-xl border border-line bg-surface p-6 space-y-5">
       <div>
         <h2 className="text-base font-semibold text-ink">Thông tin liên lạc</h2>
         <p className="text-xs text-ink-3 mt-1">
-          Số điện thoại lưu trực tiếp. Khi đổi email, mã OTP được gửi tới email mới và chỉ lưu sau khi bạn nhập đúng mã. Email đăng nhập không bị thay đổi.
+          Số điện thoại lưu trực tiếp, sau đó cần xác thực bằng mã OTP gửi qua SMS; đổi số thì phải xác thực lại. Khi đổi email, mã OTP được gửi tới email mới và chỉ lưu sau khi bạn nhập đúng mã. Email đăng nhập không bị thay đổi.
         </p>
       </div>
-      <ContactRow kind="phone" current={phone} verified={false} onChanged={onChanged} />
+      <ContactRow kind="phone" current={phone} verified={phoneVerified} onChanged={onChanged} />
+      <PhoneVerificationRow phone={phone} verified={phoneVerified} onChanged={onChanged} />
       <div className="border-t border-line" />
       <ContactRow kind="email" current={email} verified={emailVerified} onChanged={onChanged} />
     </div>

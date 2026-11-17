@@ -68,10 +68,20 @@ public class CenterPortalController(
         return Ok(status);
     }
 
-    /// <summary>Đổi số điện thoại liên lạc của trung tâm (không cần OTP; email mới là kênh xác thực).</summary>
+    /// <summary>Đổi số điện thoại liên lạc của trung tâm. Số mới ở trạng thái chưa xác thực; xác thực bằng OTP qua UC-91.</summary>
     [HttpPut("contact/phone")]
     public Task<IActionResult> ChangePhone([FromBody] ChangeContactPhoneDto request) =>
         RunContactChange(userId => authService.ChangeCenterPhoneAsync(userId, request.NewValue));
+
+    /// <summary>[UC-91] Gửi OTP qua SMS tới số điện thoại hiện tại của trung tâm để xác thực.</summary>
+    [HttpPost("contact/phone/verification/request")]
+    public Task<IActionResult> RequestPhoneVerification(CancellationToken ct) =>
+        RunContactChange(userId => authService.RequestCenterPhoneVerificationAsync(userId, ct));
+
+    /// <summary>[UC-91] Nhập OTP nhận qua SMS; đúng thì số điện thoại được ghi là đã xác thực.</summary>
+    [HttpPost("contact/phone/verification/confirm")]
+    public Task<IActionResult> ConfirmPhoneVerification([FromBody] ConfirmPhoneVerificationDto request, CancellationToken ct) =>
+        RunContactChange(userId => authService.ConfirmCenterPhoneVerificationAsync(userId, request.Code, ct));
 
     /// <summary>Gửi OTP tới email MỚI để đổi email liên lạc.</summary>
     [HttpPost("contact/email/request")]

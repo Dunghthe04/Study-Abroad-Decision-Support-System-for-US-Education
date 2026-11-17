@@ -530,6 +530,15 @@ export const centerPortalApi = {
       method: "PUT",
       body: JSON.stringify({ newValue }),
     }),
+  /** [UC-91] Gửi OTP qua SMS tới số điện thoại hiện tại của trung tâm. */
+  requestPhoneVerification: () =>
+    apiFetch<{ message: string }>("/api/v1/center/contact/phone/verification/request", { method: "POST" }),
+  /** [UC-91] Nhập OTP nhận qua SMS; đúng thì số điện thoại được ghi là đã xác thực. */
+  confirmPhoneVerification: (code: string) =>
+    apiFetch<{ message: string }>("/api/v1/center/contact/phone/verification/confirm", {
+      method: "POST",
+      body: JSON.stringify({ code }),
+    }),
   /** Đổi email liên lạc: gửi OTP tới email mới rồi xác nhận bằng mã. */
   requestEmailChange: (newValue: string) =>
     apiFetch<{ message: string }>("/api/v1/center/contact/email/request", {
