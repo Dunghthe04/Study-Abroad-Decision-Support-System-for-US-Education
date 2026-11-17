@@ -11,8 +11,8 @@ Mặc định chỉ in bảng trước và sau (chạy thử). Thêm --apply th�
 Ghi file thì phải đóng Excel trước. Sau khi ghi: chạy build_slm_jsonl rồi check_slm_data.
 
 Chạy trong thư mục advisor:
-  python -m scripts.resplit_slm
-  python -m scripts.resplit_slm --apply
+  python -m slm.prepare.resplit_slm
+  python -m slm.prepare.resplit_slm --apply
 """
 
 import argparse
@@ -25,8 +25,8 @@ from pathlib import Path
 
 from openpyxl import load_workbook
 
-from scripts.build_slm_jsonl import DEFAULT_EXCEL, SPLITS
-from scripts.check_slm_data import (
+from slm.prepare.build_slm_jsonl import DEFAULT_EXCEL, SPLITS
+from slm.prepare.check_slm_data import (
     MIN_PROFILE_KEY,
     MIN_TEST,
     MULTI_MIN_INTENTS,
@@ -298,7 +298,7 @@ def main() -> int:
     if args.apply:
         apply_to_excel(args.excel, items, after)
         print(
-            f"\nĐã ghi {args.excel}. Chạy tiếp: python -m scripts.build_slm_jsonl && python -m scripts.check_slm_data"
+            f"\nĐã ghi {args.excel}. Chạy tiếp: python -m slm.prepare.build_slm_jsonl && python -m slm.prepare.check_slm_data"
         )
     else:
         print("\n(Chạy thử, chưa ghi file. Thêm --apply để ghi.)")

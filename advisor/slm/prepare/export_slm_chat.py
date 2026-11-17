@@ -1,14 +1,14 @@
 """Xuất dữ liệu SLM sang dạng hội thoại để fine-tune: system = prompt, user = JSON đầu vào, assistant = đáp án.
-Đọc thẳng data/slm/du_lieu_slm.jsonl (tiếng Anh, đúng tên khóa như Excel) và dùng prompt tiếng Anh app/skills/slm_intents.md,
+Đọc thẳng slm/data/du_lieu_slm.jsonl (tiếng Anh, đúng tên khóa như Excel) và dùng prompt tiếng Anh app/skills/slm_intents.md,
 nên dữ liệu, prompt và đáp án dùng MỘT bộ tên. Skill hồ sơ không train (code điền khuôn).
 
 Tin user là JSON viết liền {"question", "profile", "pending_question", ["context"]}; đáp án là {"intents":[{"type","span","entities"}]}
 với khóa trong entities theo một thứ tự cố định, để model học nhất quán. Chỉ xuất train và val, tập test không bao giờ đem đi train.
 Lúc chạy thật phải dựng tin user đúng như hàm user_message ở đây và dùng đúng prompt này.
 
-Chạy trong thư mục advisor, sau khi đã chạy scripts.build_slm_jsonl:
-  python -m scripts.export_slm_chat
-Ra data/slm/finetune/train.jsonl và val.jsonl, mỗi dòng {"messages": [system, user, assistant]}. Mang 2 file lên Colab.
+Chạy trong thư mục advisor, sau khi đã chạy slm.prepare.build_slm_jsonl:
+  python -m slm.prepare.export_slm_chat
+Ra slm/data/finetune/train.jsonl và val.jsonl, mỗi dòng {"messages": [system, user, assistant]}. Mang 2 file lên Colab.
 """
 
 import argparse
@@ -18,7 +18,7 @@ from typing import Any
 
 from app.schemas.slm import PROFILE_KEYS
 from app.services.skill_call import SKILLS_DIR, load_skill
-from scripts.build_slm_jsonl import DEFAULT_OUT, profile_text
+from slm.prepare.build_slm_jsonl import DEFAULT_OUT, profile_text
 
 # Prompt tách ý dùng để huấn luyện (tiếng Anh). Chạy thật phải dùng đúng prompt này
 TRAIN_PROMPT = "slm_intents"
@@ -60,7 +60,7 @@ def user_message(data: dict[str, Any]) -> str:
 
 
 # Một dòng dữ liệu thành một hội thoại: system = prompt, user = đầu vào, assistant = đáp án. Mỗi hội thoại là một dòng trong
-# data/slm/finetune/train.jsonl, dạng {"messages": [{"role": "system", ...}, {"role": "user", ...}, {"role": "assistant", ...}]}
+# slm/data/finetune/train.jsonl, dạng {"messages": [{"role": "system", ...}, {"role": "user", ...}, {"role": "assistant", ...}]}
 def to_chat(record: dict[str, Any], prompt: str) -> dict[str, Any]:
     return {
         "messages": [

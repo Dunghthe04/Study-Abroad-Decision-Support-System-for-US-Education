@@ -1,4 +1,4 @@
-"""Chỉ số đo SLM tách ý, tính từ file dự đoán của scripts.eval_slm (data/slm/ket_qua/<model>_<split>.jsonl). Không cần Ollama.
+"""Chỉ số đo SLM tách ý, tính từ file dự đoán của slm.eval.eval_slm (slm/results/ket_qua/<model>_<split>.jsonl). Không cần Ollama.
 
 Mỗi dòng của file dự đoán: {"id", "question", "nhan": {"intents": [...]}, "du_doan": {"intents": [...]}, "confidence", "giay"},
 và "context" (ngữ cảnh đưa vào), "lui_ve_mo_ho" (model trả sai luật hai lần nên hệ thống lùi về "mơ hồ"). nhan là đáp án đúng,
@@ -49,7 +49,7 @@ def load_rows(path: str | Path) -> list[dict[str, Any]]:
     for r in rows:
         if "intents" not in r.get("nhan", {}) or "intents" not in r.get("du_doan", {}):
             raise ValueError(
-                f"{path}: dòng {r.get('id')} không có intents (file dự đoán của bản cũ, hãy chạy lại scripts.eval_slm)"
+                f"{path}: dòng {r.get('id')} không có intents (file dự đoán của bản cũ, hãy chạy lại slm.eval.eval_slm)"
             )
     return rows
 

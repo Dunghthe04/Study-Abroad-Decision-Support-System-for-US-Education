@@ -1,6 +1,6 @@
 """Bộ phân loại SLM (Qwen3 4B qua Ollama): đọc tin nhắn, tách thành danh sách ý, mỗi ý có loại và thông tin tách được.
 
-Đầu vào cùng dạng cột đầu vào trong data/slm/du_lieu_slm.jsonl ({"question", "profile", "pending_question", "context"}), đầu ra
+Đầu vào cùng dạng cột đầu vào trong slm/data/du_lieu_slm.jsonl ({"question", "profile", "pending_question", "context"}), đầu ra
 theo SLM_TIN_SCHEMA ({"intents": [...]}). Nhờ vậy model chưa fine-tune, model đã fine-tune và dữ liệu huấn luyện dùng chung một
 khuôn, đổi model chỉ cần đổi settings.slm_model. Hệ thống đọc đúng thứ model trả, không đổi tên khóa hay mã.
 """
@@ -43,6 +43,17 @@ _TYPE_VALUE_RE = re.compile(r'"type"\s*:\s*"([^"]*)"')
 _WORD_RE = re.compile(r"[^\W_]+(?:[-.'/][^\W_]+)*")
 # Khóa mà giá trị phải là đoạn chữ nguyên văn trong tin nhắn (schools là danh sách, kiểm từng tên)
 SPAN_KEYS = {*PROFILE_KEYS, "school", "city"}
+# Điều kiện lọc trường có giá trị là một con số (tiền, điểm tiếng Anh, tỷ lệ, hạng)
+NUMERIC_FILTER_KEYS = {
+    "max_cost",
+    "max_ielts",
+    "max_toefl",
+    "max_duolingo",
+    "min_acceptance_rate",
+    "max_acceptance_rate",
+    "min_graduation_rate",
+    "max_rank",
+}
 
 
 # Đầu vào của SLM, cùng khóa với cột đầu vào trong file dữ liệu
@@ -74,6 +85,8 @@ def build_messages(
 # Làm sạch từng ý model trả về, thay vì bỏ cả câu trả lời:
 #   entities: bỏ giá trị không có nguyên văn trong tin (model hay chép từ hồ sơ đầu vào, hoặc tự điền "null", "không có");
 #     schools bỏ từng tên không có trong tin, hết tên thì bỏ cả khóa
+#   filters: tin không có chữ số nào mà điều kiện lọc lại là một con số thì số đó do model bịa (vd "trường nào rẻ nhất" bị thêm
+#     max_cost "1000000000"), bỏ điều kiện đó. Câu nối tiếp (follow_up) lấy điều kiện từ ngữ cảnh nên không kiểm
 #   span: có chữ không nằm trong tin (hoặc rỗng) thì dùng nguyên tin thay cho đoạn đó
 # Ý không phải object thì giữ nguyên để SlmTinResult.from_raw báo lỗi và gọi lại model
 def keep_verbatim(raw: dict[str, Any], message: str, context_names: set[str] | None = None) -> dict[str, Any]:
@@ -106,11 +119,27 @@ def keep_verbatim(raw: dict[str, Any], message: str, context_names: set[str] | N
                     kept[key] = value
             elif key not in SPAN_KEYS or (isinstance(value, str) and value.lower() in text):
                 kept[key] = value
+        if (
+            isinstance(kept.get("filters"), dict)
+            and kept.get("follow_up") is not True
+            and not has_digit(message)
+        ):
+            kept["filters"] = {
+                key: value
+                for key, value in kept["filters"].items()
+                if not (key in NUMERIC_FILTER_KEYS and has_digit(str(value)))
+            }
+            if not kept["filters"]:
+                del kept["filters"]
         span = item.get("span")
         if not isinstance(span, str) or not span.strip() or words(span) - spoken:
             span = message
         cleaned.append({**item, "span": span, "entities": kept})
     return {**raw, "intents": cleaned}
+
+
+def has_digit(text: str) -> bool:
+    return any(ch.isdigit() for ch in text)
 
 
 # Các từ của một đoạn chữ, viết thường ("I-20", "TP.HCM", "8.5" giữ nguyên một từ)

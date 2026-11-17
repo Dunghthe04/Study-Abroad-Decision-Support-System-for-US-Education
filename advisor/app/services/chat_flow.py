@@ -580,7 +580,8 @@ def ask_next_missing(state: ChatState, prefix: str = "") -> SkillOutput:
 
 # Khóa ghi cả giá trị: mã cố định của hợp đồng (nhiệm vụ, chế độ, loại con, dịch vụ, mục, cách xếp, tiếp nối), tên
 # trường, trung tâm (tên công khai, có trong danh sách của hệ thống) và thành phố (chữ học sinh gõ, đã nằm trong tin nhắn ở cùng dòng
-# log nên không thêm thông tin cá nhân; ghi riêng để thấy model trả thành phố nào)
+# log nên không thêm thông tin cá nhân; ghi riêng để thấy model trả thành phố nào) và điều kiện lọc trường (filters: bang, ngành, mức
+# chi phí, tỷ lệ nhận...; là điều kiện tìm trường chứ không phải hồ sơ, cần thấy giá trị để biết model có bịa điều kiện không)
 LOGGED_VALUE_KEYS = (
     "tasks",
     "mode",
@@ -593,13 +594,26 @@ LOGGED_VALUE_KEYS = (
     "school",
     "schools",
     "centers",
+    "filters",
 )
+# Điều kiện lọc là chữ model trả về: cắt ngắn để một giá trị dài bất thường không làm phình dòng log
+MAX_LOGGED_TEXT = 80
+
+
+def short_filter(value: Any) -> Any:
+    if isinstance(value, str):
+        return value[:MAX_LOGGED_TEXT]
+    if isinstance(value, list):
+        return [short_filter(item) for item in value[:10]]
+    return value
 
 
 # Từng ý SLM đọc ra: loại, các giá trị ở trên, và tên các khóa còn lại. Giá trị còn lại là chữ học sinh viết
-# (số điểm, điều kiện lọc) nên chỉ ghi tên khóa
+# (số điểm, hồ sơ) nên chỉ ghi tên khóa
 def log_item(y: Any) -> dict[str, Any]:
     values = {key: y.entities[key] for key in LOGGED_VALUE_KEYS if key in y.entities}
+    if isinstance(values.get("filters"), dict):
+        values["filters"] = {key: short_filter(value) for key, value in values["filters"].items()}
     return {"type": y.type, **values, "other_keys": sorted(key for key in y.entities if key not in values)}
 
 

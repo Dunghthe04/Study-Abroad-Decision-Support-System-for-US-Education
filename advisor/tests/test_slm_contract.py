@@ -433,7 +433,7 @@ def test_a_skill_request_carries_the_calculated_lines():
 
 
 # ---- khớp với dữ liệu ----
-DATA = Path(__file__).resolve().parents[1] / "data" / "slm" / "du_lieu_slm.jsonl"
+DATA = Path(__file__).resolve().parents[1] / "slm" / "data" / "du_lieu_slm.jsonl"
 
 
 def labelled_outputs() -> list[dict]:

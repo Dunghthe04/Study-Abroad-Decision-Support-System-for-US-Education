@@ -1,4 +1,4 @@
-"""Vẽ biểu đồ đánh giá SLM từ kết quả của scripts.slm_metrics. Mỗi hàm vẽ một biểu đồ ra một file PNG.
+"""Vẽ biểu đồ đánh giá SLM từ kết quả của slm.eval.slm_metrics. Mỗi hàm vẽ một biểu đồ ra một file PNG.
 
 Màu cố định theo thứ tự các lần chạy: cam (model gốc), xanh dương (model đã huấn luyện), xanh lá (lần thứ ba nếu có).
 Bộ màu Okabe-Ito, phân biệt được cả với người khó phân biệt màu.
@@ -15,7 +15,7 @@ matplotlib.use("Agg")  # vẽ ra file, không mở cửa sổ
 import matplotlib.pyplot as plt  # noqa: E402
 
 from app.schemas.slm import INTENTS  # noqa: E402
-from scripts.slm_metrics import ERRORS, LEVELS, NONE, percentile  # noqa: E402
+from slm.eval.slm_metrics import ERRORS, LEVELS, NONE, percentile  # noqa: E402
 
 PALETTE = ["#E69F00", "#0072B2", "#009E73", "#CC79A7", "#56B4E9"]
 LEVEL_NAMES = {

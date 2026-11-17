@@ -320,3 +320,55 @@ async def test_chat_json_scored_sends_plain_json_mode_when_asked():
     await OllamaClient(http, model="usas-slm").chat_json_scored([{"role": "user", "content": "hi"}], "json")
 
     assert sent["body"]["format"] == "json"
+
+
+def entities_after(raw_entities, message):
+    raw = {"intents": [y("knowledge", message, **raw_entities)]}
+    return keep_verbatim(raw, message)["intents"][0]["entities"]
+
+
+def test_keep_verbatim_drops_a_cost_limit_the_model_invented_for_a_sort_only_question():
+    # Lỗi thật: "rẻ nhất" chỉ là cách xếp, model thêm max_cost 1000000000 (1 tỷ đồng, đổi ra khoảng 40.000 USD)
+    cleaned = entities_after(
+        {"tasks": ["search"], "filters": {"max_cost": "1000000000"}, "sort": "lowest_cost"},
+        "Trường nào có học phí rẻ nhất",
+    )
+    assert cleaned == {"tasks": ["search"], "sort": "lowest_cost"}
+
+
+def test_keep_verbatim_keeps_a_cost_limit_the_student_typed():
+    cleaned = entities_after(
+        {"tasks": ["search"], "filters": {"max_cost": "30 nghìn đô"}, "sort": "lowest_cost"},
+        "Trường nào học phí dưới 30 nghìn đô, xếp rẻ nhất lên đầu",
+    )
+    assert cleaned["filters"] == {"max_cost": "30 nghìn đô"}
+
+
+def test_keep_verbatim_keeps_a_cost_limit_the_model_rewrote_when_the_message_has_a_number():
+    # Học sinh gõ 30k, model viết 30000: có số trong tin nên không đụng tới
+    cleaned = entities_after({"tasks": ["search"], "filters": {"max_cost": "30000"}}, "trường nào dưới 30k")
+    assert cleaned["filters"] == {"max_cost": "30000"}
+
+
+def test_keep_verbatim_keeps_filters_carried_from_the_context_in_a_follow_up():
+    cleaned = entities_after(
+        {"tasks": ["search"], "filters": {"max_cost": "30 nghìn đô", "major": "sinh học"}, "follow_up": True},
+        "còn trường công thì sao",
+    )
+    assert cleaned["filters"] == {"max_cost": "30 nghìn đô", "major": "sinh học"}
+
+
+def test_keep_verbatim_leaves_filters_that_are_not_numbers_alone():
+    cleaned = entities_after(
+        {"tasks": ["search"], "filters": {"state": ["texas"], "test_policy": "optional", "ivy": "yes"}},
+        "trường ở Texas không cần SAT",
+    )
+    assert cleaned["filters"] == {"state": ["texas"], "test_policy": "optional", "ivy": "yes"}
+
+
+@pytest.mark.parametrize("key", ["max_cost", "max_ielts", "max_toefl", "min_acceptance_rate", "max_rank"])
+def test_keep_verbatim_drops_every_invented_numeric_filter_and_keeps_the_others(key):
+    cleaned = entities_after(
+        {"tasks": ["search"], "filters": {key: "100", "state": ["texas"]}}, "trường nào ở Texas"
+    )
+    assert cleaned["filters"] == {"state": ["texas"]}
