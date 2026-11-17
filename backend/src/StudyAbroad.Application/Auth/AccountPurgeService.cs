@@ -1,5 +1,6 @@
 using StudyAbroad.Application.Audit;
 using StudyAbroad.Application.Common;
+using StudyAbroad.Application.Profile.Flow;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
 
@@ -11,20 +12,29 @@ public interface IAccountPurgeService
     Task<AccountPurgeSummary> PurgeDueAccountsAsync(DateTime now, CancellationToken ct = default);
 }
 
-/// <summary>Kết quả một lượt chạy: số tài khoản đã xóa, số bỏ qua (vừa khôi phục), và các tài khoản lỗi.</summary>
-public record AccountPurgeSummary(int Purged, int Skipped, IReadOnlyList<AccountPurgeFailure> Failures);
+/// <summary>
+/// Kết quả một lượt chạy: số tài khoản đã xóa, số bỏ qua (vừa khôi phục), các tài khoản lỗi,
+/// và các tài khoản đã xóa trong DB nhưng xóa tệp trên ổ đĩa lỗi (cần dọn tay).
+/// </summary>
+public record AccountPurgeSummary(
+    int Purged,
+    int Skipped,
+    IReadOnlyList<AccountPurgeFailure> Failures,
+    IReadOnlyList<AccountPurgeFailure> FileCleanupFailures);
 
 public record AccountPurgeFailure(Guid UserId, Exception Error);
 
 /// <summary>
 /// [UC-80] Xóa hẳn tài khoản sau thời hạn chờ (mặc định 30 ngày). Mỗi tài khoản một transaction:
 /// kiểm tra lại điều kiện → xóa payload thanh toán → xử lý bài diễn đàn → xóa user → ghi nhật ký chỉ có id.
+/// Tệp học bạ, tệp nháp xóa SAU khi DB đã lưu: DB hoàn tác được còn tệp đã xóa thì không.
 /// Chỉ xử lý vai trò được tự xóa (học sinh, phụ huynh).
 /// </summary>
 public class AccountPurgeService(
     IAccountPurgeRepository purge,
     IAuditLogRepository auditLogs,
     IUnitOfWork unitOfWork,
+    IProfileFileStorageService fileStorage,
     AccountDeletionOptions? options = null) : IAccountPurgeService
 {
     public const string AuditAction = "user.purge_account";
@@ -40,6 +50,7 @@ public class AccountPurgeService(
         var purged = 0;
         var skipped = 0;
         List<AccountPurgeFailure> failures = [];
+        List<AccountPurgeFailure> fileFailures = [];
 
         foreach (var userId in dueIds)
         {
@@ -68,8 +79,22 @@ public class AccountPurgeService(
                     done = true;
                 }, ct);
 
-                if (done) purged++;
-                else skipped++;
+                if (!done)
+                {
+                    skipped++;
+                    continue;
+                }
+
+                purged++;
+                try
+                {
+                    await fileStorage.DeleteAllUserFilesAsync(userId, ct);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    // User đã mất khỏi DB, không thử lại theo user được nữa: báo để dọn tay
+                    fileFailures.Add(new AccountPurgeFailure(userId, ex));
+                }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -81,6 +106,6 @@ public class AccountPurgeService(
             }
         }
 
-        return new AccountPurgeSummary(purged, skipped, failures);
+        return new AccountPurgeSummary(purged, skipped, failures, fileFailures);
     }
 }

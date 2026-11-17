@@ -1,4 +1,5 @@
 using StudyAbroad.Application.Auth;
+using StudyAbroad.Application.Profile.Flow;
 using StudyAbroad.Domain.Constants;
 
 namespace StudyAbroad.UnitTests;
@@ -50,13 +51,35 @@ public class AccountPurgeServiceTests
         }
     }
 
+    /// <summary>Ghi lại thời điểm xóa tệp so với các bước DB (dùng chung danh sách Steps).</summary>
+    private sealed class FakeFileStorage(List<string> steps) : IProfileFileStorageService
+    {
+        public HashSet<Guid> FailFor { get; } = [];
+
+        public Task DeleteAllUserFilesAsync(Guid userId, CancellationToken ct = default)
+        {
+            if (FailFor.Contains(userId)) throw new IOException("tệp đang bị khóa");
+            steps.Add($"files:{userId}");
+            return Task.CompletedTask;
+        }
+
+        public Task<DraftTranscriptInfoDto> SaveDraftTranscriptAsync(Guid userId, Stream fileStream, string fileName, string contentType, long length, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<string?> CommitDraftTranscriptAsync(Guid userId, string draftRelativePath, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task DeleteDraftFileAsync(Guid userId, string? draftRelativePath, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task DeleteTranscriptFileAsync(Guid userId, string? transcriptRelativePath, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task DeleteDraftFilesAsync(Guid userId, CancellationToken ct = default) => throw new NotSupportedException();
+    }
+
     private readonly FakePurgeRepository _repo = new();
+    private readonly FakeFileStorage _files;
     private readonly FakeAuditLogRepository _audit = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly AccountDeletionOptions _options = new() { RetentionPeriod = TimeSpan.FromDays(30) };
     private static readonly DateTime Now = new(2026, 11, 17, 8, 0, 0, DateTimeKind.Utc);
 
-    private AccountPurgeService CreateService() => new(_repo, _audit, _unitOfWork, _options);
+    public AccountPurgeServiceTests() => _files = new FakeFileStorage(_repo.Steps);
+
+    private AccountPurgeService CreateService() => new(_repo, _audit, _unitOfWork, _files, _options);
 
     [Fact]
     public async Task Purge_UsesRetentionCutoffAndOnlyStudentParentRoles()
@@ -80,7 +103,9 @@ public class AccountPurgeServiceTests
         Assert.Equal(0, summary.Skipped);
         Assert.Empty(summary.Failures);
         Assert.Equal(1, _unitOfWork.Calls);
-        Assert.Equal(new[] { $"lock:{id}", $"payments:{id}", $"forum:{id}", $"delete:{id}" }, _repo.Steps);
+        // Tệp xóa sau cùng, ngoài transaction
+        Assert.Equal(new[] { $"lock:{id}", $"payments:{id}", $"forum:{id}", $"delete:{id}", $"files:{id}" }, _repo.Steps);
+        Assert.Empty(summary.FileCleanupFailures);
 
         var entry = Assert.Single(_audit.Entries);
         Assert.Equal(AccountPurgeService.AuditAction, entry.Action);
@@ -122,6 +147,38 @@ public class AccountPurgeServiceTests
         Assert.Contains($"delete:{good}", _repo.Steps);
         var entry = Assert.Single(_audit.Entries);
         Assert.Equal(good.ToString(), entry.EntityId);
+    }
+
+    [Fact]
+    public async Task Purge_FailedUser_FilesNotDeleted()
+    {
+        var id = Guid.NewGuid();
+        _repo.DueIds.Add(id);
+        _repo.FailOnDelete.Add(id);
+
+        await CreateService().PurgeDueAccountsAsync(Now);
+
+        // DB hoàn tác nên tài khoản còn nguyên: tệp cũng phải còn
+        Assert.DoesNotContain($"files:{id}", _repo.Steps);
+    }
+
+    [Fact]
+    public async Task Purge_FileDeleteFails_StillCountedPurgedAndReportedSeparately()
+    {
+        var bad = Guid.NewGuid();
+        var good = Guid.NewGuid();
+        _repo.DueIds.AddRange([bad, good]);
+        _files.FailFor.Add(bad);
+
+        var summary = await CreateService().PurgeDueAccountsAsync(Now);
+
+        Assert.Equal(2, summary.Purged);
+        Assert.Empty(summary.Failures);
+        var fileFailure = Assert.Single(summary.FileCleanupFailures);
+        Assert.Equal(bad, fileFailure.UserId);
+        Assert.IsType<IOException>(fileFailure.Error);
+        Assert.Contains($"files:{good}", _repo.Steps);
+        Assert.Equal(2, _audit.Entries.Count);
     }
 
     [Fact]

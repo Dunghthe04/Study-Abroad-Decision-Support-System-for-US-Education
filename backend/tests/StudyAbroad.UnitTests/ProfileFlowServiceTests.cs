@@ -183,6 +183,8 @@ public class ProfileFlowServiceTests
             DeleteCalled = true;
             return Task.CompletedTask;
         }
+
+        public Task DeleteAllUserFilesAsync(Guid userId, CancellationToken ct = default) => Task.CompletedTask;
     }
 
     private sealed class FakeTranscriptOcrClient : StudyAbroad.Application.Advisor.ITranscriptOcrClient

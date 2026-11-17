@@ -32,6 +32,10 @@ public class AccountPurgeBackgroundService(
                     logger.LogError(failure.Error, "[Background Job Error] Xóa hẳn tài khoản {UserId} lỗi: {Message}",
                         failure.UserId, failure.Error.Message);
 
+                foreach (var failure in summary.FileCleanupFailures)
+                    logger.LogWarning(failure.Error, "[Background Job] Đã xóa tài khoản {UserId} nhưng xóa tệp trong uploads lỗi, cần dọn tay: {Message}",
+                        failure.UserId, failure.Error.Message);
+
                 if (summary.Purged > 0 || summary.Skipped > 0 || summary.Failures.Count > 0)
                     logger.LogInformation("[Background Job] Xóa hẳn tài khoản: {Purged} đã xóa, {Skipped} bỏ qua, {Failed} lỗi.",
                         summary.Purged, summary.Skipped, summary.Failures.Count);
