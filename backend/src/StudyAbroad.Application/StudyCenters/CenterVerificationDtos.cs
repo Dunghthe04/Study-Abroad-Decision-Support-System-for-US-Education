@@ -107,7 +107,11 @@ public record UpdateCenterProfileRequest(
     DateOnly? LicenseIssuedDate = null,
     string? LegalComplianceMode = null,
     string? TrainingLicenseNumber = null,
-    int? CertifiedCounselorCount = null);
+    int? CertifiedCounselorCount = null,
+    // [UC-92] Fanpage (Moderator kiểm tra như website), khu vực phục vụ và chi nhánh (lưu ngay).
+    string? Fanpage = null,
+    List<string>? ServiceAreas = null,
+    List<string>? Branches = null);
 
 public record CenterVerificationStatusDto(
     string VerificationStatus,

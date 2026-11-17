@@ -41,9 +41,12 @@ public class CenterPortalController(
         return center is null ? NotFound("Không tìm thấy thông tin trung tâm.") : Ok(center);
     }
 
-    /// <summary>[UC-92] Cập nhật thông tin công bố của trung tâm.</summary>
+    /// <summary>
+    /// [UC-92] Trung tâm tự sửa hồ sơ. Trả về hồ sơ sau khi lưu và phân loại: lưu ngay, chờ Moderator kiểm tra (website, fanpage),
+    /// hoặc thông tin pháp lý làm hồ sơ về Chờ duyệt.
+    /// </summary>
     [HttpPut("profile")]
-    public async Task<ActionResult<StudyCenterDto>> UpdateProfile(
+    public async Task<ActionResult<CenterProfileUpdateResponse>> UpdateProfile(
         [FromBody] UpdateCenterProfileRequest request,
         CancellationToken ct)
     {
@@ -54,7 +57,35 @@ public class CenterPortalController(
         if (!result.Success || result.Center is null)
             return ValidationProblem(result.ErrorMessage);
 
-        return Ok(result.Center);
+        var outcome = result.Outcome ?? new CenterProfileUpdateOutcome([], [], [], false, "Đã lưu thay đổi hồ sơ.");
+        return Ok(new CenterProfileUpdateResponse(result.Center, outcome));
+    }
+
+    /// <summary>[UC-92] Yêu cầu xóa tài khoản mới nhất của trung tâm (204 nếu chưa gửi).</summary>
+    [HttpGet("deletion-request")]
+    public async Task<ActionResult<CenterDeletionRequestDto>> GetDeletionRequest(CancellationToken ct)
+    {
+        if (User.GetUserId() is not { } userId)
+            return Unauthorized();
+
+        var request = await centerService.GetDeletionRequestAsync(userId, ct);
+        return request is null ? NoContent() : Ok(request);
+    }
+
+    /// <summary>[UC-92] Trung tâm gửi yêu cầu xóa tài khoản và dữ liệu; Administrator xử lý ở UC-93. Mỗi lúc một yêu cầu mở.</summary>
+    [HttpPost("deletion-request")]
+    public async Task<ActionResult<CenterDeletionRequestDto>> RequestDeletion(
+        [FromBody] CreateCenterDeletionRequest request,
+        CancellationToken ct)
+    {
+        if (User.GetUserId() is not { } userId)
+            return Unauthorized();
+
+        var result = await centerService.RequestDeletionAsync(userId, request?.Reason, ct);
+        if (!result.Success || result.Request is null)
+            return ValidationProblem(result.ErrorMessage);
+
+        return Ok(result.Request);
     }
 
     /// <summary>[UC-71, UC-91] Lấy trạng thái xác minh và tiến độ hoàn thiện hồ sơ của trung tâm.</summary>
