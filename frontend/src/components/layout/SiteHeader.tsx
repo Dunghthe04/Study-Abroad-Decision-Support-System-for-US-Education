@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  BellIcon,
   BookOpenIcon,
   BookmarkCheckIcon,
   Building2Icon,
@@ -18,6 +19,7 @@ import {
 } from "lucide-react";
 import { formatUserRole } from "@/lib/user-role-labels";
 import { useAuth } from "@/contexts/AuthContext";
+import { useUnreadNotifications } from "@/hooks/use-unread-notifications";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
@@ -50,6 +52,8 @@ export function SiteHeader() {
   const isModerator = user?.role === "moderator";
   const canOpenAdmin = isAdmin || isModerator;
   const isStudentOrParent = user?.role === "student" || user?.role === "parent";
+  // [UC-110] Số thông báo chưa đọc trên chuông
+  const { count: unreadNotifications } = useUnreadNotifications(!!user);
 
   const navLinks = [
     { href: canOpenAdmin ? "/admin" : "/", label: isModerator ? "Kiểm duyệt" : isAdmin ? "Quản trị" : "Trang chủ" },
@@ -145,6 +149,19 @@ export function SiteHeader() {
             {isLoading ? (
               <Skeleton className="h-9 w-24" />
             ) : user ? (
+              <>
+              <Link
+                href="/notifications"
+                aria-label={unreadNotifications > 0 ? `Thông báo, ${unreadNotifications} chưa đọc` : "Thông báo"}
+                className="relative flex size-9 items-center justify-center rounded-full text-white outline-none transition-colors hover:bg-white/15 focus-visible:ring-3 focus-visible:ring-white/50"
+              >
+                <BellIcon className="size-5" />
+                {unreadNotifications > 0 ? (
+                  <span className="absolute -top-0.5 -right-0.5 flex min-w-4 items-center justify-center rounded-full bg-risk px-1 text-[10px] font-semibold leading-4 text-white tabular-nums">
+                    {unreadNotifications > 99 ? "99+" : unreadNotifications}
+                  </span>
+                ) : null}
+              </Link>
               <DropdownMenu>
                 <DropdownMenuTrigger
                   aria-label={`Tài khoản của ${user.fullName}`}
@@ -244,6 +261,7 @@ export function SiteHeader() {
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
+              </>
             ) : (
               <>
                 <p className="hidden text-sm text-white/85 lg:block">

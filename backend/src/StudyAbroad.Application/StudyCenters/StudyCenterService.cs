@@ -49,7 +49,8 @@ public class StudyCenterService(
     IStudyCenterRepository repository,
     IAuditLogRepository auditLogs,
     ICenterVerificationRepository? verificationRepository = null,
-    IEmailSender? emailSender = null) : IStudyCenterService
+    IEmailSender? emailSender = null,
+    StudyAbroad.Application.Notifications.INotificationService? notifications = null) : IStudyCenterService
 {
     private const int MaxPageSize = 100;
     public const int MaxNameLength = 200;
@@ -733,6 +734,8 @@ public class StudyCenterService(
     /// </summary>
     private async Task NotifyCenterAsync(StudyCenter center, string outcome, string? reason, IReadOnlyList<string>? unmet, CancellationToken ct)
     {
+        await NotifyCenterInAppAsync(center, outcome, reason, ct);
+
         if (emailSender is null || string.IsNullOrWhiteSpace(center.Email)) return;
         try
         {
@@ -741,6 +744,35 @@ public class StudyCenterService(
         catch (Exception)
         {
             // đã lưu kết quả duyệt; email là thông báo phụ
+        }
+    }
+
+    /// <summary>Tiêu đề thông báo trong ứng dụng cho từng kết quả xét duyệt; null là kết quả không cần thông báo (ví dụ vừa nộp hồ sơ).</summary>
+    public static string? VerificationOutcomeTitle(string outcome) => outcome switch
+    {
+        "verified" => "Hồ sơ xác minh đã được duyệt",
+        "reject" => "Hồ sơ xác minh bị từ chối",
+        "changes_requested" => "Hồ sơ xác minh cần bổ sung",
+        "revoked" => "Dấu xác minh đã bị thu hồi",
+        _ => null,
+    };
+
+    /// <summary>
+    /// [UC-110] Thông báo trong ứng dụng cho tài khoản trung tâm về kết quả duyệt hồ sơ xác minh (UC-59).
+    /// Trung tâm chưa gắn tài khoản, hoặc ghi thông báo lỗi, thì bỏ qua để không làm hỏng thao tác của Moderator.
+    /// </summary>
+    private async Task NotifyCenterInAppAsync(StudyCenter center, string outcome, string? reason, CancellationToken ct)
+    {
+        if (notifications is null || center.OwnerUserId is not { } ownerId) return;
+        if (VerificationOutcomeTitle(outcome) is not { } title) return;
+        try
+        {
+            var body = string.IsNullOrWhiteSpace(reason) ? null : $"Ghi chú của người duyệt: {reason.Trim()}";
+            await notifications.NotifyAsync(ownerId, "center_verification", title, body, "/center/verification", ct);
+        }
+        catch (Exception)
+        {
+            // đã lưu kết quả duyệt; thông báo là phụ
         }
     }
 

@@ -33,6 +33,7 @@ public static class DependencyInjection
         services.AddScoped<IStudyCenterRepository, StudyCenterRepository>();
         services.AddScoped<ICenterVerificationRepository, CenterVerificationRepository>();
         services.AddScoped<ICenterReviewRepository, CenterReviewRepository>();
+        services.AddScoped<StudyAbroad.Application.Notifications.INotificationRepository, NotificationRepository>();
         services.AddScoped<ICenterReviewSubmissionRepository, CenterReviewSubmissionRepository>();
         services.AddScoped<StudyAbroad.Application.Admin.Universities.IAdminUniversityRepository, AdminUniversityRepository>();
         services.AddScoped<StudyAbroad.Application.Admin.Settings.IGradeScaleSettingRepository, GradeScaleSettingRepository>();
