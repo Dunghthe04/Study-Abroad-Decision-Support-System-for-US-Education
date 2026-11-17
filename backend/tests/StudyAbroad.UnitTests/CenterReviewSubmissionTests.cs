@@ -33,10 +33,15 @@ public class CenterReviewSubmissionTests
                 .OrderByDescending(l => l.CreatedAt)
                 .FirstOrDefault());
 
-        public Task AddAsync(CenterReview review, CancellationToken ct = default)
+        /// <summary>Giả lập lượt gửi khác vừa chiếm mất yêu cầu liên hệ (DB từ chối vì index duy nhất).</summary>
+        public bool SimulateConcurrentDuplicate { get; set; }
+
+        public Task<bool> TryAddAsync(CenterReview review, CancellationToken ct = default)
         {
+            if (SimulateConcurrentDuplicate || (review.LeadId is not null && Reviews.Any(r => r.LeadId == review.LeadId)))
+                return Task.FromResult(false);
             Reviews.Add(review);
-            return Task.CompletedTask;
+            return Task.FromResult(true);
         }
 
         public Task<CenterReviewDto?> GetPublicDtoAsync(Guid reviewId, CancellationToken ct = default) =>
@@ -167,6 +172,21 @@ public class CenterReviewSubmissionTests
 
         Assert.Contains("gửi yêu cầu liên hệ", ex.Message);
         Assert.Empty(s.Repo.Reviews);
+    }
+
+    [Fact]
+    public async Task Create_ConcurrentDuplicateRejectedByDatabase_IsReportedAsAlreadyReviewedAndNotAudited()
+    {
+        var s = new Setup();
+        var student = s.AddUser();
+        s.AddLead(student.Id);
+        s.Repo.SimulateConcurrentDuplicate = true;
+
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() => s.Service.CreateAsync(student.Id, s.Center.Id, new CreateCenterReviewRequest(4)));
+
+        Assert.Equal(CenterReviewService.AlreadyReviewedMessage, ex.Message);
+        Assert.Empty(s.Repo.Reviews);
+        Assert.Empty(s.Audit.Logs);
     }
 
     [Fact]

@@ -21,10 +21,20 @@ public class CenterReviewSubmissionRepository(AppDbContext db) : ICenterReviewSu
             .OrderByDescending(l => l.CreatedAt)
             .FirstOrDefaultAsync(ct);
 
-    public async Task AddAsync(CenterReview review, CancellationToken ct = default)
+    public async Task<bool> TryAddAsync(CenterReview review, CancellationToken ct = default)
     {
         db.CenterReviews.Add(review);
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+            return true;
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException { SqlState: Npgsql.PostgresErrorCodes.UniqueViolation })
+        {
+            // Hai lượt gửi trùng nhau cho cùng một yêu cầu liên hệ: lượt sau vi phạm index duy nhất trên lead_id.
+            db.Entry(review).State = EntityState.Detached;
+            return false;
+        }
     }
 
     public async Task<CenterReviewDto?> GetPublicDtoAsync(Guid reviewId, CancellationToken ct = default)
