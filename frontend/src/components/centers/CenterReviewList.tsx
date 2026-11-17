@@ -1,8 +1,25 @@
-import { StarIcon } from "lucide-react";
+"use client";
+
+import { useState } from "react";
+import { StarIcon, Trash2Icon } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import type { CenterReviewsDto } from "@/types/api";
+import { Spinner } from "@/components/ui/spinner";
+import { Textarea } from "@/components/ui/textarea";
+import { toast } from "@/components/ui/toast";
+import { useAuth } from "@/contexts/AuthContext";
+import { ApiError, studyCentersApi } from "@/lib/api";
+import type { CenterReviewDto, CenterReviewsDto } from "@/types/api";
 
 const MAX_STARS = 5;
 
@@ -16,6 +33,10 @@ interface CenterReviewListProps {
   loadingMore?: boolean;
   loadMoreError?: boolean;
   onLoadMore?: () => void;
+  /** [UC-57] Có truyền thì Moderator thấy nút "Gỡ" trên từng đánh giá. */
+  centerId?: string;
+  /** Gọi sau khi gỡ thành công để tải lại danh sách và điểm trung bình. */
+  onReviewRemoved?: () => void;
 }
 
 /** Một hàng đủ 5 sao: sao đầy theo điểm, phần còn lại là sao rỗng màu xám. */
@@ -42,8 +63,43 @@ export function CenterReviewList({
   loadingMore = false,
   loadMoreError = false,
   onLoadMore,
+  centerId,
+  onReviewRemoved,
 }: CenterReviewListProps) {
   const total = reviews?.totalCount ?? 0;
+
+  // [UC-57] Chỉ Moderator gỡ được đánh giá vi phạm
+  const { user } = useAuth();
+  const canRemove = user?.role === "moderator" && !!centerId;
+  const [removeTarget, setRemoveTarget] = useState<CenterReviewDto | null>(null);
+  const [removeReason, setRemoveReason] = useState("");
+  const [isRemoving, setIsRemoving] = useState(false);
+
+  const closeRemoveDialog = () => {
+    if (isRemoving) return;
+    setRemoveTarget(null);
+    setRemoveReason("");
+  };
+
+  const confirmRemove = async () => {
+    if (!removeTarget || !centerId || isRemoving || removeReason.trim().length === 0) return;
+    setIsRemoving(true);
+    try {
+      await studyCentersApi.removeReview(centerId, removeTarget.id, removeReason);
+      toast.add({ type: "success", title: "Đã gỡ đánh giá", description: "Đánh giá không còn hiển thị và không tính vào điểm trung bình." });
+      setRemoveTarget(null);
+      setRemoveReason("");
+      onReviewRemoved?.();
+    } catch (err: unknown) {
+      toast.add({
+        type: "error",
+        title: "Gỡ đánh giá thất bại",
+        description: err instanceof ApiError ? err.message : "Không thể gỡ đánh giá. Vui lòng thử lại.",
+      });
+    } finally {
+      setIsRemoving(false);
+    }
+  };
 
   return (
     <div className="space-y-3">
@@ -84,8 +140,56 @@ export function CenterReviewList({
               {rev.comment}
             </CardContent>
           )}
+          {canRemove && (
+            <CardContent className="flex justify-end px-4 sm:px-6 pb-3 pt-0">
+              <Button
+                type="button"
+                variant="ghost"
+                size="xs"
+                onClick={() => setRemoveTarget(rev)}
+                className="h-6 gap-1 px-1.5 text-[11px] text-risk hover:text-risk hover:bg-risk-wash"
+              >
+                <Trash2Icon className="size-3" />
+                Gỡ đánh giá
+              </Button>
+            </CardContent>
+          )}
         </Card>
       ))}
+
+      <AlertDialog open={removeTarget !== null} onOpenChange={(open) => !open && closeRemoveDialog()}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Gỡ đánh giá này?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Đánh giá sẽ biến khỏi danh sách công khai và không còn tính vào điểm trung bình. Việc gỡ được ghi nhật ký kèm lý do.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {removeTarget && (
+            <p className="max-h-32 overflow-y-auto whitespace-pre-wrap break-words rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+              {removeTarget.rating} sao{removeTarget.comment ? `: ${removeTarget.comment}` : " (không có nhận xét)"}
+            </p>
+          )}
+          <Textarea
+            value={removeReason}
+            onChange={(e) => setRemoveReason(e.target.value)}
+            maxLength={500}
+            rows={2}
+            disabled={isRemoving}
+            placeholder="Lý do gỡ (bắt buộc, tối đa 500 ký tự)"
+            required
+            aria-label="Lý do gỡ đánh giá"
+            className="text-sm resize-y"
+          />
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isRemoving}>Hủy</AlertDialogCancel>
+            <Button type="button" variant="destructive" onClick={() => void confirmRemove()} disabled={isRemoving || removeReason.trim().length === 0} className="gap-1.5">
+              {isRemoving ? <Spinner className="size-3.5" /> : <Trash2Icon className="size-3.5" />}
+              Gỡ đánh giá
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {hasMore && onLoadMore && (
         <div className="flex flex-col items-center gap-2 pt-1">
