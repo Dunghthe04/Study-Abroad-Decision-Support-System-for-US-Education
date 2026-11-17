@@ -211,10 +211,11 @@ namespace StudyAbroad.Application.Advisor
             };
         }
 
-        // UC-53: câu chưa trả lời được vào danh sách mẫu SLM ở dạng nháp, chỉ có câu hỏi. Lỗi không làm hỏng lượt chat
+        // UC-53: câu chưa trả lời được vào danh sách mẫu SLM ở dạng nháp, chỉ có câu hỏi. Theo công tắc Chat:StoreMessages
+        // (messages null khi tắt). Lỗi không làm hỏng lượt chat
         private async Task CaptureUnansweredAsync(AdvisorChatRequest request, CancellationToken ct)
         {
-            if (slmSamples is null || request.Messages.LastOrDefault(m => m.Role == "user")?.Content is not { Length: > 0 } asked)
+            if (slmSamples is null || messages is null || request.Messages.LastOrDefault(m => m.Role == "user")?.Content is not { Length: > 0 } asked)
                 return;
             try
             {
