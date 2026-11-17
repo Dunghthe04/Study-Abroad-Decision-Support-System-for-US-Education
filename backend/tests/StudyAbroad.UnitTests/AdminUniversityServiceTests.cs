@@ -151,6 +151,21 @@ public class AdminUniversityServiceTests
     }
 
     [Fact]
+    public async Task CreateOfferingAsync_AddsNewLevel_RejectsExistingLevel()
+    {
+        var repo = new FakeRepository();
+        var service = new AdminUniversityService(repo);
+
+        var created = await service.CreateOfferingAsync(repo.University.Id, new CreateOfferingRequest("Master"), Actor);
+        var duplicate = await service.CreateOfferingAsync(repo.University.Id, new CreateOfferingRequest("undergraduate"), Actor);
+
+        Assert.True(created.Success);
+        Assert.Equal("master", Assert.Single(repo.AddedOfferings).StudyLevel);
+        Assert.Equal("university_offering.create", Assert.Single(repo.Audits).Action);
+        Assert.Contains("studyLevel", duplicate.Errors.Keys);
+    }
+
+    [Fact]
     public async Task UpdateOfferingAsync_OnlyOneSatValue_ReturnsError()
     {
         var repo = new FakeRepository();
@@ -384,6 +399,10 @@ public class AdminUniversityServiceTests
 
         public Task<University?> GetUniversityAsync(Guid universityId, CancellationToken ct = default) =>
             Task.FromResult(universityId == University.Id ? University : null);
+
+        public List<UniversityOffering> AddedOfferings { get; } = [];
+
+        public void AddOffering(UniversityOffering offering) => AddedOfferings.Add(offering);
 
         public Task<IReadOnlyList<UniversityOffering>> ListOfferingsAsync(Guid universityId, CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<UniversityOffering>>([Offering]);

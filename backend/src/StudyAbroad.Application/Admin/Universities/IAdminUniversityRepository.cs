@@ -17,6 +17,8 @@ public interface IAdminUniversityRepository
     /// <summary>Trường có tracking để sửa; null nếu không có.</summary>
     Task<University?> GetUniversityAsync(Guid universityId, CancellationToken ct = default);
 
+    void AddOffering(UniversityOffering offering);
+
     Task<IReadOnlyList<UniversityOffering>> ListOfferingsAsync(Guid universityId, CancellationToken ct = default);
 
     /// <summary>Offering có tracking để sửa; null nếu không có hoặc không thuộc trường này.</summary>

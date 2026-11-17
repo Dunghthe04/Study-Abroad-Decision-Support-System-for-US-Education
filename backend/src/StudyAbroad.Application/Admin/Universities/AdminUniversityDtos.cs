@@ -101,6 +101,8 @@ public record UpdateUniversityRequest(
     string? LogoUrl = null,
     string? CoverUrl = null);
 
+public record CreateOfferingRequest(string? StudyLevel);
+
 public record UpdateOfferingMajor(Guid MajorId, bool IsStem);
 
 public record UpdateOfferingRequest(

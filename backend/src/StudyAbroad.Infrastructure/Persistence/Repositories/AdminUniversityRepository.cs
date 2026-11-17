@@ -64,6 +64,8 @@ public class AdminUniversityRepository(AppDbContext db) : IAdminUniversityReposi
     public Task<University?> GetUniversityAsync(Guid universityId, CancellationToken ct = default) =>
         db.Universities.FirstOrDefaultAsync(u => u.Id == universityId, ct);
 
+    public void AddOffering(UniversityOffering offering) => db.UniversityOfferings.Add(offering);
+
     public async Task<IReadOnlyList<UniversityOffering>> ListOfferingsAsync(Guid universityId, CancellationToken ct = default) =>
         await db.UniversityOfferings.AsNoTracking()
             .Where(o => o.UniversityId == universityId)

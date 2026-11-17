@@ -51,6 +51,20 @@ public class AdminUniversitiesController(IAdminUniversityService service) : Cont
         return offerings is null ? NotFound() : Ok(offerings);
     }
 
+    /// <summary>[UC-65] Thêm một bậc học cho trường (chỉ Moderator).</summary>
+    [HttpPost("{id:guid}/offerings")]
+    [Authorize(Roles = UserRoles.Moderator)]
+    public async Task<ActionResult<AdminUniversityOfferingDto>> CreateOffering(
+        Guid id, [FromBody] CreateOfferingRequest request, CancellationToken ct)
+    {
+        if (User.GetUserId() is not { } actorId) return Unauthorized();
+
+        var result = await service.CreateOfferingAsync(id, request, actorId, ct);
+        if (result.NotFound) return NotFound();
+        if (!result.Success) return BadRequest(new { errors = result.Errors });
+        return Ok(result.Value);
+    }
+
     /// <summary>[UC-66] Sửa thông tin trường (chỉ Moderator).</summary>
     [HttpPut("{id:guid}")]
     [Authorize(Roles = UserRoles.Moderator)]

@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using StudyAbroad.Application.Common;
+using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
 using static StudyAbroad.Application.Admin.AdminEditHelpers;
 
@@ -18,6 +19,9 @@ public interface IAdminUniversityService
     /// <summary>[UC-66] Sửa thông tin trường (kèm ghi audit).</summary>
     Task<AdminUpdateResult<AdminUniversityDetailDto>> UpdateUniversityAsync(
         Guid universityId, UpdateUniversityRequest request, Guid actorUserId, CancellationToken ct = default);
+    /// <summary>[UC-65] Thêm một bậc học trống cho trường; số liệu nhập tiếp qua UpdateOfferingAsync.</summary>
+    Task<AdminUpdateResult<AdminUniversityOfferingDto>> CreateOfferingAsync(
+        Guid universityId, CreateOfferingRequest request, Guid actorUserId, CancellationToken ct = default);
     /// <summary>[UC-66] Sửa một bậc học của trường, gồm cả danh sách ngành (kèm ghi audit).</summary>
     Task<AdminUpdateResult<AdminUniversityOfferingDto>> UpdateOfferingAsync(
         Guid universityId, Guid offeringId, UpdateOfferingRequest request, Guid actorUserId, CancellationToken ct = default);
@@ -178,6 +182,35 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
         repository.AddAudit(AuditEntry(actorUserId, "university.update", "university", university.Id, new { code = university.Code, changes }));
         await repository.SaveChangesAsync(ct);
         return AdminUpdateResult<AdminUniversityDetailDto>.Ok(await ToDetailDtoAsync(university, ct));
+    }
+
+    public async Task<AdminUpdateResult<AdminUniversityOfferingDto>> CreateOfferingAsync(
+        Guid universityId, CreateOfferingRequest request, Guid actorUserId, CancellationToken ct = default)
+    {
+        if (await repository.GetUniversityAsync(universityId, ct) is null)
+            return AdminUpdateResult<AdminUniversityOfferingDto>.Missing();
+
+        var studyLevel = Clean(request.StudyLevel)?.ToLowerInvariant();
+        var errors = new Dictionary<string, string>();
+        if (!StudyLevels.IsValid(studyLevel))
+            errors["studyLevel"] = "Bậc học không hợp lệ.";
+        else if ((await repository.ListOfferingsAsync(universityId, ct)).Any(o => o.StudyLevel == studyLevel))
+            errors["studyLevel"] = "Trường đã có bậc học này.";
+        if (errors.Count > 0) return AdminUpdateResult<AdminUniversityOfferingDto>.Invalid(errors);
+
+        var offering = new UniversityOffering
+        {
+            UniversityId = universityId,
+            StudyLevel = studyLevel!,
+            LastEditedByUserId = actorUserId,
+        };
+        repository.AddOffering(offering);
+        repository.AddAudit(AuditEntry(actorUserId, "university_offering.create", "university_offering", offering.Id,
+            new { universityId, studyLevel }));
+        await repository.SaveChangesAsync(ct);
+
+        var lastEditedBy = await repository.GetUserDisplayNameAsync(actorUserId, ct);
+        return AdminUpdateResult<AdminUniversityOfferingDto>.Ok(ToOfferingDto(offering, [], lastEditedBy));
     }
 
     public async Task<AdminUpdateResult<AdminUniversityOfferingDto>> UpdateOfferingAsync(
