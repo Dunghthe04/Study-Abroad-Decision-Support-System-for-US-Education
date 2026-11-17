@@ -139,11 +139,7 @@ public class LeadsControllerTests
                 ?? throw new KeyNotFoundException("Không tìm thấy yêu cầu liên hệ.");
 
             var list = MessagesByLead.TryGetValue(leadId, out var msgs) ? msgs : [];
-            return Task.FromResult(new LeadMessagesThreadDto(
-                leadId,
-                lead.Status,
-                list,
-                list.Count(m => m.IsFlagged && m.Status != "removed")));
+            return Task.FromResult(new LeadMessagesThreadDto(leadId, lead.Status, list));
         }
 
         public Task<SendLeadMessageResultDto> SendLeadMessageForCenterUserAsync(
@@ -152,6 +148,7 @@ public class LeadsControllerTests
             string userRole,
             Guid leadId,
             string content,
+            Func<CancellationToken, Task<LeadMessageAttachment>>? attachmentFactory = null,
             CancellationToken ct = default)
         {
             if (leadId == Guid.Empty)
@@ -171,7 +168,6 @@ public class LeadsControllerTests
             var nextStatus = lead.Status == "new" ? "contacted" : lead.Status;
             ReceivedLeads[idx] = lead with { Status = nextStatus };
 
-            var filter = LeadMessageContentFilter.Inspect(content);
             var senderName = LeadMessageMapper.ResolveSenderDisplayName(userRole, null, lead.SharedProfile, lead.StudyCenterName);
             var msg = new LeadMessageDto(
                 Guid.NewGuid(),
@@ -181,8 +177,7 @@ public class LeadsControllerTests
                 userRole,
                 true,
                 content.Trim(),
-                filter.IsFlagged,
-                filter.FlagReason,
+                null,
                 "visible",
                 DateTime.UtcNow);
 
@@ -206,10 +201,10 @@ public class LeadsControllerTests
             if (MissingSentLeadId == leadId)
                 throw new KeyNotFoundException("Không tìm thấy yêu cầu liên hệ.");
             var messages = MessagesByLead.TryGetValue(leadId, out var list) ? list : [];
-            return Task.FromResult(new LeadMessagesThreadDto(leadId, "contacted", messages, 0));
+            return Task.FromResult(new LeadMessagesThreadDto(leadId, "contacted", messages));
         }
 
-        public Task<SendLeadMessageResultDto> SendSentLeadMessageAsync(Guid userId, Guid leadId, string content, CancellationToken ct = default)
+        public Task<SendLeadMessageResultDto> SendSentLeadMessageAsync(Guid userId, Guid leadId, string content, Func<CancellationToken, Task<LeadMessageAttachment>>? attachmentFactory = null, CancellationToken ct = default)
         {
             if (RuleToThrow is not null)
                 throw RuleToThrow;
@@ -219,21 +214,8 @@ public class LeadsControllerTests
                 throw new ArgumentException("Nội dung tin nhắn không được để trống.");
             var msg = new LeadMessageDto(
                 Guid.NewGuid(), leadId, userId, "Bạn", UserRoles.Student, false,
-                content.Trim(), false, null, "visible", DateTime.UtcNow);
+                content.Trim(), null, "visible", DateTime.UtcNow);
             return Task.FromResult(new SendLeadMessageResultDto(msg, "contacted"));
-        }
-
-        // [USAS-2080 / UC-58] Gỡ tin nhắn: ghi lại tham số để test kiểm tra controller truyền đúng
-        public (Guid ModeratorId, Guid LeadId, Guid MessageId, string? Reason)? LastRemove { get; private set; }
-
-        public Task<LeadMessageDto> RemoveLeadMessageAsync(Guid moderatorUserId, Guid leadId, Guid messageId, string? reason, CancellationToken ct = default)
-        {
-            if (MissingSentLeadId == leadId)
-                throw new KeyNotFoundException("Không tìm thấy yêu cầu liên hệ.");
-            LastRemove = (moderatorUserId, leadId, messageId, reason);
-            return Task.FromResult(new LeadMessageDto(
-                messageId, leadId, Guid.NewGuid(), "Học sinh / Phụ huynh (Ẩn danh)", UserRoles.Student, false,
-                "Tin nhắn đã bị gỡ do vi phạm quy tắc.", true, null, "removed", DateTime.UtcNow));
         }
 
         public (Guid UserId, Guid LeadId, Guid MessageId, string? Reason)? LastReport { get; private set; }
@@ -244,26 +226,60 @@ public class LeadsControllerTests
                 throw new KeyNotFoundException("Không tìm thấy yêu cầu liên hệ.");
             LastReport = (userId, leadId, messageId, reason);
             return Task.FromResult(new LeadMessageDto(
-                messageId, leadId, Guid.NewGuid(), "Trung tâm", UserRoles.Center, true, "Nội dung", false, null, "visible", DateTime.UtcNow));
+                messageId, leadId, Guid.NewGuid(), "Trung tâm", UserRoles.Center, true, "Nội dung", null, "visible", DateTime.UtcNow));
         }
 
-        public string? LastModerationStatus { get; private set; }
-        public (Guid ModeratorId, Guid LeadId, Guid MessageId)? LastKeep { get; private set; }
+        public (Guid UserId, Guid LeadId, Guid MessageId, string? Reason)? LastReceivedReport { get; private set; }
 
-        public Task<PagedResult<ModerationLeadMessageDto>> GetModerationMessagesAsync(string? filter, int page, int pageSize, CancellationToken ct = default)
-        {
-            LastModerationStatus = filter;
-            return Task.FromResult(new PagedResult<ModerationLeadMessageDto>([], page, pageSize, 0));
-        }
-
-        public Task<LeadMessageDto> KeepLeadMessageAsync(Guid moderatorUserId, Guid leadId, Guid messageId, CancellationToken ct = default)
+        public Task<LeadMessageDto> ReportReceivedLeadMessageAsync(
+            Guid userId, string? userEmail, string userRole, Guid leadId, Guid messageId, string? reason, CancellationToken ct = default)
         {
             if (MissingSentLeadId == leadId)
                 throw new KeyNotFoundException("Không tìm thấy yêu cầu liên hệ.");
-            LastKeep = (moderatorUserId, leadId, messageId);
+            LastReceivedReport = (userId, leadId, messageId, reason);
             return Task.FromResult(new LeadMessageDto(
-                messageId, leadId, Guid.NewGuid(), "Học sinh", UserRoles.Student, false, "Nội dung", false, null, "visible", DateTime.UtcNow));
+                messageId, leadId, Guid.NewGuid(), "Học sinh", UserRoles.Student, false, "Nội dung", null, "visible", DateTime.UtcNow));
         }
+
+        public Guid? LastQueueViewer { get; private set; }
+        public List<(string Action, Guid AdminId, Guid LeadId, Guid MessageId, string? Reason)> ReportActions { get; } = [];
+
+        public Task<PagedResult<AdminLeadMessageReportDto>> GetReportedMessagesAsync(string? filter, int page, int pageSize, CancellationToken ct = default, Guid? viewerAdminId = null)
+        {
+            LastQueueViewer = viewerAdminId;
+            return Task.FromResult(new PagedResult<AdminLeadMessageReportDto>([], page, pageSize, 0));
+        }
+
+        public Task<AdminLeadMessageReportContextDto> GetReportContextAsync(Guid adminUserId, Guid leadId, Guid messageId, CancellationToken ct = default)
+        {
+            ReportActions.Add(("context", adminUserId, leadId, messageId, null));
+            return Task.FromResult(new AdminLeadMessageReportContextDto(leadId, messageId, 3, []));
+        }
+
+        public Task RemoveReportedMessageAsync(Guid adminUserId, Guid leadId, Guid messageId, string? reason, CancellationToken ct = default)
+        {
+            ReportActions.Add(("remove", adminUserId, leadId, messageId, reason));
+            return Task.CompletedTask;
+        }
+
+        public Task WarnReportedSenderAsync(Guid adminUserId, Guid leadId, Guid messageId, string? reason, CancellationToken ct = default)
+        {
+            ReportActions.Add(("warn", adminUserId, leadId, messageId, reason));
+            return Task.CompletedTask;
+        }
+
+        public Task MarkReportResolvedByLockAsync(Guid adminUserId, Guid leadId, Guid messageId, CancellationToken ct = default)
+        {
+            ReportActions.Add(("lock", adminUserId, leadId, messageId, null));
+            return Task.CompletedTask;
+        }
+
+        public Task DismissReportAsync(Guid adminUserId, Guid leadId, Guid messageId, CancellationToken ct = default) => Task.CompletedTask;
+
+        public Task<Guid> GetMessageSenderIdAsync(Guid leadId, Guid messageId, CancellationToken ct = default) => Task.FromResult(Guid.NewGuid());
+
+        public Task<int> RemoveAllMessagesOfLockedSenderAsync(Guid adminUserId, Guid senderUserId, string? reason, CancellationToken ct = default) =>
+            Task.FromResult(0);
     }
 
     private static (LeadsController Controller, FakeLeadService Service) CreateController(Guid userId)
@@ -428,7 +444,7 @@ public class LeadsControllerTests
         service.MessagesByLead[leadId] =
         [
             new LeadMessageDto(Guid.NewGuid(), leadId, Guid.NewGuid(), "Trung Tâm Test", UserRoles.Center, true,
-                "Chào em", false, null, "visible", DateTime.UtcNow),
+                "Chào em", null, "visible", DateTime.UtcNow),
         ];
 
         var result = await controller.GetSentLeadMessages(leadId, CancellationToken.None);
@@ -768,7 +784,6 @@ public class LeadsControllerTests
                 UserRoles.Center,
                 true,
                 "Chào em, trung tâm đã xem hồ sơ.",
-                false,
                 null,
                 "visible",
                 DateTime.UtcNow)
@@ -812,7 +827,6 @@ public class LeadsControllerTests
         var created = Assert.IsType<CreatedAtActionResult>(result);
         var payload = Assert.IsType<SendLeadMessageResultDto>(created.Value);
         Assert.Equal("contacted", payload.LeadStatus);
-        Assert.False(payload.Message.IsFlagged);
         Assert.Equal("Trung tâm gửi em lộ trình chi tiết.", payload.Message.Content);
     }
 
@@ -869,102 +883,55 @@ public class LeadsControllerTests
     }
 
     [Fact]
-    public async Task GetModerationMessages_AsModerator_ReturnsOkAndPassesStatus()
+    public async Task ReportReceivedLeadMessage_AsCenter_ReturnsOkAndPassesArguments()
     {
-        var (controller, service) = CreateCenterController(Guid.NewGuid(), UserRoles.Moderator);
-
-        var result = await controller.GetModerationMessages("removed", 2, 10, CancellationToken.None);
-
-        var ok = Assert.IsType<OkObjectResult>(result);
-        var page = Assert.IsType<PagedResult<ModerationLeadMessageDto>>(ok.Value);
-        Assert.Equal(2, page.Page);
-        Assert.Equal("removed", service.LastModerationStatus);
-    }
-
-    [Fact]
-    public async Task KeepLeadMessage_AsModerator_ReturnsOkAndPassesArguments()
-    {
-        var moderatorId = Guid.NewGuid();
+        var centerUserId = Guid.NewGuid();
         var leadId = Guid.NewGuid();
         var messageId = Guid.NewGuid();
-        var (controller, service) = CreateCenterController(moderatorId, UserRoles.Moderator);
+        var (controller, service) = CreateCenterController(centerUserId);
 
-        var result = await controller.KeepLeadMessage(leadId, messageId, CancellationToken.None);
+        var result = await controller.ReportReceivedLeadMessage(leadId, messageId, new ReportLeadMessageRequest("Quấy rối"), CancellationToken.None);
 
         Assert.IsType<OkObjectResult>(result);
-        Assert.Equal((moderatorId, leadId, messageId), service.LastKeep);
+        Assert.Equal((centerUserId, leadId, messageId, "Quấy rối"), service.LastReceivedReport);
     }
 
     [Fact]
-    public async Task KeepLeadMessage_LeadNotFound_Returns404()
+    public async Task ReportReceivedLeadMessage_LeadNotFound_Returns404()
     {
         var leadId = Guid.NewGuid();
-        var (controller, service) = CreateCenterController(Guid.NewGuid(), UserRoles.Moderator);
+        var (controller, service) = CreateCenterController(Guid.NewGuid());
         service.MissingSentLeadId = leadId;
 
-        var result = await controller.KeepLeadMessage(leadId, Guid.NewGuid(), CancellationToken.None);
+        var result = await controller.ReportReceivedLeadMessage(leadId, Guid.NewGuid(), null, CancellationToken.None);
 
         Assert.IsType<NotFoundObjectResult>(result);
     }
 
     [Fact]
-    public void ModerationActions_HaveExpectedRoleRestrictions()
+    public void ReportAndImageActions_HaveExpectedRoleRestrictions_AndModeratorQueueIsGone()
     {
         static string? RolesOf(string method) =>
             typeof(LeadsController).GetMethod(method)
                 ?.GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute), false)
                 .Cast<Microsoft.AspNetCore.Authorization.AuthorizeAttribute>().Single().Roles;
 
-        Assert.Equal($"{UserRoles.Moderator},{UserRoles.Admin}", RolesOf(nameof(LeadsController.GetModerationMessages)));
-        Assert.Equal(UserRoles.Moderator, RolesOf(nameof(LeadsController.KeepLeadMessage)));
+        Assert.Equal(UserRoles.Center, RolesOf(nameof(LeadsController.ReportReceivedLeadMessage)));
+        Assert.Equal(UserRoles.Center, RolesOf(nameof(LeadsController.SendReceivedLeadImageMessage)));
+        Assert.Equal($"{UserRoles.Student},{UserRoles.Parent}", RolesOf(nameof(LeadsController.SendSentLeadImageMessage)));
+        Assert.Null(typeof(LeadsController).GetMethod("GetModerationMessages"));
+        Assert.Null(typeof(LeadsController).GetMethod("KeepLeadMessage"));
+        Assert.Null(typeof(LeadsController).GetMethod("RemoveLeadMessage"));
     }
 
     [Fact]
-    public async Task RemoveLeadMessage_AsModerator_ReturnsOkAndPassesArguments()
+    public void AdminLeadMessageReportsController_IsAdminOnly()
     {
-        var moderatorId = Guid.NewGuid();
-        var leadId = Guid.NewGuid();
-        var messageId = Guid.NewGuid();
-        var (controller, service) = CreateCenterController(moderatorId, UserRoles.Moderator);
-
-        var result = await controller.RemoveLeadMessage(leadId, messageId, new RemoveLeadMessageRequest("Chứa số điện thoại"), CancellationToken.None);
-
-        var ok = Assert.IsType<OkObjectResult>(result);
-        var dto = Assert.IsType<LeadMessageDto>(ok.Value);
-        Assert.Equal("removed", dto.Status);
-        Assert.Equal((moderatorId, leadId, messageId, "Chứa số điện thoại"), service.LastRemove);
-    }
-
-    [Fact]
-    public async Task RemoveLeadMessage_WithoutBody_PassesNullReason()
-    {
-        var (controller, service) = CreateCenterController(Guid.NewGuid(), UserRoles.Moderator);
-
-        await controller.RemoveLeadMessage(Guid.NewGuid(), Guid.NewGuid(), null, CancellationToken.None);
-
-        Assert.Null(service.LastRemove!.Value.Reason);
-    }
-
-    [Fact]
-    public async Task RemoveLeadMessage_LeadNotFound_Returns404()
-    {
-        var leadId = Guid.NewGuid();
-        var (controller, service) = CreateCenterController(Guid.NewGuid(), UserRoles.Moderator);
-        service.MissingSentLeadId = leadId;
-
-        var result = await controller.RemoveLeadMessage(leadId, Guid.NewGuid(), null, CancellationToken.None);
-
-        Assert.IsType<NotFoundObjectResult>(result);
-    }
-
-    [Fact]
-    public void RemoveLeadMessage_IsRestrictedToModeratorOnly()
-    {
-        var attr = typeof(LeadsController).GetMethod(nameof(LeadsController.RemoveLeadMessage))
-            ?.GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute), false)
+        var attr = typeof(AdminLeadMessageReportsController)
+            .GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute), false)
             .Cast<Microsoft.AspNetCore.Authorization.AuthorizeAttribute>().Single();
 
-        Assert.Equal(UserRoles.Moderator, attr!.Roles);
+        Assert.Equal(UserRoles.Admin, attr.Roles);
     }
 
     [Fact]
@@ -997,7 +964,7 @@ public class LeadsControllerTests
     }
 
     [Fact]
-    public void MessageEndpoints_AuthorizeCenterModeratorAndAdminRoles()
+    public void MessageEndpoints_AuthorizeCenterAndModerator_ButNotAdmin()
     {
         var getAttr = typeof(LeadsController)
             .GetMethod(nameof(LeadsController.GetReceivedLeadMessages))!
@@ -1011,9 +978,11 @@ public class LeadsControllerTests
             .Cast<AuthorizeAttribute>()
             .Single();
 
-        var expectedRoles = $"{UserRoles.Center},{UserRoles.Moderator},{UserRoles.Admin}";
+        // [UC-58] Admin không đọc toàn bộ cuộc trò chuyện, chỉ xem tin bị báo cáo kèm ngữ cảnh
+        var expectedRoles = $"{UserRoles.Center},{UserRoles.Moderator}";
         Assert.Equal(expectedRoles, getAttr.Roles);
         Assert.Equal(expectedRoles, postAttr.Roles);
+        Assert.DoesNotContain(UserRoles.Admin, getAttr.Roles!.Split(','));
     }
 
     [Fact]
@@ -1033,40 +1002,6 @@ public class LeadsControllerTests
     }
 
     [Fact]
-    public async Task SendReceivedLeadMessage_WithPhoneAndPromo_ReturnsCreatedWithFlaggedPayload()
-    {
-        var centerUserId = Guid.NewGuid();
-        var centerId = Guid.NewGuid();
-        var leadId = Guid.NewGuid();
-        var (controller, service) = CreateCenterController(centerUserId);
-
-        service.ReceivedLeads.Add(new CenterReceivedLeadDto(
-            leadId,
-            centerId,
-            "Du Học Á Âu",
-            "bachelor",
-            null,
-            "Em hỏi về học bổng",
-            true,
-            "new",
-            DateTime.UtcNow,
-            "Nguyen Van A",
-            "a@example.com",
-            null));
-
-        var result = await controller.SendReceivedLeadMessage(
-            leadId,
-            new SendLeadMessageRequest("Nhắn qua zalo 0912 345 678 để nhận khuyến mãi nhé"),
-            CancellationToken.None);
-
-        var created = Assert.IsType<CreatedAtActionResult>(result);
-        var payload = Assert.IsType<SendLeadMessageResultDto>(created.Value);
-        Assert.True(payload.Message.IsFlagged);
-        Assert.NotNull(payload.Message.FlagReason);
-        Assert.Equal("contacted", payload.LeadStatus);
-    }
-
-    [Fact]
     public async Task SendReceivedLeadMessage_EmptyGuid_ReturnsValidationProblem()
     {
         var centerUserId = Guid.NewGuid();
@@ -1082,7 +1017,6 @@ public class LeadsControllerTests
 
     [Theory]
     [InlineData(UserRoles.Moderator, "Kiểm duyệt viên")]
-    [InlineData(UserRoles.Admin, "Quản trị viên")]
     public async Task SendAndGetLeadMessages_AsModeratorOrAdmin_SucceedsWithStaffName(string role, string expectedSenderName)
     {
         var staffUserId = Guid.NewGuid();

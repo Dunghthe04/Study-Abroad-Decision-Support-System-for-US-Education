@@ -81,15 +81,14 @@ public class LeadMessageMapperTests
     }
 
     [Fact]
-    public void ToDto_MasksRemovedContentAndFlagReason_EvenWhenFlagged()
+    public void ToDto_MasksRemovedContentAndAttachment()
     {
         var row = new RawLeadMessageRow(
             Guid.NewGuid(),
             Guid.NewGuid(),
             Guid.NewGuid(),
-            "Số điện thoại 0912345678 vi phạm",
-            true,
-            "Chứa số điện thoại liên hệ",
+            "Nội dung vi phạm",
+            "https://res.cloudinary.com/x/image/upload/a.png",
             "removed",
             DateTime.UtcNow,
             UserRoles.Center,
@@ -99,9 +98,8 @@ public class LeadMessageMapperTests
 
         Assert.Equal("Trung Tâm A", dto.SenderName);
         Assert.True(dto.IsFromCenter);
-        Assert.True(dto.IsFlagged);
         Assert.Equal(LeadMessageMapper.RemovedContentPlaceholder, dto.Content);
-        Assert.Null(dto.FlagReason);
+        Assert.Null(dto.AttachmentUrl);
     }
 
     [Fact]
@@ -118,7 +116,8 @@ public class LeadMessageMapperTests
 
         Assert.Equal("lead_messages", entityType!.GetTableName());
         Assert.Equal(4000, entityType.FindProperty(nameof(LeadMessage.Content))!.GetMaxLength());
-        Assert.Equal(500, entityType.FindProperty(nameof(LeadMessage.FlagReason))!.GetMaxLength());
+        Assert.Equal(500, entityType.FindProperty(nameof(LeadMessage.ReportReason))!.GetMaxLength());
+        Assert.Equal(500, entityType.FindProperty(nameof(LeadMessage.AttachmentUrl))!.GetMaxLength());
         Assert.Equal(32, entityType.FindProperty(nameof(LeadMessage.Status))!.GetMaxLength());
         Assert.Equal("visible", entityType.FindProperty(nameof(LeadMessage.Status))!.GetDefaultValue());
 

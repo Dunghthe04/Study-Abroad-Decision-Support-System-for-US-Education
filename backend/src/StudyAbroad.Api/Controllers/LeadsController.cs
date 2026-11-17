@@ -1,9 +1,14 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Options;
 using StudyAbroad.Api.Extensions;
+using StudyAbroad.Api.RateLimiting;
 using StudyAbroad.Application.Common;
 using StudyAbroad.Application.Leads;
+using StudyAbroad.Application.MediaUploads;
 using StudyAbroad.Domain.Constants;
+using StudyAbroad.Infrastructure.MediaUploads;
 
 namespace StudyAbroad.Api.Controllers;
 
@@ -16,8 +21,14 @@ namespace StudyAbroad.Api.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/v1/leads")]
-public class LeadsController(ILeadService leadService) : ControllerBase
+public class LeadsController(
+    ILeadService leadService,
+    IServiceProvider? services = null,
+    IOptions<CloudinaryOptions>? cloudinaryOptions = null) : ControllerBase
 {
+    /// <summary>Ảnh trong chat: tối đa 5MB, chỉ JPEG / PNG / WebP (uploader kiểm tra thêm nội dung thật, kích thước điểm ảnh, ảnh động).</summary>
+    public const int MaxChatImageBytes = 5 * 1024 * 1024;
+
     /// <summary>
     /// [UC-42] Gửi yêu cầu tư vấn tới trung tâm du học.
     /// Vi phạm quy tắc trả <c>{ code, message }</c>: 400 (thiếu dữ liệu/đồng ý), 403 (tuổi, vai trò, chưa liên kết),
@@ -125,7 +136,7 @@ public class LeadsController(ILeadService leadService) : ControllerBase
 
     /// <summary>
     /// [Nhắn tin phía người gửi] Học sinh / phụ huynh gửi tin trong yêu cầu liên hệ đã gửi.
-    /// Tin có số điện thoại hoặc link ngoài vẫn lưu nhưng bị gắn cờ. Lead đã hoàn tất trả 400 <c>lead_closed</c>.
+    /// Nhắn tự do, không còn bộ lọc nội dung. Lead đã hoàn tất trả 400 <c>lead_closed</c>.
     /// </summary>
     [HttpPost("sent/{id:guid}/messages")]
     [Authorize(Roles = $"{UserRoles.Student},{UserRoles.Parent}")]
@@ -140,12 +151,35 @@ public class LeadsController(ILeadService leadService) : ControllerBase
         CancellationToken ct) =>
         ExecuteSentLeadActionAsync(async userId =>
         {
-            var result = await leadService.SendSentLeadMessageAsync(userId, id, request?.Content ?? string.Empty, ct);
+            var result = await leadService.SendSentLeadMessageAsync(userId, id, request?.Content ?? string.Empty, ct: ct);
             return CreatedAtAction(nameof(GetSentLeadMessages), new { id }, result);
         });
 
     /// <summary>
-    /// [USAS-2080 / UC-58] Học sinh / phụ huynh báo cáo một tin của trung tâm trong yêu cầu của mình. Tin vào hàng đợi của Moderator.
+    /// Học sinh / phụ huynh gửi một ảnh (kèm chú thích tùy chọn) trong yêu cầu liên hệ đã gửi.
+    /// Ảnh được kiểm tra định dạng, nội dung thật và qua kiểm duyệt nội dung nhạy cảm trước khi lưu.
+    /// </summary>
+    [HttpPost("sent/{id:guid}/messages/image")]
+    [Authorize(Roles = $"{UserRoles.Student},{UserRoles.Parent}")]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(MaxChatImageBytes + 64 * 1024)]
+    [RequestFormLimits(MultipartBodyLengthLimit = MaxChatImageBytes + 64 * 1024, ValueLengthLimit = 16 * 1024, ValueCountLimit = 4)]
+    [EnableRateLimiting(MediaUploadRateLimit.PolicyName)]
+    [ProducesResponseType(typeof(SendLeadMessageResultDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public Task<IActionResult> SendSentLeadImageMessage(Guid id, [FromForm] SendLeadImageMessageForm form, CancellationToken ct) =>
+        ExecuteSentLeadActionAsync(async userId =>
+        {
+            var factory = CreateAttachmentFactory(form.File);
+            var result = await leadService.SendSentLeadMessageAsync(userId, id, form.Content ?? string.Empty, factory, ct);
+            return CreatedAtAction(nameof(GetSentLeadMessages), new { id }, result);
+        });
+
+    /// <summary>
+    /// [UC-58] Học sinh / phụ huynh báo cáo một tin của trung tâm trong yêu cầu của mình. Admin nhận thông báo và xem xét.
     /// </summary>
     [HttpPost("sent/{id:guid}/messages/{messageId:guid}/report")]
     [Authorize(Roles = $"{UserRoles.Student},{UserRoles.Parent}")]
@@ -161,6 +195,50 @@ public class LeadsController(ILeadService leadService) : ControllerBase
         CancellationToken ct) =>
         ExecuteSentLeadActionAsync(async userId =>
             Ok(await leadService.ReportSentLeadMessageAsync(userId, id, messageId, request?.Reason, ct)));
+
+    private Func<CancellationToken, Task<LeadMessageAttachment>> CreateAttachmentFactory(IFormFile? file)
+    {
+        if (file is null || file.Length == 0 || Request.Form.Files.Count != 1)
+            throw new ArgumentException("Vui lòng chọn đúng một ảnh để gửi.");
+        if (file.Length > MaxChatImageBytes)
+            throw new ArgumentException($"Ảnh tối đa {MaxChatImageBytes / (1024 * 1024)}MB.");
+
+        return async ct =>
+        {
+            if (services is null || cloudinaryOptions is null)
+                throw new LeadRuleException("upload_unavailable", StatusCodes.Status503ServiceUnavailable, "Chưa bật tính năng gửi ảnh.");
+
+            try
+            {
+                var uploader = services.GetRequiredService<IMediaUploader>();
+                var max = Math.Min(cloudinaryOptions.Value.MaxFileSizeBytes, MaxChatImageBytes);
+                await using var stream = file.OpenReadStream();
+                var result = await uploader.UploadImageAsync(
+                    new MediaUploadRequest(stream, file.FileName, file.ContentType, max, FolderSuffix: "lead-chat", ModerateContent: true), ct);
+                return new LeadMessageAttachment(result.SecureUrl, result.PublicId);
+            }
+            catch (MediaContentRejectedException ex)
+            {
+                throw new LeadRuleException("image_rejected", StatusCodes.Status400BadRequest, ex.Message);
+            }
+            catch (MediaUploadSizeLimitException)
+            {
+                throw new LeadRuleException("image_too_large", StatusCodes.Status400BadRequest, "Ảnh vượt quá dung lượng cho phép.");
+            }
+            catch (ArgumentException)
+            {
+                throw new LeadRuleException("image_invalid", StatusCodes.Status400BadRequest, "Ảnh không hợp lệ. Chỉ nhận JPG, PNG hoặc WebP, không phải ảnh động.");
+            }
+            catch (OptionsValidationException)
+            {
+                throw new LeadRuleException("upload_unavailable", StatusCodes.Status503ServiceUnavailable, "Chưa bật tính năng gửi ảnh.");
+            }
+            catch (InvalidOperationException)
+            {
+                throw new LeadRuleException("upload_failed", StatusCodes.Status502BadGateway, "Không tải ảnh lên được, vui lòng thử lại.");
+            }
+        };
+    }
 
     // Lỗi trả { code, message } giống GET /leads/sent để frontend đọc một kiểu
     private async Task<IActionResult> ExecuteSentLeadActionAsync(Func<Guid, Task<IActionResult>> action)
@@ -309,8 +387,9 @@ public class LeadsController(ILeadService leadService) : ControllerBase
     /// [USAS-2053 / UC-74] Đọc luồng tin nhắn trao đổi với học sinh/phụ huynh trong một yêu cầu liên hệ.
     /// Trung tâm chỉ xem được yêu cầu gửi đến đúng trung tâm mình (Anti-IDOR).
     /// </summary>
+    // [UC-58] Admin không đọc toàn bộ cuộc trò chuyện: chỉ xem tin bị báo cáo kèm ngữ cảnh qua /admin/lead-message-reports
     [HttpGet("received/{id:guid}/messages")]
-    [Authorize(Roles = $"{UserRoles.Center},{UserRoles.Moderator},{UserRoles.Admin}")]
+    [Authorize(Roles = $"{UserRoles.Center},{UserRoles.Moderator}")]
     [ProducesResponseType(typeof(LeadMessagesThreadDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -331,10 +410,10 @@ public class LeadsController(ILeadService leadService) : ControllerBase
 
     /// <summary>
     /// [USAS-2053 / UC-74] Trung tâm gửi tin nhắn trả lời trong một yêu cầu liên hệ.
-    /// Áp dụng bộ lọc nội dung (tự gắn cờ nếu chứa số điện thoại hoặc quảng cáo) và lưu vào bảng lead_messages.
+    /// Nhắn tự do, không còn bộ lọc nội dung; lưu vào bảng lead_messages.
     /// </summary>
     [HttpPost("received/{id:guid}/messages")]
-    [Authorize(Roles = $"{UserRoles.Center},{UserRoles.Moderator},{UserRoles.Admin}")]
+    [Authorize(Roles = $"{UserRoles.Center},{UserRoles.Moderator}")]
     [ProducesResponseType(typeof(SendLeadMessageResultDto), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -352,60 +431,54 @@ public class LeadsController(ILeadService leadService) : ControllerBase
                 userRole,
                 id,
                 request?.Content ?? string.Empty,
-                ct);
+                ct: ct);
 
             return CreatedAtAction(nameof(GetReceivedLeadMessages), new { id }, result);
         });
 
-    /// <summary>
-    /// [USAS-2080 / UC-58] Hàng đợi tin nhắn bị gắn cờ tự động, bị báo cáo hoặc đã gỡ, kèm nội dung gốc. Moderator và Admin xem.
-    /// <c>status</c>: pending (mặc định: gắn cờ hoặc bị báo cáo) | flagged | reported | removed | all.
-    /// </summary>
-    [HttpGet("moderation/messages")]
-    [Authorize(Roles = $"{UserRoles.Moderator},{UserRoles.Admin}")]
-    [ProducesResponseType(typeof(PagedResult<ModerationLeadMessageDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    /// <summary>Trung tâm gửi một ảnh (kèm chú thích tùy chọn) trong yêu cầu liên hệ. Cùng kiểm tra bảo mật như phía học sinh.</summary>
+    [HttpPost("received/{id:guid}/messages/image")]
+    [Authorize(Roles = UserRoles.Center)]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(MaxChatImageBytes + 64 * 1024)]
+    [RequestFormLimits(MultipartBodyLengthLimit = MaxChatImageBytes + 64 * 1024, ValueLengthLimit = 16 * 1024, ValueCountLimit = 4)]
+    [EnableRateLimiting(MediaUploadRateLimit.PolicyName)]
+    [ProducesResponseType(typeof(SendLeadMessageResultDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public Task<IActionResult> GetModerationMessages(
-        [FromQuery] string? status = null,
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 20,
-        CancellationToken ct = default) =>
-        ExecuteCenterLeadActionAsync(async (_, _, _) =>
-            Ok(await leadService.GetModerationMessagesAsync(status, page, pageSize, ct)));
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public Task<IActionResult> SendReceivedLeadImageMessage(Guid id, [FromForm] SendLeadImageMessageForm form, CancellationToken ct) =>
+        ExecuteCenterLeadActionAsync(async (userId, userEmail, userRole) =>
+        {
+            var factory = CreateAttachmentFactory(form.File);
+            var result = await leadService.SendLeadMessageForCenterUserAsync(
+                userId, userEmail, userRole, id, form.Content ?? string.Empty, factory, ct);
+            return CreatedAtAction(nameof(GetReceivedLeadMessages), new { id }, result);
+        });
 
     /// <summary>
-    /// [USAS-2080 / UC-58] Moderator chọn Giữ một tin bị gắn cờ: tin vẫn hiện, bỏ cờ, có nhật ký. Chỉ Moderator.
+    /// [UC-58] Trung tâm báo cáo một tin của học sinh / phụ huynh (thô tục, quấy rối...). Admin nhận thông báo và xem xét.
     /// </summary>
-    [HttpPost("received/{id:guid}/messages/{messageId:guid}/keep")]
-    [Authorize(Roles = UserRoles.Moderator)]
+    [HttpPost("received/{id:guid}/messages/{messageId:guid}/report")]
+    [Authorize(Roles = UserRoles.Center)]
     [ProducesResponseType(typeof(LeadMessageDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public Task<IActionResult> KeepLeadMessage(Guid id, Guid messageId, CancellationToken ct) =>
-        ExecuteCenterLeadActionAsync(async (userId, _, _) =>
-            Ok(await leadService.KeepLeadMessageAsync(userId, id, messageId, ct)));
-
-    /// <summary>
-    /// [USAS-2080 / UC-58] Moderator gỡ một tin nhắn vi phạm trong yêu cầu liên hệ.
-    /// Tin hiển thị "Tin nhắn đã bị gỡ do vi phạm quy tắc" ở cả hai phía, có ghi nhật ký. Chỉ Moderator.
-    /// </summary>
-    [HttpPost("received/{id:guid}/messages/{messageId:guid}/remove")]
-    [Authorize(Roles = UserRoles.Moderator)]
-    [ProducesResponseType(typeof(LeadMessageDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public Task<IActionResult> RemoveLeadMessage(
+    public Task<IActionResult> ReportReceivedLeadMessage(
         Guid id,
         Guid messageId,
-        [FromBody] RemoveLeadMessageRequest? request,
+        [FromBody] ReportLeadMessageRequest? request,
         CancellationToken ct) =>
-        ExecuteCenterLeadActionAsync(async (userId, _, _) =>
-            Ok(await leadService.RemoveLeadMessageAsync(userId, id, messageId, request?.Reason, ct)));
+        ExecuteCenterLeadActionAsync(async (userId, userEmail, userRole) =>
+            Ok(await leadService.ReportReceivedLeadMessageAsync(userId, userEmail, userRole, id, messageId, request?.Reason, ct)));
 }
 
+/// <summary>Form multipart gửi ảnh trong chat (wrapper để Swagger sinh được schema).</summary>
+public sealed class SendLeadImageMessageForm
+{
+    public IFormFile? File { get; set; }
+    public string? Content { get; set; }
+}

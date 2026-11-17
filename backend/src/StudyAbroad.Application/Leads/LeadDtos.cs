@@ -136,8 +136,7 @@ public record LeadMessageDto(
     string SenderRole,
     bool IsFromCenter,
     string Content,
-    bool IsFlagged,
-    string? FlagReason,
+    string? AttachmentUrl,
     string Status,
     DateTime CreatedAt);
 
@@ -147,8 +146,7 @@ public record LeadMessageDto(
 public record LeadMessagesThreadDto(
     Guid LeadId,
     string LeadStatus,
-    IReadOnlyList<LeadMessageDto> Messages,
-    int FlaggedCount);
+    IReadOnlyList<LeadMessageDto> Messages);
 
 /// <summary>
 /// [USAS-2053 / UC-74] Yêu cầu gửi tin nhắn trả lời từ phía Trung tâm tư vấn.
@@ -156,37 +154,60 @@ public record LeadMessagesThreadDto(
 public record SendLeadMessageRequest(string Content);
 
 /// <summary>
-/// [USAS-2080 / UC-58] Một tin nhắn trong hàng đợi kiểm duyệt của Moderator / Admin.
-/// <paramref name="Content"/> luôn là bản gốc kể cả tin đã gỡ (đặc tả 5.4: giữ bản gốc trong nhật ký cho Moderator và Admin);
-/// bản gốc không bao giờ trả ra phía học sinh, phụ huynh hay trung tâm.
+/// [UC-58] Một tin nhắn bị báo cáo trong hàng đợi của Admin. <paramref name="Content"/> luôn là bản gốc kể cả tin đã gỡ
+/// (chỉ Admin thấy); bản gốc không bao giờ trả ra phía học sinh, phụ huynh hay trung tâm.
 /// </summary>
-public record ModerationLeadMessageDto(
+public record AdminLeadMessageReportDto(
     Guid Id,
     Guid LeadId,
     Guid StudyCenterId,
     string StudyCenterName,
     Guid SenderUserId,
+    string SenderName,
+    string? SenderEmail,
     string SenderRole,
+    string SenderStatus,
     bool IsFromCenter,
     string Content,
-    bool IsFlagged,
-    string? FlagReason,
+    string? AttachmentUrl,
     string Status,
-    Guid? RemovedByUserId,
-    DateTime CreatedAt)
-{
-    // [UC-58] Tin bị học sinh / phụ huynh báo cáo. Để dạng init để các nơi dựng DTO cũ không phải đổi.
-    public DateTime? ReportedAt { get; init; }
-    public string? ReportReason { get; init; }
-}
+    Guid? ReportedByUserId,
+    DateTime? ReportedAt,
+    string? ReportReason,
+    DateTime CreatedAt,
+    string? ReportResolution = null,
+    DateTime? ReportResolvedAt = null);
 
-/// <summary>[USAS-2080 / UC-58] Học sinh / phụ huynh báo cáo một tin nhắn của trung tâm vi phạm quy tắc. Lý do tối đa 500 ký tự.</summary>
-public record ReportLeadMessageRequest(string? Reason = null);
+/// <summary>[UC-58] Một tin trong phần ngữ cảnh quanh tin bị báo cáo. <paramref name="IsReported"/> đánh dấu chính tin bị báo cáo.</summary>
+public record AdminReportContextMessageDto(
+    Guid Id,
+    Guid SenderUserId,
+    string SenderName,
+    bool IsFromCenter,
+    string Content,
+    string? AttachmentUrl,
+    string Status,
+    DateTime CreatedAt,
+    bool IsReported);
 
 /// <summary>
-/// [USAS-2080 / UC-58] Yêu cầu gỡ một tin nhắn vi phạm trong yêu cầu liên hệ. <paramref name="Reason"/> tối đa 500 ký tự, lưu vào nhật ký.
+/// [UC-58] Tin bị báo cáo kèm tối đa <paramref name="ContextSize"/> tin liền trước và liền sau (theo thứ tự thời gian).
+/// Admin chỉ đọc được phần này, không đọc toàn bộ cuộc trò chuyện.
 /// </summary>
-public record RemoveLeadMessageRequest(string? Reason = null);
+public record AdminLeadMessageReportContextDto(
+    Guid LeadId,
+    Guid MessageId,
+    int ContextSize,
+    IReadOnlyList<AdminReportContextMessageDto> Messages);
+
+/// <summary>[UC-58] Admin gỡ tin vi phạm hoặc cảnh cáo người gửi. Lý do bắt buộc, tối đa 500 ký tự.</summary>
+public record ResolveReportedMessageRequest(string? Reason = null);
+
+/// <summary>[UC-58] Học sinh / phụ huynh / trung tâm báo cáo một tin nhắn (thô tục, quấy rối...). Lý do tối đa 500 ký tự.</summary>
+public record ReportLeadMessageRequest(string? Reason = null);
+
+/// <summary>[UC-58] Admin khóa tài khoản người gửi tin bị báo cáo. Lý do bắt buộc, tối đa 500 ký tự.</summary>
+public record LockReportedSenderRequest(string? Reason = null);
 
 /// <summary>
 /// [USAS-2053 / UC-74] Kết quả sau khi gửi tin nhắn thành công, kèm trạng thái mới nhất của yêu cầu liên hệ.
@@ -197,3 +218,6 @@ public record SendLeadMessageResultDto(
 
 
 
+
+/// <summary>Ảnh đính kèm tin nhắn sau khi đã tải lên nhà cung cấp lưu trữ.</summary>
+public record LeadMessageAttachment(string Url, string PublicId);

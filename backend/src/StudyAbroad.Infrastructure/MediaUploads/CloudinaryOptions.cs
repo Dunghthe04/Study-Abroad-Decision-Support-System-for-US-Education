@@ -12,6 +12,12 @@ public sealed class CloudinaryOptions
     public string Folder { get; set; } = "usas";
     public int MaxFileSizeBytes { get; set; } = 10 * 1024 * 1024;
     public int MaxImagePixels { get; set; } = 25_000_000;
+
+    /// <summary>
+    /// Add-on kiểm duyệt ảnh của Cloudinary dùng cho ảnh trong chat (ví dụ "aws_rek" hoặc "webpurify").
+    /// Để trống nếu chưa bật add-on: khi đó chỉ áp dụng kiểm tra kỹ thuật (định dạng, kích thước, nội dung thật là ảnh).
+    /// </summary>
+    public string ChatModeration { get; set; } = string.Empty;
 }
 
 public sealed class CloudinaryOptionsValidator : IValidateOptions<CloudinaryOptions>
@@ -30,6 +36,8 @@ public sealed class CloudinaryOptionsValidator : IValidateOptions<CloudinaryOpti
             errors.Add("Cloudinary:MaxFileSizeBytes must be between 1 and 20971520.");
         if (options.MaxImagePixels is < 1 or > 40_000_000)
             errors.Add("Cloudinary:MaxImagePixels must be between 1 and 40000000.");
+        if (options.ChatModeration.Any(character => !char.IsAsciiLetterOrDigit(character) && character != '_' && character != ':'))
+            errors.Add("Cloudinary:ChatModeration may only contain letters, digits, underscores or colons.");
         if (string.IsNullOrWhiteSpace(options.Folder) || options.Folder.Length > 200)
         {
             errors.Add("Cloudinary:Folder must contain between 1 and 200 characters.");
