@@ -35,7 +35,7 @@ public class SlmTemplateWriterTests
     public async Task Build_EveryExampleRowPassesImportValidation()
     {
         var bytes = new SlmTemplateWriter().Build();
-        var service = new SlmSampleService(new NoopRepository(), new SlmWorkbookReader());
+        var service = new SlmSampleService(new FakeSlmRepository(), new SlmWorkbookReader(), new SlmTemplateWriter(), new FakeAuditLogs());
 
         var preview = await service.PreviewAsync(new MemoryStream(bytes));
 
@@ -113,69 +113,24 @@ public class SlmTemplateWriterTests
     }
 
     [Fact]
-    public void SlmSampleBackend_HasNoJsonlExportLeft()
+    public void BuildExport_OneSheetPerTypeWithAnswerColumns_AndReadableByTheImporter()
     {
-        var root = FindBackendSourceRoot();
-        var files = new[]
+        var samples = new[]
         {
-            Path.Combine(root, "StudyAbroad.Api", "Controllers", "AdminSlmSamplesController.cs"),
-            Path.Combine(root, "StudyAbroad.Application", "Admin", "SlmSamples", "ISlmSampleService.cs"),
-            Path.Combine(root, "StudyAbroad.Application", "Admin", "SlmSamples", "ISlmSampleRepository.cs"),
-            Path.Combine(root, "StudyAbroad.Application", "Admin", "SlmSamples", "SlmSampleService.cs"),
-            Path.Combine(root, "StudyAbroad.Application", "Admin", "SlmSamples", "SlmSampleDtos.cs"),
-            Path.Combine(root, "StudyAbroad.Infrastructure", "Persistence", "Repositories", "SlmSampleRepository.cs"),
+            new StudyAbroad.Domain.Entities.SlmTrainingSample
+            {
+                SampleType = SlmSampleTypes.Knowledge, Question = "visa F-1 cần gì", Answer = "Cần I-20", Topic = "visa",
+                Intents = "[]", Split = SlmSampleSplits.Val,
+            },
         };
 
-        foreach (var file in files)
-        {
-            var text = File.ReadAllText(file);
-            Assert.DoesNotContain("ExportJsonl", text);
-            Assert.DoesNotContain("ApprovedAsync", text);
-            Assert.DoesNotContain("SlmExportLine", text);
-            Assert.DoesNotContain("x-ndjson", text);
-            Assert.DoesNotContain("HttpGet(\"export\")", text);
-        }
-    }
+        var bytes = new SlmTemplateWriter().BuildExport(samples);
 
-    private static string FindBackendSourceRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null)
-        {
-            var candidate = Path.Combine(directory.FullName, "src", "StudyAbroad.Api");
-            if (Directory.Exists(candidate))
-                return Path.Combine(directory.FullName, "src");
-            directory = directory.Parent;
-        }
-        throw new DirectoryNotFoundException("Không tìm thấy thư mục backend/src.");
-    }
-
-    private class NoopRepository : ISlmSampleRepository
-    {
-        public Task<(IReadOnlyList<StudyAbroad.Domain.Entities.SlmTrainingSample> Rows, int Total)> PageAsync(
-            SlmSampleFilter filter, int skip, int take, CancellationToken ct = default) => throw new NotSupportedException();
-
-        public Task<StudyAbroad.Domain.Entities.SlmTrainingSample?> FindAsync(Guid id, CancellationToken ct = default) =>
-            throw new NotSupportedException();
-
-        public Task AddAsync(StudyAbroad.Domain.Entities.SlmTrainingSample sample, CancellationToken ct = default) =>
-            throw new NotSupportedException();
-
-        public Task AddRangeAsync(IReadOnlyList<StudyAbroad.Domain.Entities.SlmTrainingSample> samples, CancellationToken ct = default) =>
-            throw new NotSupportedException();
-
-        public Task<bool> UpdateAsync(
-            Guid id, Action<StudyAbroad.Domain.Entities.SlmTrainingSample> apply, CancellationToken ct = default) =>
-            throw new NotSupportedException();
-
-        public Task<bool> DeleteAsync(Guid id, CancellationToken ct = default) => throw new NotSupportedException();
-
-        public Task<int> ReviewAsync(
-            IReadOnlyList<Guid> ids, string status, string? note, Guid reviewerId, DateTime reviewedAt, CancellationToken ct = default) =>
-            throw new NotSupportedException();
-
-        public Task<IReadOnlyList<SlmSampleCountRow>> CountsAsync(CancellationToken ct = default) => throw new NotSupportedException();
-
-        public Task<IReadOnlyList<SlmSampleKeyRow>> ExistingKeysAsync(CancellationToken ct = default) => throw new NotSupportedException();
+        var row = Assert.Single(new SlmWorkbookReader().Read(new MemoryStream(bytes)));
+        Assert.Equal((SlmSampleTypes.Knowledge, "visa F-1 cần gì", "val"), (row.SheetName, row.Question, row.Split));
+        using var archive = new ZipArchive(new MemoryStream(bytes), ZipArchiveMode.Read);
+        Assert.Equal(SlmSampleTypes.All.Count, archive.Entries.Count(e => e.FullName.StartsWith("xl/worksheets/sheet")));
+        using var reader = new StreamReader(archive.GetEntry("xl/worksheets/sheet4.xml")!.Open(), Encoding.UTF8);
+        Assert.Contains("Cần I-20", reader.ReadToEnd());
     }
 }

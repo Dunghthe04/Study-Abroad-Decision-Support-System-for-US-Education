@@ -6,6 +6,7 @@ using System.Xml;
 using System.Xml.Linq;
 using StudyAbroad.Application.Admin.SlmSamples;
 using StudyAbroad.Domain.Constants;
+using StudyAbroad.Domain.Entities;
 
 namespace StudyAbroad.Infrastructure.Import;
 
@@ -33,20 +34,37 @@ public class SlmTemplateWriter : ISlmTemplateWriter
     private record ExampleRow(
         string SampleType, string Question, string? Profile, string? PendingQuestion, string Intents);
 
-    public byte[] Build()
-    {
-        var examples = BuildExamples();
+    private static readonly string[] ExportHeaders =
+        ["question", "answer", "topic", "source", "profile", "pending_question", "intents", "split", "context", "review"];
 
+    public byte[] Build() =>
+        Pack(BuildExamples().Select(e => (e.SampleType, BuildSheet(e))).ToList());
+
+    public byte[] BuildExport(IReadOnlyList<SlmTrainingSample> samples)
+    {
+        var sheets = new List<(string Name, XDocument Sheet)>();
+        foreach (var sampleType in SlmSampleTypes.All)
+        {
+            var rows = samples.Where(s => s.SampleType == sampleType)
+                .Select(s => new[] { s.Question, s.Answer, s.Topic, s.Source, s.Profile, s.PendingQuestion, s.Intents, s.Split, s.Context, s.SourceReview })
+                .ToList();
+            sheets.Add((sampleType, Sheet(ExportHeaders, rows)));
+        }
+        return Pack(sheets);
+    }
+
+    private static byte[] Pack(IReadOnlyList<(string Name, XDocument Sheet)> sheets)
+    {
         using var output = new MemoryStream();
         using (var archive = new ZipArchive(output, ZipArchiveMode.Create, leaveOpen: true))
         {
-            WriteEntry(archive, "[Content_Types].xml", BuildContentTypes(examples.Count));
+            WriteEntry(archive, "[Content_Types].xml", BuildContentTypes(sheets.Count));
             WriteEntry(archive, "_rels/.rels", BuildPackageRelationships());
-            WriteEntry(archive, "xl/workbook.xml", BuildWorkbook(examples));
-            WriteEntry(archive, "xl/_rels/workbook.xml.rels", BuildWorkbookRelationships(examples.Count));
+            WriteEntry(archive, "xl/workbook.xml", BuildWorkbook(sheets.Select(s => s.Name).ToList()));
+            WriteEntry(archive, "xl/_rels/workbook.xml.rels", BuildWorkbookRelationships(sheets.Count));
 
-            for (var index = 0; index < examples.Count; index++)
-                WriteEntry(archive, $"xl/worksheets/sheet{index + 1}.xml", BuildSheet(examples[index]));
+            for (var index = 0; index < sheets.Count; index++)
+                WriteEntry(archive, $"xl/worksheets/sheet{index + 1}.xml", sheets[index].Sheet);
         }
         return output.ToArray();
     }
@@ -143,13 +161,13 @@ public class SlmTemplateWriter : ISlmTemplateWriter
                 new XAttribute("Type", WorkbookRelationshipType),
                 new XAttribute("Target", "xl/workbook.xml"))));
 
-    private static XDocument BuildWorkbook(List<ExampleRow> examples)
+    private static XDocument BuildWorkbook(IReadOnlyList<string> names)
     {
         var sheets = new XElement(Main + "sheets");
-        for (var index = 0; index < examples.Count; index++)
+        for (var index = 0; index < names.Count; index++)
         {
             sheets.Add(new XElement(Main + "sheet",
-                new XAttribute("name", examples[index].SampleType),
+                new XAttribute("name", names[index]),
                 new XAttribute("sheetId", index + 1),
                 new XAttribute(DocRel + "id", $"rId{index + 1}")));
         }
@@ -184,9 +202,15 @@ public class SlmTemplateWriter : ISlmTemplateWriter
             null,
         };
 
+        return Sheet(Headers, [values]);
+    }
+
+    private static XDocument Sheet(IReadOnlyList<string?> headers, IReadOnlyList<string?[]> rows)
+    {
         var sheetData = new XElement(Main + "sheetData");
-        sheetData.Add(BuildRow(1, Headers));
-        sheetData.Add(BuildRow(2, values));
+        sheetData.Add(BuildRow(1, headers));
+        for (var index = 0; index < rows.Count; index++)
+            sheetData.Add(BuildRow(index + 2, rows[index]));
         return new XDocument(new XElement(Main + "worksheet", sheetData));
     }
 

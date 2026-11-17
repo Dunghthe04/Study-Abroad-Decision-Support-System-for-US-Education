@@ -12,7 +12,7 @@ export type SlmSampleType =
 
 export type SlmSplit = "train" | "val" | "test";
 
-export type SlmReviewStatus = "draft" | "approved" | "rejected" | "needs_fix";
+export type SlmReviewStatus = "draft" | "pending" | "approved" | "rejected" | "needs_fix";
 
 export interface SlmSample {
   id: string;
@@ -29,7 +29,36 @@ export interface SlmSample {
   reviewedByUserId: string | null;
   reviewedAt: string | null;
   createdAt: string;
-  updatedAt: string;
+  updatedAt: string | null;
+  answer: string | null;
+  topic: string | null;
+  source: string;
+  createdByUserId: string | null;
+  createdByName: string | null;
+  exportedAt: string | null;
+}
+
+export interface SlmSampleHistoryItem {
+  id: string;
+  action: "create" | "edit" | "submit" | "review" | "delete" | "capture";
+  fromStatus: SlmReviewStatus | null;
+  toStatus: SlmReviewStatus | null;
+  note: string | null;
+  changedFields: string[];
+  actorUserId: string | null;
+  actorName: string | null;
+  createdAt: string;
+}
+
+export interface SlmSampleDetail {
+  sample: SlmSample;
+  reviewedByName: string | null;
+  history: SlmSampleHistoryItem[];
+}
+
+export interface SlmSampleCreator {
+  userId: string;
+  name: string;
 }
 
 export interface SaveSlmSampleRequest {
@@ -41,6 +70,10 @@ export interface SaveSlmSampleRequest {
   context: string | null;
   split: SlmSplit;
   sourceReview: string | null;
+  answer: string | null;
+  topic: string | null;
+  source: string | null;
+  submit?: boolean;
 }
 
 export interface SlmSampleSummary {
@@ -52,6 +85,9 @@ export interface SlmSampleSummary {
 export interface SlmReviewResult {
   updated: number;
   notFound: number;
+  skippedOwn: number;
+  skippedNotReady: number;
+  skippedNotPending: number;
 }
 
 export interface SlmImportError {

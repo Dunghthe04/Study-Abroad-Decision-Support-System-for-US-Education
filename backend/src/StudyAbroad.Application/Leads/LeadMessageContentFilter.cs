@@ -152,7 +152,7 @@ public static partial class LeadMessageContentFilter
         return new LeadMessageFilterResult(true, combined);
     }
 
-    private static bool ContainsPhoneNumber(string text)
+    public static bool ContainsPhoneNumber(string text)
     {
         if (VietnamPhoneRegex().IsMatch(text) ||
             HotlinePhoneRegex().IsMatch(text) ||
