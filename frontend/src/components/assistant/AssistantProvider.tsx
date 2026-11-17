@@ -83,6 +83,10 @@ const STORAGE_KEY = "usas_assistant_chat";
 const SESSION_KEY = "usas_assistant_session";
 const chatKey = (userId: string) => `${STORAGE_KEY}:${userId}`;
 const sessionKey = (userId: string) => `${SESSION_KEY}:${userId}`;
+// Chỉ gửi các tin gần nhất cho advisor: advisor chỉ đọc tin cuối của học sinh (ngữ cảnh nằm ở state phía server), còn danh sách
+// tin có giới hạn 100 tin và mỗi tin 4000 ký tự (vượt thì advisor trả 422 và chat báo lỗi). Lịch sử đầy đủ vẫn hiện trên màn hình.
+const MAX_SENT_TURNS = 20;
+const MAX_SENT_CHARS = 4000;
 
 
 const GENERAL_SUGGESTIONS = [
@@ -249,7 +253,7 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
         const res = await streamAdvisorChat(
           {
             sessionId: sessionIdRef.current,
-            messages: history.map(({ role, content }) => ({ role, content })),
+            messages: history.slice(-MAX_SENT_TURNS).map(({ role, content }) => ({ role, content: content.slice(0, MAX_SENT_CHARS) })),
             studyLevel: pageRef.current.studyLevel || null,
             simulation: pageRef.current.simulation ?? undefined,
             action: action ?? undefined,

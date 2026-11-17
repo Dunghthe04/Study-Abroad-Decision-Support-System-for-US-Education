@@ -1741,10 +1741,12 @@ public class ChatServiceTests
 
     // ---- tìm trường theo điều kiện: model trả bo_loc, advisor chuẩn hóa, backend lọc và trả lời bằng số liệu thật (không Gemini)
 
-    private static JsonElement SearchAction(object filters, string sort = "quality", string[]? unresolved = null) =>
+    // modelSort: cách xếp model trả (có mặt = học sinh nói rõ muốn xếp theo gì, tìm được dù không có điều kiện lọc)
+    private static JsonElement SearchAction(object filters, string sort = "quality", string[]? unresolved = null, string? modelSort = null) =>
         JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, object?>
         {
             ["question"] = "tìm trường", ["filters"] = filters, ["sort"] = sort, ["unresolved"] = unresolved ?? [],
+            ["model_sort"] = modelSort,
             ["kb_answer"] = "Mình đang tra số liệu của trường này nhé.",
         })).RootElement;
 
@@ -1891,6 +1893,22 @@ public class ChatServiceTests
 
         Assert.Equal(ChatSchoolInfo.SearchNoFilter, res.Answer);
         Assert.Null(r.SearchedWith);
+    }
+
+    [Theory]
+    [InlineData("highestCost", "highest_cost", SchoolSort.HighestCost)]
+    [InlineData("mostAid", "most_aid", SchoolSort.MostAid)]
+    [InlineData("lowestCost", "lowest_cost", SchoolSort.LowestCost)]
+    public async Task SchoolSearch_OnlyASort_SearchesEverythingInThatOrder(string sort, string modelSort, SchoolSort expected)
+    {
+        // "trường nào học phí đắt nhất / học bổng lớn nhất": không có điều kiện lọc, chỉ có cách xếp
+        var runner = new FakeRunner { SearchResult = new SchoolSearchResult(2, [SearchItem("A"), SearchItem("B")], []) };
+
+        var (res, r) = await SearchChat(SearchAction(new { }, sort, modelSort: modelSort), runner);
+
+        Assert.Equal(expected, r.SearchedWith!.Value.Sort);
+        Assert.StartsWith("Có 2 trường. Xếp theo", res.Answer);
+        Assert.NotEqual(ChatSchoolInfo.SearchNoFilter, res.Answer);
     }
 
     // ---- so sánh từ hai trường: model trả schools, advisor chuyển sang, backend lấy số liệu từng trường và dựng bảng

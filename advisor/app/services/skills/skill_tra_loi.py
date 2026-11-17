@@ -11,10 +11,16 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from app.schemas.chat import ChatState, Citation, QuickReply
+from app.schemas.chat import ChatState, Citation
 from app.services.chat_flow import SkillOutput
 from app.services.knowledge import KnowledgeHit, KnowledgeRetriever
 from app.services.pii_mask import mask_personal_info
+from app.services.replies import (
+    KNOWLEDGE_DISCLAIMER,
+    KNOWLEDGE_NO_BASIS,
+    KNOWLEDGE_UNAVAILABLE,
+    menu_buttons,
+)
 from app.services.skill_call import SKILLS_DIR, SkillCall
 
 logger = logging.getLogger("advisor.knowledge")
@@ -30,17 +36,9 @@ SCHEMA = {
     "required": ["enough", "answer"],
 }
 
-NO_BASIS = (
-    "Hiện hệ thống chưa có thông tin chắc chắn về vấn đề này. "
-    "Bạn có thể hỏi lại bằng cách khác, hoặc mình gợi ý các trung tâm tư vấn đã xác minh nếu bạn cần người hỗ trợ trực tiếp."
-)
-# Nút dẫn sang B6 (skill_chuyen_trung_tam): bấm là gửi câu xin gặp tư vấn viên, hệ thống hỏi cần dịch vụ nào
-CENTER_BUTTON = QuickReply(label="Gợi ý trung tâm tư vấn", value="Em muốn gặp tư vấn viên")
-UNAVAILABLE = "Phần trả lời kiến thức đang tạm gián đoạn, bạn thử lại sau ít phút nhé."
-DISCLAIMER = (
-    "Thông tin chỉ mang tính tham khảo. Quy định visa, học phí và học bổng có thể thay đổi; "
-    "hãy kiểm tra lại với nguồn chính thức hoặc trung tâm tư vấn."
-)
+NO_BASIS = KNOWLEDGE_NO_BASIS
+UNAVAILABLE = KNOWLEDGE_UNAVAILABLE
+DISCLAIMER = KNOWLEDGE_DISCLAIMER
 
 # Giới hạn trích nội dung
 SNIPPET_CHARS = 200
@@ -129,7 +127,7 @@ class TraLoiHandler:
             hits = await self._retriever.search(vector, state.study_level)
         except Exception:  # Ollama tắt hoặc DB lỗi: nói thật là đang gián đoạn, không bịa
             logger.exception("Tìm kiến thức thất bại")
-            return SkillOutput(UNAVAILABLE)
+            return SkillOutput(UNAVAILABLE, quick_replies=menu_buttons("knowledge"))
         # Chỉ lấy dòng tốt nhất, và phải đạt ngưỡng
         if not hits or hits[0].score < self._min_score:
             # Ghi lại câu kho chưa trả lời được (đã che thông tin cá nhân) để biết cần bổ sung kiến thức gì
@@ -139,7 +137,7 @@ class TraLoiHandler:
                 hits[0].code if hits else "none",
                 mask_personal_info(message),
             )
-            return SkillOutput(NO_BASIS, quick_replies=[CENTER_BUTTON])
+            return SkillOutput(NO_BASIS, quick_replies=menu_buttons("knowledge"))
         best = hits[0]
 
         # Gọi ollama chạy skill
@@ -149,7 +147,7 @@ class TraLoiHandler:
             lambda raw: check_answer(raw, message, best),
         )
         if composed is not None and not composed.enough:
-            return SkillOutput(NO_BASIS, quick_replies=[CENTER_BUTTON])
+            return SkillOutput(NO_BASIS, quick_replies=menu_buttons("knowledge"))
         if composed is None:  # Qwen sai hai lần: dùng câu trả lời chuẩn của dòng đó
             logger.warning("Qwen không trả được câu hợp lệ sau 2 lần, dùng câu chuẩn của %s", best.code)
             answer = best.answer

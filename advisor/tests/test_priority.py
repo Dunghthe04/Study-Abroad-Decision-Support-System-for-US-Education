@@ -4,100 +4,11 @@ import pytest
 
 from app.schemas.chat import ChatState
 from app.schemas.slm import SlmTinResult, SlmY
-from app.services.chat_flow import with_comparison_intent, with_info_intent, with_priority_intent
-from app.services.priority import detect_priorities
-
-
-@pytest.mark.parametrize(
-    ("message", "expected"),
-    [
-        ("em ưu tiên học bổng hơn", {"aid": 3}),
-        ("Ưu tiên chi phí thấp nhất", {"cost": 4}),
-        ("em rất quan tâm danh tiếng của trường", {"prestige": 4}),
-        ("không quan tâm danh tiếng", {"prestige": 0}),
-        ("em ít quan tâm chi phí", {"cost": 1}),
-        ("em uu tien hoc bong", {"aid": 3}),  # gõ không dấu
-        ("ưu tiên học bổng nhất, chi phí thì ít quan tâm", {"aid": 4, "cost": 1}),
-        ("quan tâm học bổng và danh tiếng", {"aid": 3, "prestige": 3}),
-        ("tôi đã thi SAT 1400", {}),  # "tôi đã" không phải mức tối đa
-    ],
-)
-def test_detects_the_factor_and_level(message, expected):
-    assert detect_priorities(message) == expected
-
-
-@pytest.mark.parametrize(
-    "message",
-    [
-        "học bổng là gì",
-        "em cần học bổng 50%",  # thông tin hồ sơ, không có từ chỉ mức quan tâm
-        "trường nào chi phí 30000 USD",
-        "ưu tiên bang California",  # có mức nhưng không có yếu tố ưu tiên
-    ],
-)
-def test_ignores_profile_values_and_knowledge_questions(message):
-    assert detect_priorities(message) == {}
+from app.services.chat_flow import with_comparison_intent, with_info_intent
 
 
 def collect_profile(message: str) -> SlmTinResult:
     return SlmTinResult(intents=[SlmY(type="collect_profile", span=message)])
-
-
-def test_priority_message_becomes_a_what_if_when_results_exist():
-    state = ChatState(has_results=True)
-    slm = with_priority_intent(state, "em ưu tiên học bổng", collect_profile("em ưu tiên học bổng"))
-
-    assert slm.types() == ["scenario"]
-    assert slm.intents[0].entities["mode"] == "what_if"
-
-
-def test_priority_is_left_alone_while_a_profile_question_waits():
-    message = "em ưu tiên học bổng"
-    waiting = ChatState(has_results=True, question_id="B3.4")
-    assert with_priority_intent(waiting, message, collect_profile(message)).types() == ["collect_profile"]
-
-
-def test_the_opening_greeting_question_does_not_block_it():
-    # Lỗi thật: chat mới mở còn đang ở câu chào B0.1, "Em ưu tiên học bổng nhất" bị SLM xếp collect_profile và trả "hồ sơ đã đủ"
-    message = "Em ưu tiên học bổng nhất"
-    greeting = ChatState(question_id="B0.1")
-    assert with_priority_intent(greeting, message, collect_profile(message)).types() == ["scenario"]
-
-
-def test_without_results_the_scenario_branch_asks_for_recommendations_first():
-    message = "em ưu tiên học bổng"
-    assert with_priority_intent(ChatState(), message, collect_profile(message)).types() == ["scenario"]
-
-
-def test_keeps_other_intents_when_the_message_also_has_numbers():
-    state = ChatState(has_results=True)
-    message = "SAT 1500 và ưu tiên học bổng"
-    slm = with_priority_intent(state, message, collect_profile(message))
-
-    assert slm.types() == ["scenario", "collect_profile"]
-
-
-def goal_seeking(message: str, school: str | None = None) -> SlmTinResult:
-    entities = {"mode": "goal_seeking"}
-    if school:
-        entities["school"] = school
-    return SlmTinResult(intents=[SlmY(type="scenario", span=message, entities=entities)])
-
-
-def test_a_priority_the_slm_took_for_goal_seeking_without_a_school_becomes_a_what_if():
-    # Lỗi thật khi thử với usas-slm-v2: "ưu tiên chi phí thấp" bị xếp goal_seeking, hệ thống hỏi "bạn muốn vào trường nào"
-    message = "ưu tiên chi phí thấp"
-    slm = with_priority_intent(ChatState(has_results=True), message, goal_seeking(message))
-
-    assert slm.types() == ["scenario"]
-    assert slm.intents[0].entities["mode"] == "what_if"
-
-
-def test_goal_seeking_with_a_real_school_is_left_alone():
-    message = "em ưu tiên học bổng, cần gì để vào Harvard"
-    slm = with_priority_intent(ChatState(has_results=True), message, goal_seeking(message, "Harvard"))
-
-    assert slm.intents[0].entities["mode"] == "goal_seeking"
 
 
 def out_of_scope(kind: str) -> SlmTinResult:
@@ -209,3 +120,19 @@ def test_other_profile_tasks_are_left_alone():
     )
 
     assert with_comparison_intent("đánh giá hồ sơ em", other_task).types() == ["profile_review"]
+
+
+# ---- không còn quy tắc từ khóa: câu chữ không tự thành ưu tiên, chỉ điều model trả (priority_*) mới tính
+async def test_a_scholarship_need_the_model_read_is_not_also_counted_as_a_priority():
+    # Lỗi thật 16/11: "nêu không cần học bổng" model trả đúng mức cần học bổng, nhưng quy tắc từ khóa thêm "Ưu tiên mới: học bổng nhiều 0/4"
+    from app.services.branches import build_branches
+    from tests.fakes import tin
+
+    slm = tin(("scenario", {"mode": "what_if", "changes": [{"factor": "scholarship", "value": "optional"}]}))
+    out = await build_branches({})["scenario"].run(
+        ChatState(has_results=True), "nêu không cần học bổng thì sao", slm
+    )
+
+    assert out.action == "simulate"
+    assert "priorities" not in out.action_data
+    assert "Ưu tiên" not in out.answer

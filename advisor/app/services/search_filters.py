@@ -22,8 +22,10 @@ AID = {"yes": "any", "need_based": "need", "merit_based": "merit"}
 SORT = {
     "ranking": "quality",
     "lowest_cost": "lowestCost",
+    "highest_cost": "highestCost",
     "easiest_admission": "easiestAdmission",
     "most_selective": "mostSelective",
+    "most_aid": "mostAid",
 }
 DEFAULT_SORT = "quality"
 # Tên điều kiện nói với học sinh khi cần hỏi lại

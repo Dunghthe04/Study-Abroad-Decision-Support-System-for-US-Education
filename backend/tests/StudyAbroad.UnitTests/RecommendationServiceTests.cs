@@ -810,6 +810,27 @@ public class RecommendationServiceTests
     }
 
     [Fact]
+    public async Task Search_HighestCostAndMostAidOrders()
+    {
+        static RecommendSchoolInput WithAid(RecommendSchoolInput s, decimal? aid)
+        {
+            s.Offering.IntlAidAvgUsd = aid;
+            return s;
+        }
+        var schools = new[]
+        {
+            WithAid(SearchSchool("cheap-no-data", "TX", "public", 10_000m), null),
+            WithAid(SearchSchool("mid-aid", "TX", "public", 30_000m), 20_000m),
+            WithAid(SearchSchool("pricey-big-aid", "TX", "public", 60_000m), 50_000m),
+        };
+        var f = new SchoolSearchFilters(States: ["TX"]);
+
+        Assert.Equal(["pricey-big-aid", "mid-aid", "cheap-no-data"], (await SearchWith(f, SchoolSort.HighestCost, schools)).Items.Select(i => i.Code));
+        // học bổng lớn nhất trước, trường chưa có số liệu học bổng xếp cuối
+        Assert.Equal(["pricey-big-aid", "mid-aid", "cheap-no-data"], (await SearchWith(f, SchoolSort.MostAid, schools)).Items.Select(i => i.Code));
+    }
+
+    [Fact]
     public async Task Search_NothingMatches_SaysWhichConditionToDropToGetResults()
     {
         var result = await SearchWith(

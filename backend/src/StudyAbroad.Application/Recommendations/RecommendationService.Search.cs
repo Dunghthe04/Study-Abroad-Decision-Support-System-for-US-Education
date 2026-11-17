@@ -34,8 +34,11 @@ public enum SchoolSort
 {
     Quality,
     LowestCost,
+    HighestCost,
     EasiestAdmission,
     MostSelective,
+    /// <summary>Học bổng trung bình cho du học sinh lớn nhất trước; trường chưa có số liệu xếp cuối.</summary>
+    MostAid,
 }
 
 // Total: số trường thỏa điều kiện. Items: tối đa MaxItems trường đầu theo cách sắp xếp (đủ để giao diện mở "Xem thêm").
@@ -122,6 +125,8 @@ public partial class RecommendationService
         items = sort switch
         {
             SchoolSort.LowestCost => items.OrderBy(i => i.CostUsd is null).ThenBy(i => i.CostUsd).ThenBy(i => i.Name, StringComparer.OrdinalIgnoreCase),
+            SchoolSort.HighestCost => items.OrderBy(i => i.CostUsd is null).ThenByDescending(i => i.CostUsd).ThenBy(i => i.Name, StringComparer.OrdinalIgnoreCase),
+            SchoolSort.MostAid => items.OrderBy(i => i.AidAvgUsd is null).ThenByDescending(i => i.AidAvgUsd).ThenBy(i => i.Name, StringComparer.OrdinalIgnoreCase),
             SchoolSort.EasiestAdmission => items.OrderBy(i => i.AcceptRate is null).ThenByDescending(i => i.AcceptRate).ThenBy(i => i.Name, StringComparer.OrdinalIgnoreCase),
             SchoolSort.MostSelective => items.OrderBy(i => i.AcceptRate is null).ThenBy(i => i.AcceptRate).ThenBy(i => i.Name, StringComparer.OrdinalIgnoreCase),
             _ => items.OrderBy(i => i.Quality is null).ThenByDescending(i => i.Quality).ThenBy(i => i.Name, StringComparer.OrdinalIgnoreCase),

@@ -2,6 +2,7 @@ import { ApiError, apiFetch } from "@/lib/api";
 import type {
   PagedResult,
   SaveSlmSampleRequest,
+  SlmImportPreview,
   SlmImportResult,
   SlmReviewResult,
   SlmReviewStatus,
@@ -37,6 +38,22 @@ async function failureOf(res: Response): Promise<ApiError> {
   return new ApiError(res.status, message, body);
 }
 
+const TEMPLATE_FILE_NAME = "slm-training-template.xlsx";
+
+async function postXlsx<T>(action: "preview" | "import", file: File, signal?: AbortSignal): Promise<T> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(`${base}/${action}`, {
+    method: "POST",
+    credentials: "include",
+    body: form,
+    cache: "no-store",
+    signal,
+  });
+  if (!res.ok) throw await failureOf(res);
+  return (await res.json()) as T;
+}
+
 export const adminSlmSampleApi = {
   list: (filters: SlmSampleFilters = {}) =>
     apiFetch<PagedResult<SlmSample>>(`${base}${query({ ...filters })}`),
@@ -59,21 +76,12 @@ export const adminSlmSampleApi = {
       body: JSON.stringify({ ids, status, note: note || undefined }),
     }),
 
-  importXlsx: async (file: File): Promise<SlmImportResult> => {
-    const form = new FormData();
-    form.append("file", file);
-    const res = await fetch(`${base}/import`, {
-      method: "POST",
-      credentials: "include",
-      body: form,
-      cache: "no-store",
-    });
-    if (!res.ok) throw await failureOf(res);
-    return (await res.json()) as SlmImportResult;
-  },
+  previewXlsx: (file: File, signal?: AbortSignal) => postXlsx<SlmImportPreview>("preview", file, signal),
 
-  exportJsonl: async (split?: SlmSplit): Promise<void> => {
-    const res = await fetch(`${base}/export${query({ split })}`, {
+  importXlsx: (file: File) => postXlsx<SlmImportResult>("import", file),
+
+  downloadTemplate: async (): Promise<void> => {
+    const res = await fetch(`${base}/template`, {
       credentials: "include",
       cache: "no-store",
     });
@@ -82,10 +90,10 @@ export const adminSlmSampleApi = {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = split ? `slm-samples-${split}.jsonl` : "slm-samples.jsonl";
+    link.download = TEMPLATE_FILE_NAME;
     document.body.appendChild(link);
     link.click();
     link.remove();
-    URL.revokeObjectURL(url);
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   },
 };

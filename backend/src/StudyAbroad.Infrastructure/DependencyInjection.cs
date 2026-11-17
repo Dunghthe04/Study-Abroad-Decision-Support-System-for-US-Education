@@ -33,6 +33,7 @@ public static class DependencyInjection
         services.AddScoped<IStudyCenterRepository, StudyCenterRepository>();
         services.AddScoped<ICenterVerificationRepository, CenterVerificationRepository>();
         services.AddScoped<ICenterReviewRepository, CenterReviewRepository>();
+        services.AddScoped<ICenterReviewSubmissionRepository, CenterReviewSubmissionRepository>();
         services.AddScoped<StudyAbroad.Application.Admin.Universities.IAdminUniversityRepository, AdminUniversityRepository>();
         services.AddScoped<StudyAbroad.Application.Admin.Settings.IGradeScaleSettingRepository, GradeScaleSettingRepository>();
         services.AddScoped<StudyAbroad.Application.Admin.AiUsage.IAiUsageReportRepository, AiUsageReportRepository>();
@@ -41,6 +42,7 @@ public static class DependencyInjection
         services.AddScoped<StudyAbroad.Application.Admin.ReviewBatches.IReviewBatchRepository, ReviewBatchRepository>();
         services.AddScoped<StudyAbroad.Application.Leads.ILeadRepository, LeadRepository>();
         services.AddSingleton<StudyAbroad.Application.Admin.SlmSamples.ISlmWorkbookReader, StudyAbroad.Infrastructure.Import.SlmWorkbookReader>();
+        services.AddSingleton<StudyAbroad.Application.Admin.SlmSamples.ISlmTemplateWriter, StudyAbroad.Infrastructure.Import.SlmTemplateWriter>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IAuditLogRepository, AuditLogRepository>();
         services.AddScoped<StudyAbroad.Application.ParentLinks.IParentLinkRepository, ParentLinkRepository>();
