@@ -9,7 +9,7 @@ import { MAX_LEAD_MESSAGE_LENGTH, formatLeadMessageRoleLabel } from "@/lib/lead-
 import { ImageAttachPicker, LeadMessageAttachment, ReportMessageControl } from "@/components/lead/LeadMessageParts";
 import { cn } from "@/lib/utils";
 import type { LeadMessageDto, LeadMessagesThreadDto } from "@/types/api";
-import type { SentLeadDto } from "@/types/lead";
+import { LEAD_MESSAGING_BLOCK_CODES, getLeadMessagingBlockReason, type SentLeadDto } from "@/types/lead";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
@@ -51,7 +51,7 @@ export function SentLeadMessagesDialog({ lead, open, onOpenChange, onThreadChang
           </DialogDescription>
         </DialogHeader>
         {/* Chỉ dựng phần thân khi mở, để mỗi lần mở là tải lại luồng tin */}
-        {open && <ThreadBody leadId={lead.id} initialStatus={lead.status} onThreadChange={onThreadChange} />}
+        {open && <ThreadBody leadId={lead.id} initialStatus={lead.status} leadCreatedAt={lead.createdAt} onThreadChange={onThreadChange} />}
       </DialogContent>
     </Dialog>
   );
@@ -60,10 +60,12 @@ export function SentLeadMessagesDialog({ lead, open, onOpenChange, onThreadChang
 function ThreadBody({
   leadId,
   initialStatus,
+  leadCreatedAt,
   onThreadChange,
 }: {
   leadId: string;
   initialStatus: string;
+  leadCreatedAt?: string | null;
   onThreadChange?: (change: SentLeadThreadChange) => void;
 }) {
   const { user } = useAuth();
@@ -151,8 +153,10 @@ function ThreadBody({
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [messages.length]);
 
-  const isWithdrawn = leadStatus === "withdrawn"; // [UC-80]
-  const isClosed = leadStatus === "closed" || isWithdrawn;
+  // [UC-74] Chỉ nhắn khi trung tâm đã chấp nhận; server chặn thêm thì giữ lý do server trả về
+  const [serverBlockReason, setServerBlockReason] = useState<string | null>(null);
+  const blockReason = serverBlockReason ?? getLeadMessagingBlockReason(leadStatus, leadCreatedAt);
+  const isClosed = blockReason !== null;
   const trimmedDraft = draft.trim();
 
   const submit = async () => {
@@ -181,9 +185,10 @@ function ThreadBody({
       toast.add({ type: "success", title: "Đã gửi tin cho trung tâm" });
     } catch (err) {
       const rule = getLeadRuleError(err);
-      // Trung tâm vừa đóng yêu cầu trong lúc khung đang mở → chuyển sang chỉ đọc
+      // Trung tâm vừa đóng / yêu cầu vừa đổi trạng thái trong lúc khung đang mở → chuyển sang chỉ đọc (UC-74)
       if (rule?.code === "lead_closed") setLeadStatus("closed");
       if (rule?.code === "lead_withdrawn") setLeadStatus("withdrawn");
+      if (rule && (LEAD_MESSAGING_BLOCK_CODES as readonly string[]).includes(rule.code)) setServerBlockReason(rule.message);
       const msg = rule?.message ?? "Không gửi được tin nhắn. Vui lòng thử lại.";
       setFormError(msg);
       toast.add({ type: "error", title: "Gửi tin nhắn thất bại", description: msg });
@@ -239,9 +244,7 @@ function ThreadBody({
 
       {isClosed ? (
         <p className="rounded-md border bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
-          {isWithdrawn
-            ? "Yêu cầu đã được thu hồi, không gửi thêm tin nhắn được."
-            : "Yêu cầu đã hoàn tất, không gửi thêm tin nhắn được."}
+          {blockReason}
         </p>
       ) : (
         <form

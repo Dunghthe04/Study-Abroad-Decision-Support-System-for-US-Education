@@ -893,6 +893,7 @@ export function CenterLeadsListView() {
                     key={selectedLead.id}
                     leadId={selectedLead.id}
                     leadStatus={selectedLead.status}
+                    leadCreatedAt={selectedLead.createdAt}
                     onLeadStatusChange={(newStatus) =>
                       applyLeadStatusUpdate(selectedLead.id, newStatus)
                     }

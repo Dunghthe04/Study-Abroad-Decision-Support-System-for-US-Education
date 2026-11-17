@@ -4,6 +4,8 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { MessageSquareIcon, RefreshCwIcon, SendIcon } from "lucide-react";
 import { ApiError, centerLeadsApi } from "@/lib/api";
 import { MAX_LEAD_MESSAGE_LENGTH, formatLeadMessageRoleLabel } from "@/lib/lead-message";
+import { getLeadRuleError } from "@/lib/lead-api";
+import { LEAD_MESSAGING_BLOCK_CODES, getLeadMessagingBlockReason } from "@/types/lead";
 import { ImageAttachPicker, LeadMessageAttachment, ReportMessageControl } from "@/components/lead/LeadMessageParts";
 import type { LeadMessageDto, LeadMessagesThreadDto } from "@/types/api";
 import { Button } from "@/components/ui/button";
@@ -15,6 +17,8 @@ import { cn } from "@/lib/utils";
 interface LeadConversationPanelProps {
   leadId: string;
   leadStatus: string;
+  /** [UC-74] Ngày gửi yêu cầu, để chặn nhắn khi quá 90 ngày. */
+  leadCreatedAt?: string | null;
   onLeadStatusChange?: (newStatus: string) => void;
 }
 
@@ -31,8 +35,12 @@ function getLoadThreadErrorMessage(err: unknown): string {
 export function LeadConversationPanel({
   leadId,
   leadStatus,
+  leadCreatedAt,
   onLeadStatusChange,
 }: LeadConversationPanelProps) {
+  // [UC-74] Chỉ nhắn khi yêu cầu Đã chấp nhận; server chặn thêm thì giữ lý do server trả về
+  const [serverBlockReason, setServerBlockReason] = useState<string | null>(null);
+  const blockReason = serverBlockReason ?? getLeadMessagingBlockReason(leadStatus, leadCreatedAt);
   const [messages, setMessages] = useState<LeadMessageDto[]>([]);
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -98,7 +106,7 @@ export function LeadConversationPanel({
    * [USAS-2053 / UC-74] Kiểm tra hợp lệ phía client trước khi gọi API gửi phản hồi.
    */
   const submitMessage = async () => {
-    if (isSending) return;
+    if (isSending || blockReason) return;
 
     if (!trimmedDraft && !imageFile) {
       setFormError("Vui lòng nhập nội dung tin nhắn hoặc chọn ảnh trước khi gửi.");
@@ -131,10 +139,15 @@ export function LeadConversationPanel({
         description: "Tin nhắn đã được lưu và gửi tới học sinh / phụ huynh.",
       });
     } catch (err: unknown) {
+      const rule = getLeadRuleError(err);
+      if (rule && (LEAD_MESSAGING_BLOCK_CODES as readonly string[]).includes(rule.code)) {
+        setServerBlockReason(rule.message);
+      }
       const msg =
-        err instanceof ApiError
+        rule?.message ??
+        (err instanceof ApiError
           ? err.message
-          : "Không thể gửi tin nhắn. Vui lòng thử lại.";
+          : "Không thể gửi tin nhắn. Vui lòng thử lại.");
       setFormError(msg);
       toast.add({
         type: "error",
@@ -289,15 +302,11 @@ export function LeadConversationPanel({
         <div ref={bottomRef} />
       </div>
 
-      {/* Reply Composer */}
+      {/* Reply Composer: [UC-74] khóa và nêu lý do khi không nhắn được */}
+      {blockReason ? (
+        <p className="rounded-md border bg-muted/50 px-3 py-2 text-sm text-muted-foreground">{blockReason}</p>
+      ) : (
       <form onSubmit={handleFormSubmit} className="space-y-2">
-        {leadStatus === "new" && (
-          <p className="text-[11px] text-muted-foreground">
-            Gửi phản hồi đầu tiên sẽ tự động chuyển trạng thái yêu cầu từ{" "}
-            <span className="font-medium text-ink">Mới nhận</span> sang{" "}
-            <span className="font-medium text-warn">Đang trao đổi</span>.
-          </p>
-        )}
 
         <Textarea
           value={draft}
@@ -353,6 +362,7 @@ export function LeadConversationPanel({
           </Button>
         </div>
       </form>
+      )}
     </div>
   );
 }
