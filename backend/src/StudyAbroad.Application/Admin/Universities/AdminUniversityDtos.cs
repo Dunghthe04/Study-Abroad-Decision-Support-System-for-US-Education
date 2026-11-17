@@ -86,7 +86,8 @@ public record CreateUniversityRequest(
     int? InternationalStudentCount = null,
     bool IsIvy = false,
     string? LogoUrl = null,
-    string? CoverUrl = null);
+    string? CoverUrl = null,
+    bool ConfirmDuplicateName = false);
 
 public record UpdateUniversityRequest(
     string? Name,

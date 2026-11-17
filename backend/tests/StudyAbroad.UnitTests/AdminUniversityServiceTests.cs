@@ -39,6 +39,21 @@ public class AdminUniversityServiceTests
     }
 
     [Fact]
+    public async Task CreateUniversityAsync_DuplicateName_WarnsUntilConfirmed()
+    {
+        var repo = new FakeRepository();
+        var service = new AdminUniversityService(repo);
+
+        var warned = await service.CreateUniversityAsync(new CreateUniversityRequest("OTHER", "old name"), Actor);
+        var confirmed = await service.CreateUniversityAsync(
+            new CreateUniversityRequest("OTHER", "old name", ConfirmDuplicateName: true), Actor);
+
+        Assert.Contains("duplicateName", warned.Errors.Keys);
+        Assert.True(confirmed.Success);
+        Assert.Equal(1, repo.SaveCount);
+    }
+
+    [Fact]
     public async Task UpdateUniversityAsync_ClearsMediaWhenUrlsAreEmpty()
     {
         var repo = new FakeRepository();
@@ -341,6 +356,9 @@ public class AdminUniversityServiceTests
 
         public Task<bool> ExistsCodeAsync(string code, CancellationToken ct = default) =>
             Task.FromResult(University.Code == code);
+
+        public Task<bool> ExistsNameAsync(string name, CancellationToken ct = default) =>
+            Task.FromResult(string.Equals(University.Name, name, StringComparison.OrdinalIgnoreCase));
 
         public void AddUniversity(University university) => University = university;
 

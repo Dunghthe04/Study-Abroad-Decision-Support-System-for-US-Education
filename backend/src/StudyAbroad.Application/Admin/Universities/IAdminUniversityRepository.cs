@@ -9,6 +9,9 @@ public interface IAdminUniversityRepository
 
     Task<bool> ExistsCodeAsync(string code, CancellationToken ct = default);
 
+    /// <summary>So tên không phân biệt hoa thường.</summary>
+    Task<bool> ExistsNameAsync(string name, CancellationToken ct = default);
+
     void AddUniversity(University university);
 
     /// <summary>Trường có tracking để sửa; null nếu không có.</summary>

@@ -99,6 +99,8 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
             errors["code"] = "Mã trường đã tồn tại trong hệ thống.";
 
         ValidateUniversityFields(name, city, state, website, control, request.AcceptanceRate, request.InternationalStudentCount, logoUrl, coverUrl, errors);
+        if (errors.Count == 0 && !request.ConfirmDuplicateName && await repository.ExistsNameAsync(name!, ct))
+            errors["duplicateName"] = $"Đã có trường tên \"{name}\". Kiểm tra lại, hoặc xác nhận để vẫn tạo.";
         if (errors.Count > 0) return AdminUpdateResult<AdminUniversityDetailDto>.Invalid(errors);
 
         var university = new University

@@ -53,6 +53,12 @@ public class AdminUniversityRepository(AppDbContext db) : IAdminUniversityReposi
     public Task<bool> ExistsCodeAsync(string code, CancellationToken ct = default) =>
         db.Universities.AnyAsync(u => u.Code == code, ct);
 
+    public Task<bool> ExistsNameAsync(string name, CancellationToken ct = default)
+    {
+        var lowered = name.ToLower();
+        return db.Universities.AnyAsync(u => u.Name.ToLower() == lowered, ct);
+    }
+
     public void AddUniversity(University university) => db.Universities.Add(university);
 
     public Task<University?> GetUniversityAsync(Guid universityId, CancellationToken ct = default) =>
