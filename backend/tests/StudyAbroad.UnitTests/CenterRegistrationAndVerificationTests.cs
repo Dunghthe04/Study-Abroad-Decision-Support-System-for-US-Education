@@ -552,6 +552,7 @@ public class CenterRegistrationAndVerificationTests
             Email = centerEmail,
             OwnerUserId = Guid.NewGuid(),
             EmailVerifiedAt = DateTime.UtcNow,
+            PhoneVerifiedAt = DateTime.UtcNow,
             VerificationStatus = CenterVerificationStatuses.Unverified,
         };
         centers.AddAsync(center).GetAwaiter().GetResult();
@@ -700,5 +701,18 @@ public class CenterRegistrationAndVerificationTests
 
         Assert.True(result.Success);
     }
-}
 
+    [Fact]
+    public async Task Submit_EmailVerifiedButPhoneNotVerified_IsRejected()
+    {
+        // [UC-91] Phải xác thực cả email và số điện thoại trước khi nộp hồ sơ xác minh
+        var (service, _, _, center) = SubmitSetup();
+        center.PhoneVerifiedAt = null;
+
+        var result = await service.SubmitVerificationAsync(center.OwnerUserId!.Value, SubmitRequest(1));
+
+        Assert.False(result.Success);
+        Assert.Contains("xác thực số điện thoại", result.ErrorMessage);
+        Assert.Equal(CenterVerificationStatuses.Unverified, center.VerificationStatus);
+    }
+}
