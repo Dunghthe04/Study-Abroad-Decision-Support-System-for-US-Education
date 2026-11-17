@@ -610,9 +610,11 @@ public class StudyCenterService(
         if (center is null)
             return CreateStudyCenterResult.Fail("Không tìm thấy thông tin trung tâm cho tài khoản này.");
 
-        // Điều kiện 1 (email đã xác thực bằng OTP) là bắt buộc trước khi nộp hồ sơ; không còn xác thực SMS.
+        // [UC-91] Phải xác thực cả email (OTP email) và số điện thoại (OTP SMS) trước khi nộp hồ sơ xác minh.
         if (!center.EmailVerifiedAt.HasValue)
             return CreateStudyCenterResult.Fail("Bạn cần xác thực email bằng mã OTP trước khi nộp hồ sơ xác minh.");
+        if (!center.PhoneVerifiedAt.HasValue)
+            return CreateStudyCenterResult.Fail("Bạn cần xác thực số điện thoại bằng mã OTP qua SMS trước khi nộp hồ sơ xác minh.");
 
         var existingPending = await verificationRepository.GetCurrentByCenterIdAsync(center.Id, ct);
         if (existingPending is not null && existingPending.Status == CenterVerificationStatuses.PendingReview)
