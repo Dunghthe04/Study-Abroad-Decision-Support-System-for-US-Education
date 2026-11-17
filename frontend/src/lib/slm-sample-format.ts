@@ -122,3 +122,25 @@ const HISTORY_ACTIONS: Record<string, string> = {
 };
 
 export const historyActionLabel = (action: string) => HISTORY_ACTIONS[action] ?? action;
+
+const FIELD_LABELS: Record<string, string> = {
+  sampleType: "loại mẫu",
+  question: "câu hỏi",
+  answer: "câu trả lời",
+  topic: "chủ đề",
+  source: "nguồn",
+  profile: "hồ sơ",
+  pendingQuestion: "câu hệ thống đã hỏi",
+  intents: "ý định",
+  context: "ngữ cảnh",
+  split: "tập dữ liệu",
+  sourceReview: "nhãn rà soát",
+};
+
+export const fieldLabels = (fields: string[]) => fields.map((field) => FIELD_LABELS[field] ?? field).join(", ");
+
+export const SOURCE_LABELS: Record<string, string> = {
+  manual: "Nhập tay",
+  excel: "File Excel",
+  [CHAT_UNANSWERED_SOURCE]: "Chat chưa trả lời",
+};
