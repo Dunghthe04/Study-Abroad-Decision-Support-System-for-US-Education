@@ -150,7 +150,11 @@ async def test_when_the_state_catalog_is_unavailable_the_states_are_reported():
         ("lowest_cost", "Xếp theo học phí thấp đến cao", "lowest_tuition"),
         ("highest_cost", "Xếp theo tổng chi phí cả ăn ở, sinh hoạt cao đến thấp", "highest_cost"),
         ("lowest_cost", "chi phí rẻ nhất", "lowest_cost"),
-        ("highest_cost", "trường nào đắt nhất", "highest_cost"),  # không nói rõ: tổng chi phí (số tiền phải chuẩn bị)
+        (
+            "highest_cost",
+            "trường nào đắt nhất",
+            "highest_cost",
+        ),  # không nói rõ: tổng chi phí (số tiền phải chuẩn bị)
         ("highest_cost", "học phí cả ăn ở cao nhất", "highest_cost"),  # nhắc ăn ở: tổng chi phí
         ("ranking", "xếp hạng cao nhất", "ranking"),  # không phải cách xếp theo tiền: giữ nguyên
         (None, "trường ở California", None),

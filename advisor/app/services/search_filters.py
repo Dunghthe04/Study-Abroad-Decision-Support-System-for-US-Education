@@ -121,7 +121,11 @@ async def normalize(filters: dict[str, Any], sort: str | None = None) -> SearchP
     # Model đôi khi điền chữ giữ chỗ ("none", "null"...) vào điều kiện học sinh không nói: coi như không có điều kiện đó
     filters = {k: v for k, v in filters.items() if not (isinstance(v, str) and v.strip().lower() in NO_VALUE)}
     # "học phí cao/thấp nhất" là cách xếp, không phải mức chi phí: chữ không đọc ra số tiền thì bỏ, đừng hỏi lại học sinh
-    if sort in ("lowest_cost", "highest_cost") and isinstance(filters.get("max_cost"), str) and read_cost_usd(filters["max_cost"]) is None:
+    if (
+        sort in ("lowest_cost", "highest_cost")
+        and isinstance(filters.get("max_cost"), str)
+        and read_cost_usd(filters["max_cost"]) is None
+    ):
         filters.pop("max_cost")
 
     def fail(key: str, text: str) -> None:
