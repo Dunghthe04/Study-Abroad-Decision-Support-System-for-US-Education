@@ -5,6 +5,7 @@ using StudyAbroad.Application.Profile.Academic;
 using StudyAbroad.Application.Profile.Flow;
 using StudyAbroad.Application.Recommendations;
 using StudyAbroad.Domain.Entities;
+using StudyAbroad.Domain.Constants;
 
 namespace StudyAbroad.UnitTests;
 
@@ -117,6 +118,54 @@ public class ChatServiceTests
         Assert.Equal("answered", reply.Outcome);
         Assert.Null(reply.ReviewStatus);                                  // trả lời được thì admin không phải xem
         Assert.Equal(1, JsonDocument.Parse(reply.MetaJson!).RootElement.GetProperty("v").GetInt32());
+    }
+
+    // ---- UC-53: câu chưa trả lời được thành mẫu SLM nháp
+
+    private static FakeAdvisor Ambiguous() => new("B0")
+    {
+        Slm = new AdvisorSlmDto([new AdvisorSlmIntentDto("out_of_scope", "asdfgh")], ["out_of_scope"], "ambiguous", 0.2, false),
+    };
+
+    private static StudyAbroad.Application.Admin.SlmSamples.SlmSampleService Samples(FakeSlmRepository repo) =>
+        new(repo, new FakeReader(), new StudyAbroad.Infrastructure.Import.SlmTemplateWriter(), new FakeAuditLogs());
+
+    [Fact]
+    public async Task NoAnswerTurn_IsCapturedAsAnonymousSlmDraft()
+    {
+        var repo = new FakeSlmRepository();
+
+        await new ChatService(Ambiguous(), new FakeSessions(), new FakeProfileFlow(), messages: new FakeMessages(), slmSamples: Samples(repo))
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest([new Application.Advisor.ChatMessage("user", "asdfgh")]));
+
+        var sample = Assert.Single(repo.Items);
+        Assert.Equal(("asdfgh", SlmSampleSources.ChatUnanswered, SlmReviewStatuses.Draft), (sample.Question, sample.Source, sample.ReviewStatus));
+        Assert.Null(sample.CreatedByUserId);
+    }
+
+    [Fact]
+    public async Task AnsweredTurn_OrStoreMessagesOff_CapturesNothing()
+    {
+        var repo = new FakeSlmRepository();
+
+        await new ChatService(new FakeAdvisor("B0"), new FakeSessions(), new FakeProfileFlow(), messages: new FakeMessages(), slmSamples: Samples(repo))
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+        await new ChatService(Ambiguous(), new FakeSessions(), new FakeProfileFlow(), slmSamples: Samples(repo))
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest([new Application.Advisor.ChatMessage("user", "asdfgh")]));
+
+        Assert.Empty(repo.Items);
+    }
+
+    [Fact]
+    public async Task CaptureFailure_DoesNotBreakTheChatReply()
+    {
+        var repo = new FakeSlmRepository { Fail = true };
+
+        var res = await new ChatService(Ambiguous(), new FakeSessions(), new FakeProfileFlow(), messages: new FakeMessages(), slmSamples: Samples(repo))
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest([new Application.Advisor.ChatMessage("user", "asdfgh")]));
+
+        Assert.NotNull(res.SessionId);
+        Assert.Empty(repo.Items);
     }
 
     [Fact]
