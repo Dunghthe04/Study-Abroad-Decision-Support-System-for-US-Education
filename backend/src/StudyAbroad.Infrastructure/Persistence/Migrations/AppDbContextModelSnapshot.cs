@@ -297,9 +297,18 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
+
+                    b.Property<string>("DecisionNote")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("decision_note");
 
                     b.Property<DateTime?>("HandledAt")
                         .HasColumnType("timestamp with time zone")
@@ -315,9 +324,13 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(1000)")
                         .HasColumnName("reason");
 
-                    b.Property<Guid>("RequestedByUserId")
+                    b.Property<Guid?>("RequestedByUserId")
                         .HasColumnType("uuid")
                         .HasColumnName("requested_by_user_id");
+
+                    b.Property<DateTime?>("ScheduledPurgeAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("scheduled_purge_at");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -349,6 +362,9 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("Status", "CreatedAt")
                         .HasDatabaseName("ix_center_deletion_requests_status_created_at");
+
+                    b.HasIndex("Status", "ScheduledPurgeAt")
+                        .HasDatabaseName("ix_center_deletion_requests_status_scheduled_purge_at");
 
                     b.ToTable("center_deletion_requests", "app");
                 });
@@ -4865,8 +4881,7 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.HasOne("StudyAbroad.Domain.Entities.User", null)
                         .WithMany()
                         .HasForeignKey("RequestedByUserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
+                        .OnDelete(DeleteBehavior.SetNull)
                         .HasConstraintName("fk_center_deletion_requests_users_requested_by_user_id");
 
                     b.HasOne("StudyAbroad.Domain.Entities.StudyCenter", null)

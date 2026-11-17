@@ -39,6 +39,15 @@ public class AccountPurgeBackgroundService(
                 if (summary.Purged > 0 || summary.Skipped > 0 || summary.Failures.Count > 0)
                     logger.LogInformation("[Background Job] Xóa hẳn tài khoản: {Purged} đã xóa, {Skipped} bỏ qua, {Failed} lỗi.",
                         summary.Purged, summary.Skipped, summary.Failures.Count);
+
+                // [UC-93] Trung tâm Admin đã duyệt xóa, tới hạn thì xóa hẳn (cùng thời hạn chờ)
+                var centerService = scope.ServiceProvider.GetRequiredService<StudyAbroad.Application.StudyCenters.ICenterDeletionService>();
+                var centerSummary = await centerService.PurgeDueAsync(DateTime.UtcNow, stoppingToken);
+                foreach (var failure in centerSummary.Failures)
+                    logger.LogError(failure.Error, "[Background Job Error] Xóa hẳn trung tâm theo yêu cầu {RequestId} lỗi: {Message}",
+                        failure.RequestId, failure.Error.Message);
+                if (centerSummary.Purged > 0)
+                    logger.LogInformation("[Background Job] Xóa hẳn trung tâm: {Purged} đã xóa.", centerSummary.Purged);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {

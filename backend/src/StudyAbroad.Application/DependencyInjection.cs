@@ -27,6 +27,7 @@ public static class DependencyInjection
         services.AddScoped<StudyAbroad.Application.Leads.ILeadParentConfirmService, StudyAbroad.Application.Leads.LeadParentConfirmService>();   // [UC-116] phụ huynh xác nhận lead qua mail
         services.AddScoped<StudyAbroad.Application.StudyCenters.ICenterReviewService, StudyAbroad.Application.StudyCenters.CenterReviewService>();
         services.AddScoped<StudyAbroad.Application.StudyCenters.ICenterReviewModerationService, StudyAbroad.Application.StudyCenters.CenterReviewModerationService>();
+        services.AddScoped<ICenterDeletionService, CenterDeletionService>();   // [UC-93] Admin xử lý yêu cầu xóa trung tâm
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IAccountPurgeService, AccountPurgeService>();   // [UC-80] job xóa hẳn tài khoản gọi qua scope
         // [Q11] Liên kết phụ huynh–học sinh và sự đồng ý xử lý dữ liệu trẻ em
