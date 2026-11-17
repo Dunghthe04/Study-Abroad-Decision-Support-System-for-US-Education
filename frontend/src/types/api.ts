@@ -519,6 +519,7 @@ export interface ParentInviteInfo {
   policyVersion: string;
   /** Email đã là tài khoản học sinh / trung tâm / quản trị: không đồng ý được, chỉ hiện nút Từ chối */
   blockedReason?: string | null;
+  hasParentAccount?: boolean;
 }
 
 /** [UC-117] Trang rút đồng ý từ link trong mail phụ huynh */

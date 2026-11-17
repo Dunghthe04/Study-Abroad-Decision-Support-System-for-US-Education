@@ -117,24 +117,39 @@ export function ParentConsentForm() {
               {invite.parentEmail} một email xác nhận có link <strong>Rút đồng ý</strong>, dùng được bất cứ lúc nào mà không cần đăng nhập.
             </AlertDescription>
           </Alert>
-          <p className="text-sm text-ink-2">
-            Muốn xem các con đã liên kết và quản lý đồng ý trên web? Đăng ký tài khoản phụ huynh bằng đúng email {invite.parentEmail},
-            hệ thống sẽ tự liên kết.
-          </p>
-          {/* Trang đăng ký chọn sẵn Phụ huynh; email truyền qua sessionStorage, không đặt trên URL */}
-          <Link
-            href="/register?role=parent"
-            onClick={() => {
-              try {
-                sessionStorage.setItem(REGISTER_PARENT_EMAIL_KEY, invite.parentEmail);
-              } catch {
-                // Trình duyệt chặn lưu trữ: vẫn mở trang đăng ký, phụ huynh tự gõ email
-              }
-            }}
-            className={buttonVariants({ size: "xl", variant: "outline", className: "w-full" })}
-          >
-            Đăng ký tài khoản phụ huynh
-          </Link>
+          {invite.hasParentAccount ? (
+            // Email đã có tài khoản phụ huynh: liên kết đã gắn vào tài khoản đó, chỉ cần đăng nhập
+            <>
+              <p className="text-sm text-ink-2">
+                Email {invite.parentEmail} đã có tài khoản phụ huynh nên {invite.studentName} đã được liên kết vào tài khoản này.
+                Đăng nhập để xem hồ sơ của con và quản lý đồng ý.
+              </p>
+              <Link href="/login" className={buttonVariants({ size: "xl", variant: "outline", className: "w-full" })}>
+                Đăng nhập
+              </Link>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-ink-2">
+                Muốn xem các con đã liên kết và quản lý đồng ý trên web? Đăng ký tài khoản phụ huynh bằng đúng email{" "}
+                {invite.parentEmail}, hệ thống sẽ tự liên kết.
+              </p>
+              {/* Trang đăng ký chọn sẵn Phụ huynh; email truyền qua sessionStorage, không đặt trên URL */}
+              <Link
+                href="/register?role=parent"
+                onClick={() => {
+                  try {
+                    sessionStorage.setItem(REGISTER_PARENT_EMAIL_KEY, invite.parentEmail);
+                  } catch {
+                    // Trình duyệt chặn lưu trữ: vẫn mở trang đăng ký, phụ huynh tự gõ email
+                  }
+                }}
+                className={buttonVariants({ size: "xl", variant: "outline", className: "w-full" })}
+              >
+                Đăng ký tài khoản phụ huynh
+              </Link>
+            </>
+          )}
         </div>
       ) : invite.state === "rejected" ? (
         <Alert variant="warning" role="status">

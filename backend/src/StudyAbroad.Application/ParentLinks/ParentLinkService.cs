@@ -570,7 +570,8 @@ public class ParentLinkService(
         };
         var pending = state == ParentInviteStates.Pending;
         return new ParentInviteInfo(state, student.FullName, AgeOf(student), link.ParentEmail,
-            pending ? link.TokenExpiresAt : null, pending ? null : decidedAt, ConsentPurposes.ChildDataPolicyVersion);
+            pending ? link.TokenExpiresAt : null, pending ? null : decidedAt, ConsentPurposes.ChildDataPolicyVersion,
+            HasParentAccount: link.ParentUserId is not null);
     }
 
     /// <summary>Liên kết chưa bị hủy: đang chờ, đã đồng ý, hết hạn hoặc bị từ chối.</summary>

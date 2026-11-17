@@ -130,6 +130,7 @@ public class ParentLinkServiceTests
 
         Assert.Contains(_emails.SentEmails, e => e.To == student.Email && e.Purpose == "parent_linked");
         Assert.Contains(_emails.SentEmails, e => e.To == "me@test.com" && e.Purpose == ParentConsentConfirmedPurpose);
+        Assert.False(result.Value.HasParentAccount);
     }
 
     [Fact]
@@ -143,6 +144,8 @@ public class ParentLinkServiceTests
 
         Assert.Equal(parent.Id, Stored(link.Id).ParentUserId);
         Assert.Equal(parent.Id, Assert.Single(_links.Consents).GrantedByUserId);
+        // Mở lại link: trang đã đồng ý mời đăng nhập thay vì đăng ký
+        Assert.True((await CreateService().GetInviteAsync(token)).Value!.HasParentAccount);
     }
 
     [Fact]
