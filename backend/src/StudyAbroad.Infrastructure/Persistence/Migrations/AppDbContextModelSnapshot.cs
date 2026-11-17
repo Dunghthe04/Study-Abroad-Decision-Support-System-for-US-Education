@@ -775,6 +775,11 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("granted");
 
+                    b.Property<string>("GrantedByEmail")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("granted_by_email");
+
                     b.Property<Guid?>("GrantedByUserId")
                         .HasColumnType("uuid")
                         .HasColumnName("granted_by_user_id");
@@ -1473,6 +1478,29 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(2000)")
                         .HasColumnName("message");
 
+                    b.Property<DateTime?>("ParentDecidedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("parent_decided_at");
+
+                    b.Property<string>("ParentDecisionIp")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("parent_decision_ip");
+
+                    b.Property<string>("ParentEmail")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("parent_email");
+
+                    b.Property<DateTime?>("ParentTokenExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("parent_token_expires_at");
+
+                    b.Property<string>("ParentTokenHash")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("parent_token_hash");
+
                     b.Property<List<string>>("SharedFields")
                         .IsRequired()
                         .HasColumnType("text[]")
@@ -1514,6 +1542,9 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ConsentId")
                         .HasDatabaseName("ix_leads_consent_id");
+
+                    b.HasIndex("ParentTokenHash")
+                        .HasDatabaseName("ix_leads_parent_token_hash");
 
                     b.HasIndex("StudyCenterId", "Status")
                         .HasDatabaseName("ix_leads_study_center_id_status");

@@ -22,5 +22,10 @@ public class LeadConfiguration : IEntityTypeConfiguration<Lead>
         // UC-42: đếm số lần gửi trong 7 ngày / trong ngày
         b.HasIndex(x => new { x.SubmittedByUserId, x.CreatedAt });
         b.HasIndex(x => new { x.UserId, x.CreatedAt });
+        // [UC-116] Phụ huynh xác nhận qua link mail
+        b.Property(x => x.ParentTokenHash).HasMaxLength(128);
+        b.HasIndex(x => x.ParentTokenHash);
+        b.Property(x => x.ParentEmail).HasMaxLength(256);
+        b.Property(x => x.ParentDecisionIp).HasMaxLength(64);
     }
 }

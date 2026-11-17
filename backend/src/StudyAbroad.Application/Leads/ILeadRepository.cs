@@ -15,6 +15,15 @@ public interface ILeadRepository
     /// <summary>Thời điểm gửi gần nhất của người này tới trung tâm, chỉ xét từ <paramref name="sinceUtc"/>; null nếu chưa gửi (giới hạn 7 ngày).</summary>
     Task<DateTime?> GetLastToCenterAsync(Guid submitterId, Guid centerId, DateTime sinceUtc, CancellationToken ct = default);
 
+    // [UC-116] Học sinh dưới 16 gửi: chờ phụ huynh xác nhận qua link mail
+    /// <summary>Lead theo hash bí mật trong link mail phụ huynh. Không theo dõi thay đổi.</summary>
+    Task<Lead?> GetByParentTokenHashAsync(string tokenHash, CancellationToken ct = default);
+    /// <summary>
+    /// Ghi kết quả phụ huynh trả lời / hết hạn (kèm bản ghi đồng ý nếu có) chỉ khi lead còn "pending_parent".
+    /// False nếu lead đã có kết quả: ai bấm trước quyết định.
+    /// </summary>
+    Task<bool> TryCompleteParentConfirmAsync(Guid leadId, LeadParentDecision decision, Consent? consent, CancellationToken ct = default);
+
     // [UC-44] Xem yêu cầu liên hệ đã gửi
     /// <summary>
     /// Lead có học sinh thuộc <paramref name="studentIds"/> hoặc do <paramref name="submitterId"/> bấm gửi,

@@ -277,6 +277,18 @@ internal sealed class FakeEmailSender : IEmailSender
         return Task.CompletedTask;
     }
 
+    public Task SendLeadParentConfirmEmailAsync(string toEmail, string studentName, string centerName, IReadOnlyList<string> sharedFields, string confirmToken, int expiryDays, CancellationToken ct = default)
+    {
+        SentEmails.Add((toEmail, "lead_parent_confirm", confirmToken));
+        return Task.CompletedTask;
+    }
+
+    public Task SendLeadParentDecisionEmailAsync(string toEmail, string studentName, string centerName, string outcome, CancellationToken ct = default)
+    {
+        SentEmails.Add((toEmail, "lead_parent_decision", outcome));
+        return Task.CompletedTask;
+    }
+
     public Task SendParentAccountLinkedEmailAsync(string toEmail, string studentName, string parentName, CancellationToken ct = default)
     {
         SentEmails.Add((toEmail, "parent_account_linked", parentName));

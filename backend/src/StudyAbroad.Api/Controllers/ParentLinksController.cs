@@ -13,23 +13,29 @@ namespace StudyAbroad.Api.Controllers
     [Route("api/v1/parent-links")]
     public class ParentLinksController(IParentLinkService parentLinks) : ControllerBase
     {
-        // Trang xác nhận đọc thông tin lời mời trước khi đăng nhập. Token trong body để không nằm trong log URL.
+        // [UC-115] Phụ huynh mở link mời trong mail, không cần tài khoản: link một lần là xác thực. Token trong body để không nằm trong log URL.
         [AllowAnonymous]
         [HttpPost("invite/lookup")]
         [EnableRateLimiting(AuthRateLimit.PolicyName)]
         public async Task<IActionResult> LookupInvite(InviteTokenRequest request, CancellationToken ct) =>
             ToResult(await parentLinks.GetInviteAsync(request.Token, ct));
 
-        [Authorize(Roles = UserRoles.Parent)]
+        [AllowAnonymous]
         [HttpPost("invite/accept")]
         [EnableRateLimiting(AuthRateLimit.PolicyName)]
-        public async Task<IActionResult> AcceptInvite(InviteTokenRequest request, CancellationToken ct)
+        public async Task<IActionResult> AcceptInvite(AcceptInviteRequest request, CancellationToken ct)
         {
-            if (User.GetUserId() is not { } userId)
-                return Unauthorized();
-
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
-            return ToResult(await parentLinks.AcceptAsync(userId, request.Token, ip, ct));
+            return ToResult(await parentLinks.AcceptAsync(request.Token, request.IsGuardian, ip, ct));
+        }
+
+        [AllowAnonymous]
+        [HttpPost("invite/reject")]
+        [EnableRateLimiting(AuthRateLimit.PolicyName)]
+        public async Task<IActionResult> RejectInvite(InviteTokenRequest request, CancellationToken ct)
+        {
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+            return ToResult(await parentLinks.RejectAsync(request.Token, ip, ct));
         }
 
         // [UC-117] Trang rút đồng ý từ link trong mail gửi phụ huynh, không cần đăng nhập. Token trong body để không nằm trong log URL.

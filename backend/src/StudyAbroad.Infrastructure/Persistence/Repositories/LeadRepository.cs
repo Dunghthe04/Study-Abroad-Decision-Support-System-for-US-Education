@@ -42,10 +42,52 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
         db.Leads.AsNoTracking()
             .CountAsync(l => l.SubmittedByUserId == submitterId && l.CreatedAt >= sinceUtc, ct);
 
-    public Task<DateTime?> GetLastToCenterAsync(Guid submitterId, Guid centerId, DateTime sinceUtc, CancellationToken ct = default) =>
-        db.Leads.AsNoTracking()
-            .Where(l => l.SubmittedByUserId == submitterId && l.StudyCenterId == centerId && l.CreatedAt >= sinceUtc)
+    public Task<DateTime?> GetLastToCenterAsync(Guid submitterId, Guid centerId, DateTime sinceUtc, CancellationToken ct = default)
+    {
+        // [UC-116] Lead phụ huynh từ chối / hết hạn không tới trung tâm nên không tính 7 ngày chờ
+        var now = DateTime.UtcNow;
+        return db.Leads.AsNoTracking()
+            .Where(l => l.SubmittedByUserId == submitterId && l.StudyCenterId == centerId && l.CreatedAt >= sinceUtc
+                && l.Status != LeadStatuses.Cancelled && l.Status != LeadStatuses.Expired
+                && !(l.Status == LeadStatuses.PendingParent && l.ParentTokenExpiresAt <= now))
             .MaxAsync(l => (DateTime?)l.CreatedAt, ct);
+    }
+
+    public Task<Lead?> GetByParentTokenHashAsync(string tokenHash, CancellationToken ct = default) =>
+        db.Leads.AsNoTracking().FirstOrDefaultAsync(l => l.ParentTokenHash == tokenHash, ct);
+
+    public async Task<bool> TryCompleteParentConfirmAsync(Guid leadId, LeadParentDecision decision, Consent? consent, CancellationToken ct = default)
+    {
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        if (consent != null)
+        {
+            db.Consents.Add(consent);
+            await db.SaveChangesAsync(ct);
+        }
+
+        // UPDATE có điều kiện status = pending_parent: hai phụ huynh bấm cùng lúc thì chỉ một người ghi được
+        Guid? consentId = consent?.Id;
+        var rows = await db.Leads
+            .Where(l => l.Id == leadId && l.Status == LeadStatuses.PendingParent)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(l => l.Status, decision.Status)
+                .SetProperty(l => l.ParentEmail, decision.ParentEmail)
+                .SetProperty(l => l.ParentDecidedAt, decision.DecidedAt)
+                .SetProperty(l => l.ParentDecisionIp, decision.DecisionIp)
+                .SetProperty(l => l.ConsentId, l => consentId ?? l.ConsentId)
+                .SetProperty(l => l.UpdatedAt, decision.UpdatedAt), ct);
+
+        if (rows == 0)
+        {
+            await tx.RollbackAsync(ct);
+            if (consent != null)
+                db.Entry(consent).State = EntityState.Detached;
+            return false;
+        }
+
+        await tx.CommitAsync(ct);
+        return true;
+    }
 
     public async Task<Lead> CreateLeadAsync(Lead lead, Consent? consent = null, CancellationToken ct = default)
     {
@@ -74,6 +116,7 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
     {
         var safePage = page < 1 ? 1 : page;
         var safePageSize = pageSize < 1 ? 10 : (pageSize > 50 ? 50 : pageSize);
+        var now = DateTime.UtcNow;
 
         var ids = studentIds.ToList();
         var leads = db.Leads.AsNoTracking();
@@ -92,7 +135,8 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
                     l.Id,
                     l.StudyCenterId,
                     c.Name,
-                    l.Status,
+                    // [UC-116] Quá hạn mà chưa ai mở link (hết hạn lười) vẫn hiện "Hết hạn"
+                    l.Status == LeadStatuses.PendingParent && l.ParentTokenExpiresAt <= now ? LeadStatuses.Expired : l.Status,
                     l.CreatedAt,
                     l.SharedFields,
                     l.StudyLevel,
