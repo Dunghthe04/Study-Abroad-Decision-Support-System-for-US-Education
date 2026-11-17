@@ -30,8 +30,8 @@ public class AdminSlmSamplesController(ISlmSampleService samples, ISlmTemplateWr
         {
             var filter = new SlmSampleFilter(
                 sampleType, split, reviewStatus, search, createdBy,
-                from?.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc),
-                to?.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc),
+                StartOfDayUtc(from),
+                StartOfDayUtc(to?.AddDays(1)),
                 source);
             return Ok(await samples.GetPageAsync(filter, page, pageSize, ct));
         }
@@ -40,6 +40,11 @@ public class AdminSlmSamplesController(ISlmSampleService samples, ISlmTemplateWr
             return BadRequest(new { error = ex.Message });
         }
     }
+
+    private static readonly TimeSpan VietnamOffset = TimeSpan.FromHours(7);
+
+    private static DateTime? StartOfDayUtc(DateOnly? day) =>
+        day is { } d ? DateTime.SpecifyKind(d.ToDateTime(TimeOnly.MinValue) - VietnamOffset, DateTimeKind.Utc) : null;
 
     /// <summary>Số dòng theo trạng thái duyệt và theo loại mẫu, cho các tab của trang.</summary>
     [HttpGet("summary")]

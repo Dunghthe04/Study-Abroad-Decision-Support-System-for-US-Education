@@ -364,6 +364,18 @@ public class AdminSlmSamplesControllerTests
     }
 
     [Fact]
+    public async Task GetPage_DateFilter_UsesVietnamDayBoundaries()
+    {
+        var service = new FakeSlmSampleService();
+
+        await CreateController(service).GetPage(
+            null, null, null, null, from: new DateOnly(2026, 11, 17), to: new DateOnly(2026, 11, 17));
+
+        Assert.Equal(new DateTime(2026, 11, 16, 17, 0, 0, DateTimeKind.Utc), service.LastFilter!.From);
+        Assert.Equal(new DateTime(2026, 11, 17, 17, 0, 0, DateTimeKind.Utc), service.LastFilter.To);
+    }
+
+    [Fact]
     public async Task Export_ReturnsFile_AndBadFormatIs400()
     {
         var ok = await CreateController(new FakeSlmSampleService()).Export("jsonl", CancellationToken.None);
@@ -379,6 +391,7 @@ public class AdminSlmSamplesControllerTests
         public bool ThrowInvalidData { get; init; }
         public bool DeleteResult { get; init; } = true;
         public int PreviewCalls { get; private set; }
+        public SlmSampleFilter? LastFilter { get; private set; }
 
         private static SlmSampleDto MakeDto() => new(
             Guid.NewGuid(), SlmSampleTypes.Knowledge, "OPT", null, null, ValidIntents,
@@ -389,6 +402,7 @@ public class AdminSlmSamplesControllerTests
             SlmSampleFilter filter, int page, int pageSize, CancellationToken ct = default)
         {
             if (ThrowArgument) throw new ArgumentException("bad filter");
+            LastFilter = filter;
             return Task.FromResult(new PagedResult<SlmSampleDto>([], page, pageSize, 0));
         }
 
