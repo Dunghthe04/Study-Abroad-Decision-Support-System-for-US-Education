@@ -54,6 +54,8 @@ import type {
   CenterVerificationStatusDto,
   ReviewCenterVerificationRequest,
   UpdateCenterProfileRequest,
+  CenterProfileUpdateResponse,
+  CenterDeletionRequestDto,
 } from "@/types/api";
 
 // Browser code calls same-origin /api (Nginx in prod, Next rewrite in dev).
@@ -605,10 +607,19 @@ export const targetSchoolsApi = {
 // [UC-71, UC-91, UC-92] Cổng Trung tâm tư vấn
 export const centerPortalApi = {
   getProfile: () => apiFetch<StudyCenter>("/api/v1/center/profile"),
+  /** [UC-92] Lưu hồ sơ; kết quả cho biết trường nào lưu ngay, trường nào chờ Moderator kiểm tra, có về Chờ duyệt không. */
   updateProfile: (data: UpdateCenterProfileRequest) =>
-    apiFetch<StudyCenter>("/api/v1/center/profile", {
+    apiFetch<CenterProfileUpdateResponse>("/api/v1/center/profile", {
       method: "PUT",
       body: JSON.stringify(data),
+    }),
+  /** [UC-92] Yêu cầu xóa tài khoản gần nhất (null nếu chưa gửi). */
+  getDeletionRequest: () => apiFetch<CenterDeletionRequestDto | null>("/api/v1/center/deletion-request"),
+  /** [UC-92] Gửi yêu cầu xóa tài khoản và dữ liệu trung tâm (Administrator xử lý ở UC-93). */
+  requestDeletion: (reason: string) =>
+    apiFetch<CenterDeletionRequestDto>("/api/v1/center/deletion-request", {
+      method: "POST",
+      body: JSON.stringify({ reason }),
     }),
   getVerificationStatus: () =>
     apiFetch<CenterVerificationStatusDto>("/api/v1/center/verification/status"),
