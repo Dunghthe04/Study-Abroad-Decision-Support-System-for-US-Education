@@ -843,3 +843,23 @@ export interface NotificationDto {
 export interface UnreadCountDto {
   count: number;
 }
+
+/** [UC-114] Bộ lọc danh sách thay đổi trung tâm chờ Moderator kiểm tra. */
+export type CenterProfileChangeFilter = "pending" | "passed" | "failed" | "all";
+
+/** [UC-114] Một thay đổi website / fanpage do trung tâm tự sửa (UC-92). */
+export interface CenterProfileChangeDto {
+  id: string;
+  studyCenterId: string;
+  studyCenterName: string;
+  centerVerificationStatus: string;
+  centerIsActive: boolean;
+  field: "website" | "fanpage" | string;
+  oldValue?: string | null;
+  newValue?: string | null;
+  status: "pending" | "passed" | "failed" | string;
+  createdAt: string;
+  reviewedByUserId?: string | null;
+  reviewedAt?: string | null;
+  reviewReason?: string | null;
+}

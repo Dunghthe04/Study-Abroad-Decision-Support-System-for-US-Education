@@ -80,6 +80,15 @@ export const ADMIN_NAV: AdminNavItem[] = [
     useCases: ["UC-59", "UC-64", "UC-71", "UC-72"],
   },
   {
+    href: "/admin/center-profile-changes",
+    label: "Kiểm tra thay đổi trung tâm",
+    description: "Đối chiếu website, fanpage trung tâm tự sửa và đánh giá Đạt hoặc Không đạt",
+    icon: ClipboardCheckIcon,
+    // [UC-114] Chỉ Moderator kiểm tra thay đổi trung tâm
+    roles: ["moderator"],
+    useCases: ["UC-114"],
+  },
+  {
     href: "/admin/plans",
     label: "Gói và giao dịch",
     description: "Quản lý gói dịch vụ, giá và xem giao dịch",
