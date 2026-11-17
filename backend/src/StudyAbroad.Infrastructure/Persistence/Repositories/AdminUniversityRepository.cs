@@ -97,6 +97,8 @@ public class AdminUniversityRepository(AppDbContext db) : IAdminUniversityReposi
 
     public void RemoveMajorLink(UniversityOfferingMajor link) => db.UniversityOfferingMajors.Remove(link);
 
+    public void AddAudit(AuditLog entry) => db.AuditLogs.Add(entry);
+
     public Task SaveChangesAsync(CancellationToken ct = default) => db.SaveChangesAsync(ct);
 
     public async Task<IReadOnlyList<Media>> GetUniversityMediaAsync(Guid universityId, CancellationToken ct = default) =>

@@ -1,5 +1,4 @@
 using StudyAbroad.Application.Admin.Universities;
-using StudyAbroad.Application.Audit;
 using StudyAbroad.Application.Common;
 using StudyAbroad.Domain.Entities;
 using Xunit;
@@ -14,7 +13,7 @@ public class AdminUniversityServiceTests
     public async Task CreateUniversityAsync_CreatesSchoolWithMedia()
     {
         var repo = new FakeRepository();
-        var service = new AdminUniversityService(repo, new FakeAuditLogs());
+        var service = new AdminUniversityService(repo);
         var result = await service.CreateUniversityAsync(
             new CreateUniversityRequest(" new-school ", " New School ", State: "ca", LogoUrl: "https://res.cloudinary.com/test/image/upload/logo.png"), Actor);
 
@@ -31,7 +30,7 @@ public class AdminUniversityServiceTests
     public async Task CreateUniversityAsync_RejectsDuplicateCode()
     {
         var repo = new FakeRepository();
-        var service = new AdminUniversityService(repo, new FakeAuditLogs());
+        var service = new AdminUniversityService(repo);
         var result = await service.CreateUniversityAsync(new CreateUniversityRequest(repo.University.Code, "Another School"), Actor);
 
         Assert.False(result.Success);
@@ -45,7 +44,7 @@ public class AdminUniversityServiceTests
         var repo = new FakeRepository();
         var university = repo.University;
         repo.MediaItems.Add(new Media { EntityType = "University", EntityId = university.Id, Type = "logo", Url = "https://res.cloudinary.com/test/image/upload/logo.png" });
-        var service = new AdminUniversityService(repo, new FakeAuditLogs());
+        var service = new AdminUniversityService(repo);
         var result = await service.UpdateUniversityAsync(university.Id,
             new UpdateUniversityRequest(university.Name, university.City, university.State, university.Website, university.Control,
                 university.AcceptanceRate, university.InternationalStudentCount, university.IsIvy, LogoUrl: ""), Actor);
@@ -60,7 +59,7 @@ public class AdminUniversityServiceTests
     public async Task SearchAsync_ClampsPageAndPageSize()
     {
         var repo = new FakeRepository();
-        var service = new AdminUniversityService(repo, new FakeAuditLogs());
+        var service = new AdminUniversityService(repo);
 
         await service.SearchAsync(new AdminUniversityQuery(Page: 0, PageSize: 500));
 
@@ -72,8 +71,8 @@ public class AdminUniversityServiceTests
     public async Task UpdateUniversityAsync_InvalidValues_ReturnsFieldErrorsAndDoesNotSave()
     {
         var repo = new FakeRepository();
-        var audit = new FakeAuditLogs();
-        var service = new AdminUniversityService(repo, audit);
+        var audit = repo.Audits;
+        var service = new AdminUniversityService(repo);
 
         var result = await service.UpdateUniversityAsync(
             repo.University.Id, new UpdateUniversityRequest("  ", null, "California", null, "state", 1.5m, -1, false), Actor);
@@ -85,15 +84,15 @@ public class AdminUniversityServiceTests
         Assert.Contains("acceptanceRate", result.Errors.Keys);
         Assert.Contains("internationalStudentCount", result.Errors.Keys);
         Assert.Equal(0, repo.SaveCount);
-        Assert.Empty(audit.Entries);
+        Assert.Empty(audit);
     }
 
     [Fact]
     public async Task UpdateUniversityAsync_ChangedName_SavesAndWritesAuditWithOldAndNewValue()
     {
         var repo = new FakeRepository();
-        var audit = new FakeAuditLogs();
-        var service = new AdminUniversityService(repo, audit);
+        var audit = repo.Audits;
+        var service = new AdminUniversityService(repo);
         var u = repo.University;
 
         var result = await service.UpdateUniversityAsync(
@@ -103,7 +102,7 @@ public class AdminUniversityServiceTests
         Assert.Equal("New Name", u.Name);
         Assert.Equal("MA", u.State);
         Assert.Equal(1, repo.SaveCount);
-        var entry = Assert.Single(audit.Entries);
+        var entry = Assert.Single(audit);
         Assert.Equal("university.update", entry.Action);
         Assert.Equal(Actor, entry.ActorUserId);
         Assert.Contains("Old Name", entry.DetailJson);
@@ -114,8 +113,8 @@ public class AdminUniversityServiceTests
     public async Task UpdateUniversityAsync_NothingChanged_DoesNotWriteAudit()
     {
         var repo = new FakeRepository();
-        var audit = new FakeAuditLogs();
-        var service = new AdminUniversityService(repo, audit);
+        var audit = repo.Audits;
+        var service = new AdminUniversityService(repo);
         var u = repo.University;
 
         var result = await service.UpdateUniversityAsync(
@@ -123,13 +122,13 @@ public class AdminUniversityServiceTests
 
         Assert.True(result.Success);
         Assert.Equal(0, repo.SaveCount);
-        Assert.Empty(audit.Entries);
+        Assert.Empty(audit);
     }
 
     [Fact]
     public async Task UpdateUniversityAsync_UnknownId_ReturnsNotFound()
     {
-        var service = new AdminUniversityService(new FakeRepository(), new FakeAuditLogs());
+        var service = new AdminUniversityService(new FakeRepository());
 
         var result = await service.UpdateUniversityAsync(Guid.NewGuid(), new UpdateUniversityRequest("X", null, null, null, null, null, null, false), Actor);
 
@@ -140,7 +139,7 @@ public class AdminUniversityServiceTests
     public async Task UpdateOfferingAsync_OnlyOneSatValue_ReturnsError()
     {
         var repo = new FakeRepository();
-        var service = new AdminUniversityService(repo, new FakeAuditLogs());
+        var service = new AdminUniversityService(repo);
 
         var request = OfferingRequest(repo) with { Sat25 = 1200, Sat75 = null };
         var result = await service.UpdateOfferingAsync(repo.University.Id, repo.Offering.Id, request, Actor);
@@ -153,7 +152,7 @@ public class AdminUniversityServiceTests
     public async Task UpdateOfferingAsync_UnknownMajor_ReturnsError()
     {
         var repo = new FakeRepository();
-        var service = new AdminUniversityService(repo, new FakeAuditLogs());
+        var service = new AdminUniversityService(repo);
 
         var request = OfferingRequest(repo) with { Majors = [new UpdateOfferingMajor(Guid.NewGuid(), false)] };
         var result = await service.UpdateOfferingAsync(repo.University.Id, repo.Offering.Id, request, Actor);
@@ -165,8 +164,8 @@ public class AdminUniversityServiceTests
     public async Task UpdateOfferingAsync_ReplacesMajors_NewMajorIsVerifiedAndAudited()
     {
         var repo = new FakeRepository();
-        var audit = new FakeAuditLogs();
-        var service = new AdminUniversityService(repo, audit);
+        var audit = repo.Audits;
+        var service = new AdminUniversityService(repo);
 
         // Bỏ Engineering, giữ Computer Science, thêm Business.
         var request = OfferingRequest(repo) with
@@ -180,14 +179,14 @@ public class AdminUniversityServiceTests
         var added = Assert.Single(repo.Added);
         Assert.Equal(repo.Business.Id, added.MajorId);
         Assert.True(added.IsVerified);
-        Assert.Equal("university_offering.update", Assert.Single(audit.Entries).Action);
+        Assert.Equal("university_offering.update", Assert.Single(audit).Action);
     }
 
     [Fact]
     public async Task UpdateOfferingAsync_UnknownReliability_ReturnsError()
     {
         var repo = new FakeRepository();
-        var service = new AdminUniversityService(repo, new FakeAuditLogs());
+        var service = new AdminUniversityService(repo);
 
         var request = OfferingRequest(repo) with { SourceReliability = "maybe" };
         var result = await service.UpdateOfferingAsync(repo.University.Id, repo.Offering.Id, request, Actor);
@@ -200,8 +199,8 @@ public class AdminUniversityServiceTests
     public async Task UpdateOfferingAsync_ChangedReliability_RecordsEditorAndAudit()
     {
         var repo = new FakeRepository();
-        var audit = new FakeAuditLogs();
-        var service = new AdminUniversityService(repo, audit);
+        var audit = repo.Audits;
+        var service = new AdminUniversityService(repo);
 
         var request = OfferingRequest(repo) with { SourceReliability = "Official" };
         var result = await service.UpdateOfferingAsync(repo.University.Id, repo.Offering.Id, request, Actor);
@@ -210,14 +209,14 @@ public class AdminUniversityServiceTests
         Assert.Equal("official", repo.Offering.SourceReliability);
         Assert.Equal(Actor, repo.Offering.LastEditedByUserId);
         Assert.Equal("Moderator A", result.Value!.LastEditedBy);
-        Assert.Contains("sourceReliability", Assert.Single(audit.Entries).DetailJson);
+        Assert.Contains("sourceReliability", Assert.Single(audit).DetailJson);
     }
 
     [Fact]
     public async Task UpdateUniversityAsync_Changed_RecordsEditor()
     {
         var repo = new FakeRepository();
-        var service = new AdminUniversityService(repo, new FakeAuditLogs());
+        var service = new AdminUniversityService(repo);
         var u = repo.University;
 
         var result = await service.UpdateUniversityAsync(
@@ -231,21 +230,21 @@ public class AdminUniversityServiceTests
     public async Task SetVisibilityAsync_Hide_WritesAudit_SecondCallDoesNot()
     {
         var repo = new FakeRepository();
-        var audit = new FakeAuditLogs();
-        var service = new AdminUniversityService(repo, audit);
+        var audit = repo.Audits;
+        var service = new AdminUniversityService(repo);
 
         var first = await service.SetVisibilityAsync(repo.University.Id, false, Actor);
         var second = await service.SetVisibilityAsync(repo.University.Id, false, Actor);
 
         Assert.False(first!.IsActive);
         Assert.False(second!.IsActive);
-        Assert.Equal("university.hide", Assert.Single(audit.Entries).Action);
+        Assert.Equal("university.hide", Assert.Single(audit).Action);
     }
 
     [Fact]
     public async Task SetVisibilityAsync_UnknownId_ReturnsNull()
     {
-        var service = new AdminUniversityService(new FakeRepository(), new FakeAuditLogs());
+        var service = new AdminUniversityService(new FakeRepository());
 
         Assert.Null(await service.SetVisibilityAsync(Guid.NewGuid(), false, Actor));
     }
@@ -258,20 +257,6 @@ public class AdminUniversityServiceTests
             o.MinDuolingo, o.AvgGpa4, o.Sat25, o.Sat75, o.Act25, o.Act75, o.SatPolicy, o.SourceUrl, o.RetrievedAt,
             o.SourceReliability, o.Notes,
             [new UpdateOfferingMajor(repo.ComputerScience.Id, true), new UpdateOfferingMajor(repo.Engineering.Id, true)]);
-    }
-
-    private sealed class FakeAuditLogs : IAuditLogRepository
-    {
-        public List<AuditLog> Entries { get; } = [];
-
-        public Task AddAsync(AuditLog entry, CancellationToken cancellationToken = default)
-        {
-            Entries.Add(entry);
-            return Task.CompletedTask;
-        }
-
-        public Task<string?> GetLatestLockReasonAsync(Guid userId, CancellationToken cancellationToken = default) =>
-            Task.FromResult<string?>(null);
     }
 
     private sealed class FakeRepository : IAdminUniversityRepository
@@ -356,6 +341,10 @@ public class AdminUniversityServiceTests
         public void AddMajorLink(UniversityOfferingMajor link) => Added.Add(link);
 
         public void RemoveMajorLink(UniversityOfferingMajor link) => Removed.Add(link);
+
+        public List<AuditLog> Audits { get; } = [];
+
+        public void AddAudit(AuditLog entry) => Audits.Add(entry);
 
         public Task SaveChangesAsync(CancellationToken ct = default)
         {

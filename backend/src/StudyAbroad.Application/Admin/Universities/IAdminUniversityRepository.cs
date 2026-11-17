@@ -33,6 +33,9 @@ public interface IAdminUniversityRepository
 
     void RemoveMajorLink(UniversityOfferingMajor link);
 
+    /// <summary>Thêm dòng audit vào cùng lần SaveChangesAsync với thay đổi dữ liệu.</summary>
+    void AddAudit(AuditLog entry);
+
     Task SaveChangesAsync(CancellationToken ct = default);
 
     Task<IReadOnlyList<Media>> GetUniversityMediaAsync(Guid universityId, CancellationToken ct = default);
