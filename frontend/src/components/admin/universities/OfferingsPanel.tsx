@@ -10,6 +10,7 @@ import {
 } from "@/lib/admin-university-api";
 import { AddOfferingControl } from "./AddOfferingControl";
 import { OfferingSection, type OfferingTable } from "./OfferingSection";
+import { ScholarshipsSection } from "./ScholarshipsSection";
 import { UniversityInfoSection } from "./UniversityInfoSection";
 import { UniversityMediaSection } from "./UniversityMediaSection";
 import { UniversityVisibilitySwitch } from "./UniversityVisibilitySwitch";
@@ -37,6 +38,7 @@ interface LoadResult {
 type Editing =
   | { kind: "media"; universityId: string }
   | { kind: "university"; universityId: string }
+  | { kind: "scholarship"; universityId: string; scholarshipId: string | "new" }
   | {
       kind: "offering";
       universityId: string;
@@ -223,6 +225,18 @@ export function OfferingsPanel({
             onCreated={(created) => {
               if (current) setResult({ ...current, offerings: [...offerings, created] });
             }}
+          />
+        )}
+
+        {detail && (
+          <ScholarshipsSection
+            universityId={detail.id}
+            editingId={editing?.kind === "scholarship" ? editing.scholarshipId : null}
+            canEdit={editing === null}
+            onStartEdit={(scholarshipId) =>
+              setEditingState({ kind: "scholarship", universityId: detail.id, scholarshipId })
+            }
+            onStopEdit={stopEditing}
           />
         )}
     </DetailPanel>
