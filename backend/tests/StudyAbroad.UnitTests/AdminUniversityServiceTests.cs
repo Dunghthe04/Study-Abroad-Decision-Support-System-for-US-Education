@@ -169,6 +169,18 @@ public class AdminUniversityServiceTests
     }
 
     [Fact]
+    public async Task CreateOfferingAsync_ConcurrentDuplicate_ReturnsFieldErrorInsteadOfThrowing()
+    {
+        var repo = new FakeRepository { UniqueViolationOnSave = true };
+        var service = new AdminUniversityService(repo);
+
+        var result = await service.CreateOfferingAsync(repo.University.Id, new CreateOfferingRequest("master"), Actor);
+
+        Assert.False(result.Success);
+        Assert.Contains("studyLevel", result.Errors.Keys);
+    }
+
+    [Fact]
     public async Task UpdateOfferingAsync_OnlyOneSatValue_ReturnsError()
     {
         var repo = new FakeRepository();
@@ -451,6 +463,15 @@ public class AdminUniversityServiceTests
         {
             SaveCount++;
             return Task.CompletedTask;
+        }
+
+        public bool UniqueViolationOnSave { get; init; }
+
+        public Task<bool> TrySaveAsync(CancellationToken ct = default)
+        {
+            if (UniqueViolationOnSave) return Task.FromResult(false);
+            SaveCount++;
+            return Task.FromResult(true);
         }
     }
 }

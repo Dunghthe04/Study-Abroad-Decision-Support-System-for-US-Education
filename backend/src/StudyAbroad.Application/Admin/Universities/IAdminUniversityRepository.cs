@@ -43,6 +43,9 @@ public interface IAdminUniversityRepository
 
     Task SaveChangesAsync(CancellationToken ct = default);
 
+    /// <summary>Như SaveChangesAsync nhưng trả false (không ném lỗi) khi vi phạm ràng buộc unique.</summary>
+    Task<bool> TrySaveAsync(CancellationToken ct = default);
+
     Task<IReadOnlyList<Media>> GetUniversityMediaAsync(Guid universityId, CancellationToken ct = default);
     Task SaveUniversityMediaAsync(Guid universityId, string? logoUrl, string? coverUrl, CancellationToken ct = default);
 }

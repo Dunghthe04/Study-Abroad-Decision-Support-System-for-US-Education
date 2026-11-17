@@ -36,6 +36,7 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
     private const int MaxPageSize = 100;
     private static readonly string[] Controls = ["public", "private"];
     private static readonly string[] SatPolicies = ["required", "optional", "not_accepted"];
+    private const string DuplicateLevelMessage = "Trường đã có bậc học này.";
     private static readonly Regex StateCode = new("^[A-Z]{2}$");
 
     public Task<PagedResult<AdminUniversityListItemDto>> SearchAsync(AdminUniversityQuery query, CancellationToken ct = default)
@@ -200,7 +201,7 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
         if (!StudyLevels.IsValid(studyLevel))
             errors["studyLevel"] = "Bậc học không hợp lệ.";
         else if ((await repository.ListOfferingsAsync(universityId, ct)).Any(o => o.StudyLevel == studyLevel))
-            errors["studyLevel"] = "Trường đã có bậc học này.";
+            errors["studyLevel"] = DuplicateLevelMessage;
         if (errors.Count > 0) return AdminUpdateResult<AdminUniversityOfferingDto>.Invalid(errors);
 
         var offering = new UniversityOffering
@@ -212,7 +213,9 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
         repository.AddOffering(offering);
         repository.AddAudit(AuditEntry(actorUserId, "university_offering.create", "university_offering", offering.Id,
             new { universityId, studyLevel }));
-        await repository.SaveChangesAsync(ct);
+        if (!await repository.TrySaveAsync(ct))
+            return AdminUpdateResult<AdminUniversityOfferingDto>.Invalid(
+                new Dictionary<string, string> { ["studyLevel"] = DuplicateLevelMessage });
 
         var lastEditedBy = await repository.GetUserDisplayNameAsync(actorUserId, ct);
         return AdminUpdateResult<AdminUniversityOfferingDto>.Ok(ToOfferingDto(offering, [], lastEditedBy));

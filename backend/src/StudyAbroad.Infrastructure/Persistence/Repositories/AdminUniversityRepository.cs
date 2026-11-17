@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using StudyAbroad.Application.Admin.Universities;
 using StudyAbroad.Application.Common;
 using StudyAbroad.Domain.Entities;
@@ -108,6 +109,19 @@ public class AdminUniversityRepository(AppDbContext db) : IAdminUniversityReposi
     public void AddAudit(AuditLog entry) => db.AuditLogs.Add(entry);
 
     public Task SaveChangesAsync(CancellationToken ct = default) => db.SaveChangesAsync(ct);
+
+    public async Task<bool> TrySaveAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            await db.SaveChangesAsync(ct);
+            return true;
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            return false;
+        }
+    }
 
     public async Task<IReadOnlyList<Media>> GetUniversityMediaAsync(Guid universityId, CancellationToken ct = default) =>
         await db.Media.AsNoTracking()
