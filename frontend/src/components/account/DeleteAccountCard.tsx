@@ -21,6 +21,17 @@ import { Spinner } from "@/components/ui/spinner";
 /** Chữ người dùng phải gõ đúng để xác nhận xóa */
 export const DELETE_CONFIRM_WORD = "XÓA";
 
+/** Khớp AccountDeletionOptions.RetentionPeriod ở backend */
+const RETENTION_DAYS = 30;
+/** Khớp chat_log_keep_days ở advisor/app/core/config.py */
+const CHAT_LOG_KEEP_DAYS = 90;
+
+function purgeDateLabel(): string {
+  const date = new Date();
+  date.setDate(date.getDate() + RETENTION_DAYS);
+  return date.toLocaleDateString("vi-VN");
+}
+
 // [UC-80] Tự xóa tài khoản (chỉ học sinh, phụ huynh): khóa ngay, xóa hẳn sau 30 ngày,
 // trong 30 ngày đăng nhập lại là khôi phục được.
 export function DeleteAccountCard() {
@@ -28,6 +39,13 @@ export function DeleteAccountCard() {
   const [confirmText, setConfirmText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Tính lúc mở hộp thoại (không tính trong render)
+  const [purgeDate, setPurgeDate] = useState("");
+
+  const openDialog = () => {
+    setPurgeDate(purgeDateLabel());
+    setOpen(true);
+  };
 
   // So khớp sau khi chuẩn hóa Unicode: bàn phím tiếng Việt có thể gõ "Ó" thành 2 ký tự (O + dấu)
   const canConfirm = confirmText.trim().normalize("NFC") === DELETE_CONFIRM_WORD.normalize("NFC");
@@ -69,12 +87,12 @@ export function DeleteAccountCard() {
           Xóa tài khoản
         </CardTitle>
         <CardDescription>
-          Tài khoản bị khóa ngay và xóa hẳn sau 30 ngày. Trong 30 ngày đó, bạn đăng nhập lại là khôi phục được.
+          Tài khoản bị khóa ngay và xóa hẳn sau {RETENTION_DAYS} ngày. Trong {RETENTION_DAYS} ngày đó, bạn đăng nhập lại là khôi phục được.
         </CardDescription>
       </CardHeader>
 
       <CardContent>
-        <Button type="button" variant="destructive" onClick={() => setOpen(true)}>
+        <Button type="button" variant="destructive" onClick={openDialog}>
           Xóa tài khoản
         </Button>
       </CardContent>
@@ -89,10 +107,18 @@ export function DeleteAccountCard() {
           <ul className="list-disc space-y-1 pl-5 text-sm">
             <li>Tài khoản bị khóa ngay, bạn sẽ bị đăng xuất khỏi mọi thiết bị.</li>
             <li>
-              Sau <strong>30 ngày</strong>, thông tin cá nhân, hồ sơ, bảng điểm và nội dung bài viết diễn đàn của bạn sẽ bị xóa hẳn, không lấy lại được.
+              Ngày <strong>{purgeDate}</strong> (sau {RETENTION_DAYS} ngày), mọi dữ liệu của bạn bị xóa hẳn, không lấy lại được: thông tin cá nhân, hồ sơ,
+              bảng điểm, nội dung bài viết diễn đàn, kể cả dữ liệu đã chia sẻ cho trung tâm tư vấn và tin nhắn với trung tâm.
             </li>
-            <li>Trong 30 ngày đó, đăng nhập lại và chọn khôi phục là dùng tiếp như cũ.</li>
+            <li>Trước ngày đó, đăng nhập lại và chọn khôi phục là dùng tiếp như cũ.</li>
+            <li>
+              Liên kết với phụ huynh và các chia sẻ hồ sơ cho trung tâm bị hủy ngay; trung tâm thôi xem được dữ liệu của bạn. Nếu khôi phục, các liên
+              kết và chia sẻ này không tự nối lại.
+            </li>
             <li>Gói đăng ký bị hủy; lịch sử giao dịch được giữ ẩn danh theo quy định kế toán.</li>
+            <li>
+              Nhật ký trò chuyện với trợ lý tư vấn đã được che thông tin cá nhân và tự xóa sau {CHAT_LOG_KEEP_DAYS} ngày.
+            </li>
           </ul>
 
           {error && (
