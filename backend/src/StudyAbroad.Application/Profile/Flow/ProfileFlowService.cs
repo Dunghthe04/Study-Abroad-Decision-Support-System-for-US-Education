@@ -312,7 +312,7 @@ public class ProfileFlowService(
     // ───────────────────────────── Trạng thái nháp ─────────────────────────────
 
     /// <summary>Đã gửi qua luồng 6 bước, hoặc có dữ liệu nhập từ màn hình cũ</summary>
-    private static bool HasCommittedProfile(StudentProfile profile) =>
+    internal static bool HasCommittedProfile(StudentProfile profile) =>
         profile.FlowSubmittedAt.HasValue
         || profile.OverallGpa.HasValue
         || profile.BudgetTier is not null

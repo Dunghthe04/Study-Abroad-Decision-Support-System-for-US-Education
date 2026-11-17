@@ -77,6 +77,30 @@ public class AcademicProfileServiceTests
         Assert.Equal(3.65m, result.Data.OverallGpa);
         Assert.Single(result.Data.Terms);
         Assert.Equal(2, result.Data.Terms[0].Scores.Count);
+        Assert.True(result.Data.IsComplete);
+    }
+
+    // Luồng 6 bước chế độ GPA tổng: không có trường, không có điểm theo kỳ vẫn là đã hoàn thành
+    [Fact]
+    public async Task GetAcademicProfileAsync_FlowSubmittedWithOverallGpaOnly_IsComplete()
+    {
+        var repo = new FakeAcademicProfileRepository();
+        var service = new AcademicProfileService(repo);
+        var userId = Guid.NewGuid();
+        var profileId = Guid.NewGuid();
+        repo.Profiles[profileId] = new StudentProfile
+        {
+            Id = profileId,
+            UserId = userId,
+            OverallGpa = 8.2m,
+            FlowSubmittedAt = DateTimeOffset.UtcNow,
+        };
+
+        var result = await service.GetAcademicProfileAsync(userId);
+
+        Assert.True(result.Data!.IsComplete);
+        Assert.Null(result.Data.CurrentSchool);
+        Assert.Empty(result.Data.Terms);
     }
 
     [Fact]
@@ -104,6 +128,7 @@ public class AcademicProfileServiceTests
         Assert.Null(result.Data.Sat);
         Assert.Null(result.Data.Toefl);
         Assert.Equal("{\"ap\":5}", result.Data.OtherTestsJson);
+        Assert.False(result.Data.IsComplete);
     }
 
     [Fact]
@@ -121,5 +146,6 @@ public class AcademicProfileServiceTests
         Assert.Equal(StudyLevels.Undergraduate, result.Data.TargetLevel);
         Assert.Equal(GradeScales.Scale10, result.Data.GradeScale);
         Assert.Empty(result.Data.Terms);
+        Assert.False(result.Data.IsComplete);
     }
 }

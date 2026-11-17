@@ -1,3 +1,4 @@
+using StudyAbroad.Application.Profile.Flow;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
 using System;
@@ -85,7 +86,9 @@ public class AcademicProfileService(
                 : null,
             terms,
             p.CreatedAt,
-            p.UpdatedAt
+            p.UpdatedAt,
+            // Cùng điều kiện với luồng 6 bước; bảng điểm theo kỳ từ màn hình cũ cũng tính là đã điền
+            ProfileFlowService.HasCommittedProfile(p) || terms.Count > 0
         );
     }
 
