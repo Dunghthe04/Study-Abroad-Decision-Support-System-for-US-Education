@@ -180,4 +180,29 @@ public class CenterLeadMapperTests
         Assert.Equal("Nguyen Van A", dto.StudentName);
         Assert.Null(dto.ProfileSummary);
     }
+
+    [Fact]
+    public void ToCenterDto_LeadOlderThan90Days_HidesSharedData()
+    {
+        var lead = new Lead
+        {
+            Id = Guid.NewGuid(), StudyCenterId = Guid.NewGuid(), Status = "accepted", ContactPhone = "0912345678",
+            Message = "Em hỏi", SharedProfile = true, SharedFields = [LeadSharedFields.Contact],
+            CreatedAt = DateTime.UtcNow.AddDays(-(CenterLeadMapper.DataVisibleDays + 1)),
+        };
+
+        var dto = CenterLeadMapper.ToCenterDto(lead, "TT", "Nguyễn Văn A", "a@example.com", null);
+
+        Assert.True(dto.DataHidden);
+        Assert.Null(dto.StudentName);
+        Assert.Null(dto.StudentEmail);
+        Assert.Null(dto.ContactPhone);
+        Assert.Null(dto.Message);
+        Assert.Equal("accepted", dto.Status);
+
+        lead.CreatedAt = DateTime.UtcNow.AddDays(-(CenterLeadMapper.DataVisibleDays - 1));
+        var visible = CenterLeadMapper.ToCenterDto(lead, "TT", "Nguyễn Văn A", "a@example.com", null);
+        Assert.False(visible.DataHidden);
+        Assert.Equal("Nguyễn Văn A", visible.StudentName);
+    }
 }
