@@ -1,4 +1,5 @@
 import {
+  ArchiveXIcon,
   BarChart3Icon,
   BookOpenIcon,
   BuildingIcon,
@@ -112,6 +113,14 @@ export const ADMIN_NAV: AdminNavItem[] = [
     icon: MessagesSquareIcon,
     roles: ["admin", "moderator"],
     useCases: ["UC-54", "UC-55", "UC-56", "UC-57"],
+  },
+  {
+    href: "/admin/center-deletion-requests",
+    label: "Yêu cầu xóa trung tâm",
+    description: "Trung tâm xin xóa tài khoản và dữ liệu: Admin kiểm tra danh tính người gửi rồi duyệt hoặc từ chối",
+    icon: ArchiveXIcon,
+    roles: ["admin"],
+    useCases: ["UC-93"],
   },
   {
     href: "/admin/lead-message-reports",

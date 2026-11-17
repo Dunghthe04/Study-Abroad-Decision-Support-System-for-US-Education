@@ -57,7 +57,9 @@ import type {
   ReviewCenterVerificationRequest,
   UpdateCenterProfileRequest,
   CenterProfileUpdateResponse,
+  AdminCenterDeletionRequestDto,
   CenterDeletionRequestDto,
+  CenterDeletionRequestStatus,
 } from "@/types/api";
 
 // Browser code calls same-origin /api (Nginx in prod, Next rewrite in dev).
@@ -484,6 +486,30 @@ export const centerProfileChangesApi = {
 };
 
 /** [UC-58] Admin xử lý tin nhắn bị báo cáo: bỏ qua báo cáo hoặc khóa tài khoản người gửi (gỡ luôn tin của họ). */
+/** [UC-93] Administrator xử lý yêu cầu xóa tài khoản và dữ liệu trung tâm. */
+export const centerDeletionRequestsApi = {
+  list: (params?: { status?: CenterDeletionRequestStatus | "all"; page?: number; pageSize?: number }) => {
+    const sp = new URLSearchParams();
+    if (params?.status) sp.set("status", params.status);
+    if (params?.page) sp.set("page", String(params.page));
+    if (params?.pageSize) sp.set("pageSize", String(params.pageSize));
+    const qs = sp.toString();
+    return apiFetch<PagedResult<AdminCenterDeletionRequestDto>>(`/api/v1/admin/center-deletion-requests${qs ? `?${qs}` : ""}`);
+  },
+
+  approve: (id: string, identityCheckNote: string) =>
+    apiFetch<AdminCenterDeletionRequestDto>(`/api/v1/admin/center-deletion-requests/${encodeURIComponent(id)}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ identityCheckNote }),
+    }),
+
+  reject: (id: string, reason: string) =>
+    apiFetch<AdminCenterDeletionRequestDto>(`/api/v1/admin/center-deletion-requests/${encodeURIComponent(id)}/reject`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    }),
+};
+
 export const leadMessageReportsApi = {
   list: (params?: { status?: LeadMessageReportFilter; page?: number; pageSize?: number }) => {
     const sp = new URLSearchParams();

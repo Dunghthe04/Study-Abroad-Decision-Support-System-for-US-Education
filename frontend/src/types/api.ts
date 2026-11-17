@@ -207,7 +207,32 @@ export interface CenterProfileUpdateResponse {
   outcome: CenterProfileUpdateOutcome;
 }
 
-/** [UC-92 / UC-93] Yêu cầu xóa tài khoản trung tâm. status: pending | completed | rejected. */
+/** [UC-93] Trạng thái yêu cầu xóa trung tâm: chờ xử lý, đã duyệt (chờ tới hạn xóa hẳn), đã xóa, bị từ chối. */
+export type CenterDeletionRequestStatus = "pending" | "approved" | "completed" | "rejected";
+
+/** [UC-93] Yêu cầu xóa trong danh sách của Administrator, kèm thông tin kiểm tra danh tính người gửi. */
+export interface AdminCenterDeletionRequestDto {
+  id: string;
+  studyCenterId: string;
+  centerName: string;
+  centerEmail: string | null;
+  centerPhone: string | null;
+  centerVerificationStatus: string;
+  requestedByUserId: string | null;
+  requesterName: string | null;
+  requesterEmail: string | null;
+  requesterIsOwner: boolean;
+  reason: string;
+  status: CenterDeletionRequestStatus;
+  createdAt: string;
+  handledByUserId: string | null;
+  handledAt: string | null;
+  decisionNote: string | null;
+  scheduledPurgeAt: string | null;
+  completedAt: string | null;
+}
+
+/** [UC-92 / UC-93] Yêu cầu xóa tài khoản trung tâm. status: pending | approved | completed | rejected. */
 export interface CenterDeletionRequestDto {
   id: string;
   studyCenterId: string;
