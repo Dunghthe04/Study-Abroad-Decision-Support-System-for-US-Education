@@ -738,6 +738,11 @@ public class CenterRegistrationAndVerificationTests
         public Task<PagedResult<CenterProfileChange>> SearchAsync(string? status, int page, int pageSize, CancellationToken ct = default) =>
             Task.FromResult(new PagedResult<CenterProfileChange>(
                 Items.Where(x => status == null || x.Status == status).ToList(), page, pageSize, Items.Count));
+
+        public Task<IReadOnlyList<CenterChangeCenterInfo>> GetCenterInfosAsync(IReadOnlyCollection<Guid> centerIds, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<CenterChangeCenterInfo>>([]);
+
+        public Task AddNotificationAsync(Notification notification, CancellationToken ct = default) => Task.CompletedTask;
     }
 
     private sealed class FakeDeletionRepo : ICenterDeletionRequestRepository
