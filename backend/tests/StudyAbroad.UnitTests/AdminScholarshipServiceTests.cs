@@ -144,6 +144,22 @@ public class AdminScholarshipServiceTests
     }
 
     [Fact]
+    public async Task SetVisibilityAsync_AlreadyHidden_WithoutReason_IsNoOp()
+    {
+        var repo = new FakeRepository();
+        var service = new AdminScholarshipService(repo);
+        var created = (await service.CreateAsync(Valid(), Actor)).Value!;
+        await service.SetVisibilityAsync(created.Id, false, "Hết hạn", Actor);
+        var audits = repo.Audits.Count;
+
+        var again = await service.SetVisibilityAsync(created.Id, false, null, Actor);
+
+        Assert.True(again.Success);
+        Assert.False(again.Value!.IsActive);
+        Assert.Equal(audits, repo.Audits.Count);
+    }
+
+    [Fact]
     public async Task SearchAsync_ClampsPaging()
     {
         var repo = new FakeRepository();

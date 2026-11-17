@@ -313,20 +313,20 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
         var university = await repository.GetUniversityAsync(universityId, ct);
         if (university is null) return AdminUpdateResult<AdminUniversityDetailDto>.Missing();
 
+        // Bấm lại cùng trạng thái là thao tác hợp lệ, không cần lý do và không ghi thêm audit.
+        if (university.IsActive == isActive)
+            return AdminUpdateResult<AdminUniversityDetailDto>.Ok(await ToDetailDtoAsync(university, ct));
+
         reason = Clean(reason);
         var errors = ValidateVisibilityReason(isActive, reason);
         if (errors.Count > 0) return AdminUpdateResult<AdminUniversityDetailDto>.Invalid(errors);
 
-        // Bấm lại cùng trạng thái là thao tác hợp lệ, chỉ không ghi thêm audit.
-        if (university.IsActive != isActive)
-        {
-            university.IsActive = isActive;
-            university.LastEditedByUserId = actorUserId;
-            var action = isActive ? "university.show" : "university.hide";
-            repository.AddAudit(AuditEntry(actorUserId, action, "university", university.Id,
-                new { code = university.Code, from = !isActive, to = isActive, reason }));
-            await repository.SaveChangesAsync(ct);
-        }
+        university.IsActive = isActive;
+        university.LastEditedByUserId = actorUserId;
+        var action = isActive ? "university.show" : "university.hide";
+        repository.AddAudit(AuditEntry(actorUserId, action, "university", university.Id,
+            new { code = university.Code, from = !isActive, to = isActive, reason }));
+        await repository.SaveChangesAsync(ct);
         return AdminUpdateResult<AdminUniversityDetailDto>.Ok(await ToDetailDtoAsync(university, ct));
     }
 

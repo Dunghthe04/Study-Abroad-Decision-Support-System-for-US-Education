@@ -308,6 +308,20 @@ public class AdminUniversityServiceTests
     }
 
     [Fact]
+    public async Task SetVisibilityAsync_AlreadyHidden_WithoutReason_IsNoOp()
+    {
+        var repo = new FakeRepository();
+        var service = new AdminUniversityService(repo);
+        await service.SetVisibilityAsync(repo.University.Id, false, "Dữ liệu sai", Actor);
+
+        var again = await service.SetVisibilityAsync(repo.University.Id, false, null, Actor);
+
+        Assert.True(again.Success);
+        Assert.False(again.Value!.IsActive);
+        Assert.Single(repo.Audits);
+    }
+
+    [Fact]
     public async Task SetVisibilityAsync_HideWithoutReason_ReturnsError()
     {
         var repo = new FakeRepository();

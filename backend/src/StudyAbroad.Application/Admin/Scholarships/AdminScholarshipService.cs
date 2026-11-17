@@ -81,19 +81,19 @@ public class AdminScholarshipService(IAdminScholarshipRepository repository) : I
         var scholarship = await repository.GetAsync(scholarshipId, ct);
         if (scholarship is null) return AdminUpdateResult<AdminScholarshipDto>.Missing();
 
+        if (scholarship.IsActive == isActive)
+            return AdminUpdateResult<AdminScholarshipDto>.Ok(await ToDtoAsync(scholarship, ct));
+
         reason = Clean(reason);
         var errors = ValidateVisibilityReason(isActive, reason);
         if (errors.Count > 0) return AdminUpdateResult<AdminScholarshipDto>.Invalid(errors);
 
-        if (scholarship.IsActive != isActive)
-        {
-            scholarship.IsActive = isActive;
-            scholarship.LastEditedByUserId = actorUserId;
-            scholarship.UpdatedAt = DateTime.UtcNow;
-            repository.AddAudit(AuditEntry(actorUserId, isActive ? "scholarship.show" : "scholarship.hide", "scholarship", scholarship.Id,
-                new { name = scholarship.Name, from = !isActive, to = isActive, reason }));
-            await repository.SaveChangesAsync(ct);
-        }
+        scholarship.IsActive = isActive;
+        scholarship.LastEditedByUserId = actorUserId;
+        scholarship.UpdatedAt = DateTime.UtcNow;
+        repository.AddAudit(AuditEntry(actorUserId, isActive ? "scholarship.show" : "scholarship.hide", "scholarship", scholarship.Id,
+            new { name = scholarship.Name, from = !isActive, to = isActive, reason }));
+        await repository.SaveChangesAsync(ct);
         return AdminUpdateResult<AdminScholarshipDto>.Ok(await ToDtoAsync(scholarship, ct));
     }
 
