@@ -46,11 +46,25 @@ import { cn } from "@/lib/utils";
 const LEAD_STATUS_FILTER_OPTIONS: { value: string; label: string }[] = [
   { value: "all", label: "Tất cả trạng thái" },
   { value: "new", label: "Mới nhận" },
-  { value: "contacted", label: "Đã liên hệ" },
+  // [UC-73] "contacted" ở backend lọc cả accepted (đã chấp nhận) và contacted cũ
+  { value: "contacted", label: "Đã chấp nhận" },
+  { value: "rejected", label: "Bị từ chối" },
   { value: "closed", label: "Đã đóng" },
 ];
 
-type StatusFilter = "all" | "new" | "contacted" | "closed";
+type StatusFilter = "all" | "new" | "contacted" | "rejected" | "closed";
+
+/** [UC-73] Nhãn trạng thái phía trung tâm (dùng cho toast). */
+const CENTER_STATUS_LABEL: Record<string, string> = {
+  new: "Mới nhận",
+  accepted: "Đã chấp nhận",
+  rejected: "Bị từ chối",
+  contacted: "Đang trao đổi",
+  closed: "Đã hoàn tất",
+};
+
+/** [UC-73] Nhóm để cộng / trừ bộ đếm: accepted đếm chung với contacted. */
+const countGroup = (status: string) => (status === "accepted" ? "contacted" : status);
 
 function formatStudyLevel(level?: string | null): string {
   if (!level) return "Chưa xác định";
@@ -84,6 +98,9 @@ function formatBudgetTier(tier?: string | null): string {
 
 function LeadStatusBadge({ status }: { status: string }) {
   if (status === "new") return <Badge variant="brand">Mới nhận</Badge>;
+  // [UC-73]
+  if (status === "accepted") return <Badge variant="warn">Đã chấp nhận</Badge>;
+  if (status === "rejected") return <Badge variant="neutral">Bị từ chối</Badge>;
   if (status === "contacted") return <Badge variant="warn">Đang trao đổi</Badge>;
   if (status === "closed") return <Badge variant="ok">Đã hoàn tất</Badge>;
   // [UC-80] Người gửi đã xóa tài khoản
@@ -172,7 +189,7 @@ export function CenterLeadsListView() {
       setData((prev) => {
         if (!prev) return null;
         const previousStatus = prev.items.find((i) => i.id === leadId)?.status;
-        if (!previousStatus || previousStatus === newStatus) {
+        if (!previousStatus || countGroup(previousStatus) === countGroup(newStatus)) {
           return updatedLead
             ? {
                 ...prev,
@@ -182,7 +199,7 @@ export function CenterLeadsListView() {
         }
 
         const delta = (target: string) =>
-          newStatus === target ? 1 : previousStatus === target ? -1 : 0;
+          countGroup(newStatus) === target ? 1 : countGroup(previousStatus) === target ? -1 : 0;
 
         return {
           ...prev,
@@ -192,6 +209,7 @@ export function CenterLeadsListView() {
           newCount: prev.newCount + delta("new"),
           contactedCount: prev.contactedCount + delta("contacted"),
           closedCount: prev.closedCount + delta("closed"),
+          rejectedCount: (prev.rejectedCount ?? 0) + delta("rejected"),
         };
       });
 
@@ -210,9 +228,7 @@ export function CenterLeadsListView() {
       toast.add({
         type: "success",
         title: "Cập nhật trạng thái thành công",
-        description: `Yêu cầu đã được chuyển sang trạng thái "${
-          newStatus === "new" ? "Mới nhận" : newStatus === "contacted" ? "Đã liên hệ" : "Đã đóng"
-        }".`,
+        description: `Yêu cầu đã được chuyển sang trạng thái "${CENTER_STATUS_LABEL[newStatus] ?? newStatus}".`,
       });
 
       applyLeadStatusUpdate(leadId, updated.status, updated);
@@ -221,6 +237,30 @@ export function CenterLeadsListView() {
         type: "error",
         title: "Lỗi cập nhật",
         description: "Không thể cập nhật trạng thái yêu cầu. Vui lòng thử lại.",
+      });
+    } finally {
+      setIsUpdatingStatus(false);
+    }
+  };
+
+  // [UC-73] Chấp nhận / từ chối yêu cầu Mới
+  const handleDecision = async (leadId: string, accept: boolean) => {
+    setIsUpdatingStatus(true);
+    try {
+      const updated = accept ? await centerLeadsApi.accept(leadId) : await centerLeadsApi.reject(leadId);
+      toast.add({
+        type: "success",
+        title: accept ? "Đã chấp nhận yêu cầu" : "Đã từ chối yêu cầu",
+        description: accept
+          ? "Bạn có thể nhắn tin với người gửi ngay trong yêu cầu này."
+          : "Người gửi sẽ nhận được thông báo.",
+      });
+      applyLeadStatusUpdate(leadId, updated.status, updated);
+    } catch (err) {
+      toast.add({
+        type: "error",
+        title: accept ? "Không chấp nhận được" : "Không từ chối được",
+        description: err instanceof ApiError ? err.message : "Vui lòng thử lại.",
       });
     } finally {
       setIsUpdatingStatus(false);
@@ -274,6 +314,12 @@ export function CenterLeadsListView() {
           <span className="text-ink-3 italic flex items-center gap-1 whitespace-nowrap text-xs">
             <LockIcon className="size-3 shrink-0" />
             Người dùng đã thu hồi
+          </span>
+        ) : lead.dataHidden ? (
+          // [UC-73] Quá 90 ngày: không còn xem được dữ liệu đã chia sẻ
+          <span className="text-ink-3 italic flex items-center gap-1 whitespace-nowrap text-xs">
+            <LockIcon className="size-3 shrink-0" />
+            Quá 90 ngày, dữ liệu đã ẩn
           </span>
         ) : lead.sharedProfile && lead.studentName ? (
           <div>
@@ -526,7 +572,7 @@ export function CenterLeadsListView() {
         >
           <CardContent className="pt-4 flex items-center justify-between">
             <div>
-              <p className="text-xs font-medium text-warn">Đang trao đổi</p>
+              <p className="text-xs font-medium text-warn">Đã chấp nhận</p>
               <p className="font-heading text-2xl font-bold text-warn tabular-nums mt-0.5">{contactedCount}</p>
             </div>
             <div className="size-9 rounded-lg bg-warn-wash flex items-center justify-center text-warn">
@@ -605,12 +651,14 @@ export function CenterLeadsListView() {
                 </DialogDescription>
               </DialogHeader>
 
-              {selectedLead.status === "withdrawn" ? (
-                // [UC-80] Người gửi đã xóa tài khoản: ẩn mọi dữ liệu, không trao đổi, không đổi trạng thái
+              {selectedLead.status === "withdrawn" || selectedLead.dataHidden ? (
+                // [UC-80] Người gửi đã xóa tài khoản / [UC-73] quá 90 ngày: ẩn mọi dữ liệu đã chia sẻ
                 <div className="my-2 rounded-lg border border-dashed p-4 text-center bg-muted/20">
                   <LockIcon className="size-5 text-muted-foreground mx-auto mb-1" />
                   <p className="text-sm text-muted-foreground leading-relaxed max-w-md mx-auto">
-                    Người dùng đã thu hồi yêu cầu này. Thông tin liên hệ, hồ sơ và tin nhắn không còn hiển thị.
+                    {selectedLead.status === "withdrawn"
+                      ? "Người dùng đã thu hồi yêu cầu này. Thông tin liên hệ, hồ sơ và tin nhắn không còn hiển thị."
+                      : "Yêu cầu đã quá 90 ngày nên trung tâm không còn xem được dữ liệu người gửi đã chia sẻ."}
                   </p>
                 </div>
               ) : (
@@ -803,45 +851,71 @@ export function CenterLeadsListView() {
                   )}
                 </div>
 
-                {/* [UC-74] Lead Conversation & Reply Panel */}
-                <LeadConversationPanel
-                  key={selectedLead.id}
-                  leadId={selectedLead.id}
-                  leadStatus={selectedLead.status}
-                  onLeadStatusChange={(newStatus) =>
-                    applyLeadStatusUpdate(selectedLead.id, newStatus)
-                  }
-                />
+                {selectedLead.status === "new" && (
+                  // [UC-73] Yêu cầu Mới: chấp nhận để mở nhắn tin, hoặc từ chối (người gửi nhận thông báo)
+                  <div className="space-y-2 pt-2 border-t">
+                    <h4 className="text-xs font-semibold text-muted-foreground">Xử lý yêu cầu</h4>
+                    <p className="text-xs text-muted-foreground">
+                      Chấp nhận để mở nhắn tin với người gửi. Từ chối thì người gửi nhận thông báo và yêu cầu kết thúc.
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        size="sm"
+                        disabled={isUpdatingStatus}
+                        onClick={() => handleDecision(selectedLead.id, true)}
+                        className="text-xs gap-1.5"
+                      >
+                        <CheckCheckIcon className="size-3.5" />
+                        Chấp nhận
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={isUpdatingStatus}
+                        onClick={() => handleDecision(selectedLead.id, false)}
+                        className="text-xs gap-1.5"
+                      >
+                        Từ chối
+                      </Button>
+                    </div>
+                  </div>
+                )}
 
-                {/* Status Transition Control */}
+                {selectedLead.status === "rejected" && (
+                  <p className="text-sm text-muted-foreground pt-2 border-t">
+                    Trung tâm đã từ chối yêu cầu này. Người gửi đã nhận thông báo.
+                  </p>
+                )}
+
+                {/* [UC-74] Lead Conversation & Reply Panel: chỉ mở sau khi trung tâm chấp nhận (UC-73) */}
+                {selectedLead.status !== "new" && selectedLead.status !== "rejected" && (
+                  <LeadConversationPanel
+                    key={selectedLead.id}
+                    leadId={selectedLead.id}
+                    leadStatus={selectedLead.status}
+                    onLeadStatusChange={(newStatus) =>
+                      applyLeadStatusUpdate(selectedLead.id, newStatus)
+                    }
+                  />
+                )}
+
+                {/* Status Transition Control: [UC-73] chỉ sau khi chấp nhận (yêu cầu Mới xử lý ở trên) */}
+                {selectedLead.status !== "new" && selectedLead.status !== "rejected" && (
                 <div className="space-y-2 pt-2 border-t">
                   <h4 className="text-xs font-semibold text-muted-foreground">
                     Chuyển trạng thái xử lý
                   </h4>
                   <div className="flex flex-wrap items-center gap-2">
-                    {selectedLead.status !== "new" && (
+                    {selectedLead.status === "closed" && (
                       <Button
                         variant="outline"
                         size="sm"
                         disabled={isUpdatingStatus}
-                        onClick={() => handleStatusChange(selectedLead.id, "new")}
-                        className="text-xs gap-1.5"
-                      >
-                        <ClockIcon className="size-3.5 text-brand" />
-                        Chuyển về Mới nhận
-                      </Button>
-                    )}
-
-                    {selectedLead.status !== "contacted" && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={isUpdatingStatus}
-                        onClick={() => handleStatusChange(selectedLead.id, "contacted")}
+                        onClick={() => handleStatusChange(selectedLead.id, "accepted")}
                         className="text-xs gap-1.5 text-warn border-warn/30 bg-warn-wash/60 hover:bg-warn-wash"
                       >
                         <PhoneIcon className="size-3.5" />
-                        Đã liên hệ với học sinh
+                        Mở lại trao đổi
                       </Button>
                     )}
 
@@ -859,6 +933,7 @@ export function CenterLeadsListView() {
                     )}
                   </div>
                 </div>
+                )}
               </div>
               )}
 

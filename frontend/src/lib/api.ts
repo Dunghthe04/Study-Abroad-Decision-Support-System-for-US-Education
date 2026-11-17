@@ -514,6 +514,14 @@ export const centerLeadsApi = {
   getById: (id: string) =>
     apiFetch<CenterReceivedLeadDto>(`/api/v1/leads/received/${encodeURIComponent(id)}`),
 
+  /** [UC-73] Chấp nhận yêu cầu Mới: sang Đã chấp nhận, mở nhắn tin. */
+  accept: (id: string) =>
+    apiFetch<CenterReceivedLeadDto>(`/api/v1/leads/received/${encodeURIComponent(id)}/accept`, { method: "POST" }),
+
+  /** [UC-73] Từ chối yêu cầu Mới: sang Bị từ chối, người gửi nhận thông báo. */
+  reject: (id: string) =>
+    apiFetch<CenterReceivedLeadDto>(`/api/v1/leads/received/${encodeURIComponent(id)}/reject`, { method: "POST" }),
+
   updateStatus: (id: string, status: string) =>
     apiFetch<CenterReceivedLeadDto>(`/api/v1/leads/received/${encodeURIComponent(id)}/status`, {
       method: "PATCH",
