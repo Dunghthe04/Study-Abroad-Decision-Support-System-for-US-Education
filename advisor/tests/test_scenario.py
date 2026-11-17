@@ -2,7 +2,8 @@
 
 import pytest
 
-from app.services.scenario import FILTER_FACTORS, SKIP_ACTION, parse_what_if
+from app.schemas.chat import ProfileField
+from app.services.scenario import FILTER_FACTORS, SKIP_ACTION, parse_what_if, try_buttons
 from app.services.skills import exchange_rate, skill_ho_so
 from app.services.skills.validators import AskAgain
 
@@ -199,3 +200,53 @@ def test_unsupported_factors_are_grouped():
 # Nút sửa của mục lọc trường mở đúng nhóm có trong ô chọn sửa hồ sơ
 def test_filter_factors_point_to_edit_sections():
     assert set(FILTER_FACTORS.values()) <= set(skill_ho_so.EDIT_SECTIONS)
+
+
+def confirmed(value):
+    return ProfileField(value=value, status="confirmed")
+
+
+def test_try_buttons_go_one_step_above_the_profile():
+    profile = {
+        "sat": confirmed(1350),
+        "gpa": confirmed({"value": 3.6, "scale": 4}),
+        "english": confirmed({"type": "ielts", "value": 6.5}),
+        "budget": confirmed("tier_35k_50k"),
+    }
+
+    buttons = try_buttons(profile)
+
+    assert [b.label for b in buttons] == [
+        "Thử SAT 1450",
+        "Thử GPA 3.8",
+        "Thử IELTS 7",
+        "Thử ngân sách 70.000 USD",
+    ]
+    assert [b.value for b in buttons] == [
+        "Nếu SAT của em là 1450 thì sao?",
+        "Nếu GPA của em là 3.8 thì sao?",
+        "Nếu IELTS của em là 7 thì sao?",
+        "Nếu ngân sách của em là 70000 USD mỗi năm thì sao?",
+    ]
+
+
+def test_try_buttons_without_a_profile_start_from_common_marks():
+    assert [b.label for b in try_buttons({})] == ["Thử SAT 1400", "Thử IELTS 6.5"]
+
+
+def test_try_buttons_skip_what_is_already_at_the_top_and_other_english_tests():
+    profile = {
+        "sat": confirmed(1600),
+        "gpa": confirmed({"value": 9.8, "scale": 10}),
+        "english": confirmed({"type": "toefl", "value": 100}),
+        "budget": confirmed("tier_above_70k"),
+    }
+
+    assert [b.label for b in try_buttons(profile)] == ["Thử GPA 10"]
+
+
+def test_try_buttons_for_the_top_budget_tier_below_the_last_adds_a_round_amount():
+    assert [b.label for b in try_buttons({"budget": confirmed("tier_50k_70k"), "sat": confirmed(1600)})] == [
+        "Thử IELTS 6.5",
+        "Thử ngân sách 80.000 USD",
+    ]

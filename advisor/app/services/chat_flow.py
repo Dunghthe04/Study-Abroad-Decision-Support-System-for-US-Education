@@ -42,6 +42,7 @@ from app.services.replies import (
     FORM_DONE,
     INTAKE_FORM,
     INTAKE_MORE,
+    MENU,
     NEED_MAJOR,
     NOT_READY,
 )
@@ -334,6 +335,14 @@ class ChatFlow:
                 log_turn(state, message, None, [], (time.perf_counter() - started) * 1000, req.session_id)
                 return self._response(state, output, [], profile_before)
 
+        # Nút menu "Thử thay đổi hồ sơ": câu chung chung này model chưa đọc được, code trả lời luôn (hỏi thử gì, kèm nút thử nhanh)
+        if is_try_menu(message):
+            output = self._branches["scenario"].ask_what(state)
+            log_turn(
+                state, message, None, ["scenario"], (time.perf_counter() - started) * 1000, req.session_id
+            )
+            return self._response(state, output, ["scenario"], profile_before)
+
         # Câu hồ sơ đang chờ, chụp trước khi chạy nhánh để cuối lượt biết đã được trả lời chưa
         pending = (state.question_id, state.last_question)
         # 1. SLM đọc tin nhắn. Bấm nút của câu đang hỏi, hoặc bấm nút ở menu sửa hồ sơ, là trả lời hồ sơ rõ ràng, không cần SLM đoán
@@ -480,6 +489,11 @@ def is_edit_menu(state: ChatState, message: str) -> bool:
     from app.services.skills import skill_ho_so
 
     return state.question_id is None and skill_ho_so.read_edit_menu(message) is not None
+
+
+# Tin là chữ của nút menu "Thử thay đổi hồ sơ" (replies.MENU): câu chung chung này model chưa đọc được nên code nhận thẳng
+def is_try_menu(message: str) -> bool:
+    return message.strip() == MENU["scenario"].value
 
 
 # Hồ sơ đủ mục bắt buộc và không còn giá trị nào chờ xác nhận (said_in_B0)

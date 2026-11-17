@@ -152,14 +152,14 @@ async def test_what_if_filter_factors_offer_edit_buttons():
     assert out.action is None
 
 
-# Mục phần gợi ý trường không dùng: nói không làm đổi danh sách, gợi ý mục thử được, không có nút
+# Mục phần gợi ý trường không dùng: nói không làm đổi danh sách, gợi ý mục thử được, kèm nút thử nhanh để đi tiếp
 @pytest.mark.parametrize(("factor", "name"), [("visa_refused", "Lịch sử visa"), ("intake", "Kỳ nhập học")])
 async def test_what_if_no_effect_factors_say_list_unchanged(factor, name):
     out = await run_scenario(ChatState(has_results=True), **what_if({"factor": factor, "value": "x"}))
 
     assert out.answer.startswith(f"{name} không làm thay đổi danh sách trường gợi ý.")
     assert "Bạn thử đổi được: GPA" in out.answer
-    assert out.quick_replies == [] and out.action is None
+    assert [r.label for r in out.quick_replies] == ["Thử SAT 1400", "Thử IELTS 6.5"] and out.action is None
 
 
 # Mục không thuộc hai nhóm trên (hoạt động, giải thưởng...) vẫn trả câu chung
@@ -1044,3 +1044,24 @@ async def test_what_if_writer_not_called_for_other_factors_or_simulate():
     assert other.answer == NOTHING_TO_TRY.format(supported=SUPPORTED_TEXT)
     assert sat.action == "simulate" and sat.action_data["changes"] == {"sat": 1450}
     assert llm.calls == []
+
+
+# Nút menu "Thử thay đổi hồ sơ": hỏi thử gì, kèm nút thử nhanh theo hồ sơ; chưa có danh sách trường thì mời gợi ý trước
+async def test_ask_what_to_try_offers_quick_buttons_from_the_profile():
+    branch = build_branches(skills([]))["scenario"]
+    state = ChatState(has_results=True, profile={"sat": ProfileField(value=1350, status="confirmed")})
+
+    out = branch.ask_what(state)
+    no_list = branch.ask_what(ChatState())
+
+    assert out.answer.startswith("Bạn muốn thử thay đổi gì?") and out.action is None
+    assert [r.label for r in out.quick_replies] == ["Thử SAT 1450", "Thử IELTS 6.5"]
+    assert no_list.answer == NEED_RESULTS
+
+
+# Thiếu số ("nếu SAT tăng"): hỏi lại số, kèm nút thử nhanh để bấm thay vì gõ
+async def test_what_if_asking_again_for_a_number_offers_quick_buttons():
+    out = await run_scenario(ChatState(has_results=True), **what_if({"factor": "sat", "value": "cao hơn"}))
+
+    assert "SAT bao nhiêu" in out.answer and out.action is None
+    assert out.quick_replies and out.quick_replies[0].label == "Thử SAT 1400"
