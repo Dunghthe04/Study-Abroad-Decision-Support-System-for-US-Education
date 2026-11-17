@@ -2,7 +2,8 @@
 
 from app.core.config import Settings
 from app.schemas.chat import ChatMessage, ChatRequest, ChatState
-from app.services.chat_flow import BACK_TO_QUESTION, QUESTIONS, SkillOutput, ask
+from app.services.chat_flow import QUESTIONS, SkillOutput, ask
+from app.services.replies import BACK_TO_QUESTION
 from app.services.skills import build_handlers
 from app.services.skills.skill_chuyen_trung_tam import ChuyenTrungTamHandler
 from tests.fakes import flow_with, tin

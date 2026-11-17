@@ -15,6 +15,22 @@ from typing import Any
 from app.schemas.chat import ChatState, QuickReply, Widget
 from app.services.centers import SERVICES, CenterFinder, CenterHit, CityCount, db_service, match_city
 from app.services.chat_flow import SkillOutput
+from app.services.replies import (
+    CENTER_ASK_SERVICE,
+    CENTER_CITY_ASK,
+    CENTER_DISCLAIMER,
+    CENTER_ELSEWHERE,
+    CENTER_INTRO,
+    CENTER_MORE,
+    CENTER_NONE,
+    CENTER_NONE_IN_CITY,
+    CENTER_NOT_PROVIDED,
+    CENTER_SERVICE_VALUE,
+    CENTER_SERVICE_VALUE_IN_CITY,
+    CENTER_TASK_NOTES,
+    CENTER_UNAVAILABLE,
+    menu_buttons,
+)
 from app.services.skill_call import SKILLS_DIR, SkillCall
 from app.services.small_talk import plain
 
@@ -38,37 +54,21 @@ ANSWER_SCHEMA = {
     "required": ["opening", "reasons"],
 }
 
-ASK_SERVICE = "Bạn cần hỗ trợ phần nào? Bạn chọn giúp mình nhé."
-INTRO = "Dưới đây là một số trung tâm đã xác minh có hỗ trợ {label}:"
-NO_CENTER = (
-    "Hiện mình chưa có trung tâm đã xác minh nào hỗ trợ {label}. "
-    "Bạn có thể xem danh sách trung tâm đầy đủ ở trang Trung tâm."
-)
-UNAVAILABLE = "Phần gợi ý trung tâm đang tạm gián đoạn, bạn thử lại sau ít phút nhé."
-# Học sinh nêu thành phố chưa có trung tâm nào hỗ trợ dịch vụ này: không đưa trung tâm ở nơi khác cho đủ, mà cho chọn nơi đang có
-NO_CENTER_IN_CITY = (
-    "Hiện chưa có trung tâm đã xác minh ở {city} hỗ trợ {label}. Bạn chọn thành phố khác đang có nhé:"
-)
-# Việc model tách ra (tasks) mà hệ thống chưa làm được: nói rõ rồi vẫn gợi ý trung tâm theo dịch vụ
-TASK_NOTES = {
-    "booking": "Mình chưa đặt lịch hẹn thay bạn được, nhưng mình gợi ý các trung tâm để bạn tự tìm hiểu nhé.",
-    "compare": "Mình chưa so sánh các trung tâm với nhau được, nhưng mình gợi ý các trung tâm phù hợp để bạn tự tìm hiểu nhé.",
-}
-# Học sinh xin điều hệ thống không cung cấp (số điện thoại, giá, xếp hạng, đánh giá trung tâm)
-NOT_PROVIDED = (
-    "Mình không cung cấp số điện thoại, mức giá hay xếp hạng, đánh giá của trung tâm. "
-    "Mình chỉ gợi ý các trung tâm đã xác minh, bạn xem thông tin trên website của họ và tự hỏi trực tiếp nhé."
-)
+# Các câu cố định (CENTER_*) nằm ở replies.py; tên cũ giữ lại để code và test trong file này dùng như trước
+ASK_SERVICE = CENTER_ASK_SERVICE
+INTRO = CENTER_INTRO
+NO_CENTER = CENTER_NONE
+UNAVAILABLE = CENTER_UNAVAILABLE
+NO_CENTER_IN_CITY = CENTER_NONE_IN_CITY
+TASK_NOTES = CENTER_TASK_NOTES
+NOT_PROVIDED = CENTER_NOT_PROVIDED
 _NOT_PROVIDED_RE = re.compile(
     r"\bso dien thoai\b|\bsdt\b|\bhotline\b|\bzalo\b|\bemail\b|\bgmail\b|\bbao gia\b|\bmuc gia\b"
     r"|\bgia\b.*\bbao nhieu\b|\bgia (?:ca|tien|re)\b|\bphi (?:dich vu|bao nhieu)\b|\bchi phi\b|\bhoc phi\b"
     r"|\bbao nhieu tien\b|\bre nhat\b"
     r"|\buy tin\b|\btot nhat\b|\bdang tin\b|\bxep hang\b|\bdanh gia\b|\breview\b"
 )
-DISCLAIMER = (
-    "Danh sách chỉ gồm trung tâm đã được xác minh, xếp theo thành phố rồi theo tên, không phải xếp hạng chất lượng. "
-    "Bạn nên tự tìm hiểu kỹ trước khi liên hệ."
-)
+DISCLAIMER = CENTER_DISCLAIMER
 
 # Bậc học (mã chung của hệ thống) -> chữ cho AI và cho câu giải thích dự phòng
 LEVEL_LABELS = {
@@ -172,7 +172,16 @@ def check_grounded(reason: str, center: CenterHit, student_city: str | None) -> 
 
 # Kiểm tra lượt AI: đủ một câu cho mỗi trung tâm, câu ngắn, không chữ cấm, không tên trung tâm, đúng dữ liệu
 def check_reasons(raw: dict[str, Any], centers: list[CenterHit], student_city: str | None) -> dict[int, str]:
-    reasons = {int(item["id"]): str(item["reason"]).strip() for item in raw["reasons"]}
+    items = raw.get("reasons")
+    # AI trả sai dạng (danh sách chuỗi, thiếu id hoặc reason...) cũng là kết quả không dùng được: ném ValueError để gọi lại hoặc dùng câu dựng sẵn
+    if not isinstance(items, list) or not all(
+        isinstance(i, dict) and {"id", "reason"} <= set(i) for i in items
+    ):
+        raise ValueError("reasons phải là danh sách {id, reason}")
+    try:
+        reasons = {int(item["id"]): str(item["reason"]).strip() for item in items}
+    except (TypeError, ValueError) as ex:
+        raise ValueError("id của reasons phải là số") from ex
     if set(reasons) != set(range(1, len(centers) + 1)):
         raise ValueError("thiếu hoặc thừa câu giải thích")
     names = [c.name for c in centers]
@@ -207,7 +216,7 @@ def check_opening(
 # Mở đầu dựng bằng code: dùng khi AI sai hai lần
 def fallback_opening(label: str, asked_city: str | None, city_has_centers: bool | None) -> str:
     if asked_city and city_has_centers is False:
-        return f"Hiện chưa có trung tâm đã xác minh ở {asked_city}, các trung tâm dưới đây ở nơi khác:"
+        return CENTER_ELSEWHERE.format(city=asked_city)
     return INTRO.format(label=label)
 
 
@@ -233,15 +242,16 @@ def centers_widget(
     ]
     label = SERVICES[service]
     options = [
-        {"city": c.city, "count": c.count, "ask": f"Cho mình xem trung tâm {label} ở {c.city}"}
+        {"city": c.city, "count": c.count, "ask": CENTER_CITY_ASK.format(label=label, city=c.city)}
         for c in cities
     ]
     return Widget(type="centers", data={"centers": items, "firstPage": FIRST_PAGE, "cities": options})
 
 
-def service_buttons() -> list[QuickReply]:
+def service_buttons(city: str | None = None) -> list[QuickReply]:
+    value = CENTER_SERVICE_VALUE_IN_CITY if city else CENTER_SERVICE_VALUE
     return [
-        QuickReply(label=label[:1].upper() + label[1:], value=f"Mình cần hỗ trợ {label}")
+        QuickReply(label=label[:1].upper() + label[1:], value=value.format(label=label, city=city))
         for label in SERVICES.values()
     ]
 
@@ -266,7 +276,7 @@ class ChuyenTrungTamHandler:
             cities = await self._finder.cities()
         except Exception:  # backend tắt hoặc lỗi: nói thật là đang gián đoạn, không bịa danh sách
             logger.exception("Lấy danh sách thành phố thất bại")
-            return SkillOutput(UNAVAILABLE)
+            return SkillOutput(UNAVAILABLE, quick_replies=menu_buttons("centers"))
 
         need = read_need(entities, state.context, cities)
         # Nhớ thành phố ngay khi học sinh nói, kể cả khi chưa rõ dịch vụ: bấm nút dịch vụ ở câu sau vẫn giữ thành phố
@@ -275,7 +285,9 @@ class ChuyenTrungTamHandler:
         notes = [TASK_NOTES[task] for task in entities.get("tasks") or [] if task in TASK_NOTES]
         # Chưa rõ dịch vụ: hỏi lại bằng nút, học sinh bấm là gửi lại một câu rõ dịch vụ
         if need.service is None:
-            return SkillOutput("\n\n".join([*notes, ASK_SERVICE]), quick_replies=service_buttons())
+            return SkillOutput(
+                "\n\n".join([*notes, ASK_SERVICE]), quick_replies=service_buttons(need.asked_city)
+            )
 
         # Nhớ dịch vụ và thành phố để hiểu câu nối tiếp ("thế còn luyện phỏng vấn")
         state.context.service, state.context.city = need.model_service, need.city
@@ -289,7 +301,7 @@ class ChuyenTrungTamHandler:
             )
         except Exception:
             logger.exception("Lấy trung tâm thất bại")
-            return SkillOutput(UNAVAILABLE)
+            return SkillOutput(UNAVAILABLE, quick_replies=menu_buttons("centers"))
         counts = await self._city_counts(need.service, level)
         label = SERVICES[need.service]
         parts = list(notes)
@@ -300,7 +312,7 @@ class ChuyenTrungTamHandler:
                 parts.append(NO_CENTER_IN_CITY.format(city=need.asked_city, label=label))
                 return SkillOutput("\n\n".join(parts), widget=centers_widget([], {}, counts, need.service))
             parts.append(NO_CENTER.format(label=label))
-            return SkillOutput("\n\n".join(parts))
+            return SkillOutput("\n\n".join(parts), quick_replies=menu_buttons("centers"))
 
         # AI viết lời giải thích cho trang đầu; các trung tâm còn lại dùng câu dựng bằng code từ cùng dữ liệu (nhanh, rẻ, vẫn đúng)
         first = centers[:FIRST_PAGE]
@@ -315,7 +327,7 @@ class ChuyenTrungTamHandler:
             lines.append(f"- {center.name}{where}: {reasons[i]}{site}")
         parts.append("\n".join(lines))
         if len(centers) > len(first):
-            parts.append(f"Còn {len(centers) - len(first)} trung tâm khác, bạn bấm Xem thêm để xem hết.")
+            parts.append(CENTER_MORE.format(count=len(centers) - len(first)))
         # Thanh thành phố khác: khi đã có thành phố thì các nơi còn lại, khi chưa nêu thì mọi nơi (nếu có từ hai nơi trở lên)
         others = (
             [c for c in counts if not same_city(c.city, need.city)]
