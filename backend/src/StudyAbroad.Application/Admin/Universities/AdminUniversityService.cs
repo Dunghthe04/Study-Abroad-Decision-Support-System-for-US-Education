@@ -187,7 +187,7 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
         var sourceUrl = Clean(request.SourceUrl);
         var sourceReliability = Clean(request.SourceReliability)?.ToLowerInvariant();
         var notes = Clean(request.Notes);
-        var requestedMajors = request.Majors ?? [];
+        var requestedMajors = request.Majors;
 
         var errors = ValidateOffering(request, academicYear, satPolicy, sourceUrl, notes);
         if (sourceReliability is not null && !SourceReliabilities.Contains(sourceReliability))
@@ -195,7 +195,7 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
         var knownMajors = await repository.ListMajorsAsync(ct);
         var knownMajorIds = knownMajors.Select(m => m.Id).ToHashSet();
         var seenMajorIds = new HashSet<Guid>();
-        foreach (var major in requestedMajors)
+        foreach (var major in requestedMajors ?? [])
         {
             if (!knownMajorIds.Contains(major.MajorId))
                 errors["majors"] = "Có ngành không nằm trong danh mục ngành.";
@@ -245,9 +245,12 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
         offering.SourceReliability = sourceReliability;
         offering.Notes = notes;
 
-        var majorChanges = await ApplyMajorChangesAsync(offering.Id, requestedMajors, knownMajors, ct);
-        if (majorChanges.Count > 0)
-            changes["majors"] = [.. majorChanges];
+        if (requestedMajors is not null)
+        {
+            var majorChanges = await ApplyMajorChangesAsync(offering.Id, requestedMajors, knownMajors, ct);
+            if (majorChanges.Count > 0)
+                changes["majors"] = [.. majorChanges];
+        }
 
         if (changes.Count > 0)
         {

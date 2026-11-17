@@ -183,6 +183,20 @@ public class AdminUniversityServiceTests
     }
 
     [Fact]
+    public async Task UpdateOfferingAsync_MajorsOmitted_KeepsExistingLinks()
+    {
+        var repo = new FakeRepository();
+        var service = new AdminUniversityService(repo);
+
+        var request = OfferingRequest(repo) with { Majors = null, TuitionUsd = 61000m };
+        var result = await service.UpdateOfferingAsync(repo.University.Id, repo.Offering.Id, request, Actor);
+
+        Assert.True(result.Success);
+        Assert.Empty(repo.Removed);
+        Assert.Empty(repo.Added);
+    }
+
+    [Fact]
     public async Task UpdateOfferingAsync_UnknownReliability_ReturnsError()
     {
         var repo = new FakeRepository();
