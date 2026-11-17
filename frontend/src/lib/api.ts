@@ -1,5 +1,7 @@
 import type {
   CenterReviewsDto,
+  NotificationDto,
+  UnreadCountDto,
   CenterReviewDto,
   CenterReviewEligibilityDto,
   CreateCenterReviewRequest,
@@ -668,4 +670,20 @@ export const adminCenterVerificationsApi = {
       method: "POST",
       body: JSON.stringify(data),
     }),
+};
+
+// [UC-110] Thông báo của người đăng nhập
+export const notificationsApi = {
+  list: (params?: { page?: number; pageSize?: number; unreadOnly?: boolean }) => {
+    const sp = new URLSearchParams();
+    if (params?.page) sp.set("page", String(params.page));
+    if (params?.pageSize) sp.set("pageSize", String(params.pageSize));
+    if (params?.unreadOnly) sp.set("unreadOnly", "true");
+    const qs = sp.toString();
+    return apiFetch<PagedResult<NotificationDto>>(`/api/v1/notifications${qs ? `?${qs}` : ""}`);
+  },
+  unreadCount: () => apiFetch<UnreadCountDto>("/api/v1/notifications/unread-count"),
+  markRead: (id: string) =>
+    apiFetch<null>(`/api/v1/notifications/${encodeURIComponent(id)}/read`, { method: "POST" }),
+  markAllRead: () => apiFetch<{ updated: number }>("/api/v1/notifications/read-all", { method: "POST" }),
 };

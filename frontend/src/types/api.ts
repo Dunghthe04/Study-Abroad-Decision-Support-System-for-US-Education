@@ -790,3 +790,19 @@ export interface ParentProfileOfferDto {
   offeredAt: string;
   parentProfile: AcademicProfileResponse;
 }
+
+// [UC-110] Thông báo trong hệ thống (chỉ của người đăng nhập)
+export interface NotificationDto {
+  id: string;
+  type: string;
+  title: string;
+  body: string | null;
+  linkUrl: string | null;
+  isRead: boolean;
+  readAt: string | null;
+  createdAt: string;
+}
+
+export interface UnreadCountDto {
+  count: number;
+}
