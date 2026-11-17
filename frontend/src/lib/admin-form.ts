@@ -34,3 +34,9 @@ export function findNotNumbers(values: Record<string, number | null>): string[] 
   }
   return invalid;
 }
+
+/** Ngày hôm nay theo giờ máy (yyyy-mm-dd), dùng làm max cho ô ngày lấy dữ liệu. */
+export function todayIso(): string {
+  const now = new Date();
+  return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
