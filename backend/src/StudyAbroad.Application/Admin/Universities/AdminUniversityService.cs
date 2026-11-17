@@ -127,7 +127,12 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
         {
             await repository.SaveUniversityMediaAsync(university.Id, logoUrl, coverUrl, ct);
         }
-        repository.AddAudit(AuditEntry(actorUserId, "university.create", "university", university.Id, new { code = university.Code, name = university.Name }));
+        repository.AddAudit(AuditEntry(actorUserId, "university.create", "university", university.Id, new
+            {
+                code = university.Code, name = university.Name, city, state, website, control,
+                acceptanceRate = request.AcceptanceRate, internationalStudentCount = request.InternationalStudentCount,
+                isIvy = request.IsIvy, logoUrl, coverUrl,
+            }));
         await repository.SaveChangesAsync(ct);
         return AdminUpdateResult<AdminUniversityDetailDto>.Ok(await ToDetailDtoAsync(university, ct));
     }

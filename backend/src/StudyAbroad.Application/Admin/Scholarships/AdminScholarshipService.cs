@@ -47,7 +47,7 @@ public class AdminScholarshipService(IAdminScholarshipRepository repository) : I
         Apply(scholarship, values);
         repository.Add(scholarship);
         repository.AddAudit(AuditEntry(actorUserId, "scholarship.create", "scholarship", scholarship.Id,
-            new { universityId = scholarship.UniversityId, name = scholarship.Name }));
+            new { universityId = scholarship.UniversityId, name = scholarship.Name, changes = Diff(null, values) }));
         await repository.SaveChangesAsync(ct);
         return AdminUpdateResult<AdminScholarshipDto>.Ok(await ToDtoAsync(scholarship, ct));
     }
@@ -61,20 +61,7 @@ public class AdminScholarshipService(IAdminScholarshipRepository repository) : I
         var (v, errors) = await ValidateAsync(request, ct);
         if (errors.Count > 0) return AdminUpdateResult<AdminScholarshipDto>.Invalid(errors);
 
-        var changes = new Dictionary<string, object?[]>();
-        AddChange(changes, "universityId", scholarship.UniversityId, v.UniversityId);
-        AddChange(changes, "name", scholarship.Name, v.Name);
-        AddChange(changes, "provider", scholarship.Provider, v.Provider);
-        AddChange(changes, "studyLevel", scholarship.StudyLevel, v.StudyLevel);
-        AddChange(changes, "amountUsd", scholarship.AmountUsd, v.AmountUsd);
-        AddChange(changes, "coverageType", scholarship.CoverageType, v.CoverageType);
-        AddChange(changes, "minGpa4", scholarship.MinGpa4, v.MinGpa4);
-        AddChange(changes, "minIelts", scholarship.MinIelts, v.MinIelts);
-        AddChange(changes, "deadline", scholarship.Deadline, v.Deadline);
-        AddChange(changes, "eligibilityNotes", scholarship.EligibilityNotes, v.EligibilityNotes);
-        AddChange(changes, "sourceUrl", scholarship.SourceUrl, v.SourceUrl);
-        AddChange(changes, "retrievedAt", scholarship.RetrievedAt, v.RetrievedAt);
-        AddChange(changes, "sourceReliability", scholarship.SourceReliability, v.SourceReliability);
+        var changes = Diff(scholarship, v);
 
         if (changes.Count > 0)
         {
@@ -152,6 +139,25 @@ public class AdminScholarshipService(IAdminScholarshipRepository repository) : I
 
         ValidateSource(v.SourceUrl, v.RetrievedAt, v.SourceReliability, errors);
         return (v, errors);
+    }
+
+    private static Dictionary<string, object?[]> Diff(Scholarship? s, SaveScholarshipRequest v)
+    {
+        var changes = new Dictionary<string, object?[]>();
+        AddChange(changes, "universityId", s?.UniversityId, v.UniversityId);
+        AddChange(changes, "name", s?.Name, v.Name);
+        AddChange(changes, "provider", s?.Provider, v.Provider);
+        AddChange(changes, "studyLevel", s?.StudyLevel, v.StudyLevel);
+        AddChange(changes, "amountUsd", s?.AmountUsd, v.AmountUsd);
+        AddChange(changes, "coverageType", s?.CoverageType, v.CoverageType);
+        AddChange(changes, "minGpa4", s?.MinGpa4, v.MinGpa4);
+        AddChange(changes, "minIelts", s?.MinIelts, v.MinIelts);
+        AddChange(changes, "deadline", s?.Deadline, v.Deadline);
+        AddChange(changes, "eligibilityNotes", s?.EligibilityNotes, v.EligibilityNotes);
+        AddChange(changes, "sourceUrl", s?.SourceUrl, v.SourceUrl);
+        AddChange(changes, "retrievedAt", s?.RetrievedAt, v.RetrievedAt);
+        AddChange(changes, "sourceReliability", s?.SourceReliability, v.SourceReliability);
+        return changes;
     }
 
     private static void Apply(Scholarship s, SaveScholarshipRequest v)

@@ -24,6 +24,9 @@ public class AdminUniversityServiceTests
         Assert.Equal("https://res.cloudinary.com/test/image/upload/logo.png", result.Value.LogoUrl);
         Assert.Equal(result.Value.Id, Assert.Single(repo.MediaItems).EntityId);
         Assert.Equal(1, repo.SaveCount);
+        var audit = Assert.Single(repo.Audits);
+        Assert.Contains("\"state\":\"CA\"", audit.DetailJson);
+        Assert.Contains("logo.png", audit.DetailJson);
     }
 
     [Fact]

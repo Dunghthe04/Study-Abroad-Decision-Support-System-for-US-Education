@@ -26,7 +26,11 @@ public class AdminScholarshipServiceTests
         Assert.Equal("undergraduate", saved.StudyLevel);
         Assert.Equal(Actor, saved.LastEditedByUserId);
         Assert.Equal("School A", result.Value!.UniversityName);
-        Assert.Equal("scholarship.create", Assert.Single(repo.Audits).Action);
+        var audit = Assert.Single(repo.Audits);
+        Assert.Equal("scholarship.create", audit.Action);
+        Assert.Contains("20000", audit.DetailJson);
+        Assert.Contains("https://example.edu/aid", audit.DetailJson);
+        Assert.Contains("2026-11-01", audit.DetailJson);
         Assert.Equal(1, repo.SaveCount);
     }
 
