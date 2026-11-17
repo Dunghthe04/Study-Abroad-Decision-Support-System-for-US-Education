@@ -91,6 +91,7 @@ public class SlmSampleService(
     {
         var valid = Validate(request);
         CheckPersonalData(valid);
+        CheckSourceNotReserved(valid.Source, null);
         await CheckDuplicateAsync(valid, null, ct);
 
         var status = SlmReviewStatuses.Draft;
@@ -115,6 +116,7 @@ public class SlmSampleService(
 
         var found = await repository.UpdateManyAsync([id], sample =>
         {
+            CheckSourceNotReserved(valid.Source, sample.Source);
             var changed = ChangedFields(sample, valid);
             var contentChanged = changed.Except(["split", "sourceReview", "source"]).Any();
             var from = sample.ReviewStatus;
@@ -424,11 +426,19 @@ public class SlmSampleService(
         }
     }
 
+    private static void CheckSourceNotReserved(string? source, string? current)
+    {
+        if (source is not null && source != current && SlmSampleSources.All.Contains(source))
+            throw new ArgumentException($"Nguồn \"{source}\" là giá trị của hệ thống, hãy nhập nguồn tham khảo khác.");
+    }
+
     private static void CheckPersonalData(ValidSample valid)
     {
         if (SlmPersonalDataCheck.HasContact(valid.Question)
             || SlmPersonalDataCheck.HasContact(valid.Answer)
-            || SlmPersonalDataCheck.HasContact(valid.PendingQuestion))
+            || SlmPersonalDataCheck.HasContact(valid.PendingQuestion)
+            || SlmPersonalDataCheck.HasContact(valid.Topic)
+            || SlmPersonalDataCheck.HasContact(valid.Source))
             throw new ArgumentException(PersonalDataMessage);
     }
 

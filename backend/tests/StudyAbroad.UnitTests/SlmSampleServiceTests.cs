@@ -579,6 +579,39 @@ public class SlmSampleServiceTests
         Assert.Equal(SlmSampleHistoryActions.Delete, Assert.Single(repo.History).Action);
     }
 
+    [Theory]
+    [InlineData("gọi 0987654321", "Website ĐSQ")]
+    [InlineData("visa", "hs.lop12@yahoo.com")]
+    public async Task SaveAsync_PersonalDataInTopicOrSource_IsRejected(string topic, string source)
+    {
+        var repo = new FakeSlmRepository();
+        var service = Svc(repo, new FakeReader());
+        var request = QA() with { Topic = topic, Source = source };
+        var existing = await service.CreateAsync(QA(question: "câu khác"), Actor);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => service.CreateAsync(request, Actor));
+        await Assert.ThrowsAsync<ArgumentException>(() => service.UpdateAsync(existing.Id, request, Actor));
+        Assert.Single(repo.Items);
+    }
+
+    [Theory]
+    [InlineData(SlmSampleSources.Manual)]
+    [InlineData(SlmSampleSources.Excel)]
+    [InlineData(SlmSampleSources.ChatUnanswered)]
+    public async Task SaveAsync_ReservedSource_CannotBeTypedButUnchangedValueCanBeResent(string reserved)
+    {
+        var repo = new FakeSlmRepository();
+        var service = Svc(repo, new FakeReader());
+
+        await Assert.ThrowsAsync<ArgumentException>(() => service.CreateAsync(QA() with { Source = reserved }, Actor));
+
+        var created = await service.CreateAsync(QA(), Actor);
+        await Assert.ThrowsAsync<ArgumentException>(() => service.UpdateAsync(created.Id, QA() with { Source = reserved }, Actor));
+        repo.Items.Single().Source = reserved;
+        Assert.NotNull(await service.UpdateAsync(created.Id, QA(answer: "đổi") with { Source = reserved }, Actor));
+        Assert.Equal(reserved, repo.Items.Single().Source);
+    }
+
     [Fact]
     public async Task ReviewAsync_SkipsSamplesTheReviewerCreatedOrEdited()
     {

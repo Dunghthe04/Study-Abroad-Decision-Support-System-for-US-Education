@@ -40,6 +40,8 @@ public static class SlmSampleSources
     public const string Manual = "manual";
     public const string Excel = "excel";
     public const string ChatUnanswered = "chat-unanswered";
+
+    public static readonly IReadOnlyList<string> All = new[] { Manual, Excel, ChatUnanswered };
 }
 
 public static class SlmSampleHistoryActions
