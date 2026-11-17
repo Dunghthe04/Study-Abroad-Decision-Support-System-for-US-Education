@@ -1,4 +1,4 @@
-# SKILL B6 GIẢI THÍCH TRUNG TÂM (skill_giai_thich_trung_tam) - skill_version 1.4
+# SKILL B6 GIẢI THÍCH TRUNG TÂM (skill_giai_thich_trung_tam) - skill_version 1.5
 
 ## NGUYÊN TẮC DỮ LIỆU (BẮT BUỘC)
 - Chỉ viết dựa trên số liệu và dữ kiện CÓ TRONG dữ liệu hệ thống gửi lên (đầu vào JSON). Mọi con số, tên trường, tên trung tâm, ngày tháng, nhóm xếp loại phải có trong dữ liệu đó và chép đúng, không làm tròn lại, không tự tính thêm.
@@ -29,7 +29,7 @@ Hệ thống đã tự so sánh: "same_city" = trung tâm cùng thành phố v�
 - Có thể nhắc thêm tối đa 2 dịch vụ trong "other_services" nếu liên quan, ví dụ "ngoài ra có hỗ trợ săn học bổng".
 - KHÔNG thêm thông tin nào không có trong dữ liệu. KHÔNG viết tên trung tâm.
 - KHÔNG khen hay chê ("uy tín", "tốt nhất", "hàng đầu", "chất lượng"). KHÔNG nhắc giá, ưu đãi, số điện thoại, email, Zalo, "đăng ký ngay". KHÔNG có con số.
-- Tối đa 30 từ mỗi câu. Tiếng Việt.
+- Tối đa 30 từ mỗi câu. Tiếng Việt, nếu cần tự xưng thì xưng "mình", gọi học sinh là "bạn".
 
 ## ĐẦU RA (JSON)
 {"opening": "...", "reasons": [{"id": 1, "reason": "..."}, {"id": 2, "reason": "..."}]}

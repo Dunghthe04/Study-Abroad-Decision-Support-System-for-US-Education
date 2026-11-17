@@ -1,4 +1,3 @@
-using System.IO.Compression;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using StudyAbroad.Api.Extensions;
@@ -9,15 +8,16 @@ using StudyAbroad.Domain.Constants;
 namespace StudyAbroad.Api.Controllers;
 
 /// <summary>
-/// Quản lý dữ liệu huấn luyện SLM: xem, tạo, sửa, xóa, duyệt theo lô, nhập từ file xlsx và xuất JSONL các dòng đã duyệt.
+/// Quản lý dữ liệu huấn luyện SLM: xem, tạo, sửa, xóa, duyệt theo lô và nhập từ file xlsx.
 /// Moderator và Admin đều dùng được. Dữ liệu sai trả 400 kèm lý do.
 /// </summary>
 [ApiController]
 [Authorize(Roles = $"{UserRoles.Moderator},{UserRoles.Admin}")]
 [Route("api/v1/admin/slm-samples")]
-public class AdminSlmSamplesController(ISlmSampleService samples) : ControllerBase
+public class AdminSlmSamplesController(ISlmSampleService samples, ISlmTemplateWriter templateWriter) : ControllerBase
 {
     private const long MaxImportBytes = 10 * 1024 * 1024;
+    private const string XlsxContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
     /// <summary>Danh sách một trang, mới nhất trước. Bộ lọc bỏ trống là không lọc; pageSize mặc định 20, tối đa 100.</summary>
     [HttpGet]
@@ -115,14 +115,13 @@ public class AdminSlmSamplesController(ISlmSampleService samples) : ControllerBa
     {
         if (User.GetUserId() is not { } actorId)
             return Unauthorized();
-        if (file is null || file.Length == 0)
-            return BadRequest(new { error = "Cần chọn một file xlsx." });
-        if (!file.FileName.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase))
-            return BadRequest(new { error = "Chỉ nhận file .xlsx." });
+        var fileError = CheckWorkbookFile(file);
+        if (fileError is not null)
+            return BadRequest(new { error = fileError });
 
         try
         {
-            await using var stream = file.OpenReadStream();
+            await using var stream = file!.OpenReadStream();
             return Ok(await samples.ImportAsync(stream, actorId, ct));
         }
         catch (InvalidDataException ex)
@@ -131,19 +130,37 @@ public class AdminSlmSamplesController(ISlmSampleService samples) : ControllerBa
         }
     }
 
-    /// <summary>Tải về các dòng đã duyệt (approved) dạng JSONL, mỗi dòng một JSON. split bỏ trống là cả train, val và test.</summary>
-    [HttpGet("export")]
-    public async Task<IActionResult> Export([FromQuery] string? split, CancellationToken ct)
+    [HttpPost("preview")]
+    [RequestSizeLimit(MaxImportBytes)]
+    public async Task<ActionResult<SlmImportPreviewDto>> Preview(IFormFile? file, CancellationToken ct)
     {
+        var fileError = CheckWorkbookFile(file);
+        if (fileError is not null)
+            return BadRequest(new { error = fileError });
+
         try
         {
-            var content = await samples.ExportJsonlAsync(split, ct);
-            var name = string.IsNullOrWhiteSpace(split) ? "slm_training.jsonl" : $"slm_training_{split.Trim()}.jsonl";
-            return File(System.Text.Encoding.UTF8.GetBytes(content), "application/x-ndjson", name);
+            await using var stream = file!.OpenReadStream();
+            return Ok(await samples.PreviewAsync(stream, ct));
         }
-        catch (ArgumentException ex)
+        catch (InvalidDataException ex)
         {
             return BadRequest(new { error = ex.Message });
         }
+    }
+
+    [HttpGet("template")]
+    public IActionResult Template() =>
+        File(templateWriter.Build(), XlsxContentType, "slm-training-template.xlsx");
+
+    private static string? CheckWorkbookFile(IFormFile? file)
+    {
+        if (file is null || file.Length == 0)
+            return "Cần chọn một file xlsx.";
+        if (!file.FileName.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase))
+            return "Chỉ nhận file .xlsx.";
+        if (file.Length > MaxImportBytes)
+            return "File tối đa 10 MB.";
+        return null;
     }
 }

@@ -130,7 +130,8 @@ public static class ChatSchoolInfo
 
     /// <summary>Dữ liệu tìm trường: Question là câu hỏi, Filters là bộ lọc advisor đã chuẩn hóa, Sort là cách xếp, Unresolved là điều chưa đọc được, KbAnswer là câu tạm.</summary>
     public record SearchQuery(
-        string Question, SchoolSearchFilters Filters, SchoolSort Sort, IReadOnlyList<string> Unresolved, string? KbAnswer);
+        string Question, SchoolSearchFilters Filters, SchoolSort Sort, IReadOnlyList<string> Unresolved, string? KbAnswer,
+        bool SortGiven = false);
 
     public static SearchQuery? ParseSearch(System.Text.Json.JsonElement? data)
     {
@@ -155,11 +156,15 @@ public static class ChatSchoolInfo
         var sort = Str("sort")?.ToLowerInvariant() switch
         {
             "lowestcost" => SchoolSort.LowestCost,
+            "highestcost" => SchoolSort.HighestCost,
             "easiestadmission" => SchoolSort.EasiestAdmission,
             "mostselective" => SchoolSort.MostSelective,
+            "mostaid" => SchoolSort.MostAid,
             _ => SchoolSort.Quality,
         };
-        return new SearchQuery(Str("question") ?? "", filters, sort, unresolved, Str("kb_answer"));
+        // model_sort có mặt = học sinh nói rõ muốn xếp theo gì ("trường nào rẻ nhất"): tìm được dù không có điều kiện lọc
+        var sortGiven = d.TryGetProperty("model_sort", out var ms) && ms.ValueKind == System.Text.Json.JsonValueKind.String;
+        return new SearchQuery(Str("question") ?? "", filters, sort, unresolved, Str("kb_answer"), sortGiven);
     }
 
     /// <summary>Có ít nhất một điều kiện lọc không (nếu không thì không có gì để tìm).</summary>
@@ -234,6 +239,8 @@ public static class ChatSchoolInfo
     private static string SortLabel(SchoolSort sort) => sort switch
     {
         SchoolSort.LowestCost => "chi phí thấp đến cao",
+        SchoolSort.HighestCost => "chi phí cao đến thấp",
+        SchoolSort.MostAid => "học bổng trung bình cho du học sinh lớn đến nhỏ",
         SchoolSort.EasiestAdmission => "tỷ lệ nhận cao đến thấp (dễ vào trước)",
         SchoolSort.MostSelective => "tỷ lệ nhận thấp đến cao (chọn lọc trước)",
         _ => "xếp hạng (chất lượng) cao đến thấp",
@@ -280,16 +287,17 @@ public static class ChatSchoolInfo
                 text += " " + string.Join(" ", result.Relaxed.Take(3).Select(r => $"Nếu bỏ điều kiện {FilterName(r.Filter)} thì có {r.Total} trường."));
             return text;
         }
-        var lines = new List<string> { $"Có {result.Total} trường {summary}. Xếp theo {SortLabel(sort)}." };
+        var what = summary.Length > 0 ? $"{result.Total} trường {summary}" : $"{result.Total} trường";
+        var lines = new List<string> { $"Có {what}. Xếp theo {SortLabel(sort)}." };
         var shown = result.Items.Take(SearchTextItems).ToList();
         for (var i = 0; i < shown.Count; i++)
-            lines.Add($"{i + 1}. {SearchLine(shown[i])}");
+            lines.Add($"{i + 1}. {SearchLine(shown[i], sort)}");
         if (result.Total > shown.Count)
             lines.Add($"Và {result.Total - shown.Count} trường khác.");
         return string.Join("\n", lines);
     }
 
-    private static string SearchLine(SchoolSearchItem s)
+    private static string SearchLine(SchoolSearchItem s, SchoolSort sort = SchoolSort.Quality)
     {
         var place = string.Join(", ", new[] { s.City, s.State }.Where(x => !string.IsNullOrWhiteSpace(x)));
         var control = ControlText(s.Control);
@@ -298,6 +306,8 @@ public static class ChatSchoolInfo
         facts.Add(s.CostUsd is { } c ? $"chi phí {Money(c)} USD" : "chưa có chi phí");
         if (s.AcceptRate is { } r) facts.Add($"tỷ lệ nhận {Pct(r)}");
         if (s.BestRank is { } rank) facts.Add($"hạng #{rank}");
+        if (sort == SchoolSort.MostAid)
+            facts.Add(s.AidAvgUsd is { } aid ? $"học bổng trung bình {Money(aid)} USD" : "chưa có số liệu học bổng");
         return $"{s.Name}" + (head.Length > 0 ? $" ({head})" : "") + $": {string.Join(" · ", facts)}";
     }
 

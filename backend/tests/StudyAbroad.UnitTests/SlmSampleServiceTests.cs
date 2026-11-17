@@ -1,4 +1,3 @@
-using System.Text.Json;
 using StudyAbroad.Application.Admin.SlmSamples;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
@@ -200,41 +199,6 @@ public class SlmSampleServiceTests
     }
 
     [Fact]
-    public async Task ExportJsonlAsync_WritesOnlyApprovedRowsAsJsonLines()
-    {
-        var repo = new FakeSlmRepository();
-        var approved = repo.AddApproved();
-        approved.Question = "học phí MIT";
-        approved.Profile = "{\"gpa\":\"8\"}";
-        repo.AddDraft();
-        var service = new SlmSampleService(repo, new FakeReader());
-
-        var jsonl = await service.ExportJsonlAsync(null);
-
-        var lines = jsonl.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-        var line = Assert.Single(lines);
-        using var doc = JsonDocument.Parse(line);
-        Assert.Equal("học phí MIT", doc.RootElement.GetProperty("question").GetString());
-        Assert.Equal(JsonValueKind.Array, doc.RootElement.GetProperty("intents").ValueKind);
-        Assert.Equal("8", doc.RootElement.GetProperty("profile").GetProperty("gpa").GetString());
-        Assert.Equal(JsonValueKind.Null, doc.RootElement.GetProperty("context").ValueKind);
-    }
-
-    [Fact]
-    public async Task ExportJsonlAsync_FiltersBySplitAndRejectsUnknownSplit()
-    {
-        var repo = new FakeSlmRepository();
-        repo.AddApproved().Split = SlmSampleSplits.Val;
-        repo.AddApproved().Split = SlmSampleSplits.Train;
-        var service = new SlmSampleService(repo, new FakeReader());
-
-        var onlyVal = await service.ExportJsonlAsync(SlmSampleSplits.Val);
-
-        Assert.Single(onlyVal.Split('\n', StringSplitOptions.RemoveEmptyEntries));
-        await Assert.ThrowsAsync<ArgumentException>(() => service.ExportJsonlAsync("dev"));
-    }
-
-    [Fact]
     public async Task GetSummaryAsync_ListsEveryStatusAndTypeEvenWhenZero()
     {
         var repo = new FakeSlmRepository();
@@ -268,15 +232,260 @@ public class SlmSampleServiceTests
             service.GetPageAsync(new SlmSampleFilter("nope", null, null, null), 1, 20));
     }
 
+    [Fact]
+    public async Task UpdateAsync_RejectsInvalidIntentsJsonAndDoesNotChangeData()
+    {
+        var repo = new FakeSlmRepository();
+        var sample = repo.AddApproved();
+        var originalQuestion = sample.Question;
+        var service = new SlmSampleService(repo, new FakeReader());
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            service.UpdateAsync(sample.Id, Request(intents: "[oops"), Actor));
+
+        Assert.Equal(originalQuestion, repo.Items.Single().Question);
+        Assert.Equal(SlmReviewStatuses.Approved, repo.Items.Single().ReviewStatus);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_RejectsIntentsNotArrayAndDoesNotChangeData()
+    {
+        var repo = new FakeSlmRepository();
+        var sample = repo.AddApproved();
+        var originalStatus = sample.ReviewStatus;
+        var service = new SlmSampleService(repo, new FakeReader());
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            service.UpdateAsync(sample.Id, Request(intents: "{\"a\":1}"), Actor));
+
+        Assert.Equal(originalStatus, repo.Items.Single().ReviewStatus);
+    }
+
+    [Fact]
+    public async Task ReviewAsync_ToApproved_SetsReviewerAndTimeAndNote()
+    {
+        var repo = new FakeSlmRepository();
+        var sample = repo.AddDraft();
+        var service = new SlmSampleService(repo, new FakeReader());
+
+        var before = DateTime.UtcNow;
+        await service.ReviewAsync(
+            new ReviewSlmSamplesRequest([sample.Id], SlmReviewStatuses.Approved, "LGTM"), Actor);
+
+        Assert.Equal(SlmReviewStatuses.Approved, sample.ReviewStatus);
+        Assert.Equal("LGTM", sample.ReviewNote);
+        Assert.Equal(Actor, sample.ReviewedByUserId);
+        Assert.True(sample.ReviewedAt >= before);
+    }
+
+    [Fact]
+    public async Task ReviewAsync_ToNeedsFix_SetsReviewerAndTimeAndNote()
+    {
+        var repo = new FakeSlmRepository();
+        var sample = repo.AddDraft();
+        var service = new SlmSampleService(repo, new FakeReader());
+
+        var before = DateTime.UtcNow;
+        await service.ReviewAsync(
+            new ReviewSlmSamplesRequest([sample.Id], SlmReviewStatuses.NeedsFix, "cần sửa câu hỏi"), Actor);
+
+        Assert.Equal(SlmReviewStatuses.NeedsFix, sample.ReviewStatus);
+        Assert.Equal("cần sửa câu hỏi", sample.ReviewNote);
+        Assert.Equal(Actor, sample.ReviewedByUserId);
+        Assert.True(sample.ReviewedAt >= before);
+    }
+
+    [Fact]
+    public async Task ReviewAsync_WhitespaceOnlyNote_BecomesNull()
+    {
+        var repo = new FakeSlmRepository();
+        var sample = repo.AddDraft();
+        var service = new SlmSampleService(repo, new FakeReader());
+
+        await service.ReviewAsync(
+            new ReviewSlmSamplesRequest([sample.Id], SlmReviewStatuses.Approved, "   "), Actor);
+
+        Assert.Null(sample.ReviewNote);
+    }
+
+    [Fact]
+    public async Task GetAsync_UnknownId_ReturnsNull()
+    {
+        var service = new SlmSampleService(new FakeSlmRepository(), new FakeReader());
+
+        Assert.Null(await service.GetAsync(Guid.NewGuid()));
+    }
+
+    [Fact]
+    public async Task GetPageAsync_PassesTrimmedFilters()
+    {
+        var repo = new FakeSlmRepository();
+        repo.AddDraft();
+        var service = new SlmSampleService(repo, new FakeReader());
+
+        var page = await service.GetPageAsync(
+            new SlmSampleFilter("  " + SlmSampleTypes.Knowledge + "  ", null, null, null), 1, 10);
+
+        Assert.Equal(1, page.TotalCount);
+    }
+
+    [Fact]
+    public async Task ReviewAsync_NoteAtExactlyMaxLength_Passes()
+    {
+        var repo = new FakeSlmRepository();
+        var sample = repo.AddDraft();
+        var service = new SlmSampleService(repo, new FakeReader());
+        var note = new string('x', SlmSampleService.MaxNoteLength);
+
+        await service.ReviewAsync(
+            new ReviewSlmSamplesRequest([sample.Id], SlmReviewStatuses.Approved, note), Actor);
+
+        Assert.Equal(note, sample.ReviewNote);
+    }
+
+    [Fact]
+    public async Task ReviewAsync_AtMaxReviewIds_Passes()
+    {
+        var repo = new FakeSlmRepository();
+        for (var i = 0; i < SlmSampleService.MaxReviewIds; i++)
+            repo.AddDraft();
+        var ids = repo.Items.Select(x => x.Id).ToList();
+        var service = new SlmSampleService(repo, new FakeReader());
+
+        var result = await service.ReviewAsync(
+            new ReviewSlmSamplesRequest(ids, SlmReviewStatuses.Approved, null), Actor);
+
+        Assert.Equal(SlmSampleService.MaxReviewIds, result.Updated);
+    }
+
+    [Fact]
+    public async Task PreviewAsync_ValidatesAllRowsCapsRowsAndWritesNothing()
+    {
+        var repo = new FakeSlmRepository();
+        var rows = new List<SlmImportRow>();
+        for (var i = 0; i < SlmSampleService.MaxPreviewRows + 20; i++)
+            rows.Add(new SlmImportRow(SlmSampleTypes.Knowledge, i + 2, $"câu {i}", null, null, ValidIntents, null, "train", null));
+        rows.Add(new SlmImportRow(SlmSampleTypes.Scenario, 500, "", null, null, ValidIntents, null, "train", null));
+        rows.Add(new SlmImportRow(SlmSampleTypes.Scenario, 501, "lỗi json", null, null, "[oops", null, "train", null));
+        var service = new SlmSampleService(repo, new FakeReader(rows.ToArray()));
+
+        var preview = await service.PreviewAsync(new MemoryStream());
+
+        Assert.Equal(rows.Count, preview.TotalRows);
+        Assert.Equal(SlmSampleService.MaxPreviewRows, preview.Rows.Count);
+        Assert.Equal(2, preview.Rows[0].RowNumber);
+        Assert.Equal([500, 501], preview.Errors.Select(e => e.RowNumber).ToArray());
+        Assert.All(preview.Errors, e => Assert.Equal(SlmSampleTypes.Scenario, e.SheetName));
+        Assert.All(preview.Errors, e => Assert.False(string.IsNullOrWhiteSpace(e.Message)));
+        Assert.Empty(repo.Items);
+        Assert.Equal(0, repo.AddRangeCalls);
+        Assert.Equal(0, repo.AddCalls);
+        Assert.Equal(0, repo.ExistingKeysCalls);
+    }
+
+    [Fact]
+    public async Task PreviewAsync_ReportsErrorsBeyondTheCappedRows()
+    {
+        var rows = new List<SlmImportRow>();
+        for (var i = 0; i < SlmSampleService.MaxPreviewRows; i++)
+            rows.Add(new SlmImportRow(SlmSampleTypes.Knowledge, i + 2, $"câu {i}", null, null, ValidIntents, null, null, null));
+        rows.Add(new SlmImportRow(SlmSampleTypes.Knowledge, 9999, "sai tập", null, null, ValidIntents, null, "dev", null));
+        var service = new SlmSampleService(new FakeSlmRepository(), new FakeReader(rows.ToArray()));
+
+        var preview = await service.PreviewAsync(new MemoryStream());
+
+        Assert.Equal(SlmSampleService.MaxPreviewRows, preview.Rows.Count);
+        var error = Assert.Single(preview.Errors);
+        Assert.Equal(9999, error.RowNumber);
+    }
+
+    [Fact]
+    public async Task PreviewAsync_DoesNotCountDuplicatesAsErrors()
+    {
+        var repo = new FakeSlmRepository();
+        repo.Items.Add(new SlmTrainingSample { SampleType = SlmSampleTypes.Knowledge, Question = "đã có", Intents = ValidIntents });
+        var reader = new FakeReader(new SlmImportRow(SlmSampleTypes.Knowledge, 2, "đã có", null, null, ValidIntents, null, "train", null));
+        var service = new SlmSampleService(repo, reader);
+
+        var preview = await service.PreviewAsync(new MemoryStream());
+
+        Assert.Empty(preview.Errors);
+        Assert.Single(preview.Rows);
+    }
+
+    [Fact]
+    public async Task PreviewAsync_NoDataRows_ThrowsInvalidDataException()
+    {
+        var service = new SlmSampleService(new FakeSlmRepository(), new FakeReader());
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => service.PreviewAsync(new MemoryStream()));
+    }
+
+    [Fact]
+    public async Task PreviewAsync_PassesCancellationToReader()
+    {
+        var reader = new FakeReader(new SlmImportRow(SlmSampleTypes.Knowledge, 2, "câu", null, null, ValidIntents, null, null, null));
+        var service = new SlmSampleService(new FakeSlmRepository(), reader);
+        using var cts = new CancellationTokenSource();
+
+        await service.PreviewAsync(new MemoryStream(), cts.Token);
+
+        Assert.Equal(cts.Token, reader.LastToken);
+    }
+
+    [Fact]
+    public async Task PreviewAsync_CancelledToken_Throws()
+    {
+        var reader = new FakeReader(new SlmImportRow(SlmSampleTypes.Knowledge, 2, "câu", null, null, ValidIntents, null, null, null));
+        var service = new SlmSampleService(new FakeSlmRepository(), reader);
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.PreviewAsync(new MemoryStream(), cts.Token));
+    }
+
+    [Fact]
+    public async Task ImportAsync_NoDataRows_ThrowsInvalidDataExceptionAndInsertsNothing()
+    {
+        var repo = new FakeSlmRepository();
+        var service = new SlmSampleService(repo, new FakeReader());
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => service.ImportAsync(new MemoryStream(), Actor));
+        Assert.Equal(0, repo.AddRangeCalls);
+    }
+
+    [Fact]
+    public async Task ImportAsync_CanRunAgainAfterEarlierImport()
+    {
+        var repo = new FakeSlmRepository();
+        var first = new FakeReader(new SlmImportRow(SlmSampleTypes.Knowledge, 2, "lần một", null, null, ValidIntents, null, null, null));
+        var second = new FakeReader(new SlmImportRow(SlmSampleTypes.Knowledge, 2, "lần hai", null, null, ValidIntents, null, null, null));
+
+        var firstResult = await new SlmSampleService(repo, first).ImportAsync(new MemoryStream(), Actor);
+        var secondResult = await new SlmSampleService(repo, second).ImportAsync(new MemoryStream(), Actor);
+
+        Assert.Equal(1, firstResult.Inserted);
+        Assert.Equal(1, secondResult.Inserted);
+        Assert.Equal(2, repo.Items.Count);
+    }
+
     private class FakeReader(params SlmImportRow[] rows) : ISlmWorkbookReader
     {
-        public IReadOnlyList<SlmImportRow> Read(Stream workbook) => rows;
+        public CancellationToken LastToken { get; private set; }
+
+        public IReadOnlyList<SlmImportRow> Read(Stream workbook, CancellationToken ct = default)
+        {
+            LastToken = ct;
+            return rows;
+        }
     }
 
     private class FakeSlmRepository : ISlmSampleRepository
     {
         public List<SlmTrainingSample> Items { get; } = [];
         public int AddRangeCalls { get; private set; }
+        public int AddCalls { get; private set; }
+        public int ExistingKeysCalls { get; private set; }
 
         public SlmTrainingSample AddDraft()
         {
@@ -307,6 +516,7 @@ public class SlmSampleServiceTests
 
         public Task AddAsync(SlmTrainingSample sample, CancellationToken ct = default)
         {
+            AddCalls++;
             Items.Add(sample);
             return Task.CompletedTask;
         }
@@ -355,18 +565,11 @@ public class SlmSampleServiceTests
 
         public Task<IReadOnlyList<SlmSampleKeyRow>> ExistingKeysAsync(CancellationToken ct = default)
         {
+            ExistingKeysCalls++;
             IReadOnlyList<SlmSampleKeyRow> keys = Items
                 .Select(x => new SlmSampleKeyRow(x.SampleType, x.Question, x.PendingQuestion, x.Profile, x.Context, x.Intents))
                 .ToList();
             return Task.FromResult(keys);
-        }
-
-        public Task<IReadOnlyList<SlmTrainingSample>> ApprovedAsync(string? split, CancellationToken ct = default)
-        {
-            IReadOnlyList<SlmTrainingSample> approved = Items
-                .Where(x => x.ReviewStatus == SlmReviewStatuses.Approved && (split is null || x.Split == split))
-                .ToList();
-            return Task.FromResult(approved);
         }
     }
 }

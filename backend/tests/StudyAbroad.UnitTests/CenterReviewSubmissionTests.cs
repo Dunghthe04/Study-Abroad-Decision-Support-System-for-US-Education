@@ -26,8 +26,12 @@ public class CenterReviewSubmissionTests
                 .OrderByDescending(l => l.CreatedAt)
                 .FirstOrDefault());
 
-        public Task<bool> HasReviewedAsync(Guid userId, Guid centerId, CancellationToken ct = default) =>
-            Task.FromResult(Reviews.Any(r => r.UserId == userId && r.StudyCenterId == centerId));
+        public Task<Lead?> FindLatestUnreviewedLeadAsync(Guid userId, Guid centerId, CancellationToken ct = default) =>
+            Task.FromResult(Leads
+                .Where(l => l.StudyCenterId == centerId && (l.UserId == userId || l.SubmittedByUserId == userId))
+                .Where(l => !Reviews.Any(r => r.LeadId == l.Id))
+                .OrderByDescending(l => l.CreatedAt)
+                .FirstOrDefault());
 
         public Task AddAsync(CenterReview review, CancellationToken ct = default)
         {
@@ -166,7 +170,7 @@ public class CenterReviewSubmissionTests
     }
 
     [Fact]
-    public async Task Create_SecondReviewForSameCenter_IsRejected()
+    public async Task Create_SecondReviewForSameLead_IsRejected()
     {
         var s = new Setup();
         var student = s.AddUser();
@@ -175,23 +179,55 @@ public class CenterReviewSubmissionTests
 
         var ex = await Assert.ThrowsAsync<ArgumentException>(() => s.Service.CreateAsync(student.Id, s.Center.Id, new CreateCenterReviewRequest(1)));
 
-        Assert.Contains("đã đánh giá", ex.Message);
+        Assert.Contains("đã được đánh giá", ex.Message);
         Assert.Single(s.Repo.Reviews);
     }
 
     [Fact]
-    public async Task Create_ParentWhoSentTheRequest_CanReview_AndStudentOfParentLeadCanToo()
+    public async Task Create_ParentWhoSentTheRequest_CanReview_ButStudentOfSameLeadCannotReviewAgain()
     {
         var s = new Setup();
         var student = s.AddUser();
         var parent = s.AddUser(UserRoles.Parent);
-        s.AddLead(student.Id, submitterId: parent.Id);
+        var lead = s.AddLead(student.Id, submitterId: parent.Id);
 
-        var byParent = await s.Service.CreateAsync(parent.Id, s.Center.Id, new CreateCenterReviewRequest(4));
-        var byStudent = await s.Service.CreateAsync(student.Id, s.Center.Id, new CreateCenterReviewRequest(5));
+        await s.Service.CreateAsync(parent.Id, s.Center.Id, new CreateCenterReviewRequest(4));
 
-        Assert.NotEqual(byParent.Id, byStudent.Id);
-        Assert.Equal(2, s.Repo.Reviews.Count);
+        // một yêu cầu một đánh giá: học sinh của yêu cầu đó không đánh giá thêm được
+        await Assert.ThrowsAsync<ArgumentException>(() => s.Service.CreateAsync(student.Id, s.Center.Id, new CreateCenterReviewRequest(5)));
+        Assert.Equal(lead.Id, Assert.Single(s.Repo.Reviews).LeadId);
+    }
+
+    [Fact]
+    public async Task Create_NewLeadToSameCenterAfterReview_AllowsAnotherReviewForThatLead()
+    {
+        var s = new Setup();
+        var student = s.AddUser();
+        var first = s.AddLead(student.Id);
+        first.CreatedAt = DateTime.UtcNow.AddDays(-10);
+        await s.Service.CreateAsync(student.Id, s.Center.Id, new CreateCenterReviewRequest(3));
+        Assert.False((await s.Service.GetEligibilityAsync(student.Id, s.Center.Id)).CanReview);
+
+        var second = s.AddLead(student.Id);
+        Assert.True((await s.Service.GetEligibilityAsync(student.Id, s.Center.Id)).CanReview);
+        await s.Service.CreateAsync(student.Id, s.Center.Id, new CreateCenterReviewRequest(5));
+
+        Assert.Equal(new[] { first.Id, second.Id }.OrderBy(x => x), s.Repo.Reviews.Select(r => r.LeadId!.Value).OrderBy(x => x));
+    }
+
+    [Fact]
+    public async Task Create_RemovedReviewStillConsumesTheLeadsOneReview()
+    {
+        var s = new Setup();
+        var student = s.AddUser();
+        s.AddLead(student.Id);
+        await s.Service.CreateAsync(student.Id, s.Center.Id, new CreateCenterReviewRequest(1));
+        s.Repo.Reviews[0].Status = "removed"; // Moderator gỡ (UC-57)
+
+        var eligibility = await s.Service.GetEligibilityAsync(student.Id, s.Center.Id);
+
+        Assert.False(eligibility.CanReview);
+        Assert.True(eligibility.HasReviewed);
     }
 
     [Fact]

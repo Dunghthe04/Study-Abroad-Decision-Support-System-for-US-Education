@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using StudyAbroad.Application.Admin.SlmSamples;
-using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
 
 namespace StudyAbroad.Infrastructure.Persistence.Repositories;
@@ -97,18 +96,4 @@ public class SlmSampleRepository(AppDbContext db) : ISlmSampleRepository
         await db.SlmTrainingSamples.AsNoTracking()
             .Select(x => new SlmSampleKeyRow(x.SampleType, x.Question, x.PendingQuestion, x.Profile, x.Context, x.Intents))
             .ToListAsync(ct);
-
-    public async Task<IReadOnlyList<SlmTrainingSample>> ApprovedAsync(string? split, CancellationToken ct = default)
-    {
-        var query = db.SlmTrainingSamples.AsNoTracking()
-            .Where(x => x.ReviewStatus == SlmReviewStatuses.Approved);
-        if (!string.IsNullOrWhiteSpace(split))
-            query = query.Where(x => x.Split == split);
-
-        return await query
-            .OrderBy(x => x.SampleType)
-            .ThenBy(x => x.CreatedAt)
-            .ThenBy(x => x.Id)
-            .ToListAsync(ct);
-    }
 }

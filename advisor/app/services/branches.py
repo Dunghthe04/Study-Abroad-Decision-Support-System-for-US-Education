@@ -13,8 +13,6 @@ from app.schemas.slm import INFO_FIELDS, SlmTinResult, SlmY, single_school, task
 from app.services import search_filters, small_talk
 from app.services.advice_writer import AdviceWriter
 from app.services.chat_flow import (
-    NEED_PROFILE,
-    NOT_READY,
     OPENING_QUESTIONS,
     Branch,
     SkillHandler,
@@ -24,9 +22,38 @@ from app.services.chat_flow import (
     start_intake,
 )
 from app.services.goal_target import plain, target_code
-from app.services.priority import detect_priorities
 from app.services.priority import from_model as priority_from_model
 from app.services.priority import label as priority_label
+from app.services.replies import (
+    ASK_AGAIN_LABEL,
+    ASK_SCHOOL,
+    ASK_WHICH_SCHOOLS,
+    CANNOT_ANSWER,
+    CANNOT_TRY_OTHERS,
+    DEFAULT_QUESTION,
+    EDIT_SECTION_LABEL,
+    EDIT_SECTION_VALUE,
+    FILTER_TEXT,
+    GOAL_SEEK_WORKING,
+    GREETING_REPLY,
+    GROUP_NEED_RESULTS,
+    GROUP_TOO_SMALL,
+    HANDOFF_INTRO,
+    LOOKING_UP,
+    MENU,
+    NEED_PROFILE,
+    NEED_RESULTS,
+    NEXT_AFTER_SAVE,
+    NEXT_AFTER_SAVE_REPLIES,
+    NO_EFFECT_TEXT,
+    NOT_READY,
+    NOTHING_TO_TRY,
+    OUT_OF_SCOPE,
+    RECOMMENDING,
+    TRIED_SCENARIO,
+    TRY_INSTEAD,
+    menu_buttons,
+)
 from app.services.scenario import FILTER_FACTORS, LABELS, SUPPORTED_TEXT, WhatIf, parse_what_if
 from app.services.skill_input import skill_request_of
 from app.services.skill_rules import REQUIRED_B3, REQUIRED_B4, REQUIRED_BY_SKILL, missing_fields
@@ -56,7 +83,16 @@ class CenterBranch:
 # Model đã đọc câu và trả đủ trường (schools) lẫn mục hỏi (fields) thì tin model: bỏ qua kho kiến thức (nhanh hơn, đỡ một lượt gọi),
 # giao .NET tra thẳng cơ sở dữ liệu theo đúng điều model trả. Câu trả lời tạm LOOKING_UP chỉ hiện nếu .NET chưa kịp thay.
 # Model chỉ trả một trong hai, hoặc mục "other" (điều hệ thống không lưu) thì vẫn chạy kho kiến thức làm dự phòng như trên.
-LOOKING_UP = "Mình đang tra số liệu của trường này nhé."
+# Câu tạm LOOKING_UP: xem replies.py
+
+
+# Nhóm kết quả model chỉ tới (group) → mã nhóm trong danh sách gợi ý (ResultSchool.group), và số trường tối đa so sánh được (khớp ChatSchoolInfo.MaxCompare bên .NET)
+RESULT_GROUP_CODES = {"reach": {"R"}, "target": {"M"}, "safety": {"S"}}
+RESULT_GROUP_LABEL = {"reach": "Khó vào", "target": "Vừa sức", "safety": "An toàn hơn"}
+
+
+class ChatSchoolLimit:
+    MAX_COMPARE = 4
 
 
 def info_fields(entities: dict) -> list[str]:
@@ -76,8 +112,9 @@ class KnowledgeBranch:
         # Tìm trường theo điều kiện: model đã trả filters, đổi chữ học sinh gõ sang bộ lọc chuẩn (mã bang, USD...) rồi giao .NET lọc.
         # Không chạy kho kiến thức. Điều nào chưa đọc chắc chắn được thì ghi vào unresolved để hệ thống hỏi lại, không bỏ qua lặng lẽ
         filters = y.entities.get("filters")
-        if task == "search" and filters:
-            plan = await search_filters.normalize(filters, y.entities.get("sort"))
+        # Tìm trường có điều kiện lọc và/hoặc cách xếp ("trường nào rẻ nhất" chỉ có cách xếp, không có điều kiện lọc)
+        if task == "search" and (filters or y.entities.get("sort")):
+            plan = await search_filters.normalize(filters or {}, y.entities.get("sort"))
             return SkillOutput(
                 LOOKING_UP,
                 action="school_search",
@@ -91,6 +128,16 @@ class KnowledgeBranch:
                     "kb_answer": LOOKING_UP,
                 },
             )
+        # Model chỉ vào một nhóm kết quả của học sinh ("các trường nhóm Khó vào"): tên trường lấy từ danh sách gợi ý gần nhất (code chỉ tra, không đoán)
+        if task == "compare_facts" and (group := y.entities.get("group")) is not None:
+            if not state.has_results:
+                return SkillOutput(GROUP_NEED_RESULTS, quick_replies=menu_buttons())
+            codes = RESULT_GROUP_CODES[group]
+            in_group = [s.name for s in state.schools if s.group in codes][: ChatSchoolLimit.MAX_COMPARE]
+            if len(in_group) < 2:
+                text = GROUP_TOO_SMALL.format(group=RESULT_GROUP_LABEL[group], count=len(in_group))
+                return SkillOutput(text, quick_replies=menu_buttons())
+            y = y.model_copy(update={"entities": {**y.entities, "schools": in_group}})
         # So sánh sự thật của từ hai trường: model đã trả các trường (schools), bỏ qua kho kiến thức, .NET lấy số liệu từng trường
         schools = [t.strip() for t in y.entities.get("schools") or []]
         if task == "compare_facts" and len(schools) >= 2:
@@ -124,21 +171,10 @@ class KnowledgeBranch:
 # Nhánh chưa làm: báo đang hoàn thiện (kịch bản; kiến thức khi chưa có DB; trung tâm khi chưa có backend)
 class NotReadyBranch:
     async def run(self, state: ChatState, message: str, slm: SlmTinResult) -> SkillOutput:
-        return SkillOutput(NOT_READY)
+        return SkillOutput(NOT_READY, quick_replies=menu_buttons())
 
 
-# Chưa có danh sách gợi ý thì không có gì để thử kịch bản
-NEED_RESULTS = "Bạn cần có danh sách trường gợi ý trước thì mình mới thử kịch bản được. Bạn muốn mình gợi ý trường trước không?"
-NOTHING_TO_TRY = f"Mình chưa thử được thay đổi này. Hiện mình thử được: {SUPPORTED_TEXT}."
-ASK_SCHOOL = "Bạn muốn vào trường nào? Chọn hoặc gõ tên trường ở ô bên dưới nhé."
-# Mục lọc trường: không thử tạm được, sửa hồ sơ rồi gợi ý lại (.NET không tự chạy lại gợi ý khi hồ sơ đổi)
-FILTER_TEXT = (
-    "{names} là điều kiện lọc trường nên mình không thử tạm được. Bạn sửa {names} trong hồ sơ rồi nhờ mình "
-    "gợi ý trường lại thì danh sách sẽ theo {names} mới. Sau này muốn đổi lại lúc nào cũng được."
-)
-# Mục phần gợi ý trường không dùng
-NO_EFFECT_TEXT = "{names} không làm thay đổi danh sách trường gợi ý."
-TRY_INSTEAD = f"Bạn thử đổi được: {SUPPORTED_TEXT}."
+# Các câu cố định của kịch bản (NEED_RESULTS, FILTER_TEXT, NO_EFFECT_TEXT...) nằm ở replies.py
 
 
 # Câu về mục lọc trường và mục không làm đổi danh sách trường (rỗng nếu không có). Tên mục nối bằng dấu phẩy và "và",
@@ -159,11 +195,14 @@ def group_sentences(what_if: WhatIf) -> list[str]:
 def cannot_try(what_if: WhatIf) -> SkillOutput:
     sentences = group_sentences(what_if)
     if not sentences:
-        return SkillOutput(NOTHING_TO_TRY)
+        return SkillOutput(NOTHING_TO_TRY.format(supported=SUPPORTED_TEXT), quick_replies=menu_buttons())
     if not what_if.filters:
-        sentences.append(TRY_INSTEAD)
+        sentences.append(TRY_INSTEAD.format(supported=SUPPORTED_TEXT))
     sections = dict.fromkeys(FILTER_FACTORS[key] for key in what_if.filters)
-    replies = [QuickReply(label=f"Sửa {name}", value=f"Em muốn sửa {name}") for name in sections]
+    replies = [
+        QuickReply(label=EDIT_SECTION_LABEL.format(name=name), value=EDIT_SECTION_VALUE.format(name=name))
+        for name in sections
+    ]
     return SkillOutput(" ".join(sentences), quick_replies=replies)
 
 
@@ -171,7 +210,9 @@ def cannot_try(what_if: WhatIf) -> SkillOutput:
 def cannot_try_note(what_if: WhatIf) -> str:
     grouped = {LABELS[key] for key in what_if.filters + what_if.no_effect}
     others = [label for label in what_if.unsupported if label not in grouped]
-    sentences = ([f"Mình chưa thử được: {', '.join(others)}."] if others else []) + group_sentences(what_if)
+    sentences = ([CANNOT_TRY_OTHERS.format(names=", ".join(others))] if others else []) + group_sentences(
+        what_if
+    )
     return "".join(f" {sentence}" for sentence in sentences)
 
 
@@ -187,15 +228,17 @@ class ScenarioBranch:
         if entities.get("mode") == "goal_seeking":
             return self._goal_seek(entities)
         if entities.get("mode") != "what_if":
-            return SkillOutput(NOT_READY)
+            return SkillOutput(NOT_READY, quick_replies=menu_buttons())
         if not state.has_results:
-            return SkillOutput(NEED_RESULTS)
+            return SkillOutput(
+                NEED_RESULTS, quick_replies=[MENU["schools"].model_copy(), MENU["assess"].model_copy()]
+            )
         try:
             what_if = parse_what_if(entities.get("changes", []))
         except AskAgain as ask:
             return SkillOutput(ask.question)
-        # Ưu tiên: model trả (priority_*) thì tin model, quy tắc từ khóa bổ sung cho yếu tố model chưa nêu
-        priorities = {**detect_priorities(message), **priority_from_model(entities.get("changes", []))}
+        # Ưu tiên: chỉ lấy điều model trả (priority_*), không có quy tắc từ khóa đọc thêm
+        priorities = priority_from_model(entities.get("changes", []))
         if not what_if.changes and not priorities:
             return await self._cannot_try(what_if, entities.get("changes", []))
         note = cannot_try_note(what_if)
@@ -205,7 +248,7 @@ class ScenarioBranch:
         data: dict = {"changes": what_if.changes, "unsupported": what_if.unsupported}
         if priorities:
             data["priorities"] = priorities
-        return SkillOutput(f"Mình thử kịch bản: {tried}.{note}", action="simulate", action_data=data)
+        return SkillOutput(TRIED_SCENARIO.format(tried=tried, note=note), action="simulate", action_data=data)
 
     # Không có gì thử được mà có mục lọc trường hoặc mục không ảnh hưởng: Claude viết lời, nút sửa vẫn do code gắn.
     # Không có writer hoặc Claude sai cả hai lần thì dùng câu cố định (cannot_try)
@@ -226,41 +269,14 @@ class ScenarioBranch:
             # Chưa nêu trường: hiện ô chọn trường có gợi ý, giữ nhóm đích để câu hỏi gửi lại đúng ý
             return SkillOutput(ASK_SCHOOL, widget=Widget(type="school", data={"target": target}))
         return SkillOutput(
-            f"Mình xem giúp bạn cần gì để vào {school} nhé.",
+            GOAL_SEEK_WORKING.format(school=school),
             action="goal_seek",
             action_data={"school": school, "target": target},
         )
 
 
-# Câu trả lời cố định theo subtype, không gọi model. greeting trả lời riêng ở GREETING_REPLY (kèm nút gợi ý).
-# farewell gồm cảm ơn và tạm biệt nên dùng một câu hợp với cả hai
-OUT_OF_SCOPE = {
-    "exception": "Mình chỉ hỗ trợ tư vấn du học Mỹ thôi nhé.",
-    "sensitive": "Mình không hỗ trợ việc này. Hồ sơ du học cần trung thực, mình giúp bạn chuẩn bị đúng cách nhé.",
-    "farewell": "Rất vui được hỗ trợ bạn! Khi cần cứ quay lại hỏi mình nhé.",
-    "ambiguous": "Mình chưa rõ ý bạn lắm. Bạn nói cụ thể hơn giúp mình nhé.",
-    # Chỉ dùng khi chưa có skill trung tâm; bình thường human_handoff đi vào luồng trung tâm (HANDOFF_INTRO)
-    "human_handoff": "Mình là trợ lý AI nên không thay được tư vấn viên. Bạn xem danh sách trung tâm tư vấn đã xác minh ở trang Trung tâm nhé.",
-}
-
-# Muốn gặp người thật: trong hệ thống "người thật" là tư vấn viên của trung tâm, nên đi vào luồng trung tâm với dịch vụ để trống
-# (hỏi dịch vụ bằng nút), kèm một câu nói rõ trợ lý là AI
-HANDOFF_INTRO = (
-    "Mình là trợ lý AI nên không thay được tư vấn viên. Mình gợi ý các trung tâm tư vấn đã xác minh."
-)
-
-
-# Lời chào: model có nhãn riêng greeting nên chào lại và gợi ý việc làm được
-GREETING_REPLY = (
-    "Xin chào! Mình là trợ lý tư vấn du học Mỹ. Mình có thể gợi ý trường hợp với hồ sơ của bạn, "
-    "thử các kịch bản (nếu điểm SAT, GPA thay đổi), giải đáp về visa, học phí, học bổng, hoặc giới thiệu trung tâm tư vấn. "
-    "Bạn muốn bắt đầu từ đâu?"
-)
-GREETING_BUTTONS = [
-    QuickReply(label="Gợi ý trường hợp với mình", value="Gợi ý trường phù hợp với hồ sơ của mình"),
-    QuickReply(label="Hỏi về visa du học Mỹ", value="Visa F-1 cần chuẩn bị gì?"),
-    QuickReply(label="Gợi ý trung tâm tư vấn", value="Em muốn gặp tư vấn viên"),
-]
+# Câu trả lời cố định theo subtype (replies.OUT_OF_SCOPE), không gọi model; greeting có câu riêng (GREETING_REPLY).
+# Mọi câu đều kèm menu nút để học sinh không bị cụt đường
 
 
 # Ngoài phạm vi: trả câu cố định. Câu hồ sơ đang chờ (nếu có) do ChatFlow nhắc lại như mọi câu hỏi xen ngang
@@ -280,8 +296,8 @@ class OutOfScopeBranch:
         if kind == "greeting" or (
             kind in ("ambiguous", "farewell") and small_talk.classify(message) == "greeting"
         ):
-            return SkillOutput(GREETING_REPLY, quick_replies=list(GREETING_BUTTONS))
-        return SkillOutput(OUT_OF_SCOPE.get(kind, OUT_OF_SCOPE["ambiguous"]))
+            return SkillOutput(GREETING_REPLY, quick_replies=menu_buttons())
+        return SkillOutput(OUT_OF_SCOPE.get(kind, OUT_OF_SCOPE["ambiguous"]), quick_replies=menu_buttons())
 
 
 # TẠM, phần của bạn: tư vấn theo hồ sơ bằng skill cũ (đánh giá, lộ trình, giải thích một trường).
@@ -345,15 +361,10 @@ SCHOOL_LIST_WORDS = (
     "recommend school",
     "recommend college",
 )
-RECOMMENDING = "Mình lọc danh sách trường hợp với hồ sơ và ngành của bạn nhé."
 # Hồ sơ vừa đủ mà học sinh chưa hỏi câu tư vấn nào (tin là "Đúng rồi"): đánh giá hồ sơ như trước đây
-DEFAULT_QUESTION = "Đánh giá hồ sơ của em giúp em."
 # Câu chỉ hỏi giải thích trường mà chưa nêu trường nào
-ASK_WHICH_SCHOOLS = "Bạn muốn mình giải thích trường nào? Chọn hoặc gõ tên trường ở ô bên dưới nhé."
 # Số trường đầu danh sách gợi ý hiện sẵn trong ô chọn (cùng giá trị với ChatActions.MaxSuggested bên .NET)
 MAX_SUGGESTED = 6
-CANNOT_ANSWER = "Mình chưa viết được câu trả lời cho câu này. Bạn bấm hỏi lại giúp mình nhé."
-ASK_AGAIN_LABEL = "Hỏi lại"
 
 
 def asks_for_school_list(text: str) -> bool:
@@ -447,12 +458,6 @@ class GeneratedAdviceBranch:
 
 # Hồ sơ vừa lưu mà không có câu tư vấn bị hoãn: hỏi học sinh muốn làm gì tiếp. Nút gửi câu như học sinh tự gõ,
 # đi qua SLM nên chỉ chạy đúng việc được chọn
-NEXT_AFTER_SAVE = "Bạn muốn mình làm gì tiếp?"
-NEXT_AFTER_SAVE_REPLIES = [
-    QuickReply(label="Gợi ý trường", value="Gợi ý trường cho em"),
-    QuickReply(label="Đánh giá hồ sơ", value="Đánh giá hồ sơ của em"),
-    QuickReply(label="Lên lộ trình", value="Lên lộ trình cho em"),
-]
 
 
 # Trả lời câu hồ sơ đang chờ hoặc cập nhật hồ sơ. Hồ sơ vừa đủ trong lượt này (học sinh bấm "Đúng rồi" ở X1):

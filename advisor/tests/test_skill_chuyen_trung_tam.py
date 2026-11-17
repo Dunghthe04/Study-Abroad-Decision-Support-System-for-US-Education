@@ -164,6 +164,29 @@ def test_check_reasons_needs_exactly_one_reason_per_center():
 
 
 @pytest.mark.parametrize(
+    "raw",
+    [
+        {
+            "reasons": ["Có luyện phỏng vấn visa.", "Có luyện phỏng vấn visa."]
+        },  # danh sách chuỗi: lỗi thật 15/11
+        {"reasons": [{"id": 1}, {"id": 2}]},
+        {
+            "reasons": [
+                {"id": None, "reason": "Có luyện phỏng vấn visa."},
+                {"id": 2, "reason": "Có luyện phỏng vấn visa."},
+            ]
+        },
+        {"reasons": "Có luyện phỏng vấn visa."},
+        {},
+    ],
+)
+def test_check_reasons_rejects_a_wrong_shape_as_value_error(raw):
+    # sai dạng phải là ValueError để SkillCall gọi lại rồi dùng câu dựng sẵn, không được làm cả lượt chat lỗi
+    with pytest.raises(ValueError):
+        check_reasons(raw, [HCM, HN], None)
+
+
+@pytest.mark.parametrize(
     "text",
     [
         "",
@@ -338,7 +361,7 @@ def test_the_widget_carries_one_card_per_center_and_the_city_options():
         },
     ]
     assert widget.data["cities"] == [
-        {"city": "Hải Phòng", "count": 2, "ask": "Cho mình xem trung tâm luyện thi IELTS, SAT ở Hải Phòng"}
+        {"city": "Hải Phòng", "count": 2, "ask": "Cho em xem trung tâm luyện thi IELTS, SAT ở Hải Phòng"}
     ]
 
 
@@ -373,8 +396,21 @@ async def test_asks_which_service_with_buttons_when_unclear():
     assert out.answer == ASK_SERVICE
     assert [b.label for b in out.quick_replies][:2] == ["Chọn trường", "Sửa bài luận"]
     assert "Luyện thi IELTS, SAT" in [b.label for b in out.quick_replies]  # giữ chữ hoa của tên riêng
-    assert out.quick_replies[1].value == "Mình cần hỗ trợ sửa bài luận"  # bấm là gửi lại một câu rõ dịch vụ
+    assert out.quick_replies[1].value == "Em cần hỗ trợ sửa bài luận"  # bấm là gửi lại một câu rõ dịch vụ
     assert finder.find_calls == [] and llm.calls == []
+
+
+async def test_service_buttons_carry_the_city_the_student_already_said():
+    # Lỗi thật 16/11: "tôi tìm ở TP.HCM" rồi bấm nút "Sửa bài luận" ra cả Hà Nội, vì chữ trên nút không nhắc thành phố
+    finder = FakeFinder([HCM])
+
+    out = await handler(FakeLLM(), finder).run(
+        ChatState(), "tôi tìm ở TP.HCM", need(service=None, city="TP.HCM")
+    )
+
+    assert out.answer == ASK_SERVICE
+    assert out.quick_replies[1].value == "Em cần hỗ trợ sửa bài luận ở TP.HCM"
+    assert all(b.value.endswith(" ở TP.HCM") for b in out.quick_replies)
 
 
 async def test_asks_which_service_when_the_model_gave_no_entities_at_all():
@@ -499,7 +535,7 @@ async def test_a_city_with_no_center_gets_no_list_but_the_cities_that_have_some(
         finder.find_calls == [] and llm.calls == []
     )  # thành phố không khớp thành phố nào trong DB: không tìm, không gọi AI
     assert city_options(out) == [("Hà Nội", 6), ("TP.HCM", 1)]
-    assert out.widget.data["cities"][0]["ask"] == "Cho mình xem trung tâm sửa bài luận ở Hà Nội"
+    assert out.widget.data["cities"][0]["ask"] == "Cho em xem trung tâm sửa bài luận ở Hà Nội"
 
 
 async def test_a_known_city_with_no_center_for_the_service_lists_only_the_other_cities():

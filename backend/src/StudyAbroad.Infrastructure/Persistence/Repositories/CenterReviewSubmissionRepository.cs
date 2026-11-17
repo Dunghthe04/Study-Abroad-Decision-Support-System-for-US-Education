@@ -14,8 +14,12 @@ public class CenterReviewSubmissionRepository(AppDbContext db) : ICenterReviewSu
             .OrderByDescending(l => l.CreatedAt)
             .FirstOrDefaultAsync(ct);
 
-    public Task<bool> HasReviewedAsync(Guid userId, Guid centerId, CancellationToken ct = default) =>
-        db.CenterReviews.AsNoTracking().AnyAsync(r => r.UserId == userId && r.StudyCenterId == centerId, ct);
+    public Task<Lead?> FindLatestUnreviewedLeadAsync(Guid userId, Guid centerId, CancellationToken ct = default) =>
+        db.Leads.AsNoTracking()
+            .Where(l => l.StudyCenterId == centerId && (l.UserId == userId || l.SubmittedByUserId == userId))
+            .Where(l => !db.CenterReviews.Any(r => r.LeadId == l.Id))
+            .OrderByDescending(l => l.CreatedAt)
+            .FirstOrDefaultAsync(ct);
 
     public async Task AddAsync(CenterReview review, CancellationToken ct = default)
     {
