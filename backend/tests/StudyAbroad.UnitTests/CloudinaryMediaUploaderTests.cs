@@ -348,7 +348,7 @@ public class CloudinaryMediaUploaderTests
         public bool Fail { get; init; }
 
         public async Task<MediaUploadResult> UploadAsync(
-            Stream content, string safeFileName, string contentType, CancellationToken cancellationToken)
+            Stream content, string safeFileName, string contentType, string? folderSuffix, bool moderateContent, CancellationToken cancellationToken)
         {
             Calls++;
             CancellationToken = cancellationToken;

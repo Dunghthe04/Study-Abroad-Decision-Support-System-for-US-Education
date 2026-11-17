@@ -327,8 +327,8 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
     public Task<LeadMessage?> GetLeadMessageForUpdateAsync(Guid leadId, Guid messageId, CancellationToken ct = default) =>
         db.LeadMessages.FirstOrDefaultAsync(m => m.Id == messageId && m.LeadId == leadId, ct);
 
-    /// <summary>[USAS-2080 / UC-58] Hàng đợi kiểm duyệt: tin gắn cờ đang hiện, tin đã gỡ, hoặc cả hai.</summary>
-    public async Task<PagedResult<ModerationLeadMessageDto>> GetModerationMessagesAsync(
+    /// <summary>[UC-58] Hàng đợi báo cáo của Admin: tin bị báo cáo đang chờ xử lý, tin đã gỡ, hoặc cả hai.</summary>
+    public async Task<PagedResult<AdminLeadMessageReportDto>> GetReportedMessagesAsync(
         string filter,
         int page,
         int pageSize,
@@ -340,92 +340,127 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
         var query = from m in db.LeadMessages.AsNoTracking()
                     join l in db.Leads.AsNoTracking() on m.LeadId equals l.Id
                     join c in db.StudyCenters.AsNoTracking() on l.StudyCenterId equals c.Id
-                    join u in db.Users.AsNoTracking() on m.SenderUserId equals u.Id into senders
-                    from u in senders.DefaultIfEmpty()
-                    select new { Message = m, l.StudyCenterId, CenterName = c.Name, SenderRole = u != null ? u.Role : null };
+                    join u in db.Users.AsNoTracking() on m.SenderUserId equals u.Id
+                    where m.ReportedAt != null
+                    select new { Message = m, l.StudyCenterId, CenterName = c.Name, Sender = u };
 
         query = filter switch
         {
-            "removed" => query.Where(x => x.Message.Status == "removed"),
-            "flagged" => query.Where(x => x.Message.IsFlagged && x.Message.Status != "removed"),
-            "reported" => query.Where(x => x.Message.ReportedAt != null && x.Message.Status != "removed"),
-            "all" => query.Where(x => x.Message.Status == "removed" || x.Message.IsFlagged || x.Message.ReportedAt != null),
-            // pending: tin đang hiện bị gắn cờ tự động hoặc bị báo cáo, chờ Moderator xem
-            _ => query.Where(x => (x.Message.IsFlagged || x.Message.ReportedAt != null) && x.Message.Status != "removed"),
+            "resolved" => query.Where(x => x.Message.Status == "removed" || x.Message.ReportResolution != null),
+            "all" => query,
+            _ => query.Where(x => x.Message.Status != "removed" && x.Message.ReportResolution == null),
         };
 
         var total = await query.CountAsync(ct);
         var rows = await query
-            .OrderByDescending(x => x.Message.CreatedAt)
+            .OrderByDescending(x => x.Message.ReportedAt)
             .Skip((safePage - 1) * safePageSize)
             .Take(safePageSize)
             .ToListAsync(ct);
 
-        var items = rows.Select(x =>
-        {
-            var role = x.SenderRole ?? UserRoles.Student;
-            return new ModerationLeadMessageDto(
-                x.Message.Id,
-                x.Message.LeadId,
-                x.StudyCenterId,
-                x.CenterName,
-                x.Message.SenderUserId,
-                role,
-                LeadMessageMapper.IsStaffOrCenterRole(role),
-                x.Message.Content,
-                x.Message.IsFlagged,
-                x.Message.FlagReason,
-                x.Message.Status,
-                x.Message.RemovedByUserId,
-                x.Message.CreatedAt)
-            {
-                ReportedAt = x.Message.ReportedAt,
-                ReportReason = x.Message.ReportReason,
-            };
-        }).ToList();
+        var items = rows.Select(x => new AdminLeadMessageReportDto(
+            x.Message.Id,
+            x.Message.LeadId,
+            x.StudyCenterId,
+            x.CenterName,
+            x.Message.SenderUserId,
+            x.Sender.FullName,
+            x.Sender.Email,
+            x.Sender.Role,
+            x.Sender.Status,
+            LeadMessageMapper.IsStaffOrCenterRole(x.Sender.Role),
+            x.Message.Content,
+            x.Message.AttachmentUrl,
+            x.Message.Status,
+            x.Message.ReportedByUserId,
+            x.Message.ReportedAt,
+            x.Message.ReportReason,
+            x.Message.CreatedAt,
+            x.Message.ReportResolution,
+            x.Message.ReportResolvedAt)).ToList();
 
-        return new PagedResult<ModerationLeadMessageDto>(items, safePage, safePageSize, total);
+        return new PagedResult<AdminLeadMessageReportDto>(items, safePage, safePageSize, total);
     }
 
-    /// <summary>[UC-58] Tin do phía trung tâm gửi (người gửi có vai trò trung tâm) đã bị gỡ, tính theo trung tâm nhận yêu cầu.</summary>
-    public Task<int> CountRemovedCenterMessagesAsync(Guid centerId, CancellationToken ct = default) =>
-        (from m in db.LeadMessages.AsNoTracking()
-         where m.Status == "removed"
-         join l in db.Leads.AsNoTracking() on m.LeadId equals l.Id
-         where l.StudyCenterId == centerId
-         join u in db.Users.AsNoTracking() on m.SenderUserId equals u.Id
-         where u.Role == UserRoles.Center
-         select m.Id).CountAsync(ct);
-
-    public async Task<IReadOnlyList<RepeatRemovalCenterDto>> GetRepeatRemovalCentersAsync(int minRemoved, CancellationToken ct = default)
+    public async Task<IReadOnlyList<AdminReportContextMessageDto>> GetReportContextMessagesAsync(
+        Guid leadId,
+        Guid messageId,
+        int contextSize,
+        CancellationToken ct = default)
     {
-        var counts = await (from m in db.LeadMessages.AsNoTracking()
-                            where m.Status == "removed"
-                            join l in db.Leads.AsNoTracking() on m.LeadId equals l.Id
-                            join u in db.Users.AsNoTracking() on m.SenderUserId equals u.Id
-                            where u.Role == UserRoles.Center
-                            group m by l.StudyCenterId into g
-                            select new { CenterId = g.Key, Count = g.Count() })
-            .Where(x => x.Count >= minRemoved)
-            .ToListAsync(ct);
-        if (counts.Count == 0) return [];
+        var thread = db.LeadMessages.AsNoTracking().Where(m => m.LeadId == leadId);
+        var target = await thread.FirstOrDefaultAsync(m => m.Id == messageId, ct);
+        if (target is null) return [];
 
-        var ids = counts.Select(x => x.CenterId).ToList();
-        var centers = await db.StudyCenters.AsNoTracking()
-            .Where(c => ids.Contains(c.Id))
-            .Select(c => new { c.Id, c.Name, c.VerificationStatus })
+        var size = Math.Max(contextSize, 0);
+        var before = size == 0 ? [] : await thread
+            .Where(m => m.Id != target.Id && m.CreatedAt <= target.CreatedAt)
+            .OrderByDescending(m => m.CreatedAt)
+            .Take(size)
             .ToListAsync(ct);
-        var pending = (await db.CenterSuspensionProposals.AsNoTracking()
-                .Where(p => p.Status == CenterSuspensionProposalStatuses.Pending && ids.Contains(p.StudyCenterId))
-                .Select(p => p.StudyCenterId)
-                .ToListAsync(ct))
-            .ToHashSet();
+        var beforeIds = before.Select(m => m.Id).ToList();
+        var after = size == 0 ? [] : await thread
+            .Where(m => m.Id != target.Id && !beforeIds.Contains(m.Id) && m.CreatedAt >= target.CreatedAt)
+            .OrderBy(m => m.CreatedAt)
+            .Take(size)
+            .ToListAsync(ct);
 
-        return counts
-            .Join(centers, x => x.CenterId, c => c.Id,
-                (x, c) => new RepeatRemovalCenterDto(c.Id, c.Name, c.VerificationStatus, x.Count, pending.Contains(c.Id)))
-            .OrderByDescending(x => x.RemovedMessageCount)
-            .ToList();
+        var window = before.OrderBy(m => m.CreatedAt).Append(target).Concat(after).ToList();
+        var senderIds = window.Select(m => m.SenderUserId).Distinct().ToList();
+        var senders = await db.Users.AsNoTracking()
+            .Where(u => senderIds.Contains(u.Id))
+            .Select(u => new { u.Id, u.FullName, u.Role })
+            .ToDictionaryAsync(u => u.Id, ct);
+
+        return window.Select(m =>
+        {
+            senders.TryGetValue(m.SenderUserId, out var sender);
+            return new AdminReportContextMessageDto(
+                m.Id,
+                m.SenderUserId,
+                sender?.FullName ?? "Người dùng",
+                LeadMessageMapper.IsStaffOrCenterRole(sender?.Role),
+                m.Content,
+                m.AttachmentUrl,
+                m.Status,
+                m.CreatedAt,
+                m.Id == target.Id);
+        }).ToList();
+    }
+
+    public async Task<int?> GetReportContextSizeSettingAsync(CancellationToken ct = default)
+    {
+        var json = await db.AppSettings.AsNoTracking()
+            .Where(s => s.Key == LeadService.ReportContextSizeSettingKey)
+            .Select(s => s.ValueJson)
+            .FirstOrDefaultAsync(ct);
+        return LeadService.ParseReportContextSize(json);
+    }
+
+    public async Task<int> RemoveAllMessagesOfUserAsync(Guid senderUserId, Guid removedByUserId, CancellationToken ct = default)
+    {
+        var messages = await db.LeadMessages
+            .Where(m => m.SenderUserId == senderUserId && m.Status != "removed")
+            .ToListAsync(ct);
+        foreach (var m in messages)
+        {
+            m.Status = "removed";
+            m.RemovedByUserId = removedByUserId;
+        }
+        await db.SaveChangesAsync(ct);
+        return messages.Count;
+    }
+
+    public async Task<IReadOnlyList<Guid>> GetActiveAdminUserIdsAsync(CancellationToken ct = default) =>
+        await db.Users.AsNoTracking()
+            .Where(u => u.Role == UserRoles.Admin && u.Status == UserStatuses.Active)
+            .Select(u => u.Id)
+            .ToListAsync(ct);
+
+    public async Task AddNotificationsAsync(IEnumerable<Notification> notifications, CancellationToken ct = default)
+    {
+        db.Notifications.AddRange(notifications);
+        await db.SaveChangesAsync(ct);
     }
 
     public async Task SaveLeadMessageAsync(LeadMessage message, CancellationToken ct = default)

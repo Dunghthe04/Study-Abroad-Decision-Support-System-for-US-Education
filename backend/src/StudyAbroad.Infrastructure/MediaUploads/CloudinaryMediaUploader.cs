@@ -58,7 +58,8 @@ public sealed class CloudinaryMediaUploader : IMediaUploader
         buffered.Position = 0;
         var safeFileName = Guid.NewGuid().ToString("N") + extension;
         cancellationToken.ThrowIfCancellationRequested();
-        return await _client.UploadAsync(buffered, safeFileName, contentType, cancellationToken);
+        return await _client.UploadAsync(
+            buffered, safeFileName, contentType, request.FolderSuffix, request.ModerateContent, cancellationToken);
     }
 
     private string ValidateImage(

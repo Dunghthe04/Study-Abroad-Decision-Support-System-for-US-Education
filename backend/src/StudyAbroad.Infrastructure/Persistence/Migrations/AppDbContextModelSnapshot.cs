@@ -1567,6 +1567,16 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("AttachmentPublicId")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("attachment_public_id");
+
+                    b.Property<string>("AttachmentUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("attachment_url");
+
                     b.Property<string>("Content")
                         .IsRequired()
                         .HasMaxLength(4000)
@@ -1598,6 +1608,15 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
                         .HasColumnName("report_reason");
+
+                    b.Property<string>("ReportResolution")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("report_resolution");
+
+                    b.Property<DateTime?>("ReportResolvedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("report_resolved_at");
 
                     b.Property<DateTime?>("ReportedAt")
                         .HasColumnType("timestamp with time zone")
