@@ -99,7 +99,8 @@ public record UpdateUniversityRequest(
     int? InternationalStudentCount,
     bool IsIvy,
     string? LogoUrl = null,
-    string? CoverUrl = null);
+    string? CoverUrl = null,
+    bool ConfirmDuplicateName = false);
 
 public record CreateOfferingRequest(string? StudyLevel);
 

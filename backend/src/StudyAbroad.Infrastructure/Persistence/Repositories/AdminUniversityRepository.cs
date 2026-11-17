@@ -54,10 +54,10 @@ public class AdminUniversityRepository(AppDbContext db) : IAdminUniversityReposi
     public Task<bool> ExistsCodeAsync(string code, CancellationToken ct = default) =>
         db.Universities.AnyAsync(u => u.Code == code, ct);
 
-    public Task<bool> ExistsNameAsync(string name, CancellationToken ct = default)
+    public Task<bool> ExistsNameAsync(string name, Guid? excludeUniversityId = null, CancellationToken ct = default)
     {
         var lowered = name.ToLower();
-        return db.Universities.AnyAsync(u => u.Name.ToLower() == lowered, ct);
+        return db.Universities.AnyAsync(u => u.Name.ToLower() == lowered && u.Id != excludeUniversityId, ct);
     }
 
     public void AddUniversity(University university) => db.Universities.Add(university);

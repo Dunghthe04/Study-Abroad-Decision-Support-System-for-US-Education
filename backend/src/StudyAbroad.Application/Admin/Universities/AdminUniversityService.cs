@@ -104,7 +104,7 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
             errors["code"] = "Mã trường đã tồn tại trong hệ thống.";
 
         ValidateUniversityFields(name, city, state, website, control, request.AcceptanceRate, request.InternationalStudentCount, logoUrl, coverUrl, errors);
-        if (errors.Count == 0 && !request.ConfirmDuplicateName && await repository.ExistsNameAsync(name!, ct))
+        if (errors.Count == 0 && !request.ConfirmDuplicateName && await repository.ExistsNameAsync(name!, ct: ct))
             errors["duplicateName"] = $"Đã có trường tên \"{name}\". Kiểm tra lại, hoặc xác nhận để vẫn tạo.";
         if (errors.Count > 0) return AdminUpdateResult<AdminUniversityDetailDto>.Invalid(errors);
 
@@ -154,6 +154,9 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
 
         var errors = new Dictionary<string, string>();
         ValidateUniversityFields(name, city, state, website, control, request.AcceptanceRate, request.InternationalStudentCount, logoUrl, coverUrl, errors);
+        if (errors.Count == 0 && !request.ConfirmDuplicateName && name != university.Name
+            && await repository.ExistsNameAsync(name!, university.Id, ct))
+            errors["duplicateName"] = $"Đã có trường tên \"{name}\". Kiểm tra lại, hoặc bấm Lưu lần nữa để xác nhận đổi tên.";
         if (errors.Count > 0) return AdminUpdateResult<AdminUniversityDetailDto>.Invalid(errors);
 
         var currentMedia = await repository.GetUniversityMediaAsync(university.Id, ct);

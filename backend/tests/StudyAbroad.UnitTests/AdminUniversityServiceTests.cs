@@ -128,6 +128,37 @@ public class AdminUniversityServiceTests
     }
 
     [Fact]
+    public async Task UpdateUniversityAsync_RenameToExistingName_WarnsUntilConfirmed()
+    {
+        var repo = new FakeRepository();
+        repo.OtherNames.Add("Taken Name");
+        var service = new AdminUniversityService(repo);
+        var u = repo.University;
+        var rename = new UpdateUniversityRequest("taken name", u.City, u.State, u.Website, u.Control, u.AcceptanceRate, u.InternationalStudentCount, u.IsIvy);
+
+        var warned = await service.UpdateUniversityAsync(u.Id, rename, Actor);
+        Assert.Equal(0, repo.SaveCount);
+        var confirmed = await service.UpdateUniversityAsync(u.Id, rename with { ConfirmDuplicateName = true }, Actor);
+
+        Assert.Contains("duplicateName", warned.Errors.Keys);
+        Assert.True(confirmed.Success);
+        Assert.Equal("taken name", u.Name);
+    }
+
+    [Fact]
+    public async Task UpdateUniversityAsync_KeepingOwnName_DoesNotWarn()
+    {
+        var repo = new FakeRepository();
+        var service = new AdminUniversityService(repo);
+        var u = repo.University;
+
+        var result = await service.UpdateUniversityAsync(
+            u.Id, new UpdateUniversityRequest(u.Name, "Boston", u.State, u.Website, u.Control, u.AcceptanceRate, u.InternationalStudentCount, u.IsIvy), Actor);
+
+        Assert.True(result.Success);
+    }
+
+    [Fact]
     public async Task UpdateUniversityAsync_NothingChanged_DoesNotWriteAudit()
     {
         var repo = new FakeRepository();
@@ -401,8 +432,12 @@ public class AdminUniversityServiceTests
         public Task<bool> ExistsCodeAsync(string code, CancellationToken ct = default) =>
             Task.FromResult(University.Code == code);
 
-        public Task<bool> ExistsNameAsync(string name, CancellationToken ct = default) =>
-            Task.FromResult(string.Equals(University.Name, name, StringComparison.OrdinalIgnoreCase));
+        public List<string> OtherNames { get; } = [];
+
+        public Task<bool> ExistsNameAsync(string name, Guid? excludeUniversityId = null, CancellationToken ct = default) =>
+            Task.FromResult(
+                (University.Id != excludeUniversityId && string.Equals(University.Name, name, StringComparison.OrdinalIgnoreCase))
+                || OtherNames.Contains(name, StringComparer.OrdinalIgnoreCase));
 
         public void AddUniversity(University university) => University = university;
 
