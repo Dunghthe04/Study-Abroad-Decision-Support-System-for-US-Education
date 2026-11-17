@@ -612,11 +612,25 @@ export const centerPortalApi = {
     }),
   getVerificationStatus: () =>
     apiFetch<CenterVerificationStatusDto>("/api/v1/center/verification/status"),
-  /** Đổi số điện thoại liên lạc (không cần OTP). */
-  changePhone: (newValue: string) =>
-    apiFetch<{ message: string }>("/api/v1/center/contact/phone", {
-      method: "PUT",
+  /** [UC-91] Gửi OTP qua SMS tới số điện thoại hiện tại để xác thực. */
+  requestPhoneVerification: () =>
+    apiFetch<{ message: string }>("/api/v1/center/contact/phone/verify/request", { method: "POST" }),
+  /** [UC-91] Nhập OTP SMS để ghi nhận số điện thoại đã xác thực. */
+  verifyPhone: (code: string) =>
+    apiFetch<{ message: string }>("/api/v1/center/contact/phone/verify", {
+      method: "POST",
+      body: JSON.stringify({ code }),
+    }),
+  /** [UC-91] Đổi số điện thoại: gửi OTP qua SMS tới số mới rồi xác nhận bằng mã. */
+  requestPhoneChange: (newValue: string) =>
+    apiFetch<{ message: string }>("/api/v1/center/contact/phone/request", {
+      method: "POST",
       body: JSON.stringify({ newValue }),
+    }),
+  confirmPhoneChange: (newValue: string, code: string) =>
+    apiFetch<{ message: string }>("/api/v1/center/contact/phone/confirm", {
+      method: "POST",
+      body: JSON.stringify({ newValue, code }),
     }),
   /** Đổi email liên lạc: gửi OTP tới email mới rồi xác nhận bằng mã. */
   requestEmailChange: (newValue: string) =>
