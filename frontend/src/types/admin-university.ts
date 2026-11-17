@@ -87,6 +87,7 @@ export interface CreateUniversityRequest {
   isIvy: boolean;
   logoUrl?: string | null;
   coverUrl?: string | null;
+  confirmDuplicateName?: boolean;
 }
 
 export interface UpdateUniversityRequest {
