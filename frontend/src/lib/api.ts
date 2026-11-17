@@ -41,6 +41,8 @@ import type {
   AdminLeadMessageReportContextDto,
   AdminLeadMessageReportDto,
   LeadMessageReportFilter,
+  CenterProfileChangeDto,
+  CenterProfileChangeFilter,
   SendLeadMessageRequest,
   SendLeadMessageResultDto,
   RegisterCenterRequest,
@@ -448,6 +450,27 @@ export const studyCentersApi = {
       body: JSON.stringify(payload),
     });
   },
+};
+
+/** [UC-114] Moderator kiểm tra thay đổi website / fanpage do trung tâm tự sửa: Đạt hoặc Không đạt (lý do bắt buộc). */
+export const centerProfileChangesApi = {
+  list: (params?: { status?: CenterProfileChangeFilter; page?: number; pageSize?: number }) => {
+    const sp = new URLSearchParams();
+    if (params?.status) sp.set("status", params.status);
+    if (params?.page) sp.set("page", String(params.page));
+    if (params?.pageSize) sp.set("pageSize", String(params.pageSize));
+    const qs = sp.toString();
+    return apiFetch<PagedResult<CenterProfileChangeDto>>(`/api/v1/moderator/center-profile-changes${qs ? `?${qs}` : ""}`);
+  },
+
+  pass: (id: string) =>
+    apiFetch<CenterProfileChangeDto>(`/api/v1/moderator/center-profile-changes/${encodeURIComponent(id)}/pass`, { method: "POST" }),
+
+  fail: (id: string, reason: string) =>
+    apiFetch<CenterProfileChangeDto>(`/api/v1/moderator/center-profile-changes/${encodeURIComponent(id)}/fail`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    }),
 };
 
 /** [UC-58] Admin xử lý tin nhắn bị báo cáo: bỏ qua báo cáo hoặc khóa tài khoản người gửi (gỡ luôn tin của họ). */
