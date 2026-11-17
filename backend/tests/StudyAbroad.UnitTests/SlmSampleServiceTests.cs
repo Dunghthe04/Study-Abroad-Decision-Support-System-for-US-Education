@@ -126,8 +126,8 @@ public class SlmSampleServiceTests
     public async Task ReviewAsync_UpdatesManyAndCountsMissing()
     {
         var repo = new FakeSlmRepository();
-        var first = repo.AddDraft();
-        var second = repo.AddDraft();
+        var first = repo.AddPending();
+        var second = repo.AddPending();
         var service = Svc(repo, new FakeReader());
 
         var result = await service.ReviewAsync(
@@ -272,7 +272,7 @@ public class SlmSampleServiceTests
     public async Task ReviewAsync_ToApproved_SetsReviewerAndTimeAndNote()
     {
         var repo = new FakeSlmRepository();
-        var sample = repo.AddDraft();
+        var sample = repo.AddPending();
         var service = Svc(repo, new FakeReader());
 
         var before = DateTime.UtcNow;
@@ -289,7 +289,7 @@ public class SlmSampleServiceTests
     public async Task ReviewAsync_ToNeedsFix_SetsReviewerAndTimeAndNote()
     {
         var repo = new FakeSlmRepository();
-        var sample = repo.AddDraft();
+        var sample = repo.AddPending();
         var service = Svc(repo, new FakeReader());
 
         var before = DateTime.UtcNow;
@@ -306,7 +306,7 @@ public class SlmSampleServiceTests
     public async Task ReviewAsync_WhitespaceOnlyNote_BecomesNull()
     {
         var repo = new FakeSlmRepository();
-        var sample = repo.AddDraft();
+        var sample = repo.AddPending();
         var service = Svc(repo, new FakeReader());
 
         await service.ReviewAsync(
@@ -340,7 +340,7 @@ public class SlmSampleServiceTests
     public async Task ReviewAsync_NoteAtExactlyMaxLength_Passes()
     {
         var repo = new FakeSlmRepository();
-        var sample = repo.AddDraft();
+        var sample = repo.AddPending();
         var service = Svc(repo, new FakeReader());
         var note = new string('x', SlmSampleService.MaxNoteLength);
 
@@ -355,7 +355,7 @@ public class SlmSampleServiceTests
     {
         var repo = new FakeSlmRepository();
         for (var i = 0; i < SlmSampleService.MaxReviewIds; i++)
-            repo.AddDraft();
+            repo.AddPending();
         var ids = repo.Items.Select(x => x.Id).ToList();
         var service = Svc(repo, new FakeReader());
 
@@ -584,17 +584,44 @@ public class SlmSampleServiceTests
     {
         var repo = new FakeSlmRepository();
         var service = Svc(repo, new FakeReader());
-        var own = await service.CreateAsync(QA(question: "câu của tôi"), Actor);
+        var own = await service.CreateAsync(QA(question: "câu của tôi", submit: true), Actor);
         var captured = repo.AddDraft();
         await service.UpdateAsync(captured.Id, QA(question: captured.Question, submit: true), Actor);
-        var others = await service.CreateAsync(QA(question: "câu người khác"), Other);
+        var others = await service.CreateAsync(QA(question: "câu người khác", submit: true), Other);
 
         var result = await service.ReviewAsync(
             new ReviewSlmSamplesRequest([own.Id, captured.Id, others.Id], SlmReviewStatuses.Approved, null), Actor);
 
-        Assert.Equal((1, 2), (result.Updated, result.SkippedOwn));
+        Assert.Equal((1, 2, 0), (result.Updated, result.SkippedOwn, result.SkippedNotPending));
         Assert.Equal(SlmReviewStatuses.Approved, repo.Items.Single(x => x.Id == others.Id).ReviewStatus);
-        Assert.NotEqual(SlmReviewStatuses.Approved, repo.Items.Single(x => x.Id == own.Id).ReviewStatus);
+        Assert.Equal(SlmReviewStatuses.Pending, repo.Items.Single(x => x.Id == own.Id).ReviewStatus);
+    }
+
+    [Theory]
+    [InlineData(SlmReviewStatuses.Approved)]
+    [InlineData(SlmReviewStatuses.Rejected)]
+    [InlineData(SlmReviewStatuses.NeedsFix)]
+    public async Task ReviewAsync_OnlyPendingSamplesCanBeReviewed(string status)
+    {
+        var repo = new FakeSlmRepository();
+        var draft = repo.AddDraft();
+        var approved = repo.AddApproved();
+        var rejected = repo.AddDraft();
+        rejected.ReviewStatus = SlmReviewStatuses.Rejected;
+        var needsFix = repo.AddDraft();
+        needsFix.ReviewStatus = SlmReviewStatuses.NeedsFix;
+        var pending = repo.AddPending();
+
+        var result = await Svc(repo, new FakeReader()).ReviewAsync(
+            new ReviewSlmSamplesRequest([draft.Id, approved.Id, rejected.Id, needsFix.Id, pending.Id], status, "ghi chú"), Actor);
+
+        Assert.Equal((1, 4), (result.Updated, result.SkippedNotPending));
+        Assert.Equal(status, pending.ReviewStatus);
+        Assert.Equal(SlmReviewStatuses.Draft, draft.ReviewStatus);
+        Assert.Equal(SlmReviewStatuses.Approved, approved.ReviewStatus);
+        Assert.Equal(SlmReviewStatuses.Rejected, rejected.ReviewStatus);
+        Assert.Equal(SlmReviewStatuses.NeedsFix, needsFix.ReviewStatus);
+        Assert.Single(repo.History, h => h.Action == SlmSampleHistoryActions.Review);
     }
 
     [Theory]
@@ -603,11 +630,11 @@ public class SlmSampleServiceTests
     public async Task ReviewAsync_RejectOrNeedsFix_RequiresAReason(string status)
     {
         var repo = new FakeSlmRepository();
-        var sample = repo.AddDraft();
+        var sample = repo.AddPending();
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
             Svc(repo, new FakeReader()).ReviewAsync(new ReviewSlmSamplesRequest([sample.Id], status, "  "), Actor));
-        Assert.Equal(SlmReviewStatuses.Draft, sample.ReviewStatus);
+        Assert.Equal(SlmReviewStatuses.Pending, sample.ReviewStatus);
     }
 
     [Theory]
@@ -623,20 +650,20 @@ public class SlmSampleServiceTests
     }
 
     [Fact]
-    public async Task ReviewAsync_ApproveSkipsRowsWithoutAnswerOrIntents_ButLegacyLabelledRowsPass()
+    public async Task ReviewAsync_ApproveSkipsRowsWithoutAnswerOrIntents()
     {
         var repo = new FakeSlmRepository();
         var service = Svc(repo, new FakeReader());
-        var legacy = repo.AddDraft();
-        await service.CaptureUnansweredAsync("học bổng toàn phần ở Mỹ khó không");
-        var captured = repo.Items.Single(x => x.Source == SlmSampleSources.ChatUnanswered);
+        var ready = repo.AddPending();
+        var empty = repo.AddPending();
+        empty.Intents = "[]";
 
-        var result = await service.ReviewAsync(new ReviewSlmSamplesRequest([legacy.Id, captured.Id], SlmReviewStatuses.Approved, null), Actor);
+        var result = await service.ReviewAsync(new ReviewSlmSamplesRequest([ready.Id, empty.Id], SlmReviewStatuses.Approved, null), Actor);
 
         Assert.Equal((1, 1), (result.Updated, result.SkippedNotReady));
-        Assert.Equal(SlmReviewStatuses.Draft, captured.ReviewStatus);
+        Assert.Equal(SlmReviewStatuses.Pending, empty.ReviewStatus);
         var review = repo.History.Single(h => h.Action == SlmSampleHistoryActions.Review);
-        Assert.Equal((SlmReviewStatuses.Draft, SlmReviewStatuses.Approved, Actor), (review.FromStatus, review.ToStatus, review.ActorUserId));
+        Assert.Equal((SlmReviewStatuses.Pending, SlmReviewStatuses.Approved, Actor), (review.FromStatus, review.ToStatus, review.ActorUserId));
     }
 
     [Fact]
@@ -823,6 +850,13 @@ internal class FakeSlmRepository : ISlmSampleRepository
     {
         var sample = new SlmTrainingSample { SampleType = SlmSampleTypes.Knowledge, Question = "OPT là gì", Intents = ValidIntents };
         Items.Add(sample);
+        return sample;
+    }
+
+    public SlmTrainingSample AddPending()
+    {
+        var sample = AddDraft();
+        sample.ReviewStatus = SlmReviewStatuses.Pending;
         return sample;
     }
 

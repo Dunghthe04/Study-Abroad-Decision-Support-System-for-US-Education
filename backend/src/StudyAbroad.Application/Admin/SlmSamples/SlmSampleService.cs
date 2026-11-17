@@ -194,13 +194,18 @@ public class SlmSampleService(
             .Select(x => x.SampleId)
             .ToHashSet();
 
-        int skippedOwn = 0, skippedNotReady = 0, updated = 0;
+        int skippedOwn = 0, skippedNotReady = 0, skippedNotPending = 0, updated = 0;
         var now = DateTime.UtcNow;
         var found = await repository.UpdateManyAsync(ids, sample =>
         {
             if (sample.CreatedByUserId == actorUserId || contributed.Contains(sample.Id))
             {
                 skippedOwn++;
+                return null;
+            }
+            if (sample.ReviewStatus != SlmReviewStatuses.Pending)
+            {
+                skippedNotPending++;
                 return null;
             }
             if (status == SlmReviewStatuses.Approved && !IsReady(sample.Answer, sample.Intents))
@@ -219,7 +224,7 @@ public class SlmSampleService(
             return history;
         }, ct);
 
-        return new ReviewSlmSamplesResultDto(updated, ids.Count - found, skippedOwn, skippedNotReady);
+        return new ReviewSlmSamplesResultDto(updated, ids.Count - found, skippedOwn, skippedNotReady, skippedNotPending);
     }
 
     public async Task<SlmImportResultDto> ImportAsync(Stream workbook, Guid actorUserId, CancellationToken ct = default)

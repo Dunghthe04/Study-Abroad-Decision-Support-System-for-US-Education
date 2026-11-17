@@ -85,7 +85,7 @@ public record ReviewSlmSamplesRequest(IReadOnlyList<Guid>? Ids, string? Status, 
 /// Kết quả duyệt theo lô: số dòng được đổi, số mã không tồn tại, số dòng bỏ qua vì người duyệt đã tạo hoặc sửa nó,
 /// số dòng bỏ qua vì chưa có câu trả lời lẫn intents.
 /// </summary>
-public record ReviewSlmSamplesResultDto(int Updated, int NotFound, int SkippedOwn = 0, int SkippedNotReady = 0);
+public record ReviewSlmSamplesResultDto(int Updated, int NotFound, int SkippedOwn = 0, int SkippedNotReady = 0, int SkippedNotPending = 0);
 
 public record SlmSampleCountRow(string SampleType, string ReviewStatus, int Count);
 
