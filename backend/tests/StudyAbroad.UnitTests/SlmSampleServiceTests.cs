@@ -770,6 +770,10 @@ public class SlmSampleServiceTests
         var same = Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.ToQueryString(
             SlmSampleRepository.SameQuestion(db.SlmTrainingSamples, " Visa "));
 
+        var creators = Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.ToQueryString(
+            SlmSampleRepository.Creators(db.SlmTrainingSamples, db.Users));
+
+        Assert.Contains("ORDER BY", creators);
         Assert.Contains("created_by_user_id", page);
         Assert.Contains("created_at", page);
         Assert.Contains("source", page);

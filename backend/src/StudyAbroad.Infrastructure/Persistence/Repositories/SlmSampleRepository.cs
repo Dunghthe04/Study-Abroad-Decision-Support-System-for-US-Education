@@ -149,13 +149,16 @@ public class SlmSampleRepository(AppDbContext db) : ISlmSampleRepository
     }
 
     public async Task<IReadOnlyList<SlmSampleCreatorDto>> CreatorsAsync(CancellationToken ct = default) =>
-        await Live.AsNoTracking()
+        await Creators(Live.AsNoTracking(), db.Users).ToListAsync(ct);
+
+    public static IQueryable<SlmSampleCreatorDto> Creators(IQueryable<SlmTrainingSample> samples, IQueryable<User> users) =>
+        samples
             .Where(x => x.CreatedByUserId != null)
             .Select(x => x.CreatedByUserId!.Value)
             .Distinct()
-            .Join(db.Users, id => id, u => u.Id, (_, u) => new SlmSampleCreatorDto(u.Id, u.FullName))
-            .OrderBy(x => x.Name)
-            .ToListAsync(ct);
+            .Join(users, id => id, u => u.Id, (_, u) => u)
+            .OrderBy(u => u.FullName)
+            .Select(u => new SlmSampleCreatorDto(u.Id, u.FullName));
 
     public async Task<IReadOnlyList<SlmTrainingSample>> ApprovedAsync(CancellationToken ct = default) =>
         await Live.AsNoTracking()
