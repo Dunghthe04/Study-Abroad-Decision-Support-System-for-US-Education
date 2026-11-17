@@ -121,7 +121,7 @@ public class UniversityDetailRepository(AppDbContext db) : IUniversityDetailRepo
                 o.UniversityId == u.Id &&
                 (studyLevel == null || o.StudyLevel == studyLevel) &&
                 o.TuitionUsd != null &&
-                (o.TuitionUsd + (o.LivingUsd ?? 0) + (o.FeesUsd ?? 0)) <= query.MaxTotalCostUsd.Value));
+                (o.TuitionUsd + (o.LivingUsd ?? 0) + (o.FeesUsd ?? 0) + (o.OtherExpensesUsd ?? 0)) <= query.MaxTotalCostUsd.Value));
         }
 
         if (query.MaxMinIelts.HasValue)
@@ -184,6 +184,23 @@ public class UniversityDetailRepository(AppDbContext db) : IUniversityDetailRepo
                 .ThenByDescending(u => db.UniversityOfferings
                     .Where(o => o.UniversityId == u.Id && (studyLevel == null || o.StudyLevel == studyLevel))
                     .Max(o => o.TuitionUsd))
+                .ThenBy(u => u.Name),
+            // Tổng chi phí một năm = học phí + ăn ở + phí + chi khác (cùng cách tính với chat: không có học phí thì không tính)
+            "total_cost_asc" => q
+                .OrderBy(u => db.UniversityOfferings
+                    .Where(o => o.UniversityId == u.Id && (studyLevel == null || o.StudyLevel == studyLevel))
+                    .Min(o => o.TuitionUsd == null ? (decimal?)null : o.TuitionUsd + (o.LivingUsd ?? 0) + (o.FeesUsd ?? 0) + (o.OtherExpensesUsd ?? 0)) == null)
+                .ThenBy(u => db.UniversityOfferings
+                    .Where(o => o.UniversityId == u.Id && (studyLevel == null || o.StudyLevel == studyLevel))
+                    .Min(o => o.TuitionUsd == null ? (decimal?)null : o.TuitionUsd + (o.LivingUsd ?? 0) + (o.FeesUsd ?? 0) + (o.OtherExpensesUsd ?? 0)))
+                .ThenBy(u => u.Name),
+            "total_cost_desc" => q
+                .OrderBy(u => db.UniversityOfferings
+                    .Where(o => o.UniversityId == u.Id && (studyLevel == null || o.StudyLevel == studyLevel))
+                    .Max(o => o.TuitionUsd == null ? (decimal?)null : o.TuitionUsd + (o.LivingUsd ?? 0) + (o.FeesUsd ?? 0) + (o.OtherExpensesUsd ?? 0)) == null)
+                .ThenByDescending(u => db.UniversityOfferings
+                    .Where(o => o.UniversityId == u.Id && (studyLevel == null || o.StudyLevel == studyLevel))
+                    .Max(o => o.TuitionUsd == null ? (decimal?)null : o.TuitionUsd + (o.LivingUsd ?? 0) + (o.FeesUsd ?? 0) + (o.OtherExpensesUsd ?? 0)))
                 .ThenBy(u => u.Name),
             "acceptance_asc" => q
                 .OrderBy(u => u.AcceptanceRate == null)
@@ -284,7 +301,8 @@ public class UniversityDetailRepository(AppDbContext db) : IUniversityDetailRepo
             decimal? totalCost = null;
             if (offering?.TuitionUsd != null)
             {
-                totalCost = offering.TuitionUsd.Value + (offering.LivingUsd ?? 0) + (offering.FeesUsd ?? 0);
+                // Cùng công thức với chat và bộ gợi ý: học phí + ăn ở + phí + chi khác
+                totalCost = offering.TuitionUsd.Value + (offering.LivingUsd ?? 0) + (offering.FeesUsd ?? 0) + (offering.OtherExpensesUsd ?? 0);
             }
 
             return new UniversityListItemDto(
@@ -347,7 +365,7 @@ public class UniversityDetailRepository(AppDbContext db) : IUniversityDetailRepo
             .Select(o => new
             {
                 Tuition = o.TuitionUsd!.Value,
-                Total = o.TuitionUsd!.Value + (o.LivingUsd ?? 0) + (o.FeesUsd ?? 0)
+                Total = o.TuitionUsd!.Value + (o.LivingUsd ?? 0) + (o.FeesUsd ?? 0) + (o.OtherExpensesUsd ?? 0)
             })
             .ToListAsync(ct);
 

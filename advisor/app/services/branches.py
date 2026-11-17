@@ -114,7 +114,9 @@ class KnowledgeBranch:
         filters = y.entities.get("filters")
         # Tìm trường có điều kiện lọc và/hoặc cách xếp ("trường nào rẻ nhất" chỉ có cách xếp, không có điều kiện lọc)
         if task == "search" and (filters or y.entities.get("sort")):
-            plan = await search_filters.normalize(filters or {}, y.entities.get("sort"))
+            plan = await search_filters.normalize(
+                filters or {}, search_filters.resolve_cost_sort(y.entities.get("sort"), message)
+            )
             return SkillOutput(
                 LOOKING_UP,
                 action="school_search",

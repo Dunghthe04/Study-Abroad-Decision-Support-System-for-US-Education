@@ -7,6 +7,7 @@ Khóa đầu ra là camelCase, khớp SchoolSearchFilters bên .NET.
 """
 
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -23,11 +24,14 @@ SORT = {
     "ranking": "quality",
     "lowest_cost": "lowestCost",
     "highest_cost": "highestCost",
+    "lowest_tuition": "lowestTuition",
+    "highest_tuition": "highestTuition",
     "easiest_admission": "easiestAdmission",
     "most_selective": "mostSelective",
     "most_aid": "mostAid",
 }
 DEFAULT_SORT = "quality"
+NO_VALUE = {"", "none", "null", "n/a", "na", "unknown", "không", "khong", "-"}
 # Tên điều kiện nói với học sinh khi cần hỏi lại
 LABELS = {
     "state": "bang",
@@ -93,9 +97,36 @@ def read_cost_usd(text: str) -> float | None:
     return round(to_usd(amount, currency))
 
 
+def _fold(text: str) -> str:
+    text = unicodedata.normalize("NFD", text.lower().replace("đ", "d"))
+    return "".join(c for c in text if unicodedata.category(c) != "Mn")
+
+
+# Model chỉ có một nhãn cho "chi phí/học phí cao nhất, rẻ nhất" (highest_cost, lowest_cost). Hai thứ khác nhau:
+# học phí (chỉ tiền học) và tổng chi phí (cộng ăn ở, sinh hoạt). Học sinh nói rõ "học phí" (và không nhắc tổng, ăn ở) thì xếp theo học phí.
+# Còn lại (nói "tổng", "ăn ở", "chi phí" hay chỉ nói "đắt nhất", "rẻ nhất") xếp theo tổng chi phí: đó là số tiền người ta thật sự phải chuẩn bị.
+def resolve_cost_sort(sort: str | None, text: str) -> str | None:
+    if sort not in ("lowest_cost", "highest_cost"):
+        return sort
+    folded = _fold(text)
+    says_total = any(key in folded for key in ("tong chi", "tong cong", "an o", "sinh hoat"))
+    if "hoc phi" in folded and not says_total:
+        return "lowest_tuition" if sort == "lowest_cost" else "highest_tuition"
+    return sort
+
+
 async def normalize(filters: dict[str, Any], sort: str | None = None) -> SearchPlan:
     plan = SearchPlan(sort=SORT.get(sort or "", DEFAULT_SORT))
     out = plan.filters
+    # Model đôi khi điền chữ giữ chỗ ("none", "null"...) vào điều kiện học sinh không nói: coi như không có điều kiện đó
+    filters = {k: v for k, v in filters.items() if not (isinstance(v, str) and v.strip().lower() in NO_VALUE)}
+    # "học phí cao/thấp nhất" là cách xếp, không phải mức chi phí: chữ không đọc ra số tiền thì bỏ, đừng hỏi lại học sinh
+    if (
+        sort in ("lowest_cost", "highest_cost")
+        and isinstance(filters.get("max_cost"), str)
+        and read_cost_usd(filters["max_cost"]) is None
+    ):
+        filters.pop("max_cost")
 
     def fail(key: str, text: str) -> None:
         plan.unresolved.append(f"{LABELS.get(key, key)} “{text}”")

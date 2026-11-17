@@ -810,6 +810,28 @@ public class RecommendationServiceTests
     }
 
     [Fact]
+    public async Task Search_TuitionSortIgnoresLivingCost_TotalCostSortIncludesIt()
+    {
+        static RecommendSchoolInput WithLiving(RecommendSchoolInput s, decimal living)
+        {
+            s.Offering.LivingUsd = living;
+            return s;
+        }
+        // học phí: high-tuition (50k) > low-tuition (45k); tổng chi phí: low-tuition (45k+30k=75k) > high-tuition (50k+10k=60k)
+        var schools = new[]
+        {
+            WithLiving(SearchSchool("high-tuition", "TX", "private", 50_000m), 10_000m),
+            WithLiving(SearchSchool("low-tuition", "TX", "private", 45_000m), 30_000m),
+        };
+        var f = new SchoolSearchFilters(States: ["TX"]);
+
+        Assert.Equal(["high-tuition", "low-tuition"], (await SearchWith(f, SchoolSort.HighestTuition, schools)).Items.Select(i => i.Code));
+        Assert.Equal(["low-tuition", "high-tuition"], (await SearchWith(f, SchoolSort.HighestCost, schools)).Items.Select(i => i.Code));
+        Assert.Equal(["low-tuition", "high-tuition"], (await SearchWith(f, SchoolSort.LowestTuition, schools)).Items.Select(i => i.Code));
+        Assert.Equal([50_000m, 45_000m], (await SearchWith(f, SchoolSort.HighestTuition, schools)).Items.Select(i => i.TuitionUsd!.Value));
+    }
+
+    [Fact]
     public async Task Search_HighestCostAndMostAidOrders()
     {
         static RecommendSchoolInput WithAid(RecommendSchoolInput s, decimal? aid)

@@ -28,13 +28,20 @@ public record SchoolSearchFilters(
 // Quality: điểm chất lượng 0..1 từ hạng trong các bảng chung (null nếu chưa có hạng); BestRank: hạng tốt nhất trong các bảng chung
 public record SchoolSearchItem(
     string Code, string Name, string? City, string? State, string? Control,
-    decimal? CostUsd, decimal? AcceptRate, string? AidPolicy, decimal? AidAvgUsd, double? Quality, int? BestRank);
+    decimal? CostUsd, decimal? AcceptRate, string? AidPolicy, decimal? AidAvgUsd, double? Quality, int? BestRank,
+    decimal? TuitionUsd = null);
 
 public enum SchoolSort
 {
     Quality,
+    /// <summary>Tổng chi phí một năm (học phí + ăn ở + phí + chi khác) thấp đến cao.</summary>
     LowestCost,
+    /// <summary>Tổng chi phí một năm cao đến thấp.</summary>
     HighestCost,
+    /// <summary>Chỉ học phí, thấp đến cao (không tính ăn ở, sinh hoạt).</summary>
+    LowestTuition,
+    /// <summary>Chỉ học phí, cao đến thấp.</summary>
+    HighestTuition,
     EasiestAdmission,
     MostSelective,
     /// <summary>Học bổng trung bình cho du học sinh lớn nhất trước; trường chưa có số liệu xếp cuối.</summary>
@@ -126,6 +133,8 @@ public partial class RecommendationService
         {
             SchoolSort.LowestCost => items.OrderBy(i => i.CostUsd is null).ThenBy(i => i.CostUsd).ThenBy(i => i.Name, StringComparer.OrdinalIgnoreCase),
             SchoolSort.HighestCost => items.OrderBy(i => i.CostUsd is null).ThenByDescending(i => i.CostUsd).ThenBy(i => i.Name, StringComparer.OrdinalIgnoreCase),
+            SchoolSort.LowestTuition => items.OrderBy(i => i.TuitionUsd is null).ThenBy(i => i.TuitionUsd).ThenBy(i => i.Name, StringComparer.OrdinalIgnoreCase),
+            SchoolSort.HighestTuition => items.OrderBy(i => i.TuitionUsd is null).ThenByDescending(i => i.TuitionUsd).ThenBy(i => i.Name, StringComparer.OrdinalIgnoreCase),
             SchoolSort.MostAid => items.OrderBy(i => i.AidAvgUsd is null).ThenByDescending(i => i.AidAvgUsd).ThenBy(i => i.Name, StringComparer.OrdinalIgnoreCase),
             SchoolSort.EasiestAdmission => items.OrderBy(i => i.AcceptRate is null).ThenByDescending(i => i.AcceptRate).ThenBy(i => i.Name, StringComparer.OrdinalIgnoreCase),
             SchoolSort.MostSelective => items.OrderBy(i => i.AcceptRate is null).ThenBy(i => i.AcceptRate).ThenBy(i => i.Name, StringComparer.OrdinalIgnoreCase),
@@ -138,5 +147,6 @@ public partial class RecommendationService
         s.University.Code, s.University.Name, s.University.City, s.University.State, s.University.Control,
         TotalCost(s.Offering), AcceptRate(s), s.Offering.IntlAidPolicy, s.Offering.IntlAidAvgUsd,
         SchoolRanker.QualityFromRanks(s.Rankings),
-        s.Rankings is { Count: > 0 } ranks ? ranks.Min(r => r.Rank) : null);
+        s.Rankings is { Count: > 0 } ranks ? ranks.Min(r => r.Rank) : null,
+        s.Offering.TuitionUsd);
 }
