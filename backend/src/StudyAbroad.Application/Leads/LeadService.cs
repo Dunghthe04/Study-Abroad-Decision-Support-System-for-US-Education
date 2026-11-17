@@ -680,19 +680,205 @@ public class LeadService(
 
     private static readonly HashSet<string> ReportFilters = new(StringComparer.OrdinalIgnoreCase) { "pending", "resolved", "all" };
 
-    /// <summary>[UC-58] Hàng đợi báo cáo cho Admin (quyền do controller kiểm tra).</summary>
-    public Task<PagedResult<AdminLeadMessageReportDto>> GetReportedMessagesAsync(
+    /// <summary>Số tin ngữ cảnh mỗi phía khi Admin chưa cấu hình.</summary>
+    public const int DefaultReportContextSize = 3;
+    public const int MaxReportContextSize = 10;
+    /// <summary>Khóa app_settings chứa số tin ngữ cảnh. Giá trị JSON là một số (3) hoặc đối tượng {"size": 3}.</summary>
+    public const string ReportContextSizeSettingKey = "lead_message.report_context_size";
+
+    public const string ReportResolutionRemoved = "removed";
+    public const string ReportResolutionWarned = "warned";
+    public const string ReportResolutionLocked = "locked";
+
+    /// <summary>Đọc số tin ngữ cảnh từ JSON cấu hình; trả null nếu trống hoặc sai định dạng (khi đó dùng mặc định).</summary>
+    public static int? ParseReportContextSize(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var value = doc.RootElement;
+            if (value.ValueKind == JsonValueKind.Object && value.TryGetProperty("size", out var size))
+                value = size;
+            return value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var n) ? n : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>[UC-58] Hàng đợi báo cáo cho Admin (quyền do controller kiểm tra). Có viewerAdminId thì ghi nhật ký truy cập.</summary>
+    public async Task<PagedResult<AdminLeadMessageReportDto>> GetReportedMessagesAsync(
         string? filter,
         int page,
         int pageSize,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        Guid? viewerAdminId = null)
     {
         var normalized = filter?.Trim().ToLowerInvariant();
         if (!string.IsNullOrEmpty(normalized) && !ReportFilters.Contains(normalized))
             throw new ArgumentException("Bộ lọc không hợp lệ. Chỉ nhận 'pending', 'resolved' hoặc 'all'.");
 
-        return leads.GetReportedMessagesAsync(string.IsNullOrEmpty(normalized) ? "pending" : normalized, page, pageSize, ct);
+        var effectiveFilter = string.IsNullOrEmpty(normalized) ? "pending" : normalized;
+        var result = await leads.GetReportedMessagesAsync(effectiveFilter, page, pageSize, ct);
+
+        // Hàng đợi trả nội dung tin bị báo cáo nên mỗi lần đọc đều vào nhật ký truy cập (UC-97)
+        if (viewerAdminId is { } adminId && auditLogs is not null && result.Items.Count > 0)
+        {
+            await auditLogs.AddAsync(new AuditLog
+            {
+                ActorUserId = adminId,
+                Action = "lead_message.report_queue_view",
+                EntityType = "lead_message",
+                DetailJson = JsonSerializer.Serialize(new { filter = effectiveFilter, page, messageIds = result.Items.Select(i => i.Id) }),
+            }, ct);
+        }
+
+        return result;
     }
+
+    /// <summary>
+    /// [UC-58] Admin đọc tin bị báo cáo kèm một số tin ngữ cảnh liền kề (số lượng lấy từ cấu hình, mặc định
+    /// <see cref="DefaultReportContextSize"/> mỗi phía). Admin không đọc toàn bộ cuộc trò chuyện. Mỗi lần đọc ghi nhật ký truy cập.
+    /// </summary>
+    public async Task<AdminLeadMessageReportContextDto> GetReportContextAsync(
+        Guid adminUserId,
+        Guid leadId,
+        Guid messageId,
+        CancellationToken ct = default)
+    {
+        var message = await GetReportedMessageAsync(leadId, messageId, ct);
+
+        var size = Math.Clamp(await leads.GetReportContextSizeSettingAsync(ct) ?? DefaultReportContextSize, 0, MaxReportContextSize);
+        var messages = await leads.GetReportContextMessagesAsync(leadId, messageId, size, ct);
+
+        if (auditLogs is not null)
+        {
+            await auditLogs.AddAsync(new AuditLog
+            {
+                ActorUserId = adminUserId,
+                Action = "lead_message.report_view",
+                EntityType = "lead_message",
+                EntityId = message.Id.ToString(),
+                DetailJson = JsonSerializer.Serialize(new { leadId, contextSize = size, messageIds = messages.Select(m => m.Id) }),
+            }, ct);
+        }
+
+        return new AdminLeadMessageReportContextDto(leadId, messageId, size, messages);
+    }
+
+    /// <summary>
+    /// [UC-58] Admin gỡ riêng tin nhắn vi phạm (không khóa tài khoản). Lý do bắt buộc. Tin chuyển sang "removed",
+    /// báo cáo được đánh dấu đã xử lý, ghi nhật ký, thông báo cho người gửi và người báo cáo. Gỡ lại tin đã gỡ không đổi gì.
+    /// </summary>
+    public async Task RemoveReportedMessageAsync(Guid adminUserId, Guid leadId, Guid messageId, string? reason, CancellationToken ct = default)
+    {
+        var trimmedReason = RequireResolutionReason(reason);
+        var message = await GetReportedMessageAsync(leadId, messageId, ct);
+        if (string.Equals(message.Status, "removed", StringComparison.OrdinalIgnoreCase)) return;
+
+        message.Status = "removed";
+        message.RemovedByUserId = adminUserId;
+        message.ReportResolution = ReportResolutionRemoved;
+        message.ReportResolvedAt = DateTime.UtcNow;
+        await leads.SaveLeadMessageAsync(message, ct);
+
+        await AuditReportResolutionAsync(adminUserId, "lead_message.remove", leadId, message, trimmedReason, ct);
+        await NotifyUserAsync(message.SenderUserId, "lead_message_removed", "Tin nhắn của bạn đã bị gỡ",
+            $"Một tin nhắn của bạn trong yêu cầu liên hệ đã bị gỡ do vi phạm quy tắc. Lý do: {trimmedReason}", ct);
+        await NotifyReporterAsync(message, "Tin nhắn bạn báo cáo đã bị gỡ do vi phạm quy tắc.", ct);
+    }
+
+    /// <summary>
+    /// [UC-58] Admin cảnh cáo người gửi tin bị báo cáo. Lý do bắt buộc. Tin vẫn hiện, báo cáo được đánh dấu đã xử lý,
+    /// ghi nhật ký, thông báo cho người gửi và người báo cáo. Báo cáo đã xử lý rồi thì không cảnh cáo lại.
+    /// </summary>
+    public async Task WarnReportedSenderAsync(Guid adminUserId, Guid leadId, Guid messageId, string? reason, CancellationToken ct = default)
+    {
+        var trimmedReason = RequireResolutionReason(reason);
+        var message = await GetReportedMessageAsync(leadId, messageId, ct);
+        if (message.ReportResolution is not null || string.Equals(message.Status, "removed", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("Báo cáo này đã được xử lý.");
+
+        message.ReportResolution = ReportResolutionWarned;
+        message.ReportResolvedAt = DateTime.UtcNow;
+        await leads.SaveLeadMessageAsync(message, ct);
+
+        await AuditReportResolutionAsync(adminUserId, "lead_message.warn", leadId, message, trimmedReason, ct);
+        await NotifyUserAsync(message.SenderUserId, "lead_message_warning", "Cảnh cáo về tin nhắn của bạn",
+            $"Một tin nhắn của bạn trong yêu cầu liên hệ bị báo cáo và được xác định là không phù hợp. Lý do: {trimmedReason} Tiếp tục vi phạm có thể dẫn tới khóa tài khoản.", ct);
+        await NotifyReporterAsync(message, "Người gửi tin nhắn bạn báo cáo đã bị cảnh cáo.", ct);
+    }
+
+    /// <summary>
+    /// [UC-58] Gọi sau khi Admin khóa tài khoản người gửi: đánh dấu báo cáo đã xử lý bằng khóa tài khoản và thông báo cho người báo cáo.
+    /// </summary>
+    public async Task MarkReportResolvedByLockAsync(Guid adminUserId, Guid leadId, Guid messageId, CancellationToken ct = default)
+    {
+        var message = await leads.GetLeadMessageForUpdateAsync(leadId, messageId, ct);
+        if (message is null || !message.ReportedAt.HasValue) return;
+
+        message.ReportResolution = ReportResolutionLocked;
+        message.ReportResolvedAt = DateTime.UtcNow;
+        await leads.SaveLeadMessageAsync(message, ct);
+        await NotifyReporterAsync(message, "Tài khoản gửi tin nhắn bạn báo cáo đã bị khóa và các tin nhắn của tài khoản đó đã bị gỡ.", ct);
+    }
+
+    private static string RequireResolutionReason(string? reason)
+    {
+        var trimmed = reason?.Trim();
+        if (string.IsNullOrEmpty(trimmed))
+            throw new ArgumentException("Vui lòng nhập lý do xử lý.");
+        if (trimmed.Length > MaxRemoveReasonLength)
+            throw new ArgumentException($"Lý do tối đa {MaxRemoveReasonLength} ký tự.");
+        return trimmed;
+    }
+
+    /// <summary>Lấy tin (đúng yêu cầu liên hệ) và bắt buộc tin đó đang có báo cáo.</summary>
+    private async Task<LeadMessage> GetReportedMessageAsync(Guid leadId, Guid messageId, CancellationToken ct)
+    {
+        if (leadId == Guid.Empty || messageId == Guid.Empty)
+            throw new ArgumentException("Mã yêu cầu liên hệ hoặc mã tin nhắn không hợp lệ.");
+
+        var message = await leads.GetLeadMessageForUpdateAsync(leadId, messageId, ct)
+            ?? throw new KeyNotFoundException("Không tìm thấy tin nhắn trong yêu cầu liên hệ này.");
+        if (!message.ReportedAt.HasValue)
+            throw new KeyNotFoundException("Tin nhắn này không có báo cáo nào.");
+        return message;
+    }
+
+    private async Task AuditReportResolutionAsync(Guid adminUserId, string action, Guid leadId, LeadMessage message, string reason, CancellationToken ct)
+    {
+        if (auditLogs is null) return;
+        await auditLogs.AddAsync(new AuditLog
+        {
+            ActorUserId = adminUserId,
+            Action = action,
+            EntityType = "lead_message",
+            EntityId = message.Id.ToString(),
+            DetailJson = JsonSerializer.Serialize(new
+            {
+                leadId,
+                senderUserId = message.SenderUserId,
+                reportedBy = message.ReportedByUserId,
+                reportReason = message.ReportReason,
+                reason,
+            }),
+        }, ct);
+    }
+
+    private Task NotifyUserAsync(Guid userId, string type, string title, string body, CancellationToken ct) =>
+        leads.AddNotificationsAsync([new Notification { UserId = userId, Type = type, Title = title, Body = body }], ct);
+
+    /// <summary>[UC-58] Bước 4 của luồng chính: báo kết quả xử lý cho người đã báo cáo.</summary>
+    private Task NotifyReporterAsync(LeadMessage message, string outcome, CancellationToken ct) =>
+        NotifyReporterAsync(message.ReportedByUserId, outcome, ct);
+
+    private Task NotifyReporterAsync(Guid? reporterId, string outcome, CancellationToken ct) =>
+        reporterId is { } id
+            ? NotifyUserAsync(id, "lead_message_report_result", "Kết quả xử lý báo cáo tin nhắn", outcome, ct)
+            : Task.CompletedTask;
 
     /// <summary>[UC-58] Admin xem xét thấy không vi phạm: bỏ báo cáo, tin vẫn hiện, ghi nhật ký. Tin chưa bị báo cáo thì không đổi gì.</summary>
     public async Task DismissReportAsync(Guid adminUserId, Guid leadId, Guid messageId, CancellationToken ct = default)
@@ -723,6 +909,8 @@ public class LeadService(
                 DetailJson = JsonSerializer.Serialize(new { leadId, senderUserId = message.SenderUserId, reportedBy, reportReason }),
             }, ct);
         }
+
+        await NotifyReporterAsync(reportedBy, "Báo cáo tin nhắn của bạn đã được xem xét và không được xác định là vi phạm.", ct);
     }
 
     /// <summary>[UC-58] Id người gửi của tin bị báo cáo, để Admin khóa tài khoản đó.</summary>

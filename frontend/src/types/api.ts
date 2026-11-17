@@ -693,6 +693,31 @@ export interface AdminLeadMessageReportDto {
   reportedAt?: string | null;
   reportReason?: string | null;
   createdAt: string;
+  /** Kết quả Admin xử lý: removed (gỡ tin), warned (cảnh cáo), locked (khóa tài khoản). Trống là chưa xử lý. */
+  reportResolution?: "removed" | "warned" | "locked" | string | null;
+  reportResolvedAt?: string | null;
+}
+
+/** [UC-58] Một tin trong phần ngữ cảnh quanh tin bị báo cáo. */
+export interface AdminReportContextMessageDto {
+  id: string;
+  senderUserId: string;
+  senderName: string;
+  isFromCenter: boolean;
+  content: string;
+  attachmentUrl?: string | null;
+  status: "visible" | "removed" | string;
+  createdAt: string;
+  /** Chính là tin bị báo cáo. */
+  isReported: boolean;
+}
+
+/** [UC-58] Tin bị báo cáo kèm tối đa contextSize tin liền trước và liền sau. Admin không đọc cả cuộc trò chuyện. */
+export interface AdminLeadMessageReportContextDto {
+  leadId: string;
+  messageId: string;
+  contextSize: number;
+  messages: AdminReportContextMessageDto[];
 }
 
 /** Đánh giá công khai của trung tâm (tên người đánh giá đã được rút gọn ở backend). */
