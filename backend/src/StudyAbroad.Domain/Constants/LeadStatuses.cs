@@ -19,4 +19,8 @@ public static class LeadStatuses
     public const string Cancelled = "cancelled";
     /// <summary>Quá 7 ngày phụ huynh chưa trả lời.</summary>
     public const string Expired = "expired";
+
+    /// <summary>[UC-116] Lead trung tâm chưa nhận (chờ phụ huynh / phụ huynh từ chối / hết hạn): ẩn khỏi mọi màn hình phía trung tâm.</summary>
+    public static bool IsHiddenFromCenter(string? status) =>
+        status is PendingParent or Cancelled or Expired;
 }

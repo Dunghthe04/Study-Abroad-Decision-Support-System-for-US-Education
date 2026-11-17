@@ -168,7 +168,7 @@ public class LeadServiceTests
             int pageSize,
             CancellationToken ct = default)
         {
-            var q = Leads.AsEnumerable();
+            var q = Leads.Where(l => !LeadStatuses.IsHiddenFromCenter(l.Status));
             if (centerId.HasValue && centerId.Value != Guid.Empty)
                 q = q.Where(l => l.StudyCenterId == centerId.Value);
 
@@ -209,7 +209,7 @@ public class LeadServiceTests
             Guid? restrictToCenterId,
             CancellationToken ct = default)
         {
-            var lead = Leads.FirstOrDefault(l => l.Id == leadId);
+            var lead = Leads.FirstOrDefault(l => l.Id == leadId && !LeadStatuses.IsHiddenFromCenter(l.Status));
             if (lead == null) return Task.FromResult<CenterReceivedLeadDto?>(null);
 
             if (restrictToCenterId.HasValue && lead.StudyCenterId != restrictToCenterId.Value)
@@ -2037,5 +2037,35 @@ public class LeadServiceTests
         Assert.Equal(StudyAbroad.Application.ParentLinks.ParentInvite.HashToken("secret"), hash);
         Assert.False(LeadParentConfirm.TryParseToken("a.b.c", out _, out _));
         Assert.False(LeadParentConfirm.TryParseToken(new string('a', 129), out _, out _));
+    }
+
+    [Theory]
+    [InlineData(LeadStatuses.PendingParent)]
+    [InlineData(LeadStatuses.Cancelled)]
+    [InlineData(LeadStatuses.Expired)]
+    public async Task ParentConfirm_CenterCannotSeeOrTouchUnconfirmedLead(string status)
+    {
+        var ownerId = Guid.NewGuid();
+        var centerId = Guid.NewGuid();
+        var centerRepo = new FakeStudyCenterRepo();
+        centerRepo.Centers.Add(new StudyCenter { Id = centerId, Name = "TT", OwnerUserId = ownerId });
+        var leadRepo = new FakeLeadRepo();
+        var hidden = new Lead { StudyCenterId = centerId, Status = status };
+        leadRepo.Leads.Add(hidden);
+        leadRepo.Leads.Add(new Lead { StudyCenterId = centerId, Status = LeadStatuses.New });
+        var service = new LeadService(leadRepo, centerRepo, new FakeUserRepository(), new FakeParentLinkRepository());
+
+        var list = await service.GetReceivedLeadsForCenterUserAsync(ownerId, "o@c.com", UserRoles.Center, null, "all", null, 1, 10);
+        Assert.Equal(1, list.TotalCount);
+        Assert.DoesNotContain(list.Items, i => i.Id == hidden.Id);
+
+        Assert.Null(await service.GetReceivedLeadDetailForCenterUserAsync(ownerId, "o@c.com", UserRoles.Center, hidden.Id));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() =>
+            service.UpdateReceivedLeadStatusAsync(ownerId, "o@c.com", UserRoles.Center, hidden.Id, "contacted"));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() =>
+            service.GetReceivedLeadMessagesForCenterUserAsync(ownerId, "o@c.com", UserRoles.Center, hidden.Id));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() =>
+            service.SendLeadMessageForCenterUserAsync(ownerId, "o@c.com", UserRoles.Center, hidden.Id, "Chào em"));
+        Assert.Equal(status, hidden.Status);
     }
 }

@@ -50,8 +50,12 @@ export interface LeadDto {
   sharedFields: LeadSharedField[];
 }
 
-/** Trạng thái lead (backend: new | contacted | closed). */
-export type LeadStatus = "new" | "contacted" | "closed" | "withdrawn";
+/** Trạng thái lead (backend: LeadStatuses). */
+export type LeadStatus = "new" | "contacted" | "closed" | "withdrawn" | "pending_parent" | "cancelled" | "expired";
+
+/** [UC-116] Trung tâm chưa nhận yêu cầu (chờ phụ huynh / phụ huynh từ chối / hết hạn): chưa nhắn tin được. */
+export const isLeadAwaitingCenter = (status: string) =>
+  status === "pending_parent" || status === "cancelled" || status === "expired";
 
 /**
  * [UC-44] Nhãn trạng thái hiện cho học sinh / phụ huynh.
@@ -62,6 +66,10 @@ export const LEAD_STATUS_LABEL: Record<LeadStatus, string> = {
   contacted: "Đang trao đổi",
   closed: "Đã hoàn tất",
   withdrawn: "Đã thu hồi", // [UC-80] người gửi đã xóa tài khoản
+  // [UC-116] học sinh dưới 16 tự gửi: phụ huynh xác nhận qua mail
+  pending_parent: "Chờ phụ huynh xác nhận",
+  cancelled: "Phụ huynh từ chối",
+  expired: "Hết hạn",
 };
 
 /** Nhãn trạng thái; giá trị backend chưa biết thì hiện nguyên giá trị đó. */
@@ -104,6 +112,7 @@ export type LeadRuleCode =
   // [Nhắn tin phía người gửi] GET/POST /leads/sent/{id}/messages
   | "lead_closed"
   | "lead_withdrawn" // [UC-80] người gửi đã xóa tài khoản
+  | "lead_not_open" // [UC-116] trung tâm chưa nhận (chờ phụ huynh / từ chối / hết hạn)
   | "not_found"
   | "invalid_content";
 
@@ -113,4 +122,24 @@ export interface LeadRuleError {
   message: string;
   /** Chỉ có với center_cooldown: thời điểm (UTC, ISO) được gửi lại cho trung tâm này. */
   retryAt: string | null;
+}
+
+/** [UC-116] Trang phụ huynh xác nhận yêu cầu liên hệ của con (/parent-consent/lead) — khớp LeadParentConfirmInfo ở backend. */
+export type LeadParentConfirmState = "pending" | "accepted" | "rejected";
+
+export interface LeadParentConfirmInfo {
+  state: LeadParentConfirmState;
+  studentName: string;
+  studentAge: number | null;
+  centerName: string;
+  sharedFields: LeadSharedField[];
+  contactPhone: string | null;
+  message: string | null;
+  /** Email phụ huynh đang mở link */
+  parentEmail: string;
+  /** Chỉ có khi còn chờ */
+  expiresAt: string | null;
+  decidedAt: string | null;
+  /** Người bấm trước có phải chính phụ huynh này không (con có nhiều phụ huynh) */
+  decidedByYou: boolean;
 }

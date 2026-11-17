@@ -77,7 +77,8 @@ public class LeadService(
         var (centerId, centerName) = await ResolveCenterScopeAsync(userId, userEmail, userRole, null, ct);
 
         var lead = await leads.GetLeadForUpdateAsync(leadId, ct);
-        if (lead is null)
+        // [UC-116] Lead chờ phụ huynh / bị từ chối / hết hạn: trung tâm chưa nhận, báo như không tồn tại
+        if (lead is null || LeadStatuses.IsHiddenFromCenter(lead.Status))
             throw new KeyNotFoundException("Không tìm thấy yêu cầu liên hệ.");
 
         // [Chống IDOR] Trung tâm chỉ được đọc/trả lời các yêu cầu gửi tới đúng trung tâm mình
@@ -456,7 +457,8 @@ public class LeadService(
         var (centerId, _) = await ResolveCenterScopeAsync(userId, userEmail, userRole, null, ct);
 
         var lead = await leads.GetLeadForUpdateAsync(leadId, ct);
-        if (lead is null)
+        // [UC-116] Lead trung tâm chưa nhận: không đổi trạng thái được
+        if (lead is null || LeadStatuses.IsHiddenFromCenter(lead.Status))
             throw new KeyNotFoundException("Không tìm thấy yêu cầu liên hệ.");
 
         // [Chống IDOR] Lead của trung tâm khác báo "không tìm thấy" như lead không tồn tại, để không lộ lead có thật

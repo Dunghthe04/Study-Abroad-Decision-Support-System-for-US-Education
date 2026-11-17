@@ -164,7 +164,9 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
         int pageSize,
         CancellationToken ct = default)
     {
-        var baseLeads = db.Leads.AsNoTracking();
+        // [UC-116] Lead chờ phụ huynh / bị từ chối / hết hạn: trung tâm chưa nhận nên không hiện, không đếm
+        var baseLeads = db.Leads.AsNoTracking()
+            .Where(l => l.Status != LeadStatuses.PendingParent && l.Status != LeadStatuses.Cancelled && l.Status != LeadStatuses.Expired);
         if (centerId.HasValue && centerId.Value != Guid.Empty)
         {
             baseLeads = baseLeads.Where(l => l.StudyCenterId == centerId.Value);
@@ -232,6 +234,8 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
     {
         var query = from l in db.Leads.AsNoTracking()
                     where l.Id == leadId
+                        // [UC-116] Trung tâm chưa nhận lead này: báo không tìm thấy
+                        && l.Status != LeadStatuses.PendingParent && l.Status != LeadStatuses.Cancelled && l.Status != LeadStatuses.Expired
                     join c in db.StudyCenters.AsNoTracking() on l.StudyCenterId equals c.Id
                     join u in db.Users.AsNoTracking() on l.UserId equals u.Id
                     join p in db.StudentProfiles.AsNoTracking() on l.UserId equals p.UserId into profiles
