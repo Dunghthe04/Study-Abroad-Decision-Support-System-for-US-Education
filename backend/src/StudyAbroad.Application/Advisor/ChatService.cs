@@ -211,6 +211,8 @@ namespace StudyAbroad.Application.Advisor
             };
         }
 
+        private static readonly TimeSpan CaptureTimeout = TimeSpan.FromSeconds(1);
+
         // UC-53: câu chưa trả lời được vào danh sách mẫu SLM ở dạng nháp, chỉ có câu hỏi. Theo công tắc Chat:StoreMessages
         // (messages null khi tắt). Lỗi không làm hỏng lượt chat
         private async Task CaptureUnansweredAsync(AdvisorChatRequest request, CancellationToken ct)
@@ -219,7 +221,9 @@ namespace StudyAbroad.Application.Advisor
                 return;
             try
             {
-                await slmSamples.CaptureUnansweredAsync(asked, ct);
+                using var bounded = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                bounded.CancelAfter(CaptureTimeout);
+                await slmSamples.CaptureUnansweredAsync(asked, bounded.Token);
             }
             catch (Exception ex)
             {
