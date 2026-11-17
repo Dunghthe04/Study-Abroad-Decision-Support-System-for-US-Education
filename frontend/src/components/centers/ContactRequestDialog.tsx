@@ -106,7 +106,8 @@ export function ContactRequestDialog({ centerId, centerName, isVerified, compact
   if (user.role !== "student" && user.role !== "parent") return null;
 
   const isParent = user.role === "parent";
-  const isMinorStudent = !isParent && user.ageGroup === "minor";
+  // Dưới 18 (cả "child" dưới 16, nay gửi được khi phụ huynh đã đồng ý [UC-116]) phải tick xác nhận hiểu trung tâm sẽ liên hệ
+  const isMinorStudent = !isParent && (user.ageGroup === "minor" || user.ageGroup === "child");
   const activeChildren = (children ?? []).filter((c) => c.status === "active");
 
   const loadChildren = async () => {
