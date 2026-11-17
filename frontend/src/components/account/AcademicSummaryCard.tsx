@@ -154,8 +154,14 @@ export function AcademicSummaryCard({ profile, isLoading, readOnly = false, titl
               <span className="block text-label">Điểm trung bình (GPA)</span>
               <span className="mt-0.5 block text-lg text-numeric">
                 {profile?.overallGpa != null ? profile.overallGpa.toFixed(2) : "Chưa nhập"}{" "}
-                <span className="text-xs font-normal text-muted-foreground">(Thang {profile?.gradeScale})</span>
+                {/* overallGpa luôn là GPA thang 4 server đã quy đổi; gradeScale là thang học sinh nhập */}
+                <span className="text-xs font-normal text-muted-foreground">(Thang 4.0)</span>
               </span>
+              {profile?.overallGpa != null && profile.gradeScale !== "4" && (
+                <span className="text-body-s">
+                  Quy đổi từ {profile.gradeScale === "letter" ? "thang chữ" : `thang ${profile.gradeScale}`}
+                </span>
+              )}
             </CardContent>
           </Card>
         </div>
