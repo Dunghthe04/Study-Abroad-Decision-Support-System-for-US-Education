@@ -41,6 +41,31 @@ public class LeadService(
             throw new LeadRuleException("lead_withdrawn", 400, "Yêu cầu đã được người gửi thu hồi, không thể tiếp tục trao đổi.");
     }
 
+    /// <summary>
+    /// [UC-74] Chỉ nhắn tin được khi yêu cầu Đã chấp nhận (gồm "contacted" cũ). Chặn khi yêu cầu còn Mới, Bị từ chối,
+    /// Đã đóng, Đã thu hồi, Đã hủy, Hết hạn (7 ngày chờ phụ huynh) hoặc quá 90 ngày. Gọi trước khi tải ảnh lên.
+    /// </summary>
+    internal static void EnsureCanMessage(Lead lead)
+    {
+        var status = lead.Status;
+        EnsureNotWithdrawn(lead);
+
+        if (string.Equals(status, LeadStatuses.Closed, StringComparison.OrdinalIgnoreCase))
+            throw new LeadRuleException("lead_closed", 400, "Yêu cầu đã đóng, không gửi thêm tin nhắn được.");
+        if (string.Equals(status, LeadStatuses.Rejected, StringComparison.OrdinalIgnoreCase))
+            throw new LeadRuleException("lead_rejected", 400, "Yêu cầu đã bị trung tâm từ chối, không nhắn tin được.");
+        if (string.Equals(status, LeadStatuses.Cancelled, StringComparison.OrdinalIgnoreCase))
+            throw new LeadRuleException("lead_cancelled", 400, "Yêu cầu đã bị hủy, không nhắn tin được.");
+        if (string.Equals(status, LeadStatuses.Expired, StringComparison.OrdinalIgnoreCase)
+            || CenterLeadMapper.IsDataHidden(lead))
+            throw new LeadRuleException("lead_expired", 400, "Yêu cầu đã hết hạn, không nhắn tin được.");
+        // [UC-116] Còn chờ phụ huynh xác nhận: trung tâm chưa nhận yêu cầu
+        if (string.Equals(status, LeadStatuses.PendingParent, StringComparison.OrdinalIgnoreCase))
+            throw new LeadRuleException("lead_not_open", 400, "Trung tâm chưa nhận yêu cầu này nên chưa nhắn tin được.");
+        if (!LeadStatuses.IsAccepted(status))
+            throw new LeadRuleException("lead_not_accepted", 400, "Trung tâm chưa chấp nhận yêu cầu này nên chưa nhắn tin được.");
+    }
+
     private async Task<(Guid? CenterId, string? CenterName)> ResolveCenterScopeAsync(
         Guid userId,
         string? userEmail,
@@ -367,12 +392,8 @@ public class LeadService(
 
         var (user, lead, centerName) = await GetAuthorizedSentLeadAsync(userId, leadId, ct);
 
-        if (string.Equals(lead.Status, "closed", StringComparison.OrdinalIgnoreCase))
-            throw new LeadRuleException("lead_closed", 400, "Yêu cầu đã hoàn tất, không gửi thêm tin nhắn được.");
-        EnsureNotWithdrawn(lead);
-        // [UC-116] Chờ phụ huynh / phụ huynh từ chối / hết hạn: trung tâm chưa nhận yêu cầu nên chưa trao đổi được
-        if (lead.Status is LeadStatuses.PendingParent or LeadStatuses.Cancelled or LeadStatuses.Expired)
-            throw new LeadRuleException("lead_not_open", 400, "Trung tâm chưa nhận yêu cầu này nên chưa nhắn tin được.");
+        // [UC-74] Chặn theo trạng thái trước khi tải ảnh lên
+        EnsureCanMessage(lead);
 
         var attachment = attachmentFactory is null ? null : await attachmentFactory(ct);
 
@@ -592,7 +613,8 @@ public class LeadService(
         var trimmedContent = ValidateMessageContent(content, allowEmpty: attachmentFactory is not null);
 
         var (lead, centerName) = await GetAuthorizedLeadForCenterAsync(userId, userEmail, userRole, leadId, ct);
-        EnsureNotWithdrawn(lead);
+        // [UC-74] Chỉ nhắn khi đã chấp nhận (UC-73); chặn trước khi tải ảnh lên
+        EnsureCanMessage(lead);
 
         var attachment = attachmentFactory is null ? null : await attachmentFactory(ct);
 
@@ -607,15 +629,8 @@ public class LeadService(
             RemovedByUserId = null,
         };
 
-        Lead? leadToUpdate = null;
-        if (string.Equals(lead.Status, "new", StringComparison.OrdinalIgnoreCase))
-        {
-            lead.Status = "contacted";
-            lead.UpdatedAt = DateTime.UtcNow;
-            leadToUpdate = lead;
-        }
-
-        var saved = await leads.AddLeadMessageAsync(entity, leadToUpdate, ct);
+        // [UC-74] Không tự chuyển trạng thái nữa: chấp nhận yêu cầu là thao tác riêng ở UC-73
+        var saved = await leads.AddLeadMessageAsync(entity, leadToUpdate: null, ct);
 
         await AuditMessageSentAsync(userId, userRole, lead, saved, ct);
 
