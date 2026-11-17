@@ -7,6 +7,8 @@ import type {
   SlmReviewResult,
   SlmReviewStatus,
   SlmSample,
+  SlmSampleCreator,
+  SlmSampleDetail,
   SlmSampleSummary,
   SlmSampleType,
   SlmSplit,
@@ -19,6 +21,10 @@ export interface SlmSampleFilters {
   split?: SlmSplit;
   reviewStatus?: SlmReviewStatus;
   search?: string;
+  createdBy?: string;
+  from?: string;
+  to?: string;
+  source?: string;
   page?: number;
   pageSize?: number;
 }
@@ -60,7 +66,9 @@ export const adminSlmSampleApi = {
 
   summary: () => apiFetch<SlmSampleSummary>(`${base}/summary`),
 
-  get: (id: string) => apiFetch<SlmSample>(`${base}/${encodeURIComponent(id)}`),
+  get: (id: string) => apiFetch<SlmSampleDetail>(`${base}/${encodeURIComponent(id)}`),
+
+  creators: () => apiFetch<SlmSampleCreator[]>(`${base}/creators`),
 
   create: (data: SaveSlmSampleRequest) =>
     apiFetch<SlmSample>(base, { method: "POST", body: JSON.stringify(data) }),
@@ -80,20 +88,31 @@ export const adminSlmSampleApi = {
 
   importXlsx: (file: File) => postXlsx<SlmImportResult>("import", file),
 
-  downloadTemplate: async (): Promise<void> => {
-    const res = await fetch(`${base}/template`, {
-      credentials: "include",
-      cache: "no-store",
-    });
-    if (!res.ok) throw await failureOf(res);
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = TEMPLATE_FILE_NAME;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-  },
+  downloadTemplate: () => download(`${base}/template`, TEMPLATE_FILE_NAME),
+
+  exportApproved: (format: "jsonl" | "xlsx") =>
+    download(`${base}/export?format=${format}`, `slm-samples-approved.${format}`),
 };
+
+function fileNameOf(res: Response, fallback: string): string {
+  const header = res.headers.get("content-disposition") ?? "";
+  const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(header);
+  return match ? decodeURIComponent(match[1]) : fallback;
+}
+
+async function download(path: string, fallbackName: string): Promise<void> {
+  const res = await fetch(path, {
+    credentials: "include",
+    cache: "no-store",
+  });
+  if (!res.ok) throw await failureOf(res);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileNameOf(res, fallbackName);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
