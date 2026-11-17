@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CheckIcon, FileInputIcon, FilterIcon, PlusIcon, RotateCcwIcon, SearchIcon, WrenchIcon, XIcon } from "lucide-react";
+import { CheckIcon, DownloadIcon, FileInputIcon, FilterIcon, PlusIcon, RotateCcwIcon, SearchIcon, WrenchIcon, XIcon } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,8 +26,9 @@ import { SlmImportResultDialog } from "@/components/admin/knowledge/SlmImportRes
 import { SlmReviewDialog } from "@/components/admin/knowledge/SlmReviewDialog";
 import { SlmSampleFormPanel } from "@/components/admin/knowledge/SlmSampleFormPanel";
 import { slmSampleColumns } from "@/components/admin/knowledge/slm-sample-columns";
+import { useAuth } from "@/contexts/AuthContext";
 import { adminSlmSampleApi } from "@/lib/slm-sample-api";
-import { REVIEW_STATUSES, SAMPLE_TYPE_OPTIONS, SPLIT_OPTIONS, sampleToRequest } from "@/lib/slm-sample-format";
+import { CHAT_UNANSWERED_SOURCE, REVIEW_STATUSES, SAMPLE_TYPE_OPTIONS, SPLIT_OPTIONS, sampleToRequest } from "@/lib/slm-sample-format";
 import { useFetched } from "@/lib/use-fetched";
 import type { SaveSlmSampleRequest, SlmImportResult, SlmReviewStatus, SlmSample, SlmSampleType, SlmSplit } from "@/types/slm-sample";
 
@@ -37,6 +38,12 @@ const PAGE_SIZE = 20;
 
 const TYPE_FILTER_OPTIONS = [{ value: "", label: "Mọi loại mẫu" }, ...SAMPLE_TYPE_OPTIONS];
 const SPLIT_FILTER_OPTIONS = [{ value: "", label: "Mọi tập" }, ...SPLIT_OPTIONS];
+const SOURCE_FILTER_OPTIONS = [
+  { value: "", label: "Mọi nguồn" },
+  { value: "manual", label: "Nhập tay" },
+  { value: "excel", label: "File Excel" },
+  { value: CHAT_UNANSWERED_SOURCE, label: "Chat chưa trả lời" },
+];
 
 const TAB_TRIGGER_CLASS =
   "flex-none rounded-none border-0 border-b-2 border-transparent px-3 data-active:border-b-brand data-active:bg-transparent data-active:text-foreground data-active:shadow-none dark:data-active:border-transparent dark:data-active:border-b-brand dark:data-active:bg-transparent after:hidden";
@@ -52,16 +59,23 @@ interface Filters {
   sampleType: string;
   split: string;
   status: string;
+  createdBy: string;
+  from: string;
+  to: string;
+  source: string;
   page: number;
 }
 
-const EMPTY_FILTERS: Filters = { search: "", sampleType: "", split: "", status: "", page: 1 };
+const EMPTY_FILTERS: Filters = { search: "", sampleType: "", split: "", status: "", createdBy: "", from: "", to: "", source: "", page: 1 };
 
 function errorText(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
 
 export function KnowledgeListView() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
+  const [exporting, setExporting] = useState<"jsonl" | "xlsx" | null>(null);
   const [draft, setDraft] = useState<Filters>(EMPTY_FILTERS);
   const [applied, setApplied] = useState<Filters>(EMPTY_FILTERS);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -70,6 +84,7 @@ export function KnowledgeListView() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [formState, setFormState] = useState<{ sample: SlmSample | null } | null>(null);
   const [reviewStatus, setReviewStatus] = useState<SlmReviewStatus | null>(null);
+  const [reviewIds, setReviewIds] = useState<string[]>([]);
   const [deleting, setDeleting] = useState<SlmSample | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [importResult, setImportResult] = useState<SlmImportResult | null>(null);
@@ -82,11 +97,17 @@ export function KnowledgeListView() {
       sampleType: applied.sampleType === "" ? undefined : (applied.sampleType as SlmSampleType),
       split: applied.split === "" ? undefined : (applied.split as SlmSplit),
       search: applied.search || undefined,
+      createdBy: applied.createdBy || undefined,
+      from: applied.from || undefined,
+      to: applied.to || undefined,
+      source: applied.source || undefined,
       page: applied.page,
       pageSize: PAGE_SIZE,
     }),
   );
   const summary = useFetched(`summary|${reloadCounter}`, () => adminSlmSampleApi.summary());
+  const creators = useFetched("creators", () => adminSlmSampleApi.creators());
+  const creatorOptions = [{ value: "", label: "Mọi người tạo" }, ...(creators.data ?? []).map((item) => ({ value: item.userId, label: item.name }))];
 
   const items = list.data?.items ?? [];
   const reload = () => setReloadCounter((current) => current + 1);
@@ -116,13 +137,18 @@ export function KnowledgeListView() {
 
   const handleFilterSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    apply({ ...applied, sampleType: draft.sampleType, split: draft.split, page: 1 });
+    if (draft.from && draft.to && draft.from > draft.to) {
+      toast.add({ type: "error", title: "Khoảng ngày không hợp lệ", description: "Ngày bắt đầu phải trước hoặc bằng ngày kết thúc." });
+      return;
+    }
+    apply({ ...applied, sampleType: draft.sampleType, split: draft.split, createdBy: draft.createdBy, from: draft.from, to: draft.to, source: draft.source, page: 1 });
     setIsFilterOpen(false);
   };
 
   const handleResetFilters = () => {
-    setDraft({ ...draft, sampleType: "", split: "" });
-    apply({ ...applied, sampleType: "", split: "", page: 1 });
+    const cleared = { sampleType: "", split: "", createdBy: "", from: "", to: "", source: "" };
+    setDraft({ ...draft, ...cleared });
+    apply({ ...applied, ...cleared, page: 1 });
     setIsFilterOpen(false);
   };
 
@@ -145,27 +171,16 @@ export function KnowledgeListView() {
   const handleChangeField = async (sample: SlmSample, change: Partial<SaveSlmSampleRequest>) => {
     try {
       const saved = await adminSlmSampleApi.update(sample.id, { ...sampleToRequest(sample), ...change });
-      const resetToDraft = saved.reviewStatus !== sample.reviewStatus;
+      const resetToPending = saved.reviewStatus !== sample.reviewStatus;
       toast.add({
         type: "success",
         title: "Đã lưu thay đổi",
-        description: resetToDraft ? "Nhãn đã đổi nên mẫu quay về Nháp, cần duyệt lại." : undefined,
+        description: resetToPending ? "Nội dung đã đổi nên mẫu quay về Chờ duyệt, cần duyệt lại." : undefined,
       });
       if (formState?.sample?.id === sample.id) setFormState({ sample: saved });
       reload();
     } catch (error) {
       toast.add({ type: "error", title: "Không lưu được thay đổi", description: errorText(error, "Vui lòng thử lại sau.") });
-    }
-  };
-
-  const handleChangeStatus = async (sample: SlmSample, status: SlmReviewStatus) => {
-    try {
-      await adminSlmSampleApi.review([sample.id], status);
-      toast.add({ type: "success", title: "Đã đổi trạng thái duyệt" });
-      if (formState?.sample?.id === sample.id) setFormState({ sample: await adminSlmSampleApi.get(sample.id) });
-      reload();
-    } catch (error) {
-      toast.add({ type: "error", title: "Không đổi được trạng thái", description: errorText(error, "Vui lòng thử lại sau.") });
     }
   };
 
@@ -214,10 +229,21 @@ export function KnowledgeListView() {
     onEdit: (sample) => setFormState({ sample }),
     onDelete: setDeleting,
     onChangeField: handleChangeField,
-    onChangeStatus: handleChangeStatus,
   });
 
-  const activeFilterCount = [applied.sampleType !== "", applied.split !== ""].filter(Boolean).length;
+  const activeFilterCount = [applied.sampleType, applied.split, applied.createdBy, applied.from, applied.to, applied.source].filter((value) => value !== "").length;
+
+  const handleExport = async (format: "jsonl" | "xlsx") => {
+    setExporting(format);
+    try {
+      await adminSlmSampleApi.exportApproved(format);
+      toast.add({ type: "success", title: "Đã xuất mẫu đã duyệt", description: format === "jsonl" ? "File JSONL" : "File Excel" });
+    } catch (error) {
+      toast.add({ type: "error", title: "Không xuất được file", description: errorText(error, "Vui lòng thử lại sau.") });
+    } finally {
+      setExporting(null);
+    }
+  };
 
   const toolbar: DataTableToolbarSlots = {
     filters: (
@@ -236,6 +262,24 @@ export function KnowledgeListView() {
             <div className="space-y-1.5">
               <label htmlFor="slm-split-filter" className="text-sm font-medium">Tập dữ liệu</label>
               <OptionSelect id="slm-split-filter" value={draft.split} options={SPLIT_FILTER_OPTIONS} onChange={(value) => setDraft({ ...draft, split: value })} className={FILTER_FIELD_BG} />
+            </div>
+            <div className="space-y-1.5">
+              <label htmlFor="slm-source-filter" className="text-sm font-medium">Nguồn</label>
+              <OptionSelect id="slm-source-filter" value={draft.source} options={SOURCE_FILTER_OPTIONS} onChange={(value) => setDraft({ ...draft, source: value })} className={FILTER_FIELD_BG} />
+            </div>
+            <div className="space-y-1.5">
+              <label htmlFor="slm-creator-filter" className="text-sm font-medium">Người tạo</label>
+              <OptionSelect id="slm-creator-filter" value={draft.createdBy} options={creatorOptions} onChange={(value) => setDraft({ ...draft, createdBy: value })} className={FILTER_FIELD_BG} />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1.5">
+                <label htmlFor="slm-from-filter" className="text-sm font-medium">Từ ngày</label>
+                <Input id="slm-from-filter" type="date" value={draft.from} max={draft.to || undefined} onChange={(event) => setDraft({ ...draft, from: event.target.value })} className={FILTER_FIELD_BG} />
+              </div>
+              <div className="space-y-1.5">
+                <label htmlFor="slm-to-filter" className="text-sm font-medium">Đến ngày</label>
+                <Input id="slm-to-filter" type="date" value={draft.to} min={draft.from || undefined} onChange={(event) => setDraft({ ...draft, to: event.target.value })} className={FILTER_FIELD_BG} />
+              </div>
             </div>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" size="sm" onClick={handleResetFilters}>Xóa lọc</Button>
@@ -267,6 +311,18 @@ export function KnowledgeListView() {
             Xóa lọc
           </Button>
         )}
+        {isAdmin && (
+          <>
+            <Button type="button" variant="outline" size="sm" className={TOOLBAR_BUTTON_BG} disabled={exporting !== null} onClick={() => void handleExport("jsonl")}>
+              {exporting === "jsonl" ? <Spinner /> : <DownloadIcon />}
+              Xuất JSONL
+            </Button>
+            <Button type="button" variant="outline" size="sm" className={TOOLBAR_BUTTON_BG} disabled={exporting !== null} onClick={() => void handleExport("xlsx")}>
+              {exporting === "xlsx" ? <Spinner /> : <DownloadIcon />}
+              Xuất Excel
+            </Button>
+          </>
+        )}
         <Button type="button" variant="outline" size="sm" className={TOOLBAR_BUTTON_BG} onClick={openImport}>
           <FileInputIcon />
           Nhập Excel
@@ -297,7 +353,10 @@ export function KnowledgeListView() {
           <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/60 px-3 py-2 text-sm">
             <span className="font-medium">Đã chọn {selectedIds.size} mẫu</span>
             {BULK_ACTIONS.map((action) => (
-              <Button key={action.status} type="button" size="sm" variant="outline" className={action.className} onClick={() => setReviewStatus(action.status)}>
+              <Button key={action.status} type="button" size="sm" variant="outline" className={action.className} onClick={() => {
+                  setReviewIds(Array.from(selectedIds));
+                  setReviewStatus(action.status);
+                }}>
                 <action.icon />
                 {action.label}
               </Button>
@@ -330,9 +389,22 @@ export function KnowledgeListView() {
         />
       </div>
 
-      {formState && <SlmSampleFormPanel sample={formState.sample} onClose={() => setFormState(null)} onChanged={handlePanelChanged} />}
+      {formState && (
+        <SlmSampleFormPanel
+          sample={formState.sample}
+          version={reloadCounter}
+          currentUserId={user?.id}
+          onClose={() => setFormState(null)}
+          onChanged={handlePanelChanged}
+          onDelete={setDeleting}
+          onReview={(sample, status) => {
+            setReviewIds([sample.id]);
+            setReviewStatus(status);
+          }}
+        />
+      )}
 
-      <SlmReviewDialog status={reviewStatus} ids={Array.from(selectedIds)} onClose={() => setReviewStatus(null)} onDone={handleReviewed} />
+      <SlmReviewDialog status={reviewStatus} ids={reviewIds} onClose={() => setReviewStatus(null)} onDone={handleReviewed} />
       <SlmImportDialog key={importSession} open={importOpen} onOpenChange={setImportOpen} onImported={handleImported} />
       <SlmImportResultDialog result={importResult} onClose={() => setImportResult(null)} />
 
@@ -340,7 +412,7 @@ export function KnowledgeListView() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Xóa mẫu này?</AlertDialogTitle>
-            <AlertDialogDescription>Mẫu sẽ bị xóa khỏi danh sách dữ liệu huấn luyện. Thao tác này không thể khôi phục.</AlertDialogDescription>
+            <AlertDialogDescription>Mẫu sẽ bị ẩn khỏi danh sách và không được xuất ra nữa. Lịch sử của mẫu vẫn được giữ lại.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleteBusy}>Hủy</AlertDialogCancel>
